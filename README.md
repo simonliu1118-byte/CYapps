@@ -14,11 +14,14 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## CI / Build
 
-- 主要 Build/Test workflow 保留手動執行（`workflow_dispatch`）。
-- 一般開發 branch push 不自動跑完整 CI。
-- Ready for review 的 Pull Request 會依專案路徑自動執行必要 CI；Draft PR 原則上不自動跑。
-- 同一 PR 的舊 run 會在新 commit 到來時取消，避免重複耗用資源。
-- 正式 GitHub Release 必須由人工明確啟動，不因 push 到 release branch 自動發布。
+Public repository 可以正常使用自動 CI；目標是避免濫用，而不是把正常驗證全部改成手動。
+
+- Ready for review 的 Pull Request 依專案路徑自動執行必要 Build/Test。
+- Draft PR 可略過昂貴的完整驗證；是否使用 Draft 由負責開發的 AI／維護者依成熟度決定。
+- branch push 是否自動 CI 依實際效益決定，避免與 PR CI 重複執行相同昂貴工作。
+- 使用 path filter、concurrency 與分層測試避免不相關專案或舊 run 重複耗用資源。
+- 純程式 CI 與 Codex／Claude 等計量式協作 AI 流程盡量解耦；AI 深度審查不因每個小 commit 重新啟動。
+- 正式 GitHub Release 由人工明確啟動並重新驗證正式發行包。
 
 ## Repository rules
 
