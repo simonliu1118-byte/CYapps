@@ -1,13 +1,36 @@
 name: CYInvoice Windows Build
 
 on:
+  push:
+    branches:
+      - "cyinvoice/**"
+      - "!cyinvoice/csharp-remake"
+    paths:
+      - "apps/CYInvoice/VERSION"
+      - "apps/CYInvoice/go.mod"
+      - "apps/CYInvoice/go.sum"
+      - "apps/CYInvoice/assets/**"
+      - "apps/CYInvoice/cmd/**"
+      - "apps/CYInvoice/internal/**"
+      - "apps/CYInvoice/scripts/**"
+      - ".github/workflows/cyinvoice-build.yml"
+  pull_request:
+    paths:
+      - "apps/CYInvoice/VERSION"
+      - "apps/CYInvoice/go.mod"
+      - "apps/CYInvoice/go.sum"
+      - "apps/CYInvoice/assets/**"
+      - "apps/CYInvoice/cmd/**"
+      - "apps/CYInvoice/internal/**"
+      - "apps/CYInvoice/scripts/**"
+      - ".github/workflows/cyinvoice-build.yml"
   workflow_dispatch:
-
 permissions:
   contents: read
 
 jobs:
   build-windows-x64:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.head_ref != 'cyinvoice/csharp-remake' }}
     runs-on: windows-2022
     defaults:
       run:
