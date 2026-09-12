@@ -2,12 +2,23 @@ name: CYInvoice Windows Build
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "apps/CYInvoice/**"
+      - ".github/workflows/cyinvoice-build.yml"
 
 permissions:
   contents: read
 
+concurrency:
+  group: cyinvoice-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-windows-x64:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
     runs-on: windows-2022
     defaults:
       run:
@@ -15,10 +26,10 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: apps/CYInvoice/go.mod
           cache: false
@@ -72,7 +83,7 @@ jobs:
           }
 
       - name: Upload engineering artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CYInvoice-rebuild-windows-x64
           path: apps/CYInvoice/dist/engineering-artifact/
