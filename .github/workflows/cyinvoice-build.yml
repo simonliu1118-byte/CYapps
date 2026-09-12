@@ -1,0 +1,80 @@
+name: CYInvoice Windows Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-2022
+    defaults:
+      run:
+        working-directory: apps/CYInvoice
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/CYInvoice/go.mod
+          cache: false
+
+      - name: Verify module files are reproducible
+        shell: pwsh
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Scan tracked source for confidential runtime data
+        shell: pwsh
+        run: ./scripts/verify-source.ps1
+
+      - name: Run tests
+        shell: pwsh
+        run: go test ./...
+
+      - name: Run Go static analysis
+        shell: pwsh
+        run: go vet ./...
+
+      - name: Build Windows x64 package
+        shell: pwsh
+        run: ./scripts/build.ps1
+
+      - name: Verify PE structure
+        shell: pwsh
+        run: ./scripts/verify-pe.ps1 -Path ./dist/CYInvoice/CYInvoice.exe
+
+      - name: Verify release package layout
+        shell: pwsh
+        run: |
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $version) -Version $version
+
+      - name: Prepare one-layer engineering artifact
+        shell: pwsh
+        run: |
+          $artifactRoot = "./dist/engineering-artifact"
+          New-Item -Path $artifactRoot -ItemType Directory -Force | Out-Null
+          Copy-Item -Path "./dist/CYInvoice" -Destination $artifactRoot -Recurse
+
+          if (!(Test-Path "$artifactRoot/CYInvoice/CYInvoice.exe" -PathType Leaf)) {
+            throw "Engineering artifact is missing CYInvoice/CYInvoice.exe"
+          }
+
+          $nestedZip = @(Get-ChildItem -Path $artifactRoot -Filter "*.zip" -File -Recurse)
+          if ($nestedZip.Count -ne 0) {
+            throw "Engineering artifact must not contain a nested ZIP"
+          }
+
+      - name: Upload engineering artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CYInvoice-rebuild-windows-x64
+          path: apps/CYInvoice/dist/engineering-artifact/
+          if-no-files-found: error
+          retention-days: 14
