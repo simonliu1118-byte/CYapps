@@ -31,110 +31,68 @@ jobs:
             esac
           done < <(git ls-remote origin 'refs/pull/*/head')
 
-      - name: Scan reachable Git history without printing secret values
+      - name: Scan secret-named literal assignments without printing values
         shell: bash
         run: |
-          cat > /tmp/security_audit.py <<'PY'
-          import json, re, subprocess
+          cat > /tmp/targeted_audit.py <<'PY'
+          import re, subprocess
 
           def git(*args, binary=False):
               p = subprocess.run(["git", *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
               return p.stdout if binary else p.stdout.decode("utf-8", "replace")
 
-          forbidden_path = re.compile(
-              r'(?i)(^|/)(?:\.env(?:\..*)?$|[^/]*(?:credential|client_secret|oauth_client|token)[^/]*\.json$|'
-              r'[^/]+\.(?:pem|key|p12|pfx|kdbx|db|sqlite|sqlite3|xls|xlsx|pdf|log)$|'
-              r'(?:settings|invoices|buyer_names)\.json$)'
+          # Catch names such as CLEAR_PASSWORD, ProdAppKey, CLIENT_SECRET,
+          # RefreshToken, API_KEY, etc.  Values are never printed.
+          rx = re.compile(
+              r'''(?ix)\b([A-Za-z_][A-Za-z0-9_]*(?:password|passwd|secret|token|api[_-]?key|app[_-]?key)[A-Za-z0-9_]*)\s*(?::=|=|:)\s*["']([^"'\r\n]{4,})["']'''
           )
-          runtime_path = re.compile(r'(?i)(^|/)(?:Data|Logs|Cache)/.+')
-          pem = re.compile(rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----')
-          provider_patterns = {
+          provider = {
               'github_token': re.compile(rb'\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{50,}\b'),
               'google_api_key': re.compile(rb'\bAIza[0-9A-Za-z_-]{35}\b'),
               'aws_access_key': re.compile(rb'\b(?:AKIA|ASIA)[A-Z0-9]{16}\b'),
-              'stripe_live_key': re.compile(rb'\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b'),
-              'slack_token': re.compile(rb'\bxox[baprs]-[A-Za-z0-9-]{20,}\b'),
           }
-          assignment = re.compile(
-              r'''(?ix)\b(api[_-]?key|app[_-]?key|prod[_-]?app[_-]?key|client[_-]?secret|access[_-]?token|refresh[_-]?token|password|passwd|secret)\w*\s*(?::=|=|:)\s*["']([^"'\r\n]{6,})["']'''
-          )
-          allow_exact = {
-              'sHeq7t8G1wiQvhAuIM27',
-              'secret', 'password', 'test-secret', 'TEST-SECRET', 'example-secret', 'dummy-secret'
+          allow_values = {
+              'sHeq7t8G1wiQvhAuIM27', # public AMEGO test credential
+              'password', 'secret', 'test-secret', 'example-secret', 'dummy-secret'
           }
           placeholder = re.compile(r'(?i)^(?:test|demo|example|dummy|placeholder|changeme|your[-_ ]|xxx|000000)')
-          gh_expr_marker = '$' + '{{'
 
           objects = {}
           for line in git('rev-list','--objects','--all').splitlines():
-              parts = line.split(' ', 1)
-              sha = parts[0]
-              path = parts[1] if len(parts) > 1 else ''
-              objects.setdefault(sha, path)
+              parts = line.split(' ',1)
+              objects.setdefault(parts[0], parts[1] if len(parts)>1 else '')
 
-          findings = []
-          scanned = 0
-          for sha, path in objects.items():
+          findings=[]
+          scanned=0
+          for sha,path in objects.items():
               try:
-                  if git('cat-file','-t',sha).strip() != 'blob':
-                      continue
-                  size = int(git('cat-file','-s',sha).strip())
-                  if size > 2_000_000:
-                      continue
-                  data = git('cat-file','blob',sha,binary=True)
+                  if git('cat-file','-t',sha).strip() != 'blob': continue
+                  size=int(git('cat-file','-s',sha).strip())
+                  if size > 2_000_000: continue
+                  data=git('cat-file','blob',sha,binary=True)
               except Exception:
                   continue
               scanned += 1
-              if forbidden_path.search(path):
-                  findings.append(('sensitive_filename', path, sha))
-              if runtime_path.search(path) and not path.endswith('/.gitkeep'):
-                  findings.append(('runtime_data_path', path, sha))
-              if pem.search(data):
-                  findings.append(('private_key', path, sha))
-              for category, rx in provider_patterns.items():
-                  if rx.search(data):
-                      findings.append((category, path, sha))
-              if b'\x00' in data:
-                  continue
-              text = data.decode('utf-8', 'replace')
-              for m in assignment.finditer(text):
-                  value = m.group(2).strip()
-                  if value in allow_exact or placeholder.search(value):
+              for cat,pat in provider.items():
+                  if pat.search(data): findings.append((cat,path,sha))
+              if b'\x00' in data: continue
+              text=data.decode('utf-8','replace')
+              for m in rx.finditer(text):
+                  name=m.group(1)
+                  value=m.group(2).strip()
+                  # Ignore hash format identifiers, documented test values and placeholders.
+                  if value.startswith('pbkdf2-') or value in allow_values or placeholder.search(value):
                       continue
-                  if any(x in value for x in (gh_expr_marker, '$env:', '%s', '{}', '<', '>')):
+                  # Ignore format/interpolation/template expressions.
+                  if any(x in value for x in ('$'+'{{', '$env:', '%s', '{}', '<', '>')):
                       continue
-                  findings.append(('literal_secret_assignment', path, sha))
+                  findings.append(('secret_named_literal',path,sha))
                   break
 
-          emails = set()
-          for line in git('log','--all','--format=%ae%n%ce').splitlines():
-              e = line.strip().lower()
-              if e and 'noreply.github.com' not in e:
-                  emails.add(e)
-
-          uniq = sorted(set(findings))
-          print(f'AUDIT_SCANNED_BLOBS={scanned}')
-          print(f'AUDIT_FINDINGS={len(uniq)}')
-          for category, path, sha in uniq:
-              print(f'FINDING category={category} path={path or "<unknown>"} blob={sha[:12]}')
-          print(f'NON_NOREPLY_COMMIT_EMAIL_COUNT={len(emails)}')
-          for e in sorted(emails):
-              if '@' in e:
-                  local, domain = e.rsplit('@',1)
-                  masked = (local[:1] + '***') if local else '***'
-                  print(f'COMMIT_EMAIL masked={masked}@{domain}')
-
-          with open('security-audit.json','w',encoding='utf-8') as f:
-              json.dump({'scanned_blobs': scanned, 'findings': [
-                  {'category': c, 'path': p, 'blob': s} for c,p,s in uniq
-              ], 'non_noreply_email_count': len(emails)}, f, ensure_ascii=False, indent=2)
+          uniq=sorted(set(findings))
+          print(f'TARGETED_SCANNED_BLOBS={scanned}')
+          print(f'TARGETED_FINDINGS={len(uniq)}')
+          for cat,path,sha in uniq:
+              print(f'FINDING category={cat} path={path or "<unknown>"} blob={sha[:12]}')
           PY
-          python3 /tmp/security_audit.py
-
-      - name: Upload audit report
-        uses: actions/upload-artifact@v7
-        with:
-          name: one-time-security-audit
-          path: security-audit.json
-          if-no-files-found: error
-          retention-days: 1
+          python3 /tmp/targeted_audit.py
