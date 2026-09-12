@@ -14,7 +14,6 @@ import (
 	"unsafe"
 
 	"cyinvoice/internal/appdata"
-	"cyinvoice/internal/displayfmt"
 	"cyinvoice/internal/fixeddecimal"
 	"cyinvoice/internal/invoicing"
 )
@@ -27,6 +26,7 @@ const (
 	wsVScroll = 0x00200000
 	bsPushButton = 0
 	bsDefaultPushButton = 1
+	bsOwnerDraw = 11
 	bsAutoRadioButton = 9
 	bsGroupBox = 7
 	esPassword = 0x0020
@@ -115,7 +115,6 @@ var (
 	activeManualRow int
 	pricesAreInclusive = true
 	recordRowStyles []recordRowStyle
-	visibleRecordRows []appdata.InvoiceRecord
 	apiHealthGeneration uint64
 	apiHealthInFlight uint32
 	apiHealthMu sync.Mutex
@@ -124,16 +123,7 @@ var (
 	buyerLookupMu sync.Mutex
 	buyerLookupResults = map[uint64]buyerLookupOutcome{}
 	lastBuyerLookupBAN string
-	manualIssueGeneration uint64
-	manualIssueMu sync.Mutex
-	manualIssueLookups = map[uint64]manualIssueLookupOutcome{}
-	manualIssueResults = map[uint64]manualIssueOutcome{}
-	recordsRefreshGeneration uint64
-	recordsRefreshMu sync.Mutex
-	recordsRefreshResults = map[uint64]error{}
 	settingsUnlocked bool
-	settingsLoginFailures int
-	settingsLoginBlockedUntil time.Time
 )
 
 type manualItemRow struct {
@@ -151,19 +141,6 @@ type buyerLookupOutcome struct {
 	BAN string
 	Result invoicing.NameLookup
 	Err error
-	Interactive bool
-}
-
-type manualIssueLookupOutcome struct {
-	BAN string
-	Lookup invoicing.NameLookup
-	Err error
-}
-
-type manualIssueOutcome struct {
-	Draft appdata.InvoiceDraft
-	Result invoicing.IssueResult
-	Err error
 }
 
 func buildGUI(parent uintptr) error {
@@ -179,9 +156,7 @@ func buildGUI(parent uintptr) error {
 		760, 43, 368, 14, wsChild|wsVisible|ssRight|ssCenterImage, 0, nil)
 	procSendMessageW.Call(apiReasonLabel, wmSetFont, apiReasonFont, 1)
 	setStaticStyle(apiReasonLabel, rgb(96, 96, 96), rgb(238, 246, 255), bannerBrush, false)
-	// SysTabControl32 is created at its final page-frame size. Do not create a
-	// temporary strip and resize it later from a refine/patch layer.
-	tabHandle = addTab(parent, 18, 73, 1128, 710)
+	tabHandle = addTab(parent, 18, 73, 1128, 704)
 	addButton(parent, "設定", settingsButtonX, settingsButtonY, settingsButtonWidth, settingsButtonHeight, idSettings, nil)
 	defaultFont = contentFont
 	buildInvoicePage(parent)
@@ -205,11 +180,9 @@ func buildGUI(parent uintptr) error {
 
 func buildInvoicePage(parent uintptr) {
 	addPanelTitleGroup(parent, "Excel 匯入開立", 36, 132, 1092, 68, 118, &invoiceControls)
-	// Native Win32 push buttons from creation time. CYInvoice intentionally does
-	// not use an owner-draw bootstrap followed by BM_SETSTYLE conversion.
-	addButton(parent, "匯入鼎新 ERP 銷貨單", 56, 157, 196, 32, idImportERP, &invoiceControls)
-	addButton(parent, "匯入 MO店+", 270, 157, 134, 32, idImportMO, &invoiceControls)
-	addButton(parent, "匯入酷澎", 422, 157, 126, 32, idImportCoupang, &invoiceControls)
+	addButtonStyle(parent, "匯入鼎新 ERP 銷貨單", 56, 157, 196, 32, idImportERP, bsOwnerDraw, &invoiceControls)
+	addButtonStyle(parent, "匯入 MO店+", 270, 157, 134, 32, idImportMO, bsOwnerDraw, &invoiceControls)
+	addButtonStyle(parent, "匯入酷澎", 422, 157, 126, 32, idImportCoupang, bsOwnerDraw, &invoiceControls)
 
 	addPanelTitleGroup(parent, "發票基本資料", 36, 214, 1092, 132, 112, &invoiceControls)
 	addStatic(parent, "訂單編號", 56, 241, 80, 25, &invoiceControls)
@@ -226,35 +199,36 @@ func buildInvoicePage(parent uintptr) {
 	setStaticStyle(buyerBANEdit, rgb(112, 112, 112), rgb(238, 238, 238), disabledEditBrush, false)
 	setStaticStyle(buyerNameEdit, rgb(112, 112, 112), rgb(238, 238, 238), disabledEditBrush, false)
 
-	addPanelTitleGroup(parent, "商品明細資料（最多 50 筆）", 36, 360, 1092, 220, 218, &invoiceControls)
-	// Native Win32 radio buttons from creation time.
-	addButtonStyle(parent, "以含稅輸入", 76, 386, 135, 27, idTaxInclusive, bsAutoRadioButton|wsGroup, &invoiceControls)
-	addButtonStyle(parent, "以未稅輸入", 218, 386, 135, 27, idTaxExclusive, bsAutoRadioButton, &invoiceControls)
+	addPanelTitleGroup(parent, "商品明細資料（最多 50 筆）", 36, 360, 1092, 206, 218, &invoiceControls)
+	addButtonStyle(parent, "以含稅輸入", 76, 386, 135, 27, idTaxInclusive, bsOwnerDraw|wsGroup, &invoiceControls)
+	addButtonStyle(parent, "以未稅輸入", 218, 386, 135, 27, idTaxExclusive, bsOwnerDraw, &invoiceControls)
 	addButton(parent, "＋ 新增明細", 987, 385, 121, 29, idItemAdd, &invoiceControls)
-	invoiceItemsList = addInvoiceListView(parent, 57, 424, 1051, 146, 0, &invoiceControls)
+	invoiceItemsList = addControl("SysListView32", "", parent, 57, 424, 1051, 132,
+		wsChild|wsVisible|wsTabStop|wsBorder|lvsReport|lvsOwnerDrawFixed|lvsSingleSel|lvsShowSelAlways, 0, &invoiceControls)
+	procSendMessageW.Call(invoiceItemsList, lvmSetExtendedListStyle, 0, lvsExGridLines|lvsExFullRowSelect|lvsExDoubleBuffer)
 	addListViewColumns(invoiceItemsList, []struct{ Title string; Width int; Right bool }{
 		{"序號", 50, false}, {"品名", 425, false}, {"課稅別", 78, false}, {"數量", 82, true},
 		{"單價（含稅）", 140, true}, {"金額（含稅）", 148, true}, {"操作", 80, false},
 	})
 	refreshManualRows()
 
-	addPanelTitleGroup(parent, "發票總備註", 36, 593, 678, 112, 96, &invoiceControls)
-	addEdit(parent, "", 54, 618, 642, 62, idRemark, esMultiLine|esAutoVScroll|wsVScroll, &invoiceControls)
-	remarkCounterLabel = addStatic(parent, "0 / 200", 610, 680, 80, 20, &invoiceControls)
+	addPanelTitleGroup(parent, "發票總備註", 36, 579, 678, 112, 96, &invoiceControls)
+	addEdit(parent, "", 54, 604, 642, 62, idRemark, esMultiLine|esAutoVScroll|wsVScroll, &invoiceControls)
+	remarkCounterLabel = addStatic(parent, "0 / 200", 610, 666, 80, 20, &invoiceControls)
 
-	addPanelTitleGroup(parent, "金額總計", 724, 593, 404, 112, 80, &invoiceControls)
-	addStatic(parent, "應稅銷售額", 750, 616, 130, 25, &invoiceControls)
-	salesLabel = addControl("STATIC", "0", parent, 1006, 616, 100, 25, wsChild|wsVisible|ssRight, 0, &invoiceControls)
-	addStatic(parent, "營業稅額（5%）", 750, 643, 150, 25, &invoiceControls)
-	taxLabel = addControl("STATIC", "0", parent, 1006, 643, 100, 25, wsChild|wsVisible|ssRight, 0, &invoiceControls)
-	addControl("STATIC", "", parent, 750, 668, 356, 2, wsChild|wsVisible|ssEtchedHorizontal, 0, &invoiceControls)
-	addStatic(parent, "發票總額", 750, 674, 130, 26, &invoiceControls)
-	totalLabel = addControl("STATIC", "0", parent, 1006, 674, 100, 26, wsChild|wsVisible|ssRight, 0, &invoiceControls)
+	addPanelTitleGroup(parent, "金額總計", 724, 579, 404, 112, 80, &invoiceControls)
+	addStatic(parent, "應稅銷售額", 750, 602, 130, 25, &invoiceControls)
+	salesLabel = addStatic(parent, "0", 1042, 602, 64, 25, &invoiceControls)
+	addStatic(parent, "營業稅額（5%）", 750, 629, 150, 25, &invoiceControls)
+	taxLabel = addStatic(parent, "0", 1042, 629, 64, 25, &invoiceControls)
+	addControl("STATIC", "", parent, 750, 654, 356, 2, wsChild|wsVisible|ssEtchedHorizontal, 0, &invoiceControls)
+	addStatic(parent, "發票總額", 750, 660, 130, 26, &invoiceControls)
+	totalLabel = addStatic(parent, "0", 1042, 660, 64, 26, &invoiceControls)
 	procSendMessageW.Call(totalLabel, wmSetFont, boldFont, 1)
 
-	addButton(parent, "清空", 356, 721, 140, 36, idClear, &invoiceControls)
-	addButtonStyle(parent, "開立測試發票", 512, 721, 142, 36, idIssue, bsDefaultPushButton, &invoiceControls)
-	addButton(parent, "預覽", 669, 721, 140, 36, idPreview, &invoiceControls)
+	addButton(parent, "清空", 356, 707, 140, 36, idClear, &invoiceControls)
+	addButtonStyle(parent, "開立測試發票", 512, 707, 142, 36, idIssue, bsDefaultPushButton, &invoiceControls)
+	addButton(parent, "預覽", 669, 707, 140, 36, idPreview, &invoiceControls)
 	setEditLimit(idOrderID, 40); setEditLimit(idRemark, 200)
 }
 
@@ -278,15 +252,45 @@ func buildRecordsPage(parent uintptr) {
 	addButton(parent, "查詢", 41, 213, 89, 34, idRecordsFilter, &recordControls)
 	addButton(parent, "清除條件", 141, 213, 101, 34, idRecordsClear, &recordControls)
 	addButton(parent, "重新整理狀態", 253, 213, 135, 34, idRecordsRefresh, &recordControls)
-	recordsList = addInvoiceListView(parent, 41, 259, 1078, 510, 0, &recordControls)
+	recordsList = addListView(parent, 41, 259, 1078, 510, 0, &recordControls)
 	addListViewColumns(recordsList, []struct{ Title string; Width int; Right bool }{
-		{"開立時間", 142, false}, {"發票號碼", 100, false}, {"來源", 84, false},
-		{"訂單編號", 158, false}, {"統編", 112, false}, {"買受人", 120, false},
-		{"金額", 82, true}, {"交付方式", 86, false}, {"發票狀態", 88, false}, {"上傳", 58, false},
+		{"開立時間", 130, false}, {"發票號碼", 100, false}, {"來源", 70, false},
+		{"訂單編號", 145, false}, {"統編", 80, false}, {"買受人", 145, false},
+		{"金額", 95, true}, {"交付方式", 90, false}, {"發票狀態", 90, false}, {"上傳", 60, false},
 	})
 	from, to := defaultRecordDateRange(time.Now())
 	setControlText(handles[idRecordsDateFrom], from)
 	setControlText(handles[idRecordsDateTo], to)
+}
+
+func buildSettingsPage(parent uintptr) {
+	settingsControls = nil
+	settingsLoginControls = nil
+	addGroup(parent, "設定權限驗證", 44, 48, 672, 230, &settingsLoginControls)
+	addStatic(parent, "請輸入管理密碼", 138, 108, 160, 28, &settingsLoginControls)
+	addEdit(parent, "", 298, 105, 300, 28, idSettingsLoginPassword, esPassword|esAutoHScroll, &settingsLoginControls)
+	addButtonStyle(parent, "進入設定", 260, 176, 130, 38, idSettingsUnlock, bsDefaultPushButton, &settingsLoginControls)
+	addButton(parent, "取消", 404, 176, 110, 38, idSettingsCancel, &settingsLoginControls)
+
+	addGroup(parent, "使用環境", 28, 24, 704, 190, &settingsControls)
+	addButtonStyle(parent, "光貿測試環境", 56, 58, 150, 30, idEnvironmentTest, bsAutoRadioButton|wsGroup, &settingsControls)
+	addStatic(parent, "測試帳號由光貿固定提供，不可修改。", 222, 61, 400, 28, &settingsControls)
+	addButtonStyle(parent, "正式公司", 56, 111, 120, 30, idEnvironmentProd, bsAutoRadioButton, &settingsControls)
+	addStatic(parent, "統編", 188, 114, 44, 28, &settingsControls)
+	prodBANEdit := addEdit(parent, "", 232, 111, 112, 28, idProdBAN, esAutoHScroll, &settingsControls)
+	addStatic(parent, "App Key", 360, 114, 68, 28, &settingsControls)
+	prodKeyEdit := addEdit(parent, "", 430, 111, 270, 28, idProdKey, esPassword|esAutoHScroll, &settingsControls)
+	setStaticStyle(prodBANEdit, rgb(112, 112, 112), rgb(238, 238, 238), disabledEditBrush, false)
+	setStaticStyle(prodKeyEdit, rgb(112, 112, 112), rgb(238, 238, 238), disabledEditBrush, false)
+
+	addGroup(parent, "平台檔案密碼", 28, 228, 704, 100, &settingsControls)
+	addStatic(parent, "MO店+ Excel 保護密碼", 56, 267, 185, 28, &settingsControls)
+	addEdit(parent, "", 251, 264, 449, 28, idMOPassword, esPassword|esAutoHScroll, &settingsControls)
+
+	addButton(parent, "設定管理密碼", 158, 360, 140, 40, idSettingsChangePassword, &settingsControls)
+	addButtonStyle(parent, "儲存設定", 312, 360, 140, 40, idSettingsSave, bsDefaultPushButton, &settingsControls)
+	addButton(parent, "取消", 466, 360, 140, 40, idSettingsBack, &settingsControls)
+	loadSettingsIntoControls()
 }
 
 func handleCommand(id int) {
@@ -351,7 +355,7 @@ func handleCommand(id int) {
 	case idRecordsClear:
 		clearRecordFilters()
 	case idSettingsSave:
-		saveCompactSettings()
+		saveSettings()
 	case idRemark:
 		refreshRemarkCounter()
 	}
@@ -360,7 +364,7 @@ func handleCommand(id int) {
 func setOrderMode(custom bool) {
 	setChecked(handles[idOrderCustom], custom)
 	setChecked(handles[idOrderAuto], !custom)
-	setEditEnabledAppearance(handles[idOrderID], custom)
+	procEnableWindow.Call(handles[idOrderID], boolValue(custom))
 	if !custom {
 		setControlText(handles[idOrderID], nextOrderID())
 	} else {
@@ -399,21 +403,19 @@ func setBuyerMode(company bool) {
 	}
 	setChecked(handles[idCompanyBuyer], company)
 	setChecked(handles[idPaperBuyer], !company)
-	setEditEnabledAppearance(handles[idBuyerBAN], company)
-	setEditEnabledAppearance(handles[idBuyerName], company)
-	// CYInvoice rule: general consumers can only issue tax-inclusive invoices.
-	// The inclusive radio remains enabled/checked; only the exclusive radio is
-	// disabled. This state transition is explicit here and never done from a
-	// paint/WM_CTLCOLOR handler.
-	procEnableWindow.Call(handles[idTaxInclusive], 1)
-	procEnableWindow.Call(handles[idTaxExclusive], boolValue(company))
+	enabled := uintptr(0)
+	if company { enabled = 1 }
+	procEnableWindow.Call(handles[idBuyerBAN], enabled)
+	procEnableWindow.Call(handles[idBuyerName], enabled)
+	procEnableWindow.Call(handles[idTaxInclusive], enabled)
+	procEnableWindow.Call(handles[idTaxExclusive], enabled)
 	procInvalidateRect.Call(handles[idBuyerBAN], 0, 1)
 	procInvalidateRect.Call(handles[idBuyerName], 0, 1)
 	if !company {
 		setControlText(handles[idBuyerBAN], "")
 		setControlText(handles[idBuyerName], "")
-		pricesAreInclusive = true
 		updateTaxChoice(true)
+		pricesAreInclusive = true
 		lastBuyerLookupBAN = ""
 	}
 	refreshTotals()
@@ -480,9 +482,9 @@ func refreshTotals() {
 	pricesExcludeTax := isChecked(handles[idCompanyBuyer]) && !pricesAreInclusive
 	sales, tax, total, err := appdata.CalculateInvoiceTotals(items, isChecked(handles[idCompanyBuyer]), pricesExcludeTax)
 	if err != nil { sales, tax, total = 0, 0, 0 }
-	setControlText(salesLabel, displayfmt.Integer(sales))
-	setControlText(taxLabel, displayfmt.Integer(tax))
-	setControlText(totalLabel, displayfmt.Integer(total))
+	setControlText(salesLabel, strconv.FormatInt(sales, 10))
+	setControlText(taxLabel, strconv.FormatInt(tax, 10))
+	setControlText(totalLabel, strconv.FormatInt(total, 10))
 	if pricesExcludeTax {
 		setListViewColumnTitle(invoiceItemsList, 4, "單價（未稅）")
 		setListViewColumnTitle(invoiceItemsList, 5, "金額（未稅）")
@@ -508,12 +510,10 @@ func previewText(draft appdata.InvoiceDraft) string {
 	for index := 0; index < limit; index++ {
 		item := draft.Items[index]
 		quantity, unitPrice, amount, _ := appdata.InvoiceItemDecimals(item)
-		fmt.Fprintf(&text, "%d. %s　%s × %s = %s\n", index+1, item.Description,
-			fixeddecimal.Format(quantity), displayfmt.Decimal(fixeddecimal.Format(unitPrice)), displayfmt.Decimal(fixeddecimal.Format(amount)))
+		fmt.Fprintf(&text, "%d. %s　%s × %s = %s\n", index+1, item.Description, fixeddecimal.Format(quantity), fixeddecimal.Format(unitPrice), fixeddecimal.Format(amount))
 	}
 	if len(draft.Items) > limit { fmt.Fprintf(&text, "…另有 %d 筆商品\n", len(draft.Items)-limit) }
-	fmt.Fprintf(&text, "\n應稅銷售額：%s\n營業稅額：%s\n發票總額：%s",
-		displayfmt.Integer(sales), displayfmt.Integer(tax), displayfmt.Integer(draft.TotalAmount))
+	fmt.Fprintf(&text, "\n應稅銷售額：%d\n營業稅額：%d\n發票總額：%d", sales, tax, draft.TotalAmount)
 	return text.String()
 }
 
@@ -532,7 +532,7 @@ func (row manualItemRow) amountDecimal() (fixeddecimal.Value, error) {
 func (row manualItemRow) amountText() string {
 	amount, err := row.amountDecimal()
 	if err != nil { return "0" }
-	return displayfmt.Decimal(fixeddecimal.Format(amount))
+	return fixeddecimal.Format(amount)
 }
 
 func (row manualItemRow) item(index int) (appdata.InvoiceItem, error) {
@@ -622,12 +622,11 @@ func refreshRemarkCounter() {
 func refreshManualRows() {
 	commitProductCellEdit(false)
 	if invoiceItemsList == 0 { return }
-	procSendMessageW.Call(invoiceItemsList, wmSetRedraw, 0, 0)
 	clearListView(invoiceItemsList)
 	for index, row := range manualRows {
 		addListViewRow(invoiceItemsList, index, []string{
 			strconv.Itoa(index+1), row.Description, "應稅", row.Quantity,
-			displayfmt.Decimal(row.UnitPrice), row.amountText(), "刪除",
+			row.UnitPrice, row.amountText(), "",
 		})
 	}
 	for index := len(manualRows); index < 5; index++ {
@@ -635,8 +634,6 @@ func refreshManualRows() {
 	}
 	if activeManualRow < 0 { activeManualRow = 0 }
 	if activeManualRow >= len(manualRows) { activeManualRow = len(manualRows)-1 }
-	layoutProductColumnsToClient()
-	procSendMessageW.Call(invoiceItemsList, wmSetRedraw, 1, 0)
 	procInvalidateRect.Call(invoiceItemsList, 0, 1)
 }
 
@@ -650,52 +647,16 @@ func updateTaxChoice(inclusive bool) {
 
 func issueDraft() {
 	if invoiceService == nil { showError("開立服務尚未初始化"); return }
+	lookup := invoicing.NameLookup{}
 	if isChecked(handles[idCompanyBuyer]) {
-		ban := strings.TrimSpace(controlText(handles[idBuyerBAN]))
-		if len(ban) != 8 { showError("公司統編必須為 8 碼"); return }
+		var lookupErr error
 		setAPIWorking("● 正在查詢買受人名稱…")
-		procEnableWindow.Call(handles[idIssue], 0)
-		generation := atomic.AddUint64(&manualIssueGeneration, 1)
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			defer cancel()
-			lookup, lookupErr := invoiceService.LookupBuyerName(ctx, ban)
-			manualIssueMu.Lock()
-			manualIssueLookups[generation] = manualIssueLookupOutcome{BAN: ban, Lookup: lookup, Err: lookupErr}
-			manualIssueMu.Unlock()
-			procPostMessageW.Call(mainWindow, wmManualIssueLookupResult, uintptr(generation), 0)
-		}()
-		return
-	}
-	startManualIssue(invoicing.NameLookup{})
-}
-
-func finishManualIssueLookup(generation uint64) {
-	manualIssueMu.Lock()
-	outcome, found := manualIssueLookups[generation]
-	delete(manualIssueLookups, generation)
-	manualIssueMu.Unlock()
-	if !found || generation != atomic.LoadUint64(&manualIssueGeneration) { return }
-	procEnableWindow.Call(handles[idIssue], 1)
-	if !isChecked(handles[idCompanyBuyer]) || strings.TrimSpace(controlText(handles[idBuyerBAN])) != outcome.BAN {
+		lookup, lookupErr = invoiceService.LookupBuyerName(context.Background(), controlText(handles[idBuyerBAN]))
 		refreshAPIState()
-		return
+		if lookupErr != nil { showError(lookupErr.Error()); return }
+		if lookup.Name != "" { setControlText(handles[idBuyerName], lookup.Name) }
+		if strings.TrimSpace(controlText(handles[idBuyerName])) == "" { showError("光貿查詢成功但沒有公司名稱，請手動輸入買方名稱後再開立。"); return }
 	}
-	if outcome.Err != nil {
-		refreshAPIState()
-		showError(outcome.Err.Error())
-		return
-	}
-	if outcome.Lookup.Name != "" { setControlText(handles[idBuyerName], outcome.Lookup.Name) }
-	if strings.TrimSpace(controlText(handles[idBuyerName])) == "" {
-		refreshAPIState()
-		showInfo("查無此統一編號，請再次確認或自行輸入買方名稱。")
-		return
-	}
-	startManualIssue(outcome.Lookup)
-}
-
-func startManualIssue(lookup invoicing.NameLookup) {
 	draft, err := draftFromControls()
 	if err != nil { showError(err.Error()); return }
 	settings, err := appRepository.Settings.LoadOrCreate()
@@ -705,37 +666,19 @@ func startManualIssue(lookup invoicing.NameLookup) {
 	if !confirmAction(previewText(draft) + "\n\n即將送至「" + environment + "」開立。\n是否確定開立？") { return }
 	setAPIWorking("● 正在連線光貿 API…")
 	procEnableWindow.Call(handles[idIssue], 0)
-	generation := atomic.AddUint64(&manualIssueGeneration, 1)
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		defer cancel()
-		result, issueErr := invoiceService.IssueManualWithLookup(ctx, draft, lookup)
-		manualIssueMu.Lock()
-		manualIssueResults[generation] = manualIssueOutcome{Draft: draft, Result: result, Err: issueErr}
-		manualIssueMu.Unlock()
-		procPostMessageW.Call(mainWindow, wmManualIssueResult, uintptr(generation), 0)
-	}()
-}
-
-func finishManualIssue(generation uint64) {
-	manualIssueMu.Lock()
-	outcome, found := manualIssueResults[generation]
-	delete(manualIssueResults, generation)
-	manualIssueMu.Unlock()
-	if !found || generation != atomic.LoadUint64(&manualIssueGeneration) { return }
+	result, issueErr := invoiceService.IssueManualWithLookup(context.Background(), draft, lookup)
 	procEnableWindow.Call(handles[idIssue], 1)
 	refreshAPIState()
 	refreshRecords()
-	if outcome.Err != nil {
-		appLogger.Errorf("issue invoice order=%s state=%s: %v", outcome.Draft.OrderID, outcome.Result.Record.InvoiceState, outcome.Err)
-		if outcome.Result.Opened { messageBox(outcome.Err.Error(), 0x30) } else { showError(outcome.Err.Error()) }
+	if issueErr != nil {
+		appLogger.Errorf("issue invoice order=%s state=%s: %v", draft.OrderID, result.Record.InvoiceState, issueErr)
+		showError(issueErr.Error())
 		return
 	}
-	result := outcome.Result
 	appLogger.Infof("invoice opened order=%s invoice=%s environment=%s", result.Record.OrderID, result.Record.InvoiceNumber, result.Record.Environment)
-	showInfo(fmt.Sprintf("發票開立成功\n\n發票號碼：%s\n訂單編號：%s\n買受人：%s\n金額：%s\n正式發票時間：%s %s\n送出時間：%s",
+	showInfo(fmt.Sprintf("發票開立成功\n\n發票號碼：%s\n訂單編號：%s\n買受人：%s\n金額：%d\n正式發票時間：%s %s\n送出時間：%s",
 		result.Record.InvoiceNumber, result.Record.OrderID, result.Record.BuyerName,
-		displayfmt.Integer(result.Record.Amount), result.Record.InvoiceDate, result.Record.InvoiceTime, result.Record.SentAt))
+		result.Record.Amount, result.Record.InvoiceDate, result.Record.InvoiceTime, result.Record.SentAt))
 	clearDraft()
 }
 
@@ -763,10 +706,8 @@ func refreshRecords() {
 	ban := controlText(handles[idRecordsBAN])
 	source := comboText(handles[idRecordsSource])
 	state := comboText(handles[idRecordsStatus])
-	procSendMessageW.Call(recordsList, wmSetRedraw, 0, 0)
 	clearListView(recordsList)
 	recordRowStyles = recordRowStyles[:0]
-	visibleRecordRows = visibleRecordRows[:0]
 	row := 0
 	for _, record := range records {
 		date := recordDate(record)
@@ -780,17 +721,12 @@ func refreshRecords() {
 		if state != "" && state != "全部" && record.InvoiceState != state { continue }
 		addListViewRow(recordsList, row, []string{
 			recordIssueTime(record), record.InvoiceNumber, record.Source, record.OrderID,
-			record.BuyerIdentifier, record.BuyerName, displayfmt.Integer(record.Amount),
+			record.BuyerIdentifier, record.BuyerName, strconv.FormatInt(record.Amount, 10),
 			record.Delivery, record.InvoiceState, recordUploadText(record),
 		})
 		recordRowStyles = append(recordRowStyles, recordRowStyle{State: record.InvoiceState, Upload: record.UploadStatus})
-		visibleRecordRows = append(visibleRecordRows, record)
 		row++
 	}
-	syncRecordPlaceholderRows()
-	layoutRecordColumnsToClient()
-	procSendMessageW.Call(recordsList, wmSetRedraw, 1, 0)
-	procInvalidateRect.Call(recordsList, 0, 1)
 }
 
 func optionalDate(value string) (time.Time, error) {
@@ -839,24 +775,8 @@ func refreshRecordsFromAPI() {
 	if invoiceService == nil { refreshRecords(); return }
 	procEnableWindow.Call(handles[idRecordsRefresh], 0)
 	setControlText(handles[idRecordsRefresh], "重新整理中…")
-	generation := atomic.AddUint64(&recordsRefreshGeneration, 1)
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		_, refreshErr := invoiceService.RefreshAll(ctx)
-		recordsRefreshMu.Lock()
-		recordsRefreshResults[generation] = refreshErr
-		recordsRefreshMu.Unlock()
-		procPostMessageW.Call(mainWindow, wmRecordsRefreshResult, uintptr(generation), 0)
-	}()
-}
-
-func finishRecordsRefresh(generation uint64) {
-	recordsRefreshMu.Lock()
-	err, found := recordsRefreshResults[generation]
-	delete(recordsRefreshResults, generation)
-	recordsRefreshMu.Unlock()
-	if !found || generation != atomic.LoadUint64(&recordsRefreshGeneration) { return }
+	procUpdateWindow.Call(mainWindow)
+	_, err := invoiceService.RefreshAll(context.Background())
 	setControlText(handles[idRecordsRefresh], "重新整理狀態")
 	procEnableWindow.Call(handles[idRecordsRefresh], 1)
 	refreshRecords()
@@ -961,7 +881,13 @@ func stopAPIRetryTimer() {
 func lookupBuyerName() {
 	if !isChecked(handles[idCompanyBuyer]) { showInfo("請先選擇「公司統編（紙本）」。"); return }
 	ban := strings.TrimSpace(controlText(handles[idBuyerBAN]))
-	startBuyerNameLookup(ban, true)
+	setAPIWorking("● 正在查詢買受人名稱…")
+	result, err := invoiceService.LookupBuyerName(context.Background(), ban)
+	refreshAPIState()
+	if err != nil { showError(err.Error()); return }
+	if result.Name == "" { showInfo("光貿查詢成功，但沒有公司名稱。\n請手動輸入；發票成功開立後才會記憶於本機。" ); return }
+	setControlText(handles[idBuyerName], result.Name)
+	if result.Local { showInfo("已從本機安全記憶資料帶入公司名稱。") } else { showInfo("已從光貿統編查詢帶入公司名稱；此名稱不會另存本機。") }
 }
 
 func buyerBANChanged() {
@@ -982,10 +908,6 @@ func buyerBANChanged() {
 	if ban == lastBuyerLookupBAN { return }
 	lastBuyerLookupBAN = ban
 	setControlText(handles[idBuyerName], "")
-	startBuyerNameLookup(ban, false)
-}
-
-func startBuyerNameLookup(ban string, interactive bool) {
 	setAPIWorking("● 正在查詢買受人名稱…")
 	generation := atomic.AddUint64(&buyerLookupGeneration, 1)
 	go func() {
@@ -993,7 +915,7 @@ func startBuyerNameLookup(ban string, interactive bool) {
 		defer cancel()
 		result, lookupErr := invoiceService.LookupBuyerName(ctx, ban)
 		buyerLookupMu.Lock()
-		buyerLookupResults[generation] = buyerLookupOutcome{BAN: ban, Result: result, Err: lookupErr, Interactive: interactive}
+		buyerLookupResults[generation] = buyerLookupOutcome{BAN: ban, Result: result, Err: lookupErr}
 		buyerLookupMu.Unlock()
 		procPostMessageW.Call(mainWindow, wmBuyerLookupResult, uintptr(generation), 0)
 	}()
@@ -1011,24 +933,12 @@ func finishBuyerNameLookup(generation uint64) {
 		setStaticStyle(apiStatusLabel, rgb(210, 0, 0), rgb(238, 246, 255), bannerBrush, false)
 		procInvalidateRect.Call(mainWindow, 0, 1)
 		if appLogger != nil { appLogger.Errorf("automatic buyer BAN lookup %s: %v", outcome.BAN, outcome.Err) }
-		if outcome.Interactive { showError(outcome.Err.Error()) }
 		return
 	}
 	if outcome.Result.Name != "" {
 		setControlText(handles[idBuyerName], outcome.Result.Name)
 	}
 	refreshAPIState()
-	if outcome.Result.Name == "" {
-		showInfo("查無此統一編號，請再次確認或自行輸入買方名稱。")
-		return
-	}
-	if outcome.Interactive {
-		if outcome.Result.Local {
-			showInfo("已從本機安全記憶資料帶入公司名稱。")
-		} else {
-			showInfo("已從光貿統編查詢帶入公司名稱；此名稱不會另存本機。")
-		}
-	}
 }
 
 func importMOExcel() {
@@ -1058,15 +968,47 @@ func importERPExcel() {
 	showPlatformImportConfirmation(appdata.SourceERP, path, "", settings)
 }
 
+func loadSettingsIntoControls() {
+	if appRepository == nil { return }
+	settings, err := appRepository.Settings.LoadOrCreate()
+	if err != nil { showError("讀取設定失敗：" + err.Error()); return }
+	setSettingsEnvironment(settings.Environment == appdata.EnvironmentProduction)
+	setControlText(handles[idProdBAN], settings.ProdInvoice)
+	setControlText(handles[idProdKey], "")
+	setControlText(handles[idMOPassword], "")
+}
+
+func saveSettings() {
+	if !settingsUnlocked {
+		showError("設定視窗已鎖定，請重新輸入管理密碼")
+		openSettingsLogin()
+		return
+	}
+	settings, err := appRepository.Settings.LoadOrCreate()
+	if err != nil { showError(err.Error()); return }
+	if isChecked(handles[idEnvironmentProd]) {
+		settings.Environment = appdata.EnvironmentProduction
+	} else {
+		settings.Environment = appdata.EnvironmentTest
+	}
+	settings.ProdInvoice = strings.TrimSpace(controlText(handles[idProdBAN]))
+	if key := controlText(handles[idProdKey]); key != "" {
+		if err = appRepository.Settings.SetProdAppKey(&settings, key); err != nil { showError(err.Error()); return }
+	}
+	if password := controlText(handles[idMOPassword]); password != "" {
+		if err = appRepository.Settings.SetMOPassword(&settings, password); err != nil { showError(err.Error()); return }
+	}
+	if err = appRepository.Settings.Save(settings); err != nil { showError(err.Error()); return }
+	appLogger.Infof("settings saved environment=%s", settings.Environment)
+	refreshAPIState()
+	showInfo("設定已安全儲存。\nApp Key 與 MO店+ 密碼使用 Windows DPAPI 加密，不會以明文寫入。")
+}
+
 func openSettingsLogin() {
 	showSettingsWindow()
 }
 
 func unlockSettings() {
-	if remaining := time.Until(settingsLoginBlockedUntil); remaining > 0 {
-		showError(fmt.Sprintf("管理密碼連續輸入錯誤，請等待 %d 秒後再試", int(remaining.Seconds())+1))
-		return
-	}
 	password := controlText(handles[idSettingsLoginPassword])
 	if strings.TrimSpace(password) == "" {
 		showError("請輸入管理密碼")
@@ -1076,14 +1018,6 @@ func unlockSettings() {
 	if err != nil { showError("讀取設定失敗：" + err.Error()); return }
 	if settings.AdminPasswordSet {
 		if !appdata.CheckAdminPassword(settings, password) {
-			settingsLoginFailures++
-			if settingsLoginFailures >= 5 {
-				settingsLoginBlockedUntil = time.Now().Add(30 * time.Second)
-				settingsLoginFailures = 0
-				showError("管理密碼連續輸入錯誤，已暫停嘗試 30 秒")
-				return
-			}
-	} else {
 			showError("管理密碼錯誤")
 			return
 		}
@@ -1098,11 +1032,8 @@ func unlockSettings() {
 		}
 	}
 	settingsUnlocked = true
-	settingsLoginFailures = 0
-	settingsLoginBlockedUntil = time.Time{}
 	setControlText(handles[idSettingsLoginPassword], "")
-	// The settings window owns exactly one loader: loadCompactSettingsIntoControls.
-	// Do not call a legacy loader here and then overwrite it later.
+	loadSettingsIntoControls()
 	showSettingsPage(settingsControls)
 }
 
@@ -1116,8 +1047,9 @@ func lockSettingsPage() {
 func setSettingsEnvironment(production bool) {
 	setChecked(handles[idEnvironmentTest], !production)
 	setChecked(handles[idEnvironmentProd], production)
-	setEditEnabledAppearance(handles[idProdBAN], production)
-	setEditEnabledAppearance(handles[idProdKey], production)
+	value := boolValue(production)
+	procEnableWindow.Call(handles[idProdBAN], value)
+	procEnableWindow.Call(handles[idProdKey], value)
 	procInvalidateRect.Call(handles[idProdBAN], 0, 1)
 	procInvalidateRect.Call(handles[idProdKey], 0, 1)
 }
@@ -1131,7 +1063,10 @@ func addGroup(p uintptr, t string, x, y, w, h int, list *[]uintptr) uintptr {
 	return addButtonStyle(p, t, x, y, w, h, 0, bsGroupBox, list)
 }
 func addPanelTitleGroup(p uintptr, t string, x, y, w, h, titleWidth int, list *[]uintptr) uintptr {
-	return addGroup(p, t, x, y, w, h, list)
+	group := addGroup(p, "", x, y, w, h, list)
+	title := addStatic(p, t, x+8, y, titleWidth, 24, list)
+	setStaticStyle(title, rgb(0, 0, 0), rgb(240, 240, 240), panelTitleBrush, false)
+	return group
 }
 func addButton(p uintptr, t string, x, y, w, h, id int, list *[]uintptr) uintptr {
 	return addButtonStyle(p, t, x, y, w, h, id, bsPushButton, list)
@@ -1143,20 +1078,7 @@ func addStatic(p uintptr, t string, x, y, w, h int, list *[]uintptr) uintptr {
 	return addControl("STATIC", t, p, x, y, w, h, wsChild|wsVisible, 0, list)
 }
 func addEdit(p uintptr, t string, x, y, w, h, id int, style uintptr, list *[]uintptr) uintptr {
-	handle := addControl("EDIT", t, p, x, y, w, h, wsChild|wsVisible|wsTabStop|wsBorder|style, id, list)
-	setStaticStyle(handle, rgb(0, 0, 0), rgb(255, 255, 255), whiteBrush, false)
-	return handle
-}
-
-func setEditEnabledAppearance(handle uintptr, enabled bool) {
-	if handle == 0 { return }
-	procEnableWindow.Call(handle, boolValue(enabled))
-	if enabled {
-		setStaticStyle(handle, rgb(0, 0, 0), rgb(255, 255, 255), whiteBrush, false)
-	} else {
-		setStaticStyle(handle, rgb(112, 112, 112), rgb(238, 238, 238), disabledEditBrush, false)
-	}
-	procInvalidateRect.Call(handle, 0, 1)
+	return addControl("EDIT", t, p, x, y, w, h, wsChild|wsVisible|wsTabStop|wsBorder|style, id, list)
 }
 func addListBox(p uintptr, x, y, w, h int, list *[]uintptr) uintptr {
 	return addControl("LISTBOX", "", p, x, y, w, h, wsChild|wsVisible|wsVScroll|wsBorder|0x0100, 0, list)

@@ -8,17 +8,9 @@ import (
 	"unsafe"
 )
 
-const (
-	settingsWindowClass = "CYInvoiceSettingsWindow"
-	settingsWindowWidth = 560
-	settingsWindowHeight = 351
-)
+const settingsWindowClass = "CYInvoiceSettingsWindow"
 
-var (
-	settingsWindow uintptr
-	settingsLoginEditOriginalProc uintptr
-	settingsLoginEditCallback = syscall.NewCallback(settingsLoginEditWindowProc)
-)
+var settingsWindow uintptr
 
 func showSettingsWindow() {
 	if settingsWindow != 0 {
@@ -46,92 +38,59 @@ func showSettingsWindow() {
 	}
 	title := mustUTF16Ptr("CYInvoice 設定")
 	settingsWindow, _, callErr = procCreateWindowExW.Call(0, uintptr(unsafe.Pointer(className)), uintptr(unsafe.Pointer(title)),
-		0x00C00000|0x00080000, cwUseDefault, cwUseDefault, settingsWindowWidth, settingsWindowHeight, mainWindow, 0, instance, 0)
+		0x00C00000|0x00080000|wsVisible, cwUseDefault, cwUseDefault, 780, 500, mainWindow, 0, instance, 0)
 	if settingsWindow == 0 { showError(fmt.Sprintf("無法建立設定視窗：%v", callErr)); return }
-	centerWindowOnParent(settingsWindow, mainWindow, settingsWindowWidth, settingsWindowHeight)
-	if err := runOwnedModalWindow(mainWindow, settingsWindow, handles[idSettingsLoginPassword]); err != nil {
-		showError("設定視窗訊息處理失敗：" + err.Error())
-		if settingsWindow != 0 { procDestroyWindow.Call(settingsWindow) }
+	centerWindowOnParent(settingsWindow, mainWindow, 780, 500)
+	procEnableWindow.Call(mainWindow, 0)
+	procShowWindow.Call(settingsWindow, swShow)
+	procUpdateWindow.Call(settingsWindow)
+
+	var msg message
+	for {
+		alive, _, _ := procIsWindow.Call(settingsWindow)
+		if alive == 0 { break }
+		result, _, messageErr := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if int32(result) == -1 { showError(fmt.Sprintf("設定視窗訊息處理失敗：%v", messageErr)); break }
+		if result == 0 { procPostQuitMessage.Call(0); break }
+		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
 	}
+	procEnableWindow.Call(mainWindow, 1)
+	procSetFocus.Call(mainWindow)
 }
 
 func settingsWindowProc(window uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
 	case wmCreate:
 		settingsWindow = window
-		defaultFont = smallFont
-		buildCompactSettingsPage(window)
+		defaultFont = uiFont
+		buildSettingsPage(window)
 		defaultFont = contentFont
 		for _, group := range [][]uintptr{settingsLoginControls, settingsControls} {
 			for _, handle := range group { delete(baseRects, handle) }
 		}
-		installSettingsLoginEnter()
 		lockSettingsPage()
 		showSettingsPage(settingsLoginControls)
+		procSetFocus.Call(handles[idSettingsLoginPassword])
 		return 0
 	case wmCommand:
-		id := int(wParam & 0xffff)
-		switch id {
-		case idSettingsSave:
-			saveCompactSettings()
-			return 0
-		case idSettingsUnlock:
-			if unlockSettingsWindow() {
-				procSetFocus.Call(handles[idEnvironmentTest])
-			}
-			return 0
-		default:
-			handleCommand(id)
-			return 0
-		}
+		handleCommand(int(wParam & 0xffff))
+		return 0
 	case wmCtlColorStatic:
 		return handleStaticColor(wParam, lParam)
-	case wmCtlColorEdit:
-		return handleStaticColor(wParam, lParam)
 	case wmCtlColorBtn:
-		return handleButtonColor(wParam)
+		return handlePlainControlColor(wParam)
 	case wmClose:
 		procDestroyWindow.Call(window)
 		return 0
 	case wmDestroy:
 		lockSettingsPage()
-		forgetControlIDs(
-			idSettingsBack, idEnvironmentTest, idEnvironmentProd, idProdBAN, idProdKey,
-			idMOPassword, idAdminPassword, idSettingsSave, idSettingsLoginPassword,
-			idSettingsUnlock, idSettingsCancel, idSettingsChangePassword,
-		)
-		settingsControls = nil
-		settingsLoginControls = nil
-		settingsLoginEditOriginalProc = 0
 		settingsWindow = 0
 		return 0
 	default:
 		result, _, _ := procDefWindowProcW.Call(window, uintptr(msg), wParam, lParam)
 		return result
 	}
-}
-
-func installSettingsLoginEnter() {
-	handle := handles[idSettingsLoginPassword]
-	if handle == 0 { return }
-	original, _, _ := procSetWindowLongPtrW.Call(handle, gwlpWndProc, settingsLoginEditCallback)
-	if original != 0 { settingsLoginEditOriginalProc = original }
-}
-
-func settingsLoginEditWindowProc(window uintptr, msg uint32, wParam, lParam uintptr) uintptr {
-	original := settingsLoginEditOriginalProc
-	if original == 0 {
-		result, _, _ := procDefWindowProcW.Call(window, uintptr(msg), wParam, lParam)
-		return result
-	}
-	if msg == wmKeyDown && wParam == vkReturn {
-		if settingsWindow != 0 {
-			procSendMessageW.Call(settingsWindow, wmCommand, uintptr(idSettingsUnlock), 0)
-		}
-		return 0
-	}
-	result, _, _ := procCallWindowProcW.Call(original, window, uintptr(msg), wParam, lParam)
-	return result
 }
 
 func showSettingsPage(page []uintptr) {

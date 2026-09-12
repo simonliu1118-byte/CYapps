@@ -45,10 +45,23 @@ func showChangePasswordWindow() {
 		0x00C00000|0x00080000, cwUseDefault, cwUseDefault, 520, 330, settingsWindow, 0, instance, 0)
 	if changePasswordWindow == 0 { showError(fmt.Sprintf("無法建立管理密碼設定視窗：%v", callErr)); return }
 	centerWindowOnParent(changePasswordWindow, settingsWindow, 520, 330)
-	if err := runOwnedModalWindow(settingsWindow, changePasswordWindow, handles[idCurrentAdminPassword]); err != nil {
-		showError("管理密碼視窗訊息處理失敗：" + err.Error())
-		if changePasswordWindow != 0 { procDestroyWindow.Call(changePasswordWindow) }
+	procEnableWindow.Call(settingsWindow, 0)
+	procShowWindow.Call(changePasswordWindow, swShow)
+	procUpdateWindow.Call(changePasswordWindow)
+	procSetFocus.Call(handles[idCurrentAdminPassword])
+
+	var msg message
+	for {
+		alive, _, _ := procIsWindow.Call(changePasswordWindow)
+		if alive == 0 { break }
+		result, _, messageErr := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if int32(result) == -1 { showError(fmt.Sprintf("管理密碼視窗訊息處理失敗：%v", messageErr)); break }
+		if result == 0 { procPostQuitMessage.Call(0); break }
+		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
 	}
+	procEnableWindow.Call(settingsWindow, 1)
+	procSetFocus.Call(settingsWindow)
 }
 
 func changePasswordWindowProc(window uintptr, msg uint32, wParam, lParam uintptr) uintptr {
@@ -65,20 +78,12 @@ func changePasswordWindowProc(window uintptr, msg uint32, wParam, lParam uintptr
 			procDestroyWindow.Call(window)
 		}
 		return 0
-	case wmCtlColorStatic:
+	case wmCtlColorStatic, wmCtlColorBtn:
 		return handlePlainControlColor(wParam)
-	case wmCtlColorEdit:
-		return handleStaticColor(wParam, lParam)
-	case wmCtlColorBtn:
-		return handleButtonColor(wParam)
 	case wmClose:
 		procDestroyWindow.Call(window)
 		return 0
 	case wmDestroy:
-		forgetControlIDs(
-			idCurrentAdminPassword, idChangedAdminPassword, idConfirmAdminPassword,
-			idConfirmPasswordChange, idCancelPasswordChange,
-		)
 		changePasswordWindow = 0
 		return 0
 	default:
