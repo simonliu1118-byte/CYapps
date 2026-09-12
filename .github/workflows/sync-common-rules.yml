@@ -1,0 +1,88 @@
+name: Sync Common Rules
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-common-rules-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch canonical common rules
+        id: canonical
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/common-rules"
+          base='https://raw.githubusercontent.com/simonliu1118-byte/AITeam/main'
+          for file in REPOSITORY_RULES.md COMMON_RULES_VERSION COMMON_RULES_CHANGELOG.md; do
+            curl --fail --silent --show-error --location --retry 3 "$base/$file" -o "$RUNNER_TEMP/common-rules/$file"
+          done
+          version="$(tr -d '\r\n' < "$RUNNER_TEMP/common-rules/COMMON_RULES_VERSION")"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid canonical COMMON_RULES_VERSION: $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          changed=0
+          for file in REPOSITORY_RULES.md COMMON_RULES_VERSION COMMON_RULES_CHANGELOG.md; do
+            if ! cmp --silent "$file" "$RUNNER_TEMP/common-rules/$file"; then
+              changed=1
+            fi
+          done
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Create or refresh synchronization PR
+        if: steps.canonical.outputs.changed == '1'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.canonical.outputs.version }}
+        run: |
+          set -euo pipefail
+          branch="governance/sync-common-rules-v${VERSION//./-}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git fetch origin "$branch" || true
+          git checkout -B "$branch" origin/main
+
+          cp "$RUNNER_TEMP/common-rules/REPOSITORY_RULES.md" REPOSITORY_RULES.md
+          cp "$RUNNER_TEMP/common-rules/COMMON_RULES_VERSION" COMMON_RULES_VERSION
+          cp "$RUNNER_TEMP/common-rules/COMMON_RULES_CHANGELOG.md" COMMON_RULES_CHANGELOG.md
+
+          git add REPOSITORY_RULES.md COMMON_RULES_VERSION COMMON_RULES_CHANGELOG.md
+          git diff --cached --quiet && exit 0
+          git commit -m "governance: sync common rules v$VERSION"
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+
+          existing="$(gh pr list --base main --head "$branch" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$existing" ]; then
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "governance: sync common rules v$VERSION" \
+              --body "Automated synchronization from the canonical common rules in simonliu1118-byte/AITeam main. This PR only updates REPOSITORY_RULES.md, COMMON_RULES_VERSION, and COMMON_RULES_CHANGELOG.md. Repo-specific and project-specific rules are not modified."
+          fi
+
+          # Pull requests created with GITHUB_TOKEN do not trigger another workflow run.
+          # Explicitly dispatch Governance Check on the synchronization branch.
+          gh workflow run governance-check.yml --ref "$branch"
+
+      - name: Report already synchronized
+        if: steps.canonical.outputs.changed == '0'
+        run: echo "Common rules already match AITeam main."
