@@ -54,18 +54,24 @@
 - 任何可能公開的程式不得依賴寫死在原始碼中的固定管理密碼、清除密碼或其他秘密；應使用安全的本機設定、雜湊或作業系統安全儲存。
 - `.gitignore` 只能防止未來誤提交，不能視為已清除歷史。秘密一旦進入 Git，必須另做 history cleanup／rotation／風險處理。
 
-## 6. 版本號與正式版本來源
+## 6. 版本號、Build 與版本來源
 
-- 每個可發行專案根目錄必須有 `VERSION`，內容只放正式版本字串，作為程式、CI、封裝與 Release 的唯一版本來源。
-- 正式版本預設採 `MAJOR.MINOR.PATCH`：
-  - `PATCH`：錯誤修正、相容性修正、小型 UI／流程調整，不新增主要能力且不造成不相容。
-  - `MINOR`：新增向下相容的明確功能或完成一個較大的開發階段。
-  - `MAJOR`：重大產品方向、資料格式、設定格式、主要工作流程或相容性破壞。
-- 尚未達 1.0 的專案可使用 `0.MINOR.PATCH`；是否何時升 1.0 由使用者與該專案決定。
-- 測試／preview／RC 身分可以由 `PROJECT_RULES.md` 定義，但不得與正式版本 tag 混淆。
-- 正式 tag 使用 monorepo 專案前綴：`<project>-vX.Y.Z`，例如 `cyinvoice-v1.1.0`、`cyenvelope-v0.1.1`。
-- 已存在的正式 tag／Release 不覆寫；需要修正時推進新版本。
-- branch 測試包必須可辨認其來源 commit 或 workflow run；不得只有相同版本檔名而無法區分測試批次。
+- 每個可發行專案根目錄必須有 `VERSION`，內容只放基礎版本 `X.Y.Z`，作為程式、CI、封裝與 Release 的版本來源。
+- 專案應以 `BUILD` 整數保存同一工作項目的返修次數：`0` 代表不顯示 Build；`1` 代表 `Build 1`；依此類推。若既有專案尚未建立 `BUILD`，導入時預設視為 `0`。
+- 使用者可見版本格式為：`VX.Y.Z`；當 `BUILD > 0` 時為 `VX.Y.Z Build N`。
+- `X`（Major）代表重大產品世代。**只有使用者可以決定升 X**；AI 不得自行將 `1.x.x` 升為 `2.0.0`。
+- `Y`（Minor）代表使用者能明顯感受到的新能力、完整功能階段或具份量的功能升級。負責開發的 AI 可依實際工作內容自行判斷是否升 Y，升 Y 時 Z 歸零、Build 歸零；PR／版本說明需簡要說明升 Y 的理由。一般修正、小改善或單一 UI 調整不得濫用 Y。
+- `Z`（Patch）是日常開發的預設版本遞增單位。當開始處理一個新的獨立修改項目、新 bug、新需求或小型功能時，通常 Z + 1，Build 歸零。
+- 同一個 Z 所代表的工作項目若第一次交付／測試後仍未達成原要求，繼續修正**不再升 Z**，改為 Build + 1。例如：`V1.0.2` → `V1.0.2 Build 1` → `V1.0.2 Build 2`。
+- 當上一個工作項目完成，開始另一個獨立項目時，再升下一個 Z；若新工作本身達到 Minor 標準，AI 可改升 Y。
+- 「同一項目返修」包含上一版尚未修好的同一 bug、同一功能驗收失敗、同一原需求未完整達成；「新項目」包含原要求已完成後提出的新修改、不同 bug、不同功能或新增需求。界線不清楚時，AI 必須先詢問使用者，不得自行猜測以規避升版。
+- 單純重跑完全相同 source 的 CI、runner／網路失敗後 retry、重新下載同一 artifact，不改 `VERSION` 也不改 `BUILD`；GitHub workflow run number 只用來識別 CI 執行批次，**不是**本規則中的 Build N。
+- 尚未達 1.0 的專案可使用 `0.Y.Z`；何時由 `0.x.x` 升為 `1.0.0` 視為 Major 決策，由使用者決定。
+- preview／RC／獨立實驗線等特殊版本身分可以由 `PROJECT_RULES.md` 定義，但不得與正式產品線混淆。
+- 正式 tag 預設使用 monorepo 專案前綴：`<project>-vX.Y.Z`，例如 `cyinvoice-v1.1.0`、`cyenvelope-v0.1.1`。
+- 若準備正式 Release 時目前 `BUILD > 0`，不得擅自把 Build 身分消失、覆寫成不同內容的同版或自行製造正式 tag；應先向使用者確認該次正式發布的版本身分／升版方式。
+- 已存在的正式 tag／Release 不覆寫；需要後續修改時依上述 X/Y/Z/Build 規則建立新的版本身分。
+- 測試包／工程 Artifact 必須顯示 `VERSION` 與適用的 `Build N`，並可另外附 workflow run number 或 short SHA 作技術追蹤。
 
 ## 7. CI / GitHub Actions / 協作 AI
 
@@ -94,9 +100,9 @@
 
 - 正式 Release 屬低頻且具外部影響的動作，原則上以 `workflow_dispatch` 或其他明確人工啟動方式執行，不因一般 branch push 自動發布。
 - 正式 Release 預設只能由 `main` 建置；專案若有例外，必須寫入 `PROJECT_RULES.md`。
-- Release workflow 必須重新核對 `VERSION`、必要測試、敏感資料掃描、建置／封裝、SHA-256 與 tag，不得只依賴先前某次 CI 成功。
-- Release title 建議為 `<Project> VX.Y.Z`；正式 tag 為 `<project>-vX.Y.Z`。
-- 每個正式 Release 應保留該版變更摘要；專案可使用 `CHANGELOG.md`、`VX.Y.Z.txt` 或兩者，但其內容不得與 `VERSION`、tag、Release title 不一致。
+- Release workflow 必須重新核對 `VERSION`、`BUILD`、必要測試、敏感資料掃描、建置／封裝、SHA-256 與 tag，不得只依賴先前某次 CI 成功。
+- Release title 建議為 `<Project> VX.Y.Z`；若經使用者明確批准帶 Build 發布，title／tag／asset 必須一致且不可冒充無 Build 的同版。
+- 每個正式 Release 應保留該版變更摘要；專案可使用 `CHANGELOG.md`、`VX.Y.Z.txt` 或兩者，但其內容不得與 `VERSION`、`BUILD`、tag、Release title 不一致。
 - Public repo 的正式 Release 可公開下載；公開下載不代表取得根 `LICENSE` 以外的權利。Private repo 的 Release 必須維持 private。
 
 ## 10. Copyright、License 與年份
