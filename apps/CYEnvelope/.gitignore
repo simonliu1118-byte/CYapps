@@ -1,0 +1,9 @@
+/dist/
+/Data/*
+!/Data/.gitkeep
+/Logs/*
+!/Logs/.gitkeep
+/Cache/*
+!/Cache/.gitkeep
+*.syso
+/assets/icon.ico

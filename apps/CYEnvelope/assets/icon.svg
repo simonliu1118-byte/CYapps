@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <rect x="4" y="4" width="248" height="248" rx="50" fill="#2167b2"/>
+
+  <!-- 印表機：大面積、輪廓單純，縮到工作列尺寸仍可辨識。 -->
+  <rect x="22" y="91" width="174" height="116" rx="22" fill="#173a5c" stroke="#d9e9f8" stroke-width="7"/>
+  <rect x="37" y="111" width="109" height="44" rx="7" fill="#f3f8fc"/>
+  <circle cx="166" cy="125" r="8" fill="#62d69a"/>
+  <rect x="48" y="178" width="128" height="48" rx="6" fill="#ffffff" stroke="#9cbfe6" stroke-width="6"/>
+  <path d="M64 192h96M64 207h75" fill="none" stroke="#9cbfe6" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- 直式信封：由印表機上方送入。 -->
+  <path d="M132 21h73l15 17v139H117V38z" fill="#ffffff" stroke="#d9e9f8" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M132 21 117 38M205 21l15 17" fill="none" stroke="#9cbfe6" stroke-width="6"/>
+  <g fill="none" stroke="#e05a5f" stroke-width="5">
+    <rect x="175" y="43" width="11" height="14"/>
+    <rect x="191" y="43" width="11" height="14"/>
+    <rect x="207" y="43" width="11" height="14"/>
+    <rect x="137" y="70" width="32" height="83"/>
+    <rect x="179" y="78" width="10" height="10"/>
+    <rect x="179" y="96" width="10" height="10"/>
+    <rect x="179" y="114" width="10" height="10"/>
+  </g>
+</svg>
