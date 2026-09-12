@@ -2,6 +2,15 @@ name: CYAccounting Build
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/CYAccounting/**"
+      - ".github/workflows/cyaccounting-build.yml"
+  pull_request:
+    paths:
+      - "apps/CYAccounting/**"
+      - ".github/workflows/cyaccounting-build.yml"
 
 permissions:
   contents: read
@@ -67,6 +76,24 @@ jobs:
       - name: Test Windows GUI launcher lifecycle
         shell: pwsh
         run: go test ./launcher_go -v
+
+      - name: Build Windows portable package
+        shell: pwsh
+        run: ./tools/build_portable.ps1 -Version "1.0.26"
+
+      - name: Verify clean package and portable startup
+        shell: pwsh
+        run: ./tools/verify_portable.ps1 -Package ./dist/CYAccounting_V1.0.26_Windows.zip -Version "1.0.26"
+
+      - name: Upload Windows portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: CYAccounting_V1.0.26_Windows
+          path: |
+            apps/CYAccounting/dist/CYAccounting_V1.0.26_Windows.zip
+            apps/CYAccounting/dist/CYAccounting_V1.0.26_Windows.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Build reproducible source archive
         shell: pwsh

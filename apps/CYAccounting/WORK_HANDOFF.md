@@ -35,6 +35,7 @@
 - 版本檔：`apps/CYAccounting/V1.0.26.txt`。
 - CI：`.github/workflows/cyaccounting-build.yml`，直接執行原始測試，不得於 CI 內臨時改寫測試內容。
 - Git 只保存 source、測試、建置設定與文件；正式資料庫、LOG、使用者 OAuth、可執行發行包等 runtime 內容不要進 Git。
+- 正式 Windows 可攜版由 `.github/workflows/cyaccounting-release.yml` 在 release branch 建置並發布，不從開發者電腦手動拼裝。
 
 ### 發行包命名規則
 
@@ -65,6 +66,7 @@ ZIP 外部檔名可以帶版本，例如：
   - `app/util.py`
 - 測試：`tests/test_app.py`、`tests/test_safety_unittest.py`、`tests/test_gdrive_unittest.py` 與 Go launcher tests。
 - 原始碼封存：`tools/create_source_archive.py` 依 Git 追蹤檔建立可重現封存檔與 SHA-256。
+- 可攜版建置：`tools/build_portable.ps1`；乾淨內容與實際啟動驗證：`tools/verify_portable.ps1`。
 - 啟動後應立即寫入診斷／startup log。
 - Single instance。
 - SQLite 備份應使用安全、可驗證方式，不能直接把運作中的 DB 當一般檔案粗暴複製。

@@ -10,7 +10,10 @@ from pathlib import Path
 
 
 APP_PATH = "apps/CYAccounting/"
-WORKFLOW_PATH = ".github/workflows/cyaccounting-build.yml"
+WORKFLOW_PATHS = (
+    ".github/workflows/cyaccounting-build.yml",
+    ".github/workflows/cyaccounting-release.yml",
+)
 EXCLUDED_PATHS = {f"{APP_PATH}SOURCE_SHA256.txt"}
 
 
@@ -26,7 +29,7 @@ def repository_root() -> Path:
 
 def tracked_source_files(root: Path) -> list[str]:
     result = subprocess.run(
-        ["git", "ls-files", "--", APP_PATH, WORKFLOW_PATH],
+        ["git", "ls-files", "--", APP_PATH, *WORKFLOW_PATHS],
         cwd=root,
         check=True,
         capture_output=True,
