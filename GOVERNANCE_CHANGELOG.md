@@ -10,7 +10,8 @@
 - README、WORK_HANDOFF、PROJECT_STATUS、TODO、CHANGELOG、REQUIREMENTS、RC_TEST 等只保存狀態／需求／測試／歷史，不再具有永久規則優先權。
 - Governance Check 會阻擋新的 VERSIONING / TEAM_RULES / project-level AGENTS / 其他未授權平行規則入口。
 - 導入 `X.Y.Z + Build N` 版本制度：Major 只由使用者決定；Minor 可由 AI 依明顯功能階段判斷；Patch 為日常新工作項目；Build 僅用於同一項目未完成的返修。
-- CYAccounting、CYEnvelope、CYInvoice 均新增 `BUILD`；Build workflow 從 `VERSION` 讀取版本，不再硬編碼版號，工程 Artifact 可追蹤版本與 workflow run。
+- CYAccounting、CYEnvelope、CYInvoice 均新增 `BUILD`；Build workflow 從 `VERSION` 與 `BUILD` 讀取完整版本身分，不再硬編碼版號，工程 Artifact 可追蹤 Build 與 workflow run。
+- CYInvoice 正式 Release 在 `BUILD > 0` 時會停止，避免未經使用者確認就讓 Build 身分消失；工程包與程式標題則會顯示 `Build N`。
 - CI 採 Ready PR 自動驗證 + manual dispatch、path filter、concurrency cancellation；正式 Release 與一般 Build/Test 分離。
 - Commit metadata 固定使用 GitHub private noreply：`286269326+simonliu1118-byte@users.noreply.github.com`。
 - Public repo 的正式秘密、API key、token、runtime data 禁止進入 source/history；CYAccounting 固定清除資料密碼列為下一個 Public 正式 Release 前的 P0 修正。

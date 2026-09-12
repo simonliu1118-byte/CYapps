@@ -1,6 +1,9 @@
 package version
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 const (
 	ProductName = "CYInvoice"
@@ -8,17 +11,22 @@ const (
 	Copyright   = "© 2026 C.C.LIU All Rights Reserved."
 )
 
-// Value and Commit are replaced by the build script through -ldflags.
+// Value, Build and Commit are replaced by the build script through -ldflags.
 var (
-	Value  = "1.0.0-rebuild.1"
+	Value  = "1.1.0"
+	Build  = "0"
 	Commit = "unknown"
 )
 
 func Display() string {
-	return "V" + Value
+	display := "V" + Value
+	build, err := strconv.Atoi(Build)
+	if err == nil && build > 0 {
+		return fmt.Sprintf("%s Build %d", display, build)
+	}
+	return display
 }
 
 func WindowTitle() string {
 	return fmt.Sprintf("CY 電子發票 %s", Display())
 }
-

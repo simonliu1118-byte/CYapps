@@ -38,7 +38,7 @@ apps/CYInvoice/
 ├─ internal/            # Go 正式內部功能模組
 ├─ assets/              # icon、manifest 等建置資源
 ├─ scripts/             # 可重複的建置、驗證與封裝腳本
-└─ docs/                # 規格、版本與維護文件
+└─ docs/                # 規格、測試、歷史與待辦文件
 ```
 
 C# 重製測試線若存在，使用 `src/`、`tests/`、`CYInvoice.CSharp.sln` 與 `VERSION-CS`，不得因此改變 Go 正式 `VERSION`。
@@ -46,8 +46,9 @@ C# 重製測試線若存在，使用 `src/`、`tests/`、`CYInvoice.CSharp.sln` 
 ## 文件
 
 - [功能基準](docs/REQUIREMENTS.md)
-- [開發規範](docs/DEVELOPMENT_RULES.md)
-- [版本管理規則](docs/VERSIONING.md)
+- [CYInvoice 永久規則](PROJECT_RULES.md)
 - [待辦與實機驗證](docs/TODO.md)
+- [RC／實機測試](docs/RC_TEST.md)
 - [本機資料格式與安全規則](docs/DATA_FORMAT.md)
+- [復原計畫](docs/RECOVERY_PLAN.md)
 - [歷史版本紀錄](CHANGELOG.md)
