@@ -28,6 +28,13 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v7
 
+      - name: Read VERSION
+        shell: pwsh
+        run: |
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYInvoice VERSION: $version" }
+          "CYINVOICE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
@@ -62,9 +69,7 @@ jobs:
 
       - name: Verify release package layout
         shell: pwsh
-        run: |
-          $version = (Get-Content ./VERSION -Raw).Trim()
-          ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $version) -Version $version
+        run: ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) -Version $env:CYINVOICE_VERSION
 
       - name: Prepare one-layer engineering artifact
         shell: pwsh
@@ -85,7 +90,7 @@ jobs:
       - name: Upload engineering artifact
         uses: actions/upload-artifact@v7
         with:
-          name: CYInvoice-rebuild-windows-x64
+          name: CYInvoice-v${{ env.CYINVOICE_VERSION }}-windows-x64-run${{ github.run_number }}
           path: apps/CYInvoice/dist/engineering-artifact/
           if-no-files-found: error
           retention-days: 14
