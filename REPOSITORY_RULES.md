@@ -32,29 +32,32 @@
 - 志遠使用 `CY`、`Chihyuan` 或 `Chih-yuan`；不得使用 `Zhiyuan`。
 - 專案、資料夾、檔名與程式識別應優先使用既有正式名稱，避免無必要更名造成相容性或追蹤問題。
 
-## 5. 測試、CI 與 GitHub Actions
+## 5. 測試、CI、GitHub Actions 與協作 AI
 
 ### 5.1 共通原則
 
-- CI 是合併正式程式碼前的品質檢查，不應因每一次開發 branch push 而無限制重跑。
-- 所有主要 Build / Test workflow 應保留 `workflow_dispatch`，需要時可手動驗證。
-- 一般開發 branch 的 `push` 原則上不自動觸發完整 CI；若個別專案確有必要，必須在 workflow 或專案文件說明原因。
-- Pull Request 進入 `main` 前應自動執行與該專案相關的必要測試；應使用 `paths` / `paths-ignore` 避免不相關專案被一起執行。
-- Draft Pull Request 原則上不自動執行完整 CI；轉為 Ready for review 後才進入自動 PR 驗證流程。
+- CI 的目的，是用合理的自動化成本提高合併品質與可重建性；不得為省少量資源而增加大量人工操作，也不得把 CI 當成每個小修改的試錯迴圈。
+- Public 與 Private repository 都可以正常使用自動 CI；應依變更風險、執行成本及維護便利性決定，不以「能省就全改手動」為原則。
+- Pull Request 進入 `main` 前，應自動執行與該專案相關的必要測試；使用 `paths` / `paths-ignore` 避免不相關專案被一起執行。
+- 一般開發 branch 的每次 `push` 原則上不需要再重複跑完整 CI；若 branch push CI 能顯著降低維護麻煩或提早發現高風險問題，可以保留，但必須避免和 PR CI 重複執行相同昂貴工作。
+- Draft Pull Request 可略過昂貴的完整 CI；Ready for review 後應自動進入必要驗證。是否使用 Draft 由負責開發的 AI／維護者依成熟度決定，不應要求使用者為節省少量 Actions minutes 額外反覆操作。
 - 同一 PR 有新 commit 時，應使用 `concurrency` 取消仍在進行的舊 run，避免重複消耗資源。
+- 所有主要 Build / Test workflow 應保留 `workflow_dispatch`，供需要時手動重跑或獨立驗證。
 - Build/Test workflow 原則上只需要 `contents: read`；只有確實需要建立 Release、tag 或寫入 repository 的 workflow 才授予 `contents: write`。
 - GitHub 官方 Actions 應使用目前仍受支援的穩定 major 版本；升級 major 版前需確認 runner 與輸入行為相容，不追求無意義的頻繁更新。
 
-### 5.2 Public / Private 使用差異
+### 5.2 Actions minutes 與協作 AI token
 
-- Public 與 Private repository 遵循相同的品質門檻與 PR 原則，不因可見性不同而降低測試要求。
-- Private repository 應更謹慎使用 Actions 分鐘：Draft 開發期以本機／人工檢查及必要的手動 workflow 為主，Ready for review 後才自動跑必要 PR CI。
-- Private repository 的自動 PR CI 應優先執行必要測試與可重建性檢查；耗時封裝、完整發行包或其他昂貴工作應留到手動驗證或正式 Release。
-- Public repository 可在 Ready PR 上執行完整必要 Build/Test，但仍不得對每次無關 push 或所有專案濫跑矩陣工作。
+- Private repository 的 Actions minutes 有成本，因此比 Public repository 更需要避免重複、無關或過度頻繁的工作；但節省 minutes 的方案若會顯著增加人工步驟、開發時間或維護複雜度，通常不採用。
+- Public repository 可正常使用 GitHub Actions，不需刻意壓縮到最低；仍應避免無關專案一起跑、同一 commit 重複 Build，以及可由快速測試先篩掉的昂貴工作。
+- 若 CI／開發流程會觸發 Codex、Claude 或其他計量式協作 AI，不得把每次 push 都當成重新啟動完整 AI 審查的理由。應先累積成有意義的變更批次，再觸發需要 token 的審查或修正流程。
+- 一般純 GitHub Actions 測試與需要協作 AI token 的流程應盡量解耦：程式測試可以自動化，AI 深度審查應依風險、里程碑或明確需要啟動。
+- 優先採用 path filter、concurrency、快取與分層測試，減少 Actions 與 AI token 的重複消耗；不得以犧牲正確性或把工作轉嫁給使用者為代價。
 
 ### 5.3 Release
 
-- 正式 Release 一律由 `workflow_dispatch` 或其他明確的人工作業啟動；不得僅因 push 到某個 release branch 就自動對外發布正式版本。
+- 耗時封裝、完整正式發行包與 Release 屬低頻高成本工作，原則上由 `workflow_dispatch` 或其他明確的人工作業啟動。
+- 正式 Release 不得僅因一般開發 branch push 就自動對外發布。
 - Release workflow 必須再次驗證版本號、測試、封裝、SHA-256 與敏感資料規則，不能只依賴先前某次 CI 成功。
 - 發行版本必須能由儲存庫中的正式原始碼與建置設定重建。
 - 若專案有 Release、RC 或里程碑規則，依該專案自己的版本文件執行。
