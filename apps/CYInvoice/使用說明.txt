@@ -1,5 +1,8 @@
 CYInvoice 使用說明
 
+Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
+本程式與原始碼之使用、修改與散布權利以 repository 根目錄 LICENSE 為準。
+
 一、啟動與資料
 1. 本程式適用 Windows 10/11 x64，請直接執行 CYInvoice.exe。
 2. 第一次在全新資料夾啟動時，必須先設定管理密碼及 MO店+ Excel 密碼。
@@ -31,4 +34,4 @@ CYInvoice 使用說明
 六、問題排查
 1. 上方 API 狀態：灰色為查詢中、綠色為正常、紅色為異常。
 2. 發生問題時請保留完整 CYInvoice 資料夾及 Logs，並先備份 Data。
-3. 本程式僅限公司內部使用，禁止對外散布。
+3. 若下載正式 GitHub Release，請同時核對附帶的 SHA-256；Public 可下載不代表開放原始碼，授權仍以 LICENSE 為準。
