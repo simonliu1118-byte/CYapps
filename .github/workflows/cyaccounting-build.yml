@@ -2,20 +2,31 @@ name: CYAccounting Build
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "apps/CYAccounting/**"
+      - ".github/workflows/cyaccounting-build.yml"
 
 permissions:
   contents: read
 
+concurrency:
+  group: cyaccounting-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-x64:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
     runs-on: windows-latest
     defaults:
       run:
         working-directory: apps/CYAccounting
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -53,7 +64,7 @@ jobs:
         shell: pwsh
         run: python -m unittest discover -s tests -p "test_*_unittest.py" -v
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.22.x"
 
@@ -75,11 +86,11 @@ jobs:
           python tools/create_source_archive.py --output build/cyaccounting-v1.0.26-source.tar.gz
 
       - name: Upload source verification archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cyaccounting-v1.0.26-source
           path: |
             apps/CYAccounting/build/cyaccounting-v1.0.26-source.tar.gz
             apps/CYAccounting/build/cyaccounting-v1.0.26-source.tar.gz.sha256
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 14
