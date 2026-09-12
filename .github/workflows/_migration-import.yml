@@ -13,7 +13,7 @@ jobs:
   import-public-source:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-59f8-8206-9730-14d8e3ebf05d/raw?se=2026-09-12T14%3A08%3A48Z&sp=r&sv=2026-02-06&sr=b&scid=39ffeb1b-6e56-569e-a9bd-51a554b28b05&skoid=0b778285-7b0b-4cdc-ac3b-fb93e8c3686f&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-09-12T12%3A46%3A02Z&ske=2026-09-13T12%3A46%3A02Z&sks=b&skv=2026-02-06&sig=iPBjzIueTajINqMi0A9es7DaoJi2ejKMRbo%2Bk1qFAgA%3D"
+      MIGRATION_URL: "https://sdmntprcentralus.oaiusercontent.com/files/00000000-a140-81f5-9300-24b90f68252d/raw?se=2026-09-12T14%3A09%3A57Z&sp=r&sv=2026-02-06&sr=b&scid=5c311300-0248-59d4-8cdf-f5a266e07158&skoid=0b778285-7b0b-4cdc-ac3b-fb93e8c3686f&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-09-12T01%3A58%3A00Z&ske=2026-09-13T01%3A58%3A00Z&sks=b&skv=2026-02-06&sig=qPWQxeUq4c3qh2jt%2BfnEZN/%2BNUW9Hel0ZsRqnV7lV90%3D"
     steps:
       - name: Checkout clean public repository
         uses: actions/checkout@v4
@@ -37,32 +37,10 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf apps/CYAccounting apps/CYEnvelope apps/CYInvoice
-          mkdir -p apps .github/workflows
+          mkdir -p apps
           cp -a /tmp/migration-source/apps/CYAccounting apps/
           cp -a /tmp/migration-source/apps/CYEnvelope apps/
           cp -a /tmp/migration-source/apps/CYInvoice apps/
-          cp /tmp/migration-source/.github/workflows/cyaccounting-build.yml .github/workflows/
-          cp /tmp/migration-source/.github/workflows/cyenvelope-build.yml .github/workflows/
-          cp /tmp/migration-source/.github/workflows/cyinvoice-build.yml .github/workflows/
-
-      - name: Convert build workflows to manual-only execution
-        shell: bash
-        run: |
-          set -euo pipefail
-          for f in \
-            .github/workflows/cyaccounting-build.yml \
-            .github/workflows/cyenvelope-build.yml \
-            .github/workflows/cyinvoice-build.yml
-          do
-            name="$(sed -n 's/^name: //p' "$f" | head -1)"
-            tmp="${f}.tmp"
-            {
-              printf 'name: %s\n\n' "$name"
-              printf 'on:\n  workflow_dispatch:\n\n'
-              awk 'keep || /^permissions:/{keep=1; print}' "$f"
-            } > "$tmp"
-            mv "$tmp" "$f"
-          done
 
       - name: Commit imported source
         shell: bash
@@ -71,9 +49,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A apps
-          git add .github/workflows/cyaccounting-build.yml
-          git add .github/workflows/cyenvelope-build.yml
-          git add .github/workflows/cyinvoice-build.yml
           git status --short
           git commit -m "chore: import public CY applications source"
           git push origin HEAD:main
