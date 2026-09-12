@@ -21,12 +21,13 @@
 - `/GOVERNANCE_VERSION`
 - `/GOVERNANCE_CHANGELOG.md`
 - `/RULES_INDEX.md`
-- `/AGENTS.md` — AI 入口，只能指向正式規則。
-- `/apps/*/AGENTS.md` — 若專案確有需要，可作 AI 入口，但只能索引正式規則，不得複製或新增規則。
+- `/AGENTS.md` — repository 唯一 AI 規則入口，只能指向正式規則。
 - `/.github/workflows/governance-check.yml`
 
 ## 非規則文件
 
-README、WORK_HANDOFF、PROJECT_STATUS、TODO、CHANGELOG、REQUIREMENTS、VERSIONING、RC_TEST、RECOVERY_PLAN、DATA_FORMAT、版本紀錄與使用說明均可存在，但只具有其文件本身用途，不得凌駕上述三層永久規則。
+README、WORK_HANDOFF、PROJECT_STATUS、TODO、CHANGELOG、REQUIREMENTS、RC_TEST、RECOVERY_PLAN、DATA_FORMAT、版本紀錄與使用說明均可存在，但只具有其文件本身用途，不得凌駕上述三層永久規則。
+
+不再保留 project-level `AGENTS.md`、獨立 `VERSIONING.md`、`DEVELOPMENT_RULES.md`、`TEAM_RULES.md` 等平行規則入口；若其內容仍有價值，應先整理到正式三層規則或狀態／歷史文件後刪除舊檔。
 
 若文件內容看起來正在新增永久規則，必須先搬入正確的 `PROJECT_RULES.md`／`REPO_POLICY.md`／`REPOSITORY_RULES.md`，並依治理流程處理；共通規則變更必須先修改 AITeam 母本。
