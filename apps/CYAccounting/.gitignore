@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+Data/
+AutoBackup/
+RestoreBackup/
+*.log
+startup_ready.flag
+*.db
+*.db-wal
+*.db-shm
+runtime/
+*.zip
