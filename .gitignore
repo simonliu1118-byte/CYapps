@@ -1,0 +1,31 @@
+# Build outputs
+*.exe
+*.dll
+*.zip
+*.7z
+*.msi
+dist/
+build/
+out/
+*.syso
+
+# Runtime data
+Data/
+Cache/
+Logs/
+*.log
+ERROR_*.log
+
+# Secrets and local settings
+settings.json
+*.key
+*.secret
+.env
+.env.*
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
