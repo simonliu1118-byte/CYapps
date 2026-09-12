@@ -1,0 +1,85 @@
+name: CYAccounting Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/CYAccounting
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check -r requirements-ci.txt
+
+      - name: Compile Python sources
+        shell: pwsh
+        run: python -m compileall -q app tests
+
+      - name: Run application tests
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          python tests/test_app.py
+          $testExit = $LASTEXITCODE
+          if ($testExit -ne 0) {
+            Write-Host "CYAccounting tests failed with exit code $testExit"
+            if (Test-Path "Data/startup_trace.log") {
+              Write-Host "--- Data/startup_trace.log ---"
+              Get-Content "Data/startup_trace.log"
+              Write-Host "--- end startup_trace.log ---"
+            }
+            if (Test-Path "Data/Logs") {
+              Get-ChildItem "Data/Logs" -Filter "*.log" | ForEach-Object {
+                Write-Host "--- $($_.FullName) ---"
+                Get-Content $_.FullName
+              }
+            }
+            exit $testExit
+          }
+
+      - name: Run safety and integration tests
+        shell: pwsh
+        run: python -m unittest discover -s tests -p "test_*_unittest.py" -v
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - name: Compile Windows GUI launcher
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build | Out-Null
+          go build -trimpath -ldflags="-H windowsgui" -o build/CYAccountingLauncher.exe launcher_go/main.go
+          if (-not (Test-Path build/CYAccountingLauncher.exe)) { throw "launcher build failed" }
+
+      - name: Test Windows GUI launcher lifecycle
+        shell: pwsh
+        run: go test ./launcher_go -v
+
+      - name: Build reproducible source archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build | Out-Null
+          python tools/create_source_archive.py --output build/cyaccounting-v1.0.26-source.tar.gz
+
+      - name: Upload source verification archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyaccounting-v1.0.26-source
+          path: |
+            apps/CYAccounting/build/cyaccounting-v1.0.26-source.tar.gz
+            apps/CYAccounting/build/cyaccounting-v1.0.26-source.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 30
