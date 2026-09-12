@@ -1,0 +1,76 @@
+name: One-time open PR snapshot import
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/_migration-open-prs-import.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      SNAPSHOT_URL: "https://sdmntprjapaneast.oaiusercontent.com/files/00000000-2e78-8209-9aa6-5b9d392a6bbe/raw?se=2026-09-12T15%3A51%3A42Z&sp=r&sv=2026-02-06&sr=b&scid=90da1a20-7328-55a0-a0d2-bfcdf5cf494a&skoid=0b778285-7b0b-4cdc-ac3b-fb93e8c3686f&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-09-12T14%3A27%3A45Z&ske=2026-09-13T14%3A27%3A45Z&sks=b&skv=2026-02-06&sig=4/leK3Ww/mt2Dp1oOg2cb/UpxRBL82cDN0bJOAt6PZY%3D"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download and verify sanitized snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 "$SNAPSHOT_URL" -o /tmp/snapshots.zip
+          rm -rf /tmp/snapshot-artifact /tmp/snapshots
+          mkdir -p /tmp/snapshot-artifact /tmp/snapshots
+          unzip -q /tmp/snapshots.zip -d /tmp/snapshot-artifact
+          cd /tmp/snapshot-artifact
+          sha256sum -c open-pr-snapshots.tar.gz.sha256
+          tar -xzf open-pr-snapshots.tar.gz -C /tmp/snapshots
+          cd /tmp/snapshots/migration-open-prs
+          sha256sum -c /tmp/snapshot-artifact/OPEN_PR_SHA256SUMS.txt
+          if grep -RIlE 'CYWatermark|cywm\.key|private/cywm' .; then
+            echo "Private project content detected" >&2
+            exit 1
+          fi
+
+      - name: Configure Git
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Rebuild CYAccounting PR branch on clean public ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -B cyaccounting/v1.0.26-portable-release origin/main
+          rm -rf apps/CYAccounting
+          cp -a /tmp/snapshots/migration-open-prs/pr39/apps/CYAccounting apps/
+          git add -A apps/CYAccounting
+          git commit -m "chore(CYAccounting): migrate private PR #39 snapshot"
+          git push --force origin HEAD:refs/heads/cyaccounting/v1.0.26-portable-release
+
+      - name: Rebuild CYInvoice CSharp PR branch on clean public ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -B cyinvoice/csharp-remake origin/main
+          rm -rf apps/CYInvoice
+          cp -a /tmp/snapshots/migration-open-prs/pr40/apps/CYInvoice apps/
+          git add -A apps/CYInvoice
+          git commit -m "chore(CYInvoice): migrate private PR #40 CSharp snapshot"
+          git push --force origin HEAD:refs/heads/cyinvoice/csharp-remake
+
+      - name: Rebuild legacy CYInvoice UI PR branch on current public baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -B cyinvoice/fix-four-group-titles origin/main
+          cp -a /tmp/snapshots/migration-open-prs/pr26/apps/CYInvoice/cmd/CYInvoice/. apps/CYInvoice/cmd/CYInvoice/
+          git add -A apps/CYInvoice/cmd/CYInvoice
+          git commit -m "chore(CYInvoice): migrate private PR #26 changed files"
+          git push --force origin HEAD:refs/heads/cyinvoice/fix-four-group-titles
