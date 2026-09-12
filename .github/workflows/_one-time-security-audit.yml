@@ -1,0 +1,140 @@
+name: One-time public secret audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/_one-time-security-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all public refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+          while read -r sha ref; do
+            case "$ref" in
+              refs/pull/*/head)
+                n="${ref#refs/pull/}"; n="${n%/head}"
+                git fetch --force origin "$ref:refs/remotes/pull/$n" || true
+                ;;
+            esac
+          done < <(git ls-remote origin 'refs/pull/*/head')
+
+      - name: Scan reachable Git history without printing secret values
+        shell: python
+        run: |
+          import json, os, re, subprocess, sys
+          from collections import defaultdict
+
+          def git(*args, binary=False):
+              p = subprocess.run(["git", *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+              return p.stdout if binary else p.stdout.decode("utf-8", "replace")
+
+          forbidden_path = re.compile(
+              r'(?i)(^|/)(?:\.env(?:\..*)?$|[^/]*(?:credential|client_secret|oauth_client|token)[^/]*\.json$|'
+              r'[^/]+\.(?:pem|key|p12|pfx|kdbx|db|sqlite|sqlite3|xls|xlsx|pdf|log)$|'
+              r'(?:settings|invoices|buyer_names)\.json$)'
+          )
+          runtime_path = re.compile(r'(?i)(^|/)(?:Data|Logs|Cache)/.+')
+          pem = re.compile(rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----')
+          provider_patterns = {
+              'github_token': re.compile(rb'\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{50,}\b'),
+              'google_api_key': re.compile(rb'\bAIza[0-9A-Za-z_-]{35}\b'),
+              'aws_access_key': re.compile(rb'\b(?:AKIA|ASIA)[A-Z0-9]{16}\b'),
+              'stripe_live_key': re.compile(rb'\b(?:sk|rk)_live_[A-Za-z0-9]{20,}\b'),
+              'slack_token': re.compile(rb'\bxox[baprs]-[A-Za-z0-9-]{20,}\b'),
+          }
+          assignment = re.compile(
+              r'''(?ix)\b(api[_-]?key|app[_-]?key|prod[_-]?app[_-]?key|client[_-]?secret|access[_-]?token|refresh[_-]?token|password|passwd|secret)\w*\s*(?::=|=|:)\s*["']([^"'\r\n]{6,})["']'''
+          )
+          allow_exact = {
+              'sHeq7t8G1wiQvhAuIM27',  # AMEGO public documentation test AppKey
+              'secret', 'password', 'test-secret', 'TEST-SECRET', 'example-secret', 'dummy-secret'
+          }
+          placeholder = re.compile(r'(?i)^(?:test|demo|example|dummy|placeholder|changeme|your[-_ ]|xxx|000000)')
+
+          objects = {}
+          for line in git('rev-list','--objects','--all').splitlines():
+              parts = line.split(' ', 1)
+              sha = parts[0]
+              path = parts[1] if len(parts) > 1 else ''
+              objects.setdefault(sha, path)
+
+          findings = []
+          scanned = 0
+          for sha, path in objects.items():
+              try:
+                  if git('cat-file','-t',sha).strip() != 'blob':
+                      continue
+                  size = int(git('cat-file','-s',sha).strip())
+                  if size > 2_000_000:
+                      continue
+                  data = git('cat-file','blob',sha,binary=True)
+              except Exception:
+                  continue
+              scanned += 1
+              if forbidden_path.search(path):
+                  findings.append(('sensitive_filename', path, sha))
+              if runtime_path.search(path) and not path.endswith('/.gitkeep'):
+                  findings.append(('runtime_data_path', path, sha))
+              if pem.search(data):
+                  findings.append(('private_key', path, sha))
+              for category, rx in provider_patterns.items():
+                  if rx.search(data):
+                      findings.append((category, path, sha))
+              if b'\x00' in data:
+                  continue
+              text = data.decode('utf-8', 'replace')
+              for m in assignment.finditer(text):
+                  value = m.group(2).strip()
+                  if value in allow_exact or placeholder.search(value):
+                      continue
+                  # Ignore obvious variable interpolation / format placeholders.
+                  if any(x in value for x in ('${{', '$env:', '%s', '{}', '<', '>')):
+                      continue
+                  findings.append(('literal_secret_assignment', path, sha))
+                  break
+
+          # Commit email audit: privacy issue, not a credential.
+          emails = set()
+          for line in git('log','--all','--format=%ae%n%ce').splitlines():
+              e = line.strip().lower()
+              if e and 'noreply.github.com' not in e and e not in ('github-actions[bot]@users.noreply.github.com',):
+                  emails.add(e)
+
+          uniq = sorted(set(findings))
+          print(f'AUDIT_SCANNED_BLOBS={scanned}')
+          print(f'AUDIT_FINDINGS={len(uniq)}')
+          for category, path, sha in uniq:
+              print(f'FINDING category={category} path={path or "<unknown>"} blob={sha[:12]}')
+          print(f'NON_NOREPLY_COMMIT_EMAIL_COUNT={len(emails)}')
+          for e in sorted(emails):
+              # Do not print the full email; preserve only domain and masked local part.
+              if '@' in e:
+                  local, domain = e.rsplit('@',1)
+                  masked = (local[:1] + '***') if local else '***'
+                  print(f'COMMIT_EMAIL masked={masked}@{domain}')
+
+          with open('security-audit.json','w',encoding='utf-8') as f:
+              json.dump({'scanned_blobs': scanned, 'findings': [
+                  {'category': c, 'path': p, 'blob': s} for c,p,s in uniq
+              ], 'non_noreply_email_count': len(emails)}, f, ensure_ascii=False, indent=2)
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v7
+        with:
+          name: one-time-security-audit
+          path: security-audit.json
+          if-no-files-found: error
+          retention-days: 1
