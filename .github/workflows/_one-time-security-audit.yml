@@ -63,6 +63,7 @@ jobs:
               'secret', 'password', 'test-secret', 'TEST-SECRET', 'example-secret', 'dummy-secret'
           }
           placeholder = re.compile(r'(?i)^(?:test|demo|example|dummy|placeholder|changeme|your[-_ ]|xxx|000000)')
+          gh_expr_marker = '$' + '{{'
 
           objects = {}
           for line in git('rev-list','--objects','--all').splitlines():
@@ -100,7 +101,7 @@ jobs:
                   value = m.group(2).strip()
                   if value in allow_exact or placeholder.search(value):
                       continue
-                  if any(x in value for x in ('${{', '$env:', '%s', '{}', '<', '>')):
+                  if any(x in value for x in (gh_expr_marker, '$env:', '%s', '{}', '<', '>')):
                       continue
                   findings.append(('literal_secret_assignment', path, sha))
                   break
