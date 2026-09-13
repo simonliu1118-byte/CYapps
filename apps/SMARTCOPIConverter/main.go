@@ -34,6 +34,7 @@ const (
 	WM_CLOSE             = 0x0010
 	WM_SETFONT           = 0x0030
 	WM_SETREDRAW         = 0x000B
+	WM_BATCH_EVENT       = 0x8001
 	BM_GETCHECK          = 0x00F0
 	BM_SETCHECK          = 0x00F1
 	BST_CHECKED          = 1
@@ -148,6 +149,8 @@ var (
 	pSendMessageW         = user32.NewProc("SendMessageW")
 	pSetWindowTextW       = user32.NewProc("SetWindowTextW")
 	pEnableWindow         = user32.NewProc("EnableWindow")
+	pLoadCursorW          = user32.NewProc("LoadCursorW")
+	pPostMessageW         = user32.NewProc("PostMessageW")
 	pGetModuleHandleW     = kernel32.NewProc("GetModuleHandleW")
 	pGetOpenFileNameW     = comdlg32.NewProc("GetOpenFileNameW")
 	pShellExecuteW        = shell32.NewProc("ShellExecuteW")
@@ -157,6 +160,18 @@ var (
 	pCreateFontW          = gdi32.NewProc("CreateFontW")
 	pInitCommonControls   = comctl32.NewProc("InitCommonControls")
 )
+
+type batchEvent struct {
+	Kind    string
+	File    string
+	Result  ConvResult
+	ErrText string
+	Index   int
+	Total   int
+	KeepLog bool
+}
+
+var uiEvents = make(chan batchEvent, 128)
 
 var (
 	hwndMain, hwndPath, hwndList, hwndCount, hwndProgress, hwndStatus, hwndHistory, hwndStart, hwndClear, hwndRemove, hwndOpen, hwndChange, hwndFail, hwndLog uintptr
@@ -174,8 +189,9 @@ func main() {
 	state = loadState()
 	pInitCommonControls.Call()
 	hInst, _, _ := pGetModuleHandleW.Call(0)
+	hCursor, _, _ := pLoadCursorW.Call(0, 32512)
 	cls := wstr("SMARTCOPIConverterWindow")
-	wc := WNDCLASSEXW{CbSize: uint32(unsafe.Sizeof(WNDCLASSEXW{})), LpfnWndProc: syscall.NewCallback(wndProc), HInstance: hInst, HCursor: 32512, HbrBackground: uintptr(6), LpszClassName: cls}
+	wc := WNDCLASSEXW{CbSize: uint32(unsafe.Sizeof(WNDCLASSEXW{})), LpfnWndProc: syscall.NewCallback(wndProc), HInstance: hInst, HCursor: hCursor, HbrBackground: uintptr(6), LpszClassName: cls}
 	pRegisterClassExW.Call(uintptr(unsafe.Pointer(&wc)))
 	title := "SMART 銷貨單格式轉換工具"
 	if version != "" && version != "dev" {
@@ -291,6 +307,9 @@ func wndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		case ID_FAIL:
 			showFailures()
 		}
+		return 0
+	case WM_BATCH_EVENT:
+		handleBatchEvent()
 		return 0
 	case WM_CLOSE:
 		if converting {
@@ -451,35 +470,70 @@ func startBatch() {
 	updateButtons()
 	pSendMessageW.Call(hwndProgress, PBM_SETPOS, 0, 0)
 	setText(hwndStatus, "開始轉換…")
-	// Synchronous by design: no periodic timer/poller. UI state changes only on user events and batch transitions.
-	for i, f := range selectedFiles {
-		setText(hwndStatus, fmt.Sprintf("轉換中 %d/%d：%s", i+1, len(selectedFiles), filepath.Base(f)))
-		pUpdateWindow.Call(hwndMain)
-		res, err := convertFile(f, state.Settings.POSOutputDir)
+
+	files := append([]string(nil), selectedFiles...)
+	outDir := state.Settings.POSOutputDir
+	keepLog := isLogChecked()
+	go runBatch(files, outDir, keepLog)
+}
+
+func runBatch(files []string, outDir string, keepLog bool) {
+	for i, f := range files {
+		postBatchEvent(batchEvent{Kind: "progress", File: f, Index: i + 1, Total: len(files)})
+		res, err := convertFile(f, outDir)
 		if err != nil {
-			failures = append(failures, fmt.Sprintf("%s\r\n%s", filepath.Base(f), err.Error()))
-			writeLog(fmt.Sprintf("FAIL %s: %v", f, err))
+			writeLogEnabled(keepLog, fmt.Sprintf("FAIL %s: %v", f, err))
+			postBatchEvent(batchEvent{Kind: "failure", File: f, ErrText: err.Error(), Index: i + 1, Total: len(files)})
 		} else {
-			state.History = append([]HistoryItem{{Date: time.Now().Format("2006/01/02"), OrderType: res.OrderType, OrderNo: res.OrderNo, Customer: res.Customer}}, state.History...)
+			writeLogEnabled(keepLog, fmt.Sprintf("OK %s -> %s", f, res.OutputPath))
+			postBatchEvent(batchEvent{Kind: "success", File: f, Result: res, Index: i + 1, Total: len(files)})
+		}
+	}
+	postBatchEvent(batchEvent{Kind: "done", Total: len(files)})
+}
+
+func postBatchEvent(ev batchEvent) {
+	uiEvents <- ev
+	pPostMessageW.Call(hwndMain, WM_BATCH_EVENT, 0, 0)
+}
+
+func handleBatchEvent() {
+	select {
+	case ev := <-uiEvents:
+		switch ev.Kind {
+		case "progress":
+			setText(hwndStatus, fmt.Sprintf("轉換中 %d/%d：%s", ev.Index, ev.Total, filepath.Base(ev.File)))
+		case "failure":
+			failures = append(failures, fmt.Sprintf("%s\r\n%s", filepath.Base(ev.File), ev.ErrText))
+			pct := int(float64(ev.Index) / float64(ev.Total) * 100)
+			pSendMessageW.Call(hwndProgress, PBM_SETPOS, uintptr(pct), 0)
+		case "success":
+			state.History = append([]HistoryItem{{Date: time.Now().Format("2006/01/02"), OrderType: ev.Result.OrderType, OrderNo: ev.Result.OrderNo, Customer: ev.Result.Customer}}, state.History...)
 			if len(state.History) > 99 {
 				state.History = state.History[:99]
 			}
 			_ = saveState(state)
-			writeLog(fmt.Sprintf("OK %s -> %s", f, res.OutputPath))
+			pct := int(float64(ev.Index) / float64(ev.Total) * 100)
+			pSendMessageW.Call(hwndProgress, PBM_SETPOS, uintptr(pct), 0)
+		case "done":
+			converting = false
+			refreshHistory()
+			if len(failures) == 0 {
+				setText(hwndStatus, "轉換完成：全部成功")
+				message("轉換完成", "全部檔案轉換成功。", MB_OK|MB_ICONINFORMATION)
+			} else {
+				setText(hwndStatus, fmt.Sprintf("轉換完成：%d 個失敗", len(failures)))
+				message("轉換完成", fmt.Sprintf("完成，但有 %d 個檔案轉換失敗。請查看「失敗紀錄」。", len(failures)), MB_OK|MB_ICONWARNING)
+			}
+			updateButtons()
 		}
-		pct := int(float64(i+1) / float64(len(selectedFiles)) * 100)
-		pSendMessageW.Call(hwndProgress, PBM_SETPOS, uintptr(pct), 0)
+	default:
 	}
-	converting = false
-	refreshHistory()
-	if len(failures) == 0 {
-		setText(hwndStatus, "轉換完成：全部成功")
-		message("轉換完成", "全部檔案轉換成功。", MB_OK|MB_ICONINFORMATION)
-	} else {
-		setText(hwndStatus, fmt.Sprintf("轉換完成：%d 個失敗", len(failures)))
-		message("轉換完成", fmt.Sprintf("完成，但有 %d 個檔案轉換失敗。請查看「失敗紀錄」。", len(failures)), MB_OK|MB_ICONWARNING)
-	}
-	updateButtons()
+}
+
+func isLogChecked() bool {
+	r, _, _ := pSendMessageW.Call(hwndLog, BM_GETCHECK, 0, 0)
+	return r == BST_CHECKED
 }
 
 func refreshHistory() {
@@ -491,9 +545,8 @@ func refreshHistory() {
 		pSendMessageW.Call(hwndHistory, LB_ADDSTRING, 0, uintptr(unsafe.Pointer(wstr(line))))
 	}
 }
-func writeLog(line string) {
-	r, _, _ := pSendMessageW.Call(hwndLog, BM_GETCHECK, 0, 0)
-	if r != BST_CHECKED {
+func writeLogEnabled(enabled bool, line string) {
+	if !enabled {
 		return
 	}
 	p, err := logPath()
