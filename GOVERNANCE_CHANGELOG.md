@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.1 — 2026/09/14
+
+- 新增 `apps/SMARTCOPIConverter/PROJECT_RULES.md`，補齊 SMARTCOPIConverter 的 project-specific 永久規則層。
+- 同步建立專案 `VERSION=1.0.0`、`BUILD=0` 基礎 metadata，讓治理檢查在正式 source 匯入前即可辨識為有效專案。
+- 本次不修改共通 `REPOSITORY_RULES.md`，也不重複既有 Public repo 或版本共通規則。
+
 ## 2.3.0 — 2026/09/13
 
 - 共通規則同步至 2.4.0：一般 Build／Test workflow 統一採 `pull_request` + `workflow_dispatch`；Draft PR 也可正常驗收，不再把 Draft／Ready 當 CI 開關。
