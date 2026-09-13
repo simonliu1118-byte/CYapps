@@ -1,5 +1,11 @@
 # Changelog
 
+## V1.0.0 Build 3 — 2026/09/13
+
+- 修正主視窗文字標籤出現灰色色塊的外觀問題。
+- 使用 Win32 `WM_CTLCOLORSTATIC` / `WM_CTLCOLORBTN` 配合系統 `COLOR_WINDOW` 背景處理，讓靜態文字與「保留LOG」核取方塊背景和主視窗一致。
+- 這項修正仍使用 Windows 原生控制項與標準訊息處理，不加入自繪、owner-draw、timer 或背景 polling。
+
 ## V1.0.0 Build 2 — 2026/09/13
 
 - 修正按「選擇檔案」時因 `OPENFILENAMEW` filter 直接傳入含 NUL 的字串，造成 `syscall.StringToUTF16` panic 並結束程式的問題。
