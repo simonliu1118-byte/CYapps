@@ -29,9 +29,11 @@ const (
 
 	WM_CREATE         = 0x0001
 	WM_DESTROY        = 0x0002
+	WM_SIZE           = 0x0005
 	WM_CLOSE          = 0x0010
-	WM_COMMAND        = 0x0111
+	WM_GETMINMAXINFO  = 0x0024
 	WM_NOTIFY         = 0x004E
+	WM_COMMAND        = 0x0111
 	WM_SETFONT        = 0x0030
 	WM_CTLCOLORBTN    = 0x0135
 	WM_CTLCOLORSTATIC = 0x0138
@@ -61,14 +63,21 @@ const (
 	LVM_INSERTITEMW              = LVM_FIRST + 77
 	LVM_SETITEMW                 = LVM_FIRST + 76
 	LVM_INSERTCOLUMNW            = LVM_FIRST + 97
+	LVM_SETCOLUMNWIDTH           = LVM_FIRST + 30
 	LVM_SETEXTENDEDLISTVIEWSTYLE = LVM_FIRST + 54
 
-	LVIF_TEXT   = 0x0001
-	LVCF_FMT    = 0x0001
-	LVCF_WIDTH  = 0x0002
-	LVCF_TEXT   = 0x0004
-	LVCFMT_LEFT = 0
-	NM_CLICK    = -2
+	LVIF_TEXT     = 0x0001
+	LVCF_FMT      = 0x0001
+	LVCF_WIDTH    = 0x0002
+	LVCF_TEXT     = 0x0004
+	LVCFMT_LEFT   = 0
+	NM_CLICK      = -2
+	NM_CUSTOMDRAW = -12
+
+	CDDS_PREPAINT       = 0x00000001
+	CDDS_ITEMPREPAINT   = 0x00010001
+	CDRF_DODEFAULT      = 0x00000000
+	CDRF_NOTIFYITEMDRAW = 0x00000020
 
 	COINIT_APARTMENTTHREADED = 0x2
 	CLSCTX_INPROC_SERVER     = 0x1
@@ -118,6 +127,36 @@ type MSG struct {
 	Time     uint32
 	Pt       POINT
 	LPrivate uint32
+}
+
+type RECT struct {
+	Left, Top, Right, Bottom int32
+}
+
+type MINMAXINFO struct {
+	PtReserved     POINT
+	PtMaxSize      POINT
+	PtMaxPosition  POINT
+	PtMinTrackSize POINT
+	PtMaxTrackSize POINT
+}
+
+type NMCUSTOMDRAW struct {
+	Hdr         NMHDR
+	DwDrawStage uint32
+	_           uint32
+	Hdc         uintptr
+	Rc          RECT
+	DwItemSpec  uintptr
+	UItemState  uint32
+	_2          uint32
+	LItemlParam uintptr
+}
+
+type NMLVCUSTOMDRAW struct {
+	Nmcd      NMCUSTOMDRAW
+	ClrText   uint32
+	ClrTextBk uint32
 }
 
 type OPENFILENAMEW struct {
@@ -230,6 +269,8 @@ var (
 	pLoadCursorW      = user32.NewProc("LoadCursorW")
 	pLoadIconW        = user32.NewProc("LoadIconW")
 	pGetSysColorBrush = user32.NewProc("GetSysColorBrush")
+	pGetClientRect    = user32.NewProc("GetClientRect")
+	pMoveWindow       = user32.NewProc("MoveWindow")
 
 	pGetModuleHandleW   = kernel32.NewProc("GetModuleHandleW")
 	pGetOpenFileNameW   = comdlg32.NewProc("GetOpenFileNameW")
