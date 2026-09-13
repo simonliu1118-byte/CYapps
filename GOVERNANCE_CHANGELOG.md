@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.1.1 — 2026/09/13
+
+- 新增正式維護專案 `SMARTCOPIConverter`（SMART 銷貨單格式轉換工具）至 `CYapps` 專案清單。
+- 本次只調整 repository-specific 專案登錄；共通規則與其他專案規則不重複、不變更。
+
 ## 2.1.0 — 2026/09/13
 
 - 共通規則同步不再依賴每日 GitHub Actions 排程；AITeam 母本變更後，同一輪治理工作直接以 Git／GitHub API／治理 PR 同步本 repo。
