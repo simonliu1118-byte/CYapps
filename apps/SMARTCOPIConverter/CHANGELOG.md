@@ -1,5 +1,15 @@
 # Changelog
 
+## V1.0.0 Build 5 — 2026/09/14
+
+- 完整接回正式 Excel 轉換核心，輸出結構重新對齊既有 V12N4 相容格式。
+- 轉換時保留 ERP 來源儲存格的字串／數值型別；外觀看似數字但原本是文字的銷貨單別、銷貨單號、序號等不再被誤寫成數值。
+- 輸出 XLSX 改用 `sharedStrings.xml`、Office theme、Excel workbook metadata 與既有日期格式；日期欄位維持 Excel 數值日期並套用 `yyyy/m/d`。
+- 輸出改採同一目的資料夾內先寫暫存檔、完成後再 rename，避免轉換中斷時留下可被 POS 誤匯入的半成品。
+- 原生檔案選擇器新增 `CommDlgExtendedError` 判斷，能正確區分使用者取消與真正 Win32 對話框錯誤。
+- 新增型別保留、shared strings 與日期 style 單元測試。
+- 以本機既有 COPI08 樣本完成實際轉換驗證，並與既有可接受輸出逐儲存格比對；測試資料未提交 GitHub。
+
 ## V1.0.0 Build 4 — 2026/09/14
 
 - `settings.json` 改為與 EXE 同目錄，移除對 `%LOCALAPPDATA%` 的依賴；舊 Local AppData 設定不再讀取。
