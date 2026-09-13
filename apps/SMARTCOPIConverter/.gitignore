@@ -1,0 +1,9 @@
+# Local/runtime data specific to this converter
+*.xlsx
+*.xls
+*.xlsm
+*.log
+log/
+settings.json
+SMARTCOPIConverter.exe
+*.zip
