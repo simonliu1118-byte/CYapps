@@ -7,7 +7,8 @@ namespace CYInvoice.WinForms;
 
 internal sealed class InvoiceEntryControl : UserControl
 {
-    private const int MinimumRows = 5;
+    private const int MinimumVisibleRows = 5;
+    private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly Action recordsChanged;
@@ -27,8 +28,20 @@ internal sealed class InvoiceEntryControl : UserControl
     private readonly Label taxTotal = TotalLabel(false);
     private readonly Label invoiceTotal = TotalLabel(true);
     private readonly Button issueButton = new() { Width = 150, Height = 36 };
+    private readonly Button addItemButton = new()
+    {
+        Text = "＋ 新增明細",
+        Width = 137,
+        Height = 34,
+        Anchor = AnchorStyles.Top | AnchorStyles.Right,
+        Margin = new Padding(4, 3, 4, 3),
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = SystemColors.ControlText,
+        UseVisualStyleBackColor = true,
+    };
     private NameLookup? cachedLookup;
     private string cachedBan = string.Empty;
+    private bool clearingGridSelection;
 
     public InvoiceEntryControl(LocalRepository repository, InvoiceService service, Action recordsChanged)
     {
@@ -48,7 +61,7 @@ internal sealed class InvoiceEntryControl : UserControl
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 232));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 260));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         root.Controls.Add(BuildImports(), 0, 0);
@@ -73,24 +86,23 @@ internal sealed class InvoiceEntryControl : UserControl
     private Control BuildBuyer()
     {
         var group = new GroupBox { Text = "發票基本資料", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 8, RowCount = 3 };
-        foreach (var width in new[] { 86, 125, 68, 95, 190, 88, 0, 12 })
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 3 };
+        foreach (var width in new[] { 86, 260, 88, 190, 0 })
             layout.ColumnStyles.Add(width == 0 ? new ColumnStyle(SizeType.Percent, 100) : new ColumnStyle(SizeType.Absolute, width));
+        var orderModes = RadioGroup(automaticOrder, customOrder);
+        var buyerModes = RadioGroup(consumerBuyer, companyBuyer);
         layout.Controls.Add(UiControls.Label("訂單編號"), 0, 0);
-        layout.Controls.Add(automaticOrder, 1, 0);
-        layout.Controls.Add(customOrder, 3, 0);
-        layout.Controls.Add(orderId, 4, 0);
+        layout.Controls.Add(orderModes, 1, 0);
+        layout.Controls.Add(orderId, 3, 0);
+        layout.SetColumnSpan(orderId, 2);
         layout.Controls.Add(UiControls.Label("買方資料"), 0, 1);
-        layout.Controls.Add(consumerBuyer, 1, 1);
-        layout.SetColumnSpan(consumerBuyer, 2);
-        layout.Controls.Add(companyBuyer, 3, 1);
-        layout.SetColumnSpan(companyBuyer, 2);
+        layout.Controls.Add(buyerModes, 1, 1);
+        layout.SetColumnSpan(buyerModes, 4);
         layout.Controls.Add(UiControls.Label("統一編號"), 0, 2);
         layout.Controls.Add(buyerBan, 1, 2);
-        layout.SetColumnSpan(buyerBan, 2);
-        layout.Controls.Add(UiControls.Label("買方名稱"), 3, 2);
-        layout.Controls.Add(buyerName, 4, 2);
-        layout.SetColumnSpan(buyerName, 3);
+        layout.Controls.Add(UiControls.Label("買方名稱"), 2, 2);
+        layout.Controls.Add(buyerName, 3, 2);
+        layout.SetColumnSpan(buyerName, 2);
         group.Controls.Add(layout);
         return group;
     }
@@ -107,10 +119,9 @@ internal sealed class InvoiceEntryControl : UserControl
         var modes = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(12, 5, 0, 0) };
         modes.Controls.Add(taxInclusive);
         modes.Controls.Add(taxExclusive);
-        var add = new Button { Text = "＋ 新增明細", Dock = DockStyle.Fill, Margin = new Padding(4) };
-        add.Click += (_, _) => AddRow(true);
+        addItemButton.Click += (_, _) => AddRow(true);
         toolbar.Controls.Add(modes, 0, 0);
-        toolbar.Controls.Add(add, 1, 0);
+        toolbar.Controls.Add(addItemButton, 1, 0);
         ConfigureGrid();
         layout.Controls.Add(toolbar, 0, 0);
         layout.Controls.Add(items, 0, 1);
@@ -128,13 +139,26 @@ internal sealed class InvoiceEntryControl : UserControl
         items.Columns.Add(Column("課稅別", 80, readOnly: true));
         items.Columns.Add(Column("數量", 80, right: true));
         items.Columns.Add(Column("單價（含稅）", 135, right: true));
-        items.Columns.Add(Column("金額（含稅）", 140, right: true, readOnly: true));
+        var amountColumn = Column("金額（含稅）", 140, right: true, readOnly: true);
+        amountColumn.DefaultCellStyle.BackColor = Color.FromArgb(232, 232, 232);
+        amountColumn.DefaultCellStyle.SelectionBackColor = Color.FromArgb(232, 232, 232);
+        amountColumn.DefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
+        items.Columns.Add(amountColumn);
         items.Columns.Add(new DataGridViewButtonColumn
         {
-            HeaderText = "操作", Text = "刪除", UseColumnTextForButtonValue = true, Width = 76,
-            SortMode = DataGridViewColumnSortMode.NotSortable, FlatStyle = FlatStyle.Flat,
-            DefaultCellStyle = { ForeColor = Color.FromArgb(205, 32, 32) },
+            HeaderText = "操作", Text = "刪除", UseColumnTextForButtonValue = false, Width = 76,
+            SortMode = DataGridViewColumnSortMode.NotSortable, FlatStyle = FlatStyle.Standard,
+            DefaultCellStyle =
+            {
+                ForeColor = Color.FromArgb(190, 24, 24),
+                BackColor = SystemColors.Control,
+                SelectionBackColor = SystemColors.Control,
+                SelectionForeColor = Color.FromArgb(190, 24, 24),
+                Alignment = DataGridViewContentAlignment.MiddleCenter,
+                Padding = new Padding(3, 1, 3, 1),
+            },
         });
+        items.MinimumSize = new Size(0, items.ColumnHeadersHeight + (items.RowTemplate.Height * MinimumVisibleRows) + 4);
         UiControls.ReserveVerticalScrollBar(items, 1);
     }
 
@@ -190,11 +214,25 @@ internal sealed class InvoiceEntryControl : UserControl
         remark.TextChanged += (_, _) => remarkCounter.Text = $"{remark.Text.EnumerateRunes().Count()} / {InvoiceLimits.MaximumRemarkCharacters}";
         items.CellBeginEdit += (_, eventArgs) =>
         {
+            if (eventArgs.RowIndex < 0 || IsPlaceholder(items.Rows[eventArgs.RowIndex]))
+            {
+                eventArgs.Cancel = true;
+                return;
+            }
             if (eventArgs.RowIndex >= 0 && eventArgs.ColumnIndex == 4)
                 items.Rows[eventArgs.RowIndex].Cells[4].Value = Cell(items.Rows[eventArgs.RowIndex], 4).Replace(",", string.Empty, StringComparison.Ordinal);
         };
         items.CellEndEdit += (_, eventArgs) => { if (eventArgs.RowIndex >= 0) CalculateRow(items.Rows[eventArgs.RowIndex]); Recalculate(); };
         items.CellContentClick += DeleteClicked;
+        items.CellMouseDown += (_, eventArgs) =>
+        {
+            if (eventArgs.RowIndex < 0) return;
+            if (eventArgs.ColumnIndex == 5 || IsPlaceholder(items.Rows[eventArgs.RowIndex]))
+                BeginInvoke(ClearInvalidGridSelection);
+        };
+        items.SelectionChanged += (_, _) => ClearInvalidGridSelection();
+        items.EditingControlShowing += ConfigureItemEditor;
+        items.KeyDown += ItemGridKeyDown;
         items.DataError += (_, eventArgs) => eventArgs.ThrowException = false;
     }
 
@@ -205,7 +243,8 @@ internal sealed class InvoiceEntryControl : UserControl
         taxInclusive.Checked = true;
         buyerBan.Clear(); buyerName.Clear(); remark.Clear();
         items.Rows.Clear();
-        for (var index = 0; index < MinimumRows; index++) AddRow(false);
+        AddRow(false);
+        EnsurePlaceholderRows();
         items.ClearSelection();
         UpdateOrderMode(); UpdateBuyerMode(); UpdateHeaders(); Recalculate();
     }
@@ -239,32 +278,38 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private void AddRow(bool focus)
     {
-        if (items.Rows.Count >= InvoiceLimits.MaximumItems)
+        if (ActualRows().Count >= InvoiceLimits.MaximumItems)
         {
             MessageBox.Show(this, $"商品明細最多 {InvoiceLimits.MaximumItems} 筆", "無法新增", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
+        RemovePlaceholderRows();
         var index = items.Rows.Add(items.Rows.Count + 1, "", "應稅", "", "", "", "刪除");
+        EnsurePlaceholderRows();
         if (focus) { items.CurrentCell = items.Rows[index].Cells[1]; items.BeginEdit(true); }
     }
 
     private void DeleteClicked(object? sender, DataGridViewCellEventArgs eventArgs)
     {
         if (eventArgs.RowIndex < 0 || eventArgs.ColumnIndex != 6) return;
-        if (items.Rows.Count <= MinimumRows)
+        var row = items.Rows[eventArgs.RowIndex];
+        if (IsPlaceholder(row)) return;
+        if (ActualRows().Count <= 1)
         {
-            for (var column = 1; column <= 5; column++) items.Rows[eventArgs.RowIndex].Cells[column].Value = column == 2 ? "應稅" : "";
+            for (var column = 1; column <= 5; column++) row.Cells[column].Value = column == 2 ? "應稅" : "";
         }
         else
         {
             items.Rows.RemoveAt(eventArgs.RowIndex);
-            for (var index = 0; index < items.Rows.Count; index++) items.Rows[index].Cells[0].Value = index + 1;
+            RenumberActualRows();
         }
+        EnsurePlaceholderRows();
         Recalculate();
     }
 
     private void CalculateRow(DataGridViewRow row)
     {
+        if (IsPlaceholder(row)) return;
         try
         {
             var quantityText = Clean(Cell(row, 3));
@@ -307,6 +352,7 @@ internal sealed class InvoiceEntryControl : UserControl
         for (var index = 0; index < items.Rows.Count; index++)
         {
             var row = items.Rows[index];
+            if (IsPlaceholder(row)) continue;
             var description = Cell(row, 1);
             var quantityText = Clean(Cell(row, 3));
             var priceText = Clean(Cell(row, 4));
@@ -400,7 +446,7 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Task ImportMoAsync()
     {
-        using var dialog = FileDialog("MO店+ 原始 OrderExport|*.xlsx;*.xls;*.xlsm|Excel 檔案|*.xlsx;*.xls;*.xlsm");
+        using var dialog = FileDialog("Excel 檔案 (*.xls;*.xlsx;*.xlsm)|*.xls;*.xlsx;*.xlsm");
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return Task.CompletedTask;
         try
         {
@@ -415,7 +461,7 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Task ImportCoupangAsync()
     {
-        using var dialog = FileDialog("酷澎原始 Excel|*.xlsx|Excel 檔案|*.xlsx");
+        using var dialog = FileDialog("Excel 檔案 (*.xlsx)|*.xlsx");
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return Task.CompletedTask;
         try
         {
@@ -427,6 +473,116 @@ internal sealed class InvoiceEntryControl : UserControl
     }
     private void Pending(string feature) => MessageBox.Show(this, $"{feature}尚未接入 C# 重製測試線，現在不會讀檔或送出發票。", "功能尚未完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
     private static OpenFileDialog FileDialog(string filter) => new() { Filter = filter, CheckFileExists = true, Multiselect = false, RestoreDirectory = true };
+    private static FlowLayoutPanel RadioGroup(params RadioButton[] buttons)
+    {
+        var panel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 4, 0, 0),
+        };
+        foreach (var button in buttons)
+        {
+            button.Margin = new Padding(3, 3, 26, 3);
+            panel.Controls.Add(button);
+        }
+        return panel;
+    }
+
+    private List<DataGridViewRow> ActualRows() => items.Rows.Cast<DataGridViewRow>().Where(row => !IsPlaceholder(row)).ToList();
+
+    private static bool IsPlaceholder(DataGridViewRow row) => ReferenceEquals(row.Tag, PlaceholderRow);
+
+    private void RemovePlaceholderRows()
+    {
+        for (var index = items.Rows.Count - 1; index >= 0; index--)
+        {
+            if (IsPlaceholder(items.Rows[index])) items.Rows.RemoveAt(index);
+        }
+    }
+
+    private void EnsurePlaceholderRows()
+    {
+        RemovePlaceholderRows();
+        for (var index = items.Rows.Count; index < MinimumVisibleRows; index++)
+        {
+            var placeholderIndex = items.Rows.Add("", "", "", "", "", "", "");
+            var placeholder = items.Rows[placeholderIndex];
+            placeholder.Tag = PlaceholderRow;
+            placeholder.ReadOnly = true;
+            placeholder.Cells[6] = new DataGridViewTextBoxCell { Value = string.Empty, ReadOnly = true };
+        }
+    }
+
+    private void RenumberActualRows()
+    {
+        var number = 1;
+        foreach (var row in items.Rows.Cast<DataGridViewRow>().Where(row => !IsPlaceholder(row)))
+            row.Cells[0].Value = number++;
+    }
+
+    private void ConfigureItemEditor(object? sender, DataGridViewEditingControlShowingEventArgs eventArgs)
+    {
+        if (eventArgs.Control is not TextBox editor) return;
+        editor.KeyDown -= ItemEditorKeyDown;
+        editor.KeyDown += ItemEditorKeyDown;
+        if (items.CurrentCell?.ColumnIndex is 3 or 4) editor.SelectAll();
+    }
+
+    private void ItemEditorKeyDown(object? sender, KeyEventArgs eventArgs)
+    {
+        if (eventArgs.KeyCode != Keys.Enter) return;
+        eventArgs.Handled = true;
+        eventArgs.SuppressKeyPress = true;
+        items.EndEdit();
+        BeginInvoke(MoveToNextItemField);
+    }
+
+    private void ItemGridKeyDown(object? sender, KeyEventArgs eventArgs)
+    {
+        if (eventArgs.KeyCode != Keys.Enter || items.IsCurrentCellInEditMode) return;
+        eventArgs.Handled = true;
+        eventArgs.SuppressKeyPress = true;
+        MoveToNextItemField();
+    }
+
+    private void MoveToNextItemField()
+    {
+        var current = items.CurrentCell;
+        if (current is null || current.RowIndex < 0 || IsPlaceholder(items.Rows[current.RowIndex])) return;
+        var nextColumn = current.ColumnIndex switch { 1 => 3, 3 => 4, _ => -1 };
+        if (nextColumn >= 0)
+        {
+            FocusItemCell(current.RowIndex, nextColumn);
+            return;
+        }
+
+        var actual = ActualRows();
+        var position = actual.FindIndex(row => row.Index == current.RowIndex);
+        if (position >= 0 && position + 1 < actual.Count)
+            FocusItemCell(actual[position + 1].Index, 1);
+        else
+            addItemButton.Focus();
+    }
+
+    private void FocusItemCell(int rowIndex, int columnIndex)
+    {
+        items.CurrentCell = items.Rows[rowIndex].Cells[columnIndex];
+        items.BeginEdit(true);
+    }
+
+    private void ClearInvalidGridSelection()
+    {
+        if (clearingGridSelection) return;
+        var current = items.CurrentCell;
+        if (current is null || (current.ColumnIndex != 5 && !IsPlaceholder(items.Rows[current.RowIndex]))) return;
+        clearingGridSelection = true;
+        items.ClearSelection();
+        items.CurrentCell = null;
+        clearingGridSelection = false;
+    }
     private static string Cell(DataGridViewRow row, int column) => Convert.ToString(row.Cells[column].Value, CultureInfo.CurrentCulture)?.Trim() ?? string.Empty;
     private static string Clean(string value) => value.Replace(",", string.Empty, StringComparison.Ordinal).Trim();
     private static DataGridViewTextBoxColumn Column(string title, int width, bool right = false, bool readOnly = false) => new()

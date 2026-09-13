@@ -17,6 +17,7 @@ internal sealed class MainForm : Form
     private readonly Panel invoiceLine = new();
     private readonly Panel recordsLine = new();
     private readonly Panel content = new();
+    private readonly Button settingsButton = new();
 
     public MainForm()
     {
@@ -47,7 +48,7 @@ internal sealed class MainForm : Form
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(20, 16, 20, 16) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var banner = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(236, 246, 255) };
@@ -65,15 +66,37 @@ internal sealed class MainForm : Form
         var navigation = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 122));
-        var tabs = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = Padding.Empty };
+        var tabs = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 2, 0, 0),
+        };
         ConfigureTab(invoiceTab, invoiceLine, "開立發票", () => ShowPage(invoicePage));
         ConfigureTab(recordsTab, recordsLine, "已開立發票清單", () => { recordsPage.Reload(); ShowPage(recordsPage); });
         tabs.Controls.Add(TabContainer(invoiceTab, invoiceLine, 94));
         tabs.Controls.Add(TabContainer(recordsTab, recordsLine, 142));
-        var settings = new Button { Text = "設定", Dock = DockStyle.Fill, Margin = new Padding(0, 6, 0, 6) };
-        settings.Click += (_, _) => OpenSettings();
+        var settingsHost = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 6, 0, 6),
+        };
+        settingsButton.Text = "設定";
+        settingsButton.Width = 120;
+        settingsButton.Height = 34;
+        settingsButton.Margin = Padding.Empty;
+        settingsButton.TextAlign = ContentAlignment.MiddleCenter;
+        settingsButton.ForeColor = SystemColors.ControlText;
+        settingsButton.UseVisualStyleBackColor = true;
+        settingsButton.Click += (_, _) => OpenSettings();
+        settingsHost.Controls.Add(settingsButton);
         navigation.Controls.Add(tabs, 0, 0);
-        navigation.Controls.Add(settings, 1, 0);
+        navigation.Controls.Add(settingsHost, 1, 0);
 
         content.Dock = DockStyle.Fill;
         content.BackColor = Color.White;
@@ -89,7 +112,11 @@ internal sealed class MainForm : Form
         button.Text = text;
         button.Dock = DockStyle.Fill;
         button.FlatStyle = FlatStyle.Flat;
-        button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(240, 246, 253);
+        button.FlatAppearance.MouseDownBackColor = Color.FromArgb(229, 240, 252);
+        button.UseVisualStyleBackColor = false;
+        button.TextAlign = ContentAlignment.MiddleCenter;
         button.Click += (_, _) => action();
         line.Dock = DockStyle.Bottom;
         line.Height = 3;
@@ -98,7 +125,7 @@ internal sealed class MainForm : Form
 
     private static Panel TabContainer(Button button, Panel line, int width)
     {
-        var panel = new Panel { Width = width, Height = 44, Margin = Padding.Empty };
+        var panel = new Panel { Width = width, Height = 44, Margin = new Padding(0, 0, 2, 0) };
         panel.Controls.Add(button);
         panel.Controls.Add(line);
         line.BringToFront();
@@ -116,12 +143,20 @@ internal sealed class MainForm : Form
         page.Visible = true;
         page.BringToFront();
         var invoiceSelected = ReferenceEquals(page, invoicePage);
-        invoiceLine.Visible = invoiceSelected;
-        recordsLine.Visible = !invoiceSelected;
-        invoiceTab.ForeColor = invoiceSelected ? Color.FromArgb(0, 82, 180) : SystemColors.ControlText;
-        recordsTab.ForeColor = invoiceSelected ? SystemColors.ControlText : Color.FromArgb(0, 82, 180);
-        invoiceTab.Font = new Font(Font, invoiceSelected ? FontStyle.Bold : FontStyle.Regular);
-        recordsTab.Font = new Font(Font, invoiceSelected ? FontStyle.Regular : FontStyle.Bold);
+        SetTabAppearance(invoiceTab, invoiceLine, invoiceSelected);
+        SetTabAppearance(recordsTab, recordsLine, !invoiceSelected);
+    }
+
+    private void SetTabAppearance(Button button, Panel line, bool selected)
+    {
+        button.ForeColor = selected ? Color.FromArgb(0, 82, 180) : SystemColors.ControlText;
+        button.BackColor = selected ? Color.FromArgb(235, 243, 252) : Color.FromArgb(248, 248, 248);
+        button.FlatAppearance.BorderColor = selected ? Color.FromArgb(180, 202, 226) : Color.FromArgb(218, 218, 218);
+        button.Font = new Font(Font, selected ? FontStyle.Bold : FontStyle.Regular);
+        line.Visible = true;
+        line.Height = selected ? 3 : 1;
+        line.BackColor = selected ? Color.FromArgb(0, 102, 204) : Color.FromArgb(205, 205, 205);
+        line.BringToFront();
     }
 
     private void OpenSettings()
@@ -180,11 +215,11 @@ internal static class ApplicationVersion
         try
         {
             var value = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "VERSION-CS")).Trim();
-            return value.Length == 0 ? "1.1.0-cs.2" : value;
+            return value.Length == 0 ? "1.1.0-cs.3" : value;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            return "1.1.0-cs.2";
+            return "1.1.0-cs.3";
         }
     }
 }

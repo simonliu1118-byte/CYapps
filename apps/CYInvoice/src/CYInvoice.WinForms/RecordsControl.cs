@@ -7,6 +7,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class RecordsControl : UserControl
 {
+    private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly DateTimePicker dateFrom = DatePicker();
@@ -20,6 +21,8 @@ internal sealed class RecordsControl : UserControl
     private readonly DataGridView grid = UiControls.Grid();
     private readonly Button refreshButton = new() { Text = "重新整理狀態", Width = 135, Height = 34 };
     private readonly List<InvoiceRecord> visible = [];
+    private bool updatingPlaceholders;
+    private bool clearingSelection;
 
     public RecordsControl(LocalRepository repository, InvoiceService service)
     {
@@ -103,6 +106,8 @@ internal sealed class RecordsControl : UserControl
         UiControls.ReserveVerticalScrollBar(grid, 5);
         grid.CellDoubleClick += (_, eventArgs) => OpenSelected(eventArgs.RowIndex);
         grid.CellFormatting += FormatCell;
+        grid.SelectionChanged += (_, _) => ClearPlaceholderSelection();
+        grid.SizeChanged += (_, _) => EnsurePlaceholderRows();
     }
 
     private void AddColumn(string title, int width, bool right = false, bool center = false)
@@ -128,6 +133,7 @@ internal sealed class RecordsControl : UserControl
                     record.BuyerName, MoneyFormatter.Integer(record.Amount), record.Delivery, record.InvoiceState,
                     record.UploadStatus == 0 ? "" : "●");
             }
+            EnsurePlaceholderRows();
             grid.ClearSelection();
             grid.ResumeLayout();
         }
@@ -178,6 +184,41 @@ internal sealed class RecordsControl : UserControl
         if (index < 0 || index >= visible.Count) return;
         using var detail = new RecordDetailForm(visible[index]);
         detail.ShowDialog(FindForm());
+    }
+
+    private void EnsurePlaceholderRows()
+    {
+        if (updatingPlaceholders || grid.ColumnCount == 0 || grid.ClientSize.Height <= grid.ColumnHeadersHeight) return;
+        updatingPlaceholders = true;
+        try
+        {
+            for (var index = grid.Rows.Count - 1; index >= visible.Count; index--)
+            {
+                if (ReferenceEquals(grid.Rows[index].Tag, PlaceholderRow)) grid.Rows.RemoveAt(index);
+            }
+
+            var availableHeight = Math.Max(0, grid.ClientSize.Height - grid.ColumnHeadersHeight - 2);
+            var visibleRowCapacity = availableHeight / Math.Max(1, grid.RowTemplate.Height);
+            while (grid.Rows.Count < visibleRowCapacity)
+            {
+                var index = grid.Rows.Add();
+                grid.Rows[index].Tag = PlaceholderRow;
+                grid.Rows[index].ReadOnly = true;
+            }
+        }
+        finally
+        {
+            updatingPlaceholders = false;
+        }
+    }
+
+    private void ClearPlaceholderSelection()
+    {
+        if (clearingSelection || grid.CurrentCell is null || grid.CurrentCell.RowIndex < visible.Count) return;
+        clearingSelection = true;
+        grid.ClearSelection();
+        grid.CurrentCell = null;
+        clearingSelection = false;
     }
 
     private void FormatCell(object? sender, DataGridViewCellFormattingEventArgs eventArgs)
