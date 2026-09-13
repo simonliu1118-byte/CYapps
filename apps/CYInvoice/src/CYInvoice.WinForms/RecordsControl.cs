@@ -293,7 +293,7 @@ internal sealed class RecordsControl : UserControl
     internal void VerifySmokeLayout()
     {
         if (Records.Columns.Count != 10) throw new InvalidOperationException("已開立發票原生 ListView 欄位未建立");
-        if (!recordsHost.EmptyScrollBarVisible) throw new InvalidOperationException("已開立發票清單未保留停用垂直 scrollbar");
+        if (!recordsHost.ScrollSlotReserved) throw new InvalidOperationException("已開立發票清單未保留停用垂直 scrollbar");
         if (Math.Abs(Records.Font.SizeInPoints - 9F) > 0.1F) throw new InvalidOperationException("已開立發票清單未使用 9pt 字級");
     }
 

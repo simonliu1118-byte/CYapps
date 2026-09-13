@@ -721,7 +721,7 @@ internal sealed class InvoiceEntryControl : UserControl
         consumerBuyer.Checked = true;
         if (Items.Columns.Count != 7 || Items.Items.Count != MinimumVisibleRows || ActualRows().Count != 1)
             throw new InvalidOperationException("商品原生 ListView 未建立一筆實際資料與五列顯示區");
-        if (!itemsHost.EmptyScrollBarVisible) throw new InvalidOperationException("商品清單未保留停用垂直 scrollbar");
+        if (!itemsHost.ScrollSlotReserved) throw new InvalidOperationException("商品清單未保留停用垂直 scrollbar");
     }
 
     private static string Cell(ListViewItem row, int column) => row.SubItems[column].Text.Trim();

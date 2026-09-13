@@ -16,6 +16,7 @@ internal sealed class NativeListViewHost : UserControl
     };
     private readonly ImageList rowHeightImages = new();
     private bool settingColumnWidths;
+    private bool scrollNeeded;
 
     public NativeListViewHost(float fontSize = 10F, int rowHeight = 27)
     {
@@ -61,7 +62,7 @@ internal sealed class NativeListViewHost : UserControl
 
     public event EventHandler? ViewportChanged;
 
-    public bool EmptyScrollBarVisible => emptyScrollBar.Visible;
+    public bool ScrollSlotReserved => !scrollNeeded;
 
     public int VisibleRowCapacity()
     {
@@ -72,6 +73,7 @@ internal sealed class NativeListViewHost : UserControl
 
     public void SetScrollNeeded(bool needed)
     {
+        scrollNeeded = needed;
         emptyScrollBar.Visible = !needed;
         emptyScrollBar.Enabled = false;
         emptyScrollBar.BringToFront();
