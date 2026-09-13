@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.0.1 — 2026/09/13
+
+- 新增正式維護專案 `TriINVCalc`，顯示名稱固定為「三聯式發票開立計算機」。
+- 新增 `apps/TriINVCalc/PROJECT_RULES.md`，定義 Windows x64 portable、公開安全、發票計算核心與發行驗證要求。
+- `REPO_POLICY.md` 的正式維護專案清單加入 `TriINVCalc`。
+
 ## 2.0.0 — 2026/09/13
 
 - 永久規則固定為三層：共通 `REPOSITORY_RULES.md`、repo-specific `REPO_POLICY.md`、project-specific `apps/<Project>/PROJECT_RULES.md`。
