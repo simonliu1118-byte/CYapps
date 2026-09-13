@@ -228,7 +228,7 @@ func removeFile(index int) {
 
 func openFileDialog(owner uintptr) ([]string, error) {
 	buf := make([]uint16, 65536)
-	filter := syscall.StringToUTF16("Excel 檔案 (*.xlsx)\x00*.xlsx\x00所有檔案 (*.*)\x00*.*\x00\x00")
+	filter := makeOpenFileFilter("Excel 檔案 (*.xlsx)", "*.xlsx", "所有檔案 (*.*)", "*.*")
 	ofn := OPENFILENAMEW{LStructSize: uint32(unsafe.Sizeof(OPENFILENAMEW{})), HwndOwner: owner, LpstrFilter: &filter[0], LpstrFile: &buf[0], NMaxFile: uint32(len(buf)), LpstrTitle: wstr("選擇 COPI 匯出的 Excel 檔案"), Flags: OFN_ALLOWMULTISELECT | OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST, LpstrDefExt: wstr("xlsx")}
 	r, _, e := pGetOpenFileNameW.Call(uintptr(unsafe.Pointer(&ofn)))
 	if r == 0 {
@@ -250,6 +250,19 @@ func openFileDialog(owner uintptr) ([]string, error) {
 	}
 	return out, nil
 }
+
+func makeOpenFileFilter(parts ...string) []uint16 {
+	// OPENFILENAMEW expects NUL-separated display/pattern pairs terminated by a double NUL.
+	// syscall.StringToUTF16 rejects embedded NUL bytes, so each segment must be encoded separately.
+	var out []uint16
+	for _, part := range parts {
+		u := syscall.StringToUTF16(part) // includes one trailing NUL
+		out = append(out, u...)
+	}
+	out = append(out, 0) // second NUL terminator
+	return out
+}
+
 func splitUTF16Multi(buf []uint16) []string {
 	var out []string
 	start := 0
