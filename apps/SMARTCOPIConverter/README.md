@@ -20,11 +20,12 @@ SMART 銷貨單格式轉換工具，用於將 ERP COPI08 匯出的 Excel 交易�
 - `COPI08_1` 會顯示提醒，但使用者仍可自行確認後繼續。
 - 不會靜默覆蓋同名輸出檔。
 - GUI 採事件驅動；檔案清單與歷史紀錄使用 Windows 原生 ListView，不以短週期 timer 或持續自繪刷新。
+- 主視窗最小尺寸固定為既有基準；放大時清單與欄位會跟隨可用寬度調整。
 
 ## 本機資料與診斷紀錄
 
-- POS 輸出資料夾設定與轉檔歷史儲存在 `%LOCALAPPDATA%\Chihyuan\SMARTCOPIConverter\settings.json`，不提交 Git。因為設定檔不在 EXE 同目錄，所以刪除或更換 EXE 不會清除設定。
-- 若需要讓程式恢復為首次啟動狀態，可先關閉程式，再刪除上述 `settings.json`；下次啟動會重新要求設定 POS 輸出資料夾。
+- `settings.json` 與 EXE 放在同一資料夾，保存 POS 輸出資料夾設定與轉檔歷史，不提交 Git。
+- 要重置設定時，先關閉程式，再刪除 EXE 同目錄的 `settings.json`；下次啟動會重新要求設定 POS 輸出資料夾。
 - 程式每次啟動即建立診斷 log：`<EXE所在資料夾>\log\app(YYYYMMDD-HHMMSS).log`，用於追查啟動、路徑設定與轉檔異常。
 - 「保留LOG」勾選時會額外記錄較詳細的逐檔轉換資訊；基礎啟動診斷紀錄不受此勾選影響。
 
