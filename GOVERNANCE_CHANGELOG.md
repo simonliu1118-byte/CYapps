@@ -3,9 +3,10 @@
 ## 2.0.0 — 2026/09/13
 
 - 永久規則固定為三層：共通 `REPOSITORY_RULES.md`、repo-specific `REPO_POLICY.md`、project-specific `apps/<Project>/PROJECT_RULES.md`。
-- AITeam 成為三個 repository 共通規則唯一母本；本 repo 新增 `COMMON_RULES_VERSION`、`COMMON_RULES_CHANGELOG.md` 與自動同步 workflow。
+- AITeam 成為三個 repository 共通規則唯一母本；本 repo 新增 `COMMON_RULES_VERSION`、`COMMON_RULES_CHANGELOG.md` 與同步 workflow。
 - Governance Check 會逐字比對 AITeam `main` 的共通母本；只要本 repo 落後，其他 PR 就不能通過治理檢查。
-- 每日輕量 sync workflow 發現母本更新時會建立／刷新 `governance/sync-common-rules-*` PR，不會修改 `REPO_POLICY.md` 或各 APP 的 `PROJECT_RULES.md`。
+- 共通規則同步改為「同一輪治理工作直接同步」：AITeam 母本變更後，直接以 Git／GitHub API／治理 PR 更新本 repo 的三個共通檔，不等待排程 Actions。
+- `sync-common-rules.yml` 改為 manual fallback；Actions 不可用時仍必須直接比對／同步，不得把 workflow 當成唯一一致性來源。
 - 根 `AGENTS.md` 成為唯一 AI 規則入口；刪除 CYInvoice project-level `AGENTS.md` 與舊 `docs/VERSIONING.md`，既有 `DEVELOPMENT_RULES.md` 已移除。
 - README、WORK_HANDOFF、PROJECT_STATUS、TODO、CHANGELOG、REQUIREMENTS、RC_TEST 等只保存狀態／需求／測試／歷史，不再具有永久規則優先權。
 - Governance Check 會阻擋新的 VERSIONING / TEAM_RULES / project-level AGENTS / 其他未授權平行規則入口。
