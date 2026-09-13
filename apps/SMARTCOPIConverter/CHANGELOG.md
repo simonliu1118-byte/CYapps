@@ -1,5 +1,10 @@
 # Changelog
 
+## V1.0.0 Build 7 — 2026/09/14
+
+- 修正 Build 6 上傳的 icon Base64 資料在 repository 內無法被 PowerShell 正確解碼的問題。
+- 改用重新驗證過、體積較小的多尺寸 Windows ICO（16、32、48、256 px），並在本地確認 ICO header、PNG entries 與 Base64 解碼均正常。
+
 ## V1.0.0 Build 6 — 2026/09/14
 
 - 修正 GitHub Actions Windows build 的 icon resource 失敗：原 `app.ico` 資源不完整，`rsrc` 產生 `.syso` 時出現 EOF。
