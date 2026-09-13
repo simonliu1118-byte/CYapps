@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 )
@@ -21,23 +20,12 @@ type AppState struct {
 	History  []HistoryItem `json:"history"`
 }
 
-func appDataDir() (string, error) {
-	base := os.Getenv("LOCALAPPDATA")
-	if base == "" {
-		return "", errors.New("找不到 LOCALAPPDATA")
-	}
-	dir := filepath.Join(base, "Chihyuan", "SMARTCOPIConverter")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+func statePath() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
 		return "", err
 	}
-	return dir, nil
-}
-func statePath() (string, error) {
-	d, e := appDataDir()
-	if e != nil {
-		return "", e
-	}
-	return filepath.Join(d, "settings.json"), nil
+	return filepath.Join(filepath.Dir(exe), "settings.json"), nil
 }
 func loadState() AppState {
 	var st AppState
