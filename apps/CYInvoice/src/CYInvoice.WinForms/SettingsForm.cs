@@ -30,6 +30,7 @@ internal sealed class SettingsForm : Form
         Font = new Font("Microsoft JhengHei UI", 10F);
         BuildLayout();
         LoadValues();
+        UpdateEnvironmentFields();
     }
 
     private void BuildLayout()
@@ -42,7 +43,7 @@ internal sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
         var environmentGroup = new GroupBox { Text = "使用環境", Dock = DockStyle.Fill };
-        var environment = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 4, Padding = new Padding(8) };
+        var environment = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 3, Padding = new Padding(8) };
         environment.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
         environment.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
         environment.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -55,7 +56,8 @@ internal sealed class SettingsForm : Form
         var appKeyLabel = UiControls.Label("App Key");
         environment.Controls.Add(appKeyLabel, 1, 2);
         environment.Controls.Add(appKey, 2, 2);
-        environment.Controls.Add(UiControls.Label("留白會保留目前已儲存的 App Key。"), 2, 3);
+        test.CheckedChanged += (_, _) => UpdateEnvironmentFields();
+        production.CheckedChanged += (_, _) => UpdateEnvironmentFields();
         environmentGroup.Controls.Add(environment);
 
         var platformGroup = new GroupBox { Text = "平台檔案密碼", Dock = DockStyle.Fill };
@@ -106,8 +108,18 @@ internal sealed class SettingsForm : Form
         test.Checked = settings.Environment == Environments.Test;
         production.Checked = settings.Environment == Environments.Production;
         invoice.Text = settings.ProductionInvoice;
-        appKey.PlaceholderText = settings.ProductionAppKeyEncrypted.Length == 0 ? "" : "已安全儲存；留白不變更";
-        moPassword.PlaceholderText = settings.MoPasswordEncrypted.Length == 0 ? "" : "已安全儲存；留白不變更";
+        appKey.PlaceholderText = settings.ProductionAppKeyEncrypted.Length == 0
+            ? ""
+            : "留白會保留目前已儲存的 App Key。";
+        moPassword.PlaceholderText = settings.MoPasswordEncrypted.Length == 0
+            ? ""
+            : "留白會保留目前已儲存的 MO店+ Excel 保護密碼。";
+    }
+
+    private void UpdateEnvironmentFields()
+    {
+        invoice.Enabled = production.Checked;
+        appKey.Enabled = production.Checked;
     }
 
     private void SaveClicked(object? sender, EventArgs eventArgs)
@@ -135,5 +147,14 @@ internal sealed class SettingsForm : Form
         {
             MessageBox.Show(this, error.Message, "無法儲存設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
+    }
+
+    internal void VerifySmokeLayout()
+    {
+        if (invoice.Enabled != production.Checked || appKey.Enabled != production.Checked)
+            throw new InvalidOperationException("測試與正式環境欄位鎖定狀態不一致");
+        if (settings.ProductionAppKeyEncrypted.Length != 0 &&
+            appKey.PlaceholderText != "留白會保留目前已儲存的 App Key。")
+            throw new InvalidOperationException("App Key 保留提示未放在輸入欄位內");
     }
 }

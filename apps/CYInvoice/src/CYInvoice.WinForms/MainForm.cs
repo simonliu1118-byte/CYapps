@@ -12,11 +12,9 @@ internal sealed class MainForm : Form
     private readonly RecordsControl recordsPage;
     private readonly Label environmentLabel = new();
     private readonly Label apiLabel = new();
-    private readonly Button invoiceTab = new();
-    private readonly Button recordsTab = new();
-    private readonly Panel invoiceLine = new();
-    private readonly Panel recordsLine = new();
-    private readonly Panel content = new();
+    private readonly TabControl tabs = new();
+    private readonly TabPage invoiceTab = new("開立發票");
+    private readonly TabPage recordsTab = new("已開立發票清單");
     private readonly Button settingsButton = new();
 
     public MainForm()
@@ -33,7 +31,6 @@ internal sealed class MainForm : Form
         recordsPage = new RecordsControl(repository, service);
         invoicePage = new InvoiceEntryControl(repository, service, recordsPage.Reload);
         BuildShell();
-        ShowPage(invoicePage);
         UpdateEnvironment();
         Shown += async (_, _) =>
         {
@@ -46,9 +43,8 @@ internal sealed class MainForm : Form
 
     private void BuildShell()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(20, 16, 20, 16) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(20, 16, 20, 16) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var banner = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(236, 246, 255) };
@@ -63,100 +59,44 @@ internal sealed class MainForm : Form
         banner.Controls.Add(environmentLabel);
         banner.Controls.Add(apiLabel);
 
-        var navigation = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
-        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        navigation.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 122));
-        var tabs = new FlowLayoutPanel
+        var tabHost = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 0) };
+        tabs.Dock = DockStyle.Fill;
+        tabs.Appearance = TabAppearance.Normal;
+        tabs.DrawMode = TabDrawMode.Normal;
+        tabs.Multiline = false;
+        tabs.Padding = new Point(14, 5);
+        invoiceTab.BackColor = Color.White;
+        recordsTab.BackColor = Color.White;
+        invoiceTab.Controls.Add(invoicePage);
+        recordsTab.Controls.Add(recordsPage);
+        tabs.TabPages.Add(invoiceTab);
+        tabs.TabPages.Add(recordsTab);
+        tabs.SelectedIndexChanged += (_, _) =>
         {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, 2, 0, 0),
-        };
-        ConfigureTab(invoiceTab, invoiceLine, "開立發票", () => ShowPage(invoicePage));
-        ConfigureTab(recordsTab, recordsLine, "已開立發票清單", () => { recordsPage.Reload(); ShowPage(recordsPage); });
-        tabs.Controls.Add(TabContainer(invoiceTab, invoiceLine, 94));
-        tabs.Controls.Add(TabContainer(recordsTab, recordsLine, 142));
-        var settingsHost = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, 6, 0, 6),
+            if (tabs.SelectedTab == recordsTab) recordsPage.Reload();
         };
         settingsButton.Text = "設定";
         settingsButton.Width = 120;
-        settingsButton.Height = 34;
+        settingsButton.Height = 30;
         settingsButton.Margin = Padding.Empty;
+        settingsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         settingsButton.TextAlign = ContentAlignment.MiddleCenter;
         settingsButton.ForeColor = SystemColors.ControlText;
         settingsButton.UseVisualStyleBackColor = true;
         settingsButton.Click += (_, _) => OpenSettings();
-        settingsHost.Controls.Add(settingsButton);
-        navigation.Controls.Add(tabs, 0, 0);
-        navigation.Controls.Add(settingsHost, 1, 0);
-
-        content.Dock = DockStyle.Fill;
-        content.BackColor = Color.White;
-        content.BorderStyle = BorderStyle.FixedSingle;
+        tabHost.Controls.Add(tabs);
+        tabHost.Controls.Add(settingsButton);
+        tabHost.Resize += (_, _) => PositionSettingsButton(tabHost);
+        PositionSettingsButton(tabHost);
+        settingsButton.BringToFront();
         root.Controls.Add(banner, 0, 0);
-        root.Controls.Add(navigation, 0, 1);
-        root.Controls.Add(content, 0, 2);
+        root.Controls.Add(tabHost, 0, 1);
         Controls.Add(root);
     }
 
-    private void ConfigureTab(Button button, Panel line, string text, Action action)
+    private void PositionSettingsButton(Control tabHost)
     {
-        button.Text = text;
-        button.Dock = DockStyle.Fill;
-        button.FlatStyle = FlatStyle.Flat;
-        button.FlatAppearance.BorderSize = 1;
-        button.FlatAppearance.MouseOverBackColor = Color.FromArgb(240, 246, 253);
-        button.FlatAppearance.MouseDownBackColor = Color.FromArgb(229, 240, 252);
-        button.UseVisualStyleBackColor = false;
-        button.TextAlign = ContentAlignment.MiddleCenter;
-        button.Click += (_, _) => action();
-        line.Dock = DockStyle.Bottom;
-        line.Height = 3;
-        line.BackColor = Color.FromArgb(0, 102, 204);
-    }
-
-    private static Panel TabContainer(Button button, Panel line, int width)
-    {
-        var panel = new Panel { Width = width, Height = 44, Margin = new Padding(0, 0, 2, 0) };
-        panel.Controls.Add(button);
-        panel.Controls.Add(line);
-        line.BringToFront();
-        return panel;
-    }
-
-    private void ShowPage(Control page)
-    {
-        foreach (Control control in content.Controls) control.Visible = ReferenceEquals(control, page);
-        if (!content.Controls.Contains(page))
-        {
-            page.Dock = DockStyle.Fill;
-            content.Controls.Add(page);
-        }
-        page.Visible = true;
-        page.BringToFront();
-        var invoiceSelected = ReferenceEquals(page, invoicePage);
-        SetTabAppearance(invoiceTab, invoiceLine, invoiceSelected);
-        SetTabAppearance(recordsTab, recordsLine, !invoiceSelected);
-    }
-
-    private void SetTabAppearance(Button button, Panel line, bool selected)
-    {
-        button.ForeColor = selected ? Color.FromArgb(0, 82, 180) : SystemColors.ControlText;
-        button.BackColor = selected ? Color.FromArgb(235, 243, 252) : Color.FromArgb(248, 248, 248);
-        button.FlatAppearance.BorderColor = selected ? Color.FromArgb(180, 202, 226) : Color.FromArgb(218, 218, 218);
-        button.Font = new Font(Font, selected ? FontStyle.Bold : FontStyle.Regular);
-        line.Visible = true;
-        line.Height = selected ? 3 : 1;
-        line.BackColor = selected ? Color.FromArgb(0, 102, 204) : Color.FromArgb(205, 205, 205);
-        line.BringToFront();
+        settingsButton.Location = new Point(Math.Max(0, tabHost.ClientSize.Width - settingsButton.Width - 8), 2);
     }
 
     private void OpenSettings()
@@ -171,14 +111,29 @@ internal sealed class MainForm : Form
     private bool EnsureInitialSetup()
     {
         var settings = repository.Settings.LoadOrCreate();
-        if (settings.AdminPasswordSet && settings.MoPasswordEncrypted.Length != 0) return true;
-        MessageBox.Show(this,
-            "首次使用必須先建立設定管理密碼與 MO店+ Excel 保護密碼，完成前不會開放發票操作。",
-            "首次安全設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        using var form = new SettingsForm(repository);
+        if (!repository.Settings.InitialSetupRequired(settings)) return true;
+        using Form form = !settings.AdminPasswordSet && settings.MoPasswordEncrypted.Length == 0
+            ? new InitialSetupForm(repository)
+            : new SettingsForm(repository);
         if (form.ShowDialog(this) == DialogResult.OK) return true;
         Close();
         return false;
+    }
+
+    internal void VerifySmokeLayout()
+    {
+        if (tabs.TabPages.Count != 2 || tabs.TabPages[0] != invoiceTab || tabs.TabPages[1] != recordsTab)
+            throw new InvalidOperationException("主頁籤未使用兩頁原生 TabControl");
+        invoicePage.VerifySmokeLayout();
+        recordsPage.VerifySmokeLayout();
+        using var firstSetup = new InitialSetupForm(repository);
+        firstSetup.CreateControl();
+        firstSetup.PerformLayout();
+        firstSetup.VerifySmokeLayout();
+        using var settings = new SettingsForm(repository);
+        settings.CreateControl();
+        settings.PerformLayout();
+        settings.VerifySmokeLayout();
     }
 
     private void UpdateEnvironment()

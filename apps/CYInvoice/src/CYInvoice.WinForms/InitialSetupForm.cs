@@ -1,0 +1,113 @@
+using CYInvoice.Core;
+using CYInvoice.Core.Storage;
+
+namespace CYInvoice.WinForms;
+
+internal sealed class InitialSetupForm : Form
+{
+    private readonly LocalRepository repository;
+    private readonly TextBox moPassword = PasswordBox();
+    private readonly TextBox adminPassword = PasswordBox();
+    private readonly TextBox confirmPassword = PasswordBox();
+
+    public InitialSetupForm(LocalRepository repository)
+    {
+        this.repository = repository;
+        Text = "CYInvoice 首次安全設定";
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(540, 282);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        ShowInTaskbar = false;
+        Font = new Font("Microsoft JhengHei UI", 10F);
+        BuildLayout();
+    }
+
+    private void BuildLayout()
+    {
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(20) };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.Controls.Add(new Label
+        {
+            Text = "首次使用固定進入光貿測試環境，請先完成本機密碼設定。",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+        }, 0, 0);
+
+        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(4) };
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 205));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        fields.Controls.Add(FieldLabel("MO店+ Excel 保護密碼"), 0, 0);
+        fields.Controls.Add(moPassword, 1, 0);
+        fields.Controls.Add(FieldLabel("設定管理密碼"), 0, 1);
+        fields.Controls.Add(adminPassword, 1, 1);
+        fields.Controls.Add(FieldLabel("再次輸入管理密碼"), 0, 2);
+        fields.Controls.Add(confirmPassword, 1, 2);
+        root.Controls.Add(fields, 0, 1);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 7, 0, 0) };
+        var cancel = new Button { Text = "取消並關閉", DialogResult = DialogResult.Cancel, Width = 110, Height = 34 };
+        var save = new Button { Text = "完成設定", Width = 110, Height = 34 };
+        save.Click += SaveClicked;
+        buttons.Controls.Add(cancel);
+        buttons.Controls.Add(save);
+        root.Controls.Add(buttons, 0, 2);
+        Controls.Add(root);
+        AcceptButton = save;
+        CancelButton = cancel;
+    }
+
+    private void SaveClicked(object? sender, EventArgs eventArgs)
+    {
+        try
+        {
+            if (moPassword.Text.Length == 0) throw new InvalidOperationException("請輸入 MO店+ Excel 保護密碼");
+            if (adminPassword.Text.Length == 0) throw new InvalidOperationException("請設定管理密碼");
+            if (adminPassword.Text != confirmPassword.Text) throw new InvalidOperationException("兩次輸入的管理密碼不一致");
+
+            var settings = repository.Settings.LoadOrCreate();
+            if (settings.AdminPasswordSet || settings.MoPasswordEncrypted.Length != 0)
+                throw new InvalidOperationException("已存在部分安全設定，請改由一般設定視窗完成驗證");
+            settings.Environment = Environments.Test;
+            repository.Settings.SetMoPassword(settings, moPassword.Text);
+            repository.Settings.SetAdminPassword(settings, adminPassword.Text);
+            repository.Settings.Save(settings);
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "無法完成首次設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    internal void VerifySmokeLayout()
+    {
+        if (moPassword.Parent is null || adminPassword.Parent is null || confirmPassword.Parent is null)
+            throw new InvalidOperationException("首次設定未建立三個必要密碼欄位");
+        if (!moPassword.UseSystemPasswordChar || !adminPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar)
+            throw new InvalidOperationException("首次設定密碼欄未遮蔽內容");
+    }
+
+    private static Label FieldLabel(string text) => new()
+    {
+        Text = text,
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft,
+        AutoEllipsis = false,
+    };
+
+    private static TextBox PasswordBox() => new()
+    {
+        Dock = DockStyle.Fill,
+        UseSystemPasswordChar = true,
+        Margin = new Padding(3, 7, 3, 7),
+        MaxLength = 200,
+    };
+}

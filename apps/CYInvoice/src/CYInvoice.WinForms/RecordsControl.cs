@@ -18,16 +18,20 @@ internal sealed class RecordsControl : UserControl
     private readonly TextBox buyerBan = UiControls.TextBox(10);
     private readonly ComboBox source = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox state = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly DataGridView grid = UiControls.Grid();
+    private readonly NativeListViewHost recordsHost = new(9F, 24);
     private readonly Button refreshButton = new() { Text = "重新整理狀態", Width = 135, Height = 34 };
     private readonly List<InvoiceRecord> visible = [];
-    private bool updatingPlaceholders;
+    private readonly Font voidedFont;
+    private bool fillingRows;
     private bool selectionClearQueued;
+
+    private ListView Records => recordsHost.List;
 
     public RecordsControl(LocalRepository repository, InvoiceService service)
     {
         this.repository = repository;
         this.service = service;
+        voidedFont = new Font(Records.Font, FontStyle.Strikeout);
         Dock = DockStyle.Fill;
         BackColor = Color.White;
         Padding = new Padding(18);
@@ -52,10 +56,10 @@ internal sealed class RecordsControl : UserControl
         filters.Controls.Add(UiControls.Label("開立日期"), 0, 0);
         var dates = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Margin = Padding.Empty };
         dates.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        dates.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
+        dates.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
         dates.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         dates.Controls.Add(dateFrom, 0, 0);
-        dates.Controls.Add(UiControls.Label("～", ContentAlignment.MiddleCenter), 1, 0);
+        dates.Controls.Add(new Label { Text = "至", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = false }, 1, 0);
         dates.Controls.Add(dateTo, 2, 0);
         filters.Controls.Add(dates, 1, 0);
         filters.SetColumnSpan(dates, 3);
@@ -76,9 +80,9 @@ internal sealed class RecordsControl : UserControl
         buttons.Controls.Add(refreshButton);
         filters.Controls.Add(buttons, 0, 2);
         filters.SetColumnSpan(buttons, 8);
-        ConfigureGrid();
+        ConfigureList();
         root.Controls.Add(filters, 0, 0);
-        root.Controls.Add(grid, 0, 1);
+        root.Controls.Add(recordsHost, 0, 1);
         Controls.Add(root);
     }
 
@@ -88,65 +92,61 @@ internal sealed class RecordsControl : UserControl
         panel.Controls.Add(field, column + 1, row);
     }
 
-    private void ConfigureGrid()
+    private void ConfigureList()
     {
-        grid.ReadOnly = true;
-        grid.MultiSelect = false;
-        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        AddColumn("開立時間", 150);
-        AddColumn("發票號碼", 105);
-        AddColumn("來源", 90);
-        AddColumn("訂單編號", 165);
-        AddColumn("統編", 118);
-        AddColumn("買受人", 150);
-        AddColumn("金額", 90, right: true);
-        AddColumn("交付方式", 95);
-        AddColumn("發票狀態", 95);
-        AddColumn("上傳", 58, center: true);
-        UiControls.ReserveVerticalScrollBar(grid, 5);
-        grid.CellDoubleClick += (_, eventArgs) => OpenSelected(eventArgs.RowIndex);
-        grid.CellFormatting += FormatCell;
-        grid.CellMouseDown += (_, eventArgs) =>
+        Records.Columns.Add("開立時間", 158, HorizontalAlignment.Left);
+        Records.Columns.Add("發票號碼", 108, HorizontalAlignment.Left);
+        Records.Columns.Add("來源", 76, HorizontalAlignment.Left);
+        Records.Columns.Add("訂單編號", 155, HorizontalAlignment.Left);
+        Records.Columns.Add("統編", 106, HorizontalAlignment.Left);
+        Records.Columns.Add("買受人", 150, HorizontalAlignment.Left);
+        Records.Columns.Add("金額", 86, HorizontalAlignment.Right);
+        Records.Columns.Add("交付方式", 88, HorizontalAlignment.Left);
+        Records.Columns.Add("發票狀態", 88, HorizontalAlignment.Left);
+        Records.Columns.Add("上傳", 58, HorizontalAlignment.Center);
+        Records.MouseDown += (_, eventArgs) =>
         {
-            if (eventArgs.RowIndex >= visible.Count) QueuePlaceholderSelectionClear();
+            var hit = Records.HitTest(eventArgs.Location);
+            if (hit.Item is null || ReferenceEquals(hit.Item.Tag, PlaceholderRow)) QueueClearSelection();
         };
-        grid.CellEnter += (_, eventArgs) =>
+        Records.MouseDoubleClick += (_, eventArgs) =>
         {
-            if (eventArgs.RowIndex >= visible.Count) QueuePlaceholderSelectionClear();
+            var hit = Records.HitTest(eventArgs.Location);
+            if (hit.Item?.Tag is InvoiceRecord record) OpenSelected(record);
         };
-        grid.SizeChanged += (_, _) => EnsurePlaceholderRows();
-    }
-
-    private void AddColumn(string title, int width, bool right = false, bool center = false)
-    {
-        grid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            HeaderText = title, Width = width, MinimumWidth = Math.Min(width, 58), SortMode = DataGridViewColumnSortMode.NotSortable,
-            DefaultCellStyle = { Alignment = right ? DataGridViewContentAlignment.MiddleRight : center ? DataGridViewContentAlignment.MiddleCenter : DataGridViewContentAlignment.MiddleLeft },
-        });
+        recordsHost.ViewportChanged += (_, _) => { LayoutColumns(); FillPlaceholderRows(); };
     }
 
     public void Reload()
     {
+        var updateStarted = false;
         try
         {
             visible.Clear();
             visible.AddRange(repository.Invoices.LoadOrCreate().Where(Matches));
-            grid.SuspendLayout();
-            grid.Rows.Clear();
+            Records.BeginUpdate();
+            updateStarted = true;
+            Records.Items.Clear();
             foreach (var record in visible)
             {
-                grid.Rows.Add(IssueTime(record), record.InvoiceNumber, record.Source, record.OrderId, record.BuyerIdentifier,
+                var row = NewRow([IssueTime(record), record.InvoiceNumber, record.Source, record.OrderId, record.BuyerIdentifier,
                     record.BuyerName, MoneyFormatter.Integer(record.Amount), record.Delivery, record.InvoiceState,
-                    record.UploadStatus == 0 ? "" : "●");
+                    record.UploadStatus == 0 ? "" : "●"]);
+                row.Tag = record;
+                Records.Items.Add(row);
+                StyleRecordRow(row, record);
             }
-            EnsurePlaceholderRows();
-            grid.ClearSelection();
-            grid.ResumeLayout();
+            FillPlaceholderRows();
+            ClearSelection();
+            LayoutColumns();
         }
         catch (Exception error)
         {
             MessageBox.Show(this, "讀取已開立發票清單失敗：" + error.Message, "讀取失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (updateStarted) Records.EndUpdate();
         }
     }
 
@@ -186,69 +186,97 @@ internal sealed class RecordsControl : UserControl
         }
     }
 
-    private void OpenSelected(int index)
+    private void OpenSelected(InvoiceRecord record)
     {
-        if (index < 0 || index >= visible.Count) return;
-        using var detail = new RecordDetailForm(visible[index]);
+        using var detail = new RecordDetailForm(record);
         detail.ShowDialog(FindForm());
     }
 
-    private void EnsurePlaceholderRows()
+    private void FillPlaceholderRows()
     {
-        if (updatingPlaceholders || grid.ColumnCount == 0 || grid.ClientSize.Height <= grid.ColumnHeadersHeight) return;
-        updatingPlaceholders = true;
+        if (fillingRows || Records.Columns.Count == 0) return;
+        fillingRows = true;
         try
         {
-            for (var index = grid.Rows.Count - 1; index >= visible.Count; index--)
+            for (var index = Records.Items.Count - 1; index >= 0; index--)
+                if (ReferenceEquals(Records.Items[index].Tag, PlaceholderRow)) Records.Items.RemoveAt(index);
+            var capacity = Math.Max(1, recordsHost.VisibleRowCapacity());
+            while (Records.Items.Count < capacity)
             {
-                if (ReferenceEquals(grid.Rows[index].Tag, PlaceholderRow)) grid.Rows.RemoveAt(index);
+                var row = NewRow(["", "", "", "", "", "", "", "", "", ""]);
+                row.Tag = PlaceholderRow;
+                Records.Items.Add(row);
+                StyleRow(row);
             }
-
-            var availableHeight = Math.Max(0, grid.ClientSize.Height - grid.ColumnHeadersHeight - 2);
-            var visibleRowCapacity = availableHeight / Math.Max(1, grid.RowTemplate.Height);
-            while (grid.Rows.Count < visibleRowCapacity)
-            {
-                var index = grid.Rows.Add();
-                grid.Rows[index].Tag = PlaceholderRow;
-                grid.Rows[index].ReadOnly = true;
-            }
+            recordsHost.SetScrollNeeded(visible.Count > capacity);
         }
         finally
         {
-            updatingPlaceholders = false;
+            fillingRows = false;
         }
     }
 
-    private void QueuePlaceholderSelectionClear()
+    private void StyleRecordRow(ListViewItem row, InvoiceRecord record)
     {
-        if (selectionClearQueued || !grid.IsHandleCreated || grid.IsDisposed) return;
-        selectionClearQueued = true;
-        grid.BeginInvoke((Action)(() =>
+        StyleRow(row);
+        if (record.UploadStatus != 0)
+            row.SubItems[9].ForeColor = record.UploadStatus == 99 ? Color.FromArgb(0, 160, 72) : Color.FromArgb(215, 150, 0);
+        if (record.InvoiceState != InvoiceStates.Voided) return;
+        foreach (ListViewItem.ListViewSubItem subItem in row.SubItems)
         {
-            try
-            {
-                if (grid.CurrentCell is null || grid.CurrentCell.RowIndex < visible.Count) return;
-                grid.ClearSelection();
-                grid.CurrentCell = null;
-            }
-            finally
-            {
-                selectionClearQueued = false;
-            }
+            subItem.ForeColor = Color.Gray;
+            subItem.Font = voidedFont;
+        }
+    }
+
+    private static void StyleRow(ListViewItem row)
+    {
+        row.UseItemStyleForSubItems = false;
+        var background = row.Index % 2 == 0 ? Color.White : Color.FromArgb(238, 244, 250);
+        foreach (ListViewItem.ListViewSubItem subItem in row.SubItems)
+        {
+            subItem.BackColor = background;
+            subItem.ForeColor = SystemColors.ControlText;
+        }
+    }
+
+    private void ClearSelection()
+    {
+        while (Records.SelectedItems.Count > 0) Records.SelectedItems[0].Selected = false;
+        Records.FocusedItem = null;
+    }
+
+    private void QueueClearSelection()
+    {
+        if (selectionClearQueued || !Records.IsHandleCreated || Records.IsDisposed) return;
+        selectionClearQueued = true;
+        Records.BeginInvoke((Action)(() =>
+        {
+            try { ClearSelection(); }
+            finally { selectionClearQueued = false; }
         }));
     }
 
-    private void FormatCell(object? sender, DataGridViewCellFormattingEventArgs eventArgs)
+    private void LayoutColumns()
     {
-        if (eventArgs.RowIndex < 0 || eventArgs.RowIndex >= visible.Count) return;
-        var record = visible[eventArgs.RowIndex];
-        if (eventArgs.ColumnIndex == 9 && record.UploadStatus != 0)
-            eventArgs.CellStyle.ForeColor = record.UploadStatus == 99 ? Color.FromArgb(0, 160, 72) : Color.FromArgb(215, 150, 0);
-        if (record.InvoiceState == InvoiceStates.Voided)
+        if (Records.Columns.Count != 10 || Records.ClientSize.Width <= 0) return;
+        var available = Math.Max(1, Records.ClientSize.Width - 4);
+        var widths = new[] { 158, 108, 76, 155, 106, 0, 86, 88, 88, 58 };
+        widths[5] = Math.Max(80, available - widths.Sum());
+        var over = widths.Sum() - available;
+        if (over > 0)
         {
-            eventArgs.CellStyle.ForeColor = Color.Gray;
-            eventArgs.CellStyle.Font = new Font(grid.Font, FontStyle.Strikeout);
+            foreach (var index in new[] { 5, 7, 8, 6, 2, 4, 3, 0, 1 })
+            {
+                var minimum = index switch { 5 => 60, 3 => 110, 4 => 82, 0 => 125, 1 => 90, _ => 54 };
+                var reduction = Math.Min(over, Math.Max(0, widths[index] - minimum));
+                widths[index] -= reduction;
+                over -= reduction;
+                if (over == 0) break;
+            }
         }
+        else if (over < 0) widths[5] += -over;
+        recordsHost.SetColumnWidths(widths);
     }
 
     private void ResetFilters()
@@ -260,6 +288,26 @@ internal sealed class RecordsControl : UserControl
         dateTo.Checked = true;
         invoiceNumber.Clear(); orderId.Clear(); buyerName.Clear(); buyerBan.Clear();
         source.SelectedIndex = 0; state.SelectedIndex = 0;
+    }
+
+    internal void VerifySmokeLayout()
+    {
+        if (Records.Columns.Count != 10) throw new InvalidOperationException("已開立發票原生 ListView 欄位未建立");
+        if (!recordsHost.EmptyScrollBarVisible) throw new InvalidOperationException("已開立發票清單未保留停用垂直 scrollbar");
+        if (Math.Abs(Records.Font.SizeInPoints - 9F) > 0.1F) throw new InvalidOperationException("已開立發票清單未使用 9pt 字級");
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) voidedFont.Dispose();
+        base.Dispose(disposing);
+    }
+
+    private static ListViewItem NewRow(IReadOnlyList<string> values)
+    {
+        var row = new ListViewItem(values[0]);
+        for (var index = 1; index < values.Count; index++) row.SubItems.Add(values[index]);
+        return row;
     }
 
     private static DateTimePicker DatePicker() => new() { Format = DateTimePickerFormat.Custom, CustomFormat = "yyyy/MM/dd", ShowCheckBox = true, Dock = DockStyle.Fill };

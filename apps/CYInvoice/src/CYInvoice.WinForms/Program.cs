@@ -15,6 +15,7 @@ internal static class Program
                 form.CreateControl();
                 form.PerformLayout();
                 Application.DoEvents();
+                form.VerifySmokeLayout();
                 return;
             }
             Application.Run(new MainForm());

@@ -21,7 +21,7 @@ internal sealed class InvoiceEntryControl : UserControl
     private readonly TextBox buyerName = UiControls.TextBox(200);
     private readonly RadioButton taxInclusive = new() { Text = "以含稅輸入", AutoSize = true, Checked = true };
     private readonly RadioButton taxExclusive = new() { Text = "以未稅輸入", AutoSize = true };
-    private readonly DataGridView items = UiControls.Grid();
+    private readonly NativeListViewHost itemsHost = new(10F, 27);
     private readonly TextBox remark = new() { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = InvoiceLimits.MaximumRemarkCharacters };
     private readonly Label remarkCounter = UiControls.Label("0 / 200", ContentAlignment.MiddleRight);
     private readonly Label salesTotal = TotalLabel(false);
@@ -41,7 +41,12 @@ internal sealed class InvoiceEntryControl : UserControl
     };
     private NameLookup? cachedLookup;
     private string cachedBan = string.Empty;
-    private bool gridSelectionClearQueued;
+    private TextBox? cellEditor;
+    private int editorRow = -1;
+    private int editorColumn = -1;
+    private bool committingEditor;
+
+    private ListView Items => itemsHost.List;
 
     public InvoiceEntryControl(LocalRepository repository, InvoiceService service, Action recordsChanged)
     {
@@ -87,6 +92,9 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         var group = new GroupBox { Text = "發票基本資料", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 3 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         foreach (var width in new[] { 86, 260, 88, 190, 0 })
             layout.ColumnStyles.Add(width == 0 ? new ColumnStyle(SizeType.Percent, 100) : new ColumnStyle(SizeType.Absolute, width));
         var orderModes = RadioGroup(automaticOrder, customOrder);
@@ -122,44 +130,27 @@ internal sealed class InvoiceEntryControl : UserControl
         addItemButton.Click += (_, _) => AddRow(true);
         toolbar.Controls.Add(modes, 0, 0);
         toolbar.Controls.Add(addItemButton, 1, 0);
-        ConfigureGrid();
+        ConfigureItemsList();
         layout.Controls.Add(toolbar, 0, 0);
-        layout.Controls.Add(items, 0, 1);
+        layout.Controls.Add(itemsHost, 0, 1);
         group.Controls.Add(layout);
         return group;
     }
 
-    private void ConfigureGrid()
+    private void ConfigureItemsList()
     {
-        items.MultiSelect = false;
-        items.SelectionMode = DataGridViewSelectionMode.CellSelect;
-        items.EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2;
-        items.Columns.Add(Column("序號", 48, readOnly: true));
-        items.Columns.Add(Column("品名", 360));
-        items.Columns.Add(Column("課稅別", 80, readOnly: true));
-        items.Columns.Add(Column("數量", 80, right: true));
-        items.Columns.Add(Column("單價（含稅）", 135, right: true));
-        var amountColumn = Column("金額（含稅）", 140, right: true, readOnly: true);
-        amountColumn.DefaultCellStyle.BackColor = Color.FromArgb(232, 232, 232);
-        amountColumn.DefaultCellStyle.SelectionBackColor = Color.FromArgb(232, 232, 232);
-        amountColumn.DefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
-        items.Columns.Add(amountColumn);
-        items.Columns.Add(new DataGridViewButtonColumn
-        {
-            HeaderText = "操作", Text = "刪除", UseColumnTextForButtonValue = false, Width = 76,
-            SortMode = DataGridViewColumnSortMode.NotSortable, FlatStyle = FlatStyle.Standard,
-            DefaultCellStyle =
-            {
-                ForeColor = Color.FromArgb(190, 24, 24),
-                BackColor = SystemColors.Control,
-                SelectionBackColor = SystemColors.Control,
-                SelectionForeColor = Color.FromArgb(190, 24, 24),
-                Alignment = DataGridViewContentAlignment.MiddleCenter,
-                Padding = new Padding(3, 1, 3, 1),
-            },
-        });
-        items.MinimumSize = new Size(0, items.ColumnHeadersHeight + (items.RowTemplate.Height * MinimumVisibleRows) + 4);
-        UiControls.ReserveVerticalScrollBar(items, 1);
+        Items.Columns.Add("序號", 48, HorizontalAlignment.Center);
+        Items.Columns.Add("品名", 360, HorizontalAlignment.Left);
+        Items.Columns.Add("課稅別", 80, HorizontalAlignment.Center);
+        Items.Columns.Add("數量", 80, HorizontalAlignment.Right);
+        Items.Columns.Add("單價（含稅）", 135, HorizontalAlignment.Right);
+        Items.Columns.Add("金額（含稅）", 140, HorizontalAlignment.Right);
+        Items.Columns.Add("操作", 76, HorizontalAlignment.Center);
+        Items.OwnerDraw = true;
+        Items.DrawColumnHeader += (_, eventArgs) => eventArgs.DrawDefault = true;
+        Items.DrawItem += (_, eventArgs) => { if (Items.View != View.Details) eventArgs.DrawDefault = true; };
+        Items.DrawSubItem += DrawItemSubItem;
+        itemsHost.ViewportChanged += (_, _) => LayoutItemColumns();
     }
 
     private Control BuildSummary()
@@ -212,33 +203,39 @@ internal sealed class InvoiceEntryControl : UserControl
         buyerBan.TextChanged += (_, _) => { cachedLookup = null; cachedBan = string.Empty; };
         buyerBan.Leave += async (_, _) => await LookupBuyerAsync(true);
         remark.TextChanged += (_, _) => remarkCounter.Text = $"{remark.Text.EnumerateRunes().Count()} / {InvoiceLimits.MaximumRemarkCharacters}";
-        items.CellBeginEdit += (_, eventArgs) =>
+        Items.MouseDown += (_, eventArgs) =>
         {
-            if (eventArgs.RowIndex < 0 || IsPlaceholder(items.Rows[eventArgs.RowIndex]))
+            var hit = Items.HitTest(eventArgs.X, eventArgs.Y);
+            var row = hit.Item?.Index ?? -1;
+            var column = hit.SubItem is null || hit.Item is null ? -1 : hit.Item.SubItems.IndexOf(hit.SubItem);
+            if (row < 0 || row >= Items.Items.Count || IsPlaceholder(Items.Items[row]))
             {
-                eventArgs.Cancel = true;
+                CommitCellEditor(false);
+                QueueClearItemSelection();
                 return;
             }
-            if (eventArgs.RowIndex >= 0 && eventArgs.ColumnIndex == 4)
-                items.Rows[eventArgs.RowIndex].Cells[4].Value = Cell(items.Rows[eventArgs.RowIndex], 4).Replace(",", string.Empty, StringComparison.Ordinal);
+            if (column == 6 && hit.Item is { } hitItem && DeleteButtonBounds(hitItem).Contains(eventArgs.Location))
+            {
+                CommitCellEditor(false);
+                DeleteRow(row);
+                return;
+            }
+            if (column is 1 or 3 or 4)
+            {
+                BeginInvoke((Action)(() => BeginCellEdit(row, column)));
+                return;
+            }
+            CommitCellEditor(false);
+            QueueClearItemSelection();
         };
-        items.CellEndEdit += (_, eventArgs) => { if (eventArgs.RowIndex >= 0) CalculateRow(items.Rows[eventArgs.RowIndex]); Recalculate(); };
-        items.CellContentClick += DeleteClicked;
-        items.CellMouseDown += (_, eventArgs) =>
+        Items.MouseWheel += (_, _) => CommitCellEditor(false);
+        Items.KeyDown += (_, eventArgs) =>
         {
-            if (eventArgs.RowIndex < 0) return;
-            if (eventArgs.ColumnIndex == 5 || IsPlaceholder(items.Rows[eventArgs.RowIndex]))
-                QueueInvalidGridSelectionClear();
+            if (eventArgs.KeyCode != Keys.Enter || Items.FocusedItem is null || IsPlaceholder(Items.FocusedItem)) return;
+            eventArgs.Handled = true;
+            eventArgs.SuppressKeyPress = true;
+            BeginCellEdit(Items.FocusedItem.Index, 1);
         };
-        items.CellEnter += (_, eventArgs) =>
-        {
-            if (eventArgs.RowIndex < 0) return;
-            if (eventArgs.ColumnIndex == 5 || IsPlaceholder(items.Rows[eventArgs.RowIndex]))
-                QueueInvalidGridSelectionClear();
-        };
-        items.EditingControlShowing += ConfigureItemEditor;
-        items.KeyDown += ItemGridKeyDown;
-        items.DataError += (_, eventArgs) => eventArgs.ThrowException = false;
     }
 
     private void ResetDraft()
@@ -247,10 +244,11 @@ internal sealed class InvoiceEntryControl : UserControl
         consumerBuyer.Checked = true;
         taxInclusive.Checked = true;
         buyerBan.Clear(); buyerName.Clear(); remark.Clear();
-        items.Rows.Clear();
+        CommitCellEditor(true);
+        Items.Items.Clear();
         AddRow(false);
         EnsurePlaceholderRows();
-        items.ClearSelection();
+        ClearItemSelection();
         UpdateOrderMode(); UpdateBuyerMode(); UpdateHeaders(); Recalculate();
     }
 
@@ -265,70 +263,73 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private void UpdateBuyerMode()
     {
-        buyerBan.ReadOnly = !companyBuyer.Checked;
-        buyerName.ReadOnly = !companyBuyer.Checked;
-        buyerBan.BackColor = companyBuyer.Checked ? Color.White : Color.FromArgb(242, 242, 242);
-        buyerName.BackColor = companyBuyer.Checked ? Color.White : Color.FromArgb(242, 242, 242);
+        buyerBan.Enabled = companyBuyer.Checked;
+        buyerName.Enabled = companyBuyer.Checked;
         taxExclusive.Enabled = companyBuyer.Checked;
         if (!companyBuyer.Checked) { buyerBan.Clear(); buyerName.Clear(); taxInclusive.Checked = true; }
     }
 
     private void UpdateHeaders()
     {
+        CommitCellEditor(false);
         var mode = taxExclusive.Checked ? "未稅" : "含稅";
-        items.Columns[4].HeaderText = $"單價（{mode}）";
-        items.Columns[5].HeaderText = $"金額（{mode}）";
+        Items.Columns[4].Text = $"單價（{mode}）";
+        Items.Columns[5].Text = $"金額（{mode}）";
         issueButton.Text = repository.Settings.LoadOrCreate().Environment == Environments.Production ? "開立正式發票" : "開立測試發票";
     }
 
     private void AddRow(bool focus)
     {
+        CommitCellEditor(false);
         if (ActualRows().Count >= InvoiceLimits.MaximumItems)
         {
             MessageBox.Show(this, $"商品明細最多 {InvoiceLimits.MaximumItems} 筆", "無法新增", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         RemovePlaceholderRows();
-        var index = items.Rows.Add(items.Rows.Count + 1, "", "應稅", "", "", "", "刪除");
+        var item = NewRow([(ActualRows().Count + 1).ToString(CultureInfo.InvariantCulture), "", "應稅", "", "", "", "刪除"]);
+        Items.Items.Add(item);
+        var index = item.Index;
         EnsurePlaceholderRows();
-        if (focus) { items.CurrentCell = items.Rows[index].Cells[1]; items.BeginEdit(true); }
+        if (focus) BeginCellEdit(index, 1);
     }
 
-    private void DeleteClicked(object? sender, DataGridViewCellEventArgs eventArgs)
+    private void DeleteRow(int rowIndex)
     {
-        if (eventArgs.RowIndex < 0 || eventArgs.ColumnIndex != 6) return;
-        var row = items.Rows[eventArgs.RowIndex];
+        if (rowIndex < 0 || rowIndex >= Items.Items.Count) return;
+        var row = Items.Items[rowIndex];
         if (IsPlaceholder(row)) return;
         if (ActualRows().Count <= 1)
         {
-            for (var column = 1; column <= 5; column++) row.Cells[column].Value = column == 2 ? "應稅" : "";
+            for (var column = 1; column <= 5; column++) row.SubItems[column].Text = column == 2 ? "應稅" : "";
         }
         else
         {
-            items.Rows.RemoveAt(eventArgs.RowIndex);
+            Items.Items.RemoveAt(rowIndex);
             RenumberActualRows();
         }
         EnsurePlaceholderRows();
         Recalculate();
     }
 
-    private void CalculateRow(DataGridViewRow row)
+    private void CalculateRow(ListViewItem row)
     {
         if (IsPlaceholder(row)) return;
         try
         {
             var quantityText = Clean(Cell(row, 3));
             var priceText = Clean(Cell(row, 4));
-            if (quantityText.Length == 0 || priceText.Length == 0) { row.Cells[5].Value = ""; return; }
+            if (quantityText.Length == 0 || priceText.Length == 0) { row.SubItems[5].Text = ""; return; }
             var quantity = FixedDecimal.Parse(quantityText);
             var price = FixedDecimal.Parse(priceText);
-            row.Cells[4].Value = MoneyFormatter.Decimal(price.ToString());
-            row.Cells[5].Value = MoneyFormatter.Decimal(FixedDecimal.Multiply(quantity, price).ToString());
+            row.SubItems[4].Text = MoneyFormatter.Decimal(price.ToString());
+            row.SubItems[5].Text = MoneyFormatter.Decimal(FixedDecimal.Multiply(quantity, price).ToString());
         }
         catch (Exception error) when (error is FormatException or OverflowException)
         {
-            row.Cells[5].Value = "格式錯誤";
+            row.SubItems[5].Text = "格式錯誤";
         }
+        Items.Invalidate(row.Bounds);
     }
 
     private void Recalculate()
@@ -354,10 +355,11 @@ internal sealed class InvoiceEntryControl : UserControl
             OrderId = orderId.Text.Trim(), CompanyBuyer = companyBuyer.Checked, BuyerIdentifier = buyerBan.Text.Trim(),
             BuyerName = buyerName.Text.Trim(), PricesExcludeTax = taxExclusive.Checked, MainRemark = remark.Text,
         };
-        for (var index = 0; index < items.Rows.Count; index++)
+        CommitCellEditor(false);
+        var rows = ActualRows();
+        for (var index = 0; index < rows.Count; index++)
         {
-            var row = items.Rows[index];
-            if (IsPlaceholder(row)) continue;
+            var row = rows[index];
             var description = Cell(row, 1);
             var quantityText = Clean(Cell(row, 3));
             var priceText = Clean(Cell(row, 4));
@@ -446,7 +448,7 @@ internal sealed class InvoiceEntryControl : UserControl
             }
         }
         catch (Exception error) { MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-        finally { buyerBan.Enabled = true; }
+        finally { buyerBan.Enabled = companyBuyer.Checked; }
     }
 
     private Task ImportMoAsync()
@@ -496,114 +498,234 @@ internal sealed class InvoiceEntryControl : UserControl
         return panel;
     }
 
-    private List<DataGridViewRow> ActualRows() => items.Rows.Cast<DataGridViewRow>().Where(row => !IsPlaceholder(row)).ToList();
+    private List<ListViewItem> ActualRows() => Items.Items.Cast<ListViewItem>().Where(row => !IsPlaceholder(row)).ToList();
 
-    private static bool IsPlaceholder(DataGridViewRow row) => ReferenceEquals(row.Tag, PlaceholderRow);
+    private static bool IsPlaceholder(ListViewItem row) => ReferenceEquals(row.Tag, PlaceholderRow);
 
     private void RemovePlaceholderRows()
     {
-        for (var index = items.Rows.Count - 1; index >= 0; index--)
+        for (var index = Items.Items.Count - 1; index >= 0; index--)
         {
-            if (IsPlaceholder(items.Rows[index])) items.Rows.RemoveAt(index);
+            if (IsPlaceholder(Items.Items[index])) Items.Items.RemoveAt(index);
         }
     }
 
     private void EnsurePlaceholderRows()
     {
         RemovePlaceholderRows();
-        for (var index = items.Rows.Count; index < MinimumVisibleRows; index++)
+        for (var index = Items.Items.Count; index < MinimumVisibleRows; index++)
         {
-            var placeholderIndex = items.Rows.Add("", "", "", "", "", "", "");
-            var placeholder = items.Rows[placeholderIndex];
+            var placeholder = NewRow(["", "", "", "", "", "", ""]);
             placeholder.Tag = PlaceholderRow;
-            placeholder.ReadOnly = true;
-            placeholder.Cells[6] = new DataGridViewTextBoxCell { Value = string.Empty };
+            Items.Items.Add(placeholder);
         }
+        itemsHost.SetScrollNeeded(ActualRows().Count > MinimumVisibleRows);
+        StyleItemRows();
+        LayoutItemColumns();
     }
 
     private void RenumberActualRows()
     {
         var number = 1;
-        foreach (var row in items.Rows.Cast<DataGridViewRow>().Where(row => !IsPlaceholder(row)))
-            row.Cells[0].Value = number++;
+        foreach (var row in ActualRows()) row.SubItems[0].Text = (number++).ToString(CultureInfo.InvariantCulture);
     }
 
-    private void ConfigureItemEditor(object? sender, DataGridViewEditingControlShowingEventArgs eventArgs)
+    private void BeginCellEdit(int rowIndex, int columnIndex)
     {
-        if (eventArgs.Control is not TextBox editor) return;
-        editor.KeyDown -= ItemEditorKeyDown;
-        editor.KeyDown += ItemEditorKeyDown;
-        if (items.CurrentCell?.ColumnIndex is 3 or 4) editor.SelectAll();
+        CommitCellEditor(false);
+        if (rowIndex < 0 || rowIndex >= Items.Items.Count || columnIndex is not (1 or 3 or 4)) return;
+        var row = Items.Items[rowIndex];
+        if (IsPlaceholder(row)) return;
+        var bounds = row.SubItems[columnIndex].Bounds;
+        if (bounds.Width <= 8 || bounds.Height <= 4) return;
+        var value = columnIndex == 4 ? Clean(Cell(row, columnIndex)) : Cell(row, columnIndex);
+        var editor = new TextBox
+        {
+            Text = value,
+            BorderStyle = BorderStyle.FixedSingle,
+            Font = Items.Font,
+            MaxLength = columnIndex == 1 ? 256 : 64,
+            TextAlign = columnIndex is 3 or 4 ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+            Bounds = Rectangle.Inflate(bounds, -2, -1),
+        };
+        editorRow = rowIndex;
+        editorColumn = columnIndex;
+        cellEditor = editor;
+        editor.KeyDown += CellEditorKeyDown;
+        editor.Leave += (_, _) => CommitCellEditor(false);
+        Items.Controls.Add(editor);
+        editor.BringToFront();
+        editor.Focus();
+        editor.SelectAll();
+        ClearItemSelection();
     }
 
-    private void ItemEditorKeyDown(object? sender, KeyEventArgs eventArgs)
+    private void CellEditorKeyDown(object? sender, KeyEventArgs eventArgs)
     {
-        if (eventArgs.KeyCode != Keys.Enter) return;
+        if (eventArgs.KeyCode == Keys.Escape)
+        {
+            eventArgs.Handled = true;
+            eventArgs.SuppressKeyPress = true;
+            CommitCellEditor(true);
+            Items.Focus();
+            return;
+        }
+        if (eventArgs.KeyCode is not (Keys.Enter or Keys.Tab)) return;
         eventArgs.Handled = true;
         eventArgs.SuppressKeyPress = true;
-        items.EndEdit();
-        BeginInvoke(MoveToNextItemField);
+        var row = editorRow;
+        var column = editorColumn;
+        CommitCellEditor(false);
+        BeginInvoke((Action)(() => MoveToNextItemField(row, column)));
     }
 
-    private void ItemGridKeyDown(object? sender, KeyEventArgs eventArgs)
+    private void CommitCellEditor(bool cancel)
     {
-        if (eventArgs.KeyCode != Keys.Enter || items.IsCurrentCellInEditMode) return;
-        eventArgs.Handled = true;
-        eventArgs.SuppressKeyPress = true;
-        MoveToNextItemField();
+        if (cellEditor is null || committingEditor) return;
+        committingEditor = true;
+        var editor = cellEditor;
+        var rowIndex = editorRow;
+        var columnIndex = editorColumn;
+        cellEditor = null;
+        editorRow = -1;
+        editorColumn = -1;
+        try
+        {
+            if (!cancel && rowIndex >= 0 && rowIndex < Items.Items.Count && !IsPlaceholder(Items.Items[rowIndex]))
+            {
+                Items.Items[rowIndex].SubItems[columnIndex].Text = editor.Text.Trim();
+                CalculateRow(Items.Items[rowIndex]);
+                Recalculate();
+            }
+            editor.Dispose();
+        }
+        finally
+        {
+            committingEditor = false;
+        }
     }
 
-    private void MoveToNextItemField()
+    private void MoveToNextItemField(int rowIndex, int columnIndex)
     {
-        var current = items.CurrentCell;
-        if (current is null || current.RowIndex < 0 || IsPlaceholder(items.Rows[current.RowIndex])) return;
-        var nextColumn = current.ColumnIndex switch { 1 => 3, 3 => 4, _ => -1 };
+        if (rowIndex < 0 || rowIndex >= Items.Items.Count || IsPlaceholder(Items.Items[rowIndex])) return;
+        var nextColumn = columnIndex switch { 1 => 3, 3 => 4, _ => -1 };
         if (nextColumn >= 0)
         {
-            FocusItemCell(current.RowIndex, nextColumn);
+            BeginCellEdit(rowIndex, nextColumn);
             return;
         }
 
         var actual = ActualRows();
-        var position = actual.FindIndex(row => row.Index == current.RowIndex);
+        var position = actual.FindIndex(row => row.Index == rowIndex);
         if (position >= 0 && position + 1 < actual.Count)
-            FocusItemCell(actual[position + 1].Index, 1);
+            BeginCellEdit(actual[position + 1].Index, 1);
         else
             addItemButton.Focus();
     }
 
-    private void FocusItemCell(int rowIndex, int columnIndex)
+    private void QueueClearItemSelection()
     {
-        items.CurrentCell = items.Rows[rowIndex].Cells[columnIndex];
-        items.BeginEdit(true);
+        if (!Items.IsHandleCreated || Items.IsDisposed) return;
+        Items.BeginInvoke((Action)ClearItemSelection);
     }
 
-    private void QueueInvalidGridSelectionClear()
+    private void ClearItemSelection()
     {
-        if (gridSelectionClearQueued || !items.IsHandleCreated || items.IsDisposed) return;
-        gridSelectionClearQueued = true;
-        items.BeginInvoke((Action)(() =>
-        {
-            try
-            {
-                var current = items.CurrentCell;
-                if (current is null || (current.ColumnIndex != 5 && !IsPlaceholder(items.Rows[current.RowIndex]))) return;
-                items.ClearSelection();
-                items.CurrentCell = null;
-            }
-            finally
-            {
-                gridSelectionClearQueued = false;
-            }
-        }));
+        while (Items.SelectedItems.Count > 0) Items.SelectedItems[0].Selected = false;
+        Items.FocusedItem = null;
     }
-    private static string Cell(DataGridViewRow row, int column) => Convert.ToString(row.Cells[column].Value, CultureInfo.CurrentCulture)?.Trim() ?? string.Empty;
-    private static string Clean(string value) => value.Replace(",", string.Empty, StringComparison.Ordinal).Trim();
-    private static DataGridViewTextBoxColumn Column(string title, int width, bool right = false, bool readOnly = false) => new()
+
+    private void StyleItemRows()
     {
-        HeaderText = title, Width = width, MinimumWidth = Math.Min(width, 60), ReadOnly = readOnly, SortMode = DataGridViewColumnSortMode.NotSortable,
-        DefaultCellStyle = { Alignment = right ? DataGridViewContentAlignment.MiddleRight : DataGridViewContentAlignment.MiddleLeft },
-    };
+        for (var rowIndex = 0; rowIndex < Items.Items.Count; rowIndex++)
+        {
+            var row = Items.Items[rowIndex];
+            row.UseItemStyleForSubItems = false;
+            var zebra = rowIndex % 2 == 0 ? Color.White : Color.FromArgb(247, 247, 247);
+            foreach (ListViewItem.ListViewSubItem subItem in row.SubItems)
+            {
+                subItem.BackColor = zebra;
+                subItem.ForeColor = SystemColors.ControlText;
+            }
+            row.SubItems[5].BackColor = rowIndex % 2 == 0 ? Color.FromArgb(232, 232, 232) : Color.FromArgb(225, 225, 225);
+            row.SubItems[5].ForeColor = Color.FromArgb(88, 88, 88);
+        }
+        Items.Invalidate();
+    }
+
+    private void LayoutItemColumns()
+    {
+        if (Items.Columns.Count != 7 || Items.ClientSize.Width <= 0) return;
+        var available = Math.Max(1, Items.ClientSize.Width - 4);
+        var fixedWidths = new[] { 48, 80, 80, 135, 140, 76 };
+        var nameWidth = Math.Max(160, available - fixedWidths.Sum());
+        var widths = new[] { fixedWidths[0], nameWidth, fixedWidths[1], fixedWidths[2], fixedWidths[3], fixedWidths[4], fixedWidths[5] };
+        widths[1] += available - widths.Sum();
+        itemsHost.SetColumnWidths(widths);
+    }
+
+    private void DrawItemSubItem(object? sender, DrawListViewSubItemEventArgs eventArgs)
+    {
+        if (eventArgs.Item is null || eventArgs.SubItem is null) return;
+        var rowIndex = eventArgs.ItemIndex;
+        var columnIndex = eventArgs.ColumnIndex;
+        var background = columnIndex == 5
+            ? (rowIndex % 2 == 0 ? Color.FromArgb(232, 232, 232) : Color.FromArgb(225, 225, 225))
+            : (rowIndex % 2 == 0 ? Color.White : Color.FromArgb(247, 247, 247));
+        using (var brush = new SolidBrush(background)) eventArgs.Graphics.FillRectangle(brush, eventArgs.Bounds);
+
+        if (columnIndex == 6 && !IsPlaceholder(eventArgs.Item))
+        {
+            var button = DeleteButtonBounds(eventArgs.Item);
+            ButtonRenderer.DrawButton(eventArgs.Graphics, button, System.Windows.Forms.VisualStyles.PushButtonState.Normal);
+            TextRenderer.DrawText(eventArgs.Graphics, "刪除", Items.Font, button, Color.FromArgb(190, 24, 24),
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+        }
+        else
+        {
+            var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+            flags |= columnIndex is 3 or 4 or 5 ? TextFormatFlags.Right : columnIndex is 0 or 2 ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Left;
+            var textBounds = Rectangle.Inflate(eventArgs.Bounds, -5, 0);
+            var color = columnIndex == 5 ? Color.FromArgb(88, 88, 88) : SystemColors.ControlText;
+            TextRenderer.DrawText(eventArgs.Graphics, eventArgs.SubItem.Text, Items.Font, textBounds, color, flags);
+        }
+        using var pen = new Pen(Color.FromArgb(226, 226, 226));
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+    }
+
+    private static Rectangle DeleteButtonBounds(ListViewItem item)
+    {
+        var bounds = item.SubItems[6].Bounds;
+        return Rectangle.Inflate(bounds, -6, -2);
+    }
+
+    private static ListViewItem NewRow(IReadOnlyList<string> values)
+    {
+        var row = new ListViewItem(values[0]);
+        for (var index = 1; index < values.Count; index++) row.SubItems.Add(values[index]);
+        return row;
+    }
+
+    internal void VerifySmokeLayout()
+    {
+        if (consumerBuyer.Parent is null || companyBuyer.Parent is null || buyerBan.Parent is null || buyerName.Parent is null)
+            throw new InvalidOperationException("發票基本資料的買方控制項未建立");
+        if (ReferenceEquals(automaticOrder.Parent, consumerBuyer.Parent))
+            throw new InvalidOperationException("訂單與買方 RadioButton 未分成兩組");
+        if (!consumerBuyer.Checked || buyerBan.Enabled || buyerName.Enabled)
+            throw new InvalidOperationException("一般消費者模式未鎖定統編與買方名稱");
+        companyBuyer.Checked = true;
+        if (!buyerBan.Enabled || !buyerName.Enabled)
+            throw new InvalidOperationException("公司統編模式未啟用必要買方欄位");
+        consumerBuyer.Checked = true;
+        if (Items.Columns.Count != 7 || Items.Items.Count != MinimumVisibleRows || ActualRows().Count != 1)
+            throw new InvalidOperationException("商品原生 ListView 未建立一筆實際資料與五列顯示區");
+        if (!itemsHost.EmptyScrollBarVisible) throw new InvalidOperationException("商品清單未保留停用垂直 scrollbar");
+    }
+
+    private static string Cell(ListViewItem row, int column) => row.SubItems[column].Text.Trim();
+    private static string Clean(string value) => value.Replace(",", string.Empty, StringComparison.Ordinal).Trim();
     private static Button FixedButton(string text, int width, EventHandler handler)
     {
         var button = new Button { Text = text, Width = width, Height = 34, Margin = new Padding(6, 2, 6, 2) };
