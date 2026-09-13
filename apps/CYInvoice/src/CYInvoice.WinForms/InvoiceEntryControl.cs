@@ -517,7 +517,7 @@ internal sealed class InvoiceEntryControl : UserControl
             var placeholder = items.Rows[placeholderIndex];
             placeholder.Tag = PlaceholderRow;
             placeholder.ReadOnly = true;
-            placeholder.Cells[6] = new DataGridViewTextBoxCell { Value = string.Empty, ReadOnly = true };
+            placeholder.Cells[6] = new DataGridViewTextBoxCell { Value = string.Empty };
         }
     }
 
