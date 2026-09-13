@@ -299,6 +299,7 @@ func refreshHistory() {
 	for i := limit; i < 10; i++ {
 		listInsert(hwndHistory, i, "", "", "", "", "")
 	}
+	layoutHistoryColumns()
 }
 func updateButtons() {
 	enable(hwndSelect, !converting)
