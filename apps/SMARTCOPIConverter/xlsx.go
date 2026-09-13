@@ -255,6 +255,7 @@ func headerMap(row []Cell) map[string]int {
 	}
 	return m
 }
+
 func cell(row []Cell, idx int) string {
 	if idx < 0 || idx >= len(row) {
 		return ""
@@ -262,11 +263,13 @@ func cell(row []Cell, idx int) string {
 	return row[idx].Value
 }
 
-func transformSheet(src Sheet, target []string, required []string, clearCustomerDescription bool) ([][]string, error) {
+func transformCells(src Sheet, target []string, required []string, clearCustomerDescription bool) ([][]Cell, error) {
 	if len(src.Rows) < 2 {
 		return nil, errors.New("資料列不足")
 	}
-	// ERP export has headers on worksheet row 3. XML may omit the blank row 2, therefore locate by required headers.
+
+	// ERP export has headers on worksheet row 3. XML may omit the blank row 2,
+	// therefore find the header row by the required field names instead of a fixed row index.
 	hrow := -1
 	var hm map[string]int
 	for i, r := range src.Rows {
@@ -287,12 +290,8 @@ func transformSheet(src Sheet, target []string, required []string, clearCustomer
 	if hrow < 0 {
 		return nil, fmt.Errorf("缺少必要欄位：%s", strings.Join(required, "、"))
 	}
-	for _, r := range required {
-		if _, ok := hm[r]; !ok {
-			return nil, fmt.Errorf("缺少必要欄位：%s", r)
-		}
-	}
-	var out [][]string
+
+	var out [][]Cell
 	for _, r := range src.Rows[hrow+1:] {
 		nonblank := false
 		for _, c := range r {
@@ -304,20 +303,39 @@ func transformSheet(src Sheet, target []string, required []string, clearCustomer
 		if !nonblank {
 			continue
 		}
-		dst := make([]string, len(target))
+
+		dst := make([]Cell, len(target))
 		for i, h := range target {
 			if clearCustomerDescription && h == "客戶描述" {
-				dst[i] = ""
+				dst[i] = Cell{}
 				continue
 			}
-			if j, ok := hm[h]; ok {
-				dst[i] = cell(r, j)
+			if j, ok := hm[h]; ok && j >= 0 && j < len(r) {
+				dst[i] = r[j]
 			}
 		}
 		out = append(out, dst)
 	}
 	if len(out) == 0 {
 		return nil, errors.New("沒有可轉換的資料")
+	}
+	return out, nil
+}
+
+// transformSheet remains as a small value-only wrapper for unit tests and callers that
+// only need field mapping. The production writer uses transformCells so Excel cell types
+// (especially string-vs-number) are retained from the ERP export.
+func transformSheet(src Sheet, target []string, required []string, clearCustomerDescription bool) ([][]string, error) {
+	cells, err := transformCells(src, target, required, clearCustomerDescription)
+	if err != nil {
+		return nil, err
+	}
+	out := make([][]string, len(cells))
+	for i, row := range cells {
+		out[i] = make([]string, len(row))
+		for j, c := range row {
+			out[i][j] = c.Value
+		}
 	}
 	return out, nil
 }
@@ -337,21 +355,22 @@ func convertFile(srcPath, outDir string) (ConvResult, error) {
 	if !ok {
 		return ConvResult{}, errors.New("找不到「單身資料」工作表")
 	}
-	hrows, err := transformSheet(head, headHeaders, requiredHead, true)
+	hrows, err := transformCells(head, headHeaders, requiredHead, true)
 	if err != nil {
 		return ConvResult{}, fmt.Errorf("單頭資料：%w", err)
 	}
-	brows, err := transformSheet(body, bodyHeaders, requiredBody, false)
+	brows, err := transformCells(body, bodyHeaders, requiredBody, false)
 	if err != nil {
 		return ConvResult{}, fmt.Errorf("單身資料：%w", err)
 	}
+
 	hi := map[string]int{}
 	for i, h := range headHeaders {
 		hi[h] = i
 	}
-	orderType := hrows[0][hi["銷貨單別"]]
-	orderNo := hrows[0][hi["銷貨單號"]]
-	cust := hrows[0][hi["客戶全名"]]
+	orderType := hrows[0][hi["銷貨單別"]].Value
+	orderNo := hrows[0][hi["銷貨單號"]].Value
+	cust := hrows[0][hi["客戶全名"]].Value
 	if strings.TrimSpace(orderType) == "" || strings.TrimSpace(orderNo) == "" {
 		return ConvResult{}, errors.New("銷貨單別或銷貨單號為空")
 	}
@@ -363,8 +382,26 @@ func convertFile(srcPath, outDir string) (ConvResult, error) {
 	if _, e := os.Stat(dest); e == nil {
 		return ConvResult{}, fmt.Errorf("檔名重複：%s", name)
 	}
-	if err := writeXLSX(dest, hrows, brows); err != nil {
+
+	// Write to a temporary file in the same destination directory first. Only a
+	// completely written workbook is renamed to the final COPI filename, so a
+	// conversion failure cannot leave a half-written file for POS to import.
+	tmp, err := os.CreateTemp(outDir, ".smartcopi-*.tmp")
+	if err != nil {
+		return ConvResult{}, fmt.Errorf("建立暫存輸出檔失敗：%w", err)
+	}
+	tmpPath := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return ConvResult{}, fmt.Errorf("建立暫存輸出檔失敗：%w", err)
+	}
+	defer os.Remove(tmpPath)
+
+	if err := writeXLSX(tmpPath, hrows, brows); err != nil {
 		return ConvResult{}, fmt.Errorf("寫入 Excel 失敗：%w", err)
+	}
+	if err := os.Rename(tmpPath, dest); err != nil {
+		return ConvResult{}, fmt.Errorf("完成輸出檔失敗：%w", err)
 	}
 	return ConvResult{OrderType: orderType, OrderNo: orderNo, Customer: cust, OutputPath: dest}, nil
 }
@@ -374,7 +411,48 @@ func sanitize(s string) string {
 	return strings.TrimSpace(r.Replace(s))
 }
 
-func writeXLSX(path string, headRows, bodyRows [][]string) error {
+type sharedStrings struct {
+	ids    map[string]int
+	values []string
+	count  int
+}
+
+func newSharedStrings() *sharedStrings {
+	return &sharedStrings{ids: map[string]int{}}
+}
+
+func (s *sharedStrings) id(v string) int {
+	s.count++
+	if id, ok := s.ids[v]; ok {
+		return id
+	}
+	id := len(s.values)
+	s.ids[v] = id
+	s.values = append(s.values, v)
+	return id
+}
+
+func (s *sharedStrings) xml() string {
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="`)
+	b.WriteString(strconv.Itoa(s.count))
+	b.WriteString(`" uniqueCount="`)
+	b.WriteString(strconv.Itoa(len(s.values)))
+	b.WriteString(`">`)
+	for _, v := range s.values {
+		b.WriteString(`<si><t`)
+		if strings.TrimSpace(v) != v {
+			b.WriteString(` xml:space="preserve"`)
+		}
+		b.WriteString(`>`)
+		b.WriteString(xmlEsc(v))
+		b.WriteString(`</t></si>`)
+	}
+	b.WriteString(`</sst>`)
+	return b.String()
+}
+
+func writeXLSX(path string, headRows, bodyRows [][]Cell) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -391,23 +469,32 @@ func writeXLSX(path string, headRows, bodyRows [][]string) error {
 		}
 		return e3
 	}
-	files := map[string]string{
-		"[Content_Types].xml":        contentTypesXML,
-		"_rels/.rels":                rootRelsXML,
-		"docProps/app.xml":           appPropsXML,
-		"docProps/core.xml":          corePropsXML(),
-		"xl/workbook.xml":            workbookXML,
-		"xl/_rels/workbook.xml.rels": workbookRelsXML,
-		"xl/styles.xml":              stylesXML,
-		"xl/worksheets/sheet1.xml":   buildSheetXML(headHeaders, headRows),
-		"xl/worksheets/sheet2.xml":   buildSheetXML(bodyHeaders, bodyRows),
+
+	ss := newSharedStrings()
+	sheet1 := buildSheetXML(headHeaders, headRows, ss)
+	sheet2 := buildSheetXML(bodyHeaders, bodyRows, ss)
+	files := []struct {
+		name string
+		data string
+	}{
+		{"[Content_Types].xml", contentTypesXML},
+		{"_rels/.rels", rootRelsXML},
+		{"docProps/app.xml", appPropsXML},
+		{"docProps/core.xml", corePropsXML()},
+		{"xl/workbook.xml", workbookXML},
+		{"xl/_rels/workbook.xml.rels", workbookRelsXML},
+		{"xl/styles.xml", stylesXML},
+		{"xl/theme/theme1.xml", themeXML},
+		{"xl/sharedStrings.xml", ss.xml()},
+		{"xl/worksheets/sheet1.xml", sheet1},
+		{"xl/worksheets/sheet2.xml", sheet2},
 	}
-	for name, data := range files {
-		w, e := zw.Create(name)
+	for _, file := range files {
+		w, e := zw.Create(file.name)
 		if e != nil {
 			return closeAll(e)
 		}
-		if _, e = w.Write([]byte(data)); e != nil {
+		if _, e = w.Write([]byte(file.data)); e != nil {
 			return closeAll(e)
 		}
 	}
@@ -423,42 +510,64 @@ func colName(n int) string {
 	}
 	return s
 }
+
 func xmlEsc(s string) string {
 	var b bytes.Buffer
 	_ = xml.EscapeText(&b, []byte(s))
 	return b.String()
 }
-func isNumeric(s string) bool {
-	if s == "" {
+
+func numericValue(c Cell) bool {
+	if c.Value == "" {
 		return false
 	}
-	_, e := strconv.ParseFloat(strings.ReplaceAll(s, "%", ""), 64)
-	return e == nil && !strings.Contains(s, "%")
+	// Shared/inline string cells from the ERP source must remain strings even if
+	// the visible text looks numeric (e.g. 銷貨單別 "234" or 序號 "0001").
+	if c.Type == "s" || c.Type == "inlineStr" || c.Type == "str" {
+		return false
+	}
+	_, err := strconv.ParseFloat(c.Value, 64)
+	return err == nil
 }
-func buildSheetXML(headers []string, rows [][]string) string {
+
+func buildSheetXML(headers []string, rows [][]Cell, ss *sharedStrings) string {
+	lastRow := len(rows) + 3
+	if lastRow < 4 {
+		lastRow = 4
+	}
+	dim := "A1:" + colName(len(headers)) + strconv.Itoa(lastRow)
+
 	var b strings.Builder
-	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>`)
-	b.WriteString(`<row r="1"><c r="E1" t="inlineStr"><is><t>*銷貨單建立作業</t></is></c></row><row r="2"></row><row r="3">`)
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="`)
+	b.WriteString(dim)
+	b.WriteString(`"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><sheetData>`)
+
+	b.WriteString(`<row r="1"><c r="E1" t="s"><v>`)
+	b.WriteString(strconv.Itoa(ss.id("*銷貨單建立作業")))
+	b.WriteString(`</v></c></row><row r="2"></row><row r="3">`)
 	for i, h := range headers {
 		ref := colName(i+1) + "3"
-		b.WriteString(`<c r="` + ref + `" t="inlineStr" s="1"><is><t>` + xmlEsc(h) + `</t></is></c>`)
+		b.WriteString(`<c r="` + ref + `" t="s"><v>` + strconv.Itoa(ss.id(h)) + `</v></c>`)
 	}
 	b.WriteString(`</row>`)
+
 	for ri, row := range rows {
 		rnum := ri + 4
 		b.WriteString(`<row r="` + strconv.Itoa(rnum) + `">`)
-		for ci, v := range row {
-			if v == "" {
+		for ci, c := range row {
+			if c.Value == "" {
 				continue
 			}
 			ref := colName(ci+1) + strconv.Itoa(rnum)
 			h := headers[ci]
-			if dateFields[h] && isNumeric(v) {
-				b.WriteString(`<c r="` + ref + `" s="2"><v>` + xmlEsc(v) + `</v></c>`)
-			} else if isNumeric(v) && !strings.HasPrefix(v, "0") {
-				b.WriteString(`<c r="` + ref + `"><v>` + xmlEsc(v) + `</v></c>`)
+			if numericValue(c) {
+				b.WriteString(`<c r="` + ref + `"`)
+				if dateFields[h] {
+					b.WriteString(` s="1"`)
+				}
+				b.WriteString(`><v>` + xmlEsc(c.Value) + `</v></c>`)
 			} else {
-				b.WriteString(`<c r="` + ref + `" t="inlineStr"><is><t xml:space="preserve">` + xmlEsc(v) + `</t></is></c>`)
+				b.WriteString(`<c r="` + ref + `" t="s"><v>` + strconv.Itoa(ss.id(c.Value)) + `</v></c>`)
 			}
 		}
 		b.WriteString(`</row>`)
@@ -467,14 +576,21 @@ func buildSheetXML(headers []string, rows [][]string) string {
 	return b.String()
 }
 
-const contentTypesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`
+const contentTypesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`
+
 const rootRelsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`
-const workbookXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="單頭資料" sheetId="1" r:id="rId1"/><sheet name="單身資料" sheetId="2" r:id="rId2"/></sheets></workbook>`
-const workbookRelsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`
-const stylesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy/m/d"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`
-const appPropsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>SMARTCOPIConverter</Application></Properties>`
+
+const workbookXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><workbookPr/><bookViews><workbookView xWindow="0" yWindow="0" windowWidth="12000" windowHeight="8000"/></bookViews><sheets><sheet name="單頭資料" sheetId="1" r:id="rId1"/><sheet name="單身資料" sheetId="2" r:id="rId2"/></sheets><calcPr calcId="124519"/></workbook>`
+
+const workbookRelsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>`
+
+const stylesXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy/m/d"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`
+
+const appPropsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Microsoft Excel</Application><DocSecurity>0</DocSecurity><ScaleCrop>false</ScaleCrop><HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>2</vt:i4></vt:variant></vt:vector></HeadingPairs><TitlesOfParts><vt:vector size="2" baseType="lpstr"><vt:lpstr>單頭資料</vt:lpstr><vt:lpstr>單身資料</vt:lpstr></vt:vector></TitlesOfParts><Company></Company><LinksUpToDate>false</LinksUpToDate><SharedDoc>false</SharedDoc><HyperlinksChanged>false</HyperlinksChanged><AppVersion>16.0300</AppVersion></Properties>`
+
+const themeXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4><a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`
 
 func corePropsXML() string {
 	t := time.Now().UTC().Format(time.RFC3339)
-	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dcterms:created xsi:type="dcterms:W3CDTF">` + t + `</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">` + t + `</dcterms:modified></cp:coreProperties>`
+	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>SMART COPI Converter</dc:creator><cp:lastModifiedBy>SMART COPI Converter</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">` + t + `</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">` + t + `</dcterms:modified></cp:coreProperties>`
 }
