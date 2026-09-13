@@ -85,11 +85,12 @@
 
 - CI 的目的，是以合理自動化成本提高品質與可重建性；不得為省少量資源而增加大量人工步驟，也不得把 CI 當作每個小修改的試錯迴圈。
 - Public 與 Private repo 都可正常使用自動 CI；Private 需更留意 Actions minutes，但不以犧牲便利性與可靠性換取小幅節省。
-- PR 進入 `main` 前應自動執行與該專案相關的必要驗證；使用 `paths`／`paths-ignore` 避免不相關專案一起跑。
-- 一般開發 branch 的每次 push 原則上不重複跑完整昂貴 CI；若能明顯降低維護成本或風險，可由 workflow 明確保留。
-- Draft PR 可略過昂貴完整 CI；Ready for review 後應進入必要驗證。不得要求使用者為省少量 minutes 額外反覆手動操作。
+- **一般 Build／Test workflow 預設同時支援 `pull_request` 與 `workflow_dispatch`。** `pull_request` 是 AI 與日常開發的標準遠端驗收入口；`workflow_dispatch` 是人工或特殊情況的備援入口。若專案因技術或成本確有不同需求，必須由 `PROJECT_RULES.md` 明確列為例外。
+- Draft PR 可以正常執行 Build／Test；Draft 只表示「尚未準備合併」，**不得兼任 CI 開關**。不得為了觸發驗證而要求 AI 或使用者反覆切換 Draft／Ready 狀態。
+- PR 建立或更新後，應依實際變更路徑自動執行該專案必要驗證；使用 `paths`／`paths-ignore` 避免不相關專案一起跑。
+- 一般開發 branch 的單純 `push` 不預設另外重複跑完整昂貴 CI；同一份變更若已有 PR 驗證，不應再因 branch push 重複跑第二套完整 Build／Test。
+- 節省 CI 次數的主要方法是 Local-first、集中完成一輪相關修改後再 push、path filter 與 `concurrency`，而不是取消 PR 自動驗收或把所有 Build/Test 改成只能手動觸發。
 - 同一 PR 新 commit 應以 `concurrency` 取消尚未完成的舊 run。
-- 主要 Build／Test workflow 應保留 `workflow_dispatch`，供必要時手動驗證。
 - Build／Test 預設只授予 `contents: read`；只有確實需要建立 tag／Release／寫入 repo 的 workflow 才給 `contents: write`。
 - 純測試 CI 與 Codex、Claude 等計量式 AI 審查應盡量解耦；不得每次 push 都重新啟動昂貴 AI 審查。
 - GitHub 官方 Actions 使用仍受支援的穩定 major 版本；不為追新而無意義頻繁升級。
@@ -103,6 +104,7 @@
 - 日常修改先讀本次需求真正相關的檔案與相依區段；不得形成「完整讀 repo → 小改 → push → 再完整讀 repo」的高成本循環。
 - 優先在目前工作環境完成 source 修改、可用的 unit test、static check、lint 與可行的 build；Go／Win32 專案若環境可行，可先做 Windows cross-build，但 cross-build 不取代真正 Windows-specific 驗證。
 - 同一輪相關修正應先集中完成與本地檢查，再形成合理的一個 commit／push 單位；除非需要遠端資訊才能繼續，不應每修一個小問題就立即 push 或觸發 CI。
+- 一個合理修改批次完成後的 push，可視為一次遠端驗收邊界；若該 branch 已有 PR，應由 PR workflow 自動進行必要驗收，不要求 AI 另外具備手動 Run workflow 能力。
 - GitHub Windows CI 主要作為一輪修改完成後的正式 Windows 驗收層。Win32／WinForms／WPF、icon/resource/manifest、Windows DLL linkage、Registry、printer API、WebView2、PowerShell packaging、Release build，以及本地環境無法可靠驗證的 Windows-specific 項目，仍應使用真正 Windows runner 驗證。
 - GitHub Actions 成功時，預設只確認 workflow/job/step 成功、tests 結果與必要 artifact／EXE／ZIP 是否產生；不得無理由讀取完整成功 log。
 - GitHub Actions 失敗時，先讀失敗 step、error 與其前後必要區段；只有原因仍無法判斷時才逐步擴大 log 範圍，不預設把整份長 log 載入上下文。
