@@ -10,14 +10,12 @@ import (
 type Settings struct {
 	POSOutputDir string `json:"pos_output_dir"`
 }
-
 type HistoryItem struct {
 	Date      string `json:"date"`
 	OrderType string `json:"order_type"`
 	OrderNo   string `json:"order_no"`
 	Customer  string `json:"customer"`
 }
-
 type AppState struct {
 	Settings Settings      `json:"settings"`
 	History  []HistoryItem `json:"history"`
@@ -34,51 +32,50 @@ func appDataDir() (string, error) {
 	}
 	return dir, nil
 }
-
 func statePath() (string, error) {
-	dir, err := appDataDir()
-	if err != nil {
-		return "", err
+	d, e := appDataDir()
+	if e != nil {
+		return "", e
 	}
-	return filepath.Join(dir, "settings.json"), nil
+	return filepath.Join(d, "settings.json"), nil
 }
-
 func loadState() AppState {
 	var st AppState
-	p, err := statePath()
-	if err != nil {
+	p, e := statePath()
+	if e != nil {
 		return st
 	}
-	b, err := os.ReadFile(p)
-	if err != nil {
+	b, e := os.ReadFile(p)
+	if e != nil {
 		return st
 	}
-	_ = json.Unmarshal(b, &st)
+	if json.Unmarshal(b, &st) != nil {
+		return AppState{}
+	}
 	if len(st.History) > 99 {
 		st.History = st.History[:99]
 	}
 	return st
 }
-
 func saveState(st AppState) error {
 	if len(st.History) > 99 {
 		st.History = st.History[:99]
 	}
-	p, err := statePath()
-	if err != nil {
-		return err
+	p, e := statePath()
+	if e != nil {
+		return e
 	}
-	b, err := json.MarshalIndent(st, "", "  ")
-	if err != nil {
-		return err
+	b, e := json.MarshalIndent(st, "", "  ")
+	if e != nil {
+		return e
 	}
-	return os.WriteFile(p, b, 0o600)
-}
-
-func logPath() (string, error) {
-	dir, err := appDataDir()
-	if err != nil {
-		return "", err
+	tmp := p + ".tmp"
+	if e = os.WriteFile(tmp, b, 0o600); e != nil {
+		return e
 	}
-	return filepath.Join(dir, "SMART_COPI_Converter.log"), nil
+	if e = os.Rename(tmp, p); e != nil {
+		_ = os.Remove(tmp)
+		return e
+	}
+	return nil
 }
