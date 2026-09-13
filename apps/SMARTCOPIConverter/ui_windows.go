@@ -52,12 +52,27 @@ func wndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		return 0
 	case WM_NOTIFY:
 		hdr := (*NMHDR)(unsafe.Pointer(lparam))
-		if hdr != nil && int(hdr.IDFrom) == ID_FILES && hdr.Code == NM_CLICK {
-			act := (*NMITEMACTIVATE)(unsafe.Pointer(lparam))
-			if act.IItem >= 0 && act.ISubItem == 1 && !converting {
-				removeFile(int(act.IItem))
+		if hdr != nil {
+			if int(hdr.IDFrom) == ID_FILES && hdr.Code == NM_CLICK {
+				act := (*NMITEMACTIVATE)(unsafe.Pointer(lparam))
+				if act.IItem >= 0 && act.ISubItem == 1 && !converting {
+					removeFile(int(act.IItem))
+				}
+			}
+			if int(hdr.IDFrom) == ID_HISTORY && hdr.Code == NM_CUSTOMDRAW {
+				return drawHistoryZebra(lparam)
 			}
 		}
+		return 0
+	case WM_GETMINMAXINFO:
+		mmi := (*MINMAXINFO)(unsafe.Pointer(lparam))
+		if mmi != nil {
+			mmi.PtMinTrackSize.X = 760
+			mmi.PtMinTrackSize.Y = 610
+		}
+		return 0
+	case WM_SIZE:
+		layoutResizableControls()
 		return 0
 	case WM_UI_EVENT:
 		handleUIEvents()
@@ -123,6 +138,109 @@ func createControls(parent uintptr) {
 	listAddColumn(hwndHistory, 2, "銷貨單別", 96)
 	listAddColumn(hwndHistory, 3, "銷貨單號", 130)
 	listAddColumn(hwndHistory, 4, "客戶全名", 310)
+	layoutResizableControls()
+}
+
+func moveControl(hwnd uintptr, x, y, w, h int) {
+	if hwnd != 0 && w > 0 && h > 0 {
+		pMoveWindow.Call(hwnd, uintptr(x), uintptr(y), uintptr(w), uintptr(h), 1)
+	}
+}
+
+func layoutResizableControls() {
+	if hwndMain == 0 {
+		return
+	}
+	var rc RECT
+	if r, _, _ := pGetClientRect.Call(hwndMain, uintptr(unsafe.Pointer(&rc))); r == 0 {
+		return
+	}
+	w := int(rc.Right - rc.Left)
+	if w < 724 {
+		return
+	}
+	right := w - 26
+
+	// Top row: keep the path elastic and anchor settings/log controls to the right.
+	logW, changeW, gap := 110, 58, 12
+	logX := right - logW
+	changeX := logX - gap - changeW
+	pathW := changeX - gap - 26
+	moveControl(hwndPath, 26, 24, pathW, 28)
+	moveControl(hwndChange, changeX, 20, changeW, 30)
+	moveControl(hwndLog, logX, 24, logW, 26)
+
+	contentW := w - 52
+	moveControl(hwndFiles, 26, 136, contentW, 76)
+	moveControl(hwndProgress, 124, 232, w-150, 24)
+	moveControl(hwndFail, right-116, 260, 116, 34)
+	moveControl(hwndHistory, 26, 332, contentW, 224)
+	layoutHistoryColumns()
+}
+
+func layoutHistoryColumns() {
+	if hwndHistory == 0 {
+		return
+	}
+	var rc RECT
+	if r, _, _ := pGetClientRect.Call(hwndHistory, uintptr(unsafe.Pointer(&rc))); r == 0 {
+		return
+	}
+	available := int(rc.Right - rc.Left)
+	if available <= 0 {
+		return
+	}
+	// Minimums keep the sequence column readable; every extra pixel is then
+	// distributed evenly across all five columns so no trailing blank column remains.
+	widths := []int{58, 100, 100, 130, 260}
+	base := 0
+	for _, v := range widths {
+		base += v
+	}
+	if available > base {
+		extra := available - base
+		q, rem := extra/len(widths), extra%len(widths)
+		for i := range widths {
+			widths[i] += q
+			if i < rem {
+				widths[i]++
+			}
+		}
+	} else {
+		// At the minimum window size, shrink the flexible columns first.
+		deficit := base - available
+		for i := len(widths) - 1; i >= 1 && deficit > 0; i-- {
+			minW := []int{58, 86, 86, 110, 180}[i]
+			can := widths[i] - minW
+			if can > deficit {
+				can = deficit
+			}
+			widths[i] -= can
+			deficit -= can
+		}
+	}
+	for i, width := range widths {
+		pSendMessageW.Call(hwndHistory, LVM_SETCOLUMNWIDTH, uintptr(i), uintptr(width))
+	}
+}
+
+func drawHistoryZebra(lparam uintptr) uintptr {
+	cd := (*NMLVCUSTOMDRAW)(unsafe.Pointer(lparam))
+	if cd == nil {
+		return CDRF_DODEFAULT
+	}
+	switch cd.Nmcd.DwDrawStage {
+	case CDDS_PREPAINT:
+		return CDRF_NOTIFYITEMDRAW
+	case CDDS_ITEMPREPAINT:
+		if int(cd.Nmcd.DwItemSpec)%2 == 1 {
+			cd.ClrTextBk = 0x00F7F7F7
+		} else {
+			cd.ClrTextBk = 0x00FFFFFF
+		}
+		return CDRF_DODEFAULT
+	}
+	return CDRF_DODEFAULT
 }
 
 func listSetExtended(hwnd uintptr, style uintptr) {
@@ -175,6 +293,11 @@ func refreshHistory() {
 	for i := 0; i < limit; i++ {
 		h := state.History[i]
 		listInsert(hwndHistory, i, fmt.Sprintf("%d", i+1), h.Date, h.OrderType, h.OrderNo, h.Customer)
+	}
+	// Keep ten visible native ListView rows even before history exists, so the
+	// alternating row background remains visible without owner-drawing the table.
+	for i := limit; i < 10; i++ {
+		listInsert(hwndHistory, i, "", "", "", "", "")
 	}
 }
 func updateButtons() {
