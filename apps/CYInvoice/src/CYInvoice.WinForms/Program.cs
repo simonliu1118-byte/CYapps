@@ -24,6 +24,7 @@ internal static class Program
             WriteStartupError(error);
             if (smokeTest)
             {
+                Console.Error.WriteLine(error);
                 Environment.ExitCode = 1;
                 return;
             }
