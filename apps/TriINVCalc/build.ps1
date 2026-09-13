@@ -18,13 +18,21 @@ if (Test-Path $packageDir) { Remove-Item $packageDir -Recurse -Force }
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 New-Item $packageDir -ItemType Directory -Force | Out-Null
 
-$iconB64Path = Join-Path $projectDir 'assets/icon.ico.b64'
-$iconPath = Join-Path $projectDir 'assets/icon.ico'
+$assetsDir = Join-Path $projectDir 'assets'
+$iconParts = @(Get-ChildItem $assetsDir -Filter 'icon.ico.b64.part*' | Sort-Object Name)
+if ($iconParts.Count -eq 0) { throw 'Icon base64 parts not found.' }
+$iconPath = Join-Path $assetsDir 'icon.ico'
 $resourcePath = Join-Path $projectDir 'rsrc.syso'
-$manifestPath = Join-Path $projectDir 'assets/app.manifest'
+$manifestPath = Join-Path $assetsDir 'app.manifest'
 
-$iconBase64 = (Get-Content $iconB64Path -Raw) -replace '\s', ''
+$iconBase64 = (($iconParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join '') -replace '\s', ''
 [IO.File]::WriteAllBytes($iconPath, [Convert]::FromBase64String($iconBase64))
+
+$expectedIconSha256 = '423E8B292DC2C812653DD72E9B0CC90E439B0189457F7808A7DFA70CC77BB758'
+$actualIconSha256 = (Get-FileHash $iconPath -Algorithm SHA256).Hash.ToUpperInvariant()
+if ($actualIconSha256 -ne $expectedIconSha256) {
+    throw "Icon checksum mismatch. Expected $expectedIconSha256, got $actualIconSha256"
+}
 
 go run github.com/akavel/rsrc@v0.10.2 -manifest $manifestPath -ico $iconPath -o $resourcePath
 
@@ -43,3 +51,4 @@ Compress-Archive -Path $packageDir -DestinationPath $zipPath -CompressionLevel O
 
 Write-Host "Built $zipPath"
 Write-Host "Version: V$displayVersion"
+Write-Host "Icon SHA-256: $actualIconSha256"
