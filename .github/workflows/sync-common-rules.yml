@@ -1,8 +1,6 @@
 name: Sync Common Rules
 
 on:
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -76,11 +74,9 @@ jobs:
               --base main \
               --head "$branch" \
               --title "governance: sync common rules v$VERSION" \
-              --body "Automated synchronization from the canonical common rules in simonliu1118-byte/AITeam main. This PR only updates REPOSITORY_RULES.md, COMMON_RULES_VERSION, and COMMON_RULES_CHANGELOG.md. Repo-specific and project-specific rules are not modified."
+              --body "Manual fallback synchronization from the canonical common rules in simonliu1118-byte/AITeam main. Normal governance work should synchronize these files directly in the same change round. This PR only updates REPOSITORY_RULES.md, COMMON_RULES_VERSION, and COMMON_RULES_CHANGELOG.md."
           fi
 
-          # Pull requests created with GITHUB_TOKEN do not trigger another workflow run.
-          # Explicitly dispatch Governance Check on the synchronization branch.
           gh workflow run governance-check.yml --ref "$branch"
 
       - name: Report already synchronized
