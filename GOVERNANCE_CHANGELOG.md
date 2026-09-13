@@ -1,5 +1,12 @@
 # CYApps Governance Changelog
 
+## 2.1.0 — 2026/09/13
+
+- 共通規則同步不再依賴每日 GitHub Actions 排程；AITeam 母本變更後，同一輪治理工作直接以 Git／GitHub API／治理 PR 同步本 repo。
+- `sync-common-rules.yml` 改為 manual fallback；Actions 不可用時仍必須直接比對／同步，不得把 workflow 當成唯一一致性來源。
+- `REPO_POLICY.md` 新增共通規則同步責任；任何 AI 接手 APP 前須先比對本 repo `COMMON_RULES_VERSION` 與 AITeam `main`。
+- 保留 Governance 2.0.1 新增的 `TriINVCalc` 正式專案與其 project rules，不因本次治理整合倒退。
+
 ## 2.0.1 — 2026/09/13
 
 - 新增正式維護專案 `TriINVCalc`，顯示名稱固定為「三聯式發票開立計算機」。
