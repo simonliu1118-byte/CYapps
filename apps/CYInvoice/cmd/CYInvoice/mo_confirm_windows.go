@@ -11,12 +11,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"cyinvoice/internal/appdata"
 	"cyinvoice/internal/coupangimport"
-	"cyinvoice/internal/displayfmt"
 	"cyinvoice/internal/invoicing"
 	"cyinvoice/internal/moimport"
 )
@@ -31,78 +29,51 @@ const (
 	idMOConfirmCancel     = 9105
 	idMOConfirmIssue      = 9106
 
-	wmMOConfirmStartLoad   = 0x8101
-	wmMOConfirmLoadPhase   = 0x8102
-	wmMOConfirmLoaded      = 0x8103
-	wmMOConfirmIssueResult = 0x8104
-	wmMOConfirmRetryResult = 0x8105
-	pbsMarquee             = 0x00000008
-	pbmSetMarquee          = 0x040A
+	wmMOConfirmStartLoad = 0x8101
+	wmMOConfirmLoadPhase = 0x8102
+	wmMOConfirmLoaded    = 0x8103
+	pbsMarquee           = 0x00000008
+	pbmSetMarquee        = 0x040A
 
 	moConfirmWidth  = 1160
 	moConfirmHeight = 610
 )
 
 type moConfirmEntry struct {
-	Source    string
-	Order     moimport.Order
-	Lookup    invoicing.NameLookup
-	LookupErr error
-	Selected  bool
-	Finished  bool
-	Status    string
+	Source     string
+	Order      moimport.Order
+	Lookup     invoicing.NameLookup
+	LookupErr  error
+	Selected   bool
+	Finished   bool
+	Status     string
 }
 
 type moConfirmLoadResult struct {
 	Generation uint64
-	Entries    []moConfirmEntry
-	Err        error
-}
-
-type moConfirmIssueResult struct {
-	Generation uint64
-	Index      int
-	Result     invoicing.IssueResult
-	Err        error
-}
-
-type moConfirmRetryResult struct {
-	Generation uint64
-	BAN        string
-	Lookup     invoicing.NameLookup
-	Err        error
+	Entries []moConfirmEntry
+	Err error
 }
 
 var (
-	moConfirmWindow          uintptr
-	moConfirmList            uintptr
-	moConfirmSummary         uintptr
-	moConfirmBuyerHint       uintptr
-	moConfirmEntries         []moConfirmEntry
-	moConfirmActiveRow       = -1
-	moConfirmIssuing         bool
-	moConfirmFinalMessage    string
-	moConfirmProgress        uintptr
-	moConfirmProgressText    uintptr
-	moConfirmPath            string
-	moConfirmPassword        string
-	moConfirmSource          string
-	moConfirmGeneration      uint64
-	moConfirmLoadMu          sync.Mutex
-	moConfirmLoadedResult    moConfirmLoadResult
-	moConfirmRefreshing      bool
-	moConfirmIssueGeneration uint64
-	moConfirmIssueQueue      []int
-	moConfirmIssuePosition   int
-	moConfirmIssueSuccess    int
-	moConfirmIssueFailed     int
-	moConfirmIssueMu         sync.Mutex
-	moConfirmIssuedResult    moConfirmIssueResult
-	moConfirmRetryGeneration uint64
-	moConfirmRetryMu         sync.Mutex
-	moConfirmRetriedResult   moConfirmRetryResult
-	moConfirmLookupPending   bool
-	moConfirmCallback        = syscall.NewCallback(moConfirmWindowProc)
+	moConfirmWindow       uintptr
+	moConfirmList         uintptr
+	moConfirmSummary      uintptr
+	moConfirmBuyerHint    uintptr
+	moConfirmEntries      []moConfirmEntry
+	moConfirmActiveRow    = -1
+	moConfirmIssuing      bool
+	moConfirmFinalMessage string
+	moConfirmProgress     uintptr
+	moConfirmProgressText uintptr
+	moConfirmPath         string
+	moConfirmPassword     string
+	moConfirmSource       string
+	moConfirmGeneration   uint64
+	moConfirmLoadMu       sync.Mutex
+	moConfirmLoadedResult moConfirmLoadResult
+	moConfirmRefreshing   bool
+	moConfirmCallback     = syscall.NewCallback(moConfirmWindowProc)
 )
 
 func showPlatformImportConfirmation(source, path, password string, settings appdata.Settings) {
@@ -113,8 +84,6 @@ func showPlatformImportConfirmation(source, path, password string, settings appd
 	generation := atomic.AddUint64(&moConfirmGeneration, 1)
 	moConfirmActiveRow = -1
 	moConfirmIssuing = false
-	moConfirmLookupPending = false
-	atomic.AddUint64(&moConfirmRetryGeneration, 1)
 	moConfirmFinalMessage = ""
 
 	instance, _, callErr := procGetModuleHandleW.Call(0)
@@ -151,11 +120,31 @@ func showPlatformImportConfirmation(source, path, password string, settings appd
 		return
 	}
 	centerWindowOnParent(moConfirmWindow, mainWindow, moConfirmWidth, moConfirmHeight)
+	procEnableWindow.Call(mainWindow, 0)
+	procShowWindow.Call(moConfirmWindow, swShow)
+	procUpdateWindow.Call(moConfirmWindow)
 	procPostMessageW.Call(moConfirmWindow, wmMOConfirmStartLoad, uintptr(generation), 0)
-	if err := runOwnedModalWindow(mainWindow, moConfirmWindow, 0); err != nil {
-		moConfirmMessage("匯入確認視窗訊息處理失敗："+err.Error(), 0x10)
-		if moConfirmWindow != 0 { procDestroyWindow.Call(moConfirmWindow) }
+
+	var msg message
+	for {
+		window := moConfirmWindow
+		if window == 0 { break }
+		alive, _, _ := procIsWindow.Call(window)
+		if alive == 0 { break }
+		result, _, messageErr := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if int32(result) == -1 {
+			moConfirmMessage("讀取匯入確認視窗訊息失敗："+messageErr.Error(), 0x10)
+			break
+		}
+		if result == 0 {
+			procPostQuitMessage.Call(0)
+			break
+		}
+		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
 	}
+	procEnableWindow.Call(mainWindow, 1)
+	procSetFocus.Call(mainWindow)
 	refreshRecords()
 	if moConfirmFinalMessage != "" {
 		showInfo(moConfirmFinalMessage)
@@ -220,12 +209,6 @@ func moConfirmWindowProc(window uintptr, msg uint32, wParam uintptr, lParam unsa
 	case wmMOConfirmLoaded:
 		finishMOConfirmLoad(uint64(wParam))
 		return 0
-	case wmMOConfirmIssueResult:
-		finishMOConfirmIssue(uint64(wParam))
-		return 0
-	case wmMOConfirmRetryResult:
-		finishMOConfirmBuyerLookup(uint64(wParam))
-		return 0
 	case wmCommand:
 		handleMOConfirmCommand(int(wParam & 0xffff))
 		return 0
@@ -243,24 +226,14 @@ func moConfirmWindowProc(window uintptr, msg uint32, wParam uintptr, lParam unsa
 			handleMOConfirmListClick((*nmItemActivate)(lParam))
 			return 0
 		}
-	case wmCtlColorStatic:
+	case wmCtlColorStatic, wmCtlColorBtn:
 		return handlePlainControlColor(wParam)
-	case wmCtlColorEdit:
-		return handleStaticColor(wParam, uintptr(lParam))
-	case wmCtlColorBtn:
-		return handleButtonColor(wParam)
 	case wmClose:
 		if !moConfirmIssuing {
 			procDestroyWindow.Call(window)
 		}
 		return 0
 	case wmDestroy:
-		atomic.AddUint64(&moConfirmRetryGeneration, 1)
-		moConfirmLookupPending = false
-		forgetControlIDs(
-			idMOConfirmList, idMOConfirmBuyerName, idMOConfirmApplyName,
-			idMOConfirmRetryName, idMOConfirmCancel, idMOConfirmIssue,
-		)
 		moConfirmWindow = 0
 		moConfirmList = 0
 		moConfirmProgress = 0
@@ -299,15 +272,13 @@ func buildMOConfirmControls(parent uintptr) {
 
 	moConfirmSummary = addStatic(parent, "", 22, 429, 1114, 30, nil)
 	procSendMessageW.Call(moConfirmSummary, wmSetFont, boldFont, 1)
-	// Final positions are defined here directly; there is no post-WM_CREATE
-	// refine layer moving these controls a second time.
-	moConfirmProgressText = addStatic(parent, "正在唯讀解析 "+moConfirmSource+" Excel…", 22, 462, 748, 42, nil)
+	moConfirmProgressText = addStatic(parent, "正在唯讀解析 "+moConfirmSource+" Excel…", 22, 468, 330, 24, nil)
 	procSendMessageW.Call(moConfirmProgressText, wmSetFont, smallFont, 1)
-	moConfirmProgress = addControl("msctls_progress32", "", parent, 22, 496, 714, 18, wsChild|wsVisible|pbsMarquee, 0, nil)
+	moConfirmProgress = addControl("msctls_progress32", "", parent, 360, 470, 376, 18, wsChild|wsVisible|pbsMarquee, 0, nil)
 	procSendMessageW.Call(moConfirmProgress, pbmSetMarquee, 1, 45)
 
-	addButton(parent, "取消匯入", 800, 520, 145, 36, idMOConfirmCancel, nil)
-	addButtonStyle(parent, "確認開立", 958, 520, 178, 36, idMOConfirmIssue, bsDefaultPushButton, nil)
+	addButton(parent, "取消匯入", 800, 510, 145, 38, idMOConfirmCancel, nil)
+	addButtonStyle(parent, "確認開立", 958, 510, 178, 38, idMOConfirmIssue, bsDefaultPushButton, nil)
 	refreshMOConfirmList()
 	loadMOConfirmBuyerEditor()
 	setMOConfirmControlsEnabled(false)
@@ -381,7 +352,6 @@ func finishMOConfirmLoad(generation uint64) {
 
 func handleMOConfirmCommand(id int) {
 	if moConfirmIssuing { return }
-	if moConfirmLookupPending && id != idMOConfirmCancel { return }
 	switch id {
 	case idMOConfirmApplyName:
 		applyMOConfirmBuyerName(true)
@@ -395,7 +365,7 @@ func handleMOConfirmCommand(id int) {
 }
 
 func handleMOConfirmListClick(activate *nmItemActivate) {
-	if activate == nil || moConfirmIssuing || moConfirmLookupPending || moConfirmRefreshing { return }
+	if activate == nil || moConfirmIssuing || moConfirmRefreshing { return }
 	row := int(activate.Item)
 	if row < 0 || row >= len(moConfirmEntries) { return }
 	moConfirmActiveRow = row
@@ -403,7 +373,7 @@ func handleMOConfirmListClick(activate *nmItemActivate) {
 }
 
 func handleMOConfirmListStateChange(change *nmItemActivate) {
-	if change == nil || moConfirmIssuing || moConfirmLookupPending || moConfirmRefreshing || change.Changed&lvifState == 0 { return }
+	if change == nil || moConfirmIssuing || moConfirmRefreshing || change.Changed&lvifState == 0 { return }
 	row := int(change.Item)
 	if row < 0 || row >= len(moConfirmEntries) { return }
 	if (change.NewState^change.OldState)&lvisStateImageMask == 0 { return }
@@ -465,49 +435,23 @@ func retryMOConfirmBuyerLookup() {
 	entry := &moConfirmEntries[row]
 	if !isMOCompanyOrder(entry.Order) || entry.Finished { return }
 	ban := strings.TrimSpace(entry.Order.BuyerBAN)
-	generation := atomic.AddUint64(&moConfirmRetryGeneration, 1)
-	moConfirmLookupPending = true
 	setControlText(moConfirmBuyerHint, "正在重新查詢 "+ban+"…")
-	procEnableWindow.Call(handles[idMOConfirmRetryName], 0)
-	window := moConfirmWindow
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		lookup, err := invoiceService.LookupBuyerName(ctx, ban)
-		moConfirmRetryMu.Lock()
-		moConfirmRetriedResult = moConfirmRetryResult{
-			Generation: generation,
-			BAN:        ban,
-			Lookup:     lookup,
-			Err:        err,
-		}
-		moConfirmRetryMu.Unlock()
-		procPostMessageW.Call(window, wmMOConfirmRetryResult, uintptr(generation), 0)
-	}()
-}
-
-func finishMOConfirmBuyerLookup(generation uint64) {
-	if generation != atomic.LoadUint64(&moConfirmRetryGeneration) || moConfirmWindow == 0 { return }
-	moConfirmRetryMu.Lock()
-	outcome := moConfirmRetriedResult
-	moConfirmRetryMu.Unlock()
-	if outcome.Generation != generation { return }
-	moConfirmLookupPending = false
-
+	procUpdateWindow.Call(moConfirmWindow)
+	lookup, err := invoiceService.LookupBuyerName(context.Background(), ban)
 	for index := range moConfirmEntries {
 		other := &moConfirmEntries[index]
-		if strings.TrimSpace(other.Order.BuyerBAN) != outcome.BAN || other.Finished { continue }
-		other.Lookup, other.LookupErr = outcome.Lookup, outcome.Err
+		if strings.TrimSpace(other.Order.BuyerBAN) != ban || other.Finished { continue }
+		other.Lookup, other.LookupErr = lookup, err
 		switch {
-		case outcome.Err != nil:
+		case err != nil:
 			other.Selected = false
 			other.Order.BuyerName = ""
-			other.Status = "統編查詢異常：" + shortMOConfirmError(outcome.Err)
-		case outcome.Lookup.Local:
-			other.Order.BuyerName = outcome.Lookup.Name
+			other.Status = "統編查詢異常：" + shortMOConfirmError(err)
+		case lookup.Local:
+			other.Order.BuyerName = lookup.Name
 			other.Status = "本機記憶名稱"
-		case strings.TrimSpace(outcome.Lookup.APIName) != "":
-			other.Order.BuyerName = outcome.Lookup.APIName
+		case strings.TrimSpace(lookup.APIName) != "":
+			other.Order.BuyerName = lookup.APIName
 			other.Status = "光貿查詢完成"
 		default:
 			other.Order.BuyerName = ""
@@ -550,104 +494,65 @@ func issueMOConfirmSelection() {
 	procShowWindow.Call(moConfirmProgressText, swShow)
 	procShowWindow.Call(moConfirmProgress, swShow)
 	procSendMessageW.Call(moConfirmProgress, pbmSetMarquee, 1, 45)
-	moConfirmIssueQueue = selected
-	moConfirmIssuePosition = 0
-	moConfirmIssueSuccess = 0
-	moConfirmIssueFailed = 0
-	atomic.AddUint64(&moConfirmIssueGeneration, 1)
-	startNextMOConfirmIssue()
-}
+	success, failed := 0, 0
+	for position, index := range selected {
+		entry := &moConfirmEntries[index]
+		entry.Status = fmt.Sprintf("開立中（%d/%d）", position+1, len(selected))
+		setControlText(moConfirmProgressText, fmt.Sprintf("正在開立第 %d/%d 張發票…", position+1, len(selected)))
+		refreshMOConfirmList()
+		procUpdateWindow.Call(moConfirmWindow)
 
-func startNextMOConfirmIssue() {
-	if !moConfirmIssuing { return }
-	if moConfirmIssuePosition >= len(moConfirmIssueQueue) {
-		finishMOConfirmIssueBatch()
-		return
-	}
-	position := moConfirmIssuePosition
-	index := moConfirmIssueQueue[position]
-	entry := &moConfirmEntries[index]
-	entry.Status = fmt.Sprintf("開立中（%d/%d）", position+1, len(moConfirmIssueQueue))
-	setControlText(moConfirmProgressText, fmt.Sprintf("正在開立第 %d/%d 張發票…", position+1, len(moConfirmIssueQueue)))
-	refreshMOConfirmList()
-	generation := atomic.LoadUint64(&moConfirmIssueGeneration)
-	entryCopy := *entry
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		defer cancel()
-		result, err := issuePlatformConfirmEntry(ctx, entryCopy)
-		moConfirmIssueMu.Lock()
-		moConfirmIssuedResult = moConfirmIssueResult{Generation: generation, Index: index, Result: result, Err: err}
-		moConfirmIssueMu.Unlock()
-		procPostMessageW.Call(moConfirmWindow, wmMOConfirmIssueResult, uintptr(generation), 0)
-	}()
-}
-
-func finishMOConfirmIssue(generation uint64) {
-	if generation != atomic.LoadUint64(&moConfirmIssueGeneration) || !moConfirmIssuing { return }
-	moConfirmIssueMu.Lock()
-	outcome := moConfirmIssuedResult
-	moConfirmIssueMu.Unlock()
-	if outcome.Generation != generation || outcome.Index < 0 || outcome.Index >= len(moConfirmEntries) { return }
-	entry := &moConfirmEntries[outcome.Index]
-	entry.Selected = false
-	if outcome.Err == nil && outcome.Result.Opened {
-		entry.Finished = true
-		entry.Status = "成功：" + outcome.Result.Record.InvoiceNumber
-		moConfirmIssueSuccess++
-		if appLogger != nil {
-			appLogger.Infof("%s invoice opened order=%s invoice=%s", entry.Source, entry.Order.OrderID, outcome.Result.Record.InvoiceNumber)
+		result, err := issuePlatformConfirmEntry(*entry)
+		entry.Selected = false
+		if err == nil && result.Opened {
+			entry.Finished = true
+			entry.Status = "成功：" + result.Record.InvoiceNumber
+			success++
+			if appLogger != nil {
+				appLogger.Infof("%s invoice opened order=%s invoice=%s", entry.Source, entry.Order.OrderID, result.Record.InvoiceNumber)
+			}
+			continue
 		}
-	} else {
-		moConfirmIssueFailed++
-		if outcome.Result.Unknown {
+		failed++
+		if result.Unknown {
 			entry.Finished = true
 			entry.Status = "結果不明（禁止重送）"
-		} else if outcome.Result.Opened {
-			entry.Finished = true
-			entry.Status = "已開立；本機保存失敗"
 		} else {
-			state := outcome.Result.Record.InvoiceState
+			state := result.Record.InvoiceState
 			if state == "" { state = "已擋下" }
-			entry.Status = state + "：" + shortMOConfirmError(outcome.Err)
+			entry.Status = state + "：" + shortMOConfirmError(err)
 		}
 		if appLogger != nil {
-			appLogger.Errorf("%s issue order=%s state=%s: %v", entry.Source, entry.Order.OrderID, entry.Status, outcome.Err)
+			appLogger.Errorf("%s issue order=%s state=%s: %v", entry.Source, entry.Order.OrderID, entry.Status, err)
 		}
 	}
-	moConfirmIssuePosition++
-	refreshMOConfirmList()
-	startNextMOConfirmIssue()
-}
-
-func finishMOConfirmIssueBatch() {
 	refreshRecords()
 	procSendMessageW.Call(moConfirmProgress, pbmSetMarquee, 0, 0)
 	procShowWindow.Call(moConfirmProgress, swHide)
 	procShowWindow.Call(moConfirmProgressText, swHide)
 	refreshMOConfirmList()
-	if moConfirmIssueFailed == 0 && !hasMOConfirmBlockingResult() {
-		moConfirmFinalMessage = fmt.Sprintf("%s 批次開立完成\n\n成功：%d 張\n未勾選的訂單未送出。", moConfirmSource, moConfirmIssueSuccess)
+	if failed == 0 && !hasMOConfirmBlockingResult() {
+		moConfirmFinalMessage = fmt.Sprintf("%s 批次開立完成\n\n成功：%d 張\n未勾選的訂單未送出。", moConfirmSource, success)
 		procDestroyWindow.Call(moConfirmWindow)
 		return
 	}
 	moConfirmIssuing = false
 	setMOConfirmControlsEnabled(true)
 	loadMOConfirmBuyerEditor()
-	moConfirmMessage(fmt.Sprintf("批次處理完成。\n\n成功：%d 張\n未成功：%d 張\n\n確認視窗會保留，請依每列狀態處理；結果不明不可重送。", moConfirmIssueSuccess, moConfirmIssueFailed), 0x30)
+	moConfirmMessage(fmt.Sprintf("批次處理完成。\n\n成功：%d 張\n未成功：%d 張\n\n確認視窗會保留，請依每列狀態處理；結果不明不可重送。", success, failed), 0x30)
 }
 
-func issuePlatformConfirmEntry(ctx context.Context, entry moConfirmEntry) (invoicing.IssueResult, error) {
+func issuePlatformConfirmEntry(entry moConfirmEntry) (invoicing.IssueResult, error) {
 	switch entry.Source {
 	case appdata.SourceMO:
-		return invoiceService.IssueMOWithLookup(ctx, entry.Order, entry.Lookup)
+		return invoiceService.IssueMOWithLookup(context.Background(), entry.Order, entry.Lookup)
 	case appdata.SourceCoupang:
 		order := coupangimport.Order{
 			OrderID: entry.Order.OrderID, BuyerBAN: entry.Order.BuyerBAN,
 			BuyerName: entry.Order.BuyerName, Items: entry.Order.Items,
 			TotalAmount: entry.Order.TotalAmount,
 		}
-		return invoiceService.IssueCoupangWithLookup(ctx, order, entry.Lookup)
+		return invoiceService.IssueCoupangWithLookup(context.Background(), order, entry.Lookup)
 	default:
 		return invoicing.IssueResult{}, fmt.Errorf("%s 尚未完成欄位解析，已擋下且未送出", entry.Source)
 	}
@@ -738,24 +643,22 @@ func handleMOConfirmCustomDraw(lParam unsafe.Pointer) (uintptr, bool) {
 	case cddsPrePaint:
 		return cdrfNotifyItemDraw, true
 	case cddsItemPrePaint:
-		return cdrfNotifySubItemDraw, true
-	case cddsItemPrePaint | cddsSubItem:
 		row := int(draw.Draw.ItemSpec)
-		draw.Draw.ItemState &^= cdisSelected | cdisFocus
-		draw.TextBackground = zebraColor(row)
-		draw.TextColor = rgb(0, 0, 0)
+		applyZebraBackground(draw)
 		if row >= 0 && row < len(moConfirmEntries) {
 			status := moConfirmEntries[row].Status
 			switch {
 			case strings.Contains(status, "成功"):
-				draw.TextColor = rgb(0, 140, 50)
+				draw.TextColor = rgb(0, 150, 55)
 			case strings.Contains(status, "異常") || strings.Contains(status, "失敗") || strings.Contains(status, "擋下"):
-				draw.TextColor = rgb(190, 0, 0)
+				draw.TextColor = rgb(200, 0, 0)
 			case strings.Contains(status, "請輸入") || strings.Contains(status, "結果不明"):
-				draw.TextColor = rgb(190, 100, 0)
+				draw.TextColor = rgb(205, 112, 0)
 			}
 		}
-		procSelectObject.Call(draw.Draw.DC, contentFont)
+		return cdrfNotifySubItemDraw | cdrfNewFont, true
+	case cddsItemPrePaint | cddsSubItem:
+		applyZebraBackground(draw)
 		return cdrfNewFont, true
 	default:
 		return 0, true
@@ -767,7 +670,15 @@ func isMOCompanyOrder(order moimport.Order) bool {
 	return ban != "" && ban != "0000000000"
 }
 
-func formatMOConfirmMoney(value int64) string { return displayfmt.Integer(value) }
+func formatMOConfirmMoney(value int64) string {
+	sign := ""
+	if value < 0 { sign, value = "-", -value }
+	digits := strconv.FormatInt(value, 10)
+	for index := len(digits) - 3; index > 0; index -= 3 {
+		digits = digits[:index] + "," + digits[index:]
+	}
+	return sign + digits
+}
 
 func shortMOConfirmError(err error) string {
 	if err == nil { return "未知錯誤" }
@@ -779,7 +690,7 @@ func shortMOConfirmError(err error) string {
 
 func moConfirmMessage(text string, icon uintptr) {
 	value := mustUTF16Ptr(text)
-	title := mustUTF16Ptr("CYInvoice｜" + moConfirmSource + " 匯入確認")
+	title := mustUTF16Ptr("CYInvoice｜MO店+ 匯入確認")
 	parent := moConfirmWindow
 	if parent == 0 { parent = mainWindow }
 	procMessageBoxW.Call(parent, uintptr(unsafe.Pointer(value)), uintptr(unsafe.Pointer(title)), icon)

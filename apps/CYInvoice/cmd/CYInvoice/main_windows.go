@@ -14,7 +14,6 @@ import (
 	"cyinvoice/internal/appdata"
 	"cyinvoice/internal/applog"
 	"cyinvoice/internal/securestore"
-	"cyinvoice/internal/singleinstance"
 	"cyinvoice/internal/version"
 )
 
@@ -32,9 +31,6 @@ const (
 	wmInitialSetup = 0x8001
 	wmAPIHealthResult = 0x8002
 	wmBuyerLookupResult = 0x8003
-	wmManualIssueLookupResult = 0x8004
-	wmManualIssueResult = 0x8005
-	wmRecordsRefreshResult = 0x8006
 	appIconResourceID = 2
 )
 
@@ -50,7 +46,6 @@ var (
 	procGetMessageW = user32.NewProc("GetMessageW")
 	procTranslateMessage = user32.NewProc("TranslateMessage")
 	procDispatchMessageW = user32.NewProc("DispatchMessageW")
-	procIsDialogMessageW = user32.NewProc("IsDialogMessageW")
 	procPostQuitMessage = user32.NewProc("PostQuitMessage")
 	procPostMessageW = user32.NewProc("PostMessageW")
 	procDestroyWindow = user32.NewProc("DestroyWindow")
@@ -62,9 +57,6 @@ var (
 	procSetProcessDPIAware = user32.NewProc("SetProcessDPIAware")
 	procSendMessageW = user32.NewProc("SendMessageW")
 	procSetWindowTextW = user32.NewProc("SetWindowTextW")
-	procFindWindowW = user32.NewProc("FindWindowW")
-	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
-	procIsIconic = user32.NewProc("IsIconic")
 	procGetWindowTextW = user32.NewProc("GetWindowTextW")
 	procGetWindowTextLengthW = user32.NewProc("GetWindowTextLengthW")
 	procEnableWindow = user32.NewProc("EnableWindow")
@@ -98,16 +90,6 @@ type windowClassEx struct {
 
 func main() {
 	runtime.LockOSThread()
-	instanceLock, acquired, lockErr := singleinstance.Acquire("Chihyuan.CYInvoice")
-	if lockErr != nil {
-		showError("CYInvoice 無法建立單一執行鎖：" + lockErr.Error())
-		return
-	}
-	if !acquired {
-		activateExistingWindow()
-		return
-	}
-	defer instanceLock.Close()
 	baseDir, err := executableDir()
 	if err == nil {
 		appLogger, err = applog.New(baseDir)
@@ -136,18 +118,6 @@ func main() {
 		return
 	}
 	appLogger.Infof("CYInvoice 正常結束")
-}
-
-func activateExistingWindow() {
-	name := mustUTF16Ptr(className)
-	window, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(name)), 0)
-	if window == 0 {
-		showError("CYInvoice 已經在執行中。")
-		return
-	}
-	iconic, _, _ := procIsIconic.Call(window)
-	if iconic != 0 { procShowWindow.Call(window, 9) }
-	procSetForegroundWindow.Call(window)
 }
 
 func executableDir() (string, error) {
@@ -203,27 +173,6 @@ func run() error {
 		if result == 0 {
 			return nil
 		}
-
-		// Tab/Shift+Tab use the standard Win32 dialog-navigation rules across
-		// ordinary controls. Enter remains explicit so it can never trigger the
-		// invoice default button merely because focus is inside an edit control.
-		// Product in-place edits handle Tab themselves to follow the same cell
-		// sequence as Enter.
-		if msg.Message == wmKeyDown && msg.WParam == vkReturn {
-			procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
-			procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
-			continue
-		}
-		if productCellEditor != 0 && msg.Window == productCellEditor && msg.Message == wmKeyDown && (msg.WParam == vkTab || msg.WParam == vkEscape) {
-			procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
-			procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
-			continue
-		}
-		if mainWindow != 0 {
-			if handled, _, _ := procIsDialogMessageW.Call(mainWindow, uintptr(unsafe.Pointer(&msg))); handled != 0 {
-				continue
-			}
-		}
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
 	}
@@ -260,11 +209,11 @@ func windowProc(window uintptr, msg uint32, wParam uintptr, lParam unsafe.Pointe
 		if wParam == apiRetryTimerID { refreshAPIState() }
 		return 0
 	case wmNotify:
-		if notifyResult, handled := handleNotifyMessage(lParam); handled {
-			return notifyResult
+		if handleNotifyMessage(lParam) {
+			return 0
 		}
 	case wmDrawItem:
-		if handleTabOwnerDraw(lParam) {
+		if handleOwnerDraw(lParam) {
 			return 1
 		}
 	case wmSize:
@@ -277,10 +226,8 @@ func windowProc(window uintptr, msg uint32, wParam uintptr, lParam unsafe.Pointe
 		if brush := handleStaticColor(wParam, uintptr(lParam)); brush != 0 {
 			return brush
 		}
-	case wmCtlColorEdit:
-		return handleStaticColor(wParam, uintptr(lParam))
 	case wmCtlColorBtn:
-		return handleButtonColor(wParam)
+		return handlePlainControlColor(wParam)
 	case wmInitialSetup:
 		if err := runInitialSetup(); err != nil {
 			appLogger.Errorf("initial setup: %v", err)
@@ -292,15 +239,6 @@ func windowProc(window uintptr, msg uint32, wParam uintptr, lParam unsafe.Pointe
 		return 0
 	case wmBuyerLookupResult:
 		finishBuyerNameLookup(uint64(wParam))
-		return 0
-	case wmManualIssueLookupResult:
-		finishManualIssueLookup(uint64(wParam))
-		return 0
-	case wmManualIssueResult:
-		finishManualIssue(uint64(wParam))
-		return 0
-	case wmRecordsRefreshResult:
-		finishRecordsRefresh(uint64(wParam))
 		return 0
 	case wmDestroy:
 		procPostQuitMessage.Call(0)

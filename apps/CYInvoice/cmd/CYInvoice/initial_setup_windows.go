@@ -47,6 +47,8 @@ func runInitialSetup() error {
 		IconSmall: loadApplicationIcon(instance),
 	}
 	if registered, _, registerErr := procRegisterClassExW.Call(uintptr(unsafe.Pointer(&class))); registered == 0 {
+		// The setup window is normally created once per process. If Windows says
+		// the class already exists, creating the window is still safe.
 		if errno, ok := registerErr.(syscall.Errno); !ok || errno != 1410 { return fmt.Errorf("RegisterClassExW: %v", registerErr) }
 	}
 	title := mustUTF16Ptr("CYInvoice 首次安全設定")
@@ -55,10 +57,23 @@ func runInitialSetup() error {
 		0x00C00000|0x00080000, cwUseDefault, cwUseDefault, setupWidth, setupHeight, mainWindow, 0, instance, 0)
 	if initialSetupWindow == 0 { return fmt.Errorf("CreateWindowExW: %v", callErr) }
 	centerWindowOnParent(initialSetupWindow, mainWindow, setupWidth, setupHeight)
-	if err := runOwnedModalWindow(mainWindow, initialSetupWindow, handles[idSetupAdminPassword]); err != nil {
-		if initialSetupWindow != 0 { procDestroyWindow.Call(initialSetupWindow) }
-		return err
+	procEnableWindow.Call(mainWindow, 0)
+	procShowWindow.Call(initialSetupWindow, swShow)
+	procUpdateWindow.Call(initialSetupWindow)
+	procSetFocus.Call(handles[idSetupAdminPassword])
+
+	var msg message
+	for {
+		alive, _, _ := procIsWindow.Call(initialSetupWindow)
+		if alive == 0 { break }
+		result, _, messageErr := procGetMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if int32(result) == -1 { return fmt.Errorf("GetMessageW: %v", messageErr) }
+		if result == 0 { procPostQuitMessage.Call(0); break }
+		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
 	}
+	procEnableWindow.Call(mainWindow, 1)
+	procSetFocus.Call(mainWindow)
 	refreshAPIState()
 	return nil
 }
@@ -72,22 +87,10 @@ func initialSetupProc(window uintptr, msg uint32, wParam, lParam uintptr) uintpt
 	case wmCommand:
 		if int(wParam&0xffff) == idSetupSave { saveInitialSetup() }
 		return 0
-	case wmCtlColorStatic:
+	case wmCtlColorStatic, wmCtlColorBtn:
 		return handlePlainControlColor(wParam)
-	case wmCtlColorEdit:
-		return handleStaticColor(wParam, lParam)
-	case wmCtlColorBtn:
-		return handleButtonColor(wParam)
 	case wmClose:
 		setupMessage("首次使用必須設定管理密碼與 MO店+ Excel 密碼，完成後才能進入程式。", 0x30)
-		return 0
-	case wmDestroy:
-		for handle := range initialSetupEditOriginalProcs {
-			delete(initialSetupEditOriginalProcs, handle)
-			delete(initialSetupEditNext, handle)
-		}
-		forgetControlIDs(idSetupAdminPassword, idSetupMOPassword, idSetupSave)
-		initialSetupWindow = 0
 		return 0
 	default:
 		result, _, _ := procDefWindowProcW.Call(window, uintptr(msg), wParam, lParam)
