@@ -1,5 +1,6 @@
 param(
     [string]$Version = "",
+    [string]$Build = "",
     [string]$Commit = ""
 )
 
@@ -12,6 +13,19 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 }
 if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
     throw "Invalid CYInvoice version: $Version"
+}
+if ([string]::IsNullOrWhiteSpace($Build)) {
+    $Build = (Get-Content (Join-Path $ProjectRoot "BUILD") -Raw).Trim()
+}
+if ($Build -notmatch '^\d+$') {
+    throw "Invalid CYInvoice build: $Build"
+}
+$BuildNumber = [int]$Build
+$DisplayVersion = "V$Version"
+$ArtifactVersion = "V$Version"
+if ($BuildNumber -gt 0) {
+    $DisplayVersion = "V$Version Build $BuildNumber"
+    $ArtifactVersion = "V${Version}_Build${BuildNumber}"
 }
 
 if ([string]::IsNullOrWhiteSpace($Commit)) {
@@ -30,7 +44,7 @@ $ResourceFile = Join-Path $ProjectRoot "cmd/CYInvoice/rsrc_windows_amd64.syso"
 $DistRoot = Join-Path $ProjectRoot "dist"
 $ReleaseDir = Join-Path $DistRoot "CYInvoice"
 $ExePath = Join-Path $ReleaseDir "CYInvoice.exe"
-$ZipPath = Join-Path $DistRoot ("CYInvoice_V{0}.zip" -f $Version)
+$ZipPath = Join-Path $DistRoot ("CYInvoice_{0}.zip" -f $ArtifactVersion)
 
 if (Test-Path $DistRoot) {
     Remove-Item $DistRoot -Recurse -Force
@@ -62,7 +76,7 @@ try {
             throw "Resource generation failed."
         }
 
-        $LdFlags = "-H=windowsgui -s -w -X cyinvoice/internal/version.Value=$Version -X cyinvoice/internal/version.Commit=$Commit"
+        $LdFlags = "-H=windowsgui -s -w -X cyinvoice/internal/version.Value=$Version -X cyinvoice/internal/version.Build=$BuildNumber -X cyinvoice/internal/version.Commit=$Commit"
         & go build -trimpath -buildvcs=false -ldflags $LdFlags -o $ExePath ./cmd/CYInvoice
         if ($LASTEXITCODE -ne 0) {
             throw "Go build failed."
@@ -86,16 +100,16 @@ Copy-Item (Join-Path $ProjectRoot "使用說明.txt") $ReleaseDir
 
 $ReleaseDate = Get-Date -Format "yyyy/MM/dd"
 $VersionNote = @"
-Version: V$Version
+Version: $DisplayVersion
 Date: $ReleaseDate
 Commit: $Commit
 
-CYInvoice $Version。
+CYInvoice $DisplayVersion。
 
 已包含手動開立、MO店+／酷澎共用匯入確認、開立清單、狀態查詢、防重複開票及測試池個資遮蔽。
 鼎新 ERP 已統一確認入口，待取得實際銷貨單樣本與欄位規則後完成來源解析器。
 "@
-Set-Content -Path (Join-Path $ReleaseDir ("V{0}.txt" -f $Version)) -Value $VersionNote -Encoding UTF8
+Set-Content -Path (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) -Value $VersionNote -Encoding UTF8
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)

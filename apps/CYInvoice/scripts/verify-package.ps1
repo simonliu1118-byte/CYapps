@@ -3,11 +3,21 @@ param(
     [string]$Path,
 
     [Parameter(Mandatory = $true)]
-    [string]$Version
+    [string]$Version,
+
+    [int]$Build = 0
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+if ($Build -lt 0) {
+    throw "CYInvoice Build cannot be negative: $Build"
+}
+$ArtifactVersion = "V$Version"
+if ($Build -gt 0) {
+    $ArtifactVersion = "V${Version}_Build${Build}"
+}
 
 $ResolvedPath = Resolve-Path $Path
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -20,9 +30,9 @@ finally {
 }
 
 $RequiredEntries = @(
-	"CYInvoice/CYInvoice.exe",
-	"CYInvoice/V$Version.txt",
-	"CYInvoice/使用說明.txt",
+    "CYInvoice/CYInvoice.exe",
+    "CYInvoice/$ArtifactVersion.txt",
+    "CYInvoice/使用說明.txt",
     "CYInvoice/Data/",
     "CYInvoice/Cache/",
     "CYInvoice/Cache/InvoicePDF/",
@@ -45,4 +55,4 @@ if ($VersionFiles.Count -ne 1) {
     throw "Release ZIP must contain exactly one root-level version TXT file."
 }
 
-Write-Host "Package layout verified for CYInvoice V$Version."
+Write-Host "Package layout verified for CYInvoice $ArtifactVersion."

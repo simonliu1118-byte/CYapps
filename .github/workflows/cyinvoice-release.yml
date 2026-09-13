@@ -1,0 +1,129 @@
+name: CYInvoice Go Stable Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Confirm stable Go version (example: 1.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cyinvoice-release
+  cancel-in-progress: false
+
+jobs:
+  release-windows-x64:
+    runs-on: windows-2022
+    defaults:
+      run:
+        working-directory: apps/CYInvoice
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/CYInvoice/go.mod
+          cache: false
+
+      - name: Validate stable Go release identity
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_NAME -ne "main") {
+            throw "Formal CYInvoice Go releases must run from main; got $env:GITHUB_REF_NAME"
+          }
+
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "A formal Go release requires a stable semantic VERSION; got $version"
+          }
+
+          $confirmed = "${{ inputs.version }}".Trim()
+          if ($confirmed -ne $version) {
+            throw "Confirmed version $confirmed does not match VERSION $version"
+          }
+
+          if ($confirmed -match '(?i)cs|preview|rc') {
+            throw "C# / preview / RC identities cannot use the stable Go release workflow"
+          }
+
+          $build = (Get-Content ./BUILD -Raw).Trim()
+          if ($build -notmatch '^\d+$') {
+            throw "A formal Go release requires a numeric BUILD; got $build"
+          }
+          if ([int]$build -ne 0) {
+            throw "Formal release is blocked because BUILD=$build. Confirm the final release version with the project owner, then reset BUILD through a reviewed version change."
+          }
+
+          "CYINVOICE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CYINVOICE_BUILD=0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CYINVOICE_TAG=cyinvoice-v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify module files are reproducible
+        shell: pwsh
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Scan tracked source for confidential runtime data
+        shell: pwsh
+        run: ./scripts/verify-source.ps1
+
+      - name: Run tests and static analysis
+        shell: pwsh
+        run: |
+          go test ./...
+          go vet ./...
+
+      - name: Build and verify Windows x64 release
+        shell: pwsh
+        run: |
+          ./scripts/build.ps1
+          ./scripts/verify-pe.ps1 -Path ./dist/CYInvoice/CYInvoice.exe
+          ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) -Version $env:CYINVOICE_VERSION -Build $env:CYINVOICE_BUILD
+
+      - name: Create checksum and public release notes
+        shell: pwsh
+        run: |
+          $zipName = "CYInvoice_V$env:CYINVOICE_VERSION.zip"
+          $zipPath = Join-Path ./dist $zipName
+          $hash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $zipName" | Set-Content -Path "$zipPath.sha256" -Encoding ascii
+          $year = (Get-Date).Year
+          @"
+          CYInvoice V$env:CYINVOICE_VERSION
+
+          Windows 10/11 x64 正式版（Go stable line）。
+
+          Copyright © $year C.C. Liu, Chihyuan Co. All Rights Reserved.
+
+          - 下載 $zipName 後解壓縮，直接執行 CYInvoice.exe。
+          - 首次啟動會要求建立管理密碼及 MO店+ Excel 密碼。
+          - 發行包與 SHA-256 均由本次正式 Release workflow 重新建置與驗證。
+          - Public 可下載不代表開放原始碼；使用、修改與散布權利以 repository LICENSE 為準。
+          - `V1.1.0-cs.N` C# / WinForms remake 屬獨立測試線，不是本正式 Go Release。
+          "@ | Set-Content -Path ./dist/release-notes.md -Encoding utf8
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view $env:CYINVOICE_TAG --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $env:CYINVOICE_TAG already exists; refusing to overwrite it"
+          }
+          gh release create $env:CYINVOICE_TAG `
+            ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) `
+            ("./dist/CYInvoice_V{0}.zip.sha256" -f $env:CYINVOICE_VERSION) `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title "CYInvoice V$env:CYINVOICE_VERSION" `
+            --notes-file ./dist/release-notes.md `
+            --latest=false
