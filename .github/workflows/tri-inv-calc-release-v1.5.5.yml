@@ -1,0 +1,95 @@
+name: TriINVCalc V1.5.5 Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/TriINVCalc/RELEASE_V1.5.5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: triinvcalc-v1.5.5-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/TriINVCalc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.22.x'
+          cache: true
+          cache-dependency-path: apps/TriINVCalc/go.mod
+
+      - name: Build and test release package
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Generate SHA-256 checksums
+        shell: pwsh
+        run: |
+          $zip = Join-Path $PWD 'dist/TriINVCalc_V1.5.5.zip'
+          $exe = Join-Path $PWD 'dist/TriINVCalc/TriINVCalc.exe'
+          if (!(Test-Path $zip)) { throw "Release ZIP not found: $zip" }
+          if (!(Test-Path $exe)) { throw "Release EXE not found: $exe" }
+          $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $exeHash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          @(
+            "$zipHash  TriINVCalc_V1.5.5.zip"
+            "$exeHash  TriINVCalc.exe"
+          ) | Set-Content -Encoding ascii (Join-Path $PWD 'dist/SHA256SUMS.txt')
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'TriINVCalc-v1.5.5'
+          gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $tag already exists; refusing to overwrite an existing formal release."
+          }
+          $notes = @'
+          ## TriINVCalc V1.5.5
+
+          **三聯式發票開立計算機**首次納入 CYapps 的正式公開版本。
+
+          ### 本版重點
+          - Windows 10/11 x64 portable 工具，無需安裝。
+          - 固定五列商品輸入，支援含稅單價、含稅折扣與 5% 營業稅試算。
+          - 明細未稅金額含尾差分配與四層金額核對。
+          - Enter／Tab 依既定順序移動欄位。
+          - 內建 Trace／ERROR 本機除錯 LOG；LOG 不包含於正式發行包。
+          - Windows GUI 子系統，不開啟 Console／PowerShell 視窗。
+          - 已內嵌標準 Windows PE Icon 與 Manifest。
+          - 畫面署名：© 2026 C.C.LIU All Rights Reserved.
+
+          ### 檔案
+          - `TriINVCalc_V1.5.5.zip`：建議下載的 portable package。
+          - `TriINVCalc.exe`：單獨執行檔。
+          - `SHA256SUMS.txt`：上述檔案的 SHA-256 校驗值。
+
+          Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
+          '@
+          $notesPath = Join-Path $env:RUNNER_TEMP 'TriINVCalc_V1.5.5_release_notes.md'
+          $notes | Set-Content -Encoding utf8 $notesPath
+          gh release create $tag `
+            'dist/TriINVCalc_V1.5.5.zip#TriINVCalc V1.5.5 Portable ZIP' `
+            'dist/TriINVCalc/TriINVCalc.exe#TriINVCalc.exe' `
+            'dist/SHA256SUMS.txt#SHA-256 checksums' `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title 'TriINVCalc V1.5.5｜三聯式發票開立計算機' `
+            --notes-file $notesPath
