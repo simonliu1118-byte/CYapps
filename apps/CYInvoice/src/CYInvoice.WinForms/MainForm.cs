@@ -215,11 +215,11 @@ internal static class ApplicationVersion
         try
         {
             var value = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "VERSION-CS")).Trim();
-            return value.Length == 0 ? "1.1.0-cs.3" : value;
+            return value.Length == 0 ? "1.1.0-cs.4" : value;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            return "1.1.0-cs.3";
+            return "1.1.0-cs.4";
         }
     }
 }

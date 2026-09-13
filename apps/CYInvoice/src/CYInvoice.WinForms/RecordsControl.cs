@@ -22,7 +22,7 @@ internal sealed class RecordsControl : UserControl
     private readonly Button refreshButton = new() { Text = "重新整理狀態", Width = 135, Height = 34 };
     private readonly List<InvoiceRecord> visible = [];
     private bool updatingPlaceholders;
-    private bool clearingSelection;
+    private bool selectionClearQueued;
 
     public RecordsControl(LocalRepository repository, InvoiceService service)
     {
@@ -106,7 +106,14 @@ internal sealed class RecordsControl : UserControl
         UiControls.ReserveVerticalScrollBar(grid, 5);
         grid.CellDoubleClick += (_, eventArgs) => OpenSelected(eventArgs.RowIndex);
         grid.CellFormatting += FormatCell;
-        grid.SelectionChanged += (_, _) => ClearPlaceholderSelection();
+        grid.CellMouseDown += (_, eventArgs) =>
+        {
+            if (eventArgs.RowIndex >= visible.Count) QueuePlaceholderSelectionClear();
+        };
+        grid.CellEnter += (_, eventArgs) =>
+        {
+            if (eventArgs.RowIndex >= visible.Count) QueuePlaceholderSelectionClear();
+        };
         grid.SizeChanged += (_, _) => EnsurePlaceholderRows();
     }
 
@@ -212,13 +219,23 @@ internal sealed class RecordsControl : UserControl
         }
     }
 
-    private void ClearPlaceholderSelection()
+    private void QueuePlaceholderSelectionClear()
     {
-        if (clearingSelection || grid.CurrentCell is null || grid.CurrentCell.RowIndex < visible.Count) return;
-        clearingSelection = true;
-        grid.ClearSelection();
-        grid.CurrentCell = null;
-        clearingSelection = false;
+        if (selectionClearQueued || !grid.IsHandleCreated || grid.IsDisposed) return;
+        selectionClearQueued = true;
+        grid.BeginInvoke((Action)(() =>
+        {
+            try
+            {
+                if (grid.CurrentCell is null || grid.CurrentCell.RowIndex < visible.Count) return;
+                grid.ClearSelection();
+                grid.CurrentCell = null;
+            }
+            finally
+            {
+                selectionClearQueued = false;
+            }
+        }));
     }
 
     private void FormatCell(object? sender, DataGridViewCellFormattingEventArgs eventArgs)

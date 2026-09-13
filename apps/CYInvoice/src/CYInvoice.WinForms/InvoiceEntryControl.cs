@@ -41,7 +41,7 @@ internal sealed class InvoiceEntryControl : UserControl
     };
     private NameLookup? cachedLookup;
     private string cachedBan = string.Empty;
-    private bool clearingGridSelection;
+    private bool gridSelectionClearQueued;
 
     public InvoiceEntryControl(LocalRepository repository, InvoiceService service, Action recordsChanged)
     {
@@ -228,9 +228,14 @@ internal sealed class InvoiceEntryControl : UserControl
         {
             if (eventArgs.RowIndex < 0) return;
             if (eventArgs.ColumnIndex == 5 || IsPlaceholder(items.Rows[eventArgs.RowIndex]))
-                BeginInvoke(ClearInvalidGridSelection);
+                QueueInvalidGridSelectionClear();
         };
-        items.SelectionChanged += (_, _) => ClearInvalidGridSelection();
+        items.CellEnter += (_, eventArgs) =>
+        {
+            if (eventArgs.RowIndex < 0) return;
+            if (eventArgs.ColumnIndex == 5 || IsPlaceholder(items.Rows[eventArgs.RowIndex]))
+                QueueInvalidGridSelectionClear();
+        };
         items.EditingControlShowing += ConfigureItemEditor;
         items.KeyDown += ItemGridKeyDown;
         items.DataError += (_, eventArgs) => eventArgs.ThrowException = false;
@@ -573,15 +578,24 @@ internal sealed class InvoiceEntryControl : UserControl
         items.BeginEdit(true);
     }
 
-    private void ClearInvalidGridSelection()
+    private void QueueInvalidGridSelectionClear()
     {
-        if (clearingGridSelection) return;
-        var current = items.CurrentCell;
-        if (current is null || (current.ColumnIndex != 5 && !IsPlaceholder(items.Rows[current.RowIndex]))) return;
-        clearingGridSelection = true;
-        items.ClearSelection();
-        items.CurrentCell = null;
-        clearingGridSelection = false;
+        if (gridSelectionClearQueued || !items.IsHandleCreated || items.IsDisposed) return;
+        gridSelectionClearQueued = true;
+        items.BeginInvoke((Action)(() =>
+        {
+            try
+            {
+                var current = items.CurrentCell;
+                if (current is null || (current.ColumnIndex != 5 && !IsPlaceholder(items.Rows[current.RowIndex]))) return;
+                items.ClearSelection();
+                items.CurrentCell = null;
+            }
+            finally
+            {
+                gridSelectionClearQueued = false;
+            }
+        }));
     }
     private static string Cell(DataGridViewRow row, int column) => Convert.ToString(row.Cells[column].Value, CultureInfo.CurrentCulture)?.Trim() ?? string.Empty;
     private static string Clean(string value) => value.Replace(",", string.Empty, StringComparison.Ordinal).Trim();
