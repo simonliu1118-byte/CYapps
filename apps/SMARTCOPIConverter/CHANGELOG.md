@@ -1,5 +1,10 @@
 # Changelog
 
+## V1.0.0 Build 2 — 2026/09/13
+
+- 修正按「選擇檔案」時因 `OPENFILENAMEW` filter 直接傳入含 NUL 的字串，造成 `syscall.StringToUTF16` panic 並結束程式的問題。
+- filter 改為逐段轉成 UTF-16，再組成 Win32 要求的 NUL 分隔與雙 NUL 結尾格式。
+
 ## V1.0.0 Build 1 — 2026/09/13
 
 - 修正首次設定 POS 輸出資料夾後可能無回應的問題：首次設定改為主訊息迴圈啟動後，以事件觸發原生資料夾選擇器。
