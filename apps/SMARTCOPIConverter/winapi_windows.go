@@ -27,15 +27,17 @@ const (
 
 	SW_SHOW = 5
 
-	WM_CREATE    = 0x0001
-	WM_DESTROY   = 0x0002
-	WM_CLOSE     = 0x0010
-	WM_COMMAND   = 0x0111
-	WM_NOTIFY    = 0x004E
-	WM_SETFONT   = 0x0030
-	WM_APP       = 0x8000
-	WM_UI_EVENT  = WM_APP + 1
-	WM_FIRST_RUN = WM_APP + 2
+	WM_CREATE         = 0x0001
+	WM_DESTROY        = 0x0002
+	WM_CLOSE          = 0x0010
+	WM_COMMAND        = 0x0111
+	WM_NOTIFY         = 0x004E
+	WM_SETFONT        = 0x0030
+	WM_CTLCOLORBTN    = 0x0135
+	WM_CTLCOLORSTATIC = 0x0138
+	WM_APP            = 0x8000
+	WM_UI_EVENT       = WM_APP + 1
+	WM_FIRST_RUN      = WM_APP + 2
 
 	BM_GETCHECK = 0x00F0
 	BST_CHECKED = 1
@@ -74,6 +76,9 @@ const (
 	FOS_FORCEFILESYSTEM      = 0x00000040
 	FOS_PATHMUSTEXIST        = 0x00000800
 	SIGDN_FILESYSPATH        = 0x80058000
+
+	COLOR_WINDOW = 5
+	TRANSPARENT  = 1
 )
 
 const (
@@ -224,11 +229,13 @@ var (
 	pEnableWindow     = user32.NewProc("EnableWindow")
 	pLoadCursorW      = user32.NewProc("LoadCursorW")
 	pLoadIconW        = user32.NewProc("LoadIconW")
+	pGetSysColorBrush = user32.NewProc("GetSysColorBrush")
 
 	pGetModuleHandleW   = kernel32.NewProc("GetModuleHandleW")
 	pGetOpenFileNameW   = comdlg32.NewProc("GetOpenFileNameW")
 	pShellExecuteW      = shell32.NewProc("ShellExecuteW")
 	pCreateFontW        = gdi32.NewProc("CreateFontW")
+	pSetBkMode          = gdi32.NewProc("SetBkMode")
 	pInitCommonControls = comctl32.NewProc("InitCommonControls")
 
 	pCoInitializeEx   = ole32.NewProc("CoInitializeEx")
