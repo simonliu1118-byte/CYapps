@@ -62,6 +62,19 @@ func wndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 	case WM_UI_EVENT:
 		handleUIEvents()
 		return 0
+	case WM_CTLCOLORSTATIC:
+		// Keep native STATIC controls visually consistent with the white main window.
+		// This is standard Win32 color handling, not custom/owner drawing.
+		pSetBkMode.Call(wparam, TRANSPARENT)
+		brush, _, _ := pGetSysColorBrush.Call(COLOR_WINDOW)
+		return brush
+	case WM_CTLCOLORBTN:
+		// The checkbox label otherwise inherits the dialog/button-face gray background.
+		if lparam == hwndLog {
+			pSetBkMode.Call(wparam, TRANSPARENT)
+			brush, _, _ := pGetSysColorBrush.Call(COLOR_WINDOW)
+			return brush
+		}
 	case WM_CLOSE:
 		if converting {
 			message("轉換中", "目前正在轉換檔案，請等待完成。", MB_OK|MB_ICONWARNING)
