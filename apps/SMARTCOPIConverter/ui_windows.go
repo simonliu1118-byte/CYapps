@@ -367,12 +367,13 @@ func openFileDialog(owner uintptr) ([]string, error) {
 	buf := make([]uint16, 65536)
 	filter := makeOpenFileFilter("Excel 檔案 (*.xlsx)", "*.xlsx", "所有檔案 (*.*)", "*.*")
 	ofn := OPENFILENAMEW{LStructSize: uint32(unsafe.Sizeof(OPENFILENAMEW{})), HwndOwner: owner, LpstrFilter: &filter[0], LpstrFile: &buf[0], NMaxFile: uint32(len(buf)), LpstrTitle: wstr("選擇 COPI 匯出的 Excel 檔案"), Flags: OFN_ALLOWMULTISELECT | OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST, LpstrDefExt: wstr("xlsx")}
-	r, _, e := pGetOpenFileNameW.Call(uintptr(unsafe.Pointer(&ofn)))
+	r, _, _ := pGetOpenFileNameW.Call(uintptr(unsafe.Pointer(&ofn)))
 	if r == 0 {
-		if errno, ok := e.(syscall.Errno); ok && errno != 0 {
-			return nil, e
+		code, _, _ := pCommDlgExtendedError.Call()
+		if code == 0 {
+			return nil, nil // user canceled
 		}
-		return nil, nil
+		return nil, fmt.Errorf("檔案選擇器失敗 (0x%04X)", uint32(code))
 	}
 	parts := splitUTF16Multi(buf)
 	if len(parts) == 0 {
