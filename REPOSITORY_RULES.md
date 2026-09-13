@@ -93,6 +93,22 @@
 - 純測試 CI 與 Codex、Claude 等計量式 AI 審查應盡量解耦；不得每次 push 都重新啟動昂貴 AI 審查。
 - GitHub 官方 Actions 使用仍受支援的穩定 major 版本；不為追新而無意義頻繁升級。
 
+### 7.1 Local-first 與 Token／工具成本控制
+
+核心原則：**Local-first development, GitHub-final verification。** 目標是減少不必要的上下文、GitHub 往返與 Actions 消耗，但不得降低必要驗證或發布可靠度。
+
+- 新對話、新工作階段或重新接手專案時，仍須完整確認正式規則鏈與目前基準；同一工作階段內，已確認且未變更的治理文件、README、CHANGELOG、workflow 或完整 source 不應無理由反覆重讀。
+- 只有 Governance／`PROJECT_RULES.md` 更新、`main`／工作 branch 基準有重大變更、需要重新建立上下文、或使用者明確要求完整審查時，才重新做全面確認。
+- 日常修改先讀本次需求真正相關的檔案與相依區段；不得形成「完整讀 repo → 小改 → push → 再完整讀 repo」的高成本循環。
+- 優先在目前工作環境完成 source 修改、可用的 unit test、static check、lint 與可行的 build；Go／Win32 專案若環境可行，可先做 Windows cross-build，但 cross-build 不取代真正 Windows-specific 驗證。
+- 同一輪相關修正應先集中完成與本地檢查，再形成合理的一個 commit／push 單位；除非需要遠端資訊才能繼續，不應每修一個小問題就立即 push 或觸發 CI。
+- GitHub Windows CI 主要作為一輪修改完成後的正式 Windows 驗收層。Win32／WinForms、icon/resource/manifest、Windows DLL linkage、Registry、printer API、WebView2、PowerShell packaging、Release build，以及本地環境無法可靠驗證的 Windows-specific 項目，仍應使用真正 Windows runner 驗證。
+- GitHub Actions 成功時，預設只確認 workflow/job/step 成功、tests 結果與必要 artifact／EXE／ZIP 是否產生；不得無理由讀取完整成功 log。
+- GitHub Actions 失敗時，先讀失敗 step、error 與其前後必要區段；只有原因仍無法判斷時才逐步擴大 log 範圍，不預設把整份長 log 載入上下文。
+- push 後預設只核對本次 commit／diff、必要檔案與 CI 結果；除非基準或治理已變更，不重新掃描整個 repository。
+- 編譯、測試、ZIP、封裝與必要驗收本身不得為了省 Token 而省略；要節省的是重複讀取、無效 GitHub 往返、過度細碎 push 與不必要完整 log。
+- 個別專案若因技術特性不適合完全採用此流程，可由 `PROJECT_RULES.md` 補充例外；例外應維持同一原則：**先減少重複工作，再談減少必要驗證。**
+
 ## 8. 測試包、Artifact 與上傳規則
 
 - 開發中供驗證的 Windows x64 包預設使用 Actions artifact；正式版使用 GitHub Release，除非 `PROJECT_RULES.md` 明確定義不同流程。

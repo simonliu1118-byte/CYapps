@@ -1,0 +1,12 @@
+TriINVCalc V1.5.5
+三聯式發票開立計算機
+
+- 固定五筆商品輸入與三聯式發票即時預覽。
+- 應稅 5% 含稅總計反推營業稅與未稅銷售額。
+- 含稅折扣與尾差調整。
+- 未稅單價最多三位小數，確保顯示單價 × 數量可核對至整數金額。
+- Enter／Tab 輸入流程、循環 Trace log 與獨立 ERROR log。
+- Windows GUI subsystem 與標準 PE Icon resource。
+- 程式畫面顯示 © 2026 C.C.LIU All Rights Reserved. 小型署名。
+
+Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.

@@ -1,0 +1,19 @@
+# Build outputs
+dist/
+*.exe
+*.zip
+*.syso
+
+# Generated icon
+assets/icon.ico
+
+# Runtime logs
+*.log
+
+# Local/editor files
+.vscode/
+.idea/
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store

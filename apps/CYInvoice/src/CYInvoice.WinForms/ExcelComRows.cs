@@ -102,7 +102,7 @@ internal static class ExcelComRows
             }
             if (rowCount > XlsxRows.MaximumRows || columnCount > XlsxRows.MaximumColumns)
             {
-                throw new InvalidDataException($"Excel 使用範圍異常（${rowCount} 列 × ${columnCount} 欄），已停止匯入");
+                throw new InvalidDataException($"Excel 使用範圍異常（{rowCount} 列 × {columnCount} 欄），已停止匯入");
             }
 
             cells = GetProperty(usedRange, "Cells");
@@ -125,7 +125,7 @@ internal static class ExcelComRows
                     catch (Exception error)
                     {
                         throw new InvalidDataException(
-                            $"讀取 Excel 第 ${rowIndex} 列第 ${columnIndex} 欄內容失敗", Unwrap(error));
+                            $"讀取 Excel 第 {rowIndex} 列第 {columnIndex} 欄內容失敗", Unwrap(error));
                     }
                     finally
                     {
@@ -178,7 +178,7 @@ internal static class ExcelComRows
         }
         catch (Exception error)
         {
-            throw new InvalidOperationException($"${message}，為保護電腦已停止匯入", Unwrap(error));
+            throw new InvalidOperationException($"{message}，為保護電腦已停止匯入", Unwrap(error));
         }
     }
 
@@ -193,7 +193,7 @@ internal static class ExcelComRows
         }
         catch (Exception error)
         {
-            throw new InvalidDataException($"取得 Excel ${collectionName} 數量失敗", Unwrap(error));
+            throw new InvalidDataException($"取得 Excel {collectionName} 數量失敗", Unwrap(error));
         }
         finally
         {
@@ -203,7 +203,7 @@ internal static class ExcelComRows
 
     private static object GetProperty(object target, string name, params object?[] arguments) =>
         InvokeMember(target, name, BindingFlags.GetProperty, arguments)
-        ?? throw new InvalidOperationException($"Excel ${name} 沒有回傳物件");
+        ?? throw new InvalidOperationException($"Excel {name} 沒有回傳物件");
 
     private static object? GetOptionalProperty(object target, string name) =>
         InvokeMember(target, name, BindingFlags.GetProperty, []);

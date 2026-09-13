@@ -322,23 +322,15 @@ public static class MoImporter
     private static bool RowBlank(IEnumerable<string> row) => row.All(string.IsNullOrWhiteSpace);
     private static string CleanNumber(string value) => value.Trim().Replace(",", string.Empty, StringComparison.Ordinal);
 
-    private static double ParseDouble(string value, string message)
-    {
-        if (!double.TryParse(CleanNumber(value), NumberStyles.Float, CultureInfo.InvariantCulture, out var result) || !double.IsFinite(result))
-        {
-            throw new InvalidDataException(message);
-        }
-        return result;
-    }
-
     private static long ParseInteger(string value)
     {
-        var number = ParseDouble(value, "整數格式錯誤");
-        if (Math.Truncate(number) != number || number < long.MinValue || number > long.MaxValue)
+        var number = FixedDecimal.Parse(CleanNumber(value));
+        var integer = number.RoundInt64();
+        if (FixedDecimal.FromInt64(integer) != number)
         {
             throw new FormatException("not an integer");
         }
-        return checked((long)number);
+        return integer;
     }
 
     private sealed class RawOrderAmounts

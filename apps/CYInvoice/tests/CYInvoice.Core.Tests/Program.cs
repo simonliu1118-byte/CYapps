@@ -34,6 +34,18 @@ var tests = new (string Name, Action Run)[]
         Equal("12,345.6700000", MoneyFormatter.Decimal("12345.6700000"));
         Equal("not-a-number", MoneyFormatter.Decimal("not-a-number"));
     }),
+    ("manual order ID continues today's sequence", () =>
+    {
+        var now = new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.FromHours(8));
+        var records = new[]
+        {
+            new InvoiceRecord { OrderId = "20260913001" },
+            new InvoiceRecord { OrderId = "20260913007" },
+            new InvoiceRecord { OrderId = "20260912099" },
+            new InvoiceRecord { OrderId = "20260913ABC" },
+        };
+        Equal("20260913008", ManualOrderId.Next(now, records));
+    }),
     ("invoice total validation", () =>
     {
         var draft = ValidDraft();
@@ -94,6 +106,7 @@ var tests = new (string Name, Action Run)[]
     ("Coupang import keeps seven-place fractional unit price", TestCoupangFractionalUnitPrice),
     ("MO converted workbook is rejected at the import boundary", TestMoConvertedRejected),
     ("MO raw export uses official invoice amounts", TestMoRawOfficialAmounts),
+    ("MO official amounts reject scientific notation", TestMoScientificAmountRejected),
     ("MO raw export allows official rounded subtotal", TestMoRawRoundedSubtotal),
     ("MO raw export adds subsidy only when total requires it", TestMoRawConditionalSubsidy),
     ("MO raw export preserves specifications and member carrier", TestMoRawSpecifications),
@@ -699,6 +712,16 @@ static void TestMoRawRoundedSubtotal()
     Equal(100L, item.Amount);
     Equal(true, item.AllowSubtotalRounding);
     Equal("33.3333333", item.UnitPriceDecimal);
+}
+
+static void TestMoScientificAmountRejected()
+{
+    IReadOnlyList<IReadOnlyList<string>> rows =
+    [
+        MoRawHeader(),
+        ["ORDER-SCI", "商品", "", "", "1", "應稅", "", "0", "0", "0", "1e2", "100", ""],
+    ];
+    Throws<InvalidDataException>(() => MoImporter.ParseRows(rows));
 }
 
 static void TestMoRawConditionalSubsidy()
