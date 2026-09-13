@@ -1,0 +1,41 @@
+name: TriINVCalc Build and Test
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'apps/TriINVCalc/**'
+      - '.github/workflows/tri-inv-calc-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: triinvcalc-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.22.x'
+          cache-dependency-path: apps/TriINVCalc/go.mod
+
+      - name: Build and test portable package
+        shell: pwsh
+        working-directory: apps/TriINVCalc
+        run: ./build.ps1
+
+      - name: Upload engineering artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TriINVCalc-${{ github.sha }}
+          path: apps/TriINVCalc/dist/*.zip
+          retention-days: 14
+          if-no-files-found: error
