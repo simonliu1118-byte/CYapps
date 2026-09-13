@@ -55,7 +55,7 @@ const (
 	CS_VREDRAW = 0x0001
 
 	IDC_ARROW  = 32512
-	IDI_APP    = 1
+	IDI_APP    = 2
 	ICON_SMALL = 0
 	ICON_BIG   = 1
 
