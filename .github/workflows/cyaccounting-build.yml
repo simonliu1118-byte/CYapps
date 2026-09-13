@@ -78,9 +78,9 @@ jobs:
       - name: Compile Windows GUI launcher
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force build | Out-Null
-          go build -trimpath -ldflags="-H windowsgui" -o build/CYAccountingLauncher.exe launcher_go/main.go
-          if (-not (Test-Path build/CYAccountingLauncher.exe)) { throw "launcher build failed" }
+          New-Item -ItemType Directory -Force out | Out-Null
+          go build -trimpath -ldflags="-H windowsgui" -o out/CYAccountingLauncher.exe launcher_go/main.go
+          if (-not (Test-Path out/CYAccountingLauncher.exe)) { throw "launcher build failed" }
 
       - name: Test Windows GUI launcher lifecycle
         shell: pwsh
@@ -89,8 +89,8 @@ jobs:
       - name: Build reproducible source archive
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force build | Out-Null
-          $output = "build/cyaccounting-v$env:CYACCOUNTING_VERSION-source.tar.gz"
+          New-Item -ItemType Directory -Force out | Out-Null
+          $output = "out/cyaccounting-v$env:CYACCOUNTING_VERSION-source.tar.gz"
           python tools/create_source_archive.py --output $output
 
       - name: Upload source verification archive
@@ -98,7 +98,7 @@ jobs:
         with:
           name: cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source-run${{ github.run_number }}
           path: |
-            apps/CYAccounting/build/cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source.tar.gz
-            apps/CYAccounting/build/cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source.tar.gz.sha256
+            apps/CYAccounting/out/cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source.tar.gz
+            apps/CYAccounting/out/cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source.tar.gz.sha256
           if-no-files-found: error
           retention-days: 14
