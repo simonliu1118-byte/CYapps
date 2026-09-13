@@ -1,5 +1,13 @@
 # CYApps Governance Changelog
 
+## 2.3.0 — 2026/09/13
+
+- 共通規則同步至 2.4.0：一般 Build／Test workflow 統一採 `pull_request` + `workflow_dispatch`；Draft PR 也可正常驗收，不再把 Draft／Ready 當 CI 開關。
+- CYAccounting、CYEnvelope、CYInvoice Go 的 Windows Build workflow 移除 Draft 阻擋；TriINVCalc 移除多餘的 `ready_for_review` 觸發，避免單純切換 PR 狀態重跑 CI。
+- CYInvoice Go workflow 收斂 path filter，只在 Go source／module／scripts／assets／VERSION／BUILD 或 workflow 本身變更時執行，避免 C# preview 變更同時浪費一次 Go Windows CI。
+- `cyinvoice-csharp-build.yml` 正式加入 `main`，以 Draft PR #2 的 C# solution／source／tests／VERSION-CS 變更自動觸發 Windows 驗收；`workflow_dispatch` 保留人工備援。
+- 正式 Release workflow 不變，仍維持明確人工啟動；本次只調整開發 Build／Test 驗收方式。
+
 ## 2.2.0 — 2026/09/13
 
 - 共通規則同步至 2.3.0：母本改為公司／個人 repository 可共用的中性規則，並把 Wade–Giles（威妥瑪）定為全域羅馬拼音規則。

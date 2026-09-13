@@ -1,5 +1,13 @@
 # Shared Common Rules Changelog
 
+## 2.4.0 — 2026/09/13
+
+- 一般 Build／Test workflow 預設同時支援 `pull_request` 與 `workflow_dispatch`；PR 自動驗收是 AI／日常開發的標準入口，手動 dispatch 只作備援。
+- Draft PR 也可正常執行 Build／Test；Draft 僅表示尚未準備合併，不再兼任 CI 開關，也不得要求 AI 為觸發 CI 反覆切換 Draft／Ready。
+- 一般 branch push 不再額外重複跑一套完整昂貴 CI；有 PR 時由 PR workflow 驗收，並以 `paths`／`paths-ignore` 與 `concurrency` 控制成本。
+- 節省 Actions 與 Token 的主要方式固定為 Local-first、集中修改、減少 push、path filter、concurrency 與只讀必要 log；不得把 Build/Test 全部改成 manual-only 來省資源。
+- 一個合理修改批次完成後的 push 視為遠端驗收邊界；已有 PR 時應自動驗收，不要求 AI 另外具備手動 Run workflow 能力。
+
 ## 2.3.0 — 2026/09/13
 
 - 明確將 Wade–Giles（威妥瑪）定為全域共通羅馬拼音規則：凡中文名稱需要轉寫為羅馬拼音時一律使用 Wade–Giles。
