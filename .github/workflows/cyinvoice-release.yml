@@ -53,7 +53,16 @@ jobs:
             throw "C# / preview / RC identities cannot use the stable Go release workflow"
           }
 
+          $build = (Get-Content ./BUILD -Raw).Trim()
+          if ($build -notmatch '^\d+$') {
+            throw "A formal Go release requires a numeric BUILD; got $build"
+          }
+          if ([int]$build -ne 0) {
+            throw "Formal release is blocked because BUILD=$build. Confirm the final release version with the project owner, then reset BUILD through a reviewed version change."
+          }
+
           "CYINVOICE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CYINVOICE_BUILD=0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CYINVOICE_TAG=cyinvoice-v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Verify module files are reproducible
@@ -77,7 +86,7 @@ jobs:
         run: |
           ./scripts/build.ps1
           ./scripts/verify-pe.ps1 -Path ./dist/CYInvoice/CYInvoice.exe
-          ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) -Version $env:CYINVOICE_VERSION
+          ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) -Version $env:CYINVOICE_VERSION -Build $env:CYINVOICE_BUILD
 
       - name: Create checksum and public release notes
         shell: pwsh

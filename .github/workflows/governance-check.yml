@@ -1,0 +1,152 @@
+name: Governance Check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: governance-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate governance structure and common-rules sync
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import pathlib, re, sys
+
+          allowed = [
+              re.compile(r'^REPOSITORY_RULES\.md$'),
+              re.compile(r'^REPO_POLICY\.md$'),
+              re.compile(r'^RULES_INDEX\.md$'),
+              re.compile(r'^COMMON_RULES_VERSION$'),
+              re.compile(r'^COMMON_RULES_CHANGELOG\.md$'),
+              re.compile(r'^GOVERNANCE_VERSION$'),
+              re.compile(r'^GOVERNANCE_CHANGELOG\.md$'),
+              re.compile(r'^AGENTS\.md$'),
+              re.compile(r'^apps/[^/]+/PROJECT_RULES\.md$'),
+          ]
+          suspicious = re.compile(r'(?i)(rules|policy|instruction|governance|versioning|agents)')
+
+          for path in pathlib.Path('.').rglob('*'):
+              if not path.is_file() or '.git' in path.parts:
+                  continue
+              rel = path.as_posix()
+              if path.suffix.lower() not in {'.md', '.txt'} and path.name != 'AGENTS.md':
+                  continue
+              if suspicious.search(path.name) and not any(rx.fullmatch(rel) for rx in allowed):
+                  print(f'ERROR: unauthorized/obsolete rules entrypoint: {rel}')
+                  sys.exit(1)
+
+          for rel in ['COMMON_RULES_VERSION', 'GOVERNANCE_VERSION']:
+              p = pathlib.Path(rel)
+              if not p.is_file() or not re.fullmatch(r'\d+\.\d+\.\d+\n?', p.read_text(encoding='utf-8')):
+                  print(f'ERROR: {rel} must contain X.Y.Z')
+                  sys.exit(1)
+
+          required_root = [
+              'REPOSITORY_RULES.md','REPO_POLICY.md','RULES_INDEX.md',
+              'COMMON_RULES_CHANGELOG.md','GOVERNANCE_CHANGELOG.md','AGENTS.md'
+          ]
+          for rel in required_root:
+              if not pathlib.Path(rel).is_file():
+                  print(f'ERROR: missing governance file: {rel}')
+                  sys.exit(1)
+
+          apps = pathlib.Path('apps')
+          if apps.is_dir():
+              for project in sorted(p for p in apps.iterdir() if p.is_dir()):
+                  for filename in ['PROJECT_RULES.md', 'VERSION', 'BUILD']:
+                      if not (project / filename).is_file():
+                          print(f'ERROR: active project lacks {filename}: {project.as_posix()}')
+                          sys.exit(1)
+                  version = (project / 'VERSION').read_text(encoding='utf-8').strip()
+                  build = (project / 'BUILD').read_text(encoding='utf-8').strip()
+                  if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+                      print(f'ERROR: invalid VERSION in {project.as_posix()}: {version!r}')
+                      sys.exit(1)
+                  if not re.fullmatch(r'\d+', build):
+                      print(f'ERROR: invalid BUILD in {project.as_posix()}: {build!r}')
+                      sys.exit(1)
+          print('Local governance structure OK')
+          PY
+
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          base='https://raw.githubusercontent.com/simonliu1118-byte/AITeam/main'
+          for file in REPOSITORY_RULES.md COMMON_RULES_VERSION COMMON_RULES_CHANGELOG.md; do
+            curl --fail --silent --show-error --location --retry 3 "$base/$file" -o "$tmp/$file"
+            cmp --silent "$file" "$tmp/$file" || {
+              echo "ERROR: $file is not synchronized with AITeam main. Run/merge common-rules sync first."
+              exit 1
+            }
+          done
+          echo "Common rules match AITeam main."
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git fetch --no-tags origin "main:refs/remotes/origin/main"
+            mapfile -t changed < <(git diff --name-only "origin/main...HEAD")
+
+            common_changed=0
+            common_rules_changed=0
+            common_version_changed=0
+            common_changelog_changed=0
+            repo_gov_changed=0
+            gov_version_changed=0
+            gov_changelog_changed=0
+
+            for path in "${changed[@]}"; do
+              case "$path" in
+                REPOSITORY_RULES.md|COMMON_RULES_VERSION|COMMON_RULES_CHANGELOG.md)
+                  common_changed=1 ;;
+              esac
+              [ "$path" = "REPOSITORY_RULES.md" ] && common_rules_changed=1
+              [ "$path" = "COMMON_RULES_VERSION" ] && common_version_changed=1
+              [ "$path" = "COMMON_RULES_CHANGELOG.md" ] && common_changelog_changed=1
+
+              case "$path" in
+                REPO_POLICY.md|RULES_INDEX.md|GOVERNANCE_VERSION|GOVERNANCE_CHANGELOG.md|AGENTS.md|apps/*/PROJECT_RULES.md|.github/workflows/governance-check.yml|.github/workflows/sync-common-rules.yml)
+                  repo_gov_changed=1 ;;
+              esac
+              [ "$path" = "GOVERNANCE_VERSION" ] && gov_version_changed=1
+              [ "$path" = "GOVERNANCE_CHANGELOG.md" ] && gov_changelog_changed=1
+            done
+
+            if [ "$common_changed" -eq 1 ]; then
+              case "$HEAD_REF" in
+                governance/*) ;;
+                *) echo "ERROR: common rules may only change through governance/*"; exit 1 ;;
+              esac
+              [ "$common_rules_changed" -eq 1 ] || { echo "ERROR: common-rules sync must update REPOSITORY_RULES.md"; exit 1; }
+              [ "$common_version_changed" -eq 1 ] || { echo "ERROR: common-rules sync must update COMMON_RULES_VERSION"; exit 1; }
+              [ "$common_changelog_changed" -eq 1 ] || { echo "ERROR: common-rules sync must update COMMON_RULES_CHANGELOG.md"; exit 1; }
+            fi
+
+            if [ "$repo_gov_changed" -eq 1 ]; then
+              case "$HEAD_REF" in
+                governance/*) ;;
+                *) echo "ERROR: repository governance changes require governance/*"; exit 1 ;;
+              esac
+              [ "$gov_version_changed" -eq 1 ] || { echo "ERROR: repository governance change must update GOVERNANCE_VERSION"; exit 1; }
+              [ "$gov_changelog_changed" -eq 1 ] || { echo "ERROR: repository governance change must update GOVERNANCE_CHANGELOG.md"; exit 1; }
+            fi
+          fi
+
+          echo "Governance Check passed."

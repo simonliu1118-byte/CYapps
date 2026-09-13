@@ -26,6 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Read VERSION
+        shell: pwsh
+        run: |
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYAccounting VERSION: $version" }
+          "CYACCOUNTING_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
@@ -71,9 +78,9 @@ jobs:
       - name: Compile Windows GUI launcher
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force build | Out-Null
-          go build -trimpath -ldflags="-H windowsgui" -o build/CYAccountingLauncher.exe launcher_go/main.go
-          if (-not (Test-Path build/CYAccountingLauncher.exe)) { throw "launcher build failed" }
+          New-Item -ItemType Directory -Force out | Out-Null
+          go build -trimpath -ldflags="-H windowsgui" -o out/CYAccountingLauncher.exe launcher_go/main.go
+          if (-not (Test-Path out/CYAccountingLauncher.exe)) { throw "launcher build failed" }
 
       - name: Test Windows GUI launcher lifecycle
         shell: pwsh
@@ -82,15 +89,16 @@ jobs:
       - name: Build reproducible source archive
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force build | Out-Null
-          python tools/create_source_archive.py --output build/cyaccounting-v1.0.26-source.tar.gz
+          New-Item -ItemType Directory -Force out | Out-Null
+          $output = "out/cyaccounting-v$env:CYACCOUNTING_VERSION-source.tar.gz"
+          python tools/create_source_archive.py --output $output
 
       - name: Upload source verification archive
         uses: actions/upload-artifact@v7
         with:
-          name: cyaccounting-v1.0.26-source
+          name: cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source-run${{ github.run_number }}
           path: |
-            apps/CYAccounting/build/cyaccounting-v1.0.26-source.tar.gz
-            apps/CYAccounting/build/cyaccounting-v1.0.26-source.tar.gz.sha256
+            apps/CYAccounting/out/cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source.tar.gz
+            apps/CYAccounting/out/cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source.tar.gz.sha256
           if-no-files-found: error
           retention-days: 14
