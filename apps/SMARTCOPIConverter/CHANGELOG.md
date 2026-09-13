@@ -1,5 +1,10 @@
 # Changelog
 
+## V1.0.0 Build 6 — 2026/09/14
+
+- 修正 GitHub Actions Windows build 的 icon resource 失敗：原 `app.ico` 資源不完整，`rsrc` 產生 `.syso` 時出現 EOF。
+- 重新產生標準多尺寸 Windows ICO，包含 16、24、32、48、64、128、256 px，維持單一內嵌程式 icon，不提交 EXE。
+
 ## V1.0.0 Build 5 — 2026/09/14
 
 - 完整接回正式 Excel 轉換核心，輸出結構重新對齊既有 V12N4 相容格式。
