@@ -2,12 +2,22 @@ name: CYInvoice CSharp remake build
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - "apps/CYInvoice/CYInvoice.CSharp.sln"
+      - "apps/CYInvoice/Directory.Build.props"
+      - "apps/CYInvoice/VERSION-CS"
+      - "apps/CYInvoice/src/CYInvoice.Core/**"
+      - "apps/CYInvoice/src/CYInvoice.WinForms/**"
+      - "apps/CYInvoice/tests/CYInvoice.Core.Tests/**"
 
 permissions:
   contents: read
 
 concurrency:
-  group: cyinvoice-csharp-build-${{ github.ref }}
+  group: cyinvoice-csharp-build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
