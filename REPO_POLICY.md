@@ -24,7 +24,15 @@
 - 正式 Windows x64 EXE／ZIP 可以公開放在 GitHub Releases 供下載。
 - 公開下載不改變根 `LICENSE` 的 source-available proprietary 性質。
 
-## 4. Public Git 歷史
+## 4. 共通規則同步
+
+- 本 repo 的 `REPOSITORY_RULES.md`、`COMMON_RULES_VERSION`、`COMMON_RULES_CHANGELOG.md` 必須與 AITeam `main` 母本一致。
+- AITeam 共通規則變更後，同一輪治理工作應直接以 Git／GitHub API／治理 PR 同步這三個檔，不等待排程 workflow。
+- sync workflow 與 Governance Check 只作第二道保險；Actions 不可用時不得因此延後或略過共通規則同步。
+- 任何 AI 接手 APP 前，先直接比對本 repo `COMMON_RULES_VERSION` 與 AITeam `main`；若不同或內容有疑義，先同步再開發。
+- 同步只可更新三個共通母本副本，不得覆蓋本 repo `REPO_POLICY.md` 或任何 APP 的 `PROJECT_RULES.md`。
+
+## 5. Public Git 歷史
 
 - 新 commit 必須使用共通規則指定的 GitHub noreply email。
 - 不得從 Private repo 直接 mirror／merge 含敏感 ancestry 的歷史進來；需要遷移工作線時，以 Public 乾淨基準重建有效內容。
