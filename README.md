@@ -11,6 +11,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - `apps/CYAccounting`：志遠記帳系統
 - `apps/CYEnvelope`：CY 信封列印工具
 - `apps/CYInvoice`：CY 電子發票工具
+- `apps/TriINVCalc`：三聯式發票開立計算機
 
 ## CI / Build
 
