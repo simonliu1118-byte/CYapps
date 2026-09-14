@@ -22,7 +22,7 @@ internal sealed class InvoiceEntryControl : UserControl
     private readonly TextBox buyerName = UiControls.TextBox(200);
     private readonly RadioButton taxInclusive = new() { Text = "以含稅輸入", AutoSize = true, Checked = true };
     private readonly RadioButton taxExclusive = new() { Text = "以未稅輸入", AutoSize = true };
-    private readonly NativeListViewHost itemsHost = new(12F, 26);
+    private readonly NativeListViewHost itemsHost = new(12F, 23);
     private readonly TextBox remark = new() { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = InvoiceLimits.MaximumRemarkCharacters };
     private readonly Label remarkCounter = UiControls.Label("0 / 200", ContentAlignment.MiddleRight);
     private readonly Label salesTotal = TotalLabel(false);
@@ -124,7 +124,7 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Control BuildItems()
     {
-        itemsGroup = new GroupBox { Text = "商品明細資料（最多 50 筆）", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 10) };
+        itemsGroup = new GroupBox { Text = "商品明細資料（最多 50 筆）", Dock = DockStyle.Fill, Padding = new Padding(12, 6, 12, 6) };
         itemsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
         itemsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         itemsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
