@@ -53,7 +53,6 @@ internal sealed class SettingsForm : Form
         environment.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         environment.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         environment.Controls.Add(test, 0, 0);
-        environment.SetColumnSpan(test, 2);
         testAccountText = UiControls.Label("測試帳號由光貿固定提供，不可修改。");
         testAccountText.Margin = Padding.Empty;
         environment.Controls.Add(testAccountText, 1, 0);
