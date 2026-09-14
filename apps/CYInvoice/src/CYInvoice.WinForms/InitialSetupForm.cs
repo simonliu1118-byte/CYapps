@@ -143,9 +143,10 @@ internal sealed class InitialSetupForm : Form
         var cancelBounds = RectangleToClient(cancel.RectangleToScreen(cancel.ClientRectangle));
         var center = ClientSize.Width / 2;
         if (ClientSize.Width > 320 || saveBounds.Bottom > ClientSize.Height || cancelBounds.Bottom > ClientSize.Height ||
-            saveBounds.Right > center || cancelBounds.Left < center ||
-            Math.Abs(center - saveBounds.Right - (cancelBounds.Left - center)) > 2)
-            throw new InvalidOperationException("首次設定窄版視窗或置中雙按鈕配置不正確");
+            saveBounds.Right > cancelBounds.Left ||
+            Math.Abs((saveBounds.Left + cancelBounds.Right) / 2 - center) > 4)
+            throw new InvalidOperationException(
+                $"首次設定窄版視窗或置中雙按鈕配置不正確：完成 {saveBounds}，取消 {cancelBounds}，中線 {center}");
     }
 
     private static Label FieldLabel(string text) => new()
