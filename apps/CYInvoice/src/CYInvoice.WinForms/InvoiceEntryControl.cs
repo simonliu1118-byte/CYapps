@@ -769,7 +769,7 @@ internal sealed class InvoiceEntryControl : UserControl
         PerformLayout();
     }
 
-    private int RemarkInputHeight() => TextRenderer.MeasureText("Ag", remark.Font).Height * 3 + 8;
+    private int RemarkInputHeight() => TextRenderer.MeasureText("Ag", remark.Font).Height * 3 + 13;
     private int SummaryPanelHeight() => RemarkInputHeight() + SummaryChromeHeight;
 
     private static string Cell(ListViewItem row, int column) => row.SubItems[column].Text.Trim();
