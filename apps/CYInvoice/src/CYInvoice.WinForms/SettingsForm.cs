@@ -222,7 +222,7 @@ internal sealed class SettingsForm : Form
             invoiceLabel.AutoEllipsis || appKeyLabel.AutoEllipsis)
             throw new InvalidOperationException("正式公司、統編與 App Key 未依指定方式排列");
         if (forgotPassword.Enabled || !UiControls.HasLogicalSize(changePassword, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
-            toolTip.GetToolTip(helpBadge).Length == 0)
+            string.IsNullOrEmpty(toolTip.GetToolTip(helpBadge)))
             throw new InvalidOperationException("設定管理密碼按鈕或 MO店+ 說明提示未建立");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         if (logicalWidth > 430)
