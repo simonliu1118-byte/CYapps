@@ -159,8 +159,16 @@ internal sealed class MainForm : Form
         if (Math.Abs(Font.SizeInPoints - 12F) > 0.1F || Math.Abs(environmentLabel.Font.SizeInPoints - 14F) > 0.1F)
             throw new InvalidOperationException("主畫面與環境標題字級不正確");
         if (Icon is null) throw new InvalidOperationException("主視窗未載入內嵌程式圖示");
+        tabs.SelectedTab = invoiceTab;
+        tabs.PerformLayout();
+        Application.DoEvents();
         invoicePage.VerifySmokeLayout();
+        tabs.SelectedTab = recordsTab;
+        tabs.PerformLayout();
+        Application.DoEvents();
         recordsPage.VerifySmokeLayout();
+        tabs.SelectedTab = invoiceTab;
+        Application.DoEvents();
         using var firstSetup = new InitialSetupForm(repository);
         firstSetup.CreateControl();
         firstSetup.PerformLayout();
