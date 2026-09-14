@@ -8,6 +8,13 @@ namespace CYInvoice.WinForms;
 internal sealed class InvoiceEntryControl : UserControl
 {
     private const int MinimumVisibleRows = 5;
+    private const int PreferredImportsHeight = 82;
+    private const int MinimumImportsHeight = 72;
+    private const int PreferredBuyerHeight = 148;
+    private const int MinimumBuyerHeight = 136;
+    private const int PreferredActionsHeight = 52;
+    private const int MinimumActionsHeight = 46;
+    private const int MaximumDefaultFlexibleGap = 80;
     private const int SummaryChromeHeight = 74;
     private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
@@ -71,12 +78,12 @@ internal sealed class InvoiceEntryControl : UserControl
     private void BuildLayout()
     {
         rootLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6 };
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, PreferredImportsHeight));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, PreferredBuyerHeight));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, SummaryPanelHeight()));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, PreferredActionsHeight));
         rootLayout.Controls.Add(BuildImports(), 0, 0);
         rootLayout.Controls.Add(BuildBuyer(), 0, 1);
         rootLayout.Controls.Add(BuildItems(), 0, 2);
@@ -214,31 +221,7 @@ internal sealed class InvoiceEntryControl : UserControl
         buyerBan.TextChanged += (_, _) => { cachedLookup = null; cachedBan = string.Empty; };
         buyerBan.Leave += async (_, _) => await LookupBuyerAsync(true);
         remark.TextChanged += (_, _) => remarkCounter.Text = $"{remark.Text.EnumerateRunes().Count()} / {InvoiceLimits.MaximumRemarkCharacters}";
-        Items.MouseDown += (_, eventArgs) =>
-        {
-            var hit = Items.HitTest(eventArgs.X, eventArgs.Y);
-            var row = hit.Item?.Index ?? -1;
-            var column = hit.SubItem is null || hit.Item is null ? -1 : hit.Item.SubItems.IndexOf(hit.SubItem);
-            if (row < 0 || row >= Items.Items.Count || IsPlaceholder(Items.Items[row]))
-            {
-                CommitCellEditor(false);
-                QueueClearItemSelection();
-                return;
-            }
-            if (column == 6 && hit.Item is { } hitItem && DeleteButtonBounds(hitItem).Contains(eventArgs.Location))
-            {
-                CommitCellEditor(false);
-                DeleteRow(row);
-                return;
-            }
-            if (column is 1 or 3 or 4)
-            {
-                BeginInvoke((Action)(() => BeginCellEdit(row, column)));
-                return;
-            }
-            CommitCellEditor(false);
-            QueueClearItemSelection();
-        };
+        Items.MouseUp += (_, eventArgs) => HandleItemMouseUp(eventArgs);
         Items.MouseWheel += (_, _) => CommitCellEditor(false);
         Items.KeyDown += (_, eventArgs) =>
         {
@@ -247,6 +230,33 @@ internal sealed class InvoiceEntryControl : UserControl
             eventArgs.SuppressKeyPress = true;
             BeginCellEdit(Items.FocusedItem.Index, 1);
         };
+    }
+
+    private void HandleItemMouseUp(MouseEventArgs eventArgs)
+    {
+        if (eventArgs.Button != MouseButtons.Left) return;
+        var hit = Items.HitTest(eventArgs.X, eventArgs.Y);
+        var row = hit.Item?.Index ?? -1;
+        var column = hit.SubItem is null || hit.Item is null ? -1 : hit.Item.SubItems.IndexOf(hit.SubItem);
+        if (row < 0 || row >= Items.Items.Count || IsPlaceholder(Items.Items[row]))
+        {
+            CommitCellEditor(false);
+            QueueClearItemSelection();
+            return;
+        }
+        if (column == 6 && hit.Item is { } hitItem && DeleteButtonBounds(hitItem).Contains(eventArgs.Location))
+        {
+            CommitCellEditor(false);
+            DeleteRow(row);
+            return;
+        }
+        if (column is 1 or 3 or 4)
+        {
+            BeginCellEdit(row, column);
+            return;
+        }
+        CommitCellEditor(false);
+        QueueClearItemSelection();
     }
 
     private void ResetDraft()
@@ -743,14 +753,18 @@ internal sealed class InvoiceEntryControl : UserControl
         var totalRowHeight = rowHeights.Sum();
         var lineHeight = (int)Math.Ceiling(remark.Font.GetHeight());
         if (rowHeights.Length != 6 || Math.Abs(rowHeights[3] - SummaryPanelHeight()) > 2 ||
+            rowHeights[0] < MinimumImportsHeight || rowHeights[1] < MinimumBuyerHeight ||
+            rowHeights[4] > MaximumDefaultFlexibleGap || rowHeights[5] < MinimumActionsHeight ||
             remark.ClientSize.Height < lineHeight * 3 || remark.ClientSize.Height > lineHeight * 3 + 12 ||
             totalRowHeight > ClientSize.Height)
             throw new InvalidOperationException(
-                $"主畫面三列備註配置不正確：備註 {remark.ClientSize.Height}px，行高 {lineHeight}px，摘要 {rowHeights.ElementAtOrDefault(3)}px");
-        BeginCellEdit(0, 1);
+                $"主畫面配置不正確：列高 {string.Join(",", rowHeights)}，備註 {remark.ClientSize.Height}px，行高 {lineHeight}px");
+        Items.Focus();
+        var editBounds = Items.Items[0].SubItems[1].Bounds;
+        HandleItemMouseUp(new MouseEventArgs(MouseButtons.Left, 1, editBounds.Left + 4, editBounds.Top + (editBounds.Height / 2), 0));
         Application.DoEvents();
-        if (cellEditor is null || cellEditor.IsDisposed)
-            throw new InvalidOperationException("商品儲存格單擊編輯器建立後立即失去焦點並關閉");
+        if (cellEditor is null || cellEditor.IsDisposed || !cellEditor.ContainsFocus)
+            throw new InvalidOperationException("商品儲存格在滑鼠放開後未維持單擊編輯焦點");
         CommitCellEditor(true);
     }
 
@@ -766,7 +780,34 @@ internal sealed class InvoiceEntryControl : UserControl
         remarkLayout.RowStyles[0].Height = RemarkInputHeight();
         rootLayout.RowStyles[3].SizeType = SizeType.Absolute;
         rootLayout.RowStyles[3].Height = SummaryPanelHeight();
+        FitSectionRowsToClient();
         PerformLayout();
+    }
+
+    private void FitSectionRowsToClient()
+    {
+        if (rootLayout is null) return;
+        var importsHeight = PreferredImportsHeight;
+        var buyerHeight = PreferredBuyerHeight;
+        var actionsHeight = PreferredActionsHeight;
+        var availableHeight = Math.Max(0, ClientSize.Height - Padding.Vertical);
+        var fixedHeight = importsHeight + buyerHeight + actionsHeight +
+            (int)Math.Ceiling(rootLayout.RowStyles[2].Height) +
+            (int)Math.Ceiling(rootLayout.RowStyles[3].Height);
+        var overflow = Math.Max(0, fixedHeight - availableHeight);
+        buyerHeight = ReduceHeight(buyerHeight, MinimumBuyerHeight, ref overflow);
+        actionsHeight = ReduceHeight(actionsHeight, MinimumActionsHeight, ref overflow);
+        importsHeight = ReduceHeight(importsHeight, MinimumImportsHeight, ref overflow);
+        rootLayout.RowStyles[0].Height = importsHeight;
+        rootLayout.RowStyles[1].Height = buyerHeight;
+        rootLayout.RowStyles[5].Height = actionsHeight;
+    }
+
+    private static int ReduceHeight(int current, int minimum, ref int overflow)
+    {
+        var reduction = Math.Min(overflow, current - minimum);
+        overflow -= reduction;
+        return current - reduction;
     }
 
     private int RemarkInputHeight() => TextRenderer.MeasureText("Ag", remark.Font).Height * 3 + 13;

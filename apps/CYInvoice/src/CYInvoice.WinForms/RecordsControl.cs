@@ -18,7 +18,7 @@ internal sealed class RecordsControl : UserControl
     private readonly TextBox buyerBan = UiControls.TextBox(10);
     private readonly ComboBox source = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox state = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly NativeListViewHost recordsHost = new(10F, 26);
+    private readonly NativeListViewHost recordsHost = new(10F, 22);
     private readonly Button refreshButton = new() { Text = "重新整理狀態", Width = 160, Height = 40 };
     private readonly List<InvoiceRecord> visible = [];
     private readonly Font voidedFont;
@@ -321,6 +321,8 @@ internal sealed class RecordsControl : UserControl
         if (Records.Columns.Count != 10) throw new InvalidOperationException("已開立發票原生 ListView 欄位未建立");
         if (!recordsHost.ScrollSlotReserved) throw new InvalidOperationException("已開立發票清單未保留停用垂直 scrollbar");
         if (Math.Abs(Records.Font.SizeInPoints - 10F) > 0.1F) throw new InvalidOperationException("已開立發票清單未使用 10pt 字級");
+        if (Records.Items.Count == 0 || Records.GetItemRect(0).Height > 24)
+            throw new InvalidOperationException($"已開立發票清單資料列過高：{(Records.Items.Count == 0 ? 0 : Records.GetItemRect(0).Height)}px");
         var columnWidth = Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
         if (Math.Abs(columnWidth - recordsHost.ColumnViewportWidth) > 1)
             throw new InvalidOperationException($"已開立發票清單欄寬未對齊 scrollbar 前的可視範圍：欄位 {columnWidth}px，可視 {recordsHost.ColumnViewportWidth}px");
