@@ -9,8 +9,8 @@ internal sealed class InitialSetupForm : Form
     private readonly TextBox moPassword = PasswordBox();
     private readonly TextBox adminPassword = PasswordBox();
     private readonly TextBox confirmPassword = PasswordBox();
-    private readonly Button save = new() { Text = "完成設定", Width = 104, Height = 36 };
-    private readonly Button cancel = new() { Text = "取消並關閉", DialogResult = DialogResult.Cancel, Width = 104, Height = 36 };
+    private readonly Button save = UiControls.StandardButton("完成設定");
+    private readonly Button cancel = UiControls.StandardButton("取消並關閉");
 
     public InitialSetupForm(LocalRepository repository)
     {
@@ -66,9 +66,10 @@ internal sealed class InitialSetupForm : Form
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         save.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        save.Margin = new Padding(0, 0, 6, 0);
+        save.Margin = new Padding(0, 0, 2, 0);
         cancel.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-        cancel.Margin = new Padding(6, 0, 0, 0);
+        cancel.Margin = new Padding(2, 0, 0, 0);
+        cancel.DialogResult = DialogResult.Cancel;
         save.TabIndex = 3;
         cancel.TabIndex = 4;
         save.Click += SaveClicked;
@@ -144,6 +145,8 @@ internal sealed class InitialSetupForm : Form
         var center = ClientSize.Width / 2;
         if (ClientSize.Width > 320 || saveBounds.Bottom > ClientSize.Height || cancelBounds.Bottom > ClientSize.Height ||
             saveBounds.Right > cancelBounds.Left ||
+            !UiControls.HasLogicalSize(save, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(cancel, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             Math.Abs((saveBounds.Left + cancelBounds.Right) / 2 - center) > 4)
             throw new InvalidOperationException(
                 $"首次設定窄版視窗或置中雙按鈕配置不正確：完成 {saveBounds}，取消 {cancelBounds}，中線 {center}");

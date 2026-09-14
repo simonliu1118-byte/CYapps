@@ -12,6 +12,60 @@ internal static class UiControls
         Dock = DockStyle.Fill, MaxLength = maximumLength, Margin = new Padding(3, 5, 3, 5),
     };
 
+    public const int StandardButtonWidth = 132;
+    public const int StandardButtonHeight = 34;
+
+    public static Button StandardButton(string text) => new()
+    {
+        Text = text,
+        Width = StandardButtonWidth,
+        Height = StandardButtonHeight,
+        Margin = new Padding(6, 2, 6, 2),
+        AutoSize = false,
+        UseVisualStyleBackColor = true,
+    };
+
+    public static Button ImportButton(string text, ImportBrand brand) => new ImportBrandButton(text, brand);
+
+    public static Button PrimaryIssueButton() => new()
+    {
+        Width = 190,
+        Height = 46,
+        Margin = new Padding(6, 2, 6, 2),
+        AutoSize = false,
+        FlatStyle = FlatStyle.Flat,
+        ForeColor = Color.White,
+        Font = new Font("Microsoft JhengHei UI", 14F, FontStyle.Bold),
+        UseVisualStyleBackColor = false,
+    };
+
+    public static void ApplyIssueButtonTheme(Button button, bool production)
+    {
+        var normal = production ? Color.FromArgb(2, 136, 209) : Color.FromArgb(25, 135, 84);
+        button.BackColor = normal;
+        button.FlatAppearance.BorderColor = production ? Color.FromArgb(1, 105, 165) : Color.FromArgb(18, 105, 65);
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.MouseOverBackColor = production ? Color.FromArgb(3, 155, 229) : Color.FromArgb(31, 157, 99);
+        button.FlatAppearance.MouseDownBackColor = production ? Color.FromArgb(2, 112, 177) : Color.FromArgb(19, 108, 67);
+    }
+
+    public static bool HasLogicalSize(Control control, int width, int height, int tolerance = 3)
+    {
+        var dpi = control.DeviceDpi > 0 ? control.DeviceDpi : 96;
+        var logicalWidth = control.Width * 96D / dpi;
+        var logicalHeight = control.Height * 96D / dpi;
+        return Math.Abs(logicalWidth - width) <= tolerance && Math.Abs(logicalHeight - height) <= tolerance;
+    }
+
+    public static void SetTextBoxLocked(TextBox field, bool locked)
+    {
+        field.Enabled = true;
+        field.ReadOnly = locked;
+        field.TabStop = !locked;
+        field.BackColor = locked ? Color.FromArgb(242, 242, 242) : Color.White;
+        field.BorderStyle = BorderStyle.FixedSingle;
+    }
+
     public static DataGridView Grid()
     {
         var grid = new DataGridView

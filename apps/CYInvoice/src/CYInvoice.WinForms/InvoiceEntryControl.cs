@@ -13,9 +13,9 @@ internal sealed class InvoiceEntryControl : UserControl
     private const int PreferredBuyerHeight = 148;
     private const int MinimumBuyerHeight = 136;
     private const int PreferredActionsHeight = 52;
-    private const int MinimumActionsHeight = 46;
+    private const int MinimumActionsHeight = 52;
     private const int MaximumDefaultFlexibleGap = 80;
-    private const int SummaryChromeHeight = 74;
+    private const int SummaryChromeHeight = 46;
     private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
@@ -29,24 +29,16 @@ internal sealed class InvoiceEntryControl : UserControl
     private readonly TextBox buyerName = UiControls.TextBox(200);
     private readonly RadioButton taxInclusive = new() { Text = "以含稅輸入", AutoSize = true, Checked = true };
     private readonly RadioButton taxExclusive = new() { Text = "以未稅輸入", AutoSize = true };
-    private readonly NativeListViewHost itemsHost = new(12F, 23);
+    private readonly NativeListViewHost itemsHost = new(12F, 26);
     private readonly TextBox remark = new() { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = InvoiceLimits.MaximumRemarkCharacters };
     private readonly Label remarkCounter = UiControls.Label("0 / 200", ContentAlignment.MiddleRight);
     private readonly Label salesTotal = TotalLabel(false);
     private readonly Label taxTotal = TotalLabel(false);
     private readonly Label invoiceTotal = TotalLabel(true);
-    private readonly Button issueButton = new() { Width = 160, Height = 40 };
-    private readonly Button addItemButton = new()
-    {
-        Text = "＋ 新增明細",
-        Width = 150,
-        Height = 40,
-        Anchor = AnchorStyles.Top | AnchorStyles.Right,
-        Margin = new Padding(4, 3, 4, 3),
-        TextAlign = ContentAlignment.MiddleCenter,
-        ForeColor = SystemColors.ControlText,
-        UseVisualStyleBackColor = true,
-    };
+    private readonly Button issueButton = UiControls.PrimaryIssueButton();
+    private readonly Button addItemButton = UiControls.StandardButton("＋ 新增明細");
+    private int hotDeleteRow = -1;
+    private int pressedDeleteRow = -1;
     private NameLookup? cachedLookup;
     private string cachedBan = string.Empty;
     private TextBox? cellEditor;
@@ -57,6 +49,7 @@ internal sealed class InvoiceEntryControl : UserControl
     private TableLayoutPanel? itemsLayout;
     private TableLayoutPanel? remarkLayout;
     private GroupBox? itemsGroup;
+    private GroupBox? remarkGroup;
 
     private ListView Items => itemsHost.List;
 
@@ -96,9 +89,15 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         var group = new GroupBox { Text = "Excel 匯入開立", Dock = DockStyle.Fill, Padding = new Padding(12, 7, 12, 8) };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(8, 4, 0, 0) };
-        buttons.Controls.Add(FixedButton("匯入鼎新 ERP 銷貨單", 210, (_, _) => Pending("鼎新 ERP 匯入")));
-        buttons.Controls.Add(FixedButton("匯入 MO店+", 145, async (_, _) => await ImportMoAsync()));
-        buttons.Controls.Add(FixedButton("匯入酷澎", 135, async (_, _) => await ImportCoupangAsync()));
+        var digiwin = UiControls.ImportButton("鼎新ERP", ImportBrand.Digiwin);
+        var moShop = UiControls.ImportButton("MO店+", ImportBrand.MoShop);
+        var coupang = UiControls.ImportButton("酷澎商城", ImportBrand.Coupang);
+        digiwin.Click += (_, _) => Pending("鼎新 ERP 匯入");
+        moShop.Click += async (_, _) => await ImportMoAsync();
+        coupang.Click += async (_, _) => await ImportCoupangAsync();
+        buttons.Controls.Add(digiwin);
+        buttons.Controls.Add(moShop);
+        buttons.Controls.Add(coupang);
         group.Controls.Add(buttons);
         return group;
     }
@@ -106,26 +105,27 @@ internal sealed class InvoiceEntryControl : UserControl
     private Control BuildBuyer()
     {
         var group = new GroupBox { Text = "發票基本資料", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 3 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3 };
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        foreach (var width in new[] { 100, 250, 105, 230, 0 })
-            layout.ColumnStyles.Add(width == 0 ? new ColumnStyle(SizeType.Percent, 100) : new ColumnStyle(SizeType.Absolute, width));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         var orderModes = RadioGroup(automaticOrder, customOrder);
         var buyerModes = RadioGroup(consumerBuyer, companyBuyer);
         layout.Controls.Add(UiControls.Label("訂單編號"), 0, 0);
         layout.Controls.Add(orderModes, 1, 0);
-        layout.Controls.Add(orderId, 2, 0);
-        layout.SetColumnSpan(orderId, 3);
+        layout.SetColumnSpan(orderModes, 2);
+        layout.Controls.Add(orderId, 3, 0);
         layout.Controls.Add(UiControls.Label("買方資料"), 0, 1);
         layout.Controls.Add(buyerModes, 1, 1);
-        layout.SetColumnSpan(buyerModes, 4);
+        layout.SetColumnSpan(buyerModes, 2);
         layout.Controls.Add(UiControls.Label("統一編號"), 0, 2);
         layout.Controls.Add(buyerBan, 1, 2);
         layout.Controls.Add(UiControls.Label("買方名稱"), 2, 2);
         layout.Controls.Add(buyerName, 3, 2);
-        layout.SetColumnSpan(buyerName, 2);
         group.Controls.Add(layout);
         return group;
     }
@@ -134,12 +134,14 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         itemsGroup = new GroupBox { Text = "商品明細資料（最多 50 筆）", Dock = DockStyle.Fill, Padding = new Padding(12, 6, 12, 6) };
         itemsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
-        itemsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        itemsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         itemsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 158));
-        var modes = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(12, 5, 0, 0) };
+        toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
+        var modes = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(12, 0, 0, 8) };
+        addItemButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        addItemButton.Margin = new Padding(2, 2, 4, 8);
         modes.Controls.Add(taxInclusive);
         modes.Controls.Add(taxExclusive);
         addItemButton.Click += (_, _) => AddRow(true);
@@ -173,13 +175,24 @@ internal sealed class InvoiceEntryControl : UserControl
         var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(0, 10, 0, 0) };
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 63));
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37));
-        var remarkGroup = new GroupBox { Text = "發票總備註", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
-        remarkLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
+        remarkGroup = new GroupBox { Text = "發票總備註", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
+        remarkLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1 };
         remarkLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, RemarkInputHeight()));
-        remarkLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         remarkLayout.Controls.Add(remark, 0, 0);
-        remarkLayout.Controls.Add(remarkCounter, 0, 1);
+        remarkCounter.AutoSize = false;
+        remarkCounter.Width = 92;
+        remarkCounter.Height = 22;
+        remarkCounter.BackColor = Color.White;
+        void PositionRemarkCounter() => remarkCounter.SetBounds(
+            Math.Max(0, remarkGroup.ClientSize.Width - remarkCounter.Width - 10),
+            0,
+            remarkCounter.Width,
+            remarkCounter.Height);
+        remarkGroup.Resize += (_, _) => PositionRemarkCounter();
         remarkGroup.Controls.Add(remarkLayout);
+        remarkGroup.Controls.Add(remarkCounter);
+        PositionRemarkCounter();
+        remarkCounter.BringToFront();
         var totalGroup = new GroupBox { Text = "金額總計", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
         var totals = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
         totals.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
@@ -204,12 +217,20 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Control BuildActions()
     {
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 3, 0, 0) };
-        actions.Controls.Add(FixedButton("清空", 150, (_, _) => ResetDraft()));
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 2, 0, 0) };
+        var clear = UiControls.StandardButton("清空");
+        var preview = UiControls.StandardButton("預覽");
+        clear.Click += (_, _) => ResetDraft();
+        preview.Click += (_, _) => Preview();
+        actions.Controls.Add(clear);
         issueButton.Click += async (_, _) => await IssueAsync();
         actions.Controls.Add(issueButton);
-        actions.Controls.Add(FixedButton("預覽", 150, (_, _) => Preview()));
-        actions.Resize += (_, _) => actions.Padding = new Padding(Math.Max(0, (actions.ClientSize.Width - 480) / 2), 3, 0, 0);
+        actions.Controls.Add(preview);
+        actions.Resize += (_, _) =>
+        {
+            var contentWidth = actions.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
+            actions.Padding = new Padding(Math.Max(0, (actions.ClientSize.Width - contentWidth) / 2), 2, 0, 0);
+        };
         return actions;
     }
 
@@ -221,7 +242,21 @@ internal sealed class InvoiceEntryControl : UserControl
         buyerBan.TextChanged += (_, _) => { cachedLookup = null; cachedBan = string.Empty; };
         buyerBan.Leave += async (_, _) => await LookupBuyerAsync(true);
         remark.TextChanged += (_, _) => remarkCounter.Text = $"{remark.Text.EnumerateRunes().Count()} / {InvoiceLimits.MaximumRemarkCharacters}";
+        Items.MouseMove += (_, eventArgs) => UpdateDeleteHotState(DeleteButtonRowAt(eventArgs.Location));
+        Items.MouseDown += (_, eventArgs) =>
+        {
+            if (eventArgs.Button == MouseButtons.Left) UpdateDeletePressedState(DeleteButtonRowAt(eventArgs.Location));
+        };
         Items.MouseUp += (_, eventArgs) => HandleItemMouseUp(eventArgs);
+        Items.MouseLeave += (_, _) =>
+        {
+            UpdateDeleteHotState(-1);
+            UpdateDeletePressedState(-1);
+        };
+        Items.MouseCaptureChanged += (_, _) =>
+        {
+            if (Control.MouseButtons == MouseButtons.None) UpdateDeletePressedState(-1);
+        };
         Items.MouseWheel += (_, _) => CommitCellEditor(false);
         Items.KeyDown += (_, eventArgs) =>
         {
@@ -235,6 +270,8 @@ internal sealed class InvoiceEntryControl : UserControl
     private void HandleItemMouseUp(MouseEventArgs eventArgs)
     {
         if (eventArgs.Button != MouseButtons.Left) return;
+        var pressedRow = pressedDeleteRow;
+        UpdateDeletePressedState(-1);
         var hit = Items.HitTest(eventArgs.X, eventArgs.Y);
         var row = hit.Item?.Index ?? -1;
         var column = hit.SubItem is null || hit.Item is null ? -1 : hit.Item.SubItems.IndexOf(hit.SubItem);
@@ -247,7 +284,8 @@ internal sealed class InvoiceEntryControl : UserControl
         if (column == 6 && hit.Item is { } hitItem && DeleteButtonBounds(hitItem).Contains(eventArgs.Location))
         {
             CommitCellEditor(false);
-            DeleteRow(row);
+            if (pressedRow == row) DeleteRow(row);
+            else QueueClearItemSelection();
             return;
         }
         if (column is 1 or 3 or 4)
@@ -257,6 +295,38 @@ internal sealed class InvoiceEntryControl : UserControl
         }
         CommitCellEditor(false);
         QueueClearItemSelection();
+    }
+
+    private int DeleteButtonRowAt(Point location)
+    {
+        var hit = Items.HitTest(location);
+        if (hit.Item is null || IsPlaceholder(hit.Item) || hit.SubItem is null ||
+            hit.Item.SubItems.IndexOf(hit.SubItem) != 6 || !DeleteButtonBounds(hit.Item).Contains(location))
+            return -1;
+        return hit.Item.Index;
+    }
+
+    private void UpdateDeleteHotState(int row)
+    {
+        if (hotDeleteRow == row) return;
+        var previous = hotDeleteRow;
+        hotDeleteRow = row;
+        InvalidateDeleteRow(previous);
+        InvalidateDeleteRow(row);
+    }
+
+    private void UpdateDeletePressedState(int row)
+    {
+        if (pressedDeleteRow == row) return;
+        var previous = pressedDeleteRow;
+        pressedDeleteRow = row;
+        InvalidateDeleteRow(previous);
+        InvalidateDeleteRow(row);
+    }
+
+    private void InvalidateDeleteRow(int row)
+    {
+        if (row >= 0 && row < Items.Items.Count) Items.Invalidate(Items.Items[row].Bounds);
     }
 
     private void ResetDraft()
@@ -277,15 +347,14 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private void UpdateOrderMode()
     {
-        orderId.ReadOnly = automaticOrder.Checked;
-        orderId.BackColor = automaticOrder.Checked ? Color.FromArgb(242, 242, 242) : Color.White;
+        UiControls.SetTextBoxLocked(orderId, automaticOrder.Checked);
         if (automaticOrder.Checked) orderId.Text = ManualOrderId.Next(DateTimeOffset.Now, repository.Invoices.LoadOrCreate());
     }
 
     private void UpdateBuyerMode()
     {
-        buyerBan.Enabled = companyBuyer.Checked;
-        buyerName.Enabled = companyBuyer.Checked;
+        UiControls.SetTextBoxLocked(buyerBan, !companyBuyer.Checked);
+        UiControls.SetTextBoxLocked(buyerName, !companyBuyer.Checked);
         taxExclusive.Enabled = companyBuyer.Checked;
         if (!companyBuyer.Checked) { buyerBan.Clear(); buyerName.Clear(); taxInclusive.Checked = true; }
     }
@@ -296,7 +365,9 @@ internal sealed class InvoiceEntryControl : UserControl
         var mode = taxExclusive.Checked ? "未稅" : "含稅";
         Items.Columns[4].Text = $"單價（{mode}）";
         Items.Columns[5].Text = $"金額（{mode}）";
-        issueButton.Text = repository.Settings.LoadOrCreate().Environment == Environments.Production ? "開立正式發票" : "開立測試發票";
+        var production = repository.Settings.LoadOrCreate().Environment == Environments.Production;
+        issueButton.Text = production ? "開立正式發票" : "開立測試發票";
+        UiControls.ApplyIssueButtonTheme(issueButton, production);
     }
 
     private void AddRow(bool focus)
@@ -458,7 +529,7 @@ internal sealed class InvoiceEntryControl : UserControl
         if (!companyBuyer.Checked || ban.Length != 8 || !ban.All(char.IsAsciiDigit)) return;
         try
         {
-            buyerBan.Enabled = false;
+            UiControls.SetTextBoxLocked(buyerBan, true);
             cachedLookup = await service.LookupBuyerNameAsync(ban);
             cachedBan = ban;
             if (cachedLookup.Name.Length != 0) buyerName.Text = cachedLookup.Name;
@@ -469,7 +540,7 @@ internal sealed class InvoiceEntryControl : UserControl
             }
         }
         catch (Exception error) { MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-        finally { buyerBan.Enabled = companyBuyer.Checked; }
+        finally { UiControls.SetTextBoxLocked(buyerBan, !companyBuyer.Checked); }
     }
 
     private Task ImportMoAsync()
@@ -501,21 +572,22 @@ internal sealed class InvoiceEntryControl : UserControl
     }
     private void Pending(string feature) => MessageBox.Show(this, $"{feature}尚未接入 C# 重製測試線，現在不會讀檔或送出發票。", "功能尚未完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
     private static OpenFileDialog FileDialog(string filter) => new() { Filter = filter, CheckFileExists = true, Multiselect = false, RestoreDirectory = true };
-    private static FlowLayoutPanel RadioGroup(params RadioButton[] buttons)
+    private static TableLayoutPanel RadioGroup(RadioButton first, RadioButton second)
     {
-        var panel = new FlowLayoutPanel
+        var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
+            ColumnCount = 2,
+            RowCount = 1,
             Margin = Padding.Empty,
-            Padding = new Padding(0, 4, 0, 0),
+            Padding = new Padding(0, 3, 0, 0),
         };
-        foreach (var button in buttons)
-        {
-            button.Margin = new Padding(3, 3, 26, 3);
-            panel.Controls.Add(button);
-        }
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        first.Margin = new Padding(3, 3, 3, 3);
+        second.Margin = new Padding(3, 3, 3, 3);
+        panel.Controls.Add(first, 0, 0);
+        panel.Controls.Add(second, 1, 0);
         return panel;
     }
 
@@ -564,11 +636,12 @@ internal sealed class InvoiceEntryControl : UserControl
         var editor = new TextBox
         {
             Text = value,
+            AutoSize = false,
             BorderStyle = BorderStyle.FixedSingle,
             Font = Items.Font,
             MaxLength = columnIndex == 1 ? 256 : 64,
             TextAlign = columnIndex is 3 or 4 ? HorizontalAlignment.Right : HorizontalAlignment.Left,
-            Bounds = Rectangle.Inflate(bounds, -2, -1),
+            Bounds = Rectangle.Inflate(bounds, -1, -1),
         };
         editorRow = rowIndex;
         editorColumn = columnIndex;
@@ -699,7 +772,12 @@ internal sealed class InvoiceEntryControl : UserControl
         if (columnIndex == 6 && !IsPlaceholder(eventArgs.Item))
         {
             var button = DeleteButtonBounds(eventArgs.Item);
-            ButtonRenderer.DrawButton(eventArgs.Graphics, button, System.Windows.Forms.VisualStyles.PushButtonState.Normal);
+            var state = pressedDeleteRow == rowIndex
+                ? System.Windows.Forms.VisualStyles.PushButtonState.Pressed
+                : hotDeleteRow == rowIndex
+                    ? System.Windows.Forms.VisualStyles.PushButtonState.Hot
+                    : System.Windows.Forms.VisualStyles.PushButtonState.Normal;
+            ButtonRenderer.DrawButton(eventArgs.Graphics, button, state);
             TextRenderer.DrawText(eventArgs.Graphics, "刪除", Items.Font, button, Color.FromArgb(190, 24, 24),
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
@@ -735,15 +813,26 @@ internal sealed class InvoiceEntryControl : UserControl
             throw new InvalidOperationException("發票基本資料的買方控制項未建立");
         if (ReferenceEquals(automaticOrder.Parent, consumerBuyer.Parent))
             throw new InvalidOperationException("訂單與買方 RadioButton 未分成兩組");
-        if (!consumerBuyer.Checked || buyerBan.Enabled || buyerName.Enabled)
-            throw new InvalidOperationException("一般消費者模式未鎖定統編與買方名稱");
+        if (!consumerBuyer.Checked || !buyerBan.Enabled || !buyerName.Enabled || !buyerBan.ReadOnly || !buyerName.ReadOnly ||
+            buyerBan.TabStop || buyerName.TabStop)
+            throw new InvalidOperationException("一般消費者模式未以一致灰底唯讀方式鎖定統編與買方名稱");
         companyBuyer.Checked = true;
-        if (!buyerBan.Enabled || !buyerName.Enabled)
+        if (buyerBan.ReadOnly || buyerName.ReadOnly || !buyerBan.TabStop || !buyerName.TabStop)
             throw new InvalidOperationException("公司統編模式未啟用必要買方欄位");
+        var customX = customOrder.PointToScreen(Point.Empty).X;
+        var companyX = companyBuyer.PointToScreen(Point.Empty).X;
+        var buyerNameLabel = Descendants(this).OfType<Label>().FirstOrDefault(label => label.Text == "買方名稱");
+        if (buyerNameLabel is null || Math.Abs(customX - companyX) > 2 ||
+            Math.Abs(customX - buyerNameLabel.PointToScreen(Point.Empty).X) > 2)
+            throw new InvalidOperationException("自訂、公司統編與買方名稱未使用相同左緣");
         consumerBuyer.Checked = true;
         if (Items.Columns.Count != 7 || Items.Items.Count != MinimumVisibleRows || ActualRows().Count != 1)
             throw new InvalidOperationException("商品原生 ListView 未建立一筆實際資料與五列顯示區");
         if (!itemsHost.ScrollSlotReserved) throw new InvalidOperationException("商品清單未保留停用垂直 scrollbar");
+        var importButtons = Descendants(this).OfType<ImportBrandButton>().ToArray();
+        if (importButtons.Length != 3 ||
+            importButtons.Any(button => !UiControls.HasLogicalSize(button, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight)))
+            throw new InvalidOperationException("三個 Excel 平台按鈕未使用一致的品牌按鈕尺寸");
         if (Math.Abs(Items.Font.SizeInPoints - 12F) > 0.1F) throw new InvalidOperationException("商品清單未使用 12pt 字級");
         if (Math.Abs(Items.Columns.Cast<ColumnHeader>().Sum(column => column.Width) - itemsHost.ColumnViewportWidth) > 1)
             throw new InvalidOperationException("商品清單欄寬未對齊 scrollbar 前的可視範圍");
@@ -763,8 +852,21 @@ internal sealed class InvoiceEntryControl : UserControl
         var editBounds = Items.Items[0].SubItems[1].Bounds;
         HandleItemMouseUp(new MouseEventArgs(MouseButtons.Left, 1, editBounds.Left + 4, editBounds.Top + (editBounds.Height / 2), 0));
         Application.DoEvents();
-        if (cellEditor is null || cellEditor.IsDisposed || !cellEditor.ContainsFocus)
-            throw new InvalidOperationException("商品儲存格在滑鼠放開後未維持單擊編輯焦點");
+        if (cellEditor is null || cellEditor.IsDisposed || !cellEditor.ContainsFocus ||
+            cellEditor.Bounds.Top < editBounds.Top || cellEditor.Bounds.Bottom > editBounds.Bottom)
+            throw new InvalidOperationException("商品儲存格在滑鼠放開後未維持焦點或輸入框高度未貼合資料列");
+        if (!UiControls.HasLogicalSize(addItemButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(issueButton, 190, 46))
+            throw new InvalidOperationException("商品新增或主開立按鈕尺寸不正確");
+        if (remarkGroup is null || remarkCounter.Parent != remarkGroup || remarkCounter.Top != 0 ||
+            remarkCounter.Right > remarkGroup.ClientSize.Width)
+            throw new InvalidOperationException("備註字數未固定於框架標題右側");
+        UpdateDeleteHotState(0);
+        UpdateDeletePressedState(0);
+        if (hotDeleteRow != 0 || pressedDeleteRow != 0)
+            throw new InvalidOperationException("商品刪除按鈕未建立滑過與按下狀態");
+        UpdateDeleteHotState(-1);
+        UpdateDeletePressedState(-1);
         CommitCellEditor(true);
     }
 
@@ -810,17 +912,20 @@ internal sealed class InvoiceEntryControl : UserControl
         return current - reduction;
     }
 
+    private static IEnumerable<Control> Descendants(Control parent)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
+        }
+    }
+
     private int RemarkInputHeight() => TextRenderer.MeasureText("Ag", remark.Font).Height * 3 + 13;
     private int SummaryPanelHeight() => RemarkInputHeight() + SummaryChromeHeight;
 
     private static string Cell(ListViewItem row, int column) => row.SubItems[column].Text.Trim();
     private static string Clean(string value) => value.Replace(",", string.Empty, StringComparison.Ordinal).Trim();
-    private static Button FixedButton(string text, int width, EventHandler handler)
-    {
-        var button = new Button { Text = text, Width = width, Height = 40, Margin = new Padding(6, 2, 6, 2) };
-        button.Click += handler;
-        return button;
-    }
     private static Label TotalLabel(bool bold) => new()
     {
         Text = "0", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight,

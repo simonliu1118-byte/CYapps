@@ -12,8 +12,8 @@ internal sealed class AdminUnlockForm : Form
         UseSystemPasswordChar = true,
         MaxLength = 200,
     };
-    private readonly Button unlock = new() { Text = "進入設定", Width = 104, Height = 36 };
-    private readonly Button cancel = new() { Text = "取消", DialogResult = DialogResult.Cancel, Width = 90, Height = 36 };
+    private readonly Button unlock = UiControls.StandardButton("進入設定");
+    private readonly Button cancel = UiControls.StandardButton("取消");
 
     public AdminUnlockForm(Settings settings)
     {
@@ -58,6 +58,7 @@ internal sealed class AdminUnlockForm : Form
             WrapContents = false,
         };
         unlock.Click += UnlockClicked;
+        cancel.DialogResult = DialogResult.Cancel;
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(unlock);
         root.Controls.Add(buttons, 0, 2);
@@ -86,7 +87,9 @@ internal sealed class AdminUnlockForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (!password.UseSystemPasswordChar || AcceptButton != unlock || CancelButton != cancel)
+        if (!password.UseSystemPasswordChar || AcceptButton != unlock || CancelButton != cancel ||
+            !UiControls.HasLogicalSize(unlock, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(cancel, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("設定管理密碼單次解鎖視窗配置不正確");
     }
 }

@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class MainForm : Form
 {
-    private static readonly Size DefaultClientSize = new(1264, 780);
+    private static readonly Size DefaultClientSize = new(1264, 760);
     private const int WmNcHitTest = 0x0084;
     private const int WmSysCommand = 0x0112;
     private const int ScSize = 0xF000;
@@ -23,7 +23,7 @@ internal sealed class MainForm : Form
     private readonly Panel tabHost = new();
     private readonly TabPage invoiceTab = new("開立發票");
     private readonly TabPage recordsTab = new("已開立發票清單");
-    private readonly Button settingsButton = new();
+    private readonly Button settingsButton = UiControls.StandardButton("設定");
 
     public MainForm(bool startupSmokeTest = false)
     {
@@ -94,9 +94,6 @@ internal sealed class MainForm : Form
         {
             if (tabs.SelectedTab == recordsTab) recordsPage.Reload();
         };
-        settingsButton.Text = "設定";
-        settingsButton.Width = 132;
-        settingsButton.Height = 34;
         settingsButton.Margin = Padding.Empty;
         settingsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         settingsButton.TextAlign = ContentAlignment.MiddleCenter;
@@ -213,6 +210,12 @@ internal sealed class MainForm : Form
         Application.DoEvents();
         settings.VerifySmokeLayout();
         settings.Close();
+        using var passwordChange = new ChangeAdminPasswordForm(repository, repository.Settings.LoadOrCreate());
+        passwordChange.Show(this);
+        passwordChange.PerformLayout();
+        Application.DoEvents();
+        passwordChange.VerifySmokeLayout();
+        passwordChange.Close();
     }
 
     private void UpdateEnvironment()

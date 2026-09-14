@@ -19,7 +19,7 @@ internal sealed class RecordsControl : UserControl
     private readonly ComboBox source = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox state = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NativeListViewHost recordsHost = new(10F, 22);
-    private readonly Button refreshButton = new() { Text = "重新整理狀態", Width = 160, Height = 40 };
+    private readonly Button refreshButton = UiControls.StandardButton("重新整理狀態");
     private readonly List<InvoiceRecord> visible = [];
     private readonly Font voidedFont;
     private bool fillingRows;
@@ -71,9 +71,9 @@ internal sealed class RecordsControl : UserControl
         AddFilter(filters, "來源", source, 4, 1);
         AddFilter(filters, "發票狀態", state, 6, 1);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-        var query = new Button { Text = "查詢", Width = 100, Height = 40 };
+        var query = UiControls.StandardButton("查詢");
         query.Click += (_, _) => Reload();
-        var clear = new Button { Text = "清除條件", Width = 120, Height = 40 };
+        var clear = UiControls.StandardButton("清除條件");
         clear.Click += (_, _) => { ResetFilters(); Reload(); };
         refreshButton.Click += async (_, _) => await RefreshFromApiAsync();
         buttons.Controls.Add(query);
@@ -323,6 +323,8 @@ internal sealed class RecordsControl : UserControl
         if (Math.Abs(Records.Font.SizeInPoints - 10F) > 0.1F) throw new InvalidOperationException("已開立發票清單未使用 10pt 字級");
         if (Records.Items.Count == 0 || Records.GetItemRect(0).Height > 24)
             throw new InvalidOperationException($"已開立發票清單資料列過高：{(Records.Items.Count == 0 ? 0 : Records.GetItemRect(0).Height)}px");
+        if (!UiControls.HasLogicalSize(refreshButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
+            throw new InvalidOperationException("已開立發票清單按鈕未使用標準尺寸");
         var columnWidth = Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
         if (Math.Abs(columnWidth - recordsHost.ColumnViewportWidth) > 1)
             throw new InvalidOperationException($"已開立發票清單欄寬未對齊 scrollbar 前的可視範圍：欄位 {columnWidth}px，可視 {recordsHost.ColumnViewportWidth}px");

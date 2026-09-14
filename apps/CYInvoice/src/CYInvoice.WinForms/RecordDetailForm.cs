@@ -41,7 +41,9 @@ internal sealed class RecordDetailForm : Form
             items.Rows.Add(item.Description, values.Quantity.ToString(), MoneyFormatter.Decimal(values.UnitPrice.ToString()), MoneyFormatter.Decimal(values.Amount.ToString()));
         }
         items.ClearSelection();
-        var close = new Button { Text = "關閉", DialogResult = DialogResult.OK, Width = 110, Height = 34, Anchor = AnchorStyles.None };
+        var close = UiControls.StandardButton("關閉");
+        close.DialogResult = DialogResult.OK;
+        close.Anchor = AnchorStyles.None;
         root.Controls.Add(fields, 0, 0);
         root.Controls.Add(items, 0, 1);
         root.Controls.Add(close, 0, 2);
