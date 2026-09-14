@@ -16,7 +16,7 @@ internal sealed class InitialSetupForm : Form
         this.repository = repository;
         Text = "CYInvoice 首次安全設定";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(540, 282);
+        ClientSize = new Size(300, 360);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -28,29 +28,31 @@ internal sealed class InitialSetupForm : Form
 
     private void BuildLayout()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(20) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(16) };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 220));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         root.Controls.Add(new Label
         {
             Text = "首次使用固定進入光貿測試環境，請先完成本機密碼設定。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
+            AutoSize = false,
         }, 0, 0);
 
-        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, Padding = new Padding(4) };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 205));
+        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(4, 0, 4, 0) };
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
-        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        for (var index = 0; index < 3; index++)
+        {
+            fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        }
         fields.Controls.Add(FieldLabel("MO店+ Excel 保護密碼"), 0, 0);
-        fields.Controls.Add(moPassword, 1, 0);
-        fields.Controls.Add(FieldLabel("設定管理密碼"), 0, 1);
-        fields.Controls.Add(adminPassword, 1, 1);
-        fields.Controls.Add(FieldLabel("再次輸入管理密碼"), 0, 2);
-        fields.Controls.Add(confirmPassword, 1, 2);
+        fields.Controls.Add(moPassword, 0, 1);
+        fields.Controls.Add(FieldLabel("設定管理密碼"), 0, 2);
+        fields.Controls.Add(adminPassword, 0, 3);
+        fields.Controls.Add(FieldLabel("再次輸入管理密碼"), 0, 4);
+        fields.Controls.Add(confirmPassword, 0, 5);
         moPassword.TabIndex = 0;
         adminPassword.TabIndex = 1;
         confirmPassword.TabIndex = 2;
@@ -59,8 +61,10 @@ internal sealed class InitialSetupForm : Form
         confirmPassword.KeyDown += (_, eventArgs) => CompleteOnEnter(eventArgs);
         root.Controls.Add(fields, 0, 1);
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 7, 0, 0) };
-        var cancel = new Button { Text = "取消並關閉", DialogResult = DialogResult.Cancel, Width = 110, Height = 34 };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0), WrapContents = false };
+        var cancel = new Button { Text = "取消並關閉", DialogResult = DialogResult.Cancel, Width = 104, Height = 36 };
+        save.Width = 104;
+        save.Height = 36;
         save.TabIndex = 3;
         cancel.TabIndex = 4;
         save.Click += SaveClicked;
@@ -68,7 +72,7 @@ internal sealed class InitialSetupForm : Form
         buttons.Controls.Add(save);
         root.Controls.Add(buttons, 0, 2);
         Controls.Add(root);
-        AcceptButton = save;
+        AcceptButton = null;
         CancelButton = cancel;
     }
 
@@ -129,8 +133,11 @@ internal sealed class InitialSetupForm : Form
             throw new InvalidOperationException("首次設定未建立三個必要密碼欄位");
         if (!moPassword.UseSystemPasswordChar || !adminPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar)
             throw new InvalidOperationException("首次設定密碼欄未遮蔽內容");
-        if (moPassword.TabIndex != 0 || adminPassword.TabIndex != 1 || confirmPassword.TabIndex != 2 || !ReferenceEquals(AcceptButton, save))
-            throw new InvalidOperationException("首次設定鍵盤順序或 Enter 完成設定未建立");
+        if (moPassword.TabIndex != 0 || adminPassword.TabIndex != 1 || confirmPassword.TabIndex != 2 || AcceptButton is not null)
+            throw new InvalidOperationException("首次設定鍵盤順序或 Enter 分段操作未建立");
+        var buttonBottom = PointToClient(save.PointToScreen(new Point(0, save.Height))).Y;
+        if (ClientSize.Width > 320 || buttonBottom > ClientSize.Height || save.Height < 34)
+            throw new InvalidOperationException("首次設定窄版視窗或底部按鈕配置不正確");
     }
 
     private static Label FieldLabel(string text) => new()
@@ -146,7 +153,7 @@ internal sealed class InitialSetupForm : Form
     {
         Dock = DockStyle.Fill,
         UseSystemPasswordChar = true,
-        Margin = new Padding(3, 7, 3, 7),
+        Margin = new Padding(0, 4, 0, 7),
         MaxLength = 200,
     };
 }

@@ -21,7 +21,7 @@ internal sealed class InvoiceEntryControl : UserControl
     private readonly TextBox buyerName = UiControls.TextBox(200);
     private readonly RadioButton taxInclusive = new() { Text = "以含稅輸入", AutoSize = true, Checked = true };
     private readonly RadioButton taxExclusive = new() { Text = "以未稅輸入", AutoSize = true };
-    private readonly NativeListViewHost itemsHost = new(12F, 32);
+    private readonly NativeListViewHost itemsHost = new(12F, 26);
     private readonly TextBox remark = new() { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = InvoiceLimits.MaximumRemarkCharacters };
     private readonly Label remarkCounter = UiControls.Label("0 / 200", ContentAlignment.MiddleRight);
     private readonly Label salesTotal = TotalLabel(false);
@@ -69,11 +69,11 @@ internal sealed class InvoiceEntryControl : UserControl
     private void BuildLayout()
     {
         rootLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 152));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
         rootLayout.Controls.Add(BuildImports(), 0, 0);
         rootLayout.Controls.Add(BuildBuyer(), 0, 1);
         rootLayout.Controls.Add(BuildItems(), 0, 2);
@@ -97,9 +97,9 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         var group = new GroupBox { Text = "發票基本資料", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 3 };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         foreach (var width in new[] { 100, 250, 105, 230, 0 })
             layout.ColumnStyles.Add(width == 0 ? new ColumnStyle(SizeType.Percent, 100) : new ColumnStyle(SizeType.Absolute, width));
         var orderModes = RadioGroup(automaticOrder, customOrder);
@@ -124,7 +124,7 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         itemsGroup = new GroupBox { Text = "商品明細資料（最多 50 筆）", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 10) };
         itemsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
-        itemsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        itemsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         itemsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -194,12 +194,12 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Control BuildActions()
     {
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 10, 0, 0) };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 6, 0, 0) };
         actions.Controls.Add(FixedButton("清空", 150, (_, _) => ResetDraft()));
         issueButton.Click += async (_, _) => await IssueAsync();
         actions.Controls.Add(issueButton);
         actions.Controls.Add(FixedButton("預覽", 150, (_, _) => Preview()));
-        actions.Resize += (_, _) => actions.Padding = new Padding(Math.Max(0, (actions.ClientSize.Width - 480) / 2), 10, 0, 0);
+        actions.Resize += (_, _) => actions.Padding = new Padding(Math.Max(0, (actions.ClientSize.Width - 480) / 2), 6, 0, 0);
         return actions;
     }
 
@@ -736,6 +736,9 @@ internal sealed class InvoiceEntryControl : UserControl
             throw new InvalidOperationException("商品清單欄寬未對齊 scrollbar 前的可視範圍");
         if (itemsHost.VisibleRowCapacity() != MinimumVisibleRows)
             throw new InvalidOperationException($"商品清單可視列數不是五列：{itemsHost.VisibleRowCapacity()}");
+        var rowHeights = rootLayout?.GetRowHeights() ?? [];
+        if (rowHeights.Length != 5 || rowHeights[3] < 150 || rowHeights.Sum() > ClientSize.Height)
+            throw new InvalidOperationException("主畫面摘要或底部操作區高度不足");
         BeginCellEdit(0, 1);
         Application.DoEvents();
         if (cellEditor is null || cellEditor.IsDisposed)

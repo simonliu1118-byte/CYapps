@@ -20,6 +20,7 @@ internal sealed class MainForm : Form
     private readonly Label environmentLabel = new();
     private readonly Label apiLabel = new();
     private readonly TabControl tabs = new();
+    private readonly Panel tabHost = new();
     private readonly TabPage invoiceTab = new("開立發票");
     private readonly TabPage recordsTab = new("已開立發票清單");
     private readonly Button settingsButton = new();
@@ -76,7 +77,8 @@ internal sealed class MainForm : Form
         banner.Controls.Add(environmentLabel);
         banner.Controls.Add(apiLabel);
 
-        var tabHost = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 0) };
+        tabHost.Dock = DockStyle.Fill;
+        tabHost.Margin = new Padding(0, 8, 0, 0);
         tabs.Dock = DockStyle.Fill;
         tabs.Appearance = TabAppearance.Normal;
         tabs.DrawMode = TabDrawMode.Normal;
@@ -94,7 +96,7 @@ internal sealed class MainForm : Form
         };
         settingsButton.Text = "設定";
         settingsButton.Width = 132;
-        settingsButton.Height = 38;
+        settingsButton.Height = 34;
         settingsButton.Margin = Padding.Empty;
         settingsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         settingsButton.TextAlign = ContentAlignment.MiddleCenter;
@@ -114,7 +116,14 @@ internal sealed class MainForm : Form
 
     private void PositionSettingsButton(Control tabHost)
     {
-        settingsButton.Location = new Point(Math.Max(0, tabHost.ClientSize.Width - settingsButton.Width - 10), 4);
+        var headerHeight = settingsButton.Height;
+        if (tabs.IsHandleCreated && tabs.TabCount > 0)
+            headerHeight = Math.Max(30, tabs.GetTabRect(0).Height);
+        settingsButton.SetBounds(
+            Math.Max(0, tabHost.ClientSize.Width - settingsButton.Width),
+            0,
+            settingsButton.Width,
+            headerHeight);
         settingsButton.BringToFront();
     }
 
@@ -159,10 +168,16 @@ internal sealed class MainForm : Form
         if (Math.Abs(Font.SizeInPoints - 12F) > 0.1F || Math.Abs(environmentLabel.Font.SizeInPoints - 14F) > 0.1F)
             throw new InvalidOperationException("主畫面與環境標題字級不正確");
         if (Icon is null) throw new InvalidOperationException("主視窗未載入內嵌程式圖示");
+        PositionSettingsButton(tabHost);
+        if (settingsButton.Top != 0 || settingsButton.Right != tabHost.ClientSize.Width ||
+            settingsButton.Bottom > tabs.GetTabRect(0).Bottom + 1)
+            throw new InvalidOperationException("設定按鈕未貼齊原生頁籤標頭右側");
         tabs.SelectedTab = invoiceTab;
         tabs.PerformLayout();
         Application.DoEvents();
         invoicePage.VerifySmokeLayout();
+        if (ExcelComRows.AutomationLcid != 1033)
+            throw new InvalidOperationException("Excel COM 未使用相容的 en-US LCID 1033");
         tabs.SelectedTab = recordsTab;
         tabs.PerformLayout();
         Application.DoEvents();

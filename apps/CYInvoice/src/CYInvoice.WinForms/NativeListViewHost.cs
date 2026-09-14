@@ -70,7 +70,7 @@ internal sealed class NativeListViewHost : UserControl
     {
         get
         {
-            var width = List.ClientSize.Width - 2;
+            var width = List.ClientSize.Width;
             if (scrollNeeded) width -= SystemInformation.VerticalScrollBarWidth;
             // The native ListView client rectangle is reported in device pixels,
             // while ColumnHeader.Width remains in 96-DPI logical units.

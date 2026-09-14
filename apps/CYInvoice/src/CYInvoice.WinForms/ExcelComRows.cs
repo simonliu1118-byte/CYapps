@@ -8,6 +8,9 @@ namespace CYInvoice.WinForms;
 
 internal static class ExcelComRows
 {
+    private static readonly CultureInfo ExcelAutomationCulture = CultureInfo.GetCultureInfo("en-US");
+    internal static int AutomationLcid => ExcelAutomationCulture.LCID;
+
     public static Task<IReadOnlyList<IReadOnlyList<string>>> ReadFirstWorksheetAsync(
         string filePath,
         string password,
@@ -31,8 +34,12 @@ internal static class ExcelComRows
             TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
+            var originalCulture = CultureInfo.CurrentCulture;
+            var originalUiCulture = CultureInfo.CurrentUICulture;
             try
             {
+                CultureInfo.CurrentCulture = ExcelAutomationCulture;
+                CultureInfo.CurrentUICulture = ExcelAutomationCulture;
                 cancellationToken.ThrowIfCancellationRequested();
                 completion.TrySetResult(ReadFirstWorksheet(fullPath, password, sourceName, cancellationToken));
             }
@@ -43,6 +50,11 @@ internal static class ExcelComRows
             catch (Exception error)
             {
                 completion.TrySetException(error);
+            }
+            finally
+            {
+                CultureInfo.CurrentCulture = originalCulture;
+                CultureInfo.CurrentUICulture = originalUiCulture;
             }
         })
         {
@@ -86,7 +98,7 @@ internal static class ExcelComRows
             workbooks = GetProperty(excel, "Workbooks");
             try
             {
-                workbook = InvokeMethod(workbooks, "Open", filePath, 0, true, 5, password);
+                workbook = InvokeMethod(workbooks, "Open", filePath, 0, true, Type.Missing, password);
             }
             catch (Exception error)
             {
@@ -228,11 +240,11 @@ internal static class ExcelComRows
         {
             return target.GetType().InvokeMember(
                 name,
-                BindingFlags.Public | BindingFlags.Instance | operation,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.OptionalParamBinding | operation,
                 binder: null,
                 target,
                 arguments,
-                CultureInfo.InvariantCulture);
+                ExcelAutomationCulture);
         }
         catch (TargetInvocationException error) when (error.InnerException is not null)
         {
