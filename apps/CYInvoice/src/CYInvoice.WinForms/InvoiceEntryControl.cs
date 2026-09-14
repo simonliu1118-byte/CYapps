@@ -741,7 +741,7 @@ internal sealed class InvoiceEntryControl : UserControl
             throw new InvalidOperationException($"商品清單可視列數不是五列：{itemsHost.VisibleRowCapacity()}");
         var rowHeights = rootLayout?.GetRowHeights() ?? [];
         var totalRowHeight = rowHeights.Sum();
-        var lineHeight = TextRenderer.MeasureText("Ag", remark.Font).Height;
+        var lineHeight = (int)Math.Ceiling(remark.Font.GetHeight());
         if (rowHeights.Length != 6 || Math.Abs(rowHeights[3] - SummaryPanelHeight()) > 2 ||
             remark.ClientSize.Height < lineHeight * 3 || remark.ClientSize.Height > lineHeight * 3 + 12 ||
             totalRowHeight > ClientSize.Height)
