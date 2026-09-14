@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class MainForm : Form
 {
-    private static readonly Size DefaultClientSize = new(1264, 861);
+    private static readonly Size DefaultClientSize = new(1264, 945);
     private const int WmNcHitTest = 0x0084;
     private const int WmSysCommand = 0x0112;
     private const int ScSize = 0xF000;
