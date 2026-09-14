@@ -169,11 +169,12 @@ internal sealed class SettingsForm : Form
             appKey.PlaceholderText != "留白會保留目前已儲存的 App Key。")
             throw new InvalidOperationException("App Key 保留提示未放在輸入欄位內");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
-        var noteLeft = testAccountText.PointToScreen(Point.Empty).X;
-        var invoiceLeft = invoiceLabel.PointToScreen(Point.Empty).X;
-        var appKeyLeft = appKeyLabel.PointToScreen(Point.Empty).X;
-        if (logicalWidth > 430 || Math.Abs(noteLeft - invoiceLeft) > 2 || Math.Abs(noteLeft - appKeyLeft) > 2)
-            throw new InvalidOperationException(
-                $"設定視窗寬度或測試帳號說明對齊不正確：邏輯寬 {logicalWidth:F1}px，說明 {noteLeft}px，統編 {invoiceLeft}px，App Key {appKeyLeft}px");
+        if (testAccountText.Parent is not TableLayoutPanel environment ||
+            environment.GetPositionFromControl(testAccountText).Column != 1 ||
+            environment.GetPositionFromControl(invoiceLabel).Column != 1 ||
+            environment.GetPositionFromControl(appKeyLabel).Column != 1 ||
+            environment.GetColumnSpan(testAccountText) != 2 ||
+            logicalWidth > 430)
+            throw new InvalidOperationException("設定視窗寬度或測試帳號說明欄位配置不正確");
     }
 }
