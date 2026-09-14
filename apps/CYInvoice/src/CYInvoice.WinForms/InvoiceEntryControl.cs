@@ -48,6 +48,7 @@ internal sealed class InvoiceEntryControl : UserControl
     private bool committingEditor;
     private TableLayoutPanel? rootLayout;
     private TableLayoutPanel? itemsLayout;
+    private TableLayoutPanel? remarkLayout;
     private GroupBox? itemsGroup;
 
     private ListView Items => itemsHost.List;
@@ -166,7 +167,7 @@ internal sealed class InvoiceEntryControl : UserControl
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 63));
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37));
         var remarkGroup = new GroupBox { Text = "發票總備註", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
-        var remarkLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
+        remarkLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
         remarkLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, RemarkInputHeight()));
         remarkLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         remarkLayout.Controls.Add(remark, 0, 0);
@@ -755,12 +756,16 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private void ApplyMeasuredLayout()
     {
-        if (rootLayout is null || itemsLayout is null || itemsGroup is null || IsDisposed) return;
+        if (rootLayout is null || itemsLayout is null || itemsGroup is null || remarkLayout is null || IsDisposed) return;
         var listHeight = itemsHost.HeightForRows(MinimumVisibleRows);
         itemsLayout.RowStyles[1].SizeType = SizeType.Absolute;
         itemsLayout.RowStyles[1].Height = listHeight;
         var chrome = Math.Max(18, itemsGroup.Height - itemsGroup.DisplayRectangle.Height);
         rootLayout.RowStyles[2].Height = itemsLayout.RowStyles[0].Height + listHeight + chrome + itemsGroup.Margin.Vertical;
+        remarkLayout.RowStyles[0].SizeType = SizeType.Absolute;
+        remarkLayout.RowStyles[0].Height = RemarkInputHeight();
+        rootLayout.RowStyles[3].SizeType = SizeType.Absolute;
+        rootLayout.RowStyles[3].Height = SummaryPanelHeight();
         PerformLayout();
     }
 
