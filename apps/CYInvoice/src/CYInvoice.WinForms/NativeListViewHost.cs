@@ -18,6 +18,7 @@ internal sealed class NativeListViewHost : UserControl
     private readonly int configuredRowHeight;
     private bool settingColumnWidths;
     private bool scrollNeeded;
+    private bool notifyingViewport;
 
     public NativeListViewHost(float fontSize = 10F, int rowHeight = 27)
     {
@@ -153,16 +154,6 @@ internal sealed class NativeListViewHost : UserControl
         }
     }
 
-    protected override void OnSizeChanged(EventArgs eventArgs)
-    {
-        base.OnSizeChanged(eventArgs);
-        if (!IsHandleCreated || IsDisposed) return;
-        BeginInvoke((Action)(() =>
-        {
-            if (!IsDisposed && IsHandleCreated) ViewportChanged?.Invoke(this, EventArgs.Empty);
-        }));
-    }
-
     protected override void OnLayout(LayoutEventArgs eventArgs)
     {
         base.OnLayout(eventArgs);
@@ -173,6 +164,10 @@ internal sealed class NativeListViewHost : UserControl
             0,
             emptyScrollBar.Width,
             Math.Max(1, ClientSize.Height));
+        if (notifyingViewport || !IsHandleCreated || IsDisposed) return;
+        notifyingViewport = true;
+        try { ViewportChanged?.Invoke(this, EventArgs.Empty); }
+        finally { notifyingViewport = false; }
     }
 
     protected override void Dispose(bool disposing)
