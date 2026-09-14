@@ -9,7 +9,6 @@ internal sealed class NativeListViewHost : UserControl
     private const int LvmGetHeader = LvmFirst + 31;
     private readonly VScrollBar emptyScrollBar = new()
     {
-        Dock = DockStyle.Right,
         Enabled = false,
         TabStop = false,
         Visible = true,
@@ -29,7 +28,6 @@ internal sealed class NativeListViewHost : UserControl
 
         List = new NativeListView
         {
-            Dock = DockStyle.Fill,
             View = View.Details,
             FullRowSelect = true,
             GridLines = true,
@@ -72,11 +70,7 @@ internal sealed class NativeListViewHost : UserControl
         get
         {
             var width = List.ClientSize.Width - 2;
-            if (!scrollNeeded)
-            {
-                var overlap = Math.Max(0, List.Right - emptyScrollBar.Left);
-                width -= Math.Min(emptyScrollBar.Width, overlap);
-            }
+            if (scrollNeeded) width -= SystemInformation.VerticalScrollBarWidth;
             return Math.Max(1, width);
         }
     }
@@ -93,6 +87,7 @@ internal sealed class NativeListViewHost : UserControl
         scrollNeeded = needed;
         emptyScrollBar.Visible = !needed;
         emptyScrollBar.Enabled = false;
+        PerformLayout();
         emptyScrollBar.BringToFront();
     }
 
@@ -163,6 +158,18 @@ internal sealed class NativeListViewHost : UserControl
         {
             if (!IsDisposed && IsHandleCreated) ViewportChanged?.Invoke(this, EventArgs.Empty);
         }));
+    }
+
+    protected override void OnLayout(LayoutEventArgs eventArgs)
+    {
+        base.OnLayout(eventArgs);
+        var reservedWidth = scrollNeeded ? 0 : emptyScrollBar.Width;
+        List.SetBounds(0, 0, Math.Max(1, ClientSize.Width - reservedWidth), Math.Max(1, ClientSize.Height));
+        emptyScrollBar.SetBounds(
+            Math.Max(0, ClientSize.Width - emptyScrollBar.Width),
+            0,
+            emptyScrollBar.Width,
+            Math.Max(1, ClientSize.Height));
     }
 
     protected override void Dispose(bool disposing)
