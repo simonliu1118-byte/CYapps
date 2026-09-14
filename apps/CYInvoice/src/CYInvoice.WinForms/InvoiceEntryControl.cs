@@ -956,7 +956,7 @@ internal sealed class InvoiceEntryControl : UserControl
     }
 
     private int TextLineHeight() => TextRenderer.MeasureText("Ag", Font).Height;
-    private int RemarkInputHeight() => (TextLineHeight() * 3) + 6;
+    private int RemarkInputHeight() => (TextLineHeight() * 3) + 13;
     private int TotalRowHeight() => TextLineHeight() + 6;
     private int SummaryPanelHeight() => SummaryOuterTopPadding +
         Math.Max(RemarkInputHeight() + SummaryGroupChromeHeight, (TotalRowHeight() * 3) + 1 + SummaryGroupChromeHeight);
