@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using CYInvoice.Core.Imports;
 
@@ -10,7 +11,8 @@ internal static class ExcelComRows
     public static Task<IReadOnlyList<IReadOnlyList<string>>> ReadFirstWorksheetAsync(
         string filePath,
         string password,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string sourceName = "MO店+")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(password);
@@ -22,7 +24,7 @@ internal static class ExcelComRows
         var fullPath = Path.GetFullPath(filePath);
         if (!File.Exists(fullPath))
         {
-            throw new FileNotFoundException("找不到要匯入的 MO店+ Excel", fullPath);
+            throw new FileNotFoundException($"找不到要匯入的 {sourceName} Excel", fullPath);
         }
 
         var completion = new TaskCompletionSource<IReadOnlyList<IReadOnlyList<string>>>(
@@ -32,7 +34,7 @@ internal static class ExcelComRows
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                completion.TrySetResult(ReadFirstWorksheet(fullPath, password, cancellationToken));
+                completion.TrySetResult(ReadFirstWorksheet(fullPath, password, sourceName, cancellationToken));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -55,6 +57,7 @@ internal static class ExcelComRows
     private static IReadOnlyList<IReadOnlyList<string>> ReadFirstWorksheet(
         string filePath,
         string password,
+        string sourceName,
         CancellationToken cancellationToken)
     {
         object? excel = null;
@@ -87,7 +90,10 @@ internal static class ExcelComRows
             }
             catch (Exception error)
             {
-                throw new InvalidDataException("Excel 開啟失敗，請確認檔案是 MO店+ 原始 OrderExport 且保護密碼正確", Unwrap(error));
+                var guidance = sourceName == "MO店+"
+                    ? "請確認檔案是 MO店+ 原始 OrderExport 且保護密碼正確"
+                    : $"請確認檔案是 {sourceName} 原始 Excel 且未損毀";
+                throw new InvalidDataException($"Excel 開啟失敗，{guidance}。實際原因：{Unwrap(error).Message}", Unwrap(error));
             }
 
             var openBook = workbook ?? throw new InvalidOperationException("Excel 開啟活頁簿後沒有回傳可讀取物件");
@@ -138,8 +144,10 @@ internal static class ExcelComRows
         }
         catch (Exception error)
         {
-            operationError = error;
-            throw;
+            var actual = Unwrap(error);
+            operationError = actual;
+            if (actual is InvalidDataException or InvalidOperationException) throw;
+            throw new InvalidDataException($"讀取 {sourceName} Excel 失敗：{actual.Message}", actual);
         }
         finally
         {
@@ -214,17 +222,29 @@ internal static class ExcelComRows
     private static object? InvokeMethod(object target, string name, params object?[] arguments) =>
         InvokeMember(target, name, BindingFlags.InvokeMethod, arguments);
 
-    private static object? InvokeMember(object target, string name, BindingFlags operation, object?[] arguments) =>
-        target.GetType().InvokeMember(
-            name,
-            BindingFlags.Public | BindingFlags.Instance | operation,
-            binder: null,
-            target,
-            arguments,
-            CultureInfo.InvariantCulture);
-
-    private static Exception Unwrap(Exception error)
+    private static object? InvokeMember(object target, string name, BindingFlags operation, object?[] arguments)
     {
+        try
+        {
+            return target.GetType().InvokeMember(
+                name,
+                BindingFlags.Public | BindingFlags.Instance | operation,
+                binder: null,
+                target,
+                arguments,
+                CultureInfo.InvariantCulture);
+        }
+        catch (TargetInvocationException error) when (error.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(error.InnerException).Throw();
+            throw;
+        }
+    }
+
+    internal static Exception Unwrap(Exception error)
+    {
+        while (error is AggregateException { InnerExceptions: { Count: 1 } } aggregate)
+            error = aggregate.InnerException!;
         while (error is TargetInvocationException { InnerException: not null } invocation)
         {
             error = invocation.InnerException!;

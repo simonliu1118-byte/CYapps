@@ -12,6 +12,8 @@ on:
       - "apps/CYInvoice/src/CYInvoice.Core/**"
       - "apps/CYInvoice/src/CYInvoice.WinForms/**"
       - "apps/CYInvoice/tests/CYInvoice.Core.Tests/**"
+      - "apps/CYInvoice/assets/CYInvoice.ico"
+      - "apps/CYInvoice/scripts/verify-pe.ps1"
       - ".github/workflows/cyinvoice-csharp-build.yml"
 
 permissions:
@@ -77,6 +79,9 @@ jobs:
 
       - name: Publish engineering preview
         run: dotnet publish src/CYInvoice.WinForms/CYInvoice.WinForms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o out
+
+      - name: Verify embedded Windows resources
+        run: ./scripts/verify-pe.ps1 -Path ./out/CYInvoice.exe
 
       - uses: actions/upload-artifact@v7
         with:

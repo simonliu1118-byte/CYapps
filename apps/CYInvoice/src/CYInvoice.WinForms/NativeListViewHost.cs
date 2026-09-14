@@ -6,6 +6,7 @@ internal sealed class NativeListViewHost : UserControl
 {
     private const int LvmFirst = 0x1000;
     private const int LvmGetCountPerPage = LvmFirst + 40;
+    private const int LvmGetHeader = LvmFirst + 31;
     private readonly VScrollBar emptyScrollBar = new()
     {
         Dock = DockStyle.Right,
@@ -15,11 +16,13 @@ internal sealed class NativeListViewHost : UserControl
         Width = SystemInformation.VerticalScrollBarWidth,
     };
     private readonly ImageList rowHeightImages = new();
+    private readonly int configuredRowHeight;
     private bool settingColumnWidths;
     private bool scrollNeeded;
 
     public NativeListViewHost(float fontSize = 10F, int rowHeight = 27)
     {
+        configuredRowHeight = rowHeight;
         Dock = DockStyle.Fill;
         Margin = Padding.Empty;
         BackColor = Color.White;
@@ -64,6 +67,20 @@ internal sealed class NativeListViewHost : UserControl
 
     public bool ScrollSlotReserved => !scrollNeeded;
 
+    public int ColumnViewportWidth
+    {
+        get
+        {
+            var width = List.ClientSize.Width - 2;
+            if (!scrollNeeded)
+            {
+                var overlap = Math.Max(0, List.Right - emptyScrollBar.Left);
+                width -= Math.Min(emptyScrollBar.Width, overlap);
+            }
+            return Math.Max(1, width);
+        }
+    }
+
     public int VisibleRowCapacity()
     {
         if (!List.IsHandleCreated) List.CreateControl();
@@ -77,6 +94,50 @@ internal sealed class NativeListViewHost : UserControl
         emptyScrollBar.Visible = !needed;
         emptyScrollBar.Enabled = false;
         emptyScrollBar.BringToFront();
+    }
+
+    public int HeightForRows(int rowCount)
+    {
+        if (!List.IsHandleCreated) List.CreateControl();
+        var headerHeight = HeaderHeight();
+        var actualRowHeight = configuredRowHeight;
+        if (List.Items.Count > 0)
+        {
+            try { actualRowHeight = Math.Max(actualRowHeight, List.GetItemRect(0).Height); }
+            catch (ArgumentException) { }
+        }
+        return headerHeight + (Math.Max(1, rowCount) * actualRowHeight) + 2;
+    }
+
+    public static void DrawHeader(DrawListViewColumnHeaderEventArgs eventArgs, Font font)
+    {
+        using (var background = new SolidBrush(Color.FromArgb(246, 246, 246)))
+            eventArgs.Graphics.FillRectangle(background, eventArgs.Bounds);
+
+        var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+        var header = eventArgs.Header;
+        flags |= header?.TextAlign switch
+        {
+            HorizontalAlignment.Center => TextFormatFlags.HorizontalCenter,
+            HorizontalAlignment.Right => TextFormatFlags.Right,
+            _ => TextFormatFlags.Left,
+        };
+        var textBounds = Rectangle.Inflate(eventArgs.Bounds, -6, 0);
+        TextRenderer.DrawText(eventArgs.Graphics, header?.Text ?? string.Empty, font, textBounds, SystemColors.ControlText, flags);
+        using var pen = new Pen(Color.FromArgb(190, 190, 190));
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+    }
+
+    private int HeaderHeight()
+    {
+        var header = SendMessage(List.Handle, LvmGetHeader, IntPtr.Zero, IntPtr.Zero);
+        if (header != IntPtr.Zero && GetWindowRect(header, out var bounds))
+        {
+            var height = bounds.Bottom - bounds.Top;
+            if (height > 0) return height;
+        }
+        return TextRenderer.MeasureText("Ag", List.Font).Height + 10;
     }
 
     public void SetColumnWidths(IReadOnlyList<int> widths)
@@ -112,6 +173,19 @@ internal sealed class NativeListViewHost : UserControl
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr window, out NativeRect bounds);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
 
     private sealed class NativeListView : ListView
     {

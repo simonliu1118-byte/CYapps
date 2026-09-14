@@ -16,14 +16,30 @@ internal static class PlatformImportReader
         return MoImporter.ParseRows(rows);
     }
 
-    public static Task<IReadOnlyList<CoupangOrder>> ReadCoupangExportAsync(
+    public static async Task<IReadOnlyList<CoupangOrder>> ReadCoupangExportAsync(
         string filePath,
-        CancellationToken cancellationToken = default) =>
-        Task.Run(() =>
+        CancellationToken cancellationToken = default)
+    {
+        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+        IReadOnlyList<IReadOnlyList<string>> rows;
+        if (extension == ".xls")
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var rows = XlsxRows.ReadFirstWorksheet(filePath);
-            cancellationToken.ThrowIfCancellationRequested();
-            return CoupangImporter.ParseRows(rows);
-        }, cancellationToken);
+            rows = await ExcelComRows.ReadFirstWorksheetAsync(
+                filePath, string.Empty, cancellationToken, "酷澎").ConfigureAwait(false);
+        }
+        else if (extension is ".xlsx" or ".xlsm")
+        {
+            rows = await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return XlsxRows.ReadFirstWorksheet(filePath);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            throw new InvalidDataException("酷澎匯入只支援 .xls、.xlsx、.xlsm Excel 檔案");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return CoupangImporter.ParseRows(rows);
+    }
 }

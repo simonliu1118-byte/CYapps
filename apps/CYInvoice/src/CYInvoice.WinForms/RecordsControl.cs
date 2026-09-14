@@ -19,7 +19,7 @@ internal sealed class RecordsControl : UserControl
     private readonly ComboBox source = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox state = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NativeListViewHost recordsHost = new(9F, 24);
-    private readonly Button refreshButton = new() { Text = "重新整理狀態", Width = 135, Height = 34 };
+    private readonly Button refreshButton = new() { Text = "重新整理狀態", Width = 160, Height = 40 };
     private readonly List<InvoiceRecord> visible = [];
     private readonly Font voidedFont;
     private bool fillingRows;
@@ -35,6 +35,7 @@ internal sealed class RecordsControl : UserControl
         Dock = DockStyle.Fill;
         BackColor = Color.White;
         Padding = new Padding(18);
+        Font = new Font("Microsoft JhengHei UI", 12F);
         BuildLayout();
         ResetFilters();
         Reload();
@@ -45,14 +46,14 @@ internal sealed class RecordsControl : UserControl
         source.Items.AddRange(["全部", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang]);
         state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.Failed, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 144));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var filters = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 8, RowCount = 3, Padding = new Padding(0, 4, 0, 6) };
-        foreach (var width in new[] { 82, 0, 82, 0, 72, 0, 82, 0 })
+        foreach (var width in new[] { 94, 0, 90, 0, 84, 0, 94, 0 })
             filters.ColumnStyles.Add(width == 0 ? new ColumnStyle(SizeType.Percent, 25) : new ColumnStyle(SizeType.Absolute, width));
-        filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         filters.Controls.Add(UiControls.Label("開立日期"), 0, 0);
         var dates = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Margin = Padding.Empty };
         dates.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -70,9 +71,9 @@ internal sealed class RecordsControl : UserControl
         AddFilter(filters, "來源", source, 4, 1);
         AddFilter(filters, "發票狀態", state, 6, 1);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-        var query = new Button { Text = "查詢", Width = 90, Height = 34 };
+        var query = new Button { Text = "查詢", Width = 100, Height = 40 };
         query.Click += (_, _) => Reload();
-        var clear = new Button { Text = "清除條件", Width = 105, Height = 34 };
+        var clear = new Button { Text = "清除條件", Width = 120, Height = 40 };
         clear.Click += (_, _) => { ResetFilters(); Reload(); };
         refreshButton.Click += async (_, _) => await RefreshFromApiAsync();
         buttons.Controls.Add(query);
@@ -104,6 +105,10 @@ internal sealed class RecordsControl : UserControl
         Records.Columns.Add("交付方式", 88, HorizontalAlignment.Left);
         Records.Columns.Add("發票狀態", 88, HorizontalAlignment.Left);
         Records.Columns.Add("上傳", 58, HorizontalAlignment.Center);
+        Records.OwnerDraw = true;
+        Records.DrawColumnHeader += (_, eventArgs) => NativeListViewHost.DrawHeader(eventArgs, Records.Font);
+        Records.DrawItem += (_, eventArgs) => { if (Records.View != View.Details) eventArgs.DrawDefault = true; };
+        Records.DrawSubItem += DrawRecordSubItem;
         Records.MouseDown += (_, eventArgs) =>
         {
             var hit = Records.HitTest(eventArgs.Location);
@@ -260,7 +265,7 @@ internal sealed class RecordsControl : UserControl
     private void LayoutColumns()
     {
         if (Records.Columns.Count != 10 || Records.ClientSize.Width <= 0) return;
-        var available = Math.Max(1, Records.ClientSize.Width - 4);
+        var available = recordsHost.ColumnViewportWidth;
         var widths = new[] { 158, 108, 76, 155, 106, 0, 86, 88, 88, 58 };
         widths[5] = Math.Max(80, available - widths.Sum());
         var over = widths.Sum() - available;
@@ -279,6 +284,24 @@ internal sealed class RecordsControl : UserControl
         recordsHost.SetColumnWidths(widths);
     }
 
+    private void DrawRecordSubItem(object? sender, DrawListViewSubItemEventArgs eventArgs)
+    {
+        if (eventArgs.Item is null || eventArgs.SubItem is null) return;
+        using (var brush = new SolidBrush(eventArgs.SubItem.BackColor))
+            eventArgs.Graphics.FillRectangle(brush, eventArgs.Bounds);
+
+        var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
+        flags |= eventArgs.ColumnIndex == 6
+            ? TextFormatFlags.Right
+            : eventArgs.ColumnIndex == 9 ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Left;
+        var textBounds = Rectangle.Inflate(eventArgs.Bounds, -5, 0);
+        TextRenderer.DrawText(eventArgs.Graphics, eventArgs.SubItem.Text, eventArgs.SubItem.Font ?? Records.Font,
+            textBounds, eventArgs.SubItem.ForeColor, flags);
+        using var pen = new Pen(Color.FromArgb(190, 190, 190));
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+    }
+
     private void ResetFilters()
     {
         var today = DateTime.Today;
@@ -295,6 +318,8 @@ internal sealed class RecordsControl : UserControl
         if (Records.Columns.Count != 10) throw new InvalidOperationException("已開立發票原生 ListView 欄位未建立");
         if (!recordsHost.ScrollSlotReserved) throw new InvalidOperationException("已開立發票清單未保留停用垂直 scrollbar");
         if (Math.Abs(Records.Font.SizeInPoints - 9F) > 0.1F) throw new InvalidOperationException("已開立發票清單未使用 9pt 字級");
+        if (Math.Abs(Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width) - recordsHost.ColumnViewportWidth) > 1)
+            throw new InvalidOperationException("已開立發票清單欄寬未對齊 scrollbar 前的可視範圍");
     }
 
     protected override void Dispose(bool disposing)

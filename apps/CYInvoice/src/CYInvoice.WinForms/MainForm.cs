@@ -6,6 +6,13 @@ namespace CYInvoice.WinForms;
 
 internal sealed class MainForm : Form
 {
+    private static readonly Size DefaultClientSize = new(1264, 861);
+    private const int WmNcHitTest = 0x0084;
+    private const int WmSysCommand = 0x0112;
+    private const int ScSize = 0xF000;
+    private const int HtLeft = 10;
+    private const int HtBottomRight = 17;
+    private const int HtBorder = 18;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly InvoiceEntryControl invoicePage;
@@ -17,14 +24,24 @@ internal sealed class MainForm : Form
     private readonly TabPage recordsTab = new("已開立發票清單");
     private readonly Button settingsButton = new();
 
-    public MainForm()
+    public MainForm(bool startupSmokeTest = false)
     {
         Text = $"CY 電子發票 V{ApplicationVersion.Read()}（C# 重製測試版）";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(1180, 850);
-        ClientSize = new Size(1164, 811);
-        Font = new Font("Microsoft JhengHei UI", 10F);
+        ClientSize = DefaultClientSize;
+        Font = new Font("Microsoft JhengHei UI", 12F);
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
+        MinimizeBox = true;
+        SizeGripStyle = SizeGripStyle.Hide;
+        ShowIcon = true;
+        Icon = ApplicationIcon.Load();
         BackColor = Color.FromArgb(245, 245, 245);
+        ResizeEnd += (_, _) =>
+        {
+            if (WindowState == FormWindowState.Normal && ClientSize != DefaultClientSize)
+                ClientSize = DefaultClientSize;
+        };
 
         repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
         service = new InvoiceService(repository);
@@ -32,7 +49,7 @@ internal sealed class MainForm : Form
         invoicePage = new InvoiceEntryControl(repository, service, recordsPage.Reload);
         BuildShell();
         UpdateEnvironment();
-        Shown += async (_, _) =>
+        if (!startupSmokeTest) Shown += async (_, _) =>
         {
             if (!EnsureInitialSetup()) return;
             UpdateEnvironment();
@@ -44,16 +61,16 @@ internal sealed class MainForm : Form
     private void BuildShell()
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(20, 16, 20, 16) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var banner = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(236, 246, 255) };
         environmentLabel.Dock = DockStyle.Fill;
         environmentLabel.TextAlign = ContentAlignment.MiddleCenter;
-        environmentLabel.Font = new Font(Font.FontFamily, 12F, FontStyle.Bold);
+        environmentLabel.Font = new Font(Font.FontFamily, 14F, FontStyle.Bold);
         environmentLabel.ForeColor = Color.FromArgb(0, 72, 170);
         apiLabel.Dock = DockStyle.Right;
-        apiLabel.Width = 170;
+        apiLabel.Width = 190;
         apiLabel.TextAlign = ContentAlignment.MiddleRight;
         apiLabel.Padding = new Padding(0, 0, 14, 0);
         banner.Controls.Add(environmentLabel);
@@ -64,7 +81,7 @@ internal sealed class MainForm : Form
         tabs.Appearance = TabAppearance.Normal;
         tabs.DrawMode = TabDrawMode.Normal;
         tabs.Multiline = false;
-        tabs.Padding = new Point(14, 5);
+        tabs.Padding = new Point(18, 7);
         invoiceTab.BackColor = Color.White;
         recordsTab.BackColor = Color.White;
         invoiceTab.Controls.Add(invoicePage);
@@ -76,8 +93,8 @@ internal sealed class MainForm : Form
             if (tabs.SelectedTab == recordsTab) recordsPage.Reload();
         };
         settingsButton.Text = "設定";
-        settingsButton.Width = 120;
-        settingsButton.Height = 30;
+        settingsButton.Width = 132;
+        settingsButton.Height = 38;
         settingsButton.Margin = Padding.Empty;
         settingsButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         settingsButton.TextAlign = ContentAlignment.MiddleCenter;
@@ -87,6 +104,7 @@ internal sealed class MainForm : Form
         tabHost.Controls.Add(tabs);
         tabHost.Controls.Add(settingsButton);
         tabHost.Resize += (_, _) => PositionSettingsButton(tabHost);
+        tabHost.Layout += (_, _) => PositionSettingsButton(tabHost);
         PositionSettingsButton(tabHost);
         settingsButton.BringToFront();
         root.Controls.Add(banner, 0, 0);
@@ -96,7 +114,21 @@ internal sealed class MainForm : Form
 
     private void PositionSettingsButton(Control tabHost)
     {
-        settingsButton.Location = new Point(Math.Max(0, tabHost.ClientSize.Width - settingsButton.Width - 8), 2);
+        settingsButton.Location = new Point(Math.Max(0, tabHost.ClientSize.Width - settingsButton.Width - 10), 4);
+        settingsButton.BringToFront();
+    }
+
+    protected override void WndProc(ref Message message)
+    {
+        if (message.Msg == WmSysCommand && ((long)message.WParam & 0xFFF0L) == ScSize)
+            return;
+
+        base.WndProc(ref message);
+        if (message.Msg == WmNcHitTest && WindowState == FormWindowState.Normal)
+        {
+            var hit = message.Result.ToInt32();
+            if (hit >= HtLeft && hit <= HtBottomRight) message.Result = (IntPtr)HtBorder;
+        }
     }
 
     private void OpenSettings()
@@ -124,6 +156,9 @@ internal sealed class MainForm : Form
     {
         if (tabs.TabPages.Count != 2 || tabs.TabPages[0] != invoiceTab || tabs.TabPages[1] != recordsTab)
             throw new InvalidOperationException("主頁籤未使用兩頁原生 TabControl");
+        if (Math.Abs(Font.SizeInPoints - 12F) > 0.1F || Math.Abs(environmentLabel.Font.SizeInPoints - 14F) > 0.1F)
+            throw new InvalidOperationException("主畫面與環境標題字級不正確");
+        if (Icon is null) throw new InvalidOperationException("主視窗未載入內嵌程式圖示");
         invoicePage.VerifySmokeLayout();
         recordsPage.VerifySmokeLayout();
         using var firstSetup = new InitialSetupForm(repository);

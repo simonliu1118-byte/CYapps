@@ -1,5 +1,18 @@
 namespace CYInvoice.WinForms;
 
+internal static class ApplicationIcon
+{
+    private static readonly Lazy<Icon> Current = new(() =>
+    {
+        using var stream = typeof(ApplicationIcon).Assembly.GetManifestResourceStream("CYInvoice.AppIcon")
+            ?? throw new InvalidOperationException("CYInvoice 內嵌視窗圖示不存在");
+        using var icon = new Icon(stream);
+        return (Icon)icon.Clone();
+    });
+
+    public static Icon Load() => (Icon)Current.Value.Clone();
+}
+
 internal static class Program
 {
     [STAThread]
@@ -11,11 +24,12 @@ internal static class Program
             ApplicationConfiguration.Initialize();
             if (smokeTest)
             {
-                using var form = new MainForm();
-                form.CreateControl();
+                using var form = new MainForm(startupSmokeTest: true);
+                form.Show();
                 form.PerformLayout();
                 Application.DoEvents();
                 form.VerifySmokeLayout();
+                form.Close();
                 return;
             }
             Application.Run(new MainForm());

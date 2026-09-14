@@ -12,6 +12,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\CYInvoice.Core\CYInvoice.Core.csproj" />
+    <EmbeddedResource Include="..\..\assets\CYInvoice.ico" LogicalName="CYInvoice.AppIcon" />
     <Content Include="..\..\VERSION-CS" Link="VERSION-CS" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

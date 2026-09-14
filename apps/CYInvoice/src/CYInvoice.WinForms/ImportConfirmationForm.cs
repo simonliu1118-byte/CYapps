@@ -231,8 +231,25 @@ internal sealed class ImportConfirmationForm : Form
         }
         catch (Exception error)
         {
-            SetBusy(false, "匯入失敗：" + ShortError(error));
-            MessageBox.Show(this, error.Message, $"{source} 匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            var actual = ExcelComRows.Unwrap(error);
+            WriteImportError(actual);
+            SetBusy(false, "匯入失敗：" + ShortError(actual));
+            MessageBox.Show(this, actual.Message, $"{source} 匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void WriteImportError(Exception error)
+    {
+        try
+        {
+            var directory = Path.Combine(AppContext.BaseDirectory, "Logs");
+            Directory.CreateDirectory(directory);
+            var record = $"[{DateTimeOffset.Now:O}] {source} 匯入失敗{Environment.NewLine}{error}{Environment.NewLine}{Environment.NewLine}";
+            File.AppendAllText(Path.Combine(directory, "import-error.log"), record);
+        }
+        catch (Exception)
+        {
+            // 診斷紀錄失敗不可遮蔽原始匯入錯誤。
         }
     }
 

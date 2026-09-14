@@ -9,6 +9,7 @@ internal sealed class InitialSetupForm : Form
     private readonly TextBox moPassword = PasswordBox();
     private readonly TextBox adminPassword = PasswordBox();
     private readonly TextBox confirmPassword = PasswordBox();
+    private readonly Button save = new() { Text = "完成設定", Width = 110, Height = 34 };
 
     public InitialSetupForm(LocalRepository repository)
     {
@@ -22,6 +23,7 @@ internal sealed class InitialSetupForm : Form
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
         BuildLayout();
+        Shown += (_, _) => moPassword.Focus();
     }
 
     private void BuildLayout()
@@ -49,11 +51,18 @@ internal sealed class InitialSetupForm : Form
         fields.Controls.Add(adminPassword, 1, 1);
         fields.Controls.Add(FieldLabel("再次輸入管理密碼"), 0, 2);
         fields.Controls.Add(confirmPassword, 1, 2);
+        moPassword.TabIndex = 0;
+        adminPassword.TabIndex = 1;
+        confirmPassword.TabIndex = 2;
+        moPassword.KeyDown += (_, eventArgs) => AdvanceOnEnter(eventArgs, adminPassword);
+        adminPassword.KeyDown += (_, eventArgs) => AdvanceOnEnter(eventArgs, confirmPassword);
+        confirmPassword.KeyDown += (_, eventArgs) => CompleteOnEnter(eventArgs);
         root.Controls.Add(fields, 0, 1);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 7, 0, 0) };
         var cancel = new Button { Text = "取消並關閉", DialogResult = DialogResult.Cancel, Width = 110, Height = 34 };
-        var save = new Button { Text = "完成設定", Width = 110, Height = 34 };
+        save.TabIndex = 3;
+        cancel.TabIndex = 4;
         save.Click += SaveClicked;
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(save);
@@ -67,9 +76,10 @@ internal sealed class InitialSetupForm : Form
     {
         try
         {
-            if (moPassword.Text.Length == 0) throw new InvalidOperationException("請輸入 MO店+ Excel 保護密碼");
-            if (adminPassword.Text.Length == 0) throw new InvalidOperationException("請設定管理密碼");
-            if (adminPassword.Text != confirmPassword.Text) throw new InvalidOperationException("兩次輸入的管理密碼不一致");
+            if (moPassword.Text.Length == 0) { ValidationError("請輸入 MO店+ Excel 保護密碼", moPassword); return; }
+            if (adminPassword.Text.Length == 0) { ValidationError("請設定管理密碼", adminPassword); return; }
+            if (confirmPassword.Text.Length == 0) { ValidationError("請再次輸入管理密碼", confirmPassword); return; }
+            if (adminPassword.Text != confirmPassword.Text) { ValidationError("兩次輸入的管理密碼不一致", confirmPassword); return; }
 
             var settings = repository.Settings.LoadOrCreate();
             if (settings.AdminPasswordSet || settings.MoPasswordEncrypted.Length != 0)
@@ -87,12 +97,40 @@ internal sealed class InitialSetupForm : Form
         }
     }
 
+    private static void AdvanceOnEnter(KeyEventArgs eventArgs, Control next)
+    {
+        if (eventArgs.KeyCode != Keys.Enter) return;
+        eventArgs.Handled = true;
+        eventArgs.SuppressKeyPress = true;
+        next.Focus();
+    }
+
+    private void CompleteOnEnter(KeyEventArgs eventArgs)
+    {
+        if (eventArgs.KeyCode != Keys.Enter) return;
+        eventArgs.Handled = true;
+        eventArgs.SuppressKeyPress = true;
+        save.PerformClick();
+    }
+
+    private void ValidationError(string message, TextBox target)
+    {
+        MessageBox.Show(this, message, "無法完成首次設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        BeginInvoke((Action)(() =>
+        {
+            target.Focus();
+            target.SelectAll();
+        }));
+    }
+
     internal void VerifySmokeLayout()
     {
         if (moPassword.Parent is null || adminPassword.Parent is null || confirmPassword.Parent is null)
             throw new InvalidOperationException("首次設定未建立三個必要密碼欄位");
         if (!moPassword.UseSystemPasswordChar || !adminPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar)
             throw new InvalidOperationException("首次設定密碼欄未遮蔽內容");
+        if (moPassword.TabIndex != 0 || adminPassword.TabIndex != 1 || confirmPassword.TabIndex != 2 || !ReferenceEquals(AcceptButton, save))
+            throw new InvalidOperationException("首次設定鍵盤順序或 Enter 完成設定未建立");
     }
 
     private static Label FieldLabel(string text) => new()
@@ -101,6 +139,7 @@ internal sealed class InitialSetupForm : Form
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft,
         AutoEllipsis = false,
+        TabStop = false,
     };
 
     private static TextBox PasswordBox() => new()

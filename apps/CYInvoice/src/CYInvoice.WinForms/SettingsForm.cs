@@ -47,14 +47,24 @@ internal sealed class SettingsForm : Form
         environment.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
         environment.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
         environment.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        environment.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        environment.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        environment.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         environment.Controls.Add(test, 0, 0);
         environment.SetColumnSpan(test, 2);
-        environment.Controls.Add(UiControls.Label("測試帳號由光貿固定提供，不可修改。"), 2, 0);
+        var testAccountText = UiControls.Label("測試帳號由光貿固定提供，不可修改。");
+        testAccountText.Margin = new Padding(3);
+        environment.Controls.Add(testAccountText, 2, 0);
         environment.Controls.Add(production, 0, 1);
-        environment.Controls.Add(UiControls.Label("統編"), 1, 1);
-        environment.Controls.Add(invoice, 2, 1);
+        var invoiceLabel = UiControls.Label("統編");
         var appKeyLabel = UiControls.Label("App Key");
+        invoiceLabel.Margin = Padding.Empty;
+        appKeyLabel.Margin = Padding.Empty;
+        environment.Controls.Add(invoiceLabel, 1, 1);
+        AlignEnvironmentField(invoice);
+        environment.Controls.Add(invoice, 2, 1);
         environment.Controls.Add(appKeyLabel, 1, 2);
+        AlignEnvironmentField(appKey);
         environment.Controls.Add(appKey, 2, 2);
         test.CheckedChanged += (_, _) => UpdateEnvironmentFields();
         production.CheckedChanged += (_, _) => UpdateEnvironmentFields();
@@ -101,6 +111,13 @@ internal sealed class SettingsForm : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         return layout;
+    }
+
+    private static void AlignEnvironmentField(TextBox field)
+    {
+        field.Dock = DockStyle.None;
+        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        field.Margin = new Padding(3);
     }
 
     private void LoadValues()
