@@ -86,11 +86,7 @@ internal sealed class NativeListViewHost : UserControl
 
     public void SetScrollNeeded(bool needed)
     {
-        if (scrollNeeded == needed)
-        {
-            QueueViewportChanged();
-            return;
-        }
+        if (scrollNeeded == needed) return;
         scrollNeeded = needed;
         List.Scrollable = true;
         List.PerformLayout();
