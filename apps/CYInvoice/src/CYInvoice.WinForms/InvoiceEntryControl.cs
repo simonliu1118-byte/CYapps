@@ -69,11 +69,11 @@ internal sealed class InvoiceEntryControl : UserControl
     private void BuildLayout()
     {
         rootLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         rootLayout.Controls.Add(BuildImports(), 0, 0);
         rootLayout.Controls.Add(BuildBuyer(), 0, 1);
         rootLayout.Controls.Add(BuildItems(), 0, 2);
@@ -194,12 +194,12 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Control BuildActions()
     {
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 6, 0, 0) };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 3, 0, 0) };
         actions.Controls.Add(FixedButton("清空", 150, (_, _) => ResetDraft()));
         issueButton.Click += async (_, _) => await IssueAsync();
         actions.Controls.Add(issueButton);
         actions.Controls.Add(FixedButton("預覽", 150, (_, _) => Preview()));
-        actions.Resize += (_, _) => actions.Padding = new Padding(Math.Max(0, (actions.ClientSize.Width - 480) / 2), 6, 0, 0);
+        actions.Resize += (_, _) => actions.Padding = new Padding(Math.Max(0, (actions.ClientSize.Width - 480) / 2), 3, 0, 0);
         return actions;
     }
 
@@ -737,8 +737,10 @@ internal sealed class InvoiceEntryControl : UserControl
         if (itemsHost.VisibleRowCapacity() != MinimumVisibleRows)
             throw new InvalidOperationException($"商品清單可視列數不是五列：{itemsHost.VisibleRowCapacity()}");
         var rowHeights = rootLayout?.GetRowHeights() ?? [];
-        if (rowHeights.Length != 5 || rowHeights[3] < 150 || rowHeights.Sum() > ClientSize.Height)
-            throw new InvalidOperationException("主畫面摘要或底部操作區高度不足");
+        var totalRowHeight = rowHeights.Sum();
+        if (rowHeights.Length != 5 || rowHeights[3] < 150 || totalRowHeight > ClientSize.Height)
+            throw new InvalidOperationException(
+                $"主畫面摘要或底部操作區高度不足：摘要 {rowHeights.ElementAtOrDefault(3)}px，總列高 {totalRowHeight}px，介面 {ClientSize.Height}px");
         BeginCellEdit(0, 1);
         Application.DoEvents();
         if (cellEditor is null || cellEditor.IsDisposed)
