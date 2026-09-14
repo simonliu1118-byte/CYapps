@@ -58,7 +58,7 @@ internal sealed class InvoiceEntryControl : UserControl
         this.recordsChanged = recordsChanged;
         Dock = DockStyle.Fill;
         BackColor = Color.White;
-        Padding = new Padding(18, 12, 18, 12);
+        Padding = new Padding(18, 4, 18, 4);
         Font = new Font("Microsoft JhengHei UI", 12F);
         BuildLayout();
         ConfigureEvents();
@@ -69,11 +69,11 @@ internal sealed class InvoiceEntryControl : UserControl
     private void BuildLayout()
     {
         rootLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 122));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         rootLayout.Controls.Add(BuildImports(), 0, 0);
         rootLayout.Controls.Add(BuildBuyer(), 0, 1);
         rootLayout.Controls.Add(BuildItems(), 0, 2);
@@ -97,9 +97,9 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         var group = new GroupBox { Text = "發票基本資料", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 3 };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         foreach (var width in new[] { 100, 250, 105, 230, 0 })
             layout.ColumnStyles.Add(width == 0 ? new ColumnStyle(SizeType.Percent, 100) : new ColumnStyle(SizeType.Absolute, width));
         var orderModes = RadioGroup(automaticOrder, customOrder);
@@ -124,7 +124,7 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         itemsGroup = new GroupBox { Text = "商品明細資料（最多 50 筆）", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 10) };
         itemsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
-        itemsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        itemsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         itemsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));

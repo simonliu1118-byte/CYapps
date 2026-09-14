@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class MainForm : Form
 {
-    private static readonly Size DefaultClientSize = new(1264, 945);
+    private static readonly Size DefaultClientSize = new(1264, 861);
     private const int WmNcHitTest = 0x0084;
     private const int WmSysCommand = 0x0112;
     private const int ScSize = 0xF000;
@@ -61,8 +61,8 @@ internal sealed class MainForm : Form
 
     private void BuildShell()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(20, 16, 20, 16) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(20, 6, 20, 6) };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var banner = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(236, 246, 255) };
@@ -78,7 +78,7 @@ internal sealed class MainForm : Form
         banner.Controls.Add(apiLabel);
 
         tabHost.Dock = DockStyle.Fill;
-        tabHost.Margin = new Padding(0, 8, 0, 0);
+        tabHost.Margin = new Padding(0, 4, 0, 0);
         tabs.Dock = DockStyle.Fill;
         tabs.Appearance = TabAppearance.Normal;
         tabs.DrawMode = TabDrawMode.Normal;
