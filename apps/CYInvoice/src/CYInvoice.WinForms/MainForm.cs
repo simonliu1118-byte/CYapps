@@ -61,8 +61,8 @@ internal sealed class MainForm : Form
 
     private void BuildShell()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(20, 6, 20, 6) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(20, 2, 20, 2) };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var banner = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(236, 246, 255) };
@@ -78,7 +78,7 @@ internal sealed class MainForm : Form
         banner.Controls.Add(apiLabel);
 
         tabHost.Dock = DockStyle.Fill;
-        tabHost.Margin = new Padding(0, 4, 0, 0);
+        tabHost.Margin = Padding.Empty;
         tabs.Dock = DockStyle.Fill;
         tabs.Appearance = TabAppearance.Normal;
         tabs.DrawMode = TabDrawMode.Normal;
