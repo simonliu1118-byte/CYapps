@@ -119,7 +119,7 @@ internal sealed class RecordsControl : UserControl
             var hit = Records.HitTest(eventArgs.Location);
             if (hit.Item?.Tag is InvoiceRecord record) OpenSelected(record);
         };
-        recordsHost.ViewportChanged += (_, _) => { LayoutColumns(); FillPlaceholderRows(); };
+        recordsHost.ViewportChanged += (_, _) => { FillPlaceholderRows(); LayoutColumns(); };
     }
 
     public void Reload()
@@ -318,8 +318,9 @@ internal sealed class RecordsControl : UserControl
         if (Records.Columns.Count != 10) throw new InvalidOperationException("已開立發票原生 ListView 欄位未建立");
         if (!recordsHost.ScrollSlotReserved) throw new InvalidOperationException("已開立發票清單未保留停用垂直 scrollbar");
         if (Math.Abs(Records.Font.SizeInPoints - 9F) > 0.1F) throw new InvalidOperationException("已開立發票清單未使用 9pt 字級");
-        if (Math.Abs(Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width) - recordsHost.ColumnViewportWidth) > 1)
-            throw new InvalidOperationException("已開立發票清單欄寬未對齊 scrollbar 前的可視範圍");
+        var columnWidth = Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
+        if (Math.Abs(columnWidth - recordsHost.ColumnViewportWidth) > 1)
+            throw new InvalidOperationException($"已開立發票清單欄寬未對齊 scrollbar 前的可視範圍：欄位 {columnWidth}px，可視 {recordsHost.ColumnViewportWidth}px");
     }
 
     protected override void Dispose(bool disposing)
