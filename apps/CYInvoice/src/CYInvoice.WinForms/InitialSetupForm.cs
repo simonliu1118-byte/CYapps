@@ -9,7 +9,8 @@ internal sealed class InitialSetupForm : Form
     private readonly TextBox moPassword = PasswordBox();
     private readonly TextBox adminPassword = PasswordBox();
     private readonly TextBox confirmPassword = PasswordBox();
-    private readonly Button save = new() { Text = "完成設定", Width = 110, Height = 34 };
+    private readonly Button save = new() { Text = "完成設定", Width = 104, Height = 36 };
+    private readonly Button cancel = new() { Text = "取消並關閉", DialogResult = DialogResult.Cancel, Width = 104, Height = 36 };
 
     public InitialSetupForm(LocalRepository repository)
     {
@@ -61,15 +62,18 @@ internal sealed class InitialSetupForm : Form
         confirmPassword.KeyDown += (_, eventArgs) => CompleteOnEnter(eventArgs);
         root.Controls.Add(fields, 0, 1);
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 8, 0, 0), WrapContents = false };
-        var cancel = new Button { Text = "取消並關閉", DialogResult = DialogResult.Cancel, Width = 104, Height = 36 };
-        save.Width = 104;
-        save.Height = 36;
+        var buttons = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(0, 8, 0, 0) };
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        save.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        save.Margin = new Padding(0, 0, 6, 0);
+        cancel.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        cancel.Margin = new Padding(6, 0, 0, 0);
         save.TabIndex = 3;
         cancel.TabIndex = 4;
         save.Click += SaveClicked;
-        buttons.Controls.Add(cancel);
-        buttons.Controls.Add(save);
+        buttons.Controls.Add(save, 0, 0);
+        buttons.Controls.Add(cancel, 1, 0);
         root.Controls.Add(buttons, 0, 2);
         Controls.Add(root);
         AcceptButton = null;
@@ -135,9 +139,13 @@ internal sealed class InitialSetupForm : Form
             throw new InvalidOperationException("首次設定密碼欄未遮蔽內容");
         if (moPassword.TabIndex != 0 || adminPassword.TabIndex != 1 || confirmPassword.TabIndex != 2 || AcceptButton is not null)
             throw new InvalidOperationException("首次設定鍵盤順序或 Enter 分段操作未建立");
-        var buttonBottom = PointToClient(save.PointToScreen(new Point(0, save.Height))).Y;
-        if (ClientSize.Width > 320 || buttonBottom > ClientSize.Height || save.Height < 34)
-            throw new InvalidOperationException("首次設定窄版視窗或底部按鈕配置不正確");
+        var saveBounds = RectangleToClient(save.RectangleToScreen(save.ClientRectangle));
+        var cancelBounds = RectangleToClient(cancel.RectangleToScreen(cancel.ClientRectangle));
+        var center = ClientSize.Width / 2;
+        if (ClientSize.Width > 320 || saveBounds.Bottom > ClientSize.Height || cancelBounds.Bottom > ClientSize.Height ||
+            saveBounds.Right > center || cancelBounds.Left < center ||
+            Math.Abs(center - saveBounds.Right - (cancelBounds.Left - center)) > 2)
+            throw new InvalidOperationException("首次設定窄版視窗或置中雙按鈕配置不正確");
     }
 
     private static Label FieldLabel(string text) => new()

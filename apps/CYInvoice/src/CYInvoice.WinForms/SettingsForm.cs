@@ -12,9 +12,11 @@ internal sealed class SettingsForm : Form
     private readonly TextBox invoice = UiControls.TextBox(8);
     private readonly TextBox appKey = UiControls.TextBox(200);
     private readonly TextBox moPassword = UiControls.TextBox(200);
-    private readonly TextBox currentPassword = UiControls.TextBox(200);
     private readonly TextBox newPassword = UiControls.TextBox(200);
     private readonly TextBox confirmPassword = UiControls.TextBox(200);
+    private Label testAccountText = null!;
+    private Label invoiceLabel = null!;
+    private Label appKeyLabel = null!;
 
     public SettingsForm(LocalRepository repository)
     {
@@ -22,7 +24,7 @@ internal sealed class SettingsForm : Form
         settings = repository.Settings.LoadOrCreate();
         Text = "CYInvoice 設定";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(610, settings.AdminPasswordSet ? 480 : 510);
+        ClientSize = new Size(420, 430);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -35,7 +37,7 @@ internal sealed class SettingsForm : Form
 
     private void BuildLayout()
     {
-        foreach (var box in new[] { appKey, moPassword, currentPassword, newPassword, confirmPassword }) box.UseSystemPasswordChar = true;
+        foreach (var box in new[] { appKey, moPassword, newPassword, confirmPassword }) box.UseSystemPasswordChar = true;
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(18) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 160));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
@@ -44,20 +46,21 @@ internal sealed class SettingsForm : Form
 
         var environmentGroup = new GroupBox { Text = "使用環境", Dock = DockStyle.Fill };
         var environment = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 3, Padding = new Padding(8) };
-        environment.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125));
-        environment.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
+        environment.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        environment.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 68));
         environment.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         environment.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         environment.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         environment.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         environment.Controls.Add(test, 0, 0);
         environment.SetColumnSpan(test, 2);
-        var testAccountText = UiControls.Label("測試帳號由光貿固定提供，不可修改。");
-        testAccountText.Margin = new Padding(3);
-        environment.Controls.Add(testAccountText, 2, 0);
+        testAccountText = UiControls.Label("測試帳號由光貿固定提供，不可修改。");
+        testAccountText.Margin = Padding.Empty;
+        environment.Controls.Add(testAccountText, 1, 0);
+        environment.SetColumnSpan(testAccountText, 2);
         environment.Controls.Add(production, 0, 1);
-        var invoiceLabel = UiControls.Label("統編");
-        var appKeyLabel = UiControls.Label("App Key");
+        invoiceLabel = UiControls.Label("統編");
+        appKeyLabel = UiControls.Label("App Key");
         invoiceLabel.Margin = Padding.Empty;
         appKeyLabel.Margin = Padding.Empty;
         environment.Controls.Add(invoiceLabel, 1, 1);
@@ -78,16 +81,10 @@ internal sealed class SettingsForm : Form
 
         var passwordGroup = new GroupBox { Text = "設定管理密碼", Dock = DockStyle.Fill };
         var passwords = TwoColumnLayout();
-        var row = 0;
-        if (settings.AdminPasswordSet)
-        {
-            passwords.Controls.Add(UiControls.Label("目前管理密碼"), 0, row);
-            passwords.Controls.Add(currentPassword, 1, row++);
-        }
-        passwords.Controls.Add(UiControls.Label(settings.AdminPasswordSet ? "新密碼（不更改可留白）" : "建立管理密碼"), 0, row);
-        passwords.Controls.Add(newPassword, 1, row++);
-        passwords.Controls.Add(UiControls.Label("再次輸入新密碼"), 0, row);
-        passwords.Controls.Add(confirmPassword, 1, row);
+        passwords.Controls.Add(UiControls.Label(settings.AdminPasswordSet ? "新密碼（不更改可留白）" : "建立管理密碼"), 0, 0);
+        passwords.Controls.Add(newPassword, 1, 0);
+        passwords.Controls.Add(UiControls.Label("再次輸入新密碼"), 0, 1);
+        passwords.Controls.Add(confirmPassword, 1, 1);
         passwordGroup.Controls.Add(passwords);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 7, 0, 0) };
@@ -108,7 +105,7 @@ internal sealed class SettingsForm : Form
     private static TableLayoutPanel TwoColumnLayout()
     {
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(8) };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         return layout;
     }
@@ -143,8 +140,6 @@ internal sealed class SettingsForm : Form
     {
         try
         {
-            if (settings.AdminPasswordSet && !SettingsStore.CheckAdminPassword(settings, currentPassword.Text))
-                throw new InvalidOperationException("目前管理密碼不正確");
             if (!settings.AdminPasswordSet || newPassword.Text.Length != 0 || confirmPassword.Text.Length != 0)
             {
                 if (newPassword.Text.Length == 0 || newPassword.Text != confirmPassword.Text)
@@ -173,5 +168,7 @@ internal sealed class SettingsForm : Form
         if (settings.ProductionAppKeyEncrypted.Length != 0 &&
             appKey.PlaceholderText != "留白會保留目前已儲存的 App Key。")
             throw new InvalidOperationException("App Key 保留提示未放在輸入欄位內");
+        if (ClientSize.Width > 430 || testAccountText.Left != invoiceLabel.Left || testAccountText.Left != appKeyLabel.Left)
+            throw new InvalidOperationException("設定視窗寬度或測試帳號說明對齊不正確");
     }
 }

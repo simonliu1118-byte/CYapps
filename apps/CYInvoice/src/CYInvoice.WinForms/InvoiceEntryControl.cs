@@ -8,6 +8,7 @@ namespace CYInvoice.WinForms;
 internal sealed class InvoiceEntryControl : UserControl
 {
     private const int MinimumVisibleRows = 5;
+    private const int SummaryChromeHeight = 74;
     private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
@@ -68,17 +69,18 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private void BuildLayout()
     {
-        rootLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 122));
+        rootLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6 };
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, SummaryPanelHeight()));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         rootLayout.Controls.Add(BuildImports(), 0, 0);
         rootLayout.Controls.Add(BuildBuyer(), 0, 1);
         rootLayout.Controls.Add(BuildItems(), 0, 2);
         rootLayout.Controls.Add(BuildSummary(), 0, 3);
-        rootLayout.Controls.Add(BuildActions(), 0, 4);
+        rootLayout.Controls.Add(BuildActions(), 0, 5);
         Controls.Add(rootLayout);
     }
 
@@ -160,12 +162,12 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Control BuildSummary()
     {
-        var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(0, 10, 0, 0), MinimumSize = new Size(0, 150) };
+        var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(0, 10, 0, 0) };
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 63));
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37));
         var remarkGroup = new GroupBox { Text = "發票總備註", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
         var remarkLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
-        remarkLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        remarkLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, RemarkInputHeight()));
         remarkLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         remarkLayout.Controls.Add(remark, 0, 0);
         remarkLayout.Controls.Add(remarkCounter, 0, 1);
@@ -738,9 +740,12 @@ internal sealed class InvoiceEntryControl : UserControl
             throw new InvalidOperationException($"商品清單可視列數不是五列：{itemsHost.VisibleRowCapacity()}");
         var rowHeights = rootLayout?.GetRowHeights() ?? [];
         var totalRowHeight = rowHeights.Sum();
-        if (rowHeights.Length != 5 || rowHeights[3] < 150 || totalRowHeight > ClientSize.Height)
+        var lineHeight = TextRenderer.MeasureText("Ag", remark.Font).Height;
+        if (rowHeights.Length != 6 || Math.Abs(rowHeights[3] - SummaryPanelHeight()) > 2 ||
+            remark.ClientSize.Height < lineHeight * 3 || remark.ClientSize.Height > lineHeight * 3 + 12 ||
+            totalRowHeight > ClientSize.Height)
             throw new InvalidOperationException(
-                $"主畫面摘要或底部操作區高度不足：摘要 {rowHeights.ElementAtOrDefault(3)}px，總列高 {totalRowHeight}px，介面 {ClientSize.Height}px");
+                $"主畫面三列備註配置不正確：備註 {remark.ClientSize.Height}px，行高 {lineHeight}px，摘要 {rowHeights.ElementAtOrDefault(3)}px");
         BeginCellEdit(0, 1);
         Application.DoEvents();
         if (cellEditor is null || cellEditor.IsDisposed)
@@ -758,6 +763,9 @@ internal sealed class InvoiceEntryControl : UserControl
         rootLayout.RowStyles[2].Height = itemsLayout.RowStyles[0].Height + listHeight + chrome + itemsGroup.Margin.Vertical;
         PerformLayout();
     }
+
+    private int RemarkInputHeight() => TextRenderer.MeasureText("Ag", remark.Font).Height * 3 + 8;
+    private int SummaryPanelHeight() => RemarkInputHeight() + SummaryChromeHeight;
 
     private static string Cell(ListViewItem row, int column) => row.SubItems[column].Text.Trim();
     private static string Clean(string value) => value.Replace(",", string.Empty, StringComparison.Ordinal).Trim();

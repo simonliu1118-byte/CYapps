@@ -128,7 +128,10 @@ internal sealed class RecordsControl : UserControl
         try
         {
             visible.Clear();
-            visible.AddRange(repository.Invoices.LoadOrCreate().Where(Matches));
+            var currentEnvironment = repository.Settings.LoadOrCreate().Environment;
+            visible.AddRange(repository.Invoices.LoadOrCreate()
+                .Where(record => record.Environment == currentEnvironment)
+                .Where(Matches));
             Records.BeginUpdate();
             updateStarted = true;
             Records.Items.Clear();

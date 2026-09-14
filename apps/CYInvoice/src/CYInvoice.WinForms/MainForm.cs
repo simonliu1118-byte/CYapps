@@ -142,10 +142,21 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
+        var settings = repository.Settings.LoadOrCreate();
+        if (!settings.AdminPasswordSet)
+        {
+            MessageBox.Show(this, "尚未建立設定管理密碼，請先完成首次安全設定。", "無法開啟設定",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        using (var unlock = new AdminUnlockForm(settings))
+            if (unlock.ShowDialog(this) != DialogResult.OK) return;
+
         using var form = new SettingsForm(repository);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         UpdateEnvironment();
         invoicePage.RefreshEnvironment();
+        recordsPage.Reload();
         _ = RefreshApiAsync();
     }
 
@@ -188,6 +199,10 @@ internal sealed class MainForm : Form
         firstSetup.CreateControl();
         firstSetup.PerformLayout();
         firstSetup.VerifySmokeLayout();
+        using var unlock = new AdminUnlockForm(repository.Settings.LoadOrCreate());
+        unlock.CreateControl();
+        unlock.PerformLayout();
+        unlock.VerifySmokeLayout();
         using var settings = new SettingsForm(repository);
         settings.CreateControl();
         settings.PerformLayout();
