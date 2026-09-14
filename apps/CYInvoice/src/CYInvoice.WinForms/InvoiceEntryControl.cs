@@ -179,6 +179,7 @@ internal sealed class InvoiceEntryControl : UserControl
         remarkLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1 };
         remarkLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, RemarkInputHeight()));
         remarkLayout.Controls.Add(remark, 0, 0);
+        remarkCounter.Dock = DockStyle.None;
         remarkCounter.AutoSize = false;
         remarkCounter.Width = 92;
         remarkCounter.Height = 22;
