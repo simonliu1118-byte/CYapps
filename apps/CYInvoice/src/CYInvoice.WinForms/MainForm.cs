@@ -196,17 +196,23 @@ internal sealed class MainForm : Form
         tabs.SelectedTab = invoiceTab;
         Application.DoEvents();
         using var firstSetup = new InitialSetupForm(repository);
-        firstSetup.CreateControl();
+        firstSetup.Show(this);
         firstSetup.PerformLayout();
+        Application.DoEvents();
         firstSetup.VerifySmokeLayout();
+        firstSetup.Close();
         using var unlock = new AdminUnlockForm(repository.Settings.LoadOrCreate());
-        unlock.CreateControl();
+        unlock.Show(this);
         unlock.PerformLayout();
+        Application.DoEvents();
         unlock.VerifySmokeLayout();
+        unlock.Close();
         using var settings = new SettingsForm(repository);
-        settings.CreateControl();
+        settings.Show(this);
         settings.PerformLayout();
+        Application.DoEvents();
         settings.VerifySmokeLayout();
+        settings.Close();
     }
 
     private void UpdateEnvironment()
