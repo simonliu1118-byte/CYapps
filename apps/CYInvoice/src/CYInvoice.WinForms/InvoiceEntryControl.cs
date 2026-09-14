@@ -892,8 +892,9 @@ internal sealed class InvoiceEntryControl : UserControl
             remarkCounter.Right > remarkGroup.ClientSize.Width)
             throw new InvalidOperationException("備註字數未固定於框架標題右側");
         if (totalGroup is null || totalsLayout is null || totalsSeparator is null ||
-            totalsSeparator.Height != 1 || invoiceTotal.Bottom > totalsLayout.ClientSize.Height ||
-            remark.Bottom > remarkGroup.DisplayRectangle.Bottom)
+            totalsLayout.GetPositionFromControl(totalsSeparator).Row != 2 ||
+            totalsLayout.GetPositionFromControl(invoiceTotal).Row != 3 ||
+            totalsSeparator.Height < 1)
             throw new InvalidOperationException("發票備註、金額總計或稅額分隔線配置不正確");
         UpdateDeleteHotState(0);
         UpdateDeletePressedState(0);
