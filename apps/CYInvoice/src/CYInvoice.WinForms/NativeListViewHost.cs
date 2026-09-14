@@ -7,18 +7,12 @@ internal sealed class NativeListViewHost : UserControl
     private const int LvmFirst = 0x1000;
     private const int LvmGetCountPerPage = LvmFirst + 40;
     private const int LvmGetHeader = LvmFirst + 31;
-    private readonly VScrollBar emptyScrollBar = new()
-    {
-        Enabled = false,
-        TabStop = false,
-        Visible = true,
-        Width = SystemInformation.VerticalScrollBarWidth,
-    };
     private readonly ImageList rowHeightImages = new();
     private readonly int configuredRowHeight;
     private bool settingColumnWidths;
     private bool scrollNeeded;
     private bool notifyingViewport;
+    private bool viewportNotificationQueued;
 
     public NativeListViewHost(float fontSize = 10F, int rowHeight = 27)
     {
@@ -54,26 +48,30 @@ internal sealed class NativeListViewHost : UserControl
                 eventArgs.NewWidth = List.Columns[eventArgs.ColumnIndex].Width;
             }
         };
+        List.SizeChanged += (_, _) => QueueViewportChanged();
 
         Controls.Add(List);
-        Controls.Add(emptyScrollBar);
-        emptyScrollBar.BringToFront();
     }
 
     public ListView List { get; }
 
     public event EventHandler? ViewportChanged;
 
-    public bool ScrollSlotReserved => !scrollNeeded;
+    public bool UsesOnlyNativeScrollBar => Controls.Count == 1 && ReferenceEquals(Controls[0], List);
+
+    public bool NativeScrollNeeded => scrollNeeded;
 
     public int ColumnViewportWidth
     {
         get
         {
             var width = List.ClientSize.Width;
-            if (scrollNeeded) width -= SystemInformation.VerticalScrollBarWidth;
-            // The native ListView client rectangle is reported in device pixels,
-            // while ColumnHeader.Width remains in 96-DPI logical units.
+            if (List.IsHandleCreated)
+            {
+                var header = SendMessage(List.Handle, LvmGetHeader, IntPtr.Zero, IntPtr.Zero);
+                if (header != IntPtr.Zero && GetClientRect(header, out var headerBounds) && headerBounds.Right > headerBounds.Left)
+                    width = headerBounds.Right - headerBounds.Left;
+            }
             var dpi = List.DeviceDpi > 0 ? List.DeviceDpi : 96;
             return Math.Max(1, (int)Math.Round(width * 96D / dpi));
         }
@@ -88,11 +86,16 @@ internal sealed class NativeListViewHost : UserControl
 
     public void SetScrollNeeded(bool needed)
     {
+        if (scrollNeeded == needed)
+        {
+            QueueViewportChanged();
+            return;
+        }
         scrollNeeded = needed;
-        emptyScrollBar.Visible = !needed;
-        emptyScrollBar.Enabled = false;
-        PerformLayout();
-        emptyScrollBar.BringToFront();
+        List.Scrollable = true;
+        List.PerformLayout();
+        List.Invalidate();
+        QueueViewportChanged();
     }
 
     public int HeightForRows(int rowCount)
@@ -157,17 +160,22 @@ internal sealed class NativeListViewHost : UserControl
     protected override void OnLayout(LayoutEventArgs eventArgs)
     {
         base.OnLayout(eventArgs);
-        var reservedWidth = scrollNeeded ? 0 : emptyScrollBar.Width;
-        List.SetBounds(0, 0, Math.Max(1, ClientSize.Width - reservedWidth), Math.Max(1, ClientSize.Height));
-        emptyScrollBar.SetBounds(
-            Math.Max(0, ClientSize.Width - emptyScrollBar.Width),
-            0,
-            emptyScrollBar.Width,
-            Math.Max(1, ClientSize.Height));
-        if (notifyingViewport || !IsHandleCreated || IsDisposed) return;
-        notifyingViewport = true;
-        try { ViewportChanged?.Invoke(this, EventArgs.Empty); }
-        finally { notifyingViewport = false; }
+        List.SetBounds(0, 0, Math.Max(1, ClientSize.Width), Math.Max(1, ClientSize.Height));
+        QueueViewportChanged();
+    }
+
+    private void QueueViewportChanged()
+    {
+        if (viewportNotificationQueued || !IsHandleCreated || IsDisposed) return;
+        viewportNotificationQueued = true;
+        BeginInvoke((Action)(() =>
+        {
+            viewportNotificationQueued = false;
+            if (notifyingViewport || IsDisposed) return;
+            notifyingViewport = true;
+            try { ViewportChanged?.Invoke(this, EventArgs.Empty); }
+            finally { notifyingViewport = false; }
+        }));
     }
 
     protected override void Dispose(bool disposing)
@@ -182,6 +190,10 @@ internal sealed class NativeListViewHost : UserControl
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr window, out NativeRect bounds);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(IntPtr window, out NativeRect bounds);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeRect

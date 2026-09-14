@@ -20,7 +20,7 @@ internal sealed class SettingsForm : Form
     private TableLayoutPanel environmentLayout = null!;
     private Label invoiceLabel = null!;
     private Label appKeyLabel = null!;
-    private Label helpBadge = null!;
+    private Label moPasswordLabel = null!;
 
     public SettingsForm(LocalRepository repository)
     {
@@ -52,7 +52,7 @@ internal sealed class SettingsForm : Form
         var environmentGroup = new GroupBox { Text = "使用環境", Dock = DockStyle.Fill };
         environmentLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 4, Padding = new Padding(8) };
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
-        environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 68));
+        environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
@@ -73,15 +73,13 @@ internal sealed class SettingsForm : Form
         environmentGroup.Controls.Add(environmentLayout);
 
         var platformGroup = new GroupBox { Text = "平台檔案密碼", Dock = DockStyle.Fill };
-        var platform = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Padding = new Padding(8) };
-        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 72));
+        var platform = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(8) };
+        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         platform.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 28));
-        platform.Controls.Add(FieldLabel("MO店+"), 0, 0);
+        moPasswordLabel = FieldLabel("MO店+");
+        platform.Controls.Add(moPasswordLabel, 0, 0);
         platform.Controls.Add(moPassword, 1, 0);
-        helpBadge = CreateHelpBadge();
-        platform.Controls.Add(helpBadge, 2, 0);
-        toolTip.SetToolTip(helpBadge, "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。");
+        toolTip.SetToolTip(moPasswordLabel, "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。");
         platformGroup.Controls.Add(platform);
 
         var passwordGroup = new GroupBox { Text = "設定管理密碼", Dock = DockStyle.Fill };
@@ -186,28 +184,6 @@ internal sealed class SettingsForm : Form
         Margin = new Padding(3),
     };
 
-    private static Label CreateHelpBadge()
-    {
-        var badge = new Label
-        {
-            Text = "?",
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter,
-            AutoEllipsis = false,
-            TabStop = false,
-            Margin = new Padding(3, 7, 3, 7),
-        };
-        badge.Paint += (_, eventArgs) =>
-        {
-            var diameter = Math.Max(2, Math.Min(badge.ClientSize.Width, badge.ClientSize.Height) - 3);
-            var left = (badge.ClientSize.Width - diameter) / 2;
-            var top = (badge.ClientSize.Height - diameter) / 2;
-            using var pen = new Pen(Color.FromArgb(105, 105, 105));
-            eventArgs.Graphics.DrawEllipse(pen, left, top, diameter, diameter);
-        };
-        return badge;
-    }
-
     internal void VerifySmokeLayout()
     {
         if (invoice.ReadOnly != !production.Checked || appKey.ReadOnly != !production.Checked ||
@@ -222,8 +198,9 @@ internal sealed class SettingsForm : Form
             invoiceLabel.AutoEllipsis || appKeyLabel.AutoEllipsis)
             throw new InvalidOperationException("正式公司、統編與 App Key 未依指定方式排列");
         if (forgotPassword.Enabled || !UiControls.HasLogicalSize(changePassword, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
-            string.IsNullOrEmpty(toolTip.GetToolTip(helpBadge)))
-            throw new InvalidOperationException("設定管理密碼按鈕或 MO店+ 說明提示未建立");
+            string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
+            appKeyLabel.PreferredWidth > appKeyLabel.Width)
+            throw new InvalidOperationException("設定管理密碼按鈕、MO店+ 提示或 App Key 標籤配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         if (logicalWidth > 430)
             throw new InvalidOperationException("設定視窗未維持精簡寬度");

@@ -74,12 +74,18 @@ internal sealed class ImportBrandButton : Button
         base.OnKeyUp(eventArgs);
     }
 
+    protected override void OnPaintBackground(PaintEventArgs eventArgs)
+    {
+        eventArgs.Graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
+    }
+
     protected override void OnPaint(PaintEventArgs eventArgs)
     {
         var graphics = eventArgs.Graphics;
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
-        using var shape = RoundedRectangle(bounds, 5);
+        graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
+        var bounds = new Rectangle(1, 1, Math.Max(1, Width - 3), Math.Max(1, Height - 3));
+        using var shape = RoundedRectangle(bounds, 6);
         graphics.SetClip(shape);
 
         if (brand == ImportBrand.Digiwin) DrawDigiwin(graphics, bounds);
@@ -115,24 +121,27 @@ internal sealed class ImportBrandButton : Button
             graphics.FillRectangle(background, bounds);
         using (var accent = new SolidBrush(Color.FromArgb(229, 0, 45)))
             graphics.FillPolygon(accent,
-            new[]
-            {
+            [
                 new Point(bounds.Right - 20, bounds.Bottom),
                 new Point(bounds.Right, bounds.Bottom),
                 new Point(bounds.Right, bounds.Top + 8),
-            });
+            ]);
         DrawCenteredText(graphics, Text, Color.White, bounds);
     }
 
     private void DrawMoShop(Graphics graphics, Rectangle bounds)
     {
-        var split = Math.Max(46, (int)Math.Round(bounds.Width * 0.42));
+        var split = bounds.Left + (bounds.Width / 2);
         using (var left = new SolidBrush(Color.FromArgb(229, 0, 170)))
-            graphics.FillRectangle(left, bounds.Left, bounds.Top, split, bounds.Height);
+            graphics.FillRectangle(left, bounds.Left, bounds.Top, split - bounds.Left, bounds.Height);
         using (var right = new SolidBrush(Color.FromArgb(45, 62, 117)))
-            graphics.FillRectangle(right, bounds.Left + split, bounds.Top, bounds.Width - split, bounds.Height);
-        DrawCenteredText(graphics, "MO", Color.White, new Rectangle(bounds.Left, bounds.Top, split, bounds.Height));
-        DrawCenteredText(graphics, "店+", Color.White, new Rectangle(bounds.Left + split, bounds.Top, bounds.Width - split, bounds.Height));
+            graphics.FillRectangle(right, split, bounds.Top, bounds.Right - split, bounds.Height);
+        DrawAlignedText(graphics, "MO", Color.White,
+            new Rectangle(bounds.Left + 4, bounds.Top, Math.Max(1, split - bounds.Left - 9), bounds.Height),
+            TextFormatFlags.Right);
+        DrawAlignedText(graphics, "店+", Color.White,
+            new Rectangle(split + 5, bounds.Top, Math.Max(1, bounds.Right - split - 9), bounds.Height),
+            TextFormatFlags.Left);
     }
 
     private void DrawCoupang(Graphics graphics, Rectangle bounds)
@@ -162,12 +171,16 @@ internal sealed class ImportBrandButton : Button
 
     private void DrawCenteredText(Graphics graphics, string text, Color color, Rectangle bounds)
     {
-        TextRenderer.DrawText(graphics, text, Font, bounds, Enabled ? color : SystemColors.GrayText,
-            TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine |
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        DrawAlignedText(graphics, text, color, bounds, TextFormatFlags.HorizontalCenter);
     }
 
-    private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
+    private void DrawAlignedText(Graphics graphics, string text, Color color, Rectangle bounds, TextFormatFlags alignment)
+    {
+        TextRenderer.DrawText(graphics, text, Font, bounds, Enabled ? color : SystemColors.GrayText,
+            TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | alignment);
+    }
+
+    internal static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
     {
         var diameter = radius * 2;
         var path = new GraphicsPath();
@@ -177,5 +190,89 @@ internal sealed class ImportBrandButton : Button
         path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
         path.CloseFigure();
         return path;
+    }
+}
+
+internal sealed class PrimaryActionButton : Button
+{
+    private bool hovered;
+    private bool pressed;
+    private bool production;
+
+    public PrimaryActionButton()
+    {
+        Width = 190;
+        Height = 46;
+        Margin = Padding.Empty;
+        AutoSize = false;
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        ForeColor = Color.White;
+        Font = new Font("Microsoft JhengHei UI", 14F, FontStyle.Bold);
+        UseVisualStyleBackColor = false;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+    }
+
+    public void SetEnvironment(bool isProduction)
+    {
+        production = isProduction;
+        Invalidate();
+    }
+
+    protected override void OnMouseEnter(EventArgs eventArgs)
+    {
+        hovered = true;
+        Invalidate();
+        base.OnMouseEnter(eventArgs);
+    }
+
+    protected override void OnMouseLeave(EventArgs eventArgs)
+    {
+        hovered = false;
+        pressed = false;
+        Invalidate();
+        base.OnMouseLeave(eventArgs);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs eventArgs)
+    {
+        if (eventArgs.Button == MouseButtons.Left) pressed = true;
+        Invalidate();
+        base.OnMouseDown(eventArgs);
+    }
+
+    protected override void OnMouseUp(MouseEventArgs eventArgs)
+    {
+        pressed = false;
+        Invalidate();
+        base.OnMouseUp(eventArgs);
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs eventArgs)
+    {
+        eventArgs.Graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
+    }
+
+    protected override void OnPaint(PaintEventArgs eventArgs)
+    {
+        var normal = production ? Color.FromArgb(3, 155, 229) : Color.FromArgb(25, 135, 84);
+        var hover = production ? Color.FromArgb(41, 182, 246) : Color.FromArgb(31, 157, 99);
+        var down = production ? Color.FromArgb(2, 119, 189) : Color.FromArgb(19, 108, 67);
+        var borderColor = production ? Color.FromArgb(2, 119, 189) : Color.FromArgb(18, 105, 65);
+        var fill = !Enabled ? SystemColors.ControlDark : pressed ? down : hovered ? hover : normal;
+        var bounds = new Rectangle(1, 1, Math.Max(1, Width - 3), Math.Max(1, Height - 3));
+        eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        eventArgs.Graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
+        using var path = ImportBrandButton.RoundedRectangle(bounds, 7);
+        using var brush = new SolidBrush(fill);
+        using var pen = new Pen(borderColor);
+        eventArgs.Graphics.FillPath(brush, path);
+        eventArgs.Graphics.DrawPath(pen, path);
+        TextRenderer.DrawText(eventArgs.Graphics, Text, Font, bounds, Enabled ? Color.White : SystemColors.GrayText,
+            TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine |
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        if (Focused && ShowFocusCues)
+            ControlPaint.DrawFocusRectangle(eventArgs.Graphics, Rectangle.Inflate(bounds, -5, -5));
     }
 }

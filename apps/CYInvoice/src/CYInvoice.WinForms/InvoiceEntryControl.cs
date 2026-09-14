@@ -15,7 +15,8 @@ internal sealed class InvoiceEntryControl : UserControl
     private const int PreferredActionsHeight = 52;
     private const int MinimumActionsHeight = 52;
     private const int MaximumDefaultFlexibleGap = 80;
-    private const int SummaryChromeHeight = 46;
+    private const int SummaryOuterTopPadding = 10;
+    private const int SummaryGroupChromeHeight = 34;
     private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
@@ -37,6 +38,8 @@ internal sealed class InvoiceEntryControl : UserControl
     private readonly Label invoiceTotal = TotalLabel(true);
     private readonly Button issueButton = UiControls.PrimaryIssueButton();
     private readonly Button addItemButton = UiControls.StandardButton("＋ 新增明細");
+    private readonly Button clearButton = UiControls.StandardButton("清空");
+    private readonly Button previewButton = UiControls.StandardButton("預覽");
     private int hotDeleteRow = -1;
     private int pressedDeleteRow = -1;
     private NameLookup? cachedLookup;
@@ -50,6 +53,9 @@ internal sealed class InvoiceEntryControl : UserControl
     private TableLayoutPanel? remarkLayout;
     private GroupBox? itemsGroup;
     private GroupBox? remarkGroup;
+    private GroupBox? totalGroup;
+    private TableLayoutPanel? totalsLayout;
+    private Panel? totalsSeparator;
 
     private ListView Items => itemsHost.List;
 
@@ -172,7 +178,12 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Control BuildSummary()
     {
-        var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(0, 10, 0, 0) };
+        var split = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            Padding = new Padding(0, SummaryOuterTopPadding, 0, 0),
+        };
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 63));
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37));
         remarkGroup = new GroupBox { Text = "發票總備註", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
@@ -194,17 +205,22 @@ internal sealed class InvoiceEntryControl : UserControl
         remarkGroup.Controls.Add(remarkCounter);
         PositionRemarkCounter();
         remarkCounter.BringToFront();
-        var totalGroup = new GroupBox { Text = "金額總計", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
-        var totals = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
-        totals.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
-        totals.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
-        totals.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333F));
-        totals.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333F));
-        totals.RowStyles.Add(new RowStyle(SizeType.Percent, 33.334F));
-        AddTotal(totals, 0, "應稅銷售額", salesTotal);
-        AddTotal(totals, 1, "營業稅額（5%）", taxTotal);
-        AddTotal(totals, 2, "發票總額", invoiceTotal);
-        totalGroup.Controls.Add(totals);
+
+        totalGroup = new GroupBox { Text = "金額總計", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
+        totalsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4, Margin = Padding.Empty };
+        totalsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
+        totalsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+        totalsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, TotalRowHeight()));
+        totalsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, TotalRowHeight()));
+        totalsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 1));
+        totalsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, TotalRowHeight()));
+        AddTotal(totalsLayout, 0, "應稅銷售額", salesTotal);
+        AddTotal(totalsLayout, 1, "營業稅額（5%）", taxTotal);
+        totalsSeparator = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(185, 185, 185), Margin = new Padding(3, 0, 3, 0) };
+        totalsLayout.Controls.Add(totalsSeparator, 0, 2);
+        totalsLayout.SetColumnSpan(totalsSeparator, 2);
+        AddTotal(totalsLayout, 3, "發票總額", invoiceTotal);
+        totalGroup.Controls.Add(totalsLayout);
         split.Controls.Add(remarkGroup, 0, 0);
         split.Controls.Add(totalGroup, 1, 0);
         return split;
@@ -218,20 +234,29 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Control BuildActions()
     {
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(0, 2, 0, 0) };
-        var clear = UiControls.StandardButton("清空");
-        var preview = UiControls.StandardButton("預覽");
-        clear.Click += (_, _) => ResetDraft();
-        preview.Click += (_, _) => Preview();
-        actions.Controls.Add(clear);
+        var actions = new Panel { Dock = DockStyle.Fill };
+        clearButton.Margin = Padding.Empty;
+        previewButton.Margin = Padding.Empty;
+        issueButton.Margin = Padding.Empty;
+        clearButton.Click += (_, _) => ResetDraft();
+        previewButton.Click += (_, _) => Preview();
         issueButton.Click += async (_, _) => await IssueAsync();
+        actions.Controls.Add(clearButton);
         actions.Controls.Add(issueButton);
-        actions.Controls.Add(preview);
-        actions.Resize += (_, _) =>
+        actions.Controls.Add(previewButton);
+
+        void PositionActions()
         {
-            var contentWidth = actions.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-            actions.Padding = new Padding(Math.Max(0, (actions.ClientSize.Width - contentWidth) / 2), 2, 0, 0);
-        };
+            const int gap = 12;
+            var contentWidth = clearButton.Width + issueButton.Width + previewButton.Width + (gap * 2);
+            var left = Math.Max(0, (actions.ClientSize.Width - contentWidth) / 2);
+            clearButton.SetBounds(left, Math.Max(0, (actions.ClientSize.Height - clearButton.Height) / 2), clearButton.Width, clearButton.Height);
+            issueButton.SetBounds(clearButton.Right + gap, Math.Max(0, (actions.ClientSize.Height - issueButton.Height) / 2), issueButton.Width, issueButton.Height);
+            previewButton.SetBounds(issueButton.Right + gap, Math.Max(0, (actions.ClientSize.Height - previewButton.Height) / 2), previewButton.Width, previewButton.Height);
+        }
+
+        actions.Resize += (_, _) => PositionActions();
+        PositionActions();
         return actions;
     }
 
@@ -829,7 +854,7 @@ internal sealed class InvoiceEntryControl : UserControl
         consumerBuyer.Checked = true;
         if (Items.Columns.Count != 7 || Items.Items.Count != MinimumVisibleRows || ActualRows().Count != 1)
             throw new InvalidOperationException("商品原生 ListView 未建立一筆實際資料與五列顯示區");
-        if (!itemsHost.ScrollSlotReserved) throw new InvalidOperationException("商品清單未保留停用垂直 scrollbar");
+        if (!itemsHost.UsesOnlyNativeScrollBar) throw new InvalidOperationException("商品清單仍含額外 scrollbar 控制項");
         var importButtons = Descendants(this).OfType<ImportBrandButton>().ToArray();
         if (importButtons.Length != 3 ||
             importButtons.Any(button => !UiControls.HasLogicalSize(button, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight)))
@@ -857,11 +882,19 @@ internal sealed class InvoiceEntryControl : UserControl
             cellEditor.Bounds.Top < editBounds.Top || cellEditor.Bounds.Bottom > editBounds.Bottom)
             throw new InvalidOperationException("商品儲存格在滑鼠放開後未維持焦點或輸入框高度未貼合資料列");
         if (!UiControls.HasLogicalSize(addItemButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
-            !UiControls.HasLogicalSize(issueButton, 190, 46))
-            throw new InvalidOperationException("商品新增或主開立按鈕尺寸不正確");
+            !UiControls.HasLogicalSize(issueButton, 190, 46) || issueButton is not PrimaryActionButton)
+            throw new InvalidOperationException("商品新增或主開立按鈕尺寸／樣式不正確");
+        var actionCenter = issueButton.Top + (issueButton.Height / 2);
+        if (Math.Abs(actionCenter - (clearButton.Top + clearButton.Height / 2)) > 1 ||
+            Math.Abs(actionCenter - (previewButton.Top + previewButton.Height / 2)) > 1)
+            throw new InvalidOperationException("主畫面底部三個按鈕未垂直置中對齊");
         if (remarkGroup is null || remarkCounter.Parent != remarkGroup || remarkCounter.Top != 0 ||
             remarkCounter.Right > remarkGroup.ClientSize.Width)
             throw new InvalidOperationException("備註字數未固定於框架標題右側");
+        if (totalGroup is null || totalsLayout is null || totalsSeparator is null ||
+            totalsSeparator.Height != 1 || invoiceTotal.Bottom > totalsLayout.ClientSize.Height ||
+            remark.Bottom > remarkGroup.DisplayRectangle.Bottom)
+            throw new InvalidOperationException("發票備註、金額總計或稅額分隔線配置不正確");
         UpdateDeleteHotState(0);
         UpdateDeletePressedState(0);
         if (hotDeleteRow != 0 || pressedDeleteRow != 0)
@@ -922,8 +955,11 @@ internal sealed class InvoiceEntryControl : UserControl
         }
     }
 
-    private int RemarkInputHeight() => TextRenderer.MeasureText("Ag", remark.Font).Height * 3 + 13;
-    private int SummaryPanelHeight() => RemarkInputHeight() + SummaryChromeHeight;
+    private int TextLineHeight() => TextRenderer.MeasureText("Ag", Font).Height;
+    private int RemarkInputHeight() => (TextLineHeight() * 3) + 6;
+    private int TotalRowHeight() => TextLineHeight() + 6;
+    private int SummaryPanelHeight() => SummaryOuterTopPadding +
+        Math.Max(RemarkInputHeight() + SummaryGroupChromeHeight, (TotalRowHeight() * 3) + 1 + SummaryGroupChromeHeight);
 
     private static string Cell(ListViewItem row, int column) => row.SubItems[column].Text.Trim();
     private static string Clean(string value) => value.Replace(",", string.Empty, StringComparison.Ordinal).Trim();

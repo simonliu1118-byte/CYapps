@@ -27,26 +27,17 @@ internal static class UiControls
 
     public static Button ImportButton(string text, ImportBrand brand) => new ImportBrandButton(text, brand);
 
-    public static Button PrimaryIssueButton() => new()
-    {
-        Width = 190,
-        Height = 46,
-        Margin = new Padding(6, 2, 6, 2),
-        AutoSize = false,
-        FlatStyle = FlatStyle.Flat,
-        ForeColor = Color.White,
-        Font = new Font("Microsoft JhengHei UI", 14F, FontStyle.Bold),
-        UseVisualStyleBackColor = false,
-    };
+    public static Button PrimaryIssueButton() => new PrimaryActionButton();
 
     public static void ApplyIssueButtonTheme(Button button, bool production)
     {
-        var normal = production ? Color.FromArgb(2, 136, 209) : Color.FromArgb(25, 135, 84);
-        button.BackColor = normal;
-        button.FlatAppearance.BorderColor = production ? Color.FromArgb(1, 105, 165) : Color.FromArgb(18, 105, 65);
-        button.FlatAppearance.BorderSize = 1;
-        button.FlatAppearance.MouseOverBackColor = production ? Color.FromArgb(3, 155, 229) : Color.FromArgb(31, 157, 99);
-        button.FlatAppearance.MouseDownBackColor = production ? Color.FromArgb(2, 112, 177) : Color.FromArgb(19, 108, 67);
+        if (button is PrimaryActionButton primary)
+        {
+            primary.SetEnvironment(production);
+            return;
+        }
+
+        button.BackColor = production ? Color.FromArgb(3, 155, 229) : Color.FromArgb(25, 135, 84);
     }
 
     public static bool HasLogicalSize(Control control, int width, int height, int tolerance = 3)

@@ -227,14 +227,24 @@ internal sealed class RecordsControl : UserControl
     private void StyleRecordRow(ListViewItem row, InvoiceRecord record)
     {
         StyleRow(row);
-        if (record.UploadStatus != 0)
-            row.SubItems[9].ForeColor = record.UploadStatus == 99 ? Color.FromArgb(0, 160, 72) : Color.FromArgb(215, 150, 0);
-        if (record.InvoiceState != InvoiceStates.Voided) return;
-        foreach (ListViewItem.ListViewSubItem subItem in row.SubItems)
+        if (record.InvoiceState == InvoiceStates.Voided)
         {
-            subItem.ForeColor = Color.Gray;
-            subItem.Font = voidedFont;
+            for (var index = 0; index < 9; index++)
+            {
+                row.SubItems[index].ForeColor = Color.Gray;
+                row.SubItems[index].Font = voidedFont;
+            }
         }
+
+        var upload = row.SubItems[9];
+        upload.Font = Records.Font;
+        upload.ForeColor = record.UploadStatus switch
+        {
+            99 => Color.FromArgb(0, 160, 72),
+            91 => Color.FromArgb(196, 0, 0),
+            0 => SystemColors.ControlText,
+            _ => Color.FromArgb(215, 150, 0),
+        };
     }
 
     private static void StyleRow(ListViewItem row)
@@ -319,7 +329,7 @@ internal sealed class RecordsControl : UserControl
     internal void VerifySmokeLayout()
     {
         if (Records.Columns.Count != 10) throw new InvalidOperationException("已開立發票原生 ListView 欄位未建立");
-        if (!recordsHost.ScrollSlotReserved) throw new InvalidOperationException("已開立發票清單未保留停用垂直 scrollbar");
+        if (!recordsHost.UsesOnlyNativeScrollBar) throw new InvalidOperationException("已開立發票清單仍含額外 scrollbar 控制項");
         if (Math.Abs(Records.Font.SizeInPoints - 10F) > 0.1F) throw new InvalidOperationException("已開立發票清單未使用 10pt 字級");
         if (Records.Items.Count == 0 || Records.GetItemRect(0).Height > 24)
             throw new InvalidOperationException($"已開立發票清單資料列過高：{(Records.Items.Count == 0 ? 0 : Records.GetItemRect(0).Height)}px");
