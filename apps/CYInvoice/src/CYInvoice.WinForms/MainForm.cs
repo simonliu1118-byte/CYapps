@@ -264,6 +264,7 @@ internal sealed class MainForm : Form
         passwordChange.VerifySmokeLayout();
         passwordChange.Close();
         ImportConfirmationForm.VerifySmokeLayout(repository, service);
+        RecordDetailForm.VerifySmokeLayout(repository, service);
     }
 
     private void UpdateEnvironment()

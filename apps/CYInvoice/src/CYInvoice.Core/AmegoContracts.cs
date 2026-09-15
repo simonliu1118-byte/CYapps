@@ -28,6 +28,7 @@ public interface IAmegoGateway
     Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default);
     Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default);
     Task<BanResponse> QueryBanAsync(IEnumerable<string> bans, CancellationToken cancellationToken = default);
+    Task<byte[]> DownloadInvoicePdfAsync(string invoiceNumber, int downloadStyle, CancellationToken cancellationToken = default);
 }
 
 public sealed class ProductItem

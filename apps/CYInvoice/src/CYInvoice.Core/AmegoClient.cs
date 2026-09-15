@@ -8,7 +8,9 @@ namespace CYInvoice.Core.Amego;
 
 public sealed class AmegoClient : IAmegoGateway
 {
-    private const int ResponseLimit = 8 * 1024 * 1024;
+    private const int ApiResponseLimit = 8 * 1024 * 1024;
+    private const int PdfResponseLimit = 20 * 1024 * 1024;
+    private const string InvoiceFileHost = "invoice.amego.tw";
     private readonly HttpClient httpClient;
     private readonly Func<DateTimeOffset> now;
     private long clockOffsetSeconds;
@@ -92,6 +94,52 @@ public sealed class AmegoClient : IAmegoGateway
         return new BanResponse(code, message, results);
     }
 
+    public async Task<byte[]> DownloadInvoicePdfAsync(
+        string invoiceNumber,
+        int downloadStyle,
+        CancellationToken cancellationToken = default)
+    {
+        invoiceNumber = invoiceNumber.Trim();
+        if (invoiceNumber.Length is < 1 or > 10)
+            throw new ArgumentException("invoice_number is required and cannot exceed 10 characters", nameof(invoiceNumber));
+        if (downloadStyle is not (0 or 1 or 2 or 3 or 5))
+            throw new ArgumentOutOfRangeException(nameof(downloadStyle), "unsupported AMEGO invoice download style");
+
+        using var document = await PostAsync(
+            "/json/invoice_file",
+            new Dictionary<string, object>
+            {
+                ["type"] = "invoice",
+                ["invoice_number"] = invoiceNumber,
+                ["download_style"] = downloadStyle,
+            },
+            cancellationToken).ConfigureAwait(false);
+        var root = document.RootElement;
+        var (code, message) = ReadEnvelope(root);
+        ThrowResponseError(code, message);
+        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("API returned success without invoice file data");
+        var fileUrl = Text(data, "file_url");
+        if (!Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !string.Equals(uri.Host, InvoiceFileHost, StringComparison.OrdinalIgnoreCase) ||
+            !uri.IsDefaultPort ||
+            uri.UserInfo.Length != 0)
+            throw new InvalidDataException("API returned an untrusted invoice file URL");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Accept.ParseAdd("application/pdf");
+        using var response = await httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        var body = await ReadLimitedAsync(response.Content, PdfResponseLimit, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"invoice PDF HTTP {(int)response.StatusCode}", null, response.StatusCode);
+        ValidatePdf(body);
+        return body;
+    }
+
     private async Task<QueryResponse> QueryAsync(string type, string orderId, string invoiceNumber, CancellationToken cancellationToken)
     {
         if (type == "order" && orderId.Length == 0) throw new ArgumentException("order_id is required", nameof(orderId));
@@ -150,7 +198,7 @@ public sealed class AmegoClient : IAmegoGateway
         using var request = new HttpRequestMessage(HttpMethod.Post, Url(path)) { Content = content };
         request.Headers.Accept.ParseAdd("application/json");
         using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        var body = await ReadLimitedAsync(response.Content, ResponseLimit, cancellationToken).ConfigureAwait(false);
+        var body = await ReadLimitedAsync(response.Content, ApiResponseLimit, cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"API HTTP {(int)response.StatusCode}: {Encoding.UTF8.GetString(body).Trim()}", null, response.StatusCode);
         return body;
@@ -185,6 +233,12 @@ public sealed class AmegoClient : IAmegoGateway
             destination.Write(buffer, 0, read);
         }
         return destination.ToArray();
+    }
+
+    internal static void ValidatePdf(ReadOnlySpan<byte> body)
+    {
+        if (body.Length < 8 || !body[..5].SequenceEqual("%PDF-"u8))
+            throw new InvalidDataException("downloaded invoice file is not a valid PDF");
     }
 
     private static void ParseQueryData(JsonElement value, List<QueryResult> results)

@@ -51,6 +51,7 @@ public sealed class InvoiceService
     private readonly Func<DateTimeOffset> now;
     private readonly Action<string, StatusUpdate>? statusUpdater;
     private readonly SemaphoreSlim issueGate = new(1, 1);
+    private readonly SemaphoreSlim pdfGate = new(1, 1);
     private readonly object gatewayGate = new();
     private IAmegoGateway? cachedGateway;
     private string cachedGatewayKey = string.Empty;
@@ -90,6 +91,69 @@ public sealed class InvoiceService
         }
 
         return response.Data.FirstOrDefault(item => item.Ban.Trim() == ban)?.Name.Trim() ?? string.Empty;
+    }
+
+    public InvoicePdfEligibility GetInvoicePdfEligibility(InvoiceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        var environment = repository.Settings.LoadOrCreate().Environment;
+        var company = IsCompanyBuyer(record);
+        if (record.Environment != environment)
+            return new(false, company, "這筆發票屬於其他環境，請切換到正確環境後再檢視 PDF");
+        if (record.InvoiceState != InvoiceStates.Opened)
+            return new(false, company, "只有已開立且未作廢的發票可以檢視 PDF");
+        if (record.InvoiceNumber.Trim().Length == 0)
+            return new(false, company, "這筆紀錄沒有發票號碼");
+        if (record.Delivery != DeliveryPaper)
+            return new(false, company, "只有紙本發票可以下載官方 PDF");
+        if (record.UploadStatus != UploadStatuses.Complete)
+            return new(false, company, "發票上傳狀態尚未完成，請先重新整理狀態");
+        return new(true, company, string.Empty);
+    }
+
+    public IReadOnlyList<InvoicePdfStyle> GetInvoicePdfStyles(InvoiceRecord record) =>
+        GetInvoicePdfEligibility(record).CompanyBuyer ? InvoicePdfStyles.Company : InvoicePdfStyles.Consumer;
+
+    public async Task<InvoicePdfDocument> GetInvoicePdfAsync(
+        InvoiceRecord record,
+        int downloadStyle,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        await pdfGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var stored = repository.Invoices.LoadOrCreate().SingleOrDefault(item => item.Id == record.Id)
+                ?? throw new InvalidOperationException("本機找不到這筆發票紀錄，請重新整理清單");
+            if (!string.Equals(stored.InvoiceNumber.Trim(), record.InvoiceNumber.Trim(), StringComparison.Ordinal))
+                throw new InvalidOperationException("發票紀錄已變更，請重新開啟詳細資訊");
+            var eligibility = GetInvoicePdfEligibility(stored);
+            if (!eligibility.Allowed) throw new InvalidOperationException(eligibility.Reason);
+            var style = InvoicePdfStyles.Require(downloadStyle);
+            if (!eligibility.CompanyBuyer && style.Code != InvoicePdfStyles.A4.Code)
+                throw new InvalidOperationException("一般消費者紙本發票只支援 A4 整張版型");
+
+            var (gateway, environment) = GetGateway();
+            var cachePath = InvoicePdfCache.PathFor(
+                repository.InvoicePdfCacheDirectory,
+                environment,
+                stored.InvoiceNumber,
+                style.Code,
+                now());
+            if (await InvoicePdfCache.TryReadAsync(cachePath, cancellationToken).ConfigureAwait(false) is not null)
+                return new(cachePath, stored.InvoiceNumber.Trim(), style, FromCache: true);
+
+            var bytes = await gateway.DownloadInvoicePdfAsync(
+                stored.InvoiceNumber.Trim(),
+                style.Code,
+                cancellationToken).ConfigureAwait(false);
+            await InvoicePdfCache.WriteAsync(cachePath, bytes, cancellationToken).ConfigureAwait(false);
+            return new(cachePath, stored.InvoiceNumber.Trim(), style, FromCache: false);
+        }
+        finally
+        {
+            pdfGate.Release();
+        }
     }
 
     public async Task<NameLookup> LookupBuyerNameAsync(
@@ -636,6 +700,12 @@ public sealed class InvoiceService
             }
             return (cachedGateway, settings.Environment);
         }
+    }
+
+    private static bool IsCompanyBuyer(InvoiceRecord record)
+    {
+        var buyerIdentifier = record.BuyerIdentifier.Trim();
+        return buyerIdentifier.Length != 0 && buyerIdentifier != "0000000000";
     }
 
     private static IssueRequest BuildIssueRequest(InvoiceDraft draft, IssueOptions options)

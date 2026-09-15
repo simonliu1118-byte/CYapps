@@ -57,13 +57,14 @@ New-Item (Join-Path $ReleaseDir "Cache/InvoicePDF") -ItemType Directory -Force |
 New-Item (Join-Path $ReleaseDir "Logs") -ItemType Directory -Force | Out-Null
 
 $ReleaseDate = Get-Date -Format "yyyy/MM/dd"
-$PackageLabel = if ($Engineering) { "工程測試包（非正式 Release）" } else { "正式版" }
+$PackageChannel = if ($Engineering) { "engineering" } else { "formal" }
 @"
 Version: $DisplayVersion
 Date: $ReleaseDate
 Commit: $Commit
+Channel: $PackageChannel
 
-CYInvoice $DisplayVersion，Windows 10/11 x64 $PackageLabel。
+CYInvoice $DisplayVersion，Windows 10/11 x64。
 C#／WinForms 已自 V2.0.0 起成為唯一正式產品線。
 "@ | Set-Content -Path (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) -Encoding UTF8
 

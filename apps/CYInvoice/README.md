@@ -6,13 +6,13 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 現行 source／工程測試版本：**V2.0.2**。
+- 現行 source／測試版本：**V2.1.0**。
 - 最新公開正式 Release：**V2.0.1**。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線，source 直接由 `main` 維護。
 - 唯一版本來源為 `VERSION`；正式 Release 使用 `BUILD=0`。
 - Go／Win32 V1.1.0 只保留為上一個公開回退版本，不再位於 `main` 現行 source。
 
-日常 `VERSION`／`BUILD` 變更經 PR 通過並合併後，只提供 preview／engineering 測試包。只有使用者於當次工作明確要求 `release` 時，才從 `main` 啟動正式 Release workflow；workflow 會重新執行核心測試、WinForms 啟動 smoke test、公開安全掃描、Windows x64 self-contained single-file publish、PE／Icon／manifest、ZIP 結構與 SHA-256 驗證。
+日常 `VERSION`／`BUILD` 變更經 PR 通過並合併後，只提供測試 Artifact，版本標題不另加「工程測試包」。套件仍以 `Channel: engineering` 中繼資料及 Artifact 名稱與正式包區分。只有使用者於當次工作明確要求 `release` 時，才從 `main` 啟動正式 Release workflow；workflow 會重新執行核心測試、WinForms 啟動 smoke test、公開安全掃描、Windows x64 self-contained single-file publish、PE／Icon／manifest、ZIP 結構與 SHA-256 驗證。
 
 ## 技術基準
 
