@@ -12,6 +12,9 @@ on:
       - "apps/CYInvoice/src/CYInvoice.Core/**"
       - "apps/CYInvoice/src/CYInvoice.WinForms/**"
       - "apps/CYInvoice/tests/CYInvoice.Core.Tests/**"
+      - "apps/CYInvoice/assets/CYInvoice.ico"
+      - "apps/CYInvoice/scripts/verify-pe.ps1"
+      - ".github/workflows/cyinvoice-csharp-build.yml"
 
 permissions:
   contents: read
@@ -48,6 +51,16 @@ jobs:
       - name: Build with warnings as errors
         run: dotnet build CYInvoice.CSharp.sln -c Release -p:Platform=x64 --no-restore
 
+      - name: Run WinForms startup smoke test
+        run: |
+          dotnet run --project src/CYInvoice.WinForms/CYInvoice.WinForms.csproj -c Release -p:Platform=x64 --no-build -- --startup-smoke-test
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            $startupLog = Get-ChildItem -Path ./src/CYInvoice.WinForms/bin -Filter startup-error.log -File -Recurse | Select-Object -First 1
+            if ($startupLog) { Get-Content $startupLog.FullName | Write-Error }
+            throw "WinForms startup smoke test failed with exit code $exitCode"
+          }
+
       - name: Run core parity tests
         run: dotnet run --project tests/CYInvoice.Core.Tests/CYInvoice.Core.Tests.csproj -c Release --no-build
 
@@ -66,6 +79,9 @@ jobs:
 
       - name: Publish engineering preview
         run: dotnet publish src/CYInvoice.WinForms/CYInvoice.WinForms.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o out
+
+      - name: Verify embedded Windows resources
+        run: ./scripts/verify-pe.ps1 -Path ./out/CYInvoice.exe
 
       - uses: actions/upload-artifact@v7
         with:
