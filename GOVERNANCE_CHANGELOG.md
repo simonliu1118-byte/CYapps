@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.5 — 2026/09/15
+
+- 依使用者最新規範取消 CYInvoice 自動正式 Release 例外；只有使用者於當次工作明確要求 `release` 後，才可從 `main` 啟動正式 Release workflow。
+- `VERSION`／`BUILD` 仍依既有規則推進，但一般 PR 驗證與合併只產生 preview／engineering 測試包，不得自動建立 tag 或公開 Release，也不要求每個小版本都正式發布。
+- 已依舊規則發布的 CYInvoice V2.0.1 保留為既有正式歷史，不刪除、不覆寫；後續未正式發布的版本持續累積，直到使用者明確要求 Release。
+
 ## 2.3.4 — 2026/09/15
 
 - 補齊 CYInvoice Go／Win32 V1.1.0 的歷史公開回退 Release：repository 當時尚未建立 CYInvoice Release，允許由 V2 合併前的固定 `main` commit `4c2335e00173368540fe10a641fccffcb251f999` 一次性重建、驗證並發布 `cyinvoice-v1.1.0`。
