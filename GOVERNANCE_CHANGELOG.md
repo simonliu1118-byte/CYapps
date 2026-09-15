@@ -1,5 +1,12 @@
 # CYApps Governance Changelog
 
+## 2.3.2 — 2026/09/15
+
+- 使用者完成 Windows 實機驗收並明確批准 Major 升級：CYInvoice 自 `V2.0.0` 起改以 C#／WinForms 為唯一正式產品線，直接由 `main` 維護。
+- `cyinvoice/csharp-remake` 完成合併後停止使用；後續不得再以永久 C# 分支或 `VERSION-CS` 建立平行版本身分。
+- Go／Win32 `V1.1.0` 固定為上一個可回退的公開版本，不再保留於 `main` 的現行 source；既有 tag、Release、commit 與下載檔不得覆寫。
+- CYInvoice 正式 Build、測試、打包及 Release 規則改以 .NET／WinForms Windows x64 實作為準，版本唯一來源維持 `apps/CYInvoice/VERSION`。
+
 ## 2.3.1 — 2026/09/14
 
 - 新增 `apps/SMARTCOPIConverter/PROJECT_RULES.md`，補齊 SMARTCOPIConverter 的 project-specific 永久規則層。
