@@ -132,7 +132,7 @@ internal sealed class ImportConfirmationForm : Form
         heading.Controls.Add(UiControls.Label("請先逐張核對；取消、未勾選或資料有問題的訂單都不會送出。"), 1, 0);
 
         ConfigureGrid();
-        issue.Text = "確認開立";
+        issue.Text = IssueButtonCaption(0);
         UiControls.ApplyIssueButtonTheme(issue,
             repository.Settings.LoadOrCreate().Environment == Environments.Production);
         var editor = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6 };
@@ -507,7 +507,7 @@ internal sealed class ImportConfirmationForm : Form
     {
         var selected = entries.Where(entry => entry.Selected && !entry.Finished).ToArray();
         summary.Text = $"訂單共 {entries.Count} 張　｜　已選擇 {selected.Length} 張　｜　選擇總額 {MoneyFormatter.Integer(selected.Sum(entry => entry.TotalAmount))}";
-        issue.Text = $"確認開立（{selected.Length} 張）";
+        issue.Text = IssueButtonCaption(selected.Length);
     }
 
     private void LoadBuyerEditor()
@@ -562,7 +562,13 @@ internal sealed class ImportConfirmationForm : Form
             eventArgs.CellStyle.ForeColor = Color.FromArgb(190, 100, 0);
     }
 
-    private string EnvironmentName() => repository.Settings.LoadOrCreate().Environment == Environments.Production ? "正式公司環境" : "光貿測試環境";
+    private bool IsProductionEnvironment() =>
+        repository.Settings.LoadOrCreate().Environment == Environments.Production;
+
+    private string IssueButtonCaption(int count) =>
+        $"{(IsProductionEnvironment() ? "確認開立" : "確認測試開立")}（{count} 張）";
+
+    private string EnvironmentName() => IsProductionEnvironment() ? "正式公司環境" : "光貿測試環境";
     private static string ShortError(Exception error) => error.Message.Length <= 80 ? error.Message : error.Message[..77] + "…";
     private static DataGridViewTextBoxColumn Column(string title, int width, bool right = false) => new()
     {
