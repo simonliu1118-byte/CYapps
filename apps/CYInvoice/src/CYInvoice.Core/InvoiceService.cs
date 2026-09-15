@@ -45,6 +45,7 @@ public sealed class PartialRefreshException(IReadOnlyList<InvoiceRecord> records
 public sealed class InvoiceService
 {
     public const string DeliveryPaper = "紙本";
+    private static readonly TimeSpan RecoveryQueryTimeout = TimeSpan.FromSeconds(20);
     private readonly LocalRepository repository;
     private readonly Func<string, string, IAmegoGateway> gatewayFactory;
     private readonly Func<DateTimeOffset> now;
@@ -388,7 +389,20 @@ public sealed class InvoiceService
             {
                 continue;
             }
-            record.UploadStatus = status.Data[0].Status;
+            var matchedStatuses = status.Data
+                .Where(item => string.Equals(
+                    item.InvoiceNumber.Trim(),
+                    record.InvoiceNumber.Trim(),
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (matchedStatuses.Length != 1)
+            {
+                problems.Add(matchedStatuses.Length == 0
+                    ? $"{record.InvoiceNumber}: 上傳狀態回覆未包含指定發票"
+                    : $"{record.InvoiceNumber}: 上傳狀態回覆包含重複發票");
+                continue;
+            }
+            record.UploadStatus = matchedStatuses[0].Status;
             record.UploadStatusText = UploadStatusText(record.UploadStatus);
             try
             {
@@ -492,7 +506,10 @@ public sealed class InvoiceService
                 Exception? queryError;
                 try
                 {
-                    query = await gateway.QueryByOrderIdAsync(apiOrderId, cancellationToken).ConfigureAwait(false);
+                    // The issue token may already be cancelled by the request timeout. Recovery must
+                    // still perform one bounded read-only query before declaring the result unknown.
+                    using var recoveryTimeout = new CancellationTokenSource(RecoveryQueryTimeout);
+                    query = await gateway.QueryByOrderIdAsync(apiOrderId, recoveryTimeout.Token).ConfigureAwait(false);
                     VerifyQueryResult(record, draft, query.Data, string.Empty);
                     queryError = null;
                 }
