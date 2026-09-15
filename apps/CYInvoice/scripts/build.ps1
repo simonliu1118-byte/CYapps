@@ -1,7 +1,8 @@
 param(
     [string]$Version = "",
     [string]$Build = "",
-    [string]$Commit = ""
+    [string]$Commit = "",
+    [switch]$Engineering
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,12 +57,13 @@ New-Item (Join-Path $ReleaseDir "Cache/InvoicePDF") -ItemType Directory -Force |
 New-Item (Join-Path $ReleaseDir "Logs") -ItemType Directory -Force | Out-Null
 
 $ReleaseDate = Get-Date -Format "yyyy/MM/dd"
+$PackageLabel = if ($Engineering) { "工程測試包（非正式 Release）" } else { "正式版" }
 @"
 Version: $DisplayVersion
 Date: $ReleaseDate
 Commit: $Commit
 
-CYInvoice $DisplayVersion，Windows 10/11 x64 正式版。
+CYInvoice $DisplayVersion，Windows 10/11 x64 $PackageLabel。
 C#／WinForms 已自 V2.0.0 起成為唯一正式產品線。
 "@ | Set-Content -Path (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) -Encoding UTF8
 

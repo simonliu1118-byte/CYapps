@@ -1,6 +1,6 @@
 # CYInvoice 本機資料格式
 
-本文件記錄由 V1.0.0 執行檔、使用說明及版本紀錄確認的相容欄位。三個 JSON 檔皆位於程式同層的 `Data` 資料夾。
+本文件記錄 V2 C# 正式線目前使用的本機資料欄位與安全寫入方式。三個 JSON 檔皆位於程式同層的 `Data` 資料夾；已移除的 Go 舊版 Data 不列入現行驗收或遷移承諾。
 
 ## 安全寫入
 
@@ -24,11 +24,11 @@
 ## invoices.json
 
 - 根值固定為陣列；沒有紀錄時寫成 `[]`。
-- 沿用 V1.0.0 的 snake_case 欄位，包括 `sent_at`、`invoice_date`、`invoice_time`、`last_checked`、`original_order_id` 與狀態欄位。
-- 舊紀錄沒有 `sent_at` 時，第一次載入會以既有開立日期／時間固定補入。
+- 使用 snake_case 欄位，包括 `sent_at`、`invoice_date`、`invoice_time`、`last_checked`、`original_order_id` 與狀態欄位。
+- 現有 V2 紀錄若沒有 `sent_at`，第一次載入會以既有開立日期／時間固定補入。
 - 狀態回查只能更新正式開立時間與最後查詢時間，不能修改 `sent_at`。
-- 讀到尚未納入目前模型的舊欄位時會原樣保留，避免相容遷移造成資料遺失。
-- MO店+ 紀錄另保存 `api_order_id`、`carrier_type`、`carrier_id1`、`carrier_id2`、`npo_ban`；舊紀錄缺少這些選填欄位時仍可正常載入。
+- 讀到尚未納入目前模型的欄位時會原樣保留，避免 V2 資料往返寫入造成遺失。
+- MO店+ 紀錄另保存 `api_order_id`、`carrier_type`、`carrier_id1`、`carrier_id2`、`npo_ban`；現有紀錄缺少這些選填欄位時仍可正常載入。
 - `api_order_id` 保存實際送至光貿的 OrderId，用於結果不明時精確回查；測試環境依最新定案不再遮蔽原始 OrderId。已作廢訂單重新開立時依序使用 `-R2`、`-R3` 尾碼，`original_order_id` 始終保留原始平台訂單編號供本機核對與防重複。
 
 防重複鍵為「來源＋原始平台訂單編號」。只有明確「開立失敗」或「已作廢」允許重開；「已開立」、「結果不明」、「資料變更中」及未知狀態一律鎖定。
