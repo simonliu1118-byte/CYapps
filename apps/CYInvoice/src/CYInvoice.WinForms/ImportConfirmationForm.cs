@@ -41,7 +41,7 @@ internal sealed class ImportConfirmationForm : Form
     private readonly Label progressText = UiControls.Label("");
     private readonly ProgressBar progress = new() { Dock = DockStyle.Fill, Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 40 };
     private readonly Button cancel = UiControls.StandardButton("取消匯入");
-    private readonly Button issue = UiControls.StandardButton("確認開立");
+    private readonly Button issue = UiControls.PrimaryIssueButton();
     private bool refreshing;
     private bool issuing;
     private bool closing;
@@ -132,6 +132,9 @@ internal sealed class ImportConfirmationForm : Form
         heading.Controls.Add(UiControls.Label("請先逐張核對；取消、未勾選或資料有問題的訂單都不會送出。"), 1, 0);
 
         ConfigureGrid();
+        issue.Text = "確認開立";
+        UiControls.ApplyIssueButtonTheme(issue,
+            repository.Settings.LoadOrCreate().Environment == Environments.Production);
         var editor = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6 };
         buyerName.Dock = DockStyle.None;
         buyerName.Anchor = AnchorStyles.Left | AnchorStyles.Right;
@@ -156,7 +159,15 @@ internal sealed class ImportConfirmationForm : Form
         progressArea.Controls.Add(progressText, 0, 0);
         progressArea.Controls.Add(progress, 0, 1);
 
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(0, 7, 0, 0) };
+        var actions = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Padding = new Padding(0, 3, 0, 0),
+        };
+        issue.Margin = new Padding(6, 0, 6, 0);
+        cancel.Margin = new Padding(6, 6, 6, 6);
         actions.Controls.Add(issue);
         actions.Controls.Add(cancel);
 
