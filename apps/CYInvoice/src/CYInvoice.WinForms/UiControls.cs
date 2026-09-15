@@ -1,7 +1,58 @@
+using System.Runtime.InteropServices;
+
 namespace CYInvoice.WinForms;
+
+internal class NoFocusCueButton : Button
+{
+    protected override void OnHandleCreated(EventArgs eventArgs)
+    {
+        base.OnHandleCreated(eventArgs);
+        UiControls.HideFocusCue(this);
+    }
+
+    protected override void OnGotFocus(EventArgs eventArgs)
+    {
+        base.OnGotFocus(eventArgs);
+        UiControls.HideFocusCue(this);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs eventArgs)
+    {
+        base.OnMouseDown(eventArgs);
+        UiControls.HideFocusCue(this);
+    }
+}
+
+internal sealed class NoFocusCueTabControl : TabControl
+{
+    public NoFocusCueTabControl() => TabStop = false;
+
+    protected override void OnHandleCreated(EventArgs eventArgs)
+    {
+        base.OnHandleCreated(eventArgs);
+        UiControls.HideFocusCue(this);
+    }
+
+    protected override void OnGotFocus(EventArgs eventArgs)
+    {
+        base.OnGotFocus(eventArgs);
+        UiControls.HideFocusCue(this);
+    }
+}
 
 internal static class UiControls
 {
+    private const int WmUpdateUiState = 0x0128;
+    private static readonly IntPtr HideFocusState = new(0x00010001);
+
+    internal static void HideFocusCue(Control control)
+    {
+        if (control.IsHandleCreated)
+            SendMessage(control.Handle, WmUpdateUiState, HideFocusState, IntPtr.Zero);
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
     public static Label Label(string text, ContentAlignment alignment = ContentAlignment.MiddleLeft) => new()
     {
         Text = text, Dock = DockStyle.Fill, TextAlign = alignment, AutoEllipsis = true, Margin = new Padding(3),
@@ -15,7 +66,7 @@ internal static class UiControls
     public const int StandardButtonWidth = 132;
     public const int StandardButtonHeight = 34;
 
-    public static Button StandardButton(string text) => new()
+    public static Button StandardButton(string text) => new NoFocusCueButton()
     {
         Text = text,
         Width = StandardButtonWidth,

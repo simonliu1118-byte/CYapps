@@ -7,6 +7,10 @@ internal sealed class NativeListViewHost : UserControl
     private const int LvmFirst = 0x1000;
     private const int LvmGetCountPerPage = LvmFirst + 40;
     private const int LvmGetHeader = LvmFirst + 31;
+    private const int SbHorz = 0;
+    private const int GwlStyle = -16;
+    private const long WsHScroll = 0x00100000L;
+    private const long WsVScroll = 0x00200000L;
     private readonly ImageList rowHeightImages = new();
     private readonly int configuredRowHeight;
     private bool settingColumnWidths;
@@ -25,7 +29,7 @@ internal sealed class NativeListViewHost : UserControl
         {
             View = View.Details,
             FullRowSelect = true,
-            GridLines = true,
+            GridLines = false,
             HeaderStyle = ColumnHeaderStyle.Nonclickable,
             HideSelection = true,
             LabelEdit = false,
@@ -49,6 +53,11 @@ internal sealed class NativeListViewHost : UserControl
             }
         };
         List.SizeChanged += (_, _) => QueueViewportChanged();
+        List.NativeViewportChanged += (_, _) =>
+        {
+            List.Invalidate(true);
+            QueueViewportChanged();
+        };
 
         Controls.Add(List);
     }
@@ -61,19 +70,20 @@ internal sealed class NativeListViewHost : UserControl
 
     public bool NativeScrollNeeded => scrollNeeded;
 
+    public bool HorizontalScrollVisible => HasWindowStyle(WsHScroll);
+
+    public bool VerticalScrollVisible => HasWindowStyle(WsVScroll);
+
     public int ColumnViewportWidth
     {
         get
         {
             var width = List.ClientSize.Width;
-            if (List.IsHandleCreated)
-            {
-                var header = SendMessage(List.Handle, LvmGetHeader, IntPtr.Zero, IntPtr.Zero);
-                if (header != IntPtr.Zero && GetClientRect(header, out var headerBounds) && headerBounds.Right > headerBounds.Left)
-                    width = headerBounds.Right - headerBounds.Left;
-            }
+            if (List.IsHandleCreated && GetClientRect(List.Handle, out var bounds) && bounds.Right > bounds.Left)
+                width = bounds.Right - bounds.Left;
             var dpi = List.DeviceDpi > 0 ? List.DeviceDpi : 96;
-            return Math.Max(1, (int)Math.Round(width * 96D / dpi));
+            var logicalWidth = (int)Math.Floor(width * 96D / dpi);
+            return Math.Max(1, logicalWidth - 3);
         }
     }
 
@@ -90,7 +100,7 @@ internal sealed class NativeListViewHost : UserControl
         scrollNeeded = needed;
         List.Scrollable = true;
         List.PerformLayout();
-        List.Invalidate();
+        List.Invalidate(true);
         QueueViewportChanged();
     }
 
@@ -146,6 +156,8 @@ internal sealed class NativeListViewHost : UserControl
         {
             for (var index = 0; index < widths.Count; index++)
                 List.Columns[index].Width = Math.Max(1, widths[index]);
+            if (List.IsHandleCreated) ShowScrollBar(List.Handle, SbHorz, false);
+            List.Invalidate(true);
         }
         finally
         {
@@ -158,6 +170,12 @@ internal sealed class NativeListViewHost : UserControl
         base.OnLayout(eventArgs);
         List.SetBounds(0, 0, Math.Max(1, ClientSize.Width), Math.Max(1, ClientSize.Height));
         QueueViewportChanged();
+    }
+
+    private bool HasWindowStyle(long style)
+    {
+        if (!List.IsHandleCreated) return false;
+        return (GetWindowLongPtr(List.Handle, GwlStyle).ToInt64() & style) != 0;
     }
 
     private void QueueViewportChanged()
@@ -191,6 +209,13 @@ internal sealed class NativeListViewHost : UserControl
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetClientRect(IntPtr window, out NativeRect bounds);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowScrollBar(IntPtr window, int bar, [MarshalAs(UnmanagedType.Bool)] bool show);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr(IntPtr window, int index);
+
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeRect
     {
@@ -202,6 +227,22 @@ internal sealed class NativeListViewHost : UserControl
 
     private sealed class NativeListView : ListView
     {
+        private const int WmVScroll = 0x0115;
+        private const int WmMouseWheel = 0x020A;
+
         public NativeListView() => DoubleBuffered = true;
+
+        public event EventHandler? NativeViewportChanged;
+
+        protected override void WndProc(ref Message message)
+        {
+            var viewportMessage = message.Msg is WmVScroll or WmMouseWheel;
+            base.WndProc(ref message);
+            if (viewportMessage)
+            {
+                Invalidate(true);
+                NativeViewportChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
     }
 }

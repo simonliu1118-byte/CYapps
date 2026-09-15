@@ -9,7 +9,7 @@ internal enum ImportBrand
     Coupang,
 }
 
-internal sealed class ImportBrandButton : Button
+internal sealed class ImportBrandButton : NoFocusCueButton
 {
     private readonly ImportBrand brand;
     private bool hovered;
@@ -111,8 +111,6 @@ internal sealed class ImportBrandButton : Button
         graphics.ResetClip();
         using var border = new Pen(brand == ImportBrand.Coupang ? Color.FromArgb(188, 188, 188) : Color.FromArgb(75, 75, 75));
         graphics.DrawPath(border, shape);
-        if (Focused && ShowFocusCues)
-            ControlPaint.DrawFocusRectangle(graphics, Rectangle.Inflate(bounds, -4, -4));
     }
 
     private void DrawDigiwin(Graphics graphics, Rectangle bounds)
@@ -136,12 +134,16 @@ internal sealed class ImportBrandButton : Button
             graphics.FillRectangle(left, bounds.Left, bounds.Top, split - bounds.Left, bounds.Height);
         using (var right = new SolidBrush(Color.FromArgb(45, 62, 117)))
             graphics.FillRectangle(right, split, bounds.Top, bounds.Right - split, bounds.Height);
-        DrawAlignedText(graphics, "MO", Color.White,
-            new Rectangle(bounds.Left + 4, bounds.Top, Math.Max(1, split - bounds.Left - 9), bounds.Height),
-            TextFormatFlags.Right);
-        DrawAlignedText(graphics, "店+", Color.White,
-            new Rectangle(split + 5, bounds.Top, Math.Max(1, bounds.Right - split - 9), bounds.Height),
-            TextFormatFlags.Left);
+        var textFlags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix |
+            TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter;
+        var moWidth = TextRenderer.MeasureText(graphics, "MO", Font, Size.Empty, textFlags).Width;
+        var shopWidth = TextRenderer.MeasureText(graphics, "店+", Font, Size.Empty, textFlags).Width;
+        TextRenderer.DrawText(graphics, "MO", Font,
+            new Rectangle(split - moWidth, bounds.Top, moWidth, bounds.Height),
+            Enabled ? Color.White : SystemColors.GrayText, textFlags | TextFormatFlags.Right);
+        TextRenderer.DrawText(graphics, "店+", Font,
+            new Rectangle(split, bounds.Top, shopWidth, bounds.Height),
+            Enabled ? Color.White : SystemColors.GrayText, textFlags | TextFormatFlags.Left);
     }
 
     private void DrawCoupang(Graphics graphics, Rectangle bounds)
@@ -193,7 +195,7 @@ internal sealed class ImportBrandButton : Button
     }
 }
 
-internal sealed class PrimaryActionButton : Button
+internal sealed class PrimaryActionButton : NoFocusCueButton
 {
     private bool hovered;
     private bool pressed;
@@ -272,7 +274,6 @@ internal sealed class PrimaryActionButton : Button
         TextRenderer.DrawText(eventArgs.Graphics, Text, Font, bounds, Enabled ? Color.White : SystemColors.GrayText,
             TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine |
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-        if (Focused && ShowFocusCues)
-            ControlPaint.DrawFocusRectangle(eventArgs.Graphics, Rectangle.Inflate(bounds, -5, -5));
+        UiControls.HideFocusCue(this);
     }
 }

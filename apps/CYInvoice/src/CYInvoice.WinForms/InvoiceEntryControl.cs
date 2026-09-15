@@ -115,12 +115,19 @@ internal sealed class InvoiceEntryControl : UserControl
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        automaticOrder.Font = customOrder.Font = consumerBuyer.Font = companyBuyer.Font = Font;
+        var firstModeWidth = Math.Max(
+            automaticOrder.GetPreferredSize(Size.Empty).Width,
+            consumerBuyer.GetPreferredSize(Size.Empty).Width) + 2;
+        var secondModeWidth = Math.Max(
+            customOrder.GetPreferredSize(Size.Empty).Width,
+            companyBuyer.GetPreferredSize(Size.Empty).Width) + 4;
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, firstModeWidth));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, secondModeWidth));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        var orderModes = RadioGroup(automaticOrder, customOrder);
-        var buyerModes = RadioGroup(consumerBuyer, companyBuyer);
+        var orderModes = RadioGroup(automaticOrder, customOrder, firstModeWidth);
+        var buyerModes = RadioGroup(consumerBuyer, companyBuyer, firstModeWidth);
         layout.Controls.Add(UiControls.Label("訂單編號"), 0, 0);
         layout.Controls.Add(orderModes, 1, 0);
         layout.SetColumnSpan(orderModes, 2);
@@ -164,7 +171,7 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         Items.Columns.Add("序號", 56, HorizontalAlignment.Center);
         Items.Columns.Add("品名", 360, HorizontalAlignment.Left);
-        Items.Columns.Add("課稅別", 88, HorizontalAlignment.Center);
+        Items.Columns.Add("課稅別", TaxColumnWidth(), HorizontalAlignment.Left);
         Items.Columns.Add("數量", 88, HorizontalAlignment.Right);
         Items.Columns.Add("單價（含稅）", 150, HorizontalAlignment.Right);
         Items.Columns.Add("金額（含稅）", 155, HorizontalAlignment.Right);
@@ -598,7 +605,7 @@ internal sealed class InvoiceEntryControl : UserControl
     }
     private void Pending(string feature) => MessageBox.Show(this, $"{feature}尚未接入 C# 重製測試線，現在不會讀檔或送出發票。", "功能尚未完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
     private static OpenFileDialog FileDialog(string filter) => new() { Filter = filter, CheckFileExists = true, Multiselect = false, RestoreDirectory = true };
-    private static TableLayoutPanel RadioGroup(RadioButton first, RadioButton second)
+    private static TableLayoutPanel RadioGroup(RadioButton first, RadioButton second, int firstWidth)
     {
         var panel = new TableLayoutPanel
         {
@@ -608,7 +615,7 @@ internal sealed class InvoiceEntryControl : UserControl
             Margin = Padding.Empty,
             Padding = new Padding(0, 3, 0, 0),
         };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, firstWidth));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         first.Margin = new Padding(3, 3, 3, 3);
         second.Margin = new Padding(3, 3, 3, 3);
@@ -778,7 +785,7 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         if (Items.Columns.Count != 7 || Items.ClientSize.Width <= 0) return;
         var available = itemsHost.ColumnViewportWidth;
-        var fixedWidths = new[] { 56, 88, 88, 150, 155, 86 };
+        var fixedWidths = new[] { 56, TaxColumnWidth(), 88, 150, 155, 86 };
         var nameWidth = Math.Max(160, available - fixedWidths.Sum());
         var widths = new[] { fixedWidths[0], nameWidth, fixedWidths[1], fixedWidths[2], fixedWidths[3], fixedWidths[4], fixedWidths[5] };
         widths[1] += available - widths.Sum();
@@ -810,7 +817,8 @@ internal sealed class InvoiceEntryControl : UserControl
         else
         {
             var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
-            flags |= columnIndex is 3 or 4 or 5 ? TextFormatFlags.Right : columnIndex is 0 or 2 ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Left;
+            flags |= columnIndex is 3 or 4 or 5 ? TextFormatFlags.Right :
+                columnIndex == 0 ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Left;
             var textBounds = Rectangle.Inflate(eventArgs.Bounds, -5, 0);
             var color = columnIndex == 5 ? Color.FromArgb(88, 88, 88) : SystemColors.ControlText;
             TextRenderer.DrawText(eventArgs.Graphics, eventArgs.SubItem.Text, Items.Font, textBounds, color, flags);
@@ -849,8 +857,10 @@ internal sealed class InvoiceEntryControl : UserControl
         var companyX = companyBuyer.PointToScreen(Point.Empty).X;
         var buyerNameLabel = Descendants(this).OfType<Label>().FirstOrDefault(label => label.Text == "買方名稱");
         if (buyerNameLabel is null || Math.Abs(customX - companyX) > 2 ||
-            Math.Abs(customX - buyerNameLabel.PointToScreen(Point.Empty).X) > 2)
-            throw new InvalidOperationException("自訂、公司統編與買方名稱未使用相同左緣");
+            Math.Abs(customX - buyerNameLabel.PointToScreen(Point.Empty).X) > 2 ||
+            consumerBuyer.Width < consumerBuyer.GetPreferredSize(Size.Empty).Width ||
+            companyBuyer.Width < companyBuyer.GetPreferredSize(Size.Empty).Width)
+            throw new InvalidOperationException("自訂、公司統編與買方名稱未對齊，或買方選項文字遭裁切");
         consumerBuyer.Checked = true;
         if (Items.Columns.Count != 7 || Items.Items.Count != MinimumVisibleRows || ActualRows().Count != 1)
             throw new InvalidOperationException("商品原生 ListView 未建立一筆實際資料與五列顯示區");
@@ -860,14 +870,17 @@ internal sealed class InvoiceEntryControl : UserControl
             importButtons.Any(button => !UiControls.HasLogicalSize(button, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight)))
             throw new InvalidOperationException("三個 Excel 平台按鈕未使用一致的品牌按鈕尺寸");
         if (Math.Abs(Items.Font.SizeInPoints - 12F) > 0.1F) throw new InvalidOperationException("商品清單未使用 12pt 字級");
-        if (Math.Abs(Items.Columns.Cast<ColumnHeader>().Sum(column => column.Width) - itemsHost.ColumnViewportWidth) > 1)
-            throw new InvalidOperationException("商品清單欄寬未對齊 scrollbar 前的可視範圍");
+        var initialColumnWidth = Items.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
+        if (initialColumnWidth > itemsHost.ColumnViewportWidth ||
+            itemsHost.ColumnViewportWidth - initialColumnWidth > 3 ||
+            itemsHost.HorizontalScrollVisible || Items.GridLines)
+            throw new InvalidOperationException("商品清單欄寬、水平 scrollbar 或格線繪製方式不正確");
         if (itemsHost.VisibleRowCapacity() != MinimumVisibleRows)
             throw new InvalidOperationException($"商品清單可視列數不是五列：{itemsHost.VisibleRowCapacity()}");
         var rowHeights = rootLayout?.GetRowHeights() ?? [];
         var totalRowHeight = rowHeights.Sum();
         var lineHeight = (int)Math.Ceiling(remark.Font.GetHeight());
-        if (rowHeights.Length != 6 || Math.Abs(rowHeights[3] - SummaryPanelHeight()) > 2 ||
+        if (rowHeights.Length != 6 || Math.Abs(rowHeights[3] - MeasuredSummaryPanelHeight()) > 2 ||
             rowHeights[0] < MinimumImportsHeight || rowHeights[1] < MinimumBuyerHeight ||
             rowHeights[4] > MaximumDefaultFlexibleGap || rowHeights[5] < MinimumActionsHeight ||
             remark.ClientSize.Height < lineHeight * 3 || remark.ClientSize.Height > lineHeight * 3 + 12 ||
@@ -889,13 +902,16 @@ internal sealed class InvoiceEntryControl : UserControl
             Math.Abs(actionCenter - (previewButton.Top + previewButton.Height / 2)) > 1)
             throw new InvalidOperationException("主畫面底部三個按鈕未垂直置中對齊");
         if (remarkGroup is null || remarkCounter.Parent != remarkGroup || remarkCounter.Top != 0 ||
-            remarkCounter.Right > remarkGroup.ClientSize.Width)
-            throw new InvalidOperationException("備註字數未固定於框架標題右側");
+            remarkCounter.Right > remarkGroup.ClientSize.Width ||
+            remark.ClientSize.Height < lineHeight * 3 || remark.Bottom > remarkLayout!.ClientSize.Height)
+            throw new InvalidOperationException("備註標題、字數位置或三列輸入高度不正確");
         if (totalGroup is null || totalsLayout is null || totalsSeparator is null ||
             totalsLayout.GetPositionFromControl(totalsSeparator).Row != 2 ||
             totalsLayout.GetPositionFromControl(invoiceTotal).Row != 3 ||
-            totalsSeparator.Height < 1)
-            throw new InvalidOperationException("發票備註、金額總計或稅額分隔線配置不正確");
+            totalsSeparator.Height < 1 ||
+            totalsLayout.GetRowHeights().Sum() > totalsLayout.ClientSize.Height ||
+            totalsLayout.Controls.OfType<Label>().Any(label => label.Height < label.PreferredHeight))
+            throw new InvalidOperationException("金額總計文字、列高或稅額分隔線配置不正確");
         UpdateDeleteHotState(0);
         UpdateDeletePressedState(0);
         if (hotDeleteRow != 0 || pressedDeleteRow != 0)
@@ -903,6 +919,16 @@ internal sealed class InvoiceEntryControl : UserControl
         UpdateDeleteHotState(-1);
         UpdateDeletePressedState(-1);
         CommitCellEditor(true);
+        while (ActualRows().Count <= MinimumVisibleRows) AddRow(false);
+        EnsurePlaceholderRows();
+        Application.DoEvents();
+        LayoutItemColumns();
+        Application.DoEvents();
+        var scrolledColumnWidth = Items.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
+        if (!itemsHost.NativeScrollNeeded || itemsHost.HorizontalScrollVisible ||
+            scrolledColumnWidth > itemsHost.ColumnViewportWidth ||
+            itemsHost.ColumnViewportWidth - scrolledColumnWidth > 3)
+            throw new InvalidOperationException("商品清單出現垂直 scrollbar 後未重新計算欄寬，或產生水平 scrollbar");
     }
 
     private void ApplyMeasuredLayout()
@@ -916,7 +942,7 @@ internal sealed class InvoiceEntryControl : UserControl
         remarkLayout.RowStyles[0].SizeType = SizeType.Absolute;
         remarkLayout.RowStyles[0].Height = RemarkInputHeight();
         rootLayout.RowStyles[3].SizeType = SizeType.Absolute;
-        rootLayout.RowStyles[3].Height = SummaryPanelHeight();
+        rootLayout.RowStyles[3].Height = MeasuredSummaryPanelHeight();
         FitSectionRowsToClient();
         PerformLayout();
     }
@@ -958,9 +984,22 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private int TextLineHeight() => TextRenderer.MeasureText("Ag", Font).Height;
     private int RemarkInputHeight() => (TextLineHeight() * 3) + 13;
-    private int TotalRowHeight() => TextLineHeight() + 6;
-    private int SummaryPanelHeight() => SummaryOuterTopPadding +
+    private int TotalRowHeight() => TextLineHeight() + 10;
+    private int TaxColumnWidth() => Math.Max(62, TextRenderer.MeasureText("課稅別", Items.Font).Width + 14);
+    private int SummaryPanelHeight() => SummaryOuterTopPadding + 6 +
         Math.Max(RemarkInputHeight() + SummaryGroupChromeHeight, (TotalRowHeight() * 3) + 1 + SummaryGroupChromeHeight);
+
+    private int MeasuredSummaryPanelHeight()
+    {
+        var remarkChrome = remarkGroup is null
+            ? SummaryGroupChromeHeight
+            : Math.Max(SummaryGroupChromeHeight, remarkGroup.Height - remarkGroup.DisplayRectangle.Height);
+        var totalChrome = totalGroup is null
+            ? SummaryGroupChromeHeight
+            : Math.Max(SummaryGroupChromeHeight, totalGroup.Height - totalGroup.DisplayRectangle.Height);
+        return SummaryOuterTopPadding + 6 +
+            Math.Max(RemarkInputHeight() + remarkChrome, (TotalRowHeight() * 3) + 1 + totalChrome);
+    }
 
     private static string Cell(ListViewItem row, int column) => row.SubItems[column].Text.Trim();
     private static string Clean(string value) => value.Replace(",", string.Empty, StringComparison.Ordinal).Trim();

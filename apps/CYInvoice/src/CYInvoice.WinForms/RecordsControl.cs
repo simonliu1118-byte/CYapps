@@ -336,8 +336,10 @@ internal sealed class RecordsControl : UserControl
         if (!UiControls.HasLogicalSize(refreshButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("已開立發票清單按鈕未使用標準尺寸");
         var columnWidth = Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
-        if (Math.Abs(columnWidth - recordsHost.ColumnViewportWidth) > 1)
-            throw new InvalidOperationException($"已開立發票清單欄寬未對齊 scrollbar 前的可視範圍：欄位 {columnWidth}px，可視 {recordsHost.ColumnViewportWidth}px");
+        if (columnWidth > recordsHost.ColumnViewportWidth ||
+            recordsHost.ColumnViewportWidth - columnWidth > 3 ||
+            recordsHost.HorizontalScrollVisible || Records.GridLines)
+            throw new InvalidOperationException($"已開立發票清單欄寬、水平 scrollbar 或格線繪製方式不正確：欄位 {columnWidth}px，可視 {recordsHost.ColumnViewportWidth}px");
     }
 
     protected override void Dispose(bool disposing)

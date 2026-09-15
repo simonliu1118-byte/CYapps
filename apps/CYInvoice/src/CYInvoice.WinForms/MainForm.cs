@@ -18,11 +18,11 @@ internal sealed class MainForm : Form
     private readonly InvoiceEntryControl invoicePage;
     private readonly RecordsControl recordsPage;
     private readonly Panel banner = new();
-    private readonly Label environmentPrefixLabel = new();
+    private readonly TableLayoutPanel bannerLayout = new();
+    private readonly Label environmentBadgeLabel = new();
     private readonly Label environmentCompanyLabel = new();
-    private readonly Label environmentSuffixLabel = new();
     private readonly Label apiLabel = new();
-    private readonly TabControl tabs = new();
+    private readonly TabControl tabs = new NoFocusCueTabControl();
     private readonly Panel tabHost = new();
     private readonly TabPage invoiceTab = new("開立發票");
     private readonly TabPage recordsTab = new("已開立發票清單");
@@ -70,24 +70,47 @@ internal sealed class MainForm : Form
 
         banner.Dock = DockStyle.Fill;
         banner.BackColor = Color.FromArgb(236, 246, 255);
-        ConfigureEnvironmentLabel(environmentPrefixLabel);
-        ConfigureEnvironmentLabel(environmentCompanyLabel);
-        ConfigureEnvironmentLabel(environmentSuffixLabel);
+        bannerLayout.Dock = DockStyle.Fill;
+        bannerLayout.Margin = Padding.Empty;
+        bannerLayout.Padding = Padding.Empty;
+        bannerLayout.ColumnCount = 3;
+        bannerLayout.RowCount = 1;
+        bannerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 270));
+        bannerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        bannerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 270));
+        bannerLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        environmentBadgeLabel.AutoSize = true;
+        environmentBadgeLabel.Anchor = AnchorStyles.Left;
+        environmentBadgeLabel.Margin = new Padding(12, 6, 0, 6);
+        environmentBadgeLabel.Padding = new Padding(10, 4, 10, 4);
+        environmentBadgeLabel.BorderStyle = BorderStyle.FixedSingle;
+        environmentBadgeLabel.TextAlign = ContentAlignment.MiddleCenter;
+        environmentBadgeLabel.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
+
+        environmentCompanyLabel.Dock = DockStyle.Fill;
+        environmentCompanyLabel.Margin = Padding.Empty;
+        environmentCompanyLabel.TextAlign = ContentAlignment.MiddleCenter;
+        environmentCompanyLabel.Font = new Font(Font.FontFamily, 14F, FontStyle.Bold);
+        environmentCompanyLabel.ForeColor = Color.FromArgb(0, 72, 170);
+        environmentCompanyLabel.AutoEllipsis = false;
+
+        apiLabel.Dock = DockStyle.Fill;
+        apiLabel.Margin = Padding.Empty;
         apiLabel.TextAlign = ContentAlignment.MiddleRight;
         apiLabel.Padding = new Padding(0, 0, 14, 0);
-        banner.Controls.Add(environmentPrefixLabel);
-        banner.Controls.Add(environmentCompanyLabel);
-        banner.Controls.Add(environmentSuffixLabel);
-        banner.Controls.Add(apiLabel);
-        banner.Resize += (_, _) => PositionBannerLabels();
+        bannerLayout.Controls.Add(environmentBadgeLabel, 0, 0);
+        bannerLayout.Controls.Add(environmentCompanyLabel, 1, 0);
+        bannerLayout.Controls.Add(apiLabel, 2, 0);
+        banner.Controls.Add(bannerLayout);
 
         tabHost.Dock = DockStyle.Fill;
         tabHost.Margin = Padding.Empty;
         tabs.Dock = DockStyle.Fill;
         tabs.Appearance = TabAppearance.Normal;
-        tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
-        tabs.SizeMode = TabSizeMode.Fixed;
-        tabs.ItemSize = new Size(154, 38);
+        tabs.DrawMode = TabDrawMode.Normal;
+        tabs.SizeMode = TabSizeMode.Normal;
+        tabs.Padding = new Point(18, 7);
         tabs.Multiline = false;
         invoiceTab.BackColor = Color.White;
         recordsTab.BackColor = Color.White;
@@ -95,10 +118,9 @@ internal sealed class MainForm : Form
         recordsTab.Controls.Add(recordsPage);
         tabs.TabPages.Add(invoiceTab);
         tabs.TabPages.Add(recordsTab);
-        tabs.DrawItem += DrawTabHeader;
         tabs.SelectedIndexChanged += (_, _) =>
         {
-            tabs.Invalidate();
+            UiControls.HideFocusCue(tabs);
             if (tabs.SelectedTab == recordsTab) recordsPage.Reload();
         };
         settingsButton.Margin = Padding.Empty;
@@ -114,51 +136,6 @@ internal sealed class MainForm : Form
         root.Controls.Add(tabHost, 0, 1);
         Controls.Add(root);
         PositionSettingsButton();
-    }
-
-    private void ConfigureEnvironmentLabel(Label label)
-    {
-        label.AutoSize = false;
-        label.TextAlign = ContentAlignment.MiddleCenter;
-        label.Font = new Font(Font.FontFamily, 14F, FontStyle.Bold);
-        label.ForeColor = Color.FromArgb(0, 72, 170);
-    }
-
-    private void PositionBannerLabels()
-    {
-        if (banner.ClientSize.Width <= 0) return;
-        var flags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
-        var prefixWidth = TextRenderer.MeasureText(environmentPrefixLabel.Text, environmentPrefixLabel.Font, Size.Empty, flags).Width;
-        var companyWidth = TextRenderer.MeasureText(environmentCompanyLabel.Text, environmentCompanyLabel.Font, Size.Empty, flags).Width;
-        var suffixWidth = TextRenderer.MeasureText(environmentSuffixLabel.Text, environmentSuffixLabel.Font, Size.Empty, flags).Width;
-        var companyLeft = (banner.ClientSize.Width - companyWidth) / 2;
-        environmentCompanyLabel.SetBounds(companyLeft, 0, companyWidth, banner.ClientSize.Height);
-        environmentPrefixLabel.SetBounds(companyLeft - prefixWidth, 0, prefixWidth, banner.ClientSize.Height);
-        environmentSuffixLabel.SetBounds(companyLeft + companyWidth, 0, suffixWidth, banner.ClientSize.Height);
-        apiLabel.SetBounds(Math.Max(0, banner.ClientSize.Width - 190), 0, 190, banner.ClientSize.Height);
-        apiLabel.BringToFront();
-    }
-
-    private void DrawTabHeader(object? sender, DrawItemEventArgs eventArgs)
-    {
-        var selected = eventArgs.Index == tabs.SelectedIndex;
-        var bounds = eventArgs.Bounds;
-        using (var background = new SolidBrush(selected ? Color.White : Color.FromArgb(245, 245, 245)))
-            eventArgs.Graphics.FillRectangle(background, bounds);
-        using (var border = new Pen(Color.FromArgb(218, 218, 218)))
-        {
-            eventArgs.Graphics.DrawLine(border, bounds.Left, bounds.Top, bounds.Left, bounds.Bottom - 1);
-            eventArgs.Graphics.DrawLine(border, bounds.Left, bounds.Top, bounds.Right - 1, bounds.Top);
-            eventArgs.Graphics.DrawLine(border, bounds.Right - 1, bounds.Top, bounds.Right - 1, bounds.Bottom - 1);
-        }
-        if (selected)
-        {
-            using var accent = new SolidBrush(Color.FromArgb(0, 102, 204));
-            eventArgs.Graphics.FillRectangle(accent, bounds.Left + 1, bounds.Bottom - 4, Math.Max(1, bounds.Width - 2), 4);
-        }
-        TextRenderer.DrawText(eventArgs.Graphics, tabs.TabPages[eventArgs.Index].Text, tabs.Font, bounds,
-            SystemColors.ControlText, TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine |
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 
     private void PositionSettingsButton()
@@ -222,17 +199,21 @@ internal sealed class MainForm : Form
     internal void VerifySmokeLayout()
     {
         if (tabs.TabPages.Count != 2 || tabs.TabPages[0] != invoiceTab || tabs.TabPages[1] != recordsTab ||
-            tabs.DrawMode != TabDrawMode.OwnerDrawFixed)
-            throw new InvalidOperationException("主頁籤未使用原生 TabControl 或核准的標頭樣式");
+            tabs.DrawMode != TabDrawMode.Normal || tabs.TabStop)
+            throw new InvalidOperationException("主頁籤未使用無焦點虛線的原生 TabControl");
         if (Math.Abs(Font.SizeInPoints - 12F) > 0.1F ||
             Math.Abs(environmentCompanyLabel.Font.SizeInPoints - 14F) > 0.1F)
             throw new InvalidOperationException("主畫面與環境標題字級不正確");
         if (Icon is null) throw new InvalidOperationException("主視窗未載入內嵌程式圖示");
-        PositionBannerLabels();
         var bannerCenter = banner.ClientSize.Width / 2;
-        var companyCenter = environmentCompanyLabel.Left + (environmentCompanyLabel.Width / 2);
-        if (Math.Abs(bannerCenter - companyCenter) > 1 || apiLabel.Right != banner.ClientSize.Width)
-            throw new InvalidOperationException("公司名稱未固定在標題正中央或 API 狀態未獨立靠右");
+        var companyCenter = environmentCompanyLabel.PointToScreen(new Point(environmentCompanyLabel.Width / 2, 0)).X -
+            banner.PointToScreen(Point.Empty).X;
+        if (Math.Abs(bannerCenter - companyCenter) > 1 ||
+            bannerLayout.GetColumnWidths()[0] != bannerLayout.GetColumnWidths()[2] ||
+            bannerLayout.GetColumn(environmentBadgeLabel) != 0 ||
+            bannerLayout.GetColumn(environmentCompanyLabel) != 1 ||
+            bannerLayout.GetColumn(apiLabel) != 2)
+            throw new InvalidOperationException("標題列未使用左右等寬欄位，或公司名稱未固定在正中央");
         PositionSettingsButton();
         var tabHeader = tabs.GetTabRect(0);
         if (settingsButton.Right != tabHost.ClientSize.Width - 6 ||
@@ -282,17 +263,18 @@ internal sealed class MainForm : Form
         var settings = repository.Settings.LoadOrCreate();
         if (settings.Environment == Environments.Production)
         {
-            environmentPrefixLabel.Text = "正式環境｜";
+            environmentBadgeLabel.Text = "正式環境｜將開立正式發票";
+            environmentBadgeLabel.BackColor = Color.FromArgb(255, 238, 238);
+            environmentBadgeLabel.ForeColor = Color.FromArgb(166, 32, 32);
             environmentCompanyLabel.Text = $"公司統編 {settings.ProductionInvoice}";
-            environmentSuffixLabel.Text = "｜將開立正式發票";
         }
         else
         {
-            environmentPrefixLabel.Text = "測試環境｜";
+            environmentBadgeLabel.Text = "測試環境｜不會開立正式發票";
+            environmentBadgeLabel.BackColor = Color.FromArgb(255, 247, 221);
+            environmentBadgeLabel.ForeColor = Color.FromArgb(166, 92, 0);
             environmentCompanyLabel.Text = "光貿測試公司 12345678";
-            environmentSuffixLabel.Text = "｜不會開立正式發票";
         }
-        PositionBannerLabels();
     }
 
     private async Task RefreshApiAsync()
