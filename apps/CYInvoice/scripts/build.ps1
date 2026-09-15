@@ -11,15 +11,12 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = (Get-Content (Join-Path $ProjectRoot "VERSION") -Raw).Trim()
 }
-if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
-    throw "Invalid CYInvoice version: $Version"
-}
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYInvoice version: $Version" }
 if ([string]::IsNullOrWhiteSpace($Build)) {
     $Build = (Get-Content (Join-Path $ProjectRoot "BUILD") -Raw).Trim()
 }
-if ($Build -notmatch '^\d+$') {
-    throw "Invalid CYInvoice build: $Build"
-}
+if ($Build -notmatch '^\d+$') { throw "Invalid CYInvoice build: $Build" }
+
 $BuildNumber = [int]$Build
 $DisplayVersion = "V$Version"
 $ArtifactVersion = "V$Version"
@@ -27,89 +24,46 @@ if ($BuildNumber -gt 0) {
     $DisplayVersion = "V$Version Build $BuildNumber"
     $ArtifactVersion = "V${Version}_Build${BuildNumber}"
 }
-
 if ([string]::IsNullOrWhiteSpace($Commit)) {
-    try {
-        $Commit = (& git -C $ProjectRoot rev-parse --short=12 HEAD).Trim()
-        if ($LASTEXITCODE -ne 0) {
-            throw "git rev-parse failed."
-        }
-    }
-    catch {
-        $Commit = "unknown"
-    }
+    try { $Commit = (& git -C $ProjectRoot rev-parse --short=12 HEAD).Trim() }
+    catch { $Commit = "unknown" }
 }
 
-$ResourceFile = Join-Path $ProjectRoot "cmd/CYInvoice/rsrc_windows_amd64.syso"
 $DistRoot = Join-Path $ProjectRoot "dist"
+$PublishDir = Join-Path $ProjectRoot "out"
 $ReleaseDir = Join-Path $DistRoot "CYInvoice"
-$ExePath = Join-Path $ReleaseDir "CYInvoice.exe"
 $ZipPath = Join-Path $DistRoot ("CYInvoice_{0}.zip" -f $ArtifactVersion)
-
-if (Test-Path $DistRoot) {
-    Remove-Item $DistRoot -Recurse -Force
-}
+if (Test-Path $DistRoot) { Remove-Item $DistRoot -Recurse -Force }
+if (Test-Path $PublishDir) { Remove-Item $PublishDir -Recurse -Force }
 New-Item $ReleaseDir -ItemType Directory -Force | Out-Null
+
+Push-Location $ProjectRoot
+try {
+    & dotnet publish src/CYInvoice.WinForms/CYInvoice.WinForms.csproj `
+        -c Release -r win-x64 --self-contained true `
+        -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
+        -p:Version=$Version `
+        -o $PublishDir
+    if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
+}
+finally { Pop-Location }
+
+Copy-Item (Join-Path $PublishDir "*") $ReleaseDir -Recurse -Force
+if (!(Test-Path (Join-Path $ReleaseDir "CYInvoice.exe") -PathType Leaf)) { throw "Published CYInvoice.exe is missing." }
+Copy-Item (Join-Path $ProjectRoot "使用說明.txt") $ReleaseDir -Force
 New-Item (Join-Path $ReleaseDir "Data") -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $ReleaseDir "Cache/InvoicePDF") -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $ReleaseDir "Logs") -ItemType Directory -Force | Out-Null
 
-$OldGOOS = $env:GOOS
-$OldGOARCH = $env:GOARCH
-$OldGOAMD64 = $env:GOAMD64
-$OldCGO = $env:CGO_ENABLED
-
-try {
-    $env:GOOS = "windows"
-    $env:GOARCH = "amd64"
-    $env:GOAMD64 = "v1"
-    $env:CGO_ENABLED = "0"
-
-    Push-Location $ProjectRoot
-    try {
-        & go run github.com/akavel/rsrc@v0.10.2 `
-            -arch amd64 `
-            -ico "assets/CYInvoice.ico" `
-            -manifest "assets/CYInvoice.exe.manifest" `
-            -o $ResourceFile
-        if ($LASTEXITCODE -ne 0) {
-            throw "Resource generation failed."
-        }
-
-        $LdFlags = "-H=windowsgui -s -w -X cyinvoice/internal/version.Value=$Version -X cyinvoice/internal/version.Build=$BuildNumber -X cyinvoice/internal/version.Commit=$Commit"
-        & go build -trimpath -buildvcs=false -ldflags $LdFlags -o $ExePath ./cmd/CYInvoice
-        if ($LASTEXITCODE -ne 0) {
-            throw "Go build failed."
-        }
-    }
-    finally {
-        Pop-Location
-    }
-}
-finally {
-    $env:GOOS = $OldGOOS
-    $env:GOARCH = $OldGOARCH
-    $env:GOAMD64 = $OldGOAMD64
-    $env:CGO_ENABLED = $OldCGO
-    if (Test-Path $ResourceFile) {
-        Remove-Item $ResourceFile -Force
-    }
-}
-
-Copy-Item (Join-Path $ProjectRoot "使用說明.txt") $ReleaseDir
-
 $ReleaseDate = Get-Date -Format "yyyy/MM/dd"
-$VersionNote = @"
+@"
 Version: $DisplayVersion
 Date: $ReleaseDate
 Commit: $Commit
 
-CYInvoice $DisplayVersion。
-
-已包含手動開立、MO店+／酷澎共用匯入確認、開立清單、狀態查詢、防重複開票及測試池個資遮蔽。
-鼎新 ERP 已統一確認入口，待取得實際銷貨單樣本與欄位規則後完成來源解析器。
-"@
-Set-Content -Path (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) -Value $VersionNote -Encoding UTF8
+CYInvoice $DisplayVersion，Windows 10/11 x64 正式版。
+C#／WinForms 已自 V2.0.0 起成為唯一正式產品線。
+"@ | Set-Content -Path (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) -Encoding UTF8
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
@@ -121,17 +75,10 @@ try {
     }
     foreach ($File in Get-ChildItem -LiteralPath $ReleaseDir -File -Recurse) {
         $Relative = [IO.Path]::GetRelativePath($DistRoot, $File.FullName).Replace('\', '/')
-        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-            $Archive,
-            $File.FullName,
-            $Relative,
-            [System.IO.Compression.CompressionLevel]::Optimal
-        )
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($Archive, $File.FullName, $Relative, [System.IO.Compression.CompressionLevel]::Optimal)
     }
 }
-finally {
-    $Archive.Dispose()
-}
+finally { $Archive.Dispose() }
 
-Write-Host "Built: $ExePath"
+Write-Host "Built: $(Join-Path $ReleaseDir 'CYInvoice.exe')"
 Write-Host "Package: $ZipPath"

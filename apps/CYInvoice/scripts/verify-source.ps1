@@ -31,7 +31,7 @@ $LiteralSecretPattern = @'
 (?i)\b(?:AppKey|app_key|ProdAppKey|ProdAppKeyEnc|MOPassword|MOPasswordEnc)\w*\s*(?::=|=|:)\s*["'](?<value>[^"']+)["']
 '@
 
-$TextExtensions = @('.go', '.md', '.mod', '.sum', '.ps1', '.yml', '.yaml', '.json', '.manifest', '.txt')
+$TextExtensions = @('.cs', '.csproj', '.sln', '.props', '.md', '.ps1', '.yml', '.yaml', '.json', '.xml', '.manifest', '.txt')
 foreach ($RelativePath in $TrackedFiles) {
     $Extension = [IO.Path]::GetExtension($RelativePath).ToLowerInvariant()
     if ($TextExtensions -notcontains $Extension) {
@@ -47,7 +47,8 @@ foreach ($RelativePath in $TrackedFiles) {
     }
     foreach ($Match in [regex]::Matches($Content, $LiteralSecretPattern)) {
         $Value = $Match.Groups['value'].Value
-        if ($Value -notmatch '^TEST[-_]' -and $Value -ne 'secret') {
+        $IsPublishedAmegoTestKey = $RelativePath -eq 'apps/CYInvoice/src/CYInvoice.Core/AmegoContracts.cs' -and $Value -eq 'sHeq7t8G1wiQvhAuIM27'
+        if (!$IsPublishedAmegoTestKey -and $Value -notmatch '^TEST[-_]' -and $Value -ne 'secret') {
             throw "A possible literal App Key or MO password is present in: $RelativePath"
         }
     }
