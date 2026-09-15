@@ -37,11 +37,15 @@ internal sealed class ImportConfirmationForm : Form
     private readonly Button applyName = UiControls.StandardButton("套用名稱");
     private readonly Button retryLookup = UiControls.StandardButton("重新查詢統編");
     private readonly Label buyerHint = UiControls.Label("");
-    private readonly Label summary = UiControls.Label("");
+    private readonly TableLayoutPanel summary = new() { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
+    private readonly Label summaryLead = new();
+    private readonly Label summarySelected = new();
+    private readonly Label summaryTail = new();
     private readonly Label progressText = UiControls.Label("");
     private readonly ProgressBar progress = new() { Dock = DockStyle.Fill, Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 40 };
     private readonly Button cancel = UiControls.StandardButton("取消匯入");
     private readonly Button issue = UiControls.PrimaryIssueButton();
+    private readonly Panel actions = new() { Dock = DockStyle.Fill, Margin = Padding.Empty };
     private bool refreshing;
     private bool issuing;
     private bool closing;
@@ -119,7 +123,7 @@ internal sealed class ImportConfirmationForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
 
         var heading = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         heading.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300));
@@ -132,7 +136,7 @@ internal sealed class ImportConfirmationForm : Form
         heading.Controls.Add(UiControls.Label("請先逐張核對；取消、未勾選或資料有問題的訂單都不會送出。"), 1, 0);
 
         ConfigureGrid();
-        issue.Text = IssueButtonCaption(0);
+        issue.Text = IssueButtonCaption();
         UiControls.ApplyIssueButtonTheme(issue,
             repository.Settings.LoadOrCreate().Environment == Environments.Production);
         var editor = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6 };
@@ -152,24 +156,16 @@ internal sealed class ImportConfirmationForm : Form
         editor.Controls.Add(retryLookup, 3, 0);
         editor.Controls.Add(buyerHint, 4, 0);
 
-        summary.Font = new Font(Font, FontStyle.Bold);
+        ConfigureSummary();
         var progressArea = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
         progressArea.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         progressArea.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
         progressArea.Controls.Add(progressText, 0, 0);
         progressArea.Controls.Add(progress, 0, 1);
 
-        var actions = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
-            Padding = new Padding(0, 3, 0, 0),
-        };
-        issue.Margin = new Padding(6, 0, 6, 0);
-        cancel.Margin = new Padding(6, 6, 6, 6);
-        actions.Controls.Add(issue);
         actions.Controls.Add(cancel);
+        actions.Controls.Add(issue);
+        actions.Resize += (_, _) => PositionActions();
 
         root.Controls.Add(heading, 0, 0);
         root.Controls.Add(grid, 0, 1);
@@ -178,6 +174,40 @@ internal sealed class ImportConfirmationForm : Form
         root.Controls.Add(progressArea, 0, 4);
         root.Controls.Add(actions, 0, 5);
         Controls.Add(root);
+        PositionActions();
+    }
+
+    private void ConfigureSummary()
+    {
+        summary.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        summary.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        summary.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        ConfigureSummaryLabel(summaryLead, 12F, SystemColors.ControlText);
+        ConfigureSummaryLabel(summarySelected, 13F, Color.FromArgb(196, 0, 0));
+        ConfigureSummaryLabel(summaryTail, 12F, SystemColors.ControlText);
+        summary.Controls.Add(summaryLead, 0, 0);
+        summary.Controls.Add(summarySelected, 1, 0);
+        summary.Controls.Add(summaryTail, 2, 0);
+    }
+
+    private void ConfigureSummaryLabel(Label label, float size, Color color)
+    {
+        label.AutoSize = true;
+        label.Anchor = AnchorStyles.Left;
+        label.Margin = Padding.Empty;
+        label.Font = new Font(Font.FontFamily, size, FontStyle.Bold);
+        label.ForeColor = color;
+        label.TextAlign = ContentAlignment.MiddleLeft;
+    }
+
+    private void PositionActions()
+    {
+        const int gap = 14;
+        var contentWidth = cancel.Width + gap + issue.Width;
+        var left = Math.Max(0, (actions.ClientSize.Width - contentWidth) / 2);
+        cancel.SetBounds(left, Math.Max(0, (actions.ClientSize.Height - cancel.Height) / 2), cancel.Width, cancel.Height);
+        issue.SetBounds(cancel.Right + gap, Math.Max(0, (actions.ClientSize.Height - issue.Height) / 2), issue.Width, issue.Height);
     }
 
     private void ConfigureGrid()
@@ -506,8 +536,10 @@ internal sealed class ImportConfirmationForm : Form
     private void RefreshSummary()
     {
         var selected = entries.Where(entry => entry.Selected && !entry.Finished).ToArray();
-        summary.Text = $"訂單共 {entries.Count} 張　｜　已選擇 {selected.Length} 張　｜　選擇總額 {MoneyFormatter.Integer(selected.Sum(entry => entry.TotalAmount))}";
-        issue.Text = IssueButtonCaption(selected.Length);
+        summaryLead.Text = $"訂單共 {entries.Count} 張　｜　已選擇 ";
+        summarySelected.Text = selected.Length.ToString();
+        summaryTail.Text = $" 張　｜　選擇總額 {MoneyFormatter.Integer(selected.Sum(entry => entry.TotalAmount))}";
+        issue.Text = IssueButtonCaption();
     }
 
     private void LoadBuyerEditor()
@@ -565,8 +597,37 @@ internal sealed class ImportConfirmationForm : Form
     private bool IsProductionEnvironment() =>
         repository.Settings.LoadOrCreate().Environment == Environments.Production;
 
-    private string IssueButtonCaption(int count) =>
-        $"{(IsProductionEnvironment() ? "確認開立" : "確認測試開立")}（{count} 張）";
+    private string IssueButtonCaption() => IssueButtonCaption(IsProductionEnvironment());
+
+    private static string IssueButtonCaption(bool production) => production ? "確認開立" : "確認測試開立";
+
+    internal static void VerifySmokeLayout(LocalRepository repository, InvoiceService service)
+    {
+        using var form = new ImportConfirmationForm(
+            "測試",
+            repository,
+            service,
+            () => { },
+            _ => Task.FromResult<IReadOnlyList<Entry>>([]));
+        form.CreateControl();
+        form.PerformLayout();
+        form.RefreshSummary();
+        form.PositionActions();
+
+        if (IssueButtonCaption(false) != "確認測試開立" || IssueButtonCaption(true) != "確認開立" ||
+            form.issue.Text.Contains('張'))
+            throw new InvalidOperationException("匯入確認按鈕的測試／正式環境文字不正確，或仍含張數");
+        var actionCenter = (form.cancel.Left + form.issue.Right) / 2;
+        if (Math.Abs(actionCenter - form.actions.ClientSize.Width / 2) > 1 ||
+            form.cancel.Top < 0 || form.issue.Top < 0 ||
+            form.cancel.Bottom > form.actions.ClientSize.Height || form.issue.Bottom > form.actions.ClientSize.Height)
+            throw new InvalidOperationException("匯入確認按鈕未置中，或按鈕上下緣遭裁切");
+        if (Math.Abs(form.summaryLead.Font.SizeInPoints - 12F) > 0.1F ||
+            Math.Abs(form.summaryTail.Font.SizeInPoints - 12F) > 0.1F ||
+            Math.Abs(form.summarySelected.Font.SizeInPoints - 13F) > 0.1F ||
+            form.summarySelected.ForeColor != Color.FromArgb(196, 0, 0))
+            throw new InvalidOperationException("匯入確認摘要字級或已選張數顏色不正確");
+    }
 
     private string EnvironmentName() => IsProductionEnvironment() ? "正式公司環境" : "光貿測試環境";
     private static string ShortError(Exception error) => error.Message.Length <= 80 ? error.Message : error.Message[..77] + "…";

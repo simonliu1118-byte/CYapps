@@ -118,6 +118,7 @@ internal sealed class InvoiceEntryControl : UserControl
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         automaticOrder.Font = customOrder.Font = consumerBuyer.Font = companyBuyer.Font = Font;
+        automaticOrder.Anchor = customOrder.Anchor = consumerBuyer.Anchor = companyBuyer.Anchor = AnchorStyles.Left;
         var firstModeWidth = Math.Max(
             automaticOrder.GetPreferredSize(Size.Empty).Width,
             consumerBuyer.GetPreferredSize(Size.Empty).Width) + 8;
@@ -304,19 +305,12 @@ internal sealed class InvoiceEntryControl : UserControl
         buyerBan.Leave += async (_, _) => await LookupBuyerAsync(true);
         remark.TextChanged += (_, _) => remarkCounter.Text = $"{remark.Text.EnumerateRunes().Count()} / {InvoiceLimits.MaximumRemarkCharacters}";
         Items.MouseMove += (_, eventArgs) => UpdateDeleteHotState(DeleteButtonRowAt(eventArgs.Location));
-        Items.MouseDown += (_, eventArgs) =>
-        {
-            if (eventArgs.Button == MouseButtons.Left) UpdateDeletePressedState(DeleteButtonRowAt(eventArgs.Location));
-        };
+        Items.MouseDown += (_, eventArgs) => HandleItemMouseDown(eventArgs);
         Items.MouseUp += (_, eventArgs) => HandleItemMouseUp(eventArgs);
         Items.MouseLeave += (_, _) =>
         {
             UpdateDeleteHotState(-1);
             UpdateDeletePressedState(-1);
-        };
-        Items.MouseCaptureChanged += (_, _) =>
-        {
-            if (Control.MouseButtons == MouseButtons.None) UpdateDeletePressedState(-1);
         };
         Items.MouseWheel += (_, _) => CommitCellEditor(false);
         Items.KeyDown += (_, eventArgs) =>
@@ -326,6 +320,12 @@ internal sealed class InvoiceEntryControl : UserControl
             eventArgs.SuppressKeyPress = true;
             BeginCellEdit(Items.FocusedItem.Index, 1);
         };
+    }
+
+    private void HandleItemMouseDown(MouseEventArgs eventArgs)
+    {
+        if (eventArgs.Button == MouseButtons.Left)
+            UpdateDeletePressedState(DeleteButtonRowAt(eventArgs.Location));
     }
 
     private void HandleItemMouseUp(MouseEventArgs eventArgs)
@@ -891,8 +891,9 @@ internal sealed class InvoiceEntryControl : UserControl
             throw new InvalidOperationException("公司統編模式未啟用必要買方欄位");
         var buyerNameLabel = Descendants(this).OfType<Label>().FirstOrDefault(label => label.Text == "買方名稱");
         var buyerBanLabel = Descendants(this).OfType<Label>().FirstOrDefault(label => label.Text == "統一編號");
+        var orderLine = automaticOrder.Parent;
         var buyerLine = consumerBuyer.Parent;
-        if (buyerNameLabel is null || buyerBanLabel is null || buyerLine is null ||
+        if (buyerNameLabel is null || buyerBanLabel is null || orderLine is null || buyerLine is null ||
             !ReferenceEquals(companyBuyer.Parent, buyerLine) ||
             !ReferenceEquals(buyerBan.Parent, buyerLine) ||
             !ReferenceEquals(buyerName.Parent, buyerLine) ||
@@ -901,7 +902,11 @@ internal sealed class InvoiceEntryControl : UserControl
             buyerBan.Bottom > buyerLine.ClientSize.Height ||
             buyerName.Bottom > buyerLine.ClientSize.Height ||
             buyerBan.Height < buyerBan.PreferredHeight ||
-            buyerName.Height < buyerName.PreferredHeight)
+            buyerName.Height < buyerName.PreferredHeight ||
+            Math.Abs((automaticOrder.Top + automaticOrder.Height / 2) - orderLine.ClientSize.Height / 2) > 2 ||
+            Math.Abs((customOrder.Top + customOrder.Height / 2) - orderLine.ClientSize.Height / 2) > 2 ||
+            Math.Abs((consumerBuyer.Top + consumerBuyer.Height / 2) - buyerLine.ClientSize.Height / 2) > 2 ||
+            Math.Abs((companyBuyer.Top + companyBuyer.Height / 2) - buyerLine.ClientSize.Height / 2) > 2)
             throw new InvalidOperationException("買方資料未排成單列，或統編／買方名稱輸入欄位遭裁切");
         consumerBuyer.Checked = true;
         if (Items.Columns.Count != 7 || Items.Items.Count != MinimumVisibleRows || ActualRows().Count != 1)
@@ -966,6 +971,14 @@ internal sealed class InvoiceEntryControl : UserControl
         UpdateDeleteHotState(-1);
         UpdateDeletePressedState(-1);
         CommitCellEditor(true);
+        AddRow(false);
+        var rowsBeforeDelete = ActualRows().Count;
+        var deleteBounds = DeleteButtonBounds(ActualRows()[^1]);
+        var deletePoint = new Point(deleteBounds.Left + deleteBounds.Width / 2, deleteBounds.Top + deleteBounds.Height / 2);
+        HandleItemMouseDown(new MouseEventArgs(MouseButtons.Left, 1, deletePoint.X, deletePoint.Y, 0));
+        HandleItemMouseUp(new MouseEventArgs(MouseButtons.Left, 1, deletePoint.X, deletePoint.Y, 0));
+        if (ActualRows().Count != rowsBeforeDelete - 1)
+            throw new InvalidOperationException("商品刪除按鈕無法在單次按下與放開後刪除資料列");
         while (ActualRows().Count <= MinimumVisibleRows) AddRow(false);
         EnsurePlaceholderRows();
         Application.DoEvents();
