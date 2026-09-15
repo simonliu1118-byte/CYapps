@@ -118,10 +118,10 @@ internal sealed class InvoiceEntryControl : UserControl
         automaticOrder.Font = customOrder.Font = consumerBuyer.Font = companyBuyer.Font = Font;
         var firstModeWidth = Math.Max(
             automaticOrder.GetPreferredSize(Size.Empty).Width,
-            consumerBuyer.GetPreferredSize(Size.Empty).Width) + 2;
+            consumerBuyer.GetPreferredSize(Size.Empty).Width) + 8;
         var secondModeWidth = Math.Max(
             customOrder.GetPreferredSize(Size.Empty).Width,
-            companyBuyer.GetPreferredSize(Size.Empty).Width) + 4;
+            companyBuyer.GetPreferredSize(Size.Empty).Width) + 8;
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, firstModeWidth));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, secondModeWidth));
