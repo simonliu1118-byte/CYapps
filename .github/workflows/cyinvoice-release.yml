@@ -1,11 +1,7 @@
 name: CYInvoice Stable Release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "apps/CYInvoice/VERSION"
-      - ".github/workflows/cyinvoice-release.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -101,10 +97,8 @@ jobs:
 
           Copyright © $year C.C. Liu, Chihyuan Co. All Rights Reserved.
 
-          - C#／WinForms 正式主線的第一個公開版本；已完成 Windows 實機 UI 驗收。
-          - 修正正式環境主標題、發票基本資料對齊、欄位裁切、捲軸與欄位對齊。
-          - 修正匯入確認視窗按鈕裁切／置中、摘要字級與選取張數提示。
-          - 修正商品明細刪除需要重複點擊的問題。
+          - 本版由使用者明確要求正式發布後，從 main 重新建置。
+          - 完整版本內容請參閱發行包內的 V$env:CYINVOICE_VERSION.txt 與專案 CHANGELOG。
           - 下載 $zipName 後解壓縮，直接執行 CYInvoice.exe。
           - 發行包與 SHA-256 由本次正式 Release workflow 重新建置與驗證。
           - Go／Win32 V1.1.0 保留為上一個回退版本。
