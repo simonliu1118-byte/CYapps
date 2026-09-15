@@ -133,6 +133,10 @@ internal sealed class ImportConfirmationForm : Form
 
         ConfigureGrid();
         var editor = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6 };
+        buyerName.Dock = DockStyle.None;
+        buyerName.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        applyName.Anchor = AnchorStyles.None;
+        retryLookup.Anchor = AnchorStyles.None;
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
