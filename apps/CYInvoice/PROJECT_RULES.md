@@ -8,7 +8,8 @@
 - **C#／WinForms 自 `V2.0.0` 起為唯一正式產品線**，正式 source 直接由 `main` 維護。
 - 版本唯一來源為 `apps/CYInvoice/VERSION`；不得再建立 `VERSION-CS` 或其他平行版本身分。
 - `cyinvoice/csharp-remake` 已完成其一次性遷移目的，合併後停止使用；後續工作依共通規則由 `main` 建立短期工作分支與 PR。
-- Go／Win32 `V1.1.0` 固定為上一個可回退的公開版本；只保留既有 tag、Release、commit 與下載檔，不再保留於 `main` 的現行 source，也不得覆寫其歷史資產。
+- Go／Win32 `V1.1.0` 固定為上一個可回退的公開版本；只保留 tag、Release、commit 與下載檔，不再保留於 `main` 的現行 source，也不得覆寫其歷史資產。
+- 若 repository 尚無 `cyinvoice-v1.1.0` Release，允許由 V2 合併前固定 `main` commit `4c2335e00173368540fe10a641fccffcb251f999` 一次性重建、完整驗證並建立歷史回退 Release；建立後此例外即告完成，不得再次發布或修改同版。
 
 ## 2. CYInvoice 正式 Release
 

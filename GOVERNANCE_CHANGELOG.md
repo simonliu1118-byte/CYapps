@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.4 — 2026/09/15
+
+- 補齊 CYInvoice Go／Win32 V1.1.0 的歷史公開回退 Release：repository 當時尚未建立 CYInvoice Release，允許由 V2 合併前的固定 `main` commit `4c2335e00173368540fe10a641fccffcb251f999` 一次性重建、驗證並發布 `cyinvoice-v1.1.0`。
+- 歷史 Release 建立後不得更新、覆寫或再將 Go source 加回現行 `main`；V2.0.0 仍是唯一正式產品線與 latest Release。
+
 ## 2.3.3 — 2026/09/15
 
 - CYInvoice 依使用者新規範明列正式 Release 自動化例外：含 `VERSION` 變更的 PR 經必要 CI 通過並合併 `main` 後，由 Release workflow 自動重新驗證、建置、打包、建立 tag 與公開 Release。
