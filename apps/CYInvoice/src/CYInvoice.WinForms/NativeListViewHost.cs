@@ -53,7 +53,7 @@ internal sealed class NativeListViewHost : UserControl
             }
         };
         List.SizeChanged += (_, _) => QueueViewportChanged();
-        List.NativeViewportChanged += (_, _) =>
+        ((NativeListView)List).NativeViewportChanged += (_, _) =>
         {
             List.Invalidate(true);
             QueueViewportChanged();
