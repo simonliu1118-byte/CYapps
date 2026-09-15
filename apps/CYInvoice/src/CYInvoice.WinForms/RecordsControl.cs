@@ -196,7 +196,7 @@ internal sealed class RecordsControl : UserControl
 
     private void OpenSelected(InvoiceRecord record)
     {
-        using var detail = new RecordDetailForm(record);
+        using var detail = new RecordDetailForm(record, repository, service);
         detail.ShowDialog(FindForm());
     }
 

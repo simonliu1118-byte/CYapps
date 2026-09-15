@@ -79,6 +79,8 @@ var tests = new (string Name, Action Run)[]
     ("AMEGO form and signature", () => TestAmegoSignatureAsync().GetAwaiter().GetResult()),
     ("AMEGO code 15 synchronizes time once", () => TestAmegoTimeSyncAsync().GetAwaiter().GetResult()),
     ("AMEGO query selects exact order", () => TestAmegoExactQueryAsync().GetAwaiter().GetResult()),
+    ("AMEGO invoice file downloads only trusted PDF", () => TestAmegoInvoicePdfAsync().GetAwaiter().GetResult()),
+    ("AMEGO invoice file rejects untrusted URL", () => TestAmegoInvoicePdfUrlSafetyAsync().GetAwaiter().GetResult()),
     ("settings never write plaintext secrets", TestSettingsSecrets),
     ("corrupt invoice JSON is not overwritten", TestCorruptInvoiceJson),
     ("legacy invoice migration preserves unknown fields", TestLegacyInvoiceMigration),
@@ -119,6 +121,9 @@ var tests = new (string Name, Action Run)[]
     ("MO issue masks shared test-pool customer data", () => TestMoIssuePrivacyAsync().GetAwaiter().GetResult()),
     ("Coupang confirmation is reused without second BAN lookup", () => TestCoupangIssuePrivacyAsync().GetAwaiter().GetResult()),
     ("unresolved imported company name blocks before API", () => TestImportedLookupBlockAsync().GetAwaiter().GetResult()),
+    ("consumer PDF uses style zero and same-day cache", () => TestConsumerPdfCacheAsync().GetAwaiter().GetResult()),
+    ("company PDF caches each style and refreshes next day", () => TestCompanyPdfStylesAsync().GetAwaiter().GetResult()),
+    ("PDF eligibility blocks unsafe invoice states", TestPdfEligibility),
 };
 
 var failures = 0;
@@ -295,6 +300,44 @@ static async Task TestAmegoExactQueryAsync()
     Equal(1, response.Data.DetailVat);
 }
 
+static async Task TestAmegoInvoicePdfAsync()
+{
+    var requests = 0;
+    var handler = new StubHandler(async request =>
+    {
+        requests++;
+        if (request.Method == HttpMethod.Post)
+        {
+            Equal("/json/invoice_file", request.RequestUri!.AbsolutePath);
+            var form = ParseForm(await request.Content!.ReadAsStringAsync());
+            using var data = JsonDocument.Parse(form["data"]);
+            Equal("invoice", data.RootElement.GetProperty("type").GetString());
+            Equal("AB12345678", data.RootElement.GetProperty("invoice_number").GetString());
+            Equal(5, data.RootElement.GetProperty("download_style").GetInt32());
+            return JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"file_url\":\"https://invoice.amego.tw/user/invoice_print_type?token=TEST-NOT-REAL&type=5\"}}");
+        }
+        Equal("invoice.amego.tw", request.RequestUri!.Host);
+        return PdfResponse(TestPdfBytes());
+    });
+    var client = new AmegoClient("12345678", "secret", new HttpClient(handler)) { BaseUrl = "https://test.invalid" };
+    var pdf = await client.DownloadInvoicePdfAsync("AB12345678", 5);
+    Equal("%PDF-", Encoding.ASCII.GetString(pdf, 0, 5));
+    Equal(2, requests);
+}
+
+static async Task TestAmegoInvoicePdfUrlSafetyAsync()
+{
+    var requests = 0;
+    var handler = new StubHandler(_ =>
+    {
+        requests++;
+        return Task.FromResult(JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":{\"file_url\":\"https://example.invalid/invoice.pdf\"}}"));
+    });
+    var client = new AmegoClient("12345678", "secret", new HttpClient(handler)) { BaseUrl = "https://test.invalid" };
+    await ThrowsAsync<InvalidDataException>(() => client.DownloadInvoicePdfAsync("AB12345678", 0));
+    Equal(1, requests);
+}
+
 static Dictionary<string, string> ParseForm(string value) => value.Split('&').Select(part => part.Split('=', 2))
     .ToDictionary(part => WebUtility.UrlDecode(part[0]), part => WebUtility.UrlDecode(part.Length == 2 ? part[1] : string.Empty));
 
@@ -302,6 +345,13 @@ static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
 {
     Content = new StringContent(json, Encoding.UTF8, "application/json"),
 };
+
+static HttpResponseMessage PdfResponse(byte[] bytes) => new(HttpStatusCode.OK)
+{
+    Content = new ByteArrayContent(bytes),
+};
+
+static byte[] TestPdfBytes() => Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF\n");
 
 static void TestSettingsSecrets()
 {
@@ -1006,6 +1056,85 @@ static async Task TestImportedLookupBlockAsync()
     Equal(0, fake.IssueCalls);
 }
 
+static async Task TestConsumerPdfCacheAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway { PdfBytes = TestPdfBytes() };
+    var (service, repository) = TestService(temporary.Path, fake);
+    var record = PdfReadyRecord("UV12345678");
+    repository.Invoices.Append(record);
+
+    var first = await service.GetInvoicePdfAsync(record, 0);
+    var second = await service.GetInvoicePdfAsync(record, 0);
+    Equal(false, first.FromCache);
+    Equal(true, second.FromCache);
+    Equal(first.Path, second.Path);
+    Equal(1, fake.PdfCalls);
+    Equal(0, fake.LastPdfStyle);
+    Equal("UV12345678", fake.LastPdfInvoiceNumber);
+    await ThrowsAsync<InvalidOperationException>(() => service.GetInvoicePdfAsync(record, 1));
+    Equal(1, fake.PdfCalls);
+
+    File.WriteAllText(first.Path, "not a pdf");
+    var repaired = await service.GetInvoicePdfAsync(record, 0);
+    Equal(false, repaired.FromCache);
+    Equal(2, fake.PdfCalls);
+
+    File.Delete(repaired.Path);
+    fake.PdfBytes = Encoding.UTF8.GetBytes("<html>not a PDF</html>");
+    await ThrowsAsync<InvalidDataException>(() => service.GetInvoicePdfAsync(record, 0));
+    Equal(false, File.Exists(repaired.Path));
+    Equal(3, fake.PdfCalls);
+}
+
+static async Task TestCompanyPdfStylesAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway { PdfBytes = TestPdfBytes() };
+    var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+    var current = new DateTimeOffset(2026, 9, 5, 9, 8, 7, TimeSpan.FromHours(8));
+    var service = new InvoiceService(repository, (_, _) => fake, () => current);
+    var record = PdfReadyRecord("WX12345678");
+    record.BuyerIdentifier = "12345675";
+    repository.Invoices.Append(record);
+
+    Equal("0,1,2,3,5", string.Join(",", service.GetInvoicePdfStyles(record).Select(style => style.Code)));
+    var a4 = await service.GetInvoicePdfAsync(record, 0);
+    var a5 = await service.GetInvoicePdfAsync(record, 3);
+    var a5Cached = await service.GetInvoicePdfAsync(record, 3);
+    Equal(false, a4.FromCache);
+    Equal(false, a5.FromCache);
+    Equal(true, a5Cached.FromCache);
+    Equal(false, string.Equals(a4.Path, a5.Path, StringComparison.OrdinalIgnoreCase));
+    Equal(2, fake.PdfCalls);
+
+    current = current.AddDays(1);
+    var nextDay = await service.GetInvoicePdfAsync(record, 0);
+    Equal(false, nextDay.FromCache);
+    Equal(false, string.Equals(a4.Path, nextDay.Path, StringComparison.OrdinalIgnoreCase));
+    Equal(3, fake.PdfCalls);
+}
+
+static void TestPdfEligibility()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway();
+    var (service, _) = TestService(temporary.Path, fake);
+    var record = PdfReadyRecord("YZ12345678");
+    Equal(true, service.GetInvoicePdfEligibility(record).Allowed);
+    record.UploadStatus = UploadStatuses.Pending;
+    Equal(false, service.GetInvoicePdfEligibility(record).Allowed);
+    record.UploadStatus = UploadStatuses.Complete;
+    record.Delivery = "會員載具";
+    Equal(false, service.GetInvoicePdfEligibility(record).Allowed);
+    record.Delivery = InvoiceService.DeliveryPaper;
+    record.InvoiceState = InvoiceStates.Voided;
+    Equal(false, service.GetInvoicePdfEligibility(record).Allowed);
+    record.InvoiceState = InvoiceStates.Opened;
+    record.Environment = Environments.Production;
+    Equal(false, service.GetInvoicePdfEligibility(record).Allowed);
+}
+
 static void WriteZipPart(ZipArchive archive, string name, string content)
 {
     using var writer = new StreamWriter(archive.CreateEntry(name).Open(), new UTF8Encoding(false));
@@ -1050,6 +1179,15 @@ static InvoiceRecord OpenedRecord(string invoiceNumber) => new()
     DetailVat = 1,
     Items = [new InvoiceItem { Description = "商品", Quantity = 1, UnitPrice = 105, Amount = 105 }],
 };
+
+static InvoiceRecord PdfReadyRecord(string invoiceNumber)
+{
+    var record = OpenedRecord(invoiceNumber);
+    record.Id = "pdf-" + invoiceNumber;
+    record.UploadStatus = UploadStatuses.Complete;
+    record.UploadStatusText = "完成";
+    return record;
+}
 
 static QueryResponse ConfirmedQuery(
     string orderId,
@@ -1112,9 +1250,14 @@ sealed class FakeGateway : IAmegoGateway
     public Exception? BanException { get; set; }
     public StatusResponse StatusResponse { get; set; } = new(0, "", []);
     public Exception? StatusException { get; set; }
+    public byte[] PdfBytes { get; set; } = Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF\n");
+    public Exception? PdfException { get; set; }
     public int IssueCalls { get; private set; }
     public int QueryCalls { get; private set; }
     public int BanCalls { get; private set; }
+    public int PdfCalls { get; private set; }
+    public string LastPdfInvoiceNumber { get; private set; } = string.Empty;
+    public int LastPdfStyle { get; private set; } = -1;
     public IReadOnlyList<string> LastBanQuery { get; private set; } = [];
     public IssueRequest? LastIssue { get; private set; }
     public string LastQueryOrderId { get; private set; } = string.Empty;
@@ -1161,6 +1304,14 @@ sealed class FakeGateway : IAmegoGateway
         BanCalls++;
         LastBanQuery = bans.ToArray();
         return BanException is null ? Task.FromResult(BanResponse) : Task.FromException<BanResponse>(BanException);
+    }
+
+    public Task<byte[]> DownloadInvoicePdfAsync(string invoiceNumber, int downloadStyle, CancellationToken cancellationToken = default)
+    {
+        PdfCalls++;
+        LastPdfInvoiceNumber = invoiceNumber;
+        LastPdfStyle = downloadStyle;
+        return PdfException is null ? Task.FromResult(PdfBytes) : Task.FromException<byte[]>(PdfException);
     }
 }
 

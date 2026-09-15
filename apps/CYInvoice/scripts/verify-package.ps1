@@ -63,11 +63,11 @@ $VersionFiles = @($Entries | Where-Object { $_ -match '^CYInvoice/V[^/]+\.txt$' 
 if ($VersionFiles.Count -ne 1) {
     throw "Package ZIP must contain exactly one root-level version TXT file."
 }
-if ($Channel -eq "engineering" -and $VersionText -notmatch '工程測試包（非正式 Release）') {
-    throw "Engineering ZIP must identify itself as a non-release test package."
+if ($Channel -eq "engineering" -and $VersionText -notmatch '(?m)^Channel: engineering\r?$') {
+    throw "Engineering ZIP must contain engineering channel metadata."
 }
-if ($Channel -eq "formal" -and ($VersionText -notmatch '正式版' -or $VersionText -match '非正式 Release')) {
-    throw "Formal ZIP must identify itself as a formal release."
+if ($Channel -eq "formal" -and $VersionText -notmatch '(?m)^Channel: formal\r?$') {
+    throw "Formal ZIP must contain formal channel metadata."
 }
 
 Write-Host "Package layout and $Channel channel verified for CYInvoice $ArtifactVersion."
