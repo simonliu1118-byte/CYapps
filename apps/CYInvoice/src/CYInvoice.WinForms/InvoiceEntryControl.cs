@@ -147,14 +147,14 @@ internal sealed class InvoiceEntryControl : UserControl
     {
         itemsGroup = new GroupBox { Text = "商品明細資料（最多 50 筆）", Dock = DockStyle.Fill, Padding = new Padding(12, 6, 12, 6) };
         itemsLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
-        itemsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        itemsLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         itemsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         var modes = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(12, 0, 0, 8) };
         addItemButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        addItemButton.Margin = new Padding(2, 2, 4, 8);
+        addItemButton.Margin = new Padding(2, 2, 4, 4);
         modes.Controls.Add(taxInclusive);
         modes.Controls.Add(taxExclusive);
         addItemButton.Click += (_, _) => AddRow(true);
@@ -986,7 +986,7 @@ internal sealed class InvoiceEntryControl : UserControl
     private int RemarkInputHeight() => (TextLineHeight() * 3) + 10;
     private int TotalRowHeight() => Math.Max(TextLineHeight() + 6, salesTotal.GetPreferredSize(Size.Empty).Height + 6);
     private int TaxColumnWidth() => Math.Max(62, TextRenderer.MeasureText("課稅別", Items.Font).Width + 14);
-    private int SummaryPanelHeight() => SummaryOuterTopPadding + 6 +
+    private int SummaryPanelHeight() => SummaryOuterTopPadding + 12 +
         Math.Max(RemarkInputHeight() + SummaryGroupChromeHeight, (TotalRowHeight() * 3) + 1 + SummaryGroupChromeHeight);
 
     private int MeasuredSummaryPanelHeight()
@@ -997,7 +997,7 @@ internal sealed class InvoiceEntryControl : UserControl
         var totalChrome = totalGroup is null
             ? SummaryGroupChromeHeight
             : Math.Max(SummaryGroupChromeHeight, totalGroup.Height - totalGroup.DisplayRectangle.Height);
-        return SummaryOuterTopPadding + 6 +
+        return SummaryOuterTopPadding + 12 +
             Math.Max(RemarkInputHeight() + remarkChrome, (TotalRowHeight() * 3) + 1 + totalChrome);
     }
 
