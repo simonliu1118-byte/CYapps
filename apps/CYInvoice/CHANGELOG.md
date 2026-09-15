@@ -9,7 +9,7 @@
 - 修正發票基本資料 Radio 與欄位垂直對齊、統編／買方名稱下緣裁切、商品與已開立清單 scrollbar 及欄界線。
 - 匯入確認按鈕移至中間並避免下緣裁切；移除確認按鈕的張數文字，摘要列放大並以紅色強調已選張數。
 - 修正商品明細刪除事件被暫時編輯器攔截，需重複點擊才刪除一列的問題。
-- 正式 Build／Release 改用 .NET Windows runner 重新測試、self-contained single-file publish、PE／Icon／manifest、ZIP 與 SHA-256 驗證。
+- 正式 Build／Release 改用 .NET Windows runner；含 `VERSION` 變更的 PR 合併 `main` 後自動重新測試、self-contained single-file publish、PE／Icon／manifest、ZIP 與 SHA-256 驗證並建立 Release。
 - Go／Win32 V1.1.0 固定保留為上一個公開回退版本，不再保留於 `main` 現行 source。
 
 ## V1.1.0 — 2026/09/11

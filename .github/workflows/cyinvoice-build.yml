@@ -15,6 +15,7 @@ on:
       - "apps/CYInvoice/assets/**"
       - "apps/CYInvoice/scripts/**"
       - ".github/workflows/cyinvoice-build.yml"
+      - ".github/workflows/cyinvoice-release.yml"
 
 permissions:
   contents: read

@@ -1,12 +1,11 @@
 name: CYInvoice Stable Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Confirm stable version (example: 2.0.0)"
-        required: true
-        type: string
+  push:
+    branches: [main]
+    paths:
+      - "apps/CYInvoice/VERSION"
+      - ".github/workflows/cyinvoice-release.yml"
 
 permissions:
   contents: write
@@ -32,43 +31,63 @@ jobs:
           if ($env:GITHUB_REF_NAME -ne "main") { throw "Formal CYInvoice releases must run from main; got $env:GITHUB_REF_NAME" }
           $version = (Get-Content ./VERSION -Raw).Trim()
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "A formal release requires a stable semantic VERSION; got $version" }
-          $confirmed = "${{ inputs.version }}".Trim()
-          if ($confirmed -ne $version) { throw "Confirmed version $confirmed does not match VERSION $version" }
           $build = (Get-Content ./BUILD -Raw).Trim()
           if ($build -notmatch '^\d+$' -or [int]$build -ne 0) { throw "Formal release requires BUILD=0; got $build" }
           "CYINVOICE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CYINVOICE_BUILD=0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CYINVOICE_TAG=cyinvoice-v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Check release does not already exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view $env:CYINVOICE_TAG --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            "CYINVOICE_SHOULD_RELEASE=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "Release $env:CYINVOICE_TAG already exists; nothing to publish."
+            exit 0
+          }
+          $remoteTag = git ls-remote --tags origin "refs/tags/$env:CYINVOICE_TAG"
+          if (![string]::IsNullOrWhiteSpace($remoteTag)) { throw "Tag $env:CYINVOICE_TAG exists without a matching Release; refusing to overwrite it" }
+          "CYINVOICE_SHOULD_RELEASE=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Set up .NET
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
       - name: Scan tracked source for confidential runtime data
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: ./scripts/verify-source.ps1
 
       - name: Restore
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: dotnet restore CYInvoice.sln
 
       - name: Build with warnings as errors
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: dotnet build CYInvoice.sln -c Release -p:Platform=x64 -p:Version=$env:CYINVOICE_VERSION --no-restore
 
       - name: Run WinForms startup smoke test
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: |
           dotnet run --project src/CYInvoice.WinForms/CYInvoice.WinForms.csproj -c Release -p:Platform=x64 --no-build -- --startup-smoke-test
           if ($LASTEXITCODE -ne 0) { throw "WinForms startup smoke test failed" }
 
       - name: Run core parity tests
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: dotnet run --project tests/CYInvoice.Core.Tests/CYInvoice.Core.Tests.csproj -c Release --no-build
 
       - name: Build and verify Windows x64 release
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: |
           ./scripts/build.ps1 -Version $env:CYINVOICE_VERSION -Build 0
           ./scripts/verify-pe.ps1 -Path ./dist/CYInvoice/CYInvoice.exe
           ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) -Version $env:CYINVOICE_VERSION -Build 0
 
       - name: Create checksum and release notes
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: |
           $zipName = "CYInvoice_V$env:CYINVOICE_VERSION.zip"
           $zipPath = Join-Path ./dist $zipName
@@ -92,11 +111,10 @@ jobs:
           "@ | Set-Content -Path ./dist/release-notes.md -Encoding utf8
 
       - name: Publish GitHub Release
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view $env:CYINVOICE_TAG --repo $env:GITHUB_REPOSITORY 2>$null
-          if ($LASTEXITCODE -eq 0) { throw "Release $env:CYINVOICE_TAG already exists; refusing to overwrite it" }
           gh release create $env:CYINVOICE_TAG `
             ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) `
             ("./dist/CYInvoice_V{0}.zip.sha256" -f $env:CYINVOICE_VERSION) `
