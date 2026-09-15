@@ -10,8 +10,8 @@ internal sealed class InvoiceEntryControl : UserControl
     private const int MinimumVisibleRows = 5;
     private const int PreferredImportsHeight = 82;
     private const int MinimumImportsHeight = 72;
-    private const int PreferredBuyerHeight = 148;
-    private const int MinimumBuyerHeight = 136;
+    private const int PreferredBuyerHeight = 116;
+    private const int MinimumBuyerHeight = 116;
     private const int PreferredActionsHeight = 52;
     private const int MinimumActionsHeight = 52;
     private const int MaximumDefaultFlexibleGap = 80;
@@ -111,10 +111,12 @@ internal sealed class InvoiceEntryControl : UserControl
     private Control BuildBuyer()
     {
         var group = new GroupBox { Text = "發票基本資料", Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8) };
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 3 };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
         automaticOrder.Font = customOrder.Font = consumerBuyer.Font = companyBuyer.Font = Font;
         var firstModeWidth = Math.Max(
             automaticOrder.GetPreferredSize(Size.Empty).Width,
@@ -122,23 +124,49 @@ internal sealed class InvoiceEntryControl : UserControl
         var secondModeWidth = Math.Max(
             customOrder.GetPreferredSize(Size.Empty).Width,
             companyBuyer.GetPreferredSize(Size.Empty).Width) + 8;
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, firstModeWidth));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, secondModeWidth));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        var orderModes = RadioGroup(automaticOrder, customOrder, firstModeWidth);
-        var buyerModes = RadioGroup(consumerBuyer, companyBuyer, firstModeWidth);
+
+        var orderLine = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            Margin = Padding.Empty,
+        };
+        orderLine.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, firstModeWidth));
+        orderLine.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, secondModeWidth));
+        orderLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        automaticOrder.Margin = customOrder.Margin = new Padding(3);
+        orderLine.Controls.Add(automaticOrder, 0, 0);
+        orderLine.Controls.Add(customOrder, 1, 0);
+        orderLine.Controls.Add(orderId, 2, 0);
+
+        var banLabelWidth = TextRenderer.MeasureText("統一編號", Font).Width + 12;
+        var buyerNameLabelWidth = TextRenderer.MeasureText("買方名稱", Font).Width + 12;
+        var buyerLine = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 6,
+            RowCount = 1,
+            Margin = Padding.Empty,
+        };
+        buyerLine.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, firstModeWidth));
+        buyerLine.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, secondModeWidth));
+        buyerLine.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, banLabelWidth));
+        buyerLine.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        buyerLine.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, buyerNameLabelWidth));
+        buyerLine.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        consumerBuyer.Margin = companyBuyer.Margin = new Padding(3);
+        buyerLine.Controls.Add(consumerBuyer, 0, 0);
+        buyerLine.Controls.Add(companyBuyer, 1, 0);
+        buyerLine.Controls.Add(UiControls.Label("統一編號"), 2, 0);
+        buyerLine.Controls.Add(buyerBan, 3, 0);
+        buyerLine.Controls.Add(UiControls.Label("買方名稱"), 4, 0);
+        buyerLine.Controls.Add(buyerName, 5, 0);
+
         layout.Controls.Add(UiControls.Label("訂單編號"), 0, 0);
-        layout.Controls.Add(orderModes, 1, 0);
-        layout.SetColumnSpan(orderModes, 2);
-        layout.Controls.Add(orderId, 3, 0);
+        layout.Controls.Add(orderLine, 1, 0);
         layout.Controls.Add(UiControls.Label("買方資料"), 0, 1);
-        layout.Controls.Add(buyerModes, 1, 1);
-        layout.SetColumnSpan(buyerModes, 2);
-        layout.Controls.Add(UiControls.Label("統一編號"), 0, 2);
-        layout.Controls.Add(buyerBan, 1, 2);
-        layout.Controls.Add(UiControls.Label("買方名稱"), 2, 2);
-        layout.Controls.Add(buyerName, 3, 2);
+        layout.Controls.Add(buyerLine, 1, 1);
         group.Controls.Add(layout);
         return group;
     }
@@ -763,19 +791,27 @@ internal sealed class InvoiceEntryControl : UserControl
         Items.FocusedItem = null;
     }
 
+    private static Color ItemRowBackground(int rowIndex) =>
+        rowIndex % 2 == 0 ? Color.White : Color.FromArgb(238, 244, 250);
+
+    private static Color ReadOnlyItemBackground(int rowIndex) =>
+        rowIndex % 2 == 0 ? Color.FromArgb(244, 244, 244) : Color.FromArgb(235, 240, 245);
+
     private void StyleItemRows()
     {
         for (var rowIndex = 0; rowIndex < Items.Items.Count; rowIndex++)
         {
             var row = Items.Items[rowIndex];
             row.UseItemStyleForSubItems = false;
-            var zebra = rowIndex % 2 == 0 ? Color.White : Color.FromArgb(247, 247, 247);
+            var zebra = ItemRowBackground(rowIndex);
             foreach (ListViewItem.ListViewSubItem subItem in row.SubItems)
             {
                 subItem.BackColor = zebra;
                 subItem.ForeColor = SystemColors.ControlText;
             }
-            row.SubItems[5].BackColor = rowIndex % 2 == 0 ? Color.FromArgb(232, 232, 232) : Color.FromArgb(225, 225, 225);
+            var readOnlyBackground = ReadOnlyItemBackground(rowIndex);
+            row.SubItems[0].BackColor = readOnlyBackground;
+            row.SubItems[5].BackColor = readOnlyBackground;
             row.SubItems[5].ForeColor = Color.FromArgb(88, 88, 88);
         }
         Items.Invalidate();
@@ -797,9 +833,9 @@ internal sealed class InvoiceEntryControl : UserControl
         if (eventArgs.Item is null || eventArgs.SubItem is null) return;
         var rowIndex = eventArgs.ItemIndex;
         var columnIndex = eventArgs.ColumnIndex;
-        var background = columnIndex == 5
-            ? (rowIndex % 2 == 0 ? Color.FromArgb(232, 232, 232) : Color.FromArgb(225, 225, 225))
-            : (rowIndex % 2 == 0 ? Color.White : Color.FromArgb(247, 247, 247));
+        var background = columnIndex is 0 or 5
+            ? ReadOnlyItemBackground(rowIndex)
+            : ItemRowBackground(rowIndex);
         using (var brush = new SolidBrush(background)) eventArgs.Graphics.FillRectangle(brush, eventArgs.Bounds);
 
         if (columnIndex == 6 && !IsPlaceholder(eventArgs.Item))
@@ -853,14 +889,20 @@ internal sealed class InvoiceEntryControl : UserControl
         companyBuyer.Checked = true;
         if (buyerBan.ReadOnly || buyerName.ReadOnly || !buyerBan.TabStop || !buyerName.TabStop)
             throw new InvalidOperationException("公司統編模式未啟用必要買方欄位");
-        var customX = customOrder.PointToScreen(Point.Empty).X;
-        var companyX = companyBuyer.PointToScreen(Point.Empty).X;
         var buyerNameLabel = Descendants(this).OfType<Label>().FirstOrDefault(label => label.Text == "買方名稱");
-        if (buyerNameLabel is null || Math.Abs(customX - companyX) > 2 ||
-            Math.Abs(customX - buyerNameLabel.PointToScreen(Point.Empty).X) > 2 ||
+        var buyerBanLabel = Descendants(this).OfType<Label>().FirstOrDefault(label => label.Text == "統一編號");
+        var buyerLine = consumerBuyer.Parent;
+        if (buyerNameLabel is null || buyerBanLabel is null || buyerLine is null ||
+            !ReferenceEquals(companyBuyer.Parent, buyerLine) ||
+            !ReferenceEquals(buyerBan.Parent, buyerLine) ||
+            !ReferenceEquals(buyerName.Parent, buyerLine) ||
             consumerBuyer.Width < consumerBuyer.GetPreferredSize(Size.Empty).Width ||
-            companyBuyer.Width < companyBuyer.GetPreferredSize(Size.Empty).Width)
-            throw new InvalidOperationException("自訂、公司統編與買方名稱未對齊，或買方選項文字遭裁切");
+            companyBuyer.Width < companyBuyer.GetPreferredSize(Size.Empty).Width ||
+            buyerBan.Bottom > buyerLine.ClientSize.Height ||
+            buyerName.Bottom > buyerLine.ClientSize.Height ||
+            buyerBan.Height < buyerBan.PreferredHeight ||
+            buyerName.Height < buyerName.PreferredHeight)
+            throw new InvalidOperationException("買方資料未排成單列，或統編／買方名稱輸入欄位遭裁切");
         consumerBuyer.Checked = true;
         if (Items.Columns.Count != 7 || Items.Items.Count != MinimumVisibleRows || ActualRows().Count != 1)
             throw new InvalidOperationException("商品原生 ListView 未建立一筆實際資料與五列顯示區");
@@ -870,6 +912,11 @@ internal sealed class InvoiceEntryControl : UserControl
             importButtons.Any(button => !UiControls.HasLogicalSize(button, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight)))
             throw new InvalidOperationException("三個 Excel 平台按鈕未使用一致的品牌按鈕尺寸");
         if (Math.Abs(Items.Font.SizeInPoints - 12F) > 0.1F) throw new InvalidOperationException("商品清單未使用 12pt 字級");
+        if (Items.Items[0].SubItems[0].BackColor != ReadOnlyItemBackground(0) ||
+            Items.Items[0].SubItems[5].BackColor != ReadOnlyItemBackground(0) ||
+            Items.Items[1].SubItems[1].BackColor != ItemRowBackground(1) ||
+            Items.Items[1].SubItems[2].BackColor != ItemRowBackground(1))
+            throw new InvalidOperationException("商品清單的唯讀灰底或淡藍斑馬紋配置不正確");
         var initialColumnWidth = Items.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
         if (initialColumnWidth > itemsHost.ColumnViewportWidth ||
             itemsHost.ColumnViewportWidth - initialColumnWidth > 3 ||
