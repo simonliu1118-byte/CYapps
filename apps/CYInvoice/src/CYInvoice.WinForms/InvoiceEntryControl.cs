@@ -982,11 +982,11 @@ internal sealed class InvoiceEntryControl : UserControl
         }
     }
 
-    private int TextLineHeight() => TextRenderer.MeasureText("Ag", Font).Height;
-    private int RemarkInputHeight() => (TextLineHeight() * 3) + 13;
-    private int TotalRowHeight() => TextLineHeight() + 14;
+    private int TextLineHeight() => (int)Math.Ceiling(remark.Font.GetHeight());
+    private int RemarkInputHeight() => (TextLineHeight() * 3) + 10;
+    private int TotalRowHeight() => Math.Max(TextLineHeight() + 6, salesTotal.GetPreferredSize(Size.Empty).Height + 6);
     private int TaxColumnWidth() => Math.Max(62, TextRenderer.MeasureText("課稅別", Items.Font).Width + 14);
-    private int SummaryPanelHeight() => SummaryOuterTopPadding + 18 +
+    private int SummaryPanelHeight() => SummaryOuterTopPadding + 6 +
         Math.Max(RemarkInputHeight() + SummaryGroupChromeHeight, (TotalRowHeight() * 3) + 1 + SummaryGroupChromeHeight);
 
     private int MeasuredSummaryPanelHeight()
@@ -997,7 +997,7 @@ internal sealed class InvoiceEntryControl : UserControl
         var totalChrome = totalGroup is null
             ? SummaryGroupChromeHeight
             : Math.Max(SummaryGroupChromeHeight, totalGroup.Height - totalGroup.DisplayRectangle.Height);
-        return SummaryOuterTopPadding + 18 +
+        return SummaryOuterTopPadding + 6 +
             Math.Max(RemarkInputHeight() + remarkChrome, (TotalRowHeight() * 3) + 1 + totalChrome);
     }
 
