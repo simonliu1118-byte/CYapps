@@ -631,7 +631,7 @@ internal sealed class InvoiceEntryControl : UserControl
         catch (Exception error) { MessageBox.Show(this, error.Message, "酷澎匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         return Task.CompletedTask;
     }
-    private void Pending(string feature) => MessageBox.Show(this, $"{feature}尚未接入 C# 重製測試線，現在不會讀檔或送出發票。", "功能尚未完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    private void Pending(string feature) => MessageBox.Show(this, $"{feature}尚未完成，現在不會讀檔或送出發票。", "功能尚未完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
     private static OpenFileDialog FileDialog(string filter) => new() { Filter = filter, CheckFileExists = true, Multiselect = false, RestoreDirectory = true };
     private static TableLayoutPanel RadioGroup(RadioButton first, RadioButton second, int firstWidth)
     {

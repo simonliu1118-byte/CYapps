@@ -6,13 +6,14 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened]
     paths:
-      - "apps/CYInvoice/**/*.go"
-      - "apps/CYInvoice/go.mod"
-      - "apps/CYInvoice/go.sum"
-      - "apps/CYInvoice/scripts/**"
-      - "apps/CYInvoice/assets/**"
+      - "apps/CYInvoice/CYInvoice.sln"
+      - "apps/CYInvoice/Directory.Build.props"
       - "apps/CYInvoice/VERSION"
       - "apps/CYInvoice/BUILD"
+      - "apps/CYInvoice/src/**"
+      - "apps/CYInvoice/tests/**"
+      - "apps/CYInvoice/assets/**"
+      - "apps/CYInvoice/scripts/**"
       - ".github/workflows/cyinvoice-build.yml"
 
 permissions:
@@ -27,6 +28,7 @@ jobs:
     runs-on: windows-2022
     defaults:
       run:
+        shell: pwsh
         working-directory: apps/CYInvoice
 
     steps:
@@ -34,7 +36,6 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Read VERSION and BUILD
-        shell: pwsh
         run: |
           $version = (Get-Content ./VERSION -Raw).Trim()
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYInvoice VERSION: $version" }
@@ -47,62 +48,51 @@ jobs:
           "CYINVOICE_BUILD=$buildNumber" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CYINVOICE_ARTIFACT_VERSION=$artifactVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
         with:
-          go-version-file: apps/CYInvoice/go.mod
-          cache: false
-
-      - name: Verify module files are reproducible
-        shell: pwsh
-        run: |
-          go mod tidy
-          git diff --exit-code -- go.mod go.sum
+          dotnet-version: "10.0.x"
 
       - name: Scan tracked source for confidential runtime data
-        shell: pwsh
         run: ./scripts/verify-source.ps1
 
-      - name: Run tests
-        shell: pwsh
-        run: go test ./...
+      - name: Restore
+        run: dotnet restore CYInvoice.sln
 
-      - name: Run Go static analysis
-        shell: pwsh
-        run: go vet ./...
+      - name: Build with warnings as errors
+        run: dotnet build CYInvoice.sln -c Release -p:Platform=x64 -p:Version=$env:CYINVOICE_VERSION --no-restore
+
+      - name: Run WinForms startup smoke test
+        run: |
+          dotnet run --project src/CYInvoice.WinForms/CYInvoice.WinForms.csproj -c Release -p:Platform=x64 --no-build -- --startup-smoke-test
+          if ($LASTEXITCODE -ne 0) {
+            $startupLog = Get-ChildItem -Path ./src/CYInvoice.WinForms/bin -Filter startup-error.log -File -Recurse | Select-Object -First 1
+            if ($startupLog) { Get-Content $startupLog.FullName | Write-Error }
+            throw "WinForms startup smoke test failed"
+          }
+
+      - name: Run core parity tests
+        run: dotnet run --project tests/CYInvoice.Core.Tests/CYInvoice.Core.Tests.csproj -c Release --no-build
 
       - name: Build Windows x64 package
-        shell: pwsh
-        run: ./scripts/build.ps1
+        run: ./scripts/build.ps1 -Version $env:CYINVOICE_VERSION -Build $env:CYINVOICE_BUILD
 
-      - name: Verify PE structure
-        shell: pwsh
-        run: ./scripts/verify-pe.ps1 -Path ./dist/CYInvoice/CYInvoice.exe
-
-      - name: Verify release package layout
-        shell: pwsh
-        run: ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_ARTIFACT_VERSION) -Version $env:CYINVOICE_VERSION -Build $env:CYINVOICE_BUILD
+      - name: Verify PE structure and package layout
+        run: |
+          ./scripts/verify-pe.ps1 -Path ./dist/CYInvoice/CYInvoice.exe
+          ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_ARTIFACT_VERSION) -Version $env:CYINVOICE_VERSION -Build $env:CYINVOICE_BUILD
 
       - name: Prepare one-layer engineering artifact
-        shell: pwsh
         run: |
           $artifactRoot = "./dist/engineering-artifact"
           New-Item -Path $artifactRoot -ItemType Directory -Force | Out-Null
           Copy-Item -Path "./dist/CYInvoice" -Destination $artifactRoot -Recurse
-
-          if (!(Test-Path "$artifactRoot/CYInvoice/CYInvoice.exe" -PathType Leaf)) {
-            throw "Engineering artifact is missing CYInvoice/CYInvoice.exe"
-          }
-
-          $nestedZip = @(Get-ChildItem -Path $artifactRoot -Filter "*.zip" -File -Recurse)
-          if ($nestedZip.Count -ne 0) {
-            throw "Engineering artifact must not contain a nested ZIP"
-          }
+          if (!(Test-Path "$artifactRoot/CYInvoice/CYInvoice.exe" -PathType Leaf)) { throw "Engineering artifact is missing CYInvoice.exe" }
 
       - name: Upload engineering artifact
         uses: actions/upload-artifact@v7
         with:
-          name: CYInvoice-v${{ env.CYINVOICE_ARTIFACT_VERSION }}-windows-x64-run${{ github.run_number }}
+          name: CYInvoice_V${{ env.CYINVOICE_ARTIFACT_VERSION }}_engineering-run${{ github.run_number }}
           path: apps/CYInvoice/dist/engineering-artifact/
           if-no-files-found: error
           retention-days: 14

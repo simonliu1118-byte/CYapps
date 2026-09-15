@@ -1,47 +1,37 @@
 # CYInvoice
 
-CY Windows x64 電子發票工具。原始碼與正式發行包的使用、修改與散布權利以 repository 根目錄 `LICENSE` 為準；Public 可見不代表開放原始碼。
+CY Windows 10/11 x64 電子發票工具。Public 可見不代表開放原始碼；使用、修改與散布權利以 repository 根目錄 `LICENSE` 為準。
 
 Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
-## 目前狀態
+## 正式版本
 
-- 目前 Go 正式版本：**V1.1.0**（2026/09/11）。
-- `VERSION` 的正式穩定線目前為 `1.1.0`；後續小修正依 PATCH、完整功能階段依 MINOR、重大產品／相容性變更才推進 MAJOR。
-- 早期遺失原始碼的舊 V1.1.0～V1.1.2 執行檔屬失敗歷史，不代表本 repository 的正式 Git 版本；目前 V1.1.0 是由可重建原始碼重新建立並驗證的正式基準。
-- 正式 Release 必須由 `main` 的穩定 Go 線手動啟動 Release workflow，重新執行測試、封裝、SHA-256 與敏感資料檢查。
+- 目前正式版本：**V2.0.0**。
+- C#／WinForms 自 V2.0.0 起為唯一正式產品線，source 直接由 `main` 維護。
+- 唯一版本來源為 `VERSION`；正式 Release 使用 `BUILD=0`。
+- Go／Win32 V1.1.0 只保留為上一個公開回退版本，不再位於 `main` 現行 source。
 
-## C# / WinForms 測試線
+正式 Release 只可由 `main` 人工啟動 Release workflow；workflow 會重新執行核心測試、WinForms 啟動 smoke test、公開安全掃描、Windows x64 self-contained single-file publish、PE／Icon／manifest、ZIP 結構與 SHA-256 驗證。
 
-- `cyinvoice/csharp-remake` 是獨立的 **C# / WinForms 重製測試線**，版本使用 `V1.1.0-cs.N` / `VERSION-CS`。
-- C# 測試線不是 Go V1.1.0 的後續正式版本，也不取代 Go 正式基準。
-- 未完成同等功能、Windows 實機驗收並取得使用者明確同意前，不得使用正式 `cyinvoice-vX.Y.Z` tag 或 CYInvoice 正式 Release workflow 發布。
-- Go 正式線與 C# 測試線的 CI、版本身分與 Release 必須保持可辨識，不得混用。
+## 技術基準
 
-## 已知技術基準
+- 語言／UI：C#、.NET 10、Windows Forms。
+- 平台：Windows 10/11 x64。
+- Solution：`CYInvoice.sln`。
+- 正式執行檔：self-contained single-file `CYInvoice.exe`。
+- 發行 ZIP 解壓後根資料夾固定為 `CYInvoice`。
 
-- 語言：Go（目前正式線）。
-- 平台：Windows x64。
-- GUI：Windows 原生 Win32 介面。
-- 發行參數紀錄：`GOOS=windows`、`GOARCH=amd64`、`GOAMD64=v1`、`CGO_ENABLED=0`。
-- 應用程式識別：`CYInvoice`，保留 INV icon 與 amd64 Windows manifest。
-
-建置、資源嵌入、PE 與發行包結構已由 GitHub Windows CI 重複驗證；禁止以 PE 後處理方式直接修改正式 EXE。
-
-發行 ZIP 解壓後固定為 `CYInvoice` 資料夾；根目錄保留 `CYInvoice.exe`、當版唯一的 `V版本號.txt` 與 `使用說明.txt`，不建立 `Version` 資料夾，也不放 `todo.txt`。
-
-## 目錄規劃
+## 目錄
 
 ```text
 apps/CYInvoice/
-├─ cmd/CYInvoice/       # Go 正式程式進入點
-├─ internal/            # Go 正式內部功能模組
-├─ assets/              # icon、manifest 等建置資源
-├─ scripts/             # 可重複的建置、驗證與封裝腳本
-└─ docs/                # 規格、測試、歷史與待辦文件
+├─ src/CYInvoice.Core/          # 發票、安全、匯入與本機資料核心
+├─ src/CYInvoice.WinForms/      # Windows Forms 正式 UI
+├─ tests/CYInvoice.Core.Tests/  # parity 與回歸測試 runner
+├─ assets/                      # icon 等 Windows 建置資源
+├─ scripts/                     # 建置、打包與驗證腳本
+└─ docs/                        # 規格、測試、歷史與待辦文件
 ```
-
-C# 重製測試線若存在，使用 `src/`、`tests/`、`CYInvoice.CSharp.sln` 與 `VERSION-CS`，不得因此改變 Go 正式 `VERSION`。
 
 ## 文件
 
@@ -50,5 +40,5 @@ C# 重製測試線若存在，使用 `src/`、`tests/`、`CYInvoice.CSharp.sln` 
 - [待辦與實機驗證](docs/TODO.md)
 - [RC／實機測試](docs/RC_TEST.md)
 - [本機資料格式與安全規則](docs/DATA_FORMAT.md)
-- [復原計畫](docs/RECOVERY_PLAN.md)
+- [V2 遷移紀錄](docs/MIGRATION_HISTORY.md)
 - [歷史版本紀錄](CHANGELOG.md)
