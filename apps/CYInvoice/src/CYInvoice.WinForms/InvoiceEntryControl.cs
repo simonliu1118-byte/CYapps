@@ -730,8 +730,17 @@ internal sealed class InvoiceEntryControl : UserControl
         eventArgs.SuppressKeyPress = true;
         var row = editorRow;
         var column = editorColumn;
+        var keepCurrentCell = eventArgs.KeyCode == Keys.Enter && column == 4;
         CommitCellEditor(false);
-        BeginInvoke((Action)(() => MoveToNextItemField(row, column)));
+        BeginInvoke((Action)(() =>
+        {
+            if (keepCurrentCell)
+            {
+                BeginCellEdit(row, column);
+                return;
+            }
+            MoveToNextItemField(row, column);
+        }));
     }
 
     private void CommitCellEditor(bool cancel)

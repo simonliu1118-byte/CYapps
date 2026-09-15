@@ -89,12 +89,17 @@ var tests = new (string Name, Action Run)[]
     ("issue writes pending then opens and blocks resend", () => TestIssueOpensAndBlocksResendAsync().GetAwaiter().GetResult()),
     ("ambiguous issue becomes unknown and blocks resend", () => TestAmbiguousIssueAsync().GetAwaiter().GetResult()),
     ("ambiguous issue recovers only from strict order query", () => TestAmbiguousRecoveryAsync().GetAwaiter().GetResult()),
+    ("request timeout still performs one bounded recovery query", () => TestCancelledIssueRecoveryAsync().GetAwaiter().GetResult()),
     ("wrong order and voided query never establish success", () => TestStrictRecoveryRejectsMismatchAsync().GetAwaiter().GetResult()),
+    ("concurrent duplicate issue is serialized before API", () => TestConcurrentDuplicateIssueAsync().GetAwaiter().GetResult()),
+    ("same order is isolated between test and production", () => TestEnvironmentIssueIsolationAsync().GetAwaiter().GetResult()),
     ("explicit API rejection becomes failed", () => TestExplicitRejectionAsync().GetAwaiter().GetResult()),
     ("voided order reissue uses a new API order ID", () => TestVoidedReissueAsync().GetAwaiter().GetResult()),
     ("remote success and local save failure remain opened", () => TestRemoteSuccessLocalFailureAsync().GetAwaiter().GetResult()),
     ("successful manual company invoice remembers confirmed name", () => TestCompanyNameMemoryAsync().GetAwaiter().GetResult()),
     ("refresh confirms unknown invoice before remembering name", () => TestRefreshUnknownAsync().GetAwaiter().GetResult()),
+    ("refresh matches upload status by exact invoice number", () => TestUploadStatusMatchingAsync().GetAwaiter().GetResult()),
+    ("refresh rejects unmatched upload status", () => TestUploadStatusMismatchAsync().GetAwaiter().GetResult()),
     ("BAN code 99 is reachable with no matching name", () => TestBanCode99Async().GetAwaiter().GetResult()),
     ("production health check returns the API company name", () => TestProductionHealthCompanyNameAsync().GetAwaiter().GetResult()),
     ("decimal issue fields serialize as JSON numbers", () => TestDecimalIssueNumbersAsync().GetAwaiter().GetResult()),
@@ -205,6 +210,18 @@ static async Task<T> ThrowsAsync<T>(Func<Task> action) where T : Exception
     }
 
     throw new InvalidOperationException($"expected {typeof(T).Name}");
+}
+
+static async Task<(IssueResult? Result, Exception? Error)> CaptureIssueAsync(Task<IssueResult> task)
+{
+    try
+    {
+        return (await task, null);
+    }
+    catch (Exception error)
+    {
+        return (null, error);
+    }
 }
 
 static IssueRequest MinimalIssue() => new()
@@ -429,6 +446,24 @@ static async Task TestAmbiguousRecoveryAsync()
     Equal("20260905001", fake.LastQueryOrderId);
 }
 
+static async Task TestCancelledIssueRecoveryAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    using var timeout = new CancellationTokenSource();
+    var fake = new FakeGateway
+    {
+        IssueException = new OperationCanceledException("request timed out"),
+        QueryResponse = ConfirmedQuery("20260905001", "EF87654321", 105, 0, 105, 1),
+        RejectCancelledQueryToken = true,
+        OnIssue = _ => timeout.Cancel(),
+    };
+    var (service, _) = TestService(temporary.Path, fake);
+    var result = await service.IssueManualAsync(SafeDraft(), timeout.Token);
+    Equal(true, result.Opened);
+    Equal(1, fake.QueryCalls);
+    Equal(false, fake.LastQueryTokenWasCancelled);
+}
+
 static async Task TestStrictRecoveryRejectsMismatchAsync()
 {
     foreach (var query in new[]
@@ -443,6 +478,66 @@ static async Task TestStrictRecoveryRejectsMismatchAsync()
         var error = await ThrowsAsync<UnknownInvoiceResultException>(() => service.IssueManualAsync(SafeDraft()));
         Equal(InvoiceStates.Unknown, error.Record.InvoiceState);
     }
+}
+
+static async Task TestConcurrentDuplicateIssueAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway
+    {
+        IssueResponse = new IssueResponse(0, "", "IJ12345678", 0, ""),
+        QueryResponse = ConfirmedQuery("20260905001", "IJ12345678", 105, 0, 105, 1),
+        IssueStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
+        IssueRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
+    };
+    var (service, _) = TestService(temporary.Path, fake);
+    var first = CaptureIssueAsync(service.IssueManualAsync(SafeDraft()));
+    await fake.IssueStarted!.Task;
+    var second = CaptureIssueAsync(service.IssueManualAsync(SafeDraft()));
+    await Task.Yield();
+    Equal(1, fake.IssueCalls);
+    fake.IssueRelease!.SetResult(true);
+    var outcomes = await Task.WhenAll(first, second);
+    Equal(1, outcomes.Count(outcome => outcome.Result?.Opened == true));
+    Equal(1, outcomes.Count(outcome => outcome.Error is InvalidOperationException));
+    Equal(1, fake.IssueCalls);
+}
+
+static async Task TestEnvironmentIssueIsolationAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+    var gateways = new List<(string Invoice, string AppKey, FakeGateway Gateway)>();
+    var service = new InvoiceService(
+        repository,
+        (invoice, appKey) =>
+        {
+            var number = invoice == AmegoDefaults.TestInvoice ? "KL12345678" : "MN12345678";
+            var gateway = new FakeGateway
+            {
+                IssueResponse = new IssueResponse(0, "", number, 0, ""),
+                QueryResponse = ConfirmedQuery("20260905001", number, 105, 0, 105, 1),
+            };
+            gateways.Add((invoice, appKey, gateway));
+            return gateway;
+        },
+        () => new DateTimeOffset(2026, 9, 5, 9, 8, 7, TimeSpan.FromHours(8)));
+
+    await service.IssueManualAsync(SafeDraft());
+    var settings = repository.Settings.LoadOrCreate();
+    repository.Settings.SetAdminPassword(settings, "TEST-ADMIN-PASSWORD-NOT-REAL");
+    settings.Environment = Environments.Production;
+    settings.ProductionInvoice = "12345675";
+    repository.Settings.SetProductionAppKey(settings, "TEST-APP-KEY-NOT-REAL");
+    repository.Settings.Save(settings);
+    await service.IssueManualAsync(SafeDraft());
+
+    Equal(2, gateways.Count);
+    Equal(AmegoDefaults.TestInvoice, gateways[0].Invoice);
+    Equal("12345675", gateways[1].Invoice);
+    var records = repository.Invoices.LoadOrCreate();
+    Equal(1, records.Count(record => record.Environment == Environments.Test));
+    Equal(1, records.Count(record => record.Environment == Environments.Production));
 }
 
 static async Task TestExplicitRejectionAsync()
@@ -532,6 +627,59 @@ static async Task TestRefreshUnknownAsync()
     await service.RefreshAllAsync();
     Equal(true, repository.BuyerNames.TryLookup("12345675", out var name));
     Equal("稍後才記住", name);
+}
+
+static async Task TestUploadStatusMatchingAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway
+    {
+        QueryResponse = ConfirmedQuery("20260905001", "OP12345678", 105, 0, 105, 1),
+        StatusResponse = new StatusResponse(0, "", [
+            new StatusResult("WRONG00000", "", UploadStatuses.Error, "105"),
+            new StatusResult("OP12345678", "", UploadStatuses.Complete, "105"),
+        ]),
+    };
+    var (service, repository) = TestService(temporary.Path, fake);
+    repository.Invoices.Append(OpenedRecord("OP12345678"));
+    await service.RefreshAllAsync();
+    var record = repository.Invoices.LoadOrCreate().Single();
+    Equal(UploadStatuses.Complete, record.UploadStatus);
+    Equal("完成", record.UploadStatusText);
+
+    fake.StatusResponse = new StatusResponse(0, "", [
+        new StatusResult("OP12345678", "", 77, "105"),
+    ]);
+    await service.RefreshAllAsync();
+    record = repository.Invoices.LoadOrCreate().Single();
+    Equal(77, record.UploadStatus);
+    Equal("狀態 77", record.UploadStatusText);
+
+    fake.StatusResponse = new StatusResponse(0, "", [
+        new StatusResult("OP12345678", "", UploadStatuses.Error, "105"),
+    ]);
+    await service.RefreshAllAsync();
+    record = repository.Invoices.LoadOrCreate().Single();
+    Equal(UploadStatuses.Error, record.UploadStatus);
+    Equal("錯誤", record.UploadStatusText);
+}
+
+static async Task TestUploadStatusMismatchAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway
+    {
+        QueryResponse = ConfirmedQuery("20260905001", "QR12345678", 105, 0, 105, 1),
+        StatusResponse = new StatusResponse(0, "", [
+            new StatusResult("ANOTHER000", "", UploadStatuses.Complete, "105"),
+        ]),
+    };
+    var (service, repository) = TestService(temporary.Path, fake);
+    repository.Invoices.Append(OpenedRecord("QR12345678"));
+    await ThrowsAsync<PartialRefreshException>(() => service.RefreshAllAsync());
+    var record = repository.Invoices.LoadOrCreate().Single();
+    Equal(0, record.UploadStatus);
+    Equal(string.Empty, record.UploadStatusText);
 }
 
 static async Task TestBanCode99Async()
@@ -884,6 +1032,25 @@ static InvoiceDraft CompanyDraft(string orderId, string buyerName)
     return draft;
 }
 
+static InvoiceRecord OpenedRecord(string invoiceNumber) => new()
+{
+    Id = "opened-record",
+    Source = InvoiceSources.Manual,
+    OriginalOrderId = "20260905001",
+    OrderId = "20260905001",
+    ApiOrderId = "20260905001",
+    Attempt = 1,
+    Environment = Environments.Test,
+    InvoiceNumber = invoiceNumber,
+    InvoiceState = InvoiceStates.Opened,
+    BuyerIdentifier = "0000000000",
+    BuyerName = "消費者",
+    Amount = 105,
+    Delivery = InvoiceService.DeliveryPaper,
+    DetailVat = 1,
+    Items = [new InvoiceItem { Description = "商品", Quantity = 1, UnitPrice = 105, Amount = 105 }],
+};
+
 static QueryResponse ConfirmedQuery(
     string orderId,
     string invoiceNumber,
@@ -951,20 +1118,32 @@ sealed class FakeGateway : IAmegoGateway
     public IReadOnlyList<string> LastBanQuery { get; private set; } = [];
     public IssueRequest? LastIssue { get; private set; }
     public string LastQueryOrderId { get; private set; } = string.Empty;
+    public bool LastQueryTokenWasCancelled { get; private set; }
+    public bool RejectCancelledQueryToken { get; set; }
+    public TaskCompletionSource<bool>? IssueStarted { get; set; }
+    public TaskCompletionSource<bool>? IssueRelease { get; set; }
     public Action<IssueRequest>? OnIssue { get; set; }
 
-    public Task<IssueResponse> IssueAsync(IssueRequest request, CancellationToken cancellationToken = default)
+    public async Task<IssueResponse> IssueAsync(IssueRequest request, CancellationToken cancellationToken = default)
     {
         IssueCalls++;
         LastIssue = request;
         OnIssue?.Invoke(request);
-        return IssueException is null ? Task.FromResult(IssueResponse) : Task.FromException<IssueResponse>(IssueException);
+        IssueStarted?.TrySetResult(true);
+        if (IssueRelease is not null)
+            await IssueRelease.Task.WaitAsync(cancellationToken);
+        if (IssueException is { } issueException)
+            throw issueException;
+        return IssueResponse;
     }
 
     public Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default)
     {
         QueryCalls++;
         LastQueryOrderId = orderId;
+        LastQueryTokenWasCancelled = cancellationToken.IsCancellationRequested;
+        if (RejectCancelledQueryToken && cancellationToken.IsCancellationRequested)
+            return Task.FromCanceled<QueryResponse>(cancellationToken);
         return QueryException is null ? Task.FromResult(QueryResponse) : Task.FromException<QueryResponse>(QueryException);
     }
 
