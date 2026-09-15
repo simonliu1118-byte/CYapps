@@ -1,4 +1,5 @@
 using CYInvoice.Core;
+using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -204,6 +205,12 @@ internal sealed class MainForm : Form
         if (Math.Abs(Font.SizeInPoints - 12F) > 0.1F ||
             Math.Abs(environmentCompanyLabel.Font.SizeInPoints - 14F) > 0.1F)
             throw new InvalidOperationException("主畫面與環境標題字級不正確");
+        if (EnvironmentCompanyText(Environments.Test, AmegoDefaults.TestInvoice, string.Empty) != "光貿測試公司 12345678" ||
+            EnvironmentCompanyText(Environments.Production, "12345675", "志遠醫療器材行") != "志遠醫療器材行 12345675" ||
+            EnvironmentCompanyText(Environments.Production, "12345675", string.Empty) != "公司名稱查詢中 12345675" ||
+            EnvironmentCompanyText(Environments.Production, "12345675", string.Empty, lookupCompleted: true) != "公司名稱查無資料 12345675" ||
+            EnvironmentCompanyText(Environments.Production, "12345675", string.Empty, lookupFailed: true) != "公司名稱查詢失敗 12345675")
+            throw new InvalidOperationException("測試／正式環境公司標題文字不正確");
         if (Icon is null) throw new InvalidOperationException("主視窗未載入內嵌程式圖示");
         var bannerCenter = banner.ClientSize.Width / 2;
         var companyCenter = environmentCompanyLabel.PointToScreen(new Point(environmentCompanyLabel.Width / 2, 0)).X -
@@ -266,7 +273,7 @@ internal sealed class MainForm : Form
             environmentBadgeLabel.Text = "正式環境｜將開立正式發票";
             environmentBadgeLabel.BackColor = Color.FromArgb(255, 238, 238);
             environmentBadgeLabel.ForeColor = Color.FromArgb(166, 32, 32);
-            environmentCompanyLabel.Text = $"公司統編 {settings.ProductionInvoice}";
+            environmentCompanyLabel.Text = EnvironmentCompanyText(settings.Environment, settings.ProductionInvoice, string.Empty);
         }
         else
         {
@@ -279,20 +286,52 @@ internal sealed class MainForm : Form
 
     private async Task RefreshApiAsync()
     {
+        var requestedSettings = repository.Settings.LoadOrCreate();
+        var requestedEnvironment = requestedSettings.Environment;
+        var requestedInvoice = requestedEnvironment == Environments.Production
+            ? requestedSettings.ProductionInvoice.Trim()
+            : AmegoDefaults.TestInvoice;
         apiLabel.Text = "● API 檢查中";
         apiLabel.ForeColor = Color.FromArgb(196, 126, 0);
         try
         {
-            await service.HealthCheckAsync();
+            var companyName = await service.HealthCheckAsync();
+            if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
+            environmentCompanyLabel.Text = EnvironmentCompanyText(requestedEnvironment, requestedInvoice, companyName, lookupCompleted: true);
             apiLabel.Text = "● API 正常";
             apiLabel.ForeColor = Color.FromArgb(0, 155, 72);
         }
         catch (Exception error)
         {
+            if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
+            environmentCompanyLabel.Text = EnvironmentCompanyText(requestedEnvironment, requestedInvoice, string.Empty, lookupFailed: true);
             apiLabel.Text = "● API 異常";
             apiLabel.ForeColor = Color.FromArgb(196, 0, 0);
             apiLabel.AccessibleDescription = error.Message;
         }
+    }
+
+    private bool CurrentEnvironmentMatches(string environment, string invoice)
+    {
+        var current = repository.Settings.LoadOrCreate();
+        var currentInvoice = current.Environment == Environments.Production
+            ? current.ProductionInvoice.Trim()
+            : AmegoDefaults.TestInvoice;
+        return current.Environment == environment && currentInvoice == invoice;
+    }
+
+    private static string EnvironmentCompanyText(
+        string environment,
+        string invoice,
+        string companyName,
+        bool lookupCompleted = false,
+        bool lookupFailed = false)
+    {
+        if (environment != Environments.Production) return "光貿測試公司 12345678";
+        companyName = companyName.Trim();
+        if (companyName.Length != 0) return $"{companyName} {invoice.Trim()}";
+        var status = lookupFailed ? "公司名稱查詢失敗" : lookupCompleted ? "公司名稱查無資料" : "公司名稱查詢中";
+        return $"{status} {invoice.Trim()}";
     }
 }
 

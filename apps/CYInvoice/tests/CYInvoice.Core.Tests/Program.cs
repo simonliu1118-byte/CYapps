@@ -96,6 +96,7 @@ var tests = new (string Name, Action Run)[]
     ("successful manual company invoice remembers confirmed name", () => TestCompanyNameMemoryAsync().GetAwaiter().GetResult()),
     ("refresh confirms unknown invoice before remembering name", () => TestRefreshUnknownAsync().GetAwaiter().GetResult()),
     ("BAN code 99 is reachable with no matching name", () => TestBanCode99Async().GetAwaiter().GetResult()),
+    ("production health check returns the API company name", () => TestProductionHealthCompanyNameAsync().GetAwaiter().GetResult()),
     ("decimal issue fields serialize as JSON numbers", () => TestDecimalIssueNumbersAsync().GetAwaiter().GetResult()),
     ("success without invoice number is unknown", () => TestMissingInvoiceNumberAsync().GetAwaiter().GetResult()),
     ("production stays locked before administrator setup", () => TestProductionLockAsync().GetAwaiter().GetResult()),
@@ -541,8 +542,27 @@ static async Task TestBanCode99Async()
     var lookup = await service.LookupBuyerNameAsync("13871381");
     Equal(true, lookup.LookupSucceeded);
     Equal(string.Empty, lookup.Name);
-    await service.HealthCheckAsync();
+    Equal(string.Empty, await service.HealthCheckAsync());
     Equal(2, fake.BanCalls);
+}
+
+static async Task TestProductionHealthCompanyNameAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway
+    {
+        BanResponse = new BanResponse(0, "", [new BanResult("12345675", "志遠醫療器材行")]),
+    };
+    var (service, repository) = TestService(temporary.Path, fake);
+    var settings = repository.Settings.LoadOrCreate();
+    repository.Settings.SetAdminPassword(settings, "test-admin-password");
+    settings.Environment = Environments.Production;
+    settings.ProductionInvoice = "12345675";
+    repository.Settings.SetProductionAppKey(settings, "TEST-KEY-NOT-REAL");
+    repository.Settings.Save(settings);
+
+    Equal("志遠醫療器材行", await service.HealthCheckAsync());
+    Equal("12345675", fake.LastBanQuery.Single());
 }
 
 static async Task TestDecimalIssueNumbersAsync()
@@ -928,6 +948,7 @@ sealed class FakeGateway : IAmegoGateway
     public int IssueCalls { get; private set; }
     public int QueryCalls { get; private set; }
     public int BanCalls { get; private set; }
+    public IReadOnlyList<string> LastBanQuery { get; private set; } = [];
     public IssueRequest? LastIssue { get; private set; }
     public string LastQueryOrderId { get; private set; } = string.Empty;
     public Action<IssueRequest>? OnIssue { get; set; }
@@ -959,6 +980,7 @@ sealed class FakeGateway : IAmegoGateway
     public Task<BanResponse> QueryBanAsync(IEnumerable<string> bans, CancellationToken cancellationToken = default)
     {
         BanCalls++;
+        LastBanQuery = bans.ToArray();
         return BanException is null ? Task.FromResult(BanResponse) : Task.FromException<BanResponse>(BanException);
     }
 }

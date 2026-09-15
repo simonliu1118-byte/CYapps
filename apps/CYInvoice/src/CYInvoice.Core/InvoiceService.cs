@@ -66,25 +66,29 @@ public sealed class InvoiceService
         this.statusUpdater = statusUpdater;
     }
 
-    public async Task HealthCheckAsync(CancellationToken cancellationToken = default)
+    public async Task<string> HealthCheckAsync(CancellationToken cancellationToken = default)
     {
         var settings = repository.Settings.LoadOrCreate();
         var ban = settings.Environment == Environments.Production
             ? settings.ProductionInvoice.Trim()
             : AmegoDefaults.TestInvoice;
         var (gateway, _) = GetGateway();
+        BanResponse response;
         try
         {
-            await gateway.QueryBanAsync([ban], cancellationToken).ConfigureAwait(false);
+            response = await gateway.QueryBanAsync([ban], cancellationToken).ConfigureAwait(false);
         }
         catch (AmegoApiException error) when (error.Code == 99)
         {
             // A business validation reply proves the signed endpoint is reachable.
+            return string.Empty;
         }
         catch (Exception error)
         {
             throw new InvalidOperationException("API 健康檢查失敗", error);
         }
+
+        return response.Data.FirstOrDefault(item => item.Ban.Trim() == ban)?.Name.Trim() ?? string.Empty;
     }
 
     public async Task<NameLookup> LookupBuyerNameAsync(
