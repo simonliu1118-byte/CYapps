@@ -11,7 +11,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 唯一版本來源為 `VERSION`；正式 Release 使用 `BUILD=0`。
 - Go／Win32 V1.1.0 只保留為上一個公開回退版本，不再位於 `main` 現行 source。
 
-正式 Release 只可由 `main` 人工啟動 Release workflow；workflow 會重新執行核心測試、WinForms 啟動 smoke test、公開安全掃描、Windows x64 self-contained single-file publish、PE／Icon／manifest、ZIP 結構與 SHA-256 驗證。
+正式 Release 由含 `VERSION` 變更的 PR 通過 CI 並合併 `main` 後自動啟動；workflow 會重新執行核心測試、WinForms 啟動 smoke test、公開安全掃描、Windows x64 self-contained single-file publish、PE／Icon／manifest、ZIP 結構與 SHA-256 驗證。
 
 ## 技術基準
 
