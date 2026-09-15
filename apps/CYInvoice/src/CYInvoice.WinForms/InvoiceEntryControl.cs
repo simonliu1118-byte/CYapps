@@ -730,16 +730,11 @@ internal sealed class InvoiceEntryControl : UserControl
         eventArgs.SuppressKeyPress = true;
         var row = editorRow;
         var column = editorColumn;
-        var keepCurrentCell = eventArgs.KeyCode == Keys.Enter && column == 4;
+        var addRowAfterPriceEnter = eventArgs.KeyCode == Keys.Enter && column == 4;
         CommitCellEditor(false);
         BeginInvoke((Action)(() =>
         {
-            if (keepCurrentCell)
-            {
-                BeginCellEdit(row, column);
-                return;
-            }
-            MoveToNextItemField(row, column);
+            MoveToNextItemField(row, column, addRowAfterPriceEnter);
         }));
     }
 
@@ -769,7 +764,7 @@ internal sealed class InvoiceEntryControl : UserControl
         }
     }
 
-    private void MoveToNextItemField(int rowIndex, int columnIndex)
+    private void MoveToNextItemField(int rowIndex, int columnIndex, bool addRowIfMissing = false)
     {
         if (rowIndex < 0 || rowIndex >= Items.Items.Count || IsPlaceholder(Items.Items[rowIndex])) return;
         var nextColumn = columnIndex switch { 1 => 3, 3 => 4, _ => -1 };
@@ -783,6 +778,8 @@ internal sealed class InvoiceEntryControl : UserControl
         var position = actual.FindIndex(row => row.Index == rowIndex);
         if (position >= 0 && position + 1 < actual.Count)
             BeginCellEdit(actual[position + 1].Index, 1);
+        else if (addRowIfMissing)
+            AddRow(true);
         else
             addItemButton.Focus();
     }
@@ -955,6 +952,24 @@ internal sealed class InvoiceEntryControl : UserControl
         if (cellEditor is null || cellEditor.IsDisposed || !cellEditor.ContainsFocus ||
             cellEditor.Bounds.Top < editBounds.Top || cellEditor.Bounds.Bottom > editBounds.Bottom)
             throw new InvalidOperationException("商品儲存格在滑鼠放開後未維持焦點或輸入框高度未貼合資料列");
+        CommitCellEditor(true);
+        BeginCellEdit(ActualRows()[0].Index, 4);
+        if (cellEditor is null) throw new InvalidOperationException("單價欄無法進入編輯狀態");
+        cellEditor.Text = "100";
+        CellEditorKeyDown(cellEditor, new KeyEventArgs(Keys.Enter));
+        Application.DoEvents();
+        if (ActualRows().Count != 2 || cellEditor is null || editorRow != ActualRows()[1].Index || editorColumn != 1)
+            throw new InvalidOperationException("最後一列單價按 Enter 後未新增明細並移至新品名欄");
+        CommitCellEditor(true);
+        var rowsBeforeExistingNext = ActualRows().Count;
+        BeginCellEdit(ActualRows()[0].Index, 4);
+        if (cellEditor is null) throw new InvalidOperationException("單價欄無法再次進入編輯狀態");
+        CellEditorKeyDown(cellEditor, new KeyEventArgs(Keys.Enter));
+        Application.DoEvents();
+        if (ActualRows().Count != rowsBeforeExistingNext || cellEditor is null ||
+            editorRow != ActualRows()[1].Index || editorColumn != 1)
+            throw new InvalidOperationException("單價按 Enter 後未移至既有下一列品名欄，或意外新增明細");
+        CommitCellEditor(true);
         if (!UiControls.HasLogicalSize(addItemButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(issueButton, 190, 46) || issueButton is not PrimaryActionButton)
             throw new InvalidOperationException("商品新增或主開立按鈕尺寸／樣式不正確");
