@@ -13,7 +13,8 @@
 ## 2. CYInvoice 正式 Release
 
 - 正式 Release 只允許由 Public `CYapps/main` 的 CYInvoice C#／WinForms 正式 source 建置。
-- 正式 Release 一律人工明確啟動；不得因 feature/fix/release branch push 自動發布。
+- CYInvoice 是共通 Release 人工啟動原則的明確例外：含 `VERSION` 變更的 PR 經必要 CI 通過並合併 `main` 後，由正式 Release workflow 自動重新驗證、建置、打包、建立 tag 與公開 Release；使用者不需要手動按 Merge 或 Run workflow。
+- 一般 feature／fix push 或未變更 `VERSION` 的合併不得發布；自動 Release 仍只允許使用合併後的 `main` source。
 - tag 格式固定 `cyinvoice-vX.Y.Z`；Release title 使用 `CYInvoice VX.Y.Z`。
 - 手動輸入／確認的版本必須與 `apps/CYInvoice/VERSION` 完全一致；已存在 tag／Release 不覆寫。
 - 正式 ZIP 名稱為 `CYInvoice_VX.Y.Z.zip`；解壓後根資料夾固定 `CYInvoice`，資料夾名稱本身不含版號。
