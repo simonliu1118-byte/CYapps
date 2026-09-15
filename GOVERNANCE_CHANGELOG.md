@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.3 — 2026/09/15
+
+- CYInvoice 依使用者新規範明列正式 Release 自動化例外：含 `VERSION` 變更的 PR 經必要 CI 通過並合併 `main` 後，由 Release workflow 自動重新驗證、建置、打包、建立 tag 與公開 Release。
+- 使用者不需要手動按 Merge 或 Run workflow；AI 仍須先確認 PR 驗證結果再代為合併，Release 仍只允許從 `main` 建置。
+- `workflow_dispatch` 不再是 CYInvoice 正式發布的必要入口；既有正式 tag／Release 仍不得覆寫。
+
 ## 2.3.2 — 2026/09/15
 
 - 使用者完成 Windows 實機驗收並明確批准 Major 升級：CYInvoice 自 `V2.0.0` 起改以 C#／WinForms 為唯一正式產品線，直接由 `main` 維護。
