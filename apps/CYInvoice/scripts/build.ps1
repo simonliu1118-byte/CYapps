@@ -76,19 +76,11 @@ C#／WinForms 已自 V2.0.0 起成為唯一正式產品線。
 "@ | Set-Content -Path (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) -Encoding UTF8
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$Archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
-try {
-    [void]$Archive.CreateEntry("CYInvoice/")
-    foreach ($Directory in Get-ChildItem -LiteralPath $ReleaseDir -Directory -Recurse) {
-        $Relative = [IO.Path]::GetRelativePath($DistRoot, $Directory.FullName).Replace('\', '/') + "/"
-        [void]$Archive.CreateEntry($Relative)
-    }
-    foreach ($File in Get-ChildItem -LiteralPath $ReleaseDir -File -Recurse) {
-        $Relative = [IO.Path]::GetRelativePath($DistRoot, $File.FullName).Replace('\', '/')
-        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($Archive, $File.FullName, $Relative, [System.IO.Compression.CompressionLevel]::Optimal)
-    }
-}
-finally { $Archive.Dispose() }
+[System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $ReleaseDir,
+    $ZipPath,
+    [System.IO.Compression.CompressionLevel]::Optimal,
+    $true)
 
 Write-Host "Built: $(Join-Path $ReleaseDir 'CYInvoice.exe')"
 Write-Host "Package: $ZipPath"
