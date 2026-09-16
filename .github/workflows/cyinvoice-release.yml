@@ -86,7 +86,9 @@ jobs:
         if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: |
           $smokeRoot = Join-Path $env:RUNNER_TEMP ("cyinvoice-package-smoke-" + [guid]::NewGuid().ToString("N"))
-          Expand-Archive -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) -DestinationPath $smokeRoot
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zipPath = (Resolve-Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION)).Path
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $smokeRoot)
           try {
             & (Join-Path $smokeRoot "CYInvoice/CYInvoice.exe") --startup-smoke-test
             if ($LASTEXITCODE -ne 0) { throw "Packaged CYInvoice startup smoke test failed" }
