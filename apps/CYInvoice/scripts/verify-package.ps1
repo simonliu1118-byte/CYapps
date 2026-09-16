@@ -39,7 +39,6 @@ finally {
 
 $RequiredEntries = @(
     "CYInvoice/CYInvoice.exe",
-    "CYInvoice/CYInvoice.dll",
     "CYInvoice/VERSION",
     "CYInvoice/$ArtifactVersion.txt",
     "CYInvoice/使用說明.txt",
