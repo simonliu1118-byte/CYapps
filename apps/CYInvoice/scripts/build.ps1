@@ -88,6 +88,8 @@ try {
         "CYInvoice/Cache/",
         "CYInvoice/Cache/InvoicePDF/",
         "CYInvoice/Cache/InvoicePreview/",
+        "CYInvoice/Runtime/",
+        "CYInvoice/Runtime/WebView2/",
         "CYInvoice/Logs/")) {
         if ($null -eq $Archive.GetEntry($DirectoryEntry)) {
             [void]$Archive.CreateEntry($DirectoryEntry)
