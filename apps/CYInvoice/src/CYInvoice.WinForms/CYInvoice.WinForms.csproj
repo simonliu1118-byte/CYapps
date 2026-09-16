@@ -18,12 +18,4 @@
     <EmbeddedResource Include="..\..\assets\CYInvoice.ico" LogicalName="CYInvoice.AppIcon" />
     <Content Include="..\..\VERSION" Link="VERSION" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
-  <Target Name="KeepWebView2ManagedAssembliesExternal" BeforeTargets="_ComputeFilesToBundle">
-    <ItemGroup>
-      <ResolvedFileToPublish Update="@(ResolvedFileToPublish)"
-                             Condition="$([System.String]::Copy('%(ResolvedFileToPublish.FileName)').StartsWith('Microsoft.Web.WebView2.'))">
-        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-      </ResolvedFileToPublish>
-    </ItemGroup>
-  </Target>
 </Project>

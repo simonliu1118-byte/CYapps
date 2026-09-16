@@ -44,6 +44,9 @@ finally {
 
 $RequiredEntries = @(
     "CYInvoice/CYInvoice.exe",
+    "CYInvoice/CYInvoice.dll",
+    "CYInvoice/coreclr.dll",
+    "CYInvoice/clrjit.dll",
     "CYInvoice/VERSION",
     "CYInvoice/$ArtifactVersion.txt",
     "CYInvoice/使用說明.txt",
@@ -57,11 +60,14 @@ foreach ($Required in $RequiredEntries) {
     }
 }
 foreach ($RequiredAssembly in @(
+    "CYInvoice/CYInvoice.dll",
+    "CYInvoice/coreclr.dll",
+    "CYInvoice/clrjit.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll")) {
     if ($EntryLengths[$RequiredAssembly] -le 0) {
-        throw "Package ZIP contains an empty WebView2 assembly: $RequiredAssembly"
+        throw "Package ZIP contains an empty required assembly: $RequiredAssembly"
     }
 }
 if ($Entries | Where-Object { $_ -match '^CYInvoice/Version/' }) {
