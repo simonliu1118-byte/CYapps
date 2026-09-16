@@ -99,7 +99,8 @@ try {
         "CYInvoice/Runtime/WebView2/",
         "CYInvoice/Logs/")) {
         if ($null -eq $Archive.GetEntry($DirectoryEntry)) {
-            [void]$Archive.CreateEntry($DirectoryEntry)
+            $Entry = $Archive.CreateEntry($DirectoryEntry)
+            $Entry.ExternalAttributes = [int][System.IO.FileAttributes]::Directory
         }
     }
 }
