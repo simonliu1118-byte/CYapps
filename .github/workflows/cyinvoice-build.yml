@@ -90,6 +90,14 @@ jobs:
           $zipPath = (Resolve-Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_ARTIFACT_VERSION)).Path
           [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $smokeRoot)
           try {
+            $webViewRoot = Join-Path $smokeRoot "CYInvoice/Runtime/WebView2"
+            foreach ($assemblyName in @(
+              "Microsoft.Web.WebView2.Core.dll",
+              "Microsoft.Web.WebView2.WinForms.dll",
+              "Microsoft.Web.WebView2.Wpf.dll")) {
+              $assemblyPath = Join-Path $webViewRoot $assemblyName
+              Write-Host "Before launch: $assemblyPath exists=$(Test-Path -LiteralPath $assemblyPath -PathType Leaf)"
+            }
             & (Join-Path $smokeRoot "CYInvoice/CYInvoice.exe") --startup-smoke-test
             if ($LASTEXITCODE -ne 0) { throw "Packaged CYInvoice startup smoke test failed" }
           }
