@@ -56,7 +56,14 @@ if (!(Test-Path (Join-Path $ReleaseDir "CYInvoice.exe") -PathType Leaf)) { throw
 Get-ChildItem -LiteralPath $ReleaseDir -Filter "Microsoft.Web.WebView2.*.xml" -File | Remove-Item -Force
 $WebViewRuntimeDir = Join-Path $ReleaseDir "Runtime/WebView2"
 New-Item $WebViewRuntimeDir -ItemType Directory -Force | Out-Null
-Get-ChildItem -LiteralPath $ReleaseDir -Filter "Microsoft.Web.WebView2.*.dll" -File | Move-Item -Destination $WebViewRuntimeDir -Force
+$WebViewAssemblies = @(Get-ChildItem -LiteralPath $ReleaseDir -Filter "Microsoft.Web.WebView2.*.dll" -File)
+foreach ($Assembly in $WebViewAssemblies) {
+    if ($Assembly.Length -le 0) { throw "Published WebView2 assembly is empty: $($Assembly.Name)" }
+    $Destination = Join-Path $WebViewRuntimeDir $Assembly.Name
+    [System.IO.File]::Copy($Assembly.FullName, $Destination, $true)
+    if ((Get-Item -LiteralPath $Destination).Length -le 0) { throw "Copied WebView2 assembly is empty: $($Assembly.Name)" }
+    Remove-Item -LiteralPath $Assembly.FullName -Force
+}
 Copy-Item (Join-Path $ProjectRoot "使用說明.txt") $ReleaseDir -Force
 New-Item (Join-Path $ReleaseDir "Data") -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $ReleaseDir "Cache/InvoicePDF") -ItemType Directory -Force | Out-Null

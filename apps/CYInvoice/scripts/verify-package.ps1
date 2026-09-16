@@ -27,6 +27,10 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Archive = [System.IO.Compression.ZipFile]::OpenRead($ResolvedPath.Path)
 try {
     $Entries = @($Archive.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
+    $EntryLengths = @{}
+    foreach ($Entry in $Archive.Entries) {
+        $EntryLengths[$Entry.FullName -replace '\\', '/'] = $Entry.Length
+    }
     $VersionEntry = $Archive.GetEntry("CYInvoice/$ArtifactVersion.txt")
     if ($null -eq $VersionEntry) { throw "Package ZIP is missing the version identity file." }
     $Reader = [System.IO.StreamReader]::new($VersionEntry.Open())
@@ -56,6 +60,14 @@ $RequiredEntries = @(
 foreach ($Required in $RequiredEntries) {
     if ($Entries -notcontains $Required) {
         throw "Package ZIP is missing: $Required"
+    }
+}
+foreach ($RequiredAssembly in @(
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll")) {
+    if ($EntryLengths[$RequiredAssembly] -le 0) {
+        throw "Package ZIP contains an empty WebView2 assembly: $RequiredAssembly"
     }
 }
 
