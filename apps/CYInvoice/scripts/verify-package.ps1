@@ -50,6 +50,7 @@ $RequiredEntries = @(
     "CYInvoice/Runtime/WebView2/",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll",
     "CYInvoice/Logs/"
 )
 foreach ($Required in $RequiredEntries) {

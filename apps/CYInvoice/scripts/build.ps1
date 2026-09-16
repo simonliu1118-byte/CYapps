@@ -42,7 +42,7 @@ Push-Location $ProjectRoot
 try {
     & dotnet publish src/CYInvoice.WinForms/CYInvoice.WinForms.csproj `
         -c Release -r win-x64 --self-contained true `
-        -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
+        -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false `
         -p:Version=$Version `
         -o $PublishDir
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
