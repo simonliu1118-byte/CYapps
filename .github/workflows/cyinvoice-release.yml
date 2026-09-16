@@ -91,7 +91,11 @@ jobs:
           [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $smokeRoot)
           try {
             & (Join-Path $smokeRoot "CYInvoice/CYInvoice.exe") --startup-smoke-test
-            if ($LASTEXITCODE -ne 0) { throw "Packaged CYInvoice startup smoke test failed" }
+            if ($LASTEXITCODE -ne 0) {
+              $startupLog = Join-Path $smokeRoot "CYInvoice/Logs/startup-error.log"
+              if (Test-Path -LiteralPath $startupLog -PathType Leaf) { Get-Content -LiteralPath $startupLog | Write-Error }
+              throw "Packaged CYInvoice startup smoke test failed"
+            }
           }
           finally { Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue }
 
