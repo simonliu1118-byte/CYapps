@@ -14,11 +14,13 @@ internal static class RuntimeAssemblyResolver
         if (Interlocked.Exchange(ref configured, 1) != 0) return;
         var executableDirectory = Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory;
         var webViewDirectory = Path.Combine(executableDirectory, "Runtime", "WebView2");
-        AssemblyLoadContext.Default.Resolving += (context, name) => Resolve(context, name, webViewDirectory);
+        var loadContext = AssemblyLoadContext.GetLoadContext(typeof(RuntimeAssemblyResolver).Assembly)
+            ?? AssemblyLoadContext.Default;
+        loadContext.Resolving += (context, name) => Resolve(context, name, webViewDirectory);
         AppDomain.CurrentDomain.AssemblyResolve += (_, args) =>
-            Resolve(AssemblyLoadContext.Default, new AssemblyName(args.Name), webViewDirectory);
-        LoadIfPresent(AssemblyLoadContext.Default, webViewDirectory, "Microsoft.Web.WebView2.Core");
-        LoadIfPresent(AssemblyLoadContext.Default, webViewDirectory, "Microsoft.Web.WebView2.WinForms");
+            Resolve(loadContext, new AssemblyName(args.Name), webViewDirectory);
+        LoadIfPresent(loadContext, webViewDirectory, "Microsoft.Web.WebView2.Core");
+        LoadIfPresent(loadContext, webViewDirectory, "Microsoft.Web.WebView2.WinForms");
     }
 
     private static void LoadIfPresent(AssemblyLoadContext context, string webViewDirectory, string simpleName)
