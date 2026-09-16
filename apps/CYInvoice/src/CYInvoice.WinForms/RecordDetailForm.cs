@@ -9,23 +9,16 @@ internal sealed class RecordDetailForm : Form
     private readonly InvoiceRecord record;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
-    private readonly ComboBox pdfStyle = new()
+    private readonly ContextMenuStrip pdfStylesMenu = new();
+    private readonly Button viewPdf = UiControls.StandardButton("檢視 PDF");
+    private readonly Button close = UiControls.StandardButton("關閉");
+    private readonly TableLayoutPanel details = new()
     {
-        Width = 170,
-        DropDownStyle = ComboBoxStyle.DropDownList,
-        DisplayMember = nameof(InvoicePdfStyle.Name),
-        Margin = new Padding(6, 5, 6, 5),
-    };
-    private readonly Button viewPdf = UiControls.StandardButton("檢視官方 PDF");
-    private readonly Label pdfStatus = new()
-    {
-        AutoSize = false,
-        Width = 200,
-        Height = UiControls.StandardButtonHeight,
-        AutoEllipsis = true,
-        TextAlign = ContentAlignment.MiddleLeft,
-        Margin = new Padding(8, 10, 8, 0),
-        ForeColor = Color.DimGray,
+        Dock = DockStyle.Top,
+        AutoSize = true,
+        ColumnCount = 6,
+        RowCount = 4,
+        Margin = Padding.Empty,
     };
 
     public RecordDetailForm(InvoiceRecord record, LocalRepository repository, InvoiceService service)
@@ -35,59 +28,108 @@ internal sealed class RecordDetailForm : Form
         this.service = service;
         Text = $"發票詳細資訊－{record.InvoiceNumber}";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(920, 650);
-        MinimumSize = new Size(800, 560);
+        ClientSize = new Size(880, 600);
+        MinimumSize = new Size(760, 520);
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
         Icon = ApplicationIcon.Load();
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(16) };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new Padding(18, 16, 18, 12),
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 7 };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        AddField(fields, 0, "開立時間", IssueTime(record), "發票號碼", record.InvoiceNumber);
-        AddField(fields, 1, "來源", record.Source, "訂單編號", record.OrderId);
-        AddField(fields, 2, "統一編號", record.BuyerIdentifier, "買受人", record.BuyerName);
-        AddField(fields, 3, "發票金額", MoneyFormatter.Integer(record.Amount), "交付方式", record.Delivery);
-        AddField(fields, 4, "發票狀態", record.InvoiceState, "上傳狀態", record.UploadStatusText);
-        AddField(fields, 5, "使用環境", record.Environment == Environments.Production ? "正式" : "測試", "最後確認", record.LastChecked);
-        AddField(fields, 6, "錯誤訊息", record.ErrorMessage, "總備註", record.MainRemark);
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+
+        ConfigureDetails();
+        AddFieldRow(0,
+            "發票號碼", record.InvoiceNumber,
+            "開立時間", IssueTime(record),
+            "發票金額", MoneyFormatter.Integer(record.Amount));
+        AddFieldRow(1,
+            "訂單編號", record.OrderId,
+            "來源", record.Source,
+            "使用環境", record.Environment == Environments.Production ? "正式" : "測試");
+        AddFieldRow(2,
+            "買受人", record.BuyerName,
+            "統一編號", record.BuyerIdentifier,
+            "交付方式", record.Delivery);
+        AddFieldRow(3,
+            "發票狀態", record.InvoiceState,
+            "上傳狀態", record.UploadStatusText,
+            "最後確認", record.LastChecked);
+        AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
+        AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
+
         var items = UiControls.Grid();
         items.ReadOnly = true;
         items.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         items.Columns.Add(Column("品名", 300, fill: true));
-        items.Columns.Add(Column("數量", 100, right: true));
-        items.Columns.Add(Column("單價", 130, right: true));
-        items.Columns.Add(Column("金額", 130, right: true));
+        items.Columns.Add(Column("數量", 90, right: true));
+        items.Columns.Add(Column("單價", 120, right: true));
+        items.Columns.Add(Column("金額", 120, right: true));
         foreach (var item in record.Items)
         {
             var values = InvoiceCalculator.ItemDecimals(item);
-            items.Rows.Add(item.Description, values.Quantity.ToString(), MoneyFormatter.Decimal(values.UnitPrice.ToString()), MoneyFormatter.Decimal(values.Amount.ToString()));
+            items.Rows.Add(
+                item.Description,
+                values.Quantity.ToString(),
+                MoneyFormatter.Decimal(values.UnitPrice.ToString()),
+                MoneyFormatter.Decimal(values.Amount.ToString()));
         }
         items.ClearSelection();
 
+        var itemSection = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0, 10, 0, 4),
+        };
+        itemSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        itemSection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        itemSection.Controls.Add(new Label
+        {
+            Text = "商品明細",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font(Font, FontStyle.Bold),
+            Margin = Padding.Empty,
+        }, 0, 0);
+        itemSection.Controls.Add(items, 0, 1);
+
         var eligibility = service.GetInvoicePdfEligibility(record);
-        var styles = service.GetInvoicePdfStyles(record);
-        pdfStyle.Items.AddRange(styles.Cast<object>().ToArray());
-        pdfStyle.SelectedIndex = 0;
-        pdfStyle.Enabled = eligibility.CompanyBuyer;
         viewPdf.Enabled = eligibility.Allowed;
-        viewPdf.Click += async (_, _) => await OpenPdfAsync();
-        pdfStatus.Text = eligibility.Allowed
-            ? eligibility.CompanyBuyer ? "公司統編可選 5 種版型" : "一般消費者固定使用 A4 整張"
-            : eligibility.Reason;
+        viewPdf.Click += async (_, _) =>
+        {
+            if (!eligibility.Allowed) return;
+            if (eligibility.CompanyBuyer)
+            {
+                pdfStylesMenu.Show(viewPdf, new Point(0, viewPdf.Height));
+                return;
+            }
+            await OpenPdfAsync(InvoicePdfStyles.A4);
+        };
+        if (eligibility.CompanyBuyer)
+        {
+            foreach (var style in InvoicePdfStyles.Company)
+            {
+                var menuItem = new ToolStripMenuItem(style.Name) { Tag = style };
+                menuItem.Click += async (_, _) => await OpenPdfAsync((InvoicePdfStyle)menuItem.Tag!);
+                pdfStylesMenu.Items.Add(menuItem);
+            }
+        }
         if (!eligibility.Allowed)
         {
             var toolTip = new ToolTip();
             toolTip.SetToolTip(viewPdf, eligibility.Reason);
-            toolTip.SetToolTip(pdfStatus, eligibility.Reason);
             Disposed += (_, _) => toolTip.Dispose();
         }
-        var close = UiControls.StandardButton("關閉");
+
         close.Width = 100;
         close.DialogResult = DialogResult.OK;
         var actions = new FlowLayoutPanel
@@ -98,22 +140,65 @@ internal sealed class RecordDetailForm : Form
             WrapContents = false,
             Margin = Padding.Empty,
         };
-        actions.Controls.Add(UiControls.Label("PDF 版型"));
-        actions.Controls.Add(pdfStyle);
         actions.Controls.Add(viewPdf);
         actions.Controls.Add(close);
-        actions.Controls.Add(pdfStatus);
-        root.Controls.Add(fields, 0, 0);
-        root.Controls.Add(items, 0, 1);
+
+        root.Controls.Add(details, 0, 0);
+        root.Controls.Add(itemSection, 0, 1);
         root.Controls.Add(actions, 0, 2);
         Controls.Add(root);
         AcceptButton = close;
         CancelButton = close;
     }
 
-    private async Task OpenPdfAsync()
+    private void ConfigureDetails()
     {
-        if (pdfStyle.SelectedItem is not InvoicePdfStyle style) return;
+        for (var index = 0; index < 3; index++)
+        {
+            details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
+            details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
+        }
+        for (var row = 0; row < 4; row++)
+            details.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+    }
+
+    private void AddFieldRow(
+        int row,
+        string label1,
+        string value1,
+        string label2,
+        string value2,
+        string label3,
+        string value3)
+    {
+        AddField(row, 0, label1, value1);
+        AddField(row, 2, label2, value2);
+        AddField(row, 4, label3, value3);
+    }
+
+    private void AddField(int row, int column, string label, string value)
+    {
+        details.Controls.Add(FieldLabel(label), column, row);
+        details.Controls.Add(ValueLabel(value), column + 1, row);
+    }
+
+    private void AddOptionalDetail(string label, string value, Color valueColor)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        var row = details.RowCount++;
+        details.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        details.Controls.Add(FieldLabel(label), 0, row);
+        var text = ValueLabel(value);
+        text.AutoSize = true;
+        text.MinimumSize = new Size(0, 31);
+        text.ForeColor = valueColor;
+        text.AutoEllipsis = false;
+        details.Controls.Add(text, 1, row);
+        details.SetColumnSpan(text, 5);
+    }
+
+    private async Task OpenPdfAsync(InvoicePdfStyle style)
+    {
         viewPdf.Enabled = false;
         viewPdf.Text = "取得 PDF 中…";
         try
@@ -130,7 +215,7 @@ internal sealed class RecordDetailForm : Form
         }
         finally
         {
-            viewPdf.Text = "檢視官方 PDF";
+            viewPdf.Text = "檢視 PDF";
             viewPdf.Enabled = service.GetInvoicePdfEligibility(record).Allowed;
         }
     }
@@ -145,11 +230,12 @@ internal sealed class RecordDetailForm : Form
             InvoiceNumber = "AA12345678",
             InvoiceState = InvoiceStates.Opened,
             Delivery = InvoiceService.DeliveryPaper,
-            UploadStatus = CYInvoice.Core.Amego.UploadStatuses.Complete,
+            UploadStatus = CYInvoice.Core.Amego.UploadStatuses.Uploading,
+            UploadStatusText = "上傳中",
         };
         using var consumer = new RecordDetailForm(baseRecord, repository, service);
         consumer.PerformLayout();
-        consumer.VerifyPdfControls(1, enabledStyle: false);
+        consumer.VerifyPdfControls(expectedStyleMenuItems: 0);
         using var company = new RecordDetailForm(
             new InvoiceRecord
             {
@@ -159,12 +245,13 @@ internal sealed class RecordDetailForm : Form
                 InvoiceState = baseRecord.InvoiceState,
                 Delivery = baseRecord.Delivery,
                 UploadStatus = baseRecord.UploadStatus,
+                UploadStatusText = baseRecord.UploadStatusText,
                 BuyerIdentifier = "12345675",
             },
             repository,
             service);
         company.PerformLayout();
-        company.VerifyPdfControls(5, enabledStyle: true);
+        company.VerifyPdfControls(expectedStyleMenuItems: 5);
         using var viewer = new InvoicePdfViewerForm(
             new InvoicePdfDocument(
                 Path.Combine(repository.InvoicePdfCacheDirectory, "smoke.pdf"),
@@ -176,35 +263,59 @@ internal sealed class RecordDetailForm : Form
         viewer.VerifySmokeLayout();
     }
 
-    private void VerifyPdfControls(int styleCount, bool enabledStyle)
+    private void VerifyPdfControls(int expectedStyleMenuItems)
     {
-        if (pdfStyle.Items.Count != styleCount || pdfStyle.Enabled != enabledStyle)
-            throw new InvalidOperationException("紙本發票 PDF 版型選項不正確");
+        if (!viewPdf.Enabled)
+            throw new InvalidOperationException("上傳中的已開立紙本發票未開放檢視 PDF");
+        if (pdfStylesMenu.Items.Count != expectedStyleMenuItems)
+            throw new InvalidOperationException("公司統編 PDF 版型選單不正確");
+        if (details.ColumnCount != 6 || details.RowCount < 4)
+            throw new InvalidOperationException("發票詳細資訊未使用緊湊三欄配置");
         if (!UiControls.HasLogicalSize(viewPdf, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("檢視官方 PDF 按鈕未使用標準尺寸");
+            throw new InvalidOperationException("檢視 PDF 按鈕未使用標準尺寸");
+        if (!UiControls.HasLogicalSize(close, 100, UiControls.StandardButtonHeight))
+            throw new InvalidOperationException("關閉按鈕未使用核准尺寸");
     }
+
+    private static Label FieldLabel(string text) => new()
+    {
+        Text = text,
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = Color.DimGray,
+        Margin = new Padding(0, 1, 4, 1),
+        AutoEllipsis = true,
+    };
+
+    private static Label ValueLabel(string value) => new()
+    {
+        Text = value,
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = SystemColors.ControlText,
+        Margin = new Padding(0, 1, 12, 1),
+        AutoEllipsis = true,
+    };
 
     private static DataGridViewTextBoxColumn Column(string title, int width, bool right = false, bool fill = false) => new()
     {
-        HeaderText = title, Width = width, AutoSizeMode = fill ? DataGridViewAutoSizeColumnMode.Fill : DataGridViewAutoSizeColumnMode.None,
+        HeaderText = title,
+        Width = width,
+        AutoSizeMode = fill ? DataGridViewAutoSizeColumnMode.Fill : DataGridViewAutoSizeColumnMode.None,
         SortMode = DataGridViewColumnSortMode.NotSortable,
         DefaultCellStyle = { Alignment = right ? DataGridViewContentAlignment.MiddleRight : DataGridViewContentAlignment.MiddleLeft },
     };
 
-    private static void AddField(TableLayoutPanel panel, int row, string label1, string value1, string label2, string value2)
-    {
-        panel.Controls.Add(UiControls.Label(label1), 0, row);
-        panel.Controls.Add(Value(value1), 1, row);
-        panel.Controls.Add(UiControls.Label(label2), 2, row);
-        panel.Controls.Add(Value(value2), 3, row);
-    }
-
-    private static TextBox Value(string value) => new() { Text = value, ReadOnly = true, Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(3, 4, 8, 4) };
-    private static string IssueTime(InvoiceRecord record) => record.InvoiceDate.Length == 0 ? record.SentAt : (record.InvoiceDate + " " + record.InvoiceTime).Trim();
+    private static string IssueTime(InvoiceRecord record) =>
+        record.InvoiceDate.Length == 0 ? record.SentAt : (record.InvoiceDate + " " + record.InvoiceTime).Trim();
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) Icon?.Dispose();
+        if (disposing)
+        {
+            pdfStylesMenu.Dispose();
+            Icon?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

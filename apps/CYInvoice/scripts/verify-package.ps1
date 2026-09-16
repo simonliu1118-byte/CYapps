@@ -59,6 +59,9 @@ if ($Entries | Where-Object { $_ -match '^CYInvoice/Version/' }) {
 if ($Entries | Where-Object { $_ -match '(^|/)todo\.txt$' }) {
     throw "Package ZIP must not contain todo.txt."
 }
+if ($Entries | Where-Object { $_ -match '^CYInvoice/Microsoft\.Web\.WebView2\..*\.xml$' }) {
+    throw "Package ZIP must not contain WebView2 API documentation XML files."
+}
 $VersionFiles = @($Entries | Where-Object { $_ -match '^CYInvoice/V[^/]+\.txt$' })
 if ($VersionFiles.Count -ne 1) {
     throw "Package ZIP must contain exactly one root-level version TXT file."

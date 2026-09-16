@@ -41,7 +41,7 @@ Go／Win32 V1.1.0 已固定為公開回退版本；其舊版 UI 與 API 指示�
 
 ## V2 後續開發與 API 驗證
 
-- [ ] 依 `docs/RC_TEST.md` 的最小 PDF 清單，在 Windows + WebView2 Runtime 實機驗證內嵌顯示、縮放、下載、列印及關閉後瀏覽器子程序。
+- [ ] 依 `docs/RC_TEST.md` 的最小 PDF 清單，在 Windows + WebView2 Runtime 實機驗證已開立即可取得、公司版型選單、原生縮放／下載／列印及關閉後瀏覽器子程序。
 - [x] 以核心回歸測試驗證一般消費者只允許 `download_style=0`、首次取得、同日 Cache、壞檔重抓及隔日重新取得路徑。
 - [x] 依光貿官方文件鎖定公司統編五種 `download_style` 為 0、1、2、3、5，並以回歸測試確認各版型 Cache 不互相覆蓋。
 - [ ] 完整驗證 `/json/f0501` 作廢、員工帳密、作廢原因、`/json/invoice_status`、燈號、顯示及跨期阻擋。

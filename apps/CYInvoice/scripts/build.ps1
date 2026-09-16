@@ -51,6 +51,7 @@ finally { Pop-Location }
 
 Copy-Item (Join-Path $PublishDir "*") $ReleaseDir -Recurse -Force
 if (!(Test-Path (Join-Path $ReleaseDir "CYInvoice.exe") -PathType Leaf)) { throw "Published CYInvoice.exe is missing." }
+Get-ChildItem -LiteralPath $ReleaseDir -Filter "Microsoft.Web.WebView2.*.xml" -File | Remove-Item -Force
 Copy-Item (Join-Path $ProjectRoot "使用說明.txt") $ReleaseDir -Force
 New-Item (Join-Path $ReleaseDir "Data") -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $ReleaseDir "Cache/InvoicePDF") -ItemType Directory -Force | Out-Null

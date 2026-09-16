@@ -106,8 +106,6 @@ public sealed class InvoiceService
             return new(false, company, "這筆紀錄沒有發票號碼");
         if (record.Delivery != DeliveryPaper)
             return new(false, company, "只有紙本發票可以下載官方 PDF");
-        if (record.UploadStatus != UploadStatuses.Complete)
-            return new(false, company, "發票上傳狀態尚未完成，請先重新整理狀態");
         return new(true, company, string.Empty);
     }
 
@@ -143,10 +141,18 @@ public sealed class InvoiceService
             if (await InvoicePdfCache.TryReadAsync(cachePath, cancellationToken).ConfigureAwait(false) is not null)
                 return new(cachePath, stored.InvoiceNumber.Trim(), style, FromCache: true);
 
-            var bytes = await gateway.DownloadInvoicePdfAsync(
-                stored.InvoiceNumber.Trim(),
-                style.Code,
-                cancellationToken).ConfigureAwait(false);
+            byte[] bytes;
+            try
+            {
+                bytes = await gateway.DownloadInvoicePdfAsync(
+                    stored.InvoiceNumber.Trim(),
+                    style.Code,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (AmegoApiException error) when (error.Code == 99)
+            {
+                throw new InvalidOperationException("光貿尚未提供這張發票的官方 PDF，請稍後再試", error);
+            }
             await InvoicePdfCache.WriteAsync(cachePath, bytes, cancellationToken).ConfigureAwait(false);
             return new(cachePath, stored.InvoiceNumber.Trim(), style, FromCache: false);
         }
