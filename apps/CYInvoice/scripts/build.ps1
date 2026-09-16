@@ -49,8 +49,11 @@ try {
 }
 finally { Pop-Location }
 
-Copy-Item (Join-Path $PublishDir "*") $ReleaseDir -Recurse -Force
+Get-ChildItem -LiteralPath $PublishDir -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $ReleaseDir -Recurse -Force
+}
 if (!(Test-Path (Join-Path $ReleaseDir "CYInvoice.exe") -PathType Leaf)) { throw "Published CYInvoice.exe is missing." }
+if (!(Test-Path (Join-Path $ReleaseDir "CYInvoice.dll") -PathType Leaf)) { throw "Published CYInvoice.dll is missing." }
 Get-ChildItem -LiteralPath $ReleaseDir -Filter "Microsoft.Web.WebView2.*.xml" -File | Remove-Item -Force
 $WebViewRuntimeDir = Join-Path $ReleaseDir "Runtime/WebView2"
 New-Item $WebViewRuntimeDir -ItemType Directory -Force | Out-Null
