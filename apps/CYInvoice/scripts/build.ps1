@@ -49,12 +49,32 @@ try {
 }
 finally { Pop-Location }
 
-Copy-Item (Join-Path $PublishDir "*") $ReleaseDir -Recurse -Force
+Get-ChildItem -LiteralPath $PublishDir -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $ReleaseDir -Recurse -Force
+}
 if (!(Test-Path (Join-Path $ReleaseDir "CYInvoice.exe") -PathType Leaf)) { throw "Published CYInvoice.exe is missing." }
 Get-ChildItem -LiteralPath $ReleaseDir -Filter "Microsoft.Web.WebView2.*.xml" -File | Remove-Item -Force
+$WebViewRuntimeDir = Join-Path $ReleaseDir "Runtime/WebView2"
+New-Item $WebViewRuntimeDir -ItemType Directory -Force | Out-Null
+$WebViewBuildRoot = Join-Path $ProjectRoot "src/CYInvoice.WinForms/bin"
+foreach ($AssemblyName in @(
+    "Microsoft.Web.WebView2.Core.dll",
+    "Microsoft.Web.WebView2.WinForms.dll",
+    "Microsoft.Web.WebView2.Wpf.dll")) {
+    $Assembly = Get-ChildItem -LiteralPath $WebViewBuildRoot -Filter $AssemblyName -File -Recurse |
+        Sort-Object LastWriteTimeUtc -Descending |
+        Select-Object -First 1
+    if ($null -eq $Assembly -or $Assembly.Length -le 0) { throw "Built WebView2 assembly is missing or empty: $AssemblyName" }
+    $Destination = Join-Path $WebViewRuntimeDir $AssemblyName
+    [System.IO.File]::Copy($Assembly.FullName, $Destination, $true)
+    if ((Get-Item -LiteralPath $Destination).Length -le 0) { throw "Copied WebView2 assembly is empty: $AssemblyName" }
+    $PublishedAssembly = Join-Path $ReleaseDir $AssemblyName
+    if (Test-Path -LiteralPath $PublishedAssembly -PathType Leaf) { Remove-Item -LiteralPath $PublishedAssembly -Force }
+}
 Copy-Item (Join-Path $ProjectRoot "使用說明.txt") $ReleaseDir -Force
 New-Item (Join-Path $ReleaseDir "Data") -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $ReleaseDir "Cache/InvoicePDF") -ItemType Directory -Force | Out-Null
+New-Item (Join-Path $ReleaseDir "Cache/InvoicePreview") -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $ReleaseDir "Logs") -ItemType Directory -Force | Out-Null
 
 $ReleaseDate = Get-Date -Format "yyyy/MM/dd"
@@ -72,14 +92,13 @@ C#／WinForms 已自 V2.0.0 起成為唯一正式產品線。
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
-    [void]$Archive.CreateEntry("CYInvoice/")
-    foreach ($Directory in Get-ChildItem -LiteralPath $ReleaseDir -Directory -Recurse) {
-        $Relative = [IO.Path]::GetRelativePath($DistRoot, $Directory.FullName).Replace('\', '/') + "/"
-        [void]$Archive.CreateEntry($Relative)
-    }
-    foreach ($File in Get-ChildItem -LiteralPath $ReleaseDir -File -Recurse) {
+    foreach ($File in Get-ChildItem -LiteralPath $ReleaseDir -File -Recurse | Sort-Object FullName) {
         $Relative = [IO.Path]::GetRelativePath($DistRoot, $File.FullName).Replace('\', '/')
-        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($Archive, $File.FullName, $Relative, [System.IO.Compression.CompressionLevel]::Optimal)
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $Archive,
+            $File.FullName,
+            $Relative,
+            [System.IO.Compression.CompressionLevel]::Optimal)
     }
 }
 finally { $Archive.Dispose() }

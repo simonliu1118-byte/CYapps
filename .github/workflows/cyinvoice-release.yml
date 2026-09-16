@@ -82,6 +82,27 @@ jobs:
           ./scripts/verify-pe.ps1 -Path ./dist/CYInvoice/CYInvoice.exe
           ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) -Version $env:CYINVOICE_VERSION -Build 0
 
+      - name: Smoke test packaged portable folder
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ("cyinvoice-package-smoke-" + [guid]::NewGuid().ToString("N"))
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zipPath = (Resolve-Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION)).Path
+          [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $smokeRoot)
+          try {
+            $process = Start-Process `
+              -FilePath (Join-Path $smokeRoot "CYInvoice/CYInvoice.exe") `
+              -ArgumentList "--startup-smoke-test" `
+              -Wait `
+              -PassThru
+            if ($process.ExitCode -ne 0) {
+              $startupLog = Join-Path $smokeRoot "CYInvoice/Logs/startup-error.log"
+              if (Test-Path -LiteralPath $startupLog -PathType Leaf) { Get-Content -LiteralPath $startupLog | Write-Error }
+              throw "Packaged CYInvoice startup smoke test failed with exit code $($process.ExitCode)"
+            }
+          }
+          finally { Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue }
+
       - name: Create checksum and release notes
         if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: |

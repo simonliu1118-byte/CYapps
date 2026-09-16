@@ -27,6 +27,11 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Archive = [System.IO.Compression.ZipFile]::OpenRead($ResolvedPath.Path)
 try {
     $Entries = @($Archive.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
+    $EntryLengths = @{}
+    foreach ($Entry in $Archive.Entries) {
+        $NormalizedName = $Entry.FullName -replace '\\', '/'
+        $EntryLengths[$NormalizedName] = $Entry.Length
+    }
     $VersionEntry = $Archive.GetEntry("CYInvoice/$ArtifactVersion.txt")
     if ($null -eq $VersionEntry) { throw "Package ZIP is missing the version identity file." }
     $Reader = [System.IO.StreamReader]::new($VersionEntry.Open())
@@ -42,17 +47,23 @@ $RequiredEntries = @(
     "CYInvoice/VERSION",
     "CYInvoice/$ArtifactVersion.txt",
     "CYInvoice/使用說明.txt",
-    "CYInvoice/Data/",
-    "CYInvoice/Cache/",
-    "CYInvoice/Cache/InvoicePDF/",
-    "CYInvoice/Logs/"
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll"
 )
 foreach ($Required in $RequiredEntries) {
     if ($Entries -notcontains $Required) {
         throw "Package ZIP is missing: $Required"
     }
 }
-
+foreach ($RequiredAssembly in @(
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll")) {
+    if ($EntryLengths[$RequiredAssembly] -le 0) {
+        throw "Package ZIP contains an empty required assembly: $RequiredAssembly"
+    }
+}
 if ($Entries | Where-Object { $_ -match '^CYInvoice/Version/' }) {
     throw "Package ZIP must not contain a Version directory."
 }
@@ -61,6 +72,9 @@ if ($Entries | Where-Object { $_ -match '(^|/)todo\.txt$' }) {
 }
 if ($Entries | Where-Object { $_ -match '^CYInvoice/Microsoft\.Web\.WebView2\..*\.xml$' }) {
     throw "Package ZIP must not contain WebView2 API documentation XML files."
+}
+if ($Entries | Where-Object { $_ -match '^CYInvoice/Microsoft\.Web\.WebView2\..*\.dll$' }) {
+    throw "Package ZIP must keep WebView2 managed assemblies under Runtime/WebView2."
 }
 $VersionFiles = @($Entries | Where-Object { $_ -match '^CYInvoice/V[^/]+\.txt$' })
 if ($VersionFiles.Count -ne 1) {

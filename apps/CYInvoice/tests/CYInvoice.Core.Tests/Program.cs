@@ -123,6 +123,7 @@ var tests = new (string Name, Action Run)[]
     ("unresolved imported company name blocks before API", () => TestImportedLookupBlockAsync().GetAwaiter().GetResult()),
     ("consumer PDF uses style zero and same-day cache", () => TestConsumerPdfCacheAsync().GetAwaiter().GetResult()),
     ("company PDF caches each style and refreshes next day", () => TestCompanyPdfStylesAsync().GetAwaiter().GetResult()),
+    ("PDF preview cache is isolated and validates PNG", () => TestInvoicePreviewCacheAsync().GetAwaiter().GetResult()),
     ("opened PDF is attempted before upload completes", () => TestPendingUploadPdfAttemptAsync().GetAwaiter().GetResult()),
     ("PDF eligibility blocks unsafe invoice states", TestPdfEligibility),
 };
@@ -1114,6 +1115,33 @@ static async Task TestCompanyPdfStylesAsync()
     Equal(false, nextDay.FromCache);
     Equal(false, string.Equals(a4.Path, nextDay.Path, StringComparison.OrdinalIgnoreCase));
     Equal(3, fake.PdfCalls);
+}
+
+static async Task TestInvoicePreviewCacheAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+    var pdfPath = Path.Combine(repository.InvoicePdfCacheDirectory, "test", "20260905", "AA12345678_style0.pdf");
+    var previewPath = InvoicePreviewCache.PathForPdf(
+        repository.InvoicePreviewCacheDirectory,
+        repository.InvoicePdfCacheDirectory,
+        pdfPath);
+    Equal(
+        Path.Combine(repository.InvoicePreviewCacheDirectory, "test", "20260905", "AA12345678_style0.page1.png"),
+        previewPath);
+
+    var png = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4 };
+    await InvoicePreviewCache.WriteAsync(previewPath, png);
+    var cached = await InvoicePreviewCache.TryReadAsync(previewPath);
+    Equal(true, cached is not null && cached.SequenceEqual(png));
+
+    File.WriteAllText(previewPath, "not png");
+    Equal<byte[]?>(null, await InvoicePreviewCache.TryReadAsync(previewPath));
+    await ThrowsAsync<InvalidDataException>(() => InvoicePreviewCache.WriteAsync(previewPath, [1, 2, 3]));
+    Throws<InvalidOperationException>(() => InvoicePreviewCache.PathForPdf(
+        repository.InvoicePreviewCacheDirectory,
+        repository.InvoicePdfCacheDirectory,
+        Path.Combine(temporary.Path, "outside.pdf")));
 }
 
 static async Task TestPendingUploadPdfAttemptAsync()
