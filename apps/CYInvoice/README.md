@@ -6,7 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 現行 source／測試版本：**V2.1.0**。
+- 現行 source／測試版本：**V2.1.0 Build 1**。
 - 最新公開正式 Release：**V2.0.1**。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線，source 直接由 `main` 維護。
 - 唯一版本來源為 `VERSION`；正式 Release 使用 `BUILD=0`。

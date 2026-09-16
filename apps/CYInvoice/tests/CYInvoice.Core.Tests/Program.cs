@@ -123,6 +123,7 @@ var tests = new (string Name, Action Run)[]
     ("unresolved imported company name blocks before API", () => TestImportedLookupBlockAsync().GetAwaiter().GetResult()),
     ("consumer PDF uses style zero and same-day cache", () => TestConsumerPdfCacheAsync().GetAwaiter().GetResult()),
     ("company PDF caches each style and refreshes next day", () => TestCompanyPdfStylesAsync().GetAwaiter().GetResult()),
+    ("opened PDF is attempted before upload completes", () => TestPendingUploadPdfAttemptAsync().GetAwaiter().GetResult()),
     ("PDF eligibility blocks unsafe invoice states", TestPdfEligibility),
 };
 
@@ -1115,6 +1116,22 @@ static async Task TestCompanyPdfStylesAsync()
     Equal(3, fake.PdfCalls);
 }
 
+static async Task TestPendingUploadPdfAttemptAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway { PdfException = new AmegoApiException(99, "尚未產生") };
+    var (service, repository) = TestService(temporary.Path, fake);
+    var record = PdfReadyRecord("XY12345678");
+    record.UploadStatus = UploadStatuses.Uploading;
+    record.UploadStatusText = "上傳中";
+    repository.Invoices.Append(record);
+
+    Equal(true, service.GetInvoicePdfEligibility(record).Allowed);
+    var error = await ThrowsAsync<InvalidOperationException>(() => service.GetInvoicePdfAsync(record, 0));
+    Equal("光貿尚未提供這張發票的官方 PDF，請稍後再試", error.Message);
+    Equal(1, fake.PdfCalls);
+}
+
 static void TestPdfEligibility()
 {
     using var temporary = new TemporaryDirectory();
@@ -1123,8 +1140,9 @@ static void TestPdfEligibility()
     var record = PdfReadyRecord("YZ12345678");
     Equal(true, service.GetInvoicePdfEligibility(record).Allowed);
     record.UploadStatus = UploadStatuses.Pending;
-    Equal(false, service.GetInvoicePdfEligibility(record).Allowed);
-    record.UploadStatus = UploadStatuses.Complete;
+    Equal(true, service.GetInvoicePdfEligibility(record).Allowed);
+    record.UploadStatus = UploadStatuses.Error;
+    Equal(true, service.GetInvoicePdfEligibility(record).Allowed);
     record.Delivery = "會員載具";
     Equal(false, service.GetInvoicePdfEligibility(record).Allowed);
     record.Delivery = InvoiceService.DeliveryPaper;
