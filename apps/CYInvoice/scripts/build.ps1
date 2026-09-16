@@ -81,6 +81,20 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
     $ZipPath,
     [System.IO.Compression.CompressionLevel]::Optimal,
     $true)
+$Archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Update)
+try {
+    foreach ($DirectoryEntry in @(
+        "CYInvoice/Data/",
+        "CYInvoice/Cache/",
+        "CYInvoice/Cache/InvoicePDF/",
+        "CYInvoice/Cache/InvoicePreview/",
+        "CYInvoice/Logs/")) {
+        if ($null -eq $Archive.GetEntry($DirectoryEntry)) {
+            [void]$Archive.CreateEntry($DirectoryEntry)
+        }
+    }
+}
+finally { $Archive.Dispose() }
 
 Write-Host "Built: $(Join-Path $ReleaseDir 'CYInvoice.exe')"
 Write-Host "Package: $ZipPath"
