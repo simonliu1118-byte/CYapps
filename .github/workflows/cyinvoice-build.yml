@@ -90,31 +90,18 @@ jobs:
           $zipPath = (Resolve-Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_ARTIFACT_VERSION)).Path
           [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $smokeRoot)
           try {
-            $webViewRoot = Join-Path $smokeRoot "CYInvoice/Runtime/WebView2"
-            foreach ($assemblyName in @(
-              "Microsoft.Web.WebView2.Core.dll",
-              "Microsoft.Web.WebView2.WinForms.dll",
-              "Microsoft.Web.WebView2.Wpf.dll")) {
-              $assemblyPath = Join-Path $webViewRoot $assemblyName
-              Write-Host "Before launch: $assemblyPath exists=$(Test-Path -LiteralPath $assemblyPath -PathType Leaf)"
-            }
-            & (Join-Path $smokeRoot "CYInvoice/CYInvoice.exe") --startup-smoke-test
-            if ($LASTEXITCODE -ne 0) {
+            $process = Start-Process `
+              -FilePath (Join-Path $smokeRoot "CYInvoice/CYInvoice.exe") `
+              -ArgumentList "--startup-smoke-test" `
+              -Wait `
+              -PassThru
+            if ($process.ExitCode -ne 0) {
               $startupLog = Join-Path $smokeRoot "CYInvoice/Logs/startup-error.log"
               if (Test-Path -LiteralPath $startupLog -PathType Leaf) { Get-Content -LiteralPath $startupLog | Write-Error }
-              throw "Packaged CYInvoice startup smoke test failed"
+              throw "Packaged CYInvoice startup smoke test failed with exit code $($process.ExitCode)"
             }
           }
           finally { Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue }
-
-      - name: Upload failed package for diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: CYInvoice-V${{ env.CYINVOICE_ARTIFACT_VERSION }}-diagnostic
-          path: apps/CYInvoice/dist/CYInvoice_V${{ env.CYINVOICE_ARTIFACT_VERSION }}.zip
-          retention-days: 1
-          if-no-files-found: error
 
       - name: Prepare one-layer engineering artifact
         run: |
