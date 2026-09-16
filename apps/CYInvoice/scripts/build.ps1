@@ -83,24 +83,22 @@ C#／WinForms 已自 V2.0.0 起成為唯一正式產品線。
 "@ | Set-Content -Path (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) -Encoding UTF8
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::CreateFromDirectory(
-    $ReleaseDir,
-    $ZipPath,
-    [System.IO.Compression.CompressionLevel]::Optimal,
-    $true)
-$Archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Update)
+$Archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
-    foreach ($DirectoryEntry in @(
-        "CYInvoice/Data/",
-        "CYInvoice/Cache/",
-        "CYInvoice/Cache/InvoicePDF/",
-        "CYInvoice/Cache/InvoicePreview/",
-        "CYInvoice/Runtime/",
-        "CYInvoice/Runtime/WebView2/",
-        "CYInvoice/Logs/")) {
-        $Entry = $Archive.GetEntry($DirectoryEntry)
-        if ($null -eq $Entry) { $Entry = $Archive.CreateEntry($DirectoryEntry) }
+    $RootEntry = $Archive.CreateEntry("CYInvoice/")
+    $RootEntry.ExternalAttributes = [int][System.IO.FileAttributes]::Directory
+    foreach ($Directory in Get-ChildItem -LiteralPath $ReleaseDir -Directory -Recurse | Sort-Object FullName) {
+        $Relative = [IO.Path]::GetRelativePath($DistRoot, $Directory.FullName).Replace('\', '/') + "/"
+        $Entry = $Archive.CreateEntry($Relative)
         $Entry.ExternalAttributes = [int][System.IO.FileAttributes]::Directory
+    }
+    foreach ($File in Get-ChildItem -LiteralPath $ReleaseDir -File -Recurse | Sort-Object FullName) {
+        $Relative = [IO.Path]::GetRelativePath($DistRoot, $File.FullName).Replace('\', '/')
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $Archive,
+            $File.FullName,
+            $Relative,
+            [System.IO.Compression.CompressionLevel]::Optimal)
     }
 }
 finally { $Archive.Dispose() }
