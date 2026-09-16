@@ -95,6 +95,15 @@ jobs:
           }
           finally { Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue }
 
+      - name: Upload failed package for diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYInvoice-V${{ env.CYINVOICE_ARTIFACT_VERSION }}-diagnostic
+          path: apps/CYInvoice/dist/CYInvoice_V${{ env.CYINVOICE_ARTIFACT_VERSION }}.zip
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Prepare one-layer engineering artifact
         run: |
           $artifactRoot = "./dist/engineering-artifact"
