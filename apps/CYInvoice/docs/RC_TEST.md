@@ -94,7 +94,7 @@
 
 1. 根目錄包含 `CYInvoice.exe`、當版唯一的 `V版本號.txt` 及 `使用說明.txt`。
 2. 不得包含 `Version` 資料夾或 `todo.txt`。
-3. `Data`、`Cache/InvoicePDF`、`Logs` 目錄均存在。
+3. 套件第一次啟動後，`Data`、`Cache/InvoicePDF`、`Cache/InvoicePreview`、`Logs` 目錄均由程式建立；ZIP 不依賴空目錄 entry。
 4. 測試 Artifact 內的版本文字須包含 `Channel: engineering`，正式 ZIP 須包含 `Channel: formal`；版本標題不另加「工程測試包」。正式 Release 仍只在使用者當次明確要求時建立。
 5. 套件根目錄不得出現 `Microsoft.Web.WebView2.Core.xml`、`Microsoft.Web.WebView2.WinForms.xml` 或 `Microsoft.Web.WebView2.Wpf.xml` 等開發用 API 說明檔。
 

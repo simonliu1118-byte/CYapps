@@ -28,11 +28,9 @@ $Archive = [System.IO.Compression.ZipFile]::OpenRead($ResolvedPath.Path)
 try {
     $Entries = @($Archive.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
     $EntryLengths = @{}
-    $EntryAttributes = @{}
     foreach ($Entry in $Archive.Entries) {
         $NormalizedName = $Entry.FullName -replace '\\', '/'
         $EntryLengths[$NormalizedName] = $Entry.Length
-        $EntryAttributes[$NormalizedName] = $Entry.ExternalAttributes
     }
     $VersionEntry = $Archive.GetEntry("CYInvoice/$ArtifactVersion.txt")
     if ($null -eq $VersionEntry) { throw "Package ZIP is missing the version identity file." }
@@ -49,14 +47,9 @@ $RequiredEntries = @(
     "CYInvoice/VERSION",
     "CYInvoice/$ArtifactVersion.txt",
     "CYInvoice/使用說明.txt",
-    "CYInvoice/Data/",
-    "CYInvoice/Cache/",
-    "CYInvoice/Cache/InvoicePDF/",
-    "CYInvoice/Cache/InvoicePreview/",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
-    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll",
-    "CYInvoice/Logs/"
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll"
 )
 foreach ($Required in $RequiredEntries) {
     if ($Entries -notcontains $Required) {
@@ -71,17 +64,6 @@ foreach ($RequiredAssembly in @(
         throw "Package ZIP contains an empty WebView2 assembly: $RequiredAssembly"
     }
 }
-foreach ($RequiredDirectory in @(
-    "CYInvoice/Data/",
-    "CYInvoice/Cache/",
-    "CYInvoice/Cache/InvoicePDF/",
-    "CYInvoice/Cache/InvoicePreview/",
-    "CYInvoice/Logs/")) {
-    if (($EntryAttributes[$RequiredDirectory] -band [int][System.IO.FileAttributes]::Directory) -eq 0) {
-        throw "Package ZIP entry is not marked as a directory: $RequiredDirectory"
-    }
-}
-
 if ($Entries | Where-Object { $_ -match '^CYInvoice/Version/' }) {
     throw "Package ZIP must not contain a Version directory."
 }

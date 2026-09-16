@@ -85,14 +85,6 @@ C#／WinForms 已自 V2.0.0 起成為唯一正式產品線。
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
-    $RootEntry = $Archive.CreateEntry("CYInvoice/")
-    $RootEntry.ExternalAttributes = [int][System.IO.FileAttributes]::Directory
-    foreach ($Directory in Get-ChildItem -LiteralPath $ReleaseDir -Directory -Recurse | Sort-Object FullName) {
-        if (Get-ChildItem -LiteralPath $Directory.FullName -File -Recurse | Select-Object -First 1) { continue }
-        $Relative = [IO.Path]::GetRelativePath($DistRoot, $Directory.FullName).Replace('\', '/') + "/"
-        $Entry = $Archive.CreateEntry($Relative)
-        $Entry.ExternalAttributes = [int][System.IO.FileAttributes]::Directory
-    }
     foreach ($File in Get-ChildItem -LiteralPath $ReleaseDir -File -Recurse | Sort-Object FullName) {
         $Relative = [IO.Path]::GetRelativePath($DistRoot, $File.FullName).Replace('\', '/')
         [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
