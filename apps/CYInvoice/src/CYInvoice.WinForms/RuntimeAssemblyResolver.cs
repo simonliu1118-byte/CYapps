@@ -22,6 +22,13 @@ internal static class RuntimeAssemblyResolver
             Console.Error.WriteLine($"WebView2 loader: process={Environment.ProcessPath}");
             Console.Error.WriteLine($"WebView2 loader: base={AppContext.BaseDirectory}");
             Console.Error.WriteLine($"WebView2 loader: directory={webViewDirectory}");
+            foreach (var candidate in Directory.EnumerateFiles(
+                         executableDirectory,
+                         "Microsoft.Web.WebView2.*.dll",
+                         SearchOption.AllDirectories))
+            {
+                Console.Error.WriteLine($"WebView2 loader: candidate={candidate}");
+            }
         }
         loadContext.Resolving += (context, name) => Resolve(context, name, webViewDirectory);
         AppDomain.CurrentDomain.AssemblyResolve += (_, args) =>
