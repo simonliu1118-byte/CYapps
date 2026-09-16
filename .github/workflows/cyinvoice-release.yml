@@ -82,6 +82,17 @@ jobs:
           ./scripts/verify-pe.ps1 -Path ./dist/CYInvoice/CYInvoice.exe
           ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) -Version $env:CYINVOICE_VERSION -Build 0
 
+      - name: Smoke test packaged portable folder
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ("cyinvoice-package-smoke-" + [guid]::NewGuid().ToString("N"))
+          Expand-Archive -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION) -DestinationPath $smokeRoot
+          try {
+            & (Join-Path $smokeRoot "CYInvoice/CYInvoice.exe") --startup-smoke-test
+            if ($LASTEXITCODE -ne 0) { throw "Packaged CYInvoice startup smoke test failed" }
+          }
+          finally { Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue }
+
       - name: Create checksum and release notes
         if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: |

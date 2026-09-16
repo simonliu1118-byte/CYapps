@@ -45,6 +45,11 @@ $RequiredEntries = @(
     "CYInvoice/Data/",
     "CYInvoice/Cache/",
     "CYInvoice/Cache/InvoicePDF/",
+    "CYInvoice/Cache/InvoicePreview/",
+    "CYInvoice/Runtime/",
+    "CYInvoice/Runtime/WebView2/",
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
+    "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
     "CYInvoice/Logs/"
 )
 foreach ($Required in $RequiredEntries) {
@@ -61,6 +66,9 @@ if ($Entries | Where-Object { $_ -match '(^|/)todo\.txt$' }) {
 }
 if ($Entries | Where-Object { $_ -match '^CYInvoice/Microsoft\.Web\.WebView2\..*\.xml$' }) {
     throw "Package ZIP must not contain WebView2 API documentation XML files."
+}
+if ($Entries | Where-Object { $_ -match '^CYInvoice/Microsoft\.Web\.WebView2\..*\.dll$' }) {
+    throw "Package ZIP must keep WebView2 managed assemblies under Runtime/WebView2."
 }
 $VersionFiles = @($Entries | Where-Object { $_ -match '^CYInvoice/V[^/]+\.txt$' })
 if ($VersionFiles.Count -ne 1) {

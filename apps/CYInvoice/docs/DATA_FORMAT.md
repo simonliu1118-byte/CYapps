@@ -7,8 +7,9 @@
 - 先在同一資料夾寫入暫存檔、同步落盤，再取代正式檔，避免程式中斷留下半份 JSON。
 - 讀到損壞或包含多個根值的 JSON 時停止並回報，不用空白資料覆蓋原檔。
 - Windows 取代檔案使用 `MoveFileExW` 的 replace-existing 與 write-through。
-- 每次啟動會自行建立 `Data`、`Cache/InvoicePDF`；不依賴 ZIP 保存空資料夾。
+- 每次啟動會自行建立 `Data`、`Cache/InvoicePDF`、`Cache/InvoicePreview`；不依賴 ZIP 保存空資料夾。
 - 官方紙本發票 PDF 使用 `Cache/InvoicePDF/{test|prod}/{yyyyMMdd}/{發票號碼}_style{0|1|2|3|5}.pdf`。環境、日期與版型不可共用；只有通過大小限制及 `%PDF` 檔頭檢查的完整檔案才可原子移入正式 Cache 路徑。
+- 詳細資訊內的紙本發票預覽圖使用 `Cache/InvoicePreview/{test|prod}/{yyyyMMdd}/{發票號碼}_style0.page1.png`，只由同日官方 A4 PDF 第一頁產生；必須通過大小及 PNG 檔頭驗證後原子寫入。一般消費者與公司統編都只在詳細資訊顯示此第一頁預覽，列印仍使用原始 PDF。
 - `Cache/WebView2` 只保存內嵌 Edge 元件的執行資料，不保存 App Key；刪除 Cache 後可由官方 API 重新取得 PDF，不影響 `Data` 發票紀錄。
 
 ## settings.json

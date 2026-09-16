@@ -99,9 +99,9 @@ public sealed class InvoiceService
         var environment = repository.Settings.LoadOrCreate().Environment;
         var company = IsCompanyBuyer(record);
         if (record.Environment != environment)
-            return new(false, company, "這筆發票屬於其他環境，請切換到正確環境後再檢視 PDF");
+            return new(false, company, "這筆發票屬於其他環境，請切換到正確環境後再取得官方 PDF");
         if (record.InvoiceState != InvoiceStates.Opened)
-            return new(false, company, "只有已開立且未作廢的發票可以檢視 PDF");
+            return new(false, company, "只有已開立且未作廢的發票可以取得官方 PDF");
         if (record.InvoiceNumber.Trim().Length == 0)
             return new(false, company, "這筆紀錄沒有發票號碼");
         if (record.Delivery != DeliveryPaper)

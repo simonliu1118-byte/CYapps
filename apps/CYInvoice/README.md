@@ -6,7 +6,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 現行 source／測試版本：**V2.1.0 Build 1**。
+- 現行 source／測試版本：**V2.2.0**。
 - 最新公開正式 Release：**V2.0.1**。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線，source 直接由 `main` 維護。
 - 唯一版本來源為 `VERSION`；正式 Release 使用 `BUILD=0`。
@@ -19,7 +19,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 語言／UI：C#、.NET 10、Windows Forms。
 - 平台：Windows 10/11 x64。
 - Solution：`CYInvoice.sln`。
-- 正式執行檔：self-contained single-file `CYInvoice.exe`。
+- 正式執行檔：self-contained `CYInvoice.exe`；WebView2 必要組件集中於 `Runtime/WebView2`。
 - 發行 ZIP 解壓後根資料夾固定為 `CYInvoice`。
 
 ## 目錄

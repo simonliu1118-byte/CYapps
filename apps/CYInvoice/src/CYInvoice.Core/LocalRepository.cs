@@ -6,6 +6,7 @@ public sealed class LocalRepository
         string dataDirectory,
         string cacheDirectory,
         string invoicePdfCacheDirectory,
+        string invoicePreviewCacheDirectory,
         SettingsStore settings,
         InvoiceStore invoices,
         BuyerNameStore buyerNames)
@@ -13,6 +14,7 @@ public sealed class LocalRepository
         DataDirectory = dataDirectory;
         CacheDirectory = cacheDirectory;
         InvoicePdfCacheDirectory = invoicePdfCacheDirectory;
+        InvoicePreviewCacheDirectory = invoicePreviewCacheDirectory;
         Settings = settings;
         Invoices = invoices;
         BuyerNames = buyerNames;
@@ -21,6 +23,7 @@ public sealed class LocalRepository
     public string DataDirectory { get; }
     public string CacheDirectory { get; }
     public string InvoicePdfCacheDirectory { get; }
+    public string InvoicePreviewCacheDirectory { get; }
     public SettingsStore Settings { get; }
     public InvoiceStore Invoices { get; }
     public BuyerNameStore BuyerNames { get; }
@@ -30,12 +33,15 @@ public sealed class LocalRepository
         var data = Path.Combine(baseDirectory, "Data");
         var cache = Path.Combine(baseDirectory, "Cache");
         var invoicePdfCache = Path.Combine(cache, "InvoicePDF");
+        var invoicePreviewCache = Path.Combine(cache, "InvoicePreview");
         Directory.CreateDirectory(data);
         Directory.CreateDirectory(invoicePdfCache);
+        Directory.CreateDirectory(invoicePreviewCache);
         var repository = new LocalRepository(
             data,
             cache,
             invoicePdfCache,
+            invoicePreviewCache,
             new SettingsStore(data, protector),
             new InvoiceStore(data),
             new BuyerNameStore(data));

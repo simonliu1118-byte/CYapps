@@ -9,7 +9,7 @@ public static class InvoicePdfStyles
 {
     public static readonly InvoicePdfStyle A4 = new(0, "A4 整張");
     public static readonly InvoicePdfStyle A4AddressAndA5 = new(1, "A4（地址＋A5）");
-    public static readonly InvoicePdfStyle A4TwoA5 = new(2, "A4（A5×2）");
+    public static readonly InvoicePdfStyle A4TwoA5 = new(2, "A4（A5 內容）");
     public static readonly InvoicePdfStyle A5 = new(3, "A5");
     public static readonly InvoicePdfStyle QrCodeA4 = new(5, "QRcode A4");
 

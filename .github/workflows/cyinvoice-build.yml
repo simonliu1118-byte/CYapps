@@ -83,6 +83,16 @@ jobs:
           ./scripts/verify-pe.ps1 -Path ./dist/CYInvoice/CYInvoice.exe
           ./scripts/verify-package.ps1 -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_ARTIFACT_VERSION) -Version $env:CYINVOICE_VERSION -Build $env:CYINVOICE_BUILD -Channel engineering
 
+      - name: Smoke test packaged portable folder
+        run: |
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ("cyinvoice-package-smoke-" + [guid]::NewGuid().ToString("N"))
+          Expand-Archive -Path ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_ARTIFACT_VERSION) -DestinationPath $smokeRoot
+          try {
+            & (Join-Path $smokeRoot "CYInvoice/CYInvoice.exe") --startup-smoke-test
+            if ($LASTEXITCODE -ne 0) { throw "Packaged CYInvoice startup smoke test failed" }
+          }
+          finally { Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue }
+
       - name: Prepare one-layer engineering artifact
         run: |
           $artifactRoot = "./dist/engineering-artifact"
