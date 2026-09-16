@@ -53,8 +53,6 @@ $RequiredEntries = @(
     "CYInvoice/Cache/",
     "CYInvoice/Cache/InvoicePDF/",
     "CYInvoice/Cache/InvoicePreview/",
-    "CYInvoice/Runtime/",
-    "CYInvoice/Runtime/WebView2/",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll",
@@ -78,8 +76,6 @@ foreach ($RequiredDirectory in @(
     "CYInvoice/Cache/",
     "CYInvoice/Cache/InvoicePDF/",
     "CYInvoice/Cache/InvoicePreview/",
-    "CYInvoice/Runtime/",
-    "CYInvoice/Runtime/WebView2/",
     "CYInvoice/Logs/")) {
     if (($EntryAttributes[$RequiredDirectory] -band [int][System.IO.FileAttributes]::Directory) -eq 0) {
         throw "Package ZIP entry is not marked as a directory: $RequiredDirectory"

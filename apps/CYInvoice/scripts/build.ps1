@@ -88,6 +88,7 @@ try {
     $RootEntry = $Archive.CreateEntry("CYInvoice/")
     $RootEntry.ExternalAttributes = [int][System.IO.FileAttributes]::Directory
     foreach ($Directory in Get-ChildItem -LiteralPath $ReleaseDir -Directory -Recurse | Sort-Object FullName) {
+        if (Get-ChildItem -LiteralPath $Directory.FullName -File -Recurse | Select-Object -First 1) { continue }
         $Relative = [IO.Path]::GetRelativePath($DistRoot, $Directory.FullName).Replace('\', '/') + "/"
         $Entry = $Archive.CreateEntry($Relative)
         $Entry.ExternalAttributes = [int][System.IO.FileAttributes]::Directory
