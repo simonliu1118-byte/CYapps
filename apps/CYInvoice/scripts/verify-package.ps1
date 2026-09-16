@@ -44,9 +44,6 @@ finally {
 
 $RequiredEntries = @(
     "CYInvoice/CYInvoice.exe",
-    "CYInvoice/CYInvoice.dll",
-    "CYInvoice/coreclr.dll",
-    "CYInvoice/clrjit.dll",
     "CYInvoice/VERSION",
     "CYInvoice/$ArtifactVersion.txt",
     "CYInvoice/使用說明.txt",
@@ -60,9 +57,6 @@ foreach ($Required in $RequiredEntries) {
     }
 }
 foreach ($RequiredAssembly in @(
-    "CYInvoice/CYInvoice.dll",
-    "CYInvoice/coreclr.dll",
-    "CYInvoice/clrjit.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.WinForms.dll",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Wpf.dll")) {

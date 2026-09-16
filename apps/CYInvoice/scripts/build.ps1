@@ -42,7 +42,7 @@ Push-Location $ProjectRoot
 try {
     & dotnet publish src/CYInvoice.WinForms/CYInvoice.WinForms.csproj `
         -c Release -r win-x64 --self-contained true `
-        -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false `
+        -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false `
         -p:Version=$Version `
         -o $PublishDir
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
@@ -53,17 +53,23 @@ Get-ChildItem -LiteralPath $PublishDir -Force | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $ReleaseDir -Recurse -Force
 }
 if (!(Test-Path (Join-Path $ReleaseDir "CYInvoice.exe") -PathType Leaf)) { throw "Published CYInvoice.exe is missing." }
-if (!(Test-Path (Join-Path $ReleaseDir "CYInvoice.dll") -PathType Leaf)) { throw "Published CYInvoice.dll is missing." }
 Get-ChildItem -LiteralPath $ReleaseDir -Filter "Microsoft.Web.WebView2.*.xml" -File | Remove-Item -Force
 $WebViewRuntimeDir = Join-Path $ReleaseDir "Runtime/WebView2"
 New-Item $WebViewRuntimeDir -ItemType Directory -Force | Out-Null
-$WebViewAssemblies = @(Get-ChildItem -LiteralPath $ReleaseDir -Filter "Microsoft.Web.WebView2.*.dll" -File)
-foreach ($Assembly in $WebViewAssemblies) {
-    if ($Assembly.Length -le 0) { throw "Published WebView2 assembly is empty: $($Assembly.Name)" }
-    $Destination = Join-Path $WebViewRuntimeDir $Assembly.Name
+$WebViewBuildRoot = Join-Path $ProjectRoot "src/CYInvoice.WinForms/bin"
+foreach ($AssemblyName in @(
+    "Microsoft.Web.WebView2.Core.dll",
+    "Microsoft.Web.WebView2.WinForms.dll",
+    "Microsoft.Web.WebView2.Wpf.dll")) {
+    $Assembly = Get-ChildItem -LiteralPath $WebViewBuildRoot -Filter $AssemblyName -File -Recurse |
+        Sort-Object LastWriteTimeUtc -Descending |
+        Select-Object -First 1
+    if ($null -eq $Assembly -or $Assembly.Length -le 0) { throw "Built WebView2 assembly is missing or empty: $AssemblyName" }
+    $Destination = Join-Path $WebViewRuntimeDir $AssemblyName
     [System.IO.File]::Copy($Assembly.FullName, $Destination, $true)
-    if ((Get-Item -LiteralPath $Destination).Length -le 0) { throw "Copied WebView2 assembly is empty: $($Assembly.Name)" }
-    Remove-Item -LiteralPath $Assembly.FullName -Force
+    if ((Get-Item -LiteralPath $Destination).Length -le 0) { throw "Copied WebView2 assembly is empty: $AssemblyName" }
+    $PublishedAssembly = Join-Path $ReleaseDir $AssemblyName
+    if (Test-Path -LiteralPath $PublishedAssembly -PathType Leaf) { Remove-Item -LiteralPath $PublishedAssembly -Force }
 }
 Copy-Item (Join-Path $ProjectRoot "使用說明.txt") $ReleaseDir -Force
 New-Item (Join-Path $ReleaseDir "Data") -ItemType Directory -Force | Out-Null
