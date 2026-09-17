@@ -1,5 +1,14 @@
 # Shared Common Rules Changelog
 
+## 2.5.0 — 2026/09/17
+
+- 新增 binary asset source integrity SOP：會影響產品輸出的必要 PNG／WAV／ICO 等二進位資源，正式採用前必須確認 intended source、canonical path、byte size 與 SHA-256；圖片另記錄 dimensions，其他格式依專案需要記錄可驗證屬性。
+- Base64、chunk 或其他文字化表示只能作傳輸手段；除非專案明確把該格式本身定義為正式 source，repository 最終應保存真正的 binary 檔，不把傳輸用 `.b64`／chunk 當永久素材來源。
+- 二進位檔寫入 Git 後必須從 repository read-back，再核對 byte size／SHA-256 與 intended source 完全一致；只看到正確檔名、GitHub preview 或圖片外觀不足以視為 source gate 通過。
+- ICO、縮圖或其他 derived resource 原則上只能在 source gate 通過後產生，並應盡量由可重現的 script／build pipeline 建立；Windows icon 必須驗證專案要求的 native sizes 與最終 EXE 可解析的 associated icon。
+- 禁止以會破壞或截斷 self-contained／single-file payload 的 post-publish resource patch 作為一般 icon/resource 注入方式；應優先在正式編譯／resource pipeline 內嵌入，並對最終 Windows binary 做必要 size guard、resource check 與 startup smoke。
+- Explorer／taskbar／window icon 等受 Windows shell cache 或實際 UI 影響的項目，CI 驗證不能完全取代實機目視；專案需要時仍應保留 real-machine acceptance。
+
 ## 2.4.0 — 2026/09/13
 
 - 一般 Build／Test workflow 預設同時支援 `pull_request` 與 `workflow_dispatch`；PR 自動驗收是 AI／日常開發的標準入口，手動 dispatch 只作備援。
