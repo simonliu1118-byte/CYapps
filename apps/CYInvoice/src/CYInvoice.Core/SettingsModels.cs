@@ -11,6 +11,7 @@ public sealed class Settings
     [JsonPropertyName("password_salt")] public string PasswordSalt { get; set; } = string.Empty;
     [JsonPropertyName("password_hash")] public string PasswordHash { get; set; } = string.Empty;
     [JsonPropertyName("admin_password_set")] public bool AdminPasswordSet { get; set; }
+    [JsonPropertyName("invoice_printer_name")] public string InvoicePrinterName { get; set; } = string.Empty;
 }
 
 public interface ISecretProtector

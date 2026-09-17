@@ -7,9 +7,10 @@ internal sealed class PdfStyleSelectionForm : Form
     private readonly List<Bitmap> thumbnails = [];
     private readonly List<Button> styleButtons = [];
 
-    public PdfStyleSelectionForm()
+    public PdfStyleSelectionForm(string action = "列印")
     {
-        Text = "選擇列印版型";
+        action = action == "檢視" ? "檢視" : "列印";
+        Text = $"選擇{action}版型";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(1060, 410);
         MinimumSize = new Size(940, 390);
@@ -30,7 +31,7 @@ internal sealed class PdfStyleSelectionForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(new Label
         {
-            Text = "請選擇要列印的公司發票版型",
+            Text = $"請選擇要{action}的公司發票版型",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font(Font.FontFamily, 12F, FontStyle.Bold),
@@ -66,7 +67,7 @@ internal sealed class PdfStyleSelectionForm : Form
                 Font = new Font(Font.FontFamily, 10F),
                 FlatStyle = FlatStyle.Flat,
                 UseVisualStyleBackColor = true,
-                AccessibleName = "列印版型 " + DisplayName(style),
+                AccessibleName = $"{action}版型 " + DisplayName(style),
             };
             button.FlatAppearance.BorderColor = Color.FromArgb(34, 166, 225);
             button.FlatAppearance.BorderSize = 1;

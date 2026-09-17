@@ -15,6 +15,7 @@
     <ProjectReference Include="..\CYInvoice.Core\CYInvoice.Core.csproj" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
     <PackageReference Include="PDFtoImage" Version="5.4.0" />
+    <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.16" />
     <EmbeddedResource Include="..\..\assets\CYInvoice.ico" LogicalName="CYInvoice.AppIcon" />
     <Content Include="..\..\VERSION" Link="VERSION" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
