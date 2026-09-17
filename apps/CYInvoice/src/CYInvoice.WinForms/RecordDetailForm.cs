@@ -718,8 +718,9 @@ internal sealed class RecordDetailForm : Form
             repository,
             service);
         failed.PerformLayout();
-        if (!failed.previewMessageHost.Visible ||
-            !failed.a4PreviewFrame.Controls.Contains(failed.previewMessageHost) ||
+        if (!failed.a4PreviewFrame.Controls.Contains(failed.previewMessageHost) ||
+            !failed.previewMessageHost.Controls.Contains(failed.previewStatus) ||
+            failed.previewMessageHost.BackColor != Color.White ||
             failed.previewStatus.TextAlign != ContentAlignment.MiddleCenter ||
             !failed.previewStatus.Text.Contains("開立失敗", StringComparison.Ordinal))
             throw new InvalidOperationException("開立失敗發票未在 A4 白紙中央顯示不可取得 PDF 狀態");
