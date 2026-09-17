@@ -5,11 +5,12 @@ namespace CYInvoice.WinForms;
 internal sealed class BuyerNameField : UserControl
 {
     private readonly TextBox editor;
+    private readonly int nativeFieldHeight;
     private readonly Button retry = new NoFocusCueButton
     {
         Text = "↻",
         Dock = DockStyle.Right,
-        Width = 28,
+        Width = 30,
         TabStop = false,
         FlatStyle = FlatStyle.Flat,
         Visible = false,
@@ -24,23 +25,30 @@ internal sealed class BuyerNameField : UserControl
     public BuyerNameField(TextBox editor)
     {
         this.editor = editor;
-        Dock = DockStyle.Fill;
-        Margin = Padding.Empty;
-        Padding = new Padding(4, 3, 0, 2);
-        BorderStyle = BorderStyle.FixedSingle;
-        BackColor = Color.White;
-        AutoSize = false;
-        Height = PreferredFieldHeight();
+        nativeFieldHeight = editor.PreferredHeight;
 
         editor.Dock = DockStyle.Fill;
         editor.Margin = Padding.Empty;
         editor.BorderStyle = BorderStyle.None;
         editor.BackColor = Color.White;
 
-        retry.FlatAppearance.BorderSize = 0;
-        retry.BackColor = Color.White;
-        retry.FlatAppearance.MouseOverBackColor = Color.FromArgb(238, 246, 252);
-        retry.FlatAppearance.MouseDownBackColor = Color.FromArgb(222, 239, 250);
+        Dock = DockStyle.None;
+        Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        Margin = new Padding(3, 5, 3, 5);
+        Padding = new Padding(3, 0, 1, 0);
+        BorderStyle = BorderStyle.Fixed3D;
+        BackColor = Color.White;
+        AutoSize = false;
+        Height = nativeFieldHeight;
+        MinimumSize = new Size(0, nativeFieldHeight);
+        MaximumSize = new Size(0, nativeFieldHeight);
+
+        retry.FlatAppearance.BorderSize = 1;
+        retry.FlatAppearance.BorderColor = Color.FromArgb(145, 145, 145);
+        retry.ForeColor = Color.FromArgb(55, 55, 55);
+        retry.BackColor = Color.FromArgb(248, 248, 248);
+        retry.FlatAppearance.MouseOverBackColor = Color.FromArgb(232, 243, 252);
+        retry.FlatAppearance.MouseDownBackColor = Color.FromArgb(214, 234, 249);
         toolTip.SetToolTip(retry, "重新查詢買受人名稱");
 
         Controls.Add(editor);
@@ -58,7 +66,7 @@ internal sealed class BuyerNameField : UserControl
     public override Size GetPreferredSize(Size proposedSize)
     {
         var width = proposedSize.Width > 0 ? proposedSize.Width : 120;
-        return new Size(width, PreferredFieldHeight());
+        return new Size(width, nativeFieldHeight);
     }
 
     public void SetLookupState(NameLookup lookup)
@@ -81,11 +89,9 @@ internal sealed class BuyerNameField : UserControl
         editor.TabStop = !value;
         BackColor = value ? Color.FromArgb(242, 242, 242) : Color.White;
         editor.BackColor = BackColor;
-        retry.BackColor = BackColor;
+        retry.BackColor = value ? BackColor : Color.FromArgb(248, 248, 248);
         UpdateState();
     }
-
-    private int PreferredFieldHeight() => editor.PreferredHeight + Padding.Vertical + 2;
 
     private void UpdateState()
     {

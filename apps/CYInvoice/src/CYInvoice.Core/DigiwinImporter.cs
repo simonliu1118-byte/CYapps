@@ -33,7 +33,7 @@ public static class DigiwinImporter
             .Where(row => !RowBlank(row))
             .ToArray();
         if (headData.Length != 1)
-            throw new InvalidDataException(headData.Length == 0 ? "鼎新單頭資料沒有銷貨單" : "鼎新標準匯出檔必須只有一張銷貨單");
+            throw new InvalidDataException(headData.Length == 0 ? "鼎新單頭資料沒有銷貨單" : "鼎新 Excel 匯出檔必須只有一張銷貨單");
 
         var orderId = Value(headData[0], headColumns, "銷貨單號");
         if (orderId.Length == 0) throw new InvalidDataException("鼎新單頭資料的銷貨單號不可空白");
@@ -64,6 +64,7 @@ public static class DigiwinImporter
             var description = Value(row, detailColumns, "品名");
             var quantityText = Value(row, detailColumns, "數量");
             var amountText = Value(row, detailColumns, "金額");
+            var unit = Value(row, detailColumns, "單位");
             if (description.Length == 0 && quantityText.Length == 0 && amountText.Length == 0) continue;
             if (description.Length == 0) throw new InvalidDataException($"鼎新單身資料第 {rowIndex + 1} 列品名不可空白");
 
@@ -84,6 +85,7 @@ public static class DigiwinImporter
                 Description = description,
                 Quantity = double.Parse(quantity.ToString(), CultureInfo.InvariantCulture),
                 QuantityDecimal = quantity.ToString(),
+                Unit = unit,
                 UnitPrice = unitPrice.RoundInt64(),
                 UnitPriceDecimal = unitPrice.ToString(),
                 Amount = amount,

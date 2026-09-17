@@ -47,7 +47,7 @@ internal sealed class RecordsControl : UserControl
         BackColor = Color.White;
         Padding = new Padding(18);
         Font = new Font("Microsoft JhengHei UI", 12F);
-        copyHint.Font = new Font(Font.FontFamily, 9F);
+        copyHint.Font = new Font(Font.FontFamily, 10F);
         copyFeedbackTimer.Tick += (_, _) => ResetCopyHint();
         BuildLayout();
         ResetFilters();
@@ -56,7 +56,7 @@ internal sealed class RecordsControl : UserControl
 
     private void BuildLayout()
     {
-        source.Items.AddRange(["全部", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang]);
+        source.Items.AddRange(["全部", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang, InvoiceSources.Digiwin]);
         state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.Failed, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 144));

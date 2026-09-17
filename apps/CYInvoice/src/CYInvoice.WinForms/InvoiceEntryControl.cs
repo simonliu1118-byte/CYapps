@@ -660,7 +660,7 @@ internal sealed class InvoiceEntryControl : UserControl
 
     private Task ImportDigiwinAsync()
     {
-        using var dialog = FileDialog("鼎新標準 Excel (*.xlsx)|*.xlsx");
+        using var dialog = FileDialog("Excel 檔案 (*.xlsx)|*.xlsx");
         if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return Task.CompletedTask;
         try
         {

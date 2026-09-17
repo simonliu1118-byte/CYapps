@@ -67,6 +67,7 @@ internal sealed class ImportConfirmationForm : Form
     private bool closing;
     private bool loadingBuyerEditor;
     private bool buyerEditorDirty;
+    private int buyerLookupGeneration;
 
     private ImportConfirmationForm(
         string source,
@@ -246,7 +247,10 @@ internal sealed class ImportConfirmationForm : Form
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         buyerBan.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        buyerNameField.Dock = DockStyle.None;
         buyerNameField.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        buyerNameField.Margin = buyerBan.Margin;
+        buyerNameField.Height = buyerBan.PreferredHeight;
         applyName.Anchor = AnchorStyles.None;
         editor.Controls.Add(UiControls.Label("統一編號"), 0, 0);
         editor.Controls.Add(buyerBan, 1, 0);
@@ -328,7 +332,7 @@ internal sealed class ImportConfirmationForm : Form
         buyerNameField.RetryRequested += async (_, _) => await RequeryApiNameAsync();
         if (digiwinMode)
         {
-            buyerBan.TextChanged += (_, _) => BuyerEditorChanged(clearApiName: true);
+            buyerBan.TextChanged += async (_, _) => await DigiwinBuyerBanChangedAsync();
             buyerName.TextChanged += (_, _) => BuyerEditorChanged(clearApiName: false);
         }
         grid.CurrentCellDirtyStateChanged += (_, _) =>
@@ -349,6 +353,65 @@ internal sealed class ImportConfirmationForm : Form
             closing = true;
             lifetime.Cancel();
         };
+    }
+
+    private async Task DigiwinBuyerBanChangedAsync()
+    {
+        if (!digiwinMode || loadingBuyerEditor) return;
+        buyerEditorDirty = true;
+        var generation = ++buyerLookupGeneration;
+        buyerNameField.ClearLookupState();
+        loadingBuyerEditor = true;
+        try { buyerName.Clear(); }
+        finally { loadingBuyerEditor = false; }
+
+        var ban = buyerBan.Text.Trim();
+        if (ban.Length != 8 || !ban.All(char.IsAsciiDigit))
+        {
+            buyerHint.Text = ban.Length == 0
+                ? "買方資料已修改，請先套用資料"
+                : "輸入完整 8 碼統編後會自動查詢買受人名稱";
+            UpdateIssueEnabled();
+            return;
+        }
+
+        buyerHint.Text = "正在自動查詢買受人名稱…";
+        UpdateIssueEnabled();
+        var entry = ActiveEntry();
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(20));
+            var lookup = await service.LookupBuyerNameAsync(ban, timeout.Token);
+            if (closing || generation != buyerLookupGeneration || !string.Equals(buyerBan.Text.Trim(), ban, StringComparison.Ordinal)) return;
+
+            var resolved = lookup.Name.Trim();
+            if (resolved.Length == 0 && entry is not null && string.Equals(entry.OriginalBuyerBan.Trim(), ban, StringComparison.Ordinal))
+                resolved = entry.OriginalBuyerName.Trim();
+            loadingBuyerEditor = true;
+            try
+            {
+                buyerName.Text = resolved;
+                buyerNameField.SetLookupState(lookup);
+            }
+            finally { loadingBuyerEditor = false; }
+            buyerHint.Text = lookup.Local
+                ? "已找到本機記憶名稱，請套用資料"
+                : lookup.ApiName.Trim().Length != 0
+                    ? "已自動查詢買受人名稱，請套用資料"
+                    : "光貿查無名稱，請輸入買方名稱後套用資料";
+        }
+        catch (Exception error)
+        {
+            if (closing || generation != buyerLookupGeneration || !string.Equals(buyerBan.Text.Trim(), ban, StringComparison.Ordinal)) return;
+            buyerNameField.ClearLookupState();
+            buyerHint.Text = "統編自動查詢失敗，請確認後再試";
+            MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            UpdateIssueEnabled();
+        }
     }
 
     private void BuyerEditorChanged(bool clearApiName)
@@ -396,7 +459,6 @@ internal sealed class ImportConfirmationForm : Form
         }
         catch (Exception)
         {
-            // 診斷紀錄失敗不可遮蔽原始匯入錯誤。
         }
     }
 
@@ -823,6 +885,7 @@ internal sealed class ImportConfirmationForm : Form
     private void LoadBuyerEditor()
     {
         var entry = ActiveEntry();
+        buyerLookupGeneration++;
         loadingBuyerEditor = true;
         try
         {

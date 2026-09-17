@@ -85,7 +85,6 @@ public sealed class InvoiceService
         }
         catch (AmegoApiException error) when (error.Code == 99)
         {
-            // A business validation reply proves the signed endpoint is reachable.
             return string.Empty;
         }
         catch (Exception error)
@@ -608,8 +607,6 @@ public sealed class InvoiceService
                 Exception? queryError;
                 try
                 {
-                    // The issue token may already be cancelled by the request timeout. Recovery must
-                    // still perform one bounded read-only query before declaring the result unknown.
                     using var recoveryTimeout = new CancellationTokenSource(RecoveryQueryTimeout);
                     query = await gateway.QueryByOrderIdAsync(apiOrderId, recoveryTimeout.Token).ConfigureAwait(false);
                     VerifyQueryResult(record, draft, query.Data, string.Empty);
@@ -783,6 +780,7 @@ public sealed class InvoiceService
         {
             Description = options.TestPrivacy ? $"測試商品 {index + 1}" : item.Description,
             Quantity = NumericValue(item.QuantityDecimal, item.Quantity),
+            Unit = item.Unit.Trim(),
             UnitPrice = NumericValue(item.UnitPriceDecimal, item.UnitPrice),
             Amount = NumericValue(item.AmountDecimal, item.Amount),
             Remark = options.TestPrivacy ? string.Empty : item.Remark,
