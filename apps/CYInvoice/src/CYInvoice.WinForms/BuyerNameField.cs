@@ -7,7 +7,8 @@ internal sealed class BuyerNameField : TextBox
 {
     private const int EmSetMargins = 0x00D3;
     private const int EcRightMargin = 0x0002;
-    private const int RetryWidth = 28;
+    private const int RetryWidth = 22;
+    private const int RetryInset = 2;
     private readonly Button retry = new NoFocusCueButton
     {
         Text = "↻",
@@ -17,6 +18,7 @@ internal sealed class BuyerNameField : TextBox
         Margin = Padding.Empty,
         Padding = Padding.Empty,
         UseVisualStyleBackColor = false,
+        Font = new Font("Segoe UI Symbol", 11F, FontStyle.Bold),
     };
     private readonly ToolTip toolTip = new();
     private TextBox? buyerBan;
@@ -71,6 +73,8 @@ internal sealed class BuyerNameField : TextBox
         lookupEnabled = enabled;
         resolveName = resolver;
         lifetimeToken = cancellationToken;
+        AlignInputField(buyerBan);
+        AlignInputField(this);
         buyerBan.TextChanged += BuyerBanTextChanged;
     }
 
@@ -208,15 +212,25 @@ internal sealed class BuyerNameField : TextBox
     private void LayoutRetryButton()
     {
         if (ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
-        var height = Math.Max(18, ClientSize.Height - 2);
-        retry.SetBounds(Math.Max(0, ClientSize.Width - RetryWidth - 1), 1, RetryWidth, height);
+        var height = Math.Max(16, ClientSize.Height - (RetryInset * 2));
+        retry.SetBounds(
+            Math.Max(RetryInset, ClientSize.Width - RetryWidth - RetryInset),
+            RetryInset,
+            RetryWidth,
+            height);
     }
 
     private void ApplyTextMargin()
     {
         if (!IsHandleCreated) return;
-        var rightMargin = retry.Visible ? RetryWidth + 3 : 1;
+        var rightMargin = retry.Visible ? RetryWidth + RetryInset + 4 : 1;
         SendMessage(Handle, EmSetMargins, new IntPtr(EcRightMargin), new IntPtr(rightMargin << 16));
+    }
+
+    private static void AlignInputField(TextBox field)
+    {
+        field.Dock = DockStyle.None;
+        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
     }
 
     private static bool IsValidBan(string value) => value.Length == 8 && value.All(char.IsAsciiDigit);
