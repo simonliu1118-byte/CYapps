@@ -29,6 +29,8 @@ internal sealed class BuyerNameField : UserControl
         Padding = new Padding(4, 3, 0, 2);
         BorderStyle = BorderStyle.FixedSingle;
         BackColor = Color.White;
+        AutoSize = false;
+        Height = PreferredFieldHeight();
 
         editor.Dock = DockStyle.Fill;
         editor.Margin = Padding.Empty;
@@ -52,6 +54,12 @@ internal sealed class BuyerNameField : UserControl
     public string ApiName => apiName;
     public bool HasApiMismatch => apiName.Length != 0 && !string.Equals(editor.Text.Trim(), apiName, StringComparison.Ordinal);
     public event EventHandler? RetryRequested;
+
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var width = proposedSize.Width > 0 ? proposedSize.Width : 120;
+        return new Size(width, PreferredFieldHeight());
+    }
 
     public void SetLookupState(NameLookup lookup)
     {
@@ -77,15 +85,7 @@ internal sealed class BuyerNameField : UserControl
         UpdateState();
     }
 
-    protected override void OnLayout(LayoutEventArgs eventArgs)
-    {
-        base.OnLayout(eventArgs);
-        if (Parent is not TableLayoutPanel parent) return;
-        var controls = parent.Controls.Cast<Control>().Select(control =>
-            $"{control.GetType().Name}:{control.Text}:{control.Bounds}:pref={control.GetPreferredSize(Size.Empty)}");
-        Console.WriteLine(
-            $"BUYER_LAYOUT field={Bounds};fieldClient={ClientSize};editor={editor.Bounds};editorPrefH={editor.PreferredHeight};parentClient={parent.ClientSize};controls=[{string.Join("|", controls)}]");
-    }
+    private int PreferredFieldHeight() => editor.PreferredHeight + Padding.Vertical + 2;
 
     private void UpdateState()
     {
