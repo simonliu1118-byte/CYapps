@@ -78,7 +78,7 @@ internal sealed class RecordDetailForm : Form
     {
         AutoSize = true,
         Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
+        TextAlign = ContentAlignment.TopLeft,
         ForeColor = SystemColors.ControlText,
         BackColor = SystemColors.Control,
         Margin = Padding.Empty,
@@ -122,7 +122,7 @@ internal sealed class RecordDetailForm : Form
         AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
         if (paperInvoice)
         {
-            AddDetail("發票印表機", string.Empty, printerStatus, topAlignLabel: true);
+            AddDetail("發票印表機", string.Empty, printerStatus);
             UpdatePrinterStatus();
         }
 
@@ -571,11 +571,11 @@ internal sealed class RecordDetailForm : Form
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
     }
 
-    private void AddDetail(string label, string value, Label? target = null, bool singleLine = false, bool topAlignLabel = false)
+    private void AddDetail(string label, string value, Label? target = null, bool singleLine = false)
     {
         var row = details.RowCount++;
         details.RowStyles.Add(singleLine ? new RowStyle(SizeType.Absolute, 31) : new RowStyle(SizeType.AutoSize));
-        details.Controls.Add(FieldLabel(label, topAlignLabel), 0, row);
+        details.Controls.Add(FieldLabel(label), 0, row);
         var text = target ?? ValueLabel(value, singleLine);
         if (target is not null) text.Text = value;
         details.Controls.Add(text, 1, row);
@@ -745,15 +745,15 @@ internal sealed class RecordDetailForm : Form
             throw new InvalidOperationException("紙本詳細資訊初始狀態不應處於 PDF 忙碌狀態");
     }
 
-    private static Label FieldLabel(string text, bool topAlign = false) => new()
+    private static Label FieldLabel(string text) => new()
     {
         Text = text,
         Dock = DockStyle.Fill,
-        TextAlign = topAlign ? ContentAlignment.TopLeft : ContentAlignment.MiddleLeft,
+        TextAlign = ContentAlignment.TopLeft,
         ForeColor = Color.DimGray,
         BackColor = SystemColors.Control,
         Margin = Padding.Empty,
-        Padding = new Padding(0, topAlign ? 7 : 5, 4, 5),
+        Padding = new Padding(0, 5, 4, 5),
         MinimumSize = new Size(0, 30),
         AutoEllipsis = true,
     };
@@ -763,7 +763,7 @@ internal sealed class RecordDetailForm : Form
         Text = value,
         AutoSize = !singleLine,
         Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
+        TextAlign = singleLine ? ContentAlignment.MiddleLeft : ContentAlignment.TopLeft,
         ForeColor = SystemColors.ControlText,
         BackColor = SystemColors.Control,
         Margin = Padding.Empty,

@@ -40,13 +40,14 @@ internal static class CarrierInvoicePreview
             graphics.FillRectangle(paperBrush, paper.Right - sideWidth, y, sideWidth, 14);
         }
 
-        using var noticeFont = new Font("Microsoft JhengHei UI", 13F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var titleFont = new Font("Microsoft JhengHei UI", 37F, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var subtitleFont = new Font("Microsoft JhengHei UI", 24F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var periodFont = new Font("Microsoft JhengHei UI", 31F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var numberFont = new Font("Microsoft JhengHei UI", 39F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var noticeFont = new Font("Microsoft JhengHei UI", 16F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var titleFont = new Font("Microsoft JhengHei UI", 40F, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var subtitleFont = new Font("Microsoft JhengHei UI", 27F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var periodFont = new Font("Microsoft JhengHei UI", 34F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var numberFont = new Font("Microsoft JhengHei UI", 42F, FontStyle.Regular, GraphicsUnit.Pixel);
         using var bodyFont = new Font("Microsoft JhengHei UI", 20F, FontStyle.Regular, GraphicsUnit.Pixel);
         using var smallFont = new Font("Microsoft JhengHei UI", 15F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var footerFont = new Font("Microsoft JhengHei UI", 14F, FontStyle.Regular, GraphicsUnit.Pixel);
 
         var contentLeft = paper.Left + sideWidth + 22;
         var contentWidth = paper.Width - sideWidth * 2 - 44;
@@ -70,6 +71,7 @@ internal static class CarrierInvoicePreview
         var qrTop = paper.Top + 552;
         DrawQr(graphics, new Rectangle(contentLeft + 18, qrTop, qrSize, qrSize));
         DrawQr(graphics, new Rectangle(contentLeft + contentWidth - 18 - qrSize, qrTop, qrSize, qrSize));
+        DrawCentered(graphics, "模擬畫面僅供參考", footerFont, grayBrush, contentLeft, paper.Bottom - 42, contentWidth, 24);
         return image;
     }
 
