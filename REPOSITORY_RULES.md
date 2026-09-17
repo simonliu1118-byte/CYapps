@@ -62,6 +62,22 @@
 - 任何可能公開的程式不得依賴寫死在原始碼中的固定管理密碼、清除密碼或其他秘密；應使用安全的本機設定、雜湊或作業系統安全儲存。
 - `.gitignore` 只能防止未來誤提交，不能視為已清除歷史。秘密一旦進入 Git，必須另做 history cleanup／rotation／風險處理。
 
+### 5.1 Binary asset source integrity 與衍生資源 SOP
+
+本節適用於會影響產品輸出的必要二進位資源，例如 PNG／JPG／WAV／ICO、字型、韌體映像或其他專案核准納入 Git 的 binary source。若個別專案禁止某類 binary 進 Git，仍以該專案 `PROJECT_RULES.md` 為準。
+
+- 正式採用 binary asset 前，必須先確認 intended source 與 canonical repository path；至少記錄或可重建其 byte size 與 SHA-256。圖片另應確認 dimensions；其他格式依專案需要記錄可驗證屬性。
+- 需要人工判斷的視覺／聲音素材，先完成 intended source 的人工目視／試聽確認，再進行轉檔、縮放、ICO 生成或其他衍生處理；CI 不得把「檔案可解析」冒充成「內容已被使用者接受」。
+- Base64、chunk、hex dump 或其他文字化表示只能作為傳輸手段。除非 `PROJECT_RULES.md` 明確把該格式本身定義為正式 source，repository 最終必須保存真正可直接使用的 binary 檔，不得把傳輸用 `.b64`／chunk 當成永久素材來源。
+- Binary asset 寫入 Git 後，必須從 repository read-back，再核對 byte size／SHA-256 與 intended source 完全一致；只看到正確檔名、GitHub preview、圖片外觀或上傳成功訊息，不足以視為 source gate 通過。
+- 任何 SHA-256／size 不一致、來源不明或 read-back 失敗的 binary asset，不得進入正式 build／package／Release；先修正 source 再繼續，不得用重新產生近似素材來掩蓋來源差異。
+- ICO、縮圖、resized image、resource blob 等 derived resource 原則上只能在 source gate 通過後產生；能自動產生者應優先由可重現的 script／build pipeline 建立，避免把不可追溯的手工轉檔當成唯一來源。
+- Windows icon/resource 若有專案要求的 native sizes、bit depth 或 container 結構，CI 應直接檢查該衍生檔的實際 entries；不得只檢查副檔名或單一 preview。
+- 對 self-contained／single-file EXE，icon/resource 應優先透過正式 compiler／resource build pipeline 嵌入。不得把可能截斷、覆寫或破壞附加 payload 的 post-publish binary resource patch 當成一般做法；若專案確有不可避免的 post-processing，必須有明確專案例外與完整 binary integrity 驗證。
+- 最終 Windows binary 應依風險加入合理驗證，例如 expected-size lower bound、PE/resource 可解析性、OS associated icon extraction、dependency／manifest 檢查與 startup smoke；這些檢查要驗證**最終產物**，不能只驗證中間 source。
+- Explorer、taskbar、window icon、shell cache 或 DPI 顯示等受真實 Windows UI／cache 影響的項目，CI 不能完全取代實機目視；專案需要時仍保留 real-machine acceptance。
+- Binary asset 的新增、替換或 manifest/hash 變更若會影響產品輸出，應納入相關 CI 的 path trigger／驗證範圍；不得因素材不是 source code 就繞過必要 build/package gate。
+
 ## 6. 版本號、Build 與版本來源
 
 - 每個可發行專案根目錄必須有 `VERSION`，內容只放基礎版本 `X.Y.Z`，作為程式、CI、封裝與 Release 的版本來源。
