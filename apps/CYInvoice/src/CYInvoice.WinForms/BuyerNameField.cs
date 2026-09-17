@@ -8,16 +8,13 @@ internal sealed class BuyerNameField : TextBox
     private const int EmSetMargins = 0x00D3;
     private const int EcRightMargin = 0x0002;
     private const int RetryWidth = 22;
-    private const int RetryInset = 2;
-    private readonly Button retry = new NoFocusCueButton
+    private const int RetryInset = 3;
+    private readonly RetryGlyph retry = new()
     {
-        Text = "↻",
-        TabStop = false,
-        FlatStyle = FlatStyle.Flat,
         Visible = false,
+        TabStop = false,
+        Cursor = Cursors.Hand,
         Margin = Padding.Empty,
-        Padding = Padding.Empty,
-        UseVisualStyleBackColor = false,
         Font = new Font("Segoe UI Symbol", 11F, FontStyle.Bold),
     };
     private readonly ToolTip toolTip = new();
@@ -39,12 +36,6 @@ internal sealed class BuyerNameField : TextBox
         Margin = new Padding(3, 5, 3, 5);
         BorderStyle = BorderStyle.FixedSingle;
 
-        retry.FlatAppearance.BorderSize = 1;
-        retry.FlatAppearance.BorderColor = Color.FromArgb(125, 125, 125);
-        retry.ForeColor = Color.FromArgb(45, 45, 45);
-        retry.BackColor = Color.FromArgb(248, 248, 248);
-        retry.FlatAppearance.MouseOverBackColor = Color.FromArgb(232, 243, 252);
-        retry.FlatAppearance.MouseDownBackColor = Color.FromArgb(214, 234, 249);
         toolTip.SetToolTip(retry, "重新查詢買受人名稱");
         retry.Click += async (_, _) => await LookupAsync(forceApi: true);
         Controls.Add(retry);
@@ -73,8 +64,6 @@ internal sealed class BuyerNameField : TextBox
         lookupEnabled = enabled;
         resolveName = resolver;
         lifetimeToken = cancellationToken;
-        AlignInputField(buyerBan);
-        AlignInputField(this);
         buyerBan.TextChanged += BuyerBanTextChanged;
     }
 
@@ -127,6 +116,7 @@ internal sealed class BuyerNameField : TextBox
             activeLookup?.Cancel();
             activeLookup?.Dispose();
             toolTip.Dispose();
+            retry.Font.Dispose();
         }
         base.Dispose(disposing);
     }
@@ -205,7 +195,7 @@ internal sealed class BuyerNameField : TextBox
             ApplyTextMargin();
         }
         retry.Enabled = !locked;
-        retry.BackColor = locked ? BackColor : Color.FromArgb(248, 248, 248);
+        retry.BaseBackColor = locked ? BackColor : Color.FromArgb(248, 248, 248);
         if (showRetry) retry.BringToFront();
     }
 
@@ -223,18 +213,89 @@ internal sealed class BuyerNameField : TextBox
     private void ApplyTextMargin()
     {
         if (!IsHandleCreated) return;
-        var rightMargin = retry.Visible ? RetryWidth + RetryInset + 4 : 1;
+        var rightMargin = retry.Visible ? RetryWidth + RetryInset + 5 : 1;
         SendMessage(Handle, EmSetMargins, new IntPtr(EcRightMargin), new IntPtr(rightMargin << 16));
-    }
-
-    private static void AlignInputField(TextBox field)
-    {
-        field.Dock = DockStyle.None;
-        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
     }
 
     private static bool IsValidBan(string value) => value.Length == 8 && value.All(char.IsAsciiDigit);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    private sealed class RetryGlyph : Control
+    {
+        private bool hot;
+        private bool pressed;
+        private Color baseBackColor = Color.FromArgb(248, 248, 248);
+
+        public RetryGlyph()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            Cursor = Cursors.Hand;
+            TabStop = false;
+        }
+
+        public Color BaseBackColor
+        {
+            get => baseBackColor;
+            set
+            {
+                if (baseBackColor == value) return;
+                baseBackColor = value;
+                Invalidate();
+            }
+        }
+
+        protected override void OnMouseEnter(EventArgs eventArgs)
+        {
+            hot = true;
+            Invalidate();
+            base.OnMouseEnter(eventArgs);
+        }
+
+        protected override void OnMouseLeave(EventArgs eventArgs)
+        {
+            hot = false;
+            pressed = false;
+            Invalidate();
+            base.OnMouseLeave(eventArgs);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs eventArgs)
+        {
+            if (eventArgs.Button == MouseButtons.Left)
+            {
+                pressed = true;
+                Invalidate();
+            }
+            base.OnMouseDown(eventArgs);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs eventArgs)
+        {
+            pressed = false;
+            Invalidate();
+            base.OnMouseUp(eventArgs);
+        }
+
+        protected override void OnPaint(PaintEventArgs eventArgs)
+        {
+            var background = pressed
+                ? Color.FromArgb(214, 234, 249)
+                : hot ? Color.FromArgb(232, 243, 252) : baseBackColor;
+            using var brush = new SolidBrush(background);
+            eventArgs.Graphics.FillRectangle(brush, ClientRectangle);
+            using var pen = new Pen(Color.FromArgb(125, 125, 125));
+            eventArgs.Graphics.DrawRectangle(pen, 0, 0, Math.Max(0, Width - 1), Math.Max(0, Height - 1));
+
+            var textBounds = new Rectangle(1, 0, Math.Max(0, Width - 2), Height);
+            TextRenderer.DrawText(
+                eventArgs.Graphics,
+                "↻",
+                Font,
+                textBounds,
+                Enabled ? Color.FromArgb(45, 45, 45) : SystemColors.GrayText,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+        }
+    }
 }
