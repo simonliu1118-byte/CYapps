@@ -195,7 +195,7 @@ internal sealed class BuyerNameField : TextBox
             ApplyTextMargin();
         }
         retry.Enabled = !locked;
-        retry.BaseBackColor = locked ? BackColor : Color.FromArgb(248, 248, 248);
+        retry.SetBaseBackColor(locked ? BackColor : Color.FromArgb(248, 248, 248));
         if (showRetry) retry.BringToFront();
     }
 
@@ -235,15 +235,11 @@ internal sealed class BuyerNameField : TextBox
             TabStop = false;
         }
 
-        public Color BaseBackColor
+        public void SetBaseBackColor(Color value)
         {
-            get => baseBackColor;
-            set
-            {
-                if (baseBackColor == value) return;
-                baseBackColor = value;
-                Invalidate();
-            }
+            if (baseBackColor == value) return;
+            baseBackColor = value;
+            Invalidate();
         }
 
         protected override void OnMouseEnter(EventArgs eventArgs)
