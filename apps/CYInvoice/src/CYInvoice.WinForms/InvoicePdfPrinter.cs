@@ -9,8 +9,7 @@ internal static class InvoicePdfPrinter
 {
     private const double A4WidthInches = 8.26772D;
     private const double A4HeightInches = 11.69291D;
-    private const double A5WidthInches = 5.82677D;
-    private const double A5HeightInches = 8.26772D;
+    private const double A5ShortSideInches = 5.82677D;
 
     public static IReadOnlyList<string> InstalledPrinters()
     {
@@ -53,6 +52,8 @@ internal static class InvoicePdfPrinter
     {
         if (!IsInstalled(printerName))
             throw new InvalidOperationException("先前設定的發票印表機已不存在，請重新選擇印表機。");
+        if (consumerPaper && !CanDuplex(printerName))
+            throw new InvalidOperationException("一般消費者紙本直接列印只能使用支援雙面的印表機。請更換印表機，或改用「檢視 PDF」手動列印。");
         if (!File.Exists(document.Path))
             throw new FileNotFoundException("找不到要列印的官方發票 PDF。", document.Path);
 
@@ -82,15 +83,16 @@ internal static class InvoicePdfPrinter
 
             var settings = webView.CoreWebView2.Environment.CreatePrintSettings();
             settings.PrinterName = printerName;
-            settings.Orientation = CoreWebView2PrintOrientation.Portrait;
             settings.MediaSize = CoreWebView2PrintMediaSize.Custom;
             if (document.Style.Code == InvoicePdfStyles.A5.Code)
             {
-                settings.PageWidth = A5WidthInches;
-                settings.PageHeight = A5HeightInches;
+                settings.Orientation = CoreWebView2PrintOrientation.Landscape;
+                settings.PageWidth = A4WidthInches;
+                settings.PageHeight = A5ShortSideInches;
             }
             else
             {
+                settings.Orientation = CoreWebView2PrintOrientation.Portrait;
                 settings.PageWidth = A4WidthInches;
                 settings.PageHeight = A4HeightInches;
             }
@@ -103,7 +105,7 @@ internal static class InvoicePdfPrinter
             settings.ShouldPrintBackgrounds = true;
             settings.ShouldPrintHeaderAndFooter = false;
             settings.Duplex = consumerPaper
-                ? (CanDuplex(printerName) ? CoreWebView2PrintDuplex.TwoSidedLongEdge : CoreWebView2PrintDuplex.OneSided)
+                ? CoreWebView2PrintDuplex.TwoSidedLongEdge
                 : CoreWebView2PrintDuplex.Default;
 
             var result = await webView.CoreWebView2.PrintAsync(settings);

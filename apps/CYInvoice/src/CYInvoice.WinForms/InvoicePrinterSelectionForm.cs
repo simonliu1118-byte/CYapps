@@ -6,14 +6,7 @@ internal sealed class InvoicePrinterSelectionForm : Form
     {
         Dock = DockStyle.Fill,
         DropDownStyle = ComboBoxStyle.DropDownList,
-        Margin = new Padding(3, 5, 3, 5),
-    };
-    private readonly Label capability = new()
-    {
-        Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = Color.DimGray,
-        Margin = new Padding(3),
+        Margin = new Padding(0, 4, 0, 4),
     };
     private readonly Button usePrinter = UiControls.StandardButton("使用此印表機");
     private readonly Button cancel = UiControls.StandardButton("取消");
@@ -22,7 +15,7 @@ internal sealed class InvoicePrinterSelectionForm : Form
     {
         Text = "選擇發票印表機";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 210);
+        ClientSize = new Size(340, 175);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -35,22 +28,29 @@ internal sealed class InvoicePrinterSelectionForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 4,
-            Padding = new Padding(18, 14, 18, 12),
+            Padding = new Padding(16, 12, 16, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(new Label
         {
-            Text = "選擇 CYInvoice 專用的發票印表機",
+            Text = "選擇 CYInvoice 發票印表機",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font(Font, FontStyle.Bold),
             Margin = Padding.Empty,
         }, 0, 0);
         root.Controls.Add(printers, 0, 1);
-        root.Controls.Add(capability, 0, 2);
+        root.Controls.Add(new Label
+        {
+            Text = "只能選擇支援雙面的印表機",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = Color.DimGray,
+            Margin = Padding.Empty,
+        }, 0, 2);
 
         var actions = new FlowLayoutPanel
         {
@@ -75,42 +75,25 @@ internal sealed class InvoicePrinterSelectionForm : Form
         AcceptButton = usePrinter;
         CancelButton = cancel;
 
-        foreach (var printer in InvoicePdfPrinter.InstalledPrinters()) printers.Items.Add(printer);
-        if (printers.Items.Count == 0)
+        foreach (var printer in InvoicePdfPrinter.InstalledPrinters().Where(InvoicePdfPrinter.CanDuplex))
+            printers.Items.Add(printer);
+
+        var selectedIndex = -1;
+        for (var index = 0; index < printers.Items.Count; index++)
         {
-            capability.Text = "Windows 目前沒有可用的已安裝印表機。";
-            usePrinter.Enabled = false;
-        }
-        else
-        {
-            var selectedIndex = -1;
-            for (var index = 0; index < printers.Items.Count; index++)
+            if (string.Equals(printers.Items[index]?.ToString(), currentPrinter, StringComparison.OrdinalIgnoreCase))
             {
-                if (string.Equals(printers.Items[index]?.ToString(), currentPrinter, StringComparison.OrdinalIgnoreCase))
-                {
-                    selectedIndex = index;
-                    break;
-                }
+                selectedIndex = index;
+                break;
             }
-            printers.SelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
-            UpdateCapability();
         }
-        printers.SelectedIndexChanged += (_, _) => UpdateCapability();
+        if (printers.Items.Count > 0)
+            printers.SelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
+        else
+            usePrinter.Enabled = false;
     }
 
     public string SelectedPrinterName { get; private set; } = string.Empty;
-
-    private void UpdateCapability()
-    {
-        if (printers.SelectedItem is not string selected || selected.Length == 0)
-        {
-            capability.Text = "請選擇印表機。";
-            return;
-        }
-        capability.Text = InvoicePdfPrinter.CanDuplex(selected)
-            ? "此印表機支援雙面；一般消費者紙本將使用雙面、長邊翻轉。"
-            : "此印表機未回報雙面能力；一般消費者紙本將使用單面。";
-    }
 
     protected override void Dispose(bool disposing)
     {
