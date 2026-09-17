@@ -465,7 +465,7 @@ static async Task TestIssueOpensAndBlocksResendAsync()
     Equal("AB12345678", result.Record.InvoiceNumber);
     Equal(1, fake.IssueCalls);
     Equal("0000000000", fake.LastIssue!.BuyerIdentifier);
-    Equal("消費者", fake.LastIssue.BuyerName);
+    Equal("測試消費者", fake.LastIssue.BuyerName);
     Equal(105L, Convert.ToInt64(fake.LastIssue.SalesAmount));
     Equal(0L, Convert.ToInt64(fake.LastIssue.TaxAmount));
     await ThrowsAsync<InvalidOperationException>(() => service.IssueManualAsync(SafeDraft()));
