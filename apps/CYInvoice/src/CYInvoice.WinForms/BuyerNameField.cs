@@ -25,7 +25,7 @@ internal sealed class BuyerNameField : UserControl
     {
         this.editor = editor;
         Dock = DockStyle.Fill;
-        Margin = new Padding(3, 5, 3, 5);
+        Margin = new Padding(3);
         Padding = new Padding(4, 3, 0, 2);
         BorderStyle = BorderStyle.FixedSingle;
         BackColor = Color.White;
