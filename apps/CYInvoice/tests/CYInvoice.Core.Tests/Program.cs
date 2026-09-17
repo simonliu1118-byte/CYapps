@@ -3,6 +3,7 @@ using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Imports;
 using CYInvoice.Core.Imports.Coupang;
+using CYInvoice.Core.Imports.Digiwin;
 using CYInvoice.Core.Imports.Mo;
 using CYInvoice.Core.Storage;
 using System.IO.Compression;
@@ -34,17 +35,17 @@ var tests = new (string Name, Action Run)[]
         Equal("12,345.6700000", MoneyFormatter.Decimal("12345.6700000"));
         Equal("not-a-number", MoneyFormatter.Decimal("not-a-number"));
     }),
-    ("manual order ID continues today's sequence", () =>
+    ("manual order ID uses M prefix and continues today's sequence", () =>
     {
         var now = new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.FromHours(8));
         var records = new[]
         {
-            new InvoiceRecord { OrderId = "20260913001" },
-            new InvoiceRecord { OrderId = "20260913007" },
-            new InvoiceRecord { OrderId = "20260912099" },
-            new InvoiceRecord { OrderId = "20260913ABC" },
+            new InvoiceRecord { OrderId = "M20260913001" },
+            new InvoiceRecord { OrderId = "M20260913007" },
+            new InvoiceRecord { OrderId = "20260913099" },
+            new InvoiceRecord { OrderId = "M20260913ABC" },
         };
-        Equal("20260913008", ManualOrderId.Next(now, records));
+        Equal("M20260913008", ManualOrderId.Next(now, records));
     }),
     ("invoice total validation", () =>
     {
@@ -99,6 +100,7 @@ var tests = new (string Name, Action Run)[]
     ("voided order reissue uses a new API order ID", () => TestVoidedReissueAsync().GetAwaiter().GetResult()),
     ("remote success and local save failure remain opened", () => TestRemoteSuccessLocalFailureAsync().GetAwaiter().GetResult()),
     ("successful manual company invoice remembers confirmed name", () => TestCompanyNameMemoryAsync().GetAwaiter().GetResult()),
+    ("successful manual company correction overwrites local name", () => TestLocalCompanyNameCorrectionAsync().GetAwaiter().GetResult()),
     ("refresh confirms unknown invoice before remembering name", () => TestRefreshUnknownAsync().GetAwaiter().GetResult()),
     ("refresh matches upload status by exact invoice number", () => TestUploadStatusMatchingAsync().GetAwaiter().GetResult()),
     ("refresh rejects unmatched upload status", () => TestUploadStatusMismatchAsync().GetAwaiter().GetResult()),
@@ -108,10 +110,14 @@ var tests = new (string Name, Action Run)[]
     ("success without invoice number is unknown", () => TestMissingInvoiceNumberAsync().GetAwaiter().GetResult()),
     ("production stays locked before administrator setup", () => TestProductionLockAsync().GetAwaiter().GetResult()),
     ("xlsx resolves the first logical worksheet", TestXlsxRelationship),
+    ("xlsx reads an exact named worksheet", TestXlsxNamedWorksheet),
     ("xlsx column references continue after Z", TestXlsxColumns),
     ("Excel display artifacts fall back to stable raw values", TestSpreadsheetCellValues),
     ("Coupang import uses headers and groups order items", TestCoupangGrouping),
     ("Coupang import keeps seven-place fractional unit price", TestCoupangFractionalUnitPrice),
+    ("Digiwin import preserves negative detail and original company reference", TestDigiwinNegativeDiscount),
+    ("Digiwin consumer clears source buyer name", TestDigiwinConsumerClearsBuyerName),
+    ("Digiwin import rejects detail total mismatch", TestDigiwinTotalMismatch),
     ("MO converted workbook is rejected at the import boundary", TestMoConvertedRejected),
     ("MO raw export uses official invoice amounts", TestMoRawOfficialAmounts),
     ("MO official amounts reject scientific notation", TestMoScientificAmountRejected),
@@ -119,7 +125,7 @@ var tests = new (string Name, Action Run)[]
     ("MO raw export adds subsidy only when total requires it", TestMoRawConditionalSubsidy),
     ("MO raw export preserves specifications and member carrier", TestMoRawSpecifications),
     ("MO issue masks shared test-pool customer data", () => TestMoIssuePrivacyAsync().GetAwaiter().GetResult()),
-    ("Coupang confirmation is reused without second BAN lookup", () => TestCoupangIssuePrivacyAsync().GetAwaiter().GetResult()),
+    ("Coupang confirmation is reused and company test privacy uses AMEGO buyer", () => TestCoupangIssuePrivacyAsync().GetAwaiter().GetResult()),
     ("unresolved imported company name blocks before API", () => TestImportedLookupBlockAsync().GetAwaiter().GetResult()),
     ("consumer PDF uses style zero and same-day cache", () => TestConsumerPdfCacheAsync().GetAwaiter().GetResult()),
     ("company PDF caches each style and refreshes next day", () => TestCompanyPdfStylesAsync().GetAwaiter().GetResult()),
@@ -660,6 +666,23 @@ static async Task TestCompanyNameMemoryAsync()
     Equal("人工醫院名稱", name);
 }
 
+static async Task TestLocalCompanyNameCorrectionAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway
+    {
+        IssueResponse = new IssueResponse(0, "", "MP12345678", 0, ""),
+        QueryResponse = ConfirmedQuery("20260905006", "MP12345678", 100, 5, 105, 1),
+    };
+    var (service, repository) = TestService(temporary.Path, fake);
+    repository.BuyerNames.RememberAfterSuccessfulInvoice("12345675", true, "", "舊名稱", true);
+    var draft = CompanyDraft("20260905006", "新名稱");
+    var result = await service.IssueManualWithLookupAsync(draft, new NameLookup("舊名稱", Local: true));
+    Equal(true, result.Opened);
+    Equal(true, repository.BuyerNames.TryLookup("12345675", out var name));
+    Equal("新名稱", name);
+}
+
 static async Task TestRefreshUnknownAsync()
 {
     using var temporary = new TemporaryDirectory();
@@ -858,6 +881,24 @@ static void TestXlsxRelationship()
     Equal("RIGHT", rows[0][0]);
 }
 
+static void TestXlsxNamedWorksheet()
+{
+    using var temporary = new TemporaryDirectory();
+    var path = System.IO.Path.Combine(temporary.Path, "named.xlsx");
+    using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+    {
+        WriteZipPart(archive, "xl/workbook.xml", """
+            <?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="單頭資料" sheetId="1" r:id="rId1"/><sheet name="單身資料" sheetId="2" r:id="rId2"/></sheets></workbook>
+            """);
+        WriteZipPart(archive, "xl/_rels/workbook.xml.rels", """
+            <?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="worksheet" Target="worksheets/head.xml"/><Relationship Id="rId2" Type="worksheet" Target="worksheets/detail.xml"/></Relationships>
+            """);
+        WriteZipPart(archive, "xl/worksheets/head.xml", Worksheet("HEAD"));
+        WriteZipPart(archive, "xl/worksheets/detail.xml", Worksheet("DETAIL"));
+    }
+    Equal("DETAIL", XlsxRows.ReadWorksheet(path, "單身資料")[0][0]);
+}
+
 static void TestCoupangGrouping()
 {
     IReadOnlyList<IReadOnlyList<string>> rows =
@@ -884,6 +925,66 @@ static void TestCoupangFractionalUnitPrice()
     Equal("33.3333333", item.UnitPriceDecimal);
     Equal("100", item.AmountDecimal);
     Equal(true, item.AllowSubtotalRounding);
+}
+
+static void TestDigiwinNegativeDiscount()
+{
+    IReadOnlyList<IReadOnlyList<string>> head =
+    [
+        ["銷貨單建立作業"],
+        [],
+        ["銷貨單號", "客戶全名", "統一編號", "本幣合計"],
+        ["20260917005", "原始公司名稱", "12345675", "580"],
+    ];
+    IReadOnlyList<IReadOnlyList<string>> detail =
+    [
+        ["序號"],
+        [],
+        ["品名", "數量", "金額"],
+        ["商品", "2", "600"],
+        ["活動折讓", "3", "-20"],
+    ];
+    var order = DigiwinImporter.ParseRows(head, detail);
+    Equal("20260917005", order.OrderId);
+    Equal("12345675", order.BuyerBan);
+    Equal("原始公司名稱", order.OriginalBuyerName);
+    Equal(580L, order.TotalAmount);
+    Equal(-20L, order.Items[1].Amount);
+    Equal("-6.6666667", order.Items[1].UnitPriceDecimal);
+    Equal(true, order.Items[1].AllowSubtotalRounding);
+}
+
+static void TestDigiwinConsumerClearsBuyerName()
+{
+    IReadOnlyList<IReadOnlyList<string>> head =
+    [
+        ["銷貨單號", "客戶全名", "統一編號", "本幣合計"],
+        ["20260917006", "鼎新一定有的客戶名稱", "", "100"],
+    ];
+    IReadOnlyList<IReadOnlyList<string>> detail =
+    [
+        ["品名", "數量", "金額"],
+        ["商品", "1", "100"],
+    ];
+    var order = DigiwinImporter.ParseRows(head, detail);
+    Equal(string.Empty, order.BuyerBan);
+    Equal(string.Empty, order.BuyerName);
+    Equal("鼎新一定有的客戶名稱", order.OriginalBuyerName);
+}
+
+static void TestDigiwinTotalMismatch()
+{
+    IReadOnlyList<IReadOnlyList<string>> head =
+    [
+        ["銷貨單號", "客戶全名", "統一編號", "本幣合計"],
+        ["20260917007", "一般消費者", "", "100"],
+    ];
+    IReadOnlyList<IReadOnlyList<string>> detail =
+    [
+        ["品名", "數量", "金額"],
+        ["商品", "1", "99"],
+    ];
+    Throws<InvalidDataException>(() => DigiwinImporter.ParseRows(head, detail));
 }
 
 static void TestMoConvertedRejected()
@@ -1032,9 +1133,10 @@ static async Task TestCoupangIssuePrivacyAsync()
     };
     order.Items.Add(new InvoiceItem { Description = "真實酷澎商品", Quantity = 1, UnitPrice = 105, Amount = 105, Remark = "真實備註" });
     var result = await service.IssueCoupangWithLookupAsync(order, new NameLookup(LookupSucceeded: true));
-    Equal(0, fake.BanCalls);
+    Equal(1, fake.BanCalls);
+    Equal("28080623", fake.LastBanQuery.Single());
     Equal("28080623", fake.LastIssue!.BuyerIdentifier);
-    Equal("測試消費者", fake.LastIssue.BuyerName);
+    Equal("光貿測試買受人", fake.LastIssue.BuyerName);
     Equal("測試商品 1", fake.LastIssue.ProductItems[0].Description);
     Equal("12345675", result.Record.BuyerIdentifier);
     Equal("人工醫院名稱", result.Record.BuyerName);
@@ -1292,7 +1394,7 @@ sealed class FakeGateway : IAmegoGateway
     public Exception? IssueException { get; set; }
     public QueryResponse QueryResponse { get; set; } = null!;
     public Exception? QueryException { get; set; }
-    public BanResponse BanResponse { get; set; } = new(0, "", []);
+    public BanResponse BanResponse { get; set; } = new(0, "", [new BanResult("28080623", "光貿測試買受人")]);
     public Exception? BanException { get; set; }
     public StatusResponse StatusResponse { get; set; } = new(0, "", []);
     public Exception? StatusException { get; set; }

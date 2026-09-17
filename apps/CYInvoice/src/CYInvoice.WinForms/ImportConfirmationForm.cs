@@ -1,5 +1,6 @@
 using CYInvoice.Core;
 using CYInvoice.Core.Imports.Coupang;
+using CYInvoice.Core.Imports.Digiwin;
 using CYInvoice.Core.Imports.Mo;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
@@ -11,12 +12,15 @@ internal sealed class ImportConfirmationForm : Form
     private sealed class Entry
     {
         public required string OrderId { get; init; }
-        public required string BuyerBan { get; init; }
+        public required string BuyerBan { get; set; }
         public required List<InvoiceItem> Items { get; init; }
         public required long TotalAmount { get; init; }
         public required Action<string> ApplyBuyerName { get; init; }
         public required Func<NameLookup, CancellationToken, Task<IssueResult>> IssueAsync { get; init; }
+        public Action<string, string>? ApplyBuyerData { get; init; }
         public string BuyerName { get; set; } = string.Empty;
+        public string OriginalBuyerBan { get; init; } = string.Empty;
+        public string OriginalBuyerName { get; init; } = string.Empty;
         public NameLookup Lookup { get; set; } = new();
         public Exception? LookupError { get; set; }
         public bool Selected { get; set; } = true;
@@ -33,10 +37,21 @@ internal sealed class ImportConfirmationForm : Form
     private readonly CancellationTokenSource lifetime = new();
     private readonly List<Entry> entries = [];
     private readonly DataGridView grid = UiControls.Grid();
+    private readonly TextBox buyerBan = UiControls.TextBox(8);
     private readonly TextBox buyerName = UiControls.TextBox(200);
+    private readonly BuyerNameField buyerNameField;
     private readonly Button applyName = UiControls.StandardButton("套用名稱");
     private readonly Button retryLookup = UiControls.StandardButton("重新查詢統編");
     private readonly Label buyerHint = UiControls.Label("");
+    private readonly Label originalBuyerReference = new()
+    {
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = Color.FromArgb(118, 118, 118),
+        AutoEllipsis = true,
+        Margin = new Padding(3, 0, 3, 0),
+    };
+    private readonly ToolTip originalReferenceToolTip = new();
     private readonly TableLayoutPanel summary = new() { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
     private readonly Label summaryLead = new();
     private readonly Label summarySelected = new();
@@ -46,9 +61,12 @@ internal sealed class ImportConfirmationForm : Form
     private readonly Button cancel = UiControls.StandardButton("取消匯入");
     private readonly Button issue = UiControls.PrimaryIssueButton();
     private readonly Panel actions = new() { Dock = DockStyle.Fill, Margin = Padding.Empty };
+    private readonly bool digiwinMode;
     private bool refreshing;
     private bool issuing;
     private bool closing;
+    private bool loadingBuyerEditor;
+    private bool buyerEditorDirty;
 
     private ImportConfirmationForm(
         string source,
@@ -62,11 +80,13 @@ internal sealed class ImportConfirmationForm : Form
         this.service = service;
         this.recordsChanged = recordsChanged;
         this.loadOrders = loadOrders;
+        digiwinMode = source == InvoiceSources.Digiwin;
+        buyerNameField = new BuyerNameField(buyerName);
         Text = $"CYInvoice｜{source} 開立發票匯入確認｜{EnvironmentName()}";
         Font = new Font("Microsoft JhengHei UI", 10F);
         StartPosition = FormStartPosition.CenterParent;
-        MinimumSize = new Size(1080, 610);
-        ClientSize = new Size(1160, 610);
+        MinimumSize = new Size(1080, digiwinMode ? 640 : 610);
+        ClientSize = new Size(1160, digiwinMode ? 640 : 610);
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         BuildLayout();
@@ -115,12 +135,42 @@ internal sealed class ImportConfirmationForm : Form
             }).ToArray();
         });
 
+    public static ImportConfirmationForm ForDigiwin(
+        LocalRepository repository,
+        InvoiceService service,
+        Action recordsChanged,
+        string filePath) =>
+        new(InvoiceSources.Digiwin, repository, service, recordsChanged, async cancellationToken =>
+        {
+            var order = await PlatformImportReader.ReadDigiwinExportAsync(filePath, cancellationToken);
+            return
+            [
+                new Entry
+                {
+                    OrderId = order.OrderId,
+                    BuyerBan = order.BuyerBan,
+                    BuyerName = order.BuyerName,
+                    OriginalBuyerBan = order.OriginalBuyerBan,
+                    OriginalBuyerName = order.OriginalBuyerName,
+                    Items = order.Items,
+                    TotalAmount = order.TotalAmount,
+                    ApplyBuyerName = value => order.BuyerName = value,
+                    ApplyBuyerData = (ban, name) =>
+                    {
+                        order.BuyerBan = ban;
+                        order.BuyerName = name;
+                    },
+                    IssueAsync = (lookup, token) => service.IssueDigiwinWithLookupAsync(order, lookup, token),
+                },
+            ];
+        });
+
     private void BuildLayout()
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(18, 14, 18, 14), RowCount = 6, ColumnCount = 1 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 306));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, digiwinMode ? 78 : 48));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
@@ -139,22 +189,7 @@ internal sealed class ImportConfirmationForm : Form
         issue.Text = IssueButtonCaption();
         UiControls.ApplyIssueButtonTheme(issue,
             repository.Settings.LoadOrCreate().Environment == Environments.Production);
-        var editor = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6 };
-        buyerName.Dock = DockStyle.None;
-        buyerName.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        applyName.Anchor = AnchorStyles.None;
-        retryLookup.Anchor = AnchorStyles.None;
-        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
-        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
-        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
-        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
-        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 8));
-        editor.Controls.Add(UiControls.Label("買方名稱"), 0, 0);
-        editor.Controls.Add(buyerName, 1, 0);
-        editor.Controls.Add(applyName, 2, 0);
-        editor.Controls.Add(retryLookup, 3, 0);
-        editor.Controls.Add(buyerHint, 4, 0);
+        var editor = digiwinMode ? BuildDigiwinEditor() : BuildStandardEditor();
 
         ConfigureSummary();
         var progressArea = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2 };
@@ -174,7 +209,55 @@ internal sealed class ImportConfirmationForm : Form
         root.Controls.Add(progressArea, 0, 4);
         root.Controls.Add(actions, 0, 5);
         Controls.Add(root);
+        originalBuyerReference.Resize += (_, _) => UpdateOriginalReferenceTooltip();
         PositionActions();
+    }
+
+    private Control BuildStandardEditor()
+    {
+        var editor = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6 };
+        buyerNameField.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        applyName.Anchor = AnchorStyles.None;
+        retryLookup.Anchor = AnchorStyles.None;
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 8));
+        editor.Controls.Add(UiControls.Label("買方名稱"), 0, 0);
+        editor.Controls.Add(buyerNameField, 1, 0);
+        editor.Controls.Add(applyName, 2, 0);
+        editor.Controls.Add(retryLookup, 3, 0);
+        editor.Controls.Add(buyerHint, 4, 0);
+        return editor;
+    }
+
+    private Control BuildDigiwinEditor()
+    {
+        applyName.Text = "套用資料";
+        var editor = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 6, RowCount = 2, Margin = Padding.Empty };
+        editor.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        editor.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
+        editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        buyerBan.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        buyerNameField.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        applyName.Anchor = AnchorStyles.None;
+        editor.Controls.Add(UiControls.Label("統一編號"), 0, 0);
+        editor.Controls.Add(buyerBan, 1, 0);
+        editor.Controls.Add(UiControls.Label("買方名稱"), 2, 0);
+        editor.Controls.Add(buyerNameField, 3, 0);
+        editor.Controls.Add(applyName, 4, 0);
+        editor.Controls.Add(buyerHint, 5, 0);
+        editor.Controls.Add(originalBuyerReference, 0, 1);
+        editor.SetColumnSpan(originalBuyerReference, 6);
+        retryLookup.Visible = false;
+        return editor;
     }
 
     private void ConfigureSummary()
@@ -236,8 +319,18 @@ internal sealed class ImportConfirmationForm : Form
     {
         cancel.Click += (_, _) => Close();
         issue.Click += async (_, _) => await IssueSelectionAsync();
-        applyName.Click += (_, _) => ApplyBuyerName(true);
+        applyName.Click += async (_, _) =>
+        {
+            if (digiwinMode) await ApplyDigiwinBuyerDataAsync(true);
+            else ApplyBuyerName(true);
+        };
         retryLookup.Click += async (_, _) => await RetryLookupAsync();
+        buyerNameField.RetryRequested += async (_, _) => await RequeryApiNameAsync();
+        if (digiwinMode)
+        {
+            buyerBan.TextChanged += (_, _) => BuyerEditorChanged(clearApiName: true);
+            buyerName.TextChanged += (_, _) => BuyerEditorChanged(clearApiName: false);
+        }
         grid.CurrentCellDirtyStateChanged += (_, _) =>
         {
             if (grid.IsCurrentCellDirty && grid.CurrentCell?.ColumnIndex == 0) grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
@@ -256,6 +349,15 @@ internal sealed class ImportConfirmationForm : Form
             closing = true;
             lifetime.Cancel();
         };
+    }
+
+    private void BuyerEditorChanged(bool clearApiName)
+    {
+        if (!digiwinMode || loadingBuyerEditor) return;
+        buyerEditorDirty = true;
+        if (clearApiName) buyerNameField.ClearLookupState();
+        buyerHint.Text = "買方資料已修改，請先套用資料";
+        UpdateIssueEnabled();
     }
 
     private async Task LoadAsync()
@@ -308,8 +410,20 @@ internal sealed class ImportConfirmationForm : Form
             progressText.Text = $"正在查詢公司統編與準備逐張確認資料…（{index + 1}/{entries.Count}）";
             if (!entry.Company)
             {
-                entry.BuyerName = entry.BuyerName.Trim().Length == 0 ? "消費者" : entry.BuyerName.Trim();
-                entry.ApplyBuyerName(entry.BuyerName);
+                if (digiwinMode)
+                {
+                    entry.BuyerBan = string.Empty;
+                    entry.BuyerName = string.Empty;
+                    entry.Lookup = new NameLookup();
+                    entry.LookupError = null;
+                    entry.ApplyBuyerData?.Invoke(string.Empty, string.Empty);
+                    entry.Status = "可開立";
+                }
+                else
+                {
+                    entry.BuyerName = entry.BuyerName.Trim().Length == 0 ? "消費者" : entry.BuyerName.Trim();
+                    entry.ApplyBuyerName(entry.BuyerName);
+                }
                 continue;
             }
             var ban = entry.BuyerBan.Trim();
@@ -338,7 +452,11 @@ internal sealed class ImportConfirmationForm : Form
         if (error is not null)
         {
             entry.Selected = false;
-            entry.BuyerName = string.Empty;
+            if (!digiwinMode)
+            {
+                entry.BuyerName = string.Empty;
+                entry.ApplyBuyerName(string.Empty);
+            }
             entry.Status = "統編查詢異常：" + ShortError(error);
         }
         else if (lookup.Local)
@@ -348,6 +466,14 @@ internal sealed class ImportConfirmationForm : Form
         else if (lookup.ApiName.Trim().Length != 0)
         {
             SetResolvedName(entry, lookup.ApiName, "光貿查詢完成");
+        }
+        else if (digiwinMode)
+        {
+            var fallback = entry.BuyerName.Trim().Length == 0 ? entry.OriginalBuyerName.Trim() : entry.BuyerName.Trim();
+            entry.BuyerName = fallback;
+            entry.ApplyBuyerData?.Invoke(entry.BuyerBan.Trim(), fallback);
+            entry.Status = fallback.Length == 0 ? "請輸入買方名稱" : "光貿查無名稱，請確認買方名稱";
+            entry.Selected = fallback.Length != 0;
         }
         else
         {
@@ -360,8 +486,10 @@ internal sealed class ImportConfirmationForm : Form
     private void SetResolvedName(Entry entry, string name, string status)
     {
         entry.BuyerName = name.Trim();
-        entry.ApplyBuyerName(entry.BuyerName);
+        if (digiwinMode) entry.ApplyBuyerData?.Invoke(entry.BuyerBan.Trim(), entry.BuyerName);
+        else entry.ApplyBuyerName(entry.BuyerName);
         entry.Status = status;
+        entry.Selected = true;
     }
 
     private async Task RetryLookupAsync()
@@ -389,6 +517,56 @@ internal sealed class ImportConfirmationForm : Form
         SetBusy(false, string.Empty);
     }
 
+    private async Task RequeryApiNameAsync()
+    {
+        var entry = ActiveEntry();
+        var ban = digiwinMode ? buyerBan.Text.Trim() : entry?.BuyerBan.Trim() ?? string.Empty;
+        if (entry is null || entry.Finished || ban.Length != 8 || !ban.All(char.IsAsciiDigit)) return;
+        var current = buyerName.Text;
+        SetBusy(true, $"正在向光貿重新查詢 {ban}…");
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(20));
+            var lookup = await service.LookupBuyerNameFromApiAsync(ban, timeout.Token);
+            if (closing) return;
+            loadingBuyerEditor = true;
+            try
+            {
+                if (lookup.ApiName.Trim().Length != 0) buyerName.Text = lookup.ApiName.Trim();
+                else buyerName.Text = current;
+                buyerNameField.SetLookupState(lookup);
+            }
+            finally { loadingBuyerEditor = false; }
+            if (digiwinMode)
+            {
+                buyerEditorDirty = true;
+                buyerHint.Text = lookup.ApiName.Trim().Length == 0
+                    ? "光貿查無名稱；請確認後套用資料"
+                    : "已重新查詢，請套用資料";
+            }
+            else if (lookup.ApiName.Trim().Length != 0)
+            {
+                SetResolvedName(entry, lookup.ApiName, "光貿重新查詢完成");
+                entry.Lookup = lookup;
+                entry.LookupError = null;
+                RefreshGrid();
+            }
+        }
+        catch (Exception error)
+        {
+            loadingBuyerEditor = true;
+            try { buyerName.Text = current; }
+            finally { loadingBuyerEditor = false; }
+            MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            SetBusy(false, string.Empty);
+            UpdateIssueEnabled();
+        }
+    }
+
     private void ApplyBuyerName(bool showMessage)
     {
         var entry = ActiveEntry();
@@ -410,21 +588,102 @@ internal sealed class ImportConfirmationForm : Form
             MessageBox.Show(this, "已套用到本批次相同統編的訂單；只有成功開立後才會記憶。", "名稱已套用", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
+    private async Task ApplyDigiwinBuyerDataAsync(bool showMessage)
+    {
+        var entry = ActiveEntry();
+        if (!digiwinMode || entry is null || entry.Finished) return;
+        var ban = buyerBan.Text.Trim();
+        var name = buyerName.Text.Trim();
+        if (ban.Length == 0 && name.Length == 0)
+        {
+            entry.BuyerBan = string.Empty;
+            entry.BuyerName = string.Empty;
+            entry.Lookup = new NameLookup();
+            entry.LookupError = null;
+            entry.Status = "可開立";
+            entry.Selected = true;
+            entry.ApplyBuyerData?.Invoke(string.Empty, string.Empty);
+            buyerEditorDirty = false;
+            RefreshGrid();
+            return;
+        }
+        if (ban.Length == 0 || name.Length == 0)
+        {
+            if (showMessage) MessageBox.Show(this, "統一編號與買方名稱必須同時填寫或同時留空。", "買方資料不完整", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            UpdateIssueEnabled();
+            return;
+        }
+        if (ban.Length != 8 || !ban.All(char.IsAsciiDigit))
+        {
+            if (showMessage) MessageBox.Show(this, "公司統編必須為 8 碼數字。", "統一編號格式錯誤", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            UpdateIssueEnabled();
+            return;
+        }
+
+        SetBusy(true, $"正在確認公司統編 {ban}…");
+        NameLookup lookup;
+        Exception? error = null;
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(20));
+            lookup = await service.LookupBuyerNameAsync(ban, timeout.Token);
+        }
+        catch (Exception caught)
+        {
+            lookup = new NameLookup();
+            error = caught;
+        }
+        if (closing) return;
+
+        entry.BuyerBan = ban;
+        entry.BuyerName = name;
+        entry.Lookup = lookup;
+        entry.LookupError = error;
+        entry.ApplyBuyerData?.Invoke(ban, name);
+        if (error is not null)
+        {
+            entry.Selected = false;
+            entry.Status = "統編查詢異常：" + ShortError(error);
+        }
+        else
+        {
+            entry.Selected = true;
+            entry.Status = lookup.Local
+                ? string.Equals(name, lookup.Name.Trim(), StringComparison.Ordinal) ? "本機記憶名稱" : "人工名稱將覆寫本機記憶"
+                : lookup.ApiName.Trim().Length == 0
+                    ? "人工名稱待成功後記憶"
+                    : string.Equals(name, lookup.ApiName.Trim(), StringComparison.Ordinal)
+                        ? "光貿查詢完成"
+                        : "名稱與光貿查詢不同";
+        }
+        buyerEditorDirty = false;
+        RefreshGrid();
+        SetBusy(false, string.Empty);
+        if (error is not null && showMessage)
+            MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
     private async Task IssueSelectionAsync()
     {
-        ApplyBuyerName(false);
+        if (digiwinMode && buyerEditorDirty)
+        {
+            MessageBox.Show(this, "買方資料已修改，請先套用資料。", "資料尚未套用", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (!digiwinMode) ApplyBuyerName(false);
         var selected = entries.Where(entry => entry.Selected && !entry.Finished).ToArray();
         if (selected.Length == 0)
         {
             MessageBox.Show(this, "目前沒有勾選要開立的發票。", "尚未選擇", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        var invalid = selected.FirstOrDefault(entry => entry.LookupError is not null || entry.Company && entry.BuyerName.Trim().Length == 0);
+        var invalid = selected.FirstOrDefault(EntryInvalid);
         if (invalid is not null)
         {
             SelectEntry(invalid);
             MessageBox.Show(this,
-                invalid.LookupError is not null ? "仍有統編查詢異常，請重新查詢或取消勾選該張發票。" : "公司發票尚未輸入並套用買方名稱。",
+                invalid.LookupError is not null ? "仍有統編查詢異常，請重新查詢或取消勾選該張發票。" : "公司發票的統一編號與買方名稱尚未完成確認。",
                 "資料尚未完成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -496,6 +755,20 @@ internal sealed class ImportConfirmationForm : Form
             "部分項目未完成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
+    private bool EntryInvalid(Entry entry)
+    {
+        if (entry.LookupError is not null) return true;
+        if (digiwinMode)
+        {
+            var ban = entry.BuyerBan.Trim();
+            var name = entry.BuyerName.Trim();
+            if ((ban.Length == 0) != (name.Length == 0)) return true;
+            if (ban.Length == 0) return false;
+            return ban.Length != 8 || !ban.All(char.IsAsciiDigit) || (!entry.Lookup.Local && !entry.Lookup.LookupSucceeded);
+        }
+        return entry.Company && entry.BuyerName.Trim().Length == 0;
+    }
+
     private void RefreshGrid()
     {
         var active = ActiveEntry();
@@ -504,10 +777,14 @@ internal sealed class ImportConfirmationForm : Form
         foreach (var entry in entries)
         {
             var totals = Totals(entry);
-            grid.Rows.Add(entry.Selected && !entry.Finished && entry.LookupError is null, entry.OrderId,
+            var rowIndex = grid.Rows.Add(entry.Selected && !entry.Finished && entry.LookupError is null, entry.OrderId,
                 entry.Company ? entry.BuyerBan.Trim() : string.Empty, entry.BuyerName, "應稅",
                 MoneyFormatter.Integer(totals.SalesAmount), MoneyFormatter.Integer(totals.TaxAmount),
                 MoneyFormatter.Integer(totals.TotalAmount), entry.Items.Count, entry.Status);
+            var nameCell = grid.Rows[rowIndex].Cells[3];
+            var name = entry.BuyerName.Trim();
+            if (name.Length != 0 && TextRenderer.MeasureText(name, grid.Font).Width > grid.Columns[3].Width - 12)
+                nameCell.ToolTipText = name;
         }
         refreshing = false;
         if (active is not null) SelectEntry(active);
@@ -531,6 +808,7 @@ internal sealed class ImportConfirmationForm : Form
         entry.Selected = !entry.Finished && entry.LookupError is null && selected;
         if (selected && !entry.Selected) grid.Rows[rowIndex].Cells[0].Value = false;
         RefreshSummary();
+        UpdateIssueEnabled();
     }
 
     private void RefreshSummary()
@@ -545,12 +823,60 @@ internal sealed class ImportConfirmationForm : Form
     private void LoadBuyerEditor()
     {
         var entry = ActiveEntry();
-        buyerName.Text = entry?.BuyerName ?? string.Empty;
-        var editable = entry is not null && CanEditName(entry) && !issuing;
-        buyerName.Enabled = editable;
-        applyName.Enabled = editable;
-        retryLookup.Enabled = entry is { Company: true, Finished: false } && !issuing;
-        buyerHint.Text = entry?.LookupError is null ? string.Empty : "統編查詢失敗，可重新查詢";
+        loadingBuyerEditor = true;
+        try
+        {
+            if (digiwinMode) buyerBan.Text = entry?.BuyerBan ?? string.Empty;
+            buyerName.Text = entry?.BuyerName ?? string.Empty;
+            buyerNameField.SetLookupState(entry?.Lookup ?? new NameLookup());
+            buyerEditorDirty = false;
+        }
+        finally { loadingBuyerEditor = false; }
+        UpdateEditorAvailability();
+        UpdateIssueEnabled();
+    }
+
+    private void UpdateEditorAvailability()
+    {
+        var entry = ActiveEntry();
+        if (digiwinMode)
+        {
+            var editable = entry is { Finished: false } && !issuing && grid.Enabled;
+            buyerBan.Enabled = editable;
+            buyerNameField.SetLocked(!editable);
+            applyName.Enabled = editable;
+            retryLookup.Visible = false;
+            if (!buyerEditorDirty)
+                buyerHint.Text = entry?.LookupError is null ? string.Empty : "統編查詢失敗；修正後請再套用資料";
+            var showReference = entry is not null && entry.OriginalBuyerBan.Trim().Length != 0;
+            originalBuyerReference.Visible = showReference;
+            originalBuyerReference.Text = showReference
+                ? $"鼎新原始資料：統編 {entry!.OriginalBuyerBan.Trim()}｜買受人 {entry.OriginalBuyerName.Trim()}"
+                : string.Empty;
+            UpdateOriginalReferenceTooltip();
+        }
+        else
+        {
+            var editable = entry is not null && CanEditName(entry) && !issuing && grid.Enabled;
+            buyerNameField.SetLocked(!editable);
+            applyName.Enabled = editable;
+            retryLookup.Enabled = entry is { Company: true, Finished: false } && !issuing && grid.Enabled;
+            retryLookup.Visible = true;
+            buyerHint.Text = entry?.LookupError is null ? string.Empty : "統編查詢失敗，可重新查詢";
+        }
+    }
+
+    private void UpdateOriginalReferenceTooltip()
+    {
+        var text = originalBuyerReference.Text;
+        if (!originalBuyerReference.Visible || text.Length == 0 || originalBuyerReference.ClientSize.Width <= 0)
+        {
+            originalReferenceToolTip.SetToolTip(originalBuyerReference, null);
+            return;
+        }
+        originalReferenceToolTip.SetToolTip(
+            originalBuyerReference,
+            TextRenderer.MeasureText(text, originalBuyerReference.Font).Width > originalBuyerReference.ClientSize.Width - 6 ? text : null);
     }
 
     private static bool CanEditName(Entry entry) =>
@@ -575,12 +901,27 @@ internal sealed class ImportConfirmationForm : Form
     {
         grid.Enabled = !busy;
         cancel.Enabled = !busy || !issuing;
-        issue.Enabled = !busy && entries.Count != 0;
         progress.Visible = busy;
         progressText.Text = message;
         if (!busy) progress.Style = ProgressBarStyle.Blocks;
         else { progress.Style = ProgressBarStyle.Marquee; progress.MarqueeAnimationSpeed = 40; }
-        LoadBuyerEditor();
+        UpdateEditorAvailability();
+        UpdateIssueEnabled(busy);
+    }
+
+    private void UpdateIssueEnabled(bool busy = false)
+    {
+        if (busy || issuing || entries.Count == 0)
+        {
+            issue.Enabled = false;
+            return;
+        }
+        if (digiwinMode && buyerEditorDirty)
+        {
+            issue.Enabled = false;
+            return;
+        }
+        issue.Enabled = !entries.Where(entry => entry.Selected && !entry.Finished).Any(EntryInvalid);
     }
 
     private void FormatStatus(DataGridViewCellFormattingEventArgs eventArgs)
@@ -590,7 +931,7 @@ internal sealed class ImportConfirmationForm : Form
         if (status.Contains("成功", StringComparison.Ordinal)) eventArgs.CellStyle.ForeColor = Color.FromArgb(0, 135, 45);
         else if (status.Contains("異常", StringComparison.Ordinal) || status.Contains("失敗", StringComparison.Ordinal) || status.Contains("擋下", StringComparison.Ordinal))
             eventArgs.CellStyle.ForeColor = Color.FromArgb(190, 0, 0);
-        else if (status.Contains("請輸入", StringComparison.Ordinal) || status.Contains("結果不明", StringComparison.Ordinal))
+        else if (status.Contains("請輸入", StringComparison.Ordinal) || status.Contains("結果不明", StringComparison.Ordinal) || status.Contains("不同", StringComparison.Ordinal))
             eventArgs.CellStyle.ForeColor = Color.FromArgb(190, 100, 0);
     }
 

@@ -56,7 +56,8 @@ internal sealed class PdfStyleSelectionForm : Form
             thumbnails.Add(thumbnail);
             var button = new NoFocusCueButton
             {
-                Dock = DockStyle.Fill,
+                Size = new Size(184, 278),
+                Anchor = AnchorStyles.None,
                 Margin = new Padding(8, 4, 8, 4),
                 Text = DisplayName(style),
                 Tag = style,
@@ -71,8 +72,14 @@ internal sealed class PdfStyleSelectionForm : Form
                 AccessibleName = $"{action}版型 " + DisplayName(style),
             };
             button.FlatAppearance.BorderSize = 0;
-            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(224, 244, 253);
-            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(202, 235, 250);
+            button.FlatAppearance.BorderColor = Color.FromArgb(0, 120, 215);
+            button.FlatAppearance.MouseOverBackColor = SystemColors.Control;
+            button.FlatAppearance.MouseDownBackColor = SystemColors.Control;
+            void SetFrame(bool visible) => button.FlatAppearance.BorderSize = visible ? 1 : 0;
+            button.MouseEnter += (_, _) => SetFrame(true);
+            button.MouseLeave += (_, _) => SetFrame(false);
+            button.MouseDown += (_, eventArgs) => { if (eventArgs.Button == MouseButtons.Left) SetFrame(true); };
+            button.MouseUp += (_, eventArgs) => SetFrame(button.ClientRectangle.Contains(eventArgs.Location));
             button.Click += (_, _) =>
             {
                 SelectedStyle = (InvoicePdfStyle)button.Tag!;
@@ -99,8 +106,12 @@ internal sealed class PdfStyleSelectionForm : Form
             throw new InvalidOperationException("公司發票圖像版型選擇未建立五個有效選項");
         if (styleButtons.Select(button => ((InvoicePdfStyle)button.Tag!).Code).Distinct().Count() != 5)
             throw new InvalidOperationException("公司發票圖像版型選項重複");
-        if (styleButtons.Any(button => button.FlatAppearance.BorderSize != 0))
-            throw new InvalidOperationException("公司發票版型卡片仍顯示常態外框");
+        if (styleButtons.Any(button => button.FlatAppearance.BorderSize != 0 ||
+                                      button.FlatAppearance.MouseOverBackColor != SystemColors.Control ||
+                                      button.FlatAppearance.MouseDownBackColor != SystemColors.Control))
+            throw new InvalidOperationException("公司發票版型卡片仍有常態外框或大面積滑過底色");
+        if (styleButtons.Any(button => button.Width > 190 || button.Height > 285))
+            throw new InvalidOperationException("公司發票版型互動範圍仍超出實際卡片");
 
         var canvas = new Size(164, 220);
         var a4 = PdfStyleThumbnail.PageBounds(InvoicePdfStyles.A4, canvas);

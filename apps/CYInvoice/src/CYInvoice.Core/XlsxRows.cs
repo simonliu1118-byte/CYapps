@@ -13,9 +13,20 @@ public static class XlsxRows
     public static IReadOnlyList<IReadOnlyList<string>> ReadFirstWorksheet(string filePath)
     {
         using var archive = ZipFile.OpenRead(filePath);
+        return ReadWorksheetRows(archive, WorksheetPath(archive, null));
+    }
+
+    public static IReadOnlyList<IReadOnlyList<string>> ReadWorksheet(string filePath, string worksheetName)
+    {
+        if (string.IsNullOrWhiteSpace(worksheetName)) throw new ArgumentException("工作表名稱不可空白", nameof(worksheetName));
+        using var archive = ZipFile.OpenRead(filePath);
+        return ReadWorksheetRows(archive, WorksheetPath(archive, worksheetName.Trim()));
+    }
+
+    private static IReadOnlyList<IReadOnlyList<string>> ReadWorksheetRows(ZipArchive archive, string worksheetPath)
+    {
         var sharedStrings = ReadSharedStrings(archive);
-        var worksheetPath = FirstWorksheetPath(archive);
-        var worksheet = ReadXml(RequiredEntry(archive, worksheetPath));
+        var worksheet = ReadXml(RequiredEntry(archive, worksheetPath, "xlsx 找不到指定工作表"));
         var rows = worksheet.Descendants().Where(element => element.Name.LocalName == "row").ToArray();
         if (rows.Length > MaximumRows)
         {
@@ -88,11 +99,11 @@ public static class XlsxRows
             .ToArray();
     }
 
-    private static string FirstWorksheetPath(ZipArchive archive)
+    private static string WorksheetPath(ZipArchive archive, string? worksheetName)
     {
         var workbook = OptionalEntry(archive, "xl/workbook.xml");
         var relationships = OptionalEntry(archive, "xl/_rels/workbook.xml.rels");
-        if (workbook is null && relationships is null)
+        if (workbook is null && relationships is null && worksheetName is null)
         {
             return "xl/worksheets/sheet1.xml";
         }
@@ -102,12 +113,18 @@ public static class XlsxRows
         }
 
         var workbookDocument = ReadXml(workbook);
-        var firstSheet = workbookDocument.Descendants().FirstOrDefault(element => element.Name.LocalName == "sheet")
-            ?? throw new InvalidDataException("xlsx 找不到第一個工作表關聯");
-        var relationshipId = firstSheet.Attributes().FirstOrDefault(attribute => attribute.Name.LocalName == "id")?.Value ?? string.Empty;
+        var sheets = workbookDocument.Descendants().Where(element => element.Name.LocalName == "sheet").ToArray();
+        var sheet = worksheetName is null
+            ? sheets.FirstOrDefault()
+            : sheets.FirstOrDefault(element => string.Equals((string?)element.Attribute("name"), worksheetName, StringComparison.Ordinal));
+        if (sheet is null)
+        {
+            throw new InvalidDataException(worksheetName is null ? "xlsx 找不到第一個工作表關聯" : $"xlsx 找不到工作表：{worksheetName}");
+        }
+        var relationshipId = sheet.Attributes().FirstOrDefault(attribute => attribute.Name.LocalName == "id")?.Value ?? string.Empty;
         if (relationshipId.Length == 0)
         {
-            throw new InvalidDataException("xlsx 找不到第一個工作表關聯");
+            throw new InvalidDataException(worksheetName is null ? "xlsx 找不到第一個工作表關聯" : $"xlsx 工作表 {worksheetName} 缺少關聯資料");
         }
 
         var relationshipDocument = ReadXml(relationships);
@@ -116,19 +133,19 @@ public static class XlsxRows
             ?.Attribute("Target")?.Value.Trim().Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(target))
         {
-            throw new InvalidDataException("xlsx 找不到第一個工作表檔案");
+            throw new InvalidDataException(worksheetName is null ? "xlsx 找不到第一個工作表檔案" : $"xlsx 找不到工作表檔案：{worksheetName}");
         }
         target = target.StartsWith("/", StringComparison.Ordinal) ? target.TrimStart('/') : "xl/" + target;
         var segments = target.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Any(segment => segment == "..") || !target.StartsWith("xl/worksheets/", StringComparison.Ordinal))
         {
-            throw new InvalidDataException("xlsx 第一個工作表路徑不安全");
+            throw new InvalidDataException("xlsx 工作表路徑不安全");
         }
         return target;
     }
 
-    private static ZipArchiveEntry RequiredEntry(ZipArchive archive, string name) =>
-        OptionalEntry(archive, name) ?? throw new InvalidDataException("xlsx 找不到第一個工作表");
+    private static ZipArchiveEntry RequiredEntry(ZipArchive archive, string name, string message) =>
+        OptionalEntry(archive, name) ?? throw new InvalidDataException(message);
 
     private static ZipArchiveEntry? OptionalEntry(ZipArchive archive, string name)
     {
