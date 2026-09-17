@@ -66,11 +66,13 @@ internal sealed class PdfStyleSelectionForm : Form
                 TextImageRelation = TextImageRelation.ImageAboveText,
                 Font = new Font(Font.FontFamily, 10F),
                 FlatStyle = FlatStyle.Flat,
-                UseVisualStyleBackColor = true,
+                BackColor = SystemColors.Control,
+                UseVisualStyleBackColor = false,
                 AccessibleName = $"{action}版型 " + DisplayName(style),
             };
-            button.FlatAppearance.BorderColor = Color.FromArgb(34, 166, 225);
-            button.FlatAppearance.BorderSize = 1;
+            button.FlatAppearance.BorderSize = 0;
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(232, 232, 232);
+            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(220, 220, 220);
             button.Click += (_, _) =>
             {
                 SelectedStyle = (InvoicePdfStyle)button.Tag!;
@@ -97,6 +99,8 @@ internal sealed class PdfStyleSelectionForm : Form
             throw new InvalidOperationException("公司發票圖像版型選擇未建立五個有效選項");
         if (styleButtons.Select(button => ((InvoicePdfStyle)button.Tag!).Code).Distinct().Count() != 5)
             throw new InvalidOperationException("公司發票圖像版型選項重複");
+        if (styleButtons.Any(button => button.FlatAppearance.BorderSize != 0))
+            throw new InvalidOperationException("公司發票版型卡片仍顯示常態外框");
 
         var canvas = new Size(164, 220);
         var a4 = PdfStyleThumbnail.PageBounds(InvoicePdfStyles.A4, canvas);
@@ -133,7 +137,7 @@ internal sealed class PdfStyleSelectionForm : Form
 internal static class PdfStyleThumbnail
 {
     private static readonly Color Canvas = Color.FromArgb(242, 242, 242);
-    private static readonly Color Border = Color.FromArgb(34, 166, 225);
+    private static readonly Color PaperEdge = Color.FromArgb(205, 205, 205);
     private static readonly Color Ink = Color.FromArgb(86, 86, 86);
     private static readonly Color Faint = Color.FromArgb(188, 188, 188);
 
@@ -146,11 +150,11 @@ internal static class PdfStyleThumbnail
 
         var page = PageBounds(style, size);
         using var paperBrush = new SolidBrush(Color.White);
-        using var border = new Pen(Border, 1.5F);
+        using var edge = new Pen(PaperEdge, 1F);
         using var ink = new Pen(Ink, 1);
         using var faint = new Pen(Faint, 1);
         graphics.FillRectangle(paperBrush, page);
-        graphics.DrawRectangle(border, page.X, page.Y, page.Width - 1, page.Height - 1);
+        graphics.DrawRectangle(edge, page.X, page.Y, page.Width - 1, page.Height - 1);
 
         switch (style.Code)
         {
