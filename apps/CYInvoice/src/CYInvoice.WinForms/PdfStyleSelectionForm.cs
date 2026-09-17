@@ -52,7 +52,7 @@ internal sealed class PdfStyleSelectionForm : Form
         for (var index = 0; index < InvoicePdfStyles.Company.Count; index++)
         {
             var style = InvoicePdfStyles.Company[index];
-            var thumbnail = PdfStyleThumbnail.Create(style, new Size(150, 214));
+            var thumbnail = PdfStyleThumbnail.Create(style, new Size(164, 220));
             thumbnails.Add(thumbnail);
             var button = new NoFocusCueButton
             {
@@ -97,6 +97,14 @@ internal sealed class PdfStyleSelectionForm : Form
             throw new InvalidOperationException("公司發票圖像版型選擇未建立五個有效選項");
         if (styleButtons.Select(button => ((InvoicePdfStyle)button.Tag!).Code).Distinct().Count() != 5)
             throw new InvalidOperationException("公司發票圖像版型選項重複");
+
+        var canvas = new Size(164, 220);
+        var a4 = PdfStyleThumbnail.PageBounds(InvoicePdfStyles.A4, canvas);
+        var a5 = PdfStyleThumbnail.PageBounds(InvoicePdfStyles.A5, canvas);
+        if (a4.Height <= a4.Width || a5.Width <= a5.Height ||
+            Math.Abs(a4.Width / (double)a4.Height - 210D / 297D) > 0.03 ||
+            Math.Abs(a5.Width / (double)a5.Height - 210D / 148D) > 0.03)
+            throw new InvalidOperationException("公司發票 A4／橫式 A5 示意圖比例不正確");
     }
 
     private static string DisplayName(InvoicePdfStyle style) => style.Code switch
@@ -123,71 +131,241 @@ internal sealed class PdfStyleSelectionForm : Form
 
 internal static class PdfStyleThumbnail
 {
+    private static readonly Color BorderBlue = Color.FromArgb(34, 166, 225);
+    private static readonly Color Ink = Color.FromArgb(72, 72, 72);
+    private static readonly Color Faint = Color.FromArgb(176, 176, 176);
+
     public static Bitmap Create(InvoicePdfStyle style, Size size)
     {
         var image = new Bitmap(size.Width, size.Height);
         using var graphics = Graphics.FromImage(image);
         graphics.Clear(Color.White);
         graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        using var border = new Pen(Color.FromArgb(34, 166, 225), 2);
-        using var ink = new Pen(Color.FromArgb(76, 76, 76), 1);
-        using var faint = new Pen(Color.FromArgb(178, 178, 178), 1);
-        graphics.DrawRectangle(border, 1, 1, size.Width - 3, size.Height - 3);
+        graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
 
-        var page = Rectangle.Inflate(new Rectangle(12, 10, size.Width - 24, size.Height - 20), -2, -2);
-        DrawHeader(graphics, ink, faint, page);
+        var page = PageBounds(style, size);
+        var shadow = page;
+        shadow.Offset(2, 2);
+        using var shadowBrush = new SolidBrush(Color.FromArgb(228, 228, 228));
+        using var paperBrush = new SolidBrush(Color.White);
+        using var border = new Pen(BorderBlue, 2);
+        using var ink = new Pen(Ink, 1);
+        using var faint = new Pen(Faint, 1);
+        graphics.FillRectangle(shadowBrush, shadow);
+        graphics.FillRectangle(paperBrush, page);
+        graphics.DrawRectangle(border, page.X, page.Y, page.Width - 1, page.Height - 1);
+
         switch (style.Code)
         {
             case 0:
-                DrawTable(graphics, ink, new Rectangle(page.Left + 5, page.Top + 50, page.Width - 10, page.Height - 68), 5);
+                DrawA4Full(graphics, ink, faint, page);
                 break;
             case 1:
-                graphics.DrawRectangle(faint, page.Left + 5, page.Top + 48, page.Width - 10, 36);
-                DrawTable(graphics, ink, new Rectangle(page.Left + 5, page.Top + 98, page.Width - 10, page.Height - 116), 3);
+                DrawAddressAndA5(graphics, ink, faint, page);
                 break;
             case 2:
-                DrawTable(graphics, ink, new Rectangle(page.Left + 5, page.Top + 50, page.Width - 10, 68), 4);
-                graphics.DrawLine(faint, page.Left + 5, page.Top + 135, page.Right - 5, page.Top + 135);
+                DrawA5ContentOnA4(graphics, ink, faint, page);
                 break;
             case 3:
-                DrawTable(graphics, ink, new Rectangle(page.Left + 5, page.Top + 50, page.Width - 10, 78), 4);
+                DrawLandscapeA5(graphics, ink, faint, page);
                 break;
             case 5:
-                DrawReceipt(graphics, ink, faint, new Rectangle(page.Left + 40, page.Top + 40, page.Width - 80, page.Height - 60));
+                DrawQrCodeA4(graphics, ink, faint, page);
                 break;
         }
         return image;
     }
 
-    private static void DrawHeader(Graphics graphics, Pen ink, Pen faint, Rectangle page)
+    internal static Rectangle PageBounds(InvoicePdfStyle style, Size size)
     {
-        graphics.DrawLine(ink, page.Left + 12, page.Top + 12, page.Right - 12, page.Top + 12);
-        graphics.DrawLine(faint, page.Left + 22, page.Top + 22, page.Right - 22, page.Top + 22);
-        graphics.DrawLine(faint, page.Left + 7, page.Top + 34, page.Left + page.Width / 2, page.Top + 34);
+        var availableWidth = Math.Max(1, size.Width - 12);
+        var availableHeight = Math.Max(1, size.Height - 12);
+        var ratio = style.Code == InvoicePdfStyles.A5.Code ? 210D / 148D : 210D / 297D;
+        int width;
+        int height;
+        if (availableWidth / (double)availableHeight > ratio)
+        {
+            height = availableHeight;
+            width = Math.Max(1, (int)Math.Round(height * ratio));
+        }
+        else
+        {
+            width = availableWidth;
+            height = Math.Max(1, (int)Math.Round(width / ratio));
+        }
+        return new Rectangle(
+            (size.Width - width) / 2,
+            (size.Height - height) / 2,
+            width,
+            height);
     }
 
-    private static void DrawTable(Graphics graphics, Pen pen, Rectangle rectangle, int rows)
+    private static void DrawA4Full(Graphics graphics, Pen ink, Pen faint, Rectangle page)
     {
-        graphics.DrawRectangle(pen, rectangle);
-        graphics.DrawLine(pen, rectangle.Left + rectangle.Width / 2, rectangle.Top, rectangle.Left + rectangle.Width / 2, rectangle.Bottom);
-        graphics.DrawLine(pen, rectangle.Left + rectangle.Width * 3 / 4, rectangle.Top, rectangle.Left + rectangle.Width * 3 / 4, rectangle.Bottom);
+        DrawOfficialHeader(graphics, ink, faint, page, page.Top + 7, compact: false);
+        var table = new Rectangle(
+            page.Left + 7,
+            page.Top + page.Height * 27 / 100,
+            page.Width - 14,
+            page.Height * 56 / 100);
+        DrawInvoiceTable(graphics, ink, faint, table, 7);
+        DrawTotals(graphics, ink, faint, new Rectangle(page.Left + 7, table.Bottom + 4, page.Width - 14, page.Bottom - table.Bottom - 11));
+    }
+
+    private static void DrawAddressAndA5(Graphics graphics, Pen ink, Pen faint, Rectangle page)
+    {
+        DrawOfficialHeader(graphics, ink, faint, page, page.Top + 6, compact: true);
+        var addressTop = page.Top + page.Height * 20 / 100;
+        DrawLineCluster(graphics, faint, page.Left + 12, addressTop, page.Width * 58 / 100, 4, 7);
+        graphics.DrawLine(faint, page.Left + 8, page.Top + page.Height / 2, page.Right - 8, page.Top + page.Height / 2);
+
+        var lower = new Rectangle(
+            page.Left + 7,
+            page.Top + page.Height * 54 / 100,
+            page.Width - 14,
+            page.Height * 39 / 100);
+        DrawOfficialHeader(graphics, ink, faint, lower, lower.Top + 2, compact: true);
+        var table = new Rectangle(lower.Left + 2, lower.Top + lower.Height * 35 / 100, lower.Width - 4, lower.Height * 48 / 100);
+        DrawInvoiceTable(graphics, ink, faint, table, 4);
+        DrawTotals(graphics, ink, faint, new Rectangle(lower.Left + 2, table.Bottom + 2, lower.Width - 4, lower.Bottom - table.Bottom - 2));
+    }
+
+    private static void DrawA5ContentOnA4(Graphics graphics, Pen ink, Pen faint, Rectangle page)
+    {
+        var upper = new Rectangle(
+            page.Left + 7,
+            page.Top + 7,
+            page.Width - 14,
+            page.Height * 44 / 100);
+        DrawOfficialHeader(graphics, ink, faint, upper, upper.Top + 1, compact: true);
+        var table = new Rectangle(upper.Left + 2, upper.Top + upper.Height * 31 / 100, upper.Width - 4, upper.Height * 51 / 100);
+        DrawInvoiceTable(graphics, ink, faint, table, 5);
+        DrawTotals(graphics, ink, faint, new Rectangle(upper.Left + 2, table.Bottom + 2, upper.Width - 4, upper.Bottom - table.Bottom - 2));
+    }
+
+    private static void DrawLandscapeA5(Graphics graphics, Pen ink, Pen faint, Rectangle page)
+    {
+        DrawOfficialHeader(graphics, ink, faint, page, page.Top + 5, compact: true);
+        var table = new Rectangle(
+            page.Left + 8,
+            page.Top + page.Height * 34 / 100,
+            page.Width - 16,
+            page.Height * 45 / 100);
+        DrawInvoiceTable(graphics, ink, faint, table, 4);
+        DrawTotals(graphics, ink, faint, new Rectangle(page.Left + 8, table.Bottom + 3, page.Width - 16, page.Bottom - table.Bottom - 9));
+    }
+
+    private static void DrawQrCodeA4(Graphics graphics, Pen ink, Pen faint, Rectangle page)
+    {
+        var receiptWidth = Math.Max(28, page.Width * 43 / 100);
+        var receiptHeight = page.Height * 55 / 100;
+        var receipt = new Rectangle(
+            page.Left + (page.Width - receiptWidth) / 2,
+            page.Top + page.Height * 8 / 100,
+            receiptWidth,
+            receiptHeight);
+        graphics.DrawRectangle(faint, receipt);
+        DrawLineCluster(graphics, faint, receipt.Left + 5, receipt.Top + 7, receipt.Width - 10, 5, 5);
+        var barcode = new Rectangle(receipt.Left + 5, receipt.Top + receipt.Height * 42 / 100, receipt.Width - 10, Math.Max(6, receipt.Height * 12 / 100));
+        DrawBarcode(graphics, ink, barcode);
+        var qrSize = Math.Max(12, (receipt.Width - 14) / 2);
+        DrawQr(graphics, ink, new Rectangle(receipt.Left + 4, receipt.Top + receipt.Height * 58 / 100, qrSize, qrSize));
+        DrawQr(graphics, ink, new Rectangle(receipt.Right - 4 - qrSize, receipt.Top + receipt.Height * 58 / 100, qrSize, qrSize));
+        DrawLineCluster(graphics, faint, receipt.Left + 5, receipt.Bottom + 8, receipt.Width, 5, 6);
+    }
+
+    private static void DrawOfficialHeader(Graphics graphics, Pen ink, Pen faint, Rectangle area, int top, bool compact)
+    {
+        var centerWidth = compact ? area.Width * 45 / 100 : area.Width * 52 / 100;
+        var centerLeft = area.Left + (area.Width - centerWidth) / 2;
+        graphics.DrawLine(ink, centerLeft, top + 3, centerLeft + centerWidth, top + 3);
+        graphics.DrawLine(faint, centerLeft + 5, top + 8, centerLeft + centerWidth - 5, top + 8);
+        graphics.DrawLine(faint, centerLeft + 10, top + 13, centerLeft + centerWidth - 10, top + 13);
+
+        var metaTop = top + 18;
+        DrawLineCluster(graphics, faint, area.Left + 6, metaTop, area.Width * 42 / 100, compact ? 3 : 4, 5);
+        DrawLineCluster(graphics, faint, area.Left + area.Width * 62 / 100, metaTop, area.Width * 31 / 100, compact ? 2 : 3, 5);
+    }
+
+    private static void DrawInvoiceTable(Graphics graphics, Pen ink, Pen faint, Rectangle rectangle, int rows)
+    {
+        if (rectangle.Width < 8 || rectangle.Height < 8) return;
+        graphics.DrawRectangle(ink, rectangle);
+        var columns = new[] { 52, 70, 83 };
+        foreach (var percentage in columns)
+        {
+            var x = rectangle.Left + rectangle.Width * percentage / 100;
+            graphics.DrawLine(ink, x, rectangle.Top, x, rectangle.Bottom);
+        }
+        var headerHeight = Math.Max(5, rectangle.Height / Math.Max(7, rows + 2));
+        graphics.DrawLine(ink, rectangle.Left, rectangle.Top + headerHeight, rectangle.Right, rectangle.Top + headerHeight);
+        var bodyHeight = rectangle.Height - headerHeight;
         for (var row = 1; row < rows; row++)
         {
-            var y = rectangle.Top + rectangle.Height * row / rows;
-            graphics.DrawLine(pen, rectangle.Left, y, rectangle.Right, y);
+            var y = rectangle.Top + headerHeight + bodyHeight * row / rows;
+            graphics.DrawLine(faint, rectangle.Left, y, rectangle.Right, y);
         }
     }
 
-    private static void DrawReceipt(Graphics graphics, Pen ink, Pen faint, Rectangle rectangle)
+    private static void DrawTotals(Graphics graphics, Pen ink, Pen faint, Rectangle rectangle)
     {
-        graphics.DrawRectangle(ink, rectangle);
-        for (var row = 0; row < 5; row++)
+        if (rectangle.Width < 8 || rectangle.Height < 5) return;
+        var y = rectangle.Top + Math.Max(1, rectangle.Height / 3);
+        graphics.DrawLine(faint, rectangle.Left, y, rectangle.Right, y);
+        graphics.DrawLine(ink, rectangle.Left + rectangle.Width * 62 / 100, rectangle.Top, rectangle.Left + rectangle.Width * 62 / 100, rectangle.Bottom);
+        graphics.DrawLine(faint, rectangle.Left + rectangle.Width * 80 / 100, rectangle.Top, rectangle.Left + rectangle.Width * 80 / 100, rectangle.Bottom);
+    }
+
+    private static void DrawLineCluster(Graphics graphics, Pen pen, int left, int top, int width, int rows, int spacing)
+    {
+        width = Math.Max(4, width);
+        for (var row = 0; row < rows; row++)
         {
-            var y = rectangle.Top + 12 + row * 9;
-            graphics.DrawLine(faint, rectangle.Left + 8, y, rectangle.Right - 8, y);
+            var shrink = row % 3 * Math.Max(2, width / 9);
+            graphics.DrawLine(pen, left, top + row * spacing, left + Math.Max(4, width - shrink), top + row * spacing);
         }
-        var qrSize = Math.Max(16, rectangle.Width / 3);
-        graphics.DrawRectangle(ink, rectangle.Left + 7, rectangle.Bottom - qrSize - 8, qrSize, qrSize);
-        graphics.DrawRectangle(ink, rectangle.Right - qrSize - 7, rectangle.Bottom - qrSize - 8, qrSize, qrSize);
+    }
+
+    private static void DrawBarcode(Graphics graphics, Pen pen, Rectangle rectangle)
+    {
+        if (rectangle.Width < 5 || rectangle.Height < 5) return;
+        var x = rectangle.Left;
+        var widths = new[] { 1, 2, 1, 3, 1, 1, 2, 3, 2, 1, 1, 3 };
+        var index = 0;
+        while (x < rectangle.Right)
+        {
+            var width = widths[index % widths.Length];
+            graphics.DrawLine(pen, x, rectangle.Top, x, rectangle.Bottom);
+            if (width > 1 && x + 1 < rectangle.Right)
+                graphics.DrawLine(pen, x + 1, rectangle.Top, x + 1, rectangle.Bottom);
+            x += width + 1;
+            index++;
+        }
+    }
+
+    private static void DrawQr(Graphics graphics, Pen pen, Rectangle rectangle)
+    {
+        if (rectangle.Width < 9 || rectangle.Height < 9) return;
+        const int cells = 9;
+        var cell = Math.Max(1, Math.Min(rectangle.Width, rectangle.Height) / cells);
+        using var brush = new SolidBrush(pen.Color);
+        for (var y = 0; y < cells; y++)
+        {
+            for (var x = 0; x < cells; x++)
+            {
+                var finder = InFinder(x, y, 0, 0) || InFinder(x, y, 6, 0) || InFinder(x, y, 0, 6);
+                var fill = finder || ((x * 3 + y * 5 + x * y) % 7 < 3);
+                if (!fill) continue;
+                graphics.FillRectangle(brush, rectangle.Left + x * cell, rectangle.Top + y * cell, cell, cell);
+            }
+        }
+    }
+
+    private static bool InFinder(int x, int y, int left, int top)
+    {
+        if (x < left || x >= left + 3 || y < top || y >= top + 3) return false;
+        var localX = x - left;
+        var localY = y - top;
+        return localX is 0 or 2 || localY is 0 or 2;
     }
 }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using CYInvoice.Core;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
@@ -7,6 +8,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class RecordsControl : UserControl
 {
+    private const string CopyHintText = "單擊發票號碼即可複製";
     private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
@@ -20,6 +22,15 @@ internal sealed class RecordsControl : UserControl
     private readonly ComboBox state = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NativeListViewHost recordsHost = new(10F, 22);
     private readonly Button refreshButton = UiControls.StandardButton("重新整理狀態");
+    private readonly Label copyHint = new()
+    {
+        Text = CopyHintText,
+        AutoSize = true,
+        ForeColor = Color.DimGray,
+        TextAlign = ContentAlignment.MiddleLeft,
+        Margin = new Padding(12, 10, 0, 0),
+    };
+    private readonly System.Windows.Forms.Timer copyFeedbackTimer = new() { Interval = 2000 };
     private readonly List<InvoiceRecord> visible = [];
     private readonly Font voidedFont;
     private bool fillingRows;
@@ -36,6 +47,8 @@ internal sealed class RecordsControl : UserControl
         BackColor = Color.White;
         Padding = new Padding(18);
         Font = new Font("Microsoft JhengHei UI", 12F);
+        copyHint.Font = new Font(Font.FontFamily, 9F);
+        copyFeedbackTimer.Tick += (_, _) => ResetCopyHint();
         BuildLayout();
         ResetFilters();
         Reload();
@@ -79,6 +92,7 @@ internal sealed class RecordsControl : UserControl
         buttons.Controls.Add(query);
         buttons.Controls.Add(clear);
         buttons.Controls.Add(refreshButton);
+        buttons.Controls.Add(copyHint);
         filters.Controls.Add(buttons, 0, 2);
         filters.SetColumnSpan(buttons, 8);
         ConfigureList();
@@ -114,6 +128,7 @@ internal sealed class RecordsControl : UserControl
             var hit = Records.HitTest(eventArgs.Location);
             if (hit.Item is null || ReferenceEquals(hit.Item.Tag, PlaceholderRow)) QueueClearSelection();
         };
+        Records.MouseClick += CopyInvoiceNumberIfRequested;
         Records.MouseDoubleClick += (_, eventArgs) =>
         {
             var hit = Records.HitTest(eventArgs.Location);
@@ -147,6 +162,7 @@ internal sealed class RecordsControl : UserControl
             FillPlaceholderRows();
             ClearSelection();
             LayoutColumns();
+            ResetCopyHint();
         }
         catch (Exception error)
         {
@@ -194,9 +210,53 @@ internal sealed class RecordsControl : UserControl
         }
     }
 
+    private void CopyInvoiceNumberIfRequested(object? sender, MouseEventArgs eventArgs)
+    {
+        if (eventArgs.Button != MouseButtons.Left) return;
+        var hit = Records.HitTest(eventArgs.Location);
+        if (hit.Item?.Tag is not InvoiceRecord record || hit.SubItem is null) return;
+        if (hit.Item.SubItems.IndexOf(hit.SubItem) != 1) return;
+        var number = record.InvoiceNumber.Trim();
+        if (number.Length == 0) return;
+        try
+        {
+            Clipboard.SetText(number);
+            ShowCopyFeedback($"✓ 已複製 {number}", success: true);
+        }
+        catch (ExternalException)
+        {
+            ShowCopyFeedback("複製失敗，請再試一次", success: false);
+        }
+    }
+
+    private void ShowCopyFeedback(string text, bool success)
+    {
+        copyFeedbackTimer.Stop();
+        copyHint.Text = text;
+        copyHint.ForeColor = success ? Color.FromArgb(0, 145, 70) : Color.Firebrick;
+        copyFeedbackTimer.Start();
+    }
+
+    private void ResetCopyHint()
+    {
+        copyFeedbackTimer.Stop();
+        copyHint.Text = CopyHintText;
+        copyHint.ForeColor = Color.DimGray;
+    }
+
     private void OpenSelected(InvoiceRecord record)
     {
         using var detail = new RecordDetailForm(record, repository, service);
+        if (string.Equals(record.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal))
+        {
+            detail.MinimumSize = new Size(760, 620);
+            detail.ClientSize = new Size(800, 700);
+        }
+        else
+        {
+            detail.MinimumSize = new Size(880, 600);
+            detail.ClientSize = new Size(980, 660);
+        }
         detail.ShowDialog(FindForm());
     }
 
@@ -335,6 +395,8 @@ internal sealed class RecordsControl : UserControl
             throw new InvalidOperationException($"已開立發票清單資料列過高：{(Records.Items.Count == 0 ? 0 : Records.GetItemRect(0).Height)}px");
         if (!UiControls.HasLogicalSize(refreshButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("已開立發票清單按鈕未使用標準尺寸");
+        if (copyHint.Text != CopyHintText || copyHint.Parent is null)
+            throw new InvalidOperationException("發票號碼單擊複製提示未建立");
         var columnWidth = Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
         if (columnWidth > recordsHost.ColumnViewportWidth ||
             recordsHost.ColumnViewportWidth - columnWidth > 3 ||
@@ -344,7 +406,12 @@ internal sealed class RecordsControl : UserControl
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) voidedFont.Dispose();
+        if (disposing)
+        {
+            copyFeedbackTimer.Dispose();
+            copyHint.Font.Dispose();
+            voidedFont.Dispose();
+        }
         base.Dispose(disposing);
     }
 
