@@ -426,7 +426,7 @@ internal sealed class RecordsControl : UserControl
             throw new InvalidOperationException("發票號碼單擊複製提示未建立");
 
         PerformLayout();
-        var firstRowCenters = new[] { dateFrom, dateTo, invoiceNumber, orderId }.Select(ScreenCenterY).ToArray();
+        var firstRowCenters = new Control[] { dateFrom, dateTo, invoiceNumber, orderId }.Select(ScreenCenterY).ToArray();
         var secondRowCenters = new Control[] { buyerName, buyerBan, source, state }.Select(ScreenCenterY).ToArray();
         if (firstRowCenters.Max() - firstRowCenters.Min() > 2 || secondRowCenters.Max() - secondRowCenters.Min() > 2)
             throw new InvalidOperationException("已開立發票篩選欄位未在各列垂直置中對齊");
