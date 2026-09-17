@@ -77,6 +77,16 @@ internal sealed class BuyerNameField : UserControl
         UpdateState();
     }
 
+    protected override void OnLayout(LayoutEventArgs eventArgs)
+    {
+        base.OnLayout(eventArgs);
+        if (Parent is not TableLayoutPanel parent) return;
+        var controls = parent.Controls.Cast<Control>().Select(control =>
+            $"{control.GetType().Name}:{control.Text}:{control.Bounds}:pref={control.GetPreferredSize(Size.Empty)}");
+        Console.WriteLine(
+            $"BUYER_LAYOUT field={Bounds};fieldClient={ClientSize};editor={editor.Bounds};editorPrefH={editor.PreferredHeight};parentClient={parent.ClientSize};controls=[{string.Join("|", controls)}]");
+    }
+
     private void UpdateState()
     {
         editor.ForeColor = HasApiMismatch ? Color.FromArgb(196, 0, 0) : SystemColors.WindowText;
