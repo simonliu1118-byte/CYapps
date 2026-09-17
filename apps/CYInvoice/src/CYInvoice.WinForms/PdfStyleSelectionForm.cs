@@ -71,8 +71,8 @@ internal sealed class PdfStyleSelectionForm : Form
                 AccessibleName = $"{action}版型 " + DisplayName(style),
             };
             button.FlatAppearance.BorderSize = 0;
-            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(232, 232, 232);
-            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(220, 220, 220);
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(224, 244, 253);
+            button.FlatAppearance.MouseDownBackColor = Color.FromArgb(202, 235, 250);
             button.Click += (_, _) =>
             {
                 SelectedStyle = (InvoicePdfStyle)button.Tag!;

@@ -16,14 +16,14 @@ internal static class CarrierInvoicePreview
 
     public static Bitmap Render(InvoiceRecord record, Settings settings)
     {
-        var image = new Bitmap(760, 980);
+        var image = new Bitmap(600, 820);
         using var graphics = Graphics.FromImage(image);
         graphics.Clear(Color.FromArgb(238, 240, 242));
         graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
         graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-        var paper = new Rectangle(20, 8, 720, 964);
+        var paper = new Rectangle(20, 8, 560, 804);
         using var paperBrush = new SolidBrush(Color.White);
         using var accentBrush = new SolidBrush(Accent);
         using var inkBrush = new SolidBrush(Color.FromArgb(20, 20, 20));
@@ -31,48 +31,45 @@ internal static class CarrierInvoicePreview
         using var faintPen = new Pen(Color.FromArgb(170, 170, 170), 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
         graphics.FillRectangle(paperBrush, paper);
 
-        const int sideWidth = 30;
+        const int sideWidth = 18;
         graphics.FillRectangle(accentBrush, paper.Left, paper.Top, sideWidth, paper.Height);
         graphics.FillRectangle(accentBrush, paper.Right - sideWidth, paper.Top, sideWidth, paper.Height);
-        foreach (var y in new[] { paper.Top + 330, paper.Top + 700 })
+        foreach (var y in new[] { paper.Top + 300, paper.Top + 635 })
         {
-            graphics.FillRectangle(paperBrush, paper.Left, y, sideWidth, 18);
-            graphics.FillRectangle(paperBrush, paper.Right - sideWidth, y, sideWidth, 18);
+            graphics.FillRectangle(paperBrush, paper.Left, y, sideWidth, 14);
+            graphics.FillRectangle(paperBrush, paper.Right - sideWidth, y, sideWidth, 14);
         }
 
-        using var noticeFont = new Font("Microsoft JhengHei UI", 18F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var titleFont = new Font("Microsoft JhengHei UI", 56F, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var subtitleFont = new Font("Microsoft JhengHei UI", 35F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var periodFont = new Font("Microsoft JhengHei UI", 42F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var numberFont = new Font("Microsoft JhengHei UI", 52F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var bodyFont = new Font("Microsoft JhengHei UI", 27F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var smallFont = new Font("Microsoft JhengHei UI", 19F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var footerFont = new Font("Microsoft JhengHei UI", 16F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var noticeFont = new Font("Microsoft JhengHei UI", 13F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var titleFont = new Font("Microsoft JhengHei UI", 37F, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var subtitleFont = new Font("Microsoft JhengHei UI", 24F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var periodFont = new Font("Microsoft JhengHei UI", 31F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var numberFont = new Font("Microsoft JhengHei UI", 39F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var bodyFont = new Font("Microsoft JhengHei UI", 20F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var smallFont = new Font("Microsoft JhengHei UI", 15F, FontStyle.Regular, GraphicsUnit.Pixel);
 
-        var contentLeft = paper.Left + sideWidth + 24;
-        var contentWidth = paper.Width - sideWidth * 2 - 48;
-        DrawCentered(graphics, "本明細為模擬畫面僅供參考", noticeFont, grayBrush, contentLeft, paper.Top + 18, contentWidth, 32);
-        DrawCentered(graphics, SellerTitle(record, settings), titleFont, inkBrush, contentLeft, paper.Top + 58, contentWidth, 74);
-        DrawCentered(graphics, "電子發票證明聯", subtitleFont, inkBrush, contentLeft, paper.Top + 142, contentWidth, 48);
-        DrawCentered(graphics, InvoicePeriod(record), periodFont, inkBrush, contentLeft, paper.Top + 198, contentWidth, 56);
-        DrawCentered(graphics, FormatInvoiceNumber(record.InvoiceNumber), numberFont, inkBrush, contentLeft, paper.Top + 260, contentWidth, 68);
+        var contentLeft = paper.Left + sideWidth + 22;
+        var contentWidth = paper.Width - sideWidth * 2 - 44;
+        DrawCentered(graphics, "本明細為模擬畫面僅供參考", noticeFont, grayBrush, contentLeft, paper.Top + 14, contentWidth, 24);
+        DrawCentered(graphics, SellerTitle(record, settings), titleFont, inkBrush, contentLeft, paper.Top + 48, contentWidth, 52);
+        DrawCentered(graphics, "電子發票證明聯", subtitleFont, inkBrush, contentLeft, paper.Top + 104, contentWidth, 34);
+        DrawCentered(graphics, InvoicePeriod(record), periodFont, inkBrush, contentLeft, paper.Top + 145, contentWidth, 42);
+        DrawCentered(graphics, FormatInvoiceNumber(record.InvoiceNumber), numberFont, inkBrush, contentLeft, paper.Top + 194, contentWidth, 50);
 
         var issued = IssueTime(record);
-        graphics.DrawString(issued, bodyFont, inkBrush, contentLeft + 8, paper.Top + 342);
-        graphics.DrawString($"隨機碼：{SimulationRandomCode(record.InvoiceNumber)}    總計：${MoneyFormatter.Integer(record.Amount)}", bodyFont, inkBrush, contentLeft + 8, paper.Top + 382);
-        graphics.DrawString($"賣方：{SellerBan(settings)}", bodyFont, inkBrush, contentLeft + 8, paper.Top + 422);
-        graphics.DrawString($"載具：{Mask(record.CarrierId1)}", smallFont, grayBrush, contentLeft + 8, paper.Top + 462);
+        graphics.DrawString(issued, bodyFont, inkBrush, contentLeft + 6, paper.Top + 278);
+        graphics.DrawString($"隨機碼：{SimulationRandomCode(record.InvoiceNumber)}    總計：${MoneyFormatter.Integer(record.Amount)}", bodyFont, inkBrush, contentLeft + 6, paper.Top + 314);
+        graphics.DrawString($"賣方：{SellerBan(settings)}", bodyFont, inkBrush, contentLeft + 6, paper.Top + 350);
+        graphics.DrawString($"載具：{Mask(record.CarrierId1)}", smallFont, grayBrush, contentLeft + 6, paper.Top + 386);
 
-        var barcodeRect = new Rectangle(contentLeft, paper.Top + 506, contentWidth, 92);
+        var barcodeRect = new Rectangle(contentLeft, paper.Top + 430, contentWidth, 62);
         DrawBarcode(graphics, barcodeRect);
-        graphics.DrawLine(faintPen, contentLeft + 18, paper.Top + 626, contentLeft + contentWidth - 18, paper.Top + 626);
+        graphics.DrawLine(faintPen, contentLeft + 16, paper.Top + 516, contentLeft + contentWidth - 16, paper.Top + 516);
 
-        var qrSize = 210;
-        var qrTop = paper.Top + 654;
-        DrawQr(graphics, new Rectangle(contentLeft + 26, qrTop, qrSize, qrSize));
-        DrawQr(graphics, new Rectangle(contentLeft + contentWidth - 26 - qrSize, qrTop, qrSize, qrSize));
-        DrawCentered(graphics, "掃描條碼將開啟光貿電子發票網站", footerFont, grayBrush, contentLeft, paper.Top + 874, contentWidth, 28);
-        DrawCentered(graphics, "模擬畫面｜非正式憑證", noticeFont, grayBrush, contentLeft, paper.Top + 910, contentWidth, 30);
+        var qrSize = 190;
+        var qrTop = paper.Top + 552;
+        DrawQr(graphics, new Rectangle(contentLeft + 18, qrTop, qrSize, qrSize));
+        DrawQr(graphics, new Rectangle(contentLeft + contentWidth - 18 - qrSize, qrTop, qrSize, qrSize));
         return image;
     }
 

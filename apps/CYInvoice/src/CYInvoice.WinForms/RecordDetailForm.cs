@@ -122,7 +122,7 @@ internal sealed class RecordDetailForm : Form
         AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
         if (paperInvoice)
         {
-            AddDetail("發票印表機", string.Empty, printerStatus);
+            AddDetail("發票印表機", string.Empty, printerStatus, topAlignLabel: true);
             UpdatePrinterStatus();
         }
 
@@ -243,14 +243,11 @@ internal sealed class RecordDetailForm : Form
         previewMessageHost.Controls.Add(previewStatus);
         previewMessageHost.Controls.Add(retryPreview);
         retryPreview.BringToFront();
-
         a4PreviewFrame.Controls.Add(paperPreview);
         a4PreviewFrame.Controls.Add(previewMessageHost);
         previewMessageHost.BringToFront();
         paperPreviewHost.Controls.Add(a4PreviewFrame);
-
-        if (!eligibility.Allowed)
-            ShowUnavailablePreview(eligibility);
+        if (!eligibility.Allowed) ShowUnavailablePreview(eligibility);
         return paperPreviewHost;
     }
 
@@ -315,29 +312,11 @@ internal sealed class RecordDetailForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(238, 240, 242),
-            Padding = new Padding(4),
-            Margin = new Padding(4, 0, 4, 4),
+            Padding = new Padding(6),
+            Margin = new Padding(4, 0, 0, 4),
+            Tag = "carrier-receipt",
         };
         receiptFrame.Controls.Add(receipt);
-
-        var receiptSection = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            Margin = Padding.Empty,
-        };
-        receiptSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        receiptSection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        receiptSection.Controls.Add(new Label
-        {
-            Text = "模擬電子發票",
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font(Font, FontStyle.Bold),
-            Margin = new Padding(4, 0, 0, 0),
-        }, 0, 0);
-        receiptSection.Controls.Add(receiptFrame, 0, 1);
 
         var items = CreateItemsGrid();
         var itemSection = new TableLayoutPanel
@@ -345,7 +324,8 @@ internal sealed class RecordDetailForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Margin = new Padding(4, 0, 0, 4),
+            Margin = new Padding(4, 0, 4, 4),
+            Tag = "carrier-items",
         };
         itemSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         itemSection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -378,12 +358,12 @@ internal sealed class RecordDetailForm : Form
             Tag = "carrier-preview",
         };
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, InformationColumnWidth));
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
         split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         split.Controls.Add(BuildInformationSection(), 0, 0);
-        split.Controls.Add(receiptSection, 1, 0);
-        split.Controls.Add(itemSection, 2, 0);
+        split.Controls.Add(itemSection, 1, 0);
+        split.Controls.Add(receiptFrame, 2, 0);
         return split;
     }
 
@@ -457,9 +437,7 @@ internal sealed class RecordDetailForm : Form
         try
         {
             var document = await service.GetInvoicePdfAsync(record, style.Code);
-            using var viewer = new InvoicePdfViewerForm(
-                document,
-                Path.Combine(repository.CacheDirectory, "WebView2"));
+            using var viewer = new InvoicePdfViewerForm(document, Path.Combine(repository.CacheDirectory, "WebView2"));
             viewer.ShowDialog(this);
         }
         catch (Exception error)
@@ -562,7 +540,7 @@ internal sealed class RecordDetailForm : Form
         var name = repository.Settings.LoadOrCreate().InvoicePrinterName.Trim();
         if (name.Length == 0)
         {
-            printerStatus.Text = "尚未設定（首次列印時選擇）";
+            printerStatus.Text = "尚未設定";
             printerStatus.ForeColor = Color.DimGray;
             return;
         }
@@ -593,13 +571,11 @@ internal sealed class RecordDetailForm : Form
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
     }
 
-    private void AddDetail(string label, string value, Label? target = null, bool singleLine = false)
+    private void AddDetail(string label, string value, Label? target = null, bool singleLine = false, bool topAlignLabel = false)
     {
         var row = details.RowCount++;
-        details.RowStyles.Add(singleLine
-            ? new RowStyle(SizeType.Absolute, 31)
-            : new RowStyle(SizeType.AutoSize));
-        details.Controls.Add(FieldLabel(label), 0, row);
+        details.RowStyles.Add(singleLine ? new RowStyle(SizeType.Absolute, 31) : new RowStyle(SizeType.AutoSize));
+        details.Controls.Add(FieldLabel(label, topAlignLabel), 0, row);
         var text = target ?? ValueLabel(value, singleLine);
         if (target is not null) text.Text = value;
         details.Controls.Add(text, 1, row);
@@ -769,15 +745,15 @@ internal sealed class RecordDetailForm : Form
             throw new InvalidOperationException("紙本詳細資訊初始狀態不應處於 PDF 忙碌狀態");
     }
 
-    private static Label FieldLabel(string text) => new()
+    private static Label FieldLabel(string text, bool topAlign = false) => new()
     {
         Text = text,
         Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
+        TextAlign = topAlign ? ContentAlignment.TopLeft : ContentAlignment.MiddleLeft,
         ForeColor = Color.DimGray,
         BackColor = SystemColors.Control,
         Margin = Padding.Empty,
-        Padding = new Padding(0, 5, 4, 5),
+        Padding = new Padding(0, topAlign ? 7 : 5, 4, 5),
         MinimumSize = new Size(0, 30),
         AutoEllipsis = true,
     };
