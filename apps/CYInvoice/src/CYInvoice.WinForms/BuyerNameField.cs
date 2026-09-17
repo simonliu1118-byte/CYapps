@@ -129,11 +129,13 @@ internal sealed class BuyerNameField : TextBox
 
     private void BuyerBanTextChanged(object? sender, EventArgs eventArgs)
     {
-        if (buyerBan is null || lookupEnabled?.Invoke() != true) return;
+        if (buyerBan is null) return;
         generation++;
         activeLookup?.Cancel();
         activeLookup?.Dispose();
         activeLookup = null;
+        if (lookupEnabled?.Invoke() != true) return;
+
         ClearLookupState();
         ApplyLookupText(string.Empty);
         var ban = buyerBan.Text.Trim();
