@@ -38,8 +38,8 @@ internal sealed class ImportConfirmationForm : Form
     private readonly List<Entry> entries = [];
     private readonly DataGridView grid = UiControls.Grid();
     private readonly TextBox buyerBan = UiControls.TextBox(8);
-    private readonly TextBox buyerName = UiControls.TextBox(200);
-    private readonly BuyerNameField buyerNameField;
+    private readonly BuyerNameField buyerNameField = new(200);
+    private TextBox buyerName => buyerNameField;
     private readonly Button applyName = UiControls.StandardButton("套用名稱");
     private readonly Button retryLookup = UiControls.StandardButton("重新查詢統編");
     private readonly Label buyerHint = UiControls.Label("");
@@ -67,7 +67,6 @@ internal sealed class ImportConfirmationForm : Form
     private bool closing;
     private bool loadingBuyerEditor;
     private bool buyerEditorDirty;
-    private int buyerLookupGeneration;
 
     private ImportConfirmationForm(
         string source,
@@ -82,7 +81,6 @@ internal sealed class ImportConfirmationForm : Form
         this.recordsChanged = recordsChanged;
         this.loadOrders = loadOrders;
         digiwinMode = source == InvoiceSources.Digiwin;
-        buyerNameField = new BuyerNameField(buyerName);
         Text = $"CYInvoice｜{source} 開立發票匯入確認｜{EnvironmentName()}";
         Font = new Font("Microsoft JhengHei UI", 10F);
         StartPosition = FormStartPosition.CenterParent;
@@ -246,11 +244,9 @@ internal sealed class ImportConfirmationForm : Form
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        buyerBan.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        buyerNameField.Dock = DockStyle.None;
-        buyerNameField.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        buyerBan.BorderStyle = BorderStyle.FixedSingle;
+        buyerNameField.BorderStyle = BorderStyle.FixedSingle;
         buyerNameField.Margin = buyerBan.Margin;
-        buyerNameField.Height = buyerBan.PreferredHeight;
         applyName.Anchor = AnchorStyles.None;
         editor.Controls.Add(UiControls.Label("統一編號"), 0, 0);
         editor.Controls.Add(buyerBan, 1, 0);
@@ -329,10 +325,22 @@ internal sealed class ImportConfirmationForm : Form
             else ApplyBuyerName(true);
         };
         retryLookup.Click += async (_, _) => await RetryLookupAsync();
-        buyerNameField.RetryRequested += async (_, _) => await RequeryApiNameAsync();
         if (digiwinMode)
         {
-            buyerBan.TextChanged += async (_, _) => await DigiwinBuyerBanChangedAsync();
+            buyerNameField.BindLookup(
+                buyerBan,
+                service,
+                () => !loadingBuyerEditor && !closing && !issuing,
+                ResolveDigiwinBuyerName,
+                lifetime.Token);
+            buyerNameField.BuyerBanChanged += DigiwinBuyerBanChanged;
+            buyerNameField.LookupStarted += _ =>
+            {
+                buyerHint.Text = "正在自動查詢買受人名稱…";
+                UpdateIssueEnabled();
+            };
+            buyerNameField.LookupCompleted += DigiwinBuyerLookupCompleted;
+            buyerNameField.LookupFailed += DigiwinBuyerLookupFailed;
             buyerName.TextChanged += (_, _) => BuyerEditorChanged(clearApiName: false);
         }
         grid.CurrentCellDirtyStateChanged += (_, _) =>
@@ -355,68 +363,50 @@ internal sealed class ImportConfirmationForm : Form
         };
     }
 
-    private async Task DigiwinBuyerBanChangedAsync()
+    private string ResolveDigiwinBuyerName(string ban, NameLookup lookup)
+    {
+        var resolved = lookup.Name.Trim();
+        var entry = ActiveEntry();
+        if (resolved.Length == 0 && entry is not null && string.Equals(entry.OriginalBuyerBan.Trim(), ban, StringComparison.Ordinal))
+            resolved = entry.OriginalBuyerName.Trim();
+        return resolved;
+    }
+
+    private void DigiwinBuyerBanChanged(string ban)
     {
         if (!digiwinMode || loadingBuyerEditor) return;
         buyerEditorDirty = true;
-        var generation = ++buyerLookupGeneration;
-        buyerNameField.ClearLookupState();
-        loadingBuyerEditor = true;
-        try { buyerName.Clear(); }
-        finally { loadingBuyerEditor = false; }
-
-        var ban = buyerBan.Text.Trim();
-        if (ban.Length != 8 || !ban.All(char.IsAsciiDigit))
-        {
-            buyerHint.Text = ban.Length == 0
-                ? "買方資料已修改，請先套用資料"
+        buyerHint.Text = ban.Length == 0
+            ? "買方資料已修改，請先套用資料"
+            : ban.Length == 8 && ban.All(char.IsAsciiDigit)
+                ? "正在自動查詢買受人名稱…"
                 : "輸入完整 8 碼統編後會自動查詢買受人名稱";
-            UpdateIssueEnabled();
-            return;
-        }
-
-        buyerHint.Text = "正在自動查詢買受人名稱…";
         UpdateIssueEnabled();
-        var entry = ActiveEntry();
-        try
-        {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
-            timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            var lookup = await service.LookupBuyerNameAsync(ban, timeout.Token);
-            if (closing || generation != buyerLookupGeneration || !string.Equals(buyerBan.Text.Trim(), ban, StringComparison.Ordinal)) return;
+    }
 
-            var resolved = lookup.Name.Trim();
-            if (resolved.Length == 0 && entry is not null && string.Equals(entry.OriginalBuyerBan.Trim(), ban, StringComparison.Ordinal))
-                resolved = entry.OriginalBuyerName.Trim();
-            loadingBuyerEditor = true;
-            try
-            {
-                buyerName.Text = resolved;
-                buyerNameField.SetLookupState(lookup);
-            }
-            finally { loadingBuyerEditor = false; }
-            buyerHint.Text = lookup.Local
-                ? "已找到本機記憶名稱，請套用資料"
-                : lookup.ApiName.Trim().Length != 0
-                    ? "已自動查詢買受人名稱，請套用資料"
-                    : "光貿查無名稱，請輸入買方名稱後套用資料";
-        }
-        catch (Exception error)
-        {
-            if (closing || generation != buyerLookupGeneration || !string.Equals(buyerBan.Text.Trim(), ban, StringComparison.Ordinal)) return;
-            buyerNameField.ClearLookupState();
-            buyerHint.Text = "統編自動查詢失敗，請確認後再試";
-            MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-        finally
-        {
-            UpdateIssueEnabled();
-        }
+    private void DigiwinBuyerLookupCompleted(string ban, NameLookup lookup)
+    {
+        if (!digiwinMode || loadingBuyerEditor || !string.Equals(buyerBan.Text.Trim(), ban, StringComparison.Ordinal)) return;
+        buyerEditorDirty = true;
+        buyerHint.Text = lookup.Local
+            ? "已找到本機記憶名稱，請套用資料"
+            : lookup.ApiName.Trim().Length != 0
+                ? "已查詢買受人名稱，請套用資料"
+                : "光貿查無名稱，請輸入買方名稱後套用資料";
+        UpdateIssueEnabled();
+    }
+
+    private void DigiwinBuyerLookupFailed(string ban, Exception error)
+    {
+        if (!digiwinMode || loadingBuyerEditor || !string.Equals(buyerBan.Text.Trim(), ban, StringComparison.Ordinal)) return;
+        buyerHint.Text = "統編自動查詢失敗，請確認後再試";
+        UpdateIssueEnabled();
+        MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private void BuyerEditorChanged(bool clearApiName)
     {
-        if (!digiwinMode || loadingBuyerEditor) return;
+        if (!digiwinMode || loadingBuyerEditor || buyerNameField.IsApplyingLookup) return;
         buyerEditorDirty = true;
         if (clearApiName) buyerNameField.ClearLookupState();
         buyerHint.Text = "買方資料已修改，請先套用資料";
@@ -579,56 +569,6 @@ internal sealed class ImportConfirmationForm : Form
         SetBusy(false, string.Empty);
     }
 
-    private async Task RequeryApiNameAsync()
-    {
-        var entry = ActiveEntry();
-        var ban = digiwinMode ? buyerBan.Text.Trim() : entry?.BuyerBan.Trim() ?? string.Empty;
-        if (entry is null || entry.Finished || ban.Length != 8 || !ban.All(char.IsAsciiDigit)) return;
-        var current = buyerName.Text;
-        SetBusy(true, $"正在向光貿重新查詢 {ban}…");
-        try
-        {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
-            timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            var lookup = await service.LookupBuyerNameFromApiAsync(ban, timeout.Token);
-            if (closing) return;
-            loadingBuyerEditor = true;
-            try
-            {
-                if (lookup.ApiName.Trim().Length != 0) buyerName.Text = lookup.ApiName.Trim();
-                else buyerName.Text = current;
-                buyerNameField.SetLookupState(lookup);
-            }
-            finally { loadingBuyerEditor = false; }
-            if (digiwinMode)
-            {
-                buyerEditorDirty = true;
-                buyerHint.Text = lookup.ApiName.Trim().Length == 0
-                    ? "光貿查無名稱；請確認後套用資料"
-                    : "已重新查詢，請套用資料";
-            }
-            else if (lookup.ApiName.Trim().Length != 0)
-            {
-                SetResolvedName(entry, lookup.ApiName, "光貿重新查詢完成");
-                entry.Lookup = lookup;
-                entry.LookupError = null;
-                RefreshGrid();
-            }
-        }
-        catch (Exception error)
-        {
-            loadingBuyerEditor = true;
-            try { buyerName.Text = current; }
-            finally { loadingBuyerEditor = false; }
-            MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-        finally
-        {
-            SetBusy(false, string.Empty);
-            UpdateIssueEnabled();
-        }
-    }
-
     private void ApplyBuyerName(bool showMessage)
     {
         var entry = ActiveEntry();
@@ -703,6 +643,7 @@ internal sealed class ImportConfirmationForm : Form
         entry.Lookup = lookup;
         entry.LookupError = error;
         entry.ApplyBuyerData?.Invoke(ban, name);
+        buyerNameField.SetLookupState(lookup);
         if (error is not null)
         {
             entry.Selected = false;
@@ -782,7 +723,7 @@ internal sealed class ImportConfirmationForm : Form
             {
                 entry.Selected = false;
                 entry.Finished = true;
-                entry.Status = "結果不明（禁止重送）";
+                entry.Status = "開立結果待確認，禁止重送";
                 failed++;
             }
             catch (LocalPersistenceException)
@@ -795,7 +736,7 @@ internal sealed class ImportConfirmationForm : Form
             catch (Exception error)
             {
                 entry.Selected = false;
-                entry.Status = "已擋下：" + ShortError(error);
+                entry.Status = StatusForIssueError(error);
                 failed++;
             }
             recordsChanged();
@@ -885,7 +826,6 @@ internal sealed class ImportConfirmationForm : Form
     private void LoadBuyerEditor()
     {
         var entry = ActiveEntry();
-        buyerLookupGeneration++;
         loadingBuyerEditor = true;
         try
         {
@@ -992,9 +932,10 @@ internal sealed class ImportConfirmationForm : Form
         if (eventArgs.RowIndex < 0 || eventArgs.RowIndex >= entries.Count) return;
         var status = entries[eventArgs.RowIndex].Status;
         if (status.Contains("成功", StringComparison.Ordinal)) eventArgs.CellStyle.ForeColor = Color.FromArgb(0, 135, 45);
-        else if (status.Contains("異常", StringComparison.Ordinal) || status.Contains("失敗", StringComparison.Ordinal) || status.Contains("擋下", StringComparison.Ordinal))
+        else if (status.Contains("異常", StringComparison.Ordinal) || status.Contains("失敗", StringComparison.Ordinal) ||
+                 status.Contains("未開立", StringComparison.Ordinal) || status.Contains("禁止重送", StringComparison.Ordinal))
             eventArgs.CellStyle.ForeColor = Color.FromArgb(190, 0, 0);
-        else if (status.Contains("請輸入", StringComparison.Ordinal) || status.Contains("結果不明", StringComparison.Ordinal) || status.Contains("不同", StringComparison.Ordinal))
+        else if (status.Contains("請輸入", StringComparison.Ordinal) || status.Contains("待確認", StringComparison.Ordinal) || status.Contains("不同", StringComparison.Ordinal))
             eventArgs.CellStyle.ForeColor = Color.FromArgb(190, 100, 0);
     }
 
@@ -1031,9 +972,33 @@ internal sealed class ImportConfirmationForm : Form
             Math.Abs(form.summarySelected.Font.SizeInPoints - 13F) > 0.1F ||
             form.summarySelected.ForeColor != Color.FromArgb(196, 0, 0))
             throw new InvalidOperationException("匯入確認摘要字級或已選張數顏色不正確");
+
+        using var digiwinForm = new ImportConfirmationForm(
+            InvoiceSources.Digiwin,
+            repository,
+            service,
+            () => { },
+            _ => Task.FromResult<IReadOnlyList<Entry>>([]));
+        digiwinForm.CreateControl();
+        digiwinForm.PerformLayout();
+        if (digiwinForm.buyerBan.BorderStyle != digiwinForm.buyerNameField.BorderStyle ||
+            Math.Abs(digiwinForm.buyerBan.Height - digiwinForm.buyerNameField.Height) > 1 ||
+            digiwinForm.buyerBan.Margin != digiwinForm.buyerNameField.Margin)
+            throw new InvalidOperationException("鼎新匯入的統編與買方名稱欄位外觀不一致");
     }
 
     private string EnvironmentName() => IsProductionEnvironment() ? "正式公司環境" : "光貿測試環境";
+
+    private static string StatusForIssueError(Exception error)
+    {
+        var message = ShortError(error);
+        if (message.Contains("不可重送", StringComparison.Ordinal) ||
+            message.Contains("禁止重送", StringComparison.Ordinal) ||
+            message.Contains("重複開立", StringComparison.Ordinal))
+            return "已有開立紀錄，禁止重送";
+        return "未開立：" + message;
+    }
+
     private static string ShortError(Exception error) => error.Message.Length <= 80 ? error.Message : error.Message[..77] + "…";
     private static DataGridViewTextBoxColumn Column(string title, int width, bool right = false) => new()
     {
