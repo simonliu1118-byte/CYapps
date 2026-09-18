@@ -79,13 +79,16 @@ public sealed class InvoiceDetailRefreshService
             !string.Equals(record.InvoiceNumber.Trim(), number, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("invoice_query 發票號碼與本機紀錄不符");
 
-        var orderId = query.OrderId.Trim();
-        if (orderId.Length == 0) throw new InvalidDataException("invoice_query 缺少 OrderID");
+        var apiOrderId = query.OrderId.Trim();
+        if (apiOrderId.Length == 0) throw new InvalidDataException("invoice_query 缺少 OrderID");
+        var orderId = account.Environment == Environments.Test
+            ? TestOrderIdPrefix.StripIfPresent(apiOrderId)
+            : apiOrderId;
         record.SellerInvoice = account.SellerInvoice;
         record.Environment = account.Environment;
         record.InvoiceNumber = number;
         record.OrderId = orderId;
-        record.ApiOrderId = orderId;
+        record.ApiOrderId = apiOrderId;
         if (string.Equals(record.RecordOrigin, RecordOrigins.Sync, StringComparison.Ordinal) ||
             record.OriginalOrderId.Trim().Length == 0)
             record.OriginalOrderId = orderId;
