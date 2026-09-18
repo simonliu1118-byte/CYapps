@@ -9,6 +9,7 @@ public sealed class InvoiceAutomaticSyncService
     private readonly LocalRepository repository;
     private readonly InvoiceSyncService syncService;
     private readonly InvoiceSyncStateStore stateStore;
+    private readonly InvoiceRetentionService retentionService;
     private readonly Func<DateTimeOffset> now;
 
     public InvoiceAutomaticSyncService(
@@ -19,6 +20,7 @@ public sealed class InvoiceAutomaticSyncService
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         this.syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
         stateStore = new InvoiceSyncStateStore(repository.DataDirectory);
+        retentionService = new InvoiceRetentionService(repository);
         this.now = now ?? (() => DateTimeOffset.Now);
     }
 
@@ -26,7 +28,8 @@ public sealed class InvoiceAutomaticSyncService
     {
         var current = now();
         var today = DateOnly.FromDateTime(current.DateTime);
-        var accountKey = CurrentAccountKey();
+        var account = CurrentAccount();
+        var accountKey = account.Environment + "|" + account.SellerInvoice;
         var lastSuccess = stateStore.LastSuccess(accountKey, DailyReconcileScope);
 
         if (lastSuccess is not null &&
@@ -35,10 +38,31 @@ public sealed class InvoiceAutomaticSyncService
             return await syncService.SyncRecentAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        var result = await syncService.SyncRangeAsync(TwoPeriodRangeStart(today), today, cancellationToken).ConfigureAwait(false);
+        var startDate = account.Environment == Environments.Test ? today : TwoPeriodRangeStart(today);
+        var result = await syncService.SyncRangeAsync(startDate, today, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         stateStore.SetLastSuccess(accountKey, DailyReconcileScope, now());
-        return result;
+
+        if (result.Problems.Count != 0) return result;
+
+        try
+        {
+            var retention = retentionService.Prune(today);
+            if (retention.Problems.Count == 0) return result;
+            return result with
+            {
+                Problems = retention.Problems
+                    .Select(problem => "本機舊資料快取清理：" + problem)
+                    .ToArray(),
+            };
+        }
+        catch (Exception error)
+        {
+            return result with
+            {
+                Problems = [$"本機舊資料清理失敗：{error.Message}"],
+            };
+        }
     }
 
     internal static DateOnly TwoPeriodRangeStart(DateOnly today)
@@ -48,7 +72,7 @@ public sealed class InvoiceAutomaticSyncService
         return currentPeriodStart.AddMonths(-2);
     }
 
-    private string CurrentAccountKey()
+    private Account CurrentAccount()
     {
         var settings = repository.Settings.LoadOrCreate();
         var sellerInvoice = settings.Environment == Environments.Test
@@ -56,6 +80,8 @@ public sealed class InvoiceAutomaticSyncService
             : settings.ProductionInvoice.Trim();
         if (sellerInvoice.Length == 0)
             throw new InvalidOperationException("目前環境缺少可識別的公司統編");
-        return settings.Environment + "|" + sellerInvoice;
+        return new Account(settings.Environment, sellerInvoice);
     }
+
+    private sealed record Account(string Environment, string SellerInvoice);
 }
