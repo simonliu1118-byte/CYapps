@@ -218,6 +218,7 @@ public sealed class InvoiceSyncService
     {
         var accountKey = AccountKey(account);
         var local = AccountRecords(account)
+            .Where(record => !string.Equals(record.InvoiceState, InvoiceStates.Failed, StringComparison.Ordinal))
             .Where(record => IsInRange(record, startDate, endDate))
             .ToList();
         var changes = new List<InvoiceRecord>();
