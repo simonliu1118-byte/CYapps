@@ -21,6 +21,20 @@ internal static class RetentionTests
 
         InsertSyncIssue(repository, "prod|12345675", "", "M20260101003", resolved: false);
         InsertSyncIssue(repository, "prod|12345675", "AA00000002", "", resolved: true);
+        InsertSyncIssue(
+            repository,
+            "prod|12345675",
+            string.Empty,
+            "DETACHED-OLD",
+            resolved: false,
+            createdUtc: "2026-06-01T00:00:00.0000000+00:00");
+        InsertSyncIssue(
+            repository,
+            "prod|12345675",
+            string.Empty,
+            "DETACHED-CURRENT",
+            resolved: false,
+            createdUtc: "2026-09-18T00:00:00.0000000+00:00");
 
         var cacheDirectory = Path.Combine(repository.InvoicePdfCacheDirectory, Environments.Production, "20260630");
         Directory.CreateDirectory(cacheDirectory);
@@ -43,8 +57,11 @@ internal static class RetentionTests
         }
         using (var command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT COUNT(*) FROM sync_issues;";
-            Equal(0L, Convert.ToInt64(command.ExecuteScalar()));
+            command.CommandText = "SELECT order_id FROM sync_issues ORDER BY local_id;";
+            using var reader = command.ExecuteReader();
+            Equal(true, reader.Read());
+            Equal("DETACHED-CURRENT", reader.GetString(0));
+            Equal(false, reader.Read());
         }
     }
 
@@ -60,12 +77,42 @@ internal static class RetentionTests
         repository.Invoices.Append(Record("test-today-keep", "TT00000002", "M20260918001", InvoiceStates.Opened, "2026/09/18", Environments.Test));
         repository.Invoices.Append(Record("test-future-keep", "TT00000003", "M20260919001", InvoiceStates.Opened, "2026/09/19", Environments.Test));
         repository.Invoices.Append(Record("test-unknown-delete", "TT00000004", "M20260916001", InvoiceStates.Unknown, "2026/09/16", Environments.Test));
+        InsertSyncIssue(
+            repository,
+            "test|12345678",
+            string.Empty,
+            "OLD-TEST-ISSUE",
+            resolved: false,
+            createdUtc: "2026-09-17T00:00:00.0000000+00:00");
 
         var result = new InvoiceRetentionService(repository).Prune(new DateOnly(2026, 9, 18));
         Equal(2, result.Deleted);
         Equal(0, result.Problems.Count);
         var remaining = repository.Invoices.LoadOrCreate().Select(record => record.Id).OrderBy(id => id).ToArray();
         SequenceEqual(new[] { "test-future-keep", "test-today-keep" }, remaining);
+        Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).All("test|12345678").Count);
+    }
+
+    public static void FailedStoreDeletesOnlyFailedRows()
+    {
+        using var temporary = new RetentionTemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new RetentionTestProtector());
+        ConfigureProduction(repository);
+        var failed = Record("failed-delete", string.Empty, "CUSTOM-FAILED", InvoiceStates.Failed, "2026/09/18");
+        failed.ErrorMessage = "明確開立失敗";
+        var opened = Record("opened-keep", "AA99999999", "66091800999999", InvoiceStates.Opened, "2026/09/18");
+        repository.Invoices.Append(failed);
+        repository.Invoices.Append(opened);
+        InsertSyncIssue(repository, "prod|12345675", string.Empty, "CUSTOM-FAILED", resolved: false);
+
+        var store = new FailedInvoiceRecordStore(repository.DataDirectory);
+        Equal(1, store.Delete([failed]));
+        var remaining = repository.Invoices.LoadOrCreate();
+        Equal(1, remaining.Count);
+        Equal("opened-keep", remaining.Single().Id);
+        Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).All("prod|12345675").Count);
+        Throws<InvalidOperationException>(() => store.Delete([opened]));
+        Equal(1, repository.Invoices.LoadOrCreate().Count);
     }
 
     private static InvoiceRecord Record(
@@ -121,7 +168,8 @@ internal static class RetentionTests
         string accountKey,
         string invoiceNumber,
         string orderId,
-        bool resolved)
+        bool resolved,
+        string createdUtc = "2026-09-18T00:00:00.0000000+00:00")
     {
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
@@ -136,12 +184,13 @@ internal static class RetentionTests
                 account_key, invoice_number, order_id, issue_type, message, created_utc, resolved_utc
             ) VALUES (
                 $account_key, $invoice_number, $order_id, 'retention-test', 'test issue',
-                '2026-09-18T00:00:00.0000000+00:00', $resolved_utc
+                $created_utc, $resolved_utc
             );
             """;
         command.Parameters.AddWithValue("$account_key", accountKey);
         command.Parameters.AddWithValue("$invoice_number", invoiceNumber);
         command.Parameters.AddWithValue("$order_id", orderId);
+        command.Parameters.AddWithValue("$created_utc", createdUtc);
         command.Parameters.AddWithValue("$resolved_utc", resolved ? "2026-09-18T01:00:00.0000000+00:00" : "");
         command.ExecuteNonQuery();
     }
@@ -168,6 +217,19 @@ internal static class RetentionTests
     {
         if (!expected.SequenceEqual(actual))
             throw new InvalidOperationException($"expected [{string.Join(", ", expected)}], actual [{string.Join(", ", actual)}]");
+    }
+
+    private static void Throws<T>(Action action) where T : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (T)
+        {
+            return;
+        }
+        throw new InvalidOperationException($"expected {typeof(T).Name}");
     }
 
     private sealed class RetentionTestProtector : ISecretProtector
