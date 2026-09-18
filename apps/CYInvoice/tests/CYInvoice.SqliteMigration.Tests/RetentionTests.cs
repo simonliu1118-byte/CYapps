@@ -74,6 +74,7 @@ internal static class RetentionTests
         string environment = Environments.Production) => new()
         {
             Id = id,
+            SellerInvoice = environment == Environments.Test ? "12345678" : "12345675",
             Environment = environment,
             Source = "手動",
             RecordOrigin = RecordOrigins.Local,
