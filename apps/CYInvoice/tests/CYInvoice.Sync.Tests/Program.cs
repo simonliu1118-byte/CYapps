@@ -18,6 +18,7 @@ internal static class Program
             ("production sync overwrites cache and re-infers source", TestProductionOverwriteAsync),
             ("unchanged production summary skips invoice query", TestUnchangedSkipsQueryAsync),
             ("test environment does not discover shared pool invoices", TestTestEnvironmentNoDiscoveryAsync),
+            ("test environment skips definite failed records", TestTestEnvironmentSkipsFailedAsync),
             ("remote absence never deletes local cache", TestRemoteAbsenceDoesNotDeleteAsync),
             ("invoice list pagination is exhausted", TestPaginationAsync),
             ("detail refresh always queries even when official data is unchanged", TestDetailRefreshAlwaysQueriesAsync),
@@ -51,8 +52,8 @@ internal static class Program
         Equal(InvoiceSources.Digiwin, InvoiceSourceInference.FromOrderId("20260918001"));
         Equal(InvoiceSources.Manual, InvoiceSourceInference.FromOrderId("M20260918001"));
         Equal(InvoiceSources.Manual, InvoiceSourceInference.FromOrderId("M20260918001-R2"));
-        Equal(string.Empty, InvoiceSourceInference.FromOrderId("20260230001"));
-        Equal(string.Empty, InvoiceSourceInference.FromOrderId("OTHER"));
+        Equal(InvoiceSources.Manual, InvoiceSourceInference.FromOrderId("20260230001"));
+        Equal(InvoiceSources.Manual, InvoiceSourceInference.FromOrderId("OTHER"));
         return Task.CompletedTask;
     }
 
@@ -75,6 +76,7 @@ internal static class Program
         var record = repository.Invoices.LoadOrCreate().Single();
         Equal(RecordOrigins.Sync, record.RecordOrigin);
         Equal(InvoiceSources.Mo, record.Source);
+        Equal(InvoiceSourceInference.SyncTag, InvoiceSourceInference.DisplayTag(record));
         Equal("12345675", record.SellerInvoice);
         Equal("AA12345678", record.InvoiceNumber);
         Equal("66091800123456", record.OrderId);
@@ -121,6 +123,7 @@ internal static class Program
         var record = repository.Invoices.LoadOrCreate().Single();
         Equal(RecordOrigins.Local, record.RecordOrigin);
         Equal(InvoiceSources.Mo, record.Source);
+        Equal(InvoiceSourceInference.UpdateTag, InvoiceSourceInference.DisplayTag(record));
         Equal("66091800999999", record.OrderId);
         Equal("新買受人", record.BuyerName);
         Equal(120L, record.Amount);
@@ -171,7 +174,39 @@ internal static class Program
         Equal(1, result.Updated);
         var record = repository.Invoices.LoadOrCreate().Single();
         Equal(InvoiceSources.Mo, record.Source);
+        Equal(InvoiceSourceInference.UpdateTag, InvoiceSourceInference.DisplayTag(record));
         Equal(RecordOrigins.Local, record.RecordOrigin);
+    }
+
+    private static async Task TestTestEnvironmentSkipsFailedAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var settings = repository.Settings.LoadOrCreate();
+        settings.Environment = Environments.Test;
+        repository.Settings.Save(settings);
+        repository.Invoices.Append(new InvoiceRecord
+        {
+            Id = "test-failed", Environment = Environments.Test, SellerInvoice = AmegoDefaults.TestInvoice,
+            RecordOrigin = RecordOrigins.Local, Source = InvoiceSources.Manual,
+            OriginalOrderId = "CUSTOM-FAILED", OrderId = "CUSTOM-FAILED", ApiOrderId = "CUSTOM-FAILED",
+            InvoiceState = InvoiceStates.Failed, InvoiceDate = "2026/09/18", InvoiceTime = "10:00:00",
+            BuyerName = "測試消費者", Amount = 100, Delivery = InvoiceService.DeliveryPaper,
+            ErrorMessage = "光貿明確拒絕開立",
+            Items = [new InvoiceItem { Description = "測試商品", Quantity = 1, UnitPrice = 100, Amount = 100 }],
+        });
+        var fake = new FakeGateway
+        {
+            ThrowIfListCalled = true,
+            QueryException = new AmegoApiException(71, "查無發票"),
+        };
+
+        var result = await Sync(repository, fake).SyncRecentAsync();
+        Equal(0, fake.ListCalls);
+        Equal(0, fake.QueryCalls);
+        Equal(0, result.Queried);
+        Equal(0, result.Problems.Count);
+        Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).Unresolved("test|12345678").Count);
     }
 
     private static async Task TestRemoteAbsenceDoesNotDeleteAsync()
@@ -252,6 +287,7 @@ internal static class Program
         Equal("66091800666666", fresh.OrderId);
         Equal("66091800666666", fresh.ApiOrderId);
         Equal(InvoiceSources.Mo, fresh.Source);
+        Equal(InvoiceSourceInference.UpdateTag, InvoiceSourceInference.DisplayTag(fresh));
         Equal(InvoiceStates.Voided, fresh.InvoiceState);
         Equal(string.Empty, fresh.BuyerIdentifier);
         Equal(string.Empty, fresh.BuyerName);

@@ -4,22 +4,34 @@ namespace CYInvoice.Core.Invoicing;
 
 public static class InvoiceSourceInference
 {
+    public const string SyncTag = "同步";
+    public const string UpdateTag = "更新";
+
     public static string FromOrderId(string orderId)
     {
         var value = StripLegacyRetrySuffix(orderId.Trim());
-        if (value.Length == 0) return string.Empty;
         if (value.StartsWith("66", StringComparison.Ordinal)) return InvoiceSources.Mo;
         if (value.StartsWith("1", StringComparison.Ordinal)) return InvoiceSources.Coupang;
-        if (value.Length == 12 && value[0] == 'M' && IsDatedSequence(value[1..])) return InvoiceSources.Manual;
         if (value.Length == 11 && IsDatedSequence(value)) return InvoiceSources.Digiwin;
-        return string.Empty;
+        return InvoiceSources.Manual;
     }
 
     public static string Display(InvoiceRecord record)
     {
         var source = record.Source.Trim();
-        if (!string.Equals(record.RecordOrigin, RecordOrigins.Sync, StringComparison.Ordinal)) return source;
-        return source.Length == 0 ? "光貿同步" : "光貿同步｜" + source;
+        return source.Length == 0 ? FromOrderId(record.OrderId) : source;
+    }
+
+    public static string DisplayTag(InvoiceRecord record)
+    {
+        if (string.Equals(record.RecordOrigin, RecordOrigins.Sync, StringComparison.Ordinal))
+            return SyncTag;
+
+        var currentSource = Display(record);
+        var originalSource = FromOrderId(record.OriginalOrderId);
+        return string.Equals(currentSource, originalSource, StringComparison.Ordinal)
+            ? string.Empty
+            : UpdateTag;
     }
 
     private static bool IsDatedSequence(string value)

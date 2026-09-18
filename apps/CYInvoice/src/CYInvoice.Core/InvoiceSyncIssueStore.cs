@@ -34,6 +34,22 @@ public sealed class InvoiceSyncIssueStore
         databasePath = Path.Combine(dataDirectory, SqliteBootstrapper.DatabaseFileName);
     }
 
+    public IReadOnlyList<InvoiceSyncIssue> All(string accountKey)
+    {
+        accountKey = Required(accountKey, nameof(accountKey));
+        using var connection = Open(SqliteOpenMode.ReadOnly);
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT local_id, account_key, invoice_number, order_id, issue_type,
+                   message, created_utc, resolved_utc
+            FROM sync_issues
+            WHERE account_key = $account_key
+            ORDER BY local_id DESC;
+            """;
+        command.Parameters.AddWithValue("$account_key", accountKey);
+        return Read(command);
+    }
+
     public IReadOnlyList<InvoiceSyncIssue> Unresolved(string accountKey)
     {
         accountKey = Required(accountKey, nameof(accountKey));

@@ -33,10 +33,13 @@ public sealed class InvoiceRetentionService
         var candidates = LoadCandidates(connection, account)
             .Where(candidate => ShouldDelete(candidate, cutoff))
             .ToArray();
-        if (candidates.Length == 0) return new InvoiceRetentionResult(0, []);
+        var expiredIssueIds = LoadExpiredIssueIds(connection, accountKey, cutoff);
+        if (candidates.Length == 0 && expiredIssueIds.Count == 0)
+            return new InvoiceRetentionResult(0, []);
 
         using (var transaction = connection.BeginTransaction())
         {
+            DeleteExpiredIssues(connection, transaction, expiredIssueIds);
             foreach (var candidate in candidates)
             {
                 DeleteMatchingSyncIssues(connection, transaction, accountKey, candidate);
@@ -115,6 +118,48 @@ public sealed class InvoiceRetentionService
                 reader.GetString(6)));
         }
         return candidates;
+    }
+
+    private static IReadOnlyList<long> LoadExpiredIssueIds(
+        SqliteConnection connection,
+        string accountKey,
+        DateOnly cutoff)
+    {
+        var ids = new List<long>();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT local_id, created_utc
+            FROM sync_issues
+            WHERE account_key = $account_key
+            ORDER BY local_id;
+            """;
+        command.Parameters.AddWithValue("$account_key", accountKey);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var text = reader.GetString(1).Trim();
+            if (!DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var created))
+                throw new InvalidDataException("sync_issues contains invalid created_utc");
+            var localDate = DateOnly.FromDateTime(created.ToLocalTime().DateTime);
+            if (localDate < cutoff) ids.Add(reader.GetInt64(0));
+        }
+        return ids;
+    }
+
+    private static void DeleteExpiredIssues(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        IReadOnlyList<long> ids)
+    {
+        foreach (var id in ids)
+        {
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "DELETE FROM sync_issues WHERE local_id = $local_id;";
+            command.Parameters.AddWithValue("$local_id", id);
+            if (command.ExecuteNonQuery() != 1)
+                throw new InvalidDataException($"retention sync issue {id} was not deleted exactly once");
+        }
     }
 
     private static void DeleteMatchingSyncIssues(
