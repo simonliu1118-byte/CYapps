@@ -154,7 +154,7 @@ internal sealed class SettingsForm : Form
             : "留白會保留目前已儲存的 App Key。";
         moPassword.PlaceholderText = settings.MoPasswordEncrypted.Length == 0
             ? ""
-            : "留白會保留目前已儲存的 MO店+ 密碼。";
+            : "留白會保存目前已儲存的密碼";
     }
 
     private void UpdateEnvironmentFields()
@@ -226,6 +226,9 @@ internal sealed class SettingsForm : Form
         if (settings.ProductionAppKeyEncrypted.Length != 0 &&
             appKey.PlaceholderText != "留白會保留目前已儲存的 App Key。")
             throw new InvalidOperationException("App Key 保留提示未放在輸入欄位內");
+        if (settings.MoPasswordEncrypted.Length != 0 &&
+            moPassword.PlaceholderText != "留白會保存目前已儲存的密碼")
+            throw new InvalidOperationException("MO店+ 密碼保留提示文字不正確");
         if (environmentLayout.GetPositionFromControl(production).Row != 1 ||
             environmentLayout.GetPositionFromControl(invoiceLabel).Column != 1 ||
             environmentLayout.GetPositionFromControl(appKeyLabel).Column != 1 ||
