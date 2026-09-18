@@ -522,7 +522,10 @@ public sealed class InvoiceService
         };
 
         var (gateway, environment) = GetGateway();
+        var createdAt = now();
         var apiOrderId = RequestOrderId(draft, options);
+        if (environment == Environments.Test)
+            apiOrderId = TestOrderIdPrefix.Apply(apiOrderId, DateOnly.FromDateTime(createdAt.DateTime));
         var activeKey = environment + "\0" + apiOrderId;
         lock (activeIssueGate)
         {
@@ -585,7 +588,6 @@ public sealed class InvoiceService
                     options = options with { TestPrivacy = true, ApiBuyerName = safeBuyerName };
                 }
 
-                var createdAt = now();
                 var manualName = draft.BuyerName.Trim();
                 var rememberLocalCorrection = draft.CompanyBuyer && lookup.Local && manualName.Length != 0 &&
                     !string.Equals(manualName, lookup.Name.Trim(), StringComparison.Ordinal);

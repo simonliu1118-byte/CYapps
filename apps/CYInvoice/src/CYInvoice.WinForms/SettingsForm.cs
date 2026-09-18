@@ -72,6 +72,20 @@ internal sealed class SettingsForm : Form
         environmentLayout.Controls.Add(appKey, 2, 3);
         test.CheckedChanged += (_, _) => UpdateEnvironmentFields();
         production.CheckedChanged += (_, _) => UpdateEnvironmentFields();
+        invoice.KeyDown += (_, eventArgs) =>
+        {
+            if (eventArgs.KeyCode != Keys.Enter || !production.Checked) return;
+            eventArgs.SuppressKeyPress = true;
+            eventArgs.Handled = true;
+            appKey.Focus();
+        };
+        appKey.KeyDown += (_, eventArgs) =>
+        {
+            if (eventArgs.KeyCode != Keys.Enter || !production.Checked) return;
+            eventArgs.SuppressKeyPress = true;
+            eventArgs.Handled = true;
+            save.PerformClick();
+        };
         environmentGroup.Controls.Add(environmentLayout);
 
         var platformGroup = new GroupBox { Text = "平台檔案密碼", Dock = DockStyle.Fill };

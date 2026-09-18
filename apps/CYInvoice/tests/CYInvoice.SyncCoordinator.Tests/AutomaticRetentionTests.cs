@@ -7,6 +7,8 @@ namespace CYInvoice.SyncCoordinator.Tests;
 
 internal static class AutomaticRetentionTests
 {
+    private static readonly DateOnly Today = new(2026, 9, 18);
+
     public static async Task TestDailyTestScopePrunesExpiredWithoutQueryAsync()
     {
         using var temporary = new TemporaryDirectory();
@@ -18,6 +20,9 @@ internal static class AutomaticRetentionTests
 
         var result = await automatic.SyncAsync();
         Equal(0, result.Problems.Count);
+        Equal(1, gateway.ListCalls);
+        Equal(Today, gateway.LastListStart);
+        Equal(Today, gateway.LastListEnd);
         Equal(0, gateway.QueryCalls);
         Equal(0, repository.Invoices.LoadOrCreate().Count);
     }
@@ -28,12 +33,17 @@ internal static class AutomaticRetentionTests
         var repository = LocalRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         repository.Invoices.Append(TestRecord("expired", "TT00000001", "M20260917001", "2026/09/17"));
-        repository.Invoices.Append(TestRecord("today", "TT00000002", "M20260918001", "2026/09/18"));
+        var today = TestRecord("today", "TT00000002", "M20260918001", "2026/09/18");
+        today.InvoiceState = InvoiceStates.Unknown;
+        repository.Invoices.Append(today);
         var gateway = new FakeGateway();
         var automatic = Automatic(repository, gateway);
 
         var result = await automatic.SyncAsync();
         True(result.Problems.Count != 0);
+        Equal(1, gateway.ListCalls);
+        Equal(Today, gateway.LastListStart);
+        Equal(Today, gateway.LastListEnd);
         Equal(1, gateway.QueryCalls);
         var ids = repository.Invoices.LoadOrCreate().Select(record => record.Id).OrderBy(id => id).ToArray();
         SequenceEqual(new[] { "expired", "today" }, ids);
@@ -104,15 +114,23 @@ internal static class AutomaticRetentionTests
 
     private sealed class FakeGateway : IAmegoGateway
     {
+        public int ListCalls { get; private set; }
         public int QueryCalls { get; private set; }
+        public DateOnly? LastListStart { get; private set; }
+        public DateOnly? LastListEnd { get; private set; }
 
         public Task<InvoiceListResponse> ListInvoicesAsync(
             DateOnly startDate,
             DateOnly endDate,
             int page = 1,
             int limit = 500,
-            CancellationToken cancellationToken = default) =>
-            Task.FromException<InvoiceListResponse>(new InvalidOperationException("test environment must not call invoice_list"));
+            CancellationToken cancellationToken = default)
+        {
+            ListCalls++;
+            LastListStart = startDate;
+            LastListEnd = endDate;
+            return Task.FromResult(new InvoiceListResponse(0, "", 1, page, 0, []));
+        }
 
         public Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default)
         {

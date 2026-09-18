@@ -28,6 +28,8 @@ internal sealed class RecordsControl : UserControl
     private readonly NativeListViewHost recordsHost = new(10F, 22);
     private readonly Button refreshButton = UiControls.StandardButton("重新整理");
     private readonly Button uploadIssuesButton = UiControls.StandardButton("上傳問題");
+    private readonly Label rangeToLabel = FilterLabel("至");
+    private readonly Label buyerBanLabel = FilterLabel("統編");
     private readonly Label copyHint = new()
     {
         Text = CopyHintText,
@@ -41,6 +43,7 @@ internal sealed class RecordsControl : UserControl
     private readonly List<InvoiceRecord> visible = [];
     private readonly Font voidedFont;
     private readonly Font sourceTagFont;
+    private RecordSortMode sortMode = RecordSortMode.TimeDescending;
     private bool fillingRows;
     private bool selectionClearQueued;
     private bool openingRecord;
@@ -74,6 +77,7 @@ internal sealed class RecordsControl : UserControl
         refreshCooldownTimer.Tick += (_, _) => UpdateRefreshCooldownUi();
         BuildLayout();
         ResetFilters();
+        ResetSort();
         Reload();
     }
 
@@ -85,35 +89,23 @@ internal sealed class RecordsControl : UserControl
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 144));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var filters = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 8, RowCount = 3, Padding = new Padding(0, 4, 0, 6) };
-        foreach (var width in new[] { 94, 0, 90, 0, 84, 0, 94, 0 })
+        foreach (var width in new[] { 94, 0, 58, 0, 84, 0, 94, 0 })
             filters.ColumnStyles.Add(width == 0 ? new ColumnStyle(SizeType.Percent, 25) : new ColumnStyle(SizeType.Absolute, width));
         filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         filters.Controls.Add(FilterLabel("開立日期"), 0, 0);
-        var dates = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
-        dates.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        dates.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
-        dates.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        dates.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         ConfigureFilterField(dateFrom);
         ConfigureFilterField(dateTo);
-        dates.Controls.Add(dateFrom, 0, 0);
-        dates.Controls.Add(new Label
-        {
-            Text = "至",
-            AutoSize = true,
-            Anchor = AnchorStyles.None,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Margin = Padding.Empty,
-        }, 1, 0);
-        dates.Controls.Add(dateTo, 2, 0);
-        filters.Controls.Add(dates, 1, 0);
-        filters.SetColumnSpan(dates, 3);
+        filters.Controls.Add(dateFrom, 1, 0);
+        filters.Controls.Add(rangeToLabel, 2, 0);
+        filters.Controls.Add(dateTo, 3, 0);
         AddFilter(filters, "發票號碼", invoiceNumber, 4, 0);
         AddFilter(filters, "訂單編號", orderId, 6, 0);
         AddFilter(filters, "買受人", buyerName, 0, 1);
-        AddFilter(filters, "統編", buyerBan, 2, 1);
+        ConfigureFilterField(buyerBan);
+        filters.Controls.Add(buyerBanLabel, 2, 1);
+        filters.Controls.Add(buyerBan, 3, 1);
         AddFilter(filters, "來源", source, 4, 1);
         AddFilter(filters, "發票狀態", state, 6, 1);
 
@@ -122,9 +114,9 @@ internal sealed class RecordsControl : UserControl
         buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         var leftButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = Padding.Empty };
         var query = UiControls.StandardButton("查詢");
-        query.Click += (_, _) => Reload();
+        query.Click += (_, _) => { ResetSort(); Reload(); };
         var clear = UiControls.StandardButton("清除條件");
-        clear.Click += (_, _) => { ResetFilters(); Reload(); };
+        clear.Click += (_, _) => { ResetFilters(); ResetSort(); Reload(); };
         refreshButton.Click += async (_, _) => await RefreshFromApiAsync();
         uploadIssuesButton.Click += (_, _) =>
         {
@@ -176,18 +168,19 @@ internal sealed class RecordsControl : UserControl
     {
         Records.Columns.Add("開立時間", 140, HorizontalAlignment.Left);
         Records.Columns.Add("發票號碼", 108, HorizontalAlignment.Left);
-        Records.Columns.Add("來源", 142, HorizontalAlignment.Left);
+        Records.Columns.Add("來源", 116, HorizontalAlignment.Left);
         Records.Columns.Add("訂單編號", 155, HorizontalAlignment.Left);
-        Records.Columns.Add("統編", 106, HorizontalAlignment.Left);
+        Records.Columns.Add("統編", 82, HorizontalAlignment.Left);
         Records.Columns.Add("買受人", 150, HorizontalAlignment.Left);
         Records.Columns.Add("金額", 86, HorizontalAlignment.Right);
-        Records.Columns.Add("交付方式", 88, HorizontalAlignment.Left);
-        Records.Columns.Add("發票狀態", 88, HorizontalAlignment.Left);
+        Records.Columns.Add("交付方式", 76, HorizontalAlignment.Left);
+        Records.Columns.Add("發票狀態", 74, HorizontalAlignment.Left);
         Records.Columns.Add("上傳", 58, HorizontalAlignment.Center);
         Records.OwnerDraw = true;
         Records.DrawColumnHeader += (_, eventArgs) => NativeListViewHost.DrawHeader(eventArgs, Records.Font);
         Records.DrawItem += (_, eventArgs) => { if (Records.View != View.Details) eventArgs.DrawDefault = true; };
         Records.DrawSubItem += DrawRecordSubItem;
+        Records.ColumnClick += (_, eventArgs) => ChangeSort(eventArgs.Column);
         Records.MouseDown += (_, eventArgs) =>
         {
             var hit = Records.HitTest(eventArgs.Location);
@@ -212,12 +205,13 @@ internal sealed class RecordsControl : UserControl
             visible.AddRange(repository.Invoices.LoadOrCreate()
                 .Where(record => record.Environment == currentEnvironment)
                 .Where(Matches));
+            SortVisible();
             Records.BeginUpdate();
             updateStarted = true;
             Records.Items.Clear();
             foreach (var record in visible)
             {
-                var row = NewRow([IssueTime(record), record.InvoiceNumber, InvoiceSourceInference.Display(record), record.OrderId, record.BuyerIdentifier,
+                var row = NewRow([IssueTime(record), record.InvoiceNumber, InvoiceSourceInference.Display(record), record.OrderId, DisplayBuyerBan(record.BuyerIdentifier),
                     record.BuyerName, MoneyFormatter.Integer(record.Amount), record.Delivery, record.InvoiceState,
                     record.UploadStatus == 0 ? "" : "●"]);
                 row.Tag = record;
@@ -276,13 +270,14 @@ internal sealed class RecordsControl : UserControl
                     StartRefreshCooldown();
                     break;
                 case InvoiceSyncRunStatus.Completed:
+                    ResetSort();
                     Reload();
                     var result = run.Result;
                     if (result is not null && result.Problems.Count != 0)
                     {
                         MessageBox.Show(
                             this,
-                            $"最近 3 天同步已完成，但有 {result.Problems.Count} 項未完整更新：\n" + string.Join("\n", result.Problems),
+                            $"同步已完成，但有 {result.Problems.Count} 項未完整更新：\n" + string.Join("\n", result.Problems),
                             "部分資料未能更新",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Warning);
@@ -522,14 +517,14 @@ internal sealed class RecordsControl : UserControl
     {
         if (Records.Columns.Count != 10 || Records.ClientSize.Width <= 0) return;
         var available = recordsHost.ColumnViewportWidth;
-        var widths = new[] { 140, 108, 142, 155, 106, 0, 86, 88, 88, 58 };
+        var widths = new[] { 140, 108, 116, 155, 82, 0, 86, 76, 74, 58 };
         widths[5] = Math.Max(80, available - widths.Sum());
         var over = widths.Sum() - available;
         if (over > 0)
         {
-            foreach (var index in new[] { 5, 7, 8, 6, 2, 4, 3, 0, 1 })
+            foreach (var index in new[] { 5, 6, 3, 0, 1 })
             {
-                var minimum = index switch { 5 => 60, 3 => 110, 4 => 82, 2 => 108, 0 => 112, 1 => 90, _ => 54 };
+                var minimum = index switch { 5 => 60, 3 => 110, 0 => 112, 1 => 90, _ => 70 };
                 var reduction = Math.Min(over, Math.Max(0, widths[index] - minimum));
                 widths[index] -= reduction;
                 over -= reduction;
@@ -584,15 +579,11 @@ internal sealed class RecordsControl : UserControl
             new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
         var tagWidth = tagTextSize.Width + 12;
         var sourceAvailable = Math.Max(24, bounds.Width - tagWidth - 6);
-        var measuredSource = TextRenderer.MeasureText(eventArgs.Graphics, text, textFont,
-            new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
-        var sourceWidth = Math.Min(sourceAvailable, measuredSource + 2);
         var sourceBounds = new Rectangle(bounds.Left, bounds.Top, sourceAvailable, bounds.Height);
         TextRenderer.DrawText(eventArgs.Graphics, text, textFont, sourceBounds, eventArgs.SubItem.ForeColor, textFlags);
 
-        var tagX = Math.Min(bounds.Right - tagWidth, bounds.Left + sourceWidth + 5);
         var tagHeight = Math.Min(18, Math.Max(15, bounds.Height - 4));
-        var tagRect = new Rectangle(tagX, bounds.Top + (bounds.Height - tagHeight) / 2, tagWidth, tagHeight);
+        var tagRect = new Rectangle(bounds.Right - tagWidth, bounds.Top + (bounds.Height - tagHeight) / 2, tagWidth, tagHeight);
         var isUpdate = string.Equals(tag, InvoiceSourceInference.UpdateTag, StringComparison.Ordinal);
         var background = isUpdate ? Color.FromArgb(255, 246, 207) : Color.FromArgb(231, 240, 255);
         var border = isUpdate ? Color.FromArgb(239, 184, 42) : Color.FromArgb(116, 155, 231);
@@ -622,6 +613,106 @@ internal sealed class RecordsControl : UserControl
         return path;
     }
 
+    private void ChangeSort(int column)
+    {
+        switch (column)
+        {
+            case 0:
+                sortMode = sortMode == RecordSortMode.TimeDescending
+                    ? RecordSortMode.TimeAscending
+                    : RecordSortMode.TimeDescending;
+                break;
+            case 1:
+                sortMode = sortMode == RecordSortMode.InvoiceDescending
+                    ? RecordSortMode.InvoiceAscending
+                    : RecordSortMode.InvoiceDescending;
+                break;
+            case 2:
+                sortMode = RecordSortMode.SourceGroup;
+                break;
+            default:
+                return;
+        }
+        UpdateSortHeaders();
+        Reload();
+    }
+
+    private void ResetSort()
+    {
+        sortMode = RecordSortMode.TimeDescending;
+        UpdateSortHeaders();
+    }
+
+    private void UpdateSortHeaders()
+    {
+        if (Records.Columns.Count < 3) return;
+        Records.Columns[0].Text = sortMode == RecordSortMode.TimeAscending ? "開立時間 ▲" : "開立時間";
+        Records.Columns[1].Text = sortMode switch
+        {
+            RecordSortMode.InvoiceDescending => "發票號碼 ▼",
+            RecordSortMode.InvoiceAscending => "發票號碼 ▲",
+            _ => "發票號碼",
+        };
+        Records.Columns[2].Text = sortMode == RecordSortMode.SourceGroup ? "來源 ▲" : "來源";
+    }
+
+    private void SortVisible()
+    {
+        visible.Sort((left, right) => sortMode switch
+        {
+            RecordSortMode.TimeAscending => CompareIssueTime(left, right),
+            RecordSortMode.InvoiceDescending => CompareInvoiceNumber(left, right, descending: true),
+            RecordSortMode.InvoiceAscending => CompareInvoiceNumber(left, right, descending: false),
+            RecordSortMode.SourceGroup => CompareSourceGroup(left, right),
+            _ => CompareIssueTime(right, left),
+        });
+    }
+
+    private static int CompareIssueTime(InvoiceRecord left, InvoiceRecord right)
+    {
+        var comparison = IssueSortTime(left).CompareTo(IssueSortTime(right));
+        if (comparison != 0) return comparison;
+        return string.Compare(left.Id, right.Id, StringComparison.Ordinal);
+    }
+
+    private static int CompareInvoiceNumber(InvoiceRecord left, InvoiceRecord right, bool descending)
+    {
+        var leftNumber = left.InvoiceNumber.Trim();
+        var rightNumber = right.InvoiceNumber.Trim();
+        if (leftNumber.Length == 0 && rightNumber.Length == 0) return CompareIssueTime(right, left);
+        if (leftNumber.Length == 0) return 1;
+        if (rightNumber.Length == 0) return -1;
+        var comparison = string.Compare(leftNumber, rightNumber, StringComparison.OrdinalIgnoreCase);
+        if (comparison != 0) return descending ? -comparison : comparison;
+        return CompareIssueTime(right, left);
+    }
+
+    private static int CompareSourceGroup(InvoiceRecord left, InvoiceRecord right)
+    {
+        var comparison = SourceRank(InvoiceSourceInference.Display(left)).CompareTo(SourceRank(InvoiceSourceInference.Display(right)));
+        if (comparison != 0) return comparison;
+        comparison = string.Compare(InvoiceSourceInference.Display(left), InvoiceSourceInference.Display(right), StringComparison.CurrentCultureIgnoreCase);
+        if (comparison != 0) return comparison;
+        return CompareIssueTime(right, left);
+    }
+
+    private static int SourceRank(string value) => value switch
+    {
+        InvoiceSources.Manual => 0,
+        InvoiceSources.Mo => 1,
+        InvoiceSources.Coupang => 2,
+        InvoiceSources.Digiwin => 3,
+        _ => 4,
+    };
+
+    private static DateTime IssueSortTime(InvoiceRecord record)
+    {
+        var combined = (record.InvoiceDate.Trim() + " " + record.InvoiceTime.Trim()).Trim();
+        if (DateTime.TryParse(combined, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var issued)) return issued;
+        if (DateTime.TryParse(record.SentAt.Trim(), CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var sent)) return sent;
+        return DateTime.MinValue;
+    }
+
     private void ResetFilters()
     {
         var today = DateTime.Today;
@@ -648,12 +739,16 @@ internal sealed class RecordsControl : UserControl
             throw new InvalidOperationException("上傳問題按鈕尺寸或文字不正確");
         if (copyHint.Text != CopyHintText || copyHint.Parent is null)
             throw new InvalidOperationException("發票號碼單擊複製提示未建立");
+        if (Records.Columns[0].Text != "開立時間" || Records.Columns[1].Text != "發票號碼" || Records.Columns[2].Text != "來源")
+            throw new InvalidOperationException("已開立發票預設排序不應顯示表頭箭頭");
 
         PerformLayout();
         var firstRowCenters = new Control[] { dateFrom, dateTo, invoiceNumber, orderId }.Select(ScreenCenterY).ToArray();
         var secondRowCenters = new Control[] { buyerName, buyerBan, source, state }.Select(ScreenCenterY).ToArray();
         if (firstRowCenters.Max() - firstRowCenters.Min() > 2 || secondRowCenters.Max() - secondRowCenters.Min() > 2)
             throw new InvalidOperationException("已開立發票篩選欄位未在各列垂直置中對齊");
+        if (Math.Abs(rangeToLabel.PointToScreen(Point.Empty).X - buyerBanLabel.PointToScreen(Point.Empty).X) > 1)
+            throw new InvalidOperationException("統編標籤左緣未與日期『至』左緣對齊");
         if (Math.Abs(ScreenCenterY(refreshButton) - ScreenCenterY(uploadIssuesButton)) > 1)
             throw new InvalidOperationException("上傳問題按鈕未與左側操作按鈕垂直對齊");
 
@@ -692,6 +787,7 @@ internal sealed class RecordsControl : UserControl
         ShowCheckBox = true,
     };
     private static bool Contains(string value, string search) => search.Trim().Length == 0 || value.Contains(search.Trim(), StringComparison.CurrentCultureIgnoreCase);
+    private static string DisplayBuyerBan(string value) => value.Trim() == "0000000000" ? string.Empty : value.Trim();
     private static DateTime? ParseDate(string value)
     {
         value = value.Trim();
@@ -712,5 +808,14 @@ internal sealed class RecordsControl : UserControl
         if (DateTime.TryParse(sentAt, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var parsed))
             return parsed.ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture);
         return sentAt.Length >= 16 ? sentAt[..16] : sentAt;
+    }
+
+    private enum RecordSortMode
+    {
+        TimeDescending,
+        TimeAscending,
+        InvoiceDescending,
+        InvoiceAscending,
+        SourceGroup,
     }
 }
