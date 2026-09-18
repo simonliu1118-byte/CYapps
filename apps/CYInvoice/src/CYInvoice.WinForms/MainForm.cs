@@ -14,8 +14,12 @@ internal sealed class MainForm : Form
     private const int HtLeft = 10;
     private const int HtBottomRight = 17;
     private const int HtBorder = 18;
+    private const int SyncIntervalMilliseconds = 5 * 60 * 1000;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
+    private readonly InvoiceSyncCoordinator syncCoordinator;
+    private readonly CancellationTokenSource syncLifetime = new();
+    private readonly System.Windows.Forms.Timer syncTimer = new() { Interval = SyncIntervalMilliseconds };
     private readonly InvoiceEntryControl invoicePage;
     private readonly RecordsControl recordsPage;
     private readonly Panel banner = new();
@@ -37,6 +41,7 @@ internal sealed class MainForm : Form
         TextAlign = ContentAlignment.MiddleRight,
         Margin = new Padding(0, 0, 6, 0),
     };
+    private bool shuttingDown;
 
     public MainForm(bool startupSmokeTest = false)
     {
@@ -59,8 +64,11 @@ internal sealed class MainForm : Form
 
         repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
         service = new InvoiceService(repository);
-        recordsPage = new RecordsControl(repository, service);
+        syncCoordinator = new InvoiceSyncCoordinator(new InvoiceSyncService(repository));
+        recordsPage = new RecordsControl(repository, service, syncCoordinator, syncLifetime.Token);
         invoicePage = new InvoiceEntryControl(repository, service, recordsPage.Reload);
+        syncTimer.Tick += async (_, _) => await RunScheduledSyncAsync();
+        FormClosing += (_, _) => StopBackgroundSync();
         BuildShell();
         UpdateEnvironment();
         if (!startupSmokeTest) Shown += async (_, _) =>
@@ -69,6 +77,9 @@ internal sealed class MainForm : Form
             UpdateEnvironment();
             invoicePage.RefreshEnvironment();
             await RefreshApiAsync();
+            if (shuttingDown) return;
+            await RunStartupSyncAsync();
+            if (!shuttingDown) syncTimer.Start();
         };
     }
 
@@ -227,6 +238,8 @@ internal sealed class MainForm : Form
             EnvironmentCompanyText(Environments.Production, "12345675", string.Empty, lookupCompleted: true) != "公司名稱查無資料 12345675" ||
             EnvironmentCompanyText(Environments.Production, "12345675", string.Empty, lookupFailed: true) != "公司名稱查詢失敗 12345675")
             throw new InvalidOperationException("測試／正式環境公司標題文字不正確");
+        if (syncTimer.Interval != SyncIntervalMilliseconds || syncTimer.Enabled)
+            throw new InvalidOperationException("背景同步 Timer 未維持 5 分鐘且 startup smoke 不應自動啟動");
         if (Icon is null) throw new InvalidOperationException("主視窗未載入內嵌程式圖示");
         var bannerCenter = banner.ClientSize.Width / 2;
         var companyCenter = environmentCompanyLabel.PointToScreen(new Point(environmentCompanyLabel.Width / 2, 0)).X -
@@ -329,6 +342,50 @@ internal sealed class MainForm : Form
         }
     }
 
+    private async Task RunStartupSyncAsync()
+    {
+        try
+        {
+            var run = await syncCoordinator.RunStartupAsync(syncLifetime.Token);
+            if (run.Status == InvoiceSyncRunStatus.Completed && !shuttingDown) recordsPage.Reload();
+            if (run.Result is { Problems.Count: > 0 })
+                apiLabel.AccessibleDescription = $"啟動同步有 {run.Result.Problems.Count} 項未完整更新";
+        }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            if (!shuttingDown) apiLabel.AccessibleDescription = "啟動同步失敗：" + error.Message;
+        }
+    }
+
+    private async Task RunScheduledSyncAsync()
+    {
+        try
+        {
+            var run = await syncCoordinator.RunScheduledAsync(syncLifetime.Token);
+            if (run.Status == InvoiceSyncRunStatus.Completed && !shuttingDown) recordsPage.Reload();
+            if (run.Result is { Problems.Count: > 0 })
+                apiLabel.AccessibleDescription = $"背景同步有 {run.Result.Problems.Count} 項未完整更新";
+        }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            if (!shuttingDown) apiLabel.AccessibleDescription = "背景同步失敗：" + error.Message;
+        }
+    }
+
+    private void StopBackgroundSync()
+    {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        syncTimer.Stop();
+        syncLifetime.Cancel();
+    }
+
     private bool CurrentEnvironmentMatches(string environment, string invoice)
     {
         var current = repository.Settings.LoadOrCreate();
@@ -350,6 +407,16 @@ internal sealed class MainForm : Form
         if (companyName.Length != 0) return $"{companyName} {invoice.Trim()}";
         var status = lookupFailed ? "公司名稱查詢失敗" : lookupCompleted ? "公司名稱查無資料" : "公司名稱查詢中";
         return $"{status} {invoice.Trim()}";
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            StopBackgroundSync();
+            syncTimer.Dispose();
+        }
+        base.Dispose(disposing);
     }
 }
 
