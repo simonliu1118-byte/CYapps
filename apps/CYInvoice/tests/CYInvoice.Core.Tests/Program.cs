@@ -54,7 +54,7 @@ var tests = new (string Name, Action Run)[]
         draft.TotalAmount = 99;
         Throws<InvalidOperationException>(() => InvoiceValidator.Validate(draft));
     }),
-    ("test and production duplicate isolation", () =>
+    ("local duplicate history does not block OrderID", () =>
     {
         var record = new InvoiceRecord
         {
@@ -64,9 +64,9 @@ var tests = new (string Name, Action Run)[]
             Environment = Environments.Test,
         };
         Equal(string.Empty, InvoiceValidator.DuplicateBlockReason([record], "MO店+", "MO-001", Environments.Production));
-        NotEmpty(InvoiceValidator.DuplicateBlockReason([record], "MO店+", "MO-001", Environments.Test));
+        Equal(string.Empty, InvoiceValidator.DuplicateBlockReason([record], "MO店+", "MO-001", Environments.Test));
     }),
-    ("unknown result blocks resend", () =>
+    ("unknown history does not permanently block OrderID", () =>
     {
         var record = new InvoiceRecord
         {
@@ -75,7 +75,7 @@ var tests = new (string Name, Action Run)[]
             InvoiceState = InvoiceStates.Unknown,
             Environment = Environments.Production,
         };
-        NotEmpty(InvoiceValidator.DuplicateBlockReason([record], "酷澎", "115102696774269", Environments.Production));
+        Equal(string.Empty, InvoiceValidator.DuplicateBlockReason([record], "酷澎", "115102696774269", Environments.Production));
     }),
     ("AMEGO form and signature", () => TestAmegoSignatureAsync().GetAwaiter().GetResult()),
     ("AMEGO code 15 synchronizes time once", () => TestAmegoTimeSyncAsync().GetAwaiter().GetResult()),
@@ -89,15 +89,16 @@ var tests = new (string Name, Action Run)[]
     ("buyer name is remembered only after successful invoice", TestBuyerNameMemory),
     ("negative discount line remains valid", TestNegativeDiscountLine),
     ("untaxed company totals use official one-twentieth tax", TestUntaxedCompanyTotals),
-    ("issue writes pending then opens and blocks resend", () => TestIssueOpensAndBlocksResendAsync().GetAwaiter().GetResult()),
-    ("ambiguous issue becomes unknown and blocks resend", () => TestAmbiguousIssueAsync().GetAwaiter().GetResult()),
+    ("repeat OrderID is sent to AMEGO and API decides", () => TestIssueRepeatOrderIdUsesApiDecisionAsync().GetAwaiter().GetResult()),
+    ("ambiguous issue remains retryable after unknown result", () => TestAmbiguousIssueAsync().GetAwaiter().GetResult()),
     ("ambiguous issue recovers only from strict order query", () => TestAmbiguousRecoveryAsync().GetAwaiter().GetResult()),
     ("request timeout still performs one bounded recovery query", () => TestCancelledIssueRecoveryAsync().GetAwaiter().GetResult()),
     ("wrong order and voided query never establish success", () => TestStrictRecoveryRejectsMismatchAsync().GetAwaiter().GetResult()),
-    ("concurrent duplicate issue is serialized before API", () => TestConcurrentDuplicateIssueAsync().GetAwaiter().GetResult()),
+    ("concurrent issue calls are serialized before API", () => TestConcurrentDuplicateIssueAsync().GetAwaiter().GetResult()),
     ("same order is isolated between test and production", () => TestEnvironmentIssueIsolationAsync().GetAwaiter().GetResult()),
     ("explicit API rejection becomes failed", () => TestExplicitRejectionAsync().GetAwaiter().GetResult()),
-    ("voided order reissue uses a new API order ID", () => TestVoidedReissueAsync().GetAwaiter().GetResult()),
+    ("AMEGO duplicate OrderID rejection becomes failed", () => TestOrderIdDuplicateRejectionAsync().GetAwaiter().GetResult()),
+    ("voided order reissue keeps the original API order ID", () => TestVoidedReissueAsync().GetAwaiter().GetResult()),
     ("remote success and local save failure remain opened", () => TestRemoteSuccessLocalFailureAsync().GetAwaiter().GetResult()),
     ("successful manual company invoice remembers confirmed name", () => TestCompanyNameMemoryAsync().GetAwaiter().GetResult()),
     ("successful manual company correction overwrites local name", () => TestLocalCompanyNameCorrectionAsync().GetAwaiter().GetResult()),
@@ -173,14 +174,6 @@ static void Equal<T>(T expected, T actual)
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
     {
         throw new InvalidOperationException($"expected {expected}, actual {actual}");
-    }
-}
-
-static void NotEmpty(string value)
-{
-    if (value.Length == 0)
-    {
-        throw new InvalidOperationException("expected a blocking reason");
     }
 }
 
@@ -449,7 +442,7 @@ static void TestUntaxedCompanyTotals()
     Equal(200L, totals.TotalAmount);
 }
 
-static async Task TestIssueOpensAndBlocksResendAsync()
+static async Task TestIssueRepeatOrderIdUsesApiDecisionAsync()
 {
     using var temporary = new TemporaryDirectory();
     var fake = new FakeGateway
@@ -458,7 +451,7 @@ static async Task TestIssueOpensAndBlocksResendAsync()
         QueryResponse = ConfirmedQuery("20260905001", "AB12345678", 105, 0, 105, 1),
     };
     var (service, repository) = TestService(temporary.Path, fake);
-    fake.OnIssue = _ => Equal(InvoiceStates.Changing, repository.Invoices.LoadOrCreate()[0].InvoiceState);
+    fake.OnIssue = _ => Equal(InvoiceStates.Changing, repository.Invoices.LoadOrCreate().Last().InvoiceState);
     var result = await service.IssueManualAsync(SafeDraft());
     Equal(true, result.Opened);
     Equal(InvoiceStates.Opened, result.Record.InvoiceState);
@@ -468,9 +461,15 @@ static async Task TestIssueOpensAndBlocksResendAsync()
     Equal("測試消費者", fake.LastIssue.BuyerName);
     Equal(105L, Convert.ToInt64(fake.LastIssue.SalesAmount));
     Equal(0L, Convert.ToInt64(fake.LastIssue.TaxAmount));
-    await ThrowsAsync<InvalidOperationException>(() => service.IssueManualAsync(SafeDraft()));
-    Equal(1, fake.IssueCalls);
-    Equal(InvoiceStates.Opened, repository.Invoices.LoadOrCreate()[0].InvoiceState);
+
+    fake.IssueException = new AmegoApiException(3040171, "OrderId 重複");
+    await ThrowsAsync<AmegoApiException>(() => service.IssueManualAsync(SafeDraft()));
+    Equal(2, fake.IssueCalls);
+    var records = repository.Invoices.LoadOrCreate();
+    Equal(2, records.Count);
+    Equal(InvoiceStates.Opened, records[0].InvoiceState);
+    Equal(InvoiceStates.Failed, records[1].InvoiceState);
+    Equal("20260905001", fake.LastIssue!.OrderId);
 }
 
 static async Task TestAmbiguousIssueAsync()
@@ -485,7 +484,8 @@ static async Task TestAmbiguousIssueAsync()
     var error = await ThrowsAsync<UnknownInvoiceResultException>(() => service.IssueManualAsync(SafeDraft()));
     Equal(InvoiceStates.Unknown, error.Record.InvoiceState);
     Equal(InvoiceStates.Unknown, repository.Invoices.LoadOrCreate()[0].InvoiceState);
-    await ThrowsAsync<InvalidOperationException>(() => service.IssueManualAsync(SafeDraft()));
+    Equal(string.Empty, InvoiceValidator.DuplicateBlockReason(
+        repository.Invoices.LoadOrCreate(), InvoiceSources.Manual, "20260905001", Environments.Test));
     Equal(1, fake.IssueCalls);
 }
 
@@ -556,9 +556,9 @@ static async Task TestConcurrentDuplicateIssueAsync()
     Equal(1, fake.IssueCalls);
     fake.IssueRelease!.SetResult(true);
     var outcomes = await Task.WhenAll(first, second);
-    Equal(1, outcomes.Count(outcome => outcome.Result?.Opened == true));
-    Equal(1, outcomes.Count(outcome => outcome.Error is InvalidOperationException));
-    Equal(1, fake.IssueCalls);
+    Equal(2, outcomes.Count(outcome => outcome.Result?.Opened == true));
+    Equal(0, outcomes.Count(outcome => outcome.Error is not null));
+    Equal(2, fake.IssueCalls);
 }
 
 static async Task TestEnvironmentIssueIsolationAsync()
@@ -608,13 +608,25 @@ static async Task TestExplicitRejectionAsync()
     Equal(0, fake.QueryCalls);
 }
 
+static async Task TestOrderIdDuplicateRejectionAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway { IssueException = new AmegoApiException(3040171, "OrderId 重複") };
+    var (service, repository) = TestService(temporary.Path, fake);
+    var error = await ThrowsAsync<AmegoApiException>(() => service.IssueManualAsync(SafeDraft()));
+    Equal(3040171, error.Code);
+    Equal(1, fake.IssueCalls);
+    Equal(0, fake.QueryCalls);
+    Equal(InvoiceStates.Failed, repository.Invoices.LoadOrCreate().Single().InvoiceState);
+}
+
 static async Task TestVoidedReissueAsync()
 {
     using var temporary = new TemporaryDirectory();
     var fake = new FakeGateway
     {
         IssueResponse = new IssueResponse(0, "", "JK12345678", 0, ""),
-        QueryResponse = ConfirmedQuery("20260905001-R2", "JK12345678", 105, 0, 105, 1),
+        QueryResponse = ConfirmedQuery("20260905001", "JK12345678", 105, 0, 105, 1),
     };
     var (service, repository) = TestService(temporary.Path, fake);
     repository.Invoices.Append(new InvoiceRecord
@@ -624,9 +636,9 @@ static async Task TestVoidedReissueAsync()
         Attempt = 1, Amount = 105, InvoiceState = InvoiceStates.Voided, Environment = Environments.Test,
     });
     var result = await service.IssueManualAsync(SafeDraft());
-    Equal("20260905001-R2", fake.LastIssue!.OrderId);
-    Equal("20260905001-R2", result.Record.ApiOrderId);
-    Equal(2, result.Record.Attempt);
+    Equal("20260905001", fake.LastIssue!.OrderId);
+    Equal("20260905001", result.Record.ApiOrderId);
+    Equal(1, result.Record.Attempt);
 }
 
 static async Task TestRemoteSuccessLocalFailureAsync()
