@@ -2,6 +2,19 @@
 
 本檔先保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 實機驗證通過」的版本開始建立。
 
+## V2.4.0 — 2026/09/18（工程測試版，未正式 Release）
+
+- 本機發票、商品明細與人工買方名稱由 JSON 正式遷移至 `Data/CYInvoice.db`；`settings.json` 繼續保存安全設定。第一次啟動以暫存 SQLite transaction 匯入並驗證舊 `invoices.json`／`buyer_names.json` 後才切換，舊 JSON 保留；損壞資料不得被空白 DB 覆蓋。
+- AMEGO／光貿官方資料定為發票內容權威來源；SQLite 定位為本機 Cache 加上 CYInvoice metadata。遠端買受人、統編、金額、商品、作廢與上傳狀態變更都視為正常官方更新，不以內容差異建立衝突。
+- 正式環境加入 `/json/invoice_list` 最近 3 天同步；程式啟動、每 5 分鐘與手動重新整理共用同一套同步核心，手動冷卻 30 秒，同步重疊時直接略過、不排隊。
+- 每個本機日第一次自動同步會校對目前兩月發票期別與上一期別；測試環境只回查本機當日已知測試資料，不掃描共享測試池。
+- 雙擊任一發票開啟詳細資訊前一律再執行 `invoice_query` 更新該張 Cache；若無法確認最新官方內容，不以舊 Cache 冒充最新資料。
+- 正式環境本機 Cache 只保留目前及上一個兩月期別，測試環境只保留當日；能確認過期的舊資料會連同對應 PDF／預覽 Cache 與舊 sync issue 清除，舊 `Unknown`／`Changing` 不再永久保留。
+- 新增持久化 `sync_issues`：invoice list／query 失敗、光貿查無、結果不明仍無法確認、本機 SQLite 寫入失敗、解析／比對失敗及無法唯一匹配等真正技術問題才記錄；相同未解決問題去重，後續成功同步可自動解決。
+- 同一發票號碼或 OrderID 若對到多筆本機紀錄，停止自動猜測並建立 `ambiguous_match`；已開立清單新增「同步問題」視窗，可查看目前帳號未解決問題並手動標記完成、刪除或重新整理。
+- Windows CI 已涵蓋 SQLite migration／retention、invoice sync、sync issue、sync coordinator、WinForms startup smoke（含同步問題視窗）、Windows x64 package、PE／layout 及 packaged startup smoke。
+- 本版目前只建立工程測試基準與 Artifact；最新公開正式 Release 仍為 V2.3.0。未收到使用者當次明確 `release` 指示前，不建立 V2.4.0 tag／GitHub Release。
+
 ## V2.3.0 — 2026/09/18
 
 - 正式 Release：`cyinvoice-v2.3.0`，由 `main` 的正式 Release workflow 重新執行 source confidentiality scan、warnings-as-errors、WinForms startup smoke、core parity tests、Windows x64 build、PE／package 驗證、portable smoke 與 SHA-256 後發布。
@@ -73,7 +86,6 @@
 - 版本規則簡化：測試／小修正推進 PATCH，正式開發階段推進 MINOR，只有非常大的產品或相容性變更才推進 MAJOR。
 - 沿用 rc.9 已完成的固定 scrollbar 槽、斑馬紋、雙擊唯讀詳細資訊、千分位與發票安全規則；invoice core 未改動。
 
-
 ## V1.0.1-rc.9 — 2026/09/11
 
 - 依 Windows 實機結果重做兩個 ListView 的固定垂直捲軸槽：資料未滿時以 disabled 原生 `SCROLLBAR` 子控制項占住 `SM_CXVSCROLL` 系統寬度，資料溢出時原地換成 ListView 自己的原生 scrollbar；欄寬永遠只使用槽左側寬度，不再產生水平 scrollbar 或未命名假欄位。
@@ -84,7 +96,6 @@
 - 設定頁文字定案為 `App Key`；`統編` 與 `App Key` 的標籤左緣及輸入框左緣分別對齊，App Key 保留獨立完整一列。
 - 修正 rc.7／rc.8 文件把 `SIF_DISABLENOSCROLL` 描述為已穩定保留捲軸槽的錯誤；實機證明該方式仍會讓 ListView client width 變動，本版改以明確原生占位控制項處理。
 - invoice core、開票判定、防重、環境隔離與結果不明禁止重送規則均未變更。
-
 
 ## V1.0.1-rc.8 — 2026/09/11
 
@@ -154,17 +165,14 @@
 
 - MO店+、酷澎與鼎新 ERP 統一使用同一個匯入確認視窗、逐張勾選、統編名稱處理、開立進度與結果保留流程；各來源只保留 Excel 欄位解析差異。酷澎已接通，鼎新 ERP 在取得實際樣本與欄位對照前會於相同視窗安全停止，不會送出。
 - 光貿共用測試池的匯入發票全面去識別化：訂單編號末 7 碼遮蔽，買方名稱固定為「測試消費者」，真實公司統編改用官方公開測試統編，地址、電話、Email、捐贈碼與備註清空，商品名稱改為測試商品，會員載具顯碼／隱碼改用不含訂單資訊的測試 Email。本機紀錄仍保留原始資料，正式環境不套用替換。
-
 - MO店+ 原始 OrderExport 的收件人、規格1／規格2、買方統編與會員載具欄位已逐欄對齊光貿轉檔；載具資料隨發票紀錄保存。
 - 測試環境送出匯入發票時 BuyerName 固定為「測試消費者」，OrderId 末 7 碼遮蔽為 `*`，並以相同遮罩值回查。
 - 選檔後立即開啟 MO 匯入確認視窗，在視窗內顯示解析、統編查詢及開立進度；開立欄改為原生 checkbox，摘要順序與說明文字依實機意見精簡。
 - 匯入按鈕改為深藍圓角動作按鈕；三個原生清單的藍白斑馬紋加深，並在每個子欄繪製階段重新套用。
 - 設定改為頁籤列最右側的受保護頁籤，每次進入均先驗證管理密碼、離開即重新鎖定；發票狀態重新整理不再改動 API 健康燈。
-
 - MO店+ 選檔後改為獨立逐張確認視窗；可取消整批、取消單張、核對訂單／統編／名稱／拆稅金額／總額／項目數與狀態，只有按下確認才依勾選順序送出。
 - 公司名稱依「本機人工記憶 → 光貿 API → 成功但空名稱才人工輸入」處理；API 技術異常不冒充查無名稱。人工名稱只在確定開立後保存，結果不明則等日後回查確認開立才保存。
 - MO 官方金額明定為含稅最高準則；公司訂單保持含稅明細及 DetailVat=1，確認及送出拆為應稅銷售額與 5% 稅額，測試鎖定 1014 = 966 + 48。
-
 - MO店+ 匯入改為直接解析原始 `OrderExport` 79 欄格式；官方「開立發票金額依品項／加總」是最高準則，商品售價及平台費用不得覆蓋，且不建立暫存轉檔。
 - 依實際光貿轉檔結果鎖定 `6×113 + 3×112 + 65 - 65 = 1014`；公司統編訂單在送出前以買方統編查詢名稱。
 - 修正視窗左上 Icon 資源 ID；首次安全設定置中，設定按鈕回到頁籤列內，匯入按鈕改為淡藍自繪樣式，單行輸入框縮短，商品清單固定五列高度並加深斑馬紋。
@@ -214,6 +222,7 @@
 - 移除硬編碼預設管理密碼；首次使用由公司自行設定，正式 App Key 與 MO 密碼仍使用 Windows DPAPI。
 - Windows x64 CI 已通過 Go 測試、GUI 編譯、PE、icon、manifest 與 ZIP 結構檢查。
 - CI 新增模組可重現性、`go vet` 與機密資料檢查；執行資料、公司 Excel/PDF、二進位發行檔、私鑰及疑似明文 App Key／MO 密碼都會阻擋提交。
+- 發行包規則定案：根目錄保留當版 TXT 與 `使用說明.txt`，不含 `Version` 或 `todo.txt`。
 
 ## V1.0.0-rebuild.3
 
