@@ -126,6 +126,8 @@ internal static class Program
         Equal(1, result.Inserted);
         Equal(1, result.Queried);
         Equal(1, fake.ListCalls);
+        Equal(FixedDate.AddDays(-2), fake.LastListStart);
+        Equal(FixedDate, fake.LastListEnd);
         Equal(1, fake.QueryCalls);
         var record = repository.Invoices.LoadOrCreate().Single();
         Equal(RecordOrigins.Sync, record.RecordOrigin);
@@ -218,6 +220,8 @@ internal static class Program
 
         var result = await Sync(repository, fake).SyncRecentAsync();
         Equal(1, fake.ListCalls);
+        Equal(FixedDate, fake.LastListStart);
+        Equal(FixedDate, fake.LastListEnd);
         Equal(1, result.RemoteCount);
         Equal(1, result.Inserted);
         Equal(1, result.Queried);
@@ -251,6 +255,8 @@ internal static class Program
 
         var result = await Sync(repository, fake).SyncRecentAsync();
         Equal(1, fake.ListCalls);
+        Equal(FixedDate, fake.LastListStart);
+        Equal(FixedDate, fake.LastListEnd);
         Equal(0, fake.QueryCalls);
         Equal(0, result.Queried);
         Equal(0, result.Problems.Count);
@@ -538,13 +544,15 @@ internal static class Program
         public string LastInvoiceQuery { get; private set; } = string.Empty;
         public string LastOrderQuery { get; private set; } = string.Empty;
         public string LastIssueOrderId { get; private set; } = string.Empty;
+        public DateOnly? LastListStart { get; private set; }
+        public DateOnly? LastListEnd { get; private set; }
 
         public Task<InvoiceListResponse> ListInvoicesAsync(DateOnly startDate, DateOnly endDate, int page = 1, int limit = 500, CancellationToken cancellationToken = default)
         {
             if (ThrowIfListCalled) throw new InvalidOperationException("invoice_list must not be called");
             ListCalls++;
-            Equal(FixedDate, startDate);
-            Equal(FixedDate, endDate);
+            LastListStart = startDate;
+            LastListEnd = endDate;
             return Task.FromResult(Pages.TryGetValue(page, out var response)
                 ? response
                 : new InvoiceListResponse(0, "", page, page, 0, []));
