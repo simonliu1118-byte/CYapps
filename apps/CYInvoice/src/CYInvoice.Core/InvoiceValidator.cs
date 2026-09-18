@@ -64,31 +64,7 @@ public static class InvoiceValidator
         IEnumerable<InvoiceRecord> records,
         string source,
         string originalOrderId,
-        string environment)
-    {
-        foreach (var record in records)
-        {
-            if (!string.Equals(record.Source.Trim(), source.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(record.OriginalOrderId.Trim(), originalOrderId.Trim(), StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (record.Environment.Length != 0 && !string.Equals(record.Environment, environment, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (record.InvoiceState is not InvoiceStates.Failed and not InvoiceStates.Voided)
-            {
-                return record.InvoiceState is InvoiceStates.Unknown or InvoiceStates.Changing
-                    ? "既有紀錄尚未確認結果，禁止重送"
-                    : "此訂單已有不可重送的發票紀錄";
-            }
-        }
-
-        return string.Empty;
-    }
+        string environment) => string.Empty;
 
     private static void ValidateItem(InvoiceItem item, int index)
     {
@@ -133,5 +109,4 @@ public static class InvoiceValidator
     }
 
     private static bool IsEightDigits(string value) => value.Length == 8 && value.All(character => character is >= '0' and <= '9');
-
 }
