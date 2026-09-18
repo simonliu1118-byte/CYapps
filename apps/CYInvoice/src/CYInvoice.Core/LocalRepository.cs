@@ -37,17 +37,23 @@ public sealed class LocalRepository
         Directory.CreateDirectory(data);
         Directory.CreateDirectory(invoicePdfCache);
         Directory.CreateDirectory(invoicePreviewCache);
-        var repository = new LocalRepository(
+
+        var settings = new SettingsStore(data, protector);
+        var currentSettings = settings.LoadOrCreate();
+        SqliteBootstrapper.EnsureMigrated(data, currentSettings.ProductionInvoice);
+
+        var invoices = new InvoiceStore(data, currentSettings.ProductionInvoice);
+        var buyerNames = new BuyerNameStore(data);
+        invoices.LoadOrCreate();
+        buyerNames.LoadOrCreate();
+
+        return new LocalRepository(
             data,
             cache,
             invoicePdfCache,
             invoicePreviewCache,
-            new SettingsStore(data, protector),
-            new InvoiceStore(data),
-            new BuyerNameStore(data));
-        repository.Settings.LoadOrCreate();
-        repository.Invoices.LoadOrCreate();
-        repository.BuyerNames.LoadOrCreate();
-        return repository;
+            settings,
+            invoices,
+            buyerNames);
     }
 }
