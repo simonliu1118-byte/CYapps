@@ -5,7 +5,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class AdminUnlockForm : Form
 {
-    private const int CompactButtonWidth = 70;
+    private const int CompactButtonWidth = 76;
     private readonly Settings settings;
     private readonly TextBox password = new()
     {
@@ -21,7 +21,7 @@ internal sealed class AdminUnlockForm : Form
         this.settings = settings;
         Text = "驗證設定管理密碼";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(190, 174);
+        ClientSize = new Size(230, 174);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -38,30 +38,37 @@ internal sealed class AdminUnlockForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(12),
+            Padding = new Padding(14, 12, 14, 10),
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(new Label
         {
             Text = "請輸入設定管理密碼",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
+            Margin = Padding.Empty,
         }, 0, 0);
+        password.Margin = new Padding(0, 3, 0, 7);
         root.Controls.Add(password, 0, 1);
 
-        var buttons = new FlowLayoutPanel
+        var buttons = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.RightToLeft,
-            Padding = new Padding(0, 8, 0, 0),
-            WrapContents = false,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 7, 0, 0),
         };
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        unlock.Anchor = AnchorStyles.None;
+        cancel.Anchor = AnchorStyles.None;
         unlock.Click += UnlockClicked;
         cancel.DialogResult = DialogResult.Cancel;
-        buttons.Controls.Add(cancel);
-        buttons.Controls.Add(unlock);
+        buttons.Controls.Add(unlock, 0, 0);
+        buttons.Controls.Add(cancel, 1, 0);
         root.Controls.Add(buttons, 0, 2);
         Controls.Add(root);
         AcceptButton = unlock;
@@ -93,9 +100,11 @@ internal sealed class AdminUnlockForm : Form
             !UiControls.HasLogicalSize(unlock, CompactButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(cancel, CompactButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("設定管理密碼單次解鎖視窗配置不正確");
+
+        PerformLayout();
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
-        if (logicalWidth > 200)
-            throw new InvalidOperationException("設定管理密碼視窗寬度未依需求縮小");
+        if (logicalWidth > 240 || unlock.Left < 0 || cancel.Right > ClientSize.Width || password.Right > ClientSize.Width)
+            throw new InvalidOperationException("設定管理密碼視窗縮小後控制項配置超出視窗");
     }
 
     private static Button CompactButton(string text) => new NoFocusCueButton
