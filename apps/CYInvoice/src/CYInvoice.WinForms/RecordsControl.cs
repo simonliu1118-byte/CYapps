@@ -12,7 +12,8 @@ internal sealed class RecordsControl : UserControl
     private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
-    private readonly InvoiceSyncService syncService;
+    private readonly InvoiceSyncCoordinator syncCoordinator;
+    private readonly CancellationToken shutdownToken;
     private readonly DateTimePicker dateFrom = DatePicker();
     private readonly DateTimePicker dateTo = DatePicker();
     private readonly TextBox invoiceNumber = UiControls.TextBox(20);
@@ -40,10 +41,20 @@ internal sealed class RecordsControl : UserControl
     private ListView Records => recordsHost.List;
 
     public RecordsControl(LocalRepository repository, InvoiceService service)
+        : this(repository, service, new InvoiceSyncCoordinator(new InvoiceSyncService(repository)), CancellationToken.None)
+    {
+    }
+
+    public RecordsControl(
+        LocalRepository repository,
+        InvoiceService service,
+        InvoiceSyncCoordinator syncCoordinator,
+        CancellationToken shutdownToken = default)
     {
         this.repository = repository;
         this.service = service;
-        syncService = new InvoiceSyncService(repository);
+        this.syncCoordinator = syncCoordinator ?? throw new ArgumentNullException(nameof(syncCoordinator));
+        this.shutdownToken = shutdownToken;
         voidedFont = new Font(Records.Font, FontStyle.Strikeout);
         Dock = DockStyle.Fill;
         BackColor = Color.White;
@@ -227,17 +238,35 @@ internal sealed class RecordsControl : UserControl
         refreshButton.Text = "重新整理中…";
         try
         {
-            var result = await syncService.SyncRecentAsync();
-            Reload();
-            if (result.Problems.Count != 0)
+            var run = await syncCoordinator.RunManualAsync(shutdownToken);
+            switch (run.Status)
             {
-                MessageBox.Show(
-                    this,
-                    $"最近 3 天同步已完成，但有 {result.Problems.Count} 項未完整更新：\n" + string.Join("\n", result.Problems),
-                    "部分資料未能更新",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                case InvoiceSyncRunStatus.Busy:
+                    MessageBox.Show(this, "目前正在同步，這次不會重複排程。", "同步進行中",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                case InvoiceSyncRunStatus.Cooldown:
+                    var seconds = Math.Max(1, (int)Math.Ceiling(run.CooldownRemaining.TotalSeconds));
+                    MessageBox.Show(this, $"剛完成手動同步，請 {seconds} 秒後再試。", "請稍後再同步",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                case InvoiceSyncRunStatus.Completed:
+                    Reload();
+                    var result = run.Result;
+                    if (result is not null && result.Problems.Count != 0)
+                    {
+                        MessageBox.Show(
+                            this,
+                            $"最近 3 天同步已完成，但有 {result.Problems.Count} 項未完整更新：\n" + string.Join("\n", result.Problems),
+                            "部分資料未能更新",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+                    }
+                    break;
             }
+        }
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        {
         }
         catch (Exception error)
         {
