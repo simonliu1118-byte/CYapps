@@ -13,6 +13,7 @@ internal sealed class RecordsControl : UserControl
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly InvoiceSyncCoordinator syncCoordinator;
+    private readonly InvoiceDetailRefreshService detailRefreshService;
     private readonly CancellationToken shutdownToken;
     private readonly DateTimePicker dateFrom = DatePicker();
     private readonly DateTimePicker dateTo = DatePicker();
@@ -37,6 +38,7 @@ internal sealed class RecordsControl : UserControl
     private readonly Font voidedFont;
     private bool fillingRows;
     private bool selectionClearQueued;
+    private bool openingRecord;
 
     private ListView Records => recordsHost.List;
 
@@ -54,6 +56,7 @@ internal sealed class RecordsControl : UserControl
         this.repository = repository;
         this.service = service;
         this.syncCoordinator = syncCoordinator ?? throw new ArgumentNullException(nameof(syncCoordinator));
+        detailRefreshService = new InvoiceDetailRefreshService(repository);
         this.shutdownToken = shutdownToken;
         voidedFont = new Font(Records.Font, FontStyle.Strikeout);
         Dock = DockStyle.Fill;
@@ -169,10 +172,10 @@ internal sealed class RecordsControl : UserControl
             if (hit.Item is null || ReferenceEquals(hit.Item.Tag, PlaceholderRow)) QueueClearSelection();
         };
         Records.MouseClick += CopyInvoiceNumberIfRequested;
-        Records.MouseDoubleClick += (_, eventArgs) =>
+        Records.MouseDoubleClick += async (_, eventArgs) =>
         {
             var hit = Records.HitTest(eventArgs.Location);
-            if (hit.Item?.Tag is InvoiceRecord record) OpenSelected(record);
+            if (hit.Item?.Tag is InvoiceRecord record) await OpenSelectedAsync(record);
         };
         recordsHost.ViewportChanged += (_, _) => { FillPlaceholderRows(); LayoutColumns(); };
     }
@@ -313,20 +316,48 @@ internal sealed class RecordsControl : UserControl
         copyHint.ForeColor = Color.DimGray;
     }
 
-    private void OpenSelected(InvoiceRecord record)
+    private async Task OpenSelectedAsync(InvoiceRecord record)
     {
-        using var detail = new RecordDetailForm(record, repository, service);
-        if (string.Equals(record.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal))
+        if (openingRecord) return;
+        openingRecord = true;
+        Records.Enabled = false;
+        UseWaitCursor = true;
+        try
         {
-            detail.MinimumSize = new Size(760, 620);
-            detail.ClientSize = new Size(800, 700);
+            var fresh = await detailRefreshService.RefreshAsync(record, shutdownToken);
+            if (shutdownToken.IsCancellationRequested || IsDisposed) return;
+            Reload();
+            using var detail = new RecordDetailForm(fresh, repository, service);
+            if (string.Equals(fresh.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal))
+            {
+                detail.MinimumSize = new Size(760, 620);
+                detail.ClientSize = new Size(800, 700);
+            }
+            else
+            {
+                detail.MinimumSize = new Size(880, 600);
+                detail.ClientSize = new Size(980, 660);
+            }
+            detail.ShowDialog(FindForm());
         }
-        else
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
         {
-            detail.MinimumSize = new Size(880, 600);
-            detail.ClientSize = new Size(980, 660);
         }
-        detail.ShowDialog(FindForm());
+        catch (Exception error)
+        {
+            MessageBox.Show(
+                this,
+                "目前無法向光貿確認這筆發票的最新資料，因此未開啟詳細資訊。\n\n" + error.Message,
+                "無法確認最新資料",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            UseWaitCursor = false;
+            if (!IsDisposed) Records.Enabled = true;
+            openingRecord = false;
+        }
     }
 
     private void FillPlaceholderRows()
