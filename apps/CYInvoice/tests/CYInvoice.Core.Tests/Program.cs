@@ -75,7 +75,7 @@ var tests = new (string Name, Action Run)[]
     ("concurrent same OrderID is blocked before second API call", () => TestConcurrentDuplicateIssueAsync().GetAwaiter().GetResult()),
     ("same order is isolated between test and production", () => TestEnvironmentIssueIsolationAsync().GetAwaiter().GetResult()),
     ("explicit API rejection becomes failed", () => TestExplicitRejectionAsync().GetAwaiter().GetResult()),
-    ("voided order reissue keeps the original API order ID", () => TestVoidedReissueAsync().GetAwaiter().GetResult()),
+    ("voided test reissue keeps local order ID and applies API prefix", () => TestVoidedReissueAsync().GetAwaiter().GetResult()),
     ("remote success and local save failure remain opened", () => TestRemoteSuccessLocalFailureAsync().GetAwaiter().GetResult()),
     ("successful manual company invoice remembers confirmed name", () => TestCompanyNameMemoryAsync().GetAwaiter().GetResult()),
     ("successful manual company correction overwrites local name", () => TestLocalCompanyNameCorrectionAsync().GetAwaiter().GetResult()),
@@ -422,10 +422,11 @@ static void TestUntaxedCompanyTotals()
 static async Task TestIssueOpensAndBlocksResendAsync()
 {
     using var temporary = new TemporaryDirectory();
+    var apiOrderId = TestApiOrderId("20260905001");
     var fake = new FakeGateway
     {
         IssueResponse = new IssueResponse(0, "", "AB12345678", 0, ""),
-        QueryResponse = ConfirmedQuery("20260905001", "AB12345678", 105, 0, 105, 1),
+        QueryResponse = ConfirmedQuery(apiOrderId, "AB12345678", 105, 0, 105, 1),
     };
     var (service, repository) = TestService(temporary.Path, fake);
     fake.OnIssue = _ => Equal(InvoiceStates.Changing, repository.Invoices.LoadOrCreate().Last().InvoiceState);
@@ -434,7 +435,8 @@ static async Task TestIssueOpensAndBlocksResendAsync()
     Equal(InvoiceStates.Opened, result.Record.InvoiceState);
     Equal("AB12345678", result.Record.InvoiceNumber);
     Equal(1, fake.IssueCalls);
-    Equal("0000000000", fake.LastIssue!.BuyerIdentifier);
+    Equal(apiOrderId, fake.LastIssue!.OrderId);
+    Equal("0000000000", fake.LastIssue.BuyerIdentifier);
     Equal("測試消費者", fake.LastIssue.BuyerName);
     Equal(105L, Convert.ToInt64(fake.LastIssue.SalesAmount));
     Equal(0L, Convert.ToInt64(fake.LastIssue.TaxAmount));
@@ -447,7 +449,7 @@ static async Task TestIssueOpensAndBlocksResendAsync()
     Equal(2, records.Count);
     Equal(1, records.Count(record => record.InvoiceState == InvoiceStates.Opened));
     Equal(1, records.Count(record => record.InvoiceState == InvoiceStates.Failed));
-    Equal(true, records.All(record => record.ApiOrderId == "20260905001"));
+    Equal(true, records.All(record => record.ApiOrderId == apiOrderId));
 }
 
 static async Task TestAmbiguousIssueAsync()
@@ -495,26 +497,28 @@ static async Task TestUnknownRetryPreflightFailureAsync()
 static async Task TestAmbiguousRecoveryAsync()
 {
     using var temporary = new TemporaryDirectory();
+    var apiOrderId = TestApiOrderId("20260905001");
     var fake = new FakeGateway
     {
         IssueException = new IOException("decode failed"),
-        QueryResponse = ConfirmedQuery("20260905001", "CD87654321", 105, 0, 105, 1),
+        QueryResponse = ConfirmedQuery(apiOrderId, "CD87654321", 105, 0, 105, 1),
     };
     var (service, _) = TestService(temporary.Path, fake);
     var result = await service.IssueManualAsync(SafeDraft());
     Equal(true, result.Opened);
     Equal("CD87654321", result.Record.InvoiceNumber);
-    Equal("20260905001", fake.LastQueryOrderId);
+    Equal(apiOrderId, fake.LastQueryOrderId);
 }
 
 static async Task TestCancelledIssueRecoveryAsync()
 {
     using var temporary = new TemporaryDirectory();
     using var timeout = new CancellationTokenSource();
+    var apiOrderId = TestApiOrderId("20260905001");
     var fake = new FakeGateway
     {
         IssueException = new OperationCanceledException("request timed out"),
-        QueryResponse = ConfirmedQuery("20260905001", "EF87654321", 105, 0, 105, 1),
+        QueryResponse = ConfirmedQuery(apiOrderId, "EF87654321", 105, 0, 105, 1),
         RejectCancelledQueryToken = true,
         OnIssue = _ => timeout.Cancel(),
     };
@@ -522,6 +526,7 @@ static async Task TestCancelledIssueRecoveryAsync()
     var result = await service.IssueManualAsync(SafeDraft(), timeout.Token);
     Equal(true, result.Opened);
     Equal(1, fake.QueryCalls);
+    Equal(apiOrderId, fake.LastQueryOrderId);
     Equal(false, fake.LastQueryTokenWasCancelled);
 }
 
@@ -530,7 +535,7 @@ static async Task TestStrictRecoveryRejectsMismatchAsync()
     foreach (var query in new[]
     {
         ConfirmedQuery("ANOTHER-ORDER", "GH12345678", 105, 0, 105, 1),
-        ConfirmedQuery("20260905001", "GH12345678", 105, 0, 105, 1, cancelDate: 1),
+        ConfirmedQuery(TestApiOrderId("20260905001"), "GH12345678", 105, 0, 105, 1, cancelDate: 1),
     })
     {
         using var temporary = new TemporaryDirectory();
@@ -547,7 +552,7 @@ static async Task TestConcurrentDuplicateIssueAsync()
     var fake = new FakeGateway
     {
         IssueResponse = new IssueResponse(0, "", "IJ12345678", 0, ""),
-        QueryResponse = ConfirmedQuery("20260905001", "IJ12345678", 105, 0, 105, 1),
+        QueryResponse = ConfirmedQuery(TestApiOrderId("20260905001"), "IJ12345678", 105, 0, 105, 1),
         IssueStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
         IssueRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
     };
@@ -596,6 +601,8 @@ static async Task TestEnvironmentIssueIsolationAsync()
     Equal(2, gateways.Count);
     Equal(AmegoDefaults.TestInvoice, gateways[0].Invoice);
     Equal("12345675", gateways[1].Invoice);
+    Equal(TestApiOrderId("20260905001"), gateways[0].Gateway.LastIssue!.OrderId);
+    Equal("20260905001", gateways[1].Gateway.LastIssue!.OrderId);
     var records = repository.Invoices.LoadOrCreate();
     Equal(1, records.Count(record => record.Environment == Environments.Test));
     Equal(1, records.Count(record => record.Environment == Environments.Production));
@@ -614,10 +621,11 @@ static async Task TestExplicitRejectionAsync()
 static async Task TestVoidedReissueAsync()
 {
     using var temporary = new TemporaryDirectory();
+    var apiOrderId = TestApiOrderId("20260905001");
     var fake = new FakeGateway
     {
         IssueResponse = new IssueResponse(0, "", "JK12345678", 0, ""),
-        QueryResponse = ConfirmedQuery("20260905001", "JK12345678", 105, 0, 105, 1),
+        QueryResponse = ConfirmedQuery(apiOrderId, "JK12345678", 105, 0, 105, 1),
     };
     var (service, repository) = TestService(temporary.Path, fake);
     repository.Invoices.Append(new InvoiceRecord
@@ -627,8 +635,9 @@ static async Task TestVoidedReissueAsync()
         Attempt = 7, Amount = 105, InvoiceState = InvoiceStates.Voided, Environment = Environments.Test,
     });
     var result = await service.IssueManualAsync(SafeDraft());
-    Equal("20260905001", fake.LastIssue!.OrderId);
-    Equal("20260905001", result.Record.ApiOrderId);
+    Equal("20260905001", result.Record.OrderId);
+    Equal(apiOrderId, fake.LastIssue!.OrderId);
+    Equal(apiOrderId, result.Record.ApiOrderId);
     Equal(1, result.Record.Attempt);
 }
 
@@ -701,7 +710,7 @@ static async Task TestRefreshUnknownAsync()
     Equal(false, repository.BuyerNames.TryLookup("12345675", out _));
 
     fake.QueryException = null;
-    fake.QueryResponse = ConfirmedQuery("20260905003", "NO87654321", 100, 5, 105, 1);
+    fake.QueryResponse = ConfirmedQuery(TestApiOrderId("20260905003"), "NO87654321", 100, 5, 105, 1);
     await service.RefreshAllAsync();
     Equal(true, repository.BuyerNames.TryLookup("12345675", out var name));
     Equal("稍後才記住", name);
@@ -712,7 +721,7 @@ static async Task TestUploadStatusMatchingAsync()
     using var temporary = new TemporaryDirectory();
     var fake = new FakeGateway
     {
-        QueryResponse = ConfirmedQuery("20260905001", "OP12345678", 105, 0, 105, 1),
+        QueryResponse = ConfirmedQuery(TestApiOrderId("20260905001"), "OP12345678", 105, 0, 105, 1),
         StatusResponse = new StatusResponse(0, "", [
             new StatusResult("WRONG00000", "", UploadStatuses.Error, "105"),
             new StatusResult("OP12345678", "", UploadStatuses.Complete, "105"),
@@ -747,7 +756,7 @@ static async Task TestUploadStatusMismatchAsync()
     using var temporary = new TemporaryDirectory();
     var fake = new FakeGateway
     {
-        QueryResponse = ConfirmedQuery("20260905001", "QR12345678", 105, 0, 105, 1),
+        QueryResponse = ConfirmedQuery(TestApiOrderId("20260905001"), "QR12345678", 105, 0, 105, 1),
         StatusResponse = new StatusResponse(0, "", [
             new StatusResult("ANOTHER000", "", UploadStatuses.Complete, "105"),
         ]),
@@ -797,7 +806,7 @@ static async Task TestDecimalIssueNumbersAsync()
     var fake = new FakeGateway
     {
         IssueResponse = new IssueResponse(0, "", "WX12345678", 0, ""),
-        QueryResponse = ConfirmedQuery("20260905004", "WX12345678", 190, 10, 200, 0),
+        QueryResponse = ConfirmedQuery(TestApiOrderId("20260905004"), "WX12345678", 190, 10, 200, 0),
     };
     var (service, _) = TestService(temporary.Path, fake);
     var draft = CompanyDraft("20260905004", "測試公司");
@@ -1088,7 +1097,7 @@ static async Task TestMoIssuePrivacyAsync()
     var fake = new FakeGateway
     {
         IssueResponse = new IssueResponse(0, "", "MO12345678", 0, ""),
-        QueryResponse = ConfirmedQuery("66090300839412", "MO12345678", 653, 0, 653, 1),
+        QueryResponse = ConfirmedQuery(TestApiOrderId("66090300839412"), "MO12345678", 653, 0, 653, 1),
     };
     var (service, _) = TestService(temporary.Path, fake);
     var order = new MoOrder
@@ -1107,7 +1116,8 @@ static async Task TestMoIssuePrivacyAsync()
     };
     order.Items.Add(new InvoiceItem { Description = "隱私商品名稱", Quantity = 1, UnitPrice = 653, Amount = 653, Remark = "真實明細備註" });
     var result = await service.IssueMoWithLookupAsync(order, new NameLookup());
-    Equal("測試消費者", fake.LastIssue!.BuyerName);
+    Equal(TestApiOrderId("66090300839412"), fake.LastIssue!.OrderId);
+    Equal("測試消費者", fake.LastIssue.BuyerName);
     Equal("0000000000", fake.LastIssue.BuyerIdentifier);
     Equal("cyinvoice-test@example.com", fake.LastIssue.CarrierId1);
     Equal(string.Empty, fake.LastIssue.BuyerAddress);
@@ -1124,7 +1134,7 @@ static async Task TestCoupangIssuePrivacyAsync()
     var fake = new FakeGateway
     {
         IssueResponse = new IssueResponse(0, "", "CP12345678", 0, ""),
-        QueryResponse = ConfirmedQuery("CP-PRIVATE-1234567", "CP12345678", 100, 5, 105, 1),
+        QueryResponse = ConfirmedQuery(TestApiOrderId("CP-PRIVATE-1234567"), "CP12345678", 100, 5, 105, 1),
     };
     var (service, _) = TestService(temporary.Path, fake);
     var order = new CoupangOrder
@@ -1136,9 +1146,10 @@ static async Task TestCoupangIssuePrivacyAsync()
     };
     order.Items.Add(new InvoiceItem { Description = "真實酷澎商品", Quantity = 1, UnitPrice = 105, Amount = 105, Remark = "真實備註" });
     var result = await service.IssueCoupangWithLookupAsync(order, new NameLookup(LookupSucceeded: true));
+    Equal(TestApiOrderId("CP-PRIVATE-1234567"), fake.LastIssue!.OrderId);
     Equal(1, fake.BanCalls);
     Equal("28080623", fake.LastBanQuery.Single());
-    Equal("28080623", fake.LastIssue!.BuyerIdentifier);
+    Equal("28080623", fake.LastIssue.BuyerIdentifier);
     Equal("光貿測試買受人", fake.LastIssue.BuyerName);
     Equal("測試商品 1", fake.LastIssue.ProductItems[0].Description);
     Equal("12345675", result.Record.BuyerIdentifier);
@@ -1302,6 +1313,9 @@ static InvoiceDraft SafeDraft()
     return draft;
 }
 
+static string TestApiOrderId(string orderId) =>
+    TestOrderIdPrefix.Apply(orderId, new DateOnly(2026, 9, 5));
+
 static InvoiceDraft CompanyDraft(string orderId, string buyerName)
 {
     var draft = SafeDraft();
@@ -1318,7 +1332,7 @@ static InvoiceRecord OpenedRecord(string invoiceNumber) => new()
     Source = InvoiceSources.Manual,
     OriginalOrderId = "20260905001",
     OrderId = "20260905001",
-    ApiOrderId = "20260905001",
+    ApiOrderId = TestApiOrderId("20260905001"),
     Attempt = 1,
     Environment = Environments.Test,
     InvoiceNumber = invoiceNumber,
