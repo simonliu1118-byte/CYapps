@@ -31,7 +31,7 @@ public sealed record IssueResult(
 
 public sealed class LocalPersistenceException(InvoiceRecord record, Exception innerException)
     : Exception(
-        $"光貿已成功開立發票 {record.InvoiceNumber}，但本機紀錄保存失敗：{innerException.Message}；請勿重送，重新整理狀態後會再次修復",
+        $"光貿已成功開立發票 {record.InvoiceNumber}，但本機紀錄保存失敗：{innerException.Message}；請勿直接重送，重新整理或再次操作時會先回查光貿",
         innerException)
 {
     public InvoiceRecord Record { get; } = record;
@@ -55,6 +55,8 @@ public sealed class InvoiceService
     private readonly Action<string, StatusUpdate>? statusUpdater;
     private readonly SemaphoreSlim issueGate = new(1, 1);
     private readonly SemaphoreSlim pdfGate = new(1, 1);
+    private readonly object activeIssueGate = new();
+    private readonly HashSet<string> activeIssueKeys = new(StringComparer.Ordinal);
     private readonly object gatewayGate = new();
     private IAmegoGateway? cachedGateway;
     private string cachedGatewayKey = string.Empty;
@@ -511,191 +513,229 @@ public sealed class InvoiceService
         NameLookup lookup,
         CancellationToken cancellationToken)
     {
-        await issueGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        InvoiceValidator.Validate(draft);
+        options = options with
+        {
+            Source = options.Source.Length == 0 ? InvoiceSources.Manual : options.Source,
+            OriginalOrderId = options.OriginalOrderId.Length == 0 ? draft.OrderId : options.OriginalOrderId,
+            Delivery = options.Delivery.Length == 0 ? DeliveryPaper : options.Delivery,
+        };
+
+        var (gateway, environment) = GetGateway();
+        var apiOrderId = RequestOrderId(draft, options);
+        var activeKey = environment + "\0" + apiOrderId;
+        lock (activeIssueGate)
+        {
+            if (!activeIssueKeys.Add(activeKey))
+            {
+                throw new InvalidOperationException("此訂單正在開立，請勿重複送出");
+            }
+        }
+
         try
         {
-            InvoiceValidator.Validate(draft);
-            options = options with
-            {
-                Source = options.Source.Length == 0 ? InvoiceSources.Manual : options.Source,
-                OriginalOrderId = options.OriginalOrderId.Length == 0 ? draft.OrderId : options.OriginalOrderId,
-                Delivery = options.Delivery.Length == 0 ? DeliveryPaper : options.Delivery,
-            };
-
-            var records = repository.Invoices.LoadOrCreate();
-            var (gateway, environment) = GetGateway();
-            var duplicateReason = InvoiceValidator.DuplicateBlockReason(
-                records,
-                options.Source,
-                options.OriginalOrderId,
-                environment);
-            if (duplicateReason.Length != 0)
-            {
-                throw new InvalidOperationException(duplicateReason);
-            }
-
-            if (environment == Environments.Test)
-            {
-                var safeBuyerName = "測試消費者";
-                if (draft.CompanyBuyer)
-                {
-                    var testLookup = await LookupBuyerNameFromApiCoreAsync(
-                        gateway, TestBuyerIdentifier, cancellationToken).ConfigureAwait(false);
-                    safeBuyerName = testLookup.ApiName.Trim();
-                    if (safeBuyerName.Length == 0)
-                        throw new InvalidOperationException($"光貿測試統編 {TestBuyerIdentifier} 查不到買受人名稱，已停止送出");
-                }
-                options = options with { TestPrivacy = true, ApiBuyerName = safeBuyerName };
-            }
-
-            var createdAt = now();
-            var attempt = NextAttempt(records, options.Source, options.OriginalOrderId, environment);
-            var apiOrderId = RetryApiOrderId(RequestOrderId(draft, options), attempt);
-            var manualName = draft.BuyerName.Trim();
-            var rememberLocalCorrection = draft.CompanyBuyer && lookup.Local && manualName.Length != 0 &&
-                !string.Equals(manualName, lookup.Name.Trim(), StringComparison.Ordinal);
-            var rememberMissingApiName = draft.CompanyBuyer && !lookup.Local && lookup.LookupSucceeded && lookup.ApiName.Trim().Length == 0;
-            var record = new InvoiceRecord
-            {
-                Id = NewRecordId(createdAt),
-                Source = options.Source,
-                OriginalOrderId = options.OriginalOrderId,
-                OrderId = draft.OrderId,
-                Attempt = attempt,
-                BuyerIdentifier = NormalizedBuyerIdentifier(draft),
-                BuyerName = EffectiveBuyerName(draft, options.BuyerName),
-                ApiOrderId = apiOrderId,
-                CarrierType = options.CarrierType,
-                CarrierId1 = options.CarrierId1,
-                CarrierId2 = options.CarrierId2,
-                NpoBan = options.NpoBan,
-                Amount = draft.TotalAmount,
-                Delivery = options.Delivery,
-                InvoiceState = InvoiceStates.Changing,
-                Environment = environment,
-                SentAt = FormatDateTime(createdAt),
-                Items = draft.Items.ToList(),
-                MainRemark = draft.MainRemark,
-                DetailVat = DetailVat(draft),
-                BuyerNameNeedsMemory = rememberLocalCorrection || rememberMissingApiName,
-            };
-            repository.Invoices.Append(record);
-
-            options = options with { ApiOrderId = apiOrderId };
-            IssueResponse response;
+            await issueGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                response = await gateway.IssueAsync(BuildIssueRequest(draft, options), cancellationToken).ConfigureAwait(false);
-            }
-            catch (AmegoApiException error)
-            {
-                record.InvoiceState = InvoiceStates.Failed;
-                record.ErrorMessage = error.Message;
-                try
+                var records = repository.Invoices.LoadOrCreate();
+                var uncertain = FindUncertainRecord(records, apiOrderId, environment);
+                if (uncertain is not null)
                 {
-                    SaveStatus(record.Id, CreateStatusUpdate(record));
-                }
-                catch (Exception saveError)
-                {
-                    throw new AggregateException(error, saveError);
-                }
-                throw;
-            }
-            catch (Exception issueError)
-            {
-                QueryResponse? query = null;
-                Exception? queryError;
-                try
-                {
-                    using var recoveryTimeout = new CancellationTokenSource(RecoveryQueryTimeout);
-                    query = await gateway.QueryByOrderIdAsync(apiOrderId, recoveryTimeout.Token).ConfigureAwait(false);
-                    VerifyQueryResult(record, draft, query.Data, string.Empty);
-                    queryError = null;
-                }
-                catch (Exception error)
-                {
-                    queryError = error;
-                }
-
-                if (queryError is null && query is not null)
-                {
-                    ApplyQueryResult(record, query.Data, 0, string.Empty);
+                    var uncertainOrderId = EffectiveRecordOrderId(uncertain);
                     try
                     {
-                        PersistOpened(record, lookup, draft.BuyerName);
+                        using var recoveryTimeout = new CancellationTokenSource(RecoveryQueryTimeout);
+                        var query = await gateway.QueryByOrderIdAsync(uncertainOrderId, recoveryTimeout.Token).ConfigureAwait(false);
+                        VerifyStoredQueryResult(uncertain, query.Data);
+                        ApplyQueryResult(uncertain, query.Data, uncertain.UploadStatus, uncertain.UploadStatusText);
+                        SaveStatus(uncertain.Id, CreateStatusUpdate(uncertain));
+                        if (uncertain.InvoiceState == InvoiceStates.Opened)
+                        {
+                            RememberBuyerName(uncertain, lookup, draft.BuyerName);
+                            return new IssueResult(uncertain, Opened: true);
+                        }
+                    }
+                    catch (AmegoApiException error) when (error.Code == 71)
+                    {
+                        // AMEGO explicitly confirmed that the previous uncertain OrderID is not present.
+                        // It is therefore safe to let AMEGO decide the new issue request normally.
+                    }
+                    catch (Exception error)
+                    {
+                        throw new InvalidOperationException(
+                            "上一筆相同 OrderID 的開立結果尚未確認，回查光貿失敗，本次未重送：" + error.Message,
+                            error);
+                    }
+                }
+
+                if (environment == Environments.Test)
+                {
+                    var safeBuyerName = "測試消費者";
+                    if (draft.CompanyBuyer)
+                    {
+                        var testLookup = await LookupBuyerNameFromApiCoreAsync(
+                            gateway, TestBuyerIdentifier, cancellationToken).ConfigureAwait(false);
+                        safeBuyerName = testLookup.ApiName.Trim();
+                        if (safeBuyerName.Length == 0)
+                            throw new InvalidOperationException($"光貿測試統編 {TestBuyerIdentifier} 查不到買受人名稱，已停止送出");
+                    }
+                    options = options with { TestPrivacy = true, ApiBuyerName = safeBuyerName };
+                }
+
+                var createdAt = now();
+                var manualName = draft.BuyerName.Trim();
+                var rememberLocalCorrection = draft.CompanyBuyer && lookup.Local && manualName.Length != 0 &&
+                    !string.Equals(manualName, lookup.Name.Trim(), StringComparison.Ordinal);
+                var rememberMissingApiName = draft.CompanyBuyer && !lookup.Local && lookup.LookupSucceeded && lookup.ApiName.Trim().Length == 0;
+                var record = new InvoiceRecord
+                {
+                    Id = NewRecordId(createdAt),
+                    Source = options.Source,
+                    OriginalOrderId = options.OriginalOrderId,
+                    OrderId = draft.OrderId,
+                    Attempt = 1,
+                    BuyerIdentifier = NormalizedBuyerIdentifier(draft),
+                    BuyerName = EffectiveBuyerName(draft, options.BuyerName),
+                    ApiOrderId = apiOrderId,
+                    CarrierType = options.CarrierType,
+                    CarrierId1 = options.CarrierId1,
+                    CarrierId2 = options.CarrierId2,
+                    NpoBan = options.NpoBan,
+                    Amount = draft.TotalAmount,
+                    Delivery = options.Delivery,
+                    InvoiceState = InvoiceStates.Changing,
+                    Environment = environment,
+                    SentAt = FormatDateTime(createdAt),
+                    Items = draft.Items.ToList(),
+                    MainRemark = draft.MainRemark,
+                    DetailVat = DetailVat(draft),
+                    BuyerNameNeedsMemory = rememberLocalCorrection || rememberMissingApiName,
+                };
+                repository.Invoices.Append(record);
+
+                options = options with { ApiOrderId = apiOrderId };
+                IssueResponse response;
+                try
+                {
+                    response = await gateway.IssueAsync(BuildIssueRequest(draft, options), cancellationToken).ConfigureAwait(false);
+                }
+                catch (AmegoApiException error)
+                {
+                    record.InvoiceState = InvoiceStates.Failed;
+                    record.ErrorMessage = error.Message;
+                    try
+                    {
+                        SaveStatus(record.Id, CreateStatusUpdate(record));
                     }
                     catch (Exception saveError)
                     {
-                        throw new LocalPersistenceException(record, saveError);
+                        throw new AggregateException(error, saveError);
                     }
-                    return new IssueResult(record, Opened: true);
+                    throw;
+                }
+                catch (Exception issueError)
+                {
+                    QueryResponse? query = null;
+                    Exception? queryError;
+                    try
+                    {
+                        using var recoveryTimeout = new CancellationTokenSource(RecoveryQueryTimeout);
+                        query = await gateway.QueryByOrderIdAsync(apiOrderId, recoveryTimeout.Token).ConfigureAwait(false);
+                        VerifyQueryResult(record, draft, query.Data, string.Empty);
+                        queryError = null;
+                    }
+                    catch (Exception error)
+                    {
+                        queryError = error;
+                    }
+
+                    if (queryError is null && query is not null)
+                    {
+                        ApplyQueryResult(record, query.Data, 0, string.Empty);
+                        try
+                        {
+                            PersistOpened(record, lookup, draft.BuyerName);
+                        }
+                        catch (Exception saveError)
+                        {
+                            throw new LocalPersistenceException(record, saveError);
+                        }
+                        return new IssueResult(record, Opened: true);
+                    }
+
+                    record.InvoiceState = InvoiceStates.Unknown;
+                    record.ErrorMessage = issueError.Message + "；嚴格回查未確認成功：" + queryError!.Message;
+                    try
+                    {
+                        SaveStatus(record.Id, CreateStatusUpdate(record));
+                    }
+                    catch (Exception saveError)
+                    {
+                        throw new InvalidOperationException(
+                            $"開立結果不明且本機狀態保存失敗：{saveError.Message}；原始錯誤：{issueError.Message}",
+                            issueError);
+                    }
+                    throw new UnknownInvoiceResultException(record, issueError);
                 }
 
-                record.InvoiceState = InvoiceStates.Unknown;
-                record.ErrorMessage = issueError.Message + "；嚴格回查未確認成功：" + queryError!.Message;
+                record.InvoiceNumber = response.InvoiceNumber.Trim();
+                if (record.InvoiceNumber.Length == 0)
+                {
+                    record.InvoiceState = InvoiceStates.Unknown;
+                    record.ErrorMessage = "光貿回覆成功但沒有發票號碼";
+                    Exception? saveError = null;
+                    try
+                    {
+                        SaveStatus(record.Id, CreateStatusUpdate(record));
+                    }
+                    catch (Exception error)
+                    {
+                        saveError = error;
+                        record.ErrorMessage += "；本機狀態保存失敗：" + error.Message;
+                    }
+                    throw new UnknownInvoiceResultException(record, saveError);
+                }
+                if (response.InvoiceTime > 0)
+                {
+                    var issuedAt = DateTimeOffset.FromUnixTimeSeconds(response.InvoiceTime).ToLocalTime();
+                    record.InvoiceDate = issuedAt.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
+                    record.InvoiceTime = issuedAt.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+                }
+
                 try
                 {
-                    SaveStatus(record.Id, CreateStatusUpdate(record));
+                    var query = await gateway.QueryByInvoiceNumberAsync(record.InvoiceNumber, cancellationToken).ConfigureAwait(false);
+                    VerifyQueryResult(record, draft, query.Data, record.InvoiceNumber);
+                    ApplyQueryResult(record, query.Data, 0, string.Empty);
+                }
+                catch (Exception queryError)
+                {
+                    record.InvoiceState = InvoiceStates.Opened;
+                    record.ErrorMessage = "發票已開立；嚴格回查待確認：" + queryError.Message;
+                    record.LastChecked = FormatDateTime(now());
+                }
+
+                try
+                {
+                    PersistOpened(record, lookup, draft.BuyerName);
                 }
                 catch (Exception saveError)
                 {
-                    throw new InvalidOperationException(
-                        $"開立結果不明且本機狀態保存失敗：{saveError.Message}；原始錯誤：{issueError.Message}",
-                        issueError);
+                    throw new LocalPersistenceException(record, saveError);
                 }
-                throw new UnknownInvoiceResultException(record, issueError);
+                return new IssueResult(record, Opened: true);
             }
-
-            record.InvoiceNumber = response.InvoiceNumber.Trim();
-            if (record.InvoiceNumber.Length == 0)
+            finally
             {
-                record.InvoiceState = InvoiceStates.Unknown;
-                record.ErrorMessage = "光貿回覆成功但沒有發票號碼";
-                Exception? saveError = null;
-                try
-                {
-                    SaveStatus(record.Id, CreateStatusUpdate(record));
-                }
-                catch (Exception error)
-                {
-                    saveError = error;
-                    record.ErrorMessage += "；本機狀態保存失敗：" + error.Message;
-                }
-                throw new UnknownInvoiceResultException(record, saveError);
+                issueGate.Release();
             }
-            if (response.InvoiceTime > 0)
-            {
-                var issuedAt = DateTimeOffset.FromUnixTimeSeconds(response.InvoiceTime).ToLocalTime();
-                record.InvoiceDate = issuedAt.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
-                record.InvoiceTime = issuedAt.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
-            }
-
-            try
-            {
-                var query = await gateway.QueryByInvoiceNumberAsync(record.InvoiceNumber, cancellationToken).ConfigureAwait(false);
-                VerifyQueryResult(record, draft, query.Data, record.InvoiceNumber);
-                ApplyQueryResult(record, query.Data, 0, string.Empty);
-            }
-            catch (Exception queryError)
-            {
-                record.InvoiceState = InvoiceStates.Opened;
-                record.ErrorMessage = "發票已開立；嚴格回查待確認：" + queryError.Message;
-                record.LastChecked = FormatDateTime(now());
-            }
-
-            try
-            {
-                PersistOpened(record, lookup, draft.BuyerName);
-            }
-            catch (Exception saveError)
-            {
-                throw new LocalPersistenceException(record, saveError);
-            }
-            return new IssueResult(record, Opened: true);
         }
         finally
         {
-            issueGate.Release();
+            lock (activeIssueGate)
+            {
+                activeIssueKeys.Remove(activeKey);
+            }
         }
     }
 
@@ -920,7 +960,7 @@ public sealed class InvoiceService
         {
             throw new InvalidDataException("回查發票號碼與本機紀錄不符");
         }
-        var expectedOrderId = record.ApiOrderId.Trim().Length != 0 ? record.ApiOrderId.Trim() : record.OrderId.Trim();
+        var expectedOrderId = EffectiveRecordOrderId(record);
         if (query.OrderId.Trim() != expectedOrderId)
         {
             throw new InvalidDataException("回查訂單編號與本次送出不符");
@@ -990,24 +1030,17 @@ public sealed class InvoiceService
         }
     }
 
-    private static int NextAttempt(
+    private static InvoiceRecord? FindUncertainRecord(
         IEnumerable<InvoiceRecord> records,
-        string source,
-        string originalOrderId,
+        string orderId,
         string environment)
     {
-        var result = 1;
-        foreach (var record in records)
-        {
-            if (string.Equals(record.Source.Trim(), source.Trim(), StringComparison.OrdinalIgnoreCase) &&
-                record.OriginalOrderId.Trim() == originalOrderId.Trim() &&
-                SameEnvironment(record.Environment, environment) &&
-                record.Attempt >= result)
-            {
-                result = record.Attempt + 1;
-            }
-        }
-        return result;
+        return records.Reverse().FirstOrDefault(record =>
+            record.InvoiceState is InvoiceStates.Unknown or InvoiceStates.Changing &&
+            SameEnvironment(record.Environment, environment) &&
+            (string.Equals(EffectiveRecordOrderId(record), orderId, StringComparison.Ordinal) ||
+             string.Equals(record.OriginalOrderId.Trim(), orderId, StringComparison.Ordinal) ||
+             string.Equals(record.OrderId.Trim(), orderId, StringComparison.Ordinal)));
     }
 
     private static bool SameEnvironment(string recordEnvironment, string currentEnvironment)
@@ -1017,21 +1050,11 @@ public sealed class InvoiceService
         return recordEnvironment.Length == 0 || currentEnvironment.Length == 0 || recordEnvironment == currentEnvironment;
     }
 
-    private static string RetryApiOrderId(string orderId, int attempt)
+    private static string EffectiveRecordOrderId(InvoiceRecord record)
     {
-        orderId = orderId.Trim();
-        if (attempt <= 1)
-        {
-            return orderId;
-        }
-        var suffix = "-R" + attempt.ToString(CultureInfo.InvariantCulture);
-        var runes = orderId.EnumerateRunes().ToArray();
-        var limit = 40 - suffix.EnumerateRunes().Count();
-        if (limit < 1)
-        {
-            return suffix[1..];
-        }
-        return string.Concat(runes.Take(limit).Select(value => value.ToString())) + suffix;
+        if (record.ApiOrderId.Trim().Length != 0) return record.ApiOrderId.Trim();
+        if (record.OrderId.Trim().Length != 0) return record.OrderId.Trim();
+        return record.OriginalOrderId.Trim();
     }
 
     private static string RequestOrderId(InvoiceDraft draft, IssueOptions options) =>
@@ -1166,8 +1189,8 @@ public sealed class InvoiceService
 public sealed class UnknownInvoiceResultException(InvoiceRecord record, Exception? innerException = null)
     : Exception(
         record.InvoiceNumber.Length == 0 && record.ErrorMessage.StartsWith("光貿回覆成功", StringComparison.Ordinal)
-            ? "光貿回覆成功但沒有發票號碼，結果不明且已禁止重送"
-            : "開立結果不明，已禁止重送；請從開立清單重新查詢",
+            ? "光貿回覆成功但沒有發票號碼，結果不明；再次開立前會先向光貿回查"
+            : "開立結果不明；再次開立相同 OrderID 前會先向光貿回查",
         innerException)
 {
     public InvoiceRecord Record { get; } = record;
