@@ -9,6 +9,9 @@ internal sealed class SyncIssuesForm : Form
 {
     internal const string ReadStateScope = "upload-issues-read";
 
+    private static readonly int[] IssueDefaultWidths = [130, 145, 105, 135, 200, 70];
+    private static readonly int[] FailedDefaultWidths = [135, 60, 145, 125, 80, 200];
+
     private readonly LocalRepository repository;
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceSyncStateStore stateStore;
@@ -24,6 +27,8 @@ internal sealed class SyncIssuesForm : Form
         MultiSelect = false,
         HideSelection = false,
         BorderStyle = BorderStyle.FixedSingle,
+        GridLines = true,
+        Scrollable = true,
     };
     private readonly ListView failedList = new()
     {
@@ -34,6 +39,8 @@ internal sealed class SyncIssuesForm : Form
         HideSelection = false,
         CheckBoxes = true,
         BorderStyle = BorderStyle.FixedSingle,
+        GridLines = true,
+        Scrollable = true,
     };
     private readonly Label summary = new()
     {
@@ -42,7 +49,7 @@ internal sealed class SyncIssuesForm : Form
         Anchor = AnchorStyles.Left,
     };
     private readonly Button resolve = UiControls.StandardButton("標記已解決");
-    private readonly Button deleteFailed = UiControls.StandardButton("刪除 (0)");
+    private readonly Button deleteFailed = UiControls.StandardButton("刪除");
     private readonly Button deleteAllFailed = UiControls.StandardButton("全部刪除");
 
     public SyncIssuesForm(LocalRepository repository)
@@ -166,22 +173,22 @@ internal sealed class SyncIssuesForm : Form
 
     private void ConfigureIssueList()
     {
-        issueList.Columns.Add("時間", 130, HorizontalAlignment.Left);
-        issueList.Columns.Add("類型", 145, HorizontalAlignment.Left);
-        issueList.Columns.Add("發票號碼", 105, HorizontalAlignment.Left);
-        issueList.Columns.Add("訂單編號", 135, HorizontalAlignment.Left);
-        issueList.Columns.Add("內容", 220, HorizontalAlignment.Left);
-        issueList.Columns.Add("狀態", 70, HorizontalAlignment.Center);
+        issueList.Columns.Add("時間", IssueDefaultWidths[0], HorizontalAlignment.Left);
+        issueList.Columns.Add("類型", IssueDefaultWidths[1], HorizontalAlignment.Left);
+        issueList.Columns.Add("發票號碼", IssueDefaultWidths[2], HorizontalAlignment.Left);
+        issueList.Columns.Add("訂單編號", IssueDefaultWidths[3], HorizontalAlignment.Left);
+        issueList.Columns.Add("內容", IssueDefaultWidths[4], HorizontalAlignment.Left);
+        issueList.Columns.Add("狀態", IssueDefaultWidths[5], HorizontalAlignment.Center);
     }
 
     private void ConfigureFailedList()
     {
-        failedList.Columns.Add("時間", 135, HorizontalAlignment.Left);
-        failedList.Columns.Add("來源", 90, HorizontalAlignment.Left);
-        failedList.Columns.Add("訂單編號", 145, HorizontalAlignment.Left);
-        failedList.Columns.Add("買受人", 130, HorizontalAlignment.Left);
-        failedList.Columns.Add("金額", 80, HorizontalAlignment.Right);
-        failedList.Columns.Add("失敗原因", 220, HorizontalAlignment.Left);
+        failedList.Columns.Add("時間", FailedDefaultWidths[0], HorizontalAlignment.Left);
+        failedList.Columns.Add("來源", FailedDefaultWidths[1], HorizontalAlignment.Left);
+        failedList.Columns.Add("訂單編號", FailedDefaultWidths[2], HorizontalAlignment.Left);
+        failedList.Columns.Add("買受人", FailedDefaultWidths[3], HorizontalAlignment.Left);
+        failedList.Columns.Add("金額", FailedDefaultWidths[4], HorizontalAlignment.Right);
+        failedList.Columns.Add("失敗原因", FailedDefaultWidths[5], HorizontalAlignment.Left);
     }
 
     private void ReloadAll()
@@ -255,7 +262,7 @@ internal sealed class SyncIssuesForm : Form
                     row.SubItems.Add(record.OrderId);
                     row.SubItems.Add(record.BuyerName);
                     row.SubItems.Add(MoneyFormatter.Integer(record.Amount));
-                    row.SubItems.Add(record.ErrorMessage);
+                    row.SubItems.Add(FriendlyFailureReason(record.ErrorMessage));
                     row.Tag = record;
                     ApplyZebra(row, index);
                     failedList.Items.Add(row);
@@ -296,6 +303,7 @@ internal sealed class SyncIssuesForm : Form
         {
             issueStore.Resolve(issue.Id, DateTimeOffset.Now);
             ReloadIssues();
+            LayoutColumns();
         }
         catch (Exception error)
         {
@@ -369,7 +377,7 @@ internal sealed class SyncIssuesForm : Form
     {
         if (IsDisposed) return;
         var count = failedList.CheckedItems.Count;
-        deleteFailed.Text = $"刪除 ({count})";
+        deleteFailed.Text = count == 0 ? "刪除" : $"刪除({count})";
         deleteFailed.Enabled = count > 0;
         deleteAllFailed.Enabled = failedList.Items.Count > 0;
     }
@@ -392,16 +400,46 @@ internal sealed class SyncIssuesForm : Form
 
     private void LayoutColumns()
     {
-        if (issueList.ClientSize.Width > 100)
+        SizeColumns(issueList, IssueDefaultWidths, flexibleColumn: 4, checkboxFirstColumn: false);
+        SizeColumns(failedList, FailedDefaultWidths, flexibleColumn: 5, checkboxFirstColumn: true);
+    }
+
+    private static void SizeColumns(ListView list, IReadOnlyList<int> defaults, int flexibleColumn, bool checkboxFirstColumn)
+    {
+        if (list.Columns.Count != defaults.Count || list.ClientSize.Width <= 0) return;
+
+        var widths = defaults.ToArray();
+        for (var column = 0; column < list.Columns.Count; column++)
         {
-            var fixedWidth = 130 + 145 + 105 + 135 + 70;
-            issueList.Columns[4].Width = Math.Max(150, issueList.ClientSize.Width - fixedWidth - 8);
+            var measured = TextRenderer.MeasureText(
+                list.Columns[column].Text,
+                list.Font,
+                new Size(int.MaxValue, int.MaxValue),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + 18;
+            if (checkboxFirstColumn && column == 0) measured += 22;
+
+            foreach (ListViewItem item in list.Items)
+            {
+                if (column >= item.SubItems.Count) continue;
+                var text = item.SubItems[column].Text;
+                var valueWidth = TextRenderer.MeasureText(
+                    text,
+                    item.SubItems[column].Font ?? list.Font,
+                    new Size(int.MaxValue, int.MaxValue),
+                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + 18;
+                if (checkboxFirstColumn && column == 0) valueWidth += 22;
+                measured = Math.Max(measured, valueWidth);
+            }
+            widths[column] = Math.Max(widths[column], measured);
         }
-        if (failedList.ClientSize.Width > 100)
-        {
-            var fixedWidth = 135 + 90 + 145 + 130 + 80;
-            failedList.Columns[5].Width = Math.Max(150, failedList.ClientSize.Width - fixedWidth - 8);
-        }
+
+        var available = Math.Max(0, list.ClientSize.Width - 2);
+        var total = widths.Sum();
+        if (total < available)
+            widths[flexibleColumn] += available - total;
+
+        for (var column = 0; column < widths.Length; column++)
+            list.Columns[column].Width = widths[column];
     }
 
     private static void ApplyZebra(ListViewItem row, int index)
@@ -422,16 +460,84 @@ internal sealed class SyncIssuesForm : Form
         return record.SentAt.Trim();
     }
 
+    private static string FriendlyFailureReason(string raw)
+    {
+        var message = raw.Trim();
+        if (message.Length == 0) return "光貿未提供失敗原因";
+
+        if (message.StartsWith("API code ", StringComparison.OrdinalIgnoreCase))
+        {
+            var colon = message.IndexOf(':');
+            if (colon >= 0 && colon + 1 < message.Length)
+                message = message[(colon + 1)..].Trim();
+        }
+
+        var field = FailureField(message);
+        if (field.Length != 0)
+        {
+            if (ContainsAny(message, "required", "empty", "blank", "不可空", "不得空", "不能空"))
+                return field + "不可空白";
+            if (ContainsAny(message, "length", "長度"))
+                return field + "長度不正確";
+            if (ContainsAny(message, "duplicate", "already exists", "重複", "已存在"))
+                return field + "重複";
+            return field + "資料格式不正確";
+        }
+
+        if (message.Any(IsCjk)) return message;
+        return "光貿拒絕此筆開立資料，請檢查發票內容";
+    }
+
+    private static string FailureField(string message)
+    {
+        var fields = new (string Technical, string Display)[]
+        {
+            ("BuyerIdentifier", "買受人統編"),
+            ("BuyerName", "買受人名稱"),
+            ("BuyerAddress", "買受人地址"),
+            ("BuyerTelephoneNumber", "買受人電話"),
+            ("BuyerEmailAddress", "買受人電子郵件"),
+            ("OrderId", "訂單編號"),
+            ("OrderID", "訂單編號"),
+            ("SalesAmount", "銷售額"),
+            ("TaxAmount", "稅額"),
+            ("TotalAmount", "發票總額"),
+            ("ProductItem", "商品明細"),
+            ("Description", "商品名稱"),
+            ("Quantity", "商品數量"),
+            ("UnitPrice", "商品單價"),
+            ("CarrierType", "載具類型"),
+            ("CarrierId1", "載具號碼"),
+            ("CarrierId2", "載具號碼"),
+            ("NPOBAN", "捐贈碼"),
+            ("MainRemark", "備註"),
+            ("DetailVat", "明細含稅設定"),
+        };
+        foreach (var field in fields)
+            if (message.Contains(field.Technical, StringComparison.OrdinalIgnoreCase)) return field.Display;
+        return string.Empty;
+    }
+
+    private static bool ContainsAny(string value, params string[] terms) =>
+        terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsCjk(char value) =>
+        value is >= '\u3400' and <= '\u9fff';
+
     internal void VerifySmokeLayout()
     {
         if (Text != "上傳問題" || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
             throw new InvalidOperationException("上傳問題視窗標題或字級不正確");
         if (issueList.CheckBoxes || !failedList.CheckBoxes || issueList.Columns.Count != 6 || failedList.Columns.Count != 6)
             throw new InvalidOperationException("上傳問題上下清單結構不正確");
+        if (!issueList.GridLines || !failedList.GridLines || !issueList.Scrollable || !failedList.Scrollable)
+            throw new InvalidOperationException("上傳問題上下清單未保留直向格線或水平捲動能力");
         if (issueList.Columns[5].Text != "狀態")
             throw new InvalidOperationException("上傳問題狀態欄未位於最右側");
-        if (deleteFailed.Text != "刪除 (0)")
-            throw new InvalidOperationException("開立失敗刪除按鈕未顯示勾選數量");
+        if (deleteFailed.Text != "刪除")
+            throw new InvalidOperationException("未勾選開立失敗紀錄時刪除按鈕不應顯示 (0)");
+        if (FriendlyFailureReason("API code 3040122: BuyerIdentifier invalid") != "買受人統編資料格式不正確")
+            throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
     }
 
     private static string DisplayType(string type) => type switch
