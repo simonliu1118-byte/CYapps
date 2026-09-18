@@ -725,7 +725,7 @@ public sealed class InvoiceSyncService
     private sealed record Account(string Environment, string SellerInvoice, string AppKey);
     private sealed record IssueIdentity(string InvoiceNumber, string OrderId);
 
-    private sealed class AmbiguousInvoiceMatchException : InvalidDataException
+    private sealed class AmbiguousInvoiceMatchException : Exception
     {
         public AmbiguousInvoiceMatchException(string message) : base(message)
         {
