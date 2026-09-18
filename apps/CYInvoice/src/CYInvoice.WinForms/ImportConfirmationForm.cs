@@ -244,13 +244,27 @@ internal sealed class ImportConfirmationForm : Form
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146));
         editor.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
         buyerBan.BorderStyle = BorderStyle.FixedSingle;
+        buyerBan.Dock = DockStyle.None;
+        buyerBan.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        buyerBan.Margin = new Padding(3, 0, 3, 0);
         buyerNameField.BorderStyle = BorderStyle.FixedSingle;
+        buyerNameField.Dock = DockStyle.None;
+        buyerNameField.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         buyerNameField.Margin = buyerBan.Margin;
         applyName.Anchor = AnchorStyles.None;
-        editor.Controls.Add(UiControls.Label("統一編號"), 0, 0);
+
+        var banLabel = DigiwinEditorLabel("統一編號");
+        var nameLabel = DigiwinEditorLabel("買方名稱");
+        buyerHint.Dock = DockStyle.None;
+        buyerHint.AutoSize = true;
+        buyerHint.Anchor = AnchorStyles.Left;
+        buyerHint.Margin = new Padding(3, 0, 3, 0);
+
+        editor.Controls.Add(banLabel, 0, 0);
         editor.Controls.Add(buyerBan, 1, 0);
-        editor.Controls.Add(UiControls.Label("買方名稱"), 2, 0);
+        editor.Controls.Add(nameLabel, 2, 0);
         editor.Controls.Add(buyerNameField, 3, 0);
         editor.Controls.Add(applyName, 4, 0);
         editor.Controls.Add(buyerHint, 5, 0);
@@ -259,6 +273,15 @@ internal sealed class ImportConfirmationForm : Form
         retryLookup.Visible = false;
         return editor;
     }
+
+    private static Label DigiwinEditorLabel(string text) => new()
+    {
+        Text = text,
+        AutoSize = true,
+        Anchor = AnchorStyles.Left,
+        TextAlign = ContentAlignment.MiddleLeft,
+        Margin = new Padding(3, 0, 3, 0),
+    };
 
     private void ConfigureSummary()
     {
@@ -985,6 +1008,21 @@ internal sealed class ImportConfirmationForm : Form
             Math.Abs(digiwinForm.buyerBan.Height - digiwinForm.buyerNameField.Height) > 1 ||
             digiwinForm.buyerBan.Margin != digiwinForm.buyerNameField.Margin)
             throw new InvalidOperationException("鼎新匯入的統編與買方名稱欄位外觀不一致");
+
+        if (digiwinForm.buyerBan.Parent is not TableLayoutPanel digiwinEditor)
+            throw new InvalidOperationException("鼎新匯入買方資料列未使用正式 TableLayoutPanel");
+        var digiwinRowControls = new Control?[]
+        {
+            digiwinEditor.GetControlFromPosition(0, 0),
+            digiwinForm.buyerBan,
+            digiwinEditor.GetControlFromPosition(2, 0),
+            digiwinForm.buyerNameField,
+            digiwinForm.applyName,
+            digiwinForm.buyerHint,
+        }.Where(control => control is not null).Cast<Control>().ToArray();
+        var digiwinCenters = digiwinRowControls.Select(control => control.Top + (control.Height / 2)).ToArray();
+        if (digiwinCenters.Length != 6 || digiwinCenters.Max() - digiwinCenters.Min() > 2)
+            throw new InvalidOperationException("鼎新匯入的統編、買方名稱、套用按鈕與提示文字未在同一條垂直中心線");
     }
 
     private string EnvironmentName() => IsProductionEnvironment() ? "正式公司環境" : "光貿測試環境";

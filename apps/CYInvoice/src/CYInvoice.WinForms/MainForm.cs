@@ -28,6 +28,15 @@ internal sealed class MainForm : Form
     private readonly TabPage invoiceTab = new("開立發票");
     private readonly TabPage recordsTab = new("已開立發票清單");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
+    private readonly Label copyrightLabel = new()
+    {
+        Text = "Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.",
+        AutoSize = true,
+        Anchor = AnchorStyles.Right,
+        ForeColor = Color.FromArgb(128, 128, 128),
+        TextAlign = ContentAlignment.MiddleRight,
+        Margin = new Padding(0, 0, 6, 0),
+    };
 
     public MainForm(bool startupSmokeTest = false)
     {
@@ -65,9 +74,11 @@ internal sealed class MainForm : Form
 
     private void BuildShell()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(20, 2, 20, 2) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(20, 2, 20, 2) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
+        copyrightLabel.Font = new Font(Font.FontFamily, 8F);
 
         banner.Dock = DockStyle.Fill;
         banner.BackColor = Color.FromArgb(236, 246, 255);
@@ -135,6 +146,7 @@ internal sealed class MainForm : Form
         tabHost.Layout += (_, _) => PositionSettingsButton();
         root.Controls.Add(banner, 0, 0);
         root.Controls.Add(tabHost, 0, 1);
+        root.Controls.Add(copyrightLabel, 0, 2);
         Controls.Add(root);
         PositionSettingsButton();
     }
@@ -205,6 +217,10 @@ internal sealed class MainForm : Form
         if (Math.Abs(Font.SizeInPoints - 12F) > 0.1F ||
             Math.Abs(environmentCompanyLabel.Font.SizeInPoints - 14F) > 0.1F)
             throw new InvalidOperationException("主畫面與環境標題字級不正確");
+        if (copyrightLabel.Text != "Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved." ||
+            Math.Abs(copyrightLabel.Font.SizeInPoints - 8F) > 0.1F ||
+            copyrightLabel.Parent is null)
+            throw new InvalidOperationException("主畫面 Copyright footer 文字或樣式不正確");
         if (EnvironmentCompanyText(Environments.Test, AmegoDefaults.TestInvoice, string.Empty) != "光貿測試公司 12345678" ||
             EnvironmentCompanyText(Environments.Production, "12345675", "志遠醫療器材行") != "志遠醫療器材行 12345675" ||
             EnvironmentCompanyText(Environments.Production, "12345675", string.Empty) != "公司名稱查詢中 12345675" ||
