@@ -683,8 +683,8 @@ internal sealed class RecordsControl : UserControl
         if (leftNumber.Length == 0) return 1;
         if (rightNumber.Length == 0) return -1;
         var comparison = string.Compare(leftNumber, rightNumber, StringComparison.OrdinalIgnoreCase);
-        if (comparison == 0) comparison = CompareIssueTime(right, left);
-        return descending ? -comparison : comparison;
+        if (comparison != 0) return descending ? -comparison : comparison;
+        return CompareIssueTime(right, left);
     }
 
     private static int CompareSourceGroup(InvoiceRecord left, InvoiceRecord right)
