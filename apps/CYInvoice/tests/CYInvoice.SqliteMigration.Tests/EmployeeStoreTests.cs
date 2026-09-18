@@ -70,7 +70,7 @@ internal static class EmployeeStoreTests
         EmployeeEqual(EmployeeRoles.SuperAdmin, setup.Employee.Role);
         EmployeeEqual(true, setup.Employee.Enabled);
         EmployeeEqual(true, setup.RecoveryCode.StartsWith("CYR-", StringComparison.Ordinal));
-        EmployeeEqual(24, setup.RecoveryCode.Length);
+        EmployeeEqual(28, setup.RecoveryCode.Length);
         EmployeeEqual("3015", store.Authenticate("3015", "initial-password")?.EmployeeNo);
         EmployeeEqual<EmployeeAccount?>(null, store.Authenticate("3015", "wrong-password"));
 
