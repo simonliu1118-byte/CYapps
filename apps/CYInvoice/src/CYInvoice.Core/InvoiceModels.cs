@@ -24,6 +24,12 @@ public static class Environments
     public const string Production = "prod";
 }
 
+public static class RecordOrigins
+{
+    public const string Local = "local";
+    public const string Sync = "sync";
+}
+
 public sealed class InvoiceItem
 {
     [JsonPropertyName("description")]
@@ -79,6 +85,14 @@ public sealed class InvoiceRecord
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
+    [JsonPropertyName("seller_invoice")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public string SellerInvoice { get; set; } = string.Empty;
+
+    [JsonPropertyName("record_origin")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public string RecordOrigin { get; set; } = RecordOrigins.Local;
+
     [JsonPropertyName("source")]
     public string Source { get; set; } = string.Empty;
 
@@ -89,7 +103,7 @@ public sealed class InvoiceRecord
     public string OrderId { get; set; } = string.Empty;
 
     [JsonPropertyName("attempt")]
-    public int Attempt { get; set; }
+    public int Attempt { get; set; } = 1;
 
     [JsonPropertyName("api_order_id")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
