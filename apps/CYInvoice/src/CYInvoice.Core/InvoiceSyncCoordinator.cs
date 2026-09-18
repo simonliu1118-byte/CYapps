@@ -35,6 +35,8 @@ public sealed class InvoiceSyncCoordinator
         if (this.manualCooldown < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(manualCooldown));
     }
 
+    public TimeSpan ManualCooldownRemaining => CalculateManualCooldownRemaining();
+
     public Task<InvoiceSyncRunResult> RunStartupAsync(CancellationToken cancellationToken = default) =>
         RunAsync(manual: false, automatic: true, cancellationToken);
 
@@ -48,7 +50,7 @@ public sealed class InvoiceSyncCoordinator
     {
         if (manual)
         {
-            var remaining = ManualCooldownRemaining();
+            var remaining = CalculateManualCooldownRemaining();
             if (remaining > TimeSpan.Zero)
                 return new InvoiceSyncRunResult(InvoiceSyncRunStatus.Cooldown, CooldownRemaining: remaining);
         }
@@ -60,7 +62,7 @@ public sealed class InvoiceSyncCoordinator
         {
             if (manual)
             {
-                var remaining = ManualCooldownRemaining();
+                var remaining = CalculateManualCooldownRemaining();
                 if (remaining > TimeSpan.Zero)
                     return new InvoiceSyncRunResult(InvoiceSyncRunStatus.Cooldown, CooldownRemaining: remaining);
             }
@@ -80,7 +82,7 @@ public sealed class InvoiceSyncCoordinator
         }
     }
 
-    private TimeSpan ManualCooldownRemaining()
+    private TimeSpan CalculateManualCooldownRemaining()
     {
         lock (stateGate)
         {
