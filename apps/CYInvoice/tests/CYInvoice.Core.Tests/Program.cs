@@ -154,14 +154,6 @@ static void Equal<T>(T expected, T actual)
     }
 }
 
-static void NotEmpty(string value)
-{
-    if (value.Length == 0)
-    {
-        throw new InvalidOperationException("expected a blocking reason");
-    }
-}
-
 static void Throws<T>(Action action) where T : Exception
 {
     try
