@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CYInvoice.SqliteMigration.T
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CYInvoice.Sync.Tests", "tests\CYInvoice.Sync.Tests\CYInvoice.Sync.Tests.csproj", "{B2F3A414-9673-4E0C-BE29-C1A7A16362BC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CYInvoice.SyncCoordinator.Tests", "tests\CYInvoice.SyncCoordinator.Tests\CYInvoice.SyncCoordinator.Tests.csproj", "{BB7B1E44-8999-4B11-8E27-293288F3E926}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -39,5 +41,9 @@ Global
 		{B2F3A414-9673-4E0C-BE29-C1A7A16362BC}.Debug|x64.Build.0 = Debug|Any CPU
 		{B2F3A414-9673-4E0C-BE29-C1A7A16362BC}.Release|x64.ActiveCfg = Release|Any CPU
 		{B2F3A414-9673-4E0C-BE29-C1A7A16362BC}.Release|x64.Build.0 = Release|Any CPU
+		{BB7B1E44-8999-4B11-8E27-293288F3E926}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BB7B1E44-8999-4B11-8E27-293288F3E926}.Debug|x64.Build.0 = Debug|Any CPU
+		{BB7B1E44-8999-4B11-8E27-293288F3E926}.Release|x64.ActiveCfg = Release|Any CPU
+		{BB7B1E44-8999-4B11-8E27-293288F3E926}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
