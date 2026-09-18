@@ -17,6 +17,8 @@ internal static class Program
             ("automatic sync runs two-period reconciliation once per local day", TestDailyBroadThenRecentAsync),
             ("manual sync stays recent even when daily reconciliation is due", TestManualStaysRecentAsync),
             ("failed daily reconciliation remains due", TestFailedDailyRemainsDueAsync),
+            ("test daily scope prunes expired rows without querying them", AutomaticRetentionTests.TestDailyTestScopePrunesExpiredWithoutQueryAsync),
+            ("daily reconciliation problems skip retention", AutomaticRetentionTests.TestDailyProblemsSkipRetentionAsync),
         };
 
         var failures = 0;
