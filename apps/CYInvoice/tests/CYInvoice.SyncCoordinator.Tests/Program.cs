@@ -14,6 +14,9 @@ internal static class Program
             ("manual sync enforces 30-second cooldown", TestManualCooldownAsync),
             ("startup scheduled and manual share one busy gate", TestBusyGateAsync),
             ("failed manual sync does not create cooldown", TestFailedManualDoesNotCooldownAsync),
+            ("automatic sync runs two-period reconciliation once per local day", TestDailyBroadThenRecentAsync),
+            ("manual sync stays recent even when daily reconciliation is due", TestManualStaysRecentAsync),
+            ("failed daily reconciliation remains due", TestFailedDailyRemainsDueAsync),
         };
 
         var failures = 0;
@@ -109,10 +112,82 @@ internal static class Program
         Equal(2, gateway.ListCalls);
     }
 
+    private static async Task TestDailyBroadThenRecentAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var clock = new TestClock(new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
+        var gateway = new FakeGateway();
+        var coordinator = AutomaticCoordinator(repository, gateway, clock);
+
+        var startup = await coordinator.RunStartupAsync();
+        Equal(InvoiceSyncRunStatus.Completed, startup.Status);
+        Equal((new DateOnly(2026, 7, 1), new DateOnly(2026, 9, 18)), gateway.Requests[0]);
+
+        var scheduledSameDay = await coordinator.RunScheduledAsync();
+        Equal(InvoiceSyncRunStatus.Completed, scheduledSameDay.Status);
+        Equal((new DateOnly(2026, 9, 16), new DateOnly(2026, 9, 18)), gateway.Requests[1]);
+
+        clock.Advance(TimeSpan.FromDays(1));
+        var scheduledNextDay = await coordinator.RunScheduledAsync();
+        Equal(InvoiceSyncRunStatus.Completed, scheduledNextDay.Status);
+        Equal((new DateOnly(2026, 7, 1), new DateOnly(2026, 9, 19)), gateway.Requests[2]);
+    }
+
+    private static async Task TestManualStaysRecentAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var clock = new TestClock(new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
+        var gateway = new FakeGateway();
+        var coordinator = AutomaticCoordinator(repository, gateway, clock);
+
+        var manual = await coordinator.RunManualAsync();
+        Equal(InvoiceSyncRunStatus.Completed, manual.Status);
+        Equal((new DateOnly(2026, 9, 16), new DateOnly(2026, 9, 18)), gateway.Requests[0]);
+
+        var scheduled = await coordinator.RunScheduledAsync();
+        Equal(InvoiceSyncRunStatus.Completed, scheduled.Status);
+        Equal((new DateOnly(2026, 7, 1), new DateOnly(2026, 9, 18)), gateway.Requests[1]);
+    }
+
+    private static async Task TestFailedDailyRemainsDueAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var clock = new TestClock(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.FromHours(8)));
+        var gateway = new FakeGateway { FailNextList = true };
+        var coordinator = AutomaticCoordinator(repository, gateway, clock);
+
+        try
+        {
+            await coordinator.RunStartupAsync();
+            throw new InvalidOperationException("expected daily reconciliation to fail");
+        }
+        catch (InvalidOperationException error) when (error.Message == FakeGateway.FailureMessage)
+        {
+        }
+        Equal((new DateOnly(2025, 11, 1), new DateOnly(2026, 1, 15)), gateway.Requests[0]);
+
+        var retry = await coordinator.RunScheduledAsync();
+        Equal(InvoiceSyncRunStatus.Completed, retry.Status);
+        Equal((new DateOnly(2025, 11, 1), new DateOnly(2026, 1, 15)), gateway.Requests[1]);
+    }
+
     private static InvoiceSyncCoordinator Coordinator(LocalRepository repository, FakeGateway gateway, TestClock clock)
     {
         var service = new InvoiceSyncService(repository, (_, _) => gateway, clock.Now);
         return new InvoiceSyncCoordinator(service, clock.Now, TimeSpan.FromSeconds(30));
+    }
+
+    private static InvoiceSyncCoordinator AutomaticCoordinator(LocalRepository repository, FakeGateway gateway, TestClock clock)
+    {
+        var service = new InvoiceSyncService(repository, (_, _) => gateway, clock.Now);
+        var automatic = new InvoiceAutomaticSyncService(repository, service, clock.Now);
+        return new InvoiceSyncCoordinator(service, clock.Now, TimeSpan.FromSeconds(30), automatic);
     }
 
     private static void ConfigureProduction(LocalRepository repository)
@@ -145,12 +220,18 @@ internal static class Program
     private sealed class FakeGateway : IAmegoGateway
     {
         public const string FailureMessage = "forced invoice_list failure";
+        private readonly Lock requestsGate = new();
+        private readonly List<(DateOnly Start, DateOnly End)> requests = [];
         private int listCalls;
         private int firstListBlocked;
 
         public bool BlockFirstList { get; set; }
         public bool FailNextList { get; set; }
         public int ListCalls => Volatile.Read(ref listCalls);
+        public IReadOnlyList<(DateOnly Start, DateOnly End)> Requests
+        {
+            get { lock (requestsGate) return requests.ToArray(); }
+        }
         public TaskCompletionSource<bool> FirstListStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource<bool> ReleaseFirstList { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -162,6 +243,7 @@ internal static class Program
             CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref listCalls);
+            lock (requestsGate) requests.Add((startDate, endDate));
             if (FailNextList)
             {
                 FailNextList = false;

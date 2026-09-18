@@ -64,7 +64,9 @@ internal sealed class MainForm : Form
 
         repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
         service = new InvoiceService(repository);
-        syncCoordinator = new InvoiceSyncCoordinator(new InvoiceSyncService(repository));
+        var syncService = new InvoiceSyncService(repository);
+        var automaticSyncService = new InvoiceAutomaticSyncService(repository, syncService);
+        syncCoordinator = new InvoiceSyncCoordinator(syncService, automaticService: automaticSyncService);
         recordsPage = new RecordsControl(repository, service, syncCoordinator, syncLifetime.Token);
         invoicePage = new InvoiceEntryControl(repository, service, recordsPage.Reload);
         syncTimer.Tick += async (_, _) => await RunScheduledSyncAsync();
