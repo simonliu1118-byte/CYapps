@@ -5,6 +5,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class AdminUnlockForm : Form
 {
+    private const int CompactButtonWidth = 70;
     private readonly Settings settings;
     private readonly TextBox password = new()
     {
@@ -12,15 +13,15 @@ internal sealed class AdminUnlockForm : Form
         UseSystemPasswordChar = true,
         MaxLength = 200,
     };
-    private readonly Button unlock = UiControls.StandardButton("進入設定");
-    private readonly Button cancel = UiControls.StandardButton("取消");
+    private readonly Button unlock = CompactButton("確定");
+    private readonly Button cancel = CompactButton("取消");
 
     public AdminUnlockForm(Settings settings)
     {
         this.settings = settings;
         Text = "驗證設定管理密碼";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(360, 174);
+        ClientSize = new Size(190, 174);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -37,7 +38,7 @@ internal sealed class AdminUnlockForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(18),
+            Padding = new Padding(12),
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
@@ -88,8 +89,22 @@ internal sealed class AdminUnlockForm : Form
     internal void VerifySmokeLayout()
     {
         if (!password.UseSystemPasswordChar || AcceptButton != unlock || CancelButton != cancel ||
-            !UiControls.HasLogicalSize(unlock, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
-            !UiControls.HasLogicalSize(cancel, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
+            unlock.Text != "確定" || cancel.Text != "取消" ||
+            !UiControls.HasLogicalSize(unlock, CompactButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(cancel, CompactButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("設定管理密碼單次解鎖視窗配置不正確");
+        var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
+        if (logicalWidth > 200)
+            throw new InvalidOperationException("設定管理密碼視窗寬度未依需求縮小");
     }
+
+    private static Button CompactButton(string text) => new NoFocusCueButton
+    {
+        Text = text,
+        Width = CompactButtonWidth,
+        Height = UiControls.StandardButtonHeight,
+        Margin = new Padding(4, 2, 4, 2),
+        AutoSize = false,
+        UseVisualStyleBackColor = true,
+    };
 }
