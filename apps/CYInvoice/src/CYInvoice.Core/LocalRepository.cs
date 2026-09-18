@@ -9,7 +9,8 @@ public sealed class LocalRepository
         string invoicePreviewCacheDirectory,
         SettingsStore settings,
         InvoiceStore invoices,
-        BuyerNameStore buyerNames)
+        BuyerNameStore buyerNames,
+        EmployeeStore employees)
     {
         DataDirectory = dataDirectory;
         CacheDirectory = cacheDirectory;
@@ -18,6 +19,7 @@ public sealed class LocalRepository
         Settings = settings;
         Invoices = invoices;
         BuyerNames = buyerNames;
+        Employees = employees;
     }
 
     public string DataDirectory { get; }
@@ -27,6 +29,7 @@ public sealed class LocalRepository
     public SettingsStore Settings { get; }
     public InvoiceStore Invoices { get; }
     public BuyerNameStore BuyerNames { get; }
+    public EmployeeStore Employees { get; }
 
     public static LocalRepository Open(string baseDirectory, ISecretProtector protector)
     {
@@ -44,6 +47,7 @@ public sealed class LocalRepository
 
         var invoices = new InvoiceStore(data, currentSettings.ProductionInvoice);
         var buyerNames = new BuyerNameStore(data);
+        var employees = new EmployeeStore(data);
         invoices.LoadOrCreate();
         buyerNames.LoadOrCreate();
 
@@ -54,6 +58,7 @@ public sealed class LocalRepository
             invoicePreviewCache,
             settings,
             invoices,
-            buyerNames);
+            buyerNames,
+            employees);
     }
 }

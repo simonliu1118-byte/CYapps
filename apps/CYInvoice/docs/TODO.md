@@ -2,7 +2,7 @@
 
 本檔只保留**目前仍未完成、需要後續驗證或尚未取得足夠樣本**的工作。已完成版本內容與歷史決策改由 `CHANGELOG.md`、`MIGRATION_HISTORY.md` 保存，不再把大量已完成事項重複堆在 TODO。
 
-目前正式基準：**CYInvoice V2.4.2 Build 0**  
+目前工程開發基準：**CYInvoice V2.5.0 Build 0**  
 最新正式 Release：`cyinvoice-v2.4.2`
 
 ## 1. V2.5 員工帳戶與作廢流程
@@ -11,14 +11,15 @@ V2.5 已完成實作前設計，詳細內容見 `V2_5_EMPLOYEE_VOID.md`。本版
 
 ### 第一批：員工核心
 
-- [ ] SQLite 員工 schema／migration。
-- [ ] 4 碼唯一員工編號、姓名、Email、Password Hash、啟用狀態、最後修改時間。
-- [ ] `SUPER_ADMIN` / `ADMIN` / `EMPLOYEE` 三級權限。
-- [ ] 每套本機員工資料只允許一位超級管理員。
-- [ ] 底層強制超級管理員不可降級、停用或刪除。
-- [ ] 管理員可互相取消對方管理權限，但不得自行降級。
-- [ ] 超級管理員高強度復原碼：只存 Hash、一次性使用、成功使用後輪替、可由超管主動重新產生。
-- [ ] 不得使用 AMEGO App Key 作為超管復原憑證。
+- [x] SQLite 員工 additive schema／migration；使用獨立 `employee_schema_version`，不改寫既有發票 `schema_version=1`。
+- [x] 4 碼唯一員工編號、姓名、Email、Password Hash、啟用狀態、建立／最後修改時間。
+- [x] `SUPER_ADMIN` / `ADMIN` / `EMPLOYEE` 三級權限。
+- [x] 每套本機員工資料只允許一位超級管理員。
+- [x] 應用程式邏輯＋SQLite trigger 雙層強制超級管理員不可降級、停用或刪除。
+- [x] 管理員可互相取消對方管理權限，但不得自行降級／停用／刪除自己。
+- [x] 超級管理員高強度復原碼：只存 Hash、一次性使用、成功使用後輪替、可由超管主動重新產生。
+- [x] 不使用 AMEGO App Key 作為超管復原憑證；App Key 現行 DPAPI 行為完全未改。
+- [x] Windows CI 驗證既有 V2.4.2 發票資料加入員工 schema 後仍保持不變，並涵蓋員工身分限制、角色保護與復原碼輪替。
 
 ### 第二批：帳戶管理
 
