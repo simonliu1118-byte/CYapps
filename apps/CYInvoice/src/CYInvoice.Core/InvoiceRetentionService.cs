@@ -30,9 +30,8 @@ public sealed class InvoiceRetentionService
 
         using var connection = Open();
         Configure(connection);
-        var protectedIssues = LoadUnresolvedIssues(connection, accountKey);
         var candidates = LoadCandidates(connection, account)
-            .Where(candidate => ShouldDelete(candidate, cutoff, protectedIssues))
+            .Where(candidate => ShouldDelete(candidate, cutoff))
             .ToArray();
         if (candidates.Length == 0) return new InvoiceRetentionResult(0, []);
 
@@ -40,6 +39,8 @@ public sealed class InvoiceRetentionService
         {
             foreach (var candidate in candidates)
             {
+                DeleteMatchingSyncIssues(connection, transaction, accountKey, candidate);
+
                 using var command = connection.CreateCommand();
                 command.Transaction = transaction;
                 command.CommandText = "DELETE FROM invoices WHERE local_id = $local_id;";
@@ -94,7 +95,7 @@ public sealed class InvoiceRetentionService
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT local_id, invoice_number, original_order_id, order_id, api_order_id,
-                   invoice_state, invoice_date, sent_at
+                   invoice_date, sent_at
             FROM invoices
             WHERE seller_invoice = $seller_invoice AND environment = $environment
             ORDER BY local_id;
@@ -111,52 +112,41 @@ public sealed class InvoiceRetentionService
                 reader.GetString(3),
                 reader.GetString(4),
                 reader.GetString(5),
-                reader.GetString(6),
-                reader.GetString(7)));
+                reader.GetString(6)));
         }
         return candidates;
     }
 
-    private static IssueProtection LoadUnresolvedIssues(SqliteConnection connection, string accountKey)
+    private static void DeleteMatchingSyncIssues(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string accountKey,
+        Candidate candidate)
     {
-        var invoiceNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var orderIds = new HashSet<string>(StringComparer.Ordinal);
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
-            SELECT invoice_number, order_id
-            FROM sync_issues
-            WHERE account_key = $account_key AND TRIM(resolved_utc) = '';
+            DELETE FROM sync_issues
+            WHERE account_key = $account_key
+              AND (
+                    ($invoice_number <> '' AND invoice_number = $invoice_number)
+                 OR ($original_order_id <> '' AND order_id = $original_order_id)
+                 OR ($order_id <> '' AND order_id = $order_id)
+                 OR ($api_order_id <> '' AND order_id = $api_order_id)
+              );
             """;
         command.Parameters.AddWithValue("$account_key", accountKey);
-        using var reader = command.ExecuteReader();
-        while (reader.Read())
-        {
-            var invoiceNumber = reader.GetString(0).Trim();
-            var orderId = reader.GetString(1).Trim();
-            if (invoiceNumber.Length != 0) invoiceNumbers.Add(invoiceNumber);
-            if (orderId.Length != 0) orderIds.Add(orderId);
-        }
-        return new IssueProtection(invoiceNumbers, orderIds);
+        command.Parameters.AddWithValue("$invoice_number", candidate.InvoiceNumber.Trim());
+        command.Parameters.AddWithValue("$original_order_id", candidate.OriginalOrderId.Trim());
+        command.Parameters.AddWithValue("$order_id", candidate.OrderId.Trim());
+        command.Parameters.AddWithValue("$api_order_id", candidate.ApiOrderId.Trim());
+        command.ExecuteNonQuery();
     }
 
-    private static bool ShouldDelete(Candidate candidate, DateOnly cutoff, IssueProtection protectedIssues)
+    private static bool ShouldDelete(Candidate candidate, DateOnly cutoff)
     {
-        if (candidate.InvoiceState is InvoiceStates.Unknown or InvoiceStates.Changing) return false;
-        if (IsProtected(candidate, protectedIssues)) return false;
         var date = RecordDate(candidate.InvoiceDate, candidate.SentAt);
         return date is not null && date.Value < cutoff;
-    }
-
-    private static bool IsProtected(Candidate candidate, IssueProtection protectedIssues)
-    {
-        var invoiceNumber = candidate.InvoiceNumber.Trim();
-        if (invoiceNumber.Length != 0 && protectedIssues.InvoiceNumbers.Contains(invoiceNumber)) return true;
-        foreach (var orderId in new[] { candidate.OriginalOrderId, candidate.OrderId, candidate.ApiOrderId })
-        {
-            var value = orderId.Trim();
-            if (value.Length != 0 && protectedIssues.OrderIds.Contains(value)) return true;
-        }
-        return false;
     }
 
     private static DateOnly? RecordDate(string invoiceDate, string sentAt)
@@ -200,11 +190,6 @@ public sealed class InvoiceRetentionService
         string OriginalOrderId,
         string OrderId,
         string ApiOrderId,
-        string InvoiceState,
         string InvoiceDate,
         string SentAt);
-
-    private sealed record IssueProtection(
-        HashSet<string> InvoiceNumbers,
-        HashSet<string> OrderIds);
 }
