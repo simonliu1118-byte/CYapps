@@ -9,20 +9,26 @@ namespace CYInvoice.Sync.Tests;
 
 internal static class Program
 {
+    private static readonly DateTimeOffset FixedNow = new(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8));
+    private static readonly DateOnly FixedDate = new(2026, 9, 18);
+
     private static async Task<int> Main()
     {
         var tests = new (string Name, Func<Task> Run)[]
         {
             ("source inference follows current OrderID", TestSourceInferenceAsync),
+            ("test prefix is four characters and deterministic", TestPrefixFormulaAsync),
+            ("test issue sends prefixed API OrderID but keeps local OrderID", TestIssueUsesTestPrefixAsync),
             ("production sync discovers remote invoice and queries details", TestProductionDiscoveryAsync),
             ("production sync overwrites cache and re-infers source", TestProductionOverwriteAsync),
             ("unchanged production summary skips invoice query", TestUnchangedSkipsQueryAsync),
-            ("test environment does not discover shared pool invoices", TestTestEnvironmentNoDiscoveryAsync),
+            ("test list discovers only CYInvoice-prefixed invoices", TestTestEnvironmentPrefixDiscoveryAsync),
             ("test environment skips definite failed records", TestTestEnvironmentSkipsFailedAsync),
             ("remote absence never deletes local cache", TestRemoteAbsenceDoesNotDeleteAsync),
             ("invoice list pagination is exhausted", TestPaginationAsync),
             ("detail refresh always queries even when official data is unchanged", TestDetailRefreshAlwaysQueriesAsync),
             ("detail refresh overwrites official fields and invalidates cache", TestDetailRefreshOverwriteAsync),
+            ("test detail refresh strips prefix from displayed OrderID", TestTestDetailRefreshStripsPrefixAsync),
             ("detail refresh failure leaves local cache untouched", TestDetailRefreshFailureLeavesCacheAsync),
             ("detail refresh falls back to OrderID when invoice number is missing", TestDetailRefreshByOrderIdAsync),
         };
@@ -55,6 +61,54 @@ internal static class Program
         Equal(InvoiceSources.Manual, InvoiceSourceInference.FromOrderId("20260230001"));
         Equal(InvoiceSources.Manual, InvoiceSourceInference.FromOrderId("OTHER"));
         return Task.CompletedTask;
+    }
+
+    private static Task TestPrefixFormulaAsync()
+    {
+        var prefix = TestOrderIdPrefix.ForDate(FixedDate);
+        Equal(4, prefix.Length);
+        Equal(prefix, TestOrderIdPrefix.ForDate(FixedDate));
+        NotEqual(prefix, TestOrderIdPrefix.ForDate(FixedDate.AddDays(1)));
+        var apiOrderId = TestOrderIdPrefix.Apply("66091800123456", FixedDate);
+        Equal(true, TestOrderIdPrefix.TryStripForDate(apiOrderId, FixedDate, out var raw));
+        Equal("66091800123456", raw);
+        Equal(false, TestOrderIdPrefix.TryStripForDate(apiOrderId, FixedDate.AddDays(1), out _));
+        return Task.CompletedTask;
+    }
+
+    private static async Task TestIssueUsesTestPrefixAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        ConfigureTest(repository);
+        var rawOrderId = "CUSTOM-TEST-001";
+        var apiOrderId = TestOrderIdPrefix.Apply(rawOrderId, FixedDate);
+        var fake = new FakeGateway
+        {
+            IssueResultResponse = new IssueResponse(0, "", "TA12345678", FixedNow.ToUnixTimeSeconds(), "1234"),
+            QueryResponse = Query("TA12345678", apiOrderId, "100", "測試消費者"),
+        };
+        var service = new InvoiceService(repository, (_, _) => fake, () => FixedNow);
+        var draft = new InvoiceDraft
+        {
+            OrderId = rawOrderId,
+            CompanyBuyer = false,
+            BuyerIdentifier = string.Empty,
+            BuyerName = "消費者",
+            TotalAmount = 100,
+        };
+        draft.Items.Add(new InvoiceItem
+        {
+            Description = "測試商品", Quantity = 1, QuantityDecimal = "1", Unit = "個",
+            UnitPrice = 100, UnitPriceDecimal = "100", Amount = 100, AmountDecimal = "100", TaxType = "1",
+        });
+
+        var result = await service.IssueManualWithLookupAsync(draft, new NameLookup());
+        Equal(apiOrderId, fake.LastIssueOrderId);
+        Equal(rawOrderId, result.Record.OrderId);
+        Equal(rawOrderId, result.Record.OriginalOrderId);
+        Equal(apiOrderId, result.Record.ApiOrderId);
+        Equal(InvoiceSources.Manual, result.Record.Source);
     }
 
     private static async Task TestProductionDiscoveryAsync()
@@ -147,62 +201,56 @@ internal static class Program
         Equal(1, result.Unchanged);
     }
 
-    private static async Task TestTestEnvironmentNoDiscoveryAsync()
+    private static async Task TestTestEnvironmentPrefixDiscoveryAsync()
     {
         using var temporary = new TemporaryDirectory();
         var repository = LocalRepository.Open(temporary.Path, new TestProtector());
-        repository.Invoices.Append(new InvoiceRecord
-        {
-            Id = "test-local", Environment = Environments.Test, SellerInvoice = AmegoDefaults.TestInvoice,
-            RecordOrigin = RecordOrigins.Local, Source = InvoiceSources.Manual,
-            OriginalOrderId = "M20260918001", OrderId = "M20260918001", ApiOrderId = "M20260918001",
-            InvoiceNumber = "DD12345678", InvoiceState = InvoiceStates.Opened,
-            InvoiceDate = "2026/09/18", InvoiceTime = "10:00:00",
-            BuyerIdentifier = "0000000000", BuyerName = "測試消費者", Amount = 100,
-            Delivery = InvoiceService.DeliveryPaper,
-            Items = [new InvoiceItem { Description = "舊商品", Quantity = 1, UnitPrice = 100, Amount = 100 }],
-        });
-        var fake = new FakeGateway
-        {
-            ThrowIfListCalled = true,
-            QueryResponse = Query("DD12345678", "66091800123456", "100", "測試消費者"),
-        };
+        ConfigureTest(repository);
+        var prefix = TestOrderIdPrefix.ForDate(FixedDate);
+        var ours = prefix + "66091800123456";
+        var fake = new FakeGateway();
+        fake.Pages[1] = ListResponse(1,
+        [
+            Remote("DD12345678", ours, "100", buyer: "測試消費者"),
+            Remote("ZZ12345678", "OTHER-USER-ORDER", "999", buyer: "其他測試者"),
+        ]);
+        fake.QueryByInvoice["DD12345678"] = Query("DD12345678", ours, "100", "測試消費者");
 
         var result = await Sync(repository, fake).SyncRecentAsync();
-        Equal(0, fake.ListCalls);
-        Equal(1, fake.QueryCalls);
-        Equal(1, result.Updated);
+        Equal(1, fake.ListCalls);
+        Equal(1, result.RemoteCount);
+        Equal(1, result.Inserted);
+        Equal(1, result.Queried);
+        Equal(1, repository.Invoices.LoadOrCreate().Count);
         var record = repository.Invoices.LoadOrCreate().Single();
+        Equal(RecordOrigins.Sync, record.RecordOrigin);
+        Equal("66091800123456", record.OrderId);
+        Equal("66091800123456", record.OriginalOrderId);
+        Equal(ours, record.ApiOrderId);
         Equal(InvoiceSources.Mo, record.Source);
-        Equal(InvoiceSourceInference.UpdateTag, InvoiceSourceInference.DisplayTag(record));
-        Equal(RecordOrigins.Local, record.RecordOrigin);
+        Equal(InvoiceSourceInference.SyncTag, InvoiceSourceInference.DisplayTag(record));
     }
 
     private static async Task TestTestEnvironmentSkipsFailedAsync()
     {
         using var temporary = new TemporaryDirectory();
         var repository = LocalRepository.Open(temporary.Path, new TestProtector());
-        var settings = repository.Settings.LoadOrCreate();
-        settings.Environment = Environments.Test;
-        repository.Settings.Save(settings);
+        ConfigureTest(repository);
         repository.Invoices.Append(new InvoiceRecord
         {
             Id = "test-failed", Environment = Environments.Test, SellerInvoice = AmegoDefaults.TestInvoice,
             RecordOrigin = RecordOrigins.Local, Source = InvoiceSources.Manual,
-            OriginalOrderId = "CUSTOM-FAILED", OrderId = "CUSTOM-FAILED", ApiOrderId = "CUSTOM-FAILED",
+            OriginalOrderId = "CUSTOM-FAILED", OrderId = "CUSTOM-FAILED", ApiOrderId = TestOrderIdPrefix.Apply("CUSTOM-FAILED", FixedDate),
             InvoiceState = InvoiceStates.Failed, InvoiceDate = "2026/09/18", InvoiceTime = "10:00:00",
             BuyerName = "測試消費者", Amount = 100, Delivery = InvoiceService.DeliveryPaper,
             ErrorMessage = "光貿明確拒絕開立",
             Items = [new InvoiceItem { Description = "測試商品", Quantity = 1, UnitPrice = 100, Amount = 100 }],
         });
-        var fake = new FakeGateway
-        {
-            ThrowIfListCalled = true,
-            QueryException = new AmegoApiException(71, "查無發票"),
-        };
+        var fake = new FakeGateway();
+        fake.Pages[1] = ListResponse(1, []);
 
         var result = await Sync(repository, fake).SyncRecentAsync();
-        Equal(0, fake.ListCalls);
+        Equal(1, fake.ListCalls);
         Equal(0, fake.QueryCalls);
         Equal(0, result.Queried);
         Equal(0, result.Problems.Count);
@@ -297,6 +345,29 @@ internal static class Program
         Equal(false, File.Exists(preview));
     }
 
+    private static async Task TestTestDetailRefreshStripsPrefixAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        ConfigureTest(repository);
+        var rawOrderId = "66091800666666";
+        var apiOrderId = TestOrderIdPrefix.Apply(rawOrderId, FixedDate);
+        var original = MatchingRecord("TM12345678", rawOrderId);
+        original.Environment = Environments.Test;
+        original.SellerInvoice = AmegoDefaults.TestInvoice;
+        original.ApiOrderId = apiOrderId;
+        repository.Invoices.Append(original);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query("TM12345678", apiOrderId, "100", "測試消費者"),
+        };
+
+        var fresh = await DetailRefresh(repository, fake).RefreshAsync(original);
+        Equal(rawOrderId, fresh.OrderId);
+        Equal(apiOrderId, fresh.ApiOrderId);
+        Equal(InvoiceSources.Mo, fresh.Source);
+    }
+
     private static async Task TestDetailRefreshFailureLeavesCacheAsync()
     {
         using var temporary = new TemporaryDirectory();
@@ -348,12 +419,12 @@ internal static class Program
     private static InvoiceSyncService Sync(LocalRepository repository, FakeGateway fake) => new(
         repository,
         (_, _) => fake,
-        () => new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
+        () => FixedNow);
 
     private static InvoiceDetailRefreshService DetailRefresh(LocalRepository repository, FakeGateway fake) => new(
         repository,
         (_, _) => fake,
-        () => new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
+        () => FixedNow);
 
     private static void ConfigureProduction(LocalRepository repository)
     {
@@ -361,6 +432,13 @@ internal static class Program
         settings.Environment = Environments.Production;
         settings.ProductionInvoice = "12345675";
         repository.Settings.SetProductionAppKey(settings, "TEST-APP-KEY-NOT-REAL");
+        repository.Settings.Save(settings);
+    }
+
+    private static void ConfigureTest(LocalRepository repository)
+    {
+        var settings = repository.Settings.LoadOrCreate();
+        settings.Environment = Environments.Test;
         repository.Settings.Save(settings);
     }
 
@@ -439,11 +517,18 @@ internal static class Program
             throw new InvalidOperationException($"expected {expected}, actual {actual}");
     }
 
+    private static void NotEqual<T>(T left, T right)
+    {
+        if (EqualityComparer<T>.Default.Equals(left, right))
+            throw new InvalidOperationException($"expected values to differ, both were {left}");
+    }
+
     private sealed class FakeGateway : IAmegoGateway
     {
         public Dictionary<int, InvoiceListResponse> Pages { get; } = [];
         public Dictionary<string, QueryResponse> QueryByInvoice { get; } = new(StringComparer.OrdinalIgnoreCase);
         public QueryResponse QueryResponse { get; set; } = null!;
+        public IssueResponse IssueResultResponse { get; set; } = new(0, "", "TT12345678", FixedNow.ToUnixTimeSeconds(), "1234");
         public Exception? QueryException { get; set; }
         public bool ThrowIfListCalled { get; set; }
         public int ListCalls { get; private set; }
@@ -452,11 +537,14 @@ internal static class Program
         public int QueryByOrderCalls { get; private set; }
         public string LastInvoiceQuery { get; private set; } = string.Empty;
         public string LastOrderQuery { get; private set; } = string.Empty;
+        public string LastIssueOrderId { get; private set; } = string.Empty;
 
         public Task<InvoiceListResponse> ListInvoicesAsync(DateOnly startDate, DateOnly endDate, int page = 1, int limit = 500, CancellationToken cancellationToken = default)
         {
-            if (ThrowIfListCalled) throw new InvalidOperationException("shared test pool must not be listed");
+            if (ThrowIfListCalled) throw new InvalidOperationException("invoice_list must not be called");
             ListCalls++;
+            Equal(FixedDate, startDate);
+            Equal(FixedDate, endDate);
             return Task.FromResult(Pages.TryGetValue(page, out var response)
                 ? response
                 : new InvoiceListResponse(0, "", page, page, 0, []));
@@ -480,8 +568,11 @@ internal static class Program
             return QueryException is null ? Task.FromResult(QueryResponse) : Task.FromException<QueryResponse>(QueryException);
         }
 
-        public Task<IssueResponse> IssueAsync(IssueRequest request, CancellationToken cancellationToken = default) =>
-            Task.FromException<IssueResponse>(new NotSupportedException());
+        public Task<IssueResponse> IssueAsync(IssueRequest request, CancellationToken cancellationToken = default)
+        {
+            LastIssueOrderId = request.OrderId;
+            return Task.FromResult(IssueResultResponse);
+        }
         public Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default) =>
             Task.FromResult(new StatusResponse(0, "", []));
         public Task<BanResponse> QueryBanAsync(IEnumerable<string> bans, CancellationToken cancellationToken = default) =>
