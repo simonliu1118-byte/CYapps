@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CYInvoice.Core;
+using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -24,7 +25,8 @@ internal sealed class RecordsControl : UserControl
     private readonly ComboBox source = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox state = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NativeListViewHost recordsHost = new(10F, 22);
-    private readonly Button refreshButton = UiControls.StandardButton("重新整理狀態");
+    private readonly Button refreshButton = UiControls.StandardButton("重新整理");
+    private readonly Button uploadIssuesButton = UiControls.StandardButton("上傳問題");
     private readonly Label copyHint = new()
     {
         Text = CopyHintText,
@@ -34,8 +36,10 @@ internal sealed class RecordsControl : UserControl
         Margin = new Padding(12, 10, 0, 0),
     };
     private readonly System.Windows.Forms.Timer copyFeedbackTimer = new() { Interval = 2000 };
+    private readonly System.Windows.Forms.Timer refreshCooldownTimer = new() { Interval = 500 };
     private readonly List<InvoiceRecord> visible = [];
     private readonly Font voidedFont;
+    private readonly Font sourceTagFont;
     private bool fillingRows;
     private bool selectionClearQueued;
     private bool openingRecord;
@@ -59,12 +63,14 @@ internal sealed class RecordsControl : UserControl
         detailRefreshService = new InvoiceDetailRefreshService(repository);
         this.shutdownToken = shutdownToken;
         voidedFont = new Font(Records.Font, FontStyle.Strikeout);
+        sourceTagFont = new Font(Records.Font.FontFamily, 7F, FontStyle.Regular);
         Dock = DockStyle.Fill;
         BackColor = Color.White;
         Padding = new Padding(18);
         Font = new Font("Microsoft JhengHei UI", 12F);
         copyHint.Font = new Font(Font.FontFamily, 10F);
         copyFeedbackTimer.Tick += (_, _) => ResetCopyHint();
+        refreshCooldownTimer.Tick += (_, _) => UpdateRefreshCooldownUi();
         BuildLayout();
         ResetFilters();
         Reload();
@@ -109,25 +115,33 @@ internal sealed class RecordsControl : UserControl
         AddFilter(filters, "統編", buyerBan, 2, 1);
         AddFilter(filters, "來源", source, 4, 1);
         AddFilter(filters, "發票狀態", state, 6, 1);
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+
+        var buttonRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        buttonRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var leftButtons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = Padding.Empty };
         var query = UiControls.StandardButton("查詢");
         query.Click += (_, _) => Reload();
         var clear = UiControls.StandardButton("清除條件");
         clear.Click += (_, _) => { ResetFilters(); Reload(); };
         refreshButton.Click += async (_, _) => await RefreshFromApiAsync();
-        var syncIssues = UiControls.StandardButton("同步問題");
-        syncIssues.Click += (_, _) =>
+        uploadIssuesButton.Click += (_, _) =>
         {
             using var form = new SyncIssuesForm(repository);
             form.ShowDialog(FindForm());
+            Reload();
         };
-        buttons.Controls.Add(query);
-        buttons.Controls.Add(clear);
-        buttons.Controls.Add(refreshButton);
-        buttons.Controls.Add(syncIssues);
-        buttons.Controls.Add(copyHint);
-        filters.Controls.Add(buttons, 0, 2);
-        filters.SetColumnSpan(buttons, 8);
+        leftButtons.Controls.Add(query);
+        leftButtons.Controls.Add(clear);
+        leftButtons.Controls.Add(refreshButton);
+        leftButtons.Controls.Add(copyHint);
+        uploadIssuesButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        uploadIssuesButton.Margin = new Padding(3, 0, 0, 0);
+        buttonRow.Controls.Add(leftButtons, 0, 0);
+        buttonRow.Controls.Add(uploadIssuesButton, 1, 0);
+        filters.Controls.Add(buttonRow, 0, 2);
+        filters.SetColumnSpan(buttonRow, 8);
+
         ConfigureList();
         root.Controls.Add(filters, 0, 0);
         root.Controls.Add(recordsHost, 0, 1);
@@ -159,9 +173,9 @@ internal sealed class RecordsControl : UserControl
 
     private void ConfigureList()
     {
-        Records.Columns.Add("開立時間", 158, HorizontalAlignment.Left);
+        Records.Columns.Add("開立時間", 140, HorizontalAlignment.Left);
         Records.Columns.Add("發票號碼", 108, HorizontalAlignment.Left);
-        Records.Columns.Add("來源", 124, HorizontalAlignment.Left);
+        Records.Columns.Add("來源", 142, HorizontalAlignment.Left);
         Records.Columns.Add("訂單編號", 155, HorizontalAlignment.Left);
         Records.Columns.Add("統編", 106, HorizontalAlignment.Left);
         Records.Columns.Add("買受人", 150, HorizontalAlignment.Left);
@@ -213,6 +227,7 @@ internal sealed class RecordsControl : UserControl
             ClearSelection();
             LayoutColumns();
             ResetCopyHint();
+            UpdateUploadIssuesButton();
         }
         catch (Exception error)
         {
@@ -237,13 +252,14 @@ internal sealed class RecordsControl : UserControl
             {
                 if (!string.Equals(record.RecordOrigin, RecordOrigins.Sync, StringComparison.Ordinal)) return false;
             }
-            else if (record.Source != source.Text) return false;
+            else if (!string.Equals(InvoiceSourceInference.Display(record), source.Text, StringComparison.Ordinal)) return false;
         }
         return state.SelectedIndex <= 0 || record.InvoiceState == state.Text;
     }
 
     private async Task RefreshFromApiAsync()
     {
+        refreshCooldownTimer.Stop();
         refreshButton.Enabled = false;
         refreshButton.Text = "重新整理中…";
         try
@@ -254,12 +270,10 @@ internal sealed class RecordsControl : UserControl
                 case InvoiceSyncRunStatus.Busy:
                     MessageBox.Show(this, "目前正在同步，這次不會重複排程。", "同步進行中",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
+                    break;
                 case InvoiceSyncRunStatus.Cooldown:
-                    var seconds = Math.Max(1, (int)Math.Ceiling(run.CooldownRemaining.TotalSeconds));
-                    MessageBox.Show(this, $"剛完成手動同步，請 {seconds} 秒後再試。", "請稍後再同步",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
+                    StartRefreshCooldown();
+                    break;
                 case InvoiceSyncRunStatus.Completed:
                     Reload();
                     var result = run.Result;
@@ -272,6 +286,7 @@ internal sealed class RecordsControl : UserControl
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Warning);
                     }
+                    StartRefreshCooldown();
                     break;
             }
         }
@@ -284,9 +299,69 @@ internal sealed class RecordsControl : UserControl
         }
         finally
         {
-            refreshButton.Text = "重新整理狀態";
-            refreshButton.Enabled = true;
+            if (syncCoordinator.ManualCooldownRemaining <= TimeSpan.Zero)
+            {
+                refreshCooldownTimer.Stop();
+                refreshButton.Text = "重新整理";
+                refreshButton.Enabled = true;
+            }
+            else
+            {
+                StartRefreshCooldown();
+            }
         }
+    }
+
+    private void StartRefreshCooldown()
+    {
+        refreshCooldownTimer.Start();
+        UpdateRefreshCooldownUi();
+    }
+
+    private void UpdateRefreshCooldownUi()
+    {
+        var remaining = syncCoordinator.ManualCooldownRemaining;
+        if (remaining <= TimeSpan.Zero)
+        {
+            refreshCooldownTimer.Stop();
+            refreshButton.Text = "重新整理";
+            refreshButton.Enabled = true;
+            return;
+        }
+
+        refreshButton.Enabled = false;
+        refreshButton.Text = $"{Math.Max(1, (int)Math.Ceiling(remaining.TotalSeconds))} 秒";
+    }
+
+    private void UpdateUploadIssuesButton()
+    {
+        try
+        {
+            var accountKey = CurrentAccountKey();
+            if (accountKey.Length == 0)
+            {
+                uploadIssuesButton.Text = "上傳問題";
+                return;
+            }
+            var issues = new InvoiceSyncIssueStore(repository.DataDirectory).Unresolved(accountKey);
+            var lastRead = new InvoiceSyncStateStore(repository.DataDirectory)
+                .LastSuccess(accountKey, SyncIssuesForm.ReadStateScope);
+            var unread = issues.Count(issue => lastRead is null || issue.CreatedUtc > lastRead.Value);
+            uploadIssuesButton.Text = unread == 0 ? "上傳問題" : $"上傳問題 ({unread})";
+        }
+        catch (Exception)
+        {
+            uploadIssuesButton.Text = "上傳問題";
+        }
+    }
+
+    private string CurrentAccountKey()
+    {
+        var settings = repository.Settings.LoadOrCreate();
+        var sellerInvoice = settings.Environment == Environments.Test
+            ? AmegoDefaults.TestInvoice
+            : settings.ProductionInvoice.Trim();
+        return sellerInvoice.Length == 0 ? string.Empty : settings.Environment + "|" + sellerInvoice;
     }
 
     private void CopyInvoiceNumberIfRequested(object? sender, MouseEventArgs eventArgs)
@@ -446,14 +521,14 @@ internal sealed class RecordsControl : UserControl
     {
         if (Records.Columns.Count != 10 || Records.ClientSize.Width <= 0) return;
         var available = recordsHost.ColumnViewportWidth;
-        var widths = new[] { 158, 108, 124, 155, 106, 0, 86, 88, 88, 58 };
+        var widths = new[] { 140, 108, 142, 155, 106, 0, 86, 88, 88, 58 };
         widths[5] = Math.Max(80, available - widths.Sum());
         var over = widths.Sum() - available;
         if (over > 0)
         {
             foreach (var index in new[] { 5, 7, 8, 6, 2, 4, 3, 0, 1 })
             {
-                var minimum = index switch { 5 => 60, 3 => 110, 4 => 82, 2 => 90, 0 => 125, 1 => 90, _ => 54 };
+                var minimum = index switch { 5 => 60, 3 => 110, 4 => 82, 2 => 108, 0 => 112, 1 => 90, _ => 54 };
                 var reduction = Math.Min(over, Math.Max(0, widths[index] - minimum));
                 widths[index] -= reduction;
                 over -= reduction;
@@ -470,16 +545,61 @@ internal sealed class RecordsControl : UserControl
         using (var brush = new SolidBrush(eventArgs.SubItem.BackColor))
             eventArgs.Graphics.FillRectangle(brush, eventArgs.Bounds);
 
+        if (eventArgs.ColumnIndex == 2 && eventArgs.Item.Tag is InvoiceRecord record)
+            DrawSourceSubItem(eventArgs, record);
+        else
+            DrawRegularSubItem(eventArgs);
+
+        using var pen = new Pen(Color.FromArgb(190, 190, 190));
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+    }
+
+    private void DrawRegularSubItem(DrawListViewSubItemEventArgs eventArgs)
+    {
         var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
         flags |= eventArgs.ColumnIndex == 6
             ? TextFormatFlags.Right
             : eventArgs.ColumnIndex == 9 ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Left;
         var textBounds = Rectangle.Inflate(eventArgs.Bounds, -5, 0);
-        TextRenderer.DrawText(eventArgs.Graphics, eventArgs.SubItem.Text, eventArgs.SubItem.Font ?? Records.Font,
+        TextRenderer.DrawText(eventArgs.Graphics, eventArgs.SubItem!.Text, eventArgs.SubItem.Font ?? Records.Font,
             textBounds, eventArgs.SubItem.ForeColor, flags);
-        using var pen = new Pen(Color.FromArgb(190, 190, 190));
-        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
-        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+    }
+
+    private void DrawSourceSubItem(DrawListViewSubItemEventArgs eventArgs, InvoiceRecord record)
+    {
+        var bounds = Rectangle.Inflate(eventArgs.Bounds, -5, 0);
+        var text = eventArgs.SubItem!.Text;
+        var tag = InvoiceSourceInference.DisplayTag(record);
+        var textFont = eventArgs.SubItem.Font ?? Records.Font;
+        var textFlags = TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.Left;
+        if (tag.Length == 0)
+        {
+            TextRenderer.DrawText(eventArgs.Graphics, text, textFont, bounds, eventArgs.SubItem.ForeColor, textFlags);
+            return;
+        }
+
+        var tagTextSize = TextRenderer.MeasureText(eventArgs.Graphics, tag, sourceTagFont,
+            new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+        var tagWidth = tagTextSize.Width + 10;
+        var sourceAvailable = Math.Max(24, bounds.Width - tagWidth - 6);
+        var measuredSource = TextRenderer.MeasureText(eventArgs.Graphics, text, textFont,
+            new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
+        var sourceWidth = Math.Min(sourceAvailable, measuredSource + 2);
+        var sourceBounds = new Rectangle(bounds.Left, bounds.Top, sourceAvailable, bounds.Height);
+        TextRenderer.DrawText(eventArgs.Graphics, text, textFont, sourceBounds, eventArgs.SubItem.ForeColor, textFlags);
+
+        var tagX = Math.Min(bounds.Right - tagWidth, bounds.Left + sourceWidth + 5);
+        var tagHeight = Math.Min(16, Math.Max(13, bounds.Height - 5));
+        var tagRect = new Rectangle(tagX, bounds.Top + (bounds.Height - tagHeight) / 2, tagWidth, tagHeight);
+        var isUpdate = string.Equals(tag, InvoiceSourceInference.UpdateTag, StringComparison.Ordinal);
+        var background = isUpdate ? Color.FromArgb(255, 243, 214) : Color.FromArgb(232, 242, 252);
+        var border = isUpdate ? Color.FromArgb(217, 164, 74) : Color.FromArgb(126, 166, 204);
+        var foreground = isUpdate ? Color.FromArgb(145, 91, 0) : Color.FromArgb(43, 92, 137);
+        using (var brush = new SolidBrush(background)) eventArgs.Graphics.FillRectangle(brush, tagRect);
+        using (var pen = new Pen(border)) eventArgs.Graphics.DrawRectangle(pen, tagRect);
+        TextRenderer.DrawText(eventArgs.Graphics, tag, sourceTagFont, tagRect, foreground,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
     }
 
     private void ResetFilters()
@@ -500,8 +620,12 @@ internal sealed class RecordsControl : UserControl
         if (Math.Abs(Records.Font.SizeInPoints - 10F) > 0.1F) throw new InvalidOperationException("已開立發票清單未使用 10pt 字級");
         if (Records.Items.Count == 0 || Records.GetItemRect(0).Height > 24)
             throw new InvalidOperationException($"已開立發票清單資料列過高：{(Records.Items.Count == 0 ? 0 : Records.GetItemRect(0).Height)}px");
-        if (!UiControls.HasLogicalSize(refreshButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("已開立發票清單按鈕未使用標準尺寸");
+        if (!UiControls.HasLogicalSize(refreshButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            refreshButton.Text != "重新整理")
+            throw new InvalidOperationException("已開立發票重新整理按鈕尺寸或文字不正確");
+        if (!UiControls.HasLogicalSize(uploadIssuesButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            !uploadIssuesButton.Text.StartsWith("上傳問題", StringComparison.Ordinal))
+            throw new InvalidOperationException("上傳問題按鈕尺寸或文字不正確");
         if (copyHint.Text != CopyHintText || copyHint.Parent is null)
             throw new InvalidOperationException("發票號碼單擊複製提示未建立");
 
@@ -523,8 +647,10 @@ internal sealed class RecordsControl : UserControl
         if (disposing)
         {
             copyFeedbackTimer.Dispose();
+            refreshCooldownTimer.Dispose();
             copyHint.Font.Dispose();
             voidedFont.Dispose();
+            sourceTagFont.Dispose();
         }
         base.Dispose(disposing);
     }
@@ -550,5 +676,19 @@ internal sealed class RecordsControl : UserControl
         if (value.Length >= 10) value = value[..10];
         return DateTime.TryParseExact(value, ["yyyy/MM/dd", "yyyy-MM-dd"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : null;
     }
-    private static string IssueTime(InvoiceRecord record) => record.InvoiceDate.Length == 0 ? record.SentAt : (record.InvoiceDate + " " + record.InvoiceTime).Trim();
+
+    private static string IssueTime(InvoiceRecord record)
+    {
+        if (record.InvoiceDate.Trim().Length != 0)
+        {
+            var time = record.InvoiceTime.Trim();
+            if (time.Length >= 5) time = time[..5];
+            return (record.InvoiceDate.Trim() + " " + time).Trim();
+        }
+
+        var sentAt = record.SentAt.Trim();
+        if (DateTime.TryParse(sentAt, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out var parsed))
+            return parsed.ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture);
+        return sentAt.Length >= 16 ? sentAt[..16] : sentAt;
+    }
 }
