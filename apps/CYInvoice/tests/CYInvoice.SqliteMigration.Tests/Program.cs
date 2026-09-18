@@ -12,6 +12,7 @@ var tests = new (string Name, Action Run)[]
     ("empty data directory creates an empty valid database", TestEmptyMigration),
     ("production retention prunes all expired rows", RetentionTests.ProductionPrunesAllExpiredRows),
     ("test retention keeps today only", RetentionTests.TestEnvironmentKeepsTodayOnly),
+    ("failed invoice cleanup deletes only definite failures", RetentionTests.FailedStoreDeletesOnlyFailedRows),
 };
 
 var failures = 0;
