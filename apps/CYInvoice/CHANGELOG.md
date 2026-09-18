@@ -1,8 +1,29 @@
 # CYInvoice 版本紀錄
 
-本檔先保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 實機驗證通過」的版本開始建立。
+本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V2.4.0 — 2026/09/18（工程測試版，未正式 Release）
+## V2.4.2 — 2026/09/19（正式 Release）
+
+- 正式 Release：`cyinvoice-v2.4.2`，target commit `266427abb10e48ee4c1beee55c525159b25c47cd`。
+- `CYInvoice Stable Release` workflow 從 `main` 重新執行正式身分檢查、機密資料掃描、restore、warnings-as-errors build、WinForms startup smoke、core parity tests、Windows x64 release build／PE／package 驗證、portable smoke、SHA-256 與 GitHub Release 發布，全部成功。
+- 正式包：`CYInvoice_V2.4.2.zip`；SHA-256：`7a65878c52e65d1088cdb298dd2c5e93d76afa9ebd01a0136d2b245d411df502`。
+- 測試環境加入 CYInvoice 專用 OrderID namespace，避免光貿共享測試池的不同公司／執行個體互相撞號；一般 UI 仍顯示原始可讀 OrderID，不顯示 technical prefix。
+- 測試發票 discovery、開立後回查與 query 流程同步支援 namespaced OrderID，正式環境不套用測試 namespace。
+- 設定頁 Enter 導覽再修正，正式環境欄位使用明確鍵盤順序，不讓 Enter 誤觸發不相關操作。
+- 已開立紀錄清單加入可點擊排序表頭並整理欄寬；來源與 Order ID 欄位加寬。
+- V2.4.2 Build 1～5 持續修整表頭排序、設定／管理視窗、來源與 Order ID 欄寬、已作廢紀錄可讀性、會員載具預覽與作廢狀態呈現。
+- 正式發布前依規則將同一工作項目的工程 `BUILD` 從 5 重設為 0；沒有另外改動發票核心安全語意。
+
+## V2.4.1 — 2026/09/18（工程測試版，未單獨正式 Release）
+
+- 「上傳問題」視窗上下兩個 ListView 使用直向／橫向格線；欄位預設寬度不足時可由原生水平 scrollbar 查看完整內容。
+- 「開立失敗」來源欄縮窄，主要空間留給失敗原因；光貿 API technical field／code 轉為較易理解的中文摘要，原始 API 訊息仍保留在本機供診斷。
+- 「刪除」在未勾選時不顯示 `(0)`，勾選後才顯示 `刪除(N)`。
+- 主清單「上傳問題」按鈕與左側操作按鈕統一垂直 margin。
+- 來源「同步／更新」改為較緊湊的圓角色塊；同步與更新以不同色系辨識，來源文字仍保持正常可讀字級。
+- 本版內容後續併入 V2.4.2，沒有建立獨立正式 tag／Release。
+
+## V2.4.0 — 2026/09/18（工程測試版，後續併入 V2.4.2）
 
 - 本機發票、商品明細與人工買方名稱由 JSON 正式遷移至 `Data/CYInvoice.db`；`settings.json` 繼續保存安全設定。第一次啟動以暫存 SQLite transaction 匯入並驗證舊 `invoices.json`／`buyer_names.json` 後才切換，舊 JSON 保留；損壞資料不得被空白 DB 覆蓋。
 - AMEGO／光貿官方資料定為發票內容權威來源；SQLite 定位為本機 Cache 加上 CYInvoice metadata。遠端買受人、統編、金額、商品、作廢與上傳狀態變更都視為正常官方更新，不以內容差異建立衝突。
@@ -13,7 +34,7 @@
 - 新增持久化 `sync_issues`：invoice list／query 失敗、光貿查無、結果不明仍無法確認、本機 SQLite 寫入失敗、解析／比對失敗及無法唯一匹配等真正技術問題才記錄；相同未解決問題去重，後續成功同步可自動解決。
 - 同一發票號碼或 OrderID 若對到多筆本機紀錄，停止自動猜測並建立 `ambiguous_match`；已開立清單新增「同步問題」視窗，可查看目前帳號未解決問題並手動標記完成、刪除或重新整理。
 - Windows CI 已涵蓋 SQLite migration／retention、invoice sync、sync issue、sync coordinator、WinForms startup smoke（含同步問題視窗）、Windows x64 package、PE／layout 及 packaged startup smoke。
-- 本版目前只建立工程測試基準與 Artifact；最新公開正式 Release 仍為 V2.3.0。未收到使用者當次明確 `release` 指示前，不建立 V2.4.0 tag／GitHub Release。
+- V2.4.0 當時只作為工程測試基準；後續 V2.4.1／V2.4.2 繼續收斂並最終由 V2.4.2 正式發布。
 
 ## V2.3.0 — 2026/09/18
 
