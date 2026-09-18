@@ -29,6 +29,13 @@ public interface IAmegoGateway
     Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default);
     Task<BanResponse> QueryBanAsync(IEnumerable<string> bans, CancellationToken cancellationToken = default);
     Task<byte[]> DownloadInvoicePdfAsync(string invoiceNumber, int downloadStyle, CancellationToken cancellationToken = default);
+    Task<InvoiceListResponse> ListInvoicesAsync(
+        DateOnly startDate,
+        DateOnly endDate,
+        int page = 1,
+        int limit = 500,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<InvoiceListResponse>(new NotSupportedException("invoice_list is not supported by this gateway"));
 }
 
 public sealed class ProductItem
@@ -92,6 +99,35 @@ public sealed record QueryResult(
     bool DetailVatPresent);
 
 public sealed record QueryResponse(int Code, string Message, QueryResult Data);
+
+public sealed record InvoiceListItem(
+    string InvoiceNumber,
+    string InvoiceType,
+    int InvoiceStatus,
+    string InvoiceDate,
+    string InvoiceTime,
+    string BuyerIdentifier,
+    string BuyerName,
+    string SalesAmount,
+    string TaxAmount,
+    string TotalAmount,
+    string MainRemark,
+    string CarrierType,
+    string CarrierId1,
+    string CarrierId2,
+    string NpoBan,
+    long CancelDate,
+    string OrderId,
+    long CreateDate);
+
+public sealed record InvoiceListResponse(
+    int Code,
+    string Message,
+    int PageTotal,
+    int PageNow,
+    int DataTotal,
+    IReadOnlyList<InvoiceListItem> Data);
+
 public sealed record StatusResult(string InvoiceNumber, string Type, int Status, string TotalAmount);
 public sealed record StatusResponse(int Code, string Message, IReadOnlyList<StatusResult> Data);
 public sealed record BanResult(string Ban, string Name);
