@@ -12,6 +12,7 @@ internal sealed class RecordsControl : UserControl
     private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
+    private readonly InvoiceSyncService syncService;
     private readonly DateTimePicker dateFrom = DatePicker();
     private readonly DateTimePicker dateTo = DatePicker();
     private readonly TextBox invoiceNumber = UiControls.TextBox(20);
@@ -42,6 +43,7 @@ internal sealed class RecordsControl : UserControl
     {
         this.repository = repository;
         this.service = service;
+        syncService = new InvoiceSyncService(repository);
         voidedFont = new Font(Records.Font, FontStyle.Strikeout);
         Dock = DockStyle.Fill;
         BackColor = Color.White;
@@ -56,7 +58,7 @@ internal sealed class RecordsControl : UserControl
 
     private void BuildLayout()
     {
-        source.Items.AddRange(["全部", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang, InvoiceSources.Digiwin]);
+        source.Items.AddRange(["全部", "光貿同步", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang, InvoiceSources.Digiwin]);
         state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.Failed, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 144));
@@ -138,7 +140,7 @@ internal sealed class RecordsControl : UserControl
     {
         Records.Columns.Add("開立時間", 158, HorizontalAlignment.Left);
         Records.Columns.Add("發票號碼", 108, HorizontalAlignment.Left);
-        Records.Columns.Add("來源", 76, HorizontalAlignment.Left);
+        Records.Columns.Add("來源", 124, HorizontalAlignment.Left);
         Records.Columns.Add("訂單編號", 155, HorizontalAlignment.Left);
         Records.Columns.Add("統編", 106, HorizontalAlignment.Left);
         Records.Columns.Add("買受人", 150, HorizontalAlignment.Left);
@@ -179,7 +181,7 @@ internal sealed class RecordsControl : UserControl
             Records.Items.Clear();
             foreach (var record in visible)
             {
-                var row = NewRow([IssueTime(record), record.InvoiceNumber, record.Source, record.OrderId, record.BuyerIdentifier,
+                var row = NewRow([IssueTime(record), record.InvoiceNumber, InvoiceSourceInference.Display(record), record.OrderId, record.BuyerIdentifier,
                     record.BuyerName, MoneyFormatter.Integer(record.Amount), record.Delivery, record.InvoiceState,
                     record.UploadStatus == 0 ? "" : "●"]);
                 row.Tag = record;
@@ -208,7 +210,14 @@ internal sealed class RecordsControl : UserControl
         if (dateTo.Checked && (date is null || date.Value.Date > dateTo.Value.Date)) return false;
         if (!Contains(record.InvoiceNumber, invoiceNumber.Text) || !Contains(record.OrderId, orderId.Text) ||
             !Contains(record.BuyerName, buyerName.Text) || !Contains(record.BuyerIdentifier, buyerBan.Text)) return false;
-        if (source.SelectedIndex > 0 && record.Source != source.Text) return false;
+        if (source.SelectedIndex > 0)
+        {
+            if (source.Text == "光貿同步")
+            {
+                if (!string.Equals(record.RecordOrigin, RecordOrigins.Sync, StringComparison.Ordinal)) return false;
+            }
+            else if (record.Source != source.Text) return false;
+        }
         return state.SelectedIndex <= 0 || record.InvoiceState == state.Text;
     }
 
@@ -218,13 +227,17 @@ internal sealed class RecordsControl : UserControl
         refreshButton.Text = "重新整理中…";
         try
         {
-            await service.RefreshAllAsync();
+            var result = await syncService.SyncRecentAsync();
             Reload();
-        }
-        catch (PartialRefreshException error)
-        {
-            Reload();
-            MessageBox.Show(this, error.Message, "部分資料未能更新", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (result.Problems.Count != 0)
+            {
+                MessageBox.Show(
+                    this,
+                    $"最近 3 天同步已完成，但有 {result.Problems.Count} 項未完整更新：\n" + string.Join("\n", result.Problems),
+                    "部分資料未能更新",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
         }
         catch (Exception error)
         {
@@ -366,14 +379,14 @@ internal sealed class RecordsControl : UserControl
     {
         if (Records.Columns.Count != 10 || Records.ClientSize.Width <= 0) return;
         var available = recordsHost.ColumnViewportWidth;
-        var widths = new[] { 158, 108, 76, 155, 106, 0, 86, 88, 88, 58 };
+        var widths = new[] { 158, 108, 124, 155, 106, 0, 86, 88, 88, 58 };
         widths[5] = Math.Max(80, available - widths.Sum());
         var over = widths.Sum() - available;
         if (over > 0)
         {
             foreach (var index in new[] { 5, 7, 8, 6, 2, 4, 3, 0, 1 })
             {
-                var minimum = index switch { 5 => 60, 3 => 110, 4 => 82, 0 => 125, 1 => 90, _ => 54 };
+                var minimum = index switch { 5 => 60, 3 => 110, 4 => 82, 2 => 90, 0 => 125, 1 => 90, _ => 54 };
                 var reduction = Math.Min(over, Math.Max(0, widths[index] - minimum));
                 widths[index] -= reduction;
                 over -= reduction;
