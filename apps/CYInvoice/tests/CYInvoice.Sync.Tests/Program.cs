@@ -20,6 +20,10 @@ internal static class Program
             ("test environment does not discover shared pool invoices", TestTestEnvironmentNoDiscoveryAsync),
             ("remote absence never deletes local cache", TestRemoteAbsenceDoesNotDeleteAsync),
             ("invoice list pagination is exhausted", TestPaginationAsync),
+            ("detail refresh always queries even when official data is unchanged", TestDetailRefreshAlwaysQueriesAsync),
+            ("detail refresh overwrites official fields and invalidates cache", TestDetailRefreshOverwriteAsync),
+            ("detail refresh failure leaves local cache untouched", TestDetailRefreshFailureLeavesCacheAsync),
+            ("detail refresh falls back to OrderID when invoice number is missing", TestDetailRefreshByOrderIdAsync),
         };
 
         var failures = 0;
@@ -201,7 +205,116 @@ internal static class Program
         Equal(2, result.Inserted);
     }
 
+    private static async Task TestDetailRefreshAlwaysQueriesAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("HH12345678", "66091800555555");
+        repository.Invoices.Append(original);
+        var cache = CreatePdfCache(repository, original.InvoiceNumber);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query(
+                "HH12345678", "66091800555555", "100", "買受人",
+                description: "商品", buyerIdentifier: "0000000000"),
+        };
+
+        var fresh = await DetailRefresh(repository, fake).RefreshAsync(original);
+        Equal(1, fake.QueryByInvoiceCalls);
+        Equal(0, fake.QueryByOrderCalls);
+        Equal("HH12345678", fake.LastInvoiceQuery);
+        Equal("HH12345678", fresh.InvoiceNumber);
+        Equal(true, File.Exists(cache));
+    }
+
+    private static async Task TestDetailRefreshOverwriteAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("JJ12345678", "M20260918001");
+        original.Source = InvoiceSources.Manual;
+        original.OriginalOrderId = "M20260918001";
+        repository.Invoices.Append(original);
+        var pdf = CreatePdfCache(repository, original.InvoiceNumber);
+        var preview = CreatePreviewCache(repository, original.InvoiceNumber);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query(
+                "JJ12345678", "66091800666666", "120", "",
+                cancelDate: 1, description: "新商品", buyerIdentifier: ""),
+        };
+
+        var fresh = await DetailRefresh(repository, fake).RefreshAsync(original);
+        Equal(RecordOrigins.Local, fresh.RecordOrigin);
+        Equal("M20260918001", fresh.OriginalOrderId);
+        Equal("66091800666666", fresh.OrderId);
+        Equal("66091800666666", fresh.ApiOrderId);
+        Equal(InvoiceSources.Mo, fresh.Source);
+        Equal(InvoiceStates.Voided, fresh.InvoiceState);
+        Equal(string.Empty, fresh.BuyerIdentifier);
+        Equal(string.Empty, fresh.BuyerName);
+        Equal(120L, fresh.Amount);
+        Equal("新商品", fresh.Items.Single().Description);
+        Equal(false, File.Exists(pdf));
+        Equal(false, File.Exists(preview));
+    }
+
+    private static async Task TestDetailRefreshFailureLeavesCacheAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("KK12345678", "66091800777777");
+        repository.Invoices.Append(original);
+        var fake = new FakeGateway { QueryException = new InvalidOperationException("forced detail query failure") };
+
+        try
+        {
+            await DetailRefresh(repository, fake).RefreshAsync(original);
+            throw new InvalidOperationException("expected detail refresh to fail");
+        }
+        catch (InvalidOperationException error) when (error.Message == "forced detail query failure")
+        {
+        }
+
+        var stored = repository.Invoices.LoadOrCreate().Single();
+        Equal("KK12345678", stored.InvoiceNumber);
+        Equal("66091800777777", stored.OrderId);
+        Equal("買受人", stored.BuyerName);
+        Equal(100L, stored.Amount);
+        Equal("商品", stored.Items.Single().Description);
+    }
+
+    private static async Task TestDetailRefreshByOrderIdAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var original = MatchingRecord("LL12345678", "M20260918002");
+        original.InvoiceNumber = string.Empty;
+        original.InvoiceState = InvoiceStates.Unknown;
+        repository.Invoices.Append(original);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query("LL12345678", "M20260918002", "100", "買受人", description: "商品", buyerIdentifier: "0000000000"),
+        };
+
+        var fresh = await DetailRefresh(repository, fake).RefreshAsync(original);
+        Equal(0, fake.QueryByInvoiceCalls);
+        Equal(1, fake.QueryByOrderCalls);
+        Equal("M20260918002", fake.LastOrderQuery);
+        Equal("LL12345678", fresh.InvoiceNumber);
+        Equal(InvoiceStates.Opened, fresh.InvoiceState);
+    }
+
     private static InvoiceSyncService Sync(LocalRepository repository, FakeGateway fake) => new(
+        repository,
+        (_, _) => fake,
+        () => new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
+
+    private static InvoiceDetailRefreshService DetailRefresh(LocalRepository repository, FakeGateway fake) => new(
         repository,
         (_, _) => fake,
         () => new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
@@ -217,13 +330,18 @@ internal static class Program
 
     private static InvoiceRecord MatchingRecord(string invoiceNumber, string orderId) => new()
     {
-        Id = "match-" + invoiceNumber, SellerInvoice = "12345675", Environment = Environments.Production,
-        RecordOrigin = RecordOrigins.Local, Source = InvoiceSources.Mo, OriginalOrderId = orderId,
+        Id = "match-" + (invoiceNumber.Length == 0 ? orderId : invoiceNumber), SellerInvoice = "12345675", Environment = Environments.Production,
+        RecordOrigin = RecordOrigins.Local, Source = InvoiceSourceInference.FromOrderId(orderId), OriginalOrderId = orderId,
         OrderId = orderId, ApiOrderId = orderId, InvoiceNumber = invoiceNumber, InvoiceState = InvoiceStates.Opened,
         InvoiceDate = "2026/09/18", InvoiceTime = "10:10:10", BuyerIdentifier = "0000000000",
         BuyerName = "買受人", Amount = 100, Delivery = InvoiceService.DeliveryPaper,
         UploadStatus = UploadStatuses.Complete, UploadStatusText = "完成", MainRemark = "備註", DetailVat = 1,
-        Items = [new InvoiceItem { Description = "商品", Quantity = 1, UnitPrice = 100, Amount = 100 }],
+        Items = [new InvoiceItem
+        {
+            Description = "商品", Quantity = 1, QuantityDecimal = "1", Unit = "個",
+            UnitPrice = 100, UnitPriceDecimal = "100", TaxType = "1",
+            Amount = 100, AmountDecimal = "100", Remark = string.Empty,
+        }],
     };
 
     private static InvoiceListItem Remote(
@@ -238,20 +356,45 @@ internal static class Program
     private static InvoiceListResponse ListResponse(int pageTotal, IReadOnlyList<InvoiceListItem> data) =>
         new(0, "", pageTotal, 1, data.Count, data);
 
-    private static QueryResponse Query(string invoiceNumber, string orderId, string total, string buyer) => new(
+    private static QueryResponse Query(
+        string invoiceNumber,
+        string orderId,
+        string total,
+        string buyer,
+        long cancelDate = 0,
+        string description = "同步商品",
+        string buyerIdentifier = "0000000000") => new(
         0,
         "",
         new QueryResult(
             invoiceNumber, "07", UploadStatuses.Complete, "20260918", "101010",
-            "0000000000", buyer, total, "0", total, "", "", "", "", 0,
-            orderId, 0, ProductItems(), 1, true));
+            buyerIdentifier, buyer, total, "0", total, "", "", "", "", cancelDate,
+            orderId, 0, ProductItems(description, total), 1, true));
 
-    private static JsonElement ProductItems()
+    private static JsonElement ProductItems(string description = "同步商品", string amount = "100")
     {
-        using var document = JsonDocument.Parse("""
-            [{"Description":"同步商品","Quantity":1,"Unit":"個","UnitPrice":100,"Amount":100,"TaxType":1,"Remark":""}]
+        using var document = JsonDocument.Parse($$"""
+            [{"Description":{{JsonSerializer.Serialize(description)}},"Quantity":1,"Unit":"個","UnitPrice":{{amount}},"Amount":{{amount}},"TaxType":1,"Remark":""}]
             """);
         return document.RootElement.Clone();
+    }
+
+    private static string CreatePdfCache(LocalRepository repository, string invoiceNumber)
+    {
+        var directory = Path.Combine(repository.InvoicePdfCacheDirectory, Environments.Production, "20260918");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, invoiceNumber + "_style0.pdf");
+        File.WriteAllBytes(path, Encoding.ASCII.GetBytes("%PDF-1.7\n%%EOF\n"));
+        return path;
+    }
+
+    private static string CreatePreviewCache(LocalRepository repository, string invoiceNumber)
+    {
+        var directory = Path.Combine(repository.InvoicePreviewCacheDirectory, Environments.Production, "20260918");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, invoiceNumber + "_style0.page1.png");
+        File.WriteAllBytes(path, [137, 80, 78, 71, 13, 10, 26, 10]);
+        return path;
     }
 
     private static void Equal<T>(T expected, T actual)
@@ -269,6 +412,10 @@ internal static class Program
         public bool ThrowIfListCalled { get; set; }
         public int ListCalls { get; private set; }
         public int QueryCalls { get; private set; }
+        public int QueryByInvoiceCalls { get; private set; }
+        public int QueryByOrderCalls { get; private set; }
+        public string LastInvoiceQuery { get; private set; } = string.Empty;
+        public string LastOrderQuery { get; private set; } = string.Empty;
 
         public Task<InvoiceListResponse> ListInvoicesAsync(DateOnly startDate, DateOnly endDate, int page = 1, int limit = 500, CancellationToken cancellationToken = default)
         {
@@ -282,6 +429,8 @@ internal static class Program
         public Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default)
         {
             QueryCalls++;
+            QueryByInvoiceCalls++;
+            LastInvoiceQuery = number;
             if (QueryException is not null) return Task.FromException<QueryResponse>(QueryException);
             if (QueryByInvoice.TryGetValue(number, out var response)) return Task.FromResult(response);
             return Task.FromResult(QueryResponse);
@@ -290,6 +439,8 @@ internal static class Program
         public Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default)
         {
             QueryCalls++;
+            QueryByOrderCalls++;
+            LastOrderQuery = orderId;
             return QueryException is null ? Task.FromResult(QueryResponse) : Task.FromException<QueryResponse>(QueryException);
         }
 
