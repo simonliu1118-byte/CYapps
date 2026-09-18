@@ -17,12 +17,12 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 Public repository 可以正常使用自動 CI；目標是避免濫用，而不是把正常驗證全部改成手動。
 
-- Ready for review 的 Pull Request 依專案路徑自動執行必要 Build/Test。
-- Draft PR 可略過昂貴的完整驗證；是否使用 Draft 由負責開發的 AI／維護者依成熟度決定。
-- branch push 是否自動 CI 依實際效益決定，避免與 PR CI 重複執行相同昂貴工作。
+- Pull Request 依專案路徑自動執行必要 Build/Test；Draft 只代表尚未準備合併，不作為 CI 開關。
+- Draft PR 可以正常執行必要驗證；不得為了觸發 CI 而反覆切換 Draft／Ready 狀態。
+- 一般開發 branch 的單純 push 不預設重複跑完整昂貴 CI；同一份變更已有 PR 驗證時，避免再跑第二套完整 Build/Test。
 - 使用 path filter、concurrency 與分層測試避免不相關專案或舊 run 重複耗用資源。
 - 純程式 CI 與 Codex／Claude 等計量式協作 AI 流程盡量解耦；AI 深度審查不因每個小 commit 重新啟動。
-- 正式 GitHub Release 由人工明確啟動並重新驗證正式發行包。
+- 正式 GitHub Release 由使用者當次明確要求後，以正式 Release workflow 從 `main` 重新驗證並建立。
 
 ## Repository rules
 
