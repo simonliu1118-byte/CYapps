@@ -11,6 +11,7 @@ internal sealed class RecordDetailForm : Form
     private const int InformationColumnWidth = 292;
     private const int InformationLabelWidth = 90;
     private const int InformationValueMaxWidth = 190;
+    private const int CarrierItemsSectionHeight = 250;
 
     private readonly InvoiceRecord record;
     private readonly LocalRepository repository;
@@ -313,7 +314,7 @@ internal sealed class RecordDetailForm : Form
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(238, 240, 242),
             Padding = new Padding(6),
-            Margin = new Padding(4, 0, 0, 4),
+            Margin = new Padding(4, 0, 4, 4),
             Tag = "carrier-receipt",
         };
         receiptFrame.Controls.Add(receipt);
@@ -349,21 +350,33 @@ internal sealed class RecordDetailForm : Form
             Padding = new Padding(0, 3, 2, 0),
         }, 0, 2);
 
+        var rightStack = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = Padding.Empty,
+            Tag = "carrier-right-stack",
+        };
+        rightStack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        rightStack.RowStyles.Add(new RowStyle(SizeType.Absolute, CarrierItemsSectionHeight));
+        rightStack.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        rightStack.Controls.Add(itemSection, 0, 0);
+        rightStack.Controls.Add(receiptFrame, 0, 1);
+
         var split = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 3,
+            ColumnCount = 2,
             RowCount = 1,
             Margin = Padding.Empty,
             Tag = "carrier-preview",
         };
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, InformationColumnWidth));
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         split.Controls.Add(BuildInformationSection(), 0, 0);
-        split.Controls.Add(itemSection, 1, 0);
-        split.Controls.Add(receiptFrame, 2, 0);
+        split.Controls.Add(rightStack, 1, 0);
         return split;
     }
 
@@ -372,6 +385,7 @@ internal sealed class RecordDetailForm : Form
         var items = UiControls.Grid();
         items.ReadOnly = true;
         items.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        items.ScrollBars = ScrollBars.Vertical;
         items.Columns.Add(Column("品名", 180, fill: true));
         items.Columns.Add(Column("數量", 48, right: true));
         items.Columns.Add(Column("單價", 70, right: true));
@@ -675,6 +689,28 @@ internal sealed class RecordDetailForm : Form
         carrier.PerformLayout();
         carrier.VerifyLayout(companyBuyer: false, carrier: true);
 
+        using var voidedCarrier = new RecordDetailForm(
+            new InvoiceRecord
+            {
+                Id = "voided-carrier-smoke",
+                Environment = environment,
+                InvoiceNumber = "DD87654321",
+                InvoiceState = InvoiceStates.Voided,
+                Delivery = "會員載具",
+                CarrierType = "amego",
+                CarrierId1 = "motmp_20260916002",
+                Source = InvoiceSources.Mo,
+                OrderId = "20260916002",
+                InvoiceDate = "2026/09/16",
+                InvoiceTime = "12:40:00",
+                Amount = 105,
+                Items = baseRecord.Items,
+            },
+            repository,
+            service);
+        voidedCarrier.PerformLayout();
+        voidedCarrier.VerifyLayout(companyBuyer: false, carrier: true);
+
         using var failed = new RecordDetailForm(
             new InvoiceRecord
             {
@@ -729,6 +765,16 @@ internal sealed class RecordDetailForm : Form
         {
             if (paperInvoice || activePreview is null)
                 throw new InvalidOperationException("會員載具未建立模擬發票預覽");
+            var carrierRoot = FindTaggedControl(this, "carrier-preview") as TableLayoutPanel;
+            var rightStack = FindTaggedControl(this, "carrier-right-stack") as TableLayoutPanel;
+            var itemSection = FindTaggedControl(this, "carrier-items") as TableLayoutPanel;
+            var receiptFrame = FindTaggedControl(this, "carrier-receipt") as Panel;
+            var grid = itemSection?.Controls.OfType<DataGridView>().FirstOrDefault();
+            if (carrierRoot is null || carrierRoot.ColumnCount != 2 ||
+                rightStack is null || rightStack.RowCount != 2 || rightStack.RowStyles[0].SizeType != SizeType.Absolute ||
+                Math.Abs(rightStack.RowStyles[0].Height - CarrierItemsSectionHeight) > 0.1F ||
+                itemSection is null || receiptFrame is null || grid is null || grid.ScrollBars != ScrollBars.Vertical)
+                throw new InvalidOperationException("會員載具右側未使用交易明細上、模擬發票下的固定版面");
             return;
         }
         if (!paperInvoice || !viewPdf.Enabled || !printPdf.Enabled)
@@ -743,6 +789,17 @@ internal sealed class RecordDetailForm : Form
             throw new InvalidOperationException("紙本預覽未使用 A4 比例容器");
         if (pdfBusy)
             throw new InvalidOperationException("紙本詳細資訊初始狀態不應處於 PDF 忙碌狀態");
+    }
+
+    private static Control? FindTaggedControl(Control root, string tag)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (string.Equals(child.Tag as string, tag, StringComparison.Ordinal)) return child;
+            var nested = FindTaggedControl(child, tag);
+            if (nested is not null) return nested;
+        }
+        return null;
     }
 
     private static Label FieldLabel(string text) => new()
