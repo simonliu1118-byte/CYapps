@@ -168,8 +168,8 @@ internal sealed class RecordsControl : UserControl
     {
         Records.Columns.Add("開立時間", 140, HorizontalAlignment.Left);
         Records.Columns.Add("發票號碼", 108, HorizontalAlignment.Left);
-        Records.Columns.Add("來源", 106, HorizontalAlignment.Left);
-        Records.Columns.Add("訂單編號", 130, HorizontalAlignment.Left);
+        Records.Columns.Add("來源", 122, HorizontalAlignment.Left);
+        Records.Columns.Add("訂單編號", 150, HorizontalAlignment.Left);
         Records.Columns.Add("統編", 82, HorizontalAlignment.Left);
         Records.Columns.Add("買受人", 150, HorizontalAlignment.Left);
         Records.Columns.Add("金額", 86, HorizontalAlignment.Right);
@@ -517,14 +517,14 @@ internal sealed class RecordsControl : UserControl
     {
         if (Records.Columns.Count != 10 || Records.ClientSize.Width <= 0) return;
         var available = recordsHost.ColumnViewportWidth;
-        var widths = new[] { 140, 108, 106, 130, 82, 0, 86, 76, 88, 48 };
+        var widths = new[] { 140, 108, 122, 150, 82, 0, 86, 76, 88, 48 };
         widths[5] = Math.Max(80, available - widths.Sum());
         var over = widths.Sum() - available;
         if (over > 0)
         {
             foreach (var index in new[] { 5, 6, 3, 0, 1 })
             {
-                var minimum = index switch { 5 => 60, 3 => 118, 0 => 112, 1 => 90, _ => 70 };
+                var minimum = index switch { 5 => 60, 3 => 142, 0 => 112, 1 => 90, _ => 70 };
                 var reduction = Math.Min(over, Math.Max(0, widths[index] - minimum));
                 widths[index] -= reduction;
                 over -= reduction;
@@ -753,6 +753,8 @@ internal sealed class RecordsControl : UserControl
             throw new InvalidOperationException("統編標籤左緣未與日期『至』左緣對齊");
         if (Math.Abs(ScreenCenterY(refreshButton) - ScreenCenterY(uploadIssuesButton)) > 1)
             throw new InvalidOperationException("上傳問題按鈕未與左側操作按鈕垂直對齊");
+        if (Records.Columns[2].Width < 122 || Records.Columns[3].Width < 142)
+            throw new InvalidOperationException("已開立發票來源或訂單編號欄位過窄");
 
         var columnWidth = Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
         if (columnWidth > recordsHost.ColumnViewportWidth ||
