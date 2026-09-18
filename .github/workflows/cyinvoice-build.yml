@@ -81,6 +81,9 @@ jobs:
       - name: Run invoice sync tests
         run: dotnet run --project tests/CYInvoice.Sync.Tests/CYInvoice.Sync.Tests.csproj -c Release --no-build
 
+      - name: Run sync coordinator tests
+        run: dotnet run --project tests/CYInvoice.SyncCoordinator.Tests/CYInvoice.SyncCoordinator.Tests.csproj -c Release --no-build
+
       - name: Build Windows x64 package
         run: ./scripts/build.ps1 -Version $env:CYINVOICE_VERSION -Build $env:CYINVOICE_BUILD -Engineering
 
