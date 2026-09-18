@@ -6,20 +6,31 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前開發／工程測試基準：**V2.4.1**。
-- 最新公開正式 Release：**V2.3.0**（tag：`cyinvoice-v2.3.0`）。
-- V2.4.1 尚未建立正式 Release；只有使用者於當次工作明確要求 `release` 時，才可從 `main` 啟動正式 Release workflow。
+- 目前 `main` 正式基準：**V2.4.2 Build 0**。
+- 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
+- V2.4.2 已於 2026/09/19（台灣時間）由 `main` 的 `CYInvoice Stable Release` workflow 重新建置、驗證並正式發布。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線，source 直接由 `main` 維護。
-- 唯一版本來源為 `VERSION`；目前 `BUILD=0`。工程測試 Artifact 以 `Channel: engineering` 與 Artifact 名稱和正式包區分。
+- 唯一版本來源為 `VERSION`；正式 Release 必須 `BUILD=0`。日常工程測試 Artifact 與正式 Release 分離。
 - Go／Win32 V1.1.0 只保留為歷史公開回退版本，不再位於 `main` 現行 source。
+- 後續版本仍只有在使用者於當次工作明確要求 `release` 時，才可啟動正式 Release workflow；版本推進或 PR 合併本身不代表發布授權。
+
+## V2.4.2 主要調整
+
+- 測試環境加入獨立 OrderID namespace，避免共用測試池中的不同公司／不同執行個體互相撞號；畫面仍顯示原始使用者可讀 OrderID，不把技術前綴暴露給一般操作。
+- 測試發票 discovery／query 流程同步支援 namespaced OrderID，維持測試與正式環境隔離。
+- 設定頁 Enter 導覽再修正，正式環境設定欄位使用明確鍵盤順序，不讓 Enter 誤觸發不相關動作。
+- 已開立紀錄清單支援可點擊排序表頭並整理欄寬；來源與 Order ID 欄位加寬，長內容更容易辨識。
+- 已作廢紀錄的清單與詳細資訊可讀性提升；載具預覽加入明確作廢狀態，商品／交易資訊與預覽重新排列。
+- 會員載具預覽文字、刪除線與作廢狀態呈現進一步整理，避免灰化後難以辨識。
+- V2.4.2 Build 1～5 的 Windows 實機修正於正式發布前收斂，正式 Release 身分重設為 `BUILD=0`，沒有額外改動發票核心安全規則。
 
 ## V2.4.1 主要調整
 
-- 「上傳問題」視窗上下兩個 ListView 都使用直向／橫向格線；欄位目前設定只作預設寬度，實際內容較長時會自動撐寬並使用原生水平 scrollbar，確保完整資訊仍可查看，不再把最後一欄硬壓進視窗。
-- 「開立失敗」來源欄縮窄，主要空間留給失敗原因；畫面將光貿 API technical field／code 轉為可理解的中文摘要，原始 API 訊息仍保留在本機資料供診斷。
+- 「上傳問題」視窗上下兩個 ListView 使用直向／橫向格線；內容過長時可使用原生水平 scrollbar 完整查看。
+- 「開立失敗」來源欄縮窄，主要空間留給失敗原因；畫面將光貿 API technical field／code 轉為較易理解的中文摘要，原始 API 訊息仍保留在本機供診斷。
 - 「刪除」在未勾選時不顯示 `(0)`；勾選後才顯示 `刪除(N)`。
-- 主清單「上傳問題」按鈕與左側操作按鈕使用相同垂直 margin，維持同一水平線。
-- 來源欄的「同步／更新」改為較緊湊的圓角彩色 tag；同步使用藍色系、更新使用黃色系，來源文字本身仍維持正常字級。
+- 主清單「上傳問題」按鈕與左側操作按鈕維持同一水平線。
+- 來源欄的「同步／更新」改為緊湊圓角色塊，文字仍維持正常可讀字級。
 
 ## V2.4.0 主要內容
 
@@ -27,11 +38,11 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 第一次啟動若尚無 SQLite DB，會先完整讀取既有 `invoices.json`／`buyer_names.json`，在暫存 DB 中建立 schema、匯入並交叉驗證後才原子切換；舊 JSON 不會被刪除。既有 DB 若損壞則停止並回報，不會靜默建立空白資料庫覆蓋。
 - AMEGO／光貿官方資料為發票權威來源；SQLite 是本機 Cache 加上 CYInvoice 本機安全／來源資訊。遠端買受人、金額、品項、統編、作廢或上傳狀態變更都視為正常官方更新，不當作衝突。
 - 正式環境以 `/json/invoice_list` 執行最近 3 天同步；程式啟動、每 5 分鐘背景同步及手動「重新整理」共用同一套同步核心，手動重新整理有 30 秒冷卻，重疊同步直接略過、不排隊。
-- 每個本機日第一次自動同步會做較廣的「目前期別＋上一期別」校對；其餘自動同步回到最近 3 天。測試環境不掃描共享測試池，只回查本機當日測試紀錄。
-- 雙擊任一已開立發票開啟詳細資訊前，一律先執行 `invoice_query` 更新該張 SQLite Cache；若無法向光貿確認最新資料，不以舊 Cache 冒充最新資料開啟詳細資訊。
+- 每個本機日第一次自動同步會做較廣的「目前期別＋上一期別」校對；其餘自動同步回到最近 3 天。測試環境只回查本機已知測試紀錄，不掃描共享測試池。
+- 雙擊任一已開立發票開啟詳細資訊前，一律先執行 `invoice_query` 更新該張 SQLite Cache；若無法向光貿確認最新資料，不以舊 Cache 冒充最新資料。
 - 正式環境本機發票 Cache 只保留目前及上一個兩月期別；測試環境只保留當日。能確認已超出保存範圍的舊資料會清除，相關 PDF／預覽 Cache 與對應舊 `sync_issues` 一併清理。
-- 同步遇到真正的技術問題才寫入 `sync_issues`，例如 invoice list／query 失敗、本機寫入失敗、結果不明仍查無或無法唯一對應本機紀錄；相同未解決問題會更新原列，不會每 5 分鐘重複堆疊。
-- 已開立發票頁的「上傳問題」視窗以上半技術問題、下半開立失敗的方式呈現；技術問題保留未讀／已讀／已解決狀態，Failed 紀錄則可由使用者批次刪除本機資料。
+- 同步遇到真正的技術問題才寫入 `sync_issues`；相同未解決問題會更新原列，不會每 5 分鐘重複堆疊。
+- 已開立發票頁的「上傳問題」視窗以上半技術問題、下半開立失敗方式呈現；技術問題可追蹤狀態，Failed 紀錄可由使用者批次刪除本機資料。
 
 ## V2.3.0 延續功能
 
@@ -54,9 +65,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 開發與驗證
 
-日常版本／文件變更經 PR 通過並合併後只提供工程測試 Artifact。Windows CI 會執行 source confidentiality scan、warnings-as-errors、WinForms startup smoke、核心回歸、SQLite migration／retention、invoice sync、sync coordinator、Windows x64 package、PE／layout 與 packaged startup smoke。
+日常版本／文件變更經 PR 通過並合併後只提供工程測試 Artifact。Windows CI 依變更範圍執行 source confidentiality scan、warnings-as-errors、WinForms startup smoke、核心回歸、SQLite migration／retention、invoice sync、sync coordinator、Windows x64 package、PE／layout 與 packaged startup smoke。
 
-正式 Release 只有在使用者當次工作明確要求 `release` 後才執行；不得因版本號已推進到 V2.4.1 而自動發布。
+正式 Release 只有在使用者當次工作明確要求 `release` 後才執行；不得因版本號推進、BUILD 歸零或 PR 合併而自動發布。
 
 ## 目錄
 
