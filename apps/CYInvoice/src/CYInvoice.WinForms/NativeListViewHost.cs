@@ -136,7 +136,8 @@ internal sealed class NativeListViewHost : UserControl
             _ => TextFormatFlags.Left,
         };
         var textBounds = Rectangle.Inflate(eventArgs.Bounds, -6, 0);
-        TextRenderer.DrawText(eventArgs.Graphics, header?.Text ?? string.Empty, font, textBounds, SystemColors.ControlText, flags);
+        var text = string.Equals(header?.Text, "來源 ▲", StringComparison.Ordinal) ? "來源 [分組]" : header?.Text ?? string.Empty;
+        TextRenderer.DrawText(eventArgs.Graphics, text, font, textBounds, SystemColors.ControlText, flags);
         using var pen = new Pen(Color.FromArgb(190, 190, 190));
         eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
         eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
@@ -239,6 +240,32 @@ internal sealed class NativeListViewHost : UserControl
 
         public event EventHandler? NativeViewportChanged;
 
+        protected override void OnDrawSubItem(DrawListViewSubItemEventArgs eventArgs)
+        {
+            base.OnDrawSubItem(eventArgs);
+            if (!ShouldHideSingleRowOperation(eventArgs.ColumnIndex)) return;
+
+            var background = eventArgs.SubItem?.BackColor ?? BackColor;
+            var fill = new Rectangle(eventArgs.Bounds.Left, eventArgs.Bounds.Top,
+                Math.Max(0, eventArgs.Bounds.Width - 1), Math.Max(0, eventArgs.Bounds.Height - 1));
+            using (var brush = new SolidBrush(background)) eventArgs.Graphics.FillRectangle(brush, fill);
+            using var pen = new Pen(Color.FromArgb(190, 190, 190));
+            eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+            eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs eventArgs)
+        {
+            if (ShouldSuppressSingleRowOperationClick(eventArgs.Location)) return;
+            base.OnMouseDown(eventArgs);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs eventArgs)
+        {
+            if (ShouldSuppressSingleRowOperationClick(eventArgs.Location)) return;
+            base.OnMouseUp(eventArgs);
+        }
+
         protected override void WndProc(ref Message message)
         {
             var viewportMessage = message.Msg is WmVScroll or WmMouseWheel;
@@ -248,6 +275,25 @@ internal sealed class NativeListViewHost : UserControl
                 Invalidate(true);
                 NativeViewportChanged?.Invoke(this, EventArgs.Empty);
             }
+        }
+
+        private bool ShouldHideSingleRowOperation(int columnIndex) =>
+            IsSingleRowOperationList() && columnIndex == Columns.Count - 1;
+
+        private bool ShouldSuppressSingleRowOperationClick(Point location)
+        {
+            if (!IsSingleRowOperationList()) return false;
+            var hit = HitTest(location);
+            if (hit.Item is null || hit.SubItem is null) return false;
+            return hit.Item.SubItems.IndexOf(hit.SubItem) == Columns.Count - 1;
+        }
+
+        private bool IsSingleRowOperationList()
+        {
+            if (Columns.Count != 7 || !string.Equals(Columns[^1].Text, "操作", StringComparison.Ordinal)) return false;
+            var actualRows = Items.Cast<ListViewItem>()
+                .Count(item => item.SubItems.Count > 0 && !string.IsNullOrWhiteSpace(item.SubItems[0].Text));
+            return actualRows <= 1;
         }
     }
 }
