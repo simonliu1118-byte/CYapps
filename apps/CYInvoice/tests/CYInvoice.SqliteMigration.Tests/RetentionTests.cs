@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 
 internal static class RetentionTests
 {
-    public static void ProductionPrunesOnlySafeExpiredRows()
+    public static void ProductionPrunesAllExpiredRows()
     {
         using var temporary = new RetentionTemporaryDirectory();
         var repository = LocalRepository.Open(temporary.Path, new RetentionTestProtector());
@@ -14,9 +14,9 @@ internal static class RetentionTests
         repository.Invoices.Append(Record("old-delete", "AA00000001", "M20260630001", InvoiceStates.Opened, "2026/06/30"));
         repository.Invoices.Append(Record("resolved-delete", "AA00000002", "M20260501001", InvoiceStates.Opened, "2026/05/01"));
         repository.Invoices.Append(Record("boundary-keep", "AA00000003", "M20260701001", InvoiceStates.Opened, "2026/07/01"));
-        repository.Invoices.Append(Record("unknown-keep", "AA00000004", "M20260101001", InvoiceStates.Unknown, "2026/01/01"));
-        repository.Invoices.Append(Record("changing-keep", "AA00000005", "M20260101002", InvoiceStates.Changing, "2026/01/01"));
-        repository.Invoices.Append(Record("issue-keep", "AA00000006", "M20260101003", InvoiceStates.Opened, "2026/01/01"));
+        repository.Invoices.Append(Record("unknown-delete", "AA00000004", "M20260101001", InvoiceStates.Unknown, "2026/01/01"));
+        repository.Invoices.Append(Record("changing-delete", "AA00000005", "M20260101002", InvoiceStates.Changing, "2026/01/01"));
+        repository.Invoices.Append(Record("issue-delete", "AA00000006", "M20260101003", InvoiceStates.Opened, "2026/01/01"));
         repository.Invoices.Append(Record("undated-keep", "AA00000007", "M20260101004", InvoiceStates.Opened, ""));
 
         InsertSyncIssue(repository, "prod|12345675", "", "M20260101003", resolved: false);
@@ -28,22 +28,27 @@ internal static class RetentionTests
         File.WriteAllText(staleCache, "stale");
 
         var result = new InvoiceRetentionService(repository).Prune(new DateOnly(2026, 9, 18));
-        Equal(2, result.Deleted);
+        Equal(5, result.Deleted);
         Equal(0, result.Problems.Count);
         Equal(false, File.Exists(staleCache));
 
         var remaining = repository.Invoices.LoadOrCreate().Select(record => record.Id).OrderBy(id => id).ToArray();
-        SequenceEqual(
-            new[] { "boundary-keep", "changing-keep", "issue-keep", "undated-keep", "unknown-keep" },
-            remaining);
+        SequenceEqual(new[] { "boundary-keep", "undated-keep" }, remaining);
 
         using var connection = OpenReadOnly(Path.Combine(repository.DataDirectory, SqliteBootstrapper.DatabaseFileName));
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM invoice_items;";
-        Equal(5L, Convert.ToInt64(command.ExecuteScalar()));
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT COUNT(*) FROM invoice_items;";
+            Equal(2L, Convert.ToInt64(command.ExecuteScalar()));
+        }
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT COUNT(*) FROM sync_issues;";
+            Equal(0L, Convert.ToInt64(command.ExecuteScalar()));
+        }
     }
 
-    public static void TestEnvironmentKeepsTodayOnlyAndSafetyExceptions()
+    public static void TestEnvironmentKeepsTodayOnly()
     {
         using var temporary = new RetentionTemporaryDirectory();
         var repository = LocalRepository.Open(temporary.Path, new RetentionTestProtector());
@@ -54,15 +59,13 @@ internal static class RetentionTests
         repository.Invoices.Append(Record("test-old-delete", "TT00000001", "M20260917001", InvoiceStates.Opened, "2026/09/17", Environments.Test));
         repository.Invoices.Append(Record("test-today-keep", "TT00000002", "M20260918001", InvoiceStates.Opened, "2026/09/18", Environments.Test));
         repository.Invoices.Append(Record("test-future-keep", "TT00000003", "M20260919001", InvoiceStates.Opened, "2026/09/19", Environments.Test));
-        repository.Invoices.Append(Record("test-unknown-keep", "TT00000004", "M20260916001", InvoiceStates.Unknown, "2026/09/16", Environments.Test));
+        repository.Invoices.Append(Record("test-unknown-delete", "TT00000004", "M20260916001", InvoiceStates.Unknown, "2026/09/16", Environments.Test));
 
         var result = new InvoiceRetentionService(repository).Prune(new DateOnly(2026, 9, 18));
-        Equal(1, result.Deleted);
+        Equal(2, result.Deleted);
         Equal(0, result.Problems.Count);
         var remaining = repository.Invoices.LoadOrCreate().Select(record => record.Id).OrderBy(id => id).ToArray();
-        SequenceEqual(
-            new[] { "test-future-keep", "test-today-keep", "test-unknown-keep" },
-            remaining);
+        SequenceEqual(new[] { "test-future-keep", "test-today-keep" }, remaining);
     }
 
     private static InvoiceRecord Record(

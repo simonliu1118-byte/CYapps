@@ -10,8 +10,8 @@ var tests = new (string Name, Action Run)[]
     ("corrupt legacy JSON never creates SQLite database", TestCorruptLegacyJson),
     ("corrupt existing SQLite database is never overwritten", TestCorruptExistingDatabase),
     ("empty data directory creates an empty valid database", TestEmptyMigration),
-    ("production retention prunes only safe expired rows", RetentionTests.ProductionPrunesOnlySafeExpiredRows),
-    ("test retention keeps today and safety exceptions", RetentionTests.TestEnvironmentKeepsTodayOnlyAndSafetyExceptions),
+    ("production retention prunes all expired rows", RetentionTests.ProductionPrunesAllExpiredRows),
+    ("test retention keeps today only", RetentionTests.TestEnvironmentKeepsTodayOnly),
 };
 
 var failures = 0;
