@@ -66,7 +66,7 @@ internal sealed class RecordsControl : UserControl
         this.syncCoordinator = syncCoordinator ?? throw new ArgumentNullException(nameof(syncCoordinator));
         detailRefreshService = new InvoiceDetailRefreshService(repository);
         this.shutdownToken = shutdownToken;
-        voidedFont = new Font(Records.Font, FontStyle.Strikeout);
+        voidedFont = new Font(Records.Font, FontStyle.Italic);
         sourceTagFont = new Font(Records.Font.FontFamily, 7.5F, FontStyle.Bold);
         Dock = DockStyle.Fill;
         BackColor = Color.White;
@@ -413,8 +413,8 @@ internal sealed class RecordsControl : UserControl
             }
             else
             {
-                detail.MinimumSize = new Size(880, 600);
-                detail.ClientSize = new Size(980, 660);
+                detail.MinimumSize = new Size(760, 620);
+                detail.ClientSize = new Size(800, 700);
             }
             detail.ShowDialog(FindForm());
         }
@@ -467,11 +467,14 @@ internal sealed class RecordsControl : UserControl
         StyleRow(row);
         if (record.InvoiceState == InvoiceStates.Voided)
         {
-            for (var index = 0; index < 9; index++)
+            for (var index = 0; index < 8; index++)
             {
                 row.SubItems[index].ForeColor = Color.Gray;
                 row.SubItems[index].Font = voidedFont;
             }
+            row.SubItems[8].ForeColor = Color.Firebrick;
+            row.SubItems[8].Font = Records.Font;
+            row.SubItems[8].Text = "已作廢";
         }
 
         var upload = row.SubItems[9];
@@ -541,8 +544,12 @@ internal sealed class RecordsControl : UserControl
         using (var brush = new SolidBrush(eventArgs.SubItem.BackColor))
             eventArgs.Graphics.FillRectangle(brush, eventArgs.Bounds);
 
-        if (eventArgs.ColumnIndex == 2 && eventArgs.Item.Tag is InvoiceRecord record)
+        if (eventArgs.Item.Tag is InvoiceRecord record && eventArgs.ColumnIndex == 2)
             DrawSourceSubItem(eventArgs, record);
+        else if (eventArgs.Item.Tag is InvoiceRecord stateRecord &&
+                 eventArgs.ColumnIndex == 8 &&
+                 stateRecord.InvoiceState == InvoiceStates.Voided)
+            DrawVoidedStatusSubItem(eventArgs);
         else
             DrawRegularSubItem(eventArgs);
 
@@ -560,6 +567,24 @@ internal sealed class RecordsControl : UserControl
         var textBounds = Rectangle.Inflate(eventArgs.Bounds, -5, 0);
         TextRenderer.DrawText(eventArgs.Graphics, eventArgs.SubItem!.Text, eventArgs.SubItem.Font ?? Records.Font,
             textBounds, eventArgs.SubItem.ForeColor, flags);
+    }
+
+    private void DrawVoidedStatusSubItem(DrawListViewSubItemEventArgs eventArgs)
+    {
+        var bounds = Rectangle.Inflate(eventArgs.Bounds, -5, 0);
+        var iconSize = Math.Max(12, Math.Min(15, bounds.Height - 6));
+        var iconRect = new Rectangle(bounds.Left, bounds.Top + (bounds.Height - iconSize) / 2, iconSize, iconSize);
+        using (var brush = new SolidBrush(Color.Firebrick))
+            eventArgs.Graphics.FillEllipse(brush, iconRect);
+        using (var pen = new Pen(Color.White, 1.6F))
+        {
+            var inset = Math.Max(3, iconSize / 4);
+            eventArgs.Graphics.DrawLine(pen, iconRect.Left + inset, iconRect.Top + inset, iconRect.Right - inset, iconRect.Bottom - inset);
+            eventArgs.Graphics.DrawLine(pen, iconRect.Right - inset, iconRect.Top + inset, iconRect.Left + inset, iconRect.Bottom - inset);
+        }
+        var textBounds = new Rectangle(iconRect.Right + 5, bounds.Top, Math.Max(1, bounds.Right - iconRect.Right - 5), bounds.Height);
+        TextRenderer.DrawText(eventArgs.Graphics, "已作廢", Records.Font, textBounds, Color.Firebrick,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.Left);
     }
 
     private void DrawSourceSubItem(DrawListViewSubItemEventArgs eventArgs, InvoiceRecord record)
@@ -584,10 +609,17 @@ internal sealed class RecordsControl : UserControl
 
         var tagHeight = Math.Min(18, Math.Max(15, bounds.Height - 4));
         var tagRect = new Rectangle(bounds.Right - tagWidth, bounds.Top + (bounds.Height - tagHeight) / 2, tagWidth, tagHeight);
+        var isVoided = record.InvoiceState == InvoiceStates.Voided;
         var isUpdate = string.Equals(tag, InvoiceSourceInference.UpdateTag, StringComparison.Ordinal);
-        var background = isUpdate ? Color.FromArgb(255, 246, 207) : Color.FromArgb(231, 240, 255);
-        var border = isUpdate ? Color.FromArgb(239, 184, 42) : Color.FromArgb(116, 155, 231);
-        var foreground = isUpdate ? Color.FromArgb(143, 91, 0) : Color.FromArgb(42, 88, 181);
+        var background = isVoided
+            ? Color.FromArgb(238, 238, 238)
+            : isUpdate ? Color.FromArgb(255, 246, 207) : Color.FromArgb(231, 240, 255);
+        var border = isVoided
+            ? Color.FromArgb(170, 170, 170)
+            : isUpdate ? Color.FromArgb(239, 184, 42) : Color.FromArgb(116, 155, 231);
+        var foreground = isVoided
+            ? Color.DimGray
+            : isUpdate ? Color.FromArgb(143, 91, 0) : Color.FromArgb(42, 88, 181);
 
         var oldSmoothing = eventArgs.Graphics.SmoothingMode;
         eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
