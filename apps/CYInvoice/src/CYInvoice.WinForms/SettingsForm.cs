@@ -72,20 +72,6 @@ internal sealed class SettingsForm : Form
         environmentLayout.Controls.Add(appKey, 2, 3);
         test.CheckedChanged += (_, _) => UpdateEnvironmentFields();
         production.CheckedChanged += (_, _) => UpdateEnvironmentFields();
-        invoice.KeyDown += (_, eventArgs) =>
-        {
-            if (eventArgs.KeyCode != Keys.Enter || !production.Checked) return;
-            eventArgs.SuppressKeyPress = true;
-            eventArgs.Handled = true;
-            appKey.Focus();
-        };
-        appKey.KeyDown += (_, eventArgs) =>
-        {
-            if (eventArgs.KeyCode != Keys.Enter || !production.Checked) return;
-            eventArgs.SuppressKeyPress = true;
-            eventArgs.Handled = true;
-            save.PerformClick();
-        };
         environmentGroup.Controls.Add(environmentLayout);
 
         var platformGroup = new GroupBox { Text = "平台檔案密碼", Dock = DockStyle.Fill };
@@ -133,8 +119,29 @@ internal sealed class SettingsForm : Form
         root.Controls.Add(passwordGroup, 0, 2);
         root.Controls.Add(actionButtons, 0, 3);
         Controls.Add(root);
-        AcceptButton = save;
+        AcceptButton = null;
         CancelButton = cancel;
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == Keys.Enter && production.Checked)
+        {
+            if (invoice.ContainsFocus)
+            {
+                appKey.Focus();
+                appKey.SelectAll();
+                return true;
+            }
+
+            if (appKey.ContainsFocus)
+            {
+                save.PerformClick();
+                return true;
+            }
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     private void LoadValues()
@@ -214,6 +221,8 @@ internal sealed class SettingsForm : Form
         if (invoice.ReadOnly != !production.Checked || appKey.ReadOnly != !production.Checked ||
             !invoice.Enabled || !appKey.Enabled)
             throw new InvalidOperationException("測試與正式環境欄位鎖定狀態不一致");
+        if (AcceptButton is not null)
+            throw new InvalidOperationException("設定視窗不應使用表單預設 AcceptButton，Enter 必須依欄位明確處理");
         if (settings.ProductionAppKeyEncrypted.Length != 0 &&
             appKey.PlaceholderText != "留白會保留目前已儲存的 App Key。")
             throw new InvalidOperationException("App Key 保留提示未放在輸入欄位內");
