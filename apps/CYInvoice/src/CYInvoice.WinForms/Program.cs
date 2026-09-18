@@ -1,3 +1,5 @@
+using CYInvoice.Core.Storage;
+
 namespace CYInvoice.WinForms;
 
 internal static class ApplicationIcon
@@ -30,6 +32,13 @@ internal static class Program
                 Application.DoEvents();
                 form.VerifySmokeLayout();
                 form.Close();
+
+                var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
+                using var syncIssues = new SyncIssuesForm(repository);
+                syncIssues.Show();
+                syncIssues.PerformLayout();
+                Application.DoEvents();
+                syncIssues.Close();
                 return;
             }
             Application.Run(new MainForm());
