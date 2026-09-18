@@ -19,7 +19,7 @@ internal sealed class ChangeAdminPasswordForm : Form
         this.settings = settings;
         Text = "設定管理密碼";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(420, 286);
+        ClientSize = new Size(300, 286);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -31,12 +31,12 @@ internal sealed class ChangeAdminPasswordForm : Form
 
     private void BuildLayout()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(18) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(14) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 204));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
         var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 132));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (var index = 0; index < 3; index++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         fields.Controls.Add(FieldLabel("目前管理密碼"), 0, 0);
@@ -61,9 +61,9 @@ internal sealed class ChangeAdminPasswordForm : Form
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         save.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        save.Margin = new Padding(0, 2, 6, 0);
+        save.Margin = new Padding(0, 2, 4, 0);
         cancel.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-        cancel.Margin = new Padding(6, 2, 0, 0);
+        cancel.Margin = new Padding(4, 2, 0, 0);
         buttons.Controls.Add(save, 0, 0);
         buttons.Controls.Add(cancel, 1, 0);
 
@@ -143,6 +143,8 @@ internal sealed class ChangeAdminPasswordForm : Form
         if (AcceptButton is not null || CancelButton != cancel ||
             !UiControls.HasLogicalSize(save, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("管理密碼變更視窗按鈕或 Enter 分段操作不正確");
+        if (ClientSize.Width > 310)
+            throw new InvalidOperationException("管理密碼變更視窗寬度未縮減");
     }
 
     private static Label FieldLabel(string text) => new()
