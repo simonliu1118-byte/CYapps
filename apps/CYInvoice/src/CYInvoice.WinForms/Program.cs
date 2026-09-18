@@ -38,6 +38,7 @@ internal static class Program
                 syncIssues.Show();
                 syncIssues.PerformLayout();
                 Application.DoEvents();
+                syncIssues.VerifySmokeLayout();
                 syncIssues.Close();
                 return;
             }
