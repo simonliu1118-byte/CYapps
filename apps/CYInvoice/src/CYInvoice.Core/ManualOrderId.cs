@@ -6,7 +6,7 @@ public static class ManualOrderId
 {
     public static string Next(DateTimeOffset now, IEnumerable<InvoiceRecord> records)
     {
-        var prefix = now.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        var prefix = "M" + now.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         var highest = 0;
         foreach (var record in records)
         {

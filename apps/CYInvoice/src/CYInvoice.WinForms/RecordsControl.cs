@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using CYInvoice.Core;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
@@ -7,6 +8,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class RecordsControl : UserControl
 {
+    private const string CopyHintText = "單擊發票號碼即可複製";
     private static readonly object PlaceholderRow = new();
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
@@ -16,10 +18,19 @@ internal sealed class RecordsControl : UserControl
     private readonly TextBox orderId = UiControls.TextBox(40);
     private readonly TextBox buyerName = UiControls.TextBox(200);
     private readonly TextBox buyerBan = UiControls.TextBox(10);
-    private readonly ComboBox source = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox state = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox source = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox state = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NativeListViewHost recordsHost = new(10F, 22);
     private readonly Button refreshButton = UiControls.StandardButton("重新整理狀態");
+    private readonly Label copyHint = new()
+    {
+        Text = CopyHintText,
+        AutoSize = true,
+        ForeColor = Color.DimGray,
+        TextAlign = ContentAlignment.MiddleLeft,
+        Margin = new Padding(12, 10, 0, 0),
+    };
+    private readonly System.Windows.Forms.Timer copyFeedbackTimer = new() { Interval = 2000 };
     private readonly List<InvoiceRecord> visible = [];
     private readonly Font voidedFont;
     private bool fillingRows;
@@ -36,6 +47,8 @@ internal sealed class RecordsControl : UserControl
         BackColor = Color.White;
         Padding = new Padding(18);
         Font = new Font("Microsoft JhengHei UI", 12F);
+        copyHint.Font = new Font(Font.FontFamily, 10F);
+        copyFeedbackTimer.Tick += (_, _) => ResetCopyHint();
         BuildLayout();
         ResetFilters();
         Reload();
@@ -43,7 +56,7 @@ internal sealed class RecordsControl : UserControl
 
     private void BuildLayout()
     {
-        source.Items.AddRange(["全部", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang]);
+        source.Items.AddRange(["全部", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang, InvoiceSources.Digiwin]);
         state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.Failed, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 144));
@@ -54,13 +67,23 @@ internal sealed class RecordsControl : UserControl
         filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         filters.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
-        filters.Controls.Add(UiControls.Label("開立日期"), 0, 0);
-        var dates = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Margin = Padding.Empty };
+        filters.Controls.Add(FilterLabel("開立日期"), 0, 0);
+        var dates = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
         dates.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         dates.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
         dates.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        dates.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        ConfigureFilterField(dateFrom);
+        ConfigureFilterField(dateTo);
         dates.Controls.Add(dateFrom, 0, 0);
-        dates.Controls.Add(new Label { Text = "至", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, AutoEllipsis = false }, 1, 0);
+        dates.Controls.Add(new Label
+        {
+            Text = "至",
+            AutoSize = true,
+            Anchor = AnchorStyles.None,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Margin = Padding.Empty,
+        }, 1, 0);
         dates.Controls.Add(dateTo, 2, 0);
         filters.Controls.Add(dates, 1, 0);
         filters.SetColumnSpan(dates, 3);
@@ -79,6 +102,7 @@ internal sealed class RecordsControl : UserControl
         buttons.Controls.Add(query);
         buttons.Controls.Add(clear);
         buttons.Controls.Add(refreshButton);
+        buttons.Controls.Add(copyHint);
         filters.Controls.Add(buttons, 0, 2);
         filters.SetColumnSpan(buttons, 8);
         ConfigureList();
@@ -89,8 +113,25 @@ internal sealed class RecordsControl : UserControl
 
     private static void AddFilter(TableLayoutPanel panel, string label, Control field, int column, int row)
     {
-        panel.Controls.Add(UiControls.Label(label), column, row);
+        ConfigureFilterField(field);
+        panel.Controls.Add(FilterLabel(label), column, row);
         panel.Controls.Add(field, column + 1, row);
+    }
+
+    private static Label FilterLabel(string text) => new()
+    {
+        Text = text,
+        AutoSize = true,
+        Anchor = AnchorStyles.Left,
+        TextAlign = ContentAlignment.MiddleLeft,
+        Margin = new Padding(3, 0, 3, 0),
+    };
+
+    private static void ConfigureFilterField(Control field)
+    {
+        field.Dock = DockStyle.None;
+        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        field.Margin = new Padding(3, 0, 3, 0);
     }
 
     private void ConfigureList()
@@ -114,6 +155,7 @@ internal sealed class RecordsControl : UserControl
             var hit = Records.HitTest(eventArgs.Location);
             if (hit.Item is null || ReferenceEquals(hit.Item.Tag, PlaceholderRow)) QueueClearSelection();
         };
+        Records.MouseClick += CopyInvoiceNumberIfRequested;
         Records.MouseDoubleClick += (_, eventArgs) =>
         {
             var hit = Records.HitTest(eventArgs.Location);
@@ -147,6 +189,7 @@ internal sealed class RecordsControl : UserControl
             FillPlaceholderRows();
             ClearSelection();
             LayoutColumns();
+            ResetCopyHint();
         }
         catch (Exception error)
         {
@@ -194,9 +237,53 @@ internal sealed class RecordsControl : UserControl
         }
     }
 
+    private void CopyInvoiceNumberIfRequested(object? sender, MouseEventArgs eventArgs)
+    {
+        if (eventArgs.Button != MouseButtons.Left) return;
+        var hit = Records.HitTest(eventArgs.Location);
+        if (hit.Item?.Tag is not InvoiceRecord record || hit.SubItem is null) return;
+        if (hit.Item.SubItems.IndexOf(hit.SubItem) != 1) return;
+        var number = record.InvoiceNumber.Trim();
+        if (number.Length == 0) return;
+        try
+        {
+            Clipboard.SetText(number);
+            ShowCopyFeedback($"✓ 已複製 {number}", success: true);
+        }
+        catch (ExternalException)
+        {
+            ShowCopyFeedback("複製失敗，請再試一次", success: false);
+        }
+    }
+
+    private void ShowCopyFeedback(string text, bool success)
+    {
+        copyFeedbackTimer.Stop();
+        copyHint.Text = text;
+        copyHint.ForeColor = success ? Color.FromArgb(0, 145, 70) : Color.Firebrick;
+        copyFeedbackTimer.Start();
+    }
+
+    private void ResetCopyHint()
+    {
+        copyFeedbackTimer.Stop();
+        copyHint.Text = CopyHintText;
+        copyHint.ForeColor = Color.DimGray;
+    }
+
     private void OpenSelected(InvoiceRecord record)
     {
         using var detail = new RecordDetailForm(record, repository, service);
+        if (string.Equals(record.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal))
+        {
+            detail.MinimumSize = new Size(760, 620);
+            detail.ClientSize = new Size(800, 700);
+        }
+        else
+        {
+            detail.MinimumSize = new Size(880, 600);
+            detail.ClientSize = new Size(980, 660);
+        }
         detail.ShowDialog(FindForm());
     }
 
@@ -335,6 +422,15 @@ internal sealed class RecordsControl : UserControl
             throw new InvalidOperationException($"已開立發票清單資料列過高：{(Records.Items.Count == 0 ? 0 : Records.GetItemRect(0).Height)}px");
         if (!UiControls.HasLogicalSize(refreshButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("已開立發票清單按鈕未使用標準尺寸");
+        if (copyHint.Text != CopyHintText || copyHint.Parent is null)
+            throw new InvalidOperationException("發票號碼單擊複製提示未建立");
+
+        PerformLayout();
+        var firstRowCenters = new Control[] { dateFrom, dateTo, invoiceNumber, orderId }.Select(ScreenCenterY).ToArray();
+        var secondRowCenters = new Control[] { buyerName, buyerBan, source, state }.Select(ScreenCenterY).ToArray();
+        if (firstRowCenters.Max() - firstRowCenters.Min() > 2 || secondRowCenters.Max() - secondRowCenters.Min() > 2)
+            throw new InvalidOperationException("已開立發票篩選欄位未在各列垂直置中對齊");
+
         var columnWidth = Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
         if (columnWidth > recordsHost.ColumnViewportWidth ||
             recordsHost.ColumnViewportWidth - columnWidth > 3 ||
@@ -344,7 +440,12 @@ internal sealed class RecordsControl : UserControl
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) voidedFont.Dispose();
+        if (disposing)
+        {
+            copyFeedbackTimer.Dispose();
+            copyHint.Font.Dispose();
+            voidedFont.Dispose();
+        }
         base.Dispose(disposing);
     }
 
@@ -355,7 +456,13 @@ internal sealed class RecordsControl : UserControl
         return row;
     }
 
-    private static DateTimePicker DatePicker() => new() { Format = DateTimePickerFormat.Custom, CustomFormat = "yyyy/MM/dd", ShowCheckBox = true, Dock = DockStyle.Fill };
+    private static int ScreenCenterY(Control control) => control.PointToScreen(Point.Empty).Y + (control.Height / 2);
+    private static DateTimePicker DatePicker() => new()
+    {
+        Format = DateTimePickerFormat.Custom,
+        CustomFormat = "yyyy/MM/dd",
+        ShowCheckBox = true,
+    };
     private static bool Contains(string value, string search) => search.Trim().Length == 0 || value.Contains(search.Trim(), StringComparison.CurrentCultureIgnoreCase);
     private static DateTime? ParseDate(string value)
     {

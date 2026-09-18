@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Imports.Coupang;
+using CYInvoice.Core.Imports.Digiwin;
 using CYInvoice.Core.Imports.Mo;
 using CYInvoice.Core.Storage;
 
@@ -13,6 +14,7 @@ public static class InvoiceSources
     public const string Manual = "手動";
     public const string Mo = "MO店+";
     public const string Coupang = "酷澎";
+    public const string Digiwin = "鼎新ERP";
 }
 
 public sealed record NameLookup(
@@ -45,6 +47,7 @@ public sealed class PartialRefreshException(IReadOnlyList<InvoiceRecord> records
 public sealed class InvoiceService
 {
     public const string DeliveryPaper = "紙本";
+    private const string TestBuyerIdentifier = "28080623";
     private static readonly TimeSpan RecoveryQueryTimeout = TimeSpan.FromSeconds(20);
     private readonly LocalRepository repository;
     private readonly Func<string, string, IAmegoGateway> gatewayFactory;
@@ -82,7 +85,6 @@ public sealed class InvoiceService
         }
         catch (AmegoApiException error) when (error.Code == 99)
         {
-            // A business validation reply proves the signed endpoint is reachable.
             return string.Empty;
         }
         catch (Exception error)
@@ -166,37 +168,22 @@ public sealed class InvoiceService
         string ban,
         CancellationToken cancellationToken = default)
     {
-        ban = ban.Trim();
-        if (ban.Length != 8)
-        {
-            throw new InvalidOperationException("公司統編必須為 8 碼");
-        }
-        if (!ban.All(character => character is >= '0' and <= '9'))
-        {
-            throw new InvalidOperationException("公司統編必須為 8 碼數字");
-        }
+        ban = ValidateBuyerBan(ban);
         if (repository.BuyerNames.TryLookup(ban, out var localName))
         {
             return new NameLookup(localName, Local: true);
         }
-
         var (gateway, _) = GetGateway();
-        BanResponse response;
-        try
-        {
-            response = await gateway.QueryBanAsync([ban], cancellationToken).ConfigureAwait(false);
-        }
-        catch (AmegoApiException error) when (error.Code == 99)
-        {
-            return new NameLookup(LookupSucceeded: true);
-        }
-        catch (Exception error)
-        {
-            throw new InvalidOperationException("查詢買受人名稱失敗", error);
-        }
+        return await LookupBuyerNameFromApiCoreAsync(gateway, ban, cancellationToken).ConfigureAwait(false);
+    }
 
-        var apiName = response.Data.FirstOrDefault(item => item.Ban.Trim() == ban)?.Name.Trim() ?? string.Empty;
-        return new NameLookup(apiName, LookupSucceeded: true, ApiName: apiName);
+    public async Task<NameLookup> LookupBuyerNameFromApiAsync(
+        string ban,
+        CancellationToken cancellationToken = default)
+    {
+        ban = ValidateBuyerBan(ban);
+        var (gateway, _) = GetGateway();
+        return await LookupBuyerNameFromApiCoreAsync(gateway, ban, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IssueResult> IssueManualAsync(
@@ -218,18 +205,12 @@ public sealed class InvoiceService
     public Task<IssueResult> IssueManualWithLookupAsync(
         InvoiceDraft draft,
         NameLookup lookup,
-        CancellationToken cancellationToken = default)
-    {
-        if (draft.CompanyBuyer && lookup.Name.Length != 0)
-        {
-            draft.BuyerName = lookup.Name;
-        }
-        return IssueAsync(
+        CancellationToken cancellationToken = default) =>
+        IssueAsync(
             draft,
             new IssueOptions(InvoiceSources.Manual, draft.OrderId, DeliveryPaper),
             lookup,
             cancellationToken);
-    }
 
     public async Task<IssueResult> IssueMoAsync(MoOrder order, CancellationToken cancellationToken = default)
     {
@@ -354,6 +335,38 @@ public sealed class InvoiceService
                 BuyerName: order.BuyerName,
                 ApiBuyerName: testPrivacy ? "測試消費者" : string.Empty,
                 TestPrivacy: testPrivacy),
+            lookup,
+            cancellationToken);
+    }
+
+    public Task<IssueResult> IssueDigiwinWithLookupAsync(
+        DigiwinOrder order,
+        NameLookup lookup,
+        CancellationToken cancellationToken = default)
+    {
+        var ban = order.BuyerBan.Trim();
+        var name = order.BuyerName.Trim();
+        if ((ban.Length == 0) != (name.Length == 0))
+            throw new InvalidOperationException("鼎新公司統編與買方名稱必須同時填寫或同時留空");
+        var company = ban.Length != 0;
+        if (company && !lookup.Local && !lookup.LookupSucceeded)
+            throw new InvalidOperationException("買方名稱尚未完成查詢，已擋下且未送出");
+
+        var draft = DraftFromImportedOrder(
+            order.OrderId,
+            company,
+            company ? ban : string.Empty,
+            company ? name : string.Empty,
+            order.Items,
+            order.TotalAmount,
+            string.Empty);
+        return IssueAsync(
+            draft,
+            new IssueOptions(
+                Source: InvoiceSources.Digiwin,
+                OriginalOrderId: order.OrderId,
+                Delivery: DeliveryPaper,
+                BuyerName: company ? name : string.Empty),
             lookup,
             cancellationToken);
     }
@@ -521,9 +534,27 @@ public sealed class InvoiceService
                 throw new InvalidOperationException(duplicateReason);
             }
 
+            if (environment == Environments.Test)
+            {
+                var safeBuyerName = "測試消費者";
+                if (draft.CompanyBuyer)
+                {
+                    var testLookup = await LookupBuyerNameFromApiCoreAsync(
+                        gateway, TestBuyerIdentifier, cancellationToken).ConfigureAwait(false);
+                    safeBuyerName = testLookup.ApiName.Trim();
+                    if (safeBuyerName.Length == 0)
+                        throw new InvalidOperationException($"光貿測試統編 {TestBuyerIdentifier} 查不到買受人名稱，已停止送出");
+                }
+                options = options with { TestPrivacy = true, ApiBuyerName = safeBuyerName };
+            }
+
             var createdAt = now();
             var attempt = NextAttempt(records, options.Source, options.OriginalOrderId, environment);
             var apiOrderId = RetryApiOrderId(RequestOrderId(draft, options), attempt);
+            var manualName = draft.BuyerName.Trim();
+            var rememberLocalCorrection = draft.CompanyBuyer && lookup.Local && manualName.Length != 0 &&
+                !string.Equals(manualName, lookup.Name.Trim(), StringComparison.Ordinal);
+            var rememberMissingApiName = draft.CompanyBuyer && !lookup.Local && lookup.LookupSucceeded && lookup.ApiName.Trim().Length == 0;
             var record = new InvoiceRecord
             {
                 Id = NewRecordId(createdAt),
@@ -546,7 +577,7 @@ public sealed class InvoiceService
                 Items = draft.Items.ToList(),
                 MainRemark = draft.MainRemark,
                 DetailVat = DetailVat(draft),
-                BuyerNameNeedsMemory = draft.CompanyBuyer && !lookup.Local && lookup.LookupSucceeded && lookup.ApiName.Length == 0,
+                BuyerNameNeedsMemory = rememberLocalCorrection || rememberMissingApiName,
             };
             repository.Invoices.Append(record);
 
@@ -576,8 +607,6 @@ public sealed class InvoiceService
                 Exception? queryError;
                 try
                 {
-                    // The issue token may already be cancelled by the request timeout. Recovery must
-                    // still perform one bounded read-only query before declaring the result unknown.
                     using var recoveryTimeout = new CancellationTokenSource(RecoveryQueryTimeout);
                     query = await gateway.QueryByOrderIdAsync(apiOrderId, recoveryTimeout.Token).ConfigureAwait(false);
                     VerifyQueryResult(record, draft, query.Data, string.Empty);
@@ -708,6 +737,37 @@ public sealed class InvoiceService
         }
     }
 
+    private static async Task<NameLookup> LookupBuyerNameFromApiCoreAsync(
+        IAmegoGateway gateway,
+        string ban,
+        CancellationToken cancellationToken)
+    {
+        BanResponse response;
+        try
+        {
+            response = await gateway.QueryBanAsync([ban], cancellationToken).ConfigureAwait(false);
+        }
+        catch (AmegoApiException error) when (error.Code == 99)
+        {
+            return new NameLookup(LookupSucceeded: true);
+        }
+        catch (Exception error)
+        {
+            throw new InvalidOperationException("查詢買受人名稱失敗", error);
+        }
+        var apiName = response.Data.FirstOrDefault(item => item.Ban.Trim() == ban)?.Name.Trim() ?? string.Empty;
+        return new NameLookup(apiName, LookupSucceeded: true, ApiName: apiName);
+    }
+
+    private static string ValidateBuyerBan(string ban)
+    {
+        ban = ban.Trim();
+        if (ban.Length != 8) throw new InvalidOperationException("公司統編必須為 8 碼");
+        if (!ban.All(character => character is >= '0' and <= '9'))
+            throw new InvalidOperationException("公司統編必須為 8 碼數字");
+        return ban;
+    }
+
     private static bool IsCompanyBuyer(InvoiceRecord record)
     {
         var buyerIdentifier = record.BuyerIdentifier.Trim();
@@ -720,6 +780,7 @@ public sealed class InvoiceService
         {
             Description = options.TestPrivacy ? $"測試商品 {index + 1}" : item.Description,
             Quantity = NumericValue(item.QuantityDecimal, item.Quantity),
+            Unit = item.Unit.Trim(),
             UnitPrice = NumericValue(item.UnitPriceDecimal, item.UnitPrice),
             Amount = NumericValue(item.AmountDecimal, item.Amount),
             Remark = options.TestPrivacy ? string.Empty : item.Remark,
@@ -739,8 +800,8 @@ public sealed class InvoiceService
         var npoBan = options.NpoBan;
         if (options.TestPrivacy)
         {
-            buyerIdentifier = draft.CompanyBuyer ? "28080623" : "0000000000";
-            buyerName = "測試消費者";
+            buyerIdentifier = draft.CompanyBuyer ? TestBuyerIdentifier : "0000000000";
+            buyerName = options.ApiBuyerName.Trim().Length == 0 ? "測試消費者" : options.ApiBuyerName.Trim();
             buyerAddress = buyerPhone = buyerEmail = mainRemark = npoBan = string.Empty;
             carrierId1 = options.CarrierType.Length == 0 ? string.Empty : "cyinvoice-test@example.com";
             carrierId2 = carrierId1;
@@ -802,7 +863,7 @@ public sealed class InvoiceService
         }
         repository.BuyerNames.RememberAfterSuccessfulInvoice(
             record.BuyerIdentifier,
-            lookup.LookupSucceeded,
+            lookup.Local || lookup.LookupSucceeded,
             lookup.ApiName,
             manualName,
             invoiceSucceeded: true);

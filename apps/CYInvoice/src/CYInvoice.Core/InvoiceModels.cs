@@ -35,6 +35,10 @@ public sealed class InvoiceItem
     [JsonPropertyName("quantity_decimal")]
     public string QuantityDecimal { get; set; } = string.Empty;
 
+    [JsonPropertyName("unit")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public string Unit { get; set; } = string.Empty;
+
     [JsonPropertyName("unit_price")]
     public long UnitPrice { get; set; }
 

@@ -4,115 +4,121 @@ using System.Text;
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Storage;
+using ZXing;
+using ZXing.Common;
 
 namespace CYInvoice.WinForms;
 
 internal static class CarrierInvoicePreview
 {
+    private const string AmegoInvoiceSite = "https://invoice.amego.tw/";
     private static readonly Color Accent = Color.FromArgb(31, 168, 123);
 
     public static Bitmap Render(InvoiceRecord record, Settings settings)
     {
-        var image = new Bitmap(520, 720);
+        var image = new Bitmap(600, 820);
         using var graphics = Graphics.FromImage(image);
         graphics.Clear(Color.FromArgb(238, 240, 242));
         graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
         graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-        var paper = new Rectangle(28, 12, 464, 696);
+        var paper = new Rectangle(20, 8, 560, 804);
         using var paperBrush = new SolidBrush(Color.White);
         using var accentBrush = new SolidBrush(Accent);
-        using var inkBrush = new SolidBrush(Color.FromArgb(28, 28, 28));
-        using var grayBrush = new SolidBrush(Color.FromArgb(92, 92, 92));
-        using var faintPen = new Pen(Color.FromArgb(178, 178, 178), 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
+        using var inkBrush = new SolidBrush(Color.FromArgb(20, 20, 20));
+        using var grayBrush = new SolidBrush(Color.FromArgb(78, 78, 78));
+        using var faintPen = new Pen(Color.FromArgb(170, 170, 170), 2) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
         graphics.FillRectangle(paperBrush, paper);
-        graphics.FillRectangle(accentBrush, paper.Left, paper.Top, 18, paper.Height);
-        graphics.FillRectangle(accentBrush, paper.Right - 18, paper.Top, 18, paper.Height);
 
-        using var noticeFont = new Font("Microsoft JhengHei UI", 12F, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var titleFont = new Font("Microsoft JhengHei UI", 31F, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var subtitleFont = new Font("Microsoft JhengHei UI", 24F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var periodFont = new Font("Microsoft JhengHei UI", 27F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var numberFont = new Font("Microsoft JhengHei UI", 34F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var bodyFont = new Font("Microsoft JhengHei UI", 17F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var smallFont = new Font("Microsoft JhengHei UI", 13F, FontStyle.Regular, GraphicsUnit.Pixel);
+        const int sideWidth = 18;
+        graphics.FillRectangle(accentBrush, paper.Left, paper.Top, sideWidth, paper.Height);
+        graphics.FillRectangle(accentBrush, paper.Right - sideWidth, paper.Top, sideWidth, paper.Height);
+        foreach (var y in new[] { paper.Top + 300, paper.Top + 635 })
+        {
+            graphics.FillRectangle(paperBrush, paper.Left, y, sideWidth, 14);
+            graphics.FillRectangle(paperBrush, paper.Right - sideWidth, y, sideWidth, 14);
+        }
 
-        DrawCentered(graphics, "本畫面為模擬預覽，非正式憑證", noticeFont, grayBrush, paper.Left + 24, paper.Top + 12, paper.Width - 48, 26);
-        DrawCentered(graphics, SellerTitle(record, settings), titleFont, inkBrush, paper.Left + 28, paper.Top + 45, paper.Width - 56, 48);
-        DrawCentered(graphics, "電子發票證明聯", subtitleFont, inkBrush, paper.Left + 28, paper.Top + 96, paper.Width - 56, 38);
-        DrawCentered(graphics, InvoicePeriod(record), periodFont, inkBrush, paper.Left + 28, paper.Top + 134, paper.Width - 56, 42);
-        DrawCentered(graphics, FormatInvoiceNumber(record.InvoiceNumber), numberFont, inkBrush, paper.Left + 28, paper.Top + 176, paper.Width - 56, 48);
+        using var noticeFont = new Font("Microsoft JhengHei UI", 16F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var titleFont = new Font("Microsoft JhengHei UI", 40F, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var subtitleFont = new Font("Microsoft JhengHei UI", 27F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var periodFont = new Font("Microsoft JhengHei UI", 34F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var numberFont = new Font("Microsoft JhengHei UI", 42F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var bodyFont = new Font("Microsoft JhengHei UI", 20F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var smallFont = new Font("Microsoft JhengHei UI", 15F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var footerFont = new Font("Microsoft JhengHei UI", 14F, FontStyle.Regular, GraphicsUnit.Pixel);
+
+        var contentLeft = paper.Left + sideWidth + 22;
+        var contentWidth = paper.Width - sideWidth * 2 - 44;
+        DrawCentered(graphics, "本明細為模擬畫面僅供參考", noticeFont, grayBrush, contentLeft, paper.Top + 14, contentWidth, 24);
+        DrawCentered(graphics, SellerTitle(record, settings), titleFont, inkBrush, contentLeft, paper.Top + 48, contentWidth, 52);
+        DrawCentered(graphics, "電子發票證明聯", subtitleFont, inkBrush, contentLeft, paper.Top + 104, contentWidth, 34);
+        DrawCentered(graphics, InvoicePeriod(record), periodFont, inkBrush, contentLeft, paper.Top + 145, contentWidth, 42);
+        DrawCentered(graphics, FormatInvoiceNumber(record.InvoiceNumber), numberFont, inkBrush, contentLeft, paper.Top + 194, contentWidth, 50);
 
         var issued = IssueTime(record);
-        graphics.DrawString(issued, bodyFont, inkBrush, paper.Left + 42, paper.Top + 230);
-        graphics.DrawString($"隨機碼：----    總計：${MoneyFormatter.Integer(record.Amount)}", bodyFont, inkBrush, paper.Left + 42, paper.Top + 258);
-        graphics.DrawString($"賣方：{SellerBan(settings)}", bodyFont, inkBrush, paper.Left + 42, paper.Top + 286);
-        graphics.DrawString($"載具：{Mask(record.CarrierId1)}", smallFont, grayBrush, paper.Left + 42, paper.Top + 315);
+        graphics.DrawString(issued, bodyFont, inkBrush, contentLeft + 6, paper.Top + 278);
+        graphics.DrawString($"隨機碼：{SimulationRandomCode(record.InvoiceNumber)}    總計：${MoneyFormatter.Integer(record.Amount)}", bodyFont, inkBrush, contentLeft + 6, paper.Top + 314);
+        graphics.DrawString($"賣方：{SellerBan(settings)}", bodyFont, inkBrush, contentLeft + 6, paper.Top + 350);
+        graphics.DrawString($"載具：{Mask(record.CarrierId1)}", smallFont, grayBrush, contentLeft + 6, paper.Top + 386);
 
-        DrawBarcode(graphics, record.InvoiceNumber, new Rectangle(paper.Left + 42, paper.Top + 348, paper.Width - 84, 70));
-        graphics.DrawLine(faintPen, paper.Left + 42, paper.Top + 438, paper.Right - 42, paper.Top + 438);
+        var barcodeRect = new Rectangle(contentLeft, paper.Top + 430, contentWidth, 62);
+        DrawBarcode(graphics, barcodeRect);
+        graphics.DrawLine(faintPen, contentLeft + 16, paper.Top + 516, contentLeft + contentWidth - 16, paper.Top + 516);
 
-        var qrSize = 142;
-        DrawPseudoQr(graphics, record.InvoiceNumber + "L", new Rectangle(paper.Left + 58, paper.Top + 464, qrSize, qrSize));
-        DrawPseudoQr(graphics, record.InvoiceNumber + "R", new Rectangle(paper.Right - 58 - qrSize, paper.Top + 464, qrSize, qrSize));
-        DrawCentered(graphics, "示意圖形｜不可掃描", smallFont, grayBrush, paper.Left + 42, paper.Top + 615, paper.Width - 84, 24);
-        DrawCentered(graphics, "會員載具｜發票資料已保存於雲端", noticeFont, grayBrush, paper.Left + 42, paper.Top + 652, paper.Width - 84, 26);
+        var qrSize = 190;
+        var qrTop = paper.Top + 552;
+        DrawQr(graphics, new Rectangle(contentLeft + 18, qrTop, qrSize, qrSize));
+        DrawQr(graphics, new Rectangle(contentLeft + contentWidth - 18 - qrSize, qrTop, qrSize, qrSize));
+        DrawCentered(graphics, "模擬畫面僅供參考", footerFont, grayBrush, contentLeft, paper.Bottom - 42, contentWidth, 24);
         return image;
     }
 
-    private static void DrawBarcode(Graphics graphics, string seed, Rectangle rectangle)
+    private static void DrawBarcode(Graphics graphics, Rectangle rectangle)
     {
-        using var background = new SolidBrush(Color.White);
-        using var ink = new SolidBrush(Color.Black);
-        graphics.FillRectangle(background, rectangle);
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
-        var x = rectangle.Left + 4;
-        var index = 0;
-        while (x < rectangle.Right - 4)
-        {
-            var width = 1 + hash[index % hash.Length] % 4;
-            var gap = 1 + hash[(index + 7) % hash.Length] % 3;
-            graphics.FillRectangle(ink, x, rectangle.Top + 4, width, rectangle.Height - 8);
-            x += width + gap;
-            index++;
-        }
+        using var barcode = CreateBarcode(BarcodeFormat.CODE_128, rectangle.Size, margin: 0);
+        graphics.DrawImage(barcode, rectangle);
     }
 
-    private static void DrawPseudoQr(Graphics graphics, string seed, Rectangle rectangle)
+    private static void DrawQr(Graphics graphics, Rectangle rectangle)
     {
-        const int cells = 25;
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
-        using var background = new SolidBrush(Color.White);
-        using var ink = new SolidBrush(Color.Black);
-        graphics.FillRectangle(background, rectangle);
-        var cell = Math.Max(1, rectangle.Width / cells);
-        for (var y = 0; y < cells; y++)
+        using var qr = CreateBarcode(BarcodeFormat.QR_CODE, rectangle.Size, margin: 1);
+        graphics.DrawImage(qr, rectangle);
+    }
+
+    private static Bitmap CreateBarcode(BarcodeFormat format, Size size, int margin)
+    {
+        var writer = new ZXing.Windows.Compatibility.BarcodeWriter
         {
-            for (var x = 0; x < cells; x++)
+            Format = format,
+            Options = new EncodingOptions
             {
-                var finder = InFinder(x, y, 1, 1) || InFinder(x, y, cells - 8, 1) || InFinder(x, y, 1, cells - 8);
-                var bit = (hash[(x * 7 + y * 13) % hash.Length] & (1 << ((x + y) % 8))) != 0;
-                if (finder || bit) graphics.FillRectangle(ink, rectangle.Left + x * cell, rectangle.Top + y * cell, cell, cell);
-            }
-        }
-        using var warning = new SolidBrush(Color.FromArgb(225, Color.White));
-        graphics.FillRectangle(warning, rectangle.Left + 20, rectangle.Top + rectangle.Height / 2 - 10, rectangle.Width - 40, 20);
-        using var font = new Font("Microsoft JhengHei UI", 10F, FontStyle.Bold, GraphicsUnit.Pixel);
-        using var gray = new SolidBrush(Color.FromArgb(70, 70, 70));
-        DrawCentered(graphics, "示意", font, gray, rectangle.Left + 20, rectangle.Top + rectangle.Height / 2 - 10, rectangle.Width - 40, 20);
+                Width = size.Width,
+                Height = size.Height,
+                Margin = margin,
+                PureBarcode = true,
+                NoPadding = true,
+            },
+        };
+        return writer.Write(AmegoInvoiceSite);
     }
 
-    private static bool InFinder(int x, int y, int left, int top)
+    private static string SimulationRandomCode(string invoiceNumber)
     {
-        if (x < left || x >= left + 7 || y < top || y >= top + 7) return false;
-        var localX = x - left;
-        var localY = y - top;
-        return localX is 0 or 6 || localY is 0 or 6 || (localX is >= 2 and <= 4 && localY is >= 2 and <= 4);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(invoiceNumber.Trim().ToUpperInvariant()));
+        var value = ((hash[0] << 8) | hash[1]) % 10_000;
+        return value.ToString("0000", CultureInfo.InvariantCulture);
     }
 
     private static void DrawCentered(Graphics graphics, string text, Font font, Brush brush, int x, int y, int width, int height)
     {
-        using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter };
+        using var format = new StringFormat
+        {
+            Alignment = StringAlignment.Center,
+            LineAlignment = StringAlignment.Center,
+            Trimming = StringTrimming.EllipsisCharacter,
+        };
         graphics.DrawString(text, font, brush, new RectangleF(x, y, width, height), format);
     }
 

@@ -7,46 +7,89 @@ namespace CYInvoice.WinForms;
 
 internal sealed class RecordDetailForm : Form
 {
+    private const int DetailWindowWidth = 820;
+    private const int InformationColumnWidth = 292;
+    private const int InformationLabelWidth = 90;
+    private const int InformationValueMaxWidth = 190;
+
     private readonly InvoiceRecord record;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly bool paperInvoice;
+    private readonly Button viewPdf = UiControls.StandardButton("檢視 PDF");
     private readonly Button printPdf = UiControls.StandardButton("列印發票");
+    private readonly Button changePrinter = UiControls.StandardButton("更換印表機…");
     private readonly Button close = UiControls.StandardButton("關閉");
     private readonly TableLayoutPanel details = new()
     {
         Dock = DockStyle.Top,
         AutoSize = true,
-        ColumnCount = 6,
-        RowCount = 4,
+        ColumnCount = 2,
+        RowCount = 0,
         Margin = Padding.Empty,
+        BackColor = SystemColors.Control,
     };
     private readonly PictureBox paperPreview = new()
     {
         Dock = DockStyle.Fill,
         SizeMode = PictureBoxSizeMode.Zoom,
+        BackColor = Color.White,
+        Margin = Padding.Empty,
+    };
+    private readonly Panel paperPreviewHost = new()
+    {
+        Dock = DockStyle.Fill,
         BackColor = Color.FromArgb(54, 54, 54),
+        Margin = new Padding(4, 0, 0, 4),
+    };
+    private readonly Panel a4PreviewFrame = new()
+    {
+        BackColor = Color.White,
+        BorderStyle = BorderStyle.FixedSingle,
         Margin = Padding.Empty,
     };
     private readonly Label previewStatus = new()
     {
         Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = Color.DimGray,
-        AutoEllipsis = true,
+        TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = SystemColors.ControlText,
+        BackColor = Color.White,
+        Font = new Font("Microsoft JhengHei UI", 16F, FontStyle.Bold),
         Margin = Padding.Empty,
+        Padding = new Padding(18),
     };
     private readonly LinkLabel retryPreview = new()
     {
         Text = "重新載入預覽",
         AutoSize = true,
-        Anchor = AnchorStyles.Right,
+        LinkColor = SystemColors.HotTrack,
+        ActiveLinkColor = SystemColors.Highlight,
         Visible = false,
-        Margin = new Padding(10, 0, 0, 0),
+        BackColor = Color.White,
+        Margin = Padding.Empty,
+    };
+    private readonly Panel previewMessageHost = new()
+    {
+        Dock = DockStyle.Fill,
+        BackColor = Color.White,
+        Visible = false,
+    };
+    private readonly Label printerStatus = new()
+    {
+        AutoSize = true,
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.TopLeft,
+        ForeColor = SystemColors.ControlText,
+        BackColor = SystemColors.Control,
+        Margin = Padding.Empty,
+        Padding = new Padding(0, 5, 0, 5),
+        MaximumSize = new Size(InformationValueMaxWidth, 0),
+        AutoEllipsis = false,
     };
     private readonly CancellationTokenSource previewCancellation = new();
     private Bitmap? activePreview;
     private bool previewLoading;
+    private bool pdfBusy;
 
     public RecordDetailForm(InvoiceRecord record, LocalRepository repository, InvoiceService service)
     {
@@ -56,50 +99,53 @@ internal sealed class RecordDetailForm : Form
         paperInvoice = string.Equals(record.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal);
         Text = $"發票詳細資訊－{record.InvoiceNumber}";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(1080, 720);
-        MinimumSize = new Size(900, 620);
+        ClientSize = new Size(DetailWindowWidth, 700);
+        MinimumSize = new Size(760, 620);
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
         Icon = ApplicationIcon.Load();
+
+        ConfigureDetails();
+        AddDetail("發票號碼", record.InvoiceNumber);
+        AddDetail("開立時間", IssueTime(record), singleLine: true);
+        AddDetail("訂單編號", record.OrderId);
+        AddDetail("來源", record.Source);
+        AddDetail("買受人", record.BuyerName);
+        AddDetail("統一編號", record.BuyerIdentifier);
+        AddDetail("發票金額", MoneyFormatter.Integer(record.Amount));
+        AddDetail("使用環境", record.Environment == Environments.Production ? "正式" : "測試");
+        AddDetail("交付方式", record.Delivery);
+        AddDetail("發票狀態", record.InvoiceState);
+        AddDetail("上傳狀態", record.UploadStatusText);
+        AddDetail("最後確認", record.LastChecked);
+        AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
+        AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
+        if (paperInvoice)
+        {
+            AddDetail("發票印表機", string.Empty, printerStatus);
+            UpdatePrinterStatus();
+        }
 
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
-            Padding = new Padding(18, 14, 18, 10),
+            RowCount = 2,
+            Padding = new Padding(14, 10, 14, 8),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-
-        ConfigureDetails();
-        AddFieldRow(0,
-            "發票號碼", record.InvoiceNumber,
-            "開立時間", IssueTime(record),
-            "發票金額", MoneyFormatter.Integer(record.Amount));
-        AddFieldRow(1,
-            "訂單編號", record.OrderId,
-            "來源", record.Source,
-            "使用環境", record.Environment == Environments.Production ? "正式" : "測試");
-        AddFieldRow(2,
-            "買受人", record.BuyerName,
-            "統一編號", record.BuyerIdentifier,
-            "交付方式", record.Delivery);
-        AddFieldRow(3,
-            "發票狀態", record.InvoiceState,
-            "上傳狀態", record.UploadStatusText,
-            "最後確認", record.LastChecked);
-        AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
-        AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
 
         var eligibility = service.GetInvoicePdfEligibility(record);
         Control content;
         if (paperInvoice)
         {
-            content = BuildPaperPreview(eligibility);
+            content = BuildPaperContent(eligibility);
+            viewPdf.Enabled = eligibility.Allowed;
             printPdf.Enabled = eligibility.Allowed;
+            viewPdf.Click += async (_, _) => await ViewPaperInvoiceAsync(eligibility.CompanyBuyer);
             printPdf.Click += async (_, _) => await PrintPaperInvoiceAsync(eligibility.CompanyBuyer);
+            changePrinter.Click += (_, _) => ChangeInvoicePrinter();
             Shown += async (_, _) =>
             {
                 if (eligibility.Allowed) await LoadPaperPreviewAsync();
@@ -108,7 +154,6 @@ internal sealed class RecordDetailForm : Form
         else
         {
             content = BuildCarrierContent();
-            printPdf.Visible = false;
         }
 
         close.Width = 100;
@@ -121,57 +166,135 @@ internal sealed class RecordDetailForm : Form
             WrapContents = false,
             Margin = Padding.Empty,
         };
-        if (paperInvoice) actions.Controls.Add(printPdf);
+        if (paperInvoice)
+        {
+            actions.Controls.Add(viewPdf);
+            actions.Controls.Add(printPdf);
+            actions.Controls.Add(changePrinter);
+        }
         actions.Controls.Add(close);
 
-        root.Controls.Add(details, 0, 0);
-        root.Controls.Add(content, 0, 1);
-        root.Controls.Add(actions, 0, 2);
+        root.Controls.Add(content, 0, 0);
+        root.Controls.Add(actions, 0, 1);
         Controls.Add(root);
         AcceptButton = close;
         CancelButton = close;
         retryPreview.LinkClicked += async (_, _) => await LoadPaperPreviewAsync();
+        previewMessageHost.Layout += (_, _) => LayoutPreviewMessage();
+        paperPreviewHost.Layout += (_, _) => LayoutA4Preview();
         FormClosed += (_, _) => previewCancellation.Cancel();
     }
 
-    private Control BuildPaperPreview(InvoicePdfEligibility eligibility)
+    private Control BuildPaperContent(InvoicePdfEligibility eligibility)
+    {
+        var split = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = Padding.Empty,
+            Tag = "paper-detail",
+        };
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, InformationColumnWidth));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        split.Controls.Add(BuildInformationSection(), 0, 0);
+        split.Controls.Add(BuildPaperPreview(eligibility), 1, 0);
+        return split;
+    }
+
+    private Control BuildInformationSection()
     {
         var section = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
-            Margin = new Padding(0, 8, 0, 4),
+            Margin = new Padding(0, 0, 6, 4),
+            BackColor = SystemColors.Control,
         };
-        section.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        section.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         section.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        var header = new TableLayoutPanel
+        section.Controls.Add(new Label
+        {
+            Text = "發票資訊",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font(Font, FontStyle.Bold),
+            BackColor = SystemColors.Control,
+            Margin = new Padding(6, 0, 0, 0),
+        }, 0, 0);
+        var scroller = new Panel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
+            AutoScroll = true,
             Margin = Padding.Empty,
+            Padding = new Padding(6, 0, 4, 0),
+            BackColor = SystemColors.Control,
+            BorderStyle = BorderStyle.FixedSingle,
         };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        previewStatus.Text = eligibility.Allowed
-            ? (eligibility.CompanyBuyer ? "官方 A4 發票預覽" : "官方 A4 發票第一頁預覽")
-            : eligibility.Reason;
-        header.Controls.Add(previewStatus, 0, 0);
-        header.Controls.Add(retryPreview, 1, 0);
-
-        var previewFrame = new Panel
-        {
-            Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(54, 54, 54),
-            Padding = new Padding(12),
-            Margin = Padding.Empty,
-        };
-        previewFrame.Controls.Add(paperPreview);
-        section.Controls.Add(header, 0, 0);
-        section.Controls.Add(previewFrame, 0, 1);
+        scroller.Controls.Add(details);
+        section.Controls.Add(scroller, 0, 1);
         return section;
+    }
+
+    private Control BuildPaperPreview(InvoicePdfEligibility eligibility)
+    {
+        previewMessageHost.Controls.Add(previewStatus);
+        previewMessageHost.Controls.Add(retryPreview);
+        retryPreview.BringToFront();
+        a4PreviewFrame.Controls.Add(paperPreview);
+        a4PreviewFrame.Controls.Add(previewMessageHost);
+        previewMessageHost.BringToFront();
+        paperPreviewHost.Controls.Add(a4PreviewFrame);
+        if (!eligibility.Allowed) ShowUnavailablePreview(eligibility);
+        return paperPreviewHost;
+    }
+
+    private void ShowUnavailablePreview(InvoicePdfEligibility eligibility)
+    {
+        previewStatus.Text = record.InvoiceState switch
+        {
+            InvoiceStates.Failed => "此發票開立失敗\r\n無法取得官方 PDF",
+            InvoiceStates.Voided => "此發票已作廢\r\n無法取得官方 PDF",
+            _ => string.IsNullOrWhiteSpace(eligibility.Reason) ? "目前無法取得官方 PDF" : eligibility.Reason,
+        };
+        retryPreview.Visible = false;
+        previewMessageHost.Visible = true;
+        LayoutPreviewMessage();
+    }
+
+    private void LayoutPreviewMessage()
+    {
+        if (!retryPreview.Visible) return;
+        var x = Math.Max(0, (previewMessageHost.ClientSize.Width - retryPreview.PreferredSize.Width) / 2);
+        var y = Math.Max(0, previewMessageHost.ClientSize.Height / 2 + 34);
+        retryPreview.Location = new Point(x, y);
+    }
+
+    private void LayoutA4Preview()
+    {
+        const double a4Ratio = 210D / 297D;
+        var availableWidth = Math.Max(1, paperPreviewHost.ClientSize.Width - 6);
+        var availableHeight = Math.Max(1, paperPreviewHost.ClientSize.Height - 8);
+        int width;
+        int height;
+        if (availableWidth / (double)availableHeight > a4Ratio)
+        {
+            height = availableHeight;
+            width = Math.Max(1, (int)Math.Round(height * a4Ratio));
+        }
+        else
+        {
+            width = availableWidth;
+            height = Math.Max(1, (int)Math.Round(width / a4Ratio));
+        }
+        a4PreviewFrame.Bounds = new Rectangle(
+            Math.Max(0, (paperPreviewHost.ClientSize.Width - width) / 2),
+            Math.Max(0, (paperPreviewHost.ClientSize.Height - height) / 2),
+            width,
+            height);
+        previewMessageHost.BringToFront();
     }
 
     private Control BuildCarrierContent()
@@ -189,8 +312,9 @@ internal sealed class RecordDetailForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = Color.FromArgb(238, 240, 242),
-            Padding = new Padding(8),
-            Margin = new Padding(0, 8, 8, 4),
+            Padding = new Padding(6),
+            Margin = new Padding(4, 0, 0, 4),
+            Tag = "carrier-receipt",
         };
         receiptFrame.Controls.Add(receipt);
 
@@ -200,11 +324,12 @@ internal sealed class RecordDetailForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Margin = new Padding(8, 8, 0, 4),
+            Margin = new Padding(4, 0, 4, 4),
+            Tag = "carrier-items",
         };
-        itemSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        itemSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         itemSection.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        itemSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        itemSection.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         itemSection.Controls.Add(new Label
         {
             Text = "交易明細",
@@ -221,22 +346,24 @@ internal sealed class RecordDetailForm : Form
             TextAlign = ContentAlignment.MiddleRight,
             Font = new Font(Font, FontStyle.Bold),
             Margin = Padding.Empty,
-            Padding = new Padding(0, 4, 4, 0),
+            Padding = new Padding(0, 3, 2, 0),
         }, 0, 2);
 
         var split = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
+            ColumnCount = 3,
             RowCount = 1,
             Margin = Padding.Empty,
             Tag = "carrier-preview",
         };
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
-        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, InformationColumnWidth));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+        split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
         split.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        split.Controls.Add(receiptFrame, 0, 0);
+        split.Controls.Add(BuildInformationSection(), 0, 0);
         split.Controls.Add(itemSection, 1, 0);
+        split.Controls.Add(receiptFrame, 2, 0);
         return split;
     }
 
@@ -245,10 +372,10 @@ internal sealed class RecordDetailForm : Form
         var items = UiControls.Grid();
         items.ReadOnly = true;
         items.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        items.Columns.Add(Column("品名", 260, fill: true));
-        items.Columns.Add(Column("數量", 72, right: true));
-        items.Columns.Add(Column("單價", 105, right: true));
-        items.Columns.Add(Column("金額", 110, right: true));
+        items.Columns.Add(Column("品名", 180, fill: true));
+        items.Columns.Add(Column("數量", 48, right: true));
+        items.Columns.Add(Column("單價", 70, right: true));
+        items.Columns.Add(Column("金額", 76, right: true));
         foreach (var item in record.Items)
         {
             var values = InvoiceCalculator.ItemDecimals(item);
@@ -268,6 +395,7 @@ internal sealed class RecordDetailForm : Form
         previewLoading = true;
         retryPreview.Visible = false;
         previewStatus.Text = "正在取得官方 A4 預覽…";
+        previewMessageHost.Visible = true;
         try
         {
             var bitmap = await InvoicePdfPreview.LoadFirstPageAsync(record, repository, service, previewCancellation.Token);
@@ -280,9 +408,7 @@ internal sealed class RecordDetailForm : Form
             activePreview = bitmap;
             paperPreview.Image = bitmap;
             old?.Dispose();
-            previewStatus.Text = service.GetInvoicePdfEligibility(record).CompanyBuyer
-                ? "官方 A4 發票預覽"
-                : "官方 A4 發票第一頁預覽";
+            previewMessageHost.Visible = false;
         }
         catch (OperationCanceledException) when (previewCancellation.IsCancellationRequested)
         {
@@ -291,8 +417,10 @@ internal sealed class RecordDetailForm : Form
         {
             if (!IsDisposed)
             {
-                previewStatus.Text = "預覽尚未取得：" + error.Message;
+                previewStatus.Text = "預覽尚未取得：\r\n" + error.Message;
                 retryPreview.Visible = true;
+                previewMessageHost.Visible = true;
+                LayoutPreviewMessage();
             }
         }
         finally
@@ -301,34 +429,15 @@ internal sealed class RecordDetailForm : Form
         }
     }
 
-    private async Task PrintPaperInvoiceAsync(bool companyBuyer)
+    private async Task ViewPaperInvoiceAsync(bool companyBuyer)
     {
-        InvoicePdfStyle style;
-        if (companyBuyer)
-        {
-            using var selector = new PdfStyleSelectionForm();
-            if (selector.ShowDialog(this) != DialogResult.OK) return;
-            var selected = selector.SelectedStyle;
-            if (selected is null) return;
-            style = selected;
-        }
-        else
-        {
-            style = InvoicePdfStyles.A4;
-        }
-        await OpenPdfAsync(style);
-    }
-
-    private async Task OpenPdfAsync(InvoicePdfStyle style)
-    {
-        printPdf.Enabled = false;
-        printPdf.Text = "取得 PDF 中…";
+        var style = ChoosePaperStyle(companyBuyer, "檢視");
+        if (style is null) return;
+        SetPdfBusy(true, "檢視");
         try
         {
             var document = await service.GetInvoicePdfAsync(record, style.Code);
-            using var viewer = new InvoicePdfViewerForm(
-                document,
-                Path.Combine(repository.CacheDirectory, "WebView2"));
+            using var viewer = new InvoicePdfViewerForm(document, Path.Combine(repository.CacheDirectory, "WebView2"));
             viewer.ShowDialog(this);
         }
         catch (Exception error)
@@ -337,40 +446,140 @@ internal sealed class RecordDetailForm : Form
         }
         finally
         {
-            printPdf.Text = "列印發票";
-            printPdf.Enabled = service.GetInvoicePdfEligibility(record).Allowed;
+            SetPdfBusy(false, "檢視");
         }
+    }
+
+    private async Task PrintPaperInvoiceAsync(bool companyBuyer)
+    {
+        var style = ChoosePaperStyle(companyBuyer, "列印");
+        if (style is null) return;
+        var printerName = EnsureInvoicePrinter();
+        if (printerName is null) return;
+
+        SetPdfBusy(true, "列印");
+        try
+        {
+            var document = await service.GetInvoicePdfAsync(record, style.Code);
+            await InvoicePdfPrinter.PrintAsync(
+                document,
+                Path.Combine(repository.CacheDirectory, "WebView2Print"),
+                printerName,
+                consumerPaper: !companyBuyer,
+                previewCancellation.Token);
+        }
+        catch (OperationCanceledException) when (previewCancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "列印發票失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            UpdatePrinterStatus();
+        }
+        finally
+        {
+            SetPdfBusy(false, "列印");
+        }
+    }
+
+    private InvoicePdfStyle? ChoosePaperStyle(bool companyBuyer, string action)
+    {
+        if (!companyBuyer) return InvoicePdfStyles.A4;
+        using var selector = new PdfStyleSelectionForm(action);
+        if (selector.ShowDialog(this) != DialogResult.OK) return null;
+        return selector.SelectedStyle;
+    }
+
+    private string? EnsureInvoicePrinter()
+    {
+        var settings = repository.Settings.LoadOrCreate();
+        var remembered = settings.InvoicePrinterName.Trim();
+        if (remembered.Length != 0 && InvoicePdfPrinter.IsInstalled(remembered) && InvoicePdfPrinter.CanDuplex(remembered))
+            return remembered;
+        if (remembered.Length != 0)
+        {
+            MessageBox.Show(
+                this,
+                $"先前設定的發票印表機「{remembered}」目前不存在或未回報雙面能力。\n直接列印只能使用支援雙面的印表機，請重新選擇；若要使用其他印表機，請改用「檢視 PDF」手動列印。",
+                "需要重新選擇印表機",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        return SelectInvoicePrinter(settings, remembered);
+    }
+
+    private void ChangeInvoicePrinter()
+    {
+        var settings = repository.Settings.LoadOrCreate();
+        SelectInvoicePrinter(settings, settings.InvoicePrinterName);
+    }
+
+    private string? SelectInvoicePrinter(Settings settings, string currentPrinter)
+    {
+        if (!InvoicePdfPrinter.InstalledPrinters().Any(InvoicePdfPrinter.CanDuplex))
+        {
+            MessageBox.Show(
+                this,
+                "Windows 目前沒有回報支援雙面的印表機。\n若要使用單面印表機，請先「檢視 PDF」再由 PDF Viewer 手動列印。",
+                "沒有可用的雙面印表機",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return null;
+        }
+        using var selector = new InvoicePrinterSelectionForm(currentPrinter);
+        if (selector.ShowDialog(this) != DialogResult.OK || selector.SelectedPrinterName.Length == 0) return null;
+        settings.InvoicePrinterName = selector.SelectedPrinterName;
+        repository.Settings.Save(settings);
+        UpdatePrinterStatus();
+        return settings.InvoicePrinterName;
+    }
+
+    private void UpdatePrinterStatus()
+    {
+        if (!paperInvoice) return;
+        var name = repository.Settings.LoadOrCreate().InvoicePrinterName.Trim();
+        if (name.Length == 0)
+        {
+            printerStatus.Text = "尚未設定";
+            printerStatus.ForeColor = Color.DimGray;
+            return;
+        }
+        if (!InvoicePdfPrinter.IsInstalled(name) || !InvoicePdfPrinter.CanDuplex(name))
+        {
+            printerStatus.Text = name + "（不可直接列印）";
+            printerStatus.ForeColor = Color.Firebrick;
+            return;
+        }
+        printerStatus.Text = name;
+        printerStatus.ForeColor = SystemColors.ControlText;
+    }
+
+    private void SetPdfBusy(bool busy, string action)
+    {
+        pdfBusy = busy;
+        var allowed = !busy && service.GetInvoicePdfEligibility(record).Allowed;
+        viewPdf.Enabled = allowed;
+        printPdf.Enabled = allowed;
+        changePrinter.Enabled = !busy;
+        viewPdf.Text = busy && action == "檢視" ? "取得 PDF 中…" : "檢視 PDF";
+        printPdf.Text = busy && action == "列印" ? "列印中…" : "列印發票";
     }
 
     private void ConfigureDetails()
     {
-        for (var index = 0; index < 3; index++)
-        {
-            details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
-            details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
-        }
-        for (var row = 0; row < 4; row++)
-            details.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, InformationLabelWidth));
+        details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
     }
 
-    private void AddFieldRow(
-        int row,
-        string label1,
-        string value1,
-        string label2,
-        string value2,
-        string label3,
-        string value3)
+    private void AddDetail(string label, string value, Label? target = null, bool singleLine = false)
     {
-        AddField(row, 0, label1, value1);
-        AddField(row, 2, label2, value2);
-        AddField(row, 4, label3, value3);
-    }
-
-    private void AddField(int row, int column, string label, string value)
-    {
-        details.Controls.Add(FieldLabel(label), column, row);
-        details.Controls.Add(ValueLabel(value), column + 1, row);
+        var row = details.RowCount++;
+        details.RowStyles.Add(singleLine ? new RowStyle(SizeType.Absolute, 31) : new RowStyle(SizeType.AutoSize));
+        details.Controls.Add(FieldLabel(label), 0, row);
+        var text = target ?? ValueLabel(value, singleLine);
+        if (target is not null) text.Text = value;
+        details.Controls.Add(text, 1, row);
+        AddDetailSeparator();
     }
 
     private void AddOptionalDetail(string label, string value, Color valueColor)
@@ -380,12 +589,24 @@ internal sealed class RecordDetailForm : Form
         details.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         details.Controls.Add(FieldLabel(label), 0, row);
         var text = ValueLabel(value);
-        text.AutoSize = true;
-        text.MinimumSize = new Size(0, 31);
         text.ForeColor = valueColor;
-        text.AutoEllipsis = false;
         details.Controls.Add(text, 1, row);
-        details.SetColumnSpan(text, 5);
+        AddDetailSeparator();
+    }
+
+    private void AddDetailSeparator()
+    {
+        var row = details.RowCount++;
+        details.RowStyles.Add(new RowStyle(SizeType.Absolute, 1));
+        var line = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Height = 1,
+            Margin = Padding.Empty,
+            BackColor = Color.FromArgb(205, 205, 205),
+        };
+        details.Controls.Add(line, 0, row);
+        details.SetColumnSpan(line, 2);
     }
 
     internal static void VerifySmokeLayout(LocalRepository repository, InvoiceService service)
@@ -402,6 +623,8 @@ internal sealed class RecordDetailForm : Form
             UploadStatusText = "上傳中",
             Source = InvoiceSources.Manual,
             OrderId = "20260916001",
+            InvoiceDate = "2026/09/16",
+            InvoiceTime = "12:34:56",
             Amount = 105,
             Items = [new InvoiceItem { Description = "測試商品", Quantity = 1, UnitPrice = 105, Amount = 105 }],
         };
@@ -421,6 +644,8 @@ internal sealed class RecordDetailForm : Form
                 BuyerIdentifier = "12345675",
                 Source = baseRecord.Source,
                 OrderId = baseRecord.OrderId,
+                InvoiceDate = baseRecord.InvoiceDate,
+                InvoiceTime = baseRecord.InvoiceTime,
                 Amount = baseRecord.Amount,
                 Items = baseRecord.Items,
             },
@@ -449,7 +674,34 @@ internal sealed class RecordDetailForm : Form
             service);
         carrier.PerformLayout();
         carrier.VerifyLayout(companyBuyer: false, carrier: true);
-        using var selector = new PdfStyleSelectionForm();
+
+        using var failed = new RecordDetailForm(
+            new InvoiceRecord
+            {
+                Id = "failed-preview-smoke",
+                Environment = environment,
+                InvoiceNumber = "CC12345678",
+                InvoiceState = InvoiceStates.Failed,
+                Delivery = InvoiceService.DeliveryPaper,
+                Source = InvoiceSources.Manual,
+                OrderId = "20260917001",
+                InvoiceDate = "2026/09/17",
+                InvoiceTime = "21:29:34",
+                Amount = 105,
+                ErrorMessage = "API test failure",
+                Items = baseRecord.Items,
+            },
+            repository,
+            service);
+        failed.PerformLayout();
+        if (!failed.a4PreviewFrame.Controls.Contains(failed.previewMessageHost) ||
+            !failed.previewMessageHost.Controls.Contains(failed.previewStatus) ||
+            failed.previewMessageHost.BackColor != Color.White ||
+            failed.previewStatus.TextAlign != ContentAlignment.MiddleCenter ||
+            !failed.previewStatus.Text.Contains("開立失敗", StringComparison.Ordinal))
+            throw new InvalidOperationException("開立失敗發票未在 A4 白紙中央顯示不可取得 PDF 狀態");
+
+        using var selector = new PdfStyleSelectionForm("列印");
         selector.PerformLayout();
         selector.VerifySmokeLayout();
         using var viewer = new InvoicePdfViewerForm(
@@ -465,8 +717,12 @@ internal sealed class RecordDetailForm : Form
 
     private void VerifyLayout(bool companyBuyer, bool carrier)
     {
-        if (details.ColumnCount != 6 || details.RowCount < 4)
-            throw new InvalidOperationException("發票詳細資訊未使用緊湊三欄配置");
+        if (details.ColumnCount != 2 || details.RowCount < 24)
+            throw new InvalidOperationException("發票詳細資訊未使用直向資訊與分隔線配置");
+        if (ClientSize.Width != DetailWindowWidth)
+            throw new InvalidOperationException("紙本與會員載具詳細資訊未使用一致的精簡視窗寬度");
+        if (details.BackColor != SystemColors.Control)
+            throw new InvalidOperationException("發票資訊區未沿用視窗灰底");
         if (!UiControls.HasLogicalSize(close, 100, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("關閉按鈕未使用核准尺寸");
         if (carrier)
@@ -475,32 +731,46 @@ internal sealed class RecordDetailForm : Form
                 throw new InvalidOperationException("會員載具未建立模擬發票預覽");
             return;
         }
-        if (!paperInvoice || !printPdf.Enabled)
-            throw new InvalidOperationException("已開立紙本發票未開放列印");
-        if (!UiControls.HasLogicalSize(printPdf, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("列印發票按鈕未使用標準尺寸");
+        if (!paperInvoice || !viewPdf.Enabled || !printPdf.Enabled)
+            throw new InvalidOperationException("已開立紙本發票未開放檢視或列印");
+        if (!UiControls.HasLogicalSize(viewPdf, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(printPdf, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(changePrinter, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
+            throw new InvalidOperationException("紙本發票操作按鈕未使用標準尺寸");
         if (service.GetInvoicePdfEligibility(record).CompanyBuyer != companyBuyer)
             throw new InvalidOperationException("紙本發票買方類型判斷錯誤");
+        if (!paperPreviewHost.Controls.Contains(a4PreviewFrame))
+            throw new InvalidOperationException("紙本預覽未使用 A4 比例容器");
+        if (pdfBusy)
+            throw new InvalidOperationException("紙本詳細資訊初始狀態不應處於 PDF 忙碌狀態");
     }
 
     private static Label FieldLabel(string text) => new()
     {
         Text = text,
         Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
+        TextAlign = ContentAlignment.TopLeft,
         ForeColor = Color.DimGray,
-        Margin = new Padding(0, 1, 4, 1),
+        BackColor = SystemColors.Control,
+        Margin = Padding.Empty,
+        Padding = new Padding(0, 5, 4, 5),
+        MinimumSize = new Size(0, 30),
         AutoEllipsis = true,
     };
 
-    private static Label ValueLabel(string value) => new()
+    private static Label ValueLabel(string value, bool singleLine = false) => new()
     {
         Text = value,
+        AutoSize = !singleLine,
         Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
+        TextAlign = singleLine ? ContentAlignment.MiddleLeft : ContentAlignment.TopLeft,
         ForeColor = SystemColors.ControlText,
-        Margin = new Padding(0, 1, 12, 1),
-        AutoEllipsis = true,
+        BackColor = SystemColors.Control,
+        Margin = Padding.Empty,
+        Padding = new Padding(0, 5, 0, 5),
+        MinimumSize = new Size(0, 30),
+        MaximumSize = singleLine ? Size.Empty : new Size(InformationValueMaxWidth, 0),
+        AutoEllipsis = singleLine,
     };
 
     private static DataGridViewTextBoxColumn Column(string title, int width, bool right = false, bool fill = false) => new()

@@ -27,7 +27,8 @@ internal sealed class InvoiceEntryControl : UserControl
     private readonly RadioButton consumerBuyer = new() { Text = "一般消費者（紙本）", AutoSize = true, Checked = true };
     private readonly RadioButton companyBuyer = new() { Text = "公司統編（紙本）", AutoSize = true };
     private readonly TextBox buyerBan = UiControls.TextBox(8);
-    private readonly TextBox buyerName = UiControls.TextBox(200);
+    private readonly BuyerNameField buyerNameField = new(200);
+    private TextBox buyerName => buyerNameField;
     private readonly RadioButton taxInclusive = new() { Text = "以含稅輸入", AutoSize = true, Checked = true };
     private readonly RadioButton taxExclusive = new() { Text = "以未稅輸入", AutoSize = true };
     private readonly NativeListViewHost itemsHost = new(12F, 26);
@@ -98,7 +99,7 @@ internal sealed class InvoiceEntryControl : UserControl
         var digiwin = UiControls.ImportButton("鼎新ERP", ImportBrand.Digiwin);
         var moShop = UiControls.ImportButton("MO店+", ImportBrand.MoShop);
         var coupang = UiControls.ImportButton("酷澎商城", ImportBrand.Coupang);
-        digiwin.Click += (_, _) => Pending("鼎新 ERP 匯入");
+        digiwin.Click += async (_, _) => await ImportDigiwinAsync();
         moShop.Click += async (_, _) => await ImportMoAsync();
         coupang.Click += async (_, _) => await ImportCoupangAsync();
         buttons.Controls.Add(digiwin);
@@ -162,7 +163,7 @@ internal sealed class InvoiceEntryControl : UserControl
         buyerLine.Controls.Add(UiControls.Label("統一編號"), 2, 0);
         buyerLine.Controls.Add(buyerBan, 3, 0);
         buyerLine.Controls.Add(UiControls.Label("買方名稱"), 4, 0);
-        buyerLine.Controls.Add(buyerName, 5, 0);
+        buyerLine.Controls.Add(buyerNameField, 5, 0);
 
         layout.Controls.Add(UiControls.Label("訂單編號"), 0, 0);
         layout.Controls.Add(orderLine, 1, 0);
@@ -301,8 +302,24 @@ internal sealed class InvoiceEntryControl : UserControl
         automaticOrder.CheckedChanged += (_, _) => UpdateOrderMode();
         companyBuyer.CheckedChanged += (_, _) => UpdateBuyerMode();
         taxInclusive.CheckedChanged += (_, _) => { UpdateHeaders(); Recalculate(); };
-        buyerBan.TextChanged += (_, _) => { cachedLookup = null; cachedBan = string.Empty; };
-        buyerBan.Leave += async (_, _) => await LookupBuyerAsync(true);
+        buyerNameField.BindLookup(buyerBan, service, () => companyBuyer.Checked);
+        buyerNameField.BuyerBanChanged += _ =>
+        {
+            cachedLookup = null;
+            cachedBan = string.Empty;
+        };
+        buyerNameField.LookupCompleted += (ban, lookup) =>
+        {
+            cachedLookup = lookup;
+            cachedBan = ban;
+            if (!lookup.Local && lookup.LookupSucceeded && lookup.Name.Trim().Length == 0)
+            {
+                MessageBox.Show(this, "查無此統一編號，請再次確認或自行輸入買方名稱", "查無統編", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                buyerName.Focus();
+            }
+        };
+        buyerNameField.LookupFailed += (_, error) =>
+            MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         remark.TextChanged += (_, _) => remarkCounter.Text = $"{remark.Text.EnumerateRunes().Count()} / {InvoiceLimits.MaximumRemarkCharacters}";
         Items.MouseMove += (_, eventArgs) => UpdateDeleteHotState(DeleteButtonRowAt(eventArgs.Location));
         Items.MouseDown += (_, eventArgs) => HandleItemMouseDown(eventArgs);
@@ -333,7 +350,7 @@ internal sealed class InvoiceEntryControl : UserControl
         if (eventArgs.Button != MouseButtons.Left) return;
         var pressedRow = pressedDeleteRow;
         UpdateDeletePressedState(-1);
-        var hit = Items.HitTest(eventArgs.X, eventArgs.Y);
+        var hit = Items.HitTest(eventArgs.Location);
         var row = hit.Item?.Index ?? -1;
         var column = hit.SubItem is null || hit.Item is null ? -1 : hit.Item.SubItems.IndexOf(hit.SubItem);
         if (row < 0 || row >= Items.Items.Count || IsPlaceholder(Items.Items[row]))
@@ -395,7 +412,8 @@ internal sealed class InvoiceEntryControl : UserControl
         automaticOrder.Checked = true;
         consumerBuyer.Checked = true;
         taxInclusive.Checked = true;
-        buyerBan.Clear(); buyerName.Clear(); remark.Clear();
+        buyerBan.Clear(); buyerName.Clear(); buyerNameField.ClearLookupState(); remark.Clear();
+        cachedLookup = null; cachedBan = string.Empty;
         CommitCellEditor(true);
         Items.Items.Clear();
         AddRow(false);
@@ -415,9 +433,17 @@ internal sealed class InvoiceEntryControl : UserControl
     private void UpdateBuyerMode()
     {
         UiControls.SetTextBoxLocked(buyerBan, !companyBuyer.Checked);
-        UiControls.SetTextBoxLocked(buyerName, !companyBuyer.Checked);
+        buyerNameField.SetLocked(!companyBuyer.Checked);
         taxExclusive.Enabled = companyBuyer.Checked;
-        if (!companyBuyer.Checked) { buyerBan.Clear(); buyerName.Clear(); taxInclusive.Checked = true; }
+        if (!companyBuyer.Checked)
+        {
+            buyerBan.Clear();
+            buyerName.Clear();
+            buyerNameField.ClearLookupState();
+            cachedLookup = null;
+            cachedBan = string.Empty;
+            taxInclusive.Checked = true;
+        }
     }
 
     private void UpdateHeaders()
@@ -561,9 +587,19 @@ internal sealed class InvoiceEntryControl : UserControl
             NameLookup lookup = new();
             if (draft.CompanyBuyer)
             {
-                lookup = cachedBan == draft.BuyerIdentifier && cachedLookup is not null ? cachedLookup : await service.LookupBuyerNameAsync(draft.BuyerIdentifier);
-                if (lookup.Name.Length != 0) { draft.BuyerName = lookup.Name; buyerName.Text = lookup.Name; }
-                if (draft.BuyerName.Trim().Length == 0) throw new InvalidOperationException("查無此統一編號，請再次確認或自行輸入買方名稱");
+                lookup = cachedBan == draft.BuyerIdentifier && cachedLookup is not null
+                    ? cachedLookup
+                    : await service.LookupBuyerNameAsync(draft.BuyerIdentifier);
+                cachedLookup = lookup;
+                cachedBan = draft.BuyerIdentifier;
+                buyerNameField.SetLookupState(lookup);
+                if (draft.BuyerName.Trim().Length == 0 && lookup.Name.Trim().Length != 0)
+                {
+                    draft.BuyerName = lookup.Name.Trim();
+                    buyerName.Text = draft.BuyerName;
+                }
+                if (draft.BuyerName.Trim().Length == 0)
+                    throw new InvalidOperationException("查無此統一編號，請再次確認或自行輸入買方名稱");
             }
             var formal = repository.Settings.LoadOrCreate().Environment == Environments.Production;
             var confirm = MessageBox.Show(this,
@@ -584,24 +620,17 @@ internal sealed class InvoiceEntryControl : UserControl
         finally { Enabled = true; }
     }
 
-    private async Task LookupBuyerAsync(bool showNotFound)
+    private Task ImportDigiwinAsync()
     {
-        var ban = buyerBan.Text.Trim();
-        if (!companyBuyer.Checked || ban.Length != 8 || !ban.All(char.IsAsciiDigit)) return;
+        using var dialog = FileDialog("Excel 檔案 (*.xlsx)|*.xlsx");
+        if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return Task.CompletedTask;
         try
         {
-            UiControls.SetTextBoxLocked(buyerBan, true);
-            cachedLookup = await service.LookupBuyerNameAsync(ban);
-            cachedBan = ban;
-            if (cachedLookup.Name.Length != 0) buyerName.Text = cachedLookup.Name;
-            else if (showNotFound)
-            {
-                MessageBox.Show(this, "查無此統一編號，請再次確認或自行輸入買方名稱", "查無統編", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                buyerName.Focus();
-            }
+            using var confirmation = ImportConfirmationForm.ForDigiwin(repository, service, recordsChanged, dialog.FileName);
+            confirmation.ShowDialog(FindForm());
         }
-        catch (Exception error) { MessageBox.Show(this, error.Message, "統編查詢失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
-        finally { UiControls.SetTextBoxLocked(buyerBan, !companyBuyer.Checked); }
+        catch (Exception error) { MessageBox.Show(this, error.Message, "鼎新ERP 匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        return Task.CompletedTask;
     }
 
     private Task ImportMoAsync()
@@ -631,7 +660,7 @@ internal sealed class InvoiceEntryControl : UserControl
         catch (Exception error) { MessageBox.Show(this, error.Message, "酷澎匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         return Task.CompletedTask;
     }
-    private void Pending(string feature) => MessageBox.Show(this, $"{feature}尚未完成，現在不會讀檔或送出發票。", "功能尚未完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
     private static OpenFileDialog FileDialog(string filter) => new() { Filter = filter, CheckFileExists = true, Multiselect = false, RestoreDirectory = true };
     private static TableLayoutPanel RadioGroup(RadioButton first, RadioButton second, int firstWidth)
     {
@@ -885,7 +914,8 @@ internal sealed class InvoiceEntryControl : UserControl
 
     internal void VerifySmokeLayout()
     {
-        if (consumerBuyer.Parent is null || companyBuyer.Parent is null || buyerBan.Parent is null || buyerName.Parent is null)
+        if (consumerBuyer.Parent is null || companyBuyer.Parent is null || buyerBan.Parent is null || buyerNameField.Parent is null ||
+            !ReferenceEquals(buyerName, buyerNameField))
             throw new InvalidOperationException("發票基本資料的買方控制項未建立");
         if (ReferenceEquals(automaticOrder.Parent, consumerBuyer.Parent))
             throw new InvalidOperationException("訂單與買方 RadioButton 未分成兩組");
@@ -902,18 +932,21 @@ internal sealed class InvoiceEntryControl : UserControl
         if (buyerNameLabel is null || buyerBanLabel is null || orderLine is null || buyerLine is null ||
             !ReferenceEquals(companyBuyer.Parent, buyerLine) ||
             !ReferenceEquals(buyerBan.Parent, buyerLine) ||
-            !ReferenceEquals(buyerName.Parent, buyerLine) ||
+            !ReferenceEquals(buyerNameField.Parent, buyerLine) ||
             consumerBuyer.Width < consumerBuyer.GetPreferredSize(Size.Empty).Width ||
             companyBuyer.Width < companyBuyer.GetPreferredSize(Size.Empty).Width ||
             buyerBan.Bottom > buyerLine.ClientSize.Height ||
-            buyerName.Bottom > buyerLine.ClientSize.Height ||
+            buyerNameField.Bottom > buyerLine.ClientSize.Height ||
             buyerBan.Height < buyerBan.PreferredHeight ||
-            buyerName.Height < buyerName.PreferredHeight ||
+            buyerNameField.Height < buyerNameField.PreferredHeight ||
+            buyerBan.BorderStyle != buyerNameField.BorderStyle ||
+            Math.Abs(buyerBan.Height - buyerNameField.Height) > 1 ||
+            buyerBan.Margin != buyerNameField.Margin ||
             Math.Abs((automaticOrder.Top + automaticOrder.Height / 2) - orderLine.ClientSize.Height / 2) > 2 ||
             Math.Abs((customOrder.Top + customOrder.Height / 2) - orderLine.ClientSize.Height / 2) > 2 ||
             Math.Abs((consumerBuyer.Top + consumerBuyer.Height / 2) - buyerLine.ClientSize.Height / 2) > 2 ||
             Math.Abs((companyBuyer.Top + companyBuyer.Height / 2) - buyerLine.ClientSize.Height / 2) > 2)
-            throw new InvalidOperationException("買方資料未排成單列，或統編／買方名稱輸入欄位遭裁切");
+            throw new InvalidOperationException("買方資料未排成單列，或統編／買方名稱輸入欄位外觀不一致或遭裁切");
         consumerBuyer.Checked = true;
         if (Items.Columns.Count != 7 || Items.Items.Count != MinimumVisibleRows || ActualRows().Count != 1)
             throw new InvalidOperationException("商品原生 ListView 未建立一筆實際資料與五列顯示區");
