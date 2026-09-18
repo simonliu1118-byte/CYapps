@@ -72,7 +72,39 @@ internal static class CarrierInvoicePreview
         DrawQr(graphics, new Rectangle(contentLeft + 18, qrTop, qrSize, qrSize));
         DrawQr(graphics, new Rectangle(contentLeft + contentWidth - 18 - qrSize, qrTop, qrSize, qrSize));
         DrawCentered(graphics, "模擬畫面僅供參考", footerFont, grayBrush, contentLeft, paper.Bottom - 42, contentWidth, 24);
+
+        if (record.InvoiceState == InvoiceStates.Voided)
+            DrawVoidedStamp(graphics, paper);
+
         return image;
+    }
+
+    private static void DrawVoidedStamp(Graphics graphics, Rectangle paper)
+    {
+        var state = graphics.Save();
+        try
+        {
+            graphics.TranslateTransform(paper.Left + paper.Width / 2F, paper.Top + paper.Height * 0.48F);
+            graphics.RotateTransform(-12F);
+            var stamp = new RectangleF(-190F, -58F, 380F, 116F);
+            var inner = RectangleF.Inflate(stamp, -10F, -10F);
+            using var outerPen = new Pen(Color.FromArgb(190, 190, 28, 28), 8F);
+            using var innerPen = new Pen(Color.FromArgb(170, 190, 28, 28), 3F);
+            using var stampBrush = new SolidBrush(Color.FromArgb(180, 190, 28, 28));
+            using var stampFont = new Font("Microsoft JhengHei UI", 58F, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var format = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+            };
+            graphics.DrawRectangle(outerPen, stamp.X, stamp.Y, stamp.Width, stamp.Height);
+            graphics.DrawRectangle(innerPen, inner.X, inner.Y, inner.Width, inner.Height);
+            graphics.DrawString("已作廢", stampFont, stampBrush, stamp, format);
+        }
+        finally
+        {
+            graphics.Restore(state);
+        }
     }
 
     private static void DrawBarcode(Graphics graphics, Rectangle rectangle)
