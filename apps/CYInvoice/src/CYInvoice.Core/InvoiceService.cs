@@ -551,7 +551,10 @@ public sealed class InvoiceService
                         SaveStatus(uncertain.Id, CreateStatusUpdate(uncertain));
                         if (uncertain.InvoiceState == InvoiceStates.Opened)
                         {
-                            RememberBuyerName(uncertain, lookup, draft.BuyerName);
+                            RememberBuyerName(
+                                uncertain,
+                                new NameLookup(LookupSucceeded: true),
+                                uncertain.BuyerName);
                             return new IssueResult(uncertain, Opened: true);
                         }
                     }
