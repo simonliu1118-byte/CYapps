@@ -58,6 +58,70 @@ public sealed class AmegoClient : IAmegoGateway
     public Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default) =>
         QueryAsync("invoice", string.Empty, number.Trim(), cancellationToken);
 
+    public async Task<InvoiceListResponse> ListInvoicesAsync(
+        DateOnly startDate,
+        DateOnly endDate,
+        int page = 1,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        if (startDate > endDate) throw new ArgumentOutOfRangeException(nameof(startDate), "start date cannot be later than end date");
+        if (page < 1) throw new ArgumentOutOfRangeException(nameof(page), "page must be at least 1");
+        if (limit is < 20 or > 500) throw new ArgumentOutOfRangeException(nameof(limit), "limit must be between 20 and 500");
+        var request = new Dictionary<string, object>
+        {
+            ["date_select"] = 1,
+            ["date_start"] = startDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            ["date_end"] = endDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            ["limit"] = limit,
+            ["page"] = page,
+        };
+        using var document = await PostAsync("/json/invoice_list", request, cancellationToken).ConfigureAwait(false);
+        var root = document.RootElement;
+        var (code, message) = ReadEnvelope(root);
+        ThrowResponseError(code, message);
+        var results = new List<InvoiceListItem>();
+        if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in data.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) throw new InvalidDataException("invoice_list data contains a non-object item");
+                var number = Text(item, "invoice_number");
+                if (number.Length == 0) throw new InvalidDataException("invoice_list item is missing invoice_number");
+                results.Add(new InvoiceListItem(
+                    number,
+                    Text(item, "invoice_type"),
+                    Int32(item, "invoice_status"),
+                    Scalar(item, "invoice_date"),
+                    Scalar(item, "invoice_time"),
+                    Text(item, "buyer_identifier"),
+                    Text(item, "buyer_name"),
+                    Scalar(item, "sales_amount"),
+                    Scalar(item, "tax_amount"),
+                    Scalar(item, "total_amount"),
+                    Text(item, "main_remark"),
+                    Text(item, "carrier_type"),
+                    Text(item, "carrier_id1"),
+                    Text(item, "carrier_id2"),
+                    Text(item, "npoban"),
+                    Int64(item, "cancel_date"),
+                    Text(item, "order_id"),
+                    Int64(item, "create_date")));
+            }
+        }
+        else if (data.ValueKind != JsonValueKind.Undefined && data.ValueKind != JsonValueKind.Null)
+        {
+            throw new InvalidDataException("invoice_list data is not an array");
+        }
+        return new InvoiceListResponse(
+            code,
+            message,
+            Int32(root, "page_total"),
+            Int32(root, "page_now"),
+            Int32(root, "data_total"),
+            results);
+    }
+
     public async Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default)
     {
         var request = invoiceNumbers.Select(number => number.Trim()).Where(number => number.Length != 0)
