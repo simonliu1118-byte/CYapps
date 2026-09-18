@@ -17,6 +17,7 @@ public sealed class InvoiceSyncService
 {
     private readonly LocalRepository repository;
     private readonly InvoiceSyncRepository syncRepository;
+    private readonly InvoiceSyncIssueStore issueStore;
     private readonly Func<string, string, IAmegoGateway> gatewayFactory;
     private readonly Func<DateTimeOffset> now;
 
@@ -27,6 +28,7 @@ public sealed class InvoiceSyncService
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         syncRepository = new InvoiceSyncRepository(repository.DataDirectory);
+        issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
         this.gatewayFactory = gatewayFactory ?? ((invoice, appKey) => new AmegoClient(invoice, appKey));
         this.now = now ?? (() => DateTimeOffset.Now);
     }
@@ -57,11 +59,25 @@ public sealed class InvoiceSyncService
         DateOnly endDate,
         CancellationToken cancellationToken)
     {
-        var remote = await LoadAllPagesAsync(gateway, startDate, endDate, cancellationToken).ConfigureAwait(false);
+        var accountKey = AccountKey(account);
+        IReadOnlyList<InvoiceListItem> remote;
+        try
+        {
+            remote = await LoadAllPagesAsync(gateway, startDate, endDate, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error)
+        {
+            TryRecordIssue(accountKey, string.Empty, string.Empty, InvoiceSyncIssueTypes.InvoiceListFailed, error.Message);
+            throw;
+        }
+        TryResolveAccountIssue(accountKey, InvoiceSyncIssueTypes.InvoiceListFailed);
+
         var local = AccountRecords(account).ToList();
         var changes = new List<InvoiceRecord>();
         var invalidations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var problems = new List<string>();
+        var successfulQueries = new List<IssueIdentity>();
+        var successfulReconciliations = new List<IssueIdentity>();
         var inserted = 0;
         var updated = 0;
         var unchanged = 0;
@@ -70,7 +86,9 @@ public sealed class InvoiceSyncService
         foreach (var item in remote)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (item.InvoiceNumber.Trim().Length == 0) continue;
+            var invoiceNumber = item.InvoiceNumber.Trim();
+            var orderId = item.OrderId.Trim();
+            if (invoiceNumber.Length == 0) continue;
             try
             {
                 var record = Match(local, item);
@@ -79,17 +97,37 @@ public sealed class InvoiceSyncService
                 var before = Fingerprint(record);
                 var summaryChanged = isNew || SummaryDiffers(record, item);
                 ApplyList(record, item, account);
+                var identity = Identity(record, item);
+                successfulReconciliations.Add(identity);
 
-                if (isNew || summaryChanged || record.Items.Count == 0)
+                var pendingQueryIssue = issueStore.HasUnresolved(
+                    accountKey,
+                    identity.InvoiceNumber,
+                    identity.OrderId,
+                    InvoiceSyncIssueTypes.QueryFailed,
+                    InvoiceSyncIssueTypes.RemoteNotFound,
+                    InvoiceSyncIssueTypes.UnknownRemoteNotFound);
+                if (isNew || summaryChanged || record.Items.Count == 0 || pendingQueryIssue)
                 {
                     try
                     {
                         var query = await gateway.QueryByInvoiceNumberAsync(item.InvoiceNumber, cancellationToken).ConfigureAwait(false);
                         queried++;
                         ApplyQuery(record, query.Data, account);
+                        successfulQueries.Add(Identity(record, item));
                     }
                     catch (Exception error)
                     {
+                        var issueType = error is AmegoApiException { Code: 71 }
+                            ? InvoiceSyncIssueTypes.RemoteNotFound
+                            : InvoiceSyncIssueTypes.QueryFailed;
+                        AddIssueProblem(
+                            problems,
+                            accountKey,
+                            identity.InvoiceNumber,
+                            identity.OrderId,
+                            issueType,
+                            $"完整資料回查失敗：{error.Message}");
                         problems.Add($"{item.InvoiceNumber}: 完整資料回查失敗，已先保存清單資料：{error.Message}");
                     }
                 }
@@ -112,13 +150,60 @@ public sealed class InvoiceSyncService
                     unchanged++;
                 }
             }
+            catch (AmbiguousInvoiceMatchException error)
+            {
+                AddIssueProblem(
+                    problems,
+                    accountKey,
+                    invoiceNumber,
+                    orderId,
+                    InvoiceSyncIssueTypes.AmbiguousMatch,
+                    error.Message);
+                problems.Add($"{invoiceNumber}: {error.Message}");
+            }
             catch (Exception error)
             {
+                AddIssueProblem(
+                    problems,
+                    accountKey,
+                    invoiceNumber,
+                    orderId,
+                    InvoiceSyncIssueTypes.ReconciliationFailed,
+                    error.Message);
                 problems.Add($"{item.InvoiceNumber}: 同步失敗：{error.Message}");
             }
         }
 
-        syncRepository.UpsertMany(changes);
+        try
+        {
+            syncRepository.UpsertMany(changes);
+        }
+        catch (Exception error)
+        {
+            TryRecordIssue(accountKey, string.Empty, string.Empty, InvoiceSyncIssueTypes.LocalWriteFailed, error.Message);
+            throw;
+        }
+        ResolveAccountIssue(problems, accountKey, InvoiceSyncIssueTypes.LocalWriteFailed);
+        foreach (var identity in successfulReconciliations.Distinct())
+        {
+            ResolveIssues(
+                problems,
+                accountKey,
+                identity,
+                InvoiceSyncIssueTypes.AmbiguousMatch,
+                InvoiceSyncIssueTypes.ReconciliationFailed);
+        }
+        foreach (var identity in successfulQueries.Distinct())
+        {
+            ResolveIssues(
+                problems,
+                accountKey,
+                identity,
+                InvoiceSyncIssueTypes.QueryFailed,
+                InvoiceSyncIssueTypes.RemoteNotFound,
+                InvoiceSyncIssueTypes.UnknownRemoteNotFound);
+        }
+
         foreach (var number in invalidations)
             problems.AddRange(InvoiceCacheInvalidator.Invalidate(repository, account.Environment, number));
         return new InvoiceSyncResult(remote.Count, inserted, updated, unchanged, queried, problems);
@@ -131,12 +216,14 @@ public sealed class InvoiceSyncService
         DateOnly endDate,
         CancellationToken cancellationToken)
     {
+        var accountKey = AccountKey(account);
         var local = AccountRecords(account)
             .Where(record => IsInRange(record, startDate, endDate))
             .ToList();
         var changes = new List<InvoiceRecord>();
         var invalidations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var problems = new List<string>();
+        var successfulQueries = new List<IssueIdentity>();
         var updated = 0;
         var unchanged = 0;
         var queried = 0;
@@ -145,6 +232,7 @@ public sealed class InvoiceSyncService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var before = Fingerprint(record);
+            var identity = new IssueIdentity(record.InvoiceNumber.Trim(), EffectiveOrderId(record));
             try
             {
                 QueryResponse query;
@@ -158,6 +246,8 @@ public sealed class InvoiceSyncService
                 }
                 queried++;
                 ApplyQuery(record, query.Data, account);
+                identity = new IssueIdentity(record.InvoiceNumber.Trim(), EffectiveOrderId(record));
+                successfulQueries.Add(identity);
                 var after = Fingerprint(record);
                 if (!string.Equals(before, after, StringComparison.Ordinal))
                 {
@@ -172,15 +262,52 @@ public sealed class InvoiceSyncService
             }
             catch (AmegoApiException error) when (error.Code == 71)
             {
+                var issueType = record.InvoiceState == InvoiceStates.Unknown
+                    ? InvoiceSyncIssueTypes.UnknownRemoteNotFound
+                    : InvoiceSyncIssueTypes.RemoteNotFound;
+                AddIssueProblem(
+                    problems,
+                    accountKey,
+                    identity.InvoiceNumber,
+                    identity.OrderId,
+                    issueType,
+                    "光貿測試環境查無此筆，本機資料未刪除");
                 problems.Add($"{EffectiveOrderId(record)}: 光貿測試環境查無此筆，本機資料未刪除");
             }
             catch (Exception error)
             {
+                AddIssueProblem(
+                    problems,
+                    accountKey,
+                    identity.InvoiceNumber,
+                    identity.OrderId,
+                    InvoiceSyncIssueTypes.QueryFailed,
+                    error.Message);
                 problems.Add($"{EffectiveOrderId(record)}: 測試資料回查失敗：{error.Message}");
             }
         }
 
-        syncRepository.UpsertMany(changes);
+        try
+        {
+            syncRepository.UpsertMany(changes);
+        }
+        catch (Exception error)
+        {
+            TryRecordIssue(accountKey, string.Empty, string.Empty, InvoiceSyncIssueTypes.LocalWriteFailed, error.Message);
+            throw;
+        }
+        ResolveAccountIssue(problems, accountKey, InvoiceSyncIssueTypes.LocalWriteFailed);
+        foreach (var identity in successfulQueries.Distinct())
+        {
+            ResolveIssues(
+                problems,
+                accountKey,
+                identity,
+                InvoiceSyncIssueTypes.QueryFailed,
+                InvoiceSyncIssueTypes.RemoteNotFound,
+                InvoiceSyncIssueTypes.UnknownRemoteNotFound,
+                InvoiceSyncIssueTypes.ReconciliationFailed);
+        }
         foreach (var number in invalidations)
             problems.AddRange(InvoiceCacheInvalidator.Invalidate(repository, account.Environment, number));
         return new InvoiceSyncResult(local.Count, 0, updated, unchanged, queried, problems);
@@ -230,7 +357,9 @@ public sealed class InvoiceSyncService
         var number = remote.InvoiceNumber.Trim();
         var byNumber = local.Where(record =>
             string.Equals(record.InvoiceNumber.Trim(), number, StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (byNumber.Length != 0) return Preferred(byNumber);
+        if (byNumber.Length > 1)
+            throw new AmbiguousInvoiceMatchException($"同一發票號碼對到 {byNumber.Length} 筆本機紀錄，已停止自動更新");
+        if (byNumber.Length == 1) return byNumber[0];
 
         var orderId = remote.OrderId.Trim();
         if (orderId.Length == 0) return null;
@@ -238,12 +367,10 @@ public sealed class InvoiceSyncService
             string.Equals(record.ApiOrderId.Trim(), orderId, StringComparison.Ordinal) ||
             string.Equals(record.OrderId.Trim(), orderId, StringComparison.Ordinal) ||
             string.Equals(record.OriginalOrderId.Trim(), orderId, StringComparison.Ordinal)).ToArray();
-        return byOrder.Length == 0 ? null : Preferred(byOrder);
+        if (byOrder.Length > 1)
+            throw new AmbiguousInvoiceMatchException($"同一 OrderID 對到 {byOrder.Length} 筆本機紀錄，已停止自動更新");
+        return byOrder.Length == 0 ? null : byOrder[0];
     }
-
-    private static InvoiceRecord Preferred(IReadOnlyList<InvoiceRecord> records) =>
-        records.LastOrDefault(record => string.Equals(record.RecordOrigin, RecordOrigins.Local, StringComparison.Ordinal))
-        ?? records[^1];
 
     private InvoiceRecord NewSyncedRecord(Account account, InvoiceListItem item)
     {
@@ -447,6 +574,69 @@ public sealed class InvoiceSyncService
         return new Account(Environments.Production, sellerInvoice, appKey);
     }
 
+    private static string AccountKey(Account account) => account.Environment + "|" + account.SellerInvoice;
+
+    private static IssueIdentity Identity(InvoiceRecord record, InvoiceListItem item) => new(
+        record.InvoiceNumber.Trim().Length == 0 ? item.InvoiceNumber.Trim() : record.InvoiceNumber.Trim(),
+        EffectiveOrderId(record).Length == 0 ? item.OrderId.Trim() : EffectiveOrderId(record));
+
+    private void AddIssueProblem(
+        List<string> problems,
+        string accountKey,
+        string invoiceNumber,
+        string orderId,
+        string issueType,
+        string message)
+    {
+        try
+        {
+            issueStore.Record(accountKey, invoiceNumber, orderId, issueType, message, now());
+        }
+        catch (Exception error)
+        {
+            problems.Add($"同步異常記錄保存失敗：{error.Message}");
+        }
+    }
+
+    private void TryRecordIssue(
+        string accountKey,
+        string invoiceNumber,
+        string orderId,
+        string issueType,
+        string message)
+    {
+        try { issueStore.Record(accountKey, invoiceNumber, orderId, issueType, message, now()); }
+        catch { }
+    }
+
+    private void ResolveIssues(
+        List<string> problems,
+        string accountKey,
+        IssueIdentity identity,
+        params string[] issueTypes)
+    {
+        try
+        {
+            issueStore.ResolveMatching(accountKey, identity.InvoiceNumber, identity.OrderId, now(), issueTypes);
+        }
+        catch (Exception error)
+        {
+            problems.Add($"同步異常解決狀態保存失敗：{error.Message}");
+        }
+    }
+
+    private void ResolveAccountIssue(List<string> problems, string accountKey, string issueType)
+    {
+        try { issueStore.ResolveAccountType(accountKey, issueType, now()); }
+        catch (Exception error) { problems.Add($"同步異常解決狀態保存失敗：{error.Message}"); }
+    }
+
+    private void TryResolveAccountIssue(string accountKey, string issueType)
+    {
+        try { issueStore.ResolveAccountType(accountKey, issueType, now()); }
+        catch { }
+    }
+
     private static string Delivery(string carrierType, string npoBan)
     {
         if (npoBan.Trim().Length != 0) return "捐贈";
@@ -533,4 +723,12 @@ public sealed class InvoiceSyncService
     }
 
     private sealed record Account(string Environment, string SellerInvoice, string AppKey);
+    private sealed record IssueIdentity(string InvoiceNumber, string OrderId);
+
+    private sealed class AmbiguousInvoiceMatchException : InvalidDataException
+    {
+        public AmbiguousInvoiceMatchException(string message) : base(message)
+        {
+        }
+    }
 }
