@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CYInvoice.WinForms", "src\C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CYInvoice.Core.Tests", "tests\CYInvoice.Core.Tests\CYInvoice.Core.Tests.csproj", "{72C0B0DA-42C4-4811-8BDC-B01135292A57}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CYInvoice.SqliteMigration.Tests", "tests\CYInvoice.SqliteMigration.Tests\CYInvoice.SqliteMigration.Tests.csproj", "{AA178C2F-ED48-4AD7-A41F-31A4F09C44EB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -27,5 +29,9 @@ Global
 		{72C0B0DA-42C4-4811-8BDC-B01135292A57}.Debug|x64.Build.0 = Debug|Any CPU
 		{72C0B0DA-42C4-4811-8BDC-B01135292A57}.Release|x64.ActiveCfg = Release|Any CPU
 		{72C0B0DA-42C4-4811-8BDC-B01135292A57}.Release|x64.Build.0 = Release|Any CPU
+		{AA178C2F-ED48-4AD7-A41F-31A4F09C44EB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AA178C2F-ED48-4AD7-A41F-31A4F09C44EB}.Debug|x64.Build.0 = Debug|Any CPU
+		{AA178C2F-ED48-4AD7-A41F-31A4F09C44EB}.Release|x64.ActiveCfg = Release|Any CPU
+		{AA178C2F-ED48-4AD7-A41F-31A4F09C44EB}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
