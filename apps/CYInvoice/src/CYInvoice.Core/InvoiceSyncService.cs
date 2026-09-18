@@ -47,23 +47,30 @@ public sealed class InvoiceSyncService
         if (startDate > endDate) throw new ArgumentOutOfRangeException(nameof(startDate));
         var account = CurrentAccount();
         var gateway = gatewayFactory(account.SellerInvoice, account.AppKey);
-        return account.Environment == Environments.Test
-            ? await SyncKnownTestInvoicesAsync(gateway, account, startDate, endDate, cancellationToken).ConfigureAwait(false)
-            : await SyncProductionAsync(gateway, account, startDate, endDate, cancellationToken).ConfigureAwait(false);
+        if (account.Environment == Environments.Test)
+        {
+            var today = DateOnly.FromDateTime(now().DateTime);
+            return await SyncListedAsync(gateway, account, today, today, today, cancellationToken).ConfigureAwait(false);
+        }
+        return await SyncListedAsync(gateway, account, startDate, endDate, null, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<InvoiceSyncResult> SyncProductionAsync(
+    private async Task<InvoiceSyncResult> SyncListedAsync(
         IAmegoGateway gateway,
         Account account,
         DateOnly startDate,
         DateOnly endDate,
+        DateOnly? testPrefixDate,
         CancellationToken cancellationToken)
     {
         var accountKey = AccountKey(account);
         IReadOnlyList<InvoiceListItem> remote;
         try
         {
-            remote = await LoadAllPagesAsync(gateway, startDate, endDate, cancellationToken).ConfigureAwait(false);
+            var listed = await LoadAllPagesAsync(gateway, startDate, endDate, cancellationToken).ConfigureAwait(false);
+            remote = testPrefixDate is null
+                ? listed
+                : listed.Where(item => TestOrderIdPrefix.TryStripForDate(item.OrderId, testPrefixDate.Value, out _)).ToArray();
         }
         catch (Exception error)
         {
@@ -78,6 +85,7 @@ public sealed class InvoiceSyncService
         var problems = new List<string>();
         var successfulQueries = new List<IssueIdentity>();
         var successfulReconciliations = new List<IssueIdentity>();
+        var processedLocalIds = new HashSet<string>(StringComparer.Ordinal);
         var inserted = 0;
         var updated = 0;
         var unchanged = 0;
@@ -87,15 +95,16 @@ public sealed class InvoiceSyncService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var invoiceNumber = item.InvoiceNumber.Trim();
-            var orderId = item.OrderId.Trim();
+            var apiOrderId = item.OrderId.Trim();
             if (invoiceNumber.Length == 0) continue;
             try
             {
-                var record = Match(local, item);
+                var record = Match(local, item, account);
                 var isNew = record is null;
                 record ??= NewSyncedRecord(account, item);
+                processedLocalIds.Add(record.Id);
                 var before = Fingerprint(record);
-                var summaryChanged = isNew || SummaryDiffers(record, item);
+                var summaryChanged = isNew || SummaryDiffers(record, item, account);
                 ApplyList(record, item, account);
                 var identity = Identity(record, item);
                 successfulReconciliations.Add(identity);
@@ -156,7 +165,7 @@ public sealed class InvoiceSyncService
                     problems,
                     accountKey,
                     invoiceNumber,
-                    orderId,
+                    apiOrderId,
                     InvoiceSyncIssueTypes.AmbiguousMatch,
                     error.Message);
                 problems.Add($"{invoiceNumber}: {error.Message}");
@@ -167,10 +176,76 @@ public sealed class InvoiceSyncService
                     problems,
                     accountKey,
                     invoiceNumber,
-                    orderId,
+                    apiOrderId,
                     InvoiceSyncIssueTypes.ReconciliationFailed,
                     error.Message);
                 problems.Add($"{item.InvoiceNumber}: 同步失敗：{error.Message}");
+            }
+        }
+
+        if (testPrefixDate is not null)
+        {
+            foreach (var record in local.Where(record =>
+                         !processedLocalIds.Contains(record.Id) &&
+                         record.InvoiceState is InvoiceStates.Unknown or InvoiceStates.Changing &&
+                         IsInRange(record, testPrefixDate.Value, testPrefixDate.Value)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var before = Fingerprint(record);
+                var identity = new IssueIdentity(record.InvoiceNumber.Trim(), EffectiveOrderId(record));
+                try
+                {
+                    QueryResponse query;
+                    if (record.InvoiceNumber.Trim().Length != 0)
+                        query = await gateway.QueryByInvoiceNumberAsync(record.InvoiceNumber, cancellationToken).ConfigureAwait(false);
+                    else
+                    {
+                        var orderId = EffectiveOrderId(record);
+                        if (orderId.Length == 0) throw new InvalidDataException("本機測試紀錄缺少可回查的 OrderID");
+                        query = await gateway.QueryByOrderIdAsync(orderId, cancellationToken).ConfigureAwait(false);
+                    }
+                    queried++;
+                    ApplyQuery(record, query.Data, account);
+                    identity = new IssueIdentity(record.InvoiceNumber.Trim(), EffectiveOrderId(record));
+                    successfulQueries.Add(identity);
+                    successfulReconciliations.Add(identity);
+                    var after = Fingerprint(record);
+                    if (!string.Equals(before, after, StringComparison.Ordinal))
+                    {
+                        updated++;
+                        changes.Add(record);
+                        if (record.InvoiceNumber.Trim().Length != 0) invalidations.Add(record.InvoiceNumber);
+                    }
+                    else
+                    {
+                        unchanged++;
+                    }
+                }
+                catch (AmegoApiException error) when (error.Code == 71)
+                {
+                    var issueType = record.InvoiceState == InvoiceStates.Unknown
+                        ? InvoiceSyncIssueTypes.UnknownRemoteNotFound
+                        : InvoiceSyncIssueTypes.RemoteNotFound;
+                    AddIssueProblem(
+                        problems,
+                        accountKey,
+                        identity.InvoiceNumber,
+                        identity.OrderId,
+                        issueType,
+                        "光貿測試環境查無此筆，本機資料未刪除");
+                    problems.Add($"{EffectiveOrderId(record)}: 光貿測試環境查無此筆，本機資料未刪除");
+                }
+                catch (Exception error)
+                {
+                    AddIssueProblem(
+                        problems,
+                        accountKey,
+                        identity.InvoiceNumber,
+                        identity.OrderId,
+                        InvoiceSyncIssueTypes.QueryFailed,
+                        error.Message);
+                    problems.Add($"{EffectiveOrderId(record)}: 測試資料回查失敗：{error.Message}");
+                }
             }
         }
 
@@ -207,111 +282,6 @@ public sealed class InvoiceSyncService
         foreach (var number in invalidations)
             problems.AddRange(InvoiceCacheInvalidator.Invalidate(repository, account.Environment, number));
         return new InvoiceSyncResult(remote.Count, inserted, updated, unchanged, queried, problems);
-    }
-
-    private async Task<InvoiceSyncResult> SyncKnownTestInvoicesAsync(
-        IAmegoGateway gateway,
-        Account account,
-        DateOnly startDate,
-        DateOnly endDate,
-        CancellationToken cancellationToken)
-    {
-        var accountKey = AccountKey(account);
-        var local = AccountRecords(account)
-            .Where(record => !string.Equals(record.InvoiceState, InvoiceStates.Failed, StringComparison.Ordinal))
-            .Where(record => IsInRange(record, startDate, endDate))
-            .ToList();
-        var changes = new List<InvoiceRecord>();
-        var invalidations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var problems = new List<string>();
-        var successfulQueries = new List<IssueIdentity>();
-        var updated = 0;
-        var unchanged = 0;
-        var queried = 0;
-
-        foreach (var record in local)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var before = Fingerprint(record);
-            var identity = new IssueIdentity(record.InvoiceNumber.Trim(), EffectiveOrderId(record));
-            try
-            {
-                QueryResponse query;
-                if (record.InvoiceNumber.Trim().Length != 0)
-                    query = await gateway.QueryByInvoiceNumberAsync(record.InvoiceNumber, cancellationToken).ConfigureAwait(false);
-                else
-                {
-                    var orderId = EffectiveOrderId(record);
-                    if (orderId.Length == 0) throw new InvalidDataException("本機測試紀錄缺少可回查的 OrderID");
-                    query = await gateway.QueryByOrderIdAsync(orderId, cancellationToken).ConfigureAwait(false);
-                }
-                queried++;
-                ApplyQuery(record, query.Data, account);
-                identity = new IssueIdentity(record.InvoiceNumber.Trim(), EffectiveOrderId(record));
-                successfulQueries.Add(identity);
-                var after = Fingerprint(record);
-                if (!string.Equals(before, after, StringComparison.Ordinal))
-                {
-                    updated++;
-                    changes.Add(record);
-                    if (record.InvoiceNumber.Trim().Length != 0) invalidations.Add(record.InvoiceNumber);
-                }
-                else
-                {
-                    unchanged++;
-                }
-            }
-            catch (AmegoApiException error) when (error.Code == 71)
-            {
-                var issueType = record.InvoiceState == InvoiceStates.Unknown
-                    ? InvoiceSyncIssueTypes.UnknownRemoteNotFound
-                    : InvoiceSyncIssueTypes.RemoteNotFound;
-                AddIssueProblem(
-                    problems,
-                    accountKey,
-                    identity.InvoiceNumber,
-                    identity.OrderId,
-                    issueType,
-                    "光貿測試環境查無此筆，本機資料未刪除");
-                problems.Add($"{EffectiveOrderId(record)}: 光貿測試環境查無此筆，本機資料未刪除");
-            }
-            catch (Exception error)
-            {
-                AddIssueProblem(
-                    problems,
-                    accountKey,
-                    identity.InvoiceNumber,
-                    identity.OrderId,
-                    InvoiceSyncIssueTypes.QueryFailed,
-                    error.Message);
-                problems.Add($"{EffectiveOrderId(record)}: 測試資料回查失敗：{error.Message}");
-            }
-        }
-
-        try
-        {
-            syncRepository.UpsertMany(changes);
-        }
-        catch (Exception error)
-        {
-            TryRecordIssue(accountKey, string.Empty, string.Empty, InvoiceSyncIssueTypes.LocalWriteFailed, error.Message);
-            throw;
-        }
-        ResolveAccountIssue(problems, accountKey, InvoiceSyncIssueTypes.LocalWriteFailed);
-        foreach (var identity in successfulQueries.Distinct())
-        {
-            ResolveIssues(
-                problems,
-                accountKey,
-                identity,
-                InvoiceSyncIssueTypes.QueryFailed,
-                InvoiceSyncIssueTypes.RemoteNotFound,
-                InvoiceSyncIssueTypes.UnknownRemoteNotFound,
-                InvoiceSyncIssueTypes.ReconciliationFailed);
-        }
-        foreach (var number in invalidations)
-            problems.AddRange(InvoiceCacheInvalidator.Invalidate(repository, account.Environment, number));
-        return new InvoiceSyncResult(local.Count, 0, updated, unchanged, queried, problems);
     }
 
     private async Task<IReadOnlyList<InvoiceListItem>> LoadAllPagesAsync(
@@ -353,7 +323,7 @@ public sealed class InvoiceSyncService
             (record.SellerInvoice.Trim().Length == 0 ||
              string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal)));
 
-    private static InvoiceRecord? Match(IReadOnlyList<InvoiceRecord> local, InvoiceListItem remote)
+    private static InvoiceRecord? Match(IReadOnlyList<InvoiceRecord> local, InvoiceListItem remote, Account account)
     {
         var number = remote.InvoiceNumber.Trim();
         var byNumber = local.Where(record =>
@@ -362,10 +332,11 @@ public sealed class InvoiceSyncService
             throw new AmbiguousInvoiceMatchException($"同一發票號碼對到 {byNumber.Length} 筆本機紀錄，已停止自動更新");
         if (byNumber.Length == 1) return byNumber[0];
 
-        var orderId = remote.OrderId.Trim();
-        if (orderId.Length == 0) return null;
+        var apiOrderId = remote.OrderId.Trim();
+        if (apiOrderId.Length == 0) return null;
+        var orderId = CanonicalOrderId(account, apiOrderId);
         var byOrder = local.Where(record =>
-            string.Equals(record.ApiOrderId.Trim(), orderId, StringComparison.Ordinal) ||
+            string.Equals(record.ApiOrderId.Trim(), apiOrderId, StringComparison.Ordinal) ||
             string.Equals(record.OrderId.Trim(), orderId, StringComparison.Ordinal) ||
             string.Equals(record.OriginalOrderId.Trim(), orderId, StringComparison.Ordinal)).ToArray();
         if (byOrder.Length > 1)
@@ -375,8 +346,9 @@ public sealed class InvoiceSyncService
 
     private InvoiceRecord NewSyncedRecord(Account account, InvoiceListItem item)
     {
-        var orderId = item.OrderId.Trim();
-        if (orderId.Length == 0) throw new InvalidDataException("光貿清單缺少 OrderID");
+        var apiOrderId = item.OrderId.Trim();
+        if (apiOrderId.Length == 0) throw new InvalidDataException("光貿清單缺少 OrderID");
+        var orderId = CanonicalOrderId(account, apiOrderId);
         var issuedAt = JoinDateTime(NormalizeDate(item.InvoiceDate), NormalizeTime(item.InvoiceTime));
         return new InvoiceRecord
         {
@@ -386,7 +358,7 @@ public sealed class InvoiceSyncService
             RecordOrigin = RecordOrigins.Sync,
             OriginalOrderId = orderId,
             OrderId = orderId,
-            ApiOrderId = orderId,
+            ApiOrderId = apiOrderId,
             InvoiceNumber = item.InvoiceNumber.Trim(),
             InvoiceState = item.CancelDate == 0 ? InvoiceStates.Opened : InvoiceStates.Voided,
             SentAt = issuedAt,
@@ -396,14 +368,15 @@ public sealed class InvoiceSyncService
 
     private void ApplyList(InvoiceRecord record, InvoiceListItem item, Account account)
     {
-        var orderId = item.OrderId.Trim();
-        if (orderId.Length == 0) throw new InvalidDataException("光貿清單缺少 OrderID");
+        var apiOrderId = item.OrderId.Trim();
+        if (apiOrderId.Length == 0) throw new InvalidDataException("光貿清單缺少 OrderID");
+        var orderId = CanonicalOrderId(account, apiOrderId);
         record.SellerInvoice = account.SellerInvoice;
         record.Environment = account.Environment;
         if (record.RecordOrigin.Trim().Length == 0) record.RecordOrigin = RecordOrigins.Local;
         record.InvoiceNumber = item.InvoiceNumber.Trim();
         record.OrderId = orderId;
-        record.ApiOrderId = orderId;
+        record.ApiOrderId = apiOrderId;
         if (record.RecordOrigin == RecordOrigins.Sync || record.OriginalOrderId.Trim().Length == 0)
             record.OriginalOrderId = orderId;
         record.Source = InvoiceSourceInference.FromOrderId(orderId);
@@ -437,11 +410,12 @@ public sealed class InvoiceSyncService
         record.SellerInvoice = account.SellerInvoice;
         record.Environment = account.Environment;
         record.InvoiceNumber = number;
-        var orderId = query.OrderId.Trim();
-        if (orderId.Length != 0)
+        var apiOrderId = query.OrderId.Trim();
+        if (apiOrderId.Length != 0)
         {
+            var orderId = CanonicalOrderId(account, apiOrderId);
             record.OrderId = orderId;
-            record.ApiOrderId = orderId;
+            record.ApiOrderId = apiOrderId;
             if (record.RecordOrigin == RecordOrigins.Sync || record.OriginalOrderId.Trim().Length == 0)
                 record.OriginalOrderId = orderId;
             record.Source = InvoiceSourceInference.FromOrderId(orderId);
@@ -506,12 +480,15 @@ public sealed class InvoiceSyncService
         return items;
     }
 
-    private static bool SummaryDiffers(InvoiceRecord record, InvoiceListItem item)
+    private static bool SummaryDiffers(InvoiceRecord record, InvoiceListItem item, Account account)
     {
         var state = item.CancelDate == 0 ? InvoiceStates.Opened : InvoiceStates.Voided;
+        var apiOrderId = item.OrderId.Trim();
+        var orderId = CanonicalOrderId(account, apiOrderId);
         return !string.Equals(record.InvoiceNumber.Trim(), item.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase) ||
-               !string.Equals(record.OrderId.Trim(), item.OrderId.Trim(), StringComparison.Ordinal) ||
-               !string.Equals(record.Source.Trim(), InvoiceSourceInference.FromOrderId(item.OrderId), StringComparison.Ordinal) ||
+               !string.Equals(record.OrderId.Trim(), orderId, StringComparison.Ordinal) ||
+               !string.Equals(record.ApiOrderId.Trim(), apiOrderId, StringComparison.Ordinal) ||
+               !string.Equals(record.Source.Trim(), InvoiceSourceInference.FromOrderId(orderId), StringComparison.Ordinal) ||
                !string.Equals(record.InvoiceState, state, StringComparison.Ordinal) ||
                record.UploadStatus != item.InvoiceStatus ||
                !string.Equals(record.InvoiceDate, NormalizeDate(item.InvoiceDate), StringComparison.Ordinal) ||
@@ -525,6 +502,11 @@ public sealed class InvoiceSyncService
                !string.Equals(record.NpoBan.Trim(), item.NpoBan.Trim(), StringComparison.Ordinal) ||
                !string.Equals(record.MainRemark.Trim(), item.MainRemark.Trim(), StringComparison.Ordinal);
     }
+
+    private static string CanonicalOrderId(Account account, string apiOrderId) =>
+        account.Environment == Environments.Test
+            ? TestOrderIdPrefix.StripIfPresent(apiOrderId)
+            : apiOrderId.Trim();
 
     private static string Fingerprint(InvoiceRecord record) => JsonSerializer.Serialize(new
     {
