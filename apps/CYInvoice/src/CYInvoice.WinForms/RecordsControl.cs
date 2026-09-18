@@ -1,3 +1,4 @@
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using CYInvoice.Core;
@@ -63,7 +64,7 @@ internal sealed class RecordsControl : UserControl
         detailRefreshService = new InvoiceDetailRefreshService(repository);
         this.shutdownToken = shutdownToken;
         voidedFont = new Font(Records.Font, FontStyle.Strikeout);
-        sourceTagFont = new Font(Records.Font.FontFamily, 7F, FontStyle.Regular);
+        sourceTagFont = new Font(Records.Font.FontFamily, 7.5F, FontStyle.Bold);
         Dock = DockStyle.Fill;
         BackColor = Color.White;
         Padding = new Padding(18);
@@ -136,7 +137,7 @@ internal sealed class RecordsControl : UserControl
         leftButtons.Controls.Add(refreshButton);
         leftButtons.Controls.Add(copyHint);
         uploadIssuesButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        uploadIssuesButton.Margin = new Padding(3, 0, 0, 0);
+        uploadIssuesButton.Margin = new Padding(6, 2, 6, 2);
         buttonRow.Controls.Add(leftButtons, 0, 0);
         buttonRow.Controls.Add(uploadIssuesButton, 1, 0);
         filters.Controls.Add(buttonRow, 0, 2);
@@ -581,7 +582,7 @@ internal sealed class RecordsControl : UserControl
 
         var tagTextSize = TextRenderer.MeasureText(eventArgs.Graphics, tag, sourceTagFont,
             new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
-        var tagWidth = tagTextSize.Width + 10;
+        var tagWidth = tagTextSize.Width + 12;
         var sourceAvailable = Math.Max(24, bounds.Width - tagWidth - 6);
         var measuredSource = TextRenderer.MeasureText(eventArgs.Graphics, text, textFont,
             new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
@@ -590,16 +591,35 @@ internal sealed class RecordsControl : UserControl
         TextRenderer.DrawText(eventArgs.Graphics, text, textFont, sourceBounds, eventArgs.SubItem.ForeColor, textFlags);
 
         var tagX = Math.Min(bounds.Right - tagWidth, bounds.Left + sourceWidth + 5);
-        var tagHeight = Math.Min(16, Math.Max(13, bounds.Height - 5));
+        var tagHeight = Math.Min(18, Math.Max(15, bounds.Height - 4));
         var tagRect = new Rectangle(tagX, bounds.Top + (bounds.Height - tagHeight) / 2, tagWidth, tagHeight);
         var isUpdate = string.Equals(tag, InvoiceSourceInference.UpdateTag, StringComparison.Ordinal);
-        var background = isUpdate ? Color.FromArgb(255, 243, 214) : Color.FromArgb(232, 242, 252);
-        var border = isUpdate ? Color.FromArgb(217, 164, 74) : Color.FromArgb(126, 166, 204);
-        var foreground = isUpdate ? Color.FromArgb(145, 91, 0) : Color.FromArgb(43, 92, 137);
-        using (var brush = new SolidBrush(background)) eventArgs.Graphics.FillRectangle(brush, tagRect);
-        using (var pen = new Pen(border)) eventArgs.Graphics.DrawRectangle(pen, tagRect);
+        var background = isUpdate ? Color.FromArgb(255, 246, 207) : Color.FromArgb(231, 240, 255);
+        var border = isUpdate ? Color.FromArgb(239, 184, 42) : Color.FromArgb(116, 155, 231);
+        var foreground = isUpdate ? Color.FromArgb(143, 91, 0) : Color.FromArgb(42, 88, 181);
+
+        var oldSmoothing = eventArgs.Graphics.SmoothingMode;
+        eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using (var path = RoundedRectangle(tagRect, 4))
+        {
+            using (var brush = new SolidBrush(background)) eventArgs.Graphics.FillPath(brush, path);
+            using (var pen = new Pen(border)) eventArgs.Graphics.DrawPath(pen, path);
+        }
+        eventArgs.Graphics.SmoothingMode = oldSmoothing;
         TextRenderer.DrawText(eventArgs.Graphics, tag, sourceTagFont, tagRect, foreground,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+    }
+
+    private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
+    {
+        var diameter = radius * 2;
+        var path = new GraphicsPath();
+        path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+        path.AddArc(bounds.Right - diameter - 1, bounds.Top, diameter, diameter, 270, 90);
+        path.AddArc(bounds.Right - diameter - 1, bounds.Bottom - diameter - 1, diameter, diameter, 0, 90);
+        path.AddArc(bounds.Left, bounds.Bottom - diameter - 1, diameter, diameter, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 
     private void ResetFilters()
@@ -634,6 +654,8 @@ internal sealed class RecordsControl : UserControl
         var secondRowCenters = new Control[] { buyerName, buyerBan, source, state }.Select(ScreenCenterY).ToArray();
         if (firstRowCenters.Max() - firstRowCenters.Min() > 2 || secondRowCenters.Max() - secondRowCenters.Min() > 2)
             throw new InvalidOperationException("已開立發票篩選欄位未在各列垂直置中對齊");
+        if (Math.Abs(ScreenCenterY(refreshButton) - ScreenCenterY(uploadIssuesButton)) > 1)
+            throw new InvalidOperationException("上傳問題按鈕未與左側操作按鈕垂直對齊");
 
         var columnWidth = Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
         if (columnWidth > recordsHost.ColumnViewportWidth ||
