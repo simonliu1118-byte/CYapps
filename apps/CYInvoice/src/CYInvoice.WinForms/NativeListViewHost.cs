@@ -13,6 +13,7 @@ internal sealed class NativeListViewHost : UserControl
     private const long WsVScroll = 0x00200000L;
     private readonly ImageList rowHeightImages = new();
     private readonly int configuredRowHeight;
+    private readonly bool lockUserColumnResize = true;
     private bool settingColumnWidths;
     private bool scrollNeeded;
     private bool notifyingViewport;
@@ -30,7 +31,7 @@ internal sealed class NativeListViewHost : UserControl
             View = View.Details,
             FullRowSelect = true,
             GridLines = false,
-            HeaderStyle = ColumnHeaderStyle.Nonclickable,
+            HeaderStyle = ColumnHeaderStyle.Clickable,
             HideSelection = true,
             LabelEdit = false,
             MultiSelect = false,
@@ -46,7 +47,7 @@ internal sealed class NativeListViewHost : UserControl
         List.SmallImageList = rowHeightImages;
         List.ColumnWidthChanging += (_, eventArgs) =>
         {
-            if (!settingColumnWidths)
+            if (lockUserColumnResize && !settingColumnWidths)
             {
                 eventArgs.Cancel = true;
                 eventArgs.NewWidth = List.Columns[eventArgs.ColumnIndex].Width;
@@ -73,6 +74,10 @@ internal sealed class NativeListViewHost : UserControl
     public bool HorizontalScrollVisible => HasWindowStyle(WsHScroll);
 
     public bool VerticalScrollVisible => HasWindowStyle(WsVScroll);
+
+    public bool HeaderClicksEnabled => List.HeaderStyle == ColumnHeaderStyle.Clickable;
+
+    public bool UserColumnResizeLocked => lockUserColumnResize;
 
     public int ColumnViewportWidth
     {

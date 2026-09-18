@@ -168,14 +168,14 @@ internal sealed class RecordsControl : UserControl
     {
         Records.Columns.Add("開立時間", 140, HorizontalAlignment.Left);
         Records.Columns.Add("發票號碼", 108, HorizontalAlignment.Left);
-        Records.Columns.Add("來源", 116, HorizontalAlignment.Left);
-        Records.Columns.Add("訂單編號", 155, HorizontalAlignment.Left);
+        Records.Columns.Add("來源", 106, HorizontalAlignment.Left);
+        Records.Columns.Add("訂單編號", 130, HorizontalAlignment.Left);
         Records.Columns.Add("統編", 82, HorizontalAlignment.Left);
         Records.Columns.Add("買受人", 150, HorizontalAlignment.Left);
         Records.Columns.Add("金額", 86, HorizontalAlignment.Right);
         Records.Columns.Add("交付方式", 76, HorizontalAlignment.Left);
-        Records.Columns.Add("發票狀態", 74, HorizontalAlignment.Left);
-        Records.Columns.Add("上傳", 58, HorizontalAlignment.Center);
+        Records.Columns.Add("發票狀態", 88, HorizontalAlignment.Left);
+        Records.Columns.Add("上傳", 48, HorizontalAlignment.Center);
         Records.OwnerDraw = true;
         Records.DrawColumnHeader += (_, eventArgs) => NativeListViewHost.DrawHeader(eventArgs, Records.Font);
         Records.DrawItem += (_, eventArgs) => { if (Records.View != View.Details) eventArgs.DrawDefault = true; };
@@ -517,14 +517,14 @@ internal sealed class RecordsControl : UserControl
     {
         if (Records.Columns.Count != 10 || Records.ClientSize.Width <= 0) return;
         var available = recordsHost.ColumnViewportWidth;
-        var widths = new[] { 140, 108, 116, 155, 82, 0, 86, 76, 74, 58 };
+        var widths = new[] { 140, 108, 106, 130, 82, 0, 86, 76, 88, 48 };
         widths[5] = Math.Max(80, available - widths.Sum());
         var over = widths.Sum() - available;
         if (over > 0)
         {
             foreach (var index in new[] { 5, 6, 3, 0, 1 })
             {
-                var minimum = index switch { 5 => 60, 3 => 110, 0 => 112, 1 => 90, _ => 70 };
+                var minimum = index switch { 5 => 60, 3 => 118, 0 => 112, 1 => 90, _ => 70 };
                 var reduction = Math.Min(over, Math.Max(0, widths[index] - minimum));
                 widths[index] -= reduction;
                 over -= reduction;
@@ -728,6 +728,8 @@ internal sealed class RecordsControl : UserControl
     {
         if (Records.Columns.Count != 10) throw new InvalidOperationException("已開立發票原生 ListView 欄位未建立");
         if (!recordsHost.UsesOnlyNativeScrollBar) throw new InvalidOperationException("已開立發票清單仍含額外 scrollbar 控制項");
+        if (!recordsHost.HeaderClicksEnabled || !recordsHost.UserColumnResizeLocked)
+            throw new InvalidOperationException("已開立發票表頭必須可點擊排序且禁止使用者拖拉欄寬");
         if (Math.Abs(Records.Font.SizeInPoints - 10F) > 0.1F) throw new InvalidOperationException("已開立發票清單未使用 10pt 字級");
         if (Records.Items.Count == 0 || Records.GetItemRect(0).Height > 24)
             throw new InvalidOperationException($"已開立發票清單資料列過高：{(Records.Items.Count == 0 ? 0 : Records.GetItemRect(0).Height)}px");
