@@ -41,7 +41,7 @@ internal sealed class RecordsControl : UserControl
     private readonly System.Windows.Forms.Timer copyFeedbackTimer = new() { Interval = 2000 };
     private readonly System.Windows.Forms.Timer refreshCooldownTimer = new() { Interval = 500 };
     private readonly List<InvoiceRecord> visible = [];
-    private readonly Font voidedFont;
+    private readonly Dictionary<string, string> sellerCompanyNames = new(StringComparer.Ordinal);
     private readonly Font sourceTagFont;
     private RecordSortMode sortMode = RecordSortMode.TimeDescending;
     private bool fillingRows;
@@ -66,7 +66,6 @@ internal sealed class RecordsControl : UserControl
         this.syncCoordinator = syncCoordinator ?? throw new ArgumentNullException(nameof(syncCoordinator));
         detailRefreshService = new InvoiceDetailRefreshService(repository);
         this.shutdownToken = shutdownToken;
-        voidedFont = new Font(Records.Font, FontStyle.Italic);
         sourceTagFont = new Font(Records.Font.FontFamily, 7.5F, FontStyle.Bold);
         Dock = DockStyle.Fill;
         BackColor = Color.White;
@@ -404,18 +403,12 @@ internal sealed class RecordsControl : UserControl
         {
             var fresh = await detailRefreshService.RefreshAsync(record, shutdownToken);
             if (shutdownToken.IsCancellationRequested || IsDisposed) return;
+            var paper = string.Equals(fresh.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal);
+            var sellerCompanyName = paper ? string.Empty : await ResolveSellerCompanyNameAsync();
             Reload();
-            using var detail = new RecordDetailForm(fresh, repository, service);
-            if (string.Equals(fresh.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal))
-            {
-                detail.MinimumSize = new Size(760, 620);
-                detail.ClientSize = new Size(800, 700);
-            }
-            else
-            {
-                detail.MinimumSize = new Size(760, 620);
-                detail.ClientSize = new Size(800, 700);
-            }
+            using var detail = new RecordDetailForm(fresh, repository, service, sellerCompanyName);
+            detail.MinimumSize = new Size(760, 620);
+            detail.ClientSize = new Size(800, 700);
             detail.ShowDialog(FindForm());
         }
         catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
@@ -435,6 +428,31 @@ internal sealed class RecordsControl : UserControl
             UseWaitCursor = false;
             if (!IsDisposed) Records.Enabled = true;
             openingRecord = false;
+        }
+    }
+
+    private async Task<string> ResolveSellerCompanyNameAsync()
+    {
+        var settings = repository.Settings.LoadOrCreate();
+        if (settings.Environment == Environments.Test) return "光貿測試公司";
+
+        var accountKey = CurrentAccountKey();
+        if (accountKey.Length != 0 && sellerCompanyNames.TryGetValue(accountKey, out var cached))
+            return cached;
+
+        try
+        {
+            var name = (await service.HealthCheckAsync(shutdownToken)).Trim();
+            if (name.Length != 0 && accountKey.Length != 0) sellerCompanyNames[accountKey] = name;
+            return name;
+        }
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return string.Empty;
         }
     }
 
@@ -470,9 +488,9 @@ internal sealed class RecordsControl : UserControl
             for (var index = 0; index < 8; index++)
             {
                 row.SubItems[index].ForeColor = Color.Gray;
-                row.SubItems[index].Font = voidedFont;
+                row.SubItems[index].Font = Records.Font;
             }
-            row.SubItems[8].ForeColor = Color.Firebrick;
+            row.SubItems[8].ForeColor = SystemColors.ControlText;
             row.SubItems[8].Font = Records.Font;
             row.SubItems[8].Text = "已作廢";
         }
@@ -553,9 +571,20 @@ internal sealed class RecordsControl : UserControl
         else
             DrawRegularSubItem(eventArgs);
 
-        using var pen = new Pen(Color.FromArgb(190, 190, 190));
-        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
-        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+        using (var gridPen = new Pen(Color.FromArgb(190, 190, 190)))
+        {
+            eventArgs.Graphics.DrawLine(gridPen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+            eventArgs.Graphics.DrawLine(gridPen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+        }
+
+        if (eventArgs.Item.Tag is InvoiceRecord voidedRecord &&
+            voidedRecord.InvoiceState == InvoiceStates.Voided &&
+            eventArgs.ColumnIndex < 8)
+        {
+            using var strikePen = new Pen(Color.FromArgb(125, 125, 125), 1.2F);
+            var strikeY = eventArgs.Bounds.Top + eventArgs.Bounds.Height / 2;
+            eventArgs.Graphics.DrawLine(strikePen, eventArgs.Bounds.Left, strikeY, eventArgs.Bounds.Right, strikeY);
+        }
     }
 
     private void DrawRegularSubItem(DrawListViewSubItemEventArgs eventArgs)
@@ -583,7 +612,7 @@ internal sealed class RecordsControl : UserControl
             eventArgs.Graphics.DrawLine(pen, iconRect.Right - inset, iconRect.Top + inset, iconRect.Left + inset, iconRect.Bottom - inset);
         }
         var textBounds = new Rectangle(iconRect.Right + 5, bounds.Top, Math.Max(1, bounds.Right - iconRect.Right - 5), bounds.Height);
-        TextRenderer.DrawText(eventArgs.Graphics, "已作廢", Records.Font, textBounds, Color.Firebrick,
+        TextRenderer.DrawText(eventArgs.Graphics, "已作廢", Records.Font, textBounds, SystemColors.ControlText,
             TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.Left);
     }
 
@@ -685,7 +714,7 @@ internal sealed class RecordsControl : UserControl
             RecordSortMode.InvoiceAscending => "發票號碼 ▲",
             _ => "發票號碼",
         };
-        Records.Columns[2].Text = sortMode == RecordSortMode.SourceGroup ? "來源 ▲" : "來源";
+        Records.Columns[2].Text = sortMode == RecordSortMode.SourceGroup ? "來源 [分組]" : "來源";
     }
 
     private void SortVisible()
@@ -802,7 +831,6 @@ internal sealed class RecordsControl : UserControl
             copyFeedbackTimer.Dispose();
             refreshCooldownTimer.Dispose();
             copyHint.Font.Dispose();
-            voidedFont.Dispose();
             sourceTagFont.Dispose();
         }
         base.Dispose(disposing);
