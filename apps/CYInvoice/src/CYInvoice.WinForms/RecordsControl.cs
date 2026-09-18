@@ -115,9 +115,16 @@ internal sealed class RecordsControl : UserControl
         var clear = UiControls.StandardButton("清除條件");
         clear.Click += (_, _) => { ResetFilters(); Reload(); };
         refreshButton.Click += async (_, _) => await RefreshFromApiAsync();
+        var syncIssues = UiControls.StandardButton("同步問題");
+        syncIssues.Click += (_, _) =>
+        {
+            using var form = new SyncIssuesForm(repository);
+            form.ShowDialog(FindForm());
+        };
         buttons.Controls.Add(query);
         buttons.Controls.Add(clear);
         buttons.Controls.Add(refreshButton);
+        buttons.Controls.Add(syncIssues);
         buttons.Controls.Add(copyHint);
         filters.Controls.Add(buttons, 0, 2);
         filters.SetColumnSpan(buttons, 8);
