@@ -17,6 +17,7 @@ internal sealed class RecordDetailForm : Form
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly bool paperInvoice;
+    private readonly string sellerCompanyName;
     private readonly Button viewPdf = UiControls.StandardButton("檢視 PDF");
     private readonly Button printPdf = UiControls.StandardButton("列印發票");
     private readonly Button changePrinter = UiControls.StandardButton("更換印表機…");
@@ -92,11 +93,16 @@ internal sealed class RecordDetailForm : Form
     private bool previewLoading;
     private bool pdfBusy;
 
-    public RecordDetailForm(InvoiceRecord record, LocalRepository repository, InvoiceService service)
+    public RecordDetailForm(
+        InvoiceRecord record,
+        LocalRepository repository,
+        InvoiceService service,
+        string sellerCompanyName = "")
     {
         this.record = record;
         this.repository = repository;
         this.service = service;
+        this.sellerCompanyName = sellerCompanyName.Trim();
         paperInvoice = string.Equals(record.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal);
         Text = $"發票詳細資訊－{record.InvoiceNumber}";
         StartPosition = FormStartPosition.CenterParent;
@@ -116,7 +122,9 @@ internal sealed class RecordDetailForm : Form
         AddDetail("發票金額", MoneyFormatter.Integer(record.Amount));
         AddDetail("使用環境", record.Environment == Environments.Production ? "正式" : "測試");
         AddDetail("交付方式", record.Delivery);
-        AddDetail("發票狀態", record.InvoiceState);
+        var invoiceStateValue = ValueLabel(record.InvoiceState);
+        if (record.InvoiceState == InvoiceStates.Voided) invoiceStateValue.ForeColor = Color.Firebrick;
+        AddDetail("發票狀態", record.InvoiceState, invoiceStateValue);
         AddDetail("上傳狀態", record.UploadStatusText);
         AddDetail("最後確認", record.LastChecked);
         AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
@@ -300,7 +308,7 @@ internal sealed class RecordDetailForm : Form
 
     private Control BuildCarrierContent()
     {
-        activePreview = CarrierInvoicePreview.Render(record, repository.Settings.LoadOrCreate());
+        activePreview = CarrierInvoicePreview.Render(record, repository.Settings.LoadOrCreate(), sellerCompanyName);
         var receipt = new PictureBox
         {
             Dock = DockStyle.Fill,
@@ -685,7 +693,8 @@ internal sealed class RecordDetailForm : Form
                 Items = baseRecord.Items,
             },
             repository,
-            service);
+            service,
+            "志遠醫療器材行");
         carrier.PerformLayout();
         carrier.VerifyLayout(companyBuyer: false, carrier: true);
 
@@ -707,9 +716,15 @@ internal sealed class RecordDetailForm : Form
                 Items = baseRecord.Items,
             },
             repository,
-            service);
+            service,
+            "志遠醫療器材行");
         voidedCarrier.PerformLayout();
         voidedCarrier.VerifyLayout(companyBuyer: false, carrier: true);
+        var voidedStateValue = voidedCarrier.details.Controls
+            .OfType<Label>()
+            .FirstOrDefault(label => label.Text == InvoiceStates.Voided);
+        if (voidedStateValue is null || voidedStateValue.ForeColor != Color.Firebrick)
+            throw new InvalidOperationException("已作廢發票詳細資訊的發票狀態未使用紅字強調");
 
         using var failed = new RecordDetailForm(
             new InvoiceRecord

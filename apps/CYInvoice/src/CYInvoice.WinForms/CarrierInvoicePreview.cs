@@ -14,7 +14,7 @@ internal static class CarrierInvoicePreview
     private const string AmegoInvoiceSite = "https://invoice.amego.tw/";
     private static readonly Color Accent = Color.FromArgb(31, 168, 123);
 
-    public static Bitmap Render(InvoiceRecord record, Settings settings)
+    public static Bitmap Render(InvoiceRecord record, Settings settings, string sellerCompanyName = "")
     {
         var image = new Bitmap(600, 820);
         using var graphics = Graphics.FromImage(image);
@@ -45,23 +45,21 @@ internal static class CarrierInvoicePreview
         using var subtitleFont = new Font("Microsoft JhengHei UI", 27F, FontStyle.Regular, GraphicsUnit.Pixel);
         using var periodFont = new Font("Microsoft JhengHei UI", 34F, FontStyle.Regular, GraphicsUnit.Pixel);
         using var numberFont = new Font("Microsoft JhengHei UI", 42F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var bodyFont = new Font("Microsoft JhengHei UI", 20F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var smallFont = new Font("Microsoft JhengHei UI", 15F, FontStyle.Regular, GraphicsUnit.Pixel);
-        using var footerFont = new Font("Microsoft JhengHei UI", 14F, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var bodyFont = new Font("Microsoft JhengHei UI", 26F, FontStyle.Regular, GraphicsUnit.Pixel);
 
         var contentLeft = paper.Left + sideWidth + 22;
         var contentWidth = paper.Width - sideWidth * 2 - 44;
         DrawCentered(graphics, "本明細為模擬畫面僅供參考", noticeFont, grayBrush, contentLeft, paper.Top + 14, contentWidth, 24);
-        DrawCentered(graphics, SellerTitle(record, settings), titleFont, inkBrush, contentLeft, paper.Top + 48, contentWidth, 52);
+        DrawCentered(graphics, SellerTitle(record, settings, sellerCompanyName), titleFont, inkBrush, contentLeft, paper.Top + 48, contentWidth, 52);
         DrawCentered(graphics, "電子發票證明聯", subtitleFont, inkBrush, contentLeft, paper.Top + 104, contentWidth, 34);
         DrawCentered(graphics, InvoicePeriod(record), periodFont, inkBrush, contentLeft, paper.Top + 145, contentWidth, 42);
         DrawCentered(graphics, FormatInvoiceNumber(record.InvoiceNumber), numberFont, inkBrush, contentLeft, paper.Top + 194, contentWidth, 50);
 
         var issued = IssueTime(record);
-        graphics.DrawString(issued, bodyFont, inkBrush, contentLeft + 6, paper.Top + 278);
-        graphics.DrawString($"隨機碼：{SimulationRandomCode(record.InvoiceNumber)}    總計：${MoneyFormatter.Integer(record.Amount)}", bodyFont, inkBrush, contentLeft + 6, paper.Top + 314);
+        graphics.DrawString(issued, bodyFont, inkBrush, contentLeft + 6, paper.Top + 274);
+        graphics.DrawString($"隨機碼：{SimulationRandomCode(record.InvoiceNumber)}    總計：${MoneyFormatter.Integer(record.Amount)}", bodyFont, inkBrush, contentLeft + 6, paper.Top + 312);
         graphics.DrawString($"賣方：{SellerBan(settings)}", bodyFont, inkBrush, contentLeft + 6, paper.Top + 350);
-        graphics.DrawString($"載具：{Mask(record.CarrierId1)}", smallFont, grayBrush, contentLeft + 6, paper.Top + 386);
+        graphics.DrawString($"載具：{Mask(record.CarrierId1)}", bodyFont, grayBrush, contentLeft + 6, paper.Top + 388);
 
         var barcodeRect = new Rectangle(contentLeft, paper.Top + 430, contentWidth, 62);
         DrawBarcode(graphics, barcodeRect);
@@ -71,7 +69,7 @@ internal static class CarrierInvoicePreview
         var qrTop = paper.Top + 552;
         DrawQr(graphics, new Rectangle(contentLeft + 18, qrTop, qrSize, qrSize));
         DrawQr(graphics, new Rectangle(contentLeft + contentWidth - 18 - qrSize, qrTop, qrSize, qrSize));
-        DrawCentered(graphics, "模擬畫面僅供參考", footerFont, grayBrush, contentLeft, paper.Bottom - 42, contentWidth, 24);
+        DrawCentered(graphics, "模擬畫面僅供參考", subtitleFont, grayBrush, contentLeft, paper.Bottom - 50, contentWidth, 34);
 
         if (record.InvoiceState == InvoiceStates.Voided)
             DrawVoidedStamp(graphics, paper);
@@ -154,8 +152,13 @@ internal static class CarrierInvoicePreview
         graphics.DrawString(text, font, brush, new RectangleF(x, y, width, height), format);
     }
 
-    private static string SellerTitle(InvoiceRecord record, Settings settings) =>
-        record.Environment == Environments.Test || settings.Environment == Environments.Test ? "光貿測試公司" : "會員載具發票";
+    private static string SellerTitle(InvoiceRecord record, Settings settings, string sellerCompanyName)
+    {
+        if (record.Environment == Environments.Test || settings.Environment == Environments.Test)
+            return "光貿測試公司";
+        sellerCompanyName = sellerCompanyName.Trim();
+        return sellerCompanyName.Length == 0 ? "公司名稱" : sellerCompanyName;
+    }
 
     private static string SellerBan(Settings settings) => settings.Environment == Environments.Production
         ? settings.ProductionInvoice.Trim()
