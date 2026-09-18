@@ -35,6 +35,13 @@ jobs:
           branches=(
             "cyinvoice/csharp-remake"
             "cyinvoice/fix-four-group-titles"
+            "cyinvoice/v2.4.0-orderid-build2b"
+            "cyinvoice/v2.4.0-retention-build5c"
+            "cyinvoice/v2.4.0-sync-issues-build6a"
+            "cyinvoice/work-v2.3.0-build1"
+            "cyinvoice/work-v2.3.0-build2"
+            "cyinvoice/work-v2.3.0-build3"
+            "cyinvoice/work-v2.3.0-build4"
             "governance/cyinvoice-v2.0.0"
             "release/cyinvoice-v2.0.0"
             "governance/cyinvoice-auto-release"
