@@ -103,7 +103,7 @@ public sealed class InvoiceRecord
     public string OrderId { get; set; } = string.Empty;
 
     [JsonPropertyName("attempt")]
-    public int Attempt { get; set; } = 1;
+    public int Attempt { get; set; }
 
     [JsonPropertyName("api_order_id")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
