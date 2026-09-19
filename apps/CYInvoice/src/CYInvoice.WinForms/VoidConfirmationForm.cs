@@ -56,21 +56,6 @@ internal sealed class VoidConfirmationForm : Form
     private int CalculateHeight() =>
         20 + FieldRows * FieldRowHeight + (paperInvoice ? WarningRowHeight : 0) + ResponsibilityHeight + ActionRowHeight;
 
-    protected override void OnLoad(EventArgs eventArgs)
-    {
-        VoidConfirmationPrivacyMask.KeepMasked(Owner);
-        base.OnLoad(eventArgs);
-    }
-
-    protected override void OnFormClosed(FormClosedEventArgs eventArgs)
-    {
-        if (DialogResult == DialogResult.OK)
-            VoidConfirmationPrivacyMask.KeepMasked(Owner);
-        else
-            VoidConfirmationPrivacyMask.Restore(Owner);
-        base.OnFormClosed(eventArgs);
-    }
-
     private void BuildLayout()
     {
         password.UseSystemPasswordChar = true;
