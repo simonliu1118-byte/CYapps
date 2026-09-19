@@ -110,10 +110,11 @@ public sealed class EmployeeVoidWorkflowService
     public async Task<InvoiceVoidResult> ApproveManualReviewAsync(
         InvoiceSyncIssue issue,
         string actorEmployeeNo,
+        string actorPassword,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(issue);
-        RequireManager(actorEmployeeNo);
+        AuthenticateManager(actorEmployeeNo, actorPassword);
         RequireManualReviewIssue(issue);
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
@@ -137,10 +138,10 @@ public sealed class EmployeeVoidWorkflowService
         return result;
     }
 
-    public void CancelManualReview(InvoiceSyncIssue issue, string actorEmployeeNo)
+    public void CancelManualReview(InvoiceSyncIssue issue, string actorEmployeeNo, string actorPassword)
     {
         ArgumentNullException.ThrowIfNull(issue);
-        RequireManager(actorEmployeeNo);
+        AuthenticateManager(actorEmployeeNo, actorPassword);
         RequireManualReviewIssue(issue);
         var record = FindIssueRecord(issue);
         if (InvoiceVoidService.HasPendingMarker(record))
@@ -233,13 +234,13 @@ public sealed class EmployeeVoidWorkflowService
         return employee;
     }
 
-    private EmployeeAccount RequireManager(string actorEmployeeNo)
+    private EmployeeAccount AuthenticateManager(string actorEmployeeNo, string actorPassword)
     {
-        EmployeeAccount? actor;
-        try { actor = repository.Employees.Find(actorEmployeeNo); }
-        catch (InvalidOperationException) { actor = null; }
-        if (actor is null || !actor.Enabled || !EmployeeRoles.CanManageAccounts(actor.Role))
-            throw new UnauthorizedAccessException("只有管理員或超級管理員可以處理人工確認");
+        EmployeeAccount? actor = null;
+        try { actor = repository.Employees.Authenticate(actorEmployeeNo, actorPassword ?? string.Empty); }
+        catch (InvalidOperationException) { }
+        if (actor is null || !EmployeeRoles.CanManageAccounts(actor.Role))
+            throw new UnauthorizedAccessException("管理員驗證失敗");
         return actor;
     }
 
