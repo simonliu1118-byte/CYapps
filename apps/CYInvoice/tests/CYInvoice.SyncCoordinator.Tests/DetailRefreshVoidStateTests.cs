@@ -8,6 +8,8 @@ namespace CYInvoice.SyncCoordinator.Tests;
 
 internal static class DetailRefreshVoidStateTests
 {
+    private const string PendingMetadataKey = "cyinvoice_void_pending";
+
     public static async Task QueryWaitSetsWaitingVoidAndKeeps99Async()
     {
         using var temporary = new TemporaryDirectory();
@@ -21,7 +23,7 @@ internal static class DetailRefreshVoidStateTests
         Equal(InvoiceStates.OpenedWaitingVoid, refreshed.InvoiceState);
         Equal(UploadStatuses.Complete, refreshed.UploadStatus);
         Equal("完成", refreshed.UploadStatusText);
-        True(InvoiceVoidService.HasPendingMarker(refreshed));
+        True(PendingMarker(refreshed));
         Equal(1, gateway.QueryCalls);
     }
 
@@ -37,7 +39,7 @@ internal static class DetailRefreshVoidStateTests
 
         Equal(InvoiceStates.OpenedWaitingVoid, refreshed.InvoiceState);
         Equal(UploadStatuses.Complete, refreshed.UploadStatus);
-        True(InvoiceVoidService.HasPendingMarker(refreshed));
+        True(PendingMarker(refreshed));
         Equal(1, gateway.QueryCalls);
     }
 
@@ -54,7 +56,7 @@ internal static class DetailRefreshVoidStateTests
 
         Equal(InvoiceStates.Voided, refreshed.InvoiceState);
         Equal(UploadStatuses.Complete, refreshed.UploadStatus);
-        False(InvoiceVoidService.HasPendingMarker(refreshed));
+        False(PendingMarker(refreshed));
         Equal(cancelDate, InvoiceOfficialMetadata.CancelDate(refreshed));
         Equal(1, gateway.QueryCalls);
     }
@@ -92,9 +94,22 @@ internal static class DetailRefreshVoidStateTests
             InvoiceTime = "11:30:00",
             Items = [],
         };
-        if (pending) InvoiceVoidService.MarkPendingMarker(record);
+        if (pending) MarkPending(record);
         repository.Invoices.Append(record);
         return record;
+    }
+
+    private static void MarkPending(InvoiceRecord record)
+    {
+        record.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        record.ExtensionData[PendingMetadataKey] = JsonSerializer.SerializeToElement(true);
+    }
+
+    private static bool PendingMarker(InvoiceRecord record)
+    {
+        if (record.ExtensionData is null || !record.ExtensionData.TryGetValue(PendingMetadataKey, out var value)) return false;
+        return value.ValueKind == JsonValueKind.True ||
+               (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed) && parsed);
     }
 
     private static QueryResponse Query(long cancelDate = 0, bool voidPending = false)
