@@ -8,6 +8,7 @@ namespace CYInvoice.WinForms;
 internal sealed class RecordDetailForm : Form
 {
     private const int DetailWindowWidth = 820;
+    private const int DetailActionButtonWidth = 112;
     private const int InformationColumnWidth = 292;
     private const int InformationLabelWidth = 90;
     private const int InformationValueMaxWidth = 190;
@@ -20,12 +21,14 @@ internal sealed class RecordDetailForm : Form
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly EmployeeVoidWorkflowService voidWorkflow;
+    private readonly EmployeeAllowanceWorkflowService allowanceWorkflow;
     private readonly bool paperInvoice;
     private readonly string sellerCompanyName;
     private readonly Button viewPdf = UiControls.StandardButton("檢視 PDF");
     private readonly Button printPdf = UiControls.StandardButton("列印發票");
     private readonly Button changePrinter = UiControls.StandardButton("更換印表機…");
     private readonly Button voidInvoice = UiControls.StandardButton("作廢");
+    private readonly Button allowanceInvoice = UiControls.StandardButton("折讓");
     private readonly Button close = UiControls.StandardButton("關閉");
     private readonly TableLayoutPanel details = new()
     {
@@ -98,6 +101,7 @@ internal sealed class RecordDetailForm : Form
     private bool previewLoading;
     private bool pdfBusy;
     private bool voidBusy;
+    private bool allowanceBusy;
 
     public RecordDetailForm(
         InvoiceRecord record,
@@ -109,6 +113,7 @@ internal sealed class RecordDetailForm : Form
         this.repository = repository;
         this.service = service;
         voidWorkflow = new EmployeeVoidWorkflowService(repository);
+        allowanceWorkflow = new EmployeeAllowanceWorkflowService(repository);
         this.sellerCompanyName = sellerCompanyName.Trim();
         paperInvoice = string.Equals(record.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal);
         Text = $"發票詳細資訊－{record.InvoiceNumber}";
@@ -132,6 +137,7 @@ internal sealed class RecordDetailForm : Form
         AddInvoiceStateDetail();
         AddDetail("上傳狀態", record.UploadStatusText);
         AddDetail("最後確認", record.LastChecked);
+        AddOptionalDetail("折讓紀錄", AllowanceSummary(record), SystemColors.ControlText);
         AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
         AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
         if (paperInvoice)
@@ -170,7 +176,13 @@ internal sealed class RecordDetailForm : Form
             content = BuildCarrierContent();
         }
 
+        CompactDetailAction(viewPdf);
+        CompactDetailAction(printPdf);
+        CompactDetailAction(changePrinter);
+        CompactDetailAction(voidInvoice);
+        CompactDetailAction(allowanceInvoice);
         close.Width = 100;
+        close.Margin = new Padding(3, 2, 3, 2);
         close.DialogResult = DialogResult.OK;
         var actions = new FlowLayoutPanel
         {
@@ -186,13 +198,24 @@ internal sealed class RecordDetailForm : Form
             actions.Controls.Add(printPdf);
             actions.Controls.Add(changePrinter);
         }
+
+        var voidManualReview = voidWorkflow.ManualReviewFor(record) is not null;
+        var allowanceReview = allowanceWorkflow.ManualReviewFor(record);
         if (CanShowVoidAction())
         {
-            var manualReview = voidWorkflow.ManualReviewFor(record) is not null;
-            voidInvoice.Text = manualReview ? "人工確認中" : "作廢";
-            voidInvoice.Enabled = !manualReview;
+            voidInvoice.Text = voidManualReview ? "人工確認中" : "作廢";
+            voidInvoice.Enabled = !voidManualReview && allowanceReview is null;
             voidInvoice.Click += async (_, _) => await StartVoidAsync();
             actions.Controls.Add(voidInvoice);
+        }
+        if (CanShowAllowanceAction())
+        {
+            allowanceInvoice.Text = allowanceReview is null
+                ? "折讓"
+                : allowanceReview.AwaitingConfirmation ? "折讓待確認" : "折讓處理中";
+            allowanceInvoice.Enabled = allowanceReview is null && !voidManualReview;
+            allowanceInvoice.Click += async (_, _) => await StartAllowanceAsync();
+            actions.Controls.Add(allowanceInvoice);
         }
         actions.Controls.Add(close);
 
@@ -212,9 +235,11 @@ internal sealed class RecordDetailForm : Form
         record.InvoiceState == InvoiceStates.Opened &&
         record.UploadStatus == UploadStatuses.Complete;
 
+    private bool CanShowAllowanceAction() => CanShowVoidAction();
+
     private async Task StartVoidAsync()
     {
-        if (voidBusy) return;
+        if (voidBusy || allowanceBusy) return;
         using var reasonForm = new VoidReasonForm();
         if (reasonForm.ShowDialog(this) != DialogResult.OK) return;
         var reason = reasonForm.Reason;
@@ -307,15 +332,78 @@ internal sealed class RecordDetailForm : Form
         }
     }
 
+    private async Task StartAllowanceAsync()
+    {
+        if (allowanceBusy || voidBusy) return;
+        using var request = new AllowanceRequestForm();
+        if (request.ShowDialog(this) != DialogResult.OK) return;
+
+        SetAllowanceBusy(true);
+        try
+        {
+            var result = await allowanceWorkflow.SubmitAsync(
+                record,
+                request.EmployeeNo,
+                request.Password,
+                request.Reason,
+                request.TaxInclusiveAmount);
+            MessageBox.Show(
+                this,
+                result.AlreadyQueued
+                    ? result.Message
+                    : "折讓申請已建立。\n\n請由管理員至「上傳問題」查看明細，並在光貿網站完成人工折讓後按「已解決」。",
+                "折讓人工處理",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+        catch (EmployeeVoidAuthenticationDelayException error)
+        {
+            MessageBox.Show(this, error.Message, "驗證暫停", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (InvalidOperationException error) when (error.Message == "員工編號或密碼錯誤")
+        {
+            MessageBox.Show(this, error.Message, "驗證失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "折讓申請未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (!IsDisposed) SetAllowanceBusy(false);
+        }
+    }
+
     private void SetVoidBusy(bool busy)
     {
         voidBusy = busy;
         voidInvoice.Enabled = !busy;
+        allowanceInvoice.Enabled = !busy && !allowanceBusy;
         close.Enabled = !busy;
         viewPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
         printPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
         changePrinter.Enabled = !busy;
         voidInvoice.Text = busy ? "作廢確認中…" : "作廢";
+    }
+
+    private void SetAllowanceBusy(bool busy)
+    {
+        allowanceBusy = busy;
+        allowanceInvoice.Enabled = !busy;
+        voidInvoice.Enabled = !busy && !voidBusy;
+        close.Enabled = !busy;
+        viewPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
+        printPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
+        changePrinter.Enabled = !busy;
+        allowanceInvoice.Text = busy ? "折讓申請中…" : "折讓";
+    }
+
+    private static void CompactDetailAction(Button button)
+    {
+        button.Width = DetailActionButtonWidth;
+        button.Margin = new Padding(3, 2, 3, 2);
     }
 
     private Control BuildPaperContent(InvoicePdfEligibility eligibility)
@@ -809,6 +897,26 @@ internal sealed class RecordDetailForm : Form
         details.SetColumnSpan(line, 2);
     }
 
+    private static string AllowanceSummary(InvoiceRecord record)
+    {
+        var allowances = InvoiceAllowanceMetadata.ReadOfficial(record);
+        if (allowances.Count == 0) return string.Empty;
+        return string.Join("\r\n", allowances.Select(item =>
+        {
+            var amount = "?";
+            try
+            {
+                amount = FixedDecimal.Add(
+                    FixedDecimal.Parse(item.TotalAmount),
+                    FixedDecimal.Parse(item.TaxAmount)).ToString();
+            }
+            catch (Exception error) when (error is FormatException or OverflowException)
+            {
+            }
+            return $"{item.AllowanceNumber}｜{item.AllowanceDate}｜{item.InvoiceType}｜狀態 {item.InvoiceStatus}｜含稅 {amount}";
+        }));
+    }
+
     internal static void VerifySmokeLayout(LocalRepository repository, InvoiceService service)
     {
         var environment = repository.Settings.LoadOrCreate().Environment;
@@ -982,6 +1090,9 @@ internal sealed class RecordDetailForm : Form
         using var confirmCarrier = new VoidConfirmationForm(paperInvoice: false);
         confirmCarrier.PerformLayout();
         confirmCarrier.VerifySmokeLayout();
+        using var allowance = new AllowanceRequestForm();
+        allowance.PerformLayout();
+        allowance.VerifySmokeLayout();
     }
 
     private void VerifyLayout(bool companyBuyer, bool carrier)
@@ -1012,10 +1123,10 @@ internal sealed class RecordDetailForm : Form
         }
         if (!paperInvoice || !viewPdf.Enabled || !printPdf.Enabled)
             throw new InvalidOperationException("已開立紙本發票未開放檢視或列印");
-        if (!UiControls.HasLogicalSize(viewPdf, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
-            !UiControls.HasLogicalSize(printPdf, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
-            !UiControls.HasLogicalSize(changePrinter, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("紙本發票操作按鈕未使用標準尺寸");
+        if (!UiControls.HasLogicalSize(viewPdf, DetailActionButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(printPdf, DetailActionButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(changePrinter, DetailActionButtonWidth, UiControls.StandardButtonHeight))
+            throw new InvalidOperationException("紙本發票操作按鈕未使用詳細頁精簡尺寸");
         if (service.GetInvoicePdfEligibility(record).CompanyBuyer != companyBuyer)
             throw new InvalidOperationException("紙本發票買方類型判斷錯誤");
         if (!paperPreviewHost.Controls.Contains(a4PreviewFrame))
