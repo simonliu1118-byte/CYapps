@@ -52,10 +52,6 @@ internal sealed class SyncIssuesForm : Form
         ForeColor = Color.DimGray,
         Anchor = AnchorStyles.Left,
     };
-    private readonly Button resolve = UiControls.StandardButton("標記已解決");
-    private readonly Button viewManualReview = UiControls.StandardButton("查看明細");
-    private readonly Button approveManualReview = UiControls.StandardButton("確認送出作廢");
-    private readonly Button cancelManualReview = UiControls.StandardButton("取消退回");
     private readonly Button deleteFailed = UiControls.StandardButton("刪除");
     private readonly Button deleteAllFailed = UiControls.StandardButton("全部刪除");
 
@@ -91,16 +87,7 @@ internal sealed class SyncIssuesForm : Form
 
         var reload = UiControls.StandardButton("重新整理");
         reload.Click += (_, _) => ReloadAll();
-        resolve.Enabled = false;
-        resolve.Click += (_, _) => ResolveSelected();
-        viewManualReview.Enabled = false;
-        viewManualReview.Click += (_, _) => ShowSelectedManualReviewDetails();
-        approveManualReview.Enabled = false;
-        approveManualReview.Click += async (_, _) => await ProcessSelectedManualReviewAsync();
-        cancelManualReview.Enabled = false;
-        cancelManualReview.Click += (_, _) => CancelSelectedManualReview();
-        issueList.SelectedIndexChanged += (_, _) => UpdateIssueButtons();
-        issueList.DoubleClick += (_, _) => ShowSelectedManualReviewDetails();
+        issueList.DoubleClick += async (_, _) => await ShowSelectedIssueDetailsAsync();
 
         deleteFailed.Enabled = false;
         deleteFailed.Click += (_, _) => DeleteCheckedFailed();
@@ -122,19 +109,6 @@ internal sealed class SyncIssuesForm : Form
         issueHeader.Controls.Add(summary, 0, 0);
         reload.Anchor = AnchorStyles.Right | AnchorStyles.Top;
         issueHeader.Controls.Add(reload, 1, 0);
-
-        var issueActions = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Margin = Padding.Empty,
-            Padding = new Padding(0, 4, 0, 0),
-        };
-        issueActions.Controls.Add(resolve);
-        issueActions.Controls.Add(viewManualReview);
-        issueActions.Controls.Add(approveManualReview);
-        issueActions.Controls.Add(cancelManualReview);
 
         var failedHeader = new Label
         {
@@ -172,21 +146,20 @@ internal sealed class SyncIssuesForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 6,
+            RowCount = 5,
             Padding = new Padding(12),
+            Tag = "upload-issues-root",
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         root.Controls.Add(issueHeader, 0, 0);
         root.Controls.Add(issueList, 0, 1);
-        root.Controls.Add(issueActions, 0, 2);
-        root.Controls.Add(failedHeader, 0, 3);
-        root.Controls.Add(failedList, 0, 4);
-        root.Controls.Add(bottomActions, 0, 5);
+        root.Controls.Add(failedHeader, 0, 2);
+        root.Controls.Add(failedList, 0, 3);
+        root.Controls.Add(bottomActions, 0, 4);
         Controls.Add(root);
 
         Resize += (_, _) => LayoutColumns();
@@ -261,7 +234,6 @@ internal sealed class SyncIssuesForm : Form
 
             var unresolved = issues.Count(issue => issue.ResolvedUtc is null);
             summary.Text = unresolved == 0 ? "目前沒有尚未解決的上傳問題" : $"尚未解決：{unresolved} 項";
-            UpdateIssueButtons();
         }
         catch (Exception error)
         {
@@ -318,21 +290,97 @@ internal sealed class SyncIssuesForm : Form
         }
     }
 
-    private void ResolveSelected()
+    private async Task ShowSelectedIssueDetailsAsync()
     {
-        if (issueList.SelectedItems.Count != 1 || issueList.SelectedItems[0].Tag is not InvoiceSyncIssue issue) return;
-        if (issue.ResolvedUtc is not null) return;
-        if (InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue))
+        if (manualReviewBusy || SelectedIssue() is not { } issue) return;
+
+        try
         {
-            CloseSelectedAdministrativeWork(issue);
-            return;
+            var manual = IsManualReview(issue);
+            var rows = manual
+                ? IsAllowanceManualReview(issue) ? AllowanceDetailRows(issue) : VoidDetailRows(issue)
+                : CommonDetailRows(issue).Append(new("處理狀態", issue.ResolvedUtc is null ? IssueState(issue) : "已解決")).ToArray();
+
+            var primaryText = string.Empty;
+            var allowCancel = false;
+            var allowAdministrativeClose = false;
+            var primaryDanger = false;
+
+            if (issue.ResolvedUtc is null)
+            {
+                if (InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue))
+                {
+                    try { allowAdministrativeClose = administrativeClosure.CanClose(issue); }
+                    catch { allowAdministrativeClose = false; }
+                }
+
+                if (!allowAdministrativeClose && IsVoidManualReview(issue))
+                {
+                    primaryText = "確認送出作廢";
+                    primaryDanger = true;
+                    allowCancel = true;
+                }
+                else if (!allowAdministrativeClose && IsAllowanceManualReview(issue))
+                {
+                    var record = FindIssueRecord(issue);
+                    var review = allowanceWorkflow.ManualReviewFor(record);
+                    if (review is not null)
+                    {
+                        if (!review.AwaitingConfirmation)
+                        {
+                            primaryText = "已解決";
+                            allowCancel = true;
+                        }
+                        else
+                        {
+                            var candidates = NewAllowanceCandidates(record, review);
+                            if (candidates.Count > 1 && candidates.All(item => !IsPendingAllowanceStatus(item.InvoiceStatus)))
+                                primaryText = "確認折讓單號";
+                        }
+                    }
+                }
+                else if (!allowAdministrativeClose && !manual)
+                {
+                    primaryText = "標記已解決";
+                }
+            }
+
+            using var detail = new ManualReviewDetailForm(
+                DisplayType(issue.IssueType),
+                rows,
+                primaryText,
+                allowCancel,
+                allowAdministrativeClose,
+                primaryDanger);
+            if (detail.ShowDialog(this) != DialogResult.OK) return;
+
+            switch (detail.SelectedAction)
+            {
+                case ManualReviewDetailAction.AdministrativeClose:
+                    CloseAdministrativeWork(issue);
+                    break;
+                case ManualReviewDetailAction.CancelReturn:
+                    CancelManualReview(issue);
+                    break;
+                case ManualReviewDetailAction.Primary:
+                    if (manual) await ProcessManualReviewAsync(issue);
+                    else ResolveIssue(issue);
+                    break;
+            }
         }
-        if (IsManualReview(issue)) return;
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "讀取待辦明細失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ResolveIssue(InvoiceSyncIssue issue)
+    {
+        if (issue.ResolvedUtc is not null || IsManualReview(issue) || InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue)) return;
         try
         {
             issueStore.Resolve(issue.Id, DateTimeOffset.Now);
-            ReloadIssues();
-            LayoutColumns();
+            ReloadAll();
         }
         catch (Exception error)
         {
@@ -340,7 +388,7 @@ internal sealed class SyncIssuesForm : Form
         }
     }
 
-    private void CloseSelectedAdministrativeWork(InvoiceSyncIssue issue)
+    private void CloseAdministrativeWork(InvoiceSyncIssue issue)
     {
         if (manualReviewBusy || !administrativeClosure.CanClose(issue)) return;
         var operation = IsAllowanceManualReview(issue) ? "折讓" : "作廢";
@@ -359,16 +407,9 @@ internal sealed class SyncIssuesForm : Form
         SetManualReviewBusy(true);
         try
         {
-            administrativeClosure.Close(
-                issue,
-                login.AuthenticatedEmployee.EmployeeNo,
-                login.AuthenticatedPassword);
-            MessageBox.Show(
-                this,
-                "已由管理員手動結案。CYInvoice 不會再自動追蹤這筆待處理作業。",
-                "結案完成",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            administrativeClosure.Close(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+            MessageBox.Show(this, "已由管理員手動結案。CYInvoice 不會再自動追蹤這筆待處理作業。", "結案完成",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
             ReloadAll();
         }
         catch (Exception error)
@@ -381,32 +422,12 @@ internal sealed class SyncIssuesForm : Form
         }
     }
 
-    private void ShowSelectedManualReviewDetails()
+    private async Task ProcessManualReviewAsync(InvoiceSyncIssue issue)
     {
-        if (manualReviewBusy) return;
-        var issue = SelectedManualReviewForView();
-        if (issue is null) return;
-        try
-        {
-            var rows = IsAllowanceManualReview(issue)
-                ? AllowanceDetailRows(issue)
-                : VoidDetailRows(issue);
-            using var detail = new ManualReviewDetailForm(DisplayType(issue.IssueType), rows);
-            detail.ShowDialog(this);
-        }
-        catch (Exception error)
-        {
-            MessageBox.Show(this, error.Message, "讀取人工確認明細失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    private async Task ProcessSelectedManualReviewAsync()
-    {
-        var issue = SelectedManualReview();
-        if (issue is null || manualReviewBusy) return;
+        if (issue.ResolvedUtc is not null || manualReviewBusy) return;
         if (IsVoidManualReview(issue))
         {
-            await ApproveSelectedVoidManualReviewAsync(issue);
+            await ApproveVoidManualReviewAsync(issue);
             return;
         }
 
@@ -425,12 +446,12 @@ internal sealed class SyncIssuesForm : Form
         }
 
         if (!review.AwaitingConfirmation)
-            await CompleteSelectedAllowanceAsync(issue);
+            await CompleteAllowanceAsync(issue);
         else
-            await ConfirmSelectedAllowanceCandidateAsync(issue, record, review);
+            await ConfirmAllowanceCandidateAsync(issue, record, review);
     }
 
-    private async Task ApproveSelectedVoidManualReviewAsync(InvoiceSyncIssue issue)
+    private async Task ApproveVoidManualReviewAsync(InvoiceSyncIssue issue)
     {
         if (MessageBox.Show(
                 this,
@@ -447,40 +468,25 @@ internal sealed class SyncIssuesForm : Form
         SetManualReviewBusy(true);
         try
         {
-            var result = await voidWorkflow.ApproveManualReviewAsync(
-                issue,
-                login.AuthenticatedEmployee.EmployeeNo,
-                login.AuthenticatedPassword);
+            var result = await voidWorkflow.ApproveManualReviewAsync(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
             switch (result.Outcome)
             {
                 case InvoiceVoidOutcome.Confirmed:
                 case InvoiceVoidOutcome.AlreadyVoided:
-                    MessageBox.Show(this, "光貿已確認發票作廢完成。", "作廢完成",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(this, "光貿已確認發票作廢完成。", "作廢完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     break;
                 case InvoiceVoidOutcome.PendingConfirmation:
-                    MessageBox.Show(
-                        this,
+                    MessageBox.Show(this,
                         "作廢已送出，但光貿尚未確認最終結果。\n\n發票目前為「已開立 (等待作廢)」；後續每次正常同步都會再查詢官方結果。",
-                        "作廢結果待確認",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
+                        "作廢結果待確認", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     break;
                 case InvoiceVoidOutcome.Rejected:
-                    MessageBox.Show(
-                        this,
-                        result.Message + "\n\n人工確認仍保留，尚未標記完成。",
-                        "作廢未完成",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
+                    MessageBox.Show(this, result.Message + "\n\n人工確認仍保留，尚未標記完成。", "作廢未完成",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     break;
                 case InvoiceVoidOutcome.RetryReady:
-                    MessageBox.Show(
-                        this,
-                        "先前等待作廢狀態已解除，本次沒有自動重送。\n人工確認仍保留，可重新確認後再次送出。",
-                        "請重新確認",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
+                    MessageBox.Show(this, "先前等待作廢狀態已解除，本次沒有自動重送。\n人工確認仍保留，可重新確認後再次送出。", "請重新確認",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
                     break;
             }
             ReloadAll();
@@ -495,7 +501,7 @@ internal sealed class SyncIssuesForm : Form
         }
     }
 
-    private async Task CompleteSelectedAllowanceAsync(InvoiceSyncIssue issue)
+    private async Task CompleteAllowanceAsync(InvoiceSyncIssue issue)
     {
         if (MessageBox.Show(
                 this,
@@ -512,10 +518,7 @@ internal sealed class SyncIssuesForm : Form
         SetManualReviewBusy(true);
         try
         {
-            var result = await allowanceWorkflow.MarkManualCompletedAsync(
-                issue,
-                login.AuthenticatedEmployee.EmployeeNo,
-                login.AuthenticatedPassword);
+            var result = await allowanceWorkflow.MarkManualCompletedAsync(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
             ShowAllowanceResult(result);
             ReloadAll();
         }
@@ -529,7 +532,7 @@ internal sealed class SyncIssuesForm : Form
         }
     }
 
-    private async Task ConfirmSelectedAllowanceCandidateAsync(
+    private async Task ConfirmAllowanceCandidateAsync(
         InvoiceSyncIssue issue,
         InvoiceRecord record,
         InvoiceAllowanceManualReview review)
@@ -537,12 +540,8 @@ internal sealed class SyncIssuesForm : Form
         var candidates = NewAllowanceCandidates(record, review);
         if (candidates.Count <= 1)
         {
-            MessageBox.Show(
-                this,
-                "目前沒有多筆可供人工選擇的折讓候選。系統會在每次正常同步時繼續查詢。",
-                "等待折讓確認",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            MessageBox.Show(this, "目前沒有多筆可供人工選擇的折讓候選。系統會在每次正常同步時繼續查詢。", "等待折讓確認",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -577,43 +576,29 @@ internal sealed class SyncIssuesForm : Form
         switch (result.Outcome)
         {
             case InvoiceAllowanceReconcileOutcome.Confirmed:
-                MessageBox.Show(this, result.Message, "折讓確認完成",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, result.Message, "折讓確認完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 break;
             case InvoiceAllowanceReconcileOutcome.PendingConfirmation:
-                MessageBox.Show(
-                    this,
+                MessageBox.Show(this,
                     result.Message + "\n\n系統會在之後每一次正常同步繼續查詢，不需要重複按「已解決」。",
-                    "折讓等待確認",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "折讓等待確認", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 break;
             case InvoiceAllowanceReconcileOutcome.Problem:
-                MessageBox.Show(
-                    this,
+                MessageBox.Show(this,
                     result.Message + "\n\n這筆申請仍保留在「上傳問題」，不會自動誤結案。",
-                    "折讓資料需要確認",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    "折讓資料需要確認", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 break;
         }
     }
 
-    private void CancelSelectedManualReview()
+    private void CancelManualReview(InvoiceSyncIssue issue)
     {
-        var issue = SelectedManualReview();
-        if (issue is null || manualReviewBusy) return;
+        if (issue.ResolvedUtc is not null || manualReviewBusy || !IsManualReview(issue)) return;
         var allowance = IsAllowanceManualReview(issue);
         var prompt = allowance
             ? "確定取消並退回這筆折讓申請？\n\n不會對光貿執行任何折讓操作。"
             : "確定取消並退回這筆作廢申請？\n\n不會向光貿送出作廢，發票會維持「已開立」。";
-        if (MessageBox.Show(
-                this,
-                prompt,
-                "取消退回",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question,
-                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+        if (MessageBox.Show(this, prompt, "取消退回", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
 
         using var login = new EmployeeAdminLoginForm(repository.Employees, "人工確認－管理員驗證");
@@ -624,21 +609,13 @@ internal sealed class SyncIssuesForm : Form
         {
             if (allowance)
             {
-                allowanceWorkflow.CancelManualReview(
-                    issue,
-                    login.AuthenticatedEmployee.EmployeeNo,
-                    login.AuthenticatedPassword);
-                MessageBox.Show(this, "已取消退回；未對光貿執行折讓。", "已取消",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                allowanceWorkflow.CancelManualReview(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+                MessageBox.Show(this, "已取消退回；未對光貿執行折讓。", "已取消", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
             {
-                voidWorkflow.CancelManualReview(
-                    issue,
-                    login.AuthenticatedEmployee.EmployeeNo,
-                    login.AuthenticatedPassword);
-                MessageBox.Show(this, "已取消退回；未向光貿送出作廢。", "已取消",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                voidWorkflow.CancelManualReview(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+                MessageBox.Show(this, "已取消退回；未向光貿送出作廢。", "已取消", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             ReloadAll();
         }
@@ -652,24 +629,13 @@ internal sealed class SyncIssuesForm : Form
         }
     }
 
-    private InvoiceSyncIssue? SelectedManualReview()
-    {
-        var issue = SelectedManualReviewForView();
-        return issue is { ResolvedUtc: null } ? issue : null;
-    }
-
-    private InvoiceSyncIssue? SelectedManualReviewForView()
-    {
-        if (issueList.SelectedItems.Count != 1 || issueList.SelectedItems[0].Tag is not InvoiceSyncIssue issue)
-            return null;
-        return IsManualReview(issue) ? issue : null;
-    }
+    private InvoiceSyncIssue? SelectedIssue() =>
+        issueList.SelectedItems.Count == 1 ? issueList.SelectedItems[0].Tag as InvoiceSyncIssue : null;
 
     private void SetManualReviewBusy(bool busy)
     {
         manualReviewBusy = busy;
         issueList.Enabled = !busy;
-        UpdateIssueButtons();
     }
 
     private IReadOnlyList<KeyValuePair<string, string>> VoidDetailRows(InvoiceSyncIssue issue)
@@ -715,32 +681,24 @@ internal sealed class SyncIssuesForm : Form
     }
 
     private InvoiceRecord FindIssueRecord(InvoiceSyncIssue issue) =>
-        TryFindIssueRecord(issue)
-        ?? throw new InvalidOperationException("本機找不到這筆人工確認對應的發票");
+        TryFindIssueRecord(issue) ?? throw new InvalidOperationException("本機找不到這筆人工確認對應的發票");
 
     private InvoiceRecord? TryFindIssueRecord(InvoiceSyncIssue issue)
     {
         var settings = repository.Settings.LoadOrCreate();
-        var sellerInvoice = settings.Environment == Environments.Test
-            ? AmegoDefaults.TestInvoice
-            : settings.ProductionInvoice.Trim();
+        var sellerInvoice = settings.Environment == Environments.Test ? AmegoDefaults.TestInvoice : settings.ProductionInvoice.Trim();
         var matches = repository.Invoices.LoadOrCreate()
             .Where(record => string.Equals(record.Environment, settings.Environment, StringComparison.Ordinal))
-            .Where(record => record.SellerInvoice.Trim().Length == 0 ||
-                             string.Equals(record.SellerInvoice.Trim(), sellerInvoice, StringComparison.Ordinal))
+            .Where(record => record.SellerInvoice.Trim().Length == 0 || string.Equals(record.SellerInvoice.Trim(), sellerInvoice, StringComparison.Ordinal))
             .Where(record =>
-                (issue.InvoiceNumber.Trim().Length != 0 &&
-                 string.Equals(record.InvoiceNumber.Trim(), issue.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||
-                (issue.OrderId.Trim().Length != 0 &&
-                 string.Equals(EffectiveOrderId(record), issue.OrderId.Trim(), StringComparison.Ordinal)))
+                (issue.InvoiceNumber.Trim().Length != 0 && string.Equals(record.InvoiceNumber.Trim(), issue.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+                (issue.OrderId.Trim().Length != 0 && string.Equals(EffectiveOrderId(record), issue.OrderId.Trim(), StringComparison.Ordinal)))
             .ToArray();
         if (matches.Length > 1) throw new InvalidDataException("人工確認對到多筆本機發票，已停止處理");
         return matches.SingleOrDefault();
     }
 
-    private static IReadOnlyList<InvoiceAllowanceResult> NewAllowanceCandidates(
-        InvoiceRecord record,
-        InvoiceAllowanceManualReview review)
+    private static IReadOnlyList<InvoiceAllowanceResult> NewAllowanceCandidates(InvoiceRecord record, InvoiceAllowanceManualReview review)
     {
         var baseline = new HashSet<string>(review.BaselineAllowanceNumbers ?? [], StringComparer.OrdinalIgnoreCase);
         return InvoiceAllowanceMetadata.ReadOfficial(record)
@@ -757,9 +715,7 @@ internal sealed class SyncIssuesForm : Form
             var amount = "?";
             try
             {
-                amount = FixedDecimal.Add(
-                    FixedDecimal.Parse(item.TotalAmount),
-                    FixedDecimal.Parse(item.TaxAmount)).ToString();
+                amount = FixedDecimal.Add(FixedDecimal.Parse(item.TotalAmount), FixedDecimal.Parse(item.TaxAmount)).ToString();
             }
             catch (Exception error) when (error is FormatException or OverflowException)
             {
@@ -774,21 +730,15 @@ internal sealed class SyncIssuesForm : Form
 
     private void DeleteCheckedFailed()
     {
-        var records = failedList.CheckedItems
-            .Cast<ListViewItem>()
-            .Select(item => item.Tag)
-            .OfType<InvoiceRecord>()
-            .ToArray();
-        if (records.Length == 0) return;
-        if (!ConfirmFailedDeletion(records.Length)) return;
+        var records = failedList.CheckedItems.Cast<ListViewItem>().Select(item => item.Tag).OfType<InvoiceRecord>().ToArray();
+        if (records.Length == 0 || !ConfirmFailedDeletion(records.Length)) return;
         DeleteFailedRecords(records);
     }
 
     private void DeleteAllFailed()
     {
         var records = CurrentFailedRecords().ToArray();
-        if (records.Length == 0) return;
-        if (!ConfirmFailedDeletion(records.Length)) return;
+        if (records.Length == 0 || !ConfirmFailedDeletion(records.Length)) return;
         DeleteFailedRecords(records);
     }
 
@@ -816,85 +766,17 @@ internal sealed class SyncIssuesForm : Form
     private IReadOnlyList<InvoiceRecord> CurrentFailedRecords()
     {
         var settings = repository.Settings.LoadOrCreate();
-        var sellerInvoice = settings.Environment == Environments.Test
-            ? AmegoDefaults.TestInvoice
-            : settings.ProductionInvoice.Trim();
+        var sellerInvoice = settings.Environment == Environments.Test ? AmegoDefaults.TestInvoice : settings.ProductionInvoice.Trim();
         return repository.Invoices.LoadOrCreate()
             .Where(record => string.Equals(record.Environment, settings.Environment, StringComparison.Ordinal))
-            .Where(record => record.SellerInvoice.Trim().Length == 0 ||
-                             string.Equals(record.SellerInvoice.Trim(), sellerInvoice, StringComparison.Ordinal))
+            .Where(record => record.SellerInvoice.Trim().Length == 0 || string.Equals(record.SellerInvoice.Trim(), sellerInvoice, StringComparison.Ordinal))
             .Where(record => string.Equals(record.InvoiceState, InvoiceStates.Failed, StringComparison.Ordinal))
             .OrderByDescending(record => FullIssueTime(record), StringComparer.Ordinal)
             .ToArray();
     }
 
-    private void UpdateIssueButtons()
-    {
-        var selected = issueList.SelectedItems.Count == 1 && issueList.SelectedItems[0].Tag is InvoiceSyncIssue issue
-            ? issue
-            : null;
-        var unresolved = selected is { ResolvedUtc: null };
-        var manual = selected is not null && IsManualReview(selected);
-        var administrative = selected is not null && InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(selected);
-
-        resolve.Text = administrative ? "管理員結案" : "標記已解決";
-        resolve.Enabled = false;
-        if (!manualReviewBusy && unresolved && selected is not null)
-        {
-            if (administrative)
-            {
-                try { resolve.Enabled = administrativeClosure.CanClose(selected); }
-                catch { resolve.Enabled = false; }
-            }
-            else if (!manual)
-            {
-                resolve.Enabled = true;
-            }
-        }
-
-        viewManualReview.Enabled = !manualReviewBusy && manual;
-        approveManualReview.Enabled = false;
-        cancelManualReview.Enabled = false;
-        approveManualReview.Text = "確認送出作廢";
-
-        if (manualReviewBusy || !unresolved || selected is null || !manual) return;
-        if (IsVoidManualReview(selected))
-        {
-            approveManualReview.Text = "確認送出作廢";
-            approveManualReview.Enabled = true;
-            cancelManualReview.Enabled = true;
-            return;
-        }
-
-        try
-        {
-            var record = FindIssueRecord(selected);
-            var review = allowanceWorkflow.ManualReviewFor(record);
-            if (review is null) return;
-            if (!review.AwaitingConfirmation)
-            {
-                approveManualReview.Text = "已解決";
-                approveManualReview.Enabled = true;
-                cancelManualReview.Enabled = true;
-                return;
-            }
-
-            approveManualReview.Text = "確認折讓單號";
-            var candidates = NewAllowanceCandidates(record, review);
-            approveManualReview.Enabled = candidates.Count > 1 &&
-                                          candidates.All(item => !IsPendingAllowanceStatus(item.InvoiceStatus));
-            cancelManualReview.Enabled = false;
-        }
-        catch
-        {
-            approveManualReview.Enabled = false;
-            cancelManualReview.Enabled = false;
-        }
-    }
-
     private static bool IsPendingAllowanceStatus(int status) => status is
-        UploadStatuses.Pending or UploadStatuses.Uploading or UploadStatuses.Uploaded or
-        UploadStatuses.Processing or UploadStatuses.Confirming;
+        UploadStatuses.Pending or UploadStatuses.Uploading or UploadStatuses.Uploaded or UploadStatuses.Processing or UploadStatuses.Confirming;
 
     private void UpdateFailedButtons()
     {
@@ -910,34 +792,23 @@ internal sealed class SyncIssuesForm : Form
         if (issue.ResolvedUtc is not null) return "已解決";
         if (InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue))
         {
-            try
-            {
-                if (administrativeClosure.CanClose(issue)) return "可結案";
-            }
-            catch
-            {
-            }
+            try { if (administrativeClosure.CanClose(issue)) return "可結案"; }
+            catch { }
         }
         if (IsAllowanceManualReview(issue))
         {
             try
             {
                 var record = FindIssueRecord(issue);
-                return allowanceWorkflow.ManualReviewFor(record)?.AwaitingConfirmation == true
-                    ? "等待確認"
-                    : "人工確認";
+                return allowanceWorkflow.ManualReviewFor(record)?.AwaitingConfirmation == true ? "等待確認" : "人工確認";
             }
-            catch
-            {
-                return "人工確認";
-            }
+            catch { return "人工確認"; }
         }
         if (IsVoidManualReview(issue)) return "人工確認";
         return lastRead is not null && issue.CreatedUtc <= lastRead.Value ? "已讀" : "未讀";
     }
 
-    private static bool IsManualReview(InvoiceSyncIssue issue) =>
-        IsVoidManualReview(issue) || IsAllowanceManualReview(issue);
+    private static bool IsManualReview(InvoiceSyncIssue issue) => IsVoidManualReview(issue) || IsAllowanceManualReview(issue);
 
     private static bool IsVoidManualReview(InvoiceSyncIssue issue) =>
         string.Equals(issue.IssueType, InvoiceVoidIssueTypes.ManualReview, StringComparison.Ordinal);
@@ -948,9 +819,7 @@ internal sealed class SyncIssuesForm : Form
     private string CurrentAccountKey()
     {
         var settings = repository.Settings.LoadOrCreate();
-        var sellerInvoice = settings.Environment == Environments.Test
-            ? AmegoDefaults.TestInvoice
-            : settings.ProductionInvoice.Trim();
+        var sellerInvoice = settings.Environment == Environments.Test ? AmegoDefaults.TestInvoice : settings.ProductionInvoice.Trim();
         if (sellerInvoice.Length == 0) throw new InvalidOperationException("目前環境缺少可識別的公司統編");
         return settings.Environment + "|" + sellerInvoice;
     }
@@ -964,39 +833,26 @@ internal sealed class SyncIssuesForm : Form
     private static void SizeColumns(ListView list, IReadOnlyList<int> defaults, int flexibleColumn, bool checkboxFirstColumn)
     {
         if (list.Columns.Count != defaults.Count || list.ClientSize.Width <= 0) return;
-
         var widths = defaults.ToArray();
         for (var column = 0; column < list.Columns.Count; column++)
         {
-            var measured = TextRenderer.MeasureText(
-                list.Columns[column].Text,
-                list.Font,
-                new Size(int.MaxValue, int.MaxValue),
+            var measured = TextRenderer.MeasureText(list.Columns[column].Text, list.Font, new Size(int.MaxValue, int.MaxValue),
                 TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + 18;
             if (checkboxFirstColumn && column == 0) measured += 22;
-
             foreach (ListViewItem item in list.Items)
             {
                 if (column >= item.SubItems.Count) continue;
-                var text = item.SubItems[column].Text;
-                var valueWidth = TextRenderer.MeasureText(
-                    text,
-                    item.SubItems[column].Font ?? list.Font,
-                    new Size(int.MaxValue, int.MaxValue),
-                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + 18;
+                var valueWidth = TextRenderer.MeasureText(item.SubItems[column].Text, item.SubItems[column].Font ?? list.Font,
+                    new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + 18;
                 if (checkboxFirstColumn && column == 0) valueWidth += 22;
                 measured = Math.Max(measured, valueWidth);
             }
             widths[column] = Math.Max(widths[column], measured);
         }
-
         var available = Math.Max(0, list.ClientSize.Width - 2);
         var total = widths.Sum();
-        if (total < available)
-            widths[flexibleColumn] += available - total;
-
-        for (var column = 0; column < widths.Length; column++)
-            list.Columns[column].Width = widths[column];
+        if (total < available) widths[flexibleColumn] += available - total;
+        for (var column = 0; column < widths.Length; column++) list.Columns[column].Width = widths[column];
     }
 
     private static void ApplyZebra(ListViewItem row, int index)
@@ -1010,37 +866,26 @@ internal sealed class SyncIssuesForm : Form
         }
     }
 
-    private static string FullIssueTime(InvoiceRecord record)
-    {
-        if (record.InvoiceDate.Trim().Length != 0)
-            return (record.InvoiceDate.Trim() + " " + record.InvoiceTime.Trim()).Trim();
-        return record.SentAt.Trim();
-    }
+    private static string FullIssueTime(InvoiceRecord record) =>
+        record.InvoiceDate.Trim().Length != 0 ? (record.InvoiceDate.Trim() + " " + record.InvoiceTime.Trim()).Trim() : record.SentAt.Trim();
 
     private static string FriendlyFailureReason(string raw)
     {
         var message = raw.Trim();
         if (message.Length == 0) return "光貿未提供失敗原因";
-
         if (message.StartsWith("API code ", StringComparison.OrdinalIgnoreCase))
         {
             var colon = message.IndexOf(':');
-            if (colon >= 0 && colon + 1 < message.Length)
-                message = message[(colon + 1)..].Trim();
+            if (colon >= 0 && colon + 1 < message.Length) message = message[(colon + 1)..].Trim();
         }
-
         var field = FailureField(message);
         if (field.Length != 0)
         {
-            if (ContainsAny(message, "required", "empty", "blank", "不可空", "不得空", "不能空"))
-                return field + "不可空白";
-            if (ContainsAny(message, "length", "長度"))
-                return field + "長度不正確";
-            if (ContainsAny(message, "duplicate", "already exists", "重複", "已存在"))
-                return field + "重複";
+            if (ContainsAny(message, "required", "empty", "blank", "不可空", "不得空", "不能空")) return field + "不可空白";
+            if (ContainsAny(message, "length", "長度")) return field + "長度不正確";
+            if (ContainsAny(message, "duplicate", "already exists", "重複", "已存在")) return field + "重複";
             return field + "資料格式不正確";
         }
-
         if (message.Any(IsCjk)) return message;
         return "光貿拒絕此筆開立資料，請檢查發票內容";
     }
@@ -1049,26 +894,13 @@ internal sealed class SyncIssuesForm : Form
     {
         var fields = new (string Technical, string Display)[]
         {
-            ("BuyerIdentifier", "買受人統編"),
-            ("BuyerName", "買受人名稱"),
-            ("BuyerAddress", "買受人地址"),
-            ("BuyerTelephoneNumber", "買受人電話"),
-            ("BuyerEmailAddress", "買受人電子郵件"),
-            ("OrderId", "訂單編號"),
-            ("OrderID", "訂單編號"),
-            ("SalesAmount", "銷售額"),
-            ("TaxAmount", "稅額"),
-            ("TotalAmount", "發票總額"),
-            ("ProductItem", "商品明細"),
-            ("Description", "商品名稱"),
-            ("Quantity", "商品數量"),
-            ("UnitPrice", "商品單價"),
-            ("CarrierType", "載具類型"),
-            ("CarrierId1", "載具號碼"),
-            ("CarrierId2", "載具號碼"),
-            ("NPOBAN", "捐贈碼"),
-            ("MainRemark", "備註"),
-            ("DetailVat", "明細含稅設定"),
+            ("BuyerIdentifier", "買受人統編"), ("BuyerName", "買受人名稱"), ("BuyerAddress", "買受人地址"),
+            ("BuyerTelephoneNumber", "買受人電話"), ("BuyerEmailAddress", "買受人電子郵件"),
+            ("OrderId", "訂單編號"), ("OrderID", "訂單編號"), ("SalesAmount", "銷售額"),
+            ("TaxAmount", "稅額"), ("TotalAmount", "發票總額"), ("ProductItem", "商品明細"),
+            ("Description", "商品名稱"), ("Quantity", "商品數量"), ("UnitPrice", "商品單價"),
+            ("CarrierType", "載具類型"), ("CarrierId1", "載具號碼"), ("CarrierId2", "載具號碼"),
+            ("NPOBAN", "捐贈碼"), ("MainRemark", "備註"), ("DetailVat", "明細含稅設定"),
         };
         foreach (var field in fields)
             if (message.Contains(field.Technical, StringComparison.OrdinalIgnoreCase)) return field.Display;
@@ -1078,8 +910,7 @@ internal sealed class SyncIssuesForm : Form
     private static bool ContainsAny(string value, params string[] terms) =>
         terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
 
-    private static bool IsCjk(char value) =>
-        value is >= '\u3400' and <= '\u9fff';
+    private static bool IsCjk(char value) => value is >= '\u3400' and <= '\u9fff';
 
     internal void VerifySmokeLayout()
     {
@@ -1095,16 +926,23 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("上傳問題狀態欄未位於最右側");
         if (deleteFailed.Text != "刪除")
             throw new InvalidOperationException("未勾選開立失敗紀錄時刪除按鈕不應顯示 (0)");
-        if (!UiControls.HasLogicalSize(viewManualReview, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
-            !UiControls.HasLogicalSize(approveManualReview, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
-            !UiControls.HasLogicalSize(cancelManualReview, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("人工確認按鈕未使用標準尺寸");
+        if (Descendants(this).OfType<Button>().Any(button => button.Text is "標記已解決" or "查看明細" or "確認送出作廢" or "取消退回"))
+            throw new InvalidOperationException("上傳問題主視窗仍保留待辦操作按鈕，操作應位於雙擊後的詳細視窗");
         if (FriendlyFailureReason("API code 3040122: BuyerIdentifier invalid") != "買受人統編資料格式不正確")
             throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
         if (DisplayType(InvoiceVoidIssueTypes.ManualReview) != "紙本作廢確認" ||
             DisplayType(InvoiceVoidSyncIssueTypes.PendingConfirmation) != "作廢結果待確認" ||
             DisplayType(InvoiceAllowanceIssueTypes.ManualReview) != "折讓人工處理")
             throw new InvalidOperationException("人工確認問題類型顯示不正確");
+    }
+
+    private static IEnumerable<Control> Descendants(Control parent)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            yield return child;
+            foreach (var nested in Descendants(child)) yield return nested;
+        }
     }
 
     private static string DisplayType(string type) => type switch
