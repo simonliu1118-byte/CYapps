@@ -15,6 +15,7 @@ internal sealed class MainForm : Form
     private const int HtBottomRight = 17;
     private const int HtBorder = 18;
     private const int SyncIntervalMilliseconds = 5 * 60 * 1000;
+    private const int HeaderButtonGap = 6;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly InvoiceSyncCoordinator syncCoordinator;
@@ -31,6 +32,8 @@ internal sealed class MainForm : Form
     private readonly Panel tabHost = new();
     private readonly TabPage invoiceTab = new("開立發票");
     private readonly TabPage recordsTab = new("已開立發票清單");
+    private readonly Button forgotPasswordButton = UiControls.StandardButton("忘記密碼");
+    private readonly Button accountManagementButton = UiControls.StandardButton("帳戶管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
     private readonly Label copyrightLabel = new()
     {
@@ -148,32 +151,52 @@ internal sealed class MainForm : Form
             UiControls.HideFocusCue(tabs);
             if (tabs.SelectedTab == recordsTab) recordsPage.Reload();
         };
-        settingsButton.Margin = Padding.Empty;
-        settingsButton.TextAlign = ContentAlignment.MiddleCenter;
-        settingsButton.ForeColor = SystemColors.ControlText;
-        settingsButton.UseVisualStyleBackColor = true;
-        settingsButton.Click += (_, _) => OpenSettings();
+
+        ConfigureHeaderButton(forgotPasswordButton, OpenPasswordRecovery);
+        ConfigureHeaderButton(accountManagementButton, OpenAccountManagement);
+        ConfigureHeaderButton(settingsButton, OpenSettings);
         tabHost.Controls.Add(tabs);
+        tabHost.Controls.Add(forgotPasswordButton);
+        tabHost.Controls.Add(accountManagementButton);
         tabHost.Controls.Add(settingsButton);
-        tabHost.Resize += (_, _) => PositionSettingsButton();
-        tabHost.Layout += (_, _) => PositionSettingsButton();
+        tabHost.Resize += (_, _) => PositionHeaderButtons();
+        tabHost.Layout += (_, _) => PositionHeaderButtons();
         root.Controls.Add(banner, 0, 0);
         root.Controls.Add(tabHost, 0, 1);
         root.Controls.Add(copyrightLabel, 0, 2);
         Controls.Add(root);
-        PositionSettingsButton();
+        PositionHeaderButtons();
     }
 
-    private void PositionSettingsButton()
+    private static void ConfigureHeaderButton(Button button, Action action)
+    {
+        button.Margin = Padding.Empty;
+        button.TextAlign = ContentAlignment.MiddleCenter;
+        button.ForeColor = SystemColors.ControlText;
+        button.UseVisualStyleBackColor = true;
+        button.Click += (_, _) => action();
+    }
+
+    private void PositionHeaderButtons()
     {
         var headerHeight = settingsButton.Height;
         if (tabs.IsHandleCreated && tabs.TabCount > 0)
             headerHeight = Math.Max(settingsButton.Height, tabs.GetTabRect(0).Height);
-        settingsButton.SetBounds(
-            Math.Max(0, tabHost.ClientSize.Width - settingsButton.Width - 6),
-            Math.Max(0, (headerHeight - settingsButton.Height) / 2),
-            settingsButton.Width,
-            settingsButton.Height);
+        var top = Math.Max(0, (headerHeight - settingsButton.Height) / 2);
+        var right = Math.Max(0, tabHost.ClientSize.Width - settingsButton.Width - HeaderButtonGap);
+        settingsButton.SetBounds(right, top, settingsButton.Width, settingsButton.Height);
+        accountManagementButton.SetBounds(
+            Math.Max(0, settingsButton.Left - accountManagementButton.Width - HeaderButtonGap),
+            top,
+            accountManagementButton.Width,
+            accountManagementButton.Height);
+        forgotPasswordButton.SetBounds(
+            Math.Max(0, accountManagementButton.Left - forgotPasswordButton.Width - HeaderButtonGap),
+            top,
+            forgotPasswordButton.Width,
+            forgotPasswordButton.Height);
+        forgotPasswordButton.BringToFront();
+        accountManagementButton.BringToFront();
         settingsButton.BringToFront();
     }
 
@@ -192,16 +215,7 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
-        var settings = repository.Settings.LoadOrCreate();
-        if (!settings.AdminPasswordSet)
-        {
-            MessageBox.Show(this, "尚未建立設定管理密碼，請先完成首次安全設定。", "無法開啟設定",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        using (var unlock = new AdminUnlockForm(settings))
-            if (unlock.ShowDialog(this) != DialogResult.OK) return;
-
+        if (!TryAuthenticateAdministrator("開啟設定", out _)) return;
         using var form = new SettingsForm(repository);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         UpdateEnvironment();
@@ -210,16 +224,81 @@ internal sealed class MainForm : Form
         _ = RefreshApiAsync();
     }
 
+    private void OpenAccountManagement()
+    {
+        if (!TryAuthenticateAdministrator("帳戶管理驗證", out var account)) return;
+        using var form = new AccountManagementForm(repository.Employees, account!);
+        form.ShowDialog(this);
+    }
+
+    private void OpenPasswordRecovery()
+    {
+        if (!repository.Employees.HasEmployees())
+        {
+            MessageBox.Show(this, "尚未建立員工帳戶，請先完成首次設定。", "無法復原密碼",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        using var form = new SuperAdminRecoveryForm(repository.Employees);
+        form.ShowDialog(this);
+    }
+
+    private bool TryAuthenticateAdministrator(string title, out EmployeeAccount? account)
+    {
+        account = null;
+        if (!repository.Employees.HasEmployees())
+        {
+            MessageBox.Show(this, "尚未建立員工帳戶，請先完成首次設定。", title,
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+        using var login = new EmployeeAdminLoginForm(repository.Employees, title);
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return false;
+        account = login.AuthenticatedEmployee;
+        return true;
+    }
+
     private bool EnsureInitialSetup()
     {
+        if (!repository.Employees.HasEmployees())
+        {
+            using var setup = new InitialSetupForm(repository);
+            if (setup.ShowDialog(this) != DialogResult.OK)
+            {
+                Close();
+                return false;
+            }
+        }
+
         var settings = repository.Settings.LoadOrCreate();
-        if (!repository.Settings.InitialSetupRequired(settings)) return true;
-        using Form form = !settings.AdminPasswordSet && settings.MoPasswordEncrypted.Length == 0
-            ? new InitialSetupForm(repository)
-            : new SettingsForm(repository);
-        if (form.ShowDialog(this) == DialogResult.OK) return true;
+        if (MoPasswordReady(settings)) return true;
+        MessageBox.Show(this,
+            "MO店+ Excel 密碼尚未設定，或無法在目前 Windows 帳號解密。請由管理員重新輸入。",
+            "需要補齊設定",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+        if (!TryAuthenticateAdministrator("補齊設定驗證", out _))
+        {
+            Close();
+            return false;
+        }
+        using var form = new SettingsForm(repository, requireMoPassword: true);
+        if (form.ShowDialog(this) == DialogResult.OK && MoPasswordReady(repository.Settings.LoadOrCreate())) return true;
         Close();
         return false;
+    }
+
+    private bool MoPasswordReady(Settings settings)
+    {
+        if (settings.MoPasswordEncrypted.Length == 0) return false;
+        try
+        {
+            return !string.IsNullOrWhiteSpace(repository.Settings.MoPassword(settings));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     internal void VerifySmokeLayout()
@@ -252,12 +331,16 @@ internal sealed class MainForm : Form
             bannerLayout.GetColumn(environmentCompanyLabel) != 1 ||
             bannerLayout.GetColumn(apiLabel) != 2)
             throw new InvalidOperationException("標題列未使用左右等寬欄位，或公司名稱未固定在正中央");
-        PositionSettingsButton();
+        PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
-        if (settingsButton.Right != tabHost.ClientSize.Width - 6 ||
+        if (settingsButton.Right != tabHost.ClientSize.Width - HeaderButtonGap ||
+            accountManagementButton.Right + HeaderButtonGap != settingsButton.Left ||
+            forgotPasswordButton.Right + HeaderButtonGap != accountManagementButton.Left ||
             Math.Abs((settingsButton.Top + settingsButton.Height / 2) - (tabHeader.Top + tabHeader.Height / 2)) > 2 ||
-            !UiControls.HasLogicalSize(settingsButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("設定按鈕未以標準尺寸對齊頁籤標頭右側");
+            !UiControls.HasLogicalSize(settingsButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(accountManagementButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(forgotPasswordButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
+            throw new InvalidOperationException("主畫面帳戶／復原／設定按鈕未以標準尺寸對齊頁籤標頭右側");
         tabs.SelectedTab = invoiceTab;
         tabs.PerformLayout();
         Application.DoEvents();
@@ -270,30 +353,79 @@ internal sealed class MainForm : Form
         recordsPage.VerifySmokeLayout();
         tabs.SelectedTab = invoiceTab;
         Application.DoEvents();
+
         using var firstSetup = new InitialSetupForm(repository);
         firstSetup.Show(this);
         firstSetup.PerformLayout();
         Application.DoEvents();
         firstSetup.VerifySmokeLayout();
         firstSetup.Close();
-        using var unlock = new AdminUnlockForm(repository.Settings.LoadOrCreate());
-        unlock.Show(this);
-        unlock.PerformLayout();
+
+        using var employeeLogin = new EmployeeAdminLoginForm(repository.Employees);
+        employeeLogin.Show(this);
+        employeeLogin.PerformLayout();
         Application.DoEvents();
-        unlock.VerifySmokeLayout();
-        unlock.Close();
+        employeeLogin.VerifySmokeLayout();
+        employeeLogin.Close();
+
         using var settings = new SettingsForm(repository);
         settings.Show(this);
         settings.PerformLayout();
         Application.DoEvents();
         settings.VerifySmokeLayout();
         settings.Close();
-        using var passwordChange = new ChangeAdminPasswordForm(repository, repository.Settings.LoadOrCreate());
+
+        var now = DateTimeOffset.UtcNow;
+        var smokeAdmin = new EmployeeAccount("0000", "測試超管", string.Empty, EmployeeRoles.SuperAdmin, true, now, now);
+        using var management = new AccountManagementForm(repository.Employees, smokeAdmin);
+        management.Show(this);
+        management.PerformLayout();
+        Application.DoEvents();
+        management.VerifySmokeLayout();
+        management.Close();
+
+        using var employeeEdit = new EmployeeEditForm();
+        employeeEdit.Show(this);
+        employeeEdit.PerformLayout();
+        Application.DoEvents();
+        employeeEdit.VerifySmokeLayout();
+        employeeEdit.Close();
+
+        using var passwordReset = new EmployeePasswordResetForm("0001", "測試員工");
+        passwordReset.Show(this);
+        passwordReset.PerformLayout();
+        Application.DoEvents();
+        passwordReset.VerifySmokeLayout();
+        passwordReset.Close();
+
+        using var passwordChange = new EmployeeChangePasswordForm(repository.Employees, smokeAdmin);
         passwordChange.Show(this);
         passwordChange.PerformLayout();
         Application.DoEvents();
         passwordChange.VerifySmokeLayout();
         passwordChange.Close();
+
+        using var rotateRecovery = new RotateRecoveryCodeForm(repository.Employees, smokeAdmin);
+        rotateRecovery.Show(this);
+        rotateRecovery.PerformLayout();
+        Application.DoEvents();
+        rotateRecovery.VerifySmokeLayout();
+        rotateRecovery.Close();
+
+        using var recoveryCode = new RecoveryCodeForm("CYR-2345-6789-ABCD-EFGH-JKLM");
+        recoveryCode.Show(this);
+        recoveryCode.PerformLayout();
+        Application.DoEvents();
+        recoveryCode.VerifySmokeLayout();
+        recoveryCode.Close();
+
+        using var recovery = new SuperAdminRecoveryForm(repository.Employees);
+        recovery.Show(this);
+        recovery.PerformLayout();
+        Application.DoEvents();
+        recovery.VerifySmokeLayout();
+        recovery.Close();
+
         ImportConfirmationForm.VerifySmokeLayout(repository, service);
         RecordDetailForm.VerifySmokeLayout(repository, service);
     }
