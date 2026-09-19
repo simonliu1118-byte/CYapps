@@ -13,6 +13,7 @@ internal sealed class RecordDetailForm : Form
     private const int InformationLabelWidth = 90;
     private const int InformationValueMaxWidth = 190;
     private const int CarrierItemsSectionHeight = 250;
+    private const int HistorySectionHeight = 168;
     private const string WaitingVoidDetailText = "(等待 發票作廢)";
     private const string WaitingVoidDetailTag = "waiting-void-detail-state";
     private const string WaitingVoidHighlightTag = "waiting-void-detail-highlight";
@@ -31,6 +32,7 @@ internal sealed class RecordDetailForm : Form
     private readonly Button voidInvoice = UiControls.StandardButton("作廢");
     private readonly Button allowanceInvoice = UiControls.StandardButton("折讓");
     private readonly Button close = UiControls.StandardButton("關閉");
+    private readonly InvoiceOperationHistoryControl history = new();
     private readonly TableLayoutPanel details = new()
     {
         Dock = DockStyle.Top,
@@ -392,7 +394,7 @@ internal sealed class RecordDetailForm : Form
                 this,
                 result.AlreadyQueued
                     ? result.Message
-                    : "折讓申請已建立。\n\n請由管理員至「上傳問題」查看明細，並在光貿網站完成人工折讓後按「已解決」。",
+                    : "折讓申請已建立。\n\n請通知管理員查看並完成操作。",
                 "折讓人工處理",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -500,12 +502,14 @@ internal sealed class RecordDetailForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 4,
             Margin = new Padding(0, 0, 6, 4),
             BackColor = SystemColors.Control,
         };
         section.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         section.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        section.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        section.RowStyles.Add(new RowStyle(SizeType.Absolute, HistorySectionHeight));
         section.Controls.Add(new Label
         {
             Text = "發票資訊",
@@ -526,6 +530,16 @@ internal sealed class RecordDetailForm : Form
         };
         scroller.Controls.Add(details);
         section.Controls.Add(scroller, 0, 1);
+        section.Controls.Add(new Label
+        {
+            Text = "作廢 / 折讓紀錄",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font(Font, FontStyle.Bold),
+            BackColor = SystemColors.Control,
+            Margin = new Padding(6, 0, 0, 0),
+        }, 0, 2);
+        section.Controls.Add(history, 0, 3);
         return section;
     }
 
@@ -907,7 +921,6 @@ internal sealed class RecordDetailForm : Form
             AddInvoiceStateDetail();
             AddDetail("上傳狀態", record.UploadStatusText);
             AddDetail("最後確認", record.LastChecked);
-            AddOptionalDetail("折讓紀錄", AllowanceSummary(record), SystemColors.ControlText);
             AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
             AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
             if (paperInvoice)
@@ -915,6 +928,7 @@ internal sealed class RecordDetailForm : Form
                 AddDetail("發票印表機", string.Empty, printerStatus);
                 UpdatePrinterStatus();
             }
+            history.LoadRecord(record);
         }
         finally
         {
@@ -1014,26 +1028,6 @@ internal sealed class RecordDetailForm : Form
         details.SetColumnSpan(line, 2);
     }
 
-    private static string AllowanceSummary(InvoiceRecord record)
-    {
-        var allowances = InvoiceAllowanceMetadata.ReadOfficial(record);
-        if (allowances.Count == 0) return string.Empty;
-        return string.Join("\r\n", allowances.Select(item =>
-        {
-            var amount = "?";
-            try
-            {
-                amount = FixedDecimal.Add(
-                    FixedDecimal.Parse(item.TotalAmount),
-                    FixedDecimal.Parse(item.TaxAmount)).ToString();
-            }
-            catch (Exception error) when (error is FormatException or OverflowException)
-            {
-            }
-            return $"{item.AllowanceNumber}｜{item.AllowanceDate}｜{item.InvoiceType}｜狀態 {item.InvoiceStatus}｜含稅 {amount}";
-        }));
-    }
-
     internal static void VerifySmokeLayout(LocalRepository repository, InvoiceService service)
     {
         var environment = repository.Settings.LoadOrCreate().Environment;
@@ -1126,9 +1120,7 @@ internal sealed class RecordDetailForm : Form
         waitingVoid.PerformLayout();
         var waitingState = FindTaggedControl(waitingVoid, WaitingVoidDetailTag) as FlowLayoutPanel;
         var waitingHighlight = FindTaggedControl(waitingVoid, WaitingVoidHighlightTag) as Label;
-        if (waitingState is null || waitingHighlight is null ||
-            waitingHighlight.Text != WaitingVoidDetailText ||
-            waitingHighlight.BackColor != Color.FromArgb(255, 235, 59))
+        if (waitingState is null || waitingHighlight is null || waitingHighlight.Text != WaitingVoidDetailText || waitingHighlight.BackColor != Color.FromArgb(255, 235, 59))
             throw new InvalidOperationException("等待發票作廢的詳細資料狀態未使用指定文字與黃底強調");
 
         using var voidedCarrier = new RecordDetailForm(
@@ -1153,9 +1145,7 @@ internal sealed class RecordDetailForm : Form
             "志遠醫療器材行");
         voidedCarrier.PerformLayout();
         voidedCarrier.VerifyLayout(companyBuyer: false, carrier: true);
-        var voidedStateValue = voidedCarrier.details.Controls
-            .OfType<Label>()
-            .FirstOrDefault(label => label.Text == InvoiceStates.Voided);
+        var voidedStateValue = voidedCarrier.details.Controls.OfType<Label>().FirstOrDefault(label => label.Text == InvoiceStates.Voided);
         if (voidedStateValue is null || voidedStateValue.ForeColor != Color.Firebrick)
             throw new InvalidOperationException("已作廢發票詳細資訊的發票狀態未使用紅字強調");
 
@@ -1178,10 +1168,8 @@ internal sealed class RecordDetailForm : Form
             repository,
             service);
         failed.PerformLayout();
-        if (!failed.a4PreviewFrame.Controls.Contains(failed.previewMessageHost) ||
-            !failed.previewMessageHost.Controls.Contains(failed.previewStatus) ||
-            failed.previewMessageHost.BackColor != Color.White ||
-            failed.previewStatus.TextAlign != ContentAlignment.MiddleCenter ||
+        if (!failed.a4PreviewFrame.Controls.Contains(failed.previewMessageHost) || !failed.previewMessageHost.Controls.Contains(failed.previewStatus) ||
+            failed.previewMessageHost.BackColor != Color.White || failed.previewStatus.TextAlign != ContentAlignment.MiddleCenter ||
             !failed.previewStatus.Text.Contains("開立失敗", StringComparison.Ordinal))
             throw new InvalidOperationException("開立失敗發票未在 A4 白紙中央顯示不可取得 PDF 狀態");
 
@@ -1189,11 +1177,7 @@ internal sealed class RecordDetailForm : Form
         selector.PerformLayout();
         selector.VerifySmokeLayout();
         using var viewer = new InvoicePdfViewerForm(
-            new InvoicePdfDocument(
-                Path.Combine(repository.InvoicePdfCacheDirectory, "smoke.pdf"),
-                baseRecord.InvoiceNumber,
-                InvoicePdfStyles.A4,
-                FromCache: true),
+            new InvoicePdfDocument(Path.Combine(repository.InvoicePdfCacheDirectory, "smoke.pdf"), baseRecord.InvoiceNumber, InvoicePdfStyles.A4, FromCache: true),
             Path.Combine(repository.CacheDirectory, "WebView2"));
         viewer.PerformLayout();
         viewer.VerifySmokeLayout();
@@ -1214,12 +1198,14 @@ internal sealed class RecordDetailForm : Form
 
     private void VerifyLayout(bool companyBuyer, bool carrier)
     {
-        if (details.ColumnCount != 2 || details.RowCount < 24)
+        if (details.ColumnCount != 2 || details.RowCount < 22)
             throw new InvalidOperationException("發票詳細資訊未使用直向資訊與分隔線配置");
         if (ClientSize.Width != DetailWindowWidth)
             throw new InvalidOperationException("紙本與會員載具詳細資訊未使用一致的精簡視窗寬度");
         if (details.BackColor != SystemColors.Control)
             throw new InvalidOperationException("發票資訊區未沿用視窗灰底");
+        if (history.Parent is null || history.Height <= 0)
+            throw new InvalidOperationException("發票詳細資訊未保留固定的作廢/折讓紀錄區");
         if (!UiControls.HasLogicalSize(close, 100, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("關閉按鈕未使用核准尺寸");
         if (carrier)
