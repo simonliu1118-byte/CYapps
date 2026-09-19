@@ -322,7 +322,8 @@ internal sealed class VoidConfirmationForm : Form
             invoiceNumber.TextAlign != HorizontalAlignment.Left || employeeNo.TextAlign != HorizontalAlignment.Left ||
             password.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth ||
             ClientSize.Height != (paperInvoice ? PaperWindowHeight : CarrierWindowHeight) || AcceptButton is not null || CancelButton != cancel ||
-            !password.UseSystemPasswordChar || confirm is not DangerActionButton ||
+            !password.UseSystemPasswordChar || confirm.FlatStyle != FlatStyle.Standard || confirm.UseVisualStyleBackColor ||
+            confirm.BackColor != Color.FromArgb(183, 28, 28) || confirm.ForeColor != Color.White ||
             responsibility is null || !responsibility.Font.Bold || !responsibility.Text.Contains("同意上述聲明", StringComparison.Ordinal))
             throw new InvalidOperationException("發票作廢確認視窗基本配置不正確");
         if (paperInvoice && (notDelivered.Appearance != Appearance.Button || collected.Appearance != Appearance.Button || uncollected.Appearance != Appearance.Button))
