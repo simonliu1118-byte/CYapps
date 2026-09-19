@@ -17,6 +17,9 @@ internal static class Program
             ("automatic sync runs two-period reconciliation once per local day", TestDailyBroadThenRecentAsync),
             ("manual sync stays recent even when daily reconciliation is due", TestManualStaysRecentAsync),
             ("failed daily reconciliation remains due", TestFailedDailyRemainsDueAsync),
+            ("startup sync confirms pending void and invalidates cache", PendingVoidSyncTests.StartupConfirmsVoidAndInvalidatesCacheAsync),
+            ("scheduled sync keeps unresolved void pending and creates issue", PendingVoidSyncTests.ScheduledKeepsPendingAndCreatesIssueAsync),
+            ("manual sync unlocks stable open pending void without resend", PendingVoidSyncTests.ManualStableOpenUnlocksWithoutResendAsync),
             ("test daily scope prunes expired rows without querying them", AutomaticRetentionTests.TestDailyTestScopePrunesExpiredWithoutQueryAsync),
             ("daily reconciliation problems skip retention", AutomaticRetentionTests.TestDailyProblemsSkipRetentionAsync),
         };
