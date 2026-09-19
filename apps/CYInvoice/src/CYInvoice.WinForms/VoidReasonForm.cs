@@ -93,7 +93,6 @@ internal sealed class VoidReasonForm : Form
             return;
         }
 
-        VoidConfirmationPrivacyMask.Apply(Owner);
         DialogResult = DialogResult.OK;
         Close();
     }
