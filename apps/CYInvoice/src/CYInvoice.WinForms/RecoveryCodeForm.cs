@@ -26,6 +26,7 @@ internal sealed class RecoveryCodeForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => saved.Focus();
     }
@@ -109,7 +110,7 @@ internal sealed class RecoveryCodeForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (!recoveryCode.ReadOnly || recoveryCode.UseSystemPasswordChar || ControlBox || AcceptButton != saved ||
+        if (Icon is null || !recoveryCode.ReadOnly || recoveryCode.UseSystemPasswordChar || ControlBox || AcceptButton != saved ||
             ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
             !UiControls.HasLogicalSize(copy, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(saved, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
