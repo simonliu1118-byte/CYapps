@@ -13,13 +13,15 @@ public sealed class InvoiceAutomaticSyncService
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceRetentionService retentionService;
     private readonly InvoiceVoidService voidService;
+    private readonly EmployeeAllowanceWorkflowService allowanceService;
     private readonly Func<DateTimeOffset> now;
 
     public InvoiceAutomaticSyncService(
         LocalRepository repository,
         InvoiceSyncService syncService,
         Func<DateTimeOffset>? now = null,
-        InvoiceVoidService? voidService = null)
+        InvoiceVoidService? voidService = null,
+        EmployeeAllowanceWorkflowService? allowanceService = null)
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         this.syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
@@ -29,6 +31,7 @@ public sealed class InvoiceAutomaticSyncService
         retentionService = new InvoiceRetentionService(repository);
         this.voidService = voidService ?? new InvoiceVoidService(repository, now: now);
         this.now = now ?? (() => DateTimeOffset.Now);
+        this.allowanceService = allowanceService ?? new EmployeeAllowanceWorkflowService(repository, now: this.now);
     }
 
     public async Task<InvoiceSyncResult> SyncRecentAsync(CancellationToken cancellationToken = default)
@@ -100,7 +103,8 @@ public sealed class InvoiceAutomaticSyncService
         ResolveConfirmedPendingIssues(accountKey, account, problems);
 
         var pending = repository.Invoices.LoadOrCreate()
-            .Where(record => InvoiceVoidService.HasPendingMarker(record))
+            .Where(record => InvoiceVoidService.HasPendingMarker(record) ||
+                             EmployeeAllowanceWorkflowService.HasPendingMarker(record))
             .Where(record => string.Equals(record.Environment, account.Environment, StringComparison.Ordinal))
             .Where(record => record.SellerInvoice.Trim().Length == 0 ||
                              string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal))
@@ -111,38 +115,60 @@ public sealed class InvoiceAutomaticSyncService
             cancellationToken.ThrowIfCancellationRequested();
             var number = record.InvoiceNumber.Trim();
             var orderId = EffectiveOrderId(record);
+            var voidPending = InvoiceVoidService.HasPendingMarker(record);
+            var allowancePending = EmployeeAllowanceWorkflowService.HasPendingMarker(record);
 
-            if (record.InvoiceState == InvoiceStates.Voided)
+            if (voidPending && allowancePending)
             {
-                InvoiceVoidService.ClearPendingMarker(record);
-                syncRepository.UpsertMany([record]);
-                ResolvePendingIssue(accountKey, number, orderId);
-                problems.AddRange(InvoiceCacheInvalidator.Invalidate(repository, account.Environment, number));
+                problems.Add($"{number}: 同一張發票同時存在作廢與折讓待確認，已停止自動處理");
                 continue;
             }
 
-            // Durable pending work is reconciled by authoritative single-invoice query after every
-            // normal list sync. The invoice date only controls list coverage; it never gates pending.
-            // This still never resends f0501 automatically.
-            try
+            // All durable pending work uses authoritative single-invoice query after every normal
+            // list sync. Invoice date controls list coverage only; it never gates pending checks.
+            if (voidPending)
             {
-                var reconciliation = await voidService.ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
-                if (reconciliation.LocalSaveError is not null)
-                    problems.Add($"{number}: 作廢狀態已確認，但本機保存不完整：{reconciliation.LocalSaveError.Message}");
-
-                if (reconciliation.Outcome == InvoiceVoidOutcome.PendingConfirmation)
+                if (record.InvoiceState == InvoiceStates.Voided)
                 {
-                    RecordPendingIssue(accountKey, number, orderId, reconciliation.Message);
+                    InvoiceVoidService.ClearPendingMarker(record);
+                    syncRepository.UpsertMany([record]);
+                    ResolvePendingIssue(accountKey, number, orderId);
+                    problems.AddRange(InvoiceCacheInvalidator.Invalidate(repository, account.Environment, number));
                     continue;
                 }
 
-                ResolvePendingIssue(accountKey, number, orderId);
+                try
+                {
+                    var reconciliation = await voidService.ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+                    if (reconciliation.LocalSaveError is not null)
+                        problems.Add($"{number}: 作廢狀態已確認，但本機保存不完整：{reconciliation.LocalSaveError.Message}");
+
+                    if (reconciliation.Outcome == InvoiceVoidOutcome.PendingConfirmation)
+                    {
+                        RecordPendingIssue(accountKey, number, orderId, reconciliation.Message);
+                        continue;
+                    }
+
+                    ResolvePendingIssue(accountKey, number, orderId);
+                }
+                catch (Exception error)
+                {
+                    var message = "作廢狀態回查失敗：" + error.Message;
+                    RecordPendingIssue(accountKey, number, orderId, message);
+                    problems.Add($"{number}: {message}");
+                }
+                continue;
+            }
+
+            try
+            {
+                var reconciliation = await allowanceService.ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+                if (reconciliation.Outcome == InvoiceAllowanceReconcileOutcome.Problem)
+                    problems.Add($"{number}: {reconciliation.Message}");
             }
             catch (Exception error)
             {
-                var message = "作廢狀態回查失敗：" + error.Message;
-                RecordPendingIssue(accountKey, number, orderId, message);
-                problems.Add($"{number}: {message}");
+                problems.Add($"{number}: 折讓狀態回查失敗：{error.Message}");
             }
         }
 

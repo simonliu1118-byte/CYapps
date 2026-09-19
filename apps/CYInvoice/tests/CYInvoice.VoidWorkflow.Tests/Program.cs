@@ -18,6 +18,13 @@ var tests = new (string Name, Action Run)[]
     ("pending approved void keeps core pending marker and resolves manual review", () => TestApprovedPendingVoidAsync().GetAwaiter().GetResult()),
     ("manual review cancel is blocked after remote void becomes pending", TestCancelBlockedAfterPending),
     ("non-paper invoice proceeds without paper receipt selection", () => TestCarrierInvoiceAsync().GetAwaiter().GetResult()),
+    ("allowance wrong employee credentials make zero query calls", () => AllowanceWorkflowTests.WrongCredentialsMakeZeroQueryAsync().GetAwaiter().GetResult()),
+    ("employee can queue allowance manual review", () => AllowanceWorkflowTests.EmployeeQueuesManualReviewAsync().GetAwaiter().GetResult()),
+    ("administrator can cancel allowance manual review", () => AllowanceWorkflowTests.AdministratorCancelsManualReviewAsync().GetAwaiter().GetResult()),
+    ("administrator completed allowance waits for and confirms official result", () => AllowanceWorkflowTests.AdministratorCompletesAndOfficialQueryConfirmsAsync().GetAwaiter().GetResult()),
+    ("allowance amount mismatch stays pending", () => AllowanceWorkflowTests.AmountMismatchRemainsPendingAsync().GetAwaiter().GetResult()),
+    ("allowance pending cannot be cancelled", () => AllowanceWorkflowTests.PendingCannotBeCancelledAsync().GetAwaiter().GetResult()),
+    ("void is blocked while allowance request exists", () => AllowanceWorkflowTests.VoidIsBlockedWhileAllowanceRequestExistsAsync().GetAwaiter().GetResult()),
 };
 
 var failures = 0;
