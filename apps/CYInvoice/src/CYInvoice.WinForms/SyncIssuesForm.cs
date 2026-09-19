@@ -23,7 +23,7 @@ internal sealed class SyncIssuesForm : Form
     private DateTimeOffset? lastRead;
     private bool manualReviewBusy;
 
-    private readonly ListView issueList = new()
+    private readonly ListView issueList = new BufferedListView
     {
         Dock = DockStyle.Fill,
         View = View.Details,
@@ -34,7 +34,7 @@ internal sealed class SyncIssuesForm : Form
         GridLines = true,
         Scrollable = true,
     };
-    private readonly ListView failedList = new()
+    private readonly ListView failedList = new BufferedListView
     {
         Dock = DockStyle.Fill,
         View = View.Details,
@@ -77,11 +77,11 @@ internal sealed class SyncIssuesForm : Form
         ClientSize = new Size(840, 500);
         Font = new Font("Microsoft JhengHei UI", 10F);
         BackColor = Color.White;
-        Icon = ApplicationIcon.Load();
+        ShowIcon = false;
 
         BuildLayout();
+        MarkVisibleIssuesRead();
         ReloadAll();
-        Shown += (_, _) => MarkVisibleIssuesRead();
     }
 
     private void BuildLayout()
@@ -311,7 +311,6 @@ internal sealed class SyncIssuesForm : Form
             var openedAt = DateTimeOffset.Now;
             stateStore.SetLastSuccess(accountKey, ReadStateScope, openedAt);
             lastRead = openedAt;
-            ReloadIssues();
         }
         catch (Exception error)
         {
@@ -462,7 +461,7 @@ internal sealed class SyncIssuesForm : Form
                 case InvoiceVoidOutcome.PendingConfirmation:
                     MessageBox.Show(
                         this,
-                        "作廢已送出，但光貿尚未確認最終結果。\n\n發票目前為「已開立（等待作廢）」；後續每次正常同步都會再查詢官方結果。",
+                        "作廢已送出，但光貿尚未確認最終結果。\n\n發票目前為「已開立 (等待作廢)」；後續每次正常同步都會再查詢官方結果。",
                         "作廢結果待確認",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
@@ -1084,8 +1083,10 @@ internal sealed class SyncIssuesForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (Text != "上傳問題" || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
-            throw new InvalidOperationException("上傳問題視窗標題或字級不正確");
+        if (Text != "上傳問題" || ShowIcon || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
+            throw new InvalidOperationException("上傳問題視窗標題、圖示或字級不正確");
+        if (issueList is not BufferedListView || failedList is not BufferedListView)
+            throw new InvalidOperationException("上傳問題清單未使用雙緩衝 ListView");
         if (issueList.CheckBoxes || !failedList.CheckBoxes || issueList.Columns.Count != 6 || failedList.Columns.Count != 6)
             throw new InvalidOperationException("上傳問題上下清單結構不正確");
         if (!issueList.GridLines || !failedList.GridLines || !issueList.Scrollable || !failedList.Scrollable)
@@ -1120,4 +1121,14 @@ internal sealed class SyncIssuesForm : Form
         InvoiceAllowanceIssueTypes.ManualReview => "折讓人工處理",
         _ => type,
     };
+
+    private sealed class BufferedListView : ListView
+    {
+        public BufferedListView()
+        {
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+            UpdateStyles();
+        }
+    }
 }

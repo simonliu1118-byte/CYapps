@@ -51,15 +51,6 @@ public sealed class LocalRepository
         invoices.LoadOrCreate();
         buyerNames.LoadOrCreate();
 
-        // V2.5 uses the old global management password only to authorize creation
-        // of the first super administrator. If employee accounts already exist,
-        // any legacy hash is no longer an active credential and is removed.
-        if (employees.HasEmployees() && currentSettings.AdminPasswordSet)
-        {
-            settings.RetireLegacyAdminPassword(currentSettings);
-            settings.Save(currentSettings);
-        }
-
         return new LocalRepository(
             data,
             cache,

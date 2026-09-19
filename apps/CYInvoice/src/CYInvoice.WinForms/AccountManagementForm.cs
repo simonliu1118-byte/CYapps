@@ -13,15 +13,7 @@ internal sealed class AccountManagementForm : Form
     private const int EmailMinimumWidth = 180;
     private readonly EmployeeStore employees;
     private readonly EmployeeAccount actor;
-    private readonly ListView list = new()
-    {
-        Dock = DockStyle.Fill,
-        View = View.Details,
-        FullRowSelect = true,
-        GridLines = true,
-        HideSelection = false,
-        MultiSelect = false,
-    };
+    private readonly NativeListViewHost accountHost = new(10F, 24);
     private readonly Button add = UiControls.StandardButton("新增員工");
     private readonly Button edit = UiControls.StandardButton("修改資料");
     private readonly Button password = UiControls.StandardButton("重設密碼");
@@ -29,6 +21,8 @@ internal sealed class AccountManagementForm : Form
     private readonly Button role = UiControls.StandardButton("設為管理員");
     private readonly Button recovery = UiControls.StandardButton("重建復原碼");
     private readonly Button close = UiControls.StandardButton("關閉");
+
+    private ListView List => accountHost.List;
 
     public AccountManagementForm(EmployeeStore employees, EmployeeAccount actor)
     {
@@ -41,11 +35,11 @@ internal sealed class AccountManagementForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        ShowIcon = true;
-        Icon = ApplicationIcon.Load();
+        ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
         BuildLayout();
         Reload();
+        Shown += (_, _) => ResizeListColumns();
     }
 
     private void BuildLayout()
@@ -60,17 +54,18 @@ internal sealed class AccountManagementForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
 
-        list.Margin = Padding.Empty;
-        list.Columns.Add("員工編號", EmployeeNoWidth, HorizontalAlignment.Center);
-        list.Columns.Add("姓名", NameWidth, HorizontalAlignment.Left);
-        list.Columns.Add("Email", EmailMinimumWidth, HorizontalAlignment.Left);
-        list.Columns.Add("權限", RoleWidth, HorizontalAlignment.Center);
-        list.Columns.Add("狀態", StatusWidth, HorizontalAlignment.Center);
-        list.SelectedIndexChanged += (_, _) => UpdateButtons();
-        list.DoubleClick += (_, _) => EditSelected();
-        list.SizeChanged += (_, _) => ResizeListColumns();
-        list.Layout += (_, _) => ResizeListColumns();
-        root.Controls.Add(list, 0, 0);
+        List.HideSelection = false;
+        List.MultiSelect = false;
+        List.GridLines = true;
+        List.Columns.Add("員工編號", EmployeeNoWidth, HorizontalAlignment.Center);
+        List.Columns.Add("姓名", NameWidth, HorizontalAlignment.Left);
+        List.Columns.Add("Email", EmailMinimumWidth, HorizontalAlignment.Left);
+        List.Columns.Add("權限", RoleWidth, HorizontalAlignment.Center);
+        List.Columns.Add("狀態", StatusWidth, HorizontalAlignment.Center);
+        List.SelectedIndexChanged += (_, _) => UpdateButtons();
+        List.DoubleClick += (_, _) => EditSelected();
+        accountHost.ViewportChanged += (_, _) => ResizeListColumns();
+        root.Controls.Add(accountHost, 0, 0);
 
         var actions = new TableLayoutPanel
         {
@@ -106,10 +101,16 @@ internal sealed class AccountManagementForm : Form
 
     private void ResizeListColumns()
     {
-        if (list.Columns.Count != 5 || list.ClientSize.Width <= 0) return;
+        if (List.Columns.Count != 5 || List.ClientSize.Width <= 0) return;
         var fixedWidth = EmployeeNoWidth + NameWidth + RoleWidth + StatusWidth;
-        var available = list.ClientSize.Width - fixedWidth - 4;
-        list.Columns[2].Width = Math.Max(EmailMinimumWidth, available);
+        var available = accountHost.ColumnViewportWidth - fixedWidth;
+        accountHost.SetColumnWidths([
+            EmployeeNoWidth,
+            NameWidth,
+            Math.Max(EmailMinimumWidth, available),
+            RoleWidth,
+            StatusWidth,
+        ]);
     }
 
     private static void Place(TableLayoutPanel panel, Button button, int column, int row)
@@ -119,33 +120,45 @@ internal sealed class AccountManagementForm : Form
     }
 
     private EmployeeAccount? SelectedAccount =>
-        list.SelectedItems.Count == 1 ? list.SelectedItems[0].Tag as EmployeeAccount : null;
+        List.SelectedItems.Count == 1 ? List.SelectedItems[0].Tag as EmployeeAccount : null;
 
     private void Reload(string? selectEmployeeNo = null)
     {
         selectEmployeeNo ??= SelectedAccount?.EmployeeNo;
-        list.BeginUpdate();
+        List.BeginUpdate();
         try
         {
-            list.Items.Clear();
+            List.Items.Clear();
+            var rowIndex = 0;
             foreach (var account in employees.LoadAll())
             {
-                var item = new ListViewItem(account.EmployeeNo) { Tag = account };
+                var item = new ListViewItem(account.EmployeeNo) { Tag = account, UseItemStyleForSubItems = false };
                 item.SubItems.Add(account.Name);
                 item.SubItems.Add(account.Email);
                 item.SubItems.Add(RoleText(account.Role));
                 item.SubItems.Add(account.Enabled ? "啟用" : "停用");
-                if (!account.Enabled) item.ForeColor = Color.FromArgb(130, 130, 130);
-                list.Items.Add(item);
+                StyleRow(item, rowIndex++, account.Enabled);
+                List.Items.Add(item);
                 if (account.EmployeeNo == selectEmployeeNo) item.Selected = true;
             }
         }
         finally
         {
-            list.EndUpdate();
+            List.EndUpdate();
         }
         ResizeListColumns();
         UpdateButtons();
+    }
+
+    private static void StyleRow(ListViewItem row, int index, bool accountEnabled)
+    {
+        var background = index % 2 == 0 ? Color.White : Color.FromArgb(247, 247, 247);
+        var foreground = accountEnabled ? SystemColors.ControlText : Color.FromArgb(130, 130, 130);
+        foreach (ListViewItem.ListViewSubItem subItem in row.SubItems)
+        {
+            subItem.BackColor = background;
+            subItem.ForeColor = foreground;
+        }
     }
 
     private void UpdateButtons()
@@ -284,10 +297,10 @@ internal sealed class AccountManagementForm : Form
     {
         ResizeListColumns();
         var fixedWidth = EmployeeNoWidth + NameWidth + RoleWidth + StatusWidth;
-        var expectedEmailWidth = Math.Max(EmailMinimumWidth, list.ClientSize.Width - fixedWidth - 4);
-        if (Text != "帳戶管理" || Icon is null || list.View != View.Details || !list.FullRowSelect || list.Columns.Count != 5 ||
-            list.Columns[2].Width != expectedEmailWidth || ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
-            AcceptButton is not null || CancelButton != close ||
+        var expectedEmailWidth = Math.Max(EmailMinimumWidth, accountHost.ColumnViewportWidth - fixedWidth);
+        if (Text != "帳戶管理" || ShowIcon || List.View != View.Details || !List.FullRowSelect || List.Columns.Count != 5 ||
+            List.Columns[2].Width != expectedEmailWidth || ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
+            AcceptButton is not null || CancelButton != close || !accountHost.UserColumnResizeLocked ||
             !UiControls.HasLogicalSize(add, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(close, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("帳戶管理視窗配置不正確");
@@ -299,6 +312,6 @@ internal sealed class AccountManagementForm : Form
     {
         EmployeeRoles.SuperAdmin => "超級管理員",
         EmployeeRoles.Admin => "管理員",
-        _ => "一般員工",
+        _ => "一般使用者",
     };
 }
