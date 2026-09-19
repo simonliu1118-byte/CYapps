@@ -90,11 +90,12 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
             overlay.BringToFront();
         }
 
-        EventHandler reposition = (_, _) => Reposition();
-        label.LocationChanged += reposition;
-        label.SizeChanged += reposition;
-        parent.Layout += reposition;
-        overlayPositionHandlers.Add(new OverlayPositionHandler(label, parent, reposition));
+        EventHandler controlHandler = (_, _) => Reposition();
+        LayoutEventHandler layoutHandler = (_, _) => Reposition();
+        label.LocationChanged += controlHandler;
+        label.SizeChanged += controlHandler;
+        parent.Layout += layoutHandler;
+        overlayPositionHandlers.Add(new OverlayPositionHandler(label, parent, controlHandler, layoutHandler));
         Reposition();
     }
 
@@ -116,7 +117,7 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
 
             DrawListViewSubItemEventHandler handler = (_, eventArgs) =>
             {
-                if (eventArgs.ColumnIndex != invoiceColumn) return;
+                if (eventArgs.ColumnIndex != invoiceColumn || eventArgs.Item is null || eventArgs.SubItem is null) return;
                 var backColor = eventArgs.Item.UseItemStyleForSubItems
                     ? eventArgs.Item.BackColor
                     : eventArgs.SubItem.BackColor;
@@ -154,10 +155,10 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
         {
             if (!item.Label.IsDisposed)
             {
-                item.Label.LocationChanged -= item.Handler;
-                item.Label.SizeChanged -= item.Handler;
+                item.Label.LocationChanged -= item.ControlHandler;
+                item.Label.SizeChanged -= item.ControlHandler;
             }
-            if (!item.Parent.IsDisposed) item.Parent.Layout -= item.Handler;
+            if (!item.Parent.IsDisposed) item.Parent.Layout -= item.LayoutHandler;
         }
         foreach (var item in labels)
         {
@@ -228,5 +229,9 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
     private sealed record MaskedLabel(Label Label, string Text);
     private sealed record MaskedPicture(PictureBox Picture, bool Visible);
     private sealed record ListMaskHandler(ListView List, DrawListViewSubItemEventHandler Handler);
-    private sealed record OverlayPositionHandler(Label Label, Control Parent, EventHandler Handler);
+    private sealed record OverlayPositionHandler(
+        Label Label,
+        Control Parent,
+        EventHandler ControlHandler,
+        LayoutEventHandler LayoutHandler);
 }
