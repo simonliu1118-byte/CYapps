@@ -24,6 +24,8 @@ public static class UploadStatuses
 public interface IAmegoGateway
 {
     Task<IssueResponse> IssueAsync(IssueRequest request, CancellationToken cancellationToken = default);
+    Task<VoidResponse> VoidAsync(VoidRequest request, CancellationToken cancellationToken = default) =>
+        Task.FromException<VoidResponse>(new NotSupportedException("invoice void is not supported by this gateway"));
     Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default);
     Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default);
     Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default);
@@ -74,7 +76,17 @@ public sealed class IssueRequest
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int DetailAmountRound { get; set; }
 }
 
+public sealed class VoidRequest
+{
+    [JsonPropertyName("CancelInvoiceNumber")]
+    public string CancelInvoiceNumber { get; set; } = string.Empty;
+
+    [JsonPropertyName("CancelReason")]
+    public string CancelReason { get; set; } = string.Empty;
+}
+
 public sealed record IssueResponse(int Code, string Message, string InvoiceNumber, long InvoiceTime, string RandomNumber);
+public sealed record VoidResponse(int Code, string Message);
 
 public sealed record QueryResult(
     string InvoiceNumber,
@@ -96,7 +108,8 @@ public sealed record QueryResult(
     long CreateDate,
     JsonElement ProductItems,
     int DetailVat,
-    bool DetailVatPresent);
+    bool DetailVatPresent,
+    bool VoidPending = false);
 
 public sealed record QueryResponse(int Code, string Message, QueryResult Data);
 
