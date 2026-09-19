@@ -14,10 +14,12 @@ var tests = new (string Name, Action Run)[]
     ("ordinary employee cannot approve or cancel manual review", () => TestEmployeeCannotManageReviewAsync().GetAwaiter().GetResult()),
     ("wrong manager password cannot approve manual review", () => TestWrongManagerPasswordAsync().GetAwaiter().GetResult()),
     ("administrator can cancel manual review without changing invoice state", () => TestAdminCancelsReviewAsync().GetAwaiter().GetResult()),
-    ("administrator approval sends original requester employee number", () => TestAdminApprovesReviewAsync().GetAwaiter().GetResult()),
+    ("administrator approval sends reviewer requester and reason", () => TestAdminApprovesReviewAsync().GetAwaiter().GetResult()),
     ("pending approved void keeps core pending marker and resolves manual review", () => TestApprovedPendingVoidAsync().GetAwaiter().GetResult()),
     ("manual review cancel is blocked after remote void becomes pending", TestCancelBlockedAfterPending),
     ("non-paper invoice proceeds without paper receipt selection", () => TestCarrierInvoiceAsync().GetAwaiter().GetResult()),
+    ("direct cancel reason format uses requester and reason", TestDirectCancelReasonFormat),
+    ("reviewed cancel reason format uses reviewer requester and reason", TestReviewedCancelReasonFormat),
     ("allowance wrong employee credentials make zero query calls", () => AllowanceWorkflowTests.WrongCredentialsMakeZeroQueryAsync().GetAwaiter().GetResult()),
     ("employee can queue allowance manual review", () => AllowanceWorkflowTests.EmployeeQueuesManualReviewAsync().GetAwaiter().GetResult()),
     ("administrator can cancel allowance manual review", () => AllowanceWorkflowTests.AdministratorCancelsManualReviewAsync().GetAwaiter().GetResult()),
@@ -53,7 +55,7 @@ static async Task TestWrongInvoiceNumberAsync()
     using var temporary = new TemporaryDirectory();
     var setup = CreateSetup(temporary.Path);
     await ThrowsAsync<InvalidOperationException>(() => setup.Workflow.SubmitAsync(
-        setup.Record, "AA00000000", "3015", "employee-pass", "退貨",
+        setup.Record, "AA00000000", "3015", "Employee1", "退貨",
         PaperInvoiceReceiptStates.Collected));
     Equal(0, setup.Gateway.TotalCalls);
 }
@@ -86,7 +88,7 @@ static async Task TestDisabledEmployeeAsync()
     var setup = CreateSetup(temporary.Path);
     setup.Repository.Employees.SetEnabled("0001", "3015", false);
     var error = await ThrowsWithResultAsync<InvalidOperationException>(() => setup.Workflow.SubmitAsync(
-        setup.Record, setup.Record.InvoiceNumber, "3015", "employee-pass", "退貨",
+        setup.Record, setup.Record.InvoiceNumber, "3015", "Employee1", "退貨",
         PaperInvoiceReceiptStates.Collected));
     Equal("員工編號或密碼錯誤", error.Message);
     Equal(0, setup.Gateway.TotalCalls);
@@ -97,7 +99,7 @@ static async Task TestUncollectedQueuesManualReviewAsync()
     using var temporary = new TemporaryDirectory();
     var setup = CreateSetup(temporary.Path);
     var result = await setup.Workflow.SubmitAsync(
-        setup.Record, setup.Record.InvoiceNumber, "3015", "employee-pass", "退貨",
+        setup.Record, setup.Record.InvoiceNumber, "3015", "Employee1", "退貨",
         PaperInvoiceReceiptStates.Uncollected);
 
     Equal(true, result.ManualReviewRequired);
@@ -119,8 +121,8 @@ static async Task TestEmployeeCannotManageReviewAsync()
     await QueueReviewAsync(setup);
     var issue = ManualIssue(setup.Repository);
 
-    await ThrowsAsync<UnauthorizedAccessException>(() => setup.Workflow.ApproveManualReviewAsync(issue, "3015", "employee-pass"));
-    Throws<UnauthorizedAccessException>(() => setup.Workflow.CancelManualReview(issue, "3015", "employee-pass"));
+    await ThrowsAsync<UnauthorizedAccessException>(() => setup.Workflow.ApproveManualReviewAsync(issue, "3015", "Employee1"));
+    Throws<UnauthorizedAccessException>(() => setup.Workflow.CancelManualReview(issue, "3015", "Employee1"));
     Equal(0, setup.Gateway.TotalCalls);
     Equal(null, issue.ResolvedUtc);
 }
@@ -144,7 +146,7 @@ static async Task TestAdminCancelsReviewAsync()
     await QueueReviewAsync(setup);
     var issue = ManualIssue(setup.Repository);
 
-    setup.Workflow.CancelManualReview(issue, "2000", "admin-pass");
+    setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1");
 
     Equal(0, setup.Gateway.TotalCalls);
     var stored = setup.Repository.Invoices.LoadOrCreate().Single();
@@ -163,11 +165,11 @@ static async Task TestAdminApprovesReviewAsync()
     setup.Gateway.Queries.Enqueue(Query(cancelDate: 1789790000));
     var issue = ManualIssue(setup.Repository);
 
-    var result = await setup.Workflow.ApproveManualReviewAsync(issue, "2000", "admin-pass");
+    var result = await setup.Workflow.ApproveManualReviewAsync(issue, "2000", "AdminPass1");
 
     Equal(InvoiceVoidOutcome.Confirmed, result.Outcome);
     Equal(1, setup.Gateway.VoidCalls);
-    Equal("3015 退貨", setup.Gateway.LastVoid?.CancelReason);
+    Equal("2000-3015-退貨", setup.Gateway.LastVoid?.CancelReason);
     var stored = setup.Repository.Invoices.LoadOrCreate().Single();
     Equal(InvoiceStates.Voided, stored.InvoiceState);
     Equal(null, setup.Workflow.ManualReviewFor(stored));
@@ -185,10 +187,11 @@ static async Task TestApprovedPendingVoidAsync()
     setup.Gateway.Queries.Enqueue(Query(voidPending: true));
     var issue = ManualIssue(setup.Repository);
 
-    var result = await setup.Workflow.ApproveManualReviewAsync(issue, "0001", "super-pass");
+    var result = await setup.Workflow.ApproveManualReviewAsync(issue, "0001", "SuperPass1");
 
     Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
     Equal(1, setup.Gateway.VoidCalls);
+    Equal("0001-3015-退貨", setup.Gateway.LastVoid?.CancelReason);
     var stored = setup.Repository.Invoices.LoadOrCreate().Single();
     Equal(true, HasCorePending(stored));
     Equal(null, setup.Workflow.ManualReviewFor(stored));
@@ -207,7 +210,7 @@ static void TestCancelBlockedAfterPending()
     stored.ExtensionData["cyinvoice_void_pending"] = JsonSerializer.SerializeToElement(true);
     setup.Repository.Invoices.Save([stored]);
 
-    Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000", "admin-pass"));
+    Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
     var after = setup.Repository.Invoices.LoadOrCreate().Single();
     Equal(true, setup.Workflow.ManualReviewFor(after) is not null);
     Equal(true, HasCorePending(after));
@@ -221,17 +224,27 @@ static async Task TestCarrierInvoiceAsync()
     setup.Gateway.Queries.Enqueue(Query(cancelDate: 1789790000));
 
     var result = await setup.Workflow.SubmitAsync(
-        setup.Record, setup.Record.InvoiceNumber, "3015", "employee-pass", "取消交易", string.Empty);
+        setup.Record, setup.Record.InvoiceNumber, "3015", "Employee1", "取消交易", string.Empty);
 
     Equal(false, result.ManualReviewRequired);
     Equal(InvoiceVoidOutcome.Confirmed, result.VoidResult?.Outcome);
-    Equal("3015 取消交易", setup.Gateway.LastVoid?.CancelReason);
+    Equal("3015-取消交易", setup.Gateway.LastVoid?.CancelReason);
+}
+
+static void TestDirectCancelReasonFormat()
+{
+    Equal("3015-消退", EmployeeVoidWorkflowService.CancelReason("3015", "消退"));
+}
+
+static void TestReviewedCancelReasonFormat()
+{
+    Equal("3001-3015-消退", EmployeeVoidWorkflowService.CancelReason("3001", "3015", "消退"));
 }
 
 static async Task QueueReviewAsync(TestSetup setup)
 {
     var result = await setup.Workflow.SubmitAsync(
-        setup.Record, setup.Record.InvoiceNumber, "3015", "employee-pass", "退貨",
+        setup.Record, setup.Record.InvoiceNumber, "3015", "Employee1", "退貨",
         PaperInvoiceReceiptStates.Uncollected);
     Equal(true, result.ManualReviewRequired);
 }
@@ -239,9 +252,9 @@ static async Task QueueReviewAsync(TestSetup setup)
 static TestSetup CreateSetup(string path, bool paper = true)
 {
     var repository = LocalRepository.Open(path, new TestProtector());
-    repository.Employees.CreateFirstSuperAdmin("0001", "超管", "super@example.com", "super-pass");
-    repository.Employees.CreateEmployee("0001", "3015", "員工", "employee@example.com", "employee-pass");
-    repository.Employees.CreateEmployee("0001", "2000", "管理員", "admin@example.com", "admin-pass", EmployeeRoles.Admin);
+    repository.Employees.CreateFirstSuperAdmin("0001", "超管", "super@example.com", "SuperPass1");
+    repository.Employees.CreateEmployee("0001", "3015", "員工", "employee@example.com", "Employee1");
+    repository.Employees.CreateEmployee("0001", "2000", "管理員", "admin@example.com", "AdminPass1", EmployeeRoles.Admin);
 
     var record = new InvoiceRecord
     {
