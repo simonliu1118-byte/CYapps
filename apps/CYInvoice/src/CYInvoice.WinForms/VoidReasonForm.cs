@@ -2,6 +2,8 @@ namespace CYInvoice.WinForms;
 
 internal sealed class VoidReasonForm : Form
 {
+    private const int WindowWidth = 350;
+    private const int WindowHeight = 142;
     private readonly TextBox reason = UiControls.TextBox(30);
     private readonly Button next = UiControls.StandardButton("下一步");
     private readonly Button cancel = UiControls.StandardButton("取消");
@@ -10,7 +12,7 @@ internal sealed class VoidReasonForm : Form
     {
         Text = "發票作廢";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(360, 158);
+        ClientSize = new Size(WindowWidth, WindowHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -30,19 +32,22 @@ internal sealed class VoidReasonForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(18, 14, 18, 12),
+            Padding = new Padding(14, 10, 14, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         root.Controls.Add(new Label
         {
             Text = "作廢原因（最多 15 字）",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
+            Margin = Padding.Empty,
         }, 0, 0);
-        reason.Dock = DockStyle.Fill;
-        reason.Margin = new Padding(0, 4, 0, 8);
+        reason.Dock = DockStyle.None;
+        reason.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        reason.Margin = new Padding(0);
+        reason.TextAlign = HorizontalAlignment.Left;
         reason.TabIndex = 0;
         reason.KeyDown += (_, eventArgs) =>
         {
@@ -101,7 +106,8 @@ internal sealed class VoidReasonForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (Text != "發票作廢" || AcceptButton is not null || CancelButton != cancel)
+        if (Text != "發票作廢" || AcceptButton is not null || CancelButton != cancel ||
+            reason.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight)
             throw new InvalidOperationException("作廢原因視窗基本配置不正確");
         if (reason.MaxLength < 15 || !UiControls.HasLogicalSize(next, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("作廢原因欄位或按鈕尺寸不正確");
