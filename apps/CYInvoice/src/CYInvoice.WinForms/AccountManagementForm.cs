@@ -4,6 +4,8 @@ namespace CYInvoice.WinForms;
 
 internal sealed class AccountManagementForm : Form
 {
+    private const int WindowWidth = 680;
+    private const int WindowHeight = 420;
     private readonly EmployeeStore employees;
     private readonly EmployeeAccount actor;
     private readonly ListView list = new()
@@ -30,8 +32,8 @@ internal sealed class AccountManagementForm : Form
         this.actor = actor;
         Text = "CYInvoice 帳戶管理";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(860, 520);
-        MinimumSize = new Size(780, 480);
+        ClientSize = new Size(WindowWidth, WindowHeight);
+        MinimumSize = new Size(640, 380);
         Font = new Font("Microsoft JhengHei UI", 10F);
         BuildLayout();
         Reload();
@@ -44,23 +46,25 @@ internal sealed class AccountManagementForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(16, 12, 16, 12),
+            Padding = new Padding(12, 10, 12, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
 
         actorLabel.Text = $"目前管理員：{actor.EmployeeNo} {actor.Name}　{RoleText(actor.Role)}";
         actorLabel.Dock = DockStyle.Fill;
         actorLabel.TextAlign = ContentAlignment.MiddleLeft;
         actorLabel.Font = new Font(Font.FontFamily, 9.5F, FontStyle.Bold);
+        actorLabel.Margin = Padding.Empty;
         root.Controls.Add(actorLabel, 0, 0);
 
-        list.Columns.Add("員工編號", 100, HorizontalAlignment.Center);
-        list.Columns.Add("姓名", 150, HorizontalAlignment.Left);
-        list.Columns.Add("Email", 270, HorizontalAlignment.Left);
-        list.Columns.Add("權限", 120, HorizontalAlignment.Center);
-        list.Columns.Add("狀態", 90, HorizontalAlignment.Center);
+        list.Margin = new Padding(0, 2, 0, 0);
+        list.Columns.Add("員工編號", 82, HorizontalAlignment.Center);
+        list.Columns.Add("姓名", 110, HorizontalAlignment.Left);
+        list.Columns.Add("Email", 226, HorizontalAlignment.Left);
+        list.Columns.Add("權限", 95, HorizontalAlignment.Center);
+        list.Columns.Add("狀態", 64, HorizontalAlignment.Center);
         list.SelectedIndexChanged += (_, _) => UpdateButtons();
         list.DoubleClick += (_, _) => EditSelected();
         root.Controls.Add(list, 0, 1);
@@ -70,11 +74,12 @@ internal sealed class AccountManagementForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 4,
             RowCount = 2,
-            Padding = new Padding(0, 8, 0, 0),
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 4, 0, 0),
         };
         for (var index = 0; index < 4; index++) actions.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        actions.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         Place(actions, add, 0, 0);
         Place(actions, edit, 1, 0);
         Place(actions, password, 2, 0);
@@ -266,6 +271,7 @@ internal sealed class AccountManagementForm : Form
     internal void VerifySmokeLayout()
     {
         if (list.View != View.Details || !list.FullRowSelect || list.Columns.Count != 5 ||
+            ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
             AcceptButton is not null || CancelButton != close ||
             !UiControls.HasLogicalSize(add, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(close, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
