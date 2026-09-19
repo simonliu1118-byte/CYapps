@@ -33,6 +33,7 @@ internal sealed class EmployeeEditForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout(existing);
         Shown += (_, _) => (createMode ? employeeNo : name).Focus();
     }
@@ -205,7 +206,7 @@ internal sealed class EmployeeEditForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (employeeNo.MaxLength != 4 || InputFields().Any(field => field.TextAlign != HorizontalAlignment.Left) ||
+        if (Icon is null || employeeNo.MaxLength != 4 || InputFields().Any(field => field.TextAlign != HorizontalAlignment.Left) ||
             ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
             AcceptButton is not null || CancelButton != cancel ||
             (createMode && (!password.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar)) ||
