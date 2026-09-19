@@ -131,4 +131,4 @@ jobs:
           name: CYInvoice_V${{ env.CYINVOICE_ARTIFACT_VERSION }}_engineering-run${{ github.run_number }}
           path: apps/CYInvoice/dist/engineering-artifact/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
