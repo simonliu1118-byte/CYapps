@@ -100,4 +100,4 @@ jobs:
             apps/CYAccounting/out/cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source.tar.gz
             apps/CYAccounting/out/cyaccounting-v${{ env.CYACCOUNTING_VERSION }}-source.tar.gz.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
