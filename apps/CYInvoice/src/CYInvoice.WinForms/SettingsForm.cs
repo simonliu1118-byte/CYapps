@@ -7,6 +7,7 @@ internal sealed class SettingsForm : Form
 {
     private readonly LocalRepository repository;
     private readonly Settings settings;
+    private readonly bool requireMoPassword;
     private readonly ToolTip toolTip = new();
     private readonly RadioButton test = new() { Text = "光貿測試環境", AutoSize = true };
     private readonly RadioButton production = new() { Text = "正式公司", AutoSize = true };
@@ -21,9 +22,10 @@ internal sealed class SettingsForm : Form
     private Label moPasswordLabel = null!;
     private FlowLayoutPanel actionButtons = null!;
 
-    public SettingsForm(LocalRepository repository)
+    public SettingsForm(LocalRepository repository, bool requireMoPassword = false)
     {
         this.repository = repository;
+        this.requireMoPassword = requireMoPassword;
         settings = repository.Settings.LoadOrCreate();
         Text = "CYInvoice 設定";
         StartPosition = FormStartPosition.CenterParent;
@@ -78,7 +80,9 @@ internal sealed class SettingsForm : Form
         moPasswordLabel = FieldLabel("MO店+");
         platform.Controls.Add(moPasswordLabel, 1, 0);
         platform.Controls.Add(moPassword, 2, 0);
-        toolTip.SetToolTip(moPasswordLabel, "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。");
+        toolTip.SetToolTip(moPasswordLabel, requireMoPassword
+            ? "目前保存的 MO店+ 密碼無法使用，請重新輸入。"
+            : "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。");
         platformGroup.Controls.Add(platform);
 
         cancel.DialogResult = DialogResult.Cancel;
@@ -131,9 +135,11 @@ internal sealed class SettingsForm : Form
         appKey.PlaceholderText = settings.ProductionAppKeyEncrypted.Length == 0
             ? ""
             : "留白會保留目前已儲存的 App Key。";
-        moPassword.PlaceholderText = settings.MoPasswordEncrypted.Length == 0
-            ? ""
-            : "留白會保存目前已儲存的密碼";
+        moPassword.PlaceholderText = requireMoPassword
+            ? "請重新輸入 MO店+ Excel 密碼"
+            : settings.MoPasswordEncrypted.Length == 0
+                ? ""
+                : "留白會保存目前已儲存的密碼";
     }
 
     private void UpdateEnvironmentFields()
@@ -149,6 +155,13 @@ internal sealed class SettingsForm : Form
             settings.Environment = production.Checked ? Environments.Production : Environments.Test;
             settings.ProductionInvoice = invoice.Text.Trim();
             if (appKey.Text.Length != 0) repository.Settings.SetProductionAppKey(settings, appKey.Text);
+            if (requireMoPassword && moPassword.Text.Length == 0)
+            {
+                MessageBox.Show(this, "請重新輸入 MO店+ Excel 保護密碼", "無法儲存設定",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                moPassword.Focus();
+                return;
+            }
             if (moPassword.Text.Length != 0) repository.Settings.SetMoPassword(settings, moPassword.Text);
             if (settings.MoPasswordEncrypted.Length == 0)
             {
@@ -192,9 +205,11 @@ internal sealed class SettingsForm : Form
         if (settings.ProductionAppKeyEncrypted.Length != 0 &&
             appKey.PlaceholderText != "留白會保留目前已儲存的 App Key。")
             throw new InvalidOperationException("App Key 保留提示未放在輸入欄位內");
-        if (settings.MoPasswordEncrypted.Length != 0 &&
+        if (!requireMoPassword && settings.MoPasswordEncrypted.Length != 0 &&
             moPassword.PlaceholderText != "留白會保存目前已儲存的密碼")
             throw new InvalidOperationException("MO店+ 密碼保留提示文字不正確");
+        if (requireMoPassword && moPassword.PlaceholderText != "請重新輸入 MO店+ Excel 密碼")
+            throw new InvalidOperationException("MO店+ 密碼重新輸入提示文字不正確");
         if (environmentLayout.GetPositionFromControl(production).Row != 1 ||
             environmentLayout.GetPositionFromControl(invoiceLabel).Column != 1 ||
             environmentLayout.GetPositionFromControl(appKeyLabel).Column != 1 ||
