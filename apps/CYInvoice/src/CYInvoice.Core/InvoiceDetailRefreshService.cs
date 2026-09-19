@@ -93,7 +93,23 @@ public sealed class InvoiceDetailRefreshService
             record.OriginalOrderId.Trim().Length == 0)
             record.OriginalOrderId = orderId;
         record.Source = InvoiceSourceInference.FromOrderId(orderId);
-        record.InvoiceState = query.CancelDate == 0 ? InvoiceStates.Opened : InvoiceStates.Voided;
+
+        if (query.CancelDate > 0)
+        {
+            record.InvoiceState = InvoiceStates.Voided;
+            InvoiceVoidService.ClearPendingMarker(record);
+            InvoiceOfficialMetadata.SetCancelDate(record, query.CancelDate);
+        }
+        else
+        {
+            InvoiceOfficialMetadata.SetCancelDate(record, 0);
+            if (query.VoidPending)
+                InvoiceVoidService.MarkPendingMarker(record);
+            record.InvoiceState = query.VoidPending || InvoiceVoidService.HasPendingMarker(record)
+                ? InvoiceStates.OpenedWaitingVoid
+                : InvoiceStates.Opened;
+        }
+
         if (query.InvoiceStatus != 0) record.UploadStatus = query.InvoiceStatus;
         record.UploadStatusText = UploadStatusText(record.UploadStatus);
         record.ErrorMessage = string.Empty;
