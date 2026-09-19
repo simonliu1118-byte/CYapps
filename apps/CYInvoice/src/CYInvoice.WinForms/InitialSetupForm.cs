@@ -39,6 +39,7 @@ internal sealed class InitialSetupForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => FirstField().Focus();
     }
@@ -290,7 +291,7 @@ internal sealed class InitialSetupForm : Form
     internal void VerifySmokeLayout()
     {
         var fields = InputFields().ToArray();
-        if (employeeNo.MaxLength != 4 || !employeePassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
+        if (Icon is null || employeeNo.MaxLength != 4 || !employeePassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
             (legacyPasswordRequired && !legacyPassword.UseSystemPasswordChar) ||
             (moPasswordRequired && !moPassword.UseSystemPasswordChar) ||
             fields.Any(field => field.TextAlign != HorizontalAlignment.Left) ||
