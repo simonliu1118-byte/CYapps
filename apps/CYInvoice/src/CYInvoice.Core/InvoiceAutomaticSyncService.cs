@@ -18,14 +18,15 @@ public sealed class InvoiceAutomaticSyncService
     public InvoiceAutomaticSyncService(
         LocalRepository repository,
         InvoiceSyncService syncService,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        InvoiceVoidService? voidService = null)
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         this.syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
         stateStore = new InvoiceSyncStateStore(repository.DataDirectory);
         issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
         retentionService = new InvoiceRetentionService(repository);
-        voidService = new InvoiceVoidService(repository, now: now);
+        this.voidService = voidService ?? new InvoiceVoidService(repository, now: now);
         this.now = now ?? (() => DateTimeOffset.Now);
     }
 
