@@ -4,9 +4,10 @@ namespace CYInvoice.WinForms;
 
 internal sealed class EmployeeEditForm : Form
 {
-    private const int WindowWidth = 370;
-    private const int FieldRowHeight = 38;
-    private const int ActionRowHeight = 46;
+    private const int WindowWidth = 296;
+    private const int FieldRowHeight = 34;
+    private const int ActionRowHeight = 40;
+    private const int CompactButtonWidth = 110;
     private readonly bool createMode;
     private readonly bool allowRoleChange;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
@@ -18,8 +19,8 @@ internal sealed class EmployeeEditForm : Form
     {
         DropDownStyle = ComboBoxStyle.DropDownList,
     };
-    private readonly Button save = UiControls.StandardButton("儲存");
-    private readonly Button cancel = UiControls.StandardButton("取消");
+    private readonly Button save = CompactButton("儲存");
+    private readonly Button cancel = CompactButton("取消");
 
     public EmployeeEditForm(EmployeeAccount? existing = null, bool allowRoleChange = true)
     {
@@ -32,8 +33,8 @@ internal sealed class EmployeeEditForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
+        ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
-        Icon = ApplicationIcon.Load();
         BuildLayout(existing);
         Shown += (_, _) => (createMode ? employeeNo : name).Focus();
     }
@@ -45,11 +46,11 @@ internal sealed class EmployeeEditForm : Form
     public string Role => role.SelectedIndex == 1 ? EmployeeRoles.Admin : EmployeeRoles.Employee;
 
     private int FieldCount => createMode ? 6 : 4;
-    private int CalculateHeight() => 20 + FieldCount * FieldRowHeight + ActionRowHeight;
+    private int CalculateHeight() => 16 + FieldCount * FieldRowHeight + ActionRowHeight;
 
     private void BuildLayout(EmployeeAccount? existing)
     {
-        role.Items.AddRange(new object[] { "一般員工", "管理員" });
+        role.Items.AddRange(new object[] { "一般使用者", "管理員" });
         role.SelectedIndex = existing?.Role == EmployeeRoles.Admin ? 1 : 0;
         foreach (var field in InputFields()) ConfigureInputField(field);
         ConfigureChoiceField(role);
@@ -59,7 +60,7 @@ internal sealed class EmployeeEditForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
-            Padding = new Padding(14, 10, 14, 10),
+            Padding = new Padding(10, 8, 10, 8),
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldCount * FieldRowHeight));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, ActionRowHeight));
@@ -71,7 +72,7 @@ internal sealed class EmployeeEditForm : Form
             RowCount = FieldCount,
             Margin = Padding.Empty,
         };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 94));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (var index = 0; index < FieldCount; index++)
             fields.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight));
@@ -119,7 +120,7 @@ internal sealed class EmployeeEditForm : Form
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Margin = Padding.Empty,
-            Padding = new Padding(0, 4, 0, 0),
+            Padding = new Padding(0, 2, 0, 0),
         };
         buttons.SizeChanged += (_, _) => CenterButtons(buttons);
         save.Click += SaveClicked;
@@ -130,6 +131,52 @@ internal sealed class EmployeeEditForm : Form
         Controls.Add(root);
         AcceptButton = null;
         CancelButton = cancel;
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData != Keys.Enter || role.DroppedDown) return base.ProcessCmdKey(ref msg, keyData);
+
+        if (createMode && employeeNo.ContainsFocus)
+        {
+            FocusField(name);
+            return true;
+        }
+        if (name.ContainsFocus)
+        {
+            FocusField(email);
+            return true;
+        }
+        if (email.ContainsFocus)
+        {
+            if (role.Enabled) role.Focus();
+            else save.PerformClick();
+            return true;
+        }
+        if (role.ContainsFocus)
+        {
+            if (createMode) FocusField(password);
+            else save.PerformClick();
+            return true;
+        }
+        if (createMode && password.ContainsFocus)
+        {
+            FocusField(confirmPassword);
+            return true;
+        }
+        if (createMode && confirmPassword.ContainsFocus)
+        {
+            save.PerformClick();
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    private static void FocusField(TextBox field)
+    {
+        field.Focus();
+        field.SelectAll();
     }
 
     private IEnumerable<TextBox> InputFields()
@@ -179,9 +226,9 @@ internal sealed class EmployeeEditForm : Form
         }
         if (createMode)
         {
-            if (password.Text.Length == 0)
+            if (password.Text.Length < 8 || !password.Text.All(char.IsAsciiLetterOrDigit))
             {
-                ValidationError("請輸入初始密碼", password);
+                ValidationError("密碼至少 8 碼，且只能使用英文字母或數字", password);
                 return;
             }
             if (confirmPassword.Text.Length == 0 || password.Text != confirmPassword.Text)
@@ -206,12 +253,13 @@ internal sealed class EmployeeEditForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (Icon is null || employeeNo.MaxLength != 4 || InputFields().Any(field => field.TextAlign != HorizontalAlignment.Left) ||
+        if (ShowIcon || employeeNo.MaxLength != 4 || InputFields().Any(field => field.TextAlign != HorizontalAlignment.Left) ||
             ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
             AcceptButton is not null || CancelButton != cancel ||
             (createMode && (!password.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar)) ||
             (!createMode && !allowRoleChange && role.Enabled) ||
-            !UiControls.HasLogicalSize(save, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
+            role.Items.Cast<object>().Any(item => string.Equals(item.ToString(), "一般員工", StringComparison.Ordinal)) ||
+            !UiControls.HasLogicalSize(save, CompactButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("員工編輯視窗配置不正確");
     }
 
@@ -228,12 +276,22 @@ internal sealed class EmployeeEditForm : Form
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft,
         AutoEllipsis = false,
-        Margin = new Padding(0, 0, 8, 0),
+        Margin = new Padding(0, 0, 6, 0),
+    };
+
+    private static Button CompactButton(string text) => new NoFocusCueButton
+    {
+        Text = text,
+        Width = CompactButtonWidth,
+        Height = UiControls.StandardButtonHeight,
+        Margin = new Padding(5, 2, 5, 2),
+        AutoSize = false,
+        UseVisualStyleBackColor = true,
     };
 
     private static void CenterButtons(FlowLayoutPanel panel)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 4, 0, 0);
+        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 2, 0, 0);
     }
 }
