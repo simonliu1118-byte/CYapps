@@ -218,9 +218,9 @@ public sealed class EmployeeVoidWorkflowService
         {
             employee = repository.Employees.Authenticate(employeeNo, password);
         }
-        catch (ArgumentException)
+        catch (InvalidOperationException)
         {
-            // Keep the external message identical for an invalid number and an invalid password.
+            // Invalid employee-number shape is intentionally indistinguishable from bad credentials.
         }
 
         if (employee is null)
@@ -237,7 +237,7 @@ public sealed class EmployeeVoidWorkflowService
     {
         EmployeeAccount? actor;
         try { actor = repository.Employees.Find(actorEmployeeNo); }
-        catch (ArgumentException) { actor = null; }
+        catch (InvalidOperationException) { actor = null; }
         if (actor is null || !actor.Enabled || !EmployeeRoles.CanManageAccounts(actor.Role))
             throw new UnauthorizedAccessException("只有管理員或超級管理員可以處理人工確認");
         return actor;
