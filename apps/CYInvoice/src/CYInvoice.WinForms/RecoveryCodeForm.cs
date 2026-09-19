@@ -103,7 +103,7 @@ internal sealed class RecoveryCodeForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (!recoveryCode.ReadOnly || recoveryCode.UseSystemPasswordChar || !ControlBox || AcceptButton != saved ||
+        if (!recoveryCode.ReadOnly || recoveryCode.UseSystemPasswordChar || ControlBox || AcceptButton != saved ||
             !UiControls.HasLogicalSize(copy, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(saved, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("復原碼顯示視窗配置不正確");
