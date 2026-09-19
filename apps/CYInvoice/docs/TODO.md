@@ -35,13 +35,15 @@ V2.5 已完成實作前設計，詳細內容見 `V2_5_EMPLOYEE_VOID.md`。本版
 
 ### 第三批：AMEGO 作廢核心
 
-- [ ] 實作前重新核對最新光貿 `/json/f0501`、`invoice_query`、`invoice_status` 官方規格。
-- [ ] 完整串接／驗證 `/json/f0501` 作廢流程。
-- [ ] `CancelReason` 使用「4 碼員工編號 + 空格 + 使用者原因」，原因最多 15 字；實作前再次確認 API 長度限制。
-- [ ] 作廢後以官方查詢確認最終狀態，不能只依 `f0501` 初始回覆判定成功。
-- [ ] 結果不明、timeout 或官方狀態尚未確認時禁止盲目重送作廢／重開。
-- [ ] 作廢後重開仍須維持既有 `-R2`、`-R3` API OrderID 與防重安全語意。
-- [ ] 不自行新增本機跨期禁止規則；API 是否允許作廢以 AMEGO 正式結果為準。
+- [x] 已重新核對光貿 `/json/f0501`、`invoice_query`、`invoice_status` 官方規格；`CancelReason` 官方上限確認為 20 字。
+- [x] 已串接 `/json/f0501`；payload 固定使用一筆陣列並在 client 端限制發票號碼與 `CancelReason` 長度。
+- [x] 作廢核心接受最終送出的 `CancelReason`，限制 20 字；第四批再組成「4 碼員工編號 + 空格 + 最多 15 字原因」。
+- [x] `invoice_query` 已解析 `cancel_date` 與 `wait` 中的 `C0501`；作廢後以 query／status 官方結果確認，不以 `f0501 code=0` 單獨判定成功。
+- [x] 結果不明、timeout、官方仍處理中或 code=0 尚未確認時，寫入既有 `extra_json` 技術性 pending marker 並禁止盲目重送；不建立永久 `void_audit`。
+- [x] pending 紀錄再次操作時只做 reconciliation；若官方明確仍為正常完成且沒有待處理作廢，只解除 pending 並回傳 retry-ready，同一次操作不自動重送。
+- [x] 同一程式內另以執行鎖阻止同張作廢流程並行重複送出；Windows 專用 void tests 已涵蓋並行、防重、timeout、已作廢、待處理、明確拒絕與官方確認語意。
+- [x] 作廢後重開既有 `-R2`、`-R3` API OrderID 與防重安全語意未修改，既有 core parity tests 維持成功。
+- [x] 不自行新增本機跨期禁止規則；API 是否允許作廢以 AMEGO 正式結果為準。
 
 ### 第四批：員工作廢整合
 
