@@ -10,8 +10,9 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
     private readonly string originalTitle;
     private readonly List<MaskedLabel> labels = [];
     private readonly List<MaskedPicture> pictures = [];
-    private readonly List<MaskedListText> listTexts = [];
     private readonly List<Control> overlays = [];
+    private readonly List<ListMaskHandler> listMasks = [];
+    private readonly List<OverlayPositionHandler> overlayPositionHandlers = [];
     private bool disposed;
 
     private VoidConfirmationPrivacyMask(Form owner, string invoiceNumber)
@@ -67,19 +68,34 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
     {
         var parent = label.Parent;
         if (parent is null) return;
-        var maskWidth = Math.Min(Math.Max(104, label.PreferredWidth + 10), Math.Max(104, label.Width));
-        var maskHeight = Math.Min(20, Math.Max(14, label.Height - 8));
         var overlay = new Panel
         {
             BackColor = Color.Black,
-            Size = new Size(maskWidth, maskHeight),
-            Location = new Point(label.Left, label.Top + Math.Max(0, (label.Height - maskHeight) / 2)),
             Margin = Padding.Empty,
             Tag = InvoiceMaskTag,
         };
         parent.Controls.Add(overlay);
-        overlay.BringToFront();
         overlays.Add(overlay);
+
+        void Reposition()
+        {
+            if (overlay.IsDisposed || label.IsDisposed || parent.IsDisposed) return;
+            var width = Math.Min(Math.Max(92, TextRenderer.MeasureText("AA00000000", label.Font).Width + 8), Math.Max(92, label.Width));
+            var height = Math.Min(18, Math.Max(14, label.Height - 8));
+            overlay.Bounds = new Rectangle(
+                label.Left,
+                label.Top + Math.Max(0, (label.Height - height) / 2),
+                width,
+                height);
+            overlay.BringToFront();
+        }
+
+        EventHandler reposition = (_, _) => Reposition();
+        label.LocationChanged += reposition;
+        label.SizeChanged += reposition;
+        parent.Layout += reposition;
+        overlayPositionHandlers.Add(new OverlayPositionHandler(label, parent, reposition));
+        Reposition();
     }
 
     private void MaskVisibleInvoiceNumbers(Form? backgroundForm)
@@ -96,22 +112,28 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
                     break;
                 }
             }
-            if (invoiceColumn < 0 || list.Items.Count == 0) continue;
+            if (invoiceColumn < 0 || !list.OwnerDraw) continue;
 
-            var firstIndex = list.TopItem?.Index ?? 0;
-            for (var index = Math.Max(0, firstIndex); index < list.Items.Count; index++)
+            DrawListViewSubItemEventHandler handler = (_, eventArgs) =>
             {
-                Rectangle bounds;
-                try { bounds = list.GetItemRect(index); }
-                catch (ArgumentException) { break; }
-                if (bounds.Top >= list.ClientSize.Height) break;
-                if (bounds.Bottom <= 0) continue;
-                var item = list.Items[index];
-                if (item.SubItems.Count <= invoiceColumn) continue;
-                var subItem = item.SubItems[invoiceColumn];
-                listTexts.Add(new MaskedListText(list, subItem, subItem.Text));
-                subItem.Text = string.Empty;
-            }
+                if (eventArgs.ColumnIndex != invoiceColumn) return;
+                var backColor = eventArgs.Item.UseItemStyleForSubItems
+                    ? eventArgs.Item.BackColor
+                    : eventArgs.SubItem.BackColor;
+                if (backColor == Color.Empty) backColor = list.BackColor;
+                using var brush = new SolidBrush(backColor);
+                eventArgs.Graphics.FillRectangle(brush, eventArgs.Bounds);
+                if (list.GridLines)
+                {
+                    using var gridPen = new Pen(Color.FromArgb(226, 226, 226));
+                    eventArgs.Graphics.DrawLine(gridPen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top,
+                        eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+                    eventArgs.Graphics.DrawLine(gridPen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1,
+                        eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+                }
+            };
+            list.DrawSubItem += handler;
+            listMasks.Add(new ListMaskHandler(list, handler));
             list.Invalidate();
         }
     }
@@ -122,15 +144,24 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
         disposed = true;
 
         if (!owner.IsDisposed) owner.Text = originalTitle;
+        foreach (var item in listMasks)
+        {
+            if (item.List.IsDisposed) continue;
+            item.List.DrawSubItem -= item.Handler;
+            item.List.Invalidate();
+        }
+        foreach (var item in overlayPositionHandlers)
+        {
+            if (!item.Label.IsDisposed)
+            {
+                item.Label.LocationChanged -= item.Handler;
+                item.Label.SizeChanged -= item.Handler;
+            }
+            if (!item.Parent.IsDisposed) item.Parent.Layout -= item.Handler;
+        }
         foreach (var item in labels)
         {
             if (!item.Label.IsDisposed) item.Label.Text = item.Text;
-        }
-        foreach (var item in listTexts)
-        {
-            if (item.List.IsDisposed) continue;
-            item.SubItem.Text = item.Text;
-            item.List.Invalidate();
         }
         foreach (var item in pictures)
         {
@@ -147,17 +178,26 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
     internal static void VerifySmokeLayout()
     {
         using var owner = new Form { Text = "發票詳細資訊-AA12345678" };
-        var number = new Label { Text = "AA12345678", AutoSize = false, Size = new Size(150, 30) };
+        var numberHost = new Panel { Size = new Size(180, 40) };
+        var number = new Label { Text = "AA12345678", AutoSize = false, Location = new Point(10, 5), Size = new Size(150, 30) };
+        numberHost.Controls.Add(number);
         var previewHost = new Panel();
         previewHost.Controls.Add(new PictureBox { Dock = DockStyle.Fill });
-        owner.Controls.Add(number);
+        owner.Controls.Add(numberHost);
         owner.Controls.Add(previewHost);
 
         var mask = Apply(owner, "AA12345678");
         if (owner.Text != MaskedDetailTitle || number.Text.Length != 0 ||
             FindTaggedControl(owner, InvoiceMaskTag) is not Panel invoiceMask || invoiceMask.BackColor != Color.Black ||
+            invoiceMask.Top < number.Top || invoiceMask.Bottom > number.Bottom ||
             FindTaggedControl(owner, PreviewMaskTag) is null)
             throw new InvalidOperationException("作廢確認未正確遮蔽詳細資料中的發票號碼與預覽");
+
+        number.Location = new Point(10, 9);
+        owner.PerformLayout();
+        Application.DoEvents();
+        if (invoiceMask.Top < number.Top || invoiceMask.Bottom > number.Bottom)
+            throw new InvalidOperationException("發票號碼遮罩未跟隨欄位位置更新");
 
         mask.Dispose();
         if (owner.Text != "發票詳細資訊-AA12345678" || number.Text != "AA12345678" ||
@@ -187,5 +227,6 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
 
     private sealed record MaskedLabel(Label Label, string Text);
     private sealed record MaskedPicture(PictureBox Picture, bool Visible);
-    private sealed record MaskedListText(ListView List, ListViewItem.ListViewSubItem SubItem, string Text);
+    private sealed record ListMaskHandler(ListView List, DrawListViewSubItemEventHandler Handler);
+    private sealed record OverlayPositionHandler(Label Label, Control Parent, EventHandler Handler);
 }
