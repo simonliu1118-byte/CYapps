@@ -39,6 +39,14 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.AdminPasswordSet = true;
     }
 
+    public void RetireLegacyAdminPassword(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.PasswordSalt = string.Empty;
+        settings.PasswordHash = string.Empty;
+        settings.AdminPasswordSet = false;
+    }
+
     public static bool CheckAdminPassword(Settings settings, string password)
     {
         if (!settings.AdminPasswordSet || settings.PasswordSalt.Length == 0 || settings.PasswordHash.Length == 0) return false;

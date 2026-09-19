@@ -7,30 +7,29 @@ internal sealed class SettingsForm : Form
 {
     private readonly LocalRepository repository;
     private readonly Settings settings;
+    private readonly bool requireMoPassword;
     private readonly ToolTip toolTip = new();
     private readonly RadioButton test = new() { Text = "光貿測試環境", AutoSize = true };
     private readonly RadioButton production = new() { Text = "正式公司", AutoSize = true };
     private readonly TextBox invoice = UiControls.TextBox(8);
     private readonly TextBox appKey = UiControls.TextBox(200);
     private readonly TextBox moPassword = UiControls.TextBox(200);
-    private readonly Button forgotPassword = UiControls.StandardButton("忘記密碼");
-    private readonly Button changePassword = UiControls.StandardButton("設定密碼");
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
     private TableLayoutPanel environmentLayout = null!;
     private Label invoiceLabel = null!;
     private Label appKeyLabel = null!;
     private Label moPasswordLabel = null!;
-    private FlowLayoutPanel passwordButtons = null!;
     private FlowLayoutPanel actionButtons = null!;
 
-    public SettingsForm(LocalRepository repository)
+    public SettingsForm(LocalRepository repository, bool requireMoPassword = false)
     {
         this.repository = repository;
+        this.requireMoPassword = requireMoPassword;
         settings = repository.Settings.LoadOrCreate();
         Text = "CYInvoice 設定";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(420, 424);
+        ClientSize = new Size(420, 338);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -45,9 +44,8 @@ internal sealed class SettingsForm : Form
     {
         appKey.UseSystemPasswordChar = true;
         moPassword.UseSystemPasswordChar = true;
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(18) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(18) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 176));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
@@ -82,24 +80,10 @@ internal sealed class SettingsForm : Form
         moPasswordLabel = FieldLabel("MO店+");
         platform.Controls.Add(moPasswordLabel, 1, 0);
         platform.Controls.Add(moPassword, 2, 0);
-        toolTip.SetToolTip(moPasswordLabel, "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。");
+        toolTip.SetToolTip(moPasswordLabel, requireMoPassword
+            ? "目前保存的 MO店+ 密碼無法使用，請重新輸入。"
+            : "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。");
         platformGroup.Controls.Add(platform);
-
-        var passwordGroup = new GroupBox { Text = "設定管理密碼", Dock = DockStyle.Fill };
-        passwordButtons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Padding = new Padding(0, 12, 0, 0),
-        };
-        passwordButtons.SizeChanged += (_, _) => CenterButtons(passwordButtons, 12);
-        forgotPassword.Enabled = false;
-        toolTip.SetToolTip(forgotPassword, "忘記密碼流程尚未提供。");
-        changePassword.Click += (_, _) => ChangeAdminPassword();
-        passwordButtons.Controls.Add(forgotPassword);
-        passwordButtons.Controls.Add(changePassword);
-        passwordGroup.Controls.Add(passwordButtons);
 
         cancel.DialogResult = DialogResult.Cancel;
         save.Click += SaveClicked;
@@ -116,8 +100,7 @@ internal sealed class SettingsForm : Form
 
         root.Controls.Add(environmentGroup, 0, 0);
         root.Controls.Add(platformGroup, 0, 1);
-        root.Controls.Add(passwordGroup, 0, 2);
-        root.Controls.Add(actionButtons, 0, 3);
+        root.Controls.Add(actionButtons, 0, 2);
         Controls.Add(root);
         AcceptButton = null;
         CancelButton = cancel;
@@ -152,9 +135,11 @@ internal sealed class SettingsForm : Form
         appKey.PlaceholderText = settings.ProductionAppKeyEncrypted.Length == 0
             ? ""
             : "留白會保留目前已儲存的 App Key。";
-        moPassword.PlaceholderText = settings.MoPasswordEncrypted.Length == 0
-            ? ""
-            : "留白會保存目前已儲存的密碼";
+        moPassword.PlaceholderText = requireMoPassword
+            ? "請重新輸入 MO店+ Excel 密碼"
+            : settings.MoPasswordEncrypted.Length == 0
+                ? ""
+                : "留白會保存目前已儲存的密碼";
     }
 
     private void UpdateEnvironmentFields()
@@ -163,26 +148,20 @@ internal sealed class SettingsForm : Form
         UiControls.SetTextBoxLocked(appKey, !production.Checked);
     }
 
-    private void ChangeAdminPassword()
-    {
-        using var form = new ChangeAdminPasswordForm(repository, settings);
-        form.ShowDialog(this);
-    }
-
     private void SaveClicked(object? sender, EventArgs eventArgs)
     {
         try
         {
-            if (!settings.AdminPasswordSet)
-            {
-                MessageBox.Show(this, "請先按「設定密碼」建立設定管理密碼。", "無法儲存設定",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                changePassword.Focus();
-                return;
-            }
             settings.Environment = production.Checked ? Environments.Production : Environments.Test;
             settings.ProductionInvoice = invoice.Text.Trim();
             if (appKey.Text.Length != 0) repository.Settings.SetProductionAppKey(settings, appKey.Text);
+            if (requireMoPassword && moPassword.Text.Length == 0)
+            {
+                MessageBox.Show(this, "請重新輸入 MO店+ Excel 保護密碼", "無法儲存設定",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                moPassword.Focus();
+                return;
+            }
             if (moPassword.Text.Length != 0) repository.Settings.SetMoPassword(settings, moPassword.Text);
             if (settings.MoPasswordEncrypted.Length == 0)
             {
@@ -226,9 +205,11 @@ internal sealed class SettingsForm : Form
         if (settings.ProductionAppKeyEncrypted.Length != 0 &&
             appKey.PlaceholderText != "留白會保留目前已儲存的 App Key。")
             throw new InvalidOperationException("App Key 保留提示未放在輸入欄位內");
-        if (settings.MoPasswordEncrypted.Length != 0 &&
+        if (!requireMoPassword && settings.MoPasswordEncrypted.Length != 0 &&
             moPassword.PlaceholderText != "留白會保存目前已儲存的密碼")
             throw new InvalidOperationException("MO店+ 密碼保留提示文字不正確");
+        if (requireMoPassword && moPassword.PlaceholderText != "請重新輸入 MO店+ Excel 密碼")
+            throw new InvalidOperationException("MO店+ 密碼重新輸入提示文字不正確");
         if (environmentLayout.GetPositionFromControl(production).Row != 1 ||
             environmentLayout.GetPositionFromControl(invoiceLabel).Column != 1 ||
             environmentLayout.GetPositionFromControl(appKeyLabel).Column != 1 ||
@@ -236,15 +217,12 @@ internal sealed class SettingsForm : Form
             throw new InvalidOperationException("正式公司、統編與 App Key 未依指定方式排列");
         var environmentX = invoiceLabel.PointToScreen(Point.Empty).X;
         var platformX = moPasswordLabel.PointToScreen(Point.Empty).X;
-        if (forgotPassword.Enabled || !UiControls.HasLogicalSize(changePassword, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
-            string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
+        if (string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
             appKeyLabel.PreferredWidth > appKeyLabel.Width ||
             Math.Abs(environmentX - platformX) > 1 ||
-            Math.Abs((passwordButtons.Controls.Cast<Control>().Min(control => control.Left) +
-                passwordButtons.Controls.Cast<Control>().Max(control => control.Right)) / 2 - passwordButtons.ClientSize.Width / 2) > 2 ||
             Math.Abs((actionButtons.Controls.Cast<Control>().Min(control => control.Left) +
                 actionButtons.Controls.Cast<Control>().Max(control => control.Right)) / 2 - actionButtons.ClientSize.Width / 2) > 2)
-            throw new InvalidOperationException("設定管理密碼按鈕、設定動作、MO店+ 對齊、提示或 App Key 標籤配置不正確");
+            throw new InvalidOperationException("設定動作、MO店+ 對齊、提示或 App Key 標籤配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         if (logicalWidth > 430)
             throw new InvalidOperationException("設定視窗未維持精簡寬度");

@@ -161,6 +161,30 @@ internal static class EmployeeStoreTests
             store.CreateEmployee("3015", "3050", "員工", "", "password", EmployeeRoles.SuperAdmin));
     }
 
+    public static void LegacyManagementPasswordCanBeRetired()
+    {
+        using var temporary = new EmployeeTemporaryDirectory();
+        var store = new SettingsStore(temporary.Path, new EmployeeTestSecretProtector());
+        var settings = store.LoadOrCreate();
+        store.SetAdminPassword(settings, "legacy-management-password");
+        store.Save(settings);
+
+        var before = store.LoadOrCreate();
+        EmployeeEqual(true, before.AdminPasswordSet);
+        EmployeeEqual(true, SettingsStore.CheckAdminPassword(before, "legacy-management-password"));
+        EmployeeEqual(false, string.IsNullOrEmpty(before.PasswordSalt));
+        EmployeeEqual(false, string.IsNullOrEmpty(before.PasswordHash));
+
+        store.RetireLegacyAdminPassword(before);
+        store.Save(before);
+
+        var after = store.LoadOrCreate();
+        EmployeeEqual(false, after.AdminPasswordSet);
+        EmployeeEqual(string.Empty, after.PasswordSalt);
+        EmployeeEqual(string.Empty, after.PasswordHash);
+        EmployeeEqual(false, SettingsStore.CheckAdminPassword(after, "legacy-management-password"));
+    }
+
     private static SqliteConnection OpenReadOnly(string path)
     {
         var builder = new SqliteConnectionStringBuilder
@@ -226,6 +250,13 @@ internal static class EmployeeStoreTests
         }
         throw new InvalidOperationException($"expected {typeof(T).Name}");
     }
+}
+
+internal sealed class EmployeeTestSecretProtector : ISecretProtector
+{
+    public string Protect(ReadOnlySpan<byte> plaintext) => Convert.ToBase64String(plaintext);
+
+    public byte[] Unprotect(string ciphertext) => Convert.FromBase64String(ciphertext);
 }
 
 internal sealed class EmployeeTemporaryDirectory : IDisposable
