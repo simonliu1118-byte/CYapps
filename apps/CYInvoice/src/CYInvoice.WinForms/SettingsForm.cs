@@ -15,11 +15,11 @@ internal sealed class SettingsForm : Form
     private readonly TextBox moPassword = UiControls.TextBox(200);
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
-    private TableLayoutPanel environmentLayout = null!;
+    private BufferedTableLayoutPanel environmentLayout = null!;
     private Label invoiceLabel = null!;
     private Label appKeyLabel = null!;
     private Label moPasswordLabel = null!;
-    private FlowLayoutPanel actionButtons = null!;
+    private BufferedFlowLayoutPanel actionButtons = null!;
 
     public SettingsForm(LocalRepository repository)
     {
@@ -34,6 +34,9 @@ internal sealed class SettingsForm : Form
         ShowInTaskbar = false;
         ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        UpdateStyles();
 
         SuspendLayout();
         BuildLayout();
@@ -41,20 +44,35 @@ internal sealed class SettingsForm : Form
         UpdateEnvironmentFields();
         test.CheckedChanged += EnvironmentChanged;
         production.CheckedChanged += EnvironmentChanged;
-        ResumeLayout(true);
+        ResumeLayout(false);
+        PerformLayout();
     }
 
     private void BuildLayout()
     {
         appKey.UseSystemPasswordChar = true;
         moPassword.UseSystemPasswordChar = true;
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(18) };
+        var root = new BufferedTableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Padding = new Padding(18),
+            Margin = Padding.Empty,
+        };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 176));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
         var environmentGroup = new GroupBox { Text = "使用環境", Dock = DockStyle.Fill };
-        environmentLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 4, Padding = new Padding(8) };
+        environmentLayout = new BufferedTableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 4,
+            Padding = new Padding(8),
+            Margin = Padding.Empty,
+        };
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -75,7 +93,13 @@ internal sealed class SettingsForm : Form
         environmentGroup.Controls.Add(environmentLayout);
 
         var platformGroup = new GroupBox { Text = "平台檔案密碼", Dock = DockStyle.Fill };
-        var platform = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Padding = new Padding(8) };
+        var platform = new BufferedTableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            Padding = new Padding(8),
+            Margin = Padding.Empty,
+        };
         platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
         platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         platform.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -89,12 +113,13 @@ internal sealed class SettingsForm : Form
 
         cancel.DialogResult = DialogResult.Cancel;
         save.Click += SaveClicked;
-        actionButtons = new FlowLayoutPanel
+        actionButtons = new BufferedFlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Padding = new Padding(0, 7, 0, 0),
+            Margin = Padding.Empty,
         };
         actionButtons.SizeChanged += (_, _) => CenterButtons(actionButtons, 7);
         actionButtons.Controls.Add(save);
@@ -108,7 +133,20 @@ internal sealed class SettingsForm : Form
         CancelButton = cancel;
     }
 
-    private void EnvironmentChanged(object? sender, EventArgs eventArgs) => UpdateEnvironmentFields();
+    private void EnvironmentChanged(object? sender, EventArgs eventArgs)
+    {
+        SuspendLayout();
+        environmentLayout.SuspendLayout();
+        try
+        {
+            UpdateEnvironmentFields();
+        }
+        finally
+        {
+            environmentLayout.ResumeLayout(false);
+            ResumeLayout(false);
+        }
+    }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
@@ -146,8 +184,9 @@ internal sealed class SettingsForm : Form
 
     private void UpdateEnvironmentFields()
     {
-        UiControls.SetTextBoxLocked(invoice, !production.Checked);
-        UiControls.SetTextBoxLocked(appKey, !production.Checked);
+        var locked = !production.Checked;
+        if (invoice.ReadOnly != locked) UiControls.SetTextBoxLocked(invoice, locked);
+        if (appKey.ReadOnly != locked) UiControls.SetTextBoxLocked(appKey, locked);
     }
 
     private void SaveClicked(object? sender, EventArgs eventArgs)
@@ -171,7 +210,9 @@ internal sealed class SettingsForm : Form
     private static void CenterButtons(FlowLayoutPanel panel, int topPadding)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), topPadding, 0, 0);
+        var left = Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2);
+        if (panel.Padding.Left == left && panel.Padding.Top == topPadding) return;
+        panel.Padding = new Padding(left, topPadding, 0, 0);
     }
 
     private static Label FieldLabel(string text) => new()
