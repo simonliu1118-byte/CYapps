@@ -72,6 +72,7 @@ public sealed class InvoiceVoidService
             {
                 ApplyConfirmed(record, preflight);
                 var saveError = TryPersist(record);
+                TryInvalidateCache(record);
                 return new InvoiceVoidResult(
                     InvoiceVoidOutcome.AlreadyVoided,
                     Reload(record),
@@ -81,8 +82,8 @@ public sealed class InvoiceVoidService
             }
             if (preflight.Pending)
             {
-                MarkPending(record);
-                ApplyPending(record, preflight, "光貿已有作廢作業待處理，未重複送出");
+                MarkPendingMarker(record);
+                ApplyPending(record, preflight);
                 var saveError = TryPersist(record);
                 return new InvoiceVoidResult(
                     InvoiceVoidOutcome.PendingConfirmation,
@@ -102,9 +103,9 @@ public sealed class InvoiceVoidService
                     Message: $"發票目前官方狀態為 {StatusText(preflight.Query.Data.InvoiceStatus)}，尚不可送出作廢");
             }
 
-            MarkPending(record);
-            ApplyPending(record, preflight, "作廢送出前已進入待確認狀態");
-            Persist(record); // The durable marker must exist before f0501 is allowed to leave this process.
+            MarkPendingMarker(record);
+            ApplyPending(record, preflight);
+            Persist(record); // Durable anti-resend marker must exist before f0501 leaves the process.
 
             VoidResponse? response = null;
             Exception? sendError = null;
@@ -129,6 +130,7 @@ public sealed class InvoiceVoidService
             {
                 ApplyConfirmed(record, after);
                 var saveError = TryPersist(record);
+                TryInvalidateCache(record);
                 return new InvoiceVoidResult(
                     InvoiceVoidOutcome.Confirmed,
                     Reload(record),
@@ -139,7 +141,7 @@ public sealed class InvoiceVoidService
             }
             if (after.Pending)
             {
-                ApplyPending(record, after, "作廢已送出，等待光貿完成確認");
+                ApplyPending(record, after);
                 var saveError = TryPersist(record);
                 return new InvoiceVoidResult(
                     InvoiceVoidOutcome.PendingConfirmation,
@@ -154,7 +156,7 @@ public sealed class InvoiceVoidService
             {
                 if (CouldRepresentExistingVoid(rejection.Code))
                 {
-                    ApplyPending(record, after, ApiMessage(rejection));
+                    ApplyPending(record, after);
                     var saveError = TryPersist(record);
                     return new InvoiceVoidResult(
                         InvoiceVoidOutcome.PendingConfirmation,
@@ -165,7 +167,7 @@ public sealed class InvoiceVoidService
                         LocalSaveError: saveError);
                 }
 
-                ClearPending(record);
+                ClearPendingMarker(record);
                 ApplyOpen(record, after, ApiMessage(rejection));
                 var rejectedSaveError = TryPersist(record);
                 return new InvoiceVoidResult(
@@ -179,8 +181,8 @@ public sealed class InvoiceVoidService
 
             var uncertainMessage = sendError is null
                 ? "光貿已接收作廢請求，但目前尚無法確認最終結果；禁止直接重送"
-                : "作廢傳輸結果不明，已保留待確認狀態；禁止直接重送";
-            ApplyPending(record, after, uncertainMessage);
+                : "作廢傳輸結果不明，已保留等待作廢狀態；禁止直接重送";
+            ApplyPending(record, after);
             var uncertainSaveError = TryPersist(record);
             return new InvoiceVoidResult(
                 InvoiceVoidOutcome.PendingConfirmation,
@@ -229,6 +231,7 @@ public sealed class InvoiceVoidService
         {
             ApplyConfirmed(record, inspection);
             var saveError = TryPersist(record);
+            TryInvalidateCache(record);
             return new InvoiceVoidResult(
                 InvoiceVoidOutcome.Confirmed,
                 Reload(record),
@@ -238,8 +241,8 @@ public sealed class InvoiceVoidService
         }
         if (inspection.Pending)
         {
-            MarkPending(record);
-            ApplyPending(record, inspection, "光貿作廢作業仍在處理中");
+            MarkPendingMarker(record);
+            ApplyPending(record, inspection);
             var saveError = TryPersist(record);
             return new InvoiceVoidResult(
                 InvoiceVoidOutcome.PendingConfirmation,
@@ -250,7 +253,7 @@ public sealed class InvoiceVoidService
         }
         if (inspection.VoidFailed)
         {
-            ClearPending(record);
+            ClearPendingMarker(record);
             ApplyOpen(record, inspection, "光貿已明確回報作廢處理失敗，可重新確認後再操作");
             var saveError = TryPersist(record);
             return new InvoiceVoidResult(
@@ -262,19 +265,19 @@ public sealed class InvoiceVoidService
         }
         if (inspection.StableOpen)
         {
-            ClearPending(record);
+            ClearPendingMarker(record);
             ApplyOpen(record, inspection, string.Empty);
             var saveError = TryPersist(record);
             return new InvoiceVoidResult(
                 InvoiceVoidOutcome.RetryReady,
                 Reload(record),
                 requestSent,
-                Message: "官方查詢確認目前沒有作廢或待處理作廢；本次只解除待確認狀態，未自動重送",
+                Message: "官方查詢確認目前沒有作廢或待處理作廢；本次只解除等待作廢狀態，未自動重送",
                 LocalSaveError: saveError);
         }
 
-        MarkPending(record);
-        ApplyPending(record, inspection, "目前仍無法向光貿確認作廢結果；禁止直接重送");
+        MarkPendingMarker(record);
+        ApplyPending(record, inspection);
         var pendingSaveError = TryPersist(record);
         return new InvoiceVoidResult(
             InvoiceVoidOutcome.PendingConfirmation,
@@ -371,46 +374,43 @@ public sealed class InvoiceVoidService
 
     private void ApplyConfirmed(InvoiceRecord record, OfficialInspection inspection)
     {
-        ClearPending(record);
+        ClearPendingMarker(record);
         record.InvoiceState = InvoiceStates.Voided;
         record.ErrorMessage = string.Empty;
-        ApplyOfficialStatus(record, inspection, forceComplete: true);
+        ApplyOriginalInvoiceStatus(record, inspection);
     }
 
-    private void ApplyPending(InvoiceRecord record, OfficialInspection inspection, string message)
+    private void ApplyPending(InvoiceRecord record, OfficialInspection inspection)
     {
-        record.InvoiceState = InvoiceStates.Changing;
-        record.ErrorMessage = message;
-        ApplyOfficialStatus(record, inspection, forceComplete: false);
+        record.InvoiceState = InvoiceStates.OpenedWaitingVoid;
+        record.ErrorMessage = string.Empty;
+        ApplyOriginalInvoiceStatus(record, inspection);
     }
 
     private void ApplyOpen(InvoiceRecord record, OfficialInspection inspection, string message)
     {
         record.InvoiceState = InvoiceStates.Opened;
         record.ErrorMessage = message;
-        ApplyOfficialStatus(record, inspection, forceComplete: false);
+        ApplyOriginalInvoiceStatus(record, inspection);
     }
 
-    private void ApplyOfficialStatus(InvoiceRecord record, OfficialInspection inspection, bool forceComplete)
+    private void ApplyOriginalInvoiceStatus(InvoiceRecord record, OfficialInspection inspection)
     {
-        var status = forceComplete ? UploadStatuses.Complete :
-            inspection.VoidStatus?.Status is > 0 ? inspection.VoidStatus.Status :
-            inspection.Query?.Data.InvoiceStatus ?? record.UploadStatus;
-        if (status > 0)
+        if (inspection.Query is { } query && !IsVoidType(query.Data.InvoiceType) && query.Data.InvoiceStatus > 0)
         {
-            record.UploadStatus = status;
-            record.UploadStatusText = StatusText(status);
+            record.UploadStatus = query.Data.InvoiceStatus;
+            record.UploadStatusText = StatusText(query.Data.InvoiceStatus);
         }
         record.LastChecked = now().ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture);
     }
 
-    private static void MarkPending(InvoiceRecord record)
+    internal static void MarkPendingMarker(InvoiceRecord record)
     {
         record.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         record.ExtensionData[PendingMetadataKey] = JsonSerializer.SerializeToElement(true);
     }
 
-    private static void ClearPending(InvoiceRecord record)
+    internal static void ClearPendingMarker(InvoiceRecord record)
     {
         if (record.ExtensionData is null) return;
         record.ExtensionData.Remove(PendingMetadataKey);
@@ -437,6 +437,12 @@ public sealed class InvoiceVoidService
         {
             return error;
         }
+    }
+
+    private void TryInvalidateCache(InvoiceRecord record)
+    {
+        if (record.InvoiceNumber.Trim().Length == 0) return;
+        InvoiceCacheInvalidator.Invalidate(repository, record.Environment, record.InvoiceNumber);
     }
 
     private static bool CouldRepresentExistingVoid(int code) => code is 3050122 or 3050123 or 3050131;
