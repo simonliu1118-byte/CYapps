@@ -14,9 +14,7 @@ public static class InvoiceOfficialState
         }
 
         InvoiceOfficialMetadata.SetCancelDate(record, 0);
-        record.InvoiceState = InvoiceVoidService.HasPendingMarker(record)
-            ? InvoiceStates.OpenedWaitingVoid
-            : InvoiceStates.Opened;
+        record.InvoiceState = ResolveList(record, cancelDate);
     }
 
     public static void ApplyQuery(InvoiceRecord record, QueryResult query)
@@ -31,10 +29,22 @@ public static class InvoiceOfficialState
 
         InvoiceOfficialMetadata.SetCancelDate(record, 0);
         if (query.VoidPending) InvoiceVoidService.MarkPendingMarker(record);
-        record.InvoiceState = query.VoidPending || InvoiceVoidService.HasPendingMarker(record)
-            ? InvoiceStates.OpenedWaitingVoid
-            : InvoiceStates.Opened;
+        record.InvoiceState = ResolveQuery(record, query);
     }
+
+    internal static string ResolveList(InvoiceRecord record, long cancelDate) =>
+        cancelDate > 0
+            ? InvoiceStates.Voided
+            : InvoiceVoidService.HasPendingMarker(record)
+                ? InvoiceStates.OpenedWaitingVoid
+                : InvoiceStates.Opened;
+
+    internal static string ResolveQuery(InvoiceRecord record, QueryResult query) =>
+        query.CancelDate > 0
+            ? InvoiceStates.Voided
+            : query.VoidPending || InvoiceVoidService.HasPendingMarker(record)
+                ? InvoiceStates.OpenedWaitingVoid
+                : InvoiceStates.Opened;
 
     private static void ApplyVoided(InvoiceRecord record, long cancelDate)
     {
