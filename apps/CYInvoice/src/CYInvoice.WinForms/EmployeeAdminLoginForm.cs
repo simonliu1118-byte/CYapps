@@ -4,12 +4,13 @@ namespace CYInvoice.WinForms;
 
 internal sealed class EmployeeAdminLoginForm : Form
 {
-    private const string WindowTitle = "請輸入員工編號及密碼";
+    private const string WindowTitle = "權限驗證";
     private const int WindowWidth = 280;
     private const int WindowHeight = 126;
     private const int FieldRowHeight = 34;
     private const int ActionRowHeight = 40;
-    private const int CompactButtonWidth = 86;
+    private const int CompactButtonWidth = 70;
+    private const int CompactButtonHeight = 28;
     private readonly EmployeeStore employees;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(200);
@@ -78,7 +79,7 @@ internal sealed class EmployeeAdminLoginForm : Form
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Margin = Padding.Empty,
-            Padding = new Padding(0, 2, 0, 0),
+            Padding = new Padding(0, 5, 0, 0),
         };
         buttons.SizeChanged += (_, _) => CenterButtons(buttons);
         login.Click += LoginClicked;
@@ -160,11 +161,11 @@ internal sealed class EmployeeAdminLoginForm : Form
         if (Text != WindowTitle || ShowIcon || !password.UseSystemPasswordChar || employeeNo.MaxLength != 4 ||
             employeeNo.TextAlign != HorizontalAlignment.Left || password.TextAlign != HorizontalAlignment.Left ||
             AcceptButton is not null || CancelButton != cancel ||
-            !UiControls.HasLogicalSize(login, CompactButtonWidth, UiControls.StandardButtonHeight) ||
-            !UiControls.HasLogicalSize(cancel, CompactButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("管理員登入視窗配置不正確");
+            !UiControls.HasLogicalSize(login, CompactButtonWidth, CompactButtonHeight) ||
+            !UiControls.HasLogicalSize(cancel, CompactButtonWidth, CompactButtonHeight))
+            throw new InvalidOperationException("權限驗證視窗配置不正確");
         if (ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight)
-            throw new InvalidOperationException("管理員登入視窗未維持精簡尺寸");
+            throw new InvalidOperationException("權限驗證視窗未維持精簡尺寸");
     }
 
     private static Label FieldLabel(string text) => new()
@@ -180,7 +181,7 @@ internal sealed class EmployeeAdminLoginForm : Form
     {
         Text = text,
         Width = CompactButtonWidth,
-        Height = UiControls.StandardButtonHeight,
+        Height = CompactButtonHeight,
         Margin = new Padding(5, 2, 5, 2),
         AutoSize = false,
         UseVisualStyleBackColor = true,
@@ -189,6 +190,6 @@ internal sealed class EmployeeAdminLoginForm : Form
     private static void CenterButtons(FlowLayoutPanel panel)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 2, 0, 0);
+        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 5, 0, 0);
     }
 }
