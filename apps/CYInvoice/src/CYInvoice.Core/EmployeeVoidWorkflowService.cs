@@ -160,6 +160,7 @@ public sealed class EmployeeVoidWorkflowService
         string requesterEmployeeNo,
         string reason)
     {
+        ValidateCurrentAccount(record);
         if (record.InvoiceState != InvoiceStates.Opened)
             throw new InvalidOperationException("只有目前仍為已開立狀態的發票可以送交人工確認");
         if (record.UploadStatus != UploadStatuses.Complete)
@@ -244,29 +245,47 @@ public sealed class EmployeeVoidWorkflowService
 
     private InvoiceRecord FindIssueRecord(InvoiceSyncIssue issue)
     {
-        var matches = repository.Invoices.LoadOrCreate().Where(record =>
-            (issue.InvoiceNumber.Trim().Length != 0 &&
-             string.Equals(record.InvoiceNumber.Trim(), issue.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||
-            (issue.OrderId.Trim().Length != 0 &&
-             string.Equals(EffectiveOrderId(record), issue.OrderId.Trim(), StringComparison.Ordinal))).ToArray();
+        var account = CurrentAccount();
+        var matches = repository.Invoices.LoadOrCreate()
+            .Where(record => string.Equals(record.Environment, account.Environment, StringComparison.Ordinal))
+            .Where(record => record.SellerInvoice.Trim().Length == 0 ||
+                             string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal))
+            .Where(record =>
+                (issue.InvoiceNumber.Trim().Length != 0 &&
+                 string.Equals(record.InvoiceNumber.Trim(), issue.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+                (issue.OrderId.Trim().Length != 0 &&
+                 string.Equals(EffectiveOrderId(record), issue.OrderId.Trim(), StringComparison.Ordinal)))
+            .ToArray();
         if (matches.Length == 0) throw new InvalidOperationException("本機找不到這筆人工確認對應的發票");
         if (matches.Length > 1) throw new InvalidDataException("人工確認對到多筆本機發票，已停止自動處理");
         return matches[0];
     }
 
-    private static void RequireManualReviewIssue(InvoiceSyncIssue issue)
+    private void RequireManualReviewIssue(InvoiceSyncIssue issue)
     {
         if (issue.ResolvedUtc is not null)
             throw new InvalidOperationException("這筆人工確認已經處理完成");
         if (!string.Equals(issue.IssueType, InvoiceVoidIssueTypes.ManualReview, StringComparison.Ordinal))
             throw new InvalidOperationException("這筆上傳問題不是作廢人工確認");
+        if (!string.Equals(issue.AccountKey, CurrentAccountKey(), StringComparison.Ordinal))
+            throw new UnauthorizedAccessException("這筆人工確認屬於其他公司或環境，已停止處理");
+    }
+
+    private void ValidateCurrentAccount(InvoiceRecord record)
+    {
+        var account = CurrentAccount();
+        if (!string.Equals(record.Environment, account.Environment, StringComparison.Ordinal))
+            throw new InvalidOperationException("這筆發票屬於其他環境，已停止作廢");
+        if (record.SellerInvoice.Trim().Length != 0 &&
+            !string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal))
+            throw new InvalidOperationException("這筆發票屬於其他公司統編，已停止作廢");
     }
 
     private InvoiceRecord Reload(InvoiceRecord record) =>
         repository.Invoices.LoadOrCreate().SingleOrDefault(item => item.Id == record.Id)
         ?? throw new InvalidOperationException("本機找不到這筆發票紀錄，請重新整理清單");
 
-    private string CurrentAccountKey()
+    private Account CurrentAccount()
     {
         var settings = repository.Settings.LoadOrCreate();
         var sellerInvoice = settings.Environment == Environments.Test
@@ -274,7 +293,13 @@ public sealed class EmployeeVoidWorkflowService
             : settings.ProductionInvoice.Trim();
         if (sellerInvoice.Length == 0)
             throw new InvalidOperationException("目前環境缺少可識別的公司統編");
-        return settings.Environment + "|" + sellerInvoice;
+        return new Account(settings.Environment, sellerInvoice);
+    }
+
+    private string CurrentAccountKey()
+    {
+        var account = CurrentAccount();
+        return account.Environment + "|" + account.SellerInvoice;
     }
 
     private static string EffectiveOrderId(InvoiceRecord record) =>
@@ -321,6 +346,8 @@ public sealed class EmployeeVoidWorkflowService
         record.ExtensionData.Remove(ManualReviewMetadataKey);
         if (record.ExtensionData.Count == 0) record.ExtensionData = null;
     }
+
+    private sealed record Account(string Environment, string SellerInvoice);
 }
 
 internal static class EmployeeVoidAuthenticationThrottle
