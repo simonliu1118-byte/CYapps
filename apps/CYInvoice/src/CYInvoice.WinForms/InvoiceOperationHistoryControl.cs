@@ -1,6 +1,8 @@
 using System.Globalization;
+using CYInvoice.Core;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
+using CYInvoice.Core.Storage;
 
 namespace CYInvoice.WinForms;
 
@@ -51,7 +53,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
             {
                 var inclusive = InclusiveAmount(allowance);
                 var row = NewRow("折讓", FormatAllowanceDate(allowance.AllowanceDate), "已完成", "$" + inclusive);
-                row.Tag = new AllowanceHistoryItem(allowance);
+                row.Tag = new AllowanceHistoryItem(record, allowance);
                 list.Items.Add(row);
             }
         }
@@ -70,8 +72,12 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
                 using (var form = new VoidHistoryDetailForm(item)) form.ShowDialog(FindForm());
                 break;
             case AllowanceHistoryItem item:
-                using (var form = new AllowanceHistoryDetailForm(item.Allowance)) form.ShowDialog(FindForm());
+            {
+                var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
+                using var form = new AllowanceHistoryDetailForm(item.Record, item.Allowance, repository);
+                form.ShowDialog(FindForm());
                 break;
+            }
         }
     }
 
@@ -111,7 +117,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
     }
 
     internal sealed record VoidHistoryItem(string InvoiceNumber, string CancelDate, ParsedVoidReason? ParsedReason);
-    internal sealed record AllowanceHistoryItem(InvoiceAllowanceResult Allowance);
+    internal sealed record AllowanceHistoryItem(InvoiceRecord Record, InvoiceAllowanceResult Allowance);
 
     private sealed class HistoryListView : ListView
     {
@@ -205,11 +211,29 @@ internal sealed class VoidHistoryDetailForm : Form
 
 internal sealed class AllowanceHistoryDetailForm : Form
 {
-    public AllowanceHistoryDetailForm(InvoiceAllowanceResult allowance)
+    private readonly InvoiceRecord record;
+    private readonly InvoiceAllowanceResult allowance;
+    private readonly LocalRepository repository;
+    private readonly AllowancePdfService pdfService;
+    private readonly EmployeeAllowanceVoidWorkflowService voidWorkflow;
+    private readonly Button viewPdf = UiControls.StandardButton("檢視 PDF");
+    private readonly Button voidAllowance = UiControls.DangerButton("折讓作廢");
+    private bool busy;
+
+    public AllowanceHistoryDetailForm(
+        InvoiceRecord record,
+        InvoiceAllowanceResult allowance,
+        LocalRepository repository)
     {
+        this.record = record ?? throw new ArgumentNullException(nameof(record));
+        this.allowance = allowance ?? throw new ArgumentNullException(nameof(allowance));
+        this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        pdfService = new AllowancePdfService(repository);
+        voidWorkflow = new EmployeeAllowanceVoidWorkflowService(repository);
+
         Text = "折讓詳細資訊";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(390, 300);
+        ClientSize = new Size(430, 320);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -230,14 +254,96 @@ internal sealed class AllowanceHistoryDetailForm : Form
         var close = UiControls.StandardButton("關閉");
         close.Width = 90;
         close.DialogResult = DialogResult.OK;
+        viewPdf.Width = 100;
+        voidAllowance.Width = 100;
+        viewPdf.Click += async (_, _) => await ViewPdfAsync();
+        voidAllowance.Click += async (_, _) => await RequestVoidAsync();
+
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, Padding = new Padding(12) };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.Controls.Add(body, 0, 0);
-        root.Controls.Add(VoidHistoryDetailForm.CenteredActions(close), 0, 1);
+        root.Controls.Add(VoidHistoryDetailForm.CenteredActions(viewPdf, voidAllowance, close), 0, 1);
         Controls.Add(root);
         AcceptButton = close;
         CancelButton = close;
+    }
+
+    private async Task ViewPdfAsync()
+    {
+        if (busy) return;
+        var styles = AllowancePdfStyles.Official
+            .Select(style => new InvoicePdfStyle(style.Code, style.Name))
+            .ToArray();
+        using var selector = new PdfStyleSelectionForm(styles, "折讓單", "檢視");
+        if (selector.ShowDialog(this) != DialogResult.OK || selector.SelectedStyle is null) return;
+
+        SetBusy(true, "取得 PDF 中…");
+        try
+        {
+            var document = await pdfService.GetAsync(allowance.AllowanceNumber, selector.SelectedStyle.Code);
+            using var viewer = new InvoicePdfViewerForm(document, Path.Combine(repository.CacheDirectory, "WebView2"));
+            viewer.ShowDialog(this);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "取得折讓 PDF 失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (!IsDisposed) SetBusy(false, "檢視 PDF");
+        }
+    }
+
+    private async Task RequestVoidAsync()
+    {
+        if (busy) return;
+        using var request = new AllowanceVoidRequestForm();
+        if (request.ShowDialog(this) != DialogResult.OK) return;
+
+        SetBusy(true, "申請中…");
+        try
+        {
+            var result = await voidWorkflow.SubmitAsync(
+                record,
+                allowance.AllowanceNumber,
+                request.EmployeeNo,
+                request.Password,
+                request.Reason);
+            MessageBox.Show(
+                this,
+                result.AlreadyQueued
+                    ? result.Message
+                    : "折讓作廢申請已建立。\n\n請通知管理員查看並完成操作。",
+                "折讓作廢人工處理",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        catch (EmployeeVoidAuthenticationDelayException error)
+        {
+            MessageBox.Show(this, error.Message, "驗證暫停", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (InvalidOperationException error) when (error.Message == "員工編號或密碼錯誤")
+        {
+            MessageBox.Show(this, error.Message, "驗證失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "折讓作廢申請未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (!IsDisposed) SetBusy(false, "檢視 PDF");
+        }
+    }
+
+    private void SetBusy(bool value, string viewText)
+    {
+        busy = value;
+        viewPdf.Enabled = !value;
+        voidAllowance.Enabled = !value;
+        viewPdf.Text = value ? viewText : "檢視 PDF";
+        if (!value) voidAllowance.Text = "折讓作廢";
     }
 
     private static string Money(string value)
