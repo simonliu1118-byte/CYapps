@@ -8,9 +8,11 @@ var tests = new (string Name, Action Run)[]
 {
     ("wrong invoice number makes zero AMEGO calls", () => TestWrongInvoiceNumberAsync().GetAwaiter().GetResult()),
     ("wrong employee credentials make zero AMEGO calls", () => TestWrongCredentialsAsync().GetAwaiter().GetResult()),
+    ("invalid employee number remains generic and makes zero AMEGO calls", () => TestInvalidEmployeeNumberAsync().GetAwaiter().GetResult()),
     ("disabled employee makes zero AMEGO calls", () => TestDisabledEmployeeAsync().GetAwaiter().GetResult()),
     ("uncollected paper invoice queues manual review without AMEGO", () => TestUncollectedQueuesManualReviewAsync().GetAwaiter().GetResult()),
     ("ordinary employee cannot approve or cancel manual review", () => TestEmployeeCannotManageReviewAsync().GetAwaiter().GetResult()),
+    ("wrong manager password cannot approve manual review", () => TestWrongManagerPasswordAsync().GetAwaiter().GetResult()),
     ("administrator can cancel manual review without changing invoice state", () => TestAdminCancelsReviewAsync().GetAwaiter().GetResult()),
     ("administrator approval sends original requester employee number", () => TestAdminApprovesReviewAsync().GetAwaiter().GetResult()),
     ("pending approved void keeps core pending marker and resolves manual review", () => TestApprovedPendingVoidAsync().GetAwaiter().GetResult()),
@@ -56,6 +58,17 @@ static async Task TestWrongCredentialsAsync()
     Equal(0, setup.Gateway.TotalCalls);
 }
 
+static async Task TestInvalidEmployeeNumberAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var setup = CreateSetup(temporary.Path);
+    var error = await ThrowsWithResultAsync<InvalidOperationException>(() => setup.Workflow.SubmitAsync(
+        setup.Record, setup.Record.InvoiceNumber, "30", "wrong", "退貨",
+        PaperInvoiceReceiptStates.Collected));
+    Equal("員工編號或密碼錯誤", error.Message);
+    Equal(0, setup.Gateway.TotalCalls);
+}
+
 static async Task TestDisabledEmployeeAsync()
 {
     using var temporary = new TemporaryDirectory();
@@ -95,10 +108,22 @@ static async Task TestEmployeeCannotManageReviewAsync()
     await QueueReviewAsync(setup);
     var issue = ManualIssue(setup.Repository);
 
-    await ThrowsAsync<UnauthorizedAccessException>(() => setup.Workflow.ApproveManualReviewAsync(issue, "3015"));
-    Throws<UnauthorizedAccessException>(() => setup.Workflow.CancelManualReview(issue, "3015"));
+    await ThrowsAsync<UnauthorizedAccessException>(() => setup.Workflow.ApproveManualReviewAsync(issue, "3015", "employee-pass"));
+    Throws<UnauthorizedAccessException>(() => setup.Workflow.CancelManualReview(issue, "3015", "employee-pass"));
     Equal(0, setup.Gateway.TotalCalls);
     Equal(null, issue.ResolvedUtc);
+}
+
+static async Task TestWrongManagerPasswordAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var setup = CreateSetup(temporary.Path);
+    await QueueReviewAsync(setup);
+    var issue = ManualIssue(setup.Repository);
+
+    await ThrowsAsync<UnauthorizedAccessException>(() => setup.Workflow.ApproveManualReviewAsync(issue, "2000", "wrong"));
+    Equal(0, setup.Gateway.TotalCalls);
+    Equal(true, setup.Workflow.ManualReviewFor(setup.Repository.Invoices.LoadOrCreate().Single()) is not null);
 }
 
 static async Task TestAdminCancelsReviewAsync()
@@ -108,7 +133,7 @@ static async Task TestAdminCancelsReviewAsync()
     await QueueReviewAsync(setup);
     var issue = ManualIssue(setup.Repository);
 
-    setup.Workflow.CancelManualReview(issue, "2000");
+    setup.Workflow.CancelManualReview(issue, "2000", "admin-pass");
 
     Equal(0, setup.Gateway.TotalCalls);
     var stored = setup.Repository.Invoices.LoadOrCreate().Single();
@@ -127,7 +152,7 @@ static async Task TestAdminApprovesReviewAsync()
     setup.Gateway.Queries.Enqueue(Query(cancelDate: 1789790000));
     var issue = ManualIssue(setup.Repository);
 
-    var result = await setup.Workflow.ApproveManualReviewAsync(issue, "2000");
+    var result = await setup.Workflow.ApproveManualReviewAsync(issue, "2000", "admin-pass");
 
     Equal(InvoiceVoidOutcome.Confirmed, result.Outcome);
     Equal(1, setup.Gateway.VoidCalls);
@@ -149,7 +174,7 @@ static async Task TestApprovedPendingVoidAsync()
     setup.Gateway.Queries.Enqueue(Query(voidPending: true));
     var issue = ManualIssue(setup.Repository);
 
-    var result = await setup.Workflow.ApproveManualReviewAsync(issue, "0001");
+    var result = await setup.Workflow.ApproveManualReviewAsync(issue, "0001", "super-pass");
 
     Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
     Equal(1, setup.Gateway.VoidCalls);
@@ -171,7 +196,7 @@ static void TestCancelBlockedAfterPending()
     stored.ExtensionData["cyinvoice_void_pending"] = JsonSerializer.SerializeToElement(true);
     setup.Repository.Invoices.Save([stored]);
 
-    Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000"));
+    Throws<InvalidOperationException>(() => setup.Workflow.CancelManualReview(issue, "2000", "admin-pass"));
     var after = setup.Repository.Invoices.LoadOrCreate().Single();
     Equal(true, setup.Workflow.ManualReviewFor(after) is not null);
     Equal(true, HasCorePending(after));
