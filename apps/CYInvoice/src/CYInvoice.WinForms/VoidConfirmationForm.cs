@@ -8,12 +8,13 @@ internal sealed class VoidConfirmationForm : Form
         "本人已核對本次作廢之發票號碼、交易事實、作廢原因及紙本電子發票證明聯收回狀況。\r\n\r\n本人了解發票作廢應依相關法令及公司作業規範辦理；如因本人故意、操作錯誤或疏失致生相關問題，願依實際責任歸屬、相關法令及公司規定負應負之責任。\r\n\r\n按下「確認作廢」即表示本人已閱讀、理解並同意上述聲明。";
     private const string UncollectedWarningText = "尚未收回：需由管理員確認後才會送出作廢";
     private const int WindowWidth = 560;
-    private const int PaperWindowHeight = 286;
+    private const int PaperWindowHeight = 390;
     private const int CarrierWindowHeight = 246;
     private const int InputColumnWidth = 305;
     private const int DividerWidth = 1;
     private const int FieldRowHeight = 34;
-    private const int ReceiptRowHeight = 56;
+    private const int ReceiptSectionHeight = 208;
+    private const int ReceiptGapHeight = 18;
     private const int ActionRowHeight = 44;
     private const int CompactButtonWidth = 104;
 
@@ -21,7 +22,7 @@ internal sealed class VoidConfirmationForm : Form
     private readonly TextBox invoiceNumber = UiControls.TextBox(10);
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(200);
-    private readonly RadioButton notDelivered = ReceiptButton("未列印/未交付");
+    private readonly RadioButton notDelivered = ReceiptButton("未列印 / 未交付");
     private readonly RadioButton collected = ReceiptButton("已收回");
     private readonly RadioButton uncollected = ReceiptButton("尚未收回");
     private readonly Label uncollectedWarning = new()
@@ -73,14 +74,19 @@ internal sealed class VoidConfirmationForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = paperInvoice ? 2 : 1,
+            RowCount = paperInvoice ? 3 : 1,
             Margin = Padding.Empty,
             Padding = Padding.Empty,
         };
         left.RowStyles.Add(new RowStyle(SizeType.Absolute, 3 * FieldRowHeight));
-        if (paperInvoice) left.RowStyles.Add(new RowStyle(SizeType.Absolute, ReceiptRowHeight));
         left.Controls.Add(BuildFields(), 0, 0);
-        if (paperInvoice) left.Controls.Add(BuildReceiptStateHost(), 0, 1);
+        if (paperInvoice)
+        {
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, ReceiptGapHeight));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, ReceiptSectionHeight));
+            left.Controls.Add(new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty }, 0, 1);
+            left.Controls.Add(BuildReceiptStateHost(), 0, 2);
+        }
 
         var divider = new Panel
         {
@@ -178,33 +184,28 @@ internal sealed class VoidConfirmationForm : Form
         var host = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 2,
+            ColumnCount = 1,
+            RowCount = 5,
             Margin = Padding.Empty,
-            Padding = Padding.Empty,
+            Padding = new Padding(0, 0, 8, 0),
         };
-        host.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
-        host.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        host.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
-        host.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
-        host.Controls.Add(FieldLabel("證明聯狀態"), 0, 0);
-
-        var choices = new TableLayoutPanel
+        host.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        host.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        host.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        host.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        host.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        host.Controls.Add(new Label
         {
+            Text = "證明聯狀態",
             Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 1,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font(Font, FontStyle.Bold),
             Margin = Padding.Empty,
-            Padding = new Padding(3, 1, 0, 1),
-        };
-        choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
-        choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
-        choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
-        choices.Controls.Add(notDelivered, 0, 0);
-        choices.Controls.Add(collected, 1, 0);
-        choices.Controls.Add(uncollected, 2, 0);
-        host.Controls.Add(choices, 1, 0);
-        host.Controls.Add(uncollectedWarning, 1, 1);
+        }, 0, 0);
+        host.Controls.Add(notDelivered, 0, 1);
+        host.Controls.Add(collected, 0, 2);
+        host.Controls.Add(uncollected, 0, 3);
+        host.Controls.Add(uncollectedWarning, 0, 4);
 
         notDelivered.TabIndex = 3;
         collected.TabIndex = 4;
@@ -220,9 +221,9 @@ internal sealed class VoidConfirmationForm : Form
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleCenter,
         AutoSize = false,
-        Margin = new Padding(1),
+        Margin = new Padding(0, 2, 0, 2),
         UseVisualStyleBackColor = true,
-        Font = new Font("Microsoft JhengHei UI", 8F),
+        Font = new Font("Microsoft JhengHei UI", 9F),
     };
 
     private static void ConfigureInputField(TextBox field)
@@ -326,17 +327,20 @@ internal sealed class VoidConfirmationForm : Form
             confirm.BackColor != Color.FromArgb(183, 28, 28) || confirm.ForeColor != Color.White ||
             responsibility is null || !responsibility.Font.Bold || !responsibility.Text.Contains("同意上述聲明", StringComparison.Ordinal))
             throw new InvalidOperationException("發票作廢確認視窗基本配置不正確");
-        if (paperInvoice && (notDelivered.Appearance != Appearance.Button || collected.Appearance != Appearance.Button || uncollected.Appearance != Appearance.Button))
-            throw new InvalidOperationException("紙本發票證明聯狀態未使用同列三選一按鈕");
-        if (!paperInvoice && notDelivered.Parent is not null)
-            throw new InvalidOperationException("非紙本發票不應顯示證明聯狀態");
         if (paperInvoice)
         {
+            if (notDelivered.Appearance != Appearance.Button || collected.Appearance != Appearance.Button || uncollected.Appearance != Appearance.Button ||
+                !(notDelivered.Top < collected.Top && collected.Top < uncollected.Top))
+                throw new InvalidOperationException("紙本發票證明聯狀態未使用垂直三選一按鈕");
             if (uncollectedWarning.Text != UncollectedWarningText)
                 throw new InvalidOperationException("尚未收回提示文字不正確");
             uncollected.Checked = true;
             if (!ShouldShowUncollectedWarning())
                 throw new InvalidOperationException("選擇尚未收回後未進入管理員確認提示狀態");
+        }
+        else if (notDelivered.Parent is not null)
+        {
+            throw new InvalidOperationException("非紙本發票不應顯示證明聯狀態");
         }
         VoidConfirmationPrivacyMask.VerifySmokeLayout();
     }
