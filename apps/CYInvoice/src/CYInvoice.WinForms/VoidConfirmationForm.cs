@@ -5,7 +5,7 @@ namespace CYInvoice.WinForms;
 internal sealed class VoidConfirmationForm : Form
 {
     private const string ResponsibilityText =
-        "本人已核對本次作廢之發票號碼、交易事實及作廢原因，並了解錯誤或不當作廢發票可能涉及稅務法令及公司內部責任；如因本人故意或過失造成錯誤作廢，應依相關法令及公司規定負應負之責任。\n\n按下「確認作廢」即表示本人已閱讀並確認上述事項。";
+        "本人已核對本次作廢之發票號碼、交易事實及作廢原因，並了解錯誤或不當作廢發票可能涉及稅務法令及公司內部責任；如因本人故意或過失造成錯誤作廢，本人願依相關法令及公司規定承擔應負之責任。\n\n按下「確認作廢」即表示本人已閱讀並確認上述事項。";
 
     private readonly bool paperInvoice;
     private readonly TextBox invoiceNumber = UiControls.TextBox(10);
