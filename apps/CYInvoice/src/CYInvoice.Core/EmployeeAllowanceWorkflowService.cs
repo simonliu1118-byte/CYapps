@@ -14,9 +14,10 @@ public sealed record InvoiceAllowanceManualReview(
     string Reason,
     long TaxInclusiveAmount,
     DateTimeOffset RequestedUtc,
-    string AllowanceNumber = "",
+    string[] BaselineAllowanceNumbers,
     bool AwaitingConfirmation = false,
-    DateTimeOffset? ManualCompletedUtc = null);
+    DateTimeOffset? ManualCompletedUtc = null,
+    string ConfirmedAllowanceNumber = "");
 
 public sealed record EmployeeAllowanceWorkflowResult(
     InvoiceRecord Record,
@@ -74,6 +75,9 @@ public sealed class EmployeeAllowanceWorkflowService
         var employee = EmployeeOperationAuthentication.AuthenticateEmployee(
             repository, employeeNo, password, now());
 
+        // The fresh query is both the eligibility check and the durable allowance baseline.
+        // Existing historical allowances are persisted by InvoiceOfficialState.ApplyQuery before
+        // this request is created, so later reconciliation only considers newly appearing numbers.
         var fresh = await detailRefreshService.RefreshAsync(selected, cancellationToken).ConfigureAwait(false);
         ValidateCurrentAccount(fresh);
         ValidateEligible(fresh, taxInclusiveAmount);
@@ -103,11 +107,18 @@ public sealed class EmployeeAllowanceWorkflowService
         if (issueStore.HasUnresolved(accountKey, number, orderId, InvoiceAllowanceIssueTypes.ManualReview))
             throw new InvalidDataException("折讓人工處理待辦存在，但申請資料遺失，已停止重複建立");
 
+        var baseline = InvoiceAllowanceMetadata.ReadOfficial(fresh)
+            .Select(item => item.AllowanceNumber.Trim())
+            .Where(value => value.Length != 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var review = new InvoiceAllowanceManualReview(
             employee.EmployeeNo,
             reason,
             taxInclusiveAmount,
-            now().ToUniversalTime());
+            now().ToUniversalTime(),
+            baseline);
         WriteManualReview(fresh, review);
         syncRepository.UpsertMany([fresh]);
         try
@@ -142,6 +153,39 @@ public sealed class EmployeeAllowanceWorkflowService
 
     public async Task<InvoiceAllowanceReconcileResult> MarkManualCompletedAsync(
         InvoiceSyncIssue issue,
+        string actorEmployeeNo,
+        string actorPassword,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
+        RequireManualReviewIssue(issue);
+
+        var record = FindIssueRecord(issue);
+        var review = ReadManualReview(record)
+            ?? throw new InvalidOperationException("這筆人工折讓已沒有可處理的申請資料");
+        if (review.AwaitingConfirmation)
+            return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+
+        review = review with
+        {
+            AwaitingConfirmation = true,
+            ManualCompletedUtc = now().ToUniversalTime(),
+            ConfirmedAllowanceNumber = string.Empty,
+        };
+        WriteManualReview(record, review);
+        MarkPending(record);
+        syncRepository.UpsertMany([record]);
+        UpdateIssueMessage(record, "管理員已完成人工折讓，等待光貿回傳新的折讓資料。");
+
+        return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Exceptional path only. Normal reconciliation discovers the new allowance number by comparing
+    // the request-time baseline with the latest invoice_query allowance array. A manager uses this
+    // only when more than one new candidate remains equally plausible.
+    public async Task<InvoiceAllowanceReconcileResult> ConfirmCandidateAsync(
+        InvoiceSyncIssue issue,
         string allowanceNumber,
         string actorEmployeeNo,
         string actorPassword,
@@ -155,25 +199,44 @@ public sealed class EmployeeAllowanceWorkflowService
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工折讓已沒有可處理的申請資料");
-        if (review.AwaitingConfirmation)
+        if (!review.AwaitingConfirmation || !HasPendingMarker(record))
+            throw new InvalidOperationException("這筆折讓尚未進入官方確認階段");
+
+        InvoiceRecord fresh;
+        try
         {
-            if (!string.Equals(review.AllowanceNumber, allowanceNumber, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("這筆折讓已使用另一個折讓單號等待確認，不能改號");
-            return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+            fresh = await detailRefreshService.RefreshAsync(record, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            var message = "折讓狀態回查失敗：" + error.Message;
+            UpdateIssueMessage(record, message);
+            return new InvoiceAllowanceReconcileResult(
+                InvoiceAllowanceReconcileOutcome.Problem,
+                Reload(record),
+                message);
         }
 
-        review = review with
-        {
-            AllowanceNumber = allowanceNumber,
-            AwaitingConfirmation = true,
-            ManualCompletedUtc = now().ToUniversalTime(),
-        };
-        WriteManualReview(record, review);
-        MarkPending(record);
-        syncRepository.UpsertMany([record]);
-        UpdateIssueMessage(record, $"管理員已完成人工折讓，等待光貿確認折讓單 {allowanceNumber}。");
+        review = ReadManualReview(fresh)
+            ?? throw new InvalidDataException("官方回查後折讓人工申請資料遺失");
+        var candidate = NewAllowances(fresh, review)
+            .Where(item => string.Equals(item.AllowanceNumber.Trim(), allowanceNumber, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (candidate.Length == 0)
+            return Problem(fresh, $"折讓單 {allowanceNumber} 不是這次申請後新出現的折讓資料，請重新確認。");
+        if (candidate.Length > 1)
+            return Problem(fresh, $"光貿回傳多筆相同折讓單號 {allowanceNumber}，無法唯一確認。");
+        if (!IsIssuanceType(candidate[0].InvoiceType))
+            return Problem(fresh, $"折讓單 {allowanceNumber} 不是折讓開立資料，請重新確認。");
 
-        return await ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
+        review = review with { ConfirmedAllowanceNumber = allowanceNumber };
+        WriteManualReview(fresh, review);
+        syncRepository.UpsertMany([fresh]);
+        return ReconcileFresh(fresh, review);
     }
 
     public void CancelManualReview(
@@ -205,7 +268,7 @@ public sealed class EmployeeAllowanceWorkflowService
         ValidateCurrentAccount(record);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("折讓 pending 缺少人工申請資料");
-        if (!review.AwaitingConfirmation || review.AllowanceNumber.Trim().Length == 0 || !HasPendingMarker(record))
+        if (!review.AwaitingConfirmation || !HasPendingMarker(record))
             throw new InvalidOperationException("這筆折讓尚未進入官方確認階段");
 
         InvoiceRecord fresh;
@@ -229,57 +292,106 @@ public sealed class EmployeeAllowanceWorkflowService
 
         review = ReadManualReview(fresh)
             ?? throw new InvalidDataException("官方回查後折讓人工申請資料遺失");
-        var matches = InvoiceAllowanceMetadata.ReadOfficial(fresh)
-            .Where(item => string.Equals(
-                item.AllowanceNumber.Trim(),
-                review.AllowanceNumber.Trim(),
-                StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (matches.Length == 0)
-        {
-            var message = $"尚未在光貿查到折讓單 {review.AllowanceNumber}，等待下次確認。";
-            UpdateIssueMessage(fresh, message);
-            return new InvoiceAllowanceReconcileResult(
-                InvoiceAllowanceReconcileOutcome.PendingConfirmation,
-                fresh,
-                message);
-        }
-        if (matches.Length > 1)
-            return Problem(fresh, $"光貿回傳多筆相同折讓單號 {review.AllowanceNumber}，無法唯一確認。");
+        return ReconcileFresh(fresh, review);
+    }
 
-        var allowance = matches[0];
+    internal static bool HasPendingMarker(InvoiceRecord record)
+    {
+        if (record.ExtensionData is null || !record.ExtensionData.TryGetValue(PendingMetadataKey, out var value)) return false;
+        return value.ValueKind == JsonValueKind.True ||
+               (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed) && parsed);
+    }
+
+    private InvoiceAllowanceReconcileResult ReconcileFresh(
+        InvoiceRecord fresh,
+        InvoiceAllowanceManualReview review)
+    {
+        var newAllowances = NewAllowances(fresh, review);
+        if (review.ConfirmedAllowanceNumber.Trim().Length != 0)
+        {
+            var selected = newAllowances
+                .Where(item => string.Equals(
+                    item.AllowanceNumber.Trim(),
+                    review.ConfirmedAllowanceNumber.Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (selected.Length == 0)
+                return Problem(fresh, $"已確認的折讓單 {review.ConfirmedAllowanceNumber} 不在本次申請後新增的折讓資料中。");
+            if (selected.Length > 1)
+                return Problem(fresh, $"光貿回傳多筆相同折讓單號 {review.ConfirmedAllowanceNumber}，無法唯一確認。");
+            return EvaluateCandidate(fresh, review, selected[0]);
+        }
+
+        var issuance = newAllowances.Where(item => IsIssuanceType(item.InvoiceType)).ToArray();
+        if (issuance.Length == 0)
+        {
+            if (newAllowances.Count == 0)
+                return Pending(fresh, "尚未在光貿查到本次申請後新增的折讓資料，等待下次確認。");
+            return Problem(fresh, "已查到新的折讓資料，但沒有折讓開立資料，請管理員確認光貿操作結果。");
+        }
+
+        // If any newly appearing issuance record is still in flight, wait until the result set is
+        // stable before auto-selecting a number. This avoids choosing one completed record while a
+        // second same-request candidate is still being processed.
+        if (issuance.Any(item => IsPendingStatus(item.InvoiceStatus)))
+        {
+            var numbers = CandidateNumbers(issuance);
+            return Pending(fresh, $"已查到新的折讓資料{numbers}，仍有資料在光貿處理中，等待下次確認。");
+        }
+
+        var matching = new List<InvoiceAllowanceResult>();
+        var amountErrors = new List<string>();
+        foreach (var allowance in issuance)
+        {
+            if (!TryTaxInclusiveAmount(allowance, out var amount, out var error))
+            {
+                amountErrors.Add($"{allowance.AllowanceNumber}: {error}");
+                continue;
+            }
+            if (amount == FixedDecimal.FromInt64(review.TaxInclusiveAmount))
+                matching.Add(allowance);
+        }
+
+        if (matching.Count == 0)
+        {
+            var details = amountErrors.Count == 0
+                ? CandidateNumbers(issuance)
+                : "（" + string.Join("；", amountErrors) + "）";
+            return Problem(
+                fresh,
+                $"已查到本次申請後新增的折讓資料{details}，但沒有任何一筆含稅金額符合申請金額 {review.TaxInclusiveAmount}，請管理員確認。");
+        }
+        if (matching.Count > 1)
+        {
+            return Problem(
+                fresh,
+                $"查到多筆新折讓都符合申請金額：{string.Join("、", matching.Select(item => item.AllowanceNumber))}。請管理員確認本次折讓單號。");
+        }
+
+        return EvaluateCandidate(fresh, review, matching[0]);
+    }
+
+    private InvoiceAllowanceReconcileResult EvaluateCandidate(
+        InvoiceRecord fresh,
+        InvoiceAllowanceManualReview review,
+        InvoiceAllowanceResult allowance)
+    {
+        var number = allowance.AllowanceNumber.Trim();
         if (!IsIssuanceType(allowance.InvoiceType))
-            return Problem(fresh, $"折讓單 {review.AllowanceNumber} 的官方類型為 {allowance.InvoiceType}，不是折讓開立資料。");
+            return Problem(fresh, $"折讓單 {number} 的官方類型為 {allowance.InvoiceType}，不是折讓開立資料。");
         if (IsPendingStatus(allowance.InvoiceStatus))
-        {
-            var message = $"折讓單 {review.AllowanceNumber} 仍在光貿處理中。";
-            UpdateIssueMessage(fresh, message);
-            return new InvoiceAllowanceReconcileResult(
-                InvoiceAllowanceReconcileOutcome.PendingConfirmation,
-                fresh,
-                message);
-        }
+            return Pending(fresh, $"折讓單 {number} 仍在光貿處理中。");
         if (allowance.InvoiceStatus == UploadStatuses.Error)
-            return Problem(fresh, $"折讓單 {review.AllowanceNumber} 官方狀態為錯誤，請至光貿確認。");
+            return Problem(fresh, $"折讓單 {number} 官方狀態為錯誤，請至光貿確認。");
         if (allowance.InvoiceStatus != UploadStatuses.Complete)
-            return Problem(fresh, $"折讓單 {review.AllowanceNumber} 回傳未知狀態 {allowance.InvoiceStatus}，不能自動結案。");
-
-        FixedDecimal officialAmount;
-        try
-        {
-            officialAmount = FixedDecimal.Add(
-                FixedDecimal.Parse(allowance.TotalAmount),
-                FixedDecimal.Parse(allowance.TaxAmount));
-        }
-        catch (Exception error) when (error is FormatException or OverflowException)
-        {
-            return Problem(fresh, $"折讓單 {review.AllowanceNumber} 官方金額格式無法辨識：{error.Message}");
-        }
+            return Problem(fresh, $"折讓單 {number} 回傳未知狀態 {allowance.InvoiceStatus}，不能自動結案。");
+        if (!TryTaxInclusiveAmount(allowance, out var officialAmount, out var amountError))
+            return Problem(fresh, $"折讓單 {number} 官方金額格式無法辨識：{amountError}");
         if (officialAmount != FixedDecimal.FromInt64(review.TaxInclusiveAmount))
         {
             return Problem(
                 fresh,
-                $"折讓單 {review.AllowanceNumber} 官方含稅金額 {officialAmount} 與申請金額 {review.TaxInclusiveAmount} 不符。");
+                $"折讓單 {number} 官方含稅金額 {officialAmount} 與申請金額 {review.TaxInclusiveAmount} 不符。");
         }
 
         ClearPending(fresh);
@@ -294,14 +406,29 @@ public sealed class EmployeeAllowanceWorkflowService
         return new InvoiceAllowanceReconcileResult(
             InvoiceAllowanceReconcileOutcome.Confirmed,
             Reload(fresh),
-            $"光貿已確認折讓單 {review.AllowanceNumber} 完成");
+            $"光貿已確認折讓單 {number} 完成");
     }
 
-    internal static bool HasPendingMarker(InvoiceRecord record)
+    private static IReadOnlyList<InvoiceAllowanceResult> NewAllowances(
+        InvoiceRecord record,
+        InvoiceAllowanceManualReview review)
     {
-        if (record.ExtensionData is null || !record.ExtensionData.TryGetValue(PendingMetadataKey, out var value)) return false;
-        return value.ValueKind == JsonValueKind.True ||
-               (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed) && parsed);
+        var baseline = new HashSet<string>(
+            review.BaselineAllowanceNumbers ?? [],
+            StringComparer.OrdinalIgnoreCase);
+        return InvoiceAllowanceMetadata.ReadOfficial(record)
+            .Where(item => item.AllowanceNumber.Trim().Length != 0)
+            .Where(item => !baseline.Contains(item.AllowanceNumber.Trim()))
+            .ToArray();
+    }
+
+    private InvoiceAllowanceReconcileResult Pending(InvoiceRecord record, string message)
+    {
+        UpdateIssueMessage(record, message);
+        return new InvoiceAllowanceReconcileResult(
+            InvoiceAllowanceReconcileOutcome.PendingConfirmation,
+            Reload(record),
+            message);
     }
 
     private InvoiceAllowanceReconcileResult Problem(InvoiceRecord record, string message)
@@ -376,6 +503,36 @@ public sealed class EmployeeAllowanceWorkflowService
             now());
     }
 
+    private static bool TryTaxInclusiveAmount(
+        InvoiceAllowanceResult allowance,
+        out FixedDecimal amount,
+        out string error)
+    {
+        try
+        {
+            amount = FixedDecimal.Add(
+                FixedDecimal.Parse(allowance.TotalAmount),
+                FixedDecimal.Parse(allowance.TaxAmount));
+            error = string.Empty;
+            return true;
+        }
+        catch (Exception exception) when (exception is FormatException or OverflowException)
+        {
+            amount = default;
+            error = exception.Message;
+            return false;
+        }
+    }
+
+    private static string CandidateNumbers(IEnumerable<InvoiceAllowanceResult> values)
+    {
+        var numbers = values.Select(item => item.AllowanceNumber.Trim())
+            .Where(value => value.Length != 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return numbers.Length == 0 ? string.Empty : "（" + string.Join("、", numbers) + "）";
+    }
+
     private static string ValidateAllowanceNumber(string value)
     {
         value = (value ?? string.Empty).Trim();
@@ -402,10 +559,11 @@ public sealed class EmployeeAllowanceWorkflowService
         {
             var review = value.Deserialize<InvoiceAllowanceManualReview>();
             if (review is null || review.RequesterEmployeeNo.Trim().Length == 0 ||
-                review.Reason.Trim().Length == 0 || review.TaxInclusiveAmount <= 0)
+                review.Reason.Trim().Length == 0 || review.TaxInclusiveAmount <= 0 ||
+                review.BaselineAllowanceNumbers is null)
                 throw new InvalidDataException("折讓人工處理資料不完整");
-            if (review.AwaitingConfirmation && review.AllowanceNumber.Trim().Length == 0)
-                throw new InvalidDataException("折讓 pending 缺少折讓單號");
+            if (!review.AwaitingConfirmation && review.ConfirmedAllowanceNumber.Trim().Length != 0)
+                throw new InvalidDataException("尚未進入 pending 的折讓申請不應有確認單號");
             return review;
         }
         catch (JsonException error)
