@@ -39,6 +39,14 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.AdminPasswordSet = true;
     }
 
+    public void RetireLegacyAdminPassword(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.PasswordSalt = string.Empty;
+        settings.PasswordHash = string.Empty;
+        settings.AdminPasswordSet = false;
+    }
+
     public static bool CheckAdminPassword(Settings settings, string password)
     {
         if (!settings.AdminPasswordSet || settings.PasswordSalt.Length == 0 || settings.PasswordHash.Length == 0) return false;
@@ -96,6 +104,10 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             var hashText = settings.PasswordHash.StartsWith(PasswordPrefix, StringComparison.Ordinal)
                 ? settings.PasswordHash[PasswordPrefix.Length..] : settings.PasswordHash;
             if (!TryHex(hashText, out var hash) || hash.Length != 32) throw new InvalidDataException("invalid password_hash");
+        }
+        else if (settings.PasswordSalt.Length != 0 || settings.PasswordHash.Length != 0)
+        {
+            throw new InvalidDataException("retired management password fields must be empty");
         }
         if (settings.Environment == Environments.Production &&
             (settings.ProductionInvoice.Length == 0 || settings.ProductionAppKeyEncrypted.Length == 0))
