@@ -42,6 +42,7 @@ internal static class PendingVoidSyncTests
         Equal(UploadStatuses.Complete, saved.UploadStatus);
         False(PendingMarker(saved));
         Equal(0, voidGateway.QueryCalls);
+        Equal(0, voidGateway.StatusCalls);
         Equal(0, voidGateway.VoidCalls);
         False(File.Exists(pdf));
         False(File.Exists(preview));
@@ -61,7 +62,10 @@ internal static class PendingVoidSyncTests
             Items = [ListItem()],
             Query = Query(),
         };
-        var voidGateway = new VoidStatusGateway();
+        var voidGateway = new VoidStatusGateway
+        {
+            Query = Query(voidPending: true),
+        };
         var coordinator = Coordinator(repository, syncGateway, voidGateway, clock);
 
         var result = await coordinator.RunScheduledAsync();
@@ -72,7 +76,8 @@ internal static class PendingVoidSyncTests
         Equal(UploadStatuses.Complete, saved.UploadStatus);
         Equal("完成", saved.UploadStatusText);
         True(PendingMarker(saved));
-        Equal(0, voidGateway.QueryCalls);
+        Equal(1, voidGateway.QueryCalls);
+        Equal(0, voidGateway.StatusCalls);
         Equal(0, voidGateway.VoidCalls);
     }
 
@@ -86,7 +91,6 @@ internal static class PendingVoidSyncTests
         var voidGateway = new VoidStatusGateway
         {
             Query = Query(),
-            Status = new StatusResponse(0, "", [new StatusResult(record.InvoiceNumber, "A0401", UploadStatuses.Complete, "100")]),
         };
         var coordinator = Coordinator(repository, syncGateway, voidGateway, clock);
 
@@ -98,6 +102,7 @@ internal static class PendingVoidSyncTests
         Equal(UploadStatuses.Complete, saved.UploadStatus);
         False(PendingMarker(saved));
         Equal(1, voidGateway.QueryCalls);
+        Equal(0, voidGateway.StatusCalls);
         Equal(0, voidGateway.VoidCalls);
     }
 
@@ -111,7 +116,6 @@ internal static class PendingVoidSyncTests
         var voidGateway = new VoidStatusGateway
         {
             Query = Query(voidPending: true),
-            Status = new StatusResponse(0, "", []),
         };
         var coordinator = Coordinator(repository, syncGateway, voidGateway, clock);
 
@@ -123,6 +127,7 @@ internal static class PendingVoidSyncTests
         Equal(UploadStatuses.Complete, saved.UploadStatus);
         True(PendingMarker(saved));
         Equal(1, voidGateway.QueryCalls);
+        Equal(0, voidGateway.StatusCalls);
         Equal(0, voidGateway.VoidCalls);
         var issue = new InvoiceSyncIssueStore(repository.DataDirectory)
             .Unresolved(Environments.Production + "|12345675")
@@ -265,6 +270,7 @@ internal static class PendingVoidSyncTests
         public QueryResponse Query { get; set; } = PendingVoidSyncTests.Query();
         public StatusResponse Status { get; set; } = new(0, "", []);
         public int QueryCalls { get; private set; }
+        public int StatusCalls { get; private set; }
         public int VoidCalls { get; private set; }
 
         public Task<VoidResponse> VoidAsync(VoidRequest request, CancellationToken cancellationToken = default)
@@ -279,8 +285,11 @@ internal static class PendingVoidSyncTests
             return Task.FromResult(Query);
         }
 
-        public Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Status);
+        public Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default)
+        {
+            StatusCalls++;
+            return Task.FromResult(Status);
+        }
         public Task<IssueResponse> IssueAsync(IssueRequest request, CancellationToken cancellationToken = default) =>
             Task.FromException<IssueResponse>(new NotSupportedException());
         public Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default) =>
