@@ -33,7 +33,25 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.MoPasswordEncrypted = protector.Protect(Encoding.UTF8.GetBytes(password));
     }
 
-    public string MoPassword(Settings settings) => Unprotect(settings.MoPasswordEncrypted);
+    public string MoPassword(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (settings.MoPasswordEncrypted.Length == 0)
+            throw new InvalidOperationException("尚未設定 MO店+ Excel 保護密碼，請由管理員至「設定」輸入後再匯入。");
+        try
+        {
+            var password = Unprotect(settings.MoPasswordEncrypted);
+            if (string.IsNullOrWhiteSpace(password))
+                throw new InvalidDataException("MO店+ Excel 密碼解密後為空白");
+            return password;
+        }
+        catch (Exception error) when (error is not InvalidOperationException)
+        {
+            throw new InvalidOperationException(
+                "目前無法讀取 MO店+ Excel 保護密碼，請由管理員至「設定」重新輸入後再匯入。",
+                error);
+        }
+    }
 
     public void SetProductionAppKey(Settings settings, string appKey)
     {
@@ -51,9 +69,6 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             throw new InvalidDataException($"unknown environment {settings.Environment}");
         if (settings.ProductionInvoice.Length != 0 && !EightDigits(settings.ProductionInvoice))
             throw new InvalidDataException("正式公司統編必須為 8 碼");
-        if (settings.Environment == Environments.Production &&
-            (settings.ProductionInvoice.Length == 0 || settings.ProductionAppKeyEncrypted.Length == 0))
-            throw new InvalidDataException("正式公司請輸入 8 碼公司統編與 App Key");
     }
 
     private static bool EightDigits(string value) => value.Length == 8 && value.All(character => character is >= '0' and <= '9');
