@@ -380,7 +380,7 @@ public sealed class InvoiceSyncService
         if (record.RecordOrigin == RecordOrigins.Sync || record.OriginalOrderId.Trim().Length == 0)
             record.OriginalOrderId = orderId;
         record.Source = InvoiceSourceInference.FromOrderId(orderId);
-        record.InvoiceState = item.CancelDate == 0 ? InvoiceStates.Opened : InvoiceStates.Voided;
+        InvoiceOfficialState.ApplyList(record, item.CancelDate);
         record.UploadStatus = item.InvoiceStatus;
         record.UploadStatusText = UploadStatusText(item.InvoiceStatus);
         record.ErrorMessage = string.Empty;
@@ -420,7 +420,7 @@ public sealed class InvoiceSyncService
                 record.OriginalOrderId = orderId;
             record.Source = InvoiceSourceInference.FromOrderId(orderId);
         }
-        record.InvoiceState = query.CancelDate == 0 ? InvoiceStates.Opened : InvoiceStates.Voided;
+        InvoiceOfficialState.ApplyQuery(record, query);
         if (query.InvoiceStatus != 0)
         {
             record.UploadStatus = query.InvoiceStatus;
@@ -482,7 +482,7 @@ public sealed class InvoiceSyncService
 
     private static bool SummaryDiffers(InvoiceRecord record, InvoiceListItem item, Account account)
     {
-        var state = item.CancelDate == 0 ? InvoiceStates.Opened : InvoiceStates.Voided;
+        var state = InvoiceOfficialState.ResolveList(record, item.CancelDate);
         var apiOrderId = item.OrderId.Trim();
         var orderId = CanonicalOrderId(account, apiOrderId);
         return !string.Equals(record.InvoiceNumber.Trim(), item.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase) ||
@@ -490,6 +490,7 @@ public sealed class InvoiceSyncService
                !string.Equals(record.ApiOrderId.Trim(), apiOrderId, StringComparison.Ordinal) ||
                !string.Equals(record.Source.Trim(), InvoiceSourceInference.FromOrderId(orderId), StringComparison.Ordinal) ||
                !string.Equals(record.InvoiceState, state, StringComparison.Ordinal) ||
+               InvoiceOfficialMetadata.CancelDate(record) != item.CancelDate ||
                record.UploadStatus != item.InvoiceStatus ||
                !string.Equals(record.InvoiceDate, NormalizeDate(item.InvoiceDate), StringComparison.Ordinal) ||
                !string.Equals(record.InvoiceTime, NormalizeTime(item.InvoiceTime), StringComparison.Ordinal) ||
@@ -519,6 +520,8 @@ public sealed class InvoiceSyncService
         record.ApiOrderId,
         record.InvoiceNumber,
         record.InvoiceState,
+        VoidPending = InvoiceVoidService.HasPendingMarker(record),
+        CancelDate = InvoiceOfficialMetadata.CancelDate(record),
         record.CarrierType,
         record.CarrierId1,
         record.CarrierId2,
