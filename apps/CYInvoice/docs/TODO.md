@@ -25,7 +25,15 @@ V2.5 員工帳號／權限／發票作廢，以及 V2.6 暫行人工折讓、pen
 
 完整操作步驟見 `RC_TEST.md`。
 
-## 2. V2.6.2 尚缺自動化測試
+## 2. V2.6.2 實機前仍應補強
+
+以下是目前程式碼審視後確認的缺口，不需等待光貿實機才能處理：
+
+- [ ] **折讓作廢人工待辦納入超過兩期管理員結案規則。** 目前 `InvoiceAdministrativeClosureService` 只涵蓋發票作廢與折讓人工流程，尚未包含 `allowance_void_manual_review`；依既定原則，超過兩期後也應可由管理員在詳細待辦中手動結案，且只停止本機追蹤、不假裝光貿已完成。
+- [ ] **折讓 PDF Cache 失效策略。** 目前 `Cache/AllowancePDF` 以環境＋折讓單號＋版型為 key，沒有日期／官方狀態版本；若折讓後續狀態改變或作廢，舊 PDF 可能繼續命中。正式版前應增加官方狀態變更時 invalidation，或調整 Cache key／生命週期。
+- [ ] **折讓作廢人工完成後的官方確認策略。** V2.6.2 目前由管理員按「已解決」後直接結束本機待辦；待取得真實 `invoice_query.allowance[]` 作廢樣本後，應評估改為先回查官方狀態，無法確認時維持 pending，而不是只信任人工勾選。
+
+## 3. V2.6.2 尚缺自動化測試
 
 Windows CI 已通過既有 Core、作廢 workflow、SQLite、同步與 package smoke，但下列 V2.6.2 新增核心目前仍應補上專屬回歸測試，正式 Release 前建議完成：
 
@@ -33,7 +41,7 @@ Windows CI 已通過既有 Core、作廢 workflow、SQLite、同步與 package s
 - [ ] `EmployeeAllowanceVoidWorkflowService`：錯誤一般使用者帳密不得建立待辦；只有已完成且唯一的折讓可申請；重複申請防護；一般使用者不能結案；管理員完成／取消只改本機且不呼叫 `/json/g0501`。
 - [ ] 「上傳問題」單一清單 smoke：Failed checkbox 只作用於 Failed；人工待辦雙擊入口與類型顯示不得被清除流程誤傷。
 
-## 3. V2.4.x／既有同步與 Cache 實機回歸
+## 4. V2.4.x／既有同步與 Cache 實機回歸
 
 以下若沒有另外留下可追溯的實機驗證紀錄，仍保留為回歸清單：
 
@@ -45,7 +53,7 @@ Windows CI 已通過既有 Core、作廢 workflow、SQLite、同步與 package s
 - [ ] 測試環境 namespaced OrderID 不與共享測試池其他資料撞號，UI 仍顯示原始可讀 OrderID。
 - [ ] 發票 PDF／Preview Cache 不保存短效 `file_url`，retention 清理時同步移除對應 Cache。
 
-## 4. 酷澎樣本補齊
+## 5. 酷澎樣本補齊
 
 目前只完成已寄出 DeliveryList 的可靠基本解析。以下仍缺實際樣本；沒有樣本前維持安全停止，不猜欄位／金額：
 
@@ -56,7 +64,7 @@ Windows CI 已通過既有 Core、作廢 workflow、SQLite、同步與 package s
 - [ ] 折扣／負數調整樣本。
 - [ ] 取得樣本後補 parser、金額、防重與測試案例。
 
-## 5. 正式折讓 API（雲端化階段）
+## 6. 正式折讓 API（雲端化階段）
 
 目前 V2.6.2 仍以人工折讓／人工折讓作廢待辦為主；完成紀錄以 `invoice_query.allowance[]` 為官方依據。正式 AMEGO 折讓開立與作廢 API 延後到雲端化階段，以正式資料模型一次完成。
 
@@ -72,7 +80,7 @@ Windows CI 已通過既有 Core、作廢 workflow、SQLite、同步與 package s
 
 `/json/allowance_file` 折讓 PDF 已於 V2.6.2 實作，不再列為未做功能；後續只需實機驗證與雲端化時確認多裝置 Cache 行為。
 
-## 6. 雲端化後續
+## 7. 雲端化後續
 
 - [ ] 可選雲端 API 位址。
 - [ ] Cloudflare Workers／D1 等低成本雲端服務。
@@ -84,7 +92,7 @@ Windows CI 已通過既有 Core、作廢 workflow、SQLite、同步與 package s
 
 AMEGO App Key 不列入上述雲端化範圍；仍維持各電腦自行設定、Windows DPAPI 本機保護。
 
-## 7. 尚未定案的功能候選
+## 8. 尚未定案的功能候選
 
 下列只作產品評估，不代表已排入版本或授權開發：
 
