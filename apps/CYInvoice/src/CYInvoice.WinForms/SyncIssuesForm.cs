@@ -16,8 +16,10 @@ internal sealed class SyncIssuesForm : Form
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceSyncStateStore stateStore;
     private readonly FailedInvoiceRecordStore failedStore;
+    private readonly EmployeeVoidWorkflowService voidWorkflow;
     private readonly string accountKey;
     private DateTimeOffset? lastRead;
+    private bool manualReviewBusy;
 
     private readonly ListView issueList = new()
     {
@@ -49,6 +51,8 @@ internal sealed class SyncIssuesForm : Form
         Anchor = AnchorStyles.Left,
     };
     private readonly Button resolve = UiControls.StandardButton("標記已解決");
+    private readonly Button approveManualReview = UiControls.StandardButton("確認送出作廢");
+    private readonly Button cancelManualReview = UiControls.StandardButton("取消退回");
     private readonly Button deleteFailed = UiControls.StandardButton("刪除");
     private readonly Button deleteAllFailed = UiControls.StandardButton("全部刪除");
 
@@ -58,6 +62,7 @@ internal sealed class SyncIssuesForm : Form
         issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
         stateStore = new InvoiceSyncStateStore(repository.DataDirectory);
         failedStore = new FailedInvoiceRecordStore(repository.DataDirectory);
+        voidWorkflow = new EmployeeVoidWorkflowService(repository);
         accountKey = CurrentAccountKey();
         lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
 
@@ -82,7 +87,11 @@ internal sealed class SyncIssuesForm : Form
         reload.Click += (_, _) => ReloadAll();
         resolve.Enabled = false;
         resolve.Click += (_, _) => ResolveSelected();
-        issueList.SelectedIndexChanged += (_, _) => UpdateResolveButton();
+        approveManualReview.Enabled = false;
+        approveManualReview.Click += async (_, _) => await ApproveSelectedManualReviewAsync();
+        cancelManualReview.Enabled = false;
+        cancelManualReview.Click += (_, _) => CancelSelectedManualReview();
+        issueList.SelectedIndexChanged += (_, _) => UpdateIssueButtons();
 
         deleteFailed.Enabled = false;
         deleteFailed.Click += (_, _) => DeleteCheckedFailed();
@@ -114,6 +123,8 @@ internal sealed class SyncIssuesForm : Form
             Padding = new Padding(0, 4, 0, 0),
         };
         issueActions.Controls.Add(resolve);
+        issueActions.Controls.Add(approveManualReview);
+        issueActions.Controls.Add(cancelManualReview);
 
         var failedHeader = new Label
         {
@@ -224,9 +235,11 @@ internal sealed class SyncIssuesForm : Form
                     stateCell.ForeColor = state switch
                     {
                         "未讀" => Color.Firebrick,
+                        "人工確認" => Color.FromArgb(190, 120, 0),
                         "已解決" => Color.FromArgb(0, 132, 72),
                         _ => Color.DimGray,
                     };
+                    if (state == "人工確認") stateCell.Font = new Font(issueList.Font, FontStyle.Bold);
                     issueList.Items.Add(row);
                 }
             }
@@ -237,7 +250,7 @@ internal sealed class SyncIssuesForm : Form
 
             var unresolved = issues.Count(issue => issue.ResolvedUtc is null);
             summary.Text = unresolved == 0 ? "目前沒有尚未解決的上傳問題" : $"尚未解決：{unresolved} 項";
-            UpdateResolveButton();
+            UpdateIssueButtons();
         }
         catch (Exception error)
         {
@@ -298,7 +311,7 @@ internal sealed class SyncIssuesForm : Form
     private void ResolveSelected()
     {
         if (issueList.SelectedItems.Count != 1 || issueList.SelectedItems[0].Tag is not InvoiceSyncIssue issue) return;
-        if (issue.ResolvedUtc is not null) return;
+        if (issue.ResolvedUtc is not null || IsManualReview(issue)) return;
         try
         {
             issueStore.Resolve(issue.Id, DateTimeOffset.Now);
@@ -309,6 +322,124 @@ internal sealed class SyncIssuesForm : Form
         {
             MessageBox.Show(this, "標記上傳問題失敗：" + error.Message, "操作失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private async Task ApproveSelectedManualReviewAsync()
+    {
+        var issue = SelectedManualReview();
+        if (issue is null || manualReviewBusy) return;
+        if (MessageBox.Show(
+                this,
+                "這筆作廢申請的紙本電子發票證明聯先前尚未收回。\n\n確認後，CYInvoice 會重新查詢光貿最新狀態，再送出作廢。請確認已完成主管核准並可進行作廢。",
+                "確認送出作廢",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        using var login = new EmployeeAdminLoginForm(repository.Employees, "人工確認－管理員驗證");
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+
+        SetManualReviewBusy(true);
+        try
+        {
+            var result = await voidWorkflow.ApproveManualReviewAsync(
+                issue,
+                login.AuthenticatedEmployee.EmployeeNo,
+                login.AuthenticatedPassword);
+            switch (result.Outcome)
+            {
+                case InvoiceVoidOutcome.Confirmed:
+                case InvoiceVoidOutcome.AlreadyVoided:
+                    MessageBox.Show(this, "光貿已確認發票作廢完成。", "作廢完成",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    break;
+                case InvoiceVoidOutcome.PendingConfirmation:
+                    MessageBox.Show(
+                        this,
+                        "作廢已送出，但光貿尚未確認最終結果。\n\n系統已轉為待確認，不會盲目重送。",
+                        "作廢結果待確認",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    break;
+                case InvoiceVoidOutcome.Rejected:
+                    MessageBox.Show(
+                        this,
+                        result.Message + "\n\n人工確認仍保留，尚未標記完成。",
+                        "作廢未完成",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    break;
+                case InvoiceVoidOutcome.RetryReady:
+                    MessageBox.Show(
+                        this,
+                        "先前待確認狀態已解除，本次沒有自動重送。\n人工確認仍保留，可重新確認後再次送出。",
+                        "請重新確認",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    break;
+            }
+            ReloadAll();
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "人工確認未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            SetManualReviewBusy(false);
+        }
+    }
+
+    private void CancelSelectedManualReview()
+    {
+        var issue = SelectedManualReview();
+        if (issue is null || manualReviewBusy) return;
+        if (MessageBox.Show(
+                this,
+                "確定取消並退回這筆作廢申請？\n\n不會向光貿送出作廢，發票會維持「已開立」。",
+                "取消退回",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        using var login = new EmployeeAdminLoginForm(repository.Employees, "人工確認－管理員驗證");
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+
+        SetManualReviewBusy(true);
+        try
+        {
+            voidWorkflow.CancelManualReview(
+                issue,
+                login.AuthenticatedEmployee.EmployeeNo,
+                login.AuthenticatedPassword);
+            MessageBox.Show(this, "已取消退回；未向光貿送出作廢。", "已取消",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ReloadAll();
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "取消退回失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            SetManualReviewBusy(false);
+        }
+    }
+
+    private InvoiceSyncIssue? SelectedManualReview()
+    {
+        if (issueList.SelectedItems.Count != 1 || issueList.SelectedItems[0].Tag is not InvoiceSyncIssue issue)
+            return null;
+        return issue.ResolvedUtc is null && IsManualReview(issue) ? issue : null;
+    }
+
+    private void SetManualReviewBusy(bool busy)
+    {
+        manualReviewBusy = busy;
+        issueList.Enabled = !busy;
+        UpdateIssueButtons();
     }
 
     private void DeleteCheckedFailed()
@@ -367,10 +498,16 @@ internal sealed class SyncIssuesForm : Form
             .ToArray();
     }
 
-    private void UpdateResolveButton()
+    private void UpdateIssueButtons()
     {
-        resolve.Enabled = issueList.SelectedItems.Count == 1 &&
-                          issueList.SelectedItems[0].Tag is InvoiceSyncIssue { ResolvedUtc: null };
+        var selected = issueList.SelectedItems.Count == 1 && issueList.SelectedItems[0].Tag is InvoiceSyncIssue issue
+            ? issue
+            : null;
+        var unresolved = selected is { ResolvedUtc: null };
+        var manual = unresolved && selected is not null && IsManualReview(selected);
+        resolve.Enabled = !manualReviewBusy && unresolved && !manual;
+        approveManualReview.Enabled = !manualReviewBusy && manual;
+        cancelManualReview.Enabled = !manualReviewBusy && manual;
     }
 
     private void UpdateFailedButtons()
@@ -385,8 +522,12 @@ internal sealed class SyncIssuesForm : Form
     private string IssueState(InvoiceSyncIssue issue)
     {
         if (issue.ResolvedUtc is not null) return "已解決";
+        if (IsManualReview(issue)) return "人工確認";
         return lastRead is not null && issue.CreatedUtc <= lastRead.Value ? "已讀" : "未讀";
     }
+
+    private static bool IsManualReview(InvoiceSyncIssue issue) =>
+        string.Equals(issue.IssueType, InvoiceVoidIssueTypes.ManualReview, StringComparison.Ordinal);
 
     private string CurrentAccountKey()
     {
@@ -536,8 +677,13 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("上傳問題狀態欄未位於最右側");
         if (deleteFailed.Text != "刪除")
             throw new InvalidOperationException("未勾選開立失敗紀錄時刪除按鈕不應顯示 (0)");
+        if (!UiControls.HasLogicalSize(approveManualReview, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
+            !UiControls.HasLogicalSize(cancelManualReview, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
+            throw new InvalidOperationException("人工確認按鈕未使用標準尺寸");
         if (FriendlyFailureReason("API code 3040122: BuyerIdentifier invalid") != "買受人統編資料格式不正確")
             throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
+        if (DisplayType(InvoiceVoidIssueTypes.ManualReview) != "紙本作廢確認")
+            throw new InvalidOperationException("人工確認類型顯示不正確");
     }
 
     private static string DisplayType(string type) => type switch
@@ -549,6 +695,7 @@ internal sealed class SyncIssuesForm : Form
         InvoiceSyncIssueTypes.ReconciliationFailed => "同步比對失敗",
         InvoiceSyncIssueTypes.AmbiguousMatch => "本機資料無法唯一對應",
         InvoiceSyncIssueTypes.LocalWriteFailed => "本機資料庫寫入失敗",
+        InvoiceVoidIssueTypes.ManualReview => "紙本作廢確認",
         _ => type,
     };
 }

@@ -16,11 +16,13 @@ internal sealed class RecordDetailForm : Form
     private readonly InvoiceRecord record;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
+    private readonly EmployeeVoidWorkflowService voidWorkflow;
     private readonly bool paperInvoice;
     private readonly string sellerCompanyName;
     private readonly Button viewPdf = UiControls.StandardButton("檢視 PDF");
     private readonly Button printPdf = UiControls.StandardButton("列印發票");
     private readonly Button changePrinter = UiControls.StandardButton("更換印表機…");
+    private readonly Button voidInvoice = UiControls.StandardButton("作廢");
     private readonly Button close = UiControls.StandardButton("關閉");
     private readonly TableLayoutPanel details = new()
     {
@@ -92,6 +94,7 @@ internal sealed class RecordDetailForm : Form
     private Bitmap? activePreview;
     private bool previewLoading;
     private bool pdfBusy;
+    private bool voidBusy;
 
     public RecordDetailForm(
         InvoiceRecord record,
@@ -102,6 +105,7 @@ internal sealed class RecordDetailForm : Form
         this.record = record;
         this.repository = repository;
         this.service = service;
+        voidWorkflow = new EmployeeVoidWorkflowService(repository);
         this.sellerCompanyName = sellerCompanyName.Trim();
         paperInvoice = string.Equals(record.Delivery, InvoiceService.DeliveryPaper, StringComparison.Ordinal);
         Text = $"發票詳細資訊－{record.InvoiceNumber}";
@@ -181,6 +185,14 @@ internal sealed class RecordDetailForm : Form
             actions.Controls.Add(printPdf);
             actions.Controls.Add(changePrinter);
         }
+        if (CanShowVoidAction())
+        {
+            var manualReview = voidWorkflow.ManualReviewFor(record) is not null;
+            voidInvoice.Text = manualReview ? "人工確認中" : "作廢";
+            voidInvoice.Enabled = !manualReview;
+            voidInvoice.Click += async (_, _) => await StartVoidAsync();
+            actions.Controls.Add(voidInvoice);
+        }
         actions.Controls.Add(close);
 
         root.Controls.Add(content, 0, 0);
@@ -192,6 +204,116 @@ internal sealed class RecordDetailForm : Form
         previewMessageHost.Layout += (_, _) => LayoutPreviewMessage();
         paperPreviewHost.Layout += (_, _) => LayoutA4Preview();
         FormClosed += (_, _) => previewCancellation.Cancel();
+    }
+
+    private bool CanShowVoidAction() =>
+        record.InvoiceNumber.Trim().Length != 0 &&
+        record.InvoiceState == InvoiceStates.Opened &&
+        record.UploadStatus == UploadStatuses.Complete;
+
+    private async Task StartVoidAsync()
+    {
+        if (voidBusy) return;
+        using var reasonForm = new VoidReasonForm();
+        if (reasonForm.ShowDialog(this) != DialogResult.OK) return;
+        var reason = reasonForm.Reason;
+
+        while (!IsDisposed)
+        {
+            using var confirm = new VoidConfirmationForm(paperInvoice);
+            if (confirm.ShowDialog(this) != DialogResult.OK) return;
+
+            SetVoidBusy(true);
+            try
+            {
+                var result = await voidWorkflow.SubmitAsync(
+                    record,
+                    confirm.EnteredInvoiceNumber,
+                    confirm.EmployeeNo,
+                    confirm.Password,
+                    reason,
+                    confirm.PaperReceiptState);
+
+                if (result.ManualReviewRequired)
+                {
+                    MessageBox.Show(
+                        this,
+                        "已送交人工確認，尚未向光貿送出作廢。\n\n請由管理員或超級管理員至「上傳問題」處理。",
+                        "人工確認",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    DialogResult = DialogResult.OK;
+                    Close();
+                    return;
+                }
+
+                var voidResult = result.VoidResult ?? throw new InvalidDataException("作廢流程缺少處理結果");
+                switch (voidResult.Outcome)
+                {
+                    case InvoiceVoidOutcome.Confirmed:
+                    case InvoiceVoidOutcome.AlreadyVoided:
+                        MessageBox.Show(this, "光貿已確認發票作廢完成。", "作廢完成",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        DialogResult = DialogResult.OK;
+                        Close();
+                        return;
+                    case InvoiceVoidOutcome.PendingConfirmation:
+                        MessageBox.Show(
+                            this,
+                            "作廢請求已送出，但光貿尚未確認最終結果。\n\n目前狀態為「待確認」，系統不會盲目重送。",
+                            "作廢結果待確認",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+                        DialogResult = DialogResult.OK;
+                        Close();
+                        return;
+                    case InvoiceVoidOutcome.Rejected:
+                        MessageBox.Show(this, voidResult.Message, "未送出／作廢未完成",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    case InvoiceVoidOutcome.RetryReady:
+                        MessageBox.Show(
+                            this,
+                            "先前的待確認狀態已解除，本次沒有自動重送。\n請重新開啟發票詳細資訊後再次確認是否作廢。",
+                            "請重新確認",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                        DialogResult = DialogResult.OK;
+                        Close();
+                        return;
+                }
+            }
+            catch (EmployeeVoidAuthenticationDelayException error)
+            {
+                MessageBox.Show(this, error.Message, "驗證暫停", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (InvalidOperationException error) when (
+                error.Message == "員工編號或密碼錯誤" ||
+                error.Message == "發票號碼不符，請重新確認")
+            {
+                MessageBox.Show(this, error.Message, "驗證失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception error)
+            {
+                MessageBox.Show(this, error.Message, "作廢未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            finally
+            {
+                if (!IsDisposed) SetVoidBusy(false);
+            }
+        }
+    }
+
+    private void SetVoidBusy(bool busy)
+    {
+        voidBusy = busy;
+        voidInvoice.Enabled = !busy;
+        close.Enabled = !busy;
+        viewPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
+        printPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
+        changePrinter.Enabled = !busy;
+        voidInvoice.Text = busy ? "作廢確認中…" : "作廢";
     }
 
     private Control BuildPaperContent(InvoicePdfEligibility eligibility)
@@ -764,6 +886,16 @@ internal sealed class RecordDetailForm : Form
             Path.Combine(repository.CacheDirectory, "WebView2"));
         viewer.PerformLayout();
         viewer.VerifySmokeLayout();
+
+        using var reason = new VoidReasonForm();
+        reason.PerformLayout();
+        reason.VerifySmokeLayout();
+        using var confirmPaper = new VoidConfirmationForm(paperInvoice: true);
+        confirmPaper.PerformLayout();
+        confirmPaper.VerifySmokeLayout();
+        using var confirmCarrier = new VoidConfirmationForm(paperInvoice: false);
+        confirmCarrier.PerformLayout();
+        confirmCarrier.VerifySmokeLayout();
     }
 
     private void VerifyLayout(bool companyBuyer, bool carrier)

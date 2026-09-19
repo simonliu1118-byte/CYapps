@@ -78,6 +78,9 @@ jobs:
       - name: Run void core tests
         run: dotnet run --project tests/CYInvoice.Void.Tests/CYInvoice.Void.Tests.csproj -c Release --no-build
 
+      - name: Run employee void workflow tests
+        run: dotnet run --project tests/CYInvoice.VoidWorkflow.Tests/CYInvoice.VoidWorkflow.Tests.csproj -c Release --no-build
+
       - name: Run SQLite migration tests
         run: dotnet run --project tests/CYInvoice.SqliteMigration.Tests/CYInvoice.SqliteMigration.Tests.csproj -c Release --no-build
 
