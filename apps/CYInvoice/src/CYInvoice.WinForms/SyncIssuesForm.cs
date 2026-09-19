@@ -343,7 +343,10 @@ internal sealed class SyncIssuesForm : Form
         SetManualReviewBusy(true);
         try
         {
-            var result = await voidWorkflow.ApproveManualReviewAsync(issue, login.AuthenticatedEmployee.EmployeeNo);
+            var result = await voidWorkflow.ApproveManualReviewAsync(
+                issue,
+                login.AuthenticatedEmployee.EmployeeNo,
+                login.AuthenticatedPassword);
             switch (result.Outcome)
             {
                 case InvoiceVoidOutcome.Confirmed:
@@ -407,7 +410,10 @@ internal sealed class SyncIssuesForm : Form
         SetManualReviewBusy(true);
         try
         {
-            voidWorkflow.CancelManualReview(issue, login.AuthenticatedEmployee.EmployeeNo);
+            voidWorkflow.CancelManualReview(
+                issue,
+                login.AuthenticatedEmployee.EmployeeNo,
+                login.AuthenticatedPassword);
             MessageBox.Show(this, "已取消退回；未向光貿送出作廢。", "已取消",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             ReloadAll();
