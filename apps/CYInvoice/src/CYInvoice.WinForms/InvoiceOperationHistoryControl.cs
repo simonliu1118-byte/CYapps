@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class InvoiceOperationHistoryControl : UserControl
 {
-    private readonly ListView list = new BufferedListView
+    private readonly ListView list = new HistoryListView
     {
         Dock = DockStyle.Fill,
         View = View.Details,
@@ -112,6 +112,16 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
 
     internal sealed record VoidHistoryItem(string InvoiceNumber, string CancelDate, ParsedVoidReason? ParsedReason);
     internal sealed record AllowanceHistoryItem(InvoiceAllowanceResult Allowance);
+
+    private sealed class HistoryListView : ListView
+    {
+        public HistoryListView()
+        {
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+            UpdateStyles();
+        }
+    }
 }
 
 internal sealed class VoidHistoryDetailForm : Form
