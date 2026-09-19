@@ -27,6 +27,7 @@ internal sealed class EmployeeAdminLoginForm : Form
     }
 
     public EmployeeAccount? AuthenticatedEmployee { get; private set; }
+    public string AuthenticatedPassword => AuthenticatedEmployee is null ? string.Empty : password.Text;
 
     private void BuildLayout()
     {
