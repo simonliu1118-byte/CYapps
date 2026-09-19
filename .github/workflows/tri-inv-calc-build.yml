@@ -37,5 +37,5 @@ jobs:
         with:
           name: TriINVCalc-${{ github.sha }}
           path: apps/TriINVCalc/dist/*.zip
-          retention-days: 14
+          retention-days: 3
           if-no-files-found: error
