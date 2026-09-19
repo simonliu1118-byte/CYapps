@@ -65,7 +65,7 @@ internal static class EmployeeStoreTests
     {
         using var temporary = new EmployeeTemporaryDirectory();
         var store = new EmployeeStore(temporary.Path);
-        var setup = store.CreateFirstSuperAdmin("3015", "Simon", "", "initial-password");
+        var setup = store.CreateFirstSuperAdmin("3015", "Simon", "simon@example.com", "initial-password");
 
         EmployeeEqual(EmployeeRoles.SuperAdmin, setup.Employee.Role);
         EmployeeEqual(true, setup.Employee.Enabled);
@@ -110,10 +110,10 @@ internal static class EmployeeStoreTests
     {
         using var temporary = new EmployeeTemporaryDirectory();
         var store = new EmployeeStore(temporary.Path);
-        store.CreateFirstSuperAdmin("3015", "Simon", "", "super-password");
-        store.CreateEmployee("3015", "3020", "管理員甲", "", "admin-a", EmployeeRoles.Admin);
-        store.CreateEmployee("3015", "3030", "管理員乙", "", "admin-b", EmployeeRoles.Admin);
-        store.CreateEmployee("3015", "3040", "一般員工", "", "employee", EmployeeRoles.Employee);
+        store.CreateFirstSuperAdmin("3015", "Simon", "simon@example.com", "super-password");
+        store.CreateEmployee("3015", "3020", "管理員甲", "admin-a@example.com", "admin-a", EmployeeRoles.Admin);
+        store.CreateEmployee("3015", "3030", "管理員乙", "admin-b@example.com", "admin-b", EmployeeRoles.Admin);
+        store.CreateEmployee("3015", "3040", "一般員工", "employee@example.com", "employee", EmployeeRoles.Employee);
 
         store.SetRole("3020", "3030", EmployeeRoles.Employee);
         EmployeeEqual(EmployeeRoles.Employee, store.Find("3030")?.Role);
@@ -145,20 +145,24 @@ internal static class EmployeeStoreTests
     {
         using var temporary = new EmployeeTemporaryDirectory();
         var store = new EmployeeStore(temporary.Path);
-        store.CreateFirstSuperAdmin("3015", "Simon", "", "super-password");
+        EmployeeThrows<InvalidOperationException>(() =>
+            store.CreateFirstSuperAdmin("3015", "Simon", "", "super-password"));
+        store.CreateFirstSuperAdmin("3015", "Simon", "simon@example.com", "super-password");
 
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateFirstSuperAdmin("9999", "第二超管", "", "password"));
+            store.CreateFirstSuperAdmin("9999", "第二超管", "second@example.com", "password"));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "123", "錯誤編號", "", "password"));
+            store.CreateEmployee("3015", "123", "錯誤編號", "bad@example.com", "password"));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "ABCD", "錯誤編號", "", "password"));
+            store.CreateEmployee("3015", "ABCD", "錯誤編號", "bad@example.com", "password"));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "3050", "", "", "password"));
+            store.CreateEmployee("3015", "3050", "", "employee@example.com", "password"));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "3050", "員工", "", "", EmployeeRoles.Employee));
+            store.CreateEmployee("3015", "3050", "員工", "", "password"));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "3050", "員工", "", "password", EmployeeRoles.SuperAdmin));
+            store.CreateEmployee("3015", "3050", "員工", "employee@example.com", "", EmployeeRoles.Employee));
+        EmployeeThrows<InvalidOperationException>(() =>
+            store.CreateEmployee("3015", "3050", "員工", "employee@example.com", "password", EmployeeRoles.SuperAdmin));
     }
 
     public static void LegacyManagementPasswordCanBeRetired()
