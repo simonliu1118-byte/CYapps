@@ -86,7 +86,7 @@ var tests = new (string Name, Action Run)[]
     ("production health check returns the API company name", () => TestProductionHealthCompanyNameAsync().GetAwaiter().GetResult()),
     ("decimal issue fields serialize as JSON numbers", () => TestDecimalIssueNumbersAsync().GetAwaiter().GetResult()),
     ("success without invoice number is unknown", () => TestMissingInvoiceNumberAsync().GetAwaiter().GetResult()),
-    ("production stays locked before administrator setup", () => TestProductionLockAsync().GetAwaiter().GetResult()),
+    ("production uses configured credentials without legacy admin password", () => TestProductionWithoutLegacyAdminPasswordAsync().GetAwaiter().GetResult()),
     ("xlsx resolves the first logical worksheet", TestXlsxRelationship),
     ("xlsx reads an exact named worksheet", TestXlsxNamedWorksheet),
     ("xlsx column references continue after Z", TestXlsxColumns),
@@ -336,18 +336,16 @@ static void TestSettingsSecrets()
     using var temporary = new TemporaryDirectory();
     var store = new SettingsStore(temporary.Path, new TestProtector());
     var settings = store.LoadOrCreate();
-    store.SetAdminPassword(settings, "TEST-ADMIN-PASSWORD-NOT-REAL");
     store.SetMoPassword(settings, "TEST-MO-PASSWORD-NOT-REAL");
     store.SetProductionAppKey(settings, "TEST-APP-KEY-NOT-REAL");
     settings.ProductionInvoice = "12345675";
     settings.Environment = Environments.Production;
     store.Save(settings);
     var json = File.ReadAllText(System.IO.Path.Combine(temporary.Path, "settings.json"));
-    foreach (var secret in new[] { "TEST-ADMIN-PASSWORD-NOT-REAL", "TEST-MO-PASSWORD-NOT-REAL", "TEST-APP-KEY-NOT-REAL" })
+    foreach (var secret in new[] { "TEST-MO-PASSWORD-NOT-REAL", "TEST-APP-KEY-NOT-REAL" })
         if (json.Contains(secret, StringComparison.Ordinal)) throw new InvalidOperationException("plaintext secret was stored");
     Equal("TEST-MO-PASSWORD-NOT-REAL", store.MoPassword(settings));
     Equal("TEST-APP-KEY-NOT-REAL", store.ProductionAppKey(settings));
-    Equal(true, SettingsStore.CheckAdminPassword(settings, "TEST-ADMIN-PASSWORD-NOT-REAL"));
 }
 
 static void TestCorruptInvoiceJson()
@@ -591,7 +589,6 @@ static async Task TestEnvironmentIssueIsolationAsync()
 
     await service.IssueManualAsync(SafeDraft());
     var settings = repository.Settings.LoadOrCreate();
-    repository.Settings.SetAdminPassword(settings, "TEST-ADMIN-PASSWORD-NOT-REAL");
     settings.Environment = Environments.Production;
     settings.ProductionInvoice = "12345675";
     repository.Settings.SetProductionAppKey(settings, "TEST-APP-KEY-NOT-REAL");
@@ -790,7 +787,6 @@ static async Task TestProductionHealthCompanyNameAsync()
     };
     var (service, repository) = TestService(temporary.Path, fake);
     var settings = repository.Settings.LoadOrCreate();
-    repository.Settings.SetAdminPassword(settings, "test-admin-password");
     settings.Environment = Environments.Production;
     settings.ProductionInvoice = "12345675";
     repository.Settings.SetProductionAppKey(settings, "TEST-KEY-NOT-REAL");
@@ -838,20 +834,24 @@ static async Task TestMissingInvoiceNumberAsync()
     Equal(0, fake.QueryCalls);
 }
 
-static async Task TestProductionLockAsync()
+static async Task TestProductionWithoutLegacyAdminPasswordAsync()
 {
     using var temporary = new TemporaryDirectory();
-    var fake = new FakeGateway();
+    var fake = new FakeGateway
+    {
+        IssueResponse = new IssueResponse(0, "", "PX12345678", 0, ""),
+        QueryResponse = ConfirmedQuery("20260905001", "PX12345678", 105, 0, 105, 1),
+    };
     var (service, repository) = TestService(temporary.Path, fake);
     var settings = repository.Settings.LoadOrCreate();
     settings.Environment = Environments.Production;
     settings.ProductionInvoice = "12345675";
     repository.Settings.SetProductionAppKey(settings, "TEST-KEY-NOT-REAL");
     repository.Settings.Save(settings);
-    var error = await ThrowsAsync<InvalidOperationException>(() => service.IssueManualAsync(SafeDraft()));
-    if (!error.Message.Contains("正式環境目前已鎖定", StringComparison.Ordinal))
-        throw new InvalidOperationException("production did not report the administrator lock");
-    Equal(0, fake.IssueCalls);
+    var result = await service.IssueManualAsync(SafeDraft());
+    Equal(true, result.Opened);
+    Equal(1, fake.IssueCalls);
+    Equal("20260905001", fake.LastIssue!.OrderId);
 }
 
 static void TestXlsxColumns()

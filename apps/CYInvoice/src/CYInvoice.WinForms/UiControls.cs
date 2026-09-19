@@ -23,6 +23,24 @@ internal class NoFocusCueButton : Button
     }
 }
 
+internal sealed class BufferedTableLayoutPanel : TableLayoutPanel
+{
+    public BufferedTableLayoutPanel()
+    {
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    }
+}
+
+internal sealed class BufferedFlowLayoutPanel : FlowLayoutPanel
+{
+    public BufferedFlowLayoutPanel()
+    {
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    }
+}
+
 internal sealed class NoFocusCueTabControl : TabControl
 {
     public NoFocusCueTabControl() => TabStop = false;
@@ -53,6 +71,7 @@ internal static class UiControls
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
     public static Label Label(string text, ContentAlignment alignment = ContentAlignment.MiddleLeft) => new()
     {
         Text = text, Dock = DockStyle.Fill, TextAlign = alignment, AutoEllipsis = true, Margin = new Padding(3),
@@ -68,6 +87,7 @@ internal static class UiControls
 
     public static Button StandardButton(string text)
     {
+        if (text == "帳戶管理") text = "帳號管理";
         var button = new NoFocusCueButton
         {
             Text = text,
@@ -77,9 +97,26 @@ internal static class UiControls
             AutoSize = false,
             UseVisualStyleBackColor = true,
         };
-        if (text is "作廢" or "確認作廢") ApplyDangerButtonTheme(button);
+        if (IsDangerText(text)) ApplyDangerButtonTheme(button);
         return button;
     }
+
+    public static Button DangerButton(string text)
+    {
+        var button = new NoFocusCueButton
+        {
+            Text = text,
+            Width = StandardButtonWidth,
+            Height = StandardButtonHeight,
+            Margin = new Padding(6, 2, 6, 2),
+            AutoSize = false,
+            UseVisualStyleBackColor = true,
+        };
+        ApplyDangerButtonTheme(button);
+        return button;
+    }
+
+    private static bool IsDangerText(string text) => text is "作廢" or "確認作廢" or "確認送出作廢";
 
     private static void ApplyDangerButtonTheme(Button button)
     {

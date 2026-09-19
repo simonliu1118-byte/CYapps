@@ -16,18 +16,26 @@ internal sealed class MainForm : Form
     private const int HtBorder = 18;
     private const int SyncIntervalMilliseconds = 5 * 60 * 1000;
     private const int HeaderButtonGap = 6;
+    private const int EnvironmentTagWidth = 210;
+    private const int EnvironmentTagHeight = 34;
+    private const int BannerSideWidth = 450;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly InvoiceSyncCoordinator syncCoordinator;
+    private readonly AmegoConnectivityProbe connectivityProbe = new();
     private readonly CancellationTokenSource syncLifetime = new();
     private readonly System.Windows.Forms.Timer syncTimer = new() { Interval = SyncIntervalMilliseconds };
     private readonly InvoiceEntryControl invoicePage;
     private readonly RecordsControl recordsPage;
     private readonly Panel banner = new();
     private readonly TableLayoutPanel bannerLayout = new();
+    private readonly FlowLayoutPanel environmentTags = new();
     private readonly Label environmentBadgeLabel = new();
+    private readonly Label environmentWarningLabel = new();
     private readonly Label environmentCompanyLabel = new();
     private readonly Label apiLabel = new();
+    private readonly ToolTip apiToolTip = new();
+    private readonly ToolTip environmentToolTip = new();
     private readonly TabControl tabs = new NoFocusCueTabControl();
     private readonly Panel tabHost = new();
     private readonly TabPage invoiceTab = new("開立發票");
@@ -103,18 +111,26 @@ internal sealed class MainForm : Form
         bannerLayout.Padding = Padding.Empty;
         bannerLayout.ColumnCount = 3;
         bannerLayout.RowCount = 1;
-        bannerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 270));
+        bannerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, BannerSideWidth));
         bannerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        bannerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 270));
+        bannerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, BannerSideWidth));
         bannerLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        environmentBadgeLabel.AutoSize = true;
-        environmentBadgeLabel.Anchor = AnchorStyles.Left;
-        environmentBadgeLabel.Margin = new Padding(12, 6, 0, 6);
-        environmentBadgeLabel.Padding = new Padding(10, 4, 10, 4);
-        environmentBadgeLabel.BorderStyle = BorderStyle.FixedSingle;
-        environmentBadgeLabel.TextAlign = ContentAlignment.MiddleCenter;
-        environmentBadgeLabel.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
+        environmentTags.Dock = DockStyle.Fill;
+        environmentTags.FlowDirection = FlowDirection.LeftToRight;
+        environmentTags.WrapContents = false;
+        environmentTags.Margin = Padding.Empty;
+        environmentTags.Padding = new Padding(12, 6, 0, 0);
+        ConfigureEnvironmentTag(environmentBadgeLabel);
+        ConfigureEnvironmentTag(environmentWarningLabel);
+        environmentBadgeLabel.Margin = Padding.Empty;
+        environmentWarningLabel.Margin = new Padding(6, 0, 0, 0);
+        environmentWarningLabel.Text = "⚠ 正式設定異常";
+        environmentWarningLabel.BackColor = Color.FromArgb(255, 245, 210);
+        environmentWarningLabel.ForeColor = Color.FromArgb(166, 92, 0);
+        environmentWarningLabel.Visible = false;
+        environmentTags.Controls.Add(environmentBadgeLabel);
+        environmentTags.Controls.Add(environmentWarningLabel);
 
         environmentCompanyLabel.Dock = DockStyle.Fill;
         environmentCompanyLabel.Margin = Padding.Empty;
@@ -127,7 +143,7 @@ internal sealed class MainForm : Form
         apiLabel.Margin = Padding.Empty;
         apiLabel.TextAlign = ContentAlignment.MiddleRight;
         apiLabel.Padding = new Padding(0, 0, 14, 0);
-        bannerLayout.Controls.Add(environmentBadgeLabel, 0, 0);
+        bannerLayout.Controls.Add(environmentTags, 0, 0);
         bannerLayout.Controls.Add(environmentCompanyLabel, 1, 0);
         bannerLayout.Controls.Add(apiLabel, 2, 0);
         banner.Controls.Add(bannerLayout);
@@ -166,6 +182,15 @@ internal sealed class MainForm : Form
         root.Controls.Add(copyrightLabel, 0, 2);
         Controls.Add(root);
         PositionHeaderButtons();
+    }
+
+    private void ConfigureEnvironmentTag(Label label)
+    {
+        label.AutoSize = false;
+        label.Size = new Size(EnvironmentTagWidth, EnvironmentTagHeight);
+        label.BorderStyle = BorderStyle.FixedSingle;
+        label.TextAlign = ContentAlignment.MiddleCenter;
+        label.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
     }
 
     private static void ConfigureHeaderButton(Button button, Action action)
@@ -260,45 +285,11 @@ internal sealed class MainForm : Form
 
     private bool EnsureInitialSetup()
     {
-        if (!repository.Employees.HasEmployees())
-        {
-            using var setup = new InitialSetupForm(repository);
-            if (setup.ShowDialog(this) != DialogResult.OK)
-            {
-                Close();
-                return false;
-            }
-        }
-
-        var settings = repository.Settings.LoadOrCreate();
-        if (MoPasswordReady(settings)) return true;
-        MessageBox.Show(this,
-            "MO店+ Excel 密碼尚未設定，或無法在目前 Windows 帳號解密。請由管理員重新輸入。",
-            "需要補齊設定",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Warning);
-        if (!TryAuthenticateAdministrator("補齊設定驗證", out _))
-        {
-            Close();
-            return false;
-        }
-        using var form = new SettingsForm(repository, requireMoPassword: true);
-        if (form.ShowDialog(this) == DialogResult.OK && MoPasswordReady(repository.Settings.LoadOrCreate())) return true;
+        if (repository.Employees.HasEmployees()) return true;
+        using var setup = new InitialSetupForm(repository);
+        if (setup.ShowDialog(this) == DialogResult.OK) return true;
         Close();
         return false;
-    }
-
-    private bool MoPasswordReady(Settings settings)
-    {
-        if (settings.MoPasswordEncrypted.Length == 0) return false;
-        try
-        {
-            return !string.IsNullOrWhiteSpace(repository.Settings.MoPassword(settings));
-        }
-        catch (Exception)
-        {
-            return false;
-        }
     }
 
     internal void VerifySmokeLayout()
@@ -327,10 +318,12 @@ internal sealed class MainForm : Form
             banner.PointToScreen(Point.Empty).X;
         if (Math.Abs(bannerCenter - companyCenter) > 1 ||
             bannerLayout.GetColumnWidths()[0] != bannerLayout.GetColumnWidths()[2] ||
-            bannerLayout.GetColumn(environmentBadgeLabel) != 0 ||
+            bannerLayout.GetColumn(environmentTags) != 0 ||
             bannerLayout.GetColumn(environmentCompanyLabel) != 1 ||
-            bannerLayout.GetColumn(apiLabel) != 2)
-            throw new InvalidOperationException("標題列未使用左右等寬欄位，或公司名稱未固定在正中央");
+            bannerLayout.GetColumn(apiLabel) != 2 ||
+            environmentBadgeLabel.Width != environmentWarningLabel.Width ||
+            environmentBadgeLabel.Width != EnvironmentTagWidth)
+            throw new InvalidOperationException("標題列環境標籤、警告標籤或公司名稱未依指定方式排列");
         PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
         if (settingsButton.Right != tabHost.ClientSize.Width - HeaderButtonGap ||
@@ -438,13 +431,18 @@ internal sealed class MainForm : Form
             environmentBadgeLabel.Text = "正式環境｜將開立正式發票";
             environmentBadgeLabel.BackColor = Color.FromArgb(255, 238, 238);
             environmentBadgeLabel.ForeColor = Color.FromArgb(166, 32, 32);
-            environmentCompanyLabel.Text = EnvironmentCompanyText(settings.Environment, settings.ProductionInvoice, string.Empty);
+            var problem = ProductionConfigurationProblem(settings);
+            SetProductionWarning(problem);
+            environmentCompanyLabel.Text = problem.Length == 0
+                ? EnvironmentCompanyText(settings.Environment, settings.ProductionInvoice, string.Empty)
+                : "正式公司設定未完成";
         }
         else
         {
             environmentBadgeLabel.Text = "測試環境｜不會開立正式發票";
             environmentBadgeLabel.BackColor = Color.FromArgb(255, 247, 221);
             environmentBadgeLabel.ForeColor = Color.FromArgb(166, 92, 0);
+            SetProductionWarning(string.Empty);
             environmentCompanyLabel.Text = "光貿測試公司 12345678";
         }
     }
@@ -458,22 +456,113 @@ internal sealed class MainForm : Form
             : AmegoDefaults.TestInvoice;
         apiLabel.Text = "● API 檢查中";
         apiLabel.ForeColor = Color.FromArgb(196, 126, 0);
+        apiLabel.AccessibleDescription = string.Empty;
+        apiToolTip.SetToolTip(apiLabel, "正在檢查光貿 API 服務連線");
+
         try
         {
-            var companyName = await service.HealthCheckAsync();
-            if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
-            environmentCompanyLabel.Text = EnvironmentCompanyText(requestedEnvironment, requestedInvoice, companyName, lookupCompleted: true);
-            apiLabel.Text = "● API 正常";
-            apiLabel.ForeColor = Color.FromArgb(0, 155, 72);
+            await connectivityProbe.CheckAsync(syncLifetime.Token);
+        }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        {
+            return;
         }
         catch (Exception error)
         {
             if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
-            environmentCompanyLabel.Text = EnvironmentCompanyText(requestedEnvironment, requestedInvoice, string.Empty, lookupFailed: true);
+            var details = ExceptionDetails(error);
             apiLabel.Text = "● API 異常";
             apiLabel.ForeColor = Color.FromArgb(196, 0, 0);
-            apiLabel.AccessibleDescription = error.Message;
+            apiLabel.AccessibleDescription = details;
+            apiToolTip.SetToolTip(apiLabel, "光貿 API 連線異常\n" + details);
+            return;
         }
+
+        if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
+        apiLabel.Text = "● API 正常";
+        apiLabel.ForeColor = Color.FromArgb(0, 155, 72);
+        apiLabel.AccessibleDescription = "光貿 API 服務連線正常";
+        apiToolTip.SetToolTip(apiLabel, "光貿 API 服務連線正常");
+
+        if (requestedEnvironment != Environments.Production)
+        {
+            environmentCompanyLabel.Text = "光貿測試公司 12345678";
+            return;
+        }
+
+        var configurationProblem = ProductionConfigurationProblem(requestedSettings);
+        if (configurationProblem.Length != 0)
+        {
+            SetProductionWarning(configurationProblem);
+            environmentCompanyLabel.Text = "正式公司設定未完成";
+            return;
+        }
+
+        try
+        {
+            var companyName = await service.HealthCheckAsync(syncLifetime.Token);
+            if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
+            environmentCompanyLabel.Text = EnvironmentCompanyText(
+                requestedEnvironment,
+                requestedInvoice,
+                companyName,
+                lookupCompleted: true);
+            SetProductionWarning(companyName.Trim().Length == 0
+                ? "公司統編查詢完成，但光貿未回傳公司名稱。請確認正式環境統編與 App Key。"
+                : string.Empty);
+        }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
+            environmentCompanyLabel.Text = EnvironmentCompanyText(
+                requestedEnvironment,
+                requestedInvoice,
+                string.Empty,
+                lookupFailed: true);
+            SetProductionWarning("正式公司資料查詢失敗。\n" + ExceptionDetails(error));
+        }
+    }
+
+    private string ProductionConfigurationProblem(Settings settings)
+    {
+        if (settings.Environment != Environments.Production) return string.Empty;
+        var invoice = settings.ProductionInvoice.Trim();
+        if (invoice.Length != 8 || !invoice.All(character => character is >= '0' and <= '9'))
+            return "正式公司統編尚未設定或不是 8 碼數字。";
+        if (settings.ProductionAppKeyEncrypted.Length == 0)
+            return "正式環境尚未設定 App Key。";
+        try
+        {
+            if (string.IsNullOrWhiteSpace(repository.Settings.ProductionAppKey(settings)))
+                return "正式環境 App Key 為空白。";
+        }
+        catch (Exception error)
+        {
+            return "正式環境 App Key 無法解密。\n" + ExceptionDetails(error);
+        }
+        return string.Empty;
+    }
+
+    private void SetProductionWarning(string details)
+    {
+        details = details.Trim();
+        environmentWarningLabel.Visible = details.Length != 0;
+        environmentWarningLabel.AccessibleDescription = details;
+        environmentToolTip.SetToolTip(environmentWarningLabel, details);
+    }
+
+    private static string ExceptionDetails(Exception error)
+    {
+        var lines = new List<string>();
+        for (Exception? current = error; current is not null; current = current.InnerException)
+        {
+            var text = current.Message.Trim();
+            if (text.Length != 0 && !lines.Contains(text, StringComparer.Ordinal)) lines.Add(text);
+        }
+        return lines.Count == 0 ? error.GetType().Name : string.Join(Environment.NewLine, lines);
     }
 
     private async Task RunStartupSyncAsync()
@@ -549,6 +638,8 @@ internal sealed class MainForm : Form
         {
             StopBackgroundSync();
             syncTimer.Dispose();
+            apiToolTip.Dispose();
+            environmentToolTip.Dispose();
         }
         base.Dispose(disposing);
     }
