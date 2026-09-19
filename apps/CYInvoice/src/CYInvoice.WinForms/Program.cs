@@ -15,18 +15,6 @@ internal static class ApplicationIcon
     public static Icon Load() => (Icon)Current.Value.Clone();
 }
 
-internal static class DialogIconPolicy
-{
-    public static void ApplyToOpenForms()
-    {
-        foreach (Form form in Application.OpenForms)
-        {
-            if (form is MainForm) continue;
-            form.ShowIcon = false;
-        }
-    }
-}
-
 internal static class Program
 {
     [STAThread]
@@ -36,14 +24,12 @@ internal static class Program
         try
         {
             ApplicationConfiguration.Initialize();
-            Application.Idle += (_, _) => DialogIconPolicy.ApplyToOpenForms();
             if (smokeTest)
             {
                 using var form = new MainForm(startupSmokeTest: true);
                 form.Show();
                 form.PerformLayout();
                 Application.DoEvents();
-                DialogIconPolicy.ApplyToOpenForms();
                 form.VerifySmokeLayout();
                 form.Close();
 
@@ -52,7 +38,6 @@ internal static class Program
                 syncIssues.Show();
                 syncIssues.PerformLayout();
                 Application.DoEvents();
-                DialogIconPolicy.ApplyToOpenForms();
                 syncIssues.VerifySmokeLayout();
                 syncIssues.Close();
                 return;
