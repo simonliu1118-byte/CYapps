@@ -50,4 +50,4 @@ jobs:
           name: CYEnvelope-v${{ env.CYENVELOPE_VERSION }}-windows-x64-run${{ github.run_number }}
           path: apps/CYEnvelope/dist/CYEnvelope_V*.zip
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
