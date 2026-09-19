@@ -67,12 +67,13 @@ V2.5 已完成實作前設計，詳細內容見 `V2_5_EMPLOYEE_VOID.md`。本版
 
 ### 第五批：同步與 UI 收尾
 
-- [ ] 作廢時間／`cancel_date` 與作廢狀態納入既有同步更新並確認 pending reconciliation 可由啟動／5 分鐘／手動同步收斂。
+- [x] 作廢時間／`cancel_date`、`invoice_query.wait.C0501` 與 pending marker 已納入共用官方狀態映射；啟動／5 分鐘／手動同步以既有 list 流程收斂，超出近 3 天 list 的舊 pending 才單筆 query 補洞且不自動重送。
 - [ ] 實測送出例如 `3015 退貨` 後的完整 `invoice_query` JSON，確認 AMEGO 是否可查回作廢原因。
-- [ ] 若官方 query 不回作廢原因，不為此另外建立永久 `void_audit`。
-- [ ] 已開立清單、詳細資訊、PDF／載具預覽與狀態燈號一致顯示作廢／人工確認／待確認結果；詳細頁關閉後清單立即刷新。
-- [ ] 確認作廢後必要 PDF／preview Cache 失效處理。
-- [ ] issue center 完成待確認作廢與人工確認的最終整合、狀態清除與顯示一致性。
+- [x] 已定案：若官方 query 不回作廢原因，不為此另外建立永久 `void_audit`。
+- [x] 已開立清單、詳細資訊與狀態燈號統一顯示 `已開立`／`已開立（等待作廢）`／`已作廢`；`invoice_status=99` 全系統固定維持完成／綠燈，詳細頁關閉後清單立即刷新。
+- [x] 確認作廢或官方資料變更後必要 PDF／preview Cache 會失效，不使用舊 Cache 冒充最新資料。
+- [x] issue center 已整合作廢待確認與人工確認：技術類型顯示為「作廢結果待確認」，紙本未收回維持獨立「人工確認」，正式作廢後清除對應待確認問題。
+- [x] 詳細頁「作廢」與最後「確認作廢」共用紅色 danger 樣式，不改變其他一般按鈕。
 - [ ] Windows build、核心測試、startup smoke、工程測試包與實機回歸。
 
 ### 明確延後到 V2.5 之後
