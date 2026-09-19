@@ -6,12 +6,23 @@ internal sealed class VoidConfirmationForm : Form
 {
     private const string ResponsibilityText =
         "本人已核對本次作廢之發票號碼、交易事實及作廢原因，並了解錯誤或不當作廢發票可能涉及稅務法令及公司內部責任；如因本人故意或過失造成錯誤作廢，本人願依相關法令及公司規定承擔應負之責任。\n\n按下「確認作廢」即表示本人已閱讀並確認上述事項。";
+    private const string UncollectedWarningText = "未收回作廢需由管理員確認後才會送出";
 
     private readonly bool paperInvoice;
     private readonly TextBox invoiceNumber = UiControls.TextBox(10);
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(200);
     private readonly ComboBox receiptState = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly Label uncollectedWarning = new()
+    {
+        Text = UncollectedWarningText,
+        Dock = DockStyle.Fill,
+        AutoSize = false,
+        TextAlign = ContentAlignment.MiddleLeft,
+        ForeColor = Color.FromArgb(185, 108, 0),
+        Visible = false,
+        Margin = new Padding(10, 0, 0, 0),
+    };
     private readonly Button confirm = UiControls.StandardButton("確認作廢");
     private readonly Button cancel = UiControls.StandardButton("取消");
 
@@ -20,7 +31,7 @@ internal sealed class VoidConfirmationForm : Form
         this.paperInvoice = paperInvoice;
         Text = "發票作廢確認";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(470, paperInvoice ? 410 : 360);
+        ClientSize = new Size(paperInvoice ? 650 : 470, paperInvoice ? 410 : 360);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -47,23 +58,40 @@ internal sealed class VoidConfirmationForm : Form
             receiptState.Items.Add(new ReceiptChoice("已收回", PaperInvoiceReceiptStates.Collected));
             receiptState.Items.Add(new ReceiptChoice("尚未收回", PaperInvoiceReceiptStates.Uncollected));
             receiptState.DisplayMember = nameof(ReceiptChoice.Text);
+            receiptState.SelectedIndexChanged += (_, _) => UpdateUncollectedWarning();
         }
 
         var fieldRows = paperInvoice ? 4 : 3;
         var fields = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
+            ColumnCount = paperInvoice ? 3 : 2,
             RowCount = fieldRows,
             Margin = Padding.Empty,
         };
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        if (paperInvoice)
+        {
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        }
+        else
+        {
+            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        }
         for (var row = 0; row < fieldRows; row++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        AddField(fields, "發票號碼", invoiceNumber, 0);
-        AddField(fields, "員工編號", employeeNo, 1);
-        AddField(fields, "員工密碼", password, 2);
-        if (paperInvoice) AddField(fields, "證明聯狀態", receiptState, 3);
+        AddField(fields, "發票號碼", invoiceNumber, 0, paperInvoice ? 2 : 1);
+        AddField(fields, "員工編號", employeeNo, 1, paperInvoice ? 2 : 1);
+        AddField(fields, "員工密碼", password, 2, paperInvoice ? 2 : 1);
+        if (paperInvoice)
+        {
+            fields.Controls.Add(FieldLabel("證明聯狀態"), 0, 3);
+            receiptState.Dock = DockStyle.Fill;
+            receiptState.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            receiptState.Margin = new Padding(0, 8, 0, 8);
+            fields.Controls.Add(receiptState, 1, 3);
+            fields.Controls.Add(uncollectedWarning, 2, 3);
+        }
 
         invoiceNumber.TabIndex = 0;
         employeeNo.TabIndex = 1;
@@ -114,6 +142,12 @@ internal sealed class VoidConfirmationForm : Form
         CancelButton = cancel;
     }
 
+    private void UpdateUncollectedWarning()
+    {
+        uncollectedWarning.Visible = paperInvoice &&
+            SelectedReceiptState() == PaperInvoiceReceiptStates.Uncollected;
+    }
+
     private void Submit()
     {
         if (invoiceNumber.Text.Trim().Length == 0)
@@ -145,20 +179,23 @@ internal sealed class VoidConfirmationForm : Form
     private string SelectedReceiptState() =>
         receiptState.SelectedItem is ReceiptChoice choice ? choice.Value : string.Empty;
 
-    private static void AddField(TableLayoutPanel panel, string label, Control field, int row)
+    private static void AddField(TableLayoutPanel panel, string label, Control field, int row, int columnSpan)
     {
-        panel.Controls.Add(new Label
-        {
-            Text = label,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(0, 0, 8, 0),
-        }, 0, row);
+        panel.Controls.Add(FieldLabel(label), 0, row);
         field.Dock = DockStyle.Fill;
         field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
         field.Margin = new Padding(0, 8, 0, 8);
         panel.Controls.Add(field, 1, row);
+        if (columnSpan > 1) panel.SetColumnSpan(field, columnSpan);
     }
+
+    private static Label FieldLabel(string text) => new()
+    {
+        Text = text,
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft,
+        Margin = new Padding(0, 0, 8, 0),
+    };
 
     private static void AdvanceOnEnter(KeyEventArgs eventArgs, Control next)
     {
@@ -187,6 +224,14 @@ internal sealed class VoidConfirmationForm : Form
             throw new InvalidOperationException("紙本發票證明聯狀態選項不完整");
         if (!paperInvoice && receiptState.Parent is not null)
             throw new InvalidOperationException("非紙本發票不應顯示證明聯狀態");
+        if (paperInvoice)
+        {
+            if (uncollectedWarning.Text != UncollectedWarningText || uncollectedWarning.Visible)
+                throw new InvalidOperationException("尚未收回提示初始狀態不正確");
+            receiptState.SelectedIndex = 2;
+            if (!uncollectedWarning.Visible)
+                throw new InvalidOperationException("選擇尚未收回後未顯示管理員確認提示");
+        }
     }
 
     private sealed record ReceiptChoice(string Text, string Value)
