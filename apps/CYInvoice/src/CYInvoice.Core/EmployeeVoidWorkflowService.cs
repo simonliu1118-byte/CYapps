@@ -98,10 +98,9 @@ public sealed class EmployeeVoidWorkflowService
         if (paperInvoice && paperReceiptState == PaperInvoiceReceiptStates.Uncollected)
             return QueueManualReview(stored, employee.EmployeeNo, reason);
 
-        var result = await voidService.VoidAsync(
-            stored,
-            CancelReason(employee.EmployeeNo, reason),
-            cancellationToken).ConfigureAwait(false);
+        var cancelReason = CancelReason(employee.EmployeeNo, reason);
+        var result = await voidService.VoidAsync(stored, cancelReason, cancellationToken).ConfigureAwait(false);
+        RememberAcceptedVoid(expectedNumber, cancelReason, result.Outcome);
         return new EmployeeVoidWorkflowResult(
             ManualReviewRequired: false,
             result.Record,
@@ -128,10 +127,9 @@ public sealed class EmployeeVoidWorkflowService
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工確認已沒有可送出的作廢申請資料");
 
-        var result = await voidService.VoidAsync(
-            record,
-            CancelReason(manager.EmployeeNo, review.RequesterEmployeeNo, review.Reason),
-            cancellationToken).ConfigureAwait(false);
+        var cancelReason = CancelReason(manager.EmployeeNo, review.RequesterEmployeeNo, review.Reason);
+        var result = await voidService.VoidAsync(record, cancelReason, cancellationToken).ConfigureAwait(false);
+        RememberAcceptedVoid(record.InvoiceNumber, cancelReason, result.Outcome);
 
         if (result.Outcome is InvoiceVoidOutcome.Confirmed or
             InvoiceVoidOutcome.AlreadyVoided or
@@ -301,6 +299,12 @@ public sealed class EmployeeVoidWorkflowService
         if (value.EnumerateRunes().Count() > 20)
             throw new InvalidOperationException("員工編號與作廢原因合計超過光貿允許長度");
         return value;
+    }
+
+    private static void RememberAcceptedVoid(string invoiceNumber, string cancelReason, InvoiceVoidOutcome outcome)
+    {
+        if (outcome is InvoiceVoidOutcome.Confirmed or InvoiceVoidOutcome.AlreadyVoided or InvoiceVoidOutcome.PendingConfirmation)
+            VoidOperationSessionCache.Remember(invoiceNumber, cancelReason);
     }
 
     private static void ValidateReason(string reason)
