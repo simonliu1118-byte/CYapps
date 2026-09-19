@@ -16,6 +16,14 @@ internal static class PendingVoidSyncTests
         var pdf = CreateCache(repository.InvoicePdfCacheDirectory, Environments.Production, record.InvoiceNumber, ".pdf");
         var preview = CreateCache(repository.InvoicePreviewCacheDirectory, Environments.Production, record.InvoiceNumber, ".png");
         var clock = new TestClock(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.FromHours(8)));
+        var issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
+        issueStore.Record(
+            Environments.Production + "|12345675",
+            record.InvoiceNumber,
+            record.ApiOrderId,
+            InvoiceVoidSyncIssueTypes.PendingConfirmation,
+            "等待光貿確認作廢",
+            clock.Now());
         var syncGateway = new ListGateway
         {
             Items = [ListItem(cancelDate: 1789790000)],
@@ -35,6 +43,9 @@ internal static class PendingVoidSyncTests
         Equal(0, voidGateway.VoidCalls);
         False(File.Exists(pdf));
         False(File.Exists(preview));
+        False(issueStore.Unresolved(Environments.Production + "|12345675")
+            .Any(issue => issue.InvoiceNumber == record.InvoiceNumber &&
+                          issue.IssueType == InvoiceVoidSyncIssueTypes.PendingConfirmation));
     }
 
     public static async Task RecentListKeepsWaitingVoidAndStatus99Async()
