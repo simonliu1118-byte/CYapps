@@ -12,6 +12,9 @@ internal sealed class RecordDetailForm : Form
     private const int InformationLabelWidth = 90;
     private const int InformationValueMaxWidth = 190;
     private const int CarrierItemsSectionHeight = 250;
+    private const string WaitingVoidDetailText = "（等待 發票作廢）";
+    private const string WaitingVoidDetailTag = "waiting-void-detail-state";
+    private const string WaitingVoidHighlightTag = "waiting-void-detail-highlight";
 
     private readonly InvoiceRecord record;
     private readonly LocalRepository repository;
@@ -126,9 +129,7 @@ internal sealed class RecordDetailForm : Form
         AddDetail("發票金額", MoneyFormatter.Integer(record.Amount));
         AddDetail("使用環境", record.Environment == Environments.Production ? "正式" : "測試");
         AddDetail("交付方式", record.Delivery);
-        var invoiceStateValue = ValueLabel(record.InvoiceState);
-        if (record.InvoiceState == InvoiceStates.Voided) invoiceStateValue.ForeColor = Color.Firebrick;
-        AddDetail("發票狀態", record.InvoiceState, invoiceStateValue);
+        AddInvoiceStateDetail();
         AddDetail("上傳狀態", record.UploadStatusText);
         AddDetail("最後確認", record.LastChecked);
         AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
@@ -715,6 +716,60 @@ internal sealed class RecordDetailForm : Form
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
     }
 
+    private void AddInvoiceStateDetail()
+    {
+        if (record.InvoiceState != InvoiceStates.OpenedWaitingVoid)
+        {
+            var value = ValueLabel(record.InvoiceState);
+            if (record.InvoiceState == InvoiceStates.Voided) value.ForeColor = Color.Firebrick;
+            AddDetail("發票狀態", record.InvoiceState, value);
+            return;
+        }
+
+        var row = details.RowCount++;
+        details.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        details.Controls.Add(FieldLabel("發票狀態"), 0, row);
+        details.Controls.Add(WaitingVoidDetailValue(), 1, row);
+        AddDetailSeparator();
+    }
+
+    private static Control WaitingVoidDetailValue()
+    {
+        var line = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = SystemColors.Control,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 5, 0, 5),
+            MinimumSize = new Size(0, 30),
+            Tag = WaitingVoidDetailTag,
+        };
+        line.Controls.Add(new Label
+        {
+            Text = InvoiceStates.Opened,
+            AutoSize = true,
+            ForeColor = SystemColors.ControlText,
+            BackColor = SystemColors.Control,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+        });
+        line.Controls.Add(new Label
+        {
+            Text = WaitingVoidDetailText,
+            AutoSize = true,
+            ForeColor = SystemColors.ControlText,
+            BackColor = Color.FromArgb(255, 235, 59),
+            Margin = Padding.Empty,
+            Padding = new Padding(2, 0, 2, 0),
+            Tag = WaitingVoidHighlightTag,
+        });
+        return line;
+    }
+
     private void AddDetail(string label, string value, Label? target = null, bool singleLine = false)
     {
         var row = details.RowCount++;
@@ -819,6 +874,36 @@ internal sealed class RecordDetailForm : Form
             "志遠醫療器材行");
         carrier.PerformLayout();
         carrier.VerifyLayout(companyBuyer: false, carrier: true);
+
+        using var waitingVoid = new RecordDetailForm(
+            new InvoiceRecord
+            {
+                Id = "waiting-void-smoke",
+                Environment = environment,
+                InvoiceNumber = "EE87654321",
+                InvoiceState = InvoiceStates.OpenedWaitingVoid,
+                Delivery = "會員載具",
+                CarrierType = "amego",
+                CarrierId1 = "motmp_20260916003",
+                Source = InvoiceSources.Mo,
+                OrderId = "20260916003",
+                InvoiceDate = "2026/09/16",
+                InvoiceTime = "12:45:00",
+                Amount = 105,
+                UploadStatus = UploadStatuses.Complete,
+                UploadStatusText = "完成",
+                Items = baseRecord.Items,
+            },
+            repository,
+            service,
+            "志遠醫療器材行");
+        waitingVoid.PerformLayout();
+        var waitingState = FindTaggedControl(waitingVoid, WaitingVoidDetailTag) as FlowLayoutPanel;
+        var waitingHighlight = FindTaggedControl(waitingVoid, WaitingVoidHighlightTag) as Label;
+        if (waitingState is null || waitingHighlight is null ||
+            waitingHighlight.Text != WaitingVoidDetailText ||
+            waitingHighlight.BackColor != Color.FromArgb(255, 235, 59))
+            throw new InvalidOperationException("等待發票作廢的詳細資料狀態未使用指定文字與黃底強調");
 
         using var voidedCarrier = new RecordDetailForm(
             new InvoiceRecord

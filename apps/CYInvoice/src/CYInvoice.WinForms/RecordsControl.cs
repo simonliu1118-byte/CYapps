@@ -83,7 +83,7 @@ internal sealed class RecordsControl : UserControl
     private void BuildLayout()
     {
         source.Items.AddRange(["全部", "光貿同步", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang, InvoiceSources.Digiwin]);
-        state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.Failed, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
+        state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.OpenedWaitingVoid, InvoiceStates.Failed, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 144));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -173,7 +173,7 @@ internal sealed class RecordsControl : UserControl
         Records.Columns.Add("買受人", 150, HorizontalAlignment.Left);
         Records.Columns.Add("金額", 86, HorizontalAlignment.Right);
         Records.Columns.Add("交付方式", 76, HorizontalAlignment.Left);
-        Records.Columns.Add("發票狀態", 88, HorizontalAlignment.Left);
+        Records.Columns.Add("發票狀態", 136, HorizontalAlignment.Left);
         Records.Columns.Add("上傳", 48, HorizontalAlignment.Center);
         Records.OwnerDraw = true;
         Records.DrawColumnHeader += (_, eventArgs) => NativeListViewHost.DrawHeader(eventArgs, Records.Font);
@@ -410,6 +410,7 @@ internal sealed class RecordsControl : UserControl
             detail.MinimumSize = new Size(760, 620);
             detail.ClientSize = new Size(800, 700);
             detail.ShowDialog(FindForm());
+            if (!IsDisposed) Reload();
         }
         catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
         {
@@ -538,7 +539,7 @@ internal sealed class RecordsControl : UserControl
     {
         if (Records.Columns.Count != 10 || Records.ClientSize.Width <= 0) return;
         var available = recordsHost.ColumnViewportWidth;
-        var widths = new[] { 140, 108, 122, 150, 82, 0, 86, 76, 88, 48 };
+        var widths = new[] { 140, 108, 122, 150, 82, 0, 86, 76, 136, 48 };
         widths[5] = Math.Max(80, available - widths.Sum());
         var over = widths.Sum() - available;
         if (over > 0)
@@ -814,8 +815,8 @@ internal sealed class RecordsControl : UserControl
             throw new InvalidOperationException("統編標籤左緣未與日期『至』左緣對齊");
         if (Math.Abs(ScreenCenterY(refreshButton) - ScreenCenterY(uploadIssuesButton)) > 1)
             throw new InvalidOperationException("上傳問題按鈕未與左側操作按鈕垂直對齊");
-        if (Records.Columns[2].Width < 122 || Records.Columns[3].Width < 142)
-            throw new InvalidOperationException("已開立發票來源或訂單編號欄位過窄");
+        if (Records.Columns[2].Width < 122 || Records.Columns[3].Width < 142 || Records.Columns[8].Width < 128)
+            throw new InvalidOperationException("已開立發票來源、訂單編號或發票狀態欄位過窄");
 
         var columnWidth = Records.Columns.Cast<ColumnHeader>().Sum(column => column.Width);
         if (columnWidth > recordsHost.ColumnViewportWidth ||

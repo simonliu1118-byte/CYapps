@@ -17,6 +17,13 @@ internal static class Program
             ("automatic sync runs two-period reconciliation once per local day", TestDailyBroadThenRecentAsync),
             ("manual sync stays recent even when daily reconciliation is due", TestManualStaysRecentAsync),
             ("failed daily reconciliation remains due", TestFailedDailyRemainsDueAsync),
+            ("recent list confirms pending void and invalidates cache", PendingVoidSyncTests.RecentListConfirmsVoidAndInvalidatesCacheAsync),
+            ("recent list keeps waiting void while original status remains 99", PendingVoidSyncTests.RecentListKeepsWaitingVoidAndStatus99Async),
+            ("old pending void uses one query and never resends", PendingVoidSyncTests.OldPendingUsesSingleQueryAndNeverResendsAsync),
+            ("old pending still waiting creates upload issue", PendingVoidSyncTests.OldPendingStillWaitingCreatesIssueAsync),
+            ("detail query wait C0501 shows waiting void while status remains 99", DetailRefreshVoidStateTests.QueryWaitSetsWaitingVoidAndKeeps99Async),
+            ("detail query does not erase durable waiting-void marker", DetailRefreshVoidStateTests.LocalPendingSurvivesTemporarilyMissingWaitAsync),
+            ("detail query confirmed cancel clears pending marker", DetailRefreshVoidStateTests.ConfirmedCancelClearsPendingAsync),
             ("test daily scope prunes expired rows without querying them", AutomaticRetentionTests.TestDailyTestScopePrunesExpiredWithoutQueryAsync),
             ("daily reconciliation problems skip retention", AutomaticRetentionTests.TestDailyProblemsSkipRetentionAsync),
         };

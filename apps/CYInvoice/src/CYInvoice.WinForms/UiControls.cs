@@ -66,15 +66,30 @@ internal static class UiControls
     public const int StandardButtonWidth = 132;
     public const int StandardButtonHeight = 34;
 
-    public static Button StandardButton(string text) => new NoFocusCueButton()
+    public static Button StandardButton(string text)
     {
-        Text = text,
-        Width = StandardButtonWidth,
-        Height = StandardButtonHeight,
-        Margin = new Padding(6, 2, 6, 2),
-        AutoSize = false,
-        UseVisualStyleBackColor = true,
-    };
+        var button = new NoFocusCueButton
+        {
+            Text = text,
+            Width = StandardButtonWidth,
+            Height = StandardButtonHeight,
+            Margin = new Padding(6, 2, 6, 2),
+            AutoSize = false,
+            UseVisualStyleBackColor = true,
+        };
+        if (text is "作廢" or "確認作廢") ApplyDangerButtonTheme(button);
+        return button;
+    }
+
+    private static void ApplyDangerButtonTheme(Button button)
+    {
+        button.UseVisualStyleBackColor = false;
+        button.FlatStyle = FlatStyle.Flat;
+        button.BackColor = Color.FromArgb(183, 28, 28);
+        button.ForeColor = Color.White;
+        button.FlatAppearance.BorderColor = Color.FromArgb(138, 20, 20);
+        button.FlatAppearance.BorderSize = 1;
+    }
 
     public static Button ImportButton(string text, ImportBrand brand) => new ImportBrandButton(text, brand);
 

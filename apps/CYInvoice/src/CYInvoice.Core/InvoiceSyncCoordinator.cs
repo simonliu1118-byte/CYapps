@@ -67,9 +67,18 @@ public sealed class InvoiceSyncCoordinator
                     return new InvoiceSyncRunResult(InvoiceSyncRunStatus.Cooldown, CooldownRemaining: remaining);
             }
 
-            var result = automatic && automaticService is not null
-                ? await automaticService.SyncAsync(cancellationToken).ConfigureAwait(false)
-                : await service.SyncRecentAsync(cancellationToken).ConfigureAwait(false);
+            InvoiceSyncResult result;
+            if (automaticService is not null)
+            {
+                result = automatic
+                    ? await automaticService.SyncAsync(cancellationToken).ConfigureAwait(false)
+                    : await automaticService.SyncRecentAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                result = await service.SyncRecentAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             if (manual)
             {
                 lock (stateGate) lastManualCompleted = now();

@@ -13,6 +13,7 @@ public static class InvoiceStates
 {
     public const string Changing = "資料變更中";
     public const string Opened = "已開立";
+    public const string OpenedWaitingVoid = "已開立（等待作廢）";
     public const string Failed = "開立失敗";
     public const string Unknown = "結果不明";
     public const string Voided = "已作廢";

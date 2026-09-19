@@ -164,7 +164,7 @@ static class Cases
         AssertEx.Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
         AssertEx.Equal(1, gateway.VoidCalls);
         AssertEx.Equal(true, Fixtures.PendingMarker(repository));
-        AssertEx.Equal(InvoiceStates.Changing, repository.Invoices.LoadOrCreate().Single().InvoiceState);
+        AssertEx.Equal(InvoiceStates.OpenedWaitingVoid, repository.Invoices.LoadOrCreate().Single().InvoiceState);
     }
 
     public static async Task TransportAmbiguityAsync()
