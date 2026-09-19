@@ -18,6 +18,7 @@ internal sealed class SyncIssuesForm : Form
     private readonly FailedInvoiceRecordStore failedStore;
     private readonly EmployeeVoidWorkflowService voidWorkflow;
     private readonly EmployeeAllowanceWorkflowService allowanceWorkflow;
+    private readonly InvoiceAdministrativeClosureService administrativeClosure;
     private readonly string accountKey;
     private DateTimeOffset? lastRead;
     private bool manualReviewBusy;
@@ -66,6 +67,7 @@ internal sealed class SyncIssuesForm : Form
         failedStore = new FailedInvoiceRecordStore(repository.DataDirectory);
         voidWorkflow = new EmployeeVoidWorkflowService(repository);
         allowanceWorkflow = new EmployeeAllowanceWorkflowService(repository);
+        administrativeClosure = new InvoiceAdministrativeClosureService(repository);
         accountKey = CurrentAccountKey();
         lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
 
@@ -243,11 +245,11 @@ internal sealed class SyncIssuesForm : Form
                     stateCell.ForeColor = state switch
                     {
                         "未讀" => Color.Firebrick,
-                        "人工確認" or "等待確認" => Color.FromArgb(190, 120, 0),
+                        "人工確認" or "等待確認" or "可結案" => Color.FromArgb(190, 120, 0),
                         "已解決" => Color.FromArgb(0, 132, 72),
                         _ => Color.DimGray,
                     };
-                    if (state is "人工確認" or "等待確認")
+                    if (state is "人工確認" or "等待確認" or "可結案")
                         stateCell.Font = new Font(issueList.Font, FontStyle.Bold);
                     issueList.Items.Add(row);
                 }
@@ -320,7 +322,13 @@ internal sealed class SyncIssuesForm : Form
     private void ResolveSelected()
     {
         if (issueList.SelectedItems.Count != 1 || issueList.SelectedItems[0].Tag is not InvoiceSyncIssue issue) return;
-        if (issue.ResolvedUtc is not null || IsManualReview(issue)) return;
+        if (issue.ResolvedUtc is not null) return;
+        if (InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue))
+        {
+            CloseSelectedAdministrativeWork(issue);
+            return;
+        }
+        if (IsManualReview(issue)) return;
         try
         {
             issueStore.Resolve(issue.Id, DateTimeOffset.Now);
@@ -330,6 +338,47 @@ internal sealed class SyncIssuesForm : Form
         catch (Exception error)
         {
             MessageBox.Show(this, "標記上傳問題失敗：" + error.Message, "操作失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void CloseSelectedAdministrativeWork(InvoiceSyncIssue issue)
+    {
+        if (manualReviewBusy || !administrativeClosure.CanClose(issue)) return;
+        var operation = IsAllowanceManualReview(issue) ? "折讓" : "作廢";
+        if (MessageBox.Show(
+                this,
+                $"這筆{operation}待處理作業已超過系統保留的兩期。\n\n管理員結案後，CYInvoice 會停止追蹤這筆作業、清除本機等待標記，之後可依舊資料保留規則清除。\n\n此操作不會呼叫光貿 API，也不代表光貿已完成{operation}。確定結案？",
+                "管理員結案",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        using var login = new EmployeeAdminLoginForm(repository.Employees, "管理員結案－驗證");
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+
+        SetManualReviewBusy(true);
+        try
+        {
+            administrativeClosure.Close(
+                issue,
+                login.AuthenticatedEmployee.EmployeeNo,
+                login.AuthenticatedPassword);
+            MessageBox.Show(
+                this,
+                "已由管理員手動結案。CYInvoice 不會再自動追蹤這筆待處理作業。",
+                "結案完成",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            ReloadAll();
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "管理員結案失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            SetManualReviewBusy(false);
         }
     }
 
@@ -787,8 +836,23 @@ internal sealed class SyncIssuesForm : Form
             : null;
         var unresolved = selected is { ResolvedUtc: null };
         var manual = selected is not null && IsManualReview(selected);
+        var administrative = selected is not null && InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(selected);
 
-        resolve.Enabled = !manualReviewBusy && unresolved && !manual;
+        resolve.Text = administrative ? "管理員結案" : "標記已解決";
+        resolve.Enabled = false;
+        if (!manualReviewBusy && unresolved && selected is not null)
+        {
+            if (administrative)
+            {
+                try { resolve.Enabled = administrativeClosure.CanClose(selected); }
+                catch { resolve.Enabled = false; }
+            }
+            else if (!manual)
+            {
+                resolve.Enabled = true;
+            }
+        }
+
         viewManualReview.Enabled = !manualReviewBusy && manual;
         approveManualReview.Enabled = false;
         cancelManualReview.Enabled = false;
@@ -845,6 +909,16 @@ internal sealed class SyncIssuesForm : Form
     private string IssueState(InvoiceSyncIssue issue)
     {
         if (issue.ResolvedUtc is not null) return "已解決";
+        if (InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue))
+        {
+            try
+            {
+                if (administrativeClosure.CanClose(issue)) return "可結案";
+            }
+            catch
+            {
+            }
+        }
         if (IsAllowanceManualReview(issue))
         {
             try
