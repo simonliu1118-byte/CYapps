@@ -13,13 +13,14 @@ internal sealed class RecordDetailForm : Form
     private const int InformationLabelWidth = 90;
     private const int InformationValueMaxWidth = 190;
     private const int CarrierItemsSectionHeight = 250;
-    private const string WaitingVoidDetailText = "（等待 發票作廢）";
+    private const string WaitingVoidDetailText = "(等待 發票作廢)";
     private const string WaitingVoidDetailTag = "waiting-void-detail-state";
     private const string WaitingVoidHighlightTag = "waiting-void-detail-highlight";
 
-    private readonly InvoiceRecord record;
+    private InvoiceRecord record;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
+    private readonly InvoiceDetailRefreshService detailRefreshService;
     private readonly EmployeeVoidWorkflowService voidWorkflow;
     private readonly EmployeeAllowanceWorkflowService allowanceWorkflow;
     private readonly bool paperInvoice;
@@ -102,6 +103,7 @@ internal sealed class RecordDetailForm : Form
     private bool pdfBusy;
     private bool voidBusy;
     private bool allowanceBusy;
+    private bool latestStatusUnknown;
 
     public RecordDetailForm(
         InvoiceRecord record,
@@ -112,6 +114,7 @@ internal sealed class RecordDetailForm : Form
         this.record = record;
         this.repository = repository;
         this.service = service;
+        detailRefreshService = new InvoiceDetailRefreshService(repository);
         voidWorkflow = new EmployeeVoidWorkflowService(repository);
         allowanceWorkflow = new EmployeeAllowanceWorkflowService(repository);
         this.sellerCompanyName = sellerCompanyName.Trim();
@@ -121,30 +124,11 @@ internal sealed class RecordDetailForm : Form
         ClientSize = new Size(DetailWindowWidth, 700);
         MinimumSize = new Size(760, 620);
         ShowInTaskbar = false;
+        ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
-        Icon = ApplicationIcon.Load();
 
         ConfigureDetails();
-        AddDetail("發票號碼", record.InvoiceNumber);
-        AddDetail("開立時間", IssueTime(record), singleLine: true);
-        AddDetail("訂單編號", record.OrderId);
-        AddDetail("來源", record.Source);
-        AddDetail("買受人", record.BuyerName);
-        AddDetail("統一編號", record.BuyerIdentifier);
-        AddDetail("發票金額", MoneyFormatter.Integer(record.Amount));
-        AddDetail("使用環境", record.Environment == Environments.Production ? "正式" : "測試");
-        AddDetail("交付方式", record.Delivery);
-        AddInvoiceStateDetail();
-        AddDetail("上傳狀態", record.UploadStatusText);
-        AddDetail("最後確認", record.LastChecked);
-        AddOptionalDetail("折讓紀錄", AllowanceSummary(record), SystemColors.ControlText);
-        AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
-        AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
-        if (paperInvoice)
-        {
-            AddDetail("發票印表機", string.Empty, printerStatus);
-            UpdatePrinterStatus();
-        }
+        PopulateDetails();
 
         var root = new TableLayoutPanel
         {
@@ -199,21 +183,13 @@ internal sealed class RecordDetailForm : Form
             actions.Controls.Add(changePrinter);
         }
 
-        var voidManualReview = voidWorkflow.ManualReviewFor(record) is not null;
-        var allowanceReview = allowanceWorkflow.ManualReviewFor(record);
         if (CanShowVoidAction())
         {
-            voidInvoice.Text = voidManualReview ? "人工確認中" : "作廢";
-            voidInvoice.Enabled = !voidManualReview && allowanceReview is null;
             voidInvoice.Click += async (_, _) => await StartVoidAsync();
             actions.Controls.Add(voidInvoice);
         }
         if (CanShowAllowanceAction())
         {
-            allowanceInvoice.Text = allowanceReview is null
-                ? "折讓"
-                : allowanceReview.AwaitingConfirmation ? "折讓待確認" : "折讓處理中";
-            allowanceInvoice.Enabled = allowanceReview is null && !voidManualReview;
             allowanceInvoice.Click += async (_, _) => await StartAllowanceAsync();
             actions.Controls.Add(allowanceInvoice);
         }
@@ -228,6 +204,7 @@ internal sealed class RecordDetailForm : Form
         previewMessageHost.Layout += (_, _) => LayoutPreviewMessage();
         paperPreviewHost.Layout += (_, _) => LayoutA4Preview();
         FormClosed += (_, _) => previewCancellation.Cancel();
+        UpdateActionAvailability();
     }
 
     private bool CanShowVoidAction() =>
@@ -243,93 +220,157 @@ internal sealed class RecordDetailForm : Form
         using var reasonForm = new VoidReasonForm();
         if (reasonForm.ShowDialog(this) != DialogResult.OK) return;
         var reason = reasonForm.Reason;
-        using var privacyMask = VoidConfirmationPrivacyMask.Apply(this, record.InvoiceNumber);
+        var refreshAfterFlow = false;
 
-        while (!IsDisposed)
+        using (var privacyMask = VoidConfirmationPrivacyMask.Apply(this, record.InvoiceNumber))
         {
-            using var confirm = new VoidConfirmationForm(paperInvoice);
-            if (confirm.ShowDialog(this) != DialogResult.OK) return;
-
-            SetVoidBusy(true);
-            try
+            while (!IsDisposed)
             {
-                var result = await voidWorkflow.SubmitAsync(
-                    record,
-                    confirm.EnteredInvoiceNumber,
-                    confirm.EmployeeNo,
-                    confirm.Password,
-                    reason,
-                    confirm.PaperReceiptState);
+                using var confirm = new VoidConfirmationForm(paperInvoice);
+                if (confirm.ShowDialog(this) != DialogResult.OK) return;
 
-                if (result.ManualReviewRequired)
+                SetVoidBusy(true);
+                try
                 {
-                    MessageBox.Show(
-                        this,
-                        "已送交人工確認，尚未向光貿送出作廢。\n\n請由管理員或超級管理員至「上傳問題」處理。",
-                        "人工確認",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
-                    DialogResult = DialogResult.OK;
-                    Close();
-                    return;
-                }
+                    var result = await voidWorkflow.SubmitAsync(
+                        record,
+                        confirm.EnteredInvoiceNumber,
+                        confirm.EmployeeNo,
+                        confirm.Password,
+                        reason,
+                        confirm.PaperReceiptState);
 
-                var voidResult = result.VoidResult ?? throw new InvalidDataException("作廢流程缺少處理結果");
-                switch (voidResult.Outcome)
-                {
-                    case InvoiceVoidOutcome.Confirmed:
-                    case InvoiceVoidOutcome.AlreadyVoided:
-                        MessageBox.Show(this, "光貿已確認發票作廢完成。", "作廢完成",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        DialogResult = DialogResult.OK;
-                        Close();
-                        return;
-                    case InvoiceVoidOutcome.PendingConfirmation:
+                    if (result.ManualReviewRequired)
+                    {
                         MessageBox.Show(
                             this,
-                            "作廢請求已送出，但光貿尚未確認最終結果。\n\n目前狀態為「待確認」，系統不會盲目重送。",
-                            "作廢結果待確認",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Warning);
-                        DialogResult = DialogResult.OK;
-                        Close();
-                        return;
-                    case InvoiceVoidOutcome.Rejected:
-                        MessageBox.Show(this, voidResult.Message, "未送出／作廢未完成",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
-                    case InvoiceVoidOutcome.RetryReady:
-                        MessageBox.Show(
-                            this,
-                            "先前的待確認狀態已解除，本次沒有自動重送。\n請重新開啟發票詳細資訊後再次確認是否作廢。",
-                            "請重新確認",
+                            "已送交人工確認，尚未向光貿送出作廢。\n\n請由管理員或超級管理員至「上傳問題」處理。",
+                            "人工確認",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Information);
-                        DialogResult = DialogResult.OK;
-                        Close();
-                        return;
+                        refreshAfterFlow = true;
+                    }
+                    else
+                    {
+                        var voidResult = result.VoidResult ?? throw new InvalidDataException("作廢流程缺少處理結果");
+                        switch (voidResult.Outcome)
+                        {
+                            case InvoiceVoidOutcome.Confirmed:
+                            case InvoiceVoidOutcome.AlreadyVoided:
+                                MessageBox.Show(this, "光貿已確認發票作廢完成。", "作廢完成",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                refreshAfterFlow = true;
+                                break;
+                            case InvoiceVoidOutcome.PendingConfirmation:
+                                MessageBox.Show(
+                                    this,
+                                    "作廢請求已送出，但光貿尚未確認最終結果。\n\n目前狀態為「待確認」，系統不會盲目重送。",
+                                    "作廢結果待確認",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Warning);
+                                refreshAfterFlow = true;
+                                break;
+                            case InvoiceVoidOutcome.Rejected:
+                                MessageBox.Show(this, voidResult.Message, "未送出/作廢未完成",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                return;
+                            case InvoiceVoidOutcome.RetryReady:
+                                MessageBox.Show(
+                                    this,
+                                    "先前的待確認狀態已解除，本次沒有自動重送。\n系統將重新查詢這張發票的最新狀態。",
+                                    "請重新確認",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Information);
+                                refreshAfterFlow = true;
+                                break;
+                        }
+                    }
                 }
-            }
-            catch (EmployeeVoidAuthenticationDelayException error)
-            {
-                MessageBox.Show(this, error.Message, "驗證暫停", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            catch (InvalidOperationException error) when (
-                error.Message == "員工編號或密碼錯誤" ||
-                error.Message == "發票號碼不符，請重新確認")
-            {
-                MessageBox.Show(this, error.Message, "驗證失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            catch (Exception error)
-            {
-                MessageBox.Show(this, error.Message, "作廢未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-            finally
-            {
-                if (!IsDisposed) SetVoidBusy(false);
+                catch (EmployeeVoidAuthenticationDelayException error)
+                {
+                    MessageBox.Show(this, error.Message, "驗證暫停", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                catch (InvalidOperationException error) when (
+                    error.Message == "員工編號或密碼錯誤" ||
+                    error.Message == "發票號碼不符，請重新確認")
+                {
+                    MessageBox.Show(this, error.Message, "驗證失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                catch (Exception error)
+                {
+                    MessageBox.Show(this, error.Message, "作廢未完成", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                finally
+                {
+                    if (!IsDisposed) SetVoidBusy(false);
+                }
+
+                if (refreshAfterFlow) break;
             }
         }
+
+        if (refreshAfterFlow && !IsDisposed) await RefreshAfterVoidAsync();
+    }
+
+    private async Task RefreshAfterVoidAsync()
+    {
+        SetVoidBusy(true);
+        try
+        {
+            var fresh = await detailRefreshService.RefreshAsync(record, previewCancellation.Token);
+            if (previewCancellation.IsCancellationRequested || IsDisposed) return;
+            record = fresh;
+            latestStatusUnknown = false;
+            Text = $"發票詳細資訊－{record.InvoiceNumber}";
+            PopulateDetails();
+            RefreshPreviewAfterQuery();
+        }
+        catch (OperationCanceledException) when (previewCancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            if (IsDisposed) return;
+            latestStatusUnknown = true;
+            Text = "發票詳細資訊 (最新狀態未確認)";
+            PopulateDetails();
+            MessageBox.Show(
+                this,
+                "作廢流程已結束，但目前無法重新向光貿確認這張發票的最新資料。\n\n以下畫面可能不是最新狀態；在重新查詢成功前，作廢與折讓按鈕會停用。\n\n" + error.Message,
+                "無法確認最新資料",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            if (!IsDisposed) SetVoidBusy(false);
+        }
+    }
+
+    private void RefreshPreviewAfterQuery()
+    {
+        if (paperInvoice)
+        {
+            var eligibility = service.GetInvoicePdfEligibility(record);
+            if (!eligibility.Allowed)
+            {
+                paperPreview.Image = null;
+                activePreview?.Dispose();
+                activePreview = null;
+                ShowUnavailablePreview(eligibility);
+            }
+            return;
+        }
+
+        var receiptFrame = FindTaggedControl(this, "carrier-receipt") as Panel;
+        var receipt = receiptFrame?.Controls.OfType<PictureBox>().FirstOrDefault();
+        if (receipt is null) return;
+        var replacement = CarrierInvoicePreview.Render(record, repository.Settings.LoadOrCreate(), sellerCompanyName);
+        var old = activePreview;
+        activePreview = replacement;
+        receipt.Image = replacement;
+        old?.Dispose();
     }
 
     private async Task StartAllowanceAsync()
@@ -379,25 +420,54 @@ internal sealed class RecordDetailForm : Form
     private void SetVoidBusy(bool busy)
     {
         voidBusy = busy;
-        voidInvoice.Enabled = !busy;
-        allowanceInvoice.Enabled = !busy && !allowanceBusy;
-        close.Enabled = !busy;
-        viewPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
-        printPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
-        changePrinter.Enabled = !busy;
-        voidInvoice.Text = busy ? "作廢確認中…" : "作廢";
+        UpdateActionAvailability();
     }
 
     private void SetAllowanceBusy(bool busy)
     {
         allowanceBusy = busy;
-        allowanceInvoice.Enabled = !busy;
-        voidInvoice.Enabled = !busy && !voidBusy;
-        close.Enabled = !busy;
-        viewPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
-        printPdf.Enabled = !busy && service.GetInvoicePdfEligibility(record).Allowed;
-        changePrinter.Enabled = !busy;
-        allowanceInvoice.Text = busy ? "折讓申請中…" : "折讓";
+        UpdateActionAvailability();
+    }
+
+    private void UpdateActionAvailability()
+    {
+        var operationBusy = voidBusy || allowanceBusy;
+        close.Enabled = !operationBusy;
+        changePrinter.Enabled = !operationBusy;
+
+        var pdfAllowed = !operationBusy && !latestStatusUnknown && service.GetInvoicePdfEligibility(record).Allowed;
+        viewPdf.Enabled = pdfAllowed;
+        printPdf.Enabled = pdfAllowed;
+
+        var voidManualReview = voidWorkflow.ManualReviewFor(record) is not null;
+        var allowanceReview = allowanceWorkflow.ManualReviewFor(record);
+        var canOperateInvoice = CanShowVoidAction() && !latestStatusUnknown;
+
+        voidInvoice.Visible = canOperateInvoice || voidManualReview;
+        if (voidBusy)
+        {
+            voidInvoice.Text = "作廢確認中…";
+            voidInvoice.Enabled = false;
+        }
+        else
+        {
+            voidInvoice.Text = voidManualReview ? "人工確認中" : "作廢";
+            voidInvoice.Enabled = canOperateInvoice && !allowanceBusy && !voidManualReview && allowanceReview is null;
+        }
+
+        allowanceInvoice.Visible = canOperateInvoice || allowanceReview is not null;
+        if (allowanceBusy)
+        {
+            allowanceInvoice.Text = "折讓申請中…";
+            allowanceInvoice.Enabled = false;
+        }
+        else
+        {
+            allowanceInvoice.Text = allowanceReview is null
+                ? "折讓"
+                : allowanceReview.AwaitingConfirmation ? "折讓待確認" : "折讓處理中";
+            allowanceInvoice.Enabled = canOperateInvoice && !voidBusy && allowanceReview is null && !voidManualReview;
+        }
     }
 
     private static void CompactDetailAction(Button button)
@@ -780,7 +850,7 @@ internal sealed class RecordDetailForm : Form
         }
         if (!InvoicePdfPrinter.IsInstalled(name) || !InvoicePdfPrinter.CanDuplex(name))
         {
-            printerStatus.Text = name + "（不可直接列印）";
+            printerStatus.Text = name + " (不可直接列印)";
             printerStatus.ForeColor = Color.Firebrick;
             return;
         }
@@ -791,10 +861,10 @@ internal sealed class RecordDetailForm : Form
     private void SetPdfBusy(bool busy, string action)
     {
         pdfBusy = busy;
-        var allowed = !busy && service.GetInvoicePdfEligibility(record).Allowed;
+        var allowed = !busy && !voidBusy && !allowanceBusy && !latestStatusUnknown && service.GetInvoicePdfEligibility(record).Allowed;
         viewPdf.Enabled = allowed;
         printPdf.Enabled = allowed;
-        changePrinter.Enabled = !busy;
+        changePrinter.Enabled = !busy && !voidBusy && !allowanceBusy;
         viewPdf.Text = busy && action == "檢視" ? "取得 PDF 中…" : "檢視 PDF";
         printPdf.Text = busy && action == "列印" ? "列印中…" : "列印發票";
     }
@@ -803,6 +873,53 @@ internal sealed class RecordDetailForm : Form
     {
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, InformationLabelWidth));
         details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+    }
+
+    private void PopulateDetails()
+    {
+        details.SuspendLayout();
+        try
+        {
+            foreach (Control child in details.Controls.Cast<Control>().ToArray())
+            {
+                details.Controls.Remove(child);
+                if (!ReferenceEquals(child, printerStatus)) child.Dispose();
+            }
+            details.RowStyles.Clear();
+            details.RowCount = 0;
+
+            if (latestStatusUnknown)
+            {
+                var warning = ValueLabel("重新查詢失敗，以下資料可能不是最新狀態");
+                warning.ForeColor = Color.Firebrick;
+                warning.Font = new Font(Font, FontStyle.Bold);
+                AddDetail("最新狀態", warning.Text, warning);
+            }
+            AddDetail("發票號碼", record.InvoiceNumber);
+            AddDetail("開立時間", IssueTime(record), singleLine: true);
+            AddDetail("訂單編號", record.OrderId);
+            AddDetail("來源", record.Source);
+            AddDetail("買受人", record.BuyerName);
+            AddDetail("統一編號", record.BuyerIdentifier);
+            AddDetail("發票金額", MoneyFormatter.Integer(record.Amount));
+            AddDetail("使用環境", record.Environment == Environments.Production ? "正式" : "測試");
+            AddDetail("交付方式", record.Delivery);
+            AddInvoiceStateDetail();
+            AddDetail("上傳狀態", record.UploadStatusText);
+            AddDetail("最後確認", record.LastChecked);
+            AddOptionalDetail("折讓紀錄", AllowanceSummary(record), SystemColors.ControlText);
+            AddOptionalDetail("錯誤訊息", record.ErrorMessage, Color.Firebrick);
+            AddOptionalDetail("總備註", record.MainRemark, SystemColors.ControlText);
+            if (paperInvoice)
+            {
+                AddDetail("發票印表機", string.Empty, printerStatus);
+                UpdatePrinterStatus();
+            }
+        }
+        finally
+        {
+            details.ResumeLayout(true);
+        }
     }
 
     private void AddInvoiceStateDetail()
@@ -1193,7 +1310,6 @@ internal sealed class RecordDetailForm : Form
             previewCancellation.Cancel();
             paperPreview.Image = null;
             activePreview?.Dispose();
-            Icon?.Dispose();
         }
         base.Dispose(disposing);
     }
