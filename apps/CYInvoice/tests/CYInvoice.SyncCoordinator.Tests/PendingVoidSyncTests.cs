@@ -8,6 +8,8 @@ namespace CYInvoice.SyncCoordinator.Tests;
 
 internal static class PendingVoidSyncTests
 {
+    private const string PendingMetadataKey = "cyinvoice_void_pending";
+
     public static async Task RecentListConfirmsVoidAndInvalidatesCacheAsync()
     {
         using var temporary = new TemporaryDirectory();
@@ -38,7 +40,7 @@ internal static class PendingVoidSyncTests
         var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
         Equal(InvoiceStates.Voided, saved.InvoiceState);
         Equal(UploadStatuses.Complete, saved.UploadStatus);
-        False(InvoiceVoidService.HasPendingMarker(saved));
+        False(PendingMarker(saved));
         Equal(0, voidGateway.QueryCalls);
         Equal(0, voidGateway.VoidCalls);
         False(File.Exists(pdf));
@@ -69,7 +71,7 @@ internal static class PendingVoidSyncTests
         Equal(InvoiceStates.OpenedWaitingVoid, saved.InvoiceState);
         Equal(UploadStatuses.Complete, saved.UploadStatus);
         Equal("完成", saved.UploadStatusText);
-        True(InvoiceVoidService.HasPendingMarker(saved));
+        True(PendingMarker(saved));
         Equal(0, voidGateway.QueryCalls);
         Equal(0, voidGateway.VoidCalls);
     }
@@ -94,7 +96,7 @@ internal static class PendingVoidSyncTests
         var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
         Equal(InvoiceStates.Opened, saved.InvoiceState);
         Equal(UploadStatuses.Complete, saved.UploadStatus);
-        False(InvoiceVoidService.HasPendingMarker(saved));
+        False(PendingMarker(saved));
         Equal(1, voidGateway.QueryCalls);
         Equal(0, voidGateway.VoidCalls);
     }
@@ -119,7 +121,7 @@ internal static class PendingVoidSyncTests
         var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
         Equal(InvoiceStates.OpenedWaitingVoid, saved.InvoiceState);
         Equal(UploadStatuses.Complete, saved.UploadStatus);
-        True(InvoiceVoidService.HasPendingMarker(saved));
+        True(PendingMarker(saved));
         Equal(1, voidGateway.QueryCalls);
         Equal(0, voidGateway.VoidCalls);
         var issue = new InvoiceSyncIssueStore(repository.DataDirectory)
@@ -174,11 +176,18 @@ internal static class PendingVoidSyncTests
             Items = [],
             ExtensionData = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
             {
-                ["cyinvoice_void_pending"] = JsonSerializer.SerializeToElement(true),
+                [PendingMetadataKey] = JsonSerializer.SerializeToElement(true),
             },
         };
         repository.Invoices.Append(record);
         return record;
+    }
+
+    private static bool PendingMarker(InvoiceRecord record)
+    {
+        if (record.ExtensionData is null || !record.ExtensionData.TryGetValue(PendingMetadataKey, out var value)) return false;
+        return value.ValueKind == JsonValueKind.True ||
+               (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed) && parsed);
     }
 
     private static string CreateCache(string root, string environment, string invoiceNumber, string extension)
