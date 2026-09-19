@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Storage;
 using Microsoft.Data.Sqlite;
@@ -11,6 +12,13 @@ public sealed record InvoiceRetentionResult(
 
 public sealed class InvoiceRetentionService
 {
+    private static readonly string[] ActiveWorkIssueTypes =
+    [
+        InvoiceVoidIssueTypes.ManualReview,
+        InvoiceVoidSyncIssueTypes.PendingConfirmation,
+        InvoiceAllowanceIssueTypes.ManualReview,
+    ];
+
     private readonly LocalRepository repository;
     private readonly string databasePath;
 
@@ -30,8 +38,11 @@ public sealed class InvoiceRetentionService
 
         using var connection = Open();
         Configure(connection);
+        var activeIssues = LoadActiveWorkIssues(connection, accountKey);
         var candidates = LoadCandidates(connection, account)
             .Where(candidate => ShouldDelete(candidate, cutoff))
+            .Where(candidate => !HasActiveWorkMetadata(candidate.ExtraJson))
+            .Where(candidate => !HasMatchingActiveIssue(candidate, activeIssues))
             .ToArray();
         var expiredIssueIds = LoadExpiredIssueIds(connection, accountKey, cutoff);
         if (candidates.Length == 0 && expiredIssueIds.Count == 0)
@@ -98,7 +109,7 @@ public sealed class InvoiceRetentionService
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT local_id, invoice_number, original_order_id, order_id, api_order_id,
-                   invoice_date, sent_at
+                   invoice_date, sent_at, extra_json
             FROM invoices
             WHERE seller_invoice = $seller_invoice AND environment = $environment
             ORDER BY local_id;
@@ -115,9 +126,34 @@ public sealed class InvoiceRetentionService
                 reader.GetString(3),
                 reader.GetString(4),
                 reader.GetString(5),
-                reader.GetString(6)));
+                reader.GetString(6),
+                reader.GetString(7)));
         }
         return candidates;
+    }
+
+    private static IReadOnlyList<ActiveIssue> LoadActiveWorkIssues(
+        SqliteConnection connection,
+        string accountKey)
+    {
+        var issues = new List<ActiveIssue>();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT invoice_number, order_id
+            FROM sync_issues
+            WHERE account_key = $account_key
+              AND TRIM(resolved_utc) = ''
+              AND issue_type IN ($void_manual, $void_pending, $allowance_manual)
+            ORDER BY local_id;
+            """;
+        command.Parameters.AddWithValue("$account_key", accountKey);
+        command.Parameters.AddWithValue("$void_manual", InvoiceVoidIssueTypes.ManualReview);
+        command.Parameters.AddWithValue("$void_pending", InvoiceVoidSyncIssueTypes.PendingConfirmation);
+        command.Parameters.AddWithValue("$allowance_manual", InvoiceAllowanceIssueTypes.ManualReview);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            issues.Add(new ActiveIssue(reader.GetString(0), reader.GetString(1)));
+        return issues;
     }
 
     private static IReadOnlyList<long> LoadExpiredIssueIds(
@@ -128,7 +164,7 @@ public sealed class InvoiceRetentionService
         var ids = new List<long>();
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT local_id, created_utc
+            SELECT local_id, created_utc, issue_type, resolved_utc
             FROM sync_issues
             WHERE account_key = $account_key
             ORDER BY local_id;
@@ -141,7 +177,12 @@ public sealed class InvoiceRetentionService
             if (!DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var created))
                 throw new InvalidDataException("sync_issues contains invalid created_utc");
             var localDate = DateOnly.FromDateTime(created.ToLocalTime().DateTime);
-            if (localDate < cutoff) ids.Add(reader.GetInt64(0));
+            if (localDate >= cutoff) continue;
+
+            var issueType = reader.GetString(2);
+            var unresolved = reader.GetString(3).Trim().Length == 0;
+            if (unresolved && IsActiveWorkIssueType(issueType)) continue;
+            ids.Add(reader.GetInt64(0));
         }
         return ids;
     }
@@ -194,6 +235,49 @@ public sealed class InvoiceRetentionService
         return date is not null && date.Value < cutoff;
     }
 
+    private static bool HasActiveWorkMetadata(string extraJson)
+    {
+        if (string.IsNullOrWhiteSpace(extraJson)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(extraJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("CYInvoice.db contains invalid invoice extra_json shape");
+            return IsTrue(root, "cyinvoice_void_pending") ||
+                   IsTrue(root, "cyinvoice_allowance_pending") ||
+                   HasValue(root, "cyinvoice_void_manual_review") ||
+                   HasValue(root, "cyinvoice_allowance_manual_review");
+        }
+        catch (JsonException error)
+        {
+            throw new InvalidDataException("CYInvoice.db contains invalid invoice extra_json", error);
+        }
+    }
+
+    private static bool HasMatchingActiveIssue(Candidate candidate, IReadOnlyList<ActiveIssue> issues) =>
+        issues.Any(issue =>
+            (issue.InvoiceNumber.Trim().Length != 0 && candidate.InvoiceNumber.Trim().Length != 0 &&
+             string.Equals(issue.InvoiceNumber.Trim(), candidate.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+            (issue.OrderId.Trim().Length != 0 &&
+             (string.Equals(issue.OrderId.Trim(), candidate.OriginalOrderId.Trim(), StringComparison.Ordinal) ||
+              string.Equals(issue.OrderId.Trim(), candidate.OrderId.Trim(), StringComparison.Ordinal) ||
+              string.Equals(issue.OrderId.Trim(), candidate.ApiOrderId.Trim(), StringComparison.Ordinal))));
+
+    private static bool IsTrue(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value)) return false;
+        return value.ValueKind == JsonValueKind.True ||
+               (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed) && parsed);
+    }
+
+    private static bool HasValue(JsonElement root, string propertyName) =>
+        root.TryGetProperty(propertyName, out var value) &&
+        value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined);
+
+    private static bool IsActiveWorkIssueType(string issueType) =>
+        ActiveWorkIssueTypes.Contains(issueType, StringComparer.Ordinal);
+
     private static DateOnly? RecordDate(string invoiceDate, string sentAt)
     {
         var direct = ParseDate(invoiceDate);
@@ -228,6 +312,7 @@ public sealed class InvoiceRetentionService
     }
 
     private sealed record Account(string Environment, string SellerInvoice);
+    private sealed record ActiveIssue(string InvoiceNumber, string OrderId);
 
     private sealed record Candidate(
         long LocalId,
@@ -236,5 +321,6 @@ public sealed class InvoiceRetentionService
         string OrderId,
         string ApiOrderId,
         string InvoiceDate,
-        string SentAt);
+        string SentAt,
+        string ExtraJson);
 }

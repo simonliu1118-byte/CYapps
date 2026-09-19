@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
@@ -29,24 +30,73 @@ internal static class AutomaticRetentionTests
 
     public static async Task TestDailyProblemsSkipRetentionAsync()
     {
+        using (var temporary = new TemporaryDirectory())
+        {
+            var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+            ConfigureTest(repository);
+            repository.Invoices.Append(TestRecord("expired", "TT00000001", "M20260917001", "2026/09/17"));
+            var today = TestRecord("today", "TT00000002", "M20260918001", "2026/09/18");
+            today.InvoiceState = InvoiceStates.Unknown;
+            repository.Invoices.Append(today);
+            var gateway = new FakeGateway();
+            var automatic = Automatic(repository, gateway);
+
+            var result = await automatic.SyncAsync();
+            True(result.Problems.Count != 0);
+            Equal(1, gateway.ListCalls);
+            Equal(Today, gateway.LastListStart);
+            Equal(Today, gateway.LastListEnd);
+            Equal(1, gateway.QueryCalls);
+            var ids = repository.Invoices.LoadOrCreate().Select(record => record.Id).OrderBy(id => id).ToArray();
+            SequenceEqual(new[] { "expired", "today" }, ids);
+        }
+
+        await TestExpiredActiveWorkIsProtectedAsync();
+    }
+
+    private static Task TestExpiredActiveWorkIsProtectedAsync()
+    {
         using var temporary = new TemporaryDirectory();
         var repository = LocalRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
-        repository.Invoices.Append(TestRecord("expired", "TT00000001", "M20260917001", "2026/09/17"));
-        var today = TestRecord("today", "TT00000002", "M20260918001", "2026/09/18");
-        today.InvoiceState = InvoiceStates.Unknown;
-        repository.Invoices.Append(today);
-        var gateway = new FakeGateway();
-        var automatic = Automatic(repository, gateway);
 
-        var result = await automatic.SyncAsync();
-        True(result.Problems.Count != 0);
-        Equal(1, gateway.ListCalls);
-        Equal(Today, gateway.LastListStart);
-        Equal(Today, gateway.LastListEnd);
-        Equal(1, gateway.QueryCalls);
+        repository.Invoices.Append(TestRecord("plain-expired", "TT00000001", "M20260917001", "2026/09/17"));
+
+        var voidPending = TestRecord("void-pending", "TT00000002", "M20260917002", "2026/09/17");
+        voidPending.ExtensionData = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+        {
+            ["cyinvoice_void_pending"] = JsonSerializer.SerializeToElement(true),
+        };
+        repository.Invoices.Append(voidPending);
+
+        var allowanceMetadata = TestRecord("allowance-metadata", "TT00000003", "M20260917003", "2026/09/17");
+        allowanceMetadata.ExtensionData = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+        {
+            ["cyinvoice_allowance_manual_review"] = JsonSerializer.SerializeToElement(new { active = true }),
+        };
+        repository.Invoices.Append(allowanceMetadata);
+
+        var allowanceIssue = TestRecord("allowance-issue", "TT00000004", "M20260917004", "2026/09/17");
+        repository.Invoices.Append(allowanceIssue);
+        var issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
+        issueStore.Record(
+            AccountKey(),
+            allowanceIssue.InvoiceNumber,
+            allowanceIssue.ApiOrderId,
+            InvoiceAllowanceIssueTypes.ManualReview,
+            "折讓人工處理",
+            new DateTimeOffset(2026, 9, 17, 12, 0, 0, TimeSpan.FromHours(8)));
+
+        var result = new InvoiceRetentionService(repository).Prune(Today);
+
+        Equal(1, result.Deleted);
+        Equal(0, result.Problems.Count);
         var ids = repository.Invoices.LoadOrCreate().Select(record => record.Id).OrderBy(id => id).ToArray();
-        SequenceEqual(new[] { "expired", "today" }, ids);
+        SequenceEqual(new[] { "allowance-issue", "allowance-metadata", "void-pending" }, ids);
+        Equal(1, issueStore.Unresolved(AccountKey()).Count(issue =>
+            issue.IssueType == InvoiceAllowanceIssueTypes.ManualReview &&
+            issue.InvoiceNumber == allowanceIssue.InvoiceNumber));
+        return Task.CompletedTask;
     }
 
     private static InvoiceAutomaticSyncService Automatic(LocalRepository repository, FakeGateway gateway)
@@ -62,6 +112,8 @@ internal static class AutomaticRetentionTests
         settings.Environment = Environments.Test;
         repository.Settings.Save(settings);
     }
+
+    private static string AccountKey() => Environments.Test + "|" + AmegoDefaults.TestInvoice;
 
     private static InvoiceRecord TestRecord(string id, string invoiceNumber, string orderId, string invoiceDate) => new()
     {
