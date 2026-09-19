@@ -122,7 +122,7 @@ public sealed class EmployeeVoidWorkflowService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(issue);
-        AuthenticateManager(actorEmployeeNo, actorPassword);
+        var manager = AuthenticateManager(actorEmployeeNo, actorPassword);
         RequireManualReviewIssue(issue);
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
@@ -130,7 +130,7 @@ public sealed class EmployeeVoidWorkflowService
 
         var result = await voidService.VoidAsync(
             record,
-            CancelReason(review.RequesterEmployeeNo, review.Reason),
+            CancelReason(manager.EmployeeNo, review.RequesterEmployeeNo, review.Reason),
             cancellationToken).ConfigureAwait(false);
 
         if (result.Outcome is InvoiceVoidOutcome.Confirmed or
@@ -284,9 +284,20 @@ public sealed class EmployeeVoidWorkflowService
         record.ApiOrderId.Trim().Length != 0 ? record.ApiOrderId.Trim() :
         record.OrderId.Trim().Length != 0 ? record.OrderId.Trim() : record.OriginalOrderId.Trim();
 
-    private static string CancelReason(string employeeNo, string reason)
+    internal static string CancelReason(string employeeNo, string reason) =>
+        CancelReasonCore([employeeNo], reason);
+
+    internal static string CancelReason(string reviewerEmployeeNo, string requesterEmployeeNo, string reason) =>
+        CancelReasonCore([reviewerEmployeeNo, requesterEmployeeNo], reason);
+
+    private static string CancelReasonCore(IEnumerable<string> employeeNumbers, string reason)
     {
-        var value = employeeNo.Trim() + " " + reason.Trim();
+        var ids = employeeNumbers.Select(value => (value ?? string.Empty).Trim()).ToArray();
+        if (ids.Length is < 1 or > 2 || ids.Any(value => value.Length != 4 || !value.All(char.IsAsciiDigit)))
+            throw new InvalidOperationException("作廢員工編號格式錯誤");
+        reason = (reason ?? string.Empty).Trim();
+        ValidateReason(reason);
+        var value = string.Join('-', ids.Append(reason));
         if (value.EnumerateRunes().Count() > 20)
             throw new InvalidOperationException("員工編號與作廢原因合計超過光貿允許長度");
         return value;
