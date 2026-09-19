@@ -46,7 +46,11 @@ internal sealed class EmployeeEditForm : Form
     {
         role.Items.AddRange(new object[] { "一般員工", "管理員" });
         role.SelectedIndex = existing?.Role == EmployeeRoles.Admin ? 1 : 0;
-        employeeNo.TextAlign = HorizontalAlignment.Center;
+        ConfigureInputField(employeeNo);
+        ConfigureInputField(name);
+        ConfigureInputField(email);
+        ConfigureInputField(password);
+        ConfigureInputField(confirmPassword);
 
         var fieldCount = createMode ? 6 : 4;
         var root = new TableLayoutPanel
@@ -118,6 +122,11 @@ internal sealed class EmployeeEditForm : Form
         CancelButton = cancel;
     }
 
+    private static void ConfigureInputField(TextBox field)
+    {
+        field.TextAlign = HorizontalAlignment.Left;
+    }
+
     private void SaveClicked(object? sender, EventArgs eventArgs)
     {
         var no = employeeNo.Text.Trim();
@@ -129,6 +138,11 @@ internal sealed class EmployeeEditForm : Form
         if (name.Text.Trim().Length == 0)
         {
             ValidationError("員工姓名不可空白", name);
+            return;
+        }
+        if (email.Text.Trim().Length == 0)
+        {
+            ValidationError("請輸入 Email", email);
             return;
         }
         if (createMode)
@@ -160,7 +174,8 @@ internal sealed class EmployeeEditForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (employeeNo.MaxLength != 4 || AcceptButton is not null || CancelButton != cancel ||
+        if (employeeNo.MaxLength != 4 || employeeNo.TextAlign != HorizontalAlignment.Left ||
+            email.TextAlign != HorizontalAlignment.Left || AcceptButton is not null || CancelButton != cancel ||
             (createMode && (!password.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar)) ||
             (!createMode && !allowRoleChange && role.Enabled) ||
             !UiControls.HasLogicalSize(save, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
