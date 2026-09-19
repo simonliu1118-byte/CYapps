@@ -93,9 +93,10 @@ internal sealed class VoidConfirmationForm : Form
         employeeNo.KeyDown += (_, eventArgs) => AdvanceOnEnter(eventArgs, password);
         password.KeyDown += (_, eventArgs) => AdvanceOnEnter(eventArgs, paperInvoice ? notDelivered : confirm);
 
-        var receiptHost = BuildReceiptStateHost();
+        Control? receiptHost = null;
         if (paperInvoice)
         {
+            receiptHost = BuildReceiptStateHost();
             notDelivered.TabIndex = 3;
             collected.TabIndex = 4;
             uncollected.TabIndex = 5;
@@ -158,7 +159,7 @@ internal sealed class VoidConfirmationForm : Form
         root.Controls.Add(fields, 0, rowIndex++);
         if (paperInvoice)
         {
-            root.Controls.Add(receiptHost, 0, rowIndex++);
+            root.Controls.Add(receiptHost!, 0, rowIndex++);
             root.Controls.Add(uncollectedWarning, 0, rowIndex++);
         }
         root.Controls.Add(separator, 0, rowIndex++);
