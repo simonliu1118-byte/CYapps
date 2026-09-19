@@ -357,7 +357,7 @@ internal sealed class SyncIssuesForm : Form
                 case InvoiceVoidOutcome.PendingConfirmation:
                     MessageBox.Show(
                         this,
-                        "作廢已送出，但光貿尚未確認最終結果。\n\n系統已轉為待確認，不會盲目重送。",
+                        "作廢已送出，但光貿尚未確認最終結果。\n\n發票目前為「已開立（等待作廢）」；系統不會盲目重送。",
                         "作廢結果待確認",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
@@ -373,7 +373,7 @@ internal sealed class SyncIssuesForm : Form
                 case InvoiceVoidOutcome.RetryReady:
                     MessageBox.Show(
                         this,
-                        "先前待確認狀態已解除，本次沒有自動重送。\n人工確認仍保留，可重新確認後再次送出。",
+                        "先前等待作廢狀態已解除，本次沒有自動重送。\n人工確認仍保留，可重新確認後再次送出。",
                         "請重新確認",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
@@ -682,8 +682,9 @@ internal sealed class SyncIssuesForm : Form
             throw new InvalidOperationException("人工確認按鈕未使用標準尺寸");
         if (FriendlyFailureReason("API code 3040122: BuyerIdentifier invalid") != "買受人統編資料格式不正確")
             throw new InvalidOperationException("開立失敗原因未轉為可理解中文");
-        if (DisplayType(InvoiceVoidIssueTypes.ManualReview) != "紙本作廢確認")
-            throw new InvalidOperationException("人工確認類型顯示不正確");
+        if (DisplayType(InvoiceVoidIssueTypes.ManualReview) != "紙本作廢確認" ||
+            DisplayType(InvoiceVoidSyncIssueTypes.PendingConfirmation) != "作廢結果待確認")
+            throw new InvalidOperationException("作廢問題類型顯示不正確");
     }
 
     private static string DisplayType(string type) => type switch
@@ -696,6 +697,7 @@ internal sealed class SyncIssuesForm : Form
         InvoiceSyncIssueTypes.AmbiguousMatch => "本機資料無法唯一對應",
         InvoiceSyncIssueTypes.LocalWriteFailed => "本機資料庫寫入失敗",
         InvoiceVoidIssueTypes.ManualReview => "紙本作廢確認",
+        InvoiceVoidSyncIssueTypes.PendingConfirmation => "作廢結果待確認",
         _ => type,
     };
 }
