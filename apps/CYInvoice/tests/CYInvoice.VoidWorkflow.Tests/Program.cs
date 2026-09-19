@@ -14,10 +14,12 @@ var tests = new (string Name, Action Run)[]
     ("ordinary employee cannot approve or cancel manual review", () => TestEmployeeCannotManageReviewAsync().GetAwaiter().GetResult()),
     ("wrong manager password cannot approve manual review", () => TestWrongManagerPasswordAsync().GetAwaiter().GetResult()),
     ("administrator can cancel manual review without changing invoice state", () => TestAdminCancelsReviewAsync().GetAwaiter().GetResult()),
-    ("administrator approval sends original requester employee number", () => TestAdminApprovesReviewAsync().GetAwaiter().GetResult()),
+    ("administrator approval sends reviewer requester and reason", () => TestAdminApprovesReviewAsync().GetAwaiter().GetResult()),
     ("pending approved void keeps core pending marker and resolves manual review", () => TestApprovedPendingVoidAsync().GetAwaiter().GetResult()),
     ("manual review cancel is blocked after remote void becomes pending", TestCancelBlockedAfterPending),
     ("non-paper invoice proceeds without paper receipt selection", () => TestCarrierInvoiceAsync().GetAwaiter().GetResult()),
+    ("direct cancel reason format uses requester and reason", TestDirectCancelReasonFormat),
+    ("reviewed cancel reason format uses reviewer requester and reason", TestReviewedCancelReasonFormat),
     ("allowance wrong employee credentials make zero query calls", () => AllowanceWorkflowTests.WrongCredentialsMakeZeroQueryAsync().GetAwaiter().GetResult()),
     ("employee can queue allowance manual review", () => AllowanceWorkflowTests.EmployeeQueuesManualReviewAsync().GetAwaiter().GetResult()),
     ("administrator can cancel allowance manual review", () => AllowanceWorkflowTests.AdministratorCancelsManualReviewAsync().GetAwaiter().GetResult()),
@@ -167,7 +169,7 @@ static async Task TestAdminApprovesReviewAsync()
 
     Equal(InvoiceVoidOutcome.Confirmed, result.Outcome);
     Equal(1, setup.Gateway.VoidCalls);
-    Equal("3015 退貨", setup.Gateway.LastVoid?.CancelReason);
+    Equal("2000-3015-退貨", setup.Gateway.LastVoid?.CancelReason);
     var stored = setup.Repository.Invoices.LoadOrCreate().Single();
     Equal(InvoiceStates.Voided, stored.InvoiceState);
     Equal(null, setup.Workflow.ManualReviewFor(stored));
@@ -189,6 +191,7 @@ static async Task TestApprovedPendingVoidAsync()
 
     Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
     Equal(1, setup.Gateway.VoidCalls);
+    Equal("0001-3015-退貨", setup.Gateway.LastVoid?.CancelReason);
     var stored = setup.Repository.Invoices.LoadOrCreate().Single();
     Equal(true, HasCorePending(stored));
     Equal(null, setup.Workflow.ManualReviewFor(stored));
@@ -225,7 +228,17 @@ static async Task TestCarrierInvoiceAsync()
 
     Equal(false, result.ManualReviewRequired);
     Equal(InvoiceVoidOutcome.Confirmed, result.VoidResult?.Outcome);
-    Equal("3015 取消交易", setup.Gateway.LastVoid?.CancelReason);
+    Equal("3015-取消交易", setup.Gateway.LastVoid?.CancelReason);
+}
+
+static void TestDirectCancelReasonFormat()
+{
+    Equal("3015-消退", EmployeeVoidWorkflowService.CancelReason("3015", "消退"));
+}
+
+static void TestReviewedCancelReasonFormat()
+{
+    Equal("3001-3015-消退", EmployeeVoidWorkflowService.CancelReason("3001", "3015", "消退"));
 }
 
 static async Task QueueReviewAsync(TestSetup setup)
