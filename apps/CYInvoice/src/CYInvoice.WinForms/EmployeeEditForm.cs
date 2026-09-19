@@ -5,6 +5,7 @@ namespace CYInvoice.WinForms;
 internal sealed class EmployeeEditForm : Form
 {
     private readonly bool createMode;
+    private readonly bool allowRoleChange;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox name = UiControls.TextBox(80);
     private readonly TextBox email = UiControls.TextBox(160);
@@ -19,9 +20,10 @@ internal sealed class EmployeeEditForm : Form
     private readonly Button save = UiControls.StandardButton("儲存");
     private readonly Button cancel = UiControls.StandardButton("取消");
 
-    public EmployeeEditForm(EmployeeAccount? existing = null)
+    public EmployeeEditForm(EmployeeAccount? existing = null, bool allowRoleChange = true)
     {
         createMode = existing is null;
+        this.allowRoleChange = createMode || allowRoleChange;
         Text = createMode ? "新增員工" : "修改員工";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(430, createMode ? 392 : 286);
@@ -42,7 +44,7 @@ internal sealed class EmployeeEditForm : Form
 
     private void BuildLayout(EmployeeAccount? existing)
     {
-        role.Items.AddRange(["一般員工", "管理員"]);
+        role.Items.AddRange(new object[] { "一般員工", "管理員" });
         role.SelectedIndex = existing?.Role == EmployeeRoles.Admin ? 1 : 0;
         employeeNo.TextAlign = HorizontalAlignment.Center;
 
@@ -91,6 +93,10 @@ internal sealed class EmployeeEditForm : Form
                 role.Items.Add("超級管理員");
                 role.SelectedIndex = 0;
                 role.Enabled = false;
+            }
+            else
+            {
+                role.Enabled = this.allowRoleChange;
             }
         }
 
@@ -156,6 +162,7 @@ internal sealed class EmployeeEditForm : Form
     {
         if (employeeNo.MaxLength != 4 || AcceptButton is not null || CancelButton != cancel ||
             (createMode && (!password.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar)) ||
+            (!createMode && !allowRoleChange && role.Enabled) ||
             !UiControls.HasLogicalSize(save, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("員工編輯視窗配置不正確");
     }
