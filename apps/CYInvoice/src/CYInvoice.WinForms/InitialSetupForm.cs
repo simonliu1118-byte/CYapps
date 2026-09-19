@@ -4,13 +4,15 @@ namespace CYInvoice.WinForms;
 
 internal sealed class InitialSetupForm : Form
 {
-    private const int WindowWidth = 470;
-    private const int HeaderHeight = 56;
-    private const int FieldRowHeight = 38;
-    private const int ActionRowHeight = 48;
-    private const int HorizontalPadding = 18;
-    private const int VerticalPadding = 10;
+    private const int WindowWidth = 330;
+    private const int HeaderHeight = 38;
+    private const int FieldRowHeight = 34;
+    private const int ActionRowHeight = 42;
+    private const int HorizontalPadding = 12;
+    private const int VerticalPadding = 6;
     private const int FieldCount = 5;
+    private const int CompactButtonWidth = 118;
+    private const int CompactButtonHeight = 30;
 
     private readonly LocalRepository repository;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
@@ -18,13 +20,13 @@ internal sealed class InitialSetupForm : Form
     private readonly TextBox email = UiControls.TextBox(160);
     private readonly TextBox employeePassword = PasswordBox();
     private readonly TextBox confirmPassword = PasswordBox();
-    private readonly Button save = UiControls.StandardButton("建立超級管理員");
-    private readonly Button cancel = UiControls.StandardButton("取消並關閉");
+    private readonly Button save = CompactButton("建立超級管理員");
+    private readonly Button cancel = CompactButton("取消並關閉");
 
     public InitialSetupForm(LocalRepository repository)
     {
         this.repository = repository;
-        Text = "CYInvoice 首次設定";
+        Text = "首次設定";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, CalculateHeight());
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -50,6 +52,7 @@ internal sealed class InitialSetupForm : Form
             ColumnCount = 1,
             RowCount = 3,
             Padding = new Padding(HorizontalPadding, VerticalPadding, HorizontalPadding, VerticalPadding),
+            Margin = Padding.Empty,
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, HeaderHeight));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldCount * FieldRowHeight));
@@ -61,6 +64,7 @@ internal sealed class InitialSetupForm : Form
             TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = false,
             Margin = Padding.Empty,
+            Padding = Padding.Empty,
         }, 0, 0);
 
         var fields = new TableLayoutPanel
@@ -69,8 +73,9 @@ internal sealed class InitialSetupForm : Form
             ColumnCount = 2,
             RowCount = FieldCount,
             Margin = Padding.Empty,
+            Padding = Padding.Empty,
         };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 102));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (var index = 0; index < FieldCount; index++)
             fields.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight));
@@ -148,7 +153,7 @@ internal sealed class InitialSetupForm : Form
     {
         if (repository.Employees.HasEmployees())
         {
-            MessageBox.Show(this, "已建立員工帳戶，不能再次執行首次設定。", "無法建立帳戶",
+            MessageBox.Show(this, "已建立員工帳號，不能再次執行首次設定。", "無法建立帳號",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -193,7 +198,7 @@ internal sealed class InitialSetupForm : Form
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "無法完成帳戶設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, error.Message, "無法完成帳號設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -215,7 +220,7 @@ internal sealed class InitialSetupForm : Form
 
     private void ValidationError(string message, TextBox target)
     {
-        MessageBox.Show(this, message, "無法完成帳戶設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        MessageBox.Show(this, message, "無法完成帳號設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         BeginInvoke((Action)(() =>
         {
             target.Focus();
@@ -226,12 +231,12 @@ internal sealed class InitialSetupForm : Form
     internal void VerifySmokeLayout()
     {
         var fields = InputFields().ToArray();
-        if (ShowIcon || employeeNo.MaxLength != 4 || !employeePassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
+        if (Text != "首次設定" || ShowIcon || employeeNo.MaxLength != 4 || !employeePassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
             fields.Any(field => field.TextAlign != HorizontalAlignment.Left) ||
             ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
             AcceptButton is not null || CancelButton != cancel ||
-            !UiControls.HasLogicalSize(save, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("V2.6.1 首次帳戶設定視窗配置不正確");
+            !UiControls.HasLogicalSize(save, CompactButtonWidth, CompactButtonHeight))
+            throw new InvalidOperationException("V2.6.1 首次設定視窗配置不正確");
     }
 
     private static TextBox PasswordBox()
@@ -247,7 +252,17 @@ internal sealed class InitialSetupForm : Form
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft,
         AutoEllipsis = false,
-        Margin = new Padding(0, 0, 8, 0),
+        Margin = new Padding(0, 0, 6, 0),
+    };
+
+    private static Button CompactButton(string text) => new NoFocusCueButton
+    {
+        Text = text,
+        Width = CompactButtonWidth,
+        Height = CompactButtonHeight,
+        Margin = new Padding(5, 2, 5, 2),
+        AutoSize = false,
+        UseVisualStyleBackColor = true,
     };
 
     private static void CenterButtons(FlowLayoutPanel panel)
