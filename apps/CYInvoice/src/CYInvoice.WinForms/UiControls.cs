@@ -197,6 +197,7 @@ internal static class UiControls
 
     public static Button StandardButton(string text)
     {
+        if (text == "帳戶管理") text = "帳號管理";
         var button = IsDangerText(text) ? new DangerActionButton() : new NoFocusCueButton();
         button.Text = text;
         button.Width = StandardButtonWidth;
