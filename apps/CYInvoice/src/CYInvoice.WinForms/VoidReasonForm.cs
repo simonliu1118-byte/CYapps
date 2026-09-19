@@ -92,6 +92,8 @@ internal sealed class VoidReasonForm : Form
             ValidationError($"作廢原因最多 {EmployeeVoidWorkflowService.MaxReasonLength} 字。");
             return;
         }
+
+        VoidConfirmationPrivacyMask.Apply(Owner);
         DialogResult = DialogResult.OK;
         Close();
     }
