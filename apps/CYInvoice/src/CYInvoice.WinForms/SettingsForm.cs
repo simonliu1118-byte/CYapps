@@ -25,7 +25,7 @@ internal sealed class SettingsForm : Form
     {
         this.repository = repository;
         settings = repository.Settings.LoadOrCreate();
-        Text = "CYInvoice 設定";
+        Text = "設定選單";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(420, 338);
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -34,9 +34,14 @@ internal sealed class SettingsForm : Form
         ShowInTaskbar = false;
         ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+
+        SuspendLayout();
         BuildLayout();
         LoadValues();
         UpdateEnvironmentFields();
+        test.CheckedChanged += EnvironmentChanged;
+        production.CheckedChanged += EnvironmentChanged;
+        ResumeLayout(true);
     }
 
     private void BuildLayout()
@@ -67,8 +72,6 @@ internal sealed class SettingsForm : Form
         environmentLayout.Controls.Add(invoice, 2, 2);
         environmentLayout.Controls.Add(appKeyLabel, 1, 3);
         environmentLayout.Controls.Add(appKey, 2, 3);
-        test.CheckedChanged += (_, _) => UpdateEnvironmentFields();
-        production.CheckedChanged += (_, _) => UpdateEnvironmentFields();
         environmentGroup.Controls.Add(environmentLayout);
 
         var platformGroup = new GroupBox { Text = "平台檔案密碼", Dock = DockStyle.Fill };
@@ -104,6 +107,8 @@ internal sealed class SettingsForm : Form
         AcceptButton = null;
         CancelButton = cancel;
     }
+
+    private void EnvironmentChanged(object? sender, EventArgs eventArgs) => UpdateEnvironmentFields();
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
@@ -180,9 +185,9 @@ internal sealed class SettingsForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (ShowIcon || invoice.ReadOnly != !production.Checked || appKey.ReadOnly != !production.Checked ||
+        if (Text != "設定選單" || ShowIcon || invoice.ReadOnly != !production.Checked || appKey.ReadOnly != !production.Checked ||
             !invoice.Enabled || !appKey.Enabled)
-            throw new InvalidOperationException("測試與正式環境欄位鎖定狀態不一致");
+            throw new InvalidOperationException("設定視窗標題或測試與正式環境欄位鎖定狀態不一致");
         if (AcceptButton is not null)
             throw new InvalidOperationException("設定視窗不應使用表單預設 AcceptButton，Enter 必須依欄位明確處理");
         if (settings.ProductionAppKeyEncrypted.Length != 0 &&
