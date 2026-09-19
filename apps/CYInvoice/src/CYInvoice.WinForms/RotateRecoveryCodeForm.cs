@@ -27,6 +27,7 @@ internal sealed class RotateRecoveryCodeForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => password.Focus();
     }
@@ -126,7 +127,7 @@ internal sealed class RotateRecoveryCodeForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (!password.UseSystemPasswordChar || password.TextAlign != HorizontalAlignment.Left ||
+        if (Icon is null || !password.UseSystemPasswordChar || password.TextAlign != HorizontalAlignment.Left ||
             ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
             AcceptButton is not null || CancelButton != cancel ||
             !UiControls.HasLogicalSize(confirm, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
