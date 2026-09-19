@@ -105,10 +105,6 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
                 ? settings.PasswordHash[PasswordPrefix.Length..] : settings.PasswordHash;
             if (!TryHex(hashText, out var hash) || hash.Length != 32) throw new InvalidDataException("invalid password_hash");
         }
-        else if (settings.PasswordSalt.Length != 0 || settings.PasswordHash.Length != 0)
-        {
-            throw new InvalidDataException("retired management password fields must be empty");
-        }
         if (settings.Environment == Environments.Production &&
             (settings.ProductionInvoice.Length == 0 || settings.ProductionAppKeyEncrypted.Length == 0))
             throw new InvalidDataException("正式公司請輸入 8 碼公司統編與 App Key");
