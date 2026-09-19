@@ -25,6 +25,7 @@ internal sealed class EmployeeAdminLoginForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => employeeNo.Focus();
     }
@@ -154,7 +155,7 @@ internal sealed class EmployeeAdminLoginForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (!password.UseSystemPasswordChar || employeeNo.MaxLength != 4 ||
+        if (Icon is null || !password.UseSystemPasswordChar || employeeNo.MaxLength != 4 ||
             employeeNo.TextAlign != HorizontalAlignment.Left || password.TextAlign != HorizontalAlignment.Left ||
             AcceptButton is not null || CancelButton != cancel ||
             !UiControls.HasLogicalSize(login, CompactButtonWidth, UiControls.StandardButtonHeight) ||
