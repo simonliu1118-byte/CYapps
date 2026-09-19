@@ -6,20 +6,20 @@ using CYInvoice.Core.Amego;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
-var tests = new (string Name, Action Run)[]
+var tests = new (string Name, Func<Task> Run)[]
 {
-    ("f0501 serializes one-item array with exact fields", () => TestF0501PayloadAsync().GetAwaiter().GetResult()),
-    ("f0501 rejects reason longer than twenty characters", () => TestF0501ReasonLimitAsync().GetAwaiter().GetResult()),
-    ("invoice_query detects pending C0501", () => TestQueryDetectsPendingVoidAsync().GetAwaiter().GetResult()),
-    ("preflight already voided never sends f0501", () => TestAlreadyVoidedAsync().GetAwaiter().GetResult()),
-    ("preflight pending void never sends f0501", () => TestPreflightPendingAsync().GetAwaiter().GetResult()),
-    ("preflight requires official status 99", () => TestPreflightRequiresCompleteAsync().GetAwaiter().GetResult()),
-    ("successful f0501 still requires authoritative confirmation", () => TestConfirmedVoidAsync().GetAwaiter().GetResult()),
-    ("accepted but not yet visible remains pending", () => TestAcceptedButUnconfirmedAsync().GetAwaiter().GetResult()),
-    ("transport ambiguity remains pending and blocks blind resend", () => TestTransportAmbiguityAsync().GetAwaiter().GetResult()),
-    ("later stable open query only unlocks retry without resending", () => TestReconcileUnlocksRetryAsync().GetAwaiter().GetResult()),
-    ("explicit rejection clears pending state without resend", () => TestExplicitRejectionAsync().GetAwaiter().GetResult()),
-    ("concurrent same invoice sends at most one f0501", () => TestConcurrentVoidAsync().GetAwaiter().GetResult()),
+    ("f0501 serializes one-item array with exact fields", Cases.F0501PayloadAsync),
+    ("f0501 rejects reason longer than twenty characters", Cases.F0501ReasonLimitAsync),
+    ("invoice_query detects pending C0501", Cases.QueryDetectsPendingVoidAsync),
+    ("preflight already voided never sends f0501", Cases.AlreadyVoidedAsync),
+    ("preflight pending void never sends f0501", Cases.PreflightPendingAsync),
+    ("preflight requires official status 99", Cases.PreflightRequiresCompleteAsync),
+    ("successful f0501 still requires authoritative confirmation", Cases.ConfirmedVoidAsync),
+    ("accepted but not yet visible remains pending", Cases.AcceptedButUnconfirmedAsync),
+    ("transport ambiguity remains pending and blocks blind resend", Cases.TransportAmbiguityAsync),
+    ("later stable open query only unlocks retry without resending", Cases.ReconcileUnlocksRetryAsync),
+    ("explicit rejection clears pending state without resend", Cases.ExplicitRejectionAsync),
+    ("concurrent same invoice sends at most one f0501", Cases.ConcurrentVoidAsync),
 };
 
 var failures = 0;
@@ -27,7 +27,7 @@ foreach (var test in tests)
 {
     try
     {
-        test.Run();
+        await test.Run();
         Console.WriteLine($"PASS {test.Name}");
     }
     catch (Exception error)
@@ -36,339 +36,310 @@ foreach (var test in tests)
         Console.Error.WriteLine($"FAIL {test.Name}: {error}");
     }
 }
-
 Console.WriteLine($"{tests.Length - failures}/{tests.Length} void core tests passed");
 return failures == 0 ? 0 : 1;
 
-static async Task TestF0501PayloadAsync()
+static class Cases
 {
-    string data = string.Empty;
-    var calls = 0;
-    using var http = new HttpClient(new StubHandler(async request =>
+    public static async Task F0501PayloadAsync()
     {
-        calls++;
-        Equal("/json/f0501", request.RequestUri?.AbsolutePath);
-        var form = ParseForm(await request.Content!.ReadAsStringAsync());
-        Equal("12345678", form["invoice"]);
-        data = form["data"];
-        return JsonResponse("{\"code\":0,\"msg\":\"OK\"}");
-    }));
-    var client = new AmegoClient(
-        "12345678",
-        "test-key",
-        http,
-        () => new DateTimeOffset(2026, 9, 19, 14, 0, 0, TimeSpan.FromHours(8)));
+        string data = string.Empty;
+        var calls = 0;
+        using var http = new HttpClient(new StubHandler(async request =>
+        {
+            calls++;
+            AssertEx.Equal("/json/f0501", request.RequestUri?.AbsolutePath);
+            var form = Fixtures.ParseForm(await request.Content!.ReadAsStringAsync());
+            AssertEx.Equal("12345678", form["invoice"]);
+            data = form["data"];
+            return Fixtures.JsonResponse("{\"code\":0,\"msg\":\"OK\"}");
+        }));
+        var client = new AmegoClient("12345678", "test-key", http,
+            () => new DateTimeOffset(2026, 9, 19, 14, 0, 0, TimeSpan.FromHours(8)));
 
-    var result = await client.VoidAsync(new VoidRequest
+        var response = await client.VoidAsync(new VoidRequest
+        {
+            CancelInvoiceNumber = "AA12345678",
+            CancelReason = "3015 退貨",
+        });
+
+        AssertEx.Equal(1, calls);
+        AssertEx.Equal(0, response.Code);
+        using var document = JsonDocument.Parse(data);
+        AssertEx.Equal(JsonValueKind.Array, document.RootElement.ValueKind);
+        AssertEx.Equal(1, document.RootElement.GetArrayLength());
+        var item = document.RootElement[0];
+        AssertEx.Equal("AA12345678", item.GetProperty("CancelInvoiceNumber").GetString());
+        AssertEx.Equal("3015 退貨", item.GetProperty("CancelReason").GetString());
+    }
+
+    public static async Task F0501ReasonLimitAsync()
     {
-        CancelInvoiceNumber = "AA12345678",
-        CancelReason = "3015 退貨",
-    });
+        var calls = 0;
+        using var http = new HttpClient(new StubHandler(_ =>
+        {
+            calls++;
+            return Task.FromResult(Fixtures.JsonResponse("{\"code\":0,\"msg\":\"OK\"}"));
+        }));
+        var client = new AmegoClient("12345678", "test-key", http);
+        await AssertEx.ThrowsAsync<ArgumentException>(() => client.VoidAsync(new VoidRequest
+        {
+            CancelInvoiceNumber = "AA12345678",
+            CancelReason = new string('退', 21),
+        }));
+        AssertEx.Equal(0, calls);
+    }
 
-    Equal(1, calls);
-    Equal(0, result.Code);
-    using var document = JsonDocument.Parse(data);
-    Equal(JsonValueKind.Array, document.RootElement.ValueKind);
-    Equal(1, document.RootElement.GetArrayLength());
-    var item = document.RootElement[0];
-    Equal("AA12345678", item.GetProperty("CancelInvoiceNumber").GetString());
-    Equal("3015 退貨", item.GetProperty("CancelReason").GetString());
-}
-
-static async Task TestF0501ReasonLimitAsync()
-{
-    var calls = 0;
-    using var http = new HttpClient(new StubHandler(_ =>
+    public static async Task QueryDetectsPendingVoidAsync()
     {
-        calls++;
-        return Task.FromResult(JsonResponse("{\"code\":0,\"msg\":\"OK\"}"));
-    }));
-    var client = new AmegoClient("12345678", "test-key", http);
-    await ThrowsAsync<ArgumentException>(() => client.VoidAsync(new VoidRequest
+        using var http = new HttpClient(new StubHandler(_ => Task.FromResult(Fixtures.JsonResponse("""
+            {"code":0,"msg":"","data":{"invoice_number":"AA12345678","invoice_type":"A0401","invoice_status":99,"cancel_date":0,"order_id":"O1","wait":[{"invoice_type":"C0501","create_date":1789790000}]}}
+            """))));
+        var client = new AmegoClient("12345678", "test-key", http);
+        var response = await client.QueryByInvoiceNumberAsync("AA12345678");
+        AssertEx.Equal(true, response.Data.VoidPending);
+    }
+
+    public static async Task AlreadyVoidedAsync()
     {
-        CancelInvoiceNumber = "AA12345678",
-        CancelReason = new string('退', 21),
-    }));
-    Equal(0, calls);
-}
+        using var temporary = new TemporaryDirectory();
+        var gateway = new FakeGateway();
+        gateway.QueryPlan.Enqueue(Fixtures.Query(cancelDate: 1789790000));
+        var (service, repository, record) = Fixtures.CreateService(temporary.Path, gateway);
+        var result = await service.VoidAsync(record, "3015 退貨");
+        AssertEx.Equal(InvoiceVoidOutcome.AlreadyVoided, result.Outcome);
+        AssertEx.Equal(false, result.RequestSent);
+        AssertEx.Equal(0, gateway.VoidCalls);
+        AssertEx.Equal(InvoiceStates.Voided, repository.Invoices.LoadOrCreate().Single().InvoiceState);
+    }
 
-static async Task TestQueryDetectsPendingVoidAsync()
-{
-    using var http = new HttpClient(new StubHandler(_ => Task.FromResult(JsonResponse("""
-        {"code":0,"msg":"","data":{"invoice_number":"AA12345678","invoice_type":"A0401","invoice_status":99,"cancel_date":0,"order_id":"O1","wait":[{"invoice_type":"C0501","create_date":1789790000}]}}
-        """))));
-    var client = new AmegoClient("12345678", "test-key", http);
-    var response = await client.QueryByInvoiceNumberAsync("AA12345678");
-    Equal(true, response.Data.VoidPending);
-}
-
-static async Task TestAlreadyVoidedAsync()
-{
-    using var temporary = new TemporaryDirectory();
-    var gateway = new FakeGateway();
-    gateway.Queries.Enqueue(Query(cancelDate: 1789790000));
-    var (service, repository, record) = CreateService(temporary.Path, gateway);
-
-    var result = await service.VoidAsync(record, "3015 退貨");
-
-    Equal(InvoiceVoidOutcome.AlreadyVoided, result.Outcome);
-    Equal(false, result.RequestSent);
-    Equal(0, gateway.VoidCalls);
-    Equal(InvoiceStates.Voided, repository.Invoices.LoadOrCreate().Single().InvoiceState);
-}
-
-static async Task TestPreflightPendingAsync()
-{
-    using var temporary = new TemporaryDirectory();
-    var gateway = new FakeGateway();
-    gateway.Queries.Enqueue(Query(voidPending: true));
-    var (service, repository, record) = CreateService(temporary.Path, gateway);
-
-    var result = await service.VoidAsync(record, "3015 退貨");
-
-    Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
-    Equal(false, result.RequestSent);
-    Equal(0, gateway.VoidCalls);
-    Equal(true, PendingMarker(repository));
-}
-
-static async Task TestPreflightRequiresCompleteAsync()
-{
-    using var temporary = new TemporaryDirectory();
-    var gateway = new FakeGateway();
-    gateway.Queries.Enqueue(Query(status: UploadStatuses.Processing));
-    var (service, _, record) = CreateService(temporary.Path, gateway);
-
-    var result = await service.VoidAsync(record, "3015 退貨");
-
-    Equal(InvoiceVoidOutcome.Rejected, result.Outcome);
-    Equal(false, result.RequestSent);
-    Equal(0, gateway.VoidCalls);
-}
-
-static async Task TestConfirmedVoidAsync()
-{
-    using var temporary = new TemporaryDirectory();
-    var gateway = new FakeGateway();
-    gateway.Queries.Enqueue(Query());
-    gateway.Queries.Enqueue(Query(cancelDate: 1789790000));
-    gateway.VoidResponse = new VoidResponse(0, "OK");
-    var (service, repository, record) = CreateService(temporary.Path, gateway);
-
-    var result = await service.VoidAsync(record, "3015 退貨");
-
-    Equal(InvoiceVoidOutcome.Confirmed, result.Outcome);
-    Equal(true, result.RequestSent);
-    Equal(1, gateway.VoidCalls);
-    Equal(InvoiceStates.Voided, repository.Invoices.LoadOrCreate().Single().InvoiceState);
-    Equal(false, PendingMarker(repository));
-}
-
-static async Task TestAcceptedButUnconfirmedAsync()
-{
-    using var temporary = new TemporaryDirectory();
-    var gateway = new FakeGateway();
-    gateway.Queries.Enqueue(Query());
-    gateway.Queries.Enqueue(Query());
-    gateway.VoidResponse = new VoidResponse(0, "OK");
-    var (service, repository, record) = CreateService(temporary.Path, gateway);
-
-    var result = await service.VoidAsync(record, "3015 退貨");
-
-    Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
-    Equal(1, gateway.VoidCalls);
-    Equal(true, PendingMarker(repository));
-    Equal(InvoiceStates.Changing, repository.Invoices.LoadOrCreate().Single().InvoiceState);
-}
-
-static async Task TestTransportAmbiguityAsync()
-{
-    using var temporary = new TemporaryDirectory();
-    var gateway = new FakeGateway { VoidException = new TaskCanceledException("simulated timeout") };
-    gateway.Queries.Enqueue(Query());
-    gateway.QueryFailures.Enqueue(new HttpRequestException("query unavailable"));
-    gateway.StatusFailures.Enqueue(null);
-    gateway.StatusFailures.Enqueue(new HttpRequestException("status unavailable"));
-    var (service, repository, record) = CreateService(temporary.Path, gateway);
-
-    var result = await service.VoidAsync(record, "3015 退貨");
-
-    Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
-    Equal(1, gateway.VoidCalls);
-    Equal(true, PendingMarker(repository));
-}
-
-static async Task TestReconcileUnlocksRetryAsync()
-{
-    using var temporary = new TemporaryDirectory();
-    var gateway = new FakeGateway { VoidResponse = new VoidResponse(0, "OK") };
-    gateway.Queries.Enqueue(Query());
-    gateway.Queries.Enqueue(Query());
-    gateway.Queries.Enqueue(Query());
-    var (service, repository, record) = CreateService(temporary.Path, gateway);
-
-    var first = await service.VoidAsync(record, "3015 退貨");
-    Equal(InvoiceVoidOutcome.PendingConfirmation, first.Outcome);
-    Equal(1, gateway.VoidCalls);
-
-    var second = await service.VoidAsync(repository.Invoices.LoadOrCreate().Single(), "3015 退貨");
-    Equal(InvoiceVoidOutcome.RetryReady, second.Outcome);
-    Equal(false, second.RequestSent);
-    Equal(1, gateway.VoidCalls);
-    Equal(false, PendingMarker(repository));
-    Equal(InvoiceStates.Opened, repository.Invoices.LoadOrCreate().Single().InvoiceState);
-}
-
-static async Task TestExplicitRejectionAsync()
-{
-    using var temporary = new TemporaryDirectory();
-    var gateway = new FakeGateway { VoidResponse = new VoidResponse(3050126, "已超過修改期限") };
-    gateway.Queries.Enqueue(Query());
-    gateway.Queries.Enqueue(Query());
-    var (service, repository, record) = CreateService(temporary.Path, gateway);
-
-    var result = await service.VoidAsync(record, "3015 退貨");
-
-    Equal(InvoiceVoidOutcome.Rejected, result.Outcome);
-    Equal(3050126, result.ApiCode);
-    Equal(1, gateway.VoidCalls);
-    Equal(false, PendingMarker(repository));
-    Equal(InvoiceStates.Opened, repository.Invoices.LoadOrCreate().Single().InvoiceState);
-}
-
-static async Task TestConcurrentVoidAsync()
-{
-    using var temporary = new TemporaryDirectory();
-    var gateway = new FakeGateway
+    public static async Task PreflightPendingAsync()
     {
-        VoidResponse = new VoidResponse(0, "OK"),
-        VoidStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
-        VoidRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
-    };
-    gateway.Queries.Enqueue(Query());
-    gateway.Queries.Enqueue(Query(voidPending: true));
-    gateway.Queries.Enqueue(Query(voidPending: true));
-    var (service, repository, record) = CreateService(temporary.Path, gateway);
+        using var temporary = new TemporaryDirectory();
+        var gateway = new FakeGateway();
+        gateway.QueryPlan.Enqueue(Fixtures.Query(voidPending: true));
+        var (service, repository, record) = Fixtures.CreateService(temporary.Path, gateway);
+        var result = await service.VoidAsync(record, "3015 退貨");
+        AssertEx.Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
+        AssertEx.Equal(false, result.RequestSent);
+        AssertEx.Equal(0, gateway.VoidCalls);
+        AssertEx.Equal(true, Fixtures.PendingMarker(repository));
+    }
 
-    var firstTask = service.VoidAsync(record, "3015 退貨");
-    await gateway.VoidStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-    var secondTask = service.VoidAsync(record, "3015 退貨");
-    gateway.VoidRelease.SetResult(true);
-
-    var first = await firstTask;
-    var second = await secondTask;
-    Equal(InvoiceVoidOutcome.PendingConfirmation, first.Outcome);
-    Equal(InvoiceVoidOutcome.PendingConfirmation, second.Outcome);
-    Equal(1, gateway.VoidCalls);
-    Equal(true, PendingMarker(repository));
-}
-
-static (InvoiceVoidService Service, LocalRepository Repository, InvoiceRecord Record) CreateService(
-    string path,
-    FakeGateway gateway)
-{
-    var repository = LocalRepository.Open(path, new TestProtector());
-    var record = new InvoiceRecord
+    public static async Task PreflightRequiresCompleteAsync()
     {
-        Id = Guid.NewGuid().ToString("N"),
-        SellerInvoice = AmegoDefaults.TestInvoice,
-        Environment = Environments.Test,
-        Source = "手動",
-        RecordOrigin = RecordOrigins.Local,
-        OriginalOrderId = "M20260919001",
-        OrderId = "M20260919001",
-        ApiOrderId = "M20260919001",
-        InvoiceNumber = "AA12345678",
-        InvoiceState = InvoiceStates.Opened,
-        Amount = 100,
-        Delivery = InvoiceService.DeliveryPaper,
-        UploadStatus = UploadStatuses.Complete,
-        UploadStatusText = "完成",
-        InvoiceDate = "2026/09/19",
-        InvoiceTime = "14:00:00",
-        Items = [],
-    };
-    repository.Invoices.Append(record);
-    var service = new InvoiceVoidService(
-        repository,
-        (_, _) => gateway,
-        () => new DateTimeOffset(2026, 9, 19, 14, 32, 0, TimeSpan.FromHours(8)));
-    return (service, repository, record);
+        using var temporary = new TemporaryDirectory();
+        var gateway = new FakeGateway();
+        gateway.QueryPlan.Enqueue(Fixtures.Query(status: UploadStatuses.Processing));
+        var (service, _, record) = Fixtures.CreateService(temporary.Path, gateway);
+        var result = await service.VoidAsync(record, "3015 退貨");
+        AssertEx.Equal(InvoiceVoidOutcome.Rejected, result.Outcome);
+        AssertEx.Equal(false, result.RequestSent);
+        AssertEx.Equal(0, gateway.VoidCalls);
+    }
+
+    public static async Task ConfirmedVoidAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var gateway = new FakeGateway { VoidResponse = new VoidResponse(0, "OK") };
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        gateway.QueryPlan.Enqueue(Fixtures.Query(cancelDate: 1789790000));
+        var (service, repository, record) = Fixtures.CreateService(temporary.Path, gateway);
+        var result = await service.VoidAsync(record, "3015 退貨");
+        AssertEx.Equal(InvoiceVoidOutcome.Confirmed, result.Outcome);
+        AssertEx.Equal(true, result.RequestSent);
+        AssertEx.Equal(1, gateway.VoidCalls);
+        AssertEx.Equal(InvoiceStates.Voided, repository.Invoices.LoadOrCreate().Single().InvoiceState);
+        AssertEx.Equal(false, Fixtures.PendingMarker(repository));
+    }
+
+    public static async Task AcceptedButUnconfirmedAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var gateway = new FakeGateway { VoidResponse = new VoidResponse(0, "OK") };
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        var (service, repository, record) = Fixtures.CreateService(temporary.Path, gateway);
+        var result = await service.VoidAsync(record, "3015 退貨");
+        AssertEx.Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
+        AssertEx.Equal(1, gateway.VoidCalls);
+        AssertEx.Equal(true, Fixtures.PendingMarker(repository));
+        AssertEx.Equal(InvoiceStates.Changing, repository.Invoices.LoadOrCreate().Single().InvoiceState);
+    }
+
+    public static async Task TransportAmbiguityAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var gateway = new FakeGateway { VoidException = new TaskCanceledException("simulated timeout") };
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        gateway.QueryPlan.Enqueue(new HttpRequestException("query unavailable"));
+        gateway.StatusPlan.Enqueue(Fixtures.StatusOriginal());
+        gateway.StatusPlan.Enqueue(new HttpRequestException("status unavailable"));
+        var (service, repository, record) = Fixtures.CreateService(temporary.Path, gateway);
+        var result = await service.VoidAsync(record, "3015 退貨");
+        AssertEx.Equal(InvoiceVoidOutcome.PendingConfirmation, result.Outcome);
+        AssertEx.Equal(1, gateway.VoidCalls);
+        AssertEx.Equal(true, Fixtures.PendingMarker(repository));
+    }
+
+    public static async Task ReconcileUnlocksRetryAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var gateway = new FakeGateway { VoidResponse = new VoidResponse(0, "OK") };
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        var (service, repository, record) = Fixtures.CreateService(temporary.Path, gateway);
+        var first = await service.VoidAsync(record, "3015 退貨");
+        AssertEx.Equal(InvoiceVoidOutcome.PendingConfirmation, first.Outcome);
+        AssertEx.Equal(1, gateway.VoidCalls);
+
+        var second = await service.VoidAsync(repository.Invoices.LoadOrCreate().Single(), "3015 退貨");
+        AssertEx.Equal(InvoiceVoidOutcome.RetryReady, second.Outcome);
+        AssertEx.Equal(false, second.RequestSent);
+        AssertEx.Equal(1, gateway.VoidCalls);
+        AssertEx.Equal(false, Fixtures.PendingMarker(repository));
+        AssertEx.Equal(InvoiceStates.Opened, repository.Invoices.LoadOrCreate().Single().InvoiceState);
+    }
+
+    public static async Task ExplicitRejectionAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var gateway = new FakeGateway { VoidResponse = new VoidResponse(3050126, "已超過修改期限") };
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        var (service, repository, record) = Fixtures.CreateService(temporary.Path, gateway);
+        var result = await service.VoidAsync(record, "3015 退貨");
+        AssertEx.Equal(InvoiceVoidOutcome.Rejected, result.Outcome);
+        AssertEx.Equal(3050126, result.ApiCode);
+        AssertEx.Equal(1, gateway.VoidCalls);
+        AssertEx.Equal(false, Fixtures.PendingMarker(repository));
+        AssertEx.Equal(InvoiceStates.Opened, repository.Invoices.LoadOrCreate().Single().InvoiceState);
+    }
+
+    public static async Task ConcurrentVoidAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var gateway = new FakeGateway
+        {
+            VoidResponse = new VoidResponse(0, "OK"),
+            VoidStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
+            VoidRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
+        };
+        gateway.QueryPlan.Enqueue(Fixtures.Query());
+        gateway.QueryPlan.Enqueue(Fixtures.Query(voidPending: true));
+        gateway.QueryPlan.Enqueue(Fixtures.Query(voidPending: true));
+        var (service, repository, record) = Fixtures.CreateService(temporary.Path, gateway);
+
+        var firstTask = service.VoidAsync(record, "3015 退貨");
+        await gateway.VoidStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var secondTask = service.VoidAsync(record, "3015 退貨");
+        gateway.VoidRelease.SetResult(true);
+        var first = await firstTask;
+        var second = await secondTask;
+
+        AssertEx.Equal(InvoiceVoidOutcome.PendingConfirmation, first.Outcome);
+        AssertEx.Equal(InvoiceVoidOutcome.PendingConfirmation, second.Outcome);
+        AssertEx.Equal(1, gateway.VoidCalls);
+        AssertEx.Equal(true, Fixtures.PendingMarker(repository));
+    }
 }
 
-static QueryResponse Query(
-    int status = UploadStatuses.Complete,
-    long cancelDate = 0,
-    bool voidPending = false,
-    string type = "A0401") => new(
+static class Fixtures
+{
+    public static (InvoiceVoidService Service, LocalRepository Repository, InvoiceRecord Record) CreateService(string path, FakeGateway gateway)
+    {
+        var repository = LocalRepository.Open(path, new TestProtector());
+        var record = new InvoiceRecord
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            SellerInvoice = AmegoDefaults.TestInvoice,
+            Environment = Environments.Test,
+            Source = "手動",
+            RecordOrigin = RecordOrigins.Local,
+            OriginalOrderId = "M20260919001",
+            OrderId = "M20260919001",
+            ApiOrderId = "M20260919001",
+            InvoiceNumber = "AA12345678",
+            InvoiceState = InvoiceStates.Opened,
+            Amount = 100,
+            Delivery = InvoiceService.DeliveryPaper,
+            UploadStatus = UploadStatuses.Complete,
+            UploadStatusText = "完成",
+            InvoiceDate = "2026/09/19",
+            InvoiceTime = "14:00:00",
+            Items = [],
+        };
+        repository.Invoices.Append(record);
+        return (
+            new InvoiceVoidService(repository, (_, _) => gateway,
+                () => new DateTimeOffset(2026, 9, 19, 14, 32, 0, TimeSpan.FromHours(8))),
+            repository,
+            record);
+    }
+
+    public static QueryResponse Query(
+        int status = UploadStatuses.Complete,
+        long cancelDate = 0,
+        bool voidPending = false,
+        string type = "A0401") => new(
         0,
         "",
         new QueryResult(
-            InvoiceNumber: "AA12345678",
-            InvoiceType: type,
-            InvoiceStatus: status,
-            InvoiceDate: "20260919",
-            InvoiceTime: "140000",
-            BuyerIdentifier: "",
-            BuyerName: "消費者",
-            SalesAmount: "95",
-            TaxAmount: "5",
-            TotalAmount: "100",
-            CarrierType: "",
-            CarrierId1: "",
-            CarrierId2: "",
-            NpoBan: "",
-            CancelDate: cancelDate,
-            OrderId: "M20260919001",
-            CreateDate: 1789790000,
-            ProductItems: default,
-            DetailVat: 1,
-            DetailVatPresent: true,
-            VoidPending: voidPending));
+            "AA12345678", type, status, "20260919", "140000", "", "消費者",
+            "95", "5", "100", "", "", "", "", cancelDate, "M20260919001",
+            1789790000, default, 1, true, voidPending));
 
-static bool PendingMarker(LocalRepository repository)
-{
-    var record = repository.Invoices.LoadOrCreate().Single();
-    return record.ExtensionData is not null &&
-           record.ExtensionData.TryGetValue("cyinvoice_void_pending", out var value) &&
-           value.ValueKind == JsonValueKind.True;
+    public static StatusResponse StatusOriginal() =>
+        new(0, "", [new StatusResult("AA12345678", "A0401", UploadStatuses.Complete, "100")]);
+
+    public static bool PendingMarker(LocalRepository repository)
+    {
+        var record = repository.Invoices.LoadOrCreate().Single();
+        return record.ExtensionData is not null &&
+               record.ExtensionData.TryGetValue("cyinvoice_void_pending", out var value) &&
+               value.ValueKind == JsonValueKind.True;
+    }
+
+    public static Dictionary<string, string> ParseForm(string value)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var part in value.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            var key = Uri.UnescapeDataString(pair[0].Replace('+', ' '));
+            var item = pair.Length == 2 ? Uri.UnescapeDataString(pair[1].Replace('+', ' ')) : string.Empty;
+            result[key] = item;
+        }
+        return result;
+    }
+
+    public static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
+    {
+        Content = new StringContent(json, Encoding.UTF8, "application/json"),
+    };
 }
 
-static Dictionary<string, string> ParseForm(string value)
+static class AssertEx
 {
-    var result = new Dictionary<string, string>(StringComparer.Ordinal);
-    foreach (var part in value.Split('&', StringSplitOptions.RemoveEmptyEntries))
+    public static void Equal<T>(T expected, T actual)
     {
-        var pair = part.Split('=', 2);
-        var key = Uri.UnescapeDataString(pair[0].Replace('+', ' '));
-        var item = pair.Length == 2 ? Uri.UnescapeDataString(pair[1].Replace('+', ' ')) : string.Empty;
-        result[key] = item;
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException($"expected {expected}, actual {actual}");
     }
-    return result;
-}
 
-static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
-{
-    Content = new StringContent(json, Encoding.UTF8, "application/json"),
-};
-
-static void Equal<T>(T expected, T actual)
-{
-    if (!EqualityComparer<T>.Default.Equals(expected, actual))
-        throw new InvalidOperationException($"expected {expected}, actual {actual}");
-}
-
-static async Task ThrowsAsync<T>(Func<Task> action) where T : Exception
-{
-    try
+    public static async Task ThrowsAsync<T>(Func<Task> action) where T : Exception
     {
-        await action();
+        try
+        {
+            await action();
+        }
+        catch (T)
+        {
+            return;
+        }
+        throw new InvalidOperationException($"expected {typeof(T).Name}");
     }
-    catch (T)
-    {
-        return;
-    }
-    throw new InvalidOperationException($"expected {typeof(T).Name}");
 }
 
 sealed class StubHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> send) : HttpMessageHandler
@@ -378,9 +349,8 @@ sealed class StubHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> sen
 
 sealed class FakeGateway : IAmegoGateway
 {
-    public Queue<QueryResponse> Queries { get; } = new();
-    public Queue<Exception?> QueryFailures { get; } = new();
-    public Queue<Exception?> StatusFailures { get; } = new();
+    public Queue<object> QueryPlan { get; } = new();
+    public Queue<object> StatusPlan { get; } = new();
     public VoidResponse VoidResponse { get; set; } = new(0, "OK");
     public Exception? VoidException { get; set; }
     public int VoidCalls { get; private set; }
@@ -407,18 +377,17 @@ sealed class FakeGateway : IAmegoGateway
     public Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default)
     {
         QueryCalls++;
-        if (QueryFailures.Count != 0 && QueryFailures.Dequeue() is { } failure)
-            return Task.FromException<QueryResponse>(failure);
-        if (Queries.Count == 0) return Task.FromResult(Query());
-        return Task.FromResult(Queries.Dequeue());
+        if (QueryPlan.Count == 0) return Task.FromResult(Fixtures.Query());
+        var next = QueryPlan.Dequeue();
+        return next is Exception error ? Task.FromException<QueryResponse>(error) : Task.FromResult((QueryResponse)next);
     }
 
     public Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default)
     {
         StatusCalls++;
-        if (StatusFailures.Count != 0 && StatusFailures.Dequeue() is { } failure)
-            return Task.FromException<StatusResponse>(failure);
-        return Task.FromResult(new StatusResponse(0, "", [new StatusResult("AA12345678", "A0401", UploadStatuses.Complete, "100")]));
+        if (StatusPlan.Count == 0) return Task.FromResult(Fixtures.StatusOriginal());
+        var next = StatusPlan.Dequeue();
+        return next is Exception error ? Task.FromException<StatusResponse>(error) : Task.FromResult((StatusResponse)next);
     }
 
     public Task<BanResponse> QueryBanAsync(IEnumerable<string> bans, CancellationToken cancellationToken = default) =>
@@ -444,9 +413,7 @@ sealed class TemporaryDirectory : IDisposable
         Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "CYInvoice-void-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path);
     }
-
     public string Path { get; }
-
     public void Dispose()
     {
         if (Directory.Exists(Path)) Directory.Delete(Path, recursive: true);
