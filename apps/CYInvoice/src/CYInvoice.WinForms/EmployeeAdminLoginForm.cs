@@ -62,7 +62,7 @@ internal sealed class EmployeeAdminLoginForm : Form
 
         root.Controls.Add(new Label
         {
-            Text = "僅啟用中的管理員／超級管理員可進入。",
+            Text = "僅啟用中的管理員可進入。",
             Dock = DockStyle.Fill,
             ForeColor = Color.FromArgb(96, 96, 96),
             TextAlign = ContentAlignment.MiddleLeft,
@@ -102,7 +102,7 @@ internal sealed class EmployeeAdminLoginForm : Form
             }
             if (!EmployeeRoles.CanManageAccounts(account.Role))
             {
-                MessageBox.Show(this, "此帳號沒有管理權限。", "無法進入",
+                MessageBox.Show(this, "權限不足，僅管理員可執行此操作。", "權限不足",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
