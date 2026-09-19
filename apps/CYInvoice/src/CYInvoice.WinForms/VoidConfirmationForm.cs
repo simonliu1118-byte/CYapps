@@ -110,8 +110,10 @@ internal sealed class VoidConfirmationForm : Form
             AutoSize = false,
             TextAlign = ContentAlignment.TopLeft,
             ForeColor = Color.FromArgb(65, 65, 65),
+            Font = new Font(Font.FontFamily, 10F, FontStyle.Bold),
             Padding = new Padding(0, 8, 0, 0),
             Margin = Padding.Empty,
+            Tag = "void-responsibility",
         };
 
         confirm.Click += (_, _) => Submit();
@@ -228,11 +230,15 @@ internal sealed class VoidConfirmationForm : Form
 
     internal void VerifySmokeLayout()
     {
+        var responsibility = Controls.Find("void-responsibility", true).FirstOrDefault() as Label;
+        if (responsibility is null)
+            responsibility = FindTaggedResponsibility(this);
         if (Text != "發票作廢確認" || invoiceNumber.Text.Length != 0 || password.Text.Length != 0 ||
             invoiceNumber.TextAlign != HorizontalAlignment.Left || employeeNo.TextAlign != HorizontalAlignment.Left ||
             password.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth ||
             ClientSize.Height != CalculateHeight() || AcceptButton is not null || CancelButton != cancel ||
-            !password.UseSystemPasswordChar)
+            !password.UseSystemPasswordChar || confirm.FlatStyle != FlatStyle.Standard ||
+            responsibility is null || !responsibility.Font.Bold)
             throw new InvalidOperationException("發票作廢確認視窗基本配置不正確");
         if (paperInvoice && receiptState.Items.Count != 3)
             throw new InvalidOperationException("紙本發票證明聯狀態選項不完整");
@@ -246,6 +252,17 @@ internal sealed class VoidConfirmationForm : Form
             if (!ShouldShowUncollectedWarning())
                 throw new InvalidOperationException("選擇尚未收回後未進入管理員確認提示狀態");
         }
+    }
+
+    private static Label? FindTaggedResponsibility(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is Label label && Equals(label.Tag, "void-responsibility")) return label;
+            var nested = FindTaggedResponsibility(child);
+            if (nested is not null) return nested;
+        }
+        return null;
     }
 
     private sealed record ReceiptChoice(string Text, string Value)
