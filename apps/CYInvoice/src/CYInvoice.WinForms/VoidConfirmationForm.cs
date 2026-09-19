@@ -142,10 +142,12 @@ internal sealed class VoidConfirmationForm : Form
         CancelButton = cancel;
     }
 
+    private bool ShouldShowUncollectedWarning() =>
+        paperInvoice && SelectedReceiptState() == PaperInvoiceReceiptStates.Uncollected;
+
     private void UpdateUncollectedWarning()
     {
-        uncollectedWarning.Visible = paperInvoice &&
-            SelectedReceiptState() == PaperInvoiceReceiptStates.Uncollected;
+        uncollectedWarning.Visible = ShouldShowUncollectedWarning();
     }
 
     private void Submit()
@@ -226,11 +228,11 @@ internal sealed class VoidConfirmationForm : Form
             throw new InvalidOperationException("非紙本發票不應顯示證明聯狀態");
         if (paperInvoice)
         {
-            if (uncollectedWarning.Text != UncollectedWarningText || uncollectedWarning.Visible)
-                throw new InvalidOperationException("尚未收回提示初始狀態不正確");
+            if (uncollectedWarning.Text != UncollectedWarningText)
+                throw new InvalidOperationException("尚未收回提示文字不正確");
             receiptState.SelectedIndex = 2;
-            if (!uncollectedWarning.Visible)
-                throw new InvalidOperationException("選擇尚未收回後未顯示管理員確認提示");
+            if (!ShouldShowUncollectedWarning())
+                throw new InvalidOperationException("選擇尚未收回後未進入管理員確認提示狀態");
         }
     }
 
