@@ -27,6 +27,7 @@ internal sealed class SuperAdminRecoveryForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => employeeNo.Focus();
     }
@@ -187,7 +188,7 @@ internal sealed class SuperAdminRecoveryForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (employeeNo.MaxLength != 4 || !newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
+        if (Icon is null || employeeNo.MaxLength != 4 || !newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
             employeeNo.TextAlign != HorizontalAlignment.Left || recoveryCode.TextAlign != HorizontalAlignment.Left ||
             newPassword.TextAlign != HorizontalAlignment.Left || confirmPassword.TextAlign != HorizontalAlignment.Left ||
             ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
