@@ -8,68 +8,68 @@ namespace CYInvoice.SyncCoordinator.Tests;
 
 internal static class PendingVoidSyncTests
 {
-    public static async Task StartupConfirmsVoidAndInvalidatesCacheAsync()
+    public static async Task RecentListConfirmsVoidAndInvalidatesCacheAsync()
     {
         using var temporary = new TemporaryDirectory();
         var repository = OpenProduction(temporary.Path);
-        var record = AppendPendingRecord(repository);
+        var record = AppendPendingRecord(repository, "2026/09/19");
         var pdf = CreateCache(repository.InvoicePdfCacheDirectory, Environments.Production, record.InvoiceNumber, ".pdf");
         var preview = CreateCache(repository.InvoicePreviewCacheDirectory, Environments.Production, record.InvoiceNumber, ".png");
         var clock = new TestClock(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.FromHours(8)));
-        var syncGateway = new ListOnlyGateway();
-        var voidGateway = new VoidStatusGateway
+        var syncGateway = new ListGateway
         {
+            Items = [ListItem(cancelDate: 1789790000)],
             Query = Query(cancelDate: 1789790000),
-            Status = new StatusResponse(0, "", []),
         };
+        var voidGateway = new VoidStatusGateway();
         var coordinator = Coordinator(repository, syncGateway, voidGateway, clock);
 
-        var result = await coordinator.RunStartupAsync();
+        var result = await coordinator.RunManualAsync();
 
         Equal(InvoiceSyncRunStatus.Completed, result.Status);
         var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
         Equal(InvoiceStates.Voided, saved.InvoiceState);
-        False(HasPendingMarker(saved));
-        Equal(1, voidGateway.QueryCalls);
+        Equal(UploadStatuses.Complete, saved.UploadStatus);
+        False(InvoiceVoidService.HasPendingMarker(saved));
+        Equal(0, voidGateway.QueryCalls);
         Equal(0, voidGateway.VoidCalls);
         False(File.Exists(pdf));
         False(File.Exists(preview));
     }
 
-    public static async Task ScheduledKeepsPendingAndCreatesIssueAsync()
+    public static async Task RecentListKeepsWaitingVoidAndStatus99Async()
     {
         using var temporary = new TemporaryDirectory();
         var repository = OpenProduction(temporary.Path);
-        var record = AppendPendingRecord(repository);
+        var record = AppendPendingRecord(repository, "2026/09/19");
         var clock = new TestClock(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.FromHours(8)));
-        var syncGateway = new ListOnlyGateway();
-        var voidGateway = new VoidStatusGateway
+        var syncGateway = new ListGateway
         {
-            Query = Query(voidPending: true),
-            Status = new StatusResponse(0, "", []),
+            Items = [ListItem()],
+            Query = Query(),
         };
+        var voidGateway = new VoidStatusGateway();
         var coordinator = Coordinator(repository, syncGateway, voidGateway, clock);
 
         var result = await coordinator.RunScheduledAsync();
 
         Equal(InvoiceSyncRunStatus.Completed, result.Status);
         var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
-        Equal(InvoiceStates.Changing, saved.InvoiceState);
-        True(HasPendingMarker(saved));
+        Equal(InvoiceStates.OpenedWaitingVoid, saved.InvoiceState);
+        Equal(UploadStatuses.Complete, saved.UploadStatus);
+        Equal("完成", saved.UploadStatusText);
+        True(InvoiceVoidService.HasPendingMarker(saved));
+        Equal(0, voidGateway.QueryCalls);
         Equal(0, voidGateway.VoidCalls);
-        var issue = new InvoiceSyncIssueStore(repository.DataDirectory)
-            .Unresolved(Environments.Production + "|12345675")
-            .Single(item => item.InvoiceNumber == record.InvoiceNumber);
-        Equal("作廢結果待確認", issue.IssueType);
     }
 
-    public static async Task ManualStableOpenUnlocksWithoutResendAsync()
+    public static async Task OldPendingUsesSingleQueryAndNeverResendsAsync()
     {
         using var temporary = new TemporaryDirectory();
         var repository = OpenProduction(temporary.Path);
-        var record = AppendPendingRecord(repository);
+        var record = AppendPendingRecord(repository, "2026/09/10");
         var clock = new TestClock(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.FromHours(8)));
-        var syncGateway = new ListOnlyGateway();
+        var syncGateway = new ListGateway();
         var voidGateway = new VoidStatusGateway
         {
             Query = Query(),
@@ -82,13 +82,44 @@ internal static class PendingVoidSyncTests
         Equal(InvoiceSyncRunStatus.Completed, result.Status);
         var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
         Equal(InvoiceStates.Opened, saved.InvoiceState);
-        False(HasPendingMarker(saved));
+        Equal(UploadStatuses.Complete, saved.UploadStatus);
+        False(InvoiceVoidService.HasPendingMarker(saved));
+        Equal(1, voidGateway.QueryCalls);
         Equal(0, voidGateway.VoidCalls);
+    }
+
+    public static async Task OldPendingStillWaitingCreatesIssueAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = OpenProduction(temporary.Path);
+        var record = AppendPendingRecord(repository, "2026/09/10");
+        var clock = new TestClock(new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.FromHours(8)));
+        var syncGateway = new ListGateway();
+        var voidGateway = new VoidStatusGateway
+        {
+            Query = Query(voidPending: true),
+            Status = new StatusResponse(0, "", []),
+        };
+        var coordinator = Coordinator(repository, syncGateway, voidGateway, clock);
+
+        var result = await coordinator.RunManualAsync();
+
+        Equal(InvoiceSyncRunStatus.Completed, result.Status);
+        var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
+        Equal(InvoiceStates.OpenedWaitingVoid, saved.InvoiceState);
+        Equal(UploadStatuses.Complete, saved.UploadStatus);
+        True(InvoiceVoidService.HasPendingMarker(saved));
+        Equal(1, voidGateway.QueryCalls);
+        Equal(0, voidGateway.VoidCalls);
+        var issue = new InvoiceSyncIssueStore(repository.DataDirectory)
+            .Unresolved(Environments.Production + "|12345675")
+            .Single(item => item.InvoiceNumber == record.InvoiceNumber);
+        Equal(InvoiceVoidSyncIssueTypes.PendingConfirmation, issue.IssueType);
     }
 
     private static InvoiceSyncCoordinator Coordinator(
         LocalRepository repository,
-        ListOnlyGateway syncGateway,
+        ListGateway syncGateway,
         VoidStatusGateway voidGateway,
         TestClock clock)
     {
@@ -109,7 +140,7 @@ internal static class PendingVoidSyncTests
         return repository;
     }
 
-    private static InvoiceRecord AppendPendingRecord(LocalRepository repository)
+    private static InvoiceRecord AppendPendingRecord(LocalRepository repository, string invoiceDate)
     {
         var record = new InvoiceRecord
         {
@@ -122,12 +153,12 @@ internal static class PendingVoidSyncTests
             OrderId = "M20260919001",
             ApiOrderId = "M20260919001",
             InvoiceNumber = "AA12345678",
-            InvoiceState = InvoiceStates.Changing,
+            InvoiceState = InvoiceStates.OpenedWaitingVoid,
             Amount = 100,
             Delivery = InvoiceService.DeliveryPaper,
-            UploadStatus = UploadStatuses.Confirming,
-            UploadStatusText = "待確認",
-            InvoiceDate = "2026/09/19",
+            UploadStatus = UploadStatuses.Complete,
+            UploadStatusText = "完成",
+            InvoiceDate = invoiceDate,
             InvoiceTime = "11:30:00",
             Items = [],
             ExtensionData = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
@@ -139,15 +170,6 @@ internal static class PendingVoidSyncTests
         return record;
     }
 
-    private static bool HasPendingMarker(InvoiceRecord record)
-    {
-        if (record.ExtensionData is null ||
-            !record.ExtensionData.TryGetValue("cyinvoice_void_pending", out var value))
-            return false;
-        return value.ValueKind == JsonValueKind.True ||
-               (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed) && parsed);
-    }
-
     private static string CreateCache(string root, string environment, string invoiceNumber, string extension)
     {
         var directory = Path.Combine(root, environment);
@@ -156,6 +178,10 @@ internal static class PendingVoidSyncTests
         File.WriteAllText(path, "stale");
         return path;
     }
+
+    private static InvoiceListItem ListItem(long cancelDate = 0) => new(
+        "AA12345678", "A0401", UploadStatuses.Complete, "20260919", "113000", "", "消費者",
+        "95", "5", "100", "", "", "", "", "", cancelDate, "M20260919001", 1789790000);
 
     private static QueryResponse Query(long cancelDate = 0, bool voidPending = false) => new(
         0,
@@ -187,21 +213,24 @@ internal static class PendingVoidSyncTests
         public DateTimeOffset Now() => current;
     }
 
-    private sealed class ListOnlyGateway : IAmegoGateway
+    private sealed class ListGateway : IAmegoGateway
     {
+        public IReadOnlyList<InvoiceListItem> Items { get; set; } = [];
+        public QueryResponse Query { get; set; } = PendingVoidSyncTests.Query();
+
         public Task<InvoiceListResponse> ListInvoicesAsync(
             DateOnly startDate,
             DateOnly endDate,
             int page = 1,
             int limit = 500,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(new InvoiceListResponse(0, "", 1, page, 0, []));
+            Task.FromResult(new InvoiceListResponse(0, "", 1, page, Items.Count, Items));
 
+        public Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Query);
         public Task<IssueResponse> IssueAsync(IssueRequest request, CancellationToken cancellationToken = default) =>
             Task.FromException<IssueResponse>(new NotSupportedException());
         public Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default) =>
-            Task.FromException<QueryResponse>(new NotSupportedException());
-        public Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default) =>
             Task.FromException<QueryResponse>(new NotSupportedException());
         public Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default) =>
             Task.FromResult(new StatusResponse(0, "", []));
