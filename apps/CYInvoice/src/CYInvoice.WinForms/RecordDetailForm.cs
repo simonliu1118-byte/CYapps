@@ -13,10 +13,10 @@ internal sealed class RecordDetailForm : Form
     private const int InformationLabelWidth = 90;
     private const int InformationValueMaxWidth = 190;
     private const int CarrierItemsSectionHeight = 250;
-    private const int HistorySectionHeight = 168;
     private const string WaitingVoidDetailText = "(等待 發票作廢)";
     private const string WaitingVoidDetailTag = "waiting-void-detail-state";
     private const string WaitingVoidHighlightTag = "waiting-void-detail-highlight";
+    private const string InformationHostTag = "invoice-information-host";
 
     private InvoiceRecord record;
     private readonly LocalRepository repository;
@@ -507,9 +507,9 @@ internal sealed class RecordDetailForm : Form
             BackColor = SystemColors.Control,
         };
         section.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        section.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        section.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         section.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        section.RowStyles.Add(new RowStyle(SizeType.Absolute, HistorySectionHeight));
+        section.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         section.Controls.Add(new Label
         {
             Text = "發票資訊",
@@ -519,17 +519,20 @@ internal sealed class RecordDetailForm : Form
             BackColor = SystemColors.Control,
             Margin = new Padding(6, 0, 0, 0),
         }, 0, 0);
-        var scroller = new Panel
+        var informationHost = new Panel
         {
             Dock = DockStyle.Fill,
-            AutoScroll = true,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            AutoScroll = false,
             Margin = Padding.Empty,
             Padding = new Padding(6, 0, 4, 0),
             BackColor = SystemColors.Control,
             BorderStyle = BorderStyle.FixedSingle,
+            Tag = InformationHostTag,
         };
-        scroller.Controls.Add(details);
-        section.Controls.Add(scroller, 0, 1);
+        informationHost.Controls.Add(details);
+        section.Controls.Add(informationHost, 0, 1);
         section.Controls.Add(new Label
         {
             Text = "作廢 / 折讓紀錄",
@@ -1204,8 +1207,12 @@ internal sealed class RecordDetailForm : Form
             throw new InvalidOperationException("紙本與會員載具詳細資訊未使用一致的精簡視窗寬度");
         if (details.BackColor != SystemColors.Control)
             throw new InvalidOperationException("發票資訊區未沿用視窗灰底");
-        if (history.Parent is null || history.Height <= 0)
-            throw new InvalidOperationException("發票詳細資訊未保留固定的作廢/折讓紀錄區");
+        var informationHost = FindTaggedControl(this, InformationHostTag) as Panel;
+        if (informationHost is null || informationHost.AutoScroll || !informationHost.AutoSize ||
+            history.Parent is not TableLayoutPanel historyParent || history.Height <= 0 ||
+            historyParent.RowStyles.Count < 4 || historyParent.RowStyles[1].SizeType != SizeType.AutoSize ||
+            historyParent.RowStyles[3].SizeType != SizeType.Percent)
+            throw new InvalidOperationException("發票資訊必須完整顯示且只有作廢/折讓紀錄區可使用剩餘高度捲動");
         if (!UiControls.HasLogicalSize(close, 100, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("關閉按鈕未使用核准尺寸");
         if (carrier)
