@@ -21,6 +21,7 @@ internal sealed class EmployeePasswordResetForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout(employeeNo, employeeName);
         Shown += (_, _) => newPassword.Focus();
     }
@@ -144,7 +145,7 @@ internal sealed class EmployeePasswordResetForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (!newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
+        if (Icon is null || !newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
             newPassword.TextAlign != HorizontalAlignment.Left || confirmPassword.TextAlign != HorizontalAlignment.Left ||
             ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
             AcceptButton is not null || CancelButton != cancel ||
