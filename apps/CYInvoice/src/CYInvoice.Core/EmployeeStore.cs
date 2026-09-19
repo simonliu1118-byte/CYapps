@@ -722,7 +722,12 @@ public sealed class EmployeeStore
         return name;
     }
 
-    private static string NormalizeEmail(string email) => email?.Trim() ?? string.Empty;
+    private static string NormalizeEmail(string email)
+    {
+        email = email?.Trim() ?? string.Empty;
+        if (email.Length == 0) throw new InvalidOperationException("Email 不可空白");
+        return email;
+    }
 
     private static void RequirePassword(string password)
     {
