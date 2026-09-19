@@ -52,6 +52,21 @@ public sealed class AmegoClient : IAmegoGateway
         return new IssueResponse(code, message, number, Int64(result, "invoice_time"), Text(result, "random_number"));
     }
 
+    public async Task<VoidResponse> VoidAsync(VoidRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        request.CancelInvoiceNumber = request.CancelInvoiceNumber.Trim();
+        request.CancelReason = request.CancelReason.Trim();
+        if (request.CancelInvoiceNumber.Length is < 1 or > 10)
+            throw new ArgumentException("CancelInvoiceNumber is required and cannot exceed 10 characters", nameof(request));
+        if (request.CancelReason.EnumerateRunes().Count() > 20)
+            throw new ArgumentException("CancelReason cannot exceed 20 characters", nameof(request));
+
+        using var document = await PostAsync("/json/f0501", new[] { request }, cancellationToken).ConfigureAwait(false);
+        var (code, message) = ReadEnvelope(document.RootElement);
+        return new VoidResponse(code, message);
+    }
+
     public Task<QueryResponse> QueryByOrderIdAsync(string orderId, CancellationToken cancellationToken = default) =>
         QueryAsync("order", orderId.Trim(), string.Empty, cancellationToken);
 
@@ -323,7 +338,19 @@ public sealed class AmegoClient : IAmegoGateway
             Scalar(value, "total_amount"), Text(value, "carrier_type"), Text(value, "carrier_id1"), Text(value, "carrier_id2"),
             Text(value, "npoban"), Int64(value, "cancel_date"), order, Int64(value, "create_date"),
             value.TryGetProperty("product_item", out var products) ? products.Clone() : default,
-            detailPresent ? detail.GetInt32() : 0, detailPresent));
+            detailPresent ? detail.GetInt32() : 0, detailPresent, HasPendingVoid(value)));
+    }
+
+    private static bool HasPendingVoid(JsonElement value)
+    {
+        if (!value.TryGetProperty("wait", out var wait) || wait.ValueKind != JsonValueKind.Array) return false;
+        foreach (var item in wait.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            var type = FirstText(item, "invoice_type", "type");
+            if (string.Equals(type, "C0501", StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 
     private static StatusResult ParseStatus(JsonElement value, string fallbackNumber) =>
