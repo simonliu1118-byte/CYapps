@@ -2,9 +2,10 @@ namespace CYInvoice.WinForms;
 
 internal sealed class RecoveryCodeForm : Form
 {
+    private const int WindowWidth = 430;
+    private const int WindowHeight = 218;
     private readonly TextBox recoveryCode = new()
     {
-        Dock = DockStyle.Fill,
         ReadOnly = true,
         TextAlign = HorizontalAlignment.Center,
         Font = new Font("Consolas", 12F, FontStyle.Bold),
@@ -19,7 +20,7 @@ internal sealed class RecoveryCodeForm : Form
         recoveryCode.Text = code;
         Text = "超級管理員復原碼";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(470, 246);
+        ClientSize = new Size(WindowWidth, WindowHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -36,32 +37,36 @@ internal sealed class RecoveryCodeForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 4,
-            Padding = new Padding(18, 14, 18, 14),
+            Padding = new Padding(14, 10, 14, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
         root.Controls.Add(new Label
         {
-            Text = "這組復原碼只會完整顯示這一次。請保存於安全的公司文件或離線位置。",
+            Text = "這組復原碼只會完整顯示這一次，請保存於安全的公司文件或離線位置。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(150, 45, 45),
-            Font = new Font(Font.FontFamily, 10F, FontStyle.Bold),
+            Font = new Font(Font.FontFamily, 9.5F, FontStyle.Bold),
+            Margin = Padding.Empty,
         }, 0, 0);
 
-        recoveryCode.Margin = new Padding(0, 6, 0, 6);
+        recoveryCode.Dock = DockStyle.None;
+        recoveryCode.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        recoveryCode.Margin = new Padding(0, 0, 0, 0);
         root.Controls.Add(recoveryCode, 0, 1);
 
         root.Controls.Add(new Label
         {
-            Text = "若超級管理員密碼與復原碼同時遺失，單機版不提供一般管理員後門。重新產生新碼後，舊碼會立即失效。",
+            Text = "重新產生新碼後舊碼立即失效；密碼與復原碼都遺失時，單機版不提供一般管理員後門。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(88, 88, 88),
             Font = new Font(Font.FontFamily, 8.5F),
+            Margin = Padding.Empty,
         }, 0, 2);
 
         var buttons = new FlowLayoutPanel
@@ -69,7 +74,8 @@ internal sealed class RecoveryCodeForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 7, 0, 0),
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 4, 0, 0),
         };
         buttons.SizeChanged += (_, _) => CenterButtons(buttons);
         copy.Click += (_, _) => CopyCode();
@@ -104,6 +110,7 @@ internal sealed class RecoveryCodeForm : Form
     internal void VerifySmokeLayout()
     {
         if (!recoveryCode.ReadOnly || recoveryCode.UseSystemPasswordChar || ControlBox || AcceptButton != saved ||
+            ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
             !UiControls.HasLogicalSize(copy, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(saved, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("復原碼顯示視窗配置不正確");
@@ -112,6 +119,6 @@ internal sealed class RecoveryCodeForm : Form
     private static void CenterButtons(FlowLayoutPanel panel)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 7, 0, 0);
+        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 4, 0, 0);
     }
 }
