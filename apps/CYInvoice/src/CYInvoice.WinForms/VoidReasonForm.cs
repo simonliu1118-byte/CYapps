@@ -3,7 +3,7 @@ namespace CYInvoice.WinForms;
 internal sealed class VoidReasonForm : Form
 {
     private const int WindowWidth = 350;
-    private const int WindowHeight = 142;
+    private const int WindowHeight = 150;
     private readonly TextBox reason = UiControls.TextBox(30);
     private readonly Button next = UiControls.StandardButton("下一步");
     private readonly Button cancel = UiControls.StandardButton("取消");
