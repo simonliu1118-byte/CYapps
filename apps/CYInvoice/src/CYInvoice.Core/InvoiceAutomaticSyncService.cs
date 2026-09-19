@@ -1,3 +1,4 @@
+using System.Globalization;
 using CYInvoice.Core.Amego;
 using CYInvoice.Core.Storage;
 
@@ -6,9 +7,9 @@ namespace CYInvoice.Core.Invoicing;
 public sealed class InvoiceAutomaticSyncService
 {
     internal const string DailyReconcileScope = "daily-two-period";
-    private const string VoidPendingIssueType = "作廢結果待確認";
     private readonly LocalRepository repository;
     private readonly InvoiceSyncService syncService;
+    private readonly InvoiceSyncRepository syncRepository;
     private readonly InvoiceSyncStateStore stateStore;
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceRetentionService retentionService;
@@ -23,6 +24,7 @@ public sealed class InvoiceAutomaticSyncService
     {
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         this.syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
+        syncRepository = new InvoiceSyncRepository(repository.DataDirectory);
         stateStore = new InvoiceSyncStateStore(repository.DataDirectory);
         issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
         retentionService = new InvoiceRetentionService(repository);
@@ -32,8 +34,10 @@ public sealed class InvoiceAutomaticSyncService
 
     public async Task<InvoiceSyncResult> SyncRecentAsync(CancellationToken cancellationToken = default)
     {
+        var today = DateOnly.FromDateTime(now().DateTime);
+        var startDate = today.AddDays(-2);
         var result = await syncService.SyncRecentAsync(cancellationToken).ConfigureAwait(false);
-        return await ReconcilePendingVoidsAsync(result, cancellationToken).ConfigureAwait(false);
+        return await ReconcilePendingAfterListAsync(result, startDate, today, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<InvoiceSyncResult> SyncAsync(CancellationToken cancellationToken = default)
@@ -43,17 +47,15 @@ public sealed class InvoiceAutomaticSyncService
         var account = CurrentAccount();
         var accountKey = account.Environment + "|" + account.SellerInvoice;
         var lastSuccess = stateStore.LastSuccess(accountKey, DailyReconcileScope);
-        InvoiceSyncResult result;
 
         if (lastSuccess is not null &&
             DateOnly.FromDateTime(lastSuccess.Value.ToOffset(current.Offset).DateTime) == today)
         {
-            result = await syncService.SyncRecentAsync(cancellationToken).ConfigureAwait(false);
-            return await ReconcilePendingVoidsAsync(result, cancellationToken).ConfigureAwait(false);
+            return await SyncRecentAsync(cancellationToken).ConfigureAwait(false);
         }
 
         var startDate = account.Environment == Environments.Test ? today : TwoPeriodRangeStart(today);
-        result = await syncService.SyncRangeAsync(startDate, today, cancellationToken).ConfigureAwait(false);
+        var result = await syncService.SyncRangeAsync(startDate, today, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         stateStore.SetLastSuccess(accountKey, DailyReconcileScope, now());
 
@@ -81,7 +83,7 @@ public sealed class InvoiceAutomaticSyncService
             }
         }
 
-        return await ReconcilePendingVoidsAsync(result, cancellationToken).ConfigureAwait(false);
+        return await ReconcilePendingAfterListAsync(result, startDate, today, cancellationToken).ConfigureAwait(false);
     }
 
     internal static DateOnly TwoPeriodRangeStart(DateOnly today)
@@ -91,8 +93,10 @@ public sealed class InvoiceAutomaticSyncService
         return currentPeriodStart.AddMonths(-2);
     }
 
-    private async Task<InvoiceSyncResult> ReconcilePendingVoidsAsync(
+    private async Task<InvoiceSyncResult> ReconcilePendingAfterListAsync(
         InvoiceSyncResult result,
+        DateOnly coveredStart,
+        DateOnly coveredEnd,
         CancellationToken cancellationToken)
     {
         var account = CurrentAccount();
@@ -110,6 +114,30 @@ public sealed class InvoiceAutomaticSyncService
             cancellationToken.ThrowIfCancellationRequested();
             var number = record.InvoiceNumber.Trim();
             var orderId = EffectiveOrderId(record);
+
+            if (record.InvoiceState == InvoiceStates.Voided)
+            {
+                InvoiceVoidService.ClearPendingMarker(record);
+                syncRepository.UpsertMany([record]);
+                ResolvePendingIssue(accountKey, number, orderId);
+                problems.AddRange(InvoiceCacheInvalidator.Invalidate(repository, account.Environment, number));
+                continue;
+            }
+
+            if (IsInRange(record, coveredStart, coveredEnd))
+            {
+                if (record.InvoiceState != InvoiceStates.OpenedWaitingVoid || record.ErrorMessage.Length != 0)
+                {
+                    record.InvoiceState = InvoiceStates.OpenedWaitingVoid;
+                    record.ErrorMessage = string.Empty;
+                    syncRepository.UpsertMany([record]);
+                }
+                ResolvePendingIssue(accountKey, number, orderId);
+                continue;
+            }
+
+            // Accepted exception: normal list sync does not cover this older pending invoice,
+            // so query this one invoice only. It still never resends f0501 automatically.
             try
             {
                 var reconciliation = await voidService.ReconcilePendingAsync(record, cancellationToken).ConfigureAwait(false);
@@ -118,20 +146,16 @@ public sealed class InvoiceAutomaticSyncService
 
                 if (reconciliation.Outcome == InvoiceVoidOutcome.PendingConfirmation)
                 {
-                    TryRecordVoidPending(accountKey, number, orderId, reconciliation.Message);
+                    RecordPendingIssue(accountKey, number, orderId, reconciliation.Message);
                     continue;
                 }
 
-                TryResolveVoidPending(accountKey, number, orderId);
-                if (reconciliation.Outcome is InvoiceVoidOutcome.Confirmed or InvoiceVoidOutcome.AlreadyVoided)
-                {
-                    problems.AddRange(InvoiceCacheInvalidator.Invalidate(repository, account.Environment, number));
-                }
+                ResolvePendingIssue(accountKey, number, orderId);
             }
             catch (Exception error)
             {
                 var message = "作廢狀態回查失敗：" + error.Message;
-                TryRecordVoidPending(accountKey, number, orderId, message);
+                RecordPendingIssue(accountKey, number, orderId, message);
                 problems.Add($"{number}: {message}");
             }
         }
@@ -141,22 +165,33 @@ public sealed class InvoiceAutomaticSyncService
             : result with { Problems = problems.ToArray() };
     }
 
-    private void TryRecordVoidPending(string accountKey, string invoiceNumber, string orderId, string message)
+    private void RecordPendingIssue(string accountKey, string invoiceNumber, string orderId, string message)
     {
         try
         {
-            issueStore.Record(accountKey, invoiceNumber, orderId, VoidPendingIssueType, message, now());
+            issueStore.Record(
+                accountKey,
+                invoiceNumber,
+                orderId,
+                InvoiceVoidSyncIssueTypes.PendingConfirmation,
+                message,
+                now());
         }
         catch
         {
         }
     }
 
-    private void TryResolveVoidPending(string accountKey, string invoiceNumber, string orderId)
+    private void ResolvePendingIssue(string accountKey, string invoiceNumber, string orderId)
     {
         try
         {
-            issueStore.ResolveMatching(accountKey, invoiceNumber, orderId, now(), VoidPendingIssueType);
+            issueStore.ResolveMatching(
+                accountKey,
+                invoiceNumber,
+                orderId,
+                now(),
+                InvoiceVoidSyncIssueTypes.PendingConfirmation);
         }
         catch
         {
@@ -172,6 +207,15 @@ public sealed class InvoiceAutomaticSyncService
         if (sellerInvoice.Length == 0)
             throw new InvalidOperationException("目前環境缺少可識別的公司統編");
         return new Account(settings.Environment, sellerInvoice);
+    }
+
+    private static bool IsInRange(InvoiceRecord record, DateOnly startDate, DateOnly endDate)
+    {
+        var text = record.InvoiceDate.Trim();
+        if (text.Length == 0 && record.SentAt.Length >= 10) text = record.SentAt[..10];
+        text = text.Replace("/", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal);
+        return DateOnly.TryParseExact(text, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) &&
+               date >= startDate && date <= endDate;
     }
 
     private static string EffectiveOrderId(InvoiceRecord record) =>
