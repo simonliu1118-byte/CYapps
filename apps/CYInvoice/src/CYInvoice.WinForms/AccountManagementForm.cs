@@ -170,12 +170,13 @@ internal sealed class AccountManagementForm : Form
     {
         var target = SelectedAccount;
         if (target is null || !edit.Enabled) return;
-        using var form = new EmployeeEditForm(target);
+        var canChangeRole = target.Role != EmployeeRoles.SuperAdmin && target.EmployeeNo != actor.EmployeeNo;
+        using var form = new EmployeeEditForm(target, allowRoleChange: canChangeRole);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         try
         {
             employees.UpdateProfile(actor.EmployeeNo, target.EmployeeNo, form.EmployeeName, form.Email);
-            if (target.Role != EmployeeRoles.SuperAdmin && form.Role != target.Role)
+            if (canChangeRole && form.Role != target.Role)
                 employees.SetRole(actor.EmployeeNo, target.EmployeeNo, form.Role);
             Reload(target.EmployeeNo);
         }
