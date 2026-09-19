@@ -47,7 +47,7 @@ Build 3 已統一以下最終規格：
 
 - [ ] `/json/g0401` 折讓開立。
 - [ ] `/json/g0501` 作廢折讓。
-- [ ] `AllowanceNumber` 唯一編號產生規則與跨裝置／雲端防重。
+- [ ] `AllowanceNumber` 由 CYInvoice **自動產生**；建立唯一編號規則與跨裝置／雲端防重機制。
 - [ ] `allowance_query`／`allowance_status` 正式查詢與狀態同步。
 - [ ] `allowance_file`／折讓 PDF 與列印需求。
 - [ ] 折讓清單與正式本機／雲端資料模型。
