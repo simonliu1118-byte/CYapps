@@ -102,6 +102,8 @@ public sealed class InvoiceAutomaticSyncService
         var account = CurrentAccount();
         var accountKey = account.Environment + "|" + account.SellerInvoice;
         var problems = result.Problems.ToList();
+        ResolveConfirmedPendingIssues(accountKey, account, problems);
+
         var pending = repository.Invoices.LoadOrCreate()
             .Where(record => InvoiceVoidService.HasPendingMarker(record))
             .Where(record => string.Equals(record.Environment, account.Environment, StringComparison.Ordinal))
@@ -163,6 +165,35 @@ public sealed class InvoiceAutomaticSyncService
         return problems.Count == result.Problems.Count
             ? result
             : result with { Problems = problems.ToArray() };
+    }
+
+    private void ResolveConfirmedPendingIssues(string accountKey, Account account, List<string> problems)
+    {
+        try
+        {
+            var voidedNumbers = repository.Invoices.LoadOrCreate()
+                .Where(record => string.Equals(record.Environment, account.Environment, StringComparison.Ordinal))
+                .Where(record => record.SellerInvoice.Trim().Length == 0 ||
+                                 string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal))
+                .Where(record => record.InvoiceState == InvoiceStates.Voided)
+                .Select(record => record.InvoiceNumber.Trim())
+                .Where(number => number.Length != 0)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var issue in issueStore.Unresolved(accountKey)
+                         .Where(issue => string.Equals(
+                             issue.IssueType,
+                             InvoiceVoidSyncIssueTypes.PendingConfirmation,
+                             StringComparison.Ordinal))
+                         .Where(issue => voidedNumbers.Contains(issue.InvoiceNumber.Trim())))
+            {
+                issueStore.Resolve(issue.Id, now());
+            }
+        }
+        catch (Exception error)
+        {
+            problems.Add("作廢待確認問題狀態清理失敗：" + error.Message);
+        }
     }
 
     private void RecordPendingIssue(string accountKey, string invoiceNumber, string orderId, string message)
