@@ -303,45 +303,19 @@ public sealed class InvoiceVoidService
             queryError = error;
         }
 
-        StatusResponse? status = null;
-        Exception? statusError = null;
-        try
-        {
-            status = await gateway.StatusAsync([invoiceNumber], cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception error)
-        {
-            statusError = error;
-        }
-
-        StatusResult? voidStatus = null;
-        if (status is not null)
-        {
-            var candidates = status.Data.Where(item =>
-                string.Equals(item.InvoiceNumber.Trim(), invoiceNumber, StringComparison.OrdinalIgnoreCase) &&
-                IsVoidType(item.Type)).ToArray();
-            if (candidates.Length == 1)
-                voidStatus = candidates[0];
-            else if (candidates.Length > 1)
-                statusError = new InvalidDataException("invoice_status 回傳多筆相同發票的作廢狀態");
-        }
-
         var queryVoidType = query is not null && IsVoidType(query.Data.InvoiceType);
         var confirmed = query?.Data.CancelDate > 0 ||
-                        (queryVoidType && query!.Data.InvoiceStatus == UploadStatuses.Complete) ||
-                        voidStatus?.Status == UploadStatuses.Complete;
-        var pending = !confirmed &&
-                      (query?.Data.VoidPending == true ||
-                       (queryVoidType && IsPendingStatus(query!.Data.InvoiceStatus)) ||
-                       (voidStatus is not null && IsPendingStatus(voidStatus.Status)));
-        var voidFailed = !confirmed && !pending &&
-                         ((queryVoidType && query!.Data.InvoiceStatus == UploadStatuses.Error) ||
-                          voidStatus?.Status == UploadStatuses.Error);
+                        (queryVoidType && query!.Data.InvoiceStatus == UploadStatuses.Complete);
+        var pending = !confirmed && query is not null &&
+                      (query.Data.VoidPending ||
+                       (queryVoidType && IsPendingStatus(query.Data.InvoiceStatus)));
+        var voidFailed = !confirmed && !pending && queryVoidType &&
+                         query!.Data.InvoiceStatus == UploadStatuses.Error;
         var stableOpen = !confirmed && !pending && !voidFailed && query is not null &&
                          query.Data.CancelDate == 0 && !query.Data.VoidPending &&
                          query.Data.InvoiceStatus == UploadStatuses.Complete && !queryVoidType;
 
-        return new OfficialInspection(query, voidStatus, queryError, statusError, confirmed, pending, voidFailed, stableOpen);
+        return new OfficialInspection(query, null, queryError, null, confirmed, pending, voidFailed, stableOpen);
     }
 
     private InvoiceRecord Reload(InvoiceRecord record) =>

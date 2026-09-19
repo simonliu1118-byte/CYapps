@@ -21,6 +21,7 @@ public static class InvoiceOfficialState
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(query);
+        InvoiceAllowanceMetadata.ApplyQuery(record, query.Allowances);
         if (query.CancelDate > 0)
         {
             ApplyVoided(record, query.CancelDate);

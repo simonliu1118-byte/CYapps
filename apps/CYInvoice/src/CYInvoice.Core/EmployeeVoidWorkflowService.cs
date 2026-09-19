@@ -88,6 +88,13 @@ public sealed class EmployeeVoidWorkflowService
                 throw new InvalidOperationException("請確認紙本電子發票證明聯狀態");
         }
 
+        if (issueStore.HasUnresolved(
+                CurrentAccountKey(),
+                expectedNumber,
+                EffectiveOrderId(stored),
+                InvoiceAllowanceIssueTypes.ManualReview))
+            throw new InvalidOperationException("這張發票已有折讓作業待處理，不能同時作廢");
+
         if (paperInvoice && paperReceiptState == PaperInvoiceReceiptStates.Uncollected)
             return QueueManualReview(stored, employee.EmployeeNo, reason);
 
@@ -208,42 +215,11 @@ public sealed class EmployeeVoidWorkflowService
             Message: "已送交人工確認，尚未向光貿送出作廢");
     }
 
-    private EmployeeAccount AuthenticateEmployee(string employeeNo, string password)
-    {
-        employeeNo = (employeeNo ?? string.Empty).Trim();
-        password ??= string.Empty;
-        var delay = EmployeeVoidAuthenticationThrottle.Remaining(employeeNo, now());
-        if (delay > TimeSpan.Zero) throw new EmployeeVoidAuthenticationDelayException(delay);
+    private EmployeeAccount AuthenticateEmployee(string employeeNo, string password) =>
+        EmployeeOperationAuthentication.AuthenticateEmployee(repository, employeeNo, password, now());
 
-        EmployeeAccount? employee = null;
-        try
-        {
-            employee = repository.Employees.Authenticate(employeeNo, password);
-        }
-        catch (InvalidOperationException)
-        {
-            // Invalid employee-number shape is intentionally indistinguishable from bad credentials.
-        }
-
-        if (employee is null)
-        {
-            EmployeeVoidAuthenticationThrottle.RegisterFailure(employeeNo, now());
-            throw new InvalidOperationException("員工編號或密碼錯誤");
-        }
-
-        EmployeeVoidAuthenticationThrottle.Reset(employeeNo);
-        return employee;
-    }
-
-    private EmployeeAccount AuthenticateManager(string actorEmployeeNo, string actorPassword)
-    {
-        EmployeeAccount? actor = null;
-        try { actor = repository.Employees.Authenticate(actorEmployeeNo, actorPassword ?? string.Empty); }
-        catch (InvalidOperationException) { }
-        if (actor is null || !EmployeeRoles.CanManageAccounts(actor.Role))
-            throw new UnauthorizedAccessException("管理員驗證失敗");
-        return actor;
-    }
+    private EmployeeAccount AuthenticateManager(string actorEmployeeNo, string actorPassword) =>
+        EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
 
     private InvoiceRecord FindIssueRecord(InvoiceSyncIssue issue)
     {

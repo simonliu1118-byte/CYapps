@@ -332,13 +332,39 @@ public sealed class AmegoClient : IAmegoGateway
         var order = Text(value, "order_id");
         if (number.Length == 0 && order.Length == 0) throw new InvalidDataException("API query object is missing invoice_number and order_id");
         var detailPresent = value.TryGetProperty("detail_vat", out var detail) || value.TryGetProperty("DetailVat", out detail);
-        results.Add(new QueryResult(number, FirstText(value, "type", "invoice_type"), FirstInt(value, "status", "invoice_status"),
+        var query = new QueryResult(number, FirstText(value, "type", "invoice_type"), FirstInt(value, "status", "invoice_status"),
             FirstScalar(value, "date", "invoice_date"), FirstScalar(value, "time", "invoice_time"),
             Text(value, "buyer_identifier"), Text(value, "buyer_name"), Scalar(value, "sales_amount"), Scalar(value, "tax_amount"),
             Scalar(value, "total_amount"), Text(value, "carrier_type"), Text(value, "carrier_id1"), Text(value, "carrier_id2"),
             Text(value, "npoban"), Int64(value, "cancel_date"), order, Int64(value, "create_date"),
             value.TryGetProperty("product_item", out var products) ? products.Clone() : default,
-            detailPresent ? detail.GetInt32() : 0, detailPresent, HasPendingVoid(value)));
+            detailPresent ? detail.GetInt32() : 0, detailPresent, HasPendingVoid(value));
+        results.Add(query with { Allowances = ParseAllowances(value) });
+    }
+
+    private static IReadOnlyList<InvoiceAllowanceResult> ParseAllowances(JsonElement value)
+    {
+        if (!value.TryGetProperty("allowance", out var allowances) ||
+            allowances.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return [];
+        if (allowances.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException("invoice_query allowance is not an array");
+
+        var results = new List<InvoiceAllowanceResult>();
+        foreach (var item in allowances.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("invoice_query allowance contains a non-object item");
+            results.Add(new InvoiceAllowanceResult(
+                FirstText(item, "invoice_type", "type"),
+                FlexibleInt32(item, "invoice_status"),
+                FlexibleInt32(item, "allowance_type"),
+                Text(item, "allowance_number"),
+                Scalar(item, "allowance_date"),
+                Scalar(item, "tax_amount"),
+                Scalar(item, "total_amount")));
+        }
+        return results;
     }
 
     private static bool HasPendingVoid(JsonElement value)
@@ -374,6 +400,16 @@ public sealed class AmegoClient : IAmegoGateway
         JsonValueKind.Null or JsonValueKind.Undefined => string.Empty,
         _ => throw new InvalidDataException("expected string or number"),
     };
+    private static int FlexibleInt32(JsonElement value, string name)
+    {
+        if (!value.TryGetProperty(name, out var property)) return 0;
+        if (property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var numeric)) return numeric;
+        if (property.ValueKind == JsonValueKind.String &&
+            int.TryParse(property.GetString()?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var text))
+            return text;
+        if (property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return 0;
+        throw new InvalidDataException($"{name} must be an integer");
+    }
     private static int Int32(JsonElement value, string name) => value.TryGetProperty(name, out var property) && property.TryGetInt32(out var result) ? result : 0;
     private static long Int64(JsonElement value, string name) => value.TryGetProperty(name, out var property) && property.TryGetInt64(out var result) ? result : 0;
 }

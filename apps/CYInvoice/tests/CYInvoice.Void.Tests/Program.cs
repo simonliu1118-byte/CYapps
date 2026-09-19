@@ -11,6 +11,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("f0501 serializes one-item array with exact fields", Cases.F0501PayloadAsync),
     ("f0501 rejects reason longer than twenty characters", Cases.F0501ReasonLimitAsync),
     ("invoice_query detects pending C0501", Cases.QueryDetectsPendingVoidAsync),
+    ("invoice_query parses allowance array", Cases.QueryParsesAllowancesAsync),
     ("preflight already voided never sends f0501", Cases.AlreadyVoidedAsync),
     ("preflight pending void never sends f0501", Cases.PreflightPendingAsync),
     ("preflight requires official status 99", Cases.PreflightRequiresCompleteAsync),
@@ -98,6 +99,23 @@ static class Cases
         var client = new AmegoClient("12345678", "test-key", http);
         var response = await client.QueryByInvoiceNumberAsync("AA12345678");
         AssertEx.Equal(true, response.Data.VoidPending);
+    }
+
+    public static async Task QueryParsesAllowancesAsync()
+    {
+        using var http = new HttpClient(new StubHandler(_ => Task.FromResult(Fixtures.JsonResponse("""
+            {"code":0,"msg":"","data":{"invoice_number":"AA12345678","invoice_type":"A0401","invoice_status":99,"cancel_date":0,"order_id":"O1","allowance":[{"invoice_type":"D0401","invoice_status":99,"allowance_type":"2","allowance_number":"ALW20260919001","allowance_date":20260919,"tax_amount":"5","total_amount":95}]}}
+            """))));
+        var client = new AmegoClient("12345678", "test-key", http);
+        var response = await client.QueryByInvoiceNumberAsync("AA12345678");
+        var allowance = response.Data.Allowances.Single();
+        AssertEx.Equal("D0401", allowance.InvoiceType);
+        AssertEx.Equal(UploadStatuses.Complete, allowance.InvoiceStatus);
+        AssertEx.Equal(2, allowance.AllowanceType);
+        AssertEx.Equal("ALW20260919001", allowance.AllowanceNumber);
+        AssertEx.Equal("20260919", allowance.AllowanceDate);
+        AssertEx.Equal("5", allowance.TaxAmount);
+        AssertEx.Equal("95", allowance.TotalAmount);
     }
 
     public static async Task AlreadyVoidedAsync()

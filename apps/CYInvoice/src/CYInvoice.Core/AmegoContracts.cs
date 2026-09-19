@@ -88,6 +88,15 @@ public sealed class VoidRequest
 public sealed record IssueResponse(int Code, string Message, string InvoiceNumber, long InvoiceTime, string RandomNumber);
 public sealed record VoidResponse(int Code, string Message);
 
+public sealed record InvoiceAllowanceResult(
+    string InvoiceType,
+    int InvoiceStatus,
+    int AllowanceType,
+    string AllowanceNumber,
+    string AllowanceDate,
+    string TaxAmount,
+    string TotalAmount);
+
 public sealed record QueryResult(
     string InvoiceNumber,
     string InvoiceType,
@@ -109,7 +118,10 @@ public sealed record QueryResult(
     JsonElement ProductItems,
     int DetailVat,
     bool DetailVatPresent,
-    bool VoidPending = false);
+    bool VoidPending = false)
+{
+    public IReadOnlyList<InvoiceAllowanceResult> Allowances { get; init; } = [];
+}
 
 public sealed record QueryResponse(int Code, string Message, QueryResult Data);
 
