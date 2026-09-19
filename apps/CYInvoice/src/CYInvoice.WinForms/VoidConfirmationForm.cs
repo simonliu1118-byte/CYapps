@@ -56,6 +56,21 @@ internal sealed class VoidConfirmationForm : Form
     private int CalculateHeight() =>
         20 + FieldRows * FieldRowHeight + (paperInvoice ? WarningRowHeight : 0) + ResponsibilityHeight + ActionRowHeight;
 
+    protected override void OnLoad(EventArgs eventArgs)
+    {
+        VoidConfirmationPrivacyMask.KeepMasked(Owner);
+        base.OnLoad(eventArgs);
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs eventArgs)
+    {
+        if (DialogResult == DialogResult.OK)
+            VoidConfirmationPrivacyMask.KeepMasked(Owner);
+        else
+            VoidConfirmationPrivacyMask.Restore(Owner);
+        base.OnFormClosed(eventArgs);
+    }
+
     private void BuildLayout()
     {
         password.UseSystemPasswordChar = true;
@@ -230,9 +245,7 @@ internal sealed class VoidConfirmationForm : Form
 
     internal void VerifySmokeLayout()
     {
-        var responsibility = Controls.Find("void-responsibility", true).FirstOrDefault() as Label;
-        if (responsibility is null)
-            responsibility = FindTaggedResponsibility(this);
+        var responsibility = FindTaggedResponsibility(this);
         if (Text != "發票作廢確認" || invoiceNumber.Text.Length != 0 || password.Text.Length != 0 ||
             invoiceNumber.TextAlign != HorizontalAlignment.Left || employeeNo.TextAlign != HorizontalAlignment.Left ||
             password.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth ||
@@ -252,6 +265,7 @@ internal sealed class VoidConfirmationForm : Form
             if (!ShouldShowUncollectedWarning())
                 throw new InvalidOperationException("選擇尚未收回後未進入管理員確認提示狀態");
         }
+        VoidConfirmationPrivacyMask.VerifySmokeLayout();
     }
 
     private static Label? FindTaggedResponsibility(Control root)
