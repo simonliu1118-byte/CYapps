@@ -84,11 +84,9 @@ internal static class UiControls
     private static void ApplyDangerButtonTheme(Button button)
     {
         button.UseVisualStyleBackColor = false;
-        button.FlatStyle = FlatStyle.Flat;
+        button.FlatStyle = FlatStyle.Standard;
         button.BackColor = Color.FromArgb(183, 28, 28);
         button.ForeColor = Color.White;
-        button.FlatAppearance.BorderColor = Color.FromArgb(138, 20, 20);
-        button.FlatAppearance.BorderSize = 1;
     }
 
     public static Button ImportButton(string text, ImportBrand brand) => new ImportBrandButton(text, brand);

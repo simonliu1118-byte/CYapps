@@ -4,6 +4,10 @@ namespace CYInvoice.WinForms;
 
 internal sealed class RotateRecoveryCodeForm : Form
 {
+    private const int WindowWidth = 360;
+    private const int HeaderHeight = 44;
+    private const int FieldRowHeight = 38;
+    private const int ActionRowHeight = 46;
     private readonly EmployeeStore employees;
     private readonly EmployeeAccount account;
     private readonly TextBox password = UiControls.TextBox(200);
@@ -17,46 +21,52 @@ internal sealed class RotateRecoveryCodeForm : Form
         password.UseSystemPasswordChar = true;
         Text = "重新產生超管復原碼";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(390, 210);
+        ClientSize = new Size(WindowWidth, CalculateHeight());
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => password.Focus();
     }
 
     public string? NewRecoveryCode { get; private set; }
 
+    private static int CalculateHeight() => 20 + HeaderHeight + FieldRowHeight + ActionRowHeight;
+
     private void BuildLayout()
     {
+        ConfigureInputField(password);
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(18, 14, 18, 12),
+            Padding = new Padding(14, 10, 14, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, HeaderHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, ActionRowHeight));
         root.Controls.Add(new Label
         {
-            Text = "重新產生後，舊復原碼會立即失效。請輸入超級管理員目前密碼確認。",
+            Text = "重新產生後舊復原碼立即失效，請輸入目前密碼確認。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
+            Margin = Padding.Empty,
         }, 0, 0);
 
-        var field = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        field.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-        field.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        field.Controls.Add(new Label
+        var field = new TableLayoutPanel
         {
-            Text = "目前密碼",
             Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-        }, 0, 0);
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = Padding.Empty,
+        };
+        field.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        field.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        field.Controls.Add(FieldLabel("目前密碼"), 0, 0);
         field.Controls.Add(password, 1, 0);
         password.KeyDown += (_, eventArgs) =>
         {
@@ -72,7 +82,8 @@ internal sealed class RotateRecoveryCodeForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 7, 0, 0),
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 4, 0, 0),
         };
         buttons.SizeChanged += (_, _) => CenterButtons(buttons);
         confirm.Click += ConfirmClicked;
@@ -83,6 +94,14 @@ internal sealed class RotateRecoveryCodeForm : Form
         Controls.Add(root);
         AcceptButton = null;
         CancelButton = cancel;
+    }
+
+    private static void ConfigureInputField(TextBox field)
+    {
+        field.Dock = DockStyle.None;
+        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        field.Margin = new Padding(3, 0, 3, 0);
+        field.TextAlign = HorizontalAlignment.Left;
     }
 
     private void ConfirmClicked(object? sender, EventArgs eventArgs)
@@ -108,14 +127,24 @@ internal sealed class RotateRecoveryCodeForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (!password.UseSystemPasswordChar || AcceptButton is not null || CancelButton != cancel ||
+        if (Icon is null || !password.UseSystemPasswordChar || password.TextAlign != HorizontalAlignment.Left ||
+            ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
+            AcceptButton is not null || CancelButton != cancel ||
             !UiControls.HasLogicalSize(confirm, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("復原碼輪替確認視窗配置不正確");
     }
 
+    private static Label FieldLabel(string text) => new()
+    {
+        Text = text,
+        Dock = DockStyle.Fill,
+        TextAlign = ContentAlignment.MiddleLeft,
+        Margin = new Padding(0, 0, 8, 0),
+    };
+
     private static void CenterButtons(FlowLayoutPanel panel)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 7, 0, 0);
+        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 4, 0, 0);
     }
 }

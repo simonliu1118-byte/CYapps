@@ -1,8 +1,12 @@
+using CYInvoice.Core.Invoicing;
+
 namespace CYInvoice.WinForms;
 
 internal sealed class VoidReasonForm : Form
 {
-    private readonly TextBox reason = UiControls.TextBox(30);
+    private const int WindowWidth = 340;
+    private const int WindowHeight = 114;
+    private readonly TextBox reason = UiControls.TextBox(EmployeeVoidWorkflowService.MaxReasonLength);
     private readonly Button next = UiControls.StandardButton("下一步");
     private readonly Button cancel = UiControls.StandardButton("取消");
 
@@ -10,7 +14,7 @@ internal sealed class VoidReasonForm : Form
     {
         Text = "發票作廢";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(360, 158);
+        ClientSize = new Size(WindowWidth, WindowHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -30,19 +34,22 @@ internal sealed class VoidReasonForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(18, 14, 18, 12),
+            Padding = new Padding(14, 8, 14, 8),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.Controls.Add(new Label
         {
-            Text = "作廢原因（最多 15 字）",
+            Text = $"作廢原因（最多 {EmployeeVoidWorkflowService.MaxReasonLength} 字）",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
+            Margin = Padding.Empty,
         }, 0, 0);
-        reason.Dock = DockStyle.Fill;
-        reason.Margin = new Padding(0, 4, 0, 8);
+        reason.Dock = DockStyle.None;
+        reason.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        reason.Margin = Padding.Empty;
+        reason.TextAlign = HorizontalAlignment.Left;
         reason.TabIndex = 0;
         reason.KeyDown += (_, eventArgs) =>
         {
@@ -61,7 +68,7 @@ internal sealed class VoidReasonForm : Form
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
             Margin = Padding.Empty,
-            Padding = new Padding(0, 4, 0, 0),
+            Padding = new Padding(0, 2, 0, 0),
         };
         buttons.Controls.Add(next);
         buttons.Controls.Add(cancel);
@@ -80,11 +87,12 @@ internal sealed class VoidReasonForm : Form
             ValidationError("請輸入作廢原因。");
             return;
         }
-        if (length > 15)
+        if (length > EmployeeVoidWorkflowService.MaxReasonLength)
         {
-            ValidationError("作廢原因最多 15 字。");
+            ValidationError($"作廢原因最多 {EmployeeVoidWorkflowService.MaxReasonLength} 字。");
             return;
         }
+
         DialogResult = DialogResult.OK;
         Close();
     }
@@ -101,9 +109,11 @@ internal sealed class VoidReasonForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (Text != "發票作廢" || AcceptButton is not null || CancelButton != cancel)
+        if (Text != "發票作廢" || AcceptButton is not null || CancelButton != cancel ||
+            reason.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
+            reason.MaxLength != EmployeeVoidWorkflowService.MaxReasonLength)
             throw new InvalidOperationException("作廢原因視窗基本配置不正確");
-        if (reason.MaxLength < 15 || !UiControls.HasLogicalSize(next, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("作廢原因欄位或按鈕尺寸不正確");
+        if (!UiControls.HasLogicalSize(next, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
+            throw new InvalidOperationException("作廢原因按鈕尺寸不正確");
     }
 }

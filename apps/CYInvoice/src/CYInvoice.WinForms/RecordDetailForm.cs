@@ -218,6 +218,7 @@ internal sealed class RecordDetailForm : Form
         using var reasonForm = new VoidReasonForm();
         if (reasonForm.ShowDialog(this) != DialogResult.OK) return;
         var reason = reasonForm.Reason;
+        using var privacyMask = VoidConfirmationPrivacyMask.Apply(this, record.InvoiceNumber);
 
         while (!IsDisposed)
         {

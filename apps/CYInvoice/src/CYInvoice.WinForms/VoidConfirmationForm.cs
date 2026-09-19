@@ -7,6 +7,11 @@ internal sealed class VoidConfirmationForm : Form
     private const string ResponsibilityText =
         "本人已核對本次作廢之發票號碼、交易事實、作廢原因及紙本電子發票證明聯收回狀況。\n\n本人了解發票作廢應依相關法令及公司作業規範辦理；如因本人故意、操作錯誤或疏失致生相關問題，願依實際責任歸屬、相關法令及公司規定負應負之責任。\n\n按下「確認作廢」即表示本人已閱讀並確認上述事項。";
     private const string UncollectedWarningText = "未收回作廢需由管理員確認後才會送出";
+    private const int WindowWidth = 500;
+    private const int FieldRowHeight = 38;
+    private const int WarningRowHeight = 28;
+    private const int ResponsibilityHeight = 120;
+    private const int ActionRowHeight = 46;
 
     private readonly bool paperInvoice;
     private readonly TextBox invoiceNumber = UiControls.TextBox(10);
@@ -21,7 +26,7 @@ internal sealed class VoidConfirmationForm : Form
         TextAlign = ContentAlignment.MiddleLeft,
         ForeColor = Color.FromArgb(185, 108, 0),
         Visible = false,
-        Margin = new Padding(10, 0, 0, 0),
+        Margin = Padding.Empty,
     };
     private readonly Button confirm = UiControls.StandardButton("確認作廢");
     private readonly Button cancel = UiControls.StandardButton("取消");
@@ -31,7 +36,7 @@ internal sealed class VoidConfirmationForm : Form
         this.paperInvoice = paperInvoice;
         Text = "發票作廢確認";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(paperInvoice ? 650 : 470, paperInvoice ? 410 : 360);
+        ClientSize = new Size(WindowWidth, CalculateHeight());
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -47,10 +52,16 @@ internal sealed class VoidConfirmationForm : Form
     public string Password => password.Text;
     public string PaperReceiptState => paperInvoice ? SelectedReceiptState() : string.Empty;
 
+    private int FieldRows => paperInvoice ? 4 : 3;
+    private int CalculateHeight() =>
+        20 + FieldRows * FieldRowHeight + (paperInvoice ? WarningRowHeight : 0) + ResponsibilityHeight + ActionRowHeight;
+
     private void BuildLayout()
     {
         password.UseSystemPasswordChar = true;
-        employeeNo.TextAlign = HorizontalAlignment.Center;
+        ConfigureInputField(invoiceNumber);
+        ConfigureInputField(employeeNo);
+        ConfigureInputField(password);
         invoiceNumber.CharacterCasing = CharacterCasing.Upper;
         if (paperInvoice)
         {
@@ -59,38 +70,29 @@ internal sealed class VoidConfirmationForm : Form
             receiptState.Items.Add(new ReceiptChoice("尚未收回", PaperInvoiceReceiptStates.Uncollected));
             receiptState.DisplayMember = nameof(ReceiptChoice.Text);
             receiptState.SelectedIndexChanged += (_, _) => UpdateUncollectedWarning();
+            receiptState.Dock = DockStyle.None;
+            receiptState.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            receiptState.Margin = new Padding(3, 0, 3, 0);
         }
 
-        var fieldRows = paperInvoice ? 4 : 3;
         var fields = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = paperInvoice ? 3 : 2,
-            RowCount = fieldRows,
+            ColumnCount = 2,
+            RowCount = FieldRows,
             Margin = Padding.Empty,
         };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
-        if (paperInvoice)
-        {
-            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
-            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        }
-        else
-        {
-            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        }
-        for (var row = 0; row < fieldRows; row++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        AddField(fields, "發票號碼", invoiceNumber, 0, paperInvoice ? 2 : 1);
-        AddField(fields, "員工編號", employeeNo, 1, paperInvoice ? 2 : 1);
-        AddField(fields, "員工密碼", password, 2, paperInvoice ? 2 : 1);
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        for (var row = 0; row < FieldRows; row++)
+            fields.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight));
+        AddField(fields, "發票號碼", invoiceNumber, 0);
+        AddField(fields, "員工編號", employeeNo, 1);
+        AddField(fields, "員工密碼", password, 2);
         if (paperInvoice)
         {
             fields.Controls.Add(FieldLabel("證明聯狀態"), 0, 3);
-            receiptState.Dock = DockStyle.Fill;
-            receiptState.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-            receiptState.Margin = new Padding(0, 8, 0, 8);
             fields.Controls.Add(receiptState, 1, 3);
-            fields.Controls.Add(uncollectedWarning, 2, 3);
         }
 
         invoiceNumber.TabIndex = 0;
@@ -108,7 +110,10 @@ internal sealed class VoidConfirmationForm : Form
             AutoSize = false,
             TextAlign = ContentAlignment.TopLeft,
             ForeColor = Color.FromArgb(65, 65, 65),
-            Padding = new Padding(4, 10, 4, 4),
+            Font = new Font(Font.FontFamily, 10F, FontStyle.Bold),
+            Padding = new Padding(0, 8, 0, 0),
+            Margin = Padding.Empty,
+            Tag = "void-responsibility",
         };
 
         confirm.Click += (_, _) => Submit();
@@ -119,7 +124,7 @@ internal sealed class VoidConfirmationForm : Form
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
             Margin = Padding.Empty,
-            Padding = new Padding(0, 5, 0, 0),
+            Padding = new Padding(0, 4, 0, 0),
         };
         buttons.Controls.Add(confirm);
         buttons.Controls.Add(cancel);
@@ -128,18 +133,28 @@ internal sealed class VoidConfirmationForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
-            Padding = new Padding(18, 14, 18, 12),
+            RowCount = 4,
+            Padding = new Padding(14, 10, 14, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, fieldRows * 48));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRows * FieldRowHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, paperInvoice ? WarningRowHeight : 0));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, ResponsibilityHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, ActionRowHeight));
         root.Controls.Add(fields, 0, 0);
-        root.Controls.Add(responsibility, 0, 1);
-        root.Controls.Add(buttons, 0, 2);
+        if (paperInvoice) root.Controls.Add(uncollectedWarning, 0, 1);
+        root.Controls.Add(responsibility, 0, 2);
+        root.Controls.Add(buttons, 0, 3);
         Controls.Add(root);
         AcceptButton = null;
         CancelButton = cancel;
+    }
+
+    private static void ConfigureInputField(TextBox field)
+    {
+        field.Dock = DockStyle.None;
+        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        field.Margin = new Padding(3, 0, 3, 0);
+        field.TextAlign = HorizontalAlignment.Left;
     }
 
     private bool ShouldShowUncollectedWarning() =>
@@ -181,14 +196,10 @@ internal sealed class VoidConfirmationForm : Form
     private string SelectedReceiptState() =>
         receiptState.SelectedItem is ReceiptChoice choice ? choice.Value : string.Empty;
 
-    private static void AddField(TableLayoutPanel panel, string label, Control field, int row, int columnSpan)
+    private static void AddField(TableLayoutPanel panel, string label, Control field, int row)
     {
         panel.Controls.Add(FieldLabel(label), 0, row);
-        field.Dock = DockStyle.Fill;
-        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        field.Margin = new Padding(0, 8, 0, 8);
         panel.Controls.Add(field, 1, row);
-        if (columnSpan > 1) panel.SetColumnSpan(field, columnSpan);
     }
 
     private static Label FieldLabel(string text) => new()
@@ -219,8 +230,13 @@ internal sealed class VoidConfirmationForm : Form
 
     internal void VerifySmokeLayout()
     {
+        var responsibility = FindTaggedResponsibility(this);
         if (Text != "發票作廢確認" || invoiceNumber.Text.Length != 0 || password.Text.Length != 0 ||
-            AcceptButton is not null || CancelButton != cancel || !password.UseSystemPasswordChar)
+            invoiceNumber.TextAlign != HorizontalAlignment.Left || employeeNo.TextAlign != HorizontalAlignment.Left ||
+            password.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth ||
+            ClientSize.Height != CalculateHeight() || AcceptButton is not null || CancelButton != cancel ||
+            !password.UseSystemPasswordChar || confirm.FlatStyle != FlatStyle.Standard ||
+            responsibility is null || !responsibility.Font.Bold)
             throw new InvalidOperationException("發票作廢確認視窗基本配置不正確");
         if (paperInvoice && receiptState.Items.Count != 3)
             throw new InvalidOperationException("紙本發票證明聯狀態選項不完整");
@@ -234,6 +250,18 @@ internal sealed class VoidConfirmationForm : Form
             if (!ShouldShowUncollectedWarning())
                 throw new InvalidOperationException("選擇尚未收回後未進入管理員確認提示狀態");
         }
+        VoidConfirmationPrivacyMask.VerifySmokeLayout();
+    }
+
+    private static Label? FindTaggedResponsibility(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is Label label && Equals(label.Tag, "void-responsibility")) return label;
+            var nested = FindTaggedResponsibility(child);
+            if (nested is not null) return nested;
+        }
+        return null;
     }
 
     private sealed record ReceiptChoice(string Text, string Value)

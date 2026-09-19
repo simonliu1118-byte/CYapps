@@ -228,9 +228,9 @@ static async Task QueueReviewAsync(TestSetup setup)
 static TestSetup CreateSetup(string path, bool paper = true)
 {
     var repository = LocalRepository.Open(path, new TestProtector());
-    repository.Employees.CreateFirstSuperAdmin("0001", "超管", "", "super-pass");
-    repository.Employees.CreateEmployee("0001", "3015", "員工", "", "employee-pass");
-    repository.Employees.CreateEmployee("0001", "2000", "管理員", "", "admin-pass", EmployeeRoles.Admin);
+    repository.Employees.CreateFirstSuperAdmin("0001", "超管", "super@example.com", "super-pass");
+    repository.Employees.CreateEmployee("0001", "3015", "員工", "employee@example.com", "employee-pass");
+    repository.Employees.CreateEmployee("0001", "2000", "管理員", "admin@example.com", "admin-pass", EmployeeRoles.Admin);
 
     var record = new InvoiceRecord
     {

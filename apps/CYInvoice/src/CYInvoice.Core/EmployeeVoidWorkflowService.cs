@@ -38,6 +38,7 @@ public sealed class EmployeeVoidAuthenticationDelayException(TimeSpan remaining)
 
 public sealed class EmployeeVoidWorkflowService
 {
+    public const int MaxReasonLength = 10;
     private const string ManualReviewMetadataKey = "cyinvoice_void_manual_review";
     private readonly LocalRepository repository;
     private readonly InvoiceVoidService voidService;
@@ -319,7 +320,7 @@ public sealed class EmployeeVoidWorkflowService
     {
         var length = reason.EnumerateRunes().Count();
         if (length == 0) throw new InvalidOperationException("作廢原因不可空白");
-        if (length > 15) throw new InvalidOperationException("作廢原因最多 15 字");
+        if (length > MaxReasonLength) throw new InvalidOperationException($"作廢原因最多 {MaxReasonLength} 字");
     }
 
     private static InvoiceVoidManualReview? ReadManualReview(InvoiceRecord record)

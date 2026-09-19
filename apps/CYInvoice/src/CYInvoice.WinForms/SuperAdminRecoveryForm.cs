@@ -4,6 +4,10 @@ namespace CYInvoice.WinForms;
 
 internal sealed class SuperAdminRecoveryForm : Form
 {
+    private const int WindowWidth = 390;
+    private const int HeaderHeight = 44;
+    private const int FieldRowHeight = 38;
+    private const int ActionRowHeight = 46;
     private readonly EmployeeStore employees;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox recoveryCode = UiControls.TextBox(64);
@@ -17,42 +21,53 @@ internal sealed class SuperAdminRecoveryForm : Form
         this.employees = employees;
         Text = "超級管理員密碼復原";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(430, 356);
+        ClientSize = new Size(WindowWidth, CalculateHeight());
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => employeeNo.Focus();
     }
 
+    private static int CalculateHeight() => 20 + HeaderHeight + FieldRowHeight * 4 + ActionRowHeight;
+
     private void BuildLayout()
     {
-        employeeNo.TextAlign = HorizontalAlignment.Center;
+        foreach (var field in new[] { employeeNo, recoveryCode, newPassword, confirmPassword }) ConfigureInputField(field);
+
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(18, 14, 18, 12),
+            Padding = new Padding(14, 10, 14, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 216));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, HeaderHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight * 4));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, ActionRowHeight));
 
         root.Controls.Add(new Label
         {
-            Text = "此流程只供超級管理員使用。一般員工或管理員忘記密碼，請由其他管理員在「帳戶管理」中重設。",
+            Text = "僅供超級管理員使用；一般帳戶請由管理員重設密碼。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(88, 88, 88),
+            Margin = Padding.Empty,
         }, 0, 0);
 
-        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 4 };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        var fields = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 4,
+            Margin = Padding.Empty,
+        };
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var index = 0; index < 4; index++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        for (var index = 0; index < 4; index++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight));
         fields.Controls.Add(FieldLabel("員工編號"), 0, 0);
         fields.Controls.Add(employeeNo, 1, 0);
         fields.Controls.Add(FieldLabel("復原碼"), 0, 1);
@@ -76,7 +91,8 @@ internal sealed class SuperAdminRecoveryForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 7, 0, 0),
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 4, 0, 0),
         };
         buttons.SizeChanged += (_, _) => CenterButtons(buttons);
         reset.Click += ResetClicked;
@@ -90,6 +106,14 @@ internal sealed class SuperAdminRecoveryForm : Form
         Controls.Add(root);
         AcceptButton = null;
         CancelButton = cancel;
+    }
+
+    private static void ConfigureInputField(TextBox field)
+    {
+        field.Dock = DockStyle.None;
+        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        field.Margin = new Padding(3, 0, 3, 0);
+        field.TextAlign = HorizontalAlignment.Left;
     }
 
     private void ResetClicked(object? sender, EventArgs eventArgs)
@@ -164,7 +188,10 @@ internal sealed class SuperAdminRecoveryForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (employeeNo.MaxLength != 4 || !newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
+        if (Icon is null || employeeNo.MaxLength != 4 || !newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
+            employeeNo.TextAlign != HorizontalAlignment.Left || recoveryCode.TextAlign != HorizontalAlignment.Left ||
+            newPassword.TextAlign != HorizontalAlignment.Left || confirmPassword.TextAlign != HorizontalAlignment.Left ||
+            ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
             AcceptButton is not null || CancelButton != cancel ||
             !UiControls.HasLogicalSize(reset, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("超級管理員復原視窗配置不正確");
@@ -176,6 +203,7 @@ internal sealed class SuperAdminRecoveryForm : Form
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft,
         AutoEllipsis = false,
+        Margin = new Padding(0, 0, 8, 0),
     };
 
     private static TextBox PasswordBox()
@@ -188,6 +216,6 @@ internal sealed class SuperAdminRecoveryForm : Form
     private static void CenterButtons(FlowLayoutPanel panel)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 7, 0, 0);
+        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 4, 0, 0);
     }
 }

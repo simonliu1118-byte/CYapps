@@ -4,6 +4,10 @@ namespace CYInvoice.WinForms;
 
 internal sealed class EmployeeChangePasswordForm : Form
 {
+    private const int WindowWidth = 360;
+    private const int HeaderHeight = 30;
+    private const int FieldRowHeight = 38;
+    private const int ActionRowHeight = 46;
     private readonly EmployeeStore employees;
     private readonly EmployeeAccount account;
     private readonly TextBox currentPassword = PasswordBox();
@@ -18,40 +22,52 @@ internal sealed class EmployeeChangePasswordForm : Form
         this.account = account;
         Text = "變更自己的密碼";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(400, 306);
+        ClientSize = new Size(WindowWidth, CalculateHeight());
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => currentPassword.Focus();
     }
 
+    private static int CalculateHeight() => 20 + HeaderHeight + FieldRowHeight * 3 + ActionRowHeight;
+
     private void BuildLayout()
     {
+        foreach (var field in new[] { currentPassword, newPassword, confirmPassword }) ConfigureInputField(field);
+
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(18, 14, 18, 12),
+            Padding = new Padding(14, 10, 14, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 176));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, HeaderHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight * 3));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, ActionRowHeight));
         root.Controls.Add(new Label
         {
             Text = $"{account.EmployeeNo}  {account.Name}",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font(Font.FontFamily, 10F, FontStyle.Bold),
+            Margin = Padding.Empty,
         }, 0, 0);
 
-        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        var fields = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 3,
+            Margin = Padding.Empty,
+        };
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var index = 0; index < 3; index++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        for (var index = 0; index < 3; index++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight));
         fields.Controls.Add(FieldLabel("目前密碼"), 0, 0);
         fields.Controls.Add(currentPassword, 1, 0);
         fields.Controls.Add(FieldLabel("新密碼"), 0, 1);
@@ -68,7 +84,8 @@ internal sealed class EmployeeChangePasswordForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 7, 0, 0),
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 4, 0, 0),
         };
         buttons.SizeChanged += (_, _) => CenterButtons(buttons);
         save.Click += SaveClicked;
@@ -79,6 +96,14 @@ internal sealed class EmployeeChangePasswordForm : Form
         Controls.Add(root);
         AcceptButton = null;
         CancelButton = cancel;
+    }
+
+    private static void ConfigureInputField(TextBox field)
+    {
+        field.Dock = DockStyle.None;
+        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        field.Margin = new Padding(3, 0, 3, 0);
+        field.TextAlign = HorizontalAlignment.Left;
     }
 
     private void SaveClicked(object? sender, EventArgs eventArgs)
@@ -143,8 +168,10 @@ internal sealed class EmployeeChangePasswordForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (!currentPassword.UseSystemPasswordChar || !newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
-            AcceptButton is not null || CancelButton != cancel ||
+        if (Icon is null || !currentPassword.UseSystemPasswordChar || !newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
+            currentPassword.TextAlign != HorizontalAlignment.Left || newPassword.TextAlign != HorizontalAlignment.Left ||
+            confirmPassword.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth ||
+            ClientSize.Height != CalculateHeight() || AcceptButton is not null || CancelButton != cancel ||
             !UiControls.HasLogicalSize(save, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("員工本人密碼變更視窗配置不正確");
     }
@@ -162,11 +189,12 @@ internal sealed class EmployeeChangePasswordForm : Form
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft,
         AutoEllipsis = false,
+        Margin = new Padding(0, 0, 8, 0),
     };
 
     private static void CenterButtons(FlowLayoutPanel panel)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 7, 0, 0);
+        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 4, 0, 0);
     }
 }
