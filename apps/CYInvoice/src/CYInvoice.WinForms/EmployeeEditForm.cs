@@ -26,7 +26,7 @@ internal sealed class EmployeeEditForm : Form
     {
         createMode = existing is null;
         this.allowRoleChange = createMode || allowRoleChange;
-        Text = createMode ? "新增員工" : "修改員工";
+        Text = createMode ? "新增使用者" : "修改使用者";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, CalculateHeight());
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -253,14 +253,15 @@ internal sealed class EmployeeEditForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (ShowIcon || employeeNo.MaxLength != 4 || InputFields().Any(field => field.TextAlign != HorizontalAlignment.Left) ||
+        var expectedTitle = createMode ? "新增使用者" : "修改使用者";
+        if (Text != expectedTitle || ShowIcon || employeeNo.MaxLength != 4 || InputFields().Any(field => field.TextAlign != HorizontalAlignment.Left) ||
             ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
             AcceptButton is not null || CancelButton != cancel ||
             (createMode && (!password.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar)) ||
             (!createMode && !allowRoleChange && role.Enabled) ||
             role.Items.Cast<object>().Any(item => string.Equals(item.ToString(), "一般員工", StringComparison.Ordinal)) ||
             !UiControls.HasLogicalSize(save, CompactButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("員工編輯視窗配置不正確");
+            throw new InvalidOperationException("使用者編輯視窗配置不正確");
     }
 
     private static TextBox PasswordBox()
