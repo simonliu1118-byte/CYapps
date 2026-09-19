@@ -476,6 +476,16 @@ Theme 主要改變**Accent 家族**，而不是把整個 UI 的中性色、字�
 - 金額與純數字欄位通常右對齊；一般文字左對齊。
 - 表頭與內容不可因追求留白而放大到降低掃描效率。
 
+### 17.1 Grid continuity
+
+若表格使用垂直欄線，Header 與 Body 必須共享同一組 column geometry；欄線應由表頭順暢延伸到表身，任何肉眼可見的約 1 px 欄位錯位都視為 UI 缺陷。
+
+視窗 resize、scrollbar 出現／消失與 DPI scaling 後，也必須維持相同對齊結果。若某 framework 無法低成本可靠做到垂直欄線，寧可使用無垂直線設計，也不要保留錯位格線。
+
+**實作參考附件：** [CYInvoice Table / List Implementation Reference](docs/CY_UI_REFERENCE_CYINVOICE_TABLE.md)
+
+> 附件參考的是 CYInvoice 清單的幾何、欄寬、viewport、scrollbar 與 owner-draw 經驗；**目前 CYInvoice 的顏色、字級、列高、欄寬與 padding 均不是未來 Visual Guide 的固定標準**，日後應依新版 Theme / Typography / Density 重新決定。
+
 ---
 
 ## 18. Section / Group
