@@ -28,6 +28,7 @@ internal sealed class EmployeeChangePasswordForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => currentPassword.Focus();
     }
@@ -167,7 +168,7 @@ internal sealed class EmployeeChangePasswordForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (!currentPassword.UseSystemPasswordChar || !newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
+        if (Icon is null || !currentPassword.UseSystemPasswordChar || !newPassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
             currentPassword.TextAlign != HorizontalAlignment.Left || newPassword.TextAlign != HorizontalAlignment.Left ||
             confirmPassword.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth ||
             ClientSize.Height != CalculateHeight() || AcceptButton is not null || CancelButton != cancel ||
