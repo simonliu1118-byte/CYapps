@@ -1,4 +1,3 @@
-using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 
 namespace CYInvoice.WinForms;
@@ -21,115 +20,6 @@ internal class NoFocusCueButton : Button
     {
         base.OnMouseDown(eventArgs);
         UiControls.HideFocusCue(this);
-    }
-}
-
-internal sealed class DangerActionButton : NoFocusCueButton
-{
-    private bool mouseOver;
-    private bool mouseDown;
-
-    public DangerActionButton()
-    {
-        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-        FlatStyle = FlatStyle.Flat;
-        FlatAppearance.BorderSize = 0;
-        UseVisualStyleBackColor = false;
-        ForeColor = Color.White;
-        BackColor = Color.FromArgb(198, 67, 67);
-        Cursor = Cursors.Default;
-        Resize += (_, _) => UpdateRoundedRegion();
-    }
-
-    protected override void OnHandleCreated(EventArgs eventArgs)
-    {
-        base.OnHandleCreated(eventArgs);
-        UpdateRoundedRegion();
-    }
-
-    protected override void OnMouseEnter(EventArgs eventArgs)
-    {
-        mouseOver = true;
-        Invalidate();
-        base.OnMouseEnter(eventArgs);
-    }
-
-    protected override void OnMouseLeave(EventArgs eventArgs)
-    {
-        mouseOver = false;
-        mouseDown = false;
-        Invalidate();
-        base.OnMouseLeave(eventArgs);
-    }
-
-    protected override void OnMouseDown(MouseEventArgs eventArgs)
-    {
-        mouseDown = true;
-        Invalidate();
-        base.OnMouseDown(eventArgs);
-    }
-
-    protected override void OnMouseUp(MouseEventArgs eventArgs)
-    {
-        mouseDown = false;
-        Invalidate();
-        base.OnMouseUp(eventArgs);
-    }
-
-    protected override void OnEnabledChanged(EventArgs eventArgs)
-    {
-        base.OnEnabledChanged(eventArgs);
-        Invalidate();
-    }
-
-    protected override void OnPaint(PaintEventArgs eventArgs)
-    {
-        eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
-        using var path = RoundedRectangle(bounds, 5);
-        var fill = !Enabled
-            ? Color.FromArgb(225, 196, 196)
-            : mouseDown
-                ? Color.FromArgb(174, 50, 50)
-                : mouseOver
-                    ? Color.FromArgb(210, 78, 78)
-                    : Color.FromArgb(198, 67, 67);
-        using var brush = new SolidBrush(fill);
-        using var border = new Pen(Enabled ? Color.FromArgb(164, 45, 45) : Color.FromArgb(205, 180, 180));
-        eventArgs.Graphics.FillPath(brush, path);
-        eventArgs.Graphics.DrawPath(border, path);
-        TextRenderer.DrawText(
-            eventArgs.Graphics,
-            Text,
-            Font,
-            ClientRectangle,
-            Enabled ? Color.White : Color.FromArgb(245, 238, 238),
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
-        if (Focused) UiControls.HideFocusCue(this);
-    }
-
-    private void UpdateRoundedRegion()
-    {
-        if (Width <= 0 || Height <= 0) return;
-        using var path = RoundedRectangle(new Rectangle(0, 0, Width, Height), 5);
-        Region?.Dispose();
-        Region = new Region(path);
-    }
-
-    private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
-    {
-        var path = new GraphicsPath();
-        var diameter = Math.Max(2, radius * 2);
-        var arc = new Rectangle(bounds.X, bounds.Y, diameter, diameter);
-        path.AddArc(arc, 180, 90);
-        arc.X = bounds.Right - diameter;
-        path.AddArc(arc, 270, 90);
-        arc.Y = bounds.Bottom - diameter;
-        path.AddArc(arc, 0, 90);
-        arc.X = bounds.X;
-        path.AddArc(arc, 90, 90);
-        path.CloseFigure();
-        return path;
     }
 }
 
@@ -198,30 +88,43 @@ internal static class UiControls
     public static Button StandardButton(string text)
     {
         if (text == "帳戶管理") text = "帳號管理";
-        var button = IsDangerText(text) ? new DangerActionButton() : new NoFocusCueButton();
-        button.Text = text;
-        button.Width = StandardButtonWidth;
-        button.Height = StandardButtonHeight;
-        button.Margin = new Padding(6, 2, 6, 2);
-        button.AutoSize = false;
-        if (button is not DangerActionButton) button.UseVisualStyleBackColor = true;
-        return button;
-    }
-
-    public static Button DangerButton(string text)
-    {
-        var button = new DangerActionButton
+        var button = new NoFocusCueButton
         {
             Text = text,
             Width = StandardButtonWidth,
             Height = StandardButtonHeight,
             Margin = new Padding(6, 2, 6, 2),
             AutoSize = false,
+            UseVisualStyleBackColor = true,
         };
+        if (IsDangerText(text)) ApplyDangerButtonTheme(button);
+        return button;
+    }
+
+    public static Button DangerButton(string text)
+    {
+        var button = new NoFocusCueButton
+        {
+            Text = text,
+            Width = StandardButtonWidth,
+            Height = StandardButtonHeight,
+            Margin = new Padding(6, 2, 6, 2),
+            AutoSize = false,
+            UseVisualStyleBackColor = true,
+        };
+        ApplyDangerButtonTheme(button);
         return button;
     }
 
     private static bool IsDangerText(string text) => text is "作廢" or "確認作廢" or "確認送出作廢";
+
+    private static void ApplyDangerButtonTheme(Button button)
+    {
+        button.UseVisualStyleBackColor = false;
+        button.FlatStyle = FlatStyle.Standard;
+        button.BackColor = Color.FromArgb(183, 28, 28);
+        button.ForeColor = Color.White;
+    }
 
     public static Button ImportButton(string text, ImportBrand brand) => new ImportBrandButton(text, brand);
 
