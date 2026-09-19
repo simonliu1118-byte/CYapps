@@ -4,9 +4,10 @@ namespace CYInvoice.WinForms;
 
 internal sealed class VoidReasonForm : Form
 {
-    private const int WindowWidth = 280;
-    private const int WindowHeight = 116;
-    private const int CompactButtonWidth = 100;
+    private const int WindowWidth = 228;
+    private const int WindowHeight = 112;
+    private const int CompactButtonWidth = 78;
+    private const int CompactButtonHeight = 28;
     private readonly TextBox reason = UiControls.TextBox(EmployeeVoidWorkflowService.MaxReasonLength);
     private readonly Label counter = new()
     {
@@ -14,6 +15,7 @@ internal sealed class VoidReasonForm : Form
         TextAlign = ContentAlignment.MiddleRight,
         ForeColor = Color.DimGray,
         Margin = Padding.Empty,
+        AutoSize = false,
     };
     private readonly Button next = CompactButton("下一步");
     private readonly Button cancel = CompactButton("取消");
@@ -43,11 +45,12 @@ internal sealed class VoidReasonForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(10, 7, 10, 7),
+            Padding = new Padding(9, 6, 9, 6),
+            Margin = Padding.Empty,
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
 
         var header = new TableLayoutPanel
         {
@@ -55,15 +58,17 @@ internal sealed class VoidReasonForm : Form
             ColumnCount = 2,
             RowCount = 1,
             Margin = Padding.Empty,
+            Padding = Padding.Empty,
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 40));
         header.Controls.Add(new Label
         {
             Text = $"作廢原因 (最多 {EmployeeVoidWorkflowService.MaxReasonLength} 字)",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Margin = Padding.Empty,
+            AutoEllipsis = false,
         }, 0, 0);
         header.Controls.Add(counter, 1, 0);
         root.Controls.Add(header, 0, 0);
@@ -91,7 +96,7 @@ internal sealed class VoidReasonForm : Form
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
             Margin = Padding.Empty,
-            Padding = new Padding(0, 3, 0, 0),
+            Padding = new Padding(0, 5, 0, 0),
         };
         buttons.SizeChanged += (_, _) => CenterButtons(buttons);
         buttons.Controls.Add(cancel);
@@ -142,10 +147,10 @@ internal sealed class VoidReasonForm : Form
         if (Text != "發票作廢" || ShowIcon || AcceptButton is not null || CancelButton != cancel ||
             reason.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
             reason.MaxLength != EmployeeVoidWorkflowService.MaxReasonLength ||
-            counter.Text != $"0/{EmployeeVoidWorkflowService.MaxReasonLength}")
+            counter.Text != $"0/{EmployeeVoidWorkflowService.MaxReasonLength}" || counter.Width < 34)
             throw new InvalidOperationException("作廢原因視窗基本配置不正確");
-        if (!UiControls.HasLogicalSize(next, CompactButtonWidth, UiControls.StandardButtonHeight) ||
-            !UiControls.HasLogicalSize(cancel, CompactButtonWidth, UiControls.StandardButtonHeight))
+        if (!UiControls.HasLogicalSize(next, CompactButtonWidth, CompactButtonHeight) ||
+            !UiControls.HasLogicalSize(cancel, CompactButtonWidth, CompactButtonHeight))
             throw new InvalidOperationException("作廢原因按鈕尺寸不正確");
     }
 
@@ -153,7 +158,7 @@ internal sealed class VoidReasonForm : Form
     {
         Text = text,
         Width = CompactButtonWidth,
-        Height = UiControls.StandardButtonHeight,
+        Height = CompactButtonHeight,
         Margin = new Padding(5, 2, 5, 2),
         AutoSize = false,
         UseVisualStyleBackColor = true,
@@ -162,6 +167,6 @@ internal sealed class VoidReasonForm : Form
     private static void CenterButtons(FlowLayoutPanel panel)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 3, 0, 0);
+        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 5, 0, 0);
     }
 }
