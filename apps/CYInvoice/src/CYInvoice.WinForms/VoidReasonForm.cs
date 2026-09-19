@@ -1,11 +1,12 @@
+using CYInvoice.Core.Invoicing;
+
 namespace CYInvoice.WinForms;
 
 internal sealed class VoidReasonForm : Form
 {
-    private const int MaxReasonLength = 10;
     private const int WindowWidth = 340;
     private const int WindowHeight = 114;
-    private readonly TextBox reason = UiControls.TextBox(MaxReasonLength);
+    private readonly TextBox reason = UiControls.TextBox(EmployeeVoidWorkflowService.MaxReasonLength);
     private readonly Button next = UiControls.StandardButton("下一步");
     private readonly Button cancel = UiControls.StandardButton("取消");
 
@@ -40,7 +41,7 @@ internal sealed class VoidReasonForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.Controls.Add(new Label
         {
-            Text = "作廢原因（最多 10 字）",
+            Text = $"作廢原因（最多 {EmployeeVoidWorkflowService.MaxReasonLength} 字）",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Margin = Padding.Empty,
@@ -86,9 +87,9 @@ internal sealed class VoidReasonForm : Form
             ValidationError("請輸入作廢原因。");
             return;
         }
-        if (length > MaxReasonLength)
+        if (length > EmployeeVoidWorkflowService.MaxReasonLength)
         {
-            ValidationError($"作廢原因最多 {MaxReasonLength} 字。");
+            ValidationError($"作廢原因最多 {EmployeeVoidWorkflowService.MaxReasonLength} 字。");
             return;
         }
         DialogResult = DialogResult.OK;
@@ -109,7 +110,7 @@ internal sealed class VoidReasonForm : Form
     {
         if (Text != "發票作廢" || AcceptButton is not null || CancelButton != cancel ||
             reason.TextAlign != HorizontalAlignment.Left || ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
-            reason.MaxLength != MaxReasonLength)
+            reason.MaxLength != EmployeeVoidWorkflowService.MaxReasonLength)
             throw new InvalidOperationException("作廢原因視窗基本配置不正確");
         if (!UiControls.HasLogicalSize(next, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("作廢原因按鈕尺寸不正確");
