@@ -4,6 +4,13 @@ namespace CYInvoice.WinForms;
 
 internal sealed class InitialSetupForm : Form
 {
+    private const int WindowWidth = 470;
+    private const int HeaderHeight = 56;
+    private const int FieldRowHeight = 38;
+    private const int ActionRowHeight = 48;
+    private const int HorizontalPadding = 18;
+    private const int VerticalPadding = 10;
+
     private readonly LocalRepository repository;
     private readonly Settings settings;
     private readonly bool legacyPasswordRequired;
@@ -26,7 +33,7 @@ internal sealed class InitialSetupForm : Form
         moPasswordRequired = MoPasswordNeedsSetup();
         Text = legacyPasswordRequired ? "CYInvoice V2.5 帳戶遷移" : "CYInvoice 首次設定";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(470, CalculateHeight());
+        ClientSize = new Size(WindowWidth, CalculateHeight());
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -36,11 +43,10 @@ internal sealed class InitialSetupForm : Form
         Shown += (_, _) => FirstField().Focus();
     }
 
-    private int CalculateHeight()
-    {
-        var optionalRows = (legacyPasswordRequired ? 1 : 0) + (moPasswordRequired ? 1 : 0);
-        return 370 + optionalRows * 54;
-    }
+    private int FieldCount => 5 + (legacyPasswordRequired ? 1 : 0) + (moPasswordRequired ? 1 : 0);
+
+    private int CalculateHeight() =>
+        VerticalPadding * 2 + HeaderHeight + FieldCount * FieldRowHeight + ActionRowHeight;
 
     private bool MoPasswordNeedsSetup()
     {
@@ -57,18 +63,18 @@ internal sealed class InitialSetupForm : Form
 
     private void BuildLayout()
     {
-        employeeNo.TextAlign = HorizontalAlignment.Center;
-        var rows = 5 + (legacyPasswordRequired ? 1 : 0) + (moPasswordRequired ? 1 : 0);
+        foreach (var field in InputFields()) ConfigureInputField(field);
+
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 3,
-            Padding = new Padding(18, 14, 18, 12),
+            Padding = new Padding(HorizontalPadding, VerticalPadding, HorizontalPadding, VerticalPadding),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, rows * 50));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, HeaderHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldCount * FieldRowHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, ActionRowHeight));
         root.Controls.Add(new Label
         {
             Text = legacyPasswordRequired
@@ -77,12 +83,21 @@ internal sealed class InitialSetupForm : Form
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = false,
+            Margin = Padding.Empty,
         }, 0, 0);
 
-        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = rows };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 138));
+        var fields = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = FieldCount,
+            Margin = Padding.Empty,
+        };
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var index = 0; index < rows; index++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        for (var index = 0; index < FieldCount; index++)
+            fields.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight));
+
         var row = 0;
         if (legacyPasswordRequired)
         {
@@ -98,13 +113,13 @@ internal sealed class InitialSetupForm : Form
         fields.Controls.Add(employeeNo, 1, row++);
         fields.Controls.Add(FieldLabel("姓名"), 0, row);
         fields.Controls.Add(employeeName, 1, row++);
-        fields.Controls.Add(FieldLabel("Email（選填）"), 0, row);
+        fields.Controls.Add(FieldLabel("Email"), 0, row);
         fields.Controls.Add(email, 1, row++);
         fields.Controls.Add(FieldLabel("員工密碼"), 0, row);
         fields.Controls.Add(employeePassword, 1, row++);
         fields.Controls.Add(FieldLabel("再次輸入密碼"), 0, row);
         fields.Controls.Add(confirmPassword, 1, row);
-        ConfigureEnterOrder(fields);
+        ConfigureEnterOrder();
         root.Controls.Add(fields, 0, 1);
 
         var buttons = new FlowLayoutPanel
@@ -112,7 +127,8 @@ internal sealed class InitialSetupForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 8, 0, 0),
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 5, 0, 0),
         };
         buttons.SizeChanged += (_, _) => CenterButtons(buttons);
         save.Click += SaveClicked;
@@ -126,16 +142,28 @@ internal sealed class InitialSetupForm : Form
         CancelButton = cancel;
     }
 
-    private void ConfigureEnterOrder(TableLayoutPanel fields)
+    private IEnumerable<TextBox> InputFields()
     {
-        var ordered = new List<TextBox>();
-        if (legacyPasswordRequired) ordered.Add(legacyPassword);
-        if (moPasswordRequired) ordered.Add(moPassword);
-        ordered.Add(employeeNo);
-        ordered.Add(employeeName);
-        ordered.Add(email);
-        ordered.Add(employeePassword);
-        ordered.Add(confirmPassword);
+        if (legacyPasswordRequired) yield return legacyPassword;
+        if (moPasswordRequired) yield return moPassword;
+        yield return employeeNo;
+        yield return employeeName;
+        yield return email;
+        yield return employeePassword;
+        yield return confirmPassword;
+    }
+
+    private static void ConfigureInputField(TextBox field)
+    {
+        field.Dock = DockStyle.None;
+        field.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        field.Margin = new Padding(3, 0, 3, 0);
+        field.TextAlign = HorizontalAlignment.Left;
+    }
+
+    private void ConfigureEnterOrder()
+    {
+        var ordered = InputFields().ToList();
         for (var index = 0; index < ordered.Count; index++)
         {
             ordered[index].TabIndex = index;
@@ -184,6 +212,11 @@ internal sealed class InitialSetupForm : Form
         if (employeeName.Text.Trim().Length == 0)
         {
             ValidationError("請輸入員工姓名", employeeName);
+            return;
+        }
+        if (email.Text.Trim().Length == 0)
+        {
+            ValidationError("請輸入 Email", email);
             return;
         }
         if (employeePassword.Text.Length == 0)
@@ -256,9 +289,12 @@ internal sealed class InitialSetupForm : Form
 
     internal void VerifySmokeLayout()
     {
+        var fields = InputFields().ToArray();
         if (employeeNo.MaxLength != 4 || !employeePassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
             (legacyPasswordRequired && !legacyPassword.UseSystemPasswordChar) ||
             (moPasswordRequired && !moPassword.UseSystemPasswordChar) ||
+            fields.Any(field => field.TextAlign != HorizontalAlignment.Left) ||
+            ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
             AcceptButton is not null || CancelButton != cancel ||
             !UiControls.HasLogicalSize(save, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("V2.5 首次帳戶設定視窗配置不正確");
@@ -277,11 +313,12 @@ internal sealed class InitialSetupForm : Form
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft,
         AutoEllipsis = false,
+        Margin = new Padding(0, 0, 8, 0),
     };
 
     private static void CenterButtons(FlowLayoutPanel panel)
     {
         var contentWidth = panel.Controls.Cast<Control>().Sum(control => control.Width + control.Margin.Horizontal);
-        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 8, 0, 0);
+        panel.Padding = new Padding(Math.Max(0, (panel.ClientSize.Width - contentWidth) / 2), 5, 0, 0);
     }
 }
