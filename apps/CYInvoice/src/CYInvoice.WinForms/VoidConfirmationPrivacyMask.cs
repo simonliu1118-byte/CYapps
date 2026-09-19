@@ -23,9 +23,9 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
         foreach (var label in Descendants(owner).OfType<Label>()
                      .Where(label => string.Equals(label.Text.Trim(), invoiceNumber, StringComparison.OrdinalIgnoreCase)))
         {
-            labels.Add(new MaskedLabel(label, label.Visible));
+            labels.Add(new MaskedLabel(label, label.Text));
             AddInvoiceMask(label);
-            label.Visible = false;
+            label.Text = string.Empty;
         }
 
         MaskVisibleInvoiceNumbers(owner.Owner);
@@ -124,7 +124,7 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
         if (!owner.IsDisposed) owner.Text = originalTitle;
         foreach (var item in labels)
         {
-            if (!item.Label.IsDisposed) item.Label.Visible = item.Visible;
+            if (!item.Label.IsDisposed) item.Label.Text = item.Text;
         }
         foreach (var item in listTexts)
         {
@@ -154,13 +154,13 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
         owner.Controls.Add(previewHost);
 
         var mask = Apply(owner, "AA12345678");
-        if (owner.Text != MaskedDetailTitle || number.Visible ||
+        if (owner.Text != MaskedDetailTitle || number.Text.Length != 0 ||
             FindTaggedControl(owner, InvoiceMaskTag) is not Panel invoiceMask || invoiceMask.BackColor != Color.Black ||
             FindTaggedControl(owner, PreviewMaskTag) is null)
             throw new InvalidOperationException("作廢確認未正確遮蔽詳細資料中的發票號碼與預覽");
 
         mask.Dispose();
-        if (owner.Text != "發票詳細資訊-AA12345678" || !number.Visible ||
+        if (owner.Text != "發票詳細資訊-AA12345678" || number.Text != "AA12345678" ||
             FindTaggedControl(owner, InvoiceMaskTag) is not null || FindTaggedControl(owner, PreviewMaskTag) is not null)
             throw new InvalidOperationException("作廢確認結束後未正確還原詳細資料");
     }
@@ -185,7 +185,7 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
         }
     }
 
-    private sealed record MaskedLabel(Label Label, bool Visible);
+    private sealed record MaskedLabel(Label Label, string Text);
     private sealed record MaskedPicture(PictureBox Picture, bool Visible);
     private sealed record MaskedListText(ListView List, ListViewItem.ListViewSubItem SubItem, string Text);
 }
