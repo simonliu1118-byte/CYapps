@@ -108,7 +108,7 @@ internal sealed class AccountManagementForm : Form
     {
         if (list.Columns.Count != 5 || list.ClientSize.Width <= 0) return;
         var fixedWidth = EmployeeNoWidth + NameWidth + RoleWidth + StatusWidth;
-        var available = list.ClientSize.Width - fixedWidth - SystemInformation.VerticalScrollBarWidth - 4;
+        var available = list.ClientSize.Width - fixedWidth - 4;
         list.Columns[2].Width = Math.Max(EmailMinimumWidth, available);
     }
 
@@ -284,9 +284,7 @@ internal sealed class AccountManagementForm : Form
     {
         ResizeListColumns();
         var fixedWidth = EmployeeNoWidth + NameWidth + RoleWidth + StatusWidth;
-        var expectedEmailWidth = Math.Max(
-            EmailMinimumWidth,
-            list.ClientSize.Width - fixedWidth - SystemInformation.VerticalScrollBarWidth - 4);
+        var expectedEmailWidth = Math.Max(EmailMinimumWidth, list.ClientSize.Width - fixedWidth - 4);
         if (Text != "帳戶管理" || Icon is null || list.View != View.Details || !list.FullRowSelect || list.Columns.Count != 5 ||
             list.Columns[2].Width != expectedEmailWidth || ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
             AcceptButton is not null || CancelButton != close ||
