@@ -25,6 +25,10 @@ var tests = new (string Name, Action Run)[]
     ("allowance amount mismatch stays pending", () => AllowanceWorkflowTests.AmountMismatchRemainsPendingAsync().GetAwaiter().GetResult()),
     ("allowance pending cannot be cancelled", () => AllowanceWorkflowTests.PendingCannotBeCancelledAsync().GetAwaiter().GetResult()),
     ("void is blocked while allowance request exists", () => AllowanceWorkflowTests.VoidIsBlockedWhileAllowanceRequestExistsAsync().GetAwaiter().GetResult()),
+    ("work inside retained two periods cannot be administratively closed", AdministrativeClosureTests.WithinTwoPeriodsCannotClose),
+    ("ordinary employee cannot administratively close expired work", AdministrativeClosureTests.OrdinaryEmployeeCannotCloseExpiredWork),
+    ("administrator can close expired void pending work", AdministrativeClosureTests.AdministratorClosesExpiredVoidPendingWork),
+    ("administrator can close expired allowance work", AdministrativeClosureTests.AdministratorClosesExpiredAllowanceWork),
 };
 
 var failures = 0;
