@@ -29,7 +29,7 @@ internal static class PendingVoidSyncTests
         Equal(InvoiceSyncRunStatus.Completed, result.Status);
         var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
         Equal(InvoiceStates.Voided, saved.InvoiceState);
-        False(InvoiceVoidService.HasPendingMarker(saved));
+        False(HasPendingMarker(saved));
         Equal(1, voidGateway.QueryCalls);
         Equal(0, voidGateway.VoidCalls);
         False(File.Exists(pdf));
@@ -55,7 +55,7 @@ internal static class PendingVoidSyncTests
         Equal(InvoiceSyncRunStatus.Completed, result.Status);
         var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
         Equal(InvoiceStates.Changing, saved.InvoiceState);
-        True(InvoiceVoidService.HasPendingMarker(saved));
+        True(HasPendingMarker(saved));
         Equal(0, voidGateway.VoidCalls);
         var issue = new InvoiceSyncIssueStore(repository.DataDirectory)
             .Unresolved(Environments.Production + "|12345675")
@@ -82,7 +82,7 @@ internal static class PendingVoidSyncTests
         Equal(InvoiceSyncRunStatus.Completed, result.Status);
         var saved = repository.Invoices.LoadOrCreate().Single(item => item.Id == record.Id);
         Equal(InvoiceStates.Opened, saved.InvoiceState);
-        False(InvoiceVoidService.HasPendingMarker(saved));
+        False(HasPendingMarker(saved));
         Equal(0, voidGateway.VoidCalls);
     }
 
@@ -137,6 +137,15 @@ internal static class PendingVoidSyncTests
         };
         repository.Invoices.Append(record);
         return record;
+    }
+
+    private static bool HasPendingMarker(InvoiceRecord record)
+    {
+        if (record.ExtensionData is null ||
+            !record.ExtensionData.TryGetValue("cyinvoice_void_pending", out var value))
+            return false;
+        return value.ValueKind == JsonValueKind.True ||
+               (value.ValueKind == JsonValueKind.String && bool.TryParse(value.GetString(), out var parsed) && parsed);
     }
 
     private static string CreateCache(string root, string environment, string invoiceNumber, string extension)
