@@ -77,3 +77,7 @@ Device tokens and pairing codes are stored only as SHA-256 hashes in D1. Plainte
 The public health endpoints intentionally expose no workspace, device, invoice, allowance, credential, or row-count data.
 
 Phase 1 still contains no employee authentication, invoice data, allowance data, AMEGO proxying, or cross-device work items. Those are added in separate reviewed batches.
+
+## Current deployment note
+
+Schema version `2` requires `migrations/0002_device_pairing.sql`. The development Worker can be deployed before the remote D1 migration, but `/v1/health/db` will remain unavailable until schema version 2 is applied. Use the controlled migration command once, verify the new table/columns in D1, then return routine Workers Builds to `npm run deploy`.
