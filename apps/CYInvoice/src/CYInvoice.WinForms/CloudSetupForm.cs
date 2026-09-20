@@ -13,25 +13,15 @@ internal sealed class CloudSetupForm : Form
     private readonly TextBox deviceName = UiControls.TextBox(120);
     private readonly TextBox bootstrapKey = UiControls.TextBox(160);
     private readonly TextBox pairingCode = UiControls.TextBox(32);
-    private readonly Label status = new()
-    {
-        Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
-        AutoEllipsis = true,
-    };
-    private readonly Label pairingHint = new()
-    {
-        Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
-        AutoEllipsis = true,
-        ForeColor = Color.DimGray,
-    };
+    private readonly Label status = UiControls.Label(string.Empty);
+    private readonly Label pairingHint = UiControls.Label(string.Empty);
     private readonly Button check = UiControls.StandardButton("檢查連線");
     private readonly Button initialize = UiControls.StandardButton("初始化此電腦");
     private readonly Button createPairing = UiControls.StandardButton("產生配對碼");
     private readonly Button join = UiControls.StandardButton("加入工作區");
     private readonly Button close = UiControls.StandardButton("關閉");
     private bool busy;
+    private bool stateError;
 
     public CloudSetupForm(LocalRepository repository)
     {
@@ -39,8 +29,6 @@ internal sealed class CloudSetupForm : Form
         Text = "雲端設定";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(560, 450);
-        MinimumSize = new Size(560, 450);
-        MaximumSize = new Size(560, 450);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -56,6 +44,7 @@ internal sealed class CloudSetupForm : Form
         workspaceName.Text = "CYInvoice";
         deviceName.Text = Environment.MachineName;
         pairingCode.CharacterCasing = CharacterCasing.Lower;
+        pairingHint.ForeColor = Color.DimGray;
 
         BuildLayout();
         LoadValues();
@@ -65,7 +54,7 @@ internal sealed class CloudSetupForm : Form
 
     private void BuildLayout()
     {
-        var root = new TableLayoutPanel
+        var root = new BufferedTableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -73,56 +62,57 @@ internal sealed class CloudSetupForm : Form
             Padding = new Padding(16),
             Margin = Padding.Empty,
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 126));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 122));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 122));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var connection = Group("Cloud Worker", 3);
-        AddField(connection, 0, "API 網址", baseUrl);
+        var connectionGroup = BuildGroup("Cloud Worker", 2, out var connection);
+        AddField(connection, 0, "API 網址", baseUrl, reserveActionColumn: false);
+        connection.Controls.Add(UiControls.Label("狀態"), 0, 1);
+        connection.Controls.Add(status, 1, 1);
         connection.Controls.Add(check, 2, 1);
-        connection.SetColumnSpan(check, 1);
-        connection.Controls.Add(status, 1, 2);
-        connection.SetColumnSpan(status, 2);
         check.Click += async (_, _) => await CheckHealthAsync();
 
-        var firstDevice = Group("A 機／第一台電腦", 3);
-        AddField(firstDevice, 0, "工作區", workspaceName);
-        AddField(firstDevice, 1, "電腦名稱", deviceName);
-        AddField(firstDevice, 2, "初始化密鑰", bootstrapKey);
+        var firstGroup = BuildGroup("A 機／第一台電腦", 3, out var firstDevice);
+        AddField(firstDevice, 0, "工作區", workspaceName, reserveActionColumn: false);
+        AddField(firstDevice, 1, "電腦名稱", deviceName, reserveActionColumn: false);
+        AddField(firstDevice, 2, "初始化密鑰", bootstrapKey, reserveActionColumn: true);
         firstDevice.Controls.Add(initialize, 2, 2);
         initialize.Click += async (_, _) => await BootstrapAsync();
 
-        var otherDevice = Group("B 機／其他電腦", 3);
+        var otherGroup = BuildGroup("B 機／其他電腦", 3, out var otherDevice);
+        otherDevice.Controls.Add(UiControls.Label("建立配對"), 0, 0);
         otherDevice.Controls.Add(createPairing, 1, 0);
         otherDevice.Controls.Add(pairingHint, 2, 0);
-        AddField(otherDevice, 1, "配對碼", pairingCode);
+        AddField(otherDevice, 1, "配對碼", pairingCode, reserveActionColumn: false);
         otherDevice.Controls.Add(join, 2, 2);
         createPairing.Click += async (_, _) => await CreatePairingAsync();
         join.Click += async (_, _) => await ClaimPairingAsync();
 
         close.DialogResult = DialogResult.OK;
-        var actions = new FlowLayoutPanel
+        var actions = new BufferedFlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
             Padding = new Padding(0, 8, 0, 0),
+            Margin = Padding.Empty,
         };
         actions.Controls.Add(close);
 
-        root.Controls.Add(connection, 0, 0);
-        root.Controls.Add(firstDevice, 0, 1);
-        root.Controls.Add(otherDevice, 0, 2);
+        root.Controls.Add(connectionGroup, 0, 0);
+        root.Controls.Add(firstGroup, 0, 1);
+        root.Controls.Add(otherGroup, 0, 2);
         root.Controls.Add(actions, 0, 3);
         Controls.Add(root);
         CancelButton = close;
     }
 
-    private static TableLayoutPanel Group(string title, int rows)
+    private static GroupBox BuildGroup(string title, int rows, out BufferedTableLayoutPanel layout)
     {
         var group = new GroupBox { Text = title, Dock = DockStyle.Fill };
-        var layout = new TableLayoutPanel
+        layout = new BufferedTableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
@@ -132,25 +122,18 @@ internal sealed class CloudSetupForm : Form
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
-        for (var row = 0; row < rows; row++) layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F / rows));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 142));
+        for (var row = 0; row < rows; row++)
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F / rows));
         group.Controls.Add(layout);
-        group.Tag = layout;
-        return layout;
+        return group;
     }
 
-    private static void AddField(TableLayoutPanel layout, int row, string labelText, Control field)
+    private static void AddField(TableLayoutPanel layout, int row, string labelText, Control field, bool reserveActionColumn)
     {
-        var label = new Label
-        {
-            Text = labelText,
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Margin = new Padding(3),
-        };
-        layout.Controls.Add(label, 0, row);
+        layout.Controls.Add(UiControls.Label(labelText), 0, row);
         layout.Controls.Add(field, 1, row);
-        if (layout.GetControlFromPosition(2, row) is null) layout.SetColumnSpan(field, 2);
+        if (!reserveActionColumn) layout.SetColumnSpan(field, 2);
     }
 
     private void LoadValues()
@@ -161,16 +144,16 @@ internal sealed class CloudSetupForm : Form
 
     private void UpdateState(string? message = null, bool error = false)
     {
+        stateError = error;
         var settings = repository.Settings.LoadOrCreate();
-        var registered = settings.CloudMode == CloudModes.CloudPreferred
-            && settings.CloudWorkspaceId.Length != 0
-            && settings.CloudDeviceId.Length != 0
-            && settings.CloudDeviceTokenEncrypted.Length != 0;
+        var registered = IsRegistered(settings);
 
         status.Text = message ?? (registered
             ? $"已啟用雲端｜裝置 {ShortId(settings.CloudDeviceId)}"
-            : "目前為本機模式；雲端設定不會影響既有開票功能。");
-        status.ForeColor = error ? Color.FromArgb(180, 0, 0) : registered ? Color.FromArgb(0, 120, 60) : SystemColors.ControlText;
+            : "目前為本機模式；雲端設定不影響既有開票。" );
+        status.ForeColor = error
+            ? Color.FromArgb(180, 0, 0)
+            : registered ? Color.FromArgb(0, 120, 60) : SystemColors.ControlText;
         createPairing.Enabled = !busy && registered;
         initialize.Enabled = !busy && !registered;
         join.Enabled = !busy && !registered;
@@ -231,7 +214,7 @@ internal sealed class CloudSetupForm : Form
             pairingCode.Text = ticket.Code;
             pairingHint.Text = $"有效至 {ticket.ExpiresAt.ToLocalTime():HH:mm}";
             try { Clipboard.SetText(ticket.Code); } catch (Exception) { }
-            UpdateState("已產生一次性配對碼，並嘗試複製到剪貼簿。10 分鐘內在另一台電腦使用。" );
+            UpdateState("已產生一次性配對碼；10 分鐘內可供另一台電腦加入。");
         });
     }
 
@@ -311,17 +294,23 @@ internal sealed class CloudSetupForm : Form
         {
             busy = false;
             UseWaitCursor = false;
-            UpdateState(status.Text, status.ForeColor == Color.FromArgb(180, 0, 0));
+            UpdateState(status.Text, stateError);
         }
     }
+
+    private static bool IsRegistered(Settings settings) =>
+        settings.CloudMode == CloudModes.CloudPreferred
+        && settings.CloudWorkspaceId.Length != 0
+        && settings.CloudDeviceId.Length != 0
+        && settings.CloudDeviceTokenEncrypted.Length != 0;
 
     private static string CloudErrorText(CloudApiException error) => error.Code switch
     {
         "BOOTSTRAP_DISABLED" => "Cloudflare 尚未設定 BOOTSTRAP_KEY。",
         "BOOTSTRAP_AUTH_FAILED" => "初始化密鑰不正確。",
-        "WORKSPACE_ALREADY_INITIALIZED" => "這個 Cloud 已經完成第一次初始化；其他電腦請使用配對碼加入。",
+        "WORKSPACE_ALREADY_INITIALIZED" => "這個 Cloud 已完成第一次初始化；其他電腦請使用配對碼加入。",
         "PAIRING_CODE_INVALID" => "配對碼無效或已逾期，請由已註冊電腦重新產生。",
-        "PAIRING_CODE_USED" => "這組配對碼已經使用過，請重新產生。",
+        "PAIRING_CODE_USED" => "這組配對碼已使用過，請重新產生。",
         "UNAUTHORIZED" => "本機的 Cloud 裝置憑證已失效或被撤銷。",
         _ => $"Cloud API 錯誤：{error.Code}\n{error.Message}"
     };
