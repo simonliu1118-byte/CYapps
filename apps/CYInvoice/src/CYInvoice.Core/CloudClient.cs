@@ -60,7 +60,14 @@ public sealed class CloudClient
         var timer = Stopwatch.StartNew();
         try
         {
-            using var document = await SendAsync(HttpMethod.Get, "v1/health", null, false, null, cancellationToken);
+            using var document = await SendAsync(
+                HttpMethod.Get,
+                "v1/health",
+                null,
+                false,
+                null,
+                cancellationToken,
+                returnErrorResponse: true);
             timer.Stop();
             var root = document.RootElement;
             var storageAvailable =
@@ -195,7 +202,8 @@ public sealed class CloudClient
         object? body,
         bool authenticateDevice,
         string? bootstrapKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool returnErrorResponse = false)
     {
         using var request = new HttpRequestMessage(method, new Uri(baseUri, relativePath));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -220,7 +228,7 @@ public sealed class CloudClient
         await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
         var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token);
 
-        if (response.IsSuccessStatusCode)
+        if (response.IsSuccessStatusCode || returnErrorResponse)
             return document;
 
         var errorCode = ReadErrorCode(document.RootElement);
