@@ -17,6 +17,8 @@ public sealed record CloudHealthResult(
     long RoundTripMilliseconds,
     string ErrorCode);
 
+public sealed record CloudOnboardingStatus(bool WorkspaceInitialized, string State);
+
 public sealed record CloudDeviceIdentity(
     string WorkspaceId,
     string DeviceId,
@@ -98,6 +100,26 @@ public sealed class CloudClient
                 false, false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty,
                 timer.ElapsedMilliseconds, "CLOUD_UNREACHABLE");
         }
+    }
+
+    public async Task<CloudOnboardingStatus> GetOnboardingStatusAsync(CancellationToken cancellationToken = default)
+    {
+        using var document = await SendAsync(HttpMethod.Get, "v1/onboarding/status", null, false, null, cancellationToken);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("onboarding", out var onboarding) || onboarding.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Cloud onboarding response is missing onboarding data.");
+
+        var state = ReadRequiredString(onboarding, "state");
+        if (state is not "uninitialized" and not "initialized")
+            throw new InvalidDataException("Cloud onboarding state is invalid.");
+
+        var initialized = onboarding.TryGetProperty("workspaceInitialized", out var value)
+            && value.ValueKind is JsonValueKind.True or JsonValueKind.False
+            && value.GetBoolean();
+        if (initialized != (state == "initialized"))
+            throw new InvalidDataException("Cloud onboarding state is inconsistent.");
+
+        return new CloudOnboardingStatus(initialized, state);
     }
 
     public async Task<CloudDeviceIdentity> BootstrapAsync(
