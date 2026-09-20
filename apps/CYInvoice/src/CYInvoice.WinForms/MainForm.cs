@@ -37,6 +37,7 @@ internal sealed class MainForm : Form
     private readonly Label environmentCompanyLabel = new();
     private readonly TableLayoutPanel runtimeStatusLayout = new();
     private readonly Label runtimeModeLabel = new();
+    private readonly Label runtimeSeparatorLabel = new() { Text = "/" };
     private readonly Label apiLabel = new();
     private readonly ToolTip apiToolTip = new();
     private readonly ToolTip runtimeModeToolTip = new();
@@ -147,17 +148,22 @@ internal sealed class MainForm : Form
 
         runtimeStatusLayout.Dock = DockStyle.Fill;
         runtimeStatusLayout.Margin = Padding.Empty;
-        runtimeStatusLayout.Padding = new Padding(0, 2, 14, 2);
-        runtimeStatusLayout.ColumnCount = 2;
-        runtimeStatusLayout.RowCount = 2;
+        runtimeStatusLayout.Padding = new Padding(0, 0, 14, 0);
+        runtimeStatusLayout.ColumnCount = 4;
+        runtimeStatusLayout.RowCount = 1;
         ConfigureRuntimeText(runtimeModeLabel);
+        ConfigureRuntimeText(runtimeSeparatorLabel);
         ConfigureRuntimeText(apiLabel);
+        runtimeSeparatorLabel.ForeColor = SystemColors.ControlText;
+        runtimeSeparatorLabel.Margin = new Padding(6, 0, 6, 0);
         runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, RuntimeStatusPreferredWidth()));
-        runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         runtimeStatusLayout.Controls.Add(runtimeModeLabel, 1, 0);
-        runtimeStatusLayout.Controls.Add(apiLabel, 1, 1);
+        runtimeStatusLayout.Controls.Add(runtimeSeparatorLabel, 2, 0);
+        runtimeStatusLayout.Controls.Add(apiLabel, 3, 0);
 
         bannerLayout.Controls.Add(environmentTags, 0, 0);
         bannerLayout.Controls.Add(environmentCompanyLabel, 1, 0);
@@ -211,20 +217,13 @@ internal sealed class MainForm : Form
 
     private void ConfigureRuntimeText(Label label)
     {
-        label.Dock = DockStyle.Fill;
-        label.AutoSize = false;
+        label.AutoSize = true;
+        label.Anchor = AnchorStyles.None;
         label.BorderStyle = BorderStyle.None;
         label.BackColor = Color.Transparent;
         label.TextAlign = ContentAlignment.MiddleCenter;
-        label.Font = new Font(Font.FontFamily, 9F, FontStyle.Bold);
-        label.Margin = new Padding(0, 1, 0, 1);
-    }
-
-    private int RuntimeStatusPreferredWidth()
-    {
-        var runtimeWidth = TextRenderer.MeasureText("雲端-單機運行", runtimeModeLabel.Font).Width;
-        var amegoWidth = TextRenderer.MeasureText("光貿連線異常", apiLabel.Font).Width;
-        return Math.Max(runtimeWidth, amegoWidth) + 8;
+        label.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
+        label.Margin = Padding.Empty;
     }
 
     private static void ConfigureHeaderButton(Button button, Action action)
@@ -357,13 +356,17 @@ internal sealed class MainForm : Form
             bannerLayout.GetColumn(environmentCompanyLabel) != 1 ||
             bannerLayout.GetColumn(runtimeStatusLayout) != 2 ||
             runtimeStatusLayout.GetColumn(runtimeModeLabel) != 1 ||
-            runtimeStatusLayout.GetColumn(apiLabel) != 1 ||
+            runtimeStatusLayout.GetColumn(runtimeSeparatorLabel) != 2 ||
+            runtimeStatusLayout.GetColumn(apiLabel) != 3 ||
+            runtimeStatusLayout.GetRow(runtimeModeLabel) != 0 ||
+            runtimeStatusLayout.GetRow(runtimeSeparatorLabel) != 0 ||
+            runtimeStatusLayout.GetRow(apiLabel) != 0 ||
             environmentBadgeLabel.Width != environmentWarningLabel.Width ||
             environmentBadgeLabel.Width != EnvironmentTagWidth ||
-            runtimeModeLabel.Width != apiLabel.Width ||
-            runtimeModeLabel.Width != RuntimeStatusPreferredWidth() ||
+            Math.Abs(runtimeModeLabel.Font.SizeInPoints - 10F) > 0.1F ||
+            Math.Abs(apiLabel.Font.SizeInPoints - 10F) > 0.1F ||
             runtimeModeLabel.BorderStyle != BorderStyle.None || apiLabel.BorderStyle != BorderStyle.None ||
-            runtimeModeLabel.Text != "單機模式" || apiLabel.Text != "啟動中")
+            runtimeModeLabel.Text != "單機模式" || runtimeSeparatorLabel.Text != "/" || apiLabel.Text != "啟動中")
             throw new InvalidOperationException("標題列環境標籤、執行模式、連線狀態或公司名稱未依指定方式排列");
         PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
@@ -503,7 +506,7 @@ internal sealed class MainForm : Form
         if (string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
         {
             SetRuntimeModeState(
-                "雲端-單機運行",
+                "雲端異常(單機模式)",
                 Color.FromArgb(180, 0, 0),
                 "已選擇雲端模式，但尚未設定 CYInvoice Cloud API 網址。\n目前以單機方式運行。",
                 showToolTip: true);
@@ -543,7 +546,7 @@ internal sealed class MainForm : Form
             if (problem.Length != 0)
             {
                 SetRuntimeModeState(
-                    "雲端-單機運行",
+                    "雲端異常(單機模式)",
                     Color.FromArgb(180, 0, 0),
                     "CYInvoice Cloud API 目前無法使用，已改以單機方式運行。\n\n" + problem,
                     showToolTip: true);
@@ -565,7 +568,7 @@ internal sealed class MainForm : Form
         {
             if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
             SetRuntimeModeState(
-                "雲端-單機運行",
+                "雲端異常(單機模式)",
                 Color.FromArgb(180, 0, 0),
                 "CYInvoice Cloud API 目前無法使用，已改以單機方式運行。\n\n" + ExceptionDetails(error),
                 showToolTip: true);
