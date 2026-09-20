@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - 'apps/CYInvoice/cloud/**'
+      - 'apps/CYInvoice/src/CYInvoice.Core/**'
+      - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
       - '.github/workflows/cyinvoice-cloud.yml'
   push:
     branches:
       - main
     paths:
       - 'apps/CYInvoice/cloud/**'
+      - 'apps/CYInvoice/src/CYInvoice.Core/**'
+      - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
       - '.github/workflows/cyinvoice-cloud.yml'
 
 permissions:
@@ -74,3 +78,11 @@ jobs:
 
           print('D1 migrations syntax/shape check passed')
           PY
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run Windows-client cloud contract tests
+        working-directory: apps/CYInvoice
+        run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release
