@@ -70,9 +70,11 @@ public sealed class AllowancePdfService
 
             var cacheDirectory = Path.Combine(repository.CacheDirectory, "AllowancePDF");
             Directory.CreateDirectory(cacheDirectory);
+            var cacheVersion = OfficialAllowanceCacheVersion(environment, invoice, allowanceNumber);
             var cachePath = Path.Combine(
                 cacheDirectory,
-                $"{Safe(environment)}_{Safe(allowanceNumber)}_{style.Code}.pdf");
+                $"{Safe(environment)}_{Safe(invoice)}_{Safe(allowanceNumber)}_{style.Code}_{cacheVersion}.pdf");
+            PruneObsoleteCacheVersions(cacheDirectory, environment, invoice, allowanceNumber, cacheVersion);
             if (await TryReadPdfAsync(cachePath, cancellationToken).ConfigureAwait(false) is not null)
                 return new AllowancePdfDocument(cachePath, allowanceNumber, style, FromCache: true);
 
@@ -84,6 +86,66 @@ public sealed class AllowancePdfService
         finally
         {
             gate.Release();
+        }
+    }
+
+    private string OfficialAllowanceCacheVersion(string environment, string sellerInvoice, string allowanceNumber)
+    {
+        var official = repository.Invoices.LoadOrCreate()
+            .Where(record => string.Equals(record.Environment.Trim(), environment, StringComparison.Ordinal))
+            .Where(record => record.SellerInvoice.Trim().Length == 0 ||
+                             string.Equals(record.SellerInvoice.Trim(), sellerInvoice, StringComparison.Ordinal))
+            .SelectMany(InvoiceAllowanceMetadata.ReadOfficial)
+            .Where(item => string.Equals(
+                item.AllowanceNumber.Trim(),
+                allowanceNumber,
+                StringComparison.OrdinalIgnoreCase))
+            .OrderBy(item => item.AllowanceNumber, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.AllowanceDate, StringComparer.Ordinal)
+            .ThenBy(item => item.InvoiceType, StringComparer.Ordinal)
+            .ThenBy(item => item.InvoiceStatus)
+            .ThenBy(item => item.AllowanceType, StringComparer.Ordinal)
+            .ThenBy(item => item.TaxAmount, StringComparer.Ordinal)
+            .ThenBy(item => item.TotalAmount, StringComparer.Ordinal)
+            .Select(item => new
+            {
+                item.AllowanceNumber,
+                item.AllowanceDate,
+                item.InvoiceType,
+                item.InvoiceStatus,
+                item.AllowanceType,
+                item.TaxAmount,
+                item.TotalAmount,
+            })
+            .ToArray();
+        var serialized = JsonSerializer.Serialize(official);
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(serialized));
+        return Convert.ToHexString(digest).ToLowerInvariant()[..16];
+    }
+
+    private static void PruneObsoleteCacheVersions(
+        string cacheDirectory,
+        string environment,
+        string sellerInvoice,
+        string allowanceNumber,
+        string currentVersion)
+    {
+        var prefix = $"{Safe(environment)}_{Safe(sellerInvoice)}_{Safe(allowanceNumber)}_";
+        var currentSuffix = "_" + currentVersion + ".pdf";
+        foreach (var path in Directory.EnumerateFiles(cacheDirectory, prefix + "*.pdf", SearchOption.TopDirectoryOnly))
+        {
+            var fileName = Path.GetFileName(path);
+            if (fileName.EndsWith(currentSuffix, StringComparison.OrdinalIgnoreCase)) continue;
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                // A stale cache file must never block opening the current official version.
+                // Because the official-data fingerprint is part of the active path, this file
+                // cannot be reused even when Windows temporarily prevents its deletion.
+            }
         }
     }
 
