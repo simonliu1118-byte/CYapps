@@ -10,6 +10,7 @@ internal sealed class CloudSetupForm : Form
     private readonly CancellationTokenSource lifetime = new();
     private readonly TextBox baseUrl = UiControls.TextBox(240);
     private readonly Label status = UiControls.Label(string.Empty);
+    private readonly ToolTip toolTip = new();
     private readonly Button check = UiControls.StandardButton("測試連線");
     private readonly Button save = UiControls.StandardButton("儲存");
     private readonly Button cancel = UiControls.StandardButton("取消");
@@ -27,7 +28,7 @@ internal sealed class CloudSetupForm : Form
         SelectedBaseUrl = this.initialBaseUrl;
         Text = "雲端連線設定";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(520, 210);
+        ClientSize = new Size(500, 196);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -46,12 +47,14 @@ internal sealed class CloudSetupForm : Form
         {
             confirmedBaseUrl = string.Empty;
             confirmedSummary = string.Empty;
+            SelectedOnboardingStatus = null;
             UpdateState();
         };
         UpdateState();
     }
 
     public string SelectedBaseUrl { get; private set; }
+    public CloudOnboardingStatus? SelectedOnboardingStatus { get; private set; }
 
     private void BuildLayout()
     {
@@ -60,11 +63,11 @@ internal sealed class CloudSetupForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
-            Padding = new Padding(14),
+            Padding = new Padding(12),
             Margin = Padding.Empty,
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 122));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
 
         var cloudGroup = new GroupBox { Text = "CYInvoice Cloud API", Dock = DockStyle.Fill };
         var cloud = new BufferedTableLayoutPanel
@@ -72,13 +75,13 @@ internal sealed class CloudSetupForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 3,
             RowCount = 2,
-            Padding = new Padding(10, 8, 10, 8),
+            Padding = new Padding(8, 6, 8, 6),
             Margin = Padding.Empty,
         };
-        cloud.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 76));
+        cloud.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 72));
         cloud.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        cloud.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 118));
-        cloud.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        cloud.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        cloud.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         cloud.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         cloud.Controls.Add(UiControls.Label("API 網址"), 0, 0);
         cloud.Controls.Add(baseUrl, 1, 0);
@@ -99,7 +102,7 @@ internal sealed class CloudSetupForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
-            Padding = new Padding(0, 8, 0, 0),
+            Padding = new Padding(0, 5, 0, 0),
             Margin = Padding.Empty,
         };
         actions.Controls.Add(cancel);
@@ -117,7 +120,7 @@ internal sealed class CloudSetupForm : Form
         baseUrl.Text = initialBaseUrl;
     }
 
-    private void UpdateState(string? message = null, bool error = false)
+    private void UpdateState(string? message = null, bool error = false, string details = "")
     {
         stateError = error;
         var settings = repository.Settings.LoadOrCreate();
@@ -127,31 +130,36 @@ internal sealed class CloudSetupForm : Form
             ? "請輸入相容的 HTTPS API 網址。"
             : registeredHere
                 ? "API 已設定｜裝置已註冊"
-                : "API 已設定｜尚未完成裝置驗證");
+                : "API 已設定｜等待連線測試");
         status.ForeColor = error
             ? Color.FromArgb(180, 0, 0)
             : registeredHere ? Color.FromArgb(0, 120, 60) : SystemColors.ControlText;
+        status.AccessibleDescription = details;
+        toolTip.SetToolTip(status, details);
     }
 
     private async Task CheckHealthAsync()
     {
         await RunBusyAsync(async () =>
         {
-            var result = await CheckHealthCoreAsync();
+            var result = await CheckConnectionCoreAsync();
             confirmedBaseUrl = result.BaseUrl;
-            confirmedSummary = CloudCompatibility.SuccessSummary(result.Health);
-            UpdateState(confirmedSummary);
+            SelectedOnboardingStatus = result.Onboarding;
+            confirmedSummary = ConnectionSummary(result.Health, result.Onboarding);
+            UpdateState(confirmedSummary, details: ConnectionDetails(result.Health, result.Onboarding));
         });
     }
 
-    private async Task<(string BaseUrl, CloudHealthResult Health)> CheckHealthCoreAsync()
+    private async Task<(string BaseUrl, CloudHealthResult Health, CloudOnboardingStatus Onboarding)> CheckConnectionCoreAsync()
     {
         var normalized = NormalizeBaseUrl(baseUrl.Text);
         var client = new CloudClient(httpClient, new Uri(normalized, UriKind.Absolute));
         var health = await client.CheckHealthAsync(lifetime.Token);
         var problem = CloudCompatibility.Problem(health);
         if (problem.Length != 0) throw new InvalidOperationException(problem);
-        return (normalized, health);
+
+        var onboarding = await client.GetOnboardingStatusAsync(lifetime.Token);
+        return (normalized, health, onboarding);
     }
 
     private async Task SaveAsync()
@@ -159,12 +167,13 @@ internal sealed class CloudSetupForm : Form
         await RunBusyAsync(async () =>
         {
             var normalized = NormalizeBaseUrl(baseUrl.Text);
-            if (!SameEndpoint(confirmedBaseUrl, normalized))
+            if (!SameEndpoint(confirmedBaseUrl, normalized) || SelectedOnboardingStatus is null)
             {
-                var result = await CheckHealthCoreAsync();
+                var result = await CheckConnectionCoreAsync();
                 normalized = result.BaseUrl;
                 confirmedBaseUrl = result.BaseUrl;
-                confirmedSummary = CloudCompatibility.SuccessSummary(result.Health);
+                SelectedOnboardingStatus = result.Onboarding;
+                confirmedSummary = ConnectionSummary(result.Health, result.Onboarding);
             }
 
             SelectedBaseUrl = normalized;
@@ -193,15 +202,16 @@ internal sealed class CloudSetupForm : Form
         {
             if (!IsDisposed)
             {
-                UpdateState($"Cloud API 回應失敗：{error.Code}", error: true);
-                MessageBox.Show(this, $"Cloud API 錯誤：{error.Code}\n{error.Message}", "Cloud 操作失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                var details = $"Cloud API 錯誤：{error.Code}\n{error.Message}";
+                UpdateState($"Cloud API 回應失敗：{error.Code}", error: true, details: details);
+                MessageBox.Show(this, details, "Cloud 操作失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
         catch (Exception error)
         {
             if (!IsDisposed)
             {
-                UpdateState(error.Message, error: true);
+                UpdateState(error.Message, error: true, details: error.Message);
                 MessageBox.Show(this, error.Message, "無法儲存雲端連線設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
@@ -215,9 +225,23 @@ internal sealed class CloudSetupForm : Form
                 check.Enabled = true;
                 baseUrl.Enabled = true;
                 var finalMessage = stateError ? status.Text : confirmedSummary.Length == 0 ? status.Text : confirmedSummary;
-                UpdateState(finalMessage, stateError);
+                UpdateState(finalMessage, stateError, status.AccessibleDescription ?? string.Empty);
             }
         }
+    }
+
+    private static string ConnectionSummary(CloudHealthResult health, CloudOnboardingStatus onboarding)
+    {
+        var workspace = onboarding.WorkspaceInitialized ? "已建立雲端空間" : "尚未建立雲端空間";
+        return $"連線正常｜{workspace}";
+    }
+
+    private static string ConnectionDetails(CloudHealthResult health, CloudOnboardingStatus onboarding)
+    {
+        var workspace = onboarding.WorkspaceInitialized
+            ? "Cloud backend 已初始化；後續將進入既有超級管理員驗證流程。"
+            : "Cloud backend 尚未初始化；後續將進入首次建立 Workspace／超級管理員流程。";
+        return $"{CloudCompatibility.SuccessSummary(health)}\n{workspace}";
     }
 
     private static string NormalizeBaseUrl(string value)
@@ -264,7 +288,7 @@ internal sealed class CloudSetupForm : Form
         if (baseUrl.PlaceholderText.Contains("workers.dev", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Cloud API 輸入不得綁定特定雲端供應商");
         var logicalHeight = ClientSize.Height * 96D / DeviceDpi;
-        if (logicalHeight > 220)
+        if (logicalHeight > 205)
             throw new InvalidOperationException("雲端連線設定視窗未維持精簡高度");
     }
 
@@ -276,6 +300,7 @@ internal sealed class CloudSetupForm : Form
             lifetime.Cancel();
             lifetime.Dispose();
             httpClient.Dispose();
+            toolTip.Dispose();
         }
         base.Dispose(disposing);
     }
