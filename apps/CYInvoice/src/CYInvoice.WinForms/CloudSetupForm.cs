@@ -5,6 +5,8 @@ namespace CYInvoice.WinForms;
 
 internal sealed class CloudSetupForm : Form
 {
+    private const string DevelopmentBaseUrl = "https://cyinvoice-cloud-dev.simonliu1118.workers.dev/";
+
     private readonly LocalRepository repository;
     private readonly HttpClient httpClient = new();
     private readonly CancellationTokenSource lifetime = new();
@@ -139,7 +141,7 @@ internal sealed class CloudSetupForm : Form
     private void LoadValues()
     {
         var settings = repository.Settings.LoadOrCreate();
-        baseUrl.Text = settings.CloudBaseUrl;
+        baseUrl.Text = settings.CloudBaseUrl.Length == 0 ? DevelopmentBaseUrl : settings.CloudBaseUrl;
     }
 
     private void UpdateState(string? message = null, bool error = false)
@@ -327,6 +329,12 @@ internal sealed class CloudSetupForm : Form
             throw new InvalidOperationException("雲端設定視窗基本屬性不正確");
         if (workspaceName.Text.Length == 0 || deviceName.Text.Length == 0 || close.DialogResult != DialogResult.OK)
             throw new InvalidOperationException("雲端設定預設值或關閉按鈕不正確");
+        if (baseUrl.Text != DevelopmentBaseUrl)
+        {
+            var settings = repository.Settings.LoadOrCreate();
+            if (settings.CloudBaseUrl.Length == 0)
+                throw new InvalidOperationException("未儲存 Cloud URL 時應預填 development Worker 網址");
+        }
         if (ClientSize.Width != 560 || ClientSize.Height != 450)
             throw new InvalidOperationException("雲端設定視窗尺寸不正確");
     }
