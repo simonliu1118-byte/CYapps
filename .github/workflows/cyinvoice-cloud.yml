@@ -70,13 +70,25 @@ jobs:
           if missing_columns:
               raise SystemExit(f'missing device columns: {sorted(missing_columns)}')
 
-          indexes = {row[1] for row in db.execute("PRAGMA index_list('devices')")}
-          required_indexes = {'idx_devices_token_hash', 'idx_devices_pairing_id'}
-          missing_indexes = required_indexes - indexes
+          device_indexes = {row[1] for row in db.execute("PRAGMA index_list('devices')")}
+          required_device_indexes = {'idx_devices_token_hash', 'idx_devices_pairing_id'}
+          missing_indexes = required_device_indexes - device_indexes
           if missing_indexes:
               raise SystemExit(f'missing device indexes: {sorted(missing_indexes)}')
 
-          print('D1 migrations syntax/shape check passed')
+          workspace_indexes = {row[1] for row in db.execute("PRAGMA index_list('workspaces')")}
+          if 'idx_single_workspace' not in workspace_indexes:
+              raise SystemExit('missing single-workspace bootstrap invariant index')
+
+          db.execute("INSERT INTO workspaces (workspace_id, display_name) VALUES ('ws_one', 'One')")
+          try:
+              db.execute("INSERT INTO workspaces (workspace_id, display_name) VALUES ('ws_two', 'Two')")
+          except sqlite3.IntegrityError:
+              pass
+          else:
+              raise SystemExit('single-workspace invariant did not reject a second workspace')
+
+          print('D1 migrations syntax/shape/invariant check passed')
           PY
 
       - uses: actions/setup-dotnet@v4
