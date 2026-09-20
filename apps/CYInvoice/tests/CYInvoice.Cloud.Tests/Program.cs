@@ -8,8 +8,10 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud settings default to local-only and protect device token", TestSettingsAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
     ("cloud health parses database status", TestHealthAsync),
+    ("cloud bootstrap sends one-time key and parses device token", TestBootstrapAsync),
     ("cloud authenticated device request sends bearer token", TestDeviceAuthenticationAsync),
-    ("cloud pairing response parses one-time ticket", TestPairingAsync)
+    ("cloud pairing response parses one-time ticket", TestPairingAsync),
+    ("cloud pairing claim parses new device identity", TestPairingClaimAsync)
 };
 
 var failures = new List<string>();
@@ -87,6 +89,27 @@ static async Task TestHealthAsync()
     Equal("2", health.SchemaVersion, "schema version");
 }
 
+static async Task TestBootstrapAsync()
+{
+    var handler = new QueueHandler();
+    handler.Enqueue(request =>
+    {
+        True(request.Headers.TryGetValues("X-Bootstrap-Key", out var values), "bootstrap header should exist");
+        Equal("temporary-bootstrap", values.Single(), "bootstrap header value");
+        Equal(HttpMethod.Post, request.Method, "bootstrap method");
+        Equal("/v1/bootstrap", request.RequestUri?.AbsolutePath ?? string.Empty, "bootstrap path");
+        return JsonResponse(HttpStatusCode.Created,
+            """{"ok":true,"workspace":{"workspaceId":"ws_1","displayName":"CYInvoice"},"device":{"deviceId":"dev_1","displayName":"A機","token":"cydev_first_token"}}""");
+    });
+
+    using var http = new HttpClient(handler);
+    var client = new CloudClient(http, new Uri("https://example.workers.dev/"));
+    var identity = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3");
+    Equal("ws_1", identity.WorkspaceId, "bootstrap workspace ID");
+    Equal("dev_1", identity.DeviceId, "bootstrap device ID");
+    Equal("cydev_first_token", identity.DeviceToken, "bootstrap one-time device token");
+}
+
 static async Task TestDeviceAuthenticationAsync()
 {
     var handler = new QueueHandler();
@@ -117,6 +140,25 @@ static async Task TestPairingAsync()
     var pairing = await client.CreatePairingAsync();
     Equal("0123456789abcdefabcd", pairing.Code, "pairing code");
     Equal(DateTimeOffset.Parse("2026-09-20T10:00:00.000Z"), pairing.ExpiresAt, "pairing expiry");
+}
+
+static async Task TestPairingClaimAsync()
+{
+    var handler = new QueueHandler();
+    handler.Enqueue(request =>
+    {
+        Equal(HttpMethod.Post, request.Method, "claim method");
+        Equal("/v1/device-pairings/claim", request.RequestUri?.AbsolutePath ?? string.Empty, "claim path");
+        return JsonResponse(HttpStatusCode.Created,
+            """{"ok":true,"workspace":{"workspaceId":"ws_1"},"device":{"deviceId":"dev_2","displayName":"B機","token":"cydev_second_token"}}""");
+    });
+
+    using var http = new HttpClient(handler);
+    var client = new CloudClient(http, new Uri("https://example.workers.dev/"));
+    var identity = await client.ClaimPairingAsync("0123456789abcdefabcd", "B機", "2.6.3");
+    Equal("ws_1", identity.WorkspaceId, "claim workspace ID");
+    Equal("dev_2", identity.DeviceId, "claim device ID");
+    Equal("cydev_second_token", identity.DeviceToken, "claim one-time device token");
 }
 
 static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string json)
