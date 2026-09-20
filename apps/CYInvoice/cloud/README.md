@@ -10,6 +10,8 @@ This directory is isolated from the Windows client. AMEGO remains the authoritat
 - D1 binding: `DB`
 - D1 database: `cyinvoice-cloud-dev-db`
 - Environment: `development`
+- Workers Builds production branch: `cyinvoice/cloud-foundation-d1`
+- Workers Builds root directory: `apps/CYInvoice/cloud`
 
 The D1 database UUID is an identifier, not an authentication secret. Cloudflare API tokens, account keys, AMEGO App Keys, passwords, device tokens, and production data must never be committed here.
 
