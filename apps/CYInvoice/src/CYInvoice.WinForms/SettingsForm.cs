@@ -31,7 +31,7 @@ internal sealed class SettingsForm : Form
         settings = repository.Settings.LoadOrCreate();
         Text = "設定選單";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(420, 350);
+        ClientSize = new Size(420, 326);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -64,13 +64,13 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 4,
-            Padding = new Padding(14),
+            Padding = new Padding(10),
             Margin = Padding.Empty,
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
 
         var modeGroup = new GroupBox { Text = "運作模式", Dock = DockStyle.Fill };
         var modeChoices = new BufferedFlowLayoutPanel
@@ -78,11 +78,11 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(10, 6, 0, 0),
+            Padding = new Padding(8, 3, 0, 0),
             Margin = Padding.Empty,
         };
-        localMode.Margin = new Padding(0, 6, 22, 0);
-        cloudMode.Margin = new Padding(0, 6, 8, 0);
+        localMode.Margin = new Padding(0, 5, 18, 0);
+        cloudMode.Margin = new Padding(0, 5, 6, 0);
         cloudSettings.Width = 126;
         cloudSettings.Margin = Padding.Empty;
         cloudSettings.Click += (_, _) => OpenCloudSettings();
@@ -97,16 +97,16 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 3,
             RowCount = 4,
-            Padding = new Padding(8, 6, 8, 6),
+            Padding = new Padding(6, 3, 6, 3),
             Margin = Padding.Empty,
         };
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
-        environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
+        environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         environmentLayout.Controls.Add(test, 0, 0);
         environmentLayout.SetColumnSpan(test, 3);
         environmentLayout.Controls.Add(production, 0, 1);
@@ -124,11 +124,11 @@ internal sealed class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            Padding = new Padding(8, 5, 8, 5),
+            Padding = new Padding(6, 3, 6, 3),
             Margin = Padding.Empty,
         };
         platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
-        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
+        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
         platform.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         moPasswordLabel = FieldLabel("MO店+");
         platform.Controls.Add(moPasswordLabel, 1, 0);
@@ -153,10 +153,10 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 7, 0, 0),
+            Padding = new Padding(0, 4, 0, 0),
             Margin = Padding.Empty,
         };
-        actionButtons.SizeChanged += (_, _) => CenterButtons(actionButtons, 7);
+        actionButtons.SizeChanged += (_, _) => CenterButtons(actionButtons, 4);
         actionButtons.Controls.Add(diagnostics);
         actionButtons.Controls.Add(save);
         actionButtons.Controls.Add(cancel);
@@ -338,12 +338,13 @@ internal sealed class SettingsForm : Form
             cloudSettings.Enabled != cloudMode.Checked ||
             actionButtons.Controls.Count != 3 ||
             Math.Abs(environmentX - platformX) > 1 ||
+            actionButtons.Controls.Cast<Control>().Any(control => control.Bottom > actionButtons.ClientSize.Height) ||
             Math.Abs((actionButtons.Controls.Cast<Control>().Min(control => control.Left) +
                 actionButtons.Controls.Cast<Control>().Max(control => control.Right)) / 2 - actionButtons.ClientSize.Width / 2) > 2)
             throw new InvalidOperationException("設定動作、運作模式、MO店+ 對齊、提示或 App Key 標籤配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         var logicalHeight = ClientSize.Height * 96D / DeviceDpi;
-        if (logicalWidth > 430 || logicalHeight > 370)
+        if (logicalWidth > 430 || logicalHeight > 340)
             throw new InvalidOperationException("設定視窗未維持精簡尺寸");
     }
 
