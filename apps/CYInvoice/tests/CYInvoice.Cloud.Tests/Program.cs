@@ -5,9 +5,9 @@ using CYInvoice.Core.Storage;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
-    ("cloud settings default to local-only and protect device token", TestSettingsAsync),
+    ("cloud settings default to local-only with no endpoint", TestSettingsAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
-    ("cloud health parses database status", TestHealthAsync),
+    ("cloud health parses backend storage status", TestHealthAsync),
     ("cloud bootstrap sends one-time key and parses device token", TestBootstrapAsync),
     ("cloud authenticated device request sends bearer token", TestDeviceAuthenticationAsync),
     ("cloud pairing response parses one-time ticket", TestPairingAsync),
@@ -47,14 +47,24 @@ static Task TestSettingsAsync()
         var store = new SettingsStore(directory, new TestProtector());
         var settings = store.LoadOrCreate();
         Equal(CloudModes.LocalOnly, settings.CloudMode, "default cloud mode");
+        Equal(string.Empty, settings.CloudBaseUrl, "public client must not ship with a cloud endpoint");
+        Equal(string.Empty, settings.CloudWorkspaceId, "default workspace identity");
+        Equal(string.Empty, settings.CloudDeviceId, "default device identity");
 
         settings.CloudMode = CloudModes.CloudPreferred;
-        settings.CloudBaseUrl = "https://example.workers.dev/";
-        settings.CloudWorkspaceId = "ws_test";
-        settings.CloudDeviceId = "dev_test";
-        store.SetCloudDeviceToken(settings, "cydev_secret");
-        True(settings.CloudDeviceTokenEncrypted != "cydev_secret", "device token must not be stored as plaintext");
+        settings.CloudBaseUrl = "https://cloud.example.test/";
         store.Save(settings);
+
+        var configured = store.LoadOrCreate();
+        Equal(CloudModes.CloudPreferred, configured.CloudMode, "cloud mode can be selected before device registration");
+        Equal("https://cloud.example.test/", configured.CloudBaseUrl, "user-configured cloud endpoint");
+        Equal(string.Empty, configured.CloudDeviceId, "cloud endpoint configuration does not invent a device identity");
+
+        configured.CloudWorkspaceId = "ws_test";
+        configured.CloudDeviceId = "dev_test";
+        store.SetCloudDeviceToken(configured, "cydev_secret");
+        True(configured.CloudDeviceTokenEncrypted != "cydev_secret", "device token must not be stored as plaintext");
+        store.Save(configured);
 
         var reloaded = store.LoadOrCreate();
         Equal(CloudModes.CloudPreferred, reloaded.CloudMode, "persisted cloud mode");
@@ -70,7 +80,7 @@ static Task TestSettingsAsync()
 static Task TestHttpsOnlyAsync()
 {
     using var http = new HttpClient(new QueueHandler());
-    Throws<ArgumentException>(() => new CloudClient(http, new Uri("http://example.test/")));
+    Throws<ArgumentException>(() => new CloudClient(http, new Uri("http://cloud.example.test/")));
     return Task.CompletedTask;
 }
 
@@ -80,11 +90,11 @@ static async Task TestHealthAsync()
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
         """{"ok":true,"cloudVersion":"0.2.0","apiVersion":"1","schemaVersion":"2","database":"ok"}"""));
     using var http = new HttpClient(handler);
-    var client = new CloudClient(http, new Uri("https://example.workers.dev/"));
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
     var health = await client.CheckHealthAsync();
     True(health.Reachable, "health should be reachable");
-    True(health.DatabaseAvailable, "database should be available");
+    True(health.DatabaseAvailable, "backend storage should be available");
     Equal("0.2.0", health.CloudVersion, "cloud version");
     Equal("2", health.SchemaVersion, "schema version");
 }
@@ -103,7 +113,7 @@ static async Task TestBootstrapAsync()
     });
 
     using var http = new HttpClient(handler);
-    var client = new CloudClient(http, new Uri("https://example.workers.dev/"));
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
     var identity = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3");
     Equal("ws_1", identity.WorkspaceId, "bootstrap workspace ID");
     Equal("dev_1", identity.DeviceId, "bootstrap device ID");
@@ -122,7 +132,7 @@ static async Task TestDeviceAuthenticationAsync()
     });
 
     using var http = new HttpClient(handler);
-    var client = new CloudClient(http, new Uri("https://example.workers.dev/"), "cydev_test_token");
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"), "cydev_test_token");
     var identity = await client.GetCurrentDeviceAsync();
     Equal("ws_1", identity.WorkspaceId, "workspace ID");
     Equal("dev_1", identity.DeviceId, "device ID");
@@ -136,7 +146,7 @@ static async Task TestPairingAsync()
         """{"ok":true,"pairing":{"code":"0123456789abcdefabcd","expiresAt":"2026-09-20T10:00:00.000Z"}}"""));
 
     using var http = new HttpClient(handler);
-    var client = new CloudClient(http, new Uri("https://example.workers.dev/"), "cydev_test_token");
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"), "cydev_test_token");
     var pairing = await client.CreatePairingAsync();
     Equal("0123456789abcdefabcd", pairing.Code, "pairing code");
     Equal(DateTimeOffset.Parse("2026-09-20T10:00:00.000Z"), pairing.ExpiresAt, "pairing expiry");
@@ -154,7 +164,7 @@ static async Task TestPairingClaimAsync()
     });
 
     using var http = new HttpClient(handler);
-    var client = new CloudClient(http, new Uri("https://example.workers.dev/"));
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
     var identity = await client.ClaimPairingAsync("0123456789abcdefabcd", "B機", "2.6.3");
     Equal("ws_1", identity.WorkspaceId, "claim workspace ID");
     Equal("dev_2", identity.DeviceId, "claim device ID");
