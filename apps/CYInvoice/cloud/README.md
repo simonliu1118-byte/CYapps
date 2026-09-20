@@ -22,13 +22,19 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Remote deployment:
+Routine remote deployment:
 
 ```bash
 npm run deploy
 ```
 
-`npm run deploy` applies pending remote D1 migrations before deploying the Worker.
+Remote schema changes are intentionally separate from routine Worker deployment:
+
+```bash
+npm run db:migrate:remote
+```
+
+A maintainer with explicit D1 write permission must apply pending migrations before deploying code that depends on them. This avoids granting ordinary Worker Builds more database privileges than necessary. For a controlled one-off deployment with a D1-capable credential, `npm run deploy:with-migrations` is available.
 
 ## Initial endpoints
 
