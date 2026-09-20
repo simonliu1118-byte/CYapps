@@ -19,7 +19,6 @@ internal sealed class MainForm : Form
     private const int HeaderButtonGap = 6;
     private const int EnvironmentTagWidth = 210;
     private const int EnvironmentTagHeight = 34;
-    private const int RuntimeTagWidth = 150;
     private const int BannerSideWidth = 450;
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
@@ -150,12 +149,12 @@ internal sealed class MainForm : Form
         runtimeStatusLayout.Padding = new Padding(0, 2, 14, 2);
         runtimeStatusLayout.ColumnCount = 2;
         runtimeStatusLayout.RowCount = 2;
-        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, RuntimeTagWidth));
-        runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         ConfigureRuntimeTag(runtimeModeLabel);
         ConfigureRuntimeTag(apiLabel);
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, RuntimeTagPreferredWidth()));
+        runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         runtimeStatusLayout.Controls.Add(runtimeModeLabel, 1, 0);
         runtimeStatusLayout.Controls.Add(apiLabel, 1, 1);
 
@@ -217,6 +216,13 @@ internal sealed class MainForm : Form
         label.TextAlign = ContentAlignment.MiddleCenter;
         label.Font = new Font(Font.FontFamily, 9F, FontStyle.Bold);
         label.Margin = new Padding(0, 1, 0, 1);
+    }
+
+    private int RuntimeTagPreferredWidth()
+    {
+        var runtimeWidth = TextRenderer.MeasureText("雲端-單機運行", runtimeModeLabel.Font).Width;
+        var amegoWidth = TextRenderer.MeasureText("光貿連線正常", apiLabel.Font).Width;
+        return Math.Max(runtimeWidth, amegoWidth) + 12;
     }
 
     private static void ConfigureHeaderButton(Button button, Action action)
@@ -353,6 +359,7 @@ internal sealed class MainForm : Form
             environmentBadgeLabel.Width != environmentWarningLabel.Width ||
             environmentBadgeLabel.Width != EnvironmentTagWidth ||
             runtimeModeLabel.Width != apiLabel.Width ||
+            runtimeModeLabel.Width != RuntimeTagPreferredWidth() ||
             runtimeModeLabel.Text != "單機版")
             throw new InvalidOperationException("標題列環境標籤、執行模式、連線狀態或公司名稱未依指定方式排列");
         PositionHeaderButtons();
@@ -597,7 +604,7 @@ internal sealed class MainForm : Form
             if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
             var details = ExceptionDetails(error);
             SetConnectionTag(
-                "連線異常",
+                "光貿連線異常",
                 Color.FromArgb(255, 238, 238),
                 Color.FromArgb(166, 32, 32),
                 "光貿 API 連線異常\n" + details);
@@ -606,7 +613,7 @@ internal sealed class MainForm : Form
 
         if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
         SetConnectionTag(
-            "連線正常",
+            "光貿連線正常",
             Color.FromArgb(232, 248, 239),
             Color.FromArgb(0, 120, 60),
             "光貿 API 服務連線正常");
