@@ -47,6 +47,13 @@ internal static class Program
                 Application.DoEvents();
                 diagnostics.VerifySmokeLayout();
                 diagnostics.Close();
+
+                using var cloudSetup = new CloudSetupForm(repository);
+                cloudSetup.Show();
+                cloudSetup.PerformLayout();
+                Application.DoEvents();
+                cloudSetup.VerifySmokeLayout();
+                cloudSetup.Close();
                 return;
             }
             Application.Run(new MainForm());
