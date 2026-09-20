@@ -9,6 +9,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
     ("cloud compatibility rejects non-CYInvoice services", TestCompatibilityAsync),
+    ("cloud onboarding status distinguishes initialized backends", TestOnboardingStatusAsync),
     ("cloud bootstrap sends one-time key and parses device token", TestBootstrapAsync),
     ("cloud authenticated device request sends bearer token", TestDeviceAuthenticationAsync),
     ("cloud pairing response parses one-time ticket", TestPairingAsync),
@@ -89,7 +90,7 @@ static async Task TestHealthAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
-        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.2.0","apiVersion":"1","schemaVersion":"2","environment":"test","storage":"ok"}"""));
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.3.0","apiVersion":"1","schemaVersion":"2","environment":"test","storage":"ok"}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -97,7 +98,7 @@ static async Task TestHealthAsync()
     True(health.Reachable, "health should be reachable");
     True(health.StorageAvailable, "backend storage should be available");
     Equal("cyinvoice-cloud", health.ServiceName, "service name");
-    Equal("0.2.0", health.CloudVersion, "cloud version");
+    Equal("0.3.0", health.CloudVersion, "cloud version");
     Equal("1", health.ApiVersion, "api version");
     Equal("2", health.SchemaVersion, "schema version");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
@@ -118,6 +119,31 @@ static Task TestCompatibilityAsync()
     True(CloudCompatibility.Problem(health).Contains("不是相容的 CYInvoice Cloud API", StringComparison.Ordinal),
         "non-CYInvoice service must be rejected");
     return Task.CompletedTask;
+}
+
+static async Task TestOnboardingStatusAsync()
+{
+    var handler = new QueueHandler();
+    handler.Enqueue(request =>
+    {
+        Equal(HttpMethod.Get, request.Method, "onboarding status method");
+        Equal("/v1/onboarding/status", request.RequestUri?.AbsolutePath ?? string.Empty, "onboarding status path");
+        return JsonResponse(HttpStatusCode.OK,
+            """{"ok":true,"onboarding":{"state":"uninitialized","workspaceInitialized":false}}""");
+    });
+    handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
+        """{"ok":true,"onboarding":{"state":"initialized","workspaceInitialized":true}}"""));
+
+    using var http = new HttpClient(handler);
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
+
+    var first = await client.GetOnboardingStatusAsync();
+    Equal("uninitialized", first.State, "uninitialized state");
+    True(!first.WorkspaceInitialized, "new backend must report no workspace");
+
+    var second = await client.GetOnboardingStatusAsync();
+    Equal("initialized", second.State, "initialized state");
+    True(second.WorkspaceInitialized, "existing backend must report a workspace");
 }
 
 static async Task TestBootstrapAsync()
