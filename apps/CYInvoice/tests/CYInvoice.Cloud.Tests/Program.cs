@@ -8,6 +8,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud settings default to local-only with no endpoint", TestSettingsAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
+    ("cloud health preserves backend storage outage diagnostics", TestStorageOutageAsync),
     ("cloud compatibility rejects non-CYInvoice services", TestCompatibilityAsync),
     ("cloud onboarding status distinguishes initialized backends", TestOnboardingStatusAsync),
     ("cloud bootstrap sends one-time key and parses device token", TestBootstrapAsync),
@@ -102,6 +103,25 @@ static async Task TestHealthAsync()
     Equal("1", health.ApiVersion, "api version");
     Equal("2", health.SchemaVersion, "schema version");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
+}
+
+static async Task TestStorageOutageAsync()
+{
+    var handler = new QueueHandler();
+    handler.Enqueue(_ => JsonResponse(HttpStatusCode.ServiceUnavailable,
+        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.3.0","apiVersion":"1","schemaVersion":"2","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
+    using var http = new HttpClient(handler);
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
+
+    var health = await client.CheckHealthAsync();
+    True(health.Reachable, "cloud API should still be reachable during a D1 outage");
+    True(!health.StorageAvailable, "storage outage must not be reported as healthy");
+    Equal("cyinvoice-cloud", health.ServiceName, "storage outage should preserve service identity");
+    Equal("1", health.ApiVersion, "storage outage should preserve API version");
+    Equal("2", health.SchemaVersion, "storage outage should preserve schema version");
+    Equal("STORAGE_UNAVAILABLE", health.ErrorCode, "storage outage error code");
+    True(CloudCompatibility.Problem(health).Contains("後端儲存服務尚未就緒", StringComparison.Ordinal),
+        "storage outage should report backend storage instead of a wrong-service error");
 }
 
 static Task TestCompatibilityAsync()
