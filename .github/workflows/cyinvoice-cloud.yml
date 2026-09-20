@@ -5,6 +5,7 @@ on:
     paths:
       - 'apps/CYInvoice/cloud/**'
       - 'apps/CYInvoice/src/CYInvoice.Core/**'
+      - 'apps/CYInvoice/src/CYInvoice.WinForms/**'
       - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
       - '.github/workflows/cyinvoice-cloud.yml'
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - 'apps/CYInvoice/cloud/**'
       - 'apps/CYInvoice/src/CYInvoice.Core/**'
+      - 'apps/CYInvoice/src/CYInvoice.WinForms/**'
       - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
       - '.github/workflows/cyinvoice-cloud.yml'
 
@@ -97,4 +99,32 @@ jobs:
 
       - name: Run Windows-client cloud contract tests
         working-directory: apps/CYInvoice
+        run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release
+
+  windows-client:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: apps/CYInvoice
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Windows solution
+        run: dotnet restore CYInvoice.sln
+
+      - name: Build Windows client
+        run: dotnet build CYInvoice.sln -c Release -p:Platform=x64 --no-restore
+
+      - name: Run WinForms startup smoke test
+        run: |
+          dotnet run --project src/CYInvoice.WinForms/CYInvoice.WinForms.csproj -c Release -p:Platform=x64 --no-build -- --startup-smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "WinForms startup smoke test failed" }
+
+      - name: Run cloud client contract tests on Windows
         run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release
