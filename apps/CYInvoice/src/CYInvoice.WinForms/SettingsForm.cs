@@ -31,7 +31,7 @@ internal sealed class SettingsForm : Form
         settings = repository.Settings.LoadOrCreate();
         Text = "設定選單";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(420, 326);
+        ClientSize = new Size(420, 340);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -67,10 +67,10 @@ internal sealed class SettingsForm : Form
             Padding = new Padding(10),
             Margin = Padding.Empty,
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
         var modeGroup = new GroupBox { Text = "運作模式", Dock = DockStyle.Fill };
         var modeChoices = new BufferedFlowLayoutPanel
@@ -78,12 +78,12 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(8, 3, 0, 0),
+            Padding = new Padding(8, 5, 0, 0),
             Margin = Padding.Empty,
         };
         localMode.Margin = new Padding(0, 5, 18, 0);
         cloudMode.Margin = new Padding(0, 5, 6, 0);
-        cloudSettings.Width = 126;
+        cloudSettings.Width = 138;
         cloudSettings.Margin = Padding.Empty;
         cloudSettings.Click += (_, _) => OpenCloudSettings();
         modeChoices.Controls.Add(localMode);
@@ -124,7 +124,7 @@ internal sealed class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            Padding = new Padding(6, 3, 6, 3),
+            Padding = new Padding(6, 5, 6, 5),
             Margin = Padding.Empty,
         };
         platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
@@ -153,10 +153,10 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 4, 0, 0),
+            Padding = new Padding(0, 6, 0, 0),
             Margin = Padding.Empty,
         };
-        actionButtons.SizeChanged += (_, _) => CenterButtons(actionButtons, 4);
+        actionButtons.SizeChanged += (_, _) => CenterButtons(actionButtons, 6);
         actionButtons.Controls.Add(diagnostics);
         actionButtons.Controls.Add(save);
         actionButtons.Controls.Add(cancel);
@@ -333,6 +333,7 @@ internal sealed class SettingsForm : Form
         var platformX = moPasswordLabel.PointToScreen(Point.Empty).X;
         if (string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
             appKeyLabel.PreferredWidth > appKeyLabel.Width ||
+            cloudSettings.PreferredSize.Width > cloudSettings.Width ||
             diagnostics.Text != "系統診斷" || cloudSettings.Text != "雲端連線設定" ||
             localMode.Text != "單機版" || cloudMode.Text != "雲端版" ||
             cloudSettings.Enabled != cloudMode.Checked ||
@@ -344,7 +345,7 @@ internal sealed class SettingsForm : Form
             throw new InvalidOperationException("設定動作、運作模式、MO店+ 對齊、提示或 App Key 標籤配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         var logicalHeight = ClientSize.Height * 96D / DeviceDpi;
-        if (logicalWidth > 430 || logicalHeight > 340)
+        if (logicalWidth > 430 || logicalHeight > 355)
             throw new InvalidOperationException("設定視窗未維持精簡尺寸");
     }
 
