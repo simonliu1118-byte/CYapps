@@ -134,28 +134,28 @@ async function readJsonObject(request: Request): Promise<Record<string, unknown>
   }
 }
 
-async function databaseHealth(env: Env, requestId: string): Promise<Response> {
+async function storageHealth(env: Env, requestId: string): Promise<Response> {
   try {
     await env.DB.prepare("SELECT 1 AS ok FROM workspaces LIMIT 1").first();
     await env.DB.prepare("SELECT 1 AS ok FROM devices LIMIT 1").first();
     await env.DB.prepare("SELECT 1 AS ok FROM device_pairing_codes LIMIT 1").first();
 
     return json(env, requestId, 200, {
-      database: "ok",
+      storage: "ok",
       schemaVersion: env.SCHEMA_VERSION
     });
   } catch (error) {
-    console.error("database_health_failed", {
+    console.error("storage_health_failed", {
       requestId,
       error: error instanceof Error ? error.message : "unknown_error"
     });
 
     return json(env, requestId, 503, {
-      database: "unavailable",
+      storage: "unavailable",
       schemaVersion: env.SCHEMA_VERSION,
       error: {
-        code: "DATABASE_UNAVAILABLE",
-        message: "Database health check failed."
+        code: "STORAGE_UNAVAILABLE",
+        message: "Backend storage health check failed."
       }
     });
   }
@@ -411,16 +411,17 @@ export default {
       switch (url.pathname) {
         case "/":
         case "/health":
-        case "/v1/health":
           if (request.method !== "GET") return methodNotAllowed(env, requestId, "GET");
           return json(env, requestId, 200, {
             status: "ok",
             schemaVersion: env.SCHEMA_VERSION
           });
 
+        case "/v1/health":
+        case "/v1/health/storage":
         case "/v1/health/db":
           if (request.method !== "GET") return methodNotAllowed(env, requestId, "GET");
-          return databaseHealth(env, requestId);
+          return storageHealth(env, requestId);
 
         case "/v1/version":
           if (request.method !== "GET") return methodNotAllowed(env, requestId, "GET");
