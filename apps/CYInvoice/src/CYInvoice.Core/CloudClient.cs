@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -7,10 +8,13 @@ namespace CYInvoice.Core.Cloud;
 
 public sealed record CloudHealthResult(
     bool Reachable,
-    bool DatabaseAvailable,
+    bool StorageAvailable,
+    string ServiceName,
     string CloudVersion,
     string ApiVersion,
     string SchemaVersion,
+    string Environment,
+    long RoundTripMilliseconds,
     string ErrorCode);
 
 public sealed record CloudDeviceIdentity(
@@ -51,26 +55,48 @@ public sealed class CloudClient
 
     public async Task<CloudHealthResult> CheckHealthAsync(CancellationToken cancellationToken = default)
     {
+        var timer = Stopwatch.StartNew();
         try
         {
-            using var document = await SendAsync(HttpMethod.Get, "v1/health/db", null, false, null, cancellationToken);
+            using var document = await SendAsync(HttpMethod.Get, "v1/health", null, false, null, cancellationToken);
+            timer.Stop();
             var root = document.RootElement;
+            var storageAvailable =
+                (root.TryGetProperty("storage", out var storage) && storage.GetString() == "ok")
+                || (root.TryGetProperty("database", out var legacyDatabase) && legacyDatabase.GetString() == "ok");
+
             return new CloudHealthResult(
                 true,
-                root.TryGetProperty("database", out var database) && database.GetString() == "ok",
+                storageAvailable,
+                ReadString(root, "service"),
                 ReadString(root, "cloudVersion"),
                 ReadString(root, "apiVersion"),
                 ReadString(root, "schemaVersion"),
+                ReadString(root, "environment"),
+                timer.ElapsedMilliseconds,
                 ReadErrorCode(root));
         }
         catch (CloudApiException error)
         {
-            return new CloudHealthResult(true, false, string.Empty, string.Empty, string.Empty, error.Code);
+            timer.Stop();
+            return new CloudHealthResult(
+                true, false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty,
+                timer.ElapsedMilliseconds, error.Code);
+        }
+        catch (Exception error) when (error is JsonException or InvalidDataException)
+        {
+            timer.Stop();
+            return new CloudHealthResult(
+                true, false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty,
+                timer.ElapsedMilliseconds, "INVALID_RESPONSE");
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException or OperationCanceledException)
         {
             if (cancellationToken.IsCancellationRequested) throw;
-            return new CloudHealthResult(false, false, string.Empty, string.Empty, string.Empty, "CLOUD_UNREACHABLE");
+            timer.Stop();
+            return new CloudHealthResult(
+                false, false, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty,
+                timer.ElapsedMilliseconds, "CLOUD_UNREACHABLE");
         }
     }
 
