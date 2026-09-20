@@ -88,6 +88,7 @@ internal sealed class MainForm : Form
         syncTimer.Tick += async (_, _) => await RunScheduledSyncAsync();
         FormClosing += (_, _) => StopBackgroundSync();
         BuildShell();
+        SetAmegoConnectionState("啟動中", Color.FromArgb(128, 128, 128), "首次設定完成後將檢查光貿 API 連線。");
         UpdateEnvironment();
         if (!startupSmokeTest) Shown += async (_, _) =>
         {
@@ -149,10 +150,10 @@ internal sealed class MainForm : Form
         runtimeStatusLayout.Padding = new Padding(0, 2, 14, 2);
         runtimeStatusLayout.ColumnCount = 2;
         runtimeStatusLayout.RowCount = 2;
-        ConfigureRuntimeTag(runtimeModeLabel);
-        ConfigureRuntimeTag(apiLabel);
+        ConfigureRuntimeText(runtimeModeLabel);
+        ConfigureRuntimeText(apiLabel);
         runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, RuntimeTagPreferredWidth()));
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, RuntimeStatusPreferredWidth()));
         runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         runtimeStatusLayout.Controls.Add(runtimeModeLabel, 1, 0);
@@ -208,21 +209,22 @@ internal sealed class MainForm : Form
         label.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
     }
 
-    private void ConfigureRuntimeTag(Label label)
+    private void ConfigureRuntimeText(Label label)
     {
         label.Dock = DockStyle.Fill;
         label.AutoSize = false;
-        label.BorderStyle = BorderStyle.FixedSingle;
+        label.BorderStyle = BorderStyle.None;
+        label.BackColor = Color.Transparent;
         label.TextAlign = ContentAlignment.MiddleCenter;
         label.Font = new Font(Font.FontFamily, 9F, FontStyle.Bold);
         label.Margin = new Padding(0, 1, 0, 1);
     }
 
-    private int RuntimeTagPreferredWidth()
+    private int RuntimeStatusPreferredWidth()
     {
         var runtimeWidth = TextRenderer.MeasureText("雲端-單機運行", runtimeModeLabel.Font).Width;
-        var amegoWidth = TextRenderer.MeasureText("光貿連線正常", apiLabel.Font).Width;
-        return Math.Max(runtimeWidth, amegoWidth) + 12;
+        var amegoWidth = TextRenderer.MeasureText("光貿連線異常", apiLabel.Font).Width;
+        return Math.Max(runtimeWidth, amegoWidth) + 8;
     }
 
     private static void ConfigureHeaderButton(Button button, Action action)
@@ -359,8 +361,9 @@ internal sealed class MainForm : Form
             environmentBadgeLabel.Width != environmentWarningLabel.Width ||
             environmentBadgeLabel.Width != EnvironmentTagWidth ||
             runtimeModeLabel.Width != apiLabel.Width ||
-            runtimeModeLabel.Width != RuntimeTagPreferredWidth() ||
-            runtimeModeLabel.Text != "單機版")
+            runtimeModeLabel.Width != RuntimeStatusPreferredWidth() ||
+            runtimeModeLabel.BorderStyle != BorderStyle.None || apiLabel.BorderStyle != BorderStyle.None ||
+            runtimeModeLabel.Text != "單機模式" || apiLabel.Text != "啟動中")
             throw new InvalidOperationException("標題列環境標籤、執行模式、連線狀態或公司名稱未依指定方式排列");
         PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
@@ -490,28 +493,26 @@ internal sealed class MainForm : Form
     {
         if (settings.CloudMode == CloudModes.LocalOnly)
         {
-            SetRuntimeModeTag(
-                "單機版",
-                Color.FromArgb(255, 247, 221),
-                Color.FromArgb(166, 92, 0),
+            SetRuntimeModeState(
+                "單機模式",
+                SystemColors.ControlText,
                 "CYInvoice 目前使用單機模式，不會呼叫 CYInvoice Cloud API。");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
         {
-            SetRuntimeModeTag(
+            SetRuntimeModeState(
                 "雲端-單機運行",
-                Color.FromArgb(255, 238, 238),
-                Color.FromArgb(166, 32, 32),
-                "已選擇雲端模式，但尚未設定 CYInvoice Cloud API 網址。\n目前以單機方式運行。");
+                Color.FromArgb(180, 0, 0),
+                "已選擇雲端模式，但尚未設定 CYInvoice Cloud API 網址。\n目前以單機方式運行。",
+                showToolTip: true);
             return;
         }
 
-        SetRuntimeModeTag(
-            "雲端版",
-            Color.FromArgb(232, 242, 255),
-            Color.FromArgb(0, 72, 170),
+        SetRuntimeModeState(
+            "雲端模式",
+            SystemColors.ControlText,
             "已選擇雲端模式，正在確認 CYInvoice Cloud API 狀態。");
     }
 
@@ -539,21 +540,23 @@ internal sealed class MainForm : Form
             var health = await client.CheckHealthAsync(syncLifetime.Token);
             if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
             var problem = CloudCompatibility.Problem(health);
-            if (problem.Length == 0)
+            if (problem.Length != 0)
             {
-                SetRuntimeModeTag(
-                    "雲端版",
-                    Color.FromArgb(232, 242, 255),
-                    Color.FromArgb(0, 72, 170),
-                    "CYInvoice Cloud API 連線正常。\n" + CloudCompatibility.SuccessSummary(health));
+                SetRuntimeModeState(
+                    "雲端-單機運行",
+                    Color.FromArgb(180, 0, 0),
+                    "CYInvoice Cloud API 目前無法使用，已改以單機方式運行。\n\n" + problem,
+                    showToolTip: true);
                 return;
             }
 
-            SetRuntimeModeTag(
-                "雲端-單機運行",
-                Color.FromArgb(255, 238, 238),
-                Color.FromArgb(166, 32, 32),
-                "CYInvoice Cloud API 目前無法使用，已改以單機方式運行。\n\n" + problem);
+            var onboarding = await client.GetOnboardingStatusAsync(syncLifetime.Token);
+            if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
+            var onboardingText = onboarding.WorkspaceInitialized ? "已建立雲端空間" : "尚未建立雲端空間";
+            SetRuntimeModeState(
+                "雲端模式",
+                SystemColors.ControlText,
+                $"CYInvoice Cloud API 連線正常。\n{CloudCompatibility.SuccessSummary(health)}\n{onboardingText}");
         }
         catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
         {
@@ -561,21 +564,21 @@ internal sealed class MainForm : Form
         catch (Exception error)
         {
             if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
-            SetRuntimeModeTag(
+            SetRuntimeModeState(
                 "雲端-單機運行",
-                Color.FromArgb(255, 238, 238),
-                Color.FromArgb(166, 32, 32),
-                "CYInvoice Cloud API 目前無法使用，已改以單機方式運行。\n\n" + ExceptionDetails(error));
+                Color.FromArgb(180, 0, 0),
+                "CYInvoice Cloud API 目前無法使用，已改以單機方式運行。\n\n" + ExceptionDetails(error),
+                showToolTip: true);
         }
     }
 
-    private void SetRuntimeModeTag(string text, Color background, Color foreground, string details)
+    private void SetRuntimeModeState(string text, Color foreground, string details, bool showToolTip = false)
     {
         runtimeModeLabel.Text = text;
-        runtimeModeLabel.BackColor = background;
+        runtimeModeLabel.BackColor = Color.Transparent;
         runtimeModeLabel.ForeColor = foreground;
         runtimeModeLabel.AccessibleDescription = details;
-        runtimeModeToolTip.SetToolTip(runtimeModeLabel, details);
+        runtimeModeToolTip.SetToolTip(runtimeModeLabel, showToolTip ? details : string.Empty);
     }
 
     private async Task RefreshApiAsync()
@@ -585,10 +588,9 @@ internal sealed class MainForm : Form
         var requestedInvoice = requestedEnvironment == Environments.Production
             ? requestedSettings.ProductionInvoice.Trim()
             : AmegoDefaults.TestInvoice;
-        SetConnectionTag(
-            "連線檢查中",
-            Color.FromArgb(255, 247, 221),
-            Color.FromArgb(166, 92, 0),
+        SetAmegoConnectionState(
+            "光貿連線中",
+            Color.FromArgb(128, 128, 128),
             "正在檢查光貿 API 服務連線");
 
         try
@@ -603,18 +605,17 @@ internal sealed class MainForm : Form
         {
             if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
             var details = ExceptionDetails(error);
-            SetConnectionTag(
+            SetAmegoConnectionState(
                 "光貿連線異常",
-                Color.FromArgb(255, 238, 238),
-                Color.FromArgb(166, 32, 32),
-                "光貿 API 連線異常\n" + details);
+                Color.FromArgb(180, 0, 0),
+                "光貿 API 連線異常\n" + details,
+                showToolTip: true);
             return;
         }
 
         if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
-        SetConnectionTag(
+        SetAmegoConnectionState(
             "光貿連線正常",
-            Color.FromArgb(232, 248, 239),
             Color.FromArgb(0, 120, 60),
             "光貿 API 服務連線正常");
 
@@ -660,13 +661,13 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void SetConnectionTag(string text, Color background, Color foreground, string details)
+    private void SetAmegoConnectionState(string text, Color foreground, string details, bool showToolTip = false)
     {
         apiLabel.Text = text;
-        apiLabel.BackColor = background;
+        apiLabel.BackColor = Color.Transparent;
         apiLabel.ForeColor = foreground;
         apiLabel.AccessibleDescription = details;
-        apiToolTip.SetToolTip(apiLabel, details);
+        apiToolTip.SetToolTip(apiLabel, showToolTip ? details : string.Empty);
     }
 
     private string ProductionConfigurationProblem(Settings settings)
