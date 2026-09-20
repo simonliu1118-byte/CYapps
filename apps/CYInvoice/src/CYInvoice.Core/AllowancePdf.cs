@@ -104,7 +104,7 @@ public sealed class AllowancePdfService
             .ThenBy(item => item.AllowanceDate, StringComparer.Ordinal)
             .ThenBy(item => item.InvoiceType, StringComparer.Ordinal)
             .ThenBy(item => item.InvoiceStatus)
-            .ThenBy(item => item.AllowanceType, StringComparer.Ordinal)
+            .ThenBy(item => item.AllowanceType)
             .ThenBy(item => item.TaxAmount, StringComparer.Ordinal)
             .ThenBy(item => item.TotalAmount, StringComparer.Ordinal)
             .Select(item => new
