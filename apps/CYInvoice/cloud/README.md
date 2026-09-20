@@ -22,19 +22,22 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Routine remote deployment:
+The development Worker currently uses this deploy command in Cloudflare Workers Builds:
 
 ```bash
-npm run deploy
+npm run deploy:with-migrations
 ```
 
-Remote schema changes are intentionally separate from routine Worker deployment:
+That command applies only pending Wrangler D1 migrations and then deploys the Worker. This is intentional for `cyinvoice-cloud-dev` while the schema is still changing frequently, so routine development does not require repeatedly editing Cloudflare build settings.
+
+The underlying commands remain available separately:
 
 ```bash
 npm run db:migrate:remote
+npm run deploy
 ```
 
-A maintainer with explicit D1 write permission must apply pending migrations before deploying code that depends on them. This avoids granting ordinary deployment flows more database privileges than necessary. For a controlled one-off deployment with a D1-capable credential, `npm run deploy:with-migrations` is available.
+When a production Worker/database is introduced, production schema migration must be separated from routine Worker deployment and handled as an explicit controlled operation.
 
 ## Cloud bootstrap secret
 
@@ -46,7 +49,7 @@ Set it through Cloudflare without committing or sharing the value:
 npx wrangler secret put BOOTSTRAP_KEY
 ```
 
-The bootstrap key is only for creating the first workspace and first trusted device. After a workspace exists, the endpoint refuses a second initialization even if the key is correct.
+The bootstrap key is only for creating the first workspace and first trusted device. After a workspace exists, the endpoint refuses a second initialization even if the key is correct. The Windows client never persists the bootstrap key; it only stores the returned device token using the existing protected settings mechanism.
 
 ## API endpoints
 
@@ -78,6 +81,6 @@ The public health endpoints intentionally expose no workspace, device, invoice, 
 
 Phase 1 still contains no employee authentication, invoice data, allowance data, AMEGO proxying, or cross-device work items. Those are added in separate reviewed batches.
 
-## Current deployment note
+## Current state
 
-Schema version `2` requires `migrations/0002_device_pairing.sql`. The development Worker can be deployed before the remote D1 migration, but `/v1/health/db` will remain unavailable until schema version 2 is applied. Use the controlled migration command once, verify the new table/columns in D1, then return routine Workers Builds to `npm run deploy`.
+Schema version `2` (`0002_device_pairing.sql`) is active in the development D1 database. The Windows client now contains a guided cloud setup flow for health checking, first-device bootstrap, pairing-code creation, and second-device claim while preserving local-only mode as the default until a device is successfully registered.
