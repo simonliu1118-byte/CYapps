@@ -81,22 +81,31 @@
 
 ## 7. 雲端版上線工作
 
-完整需求與分期見 `CLOUD_ROADMAP.md`。目前上線前工作主線：
+目前架構定位與已定案內容見 `CLOUD_ARCHITECTURE_STATUS.md`；完整分期另見 `CLOUD_ROADMAP.md`。
 
-### Phase 1：Cloud Foundation
+### Phase 1：Public Repo Cloud Foundation 收斂
 
+- [ ] Windows client 預設固定 `Local Only`；未啟用雲端時完全不呼叫 Cloud API。
+- [ ] 移除 Windows client 中任何專案擁有者／開發環境的預設 Cloud endpoint。
+- [ ] 設定頁提供「單機模式／雲端模式」選擇；只有選擇雲端模式才顯示 Cloud API 相關設定。
+- [ ] Cloud API endpoint 由使用者自行填寫並保存。
+- [ ] Windows client 永遠只連 CYInvoice-compatible HTTPS API，不直接連任何 D1／SQL／其他資料庫。
+- [ ] 將 Cloud API contract 與特定 backend 實作分離；Cloudflare Worker + D1 僅保留為目前 reference implementation。
 - [ ] Workspace／公司資料模型。
 - [ ] Device register／pair／revoke 與 Device Token。
 - [ ] Cloud API health／version compatibility。
 - [ ] staging／production 分離。
 - [ ] Cloud schema migration、監控與服務層復原。
+- [ ] Cloud Enabled 時採 Cloud Preferred；Cloud 暫時不可用時安全本機功能可 fallback，但需要跨機唯一性的操作不得假裝取得 lock。
 
 ### Phase 2：中央員工與權限
 
 - [ ] 員工／角色／enabled／lockout 中央化。
+- [ ] 明確區分 Employee/User 與 Device 身分。
 - [ ] 維持 per-operation authentication，不強制改成程式啟動登入。
 - [ ] 第一台既有超級管理員建立 Cloud Workspace 的一次性遷移流程。
 - [ ] 第二台開始以 Cloud 員工資料為權威，本機只作必要 Cache。
+- [ ] 定案首次 SUPER_ADMIN／既有 SUPER_ADMIN／新裝置加入的正式驗證流程；Email OTP 為目前候選方案，完成安全與 UX 設計後再實作。
 
 ### Phase 3：跨機工作中心與防重
 
@@ -107,7 +116,7 @@
 
 ### Phase 4：雲端操作稽核
 
-- [ ] 有 Cloud DB 後才新增操作／稽核紀錄；不回頭為單機版另做一份。
+- [ ] 有 Cloud backend 後才新增操作／稽核紀錄；不回頭為單機版另做一份。
 - [ ] 記錄使用者、管理員、裝置、work item 與官方結果摘要，不保存密碼、復原碼、App Key 或不必要發票內容。
 
 ### Phase 5：正式折讓 API
@@ -133,7 +142,7 @@ AMEGO App Key 不列入雲端同步範圍，仍維持各電腦自行設定、Win
 
 以下已由使用者定案，不再當成單機待辦：
 
-- **本機操作／稽核紀錄：不做。** 等 Cloud DB 後做跨機稽核。
+- **本機操作／稽核紀錄：不做。** 等 Cloud backend 後做跨機稽核。
 - **本機備份／還原：不做。** CYInvoice 為中介層，發票／折讓官方資料以光貿為準。
 - **發票 Excel／CSV 匯出：不做。** 有需要直接使用光貿網站；對應業務單號另回填 ERP。
 - **管理員開機待辦提醒：不做。** 現行沒有持續登入，只在需要權限時驗證，無法可靠知道開程式的人是不是管理員。
