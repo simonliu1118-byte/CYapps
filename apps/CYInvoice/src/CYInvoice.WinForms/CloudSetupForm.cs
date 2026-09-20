@@ -7,6 +7,8 @@ internal sealed class CloudSetupForm : Form
 {
     private const string SupportedApiVersion = "1";
     private const string SupportedSchemaVersion = "2";
+    private const int LocalDialogHeight = 180;
+    private const int CloudDialogHeight = 322;
 
     private readonly LocalRepository repository;
     private readonly HttpClient httpClient = new();
@@ -19,6 +21,7 @@ internal sealed class CloudSetupForm : Form
     private readonly Button check = UiControls.StandardButton("測試連線");
     private readonly Button save = UiControls.StandardButton("儲存");
     private readonly Button cancel = UiControls.StandardButton("取消");
+    private BufferedTableLayoutPanel rootLayout = null!;
     private GroupBox cloudGroup = null!;
     private bool busy;
     private bool stateError;
@@ -30,7 +33,7 @@ internal sealed class CloudSetupForm : Form
         this.repository = repository;
         Text = "資料模式設定";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 322);
+        ClientSize = new Size(560, CloudDialogHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -59,7 +62,7 @@ internal sealed class CloudSetupForm : Form
 
     private void BuildLayout()
     {
-        var root = new BufferedTableLayoutPanel
+        rootLayout = new BufferedTableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -67,9 +70,9 @@ internal sealed class CloudSetupForm : Form
             Padding = new Padding(16),
             Margin = Padding.Empty,
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 142));
+        rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var modeGroup = new GroupBox { Text = "運作模式", Dock = DockStyle.Fill };
         var modeLayout = new BufferedTableLayoutPanel
@@ -135,10 +138,10 @@ internal sealed class CloudSetupForm : Form
         actions.Controls.Add(cancel);
         actions.Controls.Add(save);
 
-        root.Controls.Add(modeGroup, 0, 0);
-        root.Controls.Add(cloudGroup, 0, 1);
-        root.Controls.Add(actions, 0, 2);
-        Controls.Add(root);
+        rootLayout.Controls.Add(modeGroup, 0, 0);
+        rootLayout.Controls.Add(cloudGroup, 0, 1);
+        rootLayout.Controls.Add(actions, 0, 2);
+        Controls.Add(rootLayout);
         AcceptButton = null;
         CancelButton = cancel;
     }
@@ -161,13 +164,17 @@ internal sealed class CloudSetupForm : Form
 
     private void UpdateModeFields()
     {
-        var enabled = cloudMode.Checked && !busy;
-        cloudGroup.Enabled = cloudMode.Checked;
+        var cloudSelected = cloudMode.Checked;
+        cloudGroup.Visible = cloudSelected;
+        rootLayout.RowStyles[1].Height = cloudSelected ? 142 : 0;
+        ClientSize = new Size(560, cloudSelected ? CloudDialogHeight : LocalDialogHeight);
+
+        var enabled = cloudSelected && !busy;
         baseUrl.Enabled = enabled;
         check.Enabled = enabled;
-        modeHint.Text = cloudMode.Checked
-            ? "雲端模式會連線到你自行設定、符合 CYInvoice Cloud API 的 HTTPS 服務；CYInvoice 不直接連資料庫。"
-            : "單機模式只使用本機資料與既有 AMEGO 流程，不會呼叫任何 CYInvoice Cloud API。";
+        modeHint.Text = cloudSelected
+            ? "雲端模式會連線到你自行設定、符合 CYInvoice Cloud API 的 HTTPS 服務。\nCYInvoice 不直接連資料庫。"
+            : "單機模式只使用本機資料與既有 AMEGO 流程。\n不會呼叫任何 CYInvoice Cloud API。";
     }
 
     private void UpdateState(string? message = null, bool error = false)
@@ -342,7 +349,8 @@ internal sealed class CloudSetupForm : Form
             throw new InvalidOperationException("資料模式設定視窗基本屬性不正確");
         if (save.Text != "儲存" || cancel.DialogResult != DialogResult.Cancel || check.Text != "測試連線")
             throw new InvalidOperationException("資料模式設定動作按鈕不正確");
-        if (settings.CloudMode == CloudModes.LocalOnly && (!localMode.Checked || cloudMode.Checked || cloudGroup.Enabled))
+        if (settings.CloudMode == CloudModes.LocalOnly &&
+            (!localMode.Checked || cloudMode.Checked || cloudGroup.Visible || ClientSize.Height != LocalDialogHeight))
             throw new InvalidOperationException("單機模式預設狀態不正確");
         if (settings.CloudBaseUrl.Length == 0 && baseUrl.Text.Length != 0)
             throw new InvalidOperationException("Public client 不得內建任何 Cloud API endpoint");
