@@ -116,6 +116,11 @@
 - [ ] `/json/g0401`／`/json/g0501`。
 - [ ] 官方回查、pending state machine、跨裝置防重。
 
+### 對外雲端相容指南（功能定案後撰寫）
+
+- [ ] 完成 CYInvoice 雲端版 API／資料模型／認證與裝置流程定案後，撰寫一份**技術中立的 Cloud Integration Guide**，只定義 CYInvoice 雲端端點、協定、資料格式、認證／權限、錯誤碼、版本相容與必要行為；不限定 Cloudflare、D1 或任何特定雲端／資料庫技術。第三方只要依此 Guide 實作相容的雲端服務，即可在 CYInvoice「雲端模式」填入其服務位址後使用。
+- [ ] Guide 不負責教第三方如何選擇或建立其雲端基礎設施；Cloudflare 僅作為本專案開發／參考實作之一，不是 CYInvoice 雲端版的必要條件。
+
 ### 後續增強
 
 - [ ] Email 忘記密碼／驗證碼。
