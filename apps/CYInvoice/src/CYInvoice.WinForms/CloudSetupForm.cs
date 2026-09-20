@@ -174,7 +174,7 @@ internal sealed class CloudSetupForm : Form
     {
         stateError = error;
         var settings = repository.Settings.LoadOrCreate();
-        var registered = HasCloudIdentity(settings);
+        var registeredHere = HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, baseUrl.Text);
 
         if (!cloudMode.Checked)
         {
@@ -185,12 +185,12 @@ internal sealed class CloudSetupForm : Form
 
         status.Text = message ?? (baseUrl.Text.Trim().Length == 0
             ? "請輸入相容的 HTTPS API 網址。"
-            : registered && SameEndpoint(settings.CloudBaseUrl, baseUrl.Text)
+            : registeredHere
                 ? "雲端模式｜裝置已註冊"
                 : "雲端模式｜尚未完成裝置驗證");
         status.ForeColor = error
             ? Color.FromArgb(180, 0, 0)
-            : registered ? Color.FromArgb(0, 120, 60) : SystemColors.ControlText;
+            : registeredHere ? Color.FromArgb(0, 120, 60) : SystemColors.ControlText;
     }
 
     private async Task CheckHealthAsync()
@@ -244,9 +244,7 @@ internal sealed class CloudSetupForm : Form
             }
 
             if (settings.CloudBaseUrl.Length != 0 && !SameEndpoint(settings.CloudBaseUrl, normalized) && HasCloudIdentity(settings))
-            {
                 repository.Settings.ClearCloudIdentity(settings);
-            }
 
             settings.CloudBaseUrl = normalized;
             settings.CloudMode = CloudModes.CloudPreferred;
@@ -275,23 +273,32 @@ internal sealed class CloudSetupForm : Form
         }
         catch (CloudApiException error)
         {
-            UpdateState($"Cloud API 回應失敗：{error.Code}", error: true);
-            MessageBox.Show(this, $"Cloud API 錯誤：{error.Code}\n{error.Message}", "Cloud 操作失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (!IsDisposed)
+            {
+                UpdateState($"Cloud API 回應失敗：{error.Code}", error: true);
+                MessageBox.Show(this, $"Cloud API 錯誤：{error.Code}\n{error.Message}", "Cloud 操作失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
         catch (Exception error)
         {
-            UpdateState(error.Message, error: true);
-            MessageBox.Show(this, error.Message, "無法儲存資料模式", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (!IsDisposed)
+            {
+                UpdateState(error.Message, error: true);
+                MessageBox.Show(this, error.Message, "無法儲存資料模式", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
         finally
         {
             busy = false;
-            UseWaitCursor = false;
-            save.Enabled = true;
-            localMode.Enabled = true;
-            cloudMode.Enabled = true;
-            UpdateModeFields();
-            if (!IsDisposed && cloudMode.Checked) UpdateState(status.Text, stateError);
+            if (!IsDisposed && !Disposing)
+            {
+                UseWaitCursor = false;
+                save.Enabled = true;
+                localMode.Enabled = true;
+                cloudMode.Enabled = true;
+                UpdateModeFields();
+                if (cloudMode.Checked) UpdateState(status.Text, stateError);
+            }
         }
     }
 
