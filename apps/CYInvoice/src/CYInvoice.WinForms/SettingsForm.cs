@@ -20,7 +20,7 @@ internal sealed class SettingsForm : Form
         AutoEllipsis = true,
         Margin = new Padding(3),
     };
-    private readonly Button cloudSettings = UiControls.StandardButton("雲端設定");
+    private readonly Button cloudSettings = UiControls.StandardButton("資料模式設定");
     private readonly Button diagnostics = UiControls.StandardButton("系統診斷");
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
@@ -122,7 +122,7 @@ internal sealed class SettingsForm : Form
             "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。\n未設定時只會停用 MO店+ 匯入，不影響其他功能。");
         platformGroup.Controls.Add(platform);
 
-        var cloudGroup = new GroupBox { Text = "CYInvoice 雲端", Dock = DockStyle.Fill };
+        var cloudGroup = new GroupBox { Text = "資料模式", Dock = DockStyle.Fill };
         var cloud = new BufferedTableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -136,7 +136,7 @@ internal sealed class SettingsForm : Form
         cloud.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         cloud.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         cloud.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        cloudStatusLabel = FieldLabel("狀態");
+        cloudStatusLabel = FieldLabel("模式");
         cloud.Controls.Add(cloudStatusLabel, 1, 0);
         cloud.Controls.Add(cloudStatus, 2, 0);
         cloudSettings.Width = 112;
@@ -247,11 +247,21 @@ internal sealed class SettingsForm : Form
 
     private void UpdateCloudStatus()
     {
-        var registered = settings.CloudMode == CloudModes.CloudPreferred
-            && settings.CloudWorkspaceId.Length != 0
+        if (settings.CloudMode == CloudModes.LocalOnly)
+        {
+            cloudStatus.Text = "單機模式";
+            cloudStatus.ForeColor = SystemColors.ControlText;
+            return;
+        }
+
+        var registered = settings.CloudWorkspaceId.Length != 0
             && settings.CloudDeviceId.Length != 0
             && settings.CloudDeviceTokenEncrypted.Length != 0;
-        cloudStatus.Text = registered ? "雲端優先｜已註冊" : "本機模式";
+        cloudStatus.Text = registered
+            ? "雲端模式｜裝置已註冊"
+            : settings.CloudBaseUrl.Length == 0
+                ? "雲端模式｜未設定 API"
+                : "雲端模式｜API 已設定";
         cloudStatus.ForeColor = registered ? Color.FromArgb(0, 120, 60) : SystemColors.ControlText;
     }
 
@@ -322,12 +332,12 @@ internal sealed class SettingsForm : Form
         var cloudX = cloudStatusLabel.PointToScreen(Point.Empty).X;
         if (string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
             appKeyLabel.PreferredWidth > appKeyLabel.Width ||
-            diagnostics.Text != "系統診斷" || cloudSettings.Text != "雲端設定" ||
+            diagnostics.Text != "系統診斷" || cloudSettings.Text != "資料模式設定" ||
             actionButtons.Controls.Count != 3 ||
             Math.Abs(environmentX - platformX) > 1 || Math.Abs(environmentX - cloudX) > 1 ||
             Math.Abs((actionButtons.Controls.Cast<Control>().Min(control => control.Left) +
                 actionButtons.Controls.Cast<Control>().Max(control => control.Right)) / 2 - actionButtons.ClientSize.Width / 2) > 2)
-            throw new InvalidOperationException("設定動作、雲端設定、MO店+ 對齊、提示或 App Key 標籤配置不正確");
+            throw new InvalidOperationException("設定動作、資料模式設定、MO店+ 對齊、提示或 App Key 標籤配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         if (logicalWidth > 430)
             throw new InvalidOperationException("設定視窗未維持精簡寬度");
