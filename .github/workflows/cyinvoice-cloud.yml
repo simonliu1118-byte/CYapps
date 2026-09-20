@@ -1,6 +1,7 @@
 name: CYInvoice Cloud Check
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'apps/CYInvoice/cloud/**'
