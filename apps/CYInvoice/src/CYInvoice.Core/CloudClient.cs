@@ -226,7 +226,7 @@ public sealed class CloudClient
     private static Uri NormalizeBaseUri(Uri value)
     {
         var text = value.AbsoluteUri;
-        if (!text.EndsWith('/', StringComparison.Ordinal)) text += "/";
+        if (!text.EndsWith("/", StringComparison.Ordinal)) text += "/";
         return new Uri(text, UriKind.Absolute);
     }
 }
