@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cyinvoice-cloud-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-20",
+  "workers_dev": true,
+  "vars": {
+    "APP_ENV": "development",
+    "API_VERSION": "1",
+    "SCHEMA_VERSION": "1"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cyinvoice-cloud-dev-db",
+      "database_id": "ad2c5a80-0c8e-4c7b-ba8d-b1f318958710",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
