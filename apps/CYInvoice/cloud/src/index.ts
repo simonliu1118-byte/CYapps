@@ -15,7 +15,7 @@ type DeviceIdentity = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.2.0";
+const CLOUD_VERSION = "0.3.0";
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
@@ -159,6 +159,18 @@ async function storageHealth(env: Env, requestId: string): Promise<Response> {
       }
     });
   }
+}
+
+async function onboardingStatus(env: Env, requestId: string): Promise<Response> {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM workspaces").first<{ count: number }>();
+  const initialized = Number(row?.count ?? 0) > 0;
+
+  return json(env, requestId, 200, {
+    onboarding: {
+      state: initialized ? "initialized" : "uninitialized",
+      workspaceInitialized: initialized
+    }
+  });
 }
 
 async function authenticateDevice(request: Request, env: Env): Promise<DeviceIdentity | null> {
@@ -428,6 +440,10 @@ export default {
           return json(env, requestId, 200, {
             schemaVersion: env.SCHEMA_VERSION
           });
+
+        case "/v1/onboarding/status":
+          if (request.method !== "GET") return methodNotAllowed(env, requestId, "GET");
+          return onboardingStatus(env, requestId);
 
         case "/v1/bootstrap":
           if (request.method !== "POST") return methodNotAllowed(env, requestId, "POST");
