@@ -95,7 +95,7 @@ static async Task TestBootstrapAsync()
     handler.Enqueue(request =>
     {
         True(request.Headers.TryGetValues("X-Bootstrap-Key", out var values), "bootstrap header should exist");
-        Equal("temporary-bootstrap", values.Single(), "bootstrap header value");
+        Equal("temporary-bootstrap", values!.Single(), "bootstrap header value");
         Equal(HttpMethod.Post, request.Method, "bootstrap method");
         Equal("/v1/bootstrap", request.RequestUri?.AbsolutePath ?? string.Empty, "bootstrap path");
         return JsonResponse(HttpStatusCode.Created,
