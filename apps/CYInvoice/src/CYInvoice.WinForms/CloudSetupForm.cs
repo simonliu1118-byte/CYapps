@@ -22,6 +22,7 @@ internal sealed class CloudSetupForm : Form
     private readonly Button close = UiControls.StandardButton("關閉");
     private bool busy;
     private bool stateError;
+    private bool resourcesDisposed;
 
     public CloudSetupForm(LocalRepository repository)
     {
@@ -49,7 +50,6 @@ internal sealed class CloudSetupForm : Form
         BuildLayout();
         LoadValues();
         UpdateState();
-        FormClosed += (_, _) => lifetime.Cancel();
     }
 
     private void BuildLayout()
@@ -333,8 +333,9 @@ internal sealed class CloudSetupForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        if (disposing && !resourcesDisposed)
         {
+            resourcesDisposed = true;
             lifetime.Cancel();
             lifetime.Dispose();
             httpClient.Dispose();
