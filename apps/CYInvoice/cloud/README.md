@@ -83,4 +83,8 @@ Phase 1 still contains no employee authentication, invoice data, allowance data,
 
 ## Current state
 
-Schema version `2` (`0002_device_pairing.sql`) is active in the development D1 database. The Windows client now contains a guided cloud setup flow for health checking, first-device bootstrap, pairing-code creation, and second-device claim while preserving local-only mode as the default until a device is successfully registered.
+Schema version `2` (`0002_device_pairing.sql`) is active in the development D1 database. The Windows client currently supports Local Only / Cloud Preferred mode selection, user-configured HTTPS endpoint validation, D1-backed health/schema compatibility checks, onboarding-status detection, and safe fallback to local operation when the Cloud API is unavailable.
+
+Windows live validation has confirmed the development Worker and D1 can be reached from the engineering client. With no Workspace initialized, the setup UI correctly reports `連線正常｜尚未建立雲端空間`.
+
+The Core client already contains bootstrap and device-pairing contract methods, and the reference Worker exposes the matching endpoints. Those onboarding/device flows are intentionally **not yet wired into the formal Windows product UI**. Workspace creation, existing SUPER_ADMIN migration/verification, first trusted-device registration, and subsequent device pairing are the next reviewed stages.
