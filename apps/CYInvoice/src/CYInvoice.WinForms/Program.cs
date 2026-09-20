@@ -40,6 +40,13 @@ internal static class Program
                 Application.DoEvents();
                 syncIssues.VerifySmokeLayout();
                 syncIssues.Close();
+
+                using var diagnostics = new SystemDiagnosticsForm(repository, startupSmokeTest: true);
+                diagnostics.Show();
+                diagnostics.PerformLayout();
+                Application.DoEvents();
+                diagnostics.VerifySmokeLayout();
+                diagnostics.Close();
                 return;
             }
             Application.Run(new MainForm());

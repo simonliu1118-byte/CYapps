@@ -6,9 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程測試基準：**V2.6.2 Build 0**。
+- 目前工程測試基準：**V2.6.3 Build 0**。
 - 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
-- V2.6.2 已通過 Windows engineering CI，但仍需 Windows／光貿實機驗證；目前不是正式 Release。
+- V2.6.3 為 V2.6.2 折讓／待辦工程線的後續 Patch，新增系統診斷與折讓專屬自動化測試；仍需 Windows／光貿實機驗證，目前不是正式 Release。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
 - 唯一版本來源為 `VERSION`；正式 Release 必須由 `main` 重新建置與驗證。
 - 只有使用者於當次工作明確要求 `release` 時，才可建立正式 tag／Release；PR、VERSION、BUILD 或 engineering Artifact 都不代表發布授權。
@@ -43,6 +43,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 首次使用建立唯一超級管理員；超級管理員支援一次性離線復原碼。
 - 帳號管理、密碼變更／重設、啟用／停用均依角色限制。
 - MO店+ Excel 密碼與員工／管理員登入分離，不再是首次設定必要欄位；未設定時點 MO店+ 會先提示設定，不開啟選檔視窗。
+- 現行不採持續登入；需要權限的操作才進行員工／管理員驗證。
 
 ### 發票作廢
 
@@ -61,7 +62,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 系統以提出申請當下的折讓單號基線及含稅金額比對新折讓資料；無法唯一判定時保留待辦，不猜測結案。
 - 已完成折讓會出現在發票詳細資訊的「作廢 / 折讓紀錄」。
 - 折讓詳細資訊可透過 `/json/allowance_file` 取得官方 PDF；支援 A4、A4 (地址+A5)、A5 三種官方版型，沿用既有版型選擇器與 WebView2 PDF Viewer。
+- 折讓 PDF Cache 以官方 `allowance[]` 資料指紋版本化；官方狀態、日期、類型或金額變更後不會誤用舊 PDF。
 - 已完成折讓可由一般使用者提出「折讓作廢」人工申請；目前不直接呼叫 `/json/g0501`，由管理員在光貿網站人工完成，再於「上傳問題」結案或取消退回。
+- 發票作廢、折讓與折讓作廢的舊待辦超過兩期後，均可由管理員只在本機手動結案。
 
 ### PDF 與列印
 
@@ -83,19 +86,46 @@ V2.6.2 起整併為單一清單，包含：
 
 只有「開立失敗」列可勾選清除；人工待辦一律雙擊開啟詳細視窗處理。
 
-## V2.6.2 實機驗證重點
+### 系統診斷（V2.6.3）
+
+入口：`設定 → 系統診斷`。
+
+診斷頁以唯讀方式顯示：
+
+- 程式、Windows／.NET 與 x64 狀態。
+- 目前測試／正式環境與公司／App Key 設定是否完整（不顯示 App Key）。
+- 光貿服務連線與目前帳號 API 驗證。
+- SQLite quick_check 與本機資料筆數摘要。
+- 每日完整同步最後成功時間、最近官方回查時間。
+- 未解決待辦／同步問題與開立失敗數量。
+- WebView2 Runtime、Excel COM、發票印表機與 Cache 大小。
+- 可重新檢查並複製不含密碼、App Key、發票內容與完整本機路徑的診斷摘要。
+
+## 實機驗證重點
 
 - 全新首次設定與超級管理員建立。
 - 帳號管理、權限驗證、密碼規則與復原碼。
 - MO店+ 未設定 Excel 密碼時不得先開選檔視窗。
 - 直接作廢、紙本未收回人工覆核、CancelReason 格式及官方回查。
 - 人工折讓建立、管理員處理、`invoice_query.allowance[]` 自動比對。
-- 折讓 PDF 三種版型的光貿實際回傳。
+- 折讓 PDF 三種版型的光貿實際回傳與官方資料變更後 Cache 換版。
 - 折讓作廢人工待辦的建立、取消退回與人工完成。
 - 單一「上傳問題」清單、開立失敗清除與各類詳細待辦。
 - 超過兩期 pending 的管理員結案。
+- `設定 → 系統診斷` 的實機資訊、重新檢查與複製摘要。
 
 完整步驟見 [RC／實機測試](docs/RC_TEST.md)。
+
+## 單機版明確不做
+
+以下不是遺漏，而是目前產品範圍決策：
+
+- 本機操作／稽核紀錄：等有雲端資料庫後做跨機稽核。
+- 本機備份／還原：CYInvoice 是中介層，發票／折讓官方資料以光貿為準，不另外做使用者備份系統。
+- 發票 Excel／CSV 匯出：需要時使用光貿網站；業務單號另回填 ERP。
+- 管理員開機待辦提醒：目前沒有持續登入，無法以「誰打開程式」判定管理員身分。
+
+小型營運摘要保留為未來候選，不排入目前版本。
 
 ## 尚未完成／延後項目
 
@@ -103,10 +133,11 @@ V2.6.2 起整併為單一清單，包含：
 - 正式折讓作廢 API `/json/g0501`。
 - `allowance_query`／`allowance_status` 等獨立折讓同步模型；現階段仍共用 `invoice_query`。
 - 折讓單號自動產生與跨裝置防重。
-- 雲端化後的員工跨機同步、Device Token、Email 復原等。
+- 雲端化後的中央員工／權限、Device Token、跨機待辦、防重與操作稽核。
+- Email 復原、MO 密碼雲端同步與小型營運摘要等非第一階段功能。
 - 酷澎未出貨、公司統編、多商品／多數量、折扣等尚缺可靠實際樣本的格式。
 
-詳細待辦見 [docs/TODO.md](docs/TODO.md)。
+雲端上線需求見 [雲端版上線需求盤點](docs/CLOUD_ROADMAP.md)。詳細待辦見 [docs/TODO.md](docs/TODO.md)。
 
 ## 技術基準
 
@@ -120,7 +151,7 @@ V2.6.2 起整併為單一清單，包含：
 
 ## 開發與驗證
 
-日常版本與文件變更經 PR 驗證後提供 engineering Artifact。Windows CI 依變更範圍執行 source confidentiality scan、warnings-as-errors build、WinForms startup smoke、核心回歸、SQLite migration／retention、invoice sync、sync coordinator、Windows x64 package、PE／layout 與 packaged startup smoke。
+日常版本與文件變更經 PR 驗證後提供 engineering Artifact。Windows CI 依變更範圍執行 source confidentiality scan、warnings-as-errors build、WinForms startup smoke、核心回歸、作廢／折讓專屬回歸、SQLite migration／retention、invoice sync、sync coordinator、Windows x64 package、PE／layout 與 packaged startup smoke。
 
 正式 Release 只有在使用者當次工作明確要求 `release` 後才執行。
 
@@ -132,6 +163,7 @@ apps/CYInvoice/
 ├─ src/CYInvoice.WinForms/                # Windows Forms 正式 UI
 ├─ tests/CYInvoice.Core.Tests/            # 核心 parity／回歸
 ├─ tests/CYInvoice.VoidWorkflow.Tests/    # 員工作廢／折讓人工流程
+├─ tests/CYInvoice.Allowance.Tests/       # 折讓 PDF／折讓作廢專屬回歸
 ├─ tests/CYInvoice.SqliteMigration.Tests/ # SQLite migration／retention／員工 schema
 ├─ tests/CYInvoice.Sync.Tests/            # AMEGO 同步與 sync issue
 ├─ tests/CYInvoice.SyncCoordinator.Tests/ # 啟動／排程／手動同步協調
@@ -145,6 +177,7 @@ apps/CYInvoice/
 - [功能基準](docs/REQUIREMENTS.md)
 - [CYInvoice 永久規則](PROJECT_RULES.md)
 - [待辦與後續規劃](docs/TODO.md)
+- [雲端版上線需求盤點](docs/CLOUD_ROADMAP.md)
 - [RC／實機測試](docs/RC_TEST.md)
 - [本機資料格式與安全規則](docs/DATA_FORMAT.md)
 - [V2 遷移紀錄](docs/MIGRATION_HISTORY.md)

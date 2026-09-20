@@ -13,6 +13,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox invoice = UiControls.TextBox(8);
     private readonly TextBox appKey = UiControls.TextBox(200);
     private readonly TextBox moPassword = UiControls.TextBox(200);
+    private readonly Button diagnostics = UiControls.StandardButton("系統診斷");
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
     private BufferedTableLayoutPanel environmentLayout = null!;
@@ -112,6 +113,14 @@ internal sealed class SettingsForm : Form
         platformGroup.Controls.Add(platform);
 
         cancel.DialogResult = DialogResult.Cancel;
+        diagnostics.Width = 112;
+        save.Width = 112;
+        cancel.Width = 112;
+        diagnostics.Click += (_, _) =>
+        {
+            using var form = new SystemDiagnosticsForm(repository);
+            form.ShowDialog(this);
+        };
         save.Click += SaveClicked;
         actionButtons = new BufferedFlowLayoutPanel
         {
@@ -122,6 +131,7 @@ internal sealed class SettingsForm : Form
             Margin = Padding.Empty,
         };
         actionButtons.SizeChanged += (_, _) => CenterButtons(actionButtons, 7);
+        actionButtons.Controls.Add(diagnostics);
         actionButtons.Controls.Add(save);
         actionButtons.Controls.Add(cancel);
 
@@ -248,10 +258,11 @@ internal sealed class SettingsForm : Form
         var platformX = moPasswordLabel.PointToScreen(Point.Empty).X;
         if (string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
             appKeyLabel.PreferredWidth > appKeyLabel.Width ||
+            diagnostics.Text != "系統診斷" || actionButtons.Controls.Count != 3 ||
             Math.Abs(environmentX - platformX) > 1 ||
             Math.Abs((actionButtons.Controls.Cast<Control>().Min(control => control.Left) +
                 actionButtons.Controls.Cast<Control>().Max(control => control.Right)) / 2 - actionButtons.ClientSize.Width / 2) > 2)
-            throw new InvalidOperationException("設定動作、MO店+ 對齊、提示或 App Key 標籤配置不正確");
+            throw new InvalidOperationException("設定動作、系統診斷、MO店+ 對齊、提示或 App Key 標籤配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         if (logicalWidth > 430)
             throw new InvalidOperationException("設定視窗未維持精簡寬度");

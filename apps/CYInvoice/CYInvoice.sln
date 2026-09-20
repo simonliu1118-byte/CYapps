@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CYInvoice.Void.Tests", "tes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CYInvoice.VoidWorkflow.Tests", "tests\CYInvoice.VoidWorkflow.Tests\CYInvoice.VoidWorkflow.Tests.csproj", "{73824594-E864-4D39-B949-A5B728A5138B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CYInvoice.Allowance.Tests", "tests\CYInvoice.Allowance.Tests\CYInvoice.Allowance.Tests.csproj", "{E9A4208B-6B93-4BC8-98D3-7C3EC8BACC21}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -57,5 +59,9 @@ Global
 		{73824594-E864-4D39-B949-A5B728A5138B}.Debug|x64.Build.0 = Debug|Any CPU
 		{73824594-E864-4D39-B949-A5B728A5138B}.Release|x64.ActiveCfg = Release|Any CPU
 		{73824594-E864-4D39-B949-A5B728A5138B}.Release|x64.Build.0 = Release|Any CPU
+		{E9A4208B-6B93-4BC8-98D3-7C3EC8BACC21}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E9A4208B-6B93-4BC8-98D3-7C3EC8BACC21}.Debug|x64.Build.0 = Debug|Any CPU
+		{E9A4208B-6B93-4BC8-98D3-7C3EC8BACC21}.Release|x64.ActiveCfg = Release|Any CPU
+		{E9A4208B-6B93-4BC8-98D3-7C3EC8BACC21}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
