@@ -128,3 +128,23 @@ jobs:
 
       - name: Run cloud client contract tests on Windows
         run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release
+
+      - name: Build engineering package
+        run: |
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          $build = [int]((Get-Content ./BUILD -Raw).Trim())
+          ./scripts/build.ps1 -Version $version -Build $build -Engineering
+          $artifactRoot = "./dist/cloud-foundation-artifact"
+          New-Item -Path $artifactRoot -ItemType Directory -Force | Out-Null
+          Copy-Item -Path "./dist/CYInvoice" -Destination $artifactRoot -Recurse
+          if (!(Test-Path "$artifactRoot/CYInvoice/CYInvoice.exe" -PathType Leaf)) {
+            throw "Cloud foundation engineering artifact is missing CYInvoice.exe"
+          }
+
+      - name: Upload cloud foundation engineering package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYInvoice_cloud-foundation_engineering-run${{ github.run_number }}
+          path: apps/CYInvoice/dist/cloud-foundation-artifact/
+          if-no-files-found: error
+          retention-days: 14
