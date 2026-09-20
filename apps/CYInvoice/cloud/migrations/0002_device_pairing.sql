@@ -13,13 +13,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_pairing_id
     ON devices (pairing_id)
     WHERE pairing_id IS NOT NULL;
 
--- Singleton bootstrap guard. Keeping this separate from workspaces allows the
--- first-workspace claim to be enforced atomically even if two requests race.
-CREATE TABLE IF NOT EXISTS workspace_bootstrap_state (
-    bootstrap_slot INTEGER PRIMARY KEY CHECK (bootstrap_slot = 1),
-    workspace_id TEXT NOT NULL UNIQUE,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
+-- CYInvoice Cloud Phase 1 supports one workspace per development database.
+-- The constant-expression unique index enforces that invariant even if two
+-- first-workspace bootstrap requests race.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_single_workspace
+    ON workspaces ((1));
 
 CREATE TABLE IF NOT EXISTS device_pairing_codes (
     pairing_id TEXT PRIMARY KEY,
