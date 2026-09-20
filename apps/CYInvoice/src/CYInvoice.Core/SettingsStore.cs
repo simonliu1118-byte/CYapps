@@ -61,6 +61,26 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
 
     public string ProductionAppKey(Settings settings) => Unprotect(settings.ProductionAppKeyEncrypted);
 
+    public void SetCloudDeviceToken(Settings settings, string token)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        token = token.Trim();
+        settings.CloudDeviceTokenEncrypted = token.Length == 0
+            ? string.Empty
+            : protector.Protect(Encoding.UTF8.GetBytes(token));
+    }
+
+    public string CloudDeviceToken(Settings settings) => Unprotect(settings.CloudDeviceTokenEncrypted);
+
+    public void ClearCloudIdentity(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.CloudWorkspaceId = string.Empty;
+        settings.CloudDeviceId = string.Empty;
+        settings.CloudDeviceTokenEncrypted = string.Empty;
+        settings.CloudMode = CloudModes.LocalOnly;
+    }
+
     private string Unprotect(string value) => value.Length == 0 ? string.Empty : Encoding.UTF8.GetString(protector.Unprotect(value));
 
     private static void Validate(Settings settings)
@@ -69,6 +89,21 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             throw new InvalidDataException($"unknown environment {settings.Environment}");
         if (settings.ProductionInvoice.Length != 0 && !EightDigits(settings.ProductionInvoice))
             throw new InvalidDataException("正式公司統編必須為 8 碼");
+        if (settings.CloudMode is not CloudModes.LocalOnly and not CloudModes.CloudPreferred)
+            throw new InvalidDataException($"unknown cloud mode {settings.CloudMode}");
+        if (settings.CloudBaseUrl.Length != 0 && !ValidCloudBaseUrl(settings.CloudBaseUrl))
+            throw new InvalidDataException("Cloud API URL 必須是有效的 HTTPS 網址");
+        if (settings.CloudWorkspaceId.Length > 80 || settings.CloudDeviceId.Length > 80)
+            throw new InvalidDataException("Cloud workspace/device ID 格式無效");
+    }
+
+    private static bool ValidCloudBaseUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return false;
+        return uri.Scheme == Uri.UriSchemeHttps
+            && string.IsNullOrEmpty(uri.UserInfo)
+            && string.IsNullOrEmpty(uri.Query)
+            && string.IsNullOrEmpty(uri.Fragment);
     }
 
     private static bool EightDigits(string value) => value.Length == 8 && value.All(character => character is >= '0' and <= '9');
