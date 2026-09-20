@@ -38,20 +38,39 @@ jobs:
       - name: Validate Worker bundle
         run: npm run deploy:dry-run
 
-      - name: Validate D1 migration with SQLite
+      - name: Validate D1 migrations with SQLite
         shell: bash
         run: |
           python3 - <<'PY'
           import sqlite3
           from pathlib import Path
 
-          sql = Path('migrations/0001_cloud_foundation.sql').read_text(encoding='utf-8')
           db = sqlite3.connect(':memory:')
-          db.executescript(sql)
+          migrations = sorted(Path('migrations').glob('*.sql'))
+          if not migrations:
+              raise SystemExit('no D1 migrations found')
+
+          for migration in migrations:
+              print(f'applying {migration.name}')
+              db.executescript(migration.read_text(encoding='utf-8'))
+
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-          required = {'workspaces', 'devices'}
-          missing = required - tables
-          if missing:
-              raise SystemExit(f'missing tables: {sorted(missing)}')
-          print('D1 migration syntax/shape check passed')
+          required_tables = {'workspaces', 'devices', 'device_pairing_codes'}
+          missing_tables = required_tables - tables
+          if missing_tables:
+              raise SystemExit(f'missing tables: {sorted(missing_tables)}')
+
+          device_columns = {row[1] for row in db.execute('PRAGMA table_info(devices)')}
+          required_device_columns = {'token_hash', 'token_created_at', 'pairing_id', 'revoked_at'}
+          missing_columns = required_device_columns - device_columns
+          if missing_columns:
+              raise SystemExit(f'missing device columns: {sorted(missing_columns)}')
+
+          indexes = {row[1] for row in db.execute("PRAGMA index_list('devices')")}
+          required_indexes = {'idx_devices_token_hash', 'idx_devices_pairing_id'}
+          missing_indexes = required_indexes - indexes
+          if missing_indexes:
+              raise SystemExit(f'missing device indexes: {sorted(missing_indexes)}')
+
+          print('D1 migrations syntax/shape check passed')
           PY
