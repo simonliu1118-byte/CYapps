@@ -198,11 +198,11 @@ internal sealed class CloudSetupForm : Form
                 device,
                 ApplicationVersion.Read(),
                 lifetime.Token);
-            PersistIdentity(identity);
+            await PersistAndVerifyIdentityAsync(identity);
             bootstrapKey.Clear();
-            UpdateState("雲端初始化完成；此電腦已成為第一台受信任裝置。");
+            UpdateState("雲端初始化完成；此電腦已成為第一台受信任裝置，憑證驗證正常。");
             MessageBox.Show(this,
-                "雲端初始化完成。\n\nDevice Token 已使用 Windows DPAPI 加密保存在本機，不需要另外抄寫。",
+                "雲端初始化完成。\n\nDevice Token 已使用 Windows DPAPI 加密保存在本機，並已向 Cloud 驗證可正常使用。",
                 "雲端設定完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
         });
     }
@@ -231,11 +231,11 @@ internal sealed class CloudSetupForm : Form
 
             var client = NewClient(authenticated: false);
             var identity = await client.ClaimPairingAsync(code, device, ApplicationVersion.Read(), lifetime.Token);
-            PersistIdentity(identity);
+            await PersistAndVerifyIdentityAsync(identity);
             pairingCode.Clear();
-            UpdateState("此電腦已加入既有 CYInvoice 工作區。");
+            UpdateState("此電腦已加入既有 CYInvoice 工作區，憑證驗證正常。");
             MessageBox.Show(this,
-                "裝置配對完成。\n\nDevice Token 已使用 Windows DPAPI 加密保存在本機。",
+                "裝置配對完成。\n\nDevice Token 已使用 Windows DPAPI 加密保存在本機，並已向 Cloud 驗證可正常使用。",
                 "裝置配對完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
         });
     }
@@ -267,6 +267,25 @@ internal sealed class CloudSetupForm : Form
         settings.CloudMode = CloudModes.CloudPreferred;
         repository.Settings.SetCloudDeviceToken(settings, identity.DeviceToken);
         repository.Settings.Save(settings);
+    }
+
+    private async Task PersistAndVerifyIdentityAsync(CloudDeviceIdentity identity)
+    {
+        PersistIdentity(identity);
+        try
+        {
+            var verified = await NewClient(authenticated: true).GetCurrentDeviceAsync(lifetime.Token);
+            if (!string.Equals(verified.WorkspaceId, identity.WorkspaceId, StringComparison.Ordinal) ||
+                !string.Equals(verified.DeviceId, identity.DeviceId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Cloud 回傳的裝置身分與本機儲存結果不一致。");
+        }
+        catch
+        {
+            var settings = repository.Settings.LoadOrCreate();
+            repository.Settings.ClearCloudIdentity(settings);
+            repository.Settings.Save(settings);
+            throw;
+        }
     }
 
     private async Task RunBusyAsync(Func<Task> action)
