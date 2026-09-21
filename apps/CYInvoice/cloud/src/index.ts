@@ -1,9 +1,16 @@
+import { createEmailSender } from "./email";
+
 interface Env {
   DB: D1Database;
   APP_ENV: string;
   API_VERSION: string;
   SCHEMA_VERSION: string;
   BOOTSTRAP_KEY?: string;
+  OTP_PEPPER?: string;
+  EMAIL_PROVIDER?: string;
+  BREVO_API_KEY?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
 }
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -21,12 +28,30 @@ type BootstrapDeviceRow = {
   workspace_display_name: string;
 };
 
+type OtpChallengeRow = {
+  challenge_id: string;
+  email_normalized: string;
+  otp_digest: string;
+  delivery_state: string;
+  attempt_count: number;
+  max_attempts: number;
+  expires_at: string;
+  resend_after: string;
+  consumed_at: string | null;
+};
+
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.4.0";
+const CLOUD_VERSION = "0.5.0";
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
+const MAX_EMAIL_LENGTH = 320;
 const PAIRING_TTL_MS = 10 * 60 * 1000;
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const OTP_HOURLY_LIMIT = 5;
+const OTP_MAX_ATTEMPTS = 5;
+const WORKSPACE_BOOTSTRAP_PURPOSE = "workspace_bootstrap";
 
 function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
@@ -94,10 +119,33 @@ function randomHex(byteLength: number): string {
   return Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
 }
 
+function randomOtpCode(): string {
+  const range = 1_000_000;
+  const limit = Math.floor(0x1_0000_0000 / range) * range;
+  const values = new Uint32Array(1);
+  do {
+    crypto.getRandomValues(values);
+  } while (values[0] >= limit);
+  return (values[0] % range).toString().padStart(6, "0");
+}
+
 async function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return Array.from(digest, part => part.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacSha256Hex(secret: string, value: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value)));
+  return Array.from(signature, part => part.toString(16).padStart(2, "0")).join("");
 }
 
 async function constantTimeSecretEquals(left: string, right: string): Promise<boolean> {
@@ -107,6 +155,30 @@ async function constantTimeSecretEquals(left: string, right: string): Promise<bo
     difference |= leftHash.charCodeAt(index) ^ rightHash.charCodeAt(index);
   }
   return difference === 0;
+}
+
+async function requireBootstrapAuthorization(request: Request, env: Env): Promise<"ok" | "disabled" | "denied"> {
+  if (!env.BOOTSTRAP_KEY) return "disabled";
+  const suppliedKey = request.headers.get("x-bootstrap-key") ?? "";
+  if (!suppliedKey || !(await constantTimeSecretEquals(suppliedKey, env.BOOTSTRAP_KEY))) return "denied";
+  return "ok";
+}
+
+function bootstrapAuthorizationError(env: Env, requestId: string, state: "disabled" | "denied"): Response {
+  if (state === "disabled") {
+    return json(env, requestId, 503, {
+      error: {
+        code: "BOOTSTRAP_DISABLED",
+        message: "Workspace bootstrap is not configured."
+      }
+    });
+  }
+  return json(env, requestId, 401, {
+    error: {
+      code: "BOOTSTRAP_AUTH_FAILED",
+      message: "Workspace bootstrap authentication failed."
+    }
+  });
 }
 
 function bearerToken(request: Request): string | null {
@@ -137,6 +209,44 @@ function normalizedDeviceToken(value: unknown): string | null {
   return /^cydev_[0-9a-f]{64}$/.test(normalized) ? normalized : null;
 }
 
+function normalizedEmail(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized.length < 3 || normalized.length > MAX_EMAIL_LENGTH || /[\r\n\s]/.test(normalized)) return null;
+  const at = normalized.lastIndexOf("@");
+  if (at <= 0 || at >= normalized.length - 1 || normalized.indexOf("@") !== at) return null;
+  const domain = normalized.slice(at + 1);
+  if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) return null;
+  return normalized;
+}
+
+function maskedEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at <= 0) return "***";
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const visibleLocal = local.length <= 2 ? local[0] ?? "*" : local.slice(0, 2);
+  return `${visibleLocal}***@${domain}`;
+}
+
+function normalizedChallengeId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return /^otp_[0-9a-f-]{36}$/.test(normalized) ? normalized : null;
+}
+
+function normalizedOtp(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return /^\d{6}$/.test(normalized) ? normalized : null;
+}
+
+async function otpDigest(env: Env, challengeId: string, otp: string): Promise<string | null> {
+  const pepper = env.OTP_PEPPER?.trim() ?? "";
+  if (!pepper) return null;
+  return hmacSha256Hex(pepper, `${challengeId}:${otp}`);
+}
+
 async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
   try {
     const value: unknown = await request.json();
@@ -152,6 +262,7 @@ async function storageHealth(env: Env, requestId: string): Promise<Response> {
     await env.DB.prepare("SELECT 1 AS ok FROM workspaces LIMIT 1").first();
     await env.DB.prepare("SELECT 1 AS ok FROM devices LIMIT 1").first();
     await env.DB.prepare("SELECT 1 AS ok FROM device_pairing_codes LIMIT 1").first();
+    await env.DB.prepare("SELECT 1 AS ok FROM email_otp_challenges LIMIT 1").first();
 
     return json(env, requestId, 200, {
       storage: "ok",
@@ -182,6 +293,160 @@ async function onboardingStatus(env: Env, requestId: string): Promise<Response> 
     onboarding: {
       state: initialized ? "initialized" : "uninitialized",
       workspaceInitialized: initialized
+    }
+  });
+}
+
+async function startBootstrapEmailChallenge(request: Request, env: Env, requestId: string): Promise<Response> {
+  const auth = await requireBootstrapAuthorization(request, env);
+  if (auth !== "ok") return bootstrapAuthorizationError(env, requestId, auth);
+
+  const workspaceCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM workspaces").first<{ count: number }>();
+  if (Number(workspaceCount?.count ?? 0) !== 0) {
+    return json(env, requestId, 409, {
+      error: {
+        code: "WORKSPACE_ALREADY_INITIALIZED",
+        message: "A workspace already exists."
+      }
+    });
+  }
+
+  if (!env.OTP_PEPPER?.trim()) {
+    return json(env, requestId, 503, {
+      error: {
+        code: "OTP_NOT_CONFIGURED",
+        message: "Email verification is not configured."
+      }
+    });
+  }
+
+  const body = await readJsonObject(request);
+  if (!body) return badRequest(env, requestId, "INVALID_JSON", "A JSON object is required.");
+  const email = normalizedEmail(body.email);
+  if (!email) return badRequest(env, requestId, "INVALID_EMAIL", "Email address is invalid.");
+
+  const now = new Date();
+  const nowText = now.toISOString();
+  const latest = await env.DB.prepare(
+    `SELECT resend_after
+       FROM email_otp_challenges
+      WHERE purpose = ?1 AND email_normalized = ?2
+      ORDER BY created_at DESC
+      LIMIT 1`
+  ).bind(WORKSPACE_BOOTSTRAP_PURPOSE, email).first<{ resend_after: string }>();
+
+  if (latest && latest.resend_after > nowText) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((Date.parse(latest.resend_after) - now.getTime()) / 1000));
+    return json(env, requestId, 429, {
+      retryAfterSeconds,
+      error: {
+        code: "OTP_RESEND_COOLDOWN",
+        message: "Please wait before requesting another verification code."
+      }
+    }, { "retry-after": retryAfterSeconds.toString() });
+  }
+
+  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+  const recent = await env.DB.prepare(
+    `SELECT COUNT(*) AS count
+       FROM email_otp_challenges
+      WHERE purpose = ?1 AND email_normalized = ?2 AND created_at >= ?3`
+  ).bind(WORKSPACE_BOOTSTRAP_PURPOSE, email, hourAgo).first<{ count: number }>();
+  if (Number(recent?.count ?? 0) >= OTP_HOURLY_LIMIT) {
+    return json(env, requestId, 429, {
+      error: {
+        code: "OTP_RATE_LIMITED",
+        message: "Too many verification requests. Please try again later."
+      }
+    });
+  }
+
+  let sender;
+  try {
+    sender = createEmailSender({
+      provider: env.EMAIL_PROVIDER,
+      brevoApiKey: env.BREVO_API_KEY,
+      resendApiKey: env.RESEND_API_KEY,
+      from: env.EMAIL_FROM
+    });
+  } catch {
+    return json(env, requestId, 503, {
+      error: {
+        code: "EMAIL_PROVIDER_NOT_CONFIGURED",
+        message: "Email delivery is not configured."
+      }
+    });
+  }
+
+  const challengeId = `otp_${crypto.randomUUID()}`;
+  const otp = randomOtpCode();
+  const digest = await otpDigest(env, challengeId, otp);
+  if (!digest) {
+    return json(env, requestId, 503, {
+      error: {
+        code: "OTP_NOT_CONFIGURED",
+        message: "Email verification is not configured."
+      }
+    });
+  }
+
+  const expiresAt = new Date(now.getTime() + OTP_TTL_MS).toISOString();
+  const resendAfter = new Date(now.getTime() + OTP_RESEND_COOLDOWN_MS).toISOString();
+
+  await env.DB.prepare(
+    `INSERT INTO email_otp_challenges (
+        challenge_id, purpose, email_normalized, otp_digest, delivery_state,
+        attempt_count, max_attempts, expires_at, resend_after, created_at, updated_at
+     ) VALUES (?1, ?2, ?3, ?4, 'pending', 0, ?5, ?6, ?7, ?8, ?8)`
+  ).bind(
+    challengeId,
+    WORKSPACE_BOOTSTRAP_PURPOSE,
+    email,
+    digest,
+    OTP_MAX_ATTEMPTS,
+    expiresAt,
+    resendAfter,
+    nowText
+  ).run();
+
+  try {
+    await sender.send({
+      to: email,
+      subject: "CYInvoice 雲端驗證碼",
+      text: `您的 CYInvoice 雲端驗證碼是 ${otp}。驗證碼 10 分鐘內有效，請勿提供給其他人。`,
+      html: `<p>您的 CYInvoice 雲端驗證碼是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${otp}</p><p>驗證碼 10 分鐘內有效，請勿提供給其他人。</p>`
+    });
+  } catch (error) {
+    await env.DB.prepare(
+      `UPDATE email_otp_challenges
+          SET delivery_state = 'failed', updated_at = ?1
+        WHERE challenge_id = ?2`
+    ).bind(new Date().toISOString(), challengeId).run();
+    console.warn("otp_email_delivery_failed", {
+      requestId,
+      error: error instanceof Error ? error.message : "email_delivery_failed"
+    });
+    return json(env, requestId, 503, {
+      error: {
+        code: "EMAIL_DELIVERY_UNAVAILABLE",
+        message: "Verification email could not be sent."
+      }
+    });
+  }
+
+  const sentAt = new Date().toISOString();
+  await env.DB.prepare(
+    `UPDATE email_otp_challenges
+        SET delivery_state = 'sent', sent_at = ?1, updated_at = ?1
+      WHERE challenge_id = ?2`
+  ).bind(sentAt, challengeId).run();
+
+  return json(env, requestId, 201, {
+    challenge: {
+      challengeId,
+      maskedEmail: maskedEmail(email),
+      expiresAt,
+      resendAfter
     }
   });
 }
@@ -249,25 +514,67 @@ function bootstrapIdentityResponse(env: Env, requestId: string, status: number, 
   });
 }
 
-async function bootstrapWorkspace(request: Request, env: Env, requestId: string): Promise<Response> {
-  if (!env.BOOTSTRAP_KEY) {
+async function validateBootstrapOtp(
+  env: Env,
+  requestId: string,
+  challengeId: string,
+  otp: string
+): Promise<{ email: string } | Response> {
+  if (!env.OTP_PEPPER?.trim()) {
     return json(env, requestId, 503, {
       error: {
-        code: "BOOTSTRAP_DISABLED",
-        message: "Workspace bootstrap is not configured."
+        code: "OTP_NOT_CONFIGURED",
+        message: "Email verification is not configured."
       }
     });
   }
 
-  const suppliedKey = request.headers.get("x-bootstrap-key") ?? "";
-  if (!suppliedKey || !(await constantTimeSecretEquals(suppliedKey, env.BOOTSTRAP_KEY))) {
-    return json(env, requestId, 401, {
+  const row = await env.DB.prepare(
+    `SELECT challenge_id, email_normalized, otp_digest, delivery_state,
+            attempt_count, max_attempts, expires_at, resend_after, consumed_at
+       FROM email_otp_challenges
+      WHERE challenge_id = ?1 AND purpose = ?2
+      LIMIT 1`
+  ).bind(challengeId, WORKSPACE_BOOTSTRAP_PURPOSE).first<OtpChallengeRow>();
+
+  const now = new Date().toISOString();
+  if (!row || row.delivery_state !== "sent" || row.consumed_at || row.expires_at <= now) {
+    return badRequest(env, requestId, "OTP_INVALID", "Verification code is invalid or expired.");
+  }
+  if (Number(row.attempt_count) >= Number(row.max_attempts)) {
+    return json(env, requestId, 429, {
       error: {
-        code: "BOOTSTRAP_AUTH_FAILED",
-        message: "Workspace bootstrap authentication failed."
+        code: "OTP_ATTEMPTS_EXHAUSTED",
+        message: "Verification attempts have been exhausted."
       }
     });
   }
+
+  const suppliedDigest = await otpDigest(env, challengeId, otp);
+  if (!suppliedDigest || !(await constantTimeSecretEquals(row.otp_digest, suppliedDigest))) {
+    const result = await env.DB.prepare(
+      `UPDATE email_otp_challenges
+          SET attempt_count = attempt_count + 1, updated_at = ?1
+        WHERE challenge_id = ?2 AND consumed_at IS NULL AND attempt_count < max_attempts`
+    ).bind(now, challengeId).run();
+    const attempts = Number(row.attempt_count) + (result.meta.changes > 0 ? 1 : 0);
+    if (attempts >= Number(row.max_attempts)) {
+      return json(env, requestId, 429, {
+        error: {
+          code: "OTP_ATTEMPTS_EXHAUSTED",
+          message: "Verification attempts have been exhausted."
+        }
+      });
+    }
+    return badRequest(env, requestId, "OTP_INVALID", "Verification code is invalid or expired.");
+  }
+
+  return { email: row.email_normalized };
+}
+
+async function bootstrapWorkspace(request: Request, env: Env, requestId: string): Promise<Response> {
+  const auth = await requireBootstrapAuthorization(request, env);
+  if (auth !== "ok") return bootstrapAuthorizationError(env, requestId, auth);
 
   const body = await readJsonObject(request);
   if (!body) return badRequest(env, requestId, "INVALID_JSON", "A JSON object is required.");
@@ -276,9 +583,11 @@ async function bootstrapWorkspace(request: Request, env: Env, requestId: string)
   const deviceDisplayName = normalizedDisplayName(body.deviceDisplayName);
   const clientVersion = normalizedClientVersion(body.clientVersion);
   const deviceToken = normalizedDeviceToken(body.deviceToken);
-  if (!workspaceDisplayName || !deviceDisplayName || !deviceToken
+  const emailChallengeId = normalizedChallengeId(body.emailChallengeId);
+  const emailOtp = normalizedOtp(body.emailOtp);
+  if (!workspaceDisplayName || !deviceDisplayName || !deviceToken || !emailChallengeId || !emailOtp
       || (body.clientVersion !== undefined && clientVersion === null)) {
-    return badRequest(env, requestId, "INVALID_BOOTSTRAP_INPUT", "Workspace or device information is invalid.");
+    return badRequest(env, requestId, "INVALID_BOOTSTRAP_INPUT", "Workspace, device, or email verification information is invalid.");
   }
 
   const tokenHash = await sha256Hex(deviceToken);
@@ -295,6 +604,9 @@ async function bootstrapWorkspace(request: Request, env: Env, requestId: string)
     });
   }
 
+  const otpValidation = await validateBootstrapOtp(env, requestId, emailChallengeId, emailOtp);
+  if (otpValidation instanceof Response) return otpValidation;
+
   const workspaceId = `ws_${crypto.randomUUID()}`;
   const deviceId = `dev_${crypto.randomUUID()}`;
   const now = new Date().toISOString();
@@ -302,15 +614,24 @@ async function bootstrapWorkspace(request: Request, env: Env, requestId: string)
   try {
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO workspaces (workspace_id, display_name, status, created_at, updated_at)
-         VALUES (?1, ?2, 'active', ?3, ?3)`
-      ).bind(workspaceId, workspaceDisplayName, now),
+        `INSERT INTO workspaces (
+            workspace_id, display_name, status, recovery_email,
+            recovery_email_verified_at, created_at, updated_at
+         ) VALUES (?1, ?2, 'active', ?3, ?4, ?4, ?4)`
+      ).bind(workspaceId, workspaceDisplayName, otpValidation.email, now),
       env.DB.prepare(
         `INSERT INTO devices (
             device_id, workspace_id, display_name, status, client_version,
             paired_at, last_seen_at, created_at, updated_at, token_hash, token_created_at
          ) VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?5, ?5, ?5, ?6, ?5)`
-      ).bind(deviceId, workspaceId, deviceDisplayName, clientVersion, now, tokenHash)
+      ).bind(deviceId, workspaceId, deviceDisplayName, clientVersion, now, tokenHash),
+      env.DB.prepare(
+        `UPDATE email_otp_challenges
+            SET consumed_at = ?1, updated_at = ?1
+          WHERE challenge_id = ?2
+            AND purpose = ?3
+            AND consumed_at IS NULL`
+      ).bind(now, emailChallengeId, WORKSPACE_BOOTSTRAP_PURPOSE)
     ]);
   } catch (error) {
     const recovered = await findBootstrapDeviceByTokenHash(env, tokenHash);
@@ -501,6 +822,10 @@ export default {
         case "/v1/onboarding/status":
           if (request.method !== "GET") return methodNotAllowed(env, requestId, "GET");
           return onboardingStatus(env, requestId);
+
+        case "/v1/onboarding/bootstrap-email":
+          if (request.method !== "POST") return methodNotAllowed(env, requestId, "POST");
+          return startBootstrapEmailChallenge(request, env, requestId);
 
         case "/v1/bootstrap":
           if (request.method !== "POST") return methodNotAllowed(env, requestId, "POST");
