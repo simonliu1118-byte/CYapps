@@ -38,6 +38,12 @@ public sealed record CloudBootstrapAttempt(string DeviceToken)
         $"cydev_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}");
 }
 
+public sealed record CloudDeviceJoinAttempt(string DeviceToken)
+{
+    public static CloudDeviceJoinAttempt Create() => new(
+        $"cydev_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}");
+}
+
 public sealed record CloudPairingTicket(string Code, DateTimeOffset ExpiresAt);
 
 public sealed class CloudApiException(string code, string message, HttpStatusCode statusCode)
@@ -237,8 +243,15 @@ public sealed class CloudClient
         string code,
         string deviceDisplayName,
         string clientVersion,
+        CloudDeviceJoinAttempt attempt,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(code))
+            throw new ArgumentException("Pairing code is required.", nameof(code));
+        ArgumentNullException.ThrowIfNull(attempt);
+        if (!ValidDeviceToken(attempt.DeviceToken))
+            throw new ArgumentException("Device join token is invalid.", nameof(attempt));
+
         using var document = await SendAsync(
             HttpMethod.Post,
             "v1/device-pairings/claim",
@@ -246,13 +259,14 @@ public sealed class CloudClient
             {
                 code = code.Trim(),
                 deviceDisplayName,
-                clientVersion
+                clientVersion,
+                deviceToken = attempt.DeviceToken
             },
             false,
             null,
             cancellationToken);
 
-        return ReadDeviceIdentity(document.RootElement, requireToken: true);
+        return ReadDeviceIdentity(document.RootElement, requireToken: false) with { DeviceToken = attempt.DeviceToken };
     }
 
     private async Task<JsonDocument> SendAsync(
