@@ -39,10 +39,13 @@ AMEGO App Key、本機 Device Token 等敏感憑證不進 Public repository；Cl
 - 每台 Device 獨立 token-hash foundation。
 - Windows Cloud API client、HTTPS-only 驗證與 bounded timeout。
 - Windows Device Token protected-storage abstraction。
+- Pending Device Token／onboarding state protected persistence foundation。
 - Local Only／Cloud Preferred 設定與 Cloud 異常 fallback 顯示。
 - Windows → development Worker → D1 live connection 已驗證。
 - development D1 尚未建立正式 Workspace；Windows 正確顯示 `連線正常｜尚未建立雲端空間`。
 - Foundation bootstrap／device／pairing endpoints 與 .NET contract tests 已建立。
+- Provider-neutral Email transport boundary 已建立，reference Worker 目前含 Brevo／Resend adapters。
+- 目前 development reference Email Provider 定為 Brevo；實際 API Key 尚待帳號手機驗證後設定，因此尚未做 live Email delivery test。
 - Public Windows client 不內建 project-owner Cloud endpoint。
 
 ## 4. 目前正在收斂：第一個 Workspace + 第一台 Device
@@ -55,9 +58,9 @@ Device ID    → Cloud 產生
 Device Token → Windows 產生
 ```
 
-Windows 最終必須在送出 bootstrap 前先把 Device Token 以 DPAPI 保存成 Pending；Cloud 只保存 Token hash。同一 Pending Token 必須能在 timeout／lost response 後找回已建立的 Cloud Workspace／Device identity，而不是建立第二個 Workspace。
+Windows 在送出 bootstrap 前必須先把 Device Token 以 DPAPI 保存成 Pending；Cloud 只保存 Token hash。同一 Pending Token 必須能在 timeout／lost response 後找回已建立的 Cloud Workspace／Device identity，而不是建立第二個 Workspace。
 
-目前 PR #73 已先把 Core／Worker contract 朝此方向調整；Pending DPAPI persistence、Email OTP、正式 Windows onboarding UI 尚未完成，不能把目前 foundation endpoint 視為 V3.0 最終 UX。
+PR #73 已先把 Core／Worker contract 朝此方向調整；Email OTP、正式 Windows onboarding UI 尚未完成，不能把目前 foundation endpoint 視為 V3.0 最終 UX。
 
 ## 5. 已定案但尚未全部實作的身分流程
 
@@ -83,6 +86,8 @@ CYInvoice Windows client：
 - 不要求一般使用者理解 Cloudflare／D1 等底層技術。
 
 Cloudflare Worker + D1 只是目前 reference backend。未來第三方可使用其他技術，只要符合 Cloud API contract。
+
+Email Provider 同樣屬於 backend implementation detail：目前 reference deployment 使用 Brevo；未來有自有網域時可切到 Resend，Windows 與 OTP contract 不變。
 
 ## 7. Cloud Preferred 與 fallback
 
@@ -117,7 +122,8 @@ Local SUPER_ADMIN 只代表原單機系統最高管理者，不代表可以自�
 - `POST /v1/device-pairings` 目前仍只依有效 Device Token 即可發配對碼；正式版尚需人員授權／OTP gate。
 - `POST /v1/device-pairings/claim` 目前 foundation 仍由 Cloud 產生 Device Token；後續 Device Join batch 需收斂成與正式生命週期一致的 Windows-generated Token。
 - 尚無中央 Employee／Role／single-SUPER_ADMIN schema。
-- 尚無 Recovery Email／OTP challenge schema 或寄信 provider integration。
+- 尚無 Recovery Email／OTP challenge schema；Email transport adapter 已有，但尚未接到 OTP endpoint。
+- Brevo runtime API Key 尚未設定，因此尚未做 live Email delivery test。
 - 尚無 Device revoke／recovery 正式 UI。
 - 尚無 Work Item／Audit／跨機同步正式實作。
 
@@ -136,7 +142,7 @@ Local SUPER_ADMIN 只代表原單機系統最高管理者，不代表可以自�
 
 1. 驗證安全 bootstrap contract CI。
 2. Pending Device Token／onboarding state DPAPI 持久化。
-3. Local SUPER_ADMIN + existing Email OTP 初始化與必要 `0003+` migration。
+3. Brevo runtime Secret 完成後做 Email transport live test；同時可先完成 Local SUPER_ADMIN + existing Email OTP schema／邏輯。
 4. Windows 首次 Workspace onboarding UI／timeout recovery。
 5. Device Join／Recovery。
 6. 中央 Employee／單一 SUPER_ADMIN／超管移交。
