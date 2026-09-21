@@ -120,50 +120,53 @@
 
 #### Batch 1：安全 bootstrap contract
 
-- [ ] Workspace ID／Device ID 由 Cloud 產生，Device Token 由 Windows 產生；Cloud 只保存 Token hash。
-- [ ] 同一 Pending Token 能安全恢復 timeout／lost response／bootstrap retry，不依賴 Client 自行產生 Device ID。
-- [ ] Workspace + 第一台 Device 必須原子建立，不留下只有 Workspace 沒有可信任 Device 的狀態。
-- [ ] Cloud contract tests 與 Worker type／bundle／Windows build／startup smoke 全部通過。
+- [x] Workspace ID／Device ID 由 Cloud 產生，Device Token 由 Windows 產生；Cloud 只保存 Token hash。
+- [x] 同一 Pending Token 能安全恢復 timeout／lost response／bootstrap retry，不依賴 Client 自行產生 Device ID。
+- [x] Workspace + 第一台 Device 原子建立，不留下只有 Workspace 沒有可信任 Device 的狀態。
+- [x] Cloud contract tests 與 Worker type／bundle／Windows build／startup smoke 全部通過。
 
 #### Batch 2：Windows Pending Token
 
-- [ ] Windows 在 bootstrap 送網路前先以 DPAPI 持久化 Pending Device Token。
-- [ ] Pending onboarding state 可跨程式重啟恢復。
-- [ ] bootstrap timeout 時先查 onboarding status；Workspace 已存在時先以 Pending Token 驗證，不盲目重建。
+- [x] Windows 在 bootstrap 送網路前先以 DPAPI 持久化 Pending Device Token。
+- [x] Pending onboarding state 可跨程式重啟恢復。
+- [x] bootstrap timeout／Workspace 已存在時先以 Pending Token 驗證結果，不盲目重建 Workspace／Device。
 
 #### Batch 3：Local SUPER_ADMIN Email OTP
 
-- [ ] 建立 Workspace 前先驗證既有 Local SUPER_ADMIN；不重新輸入 Email。
-- [ ] UI 只顯示遮罩後既有 SUPER_ADMIN Email。
-- [ ] Email OTP challenge／verify：短效、單次、OTP hash、錯誤次數限制、重寄 cooldown、rate limit。
-- [ ] 需要新增 Cloud schema 時只用 `0003+` forward migration，不修改 `0001`／`0002`。
-- [ ] OTP 通過後，既有 Local SUPER_ADMIN 成為 Workspace 唯一 SUPER_ADMIN。
+- [x] 建立 Workspace 前先驗證既有 Local SUPER_ADMIN；不重新輸入 Email。
+- [x] UI 只顯示遮罩後既有 SUPER_ADMIN Email。
+- [x] Email OTP challenge／verify：短效、單次、OTP hash、錯誤次數限制、重寄 cooldown、rate limit。
+- [x] 新增 `0003_workspace_recovery_email_otp.sql` forward migration，不修改 `0001`／`0002`。
+- [ ] 中央 Employee schema 完成後，把第一位既有 Local SUPER_ADMIN 明確建立／對應為 Workspace 唯一 SUPER_ADMIN；目前只有 Recovery Email／Device bootstrap foundation。
 
 #### Batch 4：首次建立 UI
 
-- [ ] Windows「雲端連線設定」在 health 成功且尚無 Workspace 時提供「建立雲端空間」。
-- [ ] 一次性 server-side bootstrap guard／「雲端初始化碼」不得保存到 repo／log／安裝包／明文設定。
-- [ ] 初始化成功後立即以 `GET /v1/device` 驗證 Workspace／Device；成功後 Pending identity 才轉正式。
-- [ ] Workspace 已存在時不得再顯示首次建立流程。
+- [x] Windows「雲端連線設定」在 health 成功且尚無 Workspace 時提供「建立雲端空間」。
+- [x] 一次性 server-side bootstrap guard／「雲端初始化碼」不得保存到 repo／log／安裝包／明文設定。
+- [x] 初始化成功後立即以 `GET /v1/device` 驗證 Workspace／Device；成功後 Pending identity 才轉正式。
+- [x] Workspace 已存在時不得再顯示首次建立流程，改進入 Device Join。
 
 ### 7.4 Phase 3：中央員工、SUPER_ADMIN 與 Device Join／Recovery
 
 - [ ] 員工／role／enabled／lockout 中央化，維持 per-operation authentication。
-- [ ] 全新第二台電腦第一次啟動可直接選「加入既有雲端空間」，不必先建立 Local SUPER_ADMIN。
-- [ ] Cloud 有 Workspace、本機無 Device identity 時顯示「此雲端空間已建立，但這台電腦尚未加入」。
-- [ ] Device Join 支援短效 Pairing Code，或 Workspace 已登記 SUPER_ADMIN Email OTP。
-- [ ] 既有 Workspace 加入授權不得使用新機自己的 Local SUPER_ADMIN Email 自我批准。
-- [ ] 第二台 Device／Recovery Device 也使用獨立 Token；正式流程收斂為 Windows 產生 Token、Cloud 只存 hash。
-- [ ] Token 遺失／Windows 重灌時加入原 Workspace，不建立新 Workspace。
-- [ ] 舊 Device 不因名稱相同自動撤銷；由 SUPER_ADMIN／授權 ADMIN 明確 revoke。
+- [ ] 全新第二台電腦第一次啟動可直接選「加入既有雲端空間」，不必先建立 Local SUPER_ADMIN；目前既有程式的 Cloud 設定頁 Device Join 已完成，fresh-install first-run 分流尚未接。
+- [x] Cloud 有 Workspace、本機無 Device identity 時，`雲端連線設定` 顯示「加入雲端空間」而不是重建 Workspace。
+- [x] Pairing Code Device Join foundation 已完成：A 機先用 Workspace Recovery Email OTP 授權產生短效一次性 Pairing Code，B 機以配對碼加入。
+- [ ] 所有 Device Token 遺失時，直接使用 Workspace 已登記 SUPER_ADMIN／Recovery Email OTP 建立 Recovery Device 的路徑尚未實作。
+- [x] 既有 Workspace Pairing 授權不使用新機自己的 Local SUPER_ADMIN Email 自我批准；OTP 收件者由 Cloud 依 Workspace Recovery Email 決定。
+- [x] Pairing Claim 使用獨立 Device Token：Windows 事前產生並 DPAPI 保存，Cloud 只存 hash；Cloud 仍負責產生 Device ID。
+- [x] Pairing Claim timeout／lost response 使用同一 Pending Token 找回既有 Device，不會因回應遺失產生第二台孤兒 Device。
+- [x] Pending Device Join state 可跨重新啟動恢復，且與 first-bootstrap Pending state 互斥。
+- [ ] Token 遺失／Windows 重灌時加入原 Workspace：已有其他可信任 Device 時可走 Pairing Code；全部 Device Token 遺失時的 Email Recovery 尚未完成。
+- [ ] 舊 Device 不因名稱相同自動撤銷；由 SUPER_ADMIN／授權 ADMIN 明確 revoke。目前「不自動撤銷」已成立，正式 revoke UI/API 尚未完成。
 - [ ] 既有單機 B 機合法加入後，原 Local SUPER_ADMIN Y 自動建立／對應為 Workspace ADMIN，可立即工作。
 - [ ] 若 Y 已經是 Cloud Employee，使用穩定 Employee identity／明確驗證 mapping，不建立第二個 Y，不只靠姓名猜。
 - [ ] 帳號管理新增「移交超管權限」；只有目前 SUPER_ADMIN 可操作，且 Server 以單一原子 transaction 同時降舊超管、升新超管。
 - [ ] SUPER_ADMIN 不提供獨立「降為管理員」按鈕；要降級只能先移交給另一位 ADMIN。
-- [ ] Pairing Code 只有在有效 Device + SUPER_ADMIN／指定 ADMIN 人員驗證 + OTP 成功後才產生；B 機輸入已授權 Pairing Code 後不再做第二次管理員 OTP。
+- [ ] Pairing Code 的第一階段安全 gate 已完成「有效 Device + Workspace Recovery Email OTP」；中央 Employee 完成後再收斂成 SUPER_ADMIN／具 DEVICE_MANAGE 權限 ADMIN + OTP，B 機不再做第二次管理員 OTP。
 - [ ] SUPER_ADMIN 有有效 Device 時可修改自己的 Email並 OTP 驗證新 Email；忘記本機密碼沿用單機 Recovery Code。
 - [ ] 所有 Device Token 遺失時以 Workspace Recovery／SUPER_ADMIN Email OTP 重建 Device。
-- [ ] 雙重災難只保留 Cloudflare／reference backend 人工維運救援，不新增 Windows emergency recovery API。
+- [x] 雙重災難只保留 Cloudflare／reference backend 人工維運救援，不新增 Windows emergency recovery API（架構定案；維運文件後續補齊）。
 
 ### 7.5 Phase 4：跨機 Work Item、離線降級與恢復
 
