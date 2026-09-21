@@ -40,7 +40,7 @@ AMEGO App Key、本機 Device Token 等敏感憑證不進 Public repository；Cl
 - 每台 Device 獨立 token-hash foundation。
 - Windows Cloud API client、HTTPS-only 驗證與 bounded timeout。
 - Windows Device Token protected-storage abstraction。
-- Pending Device Token／onboarding state protected persistence foundation。
+- Pending Device Token／onboarding state protected persistence，可跨程式重啟沿用。
 - Local Only／Cloud Preferred 設定與 Cloud 異常 fallback 顯示。
 - Windows → development Worker → D1 live connection 已驗證。
 - development D1 尚未建立正式 Workspace。
@@ -48,13 +48,19 @@ AMEGO App Key、本機 Device Token 等敏感憑證不進 Public repository；Cl
 - Provider-neutral Email transport boundary 已建立，reference Worker 含 Brevo／Resend adapters。
 - 目前 development reference Email Provider 定為 Brevo；實際 API Key 尚待帳號手機驗證後設定，因此尚未做 live Email delivery test。
 - first-bootstrap Email OTP foundation 已實作：6 碼、HMAC-SHA256、10 分鐘有效、5 次錯誤上限、60 秒重寄冷卻、每 Email／purpose 每小時 5 次 challenge 上限、一次性消耗。
-- first Workspace bootstrap 現在要求有效 Email challenge + OTP，並把已驗證 Email 寫入 Workspace Recovery Email。
-- bootstrap retry 仍以同一 Pending Device Token 先復原既有 Cloud Workspace／Device，避免 lost response 造成第二套 identity。
+- first Workspace bootstrap 要求有效 Email challenge + OTP，並把已驗證 Email 寫入 Workspace Recovery Email。
+- bootstrap retry／lost response 以同一 Pending Device Token 復原既有 Cloud Workspace／Device，避免第二套 identity。
+- WinForms 首次 Workspace onboarding UI 已接上：本機 SUPER_ADMIN 驗證、既有 Email 遮罩顯示、寄送 OTP、輸入 OTP、Pending Token 安全落地、bootstrap、`GET /v1/device` 最終確認。
+- `GET /v1/device` 驗證成功且 Workspace／Device ID 與 bootstrap 結果一致後，Pending identity 才會轉為正式 Cloud identity。
+- Cloud 已有 Workspace 時不允許再次進入首次建立流程，該狀態保留給後續 Device Join／Recovery。
+- `雲端初始化碼` 只存在於當次密碼式輸入／HTTPS request，不寫入 settings、repo、log 或 artifact。
+- Settings 視窗與 Cloud onboarding 共用同一個 in-memory Settings instance，避免父視窗舊資料覆寫剛建立的 Cloud identity。
 - Public Windows client 不內建 project-owner Cloud endpoint。
+- CYInvoice Cloud Check Run #97 已通過 Worker、migration、Cloud contract、Windows x64 build、WinForms startup smoke 與 engineering package 驗證。
 
 ## 4. 第一個 Workspace + 第一台 Device contract
 
-已定案並已進入 Core／Worker contract 的 bootstrap model：
+已定案並已進入 Core／Worker／WinForms 的 bootstrap model：
 
 ```text
 Workspace ID → Cloud 產生
@@ -64,24 +70,34 @@ Device Token → Windows 產生
 
 Windows 在送出 bootstrap 前先把 Device Token 以 DPAPI 保存成 Pending；Cloud 只保存 Token hash。
 
-第一次 Workspace 另增加 Email authorization：
+第一次 Workspace 增加 Email authorization：
 
 ```text
 既有 Local SUPER_ADMIN
         ↓ 本機先驗證本人
-沿用其既有 Email
+沿用其既有 Email（UI 只顯示遮罩）
         ↓
 POST /v1/onboarding/bootstrap-email
         ↓
 6 碼 OTP
         ↓
+Windows 先保存 Pending Device Token
+        ↓
 POST /v1/bootstrap
         ↓
-建立 Workspace + 第一台 Device
+Cloud 建立 Workspace + 第一台 Device
 並綁定 verified Recovery Email
+        ↓
+GET /v1/device
+        ↓
+核對 Workspace／Device
+        ↓
+Pending → 正式 Cloud identity
 ```
 
-使用者不需要再輸入第二個 Cloud Email。Windows 正式 UI 尚未接上這套 contract。
+使用者不需要再輸入第二個 Cloud Email。
+
+若 bootstrap 回應 timeout／中斷而結果不明，Windows 保留原 Pending Token，不重新產生 Token；可使用同一 Token 嘗試找回已建立的 Device identity。若 Cloud 已存在 Workspace 但該 Pending Token 無法驗證，不盲目建立第二個 Workspace，而是保留到後續 Device Join／Recovery。
 
 ## 5. OTP 與 Email 安全邊界
 
@@ -92,14 +108,16 @@ POST /v1/bootstrap
 - Provider delivery failure 不記錄 provider response body、收件 Email、OTP 或信件本文。
 - Recovery Email 是 Workspace 必要私有後端資料，但不得進 public log／artifact。
 - OTP challenge 在 Workspace 建立成功時一併標記 consumed。
+- Challenge ID 不必跨重啟持久保存；若程式在 bootstrap 前關閉，可重新申請新的 OTP challenge。真正需要先安全落地的是 Device Token。
 
 ## 6. 已定案但尚未全部實作的身分流程
 
-- 第一次從單機版建立 Workspace：沿用既有 Local SUPER_ADMIN Email，不重新輸入；完成既有超管驗證 + Email OTP 後才初始化。
+- 第一次從單機版建立 Workspace：Windows UI／Core／Worker foundation 已接通；尚待 Brevo runtime credential 可用後做真實 Email delivery／OTP live test。
+- **中央 Cloud Employee／Role／single-SUPER_ADMIN schema 尚未實作。** 目前「驗證 Local SUPER_ADMIN + 綁定 Recovery Email」不等於中央 Employee 角色已完成。
 - Workspace 建立後不因 Token 遺失、Windows 重灌或程式重新下載而重建。
-- 已有 Workspace、沒有本機 Device identity：使用 Pairing Code 或 Workspace 已登記 SUPER_ADMIN Email OTP 加入。
+- 已有 Workspace、沒有本機 Device identity：使用 Pairing Code 或 Workspace 已登記 SUPER_ADMIN／Recovery Email OTP 加入。
 - 新機自己的 Local SUPER_ADMIN 不得自行授權加入既有 Workspace。
-- 既有單機 B 機合法加入後，原唯一 Local SUPER_ADMIN Y 自動成為 Workspace ADMIN，可立即工作。
+- 既有單機 B 機合法加入後，原唯一 Local SUPER_ADMIN Y 後續由中央 Employee 層建立／對應為 Workspace ADMIN；不得因此升為 SUPER_ADMIN。
 - Workspace 永遠只有一名 SUPER_ADMIN。
 - 超管換人使用原子 `TransferSuperAdmin`：原超管降 ADMIN、指定 ADMIN 升 SUPER_ADMIN。
 - Pairing Code 正式版必須在有效 Device + SUPER_ADMIN／指定 ADMIN 人員驗證 + OTP 成功後才產生；B 機輸入已授權 Pairing Code 後不再重做 OTP。
@@ -151,11 +169,10 @@ Local SUPER_ADMIN 只代表原單機系統最高管理者，不代表可以自�
 ## 10. 目前仍屬 prototype、不得誤認為正式 V3.0 行為
 
 - `POST /v1/device-pairings` 目前仍只依有效 Device Token 即可發配對碼；正式版尚需人員授權／OTP gate。
-- `POST /v1/device-pairings/claim` 目前 foundation 仍由 Cloud 產生 Device Token；後續 Device Join batch 需收斂成與正式生命週期一致的 Windows-generated Token。
+- `POST /v1/device-pairings/claim` 目前 foundation 仍由 Cloud 產生 Device Token；正式 Device Join 前必須改成可安全處理 lost response 的 Windows-generated Token contract。
 - 尚無中央 Employee／Role／single-SUPER_ADMIN Cloud schema。
-- Bootstrap Email OTP backend／Core contract 已有，但尚未接正式 WinForms onboarding UI。
 - Brevo runtime API Key 尚未設定，因此尚未做 live Email delivery test。
-- 尚無 Device revoke／recovery 正式 UI。
+- 尚無 Device Join／revoke／recovery 正式 UI。
 - 尚無 Work Item／Audit／跨機同步正式實作。
 
 ## 11. 已定案不進 Cloud 的內容
@@ -171,12 +188,10 @@ Local SUPER_ADMIN 只代表原單機系統最高管理者，不代表可以自�
 
 依 `CLOUD_IDENTITY_LIFECYCLE.md` 分批：
 
-1. Windows 首次 Workspace onboarding UI：驗證既有 Local SUPER_ADMIN、取用既有 Email、發 OTP、輸入 OTP、提交 bootstrap。
-2. 完成 UI 的 timeout／restart recovery 與 Pending Token／challenge state 銜接。
-3. Brevo 手機驗證恢復後，設定 runtime Secret 並做 live Email transport／OTP 測試。
-4. Device Join／Recovery。
-5. 中央 Employee／單一 SUPER_ADMIN／超管移交。
-6. Pairing Code 前的人員授權。
-7. 再進入 Work Item／Audit／多機 OrderID／正式折讓 API。
+1. Brevo 手機驗證恢復後，設定 runtime Secret 並做 live Email transport／OTP 測試。
+2. Existing-Workspace Device Join／Recovery；正式實作前先收斂 pairing claim 的 Windows-generated Device Token 與 lost-response retry 語意。
+3. 中央 Employee／單一 SUPER_ADMIN／超管移交。
+4. Pairing Code 前的人員授權。
+5. 再進入 Work Item／Audit／多機 OrderID／正式折讓 API。
 
 多公司、`company_id`、跨公司權限不在 V3.0 當前工程範圍。
