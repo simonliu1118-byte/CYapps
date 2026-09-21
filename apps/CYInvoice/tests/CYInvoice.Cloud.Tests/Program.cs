@@ -54,6 +54,8 @@ static Task TestSettingsAsync()
         Equal(string.Empty, settings.CloudBaseUrl, "public client must not ship with a cloud endpoint");
         Equal(string.Empty, settings.CloudWorkspaceId, "default workspace identity");
         Equal(string.Empty, settings.CloudDeviceId, "default device identity");
+        Equal(string.Empty, settings.CloudPendingBootstrapTokenEncrypted, "default pending bootstrap token");
+        True(store.CloudPendingBootstrap(settings) is null, "default settings must not invent pending bootstrap state");
 
         settings.CloudMode = CloudModes.CloudPreferred;
         settings.CloudBaseUrl = "https://cloud.example.test/";
@@ -64,15 +66,51 @@ static Task TestSettingsAsync()
         Equal("https://cloud.example.test/", configured.CloudBaseUrl, "user-configured cloud endpoint");
         Equal(string.Empty, configured.CloudDeviceId, "cloud endpoint configuration does not invent a device identity");
 
-        configured.CloudWorkspaceId = "ws_test";
-        configured.CloudDeviceId = "dev_test";
-        store.SetCloudDeviceToken(configured, "cydev_secret");
-        True(configured.CloudDeviceTokenEncrypted != "cydev_secret", "device token must not be stored as plaintext");
+        var pendingToken = "cydev_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var pendingStarted = DateTimeOffset.Parse("2026-09-21T05:45:00+00:00");
+        store.SetCloudPendingBootstrap(
+            configured,
+            "https://cloud.example.test",
+            "Chihyuan",
+            "高雄-A機",
+            pendingToken,
+            pendingStarted);
+        True(configured.CloudPendingBootstrapTokenEncrypted != pendingToken,
+            "pending bootstrap token must not be stored as plaintext");
         store.Save(configured);
+
+        var pendingReloadedSettings = store.LoadOrCreate();
+        var pending = store.CloudPendingBootstrap(pendingReloadedSettings)
+            ?? throw new InvalidOperationException("pending bootstrap state should survive restart");
+        Equal("https://cloud.example.test/", pending.BaseUrl, "pending bootstrap endpoint");
+        Equal("Chihyuan", pending.WorkspaceDisplayName, "pending workspace name");
+        Equal("高雄-A機", pending.DeviceDisplayName, "pending device name");
+        Equal(pendingStarted, pending.StartedAtUtc, "pending bootstrap start time");
+        Equal(pendingToken, pending.DeviceToken, "protected pending token round-trip");
+
+        pendingReloadedSettings.CloudWorkspaceId = "ws_test";
+        pendingReloadedSettings.CloudDeviceId = "dev_test";
+        store.SetCloudDeviceToken(pendingReloadedSettings, "cydev_secret");
+        True(pendingReloadedSettings.CloudDeviceTokenEncrypted != "cydev_secret", "device token must not be stored as plaintext");
+        store.Save(pendingReloadedSettings);
 
         var reloaded = store.LoadOrCreate();
         Equal(CloudModes.CloudPreferred, reloaded.CloudMode, "persisted cloud mode");
         Equal("cydev_secret", store.CloudDeviceToken(reloaded), "protected cloud token round-trip");
+        True(store.CloudPendingBootstrap(reloaded) is not null, "pending state remains until onboarding is explicitly finalized or cleared");
+
+        store.ClearCloudIdentity(reloaded);
+        store.Save(reloaded);
+        var cleared = store.LoadOrCreate();
+        Equal(CloudModes.LocalOnly, cleared.CloudMode, "clearing cloud identity returns to local-only");
+        Equal(string.Empty, cleared.CloudWorkspaceId, "cleared workspace identity");
+        Equal(string.Empty, cleared.CloudDeviceId, "cleared device identity");
+        Equal(string.Empty, cleared.CloudDeviceTokenEncrypted, "cleared device token");
+        True(store.CloudPendingBootstrap(cleared) is null, "clearing cloud identity must also clear pending bootstrap state");
+
+        var incomplete = store.LoadOrCreate();
+        incomplete.CloudPendingBootstrapUrl = "https://cloud.example.test/";
+        Throws<InvalidDataException>(() => store.Save(incomplete));
         return Task.CompletedTask;
     }
     finally
