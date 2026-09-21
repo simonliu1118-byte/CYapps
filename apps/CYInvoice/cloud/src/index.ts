@@ -47,7 +47,7 @@ type OtpChallengeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.6.0";
+const CLOUD_VERSION = "0.7.0";
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
@@ -58,6 +58,7 @@ const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 const OTP_HOURLY_LIMIT = 5;
 const OTP_MAX_ATTEMPTS = 5;
 const WORKSPACE_BOOTSTRAP_PURPOSE = "workspace_bootstrap";
+const DEVICE_PAIRING_PURPOSE_PREFIX = "device_pairing_authorization";
 
 function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
@@ -247,6 +248,10 @@ function normalizedOtp(value: unknown): string | null {
   return /^\d{6}$/.test(normalized) ? normalized : null;
 }
 
+function devicePairingPurpose(identity: DeviceIdentity): string {
+  return `${DEVICE_PAIRING_PURPOSE_PREFIX}:${identity.workspaceId}:${identity.deviceId}`;
+}
+
 async function otpDigest(env: Env, challengeId: string, otp: string): Promise<string | null> {
   const pepper = env.OTP_PEPPER?.trim() ?? "";
   if (!pepper) return null;
@@ -301,6 +306,19 @@ async function onboardingStatus(env: Env, requestId: string): Promise<Response> 
       workspaceInitialized: initialized
     }
   });
+}
+
+async function configuredEmailSender(env: Env): Promise<ReturnType<typeof createEmailSender> | null> {
+  try {
+    return createEmailSender({
+      provider: env.EMAIL_PROVIDER,
+      brevoApiKey: env.BREVO_API_KEY,
+      resendApiKey: env.RESEND_API_KEY,
+      from: env.EMAIL_FROM
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function startBootstrapEmailChallenge(request: Request, env: Env, requestId: string): Promise<Response> {
@@ -367,15 +385,8 @@ async function startBootstrapEmailChallenge(request: Request, env: Env, requestI
     });
   }
 
-  let sender;
-  try {
-    sender = createEmailSender({
-      provider: env.EMAIL_PROVIDER,
-      brevoApiKey: env.BREVO_API_KEY,
-      resendApiKey: env.RESEND_API_KEY,
-      from: env.EMAIL_FROM
-    });
-  } catch {
+  const sender = await configuredEmailSender(env);
+  if (!sender) {
     return json(env, requestId, 503, {
       error: {
         code: "EMAIL_PROVIDER_NOT_CONFIGURED",
@@ -664,21 +675,259 @@ async function bootstrapWorkspace(request: Request, env: Env, requestId: string)
   });
 }
 
+async function startDevicePairingAuthorization(request: Request, env: Env, requestId: string): Promise<Response> {
+  const identity = await authenticateDevice(request, env);
+  if (!identity) return unauthorized(env, requestId);
+  if (!env.OTP_PEPPER?.trim()) {
+    return json(env, requestId, 503, {
+      error: {
+        code: "OTP_NOT_CONFIGURED",
+        message: "Email verification is not configured."
+      }
+    });
+  }
+
+  const workspace = await env.DB.prepare(
+    `SELECT recovery_email, recovery_email_verified_at
+       FROM workspaces
+      WHERE workspace_id = ?1 AND status = 'active'
+      LIMIT 1`
+  ).bind(identity.workspaceId).first<{ recovery_email: string | null; recovery_email_verified_at: string | null }>();
+  const email = normalizedEmail(workspace?.recovery_email ?? "");
+  if (!workspace || !email || !workspace.recovery_email_verified_at) {
+    return json(env, requestId, 503, {
+      error: {
+        code: "WORKSPACE_RECOVERY_EMAIL_NOT_CONFIGURED",
+        message: "Workspace recovery email is not configured."
+      }
+    });
+  }
+
+  const purpose = devicePairingPurpose(identity);
+  const now = new Date();
+  const nowText = now.toISOString();
+  const latest = await env.DB.prepare(
+    `SELECT resend_after
+       FROM email_otp_challenges
+      WHERE purpose = ?1 AND email_normalized = ?2
+      ORDER BY created_at DESC
+      LIMIT 1`
+  ).bind(purpose, email).first<{ resend_after: string }>();
+  if (latest && latest.resend_after > nowText) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((Date.parse(latest.resend_after) - now.getTime()) / 1000));
+    return json(env, requestId, 429, {
+      retryAfterSeconds,
+      error: {
+        code: "OTP_RESEND_COOLDOWN",
+        message: "Please wait before requesting another verification code."
+      }
+    }, { "retry-after": retryAfterSeconds.toString() });
+  }
+
+  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+  const recent = await env.DB.prepare(
+    `SELECT COUNT(*) AS count
+       FROM email_otp_challenges
+      WHERE email_normalized = ?1
+        AND purpose LIKE ?2
+        AND created_at >= ?3`
+  ).bind(email, `${DEVICE_PAIRING_PURPOSE_PREFIX}:%`, hourAgo).first<{ count: number }>();
+  if (Number(recent?.count ?? 0) >= OTP_HOURLY_LIMIT) {
+    return json(env, requestId, 429, {
+      error: {
+        code: "OTP_RATE_LIMITED",
+        message: "Too many verification requests. Please try again later."
+      }
+    });
+  }
+
+  const sender = await configuredEmailSender(env);
+  if (!sender) {
+    return json(env, requestId, 503, {
+      error: {
+        code: "EMAIL_PROVIDER_NOT_CONFIGURED",
+        message: "Email delivery is not configured."
+      }
+    });
+  }
+
+  const challengeId = `otp_${crypto.randomUUID()}`;
+  const otp = randomOtpCode();
+  const digest = await otpDigest(env, challengeId, otp);
+  if (!digest) {
+    return json(env, requestId, 503, {
+      error: {
+        code: "OTP_NOT_CONFIGURED",
+        message: "Email verification is not configured."
+      }
+    });
+  }
+  const expiresAt = new Date(now.getTime() + OTP_TTL_MS).toISOString();
+  const resendAfter = new Date(now.getTime() + OTP_RESEND_COOLDOWN_MS).toISOString();
+
+  await env.DB.prepare(
+    `INSERT INTO email_otp_challenges (
+        challenge_id, purpose, email_normalized, otp_digest, delivery_state,
+        attempt_count, max_attempts, expires_at, resend_after, created_at, updated_at
+     ) VALUES (?1, ?2, ?3, ?4, 'pending', 0, ?5, ?6, ?7, ?8, ?8)`
+  ).bind(challengeId, purpose, email, digest, OTP_MAX_ATTEMPTS, expiresAt, resendAfter, nowText).run();
+
+  try {
+    await sender.send({
+      to: email,
+      subject: "CYInvoice 新增裝置驗證碼",
+      text: `您的 CYInvoice 新增裝置驗證碼是 ${otp}。驗證碼 10 分鐘內有效，請勿提供給未授權的人。`,
+      html: `<p>您的 CYInvoice 新增裝置驗證碼是：</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${otp}</p><p>驗證碼 10 分鐘內有效，請勿提供給未授權的人。</p>`
+    });
+  } catch (error) {
+    await env.DB.prepare(
+      `UPDATE email_otp_challenges
+          SET delivery_state = 'failed', updated_at = ?1
+        WHERE challenge_id = ?2`
+    ).bind(new Date().toISOString(), challengeId).run();
+    console.warn("pairing_otp_email_delivery_failed", {
+      requestId,
+      deviceId: identity.deviceId,
+      error: error instanceof Error ? error.message : "email_delivery_failed"
+    });
+    return json(env, requestId, 503, {
+      error: {
+        code: "EMAIL_DELIVERY_UNAVAILABLE",
+        message: "Verification email could not be sent."
+      }
+    });
+  }
+
+  const sentAt = new Date().toISOString();
+  await env.DB.prepare(
+    `UPDATE email_otp_challenges
+        SET delivery_state = 'sent', sent_at = ?1, updated_at = ?1
+      WHERE challenge_id = ?2`
+  ).bind(sentAt, challengeId).run();
+
+  return json(env, requestId, 201, {
+    challenge: {
+      challengeId,
+      maskedEmail: maskedEmail(email),
+      expiresAt,
+      resendAfter
+    }
+  });
+}
+
+async function validateDevicePairingAuthorization(
+  env: Env,
+  requestId: string,
+  identity: DeviceIdentity,
+  challengeId: string,
+  otp: string
+): Promise<true | Response> {
+  if (!env.OTP_PEPPER?.trim()) {
+    return json(env, requestId, 503, {
+      error: {
+        code: "OTP_NOT_CONFIGURED",
+        message: "Email verification is not configured."
+      }
+    });
+  }
+
+  const workspace = await env.DB.prepare(
+    `SELECT recovery_email, recovery_email_verified_at
+       FROM workspaces
+      WHERE workspace_id = ?1 AND status = 'active'
+      LIMIT 1`
+  ).bind(identity.workspaceId).first<{ recovery_email: string | null; recovery_email_verified_at: string | null }>();
+  const email = normalizedEmail(workspace?.recovery_email ?? "");
+  if (!workspace || !email || !workspace.recovery_email_verified_at) {
+    return json(env, requestId, 503, {
+      error: {
+        code: "WORKSPACE_RECOVERY_EMAIL_NOT_CONFIGURED",
+        message: "Workspace recovery email is not configured."
+      }
+    });
+  }
+
+  const purpose = devicePairingPurpose(identity);
+  const row = await env.DB.prepare(
+    `SELECT challenge_id, email_normalized, otp_digest, delivery_state,
+            attempt_count, max_attempts, expires_at, resend_after, consumed_at
+       FROM email_otp_challenges
+      WHERE challenge_id = ?1 AND purpose = ?2
+      LIMIT 1`
+  ).bind(challengeId, purpose).first<OtpChallengeRow>();
+  const now = new Date().toISOString();
+  if (!row || row.email_normalized !== email || row.delivery_state !== "sent" || row.consumed_at || row.expires_at <= now) {
+    return badRequest(env, requestId, "OTP_INVALID", "Verification code is invalid or expired.");
+  }
+  if (Number(row.attempt_count) >= Number(row.max_attempts)) {
+    return json(env, requestId, 429, {
+      error: {
+        code: "OTP_ATTEMPTS_EXHAUSTED",
+        message: "Verification attempts have been exhausted."
+      }
+    });
+  }
+
+  const suppliedDigest = await otpDigest(env, challengeId, otp);
+  if (!suppliedDigest || !(await constantTimeSecretEquals(row.otp_digest, suppliedDigest))) {
+    const result = await env.DB.prepare(
+      `UPDATE email_otp_challenges
+          SET attempt_count = attempt_count + 1, updated_at = ?1
+        WHERE challenge_id = ?2 AND consumed_at IS NULL AND attempt_count < max_attempts`
+    ).bind(now, challengeId).run();
+    const attempts = Number(row.attempt_count) + (result.meta.changes > 0 ? 1 : 0);
+    if (attempts >= Number(row.max_attempts)) {
+      return json(env, requestId, 429, {
+        error: {
+          code: "OTP_ATTEMPTS_EXHAUSTED",
+          message: "Verification attempts have been exhausted."
+        }
+      });
+    }
+    return badRequest(env, requestId, "OTP_INVALID", "Verification code is invalid or expired.");
+  }
+
+  return true;
+}
+
 async function createDevicePairing(request: Request, env: Env, requestId: string): Promise<Response> {
   const identity = await authenticateDevice(request, env);
   if (!identity) return unauthorized(env, requestId);
 
+  const body = await readJsonObject(request);
+  if (!body) return badRequest(env, requestId, "INVALID_JSON", "A JSON object is required.");
+  const challengeId = normalizedChallengeId(body.emailChallengeId);
+  const emailOtp = normalizedOtp(body.emailOtp);
+  if (!challengeId || !emailOtp) {
+    return badRequest(env, requestId, "INVALID_PAIRING_AUTHORIZATION", "Pairing authorization is invalid.");
+  }
+
+  const authorization = await validateDevicePairingAuthorization(env, requestId, identity, challengeId, emailOtp);
+  if (authorization instanceof Response) return authorization;
+
+  const now = new Date().toISOString();
+  const consumed = await env.DB.prepare(
+    `UPDATE email_otp_challenges
+        SET consumed_at = ?1, updated_at = ?1
+      WHERE challenge_id = ?2
+        AND purpose = ?3
+        AND consumed_at IS NULL
+        AND expires_at > ?1`
+  ).bind(now, challengeId, devicePairingPurpose(identity)).run();
+  if (consumed.meta.changes !== 1) {
+    return badRequest(env, requestId, "OTP_INVALID", "Verification code is invalid or expired.");
+  }
+
   const pairingId = `pair_${crypto.randomUUID()}`;
   const pairingCode = randomHex(10);
   const codeHash = await sha256Hex(pairingCode);
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + PAIRING_TTL_MS).toISOString();
+  const expiresAt = new Date(Date.parse(now) + PAIRING_TTL_MS).toISOString();
 
   await env.DB.prepare(
     `INSERT INTO device_pairing_codes (
         pairing_id, workspace_id, code_hash, created_by_device_id, expires_at, created_at
      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
-  ).bind(pairingId, identity.workspaceId, codeHash, identity.deviceId, expiresAt, now.toISOString()).run();
+  ).bind(pairingId, identity.workspaceId, codeHash, identity.deviceId, expiresAt, now).run();
 
   return json(env, requestId, 201, {
     pairing: {
@@ -906,6 +1155,10 @@ export default {
         case "/v1/bootstrap":
           if (request.method !== "POST") return methodNotAllowed(env, requestId, "POST");
           return bootstrapWorkspace(request, env, requestId);
+
+        case "/v1/device-pairings/authorization-email":
+          if (request.method !== "POST") return methodNotAllowed(env, requestId, "POST");
+          return startDevicePairingAuthorization(request, env, requestId);
 
         case "/v1/device-pairings":
           if (request.method !== "POST") return methodNotAllowed(env, requestId, "POST");
