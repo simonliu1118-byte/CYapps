@@ -43,7 +43,7 @@ When a production Worker/database is introduced, production schema migration mus
 
 ## Cloud bootstrap secret
 
-The first workspace bootstrap endpoint is disabled unless the Worker has a secret named `BOOTSTRAP_KEY`.
+The first workspace bootstrap endpoints are disabled unless the Worker has a secret named `BOOTSTRAP_KEY`.
 
 Set it through Cloudflare without committing or sharing the value:
 
@@ -61,8 +61,10 @@ The first-device bootstrap contract is intentionally split this way:
 - Windows must persist that Token with DPAPI as a pending onboarding credential before sending bootstrap.
 - D1 stores only the Token hash.
 - Retrying with the same pending Token can recover the Cloud-generated Workspace／Device identity after an ambiguous timeout or lost response.
+- the existing Local SUPER_ADMIN Email is sent by Windows only after local administrator authentication; the user does not type a second Cloud Email.
+- Cloud verifies that Email with a one-time OTP before first Workspace creation.
 
-The bootstrap guard, Device Token, and future Email OTP values must never be written to repo, logs, public artifacts, or plaintext runtime settings.
+The bootstrap guard, Device Token, Email provider credentials, `OTP_PEPPER`, and OTP values must never be written to repo, logs, public artifacts, or plaintext runtime settings.
 
 ## Transactional Email provider
 
@@ -72,7 +74,8 @@ For the current V3.0 development environment, Brevo is the selected reference pr
 
 - `EMAIL_PROVIDER=brevo`
 - `BREVO_API_KEY` — Brevo API key, stored only as a Cloudflare Worker secret.
-- `EMAIL_FROM` — verified sender, for example `CYInvoice <sender@example.com>`. The real sender address stays in Worker runtime configuration.
+- `EMAIL_FROM` — verified sender. The real sender address stays in Worker runtime configuration.
+- `OTP_PEPPER` — independent random server secret used to HMAC OTP values before D1 persistence.
 
 When an owned domain is available later, the same Worker can switch to Resend without changing the Windows client or OTP API contract:
 
@@ -82,7 +85,16 @@ When an owned domain is available later, the same Worker can switch to Resend wi
 
 Both transports deliberately avoid logging provider response bodies, recipient addresses, API keys, OTP values, or Email bodies on delivery failure.
 
-The adapter layer alone does not create OTP semantics. OTP generation, hashing, TTL, attempt limits, resend cooldown, recovery-email binding, and one-time consumption remain CYInvoice Cloud responsibilities and are implemented in a separate reviewed batch.
+OTP semantics are owned by CYInvoice Cloud, not the provider. Schema `0003` and the Worker now implement the first-bootstrap OTP foundation:
+
+- six numeric digits generated with Web Crypto;
+- HMAC-SHA256 at rest using `OTP_PEPPER`, never plaintext OTP storage;
+- 10-minute TTL;
+- 5 wrong attempts maximum;
+- 60-second resend cooldown;
+- 5 challenge requests per Email/purpose per hour;
+- one-time challenge consumption when the Workspace is created;
+- verified Recovery Email stored on the new Workspace.
 
 ## API endpoints
 
@@ -93,45 +105,53 @@ Public health/version endpoints:
 - `GET /v1/health/db`
 - `GET /v1/version`
 
+First Workspace onboarding:
+
+- `POST /v1/onboarding/bootstrap-email`
+  - requires `X-Bootstrap-Key`;
+  - only works while no Workspace exists;
+  - accepts the existing Local SUPER_ADMIN Email supplied by the Windows client after local authentication;
+  - creates and sends a short-lived OTP challenge;
+  - returns only a challenge ID, masked Email, expiry and resend time.
+- `POST /v1/bootstrap`
+  - requires `X-Bootstrap-Key` plus the Email challenge ID and six-digit OTP;
+  - creates the first Workspace and first trusted Device as one bootstrap unit;
+  - binds the verified Email as Workspace Recovery Email;
+  - accepts a caller-owned Device Token; Workspace ID／Device ID remain Cloud-owned;
+  - a retry using the same Device Token returns the already-created identity instead of creating a second Workspace.
+
 Foundation device endpoints:
 
-- `POST /v1/bootstrap`
-  - requires `X-Bootstrap-Key`
-  - creates the first workspace and first trusted device
-  - accepts a caller-owned one-time Device Token; Workspace ID／Device ID remain Cloud-owned
-  - a retry using the same Device Token returns the already-created identity instead of creating a second Workspace
 - `GET /v1/device`
-  - requires `Authorization: Bearer <device-token>`
+  - requires `Authorization: Bearer <device-token>`.
 - `POST /v1/device-pairings`
-  - current foundation prototype requires an authenticated active device
-  - **not final V3.0 authorization**: before production use, pairing-code issuance must additionally require SUPER_ADMIN／authorized ADMIN human approval and OTP
+  - current foundation prototype requires an authenticated active device;
+  - **not final V3.0 authorization**: before production use, pairing-code issuance must additionally require SUPER_ADMIN／authorized ADMIN human approval and OTP.
 - `POST /v1/device-pairings/claim`
-  - current foundation prototype claims a valid pairing code for a new device
-  - later reviewed batch will align new-device Token ownership with the finalized Windows-generated-Token lifecycle
+  - current foundation prototype claims a valid pairing code for a new device;
+  - later reviewed batch will align new-device Token ownership with the finalized Windows-generated-Token lifecycle.
 
-Device tokens and pairing codes are stored only as hashes in D1. Plaintext secrets are transient and must be protected by the Windows client before persistence.
+Device tokens and pairing codes are stored only as hashes in D1. OTP values are stored only as keyed digests. Plaintext secrets are transient and must not enter logs.
 
 The public health endpoints intentionally expose no workspace, device, invoice, allowance, credential, recovery email, OTP, or row-count data.
 
-Phase 1 still contains no employee authentication, invoice data, allowance data, AMEGO proxying, or cross-device work items. Those are added in separate reviewed batches.
-
 ## Current state
 
-Schema version `2` (`0002_device_pairing.sql`) is active in the development D1 database. The Windows client currently supports Local Only / Cloud Preferred mode selection, user-configured HTTPS endpoint validation, D1-backed health/schema compatibility checks, onboarding-status detection, and safe fallback to local operation when the Cloud API is unavailable.
+Schema version `3` (`0001` + `0002` + `0003_workspace_recovery_email_otp.sql`) is the current branch contract. Applied `0001`／`0002` remain immutable.
 
-Windows live validation has confirmed the development Worker and D1 can be reached from the engineering client. With no Workspace initialized, the setup UI correctly reports `連線正常｜尚未建立雲端空間`.
+The Windows client currently supports Local Only / Cloud Preferred mode selection, user-configured HTTPS endpoint validation, D1-backed health/schema compatibility checks, onboarding-status detection, safe fallback to local operation, pending bootstrap Device Token DPAPI persistence, bootstrap Email challenge contract, and OTP-gated bootstrap contract.
 
-The Core client contains bootstrap and foundation device-pairing contract methods, and the reference Worker exposes the matching endpoints. Those onboarding/device flows are intentionally **not yet fully wired into the formal Windows product UI**.
+Windows live validation previously confirmed the development Worker and D1 can be reached from the engineering client. The actual Brevo API Key is still blocked on Brevo account phone verification, so live OTP Email delivery has not yet been tested. This does not block schema, cryptographic OTP, API contract, migration or Windows contract-test work.
+
+The Core client contains bootstrap and foundation device-pairing contract methods, but the Email OTP onboarding path is intentionally **not yet wired into the formal Windows product UI**.
 
 The next reviewed work is staged as:
 
-1. complete and validate the safe first-bootstrap contract;
-2. persist pending bootstrap Token/state with DPAPI before network submission;
-3. complete Brevo runtime configuration after account phone verification, then perform the first live Email transport test;
-4. add existing Local SUPER_ADMIN + existing Email OTP initialization, without asking the user to re-enter the Email;
-5. wire first-Workspace UI and timeout recovery;
-6. add existing-Workspace Device Join／Recovery;
-7. centralize Employee／single-SUPER_ADMIN role handling and atomic SUPER_ADMIN transfer;
-8. require human authorization before issuing a pairing code.
+1. complete Windows first-Workspace onboarding UI using the existing Local SUPER_ADMIN identity and Email;
+2. complete restart／timeout recovery around pending Device Token and OTP challenge state;
+3. after Brevo phone verification, configure Worker runtime secrets and perform the first live Email transport test;
+4. add existing-Workspace Device Join／Recovery;
+5. centralize Employee／single-SUPER_ADMIN role handling and atomic SUPER_ADMIN transfer;
+6. require human authorization before issuing a pairing code.
 
-Applied `0001`／`0002` migrations remain immutable; any Email／Employee／recovery schema additions must use forward migrations `0003+`.
+Applied migrations are never rewritten; later identity／role additions must use forward migrations `0004+`.
