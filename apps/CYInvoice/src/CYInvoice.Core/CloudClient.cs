@@ -166,18 +166,7 @@ public sealed class CloudClient
             bootstrapKey.Trim(),
             cancellationToken);
 
-        var root = document.RootElement;
-        if (!root.TryGetProperty("challenge", out var challenge) || challenge.ValueKind != JsonValueKind.Object)
-            throw new InvalidDataException("Cloud email challenge response is missing challenge data.");
-
-        var challengeId = ReadRequiredString(challenge, "challengeId");
-        var maskedEmail = ReadRequiredString(challenge, "maskedEmail");
-        var expiresAt = ReadRequiredDateTimeOffset(challenge, "expiresAt");
-        var resendAfter = ReadRequiredDateTimeOffset(challenge, "resendAfter");
-        if (resendAfter > expiresAt)
-            throw new InvalidDataException("Cloud email challenge timing is inconsistent.");
-
-        return new CloudEmailChallenge(challengeId, maskedEmail, expiresAt, resendAfter);
+        return ReadEmailChallenge(document.RootElement);
     }
 
     public async Task<CloudDeviceIdentity> BootstrapAsync(
@@ -225,9 +214,35 @@ public sealed class CloudClient
         return ReadDeviceIdentity(document.RootElement, requireToken: false) with { DeviceToken = deviceToken };
     }
 
-    public async Task<CloudPairingTicket> CreatePairingAsync(CancellationToken cancellationToken = default)
+    public async Task<CloudEmailChallenge> StartPairingAuthorizationAsync(CancellationToken cancellationToken = default)
     {
-        using var document = await SendAsync(HttpMethod.Post, "v1/device-pairings", new { }, true, null, cancellationToken);
+        using var document = await SendAsync(
+            HttpMethod.Post,
+            "v1/device-pairings/authorization-email",
+            new { },
+            true,
+            null,
+            cancellationToken);
+        return ReadEmailChallenge(document.RootElement);
+    }
+
+    public async Task<CloudPairingTicket> CreatePairingAsync(
+        string emailChallengeId,
+        string emailOtp,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(emailChallengeId))
+            throw new ArgumentException("Email challenge ID is required.", nameof(emailChallengeId));
+        if (emailOtp is null || emailOtp.Length != 6 || !emailOtp.All(char.IsDigit))
+            throw new ArgumentException("Email OTP must contain six digits.", nameof(emailOtp));
+
+        using var document = await SendAsync(
+            HttpMethod.Post,
+            "v1/device-pairings",
+            new { emailChallengeId = emailChallengeId.Trim(), emailOtp },
+            true,
+            null,
+            cancellationToken);
         var root = document.RootElement;
         if (!root.TryGetProperty("pairing", out var pairing))
             throw new InvalidDataException("Cloud pairing response is missing pairing data.");
@@ -311,6 +326,21 @@ public sealed class CloudClient
             errorCode.Length == 0 ? "CLOUD_API_ERROR" : errorCode,
             errorMessage.Length == 0 ? $"Cloud API returned {(int)response.StatusCode}." : errorMessage,
             response.StatusCode);
+    }
+
+    private static CloudEmailChallenge ReadEmailChallenge(JsonElement root)
+    {
+        if (!root.TryGetProperty("challenge", out var challenge) || challenge.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Cloud email challenge response is missing challenge data.");
+
+        var challengeId = ReadRequiredString(challenge, "challengeId");
+        var maskedEmail = ReadRequiredString(challenge, "maskedEmail");
+        var expiresAt = ReadRequiredDateTimeOffset(challenge, "expiresAt");
+        var resendAfter = ReadRequiredDateTimeOffset(challenge, "resendAfter");
+        if (resendAfter > expiresAt)
+            throw new InvalidDataException("Cloud email challenge timing is inconsistent.");
+
+        return new CloudEmailChallenge(challengeId, maskedEmail, expiresAt, resendAfter);
     }
 
     private static CloudDeviceIdentity ReadDeviceIdentity(JsonElement root, bool requireToken)
