@@ -15,7 +15,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud bootstrap email challenge preserves bootstrap authorization", TestBootstrapEmailChallengeAsync),
     ("cloud bootstrap reuses caller-owned token and requires email OTP", TestBootstrapAsync),
     ("cloud authenticated device request sends bearer token", TestDeviceAuthenticationAsync),
-    ("cloud pairing response parses one-time ticket", TestPairingAsync),
+    ("cloud pairing authorization uses the authenticated Device and Workspace recovery Email", TestPairingAuthorizationAsync),
+    ("cloud pairing code requires email authorization OTP", TestPairingAsync),
     ("cloud pairing claim reuses caller-owned token across retries", TestPairingClaimAsync)
 };
 
@@ -56,7 +57,9 @@ static Task TestSettingsAsync()
         Equal(string.Empty, settings.CloudWorkspaceId, "default workspace identity");
         Equal(string.Empty, settings.CloudDeviceId, "default device identity");
         Equal(string.Empty, settings.CloudPendingBootstrapTokenEncrypted, "default pending bootstrap token");
+        Equal(string.Empty, settings.CloudPendingDeviceJoinTokenEncrypted, "default pending Device Join token");
         True(store.CloudPendingBootstrap(settings) is null, "default settings must not invent pending bootstrap state");
+        True(store.CloudPendingDeviceJoin(settings) is null, "default settings must not invent pending Device Join state");
 
         settings.CloudMode = CloudModes.CloudPreferred;
         settings.CloudBaseUrl = "https://cloud.example.test/";
@@ -108,9 +111,38 @@ static Task TestSettingsAsync()
         Equal(string.Empty, cleared.CloudDeviceId, "cleared device identity");
         Equal(string.Empty, cleared.CloudDeviceTokenEncrypted, "cleared device token");
         True(store.CloudPendingBootstrap(cleared) is null, "clearing cloud identity must also clear pending bootstrap state");
+        True(store.CloudPendingDeviceJoin(cleared) is null, "clearing cloud identity must also clear pending Device Join state");
+
+        var joinToken = "cydev_dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+        var joinStarted = DateTimeOffset.Parse("2026-09-21T07:30:00+00:00");
+        store.SetCloudPendingDeviceJoin(
+            cleared,
+            "https://cloud.example.test",
+            "高雄-B機",
+            joinToken,
+            joinStarted);
+        True(cleared.CloudPendingDeviceJoinTokenEncrypted != joinToken,
+            "pending Device Join token must not be stored as plaintext");
+        store.Save(cleared);
+
+        var joinReloadedSettings = store.LoadOrCreate();
+        var join = store.CloudPendingDeviceJoin(joinReloadedSettings)
+            ?? throw new InvalidOperationException("pending Device Join state should survive restart");
+        Equal("https://cloud.example.test/", join.BaseUrl, "pending Device Join endpoint");
+        Equal("高雄-B機", join.DeviceDisplayName, "pending Device Join device name");
+        Equal(joinStarted, join.StartedAtUtc, "pending Device Join start time");
+        Equal(joinToken, join.DeviceToken, "protected pending Device Join token round-trip");
+
+        store.ClearCloudIdentity(joinReloadedSettings);
+        store.Save(joinReloadedSettings);
+        True(store.CloudPendingDeviceJoin(store.LoadOrCreate()) is null,
+            "clearing cloud identity must clear pending Device Join token");
 
         var incomplete = store.LoadOrCreate();
         incomplete.CloudPendingBootstrapUrl = "https://cloud.example.test/";
+        Throws<InvalidDataException>(() => store.Save(incomplete));
+        incomplete.CloudPendingBootstrapUrl = string.Empty;
+        incomplete.CloudPendingDeviceJoinUrl = "https://cloud.example.test/";
         Throws<InvalidDataException>(() => store.Save(incomplete));
         return Task.CompletedTask;
     }
@@ -131,7 +163,7 @@ static async Task TestHealthAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
-        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.5.0","apiVersion":"1","schemaVersion":"3","environment":"test","storage":"ok"}"""));
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.7.0","apiVersion":"1","schemaVersion":"3","environment":"test","storage":"ok"}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -139,7 +171,7 @@ static async Task TestHealthAsync()
     True(health.Reachable, "health should be reachable");
     True(health.StorageAvailable, "backend storage should be available");
     Equal("cyinvoice-cloud", health.ServiceName, "service name");
-    Equal("0.5.0", health.CloudVersion, "cloud version");
+    Equal("0.7.0", health.CloudVersion, "cloud version");
     Equal("1", health.ApiVersion, "api version");
     Equal("3", health.SchemaVersion, "schema version");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
@@ -149,7 +181,7 @@ static async Task TestStorageOutageAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.ServiceUnavailable,
-        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.5.0","apiVersion":"1","schemaVersion":"3","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
+        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.7.0","apiVersion":"1","schemaVersion":"3","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -301,17 +333,54 @@ static async Task TestDeviceAuthenticationAsync()
     Equal("cydev_test_token", identity.DeviceToken, "local device token remains available to caller");
 }
 
-static async Task TestPairingAsync()
+static async Task TestPairingAuthorizationAsync()
 {
     var handler = new QueueHandler();
-    handler.Enqueue(_ => JsonResponse(HttpStatusCode.Created,
-        """{"ok":true,"pairing":{"code":"0123456789abcdefabcd","expiresAt":"2026-09-20T10:00:00.000Z"}}"""));
+    handler.Enqueue(request =>
+    {
+        Equal(HttpMethod.Post, request.Method, "pairing authorization method");
+        Equal("/v1/device-pairings/authorization-email", request.RequestUri?.AbsolutePath ?? string.Empty,
+            "pairing authorization path");
+        Equal("Bearer", request.Headers.Authorization?.Scheme ?? string.Empty, "pairing authorization bearer scheme");
+        Equal("cydev_test_token", request.Headers.Authorization?.Parameter ?? string.Empty,
+            "pairing authorization Device token");
+        return JsonResponse(HttpStatusCode.Created,
+            """{"ok":true,"challenge":{"challengeId":"otp_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","maskedEmail":"ow***@example.test","expiresAt":"2026-09-21T08:10:00Z","resendAfter":"2026-09-21T08:01:00Z"}}""");
+    });
 
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"), "cydev_test_token");
-    var pairing = await client.CreatePairingAsync();
+    var challenge = await client.StartPairingAuthorizationAsync();
+    Equal("otp_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", challenge.ChallengeId, "pairing authorization challenge ID");
+    Equal("ow***@example.test", challenge.MaskedEmail, "pairing authorization masked Email");
+}
+
+static async Task TestPairingAsync()
+{
+    const string challengeId = "otp_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    const string otp = "654321";
+    var handler = new QueueHandler();
+    handler.Enqueue(request =>
+    {
+        Equal(HttpMethod.Post, request.Method, "pairing creation method");
+        Equal("/v1/device-pairings", request.RequestUri?.AbsolutePath ?? string.Empty, "pairing creation path");
+        Equal("Bearer", request.Headers.Authorization?.Scheme ?? string.Empty, "pairing creation bearer scheme");
+        Equal("cydev_test_token", request.Headers.Authorization?.Parameter ?? string.Empty, "pairing creation Device token");
+        var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var body = JsonDocument.Parse(payload);
+        Equal(challengeId, body.RootElement.GetProperty("emailChallengeId").GetString() ?? string.Empty,
+            "pairing authorization challenge ID");
+        Equal(otp, body.RootElement.GetProperty("emailOtp").GetString() ?? string.Empty,
+            "pairing authorization OTP");
+        return JsonResponse(HttpStatusCode.Created,
+            """{"ok":true,"pairing":{"code":"0123456789abcdefabcd","expiresAt":"2026-09-21T08:20:00.000Z"}}""");
+    });
+
+    using var http = new HttpClient(handler);
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"), "cydev_test_token");
+    var pairing = await client.CreatePairingAsync(challengeId, otp);
     Equal("0123456789abcdefabcd", pairing.Code, "pairing code");
-    Equal(DateTimeOffset.Parse("2026-09-20T10:00:00.000Z"), pairing.ExpiresAt, "pairing expiry");
+    Equal(DateTimeOffset.Parse("2026-09-21T08:20:00.000Z"), pairing.ExpiresAt, "pairing expiry");
 }
 
 static async Task TestPairingClaimAsync()
