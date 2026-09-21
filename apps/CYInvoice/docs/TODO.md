@@ -82,20 +82,25 @@
 
 ## 7. CYInvoice V3.0 雲端協同
 
-完整長期定位與分期見 `CLOUD_ROADMAP.md`。V3.0 的產品範圍已收斂為：**志遠高雄單一公司／單一統編，多台 CYInvoice 電腦協同。**
+完整長期定位與分期見 `CLOUD_ROADMAP.md`；Workspace／Device／Token／SUPER_ADMIN／Recovery 的完整定案見 `CLOUD_IDENTITY_LIFECYCLE.md`。V3.0 的產品範圍已收斂為：**志遠高雄單一公司／單一統編，多台 CYInvoice 電腦協同。**
 
 ### 7.1 已定案的架構邊界
 
 - [x] V3.0 不做多公司 UI、跨公司權限、跨公司查詢或跨公司待辦。
 - [x] V3.0 不先導入 `company_id`；未來真正有台北／台中等不同統編需求時再新增 Company 層與 migration。
 - [x] `workspace_id` 不得等於統編；Workspace 定義為協作／管理範圍，不永久等同公司或 AMEGO 帳號。
+- [x] Workspace 建立後不因 Device／Token 遺失、Windows 重灌或程式重新下載而重建。
 - [x] 未來志遠多家公司可以共用同一 Workspace；是否做跨公司功能留到當時再決定。
 - [x] Windows Client 只依賴 CYInvoice-compatible HTTPS API，不綁定 Cloudflare、D1 或特定資料庫。
 - [x] Cloudflare Worker + D1 僅為目前 reference implementation。
 - [x] 既有 `0001_cloud_foundation.sql`／`0002_device_pairing.sql` 保留，後續一律新增 migration，不回寫已執行 migration。
 - [x] Cloud 定位為 Coordination Service，不是業務總開關；Cloud 掛掉時原則上降回單機模式，不採全系統 blanket lock。
 - [x] AMEGO 仍是發票／作廢／折讓官方結果唯一準則；App Key 不上雲。
-- [x] Employee 與 Device 分離；不另建立第二套 Cloud Admin，後續沿用既有 SUPER_ADMIN 身分。
+- [x] Employee 與 Device 分離；不另建立第二套 Cloud Admin。
+- [x] 每個 Workspace 永遠只允許一名 SUPER_ADMIN；ADMIN 可多人。
+- [x] 既有單機 B 機合法加入 Workspace 後，原唯一 Local SUPER_ADMIN Y 自動成為 Workspace ADMIN，可立即工作。
+- [x] SUPER_ADMIN 更換只走原子的「移交超管權限」：原超管降 ADMIN、指定 ADMIN 升 SUPER_ADMIN。
+- [x] 雙重災難（所有 Device Token 與原 Recovery Email 同時失效）最終由 Cloudflare／reference backend 管理端人工修改 Recovery Email，不新增第四套 emergency secret。
 
 ### 7.2 Phase 1：Public Repo Cloud Foundation 收斂
 
@@ -113,22 +118,52 @@
 
 ### 7.3 Phase 2：Workspace + 第一台 Device
 
+#### Batch 1：安全 bootstrap contract
+
+- [ ] Workspace ID／Device ID 由 Cloud 產生，Device Token 由 Windows 產生；Cloud 只保存 Token hash。
+- [ ] 同一 Pending Token 能安全恢復 timeout／lost response／bootstrap retry，不依賴 Client 自行產生 Device ID。
+- [ ] Workspace + 第一台 Device 必須原子建立，不留下只有 Workspace 沒有可信任 Device 的狀態。
+- [ ] Cloud contract tests 與 Worker type／bundle／Windows build／startup smoke 全部通過。
+
+#### Batch 2：Windows Pending Token
+
+- [ ] Windows 在 bootstrap 送網路前先以 DPAPI 持久化 Pending Device Token。
+- [ ] Pending onboarding state 可跨程式重啟恢復。
+- [ ] bootstrap timeout 時先查 onboarding status；Workspace 已存在時先以 Pending Token 驗證，不盲目重建。
+
+#### Batch 3：Local SUPER_ADMIN Email OTP
+
+- [ ] 建立 Workspace 前先驗證既有 Local SUPER_ADMIN；不重新輸入 Email。
+- [ ] UI 只顯示遮罩後既有 SUPER_ADMIN Email。
+- [ ] Email OTP challenge／verify：短效、單次、OTP hash、錯誤次數限制、重寄 cooldown、rate limit。
+- [ ] 需要新增 Cloud schema 時只用 `0003+` forward migration，不修改 `0001`／`0002`。
+- [ ] OTP 通過後，既有 Local SUPER_ADMIN 成為 Workspace 唯一 SUPER_ADMIN。
+
+#### Batch 4：首次建立 UI
+
 - [ ] Windows「雲端連線設定」在 health 成功且尚無 Workspace 時提供「建立雲端空間」。
-- [ ] Workspace bootstrap 與第一台 trusted Device 建立視為同一個使用者可理解的初始化流程，避免留下沒有可信任 Device 的 Workspace。
-- [ ] 初始化只接受一次性的 server-side bootstrap guard；UI 名稱採「雲端初始化碼」，不得保存到 repo／log／安裝包／明文設定。
-- [ ] bootstrap 成功後只接收一次 Device Token，立即以 Windows 安全儲存機制保存。
-- [ ] 儲存後立即呼叫 current-device API 重新驗證 Workspace／Device 身分。
-- [ ] bootstrap timeout／結果不明時先查 onboarding status，不盲目再次建立 Workspace。
-- [ ] Device Token 遺失／撤銷／失效的安全恢復流程。
+- [ ] 一次性 server-side bootstrap guard／「雲端初始化碼」不得保存到 repo／log／安裝包／明文設定。
+- [ ] 初始化成功後立即以 `GET /v1/device` 驗證 Workspace／Device；成功後 Pending identity 才轉正式。
+- [ ] Workspace 已存在時不得再顯示首次建立流程。
 
-### 7.4 Phase 3：中央員工、SUPER_ADMIN 與第二台 Device
+### 7.4 Phase 3：中央員工、SUPER_ADMIN 與 Device Join／Recovery
 
-- [ ] 員工／role／enabled／lockout 中央化。
-- [ ] 維持 per-operation authentication，不強制改成程式啟動登入。
-- [ ] 既有本機 SUPER_ADMIN 與 Cloud identity 的綁定流程。
-- [ ] 本機 Employee 遷移策略；先同步非秘密 identity／authorization 欄位，密碼模型另行確認後再決定是否可沿用。
-- [ ] 第二台 Device 使用短效 pairing code 加入；每台 Device 有自己的 Token，不共用第一台 Token。
-- [ ] Device pair／revoke／重新配對 UI 與權限驗證。
+- [ ] 員工／role／enabled／lockout 中央化，維持 per-operation authentication。
+- [ ] 全新第二台電腦第一次啟動可直接選「加入既有雲端空間」，不必先建立 Local SUPER_ADMIN。
+- [ ] Cloud 有 Workspace、本機無 Device identity 時顯示「此雲端空間已建立，但這台電腦尚未加入」。
+- [ ] Device Join 支援短效 Pairing Code，或 Workspace 已登記 SUPER_ADMIN Email OTP。
+- [ ] 既有 Workspace 加入授權不得使用新機自己的 Local SUPER_ADMIN Email 自我批准。
+- [ ] 第二台 Device／Recovery Device 也使用獨立 Token；正式流程收斂為 Windows 產生 Token、Cloud 只存 hash。
+- [ ] Token 遺失／Windows 重灌時加入原 Workspace，不建立新 Workspace。
+- [ ] 舊 Device 不因名稱相同自動撤銷；由 SUPER_ADMIN／授權 ADMIN 明確 revoke。
+- [ ] 既有單機 B 機合法加入後，原 Local SUPER_ADMIN Y 自動建立／對應為 Workspace ADMIN，可立即工作。
+- [ ] 若 Y 已經是 Cloud Employee，使用穩定 Employee identity／明確驗證 mapping，不建立第二個 Y，不只靠姓名猜。
+- [ ] 帳號管理新增「移交超管權限」；只有目前 SUPER_ADMIN 可操作，且 Server 以單一原子 transaction 同時降舊超管、升新超管。
+- [ ] SUPER_ADMIN 不提供獨立「降為管理員」按鈕；要降級只能先移交給另一位 ADMIN。
+- [ ] Pairing Code 只有在有效 Device + SUPER_ADMIN／指定 ADMIN 人員驗證 + OTP 成功後才產生；B 機輸入已授權 Pairing Code 後不再做第二次管理員 OTP。
+- [ ] SUPER_ADMIN 有有效 Device 時可修改自己的 Email並 OTP 驗證新 Email；忘記本機密碼沿用單機 Recovery Code。
+- [ ] 所有 Device Token 遺失時以 Workspace Recovery／SUPER_ADMIN Email OTP 重建 Device。
+- [ ] 雙重災難只保留 Cloudflare／reference backend 人工維運救援，不新增 Windows emergency recovery API。
 
 ### 7.5 Phase 4：跨機 Work Item、離線降級與恢復
 
@@ -136,15 +171,15 @@
 - [ ] Work Item 使用原子 state transition／optimistic version，避免同一待辦被兩台同時結案。
 - [ ] idempotency／operation lock 只用在真正需要跨機協調的點，不把 Cloud Lock 變成所有本機業務的前置條件。
 - [ ] Cloud 失效時盤點並實測現有單機功能：查閱／同步／PDF／列印／一般開票／直接作廢／人工作廢覆核／人工折讓／人工折讓作廢／管理員結案。
-- [ ] Cloud 失效時，純 Cloud 管理功能（新 Device、中央帳號／角色／Workspace 管理）停止；安全本機業務直接降單機模式。
+- [ ] Cloud 失效時，純 Cloud 管理功能（新 Device、中央帳號／角色／Workspace 管理、超管移交）停止；安全本機業務直接降單機模式。
 - [ ] Cloud 恢復後，對離線期間本機狀態做 reconciliation；任何 AMEGO 結果不明操作都不得因重新連線而自動重送。
 - [ ] 解決多機離線自動 OrderID 撞號：目前 `MyyyyMMddNNN` 只看本機紀錄，正式多機上線前需改成 Device namespace／短碼或等效不依賴即時 Cloud 的方案。
 
 ### 7.6 Phase 5：Cloud Audit
 
 - [ ] 有 Cloud backend 後才新增跨機操作／稽核紀錄；不回頭為單機版另做一份。
-- [ ] 記錄 Employee、管理員、Device、Work Item 與官方結果摘要。
-- [ ] 不保存密碼、復原碼、App Key 或不必要的完整發票內容。
+- [ ] 記錄 Employee、管理員、Device、Work Item、超管移交與必要維運事件摘要。
+- [ ] 不保存密碼、復原碼、OTP、Device Token、App Key 或不必要的完整發票內容。
 
 ### 7.7 Phase 6：正式折讓 API
 
@@ -172,7 +207,7 @@
 
 ## 10. 後續增強
 
-- [ ] Email 忘記密碼／驗證碼。
+- [ ] 一般員工／管理員忘記密碼的 Email self-service 流程；Workspace／Device Recovery OTP 已列入 V3.0 核心，不放在此延後項目。
 - [ ] MO 密碼安全雲端同步。
 - [ ] 小型營運摘要：今日／本月開票張數與金額、待處理工作數、同步異常數；目前只保留產品候選。
 
