@@ -15,6 +15,12 @@ public sealed record CloudPendingBootstrapState(
     DateTimeOffset StartedAtUtc,
     string DeviceToken);
 
+public sealed record CloudPendingDeviceJoinState(
+    string BaseUrl,
+    string DeviceDisplayName,
+    DateTimeOffset StartedAtUtc,
+    string DeviceToken);
+
 public sealed class Settings
 {
     [JsonPropertyName("environment")] public string Environment { get; set; } = Environments.Test;
@@ -32,6 +38,10 @@ public sealed class Settings
     [JsonPropertyName("cloud_pending_bootstrap_device_name")] public string CloudPendingBootstrapDeviceName { get; set; } = string.Empty;
     [JsonPropertyName("cloud_pending_bootstrap_started_utc")] public string CloudPendingBootstrapStartedUtc { get; set; } = string.Empty;
     [JsonPropertyName("cloud_pending_bootstrap_token_enc")] public string CloudPendingBootstrapTokenEncrypted { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_device_join_url")] public string CloudPendingDeviceJoinUrl { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_device_join_device_name")] public string CloudPendingDeviceJoinDeviceName { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_device_join_started_utc")] public string CloudPendingDeviceJoinStartedUtc { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_device_join_token_enc")] public string CloudPendingDeviceJoinTokenEncrypted { get; set; } = string.Empty;
 }
 
 public interface ISecretProtector
