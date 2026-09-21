@@ -11,8 +11,8 @@
 - Cloud backend：Cloudflare Worker + D1 reference implementation。
 - Windows Client：provider-neutral，只接受使用者設定的 CYInvoice-compatible HTTPS endpoint。
 - 預設模式：`local_only`。
-- Cloud schema：2（`0001` + `0002`）。
-- 已執行 migration 不回寫；後續 schema 一律使用 `0003+` forward migration。
+- Cloud schema：3（`0001` + `0002` + `0003_workspace_recovery_email_otp.sql`）。
+- 已執行 migration 不回寫；後續 schema 一律使用 forward migration。
 
 CYInvoice 永久支援兩種模式：
 
@@ -36,21 +36,25 @@ AMEGO App Key、本機 Device Token 等敏感憑證不進 Public repository；Cl
 
 - Cloud API health／version／storage compatibility。
 - D1 `workspaces`、`devices`、`device_pairing_codes` foundation schema。
+- D1 Workspace Recovery Email + `email_otp_challenges` schema foundation。
 - 每台 Device 獨立 token-hash foundation。
 - Windows Cloud API client、HTTPS-only 驗證與 bounded timeout。
 - Windows Device Token protected-storage abstraction。
 - Pending Device Token／onboarding state protected persistence foundation。
 - Local Only／Cloud Preferred 設定與 Cloud 異常 fallback 顯示。
 - Windows → development Worker → D1 live connection 已驗證。
-- development D1 尚未建立正式 Workspace；Windows 正確顯示 `連線正常｜尚未建立雲端空間`。
+- development D1 尚未建立正式 Workspace。
 - Foundation bootstrap／device／pairing endpoints 與 .NET contract tests 已建立。
-- Provider-neutral Email transport boundary 已建立，reference Worker 目前含 Brevo／Resend adapters。
+- Provider-neutral Email transport boundary 已建立，reference Worker 含 Brevo／Resend adapters。
 - 目前 development reference Email Provider 定為 Brevo；實際 API Key 尚待帳號手機驗證後設定，因此尚未做 live Email delivery test。
+- first-bootstrap Email OTP foundation 已實作：6 碼、HMAC-SHA256、10 分鐘有效、5 次錯誤上限、60 秒重寄冷卻、每 Email／purpose 每小時 5 次 challenge 上限、一次性消耗。
+- first Workspace bootstrap 現在要求有效 Email challenge + OTP，並把已驗證 Email 寫入 Workspace Recovery Email。
+- bootstrap retry 仍以同一 Pending Device Token 先復原既有 Cloud Workspace／Device，避免 lost response 造成第二套 identity。
 - Public Windows client 不內建 project-owner Cloud endpoint。
 
-## 4. 目前正在收斂：第一個 Workspace + 第一台 Device
+## 4. 第一個 Workspace + 第一台 Device contract
 
-已定案的 bootstrap contract：
+已定案並已進入 Core／Worker contract 的 bootstrap model：
 
 ```text
 Workspace ID → Cloud 產生
@@ -58,11 +62,38 @@ Device ID    → Cloud 產生
 Device Token → Windows 產生
 ```
 
-Windows 在送出 bootstrap 前必須先把 Device Token 以 DPAPI 保存成 Pending；Cloud 只保存 Token hash。同一 Pending Token 必須能在 timeout／lost response 後找回已建立的 Cloud Workspace／Device identity，而不是建立第二個 Workspace。
+Windows 在送出 bootstrap 前先把 Device Token 以 DPAPI 保存成 Pending；Cloud 只保存 Token hash。
 
-PR #73 已先把 Core／Worker contract 朝此方向調整；Email OTP、正式 Windows onboarding UI 尚未完成，不能把目前 foundation endpoint 視為 V3.0 最終 UX。
+第一次 Workspace 另增加 Email authorization：
 
-## 5. 已定案但尚未全部實作的身分流程
+```text
+既有 Local SUPER_ADMIN
+        ↓ 本機先驗證本人
+沿用其既有 Email
+        ↓
+POST /v1/onboarding/bootstrap-email
+        ↓
+6 碼 OTP
+        ↓
+POST /v1/bootstrap
+        ↓
+建立 Workspace + 第一台 Device
+並綁定 verified Recovery Email
+```
+
+使用者不需要再輸入第二個 Cloud Email。Windows 正式 UI 尚未接上這套 contract。
+
+## 5. OTP 與 Email 安全邊界
+
+- OTP 由 Web Crypto 產生，不使用 `Math.random()`。
+- D1 不保存明文 OTP，只保存 `HMAC-SHA256(OTP_PEPPER, challengeId:otp)`。
+- `OTP_PEPPER` 必須是 Worker Secret，不進 repo／log／artifact。
+- OTP Email Provider Key 同樣只存在 Worker runtime secret。
+- Provider delivery failure 不記錄 provider response body、收件 Email、OTP 或信件本文。
+- Recovery Email 是 Workspace 必要私有後端資料，但不得進 public log／artifact。
+- OTP challenge 在 Workspace 建立成功時一併標記 consumed。
+
+## 6. 已定案但尚未全部實作的身分流程
 
 - 第一次從單機版建立 Workspace：沿用既有 Local SUPER_ADMIN Email，不重新輸入；完成既有超管驗證 + Email OTP 後才初始化。
 - Workspace 建立後不因 Token 遺失、Windows 重灌或程式重新下載而重建。
@@ -76,7 +107,7 @@ PR #73 已先把 Core／Worker contract 朝此方向調整；Email OTP、正式 
 
 完整流程與安全邊界見 `CLOUD_IDENTITY_LIFECYCLE.md`。
 
-## 6. Public Repo 與 Provider-neutral 邊界
+## 7. Public Repo 與 Provider-neutral 邊界
 
 CYInvoice Windows client：
 
@@ -89,7 +120,7 @@ Cloudflare Worker + D1 只是目前 reference backend。未來第三方可使用
 
 Email Provider 同樣屬於 backend implementation detail：目前 reference deployment 使用 Brevo；未來有自有網域時可切到 Resend，Windows 與 OTP contract 不變。
 
-## 7. Cloud Preferred 與 fallback
+## 8. Cloud Preferred 與 fallback
 
 Cloud 健康時，用於跨裝置協調、中央身分、Work Item 與 Audit。
 
@@ -102,7 +133,7 @@ Cloud 暫時不可用時，安全的既有本機業務仍可繼續；只有真�
 
 不採「所有敏感業務都必須先拿 Cloud Lock」的 blanket lock 設計。
 
-## 8. 帳號與裝置是不同概念
+## 9. 帳號與裝置是不同概念
 
 正式模型必須區分：
 
@@ -117,17 +148,17 @@ Cloud 暫時不可用時，安全的既有本機業務仍可繼續；只有真�
 
 Local SUPER_ADMIN 只代表原單機系統最高管理者，不代表可以自行取得既有 Workspace 管理權。
 
-## 9. 目前仍屬 prototype、不得誤認為正式 V3.0 行為
+## 10. 目前仍屬 prototype、不得誤認為正式 V3.0 行為
 
 - `POST /v1/device-pairings` 目前仍只依有效 Device Token 即可發配對碼；正式版尚需人員授權／OTP gate。
 - `POST /v1/device-pairings/claim` 目前 foundation 仍由 Cloud 產生 Device Token；後續 Device Join batch 需收斂成與正式生命週期一致的 Windows-generated Token。
-- 尚無中央 Employee／Role／single-SUPER_ADMIN schema。
-- 尚無 Recovery Email／OTP challenge schema；Email transport adapter 已有，但尚未接到 OTP endpoint。
+- 尚無中央 Employee／Role／single-SUPER_ADMIN Cloud schema。
+- Bootstrap Email OTP backend／Core contract 已有，但尚未接正式 WinForms onboarding UI。
 - Brevo runtime API Key 尚未設定，因此尚未做 live Email delivery test。
 - 尚無 Device revoke／recovery 正式 UI。
 - 尚無 Work Item／Audit／跨機同步正式實作。
 
-## 10. 已定案不進 Cloud 的內容
+## 11. 已定案不進 Cloud 的內容
 
 - AMEGO App Key。
 - 完整發票資料鏡像。
@@ -136,17 +167,16 @@ Local SUPER_ADMIN 只代表原單機系統最高管理者，不代表可以自�
 - 不必要的 AMEGO response payload。
 - 明文 Device Token／OTP／密碼／單機 Recovery Code。
 
-## 11. 下一步工程順序
+## 12. 下一步工程順序
 
 依 `CLOUD_IDENTITY_LIFECYCLE.md` 分批：
 
-1. 驗證安全 bootstrap contract CI。
-2. Pending Device Token／onboarding state DPAPI 持久化。
-3. Brevo runtime Secret 完成後做 Email transport live test；同時可先完成 Local SUPER_ADMIN + existing Email OTP schema／邏輯。
-4. Windows 首次 Workspace onboarding UI／timeout recovery。
-5. Device Join／Recovery。
-6. 中央 Employee／單一 SUPER_ADMIN／超管移交。
-7. Pairing Code 前的人員授權。
-8. 再進入 Work Item／Audit／多機 OrderID／正式折讓 API。
+1. Windows 首次 Workspace onboarding UI：驗證既有 Local SUPER_ADMIN、取用既有 Email、發 OTP、輸入 OTP、提交 bootstrap。
+2. 完成 UI 的 timeout／restart recovery 與 Pending Token／challenge state 銜接。
+3. Brevo 手機驗證恢復後，設定 runtime Secret 並做 live Email transport／OTP 測試。
+4. Device Join／Recovery。
+5. 中央 Employee／單一 SUPER_ADMIN／超管移交。
+6. Pairing Code 前的人員授權。
+7. 再進入 Work Item／Audit／多機 OrderID／正式折讓 API。
 
 多公司、`company_id`、跨公司權限不在 V3.0 當前工程範圍。
