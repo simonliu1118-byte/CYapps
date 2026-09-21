@@ -28,6 +28,12 @@ type BootstrapDeviceRow = {
   workspace_display_name: string;
 };
 
+type PairingDeviceRow = {
+  device_id: string;
+  workspace_id: string;
+  device_display_name: string;
+};
+
 type OtpChallengeRow = {
   challenge_id: string;
   email_normalized: string;
@@ -41,7 +47,7 @@ type OtpChallengeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.5.0";
+const CLOUD_VERSION = "0.6.0";
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
@@ -682,6 +688,52 @@ async function createDevicePairing(request: Request, env: Env, requestId: string
   });
 }
 
+async function findPairingDeviceByTokenHash(
+  env: Env,
+  pairingId: string,
+  tokenHash: string
+): Promise<PairingDeviceRow | null> {
+  return env.DB.prepare(
+    `SELECT d.device_id,
+            d.workspace_id,
+            d.display_name AS device_display_name
+       FROM devices d
+       JOIN workspaces w ON w.workspace_id = d.workspace_id
+      WHERE d.pairing_id = ?1
+        AND d.token_hash = ?2
+        AND d.status = 'active'
+        AND w.status = 'active'
+      LIMIT 1`
+  ).bind(pairingId, tokenHash).first<PairingDeviceRow>();
+}
+
+function pairingIdentityResponse(env: Env, requestId: string, status: number, row: PairingDeviceRow): Response {
+  return json(env, requestId, status, {
+    workspace: {
+      workspaceId: row.workspace_id
+    },
+    device: {
+      deviceId: row.device_id,
+      displayName: row.device_display_name
+    }
+  });
+}
+
+async function finalizePairingClaim(
+  env: Env,
+  pairingId: string,
+  deviceId: string,
+  now: string
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE device_pairing_codes
+        SET used_at = COALESCE(used_at, ?1),
+            claimed_device_id = COALESCE(claimed_device_id, ?2)
+      WHERE pairing_id = ?3
+        AND (claimed_device_id IS NULL OR claimed_device_id = ?2)`
+  ).bind(now, deviceId, pairingId).run();
+}
+
 async function claimDevicePairing(request: Request, env: Env, requestId: string): Promise<Response> {
   const body = await readJsonObject(request);
   if (!body) return badRequest(env, requestId, "INVALID_JSON", "A JSON object is required.");
@@ -689,22 +741,28 @@ async function claimDevicePairing(request: Request, env: Env, requestId: string)
   const code = typeof body.code === "string" ? body.code.trim().toLowerCase() : "";
   const deviceDisplayName = normalizedDisplayName(body.deviceDisplayName);
   const clientVersion = normalizedClientVersion(body.clientVersion);
-  if (!/^[0-9a-f]{20}$/.test(code) || !deviceDisplayName || (body.clientVersion !== undefined && clientVersion === null)) {
+  const deviceToken = normalizedDeviceToken(body.deviceToken);
+  if (!/^[0-9a-f]{20}$/.test(code) || !deviceDisplayName || !deviceToken
+      || (body.clientVersion !== undefined && clientVersion === null)) {
     return badRequest(env, requestId, "INVALID_PAIRING_INPUT", "Pairing information is invalid.");
   }
 
-  const codeHash = await sha256Hex(code);
+  const [codeHash, tokenHash] = await Promise.all([sha256Hex(code), sha256Hex(deviceToken)]);
   const now = new Date().toISOString();
   const pairing = await env.DB.prepare(
-    `SELECT p.pairing_id, p.workspace_id
+    `SELECT p.pairing_id, p.workspace_id, p.expires_at, p.used_at, p.claimed_device_id
        FROM device_pairing_codes p
        JOIN workspaces w ON w.workspace_id = p.workspace_id
       WHERE p.code_hash = ?1
-        AND p.used_at IS NULL
-        AND p.expires_at > ?2
         AND w.status = 'active'
       LIMIT 1`
-  ).bind(codeHash, now).first<{ pairing_id: string; workspace_id: string }>();
+  ).bind(codeHash).first<{
+    pairing_id: string;
+    workspace_id: string;
+    expires_at: string;
+    used_at: string | null;
+    claimed_device_id: string | null;
+  }>();
 
   if (!pairing) {
     return json(env, requestId, 400, {
@@ -715,12 +773,33 @@ async function claimDevicePairing(request: Request, env: Env, requestId: string)
     });
   }
 
-  const deviceId = `dev_${crypto.randomUUID()}`;
-  const deviceToken = `cydev_${randomHex(32)}`;
-  const tokenHash = await sha256Hex(deviceToken);
+  const retry = await findPairingDeviceByTokenHash(env, pairing.pairing_id, tokenHash);
+  if (retry) {
+    await finalizePairingClaim(env, pairing.pairing_id, retry.device_id, now);
+    return pairingIdentityResponse(env, requestId, 200, retry);
+  }
 
+  if (pairing.used_at || pairing.claimed_device_id) {
+    return json(env, requestId, 409, {
+      error: {
+        code: "PAIRING_CODE_USED",
+        message: "Pairing code has already been used."
+      }
+    });
+  }
+
+  if (pairing.expires_at <= now) {
+    return json(env, requestId, 400, {
+      error: {
+        code: "PAIRING_CODE_INVALID",
+        message: "Pairing code is invalid or expired."
+      }
+    });
+  }
+
+  const deviceId = `dev_${crypto.randomUUID()}`;
   try {
-    await env.DB.prepare(
+    const inserted = await env.DB.prepare(
       `INSERT INTO devices (
           device_id, workspace_id, display_name, status, client_version,
           paired_at, last_seen_at, created_at, updated_at, token_hash,
@@ -733,7 +812,27 @@ async function claimDevicePairing(request: Request, env: Env, requestId: string)
           AND p.used_at IS NULL
           AND p.expires_at > ?4`
     ).bind(deviceId, deviceDisplayName, clientVersion, now, tokenHash, pairing.pairing_id).run();
+
+    if (inserted.meta.changes !== 1) {
+      const recovered = await findPairingDeviceByTokenHash(env, pairing.pairing_id, tokenHash);
+      if (recovered) {
+        await finalizePairingClaim(env, pairing.pairing_id, recovered.device_id, now);
+        return pairingIdentityResponse(env, requestId, 200, recovered);
+      }
+      return json(env, requestId, 409, {
+        error: {
+          code: "PAIRING_CODE_USED",
+          message: "Pairing code has already been used."
+        }
+      });
+    }
   } catch (error) {
+    const recovered = await findPairingDeviceByTokenHash(env, pairing.pairing_id, tokenHash);
+    if (recovered) {
+      await finalizePairingClaim(env, pairing.pairing_id, recovered.device_id, now);
+      return pairingIdentityResponse(env, requestId, 200, recovered);
+    }
+
     console.warn("device_pairing_insert_failed", {
       pairingId: pairing.pairing_id,
       error: error instanceof Error ? error.message : "unknown_error"
@@ -746,34 +845,11 @@ async function claimDevicePairing(request: Request, env: Env, requestId: string)
     });
   }
 
-  const created = await env.DB.prepare(
-    "SELECT device_id FROM devices WHERE device_id = ?1 AND pairing_id = ?2 LIMIT 1"
-  ).bind(deviceId, pairing.pairing_id).first<{ device_id: string }>();
-
-  if (!created) {
-    return json(env, requestId, 409, {
-      error: {
-        code: "PAIRING_CODE_USED",
-        message: "Pairing code has already been used."
-      }
-    });
-  }
-
-  await env.DB.prepare(
-    `UPDATE device_pairing_codes
-        SET used_at = ?1, claimed_device_id = ?2
-      WHERE pairing_id = ?3 AND used_at IS NULL`
-  ).bind(now, deviceId, pairing.pairing_id).run();
-
-  return json(env, requestId, 201, {
-    workspace: {
-      workspaceId: pairing.workspace_id
-    },
-    device: {
-      deviceId,
-      displayName: deviceDisplayName,
-      token: deviceToken
-    }
+  await finalizePairingClaim(env, pairing.pairing_id, deviceId, now);
+  return pairingIdentityResponse(env, requestId, 201, {
+    device_id: deviceId,
+    workspace_id: pairing.workspace_id,
+    device_display_name: deviceDisplayName
   });
 }
 
