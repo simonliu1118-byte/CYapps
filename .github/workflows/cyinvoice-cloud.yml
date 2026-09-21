@@ -62,13 +62,19 @@ jobs:
               db.executescript(migration.read_text(encoding='utf-8'))
 
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-          required_tables = {'workspaces', 'devices', 'device_pairing_codes', 'email_otp_challenges'}
+          required_tables = {
+              'workspaces', 'devices', 'device_pairing_codes', 'email_otp_challenges',
+              'cloud_employees', 'device_employee_links', 'employee_link_candidates'
+          }
           missing_tables = required_tables - tables
           if missing_tables:
               raise SystemExit(f'missing tables: {sorted(missing_tables)}')
 
           device_columns = {row[1] for row in db.execute('PRAGMA table_info(devices)')}
-          required_device_columns = {'token_hash', 'token_created_at', 'pairing_id', 'revoked_at'}
+          required_device_columns = {
+              'token_hash', 'token_created_at', 'pairing_id', 'revoked_at',
+              'employee_onboarding_closed_at'
+          }
           missing_columns = required_device_columns - device_columns
           if missing_columns:
               raise SystemExit(f'missing device columns: {sorted(missing_columns)}')
@@ -89,6 +95,15 @@ jobs:
           if missing_otp_columns:
               raise SystemExit(f'missing OTP columns: {sorted(missing_otp_columns)}')
 
+          employee_columns = {row[1] for row in db.execute('PRAGMA table_info(cloud_employees)')}
+          required_employee_columns = {
+              'employee_id', 'workspace_id', 'employee_no', 'name', 'email_normalized',
+              'email_verified_at', 'role', 'enabled', 'source_device_id', 'created_at', 'updated_at'
+          }
+          missing_employee_columns = required_employee_columns - employee_columns
+          if missing_employee_columns:
+              raise SystemExit(f'missing central employee columns: {sorted(missing_employee_columns)}')
+
           device_indexes = {row[1] for row in db.execute("PRAGMA index_list('devices')")}
           required_device_indexes = {'idx_devices_token_hash', 'idx_devices_pairing_id'}
           missing_indexes = required_device_indexes - device_indexes
@@ -101,6 +116,17 @@ jobs:
           if missing_otp_indexes:
               raise SystemExit(f'missing OTP indexes: {sorted(missing_otp_indexes)}')
 
+          employee_indexes = {row[1] for row in db.execute("PRAGMA index_list('cloud_employees')")}
+          required_employee_indexes = {
+              'idx_cloud_employees_workspace_employee_no',
+              'idx_cloud_employees_workspace_email',
+              'idx_cloud_employees_single_super_admin',
+              'idx_cloud_employees_workspace_role'
+          }
+          missing_employee_indexes = required_employee_indexes - employee_indexes
+          if missing_employee_indexes:
+              raise SystemExit(f'missing central employee indexes: {sorted(missing_employee_indexes)}')
+
           workspace_indexes = {row[1] for row in db.execute("PRAGMA index_list('workspaces')")}
           if 'idx_single_workspace' not in workspace_indexes:
               raise SystemExit('missing single-workspace bootstrap invariant index')
@@ -112,6 +138,15 @@ jobs:
               pass
           else:
               raise SystemExit('single-workspace invariant did not reject a second workspace')
+
+          db.execute("INSERT INTO devices (device_id, workspace_id, display_name, status, created_at, updated_at) VALUES ('dev_a', 'ws_one', 'A', 'active', '2026-09-21T00:00:00Z', '2026-09-21T00:00:00Z')")
+          db.execute("INSERT INTO cloud_employees (employee_id, workspace_id, employee_no, name, email_normalized, role, enabled, source_device_id) VALUES ('emp_x', 'ws_one', '0001', 'X', 'x@example.test', 'SUPER_ADMIN', 1, 'dev_a')")
+          try:
+              db.execute("INSERT INTO cloud_employees (employee_id, workspace_id, employee_no, name, email_normalized, role, enabled, source_device_id) VALUES ('emp_y', 'ws_one', '0002', 'Y', 'y@example.test', 'SUPER_ADMIN', 1, 'dev_a')")
+          except sqlite3.IntegrityError:
+              pass
+          else:
+              raise SystemExit('single-SUPER_ADMIN invariant did not reject a second SUPER_ADMIN')
 
           print('D1 migrations syntax/shape/invariant check passed')
           PY
