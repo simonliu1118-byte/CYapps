@@ -82,6 +82,9 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         DateTimeOffset startedAtUtc)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        if (settings.CloudPendingDeviceJoinTokenEncrypted.Length != 0)
+            throw new InvalidOperationException("已有未完成的裝置加入流程，請先完成或清除後再建立第一個 Workspace。");
+
         baseUrl = NormalizeCloudBaseUrl(baseUrl);
         workspaceDisplayName = workspaceDisplayName.Trim();
         deviceDisplayName = deviceDisplayName.Trim();
@@ -144,6 +147,73 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.CloudPendingBootstrapTokenEncrypted = string.Empty;
     }
 
+    public void SetCloudPendingDeviceJoin(
+        Settings settings,
+        string baseUrl,
+        string deviceDisplayName,
+        string deviceToken,
+        DateTimeOffset startedAtUtc)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (settings.CloudPendingBootstrapTokenEncrypted.Length != 0)
+            throw new InvalidOperationException("已有未完成的第一台裝置初始化流程，請先完成或確認無法復原後再加入既有 Workspace。");
+
+        baseUrl = NormalizeCloudBaseUrl(baseUrl);
+        deviceDisplayName = deviceDisplayName.Trim();
+        deviceToken = deviceToken.Trim();
+
+        if (deviceDisplayName.Length is < 1 or > 120)
+            throw new InvalidOperationException("裝置名稱長度必須為 1 到 120 個字元。");
+        if (!ValidCloudDeviceToken(deviceToken))
+            throw new InvalidOperationException("Pending Device Join Token 格式無效。");
+
+        settings.CloudPendingDeviceJoinUrl = baseUrl;
+        settings.CloudPendingDeviceJoinDeviceName = deviceDisplayName;
+        settings.CloudPendingDeviceJoinStartedUtc = startedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        settings.CloudPendingDeviceJoinTokenEncrypted = protector.Protect(Encoding.UTF8.GetBytes(deviceToken));
+        Validate(settings);
+    }
+
+    public CloudPendingDeviceJoinState? CloudPendingDeviceJoin(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        Validate(settings);
+        if (settings.CloudPendingDeviceJoinTokenEncrypted.Length == 0) return null;
+
+        try
+        {
+            var token = Unprotect(settings.CloudPendingDeviceJoinTokenEncrypted);
+            if (!ValidCloudDeviceToken(token))
+                throw new InvalidDataException("Pending Device Join Token 解密後格式無效。");
+            if (!DateTimeOffset.TryParseExact(
+                    settings.CloudPendingDeviceJoinStartedUtc,
+                    "O",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var startedAtUtc))
+                throw new InvalidDataException("Pending Device Join 時間格式無效。");
+
+            return new CloudPendingDeviceJoinState(
+                settings.CloudPendingDeviceJoinUrl,
+                settings.CloudPendingDeviceJoinDeviceName,
+                startedAtUtc.ToUniversalTime(),
+                token);
+        }
+        catch (Exception error) when (error is not InvalidOperationException)
+        {
+            throw new InvalidOperationException("目前無法讀取待完成的雲端裝置加入資料。", error);
+        }
+    }
+
+    public void ClearCloudPendingDeviceJoin(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.CloudPendingDeviceJoinUrl = string.Empty;
+        settings.CloudPendingDeviceJoinDeviceName = string.Empty;
+        settings.CloudPendingDeviceJoinStartedUtc = string.Empty;
+        settings.CloudPendingDeviceJoinTokenEncrypted = string.Empty;
+    }
+
     public void ClearCloudIdentity(Settings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -151,6 +221,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.CloudDeviceId = string.Empty;
         settings.CloudDeviceTokenEncrypted = string.Empty;
         ClearCloudPendingBootstrap(settings);
+        ClearCloudPendingDeviceJoin(settings);
         settings.CloudMode = CloudModes.LocalOnly;
     }
 
@@ -170,6 +241,10 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             throw new InvalidDataException("Cloud workspace/device ID 格式無效");
 
         ValidateCloudPendingBootstrap(settings);
+        ValidateCloudPendingDeviceJoin(settings);
+        if (settings.CloudPendingBootstrapTokenEncrypted.Length != 0
+            && settings.CloudPendingDeviceJoinTokenEncrypted.Length != 0)
+            throw new InvalidDataException("Pending Cloud bootstrap 與 Device Join 不可同時存在。");
     }
 
     private static void ValidateCloudPendingBootstrap(Settings settings)
@@ -199,6 +274,32 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
                 DateTimeStyles.RoundtripKind,
                 out _))
             throw new InvalidDataException("Pending Cloud bootstrap 時間格式無效。");
+    }
+
+    private static void ValidateCloudPendingDeviceJoin(Settings settings)
+    {
+        var values = new[]
+        {
+            settings.CloudPendingDeviceJoinUrl,
+            settings.CloudPendingDeviceJoinDeviceName,
+            settings.CloudPendingDeviceJoinStartedUtc,
+            settings.CloudPendingDeviceJoinTokenEncrypted
+        };
+        var present = values.Count(value => value.Length != 0);
+        if (present == 0) return;
+        if (present != values.Length)
+            throw new InvalidDataException("Pending Device Join 資料不完整。");
+        if (!ValidCloudBaseUrl(settings.CloudPendingDeviceJoinUrl))
+            throw new InvalidDataException("Pending Device Join API URL 無效。");
+        if (settings.CloudPendingDeviceJoinDeviceName.Trim().Length is < 1 or > 120)
+            throw new InvalidDataException("Pending Device Join 裝置名稱無效。");
+        if (!DateTimeOffset.TryParseExact(
+                settings.CloudPendingDeviceJoinStartedUtc,
+                "O",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out _))
+            throw new InvalidDataException("Pending Device Join 時間格式無效。");
     }
 
     private static string NormalizeCloudBaseUrl(string value)
