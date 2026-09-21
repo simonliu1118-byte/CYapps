@@ -16,7 +16,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud bootstrap reuses caller-owned token and requires email OTP", TestBootstrapAsync),
     ("cloud authenticated device request sends bearer token", TestDeviceAuthenticationAsync),
     ("cloud pairing response parses one-time ticket", TestPairingAsync),
-    ("cloud pairing claim parses new device identity", TestPairingClaimAsync)
+    ("cloud pairing claim reuses caller-owned token across retries", TestPairingClaimAsync)
 };
 
 var failures = new List<string>();
@@ -316,21 +316,44 @@ static async Task TestPairingAsync()
 
 static async Task TestPairingClaimAsync()
 {
+    var attempt = new CloudDeviceJoinAttempt(
+        "cydev_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
     var handler = new QueueHandler();
-    handler.Enqueue(request =>
+
+    for (var index = 0; index < 2; index++)
     {
-        Equal(HttpMethod.Post, request.Method, "claim method");
-        Equal("/v1/device-pairings/claim", request.RequestUri?.AbsolutePath ?? string.Empty, "claim path");
-        return JsonResponse(HttpStatusCode.Created,
-            """{"ok":true,"workspace":{"workspaceId":"ws_1"},"device":{"deviceId":"dev_2","displayName":"B機","token":"cydev_second_token"}}""");
-    });
+        var status = index == 0 ? HttpStatusCode.Created : HttpStatusCode.OK;
+        handler.Enqueue(request =>
+        {
+            Equal(HttpMethod.Post, request.Method, "claim method");
+            Equal("/v1/device-pairings/claim", request.RequestUri?.AbsolutePath ?? string.Empty, "claim path");
+            var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var body = JsonDocument.Parse(payload);
+            Equal("0123456789abcdefabcd", body.RootElement.GetProperty("code").GetString() ?? string.Empty, "pairing code");
+            Equal("B機", body.RootElement.GetProperty("deviceDisplayName").GetString() ?? string.Empty, "pairing device name");
+            Equal(attempt.DeviceToken, body.RootElement.GetProperty("deviceToken").GetString() ?? string.Empty,
+                "pairing retry must send the same caller-owned token");
+            True(!body.RootElement.TryGetProperty("deviceId", out _), "pairing Device ID must remain cloud-owned");
+            return JsonResponse(status,
+                """{"ok":true,"workspace":{"workspaceId":"ws_1"},"device":{"deviceId":"dev_2","displayName":"B機"}}""");
+        });
+    }
 
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
-    var identity = await client.ClaimPairingAsync("0123456789abcdefabcd", "B機", "2.6.3");
-    Equal("ws_1", identity.WorkspaceId, "claim workspace ID");
-    Equal("dev_2", identity.DeviceId, "claim device ID");
-    Equal("cydev_second_token", identity.DeviceToken, "claim one-time device token");
+    var first = await client.ClaimPairingAsync("0123456789abcdefabcd", "B機", "2.6.3", attempt);
+    var retry = await client.ClaimPairingAsync("0123456789abcdefabcd", "B機", "2.6.3", attempt);
+
+    Equal("ws_1", first.WorkspaceId, "claim workspace ID");
+    Equal("dev_2", first.DeviceId, "claim Device ID is returned by Cloud");
+    Equal(attempt.DeviceToken, first.DeviceToken, "claim token remains caller-owned");
+    Equal(first.WorkspaceId, retry.WorkspaceId, "retry workspace ID");
+    Equal(first.DeviceId, retry.DeviceId, "retry device ID");
+    Equal(first.DeviceToken, retry.DeviceToken, "retry must reuse the same Device Token");
+
+    var generated = CloudDeviceJoinAttempt.Create();
+    True(generated.DeviceToken.StartsWith("cydev_", StringComparison.Ordinal) && generated.DeviceToken.Length == 70,
+        "generated Device Join token format");
 }
 
 static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string json)
