@@ -26,10 +26,9 @@ public sealed record CloudDeviceIdentity(
     string DeviceDisplayName,
     string DeviceToken);
 
-public sealed record CloudBootstrapAttempt(string DeviceId, string DeviceToken)
+public sealed record CloudBootstrapAttempt(string DeviceToken)
 {
     public static CloudBootstrapAttempt Create() => new(
-        $"dev_{Guid.NewGuid():D}",
         $"cydev_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}");
 }
 
@@ -147,8 +146,6 @@ public sealed class CloudClient
     {
         if (string.IsNullOrWhiteSpace(bootstrapKey)) throw new ArgumentException("Bootstrap key is required.", nameof(bootstrapKey));
         ArgumentNullException.ThrowIfNull(attempt);
-        if (!ValidBootstrapDeviceId(attempt.DeviceId))
-            throw new ArgumentException("Bootstrap device ID is invalid.", nameof(attempt));
         if (!ValidDeviceToken(attempt.DeviceToken))
             throw new ArgumentException("Bootstrap device token is invalid.", nameof(attempt));
 
@@ -160,7 +157,6 @@ public sealed class CloudClient
                 workspaceDisplayName,
                 deviceDisplayName,
                 clientVersion,
-                deviceId = attempt.DeviceId,
                 deviceToken = attempt.DeviceToken
             },
             false,
@@ -293,12 +289,6 @@ public sealed class CloudClient
         return element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? string.Empty
             : string.Empty;
-    }
-
-    private static bool ValidBootstrapDeviceId(string value)
-    {
-        if (!value.StartsWith("dev_", StringComparison.Ordinal) || value.Length != 40) return false;
-        return Guid.TryParseExact(value[4..], "D", out _);
     }
 
     private static bool ValidDeviceToken(string value)
