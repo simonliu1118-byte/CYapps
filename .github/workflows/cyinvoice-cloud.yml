@@ -62,7 +62,7 @@ jobs:
               db.executescript(migration.read_text(encoding='utf-8'))
 
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-          required_tables = {'workspaces', 'devices', 'device_pairing_codes'}
+          required_tables = {'workspaces', 'devices', 'device_pairing_codes', 'email_otp_challenges'}
           missing_tables = required_tables - tables
           if missing_tables:
               raise SystemExit(f'missing tables: {sorted(missing_tables)}')
@@ -73,11 +73,33 @@ jobs:
           if missing_columns:
               raise SystemExit(f'missing device columns: {sorted(missing_columns)}')
 
+          workspace_columns = {row[1] for row in db.execute('PRAGMA table_info(workspaces)')}
+          required_workspace_columns = {'recovery_email', 'recovery_email_verified_at'}
+          missing_workspace_columns = required_workspace_columns - workspace_columns
+          if missing_workspace_columns:
+              raise SystemExit(f'missing workspace recovery columns: {sorted(missing_workspace_columns)}')
+
+          otp_columns = {row[1] for row in db.execute('PRAGMA table_info(email_otp_challenges)')}
+          required_otp_columns = {
+              'challenge_id', 'purpose', 'email_normalized', 'otp_digest', 'delivery_state',
+              'attempt_count', 'max_attempts', 'expires_at', 'resend_after', 'sent_at',
+              'consumed_at', 'created_at', 'updated_at'
+          }
+          missing_otp_columns = required_otp_columns - otp_columns
+          if missing_otp_columns:
+              raise SystemExit(f'missing OTP columns: {sorted(missing_otp_columns)}')
+
           device_indexes = {row[1] for row in db.execute("PRAGMA index_list('devices')")}
           required_device_indexes = {'idx_devices_token_hash', 'idx_devices_pairing_id'}
           missing_indexes = required_device_indexes - device_indexes
           if missing_indexes:
               raise SystemExit(f'missing device indexes: {sorted(missing_indexes)}')
+
+          otp_indexes = {row[1] for row in db.execute("PRAGMA index_list('email_otp_challenges')")}
+          required_otp_indexes = {'idx_email_otp_email_purpose_created', 'idx_email_otp_expiry'}
+          missing_otp_indexes = required_otp_indexes - otp_indexes
+          if missing_otp_indexes:
+              raise SystemExit(f'missing OTP indexes: {sorted(missing_otp_indexes)}')
 
           workspace_indexes = {row[1] for row in db.execute("PRAGMA index_list('workspaces')")}
           if 'idx_single_workspace' not in workspace_indexes:
