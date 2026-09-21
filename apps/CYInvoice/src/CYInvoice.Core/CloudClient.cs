@@ -20,6 +20,12 @@ public sealed record CloudHealthResult(
 
 public sealed record CloudOnboardingStatus(bool WorkspaceInitialized, string State);
 
+public sealed record CloudEmailChallenge(
+    string ChallengeId,
+    string MaskedEmail,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset ResendAfter);
+
 public sealed record CloudDeviceIdentity(
     string WorkspaceId,
     string DeviceId,
@@ -136,15 +142,54 @@ public sealed class CloudClient
         return new CloudOnboardingStatus(initialized, state);
     }
 
+    public async Task<CloudEmailChallenge> StartBootstrapEmailChallengeAsync(
+        string bootstrapKey,
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(bootstrapKey))
+            throw new ArgumentException("Bootstrap key is required.", nameof(bootstrapKey));
+        if (string.IsNullOrWhiteSpace(email))
+            throw new ArgumentException("Email is required.", nameof(email));
+
+        using var document = await SendAsync(
+            HttpMethod.Post,
+            "v1/onboarding/bootstrap-email",
+            new { email = email.Trim() },
+            false,
+            bootstrapKey.Trim(),
+            cancellationToken);
+
+        var root = document.RootElement;
+        if (!root.TryGetProperty("challenge", out var challenge) || challenge.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Cloud email challenge response is missing challenge data.");
+
+        var challengeId = ReadRequiredString(challenge, "challengeId");
+        var maskedEmail = ReadRequiredString(challenge, "maskedEmail");
+        var expiresAt = ReadRequiredDateTimeOffset(challenge, "expiresAt");
+        var resendAfter = ReadRequiredDateTimeOffset(challenge, "resendAfter");
+        if (resendAfter > expiresAt)
+            throw new InvalidDataException("Cloud email challenge timing is inconsistent.");
+
+        return new CloudEmailChallenge(challengeId, maskedEmail, expiresAt, resendAfter);
+    }
+
     public async Task<CloudDeviceIdentity> BootstrapAsync(
         string bootstrapKey,
         string workspaceDisplayName,
         string deviceDisplayName,
         string clientVersion,
+        string emailChallengeId,
+        string emailOtp,
         CloudBootstrapAttempt attempt,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(bootstrapKey)) throw new ArgumentException("Bootstrap key is required.", nameof(bootstrapKey));
+        if (string.IsNullOrWhiteSpace(bootstrapKey))
+            throw new ArgumentException("Bootstrap key is required.", nameof(bootstrapKey));
+        if (string.IsNullOrWhiteSpace(emailChallengeId))
+            throw new ArgumentException("Email challenge ID is required.", nameof(emailChallengeId));
+        if (emailOtp is null || emailOtp.Length != 6 || !emailOtp.All(char.IsDigit))
+            throw new ArgumentException("Email OTP must contain six digits.", nameof(emailOtp));
         ArgumentNullException.ThrowIfNull(attempt);
         if (!ValidDeviceToken(attempt.DeviceToken))
             throw new ArgumentException("Bootstrap device token is invalid.", nameof(attempt));
@@ -157,6 +202,8 @@ public sealed class CloudClient
                 workspaceDisplayName,
                 deviceDisplayName,
                 clientVersion,
+                emailChallengeId = emailChallengeId.Trim(),
+                emailOtp,
                 deviceToken = attempt.DeviceToken
             },
             false,
@@ -275,6 +322,14 @@ public sealed class CloudClient
     private static string ReadErrorMessage(JsonElement root)
     {
         return root.TryGetProperty("error", out var error) ? ReadString(error, "message") : string.Empty;
+    }
+
+    private static DateTimeOffset ReadRequiredDateTimeOffset(JsonElement element, string name)
+    {
+        var value = ReadRequiredString(element, name);
+        if (!DateTimeOffset.TryParse(value, out var parsed))
+            throw new InvalidDataException($"Cloud response field '{name}' is not a valid timestamp.");
+        return parsed;
     }
 
     private static string ReadRequiredString(JsonElement element, string name)
