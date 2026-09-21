@@ -13,6 +13,7 @@
 - 預設模式：`local_only`。
 - Cloud schema：3（`0001` + `0002` + `0003_workspace_recovery_email_otp.sql`）。
 - 已執行 migration 不回寫；後續 schema 一律使用 forward migration。
+- 最新 Device Join code-bearing validation：**CYInvoice Cloud Check Run #111 全部成功**。
 
 CYInvoice 永久支援兩種模式：
 
@@ -63,6 +64,7 @@ AMEGO App Key、本機 Device Token 等敏感憑證不進 Public repository；Cl
 - `雲端初始化碼` 只存在於當次密碼式輸入／HTTPS request，不寫入 settings、repo、log 或 artifact。
 - Settings 視窗與 Cloud onboarding 共用同一個 in-memory Settings instance，避免父視窗舊資料覆寫剛建立的 Cloud identity。
 - Public Windows client 不內建 project-owner Cloud endpoint。
+- Run #111 已通過 Worker TypeScript／bundle、schema 1–3 migration validation、.NET Cloud contract tests、Windows x64 build、WinForms startup smoke、Windows Cloud tests 與 engineering package build/upload。
 
 ## 4. 第一個 Workspace + 第一台 Device contract
 
@@ -145,7 +147,7 @@ Pairing Claim 的 retry anchor 是 B 機事前保存的 Device Token。若 Cloud
 - D1 不保存明文 OTP，只保存 `HMAC-SHA256(OTP_PEPPER, challengeId:otp)`。
 - `OTP_PEPPER` 必須是 Worker Secret，不進 repo／log／artifact。
 - OTP Email Provider Key 同樣只存在 Worker runtime secret。
-- Provider delivery failure不記錄 provider response body、收件 Email、OTP 或信件本文。
+- Provider delivery failure 不記錄 provider response body、收件 Email、OTP 或信件本文。
 - Recovery Email 是 Workspace 必要私有後端資料，但不得進 public log／artifact。
 - OTP challenge 使用後立即 consumed；錯誤次數、重寄 cooldown 與 rate limit 都由 Cloud enforce。
 - Pairing authorization challenge 綁定 Workspace + 發起的可信任 Device，不能拿另一台 Device 的 challenge 直接產生 Pairing Code。
