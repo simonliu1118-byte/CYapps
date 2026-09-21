@@ -172,12 +172,15 @@ internal sealed class SettingsForm : Form
 
     private void OpenCloudSettings()
     {
-        using var form = new CloudSetupForm(repository, settings.CloudBaseUrl);
+        var originalEndpoint = settings.CloudBaseUrl;
+        using var form = new CloudSetupForm(repository, originalEndpoint, settings);
         if (form.ShowDialog(this) != DialogResult.OK) return;
 
-        var endpointChanged = settings.CloudBaseUrl.Length != 0
-            && !SameCloudEndpoint(settings.CloudBaseUrl, form.SelectedBaseUrl);
-        if (endpointChanged)
+        var endpointChanged = originalEndpoint.Length != 0
+            && !SameCloudEndpoint(originalEndpoint, form.SelectedBaseUrl);
+        var identityAlreadyMovedToSelectedEndpoint = HasCloudIdentity(settings)
+            && SameCloudEndpoint(settings.CloudBaseUrl, form.SelectedBaseUrl);
+        if (endpointChanged && !identityAlreadyMovedToSelectedEndpoint)
         {
             if (HasCloudIdentity(settings))
                 repository.Settings.ClearCloudIdentity(settings);
@@ -185,6 +188,12 @@ internal sealed class SettingsForm : Form
                 repository.Settings.ClearCloudPendingBootstrap(settings);
         }
         settings.CloudBaseUrl = form.SelectedBaseUrl;
+
+        if (form.IdentityCompleted)
+        {
+            cloudMode.Checked = true;
+            localMode.Checked = false;
+        }
     }
 
     private void EnvironmentChanged(object? sender, EventArgs eventArgs)
