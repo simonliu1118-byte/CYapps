@@ -1,256 +1,146 @@
-# CYInvoice 雲端架構現況與定案
+# CYInvoice Cloud Architecture Status
 
-> 本文件記錄 CYInvoice 雲端功能的目前工程狀態、已定案的產品邊界與後續實作方向。它是需求／狀態文件，不取代 `PROJECT_RULES.md`、`REPOSITORY_RULES.md` 或 `REPO_POLICY.md`。
->
-> 本 repository 為 Public repository。本文不得包含任何實際 Cloud 帳號、資源 ID、私人端點、密鑰、Token、公司正式資料、Email、正式統編或其他營運／個資資訊。
+此文件只描述目前已實作／已驗證的雲端工程狀態；長期產品藍圖見 `CLOUD_ROADMAP.md`，Workspace／Device／SUPER_ADMIN 身分生命週期定案見 `CLOUD_IDENTITY_LIFECYCLE.md`。
 
-## 1. 核心產品定位
+> 本 repository 為 Public repository。本文不得包含任何實際 Cloud 帳號、私人 endpoint、密鑰、Token、OTP、正式公司資料、真實 Email 或其他營運／個資資訊。
 
-CYInvoice 必須永久支援兩種運作模式：
+## 1. 目前產品與工程基準
 
-1. **單機模式（Local Only）**
-2. **雲端模式（Cloud Enabled / Cloud Preferred）**
+- CYInvoice Windows 正式產品線：C#／WinForms。
+- 目前工程版本：V2.6.3 Build 0。
+- Cloud backend：Cloudflare Worker + D1 reference implementation。
+- Windows Client：provider-neutral，只接受使用者設定的 CYInvoice-compatible HTTPS endpoint。
+- 預設模式：`local_only`。
+- Cloud schema：2（`0001` + `0002`）。
+- 已執行 migration 不回寫；後續 schema 一律使用 `0003+` forward migration。
 
-單機模式是完整可用的產品模式，不是雲端模式的降級版。使用者若只需要單機使用，完成既有本機設定後即可使用，不需要任何雲端服務。
+CYInvoice 永久支援兩種模式：
 
-雲端模式是可選擴充層，目標是提供多裝置共同狀態、中央帳號／權限、跨機工作協調、防重與後續稽核能力。
+1. 單機模式（Local Only）。
+2. 雲端模式（Cloud Enabled / Cloud Preferred）。
 
-## 2. Public Repo 的重要邊界
+單機模式是完整產品模式；Cloud 是可選的協作層，不是發票業務總開關。
 
-CYInvoice Windows client **不得直接綁定某一個實際雲端資料庫，也不得內建任何專案擁有者的私人 Cloud endpoint**。
-
-正式設計必須符合：
-
-- Windows client 不直接連 D1、PostgreSQL、MySQL 或其他資料庫。
-- Windows client 只連一個由使用者設定的 **CYInvoice-compatible HTTPS API endpoint**。
-- 該 API 背後使用何種資料庫、雲端平台、Server framework 或部署方式，不是 Windows client 的責任。
-- repository 不得提交實際 Cloud 帳號 ID、Database ID、私人 Worker URL、API token、bootstrap secret、device token 或正式資料。
-- Cloudflare Worker + D1 可以作為本專案目前的開發／參考實作，但不得成為 Public Windows client 的硬編碼依賴。
-
-因此正式產品關係是：
+## 2. 資料責任
 
 ```text
-CYInvoice Windows client
-        |
-        | HTTPS
-        v
-User-configured CYInvoice Cloud API
-        |
-        v
-Implementation-defined backend/database
+AMEGO        = 電子發票／作廢／折讓官方交易真相
+Local SQLite = 單機運作、快取、fallback
+Cloud API    = 可選的跨裝置協作介面
+Backend DB   = 由 Cloud API 實作者自行決定
 ```
 
-## 3. 使用者模式切換
+AMEGO App Key、本機 Device Token 等敏感憑證不進 Public repository；Cloud 不保存不必要的完整發票鏡像／PDF Cache。
 
-### 3.1 預設與單機模式
+## 3. 已完成／已驗證
 
-CYInvoice 預設必須為單機模式：
+- Cloud API health／version／storage compatibility。
+- D1 `workspaces`、`devices`、`device_pairing_codes` foundation schema。
+- 每台 Device 獨立 token-hash foundation。
+- Windows Cloud API client、HTTPS-only 驗證與 bounded timeout。
+- Windows Device Token protected-storage abstraction。
+- Local Only／Cloud Preferred 設定與 Cloud 異常 fallback 顯示。
+- Windows → development Worker → D1 live connection 已驗證。
+- development D1 尚未建立正式 Workspace；Windows 正確顯示 `連線正常｜尚未建立雲端空間`。
+- Foundation bootstrap／device／pairing endpoints 與 .NET contract tests 已建立。
+- Public Windows client 不內建 project-owner Cloud endpoint。
+
+## 4. 目前正在收斂：第一個 Workspace + 第一台 Device
+
+已定案的 bootstrap contract：
 
 ```text
-Local SQLite + AMEGO
+Workspace ID → Cloud 產生
+Device ID    → Cloud 產生
+Device Token → Windows 產生
 ```
 
-單機模式下：
+Windows 最終必須在送出 bootstrap 前先把 Device Token 以 DPAPI 保存成 Pending；Cloud 只保存 Token hash。同一 Pending Token 必須能在 timeout／lost response 後找回已建立的 Cloud Workspace／Device identity，而不是建立第二個 Workspace。
 
-- 不呼叫 Cloud API。
-- 不要求 Cloud URL。
-- 不要求 Workspace／Device 設定。
-- 不要求 Cloud 帳號。
-- 既有單機開票、查詢、同步、PDF、設定與本機快取流程維持不變。
+目前 PR #73 已先把 Core／Worker contract 朝此方向調整；Pending DPAPI persistence、Email OTP、正式 Windows onboarding UI 尚未完成，不能把目前 foundation endpoint 視為 V3.0 最終 UX。
 
-### 3.2 啟用雲端模式
+## 5. 已定案但尚未全部實作的身分流程
 
-若使用者需要雲端版，流程應是：
+- 第一次從單機版建立 Workspace：沿用既有 Local SUPER_ADMIN Email，不重新輸入；完成既有超管驗證 + Email OTP 後才初始化。
+- Workspace 建立後不因 Token 遺失、Windows 重灌或程式重新下載而重建。
+- 已有 Workspace、沒有本機 Device identity：使用 Pairing Code 或 Workspace 已登記 SUPER_ADMIN Email OTP 加入。
+- 新機自己的 Local SUPER_ADMIN 不得自行授權加入既有 Workspace。
+- 既有單機 B 機合法加入後，原唯一 Local SUPER_ADMIN Y 自動成為 Workspace ADMIN，可立即工作。
+- Workspace 永遠只有一名 SUPER_ADMIN。
+- 超管換人使用原子 `TransferSuperAdmin`：原超管降 ADMIN、指定 ADMIN 升 SUPER_ADMIN。
+- Pairing Code 正式版必須在有效 Device + SUPER_ADMIN／指定 ADMIN 人員驗證 + OTP 成功後才產生；B 機輸入已授權 Pairing Code 後不再重做 OTP。
+- 所有 Device Token + 原 Recovery Email 同時失效時，以 Cloudflare／reference backend 管理端人工修改 Recovery Email 作最終維運救援，不增加 Windows emergency secret。
 
-1. 先以單機模式正常啟動 CYInvoice。
-2. 到「設定」中選擇雲端模式。
-3. 填寫 CYInvoice Cloud API 連線資訊。
-4. 測試相容性與連線。
-5. 完成 Workspace／管理員／裝置驗證流程。
-6. 儲存後啟用 Cloud Preferred。
+完整流程與安全邊界見 `CLOUD_IDENTITY_LIFECYCLE.md`。
 
-正式版不應要求一般使用者理解底層資料庫名稱或 Database ID。
+## 6. Public Repo 與 Provider-neutral 邊界
 
-## 4. 三層資料責任
+CYInvoice Windows client：
 
-CYInvoice 的資料責任分為三層，不能混為單一資料庫。
+- 不直接連 D1、PostgreSQL、SQL Server 或其他資料庫。
+- 不內建專案擁有者私人 Cloud endpoint。
+- 只連使用者設定的 CYInvoice-compatible HTTPS API。
+- 不要求一般使用者理解 Cloudflare／D1 等底層技術。
 
-### 4.1 AMEGO：電子發票官方真相
-
-AMEGO 仍是發票／折讓／註銷等正式交易狀態的權威來源。
-
-CYInvoice Cloud 不得自行宣布 AMEGO 交易成功。所有交易結果仍需以 AMEGO 明確回覆或官方查詢結果確認。
-
-### 4.2 Local SQLite：單機運作與快取
-
-Local SQLite 永久保留，負責：
-
-- 本機近期發票／查詢快取。
-- 本機 UI 與同步狀態。
-- 本機設定。
-- 必要離線閱讀／fallback。
-- 其他既有單機資料。
-
-AMEGO App Key 與本機 Cloud device credential 等敏感資料仍由 Windows 安全儲存機制保護；不得上傳至 Public repository。
-
-### 4.3 Cloud backend：跨裝置協作
-
-Cloud backend 的責任是 CYInvoice 自己擁有的共同狀態，例如：
-
-- Workspace。
-- 員工／角色／enabled 狀態。
-- Device 註冊與撤銷。
-- Device credential hash。
-- Email／OTP 驗證狀態（若正式採用）。
-- Work item。
-- Idempotency／operation lock。
-- 跨機狀態協調。
-- 未來 Cloud audit log。
-
-Cloud backend 不應成為完整 AMEGO 發票資料鏡像，也不應保存不必要的 PDF、App Key 或大量本機 Cache。
-
-## 5. Cloud API 是產品介面；技術實作不是
-
-CYInvoice 最終對外應定義一份 **CYInvoice Cloud API compatibility specification**。
-
-該規格描述 CYInvoice Windows client 需要的協定，例如：
-
-- HTTPS endpoint 規則。
-- API version／compatibility negotiation。
-- Health check。
-- Request／response JSON。
-- Authentication／device credential。
-- Workspace bootstrap／join。
-- Employee／role。
-- Verification／OTP（若採用）。
-- Work items。
-- Operation lock／idempotency。
-- Audit contract。
-- Error codes。
-- Timeout／retry／offline semantics。
-
-第三方可自行使用任何技術完成相容服務。CYInvoice 不規定必須使用 Cloudflare、D1、AWS、Azure、Supabase、Firebase、PostgreSQL、MySQL 或任何特定平台。
-
-只要第三方服務符合 CYInvoice Cloud API specification，使用者即可在 CYInvoice 雲端設定中填入該服務 endpoint 使用。
-
-## 6. 對外 Guide 的定案
-
-在雲端功能、API contract、資料模型與錯誤語意全部定案後，Public repository 必須新增一份面向第三方的 Cloud integration guide。
-
-Guide 的責任：
-
-- 說明 CYInvoice Cloud API 必要介面與格式。
-- 說明相容性／版本要求。
-- 說明安全要求。
-- 說明 Windows client 會如何呼叫 Cloud API。
-- 提供可驗證的 contract examples／test expectations。
-
-Guide **不負責**：
-
-- 指定第三方一定使用 Cloudflare。
-- 教第三方選擇雲端平台。
-- 教第三方如何建立特定品牌資料庫。
-- 替第三方設計其基礎設施。
-
-目前先列入 TODO，等雲端功能定案後再撰寫正式版。
+Cloudflare Worker + D1 只是目前 reference backend。未來第三方可使用其他技術，只要符合 Cloud API contract。
 
 ## 7. Cloud Preferred 與 fallback
 
-啟用雲端模式後，CYInvoice 採 Cloud Preferred：
+Cloud 健康時，用於跨裝置協調、中央身分、Work Item 與 Audit。
 
-- Cloud 健康：使用 Cloud 協調跨裝置狀態。
-- Cloud 暫時不可用：安全的本機功能仍可繼續使用。
-- 需要跨裝置唯一性／鎖定的操作：若無法取得 Cloud lock，不得假裝取得成功。
+Cloud 暫時不可用時，安全的既有本機業務仍可繼續；只有真正依賴 Cloud 的管理功能停止，例如：
 
-使用者也可以主動切回單機模式。切回單機模式後，不應再呼叫 Cloud API。
+- 新 Device 註冊／配對／撤銷。
+- 中央帳號／角色變更。
+- SUPER_ADMIN 移交。
+- Workspace 管理。
 
-「暫停使用 Cloud」與「解除此裝置的 Cloud 註冊」必須視為兩種不同操作；切回單機模式不應自動銷毀 Cloud 身分資料。
+不採「所有敏感業務都必須先拿 Cloud Lock」的 blanket lock 設計。
 
-## 8. 帳號與裝置是兩個概念
+## 8. 帳號與裝置是不同概念
 
-正式雲端模型必須區分：
+正式模型必須區分：
 
-- **Employee / User**：誰正在執行操作。
-- **Device**：哪一台受信任電腦正在執行操作。
+- Employee / User：誰正在執行操作。
+- Device：哪一台可信任電腦正在執行操作。
 
-兩者不可混為同一身分。
+預定角色：
 
-預定角色至少包含：
+- `SUPER_ADMIN`：每個 Workspace 恰好一名。
+- `ADMIN`：可多人。
+- `EMPLOYEE`：可多人。
 
-- `SUPER_ADMIN`
-- `ADMIN`
-- `EMPLOYEE`
+Local SUPER_ADMIN 只代表原單機系統最高管理者，不代表可以自行取得既有 Workspace 管理權。
 
-正式的第一台裝置與後續裝置加入流程，將在中央員工／權限與驗證機制定案後完成。
+## 9. 目前仍屬 prototype、不得誤認為正式 V3.0 行為
 
-## 9. 目前工程實作狀態
+- `POST /v1/device-pairings` 目前仍只依有效 Device Token 即可發配對碼；正式版尚需人員授權／OTP gate。
+- `POST /v1/device-pairings/claim` 目前 foundation 仍由 Cloud 產生 Device Token；後續 Device Join batch 需收斂成與正式生命週期一致的 Windows-generated Token。
+- 尚無中央 Employee／Role／single-SUPER_ADMIN schema。
+- 尚無 Recovery Email／OTP challenge schema 或寄信 provider integration。
+- 尚無 Device revoke／recovery 正式 UI。
+- 尚無 Work Item／Audit／跨機同步正式實作。
 
-目前工作分支已完成 Cloud Foundation 的早期工程驗證，包括：
-
-- 參考 Cloud API server。
-- 參考資料庫 schema migration。
-- Workspace／Device 基礎資料模型。
-- Hashed device credential。
-- 一次性 device pairing 基礎流程。
-- Health／version endpoint。
-- Windows Cloud client 基礎層。
-- HTTPS-only endpoint validation。
-- Windows 本機 protected credential storage。
-- Cloud contract tests。
-- Windows build／startup smoke validation。
-
-目前參考實作使用 Cloudflare Worker + D1 作為開發環境，但這只是現階段的參考 backend。
-
-## 10. 目前工程實作與最終產品設計的差距
-
-目前早期測試流程仍包含為開發驗證而存在的做法，不能直接視為 Public 正式介面。
-
-後續必須修正／完成：
-
-- 移除 Windows client 中任何專案擁有者的預設 Cloud endpoint。
-- 預設固定為 Local Only。
-- 在正式設定 UI 中提供單機／雲端模式選擇。
-- 只有選擇雲端模式才顯示／要求 Cloud API 設定。
-- Cloud endpoint 由使用者自行填寫。
-- 將 Windows client 對後端的依賴收斂成技術中立的 CYInvoice Cloud API contract。
-- 將 Cloudflare/D1 特有設定留在 reference backend，而不是 Windows product contract。
-- 完成 SUPER_ADMIN／Employee／Device 的正式 onboarding 模型。
-- 決定並完成 Email OTP／其他驗證機制。
-- 完成 work item、idempotency、operation lock、audit。
-- 最後才撰寫第三方 Cloud integration guide。
-
-## 11. 已定案不進 Cloud 的內容
-
-目前已確定不以 Cloud backend 作為主要儲存位置的項目：
+## 10. 已定案不進 Cloud 的內容
 
 - AMEGO App Key。
 - 完整發票資料鏡像。
 - PDF Cache。
 - 本機 runtime backup／export data。
 - 不必要的 AMEGO response payload。
+- 明文 Device Token／OTP／密碼／單機 Recovery Code。
 
-是否有其他欄位需要進 Cloud，必須依「跨裝置協作是否需要」與資料最小化原則逐項決定。
+## 11. 下一步工程順序
 
-## 12. 下一步工程順序
+依 `CLOUD_IDENTITY_LIFECYCLE.md` 分批：
 
-在新增更多 Cloud 業務功能前，先完成 Public Repo 架構收斂：
+1. 驗證安全 bootstrap contract CI。
+2. Pending Device Token／onboarding state DPAPI 持久化。
+3. Local SUPER_ADMIN + existing Email OTP 初始化與必要 `0003+` migration。
+4. Windows 首次 Workspace onboarding UI／timeout recovery。
+5. Device Join／Recovery。
+6. 中央 Employee／單一 SUPER_ADMIN／超管移交。
+7. Pairing Code 前的人員授權。
+8. 再進入 Work Item／Audit／多機 OrderID／正式折讓 API。
 
-1. 移除 Windows client 中的任何開發環境預設 endpoint。
-2. 完成 Local Only / Cloud Enabled 模式選擇與設定保存。
-3. 將 Cloud API endpoint 完全改為 user-configured。
-4. 整理 reference backend 與 Windows client 的 contract 邊界。
-5. 再進入中央員工／角色／裝置 onboarding。
-6. 再進入跨機 work item／lock／idempotency。
-7. 再進入 Cloud audit 與正式折讓 API。
-8. 雲端全部定案後撰寫第三方 Cloud integration guide。
-
----
-
-簡化後的正式定位：
-
-```text
-AMEGO        = 電子發票官方交易真相
-Local SQLite = 單機運作、快取、fallback
-Cloud API    = 可選的跨裝置協作介面
-Backend DB   = 由 Cloud API 實作者自行決定
-```
+多公司、`company_id`、跨公司權限不在 V3.0 當前工程範圍。
