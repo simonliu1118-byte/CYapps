@@ -6,12 +6,14 @@ namespace CYInvoice.WinForms;
 internal sealed class CloudSetupForm : Form
 {
     private readonly LocalRepository repository;
+    private readonly Settings settings;
     private readonly HttpClient httpClient = new();
     private readonly CancellationTokenSource lifetime = new();
     private readonly TextBox baseUrl = UiControls.TextBox(240);
     private readonly Label status = UiControls.Label(string.Empty);
     private readonly ToolTip toolTip = new();
     private readonly Button check = UiControls.StandardButton("測試連線");
+    private readonly Button initialize = UiControls.StandardButton("建立雲端空間");
     private readonly Button save = UiControls.StandardButton("儲存");
     private readonly Button cancel = UiControls.StandardButton("取消");
     private readonly string initialBaseUrl;
@@ -21,10 +23,11 @@ internal sealed class CloudSetupForm : Form
     private string confirmedBaseUrl = string.Empty;
     private string confirmedSummary = string.Empty;
 
-    public CloudSetupForm(LocalRepository repository, string? initialBaseUrl = null)
+    public CloudSetupForm(LocalRepository repository, string? initialBaseUrl = null, Settings? liveSettings = null)
     {
         this.repository = repository;
-        this.initialBaseUrl = initialBaseUrl ?? repository.Settings.LoadOrCreate().CloudBaseUrl;
+        settings = liveSettings ?? repository.Settings.LoadOrCreate();
+        this.initialBaseUrl = initialBaseUrl ?? settings.CloudBaseUrl;
         SelectedBaseUrl = this.initialBaseUrl;
         Text = "雲端連線設定";
         StartPosition = FormStartPosition.CenterParent;
@@ -55,6 +58,7 @@ internal sealed class CloudSetupForm : Form
 
     public string SelectedBaseUrl { get; private set; }
     public CloudOnboardingStatus? SelectedOnboardingStatus { get; private set; }
+    public bool IdentityCompleted { get; private set; }
 
     private void BuildLayout()
     {
@@ -94,8 +98,10 @@ internal sealed class CloudSetupForm : Form
         cloudGroup.Controls.Add(cloud);
 
         cancel.DialogResult = DialogResult.Cancel;
-        save.Width = 112;
-        cancel.Width = 112;
+        initialize.Width = 138;
+        save.Width = 100;
+        cancel.Width = 100;
+        initialize.Click += async (_, _) => await InitializeWorkspaceAsync();
         save.Click += async (_, _) => await SaveAsync();
         var actions = new BufferedFlowLayoutPanel
         {
@@ -107,6 +113,7 @@ internal sealed class CloudSetupForm : Form
         };
         actions.Controls.Add(cancel);
         actions.Controls.Add(save);
+        actions.Controls.Add(initialize);
 
         root.Controls.Add(cloudGroup, 0, 0);
         root.Controls.Add(actions, 0, 1);
@@ -123,7 +130,6 @@ internal sealed class CloudSetupForm : Form
     private void UpdateState(string? message = null, bool error = false, string details = "")
     {
         stateError = error;
-        var settings = repository.Settings.LoadOrCreate();
         var registeredHere = HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, baseUrl.Text);
 
         status.Text = message ?? (baseUrl.Text.Trim().Length == 0
@@ -136,6 +142,16 @@ internal sealed class CloudSetupForm : Form
             : registeredHere ? Color.FromArgb(0, 120, 60) : SystemColors.ControlText;
         status.AccessibleDescription = details;
         toolTip.SetToolTip(status, details);
+        UpdateInitializeState();
+    }
+
+    private void UpdateInitializeState()
+    {
+        var registeredHere = HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, baseUrl.Text);
+        initialize.Enabled = !busy
+            && !registeredHere
+            && SelectedOnboardingStatus is { WorkspaceInitialized: false }
+            && SameEndpoint(confirmedBaseUrl, baseUrl.Text);
     }
 
     private async Task CheckHealthAsync()
@@ -160,6 +176,38 @@ internal sealed class CloudSetupForm : Form
 
         var onboarding = await client.GetOnboardingStatusAsync(lifetime.Token);
         return (normalized, health, onboarding);
+    }
+
+    private async Task InitializeWorkspaceAsync()
+    {
+        await RunBusyAsync(async () =>
+        {
+            var normalized = NormalizeBaseUrl(baseUrl.Text);
+            if (!SameEndpoint(confirmedBaseUrl, normalized) || SelectedOnboardingStatus is null)
+            {
+                var result = await CheckConnectionCoreAsync();
+                normalized = result.BaseUrl;
+                confirmedBaseUrl = result.BaseUrl;
+                SelectedOnboardingStatus = result.Onboarding;
+                confirmedSummary = ConnectionSummary(result.Health, result.Onboarding);
+            }
+
+            if (SelectedOnboardingStatus is not { WorkspaceInitialized: false })
+                throw new InvalidOperationException("此 Cloud 已有 Workspace，不可再次執行首次建立。這台電腦若尚未加入，後續應走裝置加入／復原流程。");
+            if (HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, normalized))
+                throw new InvalidOperationException("這台電腦已經有有效的 Cloud Device identity，不需要再次建立 Workspace。");
+
+            using var form = new CloudFirstWorkspaceForm(repository, settings, normalized);
+            if (form.ShowDialog(this) != DialogResult.OK || !form.IdentityCompleted) return;
+
+            IdentityCompleted = true;
+            SelectedBaseUrl = normalized;
+            SelectedOnboardingStatus = new CloudOnboardingStatus(true, "initialized");
+            confirmedSummary = "連線正常｜已建立雲端空間";
+            UpdateState(
+                confirmedSummary,
+                details: "第一個 Workspace 與本機 Device identity 已完成建立及驗證。");
+        });
     }
 
     private async Task SaveAsync()
@@ -189,6 +237,7 @@ internal sealed class CloudSetupForm : Form
         UseWaitCursor = true;
         save.Enabled = false;
         check.Enabled = false;
+        initialize.Enabled = false;
         baseUrl.Enabled = false;
         UpdateState("處理中…");
         try
@@ -212,7 +261,7 @@ internal sealed class CloudSetupForm : Form
             if (!IsDisposed)
             {
                 UpdateState(error.Message, error: true, details: error.Message);
-                MessageBox.Show(this, error.Message, "無法儲存雲端連線設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, error.Message, "無法完成雲端連線設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
         finally
@@ -239,8 +288,8 @@ internal sealed class CloudSetupForm : Form
     private static string ConnectionDetails(CloudHealthResult health, CloudOnboardingStatus onboarding)
     {
         var workspace = onboarding.WorkspaceInitialized
-            ? "Cloud backend 已初始化；後續將進入既有超級管理員驗證流程。"
-            : "Cloud backend 尚未初始化；後續將進入首次建立 Workspace／超級管理員流程。";
+            ? "Cloud backend 已初始化；若本機沒有有效 Device identity，應進入裝置加入／復原流程。"
+            : "Cloud backend 尚未初始化；可由本機既有 SUPER_ADMIN 驗證 Email OTP 後建立第一個 Workspace。";
         return $"{CloudCompatibility.SuccessSummary(health)}\n{workspace}";
     }
 
@@ -281,7 +330,7 @@ internal sealed class CloudSetupForm : Form
     {
         if (Text != "雲端連線設定" || ShowIcon || AcceptButton is not null)
             throw new InvalidOperationException("雲端連線設定視窗基本屬性不正確");
-        if (save.Text != "儲存" || cancel.DialogResult != DialogResult.Cancel || check.Text != "測試連線")
+        if (save.Text != "儲存" || cancel.DialogResult != DialogResult.Cancel || check.Text != "測試連線" || initialize.Text != "建立雲端空間")
             throw new InvalidOperationException("雲端連線設定動作按鈕不正確");
         if (initialBaseUrl.Length == 0 && baseUrl.Text.Length != 0)
             throw new InvalidOperationException("Public client 不得內建任何 Cloud API endpoint");
