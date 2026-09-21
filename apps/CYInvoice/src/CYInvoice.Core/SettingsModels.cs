@@ -8,6 +8,13 @@ public static class CloudModes
     public const string CloudPreferred = "cloud_preferred";
 }
 
+public sealed record CloudPendingBootstrapState(
+    string BaseUrl,
+    string WorkspaceDisplayName,
+    string DeviceDisplayName,
+    DateTimeOffset StartedAtUtc,
+    string DeviceToken);
+
 public sealed class Settings
 {
     [JsonPropertyName("environment")] public string Environment { get; set; } = Environments.Test;
@@ -20,6 +27,11 @@ public sealed class Settings
     [JsonPropertyName("cloud_workspace_id")] public string CloudWorkspaceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_id")] public string CloudDeviceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_token_enc")] public string CloudDeviceTokenEncrypted { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_bootstrap_url")] public string CloudPendingBootstrapUrl { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_bootstrap_workspace_name")] public string CloudPendingBootstrapWorkspaceName { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_bootstrap_device_name")] public string CloudPendingBootstrapDeviceName { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_bootstrap_started_utc")] public string CloudPendingBootstrapStartedUtc { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_bootstrap_token_enc")] public string CloudPendingBootstrapTokenEncrypted { get; set; } = string.Empty;
 }
 
 public interface ISecretProtector
