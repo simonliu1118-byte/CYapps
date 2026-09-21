@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Storage;
 
@@ -11,7 +12,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud health preserves backend storage outage diagnostics", TestStorageOutageAsync),
     ("cloud compatibility rejects non-CYInvoice services", TestCompatibilityAsync),
     ("cloud onboarding status distinguishes initialized backends", TestOnboardingStatusAsync),
-    ("cloud bootstrap sends one-time key and parses device token", TestBootstrapAsync),
+    ("cloud bootstrap reuses caller-owned device credentials for safe retry", TestBootstrapAsync),
     ("cloud authenticated device request sends bearer token", TestDeviceAuthenticationAsync),
     ("cloud pairing response parses one-time ticket", TestPairingAsync),
     ("cloud pairing claim parses new device identity", TestPairingClaimAsync)
@@ -91,7 +92,7 @@ static async Task TestHealthAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
-        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.3.0","apiVersion":"1","schemaVersion":"2","environment":"test","storage":"ok"}"""));
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.4.0","apiVersion":"1","schemaVersion":"2","environment":"test","storage":"ok"}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -99,7 +100,7 @@ static async Task TestHealthAsync()
     True(health.Reachable, "health should be reachable");
     True(health.StorageAvailable, "backend storage should be available");
     Equal("cyinvoice-cloud", health.ServiceName, "service name");
-    Equal("0.3.0", health.CloudVersion, "cloud version");
+    Equal("0.4.0", health.CloudVersion, "cloud version");
     Equal("1", health.ApiVersion, "api version");
     Equal("2", health.SchemaVersion, "schema version");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
@@ -109,7 +110,7 @@ static async Task TestStorageOutageAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.ServiceUnavailable,
-        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.3.0","apiVersion":"1","schemaVersion":"2","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
+        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.4.0","apiVersion":"1","schemaVersion":"2","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -168,23 +169,50 @@ static async Task TestOnboardingStatusAsync()
 
 static async Task TestBootstrapAsync()
 {
+    var attempt = new CloudBootstrapAttempt(
+        "dev_11111111-1111-4111-8111-111111111111",
+        "cydev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     var handler = new QueueHandler();
-    handler.Enqueue(request =>
+
+    for (var index = 0; index < 2; index++)
     {
-        True(request.Headers.TryGetValues("X-Bootstrap-Key", out var values), "bootstrap header should exist");
-        Equal("temporary-bootstrap", values!.Single(), "bootstrap header value");
-        Equal(HttpMethod.Post, request.Method, "bootstrap method");
-        Equal("/v1/bootstrap", request.RequestUri?.AbsolutePath ?? string.Empty, "bootstrap path");
-        return JsonResponse(HttpStatusCode.Created,
-            """{"ok":true,"workspace":{"workspaceId":"ws_1","displayName":"CYInvoice"},"device":{"deviceId":"dev_1","displayName":"A機","token":"cydev_first_token"}}""");
-    });
+        var status = index == 0 ? HttpStatusCode.Created : HttpStatusCode.OK;
+        handler.Enqueue(request =>
+        {
+            True(request.Headers.TryGetValues("X-Bootstrap-Key", out var values), "bootstrap header should exist");
+            Equal("temporary-bootstrap", values!.Single(), "bootstrap header value");
+            Equal(HttpMethod.Post, request.Method, "bootstrap method");
+            Equal("/v1/bootstrap", request.RequestUri?.AbsolutePath ?? string.Empty, "bootstrap path");
+
+            var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var body = JsonDocument.Parse(payload);
+            Equal("CYInvoice", body.RootElement.GetProperty("workspaceDisplayName").GetString() ?? string.Empty, "bootstrap workspace name");
+            Equal("A機", body.RootElement.GetProperty("deviceDisplayName").GetString() ?? string.Empty, "bootstrap device name");
+            Equal(attempt.DeviceId, body.RootElement.GetProperty("deviceId").GetString() ?? string.Empty, "bootstrap retry device ID");
+            Equal(attempt.DeviceToken, body.RootElement.GetProperty("deviceToken").GetString() ?? string.Empty, "bootstrap retry device token");
+
+            return JsonResponse(status,
+                """{"ok":true,"workspace":{"workspaceId":"ws_1","displayName":"CYInvoice"},"device":{"deviceId":"dev_11111111-1111-4111-8111-111111111111","displayName":"A機"}}""");
+        });
+    }
 
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
-    var identity = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3");
-    Equal("ws_1", identity.WorkspaceId, "bootstrap workspace ID");
-    Equal("dev_1", identity.DeviceId, "bootstrap device ID");
-    Equal("cydev_first_token", identity.DeviceToken, "bootstrap one-time device token");
+    var first = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3", attempt);
+    var retry = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3", attempt);
+
+    Equal("ws_1", first.WorkspaceId, "bootstrap workspace ID");
+    Equal(attempt.DeviceId, first.DeviceId, "bootstrap device ID");
+    Equal(attempt.DeviceToken, first.DeviceToken, "bootstrap token remains caller-owned");
+    Equal(first.WorkspaceId, retry.WorkspaceId, "retry workspace ID");
+    Equal(first.DeviceId, retry.DeviceId, "retry device ID");
+    Equal(first.DeviceToken, retry.DeviceToken, "retry must reuse the same device token");
+
+    var generated = CloudBootstrapAttempt.Create();
+    True(generated.DeviceId.StartsWith("dev_", StringComparison.Ordinal), "generated bootstrap device ID prefix");
+    True(Guid.TryParseExact(generated.DeviceId[4..], "D", out _), "generated bootstrap device ID UUID");
+    True(generated.DeviceToken.StartsWith("cydev_", StringComparison.Ordinal) && generated.DeviceToken.Length == 70,
+        "generated bootstrap device token format");
 }
 
 static async Task TestDeviceAuthenticationAsync()

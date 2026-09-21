@@ -14,8 +14,16 @@ type DeviceIdentity = {
   deviceDisplayName: string;
 };
 
+type BootstrapDeviceRow = {
+  device_id: string;
+  workspace_id: string;
+  device_display_name: string;
+  workspace_display_name: string;
+  token_hash: string | null;
+};
+
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.3.0";
+const CLOUD_VERSION = "0.4.0";
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
@@ -124,6 +132,20 @@ function normalizedClientVersion(value: unknown): string | null {
   return normalized;
 }
 
+function normalizedBootstrapDeviceId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return /^dev_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(normalized)
+    ? normalized
+    : null;
+}
+
+function normalizedDeviceToken(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return /^cydev_[0-9a-f]{64}$/.test(normalized) ? normalized : null;
+}
+
 async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
   try {
     const value: unknown = await request.json();
@@ -208,6 +230,47 @@ async function authenticateDevice(request: Request, env: Env): Promise<DeviceIde
   };
 }
 
+async function findBootstrapDevice(env: Env, deviceId: string): Promise<BootstrapDeviceRow | null> {
+  return env.DB.prepare(
+    `SELECT d.device_id,
+            d.workspace_id,
+            d.display_name AS device_display_name,
+            d.token_hash,
+            w.display_name AS workspace_display_name
+       FROM devices d
+       JOIN workspaces w ON w.workspace_id = d.workspace_id
+      WHERE d.device_id = ?1
+      LIMIT 1`
+  ).bind(deviceId).first<BootstrapDeviceRow>();
+}
+
+async function matchingBootstrapRetry(
+  env: Env,
+  deviceId: string,
+  tokenHash: string,
+  workspaceDisplayName: string,
+  deviceDisplayName: string
+): Promise<BootstrapDeviceRow | null> {
+  const existing = await findBootstrapDevice(env, deviceId);
+  if (!existing || !existing.token_hash) return null;
+  if (!(await constantTimeSecretEquals(tokenHash, existing.token_hash))) return null;
+  if (existing.workspace_display_name !== workspaceDisplayName || existing.device_display_name !== deviceDisplayName) return null;
+  return existing;
+}
+
+function bootstrapIdentityResponse(env: Env, requestId: string, status: number, row: BootstrapDeviceRow): Response {
+  return json(env, requestId, status, {
+    workspace: {
+      workspaceId: row.workspace_id,
+      displayName: row.workspace_display_name
+    },
+    device: {
+      deviceId: row.device_id,
+      displayName: row.device_display_name
+    }
+  });
+}
+
 async function bootstrapWorkspace(request: Request, env: Env, requestId: string): Promise<Response> {
   if (!env.BOOTSTRAP_KEY) {
     return json(env, requestId, 503, {
@@ -234,9 +297,16 @@ async function bootstrapWorkspace(request: Request, env: Env, requestId: string)
   const workspaceDisplayName = normalizedDisplayName(body.workspaceDisplayName);
   const deviceDisplayName = normalizedDisplayName(body.deviceDisplayName);
   const clientVersion = normalizedClientVersion(body.clientVersion);
-  if (!workspaceDisplayName || !deviceDisplayName || (body.clientVersion !== undefined && clientVersion === null)) {
+  const deviceId = normalizedBootstrapDeviceId(body.deviceId);
+  const deviceToken = normalizedDeviceToken(body.deviceToken);
+  if (!workspaceDisplayName || !deviceDisplayName || !deviceId || !deviceToken
+      || (body.clientVersion !== undefined && clientVersion === null)) {
     return badRequest(env, requestId, "INVALID_BOOTSTRAP_INPUT", "Workspace or device information is invalid.");
   }
+
+  const tokenHash = await sha256Hex(deviceToken);
+  const retry = await matchingBootstrapRetry(env, deviceId, tokenHash, workspaceDisplayName, deviceDisplayName);
+  if (retry) return bootstrapIdentityResponse(env, requestId, 200, retry);
 
   const countRow = await env.DB.prepare("SELECT COUNT(*) AS count FROM workspaces").first<{ count: number }>();
   if (Number(countRow?.count ?? 0) !== 0) {
@@ -249,34 +319,44 @@ async function bootstrapWorkspace(request: Request, env: Env, requestId: string)
   }
 
   const workspaceId = `ws_${crypto.randomUUID()}`;
-  const deviceId = `dev_${crypto.randomUUID()}`;
-  const deviceToken = `cydev_${randomHex(32)}`;
-  const tokenHash = await sha256Hex(deviceToken);
   const now = new Date().toISOString();
 
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO workspaces (workspace_id, display_name, status, created_at, updated_at)
-       VALUES (?1, ?2, 'active', ?3, ?3)`
-    ).bind(workspaceId, workspaceDisplayName, now),
-    env.DB.prepare(
-      `INSERT INTO devices (
-          device_id, workspace_id, display_name, status, client_version,
-          paired_at, last_seen_at, created_at, updated_at, token_hash, token_created_at
-       ) VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?5, ?5, ?5, ?6, ?5)`
-    ).bind(deviceId, workspaceId, deviceDisplayName, clientVersion, now, tokenHash)
-  ]);
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO workspaces (workspace_id, display_name, status, created_at, updated_at)
+         VALUES (?1, ?2, 'active', ?3, ?3)`
+      ).bind(workspaceId, workspaceDisplayName, now),
+      env.DB.prepare(
+        `INSERT INTO devices (
+            device_id, workspace_id, display_name, status, client_version,
+            paired_at, last_seen_at, created_at, updated_at, token_hash, token_created_at
+         ) VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?5, ?5, ?5, ?6, ?5)`
+      ).bind(deviceId, workspaceId, deviceDisplayName, clientVersion, now, tokenHash)
+    ]);
+  } catch (error) {
+    const recovered = await matchingBootstrapRetry(env, deviceId, tokenHash, workspaceDisplayName, deviceDisplayName);
+    if (recovered) return bootstrapIdentityResponse(env, requestId, 200, recovered);
 
-  return json(env, requestId, 201, {
-    workspace: {
-      workspaceId,
-      displayName: workspaceDisplayName
-    },
-    device: {
-      deviceId,
-      displayName: deviceDisplayName,
-      token: deviceToken
+    const afterCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM workspaces").first<{ count: number }>();
+    if (Number(afterCount?.count ?? 0) !== 0) {
+      return json(env, requestId, 409, {
+        error: {
+          code: "WORKSPACE_ALREADY_INITIALIZED",
+          message: "A workspace already exists."
+        }
+      });
     }
+
+    throw error;
+  }
+
+  return bootstrapIdentityResponse(env, requestId, 201, {
+    device_id: deviceId,
+    workspace_id: workspaceId,
+    device_display_name: deviceDisplayName,
+    workspace_display_name: workspaceDisplayName,
+    token_hash: tokenHash
   });
 }
 

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace CYInvoice.Core.Cloud;
@@ -24,6 +25,13 @@ public sealed record CloudDeviceIdentity(
     string DeviceId,
     string DeviceDisplayName,
     string DeviceToken);
+
+public sealed record CloudBootstrapAttempt(string DeviceId, string DeviceToken)
+{
+    public static CloudBootstrapAttempt Create() => new(
+        $"dev_{Guid.NewGuid():D}",
+        $"cydev_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}");
+}
 
 public sealed record CloudPairingTicket(string Code, DateTimeOffset ExpiresAt);
 
@@ -134,9 +142,15 @@ public sealed class CloudClient
         string workspaceDisplayName,
         string deviceDisplayName,
         string clientVersion,
+        CloudBootstrapAttempt attempt,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(bootstrapKey)) throw new ArgumentException("Bootstrap key is required.", nameof(bootstrapKey));
+        ArgumentNullException.ThrowIfNull(attempt);
+        if (!ValidBootstrapDeviceId(attempt.DeviceId))
+            throw new ArgumentException("Bootstrap device ID is invalid.", nameof(attempt));
+        if (!ValidDeviceToken(attempt.DeviceToken))
+            throw new ArgumentException("Bootstrap device token is invalid.", nameof(attempt));
 
         using var document = await SendAsync(
             HttpMethod.Post,
@@ -145,13 +159,15 @@ public sealed class CloudClient
             {
                 workspaceDisplayName,
                 deviceDisplayName,
-                clientVersion
+                clientVersion,
+                deviceId = attempt.DeviceId,
+                deviceToken = attempt.DeviceToken
             },
             false,
             bootstrapKey.Trim(),
             cancellationToken);
 
-        return ReadDeviceIdentity(document.RootElement, requireToken: true);
+        return ReadDeviceIdentity(document.RootElement, requireToken: false) with { DeviceToken = attempt.DeviceToken };
     }
 
     public async Task<CloudDeviceIdentity> GetCurrentDeviceAsync(CancellationToken cancellationToken = default)
@@ -277,6 +293,19 @@ public sealed class CloudClient
         return element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? string.Empty
             : string.Empty;
+    }
+
+    private static bool ValidBootstrapDeviceId(string value)
+    {
+        if (!value.StartsWith("dev_", StringComparison.Ordinal) || value.Length != 40) return false;
+        return Guid.TryParseExact(value[4..], "D", out _);
+    }
+
+    private static bool ValidDeviceToken(string value)
+    {
+        if (!value.StartsWith("cydev_", StringComparison.Ordinal) || value.Length != 70) return false;
+        return value.AsSpan(6).ToString().All(character =>
+            character is >= '0' and <= '9' or >= 'a' and <= 'f');
     }
 
     private static Uri NormalizeBaseUri(Uri value)
