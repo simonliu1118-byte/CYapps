@@ -457,7 +457,7 @@ async function verifyEmployeeSchemaHealth(env: Env, requestId: string): Promise<
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const requestId = requestIdFrom(request);
     const url = new URL(request.url);
 
@@ -485,7 +485,7 @@ export default {
         if (problem) return problem;
       }
 
-      return baseWorker.fetch(request, env, ctx);
+      return baseWorker.fetch(request, env);
     } catch (error) {
       console.error("employee_layer_request_failed", {
         requestId,
