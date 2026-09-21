@@ -8,11 +8,14 @@ internal sealed class SettingsForm : Form
     private readonly LocalRepository repository;
     private readonly Settings settings;
     private readonly ToolTip toolTip = new();
+    private readonly RadioButton localMode = new() { Text = "單機版", AutoSize = true };
+    private readonly RadioButton cloudMode = new() { Text = "雲端版", AutoSize = true };
     private readonly RadioButton test = new() { Text = "光貿測試環境", AutoSize = true };
     private readonly RadioButton production = new() { Text = "正式公司", AutoSize = true };
     private readonly TextBox invoice = UiControls.TextBox(8);
     private readonly TextBox appKey = UiControls.TextBox(200);
     private readonly TextBox moPassword = UiControls.TextBox(200);
+    private readonly Button cloudSettings = UiControls.StandardButton("雲端連線設定");
     private readonly Button diagnostics = UiControls.StandardButton("系統診斷");
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
@@ -28,7 +31,7 @@ internal sealed class SettingsForm : Form
         settings = repository.Settings.LoadOrCreate();
         Text = "設定選單";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(420, 338);
+        ClientSize = new Size(420, 340);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -43,8 +46,11 @@ internal sealed class SettingsForm : Form
         BuildLayout();
         LoadValues();
         UpdateEnvironmentFields();
+        UpdateCloudControls();
         test.CheckedChanged += EnvironmentChanged;
         production.CheckedChanged += EnvironmentChanged;
+        localMode.CheckedChanged += CloudModeChanged;
+        cloudMode.CheckedChanged += CloudModeChanged;
         ResumeLayout(false);
         PerformLayout();
     }
@@ -57,13 +63,33 @@ internal sealed class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
-            Padding = new Padding(18),
+            RowCount = 4,
+            Padding = new Padding(10),
             Margin = Padding.Empty,
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 176));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+
+        var modeGroup = new GroupBox { Text = "運作模式", Dock = DockStyle.Fill };
+        var modeChoices = new BufferedFlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(8, 5, 0, 0),
+            Margin = Padding.Empty,
+        };
+        localMode.Margin = new Padding(0, 5, 18, 0);
+        cloudMode.Margin = new Padding(0, 5, 6, 0);
+        cloudSettings.Width = 138;
+        cloudSettings.Margin = Padding.Empty;
+        cloudSettings.Click += (_, _) => OpenCloudSettings();
+        modeChoices.Controls.Add(localMode);
+        modeChoices.Controls.Add(cloudMode);
+        modeChoices.Controls.Add(cloudSettings);
+        modeGroup.Controls.Add(modeChoices);
 
         var environmentGroup = new GroupBox { Text = "使用環境", Dock = DockStyle.Fill };
         environmentLayout = new BufferedTableLayoutPanel
@@ -71,16 +97,16 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 3,
             RowCount = 4,
-            Padding = new Padding(8),
+            Padding = new Padding(6, 3, 6, 3),
             Margin = Padding.Empty,
         };
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
-        environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
+        environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
         environmentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
+        environmentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 31));
         environmentLayout.Controls.Add(test, 0, 0);
         environmentLayout.SetColumnSpan(test, 3);
         environmentLayout.Controls.Add(production, 0, 1);
@@ -98,11 +124,11 @@ internal sealed class SettingsForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            Padding = new Padding(8),
+            Padding = new Padding(6, 5, 6, 5),
             Margin = Padding.Empty,
         };
         platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
-        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
+        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
         platform.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         moPasswordLabel = FieldLabel("MO店+");
         platform.Controls.Add(moPasswordLabel, 1, 0);
@@ -127,20 +153,33 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 7, 0, 0),
+            Padding = new Padding(0, 6, 0, 0),
             Margin = Padding.Empty,
         };
-        actionButtons.SizeChanged += (_, _) => CenterButtons(actionButtons, 7);
+        actionButtons.SizeChanged += (_, _) => CenterButtons(actionButtons, 6);
         actionButtons.Controls.Add(diagnostics);
         actionButtons.Controls.Add(save);
         actionButtons.Controls.Add(cancel);
 
-        root.Controls.Add(environmentGroup, 0, 0);
-        root.Controls.Add(platformGroup, 0, 1);
-        root.Controls.Add(actionButtons, 0, 2);
+        root.Controls.Add(modeGroup, 0, 0);
+        root.Controls.Add(environmentGroup, 0, 1);
+        root.Controls.Add(platformGroup, 0, 2);
+        root.Controls.Add(actionButtons, 0, 3);
         Controls.Add(root);
         AcceptButton = null;
         CancelButton = cancel;
+    }
+
+    private void OpenCloudSettings()
+    {
+        using var form = new CloudSetupForm(repository, settings.CloudBaseUrl);
+        if (form.ShowDialog(this) != DialogResult.OK) return;
+
+        var endpointChanged = settings.CloudBaseUrl.Length != 0
+            && !SameCloudEndpoint(settings.CloudBaseUrl, form.SelectedBaseUrl);
+        if (endpointChanged && HasCloudIdentity(settings))
+            repository.Settings.ClearCloudIdentity(settings);
+        settings.CloudBaseUrl = form.SelectedBaseUrl;
     }
 
     private void EnvironmentChanged(object? sender, EventArgs eventArgs)
@@ -156,6 +195,12 @@ internal sealed class SettingsForm : Form
             environmentLayout.ResumeLayout(false);
             ResumeLayout(false);
         }
+    }
+
+    private void CloudModeChanged(object? sender, EventArgs eventArgs)
+    {
+        if (sender is RadioButton radio && !radio.Checked) return;
+        UpdateCloudControls();
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -181,6 +226,8 @@ internal sealed class SettingsForm : Form
 
     private void LoadValues()
     {
+        localMode.Checked = settings.CloudMode == CloudModes.LocalOnly;
+        cloudMode.Checked = settings.CloudMode == CloudModes.CloudPreferred;
         test.Checked = settings.Environment == Environments.Test;
         production.Checked = settings.Environment == Environments.Production;
         invoice.Text = settings.ProductionInvoice;
@@ -190,6 +237,11 @@ internal sealed class SettingsForm : Form
         moPassword.PlaceholderText = settings.MoPasswordEncrypted.Length == 0
             ? "尚未設定"
             : "留白會保存目前已儲存的密碼";
+    }
+
+    private void UpdateCloudControls()
+    {
+        cloudSettings.Enabled = cloudMode.Checked;
     }
 
     private void UpdateEnvironmentFields()
@@ -203,6 +255,12 @@ internal sealed class SettingsForm : Form
     {
         try
         {
+            if (!localMode.Checked && !cloudMode.Checked)
+                throw new InvalidOperationException("請選擇單機版或雲端版。");
+            if (cloudMode.Checked && string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
+                throw new InvalidOperationException("請先按「雲端連線設定」完成 Cloud API 連線設定。");
+
+            settings.CloudMode = cloudMode.Checked ? CloudModes.CloudPreferred : CloudModes.LocalOnly;
             settings.Environment = production.Checked ? Environments.Production : Environments.Test;
             settings.ProductionInvoice = invoice.Text.Trim();
             if (appKey.Text.Length != 0) repository.Settings.SetProductionAppKey(settings, appKey.Text);
@@ -215,6 +273,23 @@ internal sealed class SettingsForm : Form
         {
             MessageBox.Show(this, error.Message, "無法儲存設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
+    }
+
+    private static bool HasCloudIdentity(Settings value) =>
+        value.CloudWorkspaceId.Length != 0
+        && value.CloudDeviceId.Length != 0
+        && value.CloudDeviceTokenEncrypted.Length != 0;
+
+    private static bool SameCloudEndpoint(string left, string right)
+    {
+        static string Normalize(string value)
+        {
+            value = value.Trim();
+            if (value.Length == 0) return string.Empty;
+            return value.EndsWith("/", StringComparison.Ordinal) ? value : value + "/";
+        }
+
+        return string.Equals(Normalize(left), Normalize(right), StringComparison.OrdinalIgnoreCase);
     }
 
     private static void CenterButtons(FlowLayoutPanel panel, int topPadding)
@@ -258,14 +333,20 @@ internal sealed class SettingsForm : Form
         var platformX = moPasswordLabel.PointToScreen(Point.Empty).X;
         if (string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
             appKeyLabel.PreferredWidth > appKeyLabel.Width ||
-            diagnostics.Text != "系統診斷" || actionButtons.Controls.Count != 3 ||
+            cloudSettings.PreferredSize.Width > cloudSettings.Width ||
+            diagnostics.Text != "系統診斷" || cloudSettings.Text != "雲端連線設定" ||
+            localMode.Text != "單機版" || cloudMode.Text != "雲端版" ||
+            cloudSettings.Enabled != cloudMode.Checked ||
+            actionButtons.Controls.Count != 3 ||
             Math.Abs(environmentX - platformX) > 1 ||
+            actionButtons.Controls.Cast<Control>().Any(control => control.Bottom > actionButtons.ClientSize.Height) ||
             Math.Abs((actionButtons.Controls.Cast<Control>().Min(control => control.Left) +
                 actionButtons.Controls.Cast<Control>().Max(control => control.Right)) / 2 - actionButtons.ClientSize.Width / 2) > 2)
-            throw new InvalidOperationException("設定動作、系統診斷、MO店+ 對齊、提示或 App Key 標籤配置不正確");
+            throw new InvalidOperationException("設定動作、運作模式、MO店+ 對齊、提示或 App Key 標籤配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
-        if (logicalWidth > 430)
-            throw new InvalidOperationException("設定視窗未維持精簡寬度");
+        var logicalHeight = ClientSize.Height * 96D / DeviceDpi;
+        if (logicalWidth > 430 || logicalHeight > 355)
+            throw new InvalidOperationException("設定視窗未維持精簡尺寸");
     }
 
     protected override void Dispose(bool disposing)

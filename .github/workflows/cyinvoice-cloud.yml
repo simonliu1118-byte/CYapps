@@ -1,0 +1,151 @@
+name: CYInvoice Cloud Check
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/CYInvoice/cloud/**'
+      - 'apps/CYInvoice/src/CYInvoice.Core/**'
+      - 'apps/CYInvoice/src/CYInvoice.WinForms/**'
+      - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
+      - '.github/workflows/cyinvoice-cloud.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/CYInvoice/cloud/**'
+      - 'apps/CYInvoice/src/CYInvoice.Core/**'
+      - 'apps/CYInvoice/src/CYInvoice.WinForms/**'
+      - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
+      - '.github/workflows/cyinvoice-cloud.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/CYInvoice/cloud
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Type check
+        run: npm run check
+
+      - name: Validate Worker bundle
+        run: npm run deploy:dry-run
+
+      - name: Validate D1 migrations with SQLite
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          db = sqlite3.connect(':memory:')
+          migrations = sorted(Path('migrations').glob('*.sql'))
+          if not migrations:
+              raise SystemExit('no D1 migrations found')
+
+          for migration in migrations:
+              print(f'applying {migration.name}')
+              db.executescript(migration.read_text(encoding='utf-8'))
+
+          tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          required_tables = {'workspaces', 'devices', 'device_pairing_codes'}
+          missing_tables = required_tables - tables
+          if missing_tables:
+              raise SystemExit(f'missing tables: {sorted(missing_tables)}')
+
+          device_columns = {row[1] for row in db.execute('PRAGMA table_info(devices)')}
+          required_device_columns = {'token_hash', 'token_created_at', 'pairing_id', 'revoked_at'}
+          missing_columns = required_device_columns - device_columns
+          if missing_columns:
+              raise SystemExit(f'missing device columns: {sorted(missing_columns)}')
+
+          device_indexes = {row[1] for row in db.execute("PRAGMA index_list('devices')")}
+          required_device_indexes = {'idx_devices_token_hash', 'idx_devices_pairing_id'}
+          missing_indexes = required_device_indexes - device_indexes
+          if missing_indexes:
+              raise SystemExit(f'missing device indexes: {sorted(missing_indexes)}')
+
+          workspace_indexes = {row[1] for row in db.execute("PRAGMA index_list('workspaces')")}
+          if 'idx_single_workspace' not in workspace_indexes:
+              raise SystemExit('missing single-workspace bootstrap invariant index')
+
+          db.execute("INSERT INTO workspaces (workspace_id, display_name) VALUES ('ws_one', 'One')")
+          try:
+              db.execute("INSERT INTO workspaces (workspace_id, display_name) VALUES ('ws_two', 'Two')")
+          except sqlite3.IntegrityError:
+              pass
+          else:
+              raise SystemExit('single-workspace invariant did not reject a second workspace')
+
+          print('D1 migrations syntax/shape/invariant check passed')
+          PY
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run Windows-client cloud contract tests
+        working-directory: apps/CYInvoice
+        run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release
+
+  windows-client:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: apps/CYInvoice
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Windows solution
+        run: dotnet restore CYInvoice.sln
+
+      - name: Build Windows client
+        run: dotnet build CYInvoice.sln -c Release -p:Platform=x64 --no-restore
+
+      - name: Run WinForms startup smoke test
+        run: |
+          dotnet run --project src/CYInvoice.WinForms/CYInvoice.WinForms.csproj -c Release -p:Platform=x64 --no-build -- --startup-smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "WinForms startup smoke test failed" }
+
+      - name: Run cloud client contract tests on Windows
+        run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release
+
+      - name: Build engineering package
+        run: |
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          $build = [int]((Get-Content ./BUILD -Raw).Trim())
+          ./scripts/build.ps1 -Version $version -Build $build -Engineering
+          $artifactRoot = "./dist/cloud-foundation-artifact"
+          New-Item -Path $artifactRoot -ItemType Directory -Force | Out-Null
+          Copy-Item -Path "./dist/CYInvoice" -Destination $artifactRoot -Recurse
+          if (!(Test-Path "$artifactRoot/CYInvoice/CYInvoice.exe" -PathType Leaf)) {
+            throw "Cloud foundation engineering artifact is missing CYInvoice.exe"
+          }
+
+      - name: Upload cloud foundation engineering package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYInvoice_cloud-foundation_engineering-run${{ github.run_number }}
+          path: apps/CYInvoice/dist/cloud-foundation-artifact/
+          if-no-files-found: error
+          retention-days: 14
