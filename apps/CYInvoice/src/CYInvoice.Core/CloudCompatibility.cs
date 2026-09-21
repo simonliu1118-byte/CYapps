@@ -4,7 +4,7 @@ public static class CloudCompatibility
 {
     public const string ServiceName = "cyinvoice-cloud";
     public const string ApiVersion = "1";
-    public const string SchemaVersion = "3";
+    public const string SchemaVersion = "4";
 
     public static string Problem(CloudHealthResult health)
     {
