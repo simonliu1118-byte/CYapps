@@ -12,7 +12,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud health preserves backend storage outage diagnostics", TestStorageOutageAsync),
     ("cloud compatibility rejects non-CYInvoice services", TestCompatibilityAsync),
     ("cloud onboarding status distinguishes initialized backends", TestOnboardingStatusAsync),
-    ("cloud bootstrap reuses caller-owned token while device ID remains cloud-owned", TestBootstrapAsync),
+    ("cloud bootstrap email challenge preserves bootstrap authorization", TestBootstrapEmailChallengeAsync),
+    ("cloud bootstrap reuses caller-owned token and requires email OTP", TestBootstrapAsync),
     ("cloud authenticated device request sends bearer token", TestDeviceAuthenticationAsync),
     ("cloud pairing response parses one-time ticket", TestPairingAsync),
     ("cloud pairing claim parses new device identity", TestPairingClaimAsync)
@@ -130,7 +131,7 @@ static async Task TestHealthAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
-        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.4.0","apiVersion":"1","schemaVersion":"2","environment":"test","storage":"ok"}"""));
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.5.0","apiVersion":"1","schemaVersion":"3","environment":"test","storage":"ok"}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -138,9 +139,9 @@ static async Task TestHealthAsync()
     True(health.Reachable, "health should be reachable");
     True(health.StorageAvailable, "backend storage should be available");
     Equal("cyinvoice-cloud", health.ServiceName, "service name");
-    Equal("0.4.0", health.CloudVersion, "cloud version");
+    Equal("0.5.0", health.CloudVersion, "cloud version");
     Equal("1", health.ApiVersion, "api version");
-    Equal("2", health.SchemaVersion, "schema version");
+    Equal("3", health.SchemaVersion, "schema version");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
 }
 
@@ -148,7 +149,7 @@ static async Task TestStorageOutageAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.ServiceUnavailable,
-        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.4.0","apiVersion":"1","schemaVersion":"2","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
+        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.5.0","apiVersion":"1","schemaVersion":"3","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -157,7 +158,7 @@ static async Task TestStorageOutageAsync()
     True(!health.StorageAvailable, "storage outage must not be reported as healthy");
     Equal("cyinvoice-cloud", health.ServiceName, "storage outage should preserve service identity");
     Equal("1", health.ApiVersion, "storage outage should preserve API version");
-    Equal("2", health.SchemaVersion, "storage outage should preserve schema version");
+    Equal("3", health.SchemaVersion, "storage outage should preserve schema version");
     Equal("STORAGE_UNAVAILABLE", health.ErrorCode, "storage outage error code");
     True(CloudCompatibility.Problem(health).Contains("後端儲存服務尚未就緒", StringComparison.Ordinal),
         "storage outage should report backend storage instead of a wrong-service error");
@@ -205,10 +206,39 @@ static async Task TestOnboardingStatusAsync()
     True(second.WorkspaceInitialized, "existing backend must report a workspace");
 }
 
+static async Task TestBootstrapEmailChallengeAsync()
+{
+    var handler = new QueueHandler();
+    handler.Enqueue(request =>
+    {
+        Equal(HttpMethod.Post, request.Method, "bootstrap email challenge method");
+        Equal("/v1/onboarding/bootstrap-email", request.RequestUri?.AbsolutePath ?? string.Empty,
+            "bootstrap email challenge path");
+        True(request.Headers.TryGetValues("X-Bootstrap-Key", out var values), "bootstrap email header should exist");
+        Equal("temporary-bootstrap", values!.Single(), "bootstrap email header value");
+        var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var body = JsonDocument.Parse(payload);
+        Equal("owner@example.test", body.RootElement.GetProperty("email").GetString() ?? string.Empty,
+            "existing Local SUPER_ADMIN email is forwarded without a separate user-entered address");
+        return JsonResponse(HttpStatusCode.Created,
+            """{"ok":true,"challenge":{"challengeId":"otp_12345678-1234-1234-1234-123456789abc","maskedEmail":"ow***@example.test","expiresAt":"2026-09-21T07:10:00Z","resendAfter":"2026-09-21T07:01:00Z"}}""");
+    });
+
+    using var http = new HttpClient(handler);
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
+    var challenge = await client.StartBootstrapEmailChallengeAsync("temporary-bootstrap", "owner@example.test");
+    Equal("otp_12345678-1234-1234-1234-123456789abc", challenge.ChallengeId, "challenge ID");
+    Equal("ow***@example.test", challenge.MaskedEmail, "masked email");
+    Equal(DateTimeOffset.Parse("2026-09-21T07:10:00Z"), challenge.ExpiresAt, "OTP expiry");
+    Equal(DateTimeOffset.Parse("2026-09-21T07:01:00Z"), challenge.ResendAfter, "OTP resend time");
+}
+
 static async Task TestBootstrapAsync()
 {
     var attempt = new CloudBootstrapAttempt(
         "cydev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    const string challengeId = "otp_12345678-1234-1234-1234-123456789abc";
+    const string otp = "123456";
     var handler = new QueueHandler();
 
     for (var index = 0; index < 2; index++)
@@ -225,6 +255,8 @@ static async Task TestBootstrapAsync()
             using var body = JsonDocument.Parse(payload);
             Equal("CYInvoice", body.RootElement.GetProperty("workspaceDisplayName").GetString() ?? string.Empty, "bootstrap workspace name");
             Equal("A機", body.RootElement.GetProperty("deviceDisplayName").GetString() ?? string.Empty, "bootstrap device name");
+            Equal(challengeId, body.RootElement.GetProperty("emailChallengeId").GetString() ?? string.Empty, "bootstrap email challenge ID");
+            Equal(otp, body.RootElement.GetProperty("emailOtp").GetString() ?? string.Empty, "bootstrap OTP");
             True(!body.RootElement.TryGetProperty("deviceId", out _), "bootstrap device ID must remain cloud-owned");
             Equal(attempt.DeviceToken, body.RootElement.GetProperty("deviceToken").GetString() ?? string.Empty, "bootstrap retry device token");
 
@@ -235,8 +267,8 @@ static async Task TestBootstrapAsync()
 
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
-    var first = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3", attempt);
-    var retry = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3", attempt);
+    var first = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3", challengeId, otp, attempt);
+    var retry = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3", challengeId, otp, attempt);
 
     Equal("ws_1", first.WorkspaceId, "bootstrap workspace ID");
     Equal("dev_cloud_generated", first.DeviceId, "bootstrap device ID is returned by Cloud");
