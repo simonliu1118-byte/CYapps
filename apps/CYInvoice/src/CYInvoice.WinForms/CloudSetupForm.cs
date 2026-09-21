@@ -170,7 +170,13 @@ internal sealed class CloudSetupForm : Form
             confirmedBaseUrl = result.BaseUrl;
             SelectedOnboardingStatus = result.Onboarding;
             confirmedSummary = ConnectionSummary(result.Onboarding);
-            UpdateState(confirmedSummary, details: ConnectionDetails(result.Health, result.Onboarding));
+            var details = ConnectionDetails(result.Health, result.Onboarding);
+            if (HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, result.BaseUrl))
+            {
+                var reconciliation = await ReconcileLocalEmployeeAsync(result.BaseUrl);
+                details += $"\n{ReconciliationDetails(reconciliation)}";
+            }
+            UpdateState(confirmedSummary, details: details);
         });
     }
 
@@ -208,13 +214,17 @@ internal sealed class CloudSetupForm : Form
                 using var form = new CloudFirstWorkspaceForm(repository, settings, normalized);
                 if (form.ShowDialog(this) != DialogResult.OK || !form.IdentityCompleted) return;
 
+                var reconciliation = await ReconcileLocalEmployeeAsync(normalized);
+                if (!reconciliation.CentralRoleReady || reconciliation.Employee?.Role != EmployeeRoles.SuperAdmin)
+                    throw new InvalidOperationException("第一位本機超級管理員尚未完成中央 SUPER_ADMIN 建立；Device identity 已保留，請重新測試連線以安全重試帳號同步。");
+
                 IdentityCompleted = true;
                 SelectedBaseUrl = normalized;
                 SelectedOnboardingStatus = new CloudOnboardingStatus(true, "initialized");
                 confirmedSummary = "連線正常｜已建立雲端空間";
                 UpdateState(
                     confirmedSummary,
-                    details: "第一個 Workspace 與本機 Device identity 已完成建立及驗證。");
+                    details: $"第一個 Workspace、Device identity 與中央 SUPER_ADMIN 已完成建立及驗證。\n{ReconciliationDetails(reconciliation)}");
                 return;
             }
 
@@ -223,17 +233,56 @@ internal sealed class CloudSetupForm : Form
                 using var form = new CloudJoinWorkspaceForm(repository, settings, normalized);
                 if (form.ShowDialog(this) != DialogResult.OK || !form.IdentityCompleted) return;
 
+                var reconciliation = await ReconcileLocalEmployeeAsync(normalized);
                 IdentityCompleted = true;
                 SelectedBaseUrl = normalized;
                 confirmedSummary = "連線正常｜此電腦已加入雲端空間";
                 UpdateState(
                     confirmedSummary,
-                    details: "既有 Workspace 保持不變；本機已取得並驗證自己的獨立 Device identity。帳號／角色仍由後續中央 Employee 流程處理。");
+                    details: $"既有 Workspace 保持不變；本機已取得並驗證自己的獨立 Device identity。\n{ReconciliationDetails(reconciliation)}");
                 return;
             }
 
             throw new InvalidOperationException("Cloud onboarding 狀態無法判斷，請重新測試連線。");
         });
+    }
+
+    private async Task<CloudEmployeeReconciliation> ReconcileLocalEmployeeAsync(string normalizedBaseUrl)
+    {
+        if (!HasCloudIdentity(settings) || !SameEndpoint(settings.CloudBaseUrl, normalizedBaseUrl))
+            throw new InvalidOperationException("Cloud Device identity 尚未完成，不能同步中央員工身分。");
+
+        var localSuperAdmins = repository.Employees.LoadAll()
+            .Where(account => account.Enabled && account.Role == EmployeeRoles.SuperAdmin)
+            .ToArray();
+        if (localSuperAdmins.Length > 1)
+            throw new InvalidDataException("本機存在多個啟用中的超級管理員，停止中央員工同步。");
+
+        var token = repository.Settings.CloudDeviceToken(settings);
+        var employeeClient = new CloudEmployeeClient(
+            httpClient,
+            new Uri(normalizedBaseUrl, UriKind.Absolute),
+            token);
+        return await employeeClient.ReconcileLocalSuperAdminAsync(
+            localSuperAdmins.SingleOrDefault(),
+            lifetime.Token);
+    }
+
+    private static string ReconciliationDetails(CloudEmployeeReconciliation reconciliation)
+    {
+        var account = reconciliation.Employee is null
+            ? string.Empty
+            : $"（{reconciliation.Employee.EmployeeNo} {reconciliation.Employee.Name}）";
+        return reconciliation.State switch
+        {
+            "owner_created" => $"本機原超級管理員已建立為 Workspace 唯一 SUPER_ADMIN {account}。",
+            "admin_created" => $"本機原超級管理員已自動轉為 Workspace ADMIN {account}，可維持日常管理工作。",
+            "linked" => $"本機帳號已連結既有中央員工身分 {account}。",
+            "requires_confirmation" => "偵測到可能已存在的中央員工，未依姓名或 Email 自動合併；Device 已加入，帳號需由帳號管理明確確認對應。",
+            "device_only" => "此裝置沒有可匯入的本機超級管理員；Device 已加入，中央使用者身分另行處理。",
+            "import_window_expired" => "本機超級管理員自動匯入時限已過；Device 仍有效，帳號需由帳號管理明確處理。",
+            _ => $"中央員工同步狀態：{reconciliation.State}。",
+        };
     }
 
     private async Task SaveAsync()
