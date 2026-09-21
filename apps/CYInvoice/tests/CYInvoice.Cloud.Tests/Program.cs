@@ -12,7 +12,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud health preserves backend storage outage diagnostics", TestStorageOutageAsync),
     ("cloud compatibility rejects non-CYInvoice services", TestCompatibilityAsync),
     ("cloud onboarding status distinguishes initialized backends", TestOnboardingStatusAsync),
-    ("cloud bootstrap reuses caller-owned device credentials for safe retry", TestBootstrapAsync),
+    ("cloud bootstrap reuses caller-owned token while device ID remains cloud-owned", TestBootstrapAsync),
     ("cloud authenticated device request sends bearer token", TestDeviceAuthenticationAsync),
     ("cloud pairing response parses one-time ticket", TestPairingAsync),
     ("cloud pairing claim parses new device identity", TestPairingClaimAsync)
@@ -170,7 +170,6 @@ static async Task TestOnboardingStatusAsync()
 static async Task TestBootstrapAsync()
 {
     var attempt = new CloudBootstrapAttempt(
-        "dev_11111111-1111-4111-8111-111111111111",
         "cydev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     var handler = new QueueHandler();
 
@@ -188,11 +187,11 @@ static async Task TestBootstrapAsync()
             using var body = JsonDocument.Parse(payload);
             Equal("CYInvoice", body.RootElement.GetProperty("workspaceDisplayName").GetString() ?? string.Empty, "bootstrap workspace name");
             Equal("A機", body.RootElement.GetProperty("deviceDisplayName").GetString() ?? string.Empty, "bootstrap device name");
-            Equal(attempt.DeviceId, body.RootElement.GetProperty("deviceId").GetString() ?? string.Empty, "bootstrap retry device ID");
+            True(!body.RootElement.TryGetProperty("deviceId", out _), "bootstrap device ID must remain cloud-owned");
             Equal(attempt.DeviceToken, body.RootElement.GetProperty("deviceToken").GetString() ?? string.Empty, "bootstrap retry device token");
 
             return JsonResponse(status,
-                """{"ok":true,"workspace":{"workspaceId":"ws_1","displayName":"CYInvoice"},"device":{"deviceId":"dev_11111111-1111-4111-8111-111111111111","displayName":"A機"}}""");
+                """{"ok":true,"workspace":{"workspaceId":"ws_1","displayName":"CYInvoice"},"device":{"deviceId":"dev_cloud_generated","displayName":"A機"}}""");
         });
     }
 
@@ -202,15 +201,13 @@ static async Task TestBootstrapAsync()
     var retry = await client.BootstrapAsync("temporary-bootstrap", "CYInvoice", "A機", "2.6.3", attempt);
 
     Equal("ws_1", first.WorkspaceId, "bootstrap workspace ID");
-    Equal(attempt.DeviceId, first.DeviceId, "bootstrap device ID");
+    Equal("dev_cloud_generated", first.DeviceId, "bootstrap device ID is returned by Cloud");
     Equal(attempt.DeviceToken, first.DeviceToken, "bootstrap token remains caller-owned");
     Equal(first.WorkspaceId, retry.WorkspaceId, "retry workspace ID");
     Equal(first.DeviceId, retry.DeviceId, "retry device ID");
     Equal(first.DeviceToken, retry.DeviceToken, "retry must reuse the same device token");
 
     var generated = CloudBootstrapAttempt.Create();
-    True(generated.DeviceId.StartsWith("dev_", StringComparison.Ordinal), "generated bootstrap device ID prefix");
-    True(Guid.TryParseExact(generated.DeviceId[4..], "D", out _), "generated bootstrap device ID UUID");
     True(generated.DeviceToken.StartsWith("cydev_", StringComparison.Ordinal) && generated.DeviceToken.Length == 70,
         "generated bootstrap device token format");
 }
