@@ -17,7 +17,9 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud authenticated device request sends bearer token", TestDeviceAuthenticationAsync),
     ("cloud pairing authorization uses the authenticated Device and Workspace recovery Email", TestPairingAuthorizationAsync),
     ("cloud pairing code requires email authorization OTP", TestPairingAsync),
-    ("cloud pairing claim reuses caller-owned token across retries", TestPairingClaimAsync)
+    ("cloud pairing claim reuses caller-owned token across retries", TestPairingClaimAsync),
+    ("central employee reconciliation sends only the existing Local SUPER_ADMIN profile", TestEmployeeReconciliationAsync),
+    ("central employee listing parses Workspace roles", TestEmployeeListAsync)
 };
 
 var failures = new List<string>();
@@ -163,7 +165,7 @@ static async Task TestHealthAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
-        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.7.0","apiVersion":"1","schemaVersion":"3","environment":"test","storage":"ok"}"""));
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.8.0","apiVersion":"1","schemaVersion":"4","environment":"test","storage":"ok"}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -171,9 +173,9 @@ static async Task TestHealthAsync()
     True(health.Reachable, "health should be reachable");
     True(health.StorageAvailable, "backend storage should be available");
     Equal("cyinvoice-cloud", health.ServiceName, "service name");
-    Equal("0.7.0", health.CloudVersion, "cloud version");
+    Equal("0.8.0", health.CloudVersion, "cloud version");
     Equal("1", health.ApiVersion, "api version");
-    Equal("3", health.SchemaVersion, "schema version");
+    Equal("4", health.SchemaVersion, "schema version");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
 }
 
@@ -181,7 +183,7 @@ static async Task TestStorageOutageAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.ServiceUnavailable,
-        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.7.0","apiVersion":"1","schemaVersion":"3","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
+        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.8.0","apiVersion":"1","schemaVersion":"4","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -190,7 +192,7 @@ static async Task TestStorageOutageAsync()
     True(!health.StorageAvailable, "storage outage must not be reported as healthy");
     Equal("cyinvoice-cloud", health.ServiceName, "storage outage should preserve service identity");
     Equal("1", health.ApiVersion, "storage outage should preserve API version");
-    Equal("3", health.SchemaVersion, "storage outage should preserve schema version");
+    Equal("4", health.SchemaVersion, "storage outage should preserve schema version");
     Equal("STORAGE_UNAVAILABLE", health.ErrorCode, "storage outage error code");
     True(CloudCompatibility.Problem(health).Contains("後端儲存服務尚未就緒", StringComparison.Ordinal),
         "storage outage should report backend storage instead of a wrong-service error");
@@ -423,6 +425,66 @@ static async Task TestPairingClaimAsync()
     var generated = CloudDeviceJoinAttempt.Create();
     True(generated.DeviceToken.StartsWith("cydev_", StringComparison.Ordinal) && generated.DeviceToken.Length == 70,
         "generated Device Join token format");
+}
+
+static async Task TestEmployeeReconciliationAsync()
+{
+    const string token = "cydev_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    var local = new EmployeeAccount(
+        "0001",
+        "X",
+        "owner@example.test",
+        EmployeeRoles.SuperAdmin,
+        true,
+        DateTimeOffset.Parse("2026-09-21T00:00:00Z"),
+        DateTimeOffset.Parse("2026-09-21T00:00:00Z"));
+    var handler = new QueueHandler();
+    handler.Enqueue(request =>
+    {
+        Equal(HttpMethod.Post, request.Method, "employee reconciliation method");
+        Equal("/v1/employees/reconcile-local", request.RequestUri?.AbsolutePath ?? string.Empty,
+            "employee reconciliation path");
+        Equal("Bearer", request.Headers.Authorization?.Scheme ?? string.Empty, "employee reconciliation bearer scheme");
+        Equal(token, request.Headers.Authorization?.Parameter ?? string.Empty, "employee reconciliation Device token");
+        var payload = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var body = JsonDocument.Parse(payload);
+        var candidate = body.RootElement.GetProperty("localSuperAdmin");
+        Equal("0001", candidate.GetProperty("employeeNo").GetString() ?? string.Empty, "local SUPER_ADMIN employee number");
+        Equal("X", candidate.GetProperty("name").GetString() ?? string.Empty, "local SUPER_ADMIN name");
+        Equal("owner@example.test", candidate.GetProperty("email").GetString() ?? string.Empty, "local SUPER_ADMIN email");
+        True(!candidate.TryGetProperty("password", out _), "local password must never be sent to central employee reconciliation");
+        return JsonResponse(HttpStatusCode.OK,
+            """{"ok":true,"reconciliation":{"state":"owner_created","employee":{"employeeId":"emp_1","employeeNo":"0001","name":"X","email":"owner@example.test","role":"SUPER_ADMIN","enabled":true}}}""");
+    });
+
+    using var http = new HttpClient(handler);
+    var client = new CloudEmployeeClient(http, new Uri("https://cloud.example.test/"), token);
+    var result = await client.ReconcileLocalSuperAdminAsync(local);
+    Equal("owner_created", result.State, "employee reconciliation state");
+    True(result.CentralRoleReady, "central role should be ready after owner creation");
+    Equal("SUPER_ADMIN", result.Employee?.Role ?? string.Empty, "central owner role");
+    Equal("0001", result.Employee?.EmployeeNo ?? string.Empty, "central owner employee number");
+}
+
+static async Task TestEmployeeListAsync()
+{
+    const string token = "cydev_ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    var handler = new QueueHandler();
+    handler.Enqueue(request =>
+    {
+        Equal(HttpMethod.Get, request.Method, "employee list method");
+        Equal("/v1/employees", request.RequestUri?.AbsolutePath ?? string.Empty, "employee list path");
+        Equal(token, request.Headers.Authorization?.Parameter ?? string.Empty, "employee list Device token");
+        return JsonResponse(HttpStatusCode.OK,
+            """{"ok":true,"employees":[{"employeeId":"emp_x","employeeNo":"0001","name":"X","email":"x@example.test","role":"SUPER_ADMIN","enabled":true},{"employeeId":"emp_y","employeeNo":"0002","name":"Y","email":"y@example.test","role":"ADMIN","enabled":true}]}""");
+    });
+
+    using var http = new HttpClient(handler);
+    var client = new CloudEmployeeClient(http, new Uri("https://cloud.example.test/"), token);
+    var employees = await client.ListEmployeesAsync();
+    Equal(2, employees.Count, "central employee count");
+    Equal("SUPER_ADMIN", employees[0].Role, "first central employee role");
+    Equal("ADMIN", employees[1].Role, "second central employee role");
 }
 
 static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string json)
