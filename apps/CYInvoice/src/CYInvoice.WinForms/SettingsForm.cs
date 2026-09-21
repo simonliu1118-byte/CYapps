@@ -177,8 +177,13 @@ internal sealed class SettingsForm : Form
 
         var endpointChanged = settings.CloudBaseUrl.Length != 0
             && !SameCloudEndpoint(settings.CloudBaseUrl, form.SelectedBaseUrl);
-        if (endpointChanged && HasCloudIdentity(settings))
-            repository.Settings.ClearCloudIdentity(settings);
+        if (endpointChanged)
+        {
+            if (HasCloudIdentity(settings))
+                repository.Settings.ClearCloudIdentity(settings);
+            else
+                repository.Settings.ClearCloudPendingBootstrap(settings);
+        }
         settings.CloudBaseUrl = form.SelectedBaseUrl;
     }
 
