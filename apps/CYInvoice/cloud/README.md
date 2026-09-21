@@ -13,7 +13,7 @@ The finalized V3.0 Workspace／Device／SUPER_ADMIN lifecycle is documented in `
 - D1 database: `cyinvoice-cloud-dev-db`
 - Environment: `development`
 
-The D1 database UUID is an identifier, not an authentication secret. Cloudflare API tokens, account keys, AMEGO App Keys, passwords, device tokens, bootstrap keys, OTP values, and production data must never be committed here.
+The D1 database UUID is an identifier, not an authentication secret. Cloudflare API tokens, account keys, AMEGO App Keys, passwords, device tokens, bootstrap keys, Email provider keys, OTP values, and production data must never be committed here.
 
 ## Commands
 
@@ -64,6 +64,20 @@ The first-device bootstrap contract is intentionally split this way:
 
 The bootstrap guard, Device Token, and future Email OTP values must never be written to repo, logs, public artifacts, or plaintext runtime settings.
 
+## Transactional Email provider
+
+The reference backend uses a provider-neutral `EmailSender` boundary. The first adapter is Resend and uses the HTTPS Email API directly rather than making Resend part of the CYInvoice public API contract.
+
+Runtime configuration is environment-specific and must not be committed. The Worker will use:
+
+- `RESEND_API_KEY` — Resend API key, stored as a Cloudflare Worker secret.
+- `EMAIL_FROM` — verified sender, for example `CYInvoice <verify@example.com>`. Keep this in Worker runtime configuration rather than source so deployments remain provider-neutral and customer-neutral.
+- optional future `EMAIL_PROVIDER` — provider selector when a second adapter is introduced; the current adapter defaults to Resend.
+
+The Resend transport deliberately does not log provider response bodies, recipient addresses, API keys, OTP values, or Email bodies on delivery failure.
+
+The adapter alone does not create OTP semantics. OTP generation, hashing, TTL, attempt limits, resend cooldown, recovery-email binding, and one-time consumption remain CYInvoice Cloud responsibilities and will be added in the reviewed Email-verification batch.
+
 ## API endpoints
 
 Public health/version endpoints:
@@ -107,10 +121,11 @@ The next reviewed work is staged as:
 
 1. complete and validate the safe first-bootstrap contract;
 2. persist pending bootstrap Token/state with DPAPI before network submission;
-3. add existing Local SUPER_ADMIN + existing Email OTP initialization, without asking the user to re-enter the Email;
-4. wire first-Workspace UI and timeout recovery;
-5. add existing-Workspace Device Join／Recovery;
-6. centralize Employee／single-SUPER_ADMIN role handling and atomic SUPER_ADMIN transfer;
-7. require human authorization before issuing a pairing code.
+3. configure the Resend runtime secrets and verified sender for the development Worker;
+4. add existing Local SUPER_ADMIN + existing Email OTP initialization, without asking the user to re-enter the Email;
+5. wire first-Workspace UI and timeout recovery;
+6. add existing-Workspace Device Join／Recovery;
+7. centralize Employee／single-SUPER_ADMIN role handling and atomic SUPER_ADMIN transfer;
+8. require human authorization before issuing a pairing code.
 
 Applied `0001`／`0002` migrations remain immutable; any Email／Employee／recovery schema additions must use forward migrations `0003+`.
