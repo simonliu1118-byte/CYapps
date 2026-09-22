@@ -10,7 +10,8 @@ public sealed class LocalRepository
         SettingsStore settings,
         InvoiceStore invoices,
         BuyerNameStore buyerNames,
-        EmployeeStore employees)
+        EmployeeStore employees,
+        CloudEmployeeCacheStore cloudEmployees)
     {
         DataDirectory = dataDirectory;
         CacheDirectory = cacheDirectory;
@@ -20,6 +21,7 @@ public sealed class LocalRepository
         Invoices = invoices;
         BuyerNames = buyerNames;
         Employees = employees;
+        CloudEmployees = cloudEmployees;
     }
 
     public string DataDirectory { get; }
@@ -30,6 +32,7 @@ public sealed class LocalRepository
     public InvoiceStore Invoices { get; }
     public BuyerNameStore BuyerNames { get; }
     public EmployeeStore Employees { get; }
+    public CloudEmployeeCacheStore CloudEmployees { get; }
 
     public static LocalRepository Open(string baseDirectory, ISecretProtector protector)
     {
@@ -48,6 +51,7 @@ public sealed class LocalRepository
         var invoices = new InvoiceStore(data, currentSettings.ProductionInvoice);
         var buyerNames = new BuyerNameStore(data);
         var employees = new EmployeeStore(data);
+        var cloudEmployees = new CloudEmployeeCacheStore(data, protector);
         invoices.LoadOrCreate();
         buyerNames.LoadOrCreate();
 
@@ -59,6 +63,7 @@ public sealed class LocalRepository
             settings,
             invoices,
             buyerNames,
-            employees);
+            employees,
+            cloudEmployees);
     }
 }
