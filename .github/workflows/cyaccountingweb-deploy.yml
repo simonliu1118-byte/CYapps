@@ -2,6 +2,12 @@ name: CYAccountingWeb Cloudflare Deploy
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - cyaccountingweb/feature-initial-web
+    paths:
+      - "apps/CYAccountingWeb/**"
+      - ".github/workflows/cyaccountingweb-deploy.yml"
 
 permissions:
   contents: read
@@ -14,6 +20,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: development
     defaults:
       run:
         working-directory: apps/CYAccountingWeb
