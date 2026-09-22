@@ -18,7 +18,7 @@ internal static class EmployeeOperationAuthentication
         EmployeeAccount? employee = null;
         try
         {
-            employee = repository.Employees.Authenticate(employeeNo, password);
+            employee = repository.AuthenticateEmployee(employeeNo, password);
         }
         catch (InvalidOperationException)
         {
@@ -41,7 +41,7 @@ internal static class EmployeeOperationAuthentication
         string password)
     {
         EmployeeAccount? employee = null;
-        try { employee = repository.Employees.Authenticate(employeeNo, password ?? string.Empty); }
+        try { employee = repository.AuthenticateEmployee(employeeNo, password ?? string.Empty); }
         catch (InvalidOperationException) { }
         if (employee is null || !EmployeeRoles.CanManageAccounts(employee.Role))
             throw new UnauthorizedAccessException("管理員驗證失敗");
