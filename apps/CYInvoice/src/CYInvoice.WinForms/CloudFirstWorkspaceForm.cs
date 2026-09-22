@@ -277,7 +277,7 @@ internal sealed class CloudFirstWorkspaceForm : Form
             }
 
             CommitIdentity(verified, attempt.DeviceToken);
-            CompleteSuccess("雲端空間與第一台裝置已建立，Device identity 驗證完成。");
+            CompleteSuccess("雲端空間與第一台裝置已建立，Device identity 驗證完成；帳號轉換尚未完成。");
         });
     }
 
@@ -291,7 +291,7 @@ internal sealed class CloudFirstWorkspaceForm : Form
             var client = new CloudClient(httpClient, new Uri(baseUrl, UriKind.Absolute), pending.DeviceToken);
             var identity = await client.GetCurrentDeviceAsync(lifetime.Token);
             CommitIdentity(identity, pending.DeviceToken);
-            CompleteSuccess("已找回先前完成的雲端裝置，未建立第二個 Workspace／Device。");
+            CompleteSuccess("已找回先前完成的雲端裝置，未建立第二個 Workspace／Device；帳號主資料仍維持在轉換狀態。");
             return true;
         }
         catch (CloudApiException error) when (error.StatusCode == System.Net.HttpStatusCode.Unauthorized)
@@ -315,7 +315,7 @@ internal sealed class CloudFirstWorkspaceForm : Form
         settings.CloudDeviceId = identity.DeviceId;
         repository.Settings.SetCloudDeviceToken(settings, token);
         repository.Settings.ClearCloudPendingBootstrap(settings);
-        settings.CloudMode = CloudModes.CloudPreferred;
+        repository.Settings.MarkCloudEmployeeTransition(settings);
         repository.Settings.Save(settings);
         IdentityCompleted = true;
     }
