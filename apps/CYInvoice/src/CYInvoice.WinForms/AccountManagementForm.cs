@@ -114,7 +114,7 @@ internal sealed class AccountManagementForm : Form
         password.Click += (_, _) => PasswordSelected();
         enabled.Click += (_, _) => ToggleEnabled();
         role.Click += (_, _) => ToggleRole();
-        recovery.Click += (_, _) => RotateRecoveryCode();
+        recovery.Click += async (_, _) => await RecoveryOrTransferAsync();
         pendingIdentity.Click += async (_, _) => await OpenPendingIdentityAsync();
         close.DialogResult = DialogResult.OK;
         root.Controls.Add(actions, 0, 1);
@@ -196,17 +196,21 @@ internal sealed class AccountManagementForm : Form
         if (CloudAuthority)
         {
             // Cloud is the only account authority after cutover. Local EmployeeStore
-            // mutations are intentionally disabled; central CRUD/role operations are
-            // wired in the following account-management batch.
+            // mutations stay disabled; central account CRUD is wired separately.
             add.Enabled = false;
             edit.Enabled = false;
             password.Enabled = false;
             enabled.Enabled = false;
             role.Enabled = false;
-            recovery.Enabled = false;
             password.Text = "重設密碼";
             enabled.Text = "停用帳號";
             role.Text = "設為管理員";
+            recovery.Text = "移交超管權限";
+            recovery.Enabled = actor.Role == EmployeeRoles.SuperAdmin
+                && hasTarget
+                && target!.EmployeeNo != actor.EmployeeNo
+                && target.Role == EmployeeRoles.Admin
+                && target.Enabled;
             return;
         }
 
@@ -218,6 +222,7 @@ internal sealed class AccountManagementForm : Form
         enabled.Text = target?.Enabled == false ? "啟用帳號" : "停用帳號";
         role.Enabled = hasTarget && target!.Role != EmployeeRoles.SuperAdmin && target.EmployeeNo != actor.EmployeeNo;
         role.Text = target?.Role == EmployeeRoles.Admin ? "取消管理員" : "設為管理員";
+        recovery.Text = "重建復原碼";
         recovery.Enabled = actor.Role == EmployeeRoles.SuperAdmin;
     }
 
@@ -369,6 +374,16 @@ internal sealed class AccountManagementForm : Form
         }
     }
 
+    private async Task RecoveryOrTransferAsync()
+    {
+        if (!CloudAuthority)
+        {
+            RotateRecoveryCode();
+            return;
+        }
+        await TransferSuperAdminAsync();
+    }
+
     private void RotateRecoveryCode()
     {
         if (CloudAuthority || actor.Role != EmployeeRoles.SuperAdmin) return;
@@ -376,6 +391,64 @@ internal sealed class AccountManagementForm : Form
         if (confirm.ShowDialog(this) != DialogResult.OK || string.IsNullOrEmpty(confirm.NewRecoveryCode)) return;
         using var show = new RecoveryCodeForm(confirm.NewRecoveryCode);
         show.ShowDialog(this);
+    }
+
+    private async Task TransferSuperAdminAsync()
+    {
+        if (repository is null || !CloudAuthority || actor.Role != EmployeeRoles.SuperAdmin
+            || SelectedAccount is not { Role: EmployeeRoles.Admin, Enabled: true } target
+            || target.EmployeeNo == actor.EmployeeNo)
+            return;
+
+        using var login = new EmployeeAdminLoginForm(repository, "移交超管權限－超管驗證");
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        if (login.AuthenticatedEmployee.Role != EmployeeRoles.SuperAdmin
+            || login.AuthenticatedEmployee.EmployeeNo != actor.EmployeeNo)
+        {
+            MessageBox.Show(this, "必須由目前 Workspace 超級管理員本人重新驗證。", "無法移交",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            var settings = repository.Settings.LoadOrCreate();
+            var token = repository.Settings.CloudDeviceToken(settings);
+            if (token.Length == 0 || settings.CloudBaseUrl.Length == 0)
+                throw new InvalidOperationException("本機缺少可用的 Cloud Device identity。");
+            var client = new CloudSuperAdminTransferClient(
+                cloudHttpClient,
+                new Uri(settings.CloudBaseUrl, UriKind.Absolute),
+                token);
+            using var transfer = new CloudSuperAdminTransferForm(
+                client,
+                login.AuthenticatedEmployee,
+                login.AuthenticatedPassword,
+                target);
+            if (transfer.ShowDialog(this) != DialogResult.OK || transfer.Result is null) return;
+
+            var authority = new CloudEmployeeAuthorityClient(
+                cloudHttpClient,
+                new Uri(settings.CloudBaseUrl, UriKind.Absolute),
+                token);
+            var snapshot = await authority.GetSnapshotAsync(lifetime.Token);
+            if (!string.Equals(snapshot.WorkspaceId, settings.CloudWorkspaceId, StringComparison.Ordinal))
+                throw new InvalidDataException("超管移交後取得的中央帳號 Workspace identity 不一致。");
+            repository.CloudEmployees.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
+
+            MessageBox.Show(
+                this,
+                $"超級管理員已移交給 {transfer.Result.NewSuperAdmin.EmployeeNo} {transfer.Result.NewSuperAdmin.Name}。\n\n" +
+                $"{transfer.Result.FormerSuperAdmin.EmployeeNo} 已改為管理員，Workspace Recovery Email 也已切換至新超管的已驗證 Email。",
+                "移交完成",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            Close();
+        }
+        catch (Exception error)
+        {
+            ShowOperationError("無法移交超級管理員", error);
+        }
     }
 
     private void ShowOperationError(string title, Exception error) =>
