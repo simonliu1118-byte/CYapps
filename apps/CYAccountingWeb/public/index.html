@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>志遠記帳系統 Web</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>志遠記帳系統</h1>
+      <p>CYAccounting Web <span class="version">V0.1.0</span></p>
+    </div>
+    <div id="connectionStatus" class="status">連線檢查中</div>
+  </header>
+
+  <main class="shell">
+    <section class="card entry-card">
+      <div class="section-title">
+        <h2>新增記帳</h2>
+        <span id="saveMessage" class="save-message"></span>
+      </div>
+
+      <form id="transactionForm" autocomplete="off">
+        <div class="entry-grid">
+          <label><span>日期</span><input id="txDate" type="date" required></label>
+          <label><span>帳戶</span><select id="accountName" required></select></label>
+          <fieldset class="kind-field"><legend>收支</legend><div class="kind-buttons"><button type="button" class="kind-button active" data-kind="expense">支出</button><button type="button" class="kind-button" data-kind="income">收入</button></div></fieldset>
+          <label><span>科目</span><select id="categoryName" required></select></label>
+          <label class="summary-field"><span>摘要</span><input id="summary" type="text" maxlength="100" placeholder="可留白"></label>
+          <label class="amount-field"><span>金額</span><input id="amount" type="text" inputmode="numeric" maxlength="7" placeholder="0" required></label>
+          <button id="saveButton" class="primary" type="submit">儲存</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card ledger-card">
+      <div class="section-title ledger-title">
+        <div><h2>記帳資料</h2><p id="monthSummary">—</p></div>
+        <label class="month-picker"><span>月份</span><input id="monthFilter" type="month"></label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>日期</th><th>帳戶</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="action-col"></th></tr></thead>
+          <tbody id="transactionRows"><tr><td colspan="7" class="empty">載入中…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>

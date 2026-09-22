@@ -1,0 +1,48 @@
+:root { font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif; color: #222b35; background: #eef2f6; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input, select { font: inherit; }
+.topbar { min-height: 78px; padding: 14px 28px; background: #ffffff; border-bottom: 1px solid #cbd3dc; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.topbar h1 { margin: 0; font-size: 23px; }
+.topbar p { margin: 3px 0 0; color: #687583; font-size: 13px; }
+.version { margin-left: 6px; }
+.status { font-size: 13px; padding: 7px 11px; border-radius: 999px; background: #e9eef3; color: #57636f; }
+.status.ok { background: #e7f5eb; color: #216536; }
+.status.warn { background: #fff3d6; color: #815d00; }
+.shell { width: min(1500px, calc(100% - 40px)); margin: 22px auto 40px; display: grid; gap: 18px; }
+.card { background: #ffffff; border: 1px solid #cbd3dc; border-radius: 8px; box-shadow: 0 1px 3px rgba(31, 42, 55, .05); }
+.entry-card { padding: 18px; }
+.ledger-card { overflow: hidden; }
+.section-title { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.section-title h2 { margin: 0; font-size: 18px; }
+.section-title p { margin: 3px 0 0; color: #687583; font-size: 13px; }
+.save-message { min-height: 20px; color: #216536; font-size: 13px; }
+.save-message.error { color: #a72b22; }
+.entry-grid { display: grid; grid-template-columns: 150px 170px 150px minmax(180px, 1fr) minmax(220px, 1.4fr) 150px 96px; gap: 10px; align-items: end; }
+label, fieldset { min-width: 0; }
+label > span, legend { display: block; margin: 0 0 5px; padding: 0; font-size: 12px; color: #66727e; }
+fieldset { border: 0; padding: 0; margin: 0; }
+input, select { width: 100%; height: 36px; padding: 5px 9px; border: 1px solid #aeb9c5; border-radius: 5px; background: #fff; color: #222b35; }
+input:focus, select:focus { outline: 2px solid rgba(57, 115, 157, .18); border-color: #39739d; }
+.kind-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.kind-button { height: 36px; border: 1px solid #aeb9c5; border-radius: 5px; background: #f4f6f8; cursor: pointer; }
+.kind-button.active { background: #e5ecf3; border-color: #6c8499; font-weight: 700; }
+.primary { height: 36px; border: 1px solid #2f6388; border-radius: 5px; background: #376f98; color: white; font-weight: 700; cursor: pointer; }
+.primary:disabled { opacity: .6; cursor: wait; }
+.ledger-title { padding: 16px 18px 0; }
+.month-picker { display: grid; grid-template-columns: auto 150px; gap: 8px; align-items: center; }
+.month-picker > span { margin: 0; }
+.table-wrap { overflow: auto; border-top: 1px solid #dde3e9; }
+table { width: 100%; border-collapse: collapse; min-width: 860px; }
+th, td { padding: 10px 12px; border-bottom: 1px solid #e3e7eb; text-align: left; font-size: 14px; white-space: nowrap; }
+th { background: #f4f6f8; color: #4f5b66; font-size: 12px; position: sticky; top: 0; }
+td.summary { white-space: normal; min-width: 180px; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.kind-tag { display: inline-block; min-width: 44px; text-align: center; padding: 3px 7px; border-radius: 4px; font-size: 12px; }
+.kind-tag.income { background: #e7f3e9; color: #28633a; }
+.kind-tag.expense { background: #f8e9e7; color: #8b342d; }
+.action-col { width: 64px; }
+.delete-button { border: 0; background: transparent; color: #a72b22; cursor: pointer; padding: 4px 6px; }
+.empty { text-align: center; color: #7a8793; padding: 28px; }
+@media (max-width: 1100px) { .entry-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .summary-field { grid-column: span 2; } }
+@media (max-width: 720px) { .topbar { padding: 12px 16px; align-items: flex-start; } .topbar h1 { font-size: 20px; } .shell { width: calc(100% - 20px); margin-top: 10px; } .entry-grid { grid-template-columns: 1fr 1fr; } .summary-field { grid-column: 1 / -1; } .amount-field { grid-column: 1; } .primary { grid-column: 2; } .ledger-title { align-items: flex-end; } .month-picker { grid-template-columns: 1fr; gap: 2px; } }
