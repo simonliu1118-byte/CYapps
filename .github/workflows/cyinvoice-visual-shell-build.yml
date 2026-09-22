@@ -1,0 +1,53 @@
+name: CYInvoice Visual Shell Build
+
+on:
+  push:
+    branches:
+      - design/cyinvoice-visual-shell-prototype
+    paths:
+      - 'design/cy-desktop-visual-guide/prototypes/CYInvoiceVisualShell/**'
+      - '.github/workflows/cyinvoice-visual-shell-build.yml'
+      - 'apps/CYInvoice/assets/CYInvoice.ico'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish portable preview EXE
+        id: publish
+        shell: pwsh
+        run: |
+          $project = 'design/cy-desktop-visual-guide/prototypes/CYInvoiceVisualShell/CYInvoiceVisualShell.csproj'
+          $out = Join-Path $env:RUNNER_TEMP 'cyinvoice-visual-shell'
+          dotnet restore $project
+          dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -o $out
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = Join-Path $out 'CYInvoiceVisualShell.exe'
+          if (!(Test-Path $exe)) { throw 'CYInvoiceVisualShell.exe was not produced.' }
+          if ((Get-Item $exe).Length -lt 1000000) { throw 'Published EXE is unexpectedly small.' }
+          & $exe --smoke-test
+          if ($LASTEXITCODE -ne 0) { throw "Startup smoke test failed with exit code $LASTEXITCODE" }
+          $zip = Join-Path $env:RUNNER_TEMP 'CYInvoiceVisualShell_preview.zip'
+          Compress-Archive -Path $exe -DestinationPath $zip -Force
+          "artifact_zip=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload preview artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CYInvoiceVisualShell-preview-${{ github.run_number }}
+          path: ${{ steps.publish.outputs.artifact_zip }}
+          if-no-files-found: error
+          retention-days: 14
