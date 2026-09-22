@@ -3,35 +3,32 @@
 package main
 
 import (
+	"fmt"
 	"time"
 )
 
 func createControls(parent uintptr) {
-	createCtrl("STATIC", "V0.0.10 Build 8：Esc 可緊急停止；下拉直接依指定值選取；明細支援第 2 列測試。此版仍不儲存 ERP 單據。", WS_CHILD|WS_VISIBLE, 16, 10, 1250, 22, parent, 0)
-	createCtrl("BUTTON", "尋找 ERP", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 16, 38, 90, 30, parent, 1001)
-	createCtrl("BUTTON", "偵測狀態", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 112, 38, 95, 30, parent, 1010)
-	createCtrl("BUTTON", "進入輸入狀態", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 213, 38, 115, 30, parent, 1011)
-	createCtrl("BUTTON", "填入選取欄位（不儲存）", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 334, 38, 190, 30, parent, 1005)
-	createCtrl("BUTTON", "讀取已勾選下拉選項", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 530, 38, 175, 30, parent, 1012)
-	createCtrl("BUTTON", "儲存下拉設定", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 711, 38, 120, 30, parent, 1013)
-	createCtrl("BUTTON", "欄位設定", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 837, 38, 105, 30, parent, 1016)
-	createCtrl("BUTTON", "開啟設定檔", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 948, 38, 105, 30, parent, 1014)
-	createCtrl("BUTTON", "除錯紀錄資料夾", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1059, 38, 125, 30, parent, 1006)
-	createCtrl("BUTTON", "掃描控制項", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1190, 38, 110, 30, parent, 1002)
+	setWindowText(parent, "CYERPAutoInput V0.0.10 Build 11 — SMART ERP 自動輸入工具（不儲存）")
+	pSetWindowPos.Call(parent, HWND_TOP, 0, 0, 1580, 900, SWP_NOMOVE|SWP_SHOWWINDOW)
+	createCtrl("STATIC", "V0.0.10 Build 11：新增單據輸入測試；Esc 可緊急停止；明細支援多列。此版仍不儲存 ERP 單據。", WS_CHILD|WS_VISIBLE, 16, 10, 1450, 22, parent, 0)
 
-	createCtrl("BUTTON", "全部勾選", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 16, 74, 95, 28, parent, 1003)
-	createCtrl("BUTTON", "全部取消", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 117, 74, 95, 28, parent, 1004)
-	createCtrl("BUTTON", "切到交易資料", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 218, 74, 115, 28, parent, 1015)
-	createCtrl("BUTTON", "切到送貨資料", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 339, 74, 115, 28, parent, 1008)
-	createCtrl("BUTTON", "切到發票資料(一)", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 460, 74, 145, 28, parent, 1009)
-	createCtrl("STATIC", "焦點單欄測試：", WS_CHILD|WS_VISIBLE, 620, 78, 95, 20, parent, 0)
-	focusText = createCtrl("EDIT", "CYTEST123", WS_CHILD|WS_VISIBLE|WS_BORDER|ES_AUTOHSCROLL, 714, 74, 120, 26, parent, 1100)
-	createCtrl("BUTTON", "3 秒後輸入焦點", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 840, 74, 150, 28, parent, 1007)
-	statusHwnd = createCtrl("STATIC", "ERP：尚未偵測", WS_CHILD|WS_VISIBLE, 16, 108, 1530, 22, parent, 0)
+	createCtrl("BUTTON", "尋找 ERP", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 16, 36, 90, 30, parent, 1001)
+	createCtrl("BUTTON", "偵測狀態", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 112, 36, 95, 30, parent, 1010)
+	createCtrl("BUTTON", "進入輸入狀態", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 213, 36, 115, 30, parent, 1011)
+	createCtrl("BUTTON", "填入選取欄位（不儲存）", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 334, 36, 190, 30, parent, 1005)
+	createCtrl("BUTTON", "全部勾選", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 530, 36, 95, 30, parent, 1003)
+	createCtrl("BUTTON", "全部取消", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 631, 36, 95, 30, parent, 1004)
+	createCtrl("BUTTON", "儲存下拉設定", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 732, 36, 120, 30, parent, 1013)
+	createCtrl("BUTTON", "欄位設定", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 858, 36, 105, 30, parent, 1016)
+	createCtrl("BUTTON", "開啟設定檔", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 969, 36, 105, 30, parent, 1014)
+	createCtrl("BUTTON", "除錯紀錄資料夾", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1080, 36, 125, 30, parent, 1006)
+	createCtrl("BUTTON", "掃描控制項", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1211, 36, 110, 30, parent, 1002)
+
+	statusHwnd = createCtrl("STATIC", "ERP：尚未偵測", WS_CHILD|WS_VISIBLE, 16, 74, 1530, 22, parent, 0)
 
 	xCols := []int32{16, 398, 780, 1162}
 	groupW := int32(372)
-	groupY := int32(136)
+	groupY := int32(100)
 	groupH := int32(404)
 	createCtrl("BUTTON", "表頭", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, xCols[0], groupY, groupW, groupH, parent, 0)
 	createCtrl("BUTTON", "交易資料", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, xCols[1], groupY, groupW, groupH, parent, 0)
@@ -88,37 +85,16 @@ func createControls(parent uintptr) {
 		{Key: "inv_addr2", Group: "發票資料(一)", Label: "發票地址(二)", Row: 5, Col: 0, Default: ""},
 		{Key: "email", Group: "發票資料(一)", Label: "連絡人EMAIL", Row: 6, Col: 0, Default: ""},
 	}
-	makeFieldColumn(parent, xCols[0]+10, 160, header, 350)
-	makeFieldColumn(parent, xCols[1]+10, 160, trade, 350)
-	makeFieldColumn(parent, xCols[2]+10, 160, ship, 350)
-	makeFieldColumn(parent, xCols[3]+10, 160, inv, 350)
+	makeFieldColumn(parent, xCols[0]+10, 124, header, 350)
+	makeFieldColumn(parent, xCols[1]+10, 124, trade, 350)
+	makeFieldColumn(parent, xCols[2]+10, 124, ship, 350)
+	makeFieldColumn(parent, xCols[3]+10, 124, inv, 350)
 
-	createCtrl("BUTTON", "明細（第 1 列 + 第 2 列測試）", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 16, 548, 1518, 150, parent, 0)
-	detail := []*Field{
-		{Key: "item_code", Group: "明細", Label: "品號", Col: 0, Default: ""},
-		{Key: "qty", Group: "明細", Label: "數量", Col: 1, Default: ""},
-		{Key: "item_type", Group: "明細", Label: "類型", Col: 2, Default: ""},
-		{Key: "gift_qty", Group: "明細", Label: "贈/備品量", Col: 3, Default: ""},
-		{Key: "unit", Group: "明細", Label: "單位", Col: 4, Default: ""},
-		{Key: "batch", Group: "明細", Label: "批號", Col: 5, Default: ""},
-		{Key: "warehouse", Group: "明細", Label: "倉別", Col: 6, Default: ""},
-		{Key: "unit_price", Group: "明細", Label: "單價", Col: 7, Default: ""},
-		{Key: "discount_rate", Group: "明細", Label: "折扣率", Col: 8, Default: ""},
-		{Key: "detail_note", Group: "明細", Label: "備註", Col: 9, Default: ""},
-	}
-	makeDetailFields(parent, 28, 576, detail)
-
-	// Build 8 initially exposes the two most important second-row fields. This
-	// is enough to validate the confirmed COPI08 sequence without expanding the
-	// experimental UI too aggressively: Down -> re-click row 2 品號 -> Enter.
-	detail2 := []*Field{
-		{Key: "row2_item_code", Group: "明細", Label: "第2列 品號", Col: 0, Default: ""},
-		{Key: "row2_qty", Group: "明細", Label: "第2列 數量", Col: 1, Default: ""},
-	}
-	makeDetailFields(parent, 28, 672, detail2)
+	createCtrl("BUTTON", "商品明細（勾選列；空白欄位不輸入）", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 16, 512, 1518, 310, parent, 0)
+	makeDetailTable(parent, 30, 536, 8)
 
 	applySettingsToUI()
-	createCtrl("STATIC", "除錯紀錄只寫入 logs；本機下拉設定存於 config\\settings.json。第2列測試流程：第一列完成→Down→重點第2列品號→Enter。仍不儲存 ERP。", WS_CHILD|WS_VISIBLE, 16, 708, 1480, 20, parent, 0)
+	createCtrl("STATIC", "明細規則：每列先輸入品號；其餘空白欄位保留 ERP 自動帶值。單位、批號 Build 11 只保留欄位，後續改成實際點選。仍不儲存 ERP。", WS_CHILD|WS_VISIBLE, 16, 832, 1510, 20, parent, 0)
 }
 
 func makeFieldColumn(parent uintptr, x, y int32, fs []*Field, totalWidth int32) {
@@ -141,20 +117,55 @@ func makeFieldColumn(parent uintptr, x, y int32, fs []*Field, totalWidth int32) 
 	}
 }
 
-func makeDetailFields(parent uintptr, x, y int32, fs []*Field) {
-	cellW := int32(296)
-	for i, f := range fs {
-		r := int32(i / 5)
-		c := int32(i % 5)
-		xx := x + c*cellW
-		yy := y + r*48
-		f.ApplyHwnd = createCtrl("BUTTON", "", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, xx, yy, 18, 20, parent, nextID)
+type detailColumnDefV11 struct {
+	key   string
+	label string
+	col   int
+	width int32
+	kind  string
+}
+
+func makeDetailTable(parent uintptr, x, y int32, rowCount int) {
+	cols := []detailColumnDefV11{
+		{key: "item_code", label: "品號", col: 0, width: 250},
+		{key: "qty", label: "數量", col: 1, width: 125},
+		{key: "gift_qty", label: "贈/備品量", col: 3, width: 150},
+		{key: "unit", label: "單位*", col: 4, width: 135, kind: "deferred_click"},
+		{key: "batch", label: "批號*", col: 5, width: 180, kind: "deferred_click"},
+		{key: "warehouse", label: "庫別", col: 6, width: 155},
+		{key: "unit_price", label: "單價", col: 7, width: 155},
+	}
+
+	createCtrl("STATIC", "列", WS_CHILD|WS_VISIBLE|SS_LEFT, x, y, 28, 18, parent, 0)
+	cx := x + 46
+	for _, c := range cols {
+		createCtrl("STATIC", c.label, WS_CHILD|WS_VISIBLE|SS_LEFT, cx, y, c.width-8, 18, parent, 0)
+		cx += c.width
+	}
+	createCtrl("STATIC", "* 單位／批號後續改為點選", WS_CHILD|WS_VISIBLE|SS_LEFT, cx+8, y, 230, 18, parent, 0)
+
+	for r := 0; r < rowCount; r++ {
+		yy := y + 24 + int32(r)*29
+		apply := createCtrl("BUTTON", "", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, x, yy, 18, 20, parent, nextID)
 		nextID++
-		createCtrl("STATIC", f.Label, WS_CHILD|WS_VISIBLE|SS_LEFT, xx+22, yy+2, 75, 18, parent, 0)
-		f.ValueHwnd = createCtrl("EDIT", f.Default, WS_CHILD|WS_VISIBLE|WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP, xx+96, yy, 185, 21, parent, nextID)
-		fieldByID[nextID] = f
-		nextID++
-		fields = append(fields, f)
+		createCtrl("STATIC", fmt.Sprintf("%d", r+1), WS_CHILD|WS_VISIBLE|SS_LEFT, x+22, yy+2, 22, 18, parent, 0)
+		cx = x + 46
+		for _, c := range cols {
+			f := &Field{
+				Key:       fmt.Sprintf("detail_r%d_%s", r+1, c.key),
+				Group:     "明細",
+				Label:     fmt.Sprintf("第%d列 %s", r+1, c.label),
+				Kind:      c.kind,
+				ApplyHwnd: apply,
+				Row:       r,
+				Col:       c.col,
+			}
+			f.ValueHwnd = createCtrl("EDIT", "", WS_CHILD|WS_VISIBLE|WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP, cx, yy, c.width-8, 21, parent, nextID)
+			fieldByID[nextID] = f
+			nextID++
+			fields = append(fields, f)
+			cx += c.width
+		}
 	}
 }
 
