@@ -74,35 +74,17 @@ func writeDetailSequentialV7(edit uintptr, value string) bool {
 	return true
 }
 
+// Build 11: always send popup type-ahead as Unicode characters instead of
+// physical 0-9 / A-Z virtual keys. This keeps selection independent of the
+// active Windows IME; e.g. requested "5" must stay "5" rather than becoming
+// a Zhuyin symbol when a Chinese input method is active.
 func sendComboTypeAheadV7(value string) bool {
-	for _, r := range value {
-		if isStopRequested() {
-			return false
-		}
-		if r >= '0' && r <= '9' {
-			vk := uint16('0' + (r - '0'))
-			sendInputs([]INPUT{keyInput(vk, 0, 0), keyInput(vk, 0, KEYEVENTF_KEYUP)})
-		} else if r >= 'A' && r <= 'Z' {
-			vk := uint16(r)
-			sendInputs([]INPUT{keyInput(vk, 0, 0), keyInput(vk, 0, KEYEVENTF_KEYUP)})
-		} else if r >= 'a' && r <= 'z' {
-			vk := uint16(r - 'a' + 'A')
-			sendInputs([]INPUT{keyInput(vk, 0, 0), keyInput(vk, 0, KEYEVENTF_KEYUP)})
-		} else {
-			u := uint16(r)
-			sendInputs([]INPUT{keyInput(0, u, KEYEVENTF_UNICODE), keyInput(0, u, KEYEVENTF_UNICODE|KEYEVENTF_KEYUP)})
-		}
-		if !interruptibleSleep(100 * time.Millisecond) {
-			return false
-		}
-	}
-	return true
+	return sendSequentialUnicodeV5(value, 100*time.Millisecond)
 }
 
 // selectDevExpressComboDirectV7 intentionally does NOT enumerate/read option
 // lists. The requested value from CYERPAutoInput is used as popup type-ahead,
-// then Enter confirms that exact requested item. Example: requested "7" sends
-// key 7 while the popup is open, then Enter.
+// then Enter confirms that exact requested item.
 func selectDevExpressComboDirectV7(root uintptr, target ControlInfo, wanted string) bool {
 	wanted = strings.TrimSpace(wanted)
 	if wanted == "" || isStopRequested() || !prepareERPWindow(root) {
@@ -122,6 +104,6 @@ func selectDevExpressComboDirectV7(root uintptr, target ControlInfo, wanted stri
 	if !interruptibleSleep(240 * time.Millisecond) {
 		return false
 	}
-	logf("INFO", "combo direct selection dispatched hwnd=0x%x class=%q requested=%q (no option enumeration)", target.Hwnd, target.Class, wanted)
+	logf("INFO", "combo direct selection dispatched hwnd=0x%x class=%q requested_len=%d unicode_typeahead=true", target.Hwnd, target.Class, len([]rune(wanted)))
 	return true
 }
