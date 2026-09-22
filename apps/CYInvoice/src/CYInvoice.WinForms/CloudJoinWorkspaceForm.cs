@@ -18,6 +18,7 @@ internal sealed class CloudJoinWorkspaceForm : Form
     private readonly Label status = UiControls.Label(string.Empty);
     private readonly Button join = UiControls.StandardButton("加入雲端空間");
     private readonly Button cancel = UiControls.StandardButton("取消");
+    private EmployeeAccount? authorizedLocalManager;
     private bool busy;
     private bool resourcesDisposed;
 
@@ -42,8 +43,8 @@ internal sealed class CloudJoinWorkspaceForm : Form
 
         BuildLayout();
         LoadValues();
-        UpdateState("請輸入由已加入裝置完成超級管理員 Email 驗證後產生的配對碼。");
-        Shown += async (_, _) => await RecoverPendingOnShownAsync();
+        UpdateState("輸入配對碼前，必須先驗證這台電腦的本機 ADMIN 或 SUPER_ADMIN。\n配對碼本身只代表 Workspace 授權這台 Device 加入。");
+        Shown += async (_, _) => await AuthenticateThenRecoverAsync();
     }
 
     public bool IdentityCompleted { get; private set; }
@@ -69,7 +70,7 @@ internal sealed class CloudJoinWorkspaceForm : Form
         var header = new Label
         {
             Dock = DockStyle.Fill,
-            Text = "這台電腦尚未加入此 Workspace。配對碼只授權裝置加入；既有本機帳號會在後續帳號轉換完成後才切換成中央帳號主資料。",
+            Text = "這台電腦尚未加入此 Workspace。先驗證本機管理權，再輸入由既有 Workspace 核發的配對碼；兩項授權彼此獨立。",
             TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = false,
             Margin = Padding.Empty,
@@ -137,13 +138,48 @@ internal sealed class CloudJoinWorkspaceForm : Form
         if (pendingJoin is not null && SameEndpoint(pendingJoin.BaseUrl, baseUrl))
         {
             deviceName.Text = pendingJoin.DeviceDisplayName;
-            status.Text = "已找到未完成的裝置加入資料，會先用原本已保護的 Device Token 嘗試找回。";
+            status.Text = "已找到未完成的裝置加入資料；通過本機管理員驗證後，會先用原本已保護的 Device Token 嘗試找回。";
             return;
         }
 
         var pendingBootstrap = repository.Settings.CloudPendingBootstrap(settings);
         if (pendingBootstrap is not null && SameEndpoint(pendingBootstrap.BaseUrl, baseUrl))
-            status.Text = "已找到先前第一台裝置的 Pending Token，會先確認是否其實已完成建立。";
+            status.Text = "已找到先前第一台裝置的 Pending Token；通過本機管理員驗證後，會先確認是否其實已完成建立。";
+    }
+
+    private async Task AuthenticateThenRecoverAsync()
+    {
+        if (!AuthenticateLocalManager()) return;
+        await RecoverPendingOnShownAsync();
+    }
+
+    private bool AuthenticateLocalManager()
+    {
+        if (!repository.Employees.HasEmployees())
+        {
+            MessageBox.Show(
+                this,
+                "這台電腦目前沒有本機帳號。加入既有 Workspace 前，必須先建立並驗證本機 ADMIN 或 SUPER_ADMIN。",
+                "需要本機管理員",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            DialogResult = DialogResult.Cancel;
+            Close();
+            return false;
+        }
+
+        using var form = new EmployeeAdminLoginForm(repository.Employees, "加入雲端空間權限驗證");
+        if (form.ShowDialog(this) != DialogResult.OK || form.AuthenticatedEmployee is null)
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+            return false;
+        }
+
+        authorizedLocalManager = form.AuthenticatedEmployee;
+        UpdateState($"本機管理權已驗證：{authorizedLocalManager.EmployeeNo} {authorizedLocalManager.Name}。請輸入 Workspace 配對碼。");
+        pairingCode.Focus();
+        return true;
     }
 
     private async Task RecoverPendingOnShownAsync()
@@ -182,6 +218,9 @@ internal sealed class CloudJoinWorkspaceForm : Form
     {
         await RunBusyAsync(async () =>
         {
+            if (authorizedLocalManager is null || !EmployeeRoles.CanManageAccounts(authorizedLocalManager.Role))
+                throw new InvalidOperationException("尚未完成本機 ADMIN／SUPER_ADMIN 權限驗證，不能輸入配對碼加入 Workspace。");
+
             var anonymous = new CloudClient(httpClient, new Uri(baseUrl, UriKind.Absolute));
             var onboarding = await anonymous.GetOnboardingStatusAsync(lifetime.Token);
             if (!onboarding.WorkspaceInitialized)
@@ -352,10 +391,11 @@ internal sealed class CloudJoinWorkspaceForm : Form
 
     private void UpdateActionState()
     {
-        join.Enabled = !busy;
+        var authorized = authorizedLocalManager is not null;
+        join.Enabled = !busy && authorized;
         cancel.Enabled = !busy;
-        pairingCode.Enabled = !busy;
-        deviceName.Enabled = !busy;
+        pairingCode.Enabled = !busy && authorized;
+        deviceName.Enabled = !busy && authorized;
     }
 
     private static bool CouldBeAmbiguousClaim(Exception error) =>
