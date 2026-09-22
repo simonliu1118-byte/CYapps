@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.7 — 2026/09/22
+
+- 新增正式維護專案 `CYSmartERP`（SMART ERP 自動打單工具），放置於 `apps/CYSmartERP/`。
+- 新增 `PROJECT_RULES.md`，固定 COPI08 自動化流程為「新增 -> 輸入 -> 儲存」、禁止對 ERP 送出 `Ctrl+A`、支援 `Esc` 緊急停止、不得自行輸入銷貨單號，並要求下拉選項與公司實際設定只存在使用者本機。
+- 同步建立 `VERSION=0.0.10`、`BUILD=0` 基礎 metadata，並將 `CYSmartERP` 加入 `REPO_POLICY.md` 正式維護專案清單。
+
 ## 2.3.6 — 2026/09/22
 
 - 新增正式維護專案 `CYAccountingWeb`（志遠記帳系統 Web），作為 `CYAccounting` Windows 版之外的獨立 Web 產品線。
