@@ -8,6 +8,8 @@ dist/
 package/
 *.exe
 *.zip
+rsrc_windows_*.syso
+assets/*.ico
 
 # Diagnostic output
 control-scan_*.txt
