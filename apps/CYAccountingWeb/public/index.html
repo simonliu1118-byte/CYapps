@@ -10,15 +10,18 @@
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.1.0</span></p>
+      <p>CYAccounting Web <span class="version">V0.2.0</span></p>
     </div>
-    <div id="connectionStatus" class="status">連線檢查中</div>
+    <div class="topbar-actions">
+      <button id="settingsButton" class="secondary compact" type="button">設定</button>
+      <div id="connectionStatus" class="status">連線檢查中</div>
+    </div>
   </header>
 
   <main class="shell">
     <section class="card entry-card">
       <div class="section-title">
-        <h2>新增記帳</h2>
+        <div class="title-with-badge"><h2>新增記帳</h2><span id="entryLockBadge" class="lock-badge hidden">本月已鎖帳</span></div>
         <span id="saveMessage" class="save-message"></span>
       </div>
 
@@ -37,17 +40,74 @@
 
     <section class="card ledger-card">
       <div class="section-title ledger-title">
-        <div><h2>記帳資料</h2><p id="monthSummary">—</p></div>
+        <div><div class="title-with-badge"><h2>記帳資料</h2><span id="ledgerLockBadge" class="lock-badge hidden">已鎖帳</span></div><p id="monthSummary">—</p></div>
         <label class="month-picker"><span>月份</span><input id="monthFilter" type="month"></label>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>日期</th><th>帳戶</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="action-col"></th></tr></thead>
+          <thead><tr><th>日期</th><th>帳戶</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="action-col">操作</th></tr></thead>
           <tbody id="transactionRows"><tr><td colspan="7" class="empty">載入中…</td></tr></tbody>
         </table>
       </div>
     </section>
   </main>
+
+  <dialog id="editDialog" class="modal small-modal">
+    <form id="editTransactionForm" method="dialog" autocomplete="off">
+      <div class="modal-header"><div><h2>編輯記帳</h2><p id="editKindLabel"></p></div><button class="icon-button" type="button" data-close-dialog="editDialog" aria-label="關閉">×</button></div>
+      <div class="form-grid two-col">
+        <label><span>日期</span><input id="editDate" type="date" required></label>
+        <label><span>帳戶</span><select id="editAccount" required></select></label>
+        <label><span>科目</span><select id="editCategory" required></select></label>
+        <label><span>金額</span><input id="editAmount" type="text" inputmode="numeric" maxlength="7" required></label>
+        <label class="full-row"><span>摘要</span><input id="editSummary" type="text" maxlength="100"></label>
+      </div>
+      <div id="editMessage" class="dialog-message"></div>
+      <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="editDialog">取消</button><button id="editSaveButton" class="primary" type="submit">儲存修改</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="modal settings-modal">
+    <div class="modal-header"><div><h2>設定</h2><p>帳戶、科目、期初餘額與鎖帳</p></div><button class="icon-button" type="button" data-close-dialog="settingsDialog" aria-label="關閉">×</button></div>
+    <div class="settings-layout">
+      <nav class="settings-nav" aria-label="設定分類">
+        <button type="button" class="settings-tab active" data-settings-tab="accounts">帳戶</button>
+        <button type="button" class="settings-tab" data-settings-tab="categories">科目</button>
+        <button type="button" class="settings-tab" data-settings-tab="opening">期初餘額</button>
+        <button type="button" class="settings-tab" data-settings-tab="lock">鎖帳</button>
+      </nav>
+      <div class="settings-content">
+        <section class="settings-pane active" data-settings-pane="accounts">
+          <h3>帳戶管理</h3>
+          <p class="hint">預設帳戶會在新增記帳時自動選取；至少需保留一個帳戶。</p>
+          <div id="accountRows" class="manager-list"></div>
+          <div class="inline-add"><input id="newAccountName" type="text" maxlength="60" placeholder="新增帳戶名稱"><button id="addAccountButton" class="secondary" type="button">新增帳戶</button></div>
+        </section>
+
+        <section class="settings-pane" data-settings-pane="categories">
+          <div class="pane-heading"><div><h3>科目管理</h3><p class="hint">科目分為收入與支出，各自可建立大分類。</p></div><div class="kind-buttons settings-kind"><button type="button" class="kind-button active" data-settings-kind="expense">支出</button><button type="button" class="kind-button" data-settings-kind="income">收入</button></div></div>
+          <div id="categoryManager"></div>
+          <div class="inline-add"><input id="newGroupName" type="text" maxlength="60" placeholder="新增大分類"><button id="addGroupButton" class="secondary" type="button">新增大分類</button></div>
+        </section>
+
+        <section class="settings-pane" data-settings-pane="opening">
+          <div class="pane-heading"><div><h3>期初餘額</h3><p class="hint">空白代表未設定；可輸入負數。已鎖定月份不可修改。</p></div><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
+          <div id="openingRows" class="opening-list"></div>
+          <div class="modal-actions"><button id="saveOpeningButton" class="primary" type="button">儲存期初餘額</button></div>
+        </section>
+
+        <section class="settings-pane" data-settings-pane="lock">
+          <h3>月份鎖帳</h3>
+          <p class="hint">設定後，該月份以及更早月份都不能新增、編輯、刪除記帳或修改期初餘額。設定頁仍可調整鎖帳月份。</p>
+          <div class="lock-form"><label><span>鎖帳至</span><input id="lockedThrough" type="month"></label><button id="saveLockButton" class="primary" type="button">套用鎖帳</button><button id="clearLockButton" class="secondary" type="button">取消鎖帳</button></div>
+          <p id="lockStatusText" class="lock-status-text"></p>
+        </section>
+
+        <div id="settingsMessage" class="dialog-message"></div>
+      </div>
+    </div>
+  </dialog>
+
   <script src="/app.js" defer></script>
 </body>
 </html>
