@@ -1,6 +1,7 @@
 import baseWorker from "./worker";
 import { handleEmployeeTransition } from "./employee-transition";
 import { handleEmployeeTransitionActions } from "./employee-transition-actions";
+import { handleEmployeeAuthority } from "./employee-authority";
 
 interface Env {
   DB: D1Database;
@@ -22,6 +23,9 @@ export default {
 
     const transitionActionResponse = await handleEmployeeTransitionActions(request, env);
     if (transitionActionResponse) return transitionActionResponse;
+
+    const authorityResponse = await handleEmployeeAuthority(request, env);
+    if (authorityResponse) return authorityResponse;
 
     return baseWorker.fetch(request, env);
   },
