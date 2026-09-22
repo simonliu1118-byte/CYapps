@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - cyaccountingweb/feature-initial-web
+      - main
     paths:
       - "apps/CYAccountingWeb/**"
       - ".github/workflows/cyaccountingweb-deploy.yml"
