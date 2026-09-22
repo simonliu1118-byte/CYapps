@@ -22,6 +22,7 @@ public sealed record CloudEmployeeTransitionItem(
     string LocalName,
     string LocalEmail,
     string LocalRole,
+    bool LocalEnabled,
     string SuggestedCloudRole,
     string State,
     string MatchKind,
@@ -32,6 +33,7 @@ public sealed record CloudEmployeeTransitionItem(
 public sealed record CloudEmployeeTransitionInspection(
     string DeviceId,
     string AuthorityState,
+    string SnapshotHash,
     int LocalEmployeeCount,
     int UnresolvedCount,
     int ConflictCount,
@@ -65,8 +67,8 @@ public sealed class CloudEmployeeTransitionClient
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(localEmployees);
-        if (localEmployees.Count > 500)
-            throw new ArgumentException("Too many Local Employees for one transition inspection.", nameof(localEmployees));
+        if (localEmployees.Count is < 1 or > 500)
+            throw new ArgumentException("One to 500 Local Employees are required for transition inspection.", nameof(localEmployees));
 
         var payload = new
         {
@@ -76,6 +78,7 @@ public sealed class CloudEmployeeTransitionClient
                 name = employee.Name,
                 email = employee.Email,
                 role = employee.Role,
+                enabled = employee.Enabled,
             }).ToArray(),
         };
 
@@ -98,6 +101,7 @@ public sealed class CloudEmployeeTransitionClient
         return new CloudEmployeeTransitionInspection(
             ReadRequiredString(transition, "deviceId"),
             ReadRequiredString(transition, "authorityState"),
+            ReadRequiredHash(transition, "snapshotHash"),
             ReadRequiredInt32(transition, "localEmployeeCount"),
             ReadRequiredInt32(transition, "unresolvedCount"),
             ReadRequiredInt32(transition, "conflictCount"),
@@ -143,6 +147,7 @@ public sealed class CloudEmployeeTransitionClient
             ReadRequiredString(local, "name"),
             ReadRequiredString(local, "email"),
             ReadRequiredString(local, "role"),
+            ReadRequiredBoolean(local, "enabled"),
             ReadRequiredString(item, "suggestedCloudRole"),
             ReadRequiredString(item, "state"),
             ReadRequiredString(item, "matchKind"),
@@ -179,6 +184,14 @@ public sealed class CloudEmployeeTransitionClient
     {
         var value = ReadString(element, name);
         if (value.Length == 0) throw new InvalidDataException($"Cloud response field '{name}' is missing.");
+        return value;
+    }
+
+    private static string ReadRequiredHash(JsonElement element, string name)
+    {
+        var value = ReadRequiredString(element, name);
+        if (value.Length != 64 || value.Any(character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
+            throw new InvalidDataException($"Cloud response field '{name}' is invalid.");
         return value;
     }
 
