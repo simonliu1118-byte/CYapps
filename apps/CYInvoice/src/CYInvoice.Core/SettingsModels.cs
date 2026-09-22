@@ -5,6 +5,7 @@ namespace CYInvoice.Core.Storage;
 public static class CloudModes
 {
     public const string LocalOnly = "local_only";
+    public const string CloudTransition = "cloud_transition";
     public const string CloudPreferred = "cloud_preferred";
 }
 
