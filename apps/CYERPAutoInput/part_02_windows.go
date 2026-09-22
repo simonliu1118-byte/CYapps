@@ -7,7 +7,7 @@ import (
 )
 
 func createControls(parent uintptr) {
-	createCtrl("STATIC", "V0.0.10：所有自動操作可按 Esc 緊急停止；下拉讀取改為有界診斷，讀不到即停止，不再連續點擊。此版仍不儲存 ERP 單據。", WS_CHILD|WS_VISIBLE, 16, 10, 1180, 22, parent, 0)
+	createCtrl("STATIC", "V0.0.10 Build 8：Esc 可緊急停止；下拉直接依指定值選取；明細支援第 2 列測試。此版仍不儲存 ERP 單據。", WS_CHILD|WS_VISIBLE, 16, 10, 1250, 22, parent, 0)
 	createCtrl("BUTTON", "尋找 ERP", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 16, 38, 90, 30, parent, 1001)
 	createCtrl("BUTTON", "偵測狀態", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 112, 38, 95, 30, parent, 1010)
 	createCtrl("BUTTON", "進入輸入狀態", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 213, 38, 115, 30, parent, 1011)
@@ -93,7 +93,7 @@ func createControls(parent uintptr) {
 	makeFieldColumn(parent, xCols[2]+10, 160, ship, 350)
 	makeFieldColumn(parent, xCols[3]+10, 160, inv, 350)
 
-	createCtrl("BUTTON", "明細第 1 列（實驗）", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 16, 548, 1518, 150, parent, 0)
+	createCtrl("BUTTON", "明細（第 1 列 + 第 2 列測試）", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 16, 548, 1518, 150, parent, 0)
 	detail := []*Field{
 		{Key: "item_code", Group: "明細", Label: "品號", Col: 0, Default: ""},
 		{Key: "qty", Group: "明細", Label: "數量", Col: 1, Default: ""},
@@ -108,8 +108,17 @@ func createControls(parent uintptr) {
 	}
 	makeDetailFields(parent, 28, 576, detail)
 
+	// Build 8 initially exposes the two most important second-row fields. This
+	// is enough to validate the confirmed COPI08 sequence without expanding the
+	// experimental UI too aggressively: Down -> re-click row 2 品號 -> Enter.
+	detail2 := []*Field{
+		{Key: "row2_item_code", Group: "明細", Label: "第2列 品號", Col: 0, Default: ""},
+		{Key: "row2_qty", Group: "明細", Label: "第2列 數量", Col: 1, Default: ""},
+	}
+	makeDetailFields(parent, 28, 672, detail2)
+
 	applySettingsToUI()
-	createCtrl("STATIC", "除錯紀錄只寫入 logs；本機下拉設定存於 config\\settings.json。明細為第一列實驗功能，仍不儲存 ERP。", WS_CHILD|WS_VISIBLE, 16, 708, 1400, 20, parent, 0)
+	createCtrl("STATIC", "除錯紀錄只寫入 logs；本機下拉設定存於 config\\settings.json。第2列測試流程：第一列完成→Down→重點第2列品號→Enter。仍不儲存 ERP。", WS_CHILD|WS_VISIBLE, 16, 708, 1480, 20, parent, 0)
 }
 
 func makeFieldColumn(parent uintptr, x, y int32, fs []*Field, totalWidth int32) {
@@ -159,7 +168,6 @@ func startEscapeWatcher() {
 					if stopLogged.CompareAndSwap(false, true) {
 						logf("WARN", "automation stop requested by physical ESC key")
 					}
-				}
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
