@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf16"
 	"unsafe"
 )
 
@@ -73,10 +72,18 @@ func fillHeaderSelected(root uintptr) (ok, fail int) {
 		target := rows[f.Row][f.Col]
 		value := getWindowText(f.ValueHwnd)
 		filled := false
-		if f.Kind == "date" { filled = setDateControlInteractiveV2(root, target, value) } else { filled = setTextControlInteractiveV2(root, target, value) }
+		if f.Kind == "date" {
+			filled = setDateControlInteractiveV2(root, target, value)
+		} else {
+			filled = setTextControlInteractiveV2(root, target, value)
+			if filled && f.Kind == "lookup" {
+				filled = commitLookupFieldV3(root, target, 0)
+			} else if filled {
+				commitHeaderField(root)
+			}
+		}
 		if filled {
 			ok++; logf("INFO", "filled 表頭/%s hwnd=0x%x class=%q kind=%q", f.Label, target.Hwnd, target.Class, f.Kind)
-			if f.Kind != "date" { commitHeaderField(root) }
 		} else {
 			fail++; logError("表頭", f.Label, "TEXT_SET_FAILED", fmt.Sprintf("hwnd=0x%x class=%q readonly=%t enabled=%t", target.Hwnd, target.Class, windowStyle(target.Hwnd)&ES_READONLY != 0, target.Enabled))
 		}
@@ -111,7 +118,14 @@ func fillTabGroupSelected(root uintptr, group string) (ok, fail int) {
 			code := strings.TrimSpace(getWindowText(f.ValueHwnd))
 			if selectDevExpressComboByCode(root, target, code) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=combo selected=<configured>", group, f.Label, target.Hwnd, target.Class); clickBlankArea(sheet); time.Sleep(180 * time.Millisecond) } else { fail++; logError(group, f.Label, "COMBO_SELECT_FAILED", fmt.Sprintf("hwnd=0x%x class=%q requested=%q", target.Hwnd, target.Class, code)) }
 		} else {
-			if setTextControlInteractiveV2(root, target, getWindowText(f.ValueHwnd)) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=%q", group, f.Label, target.Hwnd, target.Class, f.Kind); clickBlankArea(sheet); time.Sleep(180 * time.Millisecond) } else { fail++; logError(group, f.Label, "TEXT_SET_FAILED", fmt.Sprintf("hwnd=0x%x class=%q readonly=%t enabled=%t", target.Hwnd, target.Class, windowStyle(target.Hwnd)&ES_READONLY != 0, target.Enabled)) }
+			filled := setTextControlInteractiveV2(root, target, getWindowText(f.ValueHwnd))
+			if filled && f.Kind == "lookup" {
+				filled = commitLookupFieldV3(root, target, sheet)
+			} else if filled {
+				clickBlankArea(sheet)
+				time.Sleep(180 * time.Millisecond)
+			}
+			if filled { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=%q", group, f.Label, target.Hwnd, target.Class, f.Kind) } else { fail++; logError(group, f.Label, "TEXT_SET_FAILED", fmt.Sprintf("hwnd=0x%x class=%q readonly=%t enabled=%t", target.Hwnd, target.Class, windowStyle(target.Hwnd)&ES_READONLY != 0, target.Enabled)) }
 		}
 		time.Sleep(90 * time.Millisecond)
 	}
@@ -136,33 +150,8 @@ func detailColumnRatio(col int) (float64, bool) {
 	return ratios[col], true
 }
 
-func setFocusedEditText(hwnd uintptr, value string) bool {
-	if hwnd == 0 { return false }
-	pSendMessageW.Call(hwnd, EM_SETSEL, 0, ^uintptr(0)); time.Sleep(25*time.Millisecond)
-	units := utf16.Encode([]rune(value)); for _, u := range units { pSendMessageW.Call(hwnd, WM_CHAR, uintptr(u), 0) }
-	time.Sleep(80*time.Millisecond); if getWindowText(hwnd) == value { return true }
-	ret, _, _ := pSendMessageW.Call(hwnd, WM_SETTEXT, 0, uintptr(unsafe.Pointer(wstr(value)))); time.Sleep(80*time.Millisecond)
-	return ret != 0 && getWindowText(hwnd) == value
-}
-
 func setDetailCell(root uintptr, grid ControlInfo, col int, value string) bool {
-	if isStopRequested() { return false }
-	ratio, ok := detailColumnRatio(col); if !ok { return false }
-	w := float64(grid.Rect.Right-grid.Rect.Left); x := grid.Rect.Left+int32(w*ratio); y := grid.Rect.Top+33
-	pSetForeground.Call(root); clickScreenPoint(x,y); time.Sleep(100*time.Millisecond); pressVK(VK_F2); time.Sleep(100*time.Millisecond)
-	focus := focusedControlOfForeground(root); logf("INFO", "detail focus col=%d point=%d,%d focus=0x%x class=%q", col, x,y,focus,className(focus))
-	if focus != 0 && strings.Contains(strings.ToUpper(className(focus)), "EDIT") {
-		if setFocusedEditText(focus,value) { pressVK(VK_TAB); time.Sleep(130*time.Millisecond); return true }
-	}
-	if focus == 0 { focus = grid.Hwnd }
-	if value != "" {
-		units := utf16.Encode([]rune(value)); pSendMessageW.Call(focus, WM_CHAR, uintptr(units[0]), 0); time.Sleep(100*time.Millisecond)
-		focus2 := focusedControlOfForeground(root)
-		if focus2 != 0 && strings.Contains(strings.ToUpper(className(focus2)), "EDIT") {
-			if setFocusedEditText(focus2,value) { pressVK(VK_TAB); time.Sleep(130*time.Millisecond); return true }
-		}
-	}
-	return false
+	return setDetailCellDoubleClickV3(root, grid, col, value)
 }
 
 func fillDetailSelected(root uintptr) (ok, fail int) {
@@ -183,13 +172,13 @@ func fillAllSelected() {
 	if isStopRequested() { return }
 	if !prepareERPWindow(root) { setStatus("ERP：已找到但無法移到前景，為避免誤輸入已停止"); return }
 	var oldCursor POINT; pGetCursorPos.Call(uintptr(unsafe.Pointer(&oldCursor))); defer pSetCursorPos.Call(uintptr(oldCursor.X), uintptr(oldCursor.Y))
-	logf("INFO", "AUTO-FILL V0.0.10 Build 1 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
+	logf("INFO", "AUTO-FILL V0.0.10 Build 2 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
 	if !ensureInputMode(root) { if isStopRequested(){return}; setStatus("ERP：無法確認輸入狀態，已停止；請提供除錯紀錄"); logError("自動填入","ERP","INPUT_MODE_NOT_CONFIRMED","未進入或無法判斷輸入狀態"); return }
 	setStatus("ERP：輸入狀態已確認，依序填入表頭→交易→送貨→發票→明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
 	ok,fail := 0,0; a,b := fillHeaderSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
 	for _, group := range []string{"交易資料","送貨資料","發票資料(一)"} { if isStopRequested(){return}; a,b = fillTabGroupSelected(root,group); ok+=a; fail+=b }
 	if isStopRequested(){return}; a,b = fillDetailSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
-	setStatus(fmt.Sprintf("ERP：測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 1 end success=%d fail=%d (NO SAVE)",ok,fail)
+	setStatus(fmt.Sprintf("ERP：測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 2 end success=%d fail=%d (NO SAVE)",ok,fail)
 }
 
 func findTabSheet(root uintptr, tabName string) uintptr {
