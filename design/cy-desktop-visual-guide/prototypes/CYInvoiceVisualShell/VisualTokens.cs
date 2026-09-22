@@ -47,13 +47,14 @@ internal readonly record struct DensityMetrics(
 internal static class VisualTokens
 {
     internal static readonly Color White = Color.White;
-    internal static readonly Color Window = Color.FromArgb(245, 247, 250);
+    // Restored to the lighter neutral family shown in the approved theme sample.
+    internal static readonly Color Window = Color.FromArgb(248, 250, 252); // #F8FAFC
     internal static readonly Color Subtle = Color.FromArgb(248, 250, 252);
     internal static readonly Color ReadOnly = Color.FromArgb(241, 243, 245);
-    internal static readonly Color Border = Color.FromArgb(217, 222, 229);
+    internal static readonly Color Border = Color.FromArgb(209, 213, 219); // #D1D5DB
     internal static readonly Color Divider = Color.FromArgb(229, 232, 236);
     internal static readonly Color Grid = Color.FromArgb(221, 225, 230);
-    internal static readonly Color TextPrimary = Color.FromArgb(31, 41, 55);
+    internal static readonly Color TextPrimary = Color.FromArgb(31, 41, 55); // #1F2937
     internal static readonly Color TextSecondary = Color.FromArgb(102, 112, 133);
     internal static readonly Color TextDisabled = Color.FromArgb(152, 162, 179);
     internal static readonly Color Danger = Color.FromArgb(180, 55, 55);
@@ -68,15 +69,16 @@ internal static class VisualTokens
 
     internal static ThemePalette GetPalette(CyTheme theme) => theme switch
     {
+        // Approved sample direction: clean modern teal, not muted grey-teal.
         CyTheme.Teal => new(
-            Color.FromArgb(47, 111, 115),
-            Color.FromArgb(39, 94, 97),
-            Color.FromArgb(32, 78, 81),
-            Color.FromArgb(229, 241, 240),
-            Color.FromArgb(105, 161, 163),
-            Color.FromArgb(220, 237, 235)),
+            Color.FromArgb(13, 148, 136),   // #0D9488
+            Color.FromArgb(13, 128, 118),
+            Color.FromArgb(15, 118, 110),
+            Color.FromArgb(209, 242, 235),  // #D1F2EB
+            Color.FromArgb(45, 212, 191),
+            Color.FromArgb(204, 251, 241)),
+        // Coral is intentionally rose-coral/pink so it is visually separate from Apricot and Danger red.
         CyTheme.Coral => new(
-            // V2: deliberately shifted away from orange toward coral-red / rose-pink.
             Color.FromArgb(212, 101, 123),
             Color.FromArgb(196, 86, 110),
             Color.FromArgb(173, 72, 94),
@@ -90,13 +92,14 @@ internal static class VisualTokens
             Color.FromArgb(250, 236, 221),
             Color.FromArgb(224, 161, 120),
             Color.FromArgb(246, 227, 209)),
+        // Approved sample direction: #2563EB / #DBEAFE.
         _ => new(
-            Color.FromArgb(46, 74, 113),
-            Color.FromArgb(39, 63, 97),
-            Color.FromArgb(32, 53, 80),
-            Color.FromArgb(232, 238, 245),
-            Color.FromArgb(111, 143, 184),
-            Color.FromArgb(224, 234, 245)),
+            Color.FromArgb(37, 99, 235),    // #2563EB
+            Color.FromArgb(29, 78, 216),
+            Color.FromArgb(30, 64, 175),
+            Color.FromArgb(219, 234, 254),  // #DBEAFE
+            Color.FromArgb(96, 165, 250),
+            Color.FromArgb(219, 234, 254)),
     };
 
     internal static DensityMetrics GetDensity(CyDensity density) => density switch
