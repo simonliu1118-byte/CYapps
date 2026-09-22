@@ -5,6 +5,7 @@ config/*.local.json
 
 # Build output
 dist/
+package/
 *.exe
 *.zip
 
