@@ -1,6 +1,6 @@
 # CYInvoice Cloud Architecture Status
 
-此文件只描述目前已實作／已驗證的雲端工程狀態。長期產品藍圖見 `CLOUD_ROADMAP.md`；Workspace／Device／Employee 身分生命週期見 `CLOUD_IDENTITY_LIFECYCLE.md`。
+此文件只描述目前已實作／已驗證的雲端工程狀態。長期產品藍圖見 `CLOUD_ROADMAP.md`；Workspace／Device／Employee 身分生命週期見 `CLOUD_IDENTITY_LIFECYCLE.md`。若由新的長時間工作階段／ChatGPT Work 接手，先依 `AGENTS.md` 讀永久規則，再讀 `CLOUD_WORK_HANDOFF.md`。
 
 > 本 repository 為 Public repository。不得寫入任何實際 endpoint、密鑰、Device Token、OTP、真實 Email、正式公司資料或其他營運／個資資訊。
 
