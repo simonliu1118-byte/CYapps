@@ -8,6 +8,8 @@ import (
 )
 
 func createControls(parent uintptr) {
+	setWindowText(parent, "CYERPAutoInput V0.0.10 Build 11 — SMART ERP 自動輸入工具（不儲存）")
+	pSetWindowPos.Call(parent, HWND_TOP, 0, 0, 1580, 900, SWP_NOMOVE|SWP_SHOWWINDOW)
 	createCtrl("STATIC", "V0.0.10 Build 11：新增單據輸入測試；Esc 可緊急停止；明細支援多列。此版仍不儲存 ERP 單據。", WS_CHILD|WS_VISIBLE, 16, 10, 1450, 22, parent, 0)
 
 	createCtrl("BUTTON", "尋找 ERP", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 16, 36, 90, 30, parent, 1001)
