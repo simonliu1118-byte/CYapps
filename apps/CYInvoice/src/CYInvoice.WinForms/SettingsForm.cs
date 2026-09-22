@@ -31,6 +31,7 @@ internal sealed class SettingsForm : Form
         this.repository = repository;
         settings = repository.Settings.LoadOrCreate();
         Text = "設定選單";
+        StartPosition = FormStartParent;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(420, 340);
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -217,8 +218,12 @@ internal sealed class SettingsForm : Form
     {
         try
         {
-            if (!cloudMode.Checked || !HasCloudIdentity(settings) || string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
-                throw new InvalidOperationException("這台電腦尚未完成 Cloud Device identity，無法管理其他裝置。");
+            if (!cloudMode.Checked || settings.CloudMode != CloudModes.CloudPreferred
+                || !settings.CloudEmployeeAuthorityReady || !HasCloudIdentity(settings)
+                || string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
+            {
+                throw new InvalidOperationException("這台電腦尚未完成中央帳號轉換，暫時不能管理其他裝置。");
+            }
 
             var token = repository.Settings.CloudDeviceToken(settings);
             if (string.IsNullOrWhiteSpace(token))
@@ -278,7 +283,7 @@ internal sealed class SettingsForm : Form
     private void LoadValues()
     {
         localMode.Checked = settings.CloudMode == CloudModes.LocalOnly;
-        cloudMode.Checked = settings.CloudMode == CloudModes.CloudPreferred;
+        cloudMode.Checked = settings.CloudMode is CloudModes.CloudTransition or CloudModes.CloudPreferred;
         test.Checked = settings.Environment == Environments.Test;
         production.Checked = settings.Environment == Environments.Production;
         invoice.Text = settings.ProductionInvoice;
@@ -294,6 +299,8 @@ internal sealed class SettingsForm : Form
     {
         cloudSettings.Enabled = cloudMode.Checked;
         deviceManagement.Enabled = cloudMode.Checked
+            && settings.CloudMode == CloudModes.CloudPreferred
+            && settings.CloudEmployeeAuthorityReady
             && HasCloudIdentity(settings)
             && !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
     }
@@ -313,8 +320,20 @@ internal sealed class SettingsForm : Form
                 throw new InvalidOperationException("請選擇單機版或雲端版。");
             if (cloudMode.Checked && string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
                 throw new InvalidOperationException("請先按「雲端連線設定」完成 Cloud API 連線設定。");
+            if (cloudMode.Checked && !HasCloudIdentity(settings))
+                throw new InvalidOperationException("請先完成建立／加入雲端空間；只有 API 網址尚不能切換成雲端版。");
 
-            settings.CloudMode = cloudMode.Checked ? CloudModes.CloudPreferred : CloudModes.LocalOnly;
+            if (cloudMode.Checked)
+            {
+                settings.CloudMode = settings.CloudEmployeeAuthorityReady
+                    ? CloudModes.CloudPreferred
+                    : CloudModes.CloudTransition;
+            }
+            else
+            {
+                settings.CloudMode = CloudModes.LocalOnly;
+            }
+
             settings.Environment = production.Checked ? Environments.Production : Environments.Test;
             settings.ProductionInvoice = invoice.Text.Trim();
             if (appKey.Text.Length != 0) repository.Settings.SetProductionAppKey(settings, appKey.Text);
@@ -390,6 +409,8 @@ internal sealed class SettingsForm : Form
         var environmentX = invoiceLabel.PointToScreen(Point.Empty).X;
         var platformX = moPasswordLabel.PointToScreen(Point.Empty).X;
         var expectedDeviceManagementEnabled = cloudMode.Checked
+            && settings.CloudMode == CloudModes.CloudPreferred
+            && settings.CloudEmployeeAuthorityReady
             && HasCloudIdentity(settings)
             && !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
         if (string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
