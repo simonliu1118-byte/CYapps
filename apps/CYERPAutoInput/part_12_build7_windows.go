@@ -16,31 +16,31 @@ func clearFocusedEditSelectionForcedV7(focus uintptr) bool {
 		return false
 	}
 
-	// End -> Shift+Home -> Delete, with visible spacing between each keyboard
-	// state transition. Build 6 sent the Shift chord too quickly for COPI08.
+	// Build 8: COPI08 did not reliably recognize Shift when Shift-down, Home,
+	// and Shift-up were sent as three separate SendInput calls. Keep End and
+	// Delete separate, but send the complete Shift+Home chord atomically in one
+	// SendInput call so the ERP receives it as a real modified keystroke.
 	pressVK(VK_END)
-	if !interruptibleSleep(90 * time.Millisecond) {
+	if !interruptibleSleep(110 * time.Millisecond) {
 		return false
 	}
 
-	sendInputs([]INPUT{keyInput(vkShiftV2, 0, 0)})
-	if !interruptibleSleep(70 * time.Millisecond) {
-		return false
-	}
-	sendInputs([]INPUT{keyInput(VK_HOME, 0, 0), keyInput(VK_HOME, 0, KEYEVENTF_KEYUP)})
-	if !interruptibleSleep(80 * time.Millisecond) {
-		return false
-	}
-	sendInputs([]INPUT{keyInput(vkShiftV2, 0, KEYEVENTF_KEYUP)})
-	if !interruptibleSleep(80 * time.Millisecond) {
-		return false
-	}
-	sendInputs([]INPUT{keyInput(vkDeleteV2, 0, 0), keyInput(vkDeleteV2, 0, KEYEVENTF_KEYUP)})
+	sendInputs([]INPUT{
+		keyInput(vkShiftV2, 0, 0),
+		keyInput(VK_HOME, 0, 0),
+		keyInput(VK_HOME, 0, KEYEVENTF_KEYUP),
+		keyInput(vkShiftV2, 0, KEYEVENTF_KEYUP),
+	})
 	if !interruptibleSleep(140 * time.Millisecond) {
 		return false
 	}
 
-	logf("INFO", "forced replacement clear dispatched hwnd=0x%x class=%q sequence=End+ShiftHome+Delete", focus, className(focus))
+	sendInputs([]INPUT{keyInput(vkDeleteV2, 0, 0), keyInput(vkDeleteV2, 0, KEYEVENTF_KEYUP)})
+	if !interruptibleSleep(160 * time.Millisecond) {
+		return false
+	}
+
+	logf("INFO", "forced replacement clear dispatched hwnd=0x%x class=%q sequence=End+atomic(ShiftHome)+Delete", focus, className(focus))
 	return true
 }
 
