@@ -93,12 +93,12 @@ internal static class Program
             var repository = LocalRepository.Open(temporaryRoot, new DpapiSecretProtector());
             var settings = repository.Settings.LoadOrCreate();
 
+            // Device Join now deliberately prompts for Local ADMIN/SUPER_ADMIN on Shown.
+            // The startup smoke validates static layout without displaying the form so CI
+            // never bypasses or blocks on the real runtime authorization gate.
             using var join = new CloudJoinWorkspaceForm(repository, settings, "https://cloud.example.test/");
-            join.Show();
             join.PerformLayout();
-            Application.DoEvents();
             join.VerifySmokeLayout();
-            join.Close();
 
             var token = $"cydev_{new string('a', 64)}";
             using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
