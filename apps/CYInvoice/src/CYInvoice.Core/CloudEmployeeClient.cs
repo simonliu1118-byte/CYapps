@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using CYInvoice.Core.Storage;
 
@@ -42,42 +41,20 @@ public sealed class CloudEmployeeClient
         this.deviceToken = deviceToken.Trim();
     }
 
-    public async Task<CloudEmployeeReconciliation> ReconcileLocalSuperAdminAsync(
+    [Obsolete("Single-account Local SUPER_ADMIN reconciliation is retired. Use CloudEmployeeTransitionClient for whole-device transition.")]
+    public Task<CloudEmployeeReconciliation> ReconcileLocalSuperAdminAsync(
         EmployeeAccount? localSuperAdmin,
         CancellationToken cancellationToken = default)
     {
-        object? local = null;
-        if (localSuperAdmin is not null)
-        {
-            if (localSuperAdmin.Role != EmployeeRoles.SuperAdmin || !localSuperAdmin.Enabled)
-                throw new ArgumentException("Local account must be the enabled Local SUPER_ADMIN.", nameof(localSuperAdmin));
-            local = new
-            {
-                employeeNo = localSuperAdmin.EmployeeNo,
-                name = localSuperAdmin.Name,
-                email = localSuperAdmin.Email,
-            };
-        }
-
-        using var document = await SendAsync(
-            HttpMethod.Post,
-            "v1/employees/reconcile-local",
-            new { localSuperAdmin = local },
-            cancellationToken);
-        var root = document.RootElement;
-        if (!root.TryGetProperty("reconciliation", out var reconciliation) || reconciliation.ValueKind != JsonValueKind.Object)
-            throw new InvalidDataException("Cloud employee reconciliation response is missing reconciliation data.");
-
-        var state = ReadRequiredString(reconciliation, "state");
-        CloudEmployeeIdentity? employee = null;
-        if (reconciliation.TryGetProperty("employee", out var employeeElement) && employeeElement.ValueKind == JsonValueKind.Object)
-            employee = ReadEmployee(employeeElement);
-        return new CloudEmployeeReconciliation(state, employee);
+        _ = localSuperAdmin;
+        _ = cancellationToken;
+        throw new NotSupportedException(
+            "Single-account reconciliation has been retired. Use the whole-device Local → Cloud Employee Transition flow.");
     }
 
     public async Task<IReadOnlyList<CloudEmployeeIdentity>> ListEmployeesAsync(CancellationToken cancellationToken = default)
     {
-        using var document = await SendAsync(HttpMethod.Get, "v1/employees", null, cancellationToken);
+        using var document = await SendAsync(HttpMethod.Get, "v1/employees", cancellationToken);
         var root = document.RootElement;
         if (!root.TryGetProperty("employees", out var employees) || employees.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("Cloud employee response is missing employees data.");
@@ -95,14 +72,12 @@ public sealed class CloudEmployeeClient
     private async Task<JsonDocument> SendAsync(
         HttpMethod method,
         string relativePath,
-        object? body,
         CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(method, new Uri(baseUri, relativePath));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
         request.Headers.TryAddWithoutValidation("X-Request-ID", $"win-{Guid.NewGuid():N}");
-        if (body is not null) request.Content = JsonContent.Create(body);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(DefaultRequestTimeout);
