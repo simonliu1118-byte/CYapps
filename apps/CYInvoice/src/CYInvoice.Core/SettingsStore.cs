@@ -73,6 +73,24 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
 
     public string CloudDeviceToken(Settings settings) => Unprotect(settings.CloudDeviceTokenEncrypted);
 
+    public void MarkCloudEmployeeTransition(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (!HasCloudIdentity(settings))
+            throw new InvalidOperationException("Cloud Device identity 尚未完成，不能開始帳號轉換。");
+        settings.CloudEmployeeAuthorityReady = false;
+        settings.CloudMode = CloudModes.CloudTransition;
+    }
+
+    public void MarkCloudEmployeeAuthorityReady(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (!HasCloudIdentity(settings))
+            throw new InvalidOperationException("Cloud Device identity 尚未完成，不能切換中央帳號主資料。");
+        settings.CloudEmployeeAuthorityReady = true;
+        settings.CloudMode = CloudModes.CloudPreferred;
+    }
+
     public void SetCloudPendingBootstrap(
         Settings settings,
         string baseUrl,
@@ -220,6 +238,7 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.CloudWorkspaceId = string.Empty;
         settings.CloudDeviceId = string.Empty;
         settings.CloudDeviceTokenEncrypted = string.Empty;
+        settings.CloudEmployeeAuthorityReady = false;
         ClearCloudPendingBootstrap(settings);
         ClearCloudPendingDeviceJoin(settings);
         settings.CloudMode = CloudModes.LocalOnly;
@@ -241,6 +260,15 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             throw new InvalidDataException("Cloud API URL 必須是有效的 HTTPS 網址");
         if (settings.CloudWorkspaceId.Length > 80 || settings.CloudDeviceId.Length > 80)
             throw new InvalidDataException("Cloud workspace/device ID 格式無效");
+        if (settings.CloudEmployeeAuthorityReady && !HasCloudIdentity(settings))
+            throw new InvalidDataException("中央帳號主資料狀態缺少 Cloud Device identity。");
+        if (settings.CloudMode == CloudModes.CloudTransition
+            && (!HasCloudIdentity(settings) || settings.CloudEmployeeAuthorityReady))
+            throw new InvalidDataException("Cloud 帳號轉換狀態與 Device identity 不一致。");
+        if (settings.CloudMode == CloudModes.CloudPreferred
+            && HasCloudIdentity(settings)
+            && !settings.CloudEmployeeAuthorityReady)
+            throw new InvalidDataException("Cloud Device 尚未完成中央帳號主資料切換。");
 
         ValidateCloudPendingBootstrap(settings);
         ValidateCloudPendingDeviceJoin(settings);
@@ -326,6 +354,11 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             && string.IsNullOrEmpty(uri.Query)
             && string.IsNullOrEmpty(uri.Fragment);
     }
+
+    private static bool HasCloudIdentity(Settings settings) =>
+        settings.CloudWorkspaceId.Length != 0
+        && settings.CloudDeviceId.Length != 0
+        && settings.CloudDeviceTokenEncrypted.Length != 0;
 
     private static bool ValidCloudDeviceToken(string value)
     {
