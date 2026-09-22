@@ -7,15 +7,15 @@
 ## 1. 工程基準
 
 - Windows 正式產品線：C# / WinForms。
-- 工程版本：V2.6.3 Build 0。
+- 工程版本：V2.6.4 Build 0。
 - Reference backend：Cloudflare Worker + D1。
 - Cloud API：`1`。
-- Cloud implementation version：`0.8.0`。
+- Cloud implementation version：`0.8.1`。
 - Cloud schema compatibility：`7`，forward migrations `0001`～`0007`。
 - Public Windows client 不內建專案擁有者私人 endpoint，只接受使用者設定的相容 HTTPS API。
 - 已執行 migration 不回寫；schema 修改只能新增 forward migration。
 
-GitHub Actions 驗證的是 source、Worker bundle、local SQLite migration、.NET contract、Windows build／startup smoke 與 engineering package；**不代表 Cloudflare remote Worker 或 remote D1 已部署至 Schema 7**。Remote 狀態必須另行查證。
+GitHub Actions 驗證的是 source、Worker bundle、local SQLite migration、.NET contract、Windows build／startup smoke 與 engineering package；不等同 remote 已部署。2026-09-22 已另外確認 development D1 remote 為 Schema 7、`/v1/health` storage `ok`；當時 remote Worker 為 Cloud 0.8.0，V2.6.4 的 Cloud 0.8.1 hotfix 仍須部署後再做 live OTP 驗證。
 
 ## 2. 帳號權威模型
 

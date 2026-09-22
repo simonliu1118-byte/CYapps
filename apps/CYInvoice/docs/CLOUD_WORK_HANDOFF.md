@@ -15,7 +15,7 @@
 - 接手時應先重新讀取 PR #73 的最新 head；不要依本文件硬編碼 branch head。
 - 最新 code-bearing head（交接時）：`33e8683a0f01e34baa45e364156b022a495172d6`
 - 最新 code-bearing CI：`CYInvoice Cloud Check Run #204`，成功
-- Cloud compatibility：Cloud `0.8.0` / API `1` / Schema `7`
+- Cloud compatibility：Cloud `0.8.1` / API `1` / Schema `7`
 - Forward migrations：`0001`～`0007`
 
 禁止自行 merge、tag、Release、auto-merge；只有使用者明確授權後才可執行。
@@ -77,16 +77,16 @@ Run #204 已通過：
 - Windows Cloud contract tests
 - engineering package build/upload
 
-重要限制：GitHub Actions 綠燈只證明 repository source 與 local migration 可用；不能推定 remote Cloudflare Worker / D1 已部署至 Schema 7。
+2026-09-22 已另外完成 remote audit：development Worker `/v1/health` 回覆 storage `ok`，D1 migrations 已到 Schema 7；當時 Worker 為 Cloud 0.8.0。第一次 live bootstrap OTP 隨後發現未限定範圍的 challenge 把空字串寫入 Schema 7 `scope_key`，並因主路由未等待 handler 而回傳 Cloudflare 純文字 runtime error；V2.6.4 / Cloud 0.8.1 已針對 D1 NULL scope、Worker error boundary 與 Windows 非 JSON 回應補強，下一步是部署後重測實際寄信。
 
 ## 5. Work 接手後的優先順序
 
-### A. 先查 remote development Cloud 狀態
+### A. 部署 V2.6.4 / Cloud 0.8.1 hotfix
 
-1. 先讀最新 PR #73 head 與 CI，確認沒有新的 code commit。
-2. 檢查 development Worker 實際部署版本與 `/v1/health` 回覆。
-3. 檢查 development D1 migration 實際狀態，確認是否已到 `0007` / Schema 7。
-4. 若 remote 落後，使用 forward migration / 正式 Wrangler 流程更新；不可重寫已執行 migration。
+1. 先讀最新 PR #73 head 與 CI，確認 V2.6.4 修正與測試已通過。
+2. 以既有 development deployment workflow 部署 Cloud 0.8.1；D1 已是 Schema 7，不新增或重寫 migration。
+3. 重新檢查 `/v1/health` 必須回覆 Cloud 0.8.1 / API 1 / Schema 7 / storage `ok`。
+4. 再從 V2.6.4 engineering package 只寄送一次 bootstrap OTP，確認 Brevo 收信成功；避免用舊 V2.6.3 package 重試。
 
 不要把 remote 狀態猜成已完成。
 
@@ -139,4 +139,4 @@ A/B identity flow 穩定後再做：
 
 ## 7. 目前適合的 Work 任務起點
 
-Work 接手後，先完成 **remote Cloudflare development state audit**，不要先改功能。確認 remote Worker / D1 / secrets 狀態後，再決定是部署 Schema 7、做 Email live test，或直接進 A/B Windows E2E。
+Work 接手後，先完成 **V2.6.4 / Cloud 0.8.1 hotfix CI、development deployment 與 live bootstrap OTP 重測**。成功後才繼續 A 機 Workspace + Employee transition；不要先混入下一階段功能。

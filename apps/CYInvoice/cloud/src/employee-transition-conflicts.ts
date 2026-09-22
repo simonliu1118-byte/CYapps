@@ -42,7 +42,7 @@ type ConflictRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.0";
+const CLOUD_VERSION = "0.8.1";
 
 function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
