@@ -85,7 +85,7 @@ internal sealed class AccountManagementForm : Form
         List.Columns.Add("權限", RoleWidth, HorizontalAlignment.Center);
         List.Columns.Add("狀態", StatusWidth, HorizontalAlignment.Center);
         List.SelectedIndexChanged += (_, _) => UpdateButtons();
-        List.DoubleClick += (_, _) => EditSelected();
+        List.DoubleClick += async (_, _) => await EditSelectedAsync();
         accountHost.ViewportChanged += (_, _) => ResizeListColumns();
         root.Controls.Add(accountHost, 0, 0);
 
@@ -110,10 +110,10 @@ internal sealed class AccountManagementForm : Form
         Place(actions, close, 3, 1);
         pendingIdentity.Visible = false;
         add.Click += async (_, _) => await AddEmployeeAsync();
-        edit.Click += (_, _) => EditSelected();
-        password.Click += (_, _) => PasswordSelected();
-        enabled.Click += (_, _) => ToggleEnabled();
-        role.Click += (_, _) => ToggleRole();
+        edit.Click += async (_, _) => await EditSelectedAsync();
+        password.Click += async (_, _) => await PasswordSelectedAsync();
+        enabled.Click += async (_, _) => await ToggleEnabledAsync();
+        role.Click += async (_, _) => await ToggleRoleAsync();
         recovery.Click += async (_, _) => await RecoveryOrTransferAsync();
         pendingIdentity.Click += async (_, _) => await OpenPendingIdentityAsync();
         close.DialogResult = DialogResult.OK;
@@ -195,20 +195,19 @@ internal sealed class AccountManagementForm : Form
         var hasTarget = target is not null;
         if (CloudAuthority)
         {
-            add.Enabled = EmployeeRoles.CanManageAccounts(actor.Role);
-            edit.Enabled = false;
-            password.Enabled = false;
-            enabled.Enabled = false;
-            role.Enabled = false;
-            password.Text = "重設密碼";
-            enabled.Text = "停用帳號";
-            role.Text = "設為管理員";
+            // Cloud mode never treats the account that opened this window as a
+            // persistent signed-in user. Every sensitive action re-authenticates
+            // at execution time and the server rechecks the current Cloud role.
+            add.Enabled = true;
+            edit.Enabled = hasTarget;
+            password.Enabled = hasTarget;
+            enabled.Enabled = hasTarget && target!.Role != EmployeeRoles.SuperAdmin;
+            role.Enabled = hasTarget && target!.Role != EmployeeRoles.SuperAdmin;
+            password.Text = target?.EmployeeNo == actor.EmployeeNo ? "變更密碼" : "重設密碼";
+            enabled.Text = target?.Enabled == false ? "啟用帳號" : "停用帳號";
+            role.Text = target?.Role == EmployeeRoles.Admin ? "取消管理員" : "設為管理員";
             recovery.Text = "移交超管權限";
-            recovery.Enabled = actor.Role == EmployeeRoles.SuperAdmin
-                && hasTarget
-                && target!.EmployeeNo != actor.EmployeeNo
-                && target.Role == EmployeeRoles.Admin
-                && target.Enabled;
+            recovery.Enabled = hasTarget && target!.Role == EmployeeRoles.Admin && target.Enabled;
             return;
         }
 
@@ -227,7 +226,7 @@ internal sealed class AccountManagementForm : Form
     private async Task RefreshPendingIdentityButtonAsync()
     {
         pendingIdentity.Visible = false;
-        if (!CloudAuthority || repository is null || actor.Role != EmployeeRoles.SuperAdmin) return;
+        if (!CloudAuthority || repository is null) return;
         try
         {
             var settings = repository.Settings.LoadOrCreate();
@@ -253,7 +252,7 @@ internal sealed class AccountManagementForm : Form
 
     private async Task OpenPendingIdentityAsync()
     {
-        if (!pendingIdentity.Visible || repository is null || actor.Role != EmployeeRoles.SuperAdmin) return;
+        if (!pendingIdentity.Visible || repository is null) return;
         using var form = new CloudEmployeeConflictResolutionForm(repository);
         form.ShowDialog(this);
         await RefreshPendingIdentityButtonAsync();
@@ -294,12 +293,6 @@ internal sealed class AccountManagementForm : Form
 
         using var login = new EmployeeAdminLoginForm(repository, "新增使用者－管理員驗證");
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
-        if (!EmployeeRoles.CanManageAccounts(login.AuthenticatedEmployee.Role))
-        {
-            MessageBox.Show(this, "此帳號目前沒有帳號管理權限。", "無法新增使用者",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
 
         try
         {
@@ -332,7 +325,7 @@ internal sealed class AccountManagementForm : Form
         }
         catch (Exception error)
         {
-            ShowOperationError("無法新增使用者", error);
+            ShowCloudOperationError("無法新增使用者", error);
         }
     }
 
@@ -349,9 +342,35 @@ internal sealed class AccountManagementForm : Form
         repository.CloudEmployees.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
     }
 
-    private void EditSelected()
+    private (Settings Settings, string Token, CloudEmployeeAccountClient Client) CreateCloudAccountClient()
     {
-        if (CloudAuthority) return;
+        if (repository is null || !CloudAuthority)
+            throw new InvalidOperationException("這台電腦尚未使用 Cloud Employee 作為帳號主資料。");
+        var settings = repository.Settings.LoadOrCreate();
+        var token = repository.Settings.CloudDeviceToken(settings);
+        if (token.Length == 0 || settings.CloudBaseUrl.Length == 0)
+            throw new InvalidOperationException("雲端帳號異動必須在線，且本機需要有效的 Cloud Device identity。");
+        return (
+            settings,
+            token,
+            new CloudEmployeeAccountClient(
+                cloudHttpClient,
+                new Uri(settings.CloudBaseUrl, UriKind.Absolute),
+                token));
+    }
+
+    private async Task EditSelectedAsync()
+    {
+        if (CloudAuthority)
+        {
+            await EditCloudEmployeeAsync();
+            return;
+        }
+        EditLocalSelected();
+    }
+
+    private void EditLocalSelected()
+    {
         var target = SelectedAccount;
         if (target is null || !edit.Enabled) return;
         var canChangeRole = target.Role != EmployeeRoles.SuperAdmin && target.EmployeeNo != actor.EmployeeNo;
@@ -371,9 +390,75 @@ internal sealed class AccountManagementForm : Form
         }
     }
 
-    private void PasswordSelected()
+    private async Task EditCloudEmployeeAsync()
     {
-        if (CloudAuthority) return;
+        if (repository is null || SelectedAccount is not { } target || !edit.Enabled) return;
+        var canChangeRole = target.Role != EmployeeRoles.SuperAdmin;
+        using var form = new EmployeeEditForm(target, allowRoleChange: canChangeRole);
+        if (form.ShowDialog(this) != DialogResult.OK) return;
+
+        var nextRole = target.Role == EmployeeRoles.SuperAdmin ? EmployeeRoles.SuperAdmin : form.Role;
+        if (string.Equals(form.EmployeeName, target.Name, StringComparison.Ordinal)
+            && string.Equals(form.Email, target.Email, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(nextRole, target.Role, StringComparison.Ordinal))
+            return;
+
+        using var login = new EmployeeAdminLoginForm(repository, "修改使用者－管理員驗證");
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+
+        try
+        {
+            var (settings, token, client) = CreateCloudAccountClient();
+            var proposal = new CloudEmployeeUpdateProposal(
+                target.EmployeeNo,
+                form.EmployeeName,
+                form.Email,
+                nextRole);
+            var started = await client.StartUpdateAsync(
+                login.AuthenticatedEmployee.EmployeeNo,
+                login.AuthenticatedPassword,
+                proposal,
+                lifetime.Token);
+            CloudEmployeeTransitionIdentity? updated = started.Employee;
+            if (started.VerificationRequired)
+            {
+                if (started.Challenge is null)
+                    throw new InvalidDataException("Cloud Employee Email 驗證狀態不完整。");
+                using var verification = new CloudEmployeeUpdateVerificationForm(
+                    client,
+                    login.AuthenticatedEmployee,
+                    login.AuthenticatedPassword,
+                    proposal,
+                    started.Challenge);
+                if (verification.ShowDialog(this) != DialogResult.OK || verification.UpdatedEmployee is null) return;
+                updated = verification.UpdatedEmployee;
+            }
+            if (updated is null)
+                throw new InvalidDataException("Cloud Employee 修改完成但未回傳帳號資料。");
+
+            await RefreshCloudEmployeeSnapshotAsync(settings, token);
+            Reload(updated.EmployeeNo);
+            MessageBox.Show(this, "中央帳號資料已更新。", "修改完成",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            ShowCloudOperationError("無法修改使用者", error);
+        }
+    }
+
+    private async Task PasswordSelectedAsync()
+    {
+        if (CloudAuthority)
+        {
+            await PasswordCloudSelectedAsync();
+            return;
+        }
+        PasswordLocalSelected();
+    }
+
+    private void PasswordLocalSelected()
+    {
         var target = SelectedAccount;
         if (target is null || !password.Enabled) return;
         if (target.EmployeeNo == actor.EmployeeNo)
@@ -396,9 +481,55 @@ internal sealed class AccountManagementForm : Form
         }
     }
 
-    private void ToggleEnabled()
+    private async Task PasswordCloudSelectedAsync()
     {
-        if (CloudAuthority) return;
+        if (repository is null || SelectedAccount is not { } target || !password.Enabled) return;
+        using var login = new EmployeeAdminLoginForm(repository, "變更密碼－權限驗證");
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        if (target.Role == EmployeeRoles.SuperAdmin
+            && login.AuthenticatedEmployee.EmployeeNo != target.EmployeeNo)
+        {
+            MessageBox.Show(this, "超級管理員密碼只能由超級管理員本人變更。", "無法變更密碼",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        using var reset = new EmployeePasswordResetForm(target.EmployeeNo, target.Name);
+        if (reset.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            var (settings, token, client) = CreateCloudAccountClient();
+            var verifier = CloudEmployeeCredentialVerifier.Create(reset.NewPassword);
+            var updated = await client.SetPasswordAsync(
+                login.AuthenticatedEmployee.EmployeeNo,
+                login.AuthenticatedPassword,
+                target.EmployeeNo,
+                verifier,
+                lifetime.Token);
+            await RefreshCloudEmployeeSnapshotAsync(settings, token);
+            Reload(updated.EmployeeNo);
+            var self = login.AuthenticatedEmployee.EmployeeNo == target.EmployeeNo;
+            MessageBox.Show(this, self ? "密碼已變更。" : "密碼已重設。", "帳號管理",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            ShowCloudOperationError("無法變更密碼", error);
+        }
+    }
+
+    private async Task ToggleEnabledAsync()
+    {
+        if (CloudAuthority)
+        {
+            await ToggleCloudEnabledAsync();
+            return;
+        }
+        ToggleLocalEnabled();
+    }
+
+    private void ToggleLocalEnabled()
+    {
         var target = SelectedAccount;
         if (target is null || !enabled.Enabled) return;
         var next = !target.Enabled;
@@ -417,9 +548,55 @@ internal sealed class AccountManagementForm : Form
         }
     }
 
-    private void ToggleRole()
+    private async Task ToggleCloudEnabledAsync()
     {
-        if (CloudAuthority) return;
+        if (repository is null || SelectedAccount is not { } target || !enabled.Enabled) return;
+        var next = !target.Enabled;
+        var action = next ? "啟用" : "停用";
+        if (MessageBox.Show(this, $"確定要{action} {target.EmployeeNo} {target.Name}?", "帳號管理",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+        using var login = new EmployeeAdminLoginForm(repository, $"{action}帳號－管理員驗證");
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        if (login.AuthenticatedEmployee.EmployeeNo == target.EmployeeNo)
+        {
+            MessageBox.Show(this, "管理員不能變更自己的啟用狀態。", $"無法{action}帳號",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            var (settings, token, client) = CreateCloudAccountClient();
+            var updated = await client.SetEnabledAsync(
+                login.AuthenticatedEmployee.EmployeeNo,
+                login.AuthenticatedPassword,
+                target.EmployeeNo,
+                next,
+                lifetime.Token);
+            await RefreshCloudEmployeeSnapshotAsync(settings, token);
+            Reload(updated.EmployeeNo);
+            MessageBox.Show(this, $"帳號已{action}。", "帳號管理",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            ShowCloudOperationError($"無法{action}帳號", error);
+        }
+    }
+
+    private async Task ToggleRoleAsync()
+    {
+        if (CloudAuthority)
+        {
+            await ToggleCloudRoleAsync();
+            return;
+        }
+        ToggleLocalRole();
+    }
+
+    private void ToggleLocalRole()
+    {
         var target = SelectedAccount;
         if (target is null || !role.Enabled) return;
         var nextRole = target.Role == EmployeeRoles.Admin ? EmployeeRoles.Employee : EmployeeRoles.Admin;
@@ -435,6 +612,51 @@ internal sealed class AccountManagementForm : Form
         {
             ShowOperationError("無法變更權限", error);
             Reload(target.EmployeeNo);
+        }
+    }
+
+    private async Task ToggleCloudRoleAsync()
+    {
+        if (repository is null || SelectedAccount is not { } target || !role.Enabled) return;
+        var nextRole = target.Role == EmployeeRoles.Admin ? EmployeeRoles.Employee : EmployeeRoles.Admin;
+        var action = nextRole == EmployeeRoles.Admin ? "設為管理員" : "取消管理員權限";
+        if (MessageBox.Show(this, $"確定要將 {target.EmployeeNo} {target.Name} {action}?", "帳號管理",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+        using var login = new EmployeeAdminLoginForm(repository, "變更權限－管理員驗證");
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        if (login.AuthenticatedEmployee.EmployeeNo == target.EmployeeNo)
+        {
+            MessageBox.Show(this, "管理員不能變更自己的帳號權限。", "無法變更權限",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            var (settings, token, client) = CreateCloudAccountClient();
+            var proposal = new CloudEmployeeUpdateProposal(
+                target.EmployeeNo,
+                target.Name,
+                target.Email,
+                nextRole);
+            var started = await client.StartUpdateAsync(
+                login.AuthenticatedEmployee.EmployeeNo,
+                login.AuthenticatedPassword,
+                proposal,
+                lifetime.Token);
+            if (started.VerificationRequired)
+                throw new InvalidDataException("未變更 Email 的權限異動不應要求 Email 驗證。");
+            var updated = started.Employee
+                ?? throw new InvalidDataException("Cloud Employee 權限變更完成但未回傳帳號資料。");
+            await RefreshCloudEmployeeSnapshotAsync(settings, token);
+            Reload(updated.EmployeeNo);
+            MessageBox.Show(this, action + "完成。", "帳號管理",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            ShowCloudOperationError("無法變更權限", error);
         }
     }
 
@@ -459,17 +681,21 @@ internal sealed class AccountManagementForm : Form
 
     private async Task TransferSuperAdminAsync()
     {
-        if (repository is null || !CloudAuthority || actor.Role != EmployeeRoles.SuperAdmin
-            || SelectedAccount is not { Role: EmployeeRoles.Admin, Enabled: true } target
-            || target.EmployeeNo == actor.EmployeeNo)
+        if (repository is null || !CloudAuthority
+            || SelectedAccount is not { Role: EmployeeRoles.Admin, Enabled: true } target)
             return;
 
         using var login = new EmployeeAdminLoginForm(repository, "移交超管權限－超管驗證");
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
-        if (login.AuthenticatedEmployee.Role != EmployeeRoles.SuperAdmin
-            || login.AuthenticatedEmployee.EmployeeNo != actor.EmployeeNo)
+        if (login.AuthenticatedEmployee.Role != EmployeeRoles.SuperAdmin)
         {
             MessageBox.Show(this, "必須由目前 Workspace 超級管理員本人重新驗證。", "無法移交",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (login.AuthenticatedEmployee.EmployeeNo == target.EmployeeNo)
+        {
+            MessageBox.Show(this, "超級管理員不能將權限移交給自己。", "無法移交",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -503,12 +729,44 @@ internal sealed class AccountManagementForm : Form
         }
         catch (Exception error)
         {
-            ShowOperationError("無法移交超級管理員", error);
+            ShowCloudOperationError("無法移交超級管理員", error);
         }
     }
 
     private void ShowOperationError(string title, Exception error) =>
         MessageBox.Show(this, error.Message, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+    private void ShowCloudOperationError(string title, Exception error) =>
+        MessageBox.Show(this, FriendlyCloudOperationMessage(error), title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+    private static string FriendlyCloudOperationMessage(Exception error)
+    {
+        if (error is OperationCanceledException)
+            return "Cloud 連線逾時或操作已取消，帳號資料尚未變更。";
+        if (error is not CloudApiException api) return error.Message;
+        return api.Code switch
+        {
+            "UNAUTHORIZED" => "Cloud Device 驗證失敗，請先重新檢查雲端連線。",
+            "MANAGER_REQUIRED" => "管理員帳密驗證失敗，或目前帳號已沒有帳號管理權限。",
+            "EMPLOYEE_AUTHENTICATION_FAILED" => "員工帳密驗證失敗。",
+            "EMPLOYEE_NOT_FOUND" => "此使用者已不存在於 Workspace，請重新整理帳號資料。",
+            "EMPLOYEE_EMAIL_EXISTS" => "這個 Email 已被 Workspace 內其他使用者使用。",
+            "SUPER_ADMIN_SELF_REQUIRED" => "超級管理員資料只能由目前超級管理員本人修改。",
+            "SUPER_ADMIN_TRANSFER_REQUIRED" => "超級管理員權限只能使用「移交超管權限」變更。",
+            "SELF_ROLE_CHANGE_FORBIDDEN" => "管理員不能變更自己的帳號權限。",
+            "SUPER_ADMIN_DISABLE_FORBIDDEN" => "Workspace 超級管理員不能停用。",
+            "SELF_DISABLE_FORBIDDEN" => "管理員不能變更自己的啟用狀態。",
+            "SUPER_ADMIN_PASSWORD_RESET_FORBIDDEN" => "超級管理員密碼只能由超級管理員本人變更。",
+            "EMAIL_PROVIDER_NOT_CONFIGURED" => "Cloud Email 寄送服務尚未完成設定，目前不能變更 Email。",
+            "EMAIL_DELIVERY_FAILED" => "驗證信目前無法寄出，請稍後再試。",
+            "OTP_NOT_CONFIGURED" => "Cloud Email 驗證尚未完成設定，目前不能變更 Email。",
+            "OTP_INVALID" => "Email 驗證碼錯誤。",
+            "OTP_EXPIRED" => "Email 驗證碼已過期，請重新寄送。",
+            "OTP_ATTEMPTS_EXHAUSTED" => "Email 驗證碼錯誤次數已達上限，請重新開始操作。",
+            "OTP_RESEND_COOLDOWN" => "驗證碼剛寄出，請稍後再重新寄送。",
+            _ => $"Cloud API 錯誤：{api.Code}\n{api.Message}",
+        };
+    }
 
     internal void VerifySmokeLayout()
     {
