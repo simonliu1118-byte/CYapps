@@ -3,6 +3,7 @@ import { handleEmployeeTransition } from "./employee-transition";
 import { handleEmployeeTransitionActions } from "./employee-transition-actions";
 import { handleEmployeeTransitionConflicts } from "./employee-transition-conflicts";
 import { handleEmployeeAuthority } from "./employee-authority";
+import { handleSuperAdminTransfer } from "./super-admin-transfer";
 
 interface Env {
   DB: D1Database;
@@ -19,6 +20,9 @@ interface Env {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const transferResponse = await handleSuperAdminTransfer(request, env);
+    if (transferResponse) return transferResponse;
+
     const conflictResponse = await handleEmployeeTransitionConflicts(request, env);
     if (conflictResponse) return conflictResponse;
 
