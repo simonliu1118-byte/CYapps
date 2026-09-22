@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.4 — 2026/09/22（工程測試版，未正式 Release）
+
+- 修正第一個 Workspace 寄送 Email OTP 時，未限定範圍的 challenge 將 `scope_key` 空字串寫入 D1 Schema 7 而被 CHECK constraint 拒絕的問題；未限定範圍現在一律以 `NULL` 保存與查詢。
+- Worker 主路由等待非同步 handler 完成，使 D1／Email 等執行期錯誤能由既有 JSON error boundary 統一攔截，不再由 Cloudflare 直接回傳純文字 runtime error。
+- Windows Cloud client 遇到非 JSON 回應時改回報穩定的 `CLOUD_INVALID_RESPONSE`，不再把原始 JSON parser 訊息或 provider 回應內容顯示給使用者。
+- 新增 bootstrap NULL scope 與非 JSON Cloud 回應回歸測試；Cloud implementation 推進至 `0.8.1`，API `1`／Schema `7` 不變。
+- 本版只提供 engineering 測試包；不得自動建立正式 tag／Release。
+
 ## V2.4.2 — 2026/09/19（正式 Release）
 
 - 正式 Release：`cyinvoice-v2.4.2`，target commit `266427abb10e48ee4c1beee55c525159b25c47cd`。

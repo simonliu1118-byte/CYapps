@@ -388,7 +388,8 @@ internal sealed class CloudFirstWorkspaceForm : Form
         "OTP_ATTEMPTS_EXCEEDED" => "Email 驗證碼錯誤次數已達上限，請重新寄送。",
         "OTP_RESEND_COOLDOWN" => "驗證碼剛寄出，請稍後再重新寄送。",
         "OTP_RATE_LIMITED" => "驗證碼寄送次數過多，請稍後再試。",
-        "BOOTSTRAP_AUTH_FAILED" => "雲端初始化碼錯誤。",
+        "BOOTSTRAP_FORBIDDEN" => "雲端初始化碼錯誤。",
+        "CLOUD_INVALID_RESPONSE" => "Cloud 回應格式異常，請稍後重試；若持續發生請執行系統診斷。",
         "EMAIL_PROVIDER_NOT_CONFIGURED" => "Cloud 尚未完成 Email 寄送服務設定。",
         _ => $"Cloud API 錯誤：{error.Code}\n{error.Message}"
     };

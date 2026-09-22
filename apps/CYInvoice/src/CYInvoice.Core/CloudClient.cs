@@ -314,7 +314,18 @@ public sealed class CloudClient
         timeout.CancelAfter(DefaultRequestTimeout);
         using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
         await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
-        var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token);
+        JsonDocument document;
+        try
+        {
+            document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token);
+        }
+        catch (JsonException)
+        {
+            throw new CloudApiException(
+                "CLOUD_INVALID_RESPONSE",
+                $"Cloud API returned an invalid response ({(int)response.StatusCode}).",
+                response.StatusCode);
+        }
 
         if (response.IsSuccessStatusCode || returnErrorResponse)
             return document;

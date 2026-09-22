@@ -47,7 +47,7 @@ type OtpChallengeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.0";
+const CLOUD_VERSION = "0.8.1";
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
@@ -202,7 +202,7 @@ async function createEmailChallenge(
   email: string,
   subject: string,
   text: (code: string) => string,
-  scopeKey = "",
+  scopeKey: string | null = null,
 ): Promise<Response> {
   const pepper = env.OTP_PEPPER?.trim() ?? "";
   if (!pepper) return errorResponse(env, requestId, 503, "OTP_NOT_CONFIGURED", "Email OTP is not configured.");
@@ -213,7 +213,7 @@ async function createEmailChallenge(
   const nowText = now.toISOString();
   const latest = await env.DB.prepare(
     `SELECT resend_after FROM email_otp_challenges
-      WHERE purpose = ?1 AND scope_key = ?2 AND email_normalized = ?3
+      WHERE purpose = ?1 AND scope_key IS ?2 AND email_normalized = ?3
       ORDER BY created_at DESC LIMIT 1`
   ).bind(purpose, scopeKey, email).first<{ resend_after: string }>();
   if (latest && latest.resend_after > nowText) {
@@ -273,13 +273,13 @@ async function consumeEmailChallenge(
   purpose: string,
   challengeId: string,
   suppliedOtp: string,
-  scopeKey = "",
+  scopeKey: string | null = null,
 ): Promise<{ email: string } | Response> {
   const challenge = await env.DB.prepare(
     `SELECT challenge_id, email_normalized, otp_digest, delivery_state,
             attempt_count, max_attempts, expires_at, resend_after, consumed_at
        FROM email_otp_challenges
-      WHERE challenge_id = ?1 AND purpose = ?2 AND scope_key = ?3
+      WHERE challenge_id = ?1 AND purpose = ?2 AND scope_key IS ?3
       LIMIT 1`
   ).bind(challengeId, purpose, scopeKey).first<OtpChallengeRow>();
 
@@ -641,19 +641,19 @@ export default {
         });
       }
       if (request.method === "GET" && url.pathname === "/v1/onboarding/status")
-        return onboardingStatus(env, requestId);
+        return await onboardingStatus(env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/onboarding/bootstrap-email")
-        return bootstrapEmailChallenge(request, env, requestId);
+        return await bootstrapEmailChallenge(request, env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/bootstrap")
-        return bootstrapWorkspace(request, env, requestId);
+        return await bootstrapWorkspace(request, env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/device-pairings/authorization-email")
-        return pairingAuthorizationChallenge(request, env, requestId);
+        return await pairingAuthorizationChallenge(request, env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/device-pairings")
-        return createPairing(request, env, requestId);
+        return await createPairing(request, env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/device-pairings/claim")
-        return claimPairing(request, env, requestId);
+        return await claimPairing(request, env, requestId);
       if (request.method === "GET" && url.pathname === "/v1/device")
-        return currentDevice(request, env, requestId);
+        return await currentDevice(request, env, requestId);
       return errorResponse(env, requestId, 404, "NOT_FOUND", "Route not found.");
     } catch (error) {
       console.error("cloud_request_failed", {

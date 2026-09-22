@@ -6,9 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程測試基準：**V2.6.3 Build 0**。
+- 目前工程測試基準：**V2.6.4 Build 0**。
 - 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
-- V2.6.3 為 V2.6.2 折讓／待辦工程線的後續 Patch，新增系統診斷與折讓專屬自動化測試；仍需 Windows／光貿實機驗證，目前不是正式 Release。
+- V2.6.4 修正 Cloud 第一個 Workspace Email OTP 的 D1 NULL scope、Worker error boundary 與 Windows 非 JSON 錯誤處理；仍需 development Worker live OTP／Windows 實機驗證，目前不是正式 Release。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
 - 唯一版本來源為 `VERSION`；正式 Release 必須由 `main` 重新建置與驗證。
 - 只有使用者於當次工作明確要求 `release` 時，才可建立正式 tag／Release；PR、VERSION、BUILD 或 engineering Artifact 都不代表發布授權。

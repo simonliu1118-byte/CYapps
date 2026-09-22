@@ -180,6 +180,22 @@ jobs:
               )
           """, ('a' * 64,))
 
+          # Workspace bootstrap is intentionally unscoped. Its scope_key must
+          # remain NULL; the Schema 7 CHECK constraint correctly rejects an
+          # empty string.
+          db.execute("""
+              INSERT INTO email_otp_challenges (
+                  challenge_id, purpose, scope_key, email_normalized, otp_digest,
+                  delivery_state, expires_at, resend_after
+              ) VALUES (
+                  'otp_bootstrap_regression',
+                  'workspace_bootstrap',
+                  NULL,
+                  'owner@example.test',
+                  ?, 'sent', '2026-09-21T00:10:00Z', '2026-09-21T00:01:00Z'
+              )
+          """, ('b' * 64,))
+
           print('D1 migrations syntax/shape/invariant check passed')
           PY
 

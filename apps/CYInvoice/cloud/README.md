@@ -9,7 +9,7 @@ The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; curre
 ## Current compatibility
 
 - Service: `cyinvoice-cloud`
-- Cloud implementation: `0.8.0`
+- Cloud implementation: `0.8.1`
 - API: `1`
 - Schema: `7`
 - Migrations: `0001` through `0007`
