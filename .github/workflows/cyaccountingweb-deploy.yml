@@ -1,7 +1,13 @@
-name: CYAccountingWeb Cloudflare Deploy
+name: CYAccountingWeb Validate and Deploy
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/CYAccountingWeb/**"
+      - ".github/workflows/cyaccountingweb-deploy.yml"
   push:
     branches:
       - main
@@ -13,11 +19,34 @@ permissions:
   contents: read
 
 concurrency:
-  group: cyaccountingweb-cloudflare-deploy
-  cancel-in-progress: false
+  group: cyaccountingweb-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/CYAccountingWeb
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check src/index.js
+          node --check public/app.js
+
   deploy:
+    if: github.event_name != 'pull_request'
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: development
@@ -40,11 +69,6 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-
-      - name: Validate JavaScript syntax
-        run: |
-          node --check src/index.js
-          node --check public/app.js
 
       - name: Apply D1 migrations
         run: npx wrangler d1 migrations apply DB --remote
