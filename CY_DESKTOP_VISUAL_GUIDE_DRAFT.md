@@ -13,512 +13,444 @@
 
 **狀態：Draft / Discussion Only**  
 **目前階段：Phase 1 — Visual Foundation**  
-**不在本階段：功能流程、控制項擺放位置、快捷鍵、操作步驟、資料流程與 UX 重構**  
-**本次 checkpoint：2026-09-22**
+**本次 checkpoint：2026-09-22**  
+**不在本階段：功能流程、快捷鍵、資料流程、IA 與大規模 UX 重構**
 
 ---
 
 # 0. 對話續作 Checkpoint
 
-這一章是為了避免聊天紀錄到達上限後遺失決策。重新接手本 Visual Guide 時，**先讀本章，再讀各細節章節**。
+重新接手本 Visual Guide 時，**先讀本章，再讀各細節章節**。
 
 ## 0.1 狀態標記
 
-- **`APPROVED`**：本輪已由使用者接受，Phase 1 不應無故重新推翻。
-- **`PROVISIONAL`**：方向已接受或已有候選，但仍需實機／Shell／DPI 驗證後才能成為正式值。
-- **`OPEN`**：尚未討論完成或尚未定案。
-- **`PHASE 2`**：刻意延後到 Layout / Interaction / UX 階段，不應在 Phase 1 先鎖死。
-- **`REFERENCE`**：可參考成熟現有作法，但不能把現行色值、字級或尺寸直接當未來標準。
+- **`APPROVED`**：本輪已由使用者接受；Phase 1 不應無故重新推翻。
+- **`APPROVED — ADVISORY`**：方向已接受，但屬建議型規範，不應為此限制程式實作。
+- **`PROVISIONAL`**：方向已接受，但實際數值仍需 Shell / DPI / 真機驗證。
+- **`OPEN`**：尚未完成。
+- **`PHASE 2`**：刻意延後到 Layout / Interaction / UX 階段。
+- **`REFERENCE`**：可參考成熟作法，但不可把現行數值直接當未來標準。
 - **`PRESERVE`**：既有成熟成果明確保留，不因本 Guide 強制重製。
 
 ## 0.2 目前總盤點
 
 | 項目 | 狀態 | 目前結論 |
 |---|---|---|
-| 整體視覺定位 | `APPROVED` | 現代商務、桌面優先、低裝飾、資訊密度可偏高 |
-| 規範強度 | `APPROVED` | 使用 Core / Recommended Range / App Choice，不以大量硬數值綁死各 App |
-| 主要字體 | `PROVISIONAL` | `Microsoft JhengHei UI` 為主要方向；正式字級仍需 DPI / Shell 驗證 |
-| Typography hierarchy | `APPROVED` | 統一角色與層級，不要求所有 App 使用完全相同 pt |
-| Core Neutral 色票 | `PROVISIONAL` | 角色已定，精確 HEX 尚未正式目視核准 |
-| CY Blue / Warm / Teal | `PROVISIONAL` | 三套 Theme 方向保留；精確色票尚未最終定案 |
-| Slate / Sage | `OPEN` | 僅保留未來可能性，不在第一版先完成 |
+| 整體視覺定位 | `APPROVED` | Modern Business Desktop；乾淨、低裝飾、桌面優先，可保留中高資訊密度 |
+| 規範強度 | `APPROVED` | Core / Recommended Range / App Choice；不以大量硬數值綁死各 App |
+| 主要字體 | `APPROVED` | `Microsoft JhengHei UI`，fallback `Microsoft JhengHei → Segoe UI → system sans-serif` |
+| Typography hierarchy | `APPROVED` | 統一角色與相對層級，不要求所有 App 使用完全相同 pt |
+| Typography 實際 pt | `PROVISIONAL` | 需做 100% / 125% / 150% DPI 真機驗證 |
+| Density | `APPROVED` | Compact / Standard / Comfortable 三級；精確 px 為 `PROVISIONAL` |
+| Theme 數量 | `APPROVED` | **Blue / Teal / Coral / Apricot 共四種；沒有 Warm Theme** |
+| Theme 精確 HEX | `PROVISIONAL` | 視覺方向已核准，HEX 可在 Shell 真機做小幅修正 |
+| State Colors | `APPROVED` | Info / Success / Warning / Danger 與 Theme 分離；Danger 不得跟 Coral 混用 |
 | Surface Roles | `APPROVED` | Window / Workspace / Section / Control / Raised / Subtle / Border / Divider |
-| Surface Models | `APPROVED` | Continuous / Sectioned / Carded 三種模型可依 App 選擇 |
-| Surface 實際色彩配方 | `OPEN` | 概念已定，Blue/Warm/Teal 對應的完整 Surface 配色尚待完成 |
-| Button | `APPROVED` | 微圓角、尺寸階層、字級比例、Primary/Secondary/Danger/Disabled 已定 |
-| TextBox / Numeric / ComboBox | `APPROVED` | 視覺置中、左側 Label、Numeric 無 spinner、Focus/Error 等已定 |
+| Surface Models | `APPROVED` | Continuous / Sectioned / Carded；Card 只用於真正獨立工作單元 |
+| Spacing / Margin / Padding / Alignment | `APPROVED` | 使用有限 spacing scale；Section 間距大於 Section 內間距；維持 alignment grid |
+| Button | `APPROVED` | 高度與字級比例已定；寬度以內容驅動，不為填滿空間過度拉寬 |
+| Dialog Button Size | `APPROVED — ADVISORY` | 優先 Compact / 小 Standard；通常不使用 Large；一般寬度由文字 + padding 決定 |
+| Dialog Button Position | `APPROVED — ADVISORY` | 一般商務程式靠右可作預設參考，但**不寫死**；個案可置中或其他合理排列 |
+| TextBox / Numeric / ComboBox | `APPROVED` | 視覺置中、左側 Label、Numeric 預設無 spinner、Focus/Error 等已定 |
 | Tabs | `APPROVED` | 低存在感、Active Accent 底線／字重、不使用大型 pill |
-| Section / Group / Divider | `APPROVED` | Section 預設 inherit/transparent；Title + spacing + divider；Card 不作一般排版工具 |
-| Table / List | `APPROVED` | 高密度商務表格；Grid continuity 為重要驗收條件 |
-| CYInvoice 清單 | `REFERENCE` | 參考幾何／對齊／viewport／owner-draw 經驗，不保留舊色值與欄寬為標準 |
-| Checkbox / Radio / Toggle | `APPROVED` | 原生優先；Toggle 只用於真正 On/Off，做不到可回 Checkbox |
-| Progress / Scrollbar / DatePicker / Tooltip | `APPROVED` | 穩定原生優先；Scrollbar 不客製；Progress 簡潔細條 |
-| Dialog / MessageBox / Status | `PROVISIONAL` | 已提出方向且 UI 樣本觀感獲接受，但尚未逐條正式確認 |
-| 主視窗 Title/Header/Footer/Status | `OPEN` | 已提出建議，但因轉入 Icon 討論而尚未正式通過 |
-| App Icon Family | `PROVISIONAL` | V1 備案 + 目前候選均已保留；正式各 App ICO 尚未製作 |
+| Section / Group / Divider | `APPROVED` | Section 預設 inherit/transparent；Card 不作一般排版容器 |
+| Table / List | `APPROVED` | 高密度商務表格；Grid Continuity 為 MUST |
+| CYInvoice 清單 | `REFERENCE` | 參考 geometry / viewport / scrollbar / owner-draw；現行色值與欄寬不是新標準 |
+| Secondary Controls | `APPROVED` | Native-first；Scrollbar 不客製；Toggle 只用於真正 On/Off |
+| Dialog / MessageBox / Status | `APPROVED — ADVISORY` | 原生穩定性優先；簡單 MessageBox 原生；複雜情境才 Custom Dialog |
+| Main Window Shell | `APPROVED — ADVISORY` | Minimal / Business / Workbench 只是參考模式，不是強制模板 |
+| App Icon Family | `PROVISIONAL` | V1 備案 + 目前候選保留；正式各 App ICO 尚未製作 |
 | 現行 CYInvoice Icon | `PRESERVE` | **完成版，不得因 Icon Family 設計而改動** |
-| Spacing / Margin / Padding / Alignment | `OPEN` | 下一個重要視覺議題，尚未正式討論 |
-| UI Shell Prototype | `OPEN` | Guide 接近定案後，做「只有 UI/假資料、無實體引擎」的 Windows Shell 實機驗證 |
-| UX / Layout / 操作流程 | `PHASE 2` | Phase 1 不處理 |
+| UI Shell Prototype | `OPEN` | Phase 1 文件整理後做無引擎 Windows Shell 真機驗證 |
+| UX / Layout / 操作流程 | `PHASE 2` | Phase 1 不鎖死 |
 
-## 0.3 目前下一步建議順序
+## 0.3 下一步
 
-1. `OPEN`：Spacing / Margin / Padding / Alignment。
-2. `PROVISIONAL`：正式比較 Blue / Warm / Teal 色票與 Surface 配方。
-3. `PROVISIONAL`：Typography 實際字級與控制高度做 100% / 125% / 150% DPI 驗證。
-4. `OPEN / PROVISIONAL`：快速完成 Header/Footer、Dialog/Status 最終確認。
-5. 回填完整 Guide 後，建立代表 App 的無引擎 UI Shell，實機驗證。
-6. Phase 1 確認後，才進 Phase 2 Layout / Interaction / UX。
+1. 完成 Phase 1 文件最後盤點。
+2. 建立代表 App 的無引擎 UI Shell，驗證 100% / 125% / 150% DPI。
+3. 依真機結果只微調 `PROVISIONAL` 數值，不重新推翻已核准的角色／原則。
+4. Phase 1 確認後，再進 Phase 2 Layout / Interaction / UX。
 
 ---
 
-## 1. 目的 — `APPROVED`
+# 1. 目的 — `APPROVED`
 
-CYApps 目前跨越 WinForms、Qt、Win32／Go 等不同技術世代與 UI framework。各程式功能取向不同，因此不適合強制所有畫面使用完全相同的版型、字級或控制項尺寸。
+CYApps 跨 WinForms、Qt、Win32 / Go 等不同 UI framework。本 Guide 只建立共同的**視覺骨架**，不追求 pixel-perfect identical。
 
-本草案的目標是建立一套共同的**視覺骨架**：
+共同目標：
 
 - 一眼看起來屬於同一組 CY 桌面產品。
-- 保留不同程式依功能、資訊密度與使用情境調整的空間。
-- 維持商務桌面軟體的效率與可讀性，不為了追求 Web／App 風格而犧牲操作感。
-- 優先使用各 framework 穩定、容易維護的實作方式，不為追求 1–2 px 的完全一致而大量客製控制項。
-- 視覺規範應降低日後設計決策成本，而不是增加程式製作難度。
+- 保留不同 App 依功能與資訊密度調整的空間。
+- 維持桌面商務軟體的效率、可讀性與穩定性。
+- 原生控制項能安全達到目的時，不為 1–2 px 差異大量自繪。
+- 規範用來降低設計決策成本，不得反過來拖累開發。
 
 ---
 
-## 2. 視覺定位 — `APPROVED`
+# 2. 視覺定位 — `APPROVED`
 
-CY 桌面程式共同方向：
-
-- **Modern Business Desktop**：現代商務桌面軟體，而不是 Web Dashboard。
-- **Clean but Dense**：乾淨，但允許商務工具需要的中高資訊密度。
-- **Low Saturation**：低彩度、穩定，不使用大量鮮豔色塊。
-- **Text-first**：文字標示優先；圖示作輔助，不依賴 icon-only 操作。
-- **Readable**：優先確保繁體中文、數字、表格與輸入欄位的清楚閱讀。
-- **Framework-flexible**：不同 framework 可以有細節差異，只要視覺角色與層級一致。
-
-本 Guide 不追求所有程式 pixel-perfect identical；目標是建立**同一家族的視覺語言**。
+- **Modern Business Desktop**：現代商務桌面，而不是 Web Dashboard。
+- **Clean but Dense**：乾淨，但允許中高資訊密度。
+- **Low Decoration**：不靠大量陰影、漸層、彩色塊堆出設計感。
+- **Text-first**：文字標示優先；Icon 輔助。
+- **Readable**：繁中、英文、數字、表格與輸入欄位優先清楚。
+- **Framework-flexible**：不同 framework 可有細節差異，只要角色與層級一致。
 
 ---
 
-## 3. 規範強度 — `APPROVED`
+# 3. 規範強度 — `APPROVED`
 
-### 3.1 Core
+## 3.1 Core
 
-預期各程式都應維持的共同視覺骨架，例如：
+跨 App 應維持的共同骨架，例如 Theme 角色、Danger 語意、Typography hierarchy、Grid Continuity。
 
-- 字體家族方向。
-- 色彩角色命名與用途。
-- Primary / Danger 的語意不可混用。
-- 文字層級必須清楚。
-- 同一程式內同類控制項應維持一致。
+## 3.2 Recommended Range
 
-### 3.2 Recommended Range
+提供合理範圍，不用單一數字鎖死所有 App。
 
-提供基準值與合理範圍，程式可依需要調整。
+## 3.3 App Choice
 
-**目的不是用精準 px 綁死所有 App，而是避免明顯失衡，例如大按鈕配小字、小按鈕配過大字。**
+App 可依需要選 Theme、Surface Model、Density、Zebra Row、Card 等。
 
-### 3.3 App Choice
+## 3.4 App Override
 
-依程式性質自由選擇，例如：
-
-- Blue / Warm / Teal Theme。
-- Continuous / Sectioned / Carded Surface Model。
-- 表格是否使用 zebra row。
-- Compact / Standard / Large density。
-
-### 3.4 App Override 邊界
-
-可調整：字級、控制高度、Theme、Surface Model、row height、是否需要 Card 等。
-
-不可把「可調整」解讀為每支 App 完全重新設計；仍需使用共同角色與比例邏輯。
+允許少量必要差異；不可把 Override 變成每支 App 重新建立一套設計系統。
 
 ---
 
-# Part A — Typography
+# Part A — Typography & Density
 
-## 4. 字體家族 — `PROVISIONAL`
+## 4. 字體 — `APPROVED`
 
-主要方向：
+主要字體：
 
 `Microsoft JhengHei UI`
 
-建議 fallback：
+Fallback：
 
 `Microsoft JhengHei` → `Segoe UI` → system sans-serif
 
-原因：
+字重：
 
-- Windows 繁體中文顯示穩定。
-- CYApps 現有多支程式已使用。
-- 商務桌面程式閱讀性佳。
-- 數字、中文與英文混排相對穩定。
+- Regular：Body / Input / Table body。
+- Medium / Semibold：Section title / Table header / Active Tab / 一般重要控制。
+- Bold：少量 Major Title / 特別重要摘要；不整個 UI 都 Bold。
 
-正式定案前仍需以實際 Windows Shell 驗證不同 DPI 與 framework 的 rendering。
+## 5. Typography Roles — hierarchy `APPROVED`, values `PROVISIONAL`
 
-### 4.1 字重 — `APPROVED`
+| Role | 建議範圍 |
+|---|---:|
+| Major / App Title | 16–20 pt |
+| Page Title | 13.5–16 pt |
+| Section Title | 11.5–13 pt |
+| Body / Field | 9.5–11 pt |
+| Secondary | 8.5–10 pt |
+| Button | 9–11 pt |
+| Table Header | 9–10.5 pt |
+| Table Body | 9–10.5 pt |
+| Badge / Status | 8.5–10 pt |
 
-優先使用：
+核心關係：
 
-- Regular：一般內容。
-- Medium / Semibold：表頭、較強 Label、一般重要控制。
-- Semibold / Bold：主要標題、大型 Primary Action。
+`Major Title > Page Title > Section Title > Body > Secondary`
 
-避免所有按鈕、Label、Section Title 全部粗體。
+Secondary 優先靠顏色／字重降低層級，不把文字縮到難讀。
+
+## 6. Density — `APPROVED` concept / `PROVISIONAL` values
+
+### Compact
+
+- TextBox / Combo：約 28–31 px。
+- Button：約 30–32 px。
+- Table Row：約 26–29 px。
+- Body：約 9–9.5 pt。
+
+### Standard
+
+- TextBox / Combo：約 31–35 px。
+- Button：約 34–38 px。
+- Table Row：約 30–34 px。
+- Body：約 9.5–10.5 pt。
+
+### Comfortable
+
+- TextBox：約 36–40 px。
+- Button：約 40–44 px。
+- Table Row：約 35–40 px。
+- Body：約 10.5–11.5 pt。
+
+同一頁不要無理由混三種 density；Dialog 可與主畫面使用不同 density。
+
+## 7. DPI — `APPROVED`
+
+至少驗證：
+
+- 100%
+- 125%
+- 150%
+
+驗收：TextBox 不裁字、Button 不切字、Label 不爆版、Table Header/Body 保持對齊、Dialog 不破版、Scrollbar 不破壞 geometry。
+
+優先順序：
+
+1. OS DPI awareness。
+2. framework 原生 scaling。
+3. layout 自動伸縮。
+4. 最後才是必要 override。
+
+不建立額外複雜 DPI 引擎，不重複乘 scaling factor。
 
 ---
 
-## 5. 字級角色 — `APPROVED` hierarchy / `PROVISIONAL` values
+# Part B — Color & Theme
 
-固定的是**角色與相對比例**，不是每支程式完全相同的 pt。
-
-| Role | 目前候選基準 | 建議範圍 | 狀態 |
-|---|---:|---:|---|
-| App Title | 17 pt | 16–20 pt | `PROVISIONAL` |
-| Page / Major Title | 14.5 pt | 13.5–16 pt | `PROVISIONAL` |
-| Section Title | 12 pt | 11–13.5 pt | `PROVISIONAL` |
-| Body / Field | 10.5 pt | 9.5–11.5 pt | `PROVISIONAL` |
-| Secondary | 9 pt | 8.5–10 pt | `PROVISIONAL` |
-| Standard Button | 9.5–10.5 pt | 約 9–11 pt | `PROVISIONAL` |
-| Large Button | 10.5–12 pt | 依高度同步增加 | `APPROVED` 比例 |
-| Table Header | 9.5–10.5 pt | 9–11 pt | `PROVISIONAL` |
-| Table Body | 9.5–10.5 pt | 9–11 pt | `PROVISIONAL` |
-| Badge / Small Status | 9 pt | 8.5–10 pt | `PROVISIONAL` |
-
-### 5.1 已定原則
-
-- `App Title > Page Title > Section Title > Body > Secondary`。
-- 大型按鈕必須同步放大文字，避免 46–48 px 高按鈕仍使用 9 pt 小字。
-- 高密度發票／帳務工具可以縮小部分 table/body；預覽型工具可以較大。
-- 不要求不同 App 使用相同 pt。
-
----
-
-# Part B — Color System
-
-## 6. Core Neutral Palette — `PROVISIONAL`
-
-色彩角色已接受；以下 HEX 尚未最終目視定案。
+## 8. Core Neutral Palette — roles `APPROVED`, HEX `PROVISIONAL`
 
 | Token | Candidate | 用途 |
 |---|---|---|
-| `Neutral.White` | `#FFFFFF` | 控制項、表格、必要白色 surface |
-| `Neutral.Window` | `#F5F7FA` | 預設視窗／Canvas 背景 |
-| `Neutral.Subtle` | `#F8FAFC` | 次要區、不可編輯欄位、摘要底 |
-| `Neutral.Border` | `#DCE0E6` | 一般邊框 |
-| `Neutral.Divider` | `#E4E7EC` | 分隔線 |
+| `Neutral.White` | `#FFFFFF` | Control / Table / Raised |
+| `Neutral.Window` | `#F5F7FA` | Window background |
+| `Neutral.Subtle` | `#F8FAFC` | Secondary surface |
+| `Neutral.ReadOnly` | `#F1F3F5` | Read-only / Disabled surface |
+| `Neutral.Border` | `#D9DEE5` | 一般 Border |
+| `Neutral.Divider` | `#E5E8EC` | Section Divider |
+| `Neutral.Grid` | `#DDE1E6` | Table Grid |
 | `Text.Primary` | `#1F2937` | 主文字 |
 | `Text.Secondary` | `#667085` | 次要文字 |
-| `Text.Disabled` | `#98A2B3` | 停用文字 |
-| `State.Success` | `#21825C` | 成功 |
-| `State.Warning` | `#A66B10` | 警告 |
-| `State.Danger` | `#B43737` | 危險／破壞性操作 |
-| `State.Info` | `#356A9A` | 一般資訊 |
+| `Text.Disabled` | `#98A2B3` | Disabled |
+| `Text.OnAccent` | `#FFFFFF` | Accent 上文字 |
 
----
+不要持續增加大量只差一點點的灰階。
 
-## 7. Theme Palette — `PROVISIONAL`
+## 9. Theme Set — names `APPROVED`, HEX `PROVISIONAL`
 
-Theme 主要改變 Accent 家族，不重新發明一整套 UI。
+**第一版就是四種：Blue / Teal / Coral / Apricot。沒有 Warm Theme。**
 
-每套至少包含：
+Theme 只改 Accent 家族，不重新建立另一套 Typography / Neutral / Control system。
 
-- `Accent`
-- `Accent.Hover`
-- `Accent.Pressed`
-- `Accent.Soft`
-- `Accent.Focus`
-- `Accent.Selection`
+### 9.1 Blue
 
-### 7.1 CY Blue — 標準商務
-
-適合發票、帳務、ERP、一般商務工具。
+標準商務方向。
 
 | Token | Candidate |
 |---|---|
 | `Accent` | `#2E4A71` |
-| `Accent.Hover` | `#273F61` |
-| `Accent.Pressed` | `#203550` |
-| `Accent.Soft` | `#E8EEF5` |
-| `Accent.Focus` | `#6F8FB8` |
-| `Accent.Selection` | `#E0EAF5` |
+| `Hover` | `#273F61` |
+| `Pressed` | `#203550` |
+| `Soft` | `#E8EEF5` |
+| `Focus` | `#6F8FB8` |
+| `Selection` | `#E0EAF5` |
 
-### 7.2 CY Warm — 暖灰／米棕商務
+### 9.2 Teal
 
-適合文件、列印、信封、辦公型工具。
-
-| Token | Candidate |
-|---|---|
-| `Accent` | `#765746` |
-| `Accent.Hover` | `#614638` |
-| `Accent.Pressed` | `#503A2F` |
-| `Accent.Soft` | `#F3EAE4` |
-| `Accent.Focus` | `#A98168` |
-| `Accent.Selection` | `#EEE0D7` |
-
-### 7.3 CY Teal — 青綠工具型
-
-適合計算、資料轉換、技術工具。
+工具／計算／技術方向。
 
 | Token | Candidate |
 |---|---|
 | `Accent` | `#2F6F73` |
-| `Accent.Hover` | `#275E61` |
-| `Accent.Pressed` | `#204E51` |
-| `Accent.Soft` | `#E5F1F0` |
-| `Accent.Focus` | `#69A1A3` |
-| `Accent.Selection` | `#DCEDEB` |
+| `Hover` | `#275E61` |
+| `Pressed` | `#204E51` |
+| `Soft` | `#E5F1F0` |
+| `Focus` | `#69A1A3` |
+| `Selection` | `#DCEDEB` |
 
-### 7.4 Slate / Sage — `OPEN`
+### 9.3 Coral
 
-只保留方向，不在沒有實際 App 需求時先增加維護成本。
+暖感但**偏橘珊瑚，不偏危險紅**。
 
----
-
-# Part C — Color & Surface
-
-## 8. Surface Role — `APPROVED`
-
-畫面是否使用白底、灰底、次級底色或透明繼承，應由 Surface Role 決定，而不是規定「功能區一定白底」。
-
-| Token | 角色 |
+| Token | Candidate |
 |---|---|
-| `Surface.Window` | 整個視窗／Canvas 背景 |
-| `Surface.Workspace` | 主要工作區背景 |
-| `Surface.Section` | 功能區塊背景，可為 transparent / inherit |
-| `Surface.Control` | TextBox、ComboBox、Table 等控制項表面 |
-| `Surface.Raised` | 真正需要凸顯的結果、預覽、獨立 Card |
-| `Surface.Subtle` | 摘要、不可編輯、次要區塊 |
-| `Surface.Border` | 區塊／控制項邊界 |
-| `Surface.Divider` | 內容分隔線 |
+| `Accent` | `#C9754B` |
+| `Hover` | `#B66841` |
+| `Pressed` | `#9E5936` |
+| `Soft` | `#F8E9E0` |
+| `Focus` | `#D8926F` |
+| `Selection` | `#F3E1D6` |
 
-### 8.1 關鍵原則
+### 9.4 Apricot
 
-`Surface.Section` 允許 `transparent / inherit`。
+較亮、較輕、較活潑的暖色方向。
 
-因此 CYInvoice 類高密度商務程式可以直接讓各功能區使用視窗灰底，再以標題、Divider、白色控制項建立層級；**不必把每一區包成白色 Card**。
+| Token | Candidate |
+|---|---|
+| `Accent` | `#D8844A` |
+| `Hover` | `#C3733F` |
+| `Pressed` | `#AA6435` |
+| `Soft` | `#FAECDD` |
+| `Focus` | `#E0A178` |
+| `Selection` | `#F6E3D1` |
 
-問題不是灰底或白底哪個正確，而是同一畫面的 Surface 是否有一致、完整的層級規劃。
+## 10. State Colors — `APPROVED` roles / `PROVISIONAL` HEX
 
----
+State 與 Theme 分離：
 
-## 9. Surface Model — `APPROVED` concept / `OPEN` final recipes
+| State | Candidate | Soft |
+|---|---|---|
+| Success | `#21825C` | `#EAF5F0` |
+| Warning | `#A66B10` | `#FAF1E3` |
+| Danger | `#B43737` | `#F8EAEA` |
+| Info | `#356A9A` | `#EAF1F7` |
 
-### 9.1 Continuous
+**Danger 永遠是 Danger，不得因 Coral Theme 改成 Coral。**
 
-適合高密度資料輸入、發票、帳務。
+Accent 主要用在 Primary、Focus、Active Tab、Selection、小型 highlight；不要大量鋪滿 Header / Group / Window。
 
-- Window：Neutral / Theme 對應背景。
-- Workspace：inherit。
-- Section：transparent / inherit。
-- Control / Table：通常白色或 Control Surface。
-- Raised：只在真正需要凸顯的結果／預覽使用。
-
-### 9.2 Sectioned
-
-適合一般桌面工具、左右工作區、預覽型程式。
-
-- 主 Workspace 有清楚區域。
-- Section 仍以 inherit 為主。
-- 少量真正獨立區塊使用 Border / Raised / Subtle。
-
-### 9.3 Carded
-
-適合流程型、批次工具、結果摘要。
-
-- Card 只代表真正獨立工作單元。
-- 不把 Card 當一般排版工具。
-- 避免 Card → Card → Card 巢狀。
-
-### 9.4 尚未完成
-
-Blue / Warm / Teal 各自對應 `Window / Workspace / Section / Control / Raised / Subtle` 的**完整實際色值配方仍為 `OPEN`**。
+Light Mode first；第一版不做 Dark Mode。
 
 ---
 
-# Part D — Geometry & Spacing
+# Part C — Surface
 
-## 10. Spacing / Margin / Padding / Alignment — `OPEN`
+## 11. Surface Roles — `APPROVED`
 
-這一章尚未正式討論完成。
+- `Surface.Window`
+- `Surface.Workspace`
+- `Surface.Section`（可 transparent / inherit）
+- `Surface.Control`
+- `Surface.Raised`
+- `Surface.Subtle`
+- `Surface.Border`
+- `Surface.Divider`
 
-先前草案的 `4 / 8 / 12 / 16 / 24 / 32 px` 只能視為舊候選，不是已定案標準。
+重點：問題不是灰底或白底，而是層級是否一致。
 
-尚需討論：
+## 12. Surface Models — `APPROVED`
 
-- App / Workspace 外邊距。
-- Section 間距與 Section 內欄位間距的比例。
-- Control 之間的橫向／縱向節奏。
-- Label 與 Control 的距離。
-- Button group 的視覺間距（不碰其擺放位置與操作流程）。
-- Table / Header / Footer 周邊留白。
-- 不同 density 對 spacing 的縮放方式。
+### Continuous
 
-核心目標：避免同畫面出現大量 7 / 11 / 13 / 19 px 等無規則間距，但也不以單一固定值鎖死所有 App。
+高密度資料輸入／發票／帳務。Section 多半 inherit，Control / Table 可白底。
 
----
+### Sectioned
 
-## 11. Control Size — `APPROVED` principle / `PROVISIONAL` exact values
+一般桌面工具／左右工作區／Preview。主要工作區清楚分區，但內部不再層層 Card。
 
-尺寸必須和字級成比例；各 App 可依情境選 Compact / Standard / Large。
+### Carded
 
-### 11.1 Button
+Workflow / 批次／結果摘要。Card 只代表真正獨立工作單元，不作普通排版容器。
 
-| 類型 | 建議高度 | 建議文字 |
-|---|---:|---:|
-| Compact | 30–32 px | 9–9.5 pt |
-| Standard | 34–38 px | 9.5–10.5 pt |
-| Large | 42–48 px | 10.5–12 pt |
-
-### 11.2 TextBox / Input
-
-因部分原生控制項沒有真正 vertical align，Input 高度應以**視覺置中**為目標，不應為了追求大尺寸造成文字明顯靠上／靠下。
-
-目前建議：
-
-| 類型 | 建議高度 |
-|---|---:|
-| Compact | 28–31 px |
-| Standard | 31–35 px |
-| Large | 36–40 px |
-
-精確值仍需按 framework / font rendering 驗證。
+一般 Raised / Card 優先：White + 1 px Border；不預設陰影。
 
 ---
 
-## 12. Border / Radius — `APPROVED`
+# Part D — Spacing / Alignment
 
-### 12.1 Button
+## 13. Spacing — `APPROVED`
 
-- Standard：**4 px** 為代表值。
-- Large：可 5–6 px。
-- Compact / dense toolbar：可 2–4 px。
-- 不大量使用膠囊型 Button。
-- 同一畫面同類按鈕保持一致。
+優先 spacing scale：
 
-### 12.2 Input
+`4 / 8 / 12 / 16 / 24 / 32 px`
 
-- TextBox / ComboBox：**約 3 px 小圓角**。
-- 視覺上比 Button 稍方，保持商務資料輸入的俐落感。
+不是硬性 pixel lock；framework / DPI 可小幅近似。
 
-### 12.3 Table
+常見節奏：
 
-- Table / Data Grid 可接近方角。
-- 如果 framework 不易低成本做小圓角，方角完全可接受。
+- 4：icon / text 微距。
+- 8：同組元件。
+- 12：一般欄位。
+- 16：小區塊。
+- 24：主要 Section。
+- 32：大區塊／頁面留白。
 
-### 12.4 Border
+## 14. Margin / Padding — `APPROVED` principle
 
-- 一般 1 px。
-- 不用厚重立體框、漸層或高光。
-- 不為 1–2 px 或 radius 差異強迫自繪穩定原生控制項。
+- Window / Page margin 約 12–32 px 依 density 選擇。
+- 高密度商務：通常 12–16 px。
+- 一般工具：16–24 px。
+- Preview / 低密度：24–32 px。
+- Card / framed Section 內部通常 12–24 px。
+
+## 15. Alignment — `APPROVED`
+
+MUST：
+
+- 同一 Section 的 Label Column 一致。
+- Label 左邊界一致；Input 左邊界一致。
+- 同列控制項視覺高度／基準一致。
+- Section 間距 > Section 內欄位間距。
+- Resize 不破壞 alignment grid。
+- 同類資料欄位盡量維持合理一致的邊界。
+- Table header/body geometry 保持連續。
+
+多欄表單可各自維持自己的 Label Column，不要求整頁共用超寬 Label 欄。
+
+典型 Label-to-Control 距離約 8–12 px；Button group 常見間距約 8 px，均為建議值。
 
 ---
 
 # Part E — Core Components
 
-## 13. Button — `APPROVED`
+## 16. Button — `APPROVED`
 
-### 13.1 寬度與水平 Padding
+### 16.1 Size
 
-**原則化，不鎖死。**
+| 類型 | 高度 | 文字 |
+|---|---:|---:|
+| Compact | 30–32 px | 9–9.5 pt |
+| Standard | 34–38 px | 9.5–10.5 pt |
+| Large | 42–48 px | 10.5–12 pt |
 
-- 各 App 依按鈕文字、位置與版面自由調整。
-- 避免文字貼近邊緣。
-- 同組按鈕可視情況等寬，但不是全域要求。
-- 不因 Guide 強制所有按鈕固定寬度。
+Large 主要給主工作畫面的強 Primary Action，不是 Dialog Footer 的常態。
 
-### 13.2 文字與高度比例
+### 16.2 Width
 
-- Compact / Standard / Large 需使用對應字級。
-- 大按鈕不能配小字。
-- 一般 Button：Regular / Medium。
-- Large Primary：可 Semibold / Bold。
-- 文字水平、垂直置中；Icon + Text 時整組置中。
+**Content-driven。**
 
-### 13.3 Primary
+- 依文字 + 合理水平 padding 決定。
+- 一般 horizontal padding 約 14–20 px 可作參考。
+- 同組可等寬，但以最長文字的自然需求為基準。
+- 不因視窗很寬就把 Button 拉到 130–160 px。
+- 不為填滿 Footer 做兩顆半寬大型按鈕。
 
-- 實心 Theme Accent。
-- 白字。
-- 1 px 同色邊框或視覺上無額外邊界。
-- Hover：Accent 稍深。
-- Pressed：再深一階。
-- 不用漸層、一般不使用陰影。
+### 16.3 Dialog Button Size — `APPROVED — ADVISORY`
 
-### 13.4 Secondary
+- 優先 Compact / 小 Standard，約 30–34 px 高。
+- 常見短按鈕自然寬度約 72–100 px；稍長文字約 100–120 px。
+- 這些是參考範圍，不是硬限制。
 
-- **白底 / Control Surface + 淺灰 1 px Border + 深色文字**。
-- Hover：非常淡的 neutral / theme tint。
-- 預設不使用實心灰色大塊。
+### 16.4 Geometry
 
-### 13.5 Danger
+- Standard radius 以約 4 px 為代表。
+- Large 可 5–6 px。
+- Compact 2–4 px。
+- 不做一般 pill Button。
 
-分兩層：
+### 16.5 Primary
 
-- 一般危險操作：白底 + Danger border + Danger text。
-- 最終不可逆確認：可使用實心 Danger + 白字。
+Accent solid + White text；Hover / Pressed 使用 Theme 階層；一般不使用 gradient / shadow。
 
-紅色不得作一般強調色。
+### 16.6 Secondary
 
-### 13.6 Disabled
+White / Control Surface + 1 px Neutral Border + Text.Primary；Hover 使用 subtle tint。
 
-- 淡灰背景。
-- 淡灰 Border。
-- 中灰文字。
-- 仍需清楚可讀，但一眼知道不可操作。
+### 16.7 Danger
 
-### 13.7 Focus
+- 一般破壞性操作：白底紅框紅字。
+- 最終不可逆確認：實心 Danger Red + White。
 
-- 保留清楚 keyboard focus。
-- 使用 Accent / Focus outline 或 border。
-- 不因 focus 改變控制尺寸或造成 layout 跳動。
+### 16.8 Disabled / Focus
 
-### 13.8 Icon + Text
+Disabled 仍可讀；Focus 明確但不改變 geometry，不做 glow。
 
-- Icon 可使用，但文字是主要辨識。
-- Icon 通常置於文字左側。
-- Icon-only 只適合非常成熟、直覺或高密度工具列功能。
-- 不要求每顆 Button 都有 icon。
+### 16.9 Icon + Text
+
+Icon 是輔助，文字是主要辨識；Icon-only 只用於成熟、直覺、高密度功能。
 
 ---
 
-## 14. TextBox / Numeric Input / Label — `APPROVED`
+## 17. TextBox / Numeric / Label — `APPROVED`
 
-### 14.1 TextBox
+- Background：Surface.Control。
+- Border：1 px Neutral。
+- Radius：約 3 px。
+- 文字只要求**視覺上接近垂直置中**；不為此重寫原生 TextBox。
+- Disabled / Read-only 可使用相同淡灰視覺；Read-only 內容仍應清楚可讀。
+- Focus 只換 Accent border，避免厚度改變造成跳動。
+- Error：1 px Danger Border + 短 helper text；不整格紅、不 glow、不改 geometry。
+- Placeholder：Secondary、非斜體、不可取代 Label。
 
-- `Surface.Control` 背景。
-- 1 px Neutral Border。
-- 約 3 px 小圓角。
-- 不使用內陰影／漸層。
+### Label
 
-### 14.2 文字垂直位置
-
-**不要求技術上真正 Vertical Center。**
-
-很多原生 TextBox 沒有可靠 vertical align；因此規範改成：
-
-> 透過合適的字級與欄位高度，讓文字在視覺上接近垂直置中。
-
-不應為此重寫穩定原生 TextBox。
-
-### 14.3 Label 預設位置
-
-商務桌面表單預設採**左側 Label + 右側 Control**：
-
-```text
-姓名     [____________]
-地址     [____________]
-聯絡電話 [____________]
-```
-
-- 同一 Section 使用固定 Label Column。
-- Label 左邊界一致。
-- Input 左邊界一致。
-- Label Column 寬度由該 Section 的內容決定，不全 CYApps 鎖死。
-
-### 14.4 中文短 Label 對齊
-
-若低成本可行，可用中文字視覺分散方式讓短 Label 接近同寬，例如：
+預設左側 Label + 右側 Control：
 
 ```text
 姓　　名 [____________]
@@ -526,128 +458,45 @@ Blue / Warm / Teal 各自對應 `Window / Workspace / Section / Control / Raised
 聯絡電話 [____________]
 ```
 
-不強迫英文、混合字串或長標題使用分散對齊；也不為此建立高風險自繪 Label。
+Label 本身左對齊；短中文可使用全形空白分散。Top Label 只作特殊情境例外。
 
-### 14.5 Top Label 例外
+### Numeric
 
-預設是 Left Label，但以下情況可例外放上方：
-
-- 大型多行備註。
-- 很長欄位名稱。
-- 很窄的 Dialog / Pane。
-- 明確更適合上方標題的特殊內容。
-
-### 14.6 Read-only / Disabled
-
-**外觀可做相同，不需要兩套視覺語言。**
-
-- 淡灰 / Subtle surface。
-- 灰 Border。
-- 文字保持可讀。
-- 不使用 Accent。
-
-實際是否可複製文字屬功能行為，不靠外觀區分。
-
-### 14.7 Numeric Input
-
-- 預設**不要 spinner / 上下箭頭**。
-- 若 framework 的 NumericUpDown 不易安全移除箭頭，可使用一般 TextBox + numeric validation。
-- 金額、數量、單價、百分比等真正 numeric value 預設右對齊。
-- 員工編號、統編、郵遞區號、發票號碼等 identifier 不因為由數字組成就強制右對齊。
-
-### 14.8 Focus
-
-- Focus 時以 Accent border 表示。
-- 優先只換 border 色，不改 border thickness，避免尺寸跳動。
-- 不做強烈 glow。
-
-### 14.9 Error
-
-- 1 px Danger border。
-- 不整格填紅底。
-- 不因 Error 改變控制尺寸。
-- 可在欄位附近使用簡短 Danger helper text。
-
-### 14.10 Placeholder
-
-- 使用 Secondary 色。
-- 不使用斜體。
-- Placeholder 不能取代正式 Label。
+- 金額／數量／單價／百分比預設右對齊。
+- Numeric spinner 預設不顯示；做不到時可用 TextBox + validation。
+- 郵遞區號、統編、發票號碼等 identifier 不因為是數字就強制右對齊。
 
 ---
 
-## 15. ComboBox — `APPROVED`
+## 18. ComboBox — `APPROVED`
 
-- 與 TextBox 屬同一視覺家族。
-- 高度、字級、背景、Border 邏輯接近。
-- 不要求完全 pixel-identical。
-- 原生 dropdown arrow 可保留。
-- 不為 3 px radius 或箭頭造型強制重寫整個 ComboBox。
+與 TextBox 同視覺家族；原生 dropdown arrow 可保留，不為 radius / arrow 重新自繪。
 
 ---
 
-## 16. Tabs — `APPROVED`
+## 19. Tabs — `APPROVED`
 
 - 低存在感。
-- 背景與主要 Workspace 協調。
-- Inactive：一般深灰文字。
-- Active：Accent 底線（約 2 px）＋較強字重／文字對比。
-- 不用大型 pill。
-- 不用厚重立體傳統 Tab 外觀。
-- 一般高度約 32–40 px；大型導覽才可更高。
-- 不為完全一致強制重寫原生 Tab，只要能安全控制字體、Active state 與間距即可。
+- Active：Accent 約 2 px underline + 稍強字重。
+- Inactive：Neutral text。
+- 約 32–40 px 高為常見參考。
+- 不做大型 pill / hero navigation。
 
 ---
 
-## 17. Section / Group / Divider / Card — `APPROVED`
+## 20. Section / Group / Divider / Card — `APPROVED`
 
-### 17.1 Section
-
-- 預設 `transparent / inherit`。
-- 以 Section Title + spacing 建立層級。
-- Divider 視需要使用。
-- 不預設每個 Section 都是一張白 Card。
-
-### 17.2 Section Title
-
-- 約 11.5–13 pt 候選範圍。
-- Semibold。
-- `Text.Primary`。
-- 不用 Accent 彩色大標題作為常態。
-
-### 17.3 Divider
-
-- 1 px。
-- Neutral / low contrast。
-- 不用黑線、雙線、陰影。
-
-### 17.4 GroupBox
-
-- 可以保留功能結構，不禁止原生 GroupBox。
-- 視覺上優先轉成 Title + Divider 或輕框 Section。
-- 不為了 Guide 強制重寫原本穩定 layout。
-
-### 17.5 Card
-
-Card 只用於真正獨立工作單元，例如：
-
-- Preview。
-- Result。
-- Drop area。
-- 明確獨立的 summary / workflow unit。
-
-不要把 Card 當一般排版工具；避免灰背景上出現大量彼此切割的白色塊。
+- Section 預設 transparent / inherit。
+- Section Title 約 11.5–13 pt、Semibold、Text.Primary。
+- Divider 1 px、低對比。
+- 穩定 GroupBox 可保留，不強迫重寫。
+- Card 只用於 Preview / Result / Drop Area / 獨立 Workflow Unit。
 
 ---
 
-## 18. Table / ListView / DataGrid — `APPROVED`
+## 21. Table / ListView / DataGrid — `APPROVED`
 
-### 18.1 基本方向
-
-- 偏高密度、低裝飾、清楚掃描。
-- 不走 48–60 px 高 row 的 Web 後台風格。
-
-目前候選 row density：
+### Density
 
 | 類型 | Row Height |
 |---|---:|
@@ -655,392 +504,299 @@ Card 只用於真正獨立工作單元，例如：
 | Standard | 30–34 px |
 | Comfortable | 35–40 px |
 
-精確值仍需實機驗證。
+### Visual
 
-### 18.2 Header
+- Header：淺 Neutral / Subtle，Semibold，略高於 Body row。
+- Body：通常 White。
+- Zebra：可選，非常淡。
+- Grid：低對比。
+- Selection：Accent.Selection soft tint + 深文字。
 
-- 淺 Neutral / Subtle surface。
-- SemiBold。
-- 不用深藍整條底、漸層或立體按鈕效果。
-- Header 高度只需略高於 Body row。
+### Alignment
 
-### 18.3 Body
+- Text / name / address：左。
+- Money / numeric value：右。
+- 短 status：可中。
+- Identifier 依內容決定。
 
-- Table 本體可使用白底，即使 Window 為灰底。
-- Zebra row 可選，但差異必須非常淡。
-- Grid line 應低對比。
-- 若使用垂直欄線，必須精準對齊。
+### Grid Continuity — MUST
 
-### 18.4 Alignment
+Header / Body 必須共享同一組 column geometry；肉眼可見約 1 px 欄線錯位視為 UI defect。
 
-- 一般文字：左對齊。
-- 金額／純數值：右對齊。
-- 短狀態／必要操作欄：可置中。
-- Identifier 依欄位性質決定，不因含數字就自動右對齊。
+需驗證 resize、maximize/restore、scrollbar 出現／消失、100/125/150% DPI。
 
-### 18.5 Selection
+如果 framework 無法可靠維持垂直線對齊，**寧可取消垂直線，也不要保留錯位格線**。
 
-- 使用 `Accent.Selection` / soft tint。
-- 優先淡背景 + 深色文字，而不是高飽和深底反白。
+### CYInvoice Reference — `REFERENCE`
 
-### 18.6 Grid Continuity — MUST
+[CYInvoice Table / List Implementation Reference](docs/CY_UI_REFERENCE_CYINVOICE_TABLE.md)
 
-如果 Table 使用欄線：
+參考 geometry / viewport / scrollbar compensation / column width source of truth / owner-draw border ownership / resize relayout。
 
-> Header 與 Body 必須共享同一組 column geometry；表頭格線必須順暢延續到表身。
-
-任何肉眼可見的約 1 px 欄位錯位都視為 UI defect。
-
-需涵蓋：
-
-- Resize。
-- 最大化／還原。
-- scrollbar 出現／消失。
-- 100% / 125% / 150% DPI。
-
-如果某 framework 無法低成本可靠做到垂直欄線，**寧可取消垂直欄線，也不要保留錯位格線**。
-
-### 18.7 CYInvoice Reference — `REFERENCE`
-
-**實作附件：** [CYInvoice Table / List Implementation Reference](docs/CY_UI_REFERENCE_CYINVOICE_TABLE.md)
-
-目前 CYInvoice 已開立發票清單被視為成熟的操作與表格完成品，可參考：
-
-- Header / Body geometry。
-- viewport width。
-- scrollbar 補償。
-- 欄寬計算。
-- owner-draw 邊界。
-- Resize 時重新 layout。
-
-**但目前 CYInvoice 的顏色、字體、字級、row height、欄寬、padding 都不是新版 Visual Guide 的固定值。**
-
-日後 CYInvoice 本身也可以依新版 Theme / Typography / Density 調整外觀。
+**現行 CYInvoice 顏色、字級、row height、欄寬、padding 不是新版固定標準。**
 
 ---
 
 # Part F — Secondary Controls
 
-## 19. Checkbox / Radio — `APPROVED`
+## 22. Checkbox / Radio — `APPROVED`
 
-- 原生優先。
-- Body 字級一致。
-- 文字與控制項視覺垂直對齊。
-- framework 低成本支援時可套 Theme Accent。
-- Disabled 使用共同灰階語言。
-- 不做大型 Web-style checkbox/radio。
+Native-first；Body font；視覺垂直對齊；不做 oversized Web-style controls。
 
----
+## 23. Toggle — `APPROVED`
 
-## 20. Toggle — `APPROVED`
+只用於真正 immediate On / Off；無成熟 Toggle 時用 Checkbox；動畫非必要。
 
-- 只用於真正「立即生效的 On / Off 狀態」。
-- 不全面取代 Checkbox。
-- 高度約 20–24 px 為候選。
-- ON：Accent；OFF：Neutral gray。
-- 動畫非必要。
-- framework 無成熟 Toggle 時，直接用 Checkbox；不為動畫自繪控制項。
+## 24. Progress / Loading — `APPROVED`
 
----
+- 一般 8–12 px；主要流程可 12–16 px。
+- 文字放條外。
+- 不確定進度用 native spinner / marquee。
 
-## 21. Progress / Loading — `APPROVED`
+## 25. Scrollbar — `APPROVED`
 
-- Progress 保持細、簡潔。
-- 一般高度約 8–12 px；重要流程可 12–16 px。
-- 正常處理使用 Theme Accent。
-- 文字放在 progress bar 外。
-- 不確定進度可使用 framework 原生 spinner / marquee。
-- 不為動畫追求統一而增加複雜度。
+Native-first，不客製；但必須把 scrollbar 對 layout / table geometry 的影響算進去。
+
+## 26. DatePicker / Tooltip / Slider — `APPROVED`
+
+DatePicker 高度／字體與 Input 接近，popup native。Tooltip native。Slider 非核心，有需求再用。
 
 ---
 
-## 22. Scrollbar — `APPROVED`
+# Part G — Dialog / MessageBox / Status
 
-- **原生優先，不客製 Scrollbar。**
-- Table / TextArea / Panel / Preview 均同。
-- 但 scrollbar 對 layout 的影響必須納入設計，不能造成欄位錯位、1 px 位移或最後一欄被切掉。
+## 27. Dialog / MessageBox / Status — `APPROVED — ADVISORY`
 
----
+### 27.1 Dialog Shell
 
-## 23. DatePicker / Tooltip / Slider — `APPROVED`
+- Native title bar / window behavior 優先。
+- CY 統一內容區 typography / surface / input / button。
+- 不為漂亮全面改 borderless / custom chrome。
+- Footer 可有 1 px divider；不必另做厚重背景。
 
-### DatePicker
+### 27.2 Native MessageBox
 
-- 高度與同列 TextBox 接近。
-- 字級使用 Field role。
-- 外框能低成本套同系統就套。
-- Calendar popup 使用 framework 原生。
+簡單 OK / Yes-No / Warning / Question 可使用 framework / Windows 原生 MessageBox，**按鈕排列跟隨原生，不重排**。
 
-### Tooltip
+### 27.3 Custom Dialog 使用時機
 
-- framework 原生即可。
-- 用於 icon-only、截斷內容、不直覺小功能的輔助。
-- 不能用 Tooltip 補救本身難以理解的主要 UI。
+表單、設定、Preview、多項選擇、重要 destructive confirm、詳細資訊、多步驟等才使用 CY styled dialog。
 
-### Slider
+### 27.4 Button Position — `APPROVED — ADVISORY`
 
-- 非第一版核心元件。
-- 有實際需求再使用，原生優先。
+**不寫死。**
 
----
+- 一般 Windows 商務程式常見的右下 Action Group，可作預設參考。
+- 若小型 Dialog、內容重心、視窗寬度或 App 本身設計更適合置中，可個案置中。
+- Wizard / 大型工作型 Dialog 也可依版面合理排列。
+- 不能為了「一致」而犧牲視覺平衡與操作效率。
 
-# Part G — Dialog / Status / App Shell
+真正固定的是：按鈕不要過度拉寬、同組間距一致、Primary / Secondary / Danger 語意清楚。
 
-## 24. Dialog / MessageBox / Status — `PROVISIONAL`
+### 27.5 Danger Confirm — MUST
 
-這一組已提出完整方向，且先前 UI 樣本中的 Dialog / Danger Action 整體觀感獲使用者正面接受；但尚未逐條做最終確認，所以暫列 `PROVISIONAL`。
+Danger 與 Theme 分離。一般 Danger 白底紅框；最終不可逆確認可實心紅底白字。
 
-目前建議方向：
+### 27.6 Error
 
-### 24.1 Dialog
+主訊息先用人話說明結果；HTTP code / API response / stack trace 等技術資訊可折疊或另顯示。
 
-- 原生 Windows / framework title bar 優先。
-- CY 自己控制內容區的字體、Surface、Section、Input、Button。
-- 不為漂亮全面改成 borderless / custom chrome。
-- Footer 可使用淡 Divider；不一定另填灰色底。
+### 27.7 Status Banner
 
-### 24.2 MessageBox
+Soft state background + 1 px related border + icon/text；不使用整片高飽和紅／綠。
 
-- 簡單訊息允許使用原生 MessageBox。
-- 複雜、多段、敏感、帳戶／設定／重要確認才使用 CY custom dialog。
+### 27.8 Badge
 
-### 24.3 Status
+Badge 可使用 pill；小型、低彩度、soft background + deep text；不是 Button，不做 hover action。
 
-- Info / Success / Warning / Error 四角色。
-- Soft background + 深色文字／icon。
-- 不用整片高彩度紅／綠。
-- 狀態不能只靠顏色，需保留文字。
+### 27.9 Inline Validation
 
-### 24.4 Badge
+1 px Danger border + 附近短訊息；不可造成 layout jump。
 
-- Badge 是少數允許 pill / 高 radius 的元件。
-- Low-saturation soft background + 深色文字。
+### 27.10 Processing
 
-### 24.5 Danger confirm
+短動作可把按鈕改為「處理中…」並 Disabled；有明確進度用 Progress；時間不確定用 spinner / marquee。
 
-- 一般 Danger：白底紅框。
-- 最終不可逆確認：實心紅底白字。
+### 27.11 Toast
 
-### 24.6 Toast
-
-- 非核心，MAY。
-- 不要求所有 framework 實作。
+MAY；不是核心元件，不要求所有 framework 實作。
 
 ---
 
-## 25. Main Window Shell — `OPEN`
+# Part H — Main Window Shell
 
-以下只是已提出但尚未正式通過的建議，不得視為定案：
+## 28. Main Window Shell — `APPROVED — ADVISORY`
+
+以下是**建議型 pattern，不是強制模板**。
+
+### 共通方向
 
 - Native Windows title bar 優先。
-- Internal Header 非必需；只有真的有持續資訊價值才使用。
-- Header 若使用，傾向 compact 約 42–52 px，不做 70–80 px Hero Header。
-- Header 不要只是重複 App 名稱；應顯示公司、環境、使用者、工作模式等有價值資訊。
-- Header 背景候選：Neutral / White / Accent.Soft。
-- Footer / Status Bar 非必需；若兩者都需要，傾向合併成單一薄 Bottom Strip。
-- Footer 高度候選約 20–26 px，使用 Secondary typography。
+- Title Bar 顯示 App Icon + App Name 即可，不塞大量公司／版本／環境資訊。
+- Internal Header 是 Optional；只有真的有持續資訊價值才使用。
+- Header 不重複 App Name。
+- Header 約 40–52 px、Footer 約 20–26 px 都只是參考值。
+- Header 優先 White / Neutral / Accent.Soft，不預設整條深色 Accent。
+- Footer / Status Bar 只有真的有持續狀態資訊才使用。
+- Status color 只作用在 dot / icon / badge / text，不把整條 Footer 染色。
+- 避免 Title Bar + Header + Toolbar + Tabs + Page Title + Section Title 全部堆在一起。
 
-這一章需後續由使用者正式確認。
+### 三種參考模式
+
+- **Minimal**：Title Bar + Content。
+- **Business**：Title Bar + Tabs/Toolbar + Content + optional Status。
+- **Workbench**：Title Bar + optional compact Header/Toolbar + Main Workspace + optional Status。
+
+任何 App 都可依 framework / 功能需求調整，不因不符合這三張參考就判定不合格。
 
 ---
 
-# Part H — App Icon Family
+# Part I — App Icon Family
 
-## 26. Icon Family — `PROVISIONAL`
+## 29. Icon Family — `PROVISIONAL`
 
-App Icon 不要求放 `CY`、公司 Logo 或共同字樣。
+App Icon 不要求放 `CY` 或公司 Logo。
 
-目標接近 Office / Adobe 的產品家族概念：
+目標：像 Office / Adobe 一樣，同一家族但各 App 可辨識。
 
-- 各 App 自己容易辨識。
-- 共同的視覺重量、邊框語言、簡化程度與色彩策略形成家族感。
-- 小尺寸 16 / 24 / 32 px 仍清楚。
+### 29.1 CYInvoice — `PRESERVE`
 
-### 26.1 CYInvoice Icon — `PRESERVE`
+**`apps/CYInvoice/assets/CYInvoice.ico` 是完成版，不得為 Icon Family 改動。**
 
-**現行 `apps/CYInvoice/assets/CYInvoice.ico` 視為已完成版本，不得為了新 Icon Family 而修改。**
-
-它是其他新 Icon 的母體參考，不是待重製項目。
-
-INV 的重要 DNA：
+INV DNA：
 
 - 扁平。
 - 高對比。
-- 大型英文縮寫 `INV`。
-- 下方兩條非常簡單的橫線。
-- 不靠漸層、陰影、3D 細節。
-- 小尺寸仍容易辨識。
+- 大型 `INV`。
+- 下方兩條簡單橫線。
+- 無 gradient / shadow / 3D 細節。
+- 小尺寸可辨識。
 
-### 26.2 目前較偏好的延伸方向
+### 29.2 目前候選延伸
 
-其他 App：
+其他 App 保留大型英文縮寫（ACC / ENV / CAL / CVT / WM 等），縮寫下方只搭配**一個極簡功能符號**；符號優先為小尺寸辨識服務，不做複雜主圖。
 
-- 保留大型英文縮寫，如 `ACC`、`ENV`、`CAL`、`CVT`、`WM`。
-- 縮寫本身不要被複雜圖形搶掉。
-- 縮寫下方只搭配**一個極簡功能符號**。
-- 功能符號應比 Concept V3 更簡化，避免縮小後糊成一團。
-- INV 自己的兩條橫線完全不改。
+### 29.3 只保留兩張概念圖
 
-概念例：
+- [V1 備案](design/cy-desktop-visual-guide/icon-concepts/icon-family-v1-backup.jpg)
+- [目前候選](design/cy-desktop-visual-guide/icon-concepts/icon-family-current-option.jpg)
 
-- ACC：大字 `ACC` + 極簡 money / accounting symbol。
-- ENV：大字 `ENV` + 極簡 envelope。
-- CAL：大字 `CAL` + 極簡 calculator。
-- CVT：大字 `CVT` + 極簡 conversion arrows。
-- WM：大字 `WM` + 極簡 watermark / stamp symbol。
+中間迭代不保留。
 
-### 26.3 保留的兩張候選概念圖
+### 29.4 尚未完成
 
-只保留兩張，不保留中間迭代：
-
-- **V1 備案：** [icon-family-v1-backup.jpg](design/cy-desktop-visual-guide/icon-concepts/icon-family-v1-backup.jpg)
-- **目前候選方向：** [icon-family-current-option.jpg](design/cy-desktop-visual-guide/icon-concepts/icon-family-current-option.jpg)
-
-V1 是較立體、彩色、Office-like 的備案；目前候選則是從現行 INV DNA 延伸的扁平大縮寫方向。
-
-### 26.4 尚未完成
-
-- 各 App 正式 Master source（SVG / PNG）。
-- 16 / 24 / 32 / 48 / 64 / 128 / 256 的實際小尺寸優化。
-- 正式 ICO 生成與 Windows Taskbar / Explorer 驗證。
+- 各 App Master SVG / PNG。
+- 16 / 24 / 32 / 48 / 64 / 128 / 256 小尺寸優化。
+- ICO 生成。
+- Windows Taskbar / Explorer 真機檢查。
 - 各 App 最終代表色。
 
 ---
 
-# Part I — Cross-framework / Complexity Guardrails
+# Part J — Cross-framework / Complexity Guardrails
 
-## 27. 跨 Framework 實作原則 — `APPROVED`
+## 30. Cross-framework — `APPROVED`
 
-- 優先實現**角色一致**，不要求底層 control 完全一樣。
-- 原生控制項已足夠接近時，不為 pixel-perfect 重寫。
-- 不因 1–2 px、radius、dropdown arrow 或 scrollbar 差異引入不穩定自繪元件。
-- DPI、字型 rendering、OS theme 的合理差異可接受。
-- 某 visual token 成本過高時，可採合理近似。
+- 角色一致 > 底層 control 完全一樣。
+- Native control 足夠接近時不重寫。
+- 不因 radius、arrow、scrollbar、1–2 px 細節引入不穩定自繪。
+- DPI / font rendering / OS theme 的合理差異可接受。
+- visual token 成本過高可採合理近似。
 
-一句話：**看起來像同一家產品，比每個 pixel 一模一樣重要。**
+## 31. Complexity Guardrails — `APPROVED`
 
----
-
-## 28. Complexity Guardrails — `APPROVED`
-
-1. 不因視覺規範強迫更換 framework。
-2. 不因視覺規範重寫穩定原生控制項。
-3. 不為精準 1–2 px 差異阻擋功能交付。
+1. 不因 Guide 強迫更換 framework。
+2. 不因 Guide 重寫穩定原生控制項。
+3. 不為一般 1–2 px 差異阻擋功能交付；**Table Grid Continuity 是例外，明顯錯位仍是 defect。**
 4. 不要求每個 App 實作所有 Theme。
 5. 不要求每個 App 實作所有 Surface Model。
-6. 不要求所有元件都有專用 component library。
-7. 新規範先在少數代表 App / Shell 驗證，再擴散。
-8. 規範應定義角色、比例與視覺結果，不應把每一個 padding / x-position 寫成硬限制。
-9. App Override 應是少量必要差異，不是每支程式重新設計一次。
+6. 不要求所有元件都建立專用 component library。
+7. 先在代表 App / Shell 驗證再擴散。
+8. 優先規範角色、比例、視覺結果，不把所有 x/y/padding 寫成硬限制。
+9. App Override 是必要差異，不是重新設計。
 
 ---
 
-# Part J — App Examples（非正式配置）
+# Part K — App Example（非正式配置）
 
-## 29. Theme / Surface 搭配示例 — `REFERENCE`
+## 32. Theme / Surface Example — `REFERENCE`
 
-以下只是幫助理解，不是各 App 已定案配置。
+僅示意，不是 App 正式配置：
 
-| App | Theme 示例 | Surface 示例 | 備註 |
-|---|---|---|---|
-| CYInvoice | CY Blue | Continuous | UX / 高密度商務參考；外觀仍可新版化 |
-| CYAccounting | CY Blue / Teal | Continuous / Sectioned | 成熟 business styling 參考 |
-| CYEnvelope | CY Warm | Sectioned | 半成品；未來適合重整工作台視覺 |
-| TriINVCalc | CY Teal | Continuous / Sectioned | 保留右側發票視覺身份 |
-| CYWatermark / Harness | CY Blue / Slate | Carded / Sectioned | 視覺參考；操作效率不能盲目照抄 |
+| App | Theme 示例 | Surface 示例 |
+|---|---|---|
+| CYInvoice | Blue | Continuous |
+| CYAccounting | Blue / Teal | Continuous / Sectioned |
+| CYEnvelope | Coral / Apricot | Sectioned |
+| TriINVCalc | Teal | Continuous / Sectioned |
+| CYWatermark / Harness | Blue / Teal | Carded / Sectioned |
 
 ---
 
-# Part K — UI Shell Validation
+# Part L — UI Shell Validation
 
-## 30. 無引擎 UI Shell — `OPEN`, planned after Visual Guide
+## 33. 無引擎 UI Shell — `OPEN`
 
-Visual Guide 大致定案後，不直接修改正式引擎；先做代表 App 的 UI Shell Prototype。
-
-Shell 原則：
+Guide 大致完成後，不直接改正式引擎；先做 UI Shell Prototype：
 
 - UI 是真的。
-- 資料與引擎是假的。
+- 資料／引擎是假的。
 - 不連正式 API / DB。
-- 不開立發票。
-- 不做正式浮水印處理。
-- 不真的列印或修改正式資料。
+- 不正式開立發票／列印／浮水印／修改資料。
 
-可實際測：
+真機測：
 
-- Resize。
-- Tab。
-- TextBox / ComboBox。
-- Table selection。
+- Resize / maximize / restore。
+- Tabs / Inputs / Combo / Table selection。
 - Hover / Pressed / Disabled / Focus。
-- Dialog。
-- Fake progress / fake status。
+- Dialog / Status / fake Progress。
 - 100% / 125% / 150% DPI。
 
-### 30.1 第一輪代表 App 建議
+第一輪代表：
 
-- CYInvoice：高密度商務輸入代表。
-- CYWatermark / Harness：流程型工具代表。
-- CYEnvelope：資料輸入 + Preview workbench 代表。
+- CYInvoice：高密度商務資料輸入。
+- CYWatermark / Harness：Workflow 工具。
+- CYEnvelope：Input + Preview Workbench。
 
-### 30.2 技術原則
-
-殼應盡量使用正式 App 將使用的 framework，而不是全部用同一種 prototype framework，避免 mock 看起來漂亮但正式技術做不到。
+Prototype 優先使用各 App 正式 framework，避免 mock 做得到、正式 framework 做不到。
 
 ---
 
-# Part L — Phase Boundary
+# Part M — Phase Boundary
 
-## 31. Phase 1 範圍
+## 34. Phase 1
 
-Phase 1 只處理：
+處理：Color / Theme / Surface / Typography / Density / Border / Radius / Spacing / Component Visual / Dialog / Status / Shell Visual / App Icon Family。
 
-- Color / Theme。
-- Surface。
-- Typography hierarchy。
-- Border / Radius。
-- Control size relationship。
-- Spacing（尚未完成）。
-- Button / Input / ComboBox / Tab / Section / Table。
-- Secondary controls。
-- Dialog / Status 外觀。
-- Main Window Shell 外觀。
-- App Icon Family。
+## 35. Phase 2 — `PHASE 2`
 
----
-
-## 32. Phase 2 — `PHASE 2`
-
-刻意不在 Phase 1 決定：
+刻意不在 Phase 1 寫死：
 
 - 功能流程。
-- 控制項到底放左／右／上／下。
-- Primary Action 最終擺放位置。
-- Tab 應有哪些頁面。
+- 控制項最終放左／右／上／下。
+- Primary Action 最終位置。
+- Toolbar button 順序。
+- Tab 順序與頁面資訊架構。
 - Enter / Esc / Tab 鍵行為。
 - Dialog 何時出現。
-- 驗證與錯誤處理流程。
 - 表單欄位順序。
-- 搜尋／查詢流程。
-- 工作流程步驟數量。
+- Search / Query 流程。
+- Workflow step 數量。
 - 快捷鍵。
-- 大型 layout / IA / navigation 重構。
+- 大型 Navigation / IA 重構。
 
-Phase 1 的目的只有一個：
-
-> **先讓不同 CYApps 在不改變既有操作邏輯的前提下，逐步形成一致、現代、簡潔且可維護的商務桌面視覺語言。**
+**注意：Dialog Button 的靠右／置中也屬可依個案調整的 Layout 決策，本 Guide 只提供商務桌面常見建議，不做硬限制。**
 
 ---
 
-# 33. 恢復工作時的最短指引
+# 36. 恢復工作時最短指引
 
-若後續聊天中斷、換新對話或換執行環境：
-
-1. 讀本文件最上方 CAUTION，確認它仍是 Draft，不得影響現行開發。
+1. 先讀最上方 CAUTION：本文件仍是 Draft，不得干擾現行專案。
 2. 讀 `0. 對話續作 Checkpoint`。
-3. 不重新討論 `APPROVED` 項目，除非使用者主動要求修改。
-4. 優先接續 `OPEN` 項目。
-5. `PROVISIONAL` 項目應透過實際 UI mock / Shell / DPI 驗證，而不是只靠文字反覆微調。
-6. CYInvoice Table 讀 `docs/CY_UI_REFERENCE_CYINVOICE_TABLE.md`。
-7. Icon 只保留兩張候選概念圖；**現行 CYInvoice Icon 不可因本 Guide 被修改。**
-8. 在使用者明確核准以前，本文件仍不能變成治理規則或現行開發門檻。
+3. 不重新討論 `APPROVED`，除非使用者主動要求修改。
+4. `PROVISIONAL` 以 UI Shell / Windows 真機驗證為主，不靠文字無限微調。
+5. Table 參考 `docs/CY_UI_REFERENCE_CYINVOICE_TABLE.md`。
+6. Icon 只保留兩張候選；現行 CYInvoice Icon 不改。
+7. Theme 第一版就是 **Blue / Teal / Coral / Apricot**，不要恢復舊 Warm Theme。
+8. Shell / Dialog / Button Position 多數屬 advisory；不要為了 Guide 限制正常程式設計。
+9. 在使用者明確核准以前，本文件仍不能變成治理規則或現行開發門檻。
