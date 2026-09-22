@@ -11,16 +11,28 @@ internal sealed class EmployeeAdminLoginForm : Form
     private const int ActionRowHeight = 40;
     private const int CompactButtonWidth = 70;
     private const int CompactButtonHeight = 28;
-    private readonly EmployeeStore employees;
+    private readonly Func<string, string, EmployeeAccount?> authenticate;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(200);
     private readonly Button login = CompactButton("確定");
     private readonly Button cancel = CompactButton("取消");
 
     public EmployeeAdminLoginForm(EmployeeStore employees, string title = WindowTitle)
+        : this((employeeNo, password) => employees.Authenticate(employeeNo, password), title)
     {
-        this.employees = employees;
-        Text = WindowTitle;
+        ArgumentNullException.ThrowIfNull(employees);
+    }
+
+    public EmployeeAdminLoginForm(LocalRepository repository, string title = WindowTitle)
+        : this((employeeNo, password) => repository.AuthenticateEmployee(employeeNo, password), title)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+    }
+
+    private EmployeeAdminLoginForm(Func<string, string, EmployeeAccount?> authenticate, string title)
+    {
+        this.authenticate = authenticate ?? throw new ArgumentNullException(nameof(authenticate));
+        Text = string.IsNullOrWhiteSpace(title) ? WindowTitle : title.Trim();
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, WindowHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -107,7 +119,7 @@ internal sealed class EmployeeAdminLoginForm : Form
     {
         try
         {
-            var account = employees.Authenticate(employeeNo.Text, password.Text);
+            var account = authenticate(employeeNo.Text, password.Text);
             if (account is null)
             {
                 ValidationError("員工編號或密碼錯誤", password);
@@ -158,7 +170,7 @@ internal sealed class EmployeeAdminLoginForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (Text != WindowTitle || ShowIcon || !password.UseSystemPasswordChar || employeeNo.MaxLength != 4 ||
+        if (ShowIcon || !password.UseSystemPasswordChar || employeeNo.MaxLength != 4 ||
             employeeNo.TextAlign != HorizontalAlignment.Left || password.TextAlign != HorizontalAlignment.Left ||
             AcceptButton is not null || CancelButton != cancel ||
             !UiControls.HasLogicalSize(login, CompactButtonWidth, CompactButtonHeight) ||
