@@ -69,7 +69,7 @@ internal sealed class CloudJoinWorkspaceForm : Form
         var header = new Label
         {
             Dock = DockStyle.Fill,
-            Text = "這台電腦尚未加入此 Workspace。配對碼只授權裝置加入，不會把本機帳號自動升級成雲端超級管理員。",
+            Text = "這台電腦尚未加入此 Workspace。配對碼只授權裝置加入；既有本機帳號會在後續帳號轉換完成後才切換成中央帳號主資料。",
             TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = false,
             Margin = Padding.Empty,
@@ -253,7 +253,7 @@ internal sealed class CloudJoinWorkspaceForm : Form
             }
 
             CommitIdentity(verified, attempt.DeviceToken);
-            CompleteSuccess("這台電腦已加入既有雲端空間，Device identity 驗證完成。");
+            CompleteSuccess("這台電腦已加入既有雲端空間，Device identity 驗證完成；帳號轉換尚未完成。\n\n在帳號轉換完成前，原本單機帳號仍是本機權限依據。");
         });
     }
 
@@ -264,7 +264,7 @@ internal sealed class CloudJoinWorkspaceForm : Form
             var client = new CloudClient(httpClient, new Uri(baseUrl, UriKind.Absolute), token);
             var identity = await client.GetCurrentDeviceAsync(lifetime.Token);
             CommitIdentity(identity, token);
-            CompleteSuccess("已找回先前完成的雲端裝置，不會建立第二個 Device。");
+            CompleteSuccess("已找回先前完成的雲端裝置，不會建立第二個 Device。帳號主資料仍維持在轉換狀態。");
             return RecoveryResult.Recovered;
         }
         catch (CloudApiException error) when (error.StatusCode == HttpStatusCode.Unauthorized)
@@ -289,7 +289,7 @@ internal sealed class CloudJoinWorkspaceForm : Form
         repository.Settings.SetCloudDeviceToken(settings, token);
         repository.Settings.ClearCloudPendingBootstrap(settings);
         repository.Settings.ClearCloudPendingDeviceJoin(settings);
-        settings.CloudMode = CloudModes.CloudPreferred;
+        repository.Settings.MarkCloudEmployeeTransition(settings);
         repository.Settings.Save(settings);
         IdentityCompleted = true;
     }
