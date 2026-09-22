@@ -168,6 +168,7 @@ func startEscapeWatcher() {
 					if stopLogged.CompareAndSwap(false, true) {
 						logf("WARN", "automation stop requested by physical ESC key")
 					}
+				}
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
