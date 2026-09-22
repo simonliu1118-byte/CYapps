@@ -154,15 +154,64 @@ func setDetailCell(root uintptr, grid ControlInfo, col int, value string) bool {
 	return setDetailCellEnterV4(root, grid, col, value)
 }
 
+func isSecondDetailFieldV8(f *Field) bool {
+	return f != nil && strings.HasPrefix(f.Key, "row2_")
+}
+
 func fillDetailSelected(root uintptr) (ok, fail int) {
 	if !selectedInGroup("明細") { return }
 	grid := findDetailGridSite(root); if grid == nil { logError("明細","TcxGrid","GRID_NOT_FOUND","找不到可見的標準明細 TcxGridSite"); return 0,1 }
 	logf("INFO", "detail grid hwnd=0x%x rect=%d,%d,%d,%d", grid.Hwnd, grid.Rect.Left,grid.Rect.Top,grid.Rect.Right,grid.Rect.Bottom)
 	if !activateDetailFirstRowV4(root, *grid) { logError("明細","第一列","ROW_ACTIVATION_FAILED","表頭完成後無法啟用表身第一列"); return 0,1 }
+
+	firstSelected := false
+	secondSelected := false
+	var row2Item *Field
+	for _, f := range fields {
+		if f.Group != "明細" { continue }
+		if f.Key == "row2_item_code" { row2Item = f }
+		if !checked(f.ApplyHwnd) { continue }
+		if isSecondDetailFieldV8(f) { secondSelected = true } else { firstSelected = true }
+	}
+
 	for _, f := range fields {
 		if isStopRequested() { return ok,fail }
-		if f.Group != "明細" || !checked(f.ApplyHwnd) { continue }
-		if setDetailCell(root,*grid,f.Col,getWindowText(f.ValueHwnd)) { ok++; logf("INFO", "filled 明細/%s col=%d", f.Label,f.Col) } else { fail++; logError("明細",f.Label,"GRID_CELL_SET_FAILED",fmt.Sprintf("col=%d grid=0x%x", f.Col,grid.Hwnd)) }
+		if f.Group != "明細" || isSecondDetailFieldV8(f) || !checked(f.ApplyHwnd) { continue }
+		if setDetailCell(root,*grid,f.Col,getWindowText(f.ValueHwnd)) { ok++; logf("INFO", "filled 明細/第1列/%s col=%d", f.Label,f.Col) } else { fail++; logError("明細",f.Label,"GRID_CELL_SET_FAILED",fmt.Sprintf("row=1 col=%d grid=0x%x", f.Col,grid.Hwnd)) }
+	}
+
+	if !secondSelected || isStopRequested() { return }
+	if !firstSelected {
+		fail++
+		logError("明細","第2列","SECOND_ROW_REQUIRES_FIRST_ROW","第2列測試需要先填入至少一個第1列欄位")
+		return
+	}
+	if row2Item == nil || !checked(row2Item.ApplyHwnd) || strings.TrimSpace(getWindowText(row2Item.ValueHwnd)) == "" {
+		fail++
+		logError("明細","第2列品號","SECOND_ROW_ITEM_REQUIRED","第2列有勾選資料時，必須勾選並填入第2列品號")
+		return
+	}
+	if !openNextDetailRowV8(root, *grid) {
+		fail++
+		logError("明細","第2列","NEXT_ROW_OPEN_FAILED","第一列完成後按 Down 無法確認下一列流程")
+		return
+	}
+
+	// Item code is intentionally first: Down can leave COPI08 on an arbitrary
+	// column, so row 2 always re-clicks 品號 and presses Enter before typing.
+	if setDetailCellAtRowV8(root, *grid, 1, row2Item.Col, getWindowText(row2Item.ValueHwnd)) {
+		ok++
+		logf("INFO", "filled 明細/第2列/%s col=%d", row2Item.Label,row2Item.Col)
+	} else {
+		fail++
+		logError("明細",row2Item.Label,"GRID_CELL_SET_FAILED",fmt.Sprintf("row=2 col=%d grid=0x%x", row2Item.Col,grid.Hwnd))
+		return
+	}
+
+	for _, f := range fields {
+		if isStopRequested() { return ok,fail }
+		if f.Group != "明細" || !isSecondDetailFieldV8(f) || f.Key == "row2_item_code" || !checked(f.ApplyHwnd) { continue }
+		if setDetailCellAtRowV8(root,*grid,1,f.Col,getWindowText(f.ValueHwnd)) { ok++; logf("INFO", "filled 明細/第2列/%s col=%d", f.Label,f.Col) } else { fail++; logError("明細",f.Label,"GRID_CELL_SET_FAILED",fmt.Sprintf("row=2 col=%d grid=0x%x", f.Col,grid.Hwnd)) }
 	}
 	return
 }
@@ -173,13 +222,13 @@ func fillAllSelected() {
 	if isStopRequested() { return }
 	if !prepareERPWindow(root) { setStatus("ERP：已找到但無法移到前景，為避免誤輸入已停止"); return }
 	var oldCursor POINT; pGetCursorPos.Call(uintptr(unsafe.Pointer(&oldCursor))); defer pSetCursorPos.Call(uintptr(oldCursor.X), uintptr(oldCursor.Y))
-	logf("INFO", "AUTO-FILL V0.0.10 Build 7 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
+	logf("INFO", "AUTO-FILL V0.0.10 Build 8 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
 	if !ensureInputMode(root) { if isStopRequested(){return}; setStatus("ERP：無法確認輸入狀態，已停止；請提供除錯紀錄"); logError("自動填入","ERP","INPUT_MODE_NOT_CONFIRMED","未進入或無法判斷輸入狀態"); return }
-	setStatus("ERP：Build 7 新增模式，依序填入表頭→交易→送貨→發票→明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
+	setStatus("ERP：Build 8 新增模式，依序填入表頭→交易→送貨→發票→明細（含第2列測試；不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
 	ok,fail := 0,0; a,b := fillHeaderSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
 	for _, group := range []string{"交易資料","送貨資料","發票資料(一)"} { if isStopRequested(){return}; a,b = fillTabGroupSelected(root,group); ok+=a; fail+=b }
 	if isStopRequested(){return}; a,b = fillDetailSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
-	setStatus(fmt.Sprintf("ERP：Build 7 測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 7 end success=%d fail=%d (NO SAVE)",ok,fail)
+	setStatus(fmt.Sprintf("ERP：Build 8 測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 8 end success=%d fail=%d (NO SAVE)",ok,fail)
 }
 
 func findTabSheet(root uintptr, tabName string) uintptr {
