@@ -1,5 +1,6 @@
 import baseWorker from "./worker";
 import { handleEmployeeTransition } from "./employee-transition";
+import { handleEmployeeTransitionActions } from "./employee-transition-actions";
 
 interface Env {
   DB: D1Database;
@@ -18,6 +19,10 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const transitionResponse = await handleEmployeeTransition(request, env);
     if (transitionResponse) return transitionResponse;
+
+    const transitionActionResponse = await handleEmployeeTransitionActions(request, env);
+    if (transitionActionResponse) return transitionActionResponse;
+
     return baseWorker.fetch(request, env);
   },
 };
