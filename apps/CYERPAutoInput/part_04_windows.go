@@ -73,7 +73,7 @@ func fillHeaderSelected(root uintptr) (ok, fail int) {
 		target := rows[f.Row][f.Col]
 		value := getWindowText(f.ValueHwnd)
 		filled := false
-		if f.Kind == "date" { filled = setDateControlInteractive(root, target, value) } else { filled = setTextControlInteractive(root, target, value) }
+		if f.Kind == "date" { filled = setDateControlInteractiveV2(root, target, value) } else { filled = setTextControlInteractiveV2(root, target, value) }
 		if filled {
 			ok++; logf("INFO", "filled 表頭/%s hwnd=0x%x class=%q kind=%q", f.Label, target.Hwnd, target.Class, f.Kind)
 			if f.Kind != "date" { commitHeaderField(root) }
@@ -86,13 +86,20 @@ func fillHeaderSelected(root uintptr) (ok, fail int) {
 
 func fillTabGroupSelected(root uintptr, group string) (ok, fail int) {
 	if !selectedInGroup(group) { return }
+	if !activateDevExpressTabForFill(root, group) {
+		logError(group, "頁籤", "TAB_ACTIVATE_FAILED", "無法自動切換到目標頁籤")
+		return 0, 1
+	}
+	if !interruptibleSleep(180 * time.Millisecond) { return 0, 0 }
+
+	// Re-find and rebuild the target sheet only after it is active. Hidden
+	// TcxTabSheet controls can expose stale geometry/layout before activation.
 	sheet := findTabSheet(root, group)
 	if sheet == 0 { logError(group, "頁籤", "TAB_SHEET_NOT_FOUND", "找不到 TcxTabSheet"); return 0, 1 }
 	rows := buildActionRows(sheet)
 	writeLayoutLog(group, sheet, rows)
 	if !validateGroupLayout(group, rows) { logError(group, "欄位結構", "LAYOUT_MISMATCH", fmt.Sprintf("rows=%d；為避免填錯欄位，已停止此頁", len(rows))); return 0, 1 }
-	if !activateDevExpressTab(root, group) { logError(group, "頁籤", "TAB_ACTIVATE_FAILED", "無法自動切換到目標頁籤"); return 0, 1 }
-	time.Sleep(180 * time.Millisecond)
+
 	for _, f := range fields {
 		if isStopRequested() { return ok, fail }
 		if f.Group != group || !checked(f.ApplyHwnd) { continue }
@@ -104,7 +111,7 @@ func fillTabGroupSelected(root uintptr, group string) (ok, fail int) {
 			code := strings.TrimSpace(getWindowText(f.ValueHwnd))
 			if selectDevExpressComboByCode(root, target, code) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=combo selected=<configured>", group, f.Label, target.Hwnd, target.Class); clickBlankArea(sheet); time.Sleep(180 * time.Millisecond) } else { fail++; logError(group, f.Label, "COMBO_SELECT_FAILED", fmt.Sprintf("hwnd=0x%x class=%q requested=%q", target.Hwnd, target.Class, code)) }
 		} else {
-			if setTextControlInteractive(root, target, getWindowText(f.ValueHwnd)) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=%q", group, f.Label, target.Hwnd, target.Class, f.Kind); clickBlankArea(sheet); time.Sleep(180 * time.Millisecond) } else { fail++; logError(group, f.Label, "TEXT_SET_FAILED", fmt.Sprintf("hwnd=0x%x class=%q readonly=%t enabled=%t", target.Hwnd, target.Class, windowStyle(target.Hwnd)&ES_READONLY != 0, target.Enabled)) }
+			if setTextControlInteractiveV2(root, target, getWindowText(f.ValueHwnd)) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=%q", group, f.Label, target.Hwnd, target.Class, f.Kind); clickBlankArea(sheet); time.Sleep(180 * time.Millisecond) } else { fail++; logError(group, f.Label, "TEXT_SET_FAILED", fmt.Sprintf("hwnd=0x%x class=%q readonly=%t enabled=%t", target.Hwnd, target.Class, windowStyle(target.Hwnd)&ES_READONLY != 0, target.Enabled)) }
 		}
 		time.Sleep(90 * time.Millisecond)
 	}
@@ -176,13 +183,13 @@ func fillAllSelected() {
 	if isStopRequested() { return }
 	if !prepareERPWindow(root) { setStatus("ERP：已找到但無法移到前景，為避免誤輸入已停止"); return }
 	var oldCursor POINT; pGetCursorPos.Call(uintptr(unsafe.Pointer(&oldCursor))); defer pSetCursorPos.Call(uintptr(oldCursor.X), uintptr(oldCursor.Y))
-	logf("INFO", "AUTO-FILL V0.0.10 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
+	logf("INFO", "AUTO-FILL V0.0.10 Build 1 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
 	if !ensureInputMode(root) { if isStopRequested(){return}; setStatus("ERP：無法確認輸入狀態，已停止；請提供除錯紀錄"); logError("自動填入","ERP","INPUT_MODE_NOT_CONFIRMED","未進入或無法判斷輸入狀態"); return }
 	setStatus("ERP：輸入狀態已確認，依序填入表頭→交易→送貨→發票→明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
 	ok,fail := 0,0; a,b := fillHeaderSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
 	for _, group := range []string{"交易資料","送貨資料","發票資料(一)"} { if isStopRequested(){return}; a,b = fillTabGroupSelected(root,group); ok+=a; fail+=b }
 	if isStopRequested(){return}; a,b = fillDetailSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
-	setStatus(fmt.Sprintf("ERP：測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 end success=%d fail=%d (NO SAVE)",ok,fail)
+	setStatus(fmt.Sprintf("ERP：測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 1 end success=%d fail=%d (NO SAVE)",ok,fail)
 }
 
 func findTabSheet(root uintptr, tabName string) uintptr {
