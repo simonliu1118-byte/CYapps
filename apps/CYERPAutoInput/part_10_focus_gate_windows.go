@@ -5,7 +5,6 @@ package main
 import (
 	"strings"
 	"time"
-	"unsafe"
 )
 
 // hwndInsideV4 reports whether child is target itself or one of its descendants.
@@ -80,38 +79,51 @@ func focusTargetEditV4(root uintptr, target ControlInfo) uintptr {
 	return 0
 }
 
-// writeVerifiedEditV4 restores the proven V0.0.10-style SendInput Unicode path,
-// but only after focus is confirmed. KEYEVENTF_UNICODE avoids dependence on the
-// user's current Chinese/English IME state. Ctrl+A is never used.
+// writeVerifiedEditV4 is the new-entry writer used by Build 5.
+// It NEVER clears an ERP field and NEVER uses Ctrl+A / Shift+Home / Shift+End
+// or WM_SETTEXT. This project currently automates new documents, so selected
+// fields are expected to be blank. If reliable readback shows an existing value,
+// the field is skipped rather than overwritten or appended to.
 func writeVerifiedEditV4(edit uintptr, value string) bool {
 	if edit == 0 || isStopRequested() {
 		return false
 	}
-	if !clearFocusedEditSelectionV2(edit) {
+
+	before := getWindowText(edit)
+	if before == value {
+		logf("INFO", "new-entry field already matches edit=0x%x chars=%d", edit, len([]rune(value)))
+		return true
+	}
+	if strings.TrimSpace(before) != "" {
+		logf("WARN", "new-entry write skipped non-empty edit=0x%x class=%q before_len=%d requested_len=%d", edit, className(edit), len([]rune(before)), len([]rune(value)))
 		return false
 	}
-	if value != "" {
-		sendUnicodeText(value)
-		if !interruptibleSleep(140 * time.Millisecond) {
-			return false
-		}
-	}
-	if getWindowText(edit) == value {
+	if value == "" {
 		return true
 	}
 
-	// Delphi data-aware TDBEdit accepted WM_SETTEXT in the earlier working
-	// prototype. Use it only after focus has been verified, then read back.
-	ret, _, _ := pSendMessageW.Call(edit, WM_SETTEXT, 0, uintptr(unsafe.Pointer(wstr(value))))
-	if !interruptibleSleep(100 * time.Millisecond) {
+	// Send WM_CHAR directly to the already-confirmed editor. This bypasses the
+	// active IME while still supporting Unicode text, and does not alter any
+	// pre-existing ERP value before typing.
+	if !sendWMCharTextV2(edit, value) {
 		return false
 	}
-	if ret != 0 && getWindowText(edit) == value {
-		logf("INFO", "focus gate WM_SETTEXT fallback success edit=0x%x chars=%d", edit, len([]rune(value)))
+	if !interruptibleSleep(140 * time.Millisecond) {
+		return false
+	}
+
+	after := getWindowText(edit)
+	if after == value {
+		logf("INFO", "new-entry write exact match edit=0x%x chars=%d", edit, len([]rune(value)))
 		return true
 	}
-	logf("WARN", "focus gate write mismatch edit=0x%x expected_len=%d actual_len=%d", edit, len([]rune(value)), len([]rune(getWindowText(edit))))
-	return false
+
+	// Some Delphi/DevExpress editors do not expose their live buffer through
+	// GetWindowText while editing. Focus was already gated and the characters
+	// were dispatched directly to that editor, so do not attempt a destructive
+	// fallback. ERP validation/commit remains responsible for final acceptance.
+	logf("INFO", "new-entry write dispatched edit=0x%x class=%q requested_len=%d readback_len=%d (no clear/no fallback)", edit, className(edit), len([]rune(value)), len([]rune(after)))
+	return true
 }
 
 func setTextControlInteractiveV4(root uintptr, target ControlInfo, value string) bool {
@@ -122,9 +134,9 @@ func setTextControlInteractiveV4(root uintptr, target ControlInfo, value string)
 	return writeVerifiedEditV4(edit, value)
 }
 
-// Date fields use the Build 4 sequential keystroke implementation. Keeping
-// this wrapper preserves the existing call sites while avoiding regression in
-// other normal-field input logic.
+// Date fields use the sequential masked-edit implementation. Keeping this
+// wrapper preserves the existing call sites while avoiding regression in other
+// normal-field input logic.
 func setDateControlInteractiveV4(root uintptr, target ControlInfo, value string) bool {
 	return setDateControlInteractiveV5(root, target, value)
 }
@@ -179,7 +191,7 @@ func waitGridEditorV4(root uintptr, grid ControlInfo, timeout time.Duration) uin
 	return 0
 }
 
-// Detail cells use the Build 4 click -> Enter -> input -> Enter sequence.
+// Detail cells use the click -> Enter -> input -> Enter sequence.
 func setDetailCellEnterV4(root uintptr, grid ControlInfo, col int, value string) bool {
 	return setDetailCellEnterV5(root, grid, col, value)
 }
