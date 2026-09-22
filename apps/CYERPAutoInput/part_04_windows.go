@@ -99,8 +99,6 @@ func fillTabGroupSelected(root uintptr, group string) (ok, fail int) {
 	}
 	if !interruptibleSleep(180 * time.Millisecond) { return 0, 0 }
 
-	// Re-find and rebuild the target sheet only after it is active. Hidden
-	// TcxTabSheet controls can expose stale geometry/layout before activation.
 	sheet := findTabSheet(root, group)
 	if sheet == 0 { logError(group, "頁籤", "TAB_SHEET_NOT_FOUND", "找不到 TcxTabSheet"); return 0, 1 }
 	rows := buildActionRows(sheet)
@@ -175,13 +173,13 @@ func fillAllSelected() {
 	if isStopRequested() { return }
 	if !prepareERPWindow(root) { setStatus("ERP：已找到但無法移到前景，為避免誤輸入已停止"); return }
 	var oldCursor POINT; pGetCursorPos.Call(uintptr(unsafe.Pointer(&oldCursor))); defer pSetCursorPos.Call(uintptr(oldCursor.X), uintptr(oldCursor.Y))
-	logf("INFO", "AUTO-FILL V0.0.10 Build 5 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
+	logf("INFO", "AUTO-FILL V0.0.10 Build 6 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
 	if !ensureInputMode(root) { if isStopRequested(){return}; setStatus("ERP：無法確認輸入狀態，已停止；請提供除錯紀錄"); logError("自動填入","ERP","INPUT_MODE_NOT_CONFIRMED","未進入或無法判斷輸入狀態"); return }
-	setStatus("ERP：Build 5 新增模式，依序填入表頭→交易→送貨→發票→明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
+	setStatus("ERP：Build 6 新增模式，依序填入表頭→交易→送貨→發票→明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
 	ok,fail := 0,0; a,b := fillHeaderSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
 	for _, group := range []string{"交易資料","送貨資料","發票資料(一)"} { if isStopRequested(){return}; a,b = fillTabGroupSelected(root,group); ok+=a; fail+=b }
 	if isStopRequested(){return}; a,b = fillDetailSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
-	setStatus(fmt.Sprintf("ERP：Build 5 測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 5 end success=%d fail=%d (NO SAVE)",ok,fail)
+	setStatus(fmt.Sprintf("ERP：Build 6 測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 6 end success=%d fail=%d (NO SAVE)",ok,fail)
 }
 
 func findTabSheet(root uintptr, tabName string) uintptr {

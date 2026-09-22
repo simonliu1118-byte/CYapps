@@ -109,8 +109,11 @@ func comboCodeMatches(display,wanted string) bool {
 	d:=strings.TrimSpace(display); w:=strings.TrimSpace(wanted); if w=="" { return false }; if d==w { return true }; return strings.HasPrefix(d,w+":") || strings.HasPrefix(d,w+"：") || strings.HasPrefix(d,w+" ")
 }
 
+// Build 6: only click the actual drop-down arrow. The older diagnostic clicked
+// both the left side and arrow and then tried F4/Alt+Down fallbacks, which made
+// one selected combo look like several unrelated controls were being probed.
 func comboClickArrow(root uintptr,target ControlInfo) {
-	if isStopRequested(){return}; r:=target.Rect; prepareERPWindow(root); if !interruptibleSleep(80*time.Millisecond){return}; clickScreenPoint(r.Left+8,(r.Top+r.Bottom)/2); if !interruptibleSleep(70*time.Millisecond){return}; clickScreenPoint(r.Right-9,(r.Top+r.Bottom)/2); interruptibleSleep(140*time.Millisecond)
+	if isStopRequested(){return}; r:=target.Rect; if !prepareERPWindow(root){return}; if !interruptibleSleep(80*time.Millisecond){return}; clickScreenPoint(r.Right-9,(r.Top+r.Bottom)/2); interruptibleSleep(170*time.Millisecond)
 }
 
 func comboFocus(root uintptr,target ControlInfo) uintptr {
@@ -118,21 +121,23 @@ func comboFocus(root uintptr,target ControlInfo) uintptr {
 }
 
 func comboCycleClosed(root uintptr,target ControlInfo,wanted string,discover bool)([]string,bool){
+	// Closed-cycle discovery is disabled in Build 6. It was not reliable on
+	// TcxDBImageComboBox and could move focus without a visible popup. Selection
+	// by configured code keeps the old bounded path for compatibility.
+	if discover { return nil,false }
 	if isStopRequested() || comboFocus(root,target)==0 { return nil,false }
 	wanted=strings.TrimSpace(wanted); seen:=map[string]bool{}; options:=[]string{}
 	add:=func(v string) bool { v=strings.TrimSpace(v); if v==""||seen[v]{return false}; seen[v]=true; options=append(options,v); return true }
-	pressVK(VK_HOME); if !interruptibleSleep(150*time.Millisecond){return options,false}; cur:=strings.TrimSpace(comboDisplayText(target)); add(cur); logf("INFO","combo closed-cycle first hwnd=0x%x display=%q",target.Hwnd,cur); if !discover && comboCodeMatches(cur,wanted){return options,true}
+	pressVK(VK_HOME); if !interruptibleSleep(150*time.Millisecond){return options,false}; cur:=strings.TrimSpace(comboDisplayText(target)); add(cur); logf("INFO","combo closed-cycle first hwnd=0x%x display=%q",target.Hwnd,cur); if comboCodeMatches(cur,wanted){return options,true}
 	deadline:=time.Now().Add(4*time.Second); stagnant:=0; empty:=0
-	for i:=0;i<20 && time.Now().Before(deadline);i++ { if isStopRequested(){return options,false}; pressVK(VK_DOWN); if !interruptibleSleep(140*time.Millisecond){return options,false}; next:=strings.TrimSpace(comboDisplayText(target)); logf("INFO","combo closed-cycle step=%d hwnd=0x%x display=%q",i+1,target.Hwnd,next); if !discover&&comboCodeMatches(next,wanted){return options,true}; if next==""{empty++}else{empty=0}; if next==cur{stagnant++}else{stagnant=0}; if next!=""&&seen[next]{break}; add(next); cur=next; if stagnant>=2||empty>=2{logf("WARN","combo closed-cycle stopped early hwnd=0x%x stagnant=%d empty=%d",target.Hwnd,stagnant,empty);break} }
+	for i:=0;i<20 && time.Now().Before(deadline);i++ { if isStopRequested(){return options,false}; pressVK(VK_DOWN); if !interruptibleSleep(140*time.Millisecond){return options,false}; next:=strings.TrimSpace(comboDisplayText(target)); logf("INFO","combo closed-cycle step=%d hwnd=0x%x display=%q",i+1,target.Hwnd,next); if comboCodeMatches(next,wanted){return options,true}; if next==""{empty++}else{empty=0}; if next==cur{stagnant++}else{stagnant=0}; if next!=""&&seen[next]{break}; add(next); cur=next; if stagnant>=2||empty>=2{logf("WARN","combo closed-cycle stopped early hwnd=0x%x stagnant=%d empty=%d",target.Hwnd,stagnant,empty);break} }
 	return options,false
 }
 
 func comboCommitFirst(root uintptr,target ControlInfo) string {
-	if isStopRequested(){return ""}; comboClickArrow(root,target); if isStopRequested(){return ""}; pressVK(VK_HOME); if !interruptibleSleep(80*time.Millisecond){return ""}; pressVK(VK_RETURN); if !interruptibleSleep(140*time.Millisecond){return ""}; cur:=strings.TrimSpace(comboDisplayText(target)); logf("INFO","combo first strategy=arrow hwnd=0x%x display=%q",target.Hwnd,cur); if cur!=""{return cur}
-	r:=target.Rect; clickScreenPoint(r.Left+8,(r.Top+r.Bottom)/2); if !interruptibleSleep(60*time.Millisecond){return ""}; pressVK(VK_F4); if !interruptibleSleep(120*time.Millisecond){return ""}; pressVK(VK_HOME); if !interruptibleSleep(70*time.Millisecond){return ""}; pressVK(VK_RETURN); if !interruptibleSleep(130*time.Millisecond){return ""}; cur=strings.TrimSpace(comboDisplayText(target)); logf("INFO","combo first strategy=F4 hwnd=0x%x display=%q",target.Hwnd,cur); if cur!=""{return cur}
-	openComboDropdown(); if !interruptibleSleep(120*time.Millisecond){return ""}; pressVK(VK_HOME); if !interruptibleSleep(70*time.Millisecond){return ""}; pressVK(VK_RETURN); if !interruptibleSleep(130*time.Millisecond){return ""}; cur=strings.TrimSpace(comboDisplayText(target)); logf("INFO","combo first strategy=alt-down hwnd=0x%x display=%q",target.Hwnd,cur); return cur
+	if isStopRequested(){return ""}; comboClickArrow(root,target); if isStopRequested(){return ""}; pressVK(VK_HOME); if !interruptibleSleep(100*time.Millisecond){return ""}; pressVK(VK_RETURN); if !interruptibleSleep(170*time.Millisecond){return ""}; cur:=strings.TrimSpace(comboDisplayText(target)); logf("INFO","combo deterministic first hwnd=0x%x display=%q",target.Hwnd,cur); return cur
 }
 
 func comboCommitNext(root uintptr,target ControlInfo) string {
-	if isStopRequested(){return ""}; comboClickArrow(root,target); if isStopRequested(){return ""}; pressVK(VK_DOWN); if !interruptibleSleep(70*time.Millisecond){return ""}; pressVK(VK_RETURN); if !interruptibleSleep(130*time.Millisecond){return ""}; return strings.TrimSpace(comboDisplayText(target))
+	if isStopRequested(){return ""}; comboClickArrow(root,target); if isStopRequested(){return ""}; pressVK(VK_DOWN); if !interruptibleSleep(100*time.Millisecond){return ""}; pressVK(VK_RETURN); if !interruptibleSleep(170*time.Millisecond){return ""}; cur:=strings.TrimSpace(comboDisplayText(target)); logf("INFO","combo deterministic next hwnd=0x%x display=%q",target.Hwnd,cur); return cur
 }
