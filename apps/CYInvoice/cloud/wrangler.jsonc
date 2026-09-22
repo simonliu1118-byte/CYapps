@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cyinvoice-cloud-dev",
-  "main": "src/worker.ts",
+  "main": "src/app.ts",
   "compatibility_date": "2026-09-20",
   "workers_dev": true,
   "vars": {
