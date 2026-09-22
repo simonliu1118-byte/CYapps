@@ -31,7 +31,6 @@ internal sealed class SettingsForm : Form
         this.repository = repository;
         settings = repository.Settings.LoadOrCreate();
         Text = "設定選單";
-        StartPosition = FormStartParent;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(420, 340);
         FormBorderStyle = FormBorderStyle.FixedDialog;
