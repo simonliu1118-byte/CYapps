@@ -44,9 +44,10 @@ func waitFocusLeavesTargetV5(root uintptr, target ControlInfo, originalEdit uint
 	return false
 }
 
-// setDateControlInteractiveV5 does not use WM_SETTEXT or one-shot text input.
-// COPI08 date fields must receive 8 digits sequentially and then lose focus so
-// ERP native date normalization/validation can run.
+// setDateControlInteractiveV5 is the Build 5 masked-date path.
+// The project currently automates NEW documents, so the global clear sequence
+// is intentionally not used. After focus is confirmed, Home positions the caret
+// at the first mask slot, then the 8 date digits are sent one by one.
 func setDateControlInteractiveV5(root uintptr, target ControlInfo, value string) bool {
 	digits, expected, ok := normalizeDateInput(strings.TrimSpace(value))
 	if !ok || isStopRequested() {
@@ -56,22 +57,27 @@ func setDateControlInteractiveV5(root uintptr, target ControlInfo, value string)
 	if edit == 0 {
 		return false
 	}
-	if !clearFocusedEditSelectionV2(edit) {
+
+	// Clicking the middle of a masked date edit can leave the caret in the
+	// month/day portion. Home is non-destructive and moves it back to the first
+	// editable position. No Ctrl+A / Shift-selection / Delete is used.
+	pressVK(VK_HOME)
+	if !interruptibleSleep(120 * time.Millisecond) {
 		return false
 	}
-	if !sendSequentialUnicodeV5(digits, 95*time.Millisecond) {
+	if !sendSequentialUnicodeV5(digits, 105*time.Millisecond) {
 		return false
 	}
-	if !interruptibleSleep(140 * time.Millisecond) {
+	if !interruptibleSleep(160 * time.Millisecond) {
 		return false
 	}
 
 	pressVK(VK_TAB)
-	left := waitFocusLeavesTargetV5(root, target, edit, 650*time.Millisecond)
+	left := waitFocusLeavesTargetV5(root, target, edit, 700*time.Millisecond)
 	if !left {
-		// Fallback only changes focus. It never writes date text directly.
+		// Fallback only changes focus. It never writes or clears date text.
 		commitHeaderField(root)
-		if !interruptibleSleep(300 * time.Millisecond) {
+		if !interruptibleSleep(320 * time.Millisecond) {
 			return false
 		}
 	}
@@ -81,16 +87,20 @@ func setDateControlInteractiveV5(root uintptr, target ControlInfo, value string)
 		after = strings.TrimSpace(getWindowText(edit))
 	}
 	if after == expected {
-		logf("INFO", "date V5 sequential normalization confirmed hwnd=0x%x", target.Hwnd)
+		logf("INFO", "date V5 home+sequential normalization confirmed hwnd=0x%x", target.Hwnd)
 		return true
 	}
+
+	// TDBEdit readback can be stale until its DB-aware validation completes.
+	// Do not attempt destructive fallback input; record the state for testing.
 	logf("WARN", "date V5 normalization not confirmed hwnd=0x%x expected_format_len=%d actual_len=%d", target.Hwnd, len([]rune(expected)), len([]rune(after)))
 	return false
 }
 
-// setDetailCellEnterV5 follows the confirmed COPI08 grid sequence:
+// setDetailCellEnterV5 follows the confirmed COPI08 NEW-row grid sequence:
 // click target cell -> Enter to enter editor -> input -> Enter to commit.
-// The next selected field is then reached by an explicit click before Enter.
+// No clear/select/delete operation is performed. If the editor exposes a
+// pre-existing value, writeVerifiedEditV4 refuses to append to it.
 func setDetailCellEnterV5(root uintptr, grid ControlInfo, col int, value string) bool {
 	if isStopRequested() {
 		return false
@@ -118,18 +128,18 @@ func setDetailCellEnterV5(root uintptr, grid ControlInfo, col int, value string)
 			logf("WARN", "detail V5 editor not ready col=%d attempt=%d focus=0x%x/%s", col, attempt, focus, className(focus))
 			continue
 		}
-		logf("INFO", "detail V5 editor ready col=%d edit=0x%x/%s attempt=%d", col, edit, className(edit), attempt)
+		logf("INFO", "detail V5 editor ready col=%d edit=0x%x/%s attempt=%d before_len=%d", col, edit, className(edit), attempt, len([]rune(getWindowText(edit))))
 		if !writeVerifiedEditV4(edit, value) {
 			return false
 		}
-		if !interruptibleSleep(120 * time.Millisecond) {
+		if !interruptibleSleep(140 * time.Millisecond) {
 			return false
 		}
 
-		// In COPI08, Enter commits the current detail cell more reliably than
-		// Tab. The next iteration will click the next selected column explicitly.
+		// In COPI08, Enter commits the current detail cell. The next selected
+		// field is reached by an explicit click, then Enter re-opens its editor.
 		pressVK(VK_RETURN)
-		if !interruptibleSleep(260 * time.Millisecond) {
+		if !interruptibleSleep(280 * time.Millisecond) {
 			return false
 		}
 		logf("INFO", "detail V5 committed by Enter col=%d", col)
