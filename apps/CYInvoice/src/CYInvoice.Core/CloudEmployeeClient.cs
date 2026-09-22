@@ -42,7 +42,9 @@ public sealed class CloudEmployeeClient
         this.deviceToken = deviceToken.Trim();
     }
 
-    [Obsolete("Single-account reconciliation is retired by the Cloud backend. Use CloudEmployeeTransitionClient for whole-device transition.")]
+    // Compatibility parser only. The current reference backend retires this
+    // mutation route with LEGACY_EMPLOYEE_RECONCILIATION_RETIRED; all product
+    // flows use CloudEmployeeTransitionClient for whole-device transition.
     public async Task<CloudEmployeeReconciliation> ReconcileLocalSuperAdminAsync(
         EmployeeAccount? localSuperAdmin,
         CancellationToken cancellationToken = default)
