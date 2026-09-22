@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// hwndInsideV4 reports whether child is target itself or one of its descendants.
 func hwndInsideV4(child, target uintptr) bool {
 	if child == 0 || target == 0 {
 		return false
@@ -119,7 +118,10 @@ func writeReplaceEditV6(edit uintptr, value string) bool {
 	if getWindowText(edit) == value {
 		return true
 	}
-	if !clearFocusedEditSelectionV2(edit) {
+	// Build 7: 銷貨單別 is the explicit replacement exception. Always dispatch
+	// the full End -> Shift+Home -> Delete sequence with spaced key transitions,
+	// even when Delphi readback is stale/empty.
+	if !clearFocusedEditSelectionForcedV7(edit) {
 		return false
 	}
 	if value != "" && !sendWMCharTextV2(edit, value) {

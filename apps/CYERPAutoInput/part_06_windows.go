@@ -13,22 +13,11 @@ import (
 	"unsafe"
 )
 
+// Build 7 deliberately stops trying to enumerate/read DevExpress combo options.
+// The value typed in CYERPAutoInput is treated as the exact requested option
+// and is selected by popup type-ahead + Enter.
 func selectDevExpressComboByCode(root uintptr, target ControlInfo, wanted string) bool {
-	wanted = strings.TrimSpace(wanted)
-	if wanted == "" || isStopRequested() { return false }
-	original := strings.TrimSpace(comboDisplayText(target))
-	if comboCodeMatches(original, wanted) { logf("INFO", "combo already matches hwnd=0x%x code=<configured> display=%q", target.Hwnd, original); return true }
-	if _, ok := comboCycleClosed(root,target,wanted,false); ok { logf("INFO", "combo selected by closed-cycle hwnd=0x%x", target.Hwnd); return true }
-	if isStopRequested(){ return false }
-	current := comboCommitFirst(root,target); logf("INFO", "combo popup probe hwnd=0x%x step=first display=%q", target.Hwnd,current)
-	if comboCodeMatches(current,wanted){ return true }
-	if current=="" { logf("WARN", "combo popup probe aborted: display text unreadable hwnd=0x%x", target.Hwnd); return false }
-	seen:=map[string]bool{current:true}; deadline:=time.Now().Add(5*time.Second); empty:=0
-	for step:=1; step<=20 && time.Now().Before(deadline); step++ {
-		if isStopRequested(){return false}; next:=comboCommitNext(root,target); logf("INFO", "combo popup probe hwnd=0x%x step=%d display=%q", target.Hwnd,step,next)
-		if comboCodeMatches(next,wanted){return true}; if next==""{empty++}else{empty=0}; if next!=""&&seen[next]{break}; if next!=""{seen[next]=true}; current=next; if empty>=2{break}
-	}
-	logf("WARN", "combo selection failed hwnd=0x%x original=%q last=%q", target.Hwnd,original,current); return false
+	return selectDevExpressComboDirectV7(root, target, wanted)
 }
 
 func setTextControlByFocus(root uintptr,target ControlInfo,value string) bool {
