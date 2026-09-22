@@ -286,12 +286,22 @@ internal sealed class MainForm : Form
     private void OpenAccountManagement()
     {
         if (!TryAuthenticateAdministrator("帳戶管理驗證", out var account)) return;
-        using var form = new AccountManagementForm(repository.Employees, account!);
+        using var form = new AccountManagementForm(repository, account!);
         form.ShowDialog(this);
     }
 
     private void OpenPasswordRecovery()
     {
+        if (repository.UsesCloudEmployeeAuthority())
+        {
+            MessageBox.Show(
+                this,
+                "這台電腦已使用 Cloud Employee 作為唯一帳號主資料。原本 Local SUPER_ADMIN 復原碼不再具有雲端帳號權限；請使用後續中央帳號復原流程。",
+                "雲端帳號復原",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
         if (!repository.Employees.HasEmployees())
         {
             MessageBox.Show(this, "尚未建立員工帳戶，請先完成首次設定。", "無法復原密碼",
@@ -305,13 +315,13 @@ internal sealed class MainForm : Form
     private bool TryAuthenticateAdministrator(string title, out EmployeeAccount? account)
     {
         account = null;
-        if (!repository.Employees.HasEmployees())
+        if (!repository.HasAuthorityEmployees())
         {
-            MessageBox.Show(this, "尚未建立員工帳戶，請先完成首次設定。", title,
+            MessageBox.Show(this, "尚未建立可用的員工帳戶，請先完成首次設定或雲端帳號同步。", title,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
-        using var login = new EmployeeAdminLoginForm(repository.Employees, title);
+        using var login = new EmployeeAdminLoginForm(repository, title);
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return false;
         account = login.AuthenticatedEmployee;
         return true;
@@ -319,7 +329,7 @@ internal sealed class MainForm : Form
 
     private bool EnsureInitialSetup()
     {
-        if (repository.Employees.HasEmployees()) return true;
+        if (repository.HasAuthorityEmployees()) return true;
         using var setup = new InitialSetupForm(repository);
         if (setup.ShowDialog(this) == DialogResult.OK) return true;
         Close();
@@ -503,12 +513,22 @@ internal sealed class MainForm : Form
             return;
         }
 
+        if (settings.CloudMode == CloudModes.CloudTransition)
+        {
+            SetRuntimeModeState(
+                "雲端轉換中",
+                Color.FromArgb(166, 92, 0),
+                "Cloud Device 已加入，但 Employee 主資料尚未完成切換；轉換完成前仍使用原本 Local Employee 權限。",
+                showToolTip: true);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
         {
             SetRuntimeModeState(
-                "雲端異常(單機模式)",
+                "雲端離線",
                 Color.FromArgb(180, 0, 0),
-                "已選擇雲端模式，但尚未設定 CYInvoice Cloud API 網址。\n目前以單機方式運行。",
+                "這台電腦仍是 Cloud Mode，但目前缺少可用的 Cloud API 網址。帳號驗證只會使用最後同步的 Cloud Employee 離線快取。",
                 showToolTip: true);
             return;
         }
@@ -516,7 +536,7 @@ internal sealed class MainForm : Form
         SetRuntimeModeState(
             "雲端模式",
             SystemColors.ControlText,
-            "已選擇雲端模式，正在確認 CYInvoice Cloud API 狀態。");
+            "Cloud Employee 是唯一帳號主資料，正在確認 CYInvoice Cloud API 與中央帳號快取狀態。");
     }
 
     private async Task RefreshRuntimeModeAsync()
@@ -545,21 +565,37 @@ internal sealed class MainForm : Form
             var problem = CloudCompatibility.Problem(health);
             if (problem.Length != 0)
             {
-                SetRuntimeModeState(
-                    "雲端異常(單機模式)",
-                    Color.FromArgb(180, 0, 0),
-                    "CYInvoice Cloud API 目前無法使用，已改以單機方式運行。\n\n" + problem,
-                    showToolTip: true);
+                SetCloudUnavailableState(requested, problem);
                 return;
             }
 
             var onboarding = await client.GetOnboardingStatusAsync(syncLifetime.Token);
             if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
+
+            if (requestedMode == CloudModes.CloudPreferred && requested.CloudEmployeeAuthorityReady)
+            {
+                var syncProblem = await TryRefreshCloudEmployeeCacheAsync(requested, requestedUrl);
+                if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
+                if (syncProblem.Length != 0)
+                {
+                    SetRuntimeModeState(
+                        "雲端帳號同步異常",
+                        Color.FromArgb(180, 0, 0),
+                        "Cloud API 可連線，但中央帳號快取這次沒有更新。程式仍使用最後一次成功同步的 Cloud Employee 快取。\n\n" + syncProblem,
+                        showToolTip: true);
+                    return;
+                }
+            }
+
             var onboardingText = onboarding.WorkspaceInitialized ? "已建立雲端空間" : "尚未建立雲端空間";
+            var modeText = requestedMode == CloudModes.CloudTransition ? "雲端轉換中" : "雲端模式";
+            var detail = requestedMode == CloudModes.CloudTransition
+                ? "Cloud Device identity 已連線，但 Employee authority 尚未切換。\n"
+                : "Cloud Employee 為唯一帳號主資料；本機已同步可供暫時離線驗證的安全快取。\n";
             SetRuntimeModeState(
-                "雲端模式",
-                SystemColors.ControlText,
-                $"CYInvoice Cloud API 連線正常。\n{CloudCompatibility.SuccessSummary(health)}\n{onboardingText}");
+                modeText,
+                requestedMode == CloudModes.CloudTransition ? Color.FromArgb(166, 92, 0) : SystemColors.ControlText,
+                detail + $"{CloudCompatibility.SuccessSummary(health)}\n{onboardingText}");
         }
         catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
         {
@@ -567,12 +603,60 @@ internal sealed class MainForm : Form
         catch (Exception error)
         {
             if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
-            SetRuntimeModeState(
-                "雲端異常(單機模式)",
-                Color.FromArgb(180, 0, 0),
-                "CYInvoice Cloud API 目前無法使用，已改以單機方式運行。\n\n" + ExceptionDetails(error),
-                showToolTip: true);
+            SetCloudUnavailableState(requested, ExceptionDetails(error));
         }
+    }
+
+    private async Task<string> TryRefreshCloudEmployeeCacheAsync(Settings settings, string baseUrl)
+    {
+        if (!settings.CloudEmployeeAuthorityReady || settings.CloudMode != CloudModes.CloudPreferred)
+            return string.Empty;
+        if (settings.CloudWorkspaceId.Length == 0 || settings.CloudDeviceId.Length == 0)
+            return "本機 Cloud Workspace／Device identity 不完整。";
+        try
+        {
+            var token = repository.Settings.CloudDeviceToken(settings);
+            if (token.Length == 0) return "本機 Cloud Device Token 不存在。";
+            var authority = new CloudEmployeeAuthorityClient(
+                cloudHealthHttpClient,
+                new Uri(baseUrl, UriKind.Absolute),
+                token);
+            var snapshot = await authority.GetSnapshotAsync(syncLifetime.Token);
+            if (!string.Equals(snapshot.WorkspaceId, settings.CloudWorkspaceId, StringComparison.Ordinal))
+                return "中央帳號快取回傳的 Workspace identity 與本機不一致。";
+            repository.CloudEmployees.ReplaceSnapshot(
+                snapshot.WorkspaceId,
+                snapshot.WorkspaceRevision,
+                snapshot.Employees);
+            return string.Empty;
+        }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            return ExceptionDetails(error);
+        }
+    }
+
+    private void SetCloudUnavailableState(Settings settings, string details)
+    {
+        if (settings.CloudMode == CloudModes.CloudTransition)
+        {
+            SetRuntimeModeState(
+                "雲端轉換中(離線)",
+                Color.FromArgb(180, 0, 0),
+                "帳號轉換目前無法連線 Cloud；切換尚未完成，因此原本 Local Employee 權限仍有效。\n\n" + details,
+                showToolTip: true);
+            return;
+        }
+
+        SetRuntimeModeState(
+            "雲端離線",
+            Color.FromArgb(180, 0, 0),
+            "這台電腦仍維持 Cloud Mode，不會切回舊 Local 帳號系統。需要權限的操作會使用最後一次成功同步的 Cloud Employee 離線快取。\n\n" + details,
+            showToolTip: true);
     }
 
     private void SetRuntimeModeState(string text, Color foreground, string details, bool showToolTip = false)
