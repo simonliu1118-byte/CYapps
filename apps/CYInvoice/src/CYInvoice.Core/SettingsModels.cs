@@ -34,6 +34,7 @@ public sealed class Settings
     [JsonPropertyName("cloud_workspace_id")] public string CloudWorkspaceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_id")] public string CloudDeviceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_token_enc")] public string CloudDeviceTokenEncrypted { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_employee_authority_ready")] public bool CloudEmployeeAuthorityReady { get; set; }
     [JsonPropertyName("cloud_pending_bootstrap_url")] public string CloudPendingBootstrapUrl { get; set; } = string.Empty;
     [JsonPropertyName("cloud_pending_bootstrap_workspace_name")] public string CloudPendingBootstrapWorkspaceName { get; set; } = string.Empty;
     [JsonPropertyName("cloud_pending_bootstrap_device_name")] public string CloudPendingBootstrapDeviceName { get; set; } = string.Empty;
