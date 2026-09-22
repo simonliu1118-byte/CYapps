@@ -233,7 +233,9 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             throw new InvalidDataException($"unknown environment {settings.Environment}");
         if (settings.ProductionInvoice.Length != 0 && !EightDigits(settings.ProductionInvoice))
             throw new InvalidDataException("正式公司統編必須為 8 碼");
-        if (settings.CloudMode is not CloudModes.LocalOnly and not CloudModes.CloudPreferred)
+        if (settings.CloudMode is not CloudModes.LocalOnly
+            and not CloudModes.CloudTransition
+            and not CloudModes.CloudPreferred)
             throw new InvalidDataException($"unknown cloud mode {settings.CloudMode}");
         if (settings.CloudBaseUrl.Length != 0 && !ValidCloudBaseUrl(settings.CloudBaseUrl))
             throw new InvalidDataException("Cloud API URL 必須是有效的 HTTPS 網址");
