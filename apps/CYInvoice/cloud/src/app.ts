@@ -1,6 +1,7 @@
 import baseWorker from "./worker";
 import { handleEmployeeTransition } from "./employee-transition";
 import { handleEmployeeTransitionActions } from "./employee-transition-actions";
+import { handleEmployeeTransitionConflicts } from "./employee-transition-conflicts";
 import { handleEmployeeAuthority } from "./employee-authority";
 
 interface Env {
@@ -18,6 +19,9 @@ interface Env {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const conflictResponse = await handleEmployeeTransitionConflicts(request, env);
+    if (conflictResponse) return conflictResponse;
+
     const transitionResponse = await handleEmployeeTransition(request, env);
     if (transitionResponse) return transitionResponse;
 
