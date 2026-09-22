@@ -103,9 +103,9 @@ internal sealed class EmployeePasswordResetForm : Form
 
     private void SaveClicked(object? sender, EventArgs eventArgs)
     {
-        if (newPassword.Text.Length == 0)
+        if (newPassword.Text.Length < 8 || !newPassword.Text.All(char.IsAsciiLetterOrDigit))
         {
-            ValidationError("請輸入新密碼", newPassword);
+            ValidationError("密碼至少 8 碼，且只能使用英文字母或數字", newPassword);
             return;
         }
         if (confirmPassword.Text.Length == 0 || newPassword.Text != confirmPassword.Text)
