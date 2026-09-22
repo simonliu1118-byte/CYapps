@@ -76,12 +76,13 @@ internal static class VisualTokens
             Color.FromArgb(105, 161, 163),
             Color.FromArgb(220, 237, 235)),
         CyTheme.Coral => new(
-            Color.FromArgb(201, 117, 75),
-            Color.FromArgb(182, 104, 65),
-            Color.FromArgb(158, 89, 54),
-            Color.FromArgb(248, 233, 224),
-            Color.FromArgb(216, 146, 111),
-            Color.FromArgb(243, 225, 214)),
+            // V2: deliberately shifted away from orange toward coral-red / rose-pink.
+            Color.FromArgb(212, 101, 123),
+            Color.FromArgb(196, 86, 110),
+            Color.FromArgb(173, 72, 94),
+            Color.FromArgb(252, 232, 237),
+            Color.FromArgb(227, 155, 172),
+            Color.FromArgb(247, 220, 227)),
         CyTheme.Apricot => new(
             Color.FromArgb(216, 132, 74),
             Color.FromArgb(195, 115, 63),
