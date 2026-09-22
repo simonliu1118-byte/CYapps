@@ -220,6 +220,24 @@ async function employeeByEmail(env: Env, workspaceId: string, email: string): Pr
   ).bind(workspaceId, email).first<EmployeeRow>();
 }
 
+async function linkedEmployeeByLocal(
+  env: Env,
+  workspaceId: string,
+  deviceId: string,
+  localEmployeeNo: string,
+): Promise<EmployeeRow | null> {
+  return env.DB.prepare(
+    `SELECT e.employee_id, e.employee_no, e.name, e.email_normalized, e.email_verified_at,
+            e.role, e.enabled, e.credential_verifier, e.credential_version, e.revision
+       FROM device_employee_links l
+       JOIN cloud_employees e ON e.employee_id = l.employee_id
+      WHERE l.device_id = ?1
+        AND l.local_employee_no = ?2
+        AND e.workspace_id = ?3
+      LIMIT 1`
+  ).bind(deviceId, localEmployeeNo, workspaceId).first<EmployeeRow>();
+}
+
 async function upsertTransitionItem(
   env: Env,
   device: DeviceRow,
@@ -410,33 +428,39 @@ async function inspectEmployeeTransition(request: Request, env: Env): Promise<Re
       continue;
     }
 
-    const [employeeNoMatch, emailMatch] = await Promise.all([
+    const [employeeNoMatch, emailMatch, linkedEmployee] = await Promise.all([
       employeeByNo(env, device.workspace_id, local.employeeNo),
       employeeByEmail(env, device.workspace_id, local.email),
+      linkedEmployeeByLocal(env, device.workspace_id, device.device_id, local.employeeNo),
     ]);
 
     let matchKind: MatchKind;
+    if (!employeeNoMatch && !emailMatch) matchKind = "none";
+    else if (employeeNoMatch && emailMatch && employeeNoMatch.employee_id === emailMatch.employee_id) matchKind = "same_employee";
+    else if (employeeNoMatch && !emailMatch) matchKind = "employee_no_only";
+    else if (!employeeNoMatch && emailMatch) matchKind = "email_only";
+    else matchKind = "split";
+
     let state: TransitionState;
     let matchedEmployee: EmployeeRow | null = null;
     let targetRole = suggestedRole(local.role, false);
 
-    if (!employeeNoMatch && !emailMatch) {
-      matchKind = "none";
+    // A persisted Device/local -> Cloud Employee link is an explicit identity
+    // decision. It may come from an exact automatic match or a prior SUPER_ADMIN
+    // conflict resolution. Reinspection must never discard that decision merely
+    // because the legacy Local fields still conflict with the Cloud record.
+    if (linkedEmployee) {
+      matchedEmployee = linkedEmployee;
+      targetRole = linkedEmployee.role as LocalEmployee["role"];
+      state = linkedEmployee.credential_verifier && linkedEmployee.email_verified_at ? "ready" : "credential_pending";
+    } else if (!employeeNoMatch && !emailMatch) {
       state = "new_email_pending";
     } else if (employeeNoMatch && emailMatch && employeeNoMatch.employee_id === emailMatch.employee_id) {
-      matchKind = "same_employee";
       matchedEmployee = employeeNoMatch;
       targetRole = matchedEmployee.role as LocalEmployee["role"];
       state = matchedEmployee.credential_verifier && matchedEmployee.email_verified_at ? "ready" : "credential_pending";
       await ensureExactLink(env, device.device_id, local.employeeNo, matchedEmployee.employee_id);
-    } else if (employeeNoMatch && !emailMatch) {
-      matchKind = "employee_no_only";
-      state = "conflict";
-    } else if (!employeeNoMatch && emailMatch) {
-      matchKind = "email_only";
-      state = "conflict";
     } else {
-      matchKind = "split";
       state = "conflict";
     }
 
