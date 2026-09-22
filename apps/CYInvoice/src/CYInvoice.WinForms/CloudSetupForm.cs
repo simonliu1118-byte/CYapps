@@ -149,18 +149,20 @@ internal sealed class CloudSetupForm : Form
     private void UpdateInitializeState()
     {
         var registeredHere = HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, baseUrl.Text);
+        var transitionHere = registeredHere && settings.CloudMode == CloudModes.CloudTransition;
         var endpointConfirmed = SameEndpoint(confirmedBaseUrl, baseUrl.Text);
 
-        initialize.Text = SelectedOnboardingStatus switch
-        {
-            { WorkspaceInitialized: true } => "加入雲端空間",
-            { WorkspaceInitialized: false } => "建立雲端空間",
-            _ => "建立／加入雲端空間"
-        };
+        initialize.Text = transitionHere
+            ? "繼續帳號轉換"
+            : SelectedOnboardingStatus switch
+            {
+                { WorkspaceInitialized: true } => "加入雲端空間",
+                { WorkspaceInitialized: false } => "建立雲端空間",
+                _ => "建立／加入雲端空間"
+            };
         initialize.Enabled = !busy
-            && !registeredHere
-            && SelectedOnboardingStatus is not null
-            && endpointConfirmed;
+            && endpointConfirmed
+            && (transitionHere || (!registeredHere && SelectedOnboardingStatus is not null));
     }
 
     private async Task CheckHealthAsync()
@@ -209,7 +211,14 @@ internal sealed class CloudSetupForm : Form
             }
 
             if (HasCloudIdentity(settings) && SameEndpoint(settings.CloudBaseUrl, normalized))
+            {
+                if (settings.CloudMode == CloudModes.CloudTransition)
+                {
+                    OpenEmployeeTransition(normalized);
+                    return;
+                }
                 throw new InvalidOperationException("這台電腦已經有有效的 Cloud Device identity，不需要再次建立或加入 Workspace。");
+            }
 
             if (SelectedOnboardingStatus is { WorkspaceInitialized: false })
             {
@@ -223,6 +232,7 @@ internal sealed class CloudSetupForm : Form
                 UpdateState(
                     confirmedSummary,
                     details: "第一個 Workspace 與 Device identity 已完成建立及驗證。現在進入 Local → Cloud 帳號轉換；在全部帳號整理完成前，本機既有帳號仍是權限主資料。第一位超管 Email 已於 Workspace 建立時驗證，後續建立中央 X 時直接沿用該驗證結果。");
+                OpenEmployeeTransition(normalized);
                 return;
             }
 
@@ -237,11 +247,27 @@ internal sealed class CloudSetupForm : Form
                 UpdateState(
                     confirmedSummary,
                     details: "既有 Workspace 保持不變；本機已取得並驗證自己的獨立 Device identity。現在進入 Local → Cloud 帳號轉換，完成全部既有帳號比對與必要 Email 驗證後，才會正式改以 Cloud Employee 為唯一帳號主資料。");
+                OpenEmployeeTransition(normalized);
                 return;
             }
 
             throw new InvalidOperationException("Cloud onboarding 狀態無法判斷，請重新測試連線。");
         });
+    }
+
+    private void OpenEmployeeTransition(string normalized)
+    {
+        if (settings.CloudMode != CloudModes.CloudTransition) return;
+        using var transition = new CloudEmployeeTransitionForm(repository, settings);
+        transition.ShowDialog(this);
+        if (!transition.AuthorityReady) return;
+
+        IdentityCompleted = true;
+        SelectedBaseUrl = normalized;
+        confirmedSummary = "連線正常｜雲端帳號切換完成";
+        UpdateState(
+            confirmedSummary,
+            details: "Cloud Employee 已成為這台電腦唯一的帳號主資料；暫時斷網時會使用最後一次成功同步的安全離線快取。帳號全域異動仍需在線執行。");
     }
 
     private async Task SaveAsync()
@@ -365,7 +391,7 @@ internal sealed class CloudSetupForm : Form
         if (Text != "雲端連線設定" || ShowIcon || AcceptButton is not null)
             throw new InvalidOperationException("雲端連線設定視窗基本屬性不正確");
         if (save.Text != "儲存" || cancel.DialogResult != DialogResult.Cancel || check.Text != "測試連線" ||
-            initialize.Text is not ("建立／加入雲端空間" or "建立雲端空間" or "加入雲端空間"))
+            initialize.Text is not ("建立／加入雲端空間" or "建立雲端空間" or "加入雲端空間" or "繼續帳號轉換"))
             throw new InvalidOperationException("雲端連線設定動作按鈕不正確");
         if (initialBaseUrl.Length == 0 && baseUrl.Text.Length != 0)
             throw new InvalidOperationException("Public client 不得內建任何 Cloud API endpoint");
