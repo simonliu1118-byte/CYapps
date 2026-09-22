@@ -11,8 +11,9 @@
 - Branch：`cyinvoice/cloud-onboarding-first-device`
 - PR：#73 `CYInvoice cloud identity: Workspace, Device and central Employee authority`
 - Base：`cyinvoice/cloud-foundation-d1`
-- 目前 PR head：`33e8683a0f01e34baa45e364156b022a495172d6`
 - PR 狀態：Draft / Open / 未 merge
+- 接手時應先重新讀取 PR #73 的最新 head；不要依本文件硬編碼 branch head。
+- 最新 code-bearing head（交接時）：`33e8683a0f01e34baa45e364156b022a495172d6`
 - 最新 code-bearing CI：`CYInvoice Cloud Check Run #204`，成功
 - Cloud compatibility：Cloud `0.8.0` / API `1` / Schema `7`
 - Forward migrations：`0001`～`0007`
@@ -82,10 +83,10 @@ Run #204 已通過：
 
 ### A. 先查 remote development Cloud 狀態
 
-1. 先讀最新 PR #73 head 與 CI，確認沒有新的 commit。
+1. 先讀最新 PR #73 head 與 CI，確認沒有新的 code commit。
 2. 檢查 development Worker 實際部署版本與 `/v1/health` 回覆。
 3. 檢查 development D1 migration 實際狀態，確認是否已到 `0007` / Schema 7。
-4. 若 remote 落後，使用 forward migration /正式 Wrangler 流程更新；不可重寫已執行 migration。
+4. 若 remote 落後，使用 forward migration / 正式 Wrangler 流程更新；不可重寫已執行 migration。
 
 不要把 remote 狀態猜成已完成。
 
