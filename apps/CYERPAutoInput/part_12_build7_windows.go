@@ -10,37 +10,31 @@ import (
 // clearFocusedEditSelectionForcedV7 is used only for fields that must replace
 // an ERP-provided default (currently 銷貨單別). It deliberately does not depend
 // on GetWindowText because Delphi DB-aware edits can expose stale/empty text.
-// Ctrl+A is never used.
+// Ctrl+A and Shift-selection are never used here.
 func clearFocusedEditSelectionForcedV7(focus uintptr) bool {
 	if focus == 0 || isStopRequested() {
 		return false
 	}
 
-	// Build 8: COPI08 did not reliably recognize Shift when Shift-down, Home,
-	// and Shift-up were sent as three separate SendInput calls. Keep End and
-	// Delete separate, but send the complete Shift+Home chord atomically in one
-	// SendInput call so the ERP receives it as a real modified keystroke.
+	// Build 9: COPI08 repeatedly ignored Shift+Home even when sent atomically.
+	// 銷貨單別 is at most 4 characters, so use the deterministic fallback the
+	// ERP accepts reliably: move to End, then send Backspace four times.
 	pressVK(VK_END)
 	if !interruptibleSleep(110 * time.Millisecond) {
 		return false
 	}
 
-	sendInputs([]INPUT{
-		keyInput(vkShiftV2, 0, 0),
-		keyInput(VK_HOME, 0, 0),
-		keyInput(VK_HOME, 0, KEYEVENTF_KEYUP),
-		keyInput(vkShiftV2, 0, KEYEVENTF_KEYUP),
-	})
-	if !interruptibleSleep(140 * time.Millisecond) {
+	for i := 0; i < 4; i++ {
+		pressVK(VK_BACK)
+		if !interruptibleSleep(85 * time.Millisecond) {
+			return false
+		}
+	}
+	if !interruptibleSleep(120 * time.Millisecond) {
 		return false
 	}
 
-	sendInputs([]INPUT{keyInput(vkDeleteV2, 0, 0), keyInput(vkDeleteV2, 0, KEYEVENTF_KEYUP)})
-	if !interruptibleSleep(160 * time.Millisecond) {
-		return false
-	}
-
-	logf("INFO", "forced replacement clear dispatched hwnd=0x%x class=%q sequence=End+atomic(ShiftHome)+Delete", focus, className(focus))
+	logf("INFO", "forced replacement clear dispatched hwnd=0x%x class=%q sequence=End+Backspace*4", focus, className(focus))
 	return true
 }
 
