@@ -11,12 +11,12 @@ internal static class Program
 
         if (args.Any(a => string.Equals(a, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
         {
-            using var form = new ThemeLabFormV1();
+            using var form = new TabLabFormV1();
             form.CreateControl();
             form.PerformLayout();
             return;
         }
 
-        Application.Run(new ThemeLabFormV1());
+        Application.Run(new TabLabFormV1());
     }
 }
