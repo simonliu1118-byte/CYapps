@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "combos": {
+    "delivery_slot": {
+      "selected": "",
+      "options": []
+    },
+    "inv_copies": {
+      "selected": "",
+      "options": []
+    },
+    "tax_type": {
+      "selected": "",
+      "options": []
+    },
+    "customs": {
+      "selected": "",
+      "options": []
+    }
+  }
+}
