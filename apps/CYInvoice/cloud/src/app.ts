@@ -4,6 +4,7 @@ import { handleEmployeeTransitionActions } from "./employee-transition-actions";
 import { handleEmployeeTransitionConflicts } from "./employee-transition-conflicts";
 import { handleEmployeeAuthority } from "./employee-authority";
 import { handleEmployeeManagement } from "./employee-management";
+import { handleEmployeeAccountOperations } from "./employee-account-operations";
 import { handleSuperAdminTransfer } from "./super-admin-transfer";
 
 interface Env {
@@ -23,6 +24,9 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const employeeManagementResponse = await handleEmployeeManagement(request, env);
     if (employeeManagementResponse) return employeeManagementResponse;
+
+    const employeeAccountResponse = await handleEmployeeAccountOperations(request, env);
+    if (employeeAccountResponse) return employeeAccountResponse;
 
     const transferResponse = await handleSuperAdminTransfer(request, env);
     if (transferResponse) return transferResponse;
