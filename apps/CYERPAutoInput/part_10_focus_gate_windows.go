@@ -29,9 +29,6 @@ func pointInsideRectV4(r RECT, x, y int32) bool {
 	return x >= r.Left && x < r.Right && y >= r.Top && y < r.Bottom
 }
 
-// waitFocusedEditForTargetV4 is the safety gate for normal ERP fields.
-// No character may be sent until the actual keyboard focus is confirmed to be
-// the target TDBEdit (or an edit descendant of the target control).
 func waitFocusedEditForTargetV4(root uintptr, target ControlInfo, timeout time.Duration) uintptr {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -79,16 +76,10 @@ func focusTargetEditV4(root uintptr, target ControlInfo) uintptr {
 	return 0
 }
 
-// writeVerifiedEditV4 is the new-entry writer used by Build 5.
-// It NEVER clears an ERP field and NEVER uses Ctrl+A / Shift+Home / Shift+End
-// or WM_SETTEXT. This project currently automates new documents, so selected
-// fields are expected to be blank. If reliable readback shows an existing value,
-// the field is skipped rather than overwritten or appended to.
 func writeVerifiedEditV4(edit uintptr, value string) bool {
 	if edit == 0 || isStopRequested() {
 		return false
 	}
-
 	before := getWindowText(edit)
 	if before == value {
 		logf("INFO", "new-entry field already matches edit=0x%x chars=%d", edit, len([]rune(value)))
@@ -101,28 +92,48 @@ func writeVerifiedEditV4(edit uintptr, value string) bool {
 	if value == "" {
 		return true
 	}
-
-	// Send WM_CHAR directly to the already-confirmed editor. This bypasses the
-	// active IME while still supporting Unicode text, and does not alter any
-	// pre-existing ERP value before typing.
 	if !sendWMCharTextV2(edit, value) {
 		return false
 	}
 	if !interruptibleSleep(140 * time.Millisecond) {
 		return false
 	}
-
 	after := getWindowText(edit)
 	if after == value {
 		logf("INFO", "new-entry write exact match edit=0x%x chars=%d", edit, len([]rune(value)))
 		return true
 	}
-
-	// Some Delphi/DevExpress editors do not expose their live buffer through
-	// GetWindowText while editing. Focus was already gated and the characters
-	// were dispatched directly to that editor, so do not attempt a destructive
-	// fallback. ERP validation/commit remains responsible for final acceptance.
 	logf("INFO", "new-entry write dispatched edit=0x%x class=%q requested_len=%d readback_len=%d (no clear/no fallback)", edit, className(edit), len([]rune(value)), len([]rune(after)))
+	return true
+}
+
+func isHeaderOrderTypeTargetV6(root uintptr, target ControlInfo) bool {
+	rows := buildHeaderRows(root)
+	return len(rows) == 2 && len(rows[0]) == 3 && rows[0][0].Hwnd == target.Hwnd
+}
+
+func writeReplaceEditV6(edit uintptr, value string) bool {
+	if edit == 0 || isStopRequested() {
+		return false
+	}
+	if getWindowText(edit) == value {
+		return true
+	}
+	if !clearFocusedEditSelectionV2(edit) {
+		return false
+	}
+	if value != "" && !sendWMCharTextV2(edit, value) {
+		return false
+	}
+	if !interruptibleSleep(140 * time.Millisecond) {
+		return false
+	}
+	after := getWindowText(edit)
+	if after == value {
+		logf("INFO", "order type replace exact match edit=0x%x chars=%d", edit, len([]rune(value)))
+		return true
+	}
+	logf("INFO", "order type replace dispatched edit=0x%x requested_len=%d readback_len=%d", edit, len([]rune(value)), len([]rune(after)))
 	return true
 }
 
@@ -131,18 +142,16 @@ func setTextControlInteractiveV4(root uintptr, target ControlInfo, value string)
 	if edit == 0 {
 		return false
 	}
+	if isHeaderOrderTypeTargetV6(root, target) {
+		return writeReplaceEditV6(edit, value)
+	}
 	return writeVerifiedEditV4(edit, value)
 }
 
-// Date fields use the sequential masked-edit implementation. Keeping this
-// wrapper preserves the existing call sites while avoiding regression in other
-// normal-field input logic.
 func setDateControlInteractiveV4(root uintptr, target ControlInfo, value string) bool {
 	return setDateControlInteractiveV5(root, target, value)
 }
 
-// activateDetailFirstRowV4 performs the separate first body click observed in
-// COPI08. This click only creates/activates the first grid row; it never types.
 func activateDetailFirstRowV4(root uintptr, grid ControlInfo) bool {
 	if isStopRequested() || !prepareERPWindow(root) {
 		return false
@@ -191,7 +200,6 @@ func waitGridEditorV4(root uintptr, grid ControlInfo, timeout time.Duration) uin
 	return 0
 }
 
-// Detail cells use the click -> Enter -> input -> Enter sequence.
 func setDetailCellEnterV4(root uintptr, grid ControlInfo, col int, value string) bool {
 	return setDetailCellEnterV5(root, grid, col, value)
 }
