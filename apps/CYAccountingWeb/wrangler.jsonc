@@ -7,9 +7,12 @@
     "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": ["/api/*"]
-  }
-
-  // D1 binding will be added after the Cloudflare database is created.
-  // Expected binding name: DB
-  // Expected database name: cyaccounting-web-db
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cyaccounting-web-db",
+      "database_id": "e12bccbf-6c68-4639-8195-06591e8cf2f6"
+    }
+  ]
 }
