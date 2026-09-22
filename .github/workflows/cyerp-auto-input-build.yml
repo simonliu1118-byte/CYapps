@@ -43,6 +43,14 @@ jobs:
           go-version: "1.23.x"
           cache: false
 
+      - name: Generate and embed application icon
+        shell: pwsh
+        run: |
+          go run ./tools/gen_icon.go
+          if (-not (Test-Path "assets/CYERPAutoInput.ico")) { throw "Application icon was not generated" }
+          go run github.com/akavel/rsrc@v0.10.2 -ico "assets/CYERPAutoInput.ico" -o "rsrc_windows_amd64.syso"
+          if (-not (Test-Path "rsrc_windows_amd64.syso")) { throw "Windows icon resource was not generated" }
+
       - name: Test
         run: go test ./...
 
