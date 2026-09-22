@@ -34,6 +34,37 @@ public sealed class LocalRepository
     public EmployeeStore Employees { get; }
     public CloudEmployeeCacheStore CloudEmployees { get; }
 
+    public bool UsesCloudEmployeeAuthority()
+    {
+        var settings = Settings.LoadOrCreate();
+        return settings.CloudMode == CloudModes.CloudPreferred
+            && settings.CloudEmployeeAuthorityReady;
+    }
+
+    public bool HasAuthorityEmployees() =>
+        UsesCloudEmployeeAuthority() ? CloudEmployees.LoadAll().Count != 0 : Employees.HasEmployees();
+
+    public IReadOnlyList<EmployeeAccount> LoadAuthorityEmployees() =>
+        UsesCloudEmployeeAuthority()
+            ? CloudEmployees.LoadAll().Select(ToEmployeeAccount).ToArray()
+            : Employees.LoadAll();
+
+    public EmployeeAccount? AuthenticateEmployee(string employeeNo, string password)
+    {
+        if (!UsesCloudEmployeeAuthority()) return Employees.Authenticate(employeeNo, password);
+        var cached = CloudEmployees.Authenticate(employeeNo, password);
+        return cached is null ? null : ToEmployeeAccount(cached);
+    }
+
+    private static EmployeeAccount ToEmployeeAccount(CloudEmployeeCachedAccount account) => new(
+        account.EmployeeNo,
+        account.Name,
+        account.Email,
+        account.Role,
+        account.Enabled,
+        account.SyncedUtc,
+        account.SyncedUtc);
+
     public static LocalRepository Open(string baseDirectory, ISecretProtector protector)
     {
         var data = Path.Combine(baseDirectory, "Data");
