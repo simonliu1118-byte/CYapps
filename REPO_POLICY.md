@@ -6,7 +6,7 @@
 
 - 本 repository 為 **Public**。
 - 原始碼公開可見，但並非開放原始碼；權利與使用限制依根目錄 `LICENSE`。
-- 目前正式維護專案為：`CYAccounting`、`CYAccountingWeb`、`CYEnvelope`、`CYInvoice`、`CYSmartERP`、`TriINVCalc`、`SMARTCOPIConverter`。
+- 目前正式維護專案為：`CYAccounting`、`CYAccountingWeb`、`CYEnvelope`、`CYInvoice`、`CYERPAutoInput`、`TriINVCalc`、`SMARTCOPIConverter`。
 - 任何提交、Issue、PR、Actions log、Artifact metadata、Release note 與 Release asset 都應視為可能被外部看見。
 
 ## 2. 公開安全

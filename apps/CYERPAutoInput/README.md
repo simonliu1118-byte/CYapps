@@ -1,6 +1,6 @@
-# CYSmartERP
+# CYERPAutoInput
 
-SMART ERP 自動打單工具，目前以鼎新 SMART ERP `COPI08` 銷貨單建立作業為主要自動化目標。
+SMART ERP 自動輸入工具，目前以鼎新 SMART ERP `COPI08` 銷貨單建立作業為主要自動化目標。
 
 ## 目前階段
 
@@ -19,7 +19,7 @@ SMART ERP 自動打單工具，目前以鼎新 SMART ERP `COPI08` 銷貨單建�
 ## 安全設計
 
 - 不對 SMART ERP 送出 `Ctrl+A`。
-- `Esc` 可中止 CYSmartERP 後續自動操作。
+- `Esc` 可中止 CYERPAutoInput 後續自動操作。
 - 不自動操作 ERP「修改」或「取消」。
 - 不自行輸入銷貨單號，交由 SMART ERP 產號。
 - ERP 下拉選項與公司實際代碼由使用者本機設定或現場讀取，不寫死於 Public source。
@@ -36,7 +36,7 @@ Repository 只保存程式邏輯、空白設定範例、測試與維護文件。
 ```powershell
 $env:GOOS = "windows"
 $env:GOARCH = "amd64"
-go build -trimpath -ldflags "-H=windowsgui" -o CYSmartERP.exe .
+go build -trimpath -ldflags "-H=windowsgui" -o CYERPAutoInput.exe .
 ```
 
 正式 Windows 驗收以 GitHub Actions 的 Windows runner 為準。

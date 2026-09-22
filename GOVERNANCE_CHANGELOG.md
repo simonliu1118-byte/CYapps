@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.8 — 2026/09/22
+
+- 依使用者命名決定，將 `CYSmartERP` 正式改名為 `CYERPAutoInput`，專案路徑由 `apps/CYSmartERP/` 移至 `apps/CYERPAutoInput/`。
+- 專案中文顯示名稱同步固定為「SMART ERP 自動輸入工具」，並更新 `PROJECT_RULES.md`、README、Go module、Windows Build workflow 與 Artifact／EXE 名稱。
+- `REPO_POLICY.md` 正式維護專案清單同步改用 `CYERPAutoInput`；版本維持 `0.0.10`，本次不因純命名調整重置產品版本。
+
 ## 2.3.7 — 2026/09/22
 
 - 新增正式維護專案 `CYSmartERP`（SMART ERP 自動打單工具），放置於 `apps/CYSmartERP/`。
