@@ -73,9 +73,9 @@ func fillHeaderSelected(root uintptr) (ok, fail int) {
 		value := getWindowText(f.ValueHwnd)
 		filled := false
 		if f.Kind == "date" {
-			filled = setDateControlInteractiveV2(root, target, value)
+			filled = setDateControlInteractiveV4(root, target, value)
 		} else {
-			filled = setTextControlInteractiveV2(root, target, value)
+			filled = setTextControlInteractiveV4(root, target, value)
 			if filled && f.Kind == "lookup" {
 				filled = commitLookupFieldV3(root, target, 0)
 			} else if filled {
@@ -117,8 +117,10 @@ func fillTabGroupSelected(root uintptr, group string) (ok, fail int) {
 		} else if f.Kind == "combo" || strings.Contains(strings.ToUpper(target.Class), "IMAGECOMBOBOX") {
 			code := strings.TrimSpace(getWindowText(f.ValueHwnd))
 			if selectDevExpressComboByCode(root, target, code) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=combo selected=<configured>", group, f.Label, target.Hwnd, target.Class); clickBlankArea(sheet); time.Sleep(180 * time.Millisecond) } else { fail++; logError(group, f.Label, "COMBO_SELECT_FAILED", fmt.Sprintf("hwnd=0x%x class=%q requested=%q", target.Hwnd, target.Class, code)) }
+		} else if f.Kind == "date" {
+			if setDateControlInteractiveV4(root, target, getWindowText(f.ValueHwnd)) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=date", group, f.Label, target.Hwnd, target.Class) } else { fail++; logError(group, f.Label, "DATE_SET_FAILED", fmt.Sprintf("hwnd=0x%x class=%q", target.Hwnd, target.Class)) }
 		} else {
-			filled := setTextControlInteractiveV2(root, target, getWindowText(f.ValueHwnd))
+			filled := setTextControlInteractiveV4(root, target, getWindowText(f.ValueHwnd))
 			if filled && f.Kind == "lookup" {
 				filled = commitLookupFieldV3(root, target, sheet)
 			} else if filled {
@@ -151,13 +153,14 @@ func detailColumnRatio(col int) (float64, bool) {
 }
 
 func setDetailCell(root uintptr, grid ControlInfo, col int, value string) bool {
-	return setDetailCellDoubleClickV3(root, grid, col, value)
+	return setDetailCellEnterV4(root, grid, col, value)
 }
 
 func fillDetailSelected(root uintptr) (ok, fail int) {
 	if !selectedInGroup("明細") { return }
 	grid := findDetailGridSite(root); if grid == nil { logError("明細","TcxGrid","GRID_NOT_FOUND","找不到可見的標準明細 TcxGridSite"); return 0,1 }
 	logf("INFO", "detail grid hwnd=0x%x rect=%d,%d,%d,%d", grid.Hwnd, grid.Rect.Left,grid.Rect.Top,grid.Rect.Right,grid.Rect.Bottom)
+	if !activateDetailFirstRowV4(root, *grid) { logError("明細","第一列","ROW_ACTIVATION_FAILED","表頭完成後無法啟用表身第一列"); return 0,1 }
 	for _, f := range fields {
 		if isStopRequested() { return ok,fail }
 		if f.Group != "明細" || !checked(f.ApplyHwnd) { continue }
@@ -172,13 +175,13 @@ func fillAllSelected() {
 	if isStopRequested() { return }
 	if !prepareERPWindow(root) { setStatus("ERP：已找到但無法移到前景，為避免誤輸入已停止"); return }
 	var oldCursor POINT; pGetCursorPos.Call(uintptr(unsafe.Pointer(&oldCursor))); defer pSetCursorPos.Call(uintptr(oldCursor.X), uintptr(oldCursor.Y))
-	logf("INFO", "AUTO-FILL V0.0.10 Build 2 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
+	logf("INFO", "AUTO-FILL V0.0.10 Build 3 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
 	if !ensureInputMode(root) { if isStopRequested(){return}; setStatus("ERP：無法確認輸入狀態，已停止；請提供除錯紀錄"); logError("自動填入","ERP","INPUT_MODE_NOT_CONFIRMED","未進入或無法判斷輸入狀態"); return }
-	setStatus("ERP：輸入狀態已確認，依序填入表頭→交易→送貨→發票→明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
+	setStatus("ERP：Build 3 焦點確認模式，依序填入表頭→交易→送貨→發票→明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
 	ok,fail := 0,0; a,b := fillHeaderSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
 	for _, group := range []string{"交易資料","送貨資料","發票資料(一)"} { if isStopRequested(){return}; a,b = fillTabGroupSelected(root,group); ok+=a; fail+=b }
 	if isStopRequested(){return}; a,b = fillDetailSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
-	setStatus(fmt.Sprintf("ERP：測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 2 end success=%d fail=%d (NO SAVE)",ok,fail)
+	setStatus(fmt.Sprintf("ERP：Build 3 測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 3 end success=%d fail=%d (NO SAVE)",ok,fail)
 }
 
 func findTabSheet(root uintptr, tabName string) uintptr {
