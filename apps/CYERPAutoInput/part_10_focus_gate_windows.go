@@ -122,41 +122,11 @@ func setTextControlInteractiveV4(root uintptr, target ControlInfo, value string)
 	return writeVerifiedEditV4(edit, value)
 }
 
+// Date fields use the Build 4 sequential keystroke implementation. Keeping
+// this wrapper preserves the existing call sites while avoiding regression in
+// other normal-field input logic.
 func setDateControlInteractiveV4(root uintptr, target ControlInfo, value string) bool {
-	digits, expected, ok := normalizeDateInput(strings.TrimSpace(value))
-	if !ok || isStopRequested() {
-		return false
-	}
-	edit := focusTargetEditV4(root, target)
-	if edit == 0 || !writeVerifiedEditV4(edit, digits) {
-		return false
-	}
-	pressVK(VK_TAB)
-	if !interruptibleSleep(320 * time.Millisecond) {
-		return false
-	}
-	after := strings.TrimSpace(getWindowText(target.Hwnd))
-	if after == "" {
-		after = strings.TrimSpace(getWindowText(edit))
-	}
-	if after == expected {
-		logf("INFO", "date V4 normalized by ERP hwnd=0x%x", target.Hwnd)
-		return true
-	}
-	commitHeaderField(root)
-	if !interruptibleSleep(240 * time.Millisecond) {
-		return false
-	}
-	after = strings.TrimSpace(getWindowText(target.Hwnd))
-	if after == "" {
-		after = strings.TrimSpace(getWindowText(edit))
-	}
-	if after == expected {
-		logf("INFO", "date V4 normalized after commit hwnd=0x%x", target.Hwnd)
-		return true
-	}
-	logf("WARN", "date V4 normalization not confirmed hwnd=0x%x after_len=%d", target.Hwnd, len([]rune(after)))
-	return false
+	return setDateControlInteractiveV5(root, target, value)
 }
 
 // activateDetailFirstRowV4 performs the separate first body click observed in
@@ -209,40 +179,7 @@ func waitGridEditorV4(root uintptr, grid ControlInfo, timeout time.Duration) uin
 	return 0
 }
 
-// setDetailCellEnterV4 follows the real-grid behavior confirmed by the user:
-// click the cell once, wait, press Enter, then WAIT FOR A REAL GRID EDITOR.
-// No input is sent while focus remains on TcxGridSite.
+// Detail cells use the Build 4 click -> Enter -> input -> Enter sequence.
 func setDetailCellEnterV4(root uintptr, grid ControlInfo, col int, value string) bool {
-	if isStopRequested() {
-		return false
-	}
-	ratio, ok := detailColumnRatio(col)
-	if !ok {
-		return false
-	}
-	w := float64(grid.Rect.Right - grid.Rect.Left)
-	x := grid.Rect.Left + int32(w*ratio)
-	y := grid.Rect.Top + 33
-
-	for attempt := 1; attempt <= 2; attempt++ {
-		if isStopRequested() || !prepareERPWindow(root) {
-			return false
-		}
-		clickScreenPoint(x, y)
-		if !interruptibleSleep(160 * time.Millisecond) {
-			return false
-		}
-		pressVK(VK_RETURN)
-		if edit := waitGridEditorV4(root, grid, 800*time.Millisecond); edit != 0 {
-			logf("INFO", "detail editor ready col=%d edit=0x%x/%s attempt=%d", col, edit, className(edit), attempt)
-			if !writeVerifiedEditV4(edit, value) {
-				return false
-			}
-			pressVK(VK_TAB)
-			return interruptibleSleep(220 * time.Millisecond)
-		}
-		focus := focusedControlOfForeground(root)
-		logf("WARN", "detail editor not ready col=%d attempt=%d focus=0x%x/%s", col, attempt, focus, className(focus))
-	}
-	return false
+	return setDetailCellEnterV5(root, grid, col, value)
 }
