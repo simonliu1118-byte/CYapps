@@ -1,3 +1,4 @@
+using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Storage;
 
 namespace CYInvoice.WinForms;
@@ -11,8 +12,11 @@ internal sealed class AccountManagementForm : Form
     private const int RoleWidth = 96;
     private const int StatusWidth = 64;
     private const int EmailMinimumWidth = 180;
+    private readonly LocalRepository? repository;
     private readonly EmployeeStore employees;
     private readonly EmployeeAccount actor;
+    private readonly HttpClient cloudHttpClient = new();
+    private readonly CancellationTokenSource lifetime = new();
     private readonly NativeListViewHost accountHost = new(10F, 24);
     private readonly Button add = UiControls.StandardButton("新增使用者");
     private readonly Button edit = UiControls.StandardButton("修改資料");
@@ -20,14 +24,28 @@ internal sealed class AccountManagementForm : Form
     private readonly Button enabled = UiControls.StandardButton("停用帳號");
     private readonly Button role = UiControls.StandardButton("設為管理員");
     private readonly Button recovery = UiControls.StandardButton("重建復原碼");
+    private readonly Button pendingIdentity = UiControls.StandardButton("待確認帳號");
     private readonly Button close = UiControls.StandardButton("關閉");
+    private bool resourcesDisposed;
 
     private ListView List => accountHost.List;
+    private bool CloudAuthority => repository?.UsesCloudEmployeeAuthority() == true;
 
     public AccountManagementForm(EmployeeStore employees, EmployeeAccount actor)
+        : this(null, employees, actor)
     {
-        this.employees = employees;
-        this.actor = actor;
+    }
+
+    public AccountManagementForm(LocalRepository repository, EmployeeAccount actor)
+        : this(repository, repository?.Employees ?? throw new ArgumentNullException(nameof(repository)), actor)
+    {
+    }
+
+    private AccountManagementForm(LocalRepository? repository, EmployeeStore employees, EmployeeAccount actor)
+    {
+        this.repository = repository;
+        this.employees = employees ?? throw new ArgumentNullException(nameof(employees));
+        this.actor = actor ?? throw new ArgumentNullException(nameof(actor));
         Text = "帳號管理";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, WindowHeight);
@@ -39,7 +57,11 @@ internal sealed class AccountManagementForm : Form
         Font = new Font("Microsoft JhengHei UI", 10F);
         BuildLayout();
         Reload();
-        Shown += (_, _) => ResizeListColumns();
+        Shown += async (_, _) =>
+        {
+            ResizeListColumns();
+            await RefreshPendingIdentityButtonAsync();
+        };
     }
 
     private void BuildLayout()
@@ -84,13 +106,16 @@ internal sealed class AccountManagementForm : Form
         Place(actions, enabled, 3, 0);
         Place(actions, role, 0, 1);
         Place(actions, recovery, 1, 1);
+        Place(actions, pendingIdentity, 2, 1);
         Place(actions, close, 3, 1);
+        pendingIdentity.Visible = false;
         add.Click += (_, _) => AddEmployee();
         edit.Click += (_, _) => EditSelected();
         password.Click += (_, _) => PasswordSelected();
         enabled.Click += (_, _) => ToggleEnabled();
         role.Click += (_, _) => ToggleRole();
         recovery.Click += (_, _) => RotateRecoveryCode();
+        pendingIdentity.Click += async (_, _) => await OpenPendingIdentityAsync();
         close.DialogResult = DialogResult.OK;
         root.Controls.Add(actions, 0, 1);
 
@@ -122,6 +147,9 @@ internal sealed class AccountManagementForm : Form
     private EmployeeAccount? SelectedAccount =>
         List.SelectedItems.Count == 1 ? List.SelectedItems[0].Tag as EmployeeAccount : null;
 
+    private IReadOnlyList<EmployeeAccount> CurrentAccounts() =>
+        CloudAuthority && repository is not null ? repository.LoadAuthorityEmployees() : employees.LoadAll();
+
     private void Reload(string? selectEmployeeNo = null)
     {
         selectEmployeeNo ??= SelectedAccount?.EmployeeNo;
@@ -130,7 +158,7 @@ internal sealed class AccountManagementForm : Form
         {
             List.Items.Clear();
             var rowIndex = 0;
-            foreach (var account in employees.LoadAll())
+            foreach (var account in CurrentAccounts())
             {
                 var item = new ListViewItem(account.EmployeeNo) { Tag = account, UseItemStyleForSubItems = false };
                 item.SubItems.Add(account.Name);
@@ -165,6 +193,24 @@ internal sealed class AccountManagementForm : Form
     {
         var target = SelectedAccount;
         var hasTarget = target is not null;
+        if (CloudAuthority)
+        {
+            // Cloud is the only account authority after cutover. Local EmployeeStore
+            // mutations are intentionally disabled; central CRUD/role operations are
+            // wired in the following account-management batch.
+            add.Enabled = false;
+            edit.Enabled = false;
+            password.Enabled = false;
+            enabled.Enabled = false;
+            role.Enabled = false;
+            recovery.Enabled = false;
+            password.Text = "重設密碼";
+            enabled.Text = "停用帳號";
+            role.Text = "設為管理員";
+            return;
+        }
+
+        add.Enabled = true;
         edit.Enabled = hasTarget && (target!.Role != EmployeeRoles.SuperAdmin || target.EmployeeNo == actor.EmployeeNo);
         password.Enabled = hasTarget && (target!.EmployeeNo == actor.EmployeeNo || target.Role != EmployeeRoles.SuperAdmin);
         password.Text = target?.EmployeeNo == actor.EmployeeNo ? "變更密碼" : "重設密碼";
@@ -175,8 +221,46 @@ internal sealed class AccountManagementForm : Form
         recovery.Enabled = actor.Role == EmployeeRoles.SuperAdmin;
     }
 
+    private async Task RefreshPendingIdentityButtonAsync()
+    {
+        pendingIdentity.Visible = false;
+        if (!CloudAuthority || repository is null || actor.Role != EmployeeRoles.SuperAdmin) return;
+        try
+        {
+            var settings = repository.Settings.LoadOrCreate();
+            var token = repository.Settings.CloudDeviceToken(settings);
+            if (token.Length == 0 || settings.CloudBaseUrl.Length == 0) return;
+            var client = new CloudEmployeeTransitionConflictClient(
+                cloudHttpClient,
+                new Uri(settings.CloudBaseUrl, UriKind.Absolute),
+                token);
+            var count = await client.GetCountAsync(lifetime.Token);
+            if (IsDisposed || Disposing) return;
+            pendingIdentity.Text = $"待確認帳號 {count}";
+            pendingIdentity.Visible = count > 0;
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            // Conflict notification is supplemental. A transient Cloud failure must
+            // not prevent the user from viewing the synchronized account list.
+            pendingIdentity.Visible = false;
+        }
+    }
+
+    private async Task OpenPendingIdentityAsync()
+    {
+        if (!pendingIdentity.Visible || repository is null || actor.Role != EmployeeRoles.SuperAdmin) return;
+        using var form = new CloudEmployeeConflictResolutionForm(repository);
+        form.ShowDialog(this);
+        await RefreshPendingIdentityButtonAsync();
+    }
+
     private void AddEmployee()
     {
+        if (CloudAuthority) return;
         using var form = new EmployeeEditForm();
         if (form.ShowDialog(this) != DialogResult.OK) return;
         try
@@ -198,6 +282,7 @@ internal sealed class AccountManagementForm : Form
 
     private void EditSelected()
     {
+        if (CloudAuthority) return;
         var target = SelectedAccount;
         if (target is null || !edit.Enabled) return;
         var canChangeRole = target.Role != EmployeeRoles.SuperAdmin && target.EmployeeNo != actor.EmployeeNo;
@@ -219,6 +304,7 @@ internal sealed class AccountManagementForm : Form
 
     private void PasswordSelected()
     {
+        if (CloudAuthority) return;
         var target = SelectedAccount;
         if (target is null || !password.Enabled) return;
         if (target.EmployeeNo == actor.EmployeeNo)
@@ -243,6 +329,7 @@ internal sealed class AccountManagementForm : Form
 
     private void ToggleEnabled()
     {
+        if (CloudAuthority) return;
         var target = SelectedAccount;
         if (target is null || !enabled.Enabled) return;
         var next = !target.Enabled;
@@ -263,6 +350,7 @@ internal sealed class AccountManagementForm : Form
 
     private void ToggleRole()
     {
+        if (CloudAuthority) return;
         var target = SelectedAccount;
         if (target is null || !role.Enabled) return;
         var nextRole = target.Role == EmployeeRoles.Admin ? EmployeeRoles.Employee : EmployeeRoles.Admin;
@@ -283,7 +371,7 @@ internal sealed class AccountManagementForm : Form
 
     private void RotateRecoveryCode()
     {
-        if (actor.Role != EmployeeRoles.SuperAdmin) return;
+        if (CloudAuthority || actor.Role != EmployeeRoles.SuperAdmin) return;
         using var confirm = new RotateRecoveryCodeForm(employees, actor);
         if (confirm.ShowDialog(this) != DialogResult.OK || string.IsNullOrEmpty(confirm.NewRecoveryCode)) return;
         using var show = new RecoveryCodeForm(confirm.NewRecoveryCode);
@@ -304,8 +392,10 @@ internal sealed class AccountManagementForm : Form
             !UiControls.HasLogicalSize(add, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(close, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("帳號管理視窗配置不正確");
-        if (recovery.Enabled != (actor.Role == EmployeeRoles.SuperAdmin))
+        if (!CloudAuthority && recovery.Enabled != (actor.Role == EmployeeRoles.SuperAdmin))
             throw new InvalidOperationException("超級管理員復原碼按鈕權限不正確");
+        if (!CloudAuthority && pendingIdentity.Visible)
+            throw new InvalidOperationException("單機模式不應顯示帳號身分待確認按鈕");
     }
 
     private static string RoleText(string value) => value switch
@@ -314,4 +404,16 @@ internal sealed class AccountManagementForm : Form
         EmployeeRoles.Admin => "管理員",
         _ => "一般使用者",
     };
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing && !resourcesDisposed)
+        {
+            resourcesDisposed = true;
+            lifetime.Cancel();
+            lifetime.Dispose();
+            cloudHttpClient.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 }
