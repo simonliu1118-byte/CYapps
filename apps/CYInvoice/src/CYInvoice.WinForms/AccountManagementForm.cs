@@ -109,7 +109,7 @@ internal sealed class AccountManagementForm : Form
         Place(actions, pendingIdentity, 2, 1);
         Place(actions, close, 3, 1);
         pendingIdentity.Visible = false;
-        add.Click += (_, _) => AddEmployee();
+        add.Click += async (_, _) => await AddEmployeeAsync();
         edit.Click += (_, _) => EditSelected();
         password.Click += (_, _) => PasswordSelected();
         enabled.Click += (_, _) => ToggleEnabled();
@@ -195,9 +195,7 @@ internal sealed class AccountManagementForm : Form
         var hasTarget = target is not null;
         if (CloudAuthority)
         {
-            // Cloud is the only account authority after cutover. Local EmployeeStore
-            // mutations stay disabled; central account CRUD is wired separately.
-            add.Enabled = false;
+            add.Enabled = EmployeeRoles.CanManageAccounts(actor.Role);
             edit.Enabled = false;
             password.Enabled = false;
             enabled.Enabled = false;
@@ -249,8 +247,6 @@ internal sealed class AccountManagementForm : Form
         }
         catch
         {
-            // Conflict notification is supplemental. A transient Cloud failure must
-            // not prevent the user from viewing the synchronized account list.
             pendingIdentity.Visible = false;
         }
     }
@@ -263,9 +259,14 @@ internal sealed class AccountManagementForm : Form
         await RefreshPendingIdentityButtonAsync();
     }
 
-    private void AddEmployee()
+    private async Task AddEmployeeAsync()
     {
-        if (CloudAuthority) return;
+        if (CloudAuthority)
+        {
+            await AddCloudEmployeeAsync();
+            return;
+        }
+
         using var form = new EmployeeEditForm();
         if (form.ShowDialog(this) != DialogResult.OK) return;
         try
@@ -283,6 +284,69 @@ internal sealed class AccountManagementForm : Form
         {
             ShowOperationError("無法新增使用者", error);
         }
+    }
+
+    private async Task AddCloudEmployeeAsync()
+    {
+        if (repository is null || !CloudAuthority) return;
+        using var editForm = new EmployeeEditForm();
+        if (editForm.ShowDialog(this) != DialogResult.OK) return;
+
+        using var login = new EmployeeAdminLoginForm(repository, "新增使用者－管理員驗證");
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        if (!EmployeeRoles.CanManageAccounts(login.AuthenticatedEmployee.Role))
+        {
+            MessageBox.Show(this, "此帳號目前沒有帳號管理權限。", "無法新增使用者",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            var settings = repository.Settings.LoadOrCreate();
+            var token = repository.Settings.CloudDeviceToken(settings);
+            if (token.Length == 0 || settings.CloudBaseUrl.Length == 0)
+                throw new InvalidOperationException("新增雲端使用者必須在線，且本機需要有效的 Cloud Device identity。");
+            var verifier = CloudEmployeeCredentialVerifier.Create(editForm.Password);
+            var proposal = new CloudEmployeeCreateProposal(
+                editForm.EmployeeNo,
+                editForm.EmployeeName,
+                editForm.Email,
+                editForm.Role,
+                verifier);
+            var client = new CloudEmployeeManagementClient(
+                cloudHttpClient,
+                new Uri(settings.CloudBaseUrl, UriKind.Absolute),
+                token);
+            using var verification = new CloudEmployeeCreationForm(
+                client,
+                login.AuthenticatedEmployee,
+                login.AuthenticatedPassword,
+                proposal);
+            if (verification.ShowDialog(this) != DialogResult.OK || verification.CreatedEmployee is null) return;
+
+            await RefreshCloudEmployeeSnapshotAsync(settings, token);
+            Reload(verification.CreatedEmployee.EmployeeNo);
+            MessageBox.Show(this, "新使用者的 Email 已驗證，中央帳號已建立。", "新增完成",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error)
+        {
+            ShowOperationError("無法新增使用者", error);
+        }
+    }
+
+    private async Task RefreshCloudEmployeeSnapshotAsync(Settings settings, string token)
+    {
+        if (repository is null) return;
+        var authority = new CloudEmployeeAuthorityClient(
+            cloudHttpClient,
+            new Uri(settings.CloudBaseUrl, UriKind.Absolute),
+            token);
+        var snapshot = await authority.GetSnapshotAsync(lifetime.Token);
+        if (!string.Equals(snapshot.WorkspaceId, settings.CloudWorkspaceId, StringComparison.Ordinal))
+            throw new InvalidDataException("中央帳號快取回傳的 Workspace identity 與本機不一致。");
+        repository.CloudEmployees.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
     }
 
     private void EditSelected()
@@ -427,15 +491,7 @@ internal sealed class AccountManagementForm : Form
                 target);
             if (transfer.ShowDialog(this) != DialogResult.OK || transfer.Result is null) return;
 
-            var authority = new CloudEmployeeAuthorityClient(
-                cloudHttpClient,
-                new Uri(settings.CloudBaseUrl, UriKind.Absolute),
-                token);
-            var snapshot = await authority.GetSnapshotAsync(lifetime.Token);
-            if (!string.Equals(snapshot.WorkspaceId, settings.CloudWorkspaceId, StringComparison.Ordinal))
-                throw new InvalidDataException("超管移交後取得的中央帳號 Workspace identity 不一致。");
-            repository.CloudEmployees.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
-
+            await RefreshCloudEmployeeSnapshotAsync(settings, token);
             MessageBox.Show(
                 this,
                 $"超級管理員已移交給 {transfer.Result.NewSuperAdmin.EmployeeNo} {transfer.Result.NewSuperAdmin.Name}。\n\n" +
