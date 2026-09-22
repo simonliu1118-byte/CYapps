@@ -265,10 +265,6 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         if (settings.CloudMode == CloudModes.CloudTransition
             && (!HasCloudIdentity(settings) || settings.CloudEmployeeAuthorityReady))
             throw new InvalidDataException("Cloud 帳號轉換狀態與 Device identity 不一致。");
-        if (settings.CloudMode == CloudModes.CloudPreferred
-            && HasCloudIdentity(settings)
-            && !settings.CloudEmployeeAuthorityReady)
-            throw new InvalidDataException("Cloud Device 尚未完成中央帳號主資料切換。");
 
         ValidateCloudPendingBootstrap(settings);
         ValidateCloudPendingDeviceJoin(settings);
