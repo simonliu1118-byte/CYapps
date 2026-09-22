@@ -8,32 +8,51 @@ import (
 )
 
 func createControls(parent uintptr) {
-	setWindowText(parent, "CYERPAutoInput V0.0.10 Build 11 — SMART ERP 自動輸入工具（不儲存）")
-	pSetWindowPos.Call(parent, HWND_TOP, 0, 0, 1580, 900, SWP_NOMOVE|SWP_SHOWWINDOW)
-	createCtrl("STATIC", "V0.0.10 Build 11：新增單據輸入測試；Esc 可緊急停止；明細支援多列。此版仍不儲存 ERP 單據。", WS_CHILD|WS_VISIBLE, 16, 10, 1450, 22, parent, 0)
+	resetUIRegistrationV12()
+	setWindowText(parent, "CYERPAutoInput V0.0.10 Build 12 — SMART ERP 自動輸入工具")
+	applyAppIconV12(parent)
 
-	createCtrl("BUTTON", "尋找 ERP", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 16, 36, 90, 30, parent, 1001)
-	createCtrl("BUTTON", "偵測狀態", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 112, 36, 95, 30, parent, 1010)
-	createCtrl("BUTTON", "進入輸入狀態", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 213, 36, 115, 30, parent, 1011)
-	createCtrl("BUTTON", "填入選取欄位（不儲存）", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 334, 36, 190, 30, parent, 1005)
-	createCtrl("BUTTON", "全部勾選", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 530, 36, 95, 30, parent, 1003)
-	createCtrl("BUTTON", "全部取消", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 631, 36, 95, 30, parent, 1004)
-	createCtrl("BUTTON", "儲存下拉設定", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 732, 36, 120, 30, parent, 1013)
-	createCtrl("BUTTON", "欄位設定", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 858, 36, 105, 30, parent, 1016)
-	createCtrl("BUTTON", "開啟設定檔", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 969, 36, 105, 30, parent, 1014)
-	createCtrl("BUTTON", "除錯紀錄資料夾", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1080, 36, 125, 30, parent, 1006)
-	createCtrl("BUTTON", "掃描控制項", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1211, 36, 110, 30, parent, 1002)
+	createUIControlV12("STATIC", "SMART ERP 自動輸入工具", WS_CHILD|WS_VISIBLE|SS_LEFT, 20, 12, 420, 26, parent, 0)
+	createUIControlV12("STATIC", "V0.0.10 Build 12  ·  新增模式  ·  Esc 緊急停止  ·  目前仍不自動儲存 ERP 單據", WS_CHILD|WS_VISIBLE|SS_LEFT, 20, 39, 760, 22, parent, 0)
 
-	statusHwnd = createCtrl("STATIC", "ERP：尚未偵測", WS_CHILD|WS_VISIBLE, 16, 74, 1530, 22, parent, 0)
+	modeStandardButtonV12 = createUIControlV12("BUTTON", "標準模式", WS_CHILD|WS_VISIBLE|bsAutoRadioButtonV12|wsGroupV12, 1090, 14, 112, 30, parent, 1201)
+	modeAdvancedButtonV12 = createUIControlV12("BUTTON", "進階模式", WS_CHILD|WS_VISIBLE|bsAutoRadioButtonV12, 1208, 14, 112, 30, parent, 1202)
+	settingsButton := createUIControlV12("BUTTON", "設定", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 1358, 12, 118, 34, parent, 1203)
+	registerButtonActionV12(modeStandardButtonV12, func() { setUIModeV12(uiModeStandardV12) }, "")
+	registerButtonActionV12(modeAdvancedButtonV12, func() { setUIModeV12(uiModeAdvancedV12) }, "")
+	registerButtonActionV12(settingsButton, showSettingsWindowV12, "")
+
+	createUIControlV12("BUTTON", "尋找 ERP", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 20, 70, 132, 34, parent, 1001)
+	createUIControlV12("BUTTON", "偵測狀態", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 160, 70, 132, 34, parent, 1010)
+	fillButton := createUIControlV12("BUTTON", "開始輸入 ERP", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|bsOwnerDrawV12, 306, 67, 190, 40, parent, 1005)
+	registerButtonActionV12(fillButton, nil, "primary")
+	selectAllButton := createUIControlV12("BUTTON", "勾選目前欄位", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 514, 70, 142, 34, parent, 1210)
+	clearAllButton := createUIControlV12("BUTTON", "全部取消", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 664, 70, 116, 34, parent, 1211)
+	registerButtonActionV12(selectAllButton, func() { selectVisibleFieldsV12(true) }, "")
+	registerButtonActionV12(clearAllButton, func() { selectVisibleFieldsV12(false) }, "")
+	statusHwnd = createUIControlV12("STATIC", "ERP：尚未偵測", WS_CHILD|WS_VISIBLE|SS_LEFT, 804, 77, 670, 24, parent, 0)
+
+	importBox := createUIControlV12("BUTTON", "訂單匯入", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 16, 112, 1518, 70, parent, 0)
+	_ = importBox
+	createUIControlV12("STATIC", "匯入來源", WS_CHILD|WS_VISIBLE|SS_LEFT, 34, 141, 84, 22, parent, 0)
+	shopeeButton := createUIControlV12("BUTTON", "蝦皮", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|bsOwnerDrawV12, 126, 132, 132, 36, parent, 1220)
+	moButton := createUIControlV12("BUTTON", "MO店+", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|bsOwnerDrawV12, 270, 132, 132, 36, parent, 1221)
+	coupangButton := createUIControlV12("BUTTON", "酷澎", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|bsOwnerDrawV12, 414, 132, 132, 36, parent, 1222)
+	registerButtonActionV12(shopeeButton, func() { showImportPlaceholderV12("蝦皮") }, "shopee")
+	registerButtonActionV12(moButton, func() { showImportPlaceholderV12("MO店+") }, "mo")
+	registerButtonActionV12(coupangButton, func() { showImportPlaceholderV12("酷澎") }, "coupang")
+	createUIControlV12("STATIC", "匯入按鈕在標準／進階模式都固定保留；格式解析後續逐一串接。", WS_CHILD|WS_VISIBLE|SS_LEFT, 572, 141, 720, 22, parent, 0)
 
 	xCols := []int32{16, 398, 780, 1162}
 	groupW := int32(372)
-	groupY := int32(100)
-	groupH := int32(404)
-	createCtrl("BUTTON", "表頭", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, xCols[0], groupY, groupW, groupH, parent, 0)
-	createCtrl("BUTTON", "交易資料", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, xCols[1], groupY, groupW, groupH, parent, 0)
-	createCtrl("BUTTON", "送貨資料", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, xCols[2], groupY, groupW, groupH, parent, 0)
-	createCtrl("BUTTON", "發票資料（一）", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, xCols[3], groupY, groupW, groupH, parent, 0)
+	groupY := int32(196)
+	for i, name := range []string{"表頭", "交易資料", "送貨資料", "發票資料（一）"} {
+		group := name
+		key := group
+		if name == "發票資料（一）" { key = "發票資料(一)" }
+		h := createUIControlV12("BUTTON", group, WS_CHILD|WS_VISIBLE|BS_GROUPBOX, xCols[i], groupY, groupW, 398, parent, 0)
+		registerGroupWidgetV12(key, h, xCols[i], groupY, groupW)
+	}
 
 	header := []*Field{
 		{Key: "order_type", Group: "表頭", Label: "銷貨單別", Row: 0, Col: 0, Default: "", Kind: "lookup"},
@@ -85,34 +104,36 @@ func createControls(parent uintptr) {
 		{Key: "inv_addr2", Group: "發票資料(一)", Label: "發票地址(二)", Row: 5, Col: 0, Default: ""},
 		{Key: "email", Group: "發票資料(一)", Label: "連絡人EMAIL", Row: 6, Col: 0, Default: ""},
 	}
-	makeFieldColumn(parent, xCols[0]+10, 124, header, 350)
-	makeFieldColumn(parent, xCols[1]+10, 124, trade, 350)
-	makeFieldColumn(parent, xCols[2]+10, 124, ship, 350)
-	makeFieldColumn(parent, xCols[3]+10, 124, inv, 350)
+	makeFieldColumn(parent, xCols[0]+10, groupY+26, header, 350)
+	makeFieldColumn(parent, xCols[1]+10, groupY+26, trade, 350)
+	makeFieldColumn(parent, xCols[2]+10, groupY+26, ship, 350)
+	makeFieldColumn(parent, xCols[3]+10, groupY+26, inv, 350)
 
-	createCtrl("BUTTON", "商品明細（勾選列；空白欄位不輸入）", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 16, 512, 1518, 310, parent, 0)
-	makeDetailTable(parent, 30, 536, 8)
+	detailBoxV12 = createUIControlV12("BUTTON", "商品明細（勾選列；空白欄位不輸入）", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 16, detailBaseYV12, 1518, 310, parent, 0)
+	makeDetailTable(parent, 30, detailBaseYV12+24, 8)
+	footerV12 = createUIControlV12("STATIC", "明細：品號必填；數量／贈備品量／庫別／單價有填才輸入。單位、批號目前保留欄位，後續改為點選。", WS_CHILD|WS_VISIBLE|SS_LEFT, 16, detailBaseYV12+320, 1510, 22, parent, 0)
 
 	applySettingsToUI()
-	createCtrl("STATIC", "明細規則：每列先輸入品號；其餘空白欄位保留 ERP 自動帶值。單位、批號 Build 11 只保留欄位，後續改成實際點選。仍不儲存 ERP。", WS_CHILD|WS_VISIBLE, 16, 832, 1510, 20, parent, 0)
+	applyMainModeV12(loadUIModeV12())
 }
 
 func makeFieldColumn(parent uintptr, x, y int32, fs []*Field, totalWidth int32) {
 	row := int32(0)
 	inputWidth := totalWidth - 150
 	for _, f := range fs {
-		yy := y + row*24
-		f.ApplyHwnd = createCtrl("BUTTON", "", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, x, yy, 18, 20, parent, nextID)
+		yy := y + row*26
+		f.ApplyHwnd = createUIControlV12("BUTTON", "", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, x, yy, 18, 22, parent, nextID)
 		nextID++
-		createCtrl("STATIC", f.Label, WS_CHILD|WS_VISIBLE|SS_LEFT, x+22, yy+2, 105, 18, parent, 0)
+		label := createUIControlV12("STATIC", f.Label, WS_CHILD|WS_VISIBLE|SS_LEFT, x+22, yy+2, 105, 20, parent, 0)
 		if f.Kind == "bool" {
-			f.ValueHwnd = createCtrl("BUTTON", "勾選", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, x+130, yy, 85, 20, parent, nextID)
+			f.ValueHwnd = createUIControlV12("BUTTON", "勾選", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, x+130, yy, 85, 22, parent, nextID)
 		} else {
-			f.ValueHwnd = createCtrl("EDIT", f.Default, WS_CHILD|WS_VISIBLE|WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP, x+130, yy, inputWidth, 21, parent, nextID)
+			f.ValueHwnd = createUIControlV12("EDIT", f.Default, WS_CHILD|WS_VISIBLE|WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP, x+130, yy, inputWidth, 23, parent, nextID)
 		}
 		fieldByID[nextID] = f
 		nextID++
 		fields = append(fields, f)
+		registerFieldWidgetV12(f.Key, f.Group, f.ApplyHwnd, label, f.ValueHwnd)
 		row++
 	}
 }
@@ -123,6 +144,12 @@ type detailColumnDefV11 struct {
 	col   int
 	width int32
 	kind  string
+}
+
+func detailUIControlV12(class, text string, style uint32, x, y, w, h int32, parent uintptr, id uint16) uintptr {
+	hwnd := createUIControlV12(class, text, style, x, y, w, h, parent, id)
+	registerDetailWidgetV12(hwnd, x, y, w, h)
+	return hwnd
 }
 
 func makeDetailTable(parent uintptr, x, y int32, rowCount int) {
@@ -136,19 +163,19 @@ func makeDetailTable(parent uintptr, x, y int32, rowCount int) {
 		{key: "unit_price", label: "單價", col: 7, width: 155},
 	}
 
-	createCtrl("STATIC", "列", WS_CHILD|WS_VISIBLE|SS_LEFT, x, y, 28, 18, parent, 0)
+	detailUIControlV12("STATIC", "列", WS_CHILD|WS_VISIBLE|SS_LEFT, x, y, 28, 20, parent, 0)
 	cx := x + 46
 	for _, c := range cols {
-		createCtrl("STATIC", c.label, WS_CHILD|WS_VISIBLE|SS_LEFT, cx, y, c.width-8, 18, parent, 0)
+		detailUIControlV12("STATIC", c.label, WS_CHILD|WS_VISIBLE|SS_LEFT, cx, y, c.width-8, 20, parent, 0)
 		cx += c.width
 	}
-	createCtrl("STATIC", "* 單位／批號後續改為點選", WS_CHILD|WS_VISIBLE|SS_LEFT, cx+8, y, 230, 18, parent, 0)
+	detailUIControlV12("STATIC", "* 單位／批號後續改為點選", WS_CHILD|WS_VISIBLE|SS_LEFT, cx+8, y, 230, 20, parent, 0)
 
 	for r := 0; r < rowCount; r++ {
-		yy := y + 24 + int32(r)*29
-		apply := createCtrl("BUTTON", "", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, x, yy, 18, 20, parent, nextID)
+		yy := y + 26 + int32(r)*29
+		apply := detailUIControlV12("BUTTON", "", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, x, yy, 18, 22, parent, nextID)
 		nextID++
-		createCtrl("STATIC", fmt.Sprintf("%d", r+1), WS_CHILD|WS_VISIBLE|SS_LEFT, x+22, yy+2, 22, 18, parent, 0)
+		detailUIControlV12("STATIC", fmt.Sprintf("%d", r+1), WS_CHILD|WS_VISIBLE|SS_LEFT, x+22, yy+2, 22, 20, parent, 0)
 		cx = x + 46
 		for _, c := range cols {
 			f := &Field{
@@ -160,7 +187,7 @@ func makeDetailTable(parent uintptr, x, y int32, rowCount int) {
 				Row:       r,
 				Col:       c.col,
 			}
-			f.ValueHwnd = createCtrl("EDIT", "", WS_CHILD|WS_VISIBLE|WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP, cx, yy, c.width-8, 21, parent, nextID)
+			f.ValueHwnd = detailUIControlV12("EDIT", "", WS_CHILD|WS_VISIBLE|WS_BORDER|ES_AUTOHSCROLL|WS_TABSTOP, cx, yy, c.width-8, 23, parent, nextID)
 			fieldByID[nextID] = f
 			nextID++
 			fields = append(fields, f)
@@ -179,7 +206,6 @@ func startEscapeWatcher() {
 					if stopLogged.CompareAndSwap(false, true) {
 						logf("WARN", "automation stop requested by physical ESC key")
 					}
-				}
 			}
 			time.Sleep(20 * time.Millisecond)
 		}
