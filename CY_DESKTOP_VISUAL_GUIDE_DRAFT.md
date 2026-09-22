@@ -14,7 +14,7 @@
 **狀態：Draft / Discussion Only**  
 **目前階段：Phase 1 — Visual Foundation**  
 **Phase 1 紙面設計：COMPLETE；下一步為 UI Shell / DPI / Windows 真機驗證**  
-**本次 checkpoint：2026-09-22（含 CYInvoice Visual Shell V7 Button 驗證）**  
+**本次 checkpoint：2026-09-23（含 Button V7、Input Lab、Theme Lab、Icon Family Geometry 驗證）**  
 **不在本階段：功能流程、快捷鍵、資料流程、IA 與大規模 UX 重構**
 
 ---
@@ -41,10 +41,10 @@
 | 規範強度 | `APPROVED` | Core / Recommended Range / App Choice；不以大量硬數值綁死各 App |
 | 主要字體 | `APPROVED` | `Microsoft JhengHei UI`；fallback `Microsoft JhengHei → Segoe UI → system sans-serif` |
 | Typography hierarchy | `APPROVED` | 統一角色與相對層級，不要求所有 App 使用完全相同 pt |
-| Typography 實際 pt | `PROVISIONAL` | 需做 100% / 125% / 150% DPI 真機驗證 |
-| Density | `APPROVED` | Compact / Standard / Comfortable 三級；精確 px 為 `PROVISIONAL` |
+| Standard Input 字級 | `REFERENCE` | WinForms / 96 DPI 已驗證 10 pt + 原生 natural height；不是跨 App 硬規定 |
+| Density | `APPROVED — APP CHOICE` | 可用 Compact / Standard / Comfortable 描述密度，但不規定跨 App 固定字級／欄位高度；高密度應自然使用較小字、較小欄位與較緊間距 |
 | Theme 數量 | `APPROVED` | **Blue / Teal / Coral / Apricot 共四種；沒有 Warm Theme** |
-| Theme 精確 HEX | `PROVISIONAL` | Blue / Teal 已校正回核准樣本方向；Coral 改珊瑚粉紅方向；HEX 仍可真機微調 |
+| Theme HEX | `APPROVED` | Theme Lab 已確認目前 Blue / Teal / Coral / Apricot Accent / Hover / Pressed / Soft / Focus / Selection 組合 |
 | State Colors | `APPROVED` | Info / Success / Warning / Danger 與 Theme 分離；Danger 不得跟 Coral 混用 |
 | Surface Roles | `APPROVED` | Window / Workspace / Section / Control / Raised / Subtle / Border / Divider |
 | Surface Models | `APPROVED` | Continuous / Sectioned / Carded；Card 只用於真正獨立工作單元 |
@@ -67,7 +67,8 @@
 | Accessibility baseline | `APPROVED` | Focus 不消失、狀態不只靠顏色、文字保持可讀、不破壞原生 High Contrast |
 | Dialog / MessageBox / Status | `APPROVED — ADVISORY` | **簡單訊息／確認優先原生 MessageBox；MessageBox 足夠時不另造 Custom Dialog** |
 | Main Window Shell | `APPROVED — ADVISORY` | Minimal / Business / Workbench 只是參考模式，不是強制模板 |
-| App Icon Family | `PROVISIONAL` | V1 備案 + 目前候選保留；正式各 App ICO 尚未製作 |
+| App Icon Family | `PROVISIONAL` | 以現行 INV 為 family master；幾何／Live Area 基準已建立，新 App master / ICO 尚未製作 |
+| Icon Family Geometry | `REFERENCE` | INV 實測 Live Area 約佔 Canvas 寬 80–83%、高 86–88%；48px 層約 39×42px，允許小尺寸 optical adjustment |
 | 現行 CYInvoice Icon | `PRESERVE` | **完成版，不得因 Icon Family 設計而改動** |
 | Phase 1 紙面設計 | `APPROVED` | 視覺項目盤點完成；不再主動擴張新規範 |
 | UI Shell Prototype | `OPEN` | CYInvoice 已進入真機細節驗證；完整代表 App / DPI 驗證尚未完成 |
@@ -78,7 +79,7 @@
 1. **停止繼續增加 Phase 1 視覺規格。**
 2. 延續代表 App 的無引擎 UI Shell，驗證 100% / 125% / 150% DPI。
 3. 依真機結果只微調 `PROVISIONAL` 數值，不重新推翻已核准的角色／原則。
-4. Icon 正式 Master / ICO 等到實際導入各 App 時製作與驗證。
+4. Icon 正式 Master / ICO 等到實際導入各 App 時製作與驗證；幾何應以現行 INV master 為基準。
 5. Phase 1 真機確認後，再進 Phase 2 Layout / Interaction / UX。
 
 ---
@@ -146,7 +147,7 @@ Fallback：
 - Medium / Semibold：Section title / Table header / Active Tab / 一般重要控制。
 - Bold：少量 Major Title / 特別重要摘要；不整個 UI 都 Bold。
 
-## 5. Typography Roles — hierarchy `APPROVED`, values `PROVISIONAL`
+## 5. Typography Roles — hierarchy `APPROVED`, values `RECOMMENDED RANGE`
 
 | Role | 建議範圍 |
 |---|---:|
@@ -166,30 +167,29 @@ Fallback：
 
 Secondary 優先靠顏色／字重降低層級，不把文字縮到難讀。
 
-## 6. Density — `APPROVED` concept / `PROVISIONAL` values
+### WinForms Standard Input — `REFERENCE`
 
-### Compact
+CYInvoice Input Lab 在 Windows 96 DPI / 100% 下確認：
 
-- TextBox / Combo：約 28–31 px。
-- Button：約 30–32 px。
-- Table Row：約 26–29 px。
-- Body：約 9–9.5 pt。
+- `Microsoft JhengHei UI 10 pt` 的中文可讀性比 9.5 pt 更穩定；
+- 原生 TextBox / ComboBox / DatePicker 不需為了視覺對齊強制同 Height；
+- 實測自然高度約為 TextBox 24 px / ComboBox 25 px / DatePicker 24 px；
+- 這是 WinForms / 96 DPI reference，不是所有 App / framework 的固定數值。
 
-### Standard
+## 6. Density — `APPROVED — APP CHOICE`
 
-- TextBox / Combo：約 31–35 px。
-- Button：約 34–38 px。
-- Table Row：約 30–34 px。
-- Body：約 9.5–10.5 pt。
+`Compact / Standard / Comfortable` 可以繼續當作描述畫面資訊密度的語言，但**不再定義成跨 App 必須遵守的固定字級、TextBox 高度、Button 高度或 Row Height 套餐**。
 
-### Comfortable
+核心原則：
 
-- TextBox：約 36–40 px。
-- Button：約 40–44 px。
-- Table Row：約 35–40 px。
-- Body：約 10.5–11.5 pt。
+- 高密度畫面應自然使用較小字、較小欄位、較緊間距與較高資料量；
+- 一般畫面可使用 Standard；低資訊量／Preview 等可較寬鬆；
+- 各 App 依資料量、framework natural size、螢幕空間與工作流程自行決定；
+- 同一頁不要無理由混用明顯不同密度；
+- 不為了符合 Density 名稱而破壞原生 control 的自然高度；
+- Dialog 可與主畫面採不同密度，只要自身一致。
 
-同一頁不要無理由混三種 density；Dialog 可與主畫面使用不同 density。
+因此，不再把「Compact = 9.5 pt / 某固定 px」或「Standard = 某固定 control height」當作 CY 跨程式規範。
 
 ## 7. DPI — `APPROVED`
 
@@ -228,17 +228,19 @@ Secondary 優先靠顏色／字重降低層級，不把文字縮到難讀。
 
 不要持續增加大量只差一點點的灰階。
 
-## 9. Theme Set — names `APPROVED`, HEX `PROVISIONAL`
+## 9. Theme Set — `APPROVED`
 
 **第一版就是四種：Blue / Teal / Coral / Apricot。沒有 Warm Theme。**
 
 Theme 只改 Accent 家族，不重新建立另一套 Typography / Neutral / Control system。
 
+Theme Lab 已在 Windows 真機同畫面比較確認以下四色可作第一版基準。
+
 ### 9.1 Blue
 
-回到已核准的明亮、乾淨藍色樣本方向。
+明亮、乾淨的商務藍；不使用早期灰沉候選。
 
-| Token | Candidate |
+| Token | Value |
 |---|---|
 | `Accent` | `#2563EB` |
 | `Hover` | `#1D4ED8` |
@@ -249,9 +251,9 @@ Theme 只改 Accent 家族，不重新建立另一套 Typography / Neutral / Con
 
 ### 9.2 Teal
 
-回到已核准的清爽青綠樣本方向，不使用灰沉 teal。
+清爽青綠，不使用灰沉 teal。
 
-| Token | Candidate |
+| Token | Value |
 |---|---|
 | `Accent` | `#0D9488` |
 | `Hover` | `#0D8076` |
@@ -262,9 +264,9 @@ Theme 只改 Accent 家族，不重新建立另一套 Typography / Neutral / Con
 
 ### 9.3 Coral
 
-**珊瑚紅／粉紅方向**；要和 Apricot 橘系、Danger 正紅清楚分開。
+**珊瑚紅／粉紅方向**；與 Apricot 橘系、Danger 正紅清楚分開。
 
-| Token | Candidate |
+| Token | Value |
 |---|---|
 | `Accent` | `#D4657B` |
 | `Hover` | `#C4566E` |
@@ -275,7 +277,7 @@ Theme 只改 Accent 家族，不重新建立另一套 Typography / Neutral / Con
 
 ### 9.4 Apricot
 
-| Token | Candidate |
+| Token | Value |
 |---|---|
 | `Accent` | `#D8844A` |
 | `Hover` | `#C3733F` |
@@ -382,7 +384,7 @@ MUST：
 | Standard | 34–38 px | 9.5–10.5 pt |
 | Large | 42–48 px | 10.5–12 pt |
 
-Large 主要給主工作畫面的強 Primary Action，不是 Dialog Footer 的常態。
+以上為 Button 自身常見參考，不代表 App 必須採用某一 Density 套餐。Large 主要給主工作畫面的強 Primary Action，不是 Dialog Footer 的常態。
 
 ### 16.2 Width
 
@@ -403,6 +405,7 @@ Large 主要給主工作畫面的強 Primary Action，不是 Dialog Footer 的�
 ### 16.4 Native-first / Geometry
 
 - **一般 Secondary / 普通功能按鈕優先使用 OS / framework 原生 Button。**
+- 沒有特殊 Theme 色、Danger 強調或其他明確視覺效果需求時，原生 Button 為首選。
 - 不為了一般 1–2 px radius 差異重做 Button 行為。
 - 不做一般 pill Button。
 - 原生 Button 的圓角跟隨 OS / framework，不要求跨 framework 精確相同。
@@ -449,6 +452,7 @@ Icon 是輔助，文字是主要辨識；Icon-only 只用於成熟、直覺、�
 - **單行 TextBox 不為追求統一框高強制拉高。** WinForms 等原生控制若無法真正垂直置中文字，應讓 control 高度只比文字自然高度多合理餘量，而不是做高框後讓文字貼上緣。
 - 同列 TextBox / ComboBox / DatePicker 必須以**實際可見高度與文字基準**對齊，不只看設定的 `Height` 數字。
 - 優先依 framework natural / preferred height，再由 layout 對齊；不為垂直置中另外包自繪外框。
+- WinForms 一般 Standard Input 可優先參考 `Microsoft JhengHei UI 10 pt + natural height`；其他密度／framework 由 App Choice 決定。
 - Disabled / Read-only 可使用相同淡灰視覺；Read-only 內容仍應清楚可讀。
 - Focus 不應改 geometry；原生 focus 能力足夠時不另造外框。
 - Error：1 px Danger Border + 短 helper text；不整格紅、不 glow、不改 geometry。
@@ -508,11 +512,13 @@ Label 本身左對齊；短中文可使用全形空白分散。Top Label 只作�
 
 ### Density
 
-| 類型 | Row Height |
+表格可依 App 實際資料密度自行決定 Row Height；下列只作常見參考，不與全域 Density 名稱綁死：
+
+| 類型 | Row Height 參考 |
 |---|---:|
-| Compact | 26–29 px |
-| Standard | 30–34 px |
-| Comfortable | 35–40 px |
+| 高密度 | 約 26–29 px |
+| 一般 | 約 30–34 px |
+| 寬鬆 | 約 35–40 px |
 
 ### Visual
 
@@ -723,6 +729,8 @@ App Icon 不要求放 `CY` 或公司 Logo。
 
 **`apps/CYInvoice/assets/CYInvoice.ico` 是完成版，不得為 Icon Family 改動。**
 
+INV 是現行 Icon Family 的 **master / geometry reference**。未來 ACC / ENV / CAL / CVT / WM 等新圖示應往 INV 靠攏，而不是反過來修改 INV 以配合新圖示。
+
 INV DNA：
 
 - 扁平。
@@ -732,23 +740,105 @@ INV DNA：
 - 無 gradient / shadow / 3D 細節。
 - 小尺寸可辨識。
 
-### 35.2 目前候選延伸
+### 35.2 Family Geometry — `REFERENCE`
+
+**Canvas size 不等於實際圖形尺寸。** 新圖示即使同樣輸出 48×48，如果有人只畫到 30×30、有人畫到 46×46，Windows 桌面上仍不會有同一家族感。
+
+正式 `CYInvoice.ico` 內含原生：
+
+`16 / 24 / 32 / 48 / 64 / 128 / 256 px`
+
+以 Alpha / 可見 artwork 實測得到：
+
+| Canvas | INV Visual Live Area | 寬度佔比 | 高度佔比 | Near-opaque Core |
+|---:|---:|---:|---:|---:|
+| 16 × 16 | 約 13 × 14 | 81.2% | 87.5% | 約 12 × 12 |
+| 24 × 24 | 約 20 × 21 | 83.3% | 87.5% | 約 18 × 20 |
+| 32 × 32 | 約 26 × 28 | 81.2% | 87.5% | 約 24 × 27 |
+| 48 × 48 | 約 39 × 42 | 81.2% | 87.5% | 約 38 × 41 |
+| 64 × 64 | 約 52 × 55 | 81.2% | 85.9% | 約 50 × 55 |
+| 128 × 128 | 約 103 × 112 | 80.5% | 87.5% | 約 101 × 110 |
+| 256 × 256 | 約 206 × 222 | 80.5% | 86.7% | 約 206 × 222 |
+
+因此目前 Family 的核心視覺量體 reference 為：
+
+> **Live Area 約佔 Canvas 寬 80–83%、高 86–88%。**
+
+這是**視覺量體目標**，不是要求所有 App 把向量座標機械式縮放到完全一樣。
+
+#### 48 px Desktop Reference
+
+48×48 層是一般 Windows Desktop 比較最有用的基準：
+
+- Visual Live Area：約 **39×42 px**。
+- Near-opaque core：約 **38×41 px**。
+- 左右 optical margin 約 **4–5 px**。
+- 上下 optical margin 約 **3 px**。
+
+新 Icon 在 48 px 應直接與 INV 並排比較 apparent size / visual weight，而不是只檢查 canvas 是否同為 48×48。
+
+#### Abbreviation Zone — CORE
+
+- 大型英文縮寫是主要辨識元素。
+- `INV / ACC / ENV / CAL / CVT / WM` 等縮寫應有接近的**視覺 bounding box 與 weight**。
+- 不要求不同字母組合使用完全相同 font size；若 `INV`、`ACC` 等因字形天然寬窄不同，可做少量 optical adjustment。
+- 可微調字級、水平縮放、tracking 或 x-position，但目的只能是讓可見字塊大小更一致，不是每個 App 自行發展另一套字體比例。
+
+#### Symbol Zone — CORE
+
+- 縮寫下方只放**一個極簡功能符號或 motif**。
+- Symbol 必須是 secondary，不得搶過 abbreviation。
+- 高度區域、與縮寫的間距、整體 weight 應接近 INV 下方橫線 motif 的角色。
+- 若功能符號本身太複雜，優先簡化符號，不可藉由放大整個 Icon 破壞 family Live Area。
+
+#### Optical Centering — CORE
+
+- 不要求上下左右 margin 數學上完全相同。
+- 不同字形／圓形／斜線／底部偏重符號可做約 1–2 px 級 optical correction。
+- 最終驗收以 Windows 實際顯示時「看起來置中、大小相近」為準。
+
+#### Small-size Optimization — CORE
+
+不可只把 256 px master 機械縮小後直接輸出全部 ICO layer。
+
+至少逐一檢查：
+
+`16 / 24 / 32 / 48 / 64 / 128 / 256 px`
+
+小尺寸允許：
+
+- stroke 微調；
+- abbreviation / symbol 間距微調；
+- 字塊小幅放大／縮小；
+- 1 px 級 pixel snapping / centering；
+- symbol 簡化；
+- anti-aliasing 調整。
+
+但 app identity、主要縮寫、family silhouette、色彩 identity、主次層級與大致 Live Area 比例不得在不同 layer 間改變。
+
+完整量測、術語與驗收規則見：
+
+[CY App Icon Family Geometry Reference](docs/CY_UI_REFERENCE_ICON_FAMILY_GEOMETRY.md)
+
+### 35.3 未來 Family 延伸
 
 其他 App 保留大型英文縮寫（ACC / ENV / CAL / CVT / WM 等），縮寫下方只搭配**一個極簡功能符號**；符號優先為小尺寸辨識服務，不做複雜主圖。
 
-### 35.3 只保留兩張概念圖
+新 Icon 不是「只要塞得進 ICO canvas 就合格」，還必須符合 35.2 的 visual mass / abbreviation / symbol / optical centering 原則。
+
+### 35.4 只保留兩張概念圖
 
 - [V1 備案](design/cy-desktop-visual-guide/icon-concepts/icon-family-v1-backup.jpg)
 - [目前候選](design/cy-desktop-visual-guide/icon-concepts/icon-family-current-option.jpg)
 
 中間迭代不保留。
 
-### 35.4 尚未完成
+### 35.5 尚未完成
 
 - 各 App Master SVG / PNG。
-- 16 / 24 / 32 / 48 / 64 / 128 / 256 小尺寸優化。
-- ICO 生成。
-- Windows Taskbar / Explorer 真機檢查。
+- 新 App 的 16 / 24 / 32 / 48 / 64 / 128 / 256 小尺寸專層優化。
+- 新 App ICO 生成。
+- Windows Desktop / Taskbar / Explorer 真機並排檢查。
 - 各 App 最終代表色。
 
 這些延後到實際導入 App 時處理，不阻擋 Phase 1 Shell 驗證。
@@ -831,8 +921,8 @@ Prototype 優先使用各 App 正式 framework，避免 mock 做得到、正式 
 ### 39.1 已確認的 CYInvoice Visual Shell Findings
 
 - 標準互動 Control 應維持 Native-first；V2 曾因 Button / ComboBox / DatePicker 等自繪過多而產生不一致，已明確淘汰該方向。
-- Blue / Teal 實作必須回到已核准的亮藍／青綠樣本，不使用早期灰沉候選。
-- Coral 往珊瑚粉紅方向，與 Apricot 及 Danger 拉開。
+- Blue / Teal 實作必須使用已核准的亮藍／青綠樣本，不使用早期灰沉候選；Coral 為珊瑚粉紅，Apricot 為杏橘，Theme Lab 同畫面比較已確認第一版四色。
+- WinForms Standard Input 在 96 DPI / 100% 已確認 10 pt + framework natural height 為良好一般參考；Compact / 高密度不訂跨 App 固定數值。
 - Tab 可保留低存在感 owner-draw Header，但底層行為維持原生 TabControl。
 - 簡單說明／確認用原生 MessageBox，不為展示視覺另外做 Custom Form。
 - WinForms 關鍵 Theme Button 的 V7 2px fixed-radius owner-paint 已由使用者確認可定案；一般按鈕仍優先原生。
@@ -841,10 +931,11 @@ Prototype 優先使用各 App 正式 framework，避免 mock 做得到、正式 
 
 主要調整 `PROVISIONAL`：
 
-- Typography 精確 pt。
-- Control / Row 精確高度。
-- Theme / State HEX 的小幅修正。
-- Density 的合理範圍。
+- framework / App 個別 Typography 微調。
+- Control / Row 實際高度。
+- State Colors HEX 的小幅修正。
+- 特定 App density。
+- 新 App Icon optical adjustment。
 
 原則上不重新推翻已 `APPROVED` 的角色、視覺層級與 Complexity Guardrails，除非真機證明確實有問題或使用者主動改案。
 
@@ -854,7 +945,7 @@ Prototype 優先使用各 App 正式 framework，避免 mock 做得到、正式 
 
 ## 40. Phase 1 — 紙面設計完成
 
-已處理：Color / Theme / Surface / Typography / Density / Border / Radius / Spacing / Alignment / Core Components / Secondary Controls / Supporting States / Dialog / Status / Shell Visual / App Icon Family direction。
+已處理：Color / Theme / Surface / Typography / Density / Border / Radius / Spacing / Alignment / Core Components / Secondary Controls / Supporting States / Dialog / Status / Shell Visual / App Icon Family direction / Icon Geometry reference。
 
 目前 Phase 1 剩下的是**真機驗證與 provisional 數值微調**，不是再增加更多紙面設計項目。
 
@@ -887,9 +978,10 @@ Prototype 優先使用各 App 正式 framework，避免 mock 做得到、正式 
 4. 不重新討論 `APPROVED`，除非使用者主動要求修改。
 5. `PROVISIONAL` 以 UI Shell / Windows 真機驗證為主，不靠文字無限微調。
 6. Table 參考 `docs/CY_UI_REFERENCE_CYINVOICE_TABLE.md`；WinForms Theme Button 參考 `docs/CY_UI_REFERENCE_WINFORMS_THEME_BUTTON.md`。
-7. Icon 只保留兩張候選；現行 CYInvoice Icon 不改。
+7. Icon Geometry 參考 `docs/CY_UI_REFERENCE_ICON_FAMILY_GEOMETRY.md`；現行 CYInvoice Icon 是 master / `PRESERVE`，新 Icon 往 INV 靠，不反過來改 INV。
 8. Theme 第一版就是 **Blue / Teal / Coral / Apricot**，不要恢復舊 Warm Theme；Blue / Teal 不回到灰沉舊候選。
-9. Shell / Dialog / Button Position / Navigation 等多數為 advisory；不要為了 Guide 限制正常程式設計。
-10. 標準互動 controls 仍以 Native-first；有限 owner-paint 只在成熟、穩定且有明確價值時使用。
-11. 下一個實際工作：繼續 **UI Shell Prototype / DPI 真機驗證**。
-12. 在使用者明確核准以前，本文件仍不能變成治理規則或現行開發門檻。
+9. Density 是 App Choice；WinForms 一般 Input 可參考 10 pt + natural height，但不可把 Compact / Standard 固定數值套死所有 App。
+10. Shell / Dialog / Button Position / Navigation 等多數為 advisory；不要為了 Guide 限制正常程式設計。
+11. 標準互動 controls 仍以 Native-first；有限 owner-paint 只在成熟、穩定且有明確價值時使用。
+12. 下一個實際工作：繼續 **UI Shell Prototype / DPI 真機驗證**。
+13. 在使用者明確核准以前，本文件仍不能變成治理規則或現行開發門檻。
