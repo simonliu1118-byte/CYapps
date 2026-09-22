@@ -1,0 +1,63 @@
+name: CYERPAutoInput Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - "apps/CYERPAutoInput/**"
+      - ".github/workflows/cyerp-auto-input-build.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cyerp-auto-input-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: apps/CYERPAutoInput
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read VERSION
+        shell: pwsh
+        run: |
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYERPAutoInput VERSION: $version" }
+          "CYERPAUTOINPUT_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.23.x"
+          cache: false
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build Windows x64
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $env:GOOS = "windows"
+          $env:GOARCH = "amd64"
+          go build -trimpath -ldflags "-H=windowsgui" -o "dist/CYERPAutoInput.exe" .
+          if (-not (Test-Path "dist/CYERPAutoInput.exe")) { throw "CYERPAutoInput.exe was not produced" }
+          Get-FileHash "dist/CYERPAutoInput.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  CYERPAutoInput.exe" } | Set-Content "dist/SHA256.txt"
+
+      - name: Upload engineering package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYERPAutoInput-v${{ env.CYERPAUTOINPUT_VERSION }}-windows-x64-run${{ github.run_number }}
+          path: |
+            apps/CYERPAutoInput/dist/CYERPAutoInput.exe
+            apps/CYERPAutoInput/dist/SHA256.txt
+            apps/CYERPAutoInput/README.md
+            apps/CYERPAutoInput/settings.example.json
+          if-no-files-found: error
+          retention-days: 14

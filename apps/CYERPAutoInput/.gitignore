@@ -1,0 +1,15 @@
+# Runtime / local-only data
+logs/
+config/settings.json
+config/*.local.json
+
+# Build output
+dist/
+*.exe
+*.zip
+
+# Diagnostic output
+control-scan_*.txt
+errors_*.csv
+command-crash_*.txt
+crash_*.txt
