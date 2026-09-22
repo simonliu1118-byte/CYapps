@@ -12,6 +12,7 @@ type DeviceRow = {
   workspace_id: string;
   pairing_id: string | null;
   employee_authority_state: string;
+  employee_transition_snapshot_hash: string | null;
   recovery_email: string | null;
   recovery_email_verified_at: string | null;
 };
@@ -34,6 +35,7 @@ type LocalEmployee = {
   name: string;
   email: string;
   role: "SUPER_ADMIN" | "ADMIN" | "EMPLOYEE";
+  enabled: boolean;
 };
 
 type MatchKind =
@@ -110,6 +112,7 @@ async function authenticateDevice(request: Request, env: Env): Promise<DeviceRow
   const tokenHash = await sha256Hex(token);
   return env.DB.prepare(
     `SELECT d.device_id, d.workspace_id, d.pairing_id, d.employee_authority_state,
+            d.employee_transition_snapshot_hash,
             w.recovery_email, w.recovery_email_verified_at
        FROM devices d
        JOIN workspaces w ON w.workspace_id = d.workspace_id
@@ -138,9 +141,11 @@ function normalizeLocalEmployee(value: unknown): LocalEmployee | null {
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
   const email = normalizeEmail(raw.email);
   const role = typeof raw.role === "string" ? raw.role.trim().toUpperCase() : "";
+  const enabled = raw.enabled;
   if (!/^\d{4}$/.test(employeeNo) || name.length < 1 || name.length > 120 || !email) return null;
   if (role !== "SUPER_ADMIN" && role !== "ADMIN" && role !== "EMPLOYEE") return null;
-  return { employeeNo, name, email, role };
+  if (typeof enabled !== "boolean") return null;
+  return { employeeNo, name, email, role, enabled };
 }
 
 async function readLocalEmployees(request: Request): Promise<LocalEmployee[] | null> {
@@ -148,7 +153,7 @@ async function readLocalEmployees(request: Request): Promise<LocalEmployee[] | n
     const value: unknown = await request.json();
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const raw = value as Record<string, unknown>;
-    if (!Array.isArray(raw.localEmployees) || raw.localEmployees.length > 500) return null;
+    if (!Array.isArray(raw.localEmployees) || raw.localEmployees.length < 1 || raw.localEmployees.length > 500) return null;
     const employees: LocalEmployee[] = [];
     for (const item of raw.localEmployees) {
       const normalized = normalizeLocalEmployee(item);
@@ -159,6 +164,19 @@ async function readLocalEmployees(request: Request): Promise<LocalEmployee[] | n
   } catch {
     return null;
   }
+}
+
+async function localSnapshotHash(localEmployees: LocalEmployee[]): Promise<string> {
+  const canonical = [...localEmployees]
+    .sort((left, right) => left.employeeNo.localeCompare(right.employeeNo, "en"))
+    .map(employee => ({
+      employeeNo: employee.employeeNo,
+      name: employee.name,
+      email: employee.email,
+      role: employee.role,
+      enabled: employee.enabled,
+    }));
+  return sha256Hex(JSON.stringify(canonical));
 }
 
 function employeeJson(row: EmployeeRow | null): Record<string, JsonValue> | null {
@@ -219,18 +237,19 @@ async function upsertTransitionItem(
   await env.DB.prepare(
     `INSERT INTO employee_transition_items (
          transition_item_id, workspace_id, device_id,
-         local_employee_no, local_name, local_email_normalized, local_role,
+         local_employee_no, local_name, local_email_normalized, local_role, local_enabled,
          suggested_cloud_role, state, match_kind,
          matched_employee_id, employee_no_match_id, email_match_id,
          created_at, updated_at, resolved_at
      ) VALUES (
-         ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-         ?11, ?12, ?13, ?14, ?14, ?15
+         ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+         ?12, ?13, ?14, ?15, ?15, ?16
      )
      ON CONFLICT(device_id, local_employee_no) DO UPDATE SET
          local_name = excluded.local_name,
          local_email_normalized = excluded.local_email_normalized,
          local_role = excluded.local_role,
+         local_enabled = excluded.local_enabled,
          suggested_cloud_role = excluded.suggested_cloud_role,
          state = excluded.state,
          match_kind = excluded.match_kind,
@@ -247,6 +266,7 @@ async function upsertTransitionItem(
     item.local.name,
     item.local.email,
     item.local.role,
+    item.local.enabled ? 1 : 0,
     item.suggestedCloudRole,
     item.state,
     item.matchKind,
@@ -264,9 +284,7 @@ async function ensureExactLink(env: Env, deviceId: string, localEmployeeNo: stri
       WHERE device_id = ?1 AND local_employee_no = ?2 LIMIT 1`
   ).bind(deviceId, localEmployeeNo).first<{ employee_id: string }>();
   if (existingByLocal) {
-    if (existingByLocal.employee_id !== employeeId) {
-      throw new Error("LOCAL_EMPLOYEE_LINK_CONFLICT");
-    }
+    if (existingByLocal.employee_id !== employeeId) throw new Error("LOCAL_EMPLOYEE_LINK_CONFLICT");
     return;
   }
 
@@ -274,9 +292,8 @@ async function ensureExactLink(env: Env, deviceId: string, localEmployeeNo: stri
     `SELECT local_employee_no FROM device_employee_links
       WHERE device_id = ?1 AND employee_id = ?2 LIMIT 1`
   ).bind(deviceId, employeeId).first<{ local_employee_no: string }>();
-  if (existingByEmployee && existingByEmployee.local_employee_no !== localEmployeeNo) {
+  if (existingByEmployee && existingByEmployee.local_employee_no !== localEmployeeNo)
     throw new Error("CLOUD_EMPLOYEE_LINK_CONFLICT");
-  }
 
   await env.DB.prepare(
     `INSERT INTO device_employee_links (device_id, employee_id, local_employee_no)
@@ -305,7 +322,7 @@ async function inspectEmployeeTransition(request: Request, env: Env): Promise<Re
   const localEmployees = await readLocalEmployees(request);
   if (!localEmployees) {
     return json(env, requestId, 400, {
-      error: { code: "INVALID_LOCAL_EMPLOYEES", message: "A valid localEmployees array is required." },
+      error: { code: "INVALID_LOCAL_EMPLOYEES", message: "A non-empty valid localEmployees array is required." },
     });
   }
 
@@ -333,7 +350,7 @@ async function inspectEmployeeTransition(request: Request, env: Env): Promise<Re
 
   let bootstrapOwnerNo: string | null = null;
   if (centralCount === 0 && device.pairing_id === null) {
-    const localOwners = localEmployees.filter(employee => employee.role === "SUPER_ADMIN");
+    const localOwners = localEmployees.filter(employee => employee.role === "SUPER_ADMIN" && employee.enabled);
     if (localOwners.length !== 1) {
       return json(env, requestId, 409, {
         error: {
@@ -361,8 +378,21 @@ async function inspectEmployeeTransition(request: Request, env: Env): Promise<Re
     });
   }
 
+  const snapshotHash = await localSnapshotHash(localEmployees);
   const results: InspectionItem[] = [];
   const now = new Date().toISOString();
+
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM employee_transition_items WHERE device_id = ?1").bind(device.device_id),
+    env.DB.prepare(
+      `UPDATE devices
+          SET employee_transition_snapshot_hash = ?1,
+              employee_transition_snapshot_at = ?2,
+              employee_transition_started_at = COALESCE(employee_transition_started_at, ?2),
+              updated_at = ?2
+        WHERE device_id = ?3 AND employee_authority_state = 'transitioning'`
+    ).bind(snapshotHash, now, device.device_id),
+  ]);
 
   for (const local of localEmployees) {
     if (bootstrapOwnerNo === local.employeeNo) {
@@ -388,6 +418,7 @@ async function inspectEmployeeTransition(request: Request, env: Env): Promise<Re
     let matchKind: MatchKind;
     let state: TransitionState;
     let matchedEmployee: EmployeeRow | null = null;
+    let targetRole = suggestedRole(local.role, false);
 
     if (!employeeNoMatch && !emailMatch) {
       matchKind = "none";
@@ -395,7 +426,8 @@ async function inspectEmployeeTransition(request: Request, env: Env): Promise<Re
     } else if (employeeNoMatch && emailMatch && employeeNoMatch.employee_id === emailMatch.employee_id) {
       matchKind = "same_employee";
       matchedEmployee = employeeNoMatch;
-      state = matchedEmployee.credential_verifier ? "ready" : "credential_pending";
+      targetRole = matchedEmployee.role as LocalEmployee["role"];
+      state = matchedEmployee.credential_verifier && matchedEmployee.email_verified_at ? "ready" : "credential_pending";
       await ensureExactLink(env, device.device_id, local.employeeNo, matchedEmployee.employee_id);
     } else if (employeeNoMatch && !emailMatch) {
       matchKind = "employee_no_only";
@@ -410,7 +442,7 @@ async function inspectEmployeeTransition(request: Request, env: Env): Promise<Re
 
     const item: InspectionItem = {
       local,
-      suggestedCloudRole: suggestedRole(local.role, false),
+      suggestedCloudRole: targetRole,
       state,
       matchKind,
       matchedEmployee,
@@ -428,16 +460,18 @@ async function inspectEmployeeTransition(request: Request, env: Env): Promise<Re
     transition: {
       deviceId: device.device_id,
       authorityState: device.employee_authority_state,
+      snapshotHash,
       localEmployeeCount: localEmployees.length,
       unresolvedCount,
       conflictCount,
-      readyForCutover: localEmployees.length > 0 && unresolvedCount === 0,
+      readyForCutover: unresolvedCount === 0,
       items: results.map(item => ({
         local: {
           employeeNo: item.local.employeeNo,
           name: item.local.name,
           email: item.local.email,
           role: item.local.role,
+          enabled: item.local.enabled,
         },
         suggestedCloudRole: item.suggestedCloudRole,
         state: item.state,
@@ -463,6 +497,7 @@ export async function handleEmployeeTransition(request: Request, env: Env): Prom
           error: { code: message, message: "An existing Device-to-Employee link conflicts with this identity inspection." },
         });
       }
+      console.error("employee_transition_inspection_failed", { requestId, error: message });
       return json(env, requestId, 503, {
         error: { code: "EMPLOYEE_TRANSITION_UNAVAILABLE", message: "Employee transition inspection is temporarily unavailable." },
       });
