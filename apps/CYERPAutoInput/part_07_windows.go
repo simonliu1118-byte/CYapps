@@ -99,7 +99,25 @@ func readSelectedComboOptions() {
 	if isStopRequested(){return};for k,v:=range pending{settings.Combos[k]=v};if err:=writeSettings();err!=nil{logError("設定","settings.json","SAVE_FAILED",err.Error());setStatus("設定：選項已讀取但設定檔儲存失敗");return};if isStopRequested(){return};setStatus(fmt.Sprintf("設定：已讀取 %d 個下拉欄位；結果寫入本機 settings.json",readCount));showComboSettingsSummary()
 }
 
-func showComboSettingsSummary(){var b strings.Builder;b.WriteString("下拉欄位設定／偵測結果\r\n\r\n");for _,f:=range fields{if f.Kind!="combo"{continue};cs:=settings.Combos[f.Key];b.WriteString(f.Group+" / "+f.Label+"\r\n");if strings.TrimSpace(cs.Selected)==""{b.WriteString("  設定值：未設定\r\n")}else{b.WriteString("  設定值：已設定\r\n")};if len(cs.Options)==0{b.WriteString("  讀取選項：（尚未讀到）\r\n")}else{for i,opt:=range cs.Options{b.WriteString(fmt.Sprintf("  %d. %s\r\n",i+1,opt))}};b.WriteString("\r\n")};pMessageBoxW.Call(mainHwnd,uintptr(unsafe.Pointer(wstr(b.String()))),uintptr(unsafe.Pointer(wstr("CY SMART ERP — 欄位設定"))),MB_OK|MB_ICONINFORMATION)}
+// When combo fields are checked, the summary shows only those requested fields.
+// If no combo is currently checked (for example when opening the settings view
+// directly), it falls back to showing all configured combo fields.
+func showComboSettingsSummary(){
+	selected:=selectedComboFields(); onlySelected:=len(selected)>0
+	var b strings.Builder
+	b.WriteString("下拉欄位設定／偵測結果\r\n\r\n")
+	if onlySelected { b.WriteString(fmt.Sprintf("本次勾選：%d 個下拉欄位\r\n\r\n",len(selected))) }
+	for _,f:=range fields{
+		if f.Kind!="combo"{continue}
+		if onlySelected && !checked(f.ApplyHwnd){continue}
+		cs:=settings.Combos[f.Key]
+		b.WriteString(f.Group+" / "+f.Label+"\r\n")
+		if strings.TrimSpace(cs.Selected)==""{b.WriteString("  設定值：未設定\r\n")}else{b.WriteString("  設定值：已設定\r\n")}
+		if len(cs.Options)==0{b.WriteString("  讀取選項：（尚未讀到）\r\n")}else{for i,opt:=range cs.Options{b.WriteString(fmt.Sprintf("  %d. %s\r\n",i+1,opt))}}
+		b.WriteString("\r\n")
+	}
+	pMessageBoxW.Call(mainHwnd,uintptr(unsafe.Pointer(wstr(b.String()))),uintptr(unsafe.Pointer(wstr("CY SMART ERP — 欄位設定"))),MB_OK|MB_ICONINFORMATION)
+}
 
 func focusTypingTest(){txt:=getWindowText(focusText);if txt==""{logf("WARN","focus typing test cancelled: empty text");return};for i:=3;i>=1;i--{if isStopRequested(){return};setStatus(fmt.Sprintf("焦點測試：%d 秒內請點 ERP 目標欄位…（Esc 可停止）",i));pUpdateWindow.Call(mainHwnd);if !interruptibleSleep(time.Second){return}};fg,_,_:=pGetForeground.Call();title:=getWindowText(fg);if !(strings.Contains(title,"銷貨單建立作業")||strings.Contains(strings.ToUpper(title),"SMART")){setStatus("焦點測試：前景不是 SMART ERP，已取消");logError("焦點測試","前景視窗","WRONG_FOREGROUND",fmt.Sprintf("title=%q",title));return};target:=focusedControlOfForeground(fg);if target==0{setStatus("焦點測試：抓不到 ERP 內目前焦點欄位");logError("焦點測試","焦點欄位","FOCUS_NOT_FOUND",fmt.Sprintf("foreground=0x%x title=%q",fg,title));return};cls:=className(target);before:=getWindowText(target);logf("INFO","focus target hwnd=0x%x class=%q before_len=%d",target,cls,len([]rune(before)));pSendMessageW.Call(target,EM_SETSEL,0,^uintptr(0));time.Sleep(40*time.Millisecond);units:=utf16.Encode([]rune(txt));for _,u:=range units{pSendMessageW.Call(target,WM_CHAR,uintptr(u),0)};time.Sleep(120*time.Millisecond);after:=getWindowText(target);if after==txt{setStatus(fmt.Sprintf("焦點測試：成功，%s 已輸入（未按 Enter、未儲存）",cls));logf("INFO","focus direct input success hwnd=0x%x class=%q after_len=%d",target,cls,len([]rune(after)));return};r,_,_:=pSendMessageW.Call(target,WM_SETTEXT,0,uintptr(unsafe.Pointer(wstr(txt))));time.Sleep(120*time.Millisecond);after2:=getWindowText(target);if r!=0&&after2==txt{setStatus(fmt.Sprintf("焦點測試：成功（WM_SETTEXT），%s 已輸入；未儲存",cls));logf("INFO","focus WM_SETTEXT fallback success hwnd=0x%x class=%q after_len=%d",target,cls,len([]rune(after2)));return};setStatus("焦點測試：欄位已找到，但直接輸入仍失敗；請提供 LOG");logError("焦點測試","輸入","DIRECT_INPUT_FAILED",fmt.Sprintf("hwnd=0x%x class=%q before_len=%d after_len=%d after2_len=%d wm_settext_ret=%d",target,cls,len([]rune(before)),len([]rune(after)),len([]rune(after2)),r))}
 
