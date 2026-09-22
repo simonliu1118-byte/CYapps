@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.6 — 2026/09/22
+
+- 新增正式維護專案 `CYAccountingWeb`（志遠記帳系統 Web），作為 `CYAccounting` Windows 版之外的獨立 Web 產品線。
+- 新增 `apps/CYAccountingWeb/PROJECT_RULES.md`，固定 Cloudflare Workers + Static Assets + D1 架構、D1 migration 追蹤、7 位數金額限制、鍵盤高效率輸入與 Public repo 安全要求。
+- 同步建立 `VERSION=0.1.0`、`BUILD=0` 基礎 metadata，並將 `CYAccountingWeb` 加入 `REPO_POLICY.md` 正式維護專案清單。
+
 ## 2.3.5 — 2026/09/15
 
 - 依使用者最新規範取消 CYInvoice 自動正式 Release 例外；只有使用者於當次工作明確要求 `release` 後，才可從 `main` 啟動正式 Release workflow。
@@ -41,7 +47,7 @@
 ## 2.2.0 — 2026/09/13
 
 - 共通規則同步至 2.3.0：母本改為公司／個人 repository 可共用的中性規則，並把 Wade–Giles（威妥瑪）定為全域羅馬拼音規則。
-- 志遠固定英文名與縮寫改由本 repo `REPO_POLICY.md` 保存：`Chihyuan`／`Chih-yuan`、`CY`，不得使用 `Zhiyuan`。
+- 志遠固定英文名與縮寫改由本 repo policy 保存：`Chihyuan`／`Chih-yuan`、`CY`，不得使用 `Zhiyuan`。
 - 公司正式 copyright notice 改由本 repo policy 保存：`Copyright © <YEAR> C.C. Liu, Chihyuan Co. All Rights Reserved.`。
 - 共通母本仍由 AITeam 維護；本次沒有修改任何 APP 的功能規則或 source。
 
