@@ -40,6 +40,7 @@ func buildRowsFromControls(items []ControlInfo, tolerance int32) [][]ControlInfo
 				if rows[i][b].Rect.Left < rows[i][a].Rect.Left { rows[i][a], rows[i][b] = rows[i][b], rows[i][a] }
 			}
 		}
+	}
 	return rows
 }
 
