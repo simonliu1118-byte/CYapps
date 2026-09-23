@@ -11,7 +11,7 @@
 > - 本文件的目的，是降低未來 CY 桌面程式的視覺決策成本，而不是增加程式開發負擔。
 
 **狀態：Phase 1 Final Draft / Discussion Reference**  
-**Checkpoint：2026-09-23**  
+**Checkpoint：2026-09-24**  
 **100% / 96 DPI Final Integrated Shell：使用者確認可接受**  
 **125% / 150% DPI：Deferred validation；未人工驗證，不得描述成已通過**  
 **Phase 2：Layout / Interaction / Workflow / Keyboard / IA**
@@ -687,15 +687,15 @@ Native-first，不客製；但必須把 scrollbar 對 layout / table geometry �
 
 # 13. App Icon Family — `APPROVED DIRECTION / SHARED REFERENCE`
 
-Desktop Visual Guide 只保留 Icon Family 的**方向與邊界**。正式 icon-family 細節應放在 AITeam 的 shared visual package，而不是在本 Guide 另外維護第二套標準。
+Desktop Visual Guide 只保留 Icon Family 的**方向與邊界**。正式 icon-family 細節放在 AITeam 的 shared visual package，不在本 Guide 維護第二套標準。
 
-預定 canonical upstream：
+Canonical source under preparation：
 
 `simonliu1118-byte/AITeam/shared/cy-visual/icon-family/`
 
 目前推進工作：AITeam PR #60；在該 PR 合併以前，不應宣稱 AITeam `main` 已正式存在 canonical package。
 
-下游同步工作：CYapps PR #95 / CYapps_pvt PR #49。
+後續不預設把整套 family 文件 mirror 到 CYapps / CYapps_pvt。完整 Icon Family 定案後，由各 App 負責 AI 只帶回該 App 的正式 icon assets。
 
 ## 13.1 新 Square-family 方向
 
@@ -894,25 +894,18 @@ Dialog Button 靠右／置中也屬可依個案調整的 Layout 決策，本 Gui
 
 ---
 
-# 18. 正式化與同步方向
+# 18. 正式化方向
 
-Desktop Visual Guide 未來若由使用者明確核准正式採用，建議採與 Icon Family 相同的**設計參考同步線**：
-
-Canonical upstream：
+Desktop Visual Guide 未來若由使用者明確核准正式採用，canonical source 建議放在：
 
 `simonliu1118-byte/AITeam/shared/cy-visual/desktop/`
 
-Downstream：
-
-- `CYapps/docs/cy-visual/desktop/`
-- `CYapps_pvt/docs/cy-visual/desktop/`
-
-此同步線：
+原則：
 
 - 與 Governance version 分離。
 - 不形成第四層永久治理。
-- 不自動 merge。
-- 由 AITeam 維護 shared design source，下游以同步 PR 更新。
+- AITeam 保存 shared design source。
+- 不預設把完整文件 mirror 到每個下游 repo；只有實際開發／維護需要時才建立必要的下游副本或 App-specific assets。
 
 **在使用者明確要求以前，不合併 PR #61，也不把本文件升格成現行開發門檻。**
 
