@@ -2,8 +2,10 @@ using System.Runtime.InteropServices;
 
 namespace CYInvoiceVisualShell;
 
-// Native WinForms TabControl/page behavior with header-only owner draw.
-// Hover invalidates only affected headers so the selected tab stays stable.
+// Native WinForms TabControl/TabPage behavior with header-only owner draw.
+// V4 uses FlatButtons native geometry so selected/unselected tabs do not change
+// raised/bevel geometry during a page switch. The visual selected state is
+// expressed only by text weight + accent underline.
 internal sealed class ThemeTabControlV1 : TabControl
 {
     private const int WM_CHANGEUISTATE = 0x0127;
@@ -19,7 +21,13 @@ internal sealed class ThemeTabControlV1 : TabControl
     {
         DrawMode = TabDrawMode.OwnerDrawFixed;
         SizeMode = TabSizeMode.Normal;
-        Appearance = TabAppearance.Normal;
+
+        // Keep the real Windows TabControl/TabPage implementation, but avoid
+        // the classic raised selected-tab chrome whose border geometry moves
+        // during selection changes and visibly flashes against owner-drawn
+        // headers.
+        Appearance = TabAppearance.FlatButtons;
+
         Multiline = false;
         Padding = new Point(14, 5);
         Font = VisualTokens.Font(10f);
@@ -104,6 +112,8 @@ internal sealed class ThemeTabControlV1 : TabControl
         var previous = hoverIndex;
         hoverIndex = next;
 
+        // Repaint only the headers whose hover state actually changed. Do not
+        // invalidate the full native TabControl or the selected page.
         InvalidateTab(previous);
         InvalidateTab(next);
     }
@@ -128,6 +138,8 @@ internal sealed class ThemeTabControlV1 : TabControl
         var selected = e.Index == SelectedIndex;
         var hovered = e.Index == hoverIndex && !selected;
 
+        // Flat native geometry means we can fully own the visible header face
+        // without competing with a raised selected-tab bevel.
         var background = hovered ? palette.Soft : Color.White;
         using (var brush = new SolidBrush(background))
             e.Graphics.FillRectangle(brush, rect);
