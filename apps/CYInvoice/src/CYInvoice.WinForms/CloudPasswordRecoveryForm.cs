@@ -209,6 +209,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
             "EMAIL_DELIVERY_FAILED" => "驗證信目前無法寄出，請稍後再試。",
             "EMAIL_PROVIDER_NOT_CONFIGURED" or "OTP_NOT_CONFIGURED" => "雲端 Email 驗證服務尚未完成設定。",
             "RECOVERY_STATE_CHANGED" => "帳號狀態已變更，請重新開始密碼復原。",
+            "NOT_FOUND" => "目前連線的雲端服務尚未更新密碼復原功能，請先更新 development Worker。",
             "UNAUTHORIZED" => "這台電腦的雲端裝置驗證失敗，請先檢查雲端連線。",
             _ => $"雲端密碼復原失敗：{api.Code}",
         };
