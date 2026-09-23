@@ -296,8 +296,8 @@ internal sealed class MainForm : Form
         {
             try
             {
-                using var form = new CloudPasswordRecoveryForm(repository, cloudHealthHttpClient);
-                if (form.ShowDialog(this) == DialogResult.OK) _ = RefreshRuntimeModeAsync();
+                using var cloudRecovery = new CloudPasswordRecoveryForm(repository, cloudHealthHttpClient);
+                if (cloudRecovery.ShowDialog(this) == DialogResult.OK) _ = RefreshRuntimeModeAsync();
             }
             catch (Exception problem)
             {

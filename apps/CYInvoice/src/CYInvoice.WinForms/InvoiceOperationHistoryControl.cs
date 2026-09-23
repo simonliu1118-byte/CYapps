@@ -119,7 +119,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
 
     private void DrawSubItem(object? sender, DrawListViewSubItemEventArgs eventArgs)
     {
-        if (eventArgs.SubItem is null) return;
+        if (eventArgs.SubItem is null || eventArgs.Item is null) return;
         var background = eventArgs.Item.Selected ? SystemColors.Highlight : eventArgs.SubItem.BackColor;
         var foreground = eventArgs.Item.Selected ? SystemColors.HighlightText : eventArgs.SubItem.ForeColor;
         using (var brush = new SolidBrush(background))
