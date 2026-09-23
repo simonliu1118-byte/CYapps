@@ -104,8 +104,6 @@ func setupDetailListViewV14(parent uintptr, x, y int32) {
 	icc := initCommonControlsExV14{DwSize: uint32(unsafe.Sizeof(initCommonControlsExV14{})), DwICC: iccListViewV14}
 	pInitCommonControlsExV14.Call(uintptr(unsafe.Pointer(&icc)))
 
-	// Build 12/13 created a fixed 8-row edit matrix. Build 14 replaces it with
-	// a real ListView but keeps the outer group box and mode-dependent positioning.
 	for _, d := range detailWidgetsV12 {
 		if d.hwnd != 0 {
 			pShowWindow.Call(d.hwnd, swHideV12)
@@ -151,8 +149,6 @@ func setupDetailListViewV14(parent uintptr, x, y int32) {
 
 	createUIControlV12("STATIC", "單位有指定時：品號 → F2選單位 → 數量。批號點選機制後續處理。", WS_CHILD|WS_VISIBLE|SS_LEFT, x+1270, y+144, 205, 64, parent, 0)
 
-	// Hidden marker keeps legacy anySelected() compatible when the user only
-	// wants to input detail rows. It carries no ERP value.
 	detailMirrorV14 = createCtrl("BUTTON", "", WS_CHILD|BS_AUTOCHECKBOX, 0, 0, 1, 1, parent, nextID)
 	fields = append(fields, &Field{Key: "detail_rv14_active", Group: "明細", Label: "ListView", ApplyHwnd: detailMirrorV14})
 	nextID++
@@ -420,8 +416,6 @@ func fillDetailSelectedV14(root uintptr) (ok, fail int) {
 		}
 		ok++
 
-		// Unit is intentionally before quantity. ERP quantity meaning depends on
-		// the selected conversion unit (for example, inventory-unit conversion).
 		if strings.TrimSpace(row.Unit) != "" {
 			if !selectDetailUnitV14(root, *grid, rowIndex, row.Unit) {
 				logError("明細", fmt.Sprintf("第%d列單位", rowIndex+1), "UNIT_LOOKUP_FAILED", "F2 單位查詢無法確認指定列；已停止本列後續輸入")
@@ -612,8 +606,6 @@ func lookupHasExactReadableTextV14(lookup uintptr, wanted string) bool {
 			continue
 		}
 		if strings.TrimSpace(c.Text) == want {
-			// If the text is an actual child HWND, click it so that the row/cell is
-			// active before pressing the dialog's 確定 button.
 			r := c.Rect
 			if r.Right > r.Left && r.Bottom > r.Top {
 				clickScreenPoint((r.Left+r.Right)/2, (r.Top+r.Bottom)/2)
@@ -627,16 +619,40 @@ func lookupHasExactReadableTextV14(lookup uintptr, wanted string) bool {
 
 func clickLookupButtonV14(lookup uintptr, text string) bool {
 	want := normalize(text)
+	prepareLookupWindowV14(lookup)
 	for _, c := range enumControls(lookup) {
 		if !c.Visible || normalize(c.Text) != want {
 			continue
+		}
+		if strings.Contains(strings.ToUpper(c.Class), "BUTTON") {
+			pSendMessageW.Call(c.Hwnd, 0x00F5, 0, 0) // BM_CLICK
+			logf("INFO", "unit lookup confirm dispatched by BM_CLICK class=%q", c.Class)
+			return true
 		}
 		r := c.Rect
 		if r.Right <= r.Left || r.Bottom <= r.Top {
 			continue
 		}
 		clickScreenPoint((r.Left+r.Right)/2, (r.Top+r.Bottom)/2)
+		logf("INFO", "unit lookup confirm dispatched by child-center click class=%q", c.Class)
 		return true
+	}
+
+	// In this Delphi/DevExpress F2 dialog the bottom buttons may be painted by a
+	// non-standard control and therefore not appear as independent child HWNDs.
+	// The 確定 button is consistently placed near the lower-left third of the
+	// lookup window. Use a bounded window-relative fallback only for 確定.
+	if want == normalize("確定") {
+		r := rectOf(lookup)
+		w := r.Right - r.Left
+		h := r.Bottom - r.Top
+		if w >= 360 && h >= 220 {
+			x := r.Left + w*335/1000
+			y := r.Top + h*950/1000
+			clickScreenPoint(x, y)
+			logf("INFO", "unit lookup confirm dispatched by window-relative fallback point=%d,%d size=%dx%d", x, y, w, h)
+			return true
+		}
 	}
 	return false
 }
