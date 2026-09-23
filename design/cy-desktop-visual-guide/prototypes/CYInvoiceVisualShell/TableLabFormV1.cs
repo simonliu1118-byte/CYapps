@@ -176,7 +176,7 @@ internal sealed class TableLabFormV1 : Form
         {
             var day = (i % 28) + 1;
             var number = $"AB{12345678 + i:D8}";
-            var buyer = i % 5 switch
+            var buyer = (i % 5) switch
             {
                 0 => "志遠醫療器材行",
                 1 => "一般消費者",
