@@ -11,7 +11,7 @@ internal sealed class TableLabFormV1 : Form
 
     internal TableLabFormV1()
     {
-        Text = "CY Table Lab V1 — Grid Continuity / Resize / Scrollbar";
+        Text = "CY Table Lab V2 — Neutral Header / Grid Continuity / Resize / Scrollbar";
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(1180, 720);
         MinimumSize = new Size(860, 560);
@@ -97,7 +97,7 @@ internal sealed class TableLabFormV1 : Form
         {
             AutoSize = true,
             MaximumSize = new Size(1100, 0),
-            Text = "重點不是固定欄寬，而是 Header 與 Body 必須共用同一組欄位 X / Width。請拖曳欄寬、縮放視窗、上下捲動，特別觀察垂直線是否出現約 1px 錯位。",
+            Text = "Header 維持中性淺灰，不跟 current cell 變深色；Theme 色只用於資料列 Selection。請拖曳欄寬、縮放視窗、上下捲動，特別觀察垂直線是否出現約 1px 錯位。",
             Font = VisualTokens.Font(9.5f),
             ForeColor = VisualTokens.TextSecondary,
             Margin = new Padding(0, 2, 0, 12),
@@ -157,9 +157,13 @@ internal sealed class TableLabFormV1 : Form
         grid.DefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
         grid.DefaultCellStyle.SelectionForeColor = VisualTokens.TextPrimary;
         grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(252, 253, 254);
+
+        var headerBack = Color.FromArgb(245, 247, 250);
         grid.ColumnHeadersDefaultCellStyle.Font = VisualTokens.Font(10f, FontStyle.Bold);
         grid.ColumnHeadersDefaultCellStyle.ForeColor = VisualTokens.TextPrimary;
-        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(245, 247, 250);
+        grid.ColumnHeadersDefaultCellStyle.BackColor = headerBack;
+        grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = headerBack;
+        grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = VisualTokens.TextPrimary;
         grid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
         grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
 
