@@ -86,49 +86,8 @@ func setDateControlInteractiveV5(root uintptr, target ControlInfo, value string)
 	return false
 }
 
-// Build 7 detail flow: click target cell -> Enter -> confirm editor -> send one
-// character at a time (same pacing as date) -> Enter to commit. No clear is
-// performed because this project is currently NEW-document only.
+// Build 18 keeps the proven sequential editor input, but delegates the actual
+// cell targeting to the non-maximized-safe geometry helper.
 func setDetailCellEnterV5(root uintptr, grid ControlInfo, col int, value string) bool {
-	if isStopRequested() {
-		return false
-	}
-	ratio, ok := detailColumnRatio(col)
-	if !ok {
-		return false
-	}
-	w := float64(grid.Rect.Right - grid.Rect.Left)
-	x := grid.Rect.Left + int32(w*ratio)
-	y := grid.Rect.Top + 33
-
-	for attempt := 1; attempt <= 2; attempt++ {
-		if isStopRequested() || !prepareERPWindow(root) {
-			return false
-		}
-		clickScreenPoint(x, y)
-		if !interruptibleSleep(170 * time.Millisecond) {
-			return false
-		}
-		pressVK(VK_RETURN)
-		edit := waitGridEditorV4(root, grid, 900*time.Millisecond)
-		if edit == 0 {
-			focus := focusedControlOfForeground(root)
-			logf("WARN", "detail V7 editor not ready col=%d attempt=%d focus=0x%x/%s", col, attempt, focus, className(focus))
-			continue
-		}
-		logf("INFO", "detail V7 editor ready col=%d edit=0x%x/%s attempt=%d before_len=%d", col, edit, className(edit), attempt, len([]rune(getWindowText(edit))))
-		if !writeDetailSequentialV7(edit, value) {
-			return false
-		}
-		if !interruptibleSleep(160 * time.Millisecond) {
-			return false
-		}
-		pressVK(VK_RETURN)
-		if !interruptibleSleep(300 * time.Millisecond) {
-			return false
-		}
-		logf("INFO", "detail V7 committed by Enter col=%d", col)
-		return true
-	}
-	return false
+	return setDetailCellAtRowV18(root, grid, 0, col, value)
 }

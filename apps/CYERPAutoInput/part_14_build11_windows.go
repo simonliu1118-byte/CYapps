@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 )
 
 func detailVisibleRowIndexV11(grid ControlInfo, row int) int {
@@ -28,51 +27,7 @@ func detailVisibleRowIndexV11(grid ControlInfo, row int) int {
 }
 
 func setDetailCellAtRowV11(root uintptr, grid ControlInfo, row int, col int, value string) bool {
-	if row < 0 || isStopRequested() {
-		return false
-	}
-	ratio, ok := detailColumnRatio(col)
-	if !ok {
-		return false
-	}
-	w := float64(grid.Rect.Right - grid.Rect.Left)
-	x := grid.Rect.Left + int32(w*ratio)
-	visibleRow := detailVisibleRowIndexV11(grid, row)
-	y := grid.Rect.Top + 33 + int32(visibleRow)*detailRowHeightV8
-	if y > grid.Rect.Bottom-12 {
-		y = grid.Rect.Bottom - 12
-	}
-
-	for attempt := 1; attempt <= 2; attempt++ {
-		if isStopRequested() || !prepareERPWindow(root) {
-			return false
-		}
-		clickScreenPoint(x, y)
-		if !interruptibleSleep(180 * time.Millisecond) {
-			return false
-		}
-		pressVK(VK_RETURN)
-		edit := waitGridEditorV4(root, grid, 950*time.Millisecond)
-		if edit == 0 {
-			focus := focusedControlOfForeground(root)
-			logf("WARN", "detail V11 editor not ready row=%d visible_row=%d col=%d attempt=%d point=%d,%d focus=0x%x/%s", row+1, visibleRow+1, col, attempt, x, y, focus, className(focus))
-			continue
-		}
-		logf("INFO", "detail V11 editor ready row=%d visible_row=%d col=%d edit=0x%x/%s attempt=%d before_len=%d", row+1, visibleRow+1, col, edit, className(edit), attempt, len([]rune(getWindowText(edit))))
-		if !writeDetailSequentialV7(edit, value) {
-			return false
-		}
-		if !interruptibleSleep(150 * time.Millisecond) {
-			return false
-		}
-		pressVK(VK_RETURN)
-		if !interruptibleSleep(300 * time.Millisecond) {
-			return false
-		}
-		logf("INFO", "detail V11 committed by Enter row=%d col=%d", row+1, col)
-		return true
-	}
-	return false
+	return setDetailCellAtRowV18(root, grid, row, col, value)
 }
 
 func selectedDetailRowsV11() map[int][]*Field {
