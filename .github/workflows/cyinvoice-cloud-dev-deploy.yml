@@ -70,6 +70,7 @@ jobs:
       - name: Validate source and Worker bundle
         run: |
           npm run check
+          npm test
           npm run deploy:dry-run
 
       - name: Capture D1 restore bookmark
@@ -126,8 +127,8 @@ jobs:
           if (health.ok !== true || health.storage !== 'ok') {
             throw new Error('Development Worker health or storage check failed.');
           }
-          if (health.cloudVersion !== '0.8.1') {
-            throw new Error(`Expected Cloud 0.8.1, got ${health.cloudVersion ?? 'unknown'}.`);
+          if (health.cloudVersion !== '0.8.2') {
+            throw new Error(`Expected Cloud 0.8.2, got ${health.cloudVersion ?? 'unknown'}.`);
           }
           if (String(health.schemaVersion) !== '7') {
             throw new Error(`Expected Schema 7, got ${health.schemaVersion ?? 'unknown'}.`);
