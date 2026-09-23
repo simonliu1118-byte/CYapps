@@ -179,6 +179,7 @@ func fillRoundedBoxV13(pixels []uint32, size, x0, y0, x1, y1, radius int, c uint
 				pixels[y*size+x] = c
 			}
 		}
+	}
 }
 
 func insideRoundedBoxV13(x, y, x0, y0, x1, y1, r int) bool {
