@@ -111,8 +111,9 @@
 - [x] 2026-09-23 development deploy Run #6 已確認 Worker remote 為 Cloud 0.8.2 / API 1、D1 Schema 7、`/v1/health` storage `ok`；部署前 Workspace／Device／Employee／Pairing 各為 0。
 - [x] 2026-09-22 已確認 development D1 remote migrations 到 Schema 7。
 - [x] Brevo runtime secrets 已完成設定，bootstrap OTP 實際收信成功。
-- [ ] V2.6.4 Build 1 已修正第一個 Workspace 建立 SQL 與誤報錯誤、Cloud 0.8.2 已部署；仍需重新寄送 OTP，完成 Windows live Workspace／Device 建立並回查遠端 D1。
-- [ ] A 機真實建立 Workspace + first Employee transition。
+- [x] V2.6.4 Build 1 已修正第一個 Workspace 建立 SQL 與誤報錯誤；Cloud 0.8.2 已部署，Windows client 已回報首次 Workspace／Device 建立及 Device identity 驗證成功。
+- [ ] 以本機 Codex 已連線的 Cloudflare MCP 唯讀回查 development D1：Workspace／Device／Employee／Pairing 筆數，及首個 Workspace 與 Device 的關聯；不得把部署前 0 筆當成現在結果。
+- [ ] A 機 first Employee Transition／cutover 實機驗收；Windows client 的 Device identity 成功不代表中央 SUPER_ADMIN 或帳號轉換已完成。
 - [ ] B 機 Pairing + 多 Local Employee transition matrix 實機測試。
 - [ ] 精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。
 - [ ] Central Employee CRUD、Email OTP、password、enabled、role 在 A/B 間 snapshot 同步實機測試。

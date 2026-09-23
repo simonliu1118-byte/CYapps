@@ -1,6 +1,6 @@
 # CYInvoice Cloud Work Handoff
 
-更新日期：2026-09-22
+更新日期：2026-09-23
 
 此文件供下一個長時間工作階段／ChatGPT Work 接手 CYInvoice V3 Cloud identity stage。它只描述目前狀態與下一步，不是永久規則來源；永久規則仍依 `REPOSITORY_RULES.md` → `REPO_POLICY.md` → `apps/CYInvoice/PROJECT_RULES.md`。
 
@@ -79,18 +79,22 @@ Build 1 的 Run #211 已通過：
 
 2026-09-22 已完成 remote audit：development Worker Cloud 0.8.1 的 `/v1/health` 回覆 storage `ok`，D1 migrations 已到 Schema 7，Brevo bootstrap OTP 已實際寄達。第一次建立 Workspace 時 Worker INSERT SQL 欄位和值數量不一致，D1 batch 回滾，卻誤回報 `WORKSPACE_ALREADY_INITIALIZED`；遠端唯讀查核確認 Workspace／Device／Employee／Pairing 筆數均為 0。V2.6.4 Build 1 / Cloud 0.8.2 修正 SQL、錯誤分類並新增直接執行正式 SQL 的 Schema 7 回歸測試。
 
-2026-09-23 development deploy Run #6 已完成：Cloud 0.8.2 / API 1 / Schema 7 / storage `ok`；D1 無待套用 migration，部署前 Workspace／Device／Employee／Pairing 仍各為 0。下一步由使用者在 Windows 使用 Build 1 測試包重新寄送 OTP，建立第一個 Workspace；目前不得宣稱 live 建立成功。
+2026-09-23 development deploy Run #6 已完成：Cloud 0.8.2 / API 1 / Schema 7 / storage `ok`；D1 無待套用 migration，部署前 Workspace／Device／Employee／Pairing 仍各為 0。這些是建立前的筆數，不可當作目前筆數。
+
+同日使用者在 Windows V2.6.4 Build 1 重新寄送 OTP 並執行首次建立；CYInvoice 畫面回報第一個 Workspace 與 Device 建立成功，且 Device identity 驗證完成。此為 Windows client 收到的成功結果；**建立後尚未從 Cloudflare D1 獨立唯讀核對筆數與記錄，也未確認 whole-device Employee Transition / cutover 完成**。不要再次執行 bootstrap 或清除資料。
+
+Cloudflare API、Bindings、Builds、Observability 四個官方 MCP 端點已由使用者在本機 Codex 檢查為「已設定／已載入／連線成功／目前不需 OAuth 登入」；該檢查尚未讀取 `cyinvoice-cloud-dev` 的 Workspace／Device。網頁版 Work 對話沒有這四個工具，不能把本機設定檔已登記誤當作網頁對話可用。這次工作採網頁版為主；需要 Cloudflare 即時狀態時，由已連線的本機 Codex 讀本文件後執行限定範圍的唯讀查核，並把去識別結果帶回主要工作對話。
 
 ## 5. Work 接手後的優先順序
 
-### A. Windows live 建立第一個 Workspace
+### A. 建立後的遠端唯讀查核與 A 機帳號轉換
 
-1. 使用 Build 1 engineering package，於「雲端連線設定」測試連線並確認 Cloud 0.8.2 相容。
-2. 重新寄送 bootstrap OTP；舊 OTP 已消耗，不得重用。由使用者自行在 Windows 輸入驗證碼與初始化碼，勿貼進對話。
-3. 建立第一個 Workspace，應收到 Device identity 驗證完成訊息並進入 Employee transition。
-4. 成功後再以遠端唯讀查詢核對 Workspace／Device 各 1 筆；失敗則保留錯誤碼與畫面，不重複提交。
+1. 本機 Codex 使用已連線的 Cloudflare MCP 唯讀查核 `cyinvoice-cloud-dev` 的 Worker、`/v1/health`、綁定的 development D1、migrations 與 Workspace／Device／Employee／Pairing 筆數；確認 Workspace 和首台 Device 記錄的存在及關聯。只回報必要的去識別摘要，不輸出 Email、Token、OTP、Bootstrap Key 或個資。
+2. 若唯讀筆數／關聯符合首次建立結果，再由使用者在 Windows 查看「雲端帳號轉換」視窗目前顯示的 Local Employee 盤點與狀態；尚未確認前勿按「完成雲端切換」。
+3. 依畫面進行 A 機 whole-device Employee Transition，逐一確認 Email／identity／credential／conflict，完成前不要宣稱 cutover 或中央 SUPER_ADMIN 已建立。
+4. 若 D1 或 Windows 狀態不一致，保存錯誤碼與去識別結果先查原因；不要重複 bootstrap、清除資料或猜測遠端已完成。
 
-不要把 remote 狀態猜成已完成。
+不要把 client 成功訊息當作 D1 獨立查核或帳號轉換驗收。
 
 ### B. Email live test
 
@@ -141,4 +145,4 @@ A/B identity flow 穩定後再做：
 
 ## 7. 目前適合的 Work 任務起點
 
-Work 接手後，先完成 **V2.6.4 Build 1 的 Windows live Workspace 建立及 D1 唯讀回查**；Cloud 0.8.2 已部署且 CI 通過。成功後才繼續 A 機 Employee transition；不要先混入下一階段功能。
+Work 接手後，先完成 **首次 Workspace／Device 建立後的 D1 唯讀回查**；Windows client 已回報建立及 Device identity 成功，Cloud 0.8.2 已部署且 CI 通過，但帳號轉換仍未驗收。核對後繼續 A 機 Employee Transition；不要先混入下一階段功能。一般程式／文件工作可留在網頁版，本機 Codex 負責已授權的 Cloudflare MCP 即時查核。
