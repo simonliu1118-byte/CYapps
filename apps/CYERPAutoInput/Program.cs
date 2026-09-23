@@ -6,13 +6,17 @@ internal static class Program
 {
     [STAThread]
     [SupportedOSPlatform("windows10.0.19041.0")]
-    private static void Main()
+    private static int Main(string[] args)
     {
+        using var logger = new AppLogger();
+
+        if (args.Any(a => a.Equals("--vision-self-test", StringComparison.OrdinalIgnoreCase)))
+            return VisionSelfTest.RunAsync(logger).GetAwaiter().GetResult();
+
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
-        using var logger = new AppLogger();
         Application.ThreadException += (_, e) => logger.Error("ui", e.Exception);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
@@ -21,5 +25,6 @@ internal static class Program
         };
 
         Application.Run(new MainForm(logger));
+        return 0;
     }
 }
