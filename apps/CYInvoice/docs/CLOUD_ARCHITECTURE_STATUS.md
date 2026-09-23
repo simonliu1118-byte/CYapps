@@ -15,7 +15,7 @@
 - Public Windows client 不內建專案擁有者私人 endpoint，只接受使用者設定的相容 HTTPS API。
 - 已執行 migration 不回寫；schema 修改只能新增 forward migration。
 
-GitHub Actions 驗證的是 source、Worker bundle、local SQLite migration、.NET contract、Windows build／startup smoke 與 engineering package；不等同 remote 已部署。2026-09-22 已確認 development D1 remote 為 Schema 7、Cloud 0.8.1 `/v1/health` storage `ok`，Brevo bootstrap OTP 已成功寄達。首次實際建立 Workspace 時因 Worker INSERT SQL 欄位和值數量不符而回滾；遠端唯讀查核確認 Workspace／Device／Employee／Pairing 均為 0。V2.6.4 Build 1 / Cloud 0.8.2 修正該 SQL，仍待部署與 Windows live 建立驗證。
+GitHub Actions 驗證的是 source、Worker bundle、local SQLite migration、.NET contract、Windows build／startup smoke 與 engineering package；不等同 remote 已部署。2026-09-22 已確認 development D1 remote 為 Schema 7、Brevo bootstrap OTP 已成功寄達。首次實際建立 Workspace 時因 Worker INSERT SQL 欄位和值數量不符而回滾。2026-09-23 Cloud 0.8.2 已由 development deploy Run #6 部署，`/v1/health` 回覆 API 1 / Schema 7 / storage `ok`；部署前唯讀查核 Workspace／Device／Employee／Pairing 均為 0。仍待 Windows live 建立驗證。
 
 ## 2. 帳號權威模型
 
@@ -203,7 +203,7 @@ AMEGO 仍是發票／作廢／折讓官方交易真相。Cloud 故障時，能�
 
 ## 12. 尚未完成／需實機驗證
 
-- Cloud 0.8.2 development Worker 部署與第一個 Workspace 實際建立驗證；D1 Schema 7 已確認。
+- 第一個 Workspace Windows 實際建立驗證；Cloud 0.8.2 已部署，D1 Schema 7 已確認。
 - Employee Email、SUPER_ADMIN transfer 的真實 Email OTP 測試；bootstrap OTP 寄信已確認。
 - 多台 Windows 實機：A 建 Workspace、B Pairing、whole-device transition、offline cache、恢復同步。
 - Device revoke / all-Device-Token-loss recovery。

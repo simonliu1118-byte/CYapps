@@ -13,8 +13,8 @@
 - Base：`cyinvoice/cloud-foundation-d1`
 - PR 狀態：Draft / Open / 未 merge
 - 接手時應先重新讀取 PR #73 的最新 head；不要依本文件硬編碼 branch head。
-- V2.6.4 Build 0 的 code-bearing head：`aeb22853a50ff7c598bbe958bc1ff3ef90501834`；本次 Build 1 commit 與 CI 需重新核對。
-- Build 0 的 Cloud Check Run #210 已成功；Build 1 仍待 CI。
+- V2.6.4 Build 1 的 code-bearing head：`b6d0f1d8fa02d2fd182179c599208764d0320552`。
+- Cloud Check Run #211 已成功，engineering 測試包已產生；development deploy Run #6 已成功。
 - Cloud compatibility：Cloud `0.8.2` / API `1` / Schema `7`
 - Forward migrations：`0001`～`0007`
 
@@ -66,7 +66,7 @@ PR #73 body、`CLOUD_ARCHITECTURE_STATUS.md`、`CLOUD_ROADMAP.md`、`TODO.md` �
 
 ## 4. 最新驗證
 
-Build 0 的 Run #210 已通過：
+Build 1 的 Run #211 已通過：
 
 - TypeScript type check
 - Worker dry-run bundle
@@ -77,16 +77,18 @@ Build 0 的 Run #210 已通過：
 - Windows Cloud contract tests
 - engineering package build/upload
 
-2026-09-22 已完成 remote audit：development Worker Cloud 0.8.1 的 `/v1/health` 回覆 storage `ok`，D1 migrations 已到 Schema 7，Brevo bootstrap OTP 已實際寄達。第一次建立 Workspace 時 Worker INSERT SQL 欄位和值數量不一致，D1 batch 回滾，卻誤回報 `WORKSPACE_ALREADY_INITIALIZED`；遠端唯讀查核確認 Workspace／Device／Employee／Pairing 筆數均為 0。V2.6.4 Build 1 / Cloud 0.8.2 修正 SQL、錯誤分類並新增直接執行正式 SQL 的 Schema 7 回歸測試；仍待 development 部署與 Windows live 建立驗證。
+2026-09-22 已完成 remote audit：development Worker Cloud 0.8.1 的 `/v1/health` 回覆 storage `ok`，D1 migrations 已到 Schema 7，Brevo bootstrap OTP 已實際寄達。第一次建立 Workspace 時 Worker INSERT SQL 欄位和值數量不一致，D1 batch 回滾，卻誤回報 `WORKSPACE_ALREADY_INITIALIZED`；遠端唯讀查核確認 Workspace／Device／Employee／Pairing 筆數均為 0。V2.6.4 Build 1 / Cloud 0.8.2 修正 SQL、錯誤分類並新增直接執行正式 SQL 的 Schema 7 回歸測試。
+
+2026-09-23 development deploy Run #6 已完成：Cloud 0.8.2 / API 1 / Schema 7 / storage `ok`；D1 無待套用 migration，部署前 Workspace／Device／Employee／Pairing 仍各為 0。下一步由使用者在 Windows 使用 Build 1 測試包重新寄送 OTP，建立第一個 Workspace；目前不得宣稱 live 建立成功。
 
 ## 5. Work 接手後的優先順序
 
-### A. 部署 V2.6.4 Build 1 / Cloud 0.8.2 hotfix
+### A. Windows live 建立第一個 Workspace
 
-1. 先讀最新 PR #73 head 與 CI，確認 V2.6.4 Build 1 SQL 回歸測試及 Windows 驗證已通過。
-2. 以既有 development deployment workflow 部署 Cloud 0.8.2；D1 已是 Schema 7，不新增或重寫 migration。
-3. 重新檢查 `/v1/health` 必須回覆 Cloud 0.8.2 / API 1 / Schema 7 / storage `ok`。
-4. 再由使用者以新 engineering package 重新寄送 bootstrap OTP 並建立第一個 Workspace；舊 OTP 已消耗，不得重用。成功後再以遠端唯讀查詢核對 Workspace／Device 各 1 筆。
+1. 使用 Build 1 engineering package，於「雲端連線設定」測試連線並確認 Cloud 0.8.2 相容。
+2. 重新寄送 bootstrap OTP；舊 OTP 已消耗，不得重用。由使用者自行在 Windows 輸入驗證碼與初始化碼，勿貼進對話。
+3. 建立第一個 Workspace，應收到 Device identity 驗證完成訊息並進入 Employee transition。
+4. 成功後再以遠端唯讀查詢核對 Workspace／Device 各 1 筆；失敗則保留錯誤碼與畫面，不重複提交。
 
 不要把 remote 狀態猜成已完成。
 
@@ -139,4 +141,4 @@ A/B identity flow 穩定後再做：
 
 ## 7. 目前適合的 Work 任務起點
 
-Work 接手後，先完成 **V2.6.4 Build 1 / Cloud 0.8.2 hotfix CI、development deployment 與 live Workspace 建立**。成功後才繼續 A 機 Employee transition；不要先混入下一階段功能。
+Work 接手後，先完成 **V2.6.4 Build 1 的 Windows live Workspace 建立及 D1 唯讀回查**；Cloud 0.8.2 已部署且 CI 通過。成功後才繼續 A 機 Employee transition；不要先混入下一階段功能。
