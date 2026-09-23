@@ -12,10 +12,10 @@ const build13Label = "Build 13"
 
 func init() {
 	// Build 13 keeps the Build 12 UI layout but updates the visible build label
-	// and window icon after the main HWND is created.
+	// and window icon after the controls have been created.
 	go func() {
 		for i := 0; i < 100; i++ {
-			if mainHwnd != 0 {
+			if mainHwnd != 0 && statusHwnd != 0 {
 				setWindowText(mainHwnd, "CYERPAutoInput V0.0.10 Build 13 — SMART ERP 自動輸入工具")
 				for _, c := range enumControls(mainHwnd) {
 					if strings.Contains(c.Text, "V0.0.10 Build 12") {
@@ -103,7 +103,6 @@ func makeAppIconV13(size int) uintptr {
 	border := maxiV13(1, int(float64(size)*0.075+0.5))
 	radius := maxiV13(2, int(float64(size)*0.105+0.5))
 
-	// Mark everything outside the optical live area transparent in the AND mask.
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
 			if !insideRoundedBoxV13(x, y, x0, y0, x1, y1, radius) {
@@ -115,18 +114,17 @@ func makeAppIconV13(size int) uintptr {
 	fillRoundedBoxV13(pixels, size, x0, y0, x1, y1, radius, apricot)
 	fillRoundedBoxV13(pixels, size, x0+border, y0+border, x1-border, y1-border, maxiV13(1, radius-border), white)
 
-	// EAI abbreviation zone. Bold block geometry is intentional for 16/24px legibility.
 	stroke := maxiV13(1, int(float64(size)*0.045+0.5))
 	top := int(float64(size)*0.245 + 0.5)
 	bottom := int(float64(size)*0.49 + 0.5)
-	// E
+
 	ex0 := int(float64(size)*0.245 + 0.5)
 	ex1 := int(float64(size)*0.385 + 0.5)
 	fillRectV13(pixels, size, ex0, top, ex0+stroke, bottom, apricot)
 	fillRectV13(pixels, size, ex0, top, ex1, top+stroke, apricot)
 	fillRectV13(pixels, size, ex0, (top+bottom)/2-stroke/2, ex1-stroke/2, (top+bottom)/2+maxiV13(1, stroke/2), apricot)
 	fillRectV13(pixels, size, ex0, bottom-stroke, ex1, bottom, apricot)
-	// A
+
 	axL := int(float64(size)*0.425 + 0.5)
 	axC := int(float64(size)*0.515 + 0.5)
 	axR := int(float64(size)*0.605 + 0.5)
@@ -134,11 +132,10 @@ func makeAppIconV13(size int) uintptr {
 	drawThickLineV13(pixels, size, axC, top, axR, bottom, stroke, apricot)
 	barY := int(float64(size)*0.405 + 0.5)
 	drawThickLineV13(pixels, size, axL+stroke, barY, axR-stroke, barY, stroke, apricot)
-	// I
+
 	ix := int(float64(size)*0.675 + 0.5)
 	fillRectV13(pixels, size, ix, top, ix+stroke, bottom, apricot)
 
-	// Data-flow symbol zone: three streams converge toward a receiving slot.
 	flowStroke := maxiV13(1, int(float64(size)*0.032+0.5))
 	fx0 := int(float64(size)*0.285 + 0.5)
 	flowYs := []float64{0.615, 0.685, 0.755}
@@ -182,7 +179,6 @@ func fillRoundedBoxV13(pixels []uint32, size, x0, y0, x1, y1, radius int, c uint
 				pixels[y*size+x] = c
 			}
 		}
-	}
 }
 
 func insideRoundedBoxV13(x, y, x0, y0, x1, y1, r int) bool {
