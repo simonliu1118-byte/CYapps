@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>志遠記帳系統 Web</title>
   <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/v03.css">
 </head>
 <body>
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.2.0</span></p>
+      <p>CYAccounting Web <span class="version">V0.3.0</span></p>
     </div>
     <div class="topbar-actions">
       <button id="settingsButton" class="secondary compact" type="button">設定</button>
@@ -36,6 +37,11 @@
           <button id="saveButton" class="primary" type="submit">儲存</button>
         </div>
       </form>
+      <div class="quick-entry-tools" aria-label="快速輸入">
+        <div id="favoriteCategoryGroup" class="quick-tool-row hidden"><span class="quick-tool-label">常用科目</span><div id="favoriteCategoryButtons" class="quick-chip-list"></div></div>
+        <div id="summarySuggestionGroup" class="quick-tool-row hidden"><span class="quick-tool-label">常用摘要</span><div id="summarySuggestions" class="quick-chip-list"></div></div>
+      </div>
+      <p class="keyboard-hint">鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存</p>
     </section>
 
     <section class="card ledger-card">
@@ -85,7 +91,7 @@
         </section>
 
         <section class="settings-pane" data-settings-pane="categories">
-          <div class="pane-heading"><div><h3>科目管理</h3><p class="hint">科目分為收入與支出，各自可建立大分類。</p></div><div class="kind-buttons settings-kind"><button type="button" class="kind-button active" data-settings-kind="expense">支出</button><button type="button" class="kind-button" data-settings-kind="income">收入</button></div></div>
+          <div class="pane-heading"><div><h3>科目管理</h3><p class="hint">科目分為收入與支出，各自可建立大分類；每種收支最多可標記 10 個常用科目。</p></div><div class="kind-buttons settings-kind"><button type="button" class="kind-button active" data-settings-kind="expense">支出</button><button type="button" class="kind-button" data-settings-kind="income">收入</button></div></div>
           <div id="categoryManager"></div>
           <div class="inline-add"><input id="newGroupName" type="text" maxlength="60" placeholder="新增大分類"><button id="addGroupButton" class="secondary" type="button">新增大分類</button></div>
         </section>
@@ -109,5 +115,6 @@
   </dialog>
 
   <script src="/app.js" defer></script>
+  <script src="/v03.js" defer></script>
 </body>
 </html>

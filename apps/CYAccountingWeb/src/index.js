@@ -17,6 +17,7 @@ export default {
       if (url.pathname === '/api/bootstrap' && request.method === 'GET') return handleBootstrap(env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'GET') return handleListTransactions(url, env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'POST') return handleCreateTransaction(request, env.DB);
+      if (url.pathname === '/api/summaries/frequent' && request.method === 'GET') return handleFrequentSummaries(url, env.DB);
 
       let match = url.pathname.match(/^\/api\/transactions\/(\d+)$/);
       if (match && request.method === 'PUT') return handleUpdateTransaction(Number(match[1]), request, env.DB);
@@ -35,6 +36,8 @@ export default {
       if (match && request.method === 'DELETE') return handleDeleteGroup(Number(match[1]), env.DB);
 
       if (url.pathname === '/api/categories' && request.method === 'POST') return handleCreateCategory(request, env.DB);
+      match = url.pathname.match(/^\/api\/categories\/(\d+)\/favorite$/);
+      if (match && request.method === 'PUT') return handleSetCategoryFavorite(Number(match[1]), request, env.DB);
       match = url.pathname.match(/^\/api\/categories\/(\d+)$/);
       if (match && request.method === 'PUT') return handleRenameCategory(Number(match[1]), request, env.DB);
       if (match && request.method === 'DELETE') return handleDeleteCategory(Number(match[1]), env.DB);
@@ -144,6 +147,37 @@ async function handleDeleteTransaction(id, db) {
   return json({ ok: true });
 }
 
+async function handleFrequentSummaries(url, db) {
+  const kind = String(url.searchParams.get('kind') || '').trim();
+  const account = normalizeName(url.searchParams.get('account'));
+  const category = normalizeName(url.searchParams.get('category'));
+  if (!['income', 'expense'].includes(kind) || !account || !category) {
+    return json({ ok: false, error: '常用摘要查詢條件不完整。' }, 400);
+  }
+  const result = await db.prepare(`
+    SELECT summary, tx_date, created_at, id
+    FROM transactions
+    WHERE kind = ? AND account_name = ? AND category_name = ?
+    ORDER BY tx_date DESC, created_at DESC, id DESC
+    LIMIT 100
+  `).bind(kind, account, category).all();
+
+  const stats = new Map();
+  for (const [rank, row] of (result.results || []).entries()) {
+    const summary = String(row.summary || '').trim();
+    if (!summary) continue;
+    const item = stats.get(summary) || { count: 0, latestRank: rank };
+    item.count += 1;
+    stats.set(summary, item);
+  }
+  const summaries = [...stats.entries()]
+    .filter(([, meta]) => meta.count >= 3)
+    .sort((a, b) => b[1].count - a[1].count || a[1].latestRank - b[1].latestRank)
+    .slice(0, 10)
+    .map(([summary]) => summary);
+  return json({ ok: true, summaries });
+}
+
 async function handleCreateAccount(request, db) {
   const body = await bodyJson(request);
   const name = normalizeName(body?.name);
@@ -251,6 +285,20 @@ async function handleRenameCategory(id, request, db) {
   if (await db.prepare('SELECT 1 FROM categories WHERE kind = ? AND name = ? AND id <> ?').bind(category.kind, name, id).first()) return json({ ok: false, error: '科目名稱已存在。' }, 409);
   await db.prepare('UPDATE categories SET name = ? WHERE id = ?').bind(name, id).run();
   return json({ ok: true });
+}
+
+async function handleSetCategoryFavorite(id, request, db) {
+  if (!validId(id)) return json({ ok: false, error: '科目編號錯誤。' }, 400);
+  const category = await db.prepare('SELECT kind, is_favorite FROM categories WHERE id = ?').bind(id).first();
+  if (!category) return json({ ok: false, error: '找不到科目。' }, 404);
+  const body = await bodyJson(request);
+  if (!body || typeof body.favorite !== 'boolean') return json({ ok: false, error: '常用科目設定格式錯誤。' }, 400);
+  if (body.favorite && Number(category.is_favorite) !== 1) {
+    const count = await db.prepare('SELECT COUNT(*) AS count FROM categories WHERE kind = ? AND is_favorite = 1').bind(category.kind).first();
+    if (Number(count?.count || 0) >= 10) return json({ ok: false, error: '常用科目最多設定 10 個。' }, 409);
+  }
+  await db.prepare('UPDATE categories SET is_favorite = ? WHERE id = ?').bind(body.favorite ? 1 : 0, id).run();
+  return json({ ok: true, favorite: body.favorite });
 }
 
 async function handleDeleteCategory(id, db) {
