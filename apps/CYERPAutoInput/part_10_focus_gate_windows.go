@@ -119,8 +119,7 @@ func writeReplaceEditV6(edit uintptr, value string) bool {
 		return true
 	}
 	// Build 7: 銷貨單別 is the explicit replacement exception. Always dispatch
-	// the full End -> Shift+Home -> Delete sequence with spaced key transitions,
-	// even when Delphi readback is stale/empty.
+	// the full forced clear sequence even when Delphi readback is stale/empty.
 	if !clearFocusedEditSelectionForcedV7(edit) {
 		return false
 	}
@@ -155,17 +154,7 @@ func setDateControlInteractiveV4(root uintptr, target ControlInfo, value string)
 }
 
 func activateDetailFirstRowV4(root uintptr, grid ControlInfo) bool {
-	if isStopRequested() || !prepareERPWindow(root) {
-		return false
-	}
-	x := grid.Rect.Left + 30
-	y := grid.Rect.Top + 33
-	clickScreenPoint(x, y)
-	if !interruptibleSleep(240 * time.Millisecond) {
-		return false
-	}
-	logf("INFO", "detail first-row activation click point=%d,%d focus=0x%x/%s", x, y, focusedControlOfForeground(root), className(focusedControlOfForeground(root)))
-	return true
+	return activateDetailFirstRowOpticalV011(root, freshDetailGridV18(grid))
 }
 
 func focusedGridEditorV4(root uintptr, grid ControlInfo) uintptr {
