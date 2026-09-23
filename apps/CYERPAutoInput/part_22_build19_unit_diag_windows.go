@@ -10,12 +10,10 @@ import (
 	"time"
 )
 
-// Build 19 is intentionally diagnostic-only for the F2 unit lookup. It does not
-// change the existing selection/confirmation behavior. While automation is
-// running and the F2 lookup is visible, record exactly what Win32 can read from
-// the lookup window so the next real-ERP test can distinguish "no cell text is
-// exposed" from "text is exposed but does not match the requested unit".
-func init() {
+// Build 19 diagnostic helpers are retained for targeted troubleshooting, but
+// V0.0.11 no longer starts the continuous watcher automatically. The optical
+// selector owns F2 screenshot/OCR work and normal runtime logs stay compact.
+func startUnitLookupReadbackDiagnosticV19() {
 	go watchUnitLookupReadbackV19()
 }
 
