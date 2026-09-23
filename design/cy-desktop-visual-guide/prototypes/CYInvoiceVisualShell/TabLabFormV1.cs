@@ -7,13 +7,14 @@ internal sealed class TabLabFormV1 : Form
     private readonly Label dpiLabel = new();
     private readonly ThemeTabControlV1 normalTabs = new();
     private readonly ThemeTabControlV1 manyTabs = new();
+    private readonly ThemeTabControlV1 largeTabs = new();
 
     internal TabLabFormV1()
     {
-        Text = "CY Tab Lab V1 — Native TabControl / Header-only Owner Draw";
+        Text = "CY Tab Lab V3 — Standard / Large Native TabControl";
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(1080, 720);
-        MinimumSize = new Size(920, 620);
+        ClientSize = new Size(1120, 820);
+        MinimumSize = new Size(940, 700);
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = VisualTokens.Window;
         Font = VisualTokens.Font(10f);
@@ -30,31 +31,34 @@ internal sealed class TabLabFormV1 : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 6,
+            RowCount = 8,
             Padding = new Padding(26, 22, 26, 22),
             BackColor = VisualTokens.Window,
         };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 30));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 32));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 38));
 
         var header = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
             AutoSize = true,
-            ColumnCount = 3,
+            ColumnCount = 4,
             Margin = new Padding(0, 0, 0, 4),
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         var title = new Label
         {
-            Text = "Tab Lab — 原生 TabControl + Header-only Owner Draw",
+            Text = "Tab Lab — Standard / Large Header 對照",
             AutoSize = true,
             Font = VisualTokens.Font(16f, FontStyle.Bold),
             ForeColor = VisualTokens.TextPrimary,
@@ -74,31 +78,51 @@ internal sealed class TabLabFormV1 : Form
             ApplyTheme();
         };
 
+        var openTable = new Button
+        {
+            Text = "開啟 Table Lab",
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(10, 2, 10, 2),
+            Margin = new Padding(0, 0, 12, 0),
+            Anchor = AnchorStyles.Right,
+            UseVisualStyleBackColor = true,
+        };
+        openTable.Click += (_, _) => new TableLabFormV1().Show(this);
+
         dpiLabel.AutoSize = true;
         dpiLabel.ForeColor = VisualTokens.TextSecondary;
         dpiLabel.Anchor = AnchorStyles.Right;
 
         header.Controls.Add(title, 0, 0);
         header.Controls.Add(themeCombo, 1, 0);
-        header.Controls.Add(dpiLabel, 2, 0);
+        header.Controls.Add(openTable, 2, 0);
+        header.Controls.Add(dpiLabel, 3, 0);
 
         var note = new Label
         {
-            Text = "只畫 Tab Header：Active = Accent 底線 + 較強字重；Hover = Accent Soft。頁面切換、鍵盤、焦點與原生 TabControl 行為不重做。",
+            Text = "兩種尺寸都保留原生 TabControl / TabPage 行為，只 owner-draw Header。Active = Accent 底線 + 較強字重；Hover = Accent Soft；不顯示傳統虛線 Focus cue。Large 只是在同一視覺語言下放大，不是另一套 Web-style Tab。",
             AutoSize = true,
-            MaximumSize = new Size(1000, 0),
+            MaximumSize = new Size(1040, 0),
             Font = VisualTokens.Font(9.5f),
             ForeColor = VisualTokens.TextSecondary,
-            Margin = new Padding(0, 0, 0, 18),
+            Margin = new Padding(0, 0, 0, 14),
         };
 
-        var sectionA = SectionTitle("A. 一般 4 Tabs — 常見商務主畫面");
+        var sectionA = SectionTitle("A. Standard — 一般 4 Tabs / 常見商務主畫面");
+        normalTabs.ConfigureStandard();
         BuildTabs(normalTabs, new[] { "開立發票", "已開立發票清單", "待處理", "設定" });
-        normalTabs.Margin = new Padding(0, 6, 0, 18);
+        normalTabs.Margin = new Padding(0, 5, 0, 12);
 
-        var sectionB = SectionTitle("B. 6 Tabs + 長短標題混合 — 看排列、Hover 與空間不足時的原生行為");
+        var sectionB = SectionTitle("B. Standard — 6 Tabs + 長短標題混合 / 看排列與空間不足時原生行為");
+        manyTabs.ConfigureStandard();
         BuildTabs(manyTabs, new[] { "基本資料", "商品明細", "載具與買受人", "發票上傳與同步狀態", "列印與 PDF", "系統設定" });
-        manyTabs.Margin = new Padding(0, 6, 0, 0);
+        manyTabs.Margin = new Padding(0, 5, 0, 12);
+
+        var sectionC = SectionTitle("C. Large — 較高層級功能切換 / 約 11 pt + 較大 padding（App Choice）");
+        largeTabs.ConfigureLarge();
+        BuildTabs(largeTabs, new[] { "發票作業", "開立紀錄", "同步處理", "系統設定" });
+        largeTabs.Margin = new Padding(0, 5, 0, 0);
 
         root.Controls.Add(header, 0, 0);
         root.Controls.Add(note, 0, 1);
@@ -106,6 +130,8 @@ internal sealed class TabLabFormV1 : Form
         root.Controls.Add(normalTabs, 0, 3);
         root.Controls.Add(sectionB, 0, 4);
         root.Controls.Add(manyTabs, 0, 5);
+        root.Controls.Add(sectionC, 0, 6);
+        root.Controls.Add(largeTabs, 0, 7);
         Controls.Add(root);
     }
 
@@ -126,7 +152,7 @@ internal sealed class TabLabFormV1 : Form
             var page = new TabPage(name) { BackColor = Color.White, Padding = new Padding(18) };
             var content = new Label
             {
-                Text = $"{name}\r\n\r\n這裡只是原生 TabPage 內容區。請切換頁籤、用滑鼠移過其他 Tab，並縮放視窗觀察 Header。",
+                Text = $"{name}\r\n\r\n這裡只是原生 TabPage 內容區。請切換頁籤、快速滑過其他 Tab，並縮放視窗觀察 Header。",
                 AutoSize = true,
                 Font = VisualTokens.Font(10f),
                 ForeColor = VisualTokens.TextPrimary,
@@ -140,6 +166,7 @@ internal sealed class TabLabFormV1 : Form
     {
         normalTabs.ApplyTheme(currentTheme);
         manyTabs.ApplyTheme(currentTheme);
+        largeTabs.ApplyTheme(currentTheme);
     }
 
     private void RefreshDpiLabel()
