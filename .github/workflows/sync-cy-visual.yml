@@ -1,0 +1,108 @@
+name: Sync CY Visual References
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-cy-visual-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch canonical CY visual references
+        id: canonical
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          src_base='https://raw.githubusercontent.com/simonliu1118-byte/AITeam/main/shared/cy-visual'
+          tmp="$RUNNER_TEMP/cy-visual"
+          mkdir -p "$tmp/icon-family"
+
+          curl --fail --silent --show-error --location --retry 3 "$src_base/README.md" -o "$tmp/README.md"
+
+          for file in CY_ICON_FAMILY.md CY_ICON_CREATION_BRIEF.md ICON_FAMILY_VERSION ICON_FAMILY_CHANGELOG.md; do
+            curl --fail --silent --show-error --location --retry 3 \
+              "$src_base/icon-family/$file" \
+              -o "$tmp/icon-family/$file"
+          done
+
+          version="$(tr -d '\r\n' < "$tmp/icon-family/ICON_FAMILY_VERSION")"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Invalid canonical ICON_FAMILY_VERSION: $version"
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          changed=0
+          pairs=(
+            "README.md|docs/cy-visual/README.md"
+            "icon-family/CY_ICON_FAMILY.md|docs/cy-visual/icon-family/CY_ICON_FAMILY.md"
+            "icon-family/CY_ICON_CREATION_BRIEF.md|docs/cy-visual/icon-family/CY_ICON_CREATION_BRIEF.md"
+            "icon-family/ICON_FAMILY_VERSION|docs/cy-visual/icon-family/ICON_FAMILY_VERSION"
+            "icon-family/ICON_FAMILY_CHANGELOG.md|docs/cy-visual/icon-family/ICON_FAMILY_CHANGELOG.md"
+          )
+
+          for pair in "${pairs[@]}"; do
+            src="${pair%%|*}"
+            dst="${pair#*|}"
+            if [ ! -f "$dst" ] || ! cmp --silent "$tmp/$src" "$dst"; then
+              changed=1
+            fi
+          done
+
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Create or refresh synchronization PR
+        if: steps.canonical.outputs.changed == '1'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.canonical.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          branch="design/sync-cy-icon-family-v${VERSION//./-}"
+          tmp="$RUNNER_TEMP/cy-visual"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "4189826+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git fetch origin "$branch" || true
+          git checkout -B "$branch" origin/main
+
+          mkdir -p docs/cy-visual/icon-family
+          cp "$tmp/README.md" docs/cy-visual/README.md
+          cp "$tmp/icon-family/CY_ICON_FAMILY.md" docs/cy-visual/icon-family/CY_ICON_FAMILY.md
+          cp "$tmp/icon-family/CY_ICON_CREATION_BRIEF.md" docs/cy-visual/icon-family/CY_ICON_CREATION_BRIEF.md
+          cp "$tmp/icon-family/ICON_FAMILY_VERSION" docs/cy-visual/icon-family/ICON_FAMILY_VERSION
+          cp "$tmp/icon-family/ICON_FAMILY_CHANGELOG.md" docs/cy-visual/icon-family/ICON_FAMILY_CHANGELOG.md
+
+          git add docs/cy-visual
+          git diff --cached --quiet && exit 0
+          git commit -m "docs: sync CY icon family v$VERSION"
+          git push --force-with-lease origin "HEAD:refs/heads/$branch"
+
+          existing="$(gh pr list --base main --head "$branch" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$existing" ]; then
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "docs: sync CY icon family v$VERSION" \
+              --body "Synchronize shared CY visual/icon-family references from the canonical source in simonliu1118-byte/AITeam main. These files are design/reference material and do not create a fourth governance layer."
+          fi
+
+      - name: Report already synchronized
+        if: steps.canonical.outputs.changed == '0'
+        run: echo "CY visual references already match AITeam main."
