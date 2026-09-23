@@ -60,7 +60,7 @@ func handleCommand(id uint16) {
 	case 1011:
 		runAutomation("ensure-input", testEnsureInputMode)
 	case 1012:
-		readSelectedComboOptions()
+		runAutomation("read-combo-options", readSelectedComboOptions)
 	case 1013:
 		saveComboSettingsFromUI()
 	case 1014:
@@ -125,7 +125,7 @@ func getWindowText(hwnd uintptr) string {
 	// focused F2 TcxGridSite only, V0.0.11 supplies the selected row text from
 	// one OCR snapshot plus highlight tracking. Every other HWND keeps the native
 	// Win32 path unchanged.
-	if text, ok := focusedLookupGridTextV011(hwnd); ok {
+	if text, ok := focusedLookupGridTextDirectV011(hwnd); ok {
 		return text
 	}
 	n, _, _ := pGetWindowTextLenW.Call(hwnd)
