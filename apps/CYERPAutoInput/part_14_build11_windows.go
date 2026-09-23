@@ -99,6 +99,10 @@ func findDetailFieldByColV11(fs []*Field, col int) *Field {
 }
 
 func fillDetailSelectedV11(root uintptr) (ok, fail int) {
+	if detailListViewV14 != 0 {
+		return fillDetailSelectedV14(root)
+	}
+
 	rows := selectedDetailRowsV11()
 	if len(rows) == 0 {
 		return 0, 0
