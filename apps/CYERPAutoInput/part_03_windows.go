@@ -60,7 +60,7 @@ func handleCommand(id uint16) {
 	case 1011:
 		runAutomation("ensure-input", testEnsureInputMode)
 	case 1012:
-		runAutomation("read-combo-options", readSelectedComboOptions)
+		readSelectedComboOptions()
 	case 1013:
 		saveComboSettingsFromUI()
 	case 1014:
@@ -121,6 +121,13 @@ func prepareERPWindow(root uintptr) bool {
 }
 
 func getWindowText(hwnd uintptr) string {
+	// DevExpress F2 grid cells do not expose text through GetWindowText. For the
+	// focused F2 TcxGridSite only, V0.0.11 supplies the selected row text from
+	// one OCR snapshot plus highlight tracking. Every other HWND keeps the native
+	// Win32 path unchanged.
+	if text, ok := focusedLookupGridTextV011(hwnd); ok {
+		return text
+	}
 	n, _, _ := pGetWindowTextLenW.Call(hwnd)
 	if n == 0 {
 		return ""
