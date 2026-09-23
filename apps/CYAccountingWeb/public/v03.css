@@ -1,0 +1,16 @@
+.quick-entry-tools { margin-top: 12px; display: grid; gap: 8px; }
+.quick-tool-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.quick-tool-label { flex: 0 0 auto; padding-top: 4px; color: #687583; font-size: 12px; }
+.quick-chip-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.quick-chip { min-height: 29px; padding: 4px 10px; border: 1px solid #bdc8d2; border-radius: 999px; background: #f7f9fb; color: #344250; cursor: pointer; font-size: 12px; }
+.quick-chip:hover, .quick-chip:focus-visible { border-color: #39739d; background: #edf4f9; outline: none; }
+.summary-chip { background: #fbfaf4; border-color: #d8cfaa; }
+.keyboard-hint { margin: 8px 0 0; color: #7a8793; font-size: 11px; }
+.favorite-toggle.active { color: #8a6500; border-color: #d4bd66; background: #fff9df; }
+.hidden { display: none !important; }
+@media (max-width: 720px) {
+  .quick-tool-row { display: grid; gap: 5px; }
+  .quick-tool-label { padding-top: 0; }
+  .quick-chip { min-height: 32px; }
+  .keyboard-hint { display: none; }
+}
