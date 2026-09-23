@@ -3,6 +3,13 @@ logs/
 config/settings.json
 config/*.local.json
 
+# .NET / IDE output
+bin/
+obj/
+.vs/
+*.user
+*.pdb
+
 # Build output
 dist/
 package/
