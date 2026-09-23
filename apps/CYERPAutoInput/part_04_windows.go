@@ -117,6 +117,8 @@ func fillTabGroupSelected(root uintptr, group string) (ok, fail int) {
 			if selectDevExpressComboByCode(root, target, code) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=combo requested_len=%d", group, f.Label, target.Hwnd, target.Class, len([]rune(code))); clickBlankArea(sheet); time.Sleep(180 * time.Millisecond) } else { fail++; logError(group, f.Label, "COMBO_SELECT_FAILED", fmt.Sprintf("hwnd=0x%x class=%q requested_len=%d", target.Hwnd, target.Class, len([]rune(code)))) }
 		} else if f.Kind == "date" {
 			if setDateControlInteractiveV4(root, target, getWindowText(f.ValueHwnd)) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=date", group, f.Label, target.Hwnd, target.Class) } else { fail++; logError(group, f.Label, "DATE_SET_FAILED", fmt.Sprintf("hwnd=0x%x class=%q", target.Hwnd, target.Class)) }
+		} else if isSimpleMoneyFieldV13(f.Key) {
+			if setSimpleClickInputV13(root, target, getWindowText(f.ValueHwnd), sheet) { ok++; logf("INFO", "filled %s/%s hwnd=0x%x class=%q kind=simple-click-input-leave", group, f.Label, target.Hwnd, target.Class) } else { fail++; logError(group, f.Label, "SIMPLE_INPUT_FAILED", fmt.Sprintf("hwnd=0x%x class=%q", target.Hwnd, target.Class)) }
 		} else {
 			filled := setTextControlInteractiveV4(root, target, getWindowText(f.ValueHwnd))
 			if filled && f.Kind == "lookup" {
@@ -164,13 +166,13 @@ func fillAllSelected() {
 	if isStopRequested() { return }
 	if !prepareERPWindow(root) { setStatus("ERP：已找到但無法移到前景，為避免誤輸入已停止"); return }
 	var oldCursor POINT; pGetCursorPos.Call(uintptr(unsafe.Pointer(&oldCursor))); defer pSetCursorPos.Call(uintptr(oldCursor.X), uintptr(oldCursor.Y))
-	logf("INFO", "AUTO-FILL V0.0.10 Build 12 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
+	logf("INFO", "AUTO-FILL V0.0.10 Build 13 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
 	if !ensureInputMode(root) { if isStopRequested(){return}; setStatus("ERP：無法確認輸入狀態，已停止；請提供除錯紀錄"); logError("自動填入","ERP","INPUT_MODE_NOT_CONFIRMED","未進入或無法判斷輸入狀態"); return }
-	setStatus("ERP：Build 12 新增模式，依序填入表頭→交易→送貨→發票→多列明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
+	setStatus("ERP：Build 13 新增模式，依序填入表頭→交易→送貨→發票→多列明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
 	ok,fail := 0,0; a,b := fillHeaderSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
 	for _, group := range []string{"交易資料","送貨資料","發票資料(一)"} { if isStopRequested(){return}; a,b = fillTabGroupSelected(root,group); ok+=a; fail+=b }
 	if isStopRequested(){return}; a,b = fillDetailSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
-	setStatus(fmt.Sprintf("ERP：Build 12 測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 12 end success=%d fail=%d (NO SAVE)",ok,fail)
+	setStatus(fmt.Sprintf("ERP：Build 13 測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 13 end success=%d fail=%d (NO SAVE)",ok,fail)
 }
 
 func findTabSheet(root uintptr, tabName string) uintptr {
