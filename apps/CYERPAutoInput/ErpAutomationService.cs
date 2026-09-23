@@ -142,7 +142,9 @@ internal sealed class ErpAutomationService
 
         if (field.Kind == FieldKind.Boolean)
         {
-            if (value.Equals("true", StringComparison.OrdinalIgnoreCase)) InputSender.Click(center);
+            var desired = value.Equals("true", StringComparison.OrdinalIgnoreCase);
+            var current = NativeMethods.SendMessage(target.Handle, 0x00F0, 0, 0) == 1; // BM_GETCHECK / BST_CHECKED
+            if (desired != current) InputSender.Click(center);
             await Delay(160, cancellationToken);
             return;
         }
@@ -175,6 +177,16 @@ internal sealed class ErpAutomationService
             return;
         }
 
+        if (field.Key is "cod" or "freight_fee")
+        {
+            // Proven ERP behavior: click -> type -> leave. Do not clear/select first.
+            InputSender.UnicodeText(value, 105);
+            await Delay(140, cancellationToken);
+            InputSender.Press(NativeMethods.VK_TAB);
+            await Delay(180, cancellationToken);
+            return;
+        }
+
         if (field.Key == "order_type")
         {
             // Confirmed SMART ERP behavior from the Go prototype: End + Backspace x4 reliably clears the order type.
@@ -182,10 +194,17 @@ internal sealed class ErpAutomationService
         }
         else
         {
+            // Preserve the validated new-entry rule: never erase an unexpected ERP value.
+            // Except for the explicit order-type replacement above, new-entry fields are only written when Win32 reports them blank.
             var before = NativeMethods.WindowText(focus);
-            InputSender.Press(NativeMethods.VK_END);
-            var erase = Math.Clamp(before.Length + 8, 12, 128);
-            for (var i = 0; i < erase; i++) InputSender.Press(NativeMethods.VK_BACK);
+            if (before == value)
+            {
+                InputSender.Press(field.Kind == FieldKind.Lookup ? NativeMethods.VK_RETURN : NativeMethods.VK_TAB);
+                await Delay(180, cancellationToken);
+                return;
+            }
+            if (!string.IsNullOrWhiteSpace(before))
+                throw new InvalidOperationException($"ERP 欄位「{field.Label}」目前已有內容；為避免覆蓋既有值已停止。");
         }
 
         InputSender.UnicodeText(value);
