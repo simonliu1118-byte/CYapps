@@ -9,15 +9,15 @@ The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; curre
 ## Current compatibility
 
 - Service: `cyinvoice-cloud`
-- Cloud implementation: `0.8.2`
+- Cloud implementation: `0.8.3`
 - API: `1`
-- Schema: `7`
-- Migrations: `0001` through `0007`
+- Schema: `8`
+- Migrations: `0001` through `0008`
 - Worker entrypoint: `src/app.ts`
 
 `wrangler.jsonc` advertises the client compatibility schema. Applied migrations are immutable; future changes must use new forward migrations.
 
-> GitHub Actions validates the Worker bundle and migrations with local SQLite. It does not prove the remote Cloudflare deployment or remote D1 has already reached Schema 7.
+> GitHub Actions validates the Worker bundle and migrations with local SQLite. It does not prove the remote Cloudflare deployment or remote D1 has already reached Schema 8.
 
 ## Development commands
 

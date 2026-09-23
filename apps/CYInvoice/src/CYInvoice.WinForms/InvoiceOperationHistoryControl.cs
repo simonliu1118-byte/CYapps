@@ -8,6 +8,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class InvoiceOperationHistoryControl : UserControl
 {
+    private readonly FixedColumnHeaderCursor headerCursor;
     private readonly ListView list = new HistoryListView
     {
         Dock = DockStyle.Fill,
@@ -25,9 +26,14 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
     {
         Dock = DockStyle.Fill;
         Margin = Padding.Empty;
+        headerCursor = new FixedColumnHeaderCursor(list);
         list.Columns.Add("類型", 46, HorizontalAlignment.Left);
         list.Columns.Add("日期", 100, HorizontalAlignment.Left);
         list.Columns.Add("摘要", 140, HorizontalAlignment.Left);
+        list.OwnerDraw = true;
+        list.DrawColumnHeader += (_, eventArgs) => NativeListViewHost.DrawHeader(eventArgs, list.Font);
+        list.DrawItem += (_, eventArgs) => { if (list.View != View.Details) eventArgs.DrawDefault = true; };
+        list.DrawSubItem += DrawSubItem;
         list.ColumnWidthChanging += (_, eventArgs) =>
         {
             eventArgs.Cancel = true;
@@ -38,7 +44,10 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         Controls.Add(list);
     }
 
-    public void LoadRecord(InvoiceRecord record, InvoiceVoidHandledReview? handledReview = null)
+    public void LoadRecord(
+        InvoiceRecord record,
+        InvoiceVoidHandledReview? handledReview = null,
+        InvoiceAllowanceManualReview? allowanceReview = null)
     {
         list.BeginUpdate();
         try
@@ -53,7 +62,8 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
                         handledReview.RequesterEmployeeNo,
                         handledReview.ReviewerEmployeeNo,
                         handledReview.Reason);
-                var row = NewRow("作廢", ShortDate(cancelText), parsed?.Reason ?? "已作廢");
+                var row = NewRow("作廢", ShortDate(cancelText),
+                    "已作廢(" + (parsed?.Reason ?? "原因未取得") + ")");
                 row.Tag = new VoidHistoryItem(record.InvoiceNumber, cancelText, parsed);
                 list.Items.Add(row);
             }
@@ -62,7 +72,12 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
                          .Where(item => item.InvoiceStatus == UploadStatuses.Complete))
             {
                 var inclusive = InclusiveAmount(allowance);
-                var row = NewRow("折讓", FormatAllowanceDate(allowance.AllowanceDate), "$" + inclusive);
+                var reason = allowanceReview is not null &&
+                    string.Equals(allowanceReview.ConfirmedAllowanceNumber, allowance.AllowanceNumber,
+                        StringComparison.OrdinalIgnoreCase)
+                    ? allowanceReview.Reason : "原因未取得";
+                var row = NewRow("折讓", FormatAllowanceDate(allowance.AllowanceDate),
+                    "$" + inclusive + "(" + reason + ")");
                 row.Tag = new AllowanceHistoryItem(record, allowance);
                 list.Items.Add(row);
             }
@@ -102,12 +117,35 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         list.Columns[2].Width = Math.Max(60, list.ClientSize.Width - typeWidth - dateWidth - 4);
     }
 
+    private void DrawSubItem(object? sender, DrawListViewSubItemEventArgs eventArgs)
+    {
+        if (eventArgs.SubItem is null) return;
+        var background = eventArgs.Item.Selected ? SystemColors.Highlight : eventArgs.SubItem.BackColor;
+        var foreground = eventArgs.Item.Selected ? SystemColors.HighlightText : eventArgs.SubItem.ForeColor;
+        using (var brush = new SolidBrush(background))
+            eventArgs.Graphics.FillRectangle(brush, eventArgs.Bounds);
+        TextRenderer.DrawText(eventArgs.Graphics, eventArgs.SubItem.Text, list.Font,
+            Rectangle.Inflate(eventArgs.Bounds, -5, 0), foreground,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        using var pen = new Pen(Color.FromArgb(190, 190, 190));
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top,
+            eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1,
+            eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+    }
+
     private static ListViewItem NewRow(string type, string date, string summary)
     {
         var row = new ListViewItem(type);
         row.SubItems.Add(date);
         row.SubItems.Add(summary);
         return row;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) headerCursor.Dispose();
+        base.Dispose(disposing);
     }
 
     private static string ShortDate(string value)

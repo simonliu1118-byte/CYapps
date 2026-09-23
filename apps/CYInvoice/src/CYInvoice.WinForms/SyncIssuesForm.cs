@@ -8,7 +8,7 @@ namespace CYInvoice.WinForms;
 internal sealed class SyncIssuesForm : Form
 {
     internal const string ReadStateScope = "upload-issues-read";
-    private static readonly int[] DefaultWidths = [118, 108, 105, 135, 230, 80];
+    private static readonly int[] DefaultWidths = [145, 130, 110, 150, 0, 90];
 
     private readonly LocalRepository repository;
     private readonly InvoiceSyncIssueStore issueStore;
@@ -21,6 +21,10 @@ internal sealed class SyncIssuesForm : Form
     private readonly string accountKey;
     private DateTimeOffset? lastRead;
     private bool manualReviewBusy;
+    private bool settingColumnWidths;
+    private readonly ToolTip contentToolTip = new();
+    private readonly FixedColumnHeaderCursor headerCursor;
+    private string visibleToolTip = string.Empty;
 
     private readonly ListView list = new BufferedListView
     {
@@ -55,11 +59,12 @@ internal sealed class SyncIssuesForm : Form
         administrativeClosure = new InvoiceAdministrativeClosureService(repository);
         accountKey = CurrentAccountKey();
         lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
+        headerCursor = new FixedColumnHeaderCursor(list);
 
         Text = "上傳問題";
         StartPosition = FormStartPosition.CenterParent;
-        MinimumSize = new Size(760, 450);
-        ClientSize = new Size(900, 520);
+        MinimumSize = new Size(900, 450);
+        ClientSize = new Size(960, 520);
         Font = new Font("Microsoft JhengHei UI", 10F);
         BackColor = Color.White;
         ShowIcon = false;
@@ -82,6 +87,15 @@ internal sealed class SyncIssuesForm : Form
                 eventArgs.NewValue = CheckState.Unchecked;
         };
         list.ItemChecked += (_, _) => BeginInvoke((Action)UpdateFailedButtons);
+        list.ClientSizeChanged += (_, _) => LayoutColumns();
+        list.ColumnWidthChanging += (_, eventArgs) =>
+        {
+            if (settingColumnWidths) return;
+            eventArgs.Cancel = true;
+            eventArgs.NewWidth = list.Columns[eventArgs.ColumnIndex].Width;
+        };
+        list.MouseMove += ShowClippedContentToolTip;
+        list.MouseLeave += (_, _) => ClearContentToolTip();
 
         deleteFailed.Enabled = false;
         deleteFailed.Click += (_, _) => DeleteCheckedFailed();
@@ -828,31 +842,49 @@ internal sealed class SyncIssuesForm : Form
         return settings.Environment + "|" + sellerInvoice;
     }
 
-    private void LayoutColumns() => SizeColumns(list, DefaultWidths, flexibleColumn: 4, checkboxFirstColumn: true);
-
-    private static void SizeColumns(ListView target, IReadOnlyList<int> defaults, int flexibleColumn, bool checkboxFirstColumn)
+    private void LayoutColumns()
     {
-        if (target.Columns.Count != defaults.Count || target.ClientSize.Width <= 0) return;
-        var widths = defaults.ToArray();
-        for (var column = 0; column < target.Columns.Count; column++)
+        if (list.Columns.Count != DefaultWidths.Length || list.ClientSize.Width <= 0) return;
+        var widths = DefaultWidths.ToArray();
+        var available = Math.Max(1, list.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 4);
+        widths[4] = Math.Max(60, available - widths.Where((_, index) => index != 4).Sum());
+        settingColumnWidths = true;
+        try
         {
-            var measured = TextRenderer.MeasureText(target.Columns[column].Text, target.Font, new Size(int.MaxValue, int.MaxValue),
-                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + 18;
-            if (checkboxFirstColumn && column == 0) measured += 22;
-            foreach (ListViewItem item in target.Items)
-            {
-                if (column >= item.SubItems.Count) continue;
-                var valueWidth = TextRenderer.MeasureText(item.SubItems[column].Text, item.SubItems[column].Font ?? target.Font,
-                    new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + 18;
-                if (checkboxFirstColumn && column == 0) valueWidth += 22;
-                measured = Math.Max(measured, valueWidth);
-            }
-            widths[column] = Math.Max(widths[column], measured);
+            for (var index = 0; index < widths.Length; index++)
+                if (list.Columns[index].Width != widths[index]) list.Columns[index].Width = widths[index];
         }
-        var available = Math.Max(0, target.ClientSize.Width - 2);
-        var total = widths.Sum();
-        if (total < available) widths[flexibleColumn] += available - total;
-        for (var column = 0; column < widths.Length; column++) target.Columns[column].Width = widths[column];
+        finally { settingColumnWidths = false; }
+    }
+
+    private void ShowClippedContentToolTip(object? sender, MouseEventArgs eventArgs)
+    {
+        var hit = list.HitTest(eventArgs.Location);
+        var content = hit.Item is { } item && item.SubItems.Count > 4 &&
+            ReferenceEquals(hit.SubItem, item.SubItems[4])
+            ? item.SubItems[4].Text : string.Empty;
+        var available = list.Columns[4].Width - 12;
+        if (content.Length == 0 || TextRenderer.MeasureText(content, list.Font).Width <= available)
+            content = string.Empty;
+        if (content == visibleToolTip) return;
+        visibleToolTip = content;
+        contentToolTip.SetToolTip(list, content);
+    }
+
+    private void ClearContentToolTip()
+    {
+        visibleToolTip = string.Empty;
+        contentToolTip.SetToolTip(list, string.Empty);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            headerCursor.Dispose();
+            contentToolTip.Dispose();
+        }
+        base.Dispose(disposing);
     }
 
     private static void ApplyZebra(ListViewItem row, int index)

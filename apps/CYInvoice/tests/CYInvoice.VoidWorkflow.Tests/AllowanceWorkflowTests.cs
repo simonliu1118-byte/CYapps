@@ -136,6 +136,7 @@ internal static class AllowanceWorkflowTests
             Equal(null, setup.Workflow.ManualReviewFor(stored));
             Equal("2000", setup.Workflow.HandledReviewFor(stored)?.HandlerEmployeeNo);
             Equal("3015", setup.Workflow.HandledReviewFor(stored)?.RequesterEmployeeNo);
+            Equal("NEW-003", setup.Workflow.HandledReviewFor(stored)?.ConfirmedAllowanceNumber);
             Equal(3, InvoiceAllowanceMetadata.ReadOfficial(stored).Count);
         }
     }

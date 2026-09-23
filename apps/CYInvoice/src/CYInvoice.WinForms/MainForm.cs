@@ -273,7 +273,7 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
-        if (!TryAuthenticateAdministrator("開啟設定", out _)) return;
+        if (!TryAuthenticateAdministrator("密碼驗證", out _)) return;
         using var form = new SettingsForm(repository);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         UpdateEnvironment();
@@ -285,7 +285,7 @@ internal sealed class MainForm : Form
 
     private void OpenAccountManagement()
     {
-        if (!TryAuthenticateAdministrator("帳戶管理驗證", out var account)) return;
+        if (!TryAuthenticateAdministrator("密碼驗證", out var account)) return;
         using var form = new AccountManagementForm(repository, account!);
         form.ShowDialog(this);
     }
@@ -294,12 +294,16 @@ internal sealed class MainForm : Form
     {
         if (repository.UsesCloudEmployeeAuthority())
         {
-            MessageBox.Show(
-                this,
-                "這台電腦已使用 Cloud Employee 作為唯一帳號主資料。原本 Local SUPER_ADMIN 復原碼不再具有雲端帳號權限；請使用後續中央帳號復原流程。",
-                "雲端帳號復原",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            try
+            {
+                using var form = new CloudPasswordRecoveryForm(repository, cloudHealthHttpClient);
+                if (form.ShowDialog(this) == DialogResult.OK) _ = RefreshRuntimeModeAsync();
+            }
+            catch (Exception problem)
+            {
+                MessageBox.Show(this, problem.Message, "無法復原密碼",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             return;
         }
         if (!repository.Employees.HasEmployees())

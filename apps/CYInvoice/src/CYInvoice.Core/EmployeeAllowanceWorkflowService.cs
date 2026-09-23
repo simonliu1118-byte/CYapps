@@ -410,7 +410,8 @@ public sealed class EmployeeAllowanceWorkflowService
 
         ClearPending(fresh);
         fresh.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        fresh.ExtensionData[HandledReviewMetadataKey] = JsonSerializer.SerializeToElement(review);
+        fresh.ExtensionData[HandledReviewMetadataKey] = JsonSerializer.SerializeToElement(
+            review with { ConfirmedAllowanceNumber = number });
         ClearManualReview(fresh);
         syncRepository.UpsertMany([fresh]);
         issueStore.ResolveMatching(
