@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 internal sealed class CloudFirstWorkspaceForm : Form
 {
     private const int WindowWidth = 560;
-    private const int WindowHeight = 382;
+    private const int WindowHeight = 438;
     private readonly LocalRepository repository;
     private readonly Settings settings;
     private readonly string baseUrl;
@@ -61,7 +61,7 @@ internal sealed class CloudFirstWorkspaceForm : Form
     {
         superAdminPassword.UseSystemPasswordChar = true;
         bootstrapKey.UseSystemPasswordChar = true;
-        emailOtp.TextAlign = HorizontalAlignment.Center;
+        emailOtp.TextAlign = HorizontalAlignment.Left;
 
         var root = new BufferedTableLayoutPanel
         {
@@ -71,10 +71,10 @@ internal sealed class CloudFirstWorkspaceForm : Form
             Padding = new Padding(12),
             Margin = Padding.Empty,
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 194));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 228));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 78));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
 
         var header = new Label
         {
@@ -96,7 +96,7 @@ internal sealed class CloudFirstWorkspaceForm : Form
         };
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 132));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var row = 0; row < 6; row++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        for (var row = 0; row < 6; row++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
 
         fields.Controls.Add(FieldLabel("本機超級管理員"), 0, 0);
         fields.Controls.Add(accountSummary, 1, 0);
@@ -129,7 +129,7 @@ internal sealed class CloudFirstWorkspaceForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false,
-            Padding = new Padding(0, 5, 0, 0),
+            Padding = new Padding(0, 2, 0, 0),
             Margin = Padding.Empty,
         };
         actions.Controls.Add(cancel);
@@ -389,6 +389,7 @@ internal sealed class CloudFirstWorkspaceForm : Form
         "OTP_RESEND_COOLDOWN" => "驗證碼剛寄出，請稍後再重新寄送。",
         "OTP_RATE_LIMITED" => "驗證碼寄送次數過多，請稍後再試。",
         "BOOTSTRAP_FORBIDDEN" => "雲端初始化碼錯誤。",
+        "BOOTSTRAP_FAILED" => "Cloud 無法建立雲端空間，且未寫入 Workspace 或裝置資料。請重新寄送驗證碼後再試；若持續發生請執行系統診斷。",
         "CLOUD_INVALID_RESPONSE" => "Cloud 回應格式異常，請稍後重試；若持續發生請執行系統診斷。",
         "EMAIL_PROVIDER_NOT_CONFIGURED" => "Cloud 尚未完成 Email 寄送服務設定。",
         _ => $"Cloud API 錯誤：{error.Code}\n{error.Message}"
@@ -455,11 +456,12 @@ internal sealed class CloudFirstWorkspaceForm : Form
     {
         if (Text != "建立第一個雲端空間" || ShowIcon || AcceptButton is not null || CancelButton != cancel)
             throw new InvalidOperationException("首次雲端初始化視窗基本屬性不正確");
-        if (!superAdminPassword.UseSystemPasswordChar || !bootstrapKey.UseSystemPasswordChar || emailOtp.MaxLength != 6)
+        if (!superAdminPassword.UseSystemPasswordChar || !bootstrapKey.UseSystemPasswordChar ||
+            emailOtp.MaxLength != 6 || emailOtp.TextAlign != HorizontalAlignment.Left)
             throw new InvalidOperationException("首次雲端初始化敏感欄位設定不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         var logicalHeight = ClientSize.Height * 96D / DeviceDpi;
-        if (logicalWidth > 575 || logicalHeight > 400)
+        if (logicalWidth > 575 || logicalHeight > 460)
             throw new InvalidOperationException("首次雲端初始化視窗尺寸異常");
     }
 

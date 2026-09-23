@@ -1,4 +1,8 @@
 import { createEmailSender } from "./email";
+import {
+  BOOTSTRAP_DEVICE_INSERT_SQL,
+  BOOTSTRAP_WORKSPACE_INSERT_SQL,
+} from "./bootstrap-sql";
 
 interface Env {
   DB: D1Database;
@@ -47,7 +51,7 @@ type OtpChallengeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.1";
+const CLOUD_VERSION = "0.8.2";
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
@@ -426,18 +430,10 @@ async function bootstrapWorkspace(request: Request, env: Env, requestId: string)
   const deviceId = `dev_${crypto.randomUUID()}`;
   try {
     await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO workspaces (
-          workspace_id, display_name, status, recovery_email, recovery_email_verified_at,
-          created_at, updated_at
-        ) VALUES (?1, ?2, 'active', ?3, ?4, ?4)`
-      ).bind(workspaceId, (body.workspaceDisplayName as string).trim(), verified.email, now),
-      env.DB.prepare(
-        `INSERT INTO devices (
-          device_id, workspace_id, display_name, token_hash, client_version,
-          status, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?6)`
-      ).bind(deviceId, workspaceId, (body.deviceDisplayName as string).trim(), tokenHash, (body.clientVersion as string).trim(), now),
+      env.DB.prepare(BOOTSTRAP_WORKSPACE_INSERT_SQL)
+        .bind(workspaceId, (body.workspaceDisplayName as string).trim(), verified.email, now),
+      env.DB.prepare(BOOTSTRAP_DEVICE_INSERT_SQL)
+        .bind(deviceId, workspaceId, (body.deviceDisplayName as string).trim(), tokenHash, (body.clientVersion as string).trim(), now),
     ]);
   } catch (error) {
     const byToken = await env.DB.prepare(
@@ -452,8 +448,11 @@ async function bootstrapWorkspace(request: Request, env: Env, requestId: string)
         device: { deviceId: byToken.device_id, displayName: byToken.device_display_name },
       });
     }
+    const workspaceExists = await workspaceCount(env).catch(() => 0) !== 0;
     console.error("bootstrap_insert_failed", { requestId, error: error instanceof Error ? error.message : "unknown_error" });
-    return errorResponse(env, requestId, 409, "WORKSPACE_ALREADY_INITIALIZED", "Workspace initialization conflicted with existing state.");
+    return workspaceExists
+      ? errorResponse(env, requestId, 409, "WORKSPACE_ALREADY_INITIALIZED", "Workspace initialization conflicted with existing state.")
+      : errorResponse(env, requestId, 500, "BOOTSTRAP_FAILED", "Workspace initialization failed. No Workspace or Device was created.");
   }
 
   return json(env, requestId, 201, {

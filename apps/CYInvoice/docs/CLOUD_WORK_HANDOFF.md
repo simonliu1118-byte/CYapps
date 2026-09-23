@@ -13,9 +13,9 @@
 - Base：`cyinvoice/cloud-foundation-d1`
 - PR 狀態：Draft / Open / 未 merge
 - 接手時應先重新讀取 PR #73 的最新 head；不要依本文件硬編碼 branch head。
-- 最新 code-bearing head（交接時）：`33e8683a0f01e34baa45e364156b022a495172d6`
-- 最新 code-bearing CI：`CYInvoice Cloud Check Run #204`，成功
-- Cloud compatibility：Cloud `0.8.1` / API `1` / Schema `7`
+- V2.6.4 Build 0 的 code-bearing head：`aeb22853a50ff7c598bbe958bc1ff3ef90501834`；本次 Build 1 commit 與 CI 需重新核對。
+- Build 0 的 Cloud Check Run #210 已成功；Build 1 仍待 CI。
+- Cloud compatibility：Cloud `0.8.2` / API `1` / Schema `7`
 - Forward migrations：`0001`～`0007`
 
 禁止自行 merge、tag、Release、auto-merge；只有使用者明確授權後才可執行。
@@ -66,7 +66,7 @@ PR #73 body、`CLOUD_ARCHITECTURE_STATUS.md`、`CLOUD_ROADMAP.md`、`TODO.md` �
 
 ## 4. 最新驗證
 
-Run #204 已通過：
+Build 0 的 Run #210 已通過：
 
 - TypeScript type check
 - Worker dry-run bundle
@@ -77,16 +77,16 @@ Run #204 已通過：
 - Windows Cloud contract tests
 - engineering package build/upload
 
-2026-09-22 已另外完成 remote audit：development Worker `/v1/health` 回覆 storage `ok`，D1 migrations 已到 Schema 7；當時 Worker 為 Cloud 0.8.0。第一次 live bootstrap OTP 隨後發現未限定範圍的 challenge 把空字串寫入 Schema 7 `scope_key`，並因主路由未等待 handler 而回傳 Cloudflare 純文字 runtime error；V2.6.4 / Cloud 0.8.1 已針對 D1 NULL scope、Worker error boundary 與 Windows 非 JSON 回應補強，下一步是部署後重測實際寄信。
+2026-09-22 已完成 remote audit：development Worker Cloud 0.8.1 的 `/v1/health` 回覆 storage `ok`，D1 migrations 已到 Schema 7，Brevo bootstrap OTP 已實際寄達。第一次建立 Workspace 時 Worker INSERT SQL 欄位和值數量不一致，D1 batch 回滾，卻誤回報 `WORKSPACE_ALREADY_INITIALIZED`；遠端唯讀查核確認 Workspace／Device／Employee／Pairing 筆數均為 0。V2.6.4 Build 1 / Cloud 0.8.2 修正 SQL、錯誤分類並新增直接執行正式 SQL 的 Schema 7 回歸測試；仍待 development 部署與 Windows live 建立驗證。
 
 ## 5. Work 接手後的優先順序
 
-### A. 部署 V2.6.4 / Cloud 0.8.1 hotfix
+### A. 部署 V2.6.4 Build 1 / Cloud 0.8.2 hotfix
 
-1. 先讀最新 PR #73 head 與 CI，確認 V2.6.4 修正與測試已通過。
-2. 以既有 development deployment workflow 部署 Cloud 0.8.1；D1 已是 Schema 7，不新增或重寫 migration。
-3. 重新檢查 `/v1/health` 必須回覆 Cloud 0.8.1 / API 1 / Schema 7 / storage `ok`。
-4. 再從 V2.6.4 engineering package 只寄送一次 bootstrap OTP，確認 Brevo 收信成功；避免用舊 V2.6.3 package 重試。
+1. 先讀最新 PR #73 head 與 CI，確認 V2.6.4 Build 1 SQL 回歸測試及 Windows 驗證已通過。
+2. 以既有 development deployment workflow 部署 Cloud 0.8.2；D1 已是 Schema 7，不新增或重寫 migration。
+3. 重新檢查 `/v1/health` 必須回覆 Cloud 0.8.2 / API 1 / Schema 7 / storage `ok`。
+4. 再由使用者以新 engineering package 重新寄送 bootstrap OTP 並建立第一個 Workspace；舊 OTP 已消耗，不得重用。成功後再以遠端唯讀查詢核對 Workspace／Device 各 1 筆。
 
 不要把 remote 狀態猜成已完成。
 
@@ -101,7 +101,7 @@ Reference Email provider 是 Brevo。Runtime secrets 不進 GitHub source / PR /
 
 若需要使用者輸入 secret，只提供逐步操作，讓使用者自己在 Cloudflare / CLI secret prompt 輸入；不得要求使用者把 secret 貼到對話。
 
-完成後先做 development live OTP，確認 bootstrap / Employee Email / transfer challenge 的寄信與錯誤處理。
+Development bootstrap OTP 寄信已確認；建立 Workspace 成功後再驗證 Employee Email / transfer challenge 的寄信與錯誤處理。
 
 ### C. A/B Windows end-to-end
 
@@ -139,4 +139,4 @@ A/B identity flow 穩定後再做：
 
 ## 7. 目前適合的 Work 任務起點
 
-Work 接手後，先完成 **V2.6.4 / Cloud 0.8.1 hotfix CI、development deployment 與 live bootstrap OTP 重測**。成功後才繼續 A 機 Workspace + Employee transition；不要先混入下一階段功能。
+Work 接手後，先完成 **V2.6.4 Build 1 / Cloud 0.8.2 hotfix CI、development deployment 與 live Workspace 建立**。成功後才繼續 A 機 Employee transition；不要先混入下一階段功能。

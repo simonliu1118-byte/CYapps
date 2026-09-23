@@ -2,7 +2,7 @@
 
 本檔只保留目前仍未完成、需要後續驗證或已明確延後的工作。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-目前工程開發基準：**CYInvoice V2.6.4 Build 0**
+目前工程開發基準：**CYInvoice V2.6.4 Build 1**
 最新正式 Release：`cyinvoice-v2.4.2`
 
 > V3 Cloud identity 工作若由新的長時間工作階段／ChatGPT Work 接手，先讀 `docs/CLOUD_WORK_HANDOFF.md`，再讀 `CLOUD_ARCHITECTURE_STATUS.md`、`CLOUD_ROADMAP.md` 與本檔。接手時仍必須依 `AGENTS.md` 指示先讀三層永久規則。
@@ -104,13 +104,14 @@
 - [x] 新密碼明文不上 Cloud；Windows 先產生 PBKDF2-SHA256 verifier。
 - [x] SUPER_ADMIN transfer：X 執行時帳密 re-auth + X Email OTP；atomic X→ADMIN、Y→SUPER_ADMIN、Recovery Email→Y。
 - [x] 舊單一 Local SUPER_ADMIN `reconcile-local` mutation 與任意 30 分鐘 import window 已退役；whole-device transition 為唯一正式路徑。
-- [x] Cloud compatibility 已對齊 API 1 / Cloud 0.8.1 / Schema 7（migrations `0001`～`0007`）。
+- [x] Cloud compatibility 已對齊 API 1 / Cloud 0.8.2 / Schema 7（migrations `0001`～`0007`）。
 
 ### 7.2 Cloud Identity 目前剩餘驗證／功能
 
-- [x] 2026-09-22 已確認 development Worker remote 為 Cloud 0.8.0 / API 1，且 `/v1/health` storage `ok`；V2.6.4 的 Cloud 0.8.1 hotfix 仍須重新部署後再驗證。
+- [x] 2026-09-22 已確認 development Worker remote 為 Cloud 0.8.1 / API 1、`/v1/health` storage `ok`，D1 Schema 7；Cloud 0.8.2 修正尚待部署。
 - [x] 2026-09-22 已確認 development D1 remote migrations 到 Schema 7。
-- [ ] Brevo runtime secrets 已完成設定；第一次 live bootstrap OTP 發現 NULL scope／非 JSON error handling 問題，V2.6.4 修正部署後須重新寄送並確認實際收信。
+- [x] Brevo runtime secrets 已完成設定，bootstrap OTP 實際收信成功。
+- [ ] V2.6.4 Build 1 修正第一個 Workspace 建立 SQL 與誤報錯誤；部署 Cloud 0.8.2 後重新寄送 OTP，完成 Windows live Workspace／Device 建立並回查遠端 D1。
 - [ ] A 機真實建立 Workspace + first Employee transition。
 - [ ] B 機 Pairing + 多 Local Employee transition matrix 實機測試。
 - [ ] 精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。

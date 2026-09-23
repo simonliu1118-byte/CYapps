@@ -169,7 +169,7 @@ static async Task TestHealthAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
-        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.8.1","apiVersion":"1","schemaVersion":"7","environment":"test","storage":"ok"}"""));
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.8.2","apiVersion":"1","schemaVersion":"7","environment":"test","storage":"ok"}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -177,7 +177,7 @@ static async Task TestHealthAsync()
     True(health.Reachable, "health should be reachable");
     True(health.StorageAvailable, "backend storage should be available");
     Equal("cyinvoice-cloud", health.ServiceName, "service name");
-    Equal("0.8.1", health.CloudVersion, "cloud version");
+    Equal("0.8.2", health.CloudVersion, "cloud version");
     Equal("1", health.ApiVersion, "api version");
     Equal("7", health.SchemaVersion, "schema version");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
@@ -187,7 +187,7 @@ static async Task TestStorageOutageAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.ServiceUnavailable,
-        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.8.1","apiVersion":"1","schemaVersion":"7","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
+        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.8.2","apiVersion":"1","schemaVersion":"7","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
