@@ -38,30 +38,23 @@ jobs:
           "CYERPAUTOINPUT_BUILD=$build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CYERPAUTOINPUT_ARTIFACT_SUFFIX=$suffix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-dotnet@v5
         with:
-          go-version: "1.23.x"
-          cache: false
+          dotnet-version: "8.0.x"
 
-      - name: Generate and embed application icon
+      - name: Restore
         shell: pwsh
-        run: |
-          go run ./tools/gen_icon.go
-          if (-not (Test-Path "assets/CYERPAutoInput.ico")) { throw "Application icon was not generated" }
-          go run github.com/akavel/rsrc@v0.10.2 -ico "assets/CYERPAutoInput.ico" -o "rsrc_windows_amd64.syso"
-          if (-not (Test-Path "rsrc_windows_amd64.syso")) { throw "Windows icon resource was not generated" }
+        run: dotnet restore CYERPAutoInput.csproj -r win-x64
 
-      - name: Test
-        run: go test ./...
+      - name: Build
+        shell: pwsh
+        run: dotnet build CYERPAutoInput.csproj -c Release -r win-x64 --no-restore -p:Version=$env:CYERPAUTOINPUT_VERSION -p:ContinuousIntegrationBuild=true
 
-      - name: Build Windows x64 flat package
+      - name: Publish Windows x64 portable package
         shell: pwsh
         run: |
           Remove-Item -Recurse -Force package -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path package | Out-Null
-          $env:GOOS = "windows"
-          $env:GOARCH = "amd64"
-          go build -trimpath -ldflags "-H=windowsgui" -o "package/CYERPAutoInput.exe" .
+          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:Version=$env:CYERPAUTOINPUT_VERSION -o package
           if (-not (Test-Path "package/CYERPAutoInput.exe")) { throw "CYERPAutoInput.exe was not produced" }
           Get-FileHash "package/CYERPAutoInput.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  CYERPAutoInput.exe" } | Set-Content "package/SHA256.txt"
           Copy-Item README.md "package/README.md"
