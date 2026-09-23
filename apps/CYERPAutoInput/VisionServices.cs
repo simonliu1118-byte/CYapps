@@ -58,7 +58,7 @@ internal sealed class WindowsOcrService
             cancellationToken.ThrowIfCancellationRequested();
 
             var file = await StorageFile.GetFileFromPathAsync(temp);
-            await using var stream = await file.OpenAsync(FileAccessMode.Read);
+            using var stream = await file.OpenAsync(FileAccessMode.Read);
             var decoder = await BitmapDecoder.CreateAsync(stream);
             var software = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
 
