@@ -167,7 +167,11 @@ internal sealed class GridVisionService
         if (target.Length == 0) throw new InvalidOperationException("Requested unit is blank.");
 
         var candidates = tokens
-            .Where(t => Normalize(t.Text) == target)
+            .Where(t =>
+            {
+                var text = Normalize(t.Text);
+                return text == target || text.Contains(target, StringComparison.Ordinal);
+            })
             .Where(t => unitHeader is null || t.Rect.Top > unitHeader.Value.Bottom - 2)
             .ToList();
 
@@ -185,7 +189,7 @@ internal sealed class GridVisionService
         return point;
     }
 
-    private static Rectangle? FindPhrase(IReadOnlyList<OcrToken> tokens, IReadOnlyList<string> aliases)
+    internal static Rectangle? FindPhrase(IReadOnlyList<OcrToken> tokens, IReadOnlyList<string> aliases)
     {
         foreach (var alias in aliases)
         {
@@ -219,7 +223,7 @@ internal sealed class GridVisionService
 
     private static string Normalize(string value) => value.Trim().Replace(" ", string.Empty).Replace("　", string.Empty);
 
-    private static List<int> FindHorizontalLines(Bitmap source, int startY)
+    internal static List<int> FindHorizontalLines(Bitmap source, int startY)
     {
         using var bitmap = source.Clone(new Rectangle(0, 0, source.Width, source.Height), PixelFormat.Format32bppArgb);
         var data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
