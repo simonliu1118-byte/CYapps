@@ -2,11 +2,11 @@
 
 > Canonical source: `simonliu1118-byte/AITeam`
 >
-> Status: shared design/reference material. This directory is **not** a fourth governance layer and does not replace `REPOSITORY_RULES.md`, `REPO_POLICY.md`, or project `PROJECT_RULES.md`.
+> Status: shared design/reference material. This package is **not** a fourth governance layer and does not replace `REPOSITORY_RULES.md`, `REPO_POLICY.md`, or project `PROJECT_RULES.md`.
 
 ## Purpose
 
-This directory is the canonical upstream location for CY cross-repository visual references that are intentionally shared by `CYapps` and `CYapps_pvt`.
+The canonical upstream copy of these CY cross-repository visual references lives in `simonliu1118-byte/AITeam` under `shared/cy-visual/`. `CYapps` and `CYapps_pvt` keep synchronized downstream copies under `docs/cy-visual/`.
 
 The intended model mirrors the existing common-rules synchronization pattern, but remains a separate **design-reference sync lane**:
 
