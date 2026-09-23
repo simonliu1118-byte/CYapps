@@ -2,42 +2,69 @@
 
 package main
 
-import "sort"
+import (
+	"sort"
+	"syscall"
+)
 
 const vkShiftV011 = 0x10
 
-// handleAppFieldNavigationV011 gives the CYERPAutoInput form spreadsheet-like
-// keyboard flow. Tab and Enter both advance through visible value fields; Shift
-// reverses direction. The direct-detail cell editor already has its own
-// Enter/Tab behavior and is deliberately left to detailCellEditWndProcV15.
-func handleAppFieldNavigationV011(msg *MSG) bool {
-	if msg == nil || msg.Message != wmKeyDownV15 {
-		return false
-	}
-	if msg.WParam != VK_TAB && msg.WParam != VK_RETURN {
-		return false
-	}
-	if msg.Hwnd == 0 || msg.Hwnd == detailCellEditV15 {
-		return false
-	}
+var (
+	fieldNavOldProcV011 = map[uintptr]uintptr{}
+	fieldNavWndProcV011CB uintptr
+)
 
+// setupFieldNavigationV011 makes both Enter and Tab advance through the visible
+// CYERPAutoInput value fields. The direct-detail table already has its own
+// Enter/Tab cell navigation, so it is intentionally not subclassed here.
+func setupFieldNavigationV011() {
+	if fieldNavWndProcV011CB == 0 {
+		fieldNavWndProcV011CB = syscall.NewCallback(fieldNavWndProcV011)
+	}
+	for _, f := range fields {
+		if f == nil || f.Group == "明細" || f.ValueHwnd == 0 {
+			continue
+		}
+		if _, exists := fieldNavOldProcV011[f.ValueHwnd]; exists {
+			continue
+		}
+		old, _, _ := pSetWindowLongPtrWV12.Call(f.ValueHwnd, gwlpWndProcV12, fieldNavWndProcV011CB)
+		if old != 0 {
+			fieldNavOldProcV011[f.ValueHwnd] = old
+		}
+	}
+}
+
+func fieldNavWndProcV011(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+	if msg == wmKeyDownV15 && (wParam == VK_TAB || wParam == VK_RETURN) {
+		if moveFocusFromFieldV011(hwnd, shiftDownV011()) {
+			return 0
+		}
+	}
+	if old := fieldNavOldProcV011[hwnd]; old != 0 {
+		r, _, _ := pCallWindowProcWV12.Call(old, hwnd, uintptr(msg), wParam, lParam)
+		return r
+	}
+	r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(msg), wParam, lParam)
+	return r
+}
+
+func moveFocusFromFieldV011(hwnd uintptr, backward bool) bool {
 	candidates := visibleValueFieldsV011()
+	if len(candidates) == 0 {
+		return false
+	}
 	current := -1
-	for i, hwnd := range candidates {
-		if hwnd == msg.Hwnd {
+	for i, h := range candidates {
+		if h == hwnd {
 			current = i
 			break
 		}
 	}
 	if current < 0 {
-		if msg.Hwnd == detailGridV15 && detailGridV15 != 0 {
-			startDetailCellEditorV15(0, 1)
-			return true
-		}
 		return false
 	}
 
-	backward := shiftDownV011()
 	if !backward && current == len(candidates)-1 && detailGridV15 != 0 {
 		vis, _, _ := pIsWindowVisible.Call(detailGridV15)
 		en, _, _ := pIsWindowEnabled.Call(detailGridV15)
@@ -47,9 +74,6 @@ func handleAppFieldNavigationV011(msg *MSG) bool {
 		}
 	}
 
-	if len(candidates) <= 1 {
-		return true
-	}
 	next := current + 1
 	if backward {
 		next = current - 1
