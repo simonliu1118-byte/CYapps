@@ -2,9 +2,8 @@ using System.Runtime.InteropServices;
 
 namespace CYInvoiceVisualShell;
 
-// Tab Lab V2: keep native WinForms TabControl/page behavior and only
-// owner-draw the tab headers. Hover invalidates only the affected tabs so the
-// selected tab does not repaint/flicker while the pointer crosses other tabs.
+// Native WinForms TabControl/page behavior with header-only owner draw.
+// Hover invalidates only affected headers so the selected tab stays stable.
 internal sealed class ThemeTabControlV1 : TabControl
 {
     private const int WM_CHANGEUISTATE = 0x0127;
@@ -13,6 +12,8 @@ internal sealed class ThemeTabControlV1 : TabControl
 
     private ThemePalette palette = VisualTokens.GetPalette(CyTheme.Blue);
     private int hoverIndex = -1;
+    private float headerFontPt = 10f;
+    private int underlineInset = 10;
 
     internal ThemeTabControlV1()
     {
@@ -23,10 +24,27 @@ internal sealed class ThemeTabControlV1 : TabControl
         Padding = new Point(14, 5);
         Font = VisualTokens.Font(10f);
         BackColor = Color.White;
-
-        // Keep the native TabControl, but reduce visible repaint artifacts in
-        // the small owner-drawn header region.
         DoubleBuffered = true;
+    }
+
+    internal void ConfigureStandard()
+    {
+        headerFontPt = 10f;
+        underlineInset = 10;
+        Padding = new Point(14, 5);
+        Font = VisualTokens.Font(10f);
+        InvalidateHeader();
+    }
+
+    internal void ConfigureLarge()
+    {
+        // Large is an App Choice for higher-level navigation, not a different
+        // visual language: same native TabControl, same underline/hover model.
+        headerFontPt = 11f;
+        underlineInset = 14;
+        Padding = new Point(20, 9);
+        Font = VisualTokens.Font(11f);
+        InvalidateHeader();
     }
 
     internal void ApplyTheme(CyTheme theme)
@@ -77,9 +95,6 @@ internal sealed class ThemeTabControlV1 : TabControl
         base.OnMouseMove(e);
 
         var next = HitTestTab(e.Location);
-        // The selected tab already has a stronger active treatment; do not
-        // apply a second hover state or repaint it just because the pointer
-        // enters its rectangle.
         if (next == SelectedIndex)
             next = -1;
 
@@ -89,8 +104,6 @@ internal sealed class ThemeTabControlV1 : TabControl
         var previous = hoverIndex;
         hoverIndex = next;
 
-        // Critical: do NOT Invalidate() the whole TabControl here. Repaint only
-        // the two headers whose hover state actually changed.
         InvalidateTab(previous);
         InvalidateTab(next);
     }
@@ -120,8 +133,8 @@ internal sealed class ThemeTabControlV1 : TabControl
             e.Graphics.FillRectangle(brush, rect);
 
         using var textFont = selected
-            ? VisualTokens.Font(10f, FontStyle.Bold)
-            : VisualTokens.Font(10f);
+            ? VisualTokens.Font(headerFontPt, FontStyle.Bold)
+            : VisualTokens.Font(headerFontPt);
 
         var textColor = selected ? VisualTokens.TextPrimary : VisualTokens.TextSecondary;
         TextRenderer.DrawText(
@@ -140,14 +153,11 @@ internal sealed class ThemeTabControlV1 : TabControl
         {
             using var pen = new Pen(palette.Accent, 2f);
             var y = rect.Bottom - 2;
-            e.Graphics.DrawLine(pen, rect.Left + 10, y, rect.Right - 10, y);
+            e.Graphics.DrawLine(pen, rect.Left + underlineInset, y, rect.Right - underlineInset, y);
         }
     }
 
-    private void InvalidateSelectedTab()
-    {
-        InvalidateTab(SelectedIndex);
-    }
+    private void InvalidateSelectedTab() => InvalidateTab(SelectedIndex);
 
     private void InvalidateHeader()
     {
@@ -161,8 +171,6 @@ internal sealed class ThemeTabControlV1 : TabControl
             return;
 
         var rect = GetTabRect(index);
-        // Include the underline edge and anti-aliased text fringe without
-        // touching unrelated tabs/pages.
         rect.Inflate(2, 2);
         Invalidate(rect, false);
     }
