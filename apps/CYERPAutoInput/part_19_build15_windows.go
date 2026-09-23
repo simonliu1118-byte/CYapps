@@ -566,10 +566,9 @@ func paintCoupangV15(hwnd uintptr) {
 	}
 }
 
-// Build 15 detail fill is the Build 14 sequence with two changes: rows are
-// included by content rather than a visible checkbox, and confirmed F2 unit
-// selections use Enter first (the ERP-native action) before falling back to the
-// visible 確定 button.
+// Build 18 detail fill keeps content-driven rows and follows the confirmed ERP
+// unit flow exactly: open F2 -> select requested unit -> Enter. There is no
+// mouse click on the dialog's 確定 button after Enter.
 func fillDetailSelectedV15(root uintptr) (ok, fail int) {
 	commitDetailCellEditorV15(false)
 	syncDetailAutomationMarkersV15()
@@ -664,14 +663,16 @@ func selectDetailUnitV15(root uintptr, grid ControlInfo, row int, wanted string)
 	if !prepareERPWindow(root) {
 		return false
 	}
-	ratio, ok := detailColumnRatio(4)
+	fresh := freshDetailGridV18(grid)
+	x, ok := detailColumnScreenXV18(fresh, 4)
 	if !ok {
 		return false
 	}
-	visibleRow := detailVisibleRowIndexV11(grid, row)
-	w := float64(grid.Rect.Right - grid.Rect.Left)
-	x := grid.Rect.Left + int32(w*ratio)
-	y := grid.Rect.Top + 33 + int32(visibleRow)*detailRowHeightV8
+	visibleRow := detailVisibleRowIndexV11(fresh, row)
+	y := fresh.Rect.Top + 33 + int32(visibleRow)*detailRowHeightV8
+	if y > fresh.Rect.Bottom-12 {
+		y = fresh.Rect.Bottom - 12
+	}
 	clickScreenPoint(x, y)
 	if !interruptibleSleep(180 * time.Millisecond) {
 		return false
@@ -679,7 +680,7 @@ func selectDetailUnitV15(root uintptr, grid ControlInfo, row int, wanted string)
 	pressVK(VK_F2)
 	lookup := waitUnitLookupWindowV14(root, 2200*time.Millisecond)
 	if lookup == 0 {
-		logf("WARN", "unit lookup V15 window not found row=%d requested_len=%d", row+1, len([]rune(wanted)))
+		logf("WARN", "unit lookup V18 window not found row=%d requested_len=%d", row+1, len([]rune(wanted)))
 		return false
 	}
 	prepareLookupWindowV14(lookup)
@@ -688,27 +689,16 @@ func selectDetailUnitV15(root uintptr, grid ControlInfo, row int, wanted string)
 		return false
 	}
 
-	// The F2 grid's natural commit action is Enter. Use it first rather than
-	// relying on the dialog button being exposed as a normal child HWND.
+	// Confirmed manual ERP behavior is exactly: selected row -> Enter. Build 18
+	// sends that Enter directly to the foreground F2 TcxGridSite (via pressVK's
+	// F2-specific route) and deliberately performs no button/mouse fallback.
 	pressVK(VK_RETURN)
-	if !interruptibleSleep(320 * time.Millisecond) {
-		return false
-	}
-	if lookupWindowStillVisibleV15(lookup) {
-		if !clickLookupButtonV14(lookup, "確定") {
-			logf("WARN", "unit lookup V15 Enter did not close dialog and confirm button not found")
-			return false
-		}
-		if !interruptibleSleep(320 * time.Millisecond) {
-			return false
-		}
-	}
-	if lookupWindowStillVisibleV15(lookup) {
-		logf("WARN", "unit lookup V15 dialog still visible after Enter/fallback")
+	if !waitLookupClosedV18(lookup, 900*time.Millisecond) {
+		logf("WARN", "unit lookup V18 dialog still visible after targeted Enter; no confirm-button fallback attempted")
 		return false
 	}
 	prepareERPWindow(root)
-	logf("INFO", "unit lookup V15 selected row=%d requested_len=%d confirm=enter", row+1, len([]rune(wanted)))
+	logf("INFO", "unit lookup V18 selected row=%d requested_len=%d confirm=targeted-enter", row+1, len([]rune(wanted)))
 	return true
 }
 
