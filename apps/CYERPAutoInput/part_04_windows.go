@@ -137,13 +137,81 @@ func fillTabGroupSelected(root uintptr, group string) (ok, fail int) {
 
 func findDetailGridSite(root uintptr) *ControlInfo {
 	all := enumControls(root)
-	var best *ControlInfo; var bestArea int64
-	for i := range all {
-		c := &all[i]; if !c.Visible || !strings.EqualFold(c.Class, "TcxGridSite") { continue }
-		w := int64(c.Rect.Right-c.Rect.Left); h := int64(c.Rect.Bottom-c.Rect.Top); area := w*h
-		if w > 700 && h > 120 && area > bestArea { best = c; bestArea = area }
+	rr := rectOf(root)
+	rootW := rr.Right - rr.Left
+	rootH := rr.Bottom - rr.Top
+	if rootW <= 0 || rootH <= 0 {
+		logf("WARN", "detail grid V17 invalid root rect=%d,%d,%d,%d", rr.Left, rr.Top, rr.Right, rr.Bottom)
+		return nil
 	}
-	return best
+
+	var preferred *ControlInfo
+	var preferredScore int64
+	var fallback *ControlInfo
+	var fallbackArea int64
+	candidateCount := 0
+
+	for i := range all {
+		c := &all[i]
+		if !c.Visible || !strings.EqualFold(c.Class, "TcxGridSite") {
+			continue
+		}
+		w := c.Rect.Right - c.Rect.Left
+		h := c.Rect.Bottom - c.Rect.Top
+		if w <= 0 || h <= 0 {
+			continue
+		}
+		candidateCount++
+		relLeft := c.Rect.Left - rr.Left
+		relTop := c.Rect.Top - rr.Top
+		centerY := (c.Rect.Top + c.Rect.Bottom) / 2
+		area := int64(w) * int64(h)
+		logf("INFO", "detail grid V17 candidate=%d hwnd=0x%x size=%dx%d rel=%d,%d center_y=%d", candidateCount, c.Hwnd, w, h, relLeft, relTop, centerY-rr.Top)
+
+		// Safe fallback: any reasonably sized visible grid can be considered if
+		// the preferred lower-page heuristic finds nothing. The old hard gate of
+		// 700x120 was too strict when COPI08 was not maximized or DPI/layout
+		// reduced the visible detail area.
+		if w >= 280 && h >= 45 && area > fallbackArea {
+			fallback = c
+			fallbackArea = area
+		}
+
+		// Detail grid is normally broad and in the lower half of COPI08. Score
+		// proportionally rather than requiring fixed pixels so window size/DPI do
+		// not make the grid disappear from detection.
+		lower := centerY >= rr.Top+rootH*45/100
+		broad := w >= rootW*35/100
+		if !lower || !broad || h < 45 {
+			continue
+		}
+		score := area
+		if centerY >= rr.Top+rootH/2 {
+			score += int64(rootW) * int64(rootH)
+		}
+		if w >= rootW*60/100 {
+			score += int64(rootW) * int64(rootH) / 2
+		}
+		if score > preferredScore {
+			preferred = c
+			preferredScore = score
+		}
+	}
+
+	if preferred != nil {
+		w := preferred.Rect.Right - preferred.Rect.Left
+		h := preferred.Rect.Bottom - preferred.Rect.Top
+		logf("INFO", "detail grid V17 selected preferred hwnd=0x%x size=%dx%d candidates=%d", preferred.Hwnd, w, h, candidateCount)
+		return preferred
+	}
+	if fallback != nil {
+		w := fallback.Rect.Right - fallback.Rect.Left
+		h := fallback.Rect.Bottom - fallback.Rect.Top
+		logf("WARN", "detail grid V17 selected fallback hwnd=0x%x size=%dx%d candidates=%d", fallback.Hwnd, w, h, candidateCount)
+		return fallback
+	}
+	logf("WARN", "detail grid V17 no usable TcxGridSite candidates=%d root_size=%dx%d", candidateCount, rootW, rootH)
+	return nil
 }
 
 func detailColumnRatio(col int) (float64, bool) {
@@ -166,13 +234,13 @@ func fillAllSelected() {
 	if isStopRequested() { return }
 	if !prepareERPWindow(root) { setStatus("ERP：已找到但無法移到前景，為避免誤輸入已停止"); return }
 	var oldCursor POINT; pGetCursorPos.Call(uintptr(unsafe.Pointer(&oldCursor))); defer pSetCursorPos.Call(uintptr(oldCursor.X), uintptr(oldCursor.Y))
-	logf("INFO", "AUTO-FILL V0.0.10 Build 16 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
+	logf("INFO", "AUTO-FILL V0.0.10 Build 17 start (NO SAVE), target=0x%x", root); setStatus("ERP：先確認輸入狀態…")
 	if !ensureInputMode(root) { if isStopRequested(){return}; setStatus("ERP：無法確認輸入狀態，已停止；請提供除錯紀錄"); logError("自動填入","ERP","INPUT_MODE_NOT_CONFIRMED","未進入或無法判斷輸入狀態"); return }
-	setStatus("ERP：Build 16 新增模式，依序填入有資料的表頭／交易／送貨／發票欄位→直接表格明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
+	setStatus("ERP：Build 17 新增模式，依序填入有資料的表頭／交易／送貨／發票欄位→直接表格明細（不儲存）…"); pSetForeground.Call(root); if !interruptibleSleep(250*time.Millisecond){return}
 	ok,fail := 0,0; a,b := fillHeaderSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
 	for _, group := range []string{"交易資料","送貨資料","發票資料(一)"} { if isStopRequested(){return}; a,b = fillTabGroupSelected(root,group); ok+=a; fail+=b }
 	if isStopRequested(){return}; a,b = fillDetailSelected(root); ok+=a; fail+=b; if isStopRequested(){return}
-	setStatus(fmt.Sprintf("ERP：Build 16 測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 16 end success=%d fail=%d (NO SAVE)",ok,fail)
+	setStatus(fmt.Sprintf("ERP：Build 17 測試完成，成功 %d，失敗 %d（未儲存）",ok,fail)); logf("INFO", "AUTO-FILL V0.0.10 Build 17 end success=%d fail=%d (NO SAVE)",ok,fail)
 }
 
 func findTabSheet(root uintptr, tabName string) uintptr {
