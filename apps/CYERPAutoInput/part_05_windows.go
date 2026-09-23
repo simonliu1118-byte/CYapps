@@ -96,7 +96,11 @@ func descendantEdit(hwnd uintptr) uintptr {
 	pEnumChildWindows.Call(hwnd,cb,0); return found
 }
 
-func pressVK(vk uint16) { if isStopRequested(){return}; sendInputs([]INPUT{keyInput(vk,0,0),keyInput(vk,0,KEYEVENTF_KEYUP)}) }
+func pressVK(vk uint16) {
+	if isStopRequested(){return}
+	if vk == VK_RETURN && dispatchLookupEnterV18() { return }
+	sendInputs([]INPUT{keyInput(vk,0,0),keyInput(vk,0,KEYEVENTF_KEYUP)})
+}
 
 func openComboDropdown() { sendInputs([]INPUT{keyInput(VK_MENU,0,0),keyInput(VK_DOWN,0,0),keyInput(VK_DOWN,0,KEYEVENTF_KEYUP),keyInput(VK_MENU,0,KEYEVENTF_KEYUP)}) }
 
