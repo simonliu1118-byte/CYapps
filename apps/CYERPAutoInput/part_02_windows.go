@@ -9,11 +9,11 @@ import (
 
 func createControls(parent uintptr) {
 	resetUIRegistrationV12()
-	setWindowText(parent, "CYERPAutoInput V0.0.10 Build 12 — SMART ERP 自動輸入工具")
+	setWindowText(parent, "CYERPAutoInput V0.0.10 Build 14 — SMART ERP 自動輸入工具")
 	applyAppIconV12(parent)
 
 	createUIControlV12("STATIC", "SMART ERP 自動輸入工具", WS_CHILD|WS_VISIBLE|SS_LEFT, 20, 12, 420, 26, parent, 0)
-	createUIControlV12("STATIC", "V0.0.10 Build 12  ·  新增模式  ·  Esc 緊急停止  ·  目前仍不自動儲存 ERP 單據", WS_CHILD|WS_VISIBLE|SS_LEFT, 20, 39, 760, 22, parent, 0)
+	createUIControlV12("STATIC", "V0.0.10 Build 14  ·  新增模式  ·  Esc 緊急停止  ·  目前仍不自動儲存 ERP 單據", WS_CHILD|WS_VISIBLE|SS_LEFT, 20, 39, 760, 22, parent, 0)
 
 	modeStandardButtonV12 = createUIControlV12("BUTTON", "標準模式", WS_CHILD|WS_VISIBLE|bsAutoRadioButtonV12|wsGroupV12, 1090, 14, 112, 30, parent, 1201)
 	modeAdvancedButtonV12 = createUIControlV12("BUTTON", "進階模式", WS_CHILD|WS_VISIBLE|bsAutoRadioButtonV12, 1208, 14, 112, 30, parent, 1202)
@@ -109,9 +109,9 @@ func createControls(parent uintptr) {
 	makeFieldColumn(parent, xCols[2]+10, groupY+26, ship, 350)
 	makeFieldColumn(parent, xCols[3]+10, groupY+26, inv, 350)
 
-	detailBoxV12 = createUIControlV12("BUTTON", "商品明細（勾選列；空白欄位不輸入）", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 16, detailBaseYV12, 1518, 310, parent, 0)
+	detailBoxV12 = createUIControlV12("BUTTON", "商品明細（ListView；勾選要輸入 ERP 的列）", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 16, detailBaseYV12, 1518, 310, parent, 0)
 	makeDetailTable(parent, 30, detailBaseYV12+24, 8)
-	footerV12 = createUIControlV12("STATIC", "明細：品號必填；數量／贈備品量／庫別／單價有填才輸入。單位、批號目前保留欄位，後續改為點選。", WS_CHILD|WS_VISIBLE|SS_LEFT, 16, detailBaseYV12+320, 1510, 22, parent, 0)
+	footerV12 = createUIControlV12("STATIC", "明細：品號必填；單位有填時先 F2 選單位，再輸入數量。贈/備品量、庫別、單價有填才輸入；批號點選後續處理。", WS_CHILD|WS_VISIBLE|SS_LEFT, 16, detailBaseYV12+320, 1510, 22, parent, 0)
 
 	applySettingsToUI()
 	applyMainModeV12(loadUIModeV12())
@@ -194,6 +194,8 @@ func makeDetailTable(parent uintptr, x, y int32, rowCount int) {
 			cx += c.width
 		}
 	}
+
+	setupDetailListViewV14(parent, x, y)
 }
 
 func startEscapeWatcher() {
