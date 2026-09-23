@@ -50,10 +50,10 @@ internal sealed class ErpAutomationService
         await EnsureInputModeAsync(root, cancellationToken);
 
         progress.Report("ERP：輸入表頭…");
-        await FillGroupAsync(root, snapshot, "表頭", cancellationToken);
-        await FillGroupAsync(root, snapshot, "交易資料", cancellationToken);
-        await FillGroupAsync(root, snapshot, "送貨資料", cancellationToken);
-        await FillGroupAsync(root, snapshot, "發票資料(一)", cancellationToken);
+        await FillHeaderAsync(root, snapshot, cancellationToken);
+        await FillTabGroupAsync(root, snapshot, "交易資料", cancellationToken);
+        await FillTabGroupAsync(root, snapshot, "送貨資料", cancellationToken);
+        await FillTabGroupAsync(root, snapshot, "發票資料(一)", cancellationToken);
 
         if (snapshot.Details.Count > 0)
         {
@@ -81,7 +81,19 @@ internal sealed class ErpAutomationService
         _log.Info("state", "ERP entered input mode by optical 新增 click");
     }
 
-    private async Task FillGroupAsync(nint root, FormSnapshot snapshot, string group, CancellationToken cancellationToken)
+    private async Task FillHeaderAsync(nint root, FormSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        foreach (var field in FieldCatalog.All.Where(f => f.Group == "表頭"))
+        {
+            if (!snapshot.Values.TryGetValue(field.Key, out var value) || string.IsNullOrWhiteSpace(value)) continue;
+            cancellationToken.ThrowIfCancellationRequested();
+            var target = ErpLayoutResolver.ResolveHeader(root, field.Key);
+            await SetFieldAsync(root, target, field, value, cancellationToken);
+            _log.Info("field", $"filled group={field.Group} key={field.Key} chars={value.Length}");
+        }
+    }
+
+    private async Task FillTabGroupAsync(nint root, FormSnapshot snapshot, string group, CancellationToken cancellationToken)
     {
         var fields = FieldCatalog.All
             .Where(f => f.Group == group)
@@ -89,43 +101,38 @@ internal sealed class ErpAutomationService
             .ToArray();
         if (fields.Length == 0) return;
 
-        if (group != "表頭")
-        {
-            var tabName = group;
-            var tabPoint = await _textVision.FindTextAsync(root, [tabName, tabName.Replace("(一)", "（一）")], cancellationToken);
-            if (tabPoint is null) throw new InvalidOperationException($"光學辨識找不到 ERP 頁籤「{tabName}」。");
-            InputSender.Click(tabPoint.Value);
-            await Delay(220, cancellationToken);
-        }
-
+        var sheet = await ActivateTabAsync(root, group, cancellationToken);
         foreach (var field in fields)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var value = snapshot.Values[field.Key];
-            var target = FindFieldTarget(root, field);
-            if (target is null) throw new InvalidOperationException($"找不到 ERP 欄位「{field.Label}」的輸入控制項。");
+            var target = ErpLayoutResolver.ResolveTabField(sheet, group, field.Key);
             await SetFieldAsync(root, target, field, value, cancellationToken);
             _log.Info("field", $"filled group={field.Group} key={field.Key} chars={value.Length}");
         }
     }
 
-    private static WindowControl? FindFieldTarget(nint root, FieldDefinition field)
+    private async Task<nint> ActivateTabAsync(nint root, string group, CancellationToken cancellationToken)
     {
-        // Known label aliases are intentionally generic ERP labels only; no company data belongs here.
-        var aliases = field.Key switch
+        var sheet = ErpLayoutResolver.FindTabSheet(root, group);
+        if (sheet == 0) throw new InvalidOperationException($"找不到 ERP 頁籤物件「{group}」。");
+        if (NativeMethods.IsWindowVisible(sheet)) return sheet;
+
+        var p = await _textVision.FindTextAsync(root, [group, group.Replace("(一)", "（一）")], cancellationToken);
+        if (p is null) throw new InvalidOperationException($"光學辨識找不到 ERP 頁籤「{group}」。");
+        InputSender.Click(p.Value);
+        var deadline = Environment.TickCount64 + 1200;
+        while (Environment.TickCount64 < deadline)
         {
-            "order_date" => new[] { "單據日期", "日期" },
-            "customer_code" => new[] { "客戶代號", "客戶" },
-            "trade_note" => new[] { "備註" },
-            "freight_type" => new[] { "貨運別" },
-            _ => new[] { field.Label }
-        };
-        foreach (var alias in aliases)
-        {
-            var input = Win32Automation.FindInputRightOfLabel(root, alias);
-            if (input is not null) return input;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (NativeMethods.IsWindowVisible(sheet))
+            {
+                _log.Info("tab", $"activated group={group}");
+                return sheet;
+            }
+            await Task.Delay(50, cancellationToken);
         }
-        return null;
+        throw new InvalidOperationException($"已點擊 ERP 頁籤「{group}」，但頁籤沒有啟用。");
     }
 
     private async Task SetFieldAsync(nint root, WindowControl target, FieldDefinition field, string value, CancellationToken cancellationToken)
@@ -133,7 +140,14 @@ internal sealed class ErpAutomationService
         Win32Automation.PrepareForeground(root, _log);
         var center = new Point((target.Rect.Left + target.Rect.Right) / 2, (target.Rect.Top + target.Rect.Bottom) / 2);
 
-        if (field.Kind == FieldKind.Combo)
+        if (field.Kind == FieldKind.Boolean)
+        {
+            if (value.Equals("true", StringComparison.OrdinalIgnoreCase)) InputSender.Click(center);
+            await Delay(160, cancellationToken);
+            return;
+        }
+
+        if (field.Kind == FieldKind.Combo || target.ClassName.Contains("IMAGECOMBOBOX", StringComparison.OrdinalIgnoreCase))
         {
             InputSender.Click(new Point(Math.Max(target.Rect.Left + 4, target.Rect.Right - 9), center.Y));
             await Delay(140, cancellationToken);
@@ -151,7 +165,7 @@ internal sealed class ErpAutomationService
         if (field.Kind == FieldKind.Date)
         {
             var digits = new string(value.Where(char.IsDigit).ToArray());
-            if (digits.Length != 8) throw new InvalidOperationException($"{field.Label} 必須是 8 位日期。 ");
+            if (digits.Length != 8) throw new InvalidOperationException($"{field.Label} 必須是 8 位日期。");
             InputSender.Press(NativeMethods.VK_HOME);
             await Delay(80, cancellationToken);
             InputSender.UnicodeText(digits, 95);
@@ -163,6 +177,7 @@ internal sealed class ErpAutomationService
 
         if (field.Key == "order_type")
         {
+            // Confirmed SMART ERP behavior from the Go prototype: End + Backspace x4 reliably clears the order type.
             InputSender.EndBackspace(4);
         }
         else
@@ -181,6 +196,7 @@ internal sealed class ErpAutomationService
 
     private async Task FillDetailsAsync(nint root, IReadOnlyList<DetailRow> rows, IProgress<string> progress, CancellationToken cancellationToken)
     {
+        Win32Automation.PrepareForeground(root, _log);
         var grid = FindDetailGrid(root) ?? throw new InvalidOperationException("找不到 ERP 商品明細 TcxGridSite。");
         var geometry = await _gridVision.AnalyzeDetailGridAsync(grid.Handle, cancellationToken);
 
@@ -203,9 +219,7 @@ internal sealed class ErpAutomationService
             await SetDetailCellAsync(root, grid, geometry, visibleRow, 0, row.ItemCode, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(row.Unit))
-            {
-                await SelectUnitAsync(root, grid, geometry, visibleRow, row.Unit, cancellationToken);
-            }
+                await SelectUnitAsync(root, geometry, visibleRow, row.Unit, cancellationToken);
 
             await SetDetailCellAsync(root, grid, geometry, visibleRow, 1, row.Quantity, cancellationToken);
             if (!string.IsNullOrWhiteSpace(row.GiftQuantity))
@@ -224,12 +238,14 @@ internal sealed class ErpAutomationService
         NativeMethods.GetWindowRect(root, out var rr);
         var candidates = Win32Automation.EnumerateChildren(root)
             .Where(c => c.Visible && c.ClassName.Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+            .Where(c => c.Rect.Width >= 280 && c.Rect.Height >= 45)
             .ToArray();
-        var lower = candidates
-            .Where(c => (c.Rect.Top + c.Rect.Bottom) / 2 > rr.Top + rr.Height * 35 / 100)
+        var preferred = candidates
+            .Where(c => (c.Rect.Top + c.Rect.Bottom) / 2 >= rr.Top + rr.Height * 45 / 100)
+            .Where(c => c.Rect.Width >= rr.Width * 35 / 100)
             .OrderByDescending(c => c.Rect.Width * c.Rect.Height)
             .FirstOrDefault();
-        var selected = lower ?? candidates.OrderByDescending(c => c.Rect.Width * c.Rect.Height).FirstOrDefault();
+        var selected = preferred ?? candidates.OrderByDescending(c => c.Rect.Width * c.Rect.Height).FirstOrDefault();
         if (selected is not null)
             _log.Info("detail", $"grid selected size={selected.Rect.Width}x{selected.Rect.Height}");
         return selected;
@@ -255,7 +271,7 @@ internal sealed class ErpAutomationService
         _log.Info("detail", $"cell committed row={visibleRow + 1} col={column} chars={value.Length}");
     }
 
-    private async Task SelectUnitAsync(nint root, WindowControl grid, GridGeometry geometry, int visibleRow, string unit, CancellationToken cancellationToken)
+    private async Task SelectUnitAsync(nint root, GridGeometry geometry, int visibleRow, string unit, CancellationToken cancellationToken)
     {
         if (!geometry.TryCellPoint(visibleRow, 4, out var point))
             throw new InvalidOperationException("光學明細定位沒有辨識到「單位」欄。");
@@ -273,7 +289,7 @@ internal sealed class ErpAutomationService
         var unitPoint = await _gridVision.FindUnitAsync(lookup, unit, cancellationToken);
         InputSender.Click(unitPoint);
         await Delay(100, cancellationToken);
-        // Confirmed manual ERP behavior: click requested unit -> Enter -> F2 closes.
+        // Confirmed manual ERP behavior: click requested unit -> Enter. No confirm-button fallback is allowed.
         InputSender.Press(NativeMethods.VK_RETURN);
         if (!await WaitWindowClosedAsync(lookup, 1200, cancellationToken))
             throw new InvalidOperationException("已光學點選指定單位並送出 Enter，但 F2 視窗仍未關閉。");
