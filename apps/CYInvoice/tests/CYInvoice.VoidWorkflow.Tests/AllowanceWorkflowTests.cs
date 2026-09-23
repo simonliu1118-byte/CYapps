@@ -105,6 +105,7 @@ internal static class AllowanceWorkflowTests
             var stored = setup.Repository.Invoices.LoadOrCreate().Single();
             Equal(true, HasPending(stored));
             Equal(true, setup.Workflow.ManualReviewFor(stored)?.AwaitingConfirmation);
+            Equal("2000", setup.Workflow.ManualReviewFor(stored)?.HandlerEmployeeNo);
             var unresolved = new InvoiceSyncIssueStore(setup.Repository.DataDirectory).Unresolved(AccountKey())
                 .Single(item => item.Id == issue.Id);
             Equal(true, unresolved.Message.Contains("金額", StringComparison.Ordinal));
@@ -133,6 +134,8 @@ internal static class AllowanceWorkflowTests
             var stored = setup.Repository.Invoices.LoadOrCreate().Single();
             Equal(false, HasPending(stored));
             Equal(null, setup.Workflow.ManualReviewFor(stored));
+            Equal("2000", setup.Workflow.HandledReviewFor(stored)?.HandlerEmployeeNo);
+            Equal("3015", setup.Workflow.HandledReviewFor(stored)?.RequesterEmployeeNo);
             Equal(3, InvoiceAllowanceMetadata.ReadOfficial(stored).Count);
         }
     }

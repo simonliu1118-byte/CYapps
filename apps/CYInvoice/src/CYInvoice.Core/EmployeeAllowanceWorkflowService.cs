@@ -17,7 +17,8 @@ public sealed record InvoiceAllowanceManualReview(
     string[] BaselineAllowanceNumbers,
     bool AwaitingConfirmation = false,
     DateTimeOffset? ManualCompletedUtc = null,
-    string ConfirmedAllowanceNumber = "");
+    string ConfirmedAllowanceNumber = "",
+    string HandlerEmployeeNo = "");
 
 public sealed record EmployeeAllowanceWorkflowResult(
     InvoiceRecord Record,
@@ -40,6 +41,7 @@ public sealed record InvoiceAllowanceReconcileResult(
 public sealed class EmployeeAllowanceWorkflowService
 {
     private const string ManualReviewMetadataKey = "cyinvoice_allowance_manual_review";
+    private const string HandledReviewMetadataKey = "cyinvoice_allowance_handled_review";
     private const string PendingMetadataKey = "cyinvoice_allowance_pending";
     private readonly LocalRepository repository;
     private readonly InvoiceSyncRepository syncRepository;
@@ -151,6 +153,17 @@ public sealed class EmployeeAllowanceWorkflowService
         return ReadManualReview(record);
     }
 
+    public InvoiceAllowanceManualReview? HandledReviewFor(InvoiceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.ExtensionData is null ||
+            !record.ExtensionData.TryGetValue(HandledReviewMetadataKey, out var value) ||
+            value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        try { return value.Deserialize<InvoiceAllowanceManualReview>(); }
+        catch (JsonException error) { throw new InvalidDataException("折讓人工處理紀錄格式錯誤", error); }
+    }
+
     public async Task<InvoiceAllowanceReconcileResult> MarkManualCompletedAsync(
         InvoiceSyncIssue issue,
         string actorEmployeeNo,
@@ -158,7 +171,7 @@ public sealed class EmployeeAllowanceWorkflowService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(issue);
-        EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
+        var manager = EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
         RequireManualReviewIssue(issue);
 
         var record = FindIssueRecord(issue);
@@ -172,6 +185,7 @@ public sealed class EmployeeAllowanceWorkflowService
             AwaitingConfirmation = true,
             ManualCompletedUtc = now().ToUniversalTime(),
             ConfirmedAllowanceNumber = string.Empty,
+            HandlerEmployeeNo = manager.EmployeeNo,
         };
         WriteManualReview(record, review);
         MarkPending(record);
@@ -395,6 +409,8 @@ public sealed class EmployeeAllowanceWorkflowService
         }
 
         ClearPending(fresh);
+        fresh.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        fresh.ExtensionData[HandledReviewMetadataKey] = JsonSerializer.SerializeToElement(review);
         ClearManualReview(fresh);
         syncRepository.UpsertMany([fresh]);
         issueStore.ResolveMatching(

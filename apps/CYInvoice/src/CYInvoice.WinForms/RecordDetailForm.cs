@@ -931,7 +931,7 @@ internal sealed class RecordDetailForm : Form
                 AddDetail("發票印表機", string.Empty, printerStatus);
                 UpdatePrinterStatus();
             }
-            history.LoadRecord(record);
+            history.LoadRecord(record, voidWorkflow.HandledReviewFor(record));
         }
         finally
         {

@@ -21,6 +21,8 @@ internal sealed class SettingsForm : Form
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
     private BufferedTableLayoutPanel environmentLayout = null!;
+    private BufferedFlowLayoutPanel modeChoices = null!;
+    private BufferedTableLayoutPanel platformLayout = null!;
     private Label invoiceLabel = null!;
     private Label appKeyLabel = null!;
     private Label moPasswordLabel = null!;
@@ -32,7 +34,7 @@ internal sealed class SettingsForm : Form
         settings = repository.Settings.LoadOrCreate();
         Text = "設定選單";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(420, 340);
+        ClientSize = new Size(420, 380);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -68,13 +70,13 @@ internal sealed class SettingsForm : Form
             Padding = new Padding(10),
             Margin = Padding.Empty,
         };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 136));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
 
         var modeGroup = new GroupBox { Text = "運作模式", Dock = DockStyle.Fill };
-        var modeChoices = new BufferedFlowLayoutPanel
+        modeChoices = new BufferedFlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
@@ -125,23 +127,23 @@ internal sealed class SettingsForm : Form
         environmentGroup.Controls.Add(environmentLayout);
 
         var platformGroup = new GroupBox { Text = "平台檔案密碼", Dock = DockStyle.Fill };
-        var platform = new BufferedTableLayoutPanel
+        platformLayout = new BufferedTableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
             Padding = new Padding(6, 5, 6, 5),
             Margin = Padding.Empty,
         };
-        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
-        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
-        platform.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        platformLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 24));
+        platformLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+        platformLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         moPasswordLabel = FieldLabel("MO店+");
-        platform.Controls.Add(moPasswordLabel, 1, 0);
-        platform.Controls.Add(moPassword, 2, 0);
+        platformLayout.Controls.Add(moPasswordLabel, 1, 0);
+        platformLayout.Controls.Add(moPassword, 2, 0);
         toolTip.SetToolTip(
             moPasswordLabel,
             "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。\n未設定時只會停用 MO店+ 匯入，不影響其他功能。");
-        platformGroup.Controls.Add(platform);
+        platformGroup.Controls.Add(platformLayout);
 
         cancel.DialogResult = DialogResult.Cancel;
         diagnostics.Width = 112;
@@ -424,12 +426,17 @@ internal sealed class SettingsForm : Form
             actionButtons.Controls.Count != 3 ||
             Math.Abs(environmentX - platformX) > 1 ||
             actionButtons.Controls.Cast<Control>().Any(control => control.Bottom > actionButtons.ClientSize.Height) ||
+            cloudSettings.Bottom > modeChoices.ClientSize.Height ||
+            deviceManagement.Bottom > modeChoices.ClientSize.Height ||
+            appKeyLabel.Bottom > environmentLayout.ClientSize.Height - environmentLayout.Padding.Bottom ||
+            appKey.Bottom > environmentLayout.ClientSize.Height - environmentLayout.Padding.Bottom ||
+            moPassword.Bottom > platformLayout.ClientSize.Height - platformLayout.Padding.Bottom ||
             Math.Abs((actionButtons.Controls.Cast<Control>().Min(control => control.Left) +
                 actionButtons.Controls.Cast<Control>().Max(control => control.Right)) / 2 - actionButtons.ClientSize.Width / 2) > 2)
             throw new InvalidOperationException("設定動作、雲端裝置管理、運作模式、MO店+ 對齊、提示或 App Key 標籤配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         var logicalHeight = ClientSize.Height * 96D / DeviceDpi;
-        if (logicalWidth > 430 || logicalHeight > 355)
+        if (logicalWidth > 430 || logicalHeight > 390)
             throw new InvalidOperationException("設定視窗未維持精簡尺寸");
     }
 

@@ -89,6 +89,8 @@ Build 1 的 Run #211 已通過：
 
 同日使用者在 Windows V2.6.4 Build 1 重新寄送 OTP 並執行首次建立；CYInvoice 畫面回報第一個 Workspace 與 Device 建立成功，且 Device identity 驗證完成。此為 Windows client 收到的成功結果；**建立後尚未從 Cloudflare D1 獨立唯讀核對筆數與記錄，也未確認 whole-device Employee Transition / cutover 完成**。不要再次執行 bootstrap 或清除資料。
 
+2026-09-24 本機 Codex 透過已連線的 Cloudflare MCP 唯讀查核 development D1：已有 1 個 Workspace、1 台 active Device、1 位已驗證且啟用的中央 SUPER_ADMIN；Device 與員工關聯有效，轉換待辦已完成且沒有未解決項目。使用者隨後於 A 機完成雲端帳號切換，回報目前運作正常；B 機尚未測試。Cloudflare MCP 的 HTTP fetch 對 workers.dev 回覆 403（requests to workers.dev are not allowed），所以本次未能從該工具獨立確認即時 `/v1/health`，不可沿用 2026-09-23 的 health 結果當作本次查核。不要再次 bootstrap 或清除資料。
+
 Cloudflare API、Bindings、Builds、Observability 四個官方 MCP 端點已由使用者在本機 Codex 檢查為「已設定／已載入／連線成功／目前不需 OAuth 登入」；該檢查尚未讀取 `cyinvoice-cloud-dev` 的 Workspace／Device。網頁版 Work 對話沒有這四個工具，不能把本機設定檔已登記誤當作網頁對話可用。這次工作採網頁版為主；需要 Cloudflare 即時狀態時，由已連線的本機 Codex 讀本文件後執行限定範圍的唯讀查核，並把去識別結果帶回主要工作對話。
 
 ## 5. Work 接手後的優先順序
