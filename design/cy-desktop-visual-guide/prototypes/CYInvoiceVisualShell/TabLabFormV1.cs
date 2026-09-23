@@ -11,7 +11,7 @@ internal sealed class TabLabFormV1 : Form
 
     internal TabLabFormV1()
     {
-        Text = "CY Tab Lab V3 — Standard / Large Native TabControl";
+        Text = "CY Tab Lab V4 — Flat Native Geometry / No Jump Validation";
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(1120, 820);
         MinimumSize = new Size(940, 700);
@@ -58,7 +58,7 @@ internal sealed class TabLabFormV1 : Form
 
         var title = new Label
         {
-            Text = "Tab Lab — Standard / Large Header 對照",
+            Text = "Tab Lab — Flat Native Geometry / Standard + Large",
             AutoSize = true,
             Font = VisualTokens.Font(16f, FontStyle.Bold),
             ForeColor = VisualTokens.TextPrimary,
@@ -101,7 +101,7 @@ internal sealed class TabLabFormV1 : Form
 
         var note = new Label
         {
-            Text = "兩種尺寸都保留原生 TabControl / TabPage 行為，只 owner-draw Header。Active = Accent 底線 + 較強字重；Hover = Accent Soft；不顯示傳統虛線 Focus cue。Large 只是在同一視覺語言下放大，不是另一套 Web-style Tab。",
+            Text = "V4 改用原生 TabControl 的 FlatButtons 幾何，避免傳統 Selected Tab 凸框／陰影在切換時改變尺寸而跳動。Header 仍只負責文字、Hover 與 Accent 底線；TabPage、鍵盤與頁面切換仍是原生行為。請特別快速切換 Tab，觀察外框是否還會跳／閃。",
             AutoSize = true,
             MaximumSize = new Size(1040, 0),
             Font = VisualTokens.Font(9.5f),
@@ -114,7 +114,7 @@ internal sealed class TabLabFormV1 : Form
         BuildTabs(normalTabs, new[] { "開立發票", "已開立發票清單", "待處理", "設定" });
         normalTabs.Margin = new Padding(0, 5, 0, 12);
 
-        var sectionB = SectionTitle("B. Standard — 6 Tabs + 長短標題混合 / 看排列與空間不足時原生行為");
+        var sectionB = SectionTitle("B. Standard — 6 Tabs + 長短標題混合 / 看排列與快速切換");
         manyTabs.ConfigureStandard();
         BuildTabs(manyTabs, new[] { "基本資料", "商品明細", "載具與買受人", "發票上傳與同步狀態", "列印與 PDF", "系統設定" });
         manyTabs.Margin = new Padding(0, 5, 0, 12);
@@ -152,7 +152,7 @@ internal sealed class TabLabFormV1 : Form
             var page = new TabPage(name) { BackColor = Color.White, Padding = new Padding(18) };
             var content = new Label
             {
-                Text = $"{name}\r\n\r\n這裡只是原生 TabPage 內容區。請切換頁籤、快速滑過其他 Tab，並縮放視窗觀察 Header。",
+                Text = $"{name}\r\n\r\n這裡只是原生 TabPage 內容區。請快速連續切換不同 Tab、滑過 Header，並縮放視窗觀察是否還有邊框跳動／閃爍。",
                 AutoSize = true,
                 Font = VisualTokens.Font(10f),
                 ForeColor = VisualTokens.TextPrimary,
