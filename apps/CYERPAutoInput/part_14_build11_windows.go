@@ -99,6 +99,9 @@ func findDetailFieldByColV11(fs []*Field, col int) *Field {
 }
 
 func fillDetailSelectedV11(root uintptr) (ok, fail int) {
+	if detailGridV15 != 0 {
+		return fillDetailSelectedV15(root)
+	}
 	if detailListViewV14 != 0 {
 		return fillDetailSelectedV14(root)
 	}
