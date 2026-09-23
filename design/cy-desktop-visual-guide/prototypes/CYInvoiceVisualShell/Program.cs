@@ -11,12 +11,20 @@ internal static class Program
 
         if (args.Any(a => string.Equals(a, "--smoke-test", StringComparison.OrdinalIgnoreCase)))
         {
-            using var form = new TableLabFormV1();
-            form.CreateControl();
-            form.PerformLayout();
+            using (var tab = new TabLabFormV1())
+            {
+                tab.CreateControl();
+                tab.PerformLayout();
+            }
+
+            using (var table = new TableLabFormV1())
+            {
+                table.CreateControl();
+                table.PerformLayout();
+            }
             return;
         }
 
-        Application.Run(new TableLabFormV1());
+        Application.Run(new TabLabFormV1());
     }
 }
