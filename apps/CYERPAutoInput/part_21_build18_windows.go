@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-const detailReferenceWidthV18 int32 = 1800
-
 // freshDetailGridV18 refreshes the screen rect immediately before every mouse
 // action. COPI08 can be restored/moved/resized between row activation and the
 // next cell click, so carrying a stale RECT across those steps is unsafe.
@@ -19,33 +17,12 @@ func freshDetailGridV18(grid ControlInfo) ControlInfo {
 	return grid
 }
 
-// detailColumnScreenXV18 keeps the column calibration in pixels when COPI08 is
-// not maximized. The old implementation multiplied the historical column ratio
-// by the *current* grid width. DevExpress keeps these columns close to fixed
-// pixel widths, so shrinking the window pulled the click left into the wrong
-// column (most visibly item code). Use the proven full-width calibration as a
-// minimum basis; if a target column is genuinely off-screen, stop instead of
-// clicking another column.
+// V0.0.11 no longer derives a detail-column X from the current window width.
+// The point comes from the screenshot-derived grid geometry. If optical
+// detection fails, stop rather than falling back to a guessed coordinate.
 func detailColumnScreenXV18(grid ControlInfo, col int) (int32, bool) {
-	ratio, ok := detailColumnRatio(col)
-	if !ok {
-		return 0, false
-	}
 	grid = freshDetailGridV18(grid)
-	w := grid.Rect.Right - grid.Rect.Left
-	if w <= 0 {
-		return 0, false
-	}
-	basis := w
-	if basis < detailReferenceWidthV18 {
-		basis = detailReferenceWidthV18
-	}
-	x := grid.Rect.Left + int32(float64(basis)*ratio)
-	if x < grid.Rect.Left+4 || x > grid.Rect.Right-4 {
-		logf("WARN", "detail V18 target column offscreen col=%d x=%d grid=%d..%d width=%d basis=%d", col, x, grid.Rect.Left, grid.Rect.Right, w, basis)
-		return 0, false
-	}
-	return x, true
+	return opticalDetailColumnXV011(grid, col)
 }
 
 func setDetailCellAtRowV18(root uintptr, grid ControlInfo, row int, col int, value string) bool {
@@ -57,14 +34,10 @@ func setDetailCellAtRowV18(root uintptr, grid ControlInfo, row int, col int, val
 			return false
 		}
 		fresh := freshDetailGridV18(grid)
-		x, ok := detailColumnScreenXV18(fresh, col)
+		x, y, ok := opticalDetailPointV011(fresh, row, col)
 		if !ok {
+			logf("WARN", "detail V0.0.11 optical target unavailable row=%d col=%d attempt=%d", row+1, col, attempt)
 			return false
-		}
-		visibleRow := detailVisibleRowIndexV11(fresh, row)
-		y := fresh.Rect.Top + 33 + int32(visibleRow)*detailRowHeightV8
-		if y > fresh.Rect.Bottom-12 {
-			y = fresh.Rect.Bottom - 12
 		}
 		clickScreenPoint(x, y)
 		if !interruptibleSleep(180 * time.Millisecond) {
@@ -74,10 +47,10 @@ func setDetailCellAtRowV18(root uintptr, grid ControlInfo, row int, col int, val
 		edit := waitGridEditorV4(root, fresh, 950*time.Millisecond)
 		if edit == 0 {
 			focus := focusedControlOfForeground(root)
-			logf("WARN", "detail V18 editor not ready row=%d visible_row=%d col=%d attempt=%d point=%d,%d grid_width=%d focus=0x%x/%s", row+1, visibleRow+1, col, attempt, x, y, fresh.Rect.Right-fresh.Rect.Left, focus, className(focus))
+			logf("WARN", "detail V0.0.11 optical editor not ready row=%d col=%d attempt=%d point=%d,%d grid_width=%d focus=0x%x/%s", row+1, col, attempt, x, y, fresh.Rect.Right-fresh.Rect.Left, focus, className(focus))
 			continue
 		}
-		logf("INFO", "detail V18 editor ready row=%d visible_row=%d col=%d edit=0x%x/%s attempt=%d point=%d,%d", row+1, visibleRow+1, col, edit, className(edit), attempt, x, y)
+		logf("INFO", "detail V0.0.11 optical editor ready row=%d col=%d edit=0x%x/%s attempt=%d point=%d,%d", row+1, col, edit, className(edit), attempt, x, y)
 		if !writeDetailSequentialV7(edit, value) {
 			return false
 		}
@@ -88,7 +61,7 @@ func setDetailCellAtRowV18(root uintptr, grid ControlInfo, row int, col int, val
 		if !interruptibleSleep(300 * time.Millisecond) {
 			return false
 		}
-		logf("INFO", "detail V18 committed by Enter row=%d col=%d", row+1, col)
+		logf("INFO", "detail V0.0.11 committed by Enter row=%d col=%d", row+1, col)
 		return true
 	}
 	return false
@@ -120,12 +93,12 @@ func dispatchLookupEnterV18() bool {
 	}
 	pSendMessageW.Call(target, 0x0100, uintptr(VK_RETURN), 0) // WM_KEYDOWN
 	pSendMessageW.Call(target, 0x0101, uintptr(VK_RETURN), 0) // WM_KEYUP
-	logf("INFO", "unit lookup V18 Enter dispatched directly target=0x%x class=%q focus_before=0x%x/%s", target, className(target), focus, className(focus))
+	logf("INFO", "unit lookup V0.0.11 Enter dispatched directly target=0x%x class=%q focus_before=0x%x/%s", target, className(target), focus, className(focus))
 	return true
 }
 
-// waitLookupClosedV18 is used only for diagnostics by future callers; it keeps
-// the confirmation path bounded and never clicks a fallback button.
+// waitLookupClosedV18 keeps the confirmation path bounded and never clicks a
+// fallback button.
 func waitLookupClosedV18(lookup uintptr, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
