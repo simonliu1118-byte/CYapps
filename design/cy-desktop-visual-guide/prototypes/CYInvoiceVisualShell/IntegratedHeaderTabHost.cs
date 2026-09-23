@@ -41,7 +41,6 @@ internal sealed class IntegratedHeaderTabHost : UserControl
         pages.ItemSize = new Size(1, 1);
         pages.Multiline = false;
         pages.Margin = Padding.Empty;
-        pages.Padding = Padding.Empty;
         pages.SelectedIndexChanged += (_, _) => SyncSelection();
 
         clipPanel.Controls.Add(pages);
