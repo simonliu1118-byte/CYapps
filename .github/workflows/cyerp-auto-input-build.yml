@@ -50,6 +50,10 @@ jobs:
         shell: pwsh
         run: dotnet build CYERPAutoInput.csproj -c Release -r win-x64 --no-restore -p:Version=$env:CYERPAUTOINPUT_VERSION -p:ContinuousIntegrationBuild=true
 
+      - name: Optical pipeline self-test
+        shell: pwsh
+        run: dotnet run --project CYERPAutoInput.csproj -c Release -r win-x64 --no-build -- --vision-self-test
+
       - name: Publish Windows x64 portable package
         shell: pwsh
         run: |
