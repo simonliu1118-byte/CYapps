@@ -1,0 +1,261 @@
+diff --git a/apps/CYAccounting/app/main.py b/apps/CYAccounting/app/main.py
+--- a/apps/CYAccounting/app/main.py
++++ b/apps/CYAccounting/app/main.py
+@@ -190,6 +190,7 @@ from widgets import CategoryComboBox, DatePickerDialog, MonthSpinBox, SmartDateL
+ from gdrive import GoogleDriveClient, GoogleDriveError, newest_local_backup, upload_backup_and_cleanup
+ from import_dialog import ImportTransactionsDialog
++from theme import APP_STYLE as CY_APP_STYLE
+ 
+ startup_log("all Python and PySide6 modules imported")
+@@ -295,6 +296,8 @@ QPushButton#monthNavButton {{ min-width: 36px; padding-left: 0; padding-right: 0
+ """
+ 
++APP_STYLE = CY_APP_STYLE
++
+ 
+ class ChineseStandardButtonFilter(QObject):
+@@ -403,7 +406,7 @@ class InputTab(QWidget):
+         self.calendar_btn.setFixedWidth(42)
+         self.calendar_btn.clicked.connect(self.pick_date)
+         self.date_error = QLabel("日期錯誤")
+-        self.date_error.setStyleSheet("color:#c62828;font-weight:bold;")
++        self.date_error.setStyleSheet("color:#B43737;font-weight:600;")
+         self.date_error.setFixedWidth(76)
+         self.date_error.hide()
+@@ -466,6 +469,7 @@ class InputTab(QWidget):
+         self.income_amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.income_amount))
+         self.income_amount.setPlaceholderText("最多7位")
++        self.income_amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+         self.income_save = no_tab_button("存入收入")
+         self.income_save.setObjectName("primaryButton")
+@@ -525,6 +529,7 @@ class InputTab(QWidget):
+         self.expense_amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.expense_amount))
+         self.expense_amount.setPlaceholderText("最多7位")
++        self.expense_amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+         self.expense_save = no_tab_button("存入支出")
+         self.expense_save.setObjectName("primaryButton")
+@@ -554,6 +559,7 @@ class InputTab(QWidget):
+         outer.addWidget(expense)
+ 
+         confirm = QGroupBox("輸入確認")
++        confirm.setObjectName("resultCard")
+         confirm.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+         confirm.setMinimumHeight(244)
+@@ -631,7 +637,7 @@ class InputTab(QWidget):
+         for name in self.db.favorite_category_names(kind):
+             button = no_tab_button(name)
+             button.setObjectName("quickCategoryButton")
+-            button.setFixedHeight(26)
++            button.setMinimumHeight(30)
+             button.setToolTip(f"切換{('收入' if kind == 'income' else '支出')}科目為「{name}」")
+@@ -813,8 +819,8 @@ class InputTab(QWidget):
+     def show_failure(self, reason: str):
+         self._add_confirmation(
+-            f'<span style="color:#c62828;font-weight:bold;">存檔失敗</span>　'
+-            f'<span style="color:#c62828;font-size:10pt;">{html.escape(reason)}</span>'
++            f'<span style="color:#B43737;font-weight:bold;">存檔失敗</span>　'
++            f'<span style="color:#B43737;font-size:10pt;">{html.escape(reason)}</span>'
+         )
+@@ -865,12 +871,12 @@ class InputTab(QWidget):
+             type_text = "收入" if kind == "income" else "支出"
+             if kind == "income":
+                 type_tag = (
+-                    '<span style="background-color:#e7efe9;color:#4f745c;">'
++                    '<span style="background-color:#EDF5F2;color:#2E6F5E;">'
+                     '&nbsp;收入&nbsp;</span>'
+                 )
+             else:
+                 type_tag = (
+-                    '<span style="background-color:#f4e8e8;color:#9b5b5b;">'
++                    '<span style="background-color:#F6EEEE;color:#8A5B5B;">'
+                     '&nbsp;支出&nbsp;</span>'
+                 )
+@@ -879,7 +885,7 @@ class InputTab(QWidget):
+                 html.escape(summary_text)
+                 if summary_text
+-                else '<span style="color:#98a2b3;">(空白)</span>'
++                else '<span style="color:#98A2B3;">(空白)</span>'
+             )
+@@ -891,7 +897,7 @@ class InputTab(QWidget):
+                 f"{format_date(d)}　[{html.escape(account)}]　{type_tag}　{html.escape(category)}　-　"
+                 f"{summary_display}　${amount:,}　"
+-                f'<span style="color:#198754;font-weight:bold;">&lt;存檔成功&gt;</span>'
++                f'<span style="color:#21825C;font-weight:bold;">&lt;存檔成功&gt;</span>'
+             )
+@@ -955,7 +961,7 @@ class LedgerTab(QWidget):
+         header_row.addWidget(self.search_status)
+         header_row.addStretch()
+         self.opening_warning = QLabel("此月份尚有帳戶未設定期初餘額")
+-        self.opening_warning.setStyleSheet("color:#c62828;font-weight:bold;")
++        self.opening_warning.setStyleSheet("color:#B43737;font-weight:600;")
+         header_row.addWidget(self.opening_warning)
+@@ -972,8 +978,8 @@ class LedgerTab(QWidget):
+         self.table.setEditTriggers(QTableView.EditTrigger.DoubleClicked)
+         self.table.verticalHeader().setVisible(False)
+-        self.table.verticalHeader().setMinimumSectionSize(22)
+-        self.table.verticalHeader().setDefaultSectionSize(23)
++        self.table.verticalHeader().setMinimumSectionSize(26)
++        self.table.verticalHeader().setDefaultSectionSize(28)
+         table_font = self.table.font()
+@@ -984,7 +990,7 @@ class LedgerTab(QWidget):
+         header_font.setPointSize(10)
+         header_font.setBold(True)
+         self.table.horizontalHeader().setFont(header_font)
+-        self.table.horizontalHeader().setFixedHeight(28)
++        self.table.horizontalHeader().setFixedHeight(30)
+         header = self.table.horizontalHeader()
+@@ -995,7 +1001,6 @@ class LedgerTab(QWidget):
+         header.setSectionsClickable(True)
+         header.sectionClicked.connect(self._header_clicked)
+-        self.table.setStyleSheet("QTableView{font-size:10pt;} QHeaderView::section{font-size:10pt;padding:3px 3px;}")
+ 
+@@ -1029,6 +1034,7 @@ class LedgerTab(QWidget):
+ 
+         stats_box = QGroupBox("月份統計")
++        stats_box.setObjectName("statsCard")
+         stats_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+@@ -1041,9 +1047,9 @@ class LedgerTab(QWidget):
+         for lab in labels:
+             font = lab.font(); font.setBold(True); lab.setFont(font)
+-        self.income_label.setStyleSheet("color:#1f5f99;font-weight:bold;")
+-        self.expense_label.setStyleSheet("color:#b42318;font-weight:bold;")
+-        self.ending_label.setStyleSheet("color:#334155;font-weight:bold;")
++        self.income_label.setStyleSheet("color:#2E6F5E;font-weight:600;")
++        self.expense_label.setStyleSheet("color:#8A5B5B;font-weight:600;")
++        self.ending_label.setStyleSheet("color:#1F2937;font-weight:600;")
+@@ -1149,10 +1155,10 @@ class LedgerTab(QWidget):
+         if net >= 0:
+             self.net_label.setText(f"淨利：{format_amount(net)}")
+-            self.net_label.setStyleSheet("color:#198754;font-weight:bold;")
++            self.net_label.setStyleSheet("color:#21825C;font-weight:600;")
+         else:
+             self.net_label.setText(f"淨損：{format_amount(abs(net))}")
+-            self.net_label.setStyleSheet("color:#b42318;font-weight:bold;")
++            self.net_label.setStyleSheet("color:#8A5B5B;font-weight:600;")
+@@ -1397,8 +1403,8 @@ class MainWindow(QMainWindow):
+         central = QWidget()
+         central_layout = QVBoxLayout(central)
+-        central_layout.setContentsMargins(12, 8, 12, 10)
++        central_layout.setContentsMargins(16, 10, 16, 12)
+         central_layout.setSpacing(0)
+ 
+         top_nav = QHBoxLayout()
+-        top_nav.setContentsMargins(2, 0, 2, 0)
+-        top_nav.setSpacing(7)
++        top_nav.setContentsMargins(0, 0, 0, 0)
++        top_nav.setSpacing(8)
+
+diff --git a/apps/CYAccounting/app/dialogs.py b/apps/CYAccounting/app/dialogs.py
+--- a/apps/CYAccounting/app/dialogs.py
++++ b/apps/CYAccounting/app/dialogs.py
+@@ -74,7 +74,7 @@ class NameDialog(QDialog):
+         layout.addWidget(self.edit)
+         self.error = QLabel("")
+-        self.error.setStyleSheet("color:#c62828;font-weight:bold;")
++        self.error.setStyleSheet("color:#B43737;font-weight:600;")
+@@ -105,7 +105,7 @@ class AccountManagerDialog(QDialog):
+         outer = QVBoxLayout(self)
+         note = QLabel("帳戶名稱上限8個中文字；點擊第一欄可設為預設帳戶。\n修改或刪除帳戶不會變更歷史記帳資料。")
+         note.setWordWrap(True)
+-        note.setStyleSheet("color:#5d6875;")
++        note.setStyleSheet("color:#667085;")
+@@ -244,7 +244,7 @@ class CategoryPage(QWidget):
+         count_row.addStretch(1)
+         self.favorite_count_label = QLabel("")
+-        self.favorite_count_label.setStyleSheet("color:#5d6875;font-weight:bold;")
++        self.favorite_count_label.setStyleSheet("color:#667085;font-weight:600;")
+@@ -679,7 +679,7 @@ class EditTransactionDialog(QDialog):
+-        self.amount = QLineEdit(str(tx["amount"])); self.amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.amount))
++        self.amount = QLineEdit(str(tx["amount"])); self.amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.amount)); self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+@@ -718,14 +718,10 @@ class SettingsDialog(QDialog):
+         self.setWindowTitle("系統設定")
+         self.setObjectName("settingsDialog")
+         self.setModal(True)
+-        self.resize(700, 650)
+-        self.setStyleSheet(
+-            "QDialog#settingsDialog QPushButton, QDialog#settingsDialog QLineEdit, "
+-            "QDialog#settingsDialog QComboBox, QDialog#settingsDialog QSpinBox {"
+-            "min-height:21px; max-height:24px; padding-top:0px; padding-bottom:0px;}"
+-            "QDialog#settingsDialog QGroupBox {padding-top:9px; padding-bottom:7px;}"
+-        )
++        self.resize(760, 700)
+         outer = QVBoxLayout(self)
++        outer.setContentsMargins(16, 12, 16, 12)
++        outer.setSpacing(10)
+ 
+         db_box = QGroupBox("資料庫儲存位置")
+
+diff --git a/apps/CYAccounting/app/import_dialog.py b/apps/CYAccounting/app/import_dialog.py
+--- a/apps/CYAccounting/app/import_dialog.py
++++ b/apps/CYAccounting/app/import_dialog.py
+@@ -34,6 +34,7 @@ from gdrive import DriveFile, GoogleDriveClient, GoogleDriveError, GOOGLE_SHEET_M
+ from util import APP_NAME, MAX_AMOUNT, format_date, is_month_locked, month_key_from_date, normalize_date_input, parse_date, weighted_units
++from theme import IMPORT_DIALOG_STYLE
+@@ -218,11 +219,7 @@ class ImportTransactionsDialog(QDialog):
+         self.resize(900, 690)
+         self.setObjectName("importDialog")
+-        self.setStyleSheet(
+-            "QDialog#importDialog QPushButton, QDialog#importDialog QLineEdit, QDialog#importDialog QComboBox {"
+-            "min-height:24px; max-height:27px; padding-top:0px; padding-bottom:0px;}"
+-        )
++        self.setStyleSheet(IMPORT_DIALOG_STYLE)
+         self._build()
+@@ -232,6 +229,7 @@ class ImportTransactionsDialog(QDialog):
+     def _build(self):
+         outer = QVBoxLayout(self)
+-        outer.setSpacing(8)
++        outer.setContentsMargins(16, 12, 16, 12)
++        outer.setSpacing(12)
+ 
+         source = QGroupBox("匯入來源")
+
+diff --git a/apps/CYAccounting/app/widgets.py b/apps/CYAccounting/app/widgets.py
+--- a/apps/CYAccounting/app/widgets.py
++++ b/apps/CYAccounting/app/widgets.py
+@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
+ )
+ 
+ from util import format_amount, normalize_date_input, shift_month, trim_weighted, weighted_units
++from theme import CALENDAR_STYLE, CATEGORY_POPUP_STYLE
+@@ -217,10 +218,7 @@ class CategoryComboBox(QComboBox):
+-        self.view().setStyleSheet(
+-            "QAbstractItemView { border: 1px solid #aeb9c5; background: white; "
+-            "outline: 0; selection-background-color: #dce9f5; }"
+-        )
++        self.view().setStyleSheet(CATEGORY_POPUP_STYLE)
+@@ -231,8 +229,8 @@ class CategoryComboBox(QComboBox):
+-            g.setForeground(QBrush(QColor("#4c5968")))
+-            g.setBackground(QBrush(QColor("#eef2f6")))
++            g.setForeground(QBrush(QColor("#667085")))
++            g.setBackground(QBrush(QColor("#F1F3F5")))
+@@ -306,11 +304,7 @@ class DatePickerDialog(QDialog):
+-        self.calendar.setStyleSheet(
+-            "QCalendarWidget QAbstractItemView::item:selected {"
+-            "background:#39739d; color:white; font-weight:bold; border:1px solid #245a82;"
+-            "}"
+-        )
++        self.calendar.setStyleSheet(CALENDAR_STYLE)
+@@ -365,8 +359,8 @@ class DatePickerDialog(QDialog):
+-                fmt.setBackground(QBrush(QColor("#edf0f3")))
+-                fmt.setForeground(QBrush(QColor("#8b949e")))
++                fmt.setBackground(QBrush(QColor("#F1F3F5")))
++                fmt.setForeground(QBrush(QColor("#98A2B3")))
+
+diff --git a/apps/CYAccounting/app/models.py b/apps/CYAccounting/app/models.py
+--- a/apps/CYAccounting/app/models.py
++++ b/apps/CYAccounting/app/models.py
+@@ -3,7 +3,6 @@ from typing import Callable
+ 
+ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+-from PySide6.QtGui import QBrush, QColor
+ 
+ from util import format_amount
+@@ -72,8 +71,6 @@ class LedgerTableModel(QAbstractTableModel):
+         if not index.isValid():
+             return None
+         r = self.row_data(index.row())
+         col = index.column()
+-        if role == Qt.ItemDataRole.BackgroundRole:
+-            return QBrush(QColor("#ffffff" if index.row() % 2 == 0 else "#f2f5f8"))
+         if r is None:
+             return None
