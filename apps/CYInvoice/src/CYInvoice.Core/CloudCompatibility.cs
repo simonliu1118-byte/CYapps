@@ -4,7 +4,11 @@ public static class CloudCompatibility
 {
     public const string ServiceName = "cyinvoice-cloud";
     public const string ApiVersion = "1";
-    public const string SchemaVersion = "9";
+
+    // Kept for source compatibility and diagnostics. This is the API 1 legacy
+    // compatibility marker expected by released V2.6.5 Build 4 clients; it is
+    // not the D1 migration number and must not be used as a hard compatibility gate.
+    public const string SchemaVersion = "8";
 
     public static string Problem(CloudHealthResult health)
     {
@@ -19,13 +23,13 @@ public static class CloudCompatibility
             return $"Cloud API 可連線，但後端儲存服務尚未就緒（{health.ErrorCode}）。";
         if (!string.Equals(health.ApiVersion, ApiVersion, StringComparison.Ordinal))
             return $"Cloud API 版本不相容，目前為 {Display(health.ApiVersion)}，需要 {ApiVersion}。";
-        if (!string.Equals(health.SchemaVersion, SchemaVersion, StringComparison.Ordinal))
-            return $"Cloud schema 版本不相容，目前為 {Display(health.SchemaVersion)}，需要 {SchemaVersion}。";
+        if (string.IsNullOrWhiteSpace(health.SchemaVersion))
+            return "Cloud API 缺少相容性資訊，請更新 Cloud 服務後再試。";
         return string.Empty;
     }
 
     public static string SuccessSummary(CloudHealthResult health) =>
-        $"連線正常｜API {health.ApiVersion}｜Schema {health.SchemaVersion}｜{Math.Max(0, health.RoundTripMilliseconds)} ms";
+        $"連線正常｜API {health.ApiVersion}｜相容層 {health.SchemaVersion}｜{Math.Max(0, health.RoundTripMilliseconds)} ms";
 
     private static string Display(string value) => string.IsNullOrWhiteSpace(value) ? "未提供" : value;
 }
