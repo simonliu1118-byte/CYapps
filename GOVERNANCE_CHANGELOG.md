@@ -1,5 +1,12 @@
 # CYApps Governance Changelog
 
+## 2.3.9 — 2026/09/24
+
+- 正式採用 AITeam `main/shared/cy-visual/desktop/CY_DESKTOP_VISUAL_GUIDE.md` 為 CY Windows 桌面專案共用視覺 canonical source，並採用 `shared/cy-visual/icon-family/` 為 Icon Family 唯一 family-level source。
+- 適用專案固定為 `CYAccounting`、`CYEnvelope`、`CYInvoice`、`CYERPAutoInput`、`TriINVCalc`、`SMARTCOPIConverter`；`CYAccountingWeb` 不自動套用 Windows Desktop Visual Guide。
+- AI／開發者進行新 UI、UI 重構、Theme、Table/List、Dialog、Shell、Icon 等視覺工作前，必須先讀 AITeam canonical source；個別 App 永久例外仍只能進該 App 唯一 `PROJECT_RULES.md`。
+- 不在 CYapps mirror 整套共用視覺文件；既有穩定 UI 不因本規則立即全面重製，後續新增／修改區域依 canonical direction 與 native-first guardrails 收斂。
+
 ## 2.3.8 — 2026/09/22
 
 - 依使用者命名決定，將 `CYSmartERP` 正式改名為 `CYERPAutoInput`，專案路徑由 `apps/CYSmartERP/` 移至 `apps/CYERPAutoInput/`。
