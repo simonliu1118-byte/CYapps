@@ -26,9 +26,20 @@ internal static class Program
 
         var form = new MainForm(logger)
         {
-            Text = "CYERPAutoInput V0.1.0 Build 2 — SMART ERP 自動輸入工具"
+            Text = "CYERPAutoInput V0.1.0 Build 3 — SMART ERP 自動輸入工具"
         };
+        UpdateBuildLabels(form);
         Application.Run(form);
         return 0;
+    }
+
+    private static void UpdateBuildLabels(Control root)
+    {
+        foreach (Control control in root.Controls)
+        {
+            if (control.Text.Contains("V0.1.0 Build 1", StringComparison.Ordinal))
+                control.Text = control.Text.Replace("V0.1.0 Build 1", "V0.1.0 Build 3", StringComparison.Ordinal);
+            if (control.HasChildren) UpdateBuildLabels(control);
+        }
     }
 }
