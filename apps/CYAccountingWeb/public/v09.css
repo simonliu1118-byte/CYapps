@@ -333,3 +333,54 @@
     width: min(330px, calc(100vw - 34px));
   }
 }
+
+#monthSummary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.ledger-summary-item {
+  color: #61707d;
+  white-space: nowrap;
+}
+
+.ledger-summary-item strong {
+  color: #2d3944;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-summary-item.income strong {
+  color: #2d7142;
+}
+
+.ledger-summary-item.expense strong {
+  color: #98443c;
+}
+
+.ledger-summary-item.ending {
+  padding-left: 10px;
+  border-left: 1px solid #d7dee5;
+}
+
+.ledger-summary-search {
+  color: #2f6489;
+  white-space: nowrap;
+}
+
+.opening-dialog-heading {
+  margin-top: 16px;
+  align-items: end;
+}
+
+.opening-dialog-heading .hint {
+  margin-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .settings-nav {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

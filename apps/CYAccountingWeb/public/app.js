@@ -445,6 +445,7 @@ async function mutateSettings(path, options, successMessage) {
 async function loadOpeningBalances() {
   const month = els.openingMonth.value;
   if (!month) return;
+  setDialogMessage(els.openingMessage, '');
   els.openingRows.innerHTML = '<div class="empty">載入中…</div>';
   try {
     const data = await api(`/api/opening-balances?month=${encodeURIComponent(month)}`);
