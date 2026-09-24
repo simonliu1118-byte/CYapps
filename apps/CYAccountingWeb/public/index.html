@@ -6,14 +6,31 @@
   <title>志遠記帳系統 Web</title>
   <link rel="stylesheet" href="/app.css">
   <link rel="stylesheet" href="/v03.css">
+  <link rel="stylesheet" href="/auth.css">
 </head>
-<body>
+<body class="auth-locked">
+  <div id="authOverlay" class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <div class="auth-card">
+      <h2 id="loginTitle">志遠記帳系統</h2>
+      <p class="auth-subtitle">使用 CY 員工帳號登入</p>
+      <form id="loginForm" class="auth-form" autocomplete="on">
+        <label><span>員工編號</span><input id="loginEmployeeNo" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="username" required></label>
+        <label><span>密碼</span><input id="loginPassword" type="password" maxlength="200" autocomplete="current-password" required></label>
+        <button id="loginSubmit" class="primary" type="submit">登入</button>
+        <p id="loginMessage" class="auth-message" aria-live="polite"></p>
+      </form>
+      <p class="auth-note">帳號由 CYInvoice Cloud 員工帳號系統管理。目前開放 SUPER_ADMIN 與 ADMIN 使用記帳系統。</p>
+    </div>
+  </div>
+
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.3.0</span></p>
+      <p>CYAccounting Web <span class="version">V0.4.0</span></p>
     </div>
     <div class="topbar-actions">
+      <span id="currentUser" class="current-user hidden"></span>
+      <button id="logoutButton" class="secondary compact logout-button hidden" type="button">登出</button>
       <button id="settingsButton" class="secondary compact" type="button">設定</button>
       <div id="connectionStatus" class="status">連線檢查中</div>
     </div>
@@ -114,6 +131,7 @@
     </div>
   </dialog>
 
+  <script src="/auth.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/v03.js" defer></script>
 </body>
