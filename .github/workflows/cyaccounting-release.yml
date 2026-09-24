@@ -2,12 +2,6 @@ name: CYAccounting Stable Release
 
 on:
   workflow_dispatch:
-  # Temporary bootstrap trigger for the first CYAccounting formal release.
-  # Remove this push trigger after V1.1.0 has been published; future releases are manual.
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/cyaccounting-release.yml"
 
 permissions:
   contents: write
@@ -115,9 +109,7 @@ jobs:
 
           Copyright © $year C.C. Liu, Chihyuan Co. All Rights Reserved.
 
-          - 本版由使用者明確指定為 V1.1.0 正式發布，並從 main 重新建置及完成驗證。
-          - 導入 AITeam canonical CYAccounting ACC 正式 Icon Family；目前尚未套用下一階段 UI 視覺改造。
-          - Windows EXE、Qt 視窗與 portable package 均使用同一份正式 app.ico，並驗證 ICO 七層尺寸與 EXE associated icon resource。
+          - 本版由使用者明確要求正式發布後，從 main 重新建置並完成驗證。
           - 完整版本內容請參閱發行包內的 V$env:CYACCOUNTING_VERSION.txt 與 README.txt。
           - 下載 CYAccounting_V${env:CYACCOUNTING_VERSION}_Windows_x64.zip 後解壓縮，直接執行 CYAccounting.exe。
           - 發行包、SHA-256 與 source verification archive 均由本次正式 Release workflow 重新建置與驗證。
@@ -142,23 +134,3 @@ jobs:
             --title "CYAccounting V$env:CYACCOUNTING_VERSION" `
             --notes-file ./out/release-notes.md `
             --latest
-
-      - name: Remove accidental V1.0.28 release and tag
-        if: env.CYACCOUNTING_SHOULD_RELEASE == 'true' && env.CYACCOUNTING_VERSION == '1.1.0'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $oldTag = "cyaccounting-v1.0.28"
-          gh release view $oldTag --repo $env:GITHUB_REPOSITORY 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            gh release delete $oldTag --repo $env:GITHUB_REPOSITORY --cleanup-tag --yes
-            if ($LASTEXITCODE -ne 0) { throw "Could not remove accidental $oldTag Release" }
-            Write-Host "Removed accidental $oldTag Release and tag."
-          } else {
-            $remoteTag = git ls-remote --tags origin "refs/tags/$oldTag"
-            if (![string]::IsNullOrWhiteSpace($remoteTag)) {
-              git push origin ":refs/tags/$oldTag"
-              if ($LASTEXITCODE -ne 0) { throw "Could not remove accidental $oldTag tag" }
-            }
-            Write-Host "No accidental $oldTag Release remained."
-          }
