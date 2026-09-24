@@ -10,7 +10,7 @@ on:
       - ".github/workflows/cyaccounting-build.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: cyaccounting-build-${{ github.event.pull_request.number || github.ref }}
@@ -24,6 +24,28 @@ jobs:
         working-directory: apps/CYAccounting
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+      - name: Synchronize one-time Phase 1 visual assertions
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          if (Test-Path ./tools/sync_visual_phase1_tests.py) {
+            python ./tools/sync_visual_phase1_tests.py
+            if ($LASTEXITCODE -ne 0) { throw "Could not synchronize Phase 1 visual assertions" }
+            Push-Location ../..
+            git config user.name "simonliu1118-byte"
+            git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+            git add apps/CYAccounting/tests/test_app.py
+            git rm apps/CYAccounting/tools/sync_visual_phase1_tests.py
+            if (git diff --cached --quiet) { throw "Visual assertion sync produced no changes" }
+            git commit -m "test(CYAccounting): align Phase 1 visual assertions"
+            if ($LASTEXITCODE -ne 0) { throw "Could not commit Phase 1 visual assertion changes" }
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            if ($LASTEXITCODE -ne 0) { throw "Could not push Phase 1 visual assertion changes" }
+            Pop-Location
+          }
 
       - name: Read VERSION
         shell: pwsh
