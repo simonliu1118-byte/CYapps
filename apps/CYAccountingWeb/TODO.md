@@ -20,9 +20,16 @@
 - [ ] 單月 Excel 匯出。
 - [ ] Excel 匯入：欄位對應、預覽、7 位數驗證、鎖帳檢查與重複略過。
 - [ ] 既有 CYAccounting SQLite 帳本匯入／遷移工具。
-- [ ] Web／D1 備份與復原策略，包含可驗證的復原流程；不直接照搬桌面 SQLite 檔案備份方式。
-- [ ] 高風險資料管理：清除記帳資料與期初餘額、再次驗證與權限控制。
-- [ ] Google Drive 匯入／備份是否仍需要，待 Web 原生匯入匯出與 D1 備份完成後再決定實作方式。
+
+## 備份／復原與高風險操作
+
+- [ ] Cloudflare D1 為 CYAccountingWeb 唯一正式帳務資料來源；Google Drive 僅作為 Cloudflare 之外的異地／災難復原備份，不作 live database 或雙向同步資料庫。
+- [ ] 建立 Google Drive 自動定期備份：由 D1 匯出可攜、可驗證且有版本資訊的帳務備份檔，再上傳到專用 CYAccountingWeb 備份資料夾。
+- [ ] 定義備份保留策略、檔名、版本、建立時間、資料筆數／校驗資訊及完整性驗證；不得只宣稱上傳成功就視為有效備份。
+- [ ] 建立 Google Drive 復原流程：先驗證備份格式、版本與完整性，再允許重建／復原 D1；復原行為必須有明確管理者授權與防誤觸流程。
+- [ ] 驗證「Cloudflare/D1 故障後，以 Google Drive 最近有效備份重建新 D1」的完整災難復原演練。
+- [ ] Google Drive 連線憑證、refresh token、client secret 等不得進 Public repo；正式做法需放在受保護的執行環境／Secrets。
+- [ ] Web UI **不提供「清除全部帳務資料／期初餘額」功能，也不提供對應一般應用 API**。若真的需要整庫清理，視為平台管理／維運操作，直接在 Cloudflare／D1 管理層處理。
 
 ## UI／UX 與多裝置支援
 
