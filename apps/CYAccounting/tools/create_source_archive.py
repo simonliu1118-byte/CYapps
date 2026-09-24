@@ -44,7 +44,14 @@ def create_archive(root: Path, output: Path) -> str:
         with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as compressed:
             with tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as archive:
                 for relative in tracked_source_files(root):
-                    payload = (root / relative).read_bytes()
+                    # Archive the committed blob, not the checkout: Windows Git
+                    # may materialize CRLF and otherwise change the digest.
+                    payload = subprocess.run(
+                        ["git", "show", f"HEAD:{relative}"],
+                        cwd=root,
+                        check=True,
+                        capture_output=True,
+                    ).stdout
                     info = tarfile.TarInfo(relative)
                     info.size = len(payload)
                     info.mode = 0o644

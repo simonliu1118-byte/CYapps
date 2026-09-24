@@ -1,5 +1,5 @@
 CYAccounting V1.0.26 source archive verification (portable test package change)
-SHA-256: 6445b6f79454f534ceaf409af3d3a187cb4436e42162024d24dd5db9d69fb93a
+SHA-256: be1ede04fa309a888eb403a931657b5c4282c86eed1935e8085ec6d1378aa1f7
 Archive: cyaccounting-v1.0.26-source.tar.gz
 Verification: the matching GitHub Actions source artifact contains both the archive and its .sha256 file.
 Note: SOURCE_SHA256.txt is deliberately excluded from the archive so this recorded digest can be updated without changing the archive itself.
