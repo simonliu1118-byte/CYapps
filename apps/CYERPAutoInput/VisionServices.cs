@@ -161,6 +161,39 @@ internal sealed class GridVisionService
         [7] = ["單價"]
     };
 
+    // COPI08 visible detail-column order. These ordinals are not click coordinates;
+    // they are used only to correlate OCR-recognized header anchors with optically
+    // detected vertical grid separators when small headers such as 品號/數量 are missed.
+    private static readonly Dictionary<int, int> LogicalColumnOrder = new()
+    {
+        [0] = 1,  // 品號
+        [1] = 4,  // 數量
+        [3] = 6,  // 贈/備品量
+        [4] = 7,  // 單位
+        [5] = 8,  // 批號
+        [6] = 9,  // 庫別
+        [7] = 11  // 單價
+    };
+
+    private static readonly (int Order, string[] Aliases)[] GridOrderAnchors =
+    [
+        (0, ["序號", "序"]),
+        (1, ["品號"]),
+        (2, ["品名"]),
+        (3, ["規格"]),
+        (4, ["數量"]),
+        (5, ["類型"]),
+        (6, ["贈/備品量", "贈備品量"]),
+        (7, ["單位"]),
+        (8, ["批號"]),
+        (9, ["庫別"]),
+        (10, ["庫別名稱"]),
+        (11, ["單價"]),
+        (12, ["折扣率"]),
+        (13, ["金額"]),
+        (18, ["備註"])
+    ];
+
     public GridVisionService(WindowsOcrService ocr, AppLogger log)
     {
         _ocr = ocr;
@@ -187,15 +220,22 @@ internal sealed class GridVisionService
 
         if (!geometry.ColumnX.ContainsKey(0) || !geometry.ColumnX.ContainsKey(1))
         {
-            LogTokens("detail-header-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 80), 64);
-            throw new InvalidOperationException("Optical detail header detection failed: item/quantity columns were not both found.");
+            // Build 8: OCR remains diagnostic, but a missed small header is no longer
+            // fatal when the rendered grid itself supplies enough optical geometry.
+            if (!TryInferColumnsFromGridLines(image, tokens, geometry, out var inferredHeaderBottom))
+            {
+                // Header-only diagnostic: avoid logging first-row item data.
+                LogTokens("detail-header-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 24), 64);
+                throw new InvalidOperationException("Optical detail header detection failed: item/quantity columns were not both found and grid-line fallback was not reliable.");
+            }
+            headerBottom = Math.Max(headerBottom, inferredHeaderBottom);
         }
 
         var horizontal = FindHorizontalLines(image, Math.Max(0, headerBottom - 6));
         var firstBoundaryIndex = horizontal.FindIndex(y => y >= headerBottom - 3);
         if (firstBoundaryIndex < 0 || horizontal.Count - firstBoundaryIndex < 2)
         {
-            LogTokens("detail-row-lines-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 80), 64);
+            LogTokens("detail-row-lines-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 24), 64);
             throw new InvalidOperationException("Optical detail row-line detection failed.");
         }
 
@@ -209,12 +249,123 @@ internal sealed class GridVisionService
         }
         if (geometry.RowCenterY.Count == 0)
         {
-            LogTokens("detail-row-centers-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 100), 64);
+            LogTokens("detail-row-centers-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 24), 64);
             throw new InvalidOperationException("Optical detail row centers were not detected.");
         }
 
         _log.Info("vision", $"detail geometry columns={geometry.ColumnX.Count} rows={geometry.RowCenterY.Count} size={image.Width}x{image.Height}");
         return geometry;
+    }
+
+    private bool TryInferColumnsFromGridLines(
+        Bitmap image,
+        IReadOnlyList<OcrToken> tokens,
+        GridGeometry geometry,
+        out int headerBottom)
+    {
+        headerBottom = 0;
+        var rawLines = FindVerticalLines(image, Math.Min(image.Height - 1, 90));
+        var boundaries = NormalizeColumnBoundaries(rawLines, image.Width);
+        if (boundaries.Count < 10)
+        {
+            _log.Warn("vision", $"detail grid-line fallback rejected: vertical_boundaries={boundaries.Count}");
+            return false;
+        }
+
+        var offsets = new List<int>();
+        var anchorCount = 0;
+        foreach (var anchor in GridOrderAnchors)
+        {
+            var match = FindPhrase(tokens, anchor.Aliases);
+            if (match is null || match.Value.Top > 24) continue;
+            headerBottom = Math.Max(headerBottom, match.Value.Bottom);
+            var centerX = match.Value.Left + match.Value.Width / 2;
+            var interval = FindInterval(boundaries, centerX);
+            if (interval < 0) continue;
+            offsets.Add(interval - anchor.Order);
+            anchorCount++;
+        }
+
+        if (offsets.Count < 3)
+        {
+            _log.Warn("vision", $"detail grid-line fallback rejected: anchors={anchorCount} boundaries={boundaries.Count}");
+            return false;
+        }
+
+        var bestOffset = offsets
+            .GroupBy(x => x)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => Math.Abs(g.Key))
+            .First();
+        if (bestOffset.Count() < 3)
+        {
+            _log.Warn("vision", $"detail grid-line fallback rejected: anchor_consensus={bestOffset.Count()}/{offsets.Count}");
+            return false;
+        }
+
+        var offset = bestOffset.Key;
+        foreach (var pair in LogicalColumnOrder)
+        {
+            var interval = pair.Value + offset;
+            if (interval < 0 || interval + 1 >= boundaries.Count)
+            {
+                _log.Warn("vision", $"detail grid-line fallback rejected: logical_col={pair.Key} interval={interval} boundaries={boundaries.Count}");
+                return false;
+            }
+            var left = boundaries[interval];
+            var right = boundaries[interval + 1];
+            if (right - left < 24)
+            {
+                _log.Warn("vision", $"detail grid-line fallback rejected: narrow logical_col={pair.Key} width={right - left}");
+                return false;
+            }
+            geometry.ColumnX[pair.Key] = (left + right) / 2;
+        }
+
+        var ok = geometry.ColumnX.ContainsKey(0) && geometry.ColumnX.ContainsKey(1);
+        if (ok)
+        {
+            _log.Info("vision", $"detail header OCR missed item/quantity; optical grid-line fallback accepted boundaries={boundaries.Count} anchor_consensus={bestOffset.Count()}/{offsets.Count} offset={offset}");
+        }
+        return ok;
+    }
+
+    private static int FindInterval(IReadOnlyList<int> boundaries, int x)
+    {
+        for (var i = 0; i + 1 < boundaries.Count; i++)
+        {
+            if (x >= boundaries[i] && x <= boundaries[i + 1]) return i;
+        }
+        return -1;
+    }
+
+    private static List<int> NormalizeColumnBoundaries(IReadOnlyList<int> rawLines, int width)
+    {
+        var boundaries = rawLines
+            .Where(x => x >= 0 && x < width)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+        if (boundaries.Count == 0 || boundaries[0] > 5) boundaries.Insert(0, 0);
+        if (boundaries[^1] < width - 5) boundaries.Add(width - 1);
+
+        // DevExpress lookup cells may contain a narrow internal ellipsis/dropdown strip.
+        // Merge such sub-cells so interval ordinals represent business columns rather
+        // than editor chrome. Sequence/normal data columns remain wider than this gate.
+        var changed = true;
+        while (changed && boundaries.Count > 2)
+        {
+            changed = false;
+            for (var i = 0; i + 1 < boundaries.Count; i++)
+            {
+                if (boundaries[i + 1] - boundaries[i] >= 24) continue;
+                if (i == 0) boundaries.RemoveAt(i + 1);
+                else boundaries.RemoveAt(i);
+                changed = true;
+                break;
+            }
+        }
+        return boundaries;
     }
 
     public async Task<Point> FindUnitAsync(nint lookupHwnd, string requestedUnit, CancellationToken cancellationToken)
@@ -370,6 +521,55 @@ internal sealed class GridVisionService
                     j++;
                 }
                 if (lines.Count == 0 || best.y - lines[^1] >= 8) lines.Add(best.y);
+                i = j;
+            }
+            return lines;
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
+    }
+
+    internal static List<int> FindVerticalLines(Bitmap source, int endY)
+    {
+        using var bitmap = source.Clone(new Rectangle(0, 0, source.Width, source.Height), PixelFormat.Format32bppArgb);
+        var data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            var bytes = new byte[Math.Abs(data.Stride) * data.Height];
+            System.Runtime.InteropServices.Marshal.Copy(data.Scan0, bytes, 0, bytes.Length);
+            var limitY = Math.Clamp(endY, 8, bitmap.Height - 1);
+            var scores = new List<(int x, double score)>();
+            for (var x = 1; x < bitmap.Width; x++)
+            {
+                var hits = 0;
+                var samples = 0;
+                for (var y = 2; y < limitY; y += 2)
+                {
+                    var now = Luma(bytes, data.Stride, x, y);
+                    var prev = Luma(bytes, data.Stride, x - 1, y);
+                    if (Math.Abs(now - prev) >= 14) hits++;
+                    samples++;
+                }
+                if (samples > 0)
+                {
+                    var score = (double)hits / samples;
+                    if (score >= 0.45) scores.Add((x, score));
+                }
+            }
+
+            var lines = new List<int>();
+            for (var i = 0; i < scores.Count;)
+            {
+                var best = scores[i];
+                var j = i + 1;
+                while (j < scores.Count && scores[j].x <= scores[j - 1].x + 2)
+                {
+                    if (scores[j].score > best.score) best = scores[j];
+                    j++;
+                }
+                if (lines.Count == 0 || best.x - lines[^1] >= 6) lines.Add(best.x);
                 i = j;
             }
             return lines;

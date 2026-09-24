@@ -22,11 +22,17 @@ internal static class VisionSelfTest
                 g.DrawString("12345", font, Brushes.Black, new PointF(55, 22));
                 foreach (var y in new[] { 105, 150, 195, 240, 285 })
                     g.DrawLine(pen, 15, y, 880, y);
+                foreach (var x in new[] { 15, 90, 205, 340, 485, 620, 755, 880 })
+                    g.DrawLine(pen, x, 2, x, 100);
             }
 
             var lines = GridVisionService.FindHorizontalLines(image, 80);
             if (lines.Count < 4)
-                throw new InvalidOperationException($"Synthetic grid-line detector returned only {lines.Count} lines.");
+                throw new InvalidOperationException($"Synthetic grid-line detector returned only {lines.Count} horizontal lines.");
+
+            var vertical = GridVisionService.FindVerticalLines(image, 95);
+            if (vertical.Count < 6)
+                throw new InvalidOperationException($"Synthetic grid-line detector returned only {vertical.Count} vertical lines.");
 
             using var ribbon = new Bitmap(220, 160);
             using (var g = Graphics.FromImage(ribbon))
@@ -89,7 +95,7 @@ internal static class VisionSelfTest
             if (!joinedText.Contains("12345", StringComparison.Ordinal))
                 throw new InvalidOperationException($"Windows OCR ran but did not recognize synthetic digits (tokens={tokens.Count}, text={joinedText}).");
 
-            var message = $"vision self-test passed lines={lines.Count} tokens={tokens.Count}";
+            var message = $"vision self-test passed horizontal={lines.Count} vertical={vertical.Count} tokens={tokens.Count}";
             Console.WriteLine(message);
             log.Info("selftest", message);
             return 0;

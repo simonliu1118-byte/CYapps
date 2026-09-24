@@ -11,7 +11,7 @@ internal sealed class MainForm : Form
     private readonly Dictionary<string, FlowLayoutPanel> _groupFlows = new(StringComparer.OrdinalIgnoreCase);
     private readonly DetailDataGridView _details = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 7 · Esc：緊急停止 · 不自動儲存 ERP" };
+    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 8 · Esc：緊急停止 · 不自動儲存 ERP" };
     private readonly ModeToggle _modeToggle = new();
     private readonly CyPrimaryButton _start = new();
     private CancellationTokenSource? _automationCts;
@@ -95,8 +95,8 @@ internal sealed class MainForm : Form
         actions.Controls.Add(state);
 
         _start.Text = "開始輸入 ERP";
-        _start.Size = new Size(150, 36);
-        _start.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
+        _start.Size = new Size(122, 34);
+        _start.Font = new Font(Font.FontFamily, 9.5F, FontStyle.Bold);
         _start.Margin = new Padding(4, 1, 4, 1);
         _start.Click += async (_, _) => await StartAutomationAsync();
         actions.Controls.Add(_start);
@@ -106,7 +106,7 @@ internal sealed class MainForm : Form
             Text = "訂單匯入：",
             AutoSize = true,
             Padding = new Padding(0, 9, 0, 0),
-            Margin = new Padding(12, 0, 2, 0)
+            Margin = new Padding(10, 0, 2, 0)
         });
         actions.Controls.Add(ImportButton("蝦皮"));
         actions.Controls.Add(ImportButton("MO店+"));
@@ -195,16 +195,20 @@ internal sealed class MainForm : Form
 
     private void AddField(FieldDefinition field)
     {
+        const int labelWidth = 68;
+        const int inputLeft = 76;
         var flow = _groupFlows[field.Group];
-        var row = new Panel { Width = 246, Height = 28, Margin = new Padding(1) };
+        var row = new Panel { Width = 238, Height = 28, Margin = new Padding(1) };
         row.Controls.Add(new Label
         {
             Text = field.Label,
             AutoSize = false,
-            Width = 94,
+            AutoEllipsis = true,
+            Width = labelWidth,
             Height = 24,
             TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(0, 1)
+            Location = new Point(0, 1),
+            AccessibleName = field.Label
         });
 
         Control value;
@@ -214,7 +218,7 @@ internal sealed class MainForm : Form
             {
                 Text = "啟用",
                 AutoSize = true,
-                Location = new Point(98, 4),
+                Location = new Point(inputLeft, 4),
                 Tag = field.Key
             };
         }
@@ -222,8 +226,8 @@ internal sealed class MainForm : Form
         {
             value = new TextBox
             {
-                Width = 144,
-                Location = new Point(98, 2),
+                Width = 158,
+                Location = new Point(inputLeft, 2),
                 Tag = field.Key
             };
         }
@@ -438,7 +442,13 @@ internal sealed class MainForm : Form
 
     private Button ImportButton(string text)
     {
-        Button button = text == "酷澎商城" ? new CoupangButton() : new Button { Text = text };
+        Button button = text switch
+        {
+            "蝦皮" => new ShopeeButton(),
+            "MO店+" => new MoStoreButton(),
+            "酷澎商城" => new CoupangButton(),
+            _ => new Button { Text = text }
+        };
         button.Size = new Size(90, 34);
         button.Margin = new Padding(4, 1, 4, 1);
         button.Click += (_, _) => MessageBox.Show(this,

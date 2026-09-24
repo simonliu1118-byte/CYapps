@@ -77,7 +77,7 @@ internal static class FieldCatalog
         new("freight_file", "送貨資料", "產生貨運文字檔", FieldKind.Boolean),
 
         new("inv_date", "發票資料(一)", "發票日期", FieldKind.Date, true),
-        new("inv_time", "發票資料(一)", "發票開立時間", FieldKind.Text, true),
+        new("inv_time", "發票資料(一)", "開立時間", FieldKind.Text, true),
         new("inv_copies", "發票資料(一)", "發票聯數", FieldKind.Combo, true),
         new("inv_no", "發票資料(一)", "發票號碼", FieldKind.Text, true),
         new("tax_type", "發票資料(一)", "課稅別", FieldKind.Combo, true),

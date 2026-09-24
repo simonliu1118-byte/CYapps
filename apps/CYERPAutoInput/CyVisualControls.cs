@@ -93,7 +93,7 @@ internal sealed class ModeToggle : CheckBox
         AccessibleRole = AccessibleRole.CheckButton;
         AutoCheck = true;
         AutoSize = false;
-        Size = new Size(158, 34);
+        Size = new Size(118, 34);
         Cursor = Cursors.Hand;
         TabStop = true;
         SetStyle(ControlStyles.UserPaint |
@@ -112,9 +112,9 @@ internal sealed class ModeToggle : CheckBox
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Parent?.BackColor ?? CyVisualTheme.Window);
 
-        var leftText = new Rectangle(0, 0, 42, Height);
-        var rightText = new Rectangle(116, 0, 42, Height);
-        var track = new RectangleF(51f, 9f, 56f, 16f);
+        var leftText = new Rectangle(0, 0, 34, Height);
+        var rightText = new Rectangle(84, 0, 34, Height);
+        var track = new RectangleF(42f, 10f, 34f, 14f);
         var trackRadius = track.Height / 2f;
 
         var standardColor = Checked ? CyVisualTheme.TextSecondary : CyVisualTheme.TextPrimary;
@@ -138,7 +138,7 @@ internal sealed class ModeToggle : CheckBox
         using var trackBrush = new SolidBrush(Checked ? CyVisualTheme.Accent : CyVisualTheme.Border);
         g.FillPath(trackBrush, trackPath);
 
-        var thumbSize = 12f;
+        var thumbSize = 10f;
         var thumbX = Checked ? track.Right - thumbSize - 2f : track.Left + 2f;
         var thumb = new RectangleF(thumbX, track.Top + 2f, thumbSize, thumbSize);
         using var thumbBrush = new SolidBrush(Color.White);
