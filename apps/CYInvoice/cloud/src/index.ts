@@ -745,12 +745,16 @@ async function claimInvitation(request: Request, env: Env, requestId: string): P
         WHERE invitation_id = ?3 AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?1
           AND EXISTS (SELECT 1 FROM devices WHERE device_id = ?2 AND invitation_id = ?3)`)
         .bind(now, deviceId, invitation.invitation_id),
+      env.DB.prepare(`INSERT INTO security_audit_events (event_id, workspace_id, event_type,
+        outcome, actor_employee_id, target_device_id, invitation_id, request_id, occurred_at)
+        SELECT ?1, i.workspace_id, 'device_joined', 'success', ?2, ?3,
+          i.invitation_id, ?4, ?5 FROM device_invitations i
+        WHERE i.invitation_id = ?6 AND i.consumed_by_device_id = ?3 AND i.consumed_at = ?5`)
+        .bind(`evt_${crypto.randomUUID()}`, owner.employee_id, deviceId,
+          requestId, now, invitation.invitation_id),
     ]);
-    if (result[0].meta.changes !== 1 || result[1].meta.changes !== 1)
+    if (result.some(item => item.meta.changes !== 1))
       return errorResponse(env, requestId, 409, "INVITATION_CLAIM_CONFLICT", "Invitation is no longer active.");
-    await recordSecurityEvent(env.DB, { workspaceId: invitation.workspace_id, type: "device_joined",
-      outcome: "success", actorEmployeeId: owner.employee_id, targetDeviceId: deviceId,
-      invitationId: invitation.invitation_id, requestId });
   } catch {
     return errorResponse(env, requestId, 409, "INVITATION_CLAIM_CONFLICT", "Device join could not complete.");
   }
@@ -768,14 +772,20 @@ async function revokeInvitation(request: Request, env: Env, requestId: string): 
   const owner = await authorizedOwner(request, env, device.workspaceId, body);
   if (!owner) return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
   const now = new Date().toISOString();
-  const result = await env.DB.prepare(`UPDATE device_invitations SET revoked_at = ?1
-    WHERE invitation_id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL AND consumed_at IS NULL`)
-    .bind(now, invitationId, device.workspaceId).run();
-  if (result.meta.changes !== 1)
+  const result = await env.DB.batch([
+    env.DB.prepare(`UPDATE device_invitations SET revoked_at = ?1
+      WHERE invitation_id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL AND consumed_at IS NULL`)
+      .bind(now, invitationId, device.workspaceId),
+    env.DB.prepare(`INSERT INTO security_audit_events (event_id, workspace_id, event_type,
+      outcome, actor_device_id, actor_employee_id, invitation_id, request_id, occurred_at)
+      SELECT ?1, workspace_id, 'invitation_revoked', 'success', ?2, ?3,
+        invitation_id, ?4, ?5 FROM device_invitations
+      WHERE invitation_id = ?6 AND workspace_id = ?7 AND revoked_at = ?5`)
+      .bind(`evt_${crypto.randomUUID()}`, device.deviceId, owner.employee_id,
+        requestId, now, invitationId, device.workspaceId),
+  ]);
+  if (result[0].meta.changes !== 1 || result[1].meta.changes !== 1)
     return errorResponse(env, requestId, 409, "INVITATION_NOT_ACTIVE", "Invitation is no longer active.");
-  await recordSecurityEvent(env.DB, { workspaceId: device.workspaceId, type: "invitation_revoked",
-    outcome: "success", actorDeviceId: device.deviceId, actorEmployeeId: owner.employee_id,
-    invitationId, requestId });
   return json(env, requestId, 200, { invitation: { invitationId, status: "revoked" } });
 }
 
