@@ -22,15 +22,24 @@ internal static class VisionSelfTest
                 g.DrawString("12345", font, Brushes.Black, new PointF(55, 22));
                 foreach (var y in new[] { 105, 150, 195, 240, 285 })
                     g.DrawLine(pen, 15, y, 880, y);
-                foreach (var x in new[] { 15, 90, 205, 340, 485, 620, 755, 880 })
-                    g.DrawLine(pen, x, 2, x, 100);
             }
 
             var lines = GridVisionService.FindHorizontalLines(image, 80);
             if (lines.Count < 4)
                 throw new InvalidOperationException($"Synthetic grid-line detector returned only {lines.Count} horizontal lines.");
 
-            var vertical = GridVisionService.FindVerticalLines(image, 95);
+            // Keep the vertical-grid detector test separate from the OCR digit image.
+            // Drawing vertical separators through the glyphs makes the synthetic OCR
+            // fixture itself ambiguous and does not test the production algorithm.
+            using var verticalImage = new Bitmap(900, 120);
+            using (var g = Graphics.FromImage(verticalImage))
+            {
+                g.Clear(Color.White);
+                using var pen = new Pen(Color.FromArgb(90, 90, 90), 1);
+                foreach (var x in new[] { 15, 90, 205, 340, 485, 620, 755, 880 })
+                    g.DrawLine(pen, x, 2, x, 105);
+            }
+            var vertical = GridVisionService.FindVerticalLines(verticalImage, 110);
             if (vertical.Count < 6)
                 throw new InvalidOperationException($"Synthetic grid-line detector returned only {vertical.Count} vertical lines.");
 
