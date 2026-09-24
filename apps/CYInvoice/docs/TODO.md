@@ -2,7 +2,7 @@
 
 本檔只保留目前仍未完成、需要後續驗證或已明確延後的工作。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-目前工程開發基準：**CYInvoice V2.6.4 Build 1**
+目前 PR #121 工程開發基準：**CYInvoice V2.6.6 Build 3**（Cloud Schema 9 尚未遠端部署）
 最新正式 Release：`cyinvoice-v2.4.2`
 
 > V3 Cloud identity 工作若由新的長時間工作階段／ChatGPT Work 接手，先讀 `docs/CLOUD_WORK_HANDOFF.md`，再讀 `CLOUD_ARCHITECTURE_STATUS.md`、`CLOUD_ROADMAP.md` 與本檔。接手時仍必須依 `AGENTS.md` 指示先讀三層永久規則。
@@ -112,8 +112,8 @@
 - [x] 2026-09-22 已確認 development D1 remote migrations 到 Schema 7。
 - [x] Brevo runtime secrets 已完成設定，bootstrap OTP 實際收信成功。
 - [x] V2.6.4 Build 1 已修正第一個 Workspace 建立 SQL 與誤報錯誤；Cloud 0.8.2 已部署，Windows client 已回報首次 Workspace／Device 建立及 Device identity 驗證成功。
-- [ ] 以本機 Codex 已連線的 Cloudflare MCP 唯讀回查 development D1：Workspace／Device／Employee／Pairing 筆數，及首個 Workspace 與 Device 的關聯；不得把部署前 0 筆當成現在結果。
-- [ ] A 機 first Employee Transition／cutover 實機驗收；Windows client 的 Device identity 成功不代表中央 SUPER_ADMIN 或帳號轉換已完成。
+- [x] 已透過 Cloudflare MCP 唯讀確認 development D1 首個 Workspace／Device 及中央 SUPER_ADMIN；2026-09-25 再查仍有 1 個 Workspace、1 台 active Device。不要把部署前 0 筆當成現在結果。
+- [x] A 機已完成 first Employee Transition／cutover；2026-09-25 確認 D1 active Device 即為目前遇到版本不相容的 A 機。
 - [ ] B 機 Pairing + 多 Local Employee transition matrix 實機測試。
 - [ ] 精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。
 - [ ] Central Employee CRUD、Email OTP、password、enabled、role 在 A/B 間 snapshot 同步實機測試。
@@ -131,7 +131,9 @@
 - [x] 程式不內嵌 Cloud API 網址。Workspace 識別碼僅供內部定位，不作為新機手動輸入欄位；配對碼／邀請碼由伺服器解析目標 Workspace。加入期間只在 Pending join 暫存使用者輸入的網址與裝置憑證，以便結果不明時復原；成功後才保存正式 Device identity。
 - [x] Cloud D1 安全操作紀錄涵蓋配對碼核發、驗證、新機加入、邀請寄送與撤銷及相關失敗事件；A 機可查詢配對／邀請狀態。紀錄不含配對碼、邀請碼、密碼、OTP 或 Device Token 原文。配對 Worker 已改用既有資料表 `device_pairing_codes`。
 - [ ] 後續版本新增「安全操作紀錄／稽核紀錄」查看介面；本階段只建立雲端紀錄，不製作查看介面。
-- [ ] A／B 機使用工程包實際驗收兩條加入路徑、邀請撤銷／重寄、結果不明時的恢復；安排遠端 Cloudflare migration／Worker 部署前的審核。PR #121 Build 2 CI 已通過，Build 3 視窗修正待重跑；仍不代表遠端已部署。
+- [ ] A／B 機使用工程包實際驗收兩條加入路徑、邀請撤銷／重寄、結果不明時的恢復；安排遠端 Cloudflare migration／Worker 部署前的審核。PR #121 Build 3 CI 已通過；仍不代表遠端已部署。
+- [ ] 優先修正 Cloud client 的 Schema 完全相等檢查：先盤點舊 client 對新 Worker 的端點相容性，改由 API 契約／所需功能能力判斷，加入跨版本合約測試及明確最低客戶端版本策略。Schema 7 客戶端目前因遠端 Schema 8 無法連線；不能直接刪掉檢查而未驗證安全性。
+- [ ] 在同一 A 機、同一 Windows 帳戶，以原 `Data` 和 PR #100 V2.6.5 Build 4 工程包驗證 Schema 8 連線恢復；先備份原資料夾，不重建 Workspace，不清除原資料。PR #121 Build 3 須待 Schema 9 後端部署才能實機連線。
 - [ ] 規劃「所有原裝置皆遺失且無有效邀請」的受控災難復原流程；一般新機加入仍僅有配對碼與邀請碼，不應讓 Workspace 識別碼或僅憑超管帳密成為第三條常規入口。復原須核對已驗證超管 Email、既有憑證及操作稽核，並避免重建原 Workspace 或暴露 Device Token。
 
 ### 7.3 跨機 Work Item / Sync

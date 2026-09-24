@@ -2,6 +2,15 @@
 
 更新日期：2026-09-25
 
+## 接手摘要（以此節為目前狀態；下方舊階段紀錄保留歷史脈絡）
+
+- Repository：`simonliu1118-byte/CYapps`。目前工作為 Draft [PR #121](https://github.com/simonliu1118-byte/CYapps/pull/121)，branch `cyinvoice/feat-cloud-security-audit`，疊在 PR #100 branch `cyinvoice/fix-v264-build2-ui-review-details` 上；PR #100 再承接 PR #73。接手時先讀 Git 上最新 head、三層永久規則與本文件，不以舊階段的版本／待辦敘述覆蓋此節。
+- PR #121 工程原始碼：CYInvoice V2.6.6 Build 3、Cloud 0.8.5／API 1／Schema 9，含 D1 migration `0009`、配對與邀請、安全操作紀錄、精簡首次加入視窗。2026-09-25 最新文件提交前的 CI Run #36035110929 `validate`、`windows-client` 均通過；Build 3 程式與測試包來自 Run #36034612566，Artifact `CYInvoice_cloud-foundation_engineering-run249`。**沒有 Cloudflare remote migration／Worker 部署、merge 或正式 release；A／B 尚未完成此版實機驗收。**
+- development D1 唯讀查核有 1 個 Workspace、1 台 active Device，且該 Device 就是目前無法連線的 A 機；員工權限狀態為 cloud。A 機畫面顯示舊客戶端要求 Schema 7，遠端目前為 Schema 8。這是客戶端的版本門檻，不代表 Device 註冊遺失。沒有重新 bootstrap 或修改 D1。
+- A 機短期恢復：先備份原程式整個資料夾；在同一台電腦、同一 Windows 使用者帳戶，將原 `Data` 複製到獨立解壓的 PR #100 V2.6.5 Build 4 工程包（Run #36015789588，Artifact `CYInvoice_V2.6.5_Build4_engineering-run229`）後驗證。保留原資料；不要走首次加入或新建 Workspace。此恢復方式尚待 A 機實際驗證。PR #121 Build 3 要求 Schema 9，現階段不能直接連 Schema 8 遠端。
+- **上線前優先修正版本相容策略**：`CloudCompatibility.Problem()` 目前把 `/v1/health` 的 `schemaVersion` 與客戶端常數做完全相等比較；Schema 7→8 已令舊 A 機直接拒絕。D1 Schema 應視為伺服器內部 migration 進度，客戶端應檢查 API 契約／所需功能能力；Worker 升級須保留既有端點行為，必要時有明確最低客戶端版本和更新指引。先確認 Schema 7 客戶端所需端點對 Schema 8／9 Worker 的真實相容性，不能僅移除比較就宣稱安全。新增跨版本合約測試（舊 client + 新 Worker，以及新 client + 舊 Worker 的安全降級／拒絕），再安排 migration、Worker、Windows 的分階段驗收。這是已確認的設計缺口與待辦，**尚未實作修正**。
+- 下一步順序：① A 機用相容 Build 4 與原 `Data` 驗證恢復；② 設計並修正版本／功能相容檢查與跨版本測試；③ 審查 PR #121 migration `0009`、Worker／Windows 安全與回滾路徑；④ 明確安排 development 遠端部署後，以 A／B 實機驗證配對、邀請、撤銷／重寄、狀態回報及斷線／結果不明恢復。B 機目前暫無法測試。受控災難復原流程及安全操作紀錄查看介面仍是後續 TODO。
+
 ## 2026-09-25 新裝置加入設計決議
 
 後續正式加入方式只有「配對碼」與「邀請碼」；現有「Workspace 識別碼＋超管」直接加入須移除。程式不內嵌 Cloud API 網址，Workspace 識別碼也不提供使用者手動輸入。A 機「新增雲端裝置」提供立即配對（顯示 API 網址與約 10 分鐘一次性配對碼）及寄送新裝置邀請（寄送 API 網址與 72 小時一次性邀請碼至超管已驗證 Email，可撤銷／重寄）。B 機使用配對碼，或使用邀請碼加超管帳密加入；邀請碼路徑不再寄第二封 Email 驗證碼。兩條路徑均先確認 Workspace 名稱，成功結果在 A 機視窗可查。
@@ -16,9 +25,9 @@ Cloud 安全操作紀錄涵蓋配對、邀請、撤銷與新機加入。紀錄�
 
 PR #100 已接到 PR #73 最新基準；目前工程原始碼為 CYInvoice V2.6.5 Build 4、Cloud `0.8.4` / API `1` / Schema `8`。雲端忘記密碼採員工編號與 Email 核對後寄送、第二步輸入 OTP 與新密碼，重寄倒數使用伺服器回傳時間。一般員工的帳號管理提供本人密碼與 Email 異動，姓名仍由管理員維護。PR CI Run #36015425647 的 Cloud validate 與 Windows client 均成功；完整 Windows Build Run #36015789588 也成功並產生 `CYInvoice_V2.6.5_Build4_engineering-run229` 測試包。此版本未部署到 Cloudflare；不得把本段當成遠端已上線狀態。
 
-## 最新工作：首次開啟直接加入雲端
+## 歷史階段紀錄：首次開啟直接加入雲端
 
-使用者已定案：首次開啟先選「使用單機版」或「直接加入雲端」。單機版仍先建立本機超管，之後加入既有 Workspace 維持原本的本機管理員驗證＋配對碼＋全機帳號轉換。全新安裝直接加入不建本機帳號，可選：(1) 既有可信裝置產生的短效配對碼；(2) Workspace ID＋該 Workspace 的中央 SUPER_ADMIN 員工編號與密碼，再以其已驗證 Email OTP 確認。兩條路徑先確認 Workspace 名稱，加入後取得 Device identity、中央 Employee snapshot 與受保護快取，才切 Cloud authority。相同 Email／帳密在不同 Workspace 仍是各自獨立的員工帳號；以 Workspace ID 指定目標。Cloud 參考實作目前仍只允許 bootstrap 一個 Workspace，不宣稱已完成多 Workspace 實測。
+此段描述當時 PR #73 的歷史設計，**Workspace ID＋超管直接加入已在 PR #121 移除，不能依下文重新實作或部署**。首次開啟仍先選「使用單機版」或「直接加入雲端」；現行新機加入方式以本文件頂端決議的配對碼／邀請碼為準。
 
 本分支新增 Windows 首次開啟／直連 UI 與 Cloud 0.8.3 端點；PR #73 的 Cloud Check Run #238 已通過 Cloud type check、D1 migration、Windows build、啟動 smoke、Cloud client contract tests 與工程包上傳。測試包為 **CYInvoice V2.6.5 Build 1**，Artifact `CYInvoice_cloud-foundation_engineering-run238`，SHA-256 `b9db3a964e4ac200e8a8431486808c982588f54f1ac0693128c1f188d082e37e`。**Cloud 0.8.3 尚未部署，兩種新機直連也尚未實機驗收**。並行開發已在同一 PR 加入 Cloud migration `0008` 的密碼復原功能，故此 Windows 新版要求 Schema `8`。development Worker 的即時版本和 D1 migration 狀態仍須由本機 Cloudflare MCP 唯讀查核。新機直連要求既有 Workspace 已完成第一台的中央 Employee cutover；若尚未完成，API 拒絕加入，不重建 Workspace 或另立本機超管。先完成原交接文件中的 D1 唯讀查核與 A 機帳號轉換，再由本機已連線的 Cloudflare MCP 部署經驗證的後端。請勿把本段工程 source 狀態當作已部署狀態。
 
@@ -107,7 +116,7 @@ Build 1 的 Run #211 已通過：
 
 Cloudflare API、Bindings、Builds、Observability 四個官方 MCP 端點已由使用者在本機 Codex 檢查為「已設定／已載入／連線成功／目前不需 OAuth 登入」；該檢查尚未讀取 `cyinvoice-cloud-dev` 的 Workspace／Device。網頁版 Work 對話沒有這四個工具，不能把本機設定檔已登記誤當作網頁對話可用。這次工作採網頁版為主；需要 Cloudflare 即時狀態時，由已連線的本機 Codex 讀本文件後執行限定範圍的唯讀查核，並把去識別結果帶回主要工作對話。
 
-## 5. Work 接手後的優先順序
+## 5. 歷史階段的 Work 優先順序（A 機首次建立／切換已完成）
 
 ### A. 建立後的遠端唯讀查核與 A 機帳號轉換
 
@@ -165,6 +174,6 @@ A/B identity flow 穩定後再做：
 - AMEGO 仍是發票／作廢／折讓官方結果唯一真相。
 - API timeout / unknown result 不得盲目重送高風險業務操作。
 
-## 7. 目前適合的 Work 任務起點
+## 7. 歷史 Work 任務起點（目前請以文件頂端接手摘要為準）
 
-Work 接手後，先完成 **首次 Workspace／Device 建立後的 D1 唯讀回查**；Windows client 已回報建立及 Device identity 成功，Cloud 0.8.2 已部署且 CI 通過，但帳號轉換仍未驗收。核對後繼續 A 機 Employee Transition；不要先混入下一階段功能。一般程式／文件工作可留在網頁版，本機 Codex 負責已授權的 Cloudflare MCP 即時查核。
+本節所述首次 D1 回查與 A 機 Employee Transition 已於後續階段完成；最新問題與下一步見文件頂端「接手摘要」。需要 Cloudflare 即時狀態時，仍以當次唯讀查核結果為準，不沿用歷史快照。
