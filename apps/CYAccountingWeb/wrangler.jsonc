@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "cyaccounting-web",
-  "main": "src/index.js",
+  "main": "src/app.js",
   "compatibility_date": "2026-09-22",
   "assets": {
     "directory": "./public",
@@ -13,6 +13,12 @@
       "binding": "DB",
       "database_name": "cyaccounting-web-db",
       "database_id": "e12bccbf-6c68-4639-8195-06591e8cf2f6"
+    }
+  ],
+  "services": [
+    {
+      "binding": "IDENTITY",
+      "service": "cyinvoice-cloud-dev"
     }
   ]
 }
