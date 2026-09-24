@@ -1,0 +1,49 @@
+name: CYAccounting Canonical Icon Sync (Temporary)
+
+on:
+  push:
+    branches:
+      - cyaccounting/v1.0.28-visual-alignment
+    paths:
+      - .github/workflows/cyaccounting-icon-sync-temp.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync-icon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccounting/v1.0.28-visual-alignment
+          fetch-depth: 0
+
+      - name: Copy exact canonical ACC production assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          root='apps/CYAccounting/app/resources'
+          base='https://raw.githubusercontent.com/simonliu1118-byte/AITeam/5560f126fb5d02eac4a11b856118881fe009f2b2/shared/cy-visual/icon-family/apps/accounting'
+          curl --fail --silent --show-error --location --retry 3 "$base/ACC.ico" -o "$root/app.ico"
+          curl --fail --silent --show-error --location --retry 3 "$base/ACC.svg" -o "$root/ACC.svg"
+          curl --fail --silent --show-error --location --retry 3 "$base/png/256.png" -o "$root/app.png"
+
+          echo '6b373fbbf2c6377d63926657ca9faafdd1d5bdca3de5e57aa7f12331455e0719  apps/CYAccounting/app/resources/app.ico' | sha256sum -c -
+          echo 'd693111517380fd0eee1a0165fd9c714e7995f4757f1716157f3bc9b09c2ffd6  apps/CYAccounting/app/resources/ACC.svg' | sha256sum -c -
+          echo 'd508aeed9b0a5e9a585fae08571105f488f44b05b27b39558ec25b2e3f09aafe  apps/CYAccounting/app/resources/app.png' | sha256sum -c -
+
+          test "$(stat -c %s "$root/app.ico")" = '32979'
+          test "$(stat -c %s "$root/ACC.svg")" = '4975'
+          test "$(stat -c %s "$root/app.png")" = '15567'
+
+      - name: Commit canonical assets and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm .github/workflows/cyaccounting-icon-sync-temp.yml
+          git add apps/CYAccounting/app/resources/app.ico apps/CYAccounting/app/resources/app.png apps/CYAccounting/app/resources/ACC.svg .github/workflows/cyaccounting-icon-sync-temp.yml
+          git commit -m 'feat(CYAccounting): adopt canonical ACC icon assets'
+          git push origin HEAD:cyaccounting/v1.0.28-visual-alignment
