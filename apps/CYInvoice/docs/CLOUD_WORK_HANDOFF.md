@@ -8,7 +8,7 @@
 
 Cloud 安全操作紀錄涵蓋配對、邀請、撤銷與新機加入。紀錄不寫入配對碼、邀請碼、密碼、OTP 或 Device Token 原文。安全操作／稽核紀錄的查看介面列為後續版本 TODO。
 
-目前工作分支已修改 Worker、D1 migration `0009`、Windows 加入視窗與用戶端，工程身分為 CYInvoice V2.6.6 Build 2、Cloud `0.8.5` / API `1` / Schema `9`。PR #121 首輪 CI 的 Cloud 驗證、Windows 編譯、啟動 smoke 與合約測試已通過；Build 2 安全紀錄交易修正仍待重跑 CI。A／B 實機驗收尚待完成。**本輪尚未部署 Cloudflare、合併或發版**。遠端開發環境仍以實際查核為準，不能將本分支 source 當成已上線版本。
+目前工作分支已修改 Worker、D1 migration `0009`、Windows 加入視窗與用戶端，工程身分為 CYInvoice V2.6.6 Build 2、Cloud `0.8.5` / API `1` / Schema `9`。PR #121 Build 2 CI Run #36030769762 的 Cloud 驗證、Windows 編譯、啟動 smoke、合約測試及工程包產出均通過；工程包 Artifact 為 `CYInvoice_cloud-foundation_engineering-run247`。A／B 實機驗收尚待完成。**本輪尚未部署 Cloudflare、合併或發版**。遠端開發環境仍以實際查核為準，不能將本分支 source 當成已上線版本。
 
 ## PR #100 最新進度
 
