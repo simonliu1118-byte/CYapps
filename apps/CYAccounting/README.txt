@@ -1,9 +1,15 @@
-志遠記帳系統 V1.0.28 原始碼
+志遠記帳系統 V1.1.0 原始碼
 
-V1.0.28 更新重點
+V1.1.0 更新重點
+- 正式導入 AITeam 已核准的 CYAccounting「ACC」Icon Family；app.ico 為 16/24/32/48/64/128/256 七層 Windows ICO，視窗與 CYAccounting.exe 共用同一正式來源。
+- 同步保留正式 ACC.svg 與 256px app.png；Windows CI 會驗證 ICO 七層尺寸與最終 EXE associated icon resource。
+- 本版尚未包含下一階段 CY Desktop Visual Guide Phase 1 UI 視覺改造；既有記帳流程、鍵盤操作、資料庫、備份、匯入、Google Drive、鎖帳與本機帳本重置行為未變更。
+- V1.0.28 僅為本次 Icon 導入期間的測試版本識別，不作為正式 GitHub Release。
+
+V1.0.28 測試版本紀錄
 - 換用 AITeam 已核准的 CYAccounting「ACC」正式 Icon Family 資產；app.ico 為 16/24/32/48/64/128/256 七層 Windows ICO，視窗與 CYAccounting.exe 共用同一正式來源。
 - 同步保留正式 ACC.svg 與 256px app.png；本次不重新生成另一套圖示。
-- 本版工作項目接續進行 CY Desktop Visual Guide Phase 1 視覺對齊；目前 Icon 已先導入，既有記帳流程、鍵盤操作、資料庫、備份、匯入、Google Drive、鎖帳與本機帳本重置行為未變更。
+- 此版本用於 Icon 導入與測試，正式發布版本號改為 V1.1.0。
 
 V1.0.27 Build 2 更新重點
 - 設定頁恢復清除全部記帳資料與期初餘額按鈕；必須連續兩次正確輸入大寫 DELETE，取消或輸入錯誤不會刪除。
