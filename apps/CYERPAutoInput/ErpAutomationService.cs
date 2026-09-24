@@ -143,7 +143,7 @@ internal sealed class ErpAutomationService
         if (field.Kind == FieldKind.Boolean)
         {
             var desired = value.Equals("true", StringComparison.OrdinalIgnoreCase);
-            var current = NativeMethods.SendMessage(target.Handle, 0x00F0, 0, 0) == 1; // BM_GETCHECK / BST_CHECKED
+            var current = NativeMethods.SendMessage(target.Handle, 0x00F0, 0, 0) == 1;
             if (desired != current) InputSender.Click(center);
             await Delay(160, cancellationToken);
             return;
@@ -179,7 +179,6 @@ internal sealed class ErpAutomationService
 
         if (field.Key is "cod" or "freight_fee")
         {
-            // Proven ERP behavior: click -> type -> leave. Do not clear/select first.
             InputSender.UnicodeText(value, 105);
             await Delay(140, cancellationToken);
             InputSender.Press(NativeMethods.VK_TAB);
@@ -189,13 +188,10 @@ internal sealed class ErpAutomationService
 
         if (field.Key == "order_type")
         {
-            // Confirmed SMART ERP behavior from the Go prototype: End + Backspace x4 reliably clears the order type.
             InputSender.EndBackspace(4);
         }
         else
         {
-            // Preserve the validated new-entry rule: never erase an unexpected ERP value.
-            // Except for the explicit order-type replacement above, new-entry fields are only written when Win32 reports them blank.
             var before = NativeMethods.WindowText(focus);
             if (before == value)
             {
@@ -215,43 +211,37 @@ internal sealed class ErpAutomationService
 
     private async Task FillDetailsAsync(nint root, IReadOnlyList<DetailRow> rows, IProgress<string> progress, CancellationToken cancellationToken)
     {
-        Win32Automation.PrepareForeground(root, _log);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("輸入明細前無法把 ERP 帶到前景。");
         var grid = FindDetailGrid(root) ?? throw new InvalidOperationException("找不到 ERP 商品明細 TcxGridSite。");
         var geometry = await _gridVision.AnalyzeDetailGridAsync(grid.Handle, cancellationToken);
-        var firstVisibleLogicalRow = 0;
+        if (geometry.RowCenterY.Count == 0)
+            throw new InvalidOperationException("光學辨識沒有找到任何可輸入的明細列。");
 
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             progress.Report($"ERP：輸入商品明細 {rowIndex + 1}/{rows.Count}…");
 
-            var visibleRow = rowIndex - firstVisibleLogicalRow;
-            while (visibleRow >= geometry.RowCenterY.Count)
+            // Confirmed COPI08 behavior from the validated Go implementation:
+            // after each completed detail row, Down creates/activates the next row.
+            // Down may land on an arbitrary column, therefore every subsequent
+            // write still re-clicks the exact optically located cell.
+            if (rowIndex > 0)
             {
-                // The proven COPI08 behavior is to move down from the last visible detail row.
-                // Explicitly click that row first so VK_DOWN is never sent to an unrelated ERP control.
-                var lastVisible = geometry.RowCenterY.Count - 1;
-                if (lastVisible < 0 || !geometry.TryCellPoint(lastVisible, 0, out var lastItemPoint))
-                    throw new InvalidOperationException("明細捲動前無法光學定位最後可見列。");
-
                 if (!Win32Automation.PrepareForeground(root, _log))
-                    throw new InvalidOperationException("明細捲動前無法把 ERP 帶到前景。");
-                InputSender.Click(lastItemPoint);
-                await Delay(90, cancellationToken);
+                    throw new InvalidOperationException("開啟下一筆明細前無法把 ERP 帶到前景。");
                 InputSender.Press(NativeMethods.VK_DOWN);
-                await Delay(220, cancellationToken);
-
-                firstVisibleLogicalRow++;
-                geometry = await _gridVision.AnalyzeDetailGridAsync(grid.Handle, cancellationToken);
-                visibleRow = rowIndex - firstVisibleLogicalRow;
-                _log.Info("detail", $"grid advanced one row first_visible_logical={firstVisibleLogicalRow} visible_rows={geometry.RowCenterY.Count}");
-
-                if (visibleRow < 0)
-                    throw new InvalidOperationException("明細捲動後列索引異常；已停止以避免輸入錯列。");
+                await Delay(360, cancellationToken);
+                _log.Info("detail", $"next row activated by Down logical_row={rowIndex + 1}");
             }
 
-            if (visibleRow < 0 || visibleRow >= geometry.RowCenterY.Count)
-                throw new InvalidOperationException("光學明細列位置超出可見範圍；已停止以避免輸入錯列。");
+            // While rows fit in the viewport use their actual optical row center.
+            // Once COPI08 starts scrolling, the newly activated row remains in the
+            // last visible slot; this mirrors the previously validated behavior.
+            var visibleRow = Math.Min(rowIndex, geometry.RowCenterY.Count - 1);
+            if (visibleRow < 0)
+                throw new InvalidOperationException("光學明細列位置異常；已停止以避免輸入錯列。");
 
             var row = rows[rowIndex];
             await SetDetailCellAsync(root, grid, geometry, visibleRow, 0, row.ItemCode, cancellationToken);
@@ -331,9 +321,6 @@ internal sealed class ErpAutomationService
         InputSender.Click(unitPoint);
         await Delay(120, cancellationToken);
 
-        // Manual ERP behavior is strictly: click requested row -> Enter. Before Enter,
-        // verify the click actually put focus into the F2 TcxGridSite; never fall back
-        // to clicking the confirmation button or another guessed coordinate.
         var lookupFocus = NativeMethods.FocusedControlOfForeground(lookup);
         var lookupFocusClass = NativeMethods.ClassName(lookupFocus);
         if (lookupFocus == 0 || !lookupFocusClass.Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
@@ -347,6 +334,7 @@ internal sealed class ErpAutomationService
         if (lookupFocus == 0 || !lookupFocusClass.Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("已光學點到指定單位，但 F2 表格沒有取得焦點；為避免 Enter 送到錯誤控制項已停止。");
 
+        // Manual ERP behavior is strictly: click requested row -> Enter.
         InputSender.Press(NativeMethods.VK_RETURN);
         if (!await WaitWindowClosedAsync(lookup, 1400, cancellationToken))
             throw new InvalidOperationException("已光學點選指定單位並送出 Enter，但 F2 視窗仍未關閉。");
