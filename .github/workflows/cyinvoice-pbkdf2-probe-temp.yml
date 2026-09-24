@@ -1,0 +1,66 @@
+name: CYInvoice PBKDF2 Probe (Temporary)
+
+on:
+  push:
+    branches:
+      - cyinvoice/cloud-onboarding-first-device
+    paths:
+      - '.github/workflows/cyinvoice-pbkdf2-probe-temp.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: apps/CYInvoice/cloud
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: npm install --no-audit --no-fund
+      - name: Run PBKDF2 in Workers runtime locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/pbkdf2-probe.js <<'JS'
+          function toHex(bytes) {
+            return Array.from(bytes, part => part.toString(16).padStart(2, '0')).join('');
+          }
+          async function createCredentialVerifier(password) {
+            const salt = new Uint8Array(16);
+            crypto.getRandomValues(salt);
+            const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+            const hash = new Uint8Array(await crypto.subtle.deriveBits(
+              { name: 'PBKDF2', hash: 'SHA-256', salt: Uint8Array.from(salt).buffer, iterations: 210000 },
+              key,
+              256,
+            ));
+            return `pbkdf2-sha256$210000$${toHex(salt)}$${toHex(hash)}`;
+          }
+          export default {
+            async fetch() {
+              const started = Date.now();
+              try {
+                const verifier = await createCredentialVerifier('ProbePassword123');
+                return Response.json({ ok: true, elapsedMs: Date.now() - started, formatOk: /^pbkdf2-sha256\$210000\$[0-9a-f]{32}\$[0-9a-f]{64}$/.test(verifier) });
+              } catch (error) {
+                return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+              }
+            }
+          };
+          JS
+          npx wrangler dev /tmp/pbkdf2-probe.js --local --port 8799 > /tmp/pbkdf2-wrangler.log 2>&1 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:8799 > /tmp/pbkdf2-result.json; then break; fi
+            sleep 1
+          done
+          cat /tmp/pbkdf2-result.json
+          grep -q '"ok":true' /tmp/pbkdf2-result.json
+          grep -q '"formatOk":true' /tmp/pbkdf2-result.json
