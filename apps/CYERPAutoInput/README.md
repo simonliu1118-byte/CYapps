@@ -4,7 +4,7 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 
 ## V0.1.0
 
-`V0.1.0` 起改以 **C# / .NET 8 / WinForms** 維護。舊 Go source 暫留作行為參考，不再是正式 build target。
+`V0.1.0` 起改以 **C# / .NET 8 / WinForms** 維護；原 Go 實作已自目前分支移除，歷史版本仍可由 Git 記錄追溯。
 
 主要方向：
 
@@ -33,7 +33,8 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 
 - 商品明細：截取 `TcxGridSite`，用 OCR 找表頭並以實際格線計算可見列位置，不依 ERP 視窗大小比例猜座標。
 - F2 單位查詢：截取 `F2開窗查詢`，OCR 找指定單位的實際位置，點選後只送一次實體 Enter，並確認 F2 視窗已關閉。
-- OCR 使用 Windows 內建 `Windows.Media.Ocr`。
+- OCR 使用 Windows 內建 `Windows.Media.Ocr`；優先選用 `zh-TW` / `zh-Hant` 中文辨識器，若系統沒有可用中文 OCR 語言則退回使用者語言，辨識不到目標時直接停止，不做座標猜測。
+- 小型 ERP/F2 截圖會在辨識前暫時放大，以提高小字 OCR 成功率；回傳座標會換算回原始畫面座標。
 - OCR 暫存 PNG 僅存在 Windows Temp，辨識完成後立即刪除；不自動上傳或保存到 repository。
 
 ## 安全設計

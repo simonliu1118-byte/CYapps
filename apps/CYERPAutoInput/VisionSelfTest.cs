@@ -9,6 +9,7 @@ internal static class VisionSelfTest
         try
         {
             log.Info("selftest", "vision self-test begin");
+
             using var image = new Bitmap(900, 320);
             using (var g = Graphics.FromImage(image))
             {
@@ -26,13 +27,32 @@ internal static class VisionSelfTest
             if (lines.Count < 4)
                 throw new InvalidOperationException($"Synthetic grid-line detector returned only {lines.Count} lines.");
 
-            var joined = GridVisionService.FindPhrase(
+            var joinedLatin = GridVisionService.FindPhrase(
             [
                 new OcrToken("VIS", new Rectangle(20, 20, 45, 24)),
                 new OcrToken("ION", new Rectangle(67, 20, 45, 24))
             ], ["VISION"]);
-            if (joined is null)
-                throw new InvalidOperationException("Joined OCR-token phrase matching failed.");
+            if (joinedLatin is null)
+                throw new InvalidOperationException("Joined OCR-token Latin phrase matching failed.");
+
+            var joinedChinese = GridVisionService.FindPhrase(
+            [
+                new OcrToken("換算", new Rectangle(120, 20, 42, 24)),
+                new OcrToken("單位", new Rectangle(166, 20, 42, 24))
+            ], ["換算單位"]);
+            if (joinedChinese is null)
+                throw new InvalidOperationException("Joined OCR-token Chinese phrase matching failed.");
+
+            var unitCandidate = GridVisionService.FindBestUnitCandidate(
+            [
+                new OcrToken("換算", new Rectangle(120, 20, 42, 24)),
+                new OcrToken("單位", new Rectangle(166, 20, 42, 24)),
+                new OcrToken("支", new Rectangle(171, 75, 20, 24)),
+                new OcrToken("箱", new Rectangle(171, 112, 20, 24)),
+                new OcrToken("箱", new Rectangle(500, 150, 20, 24))
+            ], "箱");
+            if (unitCandidate is null || unitCandidate.Rect.Top != 112)
+                throw new InvalidOperationException("F2 requested-unit candidate selection failed.");
 
             var ocr = new WindowsOcrService(log);
             var tokens = await ocr.RecognizeAsync(image, CancellationToken.None);
