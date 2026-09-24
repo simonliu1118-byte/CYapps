@@ -10,10 +10,10 @@ internal sealed class MainForm : Form
     private readonly Dictionary<string, Panel> _fieldRows = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, FlowLayoutPanel> _groupFlows = new(StringComparer.OrdinalIgnoreCase);
     private readonly DetailDataGridView _details = new();
-    private readonly Label _status = new();
-    private readonly RadioButton _standard = new();
-    private readonly RadioButton _advanced = new();
-    private readonly Button _start = new();
+    private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 7 · Esc：緊急停止 · 不自動儲存 ERP" };
+    private readonly ModeToggle _modeToggle = new();
+    private readonly CyPrimaryButton _start = new();
     private CancellationTokenSource? _automationCts;
 
     public MainForm(AppLogger log)
@@ -23,17 +23,16 @@ internal sealed class MainForm : Form
         _settingsStore = new UserSettingsStore(log);
         _settings = _settingsStore.Load();
 
-        Text = "CYERPAutoInput V0.1.0 Build 1 — SMART ERP 自動輸入工具";
+        Text = "CYERPAutoInput — SMART ERP 自動輸入工具";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(1440, 760);
-        Size = new Size(1540, 940);
-        Font = new Font("Microsoft JhengHei UI", 9F);
+        MinimumSize = new Size(1050, 640);
+        Size = new Size(1160, 720);
+        Font = new Font("Microsoft JhengHei UI", 9.5F);
         KeyPreview = true;
 
         BuildUi();
         ApplyDefaultsToBlankFields();
-        _advanced.Checked = _settings.AdvancedMode;
-        _standard.Checked = !_settings.AdvancedMode;
+        _modeToggle.Checked = _settings.AdvancedMode;
         ApplyMode(_settings.AdvancedMode);
     }
 
@@ -43,66 +42,38 @@ internal sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
-            Padding = new Padding(12)
+            RowCount = 4,
+            Padding = new Padding(12),
+            Margin = Padding.Empty
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 46));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 54));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 228));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         Controls.Add(root);
 
-        var top = new Panel { Dock = DockStyle.Fill };
-        root.Controls.Add(top, 0, 0);
-        top.Controls.Add(new Label
+        var toolbar = new TableLayoutPanel
         {
-            Text = "SMART ERP 自動輸入工具",
-            Font = new Font(Font.FontFamily, 15F, FontStyle.Bold),
-            AutoSize = true,
-            Location = new Point(6, 5)
-        });
-        top.Controls.Add(new Label
-        {
-            Text = "V0.1.0 Build 1 · C# / .NET 8 · 光學定位 · Esc 緊急停止 · 目前不自動儲存 ERP",
-            AutoSize = true,
-            ForeColor = Color.DimGray,
-            Location = new Point(8, 34)
-        });
-
-        _standard.Text = "標準模式";
-        _standard.AutoSize = true;
-        _standard.Checked = true;
-        _standard.Location = new Point(1070, 18);
-        _standard.CheckedChanged += (_, _) => { if (_standard.Checked) ApplyMode(false); };
-        top.Controls.Add(_standard);
-
-        _advanced.Text = "進階模式";
-        _advanced.AutoSize = true;
-        _advanced.Location = new Point(1160, 18);
-        _advanced.CheckedChanged += (_, _) => { if (_advanced.Checked) ApplyMode(true); };
-        top.Controls.Add(_advanced);
-
-        var settingsButton = new Button { Text = "設定", Size = new Size(100, 34), Location = new Point(1270, 10) };
-        settingsButton.Click += (_, _) => OpenSettings();
-        top.Controls.Add(settingsButton);
-        top.Resize += (_, _) =>
-        {
-            settingsButton.Left = top.ClientSize.Width - settingsButton.Width - 8;
-            _advanced.Left = settingsButton.Left - _advanced.Width - 20;
-            _standard.Left = _advanced.Left - _standard.Width - 20;
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = Padding.Empty
         };
+        toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        root.Controls.Add(toolbar, 0, 0);
 
         var actions = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(4, 7, 4, 4)
+            Padding = new Padding(0, 4, 0, 2),
+            Margin = Padding.Empty
         };
-        root.Controls.Add(actions, 0, 1);
+        toolbar.Controls.Add(actions, 0, 0);
 
-        var find = MakeButton("尋找 ERP", 110);
+        var find = MakeButton("尋找 ERP", 90);
         find.Click += (_, _) =>
         {
             var hwnd = _automation.FindErp();
@@ -115,7 +86,7 @@ internal sealed class MainForm : Form
         };
         actions.Controls.Add(find);
 
-        var state = MakeButton("偵測狀態", 110);
+        var state = MakeButton("偵測狀態", 90);
         state.Click += (_, _) =>
         {
             var hwnd = _automation.FindErp();
@@ -124,32 +95,73 @@ internal sealed class MainForm : Form
         actions.Controls.Add(state);
 
         _start.Text = "開始輸入 ERP";
-        _start.Size = new Size(170, 38);
-        _start.Font = new Font(Font, FontStyle.Bold);
+        _start.Size = new Size(150, 36);
+        _start.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
+        _start.Margin = new Padding(4, 1, 4, 1);
         _start.Click += async (_, _) => await StartAutomationAsync();
         actions.Controls.Add(_start);
 
-        actions.Controls.Add(new Label { Text = "     訂單匯入：", AutoSize = true, Padding = new Padding(0, 10, 0, 0) });
+        actions.Controls.Add(new Label
+        {
+            Text = "訂單匯入：",
+            AutoSize = true,
+            Padding = new Padding(0, 9, 0, 0),
+            Margin = new Padding(12, 0, 2, 0)
+        });
         actions.Controls.Add(ImportButton("蝦皮"));
         actions.Controls.Add(ImportButton("MO店+"));
         actions.Controls.Add(ImportButton("酷澎商城"));
+
+        var rightTools = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Padding = new Padding(0, 4, 0, 2),
+            Margin = Padding.Empty,
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
+        };
+        toolbar.Controls.Add(rightTools, 1, 0);
+
+        var settingsButton = MakeButton("設定", 76);
+        settingsButton.Click += (_, _) => OpenSettings();
+        rightTools.Controls.Add(settingsButton);
+
+        _modeToggle.Margin = new Padding(4, 1, 8, 1);
+        _modeToggle.CheckedChanged += (_, _) => ApplyMode(_modeToggle.Checked);
+        rightTools.Controls.Add(_modeToggle);
 
         var fieldsHost = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 4,
             RowCount = 1,
-            AutoScroll = true,
-            Padding = new Padding(0, 4, 0, 4)
+            AutoScroll = false,
+            Padding = new Padding(0, 4, 0, 4),
+            Margin = Padding.Empty
         };
         for (var i = 0; i < 4; i++) fieldsHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        root.Controls.Add(fieldsHost, 0, 2);
+        root.Controls.Add(fieldsHost, 0, 1);
 
         var groups = new[] { "表頭", "交易資料", "送貨資料", "發票資料(一)" };
         for (var i = 0; i < groups.Length; i++)
         {
-            var box = new GroupBox { Text = groups[i].Replace("(一)", "（一）"), Dock = DockStyle.Fill, Padding = new Padding(8) };
-            var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+            var box = new GroupBox
+            {
+                Text = groups[i].Replace("(一)", "（一）"),
+                Dock = DockStyle.Fill,
+                Padding = new Padding(7),
+                Margin = new Padding(i == 0 ? 0 : 4, 0, i == groups.Length - 1 ? 0 : 4, 0)
+            };
+            var flow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoScroll = true,
+                Padding = new Padding(3, 2, 0, 2),
+                Margin = Padding.Empty
+            };
             box.Controls.Add(flow);
             fieldsHost.Controls.Add(box, i, 0);
             _groupFlows[groups[i]] = flow;
@@ -158,39 +170,63 @@ internal sealed class MainForm : Form
 
         var detailBox = new GroupBox
         {
-            Text = "商品明細（直接輸入表格；有資料的列必須填品號＋數量）",
+            Text = "商品明細（有資料的列必須填品號＋數量）",
             Dock = DockStyle.Fill,
-            Padding = new Padding(8)
+            Padding = new Padding(7),
+            Margin = new Padding(0, 4, 0, 4)
         };
-        root.Controls.Add(detailBox, 0, 3);
+        root.Controls.Add(detailBox, 0, 2);
         ConfigureDetailGrid();
         detailBox.Controls.Add(_details);
 
+        var statusStrip = new StatusStrip
+        {
+            Dock = DockStyle.Fill,
+            SizingGrip = false,
+            Font = new Font("Microsoft JhengHei UI", 8.5F),
+            Padding = new Padding(2, 0, 2, 0),
+            Margin = Padding.Empty
+        };
         _status.Text = "ERP：尚未偵測";
-        _status.Dock = DockStyle.Fill;
-        _status.Padding = new Padding(6, 7, 0, 0);
-        root.Controls.Add(_status, 0, 4);
+        statusStrip.Items.Add(_status);
+        statusStrip.Items.Add(_buildStatus);
+        root.Controls.Add(statusStrip, 0, 3);
     }
 
     private void AddField(FieldDefinition field)
     {
         var flow = _groupFlows[field.Group];
-        var row = new Panel { Width = 315, Height = 31, Margin = new Padding(2) };
+        var row = new Panel { Width = 246, Height = 28, Margin = new Padding(1) };
         row.Controls.Add(new Label
         {
             Text = field.Label,
             AutoSize = false,
-            Width = 112,
-            Height = 25,
+            Width = 94,
+            Height = 24,
             TextAlign = ContentAlignment.MiddleLeft,
-            Location = new Point(0, 2)
+            Location = new Point(0, 1)
         });
 
         Control value;
         if (field.Kind == FieldKind.Boolean)
-            value = new CheckBox { Text = "啟用", Width = 176, Height = 25, Location = new Point(116, 3), Tag = field.Key };
+        {
+            value = new CheckBox
+            {
+                Text = "啟用",
+                AutoSize = true,
+                Location = new Point(98, 4),
+                Tag = field.Key
+            };
+        }
         else
-            value = new TextBox { Width = 185, Height = 26, Location = new Point(116, 2), Tag = field.Key };
+        {
+            value = new TextBox
+            {
+                Width = 144,
+                Location = new Point(98, 2),
+                Tag = field.Key
+            };
+        }
 
         row.Controls.Add(value);
         flow.Controls.Add(row);
@@ -209,20 +245,25 @@ internal sealed class MainForm : Form
         _details.EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2;
         _details.Columns.Add(TextColumn("ItemCode", "品號", 220));
         _details.Columns.Add(TextColumn("Unit", "單位", 105));
-        _details.Columns.Add(TextColumn("Quantity", "數量", 105));
-        _details.Columns.Add(TextColumn("GiftQuantity", "贈/備品量", 125));
+        _details.Columns.Add(TextColumn("Quantity", "數量", 105, DataGridViewContentAlignment.MiddleRight));
+        _details.Columns.Add(TextColumn("GiftQuantity", "贈/備品量", 125, DataGridViewContentAlignment.MiddleRight));
         _details.Columns.Add(TextColumn("Batch", "批號", 170));
         _details.Columns.Add(TextColumn("Warehouse", "庫別", 140));
-        _details.Columns.Add(TextColumn("UnitPrice", "單價", 130));
+        _details.Columns.Add(TextColumn("UnitPrice", "單價", 130, DataGridViewContentAlignment.MiddleRight));
         for (var i = 0; i < 8; i++) _details.Rows.Add();
     }
 
-    private static DataGridViewTextBoxColumn TextColumn(string name, string text, int width) => new()
+    private static DataGridViewTextBoxColumn TextColumn(
+        string name,
+        string text,
+        int width,
+        DataGridViewContentAlignment alignment = DataGridViewContentAlignment.MiddleLeft) => new()
     {
         Name = name,
         HeaderText = text,
         Width = width,
-        SortMode = DataGridViewColumnSortMode.NotSortable
+        SortMode = DataGridViewColumnSortMode.NotSortable,
+        DefaultCellStyle = new DataGridViewCellStyle { Alignment = alignment }
     };
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -260,8 +301,7 @@ internal sealed class MainForm : Form
         try
         {
             _settingsStore.Save(_settings);
-            _advanced.Checked = _settings.AdvancedMode;
-            _standard.Checked = !_settings.AdvancedMode;
+            _modeToggle.Checked = _settings.AdvancedMode;
             ApplyMode(_settings.AdvancedMode);
             ApplyDefaultsToBlankFields();
             SetStatus("設定：已儲存本機設定");
@@ -328,7 +368,7 @@ internal sealed class MainForm : Form
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var field in FieldCatalog.All)
         {
-            if (!_advanced.Checked && !field.Standard) continue;
+            if (!_modeToggle.Checked && !field.Standard) continue;
             var control = _valueControls[field.Key];
             string value;
             if (control is CheckBox cb) value = cb.Checked ? "true" : string.Empty;
@@ -398,10 +438,9 @@ internal sealed class MainForm : Form
 
     private Button ImportButton(string text)
     {
-        Button button = text == "酷澎商城" ? new CoupangButton() : new Button();
-        if (button is not CoupangButton) button.Text = text;
-        button.Size = new Size(text == "酷澎商城" ? 128 : 90, 34);
-        button.Margin = new Padding(4);
+        Button button = text == "酷澎商城" ? new CoupangButton() : new Button { Text = text };
+        button.Size = new Size(90, 34);
+        button.Margin = new Padding(4, 1, 4, 1);
         button.Click += (_, _) => MessageBox.Show(this,
             $"{text} 匯入解析會在 C# ERP 核心驗收後接續；入口固定保留。",
             "訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -412,7 +451,7 @@ internal sealed class MainForm : Form
     {
         Text = text,
         Size = new Size(width, 34),
-        Margin = new Padding(4)
+        Margin = new Padding(4, 1, 4, 1)
     };
 
     private void SetStatus(string text)

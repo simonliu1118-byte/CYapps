@@ -2,18 +2,20 @@ namespace CYERPAutoInput;
 
 internal static class CyVisualTheme
 {
-    private static readonly Color Window = Color.FromArgb(248, 250, 252);
-    private static readonly Color White = Color.White;
-    private static readonly Color Border = Color.FromArgb(209, 213, 219);
-    private static readonly Color Grid = Color.FromArgb(221, 225, 230);
-    private static readonly Color TextPrimary = Color.FromArgb(31, 41, 55);
-    private static readonly Color TextSecondary = Color.FromArgb(102, 112, 133);
-    private static readonly Color TextDisabled = Color.FromArgb(152, 162, 179);
-    private static readonly Color Accent = Color.FromArgb(216, 132, 74);
-    private static readonly Color AccentHover = Color.FromArgb(195, 115, 63);
-    private static readonly Color AccentPressed = Color.FromArgb(170, 100, 53);
-    private static readonly Color AccentSoft = Color.FromArgb(250, 236, 221);
-    private static readonly Color Selection = Color.FromArgb(246, 227, 209);
+    internal static readonly Color Window = Color.FromArgb(248, 250, 252);
+    internal static readonly Color White = Color.White;
+    internal static readonly Color ReadOnly = Color.FromArgb(241, 243, 245);
+    internal static readonly Color Border = Color.FromArgb(209, 213, 219);
+    internal static readonly Color Grid = Color.FromArgb(221, 225, 230);
+    internal static readonly Color TextPrimary = Color.FromArgb(31, 41, 55);
+    internal static readonly Color TextSecondary = Color.FromArgb(102, 112, 133);
+    internal static readonly Color TextDisabled = Color.FromArgb(152, 162, 179);
+    internal static readonly Color Accent = Color.FromArgb(216, 132, 74);
+    internal static readonly Color AccentHover = Color.FromArgb(195, 115, 63);
+    internal static readonly Color AccentPressed = Color.FromArgb(170, 100, 53);
+    internal static readonly Color AccentSoft = Color.FromArgb(250, 236, 221);
+    internal static readonly Color AccentFocus = Color.FromArgb(224, 161, 120);
+    internal static readonly Color Selection = Color.FromArgb(246, 227, 209);
 
     public static void Apply(Form form)
     {
@@ -32,7 +34,7 @@ internal static class CyVisualTheme
                     ApplyGrid(grid);
                     break;
                 case TextBox textBox:
-                    textBox.BackColor = White;
+                    textBox.BackColor = textBox.ReadOnly ? ReadOnly : White;
                     textBox.ForeColor = TextPrimary;
                     break;
                 case GroupBox groupBox:
@@ -51,73 +53,27 @@ internal static class CyVisualTheme
                     panel.BackColor = Window;
                     panel.ForeColor = TextPrimary;
                     break;
+                case StatusStrip statusStrip:
+                    statusStrip.BackColor = Window;
+                    statusStrip.ForeColor = TextSecondary;
+                    break;
                 case Label label:
-                    ApplyLabel(label);
+                    label.ForeColor = TextPrimary;
+                    label.BackColor = Window;
                     break;
                 case RadioButton radio:
                     radio.BackColor = Window;
                     radio.ForeColor = TextPrimary;
                     break;
-                case CheckBox checkBox:
+                case CheckBox checkBox when checkBox is not ModeToggle:
                     checkBox.BackColor = Window;
                     checkBox.ForeColor = TextPrimary;
-                    break;
-                case Button button:
-                    ApplyButton(button);
                     break;
             }
 
             if (control.HasChildren)
                 ApplyControlTree(control);
         }
-    }
-
-    private static void ApplyLabel(Label label)
-    {
-        label.ForeColor = TextPrimary;
-        label.BackColor = Window;
-
-        if (label.Text.StartsWith("V0.1.0 Build", StringComparison.Ordinal) ||
-            label.Text.StartsWith("ERP：", StringComparison.Ordinal))
-        {
-            label.ForeColor = TextSecondary;
-        }
-    }
-
-    private static void ApplyButton(Button button)
-    {
-        if (!button.Text.Equals("開始輸入 ERP", StringComparison.Ordinal))
-            return;
-
-        button.UseVisualStyleBackColor = false;
-        button.FlatStyle = FlatStyle.Flat;
-        button.FlatAppearance.BorderSize = 0;
-        button.BackColor = Accent;
-        button.ForeColor = White;
-
-        button.MouseEnter += (_, _) =>
-        {
-            if (button.Enabled) button.BackColor = AccentHover;
-        };
-        button.MouseLeave += (_, _) =>
-        {
-            if (button.Enabled) button.BackColor = Accent;
-        };
-        button.MouseDown += (_, _) =>
-        {
-            if (button.Enabled) button.BackColor = AccentPressed;
-        };
-        button.MouseUp += (_, _) =>
-        {
-            if (button.Enabled) button.BackColor = button.ClientRectangle.Contains(button.PointToClient(Cursor.Position))
-                ? AccentHover
-                : Accent;
-        };
-        button.EnabledChanged += (_, _) =>
-        {
-            button.BackColor = button.Enabled ? Accent : AccentSoft;
-            button.ForeColor = button.Enabled ? White : TextDisabled;
-        };
     }
 
     private static void ApplyGrid(DataGridView grid)

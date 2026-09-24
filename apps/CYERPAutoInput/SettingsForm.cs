@@ -18,19 +18,20 @@ internal sealed class SettingsForm : Form
         _settings = settings;
         Text = "CYERPAutoInput 設定";
         StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(650, 610);
+        Size = new Size(620, 540);
         MinimumSize = new Size(560, 480);
-        Font = new Font("Microsoft JhengHei UI", 9F);
+        Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
+        CyVisualTheme.Apply(this);
     }
 
     private void BuildUi()
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = new Padding(12) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         Controls.Add(root);
 
         root.Controls.Add(new Label
@@ -44,7 +45,7 @@ internal sealed class SettingsForm : Form
         _advanced.Text = "啟動時使用進階模式";
         _advanced.Checked = _settings.AdvancedMode;
         _advanced.AutoSize = true;
-        _advanced.Padding = new Padding(3, 5, 0, 0);
+        _advanced.Padding = new Padding(3, 4, 0, 0);
         root.Controls.Add(_advanced, 0, 1);
 
         _grid.Dock = DockStyle.Fill;
@@ -58,7 +59,7 @@ internal sealed class SettingsForm : Form
             Name = "Label",
             HeaderText = "欄位",
             ReadOnly = true,
-            Width = 210,
+            Width = 190,
             SortMode = DataGridViewColumnSortMode.NotSortable
         });
         _grid.Columns.Add(new DataGridViewTextBoxColumn
@@ -77,10 +78,16 @@ internal sealed class SettingsForm : Form
         }
         root.Controls.Add(_grid, 0, 2);
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(4, 8, 4, 0) };
-        var save = new Button { Text = "儲存", Width = 100, Height = 32 };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Padding = new Padding(4, 6, 4, 0)
+        };
+        var save = new CyPrimaryButton { Text = "儲存", Width = 92, Height = 34 };
         save.Click += (_, _) => SaveAndClose();
-        var cancel = new Button { Text = "取消", Width = 100, Height = 32, DialogResult = DialogResult.Cancel };
+        var cancel = new Button { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
         buttons.Controls.Add(save);
         buttons.Controls.Add(cancel);
         root.Controls.Add(buttons, 0, 3);
