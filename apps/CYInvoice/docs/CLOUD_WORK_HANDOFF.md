@@ -4,7 +4,7 @@
 
 ## PR #100 最新進度
 
-PR #100 已接到 PR #73 最新基準；目前工程原始碼為 CYInvoice V2.6.5 Build 4、Cloud `0.8.4` / API `1` / Schema `8`。雲端忘記密碼採員工編號與 Email 核對後寄送、第二步輸入 OTP 與新密碼，重寄倒數使用伺服器回傳時間。一般員工的帳號管理提供本人密碼與 Email 異動，姓名仍由管理員維護。此版本尚待 PR CI 和工程包驗證，亦未部署到 Cloudflare；不得把本段當成遠端已上線狀態。
+PR #100 已接到 PR #73 最新基準；目前工程原始碼為 CYInvoice V2.6.5 Build 4、Cloud `0.8.4` / API `1` / Schema `8`。雲端忘記密碼採員工編號與 Email 核對後寄送、第二步輸入 OTP 與新密碼，重寄倒數使用伺服器回傳時間。一般員工的帳號管理提供本人密碼與 Email 異動，姓名仍由管理員維護。PR CI Run #36015425647 的 Cloud validate 與 Windows client 均成功；完整 Windows Build Run #36015789588 也成功並產生 `CYInvoice_V2.6.5_Build4_engineering-run229` 測試包。此版本未部署到 Cloudflare；不得把本段當成遠端已上線狀態。
 
 ## 最新工作：首次開啟直接加入雲端
 
