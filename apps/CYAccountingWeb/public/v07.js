@@ -3,12 +3,45 @@ let cyPendingConfirmation = null;
 let cyConfirmationObserver = null;
 
 window.addEventListener('load', () => {
+  setupEntryWorkflowUi();
   bindEntryKindVisuals();
   bindEntryKindShortcut();
   bindInputConfirmation();
   updateEntryKindVisual();
   renderInputConfirmations();
 });
+
+function setupEntryWorkflowUi() {
+  const card = document.querySelector('.entry-card');
+  const title = card?.querySelector('.section-title .title-with-badge');
+  if (title && !document.querySelector('#entryKindIndicator')) {
+    const indicator = document.createElement('span');
+    indicator.id = 'entryKindIndicator';
+    indicator.className = 'entry-kind-indicator expense';
+    indicator.textContent = '支出模式';
+    title.append(indicator);
+  }
+
+  const hint = card?.querySelector('.keyboard-hint');
+  if (hint) {
+    hint.innerHTML = '鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　<kbd>F2</kbd> 切換收入／支出';
+  }
+
+  const ledger = document.querySelector('.ledger-card');
+  if (ledger && !document.querySelector('#inputConfirmationCard')) {
+    const section = document.createElement('section');
+    section.id = 'inputConfirmationCard';
+    section.className = 'card confirmation-card';
+    section.innerHTML = `
+      <div class="section-title">
+        <div><h2>輸入確認</h2></div>
+        <span class="hint">本次使用最近 10 筆</span>
+      </div>
+      <div id="inputConfirmationList" class="confirmation-list" aria-live="polite"></div>
+    `;
+    ledger.insertAdjacentElement('beforebegin', section);
+  }
+}
 
 function bindEntryKindVisuals() {
   els.kindButtons?.forEach(button => button.addEventListener('click', () => {
