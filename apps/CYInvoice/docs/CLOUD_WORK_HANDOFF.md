@@ -8,7 +8,9 @@
 
 Cloud 安全操作紀錄涵蓋配對、邀請、撤銷與新機加入。紀錄不寫入配對碼、邀請碼、密碼、OTP 或 Device Token 原文。安全操作／稽核紀錄的查看介面列為後續版本 TODO。
 
-目前工作分支已修改 Worker、D1 migration `0009`、Windows 加入視窗與用戶端，工程身分為 CYInvoice V2.6.6 Build 2、Cloud `0.8.5` / API `1` / Schema `9`。PR #121 Build 2 CI Run #36030769762 的 Cloud 驗證、Windows 編譯、啟動 smoke、合約測試及工程包產出均通過；工程包 Artifact 為 `CYInvoice_cloud-foundation_engineering-run247`。A／B 實機驗收尚待完成。**本輪尚未部署 Cloudflare、合併或發版**。遠端開發環境仍以實際查核為準，不能將本分支 source 當成已上線版本。
+目前工作分支已修改 Worker、D1 migration `0009`、Windows 加入視窗與用戶端，工程身分為 CYInvoice V2.6.6 Build 3、Cloud `0.8.5` / API `1` / Schema `9`。PR #121 Build 2 CI Run #36030769762 的 Cloud 驗證、Windows 編譯、啟動 smoke、合約測試及工程包產出均通過；Build 3 視窗修正待重跑 CI。A／B 實機驗收尚待完成。**本輪尚未部署 Cloudflare、合併或發版**。遠端開發環境仍以實際查核為準，不能將本分支 source 當成已上線版本。
+
+2026-09-25 A 機恢復查核：development D1 唯讀查核仍有 1 個 Workspace、1 台 active Device，該 Device 的員工權限狀態為 cloud。A 機截圖顯示舊 Windows 客戶端要求 Schema 7、遠端回報 Schema 8，屬版本相容性問題，不能當成雲端裝置身分遺失。PR #100 的 V2.6.5 Build 4 客戶端要求 Schema 8；若 A 機原 `Data` 仍在，應先備份原程式資料夾，再於同一台電腦、同一 Windows 帳戶使用相容工程包與原 `Data` 驗證連線。PR #121 的 Build 3 客戶端要求 Schema 9，必須先有對應 Cloud migration／Worker，不能直接拿來連目前 Schema 8 的遠端。若未來所有 active Device 真正遺失且沒有有效邀請，現有兩條常規加入流程無法自行恢復，需另設受控災難復原流程。
 
 ## PR #100 最新進度
 

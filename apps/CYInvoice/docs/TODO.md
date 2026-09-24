@@ -131,7 +131,8 @@
 - [x] 程式不內嵌 Cloud API 網址。Workspace 識別碼僅供內部定位，不作為新機手動輸入欄位；配對碼／邀請碼由伺服器解析目標 Workspace。加入期間只在 Pending join 暫存使用者輸入的網址與裝置憑證，以便結果不明時復原；成功後才保存正式 Device identity。
 - [x] Cloud D1 安全操作紀錄涵蓋配對碼核發、驗證、新機加入、邀請寄送與撤銷及相關失敗事件；A 機可查詢配對／邀請狀態。紀錄不含配對碼、邀請碼、密碼、OTP 或 Device Token 原文。配對 Worker 已改用既有資料表 `device_pairing_codes`。
 - [ ] 後續版本新增「安全操作紀錄／稽核紀錄」查看介面；本階段只建立雲端紀錄，不製作查看介面。
-- [ ] A／B 機使用工程包實際驗收兩條加入路徑、邀請撤銷／重寄、結果不明時的恢復；安排遠端 Cloudflare migration／Worker 部署前的審核。PR #121 Build 2 CI 已通過，仍不代表遠端已部署。
+- [ ] A／B 機使用工程包實際驗收兩條加入路徑、邀請撤銷／重寄、結果不明時的恢復；安排遠端 Cloudflare migration／Worker 部署前的審核。PR #121 Build 2 CI 已通過，Build 3 視窗修正待重跑；仍不代表遠端已部署。
+- [ ] 規劃「所有原裝置皆遺失且無有效邀請」的受控災難復原流程；一般新機加入仍僅有配對碼與邀請碼，不應讓 Workspace 識別碼或僅憑超管帳密成為第三條常規入口。復原須核對已驗證超管 Email、既有憑證及操作稽核，並避免重建原 Workspace 或暴露 Device Token。
 
 ### 7.3 跨機 Work Item / Sync
 

@@ -21,6 +21,8 @@ internal sealed class CloudDirectJoinForm : Form
     private readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button authorize = UiControls.StandardButton("確認 Workspace");
     private readonly Button join = UiControls.StandardButton("加入這個 Workspace");
+    private readonly FlowLayoutPanel actions = new() { Dock = DockStyle.Fill,
+        FlowDirection = FlowDirection.RightToLeft, WrapContents = false };
     private CloudWorkspacePreview? preview;
     private bool busy;
     private bool resourcesDisposed;
@@ -31,7 +33,7 @@ internal sealed class CloudDirectJoinForm : Form
         settings = repository.Settings.LoadOrCreate();
         Text = "首次開啟：直接加入雲端";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(640, 495);
+        ClientSize = new Size(580, 394);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -59,11 +61,11 @@ internal sealed class CloudDirectJoinForm : Form
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2,
             RowCount = 9, Padding = new Padding(16) };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var row = 0; row < 7; row++) root.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
+        for (var row = 0; row < 7; row++) root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         AddField(root, 0, "Cloud API 網址", url);
         var modes = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         modes.Controls.Add(pairingMethod);
@@ -75,11 +77,11 @@ internal sealed class CloudDirectJoinForm : Form
         AddField(root, 5, "超管密碼", password);
         AddField(root, 6, "這台裝置名稱", deviceName);
         root.Controls.Add(status, 1, 7);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var cancel = UiControls.StandardButton("取消");
         cancel.DialogResult = DialogResult.Cancel;
-        authorize.Width = 215;
-        join.Width = 160;
+        authorize.Width = 130;
+        join.Width = 150;
+        cancel.Width = 90;
         authorize.Click += async (_, _) => await AuthorizeAsync();
         join.Click += async (_, _) => await JoinAsync();
         actions.Controls.Add(cancel);
@@ -88,6 +90,18 @@ internal sealed class CloudDirectJoinForm : Form
         root.Controls.Add(actions, 1, 8);
         Controls.Add(root);
         CancelButton = cancel;
+    }
+
+    internal void VerifySmokeLayout()
+    {
+        if (ClientSize.Width > 595 || ClientSize.Height > 410)
+            throw new InvalidOperationException("雲端加入視窗尺寸異常");
+        foreach (Control button in actions.Controls)
+        {
+            if (button.Left < 0 || button.Top < 0 || button.Right > actions.ClientSize.Width
+                || button.Bottom > actions.ClientSize.Height)
+                throw new InvalidOperationException("雲端加入視窗操作按鈕被裁切");
+        }
     }
 
     private static void AddField(TableLayoutPanel root, int row, string name, Control field)
