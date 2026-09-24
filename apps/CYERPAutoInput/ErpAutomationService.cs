@@ -36,9 +36,6 @@ internal sealed class ErpAutomationService
         }
         _log.Info("state", $"mode signal total={edits.Length} readonly={readOnly} writable={writable}");
 
-        // These thresholds are intentionally conservative. On the validated COPI08
-        // layout, BROWSE is 6 readonly / 0 writable and INPUT is 2 readonly / 4 writable.
-        // Ambiguous intermediate states remain UNKNOWN rather than risking a NEW click.
         if (writable == 0 && readOnly >= 6) return ErpMode.Browse;
         if (writable >= 4 && readOnly >= 2) return ErpMode.Input;
         return ErpMode.Unknown;
@@ -79,10 +76,25 @@ internal sealed class ErpAutomationService
         var addPoint = await _textVision.FindTextAsync(root, ["新增"], cancellationToken);
         if (addPoint is null) throw new InvalidOperationException("光學辨識找不到 ERP 的「新增」按鈕；未進行猜測點擊。");
         InputSender.Click(addPoint.Value);
-        await Delay(450, cancellationToken);
-        if (DetectMode(root) != ErpMode.Input)
-            throw new InvalidOperationException("已點擊「新增」，但 ERP 沒有進入可輸入狀態。");
-        _log.Info("state", "ERP entered input mode by optical 新增 click");
+
+        // Delphi/DevExpress can visibly enter INPUT after the click before all TDBEdit
+        // style bits have settled. Poll the proven readonly/writable signal instead of
+        // making a single timing-sensitive decision.
+        var deadline = Environment.TickCount64 + 3500;
+        var checks = 0;
+        while (Environment.TickCount64 < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Delay(150, cancellationToken);
+            checks++;
+            mode = DetectMode(root);
+            if (mode == ErpMode.Input)
+            {
+                _log.Info("state", $"ERP entered input mode by optical 新增 click after_checks={checks} elapsed_ms={checks * 150}");
+                return;
+            }
+        }
+        throw new InvalidOperationException("已點擊「新增」，但等待 3.5 秒後仍無法確認 ERP 進入可輸入狀態。");
     }
 
     private async Task FillHeaderAsync(nint root, FormSnapshot snapshot, CancellationToken cancellationToken)
@@ -124,9 +136,6 @@ internal sealed class ErpAutomationService
         if (page == 0 || !NativeMethods.ClassName(page).Equals("TcxPageControl", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"ERP 頁籤「{group}」找不到 TcxPageControl parent。");
 
-        // Match the validated Go behavior: always perform a real tab click before
-        // filling it. TcxTabSheet visibility can be stale, so visibility alone is
-        // not accepted as proof that the requested page is active.
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("切換 ERP 頁籤前無法把 COPI08 帶到前景。");
         var p = await _textVision.FindTextAsync(page, [group, group.Replace("(一)", "（一）")], cancellationToken);
@@ -207,8 +216,6 @@ internal sealed class ErpAutomationService
             var before = NativeMethods.WindowText(focus);
             if (before == value)
             {
-                // SMART ERP lookup validation is triggered by leaving the field.
-                // The validated behavior is Tab, not Enter.
                 InputSender.Press(NativeMethods.VK_TAB);
                 await Delay(field.Kind == FieldKind.Lookup ? 420 : 180, cancellationToken);
                 return;
@@ -232,6 +239,12 @@ internal sealed class ErpAutomationService
         if (geometry.RowCenterY.Count == 0)
             throw new InvalidOperationException("光學辨識沒有找到任何可輸入的明細列。");
 
+        // Preserve the proven COPI08 sequence from the Go line: first activate the
+        // detail grid/first row with a real click, then re-click the exact requested
+        // cell for editing. On an inactive TcxGridSite, the first click can be consumed
+        // by row/grid activation rather than by the cell editor.
+        await ActivateDetailFirstRowAsync(root, grid, geometry, cancellationToken);
+
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -254,7 +267,7 @@ internal sealed class ErpAutomationService
             await SetDetailCellAsync(root, grid, geometry, visibleRow, 0, row.ItemCode, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(row.Unit))
-                await SelectUnitAsync(root, geometry, visibleRow, row.Unit, cancellationToken);
+                await SelectUnitAsync(root, grid, geometry, visibleRow, row.Unit, cancellationToken);
 
             await SetDetailCellAsync(root, grid, geometry, visibleRow, 1, row.Quantity, cancellationToken);
             if (!string.IsNullOrWhiteSpace(row.GiftQuantity))
@@ -286,34 +299,56 @@ internal sealed class ErpAutomationService
         return selected;
     }
 
+    private async Task ActivateDetailFirstRowAsync(nint root, WindowControl grid, GridGeometry geometry, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("啟用商品明細第一列前無法把 ERP 帶到前景。");
+        var (_, point, _) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, 0, 0, cancellationToken);
+        InputSender.Click(point);
+        await Delay(240, cancellationToken);
+        var focus = NativeMethods.FocusedControlOfForeground(root);
+        _log.Info("detail", $"first-row activation point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)}");
+    }
+
     private async Task SetDetailCellAsync(nint root, WindowControl grid, GridGeometry geometry, int visibleRow, int column, string value, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
-        if (!geometry.TryCellPoint(visibleRow, column, out var point))
-            throw new InvalidOperationException($"光學明細定位缺少 column={column}, row={visibleRow + 1}。");
 
-        if (!Win32Automation.PrepareForeground(root, _log))
-            throw new InvalidOperationException("輸入明細前無法把 ERP 帶到前景。");
-        InputSender.Click(point);
-        await Delay(130, cancellationToken);
-        InputSender.Press(NativeMethods.VK_RETURN);
-        var editor = await WaitGridEditorAsync(root, grid.Rect.ToRectangle(), cancellationToken);
-        if (editor == 0) throw new InvalidOperationException($"ERP 明細 row={visibleRow + 1}, column={column} 沒有進入編輯模式。");
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Win32Automation.PrepareForeground(root, _log))
+                throw new InvalidOperationException("輸入明細前無法把 ERP 帶到前景。");
 
-        InputSender.UnicodeText(value, 35);
-        await Delay(120, cancellationToken);
-        InputSender.Press(NativeMethods.VK_RETURN);
-        await Delay(260, cancellationToken);
-        _log.Info("detail", $"cell committed row={visibleRow + 1} col={column} chars={value.Length}");
+            var (_, point, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, column, cancellationToken);
+            InputSender.Click(point);
+            await Delay(180, cancellationToken);
+            InputSender.Press(NativeMethods.VK_RETURN);
+            var editor = await WaitGridEditorAsync(root, freshRect, cancellationToken);
+            if (editor == 0)
+            {
+                var focus = NativeMethods.FocusedControlOfForeground(root);
+                _log.Warn("detail", $"editor not ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)}");
+                continue;
+            }
+
+            _log.Info("detail", $"editor ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} edit=0x{editor:X}/{NativeMethods.ClassName(editor)}");
+            InputSender.UnicodeText(value, 35);
+            await Delay(150, cancellationToken);
+            InputSender.Press(NativeMethods.VK_RETURN);
+            await Delay(300, cancellationToken);
+            _log.Info("detail", $"cell committed row={visibleRow + 1} col={column} chars={value.Length}");
+            return;
+        }
+
+        throw new InvalidOperationException($"ERP 明細 row={visibleRow + 1}, column={column} 連續兩次都沒有進入編輯模式。");
     }
 
-    private async Task SelectUnitAsync(nint root, GridGeometry geometry, int visibleRow, string unit, CancellationToken cancellationToken)
+    private async Task SelectUnitAsync(nint root, WindowControl grid, GridGeometry geometry, int visibleRow, string unit, CancellationToken cancellationToken)
     {
-        if (!geometry.TryCellPoint(visibleRow, 4, out var point))
-            throw new InvalidOperationException("光學明細定位沒有辨識到「單位」欄。");
-
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("開啟單位 F2 前無法把 ERP 帶到前景。");
+        var (_, point, _) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 4, cancellationToken);
         InputSender.Click(point);
         await Delay(140, cancellationToken);
         InputSender.Press(NativeMethods.VK_F2);
@@ -349,6 +384,39 @@ internal sealed class ErpAutomationService
             throw new InvalidOperationException("F2 關閉後無法回到 ERP 前景。");
         await Delay(120, cancellationToken);
         _log.Info("detail", "F2 unit selected by OCR click + verified TcxGridSite focus + physical Enter");
+    }
+
+    private async Task<(GridGeometry Geometry, Point Point, Rectangle GridRect)> ResolveFreshDetailCellPointAsync(
+        nint gridHwnd,
+        GridGeometry geometry,
+        int visibleRow,
+        int column,
+        CancellationToken cancellationToken)
+    {
+        if (!NativeMethods.GetWindowRect(gridHwnd, out var fresh) || fresh.Width <= 0 || fresh.Height <= 0)
+            throw new InvalidOperationException("商品明細 grid 目前沒有有效畫面位置。");
+
+        var activeGeometry = geometry;
+        if (Math.Abs(fresh.Width - geometry.ScreenRect.Width) > 3 || Math.Abs(fresh.Height - geometry.ScreenRect.Height) > 3)
+        {
+            _log.Info("detail", $"grid size changed; reanalyzing old={geometry.ScreenRect.Width}x{geometry.ScreenRect.Height} new={fresh.Width}x{fresh.Height}");
+            activeGeometry = await _gridVision.AnalyzeDetailGridAsync(gridHwnd, cancellationToken);
+        }
+
+        if (!activeGeometry.TryCellPoint(visibleRow, column, out var capturedPoint))
+            throw new InvalidOperationException($"光學明細定位缺少 column={column}, row={visibleRow + 1}。");
+
+        if (!NativeMethods.GetWindowRect(gridHwnd, out fresh) || fresh.Width <= 0 || fresh.Height <= 0)
+            throw new InvalidOperationException("商品明細 grid 在點擊前失去有效畫面位置。");
+
+        var point = new Point(
+            capturedPoint.X + fresh.Left - activeGeometry.ScreenRect.Left,
+            capturedPoint.Y + fresh.Top - activeGeometry.ScreenRect.Top);
+        var rect = fresh.ToRectangle();
+        if (!rect.Contains(point))
+            throw new InvalidOperationException($"光學明細定位結果落在 grid 外：column={column}, row={visibleRow + 1}。");
+
+        return (activeGeometry, point, rect);
     }
 
     private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken)
