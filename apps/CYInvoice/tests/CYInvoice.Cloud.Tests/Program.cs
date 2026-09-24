@@ -469,7 +469,7 @@ static async Task TestDirectJoinClientAsync()
     {
         Equal("/v1/device-pairings/preview", request.RequestUri!.AbsolutePath, "pairing preview path");
         return JsonResponse(HttpStatusCode.OK,
-            $$"""{"workspace":{"workspaceId":"{{workspaceId}}","displayName":"志遠"}}""");
+            JsonSerializer.Serialize(new { workspace = new { workspaceId, displayName = "志遠" } }));
     });
     handler.Enqueue(request =>
     {
@@ -478,7 +478,9 @@ static async Task TestDirectJoinClientAsync()
         Equal(workspaceId, body.RootElement.GetProperty("workspaceId").GetString()!, "target Workspace");
         Equal("0001", body.RootElement.GetProperty("employeeNo").GetString()!, "target Workspace owner");
         return JsonResponse(HttpStatusCode.Created,
-            $$"""{"workspace":{"workspaceId":"{{workspaceId}}","displayName":"志遠"},"challenge":{"challengeId":"{{challengeId}}","maskedEmail":"ow***@example.test","expiresAt":"2026-09-25T01:00:00Z","resendAfter":"2026-09-25T00:51:00Z"}}""");
+            JsonSerializer.Serialize(new { workspace = new { workspaceId, displayName = "志遠" },
+                challenge = new { challengeId, maskedEmail = "ow***@example.test",
+                    expiresAt = "2026-09-25T01:00:00Z", resendAfter = "2026-09-25T00:51:00Z" } }));
     });
     handler.Enqueue(request =>
     {
@@ -488,7 +490,8 @@ static async Task TestDirectJoinClientAsync()
         Equal(challengeId, body.RootElement.GetProperty("emailChallengeId").GetString()!, "Email challenge");
         Equal("123456", body.RootElement.GetProperty("emailOtp").GetString()!, "Email OTP");
         return JsonResponse(HttpStatusCode.Created,
-            $$"""{"workspace":{"workspaceId":"{{workspaceId}}"},"device":{"deviceId":"dev_1","displayName":"新電腦"}}""");
+            JsonSerializer.Serialize(new { workspace = new { workspaceId },
+                device = new { deviceId = "dev_1", displayName = "新電腦" } }));
     });
     handler.Enqueue(request =>
     {
@@ -496,7 +499,8 @@ static async Task TestDirectJoinClientAsync()
         using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
         True(body.RootElement.GetProperty("directJoin").GetBoolean(), "direct pairing must request central authority");
         return JsonResponse(HttpStatusCode.Created,
-            $$"""{"workspace":{"workspaceId":"{{workspaceId}}"},"device":{"deviceId":"dev_2","displayName":"新電腦"}}""");
+            JsonSerializer.Serialize(new { workspace = new { workspaceId },
+                device = new { deviceId = "dev_2", displayName = "新電腦" } }));
     });
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));

@@ -25,6 +25,7 @@ internal sealed class CloudDirectJoinForm : Form
     private CloudWorkspacePreview? preview;
     private CloudDirectJoinChallenge? challenge;
     private bool busy;
+    private bool resourcesDisposed;
 
     public CloudDirectJoinForm(LocalRepository repository)
     {
@@ -268,7 +269,13 @@ internal sealed class CloudDirectJoinForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { lifetime.Cancel(); lifetime.Dispose(); http.Dispose(); }
+        if (disposing && !resourcesDisposed)
+        {
+            resourcesDisposed = true;
+            lifetime.Cancel();
+            lifetime.Dispose();
+            http.Dispose();
+        }
         base.Dispose(disposing);
     }
 }

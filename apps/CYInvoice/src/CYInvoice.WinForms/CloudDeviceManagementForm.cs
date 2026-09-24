@@ -284,11 +284,12 @@ internal sealed class CloudDeviceManagementForm : Form
     {
         if (Text != "裝置管理" || ShowIcon || AcceptButton is not null || CancelButton != close)
             throw new InvalidOperationException("裝置管理視窗基本屬性不正確");
-        if (otp.MaxLength != 6 || !pairingCode.ReadOnly || generate.Text != "產生配對碼")
+        if (otp.MaxLength != 6 || !pairingCode.ReadOnly || !workspaceId.ReadOnly
+            || generate.Text != "產生配對碼")
             throw new InvalidOperationException("裝置管理驗證碼或配對碼欄位設定不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         var logicalHeight = ClientSize.Height * 96D / DeviceDpi;
-        if (logicalWidth > 515 || logicalHeight > 280)
+        if (logicalWidth > 515 || logicalHeight > 322)
             throw new InvalidOperationException("裝置管理視窗尺寸異常");
     }
 
