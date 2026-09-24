@@ -22,18 +22,23 @@ function setupLedgerDesktopTools() {
   tools.id = 'ledgerDesktopTools';
   tools.className = 'ledger-desktop-tools';
   tools.innerHTML = `
-    <div class="ledger-month-tools">
-      <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月">‹</button>
-      <div id="ledgerMonthSlot"></div>
-      <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>
-      <span id="ledgerDisplayMonth" class="ledger-display-month"></span>
+    <div class="ledger-period-tools">
+      <div class="ledger-month-tools">
+        <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月">‹</button>
+        <div id="ledgerMonthSlot"></div>
+        <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>
+        <span id="ledgerDisplayMonth" class="ledger-display-month"></span>
+      </div>
+      <button id="ledgerOpeningBalanceButton" class="secondary compact ledger-tool-button emphasis" type="button">期初餘額</button>
     </div>
     <form id="ledgerSearchForm" class="ledger-search" role="search">
       <input id="ledgerSummarySearch" type="search" maxlength="100" placeholder="搜尋摘要">
       <button class="secondary compact" type="submit">搜尋</button>
       <button id="ledgerSearchClear" class="secondary compact" type="button">清除</button>
     </form>
-    <button id="ledgerGroupToggle" class="secondary compact" type="button" aria-pressed="false">帳戶分組</button>
+    <div class="ledger-view-tools">
+      <button id="ledgerGroupToggle" class="secondary compact" type="button" aria-pressed="false">帳戶分組</button>
+    </div>
   `;
   title.insertAdjacentElement('afterend', tools);
   document.querySelector('#ledgerMonthSlot')?.append(monthPicker);
@@ -123,7 +128,7 @@ function renderDesktopLedger() {
     ? allTransactions.filter(tx => String(tx.summary || '').toLocaleLowerCase('zh-Hant').includes(query))
     : [...allTransactions];
 
-  els.monthSummary.textContent = `期初 ${money(openingTotal)}　收入 ${money(income)}　支出 ${money(expense)}　淨利損 ${money(income - expense)}　期末 ${money(endingTotal)}${query ? `　｜搜尋顯示 ${visible.length}/${allTransactions.length} 筆` : ''}`;
+  els.monthSummary.innerHTML = `<span class="ledger-summary-item">期初 <strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item income">收入 <strong>${money(income)}</strong></span><span class="ledger-summary-item expense">支出 <strong>${money(expense)}</strong></span><span class="ledger-summary-item">淨利損 <strong>${money(income - expense)}</strong></span><span class="ledger-summary-item ending">期末 <strong>${money(endingTotal)}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
   const display = document.querySelector('#ledgerDisplayMonth');
   if (display) display.textContent = `目前顯示｜${month.replace('-', '/')}`;
   updateLedgerGroupButton();

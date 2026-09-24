@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/v06.css">
   <link rel="stylesheet" href="/v07.css">
   <link rel="stylesheet" href="/v08.css">
+  <link rel="stylesheet" href="/v09.css">
 </head>
 <body class="auth-locked">
   <div id="authOverlay" class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
@@ -29,7 +30,7 @@
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.8.0</span></p>
+      <p>CYAccounting Web <span class="version">V0.9.0</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -42,7 +43,7 @@
   <main class="shell">
     <section class="card entry-card">
       <div class="section-title">
-        <div class="title-with-badge"><h2>新增記帳</h2><span id="entryLockBadge" class="lock-badge hidden">本月已鎖帳</span></div>
+        <div class="title-with-badge"><h2>新增記帳</h2><fieldset class="entry-kind-switch-field"><legend>收支模式</legend><div class="entry-kind-switch" role="group" aria-label="收入或支出"><button type="button" class="kind-button" data-kind="income">收入</button><button type="button" class="kind-button active" data-kind="expense">支出</button></div></fieldset><span id="entryLockBadge" class="lock-badge hidden">本月已鎖帳</span></div>
         <span id="saveMessage" class="save-message"></span>
       </div>
 
@@ -50,7 +51,7 @@
         <div class="entry-grid">
           <label><span>日期</span><input id="txDate" type="date" required></label>
           <label><span>帳戶</span><select id="accountName" required></select></label>
-          <fieldset class="kind-field"><legend>收支</legend><div class="kind-buttons"><button type="button" class="kind-button active" data-kind="expense">支出</button><button type="button" class="kind-button" data-kind="income">收入</button></div></fieldset>
+          
           <label><span>科目</span><select id="categoryName" required></select></label>
           <label class="summary-field"><span>摘要</span><input id="summary" type="text" maxlength="100" placeholder="可留白"></label>
           <label class="amount-field"><span>金額</span><input id="amount" type="text" inputmode="numeric" maxlength="7" placeholder="0" required></label>
@@ -93,13 +94,21 @@
     </form>
   </dialog>
 
+
+  <dialog id="openingDialog" class="modal opening-modal">
+    <div class="modal-header"><div><h2>期初餘額</h2><p>設定選定月份各帳戶的期初金額；已鎖帳月份僅供檢視。</p></div><button class="icon-button" type="button" data-close-dialog="openingDialog" aria-label="關閉">×</button></div>
+    <div class="pane-heading opening-dialog-heading"><p class="hint">空白代表未設定；可輸入負數。歷史帳戶仍可查看既有設定。</p><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
+    <div id="openingRows" class="opening-list"></div>
+    <div id="openingMessage" class="dialog-message"></div>
+    <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="openingDialog">關閉</button><button id="saveOpeningButton" class="primary" type="button">儲存期初餘額</button></div>
+  </dialog>
+
   <dialog id="settingsDialog" class="modal settings-modal">
-    <div class="modal-header"><div><h2>設定</h2><p>帳戶、科目、期初餘額與鎖帳</p></div><button class="icon-button" type="button" data-close-dialog="settingsDialog" aria-label="關閉">×</button></div>
+    <div class="modal-header"><div><h2>設定</h2><p>帳戶、科目與鎖帳</p></div><button class="icon-button" type="button" data-close-dialog="settingsDialog" aria-label="關閉">×</button></div>
     <div class="settings-layout">
       <nav class="settings-nav" aria-label="設定分類">
         <button type="button" class="settings-tab active" data-settings-tab="accounts">帳戶</button>
         <button type="button" class="settings-tab" data-settings-tab="categories">科目</button>
-        <button type="button" class="settings-tab" data-settings-tab="opening">期初餘額</button>
         <button type="button" class="settings-tab" data-settings-tab="lock">鎖帳</button>
       </nav>
       <div class="settings-content">
@@ -116,11 +125,6 @@
           <div class="inline-add"><input id="newGroupName" type="text" maxlength="60" placeholder="新增大分類"><button id="addGroupButton" class="secondary" type="button">新增大分類</button></div>
         </section>
 
-        <section class="settings-pane" data-settings-pane="opening">
-          <div class="pane-heading"><div><h3>期初餘額</h3><p class="hint">空白代表未設定；可輸入負數。已鎖定月份不可修改。</p></div><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
-          <div id="openingRows" class="opening-list"></div>
-          <div class="modal-actions"><button id="saveOpeningButton" class="primary" type="button">儲存期初餘額</button></div>
-        </section>
 
         <section class="settings-pane" data-settings-pane="lock">
           <h3>月份鎖帳</h3>
@@ -140,5 +144,6 @@
   <script src="/v06.js" defer></script>
   <script src="/v07.js" defer></script>
   <script src="/v08.js" defer></script>
+  <script src="/v09.js" defer></script>
 </body>
 </html>
