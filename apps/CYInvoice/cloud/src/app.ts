@@ -7,6 +7,7 @@ import { handleEmployeeManagement } from "./employee-management";
 import { handleEmployeeAccountOperations } from "./employee-account-operations";
 import { handleSuperAdminTransfer } from "./super-admin-transfer";
 import { handleWebAuth } from "./web-auth";
+import { handleWebPasswordRecovery } from "./web-password-recovery";
 
 interface Env {
   DB: D1Database;
@@ -15,6 +16,8 @@ interface Env {
   SCHEMA_VERSION: string;
   WEB_LOGIN_EMPLOYEE_RATE_LIMIT: RateLimit;
   WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
+  WEB_PASSWORD_RESET_EMPLOYEE_RATE_LIMIT: RateLimit;
+  WEB_PASSWORD_RESET_IP_RATE_LIMIT: RateLimit;
   BOOTSTRAP_KEY?: string;
   OTP_PEPPER?: string;
   EMAIL_PROVIDER?: string;
@@ -25,6 +28,9 @@ interface Env {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const passwordRecoveryResponse = await handleWebPasswordRecovery(request, env);
+    if (passwordRecoveryResponse) return passwordRecoveryResponse;
+
     const webAuthResponse = await handleWebAuth(request, env);
     if (webAuthResponse) return webAuthResponse;
 

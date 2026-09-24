@@ -7,7 +7,7 @@
   "vars": {
     "APP_ENV": "development",
     "API_VERSION": "1",
-    "SCHEMA_VERSION": "7"
+    "SCHEMA_VERSION": "8"
   },
   "d1_databases": [
     {
@@ -31,6 +31,22 @@
       "namespace_id": "3102",
       "simple": {
         "limit": 40,
+        "period": 60
+      }
+    },
+    {
+      "name": "WEB_PASSWORD_RESET_EMPLOYEE_RATE_LIMIT",
+      "namespace_id": "3103",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    },
+    {
+      "name": "WEB_PASSWORD_RESET_IP_RATE_LIMIT",
+      "namespace_id": "3104",
+      "simple": {
+        "limit": 60,
         "period": 60
       }
     }
