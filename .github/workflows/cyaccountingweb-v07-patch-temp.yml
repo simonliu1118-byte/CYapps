@@ -1,0 +1,83 @@
+name: CYAccountingWeb V0.7 Patch (Temporary)
+
+on:
+  push:
+    branches:
+      - cyaccountingweb/v0.7-entry-workflow
+    paths:
+      - '.github/workflows/cyaccountingweb-v07-patch-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccountingweb/v0.7-entry-workflow
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Finalize V0.7 files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          index = Path('apps/CYAccountingWeb/public/index.html')
+          text = index.read_text(encoding='utf-8')
+          text = text.replace(
+              '  <link rel="stylesheet" href="/v06.css">\n',
+              '  <link rel="stylesheet" href="/v06.css">\n  <link rel="stylesheet" href="/v07.css">\n',
+              1,
+          )
+          text = text.replace('V0.6.0</span>', 'V0.7.0</span>', 1)
+          text = text.replace(
+              '  <script src="/v06.js" defer></script>\n',
+              '  <script src="/v06.js" defer></script>\n  <script src="/v07.js" defer></script>\n',
+              1,
+          )
+          index.write_text(text, encoding='utf-8')
+
+          Path('apps/CYAccountingWeb/VERSION').write_text('0.7.0\n', encoding='utf-8')
+
+          todo = Path('apps/CYAccountingWeb/TODO.md')
+          text = todo.read_text(encoding='utf-8')
+          text = text.replace(
+              '- [ ] 輸入確認區：最近 10 筆存檔結果、成功／失敗狀態與千分位顯示。',
+              '- [x] 輸入確認區：最近 10 筆存檔結果、成功／失敗狀態與千分位顯示（V0.7.0；位於輸入區與資料清單之間）。',
+              1,
+          )
+          todo.write_text(text, encoding='utf-8')
+
+          workflow = Path('.github/workflows/cyaccountingweb-deploy.yml')
+          text = workflow.read_text(encoding='utf-8')
+          needle = '          node --check public/v06.js\n'
+          replacement = needle + '          node --check public/v07.js\n'
+          if 'node --check public/v07.js' not in text:
+              if needle not in text:
+                  raise SystemExit('v06 syntax check line not found')
+              text = text.replace(needle, replacement, 1)
+          workflow.write_text(text, encoding='utf-8')
+          PY
+
+          node --check apps/CYAccountingWeb/public/v07.js
+          grep -q 'V0.7.0' apps/CYAccountingWeb/public/index.html
+          grep -q '/v07.css' apps/CYAccountingWeb/public/index.html
+          grep -q '/v07.js' apps/CYAccountingWeb/public/index.html
+          grep -q 'node --check public/v07.js' .github/workflows/cyaccountingweb-deploy.yml
+
+          git rm .github/workflows/cyaccountingweb-v07-patch-temp.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/CYAccountingWeb/public/index.html \
+                  apps/CYAccountingWeb/VERSION \
+                  apps/CYAccountingWeb/TODO.md \
+                  .github/workflows/cyaccountingweb-deploy.yml
+          git commit -m 'feat(CYAccountingWeb): finalize V0.7 entry workflow'
+          git push origin HEAD:cyaccountingweb/v0.7-entry-workflow
