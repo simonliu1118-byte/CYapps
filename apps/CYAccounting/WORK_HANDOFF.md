@@ -1,24 +1,24 @@
 # CYAccounting — Work 接手文件
 
-> 最後整理：2026-09-11
+> 最後整理：2026-09-24
 > 
 > 專案：志遠記帳系統 / CYAccounting
 > 
-> 目前開發版本：V1.0.26（完成 PR/merge 後以 `main` 為正式基準）
+> 目前 `main` 原始碼版本：V1.0.27 Build 2；正式 GitHub Release 尚未發布
 
 ## 1. 接手原則
 
 本文件用來把原本 Chat 對話中的產品決策、UI 規則、資料規則與目前待處理事項帶到 ChatGPT Work。
 
-**原始碼永遠以 GitHub `main` 的 `apps/CYAccounting/` 為實作真實來源。** 本文件是需求／設計／待辦的交接說明，不應覆蓋實際 source 的行為。開始任何修改前，先完整閱讀 `app/`、`launcher_go/`、`tests/`、`README.md`、版本檔與 CI，再確認現況。
+**原始碼以 GitHub `main` 的 `apps/CYAccounting/` 為實作現況來源。** 本文件是歷史需求與接手說明，不是另一套永久規則。開始修改前先依根 `AGENTS.md` 讀取正式規則鏈，並確認 `main`、相關 source、tests、版本檔與 CI。
 
 若本文件和 source 有衝突：
 
 1. 「目前已實作什麼」以 source 為準。
-2. 「使用者要什麼」以本文件中標註的產品規則與待辦為準。
+2. 「使用者要什麼」以本次明確指示及 `PROJECT_RULES.md` 為準；本文件供歷史需求參考。
 3. 不要憑印象重寫架構；先找出差異，再修改。
 
-## 2. 命名與不可變規則
+## 2. 產品背景與命名
 
 - 程式視窗名稱：**志遠記帳系統**。
 - 專案／資料夾／程式識別：`CYAccounting` / `CY`。
@@ -28,25 +28,24 @@
 - UI 語言：繁體中文。
 - 使用者非 IT 背景，因此錯誤訊息、備份、恢復、匯入流程要可理解，不能要求使用者自行處理開發環境。
 
-## 3. 目前正式版本與 Git 狀態
+## 3. 目前原始碼版本與交付狀態
 
-- 本次修正版：V1.0.26。
-- 正式 source：`apps/CYAccounting/`。
-- 版本檔：`apps/CYAccounting/V1.0.26.txt`。
-- CI：`.github/workflows/cyaccounting-build.yml`，直接執行原始測試，不得於 CI 內臨時改寫測試內容。
+- GitHub `main` 原始碼：V1.0.27 Build 2（`VERSION=1.0.27`、`BUILD=2`）；PR #122 已合併。這是原始碼基準與測試包身分，尚非正式 Release。
+- 版本紀錄：`apps/CYAccounting/V1.0.27.txt`；上一版變更見 `V1.0.26.txt`。
+- CI：`.github/workflows/cyaccounting-build.yml`，執行原始測試、Windows 建置、封裝與可攜包驗證。自動驗證不取代 Windows 實機操作驗收。
 - Git 只保存 source、測試、建置設定與文件；正式資料庫、LOG、使用者 OAuth、可執行發行包等 runtime 內容不要進 Git。
 
-### 發行包命名規則
+### 測試包與發行包
 
 ZIP 外部檔名可以帶版本，例如：
 
-`CYAccounting_V1.0.26_Windows.zip`
+`CYAccounting_V1.0.27_Build_2_Windows_x64.zip`
 
 但解壓縮後的根目錄固定為：
 
 `CYAccounting\`
 
-**根目錄名稱不要含版本號。** 版本資訊放在根目錄中的版本文字檔。
+**根目錄名稱不含版本號。** Actions Artifact 的下載檔本身就是 ZIP；解壓縮一次便看到 `CYAccounting/` 與其中的 `CYAccounting.exe`，不再放第二層 ZIP 或額外 SHA 檔。CI 內仍驗證雜湊；正式 Release 的 SHA-256 依正式發行規則提供。
 
 ## 4. 程式架構
 
@@ -392,7 +391,9 @@ ZIP 外部檔名可以帶版本，例如：
 
 UI 要緊湊；按鈕、combo、input 不要過高。
 
-高風險／破壞性操作的授權細節不要複製到一般 handoff 文件；實作前直接檢查 source，並維持原有保護機制。
+目前設定頁的程式資訊區保留「清除所有記帳資料與期初餘額」。按下後有兩個獨立輸入視窗，兩次均需輸入完全相同的大寫 `DELETE`；取消或任一次輸入錯誤不執行清除。`DELETE` 是防誤觸確認文字，不是密碼。
+
+成功時重置本機目前這份帳本的交易、期初餘額、帳戶、科目、鎖帳、本機偏好及 Google Drive 本機連結；預設帳戶／科目重新建立。清除前須先建立可驗證的復原備份；既有本機和雲端備份保留，雲端既有資料不受本機清除影響。若資料庫使用自訂位置，設定仍指向該位置，避免下次誤開舊帳本。具體範圍以 `PROJECT_RULES.md` 與目前 source 為準。
 
 ## 19. 已知歷史問題，避免回歸
 
@@ -416,34 +417,12 @@ V1.0.25 當時的 CI 只在 runtime 建立臨時測試副本修正這兩個 fixt
 
 V1.0.26 已正式修正上述兩個 fixture，並移除 CI 的臨時文字取代。後續應持續維持 source tests 與 CI 實際執行內容完全一致。
 
-CI 同時會保存 V1.0.26 的可重現原始碼封存檔與 `.sha256` 為可下載 artifact。`SOURCE_SHA256.txt` 刻意不納入封存，避免雜湊值自我循環；CI 完成後應將實際值記回該檔。
+目前 CI 另保存可重現原始碼封存檔與 `.sha256` 作為獨立 artifact；它不是一般使用者的 Windows 可攜下載包。`SOURCE_SHA256.txt` 不納入封存，以免雜湊值自我循環。
 
-## 21. 下一個開發回合的優先工作
+## 21. 下個回合：Icon 與 UI
 
-開始 Work 後，建議依序：
+使用者接下來要移到 Chat 討論 Icon 與 UI；目前沒有指定圖案或新畫面定稿。下個回合先讀 GitHub `main` 最新 source 和三層規則；視覺工作另依 `REPO_POLICY.md` 讀 AITeam `main` 的 canonical Desktop Visual Guide 與 Icon Family，再核對使用者提供的截圖和實機回饋。
 
-1. V1.0.26 合併後以 Windows 實機確認啟動、背景 Drive 同步及關閉保護。
-2. 以既有正式資料庫副本測試設定檔復原、備份與還原，確認不改寫歷史交易。
-3. 確認最新 UI：
-   - 常用摘要 chip 是否仍被裁切。
-   - 常用科目到主要輸入列的垂直距離。
-   - 常用摘要和常用科目的視覺層級是否足夠區分。
-4. 任何後續功能修改都從 `main` 開新 branch，跑 CI，PR，再 merge。
-5. 發行時提供 Windows ZIP、source ZIP、SHA-256；可攜包根目錄固定 `CYAccounting`。
+待實機驗收：Windows 深色模式下淺色標題列、清單及對話框的可讀性；解壓一次後的啟動與 Icon 顯示；以帳本副本測試雙重 `DELETE`、重置前備份、保留既有備份及自訂資料庫位置。不要把 CI 啟動測試表述成這些操作都已在使用者電腦通過。
 
-## 22. Work 的行為要求
-
-- 不要只讀 README 就假設功能真的符合畫面需求；UI 問題要看 source、實機結果、使用者 screenshot。
-- 使用者說「先討論／先不要做」時，只討論，不改 source、不建置。
-- 使用者說「可以改／開始做／繼續做」後，再實作。
-- 修改前先確認目前 branch、version、source 架構。
-- 不要為了美觀大幅改架構；穩定性優先。
-- 可以改善 UI，但不能破壞 keyboard flow、IME、DB 相容性、歷史資料、鎖帳與備份。
-- 發現 README、測試、實作三者不一致時，要明確指出，不可暗自選一個猜。
-- 技術決策以低維護、Windows 使用者可直接操作為優先。
-
-## 23. Work 開場建議
-
-在新的 Work 對話先要求它：
-
-> 先完整讀取 GitHub `simonliu1118-byte/CYapps` 的 `main`，重點是 `apps/CYAccounting/` 與 `apps/CYAccounting/WORK_HANDOFF.md`。不要立刻重寫或改版。以 `main` 的 V1.0.26 為正式基準，先確認目前資料模型、PySide6 UI lifecycle、SQLite 寫入／鎖帳／備份、Google Drive／Import 架構、Go launcher、tests 與 GitHub Actions。接著做「目前 source 實況 vs WORK_HANDOFF 產品規則／待辦」差異表，再等我指定下一步。中文一律繁體中文；志遠的英文識別只能用 CY / Chihyuan / Chih-yuan，不得使用 Zhiyuan。
+既有 UI 觀察點：常用摘要 chip 裁切、常用科目到主要輸入列的距離、常用摘要與常用科目的層級。Icon 和 UI 的具體修改範圍由下一輪使用者需求決定；維持既有鍵盤流程、IME、帳本相容性與備份功能。
