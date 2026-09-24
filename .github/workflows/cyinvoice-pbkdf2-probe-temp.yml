@@ -14,16 +14,20 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: development
     defaults:
       run:
         working-directory: apps/CYInvoice/cloud
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
       - run: npm install --no-audit --no-fund
-      - name: Run PBKDF2 in Workers runtime locally
+      - name: Run PBKDF2 in remote Workers runtime
         shell: bash
         run: |
           set -euo pipefail
@@ -54,13 +58,21 @@ jobs:
             }
           };
           JS
-          npx wrangler dev /tmp/pbkdf2-probe.js --local --port 8799 > /tmp/pbkdf2-wrangler.log 2>&1 &
+          npx wrangler dev /tmp/pbkdf2-probe.js --remote --port 8799 > /tmp/pbkdf2-wrangler.log 2>&1 &
           pid=$!
           trap 'kill $pid 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do
-            if curl --silent --fail http://127.0.0.1:8799 > /tmp/pbkdf2-result.json; then break; fi
+          success=0
+          for i in $(seq 1 45); do
+            if curl --silent --show-error --output /tmp/pbkdf2-result.json http://127.0.0.1:8799; then
+              if [ -s /tmp/pbkdf2-result.json ]; then success=1; break; fi
+            fi
             sleep 1
           done
-          cat /tmp/pbkdf2-result.json
+          echo '--- result ---'
+          cat /tmp/pbkdf2-result.json 2>/dev/null || true
+          echo
+          echo '--- wrangler tail ---'
+          tail -n 80 /tmp/pbkdf2-wrangler.log || true
+          [ "$success" = 1 ]
           grep -q '"ok":true' /tmp/pbkdf2-result.json
           grep -q '"formatOk":true' /tmp/pbkdf2-result.json
