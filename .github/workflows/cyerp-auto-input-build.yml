@@ -34,13 +34,19 @@ jobs:
           if ($build -notmatch '^\d+$') { throw "Invalid CYERPAutoInput BUILD: $build" }
           $suffix = ""
           if ([int]$build -gt 0) { $suffix = "-build$build" }
+          $packageFolder = "CYERPAutoInput-v$version$suffix-windows-x64"
           "CYERPAUTOINPUT_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CYERPAUTOINPUT_BUILD=$build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CYERPAUTOINPUT_ARTIFACT_SUFFIX=$suffix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CYERPAUTOINPUT_PACKAGE_FOLDER=$packageFolder" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
+
+      - name: Fetch canonical CYERPAutoInput icon
+        shell: pwsh
+        run: ./tools/fetch-canonical-icon.ps1
 
       - name: Restore
         shell: pwsh
@@ -58,16 +64,18 @@ jobs:
         shell: pwsh
         run: |
           Remove-Item -Recurse -Force package -ErrorAction SilentlyContinue
-          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:Version=$env:CYERPAUTOINPUT_VERSION -o package
-          if (-not (Test-Path "package/CYERPAutoInput.exe")) { throw "CYERPAutoInput.exe was not produced" }
-          Get-FileHash "package/CYERPAutoInput.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  CYERPAutoInput.exe" } | Set-Content "package/SHA256.txt"
-          Copy-Item README.md "package/README.md"
-          Copy-Item settings.example.json "package/settings.example.json"
+          $outDir = Join-Path "package" $env:CYERPAUTOINPUT_PACKAGE_FOLDER
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:Version=$env:CYERPAUTOINPUT_VERSION -o $outDir
+          if (-not (Test-Path "$outDir/CYERPAutoInput.exe")) { throw "CYERPAutoInput.exe was not produced" }
+          Get-FileHash "$outDir/CYERPAutoInput.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  CYERPAutoInput.exe" } | Set-Content "$outDir/SHA256.txt"
+          Copy-Item README.md "$outDir/README.md"
+          Copy-Item settings.example.json "$outDir/settings.example.json"
 
       - name: Upload engineering package
         uses: actions/upload-artifact@v7
         with:
           name: CYERPAutoInput-v${{ env.CYERPAUTOINPUT_VERSION }}${{ env.CYERPAUTOINPUT_ARTIFACT_SUFFIX }}-windows-x64-run${{ github.run_number }}
-          path: apps/CYERPAutoInput/package/*
+          path: apps/CYERPAutoInput/package
           if-no-files-found: error
           retention-days: 14

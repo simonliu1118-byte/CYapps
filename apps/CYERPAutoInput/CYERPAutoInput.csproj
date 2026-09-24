@@ -14,6 +14,7 @@
     <PublishTrimmed>false</PublishTrimmed>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\Auto.ico</ApplicationIcon>
     <AssemblyName>CYERPAutoInput</AssemblyName>
     <RootNamespace>CYERPAutoInput</RootNamespace>
     <Version>0.1.0</Version>

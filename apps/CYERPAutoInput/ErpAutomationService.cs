@@ -58,7 +58,7 @@ internal sealed class ErpAutomationService
 
         if (snapshot.Details.Count > 0)
         {
-            progress.Report("ERP：光學定位商品明細…");
+            progress.Report("ERP：啟用並光學定位商品明細…");
             await FillDetailsAsync(root, snapshot.Details, progress, cancellationToken);
         }
 
@@ -234,15 +234,20 @@ internal sealed class ErpAutomationService
     {
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("輸入明細前無法把 ERP 帶到前景。");
+
         var grid = FindDetailGrid(root) ?? throw new InvalidOperationException("找不到 ERP 商品明細 TcxGridSite。");
-        var geometry = await _gridVision.AnalyzeDetailGridAsync(grid.Handle, cancellationToken);
+
+        // COPI08 does not expose the real first detail row until the user first clicks
+        // the blank detail area. Build 4 OCR'd too early and therefore saw headers such
+        // as 單位/庫別 but no 品號/數量. Reproduce the real ERP interaction first,
+        // then refresh the grid and perform optical geometry analysis.
+        await PrimeDetailGridAsync(root, grid, cancellationToken);
+        (grid, var geometry) = await AnalyzePrimedDetailGridAsync(root, grid, cancellationToken);
         if (geometry.RowCenterY.Count == 0)
             throw new InvalidOperationException("光學辨識沒有找到任何可輸入的明細列。");
 
-        // Preserve the proven COPI08 sequence from the Go line: first activate the
-        // detail grid/first row with a real click, then re-click the exact requested
-        // cell for editing. On an inactive TcxGridSite, the first click can be consumed
-        // by row/grid activation rather than by the cell editor.
+        // The priming click creates/activates the first row. Once optical geometry is
+        // available, click the exact item-code cell again before entering its editor.
         await ActivateDetailFirstRowAsync(root, grid, geometry, cancellationToken);
 
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
@@ -279,6 +284,59 @@ internal sealed class ErpAutomationService
             if (!string.IsNullOrWhiteSpace(row.Batch))
                 _log.Info("detail", $"batch requested row={rowIndex + 1}; batch automation remains deferred");
         }
+    }
+
+    private async Task PrimeDetailGridAsync(nint root, WindowControl grid, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("啟用商品明細區前無法把 ERP 帶到前景。");
+        if (!NativeMethods.GetWindowRect(grid.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 45)
+            throw new InvalidOperationException("商品明細區目前沒有有效畫面位置。");
+
+        // This reproduces the proven first-row position from the Go implementation:
+        // first item column at ~5.2% of the TcxGridSite width, first row center at y+33.
+        // It is only used to materialize the ERP row; all actual field writes still use
+        // OCR-derived geometry and editor/focus verification.
+        var relativeX = (int)Math.Round(rect.Width * 0.052);
+        relativeX = Math.Clamp(relativeX, 28, Math.Max(28, rect.Width - 24));
+        var relativeY = Math.Clamp(33, 24, Math.Max(24, rect.Height - 12));
+        var point = new Point(rect.Left + relativeX, rect.Top + relativeY);
+        InputSender.Click(point);
+        await Delay(320, cancellationToken);
+
+        var focus = NativeMethods.FocusedControlOfForeground(root);
+        _log.Info("detail", $"blank-grid prime click point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)}");
+    }
+
+    private async Task<(WindowControl Grid, GridGeometry Geometry)> AnalyzePrimedDetailGridAsync(
+        nint root,
+        WindowControl initialGrid,
+        CancellationToken cancellationToken)
+    {
+        Exception? last = null;
+        var grid = initialGrid;
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Win32Automation.PrepareForeground(root, _log))
+                throw new InvalidOperationException("辨識商品明細前無法把 ERP 帶到前景。");
+
+            grid = FindDetailGrid(root) ?? grid;
+            try
+            {
+                var geometry = await _gridVision.AnalyzeDetailGridAsync(grid.Handle, cancellationToken);
+                _log.Info("detail", $"geometry ready after grid prime attempt={attempt} rows={geometry.RowCenterY.Count} columns={geometry.ColumnX.Count}");
+                return (grid, geometry);
+            }
+            catch (InvalidOperationException ex) when (attempt < 3 && ex.Message.StartsWith("Optical detail", StringComparison.Ordinal))
+            {
+                last = ex;
+                _log.Warn("detail", $"geometry not ready after grid prime attempt={attempt}: {ex.Message}");
+                await Delay(220, cancellationToken);
+            }
+        }
+
+        throw new InvalidOperationException("已點擊商品明細區，但等待第一列建立後仍無法辨識品號／數量欄位。", last);
     }
 
     private WindowControl? FindDetailGrid(nint root)
