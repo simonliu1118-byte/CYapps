@@ -1,4 +1,4 @@
-志遠記帳系統 V1.0.28 原始碼
+志遠記帳系統 V1.1.0 原始碼
 
 Windows x64 測試包
 - CYAccounting Build 的成功執行頁面會提供短期 Actions Artifact；下載後解壓縮一次，就會看到 `CYAccounting` 資料夾，從裡面執行 `CYAccounting.exe`，不用另裝 Python，也不用再解第二個 ZIP。校驗檔由 CI 內部檢查。
@@ -6,10 +6,16 @@ Windows x64 測試包
 - 更新前先備份原本的 `Data` 資料夾；測試包本身的 `Data` 必須是空的，不能拿舊版程式資料夾直接覆蓋。
 - 預設記帳資料存在可攜程式資料夾的 `Data` 內；只刪除 `CYAccounting.exe` 不會刪除帳本。若要連預設帳本一起移除，必須確認備份後刪除整個可攜程式資料夾；若曾改過資料庫位置或同步到 Google Drive，其他位置的資料不受影響。
 
-V1.0.28 更新重點
+V1.1.0 更新重點
+- 正式導入 AITeam 已核准的 CYAccounting `ACC` Icon Family；`app.ico` 為 16/24/32/48/64/128/256 七層 Windows ICO，視窗與 `CYAccounting.exe` 共用同一正式來源。
+- 同步保留正式 `ACC.svg` 與 256px `app.png`；Windows CI 驗證 ICO 七層尺寸與最終 EXE associated icon resource。
+- 本版尚未包含下一階段 CY Desktop Visual Guide Phase 1 UI 視覺改造；既有記帳流程、鍵盤操作、資料庫、備份、匯入、Google Drive、鎖帳與本機帳本重置行為未變更。
+- V1.0.28 僅為本次 Icon 導入期間的測試版本識別，不作為正式 GitHub Release。
+
+V1.0.28 測試版本紀錄
 - 換用 AITeam 已核准的 CYAccounting `ACC` 正式 Icon Family 資產；`app.ico` 為 16/24/32/48/64/128/256 七層 Windows ICO，視窗與 `CYAccounting.exe` 共用同一正式來源。
 - 同步保留正式 `ACC.svg` 與 256px `app.png`；本次不重新生成另一套圖示。
-- 本版工作項目接續進行 CY Desktop Visual Guide Phase 1 視覺對齊；目前 Icon 已先導入，既有記帳流程、鍵盤操作、資料庫、備份、匯入、Google Drive、鎖帳與本機帳本重置行為未變更。
+- 此版本用於 Icon 導入與測試，正式發布版本號改為 V1.1.0。
 
 V1.0.27 更新重點
 - Build 2：設定頁原位置恢復「清除所有記帳資料與期初餘額」。必須連續兩次獨立輸入大寫 `DELETE` 才會重置整份本機帳本；取消或任一步輸入錯誤都不會清除。交易、期初、帳戶、科目、鎖帳、本機偏好和 Google Drive 本機連結會重置；既有備份保留，清除前另建立可還原的本機備份。自訂資料庫路徑仍指向同一位置，以免誤開舊帳本。`DELETE` 只是防誤觸文字，不是管理密碼。
