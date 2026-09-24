@@ -46,7 +46,7 @@ const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 const OTP_HOURLY_LIMIT = 5;
 const OTP_MAX_ATTEMPTS = 5;
-const PASSWORD_ITERATIONS = 210_000;
+const PASSWORD_ITERATIONS = 100_000;
 const APPLICATION_POLICIES: Record<string, ReadonlySet<string>> = {
   CYAccountingWeb: new Set(["SUPER_ADMIN", "ADMIN"]),
 };

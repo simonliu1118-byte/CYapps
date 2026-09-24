@@ -6,7 +6,7 @@ namespace CYInvoice.Core.Cloud;
 
 public static class CloudEmployeeCredentialVerifier
 {
-    private const int PasswordIterations = 210_000;
+    private const int PasswordIterations = 100_000;
     private const string PasswordAlgorithm = "pbkdf2-sha256";
 
     public static string Create(string password)
