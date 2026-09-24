@@ -77,7 +77,7 @@ class NameDialog(QDialog):
         self.edit.selectAll()
         layout.addWidget(self.edit)
         self.error = QLabel("")
-        self.error.setStyleSheet("color:#c62828;font-weight:bold;")
+        self.error.setStyleSheet("color:#B43737;font-weight:bold;")
         layout.addWidget(self.error)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText("確定")
@@ -112,7 +112,7 @@ class AccountManagerDialog(QDialog):
         outer = QVBoxLayout(self)
         note = QLabel("帳戶名稱上限8個中文字；點擊第一欄可設為預設帳戶。\n修改或刪除帳戶不會變更歷史記帳資料。")
         note.setWordWrap(True)
-        note.setStyleSheet("color:#5d6875;")
+        note.setStyleSheet("color:#667085;")
         outer.addWidget(note)
 
         self.list = QTreeWidget()
@@ -255,7 +255,7 @@ class CategoryPage(QWidget):
         count_row = QHBoxLayout()
         count_row.addStretch(1)
         self.favorite_count_label = QLabel("")
-        self.favorite_count_label.setStyleSheet("color:#5d6875;font-weight:bold;")
+        self.favorite_count_label.setStyleSheet("color:#667085;font-weight:bold;")
         count_row.addWidget(self.favorite_count_label)
         outer.addLayout(count_row)
         self.tree = QTreeWidget()
@@ -509,7 +509,7 @@ class CategoryManagerDialog(QDialog):
         self.setFixedWidth(400)
         outer = QVBoxLayout(self)
         note = QLabel("大分類與科目名稱上限8個中文字；科目名稱不可重複。歷史資料不會隨科目改名或刪除而變更。")
-        note.setWordWrap(True); note.setStyleSheet("color:#5d6875;")
+        note.setWordWrap(True); note.setStyleSheet("color:#667085;")
         outer.addWidget(note)
         tabs = QTabWidget()
         tabs.addTab(CategoryPage(db, "income"), "收入科目")
@@ -530,7 +530,7 @@ class OpeningBalanceDialog(QDialog):
         outer.setContentsMargins(14, 12, 14, 12)
         outer.setSpacing(8)
         note = QLabel("每個帳戶分開設定；可輸入負數。空白代表尚未設定。")
-        note.setStyleSheet("color:#5d6875;")
+        note.setStyleSheet("color:#667085;")
         note.setWordWrap(True)
         outer.addWidget(note)
 
@@ -569,7 +569,7 @@ class OpeningBalanceDialog(QDialog):
         f = self.total.font(); f.setBold(True); self.total.setFont(f)
         outer.addWidget(self.total)
         self.error = QLabel("")
-        self.error.setStyleSheet("color:#c62828;font-weight:bold;")
+        self.error.setStyleSheet("color:#B43737;font-weight:bold;")
         self.error.setWordWrap(True)
         outer.addWidget(self.error)
 
@@ -670,9 +670,9 @@ class EditTransactionDialog(QDialog):
         form.addRow(("收入" if tx["kind"] == "income" else "支出") + "科目：", self.category)
         self.summary = WeightedLineEdit(40); self.summary.setText(tx["summary"])
         form.addRow(("收入" if tx["kind"] == "income" else "支出") + "摘要：", self.summary)
-        self.amount = QLineEdit(str(tx["amount"])); self.amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.amount))
+        self.amount = QLineEdit(str(tx["amount"])); self.amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.amount)); self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.addRow(("收入" if tx["kind"] == "income" else "支出") + "金額：", self.amount)
-        self.error = QLabel(""); self.error.setStyleSheet("color:#c62828;font-weight:bold;")
+        self.error = QLabel(""); self.error.setStyleSheet("color:#B43737;font-weight:bold;")
         form.addRow(self.error)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Save).setText("儲存修改")
@@ -726,14 +726,10 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("系統設定")
         self.setObjectName("settingsDialog")
         self.setModal(True)
-        self.resize(700, 650)
-        self.setStyleSheet(
-            "QDialog#settingsDialog QPushButton, QDialog#settingsDialog QLineEdit, "
-            "QDialog#settingsDialog QComboBox, QDialog#settingsDialog QSpinBox {"
-            "min-height:21px; max-height:24px; padding-top:0px; padding-bottom:0px;}"
-            "QDialog#settingsDialog QGroupBox {padding-top:9px; padding-bottom:7px;}"
-        )
+        self.resize(760, 700)
         outer = QVBoxLayout(self)
+        outer.setContentsMargins(16, 12, 16, 12)
+        outer.setSpacing(10)
 
         db_box = QGroupBox("資料庫儲存位置")
         db_layout = QGridLayout(db_box)
