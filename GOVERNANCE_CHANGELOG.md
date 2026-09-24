@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.10 — 2026/09/24
+
+- 依使用者決定，CYAccounting 單機版不再提供整批清除交易與期初餘額入口；取消先前 P0 指定的自訂密碼替代方案，要求移除固定密碼及清除功能。
+- 說明可攜版預設資料夾、自訂資料庫與雲端備份各自的保存位置；保留歷史帳本、備份及原本的設定頁鎖帳調整功能。
+- CYAccounting 版本基準指向 `main` 中的 `VERSION`，不把舊版號寫成永久規則。
+
 ## 2.3.9 — 2026/09/24
 
 - 正式採用 AITeam `main/shared/cy-visual/desktop/CY_DESKTOP_VISUAL_GUIDE.md` 為 CY Windows 桌面專案共用視覺 canonical source，並採用 `shared/cy-visual/icon-family/` 為 Icon Family 唯一 family-level source。
