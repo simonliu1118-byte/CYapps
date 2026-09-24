@@ -8,8 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const currentUser = document.querySelector('#currentUser');
   const logoutButton = document.querySelector('#logoutButton');
   const loginCard = overlay?.querySelector('.auth-card');
-  const version = document.querySelector('.version');
-  if (version) version.textContent = 'V0.5.0';
 
   const forgotButton = document.createElement('button');
   forgotButton.type = 'button';
