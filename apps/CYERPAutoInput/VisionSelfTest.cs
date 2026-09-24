@@ -8,6 +8,7 @@ internal static class VisionSelfTest
     {
         try
         {
+            Console.WriteLine("CYERPAutoInput vision self-test begin");
             log.Info("selftest", "vision self-test begin");
 
             using var image = new Bitmap(900, 320);
@@ -18,7 +19,7 @@ internal static class VisionSelfTest
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
                 using var font = new Font("Segoe UI", 34, FontStyle.Bold, GraphicsUnit.Pixel);
                 using var pen = new Pen(Color.FromArgb(90, 90, 90), 1);
-                g.DrawString("VISION TEST", font, Brushes.Black, new PointF(55, 22));
+                g.DrawString("12345", font, Brushes.Black, new PointF(55, 22));
                 foreach (var y in new[] { 105, 150, 195, 240, 285 })
                     g.DrawLine(pen, 15, y, 880, y);
             }
@@ -54,16 +55,22 @@ internal static class VisionSelfTest
             if (unitCandidate is null || unitCandidate.Rect.Top != 112)
                 throw new InvalidOperationException("F2 requested-unit candidate selection failed.");
 
+            // Numeric OCR keeps this runtime check independent of whichever language pack
+            // the Windows runner/user machine selects while still exercising real Windows.Media.Ocr.
             var ocr = new WindowsOcrService(log);
             var tokens = await ocr.RecognizeAsync(image, CancellationToken.None);
-            if (!tokens.Any(t => t.Text.Replace(" ", string.Empty).Contains("VISION", StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException($"Windows OCR ran but did not recognize synthetic VISION text (tokens={tokens.Count}).");
+            var joinedText = string.Concat(tokens.Select(t => t.Text)).Replace(" ", string.Empty);
+            if (!joinedText.Contains("12345", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Windows OCR ran but did not recognize synthetic digits (tokens={tokens.Count}, text={joinedText}).");
 
-            log.Info("selftest", $"vision self-test passed lines={lines.Count} tokens={tokens.Count}");
+            var message = $"vision self-test passed lines={lines.Count} tokens={tokens.Count}";
+            Console.WriteLine(message);
+            log.Info("selftest", message);
             return 0;
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine(ex.ToString());
             log.Error("selftest", ex);
             return 10;
         }
