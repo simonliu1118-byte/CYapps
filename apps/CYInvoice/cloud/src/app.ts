@@ -6,12 +6,15 @@ import { handleEmployeeAuthority } from "./employee-authority";
 import { handleEmployeeManagement } from "./employee-management";
 import { handleEmployeeAccountOperations } from "./employee-account-operations";
 import { handleSuperAdminTransfer } from "./super-admin-transfer";
+import { handleWebAuth } from "./web-auth";
 
 interface Env {
   DB: D1Database;
   APP_ENV: string;
   API_VERSION: string;
   SCHEMA_VERSION: string;
+  WEB_LOGIN_EMPLOYEE_RATE_LIMIT: RateLimit;
+  WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
   BOOTSTRAP_KEY?: string;
   OTP_PEPPER?: string;
   EMAIL_PROVIDER?: string;
@@ -22,6 +25,9 @@ interface Env {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const webAuthResponse = await handleWebAuth(request, env);
+    if (webAuthResponse) return webAuthResponse;
+
     const employeeManagementResponse = await handleEmployeeManagement(request, env);
     if (employeeManagementResponse) return employeeManagementResponse;
 

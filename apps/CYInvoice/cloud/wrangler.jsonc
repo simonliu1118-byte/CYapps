@@ -16,5 +16,23 @@
       "database_id": "ad2c5a80-0c8e-4c7b-ba8d-b1f318958710",
       "migrations_dir": "migrations"
     }
+  ],
+  "ratelimits": [
+    {
+      "name": "WEB_LOGIN_EMPLOYEE_RATE_LIMIT",
+      "namespace_id": "3101",
+      "simple": {
+        "limit": 12,
+        "period": 60
+      }
+    },
+    {
+      "name": "WEB_LOGIN_IP_RATE_LIMIT",
+      "namespace_id": "3102",
+      "simple": {
+        "limit": 40,
+        "period": 60
+      }
+    }
   ]
 }
