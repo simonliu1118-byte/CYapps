@@ -1,6 +1,6 @@
 {
   "name": "cyaccounting-web",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "CYAccounting Web - Cloudflare Workers + D1",
   "scripts": {
