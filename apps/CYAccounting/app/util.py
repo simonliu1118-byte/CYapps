@@ -21,10 +21,9 @@ _BUILD_NUMBER = int((_VERSION_ROOT / "BUILD").read_text(encoding="utf-8").strip(
 if not re.fullmatch(r"\d+\.\d+\.\d+", _BASE_VERSION) or _BUILD_NUMBER < 0:
     raise ValueError("CYAccounting VERSION / BUILD 格式不正確")
 APP_VERSION = f"V{_BASE_VERSION}" + (f" Build {_BUILD_NUMBER}" if _BUILD_NUMBER else "")
-APP_RELEASE_DATE = "2026/09/11"
+APP_RELEASE_DATE = "2026/09/24"
 DB_FILENAME = "CYaccounting.db"
 BACKUP_PREFIX = "CYaccbkup_"
-CLEAR_PASSWORD = "19911118"
 AMOUNT_DIGITS = 7
 MAX_AMOUNT = 9_999_999
 

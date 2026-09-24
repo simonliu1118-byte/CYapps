@@ -920,12 +920,6 @@ class Database:
         # Deleted historical accounts are intentionally excluded.
         return {name: int(data["ending_by_account"].get(name, 0)) for name in current_names}
 
-    def clear_transactions_and_openings(self) -> None:
-        assert self.conn is not None
-        with self.tx() as con:
-            con.execute("DELETE FROM transactions")
-            con.execute("DELETE FROM opening_balances")
-
     def counts(self) -> dict[str, int]:
         assert self.conn is not None
         return {

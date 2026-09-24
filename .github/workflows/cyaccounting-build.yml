@@ -105,7 +105,6 @@ jobs:
           name: CYAccounting_V${{ env.CYACCOUNTING_VERSION }}${{ env.CYACCOUNTING_BUILD_SUFFIX }}_Windows_x64_run${{ github.run_number }}
           path: |
             apps/CYAccounting/out/portable-dist/*.zip
-            apps/CYAccounting/out/portable-dist/*.sha256
           if-no-files-found: error
           retention-days: 3
 

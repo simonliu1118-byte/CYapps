@@ -6,6 +6,7 @@ from datetime import date
 from unittest.mock import patch
 
 from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtGui import QColor, QPalette
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
@@ -13,12 +14,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 from db import Database
 import main as main_module
 from main import MainWindow
-from dialogs import AccountManagerDialog, CategoryManagerDialog, OpeningBalanceDialog, PasswordDialog, SettingsDialog
+from dialogs import AccountManagerDialog, CategoryManagerDialog, OpeningBalanceDialog, SettingsDialog
 from import_dialog import ImportTransactionsDialog
 from background import start_background_task
 from widgets import CategoryComboBox
 from util import normalize_date_input, shift_month, APP_VERSION, APP_RELEASE_DATE
 
+
+def reset_test_transactions(db: Database) -> None:
+    # Test fixture only. The application no longer offers a clear-all operation.
+    with db.tx() as conn:
+        conn.execute('DELETE FROM transactions')
+        conn.execute('DELETE FROM opening_balances')
 
 
 def test_locale_constructor_compatibility():
@@ -55,8 +62,8 @@ def test_database_core():
     assert not db.save_transaction('2026/07/31', '現金', 'income', '一般收入', '', 1).ok
     assert db.save_transaction('2026/08/01', '現金', 'income', '一般收入', '', 1).ok
 
-    # Clear only transactions/opening balances; lock and master data remain.
-    db.clear_transactions_and_openings()
+    # Reset this test's records; the user's master data and month lock remain.
+    reset_test_transactions(db)
     assert db.counts() == {'transactions': 0, 'openings': 0}
     assert db.locked_through() == '2026/07'
     assert len(db.accounts()) == 1
@@ -86,7 +93,7 @@ def test_database_core():
         assert '10' in str(exc)
 
     # Frequent summaries are account + category specific and ranked by frequency, then recency.
-    db.clear_transactions_and_openings()
+    reset_test_transactions(db)
     for summary in ['甲', '乙', '甲', '乙', '乙', '甲', '乙', '丙']:
         db.save_transaction('2026/08/01', '現金', 'income', '一般收入', summary, 1)
     db.add_account('中信')
@@ -96,7 +103,7 @@ def test_database_core():
     assert db.frequent_summaries('income', '中信', '一般收入', 100, 3, 10, 'tx_date') == ['中信專用']
 
     # Accounting-date and recent-entry sampling can intentionally differ.
-    db.clear_transactions_and_openings()
+    reset_test_transactions(db)
     for _ in range(3):
         db.save_transaction('2026/09/01', '現金', 'income', '一般收入', '新日期', 1)
     for _ in range(3):
@@ -122,8 +129,20 @@ def test_account_manager_controls_and_titles():
     assert visible_order == ['↑', '↓', '新增', '修改', '刪除']
     assert '關閉' not in button_texts
     assert dlg.windowTitle() == '帳戶管理'
-    clear_dlg = PasswordDialog()
-    assert clear_dlg.windowTitle() == '清除記帳資料與期初餘額'
+    old_palette = app.palette()
+    old_style = app.styleSheet()
+    try:
+        dark_palette = QPalette(old_palette)
+        dark_palette.setColor(QPalette.ColorRole.Base, QColor('#202020'))
+        dark_palette.setColor(QPalette.ColorRole.Text, QColor('#202020'))
+        app.setPalette(dark_palette)
+        app.setStyleSheet(main_module.APP_STYLE)
+        dlg.list.ensurePolished()
+        assert dlg.list.palette().color(QPalette.ColorRole.Base).name() == '#ffffff'
+        assert dlg.list.palette().color(QPalette.ColorRole.Text).name() == '#1f2937'
+    finally:
+        app.setStyleSheet(old_style)
+        app.setPalette(old_palette)
     category_dlg = CategoryManagerDialog(db)
     category_buttons = [b.text() for b in category_dlg.findChildren(QPushButton)]
     assert '關閉' not in category_buttons
@@ -181,8 +200,9 @@ def test_ui_constructs():
     # Settings expose the ledger entry-position preference and update the shared config.
     dlg = SettingsDialog(
         db, config, lambda _p: (True, ''), lambda _p: (True, ''),
-        lambda: None, lambda: None, win,
+        lambda: None, win,
     )
+    assert all('清除所有記帳資料' not in b.text() for b in dlg.findChildren(QPushButton))
     assert dlg.ledger_position.count() == 2
     oldest_index = dlg.ledger_position.findData('oldest')
     dlg.ledger_position.setCurrentIndex(oldest_index)
