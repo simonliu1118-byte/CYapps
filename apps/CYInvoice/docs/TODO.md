@@ -121,7 +121,17 @@
 - [ ] Device revoke UI/API。
 - [ ] 所有 Device Token 遺失但 Recovery Email 可用時的 Recovery Device flow。
 - [ ] 所有 Device Token + Recovery Email 同時失效時的 reference-backend 人工維運文件。
-- [ ] 驗收 fresh-install 首次分流：單機版原流程；直接加入可選配對碼或 Workspace 識別碼＋該空間超管帳密／Email OTP，不建立本機帳號。先確認 A 機中央帳號已完成 cutover，再部署 Cloud 0.8.3、使用 Windows 測試包驗證兩條路徑及斷線恢復。
+- [ ] 驗收 fresh-install 首次分流：單機版原流程；雲端加入可選配對碼或邀請碼，不建立本機帳號。先確認 A 機中央帳號已完成 cutover，再使用 Windows 測試包驗證兩條路徑及斷線恢復。
+
+### 新裝置加入方式與安全紀錄（2026-09-25 討論定案，工程實作中）
+
+- [ ] 新裝置加入最終只保留「配對碼」與「邀請碼」兩種方式；移除現有「Workspace 識別碼＋超管帳密／Email OTP」直接加入入口與 API。上述舊版驗收項目須依新流程改寫，不能視為最終設計。
+- [ ] A 機「新增雲端裝置」提供「立即配對」：超管驗證後顯示目前連線的 Cloud API 網址與約 10 分鐘、限用一次的配對碼；B 機輸入網址與配對碼，確認 Workspace 名稱後加入。A 機視窗顯示加入結果。
+- [ ] A 機另提供「寄送新裝置邀請」：超管驗證後，將 API 網址與 72 小時、限用一次的邀請碼寄至超管帳號已驗證的 Email；邀請可由 A 機撤銷或重新寄送。B 機輸入網址、邀請碼、超管編號與密碼，確認 Workspace 名稱後加入；不再要求第二封 Email 驗證碼。A 機邀請視窗可顯示加入結果。
+- [ ] 程式不內嵌 Cloud API 網址。Workspace 識別碼僅供內部定位，不作為新機手動輸入欄位；配對碼／邀請碼由伺服器解析目標 Workspace。新機成功加入後才保存 API 網址與 Device identity。
+- [ ] 先在 Cloud D1 建立安全操作紀錄，涵蓋現有配對碼核發、驗證與新機加入；邀請碼及撤銷功能實作時寫入同一紀錄。紀錄需支援 A 機查詢邀請／配對狀態，並保留核發、寄送、撤銷、使用成功及相關失敗事件；不得記錄配對碼、邀請碼、密碼、OTP 或 Device Token 原文。現有配對流程的資料表名稱與 Worker 查詢名稱也需在實作時核對修正。
+- [ ] 後續版本新增「安全操作紀錄／稽核紀錄」查看介面；本階段只建立雲端紀錄，不製作查看介面。
+- [ ] 完成 Windows 編譯、A／B 機工程包測試及遠端 Cloudflare migration／Worker 部署前的審核；目前只完成本機 Cloud 型別與 D1 migration 測試，不代表已部署。
 
 ### 7.3 跨機 Work Item / Sync
 

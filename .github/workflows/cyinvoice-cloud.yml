@@ -67,7 +67,8 @@ jobs:
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           required_tables = {
               'workspaces', 'devices', 'device_pairing_codes', 'email_otp_challenges',
-              'cloud_employees', 'device_employee_links', 'employee_link_candidates'
+              'cloud_employees', 'device_employee_links', 'employee_link_candidates',
+              'device_invitations', 'security_audit_events'
           }
           missing_tables = required_tables - tables
           if missing_tables:
@@ -77,7 +78,8 @@ jobs:
           required_device_columns = {
               'token_hash', 'token_created_at', 'pairing_id', 'revoked_at',
               'employee_onboarding_closed_at', 'employee_authority_state',
-              'employee_transition_started_at', 'employee_transition_completed_at'
+              'employee_transition_started_at', 'employee_transition_completed_at',
+              'invitation_id'
           }
           missing_columns = required_device_columns - device_columns
           if missing_columns:
@@ -114,7 +116,7 @@ jobs:
 
           device_indexes = {row[1] for row in db.execute("PRAGMA index_list('devices')")}
           required_device_indexes = {
-              'idx_devices_token_hash', 'idx_devices_pairing_id',
+              'idx_devices_token_hash', 'idx_devices_pairing_id', 'idx_devices_invitation_id',
               'idx_devices_employee_authority_state'
           }
           missing_indexes = required_device_indexes - device_indexes

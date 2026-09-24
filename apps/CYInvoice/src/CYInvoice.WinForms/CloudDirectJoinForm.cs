@@ -12,18 +12,16 @@ internal sealed class CloudDirectJoinForm : Form
     private readonly CancellationTokenSource lifetime = new();
     private readonly TextBox url = UiControls.TextBox(200);
     private readonly RadioButton pairingMethod = new() { Text = "使用配對碼", Checked = true, AutoSize = true };
-    private readonly RadioButton ownerMethod = new() { Text = "使用 Workspace 識別碼與超管", AutoSize = true };
+    private readonly RadioButton ownerMethod = new() { Text = "使用邀請碼與超管帳密", AutoSize = true };
     private readonly TextBox pairingCode = UiControls.TextBox(32);
-    private readonly TextBox workspaceId = UiControls.TextBox(80);
+    private readonly TextBox invitationCode = UiControls.TextBox(80);
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(200);
-    private readonly TextBox otp = UiControls.TextBox(6);
     private readonly TextBox deviceName = UiControls.TextBox(120);
     private readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Button authorize = UiControls.StandardButton("確認 Workspace／取得驗證碼");
+    private readonly Button authorize = UiControls.StandardButton("確認 Workspace");
     private readonly Button join = UiControls.StandardButton("加入這個 Workspace");
     private CloudWorkspacePreview? preview;
-    private CloudDirectJoinChallenge? challenge;
     private bool busy;
     private bool resourcesDisposed;
 
@@ -42,14 +40,14 @@ internal sealed class CloudDirectJoinForm : Form
         url.Text = settings.CloudBaseUrl;
         deviceName.Text = Environment.MachineName[..Math.Min(Environment.MachineName.Length, 120)];
         password.UseSystemPasswordChar = true;
-        otp.MaxLength = 6;
         pairingCode.CharacterCasing = CharacterCasing.Lower;
+        invitationCode.CharacterCasing = CharacterCasing.Lower;
         BuildLayout();
         pairingMethod.CheckedChanged += (_, _) => ChangeMethod();
         ownerMethod.CheckedChanged += (_, _) => ChangeMethod();
         url.TextChanged += (_, _) => ResetAuthorization();
         pairingCode.TextChanged += (_, _) => ResetAuthorization();
-        workspaceId.TextChanged += (_, _) => ResetAuthorization();
+        invitationCode.TextChanged += (_, _) => ResetAuthorization();
         employeeNo.TextChanged += (_, _) => ResetAuthorization();
         ChangeMethod();
         Shown += async (_, _) => await RecoverPendingAsync();
@@ -60,10 +58,10 @@ internal sealed class CloudDirectJoinForm : Form
     private void BuildLayout()
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2,
-            RowCount = 10, Padding = new Padding(16) };
+            RowCount = 9, Padding = new Padding(16) };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var row = 0; row < 8; row++) root.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
+        for (var row = 0; row < 7; row++) root.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         AddField(root, 0, "Cloud API 網址", url);
@@ -72,12 +70,11 @@ internal sealed class CloudDirectJoinForm : Form
         modes.Controls.Add(ownerMethod);
         root.Controls.Add(modes, 1, 1);
         AddField(root, 2, "配對碼", pairingCode);
-        AddField(root, 3, "Workspace 識別碼", workspaceId);
+        AddField(root, 3, "邀請碼", invitationCode);
         AddField(root, 4, "超管員工編號", employeeNo);
         AddField(root, 5, "超管密碼", password);
-        AddField(root, 6, "Email 驗證碼", otp);
-        AddField(root, 7, "這台裝置名稱", deviceName);
-        root.Controls.Add(status, 1, 8);
+        AddField(root, 6, "這台裝置名稱", deviceName);
+        root.Controls.Add(status, 1, 7);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft };
         var cancel = UiControls.StandardButton("取消");
         cancel.DialogResult = DialogResult.Cancel;
@@ -88,7 +85,7 @@ internal sealed class CloudDirectJoinForm : Form
         actions.Controls.Add(cancel);
         actions.Controls.Add(join);
         actions.Controls.Add(authorize);
-        root.Controls.Add(actions, 1, 9);
+        root.Controls.Add(actions, 1, 8);
         Controls.Add(root);
         CancelButton = cancel;
     }
@@ -104,14 +101,13 @@ internal sealed class CloudDirectJoinForm : Form
     private void ChangeMethod()
     {
         pairingCode.Enabled = pairingMethod.Checked;
-        workspaceId.Enabled = employeeNo.Enabled = password.Enabled = otp.Enabled = ownerMethod.Checked;
+        invitationCode.Enabled = employeeNo.Enabled = password.Enabled = ownerMethod.Checked;
         ResetAuthorization();
     }
 
     private void ResetAuthorization()
     {
         preview = null;
-        challenge = null;
         join.Enabled = false;
         status.Text = "先確認 Workspace，再加入這台裝置。";
     }
@@ -142,13 +138,10 @@ internal sealed class CloudDirectJoinForm : Form
             }
             else
             {
-                challenge = await client.StartDirectJoinAsync(workspaceId.Text.Trim(), employeeNo.Text.Trim(),
-                    password.Text, lifetime.Token);
-                preview = challenge.Workspace;
-                password.Clear();
+                preview = await client.PreviewInvitationAsync(invitationCode.Text.Trim(),
+                    employeeNo.Text.Trim(), password.Text, lifetime.Token);
             }
-            status.Text = $"目標：{preview.DisplayName}（{preview.WorkspaceId}）。"
-                + (ownerMethod.Checked ? $" 驗證碼已寄至 {challenge!.Challenge.MaskedEmail}。" : " 請確認後加入。");
+            status.Text = $"目標：{preview.DisplayName}。請確認後加入。";
             join.Enabled = true;
         });
     }
@@ -160,8 +153,6 @@ internal sealed class CloudDirectJoinForm : Form
             if (preview is null) throw new InvalidOperationException("請先確認目標 Workspace。");
             var displayName = deviceName.Text.Trim();
             if (displayName.Length is < 1 or > 120) throw new InvalidOperationException("裝置名稱須為 1 到 120 個字元。");
-            if (ownerMethod.Checked && (challenge is null || !System.Text.RegularExpressions.Regex.IsMatch(otp.Text, @"^\d{6}$")))
-                throw new InvalidOperationException("請輸入 Email 中的六位數驗證碼。");
             var endpoint = BaseUri().ToString();
             var pending = repository.Settings.CloudPendingDeviceJoin(settings);
             if (pending is not null && !string.Equals(pending.BaseUrl, endpoint, StringComparison.OrdinalIgnoreCase))
@@ -177,9 +168,9 @@ internal sealed class CloudDirectJoinForm : Form
                 claimed = pairingMethod.Checked
                     ? await Client().ClaimPairingAsync(pairingCode.Text.Replace("-", "", StringComparison.Ordinal).Trim(),
                         displayName, Application.ProductVersion, attempt, lifetime.Token, directJoin: true)
-                    : await Client().ClaimDirectJoinAsync(preview.WorkspaceId, employeeNo.Text.Trim(),
-                        challenge!.Challenge.ChallengeId, otp.Text, displayName,
-                        Application.ProductVersion, attempt, lifetime.Token);
+                    : await Client().ClaimInvitationAsync(invitationCode.Text.Trim(), employeeNo.Text.Trim(),
+                        password.Text, displayName, Application.ProductVersion, attempt, lifetime.Token);
+                password.Clear();
             }
             catch (Exception error) when (error is HttpRequestException or TaskCanceledException
                                           or CloudApiException { Code: "PAIRING_ALREADY_USED" or "OTP_ALREADY_USED" })
