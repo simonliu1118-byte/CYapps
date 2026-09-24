@@ -1,0 +1,177 @@
+.confirmation-toggle.active {
+  background: #e7f0f8;
+  border-color: #8daec7;
+  color: #1d587e;
+}
+
+.confirmation-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e7ebef;
+  color: #5b6874;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.confirmation-count.has-items {
+  background: #dfeaf3;
+  color: #245f87;
+  font-weight: 700;
+}
+
+.confirmation-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 70;
+  width: 380px;
+  max-width: calc(100vw - 28px);
+  height: 100vh;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-left: 1px solid #cbd3dc;
+  border-radius: 0;
+  background: #f8fafc;
+  box-shadow: -12px 0 32px rgba(31, 42, 55, .16);
+  transform: translateX(102%);
+  transition: transform 160ms ease;
+  pointer-events: none;
+}
+
+.confirmation-drawer.open {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.confirmation-drawer-header {
+  min-height: 64px;
+  margin: 0;
+  padding: 14px 14px 12px 16px;
+  border-bottom: 1px solid #d9e0e6;
+  background: #fff;
+}
+
+.confirmation-drawer-header > div {
+  min-width: 0;
+}
+
+.confirmation-drawer-header h2 {
+  font-size: 17px;
+}
+
+.confirmation-drawer-header .hint {
+  margin-left: auto;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.confirmation-drawer-close {
+  flex: 0 0 auto;
+}
+
+.confirmation-drawer .confirmation-list {
+  height: calc(100vh - 64px);
+  padding: 10px;
+  overflow: auto;
+  align-content: start;
+}
+
+.confirmation-drawer .confirmation-empty {
+  padding: 14px 8px;
+}
+
+.confirmation-drawer .confirmation-item {
+  display: block;
+  min-height: 0;
+  padding: 8px 9px;
+  border: 1px solid #e0e6eb;
+  border-left-width: 3px;
+  background: #fff;
+}
+
+.confirmation-drawer .confirmation-main {
+  overflow: visible;
+  white-space: normal;
+  line-height: 1.5;
+}
+
+.confirmation-drawer .confirmation-status {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+/* Desktop business-table density: prioritize more visible records without making text cramped. */
+.ledger-title {
+  padding: 12px 16px 0;
+}
+
+.ledger-title .section-title,
+.ledger-card .section-title {
+  margin-bottom: 10px;
+}
+
+.ledger-desktop-tools {
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.ledger-desktop-tools input,
+.ledger-desktop-tools select,
+.ledger-desktop-tools .secondary.compact {
+  min-height: 30px;
+  height: 30px;
+}
+
+.ledger-card th,
+.ledger-card td {
+  padding: 5px 9px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.ledger-card th {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 11.5px;
+}
+
+.ledger-card td.summary {
+  min-width: 160px;
+}
+
+.ledger-card .kind-tag {
+  min-width: 38px;
+  padding: 1px 5px;
+  font-size: 11px;
+}
+
+.ledger-card .action-col {
+  width: 96px;
+}
+
+.ledger-card .row-action {
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.ledger-card .account-group-row td {
+  padding: 5px 9px;
+}
+
+.ledger-card .account-group-row td span {
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .confirmation-drawer {
+    width: min(380px, calc(100vw - 16px));
+  }
+}
