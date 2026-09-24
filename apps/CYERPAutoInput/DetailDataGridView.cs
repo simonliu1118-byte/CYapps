@@ -16,25 +16,40 @@ internal sealed class DetailDataGridView : DataGridView
 
     private void MoveCell(int delta)
     {
+        if (ColumnCount == 0) return;
+
         if (CurrentCell is null)
         {
             if (RowCount == 0) Rows.Add();
-            CurrentCell = this[0, 0];
+            var firstEditable = Columns.Cast<DataGridViewColumn>().FirstOrDefault(c => !c.ReadOnly);
+            if (firstEditable is null) return;
+            CurrentCell = this[firstEditable.Index, 0];
             BeginEdit(true);
             return;
         }
 
         EndEdit();
         var row = CurrentCell.RowIndex;
-        var col = CurrentCell.ColumnIndex + delta;
-        if (col >= ColumnCount) { col = 0; row++; }
-        if (col < 0) { col = ColumnCount - 1; row--; }
-        if (row < 0) row = 0;
+        var col = CurrentCell.ColumnIndex;
 
-        // DataGridView keeps a special new-row placeholder when AllowUserToAddRows is true.
-        // Enter/Tab into that row materializes it automatically when editing starts.
-        row = Math.Min(row, Math.Max(0, RowCount - 1));
-        CurrentCell = this[col, row];
-        BeginEdit(true);
+        // Build 10 adds a read-only sequence column. Enter/Tab must skip any
+        // read-only column instead of stopping on it.
+        for (var step = 0; step < ColumnCount + 1; step++)
+        {
+            col += delta;
+            if (col >= ColumnCount) { col = 0; row++; }
+            if (col < 0) { col = ColumnCount - 1; row--; }
+            if (row < 0) row = 0;
+
+            // DataGridView keeps a special new-row placeholder when
+            // AllowUserToAddRows is true. Editing an editable cell in that row
+            // materializes it automatically.
+            row = Math.Min(row, Math.Max(0, RowCount - 1));
+            if (Columns[col].ReadOnly) continue;
+
+            CurrentCell = this[col, row];
+            BeginEdit(true);
+            return;
+        }
     }
 }

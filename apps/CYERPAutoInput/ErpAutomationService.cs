@@ -4,9 +4,12 @@ internal enum ErpMode { Unknown, Browse, Input }
 
 internal sealed class ErpAutomationService
 {
+    private const int ProvenDetailRowPitch = 24;
+
     private readonly AppLogger _log;
     private readonly GridVisionService _gridVision;
     private readonly OpticalTextLocator _textVision;
+    private readonly F2UnitCellLocator _unitCellLocator;
 
     public ErpAutomationService(AppLogger log)
     {
@@ -14,6 +17,7 @@ internal sealed class ErpAutomationService
         var ocr = new WindowsOcrService(log);
         _gridVision = new GridVisionService(ocr, log);
         _textVision = new OpticalTextLocator(ocr, log);
+        _unitCellLocator = new F2UnitCellLocator(ocr, log);
     }
 
     public nint FindErp() => Win32Automation.FindCopi08Window();
@@ -77,9 +81,6 @@ internal sealed class ErpAutomationService
         if (addPoint is null) throw new InvalidOperationException("光學辨識找不到 ERP 的「新增」按鈕；未進行猜測點擊。");
         InputSender.Click(addPoint.Value);
 
-        // Delphi/DevExpress can visibly enter INPUT after the click before all TDBEdit
-        // style bits have settled. Poll the proven readonly/writable signal instead of
-        // making a single timing-sensitive decision.
         var deadline = Environment.TickCount64 + 3500;
         var checks = 0;
         while (Environment.TickCount64 < deadline)
@@ -237,17 +238,11 @@ internal sealed class ErpAutomationService
 
         var grid = FindDetailGrid(root) ?? throw new InvalidOperationException("找不到 ERP 商品明細 TcxGridSite。");
 
-        // COPI08 does not expose the real first detail row until the user first clicks
-        // the blank detail area. Build 4 OCR'd too early and therefore saw headers such
-        // as 單位/庫別 but no 品號/數量. Reproduce the real ERP interaction first,
-        // then refresh the grid and perform optical geometry analysis.
         await PrimeDetailGridAsync(root, grid, cancellationToken);
         (grid, var geometry) = await AnalyzePrimedDetailGridAsync(root, grid, cancellationToken);
         if (geometry.RowCenterY.Count == 0)
             throw new InvalidOperationException("光學辨識沒有找到任何可輸入的明細列。");
 
-        // The priming click creates/activates the first row. Once optical geometry is
-        // available, click the exact item-code cell again before entering its editor.
         await ActivateDetailFirstRowAsync(root, grid, geometry, cancellationToken);
 
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
@@ -264,10 +259,11 @@ internal sealed class ErpAutomationService
                 _log.Info("detail", $"next row activated by Down logical_row={rowIndex + 1}");
             }
 
-            var visibleRow = Math.Min(rowIndex, geometry.RowCenterY.Count - 1);
-            if (visibleRow < 0)
-                throw new InvalidOperationException("光學明細列位置異常；已停止以避免輸入錯列。");
-
+            // Do not clamp later logical rows back to row 1. COPI08 opens the next
+            // detail row by Down; ResolveFreshDetailCellPointAsync extrapolates the
+            // proven 24 px row pitch when the initial optical capture only contained
+            // the first materialized row.
+            var visibleRow = rowIndex;
             var row = rows[rowIndex];
             await SetDetailCellAsync(root, grid, geometry, visibleRow, 0, row.ItemCode, cancellationToken);
 
@@ -293,10 +289,6 @@ internal sealed class ErpAutomationService
         if (!NativeMethods.GetWindowRect(grid.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 45)
             throw new InvalidOperationException("商品明細區目前沒有有效畫面位置。");
 
-        // This reproduces the proven first-row position from the Go implementation:
-        // first item column at ~5.2% of the TcxGridSite width, first row center at y+33.
-        // It is only used to materialize the ERP row; all actual field writes still use
-        // OCR-derived geometry and editor/focus verification.
         var relativeX = (int)Math.Round(rect.Width * 0.052);
         relativeX = Math.Clamp(relativeX, 28, Math.Max(28, rect.Width - 24));
         var relativeY = Math.Clamp(33, 24, Math.Max(24, rect.Height - 12));
@@ -417,7 +409,20 @@ internal sealed class ErpAutomationService
             throw new InvalidOperationException("F2 單位查詢視窗無法取得前景。");
         await Delay(120, cancellationToken);
 
-        var unitPoint = await _gridVision.FindUnitAsync(lookup, unit, cancellationToken);
+        Point unitPoint;
+        try
+        {
+            unitPoint = await _gridVision.FindUnitAsync(lookup, unit, cancellationToken);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("OCR 無法在 F2", StringComparison.Ordinal))
+        {
+            _log.Warn("vision", $"F2 whole-window OCR missed requested unit; trying isolated-cell OCR target_len={unit.Length}");
+            var fallback = await _unitCellLocator.FindAsync(lookup, unit, cancellationToken);
+            if (fallback is null)
+                throw;
+            unitPoint = fallback.Value;
+        }
+
         InputSender.Click(unitPoint);
         await Delay(120, cancellationToken);
 
@@ -441,7 +446,7 @@ internal sealed class ErpAutomationService
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("F2 關閉後無法回到 ERP 前景。");
         await Delay(120, cancellationToken);
-        _log.Info("detail", "F2 unit selected by OCR click + verified TcxGridSite focus + physical Enter");
+        _log.Info("detail", "F2 unit selected by optical click + verified TcxGridSite focus + physical Enter");
     }
 
     private async Task<(GridGeometry Geometry, Point Point, Rectangle GridRect)> ResolveFreshDetailCellPointAsync(
@@ -461,8 +466,23 @@ internal sealed class ErpAutomationService
             activeGeometry = await _gridVision.AnalyzeDetailGridAsync(gridHwnd, cancellationToken);
         }
 
-        if (!activeGeometry.TryCellPoint(visibleRow, column, out var capturedPoint))
-            throw new InvalidOperationException($"光學明細定位缺少 column={column}, row={visibleRow + 1}。");
+        Point capturedPoint;
+        if (!activeGeometry.TryCellPoint(visibleRow, column, out capturedPoint))
+        {
+            if (visibleRow <= 0 || activeGeometry.RowCenterY.Count == 0 || !activeGeometry.ColumnX.TryGetValue(column, out var x))
+                throw new InvalidOperationException($"光學明細定位缺少 column={column}, row={visibleRow + 1}。");
+
+            // The old Go implementation was real-ERP validated at a 24 px detail-row
+            // pitch. When the first optical capture contains only the materialized first
+            // row, use that proven row pitch after Down creates subsequent rows. Clamp
+            // to the last visible slot so later logical rows remain safe after ERP scroll.
+            var firstY = activeGeometry.RowCenterY[0];
+            var maxVisible = Math.Max(0, (activeGeometry.ScreenRect.Height - firstY - 6) / ProvenDetailRowPitch);
+            var clickRow = Math.Min(visibleRow, maxVisible);
+            var y = firstY + clickRow * ProvenDetailRowPitch;
+            capturedPoint = new Point(activeGeometry.ScreenRect.Left + x, activeGeometry.ScreenRect.Top + y);
+            _log.Info("detail", $"row point extrapolated logical_row={visibleRow + 1} visible_slot={clickRow + 1} pitch={ProvenDetailRowPitch}");
+        }
 
         if (!NativeMethods.GetWindowRect(gridHwnd, out fresh) || fresh.Width <= 0 || fresh.Height <= 0)
             throw new InvalidOperationException("商品明細 grid 在點擊前失去有效畫面位置。");
