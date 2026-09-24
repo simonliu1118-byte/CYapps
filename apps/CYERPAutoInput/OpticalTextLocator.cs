@@ -17,7 +17,7 @@ internal sealed class OpticalTextLocator
             return null;
 
         using var image = ScreenCapture.Capture(rect.ToRectangle());
-        var tokens = await _ocr.RecognizeAsync(image, cancellationToken);
+        var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
         var normalizedAliases = aliases.Select(Normalize).Where(x => x.Length > 0).ToArray();
 
         foreach (var token in tokens)
