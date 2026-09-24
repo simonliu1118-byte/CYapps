@@ -45,6 +45,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     openingMonth: document.querySelector('#openingMonth'),
     openingRows: document.querySelector('#openingRows'),
     saveOpeningButton: document.querySelector('#saveOpeningButton'),
+    openingDialog: document.querySelector('#openingDialog'),
+    openingMessage: document.querySelector('#openingMessage'),
     lockedThrough: document.querySelector('#lockedThrough'),
     saveLockButton: document.querySelector('#saveLockButton'),
     clearLockButton: document.querySelector('#clearLockButton'),
@@ -304,7 +306,6 @@ function openSettings() {
   setDialogMessage(els.settingsMessage, '');
   renderSettings();
   els.settingsDialog.showModal();
-  if (state.activeSettingsTab === 'opening') loadOpeningBalances();
 }
 
 function setSettingsTab(tab) {
@@ -312,7 +313,6 @@ function setSettingsTab(tab) {
   els.settingsTabs.forEach(button => button.classList.toggle('active', button.dataset.settingsTab === tab));
   els.settingsPanes.forEach(pane => pane.classList.toggle('active', pane.dataset.settingsPane === tab));
   setDialogMessage(els.settingsMessage, '');
-  if (tab === 'opening') loadOpeningBalances();
 }
 
 function renderSettings() {
@@ -445,6 +445,7 @@ async function mutateSettings(path, options, successMessage) {
 async function loadOpeningBalances() {
   const month = els.openingMonth.value;
   if (!month) return;
+  setDialogMessage(els.openingMessage, '');
   els.openingRows.innerHTML = '<div class="empty">載入中…</div>';
   try {
     const data = await api(`/api/opening-balances?month=${encodeURIComponent(month)}`);
@@ -456,7 +457,7 @@ async function loadOpeningBalances() {
     }
     els.openingRows.innerHTML = data.accounts.map(item => `<label class="opening-row"><span>${escapeHtml(item.name)}${item.isCurrent ? '' : '<span class="historical">歷史帳戶</span>'}</span><input type="number" step="1" value="${item.amount ?? ''}" data-opening-account="${escapeHtml(item.name)}" ${data.locked ? 'disabled' : ''}></label>`).join('');
     els.saveOpeningButton.disabled = Boolean(data.locked);
-    if (data.locked) setDialogMessage(els.settingsMessage, `${month} 已鎖帳，期初餘額僅供檢視。`, true);
+    if (data.locked) setDialogMessage(els.openingMessage, `${month} 已鎖帳，期初餘額僅供檢視。`, true);
   } catch (error) {
     els.openingRows.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
   }
@@ -467,16 +468,17 @@ async function saveOpeningBalances() {
   const values = {};
   for (const input of els.openingRows.querySelectorAll('[data-opening-account]')) {
     const raw = input.value.trim();
-    if (raw !== '' && !Number.isSafeInteger(Number(raw))) return setDialogMessage(els.settingsMessage, `${input.dataset.openingAccount} 的期初餘額必須是整數。`, true);
+    if (raw !== '' && !Number.isSafeInteger(Number(raw))) return setDialogMessage(els.openingMessage, `${input.dataset.openingAccount} 的期初餘額必須是整數。`, true);
     values[input.dataset.openingAccount] = raw === '' ? null : Number(raw);
   }
   els.saveOpeningButton.disabled = true;
   try {
     await api('/api/opening-balances', { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ month: els.openingMonth.value, values }) });
-    setDialogMessage(els.settingsMessage, '期初餘額已儲存。');
+    setDialogMessage(els.openingMessage, '期初餘額已儲存。');
     await loadOpeningBalances();
+    if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
   } catch (error) {
-    setDialogMessage(els.settingsMessage, error.message, true);
+    setDialogMessage(els.openingMessage, error.message, true);
   } finally {
     els.saveOpeningButton.disabled = Boolean(state.openingData?.locked);
   }
@@ -490,7 +492,6 @@ async function saveLock(lockedThrough) {
     renderSettings();
     setDialogMessage(els.settingsMessage, state.lockedThrough ? `已鎖帳至 ${formatMonth(state.lockedThrough)}。` : '已取消鎖帳。');
     await loadTransactions();
-    if (state.activeSettingsTab === 'opening') await loadOpeningBalances();
   } catch (error) {
     setDialogMessage(els.settingsMessage, error.message, true);
   }
