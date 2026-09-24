@@ -27,7 +27,7 @@ internal sealed class AppLogger : IDisposable
         {
             AutoFlush = true
         };
-        Info("app", "CYERPAutoInput V0.1.0 Build 5 starting (C# rewrite)");
+        Info("app", "CYERPAutoInput V0.1.0 Build 6 starting (C# rewrite)");
     }
 
     public void Info(string area, string message) => Write("INFO", area, message);

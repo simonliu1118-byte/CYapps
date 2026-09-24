@@ -26,7 +26,7 @@ internal static class Program
 
         var form = new MainForm(logger)
         {
-            Text = "CYERPAutoInput V0.1.0 Build 5 — SMART ERP 自動輸入工具"
+            Text = "CYERPAutoInput V0.1.0 Build 6 — SMART ERP 自動輸入工具"
         };
         try
         {
@@ -37,6 +37,7 @@ internal static class Program
             logger.Warn("app", $"window icon load skipped: {ex.Message}");
         }
         UpdateBuildLabels(form);
+        CyVisualTheme.Apply(form);
         Application.Run(form);
         return 0;
     }
@@ -46,7 +47,7 @@ internal static class Program
         foreach (Control control in root.Controls)
         {
             if (control.Text.Contains("V0.1.0 Build 1", StringComparison.Ordinal))
-                control.Text = control.Text.Replace("V0.1.0 Build 1", "V0.1.0 Build 5", StringComparison.Ordinal);
+                control.Text = control.Text.Replace("V0.1.0 Build 1", "V0.1.0 Build 6", StringComparison.Ordinal);
             if (control.HasChildren) UpdateBuildLabels(control);
         }
     }
