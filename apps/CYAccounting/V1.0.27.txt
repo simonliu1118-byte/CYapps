@@ -1,2 +1,10 @@
 Version: V1.0.27 Build 2
 Date: 2026/09/24
+
+Build 2 (current source on main; test artifact, not a formal Release):
+- Restored the full local-ledger reset action in Settings. Two separate exact uppercase DELETE confirmations are required; cancellation or incorrect input does nothing. DELETE is a confirmation phrase, not a password.
+- The reset first creates a verified recovery backup, then resets transactions, opening balances, accounts, categories, locks, local preferences and the local Google Drive connection. Existing backups are kept and a custom database path remains pointed at the same database.
+- GitHub Actions download extracts directly to CYAccounting/ with CYAccounting.exe; there is no nested portable ZIP.
+
+Build 1:
+- Removed the hardcoded clear password and clear action and kept the interface light under Windows dark mode. Build 2 restored the action using two DELETE confirmations.
