@@ -5,6 +5,7 @@ import { handleEmployeeTransitionConflicts } from "./employee-transition-conflic
 import { handleEmployeeAuthority } from "./employee-authority";
 import { handleEmployeeManagement } from "./employee-management";
 import { handleEmployeeAccountOperations } from "./employee-account-operations";
+import { handleEmployeePasswordRecovery } from "./employee-password-recovery";
 import { handleSuperAdminTransfer } from "./super-admin-transfer";
 import { handleWebAuth } from "./web-auth";
 import { handleWebPasswordRecovery } from "./web-password-recovery";
@@ -34,6 +35,8 @@ export default {
     const webAuthResponse = await handleWebAuth(request, env);
     if (webAuthResponse) return webAuthResponse;
 
+    const employeePasswordRecoveryResponse = await handleEmployeePasswordRecovery(request, env);
+    if (employeePasswordRecoveryResponse) return employeePasswordRecoveryResponse;
     const employeeManagementResponse = await handleEmployeeManagement(request, env);
     if (employeeManagementResponse) return employeeManagementResponse;
 

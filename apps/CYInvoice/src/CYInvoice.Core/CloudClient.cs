@@ -48,11 +48,12 @@ public sealed record CloudPairingTicket(string Code, DateTimeOffset ExpiresAt);
 public sealed record CloudWorkspacePreview(string WorkspaceId, string DisplayName);
 public sealed record CloudDirectJoinChallenge(CloudWorkspacePreview Workspace, CloudEmailChallenge Challenge);
 
-public sealed class CloudApiException(string code, string message, HttpStatusCode statusCode)
+public sealed class CloudApiException(string code, string message, HttpStatusCode statusCode, int? retryAfterSeconds = null)
     : InvalidOperationException(message)
 {
     public string Code { get; } = code;
     public HttpStatusCode StatusCode { get; } = statusCode;
+    public int? RetryAfterSeconds { get; } = retryAfterSeconds;
 }
 
 public sealed class CloudClient

@@ -2,12 +2,19 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.5 Build 4 — 2026/09/24（工程測試中，未正式 Release）
+
+- 雲端忘記密碼改為兩步：先核對員工編號與已驗證 Email，成功才寄驗證碼；第二步輸入驗證碼與兩次新密碼。重寄按鈕依 API 回傳的實際 `resendAfter` 倒數。
+- 原管理員視窗改名「管理員帳號管理」；一般員工通過密碼驗證後進入自己的「帳號管理」，可用舊密碼更改密碼，或將新 Email 驗證後更新；姓名仍由管理員處理。
+- 作廢／折讓紀錄格線、摘要與上傳問題清單的固定欄寬、提示文字改善納入本次測試包。
+- Cloud implementation `0.8.4`、API `1`／Schema `8`；此原始碼尚未部署到 development，實際雲端狀態需另行查核。
+
 ## V2.6.5 Build 1 — 2026/09/24（工程測試中，未正式 Release）
 
 - 首次啟動選擇單機版或直接加入既有雲端 Workspace；直接加入不建立本機帳號，可選配對碼，或 Workspace 識別碼＋該 Workspace 超管帳密／Email OTP。
 - 直接加入後先核對 Device identity、中央 Employee authority 並同步受保護的中央帳號快取，成功後才切換雲端模式；保留 Pending Device Token 供網路不明結果恢復。
 - 原本「單機版之後加入雲端」的本機管理員驗證與完整 Employee Transition 保留；配對碼只授權裝置，不授予個人權限。
-- Cloud implementation `0.8.3`、API `1`／Schema `8`；已整合併行進度的密碼復原 migration `0008`。新增直接加入端點與超管登入速率限制。待 PR CI、development 部署及 Windows A／B 實測。
+- Cloud implementation `0.8.3`、API `1`／Schema `8`；已整合併行進度的密碼復原 migration `0008`。新增直接加入端點與超管登入速率限制。待 development 部署及 Windows A／B 實測。
 - Build 1 修正首輪 CI 發現的合約測試 JSON 字串語法與新視窗重複 Dispose；裝置管理視窗的啟動尺寸檢查也同步涵蓋新增的 Workspace ID 欄。
 
 ## V2.6.4 Build 1 — 2026/09/22（工程測試版，未正式 Release）

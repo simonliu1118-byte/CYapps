@@ -8,7 +8,7 @@ namespace CYInvoice.WinForms;
 internal sealed class SyncIssuesForm : Form
 {
     internal const string ReadStateScope = "upload-issues-read";
-    private static readonly int[] DefaultWidths = [135, 145, 105, 135, 230, 80];
+    private static readonly int[] DefaultWidths = [145, 130, 110, 150, 0, 90];
 
     private readonly LocalRepository repository;
     private readonly InvoiceSyncIssueStore issueStore;
@@ -21,6 +21,10 @@ internal sealed class SyncIssuesForm : Form
     private readonly string accountKey;
     private DateTimeOffset? lastRead;
     private bool manualReviewBusy;
+    private bool settingColumnWidths;
+    private readonly ToolTip contentToolTip = new();
+    private readonly FixedColumnHeaderCursor headerCursor;
+    private string visibleToolTip = string.Empty;
 
     private readonly ListView list = new BufferedListView
     {
@@ -55,11 +59,12 @@ internal sealed class SyncIssuesForm : Form
         administrativeClosure = new InvoiceAdministrativeClosureService(repository);
         accountKey = CurrentAccountKey();
         lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
+        headerCursor = new FixedColumnHeaderCursor(list);
 
         Text = "上傳問題";
         StartPosition = FormStartPosition.CenterParent;
-        MinimumSize = new Size(760, 450);
-        ClientSize = new Size(900, 520);
+        MinimumSize = new Size(900, 450);
+        ClientSize = new Size(960, 520);
         Font = new Font("Microsoft JhengHei UI", 10F);
         BackColor = Color.White;
         ShowIcon = false;
@@ -82,6 +87,15 @@ internal sealed class SyncIssuesForm : Form
                 eventArgs.NewValue = CheckState.Unchecked;
         };
         list.ItemChecked += (_, _) => BeginInvoke((Action)UpdateFailedButtons);
+        list.ClientSizeChanged += (_, _) => LayoutColumns();
+        list.ColumnWidthChanging += (_, eventArgs) =>
+        {
+            if (settingColumnWidths) return;
+            eventArgs.Cancel = true;
+            eventArgs.NewWidth = list.Columns[eventArgs.ColumnIndex].Width;
+        };
+        list.MouseMove += ShowClippedContentToolTip;
+        list.MouseLeave += (_, _) => ClearContentToolTip();
 
         deleteFailed.Enabled = false;
         deleteFailed.Click += (_, _) => DeleteCheckedFailed();
@@ -136,7 +150,7 @@ internal sealed class SyncIssuesForm : Form
 
     private void ConfigureList()
     {
-        list.Columns.Add("時間", DefaultWidths[0], HorizontalAlignment.Left);
+        list.Columns.Add("日期/時間", DefaultWidths[0], HorizontalAlignment.Left);
         list.Columns.Add("類型", DefaultWidths[1], HorizontalAlignment.Left);
         list.Columns.Add("發票號碼", DefaultWidths[2], HorizontalAlignment.Left);
         list.Columns.Add("訂單編號", DefaultWidths[3], HorizontalAlignment.Left);
@@ -157,7 +171,7 @@ internal sealed class SyncIssuesForm : Form
             {
                 var state = IssueState(issue);
                 var time = issue.CreatedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
-                var row = new ListViewItem(time);
+                var row = new ListViewItem(ShortIssueTime(time));
                 row.SubItems.Add(DisplayType(issue.IssueType));
                 row.SubItems.Add(issue.InvoiceNumber);
                 row.SubItems.Add(issue.OrderId);
@@ -169,7 +183,7 @@ internal sealed class SyncIssuesForm : Form
                 {
                     "未讀" => Color.Firebrick,
                     "人工確認" or "等待確認" or "可結案" => Color.FromArgb(190, 120, 0),
-                    "已解決" => Color.FromArgb(0, 132, 72),
+                    "已解決" or "已人工處理" => Color.FromArgb(0, 132, 72),
                     _ => Color.DimGray,
                 };
                 if (state is "人工確認" or "等待確認" or "可結案")
@@ -182,7 +196,7 @@ internal sealed class SyncIssuesForm : Form
                 var time = FullIssueTime(record);
                 var content = FriendlyFailureReason(record.ErrorMessage);
                 if (record.BuyerName.Trim().Length != 0) content = record.BuyerName.Trim() + "｜" + content;
-                var row = new ListViewItem(time);
+                var row = new ListViewItem(ShortIssueTime(time));
                 row.SubItems.Add("開立失敗");
                 row.SubItems.Add(record.InvoiceNumber);
                 row.SubItems.Add(record.OrderId);
@@ -269,7 +283,7 @@ internal sealed class SyncIssuesForm : Form
                 }
                 else if (!allowAdministrativeClose && IsAllowanceVoidManualReview(issue))
                 {
-                    primaryText = "已解決";
+                    primaryText = "已人工處理";
                     allowCancel = true;
                 }
                 else if (!allowAdministrativeClose && IsAllowanceManualReview(issue))
@@ -280,7 +294,7 @@ internal sealed class SyncIssuesForm : Form
                     {
                         if (!review.AwaitingConfirmation)
                         {
-                            primaryText = "已解決";
+                            primaryText = "已人工處理";
                             allowCancel = true;
                         }
                         else
@@ -353,7 +367,7 @@ internal sealed class SyncIssuesForm : Form
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
 
-        using var login = new EmployeeAdminLoginForm(repository.Employees, "管理員結案－驗證");
+        using var login = new EmployeeAdminLoginForm(repository, "管理員結案－驗證");
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
         SetManualReviewBusy(true);
         try
@@ -407,12 +421,12 @@ internal sealed class SyncIssuesForm : Form
         if (MessageBox.Show(
                 this,
                 "請先確認已在光貿網站完成這張折讓單的作廢。\n\n按下「是」後，CYInvoice 只會結束這筆人工待辦，不會呼叫折讓作廢 API。",
-                "折讓作廢已解決",
+                "折讓作廢已人工處理",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository.Employees, "折讓作廢人工處理－管理員驗證");
+        using var login = new EmployeeAdminLoginForm(repository, "折讓作廢人工處理－管理員驗證");
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
         SetManualReviewBusy(true);
         try
@@ -434,7 +448,7 @@ internal sealed class SyncIssuesForm : Form
                 "這筆作廢申請的紙本電子發票證明聯先前尚未收回。\n\n確認後，CYInvoice 會重新查詢光貿最新狀態，再送出作廢。請確認已完成主管核准並可進行作廢。",
                 "確認送出作廢", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository.Employees, "人工確認－管理員驗證");
+        using var login = new EmployeeAdminLoginForm(repository, "人工確認－管理員驗證");
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
         SetManualReviewBusy(true);
         try
@@ -471,9 +485,9 @@ internal sealed class SyncIssuesForm : Form
     {
         if (MessageBox.Show(this,
                 "請先確認已在光貿網站完成這筆人工折讓。\n\n按下「是」後，CYInvoice 會進入等待確認並用 invoice_query 自動比對新的折讓資料。",
-                "折讓已解決", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                "折讓已人工處理", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository.Employees, "折讓人工處理－管理員驗證");
+        using var login = new EmployeeAdminLoginForm(repository, "折讓人工處理－管理員驗證");
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
         SetManualReviewBusy(true);
         try
@@ -498,7 +512,7 @@ internal sealed class SyncIssuesForm : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        using var login = new EmployeeAdminLoginForm(repository.Employees, "折讓單號確認－管理員驗證");
+        using var login = new EmployeeAdminLoginForm(repository, "折讓單號確認－管理員驗證");
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
         using var selector = new AllowanceCandidateForm(candidates);
         if (selector.ShowDialog(this) != DialogResult.OK || selector.SelectedAllowanceNumber.Length == 0) return;
@@ -525,7 +539,7 @@ internal sealed class SyncIssuesForm : Form
                 MessageBox.Show(this, result.Message, "折讓確認完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 break;
             case InvoiceAllowanceReconcileOutcome.PendingConfirmation:
-                MessageBox.Show(this, result.Message + "\n\n系統會在之後每一次正常同步繼續查詢，不需要重複按「已解決」。",
+                MessageBox.Show(this, result.Message + "\n\n系統會在之後每一次正常同步繼續查詢，不需要重複按「已人工處理」。",
                     "折讓等待確認", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 break;
             case InvoiceAllowanceReconcileOutcome.Problem:
@@ -547,7 +561,7 @@ internal sealed class SyncIssuesForm : Form
                 : "確定取消並退回這筆作廢申請？\n\n不會向光貿送出作廢，發票會維持「已開立」。";
         if (MessageBox.Show(this, prompt, "取消退回", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository.Employees, "人工確認－管理員驗證");
+        using var login = new EmployeeAdminLoginForm(repository, "人工確認－管理員驗證");
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
         SetManualReviewBusy(true);
         try
@@ -590,9 +604,14 @@ internal sealed class SyncIssuesForm : Form
         var rows = CommonDetailRows(issue).ToList();
         var record = TryFindIssueRecord(issue);
         var review = record is null ? null : voidWorkflow.ManualReviewFor(record);
-        rows.Add(new("申請員工", review?.RequesterEmployeeNo ?? "－"));
-        rows.Add(new("申請時間", review is null ? "－" : review.RequestedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
-        rows.Add(new("作廢原因", review?.Reason ?? "－"));
+        var handled = record is null ? null : voidWorkflow.HandledReviewFor(record);
+        var parsed = VoidOperationSessionCache.Parse(VoidOperationSessionCache.ReasonFor(issue.InvoiceNumber));
+        var requester = review?.RequesterEmployeeNo ?? handled?.RequesterEmployeeNo ?? parsed?.UserEmployeeNo ?? "";
+        var requested = review?.RequestedUtc ?? handled?.RequestedUtc;
+        rows.Add(new("申請員工", EmployeeDisplay(requester)));
+        rows.Add(new("申請時間", requested is null ? "－" : requested.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
+        rows.Add(new("作廢原因", review?.Reason ?? handled?.Reason ?? parsed?.Reason ?? "－"));
+        rows.Add(new("處理管理員", EmployeeDisplay(handled?.ReviewerEmployeeNo ?? parsed?.ReviewerEmployeeNo ?? "")));
         rows.Add(new("處理狀態", issue.ResolvedUtc is not null ? "已解決" : "等待管理員人工確認"));
         return rows;
     }
@@ -601,10 +620,17 @@ internal sealed class SyncIssuesForm : Form
     {
         var rows = CommonDetailRows(issue).ToList();
         var record = TryFindIssueRecord(issue);
-        var review = record is null ? null : allowanceWorkflow.ManualReviewFor(record);
-        rows.Add(new("申請員工", review?.RequesterEmployeeNo ?? "－"));
+        var review = record is null ? null :
+            allowanceWorkflow.ManualReviewFor(record) ??
+            (issue.ResolvedUtc is null ? null : allowanceWorkflow.HandledReviewFor(record));
+        if (review is not null && Math.Abs((review.RequestedUtc - issue.CreatedUtc).TotalMinutes) > 5)
+            review = null;
+        rows.Add(new("申請員工", EmployeeDisplay(review?.RequesterEmployeeNo ?? "")));
         rows.Add(new("申請時間", review is null ? "－" : review.RequestedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss")));
         rows.Add(new("折讓原因", review?.Reason ?? "－"));
+        rows.Add(new("處理管理員", EmployeeDisplay(review?.HandlerEmployeeNo ?? "")));
+        rows.Add(new("人工處理時間", review?.ManualCompletedUtc is { } completed
+            ? completed.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss") : "－"));
         if (review is not null)
         {
             var taxInclusive = review.TaxInclusiveAmount;
@@ -620,7 +646,7 @@ internal sealed class SyncIssuesForm : Form
             rows.Add(new("含稅折讓總額", "－"));
         }
         rows.Add(new("處理狀態", issue.ResolvedUtc is not null
-            ? "已解決"
+            ? "已人工處理"
             : review?.AwaitingConfirmation == true ? "等待光貿確認" : "等待管理員人工處理"));
         if (record is not null)
         {
@@ -651,6 +677,23 @@ internal sealed class SyncIssuesForm : Form
         yield return new("訂單編號", issue.OrderId);
         yield return new("待辦建立時間", issue.CreatedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss"));
         yield return new("目前訊息", issue.Message);
+    }
+
+    private string EmployeeDisplay(string employeeNo)
+    {
+        employeeNo = employeeNo.Trim();
+        if (employeeNo.Length == 0) return "－";
+        try
+        {
+            var account = repository.LoadAuthorityEmployees()
+                .FirstOrDefault(employee => string.Equals(employee.EmployeeNo, employeeNo, StringComparison.Ordinal));
+            return account is null || string.IsNullOrWhiteSpace(account.Name)
+                ? employeeNo : employeeNo + " " + account.Name.Trim();
+        }
+        catch
+        {
+            return employeeNo;
+        }
     }
 
     private InvoiceRecord FindIssueRecord(InvoiceSyncIssue issue) =>
@@ -759,7 +802,8 @@ internal sealed class SyncIssuesForm : Form
 
     private string IssueState(InvoiceSyncIssue issue)
     {
-        if (issue.ResolvedUtc is not null) return "已解決";
+        if (issue.ResolvedUtc is not null)
+            return IsAllowanceManualReview(issue) || IsAllowanceVoidManualReview(issue) ? "已人工處理" : "已解決";
         if (InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue))
         {
             try { if (administrativeClosure.CanClose(issue)) return "可結案"; }
@@ -798,31 +842,49 @@ internal sealed class SyncIssuesForm : Form
         return settings.Environment + "|" + sellerInvoice;
     }
 
-    private void LayoutColumns() => SizeColumns(list, DefaultWidths, flexibleColumn: 4, checkboxFirstColumn: true);
-
-    private static void SizeColumns(ListView target, IReadOnlyList<int> defaults, int flexibleColumn, bool checkboxFirstColumn)
+    private void LayoutColumns()
     {
-        if (target.Columns.Count != defaults.Count || target.ClientSize.Width <= 0) return;
-        var widths = defaults.ToArray();
-        for (var column = 0; column < target.Columns.Count; column++)
+        if (list.Columns.Count != DefaultWidths.Length || list.ClientSize.Width <= 0) return;
+        var widths = DefaultWidths.ToArray();
+        var available = Math.Max(1, list.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 4);
+        widths[4] = Math.Max(60, available - widths.Where((_, index) => index != 4).Sum());
+        settingColumnWidths = true;
+        try
         {
-            var measured = TextRenderer.MeasureText(target.Columns[column].Text, target.Font, new Size(int.MaxValue, int.MaxValue),
-                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + 18;
-            if (checkboxFirstColumn && column == 0) measured += 22;
-            foreach (ListViewItem item in target.Items)
-            {
-                if (column >= item.SubItems.Count) continue;
-                var valueWidth = TextRenderer.MeasureText(item.SubItems[column].Text, item.SubItems[column].Font ?? target.Font,
-                    new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + 18;
-                if (checkboxFirstColumn && column == 0) valueWidth += 22;
-                measured = Math.Max(measured, valueWidth);
-            }
-            widths[column] = Math.Max(widths[column], measured);
+            for (var index = 0; index < widths.Length; index++)
+                if (list.Columns[index].Width != widths[index]) list.Columns[index].Width = widths[index];
         }
-        var available = Math.Max(0, target.ClientSize.Width - 2);
-        var total = widths.Sum();
-        if (total < available) widths[flexibleColumn] += available - total;
-        for (var column = 0; column < widths.Length; column++) target.Columns[column].Width = widths[column];
+        finally { settingColumnWidths = false; }
+    }
+
+    private void ShowClippedContentToolTip(object? sender, MouseEventArgs eventArgs)
+    {
+        var hit = list.HitTest(eventArgs.Location);
+        var content = hit.Item is { } item && item.SubItems.Count > 4 &&
+            ReferenceEquals(hit.SubItem, item.SubItems[4])
+            ? item.SubItems[4].Text : string.Empty;
+        var available = list.Columns[4].Width - 12;
+        if (content.Length == 0 || TextRenderer.MeasureText(content, list.Font).Width <= available)
+            content = string.Empty;
+        if (content == visibleToolTip) return;
+        visibleToolTip = content;
+        contentToolTip.SetToolTip(list, content);
+    }
+
+    private void ClearContentToolTip()
+    {
+        visibleToolTip = string.Empty;
+        contentToolTip.SetToolTip(list, string.Empty);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            headerCursor.Dispose();
+            contentToolTip.Dispose();
+        }
+        base.Dispose(disposing);
     }
 
     private static void ApplyZebra(ListViewItem row, int index)
@@ -838,6 +900,8 @@ internal sealed class SyncIssuesForm : Form
 
     private static string FullIssueTime(InvoiceRecord record) =>
         record.InvoiceDate.Trim().Length != 0 ? (record.InvoiceDate.Trim() + " " + record.InvoiceTime.Trim()).Trim() : record.SentAt.Trim();
+
+    private static string ShortIssueTime(string value) => value.Length >= 16 ? value[..16] : value;
 
     private static string FriendlyFailureReason(string raw)
     {

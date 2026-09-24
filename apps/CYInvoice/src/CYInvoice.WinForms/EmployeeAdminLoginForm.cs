@@ -12,26 +12,34 @@ internal sealed class EmployeeAdminLoginForm : Form
     private const int CompactButtonWidth = 70;
     private const int CompactButtonHeight = 28;
     private readonly Func<string, string, EmployeeAccount?> authenticate;
+    private readonly bool administratorRequired;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(200);
     private readonly Button login = CompactButton("確定");
     private readonly Button cancel = CompactButton("取消");
 
     public EmployeeAdminLoginForm(EmployeeStore employees, string title = WindowTitle)
-        : this((employeeNo, password) => employees.Authenticate(employeeNo, password), title)
+        : this((employeeNo, password) => employees.Authenticate(employeeNo, password), title, true)
     {
         ArgumentNullException.ThrowIfNull(employees);
     }
 
     public EmployeeAdminLoginForm(LocalRepository repository, string title = WindowTitle)
-        : this((employeeNo, password) => repository.AuthenticateEmployee(employeeNo, password), title)
+        : this((employeeNo, password) => repository.AuthenticateEmployee(employeeNo, password), title, true)
     {
         ArgumentNullException.ThrowIfNull(repository);
     }
 
-    private EmployeeAdminLoginForm(Func<string, string, EmployeeAccount?> authenticate, string title)
+    public EmployeeAdminLoginForm(LocalRepository repository, string title, bool administratorRequired)
+        : this((employeeNo, password) => repository.AuthenticateEmployee(employeeNo, password), title, administratorRequired)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+    }
+
+    private EmployeeAdminLoginForm(Func<string, string, EmployeeAccount?> authenticate, string title, bool administratorRequired)
     {
         this.authenticate = authenticate ?? throw new ArgumentNullException(nameof(authenticate));
+        this.administratorRequired = administratorRequired;
         Text = string.IsNullOrWhiteSpace(title) ? WindowTitle : title.Trim();
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, WindowHeight);
@@ -125,7 +133,7 @@ internal sealed class EmployeeAdminLoginForm : Form
                 ValidationError("員工編號或密碼錯誤", password);
                 return;
             }
-            if (!EmployeeRoles.CanManageAccounts(account.Role))
+            if (administratorRequired && !EmployeeRoles.CanManageAccounts(account.Role))
             {
                 MessageBox.Show(this, "權限不足，僅管理員可執行此操作。", "權限不足",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);

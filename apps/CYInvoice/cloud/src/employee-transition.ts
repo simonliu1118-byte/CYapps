@@ -65,7 +65,7 @@ type InspectionItem = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.3";
+const CLOUD_VERSION = "0.8.4";
 
 function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();

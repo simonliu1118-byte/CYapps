@@ -46,7 +46,7 @@ internal sealed class AccountManagementForm : Form
         this.repository = repository;
         this.employees = employees ?? throw new ArgumentNullException(nameof(employees));
         this.actor = actor ?? throw new ArgumentNullException(nameof(actor));
-        Text = "帳號管理";
+        Text = "管理員帳號管理";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, WindowHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -773,7 +773,7 @@ internal sealed class AccountManagementForm : Form
         ResizeListColumns();
         var fixedWidth = EmployeeNoWidth + NameWidth + RoleWidth + StatusWidth;
         var expectedEmailWidth = Math.Max(EmailMinimumWidth, accountHost.ColumnViewportWidth - fixedWidth);
-        if (Text != "帳號管理" || add.Text != "新增使用者" || ShowIcon || List.View != View.Details || !List.FullRowSelect || List.Columns.Count != 5 ||
+        if (Text != "管理員帳號管理" || add.Text != "新增使用者" || ShowIcon || List.View != View.Details || !List.FullRowSelect || List.Columns.Count != 5 ||
             List.Columns[2].Width != expectedEmailWidth || ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
             AcceptButton is not null || CancelButton != close || !accountHost.UserColumnResizeLocked ||
             !UiControls.HasLogicalSize(add, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||

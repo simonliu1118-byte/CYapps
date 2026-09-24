@@ -2,6 +2,10 @@
 
 更新日期：2026-09-24
 
+## PR #100 最新進度
+
+PR #100 已接到 PR #73 最新基準；目前工程原始碼為 CYInvoice V2.6.5 Build 4、Cloud `0.8.4` / API `1` / Schema `8`。雲端忘記密碼採員工編號與 Email 核對後寄送、第二步輸入 OTP 與新密碼，重寄倒數使用伺服器回傳時間。一般員工的帳號管理提供本人密碼與 Email 異動，姓名仍由管理員維護。PR CI Run #36015425647 的 Cloud validate 與 Windows client 均成功；完整 Windows Build Run #36015789588 也成功並產生 `CYInvoice_V2.6.5_Build4_engineering-run229` 測試包。此版本未部署到 Cloudflare；不得把本段當成遠端已上線狀態。
+
 ## 最新工作：首次開啟直接加入雲端
 
 使用者已定案：首次開啟先選「使用單機版」或「直接加入雲端」。單機版仍先建立本機超管，之後加入既有 Workspace 維持原本的本機管理員驗證＋配對碼＋全機帳號轉換。全新安裝直接加入不建本機帳號，可選：(1) 既有可信裝置產生的短效配對碼；(2) Workspace ID＋該 Workspace 的中央 SUPER_ADMIN 員工編號與密碼，再以其已驗證 Email OTP 確認。兩條路徑先確認 Workspace 名稱，加入後取得 Device identity、中央 Employee snapshot 與受保護快取，才切 Cloud authority。相同 Email／帳密在不同 Workspace 仍是各自獨立的員工帳號；以 Workspace ID 指定目標。Cloud 參考實作目前仍只允許 bootstrap 一個 Workspace，不宣稱已完成多 Workspace 實測。
@@ -21,7 +25,7 @@
 - 接手時應先重新讀取 PR #73 的最新 head；不要依本文件硬編碼 branch head。
 - V2.6.4 Build 1 的 code-bearing head：`b6d0f1d8fa02d2fd182179c599208764d0320552`。
 - Cloud Check Run #211 已成功，engineering 測試包已產生；development deploy Run #6 已成功。
-- 最新 source compatibility：Cloud `0.8.3` / API `1` / Schema `8`；首次建立時的已驗證歷史版本仍為 Cloud `0.8.2` / Schema `7`。
+- PR #100 最新 source compatibility：Cloud `0.8.4` / API `1` / Schema `8`；PR #73 最新為 Cloud `0.8.3` / Schema `8`，首次建立時的已驗證歷史版本為 Cloud `0.8.2` / Schema `7`。
 - Forward migrations：`0001`～`0008`
 
 禁止自行 merge、tag、Release、auto-merge；只有使用者明確授權後才可執行。
@@ -88,6 +92,8 @@ Build 1 的 Run #211 已通過：
 2026-09-23 development deploy Run #6 已完成：Cloud 0.8.2 / API 1 / Schema 7 / storage `ok`；D1 無待套用 migration，部署前 Workspace／Device／Employee／Pairing 仍各為 0。這些是建立前的筆數，不可當作目前筆數。
 
 同日使用者在 Windows V2.6.4 Build 1 重新寄送 OTP 並執行首次建立；CYInvoice 畫面回報第一個 Workspace 與 Device 建立成功，且 Device identity 驗證完成。此為 Windows client 收到的成功結果；**建立後尚未從 Cloudflare D1 獨立唯讀核對筆數與記錄，也未確認 whole-device Employee Transition / cutover 完成**。不要再次執行 bootstrap 或清除資料。
+
+2026-09-24 本機 Codex 透過已連線的 Cloudflare MCP 唯讀查核 development D1：已有 1 個 Workspace、1 台 active Device、1 位已驗證且啟用的中央 SUPER_ADMIN；Device 與員工關聯有效，轉換待辦已完成且沒有未解決項目。使用者隨後於 A 機完成雲端帳號切換，回報目前運作正常；B 機尚未測試。Cloudflare MCP 的 HTTP fetch 對 workers.dev 回覆 403（requests to workers.dev are not allowed），所以本次未能從該工具獨立確認即時 `/v1/health`，不可沿用 2026-09-23 的 health 結果當作本次查核。不要再次 bootstrap 或清除資料。
 
 Cloudflare API、Bindings、Builds、Observability 四個官方 MCP 端點已由使用者在本機 Codex 檢查為「已設定／已載入／連線成功／目前不需 OAuth 登入」；該檢查尚未讀取 `cyinvoice-cloud-dev` 的 Workspace／Device。網頁版 Work 對話沒有這四個工具，不能把本機設定檔已登記誤當作網頁對話可用。這次工作採網頁版為主；需要 Cloudflare 即時狀態時，由已連線的本機 Codex 讀本文件後執行限定範圍的唯讀查核，並把去識別結果帶回主要工作對話。
 

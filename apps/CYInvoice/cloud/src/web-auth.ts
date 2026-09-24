@@ -23,7 +23,7 @@ type EmployeeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.3";
+const CLOUD_VERSION = "0.8.4";
 const APPLICATION_POLICIES: Record<string, ReadonlySet<string>> = {
   CYAccountingWeb: new Set(["SUPER_ADMIN", "ADMIN"]),
 };

@@ -24,7 +24,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("central employee listing parses Workspace roles", TestEmployeeListAsync),
     ("central employee update requires execution-time actor credentials", TestEmployeeAccountUpdateAsync),
     ("central employee Email change requires OTP confirmation", TestEmployeeEmailUpdateAsync),
-    ("central enabled and password operations never send plaintext new password", TestEmployeeEnabledAndPasswordAsync)
+    ("central enabled and password operations never send plaintext new password", TestEmployeeEnabledAndPasswordAsync),
+    ("cloud password recovery uses Email OTP and never sends plaintext password", TestEmployeePasswordRecoveryAsync)
 };
 
 var failures = new List<string>();
@@ -170,7 +171,7 @@ static async Task TestHealthAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
-        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.8.3","apiVersion":"1","schemaVersion":"8","environment":"test","storage":"ok"}"""));
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.8.4","apiVersion":"1","schemaVersion":"8","environment":"test","storage":"ok"}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -178,7 +179,7 @@ static async Task TestHealthAsync()
     True(health.Reachable, "health should be reachable");
     True(health.StorageAvailable, "backend storage should be available");
     Equal("cyinvoice-cloud", health.ServiceName, "service name");
-    Equal("0.8.3", health.CloudVersion, "cloud version");
+    Equal("0.8.4", health.CloudVersion, "cloud version");
     Equal("1", health.ApiVersion, "api version");
     Equal("8", health.SchemaVersion, "schema version");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
@@ -188,7 +189,7 @@ static async Task TestStorageOutageAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.ServiceUnavailable,
-        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.8.3","apiVersion":"1","schemaVersion":"8","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
+        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.8.4","apiVersion":"1","schemaVersion":"8","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -677,6 +678,48 @@ static async Task TestEmployeeEnabledAndPasswordAsync()
     var passwordUpdated = await client.SetPasswordAsync("0001", "actor-password", "0002", verifier);
     Equal(2, passwordUpdated.CredentialVersion, "password credential version");
     Equal(5, passwordUpdated.Revision, "password update Employee revision");
+}
+
+static async Task TestEmployeePasswordRecoveryAsync()
+{
+    const string token = "cydev_4444444444444444444444444444444444444444444444444444444444444444";
+    const string challengeId = "otp_aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb";
+    var handler = new QueueHandler();
+    handler.Enqueue(request =>
+    {
+        Equal("/v1/employees/password-recovery/challenge", request.RequestUri?.AbsolutePath ?? string.Empty,
+            "password recovery challenge path");
+        Equal(token, request.Headers.Authorization?.Parameter ?? string.Empty, "password recovery Device token");
+        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        Equal("0001", body.RootElement.GetProperty("employeeNo").GetString() ?? string.Empty,
+            "password recovery employee");
+        Equal("x@example.test", body.RootElement.GetProperty("email").GetString() ?? string.Empty,
+            "password recovery Email cross-check");
+        return JsonResponse(HttpStatusCode.Created,
+            """{"ok":true,"challenge":{"challengeId":"otp_aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb","maskedEmail":"x***@example.test","expiresAt":"2026-09-24T06:10:00Z","resendAfter":"2026-09-24T06:01:00Z"}}""");
+    });
+    handler.Enqueue(request =>
+    {
+        Equal("/v1/employees/password-recovery/confirm", request.RequestUri?.AbsolutePath ?? string.Empty,
+            "password recovery confirmation path");
+        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        Equal("0001", body.RootElement.GetProperty("employeeNo").GetString() ?? string.Empty,
+            "password recovery employee");
+        Equal(challengeId, body.RootElement.GetProperty("challengeId").GetString() ?? string.Empty,
+            "password recovery challenge ID");
+        Equal("123456", body.RootElement.GetProperty("otp").GetString() ?? string.Empty,
+            "password recovery OTP");
+        True(body.RootElement.GetProperty("credentialVerifier").GetString()?.StartsWith("pbkdf2-sha256$", StringComparison.Ordinal) == true,
+            "password recovery must send a verifier");
+        True(!body.RootElement.TryGetProperty("newPassword", out _), "plaintext password must not be uploaded");
+        return JsonResponse(HttpStatusCode.OK, """{"ok":true,"passwordReset":true}""");
+    });
+
+    using var http = new HttpClient(handler);
+    var client = new CloudEmployeeAccountClient(http, new Uri("https://cloud.example.test/"), token);
+    var challenge = await client.StartPasswordRecoveryAsync("0001", "x@example.test");
+    Equal(challengeId, challenge.ChallengeId, "password recovery challenge parsed");
+    await client.ConfirmPasswordRecoveryAsync("0001", challenge.ChallengeId, "123456", "NewPass123");
 }
 
 static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string json)

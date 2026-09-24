@@ -54,7 +54,7 @@ type OtpRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.3";
+const CLOUD_VERSION = "0.8.4";
 const EMAIL_PURPOSE = "employee_email_verification";
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
@@ -380,10 +380,13 @@ async function startUpdate(request: Request, env: Env, requestId: string): Promi
   const proposal = body ? normalizeProposal(body) : null;
   if (!actorNo || !actorPassword || !proposal)
     return json(env, requestId, 400, { error: { code: "INVALID_EMPLOYEE_UPDATE_REQUEST", message: "Employee update request is invalid." } });
-  const actor = await requireManager(env, device, actorNo, actorPassword);
-  if (!actor) return json(env, requestId, 403, { error: { code: "MANAGER_REQUIRED", message: "Administrator authentication failed." } });
+  const actor = await authenticateEmployee(env, device, actorNo, actorPassword);
+  if (!actor) return json(env, requestId, 403, { error: { code: "EMPLOYEE_AUTHENTICATION_FAILED", message: "Employee authentication failed." } });
   const target = await employeeByNo(env, device.workspace_id, proposal.targetEmployeeNo);
   if (!target) return json(env, requestId, 404, { error: { code: "EMPLOYEE_NOT_FOUND", message: "Employee was not found." } });
+  if (!((actor.role === "SUPER_ADMIN" || actor.role === "ADMIN") ||
+    (actor.employee_id === target.employee_id && proposal.name === target.name && proposal.role === target.role)))
+    return json(env, requestId, 403, { error: { code: "MANAGER_REQUIRED", message: "Only administrators may change another Employee or edit name and role." } });
   const authorityProblem = validateUpdateAuthority(actor, target, proposal);
   if (authorityProblem)
     return json(env, requestId, 403, { error: { code: authorityProblem, message: "This Employee update is not allowed." } });
@@ -472,10 +475,13 @@ async function confirmUpdate(request: Request, env: Env, requestId: string): Pro
   const suppliedOtp = typeof body?.otp === "string" && /^\d{6}$/.test(body.otp.trim()) ? body.otp.trim() : null;
   if (!actorNo || !actorPassword || !proposal || !challengeId || !suppliedOtp)
     return json(env, requestId, 400, { error: { code: "INVALID_EMPLOYEE_UPDATE_CONFIRMATION", message: "Employee update confirmation is invalid." } });
-  const actor = await requireManager(env, device, actorNo, actorPassword);
-  if (!actor) return json(env, requestId, 403, { error: { code: "MANAGER_REQUIRED", message: "Administrator authentication failed." } });
+  const actor = await authenticateEmployee(env, device, actorNo, actorPassword);
+  if (!actor) return json(env, requestId, 403, { error: { code: "EMPLOYEE_AUTHENTICATION_FAILED", message: "Employee authentication failed." } });
   const target = await employeeByNo(env, device.workspace_id, proposal.targetEmployeeNo);
   if (!target) return json(env, requestId, 404, { error: { code: "EMPLOYEE_NOT_FOUND", message: "Employee was not found." } });
+  if (!((actor.role === "SUPER_ADMIN" || actor.role === "ADMIN") ||
+    (actor.employee_id === target.employee_id && proposal.name === target.name && proposal.role === target.role)))
+    return json(env, requestId, 403, { error: { code: "MANAGER_REQUIRED", message: "Only administrators may change another Employee or edit name and role." } });
   const authorityProblem = validateUpdateAuthority(actor, target, proposal);
   if (authorityProblem)
     return json(env, requestId, 403, { error: { code: authorityProblem, message: "This Employee update is not allowed." } });

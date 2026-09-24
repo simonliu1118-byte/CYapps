@@ -24,6 +24,13 @@ public sealed record InvoiceVoidManualReview(
     string Reason,
     DateTimeOffset RequestedUtc);
 
+public sealed record InvoiceVoidHandledReview(
+    string RequesterEmployeeNo,
+    string Reason,
+    DateTimeOffset RequestedUtc,
+    string ReviewerEmployeeNo,
+    DateTimeOffset SubmittedUtc);
+
 public sealed record EmployeeVoidWorkflowResult(
     bool ManualReviewRequired,
     InvoiceRecord Record,
@@ -40,6 +47,7 @@ public sealed class EmployeeVoidWorkflowService
 {
     public const int MaxReasonLength = 10;
     private const string ManualReviewMetadataKey = "cyinvoice_void_manual_review";
+    private const string HandledReviewMetadataKey = "cyinvoice_void_handled_review";
     private readonly LocalRepository repository;
     private readonly InvoiceVoidService voidService;
     private readonly InvoiceSyncRepository syncRepository;
@@ -114,6 +122,17 @@ public sealed class EmployeeVoidWorkflowService
         return ReadManualReview(record);
     }
 
+    public InvoiceVoidHandledReview? HandledReviewFor(InvoiceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.ExtensionData is null ||
+            !record.ExtensionData.TryGetValue(HandledReviewMetadataKey, out var value) ||
+            value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        try { return value.Deserialize<InvoiceVoidHandledReview>(); }
+        catch (JsonException error) { throw new InvalidDataException("作廢人工處理紀錄格式錯誤", error); }
+    }
+
     public async Task<InvoiceVoidResult> ApproveManualReviewAsync(
         InvoiceSyncIssue issue,
         string actorEmployeeNo,
@@ -136,6 +155,14 @@ public sealed class EmployeeVoidWorkflowService
             InvoiceVoidOutcome.PendingConfirmation)
         {
             var latest = Reload(result.Record);
+            latest.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            latest.ExtensionData[HandledReviewMetadataKey] = JsonSerializer.SerializeToElement(
+                new InvoiceVoidHandledReview(
+                    review.RequesterEmployeeNo,
+                    review.Reason,
+                    review.RequestedUtc,
+                    manager.EmployeeNo,
+                    now().ToUniversalTime()));
             ClearManualReview(latest);
             syncRepository.UpsertMany([latest]);
             issueStore.Resolve(issue.Id, now());

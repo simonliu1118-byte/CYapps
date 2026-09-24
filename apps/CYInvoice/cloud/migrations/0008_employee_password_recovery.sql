@@ -14,6 +14,7 @@ CREATE TABLE email_otp_challenges (
             'device_pairing_authorization',
             'employee_email_verification',
             'employee_password_reset',
+            'employee_password_recovery',
             'super_admin_transfer_authorization',
             'recovery_email_change'
         )

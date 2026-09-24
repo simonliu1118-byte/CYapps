@@ -21,6 +21,12 @@ public sealed record CloudEmployeeUpdateStart(
     CloudEmployeeUpdateChallenge? Challenge,
     CloudEmployeeTransitionIdentity? Employee);
 
+public sealed record CloudEmployeePasswordRecoveryChallenge(
+    string ChallengeId,
+    string MaskedEmail,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset ResendAfter);
+
 public sealed class CloudEmployeeAccountClient
 {
     private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(8);
@@ -153,6 +159,51 @@ public sealed class CloudEmployeeAccountClient
         return ReadEmployeeResponse(document);
     }
 
+    public async Task<CloudEmployeePasswordRecoveryChallenge> StartPasswordRecoveryAsync(
+        string employeeNo,
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateEmployeeNo(employeeNo, nameof(employeeNo));
+        email = email?.Trim() ?? string.Empty;
+        if (email.Length == 0 || email.Length > 254 || !email.Contains('@'))
+            throw new ArgumentException("Email is invalid.", nameof(email));
+        using var document = await SendAsync(
+            "v1/employees/password-recovery/challenge",
+            new { employeeNo = employeeNo.Trim(), email }, cancellationToken);
+        if (!document.RootElement.TryGetProperty("challenge", out var challenge) ||
+            challenge.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Cloud password recovery challenge is missing.");
+        return new CloudEmployeePasswordRecoveryChallenge(
+            ReadRequiredString(challenge, "challengeId"),
+            ReadRequiredString(challenge, "maskedEmail"),
+            ReadRequiredDateTimeOffset(challenge, "expiresAt"),
+            ReadRequiredDateTimeOffset(challenge, "resendAfter"));
+    }
+
+    public async Task ConfirmPasswordRecoveryAsync(
+        string employeeNo,
+        string challengeId,
+        string otp,
+        string newPassword,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateEmployeeNo(employeeNo, nameof(employeeNo));
+        if (string.IsNullOrWhiteSpace(challengeId) ||
+            !challengeId.Trim().StartsWith("otp_", StringComparison.Ordinal))
+            throw new ArgumentException("Challenge ID is invalid.", nameof(challengeId));
+        otp = otp?.Trim() ?? string.Empty;
+        if (otp.Length != 6 || !otp.All(char.IsAsciiDigit))
+            throw new ArgumentException("OTP must be six digits.", nameof(otp));
+        var credentialVerifier = CloudEmployeeCredentialVerifier.Create(newPassword);
+        using var document = await SendAsync(
+            "v1/employees/password-recovery/confirm",
+            new { employeeNo = employeeNo.Trim(), challengeId = challengeId.Trim(), otp, credentialVerifier },
+            cancellationToken);
+        if (!ReadRequiredBoolean(document.RootElement, "passwordReset"))
+            throw new InvalidDataException("Cloud password recovery confirmation is incomplete.");
+    }
+
     private static object UpdatePayload(string actorEmployeeNo, string actorPassword, CloudEmployeeUpdateProposal proposal) => new
     {
         actorEmployeeNo = actorEmployeeNo.Trim(),
@@ -180,11 +231,15 @@ public sealed class CloudEmployeeAccountClient
 
         var code = ReadErrorCode(document.RootElement);
         var message = ReadErrorMessage(document.RootElement);
+        int? retryAfterSeconds = document.RootElement.TryGetProperty("retryAfterSeconds", out var retry) &&
+            retry.ValueKind == JsonValueKind.Number && retry.TryGetInt32(out var seconds) && seconds > 0
+                ? seconds : null;
         document.Dispose();
         throw new CloudApiException(
             code.Length == 0 ? "CLOUD_API_ERROR" : code,
             message.Length == 0 ? $"Cloud API returned {(int)response.StatusCode}." : message,
-            response.StatusCode);
+            response.StatusCode,
+            retryAfterSeconds);
     }
 
     private static CloudEmployeeTransitionIdentity ReadEmployeeResponse(JsonDocument document)
