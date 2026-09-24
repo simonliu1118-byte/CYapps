@@ -32,13 +32,40 @@
 - 任何 AI 接手 APP 前，先直接比對本 repo `COMMON_RULES_VERSION` 與 AITeam `main`；若不同或內容有疑義，先同步再開發。
 - 同步只可更新三個共通母本副本，不得覆蓋本 repo `REPO_POLICY.md` 或任何 APP 的 `PROJECT_RULES.md`。
 
-## 5. Public Git 歷史
+## 5. CY 共用視覺準則
+
+AITeam `main` 是 CY 共用桌面視覺與 Icon Family 的唯一 canonical source：
+
+- Desktop Visual Guide：`shared/cy-visual/desktop/CY_DESKTOP_VISUAL_GUIDE.md`
+- Icon Family：`shared/cy-visual/icon-family/`
+
+本 repo 中下列 Windows 桌面專案正式採用上述 canonical source：
+
+- `CYAccounting`
+- `CYEnvelope`
+- `CYInvoice`
+- `CYERPAutoInput`
+- `TriINVCalc`
+- `SMARTCOPIConverter`
+
+`CYAccountingWeb` 是 Web 專案，不自動套用 Windows Desktop Visual Guide；若未來需要共用 Web 視覺規範，必須另由正式治理來源明確定義。
+
+採用規則：
+
+- AI／開發者在上述桌面專案進行新 UI、UI 重構、視覺調整、控制項樣式、Theme、Table/List、Dialog、Shell、Icon 或相關視覺工作前，必須先讀取 AITeam `main` 的 canonical visual source，再依目前專案 `PROJECT_RULES.md` 與實際 framework 實作。
+- 不得在 CYapps 另外維護第二套完整 Desktop Visual Guide 或 Icon Family 家族規格；family-wide／guide-wide 變更先回 AITeam canonical source 處理。
+- 個別 App 如有必要永久例外，只能寫入該 App 唯一 `PROJECT_RULES.md`；不得新增平行視覺規則檔。
+- 既有穩定 UI 不因本規則立即要求全面重製；新增畫面、被修改的視覺區域或使用者明確要求的 UI 整理應優先向 canonical direction 收斂，並遵守 native-first / complexity guardrails，避免為了外觀破壞穩定性。
+- Icon 導入只帶回該 App 自己的正式 SVG／PNG／ICO 資產，不 mirror 整套 family 文件；family-level source 永遠以 AITeam `main` 為準。
+- AITeam Visual Guide 已確認的 100% / 96 DPI 狀態可引用；125% / 150% 仍屬 Deferred，未實際驗證前不得宣稱已通過。
+
+## 6. Public Git 歷史
 
 - 新 commit 必須使用共通規則指定的 GitHub noreply email。
 - 不得從 Private repo 直接 mirror／merge 含敏感 ancestry 的歷史進來；需要遷移工作線時，以 Public 乾淨基準重建有效內容。
 - 歷史清理屬例外維護操作，必須由使用者明確同意並在完成後重新掃描 branch／tag／PR refs。
 
-## 6. 公司命名與 Copyright
+## 7. 公司命名與 Copyright
 
 - 中文名稱需要轉寫羅馬拼音時依共通規則一律採 Wade–Giles（威妥瑪）。
 - 志遠固定使用 `Chihyuan`／`Chih-yuan`，縮寫固定為 `CY`；不得使用 `Zhiyuan`。
