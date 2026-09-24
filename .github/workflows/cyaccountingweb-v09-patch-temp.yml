@@ -1,0 +1,128 @@
+name: CYAccountingWeb V0.9 Patch (Temporary)
+
+on:
+  push:
+    branches:
+      - cyaccountingweb/v0.9-desktop-ux
+    paths:
+      - '.github/workflows/cyaccountingweb-v09-patch-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccountingweb/v0.9-desktop-ux
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Patch V0.9 desktop layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('apps/CYAccountingWeb')
+
+          # index.html
+          path = root / 'public/index.html'
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('  <link rel="stylesheet" href="/v08.css">\n', '  <link rel="stylesheet" href="/v08.css">\n  <link rel="stylesheet" href="/v09.css">\n', 1)
+          text = text.replace('CYAccounting Web <span class="version">V0.8.0</span>', 'CYAccounting Web <span class="version">V0.9.0</span>', 1)
+
+          old_title = '<div class="title-with-badge"><h2>新增記帳</h2><span id="entryLockBadge" class="lock-badge hidden">本月已鎖帳</span></div>'
+          new_title = '''<div class="title-with-badge"><h2>新增記帳</h2><fieldset class="entry-kind-switch-field"><legend>收支模式</legend><div class="entry-kind-switch" role="group" aria-label="收入或支出"><button type="button" class="kind-button" data-kind="income">收入</button><button type="button" class="kind-button active" data-kind="expense">支出</button></div></fieldset><span id="entryLockBadge" class="lock-badge hidden">本月已鎖帳</span></div>'''
+          if old_title not in text:
+              raise SystemExit('entry title marker not found')
+          text = text.replace(old_title, new_title, 1)
+
+          old_kind = '<fieldset class="kind-field"><legend>收支</legend><div class="kind-buttons"><button type="button" class="kind-button active" data-kind="expense">支出</button><button type="button" class="kind-button" data-kind="income">收入</button></div></fieldset>'
+          if old_kind not in text:
+              raise SystemExit('entry kind field marker not found')
+          text = text.replace(old_kind, '', 1)
+
+          text = text.replace('<div class="modal-header"><div><h2>設定</h2><p>帳戶、科目、期初餘額與鎖帳</p></div>', '<div class="modal-header"><div><h2>設定</h2><p>帳戶、科目與鎖帳</p></div>', 1)
+          text = text.replace('        <button type="button" class="settings-tab" data-settings-tab="opening">期初餘額</button>\n', '', 1)
+          text, n = re.subn(r'\n        <section class="settings-pane" data-settings-pane="opening">.*?</section>\n', '\n', text, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('opening settings pane not found')
+
+          opening_dialog = '''\n  <dialog id="openingDialog" class="modal opening-modal">\n    <div class="modal-header"><div><h2>期初餘額</h2><p>設定選定月份各帳戶的期初金額；已鎖帳月份僅供檢視。</p></div><button class="icon-button" type="button" data-close-dialog="openingDialog" aria-label="關閉">×</button></div>\n    <div class="pane-heading opening-dialog-heading"><p class="hint">空白代表未設定；可輸入負數。歷史帳戶仍可查看既有設定。</p><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>\n    <div id="openingRows" class="opening-list"></div>\n    <div id="openingMessage" class="dialog-message"></div>\n    <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="openingDialog">關閉</button><button id="saveOpeningButton" class="primary" type="button">儲存期初餘額</button></div>\n  </dialog>\n\n'''
+          marker = '  <dialog id="settingsDialog" class="modal settings-modal">'
+          if marker not in text:
+              raise SystemExit('settings dialog marker not found')
+          text = text.replace(marker, opening_dialog + marker, 1)
+
+          text = text.replace('  <script src="/v08.js" defer></script>\n', '  <script src="/v08.js" defer></script>\n  <script src="/v09.js" defer></script>\n', 1)
+          path.write_text(text, encoding='utf-8')
+
+          # public/app.js: move opening-balance messaging into dedicated dialog.
+          path = root / 'public/app.js'
+          text = path.read_text(encoding='utf-8')
+          needle = "    saveOpeningButton: document.querySelector('#saveOpeningButton'),\n"
+          replacement = needle + "    openingDialog: document.querySelector('#openingDialog'),\n    openingMessage: document.querySelector('#openingMessage'),\n"
+          if needle not in text:
+              raise SystemExit('app opening refs marker not found')
+          text = text.replace(needle, replacement, 1)
+          text = text.replace("  if (state.activeSettingsTab === 'opening') loadOpeningBalances();\n", '', 1)
+          text = text.replace("  if (tab === 'opening') loadOpeningBalances();\n", '', 1)
+          text = text.replace("if (data.locked) setDialogMessage(els.settingsMessage, `${month} 已鎖帳，期初餘額僅供檢視。`, true);", "if (data.locked) setDialogMessage(els.openingMessage, `${month} 已鎖帳，期初餘額僅供檢視。`, true);", 1)
+          text = text.replace("return setDialogMessage(els.settingsMessage, `${input.dataset.openingAccount} 的期初餘額必須是整數。`, true);", "return setDialogMessage(els.openingMessage, `${input.dataset.openingAccount} 的期初餘額必須是整數。`, true);", 1)
+          text = text.replace("setDialogMessage(els.settingsMessage, '期初餘額已儲存。');\n    await loadOpeningBalances();", "setDialogMessage(els.openingMessage, '期初餘額已儲存。');\n    await loadOpeningBalances();\n    if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();", 1)
+          text = text.replace("setDialogMessage(els.settingsMessage, error.message, true);\n  } finally {\n    els.saveOpeningButton.disabled = Boolean(state.openingData?.locked);", "setDialogMessage(els.openingMessage, error.message, true);\n  } finally {\n    els.saveOpeningButton.disabled = Boolean(state.openingData?.locked);", 1)
+          text = text.replace("    if (state.activeSettingsTab === 'opening') await loadOpeningBalances();\n", '', 1)
+          path.write_text(text, encoding='utf-8')
+
+          # v06.js: reorganize ledger tools and summary presentation.
+          path = root / 'public/v06.js'
+          text = path.read_text(encoding='utf-8')
+          pattern = r"  tools\.innerHTML = `.*?`;\n  title\.insertAdjacentElement\('afterend', tools\);"
+          replacement = '''  tools.innerHTML = `\n    <div class="ledger-period-tools">\n      <div class="ledger-month-tools">\n        <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月">‹</button>\n        <div id="ledgerMonthSlot"></div>\n        <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>\n        <span id="ledgerDisplayMonth" class="ledger-display-month"></span>\n      </div>\n      <button id="ledgerOpeningBalanceButton" class="secondary compact ledger-tool-button emphasis" type="button">期初餘額</button>\n    </div>\n    <form id="ledgerSearchForm" class="ledger-search" role="search">\n      <input id="ledgerSummarySearch" type="search" maxlength="100" placeholder="搜尋摘要">\n      <button class="secondary compact" type="submit">搜尋</button>\n      <button id="ledgerSearchClear" class="secondary compact" type="button">清除</button>\n    </form>\n    <div class="ledger-view-tools">\n      <button id="ledgerGroupToggle" class="secondary compact" type="button" aria-pressed="false">帳戶分組</button>\n    </div>\n  `;\n  title.insertAdjacentElement('afterend', tools);'''
+          text, n = re.subn(pattern, replacement, text, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit('v06 toolbar block not found')
+
+          old_summary = "  els.monthSummary.textContent = `期初 ${money(openingTotal)}　收入 ${money(income)}　支出 ${money(expense)}　淨利損 ${money(income - expense)}　期末 ${money(endingTotal)}${query ? `　｜搜尋顯示 ${visible.length}/${allTransactions.length} 筆` : ''}`;"
+          new_summary = "  els.monthSummary.innerHTML = `<span class=\"ledger-summary-item\">期初 <strong>${money(openingTotal)}</strong></span><span class=\"ledger-summary-item income\">收入 <strong>${money(income)}</strong></span><span class=\"ledger-summary-item expense\">支出 <strong>${money(expense)}</strong></span><span class=\"ledger-summary-item\">淨利損 <strong>${money(income - expense)}</strong></span><span class=\"ledger-summary-item ending\">期末 <strong>${money(endingTotal)}</strong></span>${query ? `<span class=\"ledger-summary-search\">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;"
+          if old_summary not in text:
+              raise SystemExit('v06 summary line not found')
+          text = text.replace(old_summary, new_summary, 1)
+          path.write_text(text, encoding='utf-8')
+
+          # Version and TODO
+          (root / 'VERSION').write_text('0.9.0\n', encoding='utf-8')
+          todo = root / 'TODO.md'
+          t = todo.read_text(encoding='utf-8')
+          marker = '## UI／UX 與多裝置支援\n\n'
+          addition = '- [x] Desktop UI/UX Phase 2：主工作區縮窄約 20%、收支改雙態切換、輸入確認改右側 edge sidebar、期初餘額移至記帳資料區、重整記帳工具列（V0.9.0）。\n'
+          if addition not in t:
+              if marker not in t:
+                  raise SystemExit('TODO UI marker not found')
+              t = t.replace(marker, marker + addition, 1)
+          todo.write_text(t, encoding='utf-8')
+          PY
+
+          node --check apps/CYAccountingWeb/public/app.js
+          node --check apps/CYAccountingWeb/public/v06.js
+          node --check apps/CYAccountingWeb/public/v09.js
+          grep -q 'V0.9.0' apps/CYAccountingWeb/public/index.html
+          grep -q 'ledgerOpeningBalanceButton' apps/CYAccountingWeb/public/v06.js
+          grep -q 'openingDialog' apps/CYAccountingWeb/public/index.html
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/CYAccountingWeb/public/index.html \
+                  apps/CYAccountingWeb/public/app.js \
+                  apps/CYAccountingWeb/public/v06.js \
+                  apps/CYAccountingWeb/VERSION \
+                  apps/CYAccountingWeb/TODO.md
+          git commit -m 'feat(CYAccountingWeb): reorganize desktop workspace for V0.9'
+          git push origin HEAD:cyaccountingweb/v0.9-desktop-ux
