@@ -1,4 +1,4 @@
-志遠記帳系統 V1.0.27 原始碼
+志遠記帳系統 V1.0.27 Build 1 原始碼
 
 Windows x64 測試包
 - CYAccounting Build 的成功執行頁面會提供短期 Actions Artifact，下載後先解壓縮外層 Artifact，再解壓縮唯一的可攜版 ZIP；從 `CYAccounting` 資料夾執行 `CYAccounting.exe`，不用另裝 Python。校驗檔由 CI 內部檢查，不放入使用者下載包。

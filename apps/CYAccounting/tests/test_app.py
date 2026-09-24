@@ -156,7 +156,6 @@ def test_account_manager_controls_and_titles():
     dlg.close()
     category_dlg.close()
     opening_dlg.close()
-    clear_dlg.close()
     db.close()
 
 def test_ui_constructs():
