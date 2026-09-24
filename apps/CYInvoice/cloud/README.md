@@ -1,90 +1,183 @@
-# CYInvoice Cloud Foundation
+# CYInvoice Cloud Reference Backend
 
-Cloudflare Worker + D1 backend foundation for CYInvoice.
+Cloudflare Worker + D1 reference implementation for CYInvoice V3 coordination and central Employee identity.
 
-This directory is isolated from the Windows client. AMEGO remains the authoritative source for invoice and allowance state, and AMEGO App Keys remain local to each Windows machine.
+AMEGO remains the authoritative source for invoice / void / allowance business state. AMEGO App Keys remain local to Windows and are not part of this backend.
 
-## Development resources
+The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; current engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`.
 
-- Worker: `cyinvoice-cloud-dev`
-- D1 binding: `DB`
-- D1 database: `cyinvoice-cloud-dev-db`
-- Environment: `development`
+## Current compatibility
 
-The D1 database UUID is an identifier, not an authentication secret. Cloudflare API tokens, account keys, AMEGO App Keys, passwords, device tokens, bootstrap keys, and production data must never be committed here.
+- Service: `cyinvoice-cloud`
+- Cloud implementation: `0.8.2`
+- API: `1`
+- Schema: `7`
+- Migrations: `0001` through `0007`
+- Worker entrypoint: `src/app.ts`
 
-## Commands
+`wrangler.jsonc` advertises the client compatibility schema. Applied migrations are immutable; future changes must use new forward migrations.
+
+> GitHub Actions validates the Worker bundle and migrations with local SQLite. It does not prove the remote Cloudflare deployment or remote D1 has already reached Schema 7.
+
+## Development commands
 
 ```bash
 npm install
 npm run check
+npm test
+npm run deploy:dry-run
 npm run db:migrate:local
-npm run dev
 ```
 
-The development Worker currently uses this deploy command in Cloudflare Workers Builds:
-
-```bash
-npm run deploy:with-migrations
-```
-
-That command applies only pending Wrangler D1 migrations and then deploys the Worker. This is intentional for `cyinvoice-cloud-dev` while the schema is still changing frequently, so routine development does not require repeatedly editing Cloudflare build settings.
-
-The underlying commands remain available separately:
+Remote actions must be deliberate:
 
 ```bash
 npm run db:migrate:remote
 npm run deploy
 ```
 
-When a production Worker/database is introduced, production schema migration must be separated from routine Worker deployment and handled as an explicit controlled operation.
-
-## Cloud bootstrap secret
-
-The first workspace bootstrap endpoint is disabled unless the Worker has a secret named `BOOTSTRAP_KEY`.
-
-Set it through Cloudflare without committing or sharing the value:
+or, only when explicitly intended:
 
 ```bash
-npx wrangler secret put BOOTSTRAP_KEY
+npm run deploy:with-migrations
 ```
 
-The bootstrap key is only for creating the first workspace and first trusted device. After a workspace exists, the endpoint refuses a second initialization even if the key is correct. The Windows client never persists the bootstrap key; it only stores the returned device token using the existing protected settings mechanism.
+Do not infer remote deployment state from source or CI alone.
 
-## API endpoints
+## Runtime secrets
 
-Public health/version endpoints:
+Secrets must be configured as Worker runtime secrets and never committed:
 
-- `GET /health`
+- `BOOTSTRAP_KEY`
+- `OTP_PEPPER`
+- `BREVO_API_KEY` or another provider credential
+- sender identity / `EMAIL_FROM`
+
+Do not commit Cloudflare API tokens, account keys, passwords, Device Tokens, OTP values, recovery codes, AMEGO credentials, real Employee Email addresses, or production data.
+
+## Identity model
+
+### Device
+
+- Workspace ID: Cloud-generated.
+- Device ID: Cloud-generated.
+- Device Token: Windows-generated before the request, protected locally before network submission.
+- Cloud stores only Device Token hash.
+- Pairing Code authorizes a Device to join a Workspace; it does not grant Employee role.
+
+### Employee
+
+Before cutover, Local EmployeeStore remains the single authority. Device onboarding then runs a whole-device Employee Transition over all existing Local Employees.
+
+Identity matching:
+
+```text
+Employee No absent + Email absent
+  → new Cloud Employee after own Email verification
+
+Employee No + Email both identify the same existing Employee
+  → directly adopt that Cloud Employee
+
+partial or divergent match
+  → pending conflict for current Workspace SUPER_ADMIN
+```
+
+Name is display data, not matching authority.
+
+After cutover:
+
+```text
+Cloud Employee = only account authority
+Local data = synchronized cache + protected offline credential verifier
+```
+
+A network outage does not switch the machine back to the old Local Employee authority.
+
+## Execution-time authorization
+
+CYInvoice has no persistent application login. Sensitive Cloud operations include Employee No + password at execution time; the backend verifies the credential and current role for that request.
+
+Central account mutations are Online-only:
+
+- Employee create.
+- name / Email update.
+- `ADMIN ↔ EMPLOYEE`.
+- enabled state.
+- password change / reset.
+- pending identity resolution.
+- SUPER_ADMIN transfer.
+
+New or changed Email is committed only after OTP verification where required.
+
+## SUPER_ADMIN
+
+Each Workspace has exactly one enabled `SUPER_ADMIN`.
+
+Transfer is a dedicated high-privilege operation:
+
+```text
+current X password re-auth
+  → OTP to X verified Email
+  → backend rechecks X and target Y
+  → atomic X=ADMIN, Y=SUPER_ADMIN
+  → Workspace Recovery Email moves to Y verified Email
+```
+
+Normal role update cannot create or remove `SUPER_ADMIN`.
+
+## Main endpoint groups
+
+Foundation / Device:
+
 - `GET /v1/health`
-- `GET /v1/health/db`
-- `GET /v1/version`
-
-Foundation device endpoints:
-
+- `GET /v1/onboarding/status`
+- `POST /v1/onboarding/bootstrap-email`
 - `POST /v1/bootstrap`
-  - requires `X-Bootstrap-Key`
-  - creates the first workspace and first trusted device
-  - returns the first device token once
 - `GET /v1/device`
-  - requires `Authorization: Bearer <device-token>`
-- `POST /v1/device-pairings`
-  - requires an authenticated active device
-  - returns a one-time pairing code valid for 10 minutes
-- `POST /v1/device-pairings/claim`
-  - claims a valid pairing code for a new device
-  - returns the new device token once
+- Device pairing authorization / create / claim routes
 
-Device tokens and pairing codes are stored only as SHA-256 hashes in D1. Plaintext device tokens are returned only at creation/claim time and must be protected by the Windows client before persistence.
+Employee Transition:
 
-The public health endpoints intentionally expose no workspace, device, invoice, allowance, credential, or row-count data.
+- whole-device transition inspection / actions
+- Employee Email verification
+- pending conflict list / resolution
+- authority snapshot / cutover
 
-Phase 1 still contains no employee authentication, invoice data, allowance data, AMEGO proxying, or cross-device work items. Those are added in separate reviewed batches.
+Central account management:
 
-## Current state
+- Employee create challenge / confirm
+- Employee update challenge / confirm
+- enabled update
+- password update
+- SUPER_ADMIN transfer challenge / confirm
 
-Schema version `2` (`0002_device_pairing.sql`) is active in the development D1 database. The Windows client currently supports Local Only / Cloud Preferred mode selection, user-configured HTTPS endpoint validation, D1-backed health/schema compatibility checks, onboarding-status detection, and safe fallback to local operation when the Cloud API is unavailable.
+The legacy single-account mutation route:
 
-Windows live validation has confirmed the development Worker and D1 can be reached from the engineering client. With no Workspace initialized, the setup UI correctly reports `連線正常｜尚未建立雲端空間`.
+```text
+POST /v1/employees/reconcile-local
+```
 
-The Core client already contains bootstrap and device-pairing contract methods, and the reference Worker exposes the matching endpoints. Those onboarding/device flows are intentionally **not yet wired into the formal Windows product UI**. Workspace creation, existing SUPER_ADMIN migration/verification, first trusted-device registration, and subsequent device pairing are the next reviewed stages.
+is retired and fails closed with `LEGACY_EMPLOYEE_RECONCILIATION_RETIRED`. The arbitrary old Employee import window is no longer part of the reference backend.
+
+`GET /v1/employees` remains read-only compatibility only; current Windows Cloud authority/cache flow uses the Employee Authority snapshot contract.
+
+## Email / OTP
+
+The backend uses a provider-neutral Email adapter. Brevo is the current development reference provider; a Resend adapter is retained for later use.
+
+OTP requirements include:
+
+- Web Crypto random 6-digit code.
+- HMAC-SHA256 digest at rest.
+- 10-minute expiry.
+- resend cooldown.
+- attempt limit.
+- rate limit.
+- one-time consumption.
+- scope binding for the intended operation.
+
+No live Email-delivery claim should be made until the development deployment has the required runtime secrets and is tested end-to-end.
+
+## Public repository boundary
+
+This directory is public source. Keep implementation provider-neutral at the Windows boundary and do not place runtime secrets or operational customer data in source, PR text, logs, or engineering artifacts.

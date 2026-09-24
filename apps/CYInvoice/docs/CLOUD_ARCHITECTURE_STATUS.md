@@ -1,256 +1,212 @@
-# CYInvoice 雲端架構現況與定案
+# CYInvoice Cloud Architecture Status
 
-> 本文件記錄 CYInvoice 雲端功能的目前工程狀態、已定案的產品邊界與後續實作方向。它是需求／狀態文件，不取代 `PROJECT_RULES.md`、`REPOSITORY_RULES.md` 或 `REPO_POLICY.md`。
->
-> 本 repository 為 Public repository。本文不得包含任何實際 Cloud 帳號、資源 ID、私人端點、密鑰、Token、公司正式資料、Email、正式統編或其他營運／個資資訊。
+此文件只描述目前已實作／已驗證的雲端工程狀態。長期產品藍圖見 `CLOUD_ROADMAP.md`；Workspace／Device／Employee 身分生命週期見 `CLOUD_IDENTITY_LIFECYCLE.md`。若由新的長時間工作階段／ChatGPT Work 接手，先依 `AGENTS.md` 讀永久規則，再讀 `CLOUD_WORK_HANDOFF.md`。
 
-## 1. 核心產品定位
+> 本 repository 為 Public repository。不得寫入任何實際 endpoint、密鑰、Device Token、OTP、真實 Email、正式公司資料或其他營運／個資資訊。
 
-CYInvoice 必須永久支援兩種運作模式：
+## 1. 工程基準
 
-1. **單機模式（Local Only）**
-2. **雲端模式（Cloud Enabled / Cloud Preferred）**
+- Windows 正式產品線：C# / WinForms。
+- 工程版本：V2.6.4 Build 1。
+- Reference backend：Cloudflare Worker + D1。
+- Cloud API：`1`。
+- Cloud implementation version：`0.8.2`。
+- Cloud schema compatibility：`7`，forward migrations `0001`～`0007`。
+- Public Windows client 不內建專案擁有者私人 endpoint，只接受使用者設定的相容 HTTPS API。
+- 已執行 migration 不回寫；schema 修改只能新增 forward migration。
 
-單機模式是完整可用的產品模式，不是雲端模式的降級版。使用者若只需要單機使用，完成既有本機設定後即可使用，不需要任何雲端服務。
+GitHub Actions 驗證的是 source、Worker bundle、local SQLite migration、.NET contract、Windows build／startup smoke 與 engineering package；不等同 remote 已部署。2026-09-22 已確認 development D1 remote 為 Schema 7、Brevo bootstrap OTP 已成功寄達。首次實際建立 Workspace 時因 Worker INSERT SQL 欄位和值數量不符而回滾。2026-09-23 Cloud 0.8.2 已由 development deploy Run #6 部署，`/v1/health` 回覆 API 1 / Schema 7 / storage `ok`；部署前唯讀查核 Workspace／Device／Employee／Pairing 均為 0。之後 Windows V2.6.4 Build 1 回報第一個 Workspace／Device 建立成功與 Device identity 驗證完成；建立後的 D1 尚未獨立唯讀核對，Employee Transition／cutover 尚未驗收。部署前的 0 筆不得當成目前狀態。
 
-雲端模式是可選擴充層，目標是提供多裝置共同狀態、中央帳號／權限、跨機工作協調、防重與後續稽核能力。
+## 2. 帳號權威模型
 
-## 2. Public Repo 的重要邊界
-
-CYInvoice Windows client **不得直接綁定某一個實際雲端資料庫，也不得內建任何專案擁有者的私人 Cloud endpoint**。
-
-正式設計必須符合：
-
-- Windows client 不直接連 D1、PostgreSQL、MySQL 或其他資料庫。
-- Windows client 只連一個由使用者設定的 **CYInvoice-compatible HTTPS API endpoint**。
-- 該 API 背後使用何種資料庫、雲端平台、Server framework 或部署方式，不是 Windows client 的責任。
-- repository 不得提交實際 Cloud 帳號 ID、Database ID、私人 Worker URL、API token、bootstrap secret、device token 或正式資料。
-- Cloudflare Worker + D1 可以作為本專案目前的開發／參考實作，但不得成為 Public Windows client 的硬編碼依賴。
-
-因此正式產品關係是：
+CYInvoice 不採「程式啟動後持續登入某人」的模型。
 
 ```text
-CYInvoice Windows client
-        |
-        | HTTPS
-        v
-User-configured CYInvoice Cloud API
-        |
-        v
-Implementation-defined backend/database
+需要權限的操作
+  ↓
+當下輸入 Employee No + Password
+  ↓
+驗證該次操作
+  ↓
+依當下 Employee Role 授權
 ```
 
-## 3. 使用者模式切換
-
-### 3.1 預設與單機模式
-
-CYInvoice 預設必須為單機模式：
+單機模式：
 
 ```text
-Local SQLite + AMEGO
+Local EmployeeStore = 唯一帳號主資料
 ```
 
-單機模式下：
-
-- 不呼叫 Cloud API。
-- 不要求 Cloud URL。
-- 不要求 Workspace／Device 設定。
-- 不要求 Cloud 帳號。
-- 既有單機開票、查詢、同步、PDF、設定與本機快取流程維持不變。
-
-### 3.2 啟用雲端模式
-
-若使用者需要雲端版，流程應是：
-
-1. 先以單機模式正常啟動 CYInvoice。
-2. 到「設定」中選擇雲端模式。
-3. 填寫 CYInvoice Cloud API 連線資訊。
-4. 測試相容性與連線。
-5. 完成 Workspace／管理員／裝置驗證流程。
-6. 儲存後啟用 Cloud Preferred。
-
-正式版不應要求一般使用者理解底層資料庫名稱或 Database ID。
-
-## 4. 三層資料責任
-
-CYInvoice 的資料責任分為三層，不能混為單一資料庫。
-
-### 4.1 AMEGO：電子發票官方真相
-
-AMEGO 仍是發票／折讓／註銷等正式交易狀態的權威來源。
-
-CYInvoice Cloud 不得自行宣布 AMEGO 交易成功。所有交易結果仍需以 AMEGO 明確回覆或官方查詢結果確認。
-
-### 4.2 Local SQLite：單機運作與快取
-
-Local SQLite 永久保留，負責：
-
-- 本機近期發票／查詢快取。
-- 本機 UI 與同步狀態。
-- 本機設定。
-- 必要離線閱讀／fallback。
-- 其他既有單機資料。
-
-AMEGO App Key 與本機 Cloud device credential 等敏感資料仍由 Windows 安全儲存機制保護；不得上傳至 Public repository。
-
-### 4.3 Cloud backend：跨裝置協作
-
-Cloud backend 的責任是 CYInvoice 自己擁有的共同狀態，例如：
-
-- Workspace。
-- 員工／角色／enabled 狀態。
-- Device 註冊與撤銷。
-- Device credential hash。
-- Email／OTP 驗證狀態（若正式採用）。
-- Work item。
-- Idempotency／operation lock。
-- 跨機狀態協調。
-- 未來 Cloud audit log。
-
-Cloud backend 不應成為完整 AMEGO 發票資料鏡像，也不應保存不必要的 PDF、App Key 或大量本機 Cache。
-
-## 5. Cloud API 是產品介面；技術實作不是
-
-CYInvoice 最終對外應定義一份 **CYInvoice Cloud API compatibility specification**。
-
-該規格描述 CYInvoice Windows client 需要的協定，例如：
-
-- HTTPS endpoint 規則。
-- API version／compatibility negotiation。
-- Health check。
-- Request／response JSON。
-- Authentication／device credential。
-- Workspace bootstrap／join。
-- Employee／role。
-- Verification／OTP（若採用）。
-- Work items。
-- Operation lock／idempotency。
-- Audit contract。
-- Error codes。
-- Timeout／retry／offline semantics。
-
-第三方可自行使用任何技術完成相容服務。CYInvoice 不規定必須使用 Cloudflare、D1、AWS、Azure、Supabase、Firebase、PostgreSQL、MySQL 或任何特定平台。
-
-只要第三方服務符合 CYInvoice Cloud API specification，使用者即可在 CYInvoice 雲端設定中填入該服務 endpoint 使用。
-
-## 6. 對外 Guide 的定案
-
-在雲端功能、API contract、資料模型與錯誤語意全部定案後，Public repository 必須新增一份面向第三方的 Cloud integration guide。
-
-Guide 的責任：
-
-- 說明 CYInvoice Cloud API 必要介面與格式。
-- 說明相容性／版本要求。
-- 說明安全要求。
-- 說明 Windows client 會如何呼叫 Cloud API。
-- 提供可驗證的 contract examples／test expectations。
-
-Guide **不負責**：
-
-- 指定第三方一定使用 Cloudflare。
-- 教第三方選擇雲端平台。
-- 教第三方如何建立特定品牌資料庫。
-- 替第三方設計其基礎設施。
-
-目前先列入 TODO，等雲端功能定案後再撰寫正式版。
-
-## 7. Cloud Preferred 與 fallback
-
-啟用雲端模式後，CYInvoice 採 Cloud Preferred：
-
-- Cloud 健康：使用 Cloud 協調跨裝置狀態。
-- Cloud 暫時不可用：安全的本機功能仍可繼續使用。
-- 需要跨裝置唯一性／鎖定的操作：若無法取得 Cloud lock，不得假裝取得成功。
-
-使用者也可以主動切回單機模式。切回單機模式後，不應再呼叫 Cloud API。
-
-「暫停使用 Cloud」與「解除此裝置的 Cloud 註冊」必須視為兩種不同操作；切回單機模式不應自動銷毀 Cloud 身分資料。
-
-## 8. 帳號與裝置是兩個概念
-
-正式雲端模型必須區分：
-
-- **Employee / User**：誰正在執行操作。
-- **Device**：哪一台受信任電腦正在執行操作。
-
-兩者不可混為同一身分。
-
-預定角色至少包含：
-
-- `SUPER_ADMIN`
-- `ADMIN`
-- `EMPLOYEE`
-
-正式的第一台裝置與後續裝置加入流程，將在中央員工／權限與驗證機制定案後完成。
-
-## 9. 目前工程實作狀態
-
-目前工作分支已完成 Cloud Foundation 的早期工程驗證，包括：
-
-- 參考 Cloud API server。
-- 參考資料庫 schema migration。
-- Workspace／Device 基礎資料模型。
-- Hashed device credential。
-- 一次性 device pairing 基礎流程。
-- Health／version endpoint。
-- Windows Cloud client 基礎層。
-- HTTPS-only endpoint validation。
-- Windows 本機 protected credential storage。
-- Cloud contract tests。
-- Windows build／startup smoke validation。
-
-目前參考實作使用 Cloudflare Worker + D1 作為開發環境，但這只是現階段的參考 backend。
-
-## 10. 目前工程實作與最終產品設計的差距
-
-目前早期測試流程仍包含為開發驗證而存在的做法，不能直接視為 Public 正式介面。
-
-後續必須修正／完成：
-
-- 移除 Windows client 中任何專案擁有者的預設 Cloud endpoint。
-- 預設固定為 Local Only。
-- 在正式設定 UI 中提供單機／雲端模式選擇。
-- 只有選擇雲端模式才顯示／要求 Cloud API 設定。
-- Cloud endpoint 由使用者自行填寫。
-- 將 Windows client 對後端的依賴收斂成技術中立的 CYInvoice Cloud API contract。
-- 將 Cloudflare/D1 特有設定留在 reference backend，而不是 Windows product contract。
-- 完成 SUPER_ADMIN／Employee／Device 的正式 onboarding 模型。
-- 決定並完成 Email OTP／其他驗證機制。
-- 完成 work item、idempotency、operation lock、audit。
-- 最後才撰寫第三方 Cloud integration guide。
-
-## 11. 已定案不進 Cloud 的內容
-
-目前已確定不以 Cloud backend 作為主要儲存位置的項目：
-
-- AMEGO App Key。
-- 完整發票資料鏡像。
-- PDF Cache。
-- 本機 runtime backup／export data。
-- 不必要的 AMEGO response payload。
-
-是否有其他欄位需要進 Cloud，必須依「跨裝置協作是否需要」與資料最小化原則逐項決定。
-
-## 12. 下一步工程順序
-
-在新增更多 Cloud 業務功能前，先完成 Public Repo 架構收斂：
-
-1. 移除 Windows client 中的任何開發環境預設 endpoint。
-2. 完成 Local Only / Cloud Enabled 模式選擇與設定保存。
-3. 將 Cloud API endpoint 完全改為 user-configured。
-4. 整理 reference backend 與 Windows client 的 contract 邊界。
-5. 再進入中央員工／角色／裝置 onboarding。
-6. 再進入跨機 work item／lock／idempotency。
-7. 再進入 Cloud audit 與正式折讓 API。
-8. 雲端全部定案後撰寫第三方 Cloud integration guide。
-
----
-
-簡化後的正式定位：
+從單機版轉 Cloud：
 
 ```text
-AMEGO        = 電子發票官方交易真相
-Local SQLite = 單機運作、快取、fallback
-Cloud API    = 可選的跨裝置協作介面
-Backend DB   = 由 Cloud API 實作者自行決定
+Device 加入 Workspace
+  ↓
+CloudTransition
+  ↓
+盤點全部既有 Local Employees
+  ↓
+完成身分比對／Email 驗證／Credential 準備／衝突處理
+  ↓
+一次性 Cutover
+  ↓
+Cloud Employee = 唯一帳號主資料
 ```
+
+Cloud Mode 之後，即使斷網也不切回舊 Local EmployeeStore。Windows 只使用最後成功同步的 Cloud Employee cache + protected offline credential verifier。
+
+因此不存在長期並行的「Local Role」與「Cloud Role」兩套權限系統，也不存在 Pending Y 的暫時 Local 管理員特例。
+
+## 3. Local → Cloud Employee Transition
+
+目前已實作 whole-device transition，不再使用「只處理本機 SUPER_ADMIN」的舊 reconciliation 模型。
+
+身分判定只使用 Employee No + Email：
+
+| Local Employee | Cloud 判定 | 行為 |
+| --- | --- | --- |
+| Employee No、Email 都不存在 | 新人 | 驗證本人 Email，建立 Cloud Employee |
+| Employee No、Email 都命中同一 Employee | 同一人 | 直接採用既有 Cloud Employee 資料 |
+| 只有 Employee No 命中 | 衝突 | 交目前 Workspace SUPER_ADMIN 人工確認 |
+| 只有 Email 命中 | 衝突 | 交目前 Workspace SUPER_ADMIN 人工確認 |
+| Employee No、Email 各命中不同 Employee | 衝突 | 交目前 Workspace SUPER_ADMIN 人工確認 |
+
+姓名只作顯示，不作 identity matching authority。
+
+第一台建立 Workspace 的 X 可成為唯一中央 `SUPER_ADMIN`；其 bootstrap 時已驗證的 Recovery Email 可直接作為 X 的已驗證 Email，不重複寄 OTP。
+
+既有 Workspace 新加入的電腦若有新的 Local SUPER_ADMIN Y，Y 若是新中央 Employee，Cloud role 預設為 `ADMIN`。若 Y 的 Employee No + Email 已精確對應同一既有 Cloud Employee，直接採用該 Employee 既有 Cloud role。
+
+## 4. Device 與 Employee 分離
+
+Workspace、Device、Employee 是三個不同概念：
+
+- Workspace：長期協作邊界。
+- Device：可信任電腦。
+- Employee：人員帳號／操作權限。
+
+Device Join 使用 Pairing Code；Pairing Code 只授權 Device 加入 Workspace，不授予任何 Employee role。
+
+B 機進入 Device Join 前必須先於本機當下驗證 Local `ADMIN` 或 `SUPER_ADMIN`，證明操作者有權管理 B 機；Workspace 端 Pairing Code 則獨立證明 Workspace 已授權加入。
+
+Device Token：Windows 產生並先以 protected storage 保存；Cloud 只存 hash。Device ID 與 Workspace ID 由 Cloud 產生。
+
+## 5. Cloud Employee 帳號管理
+
+Cloud cutover 後，帳號全域異動全部為 **Online-only**，並於操作當下重新驗證操作者帳密；不能只因為某人開啟了「帳號管理」視窗就持續授權。
+
+目前中央帳號 API／Windows client 已支援：
+
+- 新增 Employee。
+- 修改姓名。
+- 修改 Email；新 Email 必須先完成 OTP 驗證才 commit。
+- `ADMIN ↔ EMPLOYEE`。
+- 啟用／停用。
+- 本人變更密碼。
+- 管理員重設其他非 SUPER_ADMIN 的密碼。
+- Employee snapshot 重新同步至本機 cache。
+
+安全限制：
+
+- `SUPER_ADMIN` 不能用一般角色修改流程降級；必須走正式 transfer。
+- `SUPER_ADMIN` 不可停用。
+- 管理員不能變更自己的 role 或 enabled state。
+- `SUPER_ADMIN` 密碼只能由本人變更。
+- Windows 不上傳新密碼明文；本機先產生 PBKDF2-SHA256 verifier，再送 Cloud。
+
+## 6. Pending Identity Conflict
+
+若 Local Employee 身分有歧義，Cloud 建立 pending conflict，不自動猜測也不建立重複 Employee。
+
+Account Management 只有存在 unresolved conflict 時才顯示：
+
+```text
+待確認帳號 N
+```
+
+真正執行 conflict resolution 時重新驗證目前 Workspace `SUPER_ADMIN`；backend 再確認該 Employee 仍是目前唯一 SUPER_ADMIN 後才允許 mapping。
+
+正常精確命中不叫 merge：確認 Employee No + Email 都指向同一中央 Employee 後，直接改採中央資料。
+
+## 7. SUPER_ADMIN Transfer
+
+每個 Workspace 恰好一名中央 `SUPER_ADMIN`。
+
+Transfer contract：
+
+```text
+目前 SUPER_ADMIN X
+  ↓ execution-time password re-auth
+寄 OTP 至 X 目前已驗證 Email
+  ↓ OTP success
+再次確認 Y 仍為 enabled ADMIN + verified Email
+  ↓ atomic transaction
+X → ADMIN
+Y → SUPER_ADMIN
+Workspace Recovery Email → Y verified Email
+```
+
+Cloud transfer 不回寫或修改舊 Local role；cutover 後本來就以 Cloud Employee 為唯一帳號 authority。
+
+## 8. 離線行為
+
+Cloud Mode 斷網時仍是 Cloud Mode。
+
+可使用最後一次成功同步的：
+
+- Employee identity。
+- Role / Enabled 狀態。
+- Protected offline credential verifier。
+
+進行原本需要帳密的本機操作時，仍在執行當下驗證；只是資料來源是最後同步的 Cloud Employee cache。
+
+帳號全域異動不允許離線修改再合併，包括新增／Email／role／enabled／password／SUPER_ADMIN transfer／identity conflict resolution。如此避免多台電腦離線各自修改同一帳號後產生雙主衝突。
+
+完全離線期間不可能得知 Cloud 上剛發生的 role／password／enabled 變更，因此只能使用最後已知狀態；恢復連線後以 Cloud authority 更新 cache。
+
+## 9. OTP / Email
+
+Reference backend 使用 provider-neutral Email abstraction；目前 development reference provider 為 Brevo，並保留 Resend adapter。
+
+OTP foundation：
+
+- Web Crypto 隨機 6 碼。
+- HMAC-SHA256 digest at rest；不保存明文 OTP。
+- 10 分鐘 TTL。
+- 60 秒 resend cooldown。
+- 5 次錯誤上限。
+- rate limit。
+- one-time consumption。
+- `OTP_PEPPER`、Email provider API key、sender identity 全部是 runtime secrets，不進 Public repo。
+
+Development bootstrap OTP 寄信已實測成功；其他 Employee Email 與 transfer challenge 仍待實機驗證。
+
+## 10. Legacy reconciliation 已退役
+
+舊路徑：
+
+```text
+POST /v1/employees/reconcile-local
+```
+
+原先只處理單一 Local SUPER_ADMIN，並含任意 30 分鐘 import window。此模型與 whole-device transition 定案衝突，已從 Cloud business logic 退役。
+
+Reference Worker 對舊 mutation route fail-closed，回傳 `LEGACY_EMPLOYEE_RECONCILIATION_RETIRED`；正式 Local → Cloud 身分轉換只能走 whole-device Employee Transition。
+
+`GET /v1/employees` 暫保留為 read-only compatibility endpoint；正式 cutover／cache 同步使用 Employee Authority snapshot contract。
+
+## 11. Business boundary
+
+Cloud 是跨裝置協作、中央 Employee、Workspace 管理與後續 Work Item / Audit foundation，不是業務 kill switch。
+
+AMEGO 仍是發票／作廢／折讓官方交易真相。Cloud 故障時，能安全本機執行的既有業務不因中央帳號管理暫時離線而全部停擺；但真正依賴 Cloud 的 Workspace／Device／Employee 全域異動必須等待恢復連線。
+
+## 12. 尚未完成／需實機驗證
+
+- 第一個 Workspace／Device 的 Windows client 已回報建立成功；尚待 Cloudflare D1 建立後的唯讀查核及 A 機 Employee Transition／cutover 實機驗收。Cloud 0.8.2 已部署，D1 Schema 7 已確認。
+- Employee Email、SUPER_ADMIN transfer 的真實 Email OTP 測試；bootstrap OTP 寄信已確認。
+- 多台 Windows 實機：A 建 Workspace、B Pairing、whole-device transition、offline cache、恢復同步。
+- Device revoke / all-Device-Token-loss recovery。
+- 後續 business sync / Work Item / Audit；不得把本文件的 identity foundation 誤認為 V3 全部功能已完成。
+
+正式 merge、tag、Release 仍需明確授權。

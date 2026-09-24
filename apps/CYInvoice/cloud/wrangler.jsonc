@@ -1,13 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cyinvoice-cloud-dev",
-  "main": "src/index.ts",
+  "main": "src/app.ts",
   "compatibility_date": "2026-09-20",
   "workers_dev": true,
   "vars": {
     "APP_ENV": "development",
     "API_VERSION": "1",
-    "SCHEMA_VERSION": "2"
+    "SCHEMA_VERSION": "8"
   },
   "d1_databases": [
     {
@@ -15,6 +15,40 @@
       "database_name": "cyinvoice-cloud-dev-db",
       "database_id": "ad2c5a80-0c8e-4c7b-ba8d-b1f318958710",
       "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "WEB_LOGIN_EMPLOYEE_RATE_LIMIT",
+      "namespace_id": "3101",
+      "simple": {
+        "limit": 12,
+        "period": 60
+      }
+    },
+    {
+      "name": "WEB_LOGIN_IP_RATE_LIMIT",
+      "namespace_id": "3102",
+      "simple": {
+        "limit": 40,
+        "period": 60
+      }
+    },
+    {
+      "name": "WEB_PASSWORD_RESET_EMPLOYEE_RATE_LIMIT",
+      "namespace_id": "3103",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    },
+    {
+      "name": "WEB_PASSWORD_RESET_IP_RATE_LIMIT",
+      "namespace_id": "3104",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
     }
   ]
 }

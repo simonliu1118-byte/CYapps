@@ -42,6 +42,9 @@ jobs:
       - name: Type check
         run: npm run check
 
+      - name: Test bootstrap SQL
+        run: npm test
+
       - name: Validate Worker bundle
         run: npm run deploy:dry-run
 
@@ -62,22 +65,82 @@ jobs:
               db.executescript(migration.read_text(encoding='utf-8'))
 
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-          required_tables = {'workspaces', 'devices', 'device_pairing_codes'}
+          required_tables = {
+              'workspaces', 'devices', 'device_pairing_codes', 'email_otp_challenges',
+              'cloud_employees', 'device_employee_links', 'employee_link_candidates'
+          }
           missing_tables = required_tables - tables
           if missing_tables:
               raise SystemExit(f'missing tables: {sorted(missing_tables)}')
 
           device_columns = {row[1] for row in db.execute('PRAGMA table_info(devices)')}
-          required_device_columns = {'token_hash', 'token_created_at', 'pairing_id', 'revoked_at'}
+          required_device_columns = {
+              'token_hash', 'token_created_at', 'pairing_id', 'revoked_at',
+              'employee_onboarding_closed_at', 'employee_authority_state',
+              'employee_transition_started_at', 'employee_transition_completed_at'
+          }
           missing_columns = required_device_columns - device_columns
           if missing_columns:
               raise SystemExit(f'missing device columns: {sorted(missing_columns)}')
 
+          workspace_columns = {row[1] for row in db.execute('PRAGMA table_info(workspaces)')}
+          required_workspace_columns = {
+              'recovery_email', 'recovery_email_verified_at', 'employee_revision'
+          }
+          missing_workspace_columns = required_workspace_columns - workspace_columns
+          if missing_workspace_columns:
+              raise SystemExit(f'missing workspace columns: {sorted(missing_workspace_columns)}')
+
+          otp_columns = {row[1] for row in db.execute('PRAGMA table_info(email_otp_challenges)')}
+          required_otp_columns = {
+              'challenge_id', 'purpose', 'scope_key', 'email_normalized', 'otp_digest',
+              'delivery_state', 'attempt_count', 'max_attempts', 'expires_at',
+              'resend_after', 'sent_at', 'consumed_at', 'created_at', 'updated_at'
+          }
+          missing_otp_columns = required_otp_columns - otp_columns
+          if missing_otp_columns:
+              raise SystemExit(f'missing OTP columns: {sorted(missing_otp_columns)}')
+
+          employee_columns = {row[1] for row in db.execute('PRAGMA table_info(cloud_employees)')}
+          required_employee_columns = {
+              'employee_id', 'workspace_id', 'employee_no', 'name', 'email_normalized',
+              'email_verified_at', 'role', 'enabled', 'source_device_id',
+              'credential_verifier', 'credential_algorithm', 'credential_version',
+              'credential_updated_at', 'revision', 'created_at', 'updated_at'
+          }
+          missing_employee_columns = required_employee_columns - employee_columns
+          if missing_employee_columns:
+              raise SystemExit(f'missing central employee columns: {sorted(missing_employee_columns)}')
+
           device_indexes = {row[1] for row in db.execute("PRAGMA index_list('devices')")}
-          required_device_indexes = {'idx_devices_token_hash', 'idx_devices_pairing_id'}
+          required_device_indexes = {
+              'idx_devices_token_hash', 'idx_devices_pairing_id',
+              'idx_devices_employee_authority_state'
+          }
           missing_indexes = required_device_indexes - device_indexes
           if missing_indexes:
               raise SystemExit(f'missing device indexes: {sorted(missing_indexes)}')
+
+          otp_indexes = {row[1] for row in db.execute("PRAGMA index_list('email_otp_challenges')")}
+          required_otp_indexes = {
+              'idx_email_otp_email_purpose_created', 'idx_email_otp_expiry',
+              'idx_email_otp_purpose_scope_created'
+          }
+          missing_otp_indexes = required_otp_indexes - otp_indexes
+          if missing_otp_indexes:
+              raise SystemExit(f'missing OTP indexes: {sorted(missing_otp_indexes)}')
+
+          employee_indexes = {row[1] for row in db.execute("PRAGMA index_list('cloud_employees')")}
+          required_employee_indexes = {
+              'idx_cloud_employees_workspace_employee_no',
+              'idx_cloud_employees_workspace_email',
+              'idx_cloud_employees_single_super_admin',
+              'idx_cloud_employees_workspace_role',
+              'idx_cloud_employees_workspace_revision'
+          }
+          missing_employee_indexes = required_employee_indexes - employee_indexes
+          if missing_employee_indexes:
+              raise SystemExit(f'missing central employee indexes: {sorted(missing_employee_indexes)}')
 
           workspace_indexes = {row[1] for row in db.execute("PRAGMA index_list('workspaces')")}
           if 'idx_single_workspace' not in workspace_indexes:
@@ -90,6 +153,51 @@ jobs:
               pass
           else:
               raise SystemExit('single-workspace invariant did not reject a second workspace')
+
+          db.execute("INSERT INTO devices (device_id, workspace_id, display_name, status, created_at, updated_at) VALUES ('dev_a', 'ws_one', 'A', 'active', '2026-09-21T00:00:00Z', '2026-09-21T00:00:00Z')")
+          state = db.execute("SELECT employee_authority_state FROM devices WHERE device_id='dev_a'").fetchone()[0]
+          if state != 'transitioning':
+              raise SystemExit(f'new Device must default to transitioning employee authority, got {state!r}')
+
+          db.execute("INSERT INTO cloud_employees (employee_id, workspace_id, employee_no, name, email_normalized, role, enabled, source_device_id) VALUES ('emp_x', 'ws_one', '0001', 'X', 'x@example.test', 'SUPER_ADMIN', 1, 'dev_a')")
+          try:
+              db.execute("INSERT INTO cloud_employees (employee_id, workspace_id, employee_no, name, email_normalized, role, enabled, source_device_id) VALUES ('emp_y', 'ws_one', '0002', 'Y', 'y@example.test', 'SUPER_ADMIN', 1, 'dev_a')")
+          except sqlite3.IntegrityError:
+              pass
+          else:
+              raise SystemExit('single-SUPER_ADMIN invariant did not reject a second SUPER_ADMIN')
+
+          # Regression: schema 3 rejected the scoped purpose already used by
+          # the pairing Worker. Schema 5 must accept it without weakening the
+          # one-time OTP table contract.
+          db.execute("""
+              INSERT INTO email_otp_challenges (
+                  challenge_id, purpose, scope_key, email_normalized, otp_digest,
+                  delivery_state, expires_at, resend_after
+              ) VALUES (
+                  'otp_pairing_regression',
+                  'device_pairing_authorization:ws_one:dev_a',
+                  'ws_one:dev_a',
+                  'owner@example.test',
+                  ?, 'sent', '2026-09-21T00:10:00Z', '2026-09-21T00:01:00Z'
+              )
+          """, ('a' * 64,))
+
+          # Workspace bootstrap is intentionally unscoped. Its scope_key must
+          # remain NULL; the Schema 7 CHECK constraint correctly rejects an
+          # empty string.
+          db.execute("""
+              INSERT INTO email_otp_challenges (
+                  challenge_id, purpose, scope_key, email_normalized, otp_digest,
+                  delivery_state, expires_at, resend_after
+              ) VALUES (
+                  'otp_bootstrap_regression',
+                  'workspace_bootstrap',
+                  NULL,
+                  'owner@example.test',
+                  ?, 'sent', '2026-09-21T00:10:00Z', '2026-09-21T00:01:00Z'
+              )
+          """, ('b' * 64,))
 
           print('D1 migrations syntax/shape/invariant check passed')
           PY

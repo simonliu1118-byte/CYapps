@@ -16,6 +16,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox appKey = UiControls.TextBox(200);
     private readonly TextBox moPassword = UiControls.TextBox(200);
     private readonly Button cloudSettings = UiControls.StandardButton("雲端連線設定");
+    private readonly Button deviceManagement = UiControls.StandardButton("裝置管理");
     private readonly Button diagnostics = UiControls.StandardButton("系統診斷");
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
@@ -78,17 +79,21 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(8, 5, 0, 0),
+            Padding = new Padding(6, 5, 0, 0),
             Margin = Padding.Empty,
         };
-        localMode.Margin = new Padding(0, 5, 18, 0);
-        cloudMode.Margin = new Padding(0, 5, 6, 0);
-        cloudSettings.Width = 138;
-        cloudSettings.Margin = Padding.Empty;
+        localMode.Margin = new Padding(0, 5, 10, 0);
+        cloudMode.Margin = new Padding(0, 5, 5, 0);
+        cloudSettings.Width = 116;
+        cloudSettings.Margin = new Padding(0, 0, 4, 0);
+        deviceManagement.Width = 92;
+        deviceManagement.Margin = Padding.Empty;
         cloudSettings.Click += (_, _) => OpenCloudSettings();
+        deviceManagement.Click += (_, _) => OpenDeviceManagement();
         modeChoices.Controls.Add(localMode);
         modeChoices.Controls.Add(cloudMode);
         modeChoices.Controls.Add(cloudSettings);
+        modeChoices.Controls.Add(deviceManagement);
         modeGroup.Controls.Add(modeChoices);
 
         var environmentGroup = new GroupBox { Text = "使用環境", Dock = DockStyle.Fill };
@@ -172,14 +177,64 @@ internal sealed class SettingsForm : Form
 
     private void OpenCloudSettings()
     {
-        using var form = new CloudSetupForm(repository, settings.CloudBaseUrl);
+        var originalEndpoint = settings.CloudBaseUrl;
+        using var form = new CloudSetupForm(repository, originalEndpoint, settings);
         if (form.ShowDialog(this) != DialogResult.OK) return;
 
-        var endpointChanged = settings.CloudBaseUrl.Length != 0
-            && !SameCloudEndpoint(settings.CloudBaseUrl, form.SelectedBaseUrl);
-        if (endpointChanged && HasCloudIdentity(settings))
-            repository.Settings.ClearCloudIdentity(settings);
+        var endpointChanged = originalEndpoint.Length != 0
+            && !SameCloudEndpoint(originalEndpoint, form.SelectedBaseUrl);
+        var identityAlreadyMovedToSelectedEndpoint = HasCloudIdentity(settings)
+            && SameCloudEndpoint(settings.CloudBaseUrl, form.SelectedBaseUrl);
+        if (endpointChanged && !identityAlreadyMovedToSelectedEndpoint)
+        {
+            if (HasPendingCloudOperation(settings))
+            {
+                MessageBox.Show(
+                    this,
+                    "目前仍有未完成的雲端初始化／裝置加入憑證。為避免斷線後遺失復原能力，必須先回原 Cloud 完成或確認結果，暫時不能切換 API 網址。",
+                    "尚有待確認的雲端作業",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                settings.CloudBaseUrl = originalEndpoint;
+                UpdateCloudControls();
+                return;
+            }
+
+            if (HasCloudIdentity(settings))
+                repository.Settings.ClearCloudIdentity(settings);
+        }
         settings.CloudBaseUrl = form.SelectedBaseUrl;
+
+        if (form.IdentityCompleted)
+        {
+            cloudMode.Checked = true;
+            localMode.Checked = false;
+        }
+        UpdateCloudControls();
+    }
+
+    private void OpenDeviceManagement()
+    {
+        try
+        {
+            if (!cloudMode.Checked || settings.CloudMode != CloudModes.CloudPreferred
+                || !settings.CloudEmployeeAuthorityReady || !HasCloudIdentity(settings)
+                || string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
+            {
+                throw new InvalidOperationException("這台電腦尚未完成中央帳號轉換，暫時不能管理其他裝置。");
+            }
+
+            var token = repository.Settings.CloudDeviceToken(settings);
+            if (string.IsNullOrWhiteSpace(token))
+                throw new InvalidOperationException("目前無法讀取這台電腦的 Cloud Device Token。");
+
+            using var form = new CloudDeviceManagementForm(settings.CloudBaseUrl, token, settings.CloudWorkspaceId);
+            form.ShowDialog(this);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "無法開啟裝置管理", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     private void EnvironmentChanged(object? sender, EventArgs eventArgs)
@@ -227,7 +282,7 @@ internal sealed class SettingsForm : Form
     private void LoadValues()
     {
         localMode.Checked = settings.CloudMode == CloudModes.LocalOnly;
-        cloudMode.Checked = settings.CloudMode == CloudModes.CloudPreferred;
+        cloudMode.Checked = settings.CloudMode is CloudModes.CloudTransition or CloudModes.CloudPreferred;
         test.Checked = settings.Environment == Environments.Test;
         production.Checked = settings.Environment == Environments.Production;
         invoice.Text = settings.ProductionInvoice;
@@ -242,6 +297,11 @@ internal sealed class SettingsForm : Form
     private void UpdateCloudControls()
     {
         cloudSettings.Enabled = cloudMode.Checked;
+        deviceManagement.Enabled = cloudMode.Checked
+            && settings.CloudMode == CloudModes.CloudPreferred
+            && settings.CloudEmployeeAuthorityReady
+            && HasCloudIdentity(settings)
+            && !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
     }
 
     private void UpdateEnvironmentFields()
@@ -259,8 +319,20 @@ internal sealed class SettingsForm : Form
                 throw new InvalidOperationException("請選擇單機版或雲端版。");
             if (cloudMode.Checked && string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
                 throw new InvalidOperationException("請先按「雲端連線設定」完成 Cloud API 連線設定。");
+            if (cloudMode.Checked && !HasCloudIdentity(settings))
+                throw new InvalidOperationException("請先完成建立／加入雲端空間；只有 API 網址尚不能切換成雲端版。");
 
-            settings.CloudMode = cloudMode.Checked ? CloudModes.CloudPreferred : CloudModes.LocalOnly;
+            if (cloudMode.Checked)
+            {
+                settings.CloudMode = settings.CloudEmployeeAuthorityReady
+                    ? CloudModes.CloudPreferred
+                    : CloudModes.CloudTransition;
+            }
+            else
+            {
+                settings.CloudMode = CloudModes.LocalOnly;
+            }
+
             settings.Environment = production.Checked ? Environments.Production : Environments.Test;
             settings.ProductionInvoice = invoice.Text.Trim();
             if (appKey.Text.Length != 0) repository.Settings.SetProductionAppKey(settings, appKey.Text);
@@ -279,6 +351,10 @@ internal sealed class SettingsForm : Form
         value.CloudWorkspaceId.Length != 0
         && value.CloudDeviceId.Length != 0
         && value.CloudDeviceTokenEncrypted.Length != 0;
+
+    private static bool HasPendingCloudOperation(Settings value) =>
+        value.CloudPendingBootstrapTokenEncrypted.Length != 0
+        || value.CloudPendingDeviceJoinTokenEncrypted.Length != 0;
 
     private static bool SameCloudEndpoint(string left, string right)
     {
@@ -331,18 +407,26 @@ internal sealed class SettingsForm : Form
             throw new InvalidOperationException("正式公司、統編與 App Key 未依指定方式排列");
         var environmentX = invoiceLabel.PointToScreen(Point.Empty).X;
         var platformX = moPasswordLabel.PointToScreen(Point.Empty).X;
+        var expectedDeviceManagementEnabled = cloudMode.Checked
+            && settings.CloudMode == CloudModes.CloudPreferred
+            && settings.CloudEmployeeAuthorityReady
+            && HasCloudIdentity(settings)
+            && !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
         if (string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
             appKeyLabel.PreferredWidth > appKeyLabel.Width ||
             cloudSettings.PreferredSize.Width > cloudSettings.Width ||
+            deviceManagement.PreferredSize.Width > deviceManagement.Width ||
             diagnostics.Text != "系統診斷" || cloudSettings.Text != "雲端連線設定" ||
+            deviceManagement.Text != "裝置管理" ||
             localMode.Text != "單機版" || cloudMode.Text != "雲端版" ||
             cloudSettings.Enabled != cloudMode.Checked ||
+            deviceManagement.Enabled != expectedDeviceManagementEnabled ||
             actionButtons.Controls.Count != 3 ||
             Math.Abs(environmentX - platformX) > 1 ||
             actionButtons.Controls.Cast<Control>().Any(control => control.Bottom > actionButtons.ClientSize.Height) ||
             Math.Abs((actionButtons.Controls.Cast<Control>().Min(control => control.Left) +
                 actionButtons.Controls.Cast<Control>().Max(control => control.Right)) / 2 - actionButtons.ClientSize.Width / 2) > 2)
-            throw new InvalidOperationException("設定動作、運作模式、MO店+ 對齊、提示或 App Key 標籤配置不正確");
+            throw new InvalidOperationException("設定動作、雲端裝置管理、運作模式、MO店+ 對齊、提示或 App Key 標籤配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         var logicalHeight = ClientSize.Height * 96D / DeviceDpi;
         if (logicalWidth > 430 || logicalHeight > 355)

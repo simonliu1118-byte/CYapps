@@ -48,12 +48,21 @@ internal static class Program
                 diagnostics.VerifySmokeLayout();
                 diagnostics.Close();
 
+                using var settings = new SettingsForm(repository);
+                settings.Show();
+                settings.PerformLayout();
+                Application.DoEvents();
+                settings.VerifySmokeLayout();
+                settings.Close();
+
                 using var cloudSetup = new CloudSetupForm(repository);
                 cloudSetup.Show();
                 cloudSetup.PerformLayout();
                 Application.DoEvents();
                 cloudSetup.VerifySmokeLayout();
                 cloudSetup.Close();
+
+                SmokeCloudDeviceForms();
                 return;
             }
             Application.Run(new MainForm());
@@ -72,6 +81,55 @@ internal static class Program
                 "CYInvoice 啟動失敗",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
+        }
+    }
+
+    private static void SmokeCloudDeviceForms()
+    {
+        var temporaryRoot = Path.Combine(Path.GetTempPath(), "CYInvoice.CloudUiSmoke", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporaryRoot);
+        try
+        {
+            var repository = LocalRepository.Open(temporaryRoot, new DpapiSecretProtector());
+            var settings = repository.Settings.LoadOrCreate();
+
+            using var firstRun = new FirstRunModeForm();
+            firstRun.Show();
+            firstRun.PerformLayout();
+            Application.DoEvents();
+            firstRun.Close();
+
+            using var directJoin = new CloudDirectJoinForm(repository);
+            directJoin.Show();
+            directJoin.PerformLayout();
+            Application.DoEvents();
+            directJoin.Close();
+
+            // Device Join now deliberately prompts for Local ADMIN/SUPER_ADMIN on Shown.
+            // The startup smoke validates static layout without displaying the form so CI
+            // never bypasses or blocks on the real runtime authorization gate.
+            using var join = new CloudJoinWorkspaceForm(repository, settings, "https://cloud.example.test/");
+            join.PerformLayout();
+            join.VerifySmokeLayout();
+
+            var token = $"cydev_{new string('a', 64)}";
+            using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
+            management.Show();
+            management.PerformLayout();
+            Application.DoEvents();
+            management.VerifySmokeLayout();
+            management.Close();
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(temporaryRoot)) Directory.Delete(temporaryRoot, recursive: true);
+            }
+            catch (Exception)
+            {
+                // Smoke cleanup failure must not hide the actual UI validation result.
+            }
         }
     }
 

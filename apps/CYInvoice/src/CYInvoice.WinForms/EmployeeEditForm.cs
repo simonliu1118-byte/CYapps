@@ -10,6 +10,7 @@ internal sealed class EmployeeEditForm : Form
     private const int CompactButtonWidth = 110;
     private readonly bool createMode;
     private readonly bool allowRoleChange;
+    private readonly string existingRole;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox name = UiControls.TextBox(80);
     private readonly TextBox email = UiControls.TextBox(160);
@@ -26,6 +27,7 @@ internal sealed class EmployeeEditForm : Form
     {
         createMode = existing is null;
         this.allowRoleChange = createMode || allowRoleChange;
+        existingRole = existing?.Role ?? string.Empty;
         Text = createMode ? "新增使用者" : "修改使用者";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, CalculateHeight());
@@ -43,7 +45,9 @@ internal sealed class EmployeeEditForm : Form
     public string EmployeeName => name.Text.Trim();
     public string Email => email.Text.Trim();
     public string Password => password.Text;
-    public string Role => role.SelectedIndex == 1 ? EmployeeRoles.Admin : EmployeeRoles.Employee;
+    public string Role => existingRole == EmployeeRoles.SuperAdmin
+        ? EmployeeRoles.SuperAdmin
+        : role.SelectedIndex == 1 ? EmployeeRoles.Admin : EmployeeRoles.Employee;
 
     private int FieldCount => createMode ? 6 : 4;
     private int CalculateHeight() => 16 + FieldCount * FieldRowHeight + ActionRowHeight;

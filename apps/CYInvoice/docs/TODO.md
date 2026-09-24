@@ -2,8 +2,10 @@
 
 本檔只保留目前仍未完成、需要後續驗證或已明確延後的工作。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-目前工程開發基準：**CYInvoice V2.6.3 Build 0**  
+目前工程開發基準：**CYInvoice V2.6.4 Build 1**
 最新正式 Release：`cyinvoice-v2.4.2`
+
+> V3 Cloud identity 工作若由新的長時間工作階段／ChatGPT Work 接手，先讀 `docs/CLOUD_WORK_HANDOFF.md`，再讀 `CLOUD_ARCHITECTURE_STATUS.md`、`CLOUD_ROADMAP.md` 與本檔。接手時仍必須依 `AGENTS.md` 指示先讀三層永久規則。
 
 ## 1. V2.6.x 實機與光貿驗證
 
@@ -82,109 +84,84 @@
 
 ## 7. CYInvoice V3.0 雲端協同
 
-完整長期定位與分期見 `CLOUD_ROADMAP.md`。V3.0 的產品範圍已收斂為：**志遠高雄單一公司／單一統編，多台 CYInvoice 電腦協同。**
+完整長期定位與分期見 `CLOUD_ROADMAP.md`；Workspace／Device／Token／SUPER_ADMIN／Recovery 的完整定案見 `CLOUD_IDENTITY_LIFECYCLE.md`。V3.0 的產品範圍已收斂為：**志遠高雄單一公司／單一統編，多台 CYInvoice 電腦協同。**
 
-### 7.1 已定案的架構邊界
+### 7.1 Cloud Identity 已完成的 source foundation
 
-- [x] V3.0 不做多公司 UI、跨公司權限、跨公司查詢或跨公司待辦。
-- [x] V3.0 不先導入 `company_id`；未來真正有台北／台中等不同統編需求時再新增 Company 層與 migration。
-- [x] `workspace_id` 不得等於統編；Workspace 定義為協作／管理範圍，不永久等同公司或 AMEGO 帳號。
-- [x] 未來志遠多家公司可以共用同一 Workspace；是否做跨公司功能留到當時再決定。
-- [x] Windows Client 只依賴 CYInvoice-compatible HTTPS API，不綁定 Cloudflare、D1 或特定資料庫。
-- [x] Cloudflare Worker + D1 僅為目前 reference implementation。
-- [x] 既有 `0001_cloud_foundation.sql`／`0002_device_pairing.sql` 保留，後續一律新增 migration，不回寫已執行 migration。
-- [x] Cloud 定位為 Coordination Service，不是業務總開關；Cloud 掛掉時原則上降回單機模式，不採全系統 blanket lock。
-- [x] AMEGO 仍是發票／作廢／折讓官方結果唯一準則；App Key 不上雲。
-- [x] Employee 與 Device 分離；不另建立第二套 Cloud Admin，後續沿用既有 SUPER_ADMIN 身分。
+- [x] Workspace / Device identity、protected Device Token、retry-safe bootstrap / Join。
+- [x] Existing Workspace B-side Join 先做執行時 Local ADMIN / SUPER_ADMIN 驗證，再允許輸入 Pairing Code。
+- [x] Pairing Code 授權 Device，不直接授予 Employee role。
+- [x] Local → Cloud 採 whole-device Employee Transition，一次盤點全部既有 Local Employees。
+- [x] Identity matching：Employee No + Email 同命中同一人直接採 Cloud；兩者都不存在建立新人；partial／divergent match 進 conflict。
+- [x] 姓名不是 identity matching authority。
+- [x] Conflict 由目前 Workspace SUPER_ADMIN 當下重新驗證後人工處理；沒有 unresolved case 時不顯示「待確認帳號」。
+- [x] 第一台 X 成為中央 SUPER_ADMIN；bootstrap 已驗證 Email 可直接沿用，不重複 OTP。
+- [x] 既有 Workspace 新 Local SUPER_ADMIN Y 若是新中央 Employee，中央 role 為 ADMIN；若精確命中既有 Employee，保留既有 Cloud role。
+- [x] Cutover 後 Cloud Employee 是唯一帳號 authority；舊 Local EmployeeStore 不再作權限來源。
+- [x] Cloud Mode 斷網時使用最後成功同步的 Cloud Employee cache + protected offline credential verifier，不切回舊 Local authority。
+- [x] 中央 Employee 新增、姓名／Email、`ADMIN ↔ EMPLOYEE`、enabled、password API/client/UI foundation 已完成。
+- [x] 新 Employee Email 必須驗證；Email 修改時新 Email 必須驗證後才 commit。
+- [x] 新密碼明文不上 Cloud；Windows 先產生 PBKDF2-SHA256 verifier。
+- [x] SUPER_ADMIN transfer：X 執行時帳密 re-auth + X Email OTP；atomic X→ADMIN、Y→SUPER_ADMIN、Recovery Email→Y。
+- [x] 舊單一 Local SUPER_ADMIN `reconcile-local` mutation 與任意 30 分鐘 import window 已退役；whole-device transition 為唯一正式路徑。
+- [x] Cloud compatibility 已對齊 API 1 / Cloud 0.8.2 / Schema 7（migrations `0001`～`0007`）。
 
-### 7.2 Phase 1：Public Repo Cloud Foundation 收斂
+### 7.2 Cloud Identity 目前剩餘驗證／功能
 
-- [x] Windows Client 預設 `Local Only`；未啟用雲端時不呼叫 Cloud API。
-- [x] Windows Client 不預填專案擁有者／development Cloud endpoint。
-- [x] 設定頁提供「單機模式／雲端模式」。
-- [x] Cloud API endpoint 由使用者自行填寫並保存，且只接受相容 HTTPS endpoint。
-- [x] Windows Client 不直接連 D1／SQL／其他資料庫。
-- [x] Cloud API contract 與 backend 實作分離。
-- [x] Health／API／schema／storage compatibility 基礎完成。
-- [x] D1 `0001`／`0002` migration 與 Windows → Worker → D1 live connection 已驗證。
-- [x] 主畫面具備 `單機模式`／`雲端模式`／`雲端異常(單機模式)` 執行狀態顯示。
-- [ ] staging／production 正式環境切分、監控與服務層復原完成。
-- [ ] 將目前開發 endpoint／reference backend 的部署與維運流程整理成正式工程文件，不把 owner endpoint 寫入 Windows 包。
+- [x] 2026-09-23 development deploy Run #6 已確認 Worker remote 為 Cloud 0.8.2 / API 1、D1 Schema 7、`/v1/health` storage `ok`；部署前 Workspace／Device／Employee／Pairing 各為 0。
+- [x] 2026-09-22 已確認 development D1 remote migrations 到 Schema 7。
+- [x] Brevo runtime secrets 已完成設定，bootstrap OTP 實際收信成功。
+- [x] V2.6.4 Build 1 已修正第一個 Workspace 建立 SQL 與誤報錯誤；Cloud 0.8.2 已部署，Windows client 已回報首次 Workspace／Device 建立及 Device identity 驗證成功。
+- [ ] 以本機 Codex 已連線的 Cloudflare MCP 唯讀回查 development D1：Workspace／Device／Employee／Pairing 筆數，及首個 Workspace 與 Device 的關聯；不得把部署前 0 筆當成現在結果。
+- [ ] A 機 first Employee Transition／cutover 實機驗收；Windows client 的 Device identity 成功不代表中央 SUPER_ADMIN 或帳號轉換已完成。
+- [ ] B 機 Pairing + 多 Local Employee transition matrix 實機測試。
+- [ ] 精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。
+- [ ] Central Employee CRUD、Email OTP、password、enabled、role 在 A/B 間 snapshot 同步實機測試。
+- [ ] Cloud Mode 斷網：以最後 Cloud cache 做 execution-time auth；恢復連線後 Cloud authority 覆蓋 cache。
+- [ ] Device revoke UI/API。
+- [ ] 所有 Device Token 遺失但 Recovery Email 可用時的 Recovery Device flow。
+- [ ] 所有 Device Token + Recovery Email 同時失效時的 reference-backend 人工維運文件。
+- [ ] 驗收 fresh-install 首次分流：單機版原流程；直接加入可選配對碼或 Workspace 識別碼＋該空間超管帳密／Email OTP，不建立本機帳號。先確認 A 機中央帳號已完成 cutover，再部署 Cloud 0.8.3、使用 Windows 測試包驗證兩條路徑及斷線恢復。
 
-### 7.3 Phase 2：Workspace + 第一台 Device
+### 7.3 跨機 Work Item / Sync
 
-- [ ] Windows「雲端連線設定」在 health 成功且尚無 Workspace 時提供「建立雲端空間」。
-- [ ] Workspace bootstrap 與第一台 trusted Device 建立視為同一個使用者可理解的初始化流程，避免留下沒有可信任 Device 的 Workspace。
-- [ ] 初始化只接受一次性的 server-side bootstrap guard；UI 名稱採「雲端初始化碼」，不得保存到 repo／log／安裝包／明文設定。
-- [ ] bootstrap 成功後只接收一次 Device Token，立即以 Windows 安全儲存機制保存。
-- [ ] 儲存後立即呼叫 current-device API 重新驗證 Workspace／Device 身分。
-- [ ] bootstrap timeout／結果不明時先查 onboarding status，不盲目再次建立 Workspace。
-- [ ] Device Token 遺失／撤銷／失效的安全恢復流程。
+- [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上 Cloud。
+- [ ] Work Item 原子 state transition／optimistic revision，避免多機同時結案。
+- [ ] Cloud coordination 只用於真正需要跨機原子性的點，不把 Cloud Lock 變成所有業務前置條件。
+- [ ] 離線期間 AMEGO 結果不明操作不得因恢復連線而自動重送。
+- [ ] 解決多機離線自動 OrderID 撞號；正式多機上線前需 Device namespace／短碼或等效方案。
 
-### 7.4 Phase 3：中央員工、SUPER_ADMIN 與第二台 Device
+### 7.4 Cloud Audit
 
-- [ ] 員工／role／enabled／lockout 中央化。
-- [ ] 維持 per-operation authentication，不強制改成程式啟動登入。
-- [ ] 既有本機 SUPER_ADMIN 與 Cloud identity 的綁定流程。
-- [ ] 本機 Employee 遷移策略；先同步非秘密 identity／authorization 欄位，密碼模型另行確認後再決定是否可沿用。
-- [ ] 第二台 Device 使用短效 pairing code 加入；每台 Device 有自己的 Token，不共用第一台 Token。
-- [ ] Device pair／revoke／重新配對 UI 與權限驗證。
-
-### 7.5 Phase 4：跨機 Work Item、離線降級與恢復
-
-- [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上雲。
-- [ ] Work Item 使用原子 state transition／optimistic version，避免同一待辦被兩台同時結案。
-- [ ] idempotency／operation lock 只用在真正需要跨機協調的點，不把 Cloud Lock 變成所有本機業務的前置條件。
-- [ ] Cloud 失效時盤點並實測現有單機功能：查閱／同步／PDF／列印／一般開票／直接作廢／人工作廢覆核／人工折讓／人工折讓作廢／管理員結案。
-- [ ] Cloud 失效時，純 Cloud 管理功能（新 Device、中央帳號／角色／Workspace 管理）停止；安全本機業務直接降單機模式。
-- [ ] Cloud 恢復後，對離線期間本機狀態做 reconciliation；任何 AMEGO 結果不明操作都不得因重新連線而自動重送。
-- [ ] 解決多機離線自動 OrderID 撞號：目前 `MyyyyMMddNNN` 只看本機紀錄，正式多機上線前需改成 Device namespace／短碼或等效不依賴即時 Cloud 的方案。
-
-### 7.6 Phase 5：Cloud Audit
-
-- [ ] 有 Cloud backend 後才新增跨機操作／稽核紀錄；不回頭為單機版另做一份。
-- [ ] 記錄 Employee、管理員、Device、Work Item 與官方結果摘要。
-- [ ] 不保存密碼、復原碼、App Key 或不必要的完整發票內容。
-
-### 7.7 Phase 6：正式折讓 API
-
-- [ ] 全域唯一 AllowanceNumber。
-- [ ] `/json/g0401`／`/json/g0501`。
-- [ ] 官方回查、pending state machine、跨裝置防重。
+- [ ] 記錄 Employee、Device、Work Item、SUPER_ADMIN transfer 與必要維運事件摘要。
+- [ ] 不保存密碼、Recovery Code、OTP、Device Token、App Key 或不必要的完整發票內容。
 
 ## 8. 後續大版本：多公司 Workspace
 
-此區只保留擴充點，不列入 V3.0 工程範圍。
+不列入 V3.0 阻塞項目。
 
-- [ ] 真正有志遠台北／台中等不同統編需求時，再新增 `companies`／Company entity 與 `company_id`。
-- [ ] V3.x 單公司 Workspace 升級時，自動建立第一個 Company，既有公司相關資料全部歸到該 Company。
-- [ ] 視實際需求再做 Employee ↔ Company 權限、Device 預設 Company、公司切換 UI、跨公司待辦／查詢／報表。
-- [ ] 向下相容：Workspace 仍只有一家公司時，舊 V3.x Client 可由 Server 套用唯一公司；啟用兩家公司以上後，舊 Client 不得自行猜測，應要求升級。
+- [ ] 真正有不同統編需求時再新增 Company entity／`company_id`。
+- [ ] V3 單公司 Workspace 升級時自動建立第一個 Company。
+- [ ] 視實際需求再做 Employee ↔ Company scope、Device 預設 Company、公司切換 UI、跨公司待辦／查詢／報表。
 
-## 9. 對外雲端相容／開源準備
+## 9. 對外相容／開源準備
 
-此區不列入目前志遠高雄 V3.0 上線阻塞項目。
-
-- [ ] Cloud 功能與 API Contract 穩定後，撰寫技術中立的 **Cloud Integration Guide**。
-- [ ] Guide 只定義 endpoint、request／response schema、Device authentication、Employee authorization、錯誤碼、版本相容、reconciliation／idempotency 必要語意。
-- [ ] Guide 不規定第三方使用 Cloudflare、D1、AWS、Azure、SQL Server、PostgreSQL 或其他技術；第三方只要提供 CYInvoice-compatible Cloud API 即可。
-- [ ] 對外販售／開源時，不假設使用者的 Workspace 只有一家公司，也不假設使用者採用本專案的 reference backend。
+- [ ] Cloud API 穩定後撰寫 provider-neutral Cloud Integration Guide。
+- [ ] Guide 定義 endpoint、schema、Device auth、Employee authorization、錯誤碼、版本、idempotency／reconciliation 語意，不指定 Cloud provider／DB。
 
 ## 10. 後續增強
 
-- [ ] Email 忘記密碼／驗證碼。
-- [ ] MO 密碼安全雲端同步。
-- [ ] 小型營運摘要：今日／本月開票張數與金額、待處理工作數、同步異常數；目前只保留產品候選。
+- [ ] 一般員工／管理員忘記密碼的 Email self-service。
+- [ ] MO 密碼安全 Cloud sync。
+- [ ] 小型營運摘要：今日／本月開票張數與金額、待處理工作數、同步異常數。
 
-AMEGO App Key 不列入雲端同步範圍，仍維持各電腦自行設定、Windows DPAPI 本機保護。
+AMEGO App Key 不列入 Cloud sync，仍由各電腦自行設定並以 Windows secure storage 保護。
 
 ## 11. 單機版明確不排入
 
-以下已由使用者定案，不再當成單機待辦：
+- 本機操作／稽核紀錄：不做；等 Cloud backend 後做跨機 Audit。
+- 本機備份／還原：不做；CYInvoice 是中介層，官方資料以光貿為準。
+- 發票 Excel／CSV 匯出：不做；需要時使用光貿網站。
+- 管理員開機待辦提醒：不做；沒有持續登入，無法可靠知道開程式的人是管理員。
 
-- **本機操作／稽核紀錄：不做。** 等 Cloud backend 後做跨機稽核。
-- **本機備份／還原：不做。** CYInvoice 為中介層，發票／折讓官方資料以光貿為準。
-- **發票 Excel／CSV 匯出：不做。** 有需要直接使用光貿網站；對應業務單號另回填 ERP。
-- **管理員開機待辦提醒：不做。** 現行沒有持續登入，只在需要權限時驗證，無法可靠知道開程式的人是不是管理員。
-
-小型營運摘要仍保留未來候選，但沒有排入目前單機版本。
+任何 merge、tag、正式 Release 均需明確授權。
