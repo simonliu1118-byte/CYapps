@@ -49,6 +49,7 @@ jobs:
           node --check public/v06.js
           node --check public/v07.js
           node --check public/v08.js
+          node --check public/v09.js
 
   deploy:
     if: github.event_name != 'pull_request'
