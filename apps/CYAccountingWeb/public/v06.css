@@ -1,0 +1,98 @@
+.ledger-desktop-tools {
+  display: grid;
+  grid-template-columns: auto minmax(260px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid #e3e9ef;
+  border-bottom: 1px solid #e3e9ef;
+  background: #fafcfe;
+}
+
+.ledger-month-tools,
+.ledger-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ledger-month-tools .month-picker {
+  margin: 0;
+}
+
+.ledger-month-tools .month-picker span {
+  display: none;
+}
+
+.ledger-month-tools .secondary.compact {
+  min-width: 34px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.ledger-display-month {
+  margin-left: 6px;
+  color: #607080;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.ledger-search {
+  justify-self: end;
+  width: min(100%, 520px);
+}
+
+.ledger-search input {
+  flex: 1 1 220px;
+  min-width: 160px;
+}
+
+#ledgerGroupToggle.active {
+  background: #e7f0f8;
+  border-color: #8daec7;
+  color: #1d587e;
+}
+
+.ledger-account-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ledger-account-header:hover {
+  text-decoration: underline;
+}
+
+.ledger-balance {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.account-group-row td {
+  padding: 8px 12px;
+  background: #edf3f7;
+  border-top: 1px solid #ccd8e1;
+  border-bottom: 1px solid #d8e2e9;
+  color: #334a5c;
+}
+
+.account-group-row td strong {
+  margin-right: 18px;
+}
+
+.account-group-row td span {
+  color: #607080;
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .ledger-desktop-tools {
+    grid-template-columns: 1fr auto;
+  }
+
+  .ledger-search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
+    width: 100%;
+  }
+}
