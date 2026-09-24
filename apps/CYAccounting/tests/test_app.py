@@ -270,9 +270,9 @@ def test_ui_constructs():
     win.input_tab.income_amount.setText('1')
     win.input_tab.save_entry('income')
     assert '(空白)' in win.input_tab.confirm_lines[0]
-    assert '#98a2b3' in win.input_tab.confirm_lines[0]
+    assert '#98A2B3' in win.input_tab.confirm_lines[0]
     assert '[現金]' in win.input_tab.confirm_lines[0]
-    assert 'background-color:#e7efe9' in win.input_tab.confirm_lines[0]
+    assert 'background-color:#EDF5F2' in win.input_tab.confirm_lines[0]
     assert '｜' not in win.input_tab.confirm_lines[0]
     assert '$1' in win.input_tab.confirm_lines[0]
     assert '&lt;存檔成功&gt;' in win.input_tab.confirm_lines[0]
