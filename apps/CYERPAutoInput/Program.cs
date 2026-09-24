@@ -26,7 +26,7 @@ internal static class Program
 
         var form = new MainForm(logger)
         {
-            Text = "CYERPAutoInput V0.1.0 Build 3 — SMART ERP 自動輸入工具"
+            Text = "CYERPAutoInput V0.1.0 Build 4 — SMART ERP 自動輸入工具"
         };
         UpdateBuildLabels(form);
         Application.Run(form);
@@ -38,7 +38,7 @@ internal static class Program
         foreach (Control control in root.Controls)
         {
             if (control.Text.Contains("V0.1.0 Build 1", StringComparison.Ordinal))
-                control.Text = control.Text.Replace("V0.1.0 Build 1", "V0.1.0 Build 3", StringComparison.Ordinal);
+                control.Text = control.Text.Replace("V0.1.0 Build 1", "V0.1.0 Build 4", StringComparison.Ordinal);
             if (control.HasChildren) UpdateBuildLabels(control);
         }
     }

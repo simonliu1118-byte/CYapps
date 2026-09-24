@@ -5,6 +5,18 @@ internal sealed class OpticalTextLocator
     private readonly WindowsOcrService _ocr;
     private readonly AppLogger _log;
 
+    private static readonly Dictionary<string, int> Copi08TabCenterX = new(StringComparer.Ordinal)
+    {
+        ["交易資料"] = 48,
+        ["送貨資料"] = 137,
+        ["發票資料(一)"] = 226,
+        ["發票資料(二)"] = 316,
+        ["其他資料"] = 405,
+        ["訂金資料"] = 493,
+        ["客戶描述"] = 582,
+        ["資料瀏覽"] = 671
+    };
+
     public OpticalTextLocator(WindowsOcrService ocr, AppLogger log)
     {
         _ocr = ocr;
@@ -17,6 +29,33 @@ internal sealed class OpticalTextLocator
             return null;
 
         var normalizedAliases = aliases.Select(Normalize).Where(x => x.Length > 0).ToArray();
+
+        // COPI08's DevExpress page tabs were already proven in the Go line to use a
+        // stable tab-strip geometry. Do not make actual tab activation depend on OCR:
+        // resolve the click point from the real TcxPageControl and the known tab order,
+        // while ActivateTabAsync still verifies the target TcxTabSheet became visible.
+        // OCR is retained only as a bounded tab-strip diagnostic for field testing.
+        if (NativeMethods.ClassName(hwnd).Equals("TcxPageControl", StringComparison.OrdinalIgnoreCase))
+        {
+            var tabName = normalizedAliases.FirstOrDefault(Copi08TabCenterX.ContainsKey);
+            if (tabName is not null)
+            {
+                await LogTabStripOcrDiagnosticAsync(hwnd, tabName, cancellationToken);
+                if (!NativeMethods.GetWindowRect(hwnd, out rect) || rect.Width <= 0 || rect.Height <= 0)
+                    return null;
+
+                var x = Copi08TabCenterX[tabName];
+                if (x < 0 || x >= rect.Width)
+                {
+                    _log.Warn("tab", $"proven tab-strip point outside page group={tabName} x={x} page_width={rect.Width}");
+                    return null;
+                }
+
+                var p = new Point(rect.Left + x, rect.Top + 12);
+                _log.Info("tab", $"resolved by proven TcxPageControl geometry group={tabName} point={p.X},{p.Y} page={rect.Width}x{rect.Height}");
+                return p;
+            }
+        }
 
         // COPI08's Ribbon sometimes exposes button captions as real child-window text.
         // Use that direct signal first for the New button only. Do not use this shortcut
@@ -82,11 +121,53 @@ internal sealed class OpticalTextLocator
                 return p;
             }
 
-            var sample = string.Join("|", ribbonTokens.Take(24).Select(t => Normalize(t.Text)).Where(t => t.Length > 0));
-            _log.Warn("vision", $"Ribbon OCR/green-plus missed 新增 tokens={ribbonTokens.Count} sample={sample}");
+            LogTokens("ribbon-new-miss", "新增", ribbonTokens, 48);
         }
 
         return null;
+    }
+
+    private async Task LogTabStripOcrDiagnosticAsync(nint page, string target, CancellationToken cancellationToken)
+    {
+        if (!NativeMethods.GetWindowRect(page, out var rect) || rect.Width <= 0 || rect.Height <= 0)
+            return;
+
+        var region = new Rectangle(rect.Left, rect.Top, rect.Width, Math.Min(rect.Height, 40));
+        try
+        {
+            using var image = ScreenCapture.Capture(region);
+            var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+            LogTokens("tab-strip", target, tokens, 64);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Diagnostic OCR must never block a tab operation that has an independent,
+            // state-verified TcxPageControl click path.
+            _log.Warn("vision", $"OCR_DIAG context=tab-strip target={target} failed={Sanitize(ex.Message)}");
+        }
+    }
+
+    private void LogTokens(string context, string target, IReadOnlyList<OcrToken> tokens, int maxTokens)
+    {
+        _log.Info("vision", $"OCR_DIAG context={context} target={target} tokens={tokens.Count}");
+        foreach (var token in tokens.Take(maxTokens))
+        {
+            var text = Sanitize(token.Text);
+            if (text.Length == 0) continue;
+            _log.Info("vision", $"OCR_TOKEN context={context} target={target} text=\"{text}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
+        }
+        if (tokens.Count > maxTokens)
+            _log.Info("vision", $"OCR_DIAG context={context} target={target} truncated={tokens.Count - maxTokens}");
+    }
+
+    private static string Sanitize(string value)
+    {
+        var text = value.Replace("\r", " ").Replace("\n", " ").Replace("\"", "'").Trim();
+        return text.Length <= 80 ? text : text[..80];
     }
 
     internal static Point? FindGreenAddIconCandidate(Bitmap image)
@@ -228,5 +309,9 @@ internal sealed class OpticalTextLocator
         return null;
     }
 
-    private static string Normalize(string value) => value.Trim().Replace(" ", string.Empty).Replace("　", string.Empty);
+    private static string Normalize(string value) => value.Trim()
+        .Replace(" ", string.Empty)
+        .Replace("　", string.Empty)
+        .Replace("（", "(")
+        .Replace("）", ")");
 }

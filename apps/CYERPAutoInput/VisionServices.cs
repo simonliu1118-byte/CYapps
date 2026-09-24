@@ -186,12 +186,18 @@ internal sealed class GridVisionService
         }
 
         if (!geometry.ColumnX.ContainsKey(0) || !geometry.ColumnX.ContainsKey(1))
+        {
+            LogTokens("detail-header-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 80), 64);
             throw new InvalidOperationException("Optical detail header detection failed: item/quantity columns were not both found.");
+        }
 
         var horizontal = FindHorizontalLines(image, Math.Max(0, headerBottom - 6));
         var firstBoundaryIndex = horizontal.FindIndex(y => y >= headerBottom - 3);
         if (firstBoundaryIndex < 0 || horizontal.Count - firstBoundaryIndex < 2)
+        {
+            LogTokens("detail-row-lines-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 80), 64);
             throw new InvalidOperationException("Optical detail row-line detection failed.");
+        }
 
         for (var i = firstBoundaryIndex; i + 1 < horizontal.Count; i++)
         {
@@ -202,7 +208,10 @@ internal sealed class GridVisionService
             geometry.RowCenterY.Add((a + b) / 2);
         }
         if (geometry.RowCenterY.Count == 0)
+        {
+            LogTokens("detail-row-centers-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 100), 64);
             throw new InvalidOperationException("Optical detail row centers were not detected.");
+        }
 
         _log.Info("vision", $"detail geometry columns={geometry.ColumnX.Count} rows={geometry.RowCenterY.Count} size={image.Width}x{image.Height}");
         return geometry;
@@ -217,7 +226,24 @@ internal sealed class GridVisionService
 
         var best = FindBestUnitCandidate(tokens, requestedUnit);
         if (best is null)
+        {
+            var unitHeader = FindPhrase(tokens, ["換算單位"]);
+            if (unitHeader is not null)
+            {
+                var headerX = unitHeader.Value.Left + unitHeader.Value.Width / 2;
+                var corridor = Math.Max(90, unitHeader.Value.Width * 2);
+                LogTokens(
+                    "f2-unit-miss",
+                    tokens,
+                    t => Math.Abs(t.Rect.Left + t.Rect.Width / 2 - headerX) <= corridor && t.Rect.Top >= unitHeader.Value.Top - 12,
+                    80);
+            }
+            else
+            {
+                LogTokens("f2-unit-header-miss", tokens, null, 80);
+            }
             throw new InvalidOperationException("OCR 無法在 F2 的「換算單位」欄可靠定位指定單位；已停止，不進行座標猜測。");
+        }
 
         var point = new Point(rect.Left + best.Rect.Left + best.Rect.Width / 2, rect.Top + best.Rect.Top + best.Rect.Height / 2);
         _log.Info("vision", $"F2 requested unit located point={point.X},{point.Y}");
@@ -284,6 +310,24 @@ internal sealed class GridVisionService
             }
         }
         return null;
+    }
+
+    private void LogTokens(string context, IReadOnlyList<OcrToken> tokens, Func<OcrToken, bool>? filter, int maxTokens)
+    {
+        var selected = (filter is null ? tokens : tokens.Where(filter).ToArray()).Take(maxTokens).ToArray();
+        _log.Warn("vision", $"OCR_DIAG context={context} total_tokens={tokens.Count} logged_tokens={selected.Length}");
+        foreach (var token in selected)
+        {
+            var text = Sanitize(token.Text);
+            if (text.Length == 0) continue;
+            _log.Warn("vision", $"OCR_TOKEN context={context} text=\"{text}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
+        }
+    }
+
+    private static string Sanitize(string value)
+    {
+        var text = value.Replace("\r", " ").Replace("\n", " ").Replace("\"", "'").Trim();
+        return text.Length <= 80 ? text : text[..80];
     }
 
     private static string Normalize(string value) => value.Trim().Replace(" ", string.Empty).Replace("　", string.Empty);
