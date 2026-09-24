@@ -24,6 +24,12 @@ export default {
       if (url.pathname === '/api/auth/login' && request.method === 'POST') {
         return handleLogin(request, env);
       }
+      if (url.pathname === '/api/auth/password-reset/challenge' && request.method === 'POST') {
+        return handlePasswordResetChallenge(request, env);
+      }
+      if (url.pathname === '/api/auth/password-reset/confirm' && request.method === 'POST') {
+        return handlePasswordResetConfirm(request, env);
+      }
       if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
         return handleLogout(request, env.DB);
       }
@@ -36,16 +42,15 @@ export default {
 
       return coreWorker.fetch(request, env);
     } catch (error) {
-      console.error('cyaccounting_auth_failed', error instanceof Error ? error.message : 'unknown_error');
-      return json({ ok: false, error: '登入服務處理失敗。' }, 500);
+      console.error('cyaccounting_identity_failed', error instanceof Error ? error.message : 'unknown_error');
+      return json({ ok: false, error: '中央帳號服務處理失敗。' }, 500);
     }
   }
 };
 
 async function handleLogin(request, env) {
-  if (!env.IDENTITY || typeof env.IDENTITY.fetch !== 'function') {
-    return json({ ok: false, error: '中央帳號服務尚未連線。', code: 'IDENTITY_NOT_CONFIGURED' }, 503);
-  }
+  const identityUnavailable = identityConfigurationError(env);
+  if (identityUnavailable) return identityUnavailable;
 
   const body = await request.json().catch(() => null);
   const employeeNo = String(body?.employeeNo || '').trim();
@@ -54,21 +59,17 @@ async function handleLogin(request, env) {
     return json({ ok: false, error: '請輸入 4 碼員工編號與密碼。', code: 'INVALID_LOGIN_REQUEST' }, 400);
   }
 
-  const headers = new Headers({ 'content-type': 'application/json' });
-  const clientIp = request.headers.get('cf-connecting-ip');
-  if (clientIp) headers.set('cf-connecting-ip', clientIp);
-
-  const identityResponse = await env.IDENTITY.fetch(new Request('https://cyinvoice.internal/v1/web-auth/login', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ application: APPLICATION, employeeNo, password })
-  }));
+  const identityResponse = await identityFetch(request, env, '/v1/web-auth/login', {
+    application: APPLICATION,
+    employeeNo,
+    password
+  });
   const identity = await identityResponse.json().catch(() => ({}));
 
   if (!identityResponse.ok || identity?.ok === false) {
     const code = String(identity?.error?.code || 'WEB_AUTHENTICATION_FAILED');
     if (identityResponse.status === 429) {
-      return json({ ok: false, error: '登入嘗試次數過多，請稍後再試。', code }, 429, { 'retry-after': identityResponse.headers.get('retry-after') || '60' });
+      return json({ ok: false, error: '登入嘗試次數過多，請稍後再試。', code }, 429, retryHeader(identityResponse));
     }
     if (identityResponse.status === 503 || code === 'WEB_AUTH_NOT_READY') {
       return json({ ok: false, error: '中央員工帳號尚未完成雲端啟用。', code: 'IDENTITY_NOT_READY' }, 503);
@@ -112,6 +113,119 @@ async function handleLogin(request, env) {
   return json({ ok: true, user: sessionUser(employee) }, 200, {
     'set-cookie': sessionCookie(token, SESSION_TTL_SECONDS)
   });
+}
+
+async function handlePasswordResetChallenge(request, env) {
+  const identityUnavailable = identityConfigurationError(env);
+  if (identityUnavailable) return identityUnavailable;
+
+  const body = await request.json().catch(() => null);
+  const employeeNo = String(body?.employeeNo || '').trim();
+  if (!/^\d{4}$/.test(employeeNo)) {
+    return json({ ok: false, error: '請輸入 4 碼員工編號。', code: 'INVALID_PASSWORD_RESET_REQUEST' }, 400);
+  }
+
+  const identityResponse = await identityFetch(request, env, '/v1/web-auth/password-reset/challenge', {
+    application: APPLICATION,
+    employeeNo
+  });
+  const identity = await identityResponse.json().catch(() => ({}));
+  if (!identityResponse.ok || identity?.ok === false) {
+    return passwordResetError(identityResponse, identity);
+  }
+
+  const challenge = identity?.challenge;
+  if (!challenge?.challengeId || !challenge?.maskedEmail || !challenge?.expiresAt || !challenge?.resendAfter) {
+    return json({ ok: false, error: '中央帳號服務回應格式錯誤。', code: 'IDENTITY_INVALID_RESPONSE' }, 502);
+  }
+  return json({
+    ok: true,
+    challenge: {
+      challengeId: String(challenge.challengeId),
+      maskedEmail: String(challenge.maskedEmail),
+      expiresAt: String(challenge.expiresAt),
+      resendAfter: String(challenge.resendAfter)
+    }
+  }, 201);
+}
+
+async function handlePasswordResetConfirm(request, env) {
+  const identityUnavailable = identityConfigurationError(env);
+  if (identityUnavailable) return identityUnavailable;
+
+  const body = await request.json().catch(() => null);
+  const employeeNo = String(body?.employeeNo || '').trim();
+  const challengeId = String(body?.challengeId || '').trim();
+  const otp = String(body?.otp || '').trim();
+  const newPassword = typeof body?.newPassword === 'string' ? body.newPassword : '';
+  if (!/^\d{4}$/.test(employeeNo) || !/^otp_[0-9a-f-]{36}$/i.test(challengeId)
+      || !/^\d{6}$/.test(otp) || !/^[A-Za-z0-9]{8,200}$/.test(newPassword)) {
+    return json({ ok: false, error: '驗證資料或新密碼格式不正確。', code: 'INVALID_PASSWORD_RESET_CONFIRMATION' }, 400);
+  }
+
+  const identityResponse = await identityFetch(request, env, '/v1/web-auth/password-reset/confirm', {
+    application: APPLICATION,
+    employeeNo,
+    challengeId,
+    otp,
+    newPassword
+  });
+  const identity = await identityResponse.json().catch(() => ({}));
+  if (!identityResponse.ok || identity?.ok === false) {
+    return passwordResetError(identityResponse, identity);
+  }
+
+  await env.DB.prepare('DELETE FROM web_sessions WHERE employee_no = ?').bind(employeeNo).run();
+  return json({ ok: true, passwordReset: true });
+}
+
+function passwordResetError(response, identity) {
+  const code = String(identity?.error?.code || 'PASSWORD_RESET_FAILED');
+  const retry = retryHeader(response);
+  if (code === 'OTP_INVALID') return json({ ok: false, error: 'Email 驗證碼錯誤。', code }, 400);
+  if (code === 'OTP_EXPIRED') return json({ ok: false, error: 'Email 驗證碼已過期，請重新寄送。', code }, 410);
+  if (code === 'OTP_ALREADY_USED') return json({ ok: false, error: '此驗證碼已使用，請重新寄送。', code }, 409);
+  if (code === 'OTP_ATTEMPTS_EXCEEDED') return json({ ok: false, error: '驗證碼錯誤次數已達上限，請重新寄送。', code }, 429, retry);
+  if (code === 'OTP_RESEND_COOLDOWN') {
+    const seconds = Number(identity?.retryAfterSeconds || response.headers.get('retry-after') || 60);
+    return json({ ok: false, error: `驗證碼剛寄出，請 ${Math.max(1, seconds)} 秒後再重寄。`, code, retryAfterSeconds: Math.max(1, seconds) }, 429, retry);
+  }
+  if (code === 'OTP_RATE_LIMITED' || code === 'PASSWORD_RESET_RATE_LIMITED') {
+    return json({ ok: false, error: '要求驗證碼或重設密碼的次數過多，請稍後再試。', code }, 429, retry);
+  }
+  if (code === 'PASSWORD_RESET_UNAVAILABLE') {
+    return json({ ok: false, error: '此帳號目前無法使用 Email 重設密碼，請確認帳號已啟用且 Email 已完成驗證。', code }, 400);
+  }
+  if (code === 'EMAIL_DELIVERY_FAILED') return json({ ok: false, error: '驗證信目前無法寄出，請稍後再試。', code }, 503);
+  if (code === 'EMAIL_PROVIDER_NOT_CONFIGURED' || code === 'OTP_NOT_CONFIGURED') {
+    return json({ ok: false, error: 'Email 驗證服務尚未完成設定。', code }, 503);
+  }
+  if (code === 'WEB_AUTH_NOT_READY' || response.status === 503) {
+    return json({ ok: false, error: '中央員工帳號服務目前無法處理密碼重設。', code }, 503);
+  }
+  return json({ ok: false, error: '密碼重設失敗，請稍後再試。', code }, response.status >= 400 ? response.status : 400, retry);
+}
+
+async function identityFetch(request, env, path, body) {
+  const headers = new Headers({ 'content-type': 'application/json' });
+  const clientIp = request.headers.get('cf-connecting-ip');
+  if (clientIp) headers.set('cf-connecting-ip', clientIp);
+  const requestId = request.headers.get('x-request-id');
+  if (requestId) headers.set('x-request-id', requestId);
+  return env.IDENTITY.fetch(new Request(`https://cyinvoice.internal${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  }));
+}
+
+function identityConfigurationError(env) {
+  if (env.IDENTITY && typeof env.IDENTITY.fetch === 'function') return null;
+  return json({ ok: false, error: '中央帳號服務尚未連線。', code: 'IDENTITY_NOT_CONFIGURED' }, 503);
+}
+
+function retryHeader(response) {
+  return { 'retry-after': response.headers.get('retry-after') || '60' };
 }
 
 async function handleLogout(request, db) {
