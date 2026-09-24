@@ -920,6 +920,19 @@ class Database:
         # Deleted historical accounts are intentionally excluded.
         return {name: int(data["ending_by_account"].get(name, 0)) for name in current_names}
 
+    def reset_local_ledger(self) -> None:
+        """Restore a new local ledger while keeping the existing database schema."""
+        assert self.conn is not None
+        with self.tx() as con:
+            con.execute("DELETE FROM transactions")
+            con.execute("DELETE FROM opening_balances")
+            con.execute("DELETE FROM categories")
+            con.execute("DELETE FROM category_groups")
+            con.execute("DELETE FROM accounts")
+            con.execute("DELETE FROM app_settings")
+            con.execute("DELETE FROM sqlite_sequence WHERE name IN ('accounts', 'category_groups', 'categories', 'transactions')")
+            self._seed_defaults()
+
     def counts(self) -> dict[str, int]:
         assert self.conn is not None
         return {

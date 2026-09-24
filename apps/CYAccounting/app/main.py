@@ -176,6 +176,7 @@ from util import (
     month_to_index,
     parse_date,
     save_config,
+    safe_copy,
     shift_month,
     sync_version_marker,
     text_sort_key,
@@ -1476,7 +1477,7 @@ class MainWindow(QMainWindow):
     def open_settings(self):
         dlg = SettingsDialog(
             self.db, self.config, self.change_database_location, self.restore_database,
-            self.settings_changed, self,
+            self.clear_data, self.settings_changed, self,
         )
         dlg.exec()
         save_config(self.config)
@@ -1486,6 +1487,39 @@ class MainWindow(QMainWindow):
     def settings_changed(self):
         self.input_tab.refresh_lists()
         self.ledger_tab.refresh_current()
+
+    def clear_data(self):
+        if background_tasks_running():
+            raise DatabaseError("Google Drive 正在同步，完成後才能重置帳本。")
+        restore_dir = self.db.path.parent / "RestoreBackup"
+        before = restore_dir / f"CYacc_beforeclear_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.db"
+        self.db.backup_to(before)
+        old_config = dict(self.config)
+        try:
+            self.db.reset_local_ledger()
+            # Keep the active DB location so the next launch cannot open an old
+            # default database by accident. Everything else, including Drive
+            # authorization and UI preferences, returns to its initial state.
+            self.config.clear()
+            self.config["database_path"] = str(self.db.path)
+            save_config(self.config)
+            safe_copy(config_path(), config_path().with_suffix(".json.bak"))
+        except Exception:
+            self.config.clear()
+            self.config.update(old_config)
+            try:
+                save_config(self.config)
+            except Exception as restore_config_error:
+                error_log(f"failed to restore configuration after clear: {restore_config_error}", sys.exc_info())
+            restored, reason = self.restore_database(before)
+            if not restored:
+                error_log(f"failed to restore database after clear: {reason}")
+                raise DatabaseError(f"重置未完成；還原原帳本失敗：{reason}。請保留 {before}。")
+            raise
+        month = date.today().strftime("%Y/%m")
+        self.ledger_tab.month_spin.set_month(month)
+        self.ledger_tab.load_month(month)
+        self.input_tab.refresh_lists()
 
     def change_database_location(self, folder: Path) -> tuple[bool, str]:
         old_path = self.db.path

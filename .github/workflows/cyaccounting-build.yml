@@ -99,12 +99,24 @@ jobs:
           $package = "out/portable-dist/CYAccounting_V${env:CYACCOUNTING_VERSION}${env:CYACCOUNTING_BUILD_SUFFIX}_Windows_x64.zip"
           ./tools/verify_portable.ps1 -Package $package
 
+      - name: Verify single-extraction artifact root
+        shell: pwsh
+        run: |
+          $roots = @(Get-ChildItem -LiteralPath out/portable-stage -Force)
+          if ($roots.Count -ne 1 -or $roots[0].Name -ne "CYAccounting" -or -not $roots[0].PSIsContainer) {
+            throw "Download artifact must contain only the CYAccounting/ folder"
+          }
+          if (!(Test-Path out/portable-stage/CYAccounting/CYAccounting.exe)) {
+            throw "Download artifact must contain CYAccounting.exe"
+          }
+
       - name: Upload portable test package
         uses: actions/upload-artifact@v7
         with:
           name: CYAccounting_V${{ env.CYACCOUNTING_VERSION }}${{ env.CYACCOUNTING_BUILD_SUFFIX }}_Windows_x64_run${{ github.run_number }}
-          path: |
-            apps/CYAccounting/out/portable-dist/*.zip
+          # The Actions download is itself a ZIP. Keep CYAccounting/ as its
+          # top-level directory so a single extraction is ready to run.
+          path: apps/CYAccounting/out/portable-stage/*
           if-no-files-found: error
           retention-days: 3
 
