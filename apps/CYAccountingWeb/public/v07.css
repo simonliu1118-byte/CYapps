@@ -1,0 +1,152 @@
+.entry-card {
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.entry-card.entry-expense {
+  background: #fff8f8;
+  border-color: #ead3d3;
+  box-shadow: 0 1px 2px rgba(120, 40, 40, 0.035);
+}
+
+.entry-card.entry-income {
+  background: #f7fcf8;
+  border-color: #d2e7d7;
+  box-shadow: 0 1px 2px rgba(36, 104, 60, 0.035);
+}
+
+.entry-card.entry-expense input,
+.entry-card.entry-expense select,
+.entry-card.entry-expense fieldset,
+.entry-card.entry-income input,
+.entry-card.entry-income select,
+.entry-card.entry-income fieldset {
+  background-color: rgba(255, 255, 255, 0.82);
+}
+
+.entry-card.entry-expense .kind-button[data-kind="expense"].active {
+  background: #f3dddd;
+  border-color: #d9aaaa;
+  color: #7b2f2f;
+}
+
+.entry-card.entry-income .kind-button[data-kind="income"].active {
+  background: #dff1e3;
+  border-color: #a9cfb2;
+  color: #285f36;
+}
+
+.entry-kind-indicator {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+
+.entry-kind-indicator.expense {
+  background: #f5e2e2;
+  color: #8a3737;
+}
+
+.entry-kind-indicator.income {
+  background: #e2f2e6;
+  color: #2f6a3f;
+}
+
+.confirmation-card {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.confirmation-card .section-title {
+  margin-bottom: 8px;
+}
+
+.confirmation-list {
+  display: grid;
+  gap: 4px;
+}
+
+.confirmation-empty {
+  padding: 4px 0;
+  color: #738194;
+  font-size: 13px;
+}
+
+.confirmation-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.confirmation-item.success {
+  border-left: 3px solid #78ad83;
+}
+
+.confirmation-item.error {
+  border-left: 3px solid #c97979;
+}
+
+.confirmation-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confirmation-status {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.confirmation-item.success .confirmation-status {
+  color: #2f7541;
+}
+
+.confirmation-item.error .confirmation-status {
+  color: #ad3636;
+}
+
+.confirmation-kind {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.confirmation-kind.income {
+  background: #e4f2e7;
+  color: #326e42;
+}
+
+.confirmation-kind.expense {
+  background: #f5e3e3;
+  color: #8c3a3a;
+}
+
+.keyboard-hint kbd {
+  display: inline-block;
+  min-width: 26px;
+  padding: 1px 5px;
+  border: 1px solid #cbd4df;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.75);
+  color: #405064;
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+}
