@@ -36,6 +36,7 @@ $EmbedArchive = Join-Path $StageRoot $EmbedName
 $EmbedUrl = "https://www.python.org/ftp/python/$PythonVersion/$EmbedName"
 Invoke-WebRequest -Uri $EmbedUrl -OutFile $EmbedArchive
 Expand-Archive -LiteralPath $EmbedArchive -DestinationPath $RuntimeDir
+Remove-Item -LiteralPath $EmbedArchive -Force
 
 $SitePackages = Join-Path $RuntimeDir "Lib/site-packages"
 New-Item -ItemType Directory $SitePackages | Out-Null

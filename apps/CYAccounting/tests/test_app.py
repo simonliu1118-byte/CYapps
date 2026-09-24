@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import tempfile
+import json
+import sqlite3
 from pathlib import Path
 from datetime import date
 from unittest.mock import patch
@@ -13,6 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 
 from db import Database
 import main as main_module
+import dialogs as dialogs_module
+import util as util_module
 from main import MainWindow
 from dialogs import AccountManagerDialog, CategoryManagerDialog, OpeningBalanceDialog, SettingsDialog
 from import_dialog import ImportTransactionsDialog
@@ -158,6 +162,87 @@ def test_account_manager_controls_and_titles():
     opening_dlg.close()
     db.close()
 
+def test_clear_data_requires_two_delete_confirmations():
+    root = Path(tempfile.mkdtemp())
+    db = Database(root / 'confirm.db')
+    db.set_opening_balances('2026/07', {'現金': 500})
+    assert db.save_transaction('2026/07/01', '現金', 'income', '一般收入', '測試', 30).ok
+    db.add_account('銀行')
+    db.add_category('income', db.category_tree('income')[0]['id'], '自訂科目')
+    db.set_locked_through('2026/07')
+    backup_path = root / 'before_clear.db'
+    db.backup_to(backup_path)
+    app = QApplication.instance() or QApplication([])
+    dlg = SettingsDialog(db, {}, lambda _p: (True, ''), lambda _p: (True, ''),
+                         db.reset_local_ledger, lambda: None)
+    assert [b.text() for b in dlg.findChildren(QPushButton)].count('清除所有記帳資料與期初餘額') == 1
+    for replies, prompts in [
+        ([('delete', True)], 1),
+        ([('DELETE', True), ('delete', True)], 2),
+        ([('DELETE', True), ('DELETE', False)], 2),
+        ([('DELETE', False)], 1),
+    ]:
+        with patch.object(dialogs_module.QInputDialog, 'getText', side_effect=replies) as get_text, \
+             patch.object(dialogs_module.QMessageBox, 'warning'):
+            dlg.clear_data()
+            assert get_text.call_count == prompts
+        assert db.counts() == {'transactions': 1, 'openings': 1}
+    with patch.object(dialogs_module.QInputDialog, 'getText', side_effect=[('DELETE', True), ('DELETE', True)]) as get_text, \
+         patch.object(dialogs_module.QMessageBox, 'information'):
+        dlg.clear_data()
+        assert get_text.call_count == 2
+    assert db.counts() == {'transactions': 0, 'openings': 0}
+    assert db.locked_through() is None
+    assert [a['name'] for a in db.accounts()] == ['現金']
+    assert db.category_names('income') == ['一般收入']
+    assert db.category_names('expense') == ['一般支出']
+    assert db.validate_database_file(backup_path)[0]
+    dlg.close()
+    db.close()
+
+def test_full_clear_resets_settings_and_preserves_recovery_backup():
+    root = Path(tempfile.mkdtemp())
+    db = Database(root / 'ledger.db')
+    db.add_account('銀行')
+    db.set_opening_balances('2026/09', {'現金': 20, '銀行': 50})
+    assert db.save_transaction('2026/09/01', '銀行', 'income', '一般收入', '舊帳', 100).ok
+    db.set_locked_through('2026/09')
+    original_config = {'database_path': str(db.path), 'google_drive_sync_enabled': True,
+                       'google_refresh_token': 'test-only', 'ledger_entry_position': 'oldest'}
+    config = dict(original_config)
+    config_file = root / 'config.json'
+    app = QApplication.instance() or QApplication([])
+    win = MainWindow(db, config, None)
+    with patch.object(util_module, 'config_path', return_value=config_file), \
+         patch.object(main_module, 'config_path', return_value=config_file):
+        util_module.save_config(config)
+        win.clear_data()
+        assert config == {'database_path': str(db.path)}
+        assert json.loads(config_file.read_text(encoding='utf-8')) == config
+        assert json.loads((root / 'config.json.bak').read_text(encoding='utf-8')) == config
+        assert db.counts() == {'transactions': 0, 'openings': 0}
+        assert [row['name'] for row in db.accounts()] == ['現金']
+        assert db.locked_through() is None
+        backups = list((root / 'RestoreBackup').glob('CYacc_beforeclear_*.db'))
+        assert len(backups) == 1
+        with sqlite3.connect(backups[0]) as archived:
+            assert archived.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 1
+            assert archived.execute('SELECT COUNT(*) FROM opening_balances').fetchone()[0] == 2
+        # If settings cannot be written, do not strand the user with an empty
+        # ledger: restore both the database and in-memory preferences.
+        db.set_locked_through('2026/09')
+        assert db.save_transaction('2026/10/01', '現金', 'income', '一般收入', '保留', 1).ok
+        before_failure = dict(config)
+        with patch.object(main_module, 'save_config', side_effect=OSError('test write failure')):
+            try:
+                win.clear_data()
+                assert False, 'a failed settings write must abort the reset'
+            except OSError:
+                pass
+        assert config == before_failure
+        assert db.counts()['transactions'] == 1
+    win.close()
+
 def test_ui_constructs():
     root = Path(tempfile.mkdtemp())
     db = Database(root / 'ui.db')
@@ -199,9 +284,8 @@ def test_ui_constructs():
     # Settings expose the ledger entry-position preference and update the shared config.
     dlg = SettingsDialog(
         db, config, lambda _p: (True, ''), lambda _p: (True, ''),
-        lambda: None, win,
+        lambda: None, lambda: None, win,
     )
-    assert all('清除所有記帳資料' not in b.text() for b in dlg.findChildren(QPushButton))
     assert dlg.ledger_position.count() == 2
     oldest_index = dlg.ledger_position.findData('oldest')
     dlg.ledger_position.setCurrentIndex(oldest_index)
@@ -340,6 +424,8 @@ if __name__ == '__main__':
     test_locale_constructor_compatibility()
     test_database_core()
     test_account_manager_controls_and_titles()
+    test_clear_data_requires_two_delete_confirmations()
+    test_full_clear_resets_settings_and_preserves_recovery_backup()
     test_ui_constructs()
     test_backup_schedule_and_recovery_paths()
     test_maximized_window_state_is_restored()

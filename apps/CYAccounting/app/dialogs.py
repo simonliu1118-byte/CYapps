@@ -712,6 +712,7 @@ class SettingsDialog(QDialog):
         config: dict,
         change_db_callback: Callable[[Path], tuple[bool, str]],
         restore_callback: Callable[[Path], tuple[bool, str]],
+        clear_callback: Callable[[], None],
         settings_changed_callback: Callable[[], None],
         parent=None,
     ):
@@ -720,6 +721,7 @@ class SettingsDialog(QDialog):
         self.config = config
         self.change_db_callback = change_db_callback
         self.restore_callback = restore_callback
+        self.clear_callback = clear_callback
         self.settings_changed_callback = settings_changed_callback
         self.setWindowTitle("系統設定")
         self.setObjectName("settingsDialog")
@@ -878,6 +880,11 @@ class SettingsDialog(QDialog):
         info_layout.addWidget(QLabel(APP_NAME), 0, 1)
         info_layout.addWidget(QLabel("版本："), 1, 0)
         info_layout.addWidget(QLabel(APP_VERSION), 1, 1)
+        clear = no_tab_button("清除所有記帳資料與期初餘額")
+        clear.setObjectName("dangerButton")
+        clear.clicked.connect(self.clear_data)
+        info_layout.setColumnStretch(2, 1)
+        info_layout.addWidget(clear, 0, 3, 2, 1, Qt.AlignmentFlag.AlignVCenter)
         outer.addWidget(info_box)
         outer.addStretch()
         close = no_tab_button("關閉"); close.clicked.connect(self.accept)
@@ -1100,3 +1107,37 @@ class SettingsDialog(QDialog):
             self.settings_changed_callback()
         else:
             QMessageBox.warning(self, APP_NAME, f"還原失敗：{msg}")
+
+    def clear_data(self):
+        first, accepted = QInputDialog.getText(
+            self, "清除記帳資料與期初餘額",
+            "這會重置整個本機帳本：交易、期初、帳戶、科目、鎖帳與本機設定。\n既有備份會保留。第一次確認：請輸入 DELETE。",
+            QLineEdit.EchoMode.Normal,
+        )
+        if not accepted:
+            return
+        if first != "DELETE":
+            QMessageBox.warning(self, APP_NAME, "文字不正確，沒有清除任何資料。")
+            return
+        second, accepted = QInputDialog.getText(
+            self, "最後確認清除",
+            "最後一次確認：請再次輸入 DELETE。\n本機帳本將從頭開始；Google Drive 上的既有備份不受影響。",
+            QLineEdit.EchoMode.Normal,
+        )
+        if not accepted:
+            return
+        if second != "DELETE":
+            QMessageBox.warning(self, APP_NAME, "第二次文字不正確，沒有清除任何資料。")
+            return
+        try:
+            self.clear_callback()
+        except Exception as exc:
+            QMessageBox.warning(self, APP_NAME, f"清除失敗：{exc}")
+            return
+        self.google_client = GoogleDriveClient(self.config)
+        self._refresh_google_status()
+        self.google_sync_check.blockSignals(True)
+        self.google_sync_check.setChecked(False)
+        self.google_sync_check.blockSignals(False)
+        QMessageBox.information(self, APP_NAME, "本機帳本已重置；重置前的本機備份已保留。")
+        self.settings_changed_callback()
