@@ -13,6 +13,15 @@ import util
 from db import Database
 
 
+class VersionTests(unittest.TestCase):
+    def test_runtime_version_matches_version_and_build_files(self):
+        project = Path(__file__).resolve().parents[1]
+        version = (project / "VERSION").read_text(encoding="utf-8").strip()
+        build = int((project / "BUILD").read_text(encoding="utf-8").strip())
+        expected = f"V{version}" + (f" Build {build}" if build else "")
+        self.assertEqual(util.APP_VERSION, expected)
+
+
 class ConfigSafetyTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())

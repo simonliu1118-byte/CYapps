@@ -10,3 +10,5 @@ startup_ready.flag
 *.db-shm
 runtime/
 *.zip
+out/
+dist/

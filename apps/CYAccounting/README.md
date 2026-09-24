@@ -1,5 +1,10 @@
 志遠記帳系統 V1.0.26 原始碼
 
+Windows x64 測試包
+- CYAccounting Build 的成功執行頁面會提供短期 Actions Artifact，內含可攜版 ZIP 與 SHA-256；解壓縮後從 `CYAccounting` 資料夾執行 `CYAccounting.exe`，不用另裝 Python。
+- 測試包與正式 GitHub Release 不同；目前清除資料仍使用公開 source 中的固定密碼，P0 修正及實機驗收完成前不得發布下一個正式 Public Release。
+- 更新前先備份原本的 `Data` 資料夾；測試包本身的 `Data` 必須是空的，不能拿舊版程式資料夾直接覆蓋。
+
 重要待辦
 - Public 前安全檢查已確認目前「清除記帳資料與期初餘額」仍使用原始碼內建固定密碼。此項已列為下一個 CYAccounting 開發回合的最高優先安全工作；本輪只記錄、不修改既有程式行為。詳見 `TODO.md`。
 
