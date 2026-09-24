@@ -1,4 +1,5 @@
 import coreWorker from './index.js';
+import { handleV11Api } from './v11-tools.js';
 
 const SESSION_COOKIE = 'cyaccounting_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -39,6 +40,9 @@ export default {
 
       const session = await sessionFromRequest(request, env.DB);
       if (!session) return json({ ok: false, error: '尚未登入。', code: 'AUTH_REQUIRED' }, 401);
+
+      const v11Response = await handleV11Api(request, env);
+      if (v11Response) return v11Response;
 
       return coreWorker.fetch(request, env);
     } catch (error) {
