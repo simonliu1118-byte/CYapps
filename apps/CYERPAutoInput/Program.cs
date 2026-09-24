@@ -24,7 +24,11 @@ internal static class Program
                 logger.Error("fatal", ex);
         };
 
-        Application.Run(new MainForm(logger));
+        var form = new MainForm(logger)
+        {
+            Text = "CYERPAutoInput V0.1.0 Build 2 — SMART ERP 自動輸入工具"
+        };
+        Application.Run(form);
         return 0;
     }
 }

@@ -53,10 +53,6 @@ internal sealed class OpticalTextLocator
             }
         }
 
-        // The Ribbon caption is very small compared with a full-size COPI08 window.
-        // If full-window OCR missed "新增", retry only the upper-left Ribbon area so
-        // Windows OCR receives a much larger effective glyph size. This remains optical
-        // targeting: no fixed click coordinate is used unless the requested text is read.
         if (normalizedAliases.Contains("新增", StringComparer.Ordinal))
         {
             var retryRect = new Rectangle(
@@ -74,11 +70,120 @@ internal sealed class OpticalTextLocator
                 return retryPoint;
             }
 
+            // COPI08's New command has a distinctive green plus icon at the left edge
+            // of the Ribbon. If text OCR misses the tiny caption, locate that visual
+            // plus rather than guessing a hard-coded click coordinate. EnsureInputModeAsync
+            // still verifies that the ERP actually entered INPUT after the click.
+            var iconPoint = FindGreenAddIconCandidate(ribbon);
+            if (iconPoint is not null)
+            {
+                var p = new Point(retryRect.Left + iconPoint.Value.X, retryRect.Top + iconPoint.Value.Y);
+                _log.Info("vision", $"Ribbon green-plus New candidate found point={p.X},{p.Y}");
+                return p;
+            }
+
             var sample = string.Join("|", ribbonTokens.Take(24).Select(t => Normalize(t.Text)).Where(t => t.Length > 0));
-            _log.Warn("vision", $"Ribbon OCR missed 新增 tokens={ribbonTokens.Count} sample={sample}");
+            _log.Warn("vision", $"Ribbon OCR/green-plus missed 新增 tokens={ribbonTokens.Count} sample={sample}");
         }
 
         return null;
+    }
+
+    internal static Point? FindGreenAddIconCandidate(Bitmap image)
+    {
+        if (image.Width < 20 || image.Height < 60) return null;
+
+        // Only inspect the upper-left command area. The green application title bar can
+        // occupy the top portion, so oversized horizontal/solid green components are
+        // deliberately rejected below.
+        var scanWidth = Math.Min(image.Width, 140);
+        var scanTop = Math.Min(image.Height - 1, 40);
+        var scanBottom = Math.Min(image.Height, 150);
+        if (scanBottom - scanTop < 15) return null;
+
+        var scanHeight = scanBottom - scanTop;
+        var green = new bool[scanWidth, scanHeight];
+        for (var y = 0; y < scanHeight; y++)
+        {
+            for (var x = 0; x < scanWidth; x++)
+            {
+                var c = image.GetPixel(x, scanTop + y);
+                green[x, y] = c.G >= 80 && c.G >= c.R + 20 && c.G >= c.B + 10;
+            }
+        }
+
+        var visited = new bool[scanWidth, scanHeight];
+        var candidates = new List<(int Count, int Left, int Top, int Right, int Bottom)>();
+        var directions = new (int X, int Y)[]
+        {
+            (-1, -1), (0, -1), (1, -1),
+            (-1, 0),             (1, 0),
+            (-1, 1),  (0, 1),   (1, 1)
+        };
+
+        for (var sy = 0; sy < scanHeight; sy++)
+        {
+            for (var sx = 0; sx < scanWidth; sx++)
+            {
+                if (!green[sx, sy] || visited[sx, sy]) continue;
+
+                var queue = new Queue<Point>();
+                var pixels = new List<Point>();
+                queue.Enqueue(new Point(sx, sy));
+                visited[sx, sy] = true;
+
+                var left = sx;
+                var right = sx;
+                var top = sy;
+                var bottom = sy;
+
+                while (queue.Count > 0)
+                {
+                    var p = queue.Dequeue();
+                    pixels.Add(p);
+                    left = Math.Min(left, p.X);
+                    right = Math.Max(right, p.X);
+                    top = Math.Min(top, p.Y);
+                    bottom = Math.Max(bottom, p.Y);
+
+                    foreach (var d in directions)
+                    {
+                        var nx = p.X + d.X;
+                        var ny = p.Y + d.Y;
+                        if (nx < 0 || ny < 0 || nx >= scanWidth || ny >= scanHeight) continue;
+                        if (!green[nx, ny] || visited[nx, ny]) continue;
+                        visited[nx, ny] = true;
+                        queue.Enqueue(new Point(nx, ny));
+                    }
+                }
+
+                var width = right - left + 1;
+                var height = bottom - top + 1;
+                if (pixels.Count < 20 || width < 7 || height < 7 || width > 45 || height > 45) continue;
+
+                var fill = pixels.Count / (double)(width * height);
+                if (fill > 0.82) continue;
+
+                var centerX = (left + right) / 2;
+                var centerY = (top + bottom) / 2;
+                var centralRow = pixels.Count(p => Math.Abs(p.Y - centerY) <= 1);
+                var centralColumn = pixels.Count(p => Math.Abs(p.X - centerX) <= 1);
+                if (centralRow < width || centralColumn < height) continue;
+
+                candidates.Add((pixels.Count, left, top, right, bottom));
+            }
+        }
+
+        if (candidates.Count == 0) return null;
+        var best = candidates
+            .OrderBy(c => c.Left)
+            .ThenBy(c => c.Top)
+            .ThenByDescending(c => c.Count)
+            .First();
+
+        return new Point(
+            (best.Left + best.Right) / 2,
+            scanTop + (best.Top + best.Bottom) / 2);
     }
 
     private static Point? FindPoint(

@@ -28,6 +28,19 @@ internal static class VisionSelfTest
             if (lines.Count < 4)
                 throw new InvalidOperationException($"Synthetic grid-line detector returned only {lines.Count} lines.");
 
+            using var ribbon = new Bitmap(220, 160);
+            using (var g = Graphics.FromImage(ribbon))
+            {
+                g.Clear(Color.White);
+                using var green = new SolidBrush(Color.FromArgb(50, 160, 70));
+                g.FillRectangle(green, 0, 0, 220, 32);
+                g.FillRectangle(green, 20, 68, 5, 28);
+                g.FillRectangle(green, 9, 80, 28, 5);
+            }
+            var addIcon = OpticalTextLocator.FindGreenAddIconCandidate(ribbon);
+            if (addIcon is null || addIcon.Value.X is < 10 or > 35 || addIcon.Value.Y is < 65 or > 100)
+                throw new InvalidOperationException("Synthetic Ribbon green-plus New detection failed.");
+
             var joinedLatin = GridVisionService.FindPhrase(
             [
                 new OcrToken("VIS", new Rectangle(20, 20, 45, 24)),
