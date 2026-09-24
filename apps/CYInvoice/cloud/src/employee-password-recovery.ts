@@ -119,6 +119,12 @@ function employeeNo(value: unknown): string | null {
   return /^\d{4}$/.test(normalized) ? normalized : null;
 }
 
+function emailAddress(value: unknown): string | null {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return normalized.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+    ? normalized : null;
+}
+
 function verifier(value: unknown): string | null {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   const match = /^pbkdf2-sha256\$(\d+)\$([0-9a-f]+)\$([0-9a-f]{64})$/.exec(normalized);
@@ -153,10 +159,11 @@ async function start(request: Request, env: Env, id: string): Promise<Response> 
     return error(env, id, 409, "EMPLOYEE_AUTHORITY_NOT_READY", "Cloud Employee authority is not ready.");
   const body = await bodyFor(request);
   const number = employeeNo(body?.employeeNo);
-  if (!number) return error(env, id, 400, "INVALID_PASSWORD_RECOVERY_REQUEST", "Employee No is invalid.");
+  const email = emailAddress(body?.email);
+  if (!number || !email) return error(env, id, 400, "INVALID_PASSWORD_RECOVERY_REQUEST", "Employee No or Email is invalid.");
   const employee = await employeeFor(env, device, number);
-  if (!employee || employee.enabled !== 1 || !employee.email_verified_at)
-    return error(env, id, 404, "RECOVERY_ACCOUNT_NOT_FOUND", "An enabled Employee with verified Email was not found.");
+  if (!employee || employee.enabled !== 1 || !employee.email_verified_at || employee.email_normalized !== email)
+    return error(env, id, 404, "RECOVERY_ACCOUNT_NOT_FOUND", "Employee No and verified Email do not match an enabled account.");
   const pepper = env.OTP_PEPPER?.trim() ?? "";
   if (!pepper) return error(env, id, 503, "OTP_NOT_CONFIGURED", "Email verification is not configured.");
   let sender: ReturnType<typeof createEmailSender>;

@@ -161,12 +161,16 @@ public sealed class CloudEmployeeAccountClient
 
     public async Task<CloudEmployeePasswordRecoveryChallenge> StartPasswordRecoveryAsync(
         string employeeNo,
+        string email,
         CancellationToken cancellationToken = default)
     {
         ValidateEmployeeNo(employeeNo, nameof(employeeNo));
+        email = email?.Trim() ?? string.Empty;
+        if (email.Length == 0 || email.Length > 254 || !email.Contains('@'))
+            throw new ArgumentException("Email is invalid.", nameof(email));
         using var document = await SendAsync(
             "v1/employees/password-recovery/challenge",
-            new { employeeNo = employeeNo.Trim() }, cancellationToken);
+            new { employeeNo = employeeNo.Trim(), email }, cancellationToken);
         if (!document.RootElement.TryGetProperty("challenge", out var challenge) ||
             challenge.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Cloud password recovery challenge is missing.");
@@ -227,11 +231,15 @@ public sealed class CloudEmployeeAccountClient
 
         var code = ReadErrorCode(document.RootElement);
         var message = ReadErrorMessage(document.RootElement);
+        int? retryAfterSeconds = document.RootElement.TryGetProperty("retryAfterSeconds", out var retry) &&
+            retry.ValueKind == JsonValueKind.Number && retry.TryGetInt32(out var seconds) && seconds > 0
+                ? seconds : null;
         document.Dispose();
         throw new CloudApiException(
             code.Length == 0 ? "CLOUD_API_ERROR" : code,
             message.Length == 0 ? $"Cloud API returned {(int)response.StatusCode}." : message,
-            response.StatusCode);
+            response.StatusCode,
+            retryAfterSeconds);
     }
 
     private static CloudEmployeeTransitionIdentity ReadEmployeeResponse(JsonDocument document)

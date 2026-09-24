@@ -47,7 +47,7 @@ internal sealed class MainForm : Form
     private readonly TabPage invoiceTab = new("開立發票");
     private readonly TabPage recordsTab = new("已開立發票清單");
     private readonly Button forgotPasswordButton = UiControls.StandardButton("忘記密碼");
-    private readonly Button accountManagementButton = UiControls.StandardButton("帳戶管理");
+    private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
     private readonly Label copyrightLabel = new()
     {
@@ -285,9 +285,25 @@ internal sealed class MainForm : Form
 
     private void OpenAccountManagement()
     {
-        if (!TryAuthenticateAdministrator("密碼驗證", out var account)) return;
-        using var form = new AccountManagementForm(repository, account!);
-        form.ShowDialog(this);
+        if (!repository.HasAuthorityEmployees())
+        {
+            MessageBox.Show(this, "尚未建立可用的員工帳戶，請先完成首次設定或雲端帳號同步。", "密碼驗證",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        using var login = new EmployeeAdminLoginForm(repository, "密碼驗證", administratorRequired: false);
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        if (EmployeeRoles.CanManageAccounts(login.AuthenticatedEmployee.Role))
+        {
+            using var adminForm = new AccountManagementForm(repository, login.AuthenticatedEmployee);
+            adminForm.ShowDialog(this);
+        }
+        else
+        {
+            using var selfForm = new SelfAccountManagementForm(repository, login.AuthenticatedEmployee,
+                login.AuthenticatedPassword, cloudHealthHttpClient);
+            selfForm.ShowDialog(this);
+        }
     }
 
     private void OpenPasswordRecovery()

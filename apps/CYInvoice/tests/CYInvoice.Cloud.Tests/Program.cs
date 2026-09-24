@@ -693,6 +693,8 @@ static async Task TestEmployeePasswordRecoveryAsync()
         using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
         Equal("0001", body.RootElement.GetProperty("employeeNo").GetString() ?? string.Empty,
             "password recovery employee");
+        Equal("x@example.test", body.RootElement.GetProperty("email").GetString() ?? string.Empty,
+            "password recovery Email cross-check");
         return JsonResponse(HttpStatusCode.Created,
             """{"ok":true,"challenge":{"challengeId":"otp_aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb","maskedEmail":"x***@example.test","expiresAt":"2026-09-24T06:10:00Z","resendAfter":"2026-09-24T06:01:00Z"}}""");
     });
@@ -715,7 +717,7 @@ static async Task TestEmployeePasswordRecoveryAsync()
 
     using var http = new HttpClient(handler);
     var client = new CloudEmployeeAccountClient(http, new Uri("https://cloud.example.test/"), token);
-    var challenge = await client.StartPasswordRecoveryAsync("0001");
+    var challenge = await client.StartPasswordRecoveryAsync("0001", "x@example.test");
     Equal(challengeId, challenge.ChallengeId, "password recovery challenge parsed");
     await client.ConfirmPasswordRecoveryAsync("0001", challenge.ChallengeId, "123456", "NewPass123");
 }
