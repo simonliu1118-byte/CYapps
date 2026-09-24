@@ -195,8 +195,10 @@ internal sealed class ErpAutomationService
             var before = NativeMethods.WindowText(focus);
             if (before == value)
             {
-                InputSender.Press(field.Kind == FieldKind.Lookup ? NativeMethods.VK_RETURN : NativeMethods.VK_TAB);
-                await Delay(180, cancellationToken);
+                // SMART ERP lookup validation is triggered by leaving the field.
+                // The validated behavior is Tab, not Enter.
+                InputSender.Press(NativeMethods.VK_TAB);
+                await Delay(field.Kind == FieldKind.Lookup ? 420 : 180, cancellationToken);
                 return;
             }
             if (!string.IsNullOrWhiteSpace(before))
@@ -205,8 +207,8 @@ internal sealed class ErpAutomationService
 
         InputSender.UnicodeText(value);
         await Delay(100, cancellationToken);
-        InputSender.Press(field.Kind == FieldKind.Lookup ? NativeMethods.VK_RETURN : NativeMethods.VK_TAB);
-        await Delay(220, cancellationToken);
+        InputSender.Press(NativeMethods.VK_TAB);
+        await Delay(field.Kind == FieldKind.Lookup ? 420 : 220, cancellationToken);
     }
 
     private async Task FillDetailsAsync(nint root, IReadOnlyList<DetailRow> rows, IProgress<string> progress, CancellationToken cancellationToken)
@@ -223,10 +225,6 @@ internal sealed class ErpAutomationService
             cancellationToken.ThrowIfCancellationRequested();
             progress.Report($"ERP：輸入商品明細 {rowIndex + 1}/{rows.Count}…");
 
-            // Confirmed COPI08 behavior from the validated Go implementation:
-            // after each completed detail row, Down creates/activates the next row.
-            // Down may land on an arbitrary column, therefore every subsequent
-            // write still re-clicks the exact optically located cell.
             if (rowIndex > 0)
             {
                 if (!Win32Automation.PrepareForeground(root, _log))
@@ -236,9 +234,6 @@ internal sealed class ErpAutomationService
                 _log.Info("detail", $"next row activated by Down logical_row={rowIndex + 1}");
             }
 
-            // While rows fit in the viewport use their actual optical row center.
-            // Once COPI08 starts scrolling, the newly activated row remains in the
-            // last visible slot; this mirrors the previously validated behavior.
             var visibleRow = Math.Min(rowIndex, geometry.RowCenterY.Count - 1);
             if (visibleRow < 0)
                 throw new InvalidOperationException("光學明細列位置異常；已停止以避免輸入錯列。");
@@ -334,7 +329,6 @@ internal sealed class ErpAutomationService
         if (lookupFocus == 0 || !lookupFocusClass.Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("已光學點到指定單位，但 F2 表格沒有取得焦點；為避免 Enter 送到錯誤控制項已停止。");
 
-        // Manual ERP behavior is strictly: click requested row -> Enter.
         InputSender.Press(NativeMethods.VK_RETURN);
         if (!await WaitWindowClosedAsync(lookup, 1400, cancellationToken))
             throw new InvalidOperationException("已光學點選指定單位並送出 Enter，但 F2 視窗仍未關閉。");
