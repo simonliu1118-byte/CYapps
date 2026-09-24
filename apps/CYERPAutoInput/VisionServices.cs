@@ -49,7 +49,10 @@ internal sealed class WindowsOcrService
     private readonly AppLogger _log;
     public WindowsOcrService(AppLogger log) => _log = log;
 
-    public async Task<IReadOnlyList<OcrToken>> RecognizeAsync(Bitmap bitmap, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<OcrToken>> RecognizeAsync(
+        Bitmap bitmap,
+        CancellationToken cancellationToken,
+        bool requireChinese = false)
     {
         var temp = Path.Combine(Path.GetTempPath(), $"CYERPAutoInput_ocr_{Guid.NewGuid():N}.png");
         try
@@ -63,7 +66,7 @@ internal sealed class WindowsOcrService
             var decoder = await BitmapDecoder.CreateAsync(stream);
             var software = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
 
-            var (engine, languageTag) = CreatePreferredEngine();
+            var (engine, languageTag) = CreatePreferredEngine(requireChinese);
             cancellationToken.ThrowIfCancellationRequested();
             var result = await engine.RecognizeAsync(software);
 
@@ -80,7 +83,7 @@ internal sealed class WindowsOcrService
                 tokens.Add(new OcrToken(word.Text, rect));
             }
 
-            _log.Info("vision", $"OCR completed tokens={tokens.Count} image={bitmap.Width}x{bitmap.Height} prepared={prepared.Width}x{prepared.Height} scale={scale:0.##} language={languageTag}");
+            _log.Info("vision", $"OCR completed tokens={tokens.Count} image={bitmap.Width}x{bitmap.Height} prepared={prepared.Width}x{prepared.Height} scale={scale:0.##} language={languageTag} require_chinese={requireChinese}");
             return tokens;
         }
         finally
@@ -89,7 +92,7 @@ internal sealed class WindowsOcrService
         }
     }
 
-    private static (OcrEngine Engine, string LanguageTag) CreatePreferredEngine()
+    private static (OcrEngine Engine, string LanguageTag) CreatePreferredEngine(bool requireChinese)
     {
         var available = OcrEngine.AvailableRecognizerLanguages;
         var chinese = available.FirstOrDefault(x => x.LanguageTag.Equals("zh-TW", StringComparison.OrdinalIgnoreCase))
@@ -101,6 +104,9 @@ internal sealed class WindowsOcrService
             var engine = OcrEngine.TryCreateFromLanguage(chinese);
             if (engine is not null) return (engine, chinese.LanguageTag);
         }
+
+        if (requireChinese)
+            throw new InvalidOperationException("Windows OCR 未提供中文辨識語言；為避免在 ERP 畫面猜測位置，光學操作已停止。請先在 Windows 安裝繁體中文語言/OCR 元件。");
 
         var profile = OcrEngine.TryCreateFromUserProfileLanguages();
         if (profile is not null) return (profile, "user-profile");
@@ -167,7 +173,7 @@ internal sealed class GridVisionService
             throw new InvalidOperationException("Detail grid rectangle is unavailable.");
 
         using var image = ScreenCapture.Capture(rect.ToRectangle());
-        var tokens = await _ocr.RecognizeAsync(image, cancellationToken);
+        var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
         var geometry = new GridGeometry { ScreenRect = rect.ToRectangle() };
 
         var headerBottom = 0;
@@ -207,11 +213,11 @@ internal sealed class GridVisionService
         if (!NativeMethods.GetWindowRect(lookupHwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
             throw new InvalidOperationException("F2 lookup rectangle is unavailable.");
         using var image = ScreenCapture.Capture(rect.ToRectangle());
-        var tokens = await _ocr.RecognizeAsync(image, cancellationToken);
+        var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
 
         var best = FindBestUnitCandidate(tokens, requestedUnit);
         if (best is null)
-            throw new InvalidOperationException("OCR could not find the requested unit in the F2 lookup.");
+            throw new InvalidOperationException("OCR 無法在 F2 的「換算單位」欄可靠定位指定單位；已停止，不進行座標猜測。");
 
         var point = new Point(rect.Left + best.Rect.Left + best.Rect.Width / 2, rect.Top + best.Rect.Top + best.Rect.Height / 2);
         _log.Info("vision", $"F2 requested unit located point={point.X},{point.Y}");
@@ -223,19 +229,26 @@ internal sealed class GridVisionService
         var target = Normalize(requestedUnit);
         if (target.Length == 0) return null;
 
+        // F2 unit selection must be anchored to the visible conversion-unit column.
+        // If the header itself cannot be recognized, do not click a same-named word elsewhere.
         var unitHeader = FindPhrase(tokens, ["換算單位"]);
-        var headerX = unitHeader is null ? (int?)null : unitHeader.Value.Left + unitHeader.Value.Width / 2;
+        if (unitHeader is null) return null;
+
+        var headerX = unitHeader.Value.Left + unitHeader.Value.Width / 2;
+        var corridor = Math.Max(80, unitHeader.Value.Width * 2);
 
         return tokens
             .Select(t => new
             {
                 Token = t,
-                Text = Normalize(t.Text)
+                Text = Normalize(t.Text),
+                CenterX = t.Rect.Left + t.Rect.Width / 2
             })
             .Where(x => x.Text == target || x.Text.Contains(target, StringComparison.Ordinal))
-            .Where(x => unitHeader is null || x.Token.Rect.Top > unitHeader.Value.Bottom - 2)
+            .Where(x => x.Token.Rect.Top > unitHeader.Value.Bottom - 2)
+            .Where(x => Math.Abs(x.CenterX - headerX) <= corridor)
             .OrderBy(x => x.Text == target ? 0 : 1)
-            .ThenBy(x => headerX is null ? 0 : Math.Abs((x.Token.Rect.Left + x.Token.Rect.Width / 2) - headerX.Value))
+            .ThenBy(x => Math.Abs(x.CenterX - headerX))
             .ThenBy(x => x.Token.Rect.Top)
             .Select(x => x.Token)
             .FirstOrDefault();
