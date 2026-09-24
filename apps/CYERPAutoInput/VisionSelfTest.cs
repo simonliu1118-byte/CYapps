@@ -55,6 +55,19 @@ internal static class VisionSelfTest
             if (unitCandidate is null || unitCandidate.Rect.Top != 112)
                 throw new InvalidOperationException("F2 requested-unit candidate selection failed.");
 
+            var noHeaderCandidate = GridVisionService.FindBestUnitCandidate(
+            [new OcrToken("箱", new Rectangle(171, 112, 20, 24))], "箱");
+            if (noHeaderCandidate is not null)
+                throw new InvalidOperationException("F2 safety failed: a unit was accepted without recognizing the 換算單位 header.");
+
+            var farColumnCandidate = GridVisionService.FindBestUnitCandidate(
+            [
+                new OcrToken("換算單位", new Rectangle(120, 20, 90, 24)),
+                new OcrToken("箱", new Rectangle(520, 112, 20, 24))
+            ], "箱");
+            if (farColumnCandidate is not null)
+                throw new InvalidOperationException("F2 safety failed: a same-text token outside the unit column was accepted.");
+
             // Numeric OCR keeps this runtime check independent of whichever language pack
             // the Windows runner/user machine selects while still exercising real Windows.Media.Ocr.
             var ocr = new WindowsOcrService(log);
