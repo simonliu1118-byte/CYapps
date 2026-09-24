@@ -42,6 +42,8 @@ jobs:
       - name: Validate JavaScript syntax
         run: |
           node --check src/index.js
+          node --check src/app.js
+          node --check public/auth.js
           node --check public/app.js
           node --check public/v03.js
 
