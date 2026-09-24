@@ -40,6 +40,48 @@ try {
     })
     if ($Forbidden.Count -ne 0) { throw "Portable ZIP contains runtime or user data" }
 
+    # Validate the canonical production ICO still contains every required native
+    # Windows size after repository copy/package staging. An ICO width/height
+    # byte of 0 represents 256 px.
+    $IconPath = Join-Path $Root "app/resources/app.ico"
+    $IconBytes = [IO.File]::ReadAllBytes($IconPath)
+    if ($IconBytes.Length -lt 6) { throw "app.ico is too small to be a valid ICO" }
+    $Reserved = [BitConverter]::ToUInt16($IconBytes, 0)
+    $IconType = [BitConverter]::ToUInt16($IconBytes, 2)
+    $IconCount = [BitConverter]::ToUInt16($IconBytes, 4)
+    if ($Reserved -ne 0 -or $IconType -ne 1) { throw "app.ico has an invalid ICO header" }
+    $ActualIconSizes = @()
+    for ($i = 0; $i -lt $IconCount; $i++) {
+        $EntryOffset = 6 + (16 * $i)
+        if ($EntryOffset + 16 -gt $IconBytes.Length) { throw "app.ico directory is truncated" }
+        $Width = [int]$IconBytes[$EntryOffset]
+        $Height = [int]$IconBytes[$EntryOffset + 1]
+        if ($Width -eq 0) { $Width = 256 }
+        if ($Height -eq 0) { $Height = 256 }
+        if ($Width -ne $Height) { throw "app.ico contains a non-square entry: ${Width}x${Height}" }
+        $ActualIconSizes += $Width
+    }
+    $ExpectedIconSizes = @(16, 24, 32, 48, 64, 128, 256)
+    $ActualIconSizes = @($ActualIconSizes | Sort-Object)
+    if ($ActualIconSizes.Count -ne $ExpectedIconSizes.Count -or
+        (Compare-Object -ReferenceObject $ExpectedIconSizes -DifferenceObject $ActualIconSizes)) {
+        throw "app.ico native sizes mismatch: $($ActualIconSizes -join ',')"
+    }
+
+    # Verify the final Windows launcher exposes an associated icon through the
+    # Windows shell API path; repository/source validation alone is insufficient.
+    Add-Type -AssemblyName System.Drawing
+    $AssociatedIcon = [System.Drawing.Icon]::ExtractAssociatedIcon((Join-Path $Root "CYAccounting.exe"))
+    if ($null -eq $AssociatedIcon) { throw "CYAccounting.exe does not expose an associated Windows icon" }
+    try {
+        if ($AssociatedIcon.Width -le 0 -or $AssociatedIcon.Height -le 0) {
+            throw "CYAccounting.exe associated icon has invalid dimensions"
+        }
+    }
+    finally {
+        $AssociatedIcon.Dispose()
+    }
+
     # Probe the bundled interpreter independently from the checkout's Python.
     & (Join-Path $Root "runtime/python.exe") -c "import PySide6.QtWidgets, openpyxl; from util import APP_VERSION; print(APP_VERSION)"
     if ($LASTEXITCODE -ne 0) { throw "Embedded Python failed dependency/version import" }
@@ -61,7 +103,7 @@ try {
     if (!(Test-Path (Join-Path $Root "Data/CYaccounting.db") -PathType Leaf)) {
         throw "Embedded application did not initialize its test database"
     }
-    Write-Host "Portable startup and clean-package verification passed"
+    Write-Host "Portable startup, icon resource and clean-package verification passed"
 }
 finally {
     if ($null -ne $StartedProcess -and !$StartedProcess.HasExited) {
