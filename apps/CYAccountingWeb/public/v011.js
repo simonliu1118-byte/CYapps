@@ -125,7 +125,7 @@ function setupQuickEntrySettingsPane() {
 
   tab.addEventListener('click', async () => {
     setSettingsTab('quick');
-    await loadQuickEntrySettings();
+    await loadQuickEntrySettings(true);
   });
   pane.querySelector('#saveQuickEntrySettings')?.addEventListener('click', saveQuickEntrySettings);
 }
@@ -202,7 +202,7 @@ function injectAccountOrderButtons() {
     const actions = row.querySelector('.manager-row-actions');
     if (!rename || !actions || actions.querySelector('[data-v11-move-account]')) return;
     const id = rename.dataset.accountRename;
-    actions.prepend(orderButton('account', id, 'down', index === rows.length - 1), orderButton('account', id, 'up', index === 0));
+    actions.prepend(orderButton('account', id, 'up', index === 0), orderButton('account', id, 'down', index === rows.length - 1));
   });
 }
 
@@ -213,7 +213,7 @@ function injectCategoryOrderButtons() {
     const groupActions = renameGroup?.parentElement;
     if (renameGroup && groupActions && !groupActions.querySelector('[data-v11-move-group]')) {
       const id = renameGroup.dataset.groupRename;
-      groupActions.prepend(orderButton('group', id, 'down', groupIndex === groups.length - 1), orderButton('group', id, 'up', groupIndex === 0));
+      groupActions.prepend(orderButton('group', id, 'up', groupIndex === 0), orderButton('group', id, 'down', groupIndex === groups.length - 1));
     }
 
     const items = [...groupElement.querySelectorAll('.category-item')];
@@ -222,7 +222,7 @@ function injectCategoryOrderButtons() {
       const actions = rename?.parentElement;
       if (!rename || !actions || actions.querySelector('[data-v11-move-category]')) return;
       const id = rename.dataset.categoryRename;
-      actions.prepend(orderButton('category', id, 'down', index === items.length - 1), orderButton('category', id, 'up', index === 0));
+      actions.prepend(orderButton('category', id, 'up', index === 0), orderButton('category', id, 'down', index === items.length - 1));
     });
   });
 }
