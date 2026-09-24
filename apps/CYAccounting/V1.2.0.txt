@@ -1,0 +1,15 @@
+Version: V1.2.0
+Date: 2026/09/25
+
+Current source on Phase 1 visual-alignment branch; test artifact, not a formal Release:
+- Aligned CYAccounting with the canonical CY Desktop Visual Guide Phase 1 using the Blue Theme.
+- Main accounting workspace moves toward the recommended Continuous surface model; result/statistics areas remain carded where they are independent information units.
+- Main tabs use a lower-presence header treatment with an accent underline; page chrome and decorative borders are reduced.
+- Inputs, buttons and dialogs stop forcing overly compressed single-line control heights; focus styling no longer changes border geometry.
+- Ledger uses neutral headers, low-contrast grid, soft selection, 28px data rows and a single zebra-striping source.
+- Monetary entry fields are right-aligned; state colors and accounting-domain income/expense colors are separated.
+- Settings and Import dialogs receive canonical spacing/density treatment while preserving their existing behavior and workflow.
+- Existing accounting workflow, Enter/Tab/Esc behavior, database schema, backup/restore, Google Drive, import flow, locking and two-DELETE local-ledger reset behavior remain unchanged.
+- ACC Icon Family from V1.1.0 remains unchanged.
+- Ledger inline-edit ComboBox narrow-arrow treatment is intentionally unchanged pending user decision because it preserves high-density cell text space.
+- 125% / 150% DPI acceptance remains deferred under the canonical guide; this test version does not claim those DPI levels as passed.
