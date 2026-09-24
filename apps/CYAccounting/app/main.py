@@ -262,6 +262,10 @@ QFrame#pageContainer {
     background: #f5f7fa;
 }
 QTableView { background: white; border: 1px solid #b8c2cc; gridline-color: #d5dbe1; alternate-background-color: #f2f5f8; }
+QTreeWidget, QListWidget, QComboBox QAbstractItemView {
+    background: #ffffff; color: #1f2937;
+    selection-background-color: #dbeafe; selection-color: #1f2937;
+}
 QHeaderView::section { background: #dde5ec; border: 0; border-right: 1px solid #c4ccd4; border-bottom: 1px solid #abb6c1; padding: 7px 4px; font-weight: bold; }
 QToolTip { background: #fffbe6; color: #222; border: 1px solid #b9aa76; padding: 6px; }
 """ + f"""
@@ -1472,7 +1476,7 @@ class MainWindow(QMainWindow):
     def open_settings(self):
         dlg = SettingsDialog(
             self.db, self.config, self.change_database_location, self.restore_database,
-            self.clear_data, self.settings_changed, self,
+            self.settings_changed, self,
         )
         dlg.exec()
         save_config(self.config)
@@ -1557,11 +1561,6 @@ class MainWindow(QMainWindow):
             except Exception as rollback_error:
                 error_log(f"restore rollback failed: {rollback_error}", sys.exc_info())
             return False, str(e)
-
-    def clear_data(self):
-        self.db.clear_transactions_and_openings()
-        self.ledger_tab.month_spin.set_month(date.today().strftime("%Y/%m"))
-        self.ledger_tab.load_month(date.today().strftime("%Y/%m"))
 
     def closeEvent(self, event: QCloseEvent):  # noqa: N802
         if background_tasks_running():
@@ -1671,8 +1670,13 @@ def main() -> int:
     try_set_zh_tw_locale()
     startup_log("system collation locale attempt complete")
 
+    # Qt 6 on Windows otherwise follows the OS dark theme for native title bars
+    # and the unstyled item views.  Keep the existing light application theme.
+    if sys.platform == "win32" and "QT_QPA_PLATFORM" not in os.environ:
+        os.environ["QT_QPA_PLATFORM"] = "windows:darkmode=0"
     startup_log("creating QApplication")
     app = QApplication(sys.argv)
+    app.styleHints().setColorScheme(Qt.ColorScheme.Light)
     startup_log("QApplication created")
     install_exception_hook()
     app.setApplicationName(APP_NAME)

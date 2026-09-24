@@ -30,7 +30,11 @@ jobs:
         run: |
           $version = (Get-Content ./VERSION -Raw).Trim()
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYAccounting VERSION: $version" }
+          $build = (Get-Content ./BUILD -Raw).Trim()
+          if ($build -notmatch '^(0|[1-9][0-9]*)$') { throw "Invalid CYAccounting BUILD: $build" }
+          $buildSuffix = if ([int]$build -gt 0) { "_Build_$build" } else { "" }
           "CYACCOUNTING_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CYACCOUNTING_BUILD_SUFFIX=$buildSuffix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - uses: actions/setup-python@v7
         with:
@@ -84,6 +88,25 @@ jobs:
       - name: Test Windows GUI launcher lifecycle
         shell: pwsh
         run: go test ./launcher_go -v
+
+      - name: Build Windows x64 portable test package
+        shell: pwsh
+        run: ./tools/build_portable.ps1
+
+      - name: Verify clean package and embedded startup
+        shell: pwsh
+        run: |
+          $package = "out/portable-dist/CYAccounting_V${env:CYACCOUNTING_VERSION}${env:CYACCOUNTING_BUILD_SUFFIX}_Windows_x64.zip"
+          ./tools/verify_portable.ps1 -Package $package
+
+      - name: Upload portable test package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYAccounting_V${{ env.CYACCOUNTING_VERSION }}${{ env.CYACCOUNTING_BUILD_SUFFIX }}_Windows_x64_run${{ github.run_number }}
+          path: |
+            apps/CYAccounting/out/portable-dist/*.zip
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Build reproducible source archive
         shell: pwsh

@@ -45,7 +45,6 @@ from util import (
     APP_VERSION,
     MAX_AMOUNT,
     app_root,
-    CLEAR_PASSWORD,
     DB_FILENAME,
     format_amount,
     format_date,
@@ -706,28 +705,6 @@ class EditTransactionDialog(QDialog):
             self.error.setText(msg)
 
 
-class PasswordDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("清除記帳資料與期初餘額")
-        form = QFormLayout(self)
-        self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow("請輸入清除密碼：", self.password)
-        self.error = QLabel(""); self.error.setStyleSheet("color:#c62828;font-weight:bold;")
-        form.addRow(self.error)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("確定")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
-        buttons.accepted.connect(self.check); buttons.rejected.connect(self.reject); form.addRow(buttons)
-
-    def check(self):
-        if self.password.text() == CLEAR_PASSWORD:
-            self.accept()
-        else:
-            self.error.setText("密碼錯誤，未清除任何資料。")
-            self.password.selectAll(); self.password.setFocus()
-
-
 class SettingsDialog(QDialog):
     def __init__(
         self,
@@ -735,7 +712,6 @@ class SettingsDialog(QDialog):
         config: dict,
         change_db_callback: Callable[[Path], tuple[bool, str]],
         restore_callback: Callable[[Path], tuple[bool, str]],
-        clear_callback: Callable[[], None],
         settings_changed_callback: Callable[[], None],
         parent=None,
     ):
@@ -744,7 +720,6 @@ class SettingsDialog(QDialog):
         self.config = config
         self.change_db_callback = change_db_callback
         self.restore_callback = restore_callback
-        self.clear_callback = clear_callback
         self.settings_changed_callback = settings_changed_callback
         self.setWindowTitle("系統設定")
         self.setObjectName("settingsDialog")
@@ -903,12 +878,6 @@ class SettingsDialog(QDialog):
         info_layout.addWidget(QLabel(APP_NAME), 0, 1)
         info_layout.addWidget(QLabel("版本："), 1, 0)
         info_layout.addWidget(QLabel(APP_VERSION), 1, 1)
-        clear = no_tab_button("清除所有記帳資料與期初餘額")
-        clear.setObjectName("dangerButton")
-        clear.setStyleSheet("QPushButton{color:#b71c1c;font-weight:bold;border-color:#d8a3a3;}")
-        clear.clicked.connect(self.clear_data)
-        info_layout.setColumnStretch(2, 1)
-        info_layout.addWidget(clear, 0, 3, 2, 1, Qt.AlignmentFlag.AlignVCenter)
         outer.addWidget(info_box)
         outer.addStretch()
         close = no_tab_button("關閉"); close.clicked.connect(self.accept)
@@ -1131,18 +1100,3 @@ class SettingsDialog(QDialog):
             self.settings_changed_callback()
         else:
             QMessageBox.warning(self, APP_NAME, f"還原失敗：{msg}")
-
-    def clear_data(self):
-        pwd = PasswordDialog(self)
-        if pwd.exec() != QDialog.DialogCode.Accepted:
-            return
-        if QMessageBox.warning(
-            self, APP_NAME,
-            "確定要清除所有記帳資料與期初餘額嗎？\n此操作無法復原；帳戶、科目與設定會保留。",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Cancel,
-        ) != QMessageBox.StandardButton.Yes:
-            return
-        self.clear_callback()
-        QMessageBox.information(self, APP_NAME, "記帳資料與期初餘額已清除。")
-        self.settings_changed_callback()
