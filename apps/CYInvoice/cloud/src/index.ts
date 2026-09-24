@@ -645,9 +645,27 @@ async function issueInvitation(request: Request, env: Env, requestId: string): P
     ]);
     return errorResponse(env, requestId, 503, "EMAIL_DELIVERY_FAILED", "Invitation email could not be delivered.");
   }
+  const sentAt = new Date().toISOString();
+  const older = await env.DB.prepare(`SELECT invitation_id FROM device_invitations
+    WHERE workspace_id = ?1 AND issued_by_device_id = ?2 AND invitation_id <> ?3
+      AND consumed_at IS NULL AND revoked_at IS NULL`)
+    .bind(device.workspaceId, device.deviceId, invitationId).all<{ invitation_id: string }>();
+  const superseded = older.results.flatMap(row => [
+    env.DB.prepare(`UPDATE device_invitations SET revoked_at = ?1
+      WHERE invitation_id = ?2 AND consumed_at IS NULL AND revoked_at IS NULL`)
+      .bind(sentAt, row.invitation_id),
+    env.DB.prepare(`INSERT INTO security_audit_events (event_id, workspace_id, event_type,
+      outcome, actor_device_id, actor_employee_id, invitation_id, reason_code, request_id, occurred_at)
+      SELECT ?1, workspace_id, 'invitation_revoked', 'success', ?2, ?3, invitation_id,
+        'SUPERSEDED', ?4, ?5 FROM device_invitations
+      WHERE invitation_id = ?6 AND revoked_at = ?5`)
+      .bind(`evt_${crypto.randomUUID()}`, device.deviceId, owner.employee_id,
+        requestId, sentAt, row.invitation_id),
+  ]);
   await env.DB.batch([
+    ...superseded,
     env.DB.prepare("UPDATE device_invitations SET delivery_state = 'sent', sent_at = ?1 WHERE invitation_id = ?2")
-      .bind(new Date().toISOString(), invitationId),
+      .bind(sentAt, invitationId),
     securityEventStatement(env.DB, { workspaceId: device.workspaceId, type: "invitation_issued",
       outcome: "success", actorDeviceId: device.deviceId, actorEmployeeId: owner.employee_id,
       invitationId, requestId }),
@@ -788,6 +806,7 @@ async function onboardingTicketStatus(request: Request, env: Env, requestId: str
 async function recentJoinTickets(request: Request, env: Env, requestId: string): Promise<Response> {
   const device = await authenticateDevice(request, env);
   if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
+  const now = new Date().toISOString();
   const pairing = await env.DB.prepare(`SELECT p.pairing_id AS id, p.expires_at, p.used_at AS joined_at,
     d.display_name AS joined_device_name FROM device_pairing_codes p
     LEFT JOIN devices d ON d.device_id = p.claimed_device_id
@@ -799,12 +818,14 @@ async function recentJoinTickets(request: Request, env: Env, requestId: string):
     i.consumed_at AS joined_at, i.revoked_at, i.delivery_state,
     d.display_name AS joined_device_name FROM device_invitations i
     LEFT JOIN devices d ON d.device_id = i.consumed_by_device_id
-    WHERE i.workspace_id = ?1 AND i.issued_by_device_id = ?2 ORDER BY i.created_at DESC LIMIT 1`)
-    .bind(device.workspaceId, device.deviceId).first<{
+    WHERE i.workspace_id = ?1 AND i.issued_by_device_id = ?2
+    ORDER BY CASE WHEN i.delivery_state = 'sent' AND i.consumed_at IS NULL
+        AND i.revoked_at IS NULL AND i.expires_at > ?3 THEN 0 ELSE 1 END,
+      i.created_at DESC LIMIT 1`)
+    .bind(device.workspaceId, device.deviceId, now).first<{
       id: string; expires_at: string; joined_at: string | null; revoked_at: string | null;
       delivery_state: string; joined_device_name: string | null;
     }>();
-  const now = new Date().toISOString();
   const status = (row: { id: string; expires_at: string; joined_at: string | null;
     joined_device_name: string | null; revoked_at?: string | null; delivery_state?: string }): Record<string, JsonValue> => ({
       id: row.id,
