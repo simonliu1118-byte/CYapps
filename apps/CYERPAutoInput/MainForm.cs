@@ -23,9 +23,9 @@ internal sealed class MainForm : Form
         _settingsStore = new UserSettingsStore(log);
         _settings = _settingsStore.Load();
 
-        Text = "CYERPAutoInput V0.1.0 — SMART ERP 自動輸入工具";
+        Text = "CYERPAutoInput V0.1.0 Build 1 — SMART ERP 自動輸入工具";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(1180, 760);
+        MinimumSize = new Size(1440, 760);
         Size = new Size(1540, 940);
         Font = new Font("Microsoft JhengHei UI", 9F);
         KeyPreview = true;
@@ -64,7 +64,7 @@ internal sealed class MainForm : Form
         });
         top.Controls.Add(new Label
         {
-            Text = "V0.1.0 · C# / .NET 8 · 光學定位 · Esc 緊急停止 · 目前不自動儲存 ERP",
+            Text = "V0.1.0 Build 1 · C# / .NET 8 · 光學定位 · Esc 緊急停止 · 目前不自動儲存 ERP",
             AutoSize = true,
             ForeColor = Color.DimGray,
             Location = new Point(8, 34)
