@@ -218,21 +218,40 @@ internal sealed class ErpAutomationService
         Win32Automation.PrepareForeground(root, _log);
         var grid = FindDetailGrid(root) ?? throw new InvalidOperationException("找不到 ERP 商品明細 TcxGridSite。");
         var geometry = await _gridVision.AnalyzeDetailGridAsync(grid.Handle, cancellationToken);
+        var firstVisibleLogicalRow = 0;
 
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             progress.Report($"ERP：輸入商品明細 {rowIndex + 1}/{rows.Count}…");
 
-            var visibleRow = rowIndex;
-            if (visibleRow >= geometry.RowCenterY.Count)
+            var visibleRow = rowIndex - firstVisibleLogicalRow;
+            while (visibleRow >= geometry.RowCenterY.Count)
             {
+                // The proven COPI08 behavior is to move down from the last visible detail row.
+                // Explicitly click that row first so VK_DOWN is never sent to an unrelated ERP control.
+                var lastVisible = geometry.RowCenterY.Count - 1;
+                if (lastVisible < 0 || !geometry.TryCellPoint(lastVisible, 0, out var lastItemPoint))
+                    throw new InvalidOperationException("明細捲動前無法光學定位最後可見列。");
+
+                if (!Win32Automation.PrepareForeground(root, _log))
+                    throw new InvalidOperationException("明細捲動前無法把 ERP 帶到前景。");
+                InputSender.Click(lastItemPoint);
+                await Delay(90, cancellationToken);
                 InputSender.Press(NativeMethods.VK_DOWN);
-                await Delay(180, cancellationToken);
+                await Delay(220, cancellationToken);
+
+                firstVisibleLogicalRow++;
                 geometry = await _gridVision.AnalyzeDetailGridAsync(grid.Handle, cancellationToken);
-                visibleRow = geometry.RowCenterY.Count - 1;
-                if (visibleRow < 0) throw new InvalidOperationException("明細捲動後無法重新辨識列位置。");
+                visibleRow = rowIndex - firstVisibleLogicalRow;
+                _log.Info("detail", $"grid advanced one row first_visible_logical={firstVisibleLogicalRow} visible_rows={geometry.RowCenterY.Count}");
+
+                if (visibleRow < 0)
+                    throw new InvalidOperationException("明細捲動後列索引異常；已停止以避免輸入錯列。");
             }
+
+            if (visibleRow < 0 || visibleRow >= geometry.RowCenterY.Count)
+                throw new InvalidOperationException("光學明細列位置超出可見範圍；已停止以避免輸入錯列。");
 
             var row = rows[rowIndex];
             await SetDetailCellAsync(root, grid, geometry, visibleRow, 0, row.ItemCode, cancellationToken);
@@ -276,7 +295,8 @@ internal sealed class ErpAutomationService
         if (!geometry.TryCellPoint(visibleRow, column, out var point))
             throw new InvalidOperationException($"光學明細定位缺少 column={column}, row={visibleRow + 1}。");
 
-        Win32Automation.PrepareForeground(root, _log);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("輸入明細前無法把 ERP 帶到前景。");
         InputSender.Click(point);
         await Delay(130, cancellationToken);
         InputSender.Press(NativeMethods.VK_RETURN);
@@ -295,27 +315,46 @@ internal sealed class ErpAutomationService
         if (!geometry.TryCellPoint(visibleRow, 4, out var point))
             throw new InvalidOperationException("光學明細定位沒有辨識到「單位」欄。");
 
-        Win32Automation.PrepareForeground(root, _log);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("開啟單位 F2 前無法把 ERP 帶到前景。");
         InputSender.Click(point);
         await Delay(140, cancellationToken);
         InputSender.Press(NativeMethods.VK_F2);
 
         var lookup = await WaitLookupAsync(cancellationToken);
         if (lookup == 0) throw new InvalidOperationException("按 F2 後沒有出現單位查詢視窗。");
-        Win32Automation.PrepareForeground(lookup, _log);
+        if (!Win32Automation.PrepareForeground(lookup, _log))
+            throw new InvalidOperationException("F2 單位查詢視窗無法取得前景。");
         await Delay(120, cancellationToken);
 
         var unitPoint = await _gridVision.FindUnitAsync(lookup, unit, cancellationToken);
         InputSender.Click(unitPoint);
-        await Delay(100, cancellationToken);
-        // Confirmed manual ERP behavior: click requested unit -> Enter. No confirm-button fallback is allowed.
+        await Delay(120, cancellationToken);
+
+        // Manual ERP behavior is strictly: click requested row -> Enter. Before Enter,
+        // verify the click actually put focus into the F2 TcxGridSite; never fall back
+        // to clicking the confirmation button or another guessed coordinate.
+        var lookupFocus = NativeMethods.FocusedControlOfForeground(lookup);
+        var lookupFocusClass = NativeMethods.ClassName(lookupFocus);
+        if (lookupFocus == 0 || !lookupFocusClass.Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+        {
+            _log.Warn("detail", $"F2 row click did not focus grid first_try class={lookupFocusClass}");
+            InputSender.Click(unitPoint);
+            await Delay(120, cancellationToken);
+            lookupFocus = NativeMethods.FocusedControlOfForeground(lookup);
+            lookupFocusClass = NativeMethods.ClassName(lookupFocus);
+        }
+        if (lookupFocus == 0 || !lookupFocusClass.Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("已光學點到指定單位，但 F2 表格沒有取得焦點；為避免 Enter 送到錯誤控制項已停止。");
+
         InputSender.Press(NativeMethods.VK_RETURN);
-        if (!await WaitWindowClosedAsync(lookup, 1200, cancellationToken))
+        if (!await WaitWindowClosedAsync(lookup, 1400, cancellationToken))
             throw new InvalidOperationException("已光學點選指定單位並送出 Enter，但 F2 視窗仍未關閉。");
 
-        Win32Automation.PrepareForeground(root, _log);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("F2 關閉後無法回到 ERP 前景。");
         await Delay(120, cancellationToken);
-        _log.Info("detail", "F2 unit selected by OCR click + physical Enter");
+        _log.Info("detail", "F2 unit selected by OCR click + verified TcxGridSite focus + physical Enter");
     }
 
     private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken)
