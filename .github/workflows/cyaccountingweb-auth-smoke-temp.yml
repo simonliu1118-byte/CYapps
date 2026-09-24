@@ -1,0 +1,47 @@
+name: CYAccountingWeb Shared Login Live Smoke (Temporary)
+
+on:
+  push:
+    branches:
+      - cyinvoice/cloud-onboarding-first-device
+    paths:
+      - ".github/workflows/cyaccountingweb-auth-smoke-temp.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe Accounting to CYInvoice Identity path
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          code="$(curl --silent --show-error --output "$tmp" --write-out '%{http_code}' \
+            --request POST \
+            --header 'content-type: application/json' \
+            --data '{"employeeNo":"0000","password":"cy-accounting-live-smoke-invalid"}' \
+            'https://cyaccounting-web.simonliu1118.workers.dev/api/auth/login')"
+          body="$(cat "$tmp")"
+          rm -f "$tmp"
+          echo "HTTP $code"
+          echo "$body"
+          [[ "$code" == "401" ]]
+          grep -q 'LOGIN_FAILED' <<<"$body"
+
+      - name: Verify protected API rejects anonymous requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          code="$(curl --silent --show-error --output "$tmp" --write-out '%{http_code}' \
+            'https://cyaccounting-web.simonliu1118.workers.dev/api/bootstrap')"
+          body="$(cat "$tmp")"
+          rm -f "$tmp"
+          echo "HTTP $code"
+          echo "$body"
+          [[ "$code" == "401" ]]
+          grep -q 'AUTH_REQUIRED' <<<"$body"
