@@ -1,0 +1,365 @@
+/* V0.10.0 Desktop UI/UX Phase 3: business-tool density and hierarchy */
+
+/* Header: keep identity and actions visible, but give more vertical room to the work area. */
+.topbar {
+  min-height: 64px;
+  padding: 9px 22px;
+  gap: 16px;
+}
+
+.topbar h1 {
+  font-size: 20px;
+  line-height: 1.2;
+  letter-spacing: .01em;
+}
+
+.topbar p {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.topbar-actions {
+  gap: 7px;
+}
+
+.topbar-actions .secondary.compact {
+  min-height: 30px;
+  padding: 4px 10px;
+  background: #fff;
+}
+
+.current-user {
+  color: #394957;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status {
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.shell {
+  margin-top: 16px;
+  gap: 14px;
+}
+
+.card {
+  border-color: #c9d2da;
+  box-shadow: 0 1px 2px rgba(31, 42, 55, .045);
+}
+
+/* Entry area: maintain clear state colour while reducing incidental whitespace. */
+.entry-card {
+  padding: 14px 16px 13px;
+}
+
+.entry-card .section-title {
+  margin-bottom: 10px;
+}
+
+.entry-card .quick-entry-tools {
+  margin-top: 8px;
+}
+
+.entry-card .keyboard-hint {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+/* Ledger toolbar: visually separate period, search and view controls. */
+.ledger-desktop-tools {
+  grid-template-columns: auto minmax(280px, 1fr) auto;
+  gap: 10px;
+  padding: 6px 9px;
+  background: #f7f9fb;
+}
+
+.ledger-period-tools,
+.ledger-view-tools {
+  gap: 5px;
+}
+
+.ledger-period-tools {
+  padding-right: 9px;
+}
+
+.ledger-view-tools {
+  padding-left: 9px;
+}
+
+.ledger-desktop-tools .secondary.compact,
+.ledger-desktop-tools input,
+.ledger-desktop-tools select {
+  min-height: 29px;
+  height: 29px;
+}
+
+.ledger-desktop-tools .secondary.compact {
+  padding: 3px 9px;
+}
+
+.ledger-month-tools input[type="month"] {
+  width: 142px;
+}
+
+.ledger-search {
+  max-width: 520px;
+  width: 100%;
+  justify-self: center;
+}
+
+#ledgerGroupToggle.active {
+  border-color: #7f9bb0;
+  background: #e8f0f6;
+  color: #235c82;
+}
+
+/* Ledger title and monthly totals: quick scanning over decorative space. */
+.ledger-title {
+  padding: 10px 13px 6px;
+}
+
+.ledger-title h2 {
+  font-size: 16px;
+}
+
+#monthSummary {
+  margin-top: 3px;
+  gap: 3px 10px;
+  font-size: 12px;
+}
+
+.ledger-summary-item.ending {
+  padding-left: 9px;
+}
+
+/* Dense accounting table with stable desktop column proportions. */
+.ledger-card .table-wrap {
+  border-top-color: #d8e0e6;
+}
+
+.ledger-card table {
+  width: 100%;
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+.ledger-card th,
+.ledger-card td {
+  padding: 4px 8px;
+  font-size: 12.5px;
+  line-height: 1.28;
+  border-bottom-color: #e1e6ea;
+}
+
+.ledger-card th {
+  padding-top: 5px;
+  padding-bottom: 5px;
+  background: #f2f5f7;
+  color: #52606c;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+.ledger-card th:nth-child(1),
+.ledger-card td:nth-child(1) { width: 96px; }
+
+.ledger-card th:nth-child(2),
+.ledger-card td:nth-child(2) { width: 96px; }
+
+.ledger-card th:nth-child(3),
+.ledger-card td:nth-child(3) { width: 58px; }
+
+.ledger-card th:nth-child(4),
+.ledger-card td:nth-child(4) { width: 126px; }
+
+.ledger-card th:nth-child(6),
+.ledger-card td:nth-child(6) { width: 104px; }
+
+.ledger-card th:nth-child(7),
+.ledger-card td:nth-child(7) { width: 106px; }
+
+.ledger-card th:nth-child(8),
+.ledger-card td:nth-child(8) { width: 82px; }
+
+.ledger-card td.summary {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ledger-card tbody tr:not(.account-group-row):nth-child(even) td {
+  background: rgba(247, 249, 251, .72);
+}
+
+.ledger-card tbody tr:not(.account-group-row):hover td {
+  background: #eef5fa;
+}
+
+.ledger-card .kind-tag {
+  min-width: 34px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.ledger-card .num {
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-card .ledger-balance {
+  color: #394957;
+  font-weight: 600;
+}
+
+.ledger-card .action-col {
+  width: 82px;
+  padding-left: 3px;
+  padding-right: 5px;
+}
+
+.ledger-card .row-action {
+  padding: 2px 3px;
+  font-size: 11.5px;
+}
+
+.ledger-card .account-group-row td {
+  padding: 5px 8px;
+  background: #eaf0f4;
+  border-top: 1px solid #cbd5dd;
+  border-bottom: 1px solid #d3dce3;
+}
+
+.ledger-card .account-group-row td strong {
+  color: #2f4658;
+}
+
+.ledger-card .account-group-row td span {
+  margin-left: 12px;
+  color: #687785;
+  font-size: 11.5px;
+}
+
+/* Settings: denser left navigation and management lists, closer to desktop admin tools. */
+.settings-modal {
+  width: min(860px, calc(100% - 28px));
+}
+
+.settings-modal > .modal-header {
+  padding: 14px 17px 11px;
+}
+
+.settings-modal .modal-header h2 {
+  font-size: 18px;
+}
+
+.settings-layout {
+  grid-template-columns: 152px minmax(0, 1fr);
+  min-height: 460px;
+}
+
+.settings-nav {
+  padding: 10px 8px;
+  gap: 4px;
+  background: #f4f6f8;
+}
+
+.settings-tab {
+  position: relative;
+  padding: 8px 10px 8px 13px;
+  border-radius: 5px;
+  font-size: 13px;
+}
+
+.settings-tab.active {
+  background: #e6edf3;
+  color: #234f70;
+}
+
+.settings-tab.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 999px;
+  background: #39739d;
+}
+
+.settings-content {
+  padding: 15px 17px 17px;
+}
+
+.settings-pane h3 {
+  font-size: 16px;
+}
+
+.settings-pane .hint {
+  margin: 4px 0 11px;
+  font-size: 12.5px;
+}
+
+.manager-list {
+  gap: 5px;
+}
+
+.manager-row {
+  padding: 6px 8px;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.manager-row:hover {
+  border-color: #c7d2dc;
+  background: #fafcfd;
+}
+
+.mini-button {
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.category-group {
+  margin-bottom: 7px;
+  border-radius: 6px;
+}
+
+.category-group-head {
+  padding: 7px 8px;
+}
+
+.category-items {
+  padding: 3px 8px 6px;
+}
+
+.category-item {
+  padding: 5px 0;
+}
+
+.inline-add {
+  margin-top: 10px;
+}
+
+/* Preserve sufficient hit area on narrower layouts; mobile redesign remains a later phase. */
+@media (max-width: 1250px) {
+  .ledger-search {
+    max-width: none;
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    min-height: 64px;
+    padding: 10px 14px;
+  }
+
+  .settings-modal {
+    width: min(860px, calc(100% - 16px));
+  }
+}
