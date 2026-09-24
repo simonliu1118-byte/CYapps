@@ -25,7 +25,7 @@ internal sealed class ErpAutomationService
             .Where(c => c.Visible && c.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase))
             .Where(c => c.Rect.Top - rr.Top is >= 140 and <= 245)
             .ToArray();
-        if (edits.Length < 3) return ErpMode.Unknown;
+        if (edits.Length < 6) return ErpMode.Unknown;
 
         var readOnly = 0;
         var writable = 0;
@@ -34,9 +34,13 @@ internal sealed class ErpAutomationService
             var style = NativeMethods.GetWindowLongPtr(edit.Handle, NativeMethods.GWL_STYLE).ToInt64();
             if ((style & NativeMethods.ES_READONLY) != 0) readOnly++; else writable++;
         }
-        _log.Info("state", $"mode signal readonly={readOnly} writable={writable}");
-        if (readOnly >= 2 && writable <= 1) return ErpMode.Browse;
-        if (writable >= 2) return ErpMode.Input;
+        _log.Info("state", $"mode signal total={edits.Length} readonly={readOnly} writable={writable}");
+
+        // These thresholds are intentionally conservative. On the validated COPI08
+        // layout, BROWSE is 6 readonly / 0 writable and INPUT is 2 readonly / 4 writable.
+        // Ambiguous intermediate states remain UNKNOWN rather than risking a NEW click.
+        if (writable == 0 && readOnly >= 6) return ErpMode.Browse;
+        if (writable >= 4 && readOnly >= 2) return ErpMode.Input;
         return ErpMode.Unknown;
     }
 
@@ -116,18 +120,26 @@ internal sealed class ErpAutomationService
     {
         var sheet = ErpLayoutResolver.FindTabSheet(root, group);
         if (sheet == 0) throw new InvalidOperationException($"找不到 ERP 頁籤物件「{group}」。");
-        if (NativeMethods.IsWindowVisible(sheet)) return sheet;
+        var page = NativeMethods.GetParent(sheet);
+        if (page == 0 || !NativeMethods.ClassName(page).Equals("TcxPageControl", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"ERP 頁籤「{group}」找不到 TcxPageControl parent。");
 
-        var p = await _textVision.FindTextAsync(root, [group, group.Replace("(一)", "（一）")], cancellationToken);
+        // Match the validated Go behavior: always perform a real tab click before
+        // filling it. TcxTabSheet visibility can be stale, so visibility alone is
+        // not accepted as proof that the requested page is active.
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("切換 ERP 頁籤前無法把 COPI08 帶到前景。");
+        var p = await _textVision.FindTextAsync(page, [group, group.Replace("(一)", "（一）")], cancellationToken);
         if (p is null) throw new InvalidOperationException($"光學辨識找不到 ERP 頁籤「{group}」。");
         InputSender.Click(p.Value);
+
         var deadline = Environment.TickCount64 + 1200;
         while (Environment.TickCount64 < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (NativeMethods.IsWindowVisible(sheet))
             {
-                _log.Info("tab", $"activated group={group}");
+                _log.Info("tab", $"activated by optical real click group={group}");
                 return sheet;
             }
             await Task.Delay(50, cancellationToken);
