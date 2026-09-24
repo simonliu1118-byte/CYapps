@@ -2,6 +2,10 @@
 
 更新日期：2026-09-24
 
+## PR #100 最新進度
+
+PR #100 已接到 PR #73 最新基準；目前工程原始碼為 CYInvoice V2.6.5 Build 4、Cloud `0.8.4` / API `1` / Schema `8`。雲端忘記密碼採員工編號與 Email 核對後寄送、第二步輸入 OTP 與新密碼，重寄倒數使用伺服器回傳時間。一般員工的帳號管理提供本人密碼與 Email 異動，姓名仍由管理員維護。此版本尚待 PR CI 和工程包驗證，亦未部署到 Cloudflare；不得把本段當成遠端已上線狀態。
+
 ## 最新工作：首次開啟直接加入雲端
 
 使用者已定案：首次開啟先選「使用單機版」或「直接加入雲端」。單機版仍先建立本機超管，之後加入既有 Workspace 維持原本的本機管理員驗證＋配對碼＋全機帳號轉換。全新安裝直接加入不建本機帳號，可選：(1) 既有可信裝置產生的短效配對碼；(2) Workspace ID＋該 Workspace 的中央 SUPER_ADMIN 員工編號與密碼，再以其已驗證 Email OTP 確認。兩條路徑先確認 Workspace 名稱，加入後取得 Device identity、中央 Employee snapshot 與受保護快取，才切 Cloud authority。相同 Email／帳密在不同 Workspace 仍是各自獨立的員工帳號；以 Workspace ID 指定目標。Cloud 參考實作目前仍只允許 bootstrap 一個 Workspace，不宣稱已完成多 Workspace 實測。
@@ -21,7 +25,7 @@
 - 接手時應先重新讀取 PR #73 的最新 head；不要依本文件硬編碼 branch head。
 - V2.6.4 Build 1 的 code-bearing head：`b6d0f1d8fa02d2fd182179c599208764d0320552`。
 - Cloud Check Run #211 已成功，engineering 測試包已產生；development deploy Run #6 已成功。
-- 最新 source compatibility：Cloud `0.8.3` / API `1` / Schema `8`；首次建立時的已驗證歷史版本仍為 Cloud `0.8.2` / Schema `7`。
+- PR #100 最新 source compatibility：Cloud `0.8.4` / API `1` / Schema `8`；PR #73 最新為 Cloud `0.8.3` / Schema `8`，首次建立時的已驗證歷史版本為 Cloud `0.8.2` / Schema `7`。
 - Forward migrations：`0001`～`0008`
 
 禁止自行 merge、tag、Release、auto-merge；只有使用者明確授權後才可執行。

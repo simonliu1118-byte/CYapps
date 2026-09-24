@@ -54,7 +54,7 @@ type OtpRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.3";
+const CLOUD_VERSION = "0.8.4";
 const EMAIL_PURPOSE = "employee_email_verification";
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
