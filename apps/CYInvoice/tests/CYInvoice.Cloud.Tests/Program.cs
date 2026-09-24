@@ -19,6 +19,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("cloud pairing authorization uses the authenticated Device and Workspace recovery Email", TestPairingAuthorizationAsync),
     ("cloud pairing code requires email authorization OTP", TestPairingAsync),
     ("cloud pairing claim reuses caller-owned token across retries", TestPairingClaimAsync),
+    ("direct cloud join identifies Workspace before creating its Device", TestDirectJoinClientAsync),
     ("central employee reconciliation sends only the existing Local SUPER_ADMIN profile", TestEmployeeReconciliationAsync),
     ("central employee listing parses Workspace roles", TestEmployeeListAsync),
     ("central employee update requires execution-time actor credentials", TestEmployeeAccountUpdateAsync),
@@ -169,7 +170,7 @@ static async Task TestHealthAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.OK,
-        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.8.2","apiVersion":"1","schemaVersion":"7","environment":"test","storage":"ok"}"""));
+        """{"ok":true,"service":"cyinvoice-cloud","cloudVersion":"0.8.3","apiVersion":"1","schemaVersion":"8","environment":"test","storage":"ok"}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -177,9 +178,9 @@ static async Task TestHealthAsync()
     True(health.Reachable, "health should be reachable");
     True(health.StorageAvailable, "backend storage should be available");
     Equal("cyinvoice-cloud", health.ServiceName, "service name");
-    Equal("0.8.2", health.CloudVersion, "cloud version");
+    Equal("0.8.3", health.CloudVersion, "cloud version");
     Equal("1", health.ApiVersion, "api version");
-    Equal("7", health.SchemaVersion, "schema version");
+    Equal("8", health.SchemaVersion, "schema version");
     Equal(string.Empty, CloudCompatibility.Problem(health), "compatible service should have no compatibility problem");
 }
 
@@ -187,7 +188,7 @@ static async Task TestStorageOutageAsync()
 {
     var handler = new QueueHandler();
     handler.Enqueue(_ => JsonResponse(HttpStatusCode.ServiceUnavailable,
-        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.8.2","apiVersion":"1","schemaVersion":"7","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
+        """{"ok":false,"service":"cyinvoice-cloud","cloudVersion":"0.8.3","apiVersion":"1","schemaVersion":"8","environment":"test","storage":"unavailable","error":{"code":"STORAGE_UNAVAILABLE","message":"Backend storage health check failed."}}"""));
     using var http = new HttpClient(handler);
     var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
 
@@ -196,7 +197,7 @@ static async Task TestStorageOutageAsync()
     True(!health.StorageAvailable, "storage outage must not be reported as healthy");
     Equal("cyinvoice-cloud", health.ServiceName, "storage outage should preserve service identity");
     Equal("1", health.ApiVersion, "storage outage should preserve API version");
-    Equal("7", health.SchemaVersion, "storage outage should preserve schema version");
+    Equal("8", health.SchemaVersion, "storage outage should preserve schema version");
     Equal("STORAGE_UNAVAILABLE", health.ErrorCode, "storage outage error code");
     True(CloudCompatibility.Problem(health).Contains("後端儲存服務尚未就緒", StringComparison.Ordinal),
         "storage outage should report backend storage instead of a wrong-service error");
@@ -456,6 +457,60 @@ static async Task TestPairingClaimAsync()
     var generated = CloudDeviceJoinAttempt.Create();
     True(generated.DeviceToken.StartsWith("cydev_", StringComparison.Ordinal) && generated.DeviceToken.Length == 70,
         "generated Device Join token format");
+}
+
+static async Task TestDirectJoinClientAsync()
+{
+    const string token = "cydev_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    const string workspaceId = "ws_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    const string challengeId = "otp_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    var handler = new QueueHandler();
+    handler.Enqueue(request =>
+    {
+        Equal("/v1/device-pairings/preview", request.RequestUri!.AbsolutePath, "pairing preview path");
+        return JsonResponse(HttpStatusCode.OK,
+            $$"""{"workspace":{"workspaceId":"{{workspaceId}}","displayName":"志遠"}}""");
+    });
+    handler.Enqueue(request =>
+    {
+        Equal("/v1/direct-join/authorize", request.RequestUri!.AbsolutePath, "owner authorization path");
+        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        Equal(workspaceId, body.RootElement.GetProperty("workspaceId").GetString()!, "target Workspace");
+        Equal("0001", body.RootElement.GetProperty("employeeNo").GetString()!, "target Workspace owner");
+        return JsonResponse(HttpStatusCode.Created,
+            $$"""{"workspace":{"workspaceId":"{{workspaceId}}","displayName":"志遠"},"challenge":{"challengeId":"{{challengeId}}","maskedEmail":"ow***@example.test","expiresAt":"2026-09-25T01:00:00Z","resendAfter":"2026-09-25T00:51:00Z"}}""");
+    });
+    handler.Enqueue(request =>
+    {
+        Equal("/v1/direct-join/claim", request.RequestUri!.AbsolutePath, "direct claim path");
+        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        Equal(token, body.RootElement.GetProperty("deviceToken").GetString()!, "caller-owned Device token");
+        Equal(challengeId, body.RootElement.GetProperty("emailChallengeId").GetString()!, "Email challenge");
+        Equal("123456", body.RootElement.GetProperty("emailOtp").GetString()!, "Email OTP");
+        return JsonResponse(HttpStatusCode.Created,
+            $$"""{"workspace":{"workspaceId":"{{workspaceId}}"},"device":{"deviceId":"dev_1","displayName":"新電腦"}}""");
+    });
+    handler.Enqueue(request =>
+    {
+        Equal("/v1/device-pairings/claim", request.RequestUri!.AbsolutePath, "direct pairing path");
+        using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+        True(body.RootElement.GetProperty("directJoin").GetBoolean(), "direct pairing must request central authority");
+        return JsonResponse(HttpStatusCode.Created,
+            $$"""{"workspace":{"workspaceId":"{{workspaceId}}"},"device":{"deviceId":"dev_2","displayName":"新電腦"}}""");
+    });
+    using var http = new HttpClient(handler);
+    var client = new CloudClient(http, new Uri("https://cloud.example.test/"));
+    var preview = await client.PreviewPairingAsync("0123456789abcdefabcd");
+    Equal(workspaceId, preview.WorkspaceId, "pairing preview Workspace");
+    var authorization = await client.StartDirectJoinAsync(workspaceId, "0001", "test-password");
+    Equal("志遠", authorization.Workspace.DisplayName, "Workspace display for confirmation");
+    var attempt = new CloudDeviceJoinAttempt(token);
+    var byOwner = await client.ClaimDirectJoinAsync(workspaceId, "0001", challengeId,
+        "123456", "新電腦", "2.6.5", attempt);
+    Equal(token, byOwner.DeviceToken, "owner path Device token");
+    var byCode = await client.ClaimPairingAsync("0123456789abcdefabcd", "新電腦",
+        "2.6.5", attempt, directJoin: true);
+    Equal("dev_2", byCode.DeviceId, "pairing path Device ID");
 }
 
 static async Task TestEmployeeReconciliationAsync()

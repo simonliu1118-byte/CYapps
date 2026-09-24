@@ -93,6 +93,18 @@ internal static class Program
             var repository = LocalRepository.Open(temporaryRoot, new DpapiSecretProtector());
             var settings = repository.Settings.LoadOrCreate();
 
+            using var firstRun = new FirstRunModeForm();
+            firstRun.Show();
+            firstRun.PerformLayout();
+            Application.DoEvents();
+            firstRun.Close();
+
+            using var directJoin = new CloudDirectJoinForm(repository);
+            directJoin.Show();
+            directJoin.PerformLayout();
+            Application.DoEvents();
+            directJoin.Close();
+
             // Device Join now deliberately prompts for Local ADMIN/SUPER_ADMIN on Shown.
             // The startup smoke validates static layout without displaying the form so CI
             // never bypasses or blocks on the real runtime authorization gate.

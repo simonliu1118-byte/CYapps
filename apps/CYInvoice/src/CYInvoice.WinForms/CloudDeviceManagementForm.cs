@@ -5,13 +5,14 @@ namespace CYInvoice.WinForms;
 internal sealed class CloudDeviceManagementForm : Form
 {
     private const int WindowWidth = 500;
-    private const int WindowHeight = 264;
+    private const int WindowHeight = 305;
     private readonly HttpClient httpClient = new();
     private readonly CancellationTokenSource lifetime = new();
     private readonly CloudClient client;
     private readonly Label status = UiControls.Label(string.Empty);
     private readonly TextBox otp = UiControls.TextBox(6);
     private readonly TextBox pairingCode = UiControls.TextBox(32);
+    private readonly TextBox workspaceId = UiControls.TextBox(80);
     private readonly Button sendOtp = UiControls.StandardButton("寄送驗證碼");
     private readonly Button generate = UiControls.StandardButton("產生配對碼");
     private readonly Button copy = UiControls.StandardButton("複製配對碼");
@@ -21,7 +22,7 @@ internal sealed class CloudDeviceManagementForm : Form
     private bool busy;
     private bool resourcesDisposed;
 
-    public CloudDeviceManagementForm(string baseUrl, string deviceToken)
+    public CloudDeviceManagementForm(string baseUrl, string deviceToken, string currentWorkspaceId = "")
     {
         client = new CloudClient(httpClient, new Uri(NormalizeBaseUrl(baseUrl), UriKind.Absolute), deviceToken);
         Text = "裝置管理";
@@ -33,6 +34,7 @@ internal sealed class CloudDeviceManagementForm : Form
         ShowInTaskbar = false;
         ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+        workspaceId.Text = currentWorkspaceId;
         DoubleBuffered = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         UpdateStyles();
@@ -47,6 +49,7 @@ internal sealed class CloudDeviceManagementForm : Form
         pairingCode.ReadOnly = true;
         pairingCode.TabStop = false;
         pairingCode.TextAlign = HorizontalAlignment.Center;
+        workspaceId.ReadOnly = true;
 
         var root = new BufferedTableLayoutPanel
         {
@@ -57,7 +60,7 @@ internal sealed class CloudDeviceManagementForm : Form
             Margin = Padding.Empty,
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
@@ -75,7 +78,7 @@ internal sealed class CloudDeviceManagementForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 3,
-            RowCount = 2,
+            RowCount = 3,
             Margin = Padding.Empty,
         };
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
@@ -83,12 +86,18 @@ internal sealed class CloudDeviceManagementForm : Form
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 128));
         fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-        fields.Controls.Add(FieldLabel("Email 驗證碼"), 0, 0);
-        fields.Controls.Add(otp, 1, 0);
-        fields.Controls.Add(sendOtp, 2, 0);
-        fields.Controls.Add(FieldLabel("配對碼"), 0, 1);
-        fields.Controls.Add(pairingCode, 1, 1);
-        fields.Controls.Add(copy, 2, 1);
+        fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        fields.Controls.Add(FieldLabel("Workspace ID"), 0, 0);
+        fields.Controls.Add(workspaceId, 1, 0);
+        var copyId = UiControls.StandardButton("複製識別碼");
+        copyId.Click += (_, _) => { if (workspaceId.Text.Length != 0) Clipboard.SetText(workspaceId.Text); };
+        fields.Controls.Add(copyId, 2, 0);
+        fields.Controls.Add(FieldLabel("Email 驗證碼"), 0, 1);
+        fields.Controls.Add(otp, 1, 1);
+        fields.Controls.Add(sendOtp, 2, 1);
+        fields.Controls.Add(FieldLabel("配對碼"), 0, 2);
+        fields.Controls.Add(pairingCode, 1, 2);
+        fields.Controls.Add(copy, 2, 2);
         root.Controls.Add(fields, 0, 1);
 
         status.AutoEllipsis = false;

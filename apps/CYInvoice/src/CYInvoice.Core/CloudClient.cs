@@ -45,6 +45,8 @@ public sealed record CloudDeviceJoinAttempt(string DeviceToken)
 }
 
 public sealed record CloudPairingTicket(string Code, DateTimeOffset ExpiresAt);
+public sealed record CloudWorkspacePreview(string WorkspaceId, string DisplayName);
+public sealed record CloudDirectJoinChallenge(CloudWorkspacePreview Workspace, CloudEmailChallenge Challenge);
 
 public sealed class CloudApiException(string code, string message, HttpStatusCode statusCode)
     : InvalidOperationException(message)
@@ -259,7 +261,8 @@ public sealed class CloudClient
         string deviceDisplayName,
         string clientVersion,
         CloudDeviceJoinAttempt attempt,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool directJoin = false)
     {
         if (string.IsNullOrWhiteSpace(code))
             throw new ArgumentException("Pairing code is required.", nameof(code));
@@ -275,13 +278,55 @@ public sealed class CloudClient
                 code = code.Trim(),
                 deviceDisplayName,
                 clientVersion,
-                deviceToken = attempt.DeviceToken
+                deviceToken = attempt.DeviceToken,
+                directJoin
             },
             false,
             null,
             cancellationToken);
 
         return ReadDeviceIdentity(document.RootElement, requireToken: false) with { DeviceToken = attempt.DeviceToken };
+    }
+
+    public async Task<CloudWorkspacePreview> PreviewPairingAsync(string code, CancellationToken cancellationToken = default)
+    {
+        using var document = await SendAsync(HttpMethod.Post, "v1/device-pairings/preview",
+            new { code }, false, null, cancellationToken);
+        return ReadWorkspacePreview(document.RootElement);
+    }
+
+    public async Task<CloudDirectJoinChallenge> StartDirectJoinAsync(
+        string workspaceId, string employeeNo, string password, CancellationToken cancellationToken = default)
+    {
+        using var document = await SendAsync(HttpMethod.Post, "v1/direct-join/authorize",
+            new { workspaceId, employeeNo, password }, false, null, cancellationToken);
+        var root = document.RootElement;
+        var workspace = ReadWorkspacePreview(root);
+        var challenge = root.GetProperty("challenge");
+        return new CloudDirectJoinChallenge(workspace, new CloudEmailChallenge(
+            ReadRequiredString(challenge, "challengeId"), ReadRequiredString(challenge, "maskedEmail"),
+            DateTimeOffset.Parse(ReadRequiredString(challenge, "expiresAt")),
+            DateTimeOffset.Parse(ReadRequiredString(challenge, "resendAfter"))));
+    }
+
+    public async Task<CloudDeviceIdentity> ClaimDirectJoinAsync(
+        string workspaceId, string employeeNo, string challengeId, string otp,
+        string deviceDisplayName, string clientVersion, CloudDeviceJoinAttempt attempt,
+        CancellationToken cancellationToken = default)
+    {
+        if (!ValidDeviceToken(attempt.DeviceToken)) throw new ArgumentException("Device token is invalid.", nameof(attempt));
+        using var document = await SendAsync(HttpMethod.Post, "v1/direct-join/claim",
+            new { workspaceId, employeeNo, emailChallengeId = challengeId, emailOtp = otp,
+                  deviceDisplayName, clientVersion, deviceToken = attempt.DeviceToken },
+            false, null, cancellationToken);
+        return ReadDeviceIdentity(document.RootElement, requireToken: false) with { DeviceToken = attempt.DeviceToken };
+    }
+
+    private static CloudWorkspacePreview ReadWorkspacePreview(JsonElement root)
+    {
+        var workspace = root.GetProperty("workspace");
+        return new CloudWorkspacePreview(ReadRequiredString(workspace, "workspaceId"),
+            ReadRequiredString(workspace, "displayName"));
     }
 
     private async Task<JsonDocument> SendAsync(

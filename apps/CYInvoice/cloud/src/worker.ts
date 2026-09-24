@@ -11,6 +11,8 @@ interface Env {
   BREVO_API_KEY?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  WEB_LOGIN_EMPLOYEE_RATE_LIMIT: RateLimit;
+  WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
 }
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -30,7 +32,7 @@ type EmployeeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.2";
+const CLOUD_VERSION = "0.8.3";
 
 function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();

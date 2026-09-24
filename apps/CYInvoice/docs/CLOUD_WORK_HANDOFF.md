@@ -1,6 +1,12 @@
 # CYInvoice Cloud Work Handoff
 
-更新日期：2026-09-23
+更新日期：2026-09-24
+
+## 最新工作：首次開啟直接加入雲端
+
+使用者已定案：首次開啟先選「使用單機版」或「直接加入雲端」。單機版仍先建立本機超管，之後加入既有 Workspace 維持原本的本機管理員驗證＋配對碼＋全機帳號轉換。全新安裝直接加入不建本機帳號，可選：(1) 既有可信裝置產生的短效配對碼；(2) Workspace ID＋該 Workspace 的中央 SUPER_ADMIN 員工編號與密碼，再以其已驗證 Email OTP 確認。兩條路徑先確認 Workspace 名稱，加入後取得 Device identity、中央 Employee snapshot 與受保護快取，才切 Cloud authority。相同 Email／帳密在不同 Workspace 仍是各自獨立的員工帳號；以 Workspace ID 指定目標。Cloud 參考實作目前仍只允許 bootstrap 一個 Workspace，不宣稱已完成多 Workspace 實測。
+
+本分支新增 Windows 首次開啟／直連 UI 與 Cloud 0.8.3 端點；**尚未部署 Cloud 0.8.3，也尚未通過 Windows CI 或實機驗收**。並行開發已在同一 PR 加入 Cloud migration `0008` 的密碼復原功能，故此 Windows 新版要求 Schema `8`。development Worker 的即時版本和 D1 migration 狀態仍須由本機 Cloudflare MCP 唯讀查核。新機直連要求既有 Workspace 已完成第一台的中央 Employee cutover；若尚未完成，API 拒絕加入，不重建 Workspace 或另立本機超管。先完成原交接文件中的 D1 唯讀查核與 A 機帳號轉換，再由本機已連線的 Cloudflare MCP 部署經驗證的後端。請勿把本段工程 source 狀態當作已部署狀態。
 
 此文件供下一個長時間工作階段／ChatGPT Work 接手 CYInvoice V3 Cloud identity stage。它只描述目前狀態與下一步，不是永久規則來源；永久規則仍依 `REPOSITORY_RULES.md` → `REPO_POLICY.md` → `apps/CYInvoice/PROJECT_RULES.md`。
 
@@ -15,8 +21,8 @@
 - 接手時應先重新讀取 PR #73 的最新 head；不要依本文件硬編碼 branch head。
 - V2.6.4 Build 1 的 code-bearing head：`b6d0f1d8fa02d2fd182179c599208764d0320552`。
 - Cloud Check Run #211 已成功，engineering 測試包已產生；development deploy Run #6 已成功。
-- Cloud compatibility：Cloud `0.8.2` / API `1` / Schema `7`
-- Forward migrations：`0001`～`0007`
+- 最新 source compatibility：Cloud `0.8.3` / API `1` / Schema `8`；首次建立時的已驗證歷史版本仍為 Cloud `0.8.2` / Schema `7`。
+- Forward migrations：`0001`～`0008`
 
 禁止自行 merge、tag、Release、auto-merge；只有使用者明確授權後才可執行。
 

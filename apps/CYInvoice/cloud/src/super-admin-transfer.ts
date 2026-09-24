@@ -49,7 +49,7 @@ type OtpRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.2";
+const CLOUD_VERSION = "0.8.3";
 const TRANSFER_PURPOSE = "super_admin_transfer_authorization";
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;

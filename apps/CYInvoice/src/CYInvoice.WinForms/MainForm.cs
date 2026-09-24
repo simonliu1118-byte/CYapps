@@ -330,6 +330,33 @@ internal sealed class MainForm : Form
     private bool EnsureInitialSetup()
     {
         if (repository.HasAuthorityEmployees()) return true;
+        var settings = repository.Settings.LoadOrCreate();
+        if (settings.CloudMode != CloudModes.LocalOnly || settings.CloudWorkspaceId.Length != 0)
+        {
+            MessageBox.Show(this, "這台電腦已綁定雲端，但目前沒有可用的中央員工帳號快取。請檢查連線並完成帳號同步；不會重新建立本機超管。",
+                "雲端帳號尚未就緒", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Close();
+            return false;
+        }
+        if (!repository.Employees.HasEmployees())
+        {
+            var pending = repository.Settings.CloudPendingDeviceJoin(settings);
+            if (pending is null)
+            {
+                using var choice = new FirstRunModeForm();
+                if (choice.ShowDialog(this) != DialogResult.OK) { Close(); return false; }
+                if (!choice.DirectCloud) return RunLocalInitialSetup();
+            }
+            using var cloud = new CloudDirectJoinForm(repository);
+            if (cloud.ShowDialog(this) == DialogResult.OK && cloud.IdentityCompleted) return true;
+            Close();
+            return false;
+        }
+        return RunLocalInitialSetup();
+    }
+
+    private bool RunLocalInitialSetup()
+    {
         using var setup = new InitialSetupForm(repository);
         if (setup.ShowDialog(this) == DialogResult.OK) return true;
         Close();

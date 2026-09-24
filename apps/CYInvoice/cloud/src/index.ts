@@ -1,4 +1,5 @@
 import { createEmailSender } from "./email";
+import { verifyPassword } from "./web-auth";
 import {
   BOOTSTRAP_DEVICE_INSERT_SQL,
   BOOTSTRAP_WORKSPACE_INSERT_SQL,
@@ -15,6 +16,8 @@ interface Env {
   BREVO_API_KEY?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  WEB_LOGIN_EMPLOYEE_RATE_LIMIT: RateLimit;
+  WEB_LOGIN_IP_RATE_LIMIT: RateLimit;
 }
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -51,7 +54,7 @@ type OtpChallengeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.2";
+const CLOUD_VERSION = "0.8.3";
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
@@ -63,6 +66,7 @@ const OTP_HOURLY_LIMIT = 5;
 const OTP_MAX_ATTEMPTS = 5;
 const WORKSPACE_BOOTSTRAP_PURPOSE = "workspace_bootstrap";
 const DEVICE_PAIRING_PURPOSE_PREFIX = "device_pairing_authorization";
+const DIRECT_JOIN_PURPOSE = "direct_workspace_join";
 
 function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
@@ -515,6 +519,136 @@ async function createPairing(request: Request, env: Env, requestId: string): Pro
   return json(env, requestId, 201, { pairing: { code, expiresAt } });
 }
 
+async function directJoinWorkspace(env: Env, workspaceId: string): Promise<{ display_name: string } | null> {
+  const workspace = await env.DB.prepare(
+    "SELECT display_name FROM workspaces WHERE workspace_id = ?1 AND status = 'active' LIMIT 1"
+  ).bind(workspaceId).first<{ display_name: string }>();
+  if (!workspace) return null;
+  const ready = await env.DB.prepare(
+    `SELECT COUNT(*) AS total,
+            SUM(CASE WHEN role = 'SUPER_ADMIN' AND enabled = 1 THEN 1 ELSE 0 END) AS owners,
+            SUM(CASE WHEN email_verified_at IS NULL OR credential_verifier IS NULL
+                      OR credential_algorithm <> 'pbkdf2-sha256' OR credential_version < 1
+                     THEN 1 ELSE 0 END) AS invalid
+       FROM cloud_employees WHERE workspace_id = ?1`
+  ).bind(workspaceId).first<{ total: number; owners: number; invalid: number }>();
+  return ready && ready.total > 0 && ready.owners === 1 && ready.invalid === 0 ? workspace : null;
+}
+
+async function previewPairing(request: Request, env: Env, requestId: string): Promise<Response> {
+  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  if (!validPairingCode(body?.code))
+    return errorResponse(env, requestId, 400, "INVALID_PAIRING_CLAIM", "Pairing code is invalid.");
+  const hash = await sha256Hex(body.code.trim().toLowerCase());
+  const pairing = await env.DB.prepare(
+    `SELECT workspace_id FROM device_pairings
+      WHERE code_hash = ?1 AND consumed_at IS NULL AND expires_at > ?2 LIMIT 1`
+  ).bind(hash, new Date().toISOString()).first<{ workspace_id: string }>();
+  const workspace = pairing && await directJoinWorkspace(env, pairing.workspace_id);
+  if (!workspace) return errorResponse(env, requestId, 404, "PAIRING_NOT_FOUND", "Pairing code is invalid or Workspace is not ready.");
+  return json(env, requestId, 200, { workspace: { workspaceId: pairing!.workspace_id, displayName: workspace.display_name } });
+}
+
+async function directJoinOwner(env: Env, workspaceId: string, employeeNo: string) {
+  return env.DB.prepare(
+    `SELECT employee_id, email_normalized, email_verified_at, credential_verifier,
+            credential_algorithm, credential_version
+       FROM cloud_employees
+      WHERE workspace_id = ?1 AND employee_no = ?2 AND role = 'SUPER_ADMIN' AND enabled = 1 LIMIT 1`
+  ).bind(workspaceId, employeeNo).first<{
+    employee_id: string; email_normalized: string; email_verified_at: string | null;
+    credential_verifier: string | null; credential_algorithm: string | null; credential_version: number;
+  }>();
+}
+
+async function startDirectJoin(request: Request, env: Env, requestId: string): Promise<Response> {
+  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  const workspaceId = typeof body?.workspaceId === "string" ? body.workspaceId.trim() : "";
+  const employeeNo = typeof body?.employeeNo === "string" ? body.employeeNo.trim() : "";
+  const password = body?.password;
+  if (!/^ws_[0-9a-f-]{36}$/.test(workspaceId) || !/^\d{4}$/.test(employeeNo)
+      || typeof password !== "string" || password.length < 1 || password.length > 200)
+    return errorResponse(env, requestId, 400, "INVALID_DIRECT_JOIN", "Direct join request is invalid.");
+
+  const employeeLimit = await env.WEB_LOGIN_EMPLOYEE_RATE_LIMIT.limit({ key: `direct:${workspaceId}:${employeeNo}` });
+  const ip = request.headers.get("cf-connecting-ip")?.trim() || "unknown";
+  const ipLimit = await env.WEB_LOGIN_IP_RATE_LIMIT.limit({ key: `direct:ip:${ip}` });
+  if (!employeeLimit.success || !ipLimit.success)
+    return errorResponse(env, requestId, 429, "DIRECT_JOIN_RATE_LIMITED", "Too many attempts. Please try again later.");
+
+  const workspace = await directJoinWorkspace(env, workspaceId);
+  const owner = workspace && await directJoinOwner(env, workspaceId, employeeNo);
+  if (!owner || !owner.email_verified_at || owner.credential_algorithm !== "pbkdf2-sha256"
+      || !owner.credential_verifier || !await verifyPassword(password, owner.credential_verifier))
+    return errorResponse(env, requestId, 401, "DIRECT_JOIN_AUTH_FAILED", "Workspace administrator authentication failed.");
+
+  const scope = `${workspaceId}:${owner.employee_id}:${owner.credential_version}`;
+  const response = await createEmailChallenge(env, requestId, DIRECT_JOIN_PURPOSE, owner.email_normalized,
+    "CYInvoice 新裝置授權驗證碼",
+    code => `您正在授權 CYInvoice Workspace 加入一台新裝置。驗證碼是 ${code}，10 分鐘內有效。若非本人操作，請忽略此信。`,
+    scope);
+  if (!response.ok) return response;
+  const payload = await response.json() as Record<string, JsonValue>;
+  return json(env, requestId, 201, { ...payload, workspace: { workspaceId, displayName: workspace!.display_name } });
+}
+
+async function claimDirectJoin(request: Request, env: Env, requestId: string): Promise<Response> {
+  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  const workspaceId = typeof body?.workspaceId === "string" ? body.workspaceId.trim() : "";
+  const employeeNo = typeof body?.employeeNo === "string" ? body.employeeNo.trim() : "";
+  const challengeId = typeof body?.emailChallengeId === "string" ? body.emailChallengeId.trim().toLowerCase() : "";
+  const otp = typeof body?.emailOtp === "string" ? body.emailOtp.trim() : "";
+  if (!/^ws_[0-9a-f-]{36}$/.test(workspaceId) || !/^\d{4}$/.test(employeeNo)
+      || !/^otp_[0-9a-f-]{36}$/.test(challengeId) || !/^\d{6}$/.test(otp)
+      || !validDisplayName(body?.deviceDisplayName) || !validClientVersion(body?.clientVersion)
+      || !validDeviceToken(body?.deviceToken))
+    return errorResponse(env, requestId, 400, "INVALID_DIRECT_JOIN", "Direct join request is invalid.");
+
+  const tokenHash = await sha256Hex(normalizeDeviceToken(body.deviceToken));
+  const existing = await env.DB.prepare(
+    "SELECT device_id, workspace_id, display_name AS device_display_name FROM devices WHERE token_hash = ?1 LIMIT 1"
+  ).bind(tokenHash).first<PairingDeviceRow>();
+  if (existing) {
+    if (existing.workspace_id !== workspaceId)
+      return errorResponse(env, requestId, 409, "DEVICE_TOKEN_ALREADY_USED", "Device token belongs to a different Workspace.");
+    return json(env, requestId, 200, { recovered: true,
+      workspace: { workspaceId }, device: { deviceId: existing.device_id, displayName: existing.device_display_name } });
+  }
+
+  const workspace = await directJoinWorkspace(env, workspaceId);
+  const owner = workspace && await directJoinOwner(env, workspaceId, employeeNo);
+  if (!owner || !owner.email_verified_at)
+    return errorResponse(env, requestId, 409, "DIRECT_JOIN_NOT_READY", "Workspace administrator is not ready.");
+  const scope = `${workspaceId}:${owner.employee_id}:${owner.credential_version}`;
+  const verified = await consumeEmailChallenge(env, requestId, DIRECT_JOIN_PURPOSE, challengeId, otp, scope);
+  if (verified instanceof Response) return verified;
+  if (verified.email !== owner.email_normalized)
+    return errorResponse(env, requestId, 409, "DIRECT_JOIN_NOT_READY", "Administrator Email has changed.");
+  const now = new Date().toISOString();
+  const deviceId = `dev_${crypto.randomUUID()}`;
+  try {
+    await env.DB.prepare(
+      `INSERT INTO devices (device_id, workspace_id, display_name, token_hash, client_version,
+          status, employee_authority_state, employee_transition_completed_at, paired_at, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, 'active', 'cloud', ?6, ?6, ?6, ?6)`
+    ).bind(deviceId, workspaceId, body.deviceDisplayName.trim(), tokenHash, body.clientVersion.trim(), now).run();
+  } catch (error) {
+    const recovered = await env.DB.prepare(
+      "SELECT device_id, workspace_id, display_name AS device_display_name FROM devices WHERE token_hash = ?1 LIMIT 1"
+    ).bind(tokenHash).first<PairingDeviceRow>();
+    if (!recovered || recovered.workspace_id !== workspaceId) {
+      console.error("direct_join_failed", { requestId, error: error instanceof Error ? error.message : "unknown_error" });
+      return errorResponse(env, requestId, 409, "DIRECT_JOIN_CONFLICT", "Device join could not complete.");
+    }
+    return json(env, requestId, 200, { recovered: true,
+      workspace: { workspaceId }, device: { deviceId: recovered.device_id, displayName: recovered.device_display_name } });
+  }
+  return json(env, requestId, 201, {
+    workspace: { workspaceId, displayName: workspace!.display_name },
+    device: { deviceId, displayName: body.deviceDisplayName.trim() },
+  });
+}
+
 async function claimPairing(request: Request, env: Env, requestId: string): Promise<Response> {
   const body = await request.json<Record<string, unknown>>().catch(() => null);
   if (!body || !validPairingCode(body.code) || !validDisplayName(body.deviceDisplayName)
@@ -522,6 +656,7 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
     return errorResponse(env, requestId, 400, "INVALID_PAIRING_CLAIM", "Pairing claim is invalid.");
   }
   const normalizedCode = (body.code as string).trim().toLowerCase();
+  const directJoin = body.directJoin === true;
   const normalizedToken = normalizeDeviceToken(body.deviceToken as string);
   const codeHash = await sha256Hex(normalizedCode);
   const tokenHash = await sha256Hex(normalizedToken);
@@ -561,6 +696,8 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
   if (!pairing) return errorResponse(env, requestId, 404, "PAIRING_NOT_FOUND", "Pairing code is invalid.");
   if (pairing.consumed_at) return errorResponse(env, requestId, 409, "PAIRING_ALREADY_USED", "Pairing code has already been used.");
   if (pairing.expires_at <= now) return errorResponse(env, requestId, 410, "PAIRING_EXPIRED", "Pairing code has expired.");
+  if (directJoin && !await directJoinWorkspace(env, pairing.workspace_id))
+    return errorResponse(env, requestId, 409, "DIRECT_JOIN_NOT_READY", "Central Employee authority is not ready.");
 
   const deviceId = `dev_${crypto.randomUUID()}`;
   try {
@@ -568,8 +705,9 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
       env.DB.prepare(
         `INSERT INTO devices (
           device_id, workspace_id, display_name, token_hash, client_version,
-          status, pairing_id, paired_at, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7, ?7, ?7)`
+          status, pairing_id, employee_authority_state, employee_transition_completed_at,
+          paired_at, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?8, ?9, ?7, ?7, ?7)`
       ).bind(
         deviceId,
         pairing.workspace_id,
@@ -577,7 +715,7 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
         tokenHash,
         (body.clientVersion as string).trim(),
         pairing.pairing_id,
-        now),
+        now, directJoin ? "cloud" : "transitioning", directJoin ? now : null),
       env.DB.prepare(
         `UPDATE device_pairings
             SET consumed_at = ?1, consumed_by_device_id = ?2
@@ -651,6 +789,12 @@ export default {
         return await createPairing(request, env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/device-pairings/claim")
         return await claimPairing(request, env, requestId);
+      if (request.method === "POST" && url.pathname === "/v1/device-pairings/preview")
+        return await previewPairing(request, env, requestId);
+      if (request.method === "POST" && url.pathname === "/v1/direct-join/authorize")
+        return await startDirectJoin(request, env, requestId);
+      if (request.method === "POST" && url.pathname === "/v1/direct-join/claim")
+        return await claimDirectJoin(request, env, requestId);
       if (request.method === "GET" && url.pathname === "/v1/device")
         return await currentDevice(request, env, requestId);
       return errorResponse(env, requestId, 404, "NOT_FOUND", "Route not found.");

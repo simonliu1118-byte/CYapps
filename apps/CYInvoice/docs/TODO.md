@@ -121,7 +121,7 @@
 - [ ] Device revoke UI/API。
 - [ ] 所有 Device Token 遺失但 Recovery Email 可用時的 Recovery Device flow。
 - [ ] 所有 Device Token + Recovery Email 同時失效時的 reference-backend 人工維運文件。
-- [ ] Fresh-install 第二台是否需要額外 first-run 分流，待多機實測後決定最小 UI；不得因此另建第二套帳號模型。
+- [ ] 驗收 fresh-install 首次分流：單機版原流程；直接加入可選配對碼或 Workspace 識別碼＋該空間超管帳密／Email OTP，不建立本機帳號。先確認 A 機中央帳號已完成 cutover，再部署 Cloud 0.8.3、使用 Windows 測試包驗證兩條路徑及斷線恢復。
 
 ### 7.3 跨機 Work Item / Sync
 

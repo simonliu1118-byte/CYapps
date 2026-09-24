@@ -2,6 +2,13 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.5 — 2026/09/24（工程測試中，未正式 Release）
+
+- 首次啟動選擇單機版或直接加入既有雲端 Workspace；直接加入不建立本機帳號，可選配對碼，或 Workspace 識別碼＋該 Workspace 超管帳密／Email OTP。
+- 直接加入後先核對 Device identity、中央 Employee authority 並同步受保護的中央帳號快取，成功後才切換雲端模式；保留 Pending Device Token 供網路不明結果恢復。
+- 原本「單機版之後加入雲端」的本機管理員驗證與完整 Employee Transition 保留；配對碼只授權裝置，不授予個人權限。
+- Cloud implementation `0.8.3`、API `1`／Schema `8`；已整合併行進度的密碼復原 migration `0008`。新增直接加入端點與超管登入速率限制。待 PR CI、development 部署及 Windows A／B 實測。
+
 ## V2.6.4 Build 1 — 2026/09/22（工程測試版，未正式 Release）
 
 - 修正第一個 Workspace 建立 SQL 的欄位和值數量不一致，避免 Email OTP 驗證成功後 D1 整批回滾；新增直接套用 Schema 7 並執行正式 bootstrap SQL 的回歸測試。

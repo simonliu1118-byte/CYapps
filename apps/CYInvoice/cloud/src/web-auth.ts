@@ -23,7 +23,7 @@ type EmployeeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.2";
+const CLOUD_VERSION = "0.8.3";
 const APPLICATION_POLICIES: Record<string, ReadonlySet<string>> = {
   CYAccountingWeb: new Set(["SUPER_ADMIN", "ADMIN"]),
 };
@@ -94,7 +94,7 @@ function fromHex(value: string): Uint8Array | null {
   return bytes;
 }
 
-async function verifyPassword(password: string, verifier: string): Promise<boolean> {
+export async function verifyPassword(password: string, verifier: string): Promise<boolean> {
   const parts = verifier.split("$");
   if (parts.length !== 4 || parts[0] !== "pbkdf2-sha256") return false;
   const iterations = Number.parseInt(parts[1], 10);

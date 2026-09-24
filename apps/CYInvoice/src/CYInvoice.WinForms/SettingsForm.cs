@@ -228,7 +228,7 @@ internal sealed class SettingsForm : Form
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException("目前無法讀取這台電腦的 Cloud Device Token。");
 
-            using var form = new CloudDeviceManagementForm(settings.CloudBaseUrl, token);
+            using var form = new CloudDeviceManagementForm(settings.CloudBaseUrl, token, settings.CloudWorkspaceId);
             form.ShowDialog(this);
         }
         catch (Exception error)
