@@ -29,7 +29,7 @@
 - [x] V0.17.0 portable backup set 改為 `manifest.json` + `data.json`；包含 App/schema version、資料筆數、SHA-256 與 byte size，上傳後兩檔均需 read-back 驗證成功才記為有效備份。
 - [x] 備份排程維持每日 03:30（台灣時間）；保留政策為最近 **14 天**，程式依 storage object 建立時間清理過期備份。
 - [x] GCS 基礎設施準備：CYAccountingWeb 使用獨立 backup dataset 與獨立 least-privilege Service Account；bucket-scoped IAM 已驗證，Cloudflare Worker 已建立 `GCS_BUCKET` 與 `GCS_SERVICE_ACCOUNT_JSON` Secrets。Public Git 不保存正式 resource identifiers 或 credential。
-- [ ] **自動備份上線驗收**：V0.17.0 部署後執行首次實機備份，確認 Service Account JWT、GCS put/get/list/delete、`manifest.json` + `data.json` read-back、SHA-256、byte size、row count 與 D1 `backup_runs` 成功紀錄。
+- [x] **自動備份上線驗收（2026-09-26）**：V0.17.0 正式 Worker 首次實機備份成功；GCS 實際建立 `data.json` + `manifest.json`，Web UI 成功紀錄與 GCS 物件均確認存在，read-back SHA-256、byte size、row count、App/schema version 與 manifest 驗證均通過。
 - [ ] Google Cloud Billing 設定每月低額預算警示（目標 NT$100）。
 - [ ] 建議在 GCS Bucket 另設 14 天 Object Lifecycle 刪除規則，作為程式 retention 之外的第二層保護。
 - [ ] Cloud Storage 復原功能 **僅 `SUPER_ADMIN` 可執行**；`ADMIN` 與 `EMPLOYEE` 均不可復原。
