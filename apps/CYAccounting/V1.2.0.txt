@@ -6,6 +6,7 @@ Current source on Phase 1 visual-alignment branch; test artifact, not a formal R
 - Build 6 moves program/version information to a low-presence main-window footer and uses the repository-policy notice: Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.; Settings keeps the destructive reset action in a dedicated Account Reset section.
 - Build 6 changes Income Category / Expense Category to large equal-width conventional QTabWidget tabs with clear selected-page chrome instead of the header-only underline treatment; native QTabWidget lifecycle and keyboard behavior remain intact.
 - Build 6 aligns secondary-dialog icon suppression with CYInvoice's proven ShowIcon=false intent: Qt caption flags are untouched, WS_EX_DLGMODALFRAME is applied to the HWND before first show and reapplied after show, and no transparent/empty icon workaround is used.
+- Build 6 visual regression checks are scoped to the category-manager tabs so the main Input / Ledger header tabs can retain their canonical Accent underline independently.
 - Build 5 preserves each QDialog's default native window flags and working Close button while applying icon suppression only at the Windows non-client HWND layer; secondary-dialog icon removal must never change or disable title-bar behavior.
 - Build 5 changes Month Statistics to the same no-explicit-title-fill, bold GroupBox legend treatment used by the other section titles.
 - Aligned CYAccounting with the canonical CY Desktop Visual Guide Phase 1 using the Blue Theme.
