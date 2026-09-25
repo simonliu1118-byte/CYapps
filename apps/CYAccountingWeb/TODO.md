@@ -30,12 +30,19 @@
 - [x] 備份排程維持每日 03:30（台灣時間）；保留政策為最近 **14 天**，程式依 storage object 建立時間清理過期備份。
 - [x] GCS 基礎設施準備：CYAccountingWeb 使用獨立 backup dataset 與獨立 least-privilege Service Account；bucket-scoped IAM 已驗證，Cloudflare Worker 已建立 `GCS_BUCKET` 與 `GCS_SERVICE_ACCOUNT_JSON` Secrets。Public Git 不保存正式 resource identifiers 或 credential。
 - [x] **自動備份上線驗收（2026-09-26）**：V0.17.0 正式 Worker 首次實機備份成功；GCS 實際建立 `data.json` + `manifest.json`，Web UI 成功紀錄與 GCS 物件均確認存在，read-back SHA-256、byte size、row count、App/schema version 與 manifest 驗證均通過。
+- [x] **Tiered Backup Phase A**：凍結已驗收 V0.17 GCS production path；GCS provider、Secrets、每日 03:30 與 14 天 retention 在 Phase C acceptance gate 前均保留，作為 rollback / safety path。
+- [x] **Tiered Backup Phase B**：package creation 與 provider storage execution 分離；單一 BackupSet 可重複交給 provider 寫入而不重新 export D1；GCS generation 已封裝為 opaque `versionToken`；新增 V0.17 format compatibility 與 export-once tests。Production output 仍維持 `CYAccountingWebBackupSet / formatVersion 2`。
+- [ ] **Tiered Backup Phase C**：新增獨立 `R2BackupStorageProvider` 與 app-scoped R2 dataset；parallel validation 期間維持每日 03:30、D1 export 一次、同一份 bytes 寫入／驗證 R2 + GCS；GCS 仍每日／14 天，R2 30 天。需連續至少 14 次 scheduled production backups 雙 provider 均驗證成功才可進 Phase D。
+- [ ] **Tiered Backup Phase D**：Phase C acceptance 後才切成 R2 每日、GCS 每週三／週日 cross-cloud DR replication，GCS retention 26 週／182 天；不得 cutover 當天大量刪除既有 V0.17 daily GCS objects。
+- [ ] **Tiered Backup Phase E**：per-App tiered model 穩定且 CY Web 準備完成後，再逐步導入 shared `CY Backup Service / Worker`；direct GCS path 在 shared-service acceptance 前保留 rollback 能力。
+- [ ] Logical backup / provider-copy catalog：一個 logical backup 只列一次，R2/GCS copy health 分開呈現；schema 可由既有 `backup_runs` 漸進遷移，不可把 provider row 當成 backup identity。
+- [ ] 共通 outer format `CYBackupSet / formatVersion 1` 僅能走 versioned compatibility path；既有 V0.17 GCS objects 不改寫，舊格式 reader/validator 保留到 compatibility window 結束。
 - [ ] Google Cloud Billing 設定每月低額預算警示（目標 NT$100）。
-- [ ] 建議在 GCS Bucket 另設 14 天 Object Lifecycle 刪除規則，作為程式 retention 之外的第二層保護。
+- [ ] GCS provider lifecycle 僅作第二層 guard；若啟用，期限必須長於當前 application policy，且 migration 期間不得提前清除仍可能需要 replication／rollback 的來源備份。
 - [ ] Cloud Storage 復原功能 **僅 `SUPER_ADMIN` 可執行**；`ADMIN` 與 `EMPLOYEE` 均不可復原。
 - [ ] 復原採雙重確認；第二次必須明確提示將覆蓋目前 D1 資料，且 Worker/API server-side authorization 為權威，不得只靠 UI 隱藏。
 - [ ] 復原前驗證備份格式、App/schema version、manifest 與完整性；復原操作需留下操作者、時間、backup identifier 與結果等 audit evidence。
-- [ ] 驗證「Cloudflare/D1 故障後，以 Cloud Storage 最近有效備份重建新 D1」的完整災難復原演練。
+- [ ] 驗證「R2 不可用時可由有效 GCS copy 載入」與「Cloudflare/D1 故障後，以 GCS cross-cloud DR 備份重建新 D1」的完整災難復原演練。
 - [ ] Web UI **不提供「清除全部帳務資料／期初餘額」功能，也不提供對應一般應用 API**。若真的需要整庫清理，視為平台管理／維運操作，直接在 Cloudflare／D1 管理層處理。
 
 ## UI／UX 與多裝置支援
@@ -56,6 +63,6 @@
 - [ ] 未來可評估將 CYAccountingWeb 納入 **Chihyuan 企業管理系統**，作為其中的記帳／財務模組之一。
 - [ ] 在真正整合前，CYAccountingWeb 仍維持獨立部署、獨立帳務資料庫、獨立 backup dataset／GCS service identity 與清楚 API 邊界，避免為尚未定案的企業入口過早耦合。
 - [ ] 若未來 Chihyuan 企業管理系統整合多個 CY 工具，再統一規劃入口、導覽、角色／App 權限與共用帳號體驗。
-- [ ] Backup 整合優先採「各 App → 共用 CY Backup Service／Worker → GCS」；不以直接共用同一把 GCS credential 作為整合方式。
-- [ ] 即使改由共用 Backup Service 管理，各 App 的備份資料仍維持邏輯隔離與獨立還原能力。
+- [ ] Backup 整合優先採「各 App → 共用 CY Backup Service／Worker → app-scoped R2/GCS」；不以直接共用同一把廣權限 storage credential 作為整合方式。
+- [ ] 即使改由共用 Backup Service 管理，各 App 的備份資料仍維持邏輯隔離與獨立還原能力；caller identity 必須由 server-side mapping 決定可存取 dataset，不得只信任 caller 傳入的 `appId`。
 - [ ] 目前共用帳號權威仍暫放 CYInvoice Cloud；等更多程式實際共用後，再評估抽出獨立的 CY Identity／SSO 服務。
