@@ -3,6 +3,7 @@ import { handleV11Api } from './v11-tools.js';
 import { handleV12Api } from './v12-tools.js';
 import { handleV13Api } from './v13-export.js';
 import { handleV15Api } from './v15-import.js';
+import { handleV16Api, handleV16OAuthCallback, runScheduledBackup } from './v16-backup.js';
 
 const SESSION_COOKIE = 'cyaccounting_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -25,6 +26,9 @@ export default {
     }
 
     try {
+      const v16Callback = await handleV16OAuthCallback(request, env);
+      if (v16Callback) return v16Callback;
+
       if (url.pathname === '/api/auth/login' && request.method === 'POST') {
         return handleLogin(request, env);
       }
@@ -44,6 +48,9 @@ export default {
       const session = await sessionFromRequest(request, env.DB);
       if (!session) return json({ ok: false, error: '尚未登入。', code: 'AUTH_REQUIRED' }, 401);
 
+      const v16Response = await handleV16Api(request, env, session);
+      if (v16Response) return v16Response;
+
       const v15Response = await handleV15Api(request, env);
       if (v15Response) return v15Response;
 
@@ -58,9 +65,13 @@ export default {
 
       return coreWorker.fetch(request, env);
     } catch (error) {
-      console.error('cyaccounting_identity_failed', error instanceof Error ? error.message : 'unknown_error');
-      return json({ ok: false, error: '中央帳號服務處理失敗。' }, 500);
+      console.error('cyaccounting_request_failed', error instanceof Error ? error.message : 'unknown_error');
+      return json({ ok: false, error: '系統處理失敗，請稍後再試。' }, 500);
     }
+  },
+
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(runScheduledBackup(env));
   }
 };
 

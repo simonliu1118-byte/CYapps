@@ -6,7 +6,9 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": [
+      "/api/*"
+    ]
   },
   "d1_databases": [
     {
@@ -20,5 +22,10 @@
       "binding": "IDENTITY",
       "service": "cyinvoice-cloud-dev"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": [
+      "30 19 * * *"
+    ]
+  }
 }

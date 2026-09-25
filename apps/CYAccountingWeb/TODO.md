@@ -23,13 +23,13 @@
 
 ## 備份／復原與高風險操作
 
-- [ ] Cloudflare D1 為 CYAccountingWeb 唯一正式帳務資料來源；Google Drive 僅作為 Cloudflare 之外的異地／災難復原備份，不作 live database 或雙向同步資料庫。
-- [ ] **備份必須自動執行**：由系統定期從 D1 產生可攜、可驗證且有版本資訊的帳務備份檔，再自動上傳到 Google Drive 專用 CYAccountingWeb 備份資料夾；日常安全不依賴使用者手動按備份。
-- [ ] 定義自動備份頻率、失敗重試、保留策略、檔名、版本、建立時間、資料筆數／校驗資訊及完整性驗證；不得只宣稱上傳成功就視為有效備份。
+- [x] 備份架構：Cloudflare D1 為唯一正式帳務資料來源；Google Drive 僅作異地／災難復原備份，不作 live database 或雙向同步資料庫（V0.16.0）。
+- [ ] **自動備份上線驗收**：V0.16.0 已完成每日 03:30（台灣時間）Cron、D1 可攜 JSON 封裝、Google Drive 上傳與回讀 SHA-256 驗證；待完成 Google OAuth／Cloudflare Secrets 與首次實機備份後勾選。
+- [x] 自動備份規格：每日 03:30（台灣時間）、保留最近 30 份、版本化 JSON、資料筆數、data SHA-256、file SHA-256；上傳後必須由 Drive 回讀並比對 SHA-256 才記為成功（V0.16.0）。
 - [ ] Google Drive 復原功能 **僅 `SUPER_ADMIN` 可執行**；`ADMIN` 與 `EMPLOYEE` 均不可復原。
 - [ ] 復原前必須再次確認高風險操作，並先驗證備份格式、版本與完整性，再允許重建／復原 D1；不得因已登入超管就直接無確認覆蓋資料。
 - [ ] 驗證「Cloudflare/D1 故障後，以 Google Drive 最近有效備份重建新 D1」的完整災難復原演練。
-- [ ] Google Drive 連線憑證、refresh token、client secret 等不得進 Public repo；正式做法需放在受保護的執行環境／Secrets。
+- [ ] Google Drive Secrets 實機設定：程式已要求 OAuth client ID／client secret 使用 Cloudflare Secrets，refresh token 以 Secret 金鑰 AES-256-GCM 加密後才存 D1；待首次部署後完成人工設定與驗收。
 - [ ] Web UI **不提供「清除全部帳務資料／期初餘額」功能，也不提供對應一般應用 API**。若真的需要整庫清理，視為平台管理／維運操作，直接在 Cloudflare／D1 管理層處理。
 
 ## UI／UX 與多裝置支援
