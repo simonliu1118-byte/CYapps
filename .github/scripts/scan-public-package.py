@@ -26,7 +26,7 @@ FORBIDDEN_NAMES = [
 ]
 
 # Match actual-looking values, not environment-variable names or placeholders.
-TEXT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+GENERAL_TEXT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("private key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.I)),
     ("Google OAuth client secret", re.compile(r"\bGOCSPX-[A-Za-z0-9_-]{12,}\b")),
     ("Google refresh token", re.compile(r"\b1//[A-Za-z0-9._/-]{20,}\b")),
@@ -36,6 +36,9 @@ TEXT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("OAuth client secret assignment", re.compile(r"(?im)\b(?:GOOGLE_DRIVE_CLIENT_SECRET|GOOGLE_CLIENT_SECRET|client_secret)\b[\"']?\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9._/-]{16,}")),
     ("token encryption key assignment", re.compile(r"(?im)\b(?:GOOGLE_DRIVE_TOKEN_KEY|GOOGLE_TOKEN_KEY|TOKEN_ENCRYPTION_KEY)\b[\"']?\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9+/=_-]{24,}")),
     ("refresh token assignment", re.compile(r"(?im)\brefresh_token\b[\"']?\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9._/-]{20,}")),
+]
+
+WRANGLER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("Cloudflare D1 concrete database id", re.compile(r"(?is)[\"']database_id[\"']\s*:\s*[\"'](?!__|<)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[\"']")),
     ("Cloudflare service binding concrete service", re.compile(r"(?is)[\"']service[\"']\s*:\s*[\"'](?!__|<)[A-Za-z0-9][A-Za-z0-9._-]{2,}[\"']")),
 ]
@@ -64,8 +67,10 @@ def decoded_variants(data: bytes) -> Iterable[str]:
 
 
 def scan_bytes(label: str, data: bytes, findings: list[str]) -> None:
+    normalized_label = normalize_name(label).lower()
+    contextual_patterns = WRANGLER_PATTERNS if "/wrangler." in f"/{normalized_label}" or normalized_label.startswith("wrangler.") else []
     for text in decoded_variants(data):
-        for description, pattern in TEXT_PATTERNS:
+        for description, pattern in [*GENERAL_TEXT_PATTERNS, *contextual_patterns]:
             if pattern.search(text):
                 findings.append(f"{description}: {label}")
                 return
