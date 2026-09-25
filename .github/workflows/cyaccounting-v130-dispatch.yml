@@ -1,0 +1,25 @@
+name: CYAccounting V1.3.0 Release Dispatch (temporary)
+
+on:
+  push:
+    branches:
+      - cyaccounting/v1.3.0-release-closeout
+    paths:
+      - .github/workflows/cyaccounting-v130-dispatch.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch formal CYAccounting release from main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run cyaccounting-release.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main
+          echo "Dispatched CYAccounting Stable Release from main."
