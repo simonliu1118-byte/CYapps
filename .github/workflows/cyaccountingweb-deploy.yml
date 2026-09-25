@@ -45,6 +45,7 @@ jobs:
           node --check src/app.js
           node --check src/v11-tools.js
           node --check src/v12-tools.js
+          node --check src/v13-export.js
           node --check public/auth.js
           node --check public/app.js
           node --check public/v03.js
@@ -55,6 +56,7 @@ jobs:
           node --check public/v091.js
           node --check public/v011.js
           node --check public/v012.js
+          node --check public/v013.js
 
   deploy:
     if: github.event_name != 'pull_request'
