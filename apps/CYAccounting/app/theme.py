@@ -74,6 +74,10 @@ QGroupBox#statsCard {{
     margin-top: 12px;
     padding: 10px 10px 8px 10px;
     background: {NEUTRAL_WHITE};
+    font-weight: 700;
+}}
+QGroupBox#statsCard QWidget {{
+    font-weight: normal;
 }}
 QGroupBox#confirmationCard, QGroupBox#inputSection, QGroupBox#incomeSection, QGroupBox#expenseSection {{
     border: 1px solid {NEUTRAL_BORDER};
@@ -126,9 +130,44 @@ QWidget#inputPage QPushButton#primaryButton, QWidget#inputPage QPushButton#accou
 }}
 
 QGroupBox#statsCard::title {{
-    left: 12px;
-    padding: 0 5px;
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 2px;
+    color: {TEXT_PRIMARY};
+    font-size: 11.5pt;
+    font-weight: 700;
+}}
+
+/* Category manager uses the canonical Header-only Custom tab direction:
+   large/equal hit targets, low visual presence, stronger selected weight and
+   a 2px Accent underline. The QTabWidget still owns page lifecycle/keyboard. */
+QTabWidget#categoryManagerTabs::pane {{
+    border: 1px solid {NEUTRAL_BORDER};
+    border-radius: 4px;
     background: {NEUTRAL_WHITE};
+    top: -1px;
+}}
+QTabWidget#categoryManagerTabs QTabBar::tab {{
+    min-height: 36px;
+    min-width: 140px;
+    padding: 8px 18px;
+    margin: 0;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: {TEXT_SECONDARY};
+    font-size: 11.5pt;
+    font-weight: 600;
+}}
+QTabWidget#categoryManagerTabs QTabBar::tab:selected {{
+    color: {TEXT_PRIMARY};
+    border-bottom: 2px solid {ACCENT};
+    font-weight: 700;
+}}
+QTabWidget#categoryManagerTabs QTabBar::tab:hover:!selected {{
+    color: {ACCENT_HOVER};
+    background: {NEUTRAL_WINDOW};
 }}
 QLineEdit, QComboBox, QSpinBox, QDateEdit {{
     border: 1px solid {NEUTRAL_BORDER};

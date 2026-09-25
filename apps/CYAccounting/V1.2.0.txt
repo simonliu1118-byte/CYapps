@@ -1,8 +1,11 @@
 Version: V1.2.0
-Build: 4
-Date: 2026/09/25
+Build: 5
+Date: 2026/09/26
 
 Current source on Phase 1 visual-alignment branch; test artifact, not a formal Release:
+- Build 5 restores the native secondary-dialog system menu and Close button while keeping the Windows no-icon treatment; no secondary dialog may disable the title-bar X as a side effect of icon suppression.
+- Build 5 changes Month Statistics to the same no-explicit-title-fill, bold GroupBox legend treatment used by the other section titles.
+- Build 5 gives Income Category / Expense Category large equal-width Header-only Custom tabs: neutral inactive text, stronger selected weight and a 2px Accent underline, while retaining QTabWidget page lifecycle and keyboard behavior.
 - Aligned CYAccounting with the canonical CY Desktop Visual Guide Phase 1 using the Blue Theme.
 - Main tabs keep the lower-presence accent-underline header treatment, while a thin neutral workspace frame groups the active page content without restoring the old heavy QTabWidget chrome.
 - Input page follows a dedicated data-entry density: primary entry fields remain deliberately larger and more legible (11pt, at least 30px high) because entering data is the primary task.

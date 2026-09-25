@@ -503,6 +503,7 @@ class CategoryManagerDialog(QDialog):
         super().__init__(parent)
         self.db = db
         self.setWindowTitle("收入支出科目管理")
+        self.setObjectName("categoryManagerDialog")
         self.setModal(True)
         # The first action row defines the useful width; remove the empty right side.
         self.resize(400, 520)
@@ -512,6 +513,9 @@ class CategoryManagerDialog(QDialog):
         note.setWordWrap(True); note.setStyleSheet("color:#667085;")
         outer.addWidget(note)
         tabs = QTabWidget()
+        tabs.setObjectName("categoryManagerTabs")
+        tabs.tabBar().setExpanding(True)
+        tabs.tabBar().setUsesScrollButtons(False)
         tabs.addTab(CategoryPage(db, "income"), "收入科目")
         tabs.addTab(CategoryPage(db, "expense"), "支出科目")
         outer.addWidget(tabs, 1)

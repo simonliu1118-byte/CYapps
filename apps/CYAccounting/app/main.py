@@ -248,9 +248,10 @@ class ChineseStandardButtonFilter(QObject):
 
     @staticmethod
     def _prepare_secondary_dialog_chrome(dialog: QDialog) -> None:
-        # Use a true dialog title-bar configuration rather than a transparent
-        # icon.  A transparent HICON still reserves the icon slot and leaves
-        # the title visibly indented on Windows.
+        # Keep the native Windows system menu: the Close button depends on it.
+        # The icon is removed separately at the native non-client level after
+        # the HWND exists.  Do not use CustomizeWindowHint here; doing so can
+        # leave the X button disabled even when WindowCloseButtonHint is set.
         if dialog.property("cySecondaryChromePrepared"):
             return
         dialog.setProperty("cySecondaryChromePrepared", True)
@@ -258,11 +259,11 @@ class ChineseStandardButtonFilter(QObject):
         try:
             flags = dialog.windowFlags()
             flags |= (
-                Qt.WindowType.CustomizeWindowHint
-                | Qt.WindowType.WindowTitleHint
+                Qt.WindowType.WindowTitleHint
+                | Qt.WindowType.WindowSystemMenuHint
                 | Qt.WindowType.WindowCloseButtonHint
             )
-            flags &= ~Qt.WindowType.WindowSystemMenuHint
+            flags &= ~Qt.WindowType.CustomizeWindowHint
             dialog.setWindowFlags(flags)
         except Exception:
             pass
@@ -289,8 +290,14 @@ class ChineseStandardButtonFilter(QObject):
                 SWP_NOACTIVATE = 0x0010
                 SWP_FRAMECHANGED = 0x0020
 
-                ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-                user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_DLGMODALFRAME)
+                # WS_EX_DLGMODALFRAME is the native no-caption-icon style.
+                # It does not remove WS_SYSMENU, so the Windows Close button
+                # remains active. WM_SETICON(NULL) then clears any inherited
+                # QApplication/window icon after the native handle exists.
+                get_ex_style = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
+                set_ex_style = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+                ex_style = get_ex_style(hwnd, GWL_EXSTYLE)
+                set_ex_style(hwnd, GWL_EXSTYLE, ex_style | WS_EX_DLGMODALFRAME)
                 user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, 0)
                 user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, 0)
                 user32.SetWindowPos(

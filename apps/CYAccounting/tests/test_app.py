@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import date
 from unittest.mock import patch
 
-from PySide6.QtWidgets import QApplication, QLabel, QGroupBox, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QGroupBox, QPushButton, QTabWidget
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtCore import Qt
 
@@ -152,6 +152,18 @@ def test_account_manager_controls_and_titles():
     category_buttons = [b.text() for b in category_dlg.findChildren(QPushButton)]
     assert '關閉' not in category_buttons
     assert {'↑', '↓', '新增科目', '修改', '刪除', '新增大分類', '移至其他大分類'} <= set(category_buttons)
+    category_tabs = category_dlg.findChild(QTabWidget, 'categoryManagerTabs')
+    assert category_tabs is not None
+    assert category_tabs.count() == 2
+    assert category_tabs.tabBar().expanding() is True
+
+    # A secondary dialog must keep the native system menu because Windows uses
+    # it to back the caption Close button. Build 4 accidentally removed it.
+    main_module.ChineseStandardButtonFilter._prepare_secondary_dialog_chrome(dlg)
+    chrome_flags = dlg.windowFlags()
+    assert bool(chrome_flags & Qt.WindowType.WindowSystemMenuHint)
+    assert bool(chrome_flags & Qt.WindowType.WindowCloseButtonHint)
+    assert not bool(chrome_flags & Qt.WindowType.CustomizeWindowHint)
     combo = CategoryComboBox()
     assert combo.lineEdit().hasFrame() is False
     opening_dlg = OpeningBalanceDialog(db, '2026/07')
