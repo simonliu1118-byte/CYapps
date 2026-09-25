@@ -65,43 +65,60 @@ jobs:
       - name: Publish Windows x64 portable package
         shell: pwsh
         run: |
-          Remove-Item -Recurse -Force package -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force package,publish-staging -ErrorAction SilentlyContinue
+          $staging = "publish-staging"
           $outDir = Join-Path "package" "CYERPAutoInput"
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:Version=$env:CYERPAUTOINPUT_VERSION -o $outDir
-          if (-not (Test-Path "$outDir/CYERPAutoInput.exe")) { throw "CYERPAutoInput.exe was not produced" }
+
+          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -p:Version=$env:CYERPAUTOINPUT_VERSION -o $staging
+          if (-not (Test-Path "$staging/CYERPAutoInput.exe")) { throw "CYERPAutoInput.exe was not produced" }
+
+          Copy-Item "$staging/CYERPAutoInput.exe" "$outDir/CYERPAutoInput.exe"
+          Copy-Item VERSION "$outDir/VERSION"
+          Copy-Item BUILD "$outDir/BUILD"
 
           New-Item -ItemType Directory -Path "$outDir/Data" -Force | Out-Null
           Copy-Item settings.example.json "$outDir/Data/settings.example.json"
-          Copy-Item README.md "$outDir/README.md"
-          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/THIRD_PARTY_NOTICES.md"
-          Copy-Item VERSION "$outDir/VERSION"
-          Copy-Item BUILD "$outDir/BUILD"
-          Get-FileHash "$outDir/CYERPAutoInput.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  CYERPAutoInput.exe" } | Set-Content "$outDir/SHA256.txt"
 
-      - name: Verify single-extraction package structure
+          New-Item -ItemType Directory -Path "$outDir/docs" -Force | Out-Null
+          Copy-Item README.md "$outDir/docs/README.md"
+          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/docs/THIRD_PARTY_NOTICES.md"
+
+          New-Item -ItemType Directory -Path "$outDir/runtime/ocr" -Force | Out-Null
+          Copy-Item "$staging/runtime/ocr/*.onnx" "$outDir/runtime/ocr/"
+
+      - name: Verify packaged executable and structure
         shell: pwsh
         run: |
-          $roots = @(Get-ChildItem -LiteralPath package -Force)
-          if ($roots.Count -ne 1 -or $roots[0].Name -ne "CYERPAutoInput" -or -not $roots[0].PSIsContainer) {
-            throw "Download artifact must contain only the CYERPAutoInput/ folder"
-          }
           $root = "package/CYERPAutoInput"
           $required = @(
             "$root/CYERPAutoInput.exe",
             "$root/BUILD",
             "$root/VERSION",
-            "$root/README.md",
-            "$root/THIRD_PARTY_NOTICES.md",
             "$root/Data/settings.example.json",
+            "$root/docs/README.md",
+            "$root/docs/THIRD_PARTY_NOTICES.md",
             "$root/runtime/ocr/ch_PP-OCRv5_det_mobile.onnx",
             "$root/runtime/ocr/ch_PP-OCRv5_rec_mobile.onnx",
-            "$root/runtime/ocr/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx",
-            "$root/runtime/ocr/SHA256.txt"
+            "$root/runtime/ocr/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"
           )
           foreach ($path in $required) {
             if (!(Test-Path $path)) { throw "Missing packaged file: $path" }
           }
+
+          $unexpected = @(Get-ChildItem -LiteralPath $root -Recurse -File | Where-Object { $_.Extension -in @('.pdb','.lib','.dll') -or $_.Name -match 'SHA256' })
+          if ($unexpected.Count -gt 0) {
+            throw "Unexpected engineering files in user package: $($unexpected.FullName -join ', ')"
+          }
+
+          $roots = @(Get-ChildItem -LiteralPath package -Force)
+          if ($roots.Count -ne 1 -or $roots[0].Name -ne "CYERPAutoInput" -or -not $roots[0].PSIsContainer) {
+            throw "Download artifact must contain only the CYERPAutoInput/ folder"
+          }
+
+          & "$root/CYERPAutoInput.exe" --vision-self-test
+          if ($LASTEXITCODE -ne 0) { throw "Packaged EXE vision self-test failed with code $LASTEXITCODE" }
+          Remove-Item -Recurse -Force "$root/logs" -ErrorAction SilentlyContinue
 
       - name: Upload engineering package
         uses: actions/upload-artifact@v7

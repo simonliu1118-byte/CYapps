@@ -45,9 +45,8 @@ internal static class ScreenCapture
     }
 }
 
-// Compatibility name retained through the V0.1.0 rewrite so the established
-// vision call sites stay small. This class no longer uses Windows.Media.Ocr;
-// Build 11+ replaces it with local PP-OCRv5 inference through ONNX Runtime.
+// Compatibility name retained through the V0.1.0 rewrite so established vision
+// call sites remain small. Build 11+ uses local PP-OCRv5 inference, not Windows OCR.
 internal sealed class WindowsOcrService
 {
     private readonly AppLogger _log;
@@ -220,6 +219,8 @@ internal sealed class GridVisionService
         _log = log;
     }
 
+    internal static bool TryGetLogicalOrder(int erpColumn, out int order) => LogicalColumnOrder.TryGetValue(erpColumn, out order);
+
     public async Task<GridGeometry> AnalyzeDetailGridAsync(nint gridHwnd, CancellationToken cancellationToken)
     {
         if (!NativeMethods.GetWindowRect(gridHwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
@@ -227,22 +228,27 @@ internal sealed class GridVisionService
 
         using var image = ScreenCapture.Capture(rect.ToRectangle());
         var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
-        var geometry = new GridGeometry { ScreenRect = rect.ToRectangle() };
+        LogDetailHeaderDiagnostics(tokens, image.Height);
 
+        var geometry = new GridGeometry { ScreenRect = rect.ToRectangle() };
         var headerBottom = 0;
         foreach (var pair in ColumnAliases)
         {
             var match = FindPhrase(tokens, pair.Value);
-            if (match is null) continue;
+            if (match is null)
+            {
+                _log.Info("vision", $"OCR_HEADER_MATCH logical_col={pair.Key} label={pair.Value[0]} found=false");
+                continue;
+            }
             geometry.ColumnX[pair.Key] = match.Value.Left + match.Value.Width / 2;
             headerBottom = Math.Max(headerBottom, match.Value.Bottom);
+            _log.Info("vision", $"OCR_HEADER_MATCH logical_col={pair.Key} label={pair.Value[0]} found=true rect={match.Value.Left},{match.Value.Top},{match.Value.Width},{match.Value.Height}");
         }
 
         if (!geometry.ColumnX.ContainsKey(0) || !geometry.ColumnX.ContainsKey(1))
         {
             if (!TryInferColumnsFromGridLines(image, tokens, geometry, out var inferredHeaderBottom))
             {
-                LogTokens("detail-header-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 40), 64);
                 throw new InvalidOperationException("Optical detail header detection failed: item/quantity columns were not both found and grid-line fallback was not reliable.");
             }
             headerBottom = Math.Max(headerBottom, inferredHeaderBottom);
@@ -259,7 +265,6 @@ internal sealed class GridVisionService
         var firstBoundaryIndex = horizontal.FindIndex(y => y >= headerBottom - 3);
         if (firstBoundaryIndex < 0 || horizontal.Count - firstBoundaryIndex < 2)
         {
-            LogTokens("detail-row-lines-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 40), 64);
             throw new InvalidOperationException("Optical detail row-line detection failed.");
         }
 
@@ -272,13 +277,27 @@ internal sealed class GridVisionService
             geometry.RowCenterY.Add((a + b) / 2);
         }
         if (geometry.RowCenterY.Count == 0)
-        {
-            LogTokens("detail-row-centers-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 40), 64);
             throw new InvalidOperationException("Optical detail row centers were not detected.");
-        }
 
         _log.Info("vision", $"detail geometry columns={geometry.ColumnX.Count} rows={geometry.RowCenterY.Count} size={image.Width}x{image.Height}");
         return geometry;
+    }
+
+    private void LogDetailHeaderDiagnostics(IReadOnlyList<OcrToken> tokens, int imageHeight)
+    {
+        var headerTokens = tokens
+            .Where(t => t.Rect.Top <= Math.Min(imageHeight, 48))
+            .OrderBy(t => t.Rect.Left)
+            .Take(80)
+            .ToArray();
+        _log.Info("vision", $"OCR_DIAG context=detail-header total_tokens={tokens.Count} header_tokens={headerTokens.Length}");
+        foreach (var token in headerTokens)
+        {
+            var raw = Sanitize(token.Text);
+            if (raw.Length == 0) continue;
+            var normalized = Sanitize(OcrTextNormalizer.Normalize(token.Text));
+            _log.Info("vision", $"OCR_TOKEN context=detail-header raw=\"{raw}\" normalized=\"{normalized}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
+        }
     }
 
     private bool TryInferColumnsFromGridLines(
@@ -300,7 +319,7 @@ internal sealed class GridVisionService
         foreach (var anchor in GridOrderAnchors)
         {
             var match = FindPhrase(tokens, anchor.Aliases);
-            if (match is null || match.Value.Top > 40) continue;
+            if (match is null || match.Value.Top > 48) continue;
             headerBottom = Math.Max(headerBottom, match.Value.Bottom);
             var centerX = match.Value.Left + match.Value.Width / 2;
             var interval = FindInterval(boundaries, centerX);
@@ -387,35 +406,19 @@ internal sealed class GridVisionService
         using var image = ScreenCapture.Capture(rect.ToRectangle());
         var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
 
+        LogTokens("f2-window", tokens, null, 80);
         var best = FindBestUnitCandidate(tokens, requestedUnit);
         if (best is null)
-        {
-            var unitHeader = FindPhrase(tokens, ["換算單位"]);
-            if (unitHeader is not null)
-            {
-                var headerX = unitHeader.Value.Left + unitHeader.Value.Width / 2;
-                var corridor = Math.Max(90, unitHeader.Value.Width * 2);
-                LogTokens(
-                    "f2-unit-miss",
-                    tokens,
-                    t => Math.Abs(t.Rect.Left + t.Rect.Width / 2 - headerX) <= corridor && t.Rect.Top >= unitHeader.Value.Top - 12,
-                    80);
-            }
-            else
-            {
-                LogTokens("f2-unit-header-miss", tokens, null, 80);
-            }
             throw new InvalidOperationException("OCR 無法在 F2 的「換算單位」欄可靠定位指定單位；已停止，不進行座標猜測。");
-        }
 
         var point = new Point(rect.Left + best.Rect.Left + best.Rect.Width / 2, rect.Top + best.Rect.Top + best.Rect.Height / 2);
-        _log.Info("vision", $"F2 requested unit located point={point.X},{point.Y}");
+        _log.Info("vision", $"F2 requested unit located point={point.X},{point.Y} raw=\"{Sanitize(best.Text)}\" normalized=\"{Sanitize(OcrTextNormalizer.Normalize(best.Text))}\"");
         return point;
     }
 
     internal static OcrToken? FindBestUnitCandidate(IReadOnlyList<OcrToken> tokens, string requestedUnit)
     {
-        var target = Normalize(requestedUnit);
+        var target = OcrTextNormalizer.Normalize(requestedUnit);
         if (target.Length == 0) return null;
 
         var unitHeader = FindPhrase(tokens, ["換算單位"]);
@@ -428,7 +431,7 @@ internal sealed class GridVisionService
             .Select(t => new
             {
                 Token = t,
-                Text = Normalize(t.Text),
+                Text = OcrTextNormalizer.Normalize(t.Text),
                 CenterX = t.Rect.Left + t.Rect.Width / 2
             })
             .Where(x => x.Text == target || x.Text.Contains(target, StringComparison.Ordinal))
@@ -443,10 +446,10 @@ internal sealed class GridVisionService
 
     internal static Rectangle? FindPhrase(IReadOnlyList<OcrToken> tokens, IReadOnlyList<string> aliases)
     {
-        foreach (var alias in aliases)
+        var normalizedAliases = aliases.Select(OcrTextNormalizer.Normalize).ToArray();
+        foreach (var alias in normalizedAliases)
         {
-            var a = Normalize(alias);
-            var direct = tokens.FirstOrDefault(t => Normalize(t.Text).Contains(a, StringComparison.Ordinal));
+            var direct = tokens.FirstOrDefault(t => OcrTextNormalizer.Normalize(t.Text).Contains(alias, StringComparison.Ordinal));
             if (direct is not null) return direct.Rect;
         }
 
@@ -464,9 +467,9 @@ internal sealed class GridVisionService
                 {
                     var token = row[start + count];
                     if (count > 0 && token.Rect.Left - union.Right > 35) break;
-                    text += Normalize(token.Text);
+                    text += OcrTextNormalizer.Normalize(token.Text);
                     union = Rectangle.Union(union, token.Rect);
-                    if (aliases.Any(a => text.Contains(Normalize(a), StringComparison.Ordinal))) return union;
+                    if (normalizedAliases.Any(a => text.Contains(a, StringComparison.Ordinal))) return union;
                 }
             }
         }
@@ -476,12 +479,12 @@ internal sealed class GridVisionService
     private void LogTokens(string context, IReadOnlyList<OcrToken> tokens, Func<OcrToken, bool>? filter, int maxTokens)
     {
         var selected = (filter is null ? tokens : tokens.Where(filter).ToArray()).Take(maxTokens).ToArray();
-        _log.Warn("vision", $"OCR_DIAG context={context} total_tokens={tokens.Count} logged_tokens={selected.Length}");
+        _log.Info("vision", $"OCR_DIAG context={context} total_tokens={tokens.Count} logged_tokens={selected.Length}");
         foreach (var token in selected)
         {
-            var text = Sanitize(token.Text);
-            if (text.Length == 0) continue;
-            _log.Warn("vision", $"OCR_TOKEN context={context} text=\"{text}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
+            var raw = Sanitize(token.Text);
+            if (raw.Length == 0) continue;
+            _log.Info("vision", $"OCR_TOKEN context={context} raw=\"{raw}\" normalized=\"{Sanitize(OcrTextNormalizer.Normalize(token.Text))}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
         }
     }
 
@@ -490,8 +493,6 @@ internal sealed class GridVisionService
         var text = value.Replace("\r", " ").Replace("\n", " ").Replace("\"", "'").Trim();
         return text.Length <= 80 ? text : text[..80];
     }
-
-    private static string Normalize(string value) => value.Trim().Replace(" ", string.Empty).Replace("　", string.Empty);
 
     internal static List<int> FindHorizontalLines(Bitmap source, int startY)
     {

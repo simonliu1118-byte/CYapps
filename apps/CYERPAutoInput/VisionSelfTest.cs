@@ -69,10 +69,23 @@ internal static class VisionSelfTest
             if (joinedChinese is null)
                 throw new InvalidOperationException("Joined OCR-token Chinese phrase matching failed.");
 
+            if (OcrTextNormalizer.Normalize("数 量") != "數量" ||
+                OcrTextNormalizer.Normalize("库别") != "庫別" ||
+                OcrTextNormalizer.Normalize("送货資料") != "送貨資料")
+                throw new InvalidOperationException("Traditional/Simplified OCR normalization failed.");
+
+            var simplifiedQuantity = GridVisionService.FindPhrase(
+            [
+                new OcrToken("数", new Rectangle(120, 20, 20, 24)),
+                new OcrToken("量", new Rectangle(142, 20, 20, 24))
+            ], ["數量"]);
+            if (simplifiedQuantity is null)
+                throw new InvalidOperationException("Simplified OCR tokens did not match Traditional field alias 數量.");
+
             var unitCandidate = GridVisionService.FindBestUnitCandidate(
             [
-                new OcrToken("換算", new Rectangle(120, 20, 42, 24)),
-                new OcrToken("單位", new Rectangle(166, 20, 42, 24)),
+                new OcrToken("换算", new Rectangle(120, 20, 42, 24)),
+                new OcrToken("单位", new Rectangle(166, 20, 42, 24)),
                 new OcrToken("支", new Rectangle(171, 75, 20, 24)),
                 new OcrToken("箱", new Rectangle(171, 112, 20, 24)),
                 new OcrToken("箱", new Rectangle(500, 150, 20, 24))

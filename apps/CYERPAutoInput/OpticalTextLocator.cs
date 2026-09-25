@@ -28,22 +28,15 @@ internal sealed class OpticalTextLocator
         if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
             return null;
 
-        var normalizedAliases = aliases.Select(Normalize).Where(x => x.Length > 0).ToArray();
+        var normalizedAliases = aliases.Select(OcrTextNormalizer.Normalize).Where(x => x.Length > 0).ToArray();
 
-        // COPI08's DevExpress page tabs were already proven in the Go line to use a
-        // stable tab-strip geometry. Do not make actual tab activation depend on OCR:
-        // resolve the click point from the real TcxPageControl and the known tab order,
-        // while ActivateTabAsync still verifies the target TcxTabSheet became visible.
-        // OCR is retained only as a bounded tab-strip diagnostic for field testing.
+        // COPI08 tabs already have a validated TcxPageControl geometry path.
+        // OCR must not delay or redefine that proven interaction flow.
         if (NativeMethods.ClassName(hwnd).Equals("TcxPageControl", StringComparison.OrdinalIgnoreCase))
         {
             var tabName = normalizedAliases.FirstOrDefault(Copi08TabCenterX.ContainsKey);
             if (tabName is not null)
             {
-                await LogTabStripOcrDiagnosticAsync(hwnd, tabName, cancellationToken);
-                if (!NativeMethods.GetWindowRect(hwnd, out rect) || rect.Width <= 0 || rect.Height <= 0)
-                    return null;
-
                 var x = Copi08TabCenterX[tabName];
                 if (x < 0 || x >= rect.Width)
                 {
@@ -57,15 +50,12 @@ internal sealed class OpticalTextLocator
             }
         }
 
-        // COPI08's Ribbon sometimes exposes button captions as real child-window text.
-        // Use that direct signal first for the New button only. Do not use this shortcut
-        // for tab captions because a TcxTabSheet can expose the same text over a large
-        // content rectangle whose center is not the actual tab header.
         if (normalizedAliases.Contains("新增", StringComparer.Ordinal))
         {
+            // Fast path 1: use a real child caption if Delphi/DevExpress exposes it.
             var direct = Win32Automation.EnumerateChildren(hwnd)
                 .Where(c => c.Visible && c.Rect.Width > 0 && c.Rect.Height > 0)
-                .Select(c => new { Control = c, Text = Normalize(c.Text) })
+                .Select(c => new { Control = c, Text = OcrTextNormalizer.Normalize(c.Text) })
                 .Where(x => normalizedAliases.Any(a => x.Text == a || x.Text.Contains(a, StringComparison.Ordinal)))
                 .OrderBy(x => x.Control.Rect.Top)
                 .ThenBy(x => x.Control.Rect.Left)
@@ -79,76 +69,49 @@ internal sealed class OpticalTextLocator
                 _log.Info("vision", $"Win32 text target found aliases={aliases.Count} class={direct.Control.ClassName} point={p.X},{p.Y}");
                 return p;
             }
-        }
 
-        using (var image = ScreenCapture.Capture(rect.ToRectangle()))
-        {
-            var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
-            var point = FindPoint(tokens, normalizedAliases, rect.Left, rect.Top);
-            if (point is not null)
-            {
-                _log.Info("vision", $"text target found aliases={aliases.Count} point={point.Value.X},{point.Value.Y}");
-                return point;
-            }
-        }
-
-        if (normalizedAliases.Contains("新增", StringComparer.Ordinal))
-        {
-            var retryRect = new Rectangle(
+            // Fast path 2: the validated green-plus icon is much cheaper than running
+            // PP-OCRv5 over the entire ERP window. Only the bounded Ribbon is captured.
+            var ribbonRect = new Rectangle(
                 rect.Left,
                 rect.Top,
                 Math.Min(rect.Width, 720),
                 Math.Min(rect.Height, 220));
-
-            using var ribbon = ScreenCapture.Capture(retryRect);
-            var ribbonTokens = await _ocr.RecognizeAsync(ribbon, cancellationToken, requireChinese: true);
-            var retryPoint = FindPoint(ribbonTokens, normalizedAliases, retryRect.Left, retryRect.Top);
-            if (retryPoint is not null)
-            {
-                _log.Info("vision", $"Ribbon OCR target found aliases={aliases.Count} point={retryPoint.Value.X},{retryPoint.Value.Y}");
-                return retryPoint;
-            }
-
-            // COPI08's New command has a distinctive green plus icon at the left edge
-            // of the Ribbon. If text OCR misses the tiny caption, locate that visual
-            // plus rather than guessing a hard-coded click coordinate. EnsureInputModeAsync
-            // still verifies that the ERP actually entered INPUT after the click.
+            using var ribbon = ScreenCapture.Capture(ribbonRect);
             var iconPoint = FindGreenAddIconCandidate(ribbon);
             if (iconPoint is not null)
             {
-                var p = new Point(retryRect.Left + iconPoint.Value.X, retryRect.Top + iconPoint.Value.Y);
+                var p = new Point(ribbonRect.Left + iconPoint.Value.X, ribbonRect.Top + iconPoint.Value.Y);
                 _log.Info("vision", $"Ribbon green-plus New candidate found point={p.X},{p.Y}");
                 return p;
             }
 
+            // OCR is now the last-resort New-button path, and is restricted to the Ribbon.
+            var ribbonTokens = await _ocr.RecognizeAsync(ribbon, cancellationToken, requireChinese: true);
+            var retryPoint = FindPoint(ribbonTokens, normalizedAliases, ribbonRect.Left, ribbonRect.Top);
+            if (retryPoint is not null)
+            {
+                _log.Info("vision", $"Ribbon PaddleOCR target found aliases={aliases.Count} point={retryPoint.Value.X},{retryPoint.Value.Y}");
+                return retryPoint;
+            }
+
             LogTokens("ribbon-new-miss", "新增", ribbonTokens, 48);
+            return null;
         }
 
+        // Generic optical locator remains available for bounded tasks that do not have
+        // a stronger native/geometry signal.
+        using var image = ScreenCapture.Capture(rect.ToRectangle());
+        var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+        var point = FindPoint(tokens, normalizedAliases, rect.Left, rect.Top);
+        if (point is not null)
+        {
+            _log.Info("vision", $"text target found aliases={aliases.Count} point={point.Value.X},{point.Value.Y}");
+            return point;
+        }
+
+        LogTokens("generic-text-miss", string.Join("/", aliases), tokens, 48);
         return null;
-    }
-
-    private async Task LogTabStripOcrDiagnosticAsync(nint page, string target, CancellationToken cancellationToken)
-    {
-        if (!NativeMethods.GetWindowRect(page, out var rect) || rect.Width <= 0 || rect.Height <= 0)
-            return;
-
-        var region = new Rectangle(rect.Left, rect.Top, rect.Width, Math.Min(rect.Height, 40));
-        try
-        {
-            using var image = ScreenCapture.Capture(region);
-            var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
-            LogTokens("tab-strip", target, tokens, 64);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // Diagnostic OCR must never block a tab operation that has an independent,
-            // state-verified TcxPageControl click path.
-            _log.Warn("vision", $"OCR_DIAG context=tab-strip target={target} failed={Sanitize(ex.Message)}");
-        }
     }
 
     private void LogTokens(string context, string target, IReadOnlyList<OcrToken> tokens, int maxTokens)
@@ -158,7 +121,7 @@ internal sealed class OpticalTextLocator
         {
             var text = Sanitize(token.Text);
             if (text.Length == 0) continue;
-            _log.Info("vision", $"OCR_TOKEN context={context} target={target} text=\"{text}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
+            _log.Info("vision", $"OCR_TOKEN context={context} target={target} raw=\"{text}\" normalized=\"{Sanitize(OcrTextNormalizer.Normalize(token.Text))}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
         }
         if (tokens.Count > maxTokens)
             _log.Info("vision", $"OCR_DIAG context={context} target={target} truncated={tokens.Count - maxTokens}");
@@ -174,9 +137,6 @@ internal sealed class OpticalTextLocator
     {
         if (image.Width < 20 || image.Height < 60) return null;
 
-        // Only inspect the upper-left command area. The green application title bar can
-        // occupy the top portion, so oversized horizontal/solid green components are
-        // deliberately rejected below.
         var scanWidth = Math.Min(image.Width, 140);
         var scanTop = Math.Min(image.Height - 1, 40);
         var scanBottom = Math.Min(image.Height, 150);
@@ -275,7 +235,7 @@ internal sealed class OpticalTextLocator
     {
         foreach (var token in tokens)
         {
-            var text = Normalize(token.Text);
+            var text = OcrTextNormalizer.Normalize(token.Text);
             if (normalizedAliases.Any(a => text == a || text.Contains(a, StringComparison.Ordinal)))
             {
                 return new Point(
@@ -296,7 +256,7 @@ internal sealed class OpticalTextLocator
                 for (var j = i; j < row.Count && j < i + 5; j++)
                 {
                     if (j > i && row[j].Rect.Left - union.Right > 40) break;
-                    text += Normalize(row[j].Text);
+                    text += OcrTextNormalizer.Normalize(row[j].Text);
                     union = Rectangle.Union(union, row[j].Rect);
                     if (!normalizedAliases.Any(a => text.Contains(a, StringComparison.Ordinal))) continue;
                     return new Point(
@@ -308,10 +268,4 @@ internal sealed class OpticalTextLocator
 
         return null;
     }
-
-    private static string Normalize(string value) => value.Trim()
-        .Replace(" ", string.Empty)
-        .Replace("　", string.Empty)
-        .Replace("（", "(")
-        .Replace("）", ")");
 }
