@@ -2,6 +2,7 @@ import coreWorker from './index.js';
 import { handleV11Api } from './v11-tools.js';
 import { handleV12Api } from './v12-tools.js';
 import { handleV13Api } from './v13-export.js';
+import { handleV15Api } from './v15-import.js';
 
 const SESSION_COOKIE = 'cyaccounting_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -42,6 +43,9 @@ export default {
 
       const session = await sessionFromRequest(request, env.DB);
       if (!session) return json({ ok: false, error: '尚未登入。', code: 'AUTH_REQUIRED' }, 401);
+
+      const v15Response = await handleV15Api(request, env);
+      if (v15Response) return v15Response;
 
       const v13Response = await handleV13Api(request, env);
       if (v13Response) return v13Response;
