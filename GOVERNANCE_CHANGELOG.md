@@ -1,5 +1,12 @@
 # CYApps Governance Changelog
 
+## 2.3.12 — 2026/09/25
+
+- Public Build／Actions Artifact／GitHub Release 與 Production Deploy 正式分離；公開產物不得取得、注入或烘焙正式 Secret、Token、Private Key、OAuth Client Secret、Refresh Token、正式帳密或可直接取得正式服務權限的憑證。
+- Cloudflare deployment-specific resource identifiers（D1 database ID／name、Worker／Service Binding 實際 service 名稱、R2／KV／Queue 等）改採 Deployment Environment 注入原則；公開設定只能使用 placeholder／template，Runner 暫存的正式 deploy config 不得 commit、上傳 Artifact 或發布 Release。
+- 新增 repository 共用 `.github/scripts/scan-public-package.py`；所有包含 `actions/upload-artifact` 或 `gh release create` 的 workflow 都必須在公開前掃描最終 package，Governance Check 會阻止未接 safety gate 的發行流程。
+- CYAccountingWeb `PROJECT_RULES.md` 同步固定 `DB`／`IDENTITY` 只保存 binding contract，正式 Cloudflare resource metadata 由部署環境注入；Google OAuth／Drive 執行期機密只允許存在 Cloudflare Secrets／受保護 runtime storage。
+
 ## 2.3.11 — 2026/09/24
 
 - 依使用者新決定，CYAccounting 設定頁恢復本機帳本清除功能；改為兩次分開輸入 `DELETE` 確認，取消原先「不提供清除入口」規則，仍不得使用固定管理密碼。

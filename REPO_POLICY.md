@@ -23,6 +23,11 @@
 - 開發測試包依共通規則使用 Actions Artifact 或經使用者同意的 Pre-release。
 - 正式 Windows x64 EXE／ZIP 可以公開放在 GitHub Releases 供下載。
 - 公開下載不改變根 `LICENSE` 的 source-available proprietary 性質。
+- **Public Build／Artifact／Release 與 Production Deploy 必須分離。** 公開建置流程不得取得、注入或烘焙正式環境的 Secret、Token、Private Key、OAuth Client Secret、Refresh Token、正式帳密或可直接取得正式服務權限的憑證。
+- 正式 Cloudflare D1 database ID、Worker／Service Binding 實際 service 名稱、R2／KV／Queue 等 deployment-specific resource identifiers 原則上由 Deployment Environment 在部署時注入；不得打包進公開 Release／Artifact。若公開 source 需要展示設定格式，只能使用 placeholder／template。
+- Production Deploy 可在 CI Runner 暫時產生正式部署設定，但該設定不得 commit 回 Git、不得保存為公開 Artifact／Release asset，也不得把實際值寫入 log。
+- 任何會公開 `actions/upload-artifact` 或 `gh release create` 產物的 workflow，都必須在公開前執行 repository 共用的 public-package safety scan；掃描未通過時必須阻止上傳／Release，不得以 warning 略過。
+- 新增或修改公開發行流程時，應確認 scanner 本身仍能辨識常見 credential 檔、private key、OAuth/refresh token、Cloudflare credential assignment 與含 concrete binding 的 deployment config；不得只掃 source 而不掃最終 package。
 
 ## 4. 共通規則同步
 

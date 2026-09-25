@@ -70,6 +70,18 @@ jobs:
                   print(f'ERROR: missing governance file: {rel}')
                   sys.exit(1)
 
+          scanner = pathlib.Path('.github/scripts/scan-public-package.py')
+          if not scanner.is_file():
+              print('ERROR: missing public artifact safety scanner')
+              sys.exit(1)
+
+          for workflow in sorted(pathlib.Path('.github/workflows').glob('*.yml')):
+              text = workflow.read_text(encoding='utf-8')
+              publishes = 'actions/upload-artifact@' in text or 'gh release create' in text
+              if publishes and 'scan-public-package.py' not in text:
+                  print(f'ERROR: public Artifact/Release workflow lacks safety scan: {workflow.as_posix()}')
+                  sys.exit(1)
+
           apps = pathlib.Path('apps')
           if apps.is_dir():
               for project in sorted(p for p in apps.iterdir() if p.is_dir()):
@@ -87,6 +99,17 @@ jobs:
                       sys.exit(1)
           print('Local governance structure OK')
           PY
+
+          scan_tmp="$(mktemp -d)"
+          printf '%s\n' 'CLOUDFLARE_API_TOKEN=__DEPLOYMENT_SECRET__' > "$scan_tmp/safe.txt"
+          python3 .github/scripts/scan-public-package.py "$scan_tmp/safe.txt"
+          printf '%s\n' 'CLOUDFLARE_API_TOKEN=abcdefghijklmnopqrstuvwxyz123456' > "$scan_tmp/bad.txt"
+          if python3 .github/scripts/scan-public-package.py "$scan_tmp/bad.txt" >/dev/null 2>&1; then
+            echo "ERROR: public artifact safety scanner failed its blocking self-test"
+            exit 1
+          fi
+          rm -rf "$scan_tmp"
+          echo "Public artifact safety scanner self-test OK."
 
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
@@ -122,7 +145,7 @@ jobs:
               [ "$path" = "COMMON_RULES_CHANGELOG.md" ] && common_changelog_changed=1
 
               case "$path" in
-                REPO_POLICY.md|RULES_INDEX.md|GOVERNANCE_VERSION|GOVERNANCE_CHANGELOG.md|AGENTS.md|apps/*/PROJECT_RULES.md|.github/workflows/governance-check.yml|.github/workflows/sync-common-rules.yml)
+                REPO_POLICY.md|RULES_INDEX.md|GOVERNANCE_VERSION|GOVERNANCE_CHANGELOG.md|AGENTS.md|apps/*/PROJECT_RULES.md|.github/workflows/governance-check.yml|.github/workflows/sync-common-rules.yml|.github/scripts/scan-public-package.py)
                   repo_gov_changed=1 ;;
               esac
               [ "$path" = "GOVERNANCE_VERSION" ] && gov_version_changed=1

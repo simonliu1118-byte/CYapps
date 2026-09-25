@@ -23,6 +23,7 @@
 - `/RULES_INDEX.md`
 - `/AGENTS.md` — repository 唯一 AI 規則入口，只能指向正式規則。
 - `/.github/workflows/governance-check.yml`
+- `/.github/scripts/scan-public-package.py` — Public Artifact／Release 發布前的秘密與 production binding 安全閘門；由 Governance Check 強制所有公開發行 workflow 接入。
 
 ## 非規則文件
 

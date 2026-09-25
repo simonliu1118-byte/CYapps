@@ -8,6 +8,7 @@ on:
     paths:
       - "apps/CYERPAutoInput/**"
       - ".github/workflows/cyerp-auto-input-build.yml"
+      - ".github/scripts/scan-public-package.py"
 
 permissions:
   contents: read
@@ -43,6 +44,10 @@ jobs:
           go-version: "1.23.x"
           cache: false
 
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
       - name: Generate and embed application icon
         shell: pwsh
         run: |
@@ -66,6 +71,10 @@ jobs:
           Get-FileHash "package/CYERPAutoInput.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  CYERPAutoInput.exe" } | Set-Content "package/SHA256.txt"
           Copy-Item README.md "package/README.md"
           Copy-Item settings.example.json "package/settings.example.json"
+
+      - name: Scan engineering package for secrets and production bindings
+        shell: pwsh
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" ./package
 
       - name: Upload engineering package
         uses: actions/upload-artifact@v7

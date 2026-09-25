@@ -1,6 +1,6 @@
 # CYAccountingWeb Project Rules
 
-本文件只記錄 `apps/CYAccountingWeb/**` 的專案補充與例外。共通規則依根 `REPOSITORY_RULES.md`，Public repo 規則依根 `REPO_POLICY.md`。
+本文件只記錄 `apps/CYAccountingWeb/**` 的專案補充與例外。共通規則依根目錄 `REPOSITORY_RULES.md`，Public repo 規則依根 `REPO_POLICY.md`。
 
 ## 1. 專案定位
 
@@ -29,3 +29,7 @@
 - Cloudflare API token 與 Account ID 由 GitHub Environment／Secrets 提供；workflow 不得把 secret 值寫入 source、log 或 artifact。
 - 正式資料庫 migration 與 Worker 部署優先由可追蹤的 CI/CD 流程執行；若因故需 Dashboard 手動操作，必須確保 Git 中仍有可重建的設定與 migration。
 - 未經使用者明確要求，不自動建立對外公開 Release；Web 部署與 GitHub Release 視為不同流程。
+- `DB`、`IDENTITY` 等 binding **名稱／contract** 可存在 source；正式 D1 database ID、D1 database name、Identity service 實際名稱與其他 deployment-specific Cloudflare resource identifiers 應由 GitHub Deployment Environment 在正式部署時注入，不得作為公開 Release／Artifact 的固定內容。
+- Public source 若需提供 Wrangler／Cloudflare 設定範例，應使用 placeholder／template；Production Deploy 可在 Runner 暫時產生正式 deploy config，但不得 commit、上傳 Artifact 或發布 Release。
+- Google OAuth Client Secret、Google Drive token encryption key 等執行期機密只可存在 Cloudflare Secrets；source 只可引用 `env.*` 名稱。OAuth refresh token 只能以受保護形式保存於 runtime storage，不得進 Git、build package、Artifact 或 Release。
+- CYAccountingWeb 的 Production Deploy workflow 與任何 Public Release／Artifact build 不得共用「把正式 Secret／resource metadata 烘焙進產物」的流程；公開產物若未通過 repository public-package safety scan，不得發布。
