@@ -1,0 +1,71 @@
+name: CYAccountingWeb V0.15 Hardening (Temporary)
+
+on:
+  push:
+    branches:
+      - cyaccountingweb/v0.15-excel-import
+    paths:
+      - '.github/workflows/cyaccountingweb-v015-hardening-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccountingweb/v0.15-excel-import
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/CYAccountingWeb/package-lock.json
+      - name: Patch and test V0.15
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          js = Path('apps/CYAccountingWeb/public/v015.js')
+          text = js.read_text(encoding='utf-8')
+          old = "    setImportMessageV15(`${data.message || '匯入完成'}${data.skippedDuplicates ? `　略過重複 ${data.skippedDuplicates} 筆。` : ''}`);\n    document.querySelector('#excelImportCommitButton').disabled = true;\n"
+          new = "    setImportMessageV15(`${data.message || '匯入完成'}${data.skippedDuplicates ? `　略過重複 ${data.skippedDuplicates} 筆。` : ''}`);\n    if (cyV15ImportState.preview) cyV15ImportState.preview.canCommit = false;\n    const commitButton = document.querySelector('#excelImportCommitButton');\n    if (commitButton) { commitButton.disabled = true; commitButton.textContent = '匯入完成'; }\n"
+          if old not in text:
+              raise SystemExit('commit success anchor not found')
+          text = text.replace(old, new, 1)
+
+          old_busy = "function setImportBusyV15(busy) {\n  document.querySelectorAll('#excelImportDialog button, #excelImportDialog select, #excelImportDialog input').forEach(element => {\n    if (element.hasAttribute('data-v15-close')) return;\n    element.disabled = busy;\n  });\n}\n"
+          new_busy = "function setImportBusyV15(busy) {\n  document.querySelectorAll('#excelImportDialog button, #excelImportDialog select, #excelImportDialog input').forEach(element => {\n    if (element.hasAttribute('data-v15-close')) return;\n    element.disabled = busy;\n  });\n  if (!busy) {\n    const commit = document.querySelector('#excelImportCommitButton');\n    if (commit) commit.disabled = !cyV15ImportState.preview?.canCommit;\n  }\n}\n"
+          if old_busy not in text:
+              raise SystemExit('busy state anchor not found')
+          text = text.replace(old_busy, new_busy, 1)
+          js.write_text(text, encoding='utf-8')
+
+          backend = Path('apps/CYAccountingWeb/src/v15-import.js')
+          text = backend.read_text(encoding='utf-8')
+          old_batch = "  await db.batch(statements);\n  return json({\n"
+          new_batch = "  try {\n    await db.batch(statements);\n  } catch (error) {\n    console.error('cyaccounting_excel_import_write_failed', error instanceof Error ? error.message : String(error));\n    return json({ ok: false, error: 'Excel 匯入寫入失敗，未完成匯入。請重新整理後再試。' }, 500);\n  }\n  return json({\n"
+          if old_batch not in text:
+              raise SystemExit('D1 batch anchor not found')
+          text = text.replace(old_batch, new_batch, 1)
+          backend.write_text(text, encoding='utf-8')
+          PY
+
+          cd apps/CYAccountingWeb
+          npm ci --no-audit --no-fund
+          node --check public/v015.js
+          node --check src/v15-import.js
+          node tests/v15-import.mjs
+          npx wrangler deploy --dry-run
+
+          cd ../..
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/CYAccountingWeb/public/v015.js apps/CYAccountingWeb/src/v15-import.js
+          git commit -m 'fix(CYAccountingWeb): harden Excel import confirmation state'
+          git push origin HEAD:cyaccountingweb/v0.15-excel-import
