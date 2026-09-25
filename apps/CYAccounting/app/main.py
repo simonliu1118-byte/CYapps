@@ -260,6 +260,7 @@ class InputTab(QWidget):
 
     def __init__(self, db: Database, config: dict, on_saved, parent=None):
         super().__init__(parent)
+        self.setObjectName("inputPage")
         self.db = db
         self.config = config
         self.on_saved = on_saved
@@ -277,14 +278,15 @@ class InputTab(QWidget):
 
     def _build(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 12, 14, 12)
-        outer.setSpacing(9)
+        outer.setContentsMargins(12, 6, 12, 8)
+        outer.setSpacing(4)
 
         basic = QGroupBox("基本資訊")
+        basic.setObjectName("inputSection")
         basic.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         basic_row = QHBoxLayout(basic)
-        basic_row.setContentsMargins(12, 12, 12, 10)
-        basic_row.setSpacing(8)
+        basic_row.setContentsMargins(8, 6, 8, 4)
+        basic_row.setSpacing(7)
         self.date_edit = SmartDateLineEdit()
         self.date_edit.setFixedWidth(145)
         self.date_edit.editingFinished.connect(self.validate_date)
@@ -335,10 +337,11 @@ class InputTab(QWidget):
         outer.addWidget(basic)
 
         income = QGroupBox("收入")
+        income.setObjectName("inputSection")
         income.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         income_v = QVBoxLayout(income)
-        income_v.setContentsMargins(12, 10, 12, 10)
-        income_v.setSpacing(6)
+        income_v.setContentsMargins(8, 4, 8, 4)
+        income_v.setSpacing(4)
         income_quick = QHBoxLayout()
         income_quick.setSpacing(6)
         income_quick.addWidget(QLabel("常用科目："))
@@ -349,7 +352,7 @@ class InputTab(QWidget):
         income_quick.addWidget(self.income_quick_host)
         income_quick.addStretch(1)
         income_v.addLayout(income_quick)
-        income_v.addSpacing(4)
+        income_v.addSpacing(0)
 
         il = QHBoxLayout()
         il.setSpacing(7)
@@ -397,10 +400,11 @@ class InputTab(QWidget):
         outer.addWidget(income)
 
         expense = QGroupBox("支出")
+        expense.setObjectName("inputSection")
         expense.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         expense_v = QVBoxLayout(expense)
-        expense_v.setContentsMargins(12, 10, 12, 10)
-        expense_v.setSpacing(6)
+        expense_v.setContentsMargins(8, 4, 8, 4)
+        expense_v.setSpacing(4)
         expense_quick = QHBoxLayout()
         expense_quick.setSpacing(6)
         expense_quick.addWidget(QLabel("常用科目："))
@@ -411,7 +415,7 @@ class InputTab(QWidget):
         expense_quick.addWidget(self.expense_quick_host)
         expense_quick.addStretch(1)
         expense_v.addLayout(expense_quick)
-        expense_v.addSpacing(4)
+        expense_v.addSpacing(0)
 
         el = QHBoxLayout()
         el.setSpacing(7)
@@ -540,7 +544,7 @@ class InputTab(QWidget):
         for name in self.db.favorite_category_names(kind):
             button = no_tab_button(name)
             button.setObjectName("quickCategoryButton")
-            button.setMinimumHeight(30)
+            button.setMinimumHeight(26)
             button.setToolTip(f"切換{('收入' if kind == 'income' else '支出')}科目為「{name}」")
             if kind == "income":
                 button.clicked.connect(lambda checked=False, n=name: self.income_category.set_current_value(n))
@@ -839,14 +843,16 @@ class LedgerTab(QWidget):
 
     def _build(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setContentsMargins(12, 6, 12, 8)
+        outer.setSpacing(5)
         top = QHBoxLayout()
+        top.setSpacing(6)
         top.addWidget(QLabel("選擇月份："))
         self.month_spin = MonthSpinBox()
         top.addWidget(self.month_spin)
         self.query_btn = no_tab_button("查詢"); self.query_btn.setObjectName("primaryButton"); self.query_btn.clicked.connect(self.query_selected)
         top.addWidget(self.query_btn)
-        top.addSpacing(12)
+        top.addSpacing(8)
         self.search_edit = QLineEdit()
         self.search_edit.setFixedWidth(220)
         self.search_edit.setPlaceholderText("搜尋收入／支出摘要")
@@ -862,6 +868,8 @@ class LedgerTab(QWidget):
         outer.addLayout(top)
 
         header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
         self.table_title = QLabel()
         f = self.table_title.font(); f.setBold(True); f.setPointSize(f.pointSize()+1); self.table_title.setFont(f)
         header_row.addWidget(self.table_title)
@@ -884,8 +892,8 @@ class LedgerTab(QWidget):
         self.table.setSelectionMode(QTableView.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QTableView.EditTrigger.DoubleClicked)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setMinimumSectionSize(26)
-        self.table.verticalHeader().setDefaultSectionSize(28)
+        self.table.verticalHeader().setMinimumSectionSize(24)
+        self.table.verticalHeader().setDefaultSectionSize(24)
         table_font = self.table.font()
         table_font.setPointSize(10)
         self.table.setFont(table_font)
@@ -893,7 +901,7 @@ class LedgerTab(QWidget):
         header_font.setPointSize(10)
         header_font.setBold(True)
         self.table.horizontalHeader().setFont(header_font)
-        self.table.horizontalHeader().setFixedHeight(30)
+        self.table.horizontalHeader().setFixedHeight(24)
         header = self.table.horizontalHeader()
         header.setMinimumSectionSize(55)
         header.setStretchLastSection(False)
@@ -930,15 +938,15 @@ class LedgerTab(QWidget):
         outer.addWidget(self.table, 1)
 
         bottom = QHBoxLayout()
-        bottom.setSpacing(10)
+        bottom.setSpacing(8)
 
         stats_box = QGroupBox("月份統計")
         stats_box.setObjectName("statsCard")
         stats_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         sg = QGridLayout(stats_box)
-        sg.setContentsMargins(12, 10, 12, 10)
-        sg.setHorizontalSpacing(30)
-        sg.setVerticalSpacing(4)
+        sg.setContentsMargins(10, 6, 10, 6)
+        sg.setHorizontalSpacing(24)
+        sg.setVerticalSpacing(2)
         self.opening_label = QLabel(); self.income_label = QLabel(); self.expense_label = QLabel(); self.net_label = QLabel(); self.ending_label = QLabel()
         labels = [self.opening_label, self.income_label, self.expense_label, self.net_label, self.ending_label]
         for lab in labels:

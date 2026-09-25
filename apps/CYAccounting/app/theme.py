@@ -67,10 +67,23 @@ QGroupBox::title {{
 QGroupBox#resultCard, QGroupBox#statsCard {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 6px;
-    margin-top: 16px;
-    padding: 14px 12px 10px 12px;
+    margin-top: 12px;
+    padding: 10px 10px 8px 10px;
     background: {NEUTRAL_WHITE};
 }}
+QGroupBox#inputSection {{
+    margin-top: 12px;
+    padding: 8px 0 2px 0;
+}}
+QWidget#inputPage QLineEdit, QWidget#inputPage QComboBox {{
+    min-height: 30px;
+    font-size: 11pt;
+}}
+QWidget#inputPage QPushButton#primaryButton, QWidget#inputPage QPushButton#accountChoiceButton {{
+    min-height: 30px;
+    font-size: 10.5pt;
+}}
+
 QGroupBox#resultCard::title, QGroupBox#statsCard::title {{
     left: 12px;
     padding: 0 5px;
@@ -220,7 +233,7 @@ QHeaderView::section {{
     border: 0;
     border-right: 1px solid {NEUTRAL_GRID};
     border-bottom: 1px solid {NEUTRAL_DIVIDER};
-    padding: 4px;
+    padding: 2px 4px;
     font-weight: 600;
 }}
 QTreeWidget, QListWidget, QComboBox QAbstractItemView {{
