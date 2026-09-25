@@ -102,6 +102,40 @@ internal static class Win32Automation
         return false;
     }
 
+
+    public static IReadOnlyList<nint> FindVisibleProcessPeerWindows(nint root)
+    {
+        if (root == 0) return Array.Empty<nint>();
+        NativeMethods.GetWindowThreadProcessId(root, out var processId);
+        if (processId == 0) return Array.Empty<nint>();
+
+        var peers = new List<nint>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (hwnd == root || !NativeMethods.IsWindowVisible(hwnd)) return true;
+            NativeMethods.GetWindowThreadProcessId(hwnd, out var pid);
+            if (pid != processId) return true;
+            if (!NativeMethods.GetWindowRect(hwnd, out var rect)) return true;
+            if (rect.Width is < 140 or > 1200 || rect.Height is < 70 or > 800) return true;
+            peers.Add(hwnd);
+            return true;
+        }, 0);
+        return peers;
+    }
+
+    public static bool WindowTreeContainsText(nint hwnd, string expectedText)
+    {
+        var target = OcrTextNormalizer.Normalize(expectedText);
+        if (target.Length == 0 || hwnd == 0) return false;
+        if (OcrTextNormalizer.Normalize(NativeMethods.WindowText(hwnd)).Contains(target, StringComparison.Ordinal))
+            return true;
+
+        return EnumerateChildren(hwnd)
+            .Where(c => c.Visible)
+            .Select(c => OcrTextNormalizer.Normalize(c.Text))
+            .Any(text => text.Contains(target, StringComparison.Ordinal));
+    }
+
     public static string NormalizeLabel(string value)
     {
         return value.Trim()

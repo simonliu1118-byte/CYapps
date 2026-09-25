@@ -11,7 +11,7 @@ internal sealed class MainForm : Form
     private readonly Dictionary<string, FlowLayoutPanel> _groupFlows = new(StringComparer.OrdinalIgnoreCase);
     private readonly DetailDataGridView _details = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 9 · Esc：緊急停止 · 不自動儲存 ERP" };
+    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 20 · Esc：緊急停止 · 不自動儲存 ERP" };
     private readonly ModeToggle _modeToggle = new();
     private readonly CyPrimaryButton _start = new();
     private CancellationTokenSource? _automationCts;
@@ -251,7 +251,9 @@ internal sealed class MainForm : Form
         _details.Columns.Add(TextColumn("Unit", "單位", 105));
         _details.Columns.Add(TextColumn("Quantity", "數量", 105, DataGridViewContentAlignment.MiddleRight));
         _details.Columns.Add(TextColumn("GiftQuantity", "贈/備品量", 125, DataGridViewContentAlignment.MiddleRight));
-        _details.Columns.Add(TextColumn("Batch", "批號", 170));
+        var batchColumn = TextColumn("Batch", "批號（自動）", 170);
+        batchColumn.ReadOnly = true;
+        _details.Columns.Add(batchColumn);
         _details.Columns.Add(TextColumn("Warehouse", "庫別", 140));
         _details.Columns.Add(TextColumn("UnitPrice", "單價", 130, DataGridViewContentAlignment.MiddleRight));
         for (var i = 0; i < 8; i++) _details.Rows.Add();
@@ -343,7 +345,12 @@ internal sealed class MainForm : Form
         try
         {
             var progress = new Progress<string>(SetStatus);
-            await _automation.RunAsync(snapshot, progress, token);
+            var result = await _automation.RunAsync(snapshot, progress, token);
+            var salesNo = string.IsNullOrWhiteSpace(result.SalesOrderNumber) ? "未取得" : result.SalesOrderNumber;
+            if (result.Warnings.Count > 0)
+                SetStatus($"ERP：銷貨單 {salesNo} 輸入完成；{result.Warnings.Count} 筆需人工確認；尚未儲存");
+            else
+                SetStatus($"ERP：銷貨單 {salesNo} 輸入完成；尚未儲存");
         }
         catch (OperationCanceledException)
         {

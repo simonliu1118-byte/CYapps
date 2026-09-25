@@ -12,6 +12,7 @@ internal sealed class ErpAutomationService
     private readonly FastDetailGridVisionService _gridVision;
     private readonly OpticalTextLocator _textVision;
     private readonly F2UnitCellLocator _unitCellLocator;
+    private readonly F2BatchCellLocator _batchCellLocator;
 
     public ErpAutomationService(AppLogger log)
     {
@@ -20,6 +21,7 @@ internal sealed class ErpAutomationService
         _gridVision = new FastDetailGridVisionService(ocr, log);
         _textVision = new OpticalTextLocator(ocr, log);
         _unitCellLocator = new F2UnitCellLocator(ocr, log);
+        _batchCellLocator = new F2BatchCellLocator(ocr, log);
         _ = Task.Run(() => WarmUpOcrAsync(ocr));
     }
 
@@ -48,8 +50,9 @@ internal sealed class ErpAutomationService
         return ErpMode.Unknown;
     }
 
-    public async Task RunAsync(FormSnapshot snapshot, IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task<AutomationRunResult> RunAsync(FormSnapshot snapshot, IProgress<string> progress, CancellationToken cancellationToken)
     {
+        var result = new AutomationRunResult();
         var root = FindErp();
         if (root == 0) throw new InvalidOperationException("找不到 SMART ERP COPI08 視窗。\n請先開啟銷貨單建立作業。");
 
@@ -66,7 +69,7 @@ internal sealed class ErpAutomationService
         await EnsureInputModeAsync(root, cancellationToken);
 
         progress.Report("ERP：輸入表頭…");
-        await FillHeaderAsync(root, snapshot, cancellationToken);
+        await FillHeaderAsync(root, snapshot, result, cancellationToken);
         await FillTabGroupAsync(root, snapshot, "交易資料", cancellationToken);
         await FillTabGroupAsync(root, snapshot, "送貨資料", cancellationToken);
         await FillTabGroupAsync(root, snapshot, "發票資料(一)", cancellationToken);
@@ -74,12 +77,13 @@ internal sealed class ErpAutomationService
         if (snapshot.Details.Count > 0)
         {
             progress.Report("ERP：啟用並光學定位商品明細…");
-            await FillDetailsAsync(root, snapshot.Details, progress, cancellationToken);
+            await FillDetailsAsync(root, snapshot.Details, result, progress, cancellationToken);
         }
 
         Win32Automation.PrepareForeground(root, _log);
         progress.Report("ERP：輸入完成；依目前安全規則未自動儲存。");
-        _log.Info("automation", "input completed; ERP save intentionally not invoked");
+        _log.Info("automation", $"input completed sales_no={result.SalesOrderNumber} warnings={result.Warnings.Count}; ERP save intentionally not invoked");
+        return result;
     }
 
     private async Task WarmUpOcrAsync(WindowsOcrService ocr)
@@ -129,7 +133,7 @@ internal sealed class ErpAutomationService
         throw new InvalidOperationException("已點擊「新增」，但等待 3.5 秒後仍無法確認 ERP 進入可輸入狀態。");
     }
 
-    private async Task FillHeaderAsync(nint root, FormSnapshot snapshot, CancellationToken cancellationToken)
+    private async Task FillHeaderAsync(nint root, FormSnapshot snapshot, AutomationRunResult result, CancellationToken cancellationToken)
     {
         foreach (var field in FieldCatalog.All.Where(f => f.Group == "表頭"))
         {
@@ -138,7 +142,72 @@ internal sealed class ErpAutomationService
             var target = ErpLayoutResolver.ResolveHeader(root, field.Key);
             await SetFieldAsync(root, target, field, value, cancellationToken);
             _log.Info("field", $"filled group={field.Group} key={field.Key} chars={value.Length}");
+            if (field.Key == "order_date" && string.IsNullOrWhiteSpace(result.SalesOrderNumber))
+                result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, cancellationToken);
         }
+
+        if (string.IsNullOrWhiteSpace(result.SalesOrderNumber))
+            result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, cancellationToken);
+    }
+
+    private async Task<string> CaptureSalesOrderNumberAsync(nint root, CancellationToken cancellationToken)
+    {
+        var target = ErpLayoutResolver.ResolveSalesOrderNumber(root);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("讀取銷貨單號前無法把 COPI08 帶到前景。");
+
+        var center = new Point((target.Rect.Left + target.Rect.Right) / 2, (target.Rect.Top + target.Rect.Bottom) / 2);
+        InputSender.Click(center);
+        await Delay(80, cancellationToken);
+
+        var direct = NativeMethods.WindowText(target.Handle).Trim();
+        var beforeClipboard = string.Empty;
+        try
+        {
+            if (Clipboard.ContainsText()) beforeClipboard = Clipboard.GetText().Trim();
+            NativeMethods.SendMessage(target.Handle, NativeMethods.EM_SETSEL, nint.Zero, new nint(-1));
+            NativeMethods.SendMessage(target.Handle, NativeMethods.WM_COPY, nint.Zero, nint.Zero);
+            await Delay(80, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("document", $"sales order clipboard copy raised {ex.GetType().Name}; exact Win32 text fallback will be evaluated");
+        }
+
+        var copied = string.Empty;
+        try
+        {
+            if (Clipboard.ContainsText()) copied = Clipboard.GetText().Trim();
+        }
+        catch { }
+
+        string value;
+        string source;
+        if (IsPlausibleSalesOrderNumber(copied) &&
+            (direct.Length == 0 ? copied != beforeClipboard || beforeClipboard.Length == 0 : copied == direct))
+        {
+            value = copied;
+            source = "clipboard";
+        }
+        else if (IsPlausibleSalesOrderNumber(direct))
+        {
+            value = direct;
+            source = "win32-text";
+        }
+        else
+        {
+            throw new InvalidOperationException("ERP 已輸入銷貨單別／日期，但無法精確取得 ERP 自動產生的銷貨單號；為避免批次追蹤錯單已停止。");
+        }
+
+        _log.Info("document", $"sales order number captured sales_no={value} source={source}");
+        return value;
+    }
+
+    private static bool IsPlausibleSalesOrderNumber(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length is < 4 or > 32) return false;
+        if (value.Any(char.IsWhiteSpace) || value.Contains('*')) return false;
+        return value.Count(char.IsLetterOrDigit) >= 4;
     }
 
     private async Task FillTabGroupAsync(nint root, FormSnapshot snapshot, string group, CancellationToken cancellationToken)
@@ -262,7 +331,7 @@ internal sealed class ErpAutomationService
         await Delay(field.Kind == FieldKind.Lookup ? 420 : 220, cancellationToken);
     }
 
-    private async Task FillDetailsAsync(nint root, IReadOnlyList<DetailRow> rows, IProgress<string> progress, CancellationToken cancellationToken)
+    private async Task FillDetailsAsync(nint root, IReadOnlyList<DetailRow> rows, AutomationRunResult result, IProgress<string> progress, CancellationToken cancellationToken)
     {
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("輸入明細前無法把 ERP 帶到前景。");
@@ -286,13 +355,16 @@ internal sealed class ErpAutomationService
                 if (!Win32Automation.PrepareForeground(root, _log))
                     throw new InvalidOperationException("開啟下一筆明細前無法把 ERP 帶到前景。");
                 InputSender.Press(NativeMethods.VK_DOWN);
-                await Delay(320, cancellationToken);
+                await Delay(180, cancellationToken);
+                await HandleRowTransitionDialogsAsync(root, result, rowIndex, rows[rowIndex - 1], cancellationToken);
+                await Delay(140, cancellationToken);
                 _log.Info("detail", $"next row activated by Down logical_row={rowIndex + 1}");
             }
 
             var visibleRow = rowIndex;
             var row = rows[rowIndex];
             geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 0, row.ItemCode, cancellationToken);
+            geometry = await SelectBatchIfRequiredAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(row.Unit))
                 geometry = await SelectUnitAsync(root, grid, geometry, visibleRow, row.Unit, cancellationToken);
@@ -304,8 +376,6 @@ internal sealed class ErpAutomationService
                 geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 6, row.Warehouse, cancellationToken);
             if (!string.IsNullOrWhiteSpace(row.UnitPrice))
                 geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 7, row.UnitPrice, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(row.Batch))
-                _log.Info("detail", $"batch requested row={rowIndex + 1}; batch automation remains deferred");
         }
     }
 
@@ -508,6 +578,125 @@ internal sealed class ErpAutomationService
         await Delay(120, cancellationToken);
         _log.Info("detail", "F2 unit selected by exact unit-column targeting + optical row click + physical Enter");
         return geometry;
+    }
+
+
+    private async Task<GridGeometry> SelectBatchIfRequiredAsync(
+        nint root,
+        WindowControl grid,
+        GridGeometry geometry,
+        int visibleRow,
+        string itemCode,
+        CancellationToken cancellationToken)
+    {
+        geometry = await EnsureDetailColumnVisibleAsync(root, grid, geometry, visibleRow, 5, cancellationToken);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("檢查批號欄前無法把 ERP 帶到前景。");
+
+        var (activeGeometry, point, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 5, cancellationToken);
+        geometry = activeGeometry;
+        InputSender.Click(point);
+        await Delay(120, cancellationToken);
+
+        var editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 220);
+        if (editor == 0)
+        {
+            InputSender.Press(NativeMethods.VK_RETURN);
+            editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 720);
+        }
+        if (editor == 0)
+            throw new InvalidOperationException($"品號 {itemCode}：無法可靠進入批號欄；為避免後續欄位錯位已停止。");
+
+        var marker = NativeMethods.WindowText(editor).Trim();
+        var starCount = marker.Count(ch => ch == '*');
+        _log.Info("detail", $"batch probe row={visibleRow + 1} item={itemCode} marker_chars={marker.Length} stars={starCount}");
+
+        if (marker.Length == 0)
+        {
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode}");
+            return geometry;
+        }
+
+        if (starCount == 0)
+        {
+            _log.Info("detail", $"batch already populated/non-marker row={visibleRow + 1} item={itemCode} chars={marker.Length}");
+            return geometry;
+        }
+
+        InputSender.Press(NativeMethods.VK_F2);
+        var lookup = await WaitLookupAsync(cancellationToken);
+        if (lookup == 0)
+            throw new InvalidOperationException($"品號 {itemCode} 需要批號，但按 F2 後沒有出現批號查詢視窗。");
+        if (!Win32Automation.PrepareForeground(lookup, _log))
+            throw new InvalidOperationException("F2 批號查詢視窗無法取得前景。");
+        await Delay(120, cancellationToken);
+
+        var selection = await _batchCellLocator.FindFirstPositiveStockAsync(lookup, cancellationToken);
+        InputSender.Click(selection.Point);
+        await Delay(120, cancellationToken);
+
+        var focus = NativeMethods.FocusedControlOfForeground(lookup);
+        if (focus == 0 || !NativeMethods.ClassName(focus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+        {
+            _log.Warn("detail", $"F2 batch row click did not focus grid first_try class={NativeMethods.ClassName(focus)}");
+            InputSender.Click(selection.Point);
+            await Delay(120, cancellationToken);
+            focus = NativeMethods.FocusedControlOfForeground(lookup);
+        }
+        if (focus == 0 || !NativeMethods.ClassName(focus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("已點到正庫存批號列，但 F2 表格沒有取得可驗證焦點；為避免 Enter 送到錯誤控制項已停止。");
+
+        InputSender.Press(NativeMethods.VK_RETURN);
+        if (!await WaitWindowClosedAsync(lookup, 1400, cancellationToken))
+            throw new InvalidOperationException("已選取正庫存批號並送出 Enter，但 F2 視窗仍未關閉。");
+
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("批號 F2 關閉後無法回到 ERP 前景。");
+        await Delay(120, cancellationToken);
+        _log.Info("detail", $"batch selected row={visibleRow + 1} item={itemCode} lookup_row={selection.RowNumber} positive_stock={selection.Stock}");
+        return geometry;
+    }
+
+    private async Task HandleRowTransitionDialogsAsync(
+        nint root,
+        AutomationRunResult result,
+        int completedDetailRow,
+        DetailRow completedRow,
+        CancellationToken cancellationToken)
+    {
+        var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
+        if (peers.Count == 0) return;
+
+        const string knownWarning = "庫存量或批號量不足";
+        foreach (var peer in peers)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var known = Win32Automation.WindowTreeContainsText(peer, knownWarning);
+            if (!known)
+                known = await _textVision.FindTextAsync(peer, [knownWarning], cancellationToken) is not null;
+            if (!known) continue;
+
+            if (!Win32Automation.PrepareForeground(peer, _log))
+                throw new InvalidOperationException("ERP 批號存量不足警告已出現，但無法安全取得警告視窗焦點。");
+            InputSender.Press(NativeMethods.VK_RETURN);
+            if (!await WaitWindowClosedAsync(peer, 1200, cancellationToken))
+                throw new InvalidOperationException("已對批號存量不足警告送出 Enter，但警告視窗沒有關閉；已停止避免後續錯位。");
+
+            var warning = new AutomationWarning(
+                "BATCH_STOCK_INSUFFICIENT",
+                result.SalesOrderNumber,
+                completedDetailRow,
+                completedRow.ItemCode,
+                "批號存量不足，需人工確認");
+            result.Warnings.Add(warning);
+            _log.Warn("document", $"warning recorded code={warning.Code} sales_no={warning.SalesOrderNumber} detail_row={warning.DetailRow} item={warning.ItemCode}");
+
+            if (!Win32Automation.PrepareForeground(root, _log))
+                throw new InvalidOperationException("關閉批號存量不足警告後無法回到 COPI08；已停止避免後續錯位。");
+            return;
+        }
+
+        throw new InvalidOperationException("切換商品明細下一列時 ERP 出現未預期視窗；為避免資料填入錯誤欄位已立即停止目前單據。");
     }
 
     private async Task<GridGeometry> EnsureDetailColumnVisibleAsync(

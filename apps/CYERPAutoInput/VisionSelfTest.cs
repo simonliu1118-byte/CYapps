@@ -132,6 +132,16 @@ internal static class VisionSelfTest
             if (farColumnCandidate is not null)
                 throw new InvalidOperationException("F2 safety failed: a same-text token outside the unit column was accepted.");
 
+
+            if (!F2BatchCellLocator.TryParseStockText("67", out var batchStock67) || batchStock67 != 67 ||
+                !F2BatchCellLocator.TryParseStockText("100.0000", out var batchStock100) || batchStock100 != 100 ||
+                !F2BatchCellLocator.TryParseStockText("1,234", out var batchStock1234) || batchStock1234 != 1234 ||
+                F2BatchCellLocator.TryParseStockText("批號", out _))
+                throw new InvalidOperationException("F2 batch stock parser regression failed.");
+
+            if (OcrTextNormalizer.Normalize("现有存量") != "現有存量")
+                throw new InvalidOperationException("Batch-stock Traditional/Simplified OCR normalization failed.");
+
             var ocr = new WindowsOcrService(log);
             var tokens = await ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: true);
             var joinedText = string.Concat(tokens.Select(t => t.Text)).Replace(" ", string.Empty).Replace("　", string.Empty);
