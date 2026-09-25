@@ -111,35 +111,35 @@ replace_once(dialogs_path, old_tabs, new_tabs)
 # 3) Visual style: month statistics uses the same no-title-fill, bold legend;
 # category manager gets intentionally large tabs.
 theme_path = ROOT / "app" / "theme.py"
-old_stats_box = '''QGroupBox#statsCard {
+old_stats_box = '''QGroupBox#statsCard {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 6px;
     margin-top: 12px;
     padding: 10px 10px 8px 10px;
     background: {NEUTRAL_WHITE};
-}
+}}
 '''
-new_stats_box = '''QGroupBox#statsCard {
+new_stats_box = '''QGroupBox#statsCard {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 6px;
     margin-top: 12px;
     padding: 10px 10px 8px 10px;
     background: {NEUTRAL_WHITE};
     font-weight: 700;
-}
-QGroupBox#statsCard QWidget {
+}}
+QGroupBox#statsCard QWidget {{
     font-weight: normal;
-}
+}}
 '''
 replace_once(theme_path, old_stats_box, new_stats_box)
 
-old_stats_title = '''QGroupBox#statsCard::title {
+old_stats_title = '''QGroupBox#statsCard::title {{
     left: 12px;
     padding: 0 5px;
     background: {NEUTRAL_WHITE};
-}
+}}
 '''
-new_stats_title = '''QGroupBox#statsCard::title {
+new_stats_title = '''QGroupBox#statsCard::title {{
     subcontrol-origin: margin;
     subcontrol-position: top left;
     left: 10px;
@@ -147,15 +147,15 @@ new_stats_title = '''QGroupBox#statsCard::title {
     color: {TEXT_PRIMARY};
     font-size: 11.5pt;
     font-weight: 700;
-}
+}}
 
-QTabWidget#categoryManagerTabs::pane {
+QTabWidget#categoryManagerTabs::pane {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 4px;
     background: {NEUTRAL_WHITE};
     top: -1px;
-}
-QTabWidget#categoryManagerTabs QTabBar::tab {
+}}
+QTabWidget#categoryManagerTabs QTabBar::tab {{
     min-height: 36px;
     min-width: 140px;
     padding: 7px 18px;
@@ -166,23 +166,23 @@ QTabWidget#categoryManagerTabs QTabBar::tab {
     color: {TEXT_SECONDARY};
     font-size: 11.5pt;
     font-weight: 600;
-}
-QTabWidget#categoryManagerTabs QTabBar::tab:first {
+}}
+QTabWidget#categoryManagerTabs QTabBar::tab:first {{
     border-top-left-radius: 4px;
-}
-QTabWidget#categoryManagerTabs QTabBar::tab:last {
+}}
+QTabWidget#categoryManagerTabs QTabBar::tab:last {{
     border-top-right-radius: 4px;
-}
-QTabWidget#categoryManagerTabs QTabBar::tab:selected {
+}}
+QTabWidget#categoryManagerTabs QTabBar::tab:selected {{
     background: {NEUTRAL_WHITE};
     color: {ACCENT_PRESSED};
     border-bottom: 2px solid {ACCENT};
     font-weight: 700;
-}
-QTabWidget#categoryManagerTabs QTabBar::tab:hover:!selected {
+}}
+QTabWidget#categoryManagerTabs QTabBar::tab:hover:!selected {{
     background: {NEUTRAL_WINDOW};
     color: {TEXT_PRIMARY};
-}
+}}
 '''
 replace_once(theme_path, old_stats_title, new_stats_title)
 
