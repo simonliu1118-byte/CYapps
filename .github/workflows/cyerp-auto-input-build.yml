@@ -116,8 +116,8 @@ jobs:
             throw "Download artifact must contain only the CYERPAutoInput/ folder"
           }
 
-          & "$root/CYERPAutoInput.exe" --vision-self-test
-          if ($LASTEXITCODE -ne 0) { throw "Packaged EXE vision self-test failed with code $LASTEXITCODE" }
+          $selfTest = Start-Process -FilePath "$root/CYERPAutoInput.exe" -ArgumentList "--vision-self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Packaged EXE vision self-test failed with code $($selfTest.ExitCode)" }
           Remove-Item -Recurse -Force "$root/logs" -ErrorAction SilentlyContinue
 
       - name: Upload engineering package
