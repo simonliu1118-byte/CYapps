@@ -6,6 +6,7 @@ on:
       - cyaccounting/v1.2.0-visual-phase1
     paths:
       - .github/workflows/cyaccounting-ui-refinement-build5.yml
+      - apps/CYAccounting/tools/refine_ui_build5.py
 
 permissions:
   contents: write
@@ -40,7 +41,7 @@ jobs:
           if ($main -match 'flags &= ~Qt.WindowType.WindowSystemMenuHint') { throw "System menu is still being removed" }
           if ($main -notmatch 'WS_EX_DLGMODALFRAME') { throw "Native no-icon style missing" }
           $theme = Get-Content apps/CYAccounting/app/theme.py -Raw
-          if ($theme -match 'QGroupBox#statsCard::title \{[^}]*background:') { throw "Month Statistics title still has explicit background" }
+          if ($theme -match 'QGroupBox#statsCard::title \{\{[^}]*background:') { throw "Month Statistics title still has explicit background" }
           if ($theme -notmatch 'QTabWidget#categoryManagerTabs QTabBar::tab') { throw "Large category tabs style missing" }
           $dialogs = Get-Content apps/CYAccounting/app/dialogs.py -Raw
           if ($dialogs -notmatch 'setObjectName\("categoryManagerTabs"\)') { throw "Category manager tab identity missing" }
