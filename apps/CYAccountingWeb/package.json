@@ -4,10 +4,11 @@
   "private": true,
   "description": "CYAccounting Web - Cloudflare Workers + D1",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "db:migrate:local": "wrangler d1 migrations apply cyaccounting-web-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply cyaccounting-web-db --remote"
+    "config:render": "node scripts/render-wrangler.mjs --output wrangler.generated.jsonc",
+    "dev": "npm run config:render && wrangler dev --config wrangler.generated.jsonc",
+    "deploy": "node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc && wrangler deploy --config wrangler.deploy.jsonc",
+    "db:migrate:local": "npm run config:render && wrangler d1 migrations apply DB --local --config wrangler.generated.jsonc",
+    "db:migrate:remote": "node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc && wrangler d1 migrations apply DB --remote --config wrangler.deploy.jsonc"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

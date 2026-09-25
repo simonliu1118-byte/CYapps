@@ -23,6 +23,11 @@ settings.json
 .env
 .env.*
 
+# Generated deployment configuration
+apps/CYAccountingWeb/wrangler.generated.jsonc
+apps/CYAccountingWeb/wrangler.ci.generated.jsonc
+apps/CYAccountingWeb/wrangler.deploy.jsonc
+
 # Editors and operating systems
 .vscode/
 .idea/

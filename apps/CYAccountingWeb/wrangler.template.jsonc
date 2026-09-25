@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "cyaccounting-web",
+  "name": "__CF_WORKER_NAME__",
   "main": "src/app.js",
   "compatibility_date": "2026-09-22",
   "assets": {
@@ -13,14 +13,14 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "cyaccounting-web-db",
-      "database_id": "e12bccbf-6c68-4639-8195-06591e8cf2f6"
+      "database_name": "__CF_D1_DATABASE_NAME__",
+      "database_id": "__CF_D1_DATABASE_ID__"
     }
   ],
   "services": [
     {
       "binding": "IDENTITY",
-      "service": "cyinvoice-cloud-dev"
+      "service": "__CF_IDENTITY_SERVICE__"
     }
   ],
   "triggers": {
