@@ -30,106 +30,92 @@ jobs:
 
           root = Path('apps/CYAccounting')
 
-          # 1) Stop fighting the Windows title bar. Production already sets the
-          # QApplication icon from app/resources/app.ico (ACC), and QDialogs
-          # inherit that icon. Remove the Build 6/7 no-icon/fixed-dialog hacks.
+          # Stop suppressing secondary-window icons. The application already
+          # sets app/resources/app.ico (ACC) on QApplication, so normal QDialogs
+          # inherit the ACC icon without native title-bar manipulation.
           main_path = root / 'app/main.py'
           main = main_path.read_text(encoding='utf-8')
-          icon_helpers = re.compile(
+          helper_pattern = re.compile(
               r"    @staticmethod\n"
               r"    def _apply_secondary_dialog_no_icon\(dialog: QDialog\) -> None:\n"
               r".*?"
               r"(?=    def eventFilter\(self, watched, event\):)",
               re.S,
           )
-          main, count = icon_helpers.subn('', main, count=1)
+          main, count = helper_pattern.subn('', main, count=1)
           if count != 1:
               raise SystemExit(f'icon-helper removal count={count}')
 
-          old_dialog_branch = '''            elif isinstance(watched, QDialog) and not isinstance(watched, QFileDialog):
-              if event.type() == QEvent.Type.Polish:
-                  self._prepare_secondary_dialog_chrome(watched)
-              QTimer.singleShot(0, lambda dlg=watched: self._clear_secondary_dialog_icon(dlg))
-          '''
-          if old_dialog_branch not in main:
-              raise SystemExit('secondary-dialog event-filter branch not found')
-          main = main.replace(old_dialog_branch, '', 1)
+          dialog_branch_pattern = re.compile(
+              r"            elif isinstance\(watched, QDialog\) and not isinstance\(watched, QFileDialog\):\n"
+              r"                if event\.type\(\) == QEvent\.Type\.Polish:\n"
+              r"                    self\._prepare_secondary_dialog_chrome\(watched\)\n"
+              r"                QTimer\.singleShot\(0, lambda dlg=watched: self\._clear_secondary_dialog_icon\(dlg\)\)\n"
+          )
+          main, count = dialog_branch_pattern.subn('', main, count=1)
+          if count != 1:
+              raise SystemExit(f'secondary-dialog event branch removal count={count}')
           main_path.write_text(main, encoding='utf-8')
 
-          # 2) Use the exact V1.1.0 Release QTabWidget construction for the
-          # income/expense category manager: no object name, no forced tab-bar
-          # expansion policy, and no custom scroll-button policy.
+          # Exact V1.1.0 Release construction: plain QTabWidget + addTab calls.
           dialogs_path = root / 'app/dialogs.py'
           dialogs = dialogs_path.read_text(encoding='utf-8')
-          old_tabs = '''        tabs = QTabWidget()
-          tabs.setObjectName("categoryManagerTabs")
-          tabs.tabBar().setExpanding(False)
-          tabs.tabBar().setUsesScrollButtons(False)
-          tabs.addTab(CategoryPage(db, "income"), "收入科目")
-          tabs.addTab(CategoryPage(db, "expense"), "支出科目")
-          '''
-          new_tabs = '''        tabs = QTabWidget()
-          tabs.addTab(CategoryPage(db, "income"), "收入科目")
-          tabs.addTab(CategoryPage(db, "expense"), "支出科目")
-          '''
-          if old_tabs not in dialogs:
-              raise SystemExit('current category-tab construction block not found')
-          dialogs = dialogs.replace(old_tabs, new_tabs, 1)
+          tab_setup_pattern = re.compile(
+              r"(        tabs = QTabWidget\(\)\n)"
+              r"        tabs\.setObjectName\(\"categoryManagerTabs\"\)\n"
+              r"        tabs\.tabBar\(\)\.setExpanding\(False\)\n"
+              r"        tabs\.tabBar\(\)\.setUsesScrollButtons\(False\)\n"
+              r"(        tabs\.addTab\(CategoryPage\(db, \"income\"\), \"收入科目\"\)\n"
+              r"        tabs\.addTab\(CategoryPage\(db, \"expense\"\), \"支出科目\"\)\n)"
+          )
+          dialogs, count = tab_setup_pattern.subn(r"\1\2", dialogs, count=1)
+          if count != 1:
+              raise SystemExit(f'category-tab construction replacement count={count}')
           dialogs_path.write_text(dialogs, encoding='utf-8')
 
-          # 3) Remove every project-specific category-manager tab QSS rule.
-          # This lets Qt/Windows draw the same native QTabWidget structure used
-          # by the V1.1.0 Release instead of trying to imitate it with QSS.
+          # Remove the Build 7 category-manager QSS wholesale. With no targeted
+          # QSS, Windows/Qt renders the same native tab/pane structure as V1.1.0.
           theme_path = root / 'app/theme.py'
           theme = theme_path.read_text(encoding='utf-8')
-          tab_qss = re.compile(
+          tab_qss_pattern = re.compile(
               r"/\* Category manager: V1\.1\.0 conventional geometry, enlarged to current guide\..*?"
               r"(?=QLineEdit, QComboBox, QSpinBox, QDateEdit \{\{)",
               re.S,
           )
-          theme, count = tab_qss.subn('', theme, count=1)
+          theme, count = tab_qss_pattern.subn('', theme, count=1)
           if count != 1:
               raise SystemExit(f'category-manager QSS removal count={count}')
           theme_path.write_text(theme, encoding='utf-8')
 
-          # 4) Regression tests now enforce native Release behavior rather than
-          # the Build 7 custom tab/chrome implementation.
+          # Update regression coverage to enforce Release-native tabs and ensure
+          # the no-icon/fixed-dialog helper does not come back.
           tests_path = root / 'tests/test_app.py'
           tests = tests_path.read_text(encoding='utf-8')
-          old_test = '''    category_tabs = category_dlg.findChild(QTabWidget, 'categoryManagerTabs')
-              assert category_tabs is not None
-              assert category_tabs.count() == 2
-              assert category_tabs.tabBar().expanding() is False
-              assert 'QTabWidget#categoryManagerTabs QTabBar::tab {' in main_module.APP_STYLE
-              assert 'border-top-left-radius: 5px' in main_module.APP_STYLE
-              assert 'top: 6px;' in main_module.APP_STYLE
-              assert 'border-bottom: 0;' in main_module.APP_STYLE
-          
-              # Secondary dialogs use Qt's Windows fixed-dialog family while keeping X.
-              chrome_flags_before = dlg.windowFlags()
-              main_module.ChineseStandardButtonFilter._prepare_secondary_dialog_chrome(dlg)
-              chrome_flags_after = dlg.windowFlags()
-              if sys.platform == 'win32':
-                  assert chrome_flags_after & Qt.WindowType.MSWindowsFixedSizeDialogHint
-                  assert chrome_flags_after & Qt.WindowType.WindowCloseButtonHint
-              assert (chrome_flags_after & Qt.WindowType.WindowType_Mask) == (chrome_flags_before & Qt.WindowType.WindowType_Mask)
+          regression_pattern = re.compile(
+              r"    category_tabs = category_dlg\.findChild\(QTabWidget, 'categoryManagerTabs'\)\n"
+              r".*?"
+              r"(?=    combo = CategoryComboBox\(\))",
+              re.S,
+          )
+          regression_replacement = '''    category_tabs = category_dlg.findChild(QTabWidget)
+          assert category_tabs is not None
+          assert category_tabs.count() == 2
+          # V1.1.0 Release implementation: plain native QTabWidget.
+          assert category_tabs.objectName() == ''
+          assert 'categoryManagerTabs' not in main_module.APP_STYLE
+          # Secondary dialogs now inherit QApplication's ACC icon; no Win32
+          # fixed-dialog/no-icon manipulation remains.
+          assert not hasattr(main_module.ChineseStandardButtonFilter, '_prepare_secondary_dialog_chrome')
           '''
-          new_test = '''    category_tabs = category_dlg.findChild(QTabWidget)
-              assert category_tabs is not None
-              assert category_tabs.count() == 2
-              # Match the V1.1.0 Release implementation: a plain native QTabWidget.
-              assert category_tabs.objectName() == ''
-              assert 'categoryManagerTabs' not in main_module.APP_STYLE
-              # The no-icon/fixed-dialog workaround is intentionally gone; production
-              # QDialogs inherit QApplication's ACC icon and keep native window flags.
-              assert not hasattr(main_module.ChineseStandardButtonFilter, '_prepare_secondary_dialog_chrome')
-          '''
-          if old_test not in tests:
-              raise SystemExit('Build 7 category/chrome regression block not found')
-          tests = tests.replace(old_test, new_test, 1)
+          regression_replacement = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in regression_replacement.splitlines()
+          ) + '\n'
+          tests, count = regression_pattern.subn(regression_replacement, tests, count=1)
+          if count != 1:
+              raise SystemExit(f'regression block replacement count={count}')
           tests_path.write_text(tests, encoding='utf-8')
 
-          # 5) Delivered revision identity.
           build_path = root / 'BUILD'
           if build_path.read_text(encoding='utf-8').strip() != '7':
               raise SystemExit('expected BUILD 7 before Build 8 migration')
