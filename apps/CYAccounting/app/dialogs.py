@@ -42,7 +42,6 @@ from db import Database, DatabaseError
 from background import start_background_task
 from util import (
     APP_NAME,
-    APP_VERSION,
     MAX_AMOUNT,
     app_root,
     DB_FILENAME,
@@ -730,7 +729,7 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("系統設定")
         self.setObjectName("settingsDialog")
         self.setModal(True)
-        self.resize(760, 660)
+        self.resize(760, 640)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 8, 12, 8)
         outer.setSpacing(6)
@@ -877,21 +876,18 @@ class SettingsDialog(QDialog):
         drive_layout.addWidget(self.google_last, 3, 0, 1, 4)
         outer.addWidget(drive_box)
 
-        info_box = QGroupBox("程式資訊")
-        info_layout = QGridLayout(info_box)
-        info_layout.setContentsMargins(12, 8, 12, 8)
-        info_layout.setHorizontalSpacing(8)
-        info_layout.setVerticalSpacing(4)
-        info_layout.addWidget(QLabel("程式名稱："), 0, 0)
-        info_layout.addWidget(QLabel(APP_NAME), 0, 1)
-        info_layout.addWidget(QLabel("版本："), 1, 0)
-        info_layout.addWidget(QLabel(APP_VERSION), 1, 1)
+        reset_box = QGroupBox("帳本重置")
+        reset_layout = QHBoxLayout(reset_box)
+        reset_layout.setContentsMargins(12, 7, 12, 7)
+        reset_layout.setSpacing(8)
+        reset_note = QLabel("清除本機帳本資料與期初餘額；既有備份保留。")
+        reset_layout.addWidget(reset_note)
+        reset_layout.addStretch(1)
         clear = no_tab_button("清除所有記帳資料與期初餘額")
         clear.setObjectName("dangerButton")
         clear.clicked.connect(self.clear_data)
-        info_layout.setColumnStretch(2, 1)
-        info_layout.addWidget(clear, 0, 3, 2, 1, Qt.AlignmentFlag.AlignVCenter)
-        outer.addWidget(info_box)
+        reset_layout.addWidget(clear)
+        outer.addWidget(reset_box)
         outer.addSpacing(2)
         close = no_tab_button("關閉"); close.clicked.connect(self.accept)
         row = QHBoxLayout(); row.addStretch(); row.addWidget(close); outer.addLayout(row)

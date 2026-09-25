@@ -1,11 +1,13 @@
 Version: V1.2.0
-Build: 5
+Build: 6
 Date: 2026/09/26
 
 Current source on Phase 1 visual-alignment branch; test artifact, not a formal Release:
+- Build 6 moves program/version information to a low-presence main-window footer and uses the repository-policy notice: Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.; Settings keeps the destructive reset action in a dedicated Account Reset section.
+- Build 6 changes Income Category / Expense Category to large equal-width conventional QTabWidget tabs with clear selected-page chrome instead of the header-only underline treatment; native QTabWidget lifecycle and keyboard behavior remain intact.
+- Build 6 aligns secondary-dialog icon suppression with CYInvoice's proven ShowIcon=false intent: Qt caption flags are untouched, WS_EX_DLGMODALFRAME is applied to the HWND before first show and reapplied after show, and no transparent/empty icon workaround is used.
 - Build 5 preserves each QDialog's default native window flags and working Close button while applying icon suppression only at the Windows non-client HWND layer; secondary-dialog icon removal must never change or disable title-bar behavior.
 - Build 5 changes Month Statistics to the same no-explicit-title-fill, bold GroupBox legend treatment used by the other section titles.
-- Build 5 gives Income Category / Expense Category large equal-width Header-only Custom tabs: neutral inactive text, stronger selected weight and a 2px Accent underline, while retaining QTabWidget page lifecycle and keyboard behavior.
 - Aligned CYAccounting with the canonical CY Desktop Visual Guide Phase 1 using the Blue Theme.
 - Main tabs keep the lower-presence accent-underline header treatment, while a thin neutral workspace frame groups the active page content without restoring the old heavy QTabWidget chrome.
 - Input page follows a dedicated data-entry density: primary entry fields remain deliberately larger and more legible (11pt, at least 30px high) because entering data is the primary task.
@@ -19,11 +21,9 @@ Current source on Phase 1 visual-alignment branch; test artifact, not a formal R
 - Income / Expense save actions use ordinary button styling rather than Primary styling, and their height is synchronized to the adjacent amount field after layout/style resolution.
 - Common-summary dividers belong to the summary band itself instead of being independent layout rows; they use a dark dashed top border and 8px vertical rhythm so their position remains stable when window width changes.
 - Input Confirmation remains fixed for the 10-entry use case. MainWindow minimum size and initial size are both 1120x710 so the full panel cannot be clipped by normal resizing at the accepted 100% / 96-DPI baseline.
-- Main application window keeps the canonical ACC icon. Secondary dialogs / management / settings windows now use true no-system-menu dialog chrome plus WM_SETICON(NULL) / dialog-modal-frame cleanup on Windows, so the icon slot itself is removed and title text aligns left; native MessageBox and native QFileDialog keep OS-native shell behavior.
 - Ledger uses a separate high-density review mode: original 23px data-row density is restored, the header is 24px, table text remains 10pt, and query/statistics spacing stays compact.
 - Ledger uses neutral headers, low-contrast grid, soft selection and a single zebra-striping source.
 - Monetary entry fields are right-aligned; state colors and accounting-domain income/expense colors are separated.
-- Settings uses compact framed GroupBox sections for database location, lock, ledger, common summary, backup/restore, Google Drive and program information; their legends use the same no-explicit-fill, bold treatment as the main input page, and excess inter-section whitespace remains removed while behavior is unchanged. Import keeps its existing canonical spacing/density treatment.
 - Build 3 real-machine refinement removes explicit GroupBox-title fills, strengthens section legend weight, adds breathing room below the main tab header, compacts the 10-row input workspace height, and suppresses the Windows generic secondary-dialog icon with an invisible native HICON.
 - Build 3 visual acceptance focus: verify that GroupBox legends inherit the surrounding background without a separate white patch, and that secondary-dialog title bars show no visible generic icon on Windows.
 - Existing accounting workflow, Enter/Tab/Esc behavior, database schema, backup/restore, Google Drive, import flow, locking and two-DELETE local-ledger reset behavior remain unchanged.

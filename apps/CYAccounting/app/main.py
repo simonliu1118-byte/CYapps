@@ -160,6 +160,7 @@ from models import LedgerTableModel
 from util import (
     APP_NAME,
     APP_VERSION,
+    APP_RELEASE_DATE,
     MAX_AMOUNT,
     BACKUP_PREFIX,
     DB_FILENAME,
@@ -247,59 +248,61 @@ class ChineseStandardButtonFilter(QObject):
                 button.setText(text)
 
     @staticmethod
+    def _apply_secondary_dialog_no_icon(dialog: QDialog) -> None:
+        """Emulate WinForms ShowIcon=False without changing Qt caption flags.
+
+        CYInvoice's proven WinForms dialogs use ShowIcon=False while retaining
+        the native system menu and Close button. Qt Widgets has no equivalent
+        property, so apply the corresponding Windows dialog-modal-frame style
+        directly to the HWND. This is intentionally done both before first show
+        and after show because Qt can refresh the non-client frame while showing.
+        """
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            hwnd = int(dialog.winId())  # Force the native HWND before first show.
+            user32 = ctypes.windll.user32
+            GWL_EXSTYLE = -20
+            WS_EX_DLGMODALFRAME = 0x00000001
+            WM_SETICON = 0x0080
+            ICON_SMALL = 0
+            ICON_BIG = 1
+            SWP_NOSIZE = 0x0001
+            SWP_NOMOVE = 0x0002
+            SWP_NOZORDER = 0x0004
+            SWP_NOACTIVATE = 0x0010
+            SWP_FRAMECHANGED = 0x0020
+            get_ex_style = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
+            set_ex_style = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
+            ex_style = get_ex_style(hwnd, GWL_EXSTYLE)
+            set_ex_style(hwnd, GWL_EXSTYLE, ex_style | WS_EX_DLGMODALFRAME)
+            user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, 0)
+            user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, 0)
+            user32.SetWindowPos(
+                hwnd,
+                0,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            )
+        except Exception:
+            pass
+
+    @staticmethod
     def _prepare_secondary_dialog_chrome(dialog: QDialog) -> None:
-        # Do not alter Qt window flags here. QDialog's native caption/system
-        # menu/Close behavior is already correct; changing the hint mask can
-        # disable the Windows X button. Icon suppression is handled only after
-        # HWND creation by _clear_secondary_dialog_icon().
+        # Never mutate Qt window flags: the default QDialog caption owns the
+        # working Windows system menu and Close button.
         if dialog.property("cySecondaryChromePrepared"):
             return
         dialog.setProperty("cySecondaryChromePrepared", True)
-        dialog.setWindowIcon(QIcon())
+        ChineseStandardButtonFilter._apply_secondary_dialog_no_icon(dialog)
 
     @staticmethod
     def _clear_secondary_dialog_icon(dialog: QDialog) -> None:
-        # Windows can still inherit a class icon after Qt creates the HWND.
-        # WS_EX_DLGMODALFRAME + WM_SETICON(NULL) suppresses that fallback and,
-        # unlike the old transparent-icon workaround, does not reserve an icon slot.
-        dialog.setWindowIcon(QIcon())
-        if sys.platform == "win32":
-            try:
-                import ctypes
-                hwnd = int(dialog.winId())
-                user32 = ctypes.windll.user32
-                GWL_EXSTYLE = -20
-                WS_EX_DLGMODALFRAME = 0x00000001
-                WM_SETICON = 0x0080
-                ICON_SMALL = 0
-                ICON_BIG = 1
-                SWP_NOSIZE = 0x0001
-                SWP_NOMOVE = 0x0002
-                SWP_NOZORDER = 0x0004
-                SWP_NOACTIVATE = 0x0010
-                SWP_FRAMECHANGED = 0x0020
-
-                # WS_EX_DLGMODALFRAME is the native no-caption-icon style.
-                # It does not remove WS_SYSMENU, so the Windows Close button
-                # remains active. WM_SETICON(NULL) then clears any inherited
-                # QApplication/window icon after the native handle exists.
-                get_ex_style = getattr(user32, "GetWindowLongPtrW", user32.GetWindowLongW)
-                set_ex_style = getattr(user32, "SetWindowLongPtrW", user32.SetWindowLongW)
-                ex_style = get_ex_style(hwnd, GWL_EXSTYLE)
-                set_ex_style(hwnd, GWL_EXSTYLE, ex_style | WS_EX_DLGMODALFRAME)
-                user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, 0)
-                user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, 0)
-                user32.SetWindowPos(
-                    hwnd,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-                )
-            except Exception:
-                pass
+        ChineseStandardButtonFilter._apply_secondary_dialog_no_icon(dialog)
 
     def eventFilter(self, watched, event):  # noqa: N802
         if event.type() in (QEvent.Type.Polish, QEvent.Type.Show):
@@ -1414,6 +1417,14 @@ class MainWindow(QMainWindow):
         page_layout.setContentsMargins(0, 0, 0, 0)
         page_layout.addWidget(self.pages)
         central_layout.addWidget(page_container, 1)
+
+        footer = QLabel(
+            f"{APP_NAME} {APP_VERSION}   |   "
+            f"Copyright © {APP_RELEASE_DATE[:4]} C.C. Liu, Chihyuan Co. All Rights Reserved."
+        )
+        footer.setObjectName("appFooter")
+        footer.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        central_layout.addWidget(footer, 0)
         self.setCentralWidget(central)
         self._restore_window_state()
         QTimer.singleShot(0, self.input_tab.date_edit.setFocus)

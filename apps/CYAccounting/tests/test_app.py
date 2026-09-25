@@ -156,6 +156,8 @@ def test_account_manager_controls_and_titles():
     assert category_tabs is not None
     assert category_tabs.count() == 2
     assert category_tabs.tabBar().expanding() is True
+    assert 'border-bottom: 2px solid #2563EB' not in main_module.APP_STYLE
+    assert 'border-bottom-color: #FFFFFF' in main_module.APP_STYLE
 
     # Secondary-dialog preparation must never mutate Qt's native window flags.
     # The default QDialog caption owns the system menu and working Close button;
@@ -270,6 +272,10 @@ def test_ui_constructs():
     assert len(win.input_tab.confirm_labels) == 10
     assert win.minimumWidth() == 1120
     assert win.minimumHeight() == 710
+    footer = win.findChild(QLabel, 'appFooter')
+    assert footer is not None
+    assert APP_VERSION in footer.text()
+    assert 'Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.' in footer.text()
     selected_button = win.input_tab.account_buttons[win.input_tab.selected_account]
     assert selected_button.isChecked()
     assert win.input_tab.income_amount.maxLength() == 7
@@ -309,6 +315,9 @@ def test_ui_constructs():
     assert dlg.common_summary_min.text() == '3'
     assert dlg.common_summary_recent.findChild(QPushButton) is None
     assert dlg.common_summary_min.findChild(QPushButton) is None
+    settings_titles = {group.title() for group in dlg.findChildren(QGroupBox)}
+    assert '程式資訊' not in settings_titles
+    assert '帳本重置' in settings_titles
     # The settings page intentionally remains an administrator override that
     # may move the lock backward after an explicit warning.
     db.set_locked_through('2026/07')

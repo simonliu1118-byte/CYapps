@@ -51,6 +51,13 @@ QLabel {{
     background: transparent;
 }}
 
+QLabel#appFooter {{
+    color: {TEXT_SECONDARY};
+    font-size: 9pt;
+    padding: 3px 2px 0 0;
+    background: transparent;
+}}
+
 /* Continuous accounting workspace: section titles carry hierarchy, not cards. */
 QGroupBox {{
     border: 0;
@@ -139,9 +146,9 @@ QGroupBox#statsCard::title {{
     font-weight: 700;
 }}
 
-/* Category manager uses the canonical Header-only Custom tab direction:
-   large/equal hit targets, low visual presence, stronger selected weight and
-   a 2px Accent underline. The QTabWidget still owns page lifecycle/keyboard. */
+/* Category manager deliberately uses large conventional tabs rather than
+   header-only navigation: these are two peer management pages and need a
+   stronger, old-style tab affordance. Keep native QTabWidget behavior. */
 QTabWidget#categoryManagerTabs::pane {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 4px;
@@ -151,23 +158,27 @@ QTabWidget#categoryManagerTabs::pane {{
 QTabWidget#categoryManagerTabs QTabBar::tab {{
     min-height: 36px;
     min-width: 140px;
-    padding: 8px 18px;
-    margin: 0;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: transparent;
+    padding: 7px 18px;
+    margin: 0 2px 0 0;
+    border: 1px solid {NEUTRAL_BORDER};
+    border-bottom-color: {NEUTRAL_BORDER};
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    background: {NEUTRAL_WINDOW};
     color: {TEXT_SECONDARY};
     font-size: 11.5pt;
     font-weight: 600;
 }}
 QTabWidget#categoryManagerTabs QTabBar::tab:selected {{
     color: {TEXT_PRIMARY};
-    border-bottom: 2px solid {ACCENT};
+    background: {NEUTRAL_WHITE};
+    border-color: {NEUTRAL_BORDER};
+    border-bottom-color: {NEUTRAL_WHITE};
     font-weight: 700;
 }}
 QTabWidget#categoryManagerTabs QTabBar::tab:hover:!selected {{
-    color: {ACCENT_HOVER};
-    background: {NEUTRAL_WINDOW};
+    color: {TEXT_PRIMARY};
+    background: #EEF2F6;
 }}
 QLineEdit, QComboBox, QSpinBox, QDateEdit {{
     border: 1px solid {NEUTRAL_BORDER};
