@@ -67,14 +67,6 @@ jobs:
           text = todo.read_text(encoding='utf-8')
           text = text.replace('- [ ] 單月 Excel 匯出。', '- [x] 單月 Excel 匯出：直接產生標準 `.xlsx`，包含月統計、逐筆餘額與期初餘額工作表（V0.13.0）。', 1)
           todo.write_text(text, encoding='utf-8')
-
-          workflow = Path('.github/workflows/cyaccountingweb-deploy.yml')
-          text = workflow.read_text(encoding='utf-8')
-          if 'node --check src/v13-export.js' not in text:
-              text = text.replace('          node --check src/v12-tools.js\n', '          node --check src/v12-tools.js\n          node --check src/v13-export.js\n', 1)
-          if 'node --check public/v013.js' not in text:
-              text = text.replace('          node --check public/v012.js\n', '          node --check public/v012.js\n          node --check public/v013.js\n', 1)
-          workflow.write_text(text, encoding='utf-8')
           PY
 
           node --check apps/CYAccountingWeb/src/v13-export.js
@@ -123,7 +115,6 @@ jobs:
           git add apps/CYAccountingWeb/src/app.js \
                   apps/CYAccountingWeb/public/index.html \
                   apps/CYAccountingWeb/VERSION \
-                  apps/CYAccountingWeb/TODO.md \
-                  .github/workflows/cyaccountingweb-deploy.yml
+                  apps/CYAccountingWeb/TODO.md
           git commit -m 'feat(CYAccountingWeb): wire V0.13 Excel export'
           git push origin HEAD:cyaccountingweb/v0.13-excel-export
