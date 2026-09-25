@@ -1,0 +1,218 @@
+name: CYERPAutoInput Build 21 Temp CI
+
+on:
+  push:
+    branches: [ci-cyerp-build21]
+    paths:
+      - ".github/workflows/cyerp-auto-input-build21-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v7
+        with:
+          ref: cyerp-auto-input/v0.1.0-csharp
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Apply Build 21 patch
+        shell: bash
+        working-directory: apps/CYERPAutoInput
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8').replace('\r\n', '\n')
+
+          def write(path, text):
+              with open(path, 'w', encoding='utf-8', newline='\n') as f:
+                  f.write(text)
+
+          def rep(path, old, new, count=1):
+              text = read(path)
+              if old not in text:
+                  raise SystemExit(f'Expected source block not found in {path}: {old[:120]!r}')
+              write(path, text.replace(old, new, count))
+
+          write('BUILD', '21\n')
+          rep('AppLogger.cs', 'CYERPAutoInput V0.1.0 Build 20 starting', 'CYERPAutoInput V0.1.0 Build 21 starting')
+          rep('Build10UiPatch.cs', 'V0.1.0 Build 20 · Esc：緊急停止 · 不自動儲存 ERP', 'V0.1.0 Build 21 · Esc：緊急停止 · 不自動儲存 ERP')
+          rep('MainForm.cs', 'V0.1.0 Build 20 · Esc：緊急停止 · 不自動儲存 ERP', 'V0.1.0 Build 21 · Esc：緊急停止 · 不自動儲存 ERP')
+
+          path = 'ErpAutomationService.cs'
+          text = read(path)
+          start_marker = '    private async Task<GridGeometry> SelectBatchIfRequiredAsync(\n'
+          end_marker = '    private async Task HandleRowTransitionDialogsAsync(\n'
+          start = text.find(start_marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('Build 21 batch method markers not found')
+
+          new_method = r'''    private async Task<GridGeometry> SelectBatchIfRequiredAsync(
+        nint root,
+        WindowControl grid,
+        GridGeometry geometry,
+        int visibleRow,
+        string itemCode,
+        CancellationToken cancellationToken)
+    {
+        geometry = await EnsureDetailColumnVisibleAsync(root, grid, geometry, visibleRow, 5, cancellationToken);
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("檢查批號欄前無法把 ERP 帶到前景。");
+
+        var (activeGeometry, point, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 5, cancellationToken);
+        geometry = activeGeometry;
+
+        // A non-batch-managed item has a real batch column cell, but COPI08 does not
+        // create an editor for that cell. Build 20 incorrectly treated "no editor" as
+        // a hard failure. Build 21 verifies that the click stayed inside the live grid,
+        // then lets ERP itself answer the question: F2 opens only when the batch lookup
+        // is available. No Enter is sent merely to probe the cell.
+        InputSender.Click(point);
+        await Delay(120, cancellationToken);
+
+        var focus = NativeMethods.FocusedControlOfForeground(root);
+        if (focus == 0 || !Win32Automation.IsInside(focus, grid.Handle))
+        {
+            InputSender.Click(point);
+            await Delay(120, cancellationToken);
+            focus = NativeMethods.FocusedControlOfForeground(root);
+        }
+        if (focus == 0 || !Win32Automation.IsInside(focus, grid.Handle))
+            throw new InvalidOperationException($"品號 {itemCode}：批號欄點擊後焦點未留在商品明細；為避免後續欄位錯位已停止。");
+
+        var editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 180);
+        var marker = editor == 0 ? string.Empty : NativeMethods.WindowText(editor).Trim();
+        var starCount = marker.Count(ch => ch == '*');
+        _log.Info("detail", $"batch probe row={visibleRow + 1} item={itemCode} focus={NativeMethods.ClassName(focus)} editor={(editor == 0 ? "none" : NativeMethods.ClassName(editor))} marker_chars={marker.Length} stars={starCount}");
+
+        InputSender.Press(NativeMethods.VK_F2);
+        var lookup = await WaitLookupAsync(cancellationToken, 850);
+        if (lookup == 0)
+        {
+            if (starCount > 0)
+                throw new InvalidOperationException($"品號 {itemCode} 的批號欄顯示批號標記，但按 F2 後沒有出現批號查詢視窗；已停止避免錯位。");
+
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode} reason=no-f2-lookup-after-verified-grid-focus");
+            return geometry;
+        }
+
+        _log.Info("detail", $"batch lookup opened row={visibleRow + 1} item={itemCode} marker_chars={marker.Length} stars={starCount}");
+        if (!Win32Automation.PrepareForeground(lookup, _log))
+            throw new InvalidOperationException("F2 批號查詢視窗無法取得前景。");
+        await Delay(120, cancellationToken);
+
+        var selection = await _batchCellLocator.FindFirstPositiveStockAsync(lookup, cancellationToken);
+        InputSender.Click(selection.Point);
+        await Delay(120, cancellationToken);
+
+        var lookupFocus = NativeMethods.FocusedControlOfForeground(lookup);
+        if (lookupFocus == 0 || !NativeMethods.ClassName(lookupFocus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+        {
+            _log.Warn("detail", $"F2 batch row click did not focus grid first_try class={NativeMethods.ClassName(lookupFocus)}");
+            InputSender.Click(selection.Point);
+            await Delay(120, cancellationToken);
+            lookupFocus = NativeMethods.FocusedControlOfForeground(lookup);
+        }
+        if (lookupFocus == 0 || !NativeMethods.ClassName(lookupFocus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("已點到正庫存批號列，但 F2 表格沒有取得可驗證焦點；為避免 Enter 送到錯誤控制項已停止。");
+
+        InputSender.Press(NativeMethods.VK_RETURN);
+        if (!await WaitWindowClosedAsync(lookup, 1400, cancellationToken))
+            throw new InvalidOperationException("已選取正庫存批號並送出 Enter，但 F2 視窗仍未關閉。");
+
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("批號 F2 關閉後無法回到 ERP 前景。");
+        await Delay(120, cancellationToken);
+        _log.Info("detail", $"batch selected row={visibleRow + 1} item={itemCode} lookup_row={selection.RowNumber} positive_stock={selection.Stock}");
+        return geometry;
+    }
+
+'''
+          text = text[:start] + new_method + text[end:]
+          old_wait = '''    private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken)
+    {
+        var stop = Environment.TickCount64 + 2500;
+'''
+          new_wait = '''    private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken, int timeoutMs = 2500)
+    {
+        var stop = Environment.TickCount64 + Math.Max(100, timeoutMs);
+'''
+          if old_wait not in text:
+              raise SystemExit('WaitLookupAsync block not found')
+          text = text.replace(old_wait, new_wait, 1)
+          write(path, text)
+          PY
+
+      - name: Fetch canonical CYERPAutoInput icon
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-canonical-icon.ps1
+
+      - name: Fetch pinned PaddleOCR models
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-ocr-models.ps1
+
+      - name: Restore
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet restore CYERPAutoInput.csproj -r win-x64
+
+      - name: Build
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet build CYERPAutoInput.csproj -c Release -r win-x64 --no-restore -p:Version=0.1.0 -p:ContinuousIntegrationBuild=true
+
+      - name: Optical pipeline self-test
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet run --project CYERPAutoInput.csproj -c Release -r win-x64 --no-build -- --vision-self-test
+
+      - name: Publish and verify portable package
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: |
+          Remove-Item -Recurse -Force package,publish-staging -ErrorAction SilentlyContinue
+          $staging = "publish-staging"
+          $outDir = Join-Path "package" "CYERPAutoInput"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -p:Version=0.1.0 -o $staging
+          Copy-Item "$staging/CYERPAutoInput.exe" "$outDir/CYERPAutoInput.exe"
+          Copy-Item VERSION "$outDir/VERSION"
+          Copy-Item BUILD "$outDir/BUILD"
+          Copy-Item README.md "$outDir/README.md"
+          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/THIRD_PARTY_NOTICES.md"
+          New-Item -ItemType Directory -Path "$outDir/Data" -Force | Out-Null
+          Copy-Item settings.example.json "$outDir/Data/settings.example.json"
+          New-Item -ItemType Directory -Path "$outDir/runtime/ocr" -Force | Out-Null
+          Copy-Item "$staging/runtime/ocr/*.onnx" "$outDir/runtime/ocr/"
+          $selfTest = Start-Process -FilePath "$outDir/CYERPAutoInput.exe" -ArgumentList "--vision-self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Packaged EXE vision self-test failed with code $($selfTest.ExitCode)" }
+          Remove-Item -Recurse -Force "$outDir/logs" -ErrorAction SilentlyContinue
+
+      - name: Commit Build 21 to development branch
+        shell: bash
+        run: |
+          git config user.name "simonliu1118-byte"
+          git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+          git add apps/CYERPAutoInput/BUILD apps/CYERPAutoInput/AppLogger.cs apps/CYERPAutoInput/Build10UiPatch.cs apps/CYERPAutoInput/MainForm.cs apps/CYERPAutoInput/ErpAutomationService.cs
+          git commit -m "fix(CYERPAutoInput): probe batch lookup without requiring editor"
+          git push origin HEAD:cyerp-auto-input/v0.1.0-csharp
+
+      - name: Upload Build 21 package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYERPAutoInput-v0.1.0-build21-windows-x64-temp21
+          path: apps/CYERPAutoInput/package/*
+          if-no-files-found: error
+          retention-days: 14
