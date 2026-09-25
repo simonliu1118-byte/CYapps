@@ -1,0 +1,380 @@
+name: CYERPAutoInput Build 22 Temp CI
+
+on:
+  push:
+    branches: [ci-cyerp-build21]
+    paths:
+      - ".github/workflows/cyerp-auto-input-build22-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v7
+        with:
+          ref: cyerp-auto-input/v0.1.0-csharp
+          fetch-depth: 0
+
+      - name: Checkout patch driver
+        uses: actions/checkout@v7
+        with:
+          ref: ci-cyerp-build21
+          path: .build22-driver
+          sparse-checkout: |
+            .github/workflows/cyerp-auto-input-build22-temp.yml
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Apply Build 22 patch
+        shell: bash
+        working-directory: apps/CYERPAutoInput
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8').replace('\r\n', '\n')
+
+          def write(path, text):
+              with open(path, 'w', encoding='utf-8', newline='\n') as f:
+                  f.write(text)
+
+          def rep(path, old, new, count=1):
+              text = read(path)
+              if old not in text:
+                  raise SystemExit(f'Expected source block not found in {path}: {old[:160]!r}')
+              write(path, text.replace(old, new, count))
+
+          write('BUILD', '22\n')
+          rep('AppLogger.cs', 'CYERPAutoInput V0.1.0 Build 21 starting', 'CYERPAutoInput V0.1.0 Build 22 starting')
+          rep('Build10UiPatch.cs', 'V0.1.0 Build 21 · Esc：緊急停止 · 不自動儲存 ERP', 'V0.1.0 Build 22 · Esc：緊急停止 · 不自動儲存 ERP')
+          rep('MainForm.cs', 'V0.1.0 Build 21 · Esc：緊急停止 · 不自動儲存 ERP', 'V0.1.0 Build 22 · Esc：緊急停止 · 不自動儲存 ERP')
+
+          # Sales-order number is the first TDBEdit on the second header row in COPI08.
+          rep('ErpLayoutResolver.cs', '        return rows[0][1];\n', '        return rows[1][0];\n')
+
+          rep('ErpAutomationService.cs',
+          '''    private static bool IsPlausibleSalesOrderNumber(string value)\n    {\n        if (string.IsNullOrWhiteSpace(value) || value.Length is < 4 or > 32) return false;\n        if (value.Any(char.IsWhiteSpace) || value.Contains('*')) return false;\n        return value.Count(char.IsLetterOrDigit) >= 4;\n    }\n''',
+          '''    private static bool IsPlausibleSalesOrderNumber(string value)\n    {\n        if (string.IsNullOrWhiteSpace(value) || value.Length is < 8 or > 20) return false;\n        return value.All(char.IsDigit);\n    }\n''')
+
+          old_flow = '''            var visibleRow = rowIndex;\n            var row = rows[rowIndex];\n            geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 0, row.ItemCode, cancellationToken);\n            geometry = await SelectBatchIfRequiredAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);\n\n            if (!string.IsNullOrWhiteSpace(row.Unit))\n                geometry = await SelectUnitAsync(root, grid, geometry, visibleRow, row.Unit, cancellationToken);\n\n            geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 1, row.Quantity, cancellationToken);\n            if (!string.IsNullOrWhiteSpace(row.GiftQuantity))\n                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 3, row.GiftQuantity, cancellationToken);\n            if (!string.IsNullOrWhiteSpace(row.Warehouse))\n                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 6, row.Warehouse, cancellationToken);\n            if (!string.IsNullOrWhiteSpace(row.UnitPrice))\n                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 7, row.UnitPrice, cancellationToken);\n'''
+          new_flow = '''            var visibleRow = rowIndex;\n            var row = rows[rowIndex];\n\n            // Proven COPI08 detail order. Batch must be last because ERP validates lot\n            // availability against the already committed unit / quantity / warehouse.\n            geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 0, row.ItemCode, cancellationToken);\n\n            if (!string.IsNullOrWhiteSpace(row.Unit))\n                geometry = await SelectUnitAsync(root, grid, geometry, visibleRow, row.Unit, cancellationToken);\n\n            geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 1, row.Quantity, cancellationToken);\n            if (!string.IsNullOrWhiteSpace(row.GiftQuantity))\n                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 3, row.GiftQuantity, cancellationToken);\n            if (!string.IsNullOrWhiteSpace(row.Warehouse))\n                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 6, row.Warehouse, cancellationToken);\n            if (!string.IsNullOrWhiteSpace(row.UnitPrice))\n                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 7, row.UnitPrice, cancellationToken);\n\n            geometry = await SelectBatchIfRequiredAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);\n'''
+          rep('ErpAutomationService.cs', old_flow, new_flow)
+
+          rep('ErpAutomationService.cs',
+          '''            var known = Win32Automation.WindowTreeContainsText(peer, knownWarning);\n            if (!known)\n                known = await _textVision.FindTextAsync(peer, [knownWarning], cancellationToken) is not null;\n            if (!known) continue;\n''',
+          '''            var known = Win32Automation.WindowTreeContainsText(peer, knownWarning);\n            if (!known)\n                known = await _textVision.ContainsAllFragmentsAsync(peer, ["庫存量", "批號量", "不足"], cancellationToken);\n            if (!known) continue;\n''')
+
+          # OpticalTextLocator: add token-bag fragment matcher for warning dialogs whose
+          # OCR token order is not stable enough for one long exact phrase.
+          opt = read('OpticalTextLocator.cs')
+          marker = '    private void LogTokens(string context, string target, IReadOnlyList<OcrToken> tokens, int maxTokens)\n'
+          insert = '''    public async Task<bool> ContainsAllFragmentsAsync(nint hwnd, IReadOnlyList<string> fragments, CancellationToken cancellationToken)\n    {\n        if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)\n            return false;\n\n        using var image = ScreenCapture.Capture(rect.ToRectangle());\n        var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);\n        var normalizedTokens = tokens.Select(t => OcrTextNormalizer.Normalize(t.Text)).Where(t => t.Length > 0).ToArray();\n        var normalizedFragments = fragments.Select(OcrTextNormalizer.Normalize).Where(f => f.Length > 0).ToArray();\n        var bag = string.Concat(normalizedTokens);\n        var found = normalizedFragments.All(fragment => bag.Contains(fragment, StringComparison.Ordinal));\n\n        _log.Info("vision", $"OCR_FRAGMENT_CHECK target={string.Join("/", normalizedFragments)} found={found} tokens={tokens.Count}");\n        if (!found)\n            LogTokens("fragment-check-miss", string.Join("/", fragments), tokens, 48);\n        return found;\n    }\n\n'''
+          if marker not in opt:
+              raise SystemExit('OpticalTextLocator insertion marker not found')
+          opt = opt.replace(marker, insert + marker, 1)
+          write('OpticalTextLocator.cs', opt)
+
+          # Replace the lot locator. Selection is now tied to the OCR token's own Y
+          # coordinate in the stock column, so row-number/gridline drift cannot click a
+          # different lot than the one whose stock was recognized.
+          write('F2BatchCellLocator.cs', r'''using System.Drawing.Imaging;
+using System.Globalization;
+
+namespace CYERPAutoInput;
+
+internal sealed record BatchStockSelection(Point Point, int RowNumber, decimal Stock);
+
+internal sealed class F2BatchCellLocator
+{
+    private readonly WindowsOcrService _ocr;
+    private readonly AppLogger _log;
+
+    public F2BatchCellLocator(WindowsOcrService ocr, AppLogger log)
+    {
+        _ocr = ocr;
+        _log = log;
+    }
+
+    public async Task<BatchStockSelection> FindFirstPositiveStockAsync(
+        nint lookupHwnd,
+        CancellationToken cancellationToken)
+    {
+        var grid = Win32Automation.EnumerateChildren(lookupHwnd)
+            .Where(c => c.Visible && c.ClassName.Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+            .Where(c => c.Rect.Width >= 180 && c.Rect.Height >= 70)
+            .OrderByDescending(c => c.Rect.Width * c.Rect.Height)
+            .FirstOrDefault();
+        if (grid is null)
+            throw new InvalidOperationException("F2 批號查詢找不到可用的 TcxGridSite；已停止目前單據。");
+
+        var captureRect = grid.Rect.ToRectangle();
+        using var image = ScreenCapture.Capture(captureRect);
+        var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+        var header = FastDetailGridVisionService.FindExactPhrase(tokens, ["現有存量"]);
+        if (header is null)
+            throw new InvalidOperationException("F2 批號查詢無法可靠辨識「現有存量」欄；已停止目前單據。");
+
+        var rawVertical = GridVisionService.FindVerticalLines(image, Math.Min(image.Height - 1, 120));
+        var boundaries = NormalizeBoundaries(rawVertical, image.Width);
+        var headerCenterX = header.Value.Left + header.Value.Width / 2;
+        var interval = FindInterval(boundaries, headerCenterX);
+        if (interval < 0 || interval + 1 >= boundaries.Count)
+            throw new InvalidOperationException("F2 批號查詢無法由即時格線定位「現有存量」欄；已停止目前單據。");
+
+        var left = boundaries[interval];
+        var right = boundaries[interval + 1];
+        if (right - left < 24)
+            throw new InvalidOperationException("F2 批號查詢的「現有存量」欄寬異常；已停止目前單據。");
+
+        var numericTokens = tokens
+            .Where(t => t.Rect.Top > header.Value.Bottom + 2)
+            .Where(t =>
+            {
+                var cx = t.Rect.Left + t.Rect.Width / 2;
+                return cx >= left + 1 && cx <= right - 1;
+            })
+            .OrderBy(t => t.Rect.Top + t.Rect.Height / 2)
+            .ThenBy(t => t.Rect.Left)
+            .ToList();
+
+        var ordinal = 0;
+        foreach (var token in numericTokens)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var raw = Sanitize(token.Text);
+            var normalized = NormalizeStockText(token.Text);
+            if (!TryParseStockText(token.Text, out var stock))
+            {
+                _log.Info("vision", $"F2_BATCH_STOCK_TOKEN raw=\"{raw}\" normalized=\"{Sanitize(normalized)}\" parse=false rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
+                continue;
+            }
+
+            ordinal++;
+            var localY = token.Rect.Top + token.Rect.Height / 2;
+            _log.Info("vision", $"F2_BATCH_STOCK_TOKEN candidate={ordinal} raw=\"{raw}\" normalized=\"{Sanitize(normalized)}\" stock={stock.ToString(CultureInfo.InvariantCulture)} rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
+            if (stock <= 0) continue;
+
+            var point = new Point(
+                captureRect.Left + (left + right) / 2,
+                captureRect.Top + localY);
+            _log.Info("vision", $"F2 batch positive stock selected by OCR token candidate={ordinal} point={point.X},{point.Y} stock={stock.ToString(CultureInfo.InvariantCulture)}");
+            return new BatchStockSelection(point, ordinal, stock);
+        }
+
+        // Safe fallback: OCR each grid row, but bind the click Y to the exact row that
+        // produced the positive value and expose the recognized text in the log.
+        var horizontal = GridVisionService.FindHorizontalLines(image, Math.Max(0, header.Value.Bottom - 5));
+        var first = horizontal.FindIndex(y => y >= header.Value.Bottom - 3);
+        if (first < 0 || horizontal.Count - first < 2)
+            throw new InvalidOperationException("F2 批號查詢無法辨識資料列；已停止目前單據。");
+
+        var rowNumber = 0;
+        for (var i = first; i + 1 < horizontal.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var top = horizontal[i];
+            var bottom = horizontal[i + 1];
+            var height = bottom - top;
+            if (height < 14 || height > 64) continue;
+            rowNumber++;
+
+            var crop = Rectangle.FromLTRB(
+                Math.Clamp(left + 2, 0, image.Width - 1),
+                Math.Clamp(top + 1, 0, image.Height - 1),
+                Math.Clamp(right - 2, 1, image.Width),
+                Math.Clamp(bottom - 1, 1, image.Height));
+            if (crop.Width < 8 || crop.Height < 8) continue;
+
+            using var cell = image.Clone(crop, PixelFormat.Format32bppArgb);
+            using var enhanced = EnhanceCell(cell, 3);
+            var cellTokens = await _ocr.RecognizeAsync(enhanced, cancellationToken);
+            var rawText = string.Concat(cellTokens
+                .OrderBy(t => t.Rect.Top)
+                .ThenBy(t => t.Rect.Left)
+                .Select(t => t.Text));
+            var normalized = NormalizeStockText(rawText);
+
+            if (!TryParseStockText(rawText, out var stock))
+            {
+                _log.Info("vision", $"F2_BATCH_STOCK_CELL row={rowNumber} raw=\"{Sanitize(rawText)}\" normalized=\"{Sanitize(normalized)}\" parse=false");
+                continue;
+            }
+
+            _log.Info("vision", $"F2_BATCH_STOCK_CELL row={rowNumber} raw=\"{Sanitize(rawText)}\" normalized=\"{Sanitize(normalized)}\" stock={stock.ToString(CultureInfo.InvariantCulture)}");
+            if (stock <= 0) continue;
+
+            var point = new Point(
+                captureRect.Left + (left + right) / 2,
+                captureRect.Top + (top + bottom) / 2);
+            _log.Info("vision", $"F2 batch positive stock selected by row fallback row={rowNumber} point={point.X},{point.Y} stock={stock.ToString(CultureInfo.InvariantCulture)}");
+            return new BatchStockSelection(point, rowNumber, stock);
+        }
+
+        throw new InvalidOperationException("F2 批號查詢沒有找到可確認的「現有存量 > 0」批號；已停止目前單據。請查看 LOG 的 F2_BATCH_STOCK_TOKEN / CELL 辨識內容。");
+    }
+
+    internal static bool TryParseStockText(string raw, out decimal value)
+    {
+        value = 0;
+        var text = NormalizeStockText(raw);
+        if (text.Length == 0) return false;
+        const NumberStyles styles = NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint;
+        return decimal.TryParse(text, styles, CultureInfo.InvariantCulture, out value) ||
+               decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value);
+    }
+
+    private static string NormalizeStockText(string raw)
+    {
+        return raw.Trim()
+            .Replace(" ", string.Empty)
+            .Replace("　", string.Empty)
+            .Replace(",", string.Empty)
+            .Replace("，", string.Empty);
+    }
+
+    private static string Sanitize(string value)
+    {
+        var text = value.Replace("\r", " ").Replace("\n", " ").Replace("\"", "'").Trim();
+        return text.Length <= 80 ? text : text[..80];
+    }
+
+    private static int FindInterval(IReadOnlyList<int> boundaries, int x)
+    {
+        for (var i = 0; i + 1 < boundaries.Count; i++)
+            if (x >= boundaries[i] && x <= boundaries[i + 1]) return i;
+        return -1;
+    }
+
+    private static List<int> NormalizeBoundaries(IReadOnlyList<int> rawLines, int width)
+    {
+        var boundaries = rawLines.Where(x => x >= 0 && x < width).Distinct().OrderBy(x => x).ToList();
+        if (boundaries.Count == 0 || boundaries[0] > 5) boundaries.Insert(0, 0);
+        if (boundaries[^1] < width - 5) boundaries.Add(width - 1);
+
+        var changed = true;
+        while (changed && boundaries.Count > 2)
+        {
+            changed = false;
+            for (var i = 0; i + 1 < boundaries.Count; i++)
+            {
+                if (boundaries[i + 1] - boundaries[i] >= 18) continue;
+                if (i == 0) boundaries.RemoveAt(i + 1);
+                else boundaries.RemoveAt(i);
+                changed = true;
+                break;
+            }
+        }
+        return boundaries;
+    }
+
+    private static Bitmap EnhanceCell(Bitmap source, int scale)
+    {
+        var width = Math.Max(1, source.Width * scale);
+        var height = Math.Max(1, source.Height * scale);
+        var output = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+
+        var total = 0L;
+        var samples = 0;
+        for (var y = 0; y < source.Height; y += 2)
+        for (var x = 0; x < source.Width; x += 2)
+        {
+            var c = source.GetPixel(x, y);
+            total += (c.R * 30 + c.G * 59 + c.B * 11) / 100;
+            samples++;
+        }
+        var average = samples == 0 ? 255 : (int)(total / samples);
+        var invert = average < 145;
+
+        for (var y = 0; y < height; y++)
+        {
+            var sy = Math.Min(source.Height - 1, y / scale);
+            for (var x = 0; x < width; x++)
+            {
+                var sx = Math.Min(source.Width - 1, x / scale);
+                var c = source.GetPixel(sx, sy);
+                var luma = (c.R * 30 + c.G * 59 + c.B * 11) / 100;
+                if (invert) luma = 255 - luma;
+                var contrasted = (int)Math.Round((luma - 128) * 1.35 + 128);
+                var v = Math.Clamp(contrasted, 0, 255);
+                output.SetPixel(x, y, Color.FromArgb(255, v, v, v));
+            }
+        }
+        return output;
+    }
+}
+''')
+          PY
+
+      - name: Fetch canonical CYERPAutoInput icon
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-canonical-icon.ps1
+
+      - name: Fetch pinned PaddleOCR models
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-ocr-models.ps1
+
+      - name: Restore
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet restore CYERPAutoInput.csproj -r win-x64
+
+      - name: Build
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet build CYERPAutoInput.csproj -c Release -r win-x64 --no-restore -p:Version=0.1.0 -p:ContinuousIntegrationBuild=true
+
+      - name: Optical pipeline self-test
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet run --project CYERPAutoInput.csproj -c Release -r win-x64 --no-build -- --vision-self-test
+
+      - name: Publish and verify portable package
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: |
+          Remove-Item -Recurse -Force package,publish-staging -ErrorAction SilentlyContinue
+          $staging = "publish-staging"
+          $outDir = Join-Path "package" "CYERPAutoInput"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -p:Version=0.1.0 -o $staging
+          Copy-Item "$staging/CYERPAutoInput.exe" "$outDir/CYERPAutoInput.exe"
+          Copy-Item VERSION "$outDir/VERSION"
+          Copy-Item BUILD "$outDir/BUILD"
+          Copy-Item README.md "$outDir/README.md"
+          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/THIRD_PARTY_NOTICES.md"
+          New-Item -ItemType Directory -Path "$outDir/Data" -Force | Out-Null
+          Copy-Item settings.example.json "$outDir/Data/settings.example.json"
+          New-Item -ItemType Directory -Path "$outDir/runtime/ocr" -Force | Out-Null
+          Copy-Item "$staging/runtime/ocr/*.onnx" "$outDir/runtime/ocr/"
+          $selfTest = Start-Process -FilePath "$outDir/CYERPAutoInput.exe" -ArgumentList "--vision-self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Packaged EXE vision self-test failed" }
+          Remove-Item -Recurse -Force "$outDir/logs" -ErrorAction SilentlyContinue
+          $unexpected = @(Get-ChildItem -LiteralPath $outDir -Recurse -File | Where-Object { $_.Extension -in @('.pdb','.lib','.dll') -or $_.Name -match 'SHA256' })
+          if ($unexpected.Count -gt 0) { throw "Unexpected engineering files: $($unexpected.FullName -join ', ')" }
+
+      - name: Commit Build 22 to development branch
+        shell: bash
+        run: |
+          git config user.name "simonliu1118-byte"
+          git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+          git add apps/CYERPAutoInput
+          git commit -m "fix(CYERPAutoInput): correct detail order and lot OCR targeting"
+          git push origin HEAD:cyerp-auto-input/v0.1.0-csharp
+
+      - name: Upload Build 22 package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYERPAutoInput-v0.1.0-build22-windows-x64-temp22
+          path: apps/CYERPAutoInput/package/*
+          if-no-files-found: error
+          retention-days: 14
