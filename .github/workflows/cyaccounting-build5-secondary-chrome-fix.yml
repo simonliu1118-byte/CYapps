@@ -1,0 +1,49 @@
+name: CYAccounting Build 5 Secondary Chrome Fix (one-time)
+
+on:
+  push:
+    branches:
+      - cyaccounting/v1.2.0-visual-phase1
+    paths:
+      - .github/workflows/cyaccounting-build5-secondary-chrome-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccounting/v1.2.0-visual-phase1
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Apply guarded fix
+        working-directory: apps/CYAccounting
+        shell: pwsh
+        run: |
+          python tools/fix_build5_secondary_chrome.py
+          if ($LASTEXITCODE -ne 0) { throw "Build 5 chrome fix failed" }
+      - name: Validate transformed source
+        shell: pwsh
+        run: |
+          python -m compileall -q apps/CYAccounting/app apps/CYAccounting/tests
+          if ((Get-Content apps/CYAccounting/BUILD -Raw).Trim() -ne "5") { throw "BUILD changed unexpectedly" }
+          $main = Get-Content apps/CYAccounting/app/main.py -Raw
+          if ($main -match 'setWindowFlags\(') { Write-Host "setWindowFlags exists elsewhere; checking secondary helper specifically" }
+          if ($main -match 'def _prepare_secondary_dialog_chrome[\s\S]{0,1200}setWindowFlags\(') { throw "Secondary chrome helper still mutates Qt window flags" }
+          if ($main -notmatch 'WS_EX_DLGMODALFRAME') { throw "Native no-icon style missing" }
+      - name: Commit source fix
+        shell: pwsh
+        run: |
+          git config user.name "simonliu1118-byte"
+          git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+          git add apps/CYAccounting/app/main.py apps/CYAccounting/tests/test_app.py apps/CYAccounting/V1.2.0.txt
+          git rm apps/CYAccounting/tools/fix_build5_secondary_chrome.py
+          git diff --cached --check
+          if (git diff --cached --quiet) { throw "No Build 5 chrome fix changes staged" }
+          git commit -m "fix(CYAccounting): preserve secondary dialog close behavior"
+          git push origin HEAD:cyaccounting/v1.2.0-visual-phase1
