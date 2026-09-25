@@ -30,9 +30,6 @@ jobs:
 
           root = Path('apps/CYAccounting')
 
-          # Stop suppressing secondary-window icons. The application already
-          # sets app/resources/app.ico (ACC) on QApplication, so normal QDialogs
-          # inherit the ACC icon without native title-bar manipulation.
           main_path = root / 'app/main.py'
           main = main_path.read_text(encoding='utf-8')
           helper_pattern = re.compile(
@@ -45,7 +42,6 @@ jobs:
           main, count = helper_pattern.subn('', main, count=1)
           if count != 1:
               raise SystemExit(f'icon-helper removal count={count}')
-
           dialog_branch_pattern = re.compile(
               r"            elif isinstance\(watched, QDialog\) and not isinstance\(watched, QFileDialog\):\n"
               r"                if event\.type\(\) == QEvent\.Type\.Polish:\n"
@@ -57,7 +53,6 @@ jobs:
               raise SystemExit(f'secondary-dialog event branch removal count={count}')
           main_path.write_text(main, encoding='utf-8')
 
-          # Exact V1.1.0 Release construction: plain QTabWidget + addTab calls.
           dialogs_path = root / 'app/dialogs.py'
           dialogs = dialogs_path.read_text(encoding='utf-8')
           tab_setup_pattern = re.compile(
@@ -73,8 +68,6 @@ jobs:
               raise SystemExit(f'category-tab construction replacement count={count}')
           dialogs_path.write_text(dialogs, encoding='utf-8')
 
-          # Remove the Build 7 category-manager QSS wholesale. With no targeted
-          # QSS, Windows/Qt renders the same native tab/pane structure as V1.1.0.
           theme_path = root / 'app/theme.py'
           theme = theme_path.read_text(encoding='utf-8')
           tab_qss_pattern = re.compile(
@@ -87,8 +80,6 @@ jobs:
               raise SystemExit(f'category-manager QSS removal count={count}')
           theme_path.write_text(theme, encoding='utf-8')
 
-          # Update regression coverage to enforce Release-native tabs and ensure
-          # the no-icon/fixed-dialog helper does not come back.
           tests_path = root / 'tests/test_app.py'
           tests = tests_path.read_text(encoding='utf-8')
           regression_pattern = re.compile(
@@ -97,20 +88,17 @@ jobs:
               r"(?=    combo = CategoryComboBox\(\))",
               re.S,
           )
-          regression_replacement = '''    category_tabs = category_dlg.findChild(QTabWidget)
-          assert category_tabs is not None
-          assert category_tabs.count() == 2
-          # V1.1.0 Release implementation: plain native QTabWidget.
-          assert category_tabs.objectName() == ''
-          assert 'categoryManagerTabs' not in main_module.APP_STYLE
-          # Secondary dialogs now inherit QApplication's ACC icon; no Win32
-          # fixed-dialog/no-icon manipulation remains.
-          assert not hasattr(main_module.ChineseStandardButtonFilter, '_prepare_secondary_dialog_chrome')
-          '''
-          regression_replacement = '\n'.join(
-              line[10:] if line.startswith('          ') else line
-              for line in regression_replacement.splitlines()
-          ) + '\n'
+          regression_replacement = (
+              "    category_tabs = category_dlg.findChild(QTabWidget)\n"
+              "    assert category_tabs is not None\n"
+              "    assert category_tabs.count() == 2\n"
+              "    # V1.1.0 Release implementation: plain native QTabWidget.\n"
+              "    assert category_tabs.objectName() == ''\n"
+              "    assert 'categoryManagerTabs' not in main_module.APP_STYLE\n"
+              "    # Secondary dialogs inherit QApplication's ACC icon; no Win32\n"
+              "    # fixed-dialog/no-icon manipulation remains.\n"
+              "    assert not hasattr(main_module.ChineseStandardButtonFilter, '_prepare_secondary_dialog_chrome')\n"
+          )
           tests, count = regression_pattern.subn(regression_replacement, tests, count=1)
           if count != 1:
               raise SystemExit(f'regression block replacement count={count}')
