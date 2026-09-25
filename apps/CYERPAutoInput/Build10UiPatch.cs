@@ -28,7 +28,7 @@ internal static class Build10UiPatch
             foreach (var item in strip.Items.OfType<ToolStripStatusLabel>())
             {
                 if (item.Text.StartsWith("V0.1.0 Build", StringComparison.Ordinal))
-                    item.Text = "V0.1.0 Build 11 · Esc：緊急停止 · 不自動儲存 ERP";
+                    item.Text = "V0.1.0 Build 12 · Esc：緊急停止 · 不自動儲存 ERP";
             }
         }
 

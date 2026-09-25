@@ -32,7 +32,7 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 
 Build 11 起正式辨識引擎改為本機 **PaddleOCR PP-OCRv5 + ONNX Runtime (CPU)**，不再依賴 `Windows.Media.Ocr` 或 Windows 中文 OCR 語言包。
 
-- Recognition：`PP-OCRv5_server_rec`，優先準確度。
+- Recognition：`ch_PP-OCRv5_rec_mobile`；使用與 RapidOCRSharpOnnx 已驗證字典完全匹配的 PP-OCRv5 模型。
 - Detection：`ch_PP-OCRv5_det_mobile`。
 - Text-line orientation：`ch_PP-LCNet_x0_25_textline_ori_cls_mobile`。
 - 商品明細：實際點擊 `TcxGridSite` 建立第一列，座標由目前 Grid 的格線與欄位語意推導；OCR 用於辨識欄位文字，不使用固定螢幕座標。
@@ -76,7 +76,7 @@ CYERPAutoInput/
   runtime/
     ocr/
       ch_PP-OCRv5_det_mobile.onnx
-      PP-OCRv5_server_rec.onnx
+      ch_PP-OCRv5_rec_mobile.onnx
       ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx
       SHA256.txt
 ```

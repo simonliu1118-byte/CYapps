@@ -47,7 +47,7 @@ internal static class ScreenCapture
 
 // Compatibility name retained through the V0.1.0 rewrite so the established
 // vision call sites stay small. This class no longer uses Windows.Media.Ocr;
-// Build 11 replaces it with local PP-OCRv5 inference through ONNX Runtime.
+// Build 11+ replaces it with local PP-OCRv5 inference through ONNX Runtime.
 internal sealed class WindowsOcrService
 {
     private readonly AppLogger _log;
@@ -101,7 +101,7 @@ internal sealed class WindowsOcrService
                 .Select(x => x.Token)
                 .ToArray();
 
-            _log.Info("vision", $"PaddleOCR completed engine=PP-OCRv5_server_rec tokens={ordered.Length} image={bitmap.Width}x{bitmap.Height} prepared={prepared.Width}x{prepared.Height} scale={scale:0.##} require_chinese={requireChinese}");
+            _log.Info("vision", $"PaddleOCR completed engine=PP-OCRv5_mobile_rec tokens={ordered.Length} image={bitmap.Width}x{bitmap.Height} prepared={prepared.Width}x{prepared.Height} scale={scale:0.##} require_chinese={requireChinese}");
             return ordered;
         }
         finally
@@ -117,7 +117,7 @@ internal sealed class WindowsOcrService
 
         var modelDir = Path.Combine(AppContext.BaseDirectory, "runtime", "ocr");
         var detector = Path.Combine(modelDir, "ch_PP-OCRv5_det_mobile.onnx");
-        var recognizer = Path.Combine(modelDir, "PP-OCRv5_server_rec.onnx");
+        var recognizer = Path.Combine(modelDir, "ch_PP-OCRv5_rec_mobile.onnx");
         var classifier = Path.Combine(modelDir, "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx");
         var missing = new[] { detector, recognizer, classifier }.Where(path => !File.Exists(path)).Select(Path.GetFileName).ToArray();
         if (missing.Length > 0)
@@ -140,7 +140,7 @@ internal sealed class WindowsOcrService
         config.RecognizerConfig.RecBatchNum = 6;
 
         _engine = new RapidOCRSharp(new ExecutionProviderCPU(config));
-        _log.Info("vision", "PaddleOCR initialized model=PP-OCRv5_server_rec provider=CPU detector=PP-OCRv5_mobile classifier=PP-LCNet_mobile");
+        _log.Info("vision", "PaddleOCR initialized model=PP-OCRv5_mobile_rec provider=CPU detector=PP-OCRv5_mobile classifier=PP-LCNet_mobile");
         return _engine;
     }
 
@@ -320,9 +320,6 @@ internal sealed class GridVisionService
             consensus = best.Count();
         }
 
-        // If tiny headers are still missed, use the optically detected grid itself and
-        // the stable COPI08 business-column order. This is not an absolute screen
-        // coordinate: every click is still derived from the current TcxGridSite lines.
         if (consensus < 2)
         {
             offset = 0;

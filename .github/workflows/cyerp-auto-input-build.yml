@@ -95,7 +95,7 @@ jobs:
             "$root/THIRD_PARTY_NOTICES.md",
             "$root/Data/settings.example.json",
             "$root/runtime/ocr/ch_PP-OCRv5_det_mobile.onnx",
-            "$root/runtime/ocr/PP-OCRv5_server_rec.onnx",
+            "$root/runtime/ocr/ch_PP-OCRv5_rec_mobile.onnx",
             "$root/runtime/ocr/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx",
             "$root/runtime/ocr/SHA256.txt"
           )

@@ -93,16 +93,13 @@ internal static class VisionSelfTest
             if (farColumnCandidate is not null)
                 throw new InvalidOperationException("F2 safety failed: a same-text token outside the unit column was accepted.");
 
-            // Exercise the actual bundled PP-OCRv5 runtime, including Traditional
-            // Chinese recognition. This intentionally does not depend on Windows OCR
-            // language packs anymore.
             var ocr = new WindowsOcrService(log);
             var tokens = await ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: true);
             var joinedText = string.Concat(tokens.Select(t => t.Text)).Replace(" ", string.Empty).Replace("　", string.Empty);
             if (!joinedText.Contains("箱", StringComparison.Ordinal))
                 throw new InvalidOperationException($"PaddleOCR ran but did not recognize synthetic Traditional Chinese target 箱 (tokens={tokens.Count}, text={joinedText}).");
 
-            var message = $"vision self-test passed engine=PP-OCRv5 horizontal={lines.Count} vertical={vertical.Count} tokens={tokens.Count} text={joinedText}";
+            var message = $"vision self-test passed engine=PP-OCRv5_mobile_rec horizontal={lines.Count} vertical={vertical.Count} tokens={tokens.Count} text={joinedText}";
             Console.WriteLine(message);
             log.Info("selftest", message);
             return 0;

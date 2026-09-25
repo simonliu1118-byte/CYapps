@@ -5,8 +5,6 @@ $modelDir = Join-Path $root "runtime\ocr"
 New-Item -ItemType Directory -Force -Path $modelDir | Out-Null
 
 $rapidRevision = "a8814c3b298bab79219341e73f687ba710ab4031"
-$paddleRevision = "b70df217f4fd99d14f970bad092cebe7d74cc4d1"
-
 $models = @(
     @{
         Name = "ch_PP-OCRv5_det_mobile.onnx"
@@ -14,9 +12,9 @@ $models = @(
         MinBytes = 4000000
     },
     @{
-        Name = "PP-OCRv5_server_rec.onnx"
-        Url = "https://huggingface.co/PaddlePaddle/PP-OCRv5_server_rec_onnx/resolve/$paddleRevision/inference.onnx?download=true"
-        MinBytes = 80000000
+        Name = "ch_PP-OCRv5_rec_mobile.onnx"
+        Url = "https://raw.githubusercontent.com/meloht/RapidOCRSharpOnnx/$rapidRevision/RapidOCRSharpOnnx.TestCommon/Models/ch_PP-OCRv5_rec_mobile.onnx"
+        MinBytes = 15000000
     },
     @{
         Name = "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"
@@ -55,6 +53,10 @@ function Get-Model([hashtable]$model) {
 foreach ($model in $models) {
     Get-Model $model
 }
+
+# Remove any stale server-recognizer experiment from local workspaces so the
+# package contains only the validated model family used by this build.
+Remove-Item -Force (Join-Path $modelDir "PP-OCRv5_server_rec.onnx") -ErrorAction SilentlyContinue
 
 $hashLines = foreach ($model in $models) {
     $path = Join-Path $modelDir $model.Name

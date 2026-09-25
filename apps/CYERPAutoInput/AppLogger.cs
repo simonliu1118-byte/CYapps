@@ -27,7 +27,7 @@ internal sealed class AppLogger : IDisposable
         {
             AutoFlush = true
         };
-        Info("app", "CYERPAutoInput V0.1.0 Build 11 starting (C# rewrite, PaddleOCR PP-OCRv5)");
+        Info("app", "CYERPAutoInput V0.1.0 Build 12 starting (C# rewrite, PaddleOCR PP-OCRv5 mobile recognition)");
     }
 
     public void Info(string area, string message) => Write("INFO", area, message);
