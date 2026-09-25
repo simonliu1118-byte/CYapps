@@ -155,17 +155,20 @@ def test_account_manager_controls_and_titles():
     category_tabs = category_dlg.findChild(QTabWidget, 'categoryManagerTabs')
     assert category_tabs is not None
     assert category_tabs.count() == 2
-    assert category_tabs.tabBar().expanding() is True
+    assert category_tabs.tabBar().expanding() is False
     assert 'QTabWidget#categoryManagerTabs QTabBar::tab {' in main_module.APP_STYLE
     assert 'border-top-left-radius: 5px' in main_module.APP_STYLE
-    assert 'border-bottom-color: #FFFFFF' in main_module.APP_STYLE
+    assert 'top: 6px;' in main_module.APP_STYLE
+    assert 'border-bottom: 0;' in main_module.APP_STYLE
 
-    # Secondary-dialog preparation must never mutate Qt's native window flags.
-    # The default QDialog caption owns the system menu and working Close button;
-    # icon suppression is a native non-client operation performed after HWND creation.
+    # Secondary dialogs use Qt's Windows fixed-dialog family while keeping X.
     chrome_flags_before = dlg.windowFlags()
     main_module.ChineseStandardButtonFilter._prepare_secondary_dialog_chrome(dlg)
-    assert dlg.windowFlags() == chrome_flags_before
+    chrome_flags_after = dlg.windowFlags()
+    if sys.platform == 'win32':
+        assert chrome_flags_after & Qt.WindowType.MSWindowsFixedSizeDialogHint
+        assert chrome_flags_after & Qt.WindowType.WindowCloseButtonHint
+    assert (chrome_flags_after & Qt.WindowType.WindowType_Mask) == (chrome_flags_before & Qt.WindowType.WindowType_Mask)
     combo = CategoryComboBox()
     assert combo.lineEdit().hasFrame() is False
     opening_dlg = OpeningBalanceDialog(db, '2026/07')
@@ -272,7 +275,7 @@ def test_ui_constructs():
     assert '2026/07' in win.ledger_tab.table_title.text()
     assert len(win.input_tab.confirm_labels) == 10
     assert win.minimumWidth() == 1120
-    assert win.minimumHeight() == 710
+    assert win.minimumHeight() == 735
     footer = win.findChild(QLabel, 'appFooter')
     assert footer is not None
     assert APP_VERSION in footer.text()

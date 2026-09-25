@@ -1,8 +1,11 @@
 Version: V1.2.0
-Build: 6
+Build: 7
 Date: 2026/09/26
 
 Current source on Phase 1 visual-alignment branch; test artifact, not a formal Release:
+- Build 7 restores the V1.1.0 category-manager tab geometry: left-aligned conventional tabs, a separately visible pane frame with the original 6px offset, and larger current-guide typography; the selected tab no longer erases or merges into the pane border.
+- Build 7 raises the 100%/96-DPI main-window baseline height from 710px to 735px so the footer no longer compresses Input Confirmation into the outer workspace frame.
+- Build 7 corrects secondary-dialog chrome at the Qt/Win32 boundary: QDialogs receive MSWindowsFixedSizeDialogHint before first show to match CYInvoice FixedDialog semantics, the Close-button hint is retained, and the native fallback uses explicit Windows x64 ctypes signatures plus frame redraw.
 - Build 6 moves program/version information to a low-presence main-window footer and uses the repository-policy notice: Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.; Settings keeps the destructive reset action in a dedicated Account Reset section.
 - Build 6 changes Income Category / Expense Category to large equal-width conventional QTabWidget tabs with clear selected-page chrome instead of the header-only underline treatment; native QTabWidget lifecycle and keyboard behavior remain intact.
 - Build 6 aligns secondary-dialog icon suppression with CYInvoice's proven ShowIcon=false intent: Qt caption flags are untouched, WS_EX_DLGMODALFRAME is applied to the HWND before first show and reapplied after show, and no transparent/empty icon workaround is used.

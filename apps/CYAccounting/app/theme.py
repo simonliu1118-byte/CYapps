@@ -146,25 +146,25 @@ QGroupBox#statsCard::title {{
     font-weight: 700;
 }}
 
-/* Category manager deliberately uses large conventional tabs rather than
-   header-only navigation: these are two peer management pages and need a
-   stronger, old-style tab affordance. Keep native QTabWidget behavior. */
+/* Category manager: V1.1.0 conventional geometry, enlarged to current guide.
+   Keep the pane frame visibly separate below the tabs; selected tabs never
+   erase or merge into the original frame line. */
 QTabWidget#categoryManagerTabs::pane {{
     border: 1px solid {NEUTRAL_BORDER};
-    border-radius: 4px;
-    background: {NEUTRAL_WHITE};
-    top: -1px;
+    border-radius: 5px;
+    background: {NEUTRAL_WINDOW};
+    top: 6px;
 }}
 QTabWidget#categoryManagerTabs QTabBar::tab {{
     min-height: 36px;
-    min-width: 140px;
-    padding: 7px 18px;
-    margin: 0 2px 0 0;
+    min-width: 132px;
+    padding: 8px 20px;
+    margin-right: 4px;
     border: 1px solid {NEUTRAL_BORDER};
-    border-bottom-color: {NEUTRAL_BORDER};
+    border-bottom: 0;
     border-top-left-radius: 5px;
     border-top-right-radius: 5px;
-    background: {NEUTRAL_WINDOW};
+    background: {NEUTRAL_DIVIDER};
     color: {TEXT_SECONDARY};
     font-size: 11.5pt;
     font-weight: 600;
@@ -172,9 +172,10 @@ QTabWidget#categoryManagerTabs QTabBar::tab {{
 QTabWidget#categoryManagerTabs QTabBar::tab:selected {{
     color: {TEXT_PRIMARY};
     background: {NEUTRAL_WHITE};
-    border-color: {NEUTRAL_BORDER};
-    border-bottom-color: {NEUTRAL_WHITE};
     font-weight: 700;
+}}
+QTabWidget#categoryManagerTabs QTabBar::tab:!selected {{
+    margin-top: 3px;
 }}
 QTabWidget#categoryManagerTabs QTabBar::tab:hover:!selected {{
     color: {TEXT_PRIMARY};

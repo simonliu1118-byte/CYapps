@@ -513,7 +513,7 @@ class CategoryManagerDialog(QDialog):
         outer.addWidget(note)
         tabs = QTabWidget()
         tabs.setObjectName("categoryManagerTabs")
-        tabs.tabBar().setExpanding(True)
+        tabs.tabBar().setExpanding(False)
         tabs.tabBar().setUsesScrollButtons(False)
         tabs.addTab(CategoryPage(db, "income"), "收入科目")
         tabs.addTab(CategoryPage(db, "expense"), "支出科目")
