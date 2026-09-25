@@ -208,7 +208,27 @@ internal static class NativeMethods
         if (expectedRoot != 0 && fg != expectedRoot) return 0;
         var tid = GetWindowThreadProcessId(fg, out _);
         var info = new GUITHREADINFO { cbSize = Marshal.SizeOf<GUITHREADINFO>() };
-        return GetGUIThreadInfo(tid, ref info) ? info.hwndFocus : 0;
+        if (!GetGUIThreadInfo(tid, ref info)) return 0;
+
+        var focus = info.hwndFocus;
+        if (focus == 0 || expectedRoot == 0) return focus;
+
+        // In the COPI08 F2 lookup, clicking a data row normally moves focus into
+        // TcxCustomInnerTextEdit, which is the active editor owned by TcxGridSite.
+        // For callers that are validating the F2 selection, normalize that editor to
+        // its owning grid. This keeps the safety check strict without treating a valid
+        // DevExpress editing state as a focus failure.
+        if (WindowText(expectedRoot).Contains("F2開窗查詢", StringComparison.Ordinal) &&
+            ClassName(focus).Equals("TcxCustomInnerTextEdit", StringComparison.OrdinalIgnoreCase))
+        {
+            for (var parent = GetParent(focus); parent != 0 && parent != expectedRoot; parent = GetParent(parent))
+            {
+                if (ClassName(parent).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+                    return parent;
+            }
+        }
+
+        return focus;
     }
 }
 
