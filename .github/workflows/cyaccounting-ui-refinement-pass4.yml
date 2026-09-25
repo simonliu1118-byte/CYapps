@@ -31,7 +31,7 @@ jobs:
               text = path.read_text(encoding='utf-8')
               count = text.count(old)
               if count != expected:
-                  raise SystemExit(f'{path}: expected {expected} occurrence(s), found {count}')
+                  raise SystemExit(f'{path}: expected {expected} occurrence(s), found {count}: {old[:80]!r}')
               path.write_text(text.replace(old, new), encoding='utf-8')
 
           main = root / 'app/main.py'
@@ -192,27 +192,11 @@ jobs:
               'from theme import CALENDAR_STYLE, CATEGORY_POPUP_STYLE\n',
               'from theme import CALENDAR_STYLE, CATEGORY_POPUP_STYLE, COMBO_ARROW_PATH\n',
           )
-          old_inline = '''        elif isinstance(editor, QComboBox):
-              editor.setStyleSheet(
-                  "QComboBox { font-size: 9pt; min-height: 0px; padding: 0px 13px 0px 3px; "
-                  "border-radius: 0px; } "
-                  "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; "
-                  "width: 12px; border-left: 1px solid #aeb9c5; background:#f1f4f7; } "
-                  "QComboBox::down-arrow { width: 8px; height: 6px; } "
-                  "QComboBox QAbstractItemView { font-size: 9pt; }"
-              )
-          '''
-          new_inline = '''        elif isinstance(editor, QComboBox):
-              editor.setStyleSheet(
-                  f"QComboBox {{ font-size: 9pt; min-height: 0px; padding: 0px 13px 0px 3px; "
-                  "border-radius: 0px; } "
-                  "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; "
-                  "width: 12px; border-left: 1px solid #aeb9c5; background:#f1f4f7; } "
-                  f"QComboBox::down-arrow {{ image: url(\\\"{COMBO_ARROW_PATH}\\\"); width: 8px; height: 6px; }} "
-                  "QComboBox QAbstractItemView { font-size: 9pt; }"
-              )
-          '''
-          replace_exact(widgets, old_inline, new_inline)
+          replace_exact(
+              widgets,
+              '                "QComboBox::down-arrow { width: 8px; height: 6px; } "\n',
+              '                f\'QComboBox::down-arrow {{ image: url("{COMBO_ARROW_PATH}"); width: 8px; height: 6px; }} \'\n',
+          )
 
           build = root / 'BUILD'
           current_build = build.read_text(encoding='utf-8').strip()
@@ -222,6 +206,8 @@ jobs:
 
           notes = root / 'V1.2.0.txt'
           text = notes.read_text(encoding='utf-8')
+          if 'Build: 1\n' in text:
+              raise SystemExit('V1.2.0.txt already contains Build 1 unexpectedly')
           text = text.replace('Version: V1.2.0\nDate:', 'Version: V1.2.0\nBuild: 1\nDate:', 1)
           text = text.replace(
               '- Basic Information, Income and Expense remain clearly framed sections; Income uses the CYAccountingWeb soft green #E7F3E9 and Expense uses soft red #F8E9E7.\n',
