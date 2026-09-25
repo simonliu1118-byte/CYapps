@@ -1,13 +1,13 @@
 import { buildBackupPackage } from './v16-backup.js';
+import { assertBackupStorageProvider } from './backup-storage-provider.js';
+import { createGcsBackupStorageProvider, gcsConfigReady, GcsProviderError } from './gcs-backup-provider.js';
 
 const BACKUP_PROVIDER = 'google_cloud_storage';
 const APP_VERSION = '0.17.0';
+const BACKUP_FORMAT = 'CYAccountingWebBackupSet';
+const BACKUP_FORMAT_VERSION = 2;
 const BACKUP_RETENTION_DAYS = 14;
-const BACKUP_OBJECT_PREFIX = 'CYAccountingWeb/';
-const TOKEN_URI = 'https://oauth2.googleapis.com/token';
-const STORAGE_SCOPE = 'https://www.googleapis.com/auth/devstorage.read_write';
-const STORAGE_API = 'https://storage.googleapis.com/storage/v1';
-const STORAGE_UPLOAD_API = 'https://storage.googleapis.com/upload/storage/v1';
+const BACKUP_ROOT_PREFIX = 'CYAccountingWeb/';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -23,7 +23,7 @@ export async function handleV17Api(request, env, session) {
   }
   if (url.pathname === '/api/backup/run' && request.method === 'POST') {
     try {
-      const result = await runGcsBackup(env, 'manual');
+      const result = await runBackup(env, 'manual');
       return json({ ok: true, backup: result });
     } catch (error) {
       return json({ ok: false, error: safeBackupMessage(error), code: safeErrorCode(error) }, 500);
@@ -35,7 +35,7 @@ export async function handleV17Api(request, env, session) {
 export async function runScheduledBackup(env) {
   try {
     if (!env?.DB || !gcsConfigReady(env)) return { skipped: true, reason: 'not_configured' };
-    return await runGcsBackup(env, 'scheduled');
+    return await runBackup(env, 'scheduled');
   } catch (error) {
     console.error('cyaccounting_scheduled_backup_failed', safeErrorCode(error));
     return { ok: false, error: safeErrorCode(error) };
@@ -63,8 +63,6 @@ async function backupStatus(env) {
     ok: true,
     provider: BACKUP_PROVIDER,
     configured,
-    bucketName: configured ? String(env.GCS_BUCKET_NAME || '') : '',
-    serviceAccountEmail: configured ? String(env.GCS_SERVICE_ACCOUNT_EMAIL || '') : '',
     schedule: { cron: '30 19 * * *', localTime: '每日 03:30（台灣時間）' },
     retentionDays: BACKUP_RETENTION_DAYS,
     latestSuccess: latestSuccess ? normalizeRunRow(latestSuccess) : null,
@@ -73,31 +71,42 @@ async function backupStatus(env) {
   });
 }
 
-export async function runGcsBackup(env, triggerKind = 'scheduled') {
-  if (!['scheduled', 'manual'].includes(triggerKind)) throw new BackupError('備份觸發類型錯誤。', 'INVALID_TRIGGER');
-  assertGcsConfig(env);
+export async function runBackup(env, triggerKind = 'scheduled', options = {}) {
+  if (!['scheduled', 'manual'].includes(triggerKind)) {
+    throw new BackupError('備份觸發類型錯誤。', 'INVALID_TRIGGER');
+  }
+  if (!env?.DB) throw new BackupError('D1 尚未綁定。', 'DB_NOT_CONFIGURED');
 
-  const startedAt = new Date().toISOString();
-  let backup = null;
-  let objectName = '';
+  const provider = assertBackupStorageProvider(options.provider || createGcsBackupStorageProvider(env, options.providerOptions));
+  const now = options.now instanceof Date ? options.now : new Date();
+  const startedAt = now.toISOString();
+  let backupSet = null;
 
   try {
-    backup = await buildV17BackupPackage(env.DB, new Date());
-    objectName = `${BACKUP_OBJECT_PREFIX}${backup.fileName}`;
-    const accessToken = await serviceAccountAccessToken(env);
-    const bucketName = String(env.GCS_BUCKET_NAME).trim();
+    backupSet = await buildV17BackupSet(env.DB, now);
+    const dataUpload = await provider.putObject(backupSet.dataKey, backupSet.dataBytes, {
+      backupId: backupSet.backupId,
+      role: 'data',
+      sha256: backupSet.dataSha256,
+      app: 'CYAccountingWeb'
+    });
+    const manifestUpload = await provider.putObject(backupSet.manifestKey, backupSet.manifestBytes, {
+      backupId: backupSet.backupId,
+      role: 'manifest',
+      sha256: backupSet.manifestSha256,
+      app: 'CYAccountingWeb'
+    });
 
-    const uploaded = await uploadGcsBackup(accessToken, bucketName, objectName, backup.bytes);
-    const uploadedName = String(uploaded.name || objectName);
-    const downloaded = await downloadGcsObject(accessToken, bucketName, uploadedName);
-    const remoteSha = await sha256HexBytes(downloaded);
-    if (remoteSha !== backup.fileSha256 || downloaded.byteLength !== backup.bytes.byteLength) {
-      try { await deleteGcsObject(accessToken, bucketName, uploadedName, uploaded.generation); } catch { /* best effort */ }
-      throw new BackupError('Cloud Storage 回讀驗證失敗，備份檔案已視為無效。', 'REMOTE_VERIFY_FAILED');
+    try {
+      await verifyBackupSet(provider, backupSet);
+    } catch (verifyError) {
+      await bestEffortDelete(provider, backupSet.dataKey, dataUpload?.generation);
+      await bestEffortDelete(provider, backupSet.manifestKey, manifestUpload?.generation);
+      throw verifyError;
     }
 
     try {
-      await cleanupExpiredGcsBackups(accessToken, bucketName, BACKUP_RETENTION_DAYS, new Date());
+      await cleanupExpiredBackups(provider, BACKUP_RETENTION_DAYS, now);
     } catch (cleanupError) {
       console.warn('cyaccounting_backup_retention_cleanup_failed', safeErrorCode(cleanupError));
     }
@@ -109,19 +118,27 @@ export async function runGcsBackup(env, triggerKind = 'scheduled') {
         data_sha256, file_sha256, row_count, byte_size, error_message
       ) VALUES (?, ?, 'success', ?, ?, ?, ?, ?, ?, ?, ?, '')
     `).bind(
-      BACKUP_PROVIDER, triggerKind, startedAt, completedAt, uploadedName, backup.fileName,
-      backup.dataSha256, backup.fileSha256, backup.totalRowCount, backup.bytes.byteLength
+      BACKUP_PROVIDER,
+      triggerKind,
+      startedAt,
+      completedAt,
+      backupSet.prefix,
+      backupSet.backupId,
+      backupSet.dataSha256,
+      backupSet.manifestSha256,
+      backupSet.totalRowCount,
+      backupSet.totalByteSize
     ).run();
 
     return {
       ok: true,
-      objectName: uploadedName,
-      fileName: backup.fileName,
+      backupId: backupSet.backupId,
+      fileName: backupSet.backupId,
       completedAt,
-      dataSha256: backup.dataSha256,
-      fileSha256: backup.fileSha256,
-      rowCount: backup.totalRowCount,
-      byteSize: backup.bytes.byteLength
+      dataSha256: backupSet.dataSha256,
+      manifestSha256: backupSet.manifestSha256,
+      rowCount: backupSet.totalRowCount,
+      byteSize: backupSet.totalByteSize
     };
   } catch (error) {
     const completedAt = new Date().toISOString();
@@ -132,9 +149,17 @@ export async function runGcsBackup(env, triggerKind = 'scheduled') {
           data_sha256, file_sha256, row_count, byte_size, error_message
         ) VALUES (?, ?, 'failed', ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        BACKUP_PROVIDER, triggerKind, startedAt, completedAt, objectName, backup?.fileName || '',
-        backup?.dataSha256 || '', backup?.fileSha256 || '', backup?.totalRowCount || 0,
-        backup?.bytes?.byteLength || 0, truncateError(safeBackupMessage(error))
+        BACKUP_PROVIDER,
+        triggerKind,
+        startedAt,
+        completedAt,
+        backupSet?.prefix || '',
+        backupSet?.backupId || '',
+        backupSet?.dataSha256 || '',
+        backupSet?.manifestSha256 || '',
+        backupSet?.totalRowCount || 0,
+        backupSet?.totalByteSize || 0,
+        truncateError(safeBackupMessage(error))
       ).run();
     } catch (logError) {
       console.error('cyaccounting_backup_failure_log_failed', safeErrorCode(logError));
@@ -143,193 +168,126 @@ export async function runGcsBackup(env, triggerKind = 'scheduled') {
   }
 }
 
-async function buildV17BackupPackage(db, now = new Date()) {
+export async function buildV17BackupSet(db, now = new Date()) {
   const base = await buildBackupPackage(db, now);
-  const parsed = JSON.parse(decoder.decode(base.bytes));
-  parsed.manifest.appVersion = APP_VERSION;
-  const payload = JSON.stringify(parsed, null, 2) + '\n';
-  const bytes = encoder.encode(payload);
-  const fileSha256 = await sha256HexBytes(bytes);
-  return {
-    ...base,
-    manifest: parsed.manifest,
-    data: parsed.data,
-    bytes,
-    fileSha256
-  };
-}
+  const createdAt = now.toISOString();
+  const backupId = createdAt.replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  const prefix = `${BACKUP_ROOT_PREFIX}${backupId}/`;
+  const dataKey = `${prefix}data.json`;
+  const manifestKey = `${prefix}manifest.json`;
 
-export function gcsConfigReady(env) {
-  try {
-    const email = String(env?.GCS_SERVICE_ACCOUNT_EMAIL || '').trim();
-    const bucket = String(env?.GCS_BUCKET_NAME || '').trim();
-    const key = normalizePrivateKeyPem(env?.GCS_PRIVATE_KEY);
-    return Boolean(email.includes('@') && bucket.length >= 3 && bucket.length <= 222
-      && key.includes('-----BEGIN PRIVATE KEY-----') && key.includes('-----END PRIVATE KEY-----'));
-  } catch {
-    return false;
-  }
-}
+  const dataText = JSON.stringify(base.data, null, 2) + '\n';
+  const dataBytes = encoder.encode(dataText);
+  const dataSha256 = await sha256HexBytes(dataBytes);
+  const counts = Object.fromEntries(Object.entries(base.data).map(([key, rows]) => [key, Array.isArray(rows) ? rows.length : 0]));
+  const totalRowCount = Object.values(counts).reduce((sum, value) => sum + Number(value || 0), 0);
 
-function assertGcsConfig(env) {
-  if (!gcsConfigReady(env)) {
-    throw new BackupError('Google Cloud Storage 備份尚未完成 Cloudflare Secrets 設定。', 'BACKUP_NOT_CONFIGURED');
-  }
-}
-
-export async function createServiceAccountJwt(env, now = new Date()) {
-  assertGcsConfig(env);
-  const issuedAt = Math.floor(now.getTime() / 1000) - 5;
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const claims = {
-    iss: String(env.GCS_SERVICE_ACCOUNT_EMAIL).trim(),
-    scope: STORAGE_SCOPE,
-    aud: TOKEN_URI,
-    iat: issuedAt,
-    exp: issuedAt + 3600
-  };
-  const unsigned = `${base64UrlEncodeText(JSON.stringify(header))}.${base64UrlEncodeText(JSON.stringify(claims))}`;
-  const key = await importServiceAccountPrivateKey(env.GCS_PRIVATE_KEY);
-  const signature = new Uint8Array(await crypto.subtle.sign(
-    { name: 'RSASSA-PKCS1-v1_5' },
-    key,
-    encoder.encode(unsigned)
-  ));
-  return `${unsigned}.${base64UrlEncodeBytes(signature)}`;
-}
-
-async function serviceAccountAccessToken(env) {
-  const assertion = await createServiceAccountJwt(env);
-  const response = await fetch(TOKEN_URI, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion
-    })
-  });
-  const data = await response.json().catch(() => ({}));
-  const accessToken = String(data.access_token || '');
-  if (!response.ok || !accessToken) {
-    throw new BackupError('Google Cloud Service Account 驗證失敗。', 'GCS_AUTH_FAILED');
-  }
-  return accessToken;
-}
-
-async function uploadGcsBackup(accessToken, bucketName, objectName, bytes) {
-  const params = new URLSearchParams({ uploadType: 'media', name: objectName, ifGenerationMatch: '0' });
-  const response = await fetch(`${STORAGE_UPLOAD_API}/b/${encodeURIComponent(bucketName)}/o?${params.toString()}`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${accessToken}`,
-      'content-type': 'application/json; charset=utf-8'
-    },
-    body: bytes
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new BackupError('Google Cloud Storage 備份上傳失敗。', `GCS_UPLOAD_${response.status}`);
-  if (!data.name) throw new BackupError('Google Cloud Storage 未回傳物件名稱。', 'GCS_UPLOAD_NO_OBJECT');
-  return data;
-}
-
-async function downloadGcsObject(accessToken, bucketName, objectName) {
-  const response = await fetch(`${STORAGE_API}/b/${encodeURIComponent(bucketName)}/o/${encodeURIComponent(objectName)}?alt=media`, {
-    headers: { authorization: `Bearer ${accessToken}` }
-  });
-  if (!response.ok) throw new BackupError('Google Cloud Storage 備份回讀失敗。', `GCS_DOWNLOAD_${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
-}
-
-async function listGcsBackupObjects(accessToken, bucketName) {
-  const items = [];
-  let pageToken = '';
-  const prefix = `${BACKUP_OBJECT_PREFIX}CYAccountingWeb_backup_`;
-  do {
-    const params = new URLSearchParams({
-      prefix,
-      maxResults: '1000',
-      fields: 'nextPageToken,items(name,timeCreated,generation,size)'
-    });
-    if (pageToken) params.set('pageToken', pageToken);
-    const response = await fetch(`${STORAGE_API}/b/${encodeURIComponent(bucketName)}/o?${params.toString()}`, {
-      headers: { authorization: `Bearer ${accessToken}` }
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new BackupError('Google Cloud Storage 無法列出備份。', `GCS_LIST_${response.status}`);
-    for (const item of data.items || []) {
-      const name = String(item.name || '');
-      if (name.startsWith(prefix) && name.endsWith('.json')) items.push(item);
+  const manifest = {
+    format: BACKUP_FORMAT,
+    formatVersion: BACKUP_FORMAT_VERSION,
+    app: 'CYAccountingWeb',
+    appVersion: APP_VERSION,
+    schemaVersion: Number(base.manifest?.schemaVersion || 0),
+    backupId,
+    createdAt,
+    counts,
+    totalRowCount,
+    files: {
+      data: {
+        name: 'data.json',
+        sha256: dataSha256,
+        byteSize: dataBytes.byteLength
+      }
     }
-    pageToken = String(data.nextPageToken || '');
-  } while (pageToken);
-  return items;
+  };
+  const manifestText = JSON.stringify(manifest, null, 2) + '\n';
+  const manifestBytes = encoder.encode(manifestText);
+  const manifestSha256 = await sha256HexBytes(manifestBytes);
+
+  return {
+    backupId,
+    prefix,
+    dataKey,
+    manifestKey,
+    manifest,
+    data: base.data,
+    dataBytes,
+    manifestBytes,
+    dataSha256,
+    manifestSha256,
+    totalRowCount,
+    totalByteSize: dataBytes.byteLength + manifestBytes.byteLength
+  };
 }
 
-async function cleanupExpiredGcsBackups(accessToken, bucketName, retentionDays, now) {
-  const cutoff = now.getTime() - retentionDays * 24 * 60 * 60 * 1000;
-  const items = await listGcsBackupObjects(accessToken, bucketName);
-  for (const item of items) {
-    const created = Date.parse(String(item.timeCreated || ''));
+export async function verifyBackupSet(provider, expected) {
+  assertBackupStorageProvider(provider);
+  const [dataBytes, manifestBytes] = await Promise.all([
+    provider.getObject(expected.dataKey),
+    provider.getObject(expected.manifestKey)
+  ]);
+
+  const [dataSha256, manifestSha256] = await Promise.all([
+    sha256HexBytes(dataBytes),
+    sha256HexBytes(manifestBytes)
+  ]);
+  if (dataBytes.byteLength !== expected.dataBytes.byteLength || dataSha256 !== expected.dataSha256) {
+    throw new BackupError('Cloud Storage data.json 回讀驗證失敗。', 'DATA_VERIFY_FAILED');
+  }
+  if (manifestBytes.byteLength !== expected.manifestBytes.byteLength || manifestSha256 !== expected.manifestSha256) {
+    throw new BackupError('Cloud Storage manifest.json 回讀驗證失敗。', 'MANIFEST_VERIFY_FAILED');
+  }
+
+  let manifest;
+  let data;
+  try {
+    manifest = JSON.parse(decoder.decode(manifestBytes));
+    data = JSON.parse(decoder.decode(dataBytes));
+  } catch {
+    throw new BackupError('備份 JSON 無法解析。', 'BACKUP_JSON_INVALID');
+  }
+
+  if (manifest?.format !== BACKUP_FORMAT || Number(manifest?.formatVersion) !== BACKUP_FORMAT_VERSION
+      || manifest?.app !== 'CYAccountingWeb' || String(manifest?.backupId || '') !== expected.backupId
+      || String(manifest?.files?.data?.sha256 || '') !== expected.dataSha256
+      || Number(manifest?.files?.data?.byteSize || -1) !== expected.dataBytes.byteLength) {
+    throw new BackupError('備份 manifest 內容驗證失敗。', 'MANIFEST_CONTENT_INVALID');
+  }
+
+  const actualCount = Object.values(data || {}).reduce((sum, rows) => sum + (Array.isArray(rows) ? rows.length : 0), 0);
+  if (actualCount !== expected.totalRowCount || actualCount !== Number(manifest.totalRowCount || -1)) {
+    throw new BackupError('備份資料筆數驗證失敗。', 'BACKUP_COUNT_MISMATCH');
+  }
+  return true;
+}
+
+export async function cleanupExpiredBackups(provider, retentionDays, now = new Date()) {
+  assertBackupStorageProvider(provider);
+  const cutoff = now.getTime() - Number(retentionDays) * 24 * 60 * 60 * 1000;
+  const objects = await provider.listObjects(BACKUP_ROOT_PREFIX);
+  for (const object of objects) {
+    const key = String(object?.key || '');
+    if (!isManagedBackupObject(key)) continue;
+    const created = Date.parse(String(object?.timeCreated || ''));
     if (!Number.isFinite(created) || created >= cutoff) continue;
     try {
-      await deleteGcsObject(accessToken, bucketName, String(item.name || ''), item.generation);
+      await provider.deleteObject(key, object?.generation || '');
     } catch {
-      // Cleanup failure must not invalidate an already verified backup.
+      // Retention cleanup is best effort and must not invalidate a verified backup.
     }
   }
 }
 
-async function deleteGcsObject(accessToken, bucketName, objectName, generation = '') {
-  const params = new URLSearchParams();
-  if (generation) params.set('generation', String(generation));
-  const suffix = params.size ? `?${params.toString()}` : '';
-  const response = await fetch(`${STORAGE_API}/b/${encodeURIComponent(bucketName)}/o/${encodeURIComponent(objectName)}${suffix}`, {
-    method: 'DELETE',
-    headers: { authorization: `Bearer ${accessToken}` }
-  });
-  if (!response.ok && response.status !== 404) {
-    throw new BackupError('Google Cloud Storage 清理舊備份失敗。', `GCS_DELETE_${response.status}`);
-  }
+function isManagedBackupObject(key) {
+  if (!key.startsWith(BACKUP_ROOT_PREFIX)) return false;
+  const relative = key.slice(BACKUP_ROOT_PREFIX.length);
+  const parts = relative.split('/');
+  if (parts.length !== 2 || !/^\d{8}T\d{6}Z$/.test(parts[0])) return false;
+  return parts[1] === 'data.json' || parts[1] === 'manifest.json';
 }
 
-async function importServiceAccountPrivateKey(value) {
-  const pem = normalizePrivateKeyPem(value);
-  const base64 = pem
-    .replace('-----BEGIN PRIVATE KEY-----', '')
-    .replace('-----END PRIVATE KEY-----', '')
-    .replace(/\s+/g, '');
-  if (!base64) throw new BackupError('Google Cloud Service Account 私鑰格式錯誤。', 'GCS_PRIVATE_KEY_INVALID');
-  let der;
-  try {
-    der = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
-  } catch {
-    throw new BackupError('Google Cloud Service Account 私鑰格式錯誤。', 'GCS_PRIVATE_KEY_INVALID');
-  }
-  try {
-    return await crypto.subtle.importKey(
-      'pkcs8',
-      der,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-  } catch {
-    throw new BackupError('Google Cloud Service Account 私鑰無法載入。', 'GCS_PRIVATE_KEY_INVALID');
-  }
-}
-
-export function normalizePrivateKeyPem(value) {
-  return String(value || '').trim().replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
-}
-
-function base64UrlEncodeText(value) {
-  return base64UrlEncodeBytes(encoder.encode(String(value)));
-}
-
-function base64UrlEncodeBytes(bytes) {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+async function bestEffortDelete(provider, key, generation) {
+  try { await provider.deleteObject(key, generation || ''); } catch { /* best effort */ }
 }
 
 async function sha256HexBytes(bytes) {
@@ -358,15 +316,16 @@ function truncateError(value) {
 }
 
 function safeBackupMessage(error) {
-  if (error instanceof BackupError) return error.message;
+  if (error instanceof BackupError || error instanceof GcsProviderError) return error.message;
   return 'Google Cloud Storage 備份處理失敗，請稍後再試。';
 }
 
 function safeErrorCode(error) {
-  return error instanceof BackupError ? error.code : 'BACKUP_FAILED';
+  if (error instanceof BackupError || error instanceof GcsProviderError) return error.code;
+  return 'BACKUP_FAILED';
 }
 
-class BackupError extends Error {
+export class BackupError extends Error {
   constructor(message, code) {
     super(message);
     this.name = 'BackupError';
@@ -377,6 +336,10 @@ class BackupError extends Error {
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff'
+    }
   });
 }
