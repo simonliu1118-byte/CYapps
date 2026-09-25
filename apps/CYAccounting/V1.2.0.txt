@@ -4,15 +4,16 @@ Date: 2026/09/25
 
 Current source on Phase 1 visual-alignment branch; test artifact, not a formal Release:
 - Aligned CYAccounting with the canonical CY Desktop Visual Guide Phase 1 using the Blue Theme.
-- Main tabs keep the lower-presence accent-underline header treatment, while a thin neutral workspace frame now groups the active page content without restoring the old heavy QTabWidget chrome.
+- Main tabs keep the lower-presence accent-underline header treatment, while a thin neutral workspace frame groups the active page content without restoring the old heavy QTabWidget chrome.
 - Input page follows a dedicated data-entry density: primary entry fields remain deliberately larger and more legible (11pt, at least 30px high) because entering data is the primary task.
-- Basic Information, Income, Expense and Confirmation use intact framed sections with internal section-title labels instead of GroupBox legend text cutting through the frame.
-- Basic Information and Confirmation use the neutral window fill; Income uses the CYAccountingWeb soft green #E7F3E9 and Expense uses soft red #F8E9E7.
-- All regular ComboBoxes now share the polished separate drop-down area and the same modern chevron asset; high-density ledger inline ComboBoxes keep their narrow geometry but use the same chevron.
+- Basic Information, Income, Expense and Input Confirmation use consistent white framed sections with border-integrated GroupBox titles.
+- Income / Expense green and red panel fills were removed after Windows real-machine review; accounting-domain colors remain available only where they convey accounting meaning rather than panel decoration.
+- All regular ComboBoxes share the polished separate drop-down area and the same modern chevron asset instead of the older platform-looking triangle. High-density ledger inline ComboBoxes keep their narrow geometry but use the same chevron.
+- ComboBox interaction remains QComboBox-native: keyboard focus, popup selection and existing data behavior are unchanged; this refinement changes the visual shell only.
 - Date controls use Qt arrow primitives, and the day-step control plus calendar button match the date field height.
-- Income/Expense save actions use ordinary button styling rather than Primary styling, and their height is synchronized to the adjacent amount field after layout/style resolution.
+- Income / Expense save actions use ordinary button styling rather than Primary styling, and their height is synchronized to the adjacent amount field after layout/style resolution.
 - Common-summary dividers belong to the summary band itself instead of being independent layout rows; they use a dark dashed top border and 8px vertical rhythm so their position remains stable when window width changes.
-- The Confirmation panel is fixed for the 10-entry use case without a white card fill; MainWindow minimum size and initial size are both 1120x760 so the full panel cannot be clipped by normal resizing at the accepted 100% / 96-DPI baseline.
+- Input Confirmation remains fixed for the 10-entry use case. MainWindow minimum size and initial size are both 1120x760 so the full panel cannot be clipped by normal resizing at the accepted 100% / 96-DPI baseline.
 - Main application window keeps the canonical ACC icon. Secondary dialogs / management / settings windows suppress the app icon while native MessageBox and native QFileDialog keep OS-native shell behavior.
 - Ledger uses a separate high-density review mode: original 23px data-row density is restored, the header is 24px, table text remains 10pt, and query/statistics spacing stays compact.
 - Ledger uses neutral headers, low-contrast grid, soft selection and a single zebra-striping source.
@@ -20,5 +21,4 @@ Current source on Phase 1 visual-alignment branch; test artifact, not a formal R
 - Settings and Import dialogs receive canonical spacing/density treatment while preserving their existing behavior and workflow.
 - Existing accounting workflow, Enter/Tab/Esc behavior, database schema, backup/restore, Google Drive, import flow, locking and two-DELETE local-ledger reset behavior remain unchanged.
 - ACC Icon Family from V1.1.0 remains unchanged.
-- Ledger inline-edit ComboBox narrow-arrow treatment is intentionally unchanged pending user decision because it preserves high-density cell text space.
 - 125% / 150% DPI acceptance remains deferred under the canonical guide; this test version does not claim those DPI levels as passed.
