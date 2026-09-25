@@ -17,7 +17,7 @@ internal sealed class UserSettingsStore
     public UserSettingsStore(AppLogger log)
     {
         _log = log;
-        var dir = Path.Combine(AppContext.BaseDirectory, "config");
+        var dir = Path.Combine(AppContext.BaseDirectory, "Data");
         Directory.CreateDirectory(dir);
         SettingsPath = Path.Combine(dir, "settings.json");
     }

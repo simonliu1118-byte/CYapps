@@ -28,7 +28,7 @@ internal static class Build10UiPatch
             foreach (var item in strip.Items.OfType<ToolStripStatusLabel>())
             {
                 if (item.Text.StartsWith("V0.1.0 Build", StringComparison.Ordinal))
-                    item.Text = "V0.1.0 Build 10 · Esc：緊急停止 · 不自動儲存 ERP";
+                    item.Text = "V0.1.0 Build 11 · Esc：緊急停止 · 不自動儲存 ERP";
             }
         }
 
@@ -50,8 +50,6 @@ internal static class Build10UiPatch
         {
             if (advanced)
             {
-                // Advanced mode uses the extra maximized height for the form sections,
-                // while keeping the detail table around ten visible rows.
                 root.RowStyles[1].SizeType = SizeType.Percent;
                 root.RowStyles[1].Height = 100;
                 root.RowStyles[2].SizeType = SizeType.Absolute;
@@ -77,8 +75,6 @@ internal static class Build10UiPatch
 
     private static void ApplyStandardRows(TableLayoutPanel root)
     {
-        // Seven standard invoice fields fit without an internal scrollbar at 96 DPI.
-        // The remaining default-height workspace is sized for about ten detail rows.
         root.RowStyles[1].SizeType = SizeType.Absolute;
         root.RowStyles[1].Height = 252;
         root.RowStyles[2].SizeType = SizeType.Percent;

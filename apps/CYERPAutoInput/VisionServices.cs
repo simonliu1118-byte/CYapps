@@ -1,8 +1,9 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
-using Windows.Graphics.Imaging;
-using Windows.Media.Ocr;
-using Windows.Storage;
+using RapidOCRSharpOnnx;
+using RapidOCRSharpOnnx.Configurations;
+using RapidOCRSharpOnnx.Providers;
+using RapidOCRSharpOnnx.Utils;
 
 namespace CYERPAutoInput;
 
@@ -44,9 +45,15 @@ internal static class ScreenCapture
     }
 }
 
+// Compatibility name retained through the V0.1.0 rewrite so the established
+// vision call sites stay small. This class no longer uses Windows.Media.Ocr;
+// Build 11 replaces it with local PP-OCRv5 inference through ONNX Runtime.
 internal sealed class WindowsOcrService
 {
     private readonly AppLogger _log;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private RapidOCRSharp? _engine;
+
     public WindowsOcrService(AppLogger log) => _log = log;
 
     public async Task<IReadOnlyList<OcrToken>> RecognizeAsync(
@@ -54,79 +61,95 @@ internal sealed class WindowsOcrService
         CancellationToken cancellationToken,
         bool requireChinese = false)
     {
-        var temp = Path.Combine(Path.GetTempPath(), $"CYERPAutoInput_ocr_{Guid.NewGuid():N}.png");
+        await _gate.WaitAsync(cancellationToken);
+        var temp = Path.Combine(Path.GetTempPath(), $"CYERPAutoInput_paddle_{Guid.NewGuid():N}.png");
         try
         {
             using var prepared = PrepareForOcr(bitmap, out var scale);
             prepared.Save(temp, ImageFormat.Png);
             cancellationToken.ThrowIfCancellationRequested();
 
-            var file = await StorageFile.GetFileFromPathAsync(temp);
-            using var stream = await file.OpenAsync(FileAccessMode.Read);
-            var decoder = await BitmapDecoder.CreateAsync(stream);
-            var software = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-
-            var (engine, languageTag) = CreatePreferredEngine(requireChinese);
+            var engine = EnsureEngine();
+            var result = await Task.Run(() => engine.RecognizeText(temp), cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            var result = await engine.RecognizeAsync(software);
 
-            var tokens = new List<OcrToken>();
-            foreach (var line in result.Lines)
-            foreach (var word in line.Words)
+            var tokens = new List<(int Line, OcrToken Token)>();
+            if (result.WordResults is not null)
             {
-                var r = word.BoundingRect;
-                var rect = new Rectangle(
-                    (int)Math.Round(r.X / scale),
-                    (int)Math.Round(r.Y / scale),
-                    Math.Max(1, (int)Math.Round(r.Width / scale)),
-                    Math.Max(1, (int)Math.Round(r.Height / scale)));
-                tokens.Add(new OcrToken(word.Text, rect));
+                foreach (var word in result.WordResults)
+                {
+                    if (word.Box is null || word.Box.Length == 0 || string.IsNullOrWhiteSpace(word.Word))
+                        continue;
+
+                    var minX = word.Box.Min(p => p.X);
+                    var minY = word.Box.Min(p => p.Y);
+                    var maxX = word.Box.Max(p => p.X);
+                    var maxY = word.Box.Max(p => p.Y);
+                    var rect = new Rectangle(
+                        Math.Max(0, (int)Math.Floor(minX / scale)),
+                        Math.Max(0, (int)Math.Floor(minY / scale)),
+                        Math.Max(1, (int)Math.Ceiling((maxX - minX) / scale)),
+                        Math.Max(1, (int)Math.Ceiling((maxY - minY) / scale)));
+                    tokens.Add((word.LineId, new OcrToken(word.Word.Trim(), rect)));
+                }
             }
 
-            _log.Info("vision", $"OCR completed tokens={tokens.Count} image={bitmap.Width}x{bitmap.Height} prepared={prepared.Width}x{prepared.Height} scale={scale:0.##} language={languageTag} require_chinese={requireChinese}");
-            return tokens;
+            var ordered = tokens
+                .OrderBy(x => x.Line)
+                .ThenBy(x => x.Token.Rect.Top)
+                .ThenBy(x => x.Token.Rect.Left)
+                .Select(x => x.Token)
+                .ToArray();
+
+            _log.Info("vision", $"PaddleOCR completed engine=PP-OCRv5_server_rec tokens={ordered.Length} image={bitmap.Width}x{bitmap.Height} prepared={prepared.Width}x{prepared.Height} scale={scale:0.##} require_chinese={requireChinese}");
+            return ordered;
         }
         finally
         {
             try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+            _gate.Release();
         }
     }
 
-    private static (OcrEngine Engine, string LanguageTag) CreatePreferredEngine(bool requireChinese)
+    private RapidOCRSharp EnsureEngine()
     {
-        var available = OcrEngine.AvailableRecognizerLanguages;
-        var chinese = available.FirstOrDefault(x => x.LanguageTag.Equals("zh-TW", StringComparison.OrdinalIgnoreCase))
-            ?? available.FirstOrDefault(x => x.LanguageTag.StartsWith("zh-Hant", StringComparison.OrdinalIgnoreCase))
-            ?? available.FirstOrDefault(x => x.LanguageTag.StartsWith("zh-", StringComparison.OrdinalIgnoreCase));
+        if (_engine is not null) return _engine;
 
-        if (chinese is not null)
+        var modelDir = Path.Combine(AppContext.BaseDirectory, "runtime", "ocr");
+        var detector = Path.Combine(modelDir, "ch_PP-OCRv5_det_mobile.onnx");
+        var recognizer = Path.Combine(modelDir, "PP-OCRv5_server_rec.onnx");
+        var classifier = Path.Combine(modelDir, "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx");
+        var missing = new[] { detector, recognizer, classifier }.Where(path => !File.Exists(path)).Select(Path.GetFileName).ToArray();
+        if (missing.Length > 0)
+            throw new InvalidOperationException($"PaddleOCR runtime model 缺少：{string.Join("、", missing)}。請使用完整 CYERPAutoInput 測試包。");
+
+        var config = new OcrConfig(detector, recognizer, LangRec.CH, OCRVersion.PPOCRV5, classifier)
         {
-            var engine = OcrEngine.TryCreateFromLanguage(chinese);
-            if (engine is not null) return (engine, chinese.LanguageTag);
-        }
+            MinHeight = 4,
+            MinSideLen = 8,
+            MaxSideLen = 3200,
+            ReturnWordBox = true
+        };
+        config.DetectorConfig.LimitType = LimitType.Max;
+        config.DetectorConfig.LimitSideLen = 1800;
+        config.DetectorConfig.Thresh = 0.20f;
+        config.DetectorConfig.BoxThresh = 0.32f;
+        config.DetectorConfig.UnclipRatio = 1.45f;
+        config.DetectorConfig.UseDilation = true;
+        config.RecognizerConfig.TextScore = 0.30f;
+        config.RecognizerConfig.RecBatchNum = 6;
 
-        if (requireChinese)
-            throw new InvalidOperationException("Windows OCR 未提供中文辨識語言；為避免在 ERP 畫面猜測位置，光學操作已停止。請先在 Windows 安裝繁體中文語言/OCR 元件。");
-
-        var profile = OcrEngine.TryCreateFromUserProfileLanguages();
-        if (profile is not null) return (profile, "user-profile");
-
-        var fallback = available.FirstOrDefault();
-        if (fallback is not null)
-        {
-            var engine = OcrEngine.TryCreateFromLanguage(fallback);
-            if (engine is not null) return (engine, fallback.LanguageTag);
-        }
-
-        throw new InvalidOperationException("Windows OCR engine is unavailable on this computer.");
+        _engine = new RapidOCRSharp(new ExecutionProviderCPU(config));
+        _log.Info("vision", "PaddleOCR initialized model=PP-OCRv5_server_rec provider=CPU detector=PP-OCRv5_mobile classifier=PP-LCNet_mobile");
+        return _engine;
     }
 
     private static Bitmap PrepareForOcr(Bitmap source, out double scale)
     {
         var maxSide = Math.Max(source.Width, source.Height);
-        scale = maxSide <= 1200 ? 2.0 : maxSide <= 1700 ? 1.5 : 1.0;
-        scale = Math.Min(scale, 2400.0 / Math.Max(1, maxSide));
-        scale = Math.Clamp(scale, 0.5, 2.0);
+        scale = maxSide <= 1100 ? 2.0 : maxSide <= 1800 ? 1.5 : 1.0;
+        scale = Math.Min(scale, 3000.0 / Math.Max(1, maxSide));
+        scale = Math.Clamp(scale, 1.0, 2.0);
 
         if (Math.Abs(scale - 1.0) < 0.01)
             return source.Clone(new Rectangle(0, 0, source.Width, source.Height), PixelFormat.Format32bppArgb);
@@ -161,18 +184,15 @@ internal sealed class GridVisionService
         [7] = ["單價"]
     };
 
-    // COPI08 visible detail-column order. These ordinals are not click coordinates;
-    // they are used only to correlate OCR-recognized header anchors with optically
-    // detected vertical grid separators when small headers such as 品號/數量 are missed.
     private static readonly Dictionary<int, int> LogicalColumnOrder = new()
     {
-        [0] = 1,  // 品號
-        [1] = 4,  // 數量
-        [3] = 6,  // 贈/備品量
-        [4] = 7,  // 單位
-        [5] = 8,  // 批號
-        [6] = 9,  // 庫別
-        [7] = 11  // 單價
+        [0] = 1,
+        [1] = 4,
+        [3] = 6,
+        [4] = 7,
+        [5] = 8,
+        [6] = 9,
+        [7] = 11
     };
 
     private static readonly (int Order, string[] Aliases)[] GridOrderAnchors =
@@ -220,22 +240,26 @@ internal sealed class GridVisionService
 
         if (!geometry.ColumnX.ContainsKey(0) || !geometry.ColumnX.ContainsKey(1))
         {
-            // Build 8: OCR remains diagnostic, but a missed small header is no longer
-            // fatal when the rendered grid itself supplies enough optical geometry.
             if (!TryInferColumnsFromGridLines(image, tokens, geometry, out var inferredHeaderBottom))
             {
-                // Header-only diagnostic: avoid logging first-row item data.
-                LogTokens("detail-header-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 24), 64);
+                LogTokens("detail-header-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 40), 64);
                 throw new InvalidOperationException("Optical detail header detection failed: item/quantity columns were not both found and grid-line fallback was not reliable.");
             }
             headerBottom = Math.Max(headerBottom, inferredHeaderBottom);
         }
 
         var horizontal = FindHorizontalLines(image, Math.Max(0, headerBottom - 6));
+        if (headerBottom <= 0)
+        {
+            headerBottom = horizontal.FirstOrDefault(y => y is >= 14 and <= 90);
+            if (headerBottom > 0)
+                _log.Info("vision", $"detail header baseline inferred from horizontal grid line y={headerBottom}");
+        }
+
         var firstBoundaryIndex = horizontal.FindIndex(y => y >= headerBottom - 3);
         if (firstBoundaryIndex < 0 || horizontal.Count - firstBoundaryIndex < 2)
         {
-            LogTokens("detail-row-lines-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 24), 64);
+            LogTokens("detail-row-lines-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 40), 64);
             throw new InvalidOperationException("Optical detail row-line detection failed.");
         }
 
@@ -249,7 +273,7 @@ internal sealed class GridVisionService
         }
         if (geometry.RowCenterY.Count == 0)
         {
-            LogTokens("detail-row-centers-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 24), 64);
+            LogTokens("detail-row-centers-miss", tokens, t => t.Rect.Top <= Math.Min(image.Height, 40), 64);
             throw new InvalidOperationException("Optical detail row centers were not detected.");
         }
 
@@ -264,69 +288,63 @@ internal sealed class GridVisionService
         out int headerBottom)
     {
         headerBottom = 0;
-        var rawLines = FindVerticalLines(image, Math.Min(image.Height - 1, 90));
+        var rawLines = FindVerticalLines(image, Math.Min(image.Height - 1, 96));
         var boundaries = NormalizeColumnBoundaries(rawLines, image.Width);
-        if (boundaries.Count < 10)
+        if (boundaries.Count < 6)
         {
             _log.Warn("vision", $"detail grid-line fallback rejected: vertical_boundaries={boundaries.Count}");
             return false;
         }
 
         var offsets = new List<int>();
-        var anchorCount = 0;
         foreach (var anchor in GridOrderAnchors)
         {
             var match = FindPhrase(tokens, anchor.Aliases);
-            if (match is null || match.Value.Top > 24) continue;
+            if (match is null || match.Value.Top > 40) continue;
             headerBottom = Math.Max(headerBottom, match.Value.Bottom);
             var centerX = match.Value.Left + match.Value.Width / 2;
             var interval = FindInterval(boundaries, centerX);
-            if (interval < 0) continue;
-            offsets.Add(interval - anchor.Order);
-            anchorCount++;
+            if (interval >= 0) offsets.Add(interval - anchor.Order);
         }
 
-        if (offsets.Count < 3)
+        var offset = 0;
+        var consensus = 0;
+        if (offsets.Count > 0)
         {
-            _log.Warn("vision", $"detail grid-line fallback rejected: anchors={anchorCount} boundaries={boundaries.Count}");
-            return false;
+            var best = offsets
+                .GroupBy(x => x)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => Math.Abs(g.Key))
+                .First();
+            offset = best.Key;
+            consensus = best.Count();
         }
 
-        var bestOffset = offsets
-            .GroupBy(x => x)
-            .OrderByDescending(g => g.Count())
-            .ThenBy(g => Math.Abs(g.Key))
-            .First();
-        if (bestOffset.Count() < 3)
+        // If tiny headers are still missed, use the optically detected grid itself and
+        // the stable COPI08 business-column order. This is not an absolute screen
+        // coordinate: every click is still derived from the current TcxGridSite lines.
+        if (consensus < 2)
         {
-            _log.Warn("vision", $"detail grid-line fallback rejected: anchor_consensus={bestOffset.Count()}/{offsets.Count}");
-            return false;
+            offset = 0;
+            _log.Warn("vision", $"detail grid-line fallback using semantic column order; OCR anchor_consensus={consensus}/{offsets.Count} boundaries={boundaries.Count}");
         }
 
-        var offset = bestOffset.Key;
         foreach (var pair in LogicalColumnOrder)
         {
             var interval = pair.Value + offset;
             if (interval < 0 || interval + 1 >= boundaries.Count)
-            {
-                _log.Warn("vision", $"detail grid-line fallback rejected: logical_col={pair.Key} interval={interval} boundaries={boundaries.Count}");
-                return false;
-            }
+                continue;
             var left = boundaries[interval];
             var right = boundaries[interval + 1];
-            if (right - left < 24)
-            {
-                _log.Warn("vision", $"detail grid-line fallback rejected: narrow logical_col={pair.Key} width={right - left}");
-                return false;
-            }
+            if (right - left < 24) continue;
             geometry.ColumnX[pair.Key] = (left + right) / 2;
         }
 
         var ok = geometry.ColumnX.ContainsKey(0) && geometry.ColumnX.ContainsKey(1);
         if (ok)
-        {
-            _log.Info("vision", $"detail header OCR missed item/quantity; optical grid-line fallback accepted boundaries={boundaries.Count} anchor_consensus={bestOffset.Count()}/{offsets.Count} offset={offset}");
-        }
+            _log.Info("vision", $"detail grid-line geometry accepted boundaries={boundaries.Count} anchor_consensus={consensus}/{offsets.Count} offset={offset}");
+        else
+            _log.Warn("vision", $"detail grid-line fallback rejected after mapping: item={geometry.ColumnX.ContainsKey(0)} quantity={geometry.ColumnX.ContainsKey(1)} boundaries={boundaries.Count}");
         return ok;
     }
 
@@ -349,9 +367,6 @@ internal sealed class GridVisionService
         if (boundaries.Count == 0 || boundaries[0] > 5) boundaries.Insert(0, 0);
         if (boundaries[^1] < width - 5) boundaries.Add(width - 1);
 
-        // DevExpress lookup cells may contain a narrow internal ellipsis/dropdown strip.
-        // Merge such sub-cells so interval ordinals represent business columns rather
-        // than editor chrome. Sequence/normal data columns remain wider than this gate.
         var changed = true;
         while (changed && boundaries.Count > 2)
         {
@@ -406,8 +421,6 @@ internal sealed class GridVisionService
         var target = Normalize(requestedUnit);
         if (target.Length == 0) return null;
 
-        // F2 unit selection must be anchored to the visible conversion-unit column.
-        // If the header itself cannot be recognized, do not click a same-named word elsewhere.
         var unitHeader = FindPhrase(tokens, ["換算單位"]);
         if (unitHeader is null) return null;
 

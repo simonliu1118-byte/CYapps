@@ -24,17 +24,32 @@ internal sealed class F2UnitCellLocator
         using var image = ScreenCapture.Capture(captureRect);
         var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
         var header = GridVisionService.FindPhrase(tokens, ["換算單位"]);
-        if (header is null)
+
+        var rawVertical = GridVisionService.FindVerticalLines(image, Math.Min(image.Height - 1, 100));
+        var boundaries = NormalizeBoundaries(rawVertical, image.Width);
+        if (boundaries.Count < 3)
         {
-            _log.Warn("vision", "F2 cell fallback stopped: 換算單位 header was not recognized inside lookup grid");
+            _log.Warn("vision", $"F2 cell fallback stopped: insufficient vertical boundaries={boundaries.Count}");
             return null;
         }
 
-        var boundaries = NormalizeBoundaries(
-            GridVisionService.FindVerticalLines(image, Math.Min(image.Height - 1, Math.Max(96, header.Value.Bottom + 32))),
-            image.Width);
-        var headerCenterX = header.Value.Left + header.Value.Width / 2;
-        var interval = FindInterval(boundaries, headerCenterX);
+        int interval;
+        var headerBottom = 0;
+        if (header is not null)
+        {
+            var headerCenterX = header.Value.Left + header.Value.Width / 2;
+            interval = FindInterval(boundaries, headerCenterX);
+            headerBottom = header.Value.Bottom;
+        }
+        else
+        {
+            // The F2 lookup has a stable business-column order. The second visible
+            // grid column is 換算單位. We still derive its pixel bounds from the live
+            // TcxGridSite separators; no fixed screen coordinate is used.
+            interval = boundaries.Count >= 6 ? 1 : -1;
+            _log.Warn("vision", $"F2 換算單位 header OCR missed; using live grid semantic column order boundaries={boundaries.Count}");
+        }
+
         if (interval < 0 || interval + 1 >= boundaries.Count)
         {
             _log.Warn("vision", $"F2 cell fallback stopped: unit-column interval not found boundaries={boundaries.Count}");
@@ -49,11 +64,17 @@ internal sealed class F2UnitCellLocator
             return null;
         }
 
-        var horizontal = GridVisionService.FindHorizontalLines(image, Math.Max(0, header.Value.Bottom - 5));
-        var first = horizontal.FindIndex(y => y >= header.Value.Bottom - 3);
+        var horizontal = GridVisionService.FindHorizontalLines(image, Math.Max(0, headerBottom - 5));
+        if (headerBottom <= 0)
+        {
+            headerBottom = horizontal.FirstOrDefault(y => y is >= 14 and <= 70);
+            if (headerBottom > 0)
+                _log.Info("vision", $"F2 header baseline inferred from live grid y={headerBottom}");
+        }
+        var first = horizontal.FindIndex(y => y >= headerBottom - 3);
         if (first < 0 || horizontal.Count - first < 2)
         {
-            _log.Warn("vision", $"F2 cell fallback stopped: row boundaries not found count={horizontal.Count}");
+            _log.Warn("vision", $"F2 cell fallback stopped: row boundaries not found count={horizontal.Count} header_bottom={headerBottom}");
             return null;
         }
 
@@ -82,14 +103,14 @@ internal sealed class F2UnitCellLocator
                 .ThenBy(t => t.Rect.Left)
                 .Select(t => t.Text)));
 
-            _log.Info("vision", $"F2 unit cell OCR row={rowNumber} text=\"{Sanitize(cellText)}\" cell={left},{top},{right - left},{height}");
+            _log.Info("vision", $"F2 unit cell PaddleOCR row={rowNumber} text=\"{Sanitize(cellText)}\" cell={left},{top},{right - left},{height}");
             if (cellText != target && !cellText.Contains(target, StringComparison.Ordinal))
                 continue;
 
             var point = new Point(
                 captureRect.Left + (left + right) / 2,
                 captureRect.Top + (top + bottom) / 2);
-            _log.Info("vision", $"F2 requested unit located by cell OCR row={rowNumber} point={point.X},{point.Y}");
+            _log.Info("vision", $"F2 requested unit located by cell PaddleOCR row={rowNumber} point={point.X},{point.Y}");
             return point;
         }
 
@@ -171,6 +192,9 @@ internal sealed class F2UnitCellLocator
         var average = samples == 0 ? 255 : (int)(total / samples);
         var invert = average < 145;
 
+        // Preserve antialiased glyph strokes for PaddleOCR instead of hard
+        // thresholding them away. Selected blue rows are inverted to dark text on
+        // a light background; normal rows stay light-background grayscale.
         for (var y = 0; y < height; y++)
         {
             var sy = Math.Min(source.Height - 1, y / scale);
@@ -180,7 +204,8 @@ internal sealed class F2UnitCellLocator
                 var c = source.GetPixel(sx, sy);
                 var luma = (c.R * 30 + c.G * 59 + c.B * 11) / 100;
                 if (invert) luma = 255 - luma;
-                var v = luma < 178 ? 0 : 255;
+                var contrasted = (int)Math.Round((luma - 128) * 1.35 + 128);
+                var v = Math.Clamp(contrasted, 0, 255);
                 output.SetPixel(x, y, Color.FromArgb(255, v, v, v));
             }
         }

@@ -34,11 +34,9 @@ jobs:
           if ($build -notmatch '^\d+$') { throw "Invalid CYERPAutoInput BUILD: $build" }
           $suffix = ""
           if ([int]$build -gt 0) { $suffix = "-build$build" }
-          $packageFolder = "CYERPAutoInput"
           "CYERPAUTOINPUT_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CYERPAUTOINPUT_BUILD=$build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "CYERPAUTOINPUT_ARTIFACT_SUFFIX=$suffix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CYERPAUTOINPUT_PACKAGE_FOLDER=$packageFolder" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - uses: actions/setup-dotnet@v5
         with:
@@ -47,6 +45,10 @@ jobs:
       - name: Fetch canonical CYERPAutoInput icon
         shell: pwsh
         run: ./tools/fetch-canonical-icon.ps1
+
+      - name: Fetch pinned PaddleOCR models
+        shell: pwsh
+        run: ./tools/fetch-ocr-models.ps1
 
       - name: Restore
         shell: pwsh
@@ -64,18 +66,47 @@ jobs:
         shell: pwsh
         run: |
           Remove-Item -Recurse -Force package -ErrorAction SilentlyContinue
-          $outDir = Join-Path "package" $env:CYERPAUTOINPUT_PACKAGE_FOLDER
+          $outDir = Join-Path "package" "CYERPAutoInput"
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
           dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:Version=$env:CYERPAUTOINPUT_VERSION -o $outDir
           if (-not (Test-Path "$outDir/CYERPAutoInput.exe")) { throw "CYERPAutoInput.exe was not produced" }
-          Get-FileHash "$outDir/CYERPAutoInput.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  CYERPAutoInput.exe" } | Set-Content "$outDir/SHA256.txt"
+
+          New-Item -ItemType Directory -Path "$outDir/Data" -Force | Out-Null
+          Copy-Item settings.example.json "$outDir/Data/settings.example.json"
           Copy-Item README.md "$outDir/README.md"
-          Copy-Item settings.example.json "$outDir/settings.example.json"
+          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/THIRD_PARTY_NOTICES.md"
+          Copy-Item VERSION "$outDir/VERSION"
+          Copy-Item BUILD "$outDir/BUILD"
+          Get-FileHash "$outDir/CYERPAutoInput.exe" -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  CYERPAutoInput.exe" } | Set-Content "$outDir/SHA256.txt"
+
+      - name: Verify single-extraction package structure
+        shell: pwsh
+        run: |
+          $roots = @(Get-ChildItem -LiteralPath package -Force)
+          if ($roots.Count -ne 1 -or $roots[0].Name -ne "CYERPAutoInput" -or -not $roots[0].PSIsContainer) {
+            throw "Download artifact must contain only the CYERPAutoInput/ folder"
+          }
+          $root = "package/CYERPAutoInput"
+          $required = @(
+            "$root/CYERPAutoInput.exe",
+            "$root/BUILD",
+            "$root/VERSION",
+            "$root/README.md",
+            "$root/THIRD_PARTY_NOTICES.md",
+            "$root/Data/settings.example.json",
+            "$root/runtime/ocr/ch_PP-OCRv5_det_mobile.onnx",
+            "$root/runtime/ocr/PP-OCRv5_server_rec.onnx",
+            "$root/runtime/ocr/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx",
+            "$root/runtime/ocr/SHA256.txt"
+          )
+          foreach ($path in $required) {
+            if (!(Test-Path $path)) { throw "Missing packaged file: $path" }
+          }
 
       - name: Upload engineering package
         uses: actions/upload-artifact@v7
         with:
           name: CYERPAutoInput-v${{ env.CYERPAUTOINPUT_VERSION }}${{ env.CYERPAUTOINPUT_ARTIFACT_SUFFIX }}-windows-x64-run${{ github.run_number }}
-          path: apps/CYERPAutoInput/package
+          path: apps/CYERPAutoInput/package/*
           if-no-files-found: error
           retention-days: 14

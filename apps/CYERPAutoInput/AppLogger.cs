@@ -11,14 +11,14 @@ internal sealed class AppLogger : IDisposable
     public AppLogger()
     {
         var baseDir = AppContext.BaseDirectory;
-        LogDirectory = Path.Combine(baseDir, "logs");
+        LogDirectory = Path.Combine(baseDir, "Data", "Logs");
         try
         {
             Directory.CreateDirectory(LogDirectory);
         }
         catch
         {
-            LogDirectory = Path.Combine(Path.GetTempPath(), "CYERPAutoInput", "logs");
+            LogDirectory = Path.Combine(Path.GetTempPath(), "CYERPAutoInput", "Data", "Logs");
             Directory.CreateDirectory(LogDirectory);
         }
 
@@ -27,7 +27,7 @@ internal sealed class AppLogger : IDisposable
         {
             AutoFlush = true
         };
-        Info("app", "CYERPAutoInput V0.1.0 Build 10 starting (C# rewrite)");
+        Info("app", "CYERPAutoInput V0.1.0 Build 11 starting (C# rewrite, PaddleOCR PP-OCRv5)");
     }
 
     public void Info(string area, string message) => Write("INFO", area, message);

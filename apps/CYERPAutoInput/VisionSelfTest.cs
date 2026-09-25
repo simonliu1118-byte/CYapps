@@ -17,9 +17,9 @@ internal static class VisionSelfTest
                 g.Clear(Color.White);
                 g.SmoothingMode = SmoothingMode.HighQuality;
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-                using var font = new Font("Segoe UI", 34, FontStyle.Bold, GraphicsUnit.Pixel);
+                using var font = new Font("Microsoft JhengHei UI", 42, FontStyle.Bold, GraphicsUnit.Pixel);
                 using var pen = new Pen(Color.FromArgb(90, 90, 90), 1);
-                g.DrawString("12345", font, Brushes.Black, new PointF(55, 22));
+                g.DrawString("換算單位  箱", font, Brushes.Black, new PointF(55, 18));
                 foreach (var y in new[] { 105, 150, 195, 240, 285 })
                     g.DrawLine(pen, 15, y, 880, y);
             }
@@ -28,9 +28,6 @@ internal static class VisionSelfTest
             if (lines.Count < 4)
                 throw new InvalidOperationException($"Synthetic grid-line detector returned only {lines.Count} horizontal lines.");
 
-            // Keep the vertical-grid detector test separate from the OCR digit image.
-            // Drawing vertical separators through the glyphs makes the synthetic OCR
-            // fixture itself ambiguous and does not test the production algorithm.
             using var verticalImage = new Bitmap(900, 120);
             using (var g = Graphics.FromImage(verticalImage))
             {
@@ -96,15 +93,16 @@ internal static class VisionSelfTest
             if (farColumnCandidate is not null)
                 throw new InvalidOperationException("F2 safety failed: a same-text token outside the unit column was accepted.");
 
-            // Numeric OCR keeps this runtime check independent of whichever language pack
-            // the Windows runner/user machine selects while still exercising real Windows.Media.Ocr.
+            // Exercise the actual bundled PP-OCRv5 runtime, including Traditional
+            // Chinese recognition. This intentionally does not depend on Windows OCR
+            // language packs anymore.
             var ocr = new WindowsOcrService(log);
-            var tokens = await ocr.RecognizeAsync(image, CancellationToken.None);
-            var joinedText = string.Concat(tokens.Select(t => t.Text)).Replace(" ", string.Empty);
-            if (!joinedText.Contains("12345", StringComparison.Ordinal))
-                throw new InvalidOperationException($"Windows OCR ran but did not recognize synthetic digits (tokens={tokens.Count}, text={joinedText}).");
+            var tokens = await ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: true);
+            var joinedText = string.Concat(tokens.Select(t => t.Text)).Replace(" ", string.Empty).Replace("　", string.Empty);
+            if (!joinedText.Contains("箱", StringComparison.Ordinal))
+                throw new InvalidOperationException($"PaddleOCR ran but did not recognize synthetic Traditional Chinese target 箱 (tokens={tokens.Count}, text={joinedText}).");
 
-            var message = $"vision self-test passed horizontal={lines.Count} vertical={vertical.Count} tokens={tokens.Count}";
+            var message = $"vision self-test passed engine=PP-OCRv5 horizontal={lines.Count} vertical={vertical.Count} tokens={tokens.Count} text={joinedText}";
             Console.WriteLine(message);
             log.Info("selftest", message);
             return 0;
