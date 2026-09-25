@@ -98,6 +98,13 @@ jobs:
           New-Item -ItemType Directory -Force out | Out-Null
           python tools/create_source_archive.py --output "out/cyaccounting-v$env:CYACCOUNTING_VERSION-source.tar.gz"
 
+      - name: Scan formal release payloads for secrets and production bindings
+        if: env.CYACCOUNTING_SHOULD_RELEASE == 'true'
+        run: |
+          $portable = "out/portable-dist/CYAccounting_V${env:CYACCOUNTING_VERSION}_Windows_x64.zip"
+          $source = "out/cyaccounting-v$env:CYACCOUNTING_VERSION-source.tar.gz"
+          python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" $portable $source
+
       - name: Create release notes
         if: env.CYACCOUNTING_SHOULD_RELEASE == 'true'
         run: |
