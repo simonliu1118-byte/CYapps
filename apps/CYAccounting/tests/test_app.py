@@ -156,7 +156,8 @@ def test_account_manager_controls_and_titles():
     assert category_tabs is not None
     assert category_tabs.count() == 2
     assert category_tabs.tabBar().expanding() is True
-    assert 'border-bottom: 2px solid #2563EB' not in main_module.APP_STYLE
+    assert 'QTabWidget#categoryManagerTabs QTabBar::tab {' in main_module.APP_STYLE
+    assert 'border-top-left-radius: 5px' in main_module.APP_STYLE
     assert 'border-bottom-color: #FFFFFF' in main_module.APP_STYLE
 
     # Secondary-dialog preparation must never mutate Qt's native window flags.
