@@ -5,12 +5,14 @@ Current source on Phase 1 visual-alignment branch; test artifact, not a formal R
 - Aligned CYAccounting with the canonical CY Desktop Visual Guide Phase 1 using the Blue Theme.
 - Main tabs use a lower-presence header treatment with an accent underline; page chrome and decorative borders are reduced.
 - Input page follows a dedicated data-entry density: primary entry fields remain deliberately larger and more legible (11pt, at least 30px high) because entering data is the primary task.
-- Basic Information, Income and Expense remain clearly framed sections; Income uses the CYAccountingWeb soft green #E7F3E9 and Expense uses soft red #F8E9E7.
+- Basic Information, Income, Expense and Confirmation use intact framed sections with internal section-title labels instead of GroupBox legend text cutting through the frame.
+- Basic Information and Confirmation use the neutral window fill; Income uses the CYAccountingWeb soft green #E7F3E9 and Expense uses soft red #F8E9E7.
 - Input-page category ComboBoxes retain the polished separate drop-down area and existing combo-arrow asset; other ComboBoxes keep the newer Phase 1 treatment.
 - Date controls use Qt arrow primitives, and the day-step control plus calendar button match the date field height.
-- Income/Expense save actions use ordinary button styling rather than Primary styling.
-- Common-summary dividers are attached to the summary band itself instead of being independent layout rows, so their vertical position remains stable when the window width changes.
-- The confirmation panel is sized for the fixed 10-entry use case without a white card fill; MainWindow minimum size is 1100x760 so the full confirmation panel cannot be clipped by normal resizing at the accepted 100% / 96-DPI baseline.
+- Income/Expense save actions use ordinary button styling rather than Primary styling, and their height is synchronized to the adjacent amount field after layout/style resolution.
+- Common-summary dividers belong to the summary band itself instead of being independent layout rows; they use a dark dashed top border and 8px vertical rhythm so their position remains stable when window width changes.
+- The Confirmation panel is fixed for the 10-entry use case without a white card fill; MainWindow minimum size and initial size are both 1120x760 so the full panel cannot be clipped by normal resizing at the accepted 100% / 96-DPI baseline.
+- Main application window keeps the canonical ACC icon. Secondary dialogs / management / settings windows suppress the app icon while native MessageBox and native QFileDialog keep OS-native shell behavior.
 - Ledger uses a separate high-density review mode: original 23px data-row density is restored, the header is 24px, table text remains 10pt, and query/statistics spacing stays compact.
 - Ledger uses neutral headers, low-contrast grid, soft selection and a single zebra-striping source.
 - Monetary entry fields are right-aligned; state colors and accounting-domain income/expense colors are separated.
@@ -19,4 +21,3 @@ Current source on Phase 1 visual-alignment branch; test artifact, not a formal R
 - ACC Icon Family from V1.1.0 remains unchanged.
 - Ledger inline-edit ComboBox narrow-arrow treatment is intentionally unchanged pending user decision because it preserves high-density cell text space.
 - 125% / 150% DPI acceptance remains deferred under the canonical guide; this test version does not claim those DPI levels as passed.
-- Phase 1 input refinement: internal section titles replace GroupBox legend labels; Basic Information shares the confirmation neutral fill; income/expense vertical rhythm is fixed at 8px around the dark dashed summary divider; save-button height follows the adjacent amount field; minimum/initial window size is 1120x760; secondary dialogs suppress the app icon while native MessageBox behavior remains unchanged.
