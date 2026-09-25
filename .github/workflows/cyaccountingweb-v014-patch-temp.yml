@@ -1,0 +1,81 @@
+name: CYAccountingWeb V0.14 Patch (Temporary)
+
+on:
+  push:
+    branches:
+      - cyaccountingweb/v0.14-inline-ledger-edit
+    paths:
+      - '.github/workflows/cyaccountingweb-v014-patch-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccountingweb/v0.14-inline-ledger-edit
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Wire and validate V0.14
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          js = Path('apps/CYAccountingWeb/public/v014.js')
+          text = js.read_text(encoding='utf-8')
+          old = "  row.addEventListener('keydown', handleInlineLedgerKeydown);\n  row.querySelector('[data-inline-summary]')?.focus();\n"
+          new = "  row.addEventListener('keydown', handleInlineLedgerKeydown);\n  row.querySelector('[data-inline-amount]')?.addEventListener('input', event => {\n    event.target.value = String(event.target.value || '').replace(/[^0-9]/g, '').slice(0, 7);\n  });\n  row.querySelector('[data-inline-summary]')?.focus();\n"
+          if old not in text:
+              raise SystemExit('inline editor wiring anchor not found')
+          text = text.replace(old, new, 1)
+          js.write_text(text, encoding='utf-8')
+
+          index = Path('apps/CYAccountingWeb/public/index.html')
+          text = index.read_text(encoding='utf-8')
+          if '/v014.css' not in text:
+              anchor = '  <link rel="stylesheet" href="/v013.css">\n'
+              if anchor not in text:
+                  raise SystemExit('V0.13 CSS anchor not found')
+              text = text.replace(anchor, anchor + '  <link rel="stylesheet" href="/v014.css">\n', 1)
+          text = text.replace('V0.13.0</span>', 'V0.14.0</span>', 1)
+          if '/v014.js' not in text:
+              anchor = '  <script src="/v013.js" defer></script>\n'
+              if anchor not in text:
+                  raise SystemExit('V0.13 JS anchor not found')
+              text = text.replace(anchor, anchor + '  <script src="/v014.js" defer></script>\n', 1)
+          index.write_text(text, encoding='utf-8')
+
+          Path('apps/CYAccountingWeb/VERSION').write_text('0.14.0\n', encoding='utf-8')
+
+          todo = Path('apps/CYAccountingWeb/TODO.md')
+          text = todo.read_text(encoding='utf-8')
+          old = '- [ ] 記帳資料表直接欄位編輯；目前仍以編輯視窗處理。'
+          new = '- [x] 記帳資料表直接欄位編輯：按編輯後原列直接切換為輸入控制，Enter 儲存、Esc 取消；鎖帳列不可編輯（V0.14.0）。'
+          if old not in text:
+              raise SystemExit('inline edit TODO anchor not found')
+          todo.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+          node --check apps/CYAccountingWeb/public/v014.js
+          test "$(grep -c '/v014.css' apps/CYAccountingWeb/public/index.html)" -eq 1
+          test "$(grep -c '/v014.js' apps/CYAccountingWeb/public/index.html)" -eq 1
+          grep -q 'V0.14.0' apps/CYAccountingWeb/public/index.html
+          grep -q '0.14.0' apps/CYAccountingWeb/VERSION
+          grep -q 'Enter 儲存、Esc 取消' apps/CYAccountingWeb/TODO.md
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/CYAccountingWeb/public/v014.js \
+                  apps/CYAccountingWeb/public/index.html \
+                  apps/CYAccountingWeb/VERSION \
+                  apps/CYAccountingWeb/TODO.md
+          git commit -m 'feat(CYAccountingWeb): wire V0.14 inline ledger editing'
+          git push origin HEAD:cyaccountingweb/v0.14-inline-ledger-edit
