@@ -69,6 +69,32 @@ internal static class VisionSelfTest
             if (joinedChinese is null)
                 throw new InvalidOperationException("Joined OCR-token Chinese phrase matching failed.");
 
+            // Build 17 regression: when the OCR row is "贈 備 品 量 單 位", looking
+            // for 單位 must return only the two matching tokens, never the preceding
+            // 備品量 span. This is what previously shifted F2 into 贈/備品量.
+            var exactUnitSpan = FastDetailGridVisionService.FindExactPhrase(
+            [
+                new OcrToken("贈", new Rectangle(100, 20, 10, 24)),
+                new OcrToken("備", new Rectangle(112, 20, 10, 24)),
+                new OcrToken("品", new Rectangle(124, 20, 10, 24)),
+                new OcrToken("量", new Rectangle(136, 20, 10, 24)),
+                new OcrToken("單", new Rectangle(160, 20, 10, 24)),
+                new OcrToken("位", new Rectangle(172, 20, 10, 24))
+            ], ["單位"]);
+            if (exactUnitSpan is null || exactUnitSpan.Value.Left != 160 || exactUnitSpan.Value.Right != 182)
+                throw new InvalidOperationException($"Exact unit phrase span failed: {exactUnitSpan?.ToString() ?? "null"}.");
+
+            // Also cover a detector that returns one combined token containing extra
+            // prefix text. The match rectangle must be cropped to the 單位 suffix.
+            var combinedUnitSpan = FastDetailGridVisionService.FindExactPhrase(
+            [new OcrToken("備品量單位", new Rectangle(200, 20, 100, 24))], ["單位"]);
+            if (combinedUnitSpan is null || combinedUnitSpan.Value.Left < 255 || combinedUnitSpan.Value.Width > 45)
+                throw new InvalidOperationException($"Combined-token unit phrase cropping failed: {combinedUnitSpan?.ToString() ?? "null"}.");
+
+            var snappedUnitX = FastDetailGridVisionService.SnapToContainingCell(173, [0, 80, 150, 190, 260]);
+            if (snappedUnitX != 170)
+                throw new InvalidOperationException($"Unit header did not snap to containing grid-cell center: {snappedUnitX}.");
+
             if (OcrTextNormalizer.Normalize("数 量") != "數量" ||
                 OcrTextNormalizer.Normalize("库别") != "庫別" ||
                 OcrTextNormalizer.Normalize("送货資料") != "送貨資料")
