@@ -48,11 +48,15 @@ jobs:
         run: |
           node --check src/index.js
           node --check src/app.js
+          node --check src/app-v17.js
+          node --check src/backup-storage-provider.js
+          node --check src/gcs-backup-provider.js
           node --check src/v11-tools.js
           node --check src/v12-tools.js
           node --check src/v13-export.js
           node --check src/v15-import.js
           node --check src/v16-backup.js
+          node --check src/v17-backup.js
           node --check scripts/render-wrangler.mjs
           node --check public/auth.js
           node --check public/app.js
@@ -73,6 +77,7 @@ jobs:
         run: |
           node tests/v15-import.mjs
           node tests/v16-backup.mjs
+          node tests/v17-backup.mjs
           node tests/deploy-config.mjs
 
       - name: Render CI-only Cloudflare config
