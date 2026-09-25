@@ -19,6 +19,7 @@ Current source on Phase 1 visual-alignment branch; test artifact, not a formal R
 - Ledger uses neutral headers, low-contrast grid, soft selection and a single zebra-striping source.
 - Monetary entry fields are right-aligned; state colors and accounting-domain income/expense colors are separated.
 - Settings uses compact framed GroupBox sections for database location, lock, ledger, common summary, backup/restore, Google Drive and program information; their legends use the same no-explicit-fill, bold treatment as the main input page, and excess inter-section whitespace remains removed while behavior is unchanged. Import keeps its existing canonical spacing/density treatment.
+- Build 3 real-machine refinement removes explicit GroupBox-title fills, strengthens section legend weight, adds breathing room below the main tab header, compacts the 10-row input workspace height, and suppresses the Windows generic secondary-dialog icon with an invisible native HICON.
 - Existing accounting workflow, Enter/Tab/Esc behavior, database schema, backup/restore, Google Drive, import flow, locking and two-DELETE local-ledger reset behavior remain unchanged.
 - ACC Icon Family from V1.1.0 remains unchanged.
 - 125% / 150% DPI acceptance remains deferred under the canonical guide; this test version does not claim those DPI levels as passed.
