@@ -1,76 +1,59 @@
-志遠記帳系統 V1.1.0 原始碼
+# 志遠記帳系統 / CYAccounting
 
-Windows x64 測試包
-- CYAccounting Build 的成功執行頁面會提供短期 Actions Artifact；下載後解壓縮一次，就會看到 `CYAccounting` 資料夾，從裡面執行 `CYAccounting.exe`，不用另裝 Python，也不用再解第二個 ZIP。校驗檔由 CI 內部檢查。
-- 測試包與正式 GitHub Release 不同；正式發布前仍需實機驗收。
-- 更新前先備份原本的 `Data` 資料夾；測試包本身的 `Data` 必須是空的，不能拿舊版程式資料夾直接覆蓋。
-- 預設記帳資料存在可攜程式資料夾的 `Data` 內；只刪除 `CYAccounting.exe` 不會刪除帳本。若要連預設帳本一起移除，必須確認備份後刪除整個可攜程式資料夾；若曾改過資料庫位置或同步到 Google Drive，其他位置的資料不受影響。
+## 目前正式版本
 
-V1.1.0 更新重點
-- 正式導入 AITeam 已核准的 CYAccounting `ACC` Icon Family；`app.ico` 為 16/24/32/48/64/128/256 七層 Windows ICO，視窗與 `CYAccounting.exe` 共用同一正式來源。
-- 同步保留正式 `ACC.svg` 與 256px `app.png`；Windows CI 驗證 ICO 七層尺寸與最終 EXE associated icon resource。
-- 本版尚未包含下一階段 CY Desktop Visual Guide Phase 1 UI 視覺改造；既有記帳流程、鍵盤操作、資料庫、備份、匯入、Google Drive、鎖帳與本機帳本重置行為未變更。
-- V1.0.28 僅為本次 Icon 導入期間的測試版本識別，不作為正式 GitHub Release。
+- 正式版本：**V1.3.0**
+- `VERSION=1.3.0`
+- `BUILD=0`
+- 平台：Windows 10/11 x64
+- 發行形式：Portable ZIP，解壓縮後直接執行 `CYAccounting.exe`，不需另外安裝 Python。
+- 正式 Release：<https://github.com/simonliu1118-byte/CYapps/releases/tag/cyaccounting-v1.3.0>
+- 正式版本紀錄：`V1.3.0.txt`
 
-V1.0.28 測試版本紀錄
-- 換用 AITeam 已核准的 CYAccounting `ACC` 正式 Icon Family 資產；`app.ico` 為 16/24/32/48/64/128/256 七層 Windows ICO，視窗與 `CYAccounting.exe` 共用同一正式來源。
-- 同步保留正式 `ACC.svg` 與 256px `app.png`；本次不重新生成另一套圖示。
-- 此版本用於 Icon 導入與測試，正式發布版本號改為 V1.1.0。
+CYAccounting V1.3.0 已完成使用者實機驗收與正式 Release；目前專案狀態為**暫停／無進行中開發工作**。
 
-V1.0.27 更新重點
-- Build 2：設定頁原位置恢復「清除所有記帳資料與期初餘額」。必須連續兩次獨立輸入大寫 `DELETE` 才會重置整份本機帳本；取消或任一步輸入錯誤都不會清除。交易、期初、帳戶、科目、鎖帳、本機偏好和 Google Drive 本機連結會重置；既有備份保留，清除前另建立可還原的本機備份。自訂資料庫路徑仍指向同一位置，以免誤開舊帳本。`DELETE` 只是防誤觸文字，不是管理密碼。
-- Build 2：測試包的 Actions 壓縮檔改為解壓縮一次直接得到 `CYAccounting`，不再包第二層 ZIP。
-- Windows 深色模式時仍顯示淺色標題列、帳戶清單和科目清單，避免深色清單配深色文字。
-- Build 1 曾移除固定清除密碼與整批清除入口；Build 2 依使用者新決定恢復功能並改為兩次 `DELETE` 確認，沒有還原固定密碼。
-- SHA-256 仍由 CI 自動產生並驗證，不在使用者下載包中額外提供校驗檔。
+## V1.3.0 重點
 
-V1.0.26 更新重點
-- 所有交易新增、編輯、表格直接修改及 Excel 匯入，金額統一為 1～9,999,999；既有超額歷史資料不會被自動修改或刪除。
-- 設定檔改為安全寫入並保留上一版；設定損壞時優先復原安全副本，無法復原則停止開啟，避免誤用新的空白帳本。
-- 備份完成後會檢查必要資料表、資料庫版本、一般完整性及資料關聯，確認可作為志遠記帳系統還原檔。
-- Google Drive 備份清理可讀取超過 100 份的完整清單，只保留最新 30 份；雲端上傳改在背景執行，不再卡住記帳畫面。
-- 修正最大化視窗可能在啟動保護流程中被還原為一般大小的問題。
-- 正式修正過期測試內容，GitHub Actions 不再於執行前臨時改寫測試；新增設定復原、7 位數金額、Drive 分頁、匯入、還原退回及 Go launcher lifecycle 測試。
-- GitHub Actions 會建立可重現、可下載並附 SHA-256 的原始碼封存檔，日後可直接核對版本內容。
-- 設定頁可直接向前或向後調整鎖帳月份是管理者刻意保留的功能，與記帳資料表的逐月鎖定流程並存。
+- 完成 CY Desktop Visual Guide Phase 1 視覺整理，主 UI 使用 Blue Theme；ACC 綠色保留為程式 Icon identity。
+- 輸入記帳頁保留較大的主要輸入欄位與字體，優先支援快速輸入。
+- 記帳資料表維持高密度閱讀：資料列 23px、表頭 24px。
+- Basic Information、Income、Expense、Input Confirmation、Settings、Import 的 section 視覺、間距與字級完成統一。
+- 一般 ComboBox 與 Ledger 內嵌 ComboBox 使用同一家族 chevron；Ledger 保留窄版 geometry。
+- 收入／支出科目管理採 V1.1.0 已驗證的原生 `QTabWidget` 作法，不再使用專案自訂 Tab 幾何。
+- 子視窗正常繼承 ACC application icon；不再做 Windows title-bar icon suppression。
+- 既有記帳流程、Enter/Tab/Esc、SQLite schema、歷史交易文字快照、備份／還原、Google Drive、Excel 匯入、鎖帳、7 位數金額限制與雙重 `DELETE` 清除流程均維持原有行為。
+- 本版正式驗收基準為 100% / 96 DPI；125% / 150% DPI 尚未納入完成範圍。
 
-V1.0.25 更新重點
-- 常用摘要列改為固定高度；有推薦摘要與顯示「尚無符合條件」時佔用高度完全一致，切換科目或重新統計不再造成收入／支出區塊上下跳動。
-- 輸入確認改為「日期　[帳戶]　收入/支出 Tag　科目　-　摘要　$金額　<存檔成功>」，各區段使用全形空白；金額加入千分位。
-- 常用摘要設定改為直接輸入數字，移除上下微調按鈕，顯示「最近 N 筆，至少出現 N 次」。
-- 日期直接輸入 YYYYMMDD 的自動格式化再強化，格式整理與日期合法性驗證仍完全分離。
-- 修正日期選擇器跨月時前一個月日期未套用灰底的情況。
-- 記帳資料表編輯模式的帳戶／科目下拉按鈕再縮窄。
-- 右上角新增「匯入」：可從本機 Excel 或已授權 Google Drive 選擇帳簿；支援分欄式與單一收支欄格式、欄位對應、預覽、鎖定月份檢查及重複資料略過。
-- Google Drive 授權與備份同步集中在「設定」；本機自動備份完成後可上傳至 Google Drive 的 CYAccounting 資料夾，失敗不影響本機記帳。
-- 設定新增 Excel 匯出預設位置。
+## 資料與更新注意事項
 
-Google Drive 首次設定
+- 預設帳本位於可攜程式資料夾的 `Data`。
+- 只刪除 `CYAccounting.exe` 不會刪除帳本。
+- 更新前先備份原本 `Data`；不要直接把新版整個資料夾覆蓋正在使用的舊版資料夾。
+- 若曾自訂資料庫位置，資料仍保存在該位置；Google Drive 既有備份也不會因移除本機程式而自動刪除。
+- 正式發行包不得包含使用者帳本、設定、OAuth client JSON、token、log 或既有備份。
+
+## 本機帳本重置
+
+設定頁提供「清除所有記帳資料與期初餘額」。必須先後兩次各自輸入完全相同的大寫 `DELETE` 才會執行；取消或任何一次輸入錯誤都不會清除。執行前必須先建立可驗證的本機復原備份，既有本機及雲端備份保留。`DELETE` 只是防誤觸確認文字，不是管理密碼。
+
+## Google Drive 首次設定
+
 1. 在 Google Cloud 建立「桌面應用程式」OAuth 用戶端並啟用 Google Drive API。
 2. 下載 OAuth client JSON。
 3. 志遠記帳系統 → 設定 → Google Drive →「匯入 OAuth 憑證」→「連結 Google Drive」。
-4. 連結後可啟用自動雲端同步，也可在右上角「匯入」直接選取 Google Drive 的 .xlsx 或 Google 試算表。
-5. 舊式 .xls 目前請先另存為 .xlsx 後再匯入。
+4. 連結後可啟用自動雲端同步，也可從「匯入」選取 Google Drive 的 `.xlsx` 或 Google 試算表。
+5. 舊式 `.xls` 請先另存為 `.xlsx` 後再匯入。
 
-既有功能與前版紀錄
-本版主要修改：
-- 日期欄重新支援直接輸入 8 位數字，例如 20251215 會先格式化為 2025/12/15，再由獨立日期驗證判斷日期是否存在。
-- 修正日期選擇器在月份 1 日剛好是星期一時，前一月份跨月日期未套用灰底的問題。
-- 收入、支出各有「常用摘要」列；依目前帳戶、收支與科目的最近 N 筆資料，自動統計最常使用的前 10 個摘要。
-- 常用摘要預設最近 100 筆、至少出現 3 次；可在系統設定調整最近筆數與最低出現次數。
-- 常用摘要空白不參與統計；相同次數時以最近使用者優先；點摘要後填入完整原文，焦點移到金額。
-- 收入／支出主要輸入列與常用摘要之間增加虛線分隔。
-- 設定視窗內的按鈕、下拉選單、輸入欄位高度整體縮短，版面更緊湊。
-- 輸入確認改為「日期 [帳戶]｜收入/支出 Tag 科目｜摘要｜金額」；收入 Tag 使用淺灰綠、支出 Tag 使用淺灰紅。
-- 記帳資料表內嵌編輯的帳戶／收入科目／支出科目下拉箭頭區縮窄，減少對儲存格文字空間的占用。
+## 開發與治理
 
-既有功能與資料庫格式可直接沿用，不修改歷史記帳資料。
-羅馬拼音與內部識別一律使用威妥瑪拼音或 CY 縮寫。
+開始任何新修改前，依序確認：
 
-V1.0.25 主要調整
-- 常用摘要改為依「帳戶＋收支＋科目」統計，可選帳務日期或近期輸入。
-- 日期欄支援只反白 MM/DD 後輸入 4 碼，自動重整為 YYYY/MM/DD。
-- 記帳資料表正常排序簡化；點「帳戶」表頭切換帳戶分組檢視，再點一次恢復。
-- 帳戶分組檢視時，餘額欄改顯示各帳戶自己的逐筆餘額。
-- 已有自訂科目時不再自動補入一般收入／一般支出。
-- 可攜版根目錄固定為 CYAccounting，並以目前版本文字檔標示版號與發出日期。
+1. 根 `REPOSITORY_RULES.md`
+2. 根 `REPO_POLICY.md`
+3. `apps/CYAccounting/PROJECT_RULES.md`
+4. 最新 `main`
+5. `WORK_HANDOFF.md`、`TODO.md`、版本檔、tests 與 workflows
+
+主要技術：PySide6、SQLite、Go Windows GUI launcher。正式 Windows 發行使用 `.github/workflows/cyaccounting-release.yml` 從 `main` 重新建置、測試、掃描並發布。
+
+歷史版本細節保留於各 `Vx.y.z.txt`；不要把舊測試 Build 的暫行 UI 作法當成目前正式規格。
