@@ -80,7 +80,8 @@ new_native = '''                # WS_EX_DLGMODALFRAME is the native no-caption-i
 '''
 replace_once(main_path, old_native, new_native)
 
-# 2) Category manager: large, two-column tabs that fill the dialog width.
+# 2) Category manager: large, two-column tabs that fill the dialog width while
+# following the CY Desktop Visual Guide header-only tab direction.
 dialogs_path = ROOT / "app" / "dialogs.py"
 old_category = '''        self.db = db
         self.setWindowTitle("收入支出科目管理")
@@ -109,7 +110,7 @@ new_tabs = '''        tabs = QTabWidget()
 replace_once(dialogs_path, old_tabs, new_tabs)
 
 # 3) Visual style: month statistics uses the same no-title-fill, bold legend;
-# category manager gets intentionally large tabs.
+# category manager gets large, equal-width, low-presence header-only tabs.
 theme_path = ROOT / "app" / "theme.py"
 old_stats_box = '''QGroupBox#statsCard {{
     border: 1px solid {NEUTRAL_BORDER};
@@ -149,6 +150,9 @@ new_stats_title = '''QGroupBox#statsCard::title {{
     font-weight: 700;
 }}
 
+/* Category manager uses the canonical Header-only Custom tab direction:
+   large/equal hit targets, low visual presence, stronger selected weight and
+   a 2px Accent underline. The QTabWidget still owns page lifecycle/keyboard. */
 QTabWidget#categoryManagerTabs::pane {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 4px;
@@ -158,30 +162,23 @@ QTabWidget#categoryManagerTabs::pane {{
 QTabWidget#categoryManagerTabs QTabBar::tab {{
     min-height: 36px;
     min-width: 140px;
-    padding: 7px 18px;
+    padding: 8px 18px;
     margin: 0;
-    border: 1px solid {NEUTRAL_BORDER};
-    border-bottom: 2px solid {NEUTRAL_BORDER};
-    background: {NEUTRAL_READ_ONLY};
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
     color: {TEXT_SECONDARY};
     font-size: 11.5pt;
     font-weight: 600;
 }}
-QTabWidget#categoryManagerTabs QTabBar::tab:first {{
-    border-top-left-radius: 4px;
-}}
-QTabWidget#categoryManagerTabs QTabBar::tab:last {{
-    border-top-right-radius: 4px;
-}}
 QTabWidget#categoryManagerTabs QTabBar::tab:selected {{
-    background: {NEUTRAL_WHITE};
-    color: {ACCENT_PRESSED};
+    color: {TEXT_PRIMARY};
     border-bottom: 2px solid {ACCENT};
     font-weight: 700;
 }}
 QTabWidget#categoryManagerTabs QTabBar::tab:hover:!selected {{
+    color: {ACCENT_HOVER};
     background: {NEUTRAL_WINDOW};
-    color: {TEXT_PRIMARY};
 }}
 '''
 replace_once(theme_path, old_stats_title, new_stats_title)
@@ -239,7 +236,7 @@ if anchor not in notes:
 insert = (
     "- Build 5 restores the native secondary-dialog system menu and Close button while keeping the Windows no-icon treatment; no secondary dialog may disable the title-bar X as a side effect of icon suppression.\n"
     "- Build 5 changes Month Statistics to the same no-explicit-title-fill, bold GroupBox legend treatment used by the other section titles.\n"
-    "- Build 5 gives Income Category / Expense Category dedicated large expanding tabs that divide the manager width evenly, with larger type and a clear selected state.\n"
+    "- Build 5 gives Income Category / Expense Category large equal-width Header-only Custom tabs: neutral inactive text, stronger selected weight and a 2px Accent underline, while retaining QTabWidget page lifecycle and keyboard behavior.\n"
 )
 notes = notes.replace(anchor, anchor + insert, 1)
 notes_path.write_text(notes, encoding="utf-8")
