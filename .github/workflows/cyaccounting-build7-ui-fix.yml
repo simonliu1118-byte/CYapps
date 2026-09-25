@@ -1,0 +1,314 @@
+name: CYAccounting Build 7 UI Correction (one-time)
+
+on:
+  push:
+    branches:
+      - cyaccounting/v1.2.0-visual-phase1
+    paths:
+      - .github/workflows/cyaccounting-build7-ui-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccounting/v1.2.0-visual-phase1
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Apply guarded Build 7 corrections
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          import re
+
+          root = Path("apps/CYAccounting")
+
+          main_path = root / "app/main.py"
+          main = main_path.read_text(encoding="utf-8")
+
+          helper_pattern = re.compile(
+              r"    @staticmethod\n    def _apply_secondary_dialog_no_icon\(dialog: QDialog\) -> None:\n.*?"
+              r"(?=    @staticmethod\n    def _prepare_secondary_dialog_chrome)",
+              re.S,
+          )
+          helper_replacement = '''    @staticmethod
+          def _apply_secondary_dialog_no_icon(dialog: QDialog) -> None:
+              """Apply native Windows fixed-dialog icon suppression after HWND creation.
+
+              CYInvoice uses FormBorderStyle.FixedDialog for secondary forms; WinForms
+              does not display a title-bar icon for that border style. Qt has no
+              ShowIcon property, so Build 7 first creates the dialog with
+              MSWindowsFixedSizeDialogHint and keeps this native fallback for Qt/Windows
+              frame refreshes. All ctypes signatures are explicit for Windows x64.
+              """
+              if sys.platform != "win32":
+                  return
+              try:
+                  import ctypes
+                  from ctypes import wintypes
+
+                  hwnd = wintypes.HWND(int(dialog.winId()))
+                  user32 = ctypes.WinDLL("user32", use_last_error=True)
+                  LONG_PTR = ctypes.c_ssize_t
+                  WPARAM = ctypes.c_size_t
+                  LPARAM = ctypes.c_ssize_t
+                  LRESULT = ctypes.c_ssize_t
+
+                  get_window_long = user32.GetWindowLongPtrW
+                  get_window_long.argtypes = [wintypes.HWND, ctypes.c_int]
+                  get_window_long.restype = LONG_PTR
+                  set_window_long = user32.SetWindowLongPtrW
+                  set_window_long.argtypes = [wintypes.HWND, ctypes.c_int, LONG_PTR]
+                  set_window_long.restype = LONG_PTR
+                  send_message = user32.SendMessageW
+                  send_message.argtypes = [wintypes.HWND, wintypes.UINT, WPARAM, LPARAM]
+                  send_message.restype = LRESULT
+                  set_window_pos = user32.SetWindowPos
+                  set_window_pos.argtypes = [
+                      wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                      ctypes.c_int, ctypes.c_int, wintypes.UINT,
+                  ]
+                  set_window_pos.restype = wintypes.BOOL
+                  redraw_window = user32.RedrawWindow
+                  redraw_window.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT]
+                  redraw_window.restype = wintypes.BOOL
+
+                  GWL_EXSTYLE = -20
+                  WS_EX_DLGMODALFRAME = 0x00000001
+                  WM_SETICON = 0x0080
+                  ICON_SMALL = 0
+                  ICON_BIG = 1
+                  SWP_NOSIZE = 0x0001
+                  SWP_NOMOVE = 0x0002
+                  SWP_NOZORDER = 0x0004
+                  SWP_NOACTIVATE = 0x0010
+                  SWP_FRAMECHANGED = 0x0020
+                  RDW_INVALIDATE = 0x0001
+                  RDW_UPDATENOW = 0x0100
+                  RDW_FRAME = 0x0400
+
+                  ex_style = int(get_window_long(hwnd, GWL_EXSTYLE))
+                  set_window_long(hwnd, GWL_EXSTYLE, ex_style | WS_EX_DLGMODALFRAME)
+                  send_message(hwnd, WM_SETICON, ICON_SMALL, 0)
+                  send_message(hwnd, WM_SETICON, ICON_BIG, 0)
+                  set_window_pos(
+                      hwnd, None, 0, 0, 0, 0,
+                      SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                  )
+                  redraw_window(hwnd, None, None, RDW_INVALIDATE | RDW_FRAME | RDW_UPDATENOW)
+              except Exception as exc:
+                  startup_log(f"secondary dialog native no-icon fallback failed: {exc}")
+
+          '''
+          main, count = helper_pattern.subn(helper_replacement, main, count=1)
+          if count != 1:
+              raise SystemExit(f"secondary helper replacement count={count}")
+
+          old_prepare = '''    @staticmethod
+          def _prepare_secondary_dialog_chrome(dialog: QDialog) -> None:
+              # Never mutate Qt window flags: the default QDialog caption owns the
+              # working Windows system menu and Close button.
+              if dialog.property("cySecondaryChromePrepared"):
+                  return
+              dialog.setProperty("cySecondaryChromePrepared", True)
+              ChineseStandardButtonFilter._apply_secondary_dialog_no_icon(dialog)
+          '''
+          new_prepare = '''    @staticmethod
+          def _prepare_secondary_dialog_chrome(dialog: QDialog) -> None:
+              if dialog.property("cySecondaryChromePrepared"):
+                  return
+              dialog.setProperty("cySecondaryChromePrepared", True)
+              if sys.platform == "win32":
+                  # Match CYInvoice's FixedDialog semantics before the HWND is shown.
+                  # Add only the Windows fixed-dialog hint and explicitly preserve the
+                  # native Close button; do not use CustomizeWindowHint or remove the
+                  # system menu.
+                  dialog.setWindowFlag(Qt.WindowType.MSWindowsFixedSizeDialogHint, True)
+                  dialog.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, True)
+              ChineseStandardButtonFilter._apply_secondary_dialog_no_icon(dialog)
+          '''
+          if old_prepare not in main:
+              raise SystemExit("old secondary prepare block not found")
+          main = main.replace(old_prepare, new_prepare, 1)
+
+          if "self.setMinimumSize(1120, 710)" not in main or "self.resize(1120, 710)" not in main:
+              raise SystemExit("main window 710 geometry anchors not found")
+          main = main.replace("self.setMinimumSize(1120, 710)", "self.setMinimumSize(1120, 735)", 1)
+          main = main.replace("self.resize(1120, 710)", "self.resize(1120, 735)", 1)
+          main_path.write_text(main, encoding="utf-8")
+
+          dialogs_path = root / "app/dialogs.py"
+          dialogs = dialogs_path.read_text(encoding="utf-8")
+          old_tabs = '''        tabs.setObjectName("categoryManagerTabs")
+                  tabs.tabBar().setExpanding(True)
+                  tabs.tabBar().setUsesScrollButtons(False)
+          '''
+          new_tabs = '''        tabs.setObjectName("categoryManagerTabs")
+                  # V1.1.0 used ordinary left-aligned QTabWidget tabs. Keep that
+                  # structure and only enlarge/refine the tabs for the current guide.
+                  tabs.tabBar().setExpanding(False)
+                  tabs.tabBar().setUsesScrollButtons(False)
+          '''
+          if old_tabs not in dialogs:
+              raise SystemExit("category tab setup anchor not found")
+          dialogs = dialogs.replace(old_tabs, new_tabs, 1)
+          dialogs_path.write_text(dialogs, encoding="utf-8")
+
+          theme_path = root / "app/theme.py"
+          theme = theme_path.read_text(encoding="utf-8")
+          old_theme = '''/* Category manager deliberately uses large conventional tabs rather than
+             header-only navigation: these are two peer management pages and need a
+             stronger, old-style tab affordance. Keep native QTabWidget behavior. */
+          QTabWidget#categoryManagerTabs::pane {{
+              border: 1px solid {NEUTRAL_BORDER};
+              border-radius: 4px;
+              background: {NEUTRAL_WHITE};
+              top: -1px;
+          }}
+          QTabWidget#categoryManagerTabs QTabBar::tab {{
+              min-height: 36px;
+              min-width: 140px;
+              padding: 7px 18px;
+              margin: 0 2px 0 0;
+              border: 1px solid {NEUTRAL_BORDER};
+              border-bottom-color: {NEUTRAL_BORDER};
+              border-top-left-radius: 5px;
+              border-top-right-radius: 5px;
+              background: {NEUTRAL_WINDOW};
+              color: {TEXT_SECONDARY};
+              font-size: 11.5pt;
+              font-weight: 600;
+          }}
+          QTabWidget#categoryManagerTabs QTabBar::tab:selected {{
+              color: {TEXT_PRIMARY};
+              background: {NEUTRAL_WHITE};
+              border-color: {NEUTRAL_BORDER};
+              border-bottom-color: {NEUTRAL_WHITE};
+              font-weight: 700;
+          }}
+          QTabWidget#categoryManagerTabs QTabBar::tab:hover:!selected {{
+              color: {TEXT_PRIMARY};
+              background: #EEF2F6;
+          }}
+          '''
+          new_theme = '''/* Category manager: preserve the V1.1.0 conventional tab geometry.
+             The page frame stays visibly separate below the tabs (6px offset); the
+             selected tab must not erase or merge into the pane border. */
+          QTabWidget#categoryManagerTabs::pane {{
+              border: 1px solid {NEUTRAL_BORDER};
+              border-radius: 5px;
+              background: {NEUTRAL_WINDOW};
+              top: 6px;
+          }}
+          QTabWidget#categoryManagerTabs QTabBar::tab {{
+              min-height: 36px;
+              min-width: 132px;
+              padding: 8px 20px;
+              margin-right: 4px;
+              border: 1px solid {NEUTRAL_BORDER};
+              border-bottom: 0;
+              border-top-left-radius: 5px;
+              border-top-right-radius: 5px;
+              background: {NEUTRAL_DIVIDER};
+              color: {TEXT_SECONDARY};
+              font-size: 11.5pt;
+              font-weight: 600;
+          }}
+          QTabWidget#categoryManagerTabs QTabBar::tab:selected {{
+              color: {TEXT_PRIMARY};
+              background: {NEUTRAL_WHITE};
+              font-weight: 700;
+          }}
+          QTabWidget#categoryManagerTabs QTabBar::tab:!selected {{
+              margin-top: 3px;
+          }}
+          QTabWidget#categoryManagerTabs QTabBar::tab:hover:!selected {{
+              color: {TEXT_PRIMARY};
+              background: #EEF2F6;
+          }}
+          '''
+          if old_theme not in theme:
+              raise SystemExit("category theme block not found")
+          theme = theme.replace(old_theme, new_theme, 1)
+          theme_path.write_text(theme, encoding="utf-8")
+
+          tests_path = root / "tests/test_app.py"
+          tests = tests_path.read_text(encoding="utf-8")
+          tests = tests.replace("assert category_tabs.tabBar().expanding() is True", "assert category_tabs.tabBar().expanding() is False", 1)
+          tests = tests.replace("    assert 'border-bottom-color: #FFFFFF' in main_module.APP_STYLE\n", "    assert 'top: 6px;' in main_module.APP_STYLE\n    assert 'border-bottom: 0;' in main_module.APP_STYLE\n", 1)
+          old_chrome_test = '''    # Secondary-dialog preparation must never mutate Qt's native window flags.
+              # The default QDialog caption owns the system menu and working Close button;
+              # icon suppression is a native non-client operation performed after HWND creation.
+              chrome_flags_before = dlg.windowFlags()
+              main_module.ChineseStandardButtonFilter._prepare_secondary_dialog_chrome(dlg)
+              assert dlg.windowFlags() == chrome_flags_before
+          '''
+          new_chrome_test = '''    # Secondary dialogs use Qt's Windows fixed-dialog hint (the equivalent
+              # border family used by CYInvoice) while explicitly preserving Close.
+              chrome_flags_before = dlg.windowFlags()
+              main_module.ChineseStandardButtonFilter._prepare_secondary_dialog_chrome(dlg)
+              chrome_flags_after = dlg.windowFlags()
+              if sys.platform == 'win32':
+                  assert chrome_flags_after & Qt.WindowType.MSWindowsFixedSizeDialogHint
+                  assert chrome_flags_after & Qt.WindowType.WindowCloseButtonHint
+              assert (chrome_flags_after & Qt.WindowType.WindowType_Mask) == (chrome_flags_before & Qt.WindowType.WindowType_Mask)
+          '''
+          if old_chrome_test not in tests:
+              raise SystemExit("old chrome test block not found")
+          tests = tests.replace(old_chrome_test, new_chrome_test, 1)
+          if "assert win.minimumHeight() == 710" not in tests:
+              raise SystemExit("minimum-height test anchor not found")
+          tests = tests.replace("assert win.minimumHeight() == 710", "assert win.minimumHeight() == 735", 1)
+          tests_path.write_text(tests, encoding="utf-8")
+
+          (root / "BUILD").write_text("7\n", encoding="utf-8")
+
+          notes_path = root / "V1.2.0.txt"
+          notes = notes_path.read_text(encoding="utf-8")
+          notes = notes.replace("Build: 6", "Build: 7", 1)
+          marker = "Current source on Phase 1 visual-alignment branch; test artifact, not a formal Release:\n"
+          build7 = (
+              "- Build 7 restores the V1.1.0 category-manager tab geometry: left-aligned conventional tabs, a separately visible pane frame with the original 6px offset, and larger current-guide typography; the selected tab no longer erases or merges into the pane border.\n"
+              "- Build 7 increases the 100%/96-DPI main-window baseline height from 710px to 735px so the new footer does not compress Input Confirmation into the outer workspace frame.\n"
+              "- Build 7 corrects secondary-dialog chrome at the Qt/Win32 boundary: QDialogs receive MSWindowsFixedSizeDialogHint before first show (matching CYInvoice FixedDialog semantics), the Close-button hint is explicitly retained, and the Win32 fallback now uses explicit 64-bit ctypes signatures plus a frame redraw.\n"
+          )
+          if marker not in notes:
+              raise SystemExit("version-note marker not found")
+          notes = notes.replace(marker, marker + build7, 1)
+          notes_path.write_text(notes, encoding="utf-8")
+          '@ | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\cyacc_build7.py"
+          python "$env:RUNNER_TEMP\cyacc_build7.py"
+          if ($LASTEXITCODE -ne 0) { throw "Build 7 transform failed" }
+
+      - name: Validate transformed source
+        shell: pwsh
+        run: |
+          python -m compileall -q apps/CYAccounting/app apps/CYAccounting/tests
+          if ((Get-Content apps/CYAccounting/BUILD -Raw).Trim() -ne "7") { throw "BUILD is not 7" }
+          $main = Get-Content apps/CYAccounting/app/main.py -Raw
+          if ($main -notmatch 'MSWindowsFixedSizeDialogHint') { throw "Fixed dialog hint missing" }
+          if ($main -notmatch 'WindowCloseButtonHint') { throw "Close button preservation missing" }
+          if ($main -notmatch 'setMinimumSize\(1120, 735\)') { throw "Main height not raised" }
+          $dialogs = Get-Content apps/CYAccounting/app/dialogs.py -Raw
+          if ($dialogs -notmatch 'categoryManagerTabs[\s\S]{0,300}setExpanding\(False\)') { throw "Category tabs still expanding" }
+          $theme = Get-Content apps/CYAccounting/app/theme.py -Raw
+          if ($theme -notmatch 'QTabWidget#categoryManagerTabs::pane \{\{[\s\S]{0,200}top: 6px;') { throw "Release-style pane offset missing" }
+          if ($theme -match 'QTabWidget#categoryManagerTabs::pane \{\{[\s\S]{0,200}top: -1px;') { throw "Merged pane style remains" }
+
+      - name: Commit Build 7 corrections
+        shell: pwsh
+        run: |
+          git config user.name "simonliu1118-byte"
+          git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+          git add apps/CYAccounting/BUILD apps/CYAccounting/V1.2.0.txt apps/CYAccounting/app/main.py apps/CYAccounting/app/dialogs.py apps/CYAccounting/app/theme.py apps/CYAccounting/tests/test_app.py
+          git diff --cached --check
+          if (git diff --cached --quiet) { throw "No Build 7 changes staged" }
+          git commit -m "ui(CYAccounting): correct dialog chrome tabs and footer spacing"
+          git push origin HEAD:cyaccounting/v1.2.0-visual-phase1
