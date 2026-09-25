@@ -78,22 +78,16 @@ QGroupBox#statsCard {{
 QGroupBox#confirmationCard, QGroupBox#inputSection, QGroupBox#incomeSection, QGroupBox#expenseSection {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 6px;
-    margin-top: 0;
+    margin-top: 10px;
     padding: 0;
+    background: {NEUTRAL_WHITE};
 }}
-QGroupBox#confirmationCard, QGroupBox#inputSection {{
-    background: {NEUTRAL_WINDOW};
-}}
-QGroupBox#incomeSection {{
-    background: #E7F3E9;
-    border-color: #C7DCCB;
-}}
-QGroupBox#expenseSection {{
-    background: #F8E9E7;
-    border-color: #E7CECA;
-}}
-QLabel#sectionTitle {{
-    background: transparent;
+QGroupBox#confirmationCard::title, QGroupBox#inputSection::title, QGroupBox#incomeSection::title, QGroupBox#expenseSection::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 5px;
+    background: {NEUTRAL_WHITE};
     color: {TEXT_PRIMARY};
     font-size: 11.5pt;
     font-weight: 600;
@@ -101,26 +95,6 @@ QLabel#sectionTitle {{
 QWidget#inputPage QLineEdit, QWidget#inputPage QComboBox {{
     min-height: 30px;
     font-size: 11pt;
-}}
-QWidget#inputPage QComboBox {{
-    padding-right: 34px;
-}}
-QWidget#inputPage QComboBox::drop-down {{
-    subcontrol-origin: padding;
-    subcontrol-position: top right;
-    width: 30px;
-    border-left: 1px solid #AEB9C5;
-    background: #F1F4F7;
-    border-top-right-radius: 4px;
-    border-bottom-right-radius: 4px;
-}}
-QWidget#inputPage QComboBox::drop-down:hover {{
-    background: #E0E7EE;
-}}
-QWidget#inputPage QComboBox::down-arrow {{
-    image: url("{COMBO_ARROW_PATH}");
-    width: 14px;
-    height: 9px;
 }}
 QWidget#inputPage QPushButton#primaryButton, QWidget#inputPage QPushButton#accountChoiceButton {{
     min-height: 30px;
@@ -140,6 +114,30 @@ QLineEdit, QComboBox, QSpinBox, QDateEdit {{
     color: {TEXT_PRIMARY};
     selection-background-color: {ACCENT_SOFT};
     selection-color: {TEXT_PRIMARY};
+}}
+QComboBox {{
+    padding-right: 34px;
+}}
+QComboBox::drop-down {{
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 30px;
+    border-left: 1px solid #AEB9C5;
+    background: #F1F4F7;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+}}
+QComboBox::drop-down:hover {{
+    background: #E0E7EE;
+}}
+QComboBox::drop-down:disabled {{
+    background: {NEUTRAL_READ_ONLY};
+    border-left-color: {NEUTRAL_BORDER};
+}}
+QComboBox::down-arrow {{
+    image: url("{COMBO_ARROW_PATH}");
+    width: 14px;
+    height: 9px;
 }}
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus {{
     border: 1px solid {ACCENT_FOCUS};
@@ -264,7 +262,8 @@ QTabBar#mainTabBar::tab:selected {{
 }}
 QTabBar#mainTabBar::tab:hover {{ color: {ACCENT_HOVER}; }}
 QFrame#pageContainer {{
-    border: 0;
+    border: 1px solid {NEUTRAL_BORDER};
+    border-radius: 6px;
     background: {NEUTRAL_WINDOW};
 }}
 

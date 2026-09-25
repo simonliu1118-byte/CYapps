@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from util import format_amount, normalize_date_input, shift_month, trim_weighted, weighted_units
-from theme import CALENDAR_STYLE, CATEGORY_POPUP_STYLE
+from theme import CALENDAR_STYLE, CATEGORY_POPUP_STYLE, COMBO_ARROW_PATH
 
 
 class WeightedLineEdit(QLineEdit):
@@ -400,7 +400,7 @@ class TransactionDelegate(QStyledItemDelegate):
                 "border-radius: 0px; } "
                 "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; "
                 "width: 12px; border-left: 1px solid #aeb9c5; background:#f1f4f7; } "
-                "QComboBox::down-arrow { width: 8px; height: 6px; } "
+                f'QComboBox::down-arrow {{ image: url("{COMBO_ARROW_PATH}"); width: 8px; height: 6px; }} '
                 "QComboBox QAbstractItemView { font-size: 9pt; }"
             )
         return editor

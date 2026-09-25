@@ -1,13 +1,14 @@
 Version: V1.2.0
+Build: 1
 Date: 2026/09/25
 
 Current source on Phase 1 visual-alignment branch; test artifact, not a formal Release:
 - Aligned CYAccounting with the canonical CY Desktop Visual Guide Phase 1 using the Blue Theme.
-- Main tabs use a lower-presence header treatment with an accent underline; page chrome and decorative borders are reduced.
+- Main tabs keep the lower-presence accent-underline header treatment, while a thin neutral workspace frame now groups the active page content without restoring the old heavy QTabWidget chrome.
 - Input page follows a dedicated data-entry density: primary entry fields remain deliberately larger and more legible (11pt, at least 30px high) because entering data is the primary task.
 - Basic Information, Income, Expense and Confirmation use intact framed sections with internal section-title labels instead of GroupBox legend text cutting through the frame.
 - Basic Information and Confirmation use the neutral window fill; Income uses the CYAccountingWeb soft green #E7F3E9 and Expense uses soft red #F8E9E7.
-- Input-page category ComboBoxes retain the polished separate drop-down area and existing combo-arrow asset; other ComboBoxes keep the newer Phase 1 treatment.
+- All regular ComboBoxes now share the polished separate drop-down area and the same modern chevron asset; high-density ledger inline ComboBoxes keep their narrow geometry but use the same chevron.
 - Date controls use Qt arrow primitives, and the day-step control plus calendar button match the date field height.
 - Income/Expense save actions use ordinary button styling rather than Primary styling, and their height is synchronized to the adjacent amount field after layout/style resolution.
 - Common-summary dividers belong to the summary band itself instead of being independent layout rows; they use a dark dashed top border and 8px vertical rhythm so their position remains stable when window width changes.
