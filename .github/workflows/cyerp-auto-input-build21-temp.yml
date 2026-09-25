@@ -29,6 +29,7 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import base64
 
           def read(path):
               return Path(path).read_text(encoding='utf-8').replace('\r\n', '\n')
@@ -56,97 +57,16 @@ jobs:
           end = text.find(end_marker, start)
           if start < 0 or end < 0:
               raise SystemExit('Build 21 batch method markers not found')
-
-          new_method = r'''    private async Task<GridGeometry> SelectBatchIfRequiredAsync(
-        nint root,
-        WindowControl grid,
-        GridGeometry geometry,
-        int visibleRow,
-        string itemCode,
-        CancellationToken cancellationToken)
-    {
-        geometry = await EnsureDetailColumnVisibleAsync(root, grid, geometry, visibleRow, 5, cancellationToken);
-        if (!Win32Automation.PrepareForeground(root, _log))
-            throw new InvalidOperationException("檢查批號欄前無法把 ERP 帶到前景。");
-
-        var (activeGeometry, point, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 5, cancellationToken);
-        geometry = activeGeometry;
-
-        // A non-batch-managed item has a real batch column cell, but COPI08 does not
-        // create an editor for that cell. Build 20 incorrectly treated "no editor" as
-        // a hard failure. Build 21 verifies that the click stayed inside the live grid,
-        // then lets ERP itself answer the question: F2 opens only when the batch lookup
-        // is available. No Enter is sent merely to probe the cell.
-        InputSender.Click(point);
-        await Delay(120, cancellationToken);
-
-        var focus = NativeMethods.FocusedControlOfForeground(root);
-        if (focus == 0 || !Win32Automation.IsInside(focus, grid.Handle))
-        {
-            InputSender.Click(point);
-            await Delay(120, cancellationToken);
-            focus = NativeMethods.FocusedControlOfForeground(root);
-        }
-        if (focus == 0 || !Win32Automation.IsInside(focus, grid.Handle))
-            throw new InvalidOperationException($"品號 {itemCode}：批號欄點擊後焦點未留在商品明細；為避免後續欄位錯位已停止。");
-
-        var editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 180);
-        var marker = editor == 0 ? string.Empty : NativeMethods.WindowText(editor).Trim();
-        var starCount = marker.Count(ch => ch == '*');
-        _log.Info("detail", $"batch probe row={visibleRow + 1} item={itemCode} focus={NativeMethods.ClassName(focus)} editor={(editor == 0 ? "none" : NativeMethods.ClassName(editor))} marker_chars={marker.Length} stars={starCount}");
-
-        InputSender.Press(NativeMethods.VK_F2);
-        var lookup = await WaitLookupAsync(cancellationToken, 850);
-        if (lookup == 0)
-        {
-            if (starCount > 0)
-                throw new InvalidOperationException($"品號 {itemCode} 的批號欄顯示批號標記，但按 F2 後沒有出現批號查詢視窗；已停止避免錯位。");
-
-            _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode} reason=no-f2-lookup-after-verified-grid-focus");
-            return geometry;
-        }
-
-        _log.Info("detail", $"batch lookup opened row={visibleRow + 1} item={itemCode} marker_chars={marker.Length} stars={starCount}");
-        if (!Win32Automation.PrepareForeground(lookup, _log))
-            throw new InvalidOperationException("F2 批號查詢視窗無法取得前景。");
-        await Delay(120, cancellationToken);
-
-        var selection = await _batchCellLocator.FindFirstPositiveStockAsync(lookup, cancellationToken);
-        InputSender.Click(selection.Point);
-        await Delay(120, cancellationToken);
-
-        var lookupFocus = NativeMethods.FocusedControlOfForeground(lookup);
-        if (lookupFocus == 0 || !NativeMethods.ClassName(lookupFocus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
-        {
-            _log.Warn("detail", $"F2 batch row click did not focus grid first_try class={NativeMethods.ClassName(lookupFocus)}");
-            InputSender.Click(selection.Point);
-            await Delay(120, cancellationToken);
-            lookupFocus = NativeMethods.FocusedControlOfForeground(lookup);
-        }
-        if (lookupFocus == 0 || !NativeMethods.ClassName(lookupFocus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("已點到正庫存批號列，但 F2 表格沒有取得可驗證焦點；為避免 Enter 送到錯誤控制項已停止。");
-
-        InputSender.Press(NativeMethods.VK_RETURN);
-        if (!await WaitWindowClosedAsync(lookup, 1400, cancellationToken))
-            throw new InvalidOperationException("已選取正庫存批號並送出 Enter，但 F2 視窗仍未關閉。");
-
-        if (!Win32Automation.PrepareForeground(root, _log))
-            throw new InvalidOperationException("批號 F2 關閉後無法回到 ERP 前景。");
-        await Delay(120, cancellationToken);
-        _log.Info("detail", $"batch selected row={visibleRow + 1} item={itemCode} lookup_row={selection.RowNumber} positive_stock={selection.Stock}");
-        return geometry;
-    }
-
-'''
+          new_method = base64.b64decode('ICAgIHByaXZhdGUgYXN5bmMgVGFzazxHcmlkR2VvbWV0cnk+IFNlbGVjdEJhdGNoSWZSZXF1aXJlZEFzeW5jKAogICAgICAgIG5pbnQgcm9vdCwKICAgICAgICBXaW5kb3dDb250cm9sIGdyaWQsCiAgICAgICAgR3JpZEdlb21ldHJ5IGdlb21ldHJ5LAogICAgICAgIGludCB2aXNpYmxlUm93LAogICAgICAgIHN0cmluZyBpdGVtQ29kZSwKICAgICAgICBDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbikKICAgIHsKICAgICAgICBnZW9tZXRyeSA9IGF3YWl0IEVuc3VyZURldGFpbENvbHVtblZpc2libGVBc3luYyhyb290LCBncmlkLCBnZW9tZXRyeSwgdmlzaWJsZVJvdywgNSwgY2FuY2VsbGF0aW9uVG9rZW4pOwogICAgICAgIGlmICghV2luMzJBdXRvbWF0aW9uLlByZXBhcmVGb3JlZ3JvdW5kKHJvb3QsIF9sb2cpKQogICAgICAgICAgICB0aHJvdyBuZXcgSW52YWxpZE9wZXJhdGlvbkV4Y2VwdGlvbigi5qqi5p+l5om56Jmf5qyE5YmN54Sh5rOV5oqKIEVSUCDluLbliLDliY3mma/jgIIiKTsKCiAgICAgICAgdmFyIChhY3RpdmVHZW9tZXRyeSwgcG9pbnQsIGZyZXNoUmVjdCkgPSBhd2FpdCBSZXNvbHZlRnJlc2hEZXRhaWxDZWxsUG9pbnRBc3luYyhncmlkLkhhbmRsZSwgZ2VvbWV0cnksIHZpc2libGVSb3csIDUsIGNhbmNlbGxhdGlvblRva2VuKTsKICAgICAgICBnZW9tZXRyeSA9IGFjdGl2ZUdlb21ldHJ5OwoKICAgICAgICAvLyBBIG5vbi1iYXRjaC1tYW5hZ2VkIGl0ZW0gaGFzIGEgcmVhbCBiYXRjaCBjb2x1bW4gY2VsbCwgYnV0IENPUEkwOCBkb2VzIG5vdAogICAgICAgIC8vIGNyZWF0ZSBhbiBlZGl0b3IgZm9yIHRoYXQgY2VsbC4gQnVpbGQgMjAgaW5jb3JyZWN0bHkgdHJlYXRlZCAibm8gZWRpdG9yIiBhcwogICAgICAgIC8vIGEgaGFyZCBmYWlsdXJlLiBCdWlsZCAyMSB2ZXJpZmllcyB0aGF0IHRoZSBjbGljayBzdGF5ZWQgaW5zaWRlIHRoZSBsaXZlIGdyaWQsCiAgICAgICAgLy8gdGhlbiBsZXRzIEVSUCBpdHNlbGYgYW5zd2VyIHRoZSBxdWVzdGlvbjogRjIgb3BlbnMgb25seSB3aGVuIHRoZSBiYXRjaCBsb29rdXAKICAgICAgICAvLyBpcyBhdmFpbGFibGUuIE5vIEVudGVyIGlzIHNlbnQgbWVyZWx5IHRvIHByb2JlIHRoZSBjZWxsLgogICAgICAgIElucHV0U2VuZGVyLkNsaWNrKHBvaW50KTsKICAgICAgICBhd2FpdCBEZWxheSgxMjAsIGNhbmNlbGxhdGlvblRva2VuKTsKCiAgICAgICAgdmFyIGZvY3VzID0gTmF0aXZlTWV0aG9kcy5Gb2N1c2VkQ29udHJvbE9mRm9yZWdyb3VuZChyb290KTsKICAgICAgICBpZiAoZm9jdXMgPT0gMCB8fCAhV2luMzJBdXRvbWF0aW9uLklzSW5zaWRlKGZvY3VzLCBncmlkLkhhbmRsZSkpCiAgICAgICAgewogICAgICAgICAgICBJbnB1dFNlbmRlci5DbGljayhwb2ludCk7CiAgICAgICAgICAgIGF3YWl0IERlbGF5KDEyMCwgY2FuY2VsbGF0aW9uVG9rZW4pOwogICAgICAgICAgICBmb2N1cyA9IE5hdGl2ZU1ldGhvZHMuRm9jdXNlZENvbnRyb2xPZkZvcmVncm91bmQocm9vdCk7CiAgICAgICAgfQogICAgICAgIGlmIChmb2N1cyA9PSAwIHx8ICFXaW4zMkF1dG9tYXRpb24uSXNJbnNpZGUoZm9jdXMsIGdyaWQuSGFuZGxlKSkKICAgICAgICAgICAgdGhyb3cgbmV3IEludmFsaWRPcGVyYXRpb25FeGNlcHRpb24oJCLlk4HomZ8ge2l0ZW1Db2Rlfe+8muaJueiZn+ashOm7nuaTiuW+jOeEpum7nuacqueVmeWcqOWVhuWTgeaYjue0sO+8m+eCuumBv+WFjeW+jOe6jOashOS9jemMr+S9jeW3suWBnOatouOAgiIpOwoKICAgICAgICB2YXIgZWRpdG9yID0gYXdhaXQgV2FpdEdyaWRFZGl0b3JBc3luYyhyb290LCBmcmVzaFJlY3QsIHBvaW50LCBjYW5jZWxsYXRpb25Ub2tlbiwgMTgwKTsKICAgICAgICB2YXIgbWFya2VyID0gZWRpdG9yID09IDAgPyBzdHJpbmcuRW1wdHkgOiBOYXRpdmVNZXRob2RzLldpbmRvd1RleHQoZWRpdG9yKS5UcmltKCk7CiAgICAgICAgdmFyIHN0YXJDb3VudCA9IG1hcmtlci5Db3VudChjaCA9PiBjaCA9PSAnKicpOwogICAgICAgIF9sb2cuSW5mbygiZGV0YWlsIiwgJCJiYXRjaCBwcm9iZSByb3c9e3Zpc2libGVSb3cgKyAxfSBpdGVtPXtpdGVtQ29kZX0gZm9jdXM9e05hdGl2ZU1ldGhvZHMuQ2xhc3NOYW1lKGZvY3VzKX0gZWRpdG9yPXsoZWRpdG9yID09IDAgPyAibm9uZSIgOiBOYXRpdmVNZXRob2RzLkNsYXNzTmFtZShlZGl0b3IpKX0gbWFya2VyX2NoYXJzPXttYXJrZXIuTGVuZ3RofSBzdGFycz17c3RhckNvdW50fSIpOwoKICAgICAgICBJbnB1dFNlbmRlci5QcmVzcyhOYXRpdmVNZXRob2RzLlZLX0YyKTsKICAgICAgICB2YXIgbG9va3VwID0gYXdhaXQgV2FpdExvb2t1cEFzeW5jKGNhbmNlbGxhdGlvblRva2VuLCA4NTApOwogICAgICAgIGlmIChsb29rdXAgPT0gMCkKICAgICAgICB7CiAgICAgICAgICAgIGlmIChzdGFyQ291bnQgPiAwKQogICAgICAgICAgICAgICAgdGhyb3cgbmV3IEludmFsaWRPcGVyYXRpb25FeGNlcHRpb24oJCLlk4HomZ8ge2l0ZW1Db2RlfSDnmoTmibnomZ/mrITpoa/npLrmibnomZ/mqJnoqJjvvIzkvYbmjIkgRjIg5b6M5rKS5pyJ5Ye654++5om56Jmf5p+l6Kmi6KaW56qX77yb5bey5YGc5q2i6YG/5YWN6Yyv5L2N44CCIik7CgogICAgICAgICAgICBfbG9nLkluZm8oImRldGFpbCIsICQiYmF0Y2ggbm90IHJlcXVpcmVkIHJvdz17dmlzaWJsZVJvdyArIDF9IGl0ZW09e2l0ZW1Db2RlfSByZWFzb249bm8tZjItbG9va3VwLWFmdGVyLXZlcmlmaWVkLWdyaWQtZm9jdXMiKTsKICAgICAgICAgICAgcmV0dXJuIGdlb21ldHJ5OwogICAgICAgIH0KCiAgICAgICAgX2xvZy5JbmZvKCJkZXRhaWwiLCAkImJhdGNoIGxvb2t1cCBvcGVuZWQgcm93PXt2aXNpYmxlUm93ICsgMX0gaXRlbT17aXRlbUNvZGV9IG1hcmtlcl9jaGFycz17bWFya2VyLkxlbmd0aH0gc3RhcnM9e3N0YXJDb3VudH0iKTsKICAgICAgICBpZiAoIVdpbjMyQXV0b21hdGlvbi5QcmVwYXJlRm9yZWdyb3VuZChsb29rdXAsIF9sb2cpKQogICAgICAgICAgICB0aHJvdyBuZXcgSW52YWxpZE9wZXJhdGlvbkV4Y2VwdGlvbigiRjIg5om56Jmf5p+l6Kmi6KaW56qX54Sh5rOV5Y+W5b6X5YmN5pmv44CCIik7CiAgICAgICAgYXdhaXQgRGVsYXkoMTIwLCBjYW5jZWxsYXRpb25Ub2tlbik7CgogICAgICAgIHZhciBzZWxlY3Rpb24gPSBhd2FpdCBfYmF0Y2hDZWxsTG9jYXRvci5GaW5kRmlyc3RQb3NpdGl2ZVN0b2NrQXN5bmMobG9va3VwLCBjYW5jZWxsYXRpb25Ub2tlbik7CiAgICAgICAgSW5wdXRTZW5kZXIuQ2xpY2soc2VsZWN0aW9uLlBvaW50KTsKICAgICAgICBhd2FpdCBEZWxheSgxMjAsIGNhbmNlbGxhdGlvblRva2VuKTsKCiAgICAgICAgdmFyIGxvb2t1cEZvY3VzID0gTmF0aXZlTWV0aG9kcy5Gb2N1c2VkQ29udHJvbE9mRm9yZWdyb3VuZChsb29rdXApOwogICAgICAgIGlmIChsb29rdXBGb2N1cyA9PSAwIHx8ICFOYXRpdmVNZXRob2RzLkNsYXNzTmFtZShsb29rdXBGb2N1cykuRXF1YWxzKCJUY3hHcmlkU2l0ZSIsIFN0cmluZ0NvbXBhcmlzb24uT3JkaW5hbElnbm9yZUNhc2UpKQogICAgICAgIHsKICAgICAgICAgICAgX2xvZy5XYXJuKCJkZXRhaWwiLCAkIkYyIGJhdGNoIHJvdyBjbGljayBkaWQgbm90IGZvY3VzIGdyaWQgZmlyc3RfdHJ5IGNsYXNzPXtOYXRpdmVNZXRob2RzLkNsYXNzTmFtZShsb29rdXBGb2N1cyl9Iik7CiAgICAgICAgICAgIElucHV0U2VuZGVyLkNsaWNrKHNlbGVjdGlvbi5Qb2ludCk7CiAgICAgICAgICAgIGF3YWl0IERlbGF5KDEyMCwgY2FuY2VsbGF0aW9uVG9rZW4pOwogICAgICAgICAgICBsb29rdXBGb2N1cyA9IE5hdGl2ZU1ldGhvZHMuRm9jdXNlZENvbnRyb2xPZkZvcmVncm91bmQobG9va3VwKTsKICAgICAgICB9CiAgICAgICAgaWYgKGxvb2t1cEZvY3VzID09IDAgfHwgIU5hdGl2ZU1ldGhvZHMuQ2xhc3NOYW1lKGxvb2t1cEZvY3VzKS5FcXVhbHMoIlRjeEdyaWRTaXRlIiwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsSWdub3JlQ2FzZSkpCiAgICAgICAgICAgIHRocm93IG5ldyBJbnZhbGlkT3BlcmF0aW9uRXhjZXB0aW9uKCLlt7Lpu57liLDmraPluqvlrZjmibnomZ/liJfvvIzkvYYgRjIg6KGo5qC85rKS5pyJ5Y+W5b6X5Y+v6amX6K2J54Sm6bue77yb54K66YG/5YWNIEVudGVyIOmAgeWIsOmMr+iqpOaOp+WItumgheW3suWBnOatouOAgiIpOwoKICAgICAgICBJbnB1dFNlbmRlci5QcmVzcyhOYXRpdmVNZXRob2RzLlZLX1JFVFVSTik7CiAgICAgICAgaWYgKCFhd2FpdCBXYWl0V2luZG93Q2xvc2VkQXN5bmMobG9va3VwLCAxNDAwLCBjYW5jZWxsYXRpb25Ub2tlbikpCiAgICAgICAgICAgIHRocm93IG5ldyBJbnZhbGlkT3BlcmF0aW9uRXhjZXB0aW9uKCLlt7Lpgbjlj5bmraPluqvlrZjmibnomZ/kuKbpgIHlh7ogRW50ZXLvvIzkvYYgRjIg6KaW56qX5LuN5pyq6Zec6ZaJ44CCIik7CgogICAgICAgIGlmICghV2luMzJBdXRvbWF0aW9uLlByZXBhcmVGb3JlZ3JvdW5kKHJvb3QsIF9sb2cpKQogICAgICAgICAgICB0aHJvdyBuZXcgSW52YWxpZE9wZXJhdGlvbkV4Y2VwdGlvbigi5om56JmfIEYyIOmXnOmWieW+jOeEoeazleWbnuWIsCBFUlAg5YmN5pmv44CCIik7CiAgICAgICAgYXdhaXQgRGVsYXkoMTIwLCBjYW5jZWxsYXRpb25Ub2tlbik7CiAgICAgICAgX2xvZy5JbmZvKCJkZXRhaWwiLCAkImJhdGNoIHNlbGVjdGVkIHJvdz17dmlzaWJsZVJvdyArIDF9IGl0ZW09e2l0ZW1Db2RlfSBsb29rdXBfcm93PXtzZWxlY3Rpb24uUm93TnVtYmVyfSBwb3NpdGl2ZV9zdG9jaz17c2VsZWN0aW9uLlN0b2NrfSIpOwogICAgICAgIHJldHVybiBnZW9tZXRyeTsKICAgIH0KCg==').decode('utf-8')
           text = text[:start] + new_method + text[end:]
-          old_wait = '''    private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken)
+          old_wait = """    private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken)
     {
         var stop = Environment.TickCount64 + 2500;
-'''
-          new_wait = '''    private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken, int timeoutMs = 2500)
+"""
+          new_wait = """    private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken, int timeoutMs = 2500)
     {
         var stop = Environment.TickCount64 + Math.Max(100, timeoutMs);
-'''
+"""
           if old_wait not in text:
               raise SystemExit('WaitLookupAsync block not found')
           text = text.replace(old_wait, new_wait, 1)
