@@ -246,12 +246,30 @@ class ChineseStandardButtonFilter(QObject):
             if button is not None:
                 button.setText(text)
 
+    @staticmethod
+    def _clear_secondary_dialog_icon(dialog: QDialog) -> None:
+        # CY Desktop visual rule: only the main application window carries the
+        # canonical family icon. Keep native dialog chrome/behavior.
+        dialog.setWindowIcon(QIcon())
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                hwnd = int(dialog.winId())
+                user32 = ctypes.windll.user32
+                wm_seticon = 0x0080
+                user32.SendMessageW(hwnd, wm_seticon, 0, 0)  # ICON_SMALL
+                user32.SendMessageW(hwnd, wm_seticon, 1, 0)  # ICON_BIG
+            except Exception:
+                pass
+
     def eventFilter(self, watched, event):  # noqa: N802
         if event.type() in (QEvent.Type.Polish, QEvent.Type.Show):
             if isinstance(watched, QDialogButtonBox):
                 self._localize_dialog_box(watched)
             elif isinstance(watched, QMessageBox):
                 QTimer.singleShot(0, lambda box=watched: self._localize_message_box(box))
+            elif isinstance(watched, QDialog) and not isinstance(watched, QFileDialog):
+                QTimer.singleShot(0, lambda dlg=watched: self._clear_secondary_dialog_icon(dlg))
         return False
 
 
@@ -281,11 +299,17 @@ class InputTab(QWidget):
         outer.setContentsMargins(12, 6, 12, 8)
         outer.setSpacing(8)
 
-        basic = QGroupBox("基本資訊")
+        basic = QGroupBox()
         basic.setObjectName("inputSection")
         basic.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        basic_row = QHBoxLayout(basic)
-        basic_row.setContentsMargins(10, 8, 10, 8)
+        basic_v = QVBoxLayout(basic)
+        basic_v.setContentsMargins(10, 8, 10, 8)
+        basic_v.setSpacing(8)
+        basic_title = QLabel("基本資訊")
+        basic_title.setObjectName("sectionTitle")
+        basic_v.addWidget(basic_title)
+        basic_row = QHBoxLayout()
+        basic_row.setContentsMargins(0, 0, 0, 0)
         basic_row.setSpacing(7)
         self.date_edit = SmartDateLineEdit()
         self.date_edit.setFixedWidth(145)
@@ -342,25 +366,29 @@ class InputTab(QWidget):
         self.account_button_layout.setSpacing(6)
         basic_row.addWidget(self.account_button_host)
         basic_row.addStretch(1)
+        basic_v.addLayout(basic_row)
         outer.addWidget(basic)
 
-        income = QGroupBox("收入")
+        income = QGroupBox()
         income.setObjectName("incomeSection")
         income.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         income_v = QVBoxLayout(income)
         income_v.setContentsMargins(10, 8, 10, 8)
-        income_v.setSpacing(5)
+        income_v.setSpacing(8)
+        income_title = QLabel("收入")
+        income_title.setObjectName("sectionTitle")
+        income_v.addWidget(income_title)
         income_quick = QHBoxLayout()
         income_quick.setSpacing(6)
         income_quick.addWidget(QLabel("常用科目："))
         self.income_quick_host = QWidget()
+        self.income_quick_host.setFixedHeight(30)
         self.income_quick_layout = QHBoxLayout(self.income_quick_host)
         self.income_quick_layout.setContentsMargins(0, 0, 0, 0)
         self.income_quick_layout.setSpacing(5)
         income_quick.addWidget(self.income_quick_host)
         income_quick.addStretch(1)
         income_v.addLayout(income_quick)
-        income_v.addSpacing(0)
 
         il = QHBoxLayout()
         il.setSpacing(7)
@@ -390,7 +418,7 @@ class InputTab(QWidget):
         income_summary_band = QWidget()
         income_summary_band.setObjectName("summaryBand")
         income_summary_quick = QHBoxLayout(income_summary_band)
-        income_summary_quick.setContentsMargins(0, 6, 0, 0)
+        income_summary_quick.setContentsMargins(0, 8, 0, 0)
         income_summary_quick.setSpacing(5)
         income_summary_quick.addWidget(QLabel("常用摘要："))
         self.income_quick_summary_host = QWidget()
@@ -406,23 +434,26 @@ class InputTab(QWidget):
         income_v.addWidget(income_summary_band)
         outer.addWidget(income)
 
-        expense = QGroupBox("支出")
+        expense = QGroupBox()
         expense.setObjectName("expenseSection")
         expense.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         expense_v = QVBoxLayout(expense)
         expense_v.setContentsMargins(10, 8, 10, 8)
-        expense_v.setSpacing(5)
+        expense_v.setSpacing(8)
+        expense_title = QLabel("支出")
+        expense_title.setObjectName("sectionTitle")
+        expense_v.addWidget(expense_title)
         expense_quick = QHBoxLayout()
         expense_quick.setSpacing(6)
         expense_quick.addWidget(QLabel("常用科目："))
         self.expense_quick_host = QWidget()
+        self.expense_quick_host.setFixedHeight(30)
         self.expense_quick_layout = QHBoxLayout(self.expense_quick_host)
         self.expense_quick_layout.setContentsMargins(0, 0, 0, 0)
         self.expense_quick_layout.setSpacing(5)
         expense_quick.addWidget(self.expense_quick_host)
         expense_quick.addStretch(1)
         expense_v.addLayout(expense_quick)
-        expense_v.addSpacing(0)
 
         el = QHBoxLayout()
         el.setSpacing(7)
@@ -452,7 +483,7 @@ class InputTab(QWidget):
         expense_summary_band = QWidget()
         expense_summary_band.setObjectName("summaryBand")
         expense_summary_quick = QHBoxLayout(expense_summary_band)
-        expense_summary_quick.setContentsMargins(0, 6, 0, 0)
+        expense_summary_quick.setContentsMargins(0, 8, 0, 0)
         expense_summary_quick.setSpacing(5)
         expense_summary_quick.addWidget(QLabel("常用摘要："))
         self.expense_quick_summary_host = QWidget()
@@ -465,13 +496,17 @@ class InputTab(QWidget):
         expense_v.addWidget(expense_summary_band)
         outer.addWidget(expense)
 
-        confirm = QGroupBox("輸入確認")
+        confirm = QGroupBox()
         confirm.setObjectName("confirmationCard")
         confirm.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        confirm.setFixedHeight(240)
+        confirm.setFixedHeight(244)
         cv = QVBoxLayout(confirm)
         cv.setContentsMargins(10, 7, 10, 7)
         cv.setSpacing(2)
+        confirm_title = QLabel("輸入確認")
+        confirm_title.setObjectName("sectionTitle")
+        cv.addWidget(confirm_title)
+        cv.addSpacing(4)
         self.confirm_labels = []
         for _ in range(10):
             lab = QLabel("")
@@ -490,6 +525,16 @@ class InputTab(QWidget):
             w.installEventFilter(self)
         self.income_category.currentIndexChanged.connect(lambda *_: self._build_quick_summary_buttons("income"))
         self.expense_category.currentIndexChanged.connect(lambda *_: self._build_quick_summary_buttons("expense"))
+        QTimer.singleShot(0, self._sync_entry_action_heights)
+
+    def _sync_entry_action_heights(self):
+        for field, button in (
+            (self.income_amount, self.income_save),
+            (self.expense_amount, self.expense_save),
+        ):
+            target_height = max(field.height(), field.sizeHint().height())
+            if target_height > 0:
+                button.setFixedHeight(target_height)
 
     def _clear_layout(self, layout: QHBoxLayout):
         while layout.count():
@@ -1277,7 +1322,7 @@ class MainWindow(QMainWindow):
         self.config = config
         self.startup_backup_error = startup_backup_error
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(1100, 760)
+        self.setMinimumSize(1120, 760)
         self.resize(1120, 760)
         icon_path = app_root() / "app" / "resources" / "app.ico"
         if icon_path.exists():

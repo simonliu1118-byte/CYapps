@@ -75,21 +75,14 @@ QGroupBox#statsCard {{
     padding: 10px 10px 8px 10px;
     background: {NEUTRAL_WHITE};
 }}
-QGroupBox#confirmationCard {{
+QGroupBox#confirmationCard, QGroupBox#inputSection, QGroupBox#incomeSection, QGroupBox#expenseSection {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 6px;
-    margin-top: 12px;
-    padding: 10px 10px 8px 10px;
+    margin-top: 0;
+    padding: 0;
+}}
+QGroupBox#confirmationCard, QGroupBox#inputSection {{
     background: {NEUTRAL_WINDOW};
-}}
-QGroupBox#inputSection, QGroupBox#incomeSection, QGroupBox#expenseSection {{
-    border: 1px solid {NEUTRAL_BORDER};
-    border-radius: 6px;
-    margin-top: 14px;
-    padding: 12px 10px 8px 10px;
-}}
-QGroupBox#inputSection {{
-    background: {NEUTRAL_WHITE};
 }}
 QGroupBox#incomeSection {{
     background: #E7F3E9;
@@ -99,20 +92,11 @@ QGroupBox#expenseSection {{
     background: #F8E9E7;
     border-color: #E7CECA;
 }}
-QGroupBox#inputSection::title {{
-    left: 10px;
-    padding: 0 3px;
+QLabel#sectionTitle {{
     background: transparent;
-}}
-QGroupBox#incomeSection::title {{
-    left: 10px;
-    padding: 0 3px;
-    background: transparent;
-}}
-QGroupBox#expenseSection::title {{
-    left: 10px;
-    padding: 0 3px;
-    background: transparent;
+    color: {TEXT_PRIMARY};
+    font-size: 11.5pt;
+    font-weight: 600;
 }}
 QWidget#inputPage QLineEdit, QWidget#inputPage QComboBox {{
     min-height: 30px;
@@ -148,12 +132,6 @@ QGroupBox#statsCard::title {{
     padding: 0 5px;
     background: {NEUTRAL_WHITE};
 }}
-QGroupBox#confirmationCard::title {{
-    left: 10px;
-    padding: 0 3px;
-    background: transparent;
-}}
-
 QLineEdit, QComboBox, QSpinBox, QDateEdit {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 4px;
@@ -236,7 +214,7 @@ QPushButton#quickSummaryButton {{
 QPushButton#quickSummaryButton:hover {{ background: {NEUTRAL_WINDOW}; border-color: {ACCENT_FOCUS}; }}
 QWidget#summaryBand {{
     border: 0;
-    border-top: 1px solid {NEUTRAL_DIVIDER};
+    border-top: 1px dashed {TEXT_PRIMARY};
     background: transparent;
 }}
 

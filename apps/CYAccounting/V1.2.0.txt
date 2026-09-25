@@ -19,3 +19,4 @@ Current source on Phase 1 visual-alignment branch; test artifact, not a formal R
 - ACC Icon Family from V1.1.0 remains unchanged.
 - Ledger inline-edit ComboBox narrow-arrow treatment is intentionally unchanged pending user decision because it preserves high-density cell text space.
 - 125% / 150% DPI acceptance remains deferred under the canonical guide; this test version does not claim those DPI levels as passed.
+- Phase 1 input refinement: internal section titles replace GroupBox legend labels; Basic Information shares the confirmation neutral fill; income/expense vertical rhythm is fixed at 8px around the dark dashed summary divider; save-button height follows the adjacent amount field; minimum/initial window size is 1120x760; secondary dialogs suppress the app icon while native MessageBox behavior remains unchanged.
