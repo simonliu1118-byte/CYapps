@@ -146,41 +146,6 @@ QGroupBox#statsCard::title {{
     font-weight: 700;
 }}
 
-/* Category manager: V1.1.0 conventional geometry, enlarged to current guide.
-   Keep the pane frame visibly separate below the tabs; selected tabs never
-   erase or merge into the original frame line. */
-QTabWidget#categoryManagerTabs::pane {{
-    border: 1px solid {NEUTRAL_BORDER};
-    border-radius: 5px;
-    background: {NEUTRAL_WINDOW};
-    top: 6px;
-}}
-QTabWidget#categoryManagerTabs QTabBar::tab {{
-    min-height: 36px;
-    min-width: 132px;
-    padding: 8px 20px;
-    margin-right: 4px;
-    border: 1px solid {NEUTRAL_BORDER};
-    border-bottom: 0;
-    border-top-left-radius: 5px;
-    border-top-right-radius: 5px;
-    background: {NEUTRAL_DIVIDER};
-    color: {TEXT_SECONDARY};
-    font-size: 11.5pt;
-    font-weight: 600;
-}}
-QTabWidget#categoryManagerTabs QTabBar::tab:selected {{
-    color: {TEXT_PRIMARY};
-    background: {NEUTRAL_WHITE};
-    font-weight: 700;
-}}
-QTabWidget#categoryManagerTabs QTabBar::tab:!selected {{
-    margin-top: 3px;
-}}
-QTabWidget#categoryManagerTabs QTabBar::tab:hover:!selected {{
-    color: {TEXT_PRIMARY};
-    background: #EEF2F6;
-}}
 QLineEdit, QComboBox, QSpinBox, QDateEdit {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 4px;

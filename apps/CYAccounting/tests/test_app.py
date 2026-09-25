@@ -152,23 +152,15 @@ def test_account_manager_controls_and_titles():
     category_buttons = [b.text() for b in category_dlg.findChildren(QPushButton)]
     assert '關閉' not in category_buttons
     assert {'↑', '↓', '新增科目', '修改', '刪除', '新增大分類', '移至其他大分類'} <= set(category_buttons)
-    category_tabs = category_dlg.findChild(QTabWidget, 'categoryManagerTabs')
+    category_tabs = category_dlg.findChild(QTabWidget)
     assert category_tabs is not None
     assert category_tabs.count() == 2
-    assert category_tabs.tabBar().expanding() is False
-    assert 'QTabWidget#categoryManagerTabs QTabBar::tab {' in main_module.APP_STYLE
-    assert 'border-top-left-radius: 5px' in main_module.APP_STYLE
-    assert 'top: 6px;' in main_module.APP_STYLE
-    assert 'border-bottom: 0;' in main_module.APP_STYLE
-
-    # Secondary dialogs use Qt's Windows fixed-dialog family while keeping X.
-    chrome_flags_before = dlg.windowFlags()
-    main_module.ChineseStandardButtonFilter._prepare_secondary_dialog_chrome(dlg)
-    chrome_flags_after = dlg.windowFlags()
-    if sys.platform == 'win32':
-        assert chrome_flags_after & Qt.WindowType.MSWindowsFixedSizeDialogHint
-        assert chrome_flags_after & Qt.WindowType.WindowCloseButtonHint
-    assert (chrome_flags_after & Qt.WindowType.WindowType_Mask) == (chrome_flags_before & Qt.WindowType.WindowType_Mask)
+    # V1.1.0 Release implementation: plain native QTabWidget.
+    assert category_tabs.objectName() == ''
+    assert 'categoryManagerTabs' not in main_module.APP_STYLE
+    # Secondary dialogs inherit QApplication's ACC icon; no Win32
+    # fixed-dialog/no-icon manipulation remains.
+    assert not hasattr(main_module.ChineseStandardButtonFilter, '_prepare_secondary_dialog_chrome')
     combo = CategoryComboBox()
     assert combo.lineEdit().hasFrame() is False
     opening_dlg = OpeningBalanceDialog(db, '2026/07')

@@ -247,94 +247,12 @@ class ChineseStandardButtonFilter(QObject):
             if button is not None:
                 button.setText(text)
 
-    @staticmethod
-    def _apply_secondary_dialog_no_icon(dialog: QDialog) -> None:
-        """Apply Windows fixed-dialog no-icon chrome without removing Close."""
-        if sys.platform != "win32":
-            return
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            hwnd = wintypes.HWND(int(dialog.winId()))
-            user32 = ctypes.WinDLL("user32", use_last_error=True)
-            LONG_PTR = ctypes.c_ssize_t
-            WPARAM = ctypes.c_size_t
-            LPARAM = ctypes.c_ssize_t
-            LRESULT = ctypes.c_ssize_t
-
-            get_window_long = user32.GetWindowLongPtrW
-            get_window_long.argtypes = [wintypes.HWND, ctypes.c_int]
-            get_window_long.restype = LONG_PTR
-            set_window_long = user32.SetWindowLongPtrW
-            set_window_long.argtypes = [wintypes.HWND, ctypes.c_int, LONG_PTR]
-            set_window_long.restype = LONG_PTR
-            send_message = user32.SendMessageW
-            send_message.argtypes = [wintypes.HWND, wintypes.UINT, WPARAM, LPARAM]
-            send_message.restype = LRESULT
-            set_window_pos = user32.SetWindowPos
-            set_window_pos.argtypes = [
-                wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
-                ctypes.c_int, ctypes.c_int, wintypes.UINT,
-            ]
-            set_window_pos.restype = wintypes.BOOL
-            redraw_window = user32.RedrawWindow
-            redraw_window.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT]
-            redraw_window.restype = wintypes.BOOL
-
-            GWL_EXSTYLE = -20
-            WS_EX_DLGMODALFRAME = 0x00000001
-            WM_SETICON = 0x0080
-            ICON_SMALL = 0
-            ICON_BIG = 1
-            SWP_NOSIZE = 0x0001
-            SWP_NOMOVE = 0x0002
-            SWP_NOZORDER = 0x0004
-            SWP_NOACTIVATE = 0x0010
-            SWP_FRAMECHANGED = 0x0020
-            RDW_INVALIDATE = 0x0001
-            RDW_UPDATENOW = 0x0100
-            RDW_FRAME = 0x0400
-
-            ex_style = int(get_window_long(hwnd, GWL_EXSTYLE))
-            set_window_long(hwnd, GWL_EXSTYLE, ex_style | WS_EX_DLGMODALFRAME)
-            send_message(hwnd, WM_SETICON, ICON_SMALL, 0)
-            send_message(hwnd, WM_SETICON, ICON_BIG, 0)
-            set_window_pos(
-                hwnd, None, 0, 0, 0, 0,
-                SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-            )
-            redraw_window(hwnd, None, None, RDW_INVALIDATE | RDW_FRAME | RDW_UPDATENOW)
-        except Exception as exc:
-            startup_log(f"secondary dialog native no-icon fallback failed: {exc}")
-
-    @staticmethod
-    def _prepare_secondary_dialog_chrome(dialog: QDialog) -> None:
-        if dialog.property("cySecondaryChromePrepared"):
-            return
-        dialog.setProperty("cySecondaryChromePrepared", True)
-        if sys.platform == "win32":
-            # CYInvoice uses the Windows FixedDialog border family. Qt has no
-            # ShowIcon property; use its fixed-dialog hint before first show and
-            # explicitly preserve the native Close button.
-            dialog.setWindowFlag(Qt.WindowType.MSWindowsFixedSizeDialogHint, True)
-            dialog.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, True)
-        ChineseStandardButtonFilter._apply_secondary_dialog_no_icon(dialog)
-
-    @staticmethod
-    def _clear_secondary_dialog_icon(dialog: QDialog) -> None:
-        ChineseStandardButtonFilter._apply_secondary_dialog_no_icon(dialog)
-
     def eventFilter(self, watched, event):  # noqa: N802
         if event.type() in (QEvent.Type.Polish, QEvent.Type.Show):
             if isinstance(watched, QDialogButtonBox):
                 self._localize_dialog_box(watched)
             elif isinstance(watched, QMessageBox):
                 QTimer.singleShot(0, lambda box=watched: self._localize_message_box(box))
-            elif isinstance(watched, QDialog) and not isinstance(watched, QFileDialog):
-                if event.type() == QEvent.Type.Polish:
-                    self._prepare_secondary_dialog_chrome(watched)
-                QTimer.singleShot(0, lambda dlg=watched: self._clear_secondary_dialog_icon(dlg))
         return False
 
 

@@ -1,8 +1,10 @@
 Version: V1.2.0
-Build: 7
+Build: 8
 Date: 2026/09/26
 
 Current source on Phase 1 visual-alignment branch; test artifact, not a formal Release:
+- Build 8 restores the income/expense category-manager tabs to the V1.1.0 Release implementation itself: a plain native QTabWidget with no CYAccounting-specific tab QSS, no forced expansion, and no custom tab-bar geometry.
+- Build 8 abandons secondary-dialog title-bar icon suppression. Dialogs again inherit the QApplication ACC icon from app/resources/app.ico; the Build 6/7 Win32 fixed-dialog/no-icon workaround is removed.
 - Build 7 restores the V1.1.0 category-manager tab geometry: left-aligned conventional tabs, a separately visible pane frame with the original 6px offset, and larger current-guide typography; the selected tab no longer erases or merges into the pane border.
 - Build 7 raises the 100%/96-DPI main-window baseline height from 710px to 735px so the footer no longer compresses Input Confirmation into the outer workspace frame.
 - Build 7 corrects secondary-dialog chrome at the Qt/Win32 boundary: QDialogs receive MSWindowsFixedSizeDialogHint before first show to match CYInvoice FixedDialog semantics, the Close-button hint is retained, and the native fallback uses explicit Windows x64 ctypes signatures plus frame redraw.
