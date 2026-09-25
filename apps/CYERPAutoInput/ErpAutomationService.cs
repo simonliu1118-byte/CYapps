@@ -9,7 +9,7 @@ internal sealed class ErpAutomationService
     private const ushort VkRight = 0x27;
 
     private readonly AppLogger _log;
-    private readonly GridVisionService _gridVision;
+    private readonly FastDetailGridVisionService _gridVision;
     private readonly OpticalTextLocator _textVision;
     private readonly F2UnitCellLocator _unitCellLocator;
 
@@ -17,9 +17,10 @@ internal sealed class ErpAutomationService
     {
         _log = log;
         var ocr = new WindowsOcrService(log);
-        _gridVision = new GridVisionService(ocr, log);
+        _gridVision = new FastDetailGridVisionService(ocr, log);
         _textVision = new OpticalTextLocator(ocr, log);
         _unitCellLocator = new F2UnitCellLocator(ocr, log);
+        _ = Task.Run(() => WarmUpOcrAsync(ocr));
     }
 
     public nint FindErp() => Win32Automation.FindCopi08Window();
@@ -51,6 +52,14 @@ internal sealed class ErpAutomationService
     {
         var root = FindErp();
         if (root == 0) throw new InvalidOperationException("找不到 SMART ERP COPI08 視窗。\n請先開啟銷貨單建立作業。");
+
+        // Build 15 deliberately standardizes ERP geometry: automation always runs
+        // against a maximized COPI08 window instead of maintaining a second windowed
+        // coordinate/viewport path.
+        NativeMethods.ShowWindow(root, NativeMethods.SW_MAXIMIZE);
+        await Delay(220, cancellationToken);
+        _log.Info("window", "COPI08 maximize requested before automation");
+
         if (!Win32Automation.PrepareForeground(root, _log)) throw new InvalidOperationException("無法把 COPI08 帶到前景。");
 
         progress.Report("ERP：確認新增狀態…");
@@ -71,6 +80,26 @@ internal sealed class ErpAutomationService
         Win32Automation.PrepareForeground(root, _log);
         progress.Report("ERP：輸入完成；依目前安全規則未自動儲存。");
         _log.Info("automation", "input completed; ERP save intentionally not invoked");
+    }
+
+    private async Task WarmUpOcrAsync(WindowsOcrService ocr)
+    {
+        try
+        {
+            using var bitmap = new Bitmap(160, 48);
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.Clear(Color.White);
+                using var font = new Font("Microsoft JhengHei UI", 14F, FontStyle.Regular, GraphicsUnit.Pixel);
+                graphics.DrawString("品號", font, Brushes.Black, new PointF(8, 10));
+            }
+            _ = await ocr.RecognizeAsync(bitmap, CancellationToken.None, requireChinese: true);
+            _log.Info("vision", "PaddleOCR background warm-up completed");
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("vision", $"PaddleOCR background warm-up skipped: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     private async Task EnsureInputModeAsync(nint root, CancellationToken cancellationToken)
@@ -368,9 +397,17 @@ internal sealed class ErpAutomationService
             var (activeGeometry, point, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, column, cancellationToken);
             geometry = activeGeometry;
             InputSender.Click(point);
-            await Delay(160, cancellationToken);
-            InputSender.Press(NativeMethods.VK_RETURN);
-            var editor = await WaitGridEditorAsync(root, freshRect, cancellationToken);
+            await Delay(120, cancellationToken);
+
+            // A real click may already activate TcxCustomInnerTextEdit. Do not send an
+            // extra Enter when the editor is already live: on some COPI08 builds that
+            // extra transition leaves the first subsequent character duplicated.
+            var editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 180);
+            if (editor == 0)
+            {
+                InputSender.Press(NativeMethods.VK_RETURN);
+                editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 720);
+            }
             if (editor == 0)
             {
                 var focus = NativeMethods.FocusedControlOfForeground(root);
@@ -379,6 +416,7 @@ internal sealed class ErpAutomationService
             }
 
             _log.Info("detail", $"editor ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} edit=0x{editor:X}/{NativeMethods.ClassName(editor)}");
+            await Delay(90, cancellationToken);
             InputSender.UnicodeText(value, 35);
             await Delay(140, cancellationToken);
             // Every detail cell is committed by physical Enter. This is the validated
@@ -403,14 +441,30 @@ internal sealed class ErpAutomationService
         geometry = await EnsureDetailColumnVisibleAsync(root, grid, geometry, visibleRow, 4, cancellationToken);
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("開啟單位 F2 前無法把 ERP 帶到前景。");
-        var (activeGeometry, point, _) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 4, cancellationToken);
+
+        var (activeGeometry, mappedPoint, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 4, cancellationToken);
         geometry = activeGeometry;
+        var point = mappedPoint;
+
+        // Prefer the exact OCR match for the 單位 header. Build 14 could enter the
+        // grid-line fallback and overwrite a correct unit X with the preceding
+        // 贈/備品量 interval. The fast analyzer keeps exact OCR X separately.
+        if (_gridVision.TryGetExactColumnX(grid.Handle, 4, out var exactUnitX))
+        {
+            var exactPoint = new Point(freshRect.Left + exactUnitX, mappedPoint.Y);
+            if (freshRect.Contains(exactPoint))
+            {
+                point = exactPoint;
+                _log.Info("detail", $"unit cell uses exact OCR header x={exactUnitX} point={point.X},{point.Y}");
+            }
+        }
+
         InputSender.Click(point);
-        await Delay(140, cancellationToken);
+        await Delay(160, cancellationToken);
         InputSender.Press(NativeMethods.VK_F2);
 
         var lookup = await WaitLookupAsync(cancellationToken);
-        if (lookup == 0) throw new InvalidOperationException("按 F2 後沒有出現單位查詢視窗。");
+        if (lookup == 0) throw new InvalidOperationException("已點擊單位欄並按 F2，但沒有出現單位查詢視窗。");
         if (!Win32Automation.PrepareForeground(lookup, _log))
             throw new InvalidOperationException("F2 單位查詢視窗無法取得前景。");
         await Delay(120, cancellationToken);
@@ -452,7 +506,7 @@ internal sealed class ErpAutomationService
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("F2 關閉後無法回到 ERP 前景。");
         await Delay(120, cancellationToken);
-        _log.Info("detail", "F2 unit selected by optical click + verified TcxGridSite focus + physical Enter");
+        _log.Info("detail", "F2 unit selected by exact unit-column targeting + optical row click + physical Enter");
         return geometry;
     }
 
@@ -630,9 +684,14 @@ internal sealed class ErpAutomationService
         return 0;
     }
 
-    private static async Task<nint> WaitGridEditorAsync(nint root, Rectangle gridRect, CancellationToken cancellationToken)
+    private static async Task<nint> WaitGridEditorAsync(
+        nint root,
+        Rectangle gridRect,
+        Point expectedPoint,
+        CancellationToken cancellationToken,
+        int timeoutMs = 950)
     {
-        var stop = Environment.TickCount64 + 950;
+        var stop = Environment.TickCount64 + timeoutMs;
         while (Environment.TickCount64 < stop)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -640,10 +699,14 @@ internal sealed class ErpAutomationService
             if (focus != 0 && NativeMethods.ClassName(focus).Contains("EDIT", StringComparison.OrdinalIgnoreCase))
             {
                 NativeMethods.GetWindowRect(focus, out var r);
+                var rect = r.ToRectangle();
                 var center = new Point((r.Left + r.Right) / 2, (r.Top + r.Bottom) / 2);
-                if (gridRect.Contains(center)) return focus;
+                if (gridRect.Contains(center) &&
+                    (rect.Contains(expectedPoint) ||
+                     (Math.Abs(center.Y - expectedPoint.Y) <= 14 && expectedPoint.X >= rect.Left - 8 && expectedPoint.X <= rect.Right + 8)))
+                    return focus;
             }
-            await Task.Delay(35, cancellationToken);
+            await Task.Delay(30, cancellationToken);
         }
         return 0;
     }

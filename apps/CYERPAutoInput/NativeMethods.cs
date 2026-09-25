@@ -5,6 +5,7 @@ namespace CYERPAutoInput;
 
 internal static class NativeMethods
 {
+    internal const int SW_MAXIMIZE = 3;
     internal const int SW_RESTORE = 9;
     internal const uint SWP_NOSIZE = 0x0001;
     internal const uint SWP_NOMOVE = 0x0002;
