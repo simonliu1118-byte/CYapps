@@ -7,6 +7,7 @@ on:
     paths:
       - 'apps/TriINVCalc/**'
       - '.github/workflows/tri-inv-calc-build.yml'
+      - '.github/scripts/scan-public-package.py'
   workflow_dispatch:
 
 permissions:
@@ -27,10 +28,22 @@ jobs:
           go-version: '1.22.x'
           cache-dependency-path: apps/TriINVCalc/go.mod
 
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
       - name: Build and test portable package
         shell: pwsh
         working-directory: apps/TriINVCalc
         run: ./build.ps1
+
+      - name: Scan engineering artifact for secrets and production bindings
+        shell: pwsh
+        working-directory: apps/TriINVCalc
+        run: |
+          $package = Get-ChildItem ./dist/*.zip | Select-Object -First 1
+          if (-not $package) { throw "TriINVCalc package not found for safety scan" }
+          python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" $package.FullName
 
       - name: Upload engineering artifact
         uses: actions/upload-artifact@v4
