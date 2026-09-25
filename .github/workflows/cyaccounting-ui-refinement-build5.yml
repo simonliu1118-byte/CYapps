@@ -1,0 +1,58 @@
+name: CYAccounting UI Refinement Build 5 (one-time)
+
+on:
+  push:
+    branches:
+      - cyaccounting/v1.2.0-visual-phase1
+    paths:
+      - .github/workflows/cyaccounting-ui-refinement-build5.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccounting/v1.2.0-visual-phase1
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Apply guarded Build 5 refinement
+        working-directory: apps/CYAccounting
+        shell: pwsh
+        run: |
+          python tools/refine_ui_build5.py
+          if ($LASTEXITCODE -ne 0) { throw "Build 5 refinement failed" }
+
+      - name: Validate transformed source
+        shell: pwsh
+        run: |
+          python -m compileall -q apps/CYAccounting/app apps/CYAccounting/tests
+          if ((Get-Content apps/CYAccounting/BUILD -Raw).Trim() -ne "5") { throw "BUILD is not 5" }
+          $main = Get-Content apps/CYAccounting/app/main.py -Raw
+          if ($main -notmatch 'WindowSystemMenuHint') { throw "System menu hint missing" }
+          if ($main -match 'flags &= ~Qt.WindowType.WindowSystemMenuHint') { throw "System menu is still being removed" }
+          if ($main -notmatch 'WS_EX_DLGMODALFRAME') { throw "Native no-icon style missing" }
+          $theme = Get-Content apps/CYAccounting/app/theme.py -Raw
+          if ($theme -match 'QGroupBox#statsCard::title \{[^}]*background:') { throw "Month Statistics title still has explicit background" }
+          if ($theme -notmatch 'QTabWidget#categoryManagerTabs QTabBar::tab') { throw "Large category tabs style missing" }
+          $dialogs = Get-Content apps/CYAccounting/app/dialogs.py -Raw
+          if ($dialogs -notmatch 'setObjectName\("categoryManagerTabs"\)') { throw "Category manager tab identity missing" }
+
+      - name: Commit Build 5 source
+        shell: pwsh
+        run: |
+          git config user.name "simonliu1118-byte"
+          git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+          git add apps/CYAccounting/app/main.py apps/CYAccounting/app/theme.py apps/CYAccounting/app/dialogs.py apps/CYAccounting/tests/test_app.py apps/CYAccounting/BUILD apps/CYAccounting/V1.2.0.txt
+          git rm apps/CYAccounting/tools/refine_ui_build5.py
+          git diff --cached --check
+          if (git diff --cached --quiet) { throw "No Build 5 changes staged" }
+          git commit -m "ui(CYAccounting): restore dialog close and enlarge category tabs"
+          git push origin HEAD:cyaccounting/v1.2.0-visual-phase1
