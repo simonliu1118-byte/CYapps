@@ -248,25 +248,14 @@ class ChineseStandardButtonFilter(QObject):
 
     @staticmethod
     def _prepare_secondary_dialog_chrome(dialog: QDialog) -> None:
-        # Keep the native Windows system menu: the Close button depends on it.
-        # The icon is removed separately at the native non-client level after
-        # the HWND exists.  Do not use CustomizeWindowHint here; doing so can
-        # leave the X button disabled even when WindowCloseButtonHint is set.
+        # Do not alter Qt window flags here. QDialog's native caption/system
+        # menu/Close behavior is already correct; changing the hint mask can
+        # disable the Windows X button. Icon suppression is handled only after
+        # HWND creation by _clear_secondary_dialog_icon().
         if dialog.property("cySecondaryChromePrepared"):
             return
         dialog.setProperty("cySecondaryChromePrepared", True)
         dialog.setWindowIcon(QIcon())
-        try:
-            flags = dialog.windowFlags()
-            flags |= (
-                Qt.WindowType.WindowTitleHint
-                | Qt.WindowType.WindowSystemMenuHint
-                | Qt.WindowType.WindowCloseButtonHint
-            )
-            flags &= ~Qt.WindowType.CustomizeWindowHint
-            dialog.setWindowFlags(flags)
-        except Exception:
-            pass
 
     @staticmethod
     def _clear_secondary_dialog_icon(dialog: QDialog) -> None:

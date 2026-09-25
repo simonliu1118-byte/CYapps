@@ -157,13 +157,12 @@ def test_account_manager_controls_and_titles():
     assert category_tabs.count() == 2
     assert category_tabs.tabBar().expanding() is True
 
-    # A secondary dialog must keep the native system menu because Windows uses
-    # it to back the caption Close button. Build 4 accidentally removed it.
+    # Secondary-dialog preparation must never mutate Qt's native window flags.
+    # The default QDialog caption owns the system menu and working Close button;
+    # icon suppression is a native non-client operation performed after HWND creation.
+    chrome_flags_before = dlg.windowFlags()
     main_module.ChineseStandardButtonFilter._prepare_secondary_dialog_chrome(dlg)
-    chrome_flags = dlg.windowFlags()
-    assert bool(chrome_flags & Qt.WindowType.WindowSystemMenuHint)
-    assert bool(chrome_flags & Qt.WindowType.WindowCloseButtonHint)
-    assert not bool(chrome_flags & Qt.WindowType.CustomizeWindowHint)
+    assert dlg.windowFlags() == chrome_flags_before
     combo = CategoryComboBox()
     assert combo.lineEdit().hasFrame() is False
     opening_dlg = OpeningBalanceDialog(db, '2026/07')
