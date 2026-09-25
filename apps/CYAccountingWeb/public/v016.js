@@ -79,14 +79,14 @@ function backupSettingsHtmlV17() {
 
     <div class="backup-security-note">
       <strong>安全設計</strong>
-      <span>Service Account 私鑰只存在 Cloudflare Secret，不寫入 D1；Worker 每次需要時換取短效 access token。備份上傳後會立即從 Cloud Storage 回讀並比對 SHA-256，通過才記為成功。</span>
+      <span>Bucket 與 Service Account JSON 只由 Cloudflare Secrets 提供，不寫入 Public Git 或 D1。備份由 storage provider 上傳後會回讀 data.json 與 manifest.json 並驗證 SHA-256，通過才記為成功。</span>
     </div>
 
     <div class="backup-history-block">
       <div class="backup-history-title"><strong>最近執行紀錄</strong><span class="hint">成功／失敗最多顯示 8 筆</span></div>
       <div class="backup-history-table-wrap">
         <table class="backup-history-table">
-          <thead><tr><th>時間</th><th>方式</th><th>狀態</th><th>檔名／錯誤</th><th class="num">資料筆數</th><th class="num">大小</th></tr></thead>
+          <thead><tr><th>時間</th><th>方式</th><th>狀態</th><th>備份 ID／錯誤</th><th class="num">資料筆數</th><th class="num">大小</th></tr></thead>
           <tbody id="backupHistoryRows"><tr><td colspan="6" class="empty">讀取中…</td></tr></tbody>
         </table>
       </div>
@@ -94,7 +94,7 @@ function backupSettingsHtmlV17() {
 
     <div class="backup-restore-note">
       <strong>復原</strong>
-      <span>V0.17 先完成 Cloud Storage 自動備份。復原功能尚未開放；後續只允許 <code>SUPER_ADMIN</code> 使用，並在覆蓋 D1 前再次驗證備份格式、版本與完整性。</span>
+      <span>V0.17 先完成 Cloud Storage 自動備份。復原功能尚未開放；後續只允許 <code>SUPER_ADMIN</code> 使用，採雙重確認並在覆蓋 D1 前再次驗證備份格式、版本與完整性。</span>
     </div>`;
 }
 
@@ -126,8 +126,8 @@ function renderBackupStatusV17(data) {
   if (state) state.textContent = configured ? '已完成設定' : '尚未完成 Cloudflare Secrets';
   if (account) {
     account.textContent = configured
-      ? `${data.bucketName || '—'} · ${data.serviceAccountEmail || '—'}`
-      : '需要 GCS_BUCKET_NAME、GCS_SERVICE_ACCOUNT_EMAIL、GCS_PRIVATE_KEY';
+      ? 'Bucket 與專用 Service Account 已設定'
+      : '需要 GCS_BUCKET、GCS_SERVICE_ACCOUNT_JSON';
   }
   if (schedule) schedule.textContent = data.schedule?.localTime || '每日 03:30（台灣時間）';
   if (retention) retention.textContent = `保留最近 ${Number(data.retentionDays || 14)} 天備份`;
@@ -137,7 +137,7 @@ function renderBackupStatusV17(data) {
   if (lastDetail) {
     lastDetail.textContent = latest
       ? `${Number(latest.rowCount || 0).toLocaleString()} 筆 · ${backupBytesV17(latest.byteSize || 0)} · SHA ${String(latest.fileSha256 || '').slice(0, 10)}…`
-      : (configured ? '可先執行一次測試備份確認權限與 Bucket 設定' : '完成 Cloudflare Secrets 後即可測試');
+      : (configured ? '可先執行一次測試備份確認 GCS 權限與讀回驗證' : '完成 Cloudflare Secrets 後即可測試');
   }
 
   if (run) run.disabled = !configured;
@@ -170,14 +170,14 @@ async function runBackupNowV17() {
   if (!confirm('現在立即執行一次 Google Cloud Storage 測試備份？\n正常每日備份仍會在排程時間自動執行。')) return;
   const button = document.querySelector('#backupRunNow');
   if (button) button.disabled = true;
-  setBackupMessageV17('正在建立、上傳並回讀驗證備份…');
+  setBackupMessageV17('正在建立 data.json／manifest.json、上傳並回讀驗證…');
   try {
     const data = await api('/api/backup/run', {
       method: 'POST',
       headers: jsonHeaders(),
       body: '{}'
     });
-    setBackupMessageV17(`備份完成：${data.backup?.fileName || ''}`);
+    setBackupMessageV17(`備份完成：${data.backup?.backupId || data.backup?.fileName || ''}`);
     await loadBackupStatusV17();
   } catch (error) {
     setBackupMessageV17(error.message || '測試備份失敗。', true);
