@@ -8,6 +8,7 @@ const BACKUP_FORMAT = 'CYAccountingWebBackupSet';
 const BACKUP_FORMAT_VERSION = 2;
 const BACKUP_RETENTION_DAYS = 14;
 const BACKUP_ROOT_PREFIX = 'CYAccountingWeb/';
+const LEGACY_GCS_TOPOLOGY = 'legacy_gcs';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -44,6 +45,7 @@ export async function runScheduledBackup(env) {
 
 async function backupStatus(env) {
   const configured = gcsConfigReady(env);
+  const topology = resolveBackupTopology(env);
   const [latestSuccess, recentRuns] = await Promise.all([
     env.DB.prepare(`
       SELECT id, completed_at, file_name, data_sha256, file_sha256, row_count, byte_size
@@ -62,6 +64,7 @@ async function backupStatus(env) {
   return json({
     ok: true,
     provider: BACKUP_PROVIDER,
+    topology,
     configured,
     schedule: { cron: '30 19 * * *', localTime: '每日 03:30（台灣時間）' },
     retentionDays: BACKUP_RETENTION_DAYS,
@@ -71,11 +74,23 @@ async function backupStatus(env) {
   });
 }
 
+/**
+ * Phase A/B safety switch. Until Phase C is explicitly introduced, production
+ * stays on the accepted V0.17 GCS path. Future topology names are deliberately
+ * rejected rather than silently changing behavior.
+ */
+export function resolveBackupTopology(env) {
+  const value = String(env?.BACKUP_TOPOLOGY || '').trim();
+  if (!value || value === LEGACY_GCS_TOPOLOGY) return LEGACY_GCS_TOPOLOGY;
+  throw new BackupError('目前部署僅允許既有 GCS 備份拓撲。', 'BACKUP_TOPOLOGY_UNSUPPORTED');
+}
+
 export async function runBackup(env, triggerKind = 'scheduled', options = {}) {
   if (!['scheduled', 'manual'].includes(triggerKind)) {
     throw new BackupError('備份觸發類型錯誤。', 'INVALID_TRIGGER');
   }
   if (!env?.DB) throw new BackupError('D1 尚未綁定。', 'DB_NOT_CONFIGURED');
+  resolveBackupTopology(env);
 
   const provider = assertBackupStorageProvider(options.provider || createGcsBackupStorageProvider(env, options.providerOptions));
   const now = options.now instanceof Date ? options.now : new Date();
@@ -83,33 +98,13 @@ export async function runBackup(env, triggerKind = 'scheduled', options = {}) {
   let backupSet = null;
 
   try {
+    // Phase B invariant: one logical backup event performs the D1 export once.
     backupSet = await buildV17BackupSet(env.DB, now);
-    const dataUpload = await provider.putObject(backupSet.dataKey, backupSet.dataBytes, {
-      backupId: backupSet.backupId,
-      role: 'data',
-      sha256: backupSet.dataSha256,
-      app: 'CYAccountingWeb'
+    await storeV17BackupSet(provider, backupSet, {
+      now,
+      retentionDays: BACKUP_RETENTION_DAYS,
+      cleanup: true
     });
-    const manifestUpload = await provider.putObject(backupSet.manifestKey, backupSet.manifestBytes, {
-      backupId: backupSet.backupId,
-      role: 'manifest',
-      sha256: backupSet.manifestSha256,
-      app: 'CYAccountingWeb'
-    });
-
-    try {
-      await verifyBackupSet(provider, backupSet);
-    } catch (verifyError) {
-      await bestEffortDelete(provider, backupSet.dataKey, dataUpload?.generation);
-      await bestEffortDelete(provider, backupSet.manifestKey, manifestUpload?.generation);
-      throw verifyError;
-    }
-
-    try {
-      await cleanupExpiredBackups(provider, BACKUP_RETENTION_DAYS, now);
-    } catch (cleanupError) {
-      console.warn('cyaccounting_backup_retention_cleanup_failed', safeErrorCode(cleanupError));
-    }
 
     const completedAt = new Date().toISOString();
     await env.DB.prepare(`
@@ -168,6 +163,55 @@ export async function runBackup(env, triggerKind = 'scheduled', options = {}) {
   }
 }
 
+/**
+ * Storage execution is intentionally independent from D1 export/package build.
+ * The same immutable BackupSet can be passed to more than one provider in Phase C
+ * without calling buildBackupPackage() again.
+ */
+export async function storeV17BackupSet(provider, backupSet, options = {}) {
+  assertBackupStorageProvider(provider);
+  assertBackupSetShape(backupSet);
+  const now = options.now instanceof Date ? options.now : new Date();
+  const retentionDays = Number(options.retentionDays ?? BACKUP_RETENTION_DAYS);
+  const cleanup = options.cleanup !== false;
+
+  const dataUpload = await provider.putObject(backupSet.dataKey, backupSet.dataBytes, {
+    backupId: backupSet.backupId,
+    role: 'data',
+    sha256: backupSet.dataSha256,
+    app: 'CYAccountingWeb'
+  });
+  const manifestUpload = await provider.putObject(backupSet.manifestKey, backupSet.manifestBytes, {
+    backupId: backupSet.backupId,
+    role: 'manifest',
+    sha256: backupSet.manifestSha256,
+    app: 'CYAccountingWeb'
+  });
+
+  try {
+    await verifyBackupSet(provider, backupSet);
+  } catch (verifyError) {
+    await bestEffortDelete(provider, backupSet.dataKey, dataUpload?.versionToken);
+    await bestEffortDelete(provider, backupSet.manifestKey, manifestUpload?.versionToken);
+    throw verifyError;
+  }
+
+  if (cleanup && Number.isFinite(retentionDays) && retentionDays > 0) {
+    try {
+      await cleanupExpiredBackups(provider, retentionDays, now);
+    } catch (cleanupError) {
+      console.warn('cyaccounting_backup_retention_cleanup_failed', safeErrorCode(cleanupError));
+    }
+  }
+
+  return {
+    ok: true,
+    backupId: backupSet.backupId,
+    dataVersionToken: String(dataUpload?.versionToken || ''),
+    manifestVersionToken: String(manifestUpload?.versionToken || '')
+  };
+}
+
 export async function buildV17BackupSet(db, now = new Date()) {
   const base = await buildBackupPackage(db, now);
   const createdAt = now.toISOString();
@@ -204,7 +248,7 @@ export async function buildV17BackupSet(db, now = new Date()) {
   const manifestBytes = encoder.encode(manifestText);
   const manifestSha256 = await sha256HexBytes(manifestBytes);
 
-  return {
+  return Object.freeze({
     backupId,
     prefix,
     dataKey,
@@ -217,26 +261,18 @@ export async function buildV17BackupSet(db, now = new Date()) {
     manifestSha256,
     totalRowCount,
     totalByteSize: dataBytes.byteLength + manifestBytes.byteLength
-  };
+  });
 }
 
-export async function verifyBackupSet(provider, expected) {
-  assertBackupStorageProvider(provider);
-  const [dataBytes, manifestBytes] = await Promise.all([
-    provider.getObject(expected.dataKey),
-    provider.getObject(expected.manifestKey)
-  ]);
-
+/**
+ * Compatibility reader for accepted V0.17 backup objects. This remains available
+ * when a future common CYBackupSet outer format is introduced.
+ */
+export async function validateV17BackupSetBytes(manifestBytes, dataBytes, expectedBackupId = '') {
   const [dataSha256, manifestSha256] = await Promise.all([
     sha256HexBytes(dataBytes),
     sha256HexBytes(manifestBytes)
   ]);
-  if (dataBytes.byteLength !== expected.dataBytes.byteLength || dataSha256 !== expected.dataSha256) {
-    throw new BackupError('Cloud Storage data.json 回讀驗證失敗。', 'DATA_VERIFY_FAILED');
-  }
-  if (manifestBytes.byteLength !== expected.manifestBytes.byteLength || manifestSha256 !== expected.manifestSha256) {
-    throw new BackupError('Cloud Storage manifest.json 回讀驗證失敗。', 'MANIFEST_VERIFY_FAILED');
-  }
 
   let manifest;
   let data;
@@ -247,15 +283,49 @@ export async function verifyBackupSet(provider, expected) {
     throw new BackupError('備份 JSON 無法解析。', 'BACKUP_JSON_INVALID');
   }
 
+  const backupId = String(manifest?.backupId || '');
   if (manifest?.format !== BACKUP_FORMAT || Number(manifest?.formatVersion) !== BACKUP_FORMAT_VERSION
-      || manifest?.app !== 'CYAccountingWeb' || String(manifest?.backupId || '') !== expected.backupId
-      || String(manifest?.files?.data?.sha256 || '') !== expected.dataSha256
-      || Number(manifest?.files?.data?.byteSize || -1) !== expected.dataBytes.byteLength) {
+      || manifest?.app !== 'CYAccountingWeb' || !/^\d{8}T\d{6}Z$/.test(backupId)
+      || (expectedBackupId && backupId !== String(expectedBackupId))
+      || String(manifest?.files?.data?.name || '') !== 'data.json'
+      || String(manifest?.files?.data?.sha256 || '') !== dataSha256
+      || Number(manifest?.files?.data?.byteSize || -1) !== dataBytes.byteLength) {
     throw new BackupError('備份 manifest 內容驗證失敗。', 'MANIFEST_CONTENT_INVALID');
   }
 
   const actualCount = Object.values(data || {}).reduce((sum, rows) => sum + (Array.isArray(rows) ? rows.length : 0), 0);
-  if (actualCount !== expected.totalRowCount || actualCount !== Number(manifest.totalRowCount || -1)) {
+  if (actualCount !== Number(manifest.totalRowCount || -1)) {
+    throw new BackupError('備份資料筆數驗證失敗。', 'BACKUP_COUNT_MISMATCH');
+  }
+
+  return {
+    manifest,
+    data,
+    backupId,
+    dataSha256,
+    manifestSha256,
+    totalRowCount: actualCount,
+    dataByteSize: dataBytes.byteLength,
+    manifestByteSize: manifestBytes.byteLength
+  };
+}
+
+export async function verifyBackupSet(provider, expected) {
+  assertBackupStorageProvider(provider);
+  assertBackupSetShape(expected);
+  const [dataBytes, manifestBytes] = await Promise.all([
+    provider.getObject(expected.dataKey),
+    provider.getObject(expected.manifestKey)
+  ]);
+
+  const validated = await validateV17BackupSetBytes(manifestBytes, dataBytes, expected.backupId);
+  if (dataBytes.byteLength !== expected.dataBytes.byteLength || validated.dataSha256 !== expected.dataSha256) {
+    throw new BackupError('Cloud Storage data.json 回讀驗證失敗。', 'DATA_VERIFY_FAILED');
+  }
+  if (manifestBytes.byteLength !== expected.manifestBytes.byteLength || validated.manifestSha256 !== expected.manifestSha256) {
+    throw new BackupError('Cloud Storage manifest.json 回讀驗證失敗。', 'MANIFEST_VERIFY_FAILED');
+  }
+  if (validated.totalRowCount !== expected.totalRowCount) {
     throw new BackupError('備份資料筆數驗證失敗。', 'BACKUP_COUNT_MISMATCH');
   }
   return true;
@@ -271,10 +341,19 @@ export async function cleanupExpiredBackups(provider, retentionDays, now = new D
     const created = Date.parse(String(object?.timeCreated || ''));
     if (!Number.isFinite(created) || created >= cutoff) continue;
     try {
-      await provider.deleteObject(key, object?.generation || '');
+      await provider.deleteObject(key, object?.versionToken || '');
     } catch {
       // Retention cleanup is best effort and must not invalidate a verified backup.
     }
+  }
+}
+
+function assertBackupSetShape(backupSet) {
+  if (!backupSet || typeof backupSet !== 'object'
+      || !backupSet.backupId || !backupSet.dataKey || !backupSet.manifestKey
+      || !(backupSet.dataBytes instanceof Uint8Array)
+      || !(backupSet.manifestBytes instanceof Uint8Array)) {
+    throw new BackupError('BackupSet 結構不完整。', 'BACKUP_SET_INVALID');
   }
 }
 
@@ -286,8 +365,8 @@ function isManagedBackupObject(key) {
   return parts[1] === 'data.json' || parts[1] === 'manifest.json';
 }
 
-async function bestEffortDelete(provider, key, generation) {
-  try { await provider.deleteObject(key, generation || ''); } catch { /* best effort */ }
+async function bestEffortDelete(provider, key, versionToken) {
+  try { await provider.deleteObject(key, versionToken || ''); } catch { /* best effort */ }
 }
 
 async function sha256HexBytes(bytes) {
