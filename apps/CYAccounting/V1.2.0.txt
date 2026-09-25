@@ -5,8 +5,10 @@ Current source on Phase 1 visual-alignment branch; test artifact, not a formal R
 - Aligned CYAccounting with the canonical CY Desktop Visual Guide Phase 1 using the Blue Theme.
 - Main accounting workspace moves toward the recommended Continuous surface model; result/statistics areas remain carded where they are independent information units.
 - Main tabs use a lower-presence header treatment with an accent underline; page chrome and decorative borders are reduced.
+- Input page follows a dedicated data-entry density: primary entry fields remain deliberately larger and more legible (11pt, at least 30px high) because entering data is the primary task, while unnecessary section/margin whitespace is reduced.
+- Ledger follows a separate high-density review mode: both data rows and the table header are 24px high; query/header/statistics spacing is tightened without reducing the 10pt table text.
 - Inputs, buttons and dialogs stop forcing overly compressed single-line control heights; focus styling no longer changes border geometry.
-- Ledger uses neutral headers, low-contrast grid, soft selection, 28px data rows and a single zebra-striping source.
+- Ledger uses neutral headers, low-contrast grid, soft selection and a single zebra-striping source.
 - Monetary entry fields are right-aligned; state colors and accounting-domain income/expense colors are separated.
 - Settings and Import dialogs receive canonical spacing/density treatment while preserving their existing behavior and workflow.
 - Existing accounting workflow, Enter/Tab/Esc behavior, database schema, backup/restore, Google Drive, import flow, locking and two-DELETE local-ledger reset behavior remain unchanged.
