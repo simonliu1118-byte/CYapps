@@ -86,7 +86,25 @@ QGroupBox#confirmationCard::title, QGroupBox#inputSection::title, QGroupBox#inco
     subcontrol-origin: margin;
     subcontrol-position: top left;
     left: 10px;
-    padding: 0 5px;
+    padding: 0 2px;
+    background: {NEUTRAL_WHITE};
+    color: {TEXT_PRIMARY};
+    font-size: 11.5pt;
+    font-weight: 600;
+}}
+QDialog#settingsDialog QGroupBox {{
+    border: 1px solid {NEUTRAL_BORDER};
+    border-radius: 6px;
+    margin-top: 10px;
+    padding: 0;
+    background: {NEUTRAL_WHITE};
+    font-weight: normal;
+}}
+QDialog#settingsDialog QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 2px;
     background: {NEUTRAL_WHITE};
     color: {TEXT_PRIMARY};
     font-size: 11.5pt;

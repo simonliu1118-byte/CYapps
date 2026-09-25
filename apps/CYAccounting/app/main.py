@@ -248,17 +248,39 @@ class ChineseStandardButtonFilter(QObject):
 
     @staticmethod
     def _clear_secondary_dialog_icon(dialog: QDialog) -> None:
-        # CY Desktop visual rule: only the main application window carries the
-        # canonical family icon. Keep native dialog chrome/behavior.
+        # CY Desktop visual rule: the main window owns the product icon.
+        # Secondary dialogs must have no title-bar icon at all; an empty Qt icon
+        # alone lets Windows fall back to the generic application icon.
         dialog.setWindowIcon(QIcon())
         if sys.platform == "win32":
             try:
                 import ctypes
                 hwnd = int(dialog.winId())
                 user32 = ctypes.windll.user32
-                wm_seticon = 0x0080
-                user32.SendMessageW(hwnd, wm_seticon, 0, 0)  # ICON_SMALL
-                user32.SendMessageW(hwnd, wm_seticon, 1, 0)  # ICON_BIG
+                GWL_EXSTYLE = -20
+                WS_EX_DLGMODALFRAME = 0x00000001
+                WM_SETICON = 0x0080
+                ICON_SMALL = 0
+                ICON_BIG = 1
+                SWP_NOSIZE = 0x0001
+                SWP_NOMOVE = 0x0002
+                SWP_NOZORDER = 0x0004
+                SWP_NOACTIVATE = 0x0010
+                SWP_FRAMECHANGED = 0x0020
+
+                ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_DLGMODALFRAME)
+                user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, 0)
+                user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, 0)
+                user32.SetWindowPos(
+                    hwnd,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                )
             except Exception:
                 pass
 
@@ -296,7 +318,7 @@ class InputTab(QWidget):
 
     def _build(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(12, 6, 12, 8)
+        outer.setContentsMargins(12, 8, 12, 8)
         outer.setSpacing(8)
 
         basic = QGroupBox("基本資訊")
@@ -490,7 +512,7 @@ class InputTab(QWidget):
         confirm = QGroupBox("輸入確認")
         confirm.setObjectName("confirmationCard")
         confirm.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        confirm.setFixedHeight(244)
+        confirm.setFixedHeight(224)
         cv = QVBoxLayout(confirm)
         cv.setContentsMargins(10, 7, 10, 7)
         cv.setSpacing(2)
@@ -1309,8 +1331,8 @@ class MainWindow(QMainWindow):
         self.config = config
         self.startup_backup_error = startup_backup_error
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(1120, 760)
-        self.resize(1120, 760)
+        self.setMinimumSize(1120, 740)
+        self.resize(1120, 740)
         icon_path = app_root() / "app" / "resources" / "app.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))

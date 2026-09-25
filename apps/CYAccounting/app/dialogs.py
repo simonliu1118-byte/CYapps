@@ -726,13 +726,16 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("系統設定")
         self.setObjectName("settingsDialog")
         self.setModal(True)
-        self.resize(760, 700)
+        self.resize(760, 660)
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(16, 12, 16, 12)
-        outer.setSpacing(10)
+        outer.setContentsMargins(12, 8, 12, 8)
+        outer.setSpacing(6)
 
         db_box = QGroupBox("資料庫儲存位置")
         db_layout = QGridLayout(db_box)
+        db_layout.setContentsMargins(12, 8, 12, 8)
+        db_layout.setHorizontalSpacing(8)
+        db_layout.setVerticalSpacing(6)
         self.db_path = QLineEdit(str(db.path.parent)); self.db_path.setReadOnly(True)
         browse = no_tab_button("瀏覽"); browse.clicked.connect(self.browse_db)
         open_folder = no_tab_button("開啟資料資料夾"); open_folder.clicked.connect(self.open_data_folder)
@@ -743,7 +746,7 @@ class SettingsDialog(QDialog):
 
         lock_box = QGroupBox("資料鎖定")
         lock_layout = QHBoxLayout(lock_box)
-        lock_layout.setContentsMargins(12, 10, 12, 10)
+        lock_layout.setContentsMargins(12, 7, 12, 7)
         lock_layout.setSpacing(8)
         current = db.locked_through()
         self.current_lock = QLabel(current or "未設定")
@@ -813,8 +816,8 @@ class SettingsDialog(QDialog):
 
         backup_box = QGroupBox("備份與還原")
         backup_layout = QHBoxLayout(backup_box)
-        backup_layout.setContentsMargins(12, 10, 12, 10)
-        backup_layout.setSpacing(16)
+        backup_layout.setContentsMargins(12, 8, 12, 8)
+        backup_layout.setSpacing(8)
         last = self.config.get("last_auto_backup_date") or "尚未備份"
         self.last_backup = QLabel(last)
         info = QVBoxLayout()
@@ -872,6 +875,9 @@ class SettingsDialog(QDialog):
 
         info_box = QGroupBox("程式資訊")
         info_layout = QGridLayout(info_box)
+        info_layout.setContentsMargins(12, 8, 12, 8)
+        info_layout.setHorizontalSpacing(8)
+        info_layout.setVerticalSpacing(4)
         info_layout.addWidget(QLabel("程式名稱："), 0, 0)
         info_layout.addWidget(QLabel(APP_NAME), 0, 1)
         info_layout.addWidget(QLabel("版本："), 1, 0)
@@ -882,7 +888,7 @@ class SettingsDialog(QDialog):
         info_layout.setColumnStretch(2, 1)
         info_layout.addWidget(clear, 0, 3, 2, 1, Qt.AlignmentFlag.AlignVCenter)
         outer.addWidget(info_box)
-        outer.addStretch()
+        outer.addSpacing(2)
         close = no_tab_button("關閉"); close.clicked.connect(self.accept)
         row = QHBoxLayout(); row.addStretch(); row.addWidget(close); outer.addLayout(row)
 
