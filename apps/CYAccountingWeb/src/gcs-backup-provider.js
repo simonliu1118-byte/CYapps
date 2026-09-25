@@ -154,10 +154,10 @@ export function createGcsBackupStorageProvider(env, options = {}) {
     return items;
   }
 
-  async function deleteObject(key, generation = '') {
+  async function deleteObject(key, versionToken = '') {
     const token = await accessToken();
     const params = new URLSearchParams();
-    if (generation) params.set('generation', String(generation));
+    if (versionToken) params.set('generation', String(versionToken));
     const suffix = params.size ? `?${params.toString()}` : '';
     const response = await fetchImpl(
       `${STORAGE_API}/b/${encodeURIComponent(config.bucket)}/o/${encodeURIComponent(String(key))}${suffix}`,
@@ -245,10 +245,9 @@ function normalizeMetadata(metadata) {
 function normalizeObject(item) {
   return {
     key: String(item?.name || ''),
+    byteSize: Number(item?.size || 0),
     timeCreated: String(item?.timeCreated || ''),
-    generation: String(item?.generation || ''),
-    size: Number(item?.size || 0),
-    metadata: item?.metadata && typeof item.metadata === 'object' ? item.metadata : {}
+    versionToken: String(item?.generation || '')
   };
 }
 
