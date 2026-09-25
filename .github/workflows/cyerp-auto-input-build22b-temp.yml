@@ -1,0 +1,162 @@
+name: CYERPAutoInput Build 22 Corrected Temp CI
+
+on:
+  push:
+    branches: [ci-cyerp-build21]
+    paths:
+      - ".github/workflows/cyerp-auto-input-build22b-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v7
+        with:
+          ref: cyerp-auto-input/v0.1.0-csharp
+          fetch-depth: 0
+
+      - name: Checkout patch driver
+        uses: actions/checkout@v7
+        with:
+          ref: ci-cyerp-build21
+          path: .build22-driver
+          sparse-checkout: |
+            .github/workflows/cyerp-auto-input-build22b-temp.yml
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Apply Build 22 patch
+        shell: bash
+        working-directory: apps/CYERPAutoInput
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8').replace('\r\n', '\n')
+
+          def write(path, text):
+              with open(path, 'w', encoding='utf-8', newline='\n') as f:
+                  f.write(text)
+
+          def dec(value):
+              return base64.b64decode(value).decode('utf-8')
+
+          def rep(path, old, new, count=1):
+              text = read(path)
+              if old not in text:
+                  raise SystemExit(f'Expected source block not found in {path}: {old[:120]!r}')
+              write(path, text.replace(old, new, count))
+
+          write('BUILD', '22\n')
+          rep('AppLogger.cs', 'CYERPAutoInput V0.1.0 Build 21 starting', 'CYERPAutoInput V0.1.0 Build 22 starting')
+          rep('Build10UiPatch.cs', 'V0.1.0 Build 21 · Esc：緊急停止 · 不自動儲存 ERP', 'V0.1.0 Build 22 · Esc：緊急停止 · 不自動儲存 ERP')
+          rep('MainForm.cs', 'V0.1.0 Build 21 · Esc：緊急停止 · 不自動儲存 ERP', 'V0.1.0 Build 22 · Esc：緊急停止 · 不自動儲存 ERP')
+
+          rep('ErpLayoutResolver.cs', '        return rows[0][1];\n', '        return rows[1][0];\n')
+
+          old_isp = dec('ICAgIHByaXZhdGUgc3RhdGljIGJvb2wgSXNQbGF1c2libGVTYWxlc09yZGVyTnVtYmVyKHN0cmluZyB2YWx1ZSkKICAgIHsKICAgICAgICBpZiAoc3RyaW5nLklzTnVsbE9yV2hpdGVTcGFjZSh2YWx1ZSkgfHwgdmFsdWUuTGVuZ3RoIGlzIDwgNCBvciA+IDMyKSByZXR1cm4gZmFsc2U7CiAgICAgICAgaWYgKHZhbHVlLkFueShjaGFyLklzV2hpdGVTcGFjZSkgfHwgdmFsdWUuQ29udGFpbnMoJyonKSkgcmV0dXJuIGZhbHNlOwogICAgICAgIHJldHVybiB2YWx1ZS5Db3VudChjaGFyLklzTGV0dGVyT3JEaWdpdCkgPj0gNDsKICAgIH0K')
+          new_isp = dec('ICAgIHByaXZhdGUgc3RhdGljIGJvb2wgSXNQbGF1c2libGVTYWxlc09yZGVyTnVtYmVyKHN0cmluZyB2YWx1ZSkKICAgIHsKICAgICAgICBpZiAoc3RyaW5nLklzTnVsbE9yV2hpdGVTcGFjZSh2YWx1ZSkgfHwgdmFsdWUuTGVuZ3RoIGlzIDwgOCBvciA+IDIwKSByZXR1cm4gZmFsc2U7CiAgICAgICAgcmV0dXJuIHZhbHVlLkFsbChjaGFyLklzRGlnaXQpOwogICAgfQo=')
+          rep('ErpAutomationService.cs', old_isp, new_isp)
+
+          old_flow = dec('ICAgICAgICAgICAgdmFyIHZpc2libGVSb3cgPSByb3dJbmRleDsKICAgICAgICAgICAgdmFyIHJvdyA9IHJvd3Nbcm93SW5kZXhdOwogICAgICAgICAgICBnZW9tZXRyeSA9IGF3YWl0IFNldERldGFpbENlbGxBc3luYyhyb290LCBncmlkLCBnZW9tZXRyeSwgdmlzaWJsZVJvdywgMCwgcm93Lkl0ZW1Db2RlLCBjYW5jZWxsYXRpb25Ub2tlbik7CiAgICAgICAgICAgIGdlb21ldHJ5ID0gYXdhaXQgU2VsZWN0QmF0Y2hJZlJlcXVpcmVkQXN5bmMocm9vdCwgZ3JpZCwgZ2VvbWV0cnksIHZpc2libGVSb3csIHJvdy5JdGVtQ29kZSwgY2FuY2VsbGF0aW9uVG9rZW4pOwoKICAgICAgICAgICAgaWYgKCFzdHJpbmcuSXNOdWxsT3JXaGl0ZVNwYWNlKHJvdy5Vbml0KSkKICAgICAgICAgICAgICAgIGdlb21ldHJ5ID0gYXdhaXQgU2VsZWN0VW5pdEFzeW5jKHJvb3QsIGdyaWQsIGdlb21ldHJ5LCB2aXNpYmxlUm93LCByb3cuVW5pdCwgY2FuY2VsbGF0aW9uVG9rZW4pOwoKICAgICAgICAgICAgZ2VvbWV0cnkgPSBhd2FpdCBTZXREZXRhaWxDZWxsQXN5bmMocm9vdCwgZ3JpZCwgZ2VvbWV0cnksIHZpc2libGVSb3csIDEsIHJvdy5RdWFudGl0eSwgY2FuY2VsbGF0aW9uVG9rZW4pOwogICAgICAgICAgICBpZiAoIXN0cmluZy5Jc051bGxPcldoaXRlU3BhY2Uocm93LkdpZnRRdWFudGl0eSkpCiAgICAgICAgICAgICAgICBnZW9tZXRyeSA9IGF3YWl0IFNldERldGFpbENlbGxBc3luYyhyb290LCBncmlkLCBnZW9tZXRyeSwgdmlzaWJsZVJvdywgMywgcm93LkdpZnRRdWFudGl0eSwgY2FuY2VsbGF0aW9uVG9rZW4pOwogICAgICAgICAgICBpZiAoIXN0cmluZy5Jc051bGxPcldoaXRlU3BhY2Uocm93LldhcmVob3VzZSkpCiAgICAgICAgICAgICAgICBnZW9tZXRyeSA9IGF3YWl0IFNldERldGFpbENlbGxBc3luYyhyb290LCBncmlkLCBnZW9tZXRyeSwgdmlzaWJsZVJvdywgNiwgcm93LldhcmVob3VzZSwgY2FuY2VsbGF0aW9uVG9rZW4pOwogICAgICAgICAgICBpZiAoIXN0cmluZy5Jc051bGxPcldoaXRlU3BhY2Uocm93LlVuaXRQcmljZSkpCiAgICAgICAgICAgICAgICBnZW9tZXRyeSA9IGF3YWl0IFNldERldGFpbENlbGxBc3luYyhyb290LCBncmlkLCBnZW9tZXRyeSwgdmlzaWJsZVJvdywgNywgcm93LlVuaXRQcmljZSwgY2FuY2VsbGF0aW9uVG9rZW4pOwo=')
+          new_flow = dec('ICAgICAgICAgICAgdmFyIHZpc2libGVSb3cgPSByb3dJbmRleDsKICAgICAgICAgICAgdmFyIHJvdyA9IHJvd3Nbcm93SW5kZXhdOwoKICAgICAgICAgICAgLy8gUHJvdmVuIENPUEkwOCBkZXRhaWwgb3JkZXIuIEJhdGNoIGlzIGludGVudGlvbmFsbHkgbGFzdCBiZWNhdXNlIEVSUAogICAgICAgICAgICAvLyB2YWxpZGF0ZXMgbG90IGF2YWlsYWJpbGl0eSBhZ2FpbnN0IGNvbW1pdHRlZCB1bml0IC8gcXVhbnRpdHkgLyB3YXJlaG91c2UuCiAgICAgICAgICAgIGdlb21ldHJ5ID0gYXdhaXQgU2V0RGV0YWlsQ2VsbEFzeW5jKHJvb3QsIGdyaWQsIGdlb21ldHJ5LCB2aXNpYmxlUm93LCAwLCByb3cuSXRlbUNvZGUsIGNhbmNlbGxhdGlvblRva2VuKTsKCiAgICAgICAgICAgIGlmICghc3RyaW5nLklzTnVsbE9yV2hpdGVTcGFjZShyb3cuVW5pdCkpCiAgICAgICAgICAgICAgICBnZW9tZXRyeSA9IGF3YWl0IFNlbGVjdFVuaXRBc3luYyhyb290LCBncmlkLCBnZW9tZXRyeSwgdmlzaWJsZVJvdywgcm93LlVuaXQsIGNhbmNlbGxhdGlvblRva2VuKTsKCiAgICAgICAgICAgIGdlb21ldHJ5ID0gYXdhaXQgU2V0RGV0YWlsQ2VsbEFzeW5jKHJvb3QsIGdyaWQsIGdlb21ldHJ5LCB2aXNpYmxlUm93LCAxLCByb3cuUXVhbnRpdHksIGNhbmNlbGxhdGlvblRva2VuKTsKICAgICAgICAgICAgaWYgKCFzdHJpbmcuSXNOdWxsT3JXaGl0ZVNwYWNlKHJvdy5HaWZ0UXVhbnRpdHkpKQogICAgICAgICAgICAgICAgZ2VvbWV0cnkgPSBhd2FpdCBTZXREZXRhaWxDZWxsQXN5bmMocm9vdCwgZ3JpZCwgZ2VvbWV0cnksIHZpc2libGVSb3csIDMsIHJvdy5HaWZ0UXVhbnRpdHksIGNhbmNlbGxhdGlvblRva2VuKTsKICAgICAgICAgICAgaWYgKCFzdHJpbmcuSXNOdWxsT3JXaGl0ZVNwYWNlKHJvdy5XYXJlaG91c2UpKQogICAgICAgICAgICAgICAgZ2VvbWV0cnkgPSBhd2FpdCBTZXREZXRhaWxDZWxsQXN5bmMocm9vdCwgZ3JpZCwgZ2VvbWV0cnksIHZpc2libGVSb3csIDYsIHJvdy5XYXJlaG91c2UsIGNhbmNlbGxhdGlvblRva2VuKTsKICAgICAgICAgICAgaWYgKCFzdHJpbmcuSXNOdWxsT3JXaGl0ZVNwYWNlKHJvdy5Vbml0UHJpY2UpKQogICAgICAgICAgICAgICAgZ2VvbWV0cnkgPSBhd2FpdCBTZXREZXRhaWxDZWxsQXN5bmMocm9vdCwgZ3JpZCwgZ2VvbWV0cnksIHZpc2libGVSb3csIDcsIHJvdy5Vbml0UHJpY2UsIGNhbmNlbGxhdGlvblRva2VuKTsKCiAgICAgICAgICAgIGdlb21ldHJ5ID0gYXdhaXQgU2VsZWN0QmF0Y2hJZlJlcXVpcmVkQXN5bmMocm9vdCwgZ3JpZCwgZ2VvbWV0cnksIHZpc2libGVSb3csIHJvdy5JdGVtQ29kZSwgY2FuY2VsbGF0aW9uVG9rZW4pOwo=')
+          rep('ErpAutomationService.cs', old_flow, new_flow)
+
+          old_warn = dec('ICAgICAgICAgICAgdmFyIGtub3duID0gV2luMzJBdXRvbWF0aW9uLldpbmRvd1RyZWVDb250YWluc1RleHQocGVlciwga25vd25XYXJuaW5nKTsKICAgICAgICAgICAgaWYgKCFrbm93bikKICAgICAgICAgICAgICAgIGtub3duID0gYXdhaXQgX3RleHRWaXNpb24uRmluZFRleHRBc3luYyhwZWVyLCBba25vd25XYXJuaW5nXSwgY2FuY2VsbGF0aW9uVG9rZW4pIGlzIG5vdCBudWxsOwogICAgICAgICAgICBpZiAoIWtub3duKSBjb250aW51ZTsK')
+          new_warn = dec('ICAgICAgICAgICAgdmFyIGtub3duID0gV2luMzJBdXRvbWF0aW9uLldpbmRvd1RyZWVDb250YWluc1RleHQocGVlciwga25vd25XYXJuaW5nKTsKICAgICAgICAgICAgaWYgKCFrbm93bikKICAgICAgICAgICAgICAgIGtub3duID0gYXdhaXQgX3RleHRWaXNpb24uQ29udGFpbnNBbGxGcmFnbWVudHNBc3luYyhwZWVyLCBbIuW6q+WtmOmHjyIsICLmibnomZ/ph48iLCAi5LiN6LazIl0sIGNhbmNlbGxhdGlvblRva2VuKTsKICAgICAgICAgICAgaWYgKCFrbm93bikgY29udGludWU7Cg==')
+          rep('ErpAutomationService.cs', old_warn, new_warn)
+
+          opt = read('OpticalTextLocator.cs')
+          marker = '    private void LogTokens(string context, string target, IReadOnlyList<OcrToken> tokens, int maxTokens)\n'
+          insert = dec('ICAgIHB1YmxpYyBhc3luYyBUYXNrPGJvb2w+IENvbnRhaW5zQWxsRnJhZ21lbnRzQXN5bmMobmludCBod25kLCBJUmVhZE9ubHlMaXN0PHN0cmluZz4gZnJhZ21lbnRzLCBDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbikKICAgIHsKICAgICAgICBpZiAoIU5hdGl2ZU1ldGhvZHMuR2V0V2luZG93UmVjdChod25kLCBvdXQgdmFyIHJlY3QpIHx8IHJlY3QuV2lkdGggPD0gMCB8fCByZWN0LkhlaWdodCA8PSAwKQogICAgICAgICAgICByZXR1cm4gZmFsc2U7CgogICAgICAgIHVzaW5nIHZhciBpbWFnZSA9IFNjcmVlbkNhcHR1cmUuQ2FwdHVyZShyZWN0LlRvUmVjdGFuZ2xlKCkpOwogICAgICAgIHZhciB0b2tlbnMgPSBhd2FpdCBfb2NyLlJlY29nbml6ZUFzeW5jKGltYWdlLCBjYW5jZWxsYXRpb25Ub2tlbiwgcmVxdWlyZUNoaW5lc2U6IHRydWUpOwogICAgICAgIHZhciBiYWcgPSBzdHJpbmcuQ29uY2F0KHRva2Vucy5TZWxlY3QodCA9PiBPY3JUZXh0Tm9ybWFsaXplci5Ob3JtYWxpemUodC5UZXh0KSkpOwogICAgICAgIHZhciBub3JtYWxpemVkRnJhZ21lbnRzID0gZnJhZ21lbnRzLlNlbGVjdChPY3JUZXh0Tm9ybWFsaXplci5Ob3JtYWxpemUpLldoZXJlKGYgPT4gZi5MZW5ndGggPiAwKS5Ub0FycmF5KCk7CiAgICAgICAgdmFyIGZvdW5kID0gbm9ybWFsaXplZEZyYWdtZW50cy5BbGwoZnJhZ21lbnQgPT4gYmFnLkNvbnRhaW5zKGZyYWdtZW50LCBTdHJpbmdDb21wYXJpc29uLk9yZGluYWwpKTsKCiAgICAgICAgX2xvZy5JbmZvKCJ2aXNpb24iLCAkIk9DUl9GUkFHTUVOVF9DSEVDSyB0YXJnZXQ9e3N0cmluZy5Kb2luKCIvIiwgbm9ybWFsaXplZEZyYWdtZW50cyl9IGZvdW5kPXtmb3VuZH0gdG9rZW5zPXt0b2tlbnMuQ291bnR9Iik7CiAgICAgICAgaWYgKCFmb3VuZCkKICAgICAgICAgICAgTG9nVG9rZW5zKCJmcmFnbWVudC1jaGVjay1taXNzIiwgc3RyaW5nLkpvaW4oIi8iLCBmcmFnbWVudHMpLCB0b2tlbnMsIDQ4KTsKICAgICAgICByZXR1cm4gZm91bmQ7CiAgICB9Cgo=')
+          if marker not in opt:
+              raise SystemExit('OpticalTextLocator insertion marker not found')
+          write('OpticalTextLocator.cs', opt.replace(marker, insert + marker, 1))
+
+          f2 = read('F2BatchCellLocator.cs')
+          start_marker = '        var horizontal = GridVisionService.FindHorizontalLines(image, Math.Max(0, header.Value.Bottom - 5));\n'
+          end_marker = '        throw new InvalidOperationException("F2 批號查詢沒有找到「現有存量 > 0」的批號；已停止目前單據。");\n'
+          start = f2.find(start_marker)
+          end = f2.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('F2 batch fallback markers not found')
+          end += len(end_marker)
+          token_block = dec('ICAgICAgICB2YXIgc3RvY2tUb2tlbnMgPSB0b2tlbnMKICAgICAgICAgICAgLldoZXJlKHQgPT4gdC5SZWN0LlRvcCA+IGhlYWRlci5WYWx1ZS5Cb3R0b20gKyAyKQogICAgICAgICAgICAuV2hlcmUodCA9PgogICAgICAgICAgICB7CiAgICAgICAgICAgICAgICB2YXIgY3ggPSB0LlJlY3QuTGVmdCArIHQuUmVjdC5XaWR0aCAvIDI7CiAgICAgICAgICAgICAgICByZXR1cm4gY3ggPj0gbGVmdCArIDEgJiYgY3ggPD0gcmlnaHQgLSAxOwogICAgICAgICAgICB9KQogICAgICAgICAgICAuT3JkZXJCeSh0ID0+IHQuUmVjdC5Ub3AgKyB0LlJlY3QuSGVpZ2h0IC8gMikKICAgICAgICAgICAgLlRoZW5CeSh0ID0+IHQuUmVjdC5MZWZ0KQogICAgICAgICAgICAuVG9MaXN0KCk7CgogICAgICAgIHZhciBudW1lcmljUm93ID0gMDsKICAgICAgICBmb3JlYWNoICh2YXIgdG9rZW4gaW4gc3RvY2tUb2tlbnMpCiAgICAgICAgewogICAgICAgICAgICBjYW5jZWxsYXRpb25Ub2tlbi5UaHJvd0lmQ2FuY2VsbGF0aW9uUmVxdWVzdGVkKCk7CiAgICAgICAgICAgIHZhciByYXcgPSB0b2tlbi5UZXh0LlJlcGxhY2UoIlxyIiwgIiAiKS5SZXBsYWNlKCJcbiIsICIgIikuUmVwbGFjZSgiXCIiLCAiJyIpLlRyaW0oKTsKICAgICAgICAgICAgdmFyIG5vcm1hbGl6ZWQgPSB0b2tlbi5UZXh0LlRyaW0oKQogICAgICAgICAgICAgICAgLlJlcGxhY2UoIiAiLCBzdHJpbmcuRW1wdHkpCiAgICAgICAgICAgICAgICAuUmVwbGFjZSgi44CAIiwgc3RyaW5nLkVtcHR5KQogICAgICAgICAgICAgICAgLlJlcGxhY2UoIiwiLCBzdHJpbmcuRW1wdHkpCiAgICAgICAgICAgICAgICAuUmVwbGFjZSgi77yMIiwgc3RyaW5nLkVtcHR5KTsKCiAgICAgICAgICAgIGlmICghVHJ5UGFyc2VTdG9ja1RleHQodG9rZW4uVGV4dCwgb3V0IHZhciBzdG9jaykpCiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgIF9sb2cuSW5mbygidmlzaW9uIiwgJCJGMl9CQVRDSF9TVE9DS19UT0tFTiByYXc9XCJ7cmF3fVwiIG5vcm1hbGl6ZWQ9XCJ7bm9ybWFsaXplZH1cIiBwYXJzZT1mYWxzZSByZWN0PXt0b2tlbi5SZWN0LkxlZnR9LHt0b2tlbi5SZWN0LlRvcH0se3Rva2VuLlJlY3QuV2lkdGh9LHt0b2tlbi5SZWN0LkhlaWdodH0iKTsKICAgICAgICAgICAgICAgIGNvbnRpbnVlOwogICAgICAgICAgICB9CgogICAgICAgICAgICBudW1lcmljUm93Kys7CiAgICAgICAgICAgIF9sb2cuSW5mbygidmlzaW9uIiwgJCJGMl9CQVRDSF9TVE9DS19UT0tFTiByb3c9e251bWVyaWNSb3d9IHJhdz1cIntyYXd9XCIgbm9ybWFsaXplZD1cIntub3JtYWxpemVkfVwiIHN0b2NrPXtzdG9jay5Ub1N0cmluZyhDdWx0dXJlSW5mby5JbnZhcmlhbnRDdWx0dXJlKX0gcmVjdD17dG9rZW4uUmVjdC5MZWZ0fSx7dG9rZW4uUmVjdC5Ub3B9LHt0b2tlbi5SZWN0LldpZHRofSx7dG9rZW4uUmVjdC5IZWlnaHR9Iik7CiAgICAgICAgICAgIGlmIChzdG9jayA8PSAwKSBjb250aW51ZTsKCiAgICAgICAgICAgIHZhciBwb2ludCA9IG5ldyBQb2ludCgKICAgICAgICAgICAgICAgIGNhcHR1cmVSZWN0LkxlZnQgKyAobGVmdCArIHJpZ2h0KSAvIDIsCiAgICAgICAgICAgICAgICBjYXB0dXJlUmVjdC5Ub3AgKyB0b2tlbi5SZWN0LlRvcCArIHRva2VuLlJlY3QuSGVpZ2h0IC8gMik7CiAgICAgICAgICAgIF9sb2cuSW5mbygidmlzaW9uIiwgJCJGMiBiYXRjaCBwb3NpdGl2ZSBzdG9jayBzZWxlY3RlZCBieSBleGFjdCBPQ1Igcm93PXtudW1lcmljUm93fSBwb2ludD17cG9pbnQuWH0se3BvaW50Lll9IHN0b2NrPXtzdG9jay5Ub1N0cmluZyhDdWx0dXJlSW5mby5JbnZhcmlhbnRDdWx0dXJlKX0iKTsKICAgICAgICAgICAgcmV0dXJuIG5ldyBCYXRjaFN0b2NrU2VsZWN0aW9uKHBvaW50LCBudW1lcmljUm93LCBzdG9jayk7CiAgICAgICAgfQoKICAgICAgICB0aHJvdyBuZXcgSW52YWxpZE9wZXJhdGlvbkV4Y2VwdGlvbigiRjIg5om56Jmf5p+l6Kmi5rKS5pyJ5om+5Yiw5Y+v56K66KqN55qE44CM54++5pyJ5a2Y6YePID4gMOOAjeaJueiZn++8m+W3suWBnOatou+8jOiri+afpeeciyBMT0cg55qEIEYyX0JBVENIX1NUT0NLX1RPS0VOIOWOn+Wni+i+qOitmOWFp+WuueOAgiIpOwo=')
+          write('F2BatchCellLocator.cs', f2[:start] + token_block + f2[end:])
+          PY
+
+      - name: Fetch canonical CYERPAutoInput icon
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-canonical-icon.ps1
+
+      - name: Fetch pinned PaddleOCR models
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-ocr-models.ps1
+
+      - name: Restore
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet restore CYERPAutoInput.csproj -r win-x64
+
+      - name: Build
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet build CYERPAutoInput.csproj -c Release -r win-x64 --no-restore -p:Version=0.1.0 -p:ContinuousIntegrationBuild=true
+
+      - name: Optical pipeline self-test
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet run --project CYERPAutoInput.csproj -c Release -r win-x64 --no-build -- --vision-self-test
+
+      - name: Publish and verify portable package
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: |
+          Remove-Item -Recurse -Force package,publish-staging -ErrorAction SilentlyContinue
+          $staging = "publish-staging"
+          $outDir = Join-Path "package" "CYERPAutoInput"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -p:Version=0.1.0 -o $staging
+          if (-not (Test-Path "$staging/CYERPAutoInput.exe")) { throw "CYERPAutoInput.exe was not produced" }
+          Copy-Item "$staging/CYERPAutoInput.exe" "$outDir/CYERPAutoInput.exe"
+          Copy-Item VERSION "$outDir/VERSION"
+          Copy-Item BUILD "$outDir/BUILD"
+          Copy-Item README.md "$outDir/README.md"
+          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/THIRD_PARTY_NOTICES.md"
+          New-Item -ItemType Directory -Path "$outDir/Data" -Force | Out-Null
+          Copy-Item settings.example.json "$outDir/Data/settings.example.json"
+          New-Item -ItemType Directory -Path "$outDir/runtime/ocr" -Force | Out-Null
+          Copy-Item "$staging/runtime/ocr/*.onnx" "$outDir/runtime/ocr/"
+          $selfTest = Start-Process -FilePath "$outDir/CYERPAutoInput.exe" -ArgumentList "--vision-self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Packaged EXE vision self-test failed" }
+          Remove-Item -Recurse -Force "$outDir/logs" -ErrorAction SilentlyContinue
+          $unexpected = @(Get-ChildItem -LiteralPath $outDir -Recurse -File | Where-Object { $_.Extension -in @('.pdb','.lib','.dll') -or $_.Name -match 'SHA256' })
+          if ($unexpected.Count -gt 0) { throw "Unexpected engineering files: $($unexpected.FullName -join ', ')" }
+
+      - name: Commit Build 22 to development branch
+        shell: bash
+        run: |
+          git config user.name "simonliu1118-byte"
+          git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+          git add apps/CYERPAutoInput
+          git commit -m "fix(CYERPAutoInput): correct detail order and lot OCR targeting"
+          git push origin HEAD:cyerp-auto-input/v0.1.0-csharp
+
+      - name: Upload Build 22 package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYERPAutoInput-v0.1.0-build22-windows-x64-temp22
+          path: apps/CYERPAutoInput/package/*
+          if-no-files-found: error
+          retention-days: 14
