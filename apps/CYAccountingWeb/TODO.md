@@ -24,14 +24,17 @@
 ## 備份／復原與高風險操作
 
 - [x] 備份架構：Cloudflare D1 為唯一正式帳務資料來源；異地備份不作 live database 或雙向同步資料庫（V0.16.0 起）。
-- [x] V0.16.0 曾完成 Google Drive OAuth／自動備份技術基礎；因 Google Workspace Drive API 對應用程式備份用途的政策限制，正式異地備份改採 Google Cloud Storage，不啟用 Drive OAuth。
-- [x] Google Cloud Storage 自動備份程式：每日 03:30（台灣時間）、可攜 JSON、資料筆數、data SHA-256、file SHA-256；上傳後由 Cloud Storage 回讀並比對 SHA-256 才記為成功（V0.17.0）。
-- [x] 備份保留政策改為最近 **14 天**；程式依 Cloud Storage 物件建立時間清理過期備份（V0.17.0）。
-- [ ] **自動備份上線驗收**：建立正式 GCS Bucket、Service Account 與 bucket-level IAM，將 `GCS_BUCKET_NAME`、`GCS_SERVICE_ACCOUNT_EMAIL`、`GCS_PRIVATE_KEY` 設為 Cloudflare Worker Secrets，完成首次實機備份與回讀驗證後勾選。
-- [ ] Google Cloud Billing 設定每月低額預算警示（目標 NT$100）；Bucket 優先採 `us-central1`／Standard，以利用目前 Cloud Storage Free Tier。
+- [x] V0.16.0 曾完成 Google Drive OAuth／自動備份技術基礎；正式異地備份改採 Google Cloud Storage，Drive provider 僅保留作既有可重用邏輯來源，待 GCS production acceptance 後清理舊 runtime 路徑。
+- [x] V0.17.0 provider-neutral boundary：`BackupService` 與 `BackupStorageProvider` 分離；GCS adapter 實作 `putObject`、`getObject`、`listObjects`、`deleteObject`。
+- [x] V0.17.0 portable backup set 改為 `manifest.json` + `data.json`；包含 App/schema version、資料筆數、SHA-256 與 byte size，上傳後兩檔均需 read-back 驗證成功才記為有效備份。
+- [x] 備份排程維持每日 03:30（台灣時間）；保留政策為最近 **14 天**，程式依 storage object 建立時間清理過期備份。
+- [x] GCS 基礎設施準備：CYAccountingWeb 使用獨立 backup dataset 與獨立 least-privilege Service Account；bucket-scoped IAM 已驗證，Cloudflare Worker 已建立 `GCS_BUCKET` 與 `GCS_SERVICE_ACCOUNT_JSON` Secrets。Public Git 不保存正式 resource identifiers 或 credential。
+- [ ] **自動備份上線驗收**：V0.17.0 部署後執行首次實機備份，確認 Service Account JWT、GCS put/get/list/delete、`manifest.json` + `data.json` read-back、SHA-256、byte size、row count 與 D1 `backup_runs` 成功紀錄。
+- [ ] Google Cloud Billing 設定每月低額預算警示（目標 NT$100）。
 - [ ] 建議在 GCS Bucket 另設 14 天 Object Lifecycle 刪除規則，作為程式 retention 之外的第二層保護。
 - [ ] Cloud Storage 復原功能 **僅 `SUPER_ADMIN` 可執行**；`ADMIN` 與 `EMPLOYEE` 均不可復原。
-- [ ] 復原前必須再次確認高風險操作，並先驗證備份格式、版本與完整性，再允許重建／復原 D1；不得因已登入超管就直接無確認覆蓋資料。
+- [ ] 復原採雙重確認；第二次必須明確提示將覆蓋目前 D1 資料，且 Worker/API server-side authorization 為權威，不得只靠 UI 隱藏。
+- [ ] 復原前驗證備份格式、App/schema version、manifest 與完整性；復原操作需留下操作者、時間、backup identifier 與結果等 audit evidence。
 - [ ] 驗證「Cloudflare/D1 故障後，以 Cloud Storage 最近有效備份重建新 D1」的完整災難復原演練。
 - [ ] Web UI **不提供「清除全部帳務資料／期初餘額」功能，也不提供對應一般應用 API**。若真的需要整庫清理，視為平台管理／維運操作，直接在 Cloudflare／D1 管理層處理。
 
@@ -51,6 +54,8 @@
 ## 長期整合方向
 
 - [ ] 未來可評估將 CYAccountingWeb 納入 **Chihyuan 企業管理系統**，作為其中的記帳／財務模組之一。
-- [ ] 在真正整合前，CYAccountingWeb 仍維持獨立部署、獨立帳務資料庫與清楚 API 邊界，避免為尚未定案的企業入口過早耦合。
+- [ ] 在真正整合前，CYAccountingWeb 仍維持獨立部署、獨立帳務資料庫、獨立 backup dataset／GCS service identity 與清楚 API 邊界，避免為尚未定案的企業入口過早耦合。
 - [ ] 若未來 Chihyuan 企業管理系統整合多個 CY 工具，再統一規劃入口、導覽、角色／App 權限與共用帳號體驗。
+- [ ] Backup 整合優先採「各 App → 共用 CY Backup Service／Worker → GCS」；不以直接共用同一把 GCS credential 作為整合方式。
+- [ ] 即使改由共用 Backup Service 管理，各 App 的備份資料仍維持邏輯隔離與獨立還原能力。
 - [ ] 目前共用帳號權威仍暫放 CYInvoice Cloud；等更多程式實際共用後，再評估抽出獨立的 CY Identity／SSO 服務。
