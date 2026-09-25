@@ -1,0 +1,16 @@
+Version: V1.3.0
+Build: 0
+Date: 2026/09/26
+
+Formal release summary:
+- Completed CYAccounting Phase 1 visual alignment under the canonical CY Desktop Visual Guide at the accepted 100% / 96-DPI baseline.
+- Uses the Blue Theme for the application shell while keeping the ACC green icon identity separate from UI accent colors.
+- Input page keeps larger, legible primary entry controls for fast data entry; ledger page uses a separate high-density review layout with 23px data rows and a 24px table header.
+- Basic Information, Income, Expense, Input Confirmation, Settings and Import sections use a consistent restrained framed-section treatment with improved spacing and typography.
+- Regular ComboBoxes share the same modern chevron family; dense ledger editors retain narrow geometry without changing native keyboard or popup behavior.
+- Income / Expense category management intentionally returns to the proven V1.1.0 native QTabWidget implementation. Secondary dialogs inherit the normal ACC application icon instead of applying custom title-bar icon suppression.
+- Main-window footer and version presentation were consolidated without changing accounting workflow or data semantics.
+- Existing Enter / Tab / Esc behavior, SQLite schema, historical transaction text snapshots, backup / restore, Google Drive integration, Excel import, locking behavior, amount limits and two-DELETE local-ledger reset behavior remain unchanged.
+- ACC Icon Family remains the approved V1.1.0 asset family.
+- Windows x64 portable packaging remains the formal distribution format; no separate Python installation is required.
+- 125% / 150% DPI visual acceptance remains deferred and is not claimed by this release.
