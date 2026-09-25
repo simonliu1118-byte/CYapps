@@ -101,18 +101,18 @@ QGroupBox#expenseSection {{
 }}
 QGroupBox#inputSection::title {{
     left: 10px;
-    padding: 0 5px;
-    background: {NEUTRAL_WHITE};
+    padding: 0 3px;
+    background: transparent;
 }}
 QGroupBox#incomeSection::title {{
     left: 10px;
-    padding: 0 5px;
-    background: #E7F3E9;
+    padding: 0 3px;
+    background: transparent;
 }}
 QGroupBox#expenseSection::title {{
     left: 10px;
-    padding: 0 5px;
-    background: #F8E9E7;
+    padding: 0 3px;
+    background: transparent;
 }}
 QWidget#inputPage QLineEdit, QWidget#inputPage QComboBox {{
     min-height: 30px;
@@ -150,8 +150,8 @@ QGroupBox#statsCard::title {{
 }}
 QGroupBox#confirmationCard::title {{
     left: 10px;
-    padding: 0 5px;
-    background: {NEUTRAL_WINDOW};
+    padding: 0 3px;
+    background: transparent;
 }}
 
 QLineEdit, QComboBox, QSpinBox, QDateEdit {{
@@ -234,11 +234,10 @@ QPushButton#quickSummaryButton {{
     border-radius: 3px;
 }}
 QPushButton#quickSummaryButton:hover {{ background: {NEUTRAL_WINDOW}; border-color: {ACCENT_FOCUS}; }}
-QFrame#summarySeparator {{
+QWidget#summaryBand {{
     border: 0;
     border-top: 1px solid {NEUTRAL_DIVIDER};
-    min-height: 1px;
-    max-height: 1px;
+    background: transparent;
 }}
 
 QToolButton#dateStepUp, QToolButton#dateStepDown {{

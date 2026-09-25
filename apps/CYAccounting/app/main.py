@@ -375,7 +375,6 @@ class InputTab(QWidget):
         self.income_amount.setPlaceholderText("最多7位")
         self.income_amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.income_save = no_tab_button("存入收入")
-        self.income_save.setObjectName("primaryButton")
         self.income_save.setFixedWidth(92)
         self.income_save.clicked.connect(lambda: self.save_entry("income"))
         il.addWidget(QLabel("收入科目："))
@@ -388,10 +387,10 @@ class InputTab(QWidget):
         il.addWidget(self.income_save)
         income_v.addLayout(il)
 
-        income_sep = QFrame()
-        income_sep.setObjectName("summarySeparator")
-        income_v.addWidget(income_sep)
-        income_summary_quick = QHBoxLayout()
+        income_summary_band = QWidget()
+        income_summary_band.setObjectName("summaryBand")
+        income_summary_quick = QHBoxLayout(income_summary_band)
+        income_summary_quick.setContentsMargins(0, 6, 0, 0)
         income_summary_quick.setSpacing(5)
         income_summary_quick.addWidget(QLabel("常用摘要："))
         self.income_quick_summary_host = QWidget()
@@ -404,7 +403,7 @@ class InputTab(QWidget):
         self.income_quick_summary_layout.setSpacing(5)
         income_summary_quick.addWidget(self.income_quick_summary_host)
         income_summary_quick.addStretch(1)
-        income_v.addLayout(income_summary_quick)
+        income_v.addWidget(income_summary_band)
         outer.addWidget(income)
 
         expense = QGroupBox("支出")
@@ -438,7 +437,6 @@ class InputTab(QWidget):
         self.expense_amount.setPlaceholderText("最多7位")
         self.expense_amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.expense_save = no_tab_button("存入支出")
-        self.expense_save.setObjectName("primaryButton")
         self.expense_save.setFixedWidth(92)
         self.expense_save.clicked.connect(lambda: self.save_entry("expense"))
         el.addWidget(QLabel("支出科目："))
@@ -451,10 +449,10 @@ class InputTab(QWidget):
         el.addWidget(self.expense_save)
         expense_v.addLayout(el)
 
-        expense_sep = QFrame()
-        expense_sep.setObjectName("summarySeparator")
-        expense_v.addWidget(expense_sep)
-        expense_summary_quick = QHBoxLayout()
+        expense_summary_band = QWidget()
+        expense_summary_band.setObjectName("summaryBand")
+        expense_summary_quick = QHBoxLayout(expense_summary_band)
+        expense_summary_quick.setContentsMargins(0, 6, 0, 0)
         expense_summary_quick.setSpacing(5)
         expense_summary_quick.addWidget(QLabel("常用摘要："))
         self.expense_quick_summary_host = QWidget()
@@ -464,7 +462,7 @@ class InputTab(QWidget):
         self.expense_quick_summary_layout.setSpacing(5)
         expense_summary_quick.addWidget(self.expense_quick_summary_host)
         expense_summary_quick.addStretch(1)
-        expense_v.addLayout(expense_summary_quick)
+        expense_v.addWidget(expense_summary_band)
         outer.addWidget(expense)
 
         confirm = QGroupBox("輸入確認")
@@ -1279,8 +1277,8 @@ class MainWindow(QMainWindow):
         self.config = config
         self.startup_backup_error = startup_backup_error
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(980, 560)
-        self.resize(1120, 620)
+        self.setMinimumSize(1100, 760)
+        self.resize(1120, 760)
         icon_path = app_root() / "app" / "resources" / "app.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
