@@ -13,7 +13,8 @@ import re
 import sys
 import tarfile
 import zipfile
-from collections.abc import BinaryIO, Iterable
+from collections.abc import Iterable
+from typing import BinaryIO
 
 CHUNK_BYTES = 4 * 1024 * 1024
 OVERLAP_BYTES = 4096
