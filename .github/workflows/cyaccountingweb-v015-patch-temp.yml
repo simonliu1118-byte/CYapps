@@ -1,0 +1,169 @@
+name: CYAccountingWeb V0.15 Patch (Temporary)
+
+on:
+  push:
+    branches:
+      - cyaccountingweb/v0.15-excel-import
+    paths:
+      - '.github/workflows/cyaccountingweb-v015-patch-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccountingweb/v0.15-excel-import
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Wire V0.15 and install parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          package = Path('apps/CYAccountingWeb/package.json')
+          data = json.loads(package.read_text(encoding='utf-8'))
+          data['version'] = '0.15.0'
+          data.setdefault('dependencies', {})['read-excel-file'] = '9.3.10'
+          package.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          app = Path('apps/CYAccountingWeb/src/app.js')
+          text = app.read_text(encoding='utf-8')
+          anchor = "import { handleV13Api } from './v13-export.js';\n"
+          if "handleV15Api" not in text:
+              if anchor not in text:
+                  raise SystemExit('V0.13 import anchor not found')
+              text = text.replace(anchor, anchor + "import { handleV15Api } from './v15-import.js';\n", 1)
+          route_anchor = "      const v13Response = await handleV13Api(request, env);\n"
+          route_insert = "      const v15Response = await handleV15Api(request, env);\n      if (v15Response) return v15Response;\n\n"
+          if 'const v15Response' not in text:
+              if route_anchor not in text:
+                  raise SystemExit('V0.13 route anchor not found')
+              text = text.replace(route_anchor, route_insert + route_anchor, 1)
+          app.write_text(text, encoding='utf-8')
+
+          js = Path('apps/CYAccountingWeb/public/v015.js')
+          text = js.read_text(encoding='utf-8')
+          old = "  document.querySelector('#excelImportPreviewButton')?.addEventListener('click', buildExcelImportPreviewV15);\n"
+          new = "  document.querySelector('#excelImportMappingGrid')?.addEventListener('change', resetImportPreviewV15);\n" + old
+          if old not in text:
+              raise SystemExit('mapping listener anchor not found')
+          text = text.replace(old, new, 1)
+          text = text.replace("    if (target && (normalized.includes(target) || target.includes(normalized))) return 2;", "    if (target && normalized.includes(target)) return 2;", 1)
+          old_amount = "  const cleaned = text.replace(/[,\u0024＄NTnt元\\s]/g, '');\n  const value = Number(cleaned);"
+          new_amount = "  const cleaned = text.replace(/[,\u0024＄元\\s]/g, '').replace(/^nt/i, '');\n  const value = Number(cleaned);"
+          if old_amount not in text:
+              raise SystemExit('amount normalizer anchor not found')
+          text = text.replace(old_amount, new_amount, 1)
+          old_build = "  const mapping = readCurrentMappingV15();\n  const mappingError = validateImportMappingV15(mapping);"
+          new_build = "  const dataRowCount = Math.max(0, cyV15ImportState.rows.length - cyV15ImportState.headerRow);\n  if (dataRowCount > 5000) return setImportMessageV15('單次最多匯入 5,000 筆；請先分割工作表。', true);\n\n  const mapping = readCurrentMappingV15();\n  const mappingError = validateImportMappingV15(mapping);"
+          if old_build not in text:
+              raise SystemExit('preview row limit anchor not found')
+          text = text.replace(old_build, new_build, 1)
+          js.write_text(text, encoding='utf-8')
+
+          index = Path('apps/CYAccountingWeb/public/index.html')
+          text = index.read_text(encoding='utf-8')
+          if '/v015.css' not in text:
+              anchor = '  <link rel="stylesheet" href="/v014.css">\n'
+              if anchor not in text:
+                  raise SystemExit('V0.14 CSS anchor not found')
+              text = text.replace(anchor, anchor + '  <link rel="stylesheet" href="/v015.css">\n', 1)
+          text = text.replace('V0.14.0</span>', 'V0.15.0</span>', 1)
+          if '/v015.js' not in text:
+              anchor = '  <script src="/v014.js" defer></script>\n'
+              if anchor not in text:
+                  raise SystemExit('V0.14 JS anchor not found')
+              text = text.replace(anchor, anchor + '  <script src="/v015.js" defer></script>\n', 1)
+          index.write_text(text, encoding='utf-8')
+
+          Path('apps/CYAccountingWeb/VERSION').write_text('0.15.0\n', encoding='utf-8')
+
+          todo = Path('apps/CYAccountingWeb/TODO.md')
+          text = todo.read_text(encoding='utf-8')
+          old = '- [ ] Excel 匯入：欄位對應、預覽、7 位數驗證、鎖帳檢查與重複略過。'
+          new = '- [x] Excel 匯入：`.xlsx` 工作表選擇、標題列／欄位對應、預覽、7 位數驗證、鎖帳檢查、重複略過與確認後寫入（V0.15.0）。'
+          if old not in text:
+              raise SystemExit('Excel import TODO anchor not found')
+          todo.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+          cd apps/CYAccountingWeb
+          npm install --no-audit --no-fund
+          node --check src/app.js
+          node --check src/v15-import.js
+          node --check public/v015.js
+          npx wrangler deploy --dry-run
+
+      - name: Test XLSX parser and import analysis
+        working-directory: apps/CYAccountingWeb
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import readExcelFile from 'read-excel-file/universal';
+          import { buildMonthlyWorkbook } from './src/v13-export.js';
+          import { analyzeImportRows } from './src/v15-import.js';
+
+          const workbook = buildMonthlyWorkbook({
+            month: '2026-09', locked: false, generatedAt: new Date('2026-09-25T04:00:00Z'),
+            accountNames: ['現金'], openingMap: new Map([['現金', 1000]]),
+            transactions: [{ id: 1, tx_date: '2026-09-24', account_name: '現金', kind: 'expense', category_name: '一般支出', summary: '文具', amount: 20, created_at: '2026-09-24T01:00:00Z' }]
+          });
+          const arrayBuffer = workbook.buffer.slice(workbook.byteOffset, workbook.byteOffset + workbook.byteLength);
+          const sheets = await readExcelFile(arrayBuffer);
+          if (sheets.length !== 2 || sheets[0].sheet !== '月帳簿') throw new Error('XLSX parser did not read exported workbook');
+          const header = sheets[0].data.find(row => Array.isArray(row) && row[0] === '日期');
+          if (!header || header[5] !== '金額') throw new Error('XLSX parser header mismatch');
+
+          class MockStatement {
+            constructor(sql) { this.sql = sql; this.args = []; }
+            bind(...args) { this.args = args; return this; }
+            async all() {
+              if (this.sql.includes('FROM accounts')) return { results: [{ name: '現金' }] };
+              if (this.sql.includes('FROM categories')) return { results: [{ kind: 'expense', name: '一般支出' }, { kind: 'income', name: '一般收入' }] };
+              if (this.sql.includes('FROM transactions')) return { results: [{ tx_date: '2026-09-24', account_name: '現金', kind: 'expense', category_name: '一般支出', summary: '文具', amount: 20 }] };
+              return { results: [] };
+            }
+            async first() {
+              if (this.sql.includes("key = 'locked_through'")) return { value: '2026-08' };
+              return null;
+            }
+          }
+          const db = { prepare(sql) { return new MockStatement(sql); } };
+          const preview = await analyzeImportRows([
+            { sourceRow: 2, txDate: '2026-09-24', accountName: '現金', kind: 'expense', categoryName: '一般支出', summary: '文具', amount: 20 },
+            { sourceRow: 3, txDate: '2026-09-25', accountName: '現金', kind: 'income', categoryName: '一般收入', summary: '現金收入', amount: 100 },
+            { sourceRow: 4, txDate: '2026-08-20', accountName: '現金', kind: 'expense', categoryName: '一般支出', summary: '鎖帳', amount: 30 },
+            { sourceRow: 5, txDate: '2026-09-25', accountName: '不存在', kind: 'expense', categoryName: '一般支出', summary: '錯誤', amount: 40 }
+          ], db);
+          if (preview.summary.duplicates !== 1 || preview.summary.ready !== 1 || preview.summary.locked !== 1 || preview.summary.errors !== 1) {
+            throw new Error(`import analysis mismatch: ${JSON.stringify(preview.summary)}`);
+          }
+          console.log('V0.15 parser and import analysis OK');
+          NODE
+
+      - name: Commit V0.15 application files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/CYAccountingWeb/package.json \
+                  apps/CYAccountingWeb/package-lock.json \
+                  apps/CYAccountingWeb/src/app.js \
+                  apps/CYAccountingWeb/public/v015.js \
+                  apps/CYAccountingWeb/public/index.html \
+                  apps/CYAccountingWeb/VERSION \
+                  apps/CYAccountingWeb/TODO.md
+          git commit -m 'feat(CYAccountingWeb): wire V0.15 Excel import'
+          git push origin HEAD:cyaccountingweb/v0.15-excel-import
