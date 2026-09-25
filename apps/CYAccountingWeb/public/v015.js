@@ -512,7 +512,9 @@ async function commitExcelImportV15() {
       method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ rows: cyV15ImportState.normalizedRows, confirm: true })
     });
     setImportMessageV15(`${data.message || '匯入完成'}${data.skippedDuplicates ? `　略過重複 ${data.skippedDuplicates} 筆。` : ''}`);
-    document.querySelector('#excelImportCommitButton').disabled = true;
+    if (cyV15ImportState.preview) cyV15ImportState.preview.canCommit = false;
+    const commitButton = document.querySelector('#excelImportCommitButton');
+    if (commitButton) { commitButton.disabled = true; commitButton.textContent = '匯入完成'; }
     await loadTransactions();
     if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
   } catch (error) {
@@ -558,6 +560,10 @@ function setImportBusyV15(busy) {
     if (element.hasAttribute('data-v15-close')) return;
     element.disabled = busy;
   });
+  if (!busy) {
+    const commit = document.querySelector('#excelImportCommitButton');
+    if (commit) commit.disabled = !cyV15ImportState.preview?.canCommit;
+  }
 }
 
 function setImportMessageV15(message, error = false) {

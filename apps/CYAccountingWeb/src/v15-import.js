@@ -127,7 +127,12 @@ async function commitImport(request, db) {
     `).bind(...values));
   }
 
-  await db.batch(statements);
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    console.error('cyaccounting_excel_import_write_failed', error instanceof Error ? error.message : String(error));
+    return json({ ok: false, error: 'Excel 匯入寫入失敗，未完成匯入。請重新整理後再試。' }, 500);
+  }
   return json({
     ok: true,
     inserted: ready.length,
