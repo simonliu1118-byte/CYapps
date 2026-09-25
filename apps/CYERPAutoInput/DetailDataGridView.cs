@@ -24,7 +24,7 @@ internal sealed class DetailDataGridView : DataGridView
             var firstEditable = Columns.Cast<DataGridViewColumn>().FirstOrDefault(c => !c.ReadOnly);
             if (firstEditable is null) return;
             CurrentCell = this[firstEditable.Index, 0];
-            BeginEdit(true);
+            BeginEdit(false);
             return;
         }
 
@@ -32,8 +32,10 @@ internal sealed class DetailDataGridView : DataGridView
         var row = CurrentCell.RowIndex;
         var col = CurrentCell.ColumnIndex;
 
-        // Build 10 adds a read-only sequence column. Enter/Tab must skip any
-        // read-only column instead of stopping on it.
+        // The read-only sequence column must be skipped. EditOnEnter + BeginEdit(false)
+        // keeps the next cell's editing control active before the first character arrives;
+        // this avoids the first keystroke being consumed once by DataGridView and once by
+        // its TextBox editing control.
         for (var step = 0; step < ColumnCount + 1; step++)
         {
             col += delta;
@@ -41,14 +43,11 @@ internal sealed class DetailDataGridView : DataGridView
             if (col < 0) { col = ColumnCount - 1; row--; }
             if (row < 0) row = 0;
 
-            // DataGridView keeps a special new-row placeholder when
-            // AllowUserToAddRows is true. Editing an editable cell in that row
-            // materializes it automatically.
             row = Math.Min(row, Math.Max(0, RowCount - 1));
             if (Columns[col].ReadOnly) continue;
 
             CurrentCell = this[col, row];
-            BeginEdit(true);
+            BeginEdit(false);
             return;
         }
     }
