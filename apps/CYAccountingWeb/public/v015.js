@@ -115,6 +115,7 @@ function bindExcelImportDialogV15() {
     document.querySelector('#excelImportHeaderRow').value = String(best.row + 1);
     renderExcelImportMappingV15(true);
   });
+  document.querySelector('#excelImportMappingGrid')?.addEventListener('change', resetImportPreviewV15);
   document.querySelector('#excelImportPreviewButton')?.addEventListener('click', buildExcelImportPreviewV15);
   document.querySelector('#excelImportCommitButton')?.addEventListener('click', commitExcelImportV15);
 }
@@ -285,7 +286,7 @@ function headerAliasScoreV15(field, header) {
   }
   for (const alias of aliases) {
     const target = normalizeHeaderV15(alias);
-    if (target && (normalized.includes(target) || target.includes(normalized))) return 2;
+    if (target && normalized.includes(target)) return 2;
   }
   return 0;
 }
@@ -296,6 +297,9 @@ function normalizeHeaderV15(value) {
 
 async function buildExcelImportPreviewV15() {
   resetImportPreviewV15();
+  const dataRowCount = Math.max(0, cyV15ImportState.rows.length - cyV15ImportState.headerRow);
+  if (dataRowCount > 5000) return setImportMessageV15('單次最多匯入 5,000 筆；請先分割工作表。', true);
+
   const mapping = readCurrentMappingV15();
   const mappingError = validateImportMappingV15(mapping);
   if (mappingError) return setImportMessageV15(mappingError, true);
@@ -443,7 +447,7 @@ function normalizeImportAmountV15(cell) {
   if (typeof cell === 'number') return Number.isFinite(cell) ? cell : NaN;
   const text = String(cell ?? '').trim();
   if (!text) return NaN;
-  const cleaned = text.replace(/[,$＄NTnt元\s]/g, '');
+  const cleaned = text.replace(/[,$＄元\s]/g, '').replace(/^nt/i, '');
   const value = Number(cleaned);
   return Number.isFinite(value) ? value : NaN;
 }
