@@ -7,8 +7,9 @@ from pathlib import Path
 from datetime import date
 from unittest.mock import patch
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QGroupBox, QPushButton
 from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import Qt
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
@@ -432,3 +433,51 @@ if __name__ == '__main__':
     test_backup_schedule_and_recovery_paths()
     test_maximized_window_state_is_restored()
     print('ALL TESTS PASSED')
+
+
+def test_phase1_section_group_titles_are_effectively_bold():
+    root = Path(tempfile.mkdtemp())
+    db = Database(root / 'visual-groups.db')
+    app = QApplication.instance() or QApplication([])
+    old_style = app.styleSheet()
+    try:
+        app.setStyleSheet(main_module.APP_STYLE)
+
+        input_tab = main_module.InputTab(db, {}, lambda _month: None)
+        input_groups = {g.title(): g for g in input_tab.findChildren(QGroupBox)}
+        for title in ('基本資訊', '收入', '支出', '輸入確認'):
+            group = input_groups[title]
+            group.ensurePolished()
+            assert group.font().bold(), title
+            labels = group.findChildren(QLabel)
+            if labels:
+                labels[0].ensurePolished()
+                assert not labels[0].font().bold(), f'{title} child text must remain regular'
+
+        settings = SettingsDialog(db, {}, lambda _p: (True, ''), lambda _p: (True, ''),
+                                  db.reset_local_ledger, lambda: None)
+        for group in settings.findChildren(QGroupBox):
+            group.ensurePolished()
+            assert group.font().bold(), group.title()
+
+        importer = ImportTransactionsDialog(db, {})
+        import_groups = {g.title(): g for g in importer.findChildren(QGroupBox)}
+        for title in ('匯入來源', '欄位對應', '匯入預覽（前 20 筆）'):
+            group = import_groups[title]
+            group.ensurePolished()
+            assert group.font().bold(), title
+
+        chrome = main_module.ChineseStandardButtonFilter(app)
+        account = AccountManagerDialog(db)
+        chrome._prepare_secondary_dialog_chrome(account)
+        assert not bool(account.windowFlags() & Qt.WindowType.WindowSystemMenuHint)
+        assert bool(account.windowFlags() & Qt.WindowType.WindowTitleHint)
+        assert bool(account.windowFlags() & Qt.WindowType.WindowCloseButtonHint)
+
+        account.close()
+        importer.close()
+        settings.close()
+        input_tab.close()
+    finally:
+        app.setStyleSheet(old_style)
+        db.close()

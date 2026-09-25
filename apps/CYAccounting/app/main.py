@@ -247,10 +247,31 @@ class ChineseStandardButtonFilter(QObject):
                 button.setText(text)
 
     @staticmethod
+    def _prepare_secondary_dialog_chrome(dialog: QDialog) -> None:
+        # Use a true dialog title-bar configuration rather than a transparent
+        # icon.  A transparent HICON still reserves the icon slot and leaves
+        # the title visibly indented on Windows.
+        if dialog.property("cySecondaryChromePrepared"):
+            return
+        dialog.setProperty("cySecondaryChromePrepared", True)
+        dialog.setWindowIcon(QIcon())
+        try:
+            flags = dialog.windowFlags()
+            flags |= (
+                Qt.WindowType.CustomizeWindowHint
+                | Qt.WindowType.WindowTitleHint
+                | Qt.WindowType.WindowCloseButtonHint
+            )
+            flags &= ~Qt.WindowType.WindowSystemMenuHint
+            dialog.setWindowFlags(flags)
+        except Exception:
+            pass
+
+    @staticmethod
     def _clear_secondary_dialog_icon(dialog: QDialog) -> None:
-        # CY Desktop visual rule: only the main window displays the product icon.
-        # WM_SETICON(NULL) lets Windows fall back to the application/class icon,
-        # so secondary dialogs receive a cached fully-transparent native HICON.
+        # Windows can still inherit a class icon after Qt creates the HWND.
+        # WS_EX_DLGMODALFRAME + WM_SETICON(NULL) suppresses that fallback and,
+        # unlike the old transparent-icon workaround, does not reserve an icon slot.
         dialog.setWindowIcon(QIcon())
         if sys.platform == "win32":
             try:
@@ -268,22 +289,10 @@ class ChineseStandardButtonFilter(QObject):
                 SWP_NOACTIVATE = 0x0010
                 SWP_FRAMECHANGED = 0x0020
 
-                blank_icon = getattr(ChineseStandardButtonFilter, "_blank_dialog_hicon", None)
-                if not blank_icon:
-                    create_icon = user32.CreateIcon
-                    create_icon.restype = ctypes.c_void_p
-                    # 16x16 monochrome icon: AND=1 and XOR=0 means fully transparent.
-                    and_mask = (ctypes.c_ubyte * 32)(*([0xFF] * 32))
-                    xor_mask = (ctypes.c_ubyte * 32)(*([0x00] * 32))
-                    blank_icon = create_icon(None, 16, 16, 1, 1, and_mask, xor_mask)
-                    if blank_icon:
-                        ChineseStandardButtonFilter._blank_dialog_hicon = blank_icon
-
                 ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
                 user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_DLGMODALFRAME)
-                if blank_icon:
-                    user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, blank_icon)
-                    user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, blank_icon)
+                user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, 0)
+                user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, 0)
                 user32.SetWindowPos(
                     hwnd,
                     0,
@@ -303,6 +312,8 @@ class ChineseStandardButtonFilter(QObject):
             elif isinstance(watched, QMessageBox):
                 QTimer.singleShot(0, lambda box=watched: self._localize_message_box(box))
             elif isinstance(watched, QDialog) and not isinstance(watched, QFileDialog):
+                if event.type() == QEvent.Type.Polish:
+                    self._prepare_secondary_dialog_chrome(watched)
                 QTimer.singleShot(0, lambda dlg=watched: self._clear_secondary_dialog_icon(dlg))
         return False
 

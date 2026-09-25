@@ -81,6 +81,11 @@ QGroupBox#confirmationCard, QGroupBox#inputSection, QGroupBox#incomeSection, QGr
     margin-top: 10px;
     padding: 0;
     background: {NEUTRAL_WHITE};
+    /* QGroupBox title painting on Windows follows the group font itself. */
+    font-weight: 700;
+}}
+QGroupBox#confirmationCard QWidget, QGroupBox#inputSection QWidget, QGroupBox#incomeSection QWidget, QGroupBox#expenseSection QWidget {{
+    font-weight: normal;
 }}
 QGroupBox#confirmationCard::title, QGroupBox#inputSection::title, QGroupBox#incomeSection::title, QGroupBox#expenseSection::title {{
     subcontrol-origin: margin;
@@ -97,6 +102,9 @@ QDialog#settingsDialog QGroupBox {{
     margin-top: 10px;
     padding: 0;
     background: {NEUTRAL_WHITE};
+    font-weight: 700;
+}}
+QDialog#settingsDialog QGroupBox QWidget {{
     font-weight: normal;
 }}
 QDialog#settingsDialog QGroupBox::title {{
@@ -314,19 +322,28 @@ QToolTip {{
 }}
 """
 
-# Import is a genuinely multi-unit workflow, so Carded sections remain appropriate.
+# Import is a genuinely multi-unit workflow, but its section chrome must use
+# the same legend treatment as the main input page and Settings.
 IMPORT_DIALOG_STYLE = f"""
 QDialog#importDialog QGroupBox {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 6px;
-    margin-top: 16px;
-    padding: 14px 10px 10px 10px;
+    margin-top: 10px;
+    padding: 0;
     background: {NEUTRAL_WHITE};
+    font-weight: 700;
+}}
+QDialog#importDialog QGroupBox QWidget {{
+    font-weight: normal;
 }}
 QDialog#importDialog QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
     left: 10px;
-    padding: 0 5px;
-    background: {NEUTRAL_WHITE};
+    padding: 0 2px;
+    color: {TEXT_PRIMARY};
+    font-size: 11.5pt;
+    font-weight: 700;
 }}
 """
 
