@@ -47,53 +47,46 @@ internal sealed class F2BatchCellLocator
         if (right - left < 24)
             throw new InvalidOperationException("F2 批號查詢的「現有存量」欄寬異常；已停止目前單據。");
 
-        var horizontal = GridVisionService.FindHorizontalLines(image, Math.Max(0, header.Value.Bottom - 5));
-        var first = horizontal.FindIndex(y => y >= header.Value.Bottom - 3);
-        if (first < 0 || horizontal.Count - first < 2)
-            throw new InvalidOperationException("F2 批號查詢無法辨識資料列；已停止目前單據。");
+        var stockTokens = tokens
+            .Where(t => t.Rect.Top > header.Value.Bottom + 2)
+            .Where(t =>
+            {
+                var cx = t.Rect.Left + t.Rect.Width / 2;
+                return cx >= left + 1 && cx <= right - 1;
+            })
+            .OrderBy(t => t.Rect.Top + t.Rect.Height / 2)
+            .ThenBy(t => t.Rect.Left)
+            .ToList();
 
-        var rowNumber = 0;
-        for (var i = first; i + 1 < horizontal.Count; i++)
+        var numericRow = 0;
+        foreach (var token in stockTokens)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var top = horizontal[i];
-            var bottom = horizontal[i + 1];
-            var height = bottom - top;
-            if (height < 14 || height > 64) continue;
-            rowNumber++;
+            var raw = token.Text.Replace("\r", " ").Replace("\n", " ").Replace("\"", "'").Trim();
+            var normalized = token.Text.Trim()
+                .Replace(" ", string.Empty)
+                .Replace("　", string.Empty)
+                .Replace(",", string.Empty)
+                .Replace("，", string.Empty);
 
-            var crop = Rectangle.FromLTRB(
-                Math.Clamp(left + 2, 0, image.Width - 1),
-                Math.Clamp(top + 1, 0, image.Height - 1),
-                Math.Clamp(right - 2, 1, image.Width),
-                Math.Clamp(bottom - 1, 1, image.Height));
-            if (crop.Width < 8 || crop.Height < 8) continue;
-
-            using var cell = image.Clone(crop, PixelFormat.Format32bppArgb);
-            using var enhanced = EnhanceCell(cell, 3);
-            var cellTokens = await _ocr.RecognizeAsync(enhanced, cancellationToken);
-            var rawText = string.Concat(cellTokens
-                .OrderBy(t => t.Rect.Top)
-                .ThenBy(t => t.Rect.Left)
-                .Select(t => t.Text));
-
-            if (!TryParseStockText(rawText, out var stock))
+            if (!TryParseStockText(token.Text, out var stock))
             {
-                _log.Info("vision", $"F2 batch stock row={rowNumber} parse=false chars={rawText.Trim().Length}");
+                _log.Info("vision", $"F2_BATCH_STOCK_TOKEN raw=\"{raw}\" normalized=\"{normalized}\" parse=false rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
                 continue;
             }
 
-            _log.Info("vision", $"F2 batch stock row={rowNumber} stock={stock.ToString(CultureInfo.InvariantCulture)}");
+            numericRow++;
+            _log.Info("vision", $"F2_BATCH_STOCK_TOKEN row={numericRow} raw=\"{raw}\" normalized=\"{normalized}\" stock={stock.ToString(CultureInfo.InvariantCulture)} rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
             if (stock <= 0) continue;
 
             var point = new Point(
                 captureRect.Left + (left + right) / 2,
-                captureRect.Top + (top + bottom) / 2);
-            _log.Info("vision", $"F2 batch first positive stock selected row={rowNumber} point={point.X},{point.Y} stock={stock.ToString(CultureInfo.InvariantCulture)}");
-            return new BatchStockSelection(point, rowNumber, stock);
+                captureRect.Top + token.Rect.Top + token.Rect.Height / 2);
+            _log.Info("vision", $"F2 batch positive stock selected by exact OCR row={numericRow} point={point.X},{point.Y} stock={stock.ToString(CultureInfo.InvariantCulture)}");
+            return new BatchStockSelection(point, numericRow, stock);
         }
 
-        throw new InvalidOperationException("F2 批號查詢沒有找到「現有存量 > 0」的批號；已停止目前單據。");
+        throw new InvalidOperationException("F2 批號查詢沒有找到可確認的「現有存量 > 0」批號；已停止，請查看 LOG 的 F2_BATCH_STOCK_TOKEN 原始辨識內容。");
     }
 
     internal static bool TryParseStockText(string raw, out decimal value)

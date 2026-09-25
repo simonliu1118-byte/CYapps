@@ -11,7 +11,7 @@ internal sealed class MainForm : Form
     private readonly Dictionary<string, FlowLayoutPanel> _groupFlows = new(StringComparer.OrdinalIgnoreCase);
     private readonly DetailDataGridView _details = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 21 · Esc：緊急停止 · 不自動儲存 ERP" };
+    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 22 · Esc：緊急停止 · 不自動儲存 ERP" };
     private readonly ModeToggle _modeToggle = new();
     private readonly CyPrimaryButton _start = new();
     private CancellationTokenSource? _automationCts;

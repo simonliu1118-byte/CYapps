@@ -205,9 +205,8 @@ internal sealed class ErpAutomationService
 
     private static bool IsPlausibleSalesOrderNumber(string value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Length is < 4 or > 32) return false;
-        if (value.Any(char.IsWhiteSpace) || value.Contains('*')) return false;
-        return value.Count(char.IsLetterOrDigit) >= 4;
+        if (string.IsNullOrWhiteSpace(value) || value.Length is < 8 or > 20) return false;
+        return value.All(char.IsDigit);
     }
 
     private async Task FillTabGroupAsync(nint root, FormSnapshot snapshot, string group, CancellationToken cancellationToken)
@@ -363,8 +362,10 @@ internal sealed class ErpAutomationService
 
             var visibleRow = rowIndex;
             var row = rows[rowIndex];
+
+            // Proven COPI08 detail order. Batch is intentionally last because ERP
+            // validates lot availability against committed unit / quantity / warehouse.
             geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 0, row.ItemCode, cancellationToken);
-            geometry = await SelectBatchIfRequiredAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(row.Unit))
                 geometry = await SelectUnitAsync(root, grid, geometry, visibleRow, row.Unit, cancellationToken);
@@ -376,6 +377,8 @@ internal sealed class ErpAutomationService
                 geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 6, row.Warehouse, cancellationToken);
             if (!string.IsNullOrWhiteSpace(row.UnitPrice))
                 geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 7, row.UnitPrice, cancellationToken);
+
+            geometry = await SelectBatchIfRequiredAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);
         }
     }
 
@@ -677,7 +680,7 @@ internal sealed class ErpAutomationService
             cancellationToken.ThrowIfCancellationRequested();
             var known = Win32Automation.WindowTreeContainsText(peer, knownWarning);
             if (!known)
-                known = await _textVision.FindTextAsync(peer, [knownWarning], cancellationToken) is not null;
+                known = await _textVision.ContainsAllFragmentsAsync(peer, ["庫存量", "批號量", "不足"], cancellationToken);
             if (!known) continue;
 
             if (!Win32Automation.PrepareForeground(peer, _log))

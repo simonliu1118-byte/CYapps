@@ -114,6 +114,23 @@ internal sealed class OpticalTextLocator
         return null;
     }
 
+    public async Task<bool> ContainsAllFragmentsAsync(nint hwnd, IReadOnlyList<string> fragments, CancellationToken cancellationToken)
+    {
+        if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
+            return false;
+
+        using var image = ScreenCapture.Capture(rect.ToRectangle());
+        var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+        var bag = string.Concat(tokens.Select(t => OcrTextNormalizer.Normalize(t.Text)));
+        var normalizedFragments = fragments.Select(OcrTextNormalizer.Normalize).Where(f => f.Length > 0).ToArray();
+        var found = normalizedFragments.All(fragment => bag.Contains(fragment, StringComparison.Ordinal));
+
+        _log.Info("vision", $"OCR_FRAGMENT_CHECK target={string.Join("/", normalizedFragments)} found={found} tokens={tokens.Count}");
+        if (!found)
+            LogTokens("fragment-check-miss", string.Join("/", fragments), tokens, 48);
+        return found;
+    }
+
     private void LogTokens(string context, string target, IReadOnlyList<OcrToken> tokens, int maxTokens)
     {
         _log.Info("vision", $"OCR_DIAG context={context} target={target} tokens={tokens.Count}");
