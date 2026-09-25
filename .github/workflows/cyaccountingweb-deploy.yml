@@ -73,7 +73,7 @@ jobs:
         run: |
           node tests/v15-import.mjs
           node tests/v16-backup.mjs
-          node tests/v161-deploy-config.mjs
+          node tests/deploy-config.mjs
 
       - name: Render CI-only Cloudflare config
         env:
