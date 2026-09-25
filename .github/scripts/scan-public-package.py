@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from typing import BinaryIO
 
 CHUNK_BYTES = 4 * 1024 * 1024
-OVERLAP_BYTES = 4096
+OVERLAP_BYTES = 64 * 1024
 MAX_NESTED_ARCHIVE_BYTES = 256 * 1024 * 1024
 
 FORBIDDEN_NAMES = [
@@ -30,7 +30,9 @@ FORBIDDEN_NAMES = [
 
 # Byte regexes avoid decoding large EXE/DLL files into several huge strings.
 GENERAL_PATTERNS: list[tuple[str, re.Pattern[bytes]]] = [
-    ("private key", re.compile(br"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.I)),
+    # Require a complete PEM-shaped private key, not merely OpenSSL/Qt format strings
+    # such as "-----BEGIN PRIVATE KEY-----" embedded in standard TLS libraries.
+    ("private key", re.compile(br"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n\t ]{80,}?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.I | re.S)),
     ("Google OAuth client secret", re.compile(br"\bGOCSPX-[A-Za-z0-9_-]{12,}\b")),
     ("Google refresh token", re.compile(br"\b1//[A-Za-z0-9._/-]{20,}\b")),
     ("GitHub token", re.compile(br"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")),
