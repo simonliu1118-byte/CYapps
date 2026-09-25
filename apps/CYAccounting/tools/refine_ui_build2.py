@@ -69,9 +69,9 @@ new_icon = '''    @staticmethod
 main = replace_once(main, old_icon, new_icon, "secondary dialog icon helper")
 main = replace_once(
     main,
-    "        outer.setContentsMargins(12, 6, 12, 8)\n",
-    "        outer.setContentsMargins(12, 8, 12, 8)\n",
-    "input top margin",
+    "    def _build(self):\n        outer = QVBoxLayout(self)\n        outer.setContentsMargins(12, 6, 12, 8)\n",
+    "    def _build(self):\n        outer = QVBoxLayout(self)\n        outer.setContentsMargins(12, 8, 12, 8)\n",
+    "InputTab _build top margin",
 )
 main = replace_once(
     main,
