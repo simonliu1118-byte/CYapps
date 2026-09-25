@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Fail CI when a public package appears to contain deployment secrets or production bindings.
+"""Fail CI when a public package contains likely secrets or production bindings.
 
-Dependency-free scanner for regular files, directories, ZIP files, and tar archives.
-It is a release/artifact safety gate, not a substitute for provider-side secret storage.
+Dependency-free, streaming scanner for files, directories, ZIP files and tar archives.
+It scans final public payloads and intentionally does not require production secrets.
 """
 from __future__ import annotations
 
@@ -13,9 +13,11 @@ import re
 import sys
 import tarfile
 import zipfile
-from collections.abc import Iterable
+from collections.abc import BinaryIO, Iterable
 
-MAX_MEMBER_BYTES = 256 * 1024 * 1024
+CHUNK_BYTES = 4 * 1024 * 1024
+OVERLAP_BYTES = 4096
+MAX_NESTED_ARCHIVE_BYTES = 256 * 1024 * 1024
 
 FORBIDDEN_NAMES = [
     re.compile(r"(^|/)(\.env)(\..+)?$", re.I),
@@ -25,22 +27,22 @@ FORBIDDEN_NAMES = [
     re.compile(r"(^|/)appsettings\.production\.json$", re.I),
 ]
 
-# Match actual-looking values, not environment-variable names or placeholders.
-GENERAL_TEXT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("private key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.I)),
-    ("Google OAuth client secret", re.compile(r"\bGOCSPX-[A-Za-z0-9_-]{12,}\b")),
-    ("Google refresh token", re.compile(r"\b1//[A-Za-z0-9._/-]{20,}\b")),
-    ("GitHub token", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")),
-    ("Cloudflare API token assignment", re.compile(r"(?im)\bCLOUDFLARE_API_TOKEN\b\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9._-]{20,}")),
-    ("Cloudflare account id assignment", re.compile(r"(?im)\bCLOUDFLARE_ACCOUNT_ID\b\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[0-9a-f]{32}\b")),
-    ("OAuth client secret assignment", re.compile(r"(?im)\b(?:GOOGLE_DRIVE_CLIENT_SECRET|GOOGLE_CLIENT_SECRET|client_secret)\b[\"']?\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9._/-]{16,}")),
-    ("token encryption key assignment", re.compile(r"(?im)\b(?:GOOGLE_DRIVE_TOKEN_KEY|GOOGLE_TOKEN_KEY|TOKEN_ENCRYPTION_KEY)\b[\"']?\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9+/=_-]{24,}")),
-    ("refresh token assignment", re.compile(r"(?im)\brefresh_token\b[\"']?\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9._/-]{20,}")),
+# Byte regexes avoid decoding large EXE/DLL files into several huge strings.
+GENERAL_PATTERNS: list[tuple[str, re.Pattern[bytes]]] = [
+    ("private key", re.compile(br"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.I)),
+    ("Google OAuth client secret", re.compile(br"\bGOCSPX-[A-Za-z0-9_-]{12,}\b")),
+    ("Google refresh token", re.compile(br"\b1//[A-Za-z0-9._/-]{20,}\b")),
+    ("GitHub token", re.compile(br"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")),
+    ("Cloudflare API token assignment", re.compile(br"\bCLOUDFLARE_API_TOKEN\b\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9._-]{20,}", re.I | re.M)),
+    ("Cloudflare account id assignment", re.compile(br"\bCLOUDFLARE_ACCOUNT_ID\b\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[0-9a-f]{32}\b", re.I | re.M)),
+    ("OAuth client secret assignment", re.compile(br"\b(?:GOOGLE_DRIVE_CLIENT_SECRET|GOOGLE_CLIENT_SECRET|client_secret)\b[\"']?\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9._/-]{16,}", re.I | re.M)),
+    ("token encryption key assignment", re.compile(br"\b(?:GOOGLE_DRIVE_TOKEN_KEY|GOOGLE_TOKEN_KEY|TOKEN_ENCRYPTION_KEY)\b[\"']?\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9+/=_-]{24,}", re.I | re.M)),
+    ("refresh token assignment", re.compile(br"\brefresh_token\b[\"']?\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9._/-]{20,}", re.I | re.M)),
 ]
 
-WRANGLER_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("Cloudflare D1 concrete database id", re.compile(r"(?is)[\"']database_id[\"']\s*:\s*[\"'](?!__|<)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[\"']")),
-    ("Cloudflare service binding concrete service", re.compile(r"(?is)[\"']service[\"']\s*:\s*[\"'](?!__|<)[A-Za-z0-9][A-Za-z0-9._-]{2,}[\"']")),
+WRANGLER_PATTERNS: list[tuple[str, re.Pattern[bytes]]] = [
+    ("Cloudflare D1 concrete database id", re.compile(br"[\"']database_id[\"']\s*:\s*[\"'](?!__|<)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[\"']", re.I | re.S)),
+    ("Cloudflare service binding concrete service", re.compile(br"[\"']service[\"']\s*:\s*[\"'](?!__|<)[A-Za-z0-9][A-Za-z0-9._-]{2,}[\"']", re.I | re.S)),
 ]
 
 
@@ -56,52 +58,53 @@ def scan_name(name: str, findings: list[str]) -> None:
             return
 
 
-def decoded_variants(data: bytes) -> Iterable[str]:
-    for encoding in ("utf-8", "utf-16-le", "utf-16-be"):
-        try:
-            text = data.decode(encoding, errors="ignore")
-        except Exception:
-            continue
-        if text:
-            yield text
+def patterns_for(label: str) -> list[tuple[str, re.Pattern[bytes]]]:
+    normalized = normalize_name(label).lower()
+    contextual = WRANGLER_PATTERNS if "/wrangler." in f"/{normalized}" or normalized.startswith("wrangler.") else []
+    return [*GENERAL_PATTERNS, *contextual]
 
 
-def scan_bytes(label: str, data: bytes, findings: list[str]) -> None:
-    normalized_label = normalize_name(label).lower()
-    contextual_patterns = WRANGLER_PATTERNS if "/wrangler." in f"/{normalized_label}" or normalized_label.startswith("wrangler.") else []
-    for text in decoded_variants(data):
-        for description, pattern in [*GENERAL_TEXT_PATTERNS, *contextual_patterns]:
-            if pattern.search(text):
+def scan_chunk(label: str, data: bytes, findings: list[str]) -> bool:
+    variants = [data]
+    # Removing NULs catches common UTF-16LE/BE embedded strings without decoding huge binaries.
+    if b"\x00" in data:
+        variants.append(data.replace(b"\x00", b""))
+    for description, pattern in patterns_for(label):
+        for variant in variants:
+            if pattern.search(variant):
                 findings.append(f"{description}: {label}")
-                return
+                return True
+    return False
 
 
-def read_limited(stream, label: str) -> bytes:
-    data = stream.read(MAX_MEMBER_BYTES + 1)
-    if len(data) > MAX_MEMBER_BYTES:
-        raise RuntimeError(f"refusing to scan oversized archive member (>256 MiB): {label}")
-    return data
+def scan_stream(label: str, stream: BinaryIO, findings: list[str]) -> None:
+    overlap = b""
+    while True:
+        chunk = stream.read(CHUNK_BYTES)
+        if not chunk:
+            break
+        data = overlap + chunk
+        if scan_chunk(label, data, findings):
+            return
+        overlap = data[-OVERLAP_BYTES:]
 
 
-def scan_payload(name: str, data: bytes, findings: list[str], parent: str = "") -> None:
-    label = f"{parent}{name}"
+def scan_nested_zip(label: str, data: bytes, findings: list[str]) -> None:
     try:
-        if data.startswith(b"PK\x03\x04"):
-            with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                for info in archive.infolist():
-                    if info.is_dir():
-                        continue
-                    child = normalize_name(info.filename)
-                    scan_name(child, findings)
-                    if info.file_size > MAX_MEMBER_BYTES:
-                        raise RuntimeError(f"refusing to scan oversized nested archive member: {label}!{child}")
-                    with archive.open(info, "r") as member:
-                        child_data = read_limited(member, f"{label}!{child}")
-                    scan_payload(child, child_data, findings, parent=f"{label}!")
-                return
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                child = normalize_name(info.filename)
+                scan_name(child, findings)
+                child_label = f"{label}!{child}"
+                with archive.open(info, "r") as member:
+                    if child.lower().endswith(".zip") and info.file_size <= MAX_NESTED_ARCHIVE_BYTES:
+                        scan_nested_zip(child_label, member.read(), findings)
+                    else:
+                        scan_stream(child_label, member, findings)
     except zipfile.BadZipFile:
-        pass
-    scan_bytes(label, data, findings)
+        scan_chunk(label, data, findings)
 
 
 def scan_zip(path: pathlib.Path, findings: list[str]) -> None:
@@ -111,11 +114,12 @@ def scan_zip(path: pathlib.Path, findings: list[str]) -> None:
                 continue
             name = normalize_name(info.filename)
             scan_name(name, findings)
-            if info.file_size > MAX_MEMBER_BYTES:
-                raise RuntimeError(f"refusing to scan oversized archive member (>256 MiB): {path}!{name}")
+            label = f"{path}!{name}"
             with archive.open(info, "r") as member:
-                data = read_limited(member, f"{path}!{name}")
-            scan_payload(name, data, findings, parent=f"{path}!")
+                if name.lower().endswith(".zip") and info.file_size <= MAX_NESTED_ARCHIVE_BYTES:
+                    scan_nested_zip(label, member.read(), findings)
+                else:
+                    scan_stream(label, member, findings)
 
 
 def scan_tar(path: pathlib.Path, findings: list[str]) -> None:
@@ -125,14 +129,11 @@ def scan_tar(path: pathlib.Path, findings: list[str]) -> None:
                 continue
             name = normalize_name(info.name)
             scan_name(name, findings)
-            if info.size > MAX_MEMBER_BYTES:
-                raise RuntimeError(f"refusing to scan oversized archive member (>256 MiB): {path}!{name}")
             member = archive.extractfile(info)
             if member is None:
                 continue
             with member:
-                data = read_limited(member, f"{path}!{name}")
-            scan_payload(name, data, findings, parent=f"{path}!")
+                scan_stream(f"{path}!{name}", member, findings)
 
 
 def scan_file(path: pathlib.Path, findings: list[str]) -> None:
@@ -145,8 +146,7 @@ def scan_file(path: pathlib.Path, findings: list[str]) -> None:
         scan_tar(path, findings)
         return
     with path.open("rb") as stream:
-        data = read_limited(stream, str(path))
-    scan_bytes(str(path), data, findings)
+        scan_stream(str(path), stream, findings)
 
 
 def iter_files(path: pathlib.Path) -> Iterable[pathlib.Path]:
