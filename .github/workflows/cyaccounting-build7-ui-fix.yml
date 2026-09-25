@@ -28,20 +28,22 @@ jobs:
           @'
           from pathlib import Path
           import re
+          import textwrap
 
           root = Path("apps/CYAccounting")
 
           # 1. Secondary-dialog chrome + main-window footer clearance.
           main_path = root / "app/main.py"
           main = main_path.read_text(encoding="utf-8")
-          chrome_pattern = re.compile(
-              r"    @staticmethod\n"
-              r"    def _apply_secondary_dialog_no_icon\(dialog: QDialog\) -> None:\n"
-              r".*?"
-              r"(?=    @staticmethod\n    def _clear_secondary_dialog_icon)",
-              re.S,
-          )
-          chrome_replacement = '''    @staticmethod
+          start_token = "    @staticmethod\n    def _apply_secondary_dialog_no_icon(dialog: QDialog) -> None:\n"
+          end_token = "    @staticmethod\n    def _clear_secondary_dialog_icon(dialog: QDialog) -> None:\n"
+          start = main.find(start_token)
+          end = main.find(end_token, start + 1)
+          if start < 0 or end < 0:
+              raise SystemExit(f"secondary chrome boundaries missing: start={start} end={end}")
+
+          chrome_body = textwrap.dedent('''
+          @staticmethod
           def _apply_secondary_dialog_no_icon(dialog: QDialog) -> None:
               """Apply Windows fixed-dialog no-icon chrome without removing Close."""
               if sys.platform != "win32":
@@ -102,25 +104,21 @@ jobs:
               except Exception as exc:
                   startup_log(f"secondary dialog native no-icon fallback failed: {exc}")
 
-              @staticmethod
+          @staticmethod
           def _prepare_secondary_dialog_chrome(dialog: QDialog) -> None:
               if dialog.property("cySecondaryChromePrepared"):
                   return
               dialog.setProperty("cySecondaryChromePrepared", True)
               if sys.platform == "win32":
-                  # CYInvoice uses the Windows FixedDialog family. Apply Qt's
-                  # native fixed-dialog hint before first show and keep Close.
+                  # CYInvoice uses the Windows FixedDialog border family. Qt has no
+                  # ShowIcon property; use its fixed-dialog hint before first show and
+                  # explicitly preserve the native Close button.
                   dialog.setWindowFlag(Qt.WindowType.MSWindowsFixedSizeDialogHint, True)
                   dialog.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, True)
               ChineseStandardButtonFilter._apply_secondary_dialog_no_icon(dialog)
-
-          '''
-          # Correct accidental extra indentation in the literal above while keeping
-          # the replacement readable inside YAML.
-          chrome_replacement = chrome_replacement.replace("\n              @staticmethod\n          def _prepare", "\n    @staticmethod\n    def _prepare")
-          main, count = chrome_pattern.subn(chrome_replacement, main, count=1)
-          if count != 1:
-              raise SystemExit(f"secondary chrome replacement count={count}")
+          ''').strip("\n")
+          chrome_block = textwrap.indent(chrome_body, "    ") + "\n\n"
+          main = main[:start] + chrome_block + main[end:]
 
           for old, new in [
               ("self.setMinimumSize(1120, 710)", "self.setMinimumSize(1120, 735)"),
@@ -131,23 +129,22 @@ jobs:
               main = main.replace(old, new, 1)
           main_path.write_text(main, encoding="utf-8")
 
-          # 2. Category manager: restore V1.1.0 left-aligned tab structure.
+          # 2. Category manager: restore actual V1.1.0 left-aligned tab structure.
           dialogs_path = root / "app/dialogs.py"
           dialogs = dialogs_path.read_text(encoding="utf-8")
-          old = '        tabs.tabBar().setExpanding(True)\n'
+          old = "        tabs.tabBar().setExpanding(True)\n"
           if old not in dialogs:
               raise SystemExit("category tabs are not expanding=True as expected")
-          dialogs = dialogs.replace(old, '        tabs.tabBar().setExpanding(False)\n', 1)
+          dialogs = dialogs.replace(old, "        tabs.tabBar().setExpanding(False)\n", 1)
           dialogs_path.write_text(dialogs, encoding="utf-8")
 
           theme_path = root / "app/theme.py"
           theme = theme_path.read_text(encoding="utf-8")
-          tab_pattern = re.compile(
-              r"/\* Category manager deliberately uses large conventional tabs.*?"
-              r"(?=QLineEdit, QComboBox, QSpinBox, QDateEdit \{\{)",
-              re.S,
-          )
-          tab_replacement = '''/* Category manager: V1.1.0 conventional geometry, enlarged to current guide.
+          tab_start = theme.find("/* Category manager deliberately uses large conventional tabs")
+          tab_end = theme.find("QLineEdit, QComboBox, QSpinBox, QDateEdit {{", tab_start)
+          if tab_start < 0 or tab_end < 0:
+              raise SystemExit(f"category style boundaries missing: start={tab_start} end={tab_end}")
+          tab_block = '''/* Category manager: V1.1.0 conventional geometry, enlarged to current guide.
              Keep the pane frame visibly separate below the tabs; selected tabs never
              erase or merge into the original frame line. */
           QTabWidget#categoryManagerTabs::pane {{
@@ -183,42 +180,40 @@ jobs:
               background: #EEF2F6;
           }}
           '''
-          theme, count = tab_pattern.subn(tab_replacement, theme, count=1)
-          if count != 1:
-              raise SystemExit(f"category tab style replacement count={count}")
+          theme = theme[:tab_start] + tab_block + theme[tab_end:]
           theme_path.write_text(theme, encoding="utf-8")
 
           # 3. Regression tests.
           tests_path = root / "tests/test_app.py"
           tests = tests_path.read_text(encoding="utf-8")
-          anchors = {
-              "assert category_tabs.tabBar().expanding() is True": "assert category_tabs.tabBar().expanding() is False",
-              "    assert 'border-bottom-color: #FFFFFF' in main_module.APP_STYLE\n": "    assert 'top: 6px;' in main_module.APP_STYLE\n    assert 'border-bottom: 0;' in main_module.APP_STYLE\n",
-              "assert win.minimumHeight() == 710": "assert win.minimumHeight() == 735",
-          }
-          for old, new in anchors.items():
+          replacements = [
+              ("assert category_tabs.tabBar().expanding() is True", "assert category_tabs.tabBar().expanding() is False"),
+              ("    assert 'border-bottom-color: #FFFFFF' in main_module.APP_STYLE\n", "    assert 'top: 6px;' in main_module.APP_STYLE\n    assert 'border-bottom: 0;' in main_module.APP_STYLE\n"),
+              ("assert win.minimumHeight() == 710", "assert win.minimumHeight() == 735"),
+          ]
+          for old, new in replacements:
               if old not in tests:
                   raise SystemExit(f"missing test anchor: {old!r}")
               tests = tests.replace(old, new, 1)
 
-          chrome_test_pattern = re.compile(
-              r"    # Secondary-dialog preparation must never mutate Qt's native window flags\.\n"
-              r".*?"
-              r"    assert dlg\.windowFlags\(\) == chrome_flags_before\n",
-              re.S,
-          )
-          chrome_test = '''    # Secondary dialogs use Qt's Windows fixed-dialog family while keeping X.
-              chrome_flags_before = dlg.windowFlags()
-              main_module.ChineseStandardButtonFilter._prepare_secondary_dialog_chrome(dlg)
-              chrome_flags_after = dlg.windowFlags()
-              if sys.platform == 'win32':
-                  assert chrome_flags_after & Qt.WindowType.MSWindowsFixedSizeDialogHint
-                  assert chrome_flags_after & Qt.WindowType.WindowCloseButtonHint
-              assert (chrome_flags_after & Qt.WindowType.WindowType_Mask) == (chrome_flags_before & Qt.WindowType.WindowType_Mask)
-          '''
-          tests, count = chrome_test_pattern.subn(chrome_test, tests, count=1)
-          if count != 1:
-              raise SystemExit(f"secondary chrome test replacement count={count}")
+          test_start_token = "    # Secondary-dialog preparation must never mutate Qt's native window flags.\n"
+          test_end_token = "    combo = CategoryComboBox()\n"
+          test_start = tests.find(test_start_token)
+          test_end = tests.find(test_end_token, test_start)
+          if test_start < 0 or test_end < 0:
+              raise SystemExit(f"chrome test boundaries missing: start={test_start} end={test_end}")
+          chrome_test_body = textwrap.dedent('''
+          # Secondary dialogs use Qt's Windows fixed-dialog family while keeping X.
+          chrome_flags_before = dlg.windowFlags()
+          main_module.ChineseStandardButtonFilter._prepare_secondary_dialog_chrome(dlg)
+          chrome_flags_after = dlg.windowFlags()
+          if sys.platform == 'win32':
+              assert chrome_flags_after & Qt.WindowType.MSWindowsFixedSizeDialogHint
+              assert chrome_flags_after & Qt.WindowType.WindowCloseButtonHint
+          assert (chrome_flags_after & Qt.WindowType.WindowType_Mask) == (chrome_flags_before & Qt.WindowType.WindowType_Mask)
+          ''').strip("\n")
+          chrome_test_block = textwrap.indent(chrome_test_body, "    ") + "\n"
+          tests = tests[:test_start] + chrome_test_block + tests[test_end:]
           tests_path.write_text(tests, encoding="utf-8")
 
           # 4. Build identity / notes.
@@ -246,6 +241,7 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q apps/CYAccounting/app apps/CYAccounting/tests
+          if ($LASTEXITCODE -ne 0) { throw "Python compile failed" }
           if ((Get-Content apps/CYAccounting/BUILD -Raw).Trim() -ne "7") { throw "BUILD is not 7" }
           $main = Get-Content apps/CYAccounting/app/main.py -Raw
           if ($main -notmatch 'MSWindowsFixedSizeDialogHint') { throw "Fixed dialog hint missing" }
