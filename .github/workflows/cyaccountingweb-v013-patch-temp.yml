@@ -1,0 +1,129 @@
+name: CYAccountingWeb V0.13 Patch (Temporary)
+
+on:
+  push:
+    branches:
+      - cyaccountingweb/v0.13-excel-export
+    paths:
+      - '.github/workflows/cyaccountingweb-v013-patch-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cyaccountingweb/v0.13-excel-export
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Wire and validate V0.13 export
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app = Path('apps/CYAccountingWeb/src/app.js')
+          text = app.read_text(encoding='utf-8')
+          old_import = "import { handleV12Api } from './v12-tools.js';\n"
+          new_import = old_import + "import { handleV13Api } from './v13-export.js';\n"
+          if "handleV13Api" not in text:
+              if old_import not in text:
+                  raise SystemExit('V0.12 import anchor not found')
+              text = text.replace(old_import, new_import, 1)
+          anchor = "      const v12Response = await handleV12Api(request, env);\n"
+          insert = "      const v13Response = await handleV13Api(request, env);\n      if (v13Response) return v13Response;\n\n"
+          if 'const v13Response' not in text:
+              if anchor not in text:
+                  raise SystemExit('V0.12 route anchor not found')
+              text = text.replace(anchor, insert + anchor, 1)
+          app.write_text(text, encoding='utf-8')
+
+          index = Path('apps/CYAccountingWeb/public/index.html')
+          text = index.read_text(encoding='utf-8')
+          css_anchor = '  <link rel="stylesheet" href="/v010.css">\n'
+          css_insert = css_anchor + '  <link rel="stylesheet" href="/v011.css">\n  <link rel="stylesheet" href="/v012.css">\n  <link rel="stylesheet" href="/v013.css">\n'
+          if '/v013.css' not in text:
+              if css_anchor not in text:
+                  raise SystemExit('CSS anchor not found')
+              text = text.replace(css_anchor, css_insert, 1)
+          text = text.replace('V0.12.0</span>', 'V0.13.0</span>', 1)
+          if '/v013.js' not in text:
+              script_anchor = '  <script src="/v012.js" defer></script>\n'
+              if script_anchor not in text:
+                  raise SystemExit('V0.12 script anchor not found')
+              text = text.replace(script_anchor, script_anchor + '  <script src="/v013.js" defer></script>\n', 1)
+          index.write_text(text, encoding='utf-8')
+
+          Path('apps/CYAccountingWeb/VERSION').write_text('0.13.0\n', encoding='utf-8')
+
+          todo = Path('apps/CYAccountingWeb/TODO.md')
+          text = todo.read_text(encoding='utf-8')
+          text = text.replace('- [ ] 單月 Excel 匯出。', '- [x] 單月 Excel 匯出：直接產生標準 `.xlsx`，包含月統計、逐筆餘額與期初餘額工作表（V0.13.0）。', 1)
+          todo.write_text(text, encoding='utf-8')
+
+          workflow = Path('.github/workflows/cyaccountingweb-deploy.yml')
+          text = workflow.read_text(encoding='utf-8')
+          if 'node --check src/v13-export.js' not in text:
+              text = text.replace('          node --check src/v12-tools.js\n', '          node --check src/v12-tools.js\n          node --check src/v13-export.js\n', 1)
+          if 'node --check public/v013.js' not in text:
+              text = text.replace('          node --check public/v012.js\n', '          node --check public/v012.js\n          node --check public/v013.js\n', 1)
+          workflow.write_text(text, encoding='utf-8')
+          PY
+
+          node --check apps/CYAccountingWeb/src/v13-export.js
+          node --check apps/CYAccountingWeb/public/v013.js
+          node --check apps/CYAccountingWeb/src/app.js
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { buildMonthlyWorkbook } from './apps/CYAccountingWeb/src/v13-export.js';
+          const workbook = buildMonthlyWorkbook({
+            month: '2026-09',
+            generatedAt: new Date('2026-09-25T04:00:00Z'),
+            locked: false,
+            accountNames: ['現金', '銀行'],
+            openingMap: new Map([['現金', 10000], ['銀行', 2500]]),
+            transactions: [
+              { id: 1, tx_date: '2026-09-01', account_name: '現金', kind: 'income', category_name: '銷貨收入', summary: '測試 & <收入>', amount: 2000, created_at: '2026-09-01T01:00:00Z' },
+              { id: 2, tx_date: '2026-09-02', account_name: '現金', kind: 'expense', category_name: '一般支出', summary: '文具', amount: 300, created_at: '2026-09-02T01:00:00Z' }
+            ]
+          });
+          fs.writeFileSync('/tmp/cyaccounting-v013.xlsx', workbook);
+          NODE
+
+          python3 - <<'PY'
+          import zipfile, xml.etree.ElementTree as ET
+          path = '/tmp/cyaccounting-v013.xlsx'
+          with zipfile.ZipFile(path) as z:
+              assert z.testzip() is None
+              required = {
+                  '[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl/styles.xml',
+                  'xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml', 'xl/_rels/workbook.xml.rels'
+              }
+              assert required.issubset(set(z.namelist()))
+              for name in required:
+                  if name.endswith('.xml') or name.endswith('.rels'):
+                      ET.fromstring(z.read(name))
+              sheet = z.read('xl/worksheets/sheet1.xml').decode('utf-8')
+              assert '測試 &amp; &lt;收入&gt;' in sheet
+              assert 'D3-F3' in sheet
+              assert 'G7+IF(C8=&quot;收入&quot;,F8,-F8)' in sheet
+          print('V0.13 XLSX structure OK')
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/CYAccountingWeb/src/app.js \
+                  apps/CYAccountingWeb/public/index.html \
+                  apps/CYAccountingWeb/VERSION \
+                  apps/CYAccountingWeb/TODO.md \
+                  .github/workflows/cyaccountingweb-deploy.yml
+          git commit -m 'feat(CYAccountingWeb): wire V0.13 Excel export'
+          git push origin HEAD:cyaccountingweb/v0.13-excel-export
