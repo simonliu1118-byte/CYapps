@@ -23,13 +23,16 @@
 
 ## 備份／復原與高風險操作
 
-- [x] 備份架構：Cloudflare D1 為唯一正式帳務資料來源；Google Drive 僅作異地／災難復原備份，不作 live database 或雙向同步資料庫（V0.16.0）。
-- [ ] **自動備份上線驗收**：V0.16.0 已完成每日 03:30（台灣時間）Cron、D1 可攜 JSON 封裝、Google Drive 上傳與回讀 SHA-256 驗證；待完成 Google OAuth／Cloudflare Secrets 與首次實機備份後勾選。
-- [x] 自動備份規格：每日 03:30（台灣時間）、保留最近 30 份、版本化 JSON、資料筆數、data SHA-256、file SHA-256；上傳後必須由 Drive 回讀並比對 SHA-256 才記為成功（V0.16.0）。
-- [ ] Google Drive 復原功能 **僅 `SUPER_ADMIN` 可執行**；`ADMIN` 與 `EMPLOYEE` 均不可復原。
+- [x] 備份架構：Cloudflare D1 為唯一正式帳務資料來源；異地備份不作 live database 或雙向同步資料庫（V0.16.0 起）。
+- [x] V0.16.0 曾完成 Google Drive OAuth／自動備份技術基礎；因 Google Workspace Drive API 對應用程式備份用途的政策限制，正式異地備份改採 Google Cloud Storage，不啟用 Drive OAuth。
+- [x] Google Cloud Storage 自動備份程式：每日 03:30（台灣時間）、可攜 JSON、資料筆數、data SHA-256、file SHA-256；上傳後由 Cloud Storage 回讀並比對 SHA-256 才記為成功（V0.17.0）。
+- [x] 備份保留政策改為最近 **14 天**；程式依 Cloud Storage 物件建立時間清理過期備份（V0.17.0）。
+- [ ] **自動備份上線驗收**：建立正式 GCS Bucket、Service Account 與 bucket-level IAM，將 `GCS_BUCKET_NAME`、`GCS_SERVICE_ACCOUNT_EMAIL`、`GCS_PRIVATE_KEY` 設為 Cloudflare Worker Secrets，完成首次實機備份與回讀驗證後勾選。
+- [ ] Google Cloud Billing 設定每月低額預算警示（目標 NT$100）；Bucket 優先採 `us-central1`／Standard，以利用目前 Cloud Storage Free Tier。
+- [ ] 建議在 GCS Bucket 另設 14 天 Object Lifecycle 刪除規則，作為程式 retention 之外的第二層保護。
+- [ ] Cloud Storage 復原功能 **僅 `SUPER_ADMIN` 可執行**；`ADMIN` 與 `EMPLOYEE` 均不可復原。
 - [ ] 復原前必須再次確認高風險操作，並先驗證備份格式、版本與完整性，再允許重建／復原 D1；不得因已登入超管就直接無確認覆蓋資料。
-- [ ] 驗證「Cloudflare/D1 故障後，以 Google Drive 最近有效備份重建新 D1」的完整災難復原演練。
-- [ ] Google Drive Secrets 實機設定：程式已要求 OAuth client ID／client secret 使用 Cloudflare Secrets，refresh token 以 Secret 金鑰 AES-256-GCM 加密後才存 D1；待首次部署後完成人工設定與驗收。
+- [ ] 驗證「Cloudflare/D1 故障後，以 Cloud Storage 最近有效備份重建新 D1」的完整災難復原演練。
 - [ ] Web UI **不提供「清除全部帳務資料／期初餘額」功能，也不提供對應一般應用 API**。若真的需要整庫清理，視為平台管理／維運操作，直接在 Cloudflare／D1 管理層處理。
 
 ## UI／UX 與多裝置支援
