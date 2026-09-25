@@ -188,13 +188,8 @@ replace_once(theme_path, old_stats_title, new_stats_title)
 test_path = ROOT / "tests" / "test_app.py"
 replace_once(
     test_path,
-    'from PySide6.QtWidgets import QApplication, QPushButton\n',
-    'from PySide6.QtWidgets import QApplication, QPushButton, QTabWidget\n',
-)
-replace_once(
-    test_path,
-    'from PySide6.QtGui import QColor, QPalette\n',
-    'from PySide6.QtGui import QColor, QPalette\nfrom PySide6.QtCore import Qt\n',
+    'from PySide6.QtWidgets import QApplication, QLabel, QGroupBox, QPushButton\n',
+    'from PySide6.QtWidgets import QApplication, QLabel, QGroupBox, QPushButton, QTabWidget\n',
 )
 old_test_tail = '''    category_dlg = CategoryManagerDialog(db)
     category_buttons = [b.text() for b in category_dlg.findChildren(QPushButton)]
