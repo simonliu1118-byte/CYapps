@@ -8,7 +8,7 @@ main = main_path.read_text(encoding="utf-8")
 theme = theme_path.read_text(encoding="utf-8")
 
 replacements = [
-    ('        super().__init__(parent)\n        self.db = db\n', '        super().__init__(parent)\n        self.setObjectName("inputPage")\n        self.db = db\n', 1),
+    ('class InputTab(QWidget):\n    data_changed = None\n\n    def __init__(self, db: Database, config: dict, on_saved, parent=None):\n        super().__init__(parent)\n        self.db = db\n', 'class InputTab(QWidget):\n    data_changed = None\n\n    def __init__(self, db: Database, config: dict, on_saved, parent=None):\n        super().__init__(parent)\n        self.setObjectName("inputPage")\n        self.db = db\n', 1),
     ('        outer.setContentsMargins(14, 12, 14, 12)\n        outer.setSpacing(9)\n', '        outer.setContentsMargins(12, 6, 12, 8)\n        outer.setSpacing(4)\n', 1),
     ('        basic = QGroupBox("基本資訊")\n', '        basic = QGroupBox("基本資訊")\n        basic.setObjectName("inputSection")\n', 1),
     ('        basic_row.setContentsMargins(12, 12, 12, 10)\n        basic_row.setSpacing(8)\n', '        basic_row.setContentsMargins(8, 6, 8, 4)\n        basic_row.setSpacing(7)\n', 1),
