@@ -87,10 +87,9 @@ QGroupBox#confirmationCard::title, QGroupBox#inputSection::title, QGroupBox#inco
     subcontrol-position: top left;
     left: 10px;
     padding: 0 2px;
-    background: {NEUTRAL_WHITE};
     color: {TEXT_PRIMARY};
     font-size: 11.5pt;
-    font-weight: 600;
+    font-weight: 700;
 }}
 QDialog#settingsDialog QGroupBox {{
     border: 1px solid {NEUTRAL_BORDER};
@@ -105,10 +104,9 @@ QDialog#settingsDialog QGroupBox::title {{
     subcontrol-position: top left;
     left: 10px;
     padding: 0 2px;
-    background: {NEUTRAL_WHITE};
     color: {TEXT_PRIMARY};
     font-size: 11.5pt;
-    font-weight: 600;
+    font-weight: 700;
 }}
 QWidget#inputPage QLineEdit, QWidget#inputPage QComboBox {{
     min-height: 30px;

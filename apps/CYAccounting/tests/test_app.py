@@ -256,6 +256,8 @@ def test_ui_constructs():
     assert win.input_tab.date_edit.hasFocus() is False  # focus is queued
     assert '2026/07' in win.ledger_tab.table_title.text()
     assert len(win.input_tab.confirm_labels) == 10
+    assert win.minimumWidth() == 1120
+    assert win.minimumHeight() == 710
     selected_button = win.input_tab.account_buttons[win.input_tab.selected_account]
     assert selected_button.isChecked()
     assert win.input_tab.income_amount.maxLength() == 7

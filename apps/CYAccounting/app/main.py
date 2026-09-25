@@ -248,9 +248,9 @@ class ChineseStandardButtonFilter(QObject):
 
     @staticmethod
     def _clear_secondary_dialog_icon(dialog: QDialog) -> None:
-        # CY Desktop visual rule: the main window owns the product icon.
-        # Secondary dialogs must have no title-bar icon at all; an empty Qt icon
-        # alone lets Windows fall back to the generic application icon.
+        # CY Desktop visual rule: only the main window displays the product icon.
+        # WM_SETICON(NULL) lets Windows fall back to the application/class icon,
+        # so secondary dialogs receive a cached fully-transparent native HICON.
         dialog.setWindowIcon(QIcon())
         if sys.platform == "win32":
             try:
@@ -268,10 +268,22 @@ class ChineseStandardButtonFilter(QObject):
                 SWP_NOACTIVATE = 0x0010
                 SWP_FRAMECHANGED = 0x0020
 
+                blank_icon = getattr(ChineseStandardButtonFilter, "_blank_dialog_hicon", None)
+                if not blank_icon:
+                    create_icon = user32.CreateIcon
+                    create_icon.restype = ctypes.c_void_p
+                    # 16x16 monochrome icon: AND=1 and XOR=0 means fully transparent.
+                    and_mask = (ctypes.c_ubyte * 32)(*([0xFF] * 32))
+                    xor_mask = (ctypes.c_ubyte * 32)(*([0x00] * 32))
+                    blank_icon = create_icon(None, 16, 16, 1, 1, and_mask, xor_mask)
+                    if blank_icon:
+                        ChineseStandardButtonFilter._blank_dialog_hicon = blank_icon
+
                 ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
                 user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style | WS_EX_DLGMODALFRAME)
-                user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, 0)
-                user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, 0)
+                if blank_icon:
+                    user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, blank_icon)
+                    user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, blank_icon)
                 user32.SetWindowPos(
                     hwnd,
                     0,
@@ -318,7 +330,7 @@ class InputTab(QWidget):
 
     def _build(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(12, 8, 12, 8)
+        outer.setContentsMargins(12, 14, 12, 8)
         outer.setSpacing(8)
 
         basic = QGroupBox("基本資訊")
@@ -1331,8 +1343,8 @@ class MainWindow(QMainWindow):
         self.config = config
         self.startup_backup_error = startup_backup_error
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(1120, 740)
-        self.resize(1120, 740)
+        self.setMinimumSize(1120, 710)
+        self.resize(1120, 710)
         icon_path = app_root() / "app" / "resources" / "app.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
