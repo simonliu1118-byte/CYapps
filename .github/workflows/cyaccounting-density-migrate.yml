@@ -1,0 +1,49 @@
+name: CYAccounting Density Migration (one-time)
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cyaccounting-density-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.ref == 'cyaccounting/v1.2.0-visual-phase1'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Apply density pass
+        working-directory: apps/CYAccounting
+        shell: pwsh
+        run: |
+          if (-not (Test-Path ./tools/compact_density_pass.py)) {
+            Write-Host "Density pass already applied."
+            exit 0
+          }
+          python ./tools/compact_density_pass.py
+          if ($LASTEXITCODE -ne 0) { throw "Density pass failed" }
+      - name: Commit transformed sources
+        shell: pwsh
+        run: |
+          if (-not (Test-Path apps/CYAccounting/tools/compact_density_pass.py)) {
+            Write-Host "No density migration source remaining."
+            exit 0
+          }
+          git config user.name "simonliu1118-byte"
+          git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+          git add apps/CYAccounting/app/main.py apps/CYAccounting/app/theme.py
+          git rm apps/CYAccounting/tools/compact_density_pass.py
+          if (git diff --cached --quiet) { throw "Density pass produced no source changes" }
+          git commit -m "style(CYAccounting): tune input and ledger density"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
