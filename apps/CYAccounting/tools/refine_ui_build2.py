@@ -10,6 +10,18 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def replace_once_in_class(text: str, class_marker: str, old: str, new: str, label: str) -> str:
+    start = text.find(class_marker)
+    if start < 0:
+        raise SystemExit(f"{label}: class marker not found")
+    end = text.find("\nclass ", start + len(class_marker))
+    if end < 0:
+        end = len(text)
+    block = text[start:end]
+    updated = replace_once(block, old, new, label)
+    return text[:start] + updated + text[end:]
+
+
 main_path = ROOT / "app" / "main.py"
 main = main_path.read_text(encoding="utf-8")
 old_icon = '''    @staticmethod
@@ -67,11 +79,12 @@ new_icon = '''    @staticmethod
                 pass
 '''
 main = replace_once(main, old_icon, new_icon, "secondary dialog icon helper")
-main = replace_once(
+main = replace_once_in_class(
     main,
-    "    def _build(self):\n        outer = QVBoxLayout(self)\n        outer.setContentsMargins(12, 6, 12, 8)\n",
-    "    def _build(self):\n        outer = QVBoxLayout(self)\n        outer.setContentsMargins(12, 8, 12, 8)\n",
-    "InputTab _build top margin",
+    "class InputTab(QWidget):",
+    "        outer.setContentsMargins(12, 6, 12, 8)\n",
+    "        outer.setContentsMargins(12, 8, 12, 8)\n",
+    "InputTab top margin",
 )
 main = replace_once(
     main,
