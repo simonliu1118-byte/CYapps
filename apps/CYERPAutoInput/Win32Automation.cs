@@ -163,6 +163,13 @@ internal static class InputSender
 
     public static void Press(ushort key)
     {
+        // COPI08's DevExpress grid needs a short settle period after a real mouse
+        // click before F2 is accepted by the newly focused unit cell. Without this,
+        // the click is correct but F2 can be delivered while the previous editor is
+        // still finishing its focus transition.
+        if (key == NativeMethods.VK_F2)
+            Thread.Sleep(500);
+
         var inputs = new[]
         {
             Key(key, 0),

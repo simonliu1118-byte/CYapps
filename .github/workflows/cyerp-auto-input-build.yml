@@ -76,13 +76,11 @@ jobs:
           Copy-Item "$staging/CYERPAutoInput.exe" "$outDir/CYERPAutoInput.exe"
           Copy-Item VERSION "$outDir/VERSION"
           Copy-Item BUILD "$outDir/BUILD"
+          Copy-Item README.md "$outDir/README.md"
+          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/THIRD_PARTY_NOTICES.md"
 
           New-Item -ItemType Directory -Path "$outDir/Data" -Force | Out-Null
           Copy-Item settings.example.json "$outDir/Data/settings.example.json"
-
-          New-Item -ItemType Directory -Path "$outDir/docs" -Force | Out-Null
-          Copy-Item README.md "$outDir/docs/README.md"
-          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/docs/THIRD_PARTY_NOTICES.md"
 
           New-Item -ItemType Directory -Path "$outDir/runtime/ocr" -Force | Out-Null
           Copy-Item "$staging/runtime/ocr/*.onnx" "$outDir/runtime/ocr/"
@@ -95,9 +93,9 @@ jobs:
             "$root/CYERPAutoInput.exe",
             "$root/BUILD",
             "$root/VERSION",
+            "$root/README.md",
+            "$root/THIRD_PARTY_NOTICES.md",
             "$root/Data/settings.example.json",
-            "$root/docs/README.md",
-            "$root/docs/THIRD_PARTY_NOTICES.md",
             "$root/runtime/ocr/ch_PP-OCRv5_det_mobile.onnx",
             "$root/runtime/ocr/ch_PP-OCRv5_rec_mobile.onnx",
             "$root/runtime/ocr/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"
