@@ -1,0 +1,99 @@
+name: CYERPAutoInput Build 21 Corrected Temp CI
+
+on:
+  push:
+    branches: [ci-cyerp-build21]
+    paths:
+      - ".github/workflows/cyerp-auto-input-build21b-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v7
+        with:
+          ref: cyerp-auto-input/v0.1.0-csharp
+          fetch-depth: 0
+
+      - name: Checkout patch driver
+        uses: actions/checkout@v7
+        with:
+          ref: ci-cyerp-build21
+          path: patch-driver
+          sparse-checkout: tools/ci/cyerp_build21_patch.py
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Apply Build 21 patch
+        shell: pwsh
+        run: python patch-driver/tools/ci/cyerp_build21_patch.py
+
+      - name: Fetch canonical CYERPAutoInput icon
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-canonical-icon.ps1
+
+      - name: Fetch pinned PaddleOCR models
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-ocr-models.ps1
+
+      - name: Restore
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet restore CYERPAutoInput.csproj -r win-x64
+
+      - name: Build
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet build CYERPAutoInput.csproj -c Release -r win-x64 --no-restore -p:Version=0.1.0 -p:ContinuousIntegrationBuild=true
+
+      - name: Optical pipeline self-test
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet run --project CYERPAutoInput.csproj -c Release -r win-x64 --no-build -- --vision-self-test
+
+      - name: Publish and verify portable package
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: |
+          Remove-Item -Recurse -Force package,publish-staging -ErrorAction SilentlyContinue
+          $staging = "publish-staging"
+          $outDir = Join-Path "package" "CYERPAutoInput"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -p:Version=0.1.0 -o $staging
+          Copy-Item "$staging/CYERPAutoInput.exe" "$outDir/CYERPAutoInput.exe"
+          Copy-Item VERSION "$outDir/VERSION"
+          Copy-Item BUILD "$outDir/BUILD"
+          Copy-Item README.md "$outDir/README.md"
+          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/THIRD_PARTY_NOTICES.md"
+          New-Item -ItemType Directory -Path "$outDir/Data" -Force | Out-Null
+          Copy-Item settings.example.json "$outDir/Data/settings.example.json"
+          New-Item -ItemType Directory -Path "$outDir/runtime/ocr" -Force | Out-Null
+          Copy-Item "$staging/runtime/ocr/*.onnx" "$outDir/runtime/ocr/"
+          $selfTest = Start-Process -FilePath "$outDir/CYERPAutoInput.exe" -ArgumentList "--vision-self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Packaged EXE vision self-test failed with code $($selfTest.ExitCode)" }
+          Remove-Item -Recurse -Force "$outDir/logs" -ErrorAction SilentlyContinue
+
+      - name: Commit Build 21 to development branch
+        shell: bash
+        run: |
+          git config user.name "simonliu1118-byte"
+          git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+          git add apps/CYERPAutoInput/BUILD apps/CYERPAutoInput/AppLogger.cs apps/CYERPAutoInput/Build10UiPatch.cs apps/CYERPAutoInput/MainForm.cs apps/CYERPAutoInput/ErpAutomationService.cs
+          git commit -m "fix(CYERPAutoInput): probe batch lookup without requiring editor"
+          git push origin HEAD:cyerp-auto-input/v0.1.0-csharp
+
+      - name: Upload Build 21 package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYERPAutoInput-v0.1.0-build21-windows-x64-temp21
+          path: apps/CYERPAutoInput/package/*
+          if-no-files-found: error
+          retention-days: 14
