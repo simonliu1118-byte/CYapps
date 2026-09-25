@@ -66,6 +66,9 @@ jobs:
           node --check public/v014.js
           node --check public/v015.js
 
+      - name: Run Excel import tests
+        run: node tests/v15-import.mjs
+
       - name: Validate Worker bundle
         run: npx wrangler deploy --dry-run
 
