@@ -1,0 +1,15 @@
+.ledger-export-status {
+  min-width: 0;
+  color: #6b7885;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ledger-export-status.error {
+  color: #b44343;
+}
+
+#ledgerExcelExport:disabled {
+  cursor: wait;
+  opacity: .72;
+}
