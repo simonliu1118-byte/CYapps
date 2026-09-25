@@ -15,3 +15,4 @@ Current source on Phase 1 visual-alignment branch; test artifact, not a formal R
 - ACC Icon Family from V1.1.0 remains unchanged.
 - Ledger inline-edit ComboBox narrow-arrow treatment is intentionally unchanged pending user decision because it preserves high-density cell text space.
 - 125% / 150% DPI acceptance remains deferred under the canonical guide; this test version does not claim those DPI levels as passed.
+- Input page refinement: framed Basic/Income/Expense sections restored; Income uses CYAccountingWeb #E7F3E9 and Expense uses #F8E9E7; legacy polished category-combo arrow treatment restored only on the input page; date controls refined and matched in height; confirmation panel is fixed to the 10-entry use case without a white card fill; ledger data rows restored to the original 23px density while the header stays 24px.

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from util import app_root
+
 # CY Desktop Visual Guide — Phase 1 / Blue Theme
 # Canonical source: AITeam/shared/cy-visual/desktop/CY_DESKTOP_VISUAL_GUIDE.md
 
@@ -34,6 +36,8 @@ INCOME_SOFT = "#EDF5F2"
 EXPENSE_TEXT = "#8A5B5B"
 EXPENSE_SOFT = "#F6EEEE"
 
+COMBO_ARROW_PATH = (app_root() / "app" / "resources" / "combo_arrow.png").as_posix()
+
 APP_STYLE = f"""
 QMainWindow, QDialog {{
     background: {NEUTRAL_WINDOW};
@@ -64,30 +68,90 @@ QGroupBox::title {{
     font-size: 12pt;
     font-weight: 600;
 }}
-QGroupBox#resultCard, QGroupBox#statsCard {{
+QGroupBox#statsCard {{
     border: 1px solid {NEUTRAL_BORDER};
     border-radius: 6px;
     margin-top: 12px;
     padding: 10px 10px 8px 10px;
     background: {NEUTRAL_WHITE};
 }}
-QGroupBox#inputSection {{
+QGroupBox#confirmationCard {{
+    border: 1px solid {NEUTRAL_BORDER};
+    border-radius: 6px;
     margin-top: 12px;
-    padding: 8px 0 2px 0;
+    padding: 10px 10px 8px 10px;
+    background: {NEUTRAL_WINDOW};
+}}
+QGroupBox#inputSection, QGroupBox#incomeSection, QGroupBox#expenseSection {{
+    border: 1px solid {NEUTRAL_BORDER};
+    border-radius: 6px;
+    margin-top: 14px;
+    padding: 12px 10px 8px 10px;
+}}
+QGroupBox#inputSection {{
+    background: {NEUTRAL_WHITE};
+}}
+QGroupBox#incomeSection {{
+    background: #E7F3E9;
+    border-color: #C7DCCB;
+}}
+QGroupBox#expenseSection {{
+    background: #F8E9E7;
+    border-color: #E7CECA;
+}}
+QGroupBox#inputSection::title {{
+    left: 10px;
+    padding: 0 5px;
+    background: {NEUTRAL_WHITE};
+}}
+QGroupBox#incomeSection::title {{
+    left: 10px;
+    padding: 0 5px;
+    background: #E7F3E9;
+}}
+QGroupBox#expenseSection::title {{
+    left: 10px;
+    padding: 0 5px;
+    background: #F8E9E7;
 }}
 QWidget#inputPage QLineEdit, QWidget#inputPage QComboBox {{
     min-height: 30px;
     font-size: 11pt;
+}}
+QWidget#inputPage QComboBox {{
+    padding-right: 34px;
+}}
+QWidget#inputPage QComboBox::drop-down {{
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 30px;
+    border-left: 1px solid #AEB9C5;
+    background: #F1F4F7;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+}}
+QWidget#inputPage QComboBox::drop-down:hover {{
+    background: #E0E7EE;
+}}
+QWidget#inputPage QComboBox::down-arrow {{
+    image: url("{COMBO_ARROW_PATH}");
+    width: 14px;
+    height: 9px;
 }}
 QWidget#inputPage QPushButton#primaryButton, QWidget#inputPage QPushButton#accountChoiceButton {{
     min-height: 30px;
     font-size: 10.5pt;
 }}
 
-QGroupBox#resultCard::title, QGroupBox#statsCard::title {{
+QGroupBox#statsCard::title {{
     left: 12px;
     padding: 0 5px;
     background: {NEUTRAL_WHITE};
+}}
+QGroupBox#confirmationCard::title {{
+    left: 10px;
+    padding: 0 5px;
+    background: {NEUTRAL_WINDOW};
 }}
 
 QLineEdit, QComboBox, QSpinBox, QDateEdit {{
@@ -177,20 +241,28 @@ QFrame#summarySeparator {{
     max-height: 1px;
 }}
 
-QToolButton#dateStepButton {{
-    min-width: 24px;
-    max-width: 24px;
-    min-height: 15px;
-    max-height: 15px;
+QToolButton#dateStepUp, QToolButton#dateStepDown {{
     padding: 0;
     border: 1px solid {NEUTRAL_BORDER};
-    border-radius: 3px;
     background: {NEUTRAL_WHITE};
-    font-size: 8pt;
-    font-weight: 600;
 }}
-QToolButton#dateStepButton:hover {{ background: {NEUTRAL_WINDOW}; }}
-QToolButton#dateStepButton:pressed {{ background: {NEUTRAL_READ_ONLY}; }}
+QToolButton#dateStepUp {{
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+    border-bottom: 0;
+}}
+QToolButton#dateStepDown {{
+    border-bottom-left-radius: 3px;
+    border-bottom-right-radius: 3px;
+}}
+QToolButton#dateStepUp:hover, QToolButton#dateStepDown:hover {{ background: {NEUTRAL_WINDOW}; }}
+QToolButton#dateStepUp:pressed, QToolButton#dateStepDown:pressed {{ background: {NEUTRAL_READ_ONLY}; }}
+QPushButton#calendarButton {{
+    padding: 0;
+    border: 1px solid {NEUTRAL_BORDER};
+    background: {NEUTRAL_WHITE};
+}}
+QPushButton#calendarButton:hover {{ background: {NEUTRAL_WINDOW}; }}
 QPushButton#monthNavButton {{
     min-width: 36px;
     padding-left: 0;
