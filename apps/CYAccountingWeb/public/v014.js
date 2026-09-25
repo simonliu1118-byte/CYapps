@@ -69,6 +69,9 @@ function beginInlineLedgerEdit(id, row) {
   row.classList.add('inline-editing');
   row.innerHTML = inlineEditRowHtml(tx);
   row.addEventListener('keydown', handleInlineLedgerKeydown);
+  row.querySelector('[data-inline-amount]')?.addEventListener('input', event => {
+    event.target.value = String(event.target.value || '').replace(/[^0-9]/g, '').slice(0, 7);
+  });
   row.querySelector('[data-inline-summary]')?.focus();
   row.querySelector('[data-inline-summary]')?.select();
 }
