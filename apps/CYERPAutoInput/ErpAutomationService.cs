@@ -595,38 +595,42 @@ internal sealed class ErpAutomationService
 
         var (activeGeometry, point, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 5, cancellationToken);
         geometry = activeGeometry;
+
+        // A non-batch-managed item has a real batch column cell, but COPI08 does not
+        // create an editor for that cell. Build 20 incorrectly treated "no editor" as
+        // a hard failure. Build 21 verifies that the click stayed inside the live grid,
+        // then lets ERP itself answer the question: F2 opens only when the batch lookup
+        // is available. No Enter is sent merely to probe the cell.
         InputSender.Click(point);
         await Delay(120, cancellationToken);
 
-        var editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 220);
-        if (editor == 0)
+        var focus = NativeMethods.FocusedControlOfForeground(root);
+        if (focus == 0 || !Win32Automation.IsInside(focus, grid.Handle))
         {
-            InputSender.Press(NativeMethods.VK_RETURN);
-            editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 720);
+            InputSender.Click(point);
+            await Delay(120, cancellationToken);
+            focus = NativeMethods.FocusedControlOfForeground(root);
         }
-        if (editor == 0)
-            throw new InvalidOperationException($"品號 {itemCode}：無法可靠進入批號欄；為避免後續欄位錯位已停止。");
+        if (focus == 0 || !Win32Automation.IsInside(focus, grid.Handle))
+            throw new InvalidOperationException($"品號 {itemCode}：批號欄點擊後焦點未留在商品明細；為避免後續欄位錯位已停止。");
 
-        var marker = NativeMethods.WindowText(editor).Trim();
+        var editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 180);
+        var marker = editor == 0 ? string.Empty : NativeMethods.WindowText(editor).Trim();
         var starCount = marker.Count(ch => ch == '*');
-        _log.Info("detail", $"batch probe row={visibleRow + 1} item={itemCode} marker_chars={marker.Length} stars={starCount}");
-
-        if (marker.Length == 0)
-        {
-            _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode}");
-            return geometry;
-        }
-
-        if (starCount == 0)
-        {
-            _log.Info("detail", $"batch already populated/non-marker row={visibleRow + 1} item={itemCode} chars={marker.Length}");
-            return geometry;
-        }
+        _log.Info("detail", $"batch probe row={visibleRow + 1} item={itemCode} focus={NativeMethods.ClassName(focus)} editor={(editor == 0 ? "none" : NativeMethods.ClassName(editor))} marker_chars={marker.Length} stars={starCount}");
 
         InputSender.Press(NativeMethods.VK_F2);
-        var lookup = await WaitLookupAsync(cancellationToken);
+        var lookup = await WaitLookupAsync(cancellationToken, 850);
         if (lookup == 0)
-            throw new InvalidOperationException($"品號 {itemCode} 需要批號，但按 F2 後沒有出現批號查詢視窗。");
+        {
+            if (starCount > 0)
+                throw new InvalidOperationException($"品號 {itemCode} 的批號欄顯示批號標記，但按 F2 後沒有出現批號查詢視窗；已停止避免錯位。");
+
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode} reason=no-f2-lookup-after-verified-grid-focus");
+            return geometry;
+        }
+
+        _log.Info("detail", $"batch lookup opened row={visibleRow + 1} item={itemCode} marker_chars={marker.Length} stars={starCount}");
         if (!Win32Automation.PrepareForeground(lookup, _log))
             throw new InvalidOperationException("F2 批號查詢視窗無法取得前景。");
         await Delay(120, cancellationToken);
@@ -635,15 +639,15 @@ internal sealed class ErpAutomationService
         InputSender.Click(selection.Point);
         await Delay(120, cancellationToken);
 
-        var focus = NativeMethods.FocusedControlOfForeground(lookup);
-        if (focus == 0 || !NativeMethods.ClassName(focus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+        var lookupFocus = NativeMethods.FocusedControlOfForeground(lookup);
+        if (lookupFocus == 0 || !NativeMethods.ClassName(lookupFocus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
         {
-            _log.Warn("detail", $"F2 batch row click did not focus grid first_try class={NativeMethods.ClassName(focus)}");
+            _log.Warn("detail", $"F2 batch row click did not focus grid first_try class={NativeMethods.ClassName(lookupFocus)}");
             InputSender.Click(selection.Point);
             await Delay(120, cancellationToken);
-            focus = NativeMethods.FocusedControlOfForeground(lookup);
+            lookupFocus = NativeMethods.FocusedControlOfForeground(lookup);
         }
-        if (focus == 0 || !NativeMethods.ClassName(focus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+        if (lookupFocus == 0 || !NativeMethods.ClassName(lookupFocus).Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("已點到正庫存批號列，但 F2 表格沒有取得可驗證焦點；為避免 Enter 送到錯誤控制項已停止。");
 
         InputSender.Press(NativeMethods.VK_RETURN);
@@ -828,9 +832,9 @@ internal sealed class ErpAutomationService
         return (activeGeometry, point, rect);
     }
 
-    private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken)
+    private static async Task<nint> WaitLookupAsync(CancellationToken cancellationToken, int timeoutMs = 2500)
     {
-        var stop = Environment.TickCount64 + 2500;
+        var stop = Environment.TickCount64 + Math.Max(100, timeoutMs);
         while (Environment.TickCount64 < stop)
         {
             cancellationToken.ThrowIfCancellationRequested();
