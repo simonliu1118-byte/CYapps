@@ -1,57 +1,80 @@
 # CYAccounting — Work 接手文件
 
-> 最後整理：2026-09-24
-> 
+> 最後整理：2026-09-26
+>
 > 專案：志遠記帳系統 / CYAccounting
-> 
-> 目前 `main` 原始碼版本：V1.0.27 Build 2；正式 GitHub Release 尚未發布
+>
+> 目前正式基準：**V1.3.0 / BUILD 0**
+>
+> 專案狀態：**暫時告一段落，無進行中開發工作**
 
-## 1. 接手原則
+## 1. 現況
 
-本文件用來把原本 Chat 對話中的產品決策、UI 規則、資料規則與目前待處理事項帶到 ChatGPT Work。
+- 正式版本：`V1.3.0`
+- `VERSION=1.3.0`
+- `BUILD=0`
+- 正式 tag：`cyaccounting-v1.3.0`
+- 正式 Release：<https://github.com/simonliu1118-byte/CYapps/releases/tag/cyaccounting-v1.3.0>
+- Release 目標 commit：`6a3d3f72a3bd23ae8d9fd720a6d72ca9f9a6ed4a`
+- 正式 Windows x64 portable package 已由 `CYAccounting Stable Release` workflow 從 `main` 重新建置、測試、驗證、掃描並發布。
+- V1.3.0 視覺與主要實機回饋已由使用者接受。
 
-**原始碼以 GitHub `main` 的 `apps/CYAccounting/` 為實作現況來源。** 本文件是歷史需求與接手說明，不是另一套永久規則。開始修改前先依根 `AGENTS.md` 讀取正式規則鏈，並確認 `main`、相關 source、tests、版本檔與 CI。
+本文件只作接手摘要，不取代治理規則。重新開工前，先讀最新 `main` 與正式規則鏈。
 
-若本文件和 source 有衝突：
+## 2. 重新開工時的固定讀取順序
 
-1. 「目前已實作什麼」以 source 為準。
-2. 「使用者要什麼」以本次明確指示及 `PROJECT_RULES.md` 為準；本文件供歷史需求參考。
-3. 不要憑印象重寫架構；先找出差異，再修改。
+1. 根 `REPOSITORY_RULES.md`
+2. 根 `REPO_POLICY.md`
+3. `apps/CYAccounting/PROJECT_RULES.md`
+4. 最新 `main`
+5. `apps/CYAccounting/VERSION`、`BUILD`、`V1.3.0.txt`
+6. `README.md`、`TODO.md`
+7. `tests/`、`.github/workflows/cyaccounting-build.yml`、`.github/workflows/cyaccounting-release.yml`
+8. 實際 PySide6 / SQLite / Go launcher source
+9. 若涉及視覺，再讀 AITeam canonical CY Desktop Visual Guide 與 ACC Icon Family
 
-## 2. 產品背景與命名
+若聊天記憶、舊文件與 source 不一致，以最新使用者明確指示、正式規則與 `main` source 為準。
 
-- 程式視窗名稱：**志遠記帳系統**。
-- 專案／資料夾／程式識別：`CYAccounting` / `CY`。
-- 羅馬拼音一律使用 **Wade–Giles**。
-- 志遠只能用 `Chihyuan` / `Chih-yuan` / `CY`；**不得出現 `Zhiyuan`**。
-- 目標環境：Windows x64，可攜式，使用者偏好免安裝、免額外設定。
-- UI 語言：繁體中文。
-- 使用者非 IT 背景，因此錯誤訊息、備份、恢復、匯入流程要可理解，不能要求使用者自行處理開發環境。
+## 3. 命名與產品識別
 
-## 3. 目前原始碼版本與交付狀態
+- 程式名稱：**志遠記帳系統**
+- 專案識別：`CYAccounting`
+- 內部縮寫：`CY`
+- 羅馬拼音：Wade–Giles
+- 志遠：`Chihyuan` / `Chih-yuan` / `CY`，不得使用 `Zhiyuan`
+- 目標環境：Windows 10/11 x64 portable
+- UI：繁體中文
 
-- GitHub `main` 原始碼：V1.0.27 Build 2（`VERSION=1.0.27`、`BUILD=2`）；PR #122 已合併。這是原始碼基準與測試包身分，尚非正式 Release。
-- 版本紀錄：`apps/CYAccounting/V1.0.27.txt`；上一版變更見 `V1.0.26.txt`。
-- CI：`.github/workflows/cyaccounting-build.yml`，執行原始測試、Windows 建置、封裝與可攜包驗證。自動驗證不取代 Windows 實機操作驗收。
-- Git 只保存 source、測試、建置設定與文件；正式資料庫、LOG、使用者 OAuth、可執行發行包等 runtime 內容不要進 Git。
+## 4. V1.3.0 已接受的視覺決策
 
-### 測試包與發行包
+- 主 UI 使用 Blue Theme；ACC 綠色只作 Icon identity，不作整體 UI 主色。
+- 輸入記帳頁：輸入是主要任務，因此主要欄位與文字保持較大、較好輸入。
+- 記帳資料表：高密度掃描／檢視；資料列 23px、表頭 24px。
+- Basic Information、Income、Expense、Input Confirmation、Settings、Import 使用一致、低裝飾的 framed section 語言。
+- 一般 ComboBox 與 Ledger 內嵌 ComboBox 使用同一家族 chevron；Ledger 保留窄版 geometry。
+- 收入／支出科目管理最終使用 V1.1.0 Release 已驗證的**原生 `QTabWidget`**。不要恢復 Build 6 / Build 7 那些自訂 category-manager tab geometry / QSS。
+- 子視窗正常繼承 ACC application icon。不要恢復 Build 6 / Build 7 的 Win32 title-bar no-icon workaround、`MSWindowsFixedSizeDialogHint` 或 HWND 清 icon hack。
+- ACC Icon Family 維持已核准正式資產，不重新生成另一套。
+- 本版接受基準為 100% / 96 DPI；125% / 150% DPI 仍 deferred。
 
-ZIP 外部檔名可以帶版本，例如：
+## 5. 不得誤改的產品行為
 
-`CYAccounting_V1.0.27_Build_2_Windows_x64.zip`
+- 日期顯示 `YYYY/MM/DD`；直接輸入 8 碼需先格式化再獨立驗證日期合法性。
+- 收入／支出金額新輸入上限為 7 位數，最大 `9,999,999`；既有超額歷史資料不可因一般編輯被自動改寫或刪除。
+- 歷史交易保存當時的帳戶／科目文字快照；master 改名或刪除不得回寫歷史交易文字。
+- 常用摘要依帳戶＋收支＋科目統計；空白不參與；最多 10 個；次數優先、同次數最近使用優先。
+- 設定頁可直接向前或向後調整鎖帳月份，屬既有刻意設計。
+- 本機帳本清除必須連續兩次各自輸入完全相同的大寫 `DELETE`；取消或任一步錯誤都不得清除。
+- 清除前先建立可驗證本機復原備份；既有本機／雲端備份保留；自訂 DB 位置保持指向目前位置。
+- Google Drive OAuth 憑證由使用者自行匯入；client JSON、refresh token、使用者設定與帳務資料不得進 Public Git 或 Release。
+- 本機 SQLite 是 source of truth；Google Drive 不作 live database。
+- 正式 package 不含使用者 Data、設定、OAuth、token、log 或備份。
 
-但解壓縮後的根目錄固定為：
+## 6. 主要程式結構
 
-`CYAccounting\`
-
-**根目錄名稱不含版本號。** Actions Artifact 的下載檔本身就是 ZIP；解壓縮一次便看到 `CYAccounting/` 與其中的 `CYAccounting.exe`，不再放第二層 ZIP 或額外 SHA 檔。CI 內仍驗證雜湊；正式 Release 的 SHA-256 依正式發行規則提供。
-
-## 4. 程式架構
-
-- GUI：PySide6。
-- DB：SQLite。
-- Go launcher：`launcher_go/`。
+- GUI：PySide6
+- DB：SQLite
+- Windows GUI launcher：Go
 - 主要 source：
   - `app/main.py`
   - `app/db.py`
@@ -62,367 +85,29 @@ ZIP 外部檔名可以帶版本，例如：
   - `app/background.py`
   - `app/models.py`
   - `app/util.py`
-- 測試：`tests/test_app.py`、`tests/test_safety_unittest.py`、`tests/test_gdrive_unittest.py` 與 Go launcher tests。
-- 原始碼封存：`tools/create_source_archive.py` 依 Git 追蹤檔建立可重現封存檔與 SHA-256。
-- 啟動後應立即寫入診斷／startup log。
-- Single instance。
-- SQLite 備份應使用安全、可驗證方式，不能直接把運作中的 DB 當一般檔案粗暴複製。
-- 歷史交易保留「當時的帳戶名稱／科目名稱文字快照」；之後修改或刪除 master，不回寫歷史交易名稱。
+- Tests：`tests/test_app.py`、`tests/test_safety_unittest.py`、`tests/test_gdrive_unittest.py`、Go launcher tests
+- Portable build：`tools/build_portable.ps1`
+- Package verify：`tools/verify_portable.ps1`
+- Source archive：`tools/create_source_archive.py`
 
-## 5. 主畫面導覽
+## 7. 發行流程
 
-左側真正頁籤：
+正常開發：branch → PR → Windows CI / Governance → 使用者實機驗收 → merge `main`。
 
-- 輸入記帳
-- 記帳資料表
+正式 Release 只有在使用者明確要求時執行：
 
-右上角是一般功能按鈕，不要做成頁籤視覺：
+- `VERSION` 必須是穩定 SemVer。
+- 正式 Release 必須 `BUILD=0`。
+- 必須存在對應 `Vx.y.z.txt`。
+- `.github/workflows/cyaccounting-release.yml` 從 `main` 重新測試並建立正式 portable package、SHA-256、source verification archive 與 GitHub Release。
+- 測試 Artifact 不等於正式 Release。
 
-- 帳戶管理
-- 收入支出科目管理
-- 匯入
-- 設定
+## 8. 目前沒有進行中的工作
 
-## 6. 輸入記帳頁
+V1.3.0 發布後，使用者已決定此專案暫時告一段落。下一次重新開工時，不要延續舊 Draft PR、舊 Build workaround 或聊天中的未採用視覺嘗試；應從當時最新 `main` 重新確認現況。
 
-### 6.1 基本資料列
+目前唯一明確保留的 deferred 項目是：
 
-概念：
+- 125% / 150% DPI 視覺實機驗收與必要調整。
 
-`日　　期： [日期] [▲▼ stepper] [月曆]    帳　　戶： [帳戶按鈕…]`
-
-- 標籤用全形空白對齊。
-- 啟動後預設焦點為日期欄。
-- 日期顯示：`YYYY/MM/DD`。
-- 預設帳戶啟動時即選中，選中帳戶要明顯高亮。
-
-### 6.2 日期輸入
-
-必須支援：
-
-- `20251215` → 先整理成 `2025/12/15`。
-- 格式化和日期合法性驗證要分離。
-- 例如 `20260230` 應先顯示 `2026/02/30`，再判斷日期不存在。
-- 日期錯誤不要彈窗；在欄位附近顯示紅色粗體 `日期錯誤`，並聚焦／選取輸入內容。
-- 支援只反白 MM/DD 後輸入 4 碼，自動恢復為完整 `YYYY/MM/DD`。
-
-日期步進：
-
-- ▲：+1 天
-- ▼：-1 天
-- `Ctrl+↑`：+1 天
-- `Ctrl+↓`：-1 天
-
-### 6.3 日期選擇器
-
-- 保留 `<< < > >>` 的月份／年份導覽邏輯，不改成上下箭頭。
-- 不顯示週次。
-- 非本月日期：灰底＋灰字，但仍可點。
-- 星期六綠色、星期日紅色。
-- 點日期後立即套用並關閉 picker。
-- 跨月灰底判定要依實際 6×7 可見日期格處理，不能只從「本月第一天所在週」推算。
-
-## 7. 帳戶
-
-- 帳戶名稱有限長、不可重複、至少保留一個帳戶；實際限制請以 source 驗證。
-- 預設帳戶以星號欄設定。
-- 刪除預設帳戶後，自動以排序後第一筆有效帳戶成為預設。
-- 帳戶管理按鈕順序：`↑`、`↓`、`新增`、`修改`、`刪除`。
-- 管理視窗要窄、緊湊，不需要額外「關閉」按鈕。
-- 主畫面帳戶異動後立即重建帳戶按鈕。
-
-## 8. 收入／支出輸入區
-
-收入與支出各自包含：
-
-1. 常用科目列。
-2. 主要輸入列：科目下拉、摘要、金額、存檔。
-3. 虛線分隔。
-4. 常用摘要列。
-
-### 摘要
-
-- 可以空白。
-- 長度限制需維持既有 source 規則。
-- IME 輸入不能被錯誤截斷。
-
-### 金額
-
-- 僅整數數字。
-- 1～9,999,999（最多 7 位數）。
-- 主畫面、編輯視窗、表格直接修改、Excel／Google Drive 匯入與 DB 寫入必須套用相同限制。
-- 若舊資料已存在超過 7 位數的金額，不得自動改值或刪除；只修改其他欄位時應允許保留原金額。
-- DB 以整數金額保存。
-
-### Enter / 鍵盤流程
-
-- 摘要 → 金額 → 存檔。
-- 存檔成功後只清空摘要與金額，不改日期、帳戶、科目。
-- 存檔後焦點回摘要。
-- 上下方向鍵可在收入／支出的摘要、金額欄之間合理切換。
-
-## 9. 常用科目
-
-- 收入與支出分開管理。
-- 各最多 10 個。
-- 由科目管理視窗設定 favourite 與排序。
-- 主畫面呈現為較明確的功能按鈕。
-
-## 10. 常用摘要
-
-這是目前重要功能。
-
-### 統計維度
-
-依：
-
-**帳戶＋收支類型＋科目**
-
-分開統計。
-
-### 規則
-
-- 空白摘要不參與。
-- 比較前 trim 前後空白；除此之外採精確比對，不做模糊歸類。
-- 最多顯示 10 個。
-- 先依出現次數降冪；同次數時依最近使用優先。
-- 點摘要後填入完整原文，焦點移到金額。
-- 科目、帳戶、存檔或相關設定改變後要重新計算。
-- 不另外保存一份快取清單；可由交易資料重算。
-
-### 統計依據設定
-
-設定頁：
-
-`統計依據：[帳務日期 ▼]，最近 [100] 筆，至少出現 [3] 次`
-
-兩種模式：
-
-- **帳務日期**：預設。交易日期 DESC，再 created time / ID DESC。後補舊日期交易仍按帳務日期位置排序。
-- **近期輸入**：created time DESC，再 ID DESC。後補舊日期交易仍算近期輸入。
-
-預設：最近 100 筆、至少 3 次。
-
-數字欄位直接輸入，不要 spinner 上下箭頭。
-
-### UI 層級
-
-- 常用科目：較明顯、偏功能按鈕。
-- 常用摘要：較輕量的 neutral chip / tag，避免和常用科目長得一樣。
-- 常用摘要建議使用淡中性色或灰藍、細邊框、較圓角、略矮、hover 稍加深。
-- 不要用收入綠／支出紅去染常用摘要，避免色彩噪音。
-
-### 目前需持續觀察的 UI 問題
-
-最近畫面曾出現常用摘要 chip 被容器底部裁切。處理方式應是讓摘要列有足夠固定高度與上下 padding；有 chip 和顯示「尚無符合條件」時高度需一致，避免切換科目造成整區上下跳動。
-
-常用科目列與主要輸入列之間建議再增加約 4–5 px 垂直空間，收入與支出一致。
-
-**注意：README 曾記錄固定高度已在 V1.0.25 處理，但實際 UI 是否仍裁切，應以使用者最新 screenshot / 實機結果為準，不能只看 README 宣稱完成。**
-
-## 11. 輸入確認區
-
-- 最多 10 筆，最新在最上。
-- 成功狀態只有 `存檔成功` 使用綠色粗體；失敗為紅色。
-- 空白摘要顯示灰色 `(空白)`。
-- 日期放最前。
-- 帳戶後面不要 `｜`。
-- 收入／支出用小型 Tag：收入淡灰綠，支出淡灰紅。
-- 金額前面 `$` 並使用千分位。
-- 區段間使用全形空白。
-
-概念格式：
-
-`2025/12/24　[中信帳戶]　[收入] 蝦皮收入 - (空白)　$25,107　<存檔成功>`
-
-確認區不需跨重啟保存。
-
-## 12. 科目管理
-
-- 收入／支出分頁。
-- 兩層：大分類 → 科目。
-- 大分類本身不能作為交易科目。
-- 歷史交易只保存當時科目名稱文字，不因 master 修改而變更。
-- 科目名稱不可重複的範圍、長度、刪除限制，以 source 驗證後維持。
-- favourite 星號欄，收入／支出各最多 10。
-- 大分類仍有子科目時不能直接刪除。
-- UI 緊湊。
-
-## 13. 記帳資料表
-
-### 頂部控制
-
-概念：
-
-`選擇月份：[<][YYYY/MM][>][查詢] [搜尋摘要][搜尋] ... [設定期初餘額]`
-
-- 月份可手動輸入。
-- 錯誤月份顯示紅色 `月份錯誤`。
-- 月份更改後需按查詢才套用。
-- 顯示 `目前顯示｜YYYY/MM`。
-- 啟動月份：有交易時以最新交易月份為原則。
-- 摘要搜尋只過濾當前顯示月份；月統計仍以整月資料計算。
-
-### 欄位
-
-`日期, 帳戶, 收支, 收入科目, 收入摘要, 收入金額, 支出科目, 支出摘要, 支出金額, 餘額`
-
-### 排序
-
-正常檢視的既定核心排序以 source 為準；V1.0.25 已做簡化。
-
-點「帳戶」表頭：
-
-- 切換帳戶分組檢視。
-- 再點一次恢復正常排序。
-- 帳戶分組檢視時，餘額欄顯示該帳戶自己的逐筆餘額。
-
-### 欄寬／編輯
-
-- 非摘要欄固定寬度。
-- 收入金額與支出金額同寬。
-- 餘額略寬。
-- 剩餘空間由收入摘要／支出摘要分配。
-- 所有欄位不提供使用者手動拖拉改寬；舊 manual width 設定忽略。
-- inline editor 的字體、位置要貼合儲存格。
-- Ledger 內帳戶／收入科目／支出科目 combo 的箭頭區比主畫面更窄，避免吃掉儲存格文字空間。
-
-### 切換頁籤定位
-
-設定：
-
-`切換到記帳資料表時：[最新的一筆 ▼]`
-
-選項：
-
-- 最新的一筆（預設）
-- 最舊的一筆
-
-只滾到位置，不要因此選取或進入編輯。
-
-## 14. 月統計、期初、鎖帳、匯出
-
-- 期初餘額依帳戶處理。
-- 月統計包含期初、收入、支出、淨利損、期末等既有欄位。
-- 鎖帳採「鎖定至某年月」，鎖定月份與之前月份禁止一般寫入／修改。
-- 記帳資料表維持依序逐月鎖定；設定頁則是管理者刻意保留的直接調整入口，可向前或向後調整，兩者並存不是繞過錯誤。
-- 單月 Excel 匯出檔名：`志遠記帳_YYYY-MM.xlsx`。
-- 設定中有 Excel 匯出預設位置。
-
-具體 SQL、鎖定邏輯、餘額演算法先閱讀 `db.py`，不要依本文件重新發明。
-
-## 15. 備份與恢復
-
-- 自動備份約每 3 天由啟動流程判斷。
-- 同一天不要重複建立相同自動備份。
-- 本機與 Google Drive 均確實保留最新 30 份；Drive 必須讀取全部分頁後再清理。
-- 備份需驗證為有效 application DB。
-- 備份失敗要警示並允許後續重試。
-- Google Drive 上傳失敗不得讓本機備份被宣稱失敗，也不得阻止記帳。
-- 雲端網路上傳在背景執行；同步進行中不可直接關閉程式造成工作執行緒中斷。
-
-## 16. Google Drive
-
-產品原則：
-
-- **不要把 Google Drive 資料夾當成 live SQLite DB。**
-- 本機 SQLite 永遠是 source of truth。
-- 本機成功且驗證通過的 backup 才可進一步上傳 Drive。
-- Drive 連線失敗、沒網路、上傳失敗，都不能阻擋本機記帳。
-- Drive 授權集中在「設定」，不要散落在主畫面。
-- Drive 備份與 Drive 匯入共用同一授權。
-- 使用 desktop OAuth / Google Drive API；不要假裝沒有 OAuth client credentials 就可以完成正式連線。
-- OAuth token / client 資料屬 runtime / 使用者資料，不進 Git。
-
-目前 README 記錄：
-
-1. Google Cloud 建立 Desktop OAuth client 並啟用 Drive API。
-2. 下載 OAuth client JSON。
-3. 設定 → Google Drive → 匯入 OAuth 憑證 → 連結 Google Drive。
-4. 授權後可同步 backup，也可從 Drive 匯入 Excel / Google Sheet。
-
-## 17. 匯入
-
-主畫面右上角「匯入」。
-
-流程：
-
-`來源 → 工作表 → 欄位對應 → 預覽 → 驗證 → 匯入`
-
-來源：
-
-- 本機 Excel。
-- 已授權 Google Drive。
-
-支援：
-
-- `.xlsx`。
-- Google Sheets 匯出／轉成 `.xlsx` 後走同一 pipeline。
-- 舊 `.xls` 目前不要直接承諾支援；README 要求先另存 `.xlsx`。
-
-驗證至少包括：
-
-- 日期。
-- 交易金額為 1～9,999,999（最多 7 位數）。
-- 收入／支出辨識。
-- 必要欄位。
-- 鎖定月份。
-- 可能重複資料。
-
-重複候選 key：
-
-`日期 + 帳戶 + 收支 + 科目 + 摘要 + 金額`
-
-預設略過重複，但應提供可理解的提示／選擇。
-
-若來源本身是 CY 格式，可依收入金額／支出金額欄自動判別類型。
-
-## 18. 設定視窗
-
-主要區塊：
-
-1. DB 位置／資料庫相關。
-2. 鎖帳。
-3. 備份／恢復。
-4. 常用摘要設定。
-5. Google Drive。
-6. Excel 匯出預設位置。
-7. 程式資訊與資料清理。
-
-UI 要緊湊；按鈕、combo、input 不要過高。
-
-目前設定頁的程式資訊區保留「清除所有記帳資料與期初餘額」。按下後有兩個獨立輸入視窗，兩次均需輸入完全相同的大寫 `DELETE`；取消或任一次輸入錯誤不執行清除。`DELETE` 是防誤觸確認文字，不是密碼。
-
-成功時重置本機目前這份帳本的交易、期初餘額、帳戶、科目、鎖帳、本機偏好及 Google Drive 本機連結；預設帳戶／科目重新建立。清除前須先建立可驗證的復原備份；既有本機和雲端備份保留，雲端既有資料不受本機清除影響。若資料庫使用自訂位置，設定仍指向該位置，避免下次誤開舊帳本。具體範圍以 `PROJECT_RULES.md` 與目前 source 為準。
-
-## 19. 已知歷史問題，避免回歸
-
-- Qt locale API 相容性曾造成啟動錯誤。
-- 啟動器曾因隱藏視窗參數造成主視窗看不到。
-- 日期 8 碼輸入曾回歸為不格式化直接報錯。
-- 日期 picker 前月日期灰底曾判斷錯誤。
-- ledger inline combo 箭頭曾過寬。
-- common summary 曾有 row clipping / 高度跳動。
-- 不要在已有自訂科目時自動補回「一般收入／一般支出」。
-- 不要把使用者歷史資料因 master rename/delete 而重寫。
-
-## 20. V1.0.25 測試檔歷史事項（V1.0.26 已處理）
-
-V1.0.25 archive 的 `tests/test_app.py` 有兩個已知 stale fixture：
-
-- 測試仍使用舊類別名稱 `ClearDataDialog`，而 source 已改名為 `PasswordDialog`。
-- 某個「後補輸入」測試日期與同一測試前面設定的 lock 發生衝突。
-
-V1.0.25 當時的 CI 只在 runtime 建立臨時測試副本修正這兩個 fixture，以保留該版 source snapshot 不被改寫。
-
-V1.0.26 已正式修正上述兩個 fixture，並移除 CI 的臨時文字取代。後續應持續維持 source tests 與 CI 實際執行內容完全一致。
-
-目前 CI 另保存可重現原始碼封存檔與 `.sha256` 作為獨立 artifact；它不是一般使用者的 Windows 可攜下載包。`SOURCE_SHA256.txt` 不納入封存，以免雜湊值自我循環。
-
-## 21. 下個回合：Icon 與 UI
-
-使用者接下來要移到 Chat 討論 Icon 與 UI；目前沒有指定圖案或新畫面定稿。下個回合先讀 GitHub `main` 最新 source 和三層規則；視覺工作另依 `REPO_POLICY.md` 讀 AITeam `main` 的 canonical Desktop Visual Guide 與 Icon Family，再核對使用者提供的截圖和實機回饋。
-
-待實機驗收：Windows 深色模式下淺色標題列、清單及對話框的可讀性；解壓一次後的啟動與 Icon 顯示；以帳本副本測試雙重 `DELETE`、重置前備份、保留既有備份及自訂資料庫位置。不要把 CI 啟動測試表述成這些操作都已在使用者電腦通過。
-
-既有 UI 觀察點：常用摘要 chip 裁切、常用科目到主要輸入列的距離、常用摘要與常用科目的層級。Icon 和 UI 的具體修改範圍由下一輪使用者需求決定；維持既有鍵盤流程、IME、帳本相容性與備份功能。
+除此之外沒有已授權的下一階段功能開發。新的功能、UI 或資料行為變更，等使用者重新提出後再建立新的 branch / PR。
