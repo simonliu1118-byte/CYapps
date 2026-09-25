@@ -53,6 +53,12 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Set up Python for public artifact safety scan
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
       - name: Scan tracked source for confidential runtime data
         if: env.CYINVOICE_SHOULD_RELEASE == 'true'
         run: ./scripts/verify-source.ps1
@@ -102,6 +108,10 @@ jobs:
             }
           }
           finally { Remove-Item $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue }
+
+      - name: Scan formal release package for secrets and production bindings
+        if: env.CYINVOICE_SHOULD_RELEASE == 'true'
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" ("./dist/CYInvoice_V{0}.zip" -f $env:CYINVOICE_VERSION)
 
       - name: Create checksum and release notes
         if: env.CYINVOICE_SHOULD_RELEASE == 'true'
