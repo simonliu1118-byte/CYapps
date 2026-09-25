@@ -12,31 +12,135 @@ The reason is provider isolation: live application data is on Cloudflare D1, whi
 
 The storage-provider change does **not** make GCS a live database or synchronization source. D1 remains authoritative.
 
-## 2. Shared contract, separate current deployments
+## 2. Shared architecture: service layer vs storage provider
 
-CYAccountingWeb and CY Web should use the same conceptual provider-neutral backup boundary:
+CYAccountingWeb and CY Web should use the same two-layer backup boundary:
 
 ```text
-Application / domain backup logic
+Application / D1 backup semantics
         ↓
-BACKUP_PROVIDER
+BackupService
+        ↓
+BackupStorageProvider
         ↓
 Concrete provider implementation
         ↓
 GCS in Chihyuan production
 ```
 
-The shared contract should cover at least:
+### `BackupService`
+
+Application-level backup orchestration owns these semantics:
 
 - create backup;
-- list backups;
-- verify backup;
-- restore backup;
-- apply retention / delete expired backups.
+- list valid backups;
+- verify backup integrity and compatibility;
+- restore a selected backup;
+- apply retention policy;
+- enforce authorization and restore safety;
+- create backup / restore audit evidence.
 
-Exact TypeScript names may differ during implementation, but storage-provider-specific code must stay behind this boundary.
+Conceptually:
 
-## 3. Current infrastructure topology
+```text
+BackupService
+- createBackup()
+- listBackups()
+- verifyBackup(backupId)
+- restoreBackup(backupId)
+- applyRetention()
+```
+
+### `BackupStorageProvider`
+
+Storage-specific code only stores and retrieves opaque objects:
+
+```text
+BackupStorageProvider
+- putObject(key, bytes, metadata)
+- getObject(key)
+- listObjects(prefix)
+- deleteObject(key)
+```
+
+`BackupStorageProvider` must **not** own D1 restore logic, `SUPER_ADMIN` checks, schema migration rules, or application-domain decisions.
+
+This is intentional: GCS can later be replaced by another object-storage backend without rewriting Accounting restore semantics.
+
+## 3. Portable backup set format
+
+A logical backup is a backup **set**, not merely one arbitrary file:
+
+```text
+<app-scope>/<backup-id>/
+├─ manifest.json
+└─ data.json
+```
+
+`backup-id` is a stable unique identifier for one backup operation and is not inferred solely from a timestamp.
+
+### `manifest.json`
+
+The portable manifest should contain at least:
+
+```text
+format
+formatVersion
+backupId
+appId
+appVersion
+schemaVersion
+createdAtUtc
+sourceDatabaseEngine = d1
+workspaceScope / tenant scope when applicable
+tableCounts / recordCounts
+dataObjectName
+dataSha256
+dataByteLength
+backupStatus
+```
+
+Do not require production D1 database IDs, Cloudflare account IDs, GCS credentials, secrets, or other infrastructure-specific sensitive values inside the portable manifest.
+
+Only a backup that has completed upload **and read-back verification** may be cataloged or displayed as valid/restorable.
+
+### `data.json`
+
+`data.json` contains the portable application-data snapshot needed to reconstruct the Accounting database.
+
+Requirements:
+
+- UTF-8 JSON;
+- explicit format version;
+- entities/tables identified explicitly rather than depending on source row order;
+- preserve IDs and relationships needed for reconstruction;
+- preserve accounting decimal/date/text semantics without binary-float reinterpretation;
+- exclude password plaintext, OTPs, sessions, OAuth refresh tokens, API tokens and other credential material;
+- reject unsupported future/legacy format versions rather than guessing.
+
+Accounting-specific tables and restore ordering remain the responsibility of CYAccountingWeb, not the shared storage layer.
+
+## 4. Integrity sequence
+
+Application-level integrity uses SHA-256 over the exact stored `data.json` bytes. Store the digest and byte length in `manifest.json`.
+
+A backup is successful only after:
+
+```text
+export D1
+→ build data.json
+→ calculate data SHA-256
+→ build manifest.json
+→ upload both objects
+→ read data.json back from provider
+→ recompute SHA-256
+→ verify byte length / counts / manifest
+→ mark backup valid
+```
+
+Provider-native checksums may be used as additional transport verification, but they do not replace the portable application-level SHA-256 contract.
+
+## 5. Current infrastructure topology
 
 The two applications may use the **same Google Cloud project**, but they must not share one broad GCS credential.
 
@@ -62,7 +166,7 @@ Requirements:
 
 Separate buckets are the clearest operational boundary. A strongly isolated namespace is acceptable only if IAM and restore selection remain unambiguous.
 
-## 4. What to keep from the existing Google Drive V0.16 work
+## 6. What to keep from the existing Google Drive V0.16 work
 
 Do not throw away the useful parts of the existing implementation merely because the provider changes.
 
@@ -73,7 +177,7 @@ Preserve/refactor where appropriate:
 - application/schema/version metadata;
 - record/row counts;
 - manifest concept;
-- data SHA-256 and file SHA-256 verification;
+- data SHA-256 and file/integrity verification;
 - upload-then-read-back integrity verification;
 - retention policy (currently latest 30 backups);
 - disaster-recovery restore validation.
@@ -83,12 +187,14 @@ Replace the provider-specific layer:
 ```text
 Google Drive API / OAuth / refresh-token storage
                 ↓
-             GCS provider
+BackupStorageProvider
+                ↓
+             GCS adapter
 ```
 
 After GCS production acceptance, remove obsolete Drive production credential and OAuth paths rather than maintaining two permanent production backup providers without a separate business requirement.
 
-## 5. Restore safety boundary
+## 7. Restore safety boundary
 
 CYAccountingWeb should align with CY Web's confirmed high-risk backup semantics:
 
@@ -99,9 +205,34 @@ CYAccountingWeb should align with CY Web's confirmed high-risk backup semantics:
 - Worker/API authorization is authoritative; UI hiding alone is insufficient;
 - backup and restore operations produce audit evidence including actor, time, backup/version identifier and result.
 
-A backup must be validated before restore: expected app/schema version, manifest, integrity checksum and other required metadata must pass.
+Before any destructive D1 write begins:
 
-## 6. Future integration into Chihyuan Enterprise Management System
+```text
+load manifest
+→ verify appId / formatVersion / schema compatibility
+→ load data
+→ verify byte length + SHA-256 + record counts
+→ only then begin controlled restore
+```
+
+Where supported, create/retain a pre-restore recovery point before replacing current D1 data. After restore, run application-level reconciliation before recording success.
+
+## 8. Cross-application restore isolation
+
+The shared outer contract does **not** make backup files interchangeable.
+
+A CY Web backup must never appear as a valid Accounting restore candidate, and vice versa.
+
+At minimum, candidate selection and restore validation must match the current application's:
+
+```text
+appId
+formatVersion
+schemaVersion compatibility
+workspace / tenant scope where applicable
+```
+
+## 9. Future integration into Chihyuan Enterprise Management System
 
 CYAccountingWeb may later become the Accounting/Finance module inside CY Web. Do **not** pre-empt that integration by sharing one GCS key today.
 
@@ -109,7 +240,7 @@ Preferred future topology:
 
 ```text
 CY Web ---------┐
-CYAccounting ---+--> CY Backup Service / Worker --> GCS
+CYAccounting ---+--> CY Backup Service / Worker --> BackupStorageProvider --> GCS
 future apps ----┘
 ```
 
@@ -118,7 +249,8 @@ At that stage:
 - Apps call a shared internal Backup Service / Worker through a service/API boundary;
 - only that backup service needs direct GCS authorization;
 - current per-App direct GCS credentials can be retired;
-- the backup service may standardize manifest, checksum, retention, audit and restore orchestration.
+- the shared service may centralize storage access, cataloging, retention, common manifest vocabulary and integrity verification;
+- App-specific exporters/restorers still own their database schema semantics.
 
 Even after consolidation, backup datasets remain logically separated:
 
@@ -129,11 +261,12 @@ Accounting backup set    -> independently restorable
 
 Do not combine unrelated application databases into one mixed backup file solely because they share a backup service.
 
-## 7. Coordination source
+## 10. Coordination source
 
 The matching CY Web architecture decisions are:
 
 - `BD-044`: in-app backup/restore is Super Admin-only and restore requires double confirmation.
-- `BD-045`: Chihyuan production initially uses GCS through a provider-neutral backup contract; CY Web and CYAccountingWeb use separate current identities/datasets and may later converge behind a shared Backup Service.
+- `BD-045`: Chihyuan production initially uses GCS; CY Web and CYAccountingWeb use separate current identities/datasets and may later converge behind a shared Backup Service.
+- `BD-046`: separates `BackupService` from `BackupStorageProvider` and fixes the portable `manifest.json + data.json` backup-set and verification semantics.
 
 When implementation begins, read the latest versions of both projects' TODO / project rules before changing runtime code. If the projects differ on a genuinely accounting-specific requirement, keep that difference explicit rather than forcing artificial code sharing.
