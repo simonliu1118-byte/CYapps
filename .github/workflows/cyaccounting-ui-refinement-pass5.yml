@@ -41,3 +41,5 @@ jobs:
           git diff --cached --check
           git commit -m "ui(CYAccounting): refine Build 2 dialogs and compact layout"
           git push origin HEAD:cyaccounting/v1.2.0-visual-phase1
+
+# Retriggered after narrowing the InputTab layout guard to its exact context.
