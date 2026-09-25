@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 from db import Database, DatabaseError
 from gdrive import DriveFile, GoogleDriveClient, GoogleDriveError, GOOGLE_SHEET_MIME, XLS_MIME, XLSM_MIME
 from util import APP_NAME, MAX_AMOUNT, format_date, is_month_locked, month_key_from_date, normalize_date_input, parse_date, weighted_units
+from theme import IMPORT_DIALOG_STYLE
 
 
 class DriveFileDialog(QDialog):
@@ -224,15 +225,13 @@ class ImportTransactionsDialog(QDialog):
         self.setWindowTitle("匯入外部帳簿")
         self.resize(900, 690)
         self.setObjectName("importDialog")
-        self.setStyleSheet(
-            "QDialog#importDialog QPushButton, QDialog#importDialog QLineEdit, QDialog#importDialog QComboBox {"
-            "min-height:24px; max-height:27px; padding-top:0px; padding-bottom:0px;}"
-        )
+        self.setStyleSheet(IMPORT_DIALOG_STYLE)
         self._build()
 
     def _build(self):
         outer = QVBoxLayout(self)
-        outer.setSpacing(8)
+        outer.setContentsMargins(16, 12, 16, 12)
+        outer.setSpacing(12)
 
         source = QGroupBox("匯入來源")
         sl = QGridLayout(source)

@@ -42,7 +42,6 @@ from db import Database, DatabaseError
 from background import start_background_task
 from util import (
     APP_NAME,
-    APP_VERSION,
     MAX_AMOUNT,
     app_root,
     DB_FILENAME,
@@ -77,7 +76,7 @@ class NameDialog(QDialog):
         self.edit.selectAll()
         layout.addWidget(self.edit)
         self.error = QLabel("")
-        self.error.setStyleSheet("color:#c62828;font-weight:bold;")
+        self.error.setStyleSheet("color:#B43737;font-weight:bold;")
         layout.addWidget(self.error)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText("確定")
@@ -112,7 +111,7 @@ class AccountManagerDialog(QDialog):
         outer = QVBoxLayout(self)
         note = QLabel("帳戶名稱上限8個中文字；點擊第一欄可設為預設帳戶。\n修改或刪除帳戶不會變更歷史記帳資料。")
         note.setWordWrap(True)
-        note.setStyleSheet("color:#5d6875;")
+        note.setStyleSheet("color:#667085;")
         outer.addWidget(note)
 
         self.list = QTreeWidget()
@@ -255,7 +254,7 @@ class CategoryPage(QWidget):
         count_row = QHBoxLayout()
         count_row.addStretch(1)
         self.favorite_count_label = QLabel("")
-        self.favorite_count_label.setStyleSheet("color:#5d6875;font-weight:bold;")
+        self.favorite_count_label.setStyleSheet("color:#667085;font-weight:bold;")
         count_row.addWidget(self.favorite_count_label)
         outer.addLayout(count_row)
         self.tree = QTreeWidget()
@@ -503,13 +502,14 @@ class CategoryManagerDialog(QDialog):
         super().__init__(parent)
         self.db = db
         self.setWindowTitle("收入支出科目管理")
+        self.setObjectName("categoryManagerDialog")
         self.setModal(True)
         # The first action row defines the useful width; remove the empty right side.
         self.resize(400, 520)
         self.setFixedWidth(400)
         outer = QVBoxLayout(self)
         note = QLabel("大分類與科目名稱上限8個中文字；科目名稱不可重複。歷史資料不會隨科目改名或刪除而變更。")
-        note.setWordWrap(True); note.setStyleSheet("color:#5d6875;")
+        note.setWordWrap(True); note.setStyleSheet("color:#667085;")
         outer.addWidget(note)
         tabs = QTabWidget()
         tabs.addTab(CategoryPage(db, "income"), "收入科目")
@@ -530,7 +530,7 @@ class OpeningBalanceDialog(QDialog):
         outer.setContentsMargins(14, 12, 14, 12)
         outer.setSpacing(8)
         note = QLabel("每個帳戶分開設定；可輸入負數。空白代表尚未設定。")
-        note.setStyleSheet("color:#5d6875;")
+        note.setStyleSheet("color:#667085;")
         note.setWordWrap(True)
         outer.addWidget(note)
 
@@ -569,7 +569,7 @@ class OpeningBalanceDialog(QDialog):
         f = self.total.font(); f.setBold(True); self.total.setFont(f)
         outer.addWidget(self.total)
         self.error = QLabel("")
-        self.error.setStyleSheet("color:#c62828;font-weight:bold;")
+        self.error.setStyleSheet("color:#B43737;font-weight:bold;")
         self.error.setWordWrap(True)
         outer.addWidget(self.error)
 
@@ -670,9 +670,9 @@ class EditTransactionDialog(QDialog):
         form.addRow(("收入" if tx["kind"] == "income" else "支出") + "科目：", self.category)
         self.summary = WeightedLineEdit(40); self.summary.setText(tx["summary"])
         form.addRow(("收入" if tx["kind"] == "income" else "支出") + "摘要：", self.summary)
-        self.amount = QLineEdit(str(tx["amount"])); self.amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.amount))
+        self.amount = QLineEdit(str(tx["amount"])); self.amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.amount)); self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.addRow(("收入" if tx["kind"] == "income" else "支出") + "金額：", self.amount)
-        self.error = QLabel(""); self.error.setStyleSheet("color:#c62828;font-weight:bold;")
+        self.error = QLabel(""); self.error.setStyleSheet("color:#B43737;font-weight:bold;")
         form.addRow(self.error)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Save).setText("儲存修改")
@@ -726,17 +726,16 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("系統設定")
         self.setObjectName("settingsDialog")
         self.setModal(True)
-        self.resize(700, 650)
-        self.setStyleSheet(
-            "QDialog#settingsDialog QPushButton, QDialog#settingsDialog QLineEdit, "
-            "QDialog#settingsDialog QComboBox, QDialog#settingsDialog QSpinBox {"
-            "min-height:21px; max-height:24px; padding-top:0px; padding-bottom:0px;}"
-            "QDialog#settingsDialog QGroupBox {padding-top:9px; padding-bottom:7px;}"
-        )
+        self.resize(760, 640)
         outer = QVBoxLayout(self)
+        outer.setContentsMargins(12, 8, 12, 8)
+        outer.setSpacing(6)
 
         db_box = QGroupBox("資料庫儲存位置")
         db_layout = QGridLayout(db_box)
+        db_layout.setContentsMargins(12, 8, 12, 8)
+        db_layout.setHorizontalSpacing(8)
+        db_layout.setVerticalSpacing(6)
         self.db_path = QLineEdit(str(db.path.parent)); self.db_path.setReadOnly(True)
         browse = no_tab_button("瀏覽"); browse.clicked.connect(self.browse_db)
         open_folder = no_tab_button("開啟資料資料夾"); open_folder.clicked.connect(self.open_data_folder)
@@ -747,7 +746,7 @@ class SettingsDialog(QDialog):
 
         lock_box = QGroupBox("資料鎖定")
         lock_layout = QHBoxLayout(lock_box)
-        lock_layout.setContentsMargins(12, 10, 12, 10)
+        lock_layout.setContentsMargins(12, 7, 12, 7)
         lock_layout.setSpacing(8)
         current = db.locked_through()
         self.current_lock = QLabel(current or "未設定")
@@ -817,8 +816,8 @@ class SettingsDialog(QDialog):
 
         backup_box = QGroupBox("備份與還原")
         backup_layout = QHBoxLayout(backup_box)
-        backup_layout.setContentsMargins(12, 10, 12, 10)
-        backup_layout.setSpacing(16)
+        backup_layout.setContentsMargins(12, 8, 12, 8)
+        backup_layout.setSpacing(8)
         last = self.config.get("last_auto_backup_date") or "尚未備份"
         self.last_backup = QLabel(last)
         info = QVBoxLayout()
@@ -874,19 +873,19 @@ class SettingsDialog(QDialog):
         drive_layout.addWidget(self.google_last, 3, 0, 1, 4)
         outer.addWidget(drive_box)
 
-        info_box = QGroupBox("程式資訊")
-        info_layout = QGridLayout(info_box)
-        info_layout.addWidget(QLabel("程式名稱："), 0, 0)
-        info_layout.addWidget(QLabel(APP_NAME), 0, 1)
-        info_layout.addWidget(QLabel("版本："), 1, 0)
-        info_layout.addWidget(QLabel(APP_VERSION), 1, 1)
+        reset_box = QGroupBox("帳本重置")
+        reset_layout = QHBoxLayout(reset_box)
+        reset_layout.setContentsMargins(12, 7, 12, 7)
+        reset_layout.setSpacing(8)
+        reset_note = QLabel("清除本機帳本資料與期初餘額；既有備份保留。")
+        reset_layout.addWidget(reset_note)
+        reset_layout.addStretch(1)
         clear = no_tab_button("清除所有記帳資料與期初餘額")
         clear.setObjectName("dangerButton")
         clear.clicked.connect(self.clear_data)
-        info_layout.setColumnStretch(2, 1)
-        info_layout.addWidget(clear, 0, 3, 2, 1, Qt.AlignmentFlag.AlignVCenter)
-        outer.addWidget(info_box)
-        outer.addStretch()
+        reset_layout.addWidget(clear)
+        outer.addWidget(reset_box)
+        outer.addSpacing(2)
         close = no_tab_button("關閉"); close.clicked.connect(self.accept)
         row = QHBoxLayout(); row.addStretch(); row.addWidget(close); outer.addLayout(row)
 

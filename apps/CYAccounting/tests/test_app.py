@@ -7,8 +7,9 @@ from pathlib import Path
 from datetime import date
 from unittest.mock import patch
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QGroupBox, QPushButton, QTabWidget
 from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import Qt
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
@@ -151,6 +152,15 @@ def test_account_manager_controls_and_titles():
     category_buttons = [b.text() for b in category_dlg.findChildren(QPushButton)]
     assert '關閉' not in category_buttons
     assert {'↑', '↓', '新增科目', '修改', '刪除', '新增大分類', '移至其他大分類'} <= set(category_buttons)
+    category_tabs = category_dlg.findChild(QTabWidget)
+    assert category_tabs is not None
+    assert category_tabs.count() == 2
+    # V1.1.0 Release implementation: plain native QTabWidget.
+    assert category_tabs.objectName() == ''
+    assert 'categoryManagerTabs' not in main_module.APP_STYLE
+    # Secondary dialogs inherit QApplication's ACC icon; no Win32
+    # fixed-dialog/no-icon manipulation remains.
+    assert not hasattr(main_module.ChineseStandardButtonFilter, '_prepare_secondary_dialog_chrome')
     combo = CategoryComboBox()
     assert combo.lineEdit().hasFrame() is False
     opening_dlg = OpeningBalanceDialog(db, '2026/07')
@@ -256,6 +266,12 @@ def test_ui_constructs():
     assert win.input_tab.date_edit.hasFocus() is False  # focus is queued
     assert '2026/07' in win.ledger_tab.table_title.text()
     assert len(win.input_tab.confirm_labels) == 10
+    assert win.minimumWidth() == 1120
+    assert win.minimumHeight() == 735
+    footer = win.findChild(QLabel, 'appFooter')
+    assert footer is not None
+    assert APP_VERSION in footer.text()
+    assert 'Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.' in footer.text()
     selected_button = win.input_tab.account_buttons[win.input_tab.selected_account]
     assert selected_button.isChecked()
     assert win.input_tab.income_amount.maxLength() == 7
@@ -270,9 +286,9 @@ def test_ui_constructs():
     win.input_tab.income_amount.setText('1')
     win.input_tab.save_entry('income')
     assert '(空白)' in win.input_tab.confirm_lines[0]
-    assert '#98a2b3' in win.input_tab.confirm_lines[0]
+    assert '#98A2B3' in win.input_tab.confirm_lines[0]
     assert '[現金]' in win.input_tab.confirm_lines[0]
-    assert 'background-color:#e7efe9' in win.input_tab.confirm_lines[0]
+    assert 'background-color:#EDF5F2' in win.input_tab.confirm_lines[0]
     assert '｜' not in win.input_tab.confirm_lines[0]
     assert '$1' in win.input_tab.confirm_lines[0]
     assert '&lt;存檔成功&gt;' in win.input_tab.confirm_lines[0]
@@ -295,6 +311,9 @@ def test_ui_constructs():
     assert dlg.common_summary_min.text() == '3'
     assert dlg.common_summary_recent.findChild(QPushButton) is None
     assert dlg.common_summary_min.findChild(QPushButton) is None
+    settings_titles = {group.title() for group in dlg.findChildren(QGroupBox)}
+    assert '程式資訊' not in settings_titles
+    assert '帳本重置' in settings_titles
     # The settings page intentionally remains an administrator override that
     # may move the lock backward after an explicit warning.
     db.set_locked_through('2026/07')
@@ -430,3 +449,51 @@ if __name__ == '__main__':
     test_backup_schedule_and_recovery_paths()
     test_maximized_window_state_is_restored()
     print('ALL TESTS PASSED')
+
+
+def test_phase1_section_group_titles_are_effectively_bold():
+    root = Path(tempfile.mkdtemp())
+    db = Database(root / 'visual-groups.db')
+    app = QApplication.instance() or QApplication([])
+    old_style = app.styleSheet()
+    try:
+        app.setStyleSheet(main_module.APP_STYLE)
+
+        input_tab = main_module.InputTab(db, {}, lambda _month: None)
+        input_groups = {g.title(): g for g in input_tab.findChildren(QGroupBox)}
+        for title in ('基本資訊', '收入', '支出', '輸入確認'):
+            group = input_groups[title]
+            group.ensurePolished()
+            assert group.font().bold(), title
+            labels = group.findChildren(QLabel)
+            if labels:
+                labels[0].ensurePolished()
+                assert not labels[0].font().bold(), f'{title} child text must remain regular'
+
+        settings = SettingsDialog(db, {}, lambda _p: (True, ''), lambda _p: (True, ''),
+                                  db.reset_local_ledger, lambda: None)
+        for group in settings.findChildren(QGroupBox):
+            group.ensurePolished()
+            assert group.font().bold(), group.title()
+
+        importer = ImportTransactionsDialog(db, {})
+        import_groups = {g.title(): g for g in importer.findChildren(QGroupBox)}
+        for title in ('匯入來源', '欄位對應', '匯入預覽（前 20 筆）'):
+            group = import_groups[title]
+            group.ensurePolished()
+            assert group.font().bold(), title
+
+        chrome = main_module.ChineseStandardButtonFilter(app)
+        account = AccountManagerDialog(db)
+        chrome._prepare_secondary_dialog_chrome(account)
+        assert not bool(account.windowFlags() & Qt.WindowType.WindowSystemMenuHint)
+        assert bool(account.windowFlags() & Qt.WindowType.WindowTitleHint)
+        assert bool(account.windowFlags() & Qt.WindowType.WindowCloseButtonHint)
+
+        account.close()
+        importer.close()
+        settings.close()
+        input_tab.close()
+    finally:
+        app.setStyleSheet(old_style)
+        db.close()

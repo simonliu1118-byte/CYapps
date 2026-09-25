@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Callable
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
-from PySide6.QtGui import QBrush, QColor
 
 from util import format_amount
 
@@ -80,8 +79,6 @@ class LedgerTableModel(QAbstractTableModel):
             return None
         r = self.row_data(index.row())
         col = index.column()
-        if role == Qt.ItemDataRole.BackgroundRole:
-            return QBrush(QColor("#ffffff" if index.row() % 2 == 0 else "#f2f5f8"))
         if r is None:
             return None
         if role == Qt.ItemDataRole.UserRole:

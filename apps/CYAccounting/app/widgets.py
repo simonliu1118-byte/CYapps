@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from util import format_amount, normalize_date_input, shift_month, trim_weighted, weighted_units
+from theme import CALENDAR_STYLE, CATEGORY_POPUP_STYLE, COMBO_ARROW_PATH
 
 
 class WeightedLineEdit(QLineEdit):
@@ -218,10 +219,7 @@ class CategoryComboBox(QComboBox):
             "QLineEdit { border: 0; border-radius: 0; background: transparent; "
             "padding: 0; min-height: 0px; }"
         )
-        self.view().setStyleSheet(
-            "QAbstractItemView { border: 1px solid #aeb9c5; background: white; "
-            "outline: 0; selection-background-color: #dce9f5; }"
-        )
+        self.view().setStyleSheet(CATEGORY_POPUP_STYLE)
         self.currentIndexChanged.connect(self._sync_display)
 
     def set_tree(self, tree: list[dict], preserve: str | None = None) -> None:
@@ -231,8 +229,8 @@ class CategoryComboBox(QComboBox):
             g = QStandardItem(group["name"])
             g.setEnabled(False)
             font = g.font(); font.setBold(True); g.setFont(font)
-            g.setForeground(QBrush(QColor("#4c5968")))
-            g.setBackground(QBrush(QColor("#eef2f6")))
+            g.setForeground(QBrush(QColor("#667085")))
+            g.setBackground(QBrush(QColor("#F1F3F5")))
             g.setData(None, Qt.ItemDataRole.UserRole)
             model.appendRow(g)
             for cat in group.get("categories", []):
@@ -310,11 +308,7 @@ class DatePickerDialog(QDialog):
         self.calendar.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
         self.calendar.setSelectedDate(QDate(initial.year, initial.month, initial.day))
         self.calendar.setCurrentPage(initial.year, initial.month)
-        self.calendar.setStyleSheet(
-            "QCalendarWidget QAbstractItemView::item:selected {"
-            "background:#39739d; color:white; font-weight:bold; border:1px solid #245a82;"
-            "}"
-        )
+        self.calendar.setStyleSheet(CALENDAR_STYLE)
         sat = self.calendar.weekdayTextFormat(Qt.DayOfWeek.Saturday)
         sat.setForeground(QBrush(QColor("#2c8b57")))
         self.calendar.setWeekdayTextFormat(Qt.DayOfWeek.Saturday, sat)
@@ -364,8 +358,8 @@ class DatePickerDialog(QDialog):
             qd = QDate(current.year, current.month, current.day)
             fmt = QTextCharFormat()
             if current.month != month:
-                fmt.setBackground(QBrush(QColor("#edf0f3")))
-                fmt.setForeground(QBrush(QColor("#8b949e")))
+                fmt.setBackground(QBrush(QColor("#F1F3F5")))
+                fmt.setForeground(QBrush(QColor("#98A2B3")))
             elif current.weekday() == 5:
                 fmt.setForeground(QBrush(QColor("#2c8b57")))
             elif current.weekday() == 6:
@@ -406,7 +400,7 @@ class TransactionDelegate(QStyledItemDelegate):
                 "border-radius: 0px; } "
                 "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; "
                 "width: 12px; border-left: 1px solid #aeb9c5; background:#f1f4f7; } "
-                "QComboBox::down-arrow { width: 8px; height: 6px; } "
+                f'QComboBox::down-arrow {{ image: url("{COMBO_ARROW_PATH}"); width: 8px; height: 6px; }} '
                 "QComboBox QAbstractItemView { font-size: 9pt; }"
             )
         return editor

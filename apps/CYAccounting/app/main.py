@@ -160,6 +160,7 @@ from models import LedgerTableModel
 from util import (
     APP_NAME,
     APP_VERSION,
+    APP_RELEASE_DATE,
     MAX_AMOUNT,
     BACKUP_PREFIX,
     DB_FILENAME,
@@ -190,105 +191,7 @@ from import_dialog import ImportTransactionsDialog
 startup_log("all Python and PySide6 modules imported")
 
 
-APP_STYLE = """
-QMainWindow, QDialog { background: #f5f7fa; }
-QWidget { font-family: "Microsoft JhengHei UI", "Microsoft JhengHei", sans-serif; font-size: 11pt; color: #222b35; }
-QGroupBox { border: 1px solid #cbd3dc; border-radius: 7px; margin-top: 12px; padding: 12px 10px 10px 10px; background: #ffffff; font-weight: bold; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; color: #334155; }
-QLineEdit, QComboBox, QSpinBox, QDateEdit { min-height: 31px; border: 1px solid #aeb9c5; border-radius: 5px; padding: 2px 7px; background: white; selection-background-color: #4b769f; }
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDateEdit:focus { border: 2px solid #39739d; }
-QPushButton { min-height: 31px; padding: 2px 13px; border: 1px solid #9faab6; border-radius: 5px; background: #f4f6f8; }
-QToolButton#dateStepButton { min-width: 24px; max-width: 24px; min-height: 15px; max-height: 15px; padding: 0; border: 1px solid #aeb9c5; border-radius: 3px; background: #f4f6f8; font-size: 8pt; font-weight: bold; }
-QToolButton#dateStepButton:hover { background: #e8edf2; border-color: #82909e; }
-QToolButton#dateStepButton:pressed { background: #dce5ed; }
-QPushButton:hover { background: #e7edf3; }
-QPushButton:pressed { background: #d7e1ea; }
-QPushButton:disabled { color: #9aa3ad; background: #eceff2; }
-QPushButton#primaryButton { background: #376f98; color: white; border-color: #2f6388; font-weight: bold; }
-QPushButton#primaryButton:hover { background: #2f6388; }
-QPushButton#dangerButton { color: #b42318; font-weight: bold; }
-QTabWidget::pane { border: 1px solid #c5cdd6; background: #f5f7fa; top: 6px; border-radius: 5px; }
-QTabBar::tab { background: #e7ebef; border: 1px solid #c5cdd6; border-bottom: 0; padding: 9px 18px; min-width: 105px; margin-right: 4px; border-top-left-radius: 5px; border-top-right-radius: 5px; }
-QTabBar::tab:selected { background: #ffffff; font-weight: bold; }
-QPushButton#topActionButton { background: #f4f6f8; border: 1px solid #9faab6; border-radius: 5px; padding: 2px 13px; }
-QPushButton#topActionButton:hover { background: #e7edf3; }
-QPushButton#topActionButton:pressed { background: #d7e1ea; }
-QPushButton#accountChoiceButton {
-    background: #f4f6f8;
-    color: #263442;
-    border: 1px solid #9faab6;
-    font-weight: normal;
-}
-QPushButton#accountChoiceButton:hover { background: #e7edf3; }
-QPushButton#accountChoiceButton:checked {
-    background: #376f98;
-    color: white;
-    border: 2px solid #244f6d;
-    font-weight: bold;
-}
-QPushButton#accountChoiceButton:checked:hover { background: #2f6388; }
-QPushButton#quickCategoryButton {
-    min-height: 24px;
-    max-height: 24px;
-    padding: 0px 9px;
-}
-QPushButton#quickSummaryButton {
-    min-height: 22px;
-    max-height: 22px;
-    padding: 0px 8px;
-    color: #53606d;
-    background: #eef2f5;
-    border: 1px solid #c9d1d9;
-    border-radius: 9px;
-}
-QPushButton#quickSummaryButton:hover { background: #e2e8ee; border-color: #aeb9c5; }
-QPushButton#quickSummaryButton:pressed { background: #d7e0e8; }
-QFrame#summarySeparator { border: 0; border-top: 1px dashed #b8c2cc; min-height: 1px; max-height: 1px; }
-
-QTabBar#mainTabBar::tab {
-    background: #e7ebef;
-    border: 1px solid #c5cdd6;
-    border-bottom: 0;
-    padding: 9px 18px;
-    min-width: 105px;
-    margin-right: 4px;
-    border-top-left-radius: 5px;
-    border-top-right-radius: 5px;
-}
-QTabBar#mainTabBar::tab:selected { background: #ffffff; font-weight: bold; margin-bottom: -1px; }
-QTabBar#mainTabBar::tab:!selected { margin-top: 3px; }
-QFrame#pageContainer {
-    border: 1px solid #c5cdd6;
-    border-radius: 0 5px 5px 5px;
-    background: #f5f7fa;
-}
-QTableView { background: white; border: 1px solid #b8c2cc; gridline-color: #d5dbe1; alternate-background-color: #f2f5f8; }
-QTreeWidget, QListWidget, QComboBox QAbstractItemView {
-    background: #ffffff; color: #1f2937;
-    selection-background-color: #dbeafe; selection-color: #1f2937;
-}
-QHeaderView::section { background: #dde5ec; border: 0; border-right: 1px solid #c4ccd4; border-bottom: 1px solid #abb6c1; padding: 7px 4px; font-weight: bold; }
-QToolTip { background: #fffbe6; color: #222; border: 1px solid #b9aa76; padding: 6px; }
-""" + f"""
-QComboBox {{ padding-right: 34px; }}
-QComboBox::drop-down {{
-    subcontrol-origin: padding;
-    subcontrol-position: top right;
-    width: 30px;
-    border-left: 1px solid #aeb9c5;
-    background: #f1f4f7;
-    border-top-right-radius: 5px;
-    border-bottom-right-radius: 5px;
-}}
-QComboBox::drop-down:hover {{ background: #e0e7ee; }}
-QComboBox::down-arrow {{
-    image: url("{(app_root() / 'app' / 'resources' / 'combo_arrow.png').as_posix()}");
-    width: 14px;
-    height: 9px;
-}}
-QLineEdit[monthError="true"] {{ border: 2px solid #c62828; }}
-QPushButton#monthNavButton {{ min-width: 36px; padding-left: 0; padding-right: 0; font-weight: bold; }}
-"""
+from theme import APP_STYLE
 
 
 class ChineseStandardButtonFilter(QObject):
@@ -358,6 +261,7 @@ class InputTab(QWidget):
 
     def __init__(self, db: Database, config: dict, on_saved, parent=None):
         super().__init__(parent)
+        self.setObjectName("inputPage")
         self.db = db
         self.config = config
         self.on_saved = on_saved
@@ -375,32 +279,43 @@ class InputTab(QWidget):
 
     def _build(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 12, 14, 12)
-        outer.setSpacing(9)
+        outer.setContentsMargins(12, 14, 12, 8)
+        outer.setSpacing(8)
 
         basic = QGroupBox("基本資訊")
+        basic.setObjectName("inputSection")
         basic.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        basic_row = QHBoxLayout(basic)
-        basic_row.setContentsMargins(12, 12, 12, 10)
-        basic_row.setSpacing(8)
+        basic_v = QVBoxLayout(basic)
+        basic_v.setContentsMargins(10, 8, 10, 8)
+        basic_v.setSpacing(8)
+        basic_row = QHBoxLayout()
+        basic_row.setContentsMargins(0, 0, 0, 0)
+        basic_row.setSpacing(7)
         self.date_edit = SmartDateLineEdit()
         self.date_edit.setFixedWidth(145)
         self.date_edit.editingFinished.connect(self.validate_date)
         self.date_edit.textEdited.connect(lambda _text: self.date_error.hide() if hasattr(self, "date_error") else None)
-        # Compact date stepper: upper arrow = +1 day, lower arrow = -1 day.
+        # Date controls share one visual height. Use Qt arrow primitives instead
+        # of text glyphs so the day stepper stays crisp at Windows DPI scaling.
+        date_control_height = max(34, self.date_edit.sizeHint().height())
         self.date_step_host = QWidget()
+        self.date_step_host.setFixedSize(28, date_control_height)
         self.date_step_layout = QVBoxLayout(self.date_step_host)
         self.date_step_layout.setContentsMargins(0, 0, 0, 0)
-        self.date_step_layout.setSpacing(2)
+        self.date_step_layout.setSpacing(1)
+        upper_height = (date_control_height - 1) // 2
+        lower_height = date_control_height - 1 - upper_height
         self.date_up_btn = QToolButton(self.date_step_host)
-        self.date_up_btn.setObjectName("dateStepButton")
-        self.date_up_btn.setText("▲")
+        self.date_up_btn.setObjectName("dateStepUp")
+        self.date_up_btn.setArrowType(Qt.ArrowType.UpArrow)
+        self.date_up_btn.setFixedSize(28, upper_height)
         self.date_up_btn.setToolTip("日期 +1 天")
         self.date_up_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.date_up_btn.clicked.connect(lambda: self.shift_date(1))
         self.date_down_btn = QToolButton(self.date_step_host)
-        self.date_down_btn.setObjectName("dateStepButton")
-        self.date_down_btn.setText("▼")
+        self.date_down_btn.setObjectName("dateStepDown")
+        self.date_down_btn.setArrowType(Qt.ArrowType.DownArrow)
+        self.date_down_btn.setFixedSize(28, lower_height)
         self.date_down_btn.setToolTip("日期 -1 天")
         self.date_down_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.date_down_btn.clicked.connect(lambda: self.shift_date(-1))
@@ -408,12 +323,13 @@ class InputTab(QWidget):
         self.date_step_layout.addWidget(self.date_down_btn)
 
         self.calendar_btn = no_tab_button("")
+        self.calendar_btn.setObjectName("calendarButton")
         self.calendar_btn.setIcon(QIcon(str(app_root() / "app" / "resources" / "calendar.png")))
         self.calendar_btn.setToolTip("選擇日期")
-        self.calendar_btn.setFixedWidth(42)
+        self.calendar_btn.setFixedSize(42, date_control_height)
         self.calendar_btn.clicked.connect(self.pick_date)
         self.date_error = QLabel("日期錯誤")
-        self.date_error.setStyleSheet("color:#c62828;font-weight:bold;")
+        self.date_error.setStyleSheet("color:#B43737;font-weight:600;")
         self.date_error.setFixedWidth(76)
         self.date_error.hide()
 
@@ -430,24 +346,26 @@ class InputTab(QWidget):
         self.account_button_layout.setSpacing(6)
         basic_row.addWidget(self.account_button_host)
         basic_row.addStretch(1)
+        basic_v.addLayout(basic_row)
         outer.addWidget(basic)
 
         income = QGroupBox("收入")
+        income.setObjectName("incomeSection")
         income.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         income_v = QVBoxLayout(income)
-        income_v.setContentsMargins(12, 10, 12, 10)
-        income_v.setSpacing(6)
+        income_v.setContentsMargins(10, 8, 10, 8)
+        income_v.setSpacing(8)
         income_quick = QHBoxLayout()
         income_quick.setSpacing(6)
         income_quick.addWidget(QLabel("常用科目："))
         self.income_quick_host = QWidget()
+        self.income_quick_host.setFixedHeight(30)
         self.income_quick_layout = QHBoxLayout(self.income_quick_host)
         self.income_quick_layout.setContentsMargins(0, 0, 0, 0)
         self.income_quick_layout.setSpacing(5)
         income_quick.addWidget(self.income_quick_host)
         income_quick.addStretch(1)
         income_v.addLayout(income_quick)
-        income_v.addSpacing(4)
 
         il = QHBoxLayout()
         il.setSpacing(7)
@@ -460,8 +378,8 @@ class InputTab(QWidget):
         self.income_amount.setMaxLength(7)
         self.income_amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.income_amount))
         self.income_amount.setPlaceholderText("最多7位")
+        self.income_amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.income_save = no_tab_button("存入收入")
-        self.income_save.setObjectName("primaryButton")
         self.income_save.setFixedWidth(92)
         self.income_save.clicked.connect(lambda: self.save_entry("income"))
         il.addWidget(QLabel("收入科目："))
@@ -474,10 +392,10 @@ class InputTab(QWidget):
         il.addWidget(self.income_save)
         income_v.addLayout(il)
 
-        income_sep = QFrame()
-        income_sep.setObjectName("summarySeparator")
-        income_v.addWidget(income_sep)
-        income_summary_quick = QHBoxLayout()
+        income_summary_band = QWidget()
+        income_summary_band.setObjectName("summaryBand")
+        income_summary_quick = QHBoxLayout(income_summary_band)
+        income_summary_quick.setContentsMargins(0, 8, 0, 0)
         income_summary_quick.setSpacing(5)
         income_summary_quick.addWidget(QLabel("常用摘要："))
         self.income_quick_summary_host = QWidget()
@@ -490,25 +408,26 @@ class InputTab(QWidget):
         self.income_quick_summary_layout.setSpacing(5)
         income_summary_quick.addWidget(self.income_quick_summary_host)
         income_summary_quick.addStretch(1)
-        income_v.addLayout(income_summary_quick)
+        income_v.addWidget(income_summary_band)
         outer.addWidget(income)
 
         expense = QGroupBox("支出")
+        expense.setObjectName("expenseSection")
         expense.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         expense_v = QVBoxLayout(expense)
-        expense_v.setContentsMargins(12, 10, 12, 10)
-        expense_v.setSpacing(6)
+        expense_v.setContentsMargins(10, 8, 10, 8)
+        expense_v.setSpacing(8)
         expense_quick = QHBoxLayout()
         expense_quick.setSpacing(6)
         expense_quick.addWidget(QLabel("常用科目："))
         self.expense_quick_host = QWidget()
+        self.expense_quick_host.setFixedHeight(30)
         self.expense_quick_layout = QHBoxLayout(self.expense_quick_host)
         self.expense_quick_layout.setContentsMargins(0, 0, 0, 0)
         self.expense_quick_layout.setSpacing(5)
         expense_quick.addWidget(self.expense_quick_host)
         expense_quick.addStretch(1)
         expense_v.addLayout(expense_quick)
-        expense_v.addSpacing(4)
 
         el = QHBoxLayout()
         el.setSpacing(7)
@@ -521,8 +440,8 @@ class InputTab(QWidget):
         self.expense_amount.setMaxLength(7)
         self.expense_amount.setValidator(QRegularExpressionValidator(QRegularExpression(r"[0-9]{0,7}"), self.expense_amount))
         self.expense_amount.setPlaceholderText("最多7位")
+        self.expense_amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.expense_save = no_tab_button("存入支出")
-        self.expense_save.setObjectName("primaryButton")
         self.expense_save.setFixedWidth(92)
         self.expense_save.clicked.connect(lambda: self.save_entry("expense"))
         el.addWidget(QLabel("支出科目："))
@@ -535,10 +454,10 @@ class InputTab(QWidget):
         el.addWidget(self.expense_save)
         expense_v.addLayout(el)
 
-        expense_sep = QFrame()
-        expense_sep.setObjectName("summarySeparator")
-        expense_v.addWidget(expense_sep)
-        expense_summary_quick = QHBoxLayout()
+        expense_summary_band = QWidget()
+        expense_summary_band.setObjectName("summaryBand")
+        expense_summary_quick = QHBoxLayout(expense_summary_band)
+        expense_summary_quick.setContentsMargins(0, 8, 0, 0)
         expense_summary_quick.setSpacing(5)
         expense_summary_quick.addWidget(QLabel("常用摘要："))
         self.expense_quick_summary_host = QWidget()
@@ -548,24 +467,25 @@ class InputTab(QWidget):
         self.expense_quick_summary_layout.setSpacing(5)
         expense_summary_quick.addWidget(self.expense_quick_summary_host)
         expense_summary_quick.addStretch(1)
-        expense_v.addLayout(expense_summary_quick)
+        expense_v.addWidget(expense_summary_band)
         outer.addWidget(expense)
 
         confirm = QGroupBox("輸入確認")
-        confirm.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        confirm.setMinimumHeight(244)
+        confirm.setObjectName("confirmationCard")
+        confirm.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        confirm.setFixedHeight(224)
         cv = QVBoxLayout(confirm)
-        cv.setContentsMargins(12, 10, 12, 10)
-        cv.setSpacing(3)
+        cv.setContentsMargins(10, 7, 10, 7)
+        cv.setSpacing(2)
         self.confirm_labels = []
         for _ in range(10):
             lab = QLabel("")
-            lab.setMinimumHeight(22)
+            lab.setMinimumHeight(18)
             lab.setTextFormat(Qt.TextFormat.RichText)
             self.confirm_labels.append(lab)
             cv.addWidget(lab)
-        cv.addStretch(1)
-        outer.addWidget(confirm, 1)
+        outer.addWidget(confirm)
+        outer.addStretch(1)
 
         self._static_main_fields = [
             self.date_edit, self.income_category, self.income_summary, self.income_amount,
@@ -575,6 +495,16 @@ class InputTab(QWidget):
             w.installEventFilter(self)
         self.income_category.currentIndexChanged.connect(lambda *_: self._build_quick_summary_buttons("income"))
         self.expense_category.currentIndexChanged.connect(lambda *_: self._build_quick_summary_buttons("expense"))
+        QTimer.singleShot(0, self._sync_entry_action_heights)
+
+    def _sync_entry_action_heights(self):
+        for field, button in (
+            (self.income_amount, self.income_save),
+            (self.expense_amount, self.expense_save),
+        ):
+            target_height = max(field.height(), field.sizeHint().height())
+            if target_height > 0:
+                button.setFixedHeight(target_height)
 
     def _clear_layout(self, layout: QHBoxLayout):
         while layout.count():
@@ -635,7 +565,7 @@ class InputTab(QWidget):
         for name in self.db.favorite_category_names(kind):
             button = no_tab_button(name)
             button.setObjectName("quickCategoryButton")
-            button.setFixedHeight(26)
+            button.setMinimumHeight(26)
             button.setToolTip(f"切換{('收入' if kind == 'income' else '支出')}科目為「{name}」")
             if kind == "income":
                 button.clicked.connect(lambda checked=False, n=name: self.income_category.set_current_value(n))
@@ -690,7 +620,7 @@ class InputTab(QWidget):
             hint = QLabel("尚無符合條件")
             hint.setFixedHeight(22)
             hint.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-            hint.setStyleSheet("color:#98a2b3;")
+            hint.setStyleSheet("color:#98A2B3;")
             layout.addWidget(hint)
         if kind == "income":
             self.quick_income_summary_buttons = buttons
@@ -811,8 +741,8 @@ class InputTab(QWidget):
 
     def show_failure(self, reason: str):
         self._add_confirmation(
-            f'<span style="color:#c62828;font-weight:bold;">存檔失敗</span>　'
-            f'<span style="color:#c62828;font-size:10pt;">{html.escape(reason)}</span>'
+            f'<span style="color:#B43737;font-weight:bold;">存檔失敗</span>　'
+            f'<span style="color:#B43737;font-size:10pt;">{html.escape(reason)}</span>'
         )
 
     def _auto_carry_if_needed(self, d: date) -> dict[str, int] | None:
@@ -869,26 +799,26 @@ class InputTab(QWidget):
             type_text = "收入" if kind == "income" else "支出"
             if kind == "income":
                 type_tag = (
-                    '<span style="background-color:#e7efe9;color:#4f745c;">'
+                    '<span style="background-color:#EDF5F2;color:#2E6F5E;">'
                     '&nbsp;收入&nbsp;</span>'
                 )
             else:
                 type_tag = (
-                    '<span style="background-color:#f4e8e8;color:#9b5b5b;">'
+                    '<span style="background-color:#F6EEEE;color:#8A5B5B;">'
                     '&nbsp;支出&nbsp;</span>'
                 )
             summary_text = summary_edit.text().strip()
             summary_display = (
                 html.escape(summary_text)
                 if summary_text
-                else '<span style="color:#98a2b3;">(空白)</span>'
+                else '<span style="color:#98A2B3;">(空白)</span>'
             )
             # Confirmation layout uses full-width spaces as visual separators.
             # The income/expense tag replaces the old "收入-科目 / 支出-科目" text.
             record = (
                 f"{format_date(d)}　[{html.escape(account)}]　{type_tag}　{html.escape(category)}　-　"
                 f"{summary_display}　${amount:,}　"
-                f'<span style="color:#198754;font-weight:bold;">&lt;存檔成功&gt;</span>'
+                f'<span style="color:#21825C;font-weight:bold;">&lt;存檔成功&gt;</span>'
             )
             self._add_confirmation(record)
             summary_edit.clear(); amount_edit.clear(); summary_edit.setFocus()
@@ -934,14 +864,16 @@ class LedgerTab(QWidget):
 
     def _build(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setContentsMargins(12, 6, 12, 8)
+        outer.setSpacing(5)
         top = QHBoxLayout()
+        top.setSpacing(6)
         top.addWidget(QLabel("選擇月份："))
         self.month_spin = MonthSpinBox()
         top.addWidget(self.month_spin)
         self.query_btn = no_tab_button("查詢"); self.query_btn.setObjectName("primaryButton"); self.query_btn.clicked.connect(self.query_selected)
         top.addWidget(self.query_btn)
-        top.addSpacing(12)
+        top.addSpacing(8)
         self.search_edit = QLineEdit()
         self.search_edit.setFixedWidth(220)
         self.search_edit.setPlaceholderText("搜尋收入／支出摘要")
@@ -957,6 +889,8 @@ class LedgerTab(QWidget):
         outer.addLayout(top)
 
         header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
         self.table_title = QLabel()
         f = self.table_title.font(); f.setBold(True); f.setPointSize(f.pointSize()+1); self.table_title.setFont(f)
         header_row.addWidget(self.table_title)
@@ -965,7 +899,7 @@ class LedgerTab(QWidget):
         header_row.addWidget(self.search_status)
         header_row.addStretch()
         self.opening_warning = QLabel("此月份尚有帳戶未設定期初餘額")
-        self.opening_warning.setStyleSheet("color:#c62828;font-weight:bold;")
+        self.opening_warning.setStyleSheet("color:#B43737;font-weight:bold;")
         header_row.addWidget(self.opening_warning)
         outer.addLayout(header_row)
 
@@ -988,14 +922,13 @@ class LedgerTab(QWidget):
         header_font.setPointSize(10)
         header_font.setBold(True)
         self.table.horizontalHeader().setFont(header_font)
-        self.table.horizontalHeader().setFixedHeight(28)
+        self.table.horizontalHeader().setFixedHeight(24)
         header = self.table.horizontalHeader()
         header.setMinimumSectionSize(55)
         header.setStretchLastSection(False)
         header.setSectionsMovable(False)
         header.setSectionsClickable(True)
         header.sectionClicked.connect(self._header_clicked)
-        self.table.setStyleSheet("QTableView{font-size:10pt;} QHeaderView::section{font-size:10pt;padding:3px 3px;}")
 
         # V1.0.21: fixed, non-draggable column layout.  The fixed-width
         # columns total 736 px at the normal DPI; the two summary columns
@@ -1026,21 +959,22 @@ class LedgerTab(QWidget):
         outer.addWidget(self.table, 1)
 
         bottom = QHBoxLayout()
-        bottom.setSpacing(10)
+        bottom.setSpacing(8)
 
         stats_box = QGroupBox("月份統計")
+        stats_box.setObjectName("statsCard")
         stats_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         sg = QGridLayout(stats_box)
-        sg.setContentsMargins(12, 10, 12, 10)
-        sg.setHorizontalSpacing(30)
-        sg.setVerticalSpacing(4)
+        sg.setContentsMargins(10, 6, 10, 6)
+        sg.setHorizontalSpacing(24)
+        sg.setVerticalSpacing(2)
         self.opening_label = QLabel(); self.income_label = QLabel(); self.expense_label = QLabel(); self.net_label = QLabel(); self.ending_label = QLabel()
         labels = [self.opening_label, self.income_label, self.expense_label, self.net_label, self.ending_label]
         for lab in labels:
             font = lab.font(); font.setBold(True); lab.setFont(font)
-        self.income_label.setStyleSheet("color:#1f5f99;font-weight:bold;")
-        self.expense_label.setStyleSheet("color:#b42318;font-weight:bold;")
-        self.ending_label.setStyleSheet("color:#334155;font-weight:bold;")
+        self.income_label.setStyleSheet("color:#2E6F5E;font-weight:bold;")
+        self.expense_label.setStyleSheet("color:#8A5B5B;font-weight:bold;")
+        self.ending_label.setStyleSheet("color:#1F2937;font-weight:bold;")
         sg.addWidget(self.opening_label, 0, 0, 1, 2)
         sg.addWidget(self.income_label, 1, 0); sg.addWidget(self.expense_label, 1, 1)
         sg.addWidget(self.net_label, 2, 0); sg.addWidget(self.ending_label, 2, 1)
@@ -1125,7 +1059,7 @@ class LedgerTab(QWidget):
                 self.search_status.setStyleSheet("color:#667085;")
             else:
                 self.search_status.setText("查無符合摘要資料")
-                self.search_status.setStyleSheet("color:#c62828;font-weight:bold;")
+                self.search_status.setStyleSheet("color:#B43737;font-weight:bold;")
         else:
             self.search_status.clear()
             self.search_status.setStyleSheet("color:#667085;")
@@ -1151,10 +1085,10 @@ class LedgerTab(QWidget):
         net = self.current_data["net"]
         if net >= 0:
             self.net_label.setText(f"淨利：{format_amount(net)}")
-            self.net_label.setStyleSheet("color:#198754;font-weight:bold;")
+            self.net_label.setStyleSheet("color:#21825C;font-weight:bold;")
         else:
             self.net_label.setText(f"淨損：{format_amount(abs(net))}")
-            self.net_label.setStyleSheet("color:#b42318;font-weight:bold;")
+            self.net_label.setStyleSheet("color:#8A5B5B;font-weight:bold;")
         self.ending_label.setText(f"期末餘額：{format_amount(self.current_data['ending_total'])}")
         opening_tip = self._balances_tooltip(self.current_data["openings"], self.current_data["opening_total"], self.current_data["missing_openings"])
         ending_tip = self._balances_tooltip(self.current_data["ending_by_account"], self.current_data["ending_total"], [])
@@ -1358,8 +1292,8 @@ class MainWindow(QMainWindow):
         self.config = config
         self.startup_backup_error = startup_backup_error
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(980, 560)
-        self.resize(1120, 620)
+        self.setMinimumSize(1120, 735)
+        self.resize(1120, 735)
         icon_path = app_root() / "app" / "resources" / "app.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
@@ -1402,12 +1336,12 @@ class MainWindow(QMainWindow):
 
         central = QWidget()
         central_layout = QVBoxLayout(central)
-        central_layout.setContentsMargins(12, 8, 12, 10)
+        central_layout.setContentsMargins(16, 10, 16, 12)
         central_layout.setSpacing(0)
 
         top_nav = QHBoxLayout()
-        top_nav.setContentsMargins(2, 0, 2, 0)
-        top_nav.setSpacing(7)
+        top_nav.setContentsMargins(0, 0, 0, 0)
+        top_nav.setSpacing(8)
         top_nav.addWidget(self.tab_bar, 0, Qt.AlignmentFlag.AlignBottom)
         top_nav.addStretch(1)
         top_nav.addWidget(account_manage, 0, Qt.AlignmentFlag.AlignTop)
@@ -1422,6 +1356,14 @@ class MainWindow(QMainWindow):
         page_layout.setContentsMargins(0, 0, 0, 0)
         page_layout.addWidget(self.pages)
         central_layout.addWidget(page_container, 1)
+
+        footer = QLabel(
+            f"{APP_NAME} {APP_VERSION}   |   "
+            f"Copyright © {APP_RELEASE_DATE[:4]} C.C. Liu, Chihyuan Co. All Rights Reserved."
+        )
+        footer.setObjectName("appFooter")
+        footer.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        central_layout.addWidget(footer, 0)
         self.setCentralWidget(central)
         self._restore_window_state()
         QTimer.singleShot(0, self.input_tab.date_edit.setFocus)

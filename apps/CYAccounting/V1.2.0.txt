@@ -1,0 +1,37 @@
+Version: V1.2.0
+Build: 8
+Date: 2026/09/26
+
+Current source on Phase 1 visual-alignment branch; test artifact, not a formal Release:
+- Build 8 restores the income/expense category-manager tabs to the V1.1.0 Release implementation itself: a plain native QTabWidget with no CYAccounting-specific tab QSS, no forced expansion, and no custom tab-bar geometry.
+- Build 8 abandons secondary-dialog title-bar icon suppression. Dialogs again inherit the QApplication ACC icon from app/resources/app.ico; the Build 6/7 Win32 fixed-dialog/no-icon workaround is removed.
+- Build 7 restores the V1.1.0 category-manager tab geometry: left-aligned conventional tabs, a separately visible pane frame with the original 6px offset, and larger current-guide typography; the selected tab no longer erases or merges into the pane border.
+- Build 7 raises the 100%/96-DPI main-window baseline height from 710px to 735px so the footer no longer compresses Input Confirmation into the outer workspace frame.
+- Build 7 corrects secondary-dialog chrome at the Qt/Win32 boundary: QDialogs receive MSWindowsFixedSizeDialogHint before first show to match CYInvoice FixedDialog semantics, the Close-button hint is retained, and the native fallback uses explicit Windows x64 ctypes signatures plus frame redraw.
+- Build 6 moves program/version information to a low-presence main-window footer and uses the repository-policy notice: Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.; Settings keeps the destructive reset action in a dedicated Account Reset section.
+- Build 6 changes Income Category / Expense Category to large equal-width conventional QTabWidget tabs with clear selected-page chrome instead of the header-only underline treatment; native QTabWidget lifecycle and keyboard behavior remain intact.
+- Build 6 aligns secondary-dialog icon suppression with CYInvoice's proven ShowIcon=false intent: Qt caption flags are untouched, WS_EX_DLGMODALFRAME is applied to the HWND before first show and reapplied after show, and no transparent/empty icon workaround is used.
+- Build 6 visual regression checks are scoped to the category-manager tabs so the main Input / Ledger header tabs can retain their canonical Accent underline independently.
+- Build 5 preserves each QDialog's default native window flags and working Close button while applying icon suppression only at the Windows non-client HWND layer; secondary-dialog icon removal must never change or disable title-bar behavior.
+- Build 5 changes Month Statistics to the same no-explicit-title-fill, bold GroupBox legend treatment used by the other section titles.
+- Aligned CYAccounting with the canonical CY Desktop Visual Guide Phase 1 using the Blue Theme.
+- Main tabs keep the lower-presence accent-underline header treatment, while a thin neutral workspace frame groups the active page content without restoring the old heavy QTabWidget chrome.
+- Input page follows a dedicated data-entry density: primary entry fields remain deliberately larger and more legible (11pt, at least 30px high) because entering data is the primary task.
+- Basic Information, Income, Expense and Input Confirmation use consistent white framed sections with standard GroupBox legend titles; the title subcontrol has no explicit fill, so its surrounding background is inherited naturally, and section titles use bold 700 weight.
+- Build 4 corrects the Windows-effective legend weight: the section QGroupBox itself now carries Bold while descendant controls are explicitly reset to Regular, covering Basic Information / Income / Expense / Input Confirmation and every Settings section.
+- Import Source / Column Mapping / Import Preview now use the same no-explicit-title-fill, bold legend treatment as the main input page instead of the older import-only white title patch.
+- Income / Expense green and red panel fills were removed after Windows real-machine review; accounting-domain colors remain available only where they convey accounting meaning rather than panel decoration.
+- All regular ComboBoxes share the polished separate drop-down area and the same modern chevron asset instead of the older platform-looking triangle. High-density ledger inline ComboBoxes keep their narrow geometry but use the same chevron.
+- ComboBox interaction remains QComboBox-native: keyboard focus, popup selection and existing data behavior are unchanged; this refinement changes the visual shell only.
+- Date controls use Qt arrow primitives, and the day-step control plus calendar button match the date field height.
+- Income / Expense save actions use ordinary button styling rather than Primary styling, and their height is synchronized to the adjacent amount field after layout/style resolution.
+- Common-summary dividers belong to the summary band itself instead of being independent layout rows; they use a dark dashed top border and 8px vertical rhythm so their position remains stable when window width changes.
+- Input Confirmation remains fixed for the 10-entry use case. MainWindow minimum size and initial size are both 1120x710 so the full panel cannot be clipped by normal resizing at the accepted 100% / 96-DPI baseline.
+- Ledger uses a separate high-density review mode: original 23px data-row density is restored, the header is 24px, table text remains 10pt, and query/statistics spacing stays compact.
+- Ledger uses neutral headers, low-contrast grid, soft selection and a single zebra-striping source.
+- Monetary entry fields are right-aligned; state colors and accounting-domain income/expense colors are separated.
+- Build 3 real-machine refinement removes explicit GroupBox-title fills, strengthens section legend weight, adds breathing room below the main tab header, compacts the 10-row input workspace height, and suppresses the Windows generic secondary-dialog icon with an invisible native HICON.
+- Build 3 visual acceptance focus: verify that GroupBox legends inherit the surrounding background without a separate white patch, and that secondary-dialog title bars show no visible generic icon on Windows.
+- Existing accounting workflow, Enter/Tab/Esc behavior, database schema, backup/restore, Google Drive, import flow, locking and two-DELETE local-ledger reset behavior remain unchanged.
+- ACC Icon Family from V1.1.0 remains unchanged.
+- 125% / 150% DPI acceptance remains deferred under the canonical guide; this test version does not claim those DPI levels as passed.
