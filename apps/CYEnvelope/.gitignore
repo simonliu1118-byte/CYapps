@@ -7,3 +7,8 @@
 !/Cache/.gitkeep
 *.syso
 /assets/icon.ico
+/src/**/bin/
+/src/**/obj/
+/tests/**/bin/
+/tests/**/obj/
+/*/*/*_wpftmp.csproj

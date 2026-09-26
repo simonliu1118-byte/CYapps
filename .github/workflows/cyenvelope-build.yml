@@ -1,4 +1,4 @@
-name: CYEnvelope Build
+name: CYEnvelope WPF Check
 
 on:
   workflow_dispatch:
@@ -8,7 +8,6 @@ on:
     paths:
       - "apps/CYEnvelope/**"
       - ".github/workflows/cyenvelope-build.yml"
-      - ".github/scripts/scan-public-package.py"
 
 permissions:
   contents: read
@@ -25,41 +24,36 @@ jobs:
         working-directory: apps/CYEnvelope
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
 
-      - name: Read VERSION
+      - name: Validate version identity
         shell: pwsh
         run: |
           $version = (Get-Content ./VERSION -Raw).Trim()
-          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYEnvelope VERSION: $version" }
-          "CYENVELOPE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $build = (Get-Content ./BUILD -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$' -or $build -notmatch '^\d+$') {
+            throw "Invalid CYEnvelope VERSION/BUILD: $version / $build"
+          }
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version: "1.22.x"
-          cache-dependency-path: apps/CYEnvelope/go.sum
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-
-      - name: Test
-        run: go test ./...
-
-      - name: Build portable package
+      - name: Build Windows application
         shell: pwsh
-        run: ./build.ps1
+        run: dotnet build ./src/CYEnvelope/CYEnvelope.csproj -c Release --nologo -warnaserror
 
-      - name: Scan engineering package for secrets and production bindings
+      - name: Run Windows core checks
+        shell: pwsh
+        run: dotnet run --project ./tests/CYEnvelope.Tests/CYEnvelope.Tests.csproj -c Release --nologo
+
+      - name: Startup smoke
         shell: pwsh
         run: |
-          $package = Get-ChildItem ./dist/CYEnvelope_V*.zip | Select-Object -First 1
-          if (-not $package) { throw "CYEnvelope package not found for safety scan" }
-          python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" $package.FullName
-
-      - name: Upload CYEnvelope engineering package
-        uses: actions/upload-artifact@v7
-        with:
-          name: CYEnvelope-v${{ env.CYENVELOPE_VERSION }}-windows-x64-run${{ github.run_number }}
-          path: apps/CYEnvelope/dist/CYEnvelope_V*.zip
-          if-no-files-found: error
-          retention-days: 3
+          $exe = Join-Path (Get-Location) 'src/CYEnvelope/bin/Release/net10.0-windows/CYEnvelope.exe'
+          $proc = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          try {
+            Start-Sleep -Seconds 4
+            $proc.Refresh()
+            if ($proc.HasExited) { throw "CYEnvelope exited during startup with code $($proc.ExitCode)" }
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
