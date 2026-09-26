@@ -75,6 +75,7 @@ jobs:
           node --check public/v014.js
           node --check public/v015.js
           node --check public/v016.js
+          node --check public/v0181.js
 
       - name: Run application tests
         run: |

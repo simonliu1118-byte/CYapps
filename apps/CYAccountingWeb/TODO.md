@@ -32,7 +32,7 @@
 - [x] **自動備份上線驗收（2026-09-26）**：V0.17.0 正式 Worker 首次實機備份成功；GCS 實際建立 `data.json` + `manifest.json`，Web UI 成功紀錄與 GCS 物件均確認存在，read-back SHA-256、byte size、row count、App/schema version 與 manifest 驗證均通過。
 - [x] **Tiered Backup Phase A**：凍結已驗收 V0.17 GCS production path；GCS provider、Secrets、每日 03:30 與 14 天 retention 在 Phase C acceptance gate 前均保留，作為 rollback / safety path。
 - [x] **Tiered Backup Phase B**：package creation 與 provider storage execution 分離；單一 BackupSet 可重複交給 provider 寫入而不重新 export D1；GCS generation 已封裝為 opaque `versionToken`；新增 V0.17 format compatibility 與 export-once tests。Production output 仍維持 `CYAccountingWebBackupSet / formatVersion 2`。
-- [ ] **Tiered Backup Phase C**：R2 provider、`parallel_dual_provider`、logical backup / provider-copy catalog 與 topology-aware UI 已上線；2026-09-27 manual paired production acceptance 已通過，同一 logical backup 的 R2/GCS copies 均 read-back 驗證成功且共用同一 package digest。**Scheduled acceptance gate 目前 0/14**：只有 `trigger = scheduled` 的每日 03:30 production backup 可計數，手動測試不計；每次都必須同一 `backupId`、R2/GCS 兩 copy `success` 且 package digest 一致。達成連續 14 次前不得進 Phase D。Phase C 期間 GCS 仍每日／14 天，R2 30 天。
+- [ ] **Tiered Backup Phase C**：R2 provider、`parallel_dual_provider`、logical backup / provider-copy catalog 與 topology-aware UI 已上線；2026-09-27 manual paired production acceptance 已通過，同一 logical backup 的 R2/GCS copies 均 read-back 驗證成功且共用同一 package digest。Scheduled acceptance gate 由 D1 catalog 自動推導並在設定頁顯示 `x/14`：只有 `trigger = scheduled` 的每日 03:30 production backup 可計數，手動測試不計；每次都必須同一 `backupId`、R2/GCS 兩 copy `success` 且存在有效 package digest。達成連續 14 次前不得進 Phase D。Phase C 期間 GCS 仍每日／14 天，R2 30 天。
 - [ ] **Tiered Backup Phase D**：Phase C acceptance 後才切成 R2 每日、GCS 每週三／週日 cross-cloud DR replication，GCS retention 26 週／182 天；不得 cutover 當天大量刪除既有 V0.17 daily GCS objects。
 - [ ] **Tiered Backup Phase E**：per-App tiered model 穩定且 CY Web 準備完成後，再逐步導入 shared `CY Backup Service / Worker`；direct GCS path 在 shared-service acceptance 前保留 rollback 能力。
 - [x] Logical backup / provider-copy catalog：一個 logical backup 只列一次，R2/GCS copy health 分開呈現；現行 schema 由既有 `backup_runs` 漸進擴充，legacy GCS run 紀錄仍保留作相容／rollback evidence。
@@ -50,7 +50,7 @@
 - [x] Desktop UI/UX Phase 3：收斂 Header 與主畫面垂直空間、固定記帳資料表欄寬比例、加強金額／餘額掃讀與列 hover、收窄操作欄，並提高設定視窗管理密度（V0.10.0）。
 - [x] Desktop UI/UX Phase 2：主工作區縮窄約 20%、收支改雙態切換、輸入確認改右側 edge sidebar、期初餘額移至記帳資料區、重整記帳工具列（V0.9.0）。
 - [x] Desktop UI/UX Phase 1：輸入確認改為右側可收合 drawer、修正版本顯示單一來源、提高記帳資料表桌面資訊密度（V0.8.0）。
-- [ ] 備份／復原頁「最近 logical backup」表格收斂成單行可讀、不需要水平捲動；與下一次 CYAccountingWeb UI 修改一起處理，不單獨為此部署。
+- [x] V0.18.1 備份／復原頁「最近 logical backup」收斂為單行六欄顯示（時間、方式、Backup ID、R2、GCS、資料），移除 desktop 水平捲動；同版加入 Phase C scheduled acceptance `x/14` 進度。
 - [ ] 完成功能後集中進行一輪 UI／UX 重整，避免開發期間因版面反覆調整增加返工。
 - [ ] 採單一網站的 RWD 為基礎，不另做獨立 PC／手機兩套網站。
 - [ ] 在 RWD 基礎上加入 Adaptive UI：相同資料與功能可依裝置使用不同 presentation，而非只把桌面版等比例縮小。
