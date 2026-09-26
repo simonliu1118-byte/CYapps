@@ -6,17 +6,17 @@
 
 | 階段 | 狀態 | 內容 |
 | --- | --- | --- |
-| 1. 核心與資料 | 已提交原始碼、跨平台編譯 | 全新 SQLite 資料層；聯絡人多地址、多電話模型；368 筆離線三碼郵遞區號；電話格式；共用信封繪製器；核准 ENV 圖示 |
-| 2. 介面與列印 | 待實作 | 收件人輸入、管理視窗、格式編輯、印表機選擇；以共用繪製器列印，按列印先保存 |
+| 1. 核心與資料 | 已提交、跨平台編譯 | 全新 SQLite 資料層；聯絡人多地址、多電話模型；368 筆離線三碼郵遞區號；電話格式；共用信封繪製器；核准 ENV 圖示 |
+| 2. 介面與列印 | 初版已編譯，等待 Windows CI 與操作檢查 | 收件人候選清單、聯絡人管理、格式編輯、印表機選擇；按列印先保存，再用共用繪製器輸出 |
 | 3. Windows 測試包與試印 | 待驗證 | Windows x64 portable、CI Artifact、圖示與啟動檢查、15K 實機試印及位置校正 |
 
-第一階段僅產生 WPF 類別庫，沒有 C# 使用介面或可供試印的 EXE。既有 `cmd/`、`internal/`、`go.mod`、`build.ps1` 和 `使用說明.txt` 暫作 Go 版行為對照；完成 C# 版驗收後再處理舊碼。新版資料庫從空白建立，不遷移 Go 測試資料。執行資料不進 Git。
+目前有 WPF 主畫面與管理視窗，但尚未完成 Windows 操作驗收，也沒有可供使用者試印的測試包。既有 `cmd/`、`internal/`、`go.mod`、`build.ps1` 和 `使用說明.txt` 暫作 Go 版行為對照；完成 C# 版驗收後再處理舊碼。新版資料庫從空白建立，不遷移 Go 測試資料。執行資料不進 Git。
 
 ## 排版原則
 
 `src/CYEnvelope/EnvelopeRenderer.cs` 以毫米保存信封及文字位置。預覽與未來列印共用同一繪製器；信封原有紅色線條只顯示於預覽，套印只輸出黑字、勾記和黑色直排方框文字。目前預覽底圖是依舊版資料建立的初步示意，尚未通過實物照片逐項比對。15K 實際套印位置仍須使用目標印表機試印，不以編譯成功視為驗收。
 
-## 第一階段開發驗證
+## 開發驗證
 
 需要 .NET 10 SDK。Windows 可直接執行：
 
@@ -25,7 +25,7 @@ dotnet build .\src\CYEnvelope\CYEnvelope.csproj
 dotnet run --project .\tests\CYEnvelope.Tests\CYEnvelope.Tests.csproj
 ```
 
-非 Windows 環境可用 `dotnet build -p:EnableWindowsTargeting=true` 檢查編譯，但無法執行 WPF 測試或實際列印。此階段的測試程式需在 Windows 執行後，才能宣稱郵遞區號、SQLite 保存與繪製執行時驗證通過。
+非 Windows 環境可用 `dotnet build -p:EnableWindowsTargeting=true` 檢查編譯，但無法執行 WPF 測試或實際列印。測試程式需在 Windows 執行後，才能宣稱郵遞區號、SQLite 保存與繪製執行時驗證通過。PR 的 Windows CI 會檢查編譯、核心檢查與啟動；通過前不得宣稱新版已可使用。
 
 ## 來源與規範
 
