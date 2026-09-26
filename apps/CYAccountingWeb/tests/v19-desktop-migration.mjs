@@ -95,6 +95,22 @@ assert.throws(() => normalizeDesktopSnapshot(sourceSnapshot({
   ]
 })), error => error?.code === 'SOURCE_DUPLICATE_KEY');
 
+const historical = normalizeDesktopSnapshot(sourceSnapshot({
+  transactions: [
+    { sourceId: 9, txDate: '2026-07-01', accountName: '已刪帳戶', kind: 'expense', categoryName: '已刪科目', summary: '歷史資料', amount: 30, createdAt: NOW, updatedAt: NOW }
+  ],
+  openingBalances: [
+    { month: '2026-07', accountName: '已刪帳戶', amount: -100, createdAt: NOW, updatedAt: NOW }
+  ]
+}));
+assert.equal(historical.transactions[0].accountName, '已刪帳戶', 'historical account names must remain valid even when absent from current master');
+assert.equal(historical.openingBalances[0].accountName, '已刪帳戶');
+const historicalPlan = planDesktopMigration(historical, pristineTarget());
+assert.equal(historicalPlan.canCommit, true);
+assert.equal(historicalPlan.historicalAccounts, 1);
+assert.equal(historicalPlan.historicalCategories, 1);
+assert.equal(historicalPlan.readyTransactions.length, 1);
+
 const pristinePlan = planDesktopMigration(normalized, pristineTarget());
 assert.equal(pristinePlan.mode, 'pristine_merge');
 assert.equal(pristinePlan.canCommit, true);
@@ -198,4 +214,4 @@ const historyBlocked = planDesktopMigration(normalized, mergeTarget({
 assert.equal(historyBlocked.alreadyImported, true);
 assert.equal(historyBlocked.canCommit, false);
 
-console.log('Desktop SQLite migration normalization, conservative merge, occurrence dedupe, conflict and lock tests passed.');
+console.log('Desktop SQLite migration normalization, historical-name preservation, conservative merge, occurrence dedupe, conflict and lock tests passed.');
