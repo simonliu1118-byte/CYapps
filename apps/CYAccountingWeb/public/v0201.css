@@ -1,0 +1,324 @@
+/* V0.20.1 Adaptive UI Phase 2 refinement.
+   Presentation-only: preserve accounting/API/backup/identity behavior. */
+
+@media (max-width: 767px) {
+  /* Compact header: keep identity/status visible without consuming a large first screen. */
+  .topbar {
+    gap: 6px;
+    padding: 9px 10px 8px;
+  }
+
+  .topbar > div:first-child {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .topbar h1 {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  .topbar p {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: #66727d;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar-actions {
+    gap: 5px;
+    flex-wrap: nowrap;
+  }
+
+  .current-user {
+    min-width: 0;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .status {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding-inline: 8px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .topbar-actions .secondary.compact {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding-inline: 9px;
+  }
+
+  /* Keep ledger search on one compact row instead of dedicating a second row to Clear. */
+  .ledger-search {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 5px;
+  }
+
+  .ledger-search #ledgerSearchClear {
+    grid-column: auto;
+    width: auto;
+  }
+
+  /* Transaction card information hierarchy.
+     Row 1: date + kind, row 2: account + category, row 3: summary,
+     row 4: amount + running balance, row 5: actions. */
+  .ledger-card tbody > tr:not(.account-group-row) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(112px, .78fr);
+    column-gap: 8px;
+    padding: 8px 9px 0;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td {
+    width: auto;
+    padding: 4px 2px;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(1),
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(3) {
+    align-items: center;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    gap: 6px;
+    font-weight: 650;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(1)::before {
+    content: none;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(3)::before {
+    content: none;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(4) {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(5) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    min-height: 30px;
+    padding-top: 6px;
+    padding-bottom: 7px;
+    border-top: 1px solid #edf0f2;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(6),
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(7) {
+    grid-row: 4;
+    margin-inline: -2px;
+    padding: 7px 7px;
+    border-radius: 6px;
+    background: #f6f8fa;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(6) {
+    grid-column: 1;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(7) {
+    grid-column: 2;
+    font-weight: 650;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td.action-col {
+    grid-column: 1 / -1;
+    grid-row: 5;
+    width: auto;
+    margin: 7px -9px 0;
+    padding: 7px 9px 8px;
+  }
+
+  .ledger-card .row-action {
+    flex: 1 1 0;
+    min-height: 40px;
+  }
+
+  .ledger-card .row-action.delete {
+    flex: 0 0 auto;
+    min-width: 78px;
+  }
+
+  /* Inline edit uses the same grid positions as the read-only transaction card. */
+  .ledger-card tr.inline-editing {
+    border-color: #aebbc6;
+    box-shadow: 0 0 0 1px rgba(69, 91, 110, .08), 0 2px 8px rgba(31, 42, 55, .08);
+  }
+
+  .ledger-card tr.inline-editing > td:nth-child(1)::before { content: "日期"; }
+  .ledger-card tr.inline-editing > td:nth-child(3)::before { content: none; }
+
+  .ledger-card tr.inline-editing > td:nth-child(1) {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: center;
+    font-weight: 400;
+  }
+
+  .ledger-card tr.inline-editing > td:nth-child(3) {
+    align-items: center;
+  }
+
+  .ledger-card tr.inline-editing > td:nth-child(5) {
+    min-height: 0;
+  }
+
+  .ledger-card tr.inline-editing > td:nth-child(6),
+  .ledger-card tr.inline-editing > td:nth-child(7) {
+    background: #f3f6f8;
+  }
+
+  .ledger-card .inline-edit-action-cell {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .ledger-card .inline-edit-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+
+  .ledger-card .inline-edit-message {
+    grid-column: 1 / -1;
+    min-height: 18px;
+    text-align: left;
+  }
+
+  /* Account-group heading reads as a compact separator, not another transaction card. */
+  .ledger-card .account-group-row td {
+    padding: 10px 4px 5px;
+  }
+
+  .ledger-card .account-group-row td strong {
+    font-size: 13px;
+  }
+
+  .ledger-card .account-group-row td span {
+    color: #71808b;
+    font-size: 11px;
+  }
+
+  /* Mobile settings: reduce vertical churn and keep actions easy to hit. */
+  .settings-content {
+    padding-top: 10px;
+  }
+
+  .manager-list,
+  #categoryManager {
+    display: grid;
+    gap: 7px;
+  }
+
+  .manager-row,
+  .category-group {
+    border-radius: 7px;
+  }
+
+  .manager-row {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .manager-row-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .manager-row-actions .mini-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .category-item {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .category-item > span:last-child {
+    display: flex;
+    gap: 4px;
+    flex: 0 0 auto;
+  }
+
+  .inline-add,
+  .category-add {
+    gap: 6px;
+  }
+
+  .inline-add button,
+  .category-add button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .current-user {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .status {
+    grid-column: 1 / -1;
+    justify-content: center;
+    min-height: 30px;
+  }
+
+  .ledger-period-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-tool-button.emphasis {
+    width: 100%;
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) {
+    grid-template-columns: minmax(0, 1fr) minmax(102px, .72fr);
+  }
+
+  .ledger-card tbody > tr:not(.account-group-row) > td {
+    grid-template-columns: 58px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .manager-row-actions {
+    grid-template-columns: 1fr;
+  }
+}
