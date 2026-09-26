@@ -62,6 +62,7 @@ jobs:
           node --check src/v17-backup.js
           node --check src/v18-backup.js
           node --check src/v19-migration.js
+          node --check src/v19-migration-safe.js
           node --check scripts/render-wrangler.mjs
           node --check scripts/prepare-sqljs.mjs
           node --check public/auth.js
@@ -90,6 +91,7 @@ jobs:
           node tests/v18-tiered-backup.mjs
           node tests/v18-backup-ui.mjs
           node tests/v19-desktop-migration.mjs
+          node tests/v19-d1-limits.mjs
           node tests/deploy-config.mjs
 
       - name: Prepare pinned browser SQLite runtime
