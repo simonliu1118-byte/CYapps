@@ -4,8 +4,9 @@ const MAX_GROUPS = 500;
 const MAX_CATEGORIES = 2000;
 const MAX_TRANSACTIONS = 10000;
 const MAX_OPENING_BALANCES = 5000;
-const MAX_NAME_LENGTH = 60;
-const MAX_SUMMARY_LENGTH = 100;
+const MAX_MASTER_NAME_LENGTH = 60;
+const MAX_HISTORICAL_NAME_LENGTH = 200;
+const MAX_SUMMARY_LENGTH = 1000;
 const TRANSACTION_INSERT_CHUNK = 40;
 const OPENING_INSERT_CHUNK = 50;
 const HISTORY_KEY = 'desktop_migration_history_v1';
@@ -50,8 +51,8 @@ async function commitDesktopMigrationRequest(request, db, session) {
     if (expectedMode && expectedMode !== analysis.plan.mode) {
       throw new DesktopMigrationError('目標帳本狀態已變更，請重新建立移轉預覽。', 'MIGRATION_TARGET_CHANGED', 409);
     }
-    if (analysis.plan.alreadyImported && body?.allowRepeat !== true) {
-      throw new DesktopMigrationError('這個 SQLite 檔案先前已完成移轉。若資料已更新，請重新選擇更新後的資料庫檔。', 'MIGRATION_SOURCE_ALREADY_IMPORTED', 409);
+    if (analysis.plan.alreadyImported) {
+      throw new DesktopMigrationError('這個 SQLite 檔案先前已完成移轉。若桌面資料有更新，請重新選擇更新後的資料庫檔。', 'MIGRATION_SOURCE_ALREADY_IMPORTED', 409);
     }
     if (!analysis.plan.canCommit) {
       throw new DesktopMigrationError('仍有資料衝突或驗證錯誤，未寫入任何資料。', 'MIGRATION_CONFLICT', 409, publicAnalysis(analysis));
@@ -92,12 +93,12 @@ export function normalizeDesktopSnapshot(raw) {
   const fileName = String(source.fileName || '').trim().slice(0, 200);
 
   const accounts = boundedArray(raw.accounts, MAX_ACCOUNTS, '帳戶').map((value, index) => ({
-    name: requiredName(value?.name, `帳戶 ${index + 1}`),
+    name: masterName(value?.name, `帳戶 ${index + 1}`),
     sortOrder: nonNegativeInteger(value?.sortOrder, `帳戶 ${index + 1} 排序`),
     isDefault: booleanInt(value?.isDefault, `帳戶 ${index + 1} 預設旗標`),
     createdAt: timestampText(value?.createdAt)
   }));
-  if (!accounts.length) throw new DesktopMigrationError('來源帳本至少需要一個帳戶。', 'SOURCE_ACCOUNT_REQUIRED', 400);
+  if (!accounts.length) throw new DesktopMigrationError('來源帳本至少需要一個目前帳戶。', 'SOURCE_ACCOUNT_REQUIRED', 400);
   assertUnique(accounts.map(item => item.name), '來源帳戶名稱重複。');
   if (accounts.filter(item => item.isDefault === 1).length !== 1) {
     throw new DesktopMigrationError('來源帳本的預設帳戶設定異常。', 'SOURCE_DEFAULT_ACCOUNT_INVALID', 400);
@@ -105,7 +106,7 @@ export function normalizeDesktopSnapshot(raw) {
 
   const groups = boundedArray(raw.groups, MAX_GROUPS, '大分類').map((value, index) => ({
     kind: kindValue(value?.kind, `大分類 ${index + 1}`),
-    name: requiredName(value?.name, `大分類 ${index + 1}`),
+    name: masterName(value?.name, `大分類 ${index + 1}`),
     sortOrder: nonNegativeInteger(value?.sortOrder, `大分類 ${index + 1} 排序`),
     createdAt: timestampText(value?.createdAt)
   }));
@@ -115,8 +116,8 @@ export function normalizeDesktopSnapshot(raw) {
   const categories = boundedArray(raw.categories, MAX_CATEGORIES, '科目').map((value, index) => {
     const item = {
       kind: kindValue(value?.kind, `科目 ${index + 1}`),
-      groupName: requiredName(value?.groupName, `科目 ${index + 1} 大分類`),
-      name: requiredName(value?.name, `科目 ${index + 1}`),
+      groupName: masterName(value?.groupName, `科目 ${index + 1} 大分類`),
+      name: masterName(value?.name, `科目 ${index + 1}`),
       sortOrder: nonNegativeInteger(value?.sortOrder, `科目 ${index + 1} 排序`),
       isFavorite: booleanInt(value?.isFavorite, `科目 ${index + 1} 常用旗標`),
       createdAt: timestampText(value?.createdAt)
@@ -128,26 +129,22 @@ export function normalizeDesktopSnapshot(raw) {
   });
   assertUnique(categories.map(item => categoryKey(item.kind, item.name)), '來源科目名稱重複。');
 
-  const accountNames = new Set(accounts.map(item => item.name));
-  const categoryNames = new Set(categories.map(item => categoryKey(item.kind, item.name)));
+  // Historical transaction names are deliberately not required to exist in the
+  // current master tables. CYAccounting allows deleting/renaming master entries
+  // while historical rows retain the old name, and the Web model supports the
+  // same historical-name semantics.
   const transactions = boundedArray(raw.transactions, MAX_TRANSACTIONS, '交易').map((value, index) => {
     const item = {
       sourceId: positiveInteger(value?.sourceId, `交易 ${index + 1} ID`),
       txDate: dateValue(value?.txDate, `交易 ${index + 1} 日期`),
-      accountName: requiredName(value?.accountName, `交易 ${index + 1} 帳戶`),
+      accountName: historicalName(value?.accountName, `交易 ${index + 1} 帳戶`),
       kind: kindValue(value?.kind, `交易 ${index + 1}`),
-      categoryName: requiredName(value?.categoryName, `交易 ${index + 1} 科目`),
+      categoryName: historicalName(value?.categoryName, `交易 ${index + 1} 科目`),
       summary: String(value?.summary || '').trim(),
       amount: integer(value?.amount, `交易 ${index + 1} 金額`),
       createdAt: timestampText(value?.createdAt),
       updatedAt: timestampText(value?.updatedAt)
     };
-    if (!accountNames.has(item.accountName)) {
-      throw new DesktopMigrationError(`來源交易 ${item.sourceId} 使用不存在的帳戶「${item.accountName}」。`, 'SOURCE_TRANSACTION_ACCOUNT_MISSING', 400);
-    }
-    if (!categoryNames.has(categoryKey(item.kind, item.categoryName))) {
-      throw new DesktopMigrationError(`來源交易 ${item.sourceId} 使用不存在的科目「${item.categoryName}」。`, 'SOURCE_TRANSACTION_CATEGORY_MISSING', 400);
-    }
     if (item.summary.length > MAX_SUMMARY_LENGTH) {
       throw new DesktopMigrationError(`來源交易 ${item.sourceId} 摘要超過 ${MAX_SUMMARY_LENGTH} 字。`, 'SOURCE_SUMMARY_TOO_LONG', 400);
     }
@@ -158,22 +155,13 @@ export function normalizeDesktopSnapshot(raw) {
   });
   assertUnique(transactions.map(item => String(item.sourceId)), '來源交易 ID 重複。');
 
-  const openingBalances = boundedArray(raw.openingBalances, MAX_OPENING_BALANCES, '期初餘額').map((value, index) => {
-    const item = {
-      month: monthValue(value?.month, `期初餘額 ${index + 1} 月份`),
-      accountName: requiredName(value?.accountName, `期初餘額 ${index + 1} 帳戶`),
-      amount: integer(value?.amount, `期初餘額 ${index + 1} 金額`),
-      createdAt: timestampText(value?.createdAt),
-      updatedAt: timestampText(value?.updatedAt)
-    };
-    if (!Number.isSafeInteger(item.amount)) {
-      throw new DesktopMigrationError(`來源期初餘額 ${item.month} / ${item.accountName} 金額無效。`, 'SOURCE_OPENING_AMOUNT_INVALID', 400);
-    }
-    if (!accountNames.has(item.accountName)) {
-      throw new DesktopMigrationError(`來源期初餘額使用不存在的帳戶「${item.accountName}」。`, 'SOURCE_OPENING_ACCOUNT_MISSING', 400);
-    }
-    return item;
-  });
+  const openingBalances = boundedArray(raw.openingBalances, MAX_OPENING_BALANCES, '期初餘額').map((value, index) => ({
+    month: monthValue(value?.month, `期初餘額 ${index + 1} 月份`),
+    accountName: historicalName(value?.accountName, `期初餘額 ${index + 1} 帳戶`),
+    amount: integer(value?.amount, `期初餘額 ${index + 1} 金額`),
+    createdAt: timestampText(value?.createdAt),
+    updatedAt: timestampText(value?.updatedAt)
+  }));
   assertUnique(openingBalances.map(item => openingKey(item.month, item.accountName)), '來源期初餘額月份／帳戶重複。');
 
   const lockedThroughRaw = String(raw.lockedThrough || '').trim();
@@ -224,10 +212,7 @@ async function loadTargetState(db, snapshot) {
 
   const [accountsResult, groupsResult, categoriesResult, openingResult, settingsResult, txCountRow, openingCountRow, txResult] = await Promise.all(tasks);
   const settings = new Map((settingsResult.results || []).map(row => [String(row.key || ''), String(row.value || '')]));
-  const lockedThroughValue = settings.get('locked_through') || '';
-  const lockedThrough = isMonth(lockedThroughValue) ? lockedThroughValue : null;
-  const history = parseHistory(settings.get(HISTORY_KEY));
-
+  const lockedValue = settings.get('locked_through') || '';
   const target = {
     accounts: (accountsResult.results || []).map(row => ({ name: String(row.name), sortOrder: Number(row.sort_order || 0), isDefault: Number(row.is_default || 0) })),
     groups: (groupsResult.results || []).map(row => ({ kind: String(row.kind), name: String(row.name), sortOrder: Number(row.sort_order || 0) })),
@@ -239,8 +224,8 @@ async function loadTargetState(db, snapshot) {
     })),
     transactionCount: Number(txCountRow?.count || 0),
     openingCount: Number(openingCountRow?.count || 0),
-    lockedThrough,
-    history
+    lockedThrough: isMonth(lockedValue) ? lockedValue : null,
+    history: parseHistory(settings.get(HISTORY_KEY))
   };
   target.pristineSeed = isPristineSeedTarget(target);
   return target;
@@ -251,17 +236,17 @@ export function planDesktopMigration(snapshot, target) {
   const warnings = [];
   const mode = target.pristineSeed ? 'pristine_merge' : 'merge';
 
-  const targetAccountMap = new Map(target.accounts.map(item => [normalizeName(item.name), item]));
+  const targetAccounts = new Map(target.accounts.map(item => [normalizeName(item.name), item]));
   const missingAccounts = [];
   const reusedAccounts = [];
   let nextAccountOrder = target.accounts.reduce((max, item) => Math.max(max, Number(item.sortOrder || 0)), -1) + 1;
   for (const source of [...snapshot.accounts].sort(compareSortOrder)) {
-    const existing = targetAccountMap.get(source.name);
+    const existing = targetAccounts.get(source.name);
     if (existing) reusedAccounts.push({ source, existing });
     else missingAccounts.push({ ...source, targetSortOrder: nextAccountOrder++ });
   }
 
-  const targetGroupMap = new Map(target.groups.map(item => [groupKey(item.kind, normalizeName(item.name)), item]));
+  const targetGroups = new Map(target.groups.map(item => [groupKey(item.kind, item.name), item]));
   const missingGroups = [];
   const reusedGroups = [];
   const nextGroupOrder = new Map(['income', 'expense'].map(kind => [
@@ -269,8 +254,7 @@ export function planDesktopMigration(snapshot, target) {
     target.groups.filter(item => item.kind === kind).reduce((max, item) => Math.max(max, Number(item.sortOrder || 0)), -1) + 1
   ]));
   for (const source of [...snapshot.groups].sort(compareKindAndSort)) {
-    const key = groupKey(source.kind, source.name);
-    const existing = targetGroupMap.get(key);
+    const existing = targetGroups.get(groupKey(source.kind, source.name));
     if (existing) reusedGroups.push({ source, existing });
     else {
       const order = nextGroupOrder.get(source.kind) || 0;
@@ -279,7 +263,7 @@ export function planDesktopMigration(snapshot, target) {
     }
   }
 
-  const targetCategoryMap = new Map(target.categories.map(item => [categoryKey(item.kind, normalizeName(item.name)), item]));
+  const targetCategories = new Map(target.categories.map(item => [categoryKey(item.kind, item.name), item]));
   const missingCategories = [];
   const reusedCategories = [];
   const realignCategories = [];
@@ -289,8 +273,7 @@ export function planDesktopMigration(snapshot, target) {
     nextCategoryOrder.set(key, Math.max(nextCategoryOrder.get(key) || 0, Number(item.sortOrder || 0) + 1));
   }
   for (const source of [...snapshot.categories].sort(compareCategorySort)) {
-    const key = categoryKey(source.kind, source.name);
-    const existing = targetCategoryMap.get(key);
+    const existing = targetCategories.get(categoryKey(source.kind, source.name));
     if (existing) {
       if (normalizeName(existing.groupName) !== source.groupName) {
         if (mode === 'pristine_merge') realignCategories.push({ source, existing });
@@ -318,31 +301,42 @@ export function planDesktopMigration(snapshot, target) {
     else readyTransactions.push(item);
   }
 
-  const targetOpening = new Map(target.openingBalances.map(item => [openingKey(item.month, normalizeName(item.accountName)), item]));
+  const targetOpening = new Map(target.openingBalances.map(item => [openingKey(item.month, item.accountName), item]));
   const readyOpeningBalances = [];
   let duplicateOpeningBalances = 0;
   for (const item of snapshot.openingBalances) {
-    const key = openingKey(item.month, item.accountName);
-    const existing = targetOpening.get(key);
-    if (!existing) {
-      readyOpeningBalances.push(item);
-      continue;
-    }
-    if (Number(existing.amount) === item.amount) duplicateOpeningBalances += 1;
+    const existing = targetOpening.get(openingKey(item.month, item.accountName));
+    if (!existing) readyOpeningBalances.push(item);
+    else if (Number(existing.amount) === item.amount) duplicateOpeningBalances += 1;
     else conflicts.push(`期初餘額 ${item.month}／${item.accountName}：Web 為 ${existing.amount}，來源帳本為 ${item.amount}。`);
+  }
+
+  const currentSourceAccounts = new Set(snapshot.accounts.map(item => item.name));
+  const currentSourceCategories = new Set(snapshot.categories.map(item => categoryKey(item.kind, item.name)));
+  const historicalAccounts = new Set();
+  const historicalCategories = new Set();
+  for (const item of snapshot.transactions) {
+    if (!currentSourceAccounts.has(item.accountName)) historicalAccounts.add(item.accountName);
+    if (!currentSourceCategories.has(categoryKey(item.kind, item.categoryName))) historicalCategories.add(`${item.kind}:${item.categoryName}`);
+  }
+  for (const item of snapshot.openingBalances) {
+    if (!currentSourceAccounts.has(item.accountName)) historicalAccounts.add(item.accountName);
   }
 
   const resultingLockedThrough = maxMonth(target.lockedThrough, snapshot.lockedThrough);
   const alreadyImported = target.history.some(item => String(item?.sha256 || '').toLowerCase() === snapshot.source.fileSha256);
 
   if (mode === 'pristine_merge') {
-    warnings.push('Web 目前仍是初始空白帳本；會沿用來源帳戶／科目排序、預設帳戶與常用科目設定。');
-    warnings.push('Web 初始預設資料若來源帳本未使用，為避免破壞既有結構不會自動刪除。');
+    warnings.push('Web 目前仍是初始空白帳本；會沿用來源目前帳戶／科目排序、預設帳戶與常用科目設定。');
+    warnings.push('Web 初始預設 master 若來源帳本未使用，為避免破壞既有結構不會自動刪除。');
   } else {
     warnings.push('Web 已有既有設定或帳務資料；本次採保守合併，不覆寫既有帳戶／科目排序與預設設定。');
   }
+  if (historicalAccounts.size || historicalCategories.size) {
+    warnings.push(`來源含歷史 master 名稱：${historicalAccounts.size} 個帳戶、${historicalCategories.size} 個科目；將保留於歷史交易／期初餘額，不重新啟用為目前 master。`);
+  }
   if (snapshot.source.schemaVersion === 1) warnings.push('來源為舊 schema v1；來源沒有常用科目旗標，將視為未標記常用。');
-  if (alreadyImported) warnings.push('此 SQLite 檔案的 SHA-256 已存在於移轉紀錄，預設不允許再次提交。');
+  if (alreadyImported) warnings.push('此 SQLite 檔案的 SHA-256 已存在於成功移轉紀錄，不能再次提交。');
   if (snapshot.lockedThrough && resultingLockedThrough !== snapshot.lockedThrough) {
     warnings.push(`Web 既有鎖帳月份較晚，將保留較嚴格的鎖帳至 ${resultingLockedThrough}。`);
   }
@@ -354,6 +348,8 @@ export function planDesktopMigration(snapshot, target) {
     conflicts,
     warnings,
     resultingLockedThrough,
+    historicalAccounts: historicalAccounts.size,
+    historicalCategories: historicalCategories.size,
     missingAccounts,
     reusedAccounts,
     missingGroups,
@@ -373,16 +369,6 @@ async function executeDesktopMigration(analysis, db, session) {
   const now = new Date().toISOString();
   const statements = [];
 
-  if (plan.mode === 'pristine_merge') {
-    for (const item of snapshot.accounts) {
-      statements.push(db.prepare(`
-        UPDATE accounts
-        SET sort_order = ?, is_default = CASE WHEN name = ? THEN 1 ELSE 0 END
-        WHERE name = ?
-      `).bind(item.sortOrder, snapshot.accounts.find(account => account.isDefault === 1)?.name || '', item.name));
-    }
-  }
-
   for (const item of plan.missingAccounts) {
     statements.push(db.prepare(`
       INSERT INTO accounts(name, sort_order, is_default, created_at)
@@ -396,10 +382,11 @@ async function executeDesktopMigration(analysis, db, session) {
   }
 
   if (plan.mode === 'pristine_merge') {
-    const defaultName = snapshot.accounts.find(item => item.isDefault === 1)?.name;
-    if (defaultName) {
-      statements.push(db.prepare('UPDATE accounts SET is_default = CASE WHEN name = ? THEN 1 ELSE 0 END').bind(defaultName));
+    for (const item of snapshot.accounts) {
+      statements.push(db.prepare('UPDATE accounts SET sort_order = ? WHERE name = ?').bind(item.sortOrder, item.name));
     }
+    const defaultName = snapshot.accounts.find(item => item.isDefault === 1)?.name;
+    if (defaultName) statements.push(db.prepare('UPDATE accounts SET is_default = CASE WHEN name = ? THEN 1 ELSE 0 END').bind(defaultName));
   }
 
   for (const item of plan.missingGroups) {
@@ -408,17 +395,31 @@ async function executeDesktopMigration(analysis, db, session) {
       VALUES (?, ?, ?, ?)
     `).bind(item.kind, item.name, plan.mode === 'pristine_merge' ? item.sortOrder : item.targetSortOrder, item.createdAt));
   }
-
   if (plan.mode === 'pristine_merge') {
     for (const item of snapshot.groups) {
       statements.push(db.prepare('UPDATE category_groups SET sort_order = ? WHERE kind = ? AND name = ?')
         .bind(item.sortOrder, item.kind, item.name));
     }
+  }
+
+  for (const item of plan.missingCategories) {
+    statements.push(db.prepare(`
+      INSERT INTO categories(kind, group_id, name, sort_order, is_favorite, created_at)
+      SELECT ?, id, ?, ?, ?, ? FROM category_groups WHERE kind = ? AND name = ? LIMIT 1
+    `).bind(
+      item.kind,
+      item.name,
+      plan.mode === 'pristine_merge' ? item.sortOrder : item.targetSortOrder,
+      item.isFavorite,
+      item.createdAt,
+      item.kind,
+      item.groupName
+    ));
+  }
+  if (plan.mode === 'pristine_merge') {
     for (const pair of plan.reusedCategories) {
       statements.push(db.prepare(`
-        UPDATE categories
-        SET sort_order = ?, is_favorite = ?
-        WHERE kind = ? AND name = ?
+        UPDATE categories SET sort_order = ?, is_favorite = ? WHERE kind = ? AND name = ?
       `).bind(pair.source.sortOrder, pair.source.isFavorite, pair.source.kind, pair.source.name));
     }
     for (const pair of plan.realignCategories) {
@@ -429,24 +430,6 @@ async function executeDesktopMigration(analysis, db, session) {
         WHERE kind = ? AND name = ?
       `).bind(pair.source.kind, pair.source.groupName, pair.source.sortOrder, pair.source.isFavorite, pair.source.kind, pair.source.name));
     }
-  }
-
-  for (const item of plan.missingCategories) {
-    statements.push(db.prepare(`
-      INSERT INTO categories(kind, group_id, name, sort_order, is_favorite, created_at)
-      SELECT ?, id, ?, ?, ?, ?
-      FROM category_groups
-      WHERE kind = ? AND name = ?
-      LIMIT 1
-    `).bind(
-      item.kind,
-      item.name,
-      plan.mode === 'pristine_merge' ? item.sortOrder : item.targetSortOrder,
-      item.isFavorite,
-      item.createdAt,
-      item.kind,
-      item.groupName
-    ));
   }
 
   for (let start = 0; start < plan.readyTransactions.length; start += TRANSACTION_INSERT_CHUNK) {
@@ -497,10 +480,6 @@ async function executeDesktopMigration(analysis, db, session) {
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).bind(HISTORY_KEY, JSON.stringify(history)));
 
-  if (!statements.length) {
-    throw new DesktopMigrationError('沒有可執行的移轉內容。', 'MIGRATION_NOTHING_TO_COMMIT', 400);
-  }
-
   try {
     await db.batch(statements);
   } catch (error) {
@@ -519,6 +498,8 @@ async function executeDesktopMigration(analysis, db, session) {
     skippedDuplicateTransactions: plan.duplicateTransactions,
     insertedOpeningBalances: plan.readyOpeningBalances.length,
     skippedDuplicateOpeningBalances: plan.duplicateOpeningBalances,
+    historicalAccountsPreserved: plan.historicalAccounts,
+    historicalCategoriesPreserved: plan.historicalCategories,
     lockedThrough: plan.resultingLockedThrough,
     completedAt: now
   };
@@ -554,13 +535,11 @@ function publicAnalysis(analysis) {
       conflicts: plan.conflicts.slice(0, 50),
       warnings: plan.warnings,
       resultingLockedThrough: plan.resultingLockedThrough,
+      historicalAccounts: plan.historicalAccounts,
+      historicalCategories: plan.historicalCategories,
       accounts: { insert: plan.missingAccounts.length, reuse: plan.reusedAccounts.length },
       groups: { insert: plan.missingGroups.length, reuse: plan.reusedGroups.length },
-      categories: {
-        insert: plan.missingCategories.length,
-        reuse: plan.reusedCategories.length,
-        realign: plan.realignCategories.length
-      },
+      categories: { insert: plan.missingCategories.length, reuse: plan.reusedCategories.length, realign: plan.realignCategories.length },
       transactions: { insert: plan.readyTransactions.length, duplicate: plan.duplicateTransactions },
       openingBalances: { insert: plan.readyOpeningBalances.length, duplicate: plan.duplicateOpeningBalances }
     }
@@ -570,9 +549,9 @@ function publicAnalysis(analysis) {
 function isPristineSeedTarget(target) {
   if (target.transactionCount !== 0 || target.openingCount !== 0 || target.lockedThrough) return false;
   if (target.accounts.length !== 1 || normalizeName(target.accounts[0]?.name) !== '現金') return false;
-  const groups = new Set(target.groups.map(item => groupKey(item.kind, normalizeName(item.name))));
+  const groups = new Set(target.groups.map(item => groupKey(item.kind, item.name)));
   if (groups.size !== 2 || !groups.has(groupKey('income', '收入分類')) || !groups.has(groupKey('expense', '支出分類'))) return false;
-  const categories = new Map(target.categories.map(item => [categoryKey(item.kind, normalizeName(item.name)), normalizeName(item.groupName)]));
+  const categories = new Map(target.categories.map(item => [categoryKey(item.kind, item.name), normalizeName(item.groupName)]));
   return categories.size === 2
     && categories.get(categoryKey('income', '一般收入')) === '收入分類'
     && categories.get(categoryKey('expense', '一般支出')) === '支出分類';
@@ -608,29 +587,23 @@ function transactionFingerprint(item) {
 function compareSortOrder(a, b) {
   return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-Hant');
 }
-
 function compareKindAndSort(a, b) {
   return a.kind.localeCompare(b.kind) || compareSortOrder(a, b);
 }
-
 function compareCategorySort(a, b) {
   return a.kind.localeCompare(b.kind) || a.groupName.localeCompare(b.groupName, 'zh-Hant') || compareSortOrder(a, b);
 }
-
 function maxMonth(a, b) {
   if (!a) return b || null;
   if (!b) return a || null;
   return a > b ? a : b;
 }
-
 function groupKey(kind, name) {
   return `${kind}\u0000${normalizeName(name)}`;
 }
-
 function categoryKey(kind, name) {
   return `${kind}\u0000${normalizeName(name)}`;
 }
-
 function openingKey(month, accountName) {
   return `${month}\u0000${normalizeName(accountName)}`;
 }
@@ -640,26 +613,30 @@ function boundedArray(value, max, label) {
   if (value.length > max) throw new DesktopMigrationError(`${label}筆數超過單次移轉上限 ${max.toLocaleString()}。`, 'MIGRATION_TOO_MANY_ROWS', 413);
   return value;
 }
-
 function normalizeName(value) {
   return String(value ?? '').trim().replace(/\s+/g, ' ');
 }
-
-function requiredName(value, label) {
+function masterName(value, label) {
+  return constrainedName(value, label, MAX_MASTER_NAME_LENGTH);
+}
+function historicalName(value, label) {
+  return constrainedName(value, label, MAX_HISTORICAL_NAME_LENGTH);
+}
+function constrainedName(value, label, max) {
   const name = normalizeName(value);
-  if (!name || name.length > MAX_NAME_LENGTH) {
-    throw new DesktopMigrationError(`${label}名稱不可空白且不可超過 ${MAX_NAME_LENGTH} 字。`, 'INVALID_SOURCE_NAME', 400);
+  if (!name || name.length > max) {
+    throw new DesktopMigrationError(`${label}名稱不可空白且不可超過 ${max} 字。`, 'INVALID_SOURCE_NAME', 400);
   }
   return name;
 }
-
 function timestampText(value) {
   const text = String(value || '').trim();
   if (!text) return new Date().toISOString();
-  if (text.length > 80) throw new DesktopMigrationError('來源時間欄位格式異常。', 'INVALID_SOURCE_TIMESTAMP', 400);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})?$/.test(text)) {
+    throw new DesktopMigrationError('來源時間欄位格式異常。', 'INVALID_SOURCE_TIMESTAMP', 400);
+  }
   return text;
 }
-
 function kindValue(value, label) {
   const kind = String(value || '').trim();
   if (!['income', 'expense'].includes(kind)) {
@@ -667,54 +644,45 @@ function kindValue(value, label) {
   }
   return kind;
 }
-
 function booleanInt(value, label) {
   const number = Number(value);
   if (number !== 0 && number !== 1) throw new DesktopMigrationError(`${label}無效。`, 'INVALID_SOURCE_FLAG', 400);
   return number;
 }
-
 function integer(value, label) {
   const number = Number(value);
   if (!Number.isSafeInteger(number)) throw new DesktopMigrationError(`${label}必須是整數。`, 'INVALID_SOURCE_INTEGER', 400);
   return number;
 }
-
 function nonNegativeInteger(value, label) {
   const number = integer(value, label);
   if (number < 0) throw new DesktopMigrationError(`${label}不可小於 0。`, 'INVALID_SOURCE_INTEGER', 400);
   return number;
 }
-
 function positiveInteger(value, label) {
   const number = integer(value, label);
   if (number < 1) throw new DesktopMigrationError(`${label}必須大於 0。`, 'INVALID_SOURCE_INTEGER', 400);
   return number;
 }
-
 function dateValue(value, label) {
   const text = String(value || '').trim();
   if (!isDate(text)) throw new DesktopMigrationError(`${label}格式無效。`, 'INVALID_SOURCE_DATE', 400);
   return text;
 }
-
 function monthValue(value, label) {
   const text = String(value || '').trim();
   if (!isMonth(text)) throw new DesktopMigrationError(`${label}格式無效。`, 'INVALID_SOURCE_MONTH', 400);
   return text;
 }
-
 function isMonth(value) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(value || ''));
 }
-
 function isDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
   const [year, month, day] = String(value).split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
-
 function assertUnique(values, message) {
   if (new Set(values).size !== values.length) throw new DesktopMigrationError(message, 'SOURCE_DUPLICATE_KEY', 400);
 }
