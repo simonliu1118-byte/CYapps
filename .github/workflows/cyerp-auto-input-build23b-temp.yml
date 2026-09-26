@@ -39,7 +39,7 @@ jobs:
           cd apps/CYERPAutoInput
           python patch23.py
           rm patch23.py
-          python -c 'from pathlib import Path; p=Path("F2BatchCellLocator.cs"); s=p.read_text(encoding="utf-8"); s=s.replace("raw=\"{Sanitize(rawText)}\" normalized=\"{Sanitize(normalized)}\"", "raw={Sanitize(rawText)} normalized={Sanitize(normalized)}"); a=s.index("    private static string Sanitize(string value)"); b=s.index("    internal static bool TryParseStockText", a); fix="    private static string Sanitize(string value)\\n    {\\n        var text = value.Replace((char)13, (char)32).Replace((char)10, (char)32).Trim();\\n        return text.Length <= 64 ? text : text[..64];\\n    }\\n\\n"; p.write_text(s[:a]+fix+s[b:],encoding="utf-8")'
+          python -c 'from pathlib import Path; p=Path("F2BatchCellLocator.cs"); s=p.read_text(encoding="utf-8"); s=s.replace("raw=\"{Sanitize(rawText)}\" normalized=\"{Sanitize(normalized)}\"", "raw={Sanitize(rawText)} normalized={Sanitize(normalized)}"); a=s.index("    private static string Sanitize(string value)"); b=s.index("    internal static bool TryParseStockText", a); nl=chr(10); fix="    private static string Sanitize(string value)"+nl+"    {"+nl+"        var text = value.Replace((char)13, (char)32).Replace((char)10, (char)32).Trim();"+nl+"        return text.Length <= 64 ? text : text[..64];"+nl+"    }"+nl+nl; p.write_text(s[:a]+fix+s[b:],encoding="utf-8")'
 
       - name: Fetch canonical CYERPAutoInput icon
         shell: pwsh
