@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace CYERPAutoInput;
 
 internal sealed class MainForm : Form
@@ -11,7 +13,7 @@ internal sealed class MainForm : Form
     private readonly Dictionary<string, FlowLayoutPanel> _groupFlows = new(StringComparer.OrdinalIgnoreCase);
     private readonly DetailDataGridView _details = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 22 · Esc：緊急停止 · 不自動儲存 ERP" };
+    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 23 · Esc：緊急停止 · 不自動儲存 ERP" };
     private readonly ModeToggle _modeToggle = new();
     private readonly CyPrimaryButton _start = new();
     private CancellationTokenSource? _automationCts;
@@ -224,18 +226,58 @@ internal sealed class MainForm : Form
         }
         else
         {
-            value = new TextBox
+            var text = new TextBox
             {
                 Width = 158,
                 Location = new Point(inputLeft, 2),
                 Tag = field.Key
             };
+            if (field.Key == "order_type")
+                text.MaxLength = 4;
+            if (field.Kind == FieldKind.Date)
+            {
+                text.MaxLength = 10;
+                ConfigureDateTextBox(text);
+            }
+            value = text;
         }
 
         row.Controls.Add(value);
         flow.Controls.Add(row);
         _valueControls[field.Key] = value;
         _fieldRows[field.Key] = row;
+    }
+
+    private static void ConfigureDateTextBox(TextBox text)
+    {
+        var updating = false;
+        text.TextChanged += (_, _) =>
+        {
+            if (updating) return;
+            var formatted = FormatDateForDisplay(NormalizeDateDigits(text.Text));
+            if (text.Text == formatted) return;
+            updating = true;
+            text.Text = formatted;
+            text.SelectionStart = text.Text.Length;
+            updating = false;
+        };
+    }
+
+    private static string NormalizeDateDigits(string value) =>
+        new string(value.Where(char.IsDigit).Take(8).ToArray());
+
+    private static string FormatDateForDisplay(string digits)
+    {
+        if (digits.Length <= 4) return digits;
+        if (digits.Length <= 6) return $"{digits[..4]}/{digits[4..]}";
+        return $"{digits[..4]}/{digits[4..6]}/{digits[6..]}";
+    }
+
+    private static bool TryNormalizeValidDate(string value, out string digits)
+    {
+        digits = NormalizeDateDigits(value);
+        return digits.Length == 8 &&
+               DateTime.TryParseExact(digits, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
     }
 
     private void ConfigureDetailGrid()
@@ -346,11 +388,11 @@ internal sealed class MainForm : Form
         {
             var progress = new Progress<string>(SetStatus);
             var result = await _automation.RunAsync(snapshot, progress, token);
-            var salesNo = string.IsNullOrWhiteSpace(result.SalesOrderNumber) ? "未取得" : result.SalesOrderNumber;
+            var documentKey = string.IsNullOrWhiteSpace(result.DocumentKey) ? "未取得" : result.DocumentKey;
             if (result.Warnings.Count > 0)
-                SetStatus($"ERP：銷貨單 {salesNo} 輸入完成；{result.Warnings.Count} 筆需人工確認；尚未儲存");
+                SetStatus($"ERP：銷貨單 {documentKey} 輸入完成；{result.Warnings.Count} 筆需人工確認；尚未儲存");
             else
-                SetStatus($"ERP：銷貨單 {salesNo} 輸入完成；尚未儲存");
+                SetStatus($"ERP：銷貨單 {documentKey} 輸入完成；尚未儲存");
         }
         catch (OperationCanceledException)
         {
@@ -384,6 +426,25 @@ internal sealed class MainForm : Form
             string value;
             if (control is CheckBox cb) value = cb.Checked ? "true" : string.Empty;
             else value = control.Text.Trim();
+
+            if (value.Length > 0 && field.Kind == FieldKind.Date)
+            {
+                if (!TryNormalizeValidDate(value, out var normalizedDate))
+                {
+                    validationError = $"{field.Label}必須是有效日期（YYYY/MM/DD）。";
+                    control.Focus();
+                    return null;
+                }
+                value = normalizedDate;
+            }
+
+            if (field.Key == "order_type" && value.Length > 4)
+            {
+                validationError = "銷貨單別最多 4 個字元。";
+                control.Focus();
+                return null;
+            }
+
             if (value.Length > 0) values[field.Key] = value;
         }
 
