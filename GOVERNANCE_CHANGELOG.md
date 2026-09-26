@@ -1,5 +1,16 @@
 # CYApps Governance Changelog
 
+## 2.3.13 — 2026/09/27
+
+- Public package safety scanner only interprets real contiguous UTF-16 ASCII
+  strings, instead of removing every NUL from native binaries. This preserves
+  ASCII/UTF-16 token detection while avoiding false positives in .NET/WPF
+  runtime DLLs and self-contained EXEs.
+- Add synthetic credential and binary false-positive regression tests; final
+  public packages still require the scanner before upload or Release.
+- Pin the exact SHA-256 of the known .NET 10 WPF native dependency that still
+  contains a token-shaped UTF-16 string; modified copies receive full scanning.
+
 ## 2.3.12 — 2026/09/25
 
 - Public Build／Actions Artifact／GitHub Release 與 Production Deploy 正式分離；公開產物不得取得、注入或烘焙正式 Secret、Token、Private Key、OAuth Client Secret、Refresh Token、正式帳密或可直接取得正式服務權限的憑證。
