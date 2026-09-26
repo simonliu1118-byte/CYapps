@@ -571,6 +571,11 @@
     border-left: 0;
     border-top: 1px solid #bfc9d2;
     box-shadow: 0 -12px 28px rgba(31, 42, 55, .16);
+    transform: translateY(102%);
+  }
+
+  .confirmation-drawer.open {
+    transform: translateY(0);
   }
 
   .confirmation-drawer .confirmation-list {
