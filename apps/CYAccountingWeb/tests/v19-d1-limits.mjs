@@ -101,7 +101,7 @@ for (let index = 0; index < 5_000; index += 1) {
 const maxDb = new CollectingDB();
 const maxBuilt = buildSafeMigrationStatements(max, maxDb, { employee_no: '0001' });
 assert.ok(maxBuilt.statements.length <= 40, `migration batch uses ${maxBuilt.statements.length} statements; expected <= 40`);
-assert.ok(maxBuilt.statements.length + 8 <= 50, 'commit analysis + write batch must fit Free-plan 50 D1 queries per invocation');
+assert.ok(maxBuilt.statements.length + 9 <= 50, 'session lookup + commit analysis + write batch must fit Free-plan 50 D1 queries per invocation');
 for (const statement of maxBuilt.statements) {
   assert.ok(statement.params.length <= 100, `statement has ${statement.params.length} bound parameters`);
   for (const param of statement.params) {
