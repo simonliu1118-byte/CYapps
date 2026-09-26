@@ -83,6 +83,7 @@ jobs:
           node tests/v17-backup.mjs
           node tests/v17-phase-b.mjs
           node tests/v18-tiered-backup.mjs
+          node tests/v18-backup-ui.mjs
           node tests/deploy-config.mjs
 
       - name: Render CI-only Cloudflare config
