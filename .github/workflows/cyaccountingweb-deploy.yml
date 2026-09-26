@@ -82,6 +82,7 @@ jobs:
           node --check public/v0181.js
           node --check public/v019.js
           node --check public/v020.js
+          node --check public/v021.js
 
       - name: Run application tests
         run: |
@@ -94,6 +95,7 @@ jobs:
           node tests/v19-desktop-migration.mjs
           node tests/v19-d1-limits.mjs
           node tests/v20-adaptive-ui.mjs
+          node tests/v21-desktop-ui.mjs
           node tests/deploy-config.mjs
 
       - name: Prepare pinned browser SQLite runtime
