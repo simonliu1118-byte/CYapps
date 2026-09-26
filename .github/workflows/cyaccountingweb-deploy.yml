@@ -50,6 +50,7 @@ jobs:
           node --check src/app.js
           node --check src/app-v17.js
           node --check src/app-v18.js
+          node --check src/app-v19.js
           node --check src/backup-storage-provider.js
           node --check src/gcs-backup-provider.js
           node --check src/r2-backup-provider.js
@@ -60,6 +61,7 @@ jobs:
           node --check src/v16-backup.js
           node --check src/v17-backup.js
           node --check src/v18-backup.js
+          node --check src/v19-migration-api.js
           node --check scripts/render-wrangler.mjs
           node --check public/auth.js
           node --check public/app.js
@@ -76,6 +78,7 @@ jobs:
           node --check public/v015.js
           node --check public/v016.js
           node --check public/v0181.js
+          node --check public/v019.js
 
       - name: Run application tests
         run: |
@@ -85,6 +88,7 @@ jobs:
           node tests/v17-phase-b.mjs
           node tests/v18-tiered-backup.mjs
           node tests/v18-backup-ui.mjs
+          node tests/v19-migration.mjs
           node tests/deploy-config.mjs
 
       - name: Render CI-only Cloudflare config
