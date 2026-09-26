@@ -11,7 +11,9 @@ const REQUIRED = {
   CF_WORKER_NAME: '__CF_WORKER_NAME__',
   CF_D1_DATABASE_NAME: '__CF_D1_DATABASE_NAME__',
   CF_D1_DATABASE_ID: '__CF_D1_DATABASE_ID__',
-  CF_IDENTITY_SERVICE: '__CF_IDENTITY_SERVICE__'
+  CF_IDENTITY_SERVICE: '__CF_IDENTITY_SERVICE__',
+  CF_R2_BACKUP_BUCKET: '__CF_R2_BACKUP_BUCKET__',
+  CF_BACKUP_TOPOLOGY: '__CF_BACKUP_TOPOLOGY__'
 };
 
 function requireValue(env, name) {
@@ -28,6 +30,10 @@ function validateValues(values) {
     throw new Error('CF_D1_DATABASE_ID must be a valid UUID.');
   }
   if (!workerLike.test(values.CF_IDENTITY_SERVICE)) throw new Error('CF_IDENTITY_SERVICE has an invalid format.');
+  if (!/^[a-z0-9][a-z0-9-]{1,62}$/i.test(values.CF_R2_BACKUP_BUCKET)) throw new Error('CF_R2_BACKUP_BUCKET has an invalid format.');
+  if (!['legacy_gcs', 'parallel_dual_provider'].includes(values.CF_BACKUP_TOPOLOGY)) {
+    throw new Error('CF_BACKUP_TOPOLOGY must be legacy_gcs or parallel_dual_provider.');
+  }
 }
 
 function jsonFragment(value) {
