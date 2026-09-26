@@ -3,7 +3,8 @@ import { createR2BackupStorageProvider, r2ConfigReady } from '../src/r2-backup-p
 import {
   backupPackageDigest,
   resolveTieredBackupTopology,
-  runParallelBackup
+  runParallelBackup,
+  summarizePhaseCAcceptance
 } from '../src/v18-backup.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
@@ -23,6 +24,37 @@ async function expectReject(fn, code) {
 assert(resolveTieredBackupTopology({}) === 'legacy_gcs', 'default topology must remain legacy_gcs');
 assert(resolveTieredBackupTopology({ BACKUP_TOPOLOGY: 'parallel_dual_provider' }) === 'parallel_dual_provider', 'parallel topology must be accepted');
 await expectReject(async () => resolveTieredBackupTopology({ BACKUP_TOPOLOGY: 'tiered_direct' }), 'BACKUP_TOPOLOGY_UNSUPPORTED');
+
+const digest64 = 'a'.repeat(64);
+const emptyAcceptance = summarizePhaseCAcceptance([]);
+assert(emptyAcceptance.consecutiveScheduledSuccesses === 0, 'empty acceptance must start at zero');
+assert(emptyAcceptance.requiredConsecutiveScheduled === 14, 'Phase C gate must require 14 scheduled backups');
+assert(emptyAcceptance.completed === false, 'empty acceptance must not complete');
+
+const twoSuccesses = summarizePhaseCAcceptance([
+  { backup_id: 'b2', created_at: '2026-09-28T19:30:00Z', package_sha256: digest64, r2_success: 1, gcs_success: 1 },
+  { backup_id: 'b1', created_at: '2026-09-27T19:30:00Z', package_sha256: digest64, r2_success: 1, gcs_success: 1 }
+]);
+assert(twoSuccesses.consecutiveScheduledSuccesses === 2, 'two latest paired scheduled successes should count as two');
+assert(twoSuccesses.remaining === 12, 'remaining acceptance count should be derived');
+assert(twoSuccesses.latestScheduledBackupId === 'b2', 'latest scheduled backup id should be exposed');
+
+const resetByFailure = summarizePhaseCAcceptance([
+  { backup_id: 'b3', created_at: '2026-09-29T19:30:00Z', package_sha256: digest64, r2_success: 1, gcs_success: 1 },
+  { backup_id: 'b2', created_at: '2026-09-28T19:30:00Z', package_sha256: digest64, r2_success: 1, gcs_success: 0 },
+  { backup_id: 'b1', created_at: '2026-09-27T19:30:00Z', package_sha256: digest64, r2_success: 1, gcs_success: 1 }
+]);
+assert(resetByFailure.consecutiveScheduledSuccesses === 1, 'counter must stop at the first scheduled failure');
+
+const fourteenSuccesses = summarizePhaseCAcceptance(Array.from({ length: 14 }, (_, index) => ({
+  backup_id: `ok${14 - index}`,
+  created_at: `2026-10-${String(14 - index).padStart(2, '0')}T19:30:00Z`,
+  package_sha256: digest64,
+  r2_success: 1,
+  gcs_success: 1
+})));
+assert(fourteenSuccesses.consecutiveScheduledSuccesses === 14, '14 consecutive scheduled paired successes must satisfy Phase C');
+assert(fourteenSuccesses.completed === true, 'Phase C gate should complete at 14/14');
 
 const r2Objects = new Map();
 let r2Version = 0;
@@ -179,4 +211,4 @@ assert(partial.backupResult.copies.find(copy => copy.provider === 'cloudflare_r2
 assert(partial.backupResult.copies.find(copy => copy.provider === 'google_cloud_storage')?.status === 'failed', 'GCS failure must be distinct');
 assert(goodR2.objects.size === 2, 'successful R2 copy must not be removed when GCS fails');
 
-console.log('Phase C R2 provider, export-once dual copy, digest parity and failure isolation tests passed.');
+console.log('Phase C R2 provider, export-once dual copy, acceptance counter, digest parity and failure isolation tests passed.');
