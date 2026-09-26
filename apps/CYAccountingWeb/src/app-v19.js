@@ -1,5 +1,5 @@
 import legacyApp from './app-v18.js';
-import { handleV19MigrationApi, hasActiveLegacyMigration } from './v19-migration.js';
+import { handleV19MigrationApi, hasActiveLegacyMigration } from './v19-migration-api.js';
 
 const SESSION_COOKIE = 'cyaccounting_session';
 
@@ -32,7 +32,7 @@ export default {
         if (activeRunId) {
           return json({
             ok: false,
-            error: '舊帳本遷移進行中，暫停其他資料修改。請先完成或中止遷移。',
+            error: '舊帳本遷移尚未完成，暫停其他資料修改。請先完成或中止遷移。',
             code: 'MIGRATION_WRITE_LOCKED',
             runId: activeRunId
           }, 423);
