@@ -28,6 +28,9 @@ apps/CYAccountingWeb/wrangler.generated.jsonc
 apps/CYAccountingWeb/wrangler.ci.generated.jsonc
 apps/CYAccountingWeb/wrangler.deploy.jsonc
 
+# Generated browser vendor runtime
+apps/CYAccountingWeb/public/vendor/sqljs/
+
 # Editors and operating systems
 .vscode/
 .idea/
