@@ -1,47 +1,32 @@
 # CYEnvelope
 
-志遠專用的 Windows 信封套印工具。程式、資料模型、測試、資源與封裝均位於本目錄；不引用 `CYInvoice` 的程式碼或資料。
+志遠專用 Windows 信封套印工具。正式基準仍是 Go 版 V0.1.1；開發分支 `cyenvelope/csharp-remake` 正分階段重做 C#／WPF，目標版本 V0.2.0。本分支的 VERSION 是目標版本，不代表已提供可使用的新版 EXE。
 
-## V0.1.1
+## 重做進度
 
-- 15K 標準信封（105 × 222 mm），直式套印。
-- 收件人即時篩選、同名多地址、每筆地址記住上次電話。
-- 臺灣市話、手機、0800 與分機格式化。
-- 離線三碼郵遞區號（中華郵政 368 筆地區表）。
-- 6–7 個郵件種類勾記、方框文字與每格式預設值。
-- 格式即時示意與毫米座標、字體、字級設定。
-- Windows 原生印表機列舉、內容視窗及 GDI 套印。
-- SQLite 本機資料庫；按下「列印」先保存，才送 Windows 列印。
-- 修正中文輸入法搭配收件人即時清單時，游標被重設而使字序錯亂的問題。
-- 依實際 15K 信封重畫主畫面預覽，並更新內建 15K 初始座標。
-- 改用「印表機＋直式信封」多尺寸應用程式圖示。
+| 階段 | 狀態 | 內容 |
+| --- | --- | --- |
+| 1. 核心與資料 | 已提交原始碼、跨平台編譯 | 全新 SQLite 資料層；聯絡人多地址、多電話模型；368 筆離線三碼郵遞區號；電話格式；共用信封繪製器；核准 ENV 圖示 |
+| 2. 介面與列印 | 待實作 | 收件人輸入、管理視窗、格式編輯、印表機選擇；以共用繪製器列印，按列印先保存 |
+| 3. Windows 測試包與試印 | 待驗證 | Windows x64 portable、CI Artifact、圖示與啟動檢查、15K 實機試印及位置校正 |
 
-目前預覽依提供的 15K 信封照片重畫；實際套印位置仍可在「格式設定」依印表機進紙差異精校。
+第一階段僅產生 WPF 類別庫，沒有 C# 使用介面或可供試印的 EXE。既有 `cmd/`、`internal/`、`go.mod`、`build.ps1` 和 `使用說明.txt` 暫作 Go 版行為對照；完成 C# 版驗收後再處理舊碼。新版資料庫從空白建立，不遷移 Go 測試資料。執行資料不進 Git。
 
-## 開發
+## 排版原則
 
-需求：Go 1.22 或更新版。
+`src/CYEnvelope/EnvelopeRenderer.cs` 以毫米保存信封及文字位置。預覽與未來列印共用同一繪製器；信封原有紅色線條只顯示於預覽，套印只輸出黑字、勾記和黑色直排方框文字。目前預覽底圖是依舊版資料建立的初步示意，尚未通過實物照片逐項比對。15K 實際套印位置仍須使用目標印表機試印，不以編譯成功視為驗收。
+
+## 第一階段開發驗證
+
+需要 .NET 10 SDK。Windows 可直接執行：
 
 ```powershell
-./build.ps1
+dotnet build .\src\CYEnvelope\CYEnvelope.csproj
+dotnet run --project .\tests\CYEnvelope.Tests\CYEnvelope.Tests.csproj
 ```
 
-或：
+非 Windows 環境可用 `dotnet build -p:EnableWindowsTargeting=true` 檢查編譯，但無法執行 WPF 測試或實際列印。此階段的測試程式需在 Windows 執行後，才能宣稱郵遞區號、SQLite 保存與繪製執行時驗證通過。
 
-```powershell
-$env:GOOS='windows'
-$env:GOARCH='amd64'
-$env:CGO_ENABLED='0'
-go test ./...
-go build -buildvcs=false -trimpath -ldflags '-H windowsgui -s -w' -o dist/CYEnvelope/CYEnvelope.exe ./cmd/CYEnvelope
-```
+## 來源與規範
 
-## 資料位置
-
-可攜版會在 EXE 同層使用：
-
-- `Data/CYEnvelope.db`：聯絡人、格式、方框文字與設定
-- `Logs/CYEnvelope.log`：執行紀錄
-- `Cache/`：保留供後續快取功能
-
-備份時關閉程式，再複製整個 `Data` 目錄即可。
+共通規則依根目錄 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 和本專案 `PROJECT_RULES.md`。介面依 AITeam 主線的 CY Desktop Visual Guide。`assets/ENV.ico`、`assets/ENV.svg` 取自 AITeam 核准的 `shared/cy-visual/icon-family/apps/envelope/`，其中 ICO SHA-256 為 `9d6f1534cb6a1e81efe96f6468db8b885b0076e10e94b85929414d86c90c6256`。
