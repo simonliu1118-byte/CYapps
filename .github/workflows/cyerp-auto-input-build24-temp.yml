@@ -1,0 +1,141 @@
+name: CYERPAutoInput Build 24 Temp CI
+
+on:
+  push:
+    branches: [ci-cyerp-build24]
+    paths:
+      - ".github/workflows/cyerp-auto-input-build24-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v7
+        with:
+          ref: cyerp-auto-input/v0.1.0-csharp
+          fetch-depth: 0
+
+      - name: Apply Build 24 patch
+        shell: bash
+        run: |
+          git show origin/ci-cyerp-build24:.github/cyerp-build24-patch.py > apps/CYERPAutoInput/patch24.py
+          cd apps/CYERPAutoInput
+          python patch24.py
+          rm patch24.py
+          test "$(cat BUILD | tr -d '\r\n')" = "24"
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Fetch canonical CYERPAutoInput icon
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-canonical-icon.ps1
+
+      - name: Fetch pinned PaddleOCR models
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: ./tools/fetch-ocr-models.ps1
+
+      - name: Restore
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet restore CYERPAutoInput.csproj -r win-x64
+
+      - name: Build
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet build CYERPAutoInput.csproj -c Release -r win-x64 --no-restore -p:Version=0.1.0 -p:ContinuousIntegrationBuild=true
+
+      - name: Verify embedded canonical icon resource
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: |
+          $assemblyPath = Get-ChildItem ./bin/Release -Recurse -Filter CYERPAutoInput.dll | Select-Object -First 1
+          if ($null -eq $assemblyPath) { throw "CYERPAutoInput.dll not found after build" }
+          $assembly = [System.Reflection.Assembly]::LoadFile($assemblyPath.FullName)
+          $names = @($assembly.GetManifestResourceNames())
+          if ($names -notcontains "CYERPAutoInput.Auto.ico") {
+            throw "Embedded canonical icon resource missing. Resources: $($names -join ', ')"
+          }
+          Write-Host "Embedded icon resource verified: CYERPAutoInput.Auto.ico"
+
+      - name: Optical pipeline self-test
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: dotnet run --project CYERPAutoInput.csproj -c Release -r win-x64 --no-build -- --vision-self-test
+
+      - name: Publish and verify portable package
+        shell: pwsh
+        working-directory: apps/CYERPAutoInput
+        run: |
+          Remove-Item -Recurse -Force package,publish-staging -ErrorAction SilentlyContinue
+          $staging = "publish-staging"
+          $outDir = Join-Path "package" "CYERPAutoInput"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+
+          dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --no-restore --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -p:DebugType=None -p:DebugSymbols=false -p:Version=0.1.0 -o $staging
+          if (-not (Test-Path "$staging/CYERPAutoInput.exe")) { throw "CYERPAutoInput.exe was not produced" }
+
+          Copy-Item "$staging/CYERPAutoInput.exe" "$outDir/CYERPAutoInput.exe"
+          Copy-Item VERSION "$outDir/VERSION"
+          Copy-Item BUILD "$outDir/BUILD"
+          Copy-Item README.md "$outDir/README.md"
+          Copy-Item THIRD_PARTY_NOTICES.md "$outDir/THIRD_PARTY_NOTICES.md"
+          New-Item -ItemType Directory -Path "$outDir/Data" -Force | Out-Null
+          Copy-Item settings.example.json "$outDir/Data/settings.example.json"
+          New-Item -ItemType Directory -Path "$outDir/runtime/ocr" -Force | Out-Null
+          Copy-Item "$staging/runtime/ocr/*.onnx" "$outDir/runtime/ocr/"
+
+          $required = @(
+            "$outDir/CYERPAutoInput.exe",
+            "$outDir/BUILD",
+            "$outDir/VERSION",
+            "$outDir/README.md",
+            "$outDir/THIRD_PARTY_NOTICES.md",
+            "$outDir/Data/settings.example.json",
+            "$outDir/runtime/ocr/ch_PP-OCRv5_det_mobile.onnx",
+            "$outDir/runtime/ocr/ch_PP-OCRv5_rec_mobile.onnx",
+            "$outDir/runtime/ocr/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"
+          )
+          foreach ($path in $required) {
+            if (!(Test-Path $path)) { throw "Missing packaged file: $path" }
+          }
+
+          $unexpected = @(Get-ChildItem -LiteralPath $outDir -Recurse -File | Where-Object { $_.Extension -in @('.pdb','.lib','.dll') -or $_.Name -match 'SHA256' })
+          if ($unexpected.Count -gt 0) { throw "Unexpected engineering files: $($unexpected.FullName -join ', ')" }
+
+          $selfTest = Start-Process -FilePath "$outDir/CYERPAutoInput.exe" -ArgumentList "--vision-self-test" -Wait -PassThru -NoNewWindow
+          if ($selfTest.ExitCode -ne 0) { throw "Packaged EXE vision self-test failed: $($selfTest.ExitCode)" }
+          Remove-Item -Recurse -Force "$outDir/logs" -ErrorAction SilentlyContinue
+
+      - name: Commit Build 24 to development branch
+        shell: bash
+        run: |
+          git config user.name "simonliu1118-byte"
+          git config user.email "286269326+simonliu1118-byte@users.noreply.github.com"
+          git add \
+            apps/CYERPAutoInput/BUILD \
+            apps/CYERPAutoInput/AppLogger.cs \
+            apps/CYERPAutoInput/Build10UiPatch.cs \
+            apps/CYERPAutoInput/ErpAutomationService.cs \
+            apps/CYERPAutoInput/CYERPAutoInput.csproj \
+            apps/CYERPAutoInput/Program.cs \
+            apps/CYERPAutoInput/NativeMethods.cs \
+            apps/CYERPAutoInput/README.md
+          git diff --cached --check
+          git commit -m "fix(CYERPAutoInput): trust lookup target state and harden app icon"
+          git push origin HEAD:cyerp-auto-input/v0.1.0-csharp
+
+      - name: Upload Build 24 package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYERPAutoInput-v0.1.0-build24-windows-x64-temp24
+          path: apps/CYERPAutoInput/package/*
+          if-no-files-found: error
+          retention-days: 14
