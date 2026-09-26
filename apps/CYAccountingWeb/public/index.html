@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/v015.css">
   <link rel="stylesheet" href="/v016.css">
   <link rel="stylesheet" href="/v0181.css">
+  <link rel="stylesheet" href="/v019.css">
 </head>
 <body class="auth-locked">
   <div id="authOverlay" class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
@@ -39,7 +40,7 @@
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.18.1</span></p>
+      <p>CYAccounting Web <span class="version">V0.19.0</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -60,7 +61,6 @@
         <div class="entry-grid">
           <label><span>日期</span><input id="txDate" type="date" required></label>
           <label><span>帳戶</span><select id="accountName" required></select></label>
-          
           <label><span>科目</span><select id="categoryName" required></select></label>
           <label class="summary-field"><span>摘要</span><input id="summary" type="text" maxlength="100" placeholder="可留白"></label>
           <label class="amount-field"><span>金額</span><input id="amount" type="text" inputmode="numeric" maxlength="7" placeholder="0" required></label>
@@ -103,7 +103,6 @@
     </form>
   </dialog>
 
-
   <dialog id="openingDialog" class="modal opening-modal">
     <div class="modal-header"><div><h2>期初餘額</h2><p>設定選定月份各帳戶的期初金額；已鎖帳月份僅供檢視。</p></div><button class="icon-button" type="button" data-close-dialog="openingDialog" aria-label="關閉">×</button></div>
     <div class="pane-heading opening-dialog-heading"><p class="hint">空白代表未設定；可輸入負數。歷史帳戶仍可查看既有設定。</p><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
@@ -134,7 +133,6 @@
           <div class="inline-add"><input id="newGroupName" type="text" maxlength="60" placeholder="新增大分類"><button id="addGroupButton" class="secondary" type="button">新增大分類</button></div>
         </section>
 
-
         <section class="settings-pane" data-settings-pane="lock">
           <h3>月份鎖帳</h3>
           <p class="hint">設定後，該月份以及更早月份都不能新增、編輯、刪除記帳或修改期初餘額。設定頁仍可調整鎖帳月份。</p>
@@ -162,5 +160,6 @@
   <script src="/v015.js" defer></script>
   <script src="/v016.js" defer></script>
   <script src="/v0181.js" defer></script>
+  <script src="/v019.js" defer></script>
 </body>
 </html>
