@@ -19,7 +19,7 @@
 - [x] 逐月鎖帳操作流程（V0.12.0）；設定頁仍保留管理者直接指定鎖帳月份的繞過流程。
 - [x] 單月 Excel 匯出：直接產生標準 `.xlsx`，包含月統計、逐筆餘額與期初餘額工作表（V0.13.0）。
 - [x] Excel 匯入：`.xlsx` 工作表選擇、標題列／欄位對應、預覽、7 位數驗證、鎖帳檢查、重複略過與確認後寫入（V0.15.0）。
-- [ ] **CYAccounting SQLite 帳本匯入／遷移工具（V0.19.0）**：實作已完成瀏覽器本機 SQLite 解析、schema/integrity 驗證、SUPER_ADMIN server-side 權限、保守合併預覽、transaction occurrence dedupe、期初餘額／科目結構衝突阻擋、鎖帳只取較嚴格月份與 D1 atomic commit；原始 `.db` 不上傳。待 CI／部署與真實桌面帳本 production acceptance 通過後才勾選完成。
+- [ ] **CYAccounting SQLite 帳本匯入／遷移工具（V0.19.0）**：實作已完成瀏覽器本機 SQLite 解析、schema/integrity 驗證、SUPER_ADMIN server-side 權限、保守合併預覽、transaction occurrence dedupe、期初餘額／科目結構衝突阻擋、鎖帳只取較嚴格月份與 D1 atomic commit；原始 `.db` 不上傳。V0.19.0 Build 1 已修正 D1 bound parameter／query／payload limit 並正式部署；仍待真實桌面帳本 production acceptance 通過後才勾選完成。
 
 ## 備份／復原與高風險操作
 
@@ -51,12 +51,13 @@
 - [x] Desktop UI/UX Phase 2：主工作區縮窄約 20%、收支改雙態切換、輸入確認改右側 edge sidebar、期初餘額移至記帳資料區、重整記帳工具列（V0.9.0）。
 - [x] Desktop UI/UX Phase 1：輸入確認改為右側可收合 drawer、修正版本顯示單一來源、提高記帳資料表桌面資訊密度（V0.8.0）。
 - [x] V0.18.1 備份／復原頁「最近 logical backup」收斂為單行六欄顯示（時間、方式、Backup ID、R2、GCS、資料），移除 desktop 水平捲動；同版加入 Phase C scheduled acceptance `x/14` 進度。
-- [ ] 完成功能後集中進行一輪 UI／UX 重整，避免開發期間因版面反覆調整增加返工。
-- [ ] 採單一網站的 RWD 為基礎，不另做獨立 PC／手機兩套網站。
-- [ ] 在 RWD 基礎上加入 Adaptive UI：相同資料與功能可依裝置使用不同 presentation，而非只把桌面版等比例縮小。
-- [ ] 建議初步 breakpoint：Desktop `>= 1024px`、Tablet `768–1023px`、Mobile `< 768px`；實際數值於 UI／UX 階段依真實畫面驗證調整。
-- [ ] 手機版重點：導覽 drawer、表格卡片化／重要欄位優先、單欄表單、較大的觸控區、Modal／設定頁可改全螢幕或 sheet 呈現。
-- [ ] Desktop 仍以高資訊密度與鍵盤高效率輸入為主要操作模式；Mobile 以查詢、確認、快速輸入與簡單修改為優先。
+- [x] **V0.20.0 RWD / Adaptive UI Phase 1**：建立正式 Desktop `>=1024px`、Tablet `768–1023px`、Mobile `<768px` presentation 分層；Mobile 新增記帳改單欄、交易表改卡片、設定／Modal 改全螢幕 sheet、輸入確認改底部 sheet，並放大高頻觸控區。此項為程式／CI 完成狀態，仍需真實手機／平板實機畫面驗收。
+- [ ] 完成功能後集中進行一輪 UI／UX 重整：V0.20.0 已啟動第一階段，後續依實機驗收結果收斂細節與視覺一致性。
+- [x] 採單一網站的 RWD 為基礎，不另做獨立 PC／手機兩套網站（V0.20.0 Phase 1 建立正式 breakpoint 與 presentation layer）。
+- [x] 在 RWD 基礎上加入 Adaptive UI：相同資料與功能依裝置使用不同 presentation，而非只把桌面版等比例縮小（V0.20.0 Phase 1）。
+- [x] 初步 breakpoint：Desktop `>= 1024px`、Tablet `768–1023px`、Mobile `< 768px` 已在 V0.20.0 落地；後續依真實裝置驗收可微調數值。
+- [x] 手機版 Phase 1：交易卡片化、單欄表單、較大的觸控區、Modal／設定頁全螢幕 sheet、輸入確認 bottom sheet；後續仍可再評估導覽 drawer 等較大型資訊架構調整。
+- [ ] Desktop 仍以高資訊密度與鍵盤高效率輸入為主要操作模式；Mobile 以查詢、確認、快速輸入與簡單修改為優先。程式方向已落地，待 Desktop/Tablet/Mobile 實機交叉驗收後再勾選完成。
 - [ ] 若未來出現掃碼、拍攝單據、離線作業、Push Notification 等強烈行動裝置需求，再評估 PWA 或原生 App；目前不提前拆成第二套前端。
 
 ## 長期整合方向
