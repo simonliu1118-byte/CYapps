@@ -25,8 +25,8 @@ internal sealed class RecoveryCodeForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
+        ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
-        Icon = ApplicationIcon.Load();
         BuildLayout();
         Shown += (_, _) => saved.Focus();
     }
@@ -47,7 +47,7 @@ internal sealed class RecoveryCodeForm : Form
 
         root.Controls.Add(new Label
         {
-            Text = "這組復原碼只會完整顯示這一次，請保存於安全的公司文件或離線位置。",
+            Text = "復原碼使用於超級使用者忘記密碼，請務必妥善保存。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(150, 45, 45),
@@ -62,7 +62,7 @@ internal sealed class RecoveryCodeForm : Form
 
         root.Controls.Add(new Label
         {
-            Text = "重新產生新碼後舊碼立即失效；密碼與復原碼都遺失時，單機版不提供一般管理員後門。",
+            Text = "若遺失復原碼則超級管理員無法使用「忘記密碼」功能恢復密碼。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(88, 88, 88),
@@ -110,7 +110,7 @@ internal sealed class RecoveryCodeForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (Icon is null || !recoveryCode.ReadOnly || recoveryCode.UseSystemPasswordChar || ControlBox || AcceptButton != saved ||
+        if (ShowIcon || !recoveryCode.ReadOnly || recoveryCode.UseSystemPasswordChar || ControlBox || AcceptButton != saved ||
             ClientSize.Width != WindowWidth || ClientSize.Height != WindowHeight ||
             !UiControls.HasLogicalSize(copy, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !UiControls.HasLogicalSize(saved, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
