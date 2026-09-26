@@ -24,7 +24,7 @@ try {
   const renderedText = fs.readFileSync(output, 'utf8');
   const rendered = JSON.parse(renderedText);
   assert.equal(rendered.name, env.CF_WORKER_NAME);
-  assert.equal(rendered.main, 'src/app-v18.js');
+  assert.equal(rendered.main, 'src/app-v19.js');
   assert.equal(rendered.d1_databases[0].binding, 'DB');
   assert.equal(rendered.d1_databases[0].database_name, env.CF_D1_DATABASE_NAME);
   assert.equal(rendered.d1_databases[0].database_id, env.CF_D1_DATABASE_ID);
