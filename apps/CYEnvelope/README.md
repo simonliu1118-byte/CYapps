@@ -30,3 +30,5 @@ dotnet run --project .\tests\CYEnvelope.Tests\CYEnvelope.Tests.csproj
 ## 來源與規範
 
 共通規則依根目錄 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 和本專案 `PROJECT_RULES.md`。介面依 AITeam 主線的 CY Desktop Visual Guide。`assets/ENV.ico`、`assets/ENV.svg` 取自 AITeam 核准的 `shared/cy-visual/icon-family/apps/envelope/`，其中 ICO SHA-256 為 `9d6f1534cb6a1e81efe96f6468db8b885b0076e10e94b85929414d86c90c6256`。
+
+Windows 多檔自包含測試包的可重建指令為 `./build-csharp.ps1`；腳本會封裝 x64 portable ZIP、執行共用安全掃描並產生 SHA-256。目前共用掃描器的正式基準尚未更新，腳本預設會正確停止上傳流程。腳本不提供跳過安全掃描的發布選項。

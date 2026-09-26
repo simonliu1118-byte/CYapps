@@ -26,3 +26,4 @@ BUILD：0
 - CI 改由 Windows 建置 C# 程式、執行核心檢查與啟動檢查；工程包要待封裝與掃描通過後另行產出。
 
 封裝依賴：多檔自包含包目前受共用安全掃描器誤判阻擋；治理修正獨立於 CYEnvelope 分支，通過並合併後才啟用公開 Artifact。
+- 已加入 build-csharp.ps1，供 Windows 重建自包含多檔 ZIP、執行掃描及計算 SHA-256；正式 CI 的 Artifact 步驟仍等待治理掃描器更新後接入。
