@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const source = fs.readFileSync(path.resolve(HERE, '../public/v016.js'), 'utf8');
 const source181 = fs.readFileSync(path.resolve(HERE, '../public/v0181.js'), 'utf8');
+const css181 = fs.readFileSync(path.resolve(HERE, '../public/v0181.css'), 'utf8');
 const context = vm.createContext({
   window: { addEventListener() {} },
   document: { querySelector() { return null; } },
@@ -103,4 +104,7 @@ assert.match(source, /google_cloud_storage/);
 assert.match(source181, /Phase C 排程驗收/);
 assert.match(source181, /colspan=\"6\"/);
 assert.doesNotMatch(source181, /資料筆數<\/th><th class=\"num\">大小/);
-console.log('Tiered backup UI and Phase C acceptance progress tests passed.');
+assert.match(css181, /overflow-x:\s*hidden/);
+assert.match(css181, /min-width:\s*0/);
+assert.doesNotMatch(css181, /min-width:\s*850px/);
+console.log('Tiered backup UI, compact history, and Phase C acceptance progress tests passed.');
