@@ -1,0 +1,104 @@
+.backup-acceptance-strip {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 2px;
+  padding: 8px 10px;
+  border: 1px solid #d8e0e6;
+  border-radius: 7px;
+  background: #f9fbfc;
+}
+
+.backup-acceptance-strip[hidden] {
+  display: none;
+}
+
+.backup-acceptance-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.backup-acceptance-main span,
+.backup-acceptance-detail {
+  color: #647580;
+  font-size: 10.5px;
+}
+
+.backup-acceptance-main strong {
+  color: #263746;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.backup-acceptance-progress {
+  width: 100%;
+  min-width: 120px;
+  height: 8px;
+}
+
+.backup-acceptance-detail {
+  display: grid;
+  gap: 1px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.backup-history-table-wrap {
+  overflow-x: hidden;
+}
+
+.backup-history-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.backup-history-table th,
+.backup-history-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-history-table th:nth-child(1),
+.backup-history-table td:nth-child(1) { width: 142px; }
+.backup-history-table th:nth-child(2),
+.backup-history-table td:nth-child(2) { width: 58px; }
+.backup-history-table th:nth-child(3),
+.backup-history-table td:nth-child(3) { width: auto; }
+.backup-history-table th:nth-child(4),
+.backup-history-table td:nth-child(4),
+.backup-history-table th:nth-child(5),
+.backup-history-table td:nth-child(5) { width: 54px; }
+.backup-history-table th:nth-child(6),
+.backup-history-table td:nth-child(6) { width: 105px; }
+
+.backup-data-summary {
+  color: #53636f;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 850px) {
+  .backup-acceptance-strip {
+    grid-template-columns: auto 1fr;
+  }
+
+  .backup-acceptance-detail {
+    grid-column: 1 / -1;
+    grid-template-columns: auto 1fr;
+    text-align: left;
+  }
+
+  .backup-history-table th:nth-child(1),
+  .backup-history-table td:nth-child(1) { width: 122px; }
+  .backup-history-table th:nth-child(2),
+  .backup-history-table td:nth-child(2) { width: 50px; }
+  .backup-history-table th:nth-child(4),
+  .backup-history-table td:nth-child(4),
+  .backup-history-table th:nth-child(5),
+  .backup-history-table td:nth-child(5) { width: 48px; }
+  .backup-history-table th:nth-child(6),
+  .backup-history-table td:nth-child(6) { width: 92px; }
+}
