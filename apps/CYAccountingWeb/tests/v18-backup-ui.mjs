@@ -52,7 +52,7 @@ assert.equal(tiered.gcs.retentionDays, 14);
 assert.equal(tiered.latest.backupId, '20260926T165125Z');
 assert.match(tiered.heading, /R2 \+ GCS/);
 
-const acceptance = context.phaseCAcceptanceUiModelV181({
+const acceptance = context.window.phaseCAcceptanceUiModelV181({
   provider: 'tiered',
   topology: 'parallel_dual_provider',
   phaseCAcceptance: {
@@ -70,7 +70,7 @@ assert.equal(acceptance.required, 14);
 assert.equal(acceptance.remaining, 11);
 assert.equal(acceptance.completed, false);
 
-const manualOnly = context.phaseCAcceptanceUiModelV181({
+const manualOnly = context.window.phaseCAcceptanceUiModelV181({
   provider: 'tiered',
   topology: 'parallel_dual_provider',
   logicalBackups: [{
@@ -96,7 +96,7 @@ assert.equal(legacy.topology, 'legacy_gcs');
 assert.equal(legacy.latest.fileName, 'legacy');
 assert.equal(legacy.recentRuns.length, 1);
 assert.match(legacy.heading, /Google Cloud Storage/);
-assert.equal(context.phaseCAcceptanceUiModelV181({ configured: true }).visible, false);
+assert.equal(context.window.phaseCAcceptanceUiModelV181({ configured: true }).visible, false);
 
 assert.match(source, /logical backup/);
 assert.match(source, /cloudflare_r2/);
