@@ -32,10 +32,9 @@ jobs:
         shell: bash
         run: |
           cp .build24-driver/.github/cyerp-build24-patch.py apps/CYERPAutoInput/patch24.py
-          cd apps/CYERPAutoInput
-          python patch24.py
-          rm patch24.py
-          test "$(cat BUILD | tr -d '\r\n')" = "24"
+          python apps/CYERPAutoInput/patch24.py
+          rm apps/CYERPAutoInput/patch24.py
+          test "$(cat apps/CYERPAutoInput/BUILD | tr -d '\r\n')" = "24"
 
       - uses: actions/setup-dotnet@v5
         with:
