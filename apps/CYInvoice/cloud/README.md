@@ -9,15 +9,15 @@ The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; curre
 ## Current compatibility
 
 - Service: `cyinvoice-cloud`
-- Cloud implementation: `0.8.4`
+- Cloud implementation: `0.8.5`
 - API: `1`
-- Schema: `8`
-- Migrations: `0001` through `0008`
+- Schema: `9`
+- Migrations: `0001` through `0009`
 - Worker entrypoint: `src/app.ts`
 
 `wrangler.jsonc` advertises the client compatibility schema. Applied migrations are immutable; future changes must use new forward migrations.
 
-> GitHub Actions validates the Worker bundle and migrations with local SQLite. It does not prove the remote Cloudflare deployment or remote D1 has already reached Schema 8.
+> GitHub Actions validates the Worker bundle and migrations with local SQLite. It does not prove the remote Cloudflare deployment or remote D1 has already reached Schema 9.
 
 ## Development commands
 
@@ -64,6 +64,9 @@ Do not commit Cloudflare API tokens, account keys, passwords, Device Tokens, OTP
 - Device Token: Windows-generated before the request, protected locally before network submission.
 - Cloud stores only Device Token hash.
 - Pairing Code authorizes a Device to join a Workspace; it does not grant Employee role.
+- New devices join by a 10-minute one-use pairing code or a 72-hour one-use emailed invitation code. The latter also requires the current verified SUPER_ADMIN credentials. Neither path asks the new device to enter a Workspace ID.
+- The API URL is entered by the new device from the connected machine or invitation email. It is not embedded in the Windows client.
+- Pairing and invitation issuance, verification, denial, revocation, and device joining write Cloud security audit events without storing code, password, OTP, or Device Token plaintext. The audit viewing UI is deferred.
 
 ### Employee
 

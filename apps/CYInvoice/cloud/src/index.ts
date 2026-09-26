@@ -1,5 +1,6 @@
 import { createEmailSender } from "./email";
 import { verifyPassword } from "./web-auth";
+import { recordSecurityEvent, securityEventStatement } from "./security-audit";
 import {
   BOOTSTRAP_DEVICE_INSERT_SQL,
   BOOTSTRAP_WORKSPACE_INSERT_SQL,
@@ -54,19 +55,20 @@ type OtpChallengeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.4";
+const CLOUD_VERSION = "0.8.5";
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_DISPLAY_NAME_LENGTH = 120;
 const MAX_CLIENT_VERSION_LENGTH = 64;
 const MAX_EMAIL_LENGTH = 320;
 const PAIRING_TTL_MS = 10 * 60 * 1000;
+const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 const OTP_HOURLY_LIMIT = 5;
 const OTP_MAX_ATTEMPTS = 5;
 const WORKSPACE_BOOTSTRAP_PURPOSE = "workspace_bootstrap";
 const DEVICE_PAIRING_PURPOSE_PREFIX = "device_pairing_authorization";
-const DIRECT_JOIN_PURPOSE = "direct_workspace_join";
+
 
 function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
@@ -468,27 +470,24 @@ async function bootstrapWorkspace(request: Request, env: Env, requestId: string)
 async function pairingAuthorizationChallenge(request: Request, env: Env, requestId: string): Promise<Response> {
   const device = await authenticateDevice(request, env);
   if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
+  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  const owner = await authorizedOwner(request, env, device.workspaceId, body);
+  if (!owner) return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
 
-  const workspace = await env.DB.prepare(
-    `SELECT recovery_email, recovery_email_verified_at
-       FROM workspaces
-      WHERE workspace_id = ?1 AND status = 'active'
-      LIMIT 1`
-  ).bind(device.workspaceId).first<{ recovery_email: string | null; recovery_email_verified_at: string | null }>();
-  const email = normalizeEmail(workspace?.recovery_email);
-  if (!email || !workspace?.recovery_email_verified_at)
-    return errorResponse(env, requestId, 409, "RECOVERY_EMAIL_NOT_VERIFIED", "Workspace recovery Email is not verified.");
-
-  const scope = `${device.workspaceId}:${device.deviceId}`;
-  return createEmailChallenge(
+  const scope = `${device.workspaceId}:${device.deviceId}:${owner.employee_id}`;
+  const response = await createEmailChallenge(
     env,
     requestId,
     DEVICE_PAIRING_PURPOSE_PREFIX,
-    email,
+    owner.email_normalized,
     "CYInvoice 新裝置授權驗證碼",
     code => `您正在授權 CYInvoice Workspace 加入一台新裝置。驗證碼是 ${code}，10 分鐘內有效。若非本人操作，請忽略此信。`,
     scope
   );
+  if (response.ok) await recordSecurityEvent(env.DB, { workspaceId: device.workspaceId,
+    type: "pairing_email", outcome: "success", actorDeviceId: device.deviceId,
+    actorEmployeeId: owner.employee_id, requestId });
+  return response;
 }
 
 async function createPairing(request: Request, env: Env, requestId: string): Promise<Response> {
@@ -496,12 +495,14 @@ async function createPairing(request: Request, env: Env, requestId: string): Pro
   if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
 
   const body = await request.json<Record<string, unknown>>().catch(() => null);
+  const owner = await authorizedOwner(request, env, device.workspaceId, body);
+  if (!owner) return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
   const challengeId = typeof body?.emailChallengeId === "string" ? body.emailChallengeId.trim().toLowerCase() : "";
   const emailOtp = typeof body?.emailOtp === "string" ? body.emailOtp.trim() : "";
   if (!/^otp_[0-9a-f-]{36}$/.test(challengeId) || !/^\d{6}$/.test(emailOtp))
     return errorResponse(env, requestId, 400, "INVALID_OTP_REQUEST", "Email authorization is required.");
 
-  const scope = `${device.workspaceId}:${device.deviceId}`;
+  const scope = `${device.workspaceId}:${device.deviceId}:${owner.employee_id}`;
   const verified = await consumeEmailChallenge(env, requestId, DEVICE_PAIRING_PURPOSE_PREFIX, challengeId, emailOtp, scope);
   if (verified instanceof Response) return verified;
 
@@ -510,13 +511,17 @@ async function createPairing(request: Request, env: Env, requestId: string): Pro
   const now = new Date();
   const expiresAt = new Date(now.getTime() + PAIRING_TTL_MS).toISOString();
   const pairingId = `pair_${crypto.randomUUID()}`;
-  await env.DB.prepare(
-    `INSERT INTO device_pairings (
-      pairing_id, workspace_id, authorized_by_device_id, code_hash,
-      expires_at, created_at
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
-  ).bind(pairingId, device.workspaceId, device.deviceId, codeHash, expiresAt, now.toISOString()).run();
-  return json(env, requestId, 201, { pairing: { code, expiresAt } });
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO device_pairing_codes (
+        pairing_id, workspace_id, created_by_device_id, code_hash, expires_at, created_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+    ).bind(pairingId, device.workspaceId, device.deviceId, codeHash, expiresAt, now.toISOString()),
+    securityEventStatement(env.DB, { workspaceId: device.workspaceId, type: "pairing_issued",
+      outcome: "success", actorDeviceId: device.deviceId, actorEmployeeId: owner.employee_id,
+      pairingId, requestId }),
+  ]);
+  return json(env, requestId, 201, { pairing: { pairingId, code, expiresAt } });
 }
 
 async function directJoinWorkspace(env: Env, workspaceId: string): Promise<{ display_name: string } | null> {
@@ -541,11 +546,13 @@ async function previewPairing(request: Request, env: Env, requestId: string): Pr
     return errorResponse(env, requestId, 400, "INVALID_PAIRING_CLAIM", "Pairing code is invalid.");
   const hash = await sha256Hex(body.code.trim().toLowerCase());
   const pairing = await env.DB.prepare(
-    `SELECT workspace_id FROM device_pairings
-      WHERE code_hash = ?1 AND consumed_at IS NULL AND expires_at > ?2 LIMIT 1`
-  ).bind(hash, new Date().toISOString()).first<{ workspace_id: string }>();
+    `SELECT pairing_id, workspace_id FROM device_pairing_codes
+      WHERE code_hash = ?1 AND used_at IS NULL AND expires_at > ?2 LIMIT 1`
+  ).bind(hash, new Date().toISOString()).first<{ pairing_id: string; workspace_id: string }>();
   const workspace = pairing && await directJoinWorkspace(env, pairing.workspace_id);
   if (!workspace) return errorResponse(env, requestId, 404, "PAIRING_NOT_FOUND", "Pairing code is invalid or Workspace is not ready.");
+  await recordSecurityEvent(env.DB, { workspaceId: pairing!.workspace_id, type: "pairing_verified",
+    outcome: "success", pairingId: pairing!.pairing_id, requestId });
   return json(env, requestId, 200, { workspace: { workspaceId: pairing!.workspace_id, displayName: workspace.display_name } });
 }
 
@@ -561,92 +568,285 @@ async function directJoinOwner(env: Env, workspaceId: string, employeeNo: string
   }>();
 }
 
-async function startDirectJoin(request: Request, env: Env, requestId: string): Promise<Response> {
-  const body = await request.json<Record<string, unknown>>().catch(() => null);
-  const workspaceId = typeof body?.workspaceId === "string" ? body.workspaceId.trim() : "";
+async function authorizedOwner(request: Request, env: Env, workspaceId: string,
+  body: Record<string, unknown> | null): Promise<{ employee_id: string; email_normalized: string } | null> {
   const employeeNo = typeof body?.employeeNo === "string" ? body.employeeNo.trim() : "";
   const password = body?.password;
-  if (!/^ws_[0-9a-f-]{36}$/.test(workspaceId) || !/^\d{4}$/.test(employeeNo)
-      || typeof password !== "string" || password.length < 1 || password.length > 200)
-    return errorResponse(env, requestId, 400, "INVALID_DIRECT_JOIN", "Direct join request is invalid.");
-
-  const employeeLimit = await env.WEB_LOGIN_EMPLOYEE_RATE_LIMIT.limit({ key: `direct:${workspaceId}:${employeeNo}` });
+  if (!/^\d{4}$/.test(employeeNo) || typeof password !== "string" || password.length < 1 || password.length > 200)
+    return null;
+  const employeeLimit = await env.WEB_LOGIN_EMPLOYEE_RATE_LIMIT.limit({ key: `onboard:${workspaceId}:${employeeNo}` });
   const ip = request.headers.get("cf-connecting-ip")?.trim() || "unknown";
-  const ipLimit = await env.WEB_LOGIN_IP_RATE_LIMIT.limit({ key: `direct:ip:${ip}` });
-  if (!employeeLimit.success || !ipLimit.success)
-    return errorResponse(env, requestId, 429, "DIRECT_JOIN_RATE_LIMITED", "Too many attempts. Please try again later.");
-
-  const workspace = await directJoinWorkspace(env, workspaceId);
-  const owner = workspace && await directJoinOwner(env, workspaceId, employeeNo);
-  if (!owner || !owner.email_verified_at || owner.credential_algorithm !== "pbkdf2-sha256"
-      || !owner.credential_verifier || !await verifyPassword(password, owner.credential_verifier))
-    return errorResponse(env, requestId, 401, "DIRECT_JOIN_AUTH_FAILED", "Workspace administrator authentication failed.");
-
-  const scope = `${workspaceId}:${owner.employee_id}:${owner.credential_version}`;
-  const response = await createEmailChallenge(env, requestId, DIRECT_JOIN_PURPOSE, owner.email_normalized,
-    "CYInvoice 新裝置授權驗證碼",
-    code => `您正在授權 CYInvoice Workspace 加入一台新裝置。驗證碼是 ${code}，10 分鐘內有效。若非本人操作，請忽略此信。`,
-    scope);
-  if (!response.ok) return response;
-  const payload = await response.json() as Record<string, JsonValue>;
-  return json(env, requestId, 201, { ...payload, workspace: { workspaceId, displayName: workspace!.display_name } });
+  const ipLimit = await env.WEB_LOGIN_IP_RATE_LIMIT.limit({ key: `onboard:ip:${ip}` });
+  if (!employeeLimit.success || !ipLimit.success) return null;
+  const owner = await directJoinOwner(env, workspaceId, employeeNo);
+  if (!owner?.email_verified_at || owner.credential_algorithm !== "pbkdf2-sha256" ||
+      !owner.credential_verifier || !await verifyPassword(password, owner.credential_verifier)) return null;
+  return { employee_id: owner.employee_id, email_normalized: owner.email_normalized };
 }
 
-async function claimDirectJoin(request: Request, env: Env, requestId: string): Promise<Response> {
+function invitationCode(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{40}$/.test(value.trim().toLowerCase());
+}
+
+function newInvitationCode(): string {
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+type InvitationRow = {
+  invitation_id: string; workspace_id: string; delivery_state: string; expires_at: string;
+  revoked_at: string | null; consumed_at: string | null; consumed_by_device_id: string | null;
+};
+
+async function findInvitation(env: Env, code: string): Promise<InvitationRow | null> {
+  return env.DB.prepare(`SELECT invitation_id, workspace_id, delivery_state, expires_at,
+      revoked_at, consumed_at, consumed_by_device_id FROM device_invitations WHERE code_hash = ?1 LIMIT 1`)
+    .bind(await sha256Hex(code.trim().toLowerCase())).first<InvitationRow>();
+}
+
+function invitationProblem(invitation: InvitationRow, now: string): string | null {
+  if (invitation.delivery_state !== "sent") return "INVITATION_NOT_DELIVERED";
+  if (invitation.revoked_at) return "INVITATION_REVOKED";
+  if (invitation.consumed_at) return "INVITATION_ALREADY_USED";
+  if (invitation.expires_at <= now) return "INVITATION_EXPIRED";
+  return null;
+}
+
+async function issueInvitation(request: Request, env: Env, requestId: string): Promise<Response> {
+  const device = await authenticateDevice(request, env);
+  if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
   const body = await request.json<Record<string, unknown>>().catch(() => null);
-  const workspaceId = typeof body?.workspaceId === "string" ? body.workspaceId.trim() : "";
-  const employeeNo = typeof body?.employeeNo === "string" ? body.employeeNo.trim() : "";
-  const challengeId = typeof body?.emailChallengeId === "string" ? body.emailChallengeId.trim().toLowerCase() : "";
-  const otp = typeof body?.emailOtp === "string" ? body.emailOtp.trim() : "";
-  if (!/^ws_[0-9a-f-]{36}$/.test(workspaceId) || !/^\d{4}$/.test(employeeNo)
-      || !/^otp_[0-9a-f-]{36}$/.test(challengeId) || !/^\d{6}$/.test(otp)
-      || !validDisplayName(body?.deviceDisplayName) || !validClientVersion(body?.clientVersion)
-      || !validDeviceToken(body?.deviceToken))
-    return errorResponse(env, requestId, 400, "INVALID_DIRECT_JOIN", "Direct join request is invalid.");
-
-  const tokenHash = await sha256Hex(normalizeDeviceToken(body.deviceToken));
-  const existing = await env.DB.prepare(
-    "SELECT device_id, workspace_id, display_name AS device_display_name FROM devices WHERE token_hash = ?1 LIMIT 1"
-  ).bind(tokenHash).first<PairingDeviceRow>();
-  if (existing) {
-    if (existing.workspace_id !== workspaceId)
-      return errorResponse(env, requestId, 409, "DEVICE_TOKEN_ALREADY_USED", "Device token belongs to a different Workspace.");
-    return json(env, requestId, 200, { recovered: true,
-      workspace: { workspaceId }, device: { deviceId: existing.device_id, displayName: existing.device_display_name } });
+  const owner = await authorizedOwner(request, env, device.workspaceId, body);
+  if (!owner) return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
+  if (!await directJoinWorkspace(env, device.workspaceId))
+    return errorResponse(env, requestId, 409, "WORKSPACE_NOT_READY", "Central Employee authority is not ready.");
+  const sender = await configuredEmailSender(env);
+  if (!sender) return errorResponse(env, requestId, 503, "EMAIL_PROVIDER_NOT_CONFIGURED", "Email delivery provider is not configured.");
+  const code = newInvitationCode();
+  const invitationId = `inv_${crypto.randomUUID()}`;
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS).toISOString();
+  await env.DB.prepare(`INSERT INTO device_invitations (
+    invitation_id, workspace_id, code_hash, issued_by_device_id, issued_by_employee_id,
+    delivery_state, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?7)`)
+    .bind(invitationId, device.workspaceId, await sha256Hex(code), device.deviceId,
+      owner.employee_id, expiresAt, now.toISOString()).run();
+  try {
+    await sender.send({ to: owner.email_normalized, subject: "CYInvoice 新裝置邀請",
+      text: `CYInvoice 新裝置連線設定\nCloud API 網址：${new URL(request.url).origin}\n開通碼：${code}\n有效至：${expiresAt}\n僅限使用一次。若非本人操作，請通知管理員撤銷邀請。`,
+      tags: [{ name: "purpose", value: "device_invitation" }] });
+  } catch {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE device_invitations SET delivery_state = 'failed' WHERE invitation_id = ?1").bind(invitationId),
+      securityEventStatement(env.DB, { workspaceId: device.workspaceId, type: "invitation_delivery_failed",
+        outcome: "failed", actorDeviceId: device.deviceId, actorEmployeeId: owner.employee_id,
+        invitationId, reasonCode: "EMAIL_DELIVERY_FAILED", requestId }),
+    ]);
+    return errorResponse(env, requestId, 503, "EMAIL_DELIVERY_FAILED", "Invitation email could not be delivered.");
   }
+  const sentAt = new Date().toISOString();
+  const older = await env.DB.prepare(`SELECT invitation_id FROM device_invitations
+    WHERE workspace_id = ?1 AND issued_by_device_id = ?2 AND invitation_id <> ?3
+      AND consumed_at IS NULL AND revoked_at IS NULL`)
+    .bind(device.workspaceId, device.deviceId, invitationId).all<{ invitation_id: string }>();
+  const superseded = older.results.flatMap(row => [
+    env.DB.prepare(`UPDATE device_invitations SET revoked_at = ?1
+      WHERE invitation_id = ?2 AND consumed_at IS NULL AND revoked_at IS NULL`)
+      .bind(sentAt, row.invitation_id),
+    env.DB.prepare(`INSERT INTO security_audit_events (event_id, workspace_id, event_type,
+      outcome, actor_device_id, actor_employee_id, invitation_id, reason_code, request_id, occurred_at)
+      SELECT ?1, workspace_id, 'invitation_revoked', 'success', ?2, ?3, invitation_id,
+        'SUPERSEDED', ?4, ?5 FROM device_invitations
+      WHERE invitation_id = ?6 AND revoked_at = ?5`)
+      .bind(`evt_${crypto.randomUUID()}`, device.deviceId, owner.employee_id,
+        requestId, sentAt, row.invitation_id),
+  ]);
+  await env.DB.batch([
+    ...superseded,
+    env.DB.prepare("UPDATE device_invitations SET delivery_state = 'sent', sent_at = ?1 WHERE invitation_id = ?2")
+      .bind(sentAt, invitationId),
+    securityEventStatement(env.DB, { workspaceId: device.workspaceId, type: "invitation_issued",
+      outcome: "success", actorDeviceId: device.deviceId, actorEmployeeId: owner.employee_id,
+      invitationId, requestId }),
+  ]);
+  return json(env, requestId, 201, { invitation: { invitationId, expiresAt, deliveryState: "sent" } });
+}
 
-  const workspace = await directJoinWorkspace(env, workspaceId);
-  const owner = workspace && await directJoinOwner(env, workspaceId, employeeNo);
-  if (!owner || !owner.email_verified_at)
-    return errorResponse(env, requestId, 409, "DIRECT_JOIN_NOT_READY", "Workspace administrator is not ready.");
-  const scope = `${workspaceId}:${owner.employee_id}:${owner.credential_version}`;
-  const verified = await consumeEmailChallenge(env, requestId, DIRECT_JOIN_PURPOSE, challengeId, otp, scope);
-  if (verified instanceof Response) return verified;
-  if (verified.email !== owner.email_normalized)
-    return errorResponse(env, requestId, 409, "DIRECT_JOIN_NOT_READY", "Administrator Email has changed.");
+async function previewInvitation(request: Request, env: Env, requestId: string): Promise<Response> {
+  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  if (!invitationCode(body?.code)) return errorResponse(env, requestId, 400, "INVALID_INVITATION", "Invitation code is invalid.");
+  const invitation = await findInvitation(env, body.code);
+  if (!invitation) return errorResponse(env, requestId, 404, "INVITATION_NOT_FOUND", "Invitation code is invalid.");
+  const problem = invitationProblem(invitation, new Date().toISOString());
+  if (problem) {
+    await recordSecurityEvent(env.DB, { workspaceId: invitation.workspace_id, type: "invitation_claim_denied",
+      outcome: "denied", invitationId: invitation.invitation_id, reasonCode: problem, requestId });
+    return errorResponse(env, requestId, 409, problem, "Invitation is unavailable.");
+  }
+  const owner = await authorizedOwner(request, env, invitation.workspace_id, body);
+  if (!owner) {
+    await recordSecurityEvent(env.DB, { workspaceId: invitation.workspace_id, type: "invitation_claim_denied",
+      outcome: "denied", invitationId: invitation.invitation_id, reasonCode: "SUPER_ADMIN_AUTH_FAILED", requestId });
+    return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
+  }
+  const workspace = await directJoinWorkspace(env, invitation.workspace_id);
+  if (!workspace) return errorResponse(env, requestId, 409, "WORKSPACE_NOT_READY", "Workspace is not ready.");
+  await recordSecurityEvent(env.DB, { workspaceId: invitation.workspace_id, type: "invitation_verified",
+    outcome: "success", actorEmployeeId: owner.employee_id, invitationId: invitation.invitation_id, requestId });
+  return json(env, requestId, 200, { workspace: { workspaceId: invitation.workspace_id, displayName: workspace.display_name } });
+}
+
+async function claimInvitation(request: Request, env: Env, requestId: string): Promise<Response> {
+  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  if (!invitationCode(body?.code) || !validDisplayName(body?.deviceDisplayName) ||
+      !validClientVersion(body?.clientVersion) || !validDeviceToken(body?.deviceToken))
+    return errorResponse(env, requestId, 400, "INVALID_INVITATION_CLAIM", "Invitation claim is invalid.");
+  const invitation = await findInvitation(env, body.code);
+  if (!invitation) return errorResponse(env, requestId, 404, "INVITATION_NOT_FOUND", "Invitation code is invalid.");
+  const tokenHash = await sha256Hex(normalizeDeviceToken(body.deviceToken));
+  const existing = await env.DB.prepare(`SELECT device_id, workspace_id, display_name AS device_display_name,
+    invitation_id FROM devices WHERE token_hash = ?1 LIMIT 1`).bind(tokenHash)
+    .first<PairingDeviceRow & { invitation_id: string | null }>();
+  if (existing) {
+    if (existing.invitation_id !== invitation.invitation_id)
+      return errorResponse(env, requestId, 409, "DEVICE_TOKEN_ALREADY_USED", "Device token belongs to another claim.");
+    return json(env, requestId, 200, { recovered: true,
+      workspace: { workspaceId: existing.workspace_id },
+      device: { deviceId: existing.device_id, displayName: existing.device_display_name } });
+  }
+  const problem = invitationProblem(invitation, new Date().toISOString());
+  if (problem) {
+    await recordSecurityEvent(env.DB, { workspaceId: invitation.workspace_id, type: "invitation_claim_denied",
+      outcome: "denied", invitationId: invitation.invitation_id, reasonCode: problem, requestId });
+    return errorResponse(env, requestId, 409, problem, "Invitation is unavailable.");
+  }
+  const owner = await authorizedOwner(request, env, invitation.workspace_id, body);
+  if (!owner) {
+    await recordSecurityEvent(env.DB, { workspaceId: invitation.workspace_id, type: "invitation_claim_denied",
+      outcome: "denied", invitationId: invitation.invitation_id, reasonCode: "SUPER_ADMIN_AUTH_FAILED", requestId });
+    return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
+  }
+  const workspace = await directJoinWorkspace(env, invitation.workspace_id);
+  if (!workspace) return errorResponse(env, requestId, 409, "WORKSPACE_NOT_READY", "Workspace is not ready.");
   const now = new Date().toISOString();
   const deviceId = `dev_${crypto.randomUUID()}`;
   try {
-    await env.DB.prepare(
-      `INSERT INTO devices (device_id, workspace_id, display_name, token_hash, client_version,
-          status, employee_authority_state, employee_transition_completed_at, paired_at, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, 'active', 'cloud', ?6, ?6, ?6, ?6)`
-    ).bind(deviceId, workspaceId, body.deviceDisplayName.trim(), tokenHash, body.clientVersion.trim(), now).run();
-  } catch (error) {
-    const recovered = await env.DB.prepare(
-      "SELECT device_id, workspace_id, display_name AS device_display_name FROM devices WHERE token_hash = ?1 LIMIT 1"
-    ).bind(tokenHash).first<PairingDeviceRow>();
-    if (!recovered || recovered.workspace_id !== workspaceId) {
-      console.error("direct_join_failed", { requestId, error: error instanceof Error ? error.message : "unknown_error" });
-      return errorResponse(env, requestId, 409, "DIRECT_JOIN_CONFLICT", "Device join could not complete.");
-    }
-    return json(env, requestId, 200, { recovered: true,
-      workspace: { workspaceId }, device: { deviceId: recovered.device_id, displayName: recovered.device_display_name } });
+    const result = await env.DB.batch([
+      env.DB.prepare(`INSERT INTO devices (device_id, workspace_id, display_name, token_hash,
+        client_version, status, invitation_id, employee_authority_state,
+        employee_transition_completed_at, paired_at, created_at, updated_at)
+        SELECT ?1, ?2, ?3, ?4, ?5, 'active', ?6, 'cloud', ?7, ?7, ?7, ?7
+        FROM device_invitations WHERE invitation_id = ?6 AND delivery_state = 'sent'
+          AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?7`)
+        .bind(deviceId, invitation.workspace_id, body.deviceDisplayName.trim(), tokenHash,
+          body.clientVersion.trim(), invitation.invitation_id, now),
+      env.DB.prepare(`UPDATE device_invitations SET consumed_at = ?1, consumed_by_device_id = ?2
+        WHERE invitation_id = ?3 AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > ?1
+          AND EXISTS (SELECT 1 FROM devices WHERE device_id = ?2 AND invitation_id = ?3)`)
+        .bind(now, deviceId, invitation.invitation_id),
+      env.DB.prepare(`INSERT INTO security_audit_events (event_id, workspace_id, event_type,
+        outcome, actor_employee_id, target_device_id, invitation_id, request_id, occurred_at)
+        SELECT ?1, i.workspace_id, 'device_joined', 'success', ?2, ?3,
+          i.invitation_id, ?4, ?5 FROM device_invitations i
+        WHERE i.invitation_id = ?6 AND i.consumed_by_device_id = ?3 AND i.consumed_at = ?5`)
+        .bind(`evt_${crypto.randomUUID()}`, owner.employee_id, deviceId,
+          requestId, now, invitation.invitation_id),
+    ]);
+    if (result.some(item => item.meta.changes !== 1))
+      return errorResponse(env, requestId, 409, "INVITATION_CLAIM_CONFLICT", "Invitation is no longer active.");
+  } catch {
+    return errorResponse(env, requestId, 409, "INVITATION_CLAIM_CONFLICT", "Device join could not complete.");
   }
-  return json(env, requestId, 201, {
-    workspace: { workspaceId, displayName: workspace!.display_name },
-    device: { deviceId, displayName: body.deviceDisplayName.trim() },
-  });
+  return json(env, requestId, 201, { workspace: { workspaceId: invitation.workspace_id,
+    displayName: workspace.display_name }, device: { deviceId, displayName: body.deviceDisplayName.trim() } });
+}
+
+async function revokeInvitation(request: Request, env: Env, requestId: string): Promise<Response> {
+  const device = await authenticateDevice(request, env);
+  if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
+  const body = await request.json<Record<string, unknown>>().catch(() => null);
+  const invitationId = typeof body?.invitationId === "string" ? body.invitationId.trim() : "";
+  if (!/^inv_[0-9a-f-]{36}$/.test(invitationId))
+    return errorResponse(env, requestId, 400, "INVALID_INVITATION", "Invitation ID is invalid.");
+  const owner = await authorizedOwner(request, env, device.workspaceId, body);
+  if (!owner) return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
+  const now = new Date().toISOString();
+  const result = await env.DB.batch([
+    env.DB.prepare(`UPDATE device_invitations SET revoked_at = ?1
+      WHERE invitation_id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL AND consumed_at IS NULL`)
+      .bind(now, invitationId, device.workspaceId),
+    env.DB.prepare(`INSERT INTO security_audit_events (event_id, workspace_id, event_type,
+      outcome, actor_device_id, actor_employee_id, invitation_id, request_id, occurred_at)
+      SELECT ?1, workspace_id, 'invitation_revoked', 'success', ?2, ?3,
+        invitation_id, ?4, ?5 FROM device_invitations
+      WHERE invitation_id = ?6 AND workspace_id = ?7 AND revoked_at = ?5`)
+      .bind(`evt_${crypto.randomUUID()}`, device.deviceId, owner.employee_id,
+        requestId, now, invitationId, device.workspaceId),
+  ]);
+  if (result[0].meta.changes !== 1 || result[1].meta.changes !== 1)
+    return errorResponse(env, requestId, 409, "INVITATION_NOT_ACTIVE", "Invitation is no longer active.");
+  return json(env, requestId, 200, { invitation: { invitationId, status: "revoked" } });
+}
+
+async function onboardingTicketStatus(request: Request, env: Env, requestId: string,
+  kind: "pairing" | "invitation", id: string): Promise<Response> {
+  const device = await authenticateDevice(request, env);
+  if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
+  const table = kind === "pairing" ? "device_pairing_codes" : "device_invitations";
+  const idColumn = kind === "pairing" ? "pairing_id" : "invitation_id";
+  const creatorColumn = kind === "pairing" ? "created_by_device_id" : "issued_by_device_id";
+  const usedColumn = kind === "pairing" ? "used_at" : "consumed_at";
+  const claimedColumn = kind === "pairing" ? "claimed_device_id" : "consumed_by_device_id";
+  const stateColumns = kind === "invitation" ? "t.revoked_at, t.delivery_state" : "NULL AS revoked_at, 'sent' AS delivery_state";
+  const row = await env.DB.prepare(`SELECT t.expires_at, t.${usedColumn} AS used_at, ${stateColumns},
+    t.${claimedColumn} AS joined_device_id, d.display_name AS joined_device_name
+    FROM ${table} t LEFT JOIN devices d ON d.device_id = t.${claimedColumn}
+    WHERE t.${idColumn} = ?1 AND t.workspace_id = ?2 AND t.${creatorColumn} = ?3 LIMIT 1`)
+    .bind(id, device.workspaceId, device.deviceId).first<{
+      expires_at: string; used_at: string | null; joined_device_id: string | null; joined_device_name: string | null;
+      revoked_at: string | null; delivery_state: string;
+    }>();
+  if (!row) return errorResponse(env, requestId, 404, "TICKET_NOT_FOUND", "Join ticket not found.");
+  return json(env, requestId, 200, { ticket: { status: row.used_at ? "joined" : row.revoked_at ? "revoked" :
+      row.delivery_state === "failed" ? "failed" : row.expires_at <= new Date().toISOString() ? "expired" : "pending",
+    joinedDeviceName: row.joined_device_name ?? "", joinedAt: row.used_at ?? "" } });
+}
+
+async function recentJoinTickets(request: Request, env: Env, requestId: string): Promise<Response> {
+  const device = await authenticateDevice(request, env);
+  if (!device) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
+  const now = new Date().toISOString();
+  const pairing = await env.DB.prepare(`SELECT p.pairing_id AS id, p.expires_at, p.used_at AS joined_at,
+    d.display_name AS joined_device_name FROM device_pairing_codes p
+    LEFT JOIN devices d ON d.device_id = p.claimed_device_id
+    WHERE p.workspace_id = ?1 AND p.created_by_device_id = ?2 ORDER BY p.created_at DESC LIMIT 1`)
+    .bind(device.workspaceId, device.deviceId).first<{
+      id: string; expires_at: string; joined_at: string | null; joined_device_name: string | null;
+    }>();
+  const invitation = await env.DB.prepare(`SELECT i.invitation_id AS id, i.expires_at,
+    i.consumed_at AS joined_at, i.revoked_at, i.delivery_state,
+    d.display_name AS joined_device_name FROM device_invitations i
+    LEFT JOIN devices d ON d.device_id = i.consumed_by_device_id
+    WHERE i.workspace_id = ?1 AND i.issued_by_device_id = ?2
+    ORDER BY CASE WHEN i.delivery_state = 'sent' AND i.consumed_at IS NULL
+        AND i.revoked_at IS NULL AND i.expires_at > ?3 THEN 0 ELSE 1 END,
+      i.created_at DESC LIMIT 1`)
+    .bind(device.workspaceId, device.deviceId, now).first<{
+      id: string; expires_at: string; joined_at: string | null; revoked_at: string | null;
+      delivery_state: string; joined_device_name: string | null;
+    }>();
+  const status = (row: { id: string; expires_at: string; joined_at: string | null;
+    joined_device_name: string | null; revoked_at?: string | null; delivery_state?: string }): Record<string, JsonValue> => ({
+      id: row.id,
+      status: row.joined_at ? "joined" : row.revoked_at ? "revoked" : row.delivery_state === "failed" ? "failed" :
+        row.expires_at <= now ? "expired" : "pending",
+      expiresAt: row.expires_at,
+      joinedAt: row.joined_at ?? "",
+      joinedDeviceName: row.joined_device_name ?? "",
+    });
+  return json(env, requestId, 200, { pairing: pairing ? status(pairing) : null,
+    invitation: invitation ? status(invitation) : null });
 }
 
 async function claimPairing(request: Request, env: Env, requestId: string): Promise<Response> {
@@ -667,8 +867,8 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
   ).bind(tokenHash).first<PairingDeviceRow>();
   if (byToken) {
     const matchingConsumed = await env.DB.prepare(
-      `SELECT pairing_id FROM device_pairings
-        WHERE code_hash = ?1 AND consumed_by_device_id = ?2
+      `SELECT pairing_id FROM device_pairing_codes
+        WHERE code_hash = ?1 AND claimed_device_id = ?2
         LIMIT 1`
     ).bind(codeHash, byToken.device_id).first<{ pairing_id: string }>();
     if (!matchingConsumed)
@@ -682,20 +882,28 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
 
   const now = new Date().toISOString();
   const pairing = await env.DB.prepare(
-    `SELECT pairing_id, workspace_id, consumed_at, consumed_by_device_id, expires_at
-       FROM device_pairings
+    `SELECT pairing_id, workspace_id, used_at, claimed_device_id, expires_at
+       FROM device_pairing_codes
       WHERE code_hash = ?1
       LIMIT 1`
   ).bind(codeHash).first<{
     pairing_id: string;
     workspace_id: string;
-    consumed_at: string | null;
-    consumed_by_device_id: string | null;
+    used_at: string | null;
+    claimed_device_id: string | null;
     expires_at: string;
   }>();
   if (!pairing) return errorResponse(env, requestId, 404, "PAIRING_NOT_FOUND", "Pairing code is invalid.");
-  if (pairing.consumed_at) return errorResponse(env, requestId, 409, "PAIRING_ALREADY_USED", "Pairing code has already been used.");
-  if (pairing.expires_at <= now) return errorResponse(env, requestId, 410, "PAIRING_EXPIRED", "Pairing code has expired.");
+  if (pairing.used_at) {
+    await recordSecurityEvent(env.DB, { workspaceId: pairing.workspace_id, type: "pairing_claim_denied",
+      outcome: "denied", pairingId: pairing.pairing_id, reasonCode: "PAIRING_ALREADY_USED", requestId });
+    return errorResponse(env, requestId, 409, "PAIRING_ALREADY_USED", "Pairing code has already been used.");
+  }
+  if (pairing.expires_at <= now) {
+    await recordSecurityEvent(env.DB, { workspaceId: pairing.workspace_id, type: "pairing_claim_denied",
+      outcome: "denied", pairingId: pairing.pairing_id, reasonCode: "PAIRING_EXPIRED", requestId });
+    return errorResponse(env, requestId, 410, "PAIRING_EXPIRED", "Pairing code has expired.");
+  }
   if (directJoin && !await directJoinWorkspace(env, pairing.workspace_id))
     return errorResponse(env, requestId, 409, "DIRECT_JOIN_NOT_READY", "Central Employee authority is not ready.");
 
@@ -717,16 +925,18 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
         pairing.pairing_id,
         now, directJoin ? "cloud" : "transitioning", directJoin ? now : null),
       env.DB.prepare(
-        `UPDATE device_pairings
-            SET consumed_at = ?1, consumed_by_device_id = ?2
-          WHERE pairing_id = ?3 AND consumed_at IS NULL`
+        `UPDATE device_pairing_codes
+            SET used_at = ?1, claimed_device_id = ?2
+          WHERE pairing_id = ?3 AND used_at IS NULL`
       ).bind(now, deviceId, pairing.pairing_id),
+      securityEventStatement(env.DB, { workspaceId: pairing.workspace_id, type: "device_joined",
+        outcome: "success", targetDeviceId: deviceId, pairingId: pairing.pairing_id, requestId }),
     ]);
   } catch (error) {
     const recovered = await env.DB.prepare(
       `SELECT d.device_id, d.workspace_id, d.display_name AS device_display_name
          FROM devices d
-         JOIN device_pairings p ON p.consumed_by_device_id = d.device_id
+         JOIN device_pairing_codes p ON p.claimed_device_id = d.device_id
         WHERE d.token_hash = ?1 AND p.code_hash = ?2
         LIMIT 1`
     ).bind(tokenHash, codeHash).first<PairingDeviceRow>();
@@ -791,10 +1001,20 @@ export default {
         return await claimPairing(request, env, requestId);
       if (request.method === "POST" && url.pathname === "/v1/device-pairings/preview")
         return await previewPairing(request, env, requestId);
-      if (request.method === "POST" && url.pathname === "/v1/direct-join/authorize")
-        return await startDirectJoin(request, env, requestId);
-      if (request.method === "POST" && url.pathname === "/v1/direct-join/claim")
-        return await claimDirectJoin(request, env, requestId);
+      if (request.method === "GET" && url.pathname.startsWith("/v1/device-pairings/status/"))
+        return await onboardingTicketStatus(request, env, requestId, "pairing", url.pathname.slice(27));
+      if (request.method === "POST" && url.pathname === "/v1/device-invitations")
+        return await issueInvitation(request, env, requestId);
+      if (request.method === "POST" && url.pathname === "/v1/device-invitations/preview")
+        return await previewInvitation(request, env, requestId);
+      if (request.method === "POST" && url.pathname === "/v1/device-invitations/claim")
+        return await claimInvitation(request, env, requestId);
+      if (request.method === "POST" && url.pathname === "/v1/device-invitations/revoke")
+        return await revokeInvitation(request, env, requestId);
+      if (request.method === "GET" && url.pathname.startsWith("/v1/device-invitations/status/"))
+        return await onboardingTicketStatus(request, env, requestId, "invitation", url.pathname.slice(30));
+      if (request.method === "GET" && url.pathname === "/v1/device-join-tickets")
+        return await recentJoinTickets(request, env, requestId);
       if (request.method === "GET" && url.pathname === "/v1/device")
         return await currentDevice(request, env, requestId);
       return errorResponse(env, requestId, 404, "NOT_FOUND", "Route not found.");

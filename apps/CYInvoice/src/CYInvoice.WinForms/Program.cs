@@ -103,6 +103,7 @@ internal static class Program
             directJoin.Show();
             directJoin.PerformLayout();
             Application.DoEvents();
+            directJoin.VerifySmokeLayout();
             directJoin.Close();
 
             // Device Join now deliberately prompts for Local ADMIN/SUPER_ADMIN on Shown.

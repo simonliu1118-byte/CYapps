@@ -32,7 +32,18 @@ type EmployeeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.4";
+const CLOUD_VERSION = "0.8.5";
+const LEGACY_SCHEMA_COMPATIBILITY_VERSION = "8";
+const MINIMUM_CLIENT_VERSION = "2.6.5";
+const MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION = "2.6.6";
+const CAPABILITIES = [
+  "employee-authority-v1",
+  "employee-password-recovery-v1",
+  "device-pairing-v2",
+  "device-invitation-v1",
+  "device-join-status-v1",
+  "security-audit-v1",
+];
 
 function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
@@ -59,6 +70,54 @@ function json(env: Env, requestId: string, status: number, body: Record<string, 
       "x-request-id": requestId,
     },
   });
+}
+
+function clientUpdateRequired(env: Env, requestId: string): Response {
+  return json(env, requestId, 426, {
+    minimumClientVersion: MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION,
+    error: {
+      code: "CLIENT_UPDATE_REQUIRED",
+      message: "Update CYInvoice before using device onboarding with this Cloud service.",
+    },
+  });
+}
+
+async function compatibilityHealth(request: Request, env: Env): Promise<Response> {
+  const response = await baseWorker.fetch(request, env);
+  let body: Record<string, JsonValue>;
+  try {
+    body = await response.clone().json() as Record<string, JsonValue>;
+  } catch {
+    return response;
+  }
+
+  const actualSchemaVersion = typeof body.schemaVersion === "string" && body.schemaVersion.length !== 0
+    ? body.schemaVersion
+    : env.SCHEMA_VERSION;
+
+  // schemaVersion is retained as the API 1 compatibility marker because released
+  // V2.6.5 Build 4 clients gate on exact value 8. D1 migration progress is exposed
+  // separately so a storage migration does not disconnect an otherwise compatible client.
+  body.schemaVersion = LEGACY_SCHEMA_COMPATIBILITY_VERSION;
+  body.storageSchemaVersion = actualSchemaVersion;
+  body.capabilities = [...CAPABILITIES];
+  body.minimumClientVersion = MINIMUM_CLIENT_VERSION;
+  body.minimumDeviceOnboardingClientVersion = MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION;
+
+  return new Response(JSON.stringify(body), {
+    status: response.status,
+    headers: response.headers,
+  });
+}
+
+async function requestHasCurrentOwnerCredentials(request: Request): Promise<boolean> {
+  const body = await request.clone().json<Record<string, unknown>>().catch(() => null);
+  const employeeNo = typeof body?.employeeNo === "string" ? body.employeeNo.trim() : "";
+  const password = body?.password;
+  return /^\d{4}$/.test(employeeNo)
+    && typeof password === "string"
+    && password.length >= 1
+    && password.length <= 200;
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -133,6 +192,24 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const requestId = requestIdFrom(request);
+
+    if (request.method === "GET"
+        && (url.pathname === "/v1/health" || url.pathname === "/v1/health/storage" || url.pathname === "/v1/health/db"))
+      return compatibilityHealth(request, env);
+
+    // API 1 remains usable by V2.6.5 Build 4 for established devices. The old
+    // Workspace-ID direct-join flow and old pairing issuance shape are retired
+    // security-sensitive onboarding operations, so reject those operations with
+    // an explicit update requirement instead of silently returning 404 or
+    // accepting weaker authorization.
+    if (request.method === "POST"
+        && (url.pathname === "/v1/direct-join/authorize" || url.pathname === "/v1/direct-join/claim"))
+      return clientUpdateRequired(env, requestId);
+
+    if (request.method === "POST"
+        && (url.pathname === "/v1/device-pairings/authorization-email" || url.pathname === "/v1/device-pairings")
+        && !await requestHasCurrentOwnerCredentials(request))
+      return clientUpdateRequired(env, requestId);
 
     if (request.method === "POST" && url.pathname === "/v1/employees/reconcile-local") {
       const device = await authenticateDevice(request, env);
