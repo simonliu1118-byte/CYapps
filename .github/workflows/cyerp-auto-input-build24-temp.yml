@@ -19,10 +19,19 @@ jobs:
           ref: cyerp-auto-input/v0.1.0-csharp
           fetch-depth: 0
 
+      - name: Checkout Build 24 patch driver
+        uses: actions/checkout@v7
+        with:
+          ref: ci-cyerp-build24
+          path: .build24-driver
+          sparse-checkout: |
+            .github/cyerp-build24-patch.py
+          sparse-checkout-cone-mode: false
+
       - name: Apply Build 24 patch
         shell: bash
         run: |
-          git show origin/ci-cyerp-build24:.github/cyerp-build24-patch.py > apps/CYERPAutoInput/patch24.py
+          cp .build24-driver/.github/cyerp-build24-patch.py apps/CYERPAutoInput/patch24.py
           cd apps/CYERPAutoInput
           python patch24.py
           rm patch24.py
