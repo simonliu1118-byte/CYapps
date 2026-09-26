@@ -15,7 +15,7 @@ internal static class AdministrativeClosureTests
         var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
 
         Equal(false, service.CanClose(setup.Issue));
-        Throws<InvalidOperationException>(() => service.Close(setup.Issue, "2000", "admin-pass"));
+        Throws<InvalidOperationException>(() => service.Close(setup.Issue, "2000", "AdminPass1"));
 
         var stored = setup.Repository.Invoices.LoadOrCreate().Single();
         Equal(true, HasMetadata(stored, "cyinvoice_void_pending"));
@@ -29,7 +29,7 @@ internal static class AdministrativeClosureTests
         var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
 
         Equal(true, service.CanClose(setup.Issue));
-        Throws<UnauthorizedAccessException>(() => service.Close(setup.Issue, "3015", "employee-pass"));
+        Throws<UnauthorizedAccessException>(() => service.Close(setup.Issue, "3015", "Employee1"));
 
         var stored = setup.Repository.Invoices.LoadOrCreate().Single();
         Equal(true, HasMetadata(stored, "cyinvoice_void_pending"));
@@ -42,7 +42,7 @@ internal static class AdministrativeClosureTests
         var setup = CreateSetup(temporary.Path, "2026/06/30", InvoiceVoidSyncIssueTypes.PendingConfirmation);
         var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
 
-        service.Close(setup.Issue, "2000", "admin-pass");
+        service.Close(setup.Issue, "2000", "AdminPass1");
 
         var stored = setup.Repository.Invoices.LoadOrCreate().Single();
         Equal(false, HasMetadata(stored, "cyinvoice_void_pending"));
@@ -62,7 +62,7 @@ internal static class AdministrativeClosureTests
         var setup = CreateSetup(temporary.Path, "2026/06/30", InvoiceAllowanceIssueTypes.ManualReview, allowance: true);
         var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
 
-        service.Close(setup.Issue, "0001", "super-pass");
+        service.Close(setup.Issue, "0001", "SuperPass1");
 
         var stored = setup.Repository.Invoices.LoadOrCreate().Single();
         Equal(false, HasMetadata(stored, "cyinvoice_allowance_pending"));
@@ -84,9 +84,9 @@ internal static class AdministrativeClosureTests
         repository.Settings.SetProductionAppKey(settings, "test-app-key");
         repository.Settings.Save(settings);
 
-        repository.Employees.CreateFirstSuperAdmin("0001", "超管", "super@example.com", "super-pass");
-        repository.Employees.CreateEmployee("0001", "3015", "員工", "employee@example.com", "employee-pass");
-        repository.Employees.CreateEmployee("0001", "2000", "管理員", "admin@example.com", "admin-pass", EmployeeRoles.Admin);
+        repository.Employees.CreateFirstSuperAdmin("0001", "超管", "super@example.com", "SuperPass1");
+        repository.Employees.CreateEmployee("0001", "3015", "員工", "employee@example.com", "Employee1");
+        repository.Employees.CreateEmployee("0001", "2000", "管理員", "admin@example.com", "AdminPass1", EmployeeRoles.Admin);
 
         var record = new InvoiceRecord
         {

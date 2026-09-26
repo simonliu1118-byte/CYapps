@@ -732,7 +732,8 @@ public sealed class EmployeeStore
     private static void RequirePassword(string password)
     {
         ArgumentNullException.ThrowIfNull(password);
-        if (password.Length == 0) throw new InvalidOperationException("密碼不可空白");
+        if (password.Length < 8 || !password.All(char.IsAsciiLetterOrDigit))
+            throw new InvalidOperationException("密碼至少 8 碼，且只能使用英文字母或數字");
     }
 
     private static string UtcNowText() => DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);

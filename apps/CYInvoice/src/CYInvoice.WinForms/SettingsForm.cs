@@ -7,7 +7,6 @@ internal sealed class SettingsForm : Form
 {
     private readonly LocalRepository repository;
     private readonly Settings settings;
-    private readonly bool requireMoPassword;
     private readonly ToolTip toolTip = new();
     private readonly RadioButton test = new() { Text = "光貿測試環境", AutoSize = true };
     private readonly RadioButton production = new() { Text = "正式公司", AutoSize = true };
@@ -22,22 +21,27 @@ internal sealed class SettingsForm : Form
     private Label moPasswordLabel = null!;
     private FlowLayoutPanel actionButtons = null!;
 
-    public SettingsForm(LocalRepository repository, bool requireMoPassword = false)
+    public SettingsForm(LocalRepository repository)
     {
         this.repository = repository;
-        this.requireMoPassword = requireMoPassword;
         settings = repository.Settings.LoadOrCreate();
-        Text = "CYInvoice 設定";
+        Text = "設定選單";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(420, 338);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
+        ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+
+        SuspendLayout();
         BuildLayout();
         LoadValues();
         UpdateEnvironmentFields();
+        test.CheckedChanged += EnvironmentChanged;
+        production.CheckedChanged += EnvironmentChanged;
+        ResumeLayout(true);
     }
 
     private void BuildLayout()
@@ -68,8 +72,6 @@ internal sealed class SettingsForm : Form
         environmentLayout.Controls.Add(invoice, 2, 2);
         environmentLayout.Controls.Add(appKeyLabel, 1, 3);
         environmentLayout.Controls.Add(appKey, 2, 3);
-        test.CheckedChanged += (_, _) => UpdateEnvironmentFields();
-        production.CheckedChanged += (_, _) => UpdateEnvironmentFields();
         environmentGroup.Controls.Add(environmentLayout);
 
         var platformGroup = new GroupBox { Text = "平台檔案密碼", Dock = DockStyle.Fill };
@@ -80,9 +82,9 @@ internal sealed class SettingsForm : Form
         moPasswordLabel = FieldLabel("MO店+");
         platform.Controls.Add(moPasswordLabel, 1, 0);
         platform.Controls.Add(moPassword, 2, 0);
-        toolTip.SetToolTip(moPasswordLabel, requireMoPassword
-            ? "目前保存的 MO店+ 密碼無法使用，請重新輸入。"
-            : "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。");
+        toolTip.SetToolTip(
+            moPasswordLabel,
+            "輸入 MO店+ 匯出 Excel 的保護密碼；留白會保留目前已儲存的密碼。\n未設定時只會停用 MO店+ 匯入，不影響其他功能。");
         platformGroup.Controls.Add(platform);
 
         cancel.DialogResult = DialogResult.Cancel;
@@ -105,6 +107,8 @@ internal sealed class SettingsForm : Form
         AcceptButton = null;
         CancelButton = cancel;
     }
+
+    private void EnvironmentChanged(object? sender, EventArgs eventArgs) => UpdateEnvironmentFields();
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
@@ -135,11 +139,9 @@ internal sealed class SettingsForm : Form
         appKey.PlaceholderText = settings.ProductionAppKeyEncrypted.Length == 0
             ? ""
             : "留白會保留目前已儲存的 App Key。";
-        moPassword.PlaceholderText = requireMoPassword
-            ? "請重新輸入 MO店+ Excel 密碼"
-            : settings.MoPasswordEncrypted.Length == 0
-                ? ""
-                : "留白會保存目前已儲存的密碼";
+        moPassword.PlaceholderText = settings.MoPasswordEncrypted.Length == 0
+            ? "尚未設定"
+            : "留白會保存目前已儲存的密碼";
     }
 
     private void UpdateEnvironmentFields()
@@ -155,21 +157,7 @@ internal sealed class SettingsForm : Form
             settings.Environment = production.Checked ? Environments.Production : Environments.Test;
             settings.ProductionInvoice = invoice.Text.Trim();
             if (appKey.Text.Length != 0) repository.Settings.SetProductionAppKey(settings, appKey.Text);
-            if (requireMoPassword && moPassword.Text.Length == 0)
-            {
-                MessageBox.Show(this, "請重新輸入 MO店+ Excel 保護密碼", "無法儲存設定",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                moPassword.Focus();
-                return;
-            }
             if (moPassword.Text.Length != 0) repository.Settings.SetMoPassword(settings, moPassword.Text);
-            if (settings.MoPasswordEncrypted.Length == 0)
-            {
-                MessageBox.Show(this, "請輸入 MO店+ Excel 保護密碼", "無法儲存設定",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                moPassword.Focus();
-                return;
-            }
             repository.Settings.Save(settings);
             DialogResult = DialogResult.OK;
             Close();
@@ -197,19 +185,19 @@ internal sealed class SettingsForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (invoice.ReadOnly != !production.Checked || appKey.ReadOnly != !production.Checked ||
+        if (Text != "設定選單" || ShowIcon || invoice.ReadOnly != !production.Checked || appKey.ReadOnly != !production.Checked ||
             !invoice.Enabled || !appKey.Enabled)
-            throw new InvalidOperationException("測試與正式環境欄位鎖定狀態不一致");
+            throw new InvalidOperationException("設定視窗標題或測試與正式環境欄位鎖定狀態不一致");
         if (AcceptButton is not null)
             throw new InvalidOperationException("設定視窗不應使用表單預設 AcceptButton，Enter 必須依欄位明確處理");
         if (settings.ProductionAppKeyEncrypted.Length != 0 &&
             appKey.PlaceholderText != "留白會保留目前已儲存的 App Key。")
             throw new InvalidOperationException("App Key 保留提示未放在輸入欄位內");
-        if (!requireMoPassword && settings.MoPasswordEncrypted.Length != 0 &&
+        if (settings.MoPasswordEncrypted.Length != 0 &&
             moPassword.PlaceholderText != "留白會保存目前已儲存的密碼")
             throw new InvalidOperationException("MO店+ 密碼保留提示文字不正確");
-        if (requireMoPassword && moPassword.PlaceholderText != "請重新輸入 MO店+ Excel 密碼")
-            throw new InvalidOperationException("MO店+ 密碼重新輸入提示文字不正確");
+        if (settings.MoPasswordEncrypted.Length == 0 && moPassword.PlaceholderText != "尚未設定")
+            throw new InvalidOperationException("未設定 MO店+ 密碼提示文字不正確");
         if (environmentLayout.GetPositionFromControl(production).Row != 1 ||
             environmentLayout.GetPositionFromControl(invoiceLabel).Column != 1 ||
             environmentLayout.GetPositionFromControl(appKeyLabel).Column != 1 ||
