@@ -40,6 +40,8 @@ assert.match(css, /\.ledger-card table\s*\{[\s\S]*?min-width:\s*0;/);
 assert.match(css, /height:\s*100dvh;/);
 assert.match(css, /\.settings-nav\s*\{[\s\S]*?overflow-x:\s*auto;/);
 assert.match(css, /\.confirmation-drawer\s*\{[\s\S]*?bottom:\s*0;/);
+assert.match(css, /\.confirmation-drawer\s*\{[\s\S]*?transform:\s*translateY\(102%\)/);
+assert.match(css, /\.confirmation-drawer\.open\s*\{[\s\S]*?transform:\s*translateY\(0\)/);
 
 // Adaptive behavior: viewport classification, safe mobile confirmation default and current-version correction.
 assert.match(js, /CY_V20_VERSION = 'V0\.20\.0'/);
