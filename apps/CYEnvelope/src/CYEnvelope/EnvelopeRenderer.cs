@@ -70,7 +70,14 @@ public static class EnvelopeRenderer
             dc.DrawRectangle(null, Red, new Rect((item.X - 1) * DipPerMm, (item.Y - .8) * DipPerMm, 3 * DipPerMm, 3 * DipPerMm));
             Label(dc, item.Label, item.X + 3, item.Y, 7, Brushes.IndianRed);
         }
-        dc.DrawRectangle(null, Red, new Rect(40 * DipPerMm, 43 * DipPerMm, 56 * DipPerMm, 151 * DipPerMm));
+        var rx = Math.Min(f.Recipient.Rect.X, f.Address.Rect.X) - 3;
+        var ry = Math.Min(f.Recipient.Rect.Y, f.Address.Rect.Y) - 3;
+        var right = Math.Max(f.Recipient.Rect.X + f.Recipient.Rect.Width,
+            f.Address.Rect.X + f.Address.Rect.Width) + 3;
+        var bottom = Math.Max(f.Recipient.Rect.Y + f.Recipient.Rect.Height,
+            f.Address.Rect.Y + f.Address.Rect.Height) + 3;
+        dc.DrawRectangle(null, Red, new Rect(rx * DipPerMm, ry * DipPerMm,
+            (right - rx) * DipPerMm, (bottom - ry) * DipPerMm));
         for (var i = 0; i < 3; i++)
             dc.DrawRectangle(null, Red, new Rect((37 + i * 8) * DipPerMm, (h - 14) * DipPerMm, 8 * DipPerMm, 8 * DipPerMm));
         Label(dc, "正聯", 6, 22, 7, Brushes.IndianRed);
@@ -97,16 +104,19 @@ public static class EnvelopeRenderer
         while (glyphs.MoveNext())
         {
             var glyph = glyphs.GetTextElement();
-            if (glyph == "\n" || (p.Vertical && (line + 1) * rowHeight > r.Height))
+            if (glyph == "\n" || (p.Vertical && (line + 1) * rowHeight > r.Height) ||
+                (!p.Vertical && (line + 1) * columnWidth > r.Width))
             {
                 column++;
                 line = 0;
                 if (glyph == "\n") continue;
             }
-            if (column >= Math.Max(1, p.Columns)) break;
+            if (column >= Math.Max(1, p.Columns) ||
+                (!p.Vertical && (column + 1) * rowHeight > r.Height)) break;
             var x = p.Vertical ? p.Rect.X + p.Rect.Width - (column + 1) * columnWidth / DipPerMm
                                : p.Rect.X + line * columnWidth / DipPerMm;
-            var y = p.Vertical ? p.Rect.Y + line * rowHeight / DipPerMm : p.Rect.Y;
+            var y = p.Vertical ? p.Rect.Y + line * rowHeight / DipPerMm
+                               : p.Rect.Y + column * rowHeight / DipPerMm;
             WriteAt(dc, glyph, x, y, p.FontSize, p.FontFamily);
             line++;
         }

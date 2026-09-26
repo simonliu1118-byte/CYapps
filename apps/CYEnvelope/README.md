@@ -7,10 +7,10 @@
 | 階段 | 狀態 | 內容 |
 | --- | --- | --- |
 | 1. 核心與資料 | 已提交、跨平台編譯 | 全新 SQLite 資料層；聯絡人多地址、多電話模型；368 筆離線三碼郵遞區號；電話格式；共用信封繪製器；核准 ENV 圖示 |
-| 2. 介面與列印 | 初版已編譯，等待 Windows CI 與操作檢查 | 收件人候選清單、聯絡人管理、格式編輯、印表機選擇；按列印先保存，再用共用繪製器輸出 |
+| 2. 介面與列印 | 初版已編譯，等待 Windows CI 與操作檢查 | 左右工作區、預覽點選輸入、聯絡人管理、格式編輯與橫式欄位旋轉；按列印先保存，再用共用繪製器輸出 |
 | 3. Windows 測試包與試印 | 待驗證 | Windows x64 portable、CI Artifact、圖示與啟動檢查、15K 實機試印及位置校正 |
 
-目前有 WPF 主畫面與管理視窗，但尚未完成 Windows 操作驗收，也沒有可供使用者試印的測試包。既有 `cmd/`、`internal/`、`go.mod`、`build.ps1` 和 `使用說明.txt` 暫作 Go 版行為對照；完成 C# 版驗收後再處理舊碼。新版資料庫從空白建立，不遷移 Go 測試資料。執行資料不進 Git。
+目前有 WPF 主畫面與管理視窗；預覽點選欄位後會以浮動輸入框編輯，畫出的內容仍由共用繪製器顯示。尚未完成這些互動的實機操作驗收，也沒有可供使用者試印的測試包。既有 `cmd/`、`internal/`、`go.mod`、`build.ps1` 和 `使用說明.txt` 暫作 Go 版行為對照；完成 C# 版驗收後再處理舊碼。新版資料庫從空白建立，不遷移 Go 測試資料。執行資料不進 Git。
 
 ## 排版原則
 
@@ -25,7 +25,7 @@ dotnet build .\src\CYEnvelope\CYEnvelope.csproj
 dotnet run --project .\tests\CYEnvelope.Tests\CYEnvelope.Tests.csproj
 ```
 
-非 Windows 環境可用 `dotnet build -p:EnableWindowsTargeting=true` 檢查編譯，但無法執行 WPF 測試或實際列印。測試程式需在 Windows 執行後，才能宣稱郵遞區號、SQLite 保存與繪製執行時驗證通過。PR 的 Windows CI 會檢查編譯、核心檢查與啟動；通過前不得宣稱新版已可使用。
+非 Windows 環境可用 `dotnet build -p:EnableWindowsTargeting=true` 檢查編譯，但無法執行 WPF 測試或實際列印。測試程式需在 Windows 執行後，才能宣稱郵遞區號、SQLite 保存與繪製執行時驗證通過。PR 的 Windows CI 會檢查編譯、核心檢查與啟動；通過前不得宣稱新版已可使用。多檔自包含封裝的安全掃描器修正位於獨立治理 PR，合併與封裝驗證前不提供公開測試包。
 
 ## 來源與規範
 

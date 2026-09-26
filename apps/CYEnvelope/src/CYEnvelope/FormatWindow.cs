@@ -170,6 +170,15 @@ public sealed class FormatWindow : Window
     private void Changed(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
+        if (ReferenceEquals(sender, _landscape) && _working.Landscape != (_landscape.IsChecked == true))
+        {
+            var oldOrientation = _working.Landscape;
+            if (!Apply()) { Load(); return; }
+            _working.Landscape = oldOrientation;
+            FormatGeometry.Rotate(_working);
+            Load();
+            return;
+        }
         if (!Apply()) return;
         Draw();
     }

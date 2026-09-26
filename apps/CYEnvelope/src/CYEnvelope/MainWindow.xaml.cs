@@ -17,6 +17,8 @@ public partial class MainWindow : Window
     private ContactAddress? _selectedAddress;
     private ContactPhone? _selectedPhone;
     private readonly Dictionary<string, CheckBox> _delivery = [];
+    private TextBox? _directEditor;
+    private ListBox? _directSuggestions;
     private bool _loading;
 
     public MainWindow()
@@ -35,6 +37,7 @@ public partial class MainWindow : Window
         Title = $"CYEnvelope V{version}" + (build != "0" ? $" Build {build}" : "");
         ShowFrameBox.IsChecked = true;
         RebuildOptions();
+        ApplyEntryMode();
         Refresh();
     }
 
@@ -191,10 +194,18 @@ public partial class MainWindow : Window
     }
     private void AddressLostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
+        UpdatePostalFromAddress();
+    }
+    private void UpdatePostalFromAddress()
+    {
         var code = Postal.Infer(AddressBox.Text);
         if (code is not null) PostalBox.Text = code; // unknown: preserve the user's previous code
     }
     private void PhoneLostFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        FormatPhone();
+    }
+    private void FormatPhone()
     {
         if (PhoneBox.Text.Length == 0) return;
         var formatted = PhoneFormatting.Format(PhoneBox.Text);
@@ -321,6 +332,7 @@ public partial class MainWindow : Window
         _settings.SelectedFormatId = _format.Id;
         _repository.SaveSettings(_settings);
         RebuildOptions();
+        RebuildDirectTargets();
         Refresh();
     }
     private void FrameClick(object sender, RoutedEventArgs e)
@@ -333,7 +345,202 @@ public partial class MainWindow : Window
     }
     private void SettingsClick(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show($"目前格式：{_format.Name}\n印表機：{(_settings.PrinterName.Length == 0 ? "尚未選擇" : _settings.PrinterName)}",
-            "設定", MessageBoxButton.OK, MessageBoxImage.Information);
+        var dialog = new Window
+        {
+            Title = "設定", Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Width = 360, Height = 210, ResizeMode = ResizeMode.NoResize,
+            FontFamily = FontFamily, FontSize = 15
+        };
+        var panel = new StackPanel { Margin = new Thickness(20) };
+        dialog.Content = panel;
+        panel.Children.Add(new TextBlock { Text = "輸入方式", FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 12) });
+        var direct = new CheckBox { Content = "直接點選信封欄位輸入", IsChecked = _settings.DirectEntry };
+        panel.Children.Add(direct);
+        panel.Children.Add(new TextBlock { Text = "關閉後使用左側資料欄輸入。",
+            Foreground = Brushes.DimGray, Margin = new Thickness(0, 10, 0, 14) });
+        var save = new Button { Content = "儲存", Width = 90, HorizontalAlignment = HorizontalAlignment.Right };
+        save.Click += (_, _) => { _settings.DirectEntry = direct.IsChecked == true; dialog.DialogResult = true; };
+        panel.Children.Add(save);
+        if (dialog.ShowDialog() == true)
+        {
+            _repository.SaveSettings(_settings);
+            ApplyEntryMode();
+        }
+    }
+
+    private void ApplyEntryMode()
+    {
+        EntryPanel.Visibility = _settings.DirectEntry ? Visibility.Collapsed : Visibility.Visible;
+        EntryColumn.Width = new GridLength(_settings.DirectEntry ? 0 : 370);
+        EntryGap.Width = new GridLength(_settings.DirectEntry ? 0 : 16);
+        DirectLayer.Visibility = _settings.DirectEntry ? Visibility.Visible : Visibility.Collapsed;
+        RebuildDirectTargets();
+    }
+    private void RebuildDirectTargets()
+    {
+        DirectLayer.Children.Clear();
+        _directEditor = null;
+        _directSuggestions = null;
+        DirectLayer.Width = _format.WidthMm * EnvelopeRenderer.DipPerMm;
+        DirectLayer.Height = _format.HeightMm * EnvelopeRenderer.DipPerMm;
+        foreach (var (field, rect) in new[]
+        {
+            ("收件人", _format.Recipient.Rect), ("地址", _format.Address.Rect),
+            ("電話", _format.Phone.Rect), ("郵遞區號", _format.PostalCode.Rect),
+            ("方框文字", _format.Frame)
+        })
+        {
+            var target = new Border
+            {
+                Width = Math.Max(20, rect.Width * EnvelopeRenderer.DipPerMm),
+                Height = Math.Max(20, rect.Height * EnvelopeRenderer.DipPerMm),
+                Background = Brushes.Transparent,
+                ToolTip = $"點選輸入{field}",
+                Tag = field
+            };
+            target.MouseEnter += (_, _) => target.BorderBrush = Brushes.SteelBlue;
+            target.MouseLeave += (_, _) => target.BorderBrush = Brushes.Transparent;
+            target.BorderThickness = new Thickness(1);
+            target.MouseLeftButtonDown += DirectTargetClick;
+            Canvas.SetLeft(target, rect.X * EnvelopeRenderer.DipPerMm);
+            Canvas.SetTop(target, rect.Y * EnvelopeRenderer.DipPerMm);
+            DirectLayer.Children.Add(target);
+        }
+        foreach (var item in _format.Delivery)
+        {
+            var target = new Button
+            {
+                Width = 16, Height = 16, Opacity = .15, Padding = new Thickness(0),
+                ToolTip = $"勾選／取消{item.Label}", Tag = item.Id
+            };
+            target.Click += (_, _) =>
+            {
+                if (_delivery.TryGetValue((string)target.Tag, out var check))
+                    check.IsChecked = check.IsChecked != true;
+            };
+            Canvas.SetLeft(target, item.X * EnvelopeRenderer.DipPerMm);
+            Canvas.SetTop(target, item.Y * EnvelopeRenderer.DipPerMm);
+            DirectLayer.Children.Add(target);
+        }
+    }
+    private void DirectTargetClick(object sender, MouseButtonEventArgs e)
+    {
+        var target = (Border)sender;
+        var field = (string)target.Tag;
+        if (_directEditor is not null) DirectLayer.Children.Remove(_directEditor);
+        if (_directSuggestions is not null) DirectLayer.Children.Remove(_directSuggestions);
+        _directSuggestions = null;
+        var source = field switch
+        {
+            "收件人" => RecipientBox,
+            "地址" => AddressBox,
+            "電話" => PhoneBox,
+            "郵遞區號" => PostalBox,
+            _ => null
+        };
+        if (source is null)
+        {
+            ShowFrameBox.IsChecked = ShowFrameBox.IsChecked != true;
+            return;
+        }
+        var editor = new TextBox
+        {
+            Text = source.Text, Width = Math.Min(200, DirectLayer.Width - 12),
+            FontSize = 16, Background = Brushes.White, BorderBrush = Brushes.SteelBlue,
+            BorderThickness = new Thickness(2), Padding = new Thickness(4),
+            ToolTip = $"輸入{field}，按 Enter 完成"
+        };
+        var original = source.Text;
+        _directEditor = editor;
+        void ChooseSuggestion()
+        {
+            if (_directSuggestions?.SelectedItem is not Contact chosen) return;
+            ChooseContact(chosen);
+            if (_directEditor is not null) DirectLayer.Children.Remove(_directEditor);
+            DirectLayer.Children.Remove(_directSuggestions);
+            _directEditor = null; _directSuggestions = null;
+        }
+        if (field == "收件人")
+        {
+            var suggestions = new ListBox
+            {
+                Width = editor.Width, MaxHeight = 105,
+                DisplayMemberPath = "Name", Background = Brushes.White,
+                BorderBrush = Brushes.SteelBlue
+            };
+            _directSuggestions = suggestions;
+            suggestions.MouseDoubleClick += (_, _) => ChooseSuggestion();
+            suggestions.KeyDown += (_, args) =>
+            {
+                if (args.Key != Key.Enter) return;
+                ChooseSuggestion();
+                args.Handled = true;
+            };
+            DirectLayer.Children.Add(suggestions);
+            Canvas.SetLeft(suggestions, Math.Clamp(Canvas.GetLeft(target), 2,
+                Math.Max(2, DirectLayer.Width - editor.Width - 2)));
+            Canvas.SetTop(suggestions, Math.Clamp(Canvas.GetTop(target) + 40, 2,
+                Math.Max(2, DirectLayer.Height - 110)));
+        }
+        editor.TextChanged += (_, _) =>
+        {
+            source.Text = editor.Text;
+            if (_directSuggestions is not null)
+            {
+                var query = editor.Text.Trim();
+                var matches = query.Length == 0 ? [] : _repository.Contacts()
+                    .Where(c => c.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase))
+                    .Take(10).ToList();
+                _directSuggestions.ItemsSource = matches;
+                _directSuggestions.Visibility = matches.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            }
+            Refresh();
+        };
+        editor.KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.Down && _directSuggestions?.Items.Count > 0)
+            {
+                _directSuggestions.SelectedIndex = 0;
+                _directSuggestions.Focus();
+                args.Handled = true;
+                return;
+            }
+            if (args.Key != Key.Enter && args.Key != Key.Escape) return;
+            if (args.Key == Key.Enter && _directSuggestions?.Items.Count == 1)
+            {
+                _directSuggestions.SelectedIndex = 0;
+                ChooseSuggestion();
+                args.Handled = true;
+                return;
+            }
+            if (args.Key == Key.Escape) source.Text = original;
+            DirectLayer.Children.Remove(editor);
+            if (_directSuggestions is not null) DirectLayer.Children.Remove(_directSuggestions);
+            _directSuggestions = null;
+            _directEditor = null;
+            args.Handled = true;
+        };
+        editor.LostKeyboardFocus += (_, _) =>
+        {
+            if (field == "地址") UpdatePostalFromAddress();
+            if (field == "電話") FormatPhone();
+            Dispatcher.BeginInvoke(() =>
+            {
+                DirectLayer.Children.Remove(editor);
+                if (ReferenceEquals(_directEditor, editor)) _directEditor = null;
+                if (_directSuggestions is not null && !_directSuggestions.IsKeyboardFocusWithin)
+                {
+                    DirectLayer.Children.Remove(_directSuggestions);
+                    _directSuggestions = null;
+                }
+            });
+        };
+        DirectLayer.Children.Add(editor);
+        Canvas.SetLeft(editor, Math.Clamp(Canvas.GetLeft(target), 2, Math.Max(2, DirectLayer.Width - editor.Width - 2)));
+        Canvas.SetTop(editor, Math.Clamp(Canvas.GetTop(target), 2, Math.Max(2, DirectLayer.Height - 40)));
+        editor.Focus();
+        editor.SelectAll();
+        e.Handled = true;
     }
 }

@@ -30,8 +30,8 @@
       </StackPanel>
     </Border>
     <Grid>
-      <Grid.ColumnDefinitions><ColumnDefinition Width="370"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <Border Grid.Column="0" Background="White" BorderBrush="#D1D5DB" BorderThickness="1" Padding="16">
+      <Grid.ColumnDefinitions><ColumnDefinition x:Name="EntryColumn" Width="370"/><ColumnDefinition x:Name="EntryGap" Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Border x:Name="EntryPanel" Grid.Column="0" Background="White" BorderBrush="#D1D5DB" BorderThickness="1" Padding="16">
         <DockPanel>
           <StackPanel DockPanel.Dock="Bottom" HorizontalAlignment="Center" Margin="0,20,0,0">
             <Button Content="列印" FontSize="17" FontWeight="SemiBold" Width="190" Height="46" Click="PrintClick"/>
@@ -69,9 +69,14 @@
             <TextBlock Text="信封預覽" FontSize="19" FontWeight="SemiBold" VerticalAlignment="Center"/>
             <TextBlock x:Name="FormatName" Foreground="#667085" VerticalAlignment="Center" Margin="16,0,0,0"/>
           </StackPanel>
-          <Viewbox Stretch="Uniform"><Border BorderBrush="#E5E8EC" BorderThickness="1">
-            <local:VisualHost x:Name="PreviewHost" xmlns:local="clr-namespace:CYEnvelope"/>
-          </Border></Viewbox>
+          <Viewbox Stretch="Uniform">
+            <Border BorderBrush="#E5E8EC" BorderThickness="1">
+              <Grid>
+                <local:VisualHost x:Name="PreviewHost" xmlns:local="clr-namespace:CYEnvelope"/>
+                <Canvas x:Name="DirectLayer" Visibility="Collapsed"/>
+              </Grid>
+            </Border>
+          </Viewbox>
         </DockPanel>
       </Border>
     </Grid>

@@ -31,6 +31,16 @@ try
     Check(reloaded.Addresses[1].LastPhoneId == reloaded.Phones[0].Id, "last phone per address");
     Check(reloaded.LastDeliveryIds.SequenceEqual(["delivery-1"]), "last mail option");
     var format = repository.Formats().Single();
+    var originalRecipient = (format.Recipient.Rect.X, format.Recipient.Rect.Y,
+        format.Recipient.Rect.Width, format.Recipient.Rect.Height);
+    FormatGeometry.Rotate(format);
+    Check(format.Landscape && format.WidthMm == 222 && format.HeightMm == 105,
+        "landscape rotates the sheet dimensions");
+    FormatGeometry.Rotate(format);
+    Check(!format.Landscape && format.WidthMm == 105 && format.HeightMm == 222 &&
+        originalRecipient == (format.Recipient.Rect.X, format.Recipient.Rect.Y,
+            format.Recipient.Rect.Width, format.Recipient.Rect.Height),
+        "portrait roundtrip preserves the recipient coordinates");
     var preview = EnvelopeRenderer.Draw(format, new PrintData { Recipient = "測試對象", PostalCode = "800" }, true);
     var output = EnvelopeRenderer.Draw(format, new PrintData { Recipient = "測試對象", PostalCode = "800" }, false);
     Check(preview.ContentBounds.Width > 0 && output.ContentBounds.Width > 0, "shared renderer output");
