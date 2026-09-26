@@ -50,6 +50,7 @@ jobs:
           node --check src/app.js
           node --check src/app-v17.js
           node --check src/app-v18.js
+          node --check src/app-v19.js
           node --check src/backup-storage-provider.js
           node --check src/gcs-backup-provider.js
           node --check src/r2-backup-provider.js
@@ -60,7 +61,9 @@ jobs:
           node --check src/v16-backup.js
           node --check src/v17-backup.js
           node --check src/v18-backup.js
+          node --check src/v19-migration.js
           node --check scripts/render-wrangler.mjs
+          node --check scripts/prepare-sqljs.mjs
           node --check public/auth.js
           node --check public/app.js
           node --check public/v03.js
@@ -76,6 +79,7 @@ jobs:
           node --check public/v015.js
           node --check public/v016.js
           node --check public/v0181.js
+          node --check public/v019.js
 
       - name: Run application tests
         run: |
@@ -85,7 +89,11 @@ jobs:
           node tests/v17-phase-b.mjs
           node tests/v18-tiered-backup.mjs
           node tests/v18-backup-ui.mjs
+          node tests/v19-desktop-migration.mjs
           node tests/deploy-config.mjs
+
+      - name: Prepare pinned browser SQLite runtime
+        run: node scripts/prepare-sqljs.mjs
 
       - name: Render CI-only Cloudflare config
         env:
@@ -103,9 +111,11 @@ jobs:
       - name: Validate Worker bundle
         run: npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc
 
-      - name: Remove CI-only Cloudflare config
+      - name: Remove CI-only generated files
         if: always()
-        run: rm -f wrangler.ci.generated.jsonc
+        run: |
+          rm -f wrangler.ci.generated.jsonc
+          node scripts/prepare-sqljs.mjs --clean
 
   deploy:
     if: github.event_name != 'pull_request'
@@ -141,6 +151,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Prepare pinned browser SQLite runtime
+        run: node scripts/prepare-sqljs.mjs
+
       - name: Render production Cloudflare config
         run: node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc
 
@@ -150,6 +163,8 @@ jobs:
       - name: Deploy Worker and static assets
         run: npx wrangler deploy --config wrangler.deploy.jsonc
 
-      - name: Remove production Cloudflare config
+      - name: Remove production generated files
         if: always()
-        run: rm -f wrangler.deploy.jsonc
+        run: |
+          rm -f wrangler.deploy.jsonc
+          node scripts/prepare-sqljs.mjs --clean
