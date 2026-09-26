@@ -6,19 +6,36 @@ internal sealed class PdfStyleSelectionForm : Form
 {
     private readonly List<Bitmap> thumbnails = [];
     private readonly List<Button> styleButtons = [];
+    private readonly IReadOnlyList<InvoicePdfStyle> styles;
 
     public PdfStyleSelectionForm(string action = "列印")
+        : this(InvoicePdfStyles.Company, "公司發票", action)
     {
+    }
+
+    public PdfStyleSelectionForm(
+        IReadOnlyList<InvoicePdfStyle> styles,
+        string subject,
+        string action = "檢視")
+    {
+        ArgumentNullException.ThrowIfNull(styles);
+        if (styles.Count == 0) throw new ArgumentException("至少需要一個 PDF 版型", nameof(styles));
+        if (styles.Select(style => style.Code).Distinct().Count() != styles.Count)
+            throw new ArgumentException("PDF 版型代碼不可重複", nameof(styles));
+        this.styles = styles.ToArray();
+        subject = string.IsNullOrWhiteSpace(subject) ? "PDF" : subject.Trim();
         action = action == "檢視" ? "檢視" : "列印";
+
         Text = $"選擇{action}版型";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(1060, 410);
-        MinimumSize = new Size(940, 390);
-        MaximumSize = new Size(1280, 520);
+        var width = Math.Clamp(80 + this.styles.Count * 196, 660, 1060);
+        ClientSize = new Size(width, 410);
+        MinimumSize = new Size(Math.Min(width, 660), 390);
+        MaximumSize = new Size(Math.Max(width, 1280), 520);
         ShowInTaskbar = false;
+        ShowIcon = false;
         KeyPreview = true;
         Font = new Font("Microsoft JhengHei UI", 10F);
-        Icon = ApplicationIcon.Load();
 
         var root = new TableLayoutPanel
         {
@@ -31,7 +48,7 @@ internal sealed class PdfStyleSelectionForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.Controls.Add(new Label
         {
-            Text = $"請選擇要{action}的公司發票版型",
+            Text = $"請選擇要{action}的{subject}版型",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font(Font.FontFamily, 12F, FontStyle.Bold),
@@ -41,17 +58,18 @@ internal sealed class PdfStyleSelectionForm : Form
         var choices = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = InvoicePdfStyles.Company.Count,
+            ColumnCount = this.styles.Count,
             RowCount = 1,
             Margin = Padding.Empty,
         };
-        foreach (var _ in InvoicePdfStyles.Company)
-            choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
+        var percentage = 100F / this.styles.Count;
+        foreach (var _ in this.styles)
+            choices.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, percentage));
         choices.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        for (var index = 0; index < InvoicePdfStyles.Company.Count; index++)
+        for (var index = 0; index < this.styles.Count; index++)
         {
-            var style = InvoicePdfStyles.Company[index];
+            var style = this.styles[index];
             var thumbnail = PdfStyleThumbnail.Create(style, new Size(164, 220));
             thumbnails.Add(thumbnail);
             var button = new NoFocusCueButton
@@ -102,16 +120,18 @@ internal sealed class PdfStyleSelectionForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (styleButtons.Count != 5 || styleButtons.Any(button => button.Image is null || button.Tag is not InvoicePdfStyle))
+        if (styles.Count == 5 && (styleButtons.Count != 5 || styleButtons.Any(button => button.Image is null || button.Tag is not InvoicePdfStyle)))
             throw new InvalidOperationException("公司發票圖像版型選擇未建立五個有效選項");
-        if (styleButtons.Select(button => ((InvoicePdfStyle)button.Tag!).Code).Distinct().Count() != 5)
-            throw new InvalidOperationException("公司發票圖像版型選項重複");
+        if (styleButtons.Count != styles.Count ||
+            styleButtons.Select(button => ((InvoicePdfStyle)button.Tag!).Code).Distinct().Count() != styles.Count)
+            throw new InvalidOperationException("PDF 圖像版型選項數量或代碼不正確");
         if (styleButtons.Any(button => button.FlatAppearance.BorderSize != 0 ||
                                       button.FlatAppearance.MouseOverBackColor != SystemColors.Control ||
                                       button.FlatAppearance.MouseDownBackColor != SystemColors.Control))
-            throw new InvalidOperationException("公司發票版型卡片仍有常態外框或大面積滑過底色");
+            throw new InvalidOperationException("PDF 版型卡片仍有常態外框或大面積滑過底色");
         if (styleButtons.Any(button => button.Width > 190 || button.Height > 285))
-            throw new InvalidOperationException("公司發票版型互動範圍仍超出實際卡片");
+            throw new InvalidOperationException("PDF 版型互動範圍仍超出實際卡片");
+        if (ShowIcon) throw new InvalidOperationException("PDF 版型選擇視窗不應顯示標題列圖示");
 
         var canvas = new Size(164, 220);
         var a4 = PdfStyleThumbnail.PageBounds(InvoicePdfStyles.A4, canvas);
@@ -120,14 +140,14 @@ internal sealed class PdfStyleSelectionForm : Form
             Math.Abs(a4.Width / (double)a4.Height - 210D / 297D) > 0.03 ||
             Math.Abs(a5.Width / (double)a5.Height - 210D / 148D) > 0.03 ||
             a5.Top != a4.Top || Math.Abs(a5.Width - a4.Width) > 1)
-            throw new InvalidOperationException("公司發票 A4／橫式 A5 示意圖比例或位置不正確");
+            throw new InvalidOperationException("PDF A4／橫式 A5 示意圖比例或位置不正確");
     }
 
     private static string DisplayName(InvoicePdfStyle style) => style.Code switch
     {
         0 => "A4 整張",
-        1 => "A4（地址＋A5）",
-        2 => "A4（A5 內容）",
+        1 => "A4 (地址+A5)",
+        2 => "A4 (A5 內容)",
         3 => "A5",
         5 => "QRcode_A4",
         _ => style.Name,
@@ -139,7 +159,6 @@ internal sealed class PdfStyleSelectionForm : Form
         {
             foreach (var button in styleButtons) button.Image = null;
             foreach (var thumbnail in thumbnails) thumbnail.Dispose();
-            Icon?.Dispose();
         }
         base.Dispose(disposing);
     }

@@ -10,12 +10,14 @@ public sealed class InvoiceAdministrativeClosureService
     private const string VoidManualReviewMetadataKey = "cyinvoice_void_manual_review";
     private const string AllowancePendingMetadataKey = "cyinvoice_allowance_pending";
     private const string AllowanceManualReviewMetadataKey = "cyinvoice_allowance_manual_review";
+    private const string AllowanceVoidManualReviewMetadataKey = "cyinvoice_allowance_void_manual_review";
 
     private static readonly string[] ActiveWorkIssueTypes =
     [
         InvoiceVoidIssueTypes.ManualReview,
         InvoiceVoidSyncIssueTypes.PendingConfirmation,
         InvoiceAllowanceIssueTypes.ManualReview,
+        InvoiceAllowanceVoidIssueTypes.ManualReview,
     ];
 
     private readonly LocalRepository repository;
@@ -129,6 +131,7 @@ public sealed class InvoiceAdministrativeClosureService
         record.ExtensionData.Remove(VoidManualReviewMetadataKey);
         record.ExtensionData.Remove(AllowancePendingMetadataKey);
         record.ExtensionData.Remove(AllowanceManualReviewMetadataKey);
+        record.ExtensionData.Remove(AllowanceVoidManualReviewMetadataKey);
         if (record.ExtensionData.Count == 0) record.ExtensionData = null;
     }
 
