@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current formal baseline: **V0.18.1 Build 0**（2026-09-27）
+> Current formal baseline: **V0.19.0 Build 0**（2026-09-27）
 
 ## 專案定位
 
@@ -79,14 +79,47 @@ CYAccountingWeb 自己的 D1 建立本系統 web session
 - 日期鍵盤快速輸入；
 - 單月 `.xlsx` 匯出；
 - `.xlsx` 匯入、欄位對應、預覽、驗證與重複略過；
+- **V0.19.0 CYAccounting SQLite 帳本移轉工具**：瀏覽器本機解析 `.db`、schema/integrity 驗證、保守合併預覽、重複資料判斷、衝突阻擋與 D1 atomic commit；僅 `SUPER_ADMIN` 可執行；
 - Tiered Backup Phase A / B；
 - Phase C R2 + GCS parallel dual-provider production path 與狀態 UI。
 
-尚未完成的主要帳務移植項目：
-
-- 既有 CYAccounting SQLite 帳本匯入／遷移工具。
+V0.19.0 SQLite 移轉功能完成自動測試與部署後，仍需使用真實桌面帳本進行 production acceptance；在完成實機驗收前不視為資料遷移工作正式結案。
 
 詳細待辦與未來方向以 [`TODO.md`](./TODO.md) 為準。
+
+## 桌面 SQLite 帳本移轉
+
+V0.19.0 的資料移轉設計：
+
+```text
+選擇 CYaccounting.db
+  ↓ 瀏覽器本機 sql.js / WebAssembly 解析
+SQLite integrity / foreign-key / schema 檢查
+  ↓
+正規化帳戶、分類、科目、交易、期初餘額、鎖帳
+  ↓ 只有正規化資料送到 Worker；原始 .db 不上傳
+SUPER_ADMIN server-side 驗證
+  ↓
+與目前 D1 建立保守合併預覽
+  ↓
+使用者確認
+  ↓
+D1 atomic batch commit
+```
+
+主要安全規則：
+
+- 原始 SQLite 檔不傳到 Worker；
+- 支援桌面 schema v1 / v2；
+- 交易金額仍受 1～9,999,999 限制；
+- 既有 Web 交易不因移轉而刪除；
+- 同內容交易按「既有／來源出現次數」判斷重複，避免誤刪合法的重複交易；
+- 同月份／帳戶的期初餘額若金額不同，視為衝突並阻擋；
+- 同名科目若已存在於不同大分類，既有 Web 帳本採阻擋而不偷偷改分類；
+- 鎖帳只會維持或變得更嚴格，不會因來源帳本而解鎖既有月份；
+- 同一來源檔 SHA-256 已有成功移轉紀錄時，預設阻擋再次提交。
+
+桌面版使用 SQLite WAL；選擇目前使用中的 `Data/CYaccounting.db` 前應先關閉 CYAccounting，或使用最近完成且已驗證的桌面備份，避免只取得尚未 checkpoint 的主資料庫檔。
 
 ## 備份目前狀態
 
@@ -133,6 +166,8 @@ CYAccountingWeb 是 Web project，**不自動套用 Windows Desktop Visual Guide
 npm install
 npm run dev
 ```
+
+`npm run dev` 會先下載並驗證固定版本的 `sql.js` browser runtime；產生的 `public/vendor/sqljs/` 是 build/runtime 衍生物，不提交 Git。
 
 正式 deploy 不使用 commit 到 Git 的 production Wrangler 檔；CI/CD 由 `wrangler.template.jsonc` 與 Deployment Environment 產生暫時設定。
 

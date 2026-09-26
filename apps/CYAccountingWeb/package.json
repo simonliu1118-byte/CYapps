@@ -4,9 +4,11 @@
   "private": true,
   "description": "CYAccounting Web - Cloudflare Workers + D1",
   "scripts": {
+    "vendor:prepare": "node scripts/prepare-sqljs.mjs",
+    "vendor:clean": "node scripts/prepare-sqljs.mjs --clean",
     "config:render": "node scripts/render-wrangler.mjs --output wrangler.generated.jsonc",
-    "dev": "npm run config:render && wrangler dev --config wrangler.generated.jsonc",
-    "deploy": "node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc && wrangler deploy --config wrangler.deploy.jsonc",
+    "dev": "npm run vendor:prepare && npm run config:render && wrangler dev --config wrangler.generated.jsonc",
+    "deploy": "npm run vendor:prepare && node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc && wrangler deploy --config wrangler.deploy.jsonc",
     "db:migrate:local": "npm run config:render && wrangler d1 migrations apply DB --local --config wrangler.generated.jsonc",
     "db:migrate:remote": "node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc && wrangler d1 migrations apply DB --remote --config wrangler.deploy.jsonc"
   },
