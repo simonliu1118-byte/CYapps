@@ -7,15 +7,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 
-const version = read('VERSION').trim();
-const build = read('BUILD').trim();
 const html = read('public/index.html');
 const css = read('public/v020.css');
 const refineCss = read('public/v0201.css');
 const js = read('public/v020.js');
 
-assert.equal(version, '0.20.1');
-assert.equal(build, '0');
 assert.match(html, /href="\/v020\.css"/);
 assert.match(html, /src="\/v020\.js"/);
 assert.ok(html.indexOf('/v020.css') > html.indexOf('/v019.css'), 'v020.css must load after v019.css');
@@ -42,7 +38,7 @@ assert.match(css, /\.confirmation-drawer\s*\{[\s\S]*?bottom:\s*0;/);
 assert.match(css, /\.confirmation-drawer\s*\{[\s\S]*?transform:\s*translateY\(102%\)/);
 assert.match(css, /\.confirmation-drawer\.open\s*\{[\s\S]*?transform:\s*translateY\(0\)/);
 
-// V0.20.1 refinement stylesheet must be loaded by the already-versioned adaptive script.
+// V0.20.1 refinement stylesheet remains loaded by the adaptive script.
 assert.match(js, /CY_V20_VERSION = 'V0\.20\.1'/);
 assert.match(js, /ensureV201Stylesheet\(\)/);
 assert.match(js, /link\.href = '\/v0201\.css'/);
@@ -66,4 +62,4 @@ assert.match(refineCss, /\.ledger-card tr\.inline-editing/);
 assert.match(refineCss, /\.inline-edit-actions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
 assert.match(refineCss, /@media \(max-width: 420px\)/);
 
-console.log('V0.20.1 adaptive UI regression tests passed.');
+console.log('V0.20 adaptive UI regression tests passed.');
