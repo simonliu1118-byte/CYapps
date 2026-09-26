@@ -1,5 +1,5 @@
 import previousApp from './app-v18.js';
-import { handleV19MigrationApi } from './v19-migration.js';
+import { handleV19MigrationApi } from './v19-migration-safe.js';
 
 const SESSION_COOKIE = 'cyaccounting_session';
 
