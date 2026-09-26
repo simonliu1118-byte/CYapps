@@ -72,15 +72,17 @@ function baseAnalysis() {
   return { snapshot, target, plan };
 }
 
-// Worst supported payload must stay under D1's 50-query Free-plan invocation limit.
+// Worst supported payload must stay under D1's per-invocation/query/string limits.
 const max = baseAnalysis();
 const longSummary = '摘要'.repeat(500); // 1,000 chars.
+const maxHistoricalAccount = '帳'.repeat(200);
+const maxHistoricalCategory = '科'.repeat(200);
 for (let index = 0; index < 10_000; index += 1) {
   max.plan.readyTransactions.push({
     txDate: '2025-12-31',
-    accountName: '歷史帳戶'.repeat(20),
+    accountName: maxHistoricalAccount,
     kind: index % 2 ? 'expense' : 'income',
-    categoryName: '歷史科目'.repeat(20),
+    categoryName: maxHistoricalCategory,
     summary: longSummary,
     amount: 9_999_999,
     createdAt: iso(index),
@@ -99,7 +101,7 @@ for (let index = 0; index < 5_000; index += 1) {
 const maxDb = new CollectingDB();
 const maxBuilt = buildSafeMigrationStatements(max, maxDb, { employee_no: '0001' });
 assert.ok(maxBuilt.statements.length <= 40, `migration batch uses ${maxBuilt.statements.length} statements; expected <= 40`);
-assert.ok(maxBuilt.statements.length + 8 <= 50, 'preview + commit must fit Free-plan 50 queries per invocation');
+assert.ok(maxBuilt.statements.length + 8 <= 50, 'commit analysis + write batch must fit Free-plan 50 D1 queries per invocation');
 for (const statement of maxBuilt.statements) {
   assert.ok(statement.params.length <= 100, `statement has ${statement.params.length} bound parameters`);
   for (const param of statement.params) {
