@@ -19,7 +19,7 @@
 - [x] 逐月鎖帳操作流程（V0.12.0）；設定頁仍保留管理者直接指定鎖帳月份的繞過流程。
 - [x] 單月 Excel 匯出：直接產生標準 `.xlsx`，包含月統計、逐筆餘額與期初餘額工作表（V0.13.0）。
 - [x] Excel 匯入：`.xlsx` 工作表選擇、標題列／欄位對應、預覽、7 位數驗證、鎖帳檢查、重複略過與確認後寫入（V0.15.0）。
-- [ ] 既有 CYAccounting SQLite 帳本匯入／遷移工具。
+- [ ] **CYAccounting SQLite 帳本匯入／遷移工具（V0.19.0）**：實作已完成瀏覽器本機 SQLite 解析、schema/integrity 驗證、SUPER_ADMIN server-side 權限、保守合併預覽、transaction occurrence dedupe、期初餘額／科目結構衝突阻擋、鎖帳只取較嚴格月份與 D1 atomic commit；原始 `.db` 不上傳。待 CI／部署與真實桌面帳本 production acceptance 通過後才勾選完成。
 
 ## 備份／復原與高風險操作
 
