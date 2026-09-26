@@ -98,12 +98,18 @@ assert.equal(legacy.recentRuns.length, 1);
 assert.match(legacy.heading, /Google Cloud Storage/);
 assert.equal(context.window.phaseCAcceptanceUiModelV181({ configured: true }).visible, false);
 
+const renderedHtml = context.backupSettingsHtmlV17();
+assert.match(renderedHtml, /<th>時間<\/th><th>方式<\/th><th>備份 ID<\/th><th>R2<\/th><th>GCS<\/th><th>資料<\/th>/);
+assert.doesNotMatch(renderedHtml, /<th>整體<\/th>/);
+assert.doesNotMatch(renderedHtml, /資料筆數<\/th>/);
+assert.doesNotMatch(renderedHtml, /<th class="num">大小<\/th>/);
+assert.match(renderedHtml, /backupAcceptance/);
+
 assert.match(source, /logical backup/);
 assert.match(source, /cloudflare_r2/);
 assert.match(source, /google_cloud_storage/);
 assert.match(source181, /Phase C 排程驗收/);
 assert.match(source181, /colspan=\"6\"/);
-assert.doesNotMatch(source181, /資料筆數<\/th><th class=\"num\">大小/);
 assert.match(css181, /overflow-x:\s*hidden/);
 assert.match(css181, /min-width:\s*0/);
 assert.doesNotMatch(css181, /min-width:\s*850px/);
