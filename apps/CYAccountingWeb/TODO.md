@@ -66,4 +66,6 @@
 - [ ] 若未來 Chihyuan 企業管理系統整合多個 CY 工具，再統一規劃入口、導覽、角色／App 權限與共用帳號體驗。
 - [ ] Backup 整合優先採「各 App → 共用 CY Backup Service／Worker → app-scoped R2/GCS」；不以直接共用同一把廣權限 storage credential 作為整合方式。
 - [ ] 即使改由共用 Backup Service 管理，各 App 的備份資料仍維持邏輯隔離與獨立還原能力；caller identity 必須由 server-side mapping 決定可存取 dataset，不得只信任 caller 傳入的 `appId`。
-- [ ] 目前共用帳號權威仍暫放 CYInvoice Cloud；等更多程式實際共用後，再評估抽出獨立的 CY Identity／SSO 服務。
+- [ ] 共用員工帳號權威目前仍暫由 **CYInvoice Cloud** 提供；跨 App Identity／SSO 正由 **CY-WEB workstream** 逐步規劃抽離與共用化。CYAccountingWeb 不直接讀取 CYInvoice D1，只透過 `IDENTITY` Service Binding contract 使用帳號能力。
+- [ ] 涉及 Identity authority、跨 App 帳號／角色、shared account database、Service Binding、shared Worker、跨 App D1 ownership 或 shared Backup Service routing 等底層變更時，實作前必須先同步 CY-WEB 最新決策，不由 CYAccountingWeb 單獨先行定義。
+- [ ] 在 shared Identity 正式遷移方案完成前，CYAccountingWeb 仍維持自己的帳務 D1 與 application session 邊界；共用帳號不代表合併 runtime database。
