@@ -7,6 +7,7 @@ It scans final public payloads and intentionally does not require production sec
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import pathlib
 import re
@@ -19,6 +20,17 @@ from typing import BinaryIO
 CHUNK_BYTES = 4 * 1024 * 1024
 OVERLAP_BYTES = 64 * 1024
 MAX_NESTED_ARCHIVE_BYTES = 256 * 1024 * 1024
+# Only decode actual alternating printable ASCII/NUL runs as UTF-16. Removing
+# every NUL byte in a native DLL can join unrelated binary spans into a token.
+UTF16LE_ASCII = re.compile(rb"(?:[\x20-\x7e]\x00){8,}")
+UTF16BE_ASCII = re.compile(rb"(?:\x00[\x20-\x7e]){8,}")
+TRUSTED_DEPENDENCY_BYTES = 2 * 1024 * 1024
+# Microsoft .NET 10 Windows Desktop runtime from the pinned CYEnvelope
+# win-x64 publish. This official native DLL includes a token-shaped string.
+# Only this exact file digest is exempt; changed DLLs are scanned normally.
+TRUSTED_DEPENDENCIES = {
+    "PresentationNative_cor3.dll": "42e2e543c17e1b37499baf00d956433b8afb655348ec0fae89c926fb7d149b6e",
+}
 
 FORBIDDEN_NAMES = [
     re.compile(r"(^|/)(\.env)(\..+)?$", re.I),
@@ -69,9 +81,11 @@ def patterns_for(label: str) -> list[tuple[str, re.Pattern[bytes]]]:
 
 def scan_chunk(label: str, data: bytes, findings: list[str]) -> bool:
     variants = [data]
-    # Removing NULs catches common UTF-16LE/BE embedded strings without decoding huge binaries.
+    # Full NUL removal can create a token that does not exist as a string in
+    # the payload. Inspect contiguous UTF-16 ASCII strings instead.
     if b"\x00" in data:
-        variants.append(data.replace(b"\x00", b""))
+        variants.extend(match.group()[::2] for match in UTF16LE_ASCII.finditer(data))
+        variants.extend(match.group()[1::2] for match in UTF16BE_ASCII.finditer(data))
     for description, pattern in patterns_for(label):
         for variant in variants:
             if pattern.search(variant):
@@ -82,6 +96,14 @@ def scan_chunk(label: str, data: bytes, findings: list[str]) -> bool:
 
 def scan_stream(label: str, stream: BinaryIO, findings: list[str]) -> None:
     overlap = b""
+    basename = normalize_name(label).split("!")[-1].split("/")[-1]
+    if basename in TRUSTED_DEPENDENCIES:
+        candidate = stream.read(TRUSTED_DEPENDENCY_BYTES + 1)
+        if len(candidate) <= TRUSTED_DEPENDENCY_BYTES and hashlib.sha256(candidate).hexdigest() == TRUSTED_DEPENDENCIES[basename]:
+            return
+        if scan_chunk(label, candidate, findings):
+            return
+        overlap = candidate[-OVERLAP_BYTES:]
     while True:
         chunk = stream.read(CHUNK_BYTES)
         if not chunk:
