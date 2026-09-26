@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.Versioning;
 
 namespace CYERPAutoInput;
@@ -13,6 +14,10 @@ internal static class Program
         if (args.Any(a => a.Equals("--vision-self-test", StringComparison.OrdinalIgnoreCase)))
             return VisionSelfTest.RunAsync(logger).GetAwaiter().GetResult();
 
+        var appIdHr = NativeMethods.SetCurrentProcessExplicitAppUserModelID("Chihyuan.CYERPAutoInput");
+        if (appIdHr != 0)
+            logger.Warn("app", $"SetCurrentProcessExplicitAppUserModelID failed HRESULT=0x{appIdHr:X8}");
+
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
@@ -27,7 +32,19 @@ internal static class Program
         var form = new MainForm(logger);
         try
         {
-            form.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            using var iconStream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream("CYERPAutoInput.Auto.ico");
+            if (iconStream is not null)
+            {
+                using var embeddedIcon = new Icon(iconStream);
+                form.Icon = (Icon)embeddedIcon.Clone();
+                logger.Info("app", "window/taskbar icon loaded from embedded canonical Auto.ico");
+            }
+            else
+            {
+                form.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                logger.Warn("app", "embedded canonical icon missing; used executable associated icon fallback");
+            }
         }
         catch (Exception ex)
         {

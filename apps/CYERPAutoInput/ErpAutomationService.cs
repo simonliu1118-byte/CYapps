@@ -364,13 +364,22 @@ internal sealed class ErpAutomationService
         }
         else
         {
-            var before = NativeMethods.WindowText(focus);
+            var editorBefore = NativeMethods.WindowText(focus).Trim();
+            var targetBefore = NativeMethods.WindowText(target.Handle).Trim();
+            var targetIsLookupDbEdit = field.Kind == FieldKind.Lookup &&
+                                       target.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase);
+            var before = targetIsLookupDbEdit ? targetBefore : editorBefore;
+
             if (before == value)
             {
                 InputSender.Press(NativeMethods.VK_TAB);
                 await Delay(field.Kind == FieldKind.Lookup ? 420 : 180, cancellationToken);
                 return;
             }
+
+            if (targetIsLookupDbEdit && targetBefore.Length == 0 && editorBefore.Length > 0)
+                _log.Info("field", $"lookup target is blank; ignored retained inner-editor text key={field.Key} editor_class={NativeMethods.ClassName(focus)} editor_len={editorBefore.Length}");
+
             if (!string.IsNullOrWhiteSpace(before))
                 throw new InvalidOperationException($"ERP 欄位「{field.Label}」目前已有內容；為避免覆蓋既有值已停止。");
         }

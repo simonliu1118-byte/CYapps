@@ -30,6 +30,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="assets\Auto.ico" LogicalName="CYERPAutoInput.Auto.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="runtime\ocr\*.onnx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

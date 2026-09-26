@@ -184,6 +184,9 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     internal static extern short GetAsyncKeyState(int vKey);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    internal static extern int SetCurrentProcessExplicitAppUserModelID(string appID);
+
     internal static string WindowText(nint hwnd)
     {
         if (hwnd == 0) return string.Empty;

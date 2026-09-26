@@ -56,6 +56,7 @@ CYERPAutoInput 使用 AITeam CY App Icon Family 的正式 `Auto` 資產：
 - Canonical revision：`887633147ef363b5b412458f687354293159c131`
 - Windows icon：`shared/cy-visual/icon-family/apps/erp-autoinput/Auto.ico`
 - Auto.ico SHA-256：`b35e87231fcd3238a4e7d73a687225d282bd1d60fe9de937f23de59393cc8e11`
+- Windows 執行時同時以 managed embedded resource 指派同一份 `Auto.ico`，並設定固定 AppUserModelID，避免 single-file 執行時工作列退回通用圖示。
 
 ## 安全設計
 
