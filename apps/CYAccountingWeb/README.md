@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current formal baseline: **V0.19.0 Build 0**（2026-09-27）
+> Current formal baseline: **V0.19.0 Build 1**（2026-09-27）
 
 ## 專案定位
 
@@ -80,6 +80,7 @@ CYAccountingWeb 自己的 D1 建立本系統 web session
 - 單月 `.xlsx` 匯出；
 - `.xlsx` 匯入、欄位對應、預覽、驗證與重複略過；
 - **V0.19.0 CYAccounting SQLite 帳本移轉工具**：瀏覽器本機解析 `.db`、schema/integrity 驗證、保守合併預覽、重複資料判斷、衝突阻擋與 D1 atomic commit；僅 `SUPER_ADMIN` 可執行；
+- **V0.19.0 Build 1 D1 寫入安全修正**：bulk insert 改採 JSON1 展開，限制單一 JSON payload 與 batch statement 數，符合 D1 bound-parameter、2 MB string/row 與 Free plan 每 invocation query 上限；
 - Tiered Backup Phase A / B；
 - Phase C R2 + GCS parallel dual-provider production path 與狀態 UI。
 
@@ -117,7 +118,8 @@ D1 atomic batch commit
 - 同月份／帳戶的期初餘額若金額不同，視為衝突並阻擋；
 - 同名科目若已存在於不同大分類，既有 Web 帳本採阻擋而不偷偷改分類；
 - 鎖帳只會維持或變得更嚴格，不會因來源帳本而解鎖既有月份；
-- 同一來源檔 SHA-256 已有成功移轉紀錄時，預設阻擋再次提交。
+- 同一來源檔 SHA-256 已有成功移轉紀錄時，預設阻擋再次提交；
+- Build 1 將 bulk D1 write 改為單一 JSON bind + `json_each(?)` 展開，交易以最多 400 筆／statement、期初餘額最多 1,000 筆／statement 寫入，並在送出前限制整體 batch statement 數。
 
 桌面版使用 SQLite WAL；選擇目前使用中的 `Data/CYaccounting.db` 前應先關閉 CYAccounting，或使用最近完成且已驗證的桌面備份，避免只取得尚未 checkpoint 的主資料庫檔。
 
