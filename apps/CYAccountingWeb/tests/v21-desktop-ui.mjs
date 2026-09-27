@@ -34,6 +34,7 @@ const build14Js = read('public/v021b14.js');
 const build15Js = read('public/v021b15.js');
 const build16Js = read('public/v021b16.js');
 const patchJs = read('public/v0211.js');
+const keyboardJs = read('public/v0211-keyboard.js');
 const v03 = read('public/v03.js');
 const v06 = read('public/v06.js');
 const v07 = read('public/v07.js');
@@ -49,14 +50,16 @@ assert.match(build11Js, /ensureV21Build14Script\(\)/);
 assert.match(build11Js, /ensureV21Build15Script\(\)/);
 assert.match(build11Js, /ensureV21Build16Script\(\)/);
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
+assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0211\.js'/);
+assert.match(build11Js, /script\.src = '\/v0211-keyboard\.js'/);
 assert.match(build12Js, /CY_V21_BUILD12_VERSION = 'V0\.21\.0 Build 12'/);
 assert.match(build13Js, /CY_V21_BUILD13_VERSION = 'V0\.21\.0 Build 13'/);
 assert.match(build14Js, /CY_V21_BUILD14_VERSION = 'V0\.21\.0 Build 14'/);
 assert.match(build15Js, /CY_V21_BUILD15_VERSION = 'V0\.21\.0 Build 15'/);
 assert.match(build16Js, /CY_V21_BUILD16_VERSION = 'V0\.21\.0 Build 16'/);
 assert.match(patchJs, /CY_V0211_VERSION = 'V0\.21\.1'/);
-for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs]) {
+for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, keyboardJs]) {
   assert.doesNotThrow(() => new Function(js), 'V0.21 overlay JavaScript must parse');
 }
 
@@ -99,6 +102,9 @@ assert.match(v03, /enterStep\(els\.summary,[\s\S]*?els\.amount\?\.focus\(\)/);
 assert.match(v03, /enterStep\(els\.amount,[\s\S]*?els\.form\.requestSubmit\(\)/);
 assert.match(v03, /cyFocusSummaryAfterSave[\s\S]*?els\.summary\.focus\(\)/);
 assert.match(v07, /event\.key !== 'Tab'/);
+assert.match(keyboardJs, /event\.key === 'Enter'[\s\S]*?#summary/);
+assert.match(keyboardJs, /event\.key === 'Tab'[\s\S]*?setEntryKind/);
+assert.match(keyboardJs, /new KeyboardEvent\('keydown'/);
 
 // Normal connection state is silent; warnings remain visible.
 assert.match(build13Js, /setupV21Build13ConnectionStatus\(\)/);
@@ -130,12 +136,11 @@ assert.match(patchCss, /\.v0211-account-row \.v21-edit-name-button\[hidden\]/);
 assert.match(patchJs, /renderV0211AccountManager/);
 assert.match(patchJs, /window\.renderV21Build15AccountManager = renderV0211AccountManager/);
 
-// Category manager has exactly one patch-owned hierarchy; no legacy card/move controls are rendered.
+// Category manager has exactly one patch-owned hierarchy; legacy observer pollution is detected and overwritten.
 assert.match(patchJs, /renderV0211CategoryManager/);
 assert.match(patchJs, /data-v0211-manager-kind="income"/);
 assert.match(patchJs, /data-v21-drag-group/);
 assert.match(patchJs, /data-v21-drag-category/);
-assert.doesNotMatch(patchJs, /data-v11-move-category|data-v11-move-group|data-v12-category-transfer/);
 assert.doesNotMatch(patchJs, /class="category-item/);
 assert.match(patchJs, /\.category-item, \.order-button, \[data-v12-category-transfer\]/);
 assert.match(patchCss, /v0211-category-income[\s\S]*?background:\s*#f4fbf6/);
