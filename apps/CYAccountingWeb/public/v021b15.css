@@ -1,0 +1,290 @@
+/* V0.21.0 Build 15 - refined business managers with drag reorder. */
+
+@media (min-width: 1024px) {
+  /* Header management actions: identical visual language to Settings. */
+  .topbar #headerAccountManagerButton,
+  .topbar #headerCategoryManagerButton,
+  .topbar #settingsButton {
+    min-width: 0 !important;
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 4px 10px !important;
+    border: 1px solid #dde3ea !important;
+    border-radius: 6px !important;
+    background: #f8f9fb !important;
+    color: #526174 !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    line-height: 1 !important;
+  }
+
+  .topbar #headerAccountManagerButton:hover:not(:disabled),
+  .topbar #headerCategoryManagerButton:hover:not(:disabled),
+  .topbar #settingsButton:hover:not(:disabled) {
+    border-color: #cfd7e1 !important;
+    background: #eef1f4 !important;
+    color: #344054 !important;
+  }
+
+  /* Account manager: drag -> fixed-width default tag -> name/edit -> delete. */
+  #settingsDialog.v21-management-mode[data-management-pane="accounts"] {
+    width: min(430px, calc(100vw - 36px)) !important;
+    max-width: 430px !important;
+  }
+
+  .v21-account-manager-row {
+    display: grid !important;
+    grid-template-columns: 24px 66px minmax(0, 1fr) auto !important;
+    align-items: center;
+    gap: 6px !important;
+    min-height: 39px !important;
+    padding: 4px 7px !important;
+    border-color: #e1e6ec !important;
+    background: #fff !important;
+  }
+
+  .v21-manager-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .v21-default-tag {
+    width: 66px;
+    min-width: 66px;
+    height: 23px;
+    min-height: 23px;
+    padding: 1px 5px;
+    border: 1px solid #d9e0e7;
+    border-radius: 999px;
+    background: #fff;
+    color: #687789;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .v21-default-tag.active {
+    border-color: #cfe3d3;
+    background: #f0f8f2;
+    color: #336d43;
+    cursor: default;
+  }
+
+  .v21-default-tag:disabled {
+    opacity: 1;
+  }
+
+  .v21-manager-delete {
+    min-width: 42px;
+  }
+
+  .v21-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 24px;
+    height: 27px;
+    min-height: 27px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #9aa5b1;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1;
+    cursor: grab;
+    user-select: none;
+  }
+
+  .v21-drag-handle:hover {
+    background: #f0f3f6;
+    color: #667789;
+  }
+
+  .v21-drag-handle:active,
+  .v21-manager-dragging .v21-drag-handle {
+    cursor: grabbing;
+  }
+
+  .v21-is-dragging {
+    opacity: .42;
+  }
+
+  .v21-drop-before,
+  .v21-drop-after {
+    position: relative;
+  }
+
+  .v21-drop-before::before,
+  .v21-drop-after::after {
+    content: "";
+    position: absolute;
+    z-index: 8;
+    left: 7px;
+    right: 7px;
+    height: 2px;
+    border-radius: 2px;
+    background: #4d88bb;
+    pointer-events: none;
+  }
+
+  .v21-drop-before::before { top: -2px; }
+  .v21-drop-after::after { bottom: -2px; }
+
+  /* Category manager: same segmented control as entry + mode tint. */
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] {
+    width: min(620px, calc(100vw - 36px)) !important;
+    max-width: 620px !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] .settings-content {
+    padding: 10px 12px 12px !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] .pane-heading {
+    display: none !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
+    margin: 0;
+    padding: 10px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].v21-category-kind-income {
+    border-color: #cfe6d5;
+    background: #f4fbf6;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].v21-category-kind-expense {
+    border-color: #edd1ce;
+    background: #fff6f5;
+  }
+
+  .v21-category-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 9px;
+  }
+
+  .v21-category-kind-switch {
+    width: 156px !important;
+    height: 32px !important;
+  }
+
+  .v21-category-manager-list {
+    overflow: hidden;
+    border: 1px solid rgba(211, 219, 227, .95);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .78);
+  }
+
+  .v21-category-group {
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  .v21-category-group + .v21-category-group {
+    border-top: 1px solid #dde4ea !important;
+  }
+
+  .v21-category-group-head {
+    display: grid !important;
+    grid-template-columns: 24px minmax(0, 1fr) 27px auto !important;
+    align-items: center;
+    gap: 5px !important;
+    min-height: 38px !important;
+    padding: 5px 7px !important;
+    background: rgba(247, 249, 251, .92) !important;
+  }
+
+  .v21-category-group-head .category-group-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #344054;
+  }
+
+  .v21-category-items {
+    padding: 0 !important;
+    min-height: 35px;
+  }
+
+  .v21-category-manager-row {
+    display: grid !important;
+    grid-template-columns: 24px 27px minmax(0, 1fr) 27px auto !important;
+    align-items: center;
+    gap: 5px !important;
+    min-height: 36px !important;
+    padding: 4px 7px 4px 16px !important;
+    border-bottom: 1px solid #edf1f4 !important;
+    background: rgba(255, 255, 255, .76);
+  }
+
+  .v21-category-manager-row .v21-editable-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13.5px;
+  }
+
+  .v21-category-empty {
+    min-height: 34px;
+    padding: 8px 16px;
+    border-bottom: 1px solid #edf1f4;
+    color: #8793a0;
+    font-size: 12px;
+  }
+
+  .v21-category-add-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 6px !important;
+    margin: 0 !important;
+    padding: 6px 7px 7px 16px !important;
+    background: rgba(252, 253, 254, .92);
+  }
+
+  .v21-category-add-row input,
+  .v21-category-add-row button {
+    min-height: 30px !important;
+    height: 30px !important;
+  }
+
+  .v21-category-empty-state {
+    margin: 0;
+    border: 1px dashed #d8e0e6;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .65);
+  }
+
+  .v21-drop-group {
+    box-shadow: inset 0 0 0 2px rgba(77, 136, 187, .28);
+  }
+
+  /* Group add row belongs to the tinted manager surface. */
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add {
+    margin-top: 8px !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add input,
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add button {
+    min-height: 32px;
+    height: 32px;
+  }
+}
