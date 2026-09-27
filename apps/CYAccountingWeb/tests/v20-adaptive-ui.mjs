@@ -21,7 +21,7 @@ assert.ok(html.indexOf('/v020.js') > html.indexOf('/v019.js'), 'v020.js must loa
 assert.match(css, /@media \(min-width: 768px\) and \(max-width: 1023px\)/);
 assert.match(css, /@media \(max-width: 767px\)/);
 
-// Phase 1 mobile entry remains a single-column touch form.
+// Phase 1 mobile entry remains a single-column touch form before later adaptive overrides.
 assert.match(css, /@media \(max-width: 767px\)[\s\S]*?\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*1fr;/);
 assert.match(css, /\.entry-grid input,[\s\S]*?min-height:\s*44px;/);
 
@@ -63,3 +63,6 @@ assert.match(refineCss, /\.inline-edit-actions\s*\{[\s\S]*?grid-template-columns
 assert.match(refineCss, /@media \(max-width: 420px\)/);
 
 console.log('V0.20 adaptive UI regression tests passed.');
+
+// Current adaptive behavior layers on top of the V0.20 baseline.
+await import('./v21-adaptive-ui.mjs');
