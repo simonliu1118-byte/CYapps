@@ -506,7 +506,7 @@ function ensureV0211DatePicker(input) {
     trigger.setAttribute('aria-expanded', 'true');
   };
 
-  const close = focus = false => {
+  const close = (focus = false) => {
     popover.hidden = true;
     trigger.setAttribute('aria-expanded', 'false');
     if (focus) trigger.focus();
