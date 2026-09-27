@@ -1,0 +1,562 @@
+/* V0.21.0 Build 3 - Desktop visual hierarchy and design-system convergence.
+   Desktop-only visual layer. The approved income/expense slider and mode colors are intentionally untouched. */
+
+@media (min-width: 1024px) {
+  :root {
+    --cy-text: #1f2937;
+    --cy-text-muted: #667085;
+    --cy-text-subtle: #8993a3;
+    --cy-border: #e5e9ef;
+    --cy-surface-muted: #f7f8fa;
+  }
+
+  body {
+    font-weight: 400;
+  }
+
+  .topbar {
+    min-height: 62px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .topbar h1 {
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  .topbar p {
+    color: #8a94a3;
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  .topbar-actions {
+    align-items: center;
+    gap: 5px;
+  }
+
+  .current-user {
+    display: grid;
+    gap: 1px;
+    max-width: 240px;
+    padding: 2px 8px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--cy-text);
+    line-height: 1.25;
+  }
+
+  .current-user-main {
+    overflow: hidden;
+    font-size: 12.5px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .current-user-role {
+    overflow: hidden;
+    color: #8a94a3;
+    font-size: 10.5px;
+    font-weight: 400;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar .secondary.compact {
+    min-height: 28px;
+    padding: 4px 8px;
+    border: 0;
+    background: transparent;
+    color: #526071;
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+
+  .topbar .secondary.compact:hover:not(:disabled) {
+    background: #f1f3f6;
+  }
+
+  .status,
+  .status.ok {
+    min-height: 28px;
+    padding: 5px 7px 5px 20px;
+    border: 0;
+    background: transparent;
+    font-size: 11.5px;
+    font-weight: 400;
+  }
+
+  .status::before {
+    left: 8px;
+    width: 6px;
+    height: 6px;
+  }
+
+  .card {
+    border-color: var(--cy-border);
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, .025);
+  }
+
+  .section-title h2,
+  .ledger-title h2 {
+    font-weight: 600;
+  }
+
+  label > span,
+  legend {
+    color: #6d7786;
+    font-weight: 500;
+  }
+
+  .primary,
+  .secondary {
+    font-weight: 500;
+  }
+
+  .entry-card #saveButton {
+    width: 110px;
+    min-height: 37px;
+    border-color: #35669f;
+    background: #3b6fa9;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .entry-card #saveButton:hover:not(:disabled) {
+    border-color: #315d91;
+    background: #35669f;
+  }
+
+  .quick-tool-label,
+  .quick-chip {
+    font-weight: 500;
+  }
+
+  .keyboard-hint {
+    display: none !important;
+  }
+
+  .entry-card .section-title {
+    position: relative;
+  }
+
+  .entry-help-button {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid #dfe5ec;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .72);
+    color: #6c7888;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 24px;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .entry-help-button:hover,
+  .entry-help-button[aria-expanded="true"] {
+    border-color: #cdd5df;
+    background: #fff;
+    color: #334155;
+  }
+
+  .entry-help-popover {
+    position: absolute;
+    top: 34px;
+    right: 0;
+    z-index: 20;
+    width: min(330px, calc(100vw - 48px));
+    padding: 13px 14px;
+    border: 1px solid #dfe5ec;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, .12);
+    color: #475467;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.55;
+  }
+
+  .entry-help-popover[hidden] {
+    display: none;
+  }
+
+  .entry-help-popover strong {
+    display: block;
+    margin-bottom: 7px;
+    color: #253247;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .entry-help-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 5px 10px;
+    align-items: baseline;
+  }
+
+  .entry-help-grid kbd {
+    padding: 1px 5px;
+    border: 1px solid #d8dee7;
+    border-radius: 4px;
+    background: #f7f8fa;
+    color: #344054;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .ledger-card {
+    box-shadow: 0 2px 10px rgba(15, 23, 42, .025);
+  }
+
+  .ledger-title {
+    display: block;
+    padding: 14px 18px 11px;
+  }
+
+  .ledger-title > div:first-child {
+    width: 100%;
+  }
+
+  .ledger-title .title-with-badge {
+    min-height: 20px;
+  }
+
+  .ledger-title h2 {
+    color: #596678;
+    font-size: 13px;
+    letter-spacing: .01em;
+  }
+
+  .v21-ledger-context {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: 4px;
+  }
+
+  .v21-ledger-context .ledger-month-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .v21-ledger-context .month-picker {
+    display: block;
+    margin: 0;
+  }
+
+  .v21-ledger-context .month-picker > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  #monthFilter {
+    width: 176px;
+    height: 34px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #1d2939;
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    box-shadow: none;
+  }
+
+  #monthFilter:hover,
+  #monthFilter:focus {
+    border: 0;
+    background: #f7f8fa;
+    box-shadow: none;
+  }
+
+  #monthFilter::-webkit-calendar-picker-indicator {
+    opacity: .58;
+    cursor: pointer;
+  }
+
+  #ledgerPrevMonth,
+  #ledgerNextMonth {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #718096;
+    font-size: 17px;
+    font-weight: 400;
+  }
+
+  #ledgerPrevMonth:hover:not(:disabled),
+  #ledgerNextMonth:hover:not(:disabled) {
+    background: #f0f2f5;
+    color: #344054;
+  }
+
+  #ledgerDisplayMonth {
+    display: none;
+  }
+
+  #monthSummary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 13px;
+    margin-top: 6px;
+  }
+
+  .ledger-summary-item {
+    color: #7b8796;
+    font-size: 11.5px;
+    font-weight: 400;
+  }
+
+  .ledger-summary-item strong {
+    color: #4a5565;
+    font-weight: 500;
+  }
+
+  .ledger-summary-item.ending strong {
+    color: #25364a;
+    font-weight: 600;
+  }
+
+  .ledger-desktop-tools {
+    min-height: 40px;
+    gap: 8px;
+    padding: 5px 10px;
+    border-top-color: #edf0f4;
+    border-bottom-color: #e8ecf1;
+    background: #fafbfc;
+  }
+
+  .ledger-period-tools,
+  .ledger-view-tools {
+    gap: 4px;
+    padding: 0;
+  }
+
+  .ledger-desktop-tools input {
+    height: 29px;
+    min-height: 29px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 400;
+  }
+
+  .ledger-desktop-tools .secondary.compact {
+    height: 28px;
+    min-height: 28px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #ledgerOpeningBalanceButton,
+  #ledgerExcelExport {
+    border: 1px solid #e1e6ec;
+    background: #f7f8fa;
+    color: #536174;
+  }
+
+  #ledgerOpeningBalanceButton:hover:not(:disabled),
+  #ledgerExcelExport:hover:not(:disabled) {
+    border-color: #d7dde5;
+    background: #eef1f4;
+    color: #344054;
+  }
+
+  #ledgerSearchForm button[type="submit"] {
+    border: 0;
+    background: #edf3f8;
+    color: #355f87;
+  }
+
+  #ledgerSearchClear {
+    border: 0;
+    background: transparent;
+    color: #7b8796;
+    font-weight: 400;
+  }
+
+  #ledgerSearchClear:hover:not(:disabled) {
+    background: #f0f2f4;
+    color: #475467;
+  }
+
+  #ledgerGroupToggle,
+  #ledgerExcelImport {
+    font-weight: 500;
+  }
+
+  th {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    color: #5f6c7c;
+    font-size: 12.5px;
+    font-weight: 550;
+    letter-spacing: 0;
+  }
+
+  td {
+    color: #344054;
+    font-size: 13.5px;
+    font-weight: 400;
+  }
+
+  td.num,
+  .ledger-balance {
+    font-weight: 500;
+  }
+
+  .kind-tag,
+  .row-action {
+    font-weight: 500;
+  }
+
+  .ledger-account-header {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .ledger-account-header:hover {
+    background: #f1f4f7;
+    color: #334155;
+  }
+
+  .ledger-account-header.v21-account-group-active {
+    color: #315f8a;
+  }
+
+  .ledger-empty-state {
+    display: grid;
+    place-items: center;
+    gap: 4px;
+    min-height: 180px;
+    color: #8a94a3;
+    text-align: center;
+  }
+
+  .ledger-empty-state strong {
+    color: #667085;
+    font-size: 13.5px;
+    font-weight: 500;
+  }
+
+  .ledger-empty-state span {
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .v21-inline-confirmation .confirmation-drawer-header h2 {
+    font-weight: 600;
+  }
+
+  .v21-inline-confirmation .confirmation-main {
+    font-size: 12.5px;
+    font-weight: 400;
+  }
+
+  .v21-inline-confirmation .confirmation-status,
+  .v21-inline-confirmation .confirmation-drawer-header .hint {
+    font-weight: 400;
+  }
+
+  .settings-tab {
+    font-weight: 500;
+  }
+
+  .settings-pane h3,
+  .modal-header h2 {
+    font-weight: 600;
+  }
+
+  .mini-button {
+    font-weight: 500;
+  }
+
+  .v21-data-pane {
+    display: grid;
+    gap: 14px;
+  }
+
+  .v21-data-section {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid #e6eaf0;
+    border-radius: 10px;
+    background: #fbfcfd;
+  }
+
+  .v21-data-section h4 {
+    margin: 0;
+    color: #344054;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+
+  .v21-data-section p {
+    margin: 0;
+    color: #7b8796;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.55;
+  }
+
+  .v21-data-actions {
+    display: flex;
+    gap: 7px;
+    margin-top: 2px;
+  }
+
+  .v21-data-actions #ledgerExcelImport {
+    min-height: 30px;
+    padding: 5px 10px;
+    border: 1px solid #dde3ea;
+    border-radius: 6px;
+    background: #fff;
+    color: #475467;
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+}
+
+@media (min-width: 1360px) {
+  .v21-entry-rail .entry-grid > #saveButton {
+    width: 110px;
+  }
+
+  .v21-split-layout > .ledger-card {
+    min-height: 0;
+    align-self: start;
+  }
+
+  .v21-split-layout > .ledger-card .table-wrap {
+    min-height: 250px;
+  }
+
+  .v21-split-layout > .ledger-card .ledger-desktop-tools {
+    grid-template-columns: auto minmax(260px, 1fr) auto;
+  }
+}

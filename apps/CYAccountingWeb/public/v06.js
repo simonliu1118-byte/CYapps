@@ -36,9 +36,7 @@ function setupLedgerDesktopTools() {
       <button class="secondary compact" type="submit">搜尋</button>
       <button id="ledgerSearchClear" class="secondary compact" type="button">清除</button>
     </form>
-    <div class="ledger-view-tools">
-      <button id="ledgerGroupToggle" class="secondary compact" type="button" aria-pressed="false">帳戶分組</button>
-    </div>
+    <div class="ledger-view-tools"></div>
   `;
   title.insertAdjacentElement('afterend', tools);
   document.querySelector('#ledgerMonthSlot')?.append(monthPicker);
@@ -58,13 +56,9 @@ function bindLedgerDesktopTools() {
     cyLedgerSearch = '';
     renderDesktopLedger();
   });
-  document.querySelector('#ledgerGroupToggle')?.addEventListener('click', () => {
-    cyLedgerGroupByAccount = !cyLedgerGroupByAccount;
-    updateLedgerGroupButton();
-    renderDesktopLedger();
-  });
   els.monthFilter?.addEventListener('change', () => {
     cyLedgerOpeningData = null;
+    cyLedgerGroupByAccount = false;
     scheduleLedgerDesktopRefresh();
   });
 }
@@ -124,9 +118,10 @@ function renderDesktopLedger() {
   const endingTotal = openingTotal + income - expense;
 
   const query = cyLedgerSearch.toLocaleLowerCase('zh-Hant');
-  const visible = query
+  const visible = (query
     ? allTransactions.filter(tx => String(tx.summary || '').toLocaleLowerCase('zh-Hant').includes(query))
-    : [...allTransactions];
+    : [...allTransactions]
+  ).sort(compareLedgerChronological);
 
   els.monthSummary.innerHTML = `<span class="ledger-summary-item">期初 <strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item income">收入 <strong>${money(income)}</strong></span><span class="ledger-summary-item expense">支出 <strong>${money(expense)}</strong></span><span class="ledger-summary-item">淨利損 <strong>${money(income - expense)}</strong></span><span class="ledger-summary-item ending">期末 <strong>${money(endingTotal)}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
   const display = document.querySelector('#ledgerDisplayMonth');
@@ -178,12 +173,8 @@ function compareLedgerChronological(left, right) {
 }
 
 function renderGroupedLedgerRows(visible, allTransactions, openingMap, calculated) {
-  const currentOrder = new Map((state.accounts || []).map((account, index) => [account.name, index]));
-  const names = [...new Set(visible.map(tx => String(tx.account_name || '')))].sort((a, b) => {
-    const ai = currentOrder.has(a) ? currentOrder.get(a) : Number.MAX_SAFE_INTEGER;
-    const bi = currentOrder.has(b) ? currentOrder.get(b) : Number.MAX_SAFE_INTEGER;
-    return ai - bi || a.localeCompare(b, 'zh-Hant');
-  });
+  const collator = new Intl.Collator('zh-Hant-TW', { numeric: true, sensitivity: 'base' });
+  const names = [...new Set(visible.map(tx => String(tx.account_name || '')))].sort((a, b) => collator.compare(a, b));
 
   return names.map(name => {
     const rows = visible.filter(tx => tx.account_name === name).sort(compareLedgerChronological);
@@ -211,10 +202,11 @@ function renderLedgerRow(tx, balance) {
 function updateLedgerHeader() {
   const row = document.querySelector('.ledger-card thead tr');
   if (!row) return;
-  row.innerHTML = '<th>日期</th><th id="ledgerAccountHeader" class="ledger-account-header" title="點擊切換帳戶分組">帳戶</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="num">餘額</th><th class="action-col">操作</th>';
+  const accountLabel = cyLedgerGroupByAccount ? '帳戶 ▲' : '帳戶';
+  const accountTitle = cyLedgerGroupByAccount ? '點擊取消帳戶排列' : '點擊依帳戶排列';
+  row.innerHTML = `<th>日期</th><th id="ledgerAccountHeader" class="ledger-account-header${cyLedgerGroupByAccount ? ' v21-account-group-active' : ''}" title="${accountTitle}" aria-pressed="${cyLedgerGroupByAccount ? 'true' : 'false'}">${accountLabel}</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="num">餘額</th><th class="action-col">操作</th>`;
   row.querySelector('#ledgerAccountHeader')?.addEventListener('click', () => {
     cyLedgerGroupByAccount = !cyLedgerGroupByAccount;
-    updateLedgerGroupButton();
     renderDesktopLedger();
   });
 }
@@ -222,9 +214,7 @@ function updateLedgerHeader() {
 function updateLedgerGroupButton() {
   const button = document.querySelector('#ledgerGroupToggle');
   if (!button) return;
-  button.classList.toggle('active', cyLedgerGroupByAccount);
-  button.setAttribute('aria-pressed', cyLedgerGroupByAccount ? 'true' : 'false');
-  button.textContent = cyLedgerGroupByAccount ? '帳戶分組：開' : '帳戶分組';
+  button.remove();
 }
 
 function writeLedgerRows(html) {
