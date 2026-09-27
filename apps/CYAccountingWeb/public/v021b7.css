@@ -1,0 +1,350 @@
+/* V0.21.0 Build 7 - Desktop settings cleanup and header alignment.
+   Desktop-only. Keeps approved quick-entry colors, slider, ledger behavior and accounting semantics unchanged. */
+
+@media (min-width: 1024px) {
+  /* Header order and account cluster alignment. */
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 9px;
+  }
+
+  .topbar #settingsButton {
+    order: 0 !important;
+  }
+
+  .v21-account-cluster {
+    order: 1 !important;
+    display: flex;
+    align-items: center;
+    height: 30px;
+    min-height: 30px;
+    overflow: hidden;
+    border: 1px solid #dde3ea;
+    border-radius: 6px;
+    background: #f8f9fb;
+  }
+
+  .v21-account-cluster .current-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: none;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 11px;
+    overflow: visible;
+    line-height: 1;
+  }
+
+  .v21-account-cluster .current-user-main,
+  .v21-account-cluster .current-user-role {
+    display: inline-flex;
+    align-items: center;
+    overflow: visible;
+    line-height: 1;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+
+  .v21-account-cluster .current-user-main {
+    color: #273548;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .v21-account-cluster .current-user-role {
+    gap: 8px;
+    margin: 0;
+    color: #667085;
+    font-size: 11.5px;
+    font-weight: 400;
+  }
+
+  .v21-account-cluster .current-user-role::before {
+    content: "·";
+    display: inline-flex;
+    align-items: center;
+    color: #a1aab6;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .v21-account-cluster #logoutButton {
+    align-self: stretch;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 11px;
+    border-left-color: #d9dfe7;
+    line-height: 1;
+  }
+
+  /* Settings is a compact work surface, not a documentation page. */
+  .settings-modal {
+    width: min(820px, calc(100% - 36px));
+    max-height: min(680px, calc(100vh - 32px));
+    border-color: #dde3ea;
+    border-radius: 12px;
+  }
+
+  .settings-modal > .modal-header {
+    align-items: center;
+    padding: 14px 16px 12px;
+  }
+
+  .settings-modal > .modal-header h2 {
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  .settings-modal > .modal-header p {
+    display: none !important;
+  }
+
+  .settings-modal > .modal-header .icon-button {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 21px;
+    line-height: 26px;
+  }
+
+  .settings-modal > .modal-header .icon-button:hover {
+    border-color: #e1e6ec;
+    background: #f5f7f9;
+  }
+
+  .settings-layout {
+    grid-template-columns: 132px minmax(0, 1fr);
+    min-height: 430px;
+  }
+
+  .settings-nav {
+    gap: 2px;
+    padding: 9px 8px;
+    background: #f7f8fa;
+  }
+
+  .settings-tab {
+    min-height: 34px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    color: #536174;
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+
+  .settings-tab.active {
+    background: #fff;
+    color: #315f8a;
+    font-weight: 600;
+    box-shadow: inset 2px 0 0 #4b83b5, 0 1px 2px rgba(15, 23, 42, .03);
+  }
+
+  .settings-content {
+    padding: 16px 18px 18px;
+  }
+
+  .settings-pane h3 {
+    margin: 0 0 11px;
+    color: #273548;
+    font-size: 15.5px;
+    font-weight: 600;
+  }
+
+  /* Build 3 accidentally forced Data Management visible on every tab. */
+  .settings-pane.v21-data-pane {
+    display: none;
+  }
+
+  .settings-pane.v21-data-pane.active {
+    display: grid;
+    gap: 10px;
+  }
+
+  /* Remove static helper prose; validation/status messages remain visible. */
+  .settings-pane > .hint,
+  .settings-pane .pane-heading .hint,
+  .quick-settings-explain,
+  #backupHeadingHint,
+  .backup-security-note,
+  .backup-restore-note,
+  .migration-heading-v19 .hint,
+  .migration-privacy-v19,
+  .v21-data-section > p {
+    display: none !important;
+  }
+
+  .manager-list {
+    gap: 6px;
+  }
+
+  .manager-row {
+    min-height: 42px;
+    gap: 8px;
+    padding: 6px 8px;
+    border-color: #e3e7ed;
+    border-radius: 7px;
+    background: #fbfcfd;
+  }
+
+  .manager-row-main {
+    gap: 7px;
+  }
+
+  .manager-row-actions {
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+
+  .mini-button {
+    min-height: 28px;
+    padding: 3px 7px;
+    border-color: #d7dee7;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .inline-add {
+    gap: 7px;
+    margin-top: 10px;
+  }
+
+  .inline-add input,
+  .inline-add button {
+    min-height: 34px;
+    height: 34px;
+  }
+
+  .pane-heading {
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .settings-kind {
+    width: 122px;
+    min-width: 122px;
+  }
+
+  .settings-kind .kind-button {
+    height: 31px;
+    min-height: 31px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .category-group {
+    margin-bottom: 8px;
+    border-color: #e2e7ed;
+    border-radius: 7px;
+  }
+
+  .category-group-head {
+    min-height: 38px;
+    padding: 6px 8px;
+    background: #f7f8fa;
+  }
+
+  .category-group-title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .category-items {
+    padding: 3px 8px 6px;
+  }
+
+  .category-item {
+    min-height: 36px;
+    padding: 5px 0;
+  }
+
+  .category-add {
+    margin-top: 4px;
+  }
+
+  .category-add input,
+  .category-add button {
+    min-height: 32px;
+    height: 32px;
+  }
+
+  .quick-settings-grid {
+    gap: 10px;
+    margin-top: 2px;
+  }
+
+  .quick-settings-actions {
+    margin-top: 12px;
+  }
+
+  .lock-form {
+    grid-template-columns: 190px auto auto;
+    gap: 7px;
+    max-width: 560px;
+    align-items: end;
+  }
+
+  .lock-form input,
+  .lock-form button {
+    min-height: 34px;
+    height: 34px;
+  }
+
+  .lock-status-text {
+    margin-top: 9px;
+    font-size: 12px;
+  }
+
+  .v21-data-section {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid #e3e8ee;
+    border-radius: 7px;
+    background: #fbfcfd;
+  }
+
+  .v21-data-section h4 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .v21-data-actions {
+    margin: 0;
+  }
+
+  .v21-data-actions #ledgerExcelImport {
+    min-height: 30px;
+    height: 30px;
+    padding: 3px 9px;
+  }
+
+  /* Opening-balance dialog keeps only controls that matter. */
+  .opening-modal .opening-dialog-heading {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 48px;
+  }
+
+  /* Empty states should state the condition once, not explain the page. */
+  .ledger-empty-state {
+    min-height: 150px;
+  }
+
+  .ledger-empty-state span {
+    display: none !important;
+  }
+}
