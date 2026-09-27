@@ -1,4 +1,4 @@
-const CY_V21_VERSION = 'V0.21.0 Build 3';
+const CY_V21_VERSION = 'V0.21.0 Build 4';
 const CY_V21_SPLIT_MEDIA = '(min-width: 1360px)';
 const CY_V21_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 
@@ -132,7 +132,8 @@ function setupV21LedgerHeaderDecoration() {
     const account = document.querySelector('#ledgerAccountHeader');
     if (!account) return;
     const active = typeof cyLedgerGroupByAccount !== 'undefined' && Boolean(cyLedgerGroupByAccount);
-    account.textContent = active ? '帳戶 ▲' : '帳戶';
+    const nextText = active ? '帳戶 ▲' : '帳戶';
+    if (account.textContent !== nextText) account.textContent = nextText;
     account.classList.toggle('v21-account-group-active', active);
     account.setAttribute('aria-pressed', active ? 'true' : 'false');
     account.title = active ? '點擊取消帳戶排列' : '點擊依帳戶排列';
@@ -169,7 +170,7 @@ function setupV21ConfirmationCopy() {
 
   const syncEmpty = () => {
     const empty = list?.querySelector('.confirmation-empty');
-    if (empty) empty.textContent = '本次尚無輸入紀錄。';
+    if (empty && empty.textContent !== '本次尚無輸入紀錄。') empty.textContent = '本次尚無輸入紀錄。';
   };
   syncEmpty();
   if (list) {

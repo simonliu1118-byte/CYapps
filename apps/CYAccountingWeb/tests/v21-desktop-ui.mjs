@@ -20,12 +20,12 @@ const v07 = read('public/v07.js');
 const v011 = read('public/v011.js');
 
 assert.equal(version, '0.21.0');
-assert.equal(build, '3');
+assert.equal(build, '4');
 assert.match(html, /href="\/v021\.css"/);
 assert.match(html, /src="\/v021\.js"/);
 assert.ok(html.indexOf('/v021.css') > html.indexOf('/v020.css'), 'v021.css must load after v020.css');
 assert.ok(html.indexOf('/v021.js') > html.indexOf('/v020.js'), 'v021.js must load after v020.js');
-assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 3'/);
+assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 4'/);
 assert.match(js, /ensureV21Build1Stylesheet\(\)/);
 assert.match(js, /ensureV21Build2Stylesheet\(\)/);
 assert.match(js, /ensureV21Build3Stylesheet\(\)/);
@@ -125,6 +125,11 @@ assert.match(js, /role === 'ADMIN'/);
 assert.match(js, /return '管理員'/);
 assert.match(build3Css, /\.current-user-role\s*\{[\s\S]*?font-weight:\s*400;/);
 
+// Build 4 hotfix: MutationObserver callbacks must be idempotent and not trigger themselves forever.
+assert.match(js, /const nextText = active \? '帳戶 ▲' : '帳戶';/);
+assert.match(js, /if \(account\.textContent !== nextText\) account\.textContent = nextText;/);
+assert.match(js, /if \(empty && empty\.textContent !== '本次尚無輸入紀錄。'\) empty\.textContent = '本次尚無輸入紀錄。';/);
+
 // Shortcut remains plain Tab inside the entry form only. Shift+Tab and dialogs retain native focus navigation.
 assert.match(v07, /els\.form\?\.addEventListener\('keydown'/);
 assert.match(v07, /event\.key !== 'Tab'/);
@@ -135,4 +140,4 @@ assert.match(v011, /<kbd>Tab<\/kbd> 切換收入／支出/);
 assert.doesNotMatch(v011, /<kbd>F2<\/kbd> 切換收入／支出/);
 assert.match(js, /<kbd>Tab<\/kbd> 切換收入／支出/);
 
-console.log('V0.21.0 Build 3 desktop hierarchy regression tests passed.');
+console.log('V0.21.0 Build 4 desktop hierarchy regression tests passed.');
