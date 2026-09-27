@@ -27,17 +27,18 @@ const v011 = read('public/v011.js');
 const v013 = read('public/v013.js');
 
 assert.equal(version, '0.21.0');
-assert.equal(build, '8');
+assert.equal(build, '9');
 assert.match(html, /href="\/v021\.css"/);
 assert.match(html, /src="\/v021\.js"/);
 assert.match(html, /src="\/v021b8\.js"/);
 assert.ok(html.indexOf('/v021.css') > html.indexOf('/v020.css'), 'v021.css must load after v020.css');
 assert.ok(html.indexOf('/v021.js') > html.indexOf('/v020.js'), 'v021.js must load after v020.js');
-assert.ok(html.indexOf('/v021b8.js') > html.indexOf('/v021.js'), 'Build 8 overlay must load after v021.js');
+assert.ok(html.indexOf('/v021b8.js') > html.indexOf('/v021.js'), 'current V0.21 overlay must load after v021.js');
 assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 7'/);
-assert.match(build8Js, /CY_V21_BUILD8_VERSION = 'V0\.21\.0 Build 8'/);
+assert.match(build8Js, /CY_V21_BUILD8_VERSION = 'V0\.21\.0 Build 9'/);
 assert.match(build8Js, /link\.href = '\/v021b8\.css'/);
-assert.doesNotThrow(() => new Function(build8Js), 'Build 8 browser JavaScript must parse');
+assert.match(build8Js, /link\.href = '\/v021b9\.css'/);
+assert.doesNotThrow(() => new Function(build8Js), 'current V0.21 browser JavaScript must parse');
 assert.match(js, /ensureV21Build1Stylesheet\(\)/);
 assert.match(js, /ensureV21Build2Stylesheet\(\)/);
 assert.match(js, /ensureV21Build3Stylesheet\(\)/);
@@ -51,7 +52,7 @@ assert.match(js, /link\.href = '\/v021b5\.css'/);
 assert.match(js, /link\.href = '\/v021b6\.css'/);
 assert.match(js, /link\.href = '\/v021b7\.css'/);
 
-// Desktop redesign remains isolated from Tablet/Mobile.
+// Desktop redesign remains isolated from Tablet/Mobile through Build 8; Build 9 is the adaptive layer.
 for (const stylesheet of [css, build3Css, build5Css, build6Css, build7Css, build8Css]) {
   assert.match(stylesheet, /@media \(min-width: 1024px\)/);
   assert.doesNotMatch(stylesheet, /@media \(max-width:/);
@@ -195,7 +196,7 @@ assert.match(js, /#settingsDialog \[data-settings-pane="migration"\] \.migration
 assert.match(build7Css, /\.settings-modal\s*\{[\s\S]*?width:\s*min\(820px, calc\(100% - 36px\)\);/);
 assert.match(build7Css, /\.settings-layout\s*\{[\s\S]*?grid-template-columns:\s*132px minmax\(0, 1fr\);[\s\S]*?min-height:\s*430px;/);
 
-// Build 8 quick entry: account buttons first, date/category second, summary/amount/save third.
+// Build 8 quick entry: account buttons first, date/category second, summary/amount/save third on Desktop.
 assert.match(html, /id="entryAccountChoiceRow"/);
 assert.match(html, /id="entryAccountButtons"[\s\S]*?role="radiogroup"/);
 assert.match(html, /class="account-source-field"[\s\S]*?id="accountName"/);
@@ -207,9 +208,8 @@ assert.match(build8Css, /\.entry-grid > \.date-field\s*\{[\s\S]*?grid-row:\s*1;/
 assert.match(build8Css, /\.entry-grid > \.category-field\s*\{[\s\S]*?grid-row:\s*1;/);
 assert.match(build8Css, /\.entry-grid > \.summary-field\s*\{[\s\S]*?grid-row:\s*2;/);
 assert.match(build8Css, /\.entry-grid > \.amount-field\s*\{[\s\S]*?grid-row:\s*2;/);
+assert.match(build8Js, /row\.hidden = false/);
 assert.match(build8Js, /select\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
-assert.match(build8Js, /event\.target !== document\.querySelector\('#txDate'\)/);
-assert.match(build8Js, /document\.querySelector\('#categoryName'\)\?\.focus\(\)/);
 
 // Build 8 raises supporting text readability without changing approved headings/month scale.
 assert.match(build8Css, /label > span,[\s\S]*?font-size:\s*13px;/);
@@ -220,7 +220,7 @@ assert.match(build8Css, /\.settings-tab\s*\{[\s\S]*?font-size:\s*13\.5px;/);
 assert.doesNotMatch(build8Css, /\.topbar h1\s*\{/);
 assert.doesNotMatch(build8Css, /#monthFilter\s*\{/);
 
-// Build 8 summary limit mirrors Desktop semantics: 40 weighted units, protected in UI and Worker.
+// Summary limit mirrors Desktop semantics: 40 weighted units, protected in UI and Worker.
 assert.match(html, /id="summary"[^>]*maxlength="40"[^>]*最多20個中文字/);
 assert.match(html, /id="editSummary"[^>]*maxlength="40"/);
 assert.match(build8Js, /CY_V21_BUILD8_SUMMARY_UNITS = 40/);
@@ -248,4 +248,4 @@ assert.match(v011, /<kbd>Tab<\/kbd> 切換收入／支出/);
 assert.doesNotMatch(v011, /<kbd>F2<\/kbd> 切換收入／支出/);
 assert.match(js, /<kbd>Tab<\/kbd> 切換收入／支出/);
 
-console.log('V0.21.0 Build 8 desktop entry/readability regression tests passed.');
+console.log('V0.21.0 Build 9 desktop regression tests passed.');
