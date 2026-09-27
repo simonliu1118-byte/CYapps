@@ -209,6 +209,10 @@
     background: rgba(247, 249, 251, .92) !important;
   }
 
+  .v21-category-group-head:has(.v21-inline-name-input) {
+    grid-template-columns: 24px minmax(0, 1fr) 27px 27px auto !important;
+  }
+
   .v21-category-group-head .category-group-title {
     min-width: 0;
     overflow: hidden;
@@ -233,6 +237,10 @@
     padding: 4px 7px 4px 16px !important;
     border-bottom: 1px solid #edf1f4 !important;
     background: rgba(255, 255, 255, .76);
+  }
+
+  .v21-category-manager-row:has(.v21-inline-name-input) {
+    grid-template-columns: 24px 27px minmax(0, 1fr) 27px 27px auto !important;
   }
 
   .v21-category-manager-row .v21-editable-name {
