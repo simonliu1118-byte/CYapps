@@ -6,6 +6,7 @@ ensureV21Build12Script();
 ensureV21Build13Script();
 ensureV21Build14Script();
 ensureV21Build15Script();
+ensureV21Build16Script();
 
 document.addEventListener('DOMContentLoaded', () => {
   syncV21Build11Version();
@@ -53,6 +54,14 @@ function ensureV21Build15Script() {
   if (document.querySelector('script[src="/v021b15.js"]')) return;
   const script = document.createElement('script');
   script.src = '/v021b15.js';
+  script.async = false;
+  document.head.appendChild(script);
+}
+
+function ensureV21Build16Script() {
+  if (document.querySelector('script[src="/v021b16.js"]')) return;
+  const script = document.createElement('script');
+  script.src = '/v021b16.js';
   script.async = false;
   document.head.appendChild(script);
 }
