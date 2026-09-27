@@ -1,0 +1,230 @@
+/* V0.21.0 Build 6 - compact desktop dialog and header account strip.
+   Desktop-only. Approved quick-entry mode colors, slider, ledger structure and accounting behavior stay unchanged. */
+
+@media (min-width: 1024px) {
+  /* Header: one horizontal account strip with a shared visual baseline. */
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .topbar #settingsButton,
+  .topbar #logoutButton {
+    flex: 0 0 auto;
+    min-width: 54px;
+    min-height: 30px;
+    height: 30px;
+    padding: 4px 10px;
+    border: 1px solid #dde3ea;
+    border-radius: 6px;
+    background: #f8f9fb;
+    color: #526174;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .topbar #settingsButton:hover:not(:disabled),
+  .topbar #logoutButton:hover:not(:disabled) {
+    border-color: #cfd7e1;
+    background: #eef1f4;
+    color: #344054;
+  }
+
+  .current-user {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    max-width: 300px;
+    padding: 0 3px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .current-user-main,
+  .current-user-role {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .current-user-main {
+    color: #344054;
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+
+  .current-user-role {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+    color: #8a94a3;
+    font-size: 10.5px;
+    font-weight: 400;
+    line-height: 1.2;
+  }
+
+  .current-user-role::before {
+    content: "·";
+    color: #b0b8c3;
+    font-size: 12px;
+  }
+
+  /* Opening balance is a compact utility dialog, not a full settings page. */
+  .opening-modal {
+    width: min(420px, calc(100% - 32px));
+    max-height: min(620px, calc(100vh - 40px));
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #e4e8ee;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .opening-modal .modal-header {
+    align-items: center;
+    padding: 14px 16px 11px;
+    border-bottom: 1px solid #edf0f4;
+  }
+
+  .opening-modal .modal-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+
+  .opening-modal .modal-header p {
+    display: none;
+  }
+
+  .opening-modal .icon-button {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 6px;
+    font-size: 22px;
+    line-height: 27px;
+  }
+
+  .opening-modal .opening-dialog-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 9px 16px;
+    border-bottom: 1px solid #f0f2f5;
+    background: #fbfcfd;
+  }
+
+  .opening-modal .opening-dialog-heading .hint {
+    margin: 0;
+    color: #8a94a3;
+    font-size: 10.5px;
+    line-height: 1.35;
+  }
+
+  .opening-modal .compact-label {
+    display: grid;
+    grid-template-columns: auto 140px;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .opening-modal .compact-label > span {
+    margin: 0;
+    color: #667085;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .opening-modal .compact-label input {
+    width: 140px;
+    height: 32px;
+    min-height: 32px;
+    padding: 4px 7px;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12.5px;
+  }
+
+  .opening-modal .opening-list {
+    max-height: min(330px, calc(100vh - 205px));
+    margin: 0;
+    padding: 4px 16px 2px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .opening-modal .opening-row {
+    grid-template-columns: minmax(0, 1fr) 138px;
+    gap: 10px;
+    min-height: 42px;
+    padding: 5px 0;
+    border-bottom: 1px solid #f0f2f5;
+  }
+
+  .opening-modal .opening-row:last-child {
+    border-bottom: 0;
+  }
+
+  .opening-modal .opening-row > span,
+  .opening-modal .opening-row > label,
+  .opening-modal .opening-row .opening-account-name {
+    min-width: 0;
+  }
+
+  .opening-modal .opening-row input {
+    width: 138px;
+    height: 32px;
+    min-height: 32px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #fbfcfd;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .opening-modal .opening-row .historical {
+    font-size: 10px;
+  }
+
+  .opening-modal #openingMessage {
+    min-height: 0;
+    margin: 0 16px;
+    padding-top: 2px;
+    font-size: 11px;
+  }
+
+  .opening-modal #openingMessage:empty {
+    display: none;
+  }
+
+  .opening-modal .modal-actions {
+    gap: 6px;
+    margin: 0;
+    padding: 9px 16px 12px;
+    border-top: 1px solid #edf0f4;
+    background: #fff;
+  }
+
+  .opening-modal .modal-actions .secondary,
+  .opening-modal .modal-actions .primary {
+    min-height: 31px;
+    height: 31px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 500;
+  }
+
+  .opening-modal #saveOpeningButton {
+    font-weight: 600;
+  }
+}
