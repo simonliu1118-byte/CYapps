@@ -1,4 +1,4 @@
-const CY_V21_VERSION = 'V0.21.0 Build 5';
+const CY_V21_VERSION = 'V0.21.0 Build 6';
 const CY_V21_SPLIT_MEDIA = '(min-width: 1360px)';
 const CY_V21_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 
@@ -6,6 +6,7 @@ ensureV21Build1Stylesheet();
 ensureV21Build2Stylesheet();
 ensureV21Build3Stylesheet();
 ensureV21Build5Stylesheet();
+ensureV21Build6Stylesheet();
 
 window.addEventListener('load', () => {
   syncV21Version();
@@ -53,6 +54,14 @@ function ensureV21Build5Stylesheet() {
   document.head.appendChild(link);
 }
 
+function ensureV21Build6Stylesheet() {
+  if (document.querySelector('link[href="/v021b6.css"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/v021b6.css';
+  document.head.appendChild(link);
+}
+
 function syncV21Version() {
   const version = document.querySelector('.version');
   if (version) version.textContent = CY_V21_VERSION;
@@ -84,9 +93,16 @@ function setupV21HeaderLayout() {
   }
   if (status && status.parentElement !== brandLine) brandLine.append(status);
 
-  if (settings) actions.append(settings);
-  if (currentUser) actions.append(currentUser);
-  if (logout) actions.append(logout);
+  let accountCluster = actions.querySelector('.v21-account-cluster');
+  if (!accountCluster) {
+    accountCluster = document.createElement('div');
+    accountCluster.className = 'v21-account-cluster';
+  }
+
+  if (settings && settings.parentElement !== actions) actions.append(settings);
+  if (currentUser && currentUser.parentElement !== accountCluster) accountCluster.append(currentUser);
+  if (logout && logout.parentElement !== accountCluster) accountCluster.append(logout);
+  if (accountCluster.parentElement !== actions) actions.append(accountCluster);
 }
 
 function setupV21EntryHelp() {

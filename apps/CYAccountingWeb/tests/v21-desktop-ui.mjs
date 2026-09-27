@@ -15,6 +15,7 @@ const build1Css = read('public/v021b1.css');
 const build2Css = read('public/v021b2.css');
 const build3Css = read('public/v021b3.css');
 const build5Css = read('public/v021b5.css');
+const build6Css = read('public/v021b6.css');
 const js = read('public/v021.js');
 const v06 = read('public/v06.js');
 const v07 = read('public/v07.js');
@@ -22,28 +23,28 @@ const v011 = read('public/v011.js');
 const v013 = read('public/v013.js');
 
 assert.equal(version, '0.21.0');
-assert.equal(build, '5');
+assert.equal(build, '6');
 assert.match(html, /href="\/v021\.css"/);
 assert.match(html, /src="\/v021\.js"/);
 assert.ok(html.indexOf('/v021.css') > html.indexOf('/v020.css'), 'v021.css must load after v020.css');
 assert.ok(html.indexOf('/v021.js') > html.indexOf('/v020.js'), 'v021.js must load after v020.js');
-assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 5'/);
+assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 6'/);
 assert.match(js, /ensureV21Build1Stylesheet\(\)/);
 assert.match(js, /ensureV21Build2Stylesheet\(\)/);
 assert.match(js, /ensureV21Build3Stylesheet\(\)/);
 assert.match(js, /ensureV21Build5Stylesheet\(\)/);
+assert.match(js, /ensureV21Build6Stylesheet\(\)/);
 assert.match(js, /link\.href = '\/v021b1\.css'/);
 assert.match(js, /link\.href = '\/v021b2\.css'/);
 assert.match(js, /link\.href = '\/v021b3\.css'/);
 assert.match(js, /link\.href = '\/v021b5\.css'/);
+assert.match(js, /link\.href = '\/v021b6\.css'/);
 
 // Desktop redesign remains isolated from Tablet/Mobile.
-assert.match(css, /@media \(min-width: 1024px\)/);
-assert.doesNotMatch(css, /@media \(max-width:/);
-assert.match(build3Css, /@media \(min-width: 1024px\)/);
-assert.doesNotMatch(build3Css, /@media \(max-width:/);
-assert.match(build5Css, /@media \(min-width: 1024px\)/);
-assert.doesNotMatch(build5Css, /@media \(max-width:/);
+for (const stylesheet of [css, build3Css, build5Css, build6Css]) {
+  assert.match(stylesheet, /@media \(min-width: 1024px\)/);
+  assert.doesNotMatch(stylesheet, /@media \(max-width:/);
+}
 
 // Modern business surfaces remain in the base V0.21 layer.
 assert.match(css, /\.topbar\s*\{[\s\S]*?backdrop-filter:\s*blur\(12px\)/);
@@ -64,10 +65,9 @@ assert.match(js, /rail\.append\(confirmation\)/);
 assert.match(js, /document\.body\.append\(confirmation\)/);
 assert.match(js, /setConfirmationDrawer\(true, false\)/);
 
-// Approved slider itself and mode tint remain intact. Build 5 may only neutralize the fieldset wrapper artefact.
-for (const stylesheet of [css, build1Css, build2Css, build3Css]) {
-  assert.doesNotMatch(stylesheet, /\.entry-kind-switch/);
-  assert.doesNotMatch(stylesheet, /\.entry-kind-switch-field/);
+// Approved slider itself and mode tint remain intact. Build 5 only neutralizes the fieldset wrapper artefact.
+for (const stylesheet of [css, build1Css, build2Css, build3Css, build6Css]) {
+  assert.doesNotMatch(stylesheet, /\.entry-kind-switch\s*\{/);
 }
 assert.doesNotMatch(build5Css, /\.entry-kind-switch\s*\{/);
 assert.match(build5Css, /\.entry-card \.entry-kind-switch-field\s*\{[\s\S]*?background:\s*transparent !important;[\s\S]*?box-shadow:\s*none;/);
@@ -125,22 +125,22 @@ assert.match(js, /class="ledger-empty-state"/);
 assert.match(build3Css, /\.ledger-empty-state\s*\{[\s\S]*?min-height:\s*180px;/);
 assert.match(build3Css, /\.v21-split-layout > \.ledger-card\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?align-self:\s*start;/);
 
-// Header exposes role, reorders actions, and only surfaces abnormal connectivity beside the product title.
+// Header exposes role, keeps abnormal connectivity beside the title, and groups identity + logout as one account cluster.
 assert.match(js, /fetch\('\/api\/auth\/me'/);
 assert.match(js, /role === 'SUPER_ADMIN'/);
 assert.match(js, /return '超級管理員'/);
 assert.match(js, /setupV21HeaderLayout\(\)/);
 assert.match(js, /brandLine\.className = 'v21-brand-line'/);
 assert.match(js, /brandLine\.append\(status\)/);
-assert.match(js, /actions\.append\(settings\)/);
-assert.match(js, /actions\.append\(currentUser\)/);
-assert.match(js, /actions\.append\(logout\)/);
+assert.match(js, /accountCluster\.className = 'v21-account-cluster'/);
+assert.match(js, /accountCluster\.append\(currentUser\)/);
+assert.match(js, /accountCluster\.append\(logout\)/);
+assert.match(js, /actions\.append\(accountCluster\)/);
 assert.match(build5Css, /\.v21-brand-line \.status\.ok\s*\{[\s\S]*?display:\s*none;/);
 assert.match(build5Css, /\.v21-brand-line \.status\.warn\s*\{[\s\S]*?display:\s*inline-flex;/);
-assert.match(build5Css, /#settingsButton\s*\{\s*order:\s*1;/);
-assert.match(build5Css, /#currentUser\s*\{\s*order:\s*2;/);
-assert.match(build5Css, /#logoutButton\s*\{\s*order:\s*3;/);
-assert.match(build5Css, /\.current-user\s*\{[\s\S]*?gap:\s*4px;/);
+assert.match(build6Css, /\.v21-account-cluster\s*\{[\s\S]*?border:\s*1px solid #dde3ea;[\s\S]*?border-radius:\s*6px;/);
+assert.match(build6Css, /\.v21-account-cluster #logoutButton\s*\{[\s\S]*?border-left:\s*1px solid #dde3ea;[\s\S]*?border-radius:\s*0;/);
+assert.match(build6Css, /\.v21-account-cluster \.current-user\s*\{[\s\S]*?background:\s*transparent;/);
 
 // Summary row owns opening-balance and month-lock actions; search stays left and export stays right.
 assert.match(js, /summaryBar\.className = 'v21-ledger-summary-bar'/);
@@ -161,10 +161,11 @@ assert.doesNotMatch(v013, /setExportStatus\('已下載'\)/);
 assert.match(build5Css, /#ledgerExcelExport\s*\{[\s\S]*?min-width:\s*82px;/);
 assert.match(build5Css, /#ledgerExcelExportStatus\s*\{[\s\S]*?position:\s*absolute !important;/);
 
-// Opening-balance dialog uses the Build 5 business modal treatment without changing its data flow.
-assert.match(build5Css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(720px, calc\(100% - 40px\)\);[\s\S]*?padding:\s*0;/);
-assert.match(build5Css, /\.opening-modal \.opening-dialog-heading\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto;/);
-assert.match(build5Css, /\.opening-modal \.modal-actions\s*\{[\s\S]*?border-top:\s*1px solid #edf0f4;/);
+// Opening-balance dialog is a compact utility surface in Build 6 while retaining the existing data flow.
+assert.match(build6Css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(420px, calc\(100% - 32px\)\);/);
+assert.match(build6Css, /\.opening-modal \.modal-header p\s*\{[\s\S]*?display:\s*none;/);
+assert.match(build6Css, /\.opening-modal \.opening-row\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 138px;[\s\S]*?min-height:\s*42px;/);
+assert.match(build6Css, /\.opening-modal \.modal-actions\s*\{[\s\S]*?padding:\s*9px 16px 12px;/);
 
 // Build 4 hotfix remains protected: MutationObserver callbacks must stay idempotent.
 assert.match(js, /const nextText = active \? '帳戶 ▲' : '帳戶';/);
@@ -181,4 +182,4 @@ assert.match(v011, /<kbd>Tab<\/kbd> 切換收入／支出/);
 assert.doesNotMatch(v011, /<kbd>F2<\/kbd> 切換收入／支出/);
 assert.match(js, /<kbd>Tab<\/kbd> 切換收入／支出/);
 
-console.log('V0.21.0 Build 5 desktop polish regression tests passed.');
+console.log('V0.21.0 Build 6 compact desktop regression tests passed.');
