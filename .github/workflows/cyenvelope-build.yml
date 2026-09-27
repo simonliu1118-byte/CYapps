@@ -57,3 +57,27 @@ jobs:
           } finally {
             if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }
+
+      - name: Build and scan portable test package
+        shell: pwsh
+        run: ./build-csharp.ps1
+
+      - name: Identify test package
+        id: package
+        shell: pwsh
+        run: |
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          $build = [int](Get-Content ./BUILD -Raw).Trim()
+          $label = "V$version"
+          if ($build -gt 0) { $label += "-Build-$build" }
+          "label=$label" >> $env:GITHUB_OUTPUT
+
+      - name: Upload scanned portable test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: CYEnvelope-${{ steps.package.outputs.label }}-windows-x64-test
+          path: |
+            apps/CYEnvelope/dist/CYEnvelope_*_windows_x64_test.zip
+            apps/CYEnvelope/dist/CYEnvelope_*_windows_x64_test.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
