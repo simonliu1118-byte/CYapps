@@ -41,6 +41,14 @@ try
         originalRecipient == (format.Recipient.Rect.X, format.Recipient.Rect.Y,
             format.Recipient.Rect.Width, format.Recipient.Rect.Height),
         "portrait roundtrip preserves the recipient coordinates");
+    var originalPostal = (format.PostalCode.Rect.X, format.PostalCode.Rect.Y, format.PostalCode.Rect.Width, format.PostalCode.Rect.Height);
+    FormatGeometry.Rotate(format); FormatGeometry.Rotate(format);
+    Check(originalPostal == (format.PostalCode.Rect.X, format.PostalCode.Rect.Y, format.PostalCode.Rect.Width, format.PostalCode.Rect.Height),
+        "portrait roundtrip preserves postal boxes");
+    format.Recipient.Rect.X += 1;
+    repository.SaveFormat(format);
+    var reopened = new Repository(path).Formats().Single();
+    Check(reopened.Recipient.Rect.X == format.Recipient.Rect.X, "user-adjusted built-in format survives reopening");
     var preview = EnvelopeRenderer.Draw(format, new PrintData { Recipient = "測試對象", PostalCode = "800" }, true);
     var output = EnvelopeRenderer.Draw(format, new PrintData { Recipient = "測試對象", PostalCode = "800" }, false);
     Check(preview.ContentBounds.Width > 0 && output.ContentBounds.Width > 0, "shared renderer output");

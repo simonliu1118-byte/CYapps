@@ -79,20 +79,20 @@ public sealed class EnvelopeFormat
     public bool IsDefault { get; set; } = true;
     public double OffsetX { get; set; }
     public double OffsetY { get; set; }
-    public TextPlacement Recipient { get; set; } = new() { Rect = new(43, 49, 18, 142), FontSize = 24 };
-    public TextPlacement Address { get; set; } = new() { Rect = new(64, 46, 29, 148), FontSize = 14, Columns = 2 };
-    public TextPlacement Phone { get; set; } = new() { Rect = new(32, 59, 8, 132), FontSize = 10 };
-    public TextPlacement PostalCode { get; set; } = new() { Rect = new(52, 21, 40, 8), FontSize = 12, Vertical = false };
+    public TextPlacement Recipient { get; set; } = new() { Rect = new(39, 62, 26, 134), FontSize = 24 };
+    public TextPlacement Address { get; set; } = new() { Rect = new(72, 60, 27, 140), FontSize = 14, Columns = 2 };
+    public TextPlacement Phone { get; set; } = new() { Rect = new(28, 98, 8, 104), FontSize = 10 };
+    public TextPlacement PostalCode { get; set; } = new() { Rect = new(49, 31, 24, 9), FontSize = 12, Vertical = false };
     public RectMm Frame { get; set; } = new(7, 95, 12, 30);
     public List<DeliveryPlacement> Delivery { get; set; } =
     [
-        new() { Id = "delivery-1", Label = "平信", X = 8.2, Y = 63 },
-        new() { Id = "delivery-2", Label = "限時", X = 8.2, Y = 67 },
-        new() { Id = "delivery-3", Label = "掛號", X = 8.2, Y = 71 },
-        new() { Id = "delivery-4", Label = "限時掛號", X = 8.2, Y = 75 },
-        new() { Id = "delivery-5", Label = "印刷品", X = 8.2, Y = 79 },
-        new() { Id = "delivery-6", Label = "航空", X = 8.2, Y = 83 },
-        new() { Id = "delivery-7", Label = "其他", X = 8.2, Y = 87 }
+        new() { Id = "delivery-1", Label = "平信", X = 7, Y = 64 },
+        new() { Id = "delivery-2", Label = "限時", X = 7, Y = 68 },
+        new() { Id = "delivery-3", Label = "掛號", X = 7, Y = 72 },
+        new() { Id = "delivery-4", Label = "限時掛號", X = 7, Y = 76 },
+        new() { Id = "delivery-5", Label = "印刷品", X = 7, Y = 80 },
+        new() { Id = "delivery-6", Label = "航空", X = 7, Y = 84 },
+        new() { Id = "delivery-7", Label = "其他", X = 7, Y = 88 }
     ];
 }
 

@@ -22,6 +22,23 @@ public sealed class Repository
             """;
         command.ExecuteNonQuery();
         if (Formats().Count == 0) SaveFormat(new EnvelopeFormat { Id = "format-15k" });
+        else UpgradePristineBuiltIn();
+    }
+
+    private void UpgradePristineBuiltIn()
+    {
+        var old = new EnvelopeFormat
+        {
+            Id = "format-15k",
+            Recipient = new() { Rect = new(43, 49, 18, 142), FontSize = 24 },
+            Address = new() { Rect = new(64, 46, 29, 148), FontSize = 14, Columns = 2 },
+            Phone = new() { Rect = new(32, 59, 8, 132), FontSize = 10 },
+            PostalCode = new() { Rect = new(52, 21, 40, 8), FontSize = 12, Vertical = false }
+        };
+        for (var i = 0; i < old.Delivery.Count; i++) { old.Delivery[i].X = 8.2; old.Delivery[i].Y = 63 + i * 4; }
+        var current = Formats().FirstOrDefault(f => f.Id == old.Id);
+        if (current is not null && JsonSerializer.Serialize(current, Json) == JsonSerializer.Serialize(old, Json))
+            SaveFormat(new EnvelopeFormat { Id = old.Id });
     }
 
     private SqliteConnection Open()

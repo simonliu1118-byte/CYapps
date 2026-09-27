@@ -50,44 +50,55 @@ public static class EnvelopeRenderer
 
     private static void DrawPrintedEnvelopeReference(DrawingContext dc, EnvelopeFormat f)
     {
-        // Red ink belongs to the purchased envelope. It is never sent to the printer.
-        var w = f.WidthMm;
-        var h = f.HeightMm;
-        Line(dc, 0, 0, w, 0);
-        Line(dc, w, 0, w, h);
-        Line(dc, w, h, 0, h);
-        Line(dc, 0, h, 0, 0);
-        Line(dc, 0, 17, w / 2, 5);
-        Line(dc, w / 2, 5, w, 17);
-        dc.DrawRectangle(null, Red, new Rect((w - 23) * DipPerMm, 7 * DipPerMm, 17 * DipPerMm, 14 * DipPerMm));
-        Label(dc, "貼郵票處", w - 21, 10, 7, Brushes.IndianRed);
-        for (var i = 0; i < 3; i++)
-            dc.DrawRectangle(null, Red, new Rect((f.PostalCode.Rect.X + i * 8) * DipPerMm,
-                f.PostalCode.Rect.Y * DipPerMm, 8 * DipPerMm, 8 * DipPerMm));
-        Label(dc, "郵件種類", 5, 57, 7, Brushes.IndianRed);
-        foreach (var item in f.Delivery)
+        // Fixed preprinted artwork: never derive the paper's red ink from editable text boxes.
+        // Visible geometry traced proportionally from the user's 393px 15K product photograph.
+        // The label obscures the lower section; the frame's lower end remains an approximation.
+        dc.PushTransform(new ScaleTransform(f.WidthMm / (f.Landscape ? 222 : 105),
+            f.HeightMm / (f.Landscape ? 105 : 222)));
+        if (f.Landscape)
         {
-            dc.DrawRectangle(null, Red, new Rect((item.X - 1) * DipPerMm, (item.Y - .8) * DipPerMm, 3 * DipPerMm, 3 * DipPerMm));
-            Label(dc, item.Label, item.X + 3, item.Y, 7, Brushes.IndianRed);
+            dc.PushTransform(new TranslateTransform(222 * DipPerMm, 0));
+            dc.PushTransform(new RotateTransform(90));
         }
-        var rx = Math.Min(f.Recipient.Rect.X, f.Address.Rect.X) - 3;
-        var ry = Math.Min(f.Recipient.Rect.Y, f.Address.Rect.Y) - 3;
-        var right = Math.Max(f.Recipient.Rect.X + f.Recipient.Rect.Width,
-            f.Address.Rect.X + f.Address.Rect.Width) + 3;
-        var bottom = Math.Max(f.Recipient.Rect.Y + f.Recipient.Rect.Height,
-            f.Address.Rect.Y + f.Address.Rect.Height) + 3;
-        dc.DrawRectangle(null, Red, new Rect(rx * DipPerMm, ry * DipPerMm,
-            (right - rx) * DipPerMm, (bottom - ry) * DipPerMm));
-        for (var i = 0; i < 3; i++)
-            dc.DrawRectangle(null, Red, new Rect((37 + i * 8) * DipPerMm, (h - 14) * DipPerMm, 8 * DipPerMm, 8 * DipPerMm));
-        Label(dc, "正聯", 6, 22, 7, Brushes.IndianRed);
+        var outline = new Pen(new SolidColorBrush(Color.FromRgb(209, 213, 219)), .2 * DipPerMm);
+        // The neutral trapezoid is the open flap, not red envelope artwork.
+        var flap = new StreamGeometry();
+        using (var g = flap.Open())
+        {
+            g.BeginFigure(new Point(0, 18 * DipPerMm), true, true);
+            g.LineTo(new Point(7 * DipPerMm, 0), true, false);
+            g.LineTo(new Point(98 * DipPerMm, 0), true, false);
+            g.LineTo(new Point(105 * DipPerMm, 18 * DipPerMm), true, false);
+        }
+        dc.DrawGeometry(new SolidColorBrush(Color.FromRgb(249, 248, 245)), outline, flap);
+        Box(6, 30, 20, 20);
+        Label(dc, "郵 票", 9, 33, 6, Red.Brush);
+        Label(dc, "黏貼處", 8, 41, 6, Red.Brush);
+        for (var i = 0; i < 6; i++) Box(49 + i * 8, 31, 6, 9);
+        Label(dc, "收件人郵遞區號", 51, 43, 5, Red.Brush);
+        // The narrow central name frame is distinct from the address printed to its right.
+        Box(37, 58, 32, 142);
+        var labels = new[] { "平信", "限時", "掛號", "限時掛號", "印刷品", "航空", "其他" };
+        Label(dc, "郵件種類", 6, 60, 5, Red.Brush);
+        Box(6, 64, 21, 28);
+        Line(dc, 10, 64, 10, 92);
+        for (var i = 0; i < labels.Length; i++)
+        {
+            if (i > 0) Line(dc, 6, 64 + i * 4, 27, 64 + i * 4);
+            Label(dc, labels[i], 11, 64 + i * 4, 5, Red.Brush);
+        }
+        if (f.Landscape) { dc.Pop(); dc.Pop(); }
+        dc.Pop();
+        void Box(double x, double y, double w, double h) =>
+            dc.DrawRectangle(null, Red, new Rect(x * DipPerMm, y * DipPerMm, w * DipPerMm, h * DipPerMm));
     }
 
     private static void DrawPostal(DrawingContext dc, string code, TextPlacement position)
     {
         var x = position.Rect.X;
         foreach (var (ch, index) in code.Take(3).Select((c, i) => (c, i)))
-            WriteAt(dc, ch.ToString(), x + index * 8 + 1.2, position.Rect.Y + .8,
+            WriteAt(dc, ch.ToString(), x + (position.Vertical ? 1.2 : index * 8 + 1.2),
+                position.Rect.Y + (position.Vertical ? index * 8 + .8 : .8),
                 position.FontSize, position.FontFamily);
     }
 

@@ -62,6 +62,21 @@ jobs:
         shell: pwsh
         run: ./build-csharp.ps1
 
+      - name: Review rendered Windows UI and final icon resources
+        shell: pwsh
+        run: |
+          dotnet run --project ./tests/CYEnvelope.VisualReview/CYEnvelope.VisualReview.csproj -c Release -- ./dist/visual-review ./dist/stage/CYEnvelope ./assets/ENV.ico
+          if ($LASTEXITCODE -ne 0) { throw 'Visual review checks failed' }
+
+      - name: Upload Windows visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CYEnvelope-windows-visual-review
+          path: apps/CYEnvelope/dist/visual-review/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Identify test package
         id: package
         shell: pwsh

@@ -16,9 +16,7 @@ public static class FormatGeometry
         RectMm Change(RectMm r) => clockwise ? Clockwise(r, oldHeight) : CounterClockwise(r, oldWidth);
         foreach (var field in new[] { format.Recipient, format.Address, format.Phone, format.PostalCode })
             field.Rect = Change(field.Rect);
-        var postal = format.PostalCode.Rect;
-        format.PostalCode.Rect = new RectMm(postal.X + postal.Width / 2 - 20,
-            postal.Y + postal.Height / 2 - 4, 40, 8);
+        format.PostalCode.Vertical = !format.PostalCode.Vertical;
         foreach (var field in new[] { format.Recipient, format.Address, format.Phone })
             field.Vertical = !field.Vertical;
         var frame = Change(format.Frame);

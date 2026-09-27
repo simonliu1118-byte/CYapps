@@ -2,7 +2,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media.Imaging;
 using System.Windows.Media;
 using System.Printing;
 
@@ -35,8 +34,6 @@ public partial class MainWindow : Window
         var formats = _repository.Formats();
         _format = formats.FirstOrDefault(f => f.Id == _settings.SelectedFormatId)
                   ?? formats.FirstOrDefault(f => f.IsDefault) ?? formats[0];
-        var icon = new BitmapImage(new Uri("pack://application:,,,/ENV.ico"));
-        Icon = icon;
         var version = File.ReadAllText(Path.Combine(appRoot, "VERSION")).Trim();
         var build = File.ReadAllText(Path.Combine(appRoot, "BUILD")).Trim();
         Title = $"CYEnvelope V{version}" + (build != "0" ? $" Build {build}" : "");
@@ -53,8 +50,8 @@ public partial class MainWindow : Window
         _delivery.Clear();
         foreach (var option in _format.Delivery)
         {
-            var item = new CheckBox { Content = option.Label, Margin = new Thickness(0, 0, 12, 9),
-                                      MinWidth = 94, Tag = option.Id };
+            var item = new CheckBox { Content = option.Label, Margin = new Thickness(0, 0, 8, 9),
+                                      MinWidth = 76, Tag = option.Id };
             item.Checked += InputChanged;
             item.Unchecked += InputChanged;
             DeliveryPanel.Children.Add(item);
@@ -350,36 +347,18 @@ public partial class MainWindow : Window
     }
     private void SettingsClick(object sender, RoutedEventArgs e)
     {
-        var dialog = new Window
-        {
-            Title = "設定", Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Width = 360, Height = 210, ResizeMode = ResizeMode.NoResize,
-            FontFamily = FontFamily, FontSize = 15
-        };
-        var panel = new StackPanel { Margin = new Thickness(20) };
-        dialog.Content = panel;
-        panel.Children.Add(new TextBlock { Text = "輸入方式", FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 12) });
-        var direct = new CheckBox { Content = "直接點選信封欄位輸入", IsChecked = _settings.DirectEntry };
-        panel.Children.Add(direct);
-        panel.Children.Add(new TextBlock { Text = "關閉後使用左側資料欄輸入。",
-            Foreground = Brushes.DimGray, Margin = new Thickness(0, 10, 0, 14) });
-        var save = new Button { Content = "儲存", Width = 90, HorizontalAlignment = HorizontalAlignment.Right };
-        save.Click += (_, _) => { _settings.DirectEntry = direct.IsChecked == true; dialog.DialogResult = true; };
-        panel.Children.Add(save);
-        if (dialog.ShowDialog() == true)
-        {
-            _repository.SaveSettings(_settings);
-            ApplyEntryMode();
-        }
+        var dialog = new SettingsWindow(_settings) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        _repository.SaveSettings(_settings);
+        ApplyEntryMode();
     }
-
     private void ApplyEntryMode()
     {
         EntryPanel.Visibility = _settings.DirectEntry ? Visibility.Collapsed : Visibility.Visible;
-        EntryColumn.Width = new GridLength(_settings.DirectEntry ? 0 : 370);
-        EntryGap.Width = new GridLength(_settings.DirectEntry ? 0 : 16);
+        EntryColumn.Width = new GridLength(_settings.DirectEntry ? 0 : 400);
+        EntryGap.Width = new GridLength(_settings.DirectEntry ? 0 : 20);
         DirectLayer.Visibility = _settings.DirectEntry ? Visibility.Visible : Visibility.Collapsed;
+        PreviewHint.Text = _settings.DirectEntry ? "點選藍色欄位輸入；也可用 Tab、Enter 操作。" : "紅線為信封底圖，僅套印黑色內容。";
         RebuildDirectTargets();
     }
     private void RebuildDirectTargets()
@@ -396,27 +375,25 @@ public partial class MainWindow : Window
             ("方框文字", _format.Frame)
         })
         {
-            var target = new Border
+            var target = new Button
             {
                 Width = Math.Max(20, rect.Width * EnvelopeRenderer.DipPerMm),
                 Height = Math.Max(20, rect.Height * EnvelopeRenderer.DipPerMm),
-                Background = Brushes.Transparent,
+                Style = (Style)FindResource("DirectTarget"),
                 ToolTip = $"點選輸入{field}",
                 Tag = field
             };
-            target.MouseEnter += (_, _) => target.BorderBrush = Brushes.SteelBlue;
-            target.MouseLeave += (_, _) => target.BorderBrush = Brushes.Transparent;
-            target.BorderThickness = new Thickness(1);
-            target.MouseLeftButtonDown += DirectTargetClick;
-            Canvas.SetLeft(target, rect.X * EnvelopeRenderer.DipPerMm);
-            Canvas.SetTop(target, rect.Y * EnvelopeRenderer.DipPerMm);
+            System.Windows.Automation.AutomationProperties.SetName(target, $"編輯{field}");
+            target.Click += DirectTargetClick;
+            Canvas.SetLeft(target, (rect.X + _format.OffsetX) * EnvelopeRenderer.DipPerMm);
+            Canvas.SetTop(target, (rect.Y + _format.OffsetY) * EnvelopeRenderer.DipPerMm);
             DirectLayer.Children.Add(target);
         }
         foreach (var item in _format.Delivery)
         {
             var target = new Button
             {
-                Width = 16, Height = 16, Opacity = .15, Padding = new Thickness(0),
+                Width = 18, Height = 18, Style = (Style)FindResource("DirectTarget"),
                 ToolTip = $"勾選／取消{item.Label}", Tag = item.Id
             };
             target.Click += (_, _) =>
@@ -424,14 +401,14 @@ public partial class MainWindow : Window
                 if (_delivery.TryGetValue((string)target.Tag, out var check))
                     check.IsChecked = check.IsChecked != true;
             };
-            Canvas.SetLeft(target, item.X * EnvelopeRenderer.DipPerMm);
-            Canvas.SetTop(target, item.Y * EnvelopeRenderer.DipPerMm);
+            Canvas.SetLeft(target, (item.X + _format.OffsetX - 1) * EnvelopeRenderer.DipPerMm);
+            Canvas.SetTop(target, (item.Y + _format.OffsetY - .8) * EnvelopeRenderer.DipPerMm);
             DirectLayer.Children.Add(target);
         }
     }
-    private void DirectTargetClick(object sender, MouseButtonEventArgs e)
+    private void DirectTargetClick(object sender, RoutedEventArgs e)
     {
-        var target = (Border)sender;
+        var target = (Button)sender;
         var field = (string)target.Tag;
         if (_directEditor is not null) DirectLayer.Children.Remove(_directEditor);
         if (_directSuggestions is not null) DirectLayer.Children.Remove(_directSuggestions);

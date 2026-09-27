@@ -26,7 +26,8 @@ public sealed class FormatWindow : Window
         SelectedFormat = selected;
         _working = Copy(selected);
         Title = "格式設定";
-        Width = 1040; Height = 780; MinWidth = 900; MinHeight = 690;
+        Width = 1040; Height = 820; MinWidth = 900; MinHeight = 720;
+        DesktopUi.Dialog(this);
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         FontFamily = new FontFamily("Microsoft JhengHei UI");
         FontSize = 14;
@@ -34,11 +35,19 @@ public sealed class FormatWindow : Window
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(365) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
         root.ColumnDefinitions.Add(new ColumnDefinition());
-        Content = root;
+        var shell = new DockPanel(); Content = shell;
+        var footer = Buttons(("儲存", (_, _) => Save()), ("設為預設", (_, _) => SetDefault()), ("選用並關閉", (_, _) => SelectAndClose()));
+        footer.HorizontalAlignment = HorizontalAlignment.Right;
+        footer.Margin = new Thickness(20, 12, 14, 12);
+        ((Button)footer.Children[2]).SetResourceReference(StyleProperty, "PrimaryButton");
+        var footerLine = new Border { Background = Brushes.White, BorderBrush = DesktopUi.Muted,
+            BorderThickness = new Thickness(0, 1, 0, 0), Child = footer };
+        DockPanel.SetDock(footerLine, Dock.Bottom); shell.Children.Add(footerLine);
+        shell.Children.Add(root);
         var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetColumn(scroll, 0); root.Children.Add(scroll);
         var left = new StackPanel(); scroll.Content = left;
-        left.Children.Add(new TextBlock { Text = "信封格式", FontSize = 19, FontWeight = FontWeights.SemiBold });
+        left.Children.Add(new TextBlock { Text = "信封格式", FontSize = 16, FontWeight = FontWeights.SemiBold });
         left.Children.Add(_formats);
         _formats.SelectionChanged += (_, _) =>
         {
@@ -74,8 +83,13 @@ public sealed class FormatWindow : Window
         AddField(position, "高（mm）", _h, 2, 1);
         left.Children.Add(position);
         AddField(left, "字型", _font);
-        AddField(left, "字級（pt）", _size);
-        AddField(left, "直排列數", _columns);
+        var typography = new Grid();
+        typography.ColumnDefinitions.Add(new ColumnDefinition());
+        typography.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+        typography.ColumnDefinitions.Add(new ColumnDefinition());
+        AddField(typography, "字級（pt）", _size, 0);
+        AddField(typography, "直排列數", _columns, 2);
+        left.Children.Add(typography);
         left.Children.Add(new TextBlock { Text = "印表機偏移（mm）", Margin = new Thickness(0, 8, 0, 4) });
         var offsets = new Grid();
         offsets.ColumnDefinitions.Add(new ColumnDefinition());
@@ -84,8 +98,6 @@ public sealed class FormatWindow : Window
         AddField(offsets, "水平", _offsetX, 0);
         AddField(offsets, "垂直", _offsetY, 2);
         left.Children.Add(offsets);
-        left.Children.Add(Buttons(("儲存", (_, _) => Save()), ("設為預設", (_, _) => SetDefault()),
-            ("選用並關閉", (_, _) => SelectAndClose())));
         foreach (var box in new[] { _name, _width, _height, _x, _y, _w, _h, _font, _size, _columns, _offsetX, _offsetY })
             box.LostKeyboardFocus += Changed;
         var frame = new Border { Background = Brushes.White, BorderBrush = Brushes.LightGray,
@@ -97,8 +109,8 @@ public sealed class FormatWindow : Window
 
     private static StackPanel AddField(Panel panel, string title, TextBox entry, int column = 0, int row = 0)
     {
-        var group = new StackPanel { Margin = new Thickness(0, 5, 0, 6) };
-        group.Children.Add(new TextBlock { Text = title });
+        var group = new StackPanel { Margin = new Thickness(0, 4, 0, 6) };
+        group.Children.Add(new TextBlock { Text = title, Margin = new Thickness(0, 0, 0, 4) });
         entry.MinHeight = 30;
         group.Children.Add(entry);
         if (panel is Grid grid)
@@ -114,8 +126,7 @@ public sealed class FormatWindow : Window
         var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 7, 0, 7) };
         foreach (var (label, action) in values)
         {
-            var button = new Button { Content = label, Padding = new Thickness(10, 6, 10, 6),
-                                      Margin = new Thickness(0, 0, 6, 0) };
+            var button = new Button { Content = label, Margin = new Thickness(0, 0, 8, 0) };
             button.Click += action; panel.Children.Add(button);
         }
         return panel;

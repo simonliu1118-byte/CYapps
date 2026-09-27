@@ -7,32 +7,35 @@ public sealed class FrameWindow : Window
 {
     private readonly AppSettings _settings;
     private readonly List<string> _working;
-    private readonly ListBox _list = new() { Height = 155 };
+    private readonly ListBox _list = new() { MinHeight = 140 };
     private readonly TextBox _entry = new() { Margin = new Thickness(0, 8, 0, 8) };
     public FrameWindow(AppSettings settings)
     {
         _settings = settings;
         _working = settings.FrameTexts.ToList();
         Title = "方框文字";
-        Width = 380; Height = 330; ResizeMode = ResizeMode.NoResize;
+        Width = 480; Height = 410; MinWidth = 440; MinHeight = 370;
+        DesktopUi.Dialog(this);
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         FontFamily = new System.Windows.Media.FontFamily("Microsoft JhengHei UI");
         FontSize = 14;
-        var root = new StackPanel { Margin = new Thickness(16) };
+        var root = new DockPanel { Margin = new Thickness(20) };
         Content = root;
-        root.Children.Add(new TextBlock { Text = "選擇文字後可修改；新增文字請先清空輸入欄。" });
+        var heading = new StackPanel(); DockPanel.SetDock(heading, Dock.Top); root.Children.Add(heading);
+        heading.Children.Add(DesktopUi.Heading("方框文字"));
+        heading.Children.Add(new TextBlock { Text = "選取項目後可修改；新增時直接輸入新文字。", TextWrapping = TextWrapping.Wrap,
+            Foreground = DesktopUi.Muted, Margin = new Thickness(0, 0, 0, 14) });
+        var footer = new StackPanel(); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
+        footer.Children.Add(_entry);
+        var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); footer.Children.Add(row);
+        var edit = new StackPanel { Orientation = Orientation.Horizontal }; row.Children.Add(edit);
+        edit.Children.Add(DesktopUi.Action("新增", Add));
+        edit.Children.Add(DesktopUi.Action("修改", Edit));
+        edit.Children.Add(DesktopUi.Action("刪除", Delete));
+        var done = DesktopUi.Action("完成", Done, true); done.Margin = new Thickness(0);
+        Grid.SetColumn(done, 1); row.Children.Add(done);
         root.Children.Add(_list);
-        root.Children.Add(_entry);
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        root.Children.Add(row);
-        foreach (var (title, action) in new (string, RoutedEventHandler)[]
-        {
-            ("新增", Add), ("修改", Edit), ("刪除", Delete), ("完成", Done)
-        })
-        {
-            var b = new Button { Content = title, MinWidth = 70, Margin = new Thickness(0, 0, 8, 0) };
-            b.Click += action; row.Children.Add(b);
-        }
         _list.SelectionChanged += (_, _) => { if (_list.SelectedItem is string s) _entry.Text = s; };
         Refresh();
     }
