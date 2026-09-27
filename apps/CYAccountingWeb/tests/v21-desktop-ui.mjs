@@ -99,7 +99,7 @@ assert.match(v06, /els\.monthFilter\.dispatchEvent\(new Event\('change', \{ bubb
 // Opening balance is a compact current-month CRUD dialog with consistent Save copy.
 assert.match(build13Css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(300px, calc\(100vw - 28px\)\) !important;/);
 assert.match(build13Css, /\.opening-modal \.opening-dialog-heading\s*\{[\s\S]*?display:\s*none !important;/);
-assert.match(build13Js, /title\.textContent = `\$\{month\.replace\('-', '\/'\)\} 期初餘額`/);
+assert.match(build13Js, /title\.textContent = `\$\{month\.replace\('-', '\/'\)\}期初餘額`/);
 assert.match(build13Js, /openingSave\.textContent = '儲存'/);
 assert.match(build13Js, /editSave\.textContent = '儲存'/);
 
