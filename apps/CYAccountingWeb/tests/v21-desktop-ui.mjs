@@ -20,12 +20,14 @@ const build10Css = read('public/v021b10.css');
 const build11Css = read('public/v021b11.css');
 const build12Css = read('public/v021b12.css');
 const build13Css = read('public/v021b13.css');
+const build14Css = read('public/v021b14.css');
 const v021 = read('public/v021.js');
 const build8Js = read('public/v021b8.js');
 const build10Js = read('public/v021b10.js');
 const build11Js = read('public/v021b11.js');
 const build12Js = read('public/v021b12.js');
 const build13Js = read('public/v021b13.js');
+const build14Js = read('public/v021b14.js');
 const v03 = read('public/v03.js');
 const v06 = read('public/v06.js');
 const v07 = read('public/v07.js');
@@ -33,31 +35,34 @@ const v013 = read('public/v013.js');
 const appV19 = read('src/app-v19.js');
 
 assert.equal(version, '0.21.0');
-assert.equal(build, '13');
+assert.equal(build, '14');
 assert.match(build11Js, /ensureV21Build12Script\(\)/);
 assert.match(build11Js, /ensureV21Build13Script\(\)/);
-assert.match(build11Js, /script\.src = '\/v021b13\.js'/);
+assert.match(build11Js, /ensureV21Build14Script\(\)/);
+assert.match(build11Js, /script\.src = '\/v021b14\.js'/);
 assert.match(build12Js, /CY_V21_BUILD12_VERSION = 'V0\.21\.0 Build 12'/);
 assert.match(build13Js, /CY_V21_BUILD13_VERSION = 'V0\.21\.0 Build 13'/);
-assert.match(build13Js, /CY_V21_BUILD13_DESKTOP = '\(min-width: 1024px\)'/);
-assert.match(build13Js, /link\.href = '\/v021b13\.css'/);
-for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js]) {
+assert.match(build14Js, /CY_V21_BUILD14_VERSION = 'V0\.21\.0 Build 14'/);
+assert.match(build14Js, /CY_V21_BUILD14_DESKTOP = '\(min-width: 1024px\)'/);
+assert.match(build14Js, /link\.href = '\/v021b14\.css'/);
+for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js]) {
   assert.doesNotThrow(() => new Function(js), 'V0.21 overlay JavaScript must parse');
 }
 
-// Breakpoint ownership remains explicit: Build 10 phone, Build 9 Tablet, Builds 12/13 Desktop only.
+// Breakpoint ownership remains explicit: Build 10 phone, Build 9 Tablet, Builds 12-14 Desktop only.
 assert.match(build10Css, /@media \(max-width: 767px\)/);
 assert.match(build11Css, /@media \(min-width: 768px\)/);
 assert.match(build12Css, /@media \(min-width: 1024px\)/);
 assert.match(build13Css, /@media \(min-width: 1024px\)/);
-assert.doesNotMatch(build13Css, /@media \(max-width:/);
+assert.match(build14Css, /@media \(min-width: 1024px\)/);
+assert.doesNotMatch(build14Css, /@media \(max-width:/);
 
 // Approved Desktop split, slider and entry mode tints remain intact.
 assert.match(build1Css, /@media \(min-width: 1360px\)/);
 assert.match(build1Css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1fr\)/);
 assert.match(build1Css, /\.entry-card\.entry-income\s*\{[\s\S]*?background:\s*#f4fbf6;/);
 assert.match(build1Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?background:\s*#fff6f5;/);
-for (const css of [baseCss, build3Css, build5Css, build6Css, build7Css, build8Css, build11Css, build12Css, build13Css]) {
+for (const css of [baseCss, build3Css, build5Css, build6Css, build7Css, build8Css, build11Css, build12Css, build13Css, build14Css]) {
   assert.doesNotMatch(css, /\.entry-kind-switch\s*\{/);
 }
 
@@ -89,27 +94,39 @@ assert.match(build13Js, /status\.classList\.contains\('warn'\)/);
 assert.match(build13Js, /status\.textContent = ''/);
 assert.match(build13Js, /status\.classList\.add\('hidden'\)/);
 
-// Custom month picker remains backed by monthFilter, with Build 13 true-center header controls.
+// Custom month picker remains backed by native month sources and Build 14 extends it to all visible Desktop month fields.
 assert.match(build12Js, /root\.id = 'ledgerMonthPickerCustom'/);
 assert.match(build12Js, /input\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
 assert.match(build13Css, /\.v21-month-picker-head\s*\{[\s\S]*?grid-template-columns:\s*36px minmax\(0, 1fr\) 36px !important;/);
-assert.match(build13Css, /\.v21-month-picker-nav,[\s\S]*?\.v21-month-picker-year\s*\{[\s\S]*?align-items:\s*center !important;[\s\S]*?justify-content:\s*center !important;/);
+assert.match(build14Js, /document\.querySelectorAll\('input\[type="month"\]'\)/);
+assert.match(build14Js, /ensureV21Build14MonthPickerForInput\(input\)/);
+assert.match(build14Js, /input\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
+assert.match(build14Css, /\.v21-native-month-source\s*\{[\s\S]*?clip-path:\s*inset\(50%\) !important;/);
+assert.match(build14Css, /\.v21-month-picker-caret\s*\{[\s\S]*?display:\s*none !important;/);
 assert.match(v06, /els\.monthFilter\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
 
-// Opening balance is a compact current-month CRUD dialog with consistent Save copy.
+// Opening balance remains a compact current-month CRUD dialog with consistent Save copy.
 assert.match(build13Css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(300px, calc\(100vw - 28px\)\) !important;/);
 assert.match(build13Css, /\.opening-modal \.opening-dialog-heading\s*\{[\s\S]*?display:\s*none !important;/);
 assert.match(build13Js, /title\.textContent = `\$\{month\.replace\('-', '\/'\)\}期初餘額`/);
 assert.match(build13Js, /openingSave\.textContent = '儲存'/);
 assert.match(build13Js, /editSave\.textContent = '儲存'/);
 
-// Account/category management move to Desktop header; regular Settings hides duplicate tabs.
+// Account/category management stays in Desktop header and Build 14 makes it compact, list-based and inline-editable.
 assert.match(build13Js, /headerAccountManagerButton/);
 assert.match(build13Js, /headerCategoryManagerButton/);
-assert.match(build13Js, /openV21Build13Management\('accounts', '帳戶管理'\)/);
-assert.match(build13Js, /openV21Build13Management\('categories', '科目管理'\)/);
-assert.match(build13Css, /#settingsDialog:not\(\.v21-management-mode\) \.settings-nav \[data-settings-tab="accounts"\]/);
-assert.match(build13Css, /#settingsDialog\.v21-management-mode \.settings-nav\s*\{[\s\S]*?display:\s*none !important;/);
+assert.match(build14Css, /data-management-pane="accounts"[\s\S]*?width:\s*min\(430px/);
+assert.match(build14Css, /\.v21-category-manager-list\s*\{/);
+assert.match(build14Css, /\.v21-category-group\s*\{[\s\S]*?border:\s*0 !important;/);
+assert.match(build14Js, /window\.renderAccountManager = renderV21Build14AccountManager/);
+assert.match(build14Js, /window\.renderCategoryManager = renderV21Build14CategoryManager/);
+assert.match(build14Js, /beginV21Build14InlineEdit\('account'/);
+assert.match(build14Js, /beginV21Build14InlineEdit\('category'/);
+assert.match(build14Js, /beginV21Build14InlineEdit\('group'/);
+assert.doesNotMatch(build14Js, /prompt\s*\(/);
+assert.match(build14Js, /input\.maxLength = type === 'account' \? 8 : 60/);
+assert.match(appV19, /ACCOUNT_NAME_MAX_CHARS = 8/);
+assert.match(appV19, /ACCOUNT_NAME_TOO_LONG/);
 
 // Ledger/export behavior and Build 4 observer hotfix remain protected.
 assert.match(v013, /button\.textContent = '匯出中…'/);
@@ -117,4 +134,4 @@ assert.match(v013, /button\.setAttribute\('aria-busy', 'true'\)/);
 assert.match(v021, /if \(account\.textContent !== nextText\) account\.textContent = nextText;/);
 assert.match(v021, /if \(empty && empty\.textContent !== '本次尚無輸入紀錄。'\) empty\.textContent = '本次尚無輸入紀錄。';/);
 
-console.log('V0.21.0 Build 13 desktop regression tests passed.');
+console.log('V0.21.0 Build 14 desktop regression tests passed.');

@@ -3,14 +3,16 @@ import { handleV19MigrationApi } from './v19-migration-safe.js';
 
 const SESSION_COOKIE = 'cyaccounting_session';
 const SUMMARY_MAX_UNITS = 40;
+const ACCOUNT_NAME_MAX_CHARS = 8;
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const migrationRequest = url.pathname.startsWith('/api/migration/desktop/');
     const transactionWrite = isTransactionWrite(url.pathname, request.method);
+    const accountWrite = isAccountWrite(url.pathname, request.method);
 
-    if (!migrationRequest && !transactionWrite) {
+    if (!migrationRequest && !transactionWrite && !accountWrite) {
       return previousApp.fetch(request, env);
     }
 
@@ -24,6 +26,16 @@ export default {
         const body = await request.clone().json().catch(() => null);
         if (body && summaryWeightedUnits(body.summary) > SUMMARY_MAX_UNITS) {
           return json({ ok: false, error: '摘要不可超過 20 個中文字或 40 個英數字元。', code: 'SUMMARY_TOO_LONG' }, 400);
+        }
+        return previousApp.fetch(request, env);
+      }
+
+      if (accountWrite) {
+        const body = await request.clone().json().catch(() => null);
+        const name = normalizeAccountName(body?.name);
+        if (!name) return json({ ok: false, error: '帳戶名稱不可空白。', code: 'ACCOUNT_NAME_REQUIRED' }, 400);
+        if (Array.from(name).length > ACCOUNT_NAME_MAX_CHARS) {
+          return json({ ok: false, error: '帳戶名稱最多 8 個字。', code: 'ACCOUNT_NAME_TOO_LONG' }, 400);
         }
         return previousApp.fetch(request, env);
       }
@@ -47,6 +59,11 @@ function isTransactionWrite(pathname, method) {
   return method === 'PUT' && /^\/api\/transactions\/\d+$/.test(pathname);
 }
 
+function isAccountWrite(pathname, method) {
+  if (method === 'POST' && pathname === '/api/accounts') return true;
+  return method === 'PUT' && /^\/api\/accounts\/\d+$/.test(pathname);
+}
+
 function summaryWeightedUnits(value) {
   let units = 0;
   for (const char of String(value ?? '').trim()) {
@@ -54,6 +71,10 @@ function summaryWeightedUnits(value) {
     units += code <= 0x7f || (code >= 0xff61 && code <= 0xff9f) ? 1 : 2;
   }
   return units;
+}
+
+function normalizeAccountName(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ');
 }
 
 async function sessionFromRequest(request, db) {
