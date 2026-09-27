@@ -24,10 +24,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        var appRoot = Path.GetFileName(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory))
+        var programDirectory = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+        var appRoot = Path.GetFileName(programDirectory)
             .Equals("Runtime", StringComparison.OrdinalIgnoreCase)
-            ? Directory.GetParent(AppContext.BaseDirectory)!.FullName
-            : AppContext.BaseDirectory;
+            ? Path.GetDirectoryName(programDirectory)!
+            : programDirectory;
         var data = Path.Combine(appRoot, "Data", "CYEnvelope.db");
         _repository = new Repository(data);
         _settings = _repository.Settings();
