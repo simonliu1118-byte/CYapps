@@ -31,10 +31,26 @@ assert.match(build8Js, /date\.setAttribute\('enterkeyhint', 'next'\)/);
 assert.match(build8Js, /summary\.setAttribute\('enterkeyhint', 'next'\)/);
 assert.match(build8Js, /amount\.setAttribute\('enterkeyhint', 'done'\)/);
 
-// Account buttons are now shared by Desktop, Tablet and Mobile while the canonical select remains the data source.
+// Account buttons remain the canonical fast selector while Mobile collapses them behind one trigger.
 assert.match(build8Js, /row\.hidden = false/);
 assert.match(build8Js, /select\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
-assert.doesNotMatch(build8Js, /document\.querySelector\('#categoryName'\)\?\.focus\(\)/);
+assert.match(build8Js, /trigger\.id = 'entryAccountPickerButton'/);
+assert.match(build8Js, /setV21Build9AccountPickerOpen/);
+assert.match(build8Js, /mobile-picker-open/);
+assert.match(build8Js, /entry-account-picker-value/);
+assert.match(build9Css, /\.entry-account-picker-trigger\s*\{[\s\S]*?display:\s*flex;/);
+assert.match(build9Css, /\.entry-account-buttons\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?display:\s*none;/);
+assert.match(build9Css, /\.entry-account-choice-row\.mobile-picker-open \.entry-account-buttons\s*\{[\s\S]*?display:\s*grid;/);
+assert.doesNotMatch(build9Css, /\.entry-account-buttons\s*\{[\s\S]*?overflow-x:\s*auto;/);
+
+// Mobile is split into two explicit task pages instead of stacking entry and ledger vertically.
+assert.match(build8Js, /setupV21Build9MobilePages\(\)/);
+assert.match(build8Js, /nav\.id = 'mobileMainNav'/);
+assert.match(build8Js, /data-mobile-page="entry"/);
+assert.match(build8Js, /data-mobile-page="ledger"/);
+assert.match(build8Js, /v21-mobile-page-hidden/);
+assert.match(build9Css, /\.v21-mobile-main-nav\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+assert.match(build9Css, /\.shell > \.v21-mobile-page-hidden\s*\{[\s\S]*?display:\s*none !important;/);
 
 // Tablet gets a compact two-row quick-entry workspace and keeps the table-oriented ledger.
 assert.match(build9Css, /@media \(min-width: 768px\) and \(max-width: 1023px\)/);
@@ -42,11 +58,11 @@ assert.match(build9Css, /\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*minma
 assert.match(build9Css, /\.entry-grid > \.account-source-field\s*\{[\s\S]*?display:\s*none;/);
 assert.match(build9Css, /\.entry-grid > \.summary-field\s*\{[\s\S]*?grid-row:\s*2;/);
 assert.match(build9Css, /\.ledger-card td\s*\{[\s\S]*?font-size:\s*13\.5px;/);
-assert.doesNotMatch(build9Css.match(/@media \(min-width: 768px\) and \(max-width: 1023px\)[\s\S]*?(?=@media \(max-width: 767px\))/)?.[0] || '', /\.ledger-card table\s*,[\s\S]*?display:\s*block/);
+const tabletCss = build9Css.match(/@media \(min-width: 768px\) and \(max-width: 1023px\)[\s\S]*?(?=\/\* Mobile:)/)?.[0] || '';
+assert.doesNotMatch(tabletCss, /\.ledger-card table\s*,[\s\S]*?display:\s*block/);
 
-// Mobile quick entry is compact: horizontal account buttons, date/category, summary, then amount/save.
+// Mobile quick entry remains compact: date/category, summary, then amount/save.
 assert.match(build9Css, /@media \(max-width: 767px\)/);
-assert.match(build9Css, /\.entry-account-buttons\s*\{[\s\S]*?flex-wrap:\s*nowrap;[\s\S]*?overflow-x:\s*auto;/);
 assert.match(build9Css, /\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, \.92fr\) minmax\(0, 1\.08fr\);/);
 assert.match(build9Css, /\.entry-grid > \.date-field\s*\{[\s\S]*?grid-row:\s*1;/);
 assert.match(build9Css, /\.entry-grid > \.category-field\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?grid-row:\s*1;/);
