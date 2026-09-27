@@ -24,15 +24,20 @@ function setupMonthlyExcelExport() {
 
 async function downloadMonthlyExcel() {
   const button = document.querySelector('#ledgerExcelExport');
-  const status = document.querySelector('#ledgerExcelExportStatus');
   const month = els.monthFilter?.value || '';
   if (!/^\d{4}-\d{2}$/.test(month)) {
     setExportStatus('請先選擇月份。', true);
     return;
   }
 
-  if (button) button.disabled = true;
-  setExportStatus('產生中…');
+  const defaultLabel = '匯出 Excel';
+  let failed = false;
+  if (button) {
+    button.disabled = true;
+    button.textContent = '匯出中…';
+    button.setAttribute('aria-busy', 'true');
+  }
+  setExportStatus('正在產生 Excel 檔案…');
 
   try {
     const response = await fetch(`/api/export/month.xlsx?month=${encodeURIComponent(month)}`, {
@@ -57,14 +62,21 @@ async function downloadMonthlyExcel() {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setExportStatus('已下載');
-    setTimeout(() => {
-      if (status?.textContent === '已下載') setExportStatus('');
-    }, 2500);
+    setExportStatus('Excel 已下載。');
   } catch (error) {
+    failed = true;
     setExportStatus(error?.message || 'Excel 匯出失敗。', true);
   } finally {
-    if (button) button.disabled = false;
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.textContent = failed ? '匯出失敗' : defaultLabel;
+      if (failed) {
+        setTimeout(() => {
+          if (button.textContent === '匯出失敗') button.textContent = defaultLabel;
+        }, 2200);
+      }
+    }
   }
 }
 
