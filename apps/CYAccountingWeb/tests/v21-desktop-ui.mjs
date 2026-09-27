@@ -19,9 +19,11 @@ const build6Css = read('public/v021b6.css');
 const build7Css = read('public/v021b7.css');
 const build8Css = read('public/v021b8.css');
 const build10Css = read('public/v021b10.css');
+const build11Css = read('public/v021b11.css');
 const js = read('public/v021.js');
 const build8Js = read('public/v021b8.js');
 const build10Js = read('public/v021b10.js');
+const build11Js = read('public/v021b11.js');
 const appV19 = read('src/app-v19.js');
 const v06 = read('public/v06.js');
 const v07 = read('public/v07.js');
@@ -29,23 +31,28 @@ const v011 = read('public/v011.js');
 const v013 = read('public/v013.js');
 
 assert.equal(version, '0.21.0');
-assert.equal(build, '10');
+assert.equal(build, '11');
 assert.match(html, /href="\/v021\.css"/);
 assert.match(html, /src="\/v021\.js"/);
 assert.match(html, /src="\/v021b8\.js"/);
 assert.match(html, /src="\/v021b10\.js"/);
+assert.match(html, /src="\/v021b11\.js"/);
 assert.ok(html.indexOf('/v021.css') > html.indexOf('/v020.css'), 'v021.css must load after v020.css');
 assert.ok(html.indexOf('/v021.js') > html.indexOf('/v020.js'), 'v021.js must load after v020.js');
 assert.ok(html.indexOf('/v021b8.js') > html.indexOf('/v021.js'), 'Build 8/9 overlay must load after v021.js');
-assert.ok(html.indexOf('/v021b10.js') > html.indexOf('/v021b8.js'), 'Build 10 mobile layer must load last');
+assert.ok(html.indexOf('/v021b10.js') > html.indexOf('/v021b8.js'), 'Build 10 mobile layer must load after Build 8/9');
+assert.ok(html.indexOf('/v021b11.js') > html.indexOf('/v021b10.js'), 'Build 11 desktop guard must load last');
 assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 7'/);
 assert.match(build8Js, /CY_V21_BUILD8_VERSION = 'V0\.21\.0 Build 9'/);
 assert.match(build10Js, /CY_V21_BUILD10_VERSION = 'V0\.21\.0 Build 10'/);
+assert.match(build11Js, /CY_V21_BUILD11_VERSION = 'V0\.21\.0 Build 11'/);
 assert.match(build8Js, /link\.href = '\/v021b8\.css'/);
 assert.match(build8Js, /link\.href = '\/v021b9\.css'/);
 assert.match(build10Js, /link\.href = '\/v021b10\.css'/);
+assert.match(build11Js, /link\.href = '\/v021b11\.css'/);
 assert.doesNotThrow(() => new Function(build8Js), 'Build 8/9 browser JavaScript must parse');
 assert.doesNotThrow(() => new Function(build10Js), 'Build 10 browser JavaScript must parse');
+assert.doesNotThrow(() => new Function(build11Js), 'Build 11 browser JavaScript must parse');
 assert.match(js, /ensureV21Build1Stylesheet\(\)/);
 assert.match(js, /ensureV21Build2Stylesheet\(\)/);
 assert.match(js, /ensureV21Build3Stylesheet\(\)/);
@@ -59,7 +66,7 @@ assert.match(js, /link\.href = '\/v021b5\.css'/);
 assert.match(js, /link\.href = '\/v021b6\.css'/);
 assert.match(js, /link\.href = '\/v021b7\.css'/);
 
-// Desktop redesign remains isolated. Build 10 is phone-only and must not redefine Tablet/Desktop breakpoints.
+// Desktop redesign remains isolated. Build 10 remains phone-only; Build 11 only restores >=768px safety.
 for (const stylesheet of [css, build3Css, build5Css, build6Css, build7Css, build8Css]) {
   assert.match(stylesheet, /@media \(min-width: 1024px\)/);
   assert.doesNotMatch(stylesheet, /@media \(max-width:/);
@@ -67,6 +74,16 @@ for (const stylesheet of [css, build3Css, build5Css, build6Css, build7Css, build
 assert.match(build10Css, /@media \(max-width: 767px\)/);
 assert.doesNotMatch(build10Css, /@media \(min-width: 768px\)/);
 assert.match(build10Js, /CY_V21_BUILD10_MOBILE = '\(max-width: 767px\)'/);
+assert.match(build11Css, /@media \(min-width: 768px\)/);
+assert.doesNotMatch(build11Css, /@media \(max-width:/);
+assert.match(build11Js, /CY_V21_BUILD11_DESKTOP = '\(min-width: 768px\)'/);
+assert.match(build11Css, /#mobileAccountMenuButton,[\s\S]*?#mobileLedgerMoreButton,[\s\S]*?#mobileMainNav[\s\S]*?display:\s*none !important;/);
+assert.match(build11Js, /accountTrigger\.hidden = Boolean\(desktop\)/);
+assert.match(build11Js, /ledgerMore\.hidden = Boolean\(desktop\)/);
+assert.match(build11Js, /document\.body\.classList\.remove\([\s\S]*?'v21-mobile-app'/);
+assert.match(build11Css, /\.entry-grid > label > input,[\s\S]*?min-width:\s*0 !important;[\s\S]*?max-width:\s*100% !important;/);
+assert.match(build11Css, /\.entry-grid > \.date-field\s*\{[\s\S]*?grid-column:\s*1 !important;/);
+assert.match(build11Css, /\.entry-grid > \.category-field\s*\{[\s\S]*?grid-column:\s*2 \/ 4 !important;/);
 
 // Modern business surfaces remain in the base V0.21 layer.
 assert.match(css, /\.topbar\s*\{[\s\S]*?backdrop-filter:\s*blur\(12px\)/);
@@ -258,4 +275,4 @@ assert.match(v011, /<kbd>Tab<\/kbd> 切換收入／支出/);
 assert.doesNotMatch(v011, /<kbd>F2<\/kbd> 切換收入／支出/);
 assert.match(js, /<kbd>Tab<\/kbd> 切換收入／支出/);
 
-console.log('V0.21.0 Build 10 desktop regression tests passed.');
+console.log('V0.21.0 Build 11 desktop isolation regression tests passed.');
