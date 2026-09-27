@@ -16,6 +16,7 @@ const build2Css = read('public/v021b2.css');
 const build3Css = read('public/v021b3.css');
 const build5Css = read('public/v021b5.css');
 const build6Css = read('public/v021b6.css');
+const build7Css = read('public/v021b7.css');
 const js = read('public/v021.js');
 const v06 = read('public/v06.js');
 const v07 = read('public/v07.js');
@@ -23,25 +24,27 @@ const v011 = read('public/v011.js');
 const v013 = read('public/v013.js');
 
 assert.equal(version, '0.21.0');
-assert.equal(build, '6');
+assert.equal(build, '7');
 assert.match(html, /href="\/v021\.css"/);
 assert.match(html, /src="\/v021\.js"/);
 assert.ok(html.indexOf('/v021.css') > html.indexOf('/v020.css'), 'v021.css must load after v020.css');
 assert.ok(html.indexOf('/v021.js') > html.indexOf('/v020.js'), 'v021.js must load after v020.js');
-assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 6'/);
+assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 7'/);
 assert.match(js, /ensureV21Build1Stylesheet\(\)/);
 assert.match(js, /ensureV21Build2Stylesheet\(\)/);
 assert.match(js, /ensureV21Build3Stylesheet\(\)/);
 assert.match(js, /ensureV21Build5Stylesheet\(\)/);
 assert.match(js, /ensureV21Build6Stylesheet\(\)/);
+assert.match(js, /ensureV21Build7Stylesheet\(\)/);
 assert.match(js, /link\.href = '\/v021b1\.css'/);
 assert.match(js, /link\.href = '\/v021b2\.css'/);
 assert.match(js, /link\.href = '\/v021b3\.css'/);
 assert.match(js, /link\.href = '\/v021b5\.css'/);
 assert.match(js, /link\.href = '\/v021b6\.css'/);
+assert.match(js, /link\.href = '\/v021b7\.css'/);
 
 // Desktop redesign remains isolated from Tablet/Mobile.
-for (const stylesheet of [css, build3Css, build5Css, build6Css]) {
+for (const stylesheet of [css, build3Css, build5Css, build6Css, build7Css]) {
   assert.match(stylesheet, /@media \(min-width: 1024px\)/);
   assert.doesNotMatch(stylesheet, /@media \(max-width:/);
 }
@@ -66,7 +69,7 @@ assert.match(js, /document\.body\.append\(confirmation\)/);
 assert.match(js, /setConfirmationDrawer\(true, false\)/);
 
 // Approved slider itself and mode tint remain intact. Build 5 only neutralizes the fieldset wrapper artefact.
-for (const stylesheet of [css, build1Css, build2Css, build3Css, build6Css]) {
+for (const stylesheet of [css, build1Css, build2Css, build3Css, build6Css, build7Css]) {
   assert.doesNotMatch(stylesheet, /\.entry-kind-switch\s*\{/);
 }
 assert.doesNotMatch(build5Css, /\.entry-kind-switch\s*\{/);
@@ -103,13 +106,13 @@ assert.match(js, /popover\.id = 'entryHelpPopover'/);
 assert.match(js, /快速輸入說明/);
 assert.match(js, /Ctrl \+ ↑↓/);
 
-// Low-frequency Excel import remains in Settings > Data Management.
+// Low-frequency Excel import remains in Settings > Data Management and the pane stays tab-scoped.
 assert.match(js, /tab\.dataset\.settingsTab = 'data'/);
 assert.match(js, /tab\.textContent = '資料管理'/);
 assert.match(js, /host\.append\(button\)/);
 assert.match(js, /button\.textContent = '匯入 Excel'/);
-assert.match(js, /帳戶、科目、資料與鎖帳/);
-assert.match(build3Css, /\.v21-data-pane/);
+assert.match(build7Css, /\.settings-pane\.v21-data-pane\s*\{[\s\S]*?display:\s*none;/);
+assert.match(build7Css, /\.settings-pane\.v21-data-pane\.active\s*\{[\s\S]*?display:\s*grid;/);
 
 // Account grouping is controlled only from the Account table header; normal ledger order follows Desktop date ordering.
 assert.doesNotMatch(v06, /<button id="ledgerGroupToggle"/);
@@ -120,12 +123,14 @@ assert.match(v06, /cyLedgerGroupByAccount = !cyLedgerGroupByAccount/);
 assert.match(v06, /new Intl\.Collator\('zh-Hant-TW'/);
 assert.match(v06, /accountLabel = cyLedgerGroupByAccount \? '帳戶 ▲' : '帳戶'/);
 
-// Empty-state and wide-ledger height stay compact.
+// Empty-state and wide-ledger height stay compact and avoid redundant helper prose.
 assert.match(js, /class="ledger-empty-state"/);
+assert.doesNotMatch(js, /新增記帳後，資料會顯示在這裡。/);
 assert.match(build3Css, /\.ledger-empty-state\s*\{[\s\S]*?min-height:\s*180px;/);
 assert.match(build3Css, /\.v21-split-layout > \.ledger-card\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?align-self:\s*start;/);
+assert.match(build7Css, /\.ledger-empty-state\s*\{[\s\S]*?min-height:\s*150px;/);
 
-// Header exposes role, keeps abnormal connectivity beside the title, and groups identity + logout as one account cluster.
+// Header exposes role, keeps abnormal connectivity beside the title, and aligns Settings before one identity/logout cluster.
 assert.match(js, /fetch\('\/api\/auth\/me'/);
 assert.match(js, /role === 'SUPER_ADMIN'/);
 assert.match(js, /return '超級管理員'/);
@@ -135,12 +140,14 @@ assert.match(js, /brandLine\.append\(status\)/);
 assert.match(js, /accountCluster\.className = 'v21-account-cluster'/);
 assert.match(js, /accountCluster\.append\(currentUser\)/);
 assert.match(js, /accountCluster\.append\(logout\)/);
-assert.match(js, /actions\.append\(accountCluster\)/);
+assert.match(js, /actions\.insertBefore\(settings, accountCluster\)/);
 assert.match(build5Css, /\.v21-brand-line \.status\.ok\s*\{[\s\S]*?display:\s*none;/);
 assert.match(build5Css, /\.v21-brand-line \.status\.warn\s*\{[\s\S]*?display:\s*inline-flex;/);
 assert.match(build6Css, /\.v21-account-cluster\s*\{[\s\S]*?border:\s*1px solid #dde3ea;[\s\S]*?border-radius:\s*6px;/);
-assert.match(build6Css, /\.v21-account-cluster #logoutButton\s*\{[\s\S]*?border-left:\s*1px solid #dde3ea;[\s\S]*?border-radius:\s*0;/);
-assert.match(build6Css, /\.v21-account-cluster \.current-user\s*\{[\s\S]*?background:\s*transparent;/);
+assert.match(build7Css, /\.topbar #settingsButton\s*\{[\s\S]*?order:\s*0 !important;/);
+assert.match(build7Css, /\.v21-account-cluster\s*\{[\s\S]*?order:\s*1 !important;[\s\S]*?align-items:\s*center;/);
+assert.match(build7Css, /\.v21-account-cluster \.current-user-main\s*\{[\s\S]*?font-weight:\s*600;/);
+assert.match(build7Css, /\.v21-account-cluster \.current-user-role\s*\{[\s\S]*?font-size:\s*11\.5px;/);
 
 // Summary row owns opening-balance and month-lock actions; search stays left and export stays right.
 assert.match(js, /summaryBar\.className = 'v21-ledger-summary-bar'/);
@@ -161,11 +168,21 @@ assert.doesNotMatch(v013, /setExportStatus\('已下載'\)/);
 assert.match(build5Css, /#ledgerExcelExport\s*\{[\s\S]*?min-width:\s*82px;/);
 assert.match(build5Css, /#ledgerExcelExportStatus\s*\{[\s\S]*?position:\s*absolute !important;/);
 
-// Opening-balance dialog is a compact utility surface in Build 6 while retaining the existing data flow.
+// Opening-balance dialog remains a compact utility surface while redundant helper copy is removed.
 assert.match(build6Css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(420px, calc\(100% - 32px\)\);/);
 assert.match(build6Css, /\.opening-modal \.modal-header p\s*\{[\s\S]*?display:\s*none;/);
 assert.match(build6Css, /\.opening-modal \.opening-row\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 138px;[\s\S]*?min-height:\s*42px;/);
-assert.match(build6Css, /\.opening-modal \.modal-actions\s*\{[\s\S]*?padding:\s*9px 16px 12px;/);
+assert.match(build7Css, /\.opening-modal \.opening-dialog-heading\s*\{[\s\S]*?justify-content:\s*flex-end;/);
+assert.match(js, /#openingDialog \.opening-dialog-heading > \.hint/);
+
+// Build 7 removes nonessential always-visible explanatory copy while keeping validation/status UI.
+assert.match(js, /function cleanupV21InterfaceCopy\(\)/);
+assert.match(js, /\.auth-note/);
+assert.match(js, /#settingsDialog \[data-settings-pane="accounts"\] > \.hint/);
+assert.match(js, /#settingsDialog \[data-settings-pane="backup"\] \.backup-security-note/);
+assert.match(js, /#settingsDialog \[data-settings-pane="migration"\] \.migration-privacy-v19/);
+assert.match(build7Css, /\.settings-modal\s*\{[\s\S]*?width:\s*min\(820px, calc\(100% - 36px\)\);/);
+assert.match(build7Css, /\.settings-layout\s*\{[\s\S]*?grid-template-columns:\s*132px minmax\(0, 1fr\);[\s\S]*?min-height:\s*430px;/);
 
 // Build 4 hotfix remains protected: MutationObserver callbacks must stay idempotent.
 assert.match(js, /const nextText = active \? '帳戶 ▲' : '帳戶';/);
@@ -182,4 +199,4 @@ assert.match(v011, /<kbd>Tab<\/kbd> 切換收入／支出/);
 assert.doesNotMatch(v011, /<kbd>F2<\/kbd> 切換收入／支出/);
 assert.match(js, /<kbd>Tab<\/kbd> 切換收入／支出/);
 
-console.log('V0.21.0 Build 6 compact desktop regression tests passed.');
+console.log('V0.21.0 Build 7 desktop cleanup regression tests passed.');
