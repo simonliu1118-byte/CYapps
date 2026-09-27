@@ -3,7 +3,7 @@ CYEnvelope V0.2.1（開發測試版，尚未正式發行）
 BUILD：0
 
 下載方式調整
-- 比照 CYInvoice 將 .NET 執行環境與必要原生元件打包進 CYEnvelope.exe，維持可攜且清爽的 CYEnvelope 資料夾。預期只包含 CYEnvelope.exe、VERSION 與 BUILD。
+- 將 .NET 管理組件打包進 CYEnvelope.exe，少量必要原生 DLL 留在同一資料夾以利安全掃描，維持可攜且清爽的 CYEnvelope 資料夾。
 - Actions 測試 Artifact 直接上傳 CYEnvelope 資料夾；下載後解壓縮一次即取得可執行資料夾，不再另附內層 ZIP 或獨立 SHA-256 檔。
 - 封裝前仍執行共用公開封包安全掃描，並在 CI 啟動封裝後的 EXE、重新下載 Artifact 驗證解壓縮結構與檔案清單。
 

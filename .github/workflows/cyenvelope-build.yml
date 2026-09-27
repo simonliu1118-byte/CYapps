@@ -107,7 +107,7 @@ jobs:
             throw 'CYEnvelope.exe missing after one extraction'
           }
           $contents = @(Get-ChildItem ./dist/verify-download/CYEnvelope -Force | Select-Object -ExpandProperty Name)
-          $expected = @('BUILD', 'CYEnvelope.exe', 'VERSION')
+          $expected = @(Get-ChildItem ./dist/stage/CYEnvelope -Force | Select-Object -ExpandProperty Name)
           if (@(Compare-Object $expected $contents).Count -ne 0) {
             throw "Unexpected portable folder contents: $($contents -join ', ')"
           }
