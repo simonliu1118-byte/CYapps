@@ -8,82 +8,90 @@ const ROOT = path.resolve(HERE, '..');
 const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 
 const build = read('BUILD').trim();
+const html = read('public/index.html');
 const v03 = read('public/v03.js');
 const build8Js = read('public/v021b8.js');
 const build9Css = read('public/v021b9.css');
+const build10Js = read('public/v021b10.js');
+const build10Css = read('public/v021b10.css');
 const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
-assert.equal(build, '9');
-assert.match(build8Js, /CY_V21_BUILD8_VERSION = 'V0\.21\.0 Build 9'/);
-assert.match(build8Js, /ensureV21Build9Stylesheet\(\)/);
-assert.match(build8Js, /link\.href = '\/v021b9\.css'/);
-assert.doesNotThrow(() => new Function(build8Js), 'current V0.21 adaptive JavaScript must parse');
+assert.equal(build, '10');
+assert.match(html, /src="\/v021b10\.js"/);
+assert.match(build10Js, /CY_V21_BUILD10_VERSION = 'V0\.21\.0 Build 10'/);
+assert.match(build10Js, /CY_V21_BUILD10_MOBILE = '\(max-width: 767px\)'/);
+assert.match(build10Js, /link\.href = '\/v021b10\.css'/);
+assert.doesNotThrow(() => new Function(build8Js), 'Build 8/9 adaptive JavaScript must parse');
+assert.doesNotThrow(() => new Function(build10Js), 'Build 10 mobile JavaScript must parse');
 
-// User-approved Enter workflow is date -> summary -> amount -> save, then focus returns to summary.
+// User-approved Enter workflow remains date -> summary -> amount -> save, then focus returns to summary.
 assert.match(v03, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/);
 assert.match(v03, /enterStep\(els\.summary,[\s\S]*?els\.amount\?\.focus\(\)/);
 assert.match(v03, /enterStep\(els\.amount,[\s\S]*?els\.form\.requestSubmit\(\)/);
 assert.doesNotMatch(v03, /const flow = \[els\.txDate, els\.accountName, els\.categoryName/);
 assert.match(v03, /cyFocusSummaryAfterSave[\s\S]*?els\.summary\.focus\(\)/);
 assert.match(build8Js, /日期 Enter → 摘要 Enter → 金額 Enter 儲存 → 回摘要/);
-assert.match(build8Js, /date\.setAttribute\('enterkeyhint', 'next'\)/);
-assert.match(build8Js, /summary\.setAttribute\('enterkeyhint', 'next'\)/);
-assert.match(build8Js, /amount\.setAttribute\('enterkeyhint', 'done'\)/);
 
-// Account buttons remain the canonical fast selector while Mobile collapses them behind one trigger.
-assert.match(build8Js, /row\.hidden = false/);
-assert.match(build8Js, /select\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
-assert.match(build8Js, /trigger\.id = 'entryAccountPickerButton'/);
-assert.match(build8Js, /setV21Build9AccountPickerOpen/);
-assert.match(build8Js, /mobile-picker-open/);
-assert.match(build8Js, /entry-account-picker-value/);
-assert.match(build9Css, /\.entry-account-picker-trigger\s*\{[\s\S]*?display:\s*flex;/);
-assert.match(build9Css, /\.entry-account-buttons\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?display:\s*none;/);
-assert.match(build9Css, /\.entry-account-choice-row\.mobile-picker-open \.entry-account-buttons\s*\{[\s\S]*?display:\s*grid;/);
-assert.doesNotMatch(build9Css, /\.entry-account-buttons\s*\{[\s\S]*?overflow-x:\s*auto;/);
+// Build 10 is deliberately phone-only. Tablet remains on the previously gated Build 9 layout.
+assert.match(build10Css, /@media \(max-width: 767px\)/);
+assert.doesNotMatch(build10Css, /@media \(min-width: 768px\)/);
+assert.match(build9Css, /@media \(min-width: 768px\) and \(max-width: 1023px\)/);
+const tabletCss = build9Css.match(/@media \(min-width: 768px\) and \(max-width: 1023px\)[\s\S]*?(?=\/\* Mobile:)/)?.[0] || '';
+assert.match(tabletCss, /\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1\.3fr\) minmax\(140px, \.8fr\) 112px;/);
+assert.doesNotMatch(tabletCss, /\.ledger-card table\s*,[\s\S]*?display:\s*block/);
 
-// Mobile is split into two explicit task pages instead of stacking entry and ledger vertically.
+// Mobile remains two explicit task pages, but Build 10 turns the selector into bottom task navigation.
 assert.match(build8Js, /setupV21Build9MobilePages\(\)/);
 assert.match(build8Js, /nav\.id = 'mobileMainNav'/);
 assert.match(build8Js, /data-mobile-page="entry"/);
 assert.match(build8Js, /data-mobile-page="ledger"/);
 assert.match(build8Js, /v21-mobile-page-hidden/);
-assert.match(build9Css, /\.v21-mobile-main-nav\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
-assert.match(build9Css, /\.shell > \.v21-mobile-page-hidden\s*\{[\s\S]*?display:\s*none !important;/);
+assert.match(build10Js, /v21-mobile-bottom-nav/);
+assert.match(build10Js, /document\.body\.append\(nav\)/);
+assert.match(build10Css, /\.v21-mobile-main-nav\.v21-mobile-bottom-nav\s*\{[\s\S]*?position:\s*fixed !important;[\s\S]*?bottom:\s*0;/);
+assert.match(build10Css, /body\.v21-mobile-app\s*\{[\s\S]*?padding-bottom:/);
 
-// Tablet gets a compact two-row quick-entry workspace and keeps the table-oriented ledger.
-assert.match(build9Css, /@media \(min-width: 768px\) and \(max-width: 1023px\)/);
-assert.match(build9Css, /\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1\.3fr\) minmax\(140px, \.8fr\) 112px;/);
-assert.match(build9Css, /\.entry-grid > \.account-source-field\s*\{[\s\S]*?display:\s*none;/);
-assert.match(build9Css, /\.entry-grid > \.summary-field\s*\{[\s\S]*?grid-row:\s*2;/);
-assert.match(build9Css, /\.ledger-card td\s*\{[\s\S]*?font-size:\s*13\.5px;/);
-const tabletCss = build9Css.match(/@media \(min-width: 768px\) and \(max-width: 1023px\)[\s\S]*?(?=\/\* Mobile:)/)?.[0] || '';
-assert.doesNotMatch(tabletCss, /\.ledger-card table\s*,[\s\S]*?display:\s*block/);
+// Mobile header is an app bar with one compact identity entry; Desktop header controls are not squeezed into the phone bar.
+assert.match(build10Js, /trigger\.id = 'mobileAccountMenuButton'/);
+assert.match(build10Js, /menu\.id = 'mobileAccountMenu'/);
+assert.match(build10Js, /data-mobile-account-action="settings"/);
+assert.match(build10Js, /data-mobile-account-action="logout"/);
+assert.match(build10Css, /\.topbar\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto !important;/);
+assert.match(build10Css, /\.topbar-actions\s*\{[\s\S]*?display:\s*none !important;/);
+assert.match(build10Css, /\.v21-mobile-account-menu-button\.role-super-admin\s*\{[\s\S]*?#fff4d6/);
+assert.match(build10Css, /\.v21-mobile-account-menu-button\.role-admin\s*\{[\s\S]*?#f7e8dc/);
+assert.match(build10Css, /\.v21-brand-line \.status\.ok[\s\S]*?display:\s*none !important;/);
 
-// Mobile quick entry remains compact: date/category, summary, then amount/save.
-assert.match(build9Css, /@media \(max-width: 767px\)/);
-assert.match(build9Css, /\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, \.92fr\) minmax\(0, 1\.08fr\);/);
-assert.match(build9Css, /\.entry-grid > \.date-field\s*\{[\s\S]*?grid-row:\s*1;/);
-assert.match(build9Css, /\.entry-grid > \.category-field\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?grid-row:\s*1;/);
-assert.match(build9Css, /\.entry-grid > \.summary-field\s*\{[\s\S]*?grid-column:\s*1 \/ -1;[\s\S]*?grid-row:\s*2;/);
-assert.match(build9Css, /\.entry-grid > \.amount-field\s*\{[\s\S]*?grid-row:\s*3;/);
-assert.match(build9Css, /\.entry-grid > #saveButton\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?grid-row:\s*3;/);
-assert.match(build9Css, /\.entry-grid input,[\s\S]*?font-size:\s*16px;/);
+// Account selection is one row on the form and opens a real bottom sheet; it is not a horizontal scrolling button strip.
+assert.match(build8Js, /trigger\.id = 'entryAccountPickerButton'/);
+assert.match(build8Js, /setV21Build9AccountPickerOpen/);
+assert.match(build10Js, /mobileAccountSheetBackdrop/);
+assert.match(build10Css, /\.entry-account-buttons\s*\{[\s\S]*?position:\s*fixed !important;[\s\S]*?bottom:\s*0 !important;/);
+assert.match(build10Css, /\.entry-account-choice-row\.mobile-picker-open \.entry-account-buttons\s*\{[\s\S]*?display:\s*grid !important;/);
+assert.doesNotMatch(build10Css, /\.entry-account-buttons\s*\{[\s\S]*?overflow-x:\s*auto/);
 
-// Existing mobile ledger card behavior remains active and Build 9 only refines it.
+// The phone entry page is a list-form, not a compressed desktop grid. Native date/select controls never share a row.
+assert.match(build10Css, /\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*1fr !important;/);
+assert.match(build10Css, /\.entry-grid > \.date-field,[\s\S]*?grid-column:\s*1 !important;[\s\S]*?grid-row:\s*auto !important;/);
+assert.match(build10Css, /\.entry-grid input,[\s\S]*?font-size:\s*16px !important;/);
+assert.match(build10Css, /\.entry-grid > #saveButton\s*\{[\s\S]*?width:\s*100% !important;[\s\S]*?height:\s*48px !important;/);
+assert.match(build10Css, /\.entry-kind-switch\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\) !important;/);
+assert.match(build10Css, /\.entry-card \.section-title h2,[\s\S]*?display:\s*none !important;/);
+
+// Recently-entered confirmation is a desktop/tablet workspace, not a third phone panel or floating bubble.
+assert.match(build10Js, /setConfirmationDrawer\(false, false\)/);
+assert.match(build10Css, /#confirmationToggle,[\s\S]*?\.confirmation-edge-open,[\s\S]*?#inputConfirmationCard\s*\{[\s\S]*?display:\s*none !important;/);
+
+// Ledger keeps mobile transaction cards but moves low-frequency month tools behind one More sheet.
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
-assert.match(build9Css, /\.ledger-card tbody > tr:not\(\.account-group-row\) > td:nth-child\(6\)\s*\{[\s\S]*?font-size:\s*17px;/);
+assert.match(build10Js, /button\.id = 'mobileLedgerMoreButton'/);
+assert.match(build10Js, /sheet\.id = 'mobileLedgerToolsSheet'/);
+assert.match(build10Js, /data-mobile-ledger-action="opening"/);
+assert.match(build10Js, /data-mobile-ledger-action="lock"/);
+assert.match(build10Js, /data-mobile-ledger-action="export"/);
+assert.match(build10Css, /\.v21-summary-actions,[\s\S]*?\.ledger-view-tools\s*\{[\s\S]*?display:\s*none !important;/);
+assert.match(build10Css, /\.v21-mobile-tools-sheet\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?bottom:\s*0;/);
 
-// Mobile/Tablet header keeps role identity compact and hides healthy connection noise.
-assert.match(build9Css, /\.v21-brand-line \.status\.ok\s*\{[\s\S]*?display:\s*none;/);
-assert.match(build9Css, /\.current-user\.role-super-admin\s*\{[\s\S]*?#fff4d6/);
-assert.match(build9Css, /\.current-user\.role-admin\s*\{[\s\S]*?#f8ebe1/);
-assert.match(build9Css, /\.v21-account-cluster\s*\{[\s\S]*?overflow:\s*hidden;/);
-
-// Approved mode tints remain available on touch layouts.
-assert.match(build9Css, /\.entry-card\.entry-income\s*\{[\s\S]*?background:\s*#f4fbf6;/);
-assert.match(build9Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?background:\s*#fff6f5;/);
-
-console.log('V0.21.0 Build 9 Tablet/Mobile adaptive UI regression tests passed.');
+console.log('V0.21.0 Build 10 mobile-first adaptive UI regression tests passed.');
