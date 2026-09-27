@@ -19,16 +19,27 @@ if (-not (Test-Path (Join-Path $output 'CYEnvelope.exe'))) {
 if ((Get-Item (Join-Path $output 'CYEnvelope.exe')).Length -lt 1000000) {
     throw 'CYEnvelope.exe unexpectedly small'
 }
-$entries = @(Get-ChildItem -LiteralPath $output -Force)
-$native = @($entries | Where-Object { $_.Extension -eq '.dll' })
-$unexpected = @($entries | Where-Object {
-    $_.PSIsContainer -or ($_.Name -notin @('CYEnvelope.exe', 'VERSION', 'BUILD') -and $_.Extension -ne '.dll')
-})
-if ($unexpected.Count -gt 0) {
-    throw "Unexpected files in portable folder: $($unexpected.Name -join ', ')"
+$nativeNames = @(
+    'D3DCompiler_47_cor3.dll', 'e_sqlite3.dll', 'PenImc_cor3.dll',
+    'PresentationNative_cor3.dll', 'vcruntime140_cor3.dll', 'wpfgfx_cor3.dll'
+)
+$runtime = Join-Path $output 'Runtime'
+New-Item -ItemType Directory -Path $runtime -Force | Out-Null
+foreach ($name in $nativeNames) {
+    $source = Join-Path $output $name
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing native dependency: $name" }
+    Move-Item -LiteralPath $source -Destination (Join-Path $runtime $name)
 }
-if ($native.Count -gt 8) { throw "Too many unpacked native dependencies: $($native.Count)" }
-Write-Host "Portable files: $($entries.Name -join ', ')"
+$rootNames = @(Get-ChildItem -LiteralPath $output -Force | Select-Object -ExpandProperty Name)
+$expectedRoot = @('CYEnvelope.exe', 'VERSION', 'BUILD', 'Runtime')
+if (@(Compare-Object $expectedRoot $rootNames).Count -ne 0) {
+    throw "Unexpected portable root contents: $($rootNames -join ', ')"
+}
+$runtimeNames = @(Get-ChildItem -LiteralPath $runtime -Force | Select-Object -ExpandProperty Name)
+if (@(Compare-Object $nativeNames $runtimeNames).Count -ne 0) {
+    throw "Unexpected Runtime contents: $($runtimeNames -join ', ')"
+}
+Write-Host "Portable root: $($rootNames -join ', '); Runtime: $($runtimeNames -join ', ')"
 python (Join-Path $repoRoot '.github/scripts/scan-public-package.py') $stageRoot
 if ($LASTEXITCODE -ne 0) { throw 'Public package safety scan failed' }
 Write-Host "Portable folder: $output"

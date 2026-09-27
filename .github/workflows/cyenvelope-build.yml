@@ -107,9 +107,20 @@ jobs:
             throw 'CYEnvelope.exe missing after one extraction'
           }
           $contents = @(Get-ChildItem ./dist/verify-download/CYEnvelope -Force | Select-Object -ExpandProperty Name)
-          $expected = @(Get-ChildItem ./dist/stage/CYEnvelope -Force | Select-Object -ExpandProperty Name)
+          $expected = @('CYEnvelope.exe', 'VERSION', 'BUILD', 'Runtime')
           if (@(Compare-Object $expected $contents).Count -ne 0) {
             throw "Unexpected portable folder contents: $($contents -join ', ')"
+          }
+          $runtime = @(Get-ChildItem ./dist/verify-download/CYEnvelope/Runtime -Force | Select-Object -ExpandProperty Name)
+          $expectedRuntime = @(
+            'D3DCompiler_47_cor3.dll', 'e_sqlite3.dll', 'PenImc_cor3.dll',
+            'PresentationNative_cor3.dll', 'vcruntime140_cor3.dll', 'wpfgfx_cor3.dll'
+          )
+          if (@(Compare-Object $expectedRuntime $runtime).Count -ne 0) {
+            throw "Unexpected Runtime contents: $($runtime -join ', ')"
+          }
+          if (@(Get-ChildItem ./dist/verify-download/CYEnvelope -Filter '*.dll' -File).Count -ne 0) {
+            throw 'DLL found in the portable root'
           }
 
       - name: Startup smoke on downloaded EXE

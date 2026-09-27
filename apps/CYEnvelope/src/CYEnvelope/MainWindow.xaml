@@ -1,82 +1,153 @@
 <Window x:Class="CYEnvelope.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="CYEnvelope"
-        Width="1140" Height="790" MinWidth="940" MinHeight="660" WindowStartupLocation="CenterScreen"
-        Background="#F8FAFC" Foreground="#1F2937" FontFamily="Microsoft JhengHei UI" FontSize="15"
-        Icon="/CYEnvelope;component/ENV.ico">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:CYEnvelope"
+        Title="CYEnvelope" Width="1180" Height="800" MinWidth="980" MinHeight="690"
+        WindowStartupLocation="CenterScreen" Icon="/CYEnvelope;component/ENV.ico"
+        Background="#F8FAFC" Foreground="#1F2937" FontFamily="Microsoft JhengHei UI" FontSize="14">
   <Window.Resources>
-    <Style TargetType="Button">
-      <Setter Property="Padding" Value="12,6"/>
-      <Setter Property="MinHeight" Value="35"/>
-      <Setter Property="Margin" Value="4"/>
+    <Style x:Key="SectionTitle" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="17"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style x:Key="FieldLabel" TargetType="TextBlock">
+      <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+    <Style x:Key="SecondaryText" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="#667085"/>
     </Style>
     <Style TargetType="TextBox">
-      <Setter Property="MinHeight" Value="32"/>
-      <Setter Property="Padding" Value="5,3"/>
-      <Setter Property="Margin" Value="0,4,0,10"/>
+      <Setter Property="Padding" Value="6,4"/>
+      <Setter Property="Margin" Value="0,0,0,12"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
     </Style>
     <Style TargetType="ComboBox">
-      <Setter Property="MinHeight" Value="32"/>
-      <Setter Property="Margin" Value="0,4,0,10"/>
+      <Setter Property="Margin" Value="0,0,0,12"/>
+      <Setter Property="MinHeight" Value="30"/>
+    </Style>
+    <Style x:Key="ToolbarButton" TargetType="Button">
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="Margin" Value="0,0,8,0"/>
+      <Setter Property="MinHeight" Value="34"/>
+    </Style>
+    <Style x:Key="SecondaryButton" TargetType="Button">
+      <Setter Property="Padding" Value="18,7"/>
+      <Setter Property="MinHeight" Value="36"/>
+    </Style>
+    <Style x:Key="PrimaryButton" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Background" Value="#2563EB"/>
+      <Setter Property="BorderBrush" Value="#2563EB"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="MinHeight" Value="38"/>
+      <Setter Property="Padding" Value="24,7"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="2"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="ButtonBorder" Property="Background" Value="#1D4ED8"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="ButtonBorder" Property="Background" Value="#1E40AF"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#1E40AF"/>
+                <Setter TargetName="ButtonBorder" Property="BorderThickness" Value="2"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="ButtonBorder" Property="Background" Value="#F1F3F5"/>
+                <Setter Property="Foreground" Value="#98A2B3"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
     </Style>
   </Window.Resources>
-  <DockPanel Margin="18">
-    <Border DockPanel.Dock="Top" Background="White" BorderBrush="#D1D5DB" BorderThickness="0,0,0,1" Padding="6,3" Margin="0,0,0,14">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E5E8EC" BorderThickness="0,0,0,1" Padding="20,10">
       <StackPanel Orientation="Horizontal">
-        <Button Content="聯絡人資料" Click="ContactsClick"/>
-        <Button Content="列印設定" Click="PrinterClick"/>
-        <Button Content="格式設定" Click="FormatClick"/>
-        <Button Content="方框文字" Click="FrameClick"/>
-        <Button Content="設定" Click="SettingsClick"/>
+        <Button Content="聯絡人資料" Style="{StaticResource ToolbarButton}" Click="ContactsClick"/>
+        <Button Content="列印設定" Style="{StaticResource ToolbarButton}" Click="PrinterClick"/>
+        <Button Content="格式設定" Style="{StaticResource ToolbarButton}" Click="FormatClick"/>
+        <Button Content="方框文字" Style="{StaticResource ToolbarButton}" Click="FrameClick"/>
+        <Button Content="設定" Style="{StaticResource ToolbarButton}" Click="SettingsClick"/>
       </StackPanel>
     </Border>
-    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,0">
-      <Button Content="列印" FontSize="17" FontWeight="SemiBold" Width="190" Height="46" Click="PrintClick"/>
-      <Button Content="清空" Width="110" Click="ClearClick"/>
-    </StackPanel>
-    <Grid>
-      <Grid.ColumnDefinitions><ColumnDefinition x:Name="EntryColumn" Width="370"/><ColumnDefinition x:Name="EntryGap" Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <Border x:Name="EntryPanel" Grid.Column="0" Background="White" BorderBrush="#D1D5DB" BorderThickness="1" Padding="16">
+    <Grid DockPanel.Dock="Bottom" Margin="20,12,20,16">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <TextBlock Grid.Column="0" Style="{StaticResource SecondaryText}" VerticalAlignment="Center"
+                 Text="請核對預覽內容；列印位置以實際試印為準。"/>
+      <StackPanel Grid.Column="1" Orientation="Horizontal">
+        <Button Content="清空" Style="{StaticResource SecondaryButton}" Margin="0,0,8,0" Click="ClearClick"/>
+        <Button Content="列印信封" Style="{StaticResource PrimaryButton}" Click="PrintClick"/>
+      </StackPanel>
+    </Grid>
+    <Grid Margin="20,16,20,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition x:Name="EntryColumn" Width="410"/>
+        <ColumnDefinition x:Name="EntryGap" Width="16"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <Border x:Name="EntryPanel" Grid.Column="0" Background="White" BorderBrush="#D1D5DB" BorderThickness="1">
         <DockPanel>
-          <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <Border DockPanel.Dock="Top" BorderBrush="#E5E8EC" BorderThickness="0,0,0,1" Padding="20,14">
             <StackPanel>
-              <TextBlock Text="收件資料" FontSize="19" FontWeight="SemiBold" Margin="0,0,0,16"/>
-              <TextBlock Text="收件人"/>
+              <TextBlock Text="收件資料" Style="{StaticResource SectionTitle}"/>
+              <TextBlock Text="輸入內容會同步顯示在右側信封上。" Style="{StaticResource SecondaryText}" Margin="0,4,0,0"/>
+            </StackPanel>
+          </Border>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="20,16,20,18">
+              <TextBlock Text="收件人" Style="{StaticResource FieldLabel}"/>
               <TextBox x:Name="RecipientBox" TextChanged="RecipientChanged" KeyDown="RecipientKeyDown"/>
-              <ListBox x:Name="Suggestions" MaxHeight="130" Visibility="Collapsed" MouseDoubleClick="SuggestionChosen"
-                       KeyDown="SuggestionKeyDown" DisplayMemberPath="Name" Margin="0,0,0,10"/>
-              <TextBlock Text="已存地址"/>
+              <ListBox x:Name="Suggestions" MaxHeight="128" Visibility="Collapsed" MouseDoubleClick="SuggestionChosen"
+                       KeyDown="SuggestionKeyDown" DisplayMemberPath="Name" Margin="0,0,0,12"/>
+              <TextBlock Text="已存地址" Style="{StaticResource FieldLabel}"/>
               <ComboBox x:Name="AddressChoice" DisplayMemberPath="Label" SelectionChanged="AddressChoiceChanged"/>
-              <TextBlock Text="地址"/>
+              <TextBlock Text="地址" Style="{StaticResource FieldLabel}"/>
               <TextBox x:Name="AddressBox" TextChanged="InputChanged" LostKeyboardFocus="AddressLostFocus"
                        KeyDown="InputKeyDown" AcceptsReturn="False"/>
-              <TextBlock Text="郵遞區號"/>
-              <TextBox x:Name="PostalBox" MaxLength="3" Width="85" HorizontalAlignment="Left" TextChanged="InputChanged"/>
-              <TextBlock Text="已存電話"/>
+              <TextBlock Text="郵遞區號" Style="{StaticResource FieldLabel}"/>
+              <TextBox x:Name="PostalBox" MaxLength="3" Width="92" HorizontalAlignment="Left" TextChanged="InputChanged"/>
+              <TextBlock Text="已存電話" Style="{StaticResource FieldLabel}"/>
               <ComboBox x:Name="PhoneChoice" DisplayMemberPath="Display" SelectionChanged="PhoneChoiceChanged"/>
-              <TextBlock Text="電話（選填）"/>
+              <TextBlock Text="電話（選填）" Style="{StaticResource FieldLabel}"/>
               <TextBox x:Name="PhoneBox" TextChanged="InputChanged" LostKeyboardFocus="PhoneLostFocus"/>
-              <TextBlock Text="郵件種類" FontWeight="SemiBold" Margin="0,4,0,8"/>
+              <Border BorderBrush="#E5E8EC" BorderThickness="0,1,0,0" Margin="0,4,0,16"/>
+              <TextBlock Text="郵件種類" FontWeight="SemiBold" Margin="0,0,0,10"/>
               <WrapPanel x:Name="DeliveryPanel"/>
-              <CheckBox x:Name="ShowFrameBox" Content="印出方框文字" Margin="0,16,0,8" Checked="InputChanged" Unchecked="InputChanged"/>
-              <ComboBox x:Name="FrameChoice" SelectionChanged="InputChanged"/>
+              <CheckBox x:Name="ShowFrameBox" Content="印出方框文字" Margin="0,12,0,8"
+                        Checked="InputChanged" Unchecked="InputChanged"/>
+              <ComboBox x:Name="FrameChoice" SelectionChanged="InputChanged" Margin="0"/>
             </StackPanel>
           </ScrollViewer>
         </DockPanel>
       </Border>
-      <Border Grid.Column="2" Background="White" BorderBrush="#D1D5DB" BorderThickness="1" Padding="14">
+      <Border Grid.Column="2" Background="White" BorderBrush="#D1D5DB" BorderThickness="1">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock Text="信封預覽" FontSize="19" FontWeight="SemiBold" VerticalAlignment="Center"/>
-            <TextBlock x:Name="FormatName" Foreground="#667085" VerticalAlignment="Center" Margin="16,0,0,0"/>
-          </StackPanel>
-          <Viewbox Stretch="Uniform">
-            <Border BorderBrush="#E5E8EC" BorderThickness="1">
-              <Grid>
-                <local:VisualHost x:Name="PreviewHost" xmlns:local="clr-namespace:CYEnvelope"/>
-                <Canvas x:Name="DirectLayer" Visibility="Collapsed"/>
-              </Grid>
-            </Border>
-          </Viewbox>
+          <Border DockPanel.Dock="Top" BorderBrush="#E5E8EC" BorderThickness="0,0,0,1" Padding="20,14">
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="信封預覽" Style="{StaticResource SectionTitle}" VerticalAlignment="Center"/>
+              <TextBlock x:Name="FormatName" Grid.Column="1" Style="{StaticResource SecondaryText}" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+          <Grid Background="#F1F3F5" Margin="16">
+            <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24">
+              <Border Background="White" BorderBrush="#D1D5DB" BorderThickness="1">
+                <Grid>
+                  <local:VisualHost x:Name="PreviewHost"/>
+                  <Canvas x:Name="DirectLayer" Visibility="Collapsed"/>
+                </Grid>
+              </Border>
+            </Viewbox>
+          </Grid>
         </DockPanel>
       </Border>
     </Grid>
