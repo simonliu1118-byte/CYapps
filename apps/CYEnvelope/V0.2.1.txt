@@ -1,0 +1,12 @@
+CYEnvelope V0.2.1（開發測試版，尚未正式發行）
+日期：2026/09/27
+BUILD：0
+
+下載方式調整
+- 比照 CYInvoice 將 .NET 執行環境與必要原生元件打包進 CYEnvelope.exe，維持可攜且清爽的 CYEnvelope 資料夾。預期只包含 CYEnvelope.exe、VERSION 與 BUILD。
+- Actions 測試 Artifact 直接上傳 CYEnvelope 資料夾；下載後解壓縮一次即取得可執行資料夾，不再另附內層 ZIP 或獨立 SHA-256 檔。
+- 封裝前仍執行共用公開封包安全掃描，並在 CI 啟動封裝後的 EXE、重新下載 Artifact 驗證解壓縮結構與檔案清單。
+
+驗證狀態
+- 本次封裝流程待 Windows CI 驗證；信封位置與列印功能仍待實機試印。
+- 前版 V0.2.0 Build 1 的功能與驗證記錄保留於 V0.2.0.txt。

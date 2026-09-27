@@ -58,7 +58,7 @@ jobs:
             if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }
 
-      - name: Build and scan portable test package
+      - name: Build and scan portable test folder
         shell: pwsh
         run: ./build-csharp.ps1
 
@@ -72,20 +72,55 @@ jobs:
           if ($build -gt 0) { $label += "-Build-$build" }
           "label=$label" >> $env:GITHUB_OUTPUT
 
-      - name: Verify package before upload
+      - name: Verify folder before upload
         shell: pwsh
         run: |
-          $packages = @(Get-ChildItem ./dist/CYEnvelope_*_windows_x64_test.zip)
-          if ($packages.Count -ne 1) { throw "Expected one CYEnvelope test package, found $($packages.Count)" }
-          python ../../.github/scripts/scan-public-package.py $packages[0].FullName
+          $entries = @(Get-ChildItem ./dist/stage -Force)
+          if ($entries.Count -ne 1 -or $entries[0].Name -ne 'CYEnvelope' -or -not $entries[0].PSIsContainer) {
+            throw 'Expected only the CYEnvelope portable folder in the artifact root'
+          }
+          python ../../.github/scripts/scan-public-package.py ./dist/stage
           if ($LASTEXITCODE -ne 0) { throw 'Public package safety scan failed' }
 
-      - name: Upload scanned portable test package
+      - name: Upload scanned portable test folder
         uses: actions/upload-artifact@v4
         with:
           name: CYEnvelope-${{ steps.package.outputs.label }}-windows-x64-test
-          path: |
-            apps/CYEnvelope/dist/CYEnvelope_*_windows_x64_test.zip
-            apps/CYEnvelope/dist/CYEnvelope_*_windows_x64_test.zip.sha256
+          path: apps/CYEnvelope/dist/stage/*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Download artifact to verify one-extraction layout
+        uses: actions/download-artifact@v4
+        with:
+          name: CYEnvelope-${{ steps.package.outputs.label }}-windows-x64-test
+          path: apps/CYEnvelope/dist/verify-download
+
+      - name: Verify downloaded portable folder
+        shell: pwsh
+        run: |
+          $entries = @(Get-ChildItem ./dist/verify-download -Force)
+          if ($entries.Count -ne 1 -or $entries[0].Name -ne 'CYEnvelope' -or -not $entries[0].PSIsContainer) {
+            throw 'Artifact extraction did not produce exactly one CYEnvelope folder'
+          }
+          if (-not (Test-Path ./dist/verify-download/CYEnvelope/CYEnvelope.exe)) {
+            throw 'CYEnvelope.exe missing after one extraction'
+          }
+          $contents = @(Get-ChildItem ./dist/verify-download/CYEnvelope -Force | Select-Object -ExpandProperty Name)
+          $expected = @('BUILD', 'CYEnvelope.exe', 'VERSION')
+          if (@(Compare-Object $expected $contents).Count -ne 0) {
+            throw "Unexpected portable folder contents: $($contents -join ', ')"
+          }
+
+      - name: Startup smoke on downloaded EXE
+        shell: pwsh
+        run: |
+          $exe = Join-Path (Get-Location) 'dist/verify-download/CYEnvelope/CYEnvelope.exe'
+          $proc = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+          try {
+            Start-Sleep -Seconds 4
+            $proc.Refresh()
+            if ($proc.HasExited) { throw "Packaged CYEnvelope exited during startup with code $($proc.ExitCode)" }
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
