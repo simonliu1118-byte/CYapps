@@ -2,11 +2,15 @@ import previousApp from './app-v18.js';
 import { handleV19MigrationApi } from './v19-migration-safe.js';
 
 const SESSION_COOKIE = 'cyaccounting_session';
+const SUMMARY_MAX_UNITS = 40;
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/api/migration/desktop/')) {
+    const migrationRequest = url.pathname.startsWith('/api/migration/desktop/');
+    const transactionWrite = isTransactionWrite(url.pathname, request.method);
+
+    if (!migrationRequest && !transactionWrite) {
       return previousApp.fetch(request, env);
     }
 
@@ -15,6 +19,15 @@ export default {
     try {
       const session = await sessionFromRequest(request, env.DB);
       if (!session) return json({ ok: false, error: '尚未登入。', code: 'AUTH_REQUIRED' }, 401);
+
+      if (transactionWrite) {
+        const body = await request.clone().json().catch(() => null);
+        if (body && summaryWeightedUnits(body.summary) > SUMMARY_MAX_UNITS) {
+          return json({ ok: false, error: '摘要不可超過 20 個中文字或 40 個英數字元。', code: 'SUMMARY_TOO_LONG' }, 400);
+        }
+        return previousApp.fetch(request, env);
+      }
+
       const response = await handleV19MigrationApi(request, env, session);
       if (response) return response;
       return json({ ok: false, error: '找不到此資料移轉功能。', code: 'MIGRATION_ROUTE_NOT_FOUND' }, 404);
@@ -28,6 +41,20 @@ export default {
     return previousApp.scheduled(controller, env, ctx);
   }
 };
+
+function isTransactionWrite(pathname, method) {
+  if (method === 'POST' && pathname === '/api/transactions') return true;
+  return method === 'PUT' && /^\/api\/transactions\/\d+$/.test(pathname);
+}
+
+function summaryWeightedUnits(value) {
+  let units = 0;
+  for (const char of String(value ?? '').trim()) {
+    const code = char.codePointAt(0) || 0;
+    units += code <= 0x7f || (code >= 0xff61 && code <= 0xff9f) ? 1 : 2;
+  }
+  return units;
+}
 
 async function sessionFromRequest(request, db) {
   const token = cookieValue(request, SESSION_COOKIE);

@@ -1,0 +1,281 @@
+/* V0.21.0 Build 8 - desktop readability, role cue and quick-entry account buttons.
+   Desktop-only. Approved income/expense slider and mode colors remain untouched. */
+
+@media (min-width: 1024px) {
+  /* Role identity: subtle medal-inspired cues without changing the account cluster structure. */
+  .v21-account-cluster .current-user {
+    transition: background-color 120ms ease, box-shadow 120ms ease;
+  }
+
+  .v21-account-cluster .current-user.role-super-admin {
+    background: linear-gradient(180deg, #fffaf0 0%, #fff4d6 100%);
+    box-shadow: inset 0 0 0 1px rgba(190, 142, 38, .18);
+  }
+
+  .v21-account-cluster .current-user.role-super-admin .current-user-main {
+    color: #4d3a12;
+  }
+
+  .v21-account-cluster .current-user.role-super-admin .current-user-role {
+    color: #8a6515;
+  }
+
+  .v21-account-cluster .current-user.role-super-admin .current-user-role::before {
+    color: #c49a42;
+  }
+
+  .v21-account-cluster .current-user.role-admin {
+    background: linear-gradient(180deg, #fdf8f4 0%, #f8ebe1 100%);
+    box-shadow: inset 0 0 0 1px rgba(158, 99, 61, .16);
+  }
+
+  .v21-account-cluster .current-user.role-admin .current-user-main {
+    color: #4a3327;
+  }
+
+  .v21-account-cluster .current-user.role-admin .current-user-role {
+    color: #8b5a3c;
+  }
+
+  .v21-account-cluster .current-user.role-admin .current-user-role::before {
+    color: #b47a57;
+  }
+
+  /* Readability: headings/month remain as approved; supporting UI moves up one size tier. */
+  .topbar p,
+  .version {
+    font-size: 12px;
+  }
+
+  .topbar #settingsButton,
+  .v21-account-cluster #logoutButton {
+    font-size: 13px;
+  }
+
+  .v21-account-cluster .current-user-main {
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+
+  .v21-account-cluster .current-user-role {
+    font-size: 12.5px;
+  }
+
+  label > span,
+  legend,
+  .entry-field-label,
+  .quick-tool-label {
+    font-size: 13px;
+  }
+
+  .entry-card input,
+  .entry-card select {
+    font-size: 15px;
+  }
+
+  .entry-card #saveButton {
+    font-size: 13.5px;
+  }
+
+  .quick-chip {
+    font-size: 13px;
+  }
+
+  .entry-help-popover {
+    font-size: 13px;
+  }
+
+  .entry-help-popover strong {
+    font-size: 13.5px;
+  }
+
+  .entry-help-grid kbd {
+    font-size: 12px;
+  }
+
+  .ledger-summary-item,
+  .ledger-summary-search {
+    font-size: 12.5px;
+  }
+
+  .ledger-desktop-tools input {
+    font-size: 13.5px;
+  }
+
+  .ledger-desktop-tools .secondary.compact,
+  #ledgerSearchClear,
+  #ledgerLockSettingsButton {
+    font-size: 13px;
+  }
+
+  th {
+    font-size: 13px;
+  }
+
+  td {
+    font-size: 14.5px;
+  }
+
+  .kind-tag,
+  .row-action {
+    font-size: 13px;
+  }
+
+  .ledger-empty-state strong {
+    font-size: 14px;
+  }
+
+  .v21-inline-confirmation .confirmation-drawer-header h2 {
+    font-size: 14.5px;
+  }
+
+  .v21-inline-confirmation .confirmation-drawer-header .hint,
+  .v21-inline-confirmation .confirmation-status {
+    font-size: 12px;
+  }
+
+  .v21-inline-confirmation .confirmation-main {
+    font-size: 13.5px;
+  }
+
+  .settings-tab {
+    font-size: 13.5px;
+  }
+
+  .settings-pane h3 {
+    font-size: 16px;
+  }
+
+  .settings-pane input,
+  .settings-pane select,
+  .settings-pane button,
+  .mini-button,
+  .category-group-title,
+  .category-item,
+  .manager-row {
+    font-size: 13px;
+  }
+
+  .lock-status-text,
+  .dialog-message {
+    font-size: 13px;
+  }
+
+  .opening-modal .compact-label > span,
+  .opening-modal .opening-row,
+  .opening-modal .modal-actions button {
+    font-size: 13px;
+  }
+
+  .opening-modal .compact-label input,
+  .opening-modal .opening-row input {
+    font-size: 14px;
+  }
+
+  /* Quick entry layout: account choices first, then date/category, then summary/amount/save. */
+  .entry-account-choice-row {
+    display: grid;
+    gap: 6px;
+    margin: 0 0 10px;
+  }
+
+  .entry-account-choice-row[hidden] {
+    display: none !important;
+  }
+
+  .entry-field-label {
+    color: #667085;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+
+  .entry-account-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .entry-account-choice {
+    min-width: 74px;
+    max-width: 150px;
+    min-height: 34px;
+    padding: 5px 12px;
+    overflow: hidden;
+    border: 1px solid #d6dde6;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .72);
+    color: #4d5b6d;
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .entry-account-choice:hover {
+    border-color: #bcc9d6;
+    background: rgba(255, 255, 255, .95);
+    color: #2f4358;
+  }
+
+  .entry-account-choice.active {
+    border-color: #8ca9c4;
+    background: #edf4fa;
+    color: #234f75;
+    box-shadow: inset 0 0 0 1px rgba(67, 113, 153, .06);
+    font-weight: 600;
+  }
+
+  .entry-account-choice:focus-visible {
+    outline: 2px solid rgba(57, 115, 157, .24);
+    outline-offset: 1px;
+  }
+
+  .entry-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(100px, .85fr) 110px;
+    gap: 9px 8px;
+    align-items: end;
+  }
+
+  .entry-grid > .date-field {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .entry-grid > .account-source-field {
+    display: none !important;
+  }
+
+  .entry-grid > .category-field {
+    grid-column: 2 / 4;
+    grid-row: 1;
+  }
+
+  .entry-grid > .summary-field {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .entry-grid > .amount-field {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .entry-grid > #saveButton {
+    grid-column: 3;
+    grid-row: 2;
+    width: 110px;
+    min-width: 110px;
+  }
+
+  #summary,
+  #editSummary {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .quick-entry-tools {
+    margin-top: 12px;
+  }
+}

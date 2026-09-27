@@ -60,11 +60,15 @@
       </div>
 
       <form id="transactionForm" autocomplete="off">
+        <div id="entryAccountChoiceRow" class="entry-account-choice-row" hidden>
+          <span class="entry-field-label">帳戶</span>
+          <div id="entryAccountButtons" class="entry-account-buttons" role="radiogroup" aria-label="帳戶"></div>
+        </div>
         <div class="entry-grid">
-          <label><span>日期</span><input id="txDate" type="date" required></label>
-          <label><span>帳戶</span><select id="accountName" required></select></label>
-          <label><span>科目</span><select id="categoryName" required></select></label>
-          <label class="summary-field"><span>摘要</span><input id="summary" type="text" maxlength="100" placeholder="可留白"></label>
+          <label class="date-field"><span>日期</span><input id="txDate" type="date" required></label>
+          <label class="account-source-field"><span>帳戶</span><select id="accountName" required></select></label>
+          <label class="category-field"><span>科目</span><select id="categoryName" required></select></label>
+          <label class="summary-field"><span>摘要</span><input id="summary" type="text" maxlength="40" placeholder="可留白，最多20個中文字"></label>
           <label class="amount-field"><span>金額</span><input id="amount" type="text" inputmode="numeric" maxlength="7" placeholder="0" required></label>
           <button id="saveButton" class="primary" type="submit">儲存</button>
         </div>
@@ -98,7 +102,7 @@
         <label><span>帳戶</span><select id="editAccount" required></select></label>
         <label><span>科目</span><select id="editCategory" required></select></label>
         <label><span>金額</span><input id="editAmount" type="text" inputmode="numeric" maxlength="7" required></label>
-        <label class="full-row"><span>摘要</span><input id="editSummary" type="text" maxlength="100"></label>
+        <label class="full-row"><span>摘要</span><input id="editSummary" type="text" maxlength="40" placeholder="最多20個中文字"></label>
       </div>
       <div id="editMessage" class="dialog-message"></div>
       <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="editDialog">取消</button><button id="editSaveButton" class="primary" type="submit">儲存修改</button></div>
@@ -165,5 +169,6 @@
   <script src="/v019.js" defer></script>
   <script src="/v020.js" defer></script>
   <script src="/v021.js" defer></script>
+  <script src="/v021b8.js" defer></script>
 </body>
 </html>
