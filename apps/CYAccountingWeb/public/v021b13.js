@@ -162,7 +162,7 @@ function setupV21Build13OpeningDialog() {
         monthInput.value = month;
         monthInput.dispatchEvent(new Event('change', { bubbles: true }));
       }
-      title.textContent = `${month.replace('-', '/')} 期初餘額`;
+      title.textContent = `${month.replace('-', '/')}期初餘額`;
     }
   };
 
