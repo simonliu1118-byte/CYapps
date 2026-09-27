@@ -27,6 +27,7 @@ const build15Css = read('public/v021b15.css');
 const build16Js = read('public/v021b16.js');
 const build16Css = read('public/v021b16.css');
 const patchJs = read('public/v0211.js');
+const keyboardJs = read('public/v0211-keyboard.js');
 const patchCss = read('public/v0211.css');
 const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
@@ -34,14 +35,17 @@ const v201Css = read('public/v0201.css');
 assert.equal(version, '0.21.1');
 assert.equal(build, '0');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
+assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0211\.js'/);
+assert.match(build11Js, /script\.src = '\/v0211-keyboard\.js'/);
 assert.match(build12Js, /CY_V21_BUILD12_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build13Js, /CY_V21_BUILD13_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build14Js, /CY_V21_BUILD14_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build15Js, /CY_V21_BUILD15_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build16Js, /CY_V21_BUILD16_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(patchJs, /CY_V0211_DESKTOP = '\(min-width: 1024px\)'/);
-for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs]) {
+assert.match(keyboardJs, /CY_V0211_KEYBOARD_DESKTOP = '\(min-width: 1024px\)'/);
+for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, keyboardJs]) {
   assert.doesNotThrow(() => new Function(js), 'adaptive overlay JavaScript must parse');
 }
 
@@ -49,6 +53,7 @@ assert.match(v03, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/)
 assert.match(v03, /enterStep\(els\.summary,[\s\S]*?els\.amount\?\.focus\(\)/);
 assert.match(v03, /enterStep\(els\.amount,[\s\S]*?els\.form\.requestSubmit\(\)/);
 assert.match(v03, /cyFocusSummaryAfterSave[\s\S]*?els\.summary\.focus\(\)/);
+assert.match(keyboardJs, /if \(!window\.matchMedia\(CY_V0211_KEYBOARD_DESKTOP\)\.matches\) return;/);
 
 // Breakpoint ownership: Build 10 phone, Build 9 Tablet, patch manager/date work remains Desktop only.
 assert.match(build10Css, /@media \(max-width: 767px\)/);
@@ -79,6 +84,7 @@ assert.doesNotMatch(tabletCss, /\.ledger-card table\s*,[\s\S]*?display:\s*block/
 assert.match(patchJs, /if \(!window\.matchMedia\(CY_V0211_DESKTOP\)\.matches/);
 assert.match(patchJs, /window\.matchMedia\(CY_V0211_DESKTOP\)/);
 assert.doesNotMatch(patchJs, /mobileMainNav|mobileAccountMenuButton|mobileLedgerMoreButton|entryAccountPickerButton/);
+assert.doesNotMatch(keyboardJs, /max-width|mobileMainNav|mobileAccountMenuButton|mobileLedgerMoreButton/);
 
 // App-owned confirmation dialog is responsive and replaces browser-native confirmation UI on every breakpoint.
 assert.match(patchCss, /\.cy-confirm-dialog/);
