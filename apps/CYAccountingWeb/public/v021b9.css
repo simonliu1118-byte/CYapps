@@ -1,6 +1,11 @@
 /* V0.21.0 Build 9 - Tablet/Mobile adaptive quick-entry refinement.
    Keeps Desktop >=1024 layout, approved income/expense slider and accounting behavior intact. */
 
+.entry-account-picker-trigger,
+.v21-mobile-main-nav {
+  display: none;
+}
+
 /* Tablet: compact Web workspace without collapsing into phone cards. */
 @media (min-width: 768px) and (max-width: 1023px) {
   .topbar {
@@ -216,7 +221,7 @@
   }
 }
 
-/* Mobile: high-frequency entry fits the first screen and ledger stays card-based. */
+/* Mobile: two task pages. Entry and ledger are never stacked into one long workspace. */
 @media (max-width: 767px) {
   :root {
     background: #f2f4f7;
@@ -360,10 +365,49 @@
     color: #8b5a3c;
   }
 
+  .v21-mobile-main-nav {
+    position: sticky;
+    top: 0;
+    z-index: 45;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #dce2e8;
+    background: rgba(247, 249, 251, .96);
+    backdrop-filter: blur(12px);
+  }
+
+  .v21-mobile-main-nav[hidden] {
+    display: none !important;
+  }
+
+  .v21-mobile-main-nav button {
+    min-height: 40px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: #687687;
+    font-size: 14px;
+    font-weight: 550;
+  }
+
+  .v21-mobile-main-nav button.active {
+    border-color: #cfd8e2;
+    background: #fff;
+    color: #26394d;
+    box-shadow: 0 1px 3px rgba(31, 42, 55, .06);
+    font-weight: 650;
+  }
+
   .shell {
     width: calc(100% - 12px);
     margin: 6px auto 20px;
-    gap: 8px;
+    gap: 0;
+  }
+
+  .shell > .v21-mobile-page-hidden {
+    display: none !important;
   }
 
   .card {
@@ -414,6 +458,8 @@
   }
 
   .entry-account-choice-row {
+    position: relative;
+    z-index: 12;
     display: grid;
     gap: 5px;
     margin: 0 0 8px;
@@ -431,29 +477,66 @@
     font-weight: 550;
   }
 
-  .entry-account-buttons {
+  .entry-account-picker-trigger {
     display: flex;
-    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 46px;
+    padding: 0 12px;
+    border: 1px solid #cfd8e2;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .9);
+    color: #26394d;
+    font-size: 16px;
+    font-weight: 550;
+    text-align: left;
+  }
+
+  .entry-account-picker-trigger[aria-expanded="true"] {
+    border-color: #86a6c2;
+    box-shadow: 0 0 0 2px rgba(70, 116, 155, .10);
+  }
+
+  .entry-account-picker-arrow {
+    margin-left: 10px;
+    color: #758394;
+    font-size: 12px;
+  }
+
+  .entry-account-buttons {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    right: 0;
+    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    padding: 1px 1px 3px;
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
+    max-height: min(48dvh, 340px);
+    padding: 8px;
+    overflow-y: auto;
+    border: 1px solid #ccd6e0;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 12px 30px rgba(31, 42, 55, .16);
+  }
+
+  .entry-account-choice-row.mobile-picker-open .entry-account-buttons {
+    display: grid;
   }
 
   .entry-account-choice {
-    flex: 0 0 auto;
-    min-width: 76px;
-    min-height: 40px;
-    padding: 6px 11px;
-    border: 1px solid #d3dbe5;
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 7px 10px;
+    border: 1px solid #d7dee7;
     border-radius: 8px;
-    background: rgba(255, 255, 255, .86);
+    background: #fff;
     color: #4d5b6d;
     font-size: 14px;
     font-weight: 500;
-    white-space: nowrap;
+    text-align: center;
   }
 
   .entry-account-choice.active {
@@ -753,8 +836,12 @@
     height: 44px;
   }
 
-  .entry-account-choice {
-    min-height: 38px;
+  .entry-account-picker-trigger {
+    min-height: 44px;
+  }
+
+  .entry-account-buttons {
+    grid-template-columns: 1fr;
   }
 
   #monthSummary {
