@@ -14,30 +14,36 @@ const css = read('public/v021.css');
 const build1Css = read('public/v021b1.css');
 const build2Css = read('public/v021b2.css');
 const build3Css = read('public/v021b3.css');
+const build5Css = read('public/v021b5.css');
 const js = read('public/v021.js');
 const v06 = read('public/v06.js');
 const v07 = read('public/v07.js');
 const v011 = read('public/v011.js');
+const v013 = read('public/v013.js');
 
 assert.equal(version, '0.21.0');
-assert.equal(build, '4');
+assert.equal(build, '5');
 assert.match(html, /href="\/v021\.css"/);
 assert.match(html, /src="\/v021\.js"/);
 assert.ok(html.indexOf('/v021.css') > html.indexOf('/v020.css'), 'v021.css must load after v020.css');
 assert.ok(html.indexOf('/v021.js') > html.indexOf('/v020.js'), 'v021.js must load after v020.js');
-assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 4'/);
+assert.match(js, /CY_V21_VERSION = 'V0\.21\.0 Build 5'/);
 assert.match(js, /ensureV21Build1Stylesheet\(\)/);
 assert.match(js, /ensureV21Build2Stylesheet\(\)/);
 assert.match(js, /ensureV21Build3Stylesheet\(\)/);
+assert.match(js, /ensureV21Build5Stylesheet\(\)/);
 assert.match(js, /link\.href = '\/v021b1\.css'/);
 assert.match(js, /link\.href = '\/v021b2\.css'/);
 assert.match(js, /link\.href = '\/v021b3\.css'/);
+assert.match(js, /link\.href = '\/v021b5\.css'/);
 
-// Base Desktop redesign remains isolated from Tablet/Mobile.
+// Desktop redesign remains isolated from Tablet/Mobile.
 assert.match(css, /@media \(min-width: 1024px\)/);
 assert.doesNotMatch(css, /@media \(max-width:/);
 assert.match(build3Css, /@media \(min-width: 1024px\)/);
 assert.doesNotMatch(build3Css, /@media \(max-width:/);
+assert.match(build5Css, /@media \(min-width: 1024px\)/);
+assert.doesNotMatch(build5Css, /@media \(max-width:/);
 
 // Modern business surfaces remain in the base V0.21 layer.
 assert.match(css, /\.topbar\s*\{[\s\S]*?backdrop-filter:\s*blur\(12px\)/);
@@ -58,11 +64,13 @@ assert.match(js, /rail\.append\(confirmation\)/);
 assert.match(js, /document\.body\.append\(confirmation\)/);
 assert.match(js, /setConfirmationDrawer\(true, false\)/);
 
-// Approved slider and mode tint remain untouched by all V0.21 build overlays.
+// Approved slider itself and mode tint remain intact. Build 5 may only neutralize the fieldset wrapper artefact.
 for (const stylesheet of [css, build1Css, build2Css, build3Css]) {
   assert.doesNotMatch(stylesheet, /\.entry-kind-switch/);
   assert.doesNotMatch(stylesheet, /\.entry-kind-switch-field/);
 }
+assert.doesNotMatch(build5Css, /\.entry-kind-switch\s*\{/);
+assert.match(build5Css, /\.entry-card \.entry-kind-switch-field\s*\{[\s\S]*?background:\s*transparent !important;[\s\S]*?box-shadow:\s*none;/);
 assert.match(build1Css, /\.entry-card\.entry-income\s*\{[\s\S]*?background:\s*#f4fbf6;/);
 assert.match(build1Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?background:\s*#fff6f5;/);
 
@@ -73,7 +81,7 @@ assert.match(build1Css, /\.v21-inline-confirmation \.confirmation-list\s*\{[\s\S
 assert.match(js, /heading\.textContent = '最近輸入'/);
 assert.match(js, /hint\.textContent = '最近 10 筆'/);
 
-// Build 3: typography hierarchy is lighter and data has more visual weight than toolbar controls.
+// Build 3 typography hierarchy stays lighter and data keeps more visual weight than toolbar controls.
 assert.match(build3Css, /\.primary,[\s\S]*?\.secondary\s*\{[\s\S]*?font-weight:\s*500;/);
 assert.match(build3Css, /\.entry-card #saveButton\s*\{[\s\S]*?width:\s*110px;[\s\S]*?font-weight:\s*600;/);
 assert.match(build3Css, /\.ledger-desktop-tools \.secondary\.compact\s*\{[\s\S]*?height:\s*28px;[\s\S]*?font-size:\s*12px;[\s\S]*?font-weight:\s*500;/);
@@ -81,21 +89,21 @@ assert.match(build3Css, /th\s*\{[\s\S]*?font-size:\s*12\.5px;[\s\S]*?font-weight
 assert.match(build3Css, /td\s*\{[\s\S]*?font-size:\s*13\.5px;[\s\S]*?font-weight:\s*400;/);
 assert.match(build3Css, /td\.num,[\s\S]*?\.ledger-balance\s*\{[\s\S]*?font-weight:\s*500;/);
 
-// Month is promoted to the primary ledger context and no longer reads as a toolbar button.
+// Month is the primary ledger context and workspace titles are peers.
 assert.match(js, /setupV21LedgerContext\(\)/);
 assert.match(js, /context\.className = 'v21-ledger-context'/);
 assert.match(js, /context\.append\(monthTools\)/);
 assert.match(build3Css, /#monthFilter\s*\{[\s\S]*?font-size:\s*21px;[\s\S]*?font-weight:\s*600;/);
-assert.match(build3Css, /#ledgerPrevMonth,[\s\S]*?#ledgerNextMonth\s*\{[\s\S]*?width:\s*28px;[\s\S]*?background:\s*transparent;/);
+assert.match(build5Css, /\.entry-card \.section-title h2,[\s\S]*?\.ledger-title h2\s*\{[\s\S]*?font-size:\s*17px;[\s\S]*?font-weight:\s*600;/);
 
-// Keyboard help becomes on-demand instead of permanent visual noise.
+// Keyboard help remains on demand.
 assert.match(build3Css, /\.keyboard-hint\s*\{[\s\S]*?display:\s*none !important;/);
 assert.match(js, /button\.id = 'entryHelpButton'/);
 assert.match(js, /popover\.id = 'entryHelpPopover'/);
 assert.match(js, /快速輸入說明/);
 assert.match(js, /Ctrl \+ ↑↓/);
 
-// Low-frequency Excel import moves into Settings > Data Management, while export stays in ledger tools.
+// Low-frequency Excel import remains in Settings > Data Management.
 assert.match(js, /tab\.dataset\.settingsTab = 'data'/);
 assert.match(js, /tab\.textContent = '資料管理'/);
 assert.match(js, /host\.append\(button\)/);
@@ -112,20 +120,53 @@ assert.match(v06, /cyLedgerGroupByAccount = !cyLedgerGroupByAccount/);
 assert.match(v06, /new Intl\.Collator\('zh-Hant-TW'/);
 assert.match(v06, /accountLabel = cyLedgerGroupByAccount \? '帳戶 ▲' : '帳戶'/);
 
-// Empty-state and wide-ledger height no longer create a full-screen blank card.
+// Empty-state and wide-ledger height stay compact.
 assert.match(js, /class="ledger-empty-state"/);
 assert.match(build3Css, /\.ledger-empty-state\s*\{[\s\S]*?min-height:\s*180px;/);
 assert.match(build3Css, /\.v21-split-layout > \.ledger-card\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?align-self:\s*start;/);
 
-// Header exposes the existing session role without changing Identity/authorization semantics.
+// Header exposes role, reorders actions, and only surfaces abnormal connectivity beside the product title.
 assert.match(js, /fetch\('\/api\/auth\/me'/);
 assert.match(js, /role === 'SUPER_ADMIN'/);
 assert.match(js, /return '超級管理員'/);
-assert.match(js, /role === 'ADMIN'/);
-assert.match(js, /return '管理員'/);
-assert.match(build3Css, /\.current-user-role\s*\{[\s\S]*?font-weight:\s*400;/);
+assert.match(js, /setupV21HeaderLayout\(\)/);
+assert.match(js, /brandLine\.className = 'v21-brand-line'/);
+assert.match(js, /brandLine\.append\(status\)/);
+assert.match(js, /actions\.append\(settings\)/);
+assert.match(js, /actions\.append\(currentUser\)/);
+assert.match(js, /actions\.append\(logout\)/);
+assert.match(build5Css, /\.v21-brand-line \.status\.ok\s*\{[\s\S]*?display:\s*none;/);
+assert.match(build5Css, /\.v21-brand-line \.status\.warn\s*\{[\s\S]*?display:\s*inline-flex;/);
+assert.match(build5Css, /#settingsButton\s*\{\s*order:\s*1;/);
+assert.match(build5Css, /#currentUser\s*\{\s*order:\s*2;/);
+assert.match(build5Css, /#logoutButton\s*\{\s*order:\s*3;/);
+assert.match(build5Css, /\.current-user\s*\{[\s\S]*?gap:\s*4px;/);
 
-// Build 4 hotfix: MutationObserver callbacks must be idempotent and not trigger themselves forever.
+// Summary row owns opening-balance and month-lock actions; search stays left and export stays right.
+assert.match(js, /summaryBar\.className = 'v21-ledger-summary-bar'/);
+assert.match(js, /summaryActions\.className = 'v21-summary-actions'/);
+assert.match(js, /summaryActions\.append\(openingButton\)/);
+assert.match(js, /lockButton\.id = 'ledgerLockSettingsButton'/);
+assert.match(js, /lockButton\.textContent = '鎖定月份'/);
+assert.match(js, /setSettingsTab\('lock'\)/);
+assert.match(build5Css, /\.ledger-desktop-tools\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto;/);
+assert.match(build5Css, /\.ledger-search\s*\{[\s\S]*?justify-self:\s*start;/);
+assert.match(build5Css, /\.ledger-view-tools\s*\{[\s\S]*?justify-self:\s*end;/);
+
+// Excel export status is contained inside the fixed-width button and cannot push toolbar layout.
+assert.match(v013, /button\.textContent = '匯出中…'/);
+assert.match(v013, /button\.setAttribute\('aria-busy', 'true'\)/);
+assert.match(v013, /button\.textContent = failed \? '匯出失敗' : defaultLabel/);
+assert.doesNotMatch(v013, /setExportStatus\('已下載'\)/);
+assert.match(build5Css, /#ledgerExcelExport\s*\{[\s\S]*?min-width:\s*82px;/);
+assert.match(build5Css, /#ledgerExcelExportStatus\s*\{[\s\S]*?position:\s*absolute !important;/);
+
+// Opening-balance dialog uses the Build 5 business modal treatment without changing its data flow.
+assert.match(build5Css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(720px, calc\(100% - 40px\)\);[\s\S]*?padding:\s*0;/);
+assert.match(build5Css, /\.opening-modal \.opening-dialog-heading\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto;/);
+assert.match(build5Css, /\.opening-modal \.modal-actions\s*\{[\s\S]*?border-top:\s*1px solid #edf0f4;/);
+
+// Build 4 hotfix remains protected: MutationObserver callbacks must stay idempotent.
 assert.match(js, /const nextText = active \? '帳戶 ▲' : '帳戶';/);
 assert.match(js, /if \(account\.textContent !== nextText\) account\.textContent = nextText;/);
 assert.match(js, /if \(empty && empty\.textContent !== '本次尚無輸入紀錄。'\) empty\.textContent = '本次尚無輸入紀錄。';/);
@@ -140,4 +181,4 @@ assert.match(v011, /<kbd>Tab<\/kbd> 切換收入／支出/);
 assert.doesNotMatch(v011, /<kbd>F2<\/kbd> 切換收入／支出/);
 assert.match(js, /<kbd>Tab<\/kbd> 切換收入／支出/);
 
-console.log('V0.21.0 Build 4 desktop hierarchy regression tests passed.');
+console.log('V0.21.0 Build 5 desktop polish regression tests passed.');
