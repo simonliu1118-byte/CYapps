@@ -154,7 +154,7 @@ function setupV21Build9MobileAccountPicker() {
 
   const mobile = window.matchMedia(CY_V21_BUILD9_MOBILE);
   const syncMode = () => {
-    if (!mobile.matches) setV21Build9AccountPickerOpen(false);
+    setV21Build9AccountPickerOpen(false);
     syncV21Build9AccountPickerLabel();
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
@@ -167,7 +167,16 @@ function setV21Build9AccountPickerOpen(open) {
   const trigger = document.querySelector('#entryAccountPickerButton');
   const host = document.querySelector('#entryAccountButtons');
   if (!row || !trigger || !host) return;
-  const next = Boolean(open && window.matchMedia(CY_V21_BUILD9_MOBILE).matches);
+
+  const isMobile = window.matchMedia(CY_V21_BUILD9_MOBILE).matches;
+  if (!isMobile) {
+    row.classList.remove('mobile-picker-open');
+    trigger.setAttribute('aria-expanded', 'false');
+    host.removeAttribute('aria-hidden');
+    return;
+  }
+
+  const next = Boolean(open);
   row.classList.toggle('mobile-picker-open', next);
   trigger.setAttribute('aria-expanded', next ? 'true' : 'false');
   host.setAttribute('aria-hidden', next ? 'false' : 'true');
