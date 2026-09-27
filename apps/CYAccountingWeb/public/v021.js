@@ -1,8 +1,9 @@
-const CY_V21_VERSION = 'V0.21.0 Build 1';
+const CY_V21_VERSION = 'V0.21.0 Build 2';
 const CY_V21_SPLIT_MEDIA = '(min-width: 1360px)';
 const CY_V21_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 
 ensureV21Build1Stylesheet();
+ensureV21Build2Stylesheet();
 
 window.addEventListener('load', () => {
   syncV21Version();
@@ -15,6 +16,14 @@ function ensureV21Build1Stylesheet() {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = '/v021b1.css';
+  document.head.appendChild(link);
+}
+
+function ensureV21Build2Stylesheet() {
+  if (document.querySelector('link[href="/v021b2.css"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/v021b2.css';
   document.head.appendChild(link);
 }
 
