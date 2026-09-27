@@ -1,14 +1,16 @@
-const CY_V21_VERSION = 'V0.21.0 Build 4';
+const CY_V21_VERSION = 'V0.21.0 Build 5';
 const CY_V21_SPLIT_MEDIA = '(min-width: 1360px)';
 const CY_V21_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 
 ensureV21Build1Stylesheet();
 ensureV21Build2Stylesheet();
 ensureV21Build3Stylesheet();
+ensureV21Build5Stylesheet();
 
 window.addEventListener('load', () => {
   syncV21Version();
   updateV21KeyboardHint();
+  setupV21HeaderLayout();
   setupV21DesktopSplitWorkspace();
   setupV21EntryHelp();
   setupV21LedgerContext();
@@ -43,6 +45,14 @@ function ensureV21Build3Stylesheet() {
   document.head.appendChild(link);
 }
 
+function ensureV21Build5Stylesheet() {
+  if (document.querySelector('link[href="/v021b5.css"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/v021b5.css';
+  document.head.appendChild(link);
+}
+
 function syncV21Version() {
   const version = document.querySelector('.version');
   if (version) version.textContent = CY_V21_VERSION;
@@ -52,6 +62,31 @@ function updateV21KeyboardHint() {
   const hint = document.querySelector('.keyboard-hint');
   if (!hint) return;
   hint.innerHTML = '鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　<kbd>Tab</kbd> 切換收入／支出　｜　日期可輸入 <kbd>0924</kbd> / <kbd>20260924</kbd>，<kbd>Ctrl</kbd>+<kbd>↑↓</kbd> ±1 天';
+}
+
+function setupV21HeaderLayout() {
+  const topbar = document.querySelector('.topbar');
+  const brand = topbar?.firstElementChild;
+  const heading = brand?.querySelector('h1');
+  const status = document.querySelector('#connectionStatus');
+  const actions = document.querySelector('.topbar-actions');
+  const settings = document.querySelector('#settingsButton');
+  const currentUser = document.querySelector('#currentUser');
+  const logout = document.querySelector('#logoutButton');
+  if (!topbar || !brand || !heading || !actions) return;
+
+  let brandLine = brand.querySelector('.v21-brand-line');
+  if (!brandLine) {
+    brandLine = document.createElement('div');
+    brandLine.className = 'v21-brand-line';
+    heading.before(brandLine);
+    brandLine.append(heading);
+  }
+  if (status && status.parentElement !== brandLine) brandLine.append(status);
+
+  if (settings) actions.append(settings);
+  if (currentUser) actions.append(currentUser);
+  if (logout) actions.append(logout);
 }
 
 function setupV21EntryHelp() {
@@ -112,6 +147,7 @@ function setupV21LedgerContext() {
   const titleMain = ledgerTitle?.firstElementChild;
   const monthTools = document.querySelector('.ledger-month-tools');
   const summary = document.querySelector('#monthSummary');
+  const openingButton = document.querySelector('#ledgerOpeningBalanceButton');
   if (!ledgerTitle || !titleMain || !monthTools || !summary) return;
 
   let context = titleMain.querySelector('.v21-ledger-context');
@@ -122,7 +158,41 @@ function setupV21LedgerContext() {
   }
   if (monthTools.parentElement !== context) context.append(monthTools);
 
+  let summaryBar = titleMain.querySelector('.v21-ledger-summary-bar');
+  if (!summaryBar) {
+    summaryBar = document.createElement('div');
+    summaryBar.className = 'v21-ledger-summary-bar';
+    context.insertAdjacentElement('afterend', summaryBar);
+  }
+  if (summary.parentElement !== summaryBar) summaryBar.append(summary);
+
+  let summaryActions = summaryBar.querySelector('.v21-summary-actions');
+  if (!summaryActions) {
+    summaryActions = document.createElement('div');
+    summaryActions.className = 'v21-summary-actions';
+    summaryBar.append(summaryActions);
+  }
+  if (openingButton && openingButton.parentElement !== summaryActions) summaryActions.append(openingButton);
+
+  let lockButton = document.querySelector('#ledgerLockSettingsButton');
+  if (!lockButton) {
+    lockButton = document.createElement('button');
+    lockButton.id = 'ledgerLockSettingsButton';
+    lockButton.className = 'secondary compact';
+    lockButton.type = 'button';
+    lockButton.textContent = '鎖定月份';
+    lockButton.title = '開啟月份鎖帳設定';
+    lockButton.addEventListener('click', () => {
+      if (typeof openSettings === 'function') openSettings();
+      if (typeof setSettingsTab === 'function') setSettingsTab('lock');
+      setTimeout(() => document.querySelector('#lockedThrough')?.focus(), 0);
+    });
+  }
+  if (lockButton.parentElement !== summaryActions) summaryActions.append(lockButton);
+
   document.querySelector('#ledgerGroupToggle')?.remove();
+  const periodTools = document.querySelector('.ledger-period-tools');
+  if (periodTools && !periodTools.children.length) periodTools.remove();
 }
 
 function setupV21LedgerHeaderDecoration() {
