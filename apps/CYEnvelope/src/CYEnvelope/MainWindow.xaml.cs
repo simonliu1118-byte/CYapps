@@ -24,7 +24,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        var data = Path.Combine(AppContext.BaseDirectory, "Data", "CYEnvelope.db");
+        var appRoot = Path.GetFileName(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory))
+            .Equals("Runtime", StringComparison.OrdinalIgnoreCase)
+            ? Directory.GetParent(AppContext.BaseDirectory)!.FullName
+            : AppContext.BaseDirectory;
+        var data = Path.Combine(appRoot, "Data", "CYEnvelope.db");
         _repository = new Repository(data);
         _settings = _repository.Settings();
         var formats = _repository.Formats();
@@ -32,8 +36,8 @@ public partial class MainWindow : Window
                   ?? formats.FirstOrDefault(f => f.IsDefault) ?? formats[0];
         var icon = new BitmapImage(new Uri("pack://application:,,,/ENV.ico"));
         Icon = icon;
-        var version = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "VERSION")).Trim();
-        var build = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "BUILD")).Trim();
+        var version = File.ReadAllText(Path.Combine(appRoot, "VERSION")).Trim();
+        var build = File.ReadAllText(Path.Combine(appRoot, "BUILD")).Trim();
         Title = $"CYEnvelope V{version}" + (build != "0" ? $" Build {build}" : "");
         ShowFrameBox.IsChecked = true;
         RebuildOptions();

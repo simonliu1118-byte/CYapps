@@ -113,7 +113,7 @@ jobs:
           }
           $runtime = @(Get-ChildItem ./dist/verify-download/CYEnvelope/Runtime -Force | Select-Object -ExpandProperty Name)
           $expectedRuntime = @(
-            'D3DCompiler_47_cor3.dll', 'e_sqlite3.dll', 'PenImc_cor3.dll',
+            'CYEnvelope.exe', 'D3DCompiler_47_cor3.dll', 'e_sqlite3.dll', 'PenImc_cor3.dll',
             'PresentationNative_cor3.dll', 'vcruntime140_cor3.dll', 'wpfgfx_cor3.dll'
           )
           if (@(Compare-Object $expectedRuntime $runtime).Count -ne 0) {
@@ -138,5 +138,5 @@ jobs:
               throw "Packaged CYEnvelope exited during startup with code $($proc.ExitCode)"
             }
           } finally {
-            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+            if (-not $proc.HasExited) { & taskkill.exe /PID $proc.Id /T /F | Out-Null }
           }

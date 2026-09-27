@@ -13,7 +13,7 @@ BUILD：0
 
 BUILD 1（同一交付要求的返修；2026/09/27）
 - 修整 WPF 主畫面的表單密度、區塊層級、操作按鈕與預覽背景，依 AITeam 的 CY Desktop Visual Guide 採用 Blue 主動作及中性工作區。
-- 可攜資料夾根目錄只保留 CYEnvelope.exe、VERSION、BUILD 與 Runtime 資料夾；六個必要原生 DLL 收進 Runtime，程式啟動時加入原生 DLL 搜尋路徑。
+- 可攜資料夾根目錄只保留 CYEnvelope.exe、VERSION、BUILD 與 Runtime 資料夾；根目錄的原生啟動程式開啟 Runtime 中的 WPF 程式，讓六個必要原生 DLL 與程式位於同一資料夾。
 - Windows CI 除公開封包掃描與啟動檢查，也檢查下載後的根目錄與 Runtime 清單；不附 SHA 檔與第二層 ZIP。
 
 驗證狀態
