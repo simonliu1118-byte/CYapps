@@ -3,6 +3,7 @@ const CY_V21_BUILD11_DESKTOP = '(min-width: 768px)';
 
 ensureV21Build11Stylesheet();
 ensureV21Build12Script();
+ensureV21Build13Script();
 
 document.addEventListener('DOMContentLoaded', () => {
   syncV21Build11Version();
@@ -26,6 +27,14 @@ function ensureV21Build12Script() {
   if (document.querySelector('script[src="/v021b12.js"]')) return;
   const script = document.createElement('script');
   script.src = '/v021b12.js';
+  script.async = false;
+  document.head.appendChild(script);
+}
+
+function ensureV21Build13Script() {
+  if (document.querySelector('script[src="/v021b13.js"]')) return;
+  const script = document.createElement('script');
+  script.src = '/v021b13.js';
   script.async = false;
   document.head.appendChild(script);
 }
