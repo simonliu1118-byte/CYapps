@@ -17,4 +17,5 @@ BUILD 1（同一交付要求的返修；2026/09/27）
 - Windows CI 除公開封包掃描與啟動檢查，也檢查下載後的根目錄與 Runtime 清單；不附 SHA 檔與第二層 ZIP。
 
 驗證狀態
-- Build 1 待 Windows CI 及使用者實機畫面、試印檢查；上方原 BUILD 0 的通過記錄僅適用於該版。
+- Build 1 的 Windows CI #31 已通過編譯、核心檢查、封包掃描、下載結構驗證與從根目錄啟動程式的啟動檢查；解壓縮後根目錄只有 CYEnvelope.exe、VERSION、BUILD、Runtime，DLL 全在 Runtime。實際畫面與試印仍待使用者在 Windows 驗收。
+- 上方原 BUILD 0 的通過記錄僅適用於該版；Build 1 測試 Artifact 見 https://github.com/simonliu1118-byte/CYapps/actions/runs/36329733771 。

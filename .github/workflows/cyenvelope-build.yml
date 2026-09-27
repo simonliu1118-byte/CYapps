@@ -137,6 +137,12 @@ jobs:
                 Select-Object -First 3 -ExpandProperty Message | Write-Host
               throw "Packaged CYEnvelope exited during startup with code $($proc.ExitCode)"
             }
+            if (-not (Test-Path ./dist/verify-download/CYEnvelope/Data/CYEnvelope.db)) {
+              throw 'Packaged app did not create its database in the outer CYEnvelope/Data folder'
+            }
+            if (Test-Path ./dist/verify-download/CYEnvelope/Runtime/Data) {
+              throw 'Packaged app created its database inside Runtime'
+            }
           } finally {
             if (-not $proc.HasExited) { & taskkill.exe /PID $proc.Id /T /F | Out-Null }
           }
