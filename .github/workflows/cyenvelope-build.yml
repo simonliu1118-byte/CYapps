@@ -131,7 +131,12 @@ jobs:
           try {
             Start-Sleep -Seconds 4
             $proc.Refresh()
-            if ($proc.HasExited) { throw "Packaged CYEnvelope exited during startup with code $($proc.ExitCode)" }
+            if ($proc.HasExited) {
+              Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-3) } -ErrorAction SilentlyContinue |
+                Where-Object { $_.ProviderName -in @('.NET Runtime', 'Application Error') -and $_.Message -match 'CYEnvelope' } |
+                Select-Object -First 3 -ExpandProperty Message | Write-Host
+              throw "Packaged CYEnvelope exited during startup with code $($proc.ExitCode)"
+            }
           } finally {
             if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }
