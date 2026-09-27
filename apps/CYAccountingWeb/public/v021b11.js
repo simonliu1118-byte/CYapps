@@ -9,6 +9,7 @@ ensureV21Build15Script();
 ensureV21Build16Script();
 ensureV0211PatchScript();
 ensureV0211KeyboardScript();
+ensureV0212PatchScript();
 
 document.addEventListener('DOMContentLoaded', () => {
   syncV21Build11Version();
@@ -80,6 +81,14 @@ function ensureV0211KeyboardScript() {
   if (document.querySelector('script[src="/v0211-keyboard.js"]')) return;
   const script = document.createElement('script');
   script.src = '/v0211-keyboard.js';
+  script.async = false;
+  document.head.appendChild(script);
+}
+
+function ensureV0212PatchScript() {
+  if (document.querySelector('script[src="/v0212.js"]')) return;
+  const script = document.createElement('script');
+  script.src = '/v0212.js';
   script.async = false;
   document.head.appendChild(script);
 }
