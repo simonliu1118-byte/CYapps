@@ -256,6 +256,10 @@ async function handleV21Build15CategoryDrop(event) {
 
   const targetRow = event.target.closest('[data-v21-category-row]');
   const targetId = Number(targetRow?.dataset.v21CategoryRow || 0);
+  if (targetId === drag.id) {
+    finishV21Build15Drag();
+    return;
+  }
   const after = targetRow ? v21Build15AfterMidpoint(event, targetRow) : true;
   const payload = v21Build15CategoryOrderPayload(drag.id, targetGroupId, targetId, after);
   finishV21Build15Drag();
@@ -267,8 +271,9 @@ async function handleV21Build15CategoryDrop(event) {
 
 function v21Build15MoveId(ids, sourceId, targetId, after) {
   if (!ids.includes(sourceId)) return null;
+  if (targetId === sourceId) return [...ids];
   const next = ids.filter(id => id !== sourceId);
-  if (!targetId || targetId === sourceId || !next.includes(targetId)) {
+  if (!targetId || !next.includes(targetId)) {
     next.push(sourceId);
     return next;
   }
@@ -279,6 +284,7 @@ function v21Build15MoveId(ids, sourceId, targetId, after) {
 }
 
 function v21Build15CategoryOrderPayload(sourceId, targetGroupId, targetId, after) {
+  if (targetId === sourceId) return null;
   const groups = (state.groups || []).filter(group => group.kind === state.settingsKind);
   if (!groups.some(group => Number(group.id) === targetGroupId)) return null;
   const payload = groups.map(group => ({
@@ -291,7 +297,7 @@ function v21Build15CategoryOrderPayload(sourceId, targetGroupId, targetId, after
   payload.forEach(group => { group.categoryIds = group.categoryIds.filter(id => id !== sourceId); });
   const target = payload.find(group => group.groupId === targetGroupId);
   let index = target.categoryIds.length;
-  if (targetId && targetId !== sourceId && target.categoryIds.includes(targetId)) {
+  if (targetId && target.categoryIds.includes(targetId)) {
     index = target.categoryIds.indexOf(targetId) + (after ? 1 : 0);
   }
   target.categoryIds.splice(index, 0, sourceId);
