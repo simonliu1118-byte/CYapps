@@ -17,7 +17,9 @@ internal static class Program
     private static int Main(string[] args)
     {
         Output = Path.GetFullPath(args[0]); Directory.CreateDirectory(Output);
-        var app = new App(); app.InitializeComponent(); app.StartupUri = null;
+        var app = new Application();
+        app.Resources.MergedDictionaries.Add(new ResourceDictionary
+            { Source = new Uri("pack://application:,,,/CYEnvelope;component/Theme.xaml") });
         app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
         try
         {
@@ -62,14 +64,14 @@ internal static class Program
                 ValidateIconResources(Path.Combine(args[1], "Runtime", "CYEnvelope.exe"), args[2], "runtime");
             }
             File.WriteAllLines(Path.Combine(Output, "checks.txt"), Results);
-            app.Shutdown(); return 0;
+            app.Shutdown(); return Results.Any(r => r.StartsWith("FAIL ", StringComparison.Ordinal)) ? 1 : 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); File.WriteAllText(Path.Combine(Output, "failure.txt"), ex.ToString()); app.Shutdown(); return 1; }
     }
     private static object Field(object target, string name) => target.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(target)!;
     private static void Invoke(object target, string name, params object[] args) => target.GetType().GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(target, args);
     private static void Flush() => Application.Current.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-    private static void Assert(bool condition, string text) { if (!condition) throw new InvalidOperationException(text); Results.Add("PASS " + text); Console.WriteLine("PASS " + text); }
+    private static void Assert(bool condition, string text) { var result = (condition ? "PASS " : "FAIL ") + text; Results.Add(result); Console.WriteLine(result); }
     private static void Capture(Window window, string name)
     {
         window.UpdateLayout(); Flush();
@@ -98,6 +100,7 @@ internal static class Program
         {
             var handle = SendMessage(hwnd, 0x007F, kind, 0);
             Assert(handle != 0, $"{name}: native icon {size} exists");
+            if (handle == 0) continue;
             var bitmap = Imaging.CreateBitmapSourceFromHIcon(handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
             Assert(bitmap.PixelWidth >= size, $"{name}: native icon >= {size}px"); Save(bitmap, $"{name}-icon-{size}.png");
         }
@@ -111,11 +114,13 @@ internal static class Program
     {
         var ico = File.ReadAllBytes(source); var module = LoadLibraryEx(exe, 0, 2 | 0x20);
         Assert(module != 0, label + ": load final PE resource image");
+        if (module == 0) return;
         try
         {
             byte[]? group = null;
             EnumResourceNames(module, (nint)14, (m, t, n, _) => { group = Resource(m, t, n); return false; }, 0);
             Assert(group is not null, label + ": RT_GROUP_ICON present");
+            if (group is null) return;
             var count = BitConverter.ToUInt16(group!, 4); Assert(count == 7, label + ": seven icon sizes");
             for (var i = 0; i < count; i++)
             {

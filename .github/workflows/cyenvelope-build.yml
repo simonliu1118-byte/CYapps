@@ -68,8 +68,19 @@ jobs:
           dotnet run --project ./tests/CYEnvelope.VisualReview/CYEnvelope.VisualReview.csproj -c Release -- ./dist/visual-review ./dist/stage/CYEnvelope ./assets/ENV.ico
           if ($LASTEXITCODE -ne 0) { throw 'Visual review checks failed' }
 
-      - name: Upload Windows visual evidence
+      - name: Scan visual evidence
+        id: evidence
         if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path ./dist/visual-review) {
+            python ../../.github/scripts/scan-public-package.py ./dist/visual-review
+            if ($LASTEXITCODE -ne 0) { throw 'Visual evidence scan failed' }
+            "safe=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Upload Windows visual evidence
+        if: always() && steps.evidence.outputs.safe == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: CYEnvelope-windows-visual-review

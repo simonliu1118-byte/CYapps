@@ -78,9 +78,7 @@
         <TextBlock x:Name="PreviewHint" DockPanel.Dock="Bottom" Text="紅線為信封底圖，僅套印黑色內容。" Style="{StaticResource SecondaryText}" Margin="0,10,0,0"/>
         <Border Background="#EEF1F5" BorderBrush="#DDE1E6" BorderThickness="1" Padding="16,12">
           <Viewbox Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <Border Background="White" BorderBrush="#D1D5DB" BorderThickness="1">
-              <Grid><local:VisualHost x:Name="PreviewHost"/><Canvas x:Name="DirectLayer" Visibility="Collapsed"/></Grid>
-            </Border>
+            <Grid><local:VisualHost x:Name="PreviewHost"/><Canvas x:Name="DirectLayer" Visibility="Collapsed"/></Grid>
           </Viewbox>
         </Border>
       </DockPanel>

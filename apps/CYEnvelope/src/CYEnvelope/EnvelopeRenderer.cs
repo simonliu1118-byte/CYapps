@@ -18,11 +18,8 @@ public static class EnvelopeRenderer
     {
         var visual = new DrawingVisual();
         using var dc = visual.RenderOpen();
-        var width = format.WidthMm * DipPerMm;
-        var height = format.HeightMm * DipPerMm;
         if (preview)
         {
-            dc.DrawRectangle(Brushes.White, new Pen(Brushes.LightGray, 1), new Rect(0, 0, width, height));
             DrawPrintedEnvelopeReference(dc, format);
         }
         dc.PushTransform(new TranslateTransform(format.OffsetX * DipPerMm, format.OffsetY * DipPerMm));
@@ -61,6 +58,7 @@ public static class EnvelopeRenderer
             dc.PushTransform(new RotateTransform(90));
         }
         var outline = new Pen(new SolidColorBrush(Color.FromRgb(209, 213, 219)), .2 * DipPerMm);
+        dc.DrawRectangle(Brushes.White, outline, new Rect(0, 18 * DipPerMm, 105 * DipPerMm, 204 * DipPerMm));
         // The neutral trapezoid is the open flap, not red envelope artwork.
         var flap = new StreamGeometry();
         using (var g = flap.Open())
