@@ -1,4 +1,4 @@
-const CY_V21_VERSION = 'V0.21.0 Build 6';
+const CY_V21_VERSION = 'V0.21.0 Build 7';
 const CY_V21_SPLIT_MEDIA = '(min-width: 1360px)';
 const CY_V21_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 
@@ -7,6 +7,7 @@ ensureV21Build2Stylesheet();
 ensureV21Build3Stylesheet();
 ensureV21Build5Stylesheet();
 ensureV21Build6Stylesheet();
+ensureV21Build7Stylesheet();
 
 window.addEventListener('load', () => {
   syncV21Version();
@@ -19,6 +20,7 @@ window.addEventListener('load', () => {
   setupV21LedgerEmptyState();
   setupV21ConfirmationCopy();
   setupV21DataSettings();
+  cleanupV21InterfaceCopy();
   setupV21UserIdentity();
 });
 
@@ -62,6 +64,14 @@ function ensureV21Build6Stylesheet() {
   document.head.appendChild(link);
 }
 
+function ensureV21Build7Stylesheet() {
+  if (document.querySelector('link[href="/v021b7.css"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/v021b7.css';
+  document.head.appendChild(link);
+}
+
 function syncV21Version() {
   const version = document.querySelector('.version');
   if (version) version.textContent = CY_V21_VERSION;
@@ -99,10 +109,13 @@ function setupV21HeaderLayout() {
     accountCluster.className = 'v21-account-cluster';
   }
 
-  if (settings && settings.parentElement !== actions) actions.append(settings);
   if (currentUser && currentUser.parentElement !== accountCluster) accountCluster.append(currentUser);
   if (logout && logout.parentElement !== accountCluster) accountCluster.append(logout);
   if (accountCluster.parentElement !== actions) actions.append(accountCluster);
+  if (settings) {
+    if (settings.parentElement !== actions) actions.append(settings);
+    actions.insertBefore(settings, accountCluster);
+  }
 }
 
 function setupV21EntryHelp() {
@@ -237,8 +250,7 @@ function setupV21LedgerEmptyState() {
     if (!empty || empty.querySelector('.ledger-empty-state')) return;
     const text = String(empty.textContent || '').trim();
     if (!text) return;
-    const searchEmpty = text.includes('搜尋條件');
-    empty.innerHTML = `<div class="ledger-empty-state"><strong>${v21EscapeHtml(text)}</strong><span>${searchEmpty ? '請調整搜尋文字或清除搜尋條件。' : '新增記帳後，資料會顯示在這裡。'}</span></div>`;
+    empty.innerHTML = `<div class="ledger-empty-state"><strong>${v21EscapeHtml(text)}</strong></div>`;
   };
   enhance();
   const observer = new MutationObserver(enhance);
@@ -289,13 +301,9 @@ function setupV21DataSettings() {
     pane.className = 'settings-pane v21-data-pane';
     pane.dataset.settingsPane = 'data';
     pane.innerHTML = `
-      <div>
-        <h3>資料管理</h3>
-        <p class="hint">低頻的資料匯入工具集中在這裡，避免佔用日常記帳工作區。</p>
-      </div>
+      <h3>資料管理</h3>
       <section class="v21-data-section">
         <h4>Excel 匯入</h4>
-        <p>匯入 .xlsx 記帳資料。請先確認工作表內容，再使用預覽驗證後提交。</p>
         <div class="v21-data-actions" id="v21ExcelImportHost"></div>
       </section>`;
     const settingsMessage = document.querySelector('#settingsMessage');
@@ -316,7 +324,39 @@ function setupV21DataSettings() {
   if (!moveImportButton()) setTimeout(moveImportButton, 50);
 
   const subtitle = document.querySelector('#settingsDialog .modal-header p');
-  if (subtitle) subtitle.textContent = '帳戶、科目、資料與鎖帳';
+  if (subtitle) subtitle.textContent = '';
+}
+
+function cleanupV21InterfaceCopy() {
+  const removeNoise = () => {
+    const selectors = [
+      '.auth-note',
+      '#settingsDialog > .modal-header p',
+      '#settingsDialog [data-settings-pane="accounts"] > .hint',
+      '#settingsDialog [data-settings-pane="categories"] .pane-heading .hint',
+      '#settingsDialog [data-settings-pane="quick"] > .hint',
+      '#settingsDialog [data-settings-pane="quick"] .quick-settings-explain',
+      '#settingsDialog [data-settings-pane="lock"] > .hint',
+      '#settingsDialog [data-settings-pane="data"] .hint',
+      '#settingsDialog [data-settings-pane="data"] .v21-data-section > p',
+      '#settingsDialog [data-settings-pane="backup"] #backupHeadingHint',
+      '#settingsDialog [data-settings-pane="backup"] .backup-security-note',
+      '#settingsDialog [data-settings-pane="backup"] .backup-restore-note',
+      '#settingsDialog [data-settings-pane="migration"] .migration-heading-v19 .hint',
+      '#settingsDialog [data-settings-pane="migration"] .migration-privacy-v19',
+      '#openingDialog .opening-dialog-heading > .hint'
+    ];
+    for (const selector of selectors) {
+      document.querySelectorAll(selector).forEach(node => node.remove());
+    }
+  };
+
+  removeNoise();
+  const settings = document.querySelector('#settingsDialog .settings-content');
+  if (settings) {
+    const observer = new MutationObserver(removeNoise);
+    observer.observe(settings, { childList: true, subtree: true });
+  }
 }
 
 async function setupV21UserIdentity() {
