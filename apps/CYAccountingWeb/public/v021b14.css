@@ -1,0 +1,299 @@
+/* V0.21.0 Build 14 - Desktop manager redesign, inline naming and unified month pickers. */
+
+@media (min-width: 1024px) {
+  /* Header management buttons use the same secondary-button language as Settings. */
+  .v21-header-management-button {
+    min-height: 32px !important;
+    height: auto !important;
+    padding: 4px 12px !important;
+    border: 1px solid #aeb9c5 !important;
+    border-radius: 5px !important;
+    background: #f7f8fa !important;
+    color: #283542 !important;
+    font-size: 13.5px !important;
+    font-weight: 400 !important;
+    line-height: normal !important;
+  }
+
+  .v21-header-management-button:hover:not(:disabled) {
+    border-color: #9eaab6 !important;
+    background: #eef2f5 !important;
+    color: #283542 !important;
+  }
+
+  /* Ledger month trigger is clickable without a dropdown-caret affordance. */
+  .v21-month-picker-caret {
+    display: none !important;
+  }
+
+  .v21-month-picker-trigger {
+    gap: 0 !important;
+  }
+
+  /* All visible Desktop month fields use the same custom picker; native controls remain data sources only. */
+  .v21-native-month-source {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0 0 0 0) !important;
+    clip-path: inset(50%) !important;
+    border: 0 !important;
+    white-space: nowrap !important;
+    pointer-events: none !important;
+  }
+
+  .v21-month-picker-field {
+    width: 100%;
+  }
+
+  .v21-month-picker-field-trigger {
+    width: 100%;
+    min-width: 0;
+    height: 34px;
+    justify-content: flex-start;
+    padding: 0 10px;
+    border: 1px solid #aeb9c5;
+    border-radius: 5px;
+    background: #fff;
+    color: #222b35;
+    font-size: 13.5px;
+    font-weight: 400;
+  }
+
+  .v21-month-picker-field-trigger:hover,
+  .v21-month-picker-field-trigger[aria-expanded="true"] {
+    border-color: #8297aa;
+    background: #fff;
+  }
+
+  .v21-month-picker-field .v21-month-picker-popover {
+    left: 0;
+    transform: none;
+  }
+
+  /* Account manager is a small utility dialog, not a full Settings workspace. */
+  #settingsDialog.v21-management-mode[data-management-pane="accounts"] {
+    width: min(430px, calc(100vw - 36px)) !important;
+    max-width: 430px !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] {
+    width: min(640px, calc(100vw - 36px)) !important;
+    max-width: 640px !important;
+  }
+
+  #settingsDialog.v21-management-mode .settings-layout {
+    min-height: 0 !important;
+  }
+
+  #settingsDialog.v21-management-mode .settings-content {
+    padding: 12px 14px 14px !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="accounts"] [data-settings-pane="accounts"] > h3,
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] .pane-heading > div:first-child {
+    display: none !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] .pane-heading {
+    justify-content: flex-end;
+    margin-bottom: 8px;
+  }
+
+  /* Account rows: default control + name + inline edit, with only order/delete on the right. */
+  .v21-account-manager-row {
+    min-height: 40px;
+    padding: 5px 7px;
+    background: #fff;
+  }
+
+  .v21-manager-name-cell {
+    gap: 6px;
+  }
+
+  .v21-editable-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .v21-default-chip,
+  .v21-favorite-chip {
+    flex: 0 0 auto;
+    min-height: 25px;
+    height: 25px;
+    padding: 2px 6px;
+    border: 1px solid #d7dee7;
+    border-radius: 999px;
+    background: #fff;
+    color: #647386;
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .v21-default-chip.active {
+    border-color: #cfe5d3;
+    background: #eef8f0;
+    color: #2f6e3f;
+  }
+
+  .v21-default-chip:disabled {
+    opacity: 1;
+    cursor: default;
+  }
+
+  .v21-favorite-chip {
+    width: 27px;
+    padding: 0;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .v21-favorite-chip.active {
+    border-color: #e8c86c;
+    background: #fff6d8;
+    color: #8b6500;
+  }
+
+  .v21-edit-name-button,
+  .v21-inline-edit-confirm,
+  .v21-inline-edit-cancel {
+    flex: 0 0 27px;
+    width: 27px;
+    min-width: 27px;
+    height: 27px;
+    min-height: 27px;
+    padding: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px !important;
+    line-height: 1;
+  }
+
+  .v21-edit-name-button {
+    color: #4d657d;
+  }
+
+  .v21-inline-edit-confirm {
+    border-color: #91b7d8;
+    color: #235f91;
+  }
+
+  .v21-inline-edit-cancel {
+    color: #7b8794;
+  }
+
+  .v21-inline-name-input {
+    min-width: 0;
+    height: 29px !important;
+    min-height: 29px !important;
+    padding: 3px 7px !important;
+    font-size: 13.5px !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="accounts"] .inline-add {
+    margin-top: 8px;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="accounts"] .inline-add input,
+  #settingsDialog.v21-management-mode[data-management-pane="accounts"] .inline-add button {
+    height: 32px;
+    min-height: 32px;
+  }
+
+  /* Category manager becomes one grouped list, visually close to the final dropdown hierarchy. */
+  .v21-category-manager-list {
+    overflow: hidden;
+    border: 1px solid #dfe5eb;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .v21-category-group {
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    background: transparent;
+  }
+
+  .v21-category-group + .v21-category-group {
+    border-top: 1px solid #dfe5eb !important;
+  }
+
+  .v21-category-group-head {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 27px 1fr 28px 28px auto;
+    align-items: center;
+    gap: 4px;
+    min-height: 37px;
+    padding: 5px 7px !important;
+    background: #f6f8fa !important;
+  }
+
+  .v21-category-group-head .category-group-title {
+    min-width: 0;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+
+  .v21-manager-action-spacer {
+    min-width: 0;
+  }
+
+  .v21-category-items {
+    padding: 0 !important;
+  }
+
+  .v21-category-manager-row {
+    display: grid !important;
+    grid-template-columns: 27px minmax(0, 1fr) 27px 28px 28px auto auto;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    padding: 4px 7px 4px 18px !important;
+    border-bottom: 1px solid #edf1f4;
+  }
+
+  .v21-category-manager-row .v21-editable-name {
+    font-size: 13.5px;
+  }
+
+  .v21-category-empty {
+    padding: 9px 18px;
+    color: #7b8794;
+    font-size: 12.5px;
+    border-bottom: 1px solid #edf1f4;
+  }
+
+  .v21-category-add-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    margin: 0 !important;
+    padding: 6px 7px 7px 18px;
+    background: #fcfdfe;
+  }
+
+  .v21-category-add-row input,
+  .v21-category-add-row button {
+    min-height: 30px !important;
+    height: 30px !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] > .settings-layout .inline-add {
+    margin-top: 8px;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] > .settings-layout .inline-add input,
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] > .settings-layout .inline-add button {
+    min-height: 32px;
+    height: 32px;
+  }
+}
