@@ -1,5 +1,6 @@
 const CY_V21_BUILD8_VERSION = 'V0.21.0 Build 9';
 const CY_V21_BUILD8_SUMMARY_UNITS = 40;
+const CY_V21_BUILD9_MOBILE = '(max-width: 767px)';
 
 ensureV21Build8Stylesheet();
 ensureV21Build9Stylesheet();
@@ -10,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupV21Build8SummaryLimit();
   setupV21Build8RoleMedal();
   setupV21Build9EnterHints();
+  setupV21Build9MobileAccountPicker();
+  setupV21Build9MobilePages();
   syncV21Build9HelpCopy();
 });
 
@@ -17,6 +20,7 @@ window.addEventListener('load', () => {
   syncV21Build8Version();
   syncV21Build8AccountChoices();
   syncV21Build8RoleMedal();
+  syncV21Build9AccountPickerLabel();
   syncV21Build9HelpCopy();
 });
 
@@ -47,6 +51,7 @@ function setupV21Build8AccountChoices() {
   const row = document.querySelector('#entryAccountChoiceRow');
   if (!select || !host || !row) return;
 
+  const mobile = window.matchMedia(CY_V21_BUILD9_MOBILE);
   row.hidden = false;
   const observer = new MutationObserver(syncV21Build8AccountChoices);
   observer.observe(select, { childList: true, subtree: true });
@@ -55,7 +60,11 @@ function setupV21Build8AccountChoices() {
   host.addEventListener('click', event => {
     const button = event.target.closest('[data-entry-account]');
     if (!button) return;
-    selectV21Build8Account(button.dataset.entryAccount || '', true);
+    selectV21Build8Account(button.dataset.entryAccount || '', !mobile.matches);
+    if (mobile.matches) {
+      setV21Build9AccountPickerOpen(false);
+      document.querySelector('#entryAccountPickerButton')?.focus();
+    }
   });
 
   host.addEventListener('keydown', event => {
@@ -95,6 +104,7 @@ function syncV21Build8AccountChoices() {
     button.tabIndex = active ? 0 : -1;
     button.title = active ? '目前使用中的帳戶' : `切換至帳戶「${button.dataset.entryAccount}」`;
   }
+  syncV21Build9AccountPickerLabel();
 }
 
 function selectV21Build8Account(name, focus = false) {
@@ -107,6 +117,122 @@ function selectV21Build8Account(name, focus = false) {
   }
   syncV21Build8AccountChoices();
   if (focus) host.querySelector(`[data-entry-account="${CSS.escape(name)}"]`)?.focus();
+}
+
+function setupV21Build9MobileAccountPicker() {
+  const row = document.querySelector('#entryAccountChoiceRow');
+  const host = document.querySelector('#entryAccountButtons');
+  if (!row || !host) return;
+
+  let trigger = document.querySelector('#entryAccountPickerButton');
+  if (!trigger) {
+    trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.id = 'entryAccountPickerButton';
+    trigger.className = 'entry-account-picker-trigger';
+    trigger.setAttribute('aria-haspopup', 'true');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.innerHTML = '<span class="entry-account-picker-value">選擇帳戶</span><span class="entry-account-picker-arrow" aria-hidden="true">▾</span>';
+    row.insertBefore(trigger, host);
+  }
+
+  trigger.addEventListener('click', () => {
+    if (!window.matchMedia(CY_V21_BUILD9_MOBILE).matches) return;
+    setV21Build9AccountPickerOpen(!row.classList.contains('mobile-picker-open'));
+  });
+
+  document.addEventListener('pointerdown', event => {
+    if (!window.matchMedia(CY_V21_BUILD9_MOBILE).matches || row.contains(event.target)) return;
+    setV21Build9AccountPickerOpen(false);
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !row.classList.contains('mobile-picker-open')) return;
+    setV21Build9AccountPickerOpen(false);
+    trigger.focus();
+  });
+
+  const mobile = window.matchMedia(CY_V21_BUILD9_MOBILE);
+  const syncMode = () => {
+    if (!mobile.matches) setV21Build9AccountPickerOpen(false);
+    syncV21Build9AccountPickerLabel();
+  };
+  if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
+  else mobile.addListener?.(syncMode);
+  syncMode();
+}
+
+function setV21Build9AccountPickerOpen(open) {
+  const row = document.querySelector('#entryAccountChoiceRow');
+  const trigger = document.querySelector('#entryAccountPickerButton');
+  const host = document.querySelector('#entryAccountButtons');
+  if (!row || !trigger || !host) return;
+  const next = Boolean(open && window.matchMedia(CY_V21_BUILD9_MOBILE).matches);
+  row.classList.toggle('mobile-picker-open', next);
+  trigger.setAttribute('aria-expanded', next ? 'true' : 'false');
+  host.setAttribute('aria-hidden', next ? 'false' : 'true');
+  if (next) {
+    const active = host.querySelector('.entry-account-choice.active') || host.querySelector('.entry-account-choice');
+    requestAnimationFrame(() => active?.focus());
+  }
+}
+
+function syncV21Build9AccountPickerLabel() {
+  const select = document.querySelector('#accountName');
+  const trigger = document.querySelector('#entryAccountPickerButton');
+  const value = trigger?.querySelector('.entry-account-picker-value');
+  if (!select || !value) return;
+  const option = select.selectedOptions?.[0];
+  value.textContent = option?.textContent?.trim() || select.value || '選擇帳戶';
+}
+
+function setupV21Build9MobilePages() {
+  const topbar = document.querySelector('.topbar');
+  const shell = document.querySelector('.shell');
+  const entry = shell?.querySelector('.entry-card');
+  const ledger = shell?.querySelector('.ledger-card');
+  if (!topbar || !shell || !entry || !ledger) return;
+
+  let nav = document.querySelector('#mobileMainNav');
+  if (!nav) {
+    nav = document.createElement('nav');
+    nav.id = 'mobileMainNav';
+    nav.className = 'v21-mobile-main-nav';
+    nav.setAttribute('aria-label', '主要頁面');
+    nav.innerHTML = `
+      <button type="button" class="active" data-mobile-page="entry" aria-selected="true">新增記帳</button>
+      <button type="button" data-mobile-page="ledger" aria-selected="false">記帳資料</button>`;
+    topbar.insertAdjacentElement('afterend', nav);
+  }
+
+  let current = 'entry';
+  const mobile = window.matchMedia(CY_V21_BUILD9_MOBILE);
+
+  const apply = page => {
+    current = page === 'ledger' ? 'ledger' : 'entry';
+    const enabled = mobile.matches;
+    nav.hidden = !enabled;
+    entry.classList.toggle('v21-mobile-page-hidden', enabled && current !== 'entry');
+    ledger.classList.toggle('v21-mobile-page-hidden', enabled && current !== 'ledger');
+    shell.dataset.mobilePage = enabled ? current : '';
+    for (const button of nav.querySelectorAll('[data-mobile-page]')) {
+      const active = button.dataset.mobilePage === current;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    }
+  };
+
+  nav.addEventListener('click', event => {
+    const button = event.target.closest('[data-mobile-page]');
+    if (!button || !mobile.matches) return;
+    apply(button.dataset.mobilePage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  const syncMode = () => apply(current);
+  if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
+  else mobile.addListener?.(syncMode);
+  apply('entry');
 }
 
 function setupV21Build8SummaryLimit() {
