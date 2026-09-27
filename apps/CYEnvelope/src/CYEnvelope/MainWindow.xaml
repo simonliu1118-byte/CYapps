@@ -29,14 +29,14 @@
         <Button Content="設定" Click="SettingsClick"/>
       </StackPanel>
     </Border>
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,0">
+      <Button Content="列印" FontSize="17" FontWeight="SemiBold" Width="190" Height="46" Click="PrintClick"/>
+      <Button Content="清空" Width="110" Click="ClearClick"/>
+    </StackPanel>
     <Grid>
       <Grid.ColumnDefinitions><ColumnDefinition x:Name="EntryColumn" Width="370"/><ColumnDefinition x:Name="EntryGap" Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <Border x:Name="EntryPanel" Grid.Column="0" Background="White" BorderBrush="#D1D5DB" BorderThickness="1" Padding="16">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Bottom" HorizontalAlignment="Center" Margin="0,20,0,0">
-            <Button Content="列印" FontSize="17" FontWeight="SemiBold" Width="190" Height="46" Click="PrintClick"/>
-            <Button Content="清空" Width="110" Click="ClearClick"/>
-          </StackPanel>
           <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel>
               <TextBlock Text="收件資料" FontSize="19" FontWeight="SemiBold" Margin="0,0,0,16"/>

@@ -1,13 +1,13 @@
 # CYEnvelope
 
-志遠專用 Windows 信封套印工具。正式基準仍是 Go 版 V0.1.1；開發分支 `cyenvelope/csharp-remake` 正分階段重做 C#／WPF，目標版本 V0.2.0。本分支的 VERSION 是目標版本，不代表已提供可使用的新版 EXE。
+志遠專用 Windows 信封套印工具。正式基準仍是 Go 版 V0.1.1；開發分支 `cyenvelope/csharp-remake` 正分階段重做 C#／WPF，目前測試版本 V0.2.0 Build 1。本分支尚未正式發行。
 
 ## 重做進度
 
 | 階段 | 狀態 | 內容 |
 | --- | --- | --- |
 | 1. 核心與資料 | 已提交、跨平台編譯 | 全新 SQLite 資料層；聯絡人多地址、多電話模型；368 筆離線三碼郵遞區號；電話格式；共用信封繪製器；核准 ENV 圖示 |
-| 2. 介面與列印 | 初版已通過 Windows CI，等待操作檢查 | 左右工作區、預覽點選輸入、聯絡人管理、格式編輯與橫式欄位旋轉；按列印先保存，再用共用繪製器輸出 |
+| 2. 介面與列印 | Build 1 修正直接輸入模式的列印／清空入口，待 Windows CI 與操作檢查 | 左右工作區、預覽點選輸入、聯絡人管理、格式編輯與橫式欄位旋轉；按列印先保存，再用共用繪製器輸出 |
 | 3. Windows 測試包與試印 | Windows CI 與 Artifact 已通過，待實機試印 | Windows x64 portable、掃描後上傳 14 天 Artifact、啟動檢查；15K 實機試印及位置校正尚待驗收 |
 
 目前有 WPF 主畫面與管理視窗；預覽點選欄位後會以浮動輸入框編輯，畫出的內容仍由共用繪製器顯示。尚未完成這些互動的實機操作驗收。Windows CI 已完成建置、啟動與封包安全掃描，並上傳可供試印的測試 Artifact。既有 `cmd/`、`internal/`、`go.mod`、`build.ps1` 和 `使用說明.txt` 暫作 Go 版行為對照；完成 C# 版驗收後再處理舊碼。新版資料庫從空白建立，不遷移 Go 測試資料。執行資料不進 Git。
@@ -25,7 +25,7 @@ dotnet build .\src\CYEnvelope\CYEnvelope.csproj
 dotnet run --project .\tests\CYEnvelope.Tests\CYEnvelope.Tests.csproj
 ```
 
-非 Windows 環境可用 `dotnet build -p:EnableWindowsTargeting=true` 檢查編譯，但無法執行 WPF 測試或實際列印。PR 的 Windows CI 已通過編譯、核心檢查、啟動與封包掃描。可從 PR 的成功 Actions 執行下載 `CYEnvelope-V0.2.0-windows-x64-test` Artifact；內含 ZIP 與 SHA-256 檔，預設保留 14 天。測試包不是正式 Release，CI 成功也不代表實際印表機位置已校正。
+非 Windows 環境可用 `dotnet build -p:EnableWindowsTargeting=true` 檢查編譯，但無法執行 WPF 測試或實際列印。V0.2.0 的 Windows CI 已通過編譯、核心檢查、啟動與封包掃描；Build 1 修正仍待新一輪 CI。完成後可從 PR 的成功 Actions 執行下載 `CYEnvelope-V0.2.0-Build-1-windows-x64-test` Artifact；內含 ZIP 與 SHA-256 檔，預設保留 14 天。測試包不是正式 Release，CI 成功也不代表實際印表機位置已校正。
 
 ## 來源與規範
 
