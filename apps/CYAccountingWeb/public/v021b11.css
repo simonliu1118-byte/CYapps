@@ -1,0 +1,72 @@
+/* V0.21.0 Build 11 - Desktop isolation hotfix after the phone-first Build 10 layer. */
+
+/* Build 10 creates mobile-only controls in the DOM. They must never participate in Tablet/Desktop layout. */
+@media (min-width: 768px) {
+  #mobileAccountMenuButton,
+  #mobileAccountMenu,
+  #mobileLedgerMoreButton,
+  #mobileLedgerToolsSheet,
+  #mobileLedgerToolsBackdrop,
+  #mobileAccountSheetBackdrop,
+  #mobileMainNav {
+    display: none !important;
+  }
+
+  body.v21-mobile-app {
+    padding-bottom: 0 !important;
+  }
+}
+
+/* Desktop quick-entry grid must constrain native controls to their grid tracks.
+   Without min-width:0, native date/select/input min-content widths can overlap neighboring fields. */
+@media (min-width: 1024px) {
+  .entry-grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(94px, .72fr) 104px !important;
+  }
+
+  .entry-grid > label,
+  .entry-grid > .date-field,
+  .entry-grid > .category-field,
+  .entry-grid > .summary-field,
+  .entry-grid > .amount-field {
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  .entry-grid > label > input,
+  .entry-grid > label > select,
+  .entry-grid input,
+  .entry-grid select {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  .entry-grid > .date-field {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+
+  .entry-grid > .category-field {
+    grid-column: 2 / 4 !important;
+    grid-row: 1 !important;
+  }
+
+  .entry-grid > .summary-field {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+  }
+
+  .entry-grid > .amount-field {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+  }
+
+  .entry-grid > #saveButton {
+    grid-column: 3 !important;
+    grid-row: 2 !important;
+    width: 104px !important;
+    min-width: 104px !important;
+  }
+}
