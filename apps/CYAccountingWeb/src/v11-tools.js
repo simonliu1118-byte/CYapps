@@ -17,6 +17,16 @@ export async function handleV11Api(request, env) {
     return handleFrequentSummaries(url, env.DB);
   }
 
+  if (url.pathname === '/api/accounts/reorder' && request.method === 'PUT') {
+    return handleReorderAccounts(request, env.DB);
+  }
+  if (url.pathname === '/api/category-groups/reorder' && request.method === 'PUT') {
+    return handleReorderGroups(request, env.DB);
+  }
+  if (url.pathname === '/api/categories/reorder' && request.method === 'PUT') {
+    return handleReorderCategories(request, env.DB);
+  }
+
   let match = url.pathname.match(/^\/api\/accounts\/(\d+)\/move$/);
   if (match && request.method === 'PUT') return handleMoveAccount(Number(match[1]), request, env.DB);
 
@@ -117,6 +127,85 @@ async function handleFrequentSummaries(url, db) {
   return json({ ok: true, summaries, settings });
 }
 
+async function handleReorderAccounts(request, db) {
+  const body = await request.json().catch(() => null);
+  const ids = parseOrderedIds(body?.ids);
+  if (!ids) return json({ ok: false, error: '帳戶排序資料格式錯誤。' }, 400);
+
+  const result = await db.prepare('SELECT id FROM accounts ORDER BY sort_order, id').all();
+  const current = (result.results || []).map(row => Number(row.id));
+  if (!sameIdSet(ids, current)) return json({ ok: false, error: '帳戶清單已變更，請重新整理後再試。' }, 409);
+
+  await runStatements(db, ids.map((id, index) =>
+    db.prepare('UPDATE accounts SET sort_order = ? WHERE id = ?').bind(index, id)
+  ));
+  return json({ ok: true });
+}
+
+async function handleReorderGroups(request, db) {
+  const body = await request.json().catch(() => null);
+  const kind = String(body?.kind || '');
+  const ids = parseOrderedIds(body?.ids);
+  if (!['income', 'expense'].includes(kind) || !ids) {
+    return json({ ok: false, error: '大分類排序資料格式錯誤。' }, 400);
+  }
+
+  const result = await db.prepare('SELECT id FROM category_groups WHERE kind = ? ORDER BY sort_order, id').bind(kind).all();
+  const current = (result.results || []).map(row => Number(row.id));
+  if (!sameIdSet(ids, current)) return json({ ok: false, error: '大分類清單已變更，請重新整理後再試。' }, 409);
+
+  await runStatements(db, ids.map((id, index) =>
+    db.prepare('UPDATE category_groups SET sort_order = ? WHERE id = ?').bind(index, id)
+  ));
+  return json({ ok: true });
+}
+
+async function handleReorderCategories(request, db) {
+  const body = await request.json().catch(() => null);
+  const kind = String(body?.kind || '');
+  if (!['income', 'expense'].includes(kind) || !Array.isArray(body?.groups)) {
+    return json({ ok: false, error: '科目排序資料格式錯誤。' }, 400);
+  }
+
+  const requestedGroups = [];
+  const flatCategoryIds = [];
+  for (const raw of body.groups) {
+    const groupId = Number(raw?.groupId);
+    const categoryIds = parseOrderedIds(raw?.categoryIds);
+    if (!Number.isInteger(groupId) || groupId <= 0 || !categoryIds) {
+      return json({ ok: false, error: '科目排序資料格式錯誤。' }, 400);
+    }
+    requestedGroups.push({ groupId, categoryIds });
+    flatCategoryIds.push(...categoryIds);
+  }
+
+  if (new Set(requestedGroups.map(item => item.groupId)).size !== requestedGroups.length
+      || new Set(flatCategoryIds).size !== flatCategoryIds.length) {
+    return json({ ok: false, error: '科目排序資料包含重複項目。' }, 400);
+  }
+
+  const [groupResult, categoryResult] = await Promise.all([
+    db.prepare('SELECT id FROM category_groups WHERE kind = ? ORDER BY sort_order, id').bind(kind).all(),
+    db.prepare('SELECT id FROM categories WHERE kind = ? ORDER BY group_id, sort_order, id').bind(kind).all()
+  ]);
+  const currentGroupIds = (groupResult.results || []).map(row => Number(row.id));
+  const currentCategoryIds = (categoryResult.results || []).map(row => Number(row.id));
+  if (!sameIdSet(requestedGroups.map(item => item.groupId), currentGroupIds)
+      || !sameIdSet(flatCategoryIds, currentCategoryIds)) {
+    return json({ ok: false, error: '科目清單已變更，請重新整理後再試。' }, 409);
+  }
+
+  const statements = [];
+  for (const group of requestedGroups) {
+    group.categoryIds.forEach((id, index) => {
+      statements.push(db.prepare('UPDATE categories SET group_id = ?, sort_order = ? WHERE id = ? AND kind = ?')
+        .bind(group.groupId, index, id, kind));
+    });
+  }
+  await runStatements(db, statements);
+  return json({ ok: true });
+}
+
 async function handleMoveAccount(id, request, db) {
   const direction = await directionFromRequest(request);
   if (!direction) return json({ ok: false, error: '排序方向錯誤。' }, 400);
@@ -169,6 +258,28 @@ async function moveWithin(db, table, whereSql, whereBindings, id, direction) {
     db.prepare(`UPDATE ${table} SET sort_order = ? WHERE id = ?`).bind(targetIndex, id),
     db.prepare(`UPDATE ${table} SET sort_order = ? WHERE id = ?`).bind(index, targetId)
   ]);
+}
+
+function parseOrderedIds(value) {
+  if (!Array.isArray(value)) return null;
+  const ids = value.map(Number);
+  if (ids.some(id => !Number.isInteger(id) || id <= 0)) return null;
+  if (new Set(ids).size !== ids.length) return null;
+  return ids;
+}
+
+function sameIdSet(left, right) {
+  if (left.length !== right.length) return false;
+  const a = [...left].sort((x, y) => x - y);
+  const b = [...right].sort((x, y) => x - y);
+  return a.every((id, index) => id === b[index]);
+}
+
+async function runStatements(db, statements) {
+  const chunkSize = 80;
+  for (let index = 0; index < statements.length; index += chunkSize) {
+    await db.batch(statements.slice(index, index + chunkSize));
+  }
 }
 
 async function directionFromRequest(request) {
