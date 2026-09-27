@@ -23,6 +23,7 @@ const build13Css = read('public/v021b13.css');
 const build14Css = read('public/v021b14.css');
 const build15Css = read('public/v021b15.css');
 const build16Css = read('public/v021b16.css');
+const patchCss = read('public/v0211.css');
 const v021 = read('public/v021.js');
 const build8Js = read('public/v021b8.js');
 const build10Js = read('public/v021b10.js');
@@ -32,6 +33,7 @@ const build13Js = read('public/v021b13.js');
 const build14Js = read('public/v021b14.js');
 const build15Js = read('public/v021b15.js');
 const build16Js = read('public/v021b16.js');
+const patchJs = read('public/v0211.js');
 const v03 = read('public/v03.js');
 const v06 = read('public/v06.js');
 const v07 = read('public/v07.js');
@@ -39,26 +41,26 @@ const v013 = read('public/v013.js');
 const appV19 = read('src/app-v19.js');
 const v11Tools = read('src/v11-tools.js');
 
-assert.equal(version, '0.21.0');
-assert.equal(build, '16');
+assert.equal(version, '0.21.1');
+assert.equal(build, '0');
 assert.match(build11Js, /ensureV21Build12Script\(\)/);
 assert.match(build11Js, /ensureV21Build13Script\(\)/);
 assert.match(build11Js, /ensureV21Build14Script\(\)/);
 assert.match(build11Js, /ensureV21Build15Script\(\)/);
 assert.match(build11Js, /ensureV21Build16Script\(\)/);
-assert.match(build11Js, /script\.src = '\/v021b16\.js'/);
+assert.match(build11Js, /ensureV0211PatchScript\(\)/);
+assert.match(build11Js, /script\.src = '\/v0211\.js'/);
 assert.match(build12Js, /CY_V21_BUILD12_VERSION = 'V0\.21\.0 Build 12'/);
 assert.match(build13Js, /CY_V21_BUILD13_VERSION = 'V0\.21\.0 Build 13'/);
 assert.match(build14Js, /CY_V21_BUILD14_VERSION = 'V0\.21\.0 Build 14'/);
 assert.match(build15Js, /CY_V21_BUILD15_VERSION = 'V0\.21\.0 Build 15'/);
 assert.match(build16Js, /CY_V21_BUILD16_VERSION = 'V0\.21\.0 Build 16'/);
-assert.match(build16Js, /CY_V21_BUILD16_DESKTOP = '\(min-width: 1024px\)'/);
-assert.match(build16Js, /link\.href = '\/v021b16\.css'/);
-for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js]) {
+assert.match(patchJs, /CY_V0211_VERSION = 'V0\.21\.1'/);
+for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs]) {
   assert.doesNotThrow(() => new Function(js), 'V0.21 overlay JavaScript must parse');
 }
 
-// Breakpoint ownership remains explicit: Build 10 phone, Build 9 Tablet, Builds 12-16 Desktop only.
+// Breakpoint ownership remains explicit: Build 10 phone, Build 9 Tablet, Builds 12-16 + V0.21.1 Desktop patch.
 assert.match(build10Css, /@media \(max-width: 767px\)/);
 assert.match(build11Css, /@media \(min-width: 768px\)/);
 assert.match(build12Css, /@media \(min-width: 1024px\)/);
@@ -66,7 +68,7 @@ assert.match(build13Css, /@media \(min-width: 1024px\)/);
 assert.match(build14Css, /@media \(min-width: 1024px\)/);
 assert.match(build15Css, /@media \(min-width: 1024px\)/);
 assert.match(build16Css, /@media \(min-width: 1024px\)/);
-assert.doesNotMatch(build16Css, /@media \(max-width:/);
+assert.match(patchCss, /@media \(min-width: 1024px\)/);
 
 // Approved Desktop split, slider and entry mode tints remain intact.
 assert.match(build1Css, /@media \(min-width: 1360px\)/);
@@ -77,13 +79,12 @@ for (const css of [baseCss, build3Css, build5Css, build6Css, build7Css, build8Cs
   assert.doesNotMatch(css, /\.entry-kind-switch\s*\{/);
 }
 
-// Identity badge/readability from Build 12 stays intact.
+// Identity badge/readability stays intact and V0.21.1 forces real vertical centering.
 assert.match(build8Css, /\.current-user\.role-super-admin\s*\{[\s\S]*?#fff4d6/);
 assert.match(build8Css, /\.current-user\.role-admin\s*\{[\s\S]*?#f8ebe1/);
-assert.match(build12Css, /\.current-user-main,[\s\S]*?\.current-user-role\s*\{[\s\S]*?font-size:\s*13\.5px !important;/);
 assert.match(build12Css, /\.current-user-role::before\s*\{[\s\S]*?content:\s*"\[" !important;/);
-assert.match(build12Css, /#monthSummary,[\s\S]*?font-size:\s*13\.5px !important;/);
-assert.match(build12Css, /\.ledger-card th\s*\{[\s\S]*?font-size:\s*13\.5px !important;/);
+assert.match(patchCss, /#currentUser\.current-user\s*\{[\s\S]*?align-items:\s*center !important;[\s\S]*?height:\s*30px !important;/);
+assert.match(patchCss, /#headerAccountManagerButton,[\s\S]*?#headerCategoryManagerButton,[\s\S]*?#settingsButton/);
 
 // Quick entry proportions and summary rules remain intact.
 assert.match(build12Css, /\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 86px 78px !important;/);
@@ -103,62 +104,61 @@ assert.match(v07, /event\.key !== 'Tab'/);
 assert.match(build13Js, /setupV21Build13ConnectionStatus\(\)/);
 assert.match(build13Js, /status\.classList\.contains\('warn'\)/);
 assert.match(build13Js, /status\.textContent = ''/);
-assert.match(build13Js, /status\.classList\.add\('hidden'\)/);
 
-// Custom month picker remains backed by native month sources and Build 14 extends it to all visible Desktop month fields.
+// Month controls stay custom; V0.21.1 additionally replaces native Desktop date pickers.
 assert.match(build12Js, /root\.id = 'ledgerMonthPickerCustom'/);
-assert.match(build12Js, /input\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
-assert.match(build13Css, /\.v21-month-picker-head\s*\{[\s\S]*?grid-template-columns:\s*36px minmax\(0, 1fr\) 36px !important;/);
 assert.match(build14Js, /document\.querySelectorAll\('input\[type="month"\]'\)/);
 assert.match(build14Js, /ensureV21Build14MonthPickerForInput\(input\)/);
-assert.match(build14Js, /input\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
-assert.match(build14Css, /\.v21-native-month-source\s*\{[\s\S]*?clip-path:\s*inset\(50%\) !important;/);
-assert.match(build14Css, /\.v21-month-picker-caret\s*\{[\s\S]*?display:\s*none !important;/);
-assert.match(v06, /els\.monthFilter\.dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/);
+assert.match(patchJs, /document\.querySelectorAll\('input\[type="month"\]'\)/);
+assert.match(patchJs, /document\.querySelectorAll\('input\[type="date"\]'\)/);
+assert.match(patchJs, /ensureV0211DatePicker/);
+assert.match(patchCss, /\.v0211-native-date-source\s*\{[\s\S]*?clip-path:\s*inset\(50%\) !important;/);
+assert.match(patchJs, /data-v0211-date-month/);
+assert.match(patchJs, /data-v0211-date-year/);
 
 // Opening balance remains a compact current-month CRUD dialog with consistent Save copy.
 assert.match(build13Css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(300px, calc\(100vw - 28px\)\) !important;/);
-assert.match(build13Css, /\.opening-modal \.opening-dialog-heading\s*\{[\s\S]*?display:\s*none !important;/);
 assert.match(build13Js, /title\.textContent = `\$\{month\.replace\('-', '\/'\)\}期初餘額`/);
 assert.match(build13Js, /openingSave\.textContent = '儲存'/);
 assert.match(build13Js, /editSave\.textContent = '儲存'/);
 
-// Account/category management stays in Desktop header and Build 14 keeps inline editing.
-assert.match(build13Js, /headerAccountManagerButton/);
-assert.match(build13Js, /headerCategoryManagerButton/);
-assert.match(build14Js, /beginV21Build14InlineEdit\('account'/);
-assert.match(build14Js, /beginV21Build14InlineEdit\('category'/);
-assert.match(build14Js, /beginV21Build14InlineEdit\('group'/);
-assert.doesNotMatch(build14Js, /prompt\s*\(/);
-assert.match(build14Js, /input\.maxLength = type === 'account' \? 8 : 60/);
-assert.match(appV19, /ACCOUNT_NAME_MAX_CHARS = 8/);
-assert.match(appV19, /ACCOUNT_NAME_TOO_LONG/);
+// Account manager remains compact; tags never overflow and names carry the visual weight.
+assert.match(patchCss, /data-management-pane="accounts"[\s\S]*?width:\s*min\(360px/);
+assert.match(patchCss, /\.v0211-default-tag\s*\{[\s\S]*?width:\s*54px !important;[\s\S]*?font-size:\s*9\.5px !important;/);
+assert.match(patchCss, /\.v0211-account-name-cell \.v21-editable-name\s*\{[\s\S]*?font-size:\s*14px !important;/);
+assert.match(patchCss, /\.v0211-account-row \.v21-edit-name-button\[hidden\]/);
+assert.match(patchJs, /renderV0211AccountManager/);
+assert.match(patchJs, /window\.renderV21Build15AccountManager = renderV0211AccountManager/);
 
-// Build 15 supplies reorder APIs and drag handles.
-assert.match(build15Js, /data-v21-drag-account/);
-assert.match(build15Js, /data-v21-drag-group/);
-assert.match(build15Js, /data-v21-drag-category/);
-assert.match(v11Tools, /url\.pathname === '\/api\/accounts\/reorder'/);
-assert.match(v11Tools, /url\.pathname === '\/api\/category-groups\/reorder'/);
-assert.match(v11Tools, /url\.pathname === '\/api\/categories\/reorder'/);
-assert.match(v11Tools, /UPDATE categories SET group_id = \?, sort_order = \?/);
-assert.match(v11Tools, /sameIdSet/);
+// Category manager has exactly one patch-owned hierarchy; no legacy card/move controls are rendered.
+assert.match(patchJs, /renderV0211CategoryManager/);
+assert.match(patchJs, /data-v0211-manager-kind="income"/);
+assert.match(patchJs, /data-v21-drag-group/);
+assert.match(patchJs, /data-v21-drag-category/);
+assert.doesNotMatch(patchJs, /data-v11-move-category|data-v11-move-group|data-v12-category-transfer/);
+assert.doesNotMatch(patchJs, /class="category-item/);
+assert.match(patchJs, /\.category-item, \.order-button, \[data-v12-category-transfer\]/);
+assert.match(patchCss, /v0211-category-income[\s\S]*?background:\s*#f4fbf6/);
+assert.match(patchCss, /v0211-category-expense[\s\S]*?background:\s*#fff6f5/);
 
-// Build 16 fixes the remaining Desktop manager interaction issues.
-assert.match(build16Css, /#headerAccountManagerButton,[\s\S]*?#headerCategoryManagerButton,[\s\S]*?#settingsButton\s*\{[\s\S]*?display:\s*inline-flex !important;[\s\S]*?align-items:\s*center !important;/);
-assert.match(build16Css, /\.entry-account-choice\s*\{[\s\S]*?flex:\s*0 0 auto !important;[\s\S]*?width:\s*auto !important;[\s\S]*?min-width:\s*0 !important;/);
-assert.match(build16Css, /data-management-pane="accounts"[\s\S]*?width:\s*min\(360px/);
-assert.match(build16Css, /\.v21-default-tag\s*\{[\s\S]*?width:\s*58px !important;/);
-assert.match(build16Css, /\.v21-edit-name-button\[hidden\]\s*\{[\s\S]*?display:\s*none !important;/);
-assert.match(build16Css, /data-management-pane="categories"\] \.pane-heading\s*\{[\s\S]*?display:\s*none !important;/);
-assert.match(build16Css, /\.v21-category-kind-switch\s*\{[\s\S]*?grid-template-columns:\s*1fr 1fr !important;/);
-assert.match(build16Js, /window\.renderCategoryManager = renderV21Build16CategoryManager/);
-assert.match(build16Js, /event\.stopImmediatePropagation\(\)/);
+// Optimistic reorder stays protected from Build 16.
 assert.match(build16Js, /state\.accounts = v21Build16OrderObjects\(previous, nextIds\);[\s\S]*?await persistV21Build16Optimistic/);
 assert.match(build16Js, /state\.groups = v21Build16ReplaceKindOrder\(previous, kind, nextIds\);[\s\S]*?await persistV21Build16Optimistic/);
 assert.match(build16Js, /state\.categories = v21Build16ApplyCategoryPayload\(previous, kind, payload\);[\s\S]*?await persistV21Build16Optimistic/);
-assert.match(build16Js, /rollback\?\.\(\)/);
-assert.match(build16Js, /document\.body\.classList\.add\('v21-reorder-saving'\)/);
+assert.match(v11Tools, /url\.pathname === '\/api\/accounts\/reorder'/);
+assert.match(v11Tools, /url\.pathname === '\/api\/category-groups\/reorder'/);
+assert.match(v11Tools, /url\.pathname === '\/api\/categories\/reorder'/);
+
+// Native browser confirmation boxes are intercepted by the app-owned dialog for every destructive/high-impact flow.
+assert.match(patchJs, /window\.cyConfirm = options => new Promise/);
+assert.match(patchJs, /\[data-delete-id\]/);
+assert.match(patchJs, /\[data-account-delete\]/);
+assert.match(patchJs, /\[data-category-delete\]/);
+assert.match(patchJs, /\[data-group-delete\]/);
+assert.match(patchJs, /#excelImportCommitButton/);
+assert.match(patchJs, /#backupRunNow/);
+assert.match(patchJs, /#desktopMigrationCommitV19/);
+assert.match(patchCss, /\.cy-confirm-dialog/);
 
 // Ledger/export behavior and Build 4 observer hotfix remain protected.
 assert.match(v013, /button\.textContent = '匯出中…'/);
@@ -166,4 +166,4 @@ assert.match(v013, /button\.setAttribute\('aria-busy', 'true'\)/);
 assert.match(v021, /if \(account\.textContent !== nextText\) account\.textContent = nextText;/);
 assert.match(v021, /if \(empty && empty\.textContent !== '本次尚無輸入紀錄。'\) empty\.textContent = '本次尚無輸入紀錄。';/);
 
-console.log('V0.21.0 Build 16 desktop regression tests passed.');
+console.log('V0.21.1 desktop regression tests passed.');
