@@ -52,7 +52,7 @@ npx wrangler d1 migrations apply DB \
 
 VERIFIER="$(python3 - <<'PY'
 import hashlib
-password = b'test-password-123'
+password = b'test-pass-123'
 salt = bytes.fromhex('00112233445566778899aabbccddeeff')
 iterations = 100_000
 digest = hashlib.pbkdf2_hmac('sha256', password, salt, iterations, 32)
@@ -134,7 +134,7 @@ fi
 LOGIN_RESPONSE="$(curl --silent --show-error --fail-with-body \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/login" \
   -H 'content-type: application/json' \
-  --data '{"workspaceId":"workspace-test-001","applicationId":"APP_TEST_LOGIN","employeeNo":"0002","password":"test-password-123"}')"
+  --data '{"workspaceId":"workspace-test-001","applicationId":"APP_TEST_LOGIN","employeeNo":"0002","password":"test-pass-123"}')"
 
 TOKEN="$(LOGIN_RESPONSE="$LOGIN_RESPONSE" python3 - <<'PY'
 import json
@@ -159,7 +159,7 @@ curl --silent --show-error --fail-with-body \
 SUPER_RESPONSE="$(curl --silent --show-error --fail-with-body \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/login" \
   -H 'content-type: application/json' \
-  --data '{"workspaceId":"workspace-test-001","applicationId":"APP_TEST_LOGIN","employeeNo":"0001","password":"test-password-123"}')"
+  --data '{"workspaceId":"workspace-test-001","applicationId":"APP_TEST_LOGIN","employeeNo":"0001","password":"test-pass-123"}')"
 
 SUPER_TOKEN="$(SUPER_RESPONSE="$SUPER_RESPONSE" python3 - <<'PY'
 import json

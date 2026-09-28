@@ -4,12 +4,12 @@
 
 ## Current checkpoint — 2026-09-28
 
-- `CYCloudIdentity` 已完成 repository governance 登錄；目前 development-deploy work item 版本 `0.1.5`。
+- `CYCloudIdentity` 已完成 repository governance 登錄；目前 development work item 版本 `0.1.6`。
 - CYInvoice Cloud 是 reference-only，第一階段保持 source/runtime/D1 不動。
 - Workspace 最高管理 authority 已與普通 Identity Groups 分離；普通身分組為 data-driven，可新增、重新命名、停用與調整 membership，不需 schema migration。
 - Application Registry 是 generic runtime registry；Public migration 不 seed 公司目前實際 App catalog，也不保存實際 Workspace/Employee access matrix。
 - Application Access 支援 direct Employee grant、Identity Group grant，以及受保護 Workspace highest-authority entry。
-- PBKDF2-SHA256 credential compatibility、Identity-owned session create/resolve/logout 已有 executable Worker implementation。
+- PBKDF2-SHA256 credential compatibility、Identity-owned session create/resolve/logout 已有 executable Worker implementation；Password 長度規則已固定為 8–16 字元。
 - Local Wrangler + D1 acceptance 已驗證 synthetic login → resolve → logout → revoked-session rejection；不依賴遠端資源或秘密。
 - Provider-neutral Email Sender、Email OTP、first-Workspace bootstrap、login rate limit 與 free-tier email budget protection 已實作。
 - Workspace highest authority 可透過 Identity admin API 調整 OTP resend cooldown、max attempts、per-email/purpose hourly limit 與 Workspace daily email limit；所有可調值受 server-side safety bounds 限制並寫 Audit。
@@ -19,7 +19,7 @@
 - CY Web 預定作為 Shared Identity 的帳號管理 UI；帳號/OTP/權限資料與規則仍由 CYCloud Identity Worker + D1 持有，不搬進 CY Web business D1。
 - `docs/AUTH_CONTRACT.md` 已固定目前 login/session consumer contract；普通 Identity Groups 不重新退回固定 role enum。
 - Placeholder-only development deployment pipeline 已加入；Public source 不保存 remote D1 ID、Worker name、sender address、provider credential、OTP pepper 或 bootstrap secret。
-- 初始 Identity D1 尚未第一次 remote deployment；remote baseline 接受後所有 schema 變更只用 numbered forward migrations。
+- Non-production Identity Worker 與 D1 已完成第一次 remote deployment，既有 numbered migrations 已套用；第一個 development Workspace bootstrap 尚未完成。
 - Current cost assumption: stay within free Cloudflare / Email provider / Google Cloud usage; no paid-tier dependency or automatic upgrade.
 - No production deployment, production Workspace, production Employee, real App catalog or real secret is created by this work.
 

@@ -5,15 +5,26 @@ import {
   createCredentialVerifier,
   createSessionToken,
   isSessionToken,
+  normalizePassword,
   sha256Hex,
   verifyCredential,
 } from "../dist/crypto.js";
 
 test("credential verifier accepts the correct password and rejects a wrong password", async () => {
-  const verifier = await createCredentialVerifier("correct horse battery staple", 100_000);
+  const verifier = await createCredentialVerifier("CorrectPass123!", 100_000);
   assert.match(verifier, /^pbkdf2-sha256\$100000\$[0-9a-f]{32}\$[0-9a-f]{64}$/);
-  assert.equal(await verifyCredential("correct horse battery staple", verifier), true);
-  assert.equal(await verifyCredential("wrong password", verifier), false);
+  assert.equal(await verifyCredential("CorrectPass123!", verifier), true);
+  assert.equal(await verifyCredential("WrongPass123!", verifier), false);
+});
+
+test("password length is restricted to 8 through 16 characters", async () => {
+  assert.equal(normalizePassword("1234567"), null);
+  assert.equal(normalizePassword("12345678"), "12345678");
+  assert.equal(normalizePassword("1234567890123456"), "1234567890123456");
+  assert.equal(normalizePassword("12345678901234567"), null);
+  assert.equal(normalizePassword("密碼測試一二三四"), "密碼測試一二三四");
+  await assert.rejects(() => createCredentialVerifier("1234567", 100_000), /credential bounds/);
+  await assert.rejects(() => createCredentialVerifier("12345678901234567", 100_000), /credential bounds/);
 });
 
 test("malformed credential verifier fails closed", async () => {
