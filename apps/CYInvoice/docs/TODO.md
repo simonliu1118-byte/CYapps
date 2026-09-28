@@ -2,7 +2,7 @@
 
 本檔只保留目前仍未完成、需要後續驗證或已明確延後的工作。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-目前 PR #121 工程開發基準：**CYInvoice V2.6.6 Build 4**（Cloud storage Schema 9 source，尚未遠端部署）
+目前 PR #121 工程開發基準：**CYInvoice V2.6.6 Build 4**；development remote 已部署 **Cloud 0.8.5 / API 1 / storage Schema 9**，A 機既有功能與 B 機配對碼加入均已實機通過。
 最新正式 Release：`cyinvoice-v2.4.2`
 
 > V3 Cloud identity 工作若由新的長時間工作階段／ChatGPT Work 接手，先讀 `docs/CLOUD_WORK_HANDOFF.md`，再讀 `CLOUD_ARCHITECTURE_STATUS.md`、`CLOUD_ROADMAP.md` 與本檔。接手時仍必須依 `AGENTS.md` 指示先讀三層永久規則。
@@ -116,17 +116,21 @@
 - [x] A 機已完成 first Employee Transition／cutover；2026-09-25 確認 D1 active Device 即為 A 機。
 - [x] A 機以原 `Data` + PR #100 V2.6.5 Build 4 / Run229 成功恢復 remote Schema 8 連線；Workspace／Device identity 無須重建。
 - [x] A 機以原 `Data` + PR #121 V2.6.6 Build 4 / Run255 成功連 remote Schema 8；新版 Client 向下相容實機驗收通過。
-- [ ] 依 `CLOUD_WORK_HANDOFF.md` staged deployment：pre-deploy 唯讀查核 → 只套 migration `0009` → A 機 Run255 回歸 → Worker `0.8.5` → health／A 機再驗。Run229 在此階段保留作 rollback，不刪除。
-- [ ] B 機 Pairing + 多 Local Employee transition matrix 實機測試。
+- [x] development staged deployment 已完成：migration `0009` 只套一次、Worker `0.8.5` 已部署、health 為 API 1 / storage Schema 9，A 機 Run255 最終既有功能驗收通過。
+- [x] B 機以乾淨 Run255 使用配對碼加入既有 Workspace 實機通過；Cloud 連線、中央帳號、重新啟動均正常。
+- [ ] 邀請碼加入路徑、邀請撤銷／重寄與結果不明恢復實機驗收。
 - [ ] 精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。
-- [ ] Central Employee CRUD、Email OTP、password、enabled、role 在 A/B 間 snapshot 同步實機測試。
+- [ ] **Cloud Employee 即時驗證 defect：**Cloud 在線時，任何 Employee 密碼／權限驗證前必須取得最新 Cloud authority／snapshot，再驗證並刷新本機 cache；不得等待 5 分鐘背景同步或重開程式。已實測 A 新增 Employee 後 B 在未刷新 cache 前看不到，新啟動後可見，確認目前 cache timing 缺口存在。
+- [ ] Central Employee CRUD、Email OTP、password、enabled、role 在 A/B 間即時與背景 snapshot 同步實機測試。
 - [ ] Cloud Mode 斷網：以最後 Cloud cache 做 execution-time auth；恢復連線後 Cloud authority 覆蓋 cache。
-- [ ] Device revoke UI/API。
+- [ ] **Cloud → Local 破壞性重置：**已完成 Cloud cutover 的電腦若切「單機版」，必須雙重確認「本機資料會全部清除且需重新建立超管」；停止同步，依 Device revoke/retire 規則處理目前 Device，再清除本機 Data／Cache／設定、Local EmployeeStore、Cloud Employee cache、Device identity/token/pending state，重啟為首次使用並重新建立 Local SUPER_ADMIN。之後再切雲端版，必須重新走正常 Local → Cloud transition，不得復活舊 authority 或 token。
+- [ ] Device revoke UI/API；亦作為 Cloud → Local 破壞性重置安全退場的一部分。
 - [ ] 所有 Device Token 遺失但 Recovery Email 可用時的 Recovery Device flow。
 - [ ] 所有 Device Token + Recovery Email 同時失效時的 reference-backend 人工維運文件。
 - [ ] 驗收 fresh-install 首次分流：單機版原流程；雲端加入可選配對碼或邀請碼，不建立本機帳號。先確認 A 機中央帳號已完成 cutover，再使用 Windows 測試包驗證兩條路徑及斷線恢復。
+- [ ] **延後／非目前阻塞：Cloud Employee offline cache 完整性簽章。** 未來可評估 server-signed snapshot／等效完整性保護，偵測刻意修改本機 SQLite 的 role、enabled 等 metadata。若沒有實際竄改事件、威脅模型提高或稽核需求，先長期擱置，不列入目前 Build／V3 上線阻塞項目。
 
-### 新裝置加入方式與安全紀錄（2026-09-25，工程實作完成，待遠端與實機驗收）
+### 新裝置加入方式與安全紀錄（2026-09-25，工程實作完成，待完整實機驗收）
 
 - [x] 新裝置加入只保留「配對碼」與「邀請碼」兩種方式；移除現有「Workspace 識別碼＋超管帳密／Email OTP」直接加入入口與 API。
 - [x] A 機「新增雲端裝置」提供「立即配對」：超管驗證後顯示目前連線的 Cloud API 網址與約 10 分鐘、限用一次的配對碼；B 機輸入網址與配對碼，確認 Workspace 名稱後加入。A 機視窗顯示加入結果。
@@ -134,9 +138,10 @@
 - [x] 程式不內嵌 Cloud API 網址。Workspace 識別碼僅供內部定位，不作為新機手動輸入欄位；配對碼／邀請碼由伺服器解析目標 Workspace。加入期間只在 Pending join 暫存使用者輸入的網址與裝置憑證，以便結果不明時復原；成功後才保存正式 Device identity。
 - [x] Cloud D1 安全操作紀錄涵蓋配對碼核發、驗證、新機加入、邀請寄送與撤銷及相關失敗事件；A 機可查詢配對／邀請狀態。紀錄不含配對碼、邀請碼、密碼、OTP 或 Device Token 原文。配對 Worker 已改用既有資料表 `device_pairing_codes`。
 - [x] Cloud client schema equality blocker 已修正：API contract／capability compatibility、legacy Build 4 health marker、minimum client metadata 與跨版本 regression 已完成；Run255 對 remote Schema 8 的 A 機實測通過。
-- [x] 同一 A 機、同一 Windows 帳戶、原 `Data` 的 Run229 Schema 8 恢復驗證已通過；Run229 暫留 rollback，待 Schema 9 + Worker 0.8.5 部署後驗收完成再刪。
-- [ ] 完成 development migration `0009`／Worker `0.8.5` staged deployment 與 A 機部署後回歸。
-- [ ] A／B 機使用工程包實際驗收兩條加入路徑、邀請撤銷／重寄、結果不明時的恢復；Run #255 CI 已通過，但 B 機尚待可用時驗收。
+- [x] 同一 A 機、同一 Windows 帳戶、原 `Data` 的 Run229 Schema 8 恢復驗證已通過。
+- [x] development migration `0009`／Worker `0.8.5` staged deployment 與 A 機部署後回歸完成。
+- [x] B 機 Run255 配對碼加入路徑實機通過。
+- [ ] 邀請碼加入、邀請撤銷／重寄、結果不明時的恢復仍待實機驗收。
 - [ ] 後續版本新增「安全操作紀錄／稽核紀錄」查看介面；本階段只建立雲端紀錄，不製作查看介面。
 - [ ] 規劃「所有原裝置皆遺失且無有效邀請」的受控災難復原流程；一般新機加入仍僅有配對碼與邀請碼，不應讓 Workspace 識別碼或僅憑超管帳密成為第三條常規入口。復原須核對已驗證超管 Email、既有憑證及操作稽核，並避免重建原 Workspace 或暴露 Device Token。
 
