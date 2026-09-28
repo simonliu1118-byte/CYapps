@@ -1,7 +1,7 @@
 export type SecurityEventType =
   | "pairing_email" | "pairing_issued" | "pairing_verified" | "pairing_claim_denied" | "device_joined"
   | "invitation_issued" | "invitation_delivery_failed" | "invitation_revoked"
-  | "invitation_verified" | "invitation_claim_denied";
+  | "invitation_verified" | "invitation_claim_denied" | "device_revoked";
 
 export type SecurityEvent = {
   workspaceId: string;
