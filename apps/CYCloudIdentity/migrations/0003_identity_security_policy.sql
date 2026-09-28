@@ -15,10 +15,7 @@ CREATE TABLE identity_security_policies (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     FOREIGN KEY (workspace_id) REFERENCES workspaces(workspace_id) ON DELETE CASCADE,
-    FOREIGN KEY (updated_by_employee_id, workspace_id)
-        REFERENCES employees(employee_id, workspace_id)
-        ON UPDATE RESTRICT
-        ON DELETE SET NULL
+    FOREIGN KEY (updated_by_employee_id) REFERENCES employees(employee_id) ON DELETE SET NULL
 );
 
 CREATE TABLE workspace_email_delivery_budget (
