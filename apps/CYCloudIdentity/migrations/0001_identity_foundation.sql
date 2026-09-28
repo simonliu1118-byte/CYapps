@@ -46,6 +46,8 @@ CREATE TABLE employees (
     CHECK (role <> 'SUPER_ADMIN' OR enabled = 1)
 );
 
+CREATE UNIQUE INDEX idx_employees_employee_workspace
+    ON employees(employee_id, workspace_id);
 CREATE UNIQUE INDEX idx_employees_workspace_employee_no
     ON employees(workspace_id, employee_no);
 CREATE UNIQUE INDEX idx_employees_workspace_email
@@ -91,20 +93,24 @@ CREATE INDEX idx_workspace_applications_enabled
     ON workspace_applications(workspace_id, enabled, application_id);
 
 CREATE TABLE employee_application_access (
+    workspace_id TEXT NOT NULL,
     employee_id TEXT NOT NULL,
     application_id TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     granted_by_employee_id TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (employee_id, application_id),
-    FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE,
-    FOREIGN KEY (application_id) REFERENCES applications(application_id) ON DELETE RESTRICT,
-    FOREIGN KEY (granted_by_employee_id) REFERENCES employees(employee_id) ON DELETE SET NULL
+    PRIMARY KEY (workspace_id, employee_id, application_id),
+    FOREIGN KEY (employee_id, workspace_id)
+        REFERENCES employees(employee_id, workspace_id) ON DELETE CASCADE,
+    FOREIGN KEY (granted_by_employee_id, workspace_id)
+        REFERENCES employees(employee_id, workspace_id) ON DELETE SET NULL,
+    FOREIGN KEY (workspace_id, application_id)
+        REFERENCES workspace_applications(workspace_id, application_id) ON DELETE RESTRICT
 );
 
 CREATE INDEX idx_employee_application_access_application
-    ON employee_application_access(application_id, enabled, employee_id);
+    ON employee_application_access(workspace_id, application_id, enabled, employee_id);
 
 CREATE TABLE identity_sessions (
     session_hash TEXT PRIMARY KEY CHECK (length(session_hash) = 64),
@@ -116,14 +122,15 @@ CREATE TABLE identity_sessions (
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
     revoked_at TEXT,
-    FOREIGN KEY (workspace_id) REFERENCES workspaces(workspace_id) ON DELETE CASCADE,
-    FOREIGN KEY (employee_id) REFERENCES employees(employee_id) ON DELETE CASCADE,
-    FOREIGN KEY (application_id) REFERENCES applications(application_id) ON DELETE RESTRICT,
+    FOREIGN KEY (employee_id, workspace_id)
+        REFERENCES employees(employee_id, workspace_id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, application_id)
+        REFERENCES workspace_applications(workspace_id, application_id) ON DELETE RESTRICT,
     CHECK (expires_at > created_at)
 );
 
 CREATE INDEX idx_identity_sessions_employee_active
-    ON identity_sessions(employee_id, application_id, expires_at, revoked_at);
+    ON identity_sessions(workspace_id, employee_id, application_id, expires_at, revoked_at);
 CREATE INDEX idx_identity_sessions_expiry
     ON identity_sessions(expires_at, revoked_at);
 
@@ -188,6 +195,6 @@ CREATE INDEX idx_identity_audit_actor_created
 INSERT INTO applications(application_id, display_name)
 VALUES
     ('CYWEB', 'CY Web'),
-    ('CYACCOUNTING', 'CY Accounting Web'),
+    ('CYACCOUNTINGWEB', 'CY Accounting Web'),
     ('CYINVOICE', 'CYInvoice')
 ON CONFLICT(application_id) DO NOTHING;
