@@ -26,3 +26,19 @@ jobs:
 
       - name: Scan CYCloud Identity public source
         run: python3 .github/scripts/scan-public-package.py apps/CYCloudIdentity
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install CYCloud Identity development dependencies
+        working-directory: apps/CYCloudIdentity
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+
+      - name: Type-check CYCloud Identity Worker
+        working-directory: apps/CYCloudIdentity
+        run: npm run check
+
+      - name: Run CYCloud Identity auth-core tests
+        working-directory: apps/CYCloudIdentity
+        run: npm test
