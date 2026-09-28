@@ -58,6 +58,49 @@ async function targetForTransfer(
   ).bind(workspaceId, targetEmployeeId).first<TransferTargetRow>();
 }
 
+export async function handleGetHighestAuthority(
+  request: Request,
+  env: Env,
+  requestId: string,
+): Promise<Response> {
+  const actor = await requireWorkspaceSuperAdmin(request, env);
+  if (!actor) {
+    return json(env, requestId, 403, {
+      error: { code: "WORKSPACE_SUPER_ADMIN_REQUIRED", message: "Workspace highest authority is required." },
+    });
+  }
+
+  const workspace = await env.DB.prepare(
+    `SELECT super_admin_employee_id,
+            recovery_email_normalized,
+            recovery_email_verified_at,
+            revision
+       FROM workspaces
+      WHERE workspace_id = ?1
+      LIMIT 1`
+  ).bind(actor.workspaceId).first<{
+    super_admin_employee_id: string | null;
+    recovery_email_normalized: string | null;
+    recovery_email_verified_at: string | null;
+    revision: number;
+  }>();
+  if (!workspace || workspace.super_admin_employee_id !== actor.employeeId) {
+    return json(env, requestId, 409, {
+      error: { code: "HIGHEST_AUTHORITY_STATE_INVALID", message: "Workspace highest-authority state is invalid." },
+    });
+  }
+
+  return json(env, requestId, 200, {
+    authority: {
+      workspaceId: actor.workspaceId,
+      superAdminEmployeeId: actor.employeeId,
+      recoveryEmail: workspace.recovery_email_normalized,
+      recoveryEmailVerified: Boolean(workspace.recovery_email_verified_at),
+      workspaceRevision: workspace.revision,
+    },
+  });
+}
+
 export async function handleStartHighestAuthorityTransfer(
   request: Request,
   env: Env,

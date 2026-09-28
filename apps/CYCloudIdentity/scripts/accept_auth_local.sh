@@ -228,6 +228,41 @@ print(token)
 PY
 )"
 
+AUTHORITY_RESPONSE="$(curl --silent --show-error --fail-with-body \
+  "http://127.0.0.1:${PORT}/v1/admin/authority" \
+  -H "authorization: Bearer ${SUPER_TOKEN}" \
+  -H 'x-identity-application: APP_TEST_LOGIN')"
+AUTHORITY_RESPONSE="$AUTHORITY_RESPONSE" python3 - <<'PY'
+import json
+import os
+payload = json.loads(os.environ['AUTHORITY_RESPONSE'])
+assert payload['ok'] is True
+assert payload['authority']['workspaceId'] == 'workspace-test-001'
+assert payload['authority']['superAdminEmployeeId'] == 'employee-test-super'
+assert payload['authority']['recoveryEmail'] == 'super@example.test'
+assert payload['authority']['recoveryEmailVerified'] is True
+PY
+
+DISABLE_SUPER_STATUS="$(curl --silent --output "$STATE_DIR/disable-super.json" --write-out '%{http_code}' \
+  -X PATCH "http://127.0.0.1:${PORT}/v1/admin/identity/employees/employee-test-super" \
+  -H "authorization: Bearer ${SUPER_TOKEN}" \
+  -H 'x-identity-application: APP_TEST_LOGIN' \
+  -H 'content-type: application/json' \
+  --data '{"employeeNo":"0001","displayName":"Synthetic Super","enabled":false,"revision":1}')"
+if [[ "$DISABLE_SUPER_STATUS" != "409" ]]; then
+  echo "Expected current highest-authority disable to return 409, got $DISABLE_SUPER_STATUS" >&2
+  cat "$STATE_DIR/disable-super.json" >&2 || true
+  print_worker_log
+  exit 1
+fi
+python3 - "$STATE_DIR/disable-super.json" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1], encoding='utf-8'))
+assert payload['ok'] is False
+assert payload['error']['code'] == 'HIGHEST_AUTHORITY_TRANSFER_REQUIRED'
+PY
+
 POLICY_RESPONSE="$(curl --silent --show-error --fail-with-body \
   "http://127.0.0.1:${PORT}/v1/admin/security-policy" \
   -H "authorization: Bearer ${SUPER_TOKEN}" \
@@ -298,6 +333,8 @@ echo 'PASS effective application role USER projection'
 echo 'PASS effective application role ADMIN precedence'
 echo 'PASS direct application grant defaults to USER compatibility role'
 echo 'PASS Workspace highest-authority projects SUPER_ADMIN compatibility role'
+echo 'PASS highest-authority summary and Recovery Email projection'
+echo 'PASS current highest-authority disable protection'
 echo 'PASS highest-authority OTP security policy management'
 echo 'PASS non-highest-authority policy update rejection'
 echo 'PASS revoked session rejection'
