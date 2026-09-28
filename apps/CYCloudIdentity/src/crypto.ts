@@ -1,3 +1,5 @@
+import { pbkdf2 as nodePbkdf2 } from "node:crypto";
+
 const PBKDF2_ALGORITHM = "pbkdf2-sha256";
 export const DEFAULT_PBKDF2_ITERATIONS = 210_000;
 const MIN_PBKDF2_ITERATIONS = 100_000;
@@ -29,24 +31,17 @@ function constantTimeEquals(left: Uint8Array, right: Uint8Array): boolean {
 }
 
 async function derivePbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
+  const passwordBytes = new TextEncoder().encode(password);
   const saltCopy = Uint8Array.from(salt);
-  return new Uint8Array(await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      hash: "SHA-256",
-      salt: saltCopy,
-      iterations,
-    },
-    key,
-    256,
-  ));
+  return new Promise<Uint8Array>((resolve, reject) => {
+    nodePbkdf2(passwordBytes, saltCopy, iterations, 32, "sha256", (error, derivedKey) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(Uint8Array.from(derivedKey));
+    });
+  });
 }
 
 export function normalizePassword(value: unknown): string | null {
