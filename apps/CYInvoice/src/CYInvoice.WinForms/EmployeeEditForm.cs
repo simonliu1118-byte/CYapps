@@ -263,7 +263,7 @@ internal sealed class EmployeeEditForm : Form
             AcceptButton is not null || CancelButton != cancel ||
             (createMode && (!password.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar)) ||
             (!createMode && !allowRoleChange && role.Enabled) ||
-            role.Items.Cast<object>().Any(item => string.Equals(item.ToString(), "一般使用者", StringComparison.Ordinal)) ||
+            role.Items.Cast<object>().Any(item => string.Equals(item.ToString(), "一般員工", StringComparison.Ordinal)) ||
             !UiControls.HasLogicalSize(save, CompactButtonWidth, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("使用者編輯視窗配置不正確");
     }
