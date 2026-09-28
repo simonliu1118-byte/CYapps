@@ -38,7 +38,7 @@ type EmployeeProposal = {
   employeeNo: string;
   name: string;
   email: string;
-  role: "ADMIN" | "EMPLOYEE";
+  role: "ADMIN" | "USER";
   credentialVerifier: string;
 };
 
@@ -173,10 +173,10 @@ function normalizeEmail(value: unknown): string | null {
   return normalized;
 }
 
-function normalizeRole(value: unknown): "ADMIN" | "EMPLOYEE" | null {
+function normalizeRole(value: unknown): "ADMIN" | "USER" | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toUpperCase();
-  return normalized === "ADMIN" || normalized === "EMPLOYEE" ? normalized : null;
+  return normalized === "ADMIN" || normalized === "USER" ? normalized : null;
 }
 
 function credentialVerifier(value: unknown): string | null {

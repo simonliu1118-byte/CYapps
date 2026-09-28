@@ -274,7 +274,7 @@ public sealed class CloudEmployeeAccountClient
         ValidateEmployeeNo(proposal.TargetEmployeeNo, nameof(proposal));
         if (string.IsNullOrWhiteSpace(proposal.Name) || string.IsNullOrWhiteSpace(proposal.Email))
             throw new ArgumentException("Employee name and Email are required.", nameof(proposal));
-        if (proposal.Role is not ("SUPER_ADMIN" or "ADMIN" or "EMPLOYEE"))
+        if (proposal.Role is not ("SUPER_ADMIN" or "ADMIN" or "USER"))
             throw new ArgumentException("Cloud Employee role is invalid.", nameof(proposal));
     }
 

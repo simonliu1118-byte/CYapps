@@ -689,7 +689,7 @@ static async Task TestEmployeeEnabledAndPasswordAsync()
         True(!body.RootElement.GetProperty("enabled").GetBoolean(), "enabled update value");
         Equal("actor-password", body.RootElement.GetProperty("actorPassword").GetString() ?? string.Empty, "enabled update execution-time password");
         return JsonResponse(HttpStatusCode.OK,
-            """{"ok":true,"employee":{"employeeId":"emp_y","employeeNo":"0002","name":"Y","email":"y@example.test","role":"EMPLOYEE","enabled":false,"emailVerified":true,"credentialReady":true,"credentialVersion":1,"revision":4}}""");
+            """{"ok":true,"employee":{"employeeId":"emp_y","employeeNo":"0002","name":"Y","email":"y@example.test","role":"USER","enabled":false,"emailVerified":true,"credentialReady":true,"credentialVersion":1,"revision":4}}""");
     });
     handler.Enqueue(request =>
     {
@@ -699,7 +699,7 @@ static async Task TestEmployeeEnabledAndPasswordAsync()
         Equal(verifier, body.RootElement.GetProperty("credentialVerifier").GetString() ?? string.Empty, "password verifier payload");
         True(!body.RootElement.TryGetProperty("newPassword", out _), "plaintext new password must never be uploaded");
         return JsonResponse(HttpStatusCode.OK,
-            """{"ok":true,"employee":{"employeeId":"emp_y","employeeNo":"0002","name":"Y","email":"y@example.test","role":"EMPLOYEE","enabled":true,"emailVerified":true,"credentialReady":true,"credentialVersion":2,"revision":5}}""");
+            """{"ok":true,"employee":{"employeeId":"emp_y","employeeNo":"0002","name":"Y","email":"y@example.test","role":"USER","enabled":true,"emailVerified":true,"credentialReady":true,"credentialVersion":2,"revision":5}}""");
     });
 
     using var http = new HttpClient(handler);

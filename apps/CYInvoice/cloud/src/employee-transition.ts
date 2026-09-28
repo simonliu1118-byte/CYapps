@@ -34,7 +34,7 @@ type LocalEmployee = {
   employeeNo: string;
   name: string;
   email: string;
-  role: "SUPER_ADMIN" | "ADMIN" | "EMPLOYEE";
+  role: "SUPER_ADMIN" | "ADMIN" | "USER";
   enabled: boolean;
 };
 
@@ -56,7 +56,7 @@ type TransitionState =
 
 type InspectionItem = {
   local: LocalEmployee;
-  suggestedCloudRole: "SUPER_ADMIN" | "ADMIN" | "EMPLOYEE";
+  suggestedCloudRole: "SUPER_ADMIN" | "ADMIN" | "USER";
   state: TransitionState;
   matchKind: MatchKind;
   matchedEmployee: EmployeeRow | null;
@@ -143,7 +143,7 @@ function normalizeLocalEmployee(value: unknown): LocalEmployee | null {
   const role = typeof raw.role === "string" ? raw.role.trim().toUpperCase() : "";
   const enabled = raw.enabled;
   if (!/^\d{4}$/.test(employeeNo) || name.length < 1 || name.length > 120 || !email) return null;
-  if (role !== "SUPER_ADMIN" && role !== "ADMIN" && role !== "EMPLOYEE") return null;
+  if (role !== "SUPER_ADMIN" && role !== "ADMIN" && role !== "USER") return null;
   if (typeof enabled !== "boolean") return null;
   return { employeeNo, name, email, role, enabled };
 }
