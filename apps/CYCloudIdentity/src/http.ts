@@ -1,7 +1,7 @@
 import type { Env, JsonValue } from "./types";
 
 const SERVICE_NAME = "cycloud-identity";
-const SERVICE_VERSION = "0.1.7";
+const SERVICE_VERSION = "0.1.8";
 
 export function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
