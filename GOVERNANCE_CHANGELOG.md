@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.14 — 2026/09/28
+
+- 新增正式維護專案 `CYCloudIdentity`，作為 CY Web、CYAccountingWeb 與後續 CYInvoice 共用的 Workspace／Employee／Credential／Application Access／Session／Email OTP／Recovery 身分服務。
+- 新增 `apps/CYCloudIdentity/PROJECT_RULES.md`，固定 Workspace scoped Employee、每 Workspace 恰好一名啟用 `SUPER_ADMIN`、Recovery Email、provider-neutral Email、Public source／secret 邊界與目前免費額度優先的資源原則。
+- 同步建立 `VERSION=0.1.0`、`BUILD=0`，並將 `CYCloudIdentity` 加入 `REPO_POLICY.md` 正式維護專案清單；CYInvoice runtime 與 Device lifecycle 不因本次治理登錄而變更。
+
 ## 2.3.13 — 2026/09/27
 
 - Public package safety scanner only interprets real contiguous UTF-16 ASCII
