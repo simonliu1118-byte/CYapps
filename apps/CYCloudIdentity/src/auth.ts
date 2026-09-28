@@ -41,7 +41,6 @@ type SessionAuthorityRow = {
   workspace_application_enabled: number;
 };
 
-const PBKDF2_ALGORITHM = "pbkdf2-sha256";
 const DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60;
 const MIN_SESSION_TTL_SECONDS = 15 * 60;
 const MAX_SESSION_TTL_SECONDS = 24 * 60 * 60;
@@ -265,11 +264,11 @@ export async function handleLogin(
     employee
     && employee.workspace_status === "active"
     && employee.enabled === 1
-    && employee.credential_algorithm === PBKDF2_ALGORITHM
+    && employee.credential_algorithm
     && employee.credential_verifier,
   );
   const authenticated = credentialReady
-    ? await verifyCredential(password, employee!.credential_verifier)
+    ? await verifyCredential(password, employee!.credential_algorithm, employee!.credential_verifier)
     : false;
 
   if (!employee || !authenticated) {
