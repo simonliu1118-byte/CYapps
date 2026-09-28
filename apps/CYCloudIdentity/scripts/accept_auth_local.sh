@@ -8,6 +8,15 @@ CONFIG="wrangler.test.generated.jsonc"
 STATE_DIR="$(mktemp -d)"
 PORT="8791"
 WORKER_PID=""
+WORKER_LOG="$STATE_DIR/worker.log"
+
+print_worker_log() {
+  if [[ -f "$WORKER_LOG" ]]; then
+    echo '--- CYCloud Identity local Worker log ---' >&2
+    cat "$WORKER_LOG" >&2
+    echo '--- end local Worker log ---' >&2
+  fi
+}
 
 cleanup() {
   if [[ -n "$WORKER_PID" ]]; then
@@ -99,16 +108,28 @@ npx wrangler dev \
   --local \
   --config "$CONFIG" \
   --persist-to "$STATE_DIR" \
-  --port "$PORT" >"$STATE_DIR/worker.log" 2>&1 &
+  --port "$PORT" >"$WORKER_LOG" 2>&1 &
 WORKER_PID="$!"
 
+READY=0
 for _ in $(seq 1 30); do
+  if ! kill -0 "$WORKER_PID" >/dev/null 2>&1; then
+    echo 'CYCloud Identity local Worker exited before health check became ready.' >&2
+    print_worker_log
+    exit 1
+  fi
   if curl --silent --fail "http://127.0.0.1:${PORT}/v1/health" >/dev/null; then
+    READY=1
     break
   fi
   sleep 1
 done
-curl --silent --fail "http://127.0.0.1:${PORT}/v1/health" >/dev/null
+
+if [[ "$READY" != "1" ]]; then
+  echo 'CYCloud Identity local Worker did not become ready before timeout.' >&2
+  print_worker_log
+  exit 1
+fi
 
 LOGIN_RESPONSE="$(curl --silent --show-error --fail-with-body \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/login" \
@@ -158,6 +179,7 @@ STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' \
   -H 'x-identity-application: APP_TEST_LOGIN')"
 if [[ "$STATUS" != "401" ]]; then
   echo "Expected revoked session to return 401, got $STATUS" >&2
+  print_worker_log
   exit 1
 fi
 
