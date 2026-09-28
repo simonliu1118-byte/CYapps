@@ -13,6 +13,7 @@ internal static class IdentityProviderFreshnessTests
         await OnlineSnapshotMakesNewEmployeeImmediatelyUsableAsync();
         await CurrentRolePasswordAndEnabledStateWinAsync();
         await ExplicitAuthorityRefreshUpdatesProtectedCacheAsync();
+        await OlderConcurrentSnapshotCannotRollBackNewerAuthorityAsync();
         await TransportFailureUsesTrustedCacheAsync();
         await TimeoutUsesTrustedCacheAsync();
         await CloudApiFailureDoesNotUseStaleCacheAsync();
@@ -86,6 +87,39 @@ internal static class IdentityProviderFreshnessTests
         Equal(3, cached.CredentialVersion, "explicit authority refresh should update credential version");
         Equal(15, cached.Revision, "explicit authority refresh should update Employee revision");
     }
+
+    private static async Task OlderConcurrentSnapshotCannotRollBackNewerAuthorityAsync()
+    {
+        using var context = FreshnessContext.Create(
+            Seed("emp_user", "0002", "Existing User", "existing@example.test", EmployeeRoles.Admin, "NewestPass2", 4, 20));
+        context.Cache.ReplaceSnapshot(
+            "ws_test",
+            50,
+            new[]
+            {
+                Seed("emp_super", "0001", "Cloud Admin", "admin@example.test", EmployeeRoles.SuperAdmin, "AdminPass1", 1, 1),
+                Seed("emp_user", "0002", "Existing User", "existing@example.test", EmployeeRoles.Admin, "NewestPass2", 4, 20),
+            });
+        context.Handler.EnqueueSnapshot(
+            49,
+            Seed("emp_user", "0002", "Existing User", "existing@example.test", EmployeeRoles.User, "OlderPass2", 3, 19));
+
+        var principal = await context.Provider.AuthenticateAsync(
+            new IdentityAuthenticationRequest("0002", "NewestPass2"));
+
+        NotNull(principal, "an older concurrent response must not roll back a newer trusted cache");
+        Equal(AppRole.Admin, principal!.Role, "newer cached role must win over an older response");
+        Equal(50, context.Cache.LoadState()?.WorkspaceRevision ?? -1,
+            "older concurrent response must not reduce Workspace authority revision");
+        True(await AuthenticateCachedAsync(context.Cache, "0002", "OlderPass2") is null,
+            "older credential verifier must not replace newer cached credentials");
+    }
+
+    private static Task<CloudEmployeeCachedAccount?> AuthenticateCachedAsync(
+        CloudEmployeeCacheStore cache,
+        string employeeNo,
+        string password) =>
+        Task.FromResult(cache.Authenticate(employeeNo, password));
 
     private static async Task TransportFailureUsesTrustedCacheAsync()
     {
