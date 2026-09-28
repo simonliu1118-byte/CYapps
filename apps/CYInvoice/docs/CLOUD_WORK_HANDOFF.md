@@ -2,181 +2,225 @@
 
 更新日期：2026-09-28
 
-## 接手摘要（以此節為目前狀態；下方舊階段紀錄保留歷史脈絡）
+本文件只保存**目前工作狀態、最新已確認決策與下一步**。歷史細節由 Git history、PR #73／#100／#121、`CLOUD_IDENTITY_LIFECYCLE.md`、`CLOUD_ARCHITECTURE_STATUS.md` 與 `TODO.md` 保留；不要再以較舊階段敘述覆蓋本文件目前狀態。
 
-- Repository：`simonliu1118-byte/CYapps`。目前工作為 Draft [PR #121](https://github.com/simonliu1118-byte/CYapps/pull/121)，branch `cyinvoice/feat-cloud-security-audit`，疊在 PR #100 branch `cyinvoice/fix-v264-build2-ui-review-details` 上；PR #100 再承接 PR #73。接手時先讀 Git 上最新 head、三層永久規則與本文件，不以舊階段的版本／待辦敘述覆蓋此節。
-- PR #121 最新工程原始碼：**CYInvoice V2.6.6 Build 4**、Cloud `0.8.5`／API `1`／D1 migration `0009`（storage Schema `9`）。Build 4 修正 Cloud 跨版本相容策略；CI Run #36039794681 / workflow Run #255 的 `validate`、Windows x64 build、WinForms startup smoke、Cloud contract tests、跨版本 regression 與工程包產出均成功。Artifact：`CYInvoice_cloud-foundation_engineering-run255`，SHA-256 `5ba818446d357e054dbefe13b04bca2cb6ba6f43637fbc85ccfe431bebc1ea43`。
-- **development remote 已完成 staged deployment**：repository canonical migration `0009_device_invites_and_audit.sql` 已由 Wrangler 正式套用且只執行一次；之後使用 repository Wrangler deploy 成功部署 `cyinvoice-cloud-dev` 至 Cloud `0.8.5`。remote D1 目前為 Schema `9`，Worker 為 Cloud `0.8.5` / API `1`。沒有手動 SQL、沒有重建 Workspace／Device、沒有 merge、tag 或正式 Release。
-- 部署後 remote 唯讀核對正常：仍為 1 Workspace、1 active A Device、1 Employee；Cloud authority 與關聯正常。`/v1/health` 實測 service `cyinvoice-cloud`、storage `ok`、Cloud `0.8.5`、API `1`、legacy compatibility `schemaVersion=8`、實際 `storageSchemaVersion=9`；六項 capabilities 均回傳；minimum client `2.6.5`、recommended client `2.6.6`。
-- **A 機目前所有相容／部署驗收均已實機通過。** 先以原 `Data` + PR #100 V2.6.5 Build 4 / Run229 成功恢復舊 Schema 8 Cloud；再以原 `Data` + PR #121 V2.6.6 Build 4 / Run255 對舊 Schema 8 Worker 完成向下相容驗證；migration `0009` 後在 Schema 9 + 舊 Worker 0.8.3 中間狀態仍正常；最後 Worker 0.8.5 部署後，Run255 的 Cloud 連線、帳號／員工、已開立清單、重新整理及完整關閉重開均正常。
-- **Run229 暫時仍保留作 rollback 基準。** A 機本身已不需要靠 Run229 才能連線，但在 B 機新裝置加入流程尚未驗收前先不刪除。等配對碼／邀請碼等新加入路徑至少完成實機驗收，再決定是否清除 Run229 備份。
-- **目前下一個阻塞項是 B 機新裝置加入實機驗收。** 正式加入方式只有「配對碼」與「邀請碼」；Workspace ID＋超管直接加入已移除。先以乾淨、獨立的 B 機 Run255 測試一條加入路徑，不複製 A 機 `Data`、不重新 bootstrap、不建立新 Workspace。成功後核對 A 端加入狀態、B 端 Workspace identity、Cloud Employee authority 與重新啟動；再規劃第二條加入路徑，避免無意留下多餘 active Device。
-- PR #121 曾在 `apiVersion=1` 下移除舊 `/v1/direct-join/*` 並改變配對授權 request shape；因此不能只放寬 Schema 檢查。Build 4 修正後，新 Worker 對已淘汰的 Workspace-ID direct join 與缺少現行超管認證的舊配對核發 shape 明確回 `CLIENT_UPDATE_REQUIRED`，不默默 404、也不降低認證要求；既有 Device 的 API 1 正常操作仍保持可用。跨版本測試同時保護「新 Client + 舊 API 1 storage schema」與「舊 Build 4 + 新 Worker health compatibility」。
-- migration `0009` 為 additive migration：只替 `devices` 增加 nullable `invitation_id`，並新增 `device_invitations`、`security_audit_events` 與索引，沒有 drop／rename／改寫既有核心資料。remote 套用與 A 機實測均已通過。
-- 本階段仍禁止自行 merge、tag、正式 Release。B 機加入驗收、安全操作紀錄查看 UI、Device revoke 與「所有原裝置遺失且無有效邀請」的受控災難復原仍是後續工作。
+永久規則仍依：`REPOSITORY_RULES.md` → `REPO_POLICY.md` → `apps/CYInvoice/PROJECT_RULES.md`。
 
-## 2026-09-25 新裝置加入設計決議
-
-後續正式加入方式只有「配對碼」與「邀請碼」；現有「Workspace 識別碼＋超管」直接加入須移除。程式不內嵌 Cloud API 網址，Workspace 識別碼也不提供使用者手動輸入。A 機「新增雲端裝置」提供立即配對（顯示 API 網址與約 10 分鐘一次性配對碼）及寄送新裝置邀請（寄送 API 網址與 72 小時一次性邀請碼至超管已驗證 Email，可撤銷／重寄）。B 機使用配對碼，或使用邀請碼加超管帳密加入；邀請碼路徑不再寄第二封 Email 驗證碼。兩條路徑均先確認 Workspace 名稱，成功結果在 A 機視窗可查。
-
-Cloud 安全操作紀錄涵蓋配對、邀請、撤銷與新機加入。紀錄不寫入配對碼、邀請碼、密碼、OTP 或 Device Token 原文。安全操作／稽核紀錄的查看介面列為後續版本 TODO。
-
-目前工作分支已修改 Worker、D1 migration `0009`、Windows 加入視窗、用戶端與跨版本相容層，工程身分為 **CYInvoice V2.6.6 Build 4**、Cloud `0.8.5` / API `1` / storage Schema `9`。Run #255 已完整通過並產生 `CYInvoice_cloud-foundation_engineering-run255`。A 機從 Run229 恢復、Run255 對舊 Schema 8 向下相容、Schema 9 中間狀態與 Worker 0.8.5 最終既有功能四個階段均已實機通過。development remote 現已部署 Cloud 0.8.5 / Schema 9；下一步為 B 機新裝置加入實機驗收。
-
-2026-09-26 A 機相容性驗證：先前舊 Windows 客戶端因 Schema 7 vs remote Schema 8 被相容 gate 阻擋，不是 Device identity 遺失。使用者先以 PR #100 V2.6.5 Build 4 / Run229 搭配原 `Data` 成功恢復，再以 PR #121 V2.6.6 Build 4 / Run255 搭配同一份原 `Data` 成功連線 remote Schema 8。這表示 Client 端 schema hard gate 修正已達成預期；後續 2026-09-28 staged deployment 與 A 機最終驗收也已完成。若未來所有 active Device 真正遺失且沒有有效邀請，現有兩條常規加入流程無法自行恢復，需另設受控災難復原流程。
-
-## PR #100 最新進度
-
-PR #100 已接到 PR #73 最新基準；目前工程原始碼為 CYInvoice V2.6.5 Build 4、Cloud `0.8.4` / API `1` / Schema `8`。雲端忘記密碼採員工編號與 Email 核對後寄送、第二步輸入 OTP 與新密碼，重寄倒數使用伺服器回傳時間。一般員工的帳號管理提供本人密碼與 Email 異動，姓名仍由管理員維護。PR CI Run #36015425647 的 Cloud validate 與 Windows client 均成功；完整 Windows Build Run #36015789588 也成功並產生 `CYInvoice_V2.6.5_Build4_engineering-run229` 測試包。此版本未部署到 Cloudflare；不得把本段當成遠端已上線狀態。
-
-## 歷史階段紀錄：首次開啟直接加入雲端
-
-此段描述當時 PR #73 的歷史設計，**Workspace ID＋超管直接加入已在 PR #121 移除，不能依下文重新實作或部署**。首次開啟仍先選「使用單機版」或「直接加入雲端」；現行新機加入方式以本文件頂端決議的配對碼／邀請碼為準。
-
-本分支新增 Windows 首次開啟／直連 UI 與 Cloud 0.8.3 端點；PR #73 的 Cloud Check Run #238 已通過 Cloud type check、D1 migration、Windows build、啟動 smoke、Cloud client contract tests 與工程包上傳。測試包為 **CYInvoice V2.6.5 Build 1**，Artifact `CYInvoice_cloud-foundation_engineering-run238`，SHA-256 `b9db3a964e4ac200e8a8431486808c982588f54f1ac0693128c1f188d082e37e`。**Cloud 0.8.3 尚未部署，兩種新機直連也尚未實機驗收**。並行開發已在同一 PR 加入 Cloud migration `0008` 的密碼復原功能，故此 Windows 新版要求 Schema `8`。development Worker 的即時版本和 D1 migration 狀態仍須由本機 Cloudflare MCP 唯讀查核。新機直連要求既有 Workspace 已完成第一台的中央 Employee cutover；若尚未完成，API 拒絕加入，不重建 Workspace 或另立本機超管。先完成原交接文件中的 D1 唯讀查核與 A 機帳號轉換，再由本機已連線的 Cloudflare MCP 部署經驗證的後端。請勿把本段工程 source 狀態當作已部署狀態。
-
-此文件供下一個長時間工作階段／ChatGPT Work 接手 CYInvoice V3 Cloud identity stage。它只描述目前狀態與下一步，不是永久規則來源；永久規則仍依 `REPOSITORY_RULES.md` → `REPO_POLICY.md` → `apps/CYInvoice/PROJECT_RULES.md`。
-
-## 1. Git 基準
+## 1. 目前 Git / 版本基準
 
 - Repository：`simonliu1118-byte/CYapps`
 - 專案：`apps/CYInvoice/`
-- Branch：`cyinvoice/cloud-onboarding-first-device`
-- PR：#73 `CYInvoice cloud identity: Workspace, Device and central Employee authority`
-- Base：`cyinvoice/cloud-foundation-d1`
-- PR 狀態：Draft / Open / 未 merge
-- 接手時應先重新讀取 PR #73 的最新 head；不要依本文件硬編碼 branch head。
-- V2.6.4 Build 1 的 code-bearing head：`b6d0f1d8fa02d2fd182179c599208764d0320552`。
-- Cloud Check Run #211 已成功，engineering 測試包已產生；development deploy Run #6 已成功。
-- PR #100 最新 source compatibility：Cloud `0.8.4` / API `1` / Schema `8`；PR #73 最新為 Cloud `0.8.3` / Schema `8`，首次建立時的已驗證歷史版本為 Cloud `0.8.2` / Schema `7`。
-- Forward migrations：`0001`～`0008`
+- Draft PR：#121
+- Branch：`cyinvoice/feat-cloud-security-audit`
+- Base：`cyinvoice/fix-v264-build2-ui-review-details`（PR #100）
+- 目前工程版本：**CYInvoice V2.6.6 Build 4**
+- Cloud：`0.8.5`
+- API：`1`
+- D1 migration：`0009`
+- storage Schema：`9`
+- 未 merge、未 tag、未正式 Release。
 
-禁止自行 merge、tag、Release、auto-merge；只有使用者明確授權後才可執行。
+Build 4 的 Windows / Cloud CI 基準為 workflow Run #255：TypeScript、Worker dry-run、D1 migration validation、跨版本 contract regression、Windows x64 build、WinForms startup smoke、Windows Cloud contract tests 與 engineering package 均成功。
 
-## 2. 已定案的 Employee authority 模型
+Engineering artifact：`CYInvoice_cloud-foundation_engineering-run255`
+SHA-256：`5ba818446d357e054dbefe13b04bca2cb6ba6f43637fbc85ccfe431bebc1ea43`
 
-CYInvoice 沒有程式啟動後持續登入的 Employee session。需要權限的操作在執行當下驗證 Employee No + Password。
+## 2. Development remote 現況
 
-- Local Mode：Local EmployeeStore 是唯一帳號 authority。
-- Device 建立／加入 Workspace 後先進入 whole-device `CloudTransition`。
-- 轉換時一次盤點全部既有 Local Employees。
-- 全部 identity / Email / credential / conflict 都處理完成後才 cutover。
-- Cutover 後 Cloud Employee 是唯一帳號 authority。
-- Windows 只保存 Cloud Employee cache + protected offline credential verifier。
-- Cloud Mode 斷網時仍是 Cloud Mode Offline，不切回舊 Local authority。
-- Workspace-wide Employee mutations 全部 Online-only。
+2026-09-28 staged deployment 已完成：
 
-Identity matching：
+1. 先唯讀確認舊 remote 為 Cloud 0.8.3 / API 1 / Schema 8。
+2. repository canonical migration `0009_device_invites_and_audit.sql` 由 Wrangler 套用一次成功，沒有手動 SQL。
+3. migration 後原 Workspace / Device / Employee 關聯正常。
+4. 再以 repository Wrangler deploy 部署 `cyinvoice-cloud-dev` 至 Cloud 0.8.5。
+5. 沒有再次執行 migration。
 
-- Employee No + Email 都不存在中央資料：驗證本人 Email後建立新 Cloud Employee。
-- Employee No + Email 都命中同一 Employee：直接採用既有 Cloud Employee 資料與既有 role，不做 merge。
-- Employee No only / Email only / 兩欄各撞不同 Employee：建立 pending conflict，由目前 Workspace SUPER_ADMIN 人工確認。
-- Name 只作顯示，不作 identity authority。
+目前 `/v1/health` 已確認：
 
-第一台 X 成為唯一 Cloud `SUPER_ADMIN`。既有 Workspace 新機上的 Local SUPER_ADMIN Y 若是新中央 Employee，Cloud role 預設 `ADMIN`；若精確命中既有中央 Employee，保留既有 Cloud role。
+- service：`cyinvoice-cloud`
+- storage：`ok`
+- Cloud：`0.8.5`
+- API：`1`
+- legacy compatibility `schemaVersion=8`
+- actual `storageSchemaVersion=9`
+- minimum client：`2.6.5`
+- recommended client：`2.6.6`
 
-## 3. 已完成的 source / UI / API foundation
+## 3. A / B 實機驗收狀態
 
-目前 branch 已包含：
+### A 機
 
-- First Workspace bootstrap + verified recovery Email OTP。
-- Pending Device Token protected storage / retry-safe recovery。
-- Existing Workspace Pairing Code Device Join。
-- B 機進入 Pairing Code 前執行時驗證 Local ADMIN / SUPER_ADMIN。
-- Whole-device Local → Cloud Employee Transition。
-- Exact identity adoption / ambiguous conflict queue。
-- `待確認帳號 N` conditional Account Management UI。
-- Conflict resolution by current central SUPER_ADMIN。
-- Cloud Employee cache / offline credential verifier foundation。
-- Central Employee create / name / Email / role / enabled / password APIs and Windows clients。
-- New Employee Email OTP；Email change verifies new Email before commit。
-- Password plaintext never uploaded; Windows derives PBKDF2-SHA256 verifier。
-- SUPER_ADMIN transfer：X password re-auth + X verified Email OTP + atomic X→ADMIN / Y→SUPER_ADMIN / Recovery Email→Y。
-- Legacy single-account `/v1/employees/reconcile-local` mutation retired；30-minute import window retired。
-- Schema compatibility aligned to 7。
+下列均已實機通過：
 
-PR #73 body、`CLOUD_ARCHITECTURE_STATUS.md`、`CLOUD_ROADMAP.md`、`TODO.md` 已更新成上述模型。
+- PR #100 V2.6.5 Build 4 / Run229 + 原 `Data` 恢復舊 development Cloud。
+- PR #121 V2.6.6 Build 4 / Run255 對舊 Schema 8 Worker 向下相容。
+- migration `0009` 後，Schema 9 + 舊 Worker 0.8.3 中間狀態正常。
+- Worker 0.8.5 部署後，Cloud 連線、中央帳號、已開立清單、重新整理、完整關閉再重開正常。
 
-## 4. 最新驗證
+### B 機
 
-Build 1 的 Run #211 已通過：
+**配對碼加入既有 Workspace 已實機通過。**
 
-- TypeScript type check
-- Worker dry-run bundle
-- D1 migrations `0001`–`0007` local SQLite validation / invariants
-- .NET Cloud contract tests
-- Windows x64 build
-- WinForms startup smoke
-- Windows Cloud contract tests
-- engineering package build/upload
+已確認：
 
-2026-09-22 已完成 remote audit：development Worker Cloud 0.8.1 的 `/v1/health` 回覆 storage `ok`，D1 migrations 已到 Schema 7，Brevo bootstrap OTP 已實際寄達。第一次建立 Workspace 時 Worker INSERT SQL欄位和值數量不一致，D1 batch 回滾，卻誤回報 `WORKSPACE_ALREADY_INITIALIZED`；遠端唯讀查核確認 Workspace／Device／Employee／Pairing 筆數均為 0。V2.6.4 Build 1 / Cloud 0.8.2 修正 SQL、錯誤分類並新增直接執行正式 SQL 的 Schema 7 回歸測試。
+- B 使用乾淨 Run255，不複製 A 機 `Data`。
+- 配對碼可解析既有 Workspace，使用者先確認 Workspace 名稱再加入。
+- B 加入後 Cloud 模式／中央帳號正常。
+- B 完整關閉再重開仍可連回原 Workspace。
 
-2026-09-23 development deploy Run #6 已完成：Cloud 0.8.2 / API 1 / Schema 7 / storage `ok`；D1 無待套用 migration，部署前 Workspace／Device／Employee／Pairing 仍各為 0。這些是建立前的筆數，不可當作目前筆數。
+仍待：
 
-同日使用者在 Windows V2.6.4 Build 1 重新寄送 OTP 並執行首次建立；CYInvoice 畫面回報第一個 Workspace 與 Device 建立成功，且 Device identity 驗證完成。此為 Windows client 收到的成功結果；**建立後尚未從 Cloudflare D1 獨立唯讀核對筆數與記錄，也未確認 whole-device Employee Transition / cutover 完成**。不要再次執行 bootstrap 或清除資料。
+- 邀請碼加入。
+- 邀請撤銷／重寄。
+- result-unknown / retry-safe recovery。
+- backend 對 B Device / audit event 的唯讀驗證。
 
-2026-09-24 本機 Codex 透過已連線的 Cloudflare MCP 唯讀查核 development D1：已有 1 個 Workspace、1 台 active Device、1 位已驗證且啟用的中央 SUPER_ADMIN；Device 與員工關聯有效，轉換待辦已完成且沒有未解決項目。使用者隨後於 A 機完成雲端帳號切換，回報目前運作正常；B 機尚未測試。Cloudflare MCP 的 HTTP fetch 對 workers.dev 回覆 403（requests to workers.dev are not allowed），所以本次未能從該工具獨立確認即時 `/v1/health`，不可沿用 2026-09-23 的 health 結果當作本次查核。不要再次 bootstrap 或清除資料。
-Cloudflare API、Bindings、Builds、Observability 四個官方 MCP 端點已由使用者在本機 Codex 檢查為「已設定／已載入／連線成功／目前不需 OAuth 登入」；該檢查尚未讀取 `cyinvoice-cloud-dev` 的 Workspace／Device。網頁版 Work 對話沒有這四個工具，不能把本機設定檔已登記誤當作網頁對話可用。這次工作採網頁版為主；需要 Cloudflare 即時狀態時，由已連線的本機 Codex 讀本文件後執行限定範圍的唯讀查核，並把去識別結果帶回主要工作對話。
+Run229 先保留作 rollback 基準，待新裝置加入與後續 identity flow 再穩定一階段後再決定是否刪除。
 
-## 5. 歷史階段的 Work 優先順序（A 機首次建立／切換已完成）
+## 4. 目前已確認的 Employee snapshot defect
 
-### A. 建立後的遠端唯讀查核與 A 機帳號轉換
+實機重現：
 
-1. 本機 Codex 使用已連線的 Cloudflare MCP 唯讀查核 `cyinvoice-cloud-dev` 的 Worker、`/v1/health`、綁定的 development D1、migrations 與 Workspace／Device／Employee／Pairing 筆數；確認 Workspace 和首台 Device 記錄的存在及關聯。只回報必要的去識別摘要，不輸出 Email、Token、OTP、Bootstrap Key 或個資。
-2. 若唯讀筆數／關聯符合首次建立結果，再由使用者在 Windows 查看「雲端帳號轉換」視窗目前顯示的 Local Employee 盤點與狀態；尚未確認前勿按「完成雲端切換」。
-3. 依畫面進行 A 機 whole-device Employee Transition，逐一確認 Email／identity／credential／conflict，完成前不要宣稱 cutover 或中央 SUPER_ADMIN 已建立。
-4. 若 D1 或 Windows 狀態不一致，保存錯誤碼與去識別結果先查原因；不要重複 bootstrap、清除資料或猜測遠端已完成。
+1. A 機新增中央 Employee 成功。
+2. B 機在既有 cache 尚未刷新時，帳號管理看不到新 Employee。
+3. B 完整關閉再重開後，新 Employee 正常出現。
 
-不要把 client 成功訊息當作 D1 獨立查核或帳號轉換驗收。
+因此已確認目前 B 等其他 Device 存在 **Cloud Employee snapshot refresh timing 缺口**，中央資料本身沒有遺失。
 
-### B. Email live test
+目前程式的 Cloud Employee 權限驗證仍有路徑會直接使用本機 `CloudEmployeeCacheStore`；不能只修「帳號管理開窗刷新」。
 
-Reference Email provider 是 Brevo。Runtime secrets 不進 GitHub source / PR / log：
+### 已定案的目標行為
 
-- `BREVO_API_KEY`
-- `EMAIL_FROM`
-- `OTP_PEPPER`
-- 既有 `BOOTSTRAP_KEY`
+Cloud 可連線時：
 
-若需要使用者輸入 secret，只提供逐步操作，讓使用者自己在 Cloudflare / CLI secret prompt 輸入；不得要求使用者把 secret 貼到對話。
+```text
+需要 Employee 密碼／權限驗證
+  ↓
+取得最新 Cloud Employee authority / snapshot
+  ↓
+以目前 Cloud credential / role / enabled 狀態驗證
+  ↓
+更新本機 cache
+  ↓
+只授權此次操作
+```
 
-Development bootstrap OTP 寄信已確認；建立 Workspace 成功後再驗證 Employee Email / transfer challenge 的寄信與錯誤處理。
+也就是：
 
-### C. A/B Windows end-to-end
+- 新增 Employee 後，其他 Device 下一次需要驗證時即可立即工作。
+- role / enabled / password 變更亦應在其他 Device 下一次驗證時生效。
+- 不得要求等待 5 分鐘背景同步或重開程式。
 
-依序驗證：
+只有 Cloud **真正不可達**時，才使用最後一次成功同步的 protected offline credential cache。
 
-1. A 建立 Workspace + X transition + cutover。
-2. B 以 Pairing Code 加入。
-3. B 全 Local Employee transition：new / exact / partial / divergent 五種 identity matrix。
-4. pending conflict 由 X SUPER_ADMIN 處理。
-5. Central Employee create / edit / Email OTP / ADMIN↔EMPLOYEE / enabled / password。
-6. SUPER_ADMIN X→Y transfer。
-7. A/B Employee snapshot 一致。
-8. B 斷網後用最後同步的 Cloud cache 做 execution-time auth；恢復後 Cloud authority 更新 cache。
+## 5. Offline cache 完整性風險與決策
 
-任何實機失敗先保留 log / error code，禁止用 fallback 特例繞過正式 authority model。
+目前 Cloud Employee cache 的 credential verifier 有 Windows secure storage / DPAPI 保護；但 SQLite 內的 `role`、`enabled` 等 metadata 沒有整筆 server signature。
 
-### D. Identity stage 後續
+因此若有人能直接修改本機 SQLite，理論上可竄改離線 cache metadata。這項風險已討論，但目前決策是：
 
-A/B identity flow 穩定後再做：
+- 不在現在導入完整 server-signed snapshot。
+- Cloud 在線時以最新 Cloud authority 消除一般操作時對被改 cache 的信任。
+- 真正離線時仍使用最後 cache，接受目前剩餘的本機竄改風險。
+- **Server-signed snapshot／等效完整性簽章列入長期 TODO，非目前 Build / V3 上線阻塞。**
+- 若未來出現實際竄改事件、威脅模型提高或有正式稽核需求，再提高優先級。
 
-- Device revoke UI/API。
-- 所有 Device Token 遺失但 Recovery Email 可用時的 Recovery Device flow。
-- 最終 reference-backend recovery 維運文件。
+## 6. Cloud → Local 已重新定案為破壞性本機重置
 
-之後才進 Business Work Item / Sync / Audit / 正式折讓 API；不要在 identity 驗證尚未完成前混入下一大階段。
+「切回單機版」不再是單純把 `CloudMode` 改成 `LocalOnly`，也不允許舊 Local authority 復活。
 
-## 6. 安全與範圍提醒
+正式目標流程：
 
-- Public repo：不得提交真實 Email、正式 endpoint、API key、Device Token、OTP、密碼、AMEGO App Key 或 runtime company/customer data。
-- Pairing Code 授權 Device，不等於 Employee role。
-- Device Token 只能證明可信 Device；高權限人員操作仍需 execution-time human authentication。
-- Cloud 是 coordination / identity service，不是 invoice business kill switch。
-- AMEGO 仍是發票／作廢／折讓官方結果唯一真相。
-- API timeout / unknown result 不得盲目重送高風險業務操作。
+```text
+使用者選擇切換單機版
+  ↓
+第一次警告：這台電腦的 CYInvoice 本機資料會全部清除
+  ↓
+第二次明確確認：清除後不可由本機復原，需重新建立單機版 SUPER_ADMIN
+  ↓
+停止同步／敏感操作
+  ↓
+依正式 Device revoke / retire 規則處理目前 Device
+  ↓
+清除目前電腦的 Data / Cache / settings / Local EmployeeStore /
+Cloud Employee cache / Cloud identity / Device Token / pending state
+  ↓
+重新啟動成首次使用
+  ↓
+選擇單機版
+  ↓
+重新建立 Local SUPER_ADMIN
+```
 
-## 7. 歷史 Work 任務起點（目前請以文件頂端接手摘要為準）
+此流程只清除**目前這台 Windows 電腦的 CYInvoice 本機資料**：
 
-本節所述首次 D1 回查與 A 機 Employee Transition 已於後續階段完成；最新問題與下一步見文件頂端「接手摘要」。需要 Cloudflare 即時狀態時，仍以當次唯讀查核結果為準，不沿用歷史快照。
+- 不刪 Cloud Workspace。
+- 不刪其他 Device。
+- 不刪中央 Employee。
+
+之後如果這台電腦再選雲端版：
+
+- 視為新的 Local authority。
+- 重新走正常 Local → Cloud transition。
+- 建立新的 Device identity。
+- 不得復活舊 Device Token、舊 Cloud cache 或舊 Local authority。
+
+Device revoke / retire 因此不只用於測試 Device 清理，也是 Cloud → Local 安全退場的必要基礎。
+
+若退出 Cloud 前無法安全完成必要 revoke / retire，正式實作必須 fail-closed 或保留可恢復狀態；不可先刪本機唯一 Device Token，再留下無法管理的 active Device。
+
+## 7. Device 管理目前決策
+
+Device 不採直接刪除歷史 row 的方式；正式行為採 revoke / retire：
+
+- Device 歷史紀錄可保留。
+- revoked Device Token 立即失效。
+- SUPER_ADMIN / 授權管理流程才能撤銷。
+- 撤銷需留下 security audit event。
+- 日後同一電腦重新加入，建立新的 Device identity，不復活舊 token。
+
+目前 Device revoke UI/API 尚未完成。
+
+## 8. 新裝置加入正式路徑
+
+正式新裝置加入只保留：
+
+1. **立即配對**：A 端超管驗證後產生 API URL + 約 10 分鐘一次性 pairing code；B 端確認 Workspace 名稱後加入。
+2. **Email 新裝置邀請**：A 端寄 API URL + 72 小時一次性 invitation code 至已驗證超管 Email；可撤銷／重寄；B 端使用 invitation code + SUPER_ADMIN credential，確認 Workspace 名稱後加入，不再寄第二封 OTP。
+
+Workspace ID + SUPER_ADMIN 直接加入已淘汰，不得恢復成第三條一般入口。
+
+## 9. Brevo / Email 觀察
+
+實機曾觀察到 Employee 驗證信約 7 分鐘才收到。
+
+目前 Worker 是直接呼叫 Brevo transactional email API；沒有刻意排程 7 分鐘後才寄的程式邏輯。若後續要定位延遲，可加入不含 Email / OTP / token 的 provider timing telemetry，例如只記 provider accepted latency 與結果；不把敏感內容寫入 log。
+
+這項目前不是 identity 核心阻塞，先記錄觀察結果，後續再視需要診斷 Brevo / 收件端 delivery latency。
+
+## 10. 下一輪規劃前的工作清單
+
+目前**只定案與整理，尚未開始實作以下新修改**：
+
+1. Cloud 在線 Employee execution-time authentication / latest snapshot refresh。
+2. Device revoke / retire API + UI + token invalidation + audit。
+3. Cloud → Local destructive reset + 雙重確認 + 本機全清 + first-run restart。
+4. 邀請碼新裝置加入完整實機驗收。
+5. 邀請撤銷／重寄／result-unknown recovery 驗收。
+6. A/B Employee CRUD、role、enabled、password 即時與背景同步驗收。
+7. Cloud Offline → reconnect 行為驗收。
+8. Security audit viewer。
+9. all-device-token-loss Recovery Device flow。
+10. Offline cache server signature：**長期擱置 TODO，非目前阻塞。**
+
+下一步應先討論上述項目的依賴關係、版本範圍與測試順序，再開始程式修改。
+
+## 11. 安全與工作邊界
+
+- Public repo 不得提交真實 Employee Email、runtime secret、Device Token、OTP、密碼、AMEGO App Key、正式營運資料。
+- Device identity 與 Employee identity 分離；Device Token 不代表管理員身分。
+- Cloud Employee 全域異動仍為 Online-only。
+- Cloud Offline 不得回復舊 Local EmployeeStore 當第二套 authority。
+- API timeout / unknown result 不得盲目重送高風險操作。
+- Cloud 是 coordination / identity service；AMEGO 仍是發票／作廢／折讓官方結果唯一真相。
+- 未經使用者明確授權，不 merge、不 tag、不建立正式 Release。
