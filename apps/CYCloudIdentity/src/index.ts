@@ -1,4 +1,5 @@
 import { handleLogin, handleLogout, handleResolveSession } from "./auth";
+import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import { json, requestIdFrom } from "./http";
 import type { Env } from "./types";
 
@@ -13,6 +14,14 @@ export default {
           status: "ok",
           identity: "ready",
         });
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/bootstrap/start") {
+        return await handleBootstrapStart(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/bootstrap/confirm") {
+        return await handleBootstrapConfirm(request, env, requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/identity/login") {
