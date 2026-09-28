@@ -103,15 +103,17 @@ Callers should branch primarily on HTTP status and `error.code`:
 
 ## Credential compatibility
 
-Initial runtime supports the existing verifier form:
+New CYCloud Identity credentials use the data-driven algorithm key `scrypt` and the verifier form:
 
 ```text
-pbkdf2-sha256$<iterations>$<salt-hex>$<32-byte-digest-hex>
+scrypt$16384$8$1$<16-byte-salt-hex>$<32-byte-digest-hex>
 ```
 
-Accepted PBKDF2 iteration bounds are 100,000 through 2,000,000. New credential generation currently targets 210,000 iterations with a random 16-byte salt. Plaintext passwords never enter D1, Git, Audit or backup metadata.
+Current parameters are N=16,384, r=8, p=1 with a random 16-byte salt. The password policy is 8 through 16 Unicode characters. Plaintext passwords never enter D1, Git, Audit or backup metadata.
 
-The schema keeps `algorithm` data-driven so a future reviewed password algorithm upgrade does not require replacing the account model.
+The Worker may verify legacy `pbkdf2-sha256` verifiers only when their iteration count is within the Cloudflare production ceiling of 100,000. Higher-iteration PBKDF2 credentials must be migrated through a reviewed rehash/reset flow rather than silently weakening or mislabelling the stored algorithm.
+
+The schema keeps `algorithm` data-driven so later reviewed password-algorithm upgrades do not require replacing the account model. New credential generation must always store the actual algorithm used; algorithm labels may not be reused for a different KDF.
 
 ## Session compatibility
 

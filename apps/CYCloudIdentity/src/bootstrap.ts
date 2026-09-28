@@ -1,4 +1,4 @@
-import { createCredentialVerifier } from "./crypto";
+import { createCredentialVerifier, CURRENT_CREDENTIAL_ALGORITHM } from "./crypto";
 import { createEmailSender, normalizeAddress } from "./email";
 import { json, readJsonObject } from "./http";
 import { issueEmailOtp, verifyEmailOtp } from "./otp";
@@ -196,7 +196,7 @@ export async function handleBootstrapStart(request: Request, env: Env, requestId
        employee_id, employee_no, employee_name, email_normalized,
        credential_algorithm, credential_verifier, applications_json,
        expires_at, created_at, updated_at
-     ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'pbkdf2-sha256', ?9, ?10, ?11, ?12, ?12)`
+     ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13)`
   ).bind(
     bootstrapId,
     workspaceId,
@@ -206,6 +206,7 @@ export async function handleBootstrapStart(request: Request, env: Env, requestId
     employeeNo,
     employeeName,
     email,
+    CURRENT_CREDENTIAL_ALGORITHM,
     credentialVerifier,
     JSON.stringify(applications),
     requestExpiresAt,
