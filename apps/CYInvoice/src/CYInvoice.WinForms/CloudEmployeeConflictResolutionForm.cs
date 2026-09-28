@@ -208,8 +208,6 @@ internal sealed class CloudEmployeeConflictResolutionForm : Form
                 target.EmployeeId,
                 lifetime.Token);
 
-            // Do not reuse the password after the action. Re-authenticate for a new
-            // server list read so every sensitive review action remains scoped.
             conflicts.Items.Remove(conflicts.SelectedItems[0]);
             candidates.Items.Clear();
             summary.Text = conflicts.Items.Count == 0
@@ -312,7 +310,7 @@ internal sealed class CloudEmployeeConflictResolutionForm : Form
     {
         EmployeeRoles.SuperAdmin => "超級管理員",
         EmployeeRoles.Admin => "管理員",
-        EmployeeRoles.Employee => "一般員工",
+        EmployeeRoles.User => "一般使用者",
         _ => role,
     };
 
