@@ -1,8 +1,16 @@
 export interface Env {
   DB: D1Database;
+  LOGIN_RATE_LIMITER?: RateLimit;
   APP_ENV?: string;
   API_VERSION?: string;
   SESSION_TTL_SECONDS?: string;
+  EMAIL_PROVIDER?: string;
+  EMAIL_FROM?: string;
+  EMAIL_DAILY_BUDGET?: string;
+  BREVO_API_KEY?: string;
+  RESEND_API_KEY?: string;
+  OTP_PEPPER?: string;
+  BOOTSTRAP_SECRET?: string;
 }
 
 export interface IdentityPrincipal {

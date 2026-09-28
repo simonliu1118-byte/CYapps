@@ -47,8 +47,11 @@ Successful response contains:
 
 The caller must not persist the password. The raw session token is returned only on login and must not be logged.
 
+Before credential/D1 work, the Worker applies the configured Cloudflare `LOGIN_RATE_LIMITER` to a SHA-256 key derived from Application + Workspace + Employee No. The deployed rate-limit binding is mandatory; if it is missing, authentication fails closed instead of running an unprotected password verifier.
+
 Authentication requires all of the following:
 
+- login rate limiter permits the attempt;
 - Workspace is active;
 - Employee exists in that Workspace and is enabled;
 - credential algorithm is currently supported and password verifies;
@@ -70,7 +73,7 @@ X-Identity-Application: <application id>
 
 A successful response returns current `principal` plus session expiry. Resolve re-checks current authority on every request:
 
-- session exists, is not expired and is not revoked;
+- session exists, is not expired and not revoked;
 - Workspace remains active;
 - Employee remains enabled;
 - credential version still matches;
@@ -92,11 +95,11 @@ Callers should branch primarily on HTTP status and `error.code`:
 - `400 INVALID_LOGIN_REQUEST` — malformed login request;
 - `401 AUTHENTICATION_FAILED` — credential authentication failed;
 - `403 APPLICATION_ACCESS_DENIED` — App is not enabled or Employee has no effective App entry grant;
+- `429 AUTH_RATE_LIMITED` — too many login attempts for the current logical login key; current response includes `Retry-After: 60`;
+- `503 AUTH_RATE_LIMITER_UNAVAILABLE` — deployment is missing its required login-protection binding;
 - `401 SESSION_INVALID` — session missing, malformed, expired, revoked or no longer authorized;
 - `404 NOT_FOUND` — unsupported endpoint;
 - `500 IDENTITY_REQUEST_FAILED` — Identity runtime failure.
-
-Rate/abuse-limit response codes will be added when the login abuse-protection layer is implemented; consumers must tolerate `429` as a retryable authentication throttle.
 
 ## Credential compatibility
 

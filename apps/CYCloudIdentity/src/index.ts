@@ -1,5 +1,7 @@
 import { handleLogin, handleLogout, handleResolveSession } from "./auth";
+import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import { json, requestIdFrom } from "./http";
+import { enforceLoginRateLimit } from "./rate-limit";
 import type { Env } from "./types";
 
 export default {
@@ -15,7 +17,17 @@ export default {
         });
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/bootstrap/start") {
+        return await handleBootstrapStart(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/bootstrap/confirm") {
+        return await handleBootstrapConfirm(request, env, requestId);
+      }
+
       if (request.method === "POST" && url.pathname === "/v1/identity/login") {
+        const limited = await enforceLoginRateLimit(request, env, requestId);
+        if (limited) return limited;
         return await handleLogin(request, env, requestId);
       }
 
