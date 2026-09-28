@@ -52,6 +52,9 @@ internal static class IdentityProviderFoundationTests
                 "Cloud invalid credentials must be rejected");
             True(await cloud.AuthenticateAsync(new IdentityAuthenticationRequest("0003", "CloudPass3")) is null,
                 "disabled Cloud authority must be rejected");
+            var disabledPrincipal = await cloud.RefreshPrincipalAsync("0003");
+            NotNull(disabledPrincipal, "refresh should still expose disabled authority metadata");
+            True(!disabledPrincipal!.Enabled, "refreshed disabled authority must stay disabled");
 
             var settingsStore = new SettingsStore(directory, protector);
             var runtime = new IdentityProviderRuntime(settingsStore, local, cloud);
