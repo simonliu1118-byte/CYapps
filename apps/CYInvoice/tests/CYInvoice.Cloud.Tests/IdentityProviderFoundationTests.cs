@@ -89,6 +89,8 @@ internal static class IdentityProviderFoundationTests
         {
             Directory.Delete(directory, recursive: true);
         }
+
+        await BuiltInCloudAuthorityFreshnessTests.RunAsync();
     }
 
     private static CloudEmployeeCacheSeed Seed(
