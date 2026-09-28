@@ -47,21 +47,29 @@ jobs:
               raise SystemExit('CloudFirstWorkspaceForm direct-auth pattern was not found exactly once')
           bootstrap.write_text(text.replace(old, new), encoding='utf-8')
 
-          workflow = Path('.github/workflows/cyinvoice-identity-refactor-patch.yml')
-          workflow.unlink()
+          Path('.github/workflows/cyinvoice-identity-refactor-patch.yml').unlink()
       - name: Validate patch scope
-        shell: bash
+        shell: python
         run: |
-          set -euo pipefail
-          git diff --check
-          if grep -RInE 'EmployeeRoles\.Employee|["'"']EMPLOYEE["'"']' apps/CYInvoice/src apps/CYInvoice/tests apps/CYInvoice/cloud/src --include='*.cs' --include='*.ts'; then
-            echo 'Forbidden active EMPLOYEE role vocabulary remains.' >&2
-            exit 1
-          fi
-          if grep -RIn 'repository\.Employees\.Authenticate' apps/CYInvoice/src/CYInvoice.WinForms --include='*.cs'; then
-            echo 'Direct EmployeeStore authentication remains in WinForms.' >&2
-            exit 1
-          fi
+          from pathlib import Path
+          import subprocess
+
+          subprocess.run(['git', 'diff', '--check'], check=True)
+          bad = []
+          for base, suffix in [
+              (Path('apps/CYInvoice/src'), '.cs'),
+              (Path('apps/CYInvoice/tests'), '.cs'),
+              (Path('apps/CYInvoice/cloud/src'), '.ts'),
+          ]:
+              for path in base.rglob(f'*{suffix}'):
+                  text = path.read_text(encoding='utf-8')
+                  if 'EmployeeRoles.Employee' in text or '"EMPLOYEE"' in text or "'EMPLOYEE'" in text:
+                      bad.append(str(path))
+          for path in Path('apps/CYInvoice/src/CYInvoice.WinForms').rglob('*.cs'):
+              if 'repository.Employees.Authenticate' in path.read_text(encoding='utf-8'):
+                  bad.append(str(path) + ' [direct repository.Employees.Authenticate]')
+          if bad:
+              raise SystemExit('Forbidden Package 1 patterns remain:\n' + '\n'.join(sorted(set(bad))))
       - name: Commit exact cleanup
         shell: bash
         run: |
