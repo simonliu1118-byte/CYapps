@@ -4,7 +4,7 @@
 
 ## Current checkpoint — 2026-09-28
 
-- `CYCloudIdentity` 已完成 repository governance 登錄；目前 shared-auth/security-policy work item 版本 `0.1.4`。
+- `CYCloudIdentity` 已完成 repository governance 登錄；目前 development-deploy work item 版本 `0.1.5`。
 - CYInvoice Cloud 是 reference-only，第一階段保持 source/runtime/D1 不動。
 - Workspace 最高管理 authority 已與普通 Identity Groups 分離；普通身分組為 data-driven，可新增、重新命名、停用與調整 membership，不需 schema migration。
 - Application Registry 是 generic runtime registry；Public migration 不 seed 公司目前實際 App catalog，也不保存實際 Workspace/Employee access matrix。
@@ -13,9 +13,12 @@
 - Local Wrangler + D1 acceptance 已驗證 synthetic login → resolve → logout → revoked-session rejection；不依賴遠端資源或秘密。
 - Provider-neutral Email Sender、Email OTP、first-Workspace bootstrap、login rate limit 與 free-tier email budget protection 已實作。
 - Workspace highest authority 可透過 Identity admin API 調整 OTP resend cooldown、max attempts、per-email/purpose hourly limit 與 Workspace daily email limit；所有可調值受 server-side safety bounds 限制並寫 Audit。
+- OTP established defaults 維持：60 秒重寄冷卻、5 次驗證嘗試、同 Email+purpose 每小時 5 封、Workspace 每日 100 封（若 global ceiling 更低則取較低值）、OTP 10 分鐘有效。
+- CY Web 的 OTP 設定入口只對 `isWorkspaceSuperAdmin=true` 顯示；其他 Identity Group/Employee 不呈現入口或權限錯誤流程。Identity backend 仍保留 highest-authority 驗證作為 security boundary。
 - Shared provider/global Email Daily Ceiling 仍由 runtime config 保留為不可突破的系統安全上限；Workspace 管理者只能在該 ceiling 以下調整自己的 daily limit。
 - CY Web 預定作為 Shared Identity 的帳號管理 UI；帳號/OTP/權限資料與規則仍由 CYCloud Identity Worker + D1 持有，不搬進 CY Web business D1。
 - `docs/AUTH_CONTRACT.md` 已固定目前 login/session consumer contract；普通 Identity Groups 不重新退回固定 role enum。
+- Placeholder-only development deployment pipeline 已加入；Public source 不保存 remote D1 ID、Worker name、sender address、provider credential、OTP pepper 或 bootstrap secret。
 - 初始 Identity D1 尚未第一次 remote deployment；remote baseline 接受後所有 schema 變更只用 numbered forward migrations。
 - Current cost assumption: stay within free Cloudflare / Email provider / Google Cloud usage; no paid-tier dependency or automatic upgrade.
 - No production deployment, production Workspace, production Employee, real App catalog or real secret is created by this work.
@@ -39,10 +42,10 @@
 15. [ ] Implement highest-authority transfer with atomic Workspace authority pointer + Recovery Email update.
 16. [ ] Implement Identity Group create/rename/disable/membership management and direct/group Application Access management.
 17. [ ] Add Worker runtime acceptance tests for all remaining critical invariants and abuse limits.
-18. [ ] Add placeholder-only development deployment pipeline; no real resource IDs in Public source.
+18. [x] Add placeholder-only development deployment pipeline; no real resource IDs in Public source.
 19. [ ] Create non-production Identity Worker/D1 and bootstrap the first development Workspace through controlled runtime configuration.
 20. [ ] Switch CY Web development Identity binding from the temporary provider to CYCloud Identity and accept login/session/logout/recovery.
-21. [ ] Add CY Web Shared Identity account-management UI (Employees, Groups, Application Access, Recovery Email, OTP policy), backed only by CYCloud Identity admin APIs.
+21. [ ] Add CY Web Shared Identity account-management UI (Employees, Groups, Application Access, Recovery Email, OTP settings), backed only by CYCloud Identity admin APIs; OTP settings entry is highest-authority-only.
 22. [ ] Publish stable consumer handoff document for ACC Web and CYInvoice workstreams after CY Web acceptance.
 23. [ ] Switch additional development Apps to CYCloud Identity and accept their login/session/recovery paths.
 24. [ ] Add low-frequency encrypted/logical backup + restore acceptance compatible with the approved free Google Cloud usage envelope before production rollout.
