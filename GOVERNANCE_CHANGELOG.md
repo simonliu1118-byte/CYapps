@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.16 — 2026/09/28
+
+- CYCloud Identity 的 Password 長度固定為 8–16 字元；所有 consumer App 必須遵循 Shared Identity 的同一 credential 驗證邊界，不得自行放寬或縮限。
+- Runtime implementation 與 boundary tests 同步採用 8／16 字元有效、7／17 字元拒絕，並以 Unicode code point 計算字元數。
+
 ## 2.3.15 — 2026/09/28
 
 - CYCloud Identity 的普通身分組改為資料驅動，可新增、重新命名、停用或調整，不再以固定 `SUPER_ADMIN / ADMIN / EMPLOYEE` enum 或 schema `CHECK` 封死；Workspace 最高管理 authority 與可編輯身分組分離。
