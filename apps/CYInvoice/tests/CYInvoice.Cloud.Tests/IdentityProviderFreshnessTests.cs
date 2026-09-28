@@ -316,6 +316,12 @@ internal static class IdentityProviderFreshnessTests
             IReadOnlyList<CloudEmployeeCacheSeed> employees,
             string workspaceId)
         {
+            var snapshotEmployees = employees.Any(employee => employee.Role == EmployeeRoles.SuperAdmin)
+                ? employees.ToArray()
+                : new[]
+                {
+                    Seed("emp_super", "0001", "Cloud Admin", "admin@example.test", EmployeeRoles.SuperAdmin, "AdminPass1", 1, 1),
+                }.Concat(employees).ToArray();
             var payload = JsonSerializer.Serialize(new
             {
                 ok = true,
@@ -323,7 +329,7 @@ internal static class IdentityProviderFreshnessTests
                 {
                     workspaceId,
                     workspaceRevision,
-                    employees = employees.Select(employee => new
+                    employees = snapshotEmployees.Select(employee => new
                     {
                         employeeId = employee.EmployeeId,
                         employeeNo = employee.EmployeeNo,
