@@ -1,9 +1,27 @@
 import { handleLogin, handleLogout, handleResolveSession } from "./auth";
 import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import { json, requestIdFrom } from "./http";
+import {
+  handleCreateIdentityGroup,
+  handleDeleteIdentityGroupMember,
+  handleIdentityAdminSnapshot,
+  handlePutApplicationCompatibilityRoleMode,
+  handlePutEmployeeApplicationAccess,
+  handlePutGroupApplicationAccess,
+  handlePutIdentityGroupMember,
+  handleUpdateIdentityGroup,
+} from "./identity-admin";
 import { enforceLoginRateLimit } from "./rate-limit";
 import { handleGetSecurityPolicy, handleUpdateSecurityPolicy } from "./security-policy";
 import type { Env } from "./types";
+
+function decodedSegment(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -46,6 +64,58 @@ export default {
 
       if (request.method === "PUT" && url.pathname === "/v1/admin/security-policy") {
         return await handleUpdateSecurityPolicy(request, env, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/admin/identity/snapshot") {
+        return await handleIdentityAdminSnapshot(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/admin/identity/groups") {
+        return await handleCreateIdentityGroup(request, env, requestId);
+      }
+
+      let match = /^\/v1\/admin\/identity\/groups\/([^/]+)$/.exec(url.pathname);
+      if (request.method === "PATCH" && match) {
+        const groupId = decodedSegment(match[1]);
+        if (groupId) return await handleUpdateIdentityGroup(request, env, requestId, groupId);
+      }
+
+      match = /^\/v1\/admin\/identity\/groups\/([^/]+)\/members\/([^/]+)$/.exec(url.pathname);
+      if (match) {
+        const groupId = decodedSegment(match[1]);
+        const employeeId = decodedSegment(match[2]);
+        if (groupId && employeeId && request.method === "PUT") {
+          return await handlePutIdentityGroupMember(request, env, requestId, groupId, employeeId);
+        }
+        if (groupId && employeeId && request.method === "DELETE") {
+          return await handleDeleteIdentityGroupMember(request, env, requestId, groupId, employeeId);
+        }
+      }
+
+      match = /^\/v1\/admin\/identity\/groups\/([^/]+)\/applications\/([^/]+)$/.exec(url.pathname);
+      if (request.method === "PUT" && match) {
+        const groupId = decodedSegment(match[1]);
+        const applicationId = decodedSegment(match[2]);
+        if (groupId && applicationId) {
+          return await handlePutGroupApplicationAccess(request, env, requestId, groupId, applicationId);
+        }
+      }
+
+      match = /^\/v1\/admin\/identity\/employees\/([^/]+)\/applications\/([^/]+)$/.exec(url.pathname);
+      if (request.method === "PUT" && match) {
+        const employeeId = decodedSegment(match[1]);
+        const applicationId = decodedSegment(match[2]);
+        if (employeeId && applicationId) {
+          return await handlePutEmployeeApplicationAccess(request, env, requestId, employeeId, applicationId);
+        }
+      }
+
+      match = /^\/v1\/admin\/identity\/applications\/([^/]+)\/compatibility-role-mode$/.exec(url.pathname);
+      if (request.method === "PUT" && match) {
+        const applicationId = decodedSegment(match[1]);
+        if (applicationId) {
+          return await handlePutApplicationCompatibilityRoleMode(request, env, requestId, applicationId);
+        }
       }
 
       return json(env, requestId, 404, {
