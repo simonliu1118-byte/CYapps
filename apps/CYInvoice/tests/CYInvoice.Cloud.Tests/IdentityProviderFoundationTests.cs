@@ -11,6 +11,10 @@ internal static class IdentityProviderFoundationTests
         Directory.CreateDirectory(directory);
         try
         {
+            Throws<InvalidDataException>(() => AppRoles.Parse("EMPLOYEE"),
+                "legacy EMPLOYEE role must not remain a compatibility alias");
+            Equal(EmployeeRoles.User, AppRoles.ToValue(AppRole.User), "canonical USER role value");
+
             var protector = new TestProtector();
             var localStore = new EmployeeStore(directory);
             localStore.CreateFirstSuperAdmin("0001", "Local Admin", "local-admin@example.test", "LocalPass1");
@@ -72,6 +76,10 @@ internal static class IdentityProviderFoundationTests
 
             Equal(IdentityProviderKind.BuiltInCloud, runtime.Current.Kind,
                 "runtime switches centrally to Built-in Cloud authority");
+            True(await runtime.Current.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "LocalPass2")) is null,
+                "Built-in Cloud authority must not fall back to Local credentials");
+            NotNull(await runtime.Current.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "CloudPass2")),
+                "Built-in Cloud authority must accept the Cloud credential after cutover");
             True(AppRoles.CanManageAccounts(AppRole.Admin), "ADMIN remains manager authority");
             True(AppRoles.CanManageAccounts(AppRole.SuperAdmin), "SUPER_ADMIN remains manager authority");
         }
@@ -135,5 +143,18 @@ internal static class IdentityProviderFoundationTests
     private static void NotNull(object? value, string description)
     {
         if (value is null) throw new InvalidOperationException(description);
+    }
+
+    private static void Throws<T>(Action action, string description) where T : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (T)
+        {
+            return;
+        }
+        throw new InvalidOperationException(description);
     }
 }
