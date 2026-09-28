@@ -8,6 +8,7 @@ import {
 import { handleLogin, handleLogout, handleResolveSession } from "./auth";
 import {
   handleConfirmHighestAuthorityTransfer,
+  handleGetHighestAuthority,
   handleStartHighestAuthorityTransfer,
 } from "./authority-transfer";
 import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
@@ -109,6 +110,10 @@ export default {
 
       if (request.method === "PUT" && url.pathname === "/v1/admin/security-policy") {
         return await handleUpdateSecurityPolicy(request, env, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/admin/authority") {
+        return await handleGetHighestAuthority(request, env, requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/admin/authority-transfer/start") {
