@@ -1,3 +1,5 @@
+using CYInvoice.Core.Cloud;
+
 namespace CYInvoice.Core.Storage;
 
 public enum AppRole
@@ -76,6 +78,8 @@ public interface IIdentityProvider
     Task<AppPrincipal?> RefreshPrincipalAsync(
         string employeeNo,
         CancellationToken cancellationToken = default);
+
+    Task RefreshAuthorityAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class LocalIdentityProvider(EmployeeStore employees) : IIdentityProvider
@@ -102,6 +106,12 @@ public sealed class LocalIdentityProvider(EmployeeStore employees) : IIdentityPr
         return Task.FromResult(ToPrincipal(employees.Find(employeeNo)));
     }
 
+    public Task RefreshAuthorityAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
     private static AppPrincipal? ToPrincipal(EmployeeAccount? account)
     {
         if (account is null) return null;
@@ -117,31 +127,91 @@ public sealed class LocalIdentityProvider(EmployeeStore employees) : IIdentityPr
     }
 }
 
-public sealed class BuiltInCloudIdentityProvider(CloudEmployeeCacheStore employees) : IIdentityProvider
+public sealed class BuiltInCloudIdentityProvider : IIdentityProvider
 {
-    private readonly CloudEmployeeCacheStore employees = employees ?? throw new ArgumentNullException(nameof(employees));
+    private static readonly HttpClient SharedHttpClient = new();
+    private readonly SettingsStore settings;
+    private readonly CloudEmployeeCacheStore employees;
+    private readonly HttpClient httpClient;
+
+    public BuiltInCloudIdentityProvider(
+        SettingsStore settings,
+        CloudEmployeeCacheStore employees,
+        HttpClient? httpClient = null)
+    {
+        this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        this.employees = employees ?? throw new ArgumentNullException(nameof(employees));
+        this.httpClient = httpClient ?? SharedHttpClient;
+    }
 
     public IdentityProviderKind Kind => IdentityProviderKind.BuiltInCloud;
     public bool OwnsAccountManagement => true;
 
-    public Task<AppPrincipal?> AuthenticateAsync(
+    public async Task<AppPrincipal?> AuthenticateAsync(
         IdentityAuthenticationRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(ToPrincipal(employees.Authenticate(request.EmployeeNo, request.Password)));
+        await RefreshForExecutionAsync(cancellationToken).ConfigureAwait(false);
+        return ToPrincipal(employees.Authenticate(request.EmployeeNo, request.Password));
     }
 
-    public Task<AppPrincipal?> RefreshPrincipalAsync(
+    public async Task<AppPrincipal?> RefreshPrincipalAsync(
         string employeeNo,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await RefreshForExecutionAsync(cancellationToken).ConfigureAwait(false);
         var normalized = (employeeNo ?? string.Empty).Trim();
         var account = employees.LoadAll().FirstOrDefault(candidate =>
             string.Equals(candidate.EmployeeNo, normalized, StringComparison.Ordinal));
-        return Task.FromResult(ToPrincipal(account));
+        return ToPrincipal(account);
+    }
+
+    public async Task RefreshAuthorityAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var current = settings.LoadOrCreate();
+        if (current.CloudMode != CloudModes.CloudPreferred || !current.CloudEmployeeAuthorityReady)
+            throw new InvalidOperationException("Built-in Cloud Employee authority is not active.");
+        if (current.CloudBaseUrl.Length == 0 || current.CloudWorkspaceId.Length == 0 || current.CloudDeviceId.Length == 0)
+            throw new InvalidOperationException("Built-in Cloud Workspace/Device identity is incomplete.");
+
+        var token = settings.CloudDeviceToken(current);
+        if (token.Length == 0)
+            throw new InvalidOperationException("Built-in Cloud Device Token is unavailable.");
+
+        var client = new CloudEmployeeAuthorityClient(
+            httpClient,
+            new Uri(current.CloudBaseUrl, UriKind.Absolute),
+            token);
+        var snapshot = await client.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(snapshot.WorkspaceId, current.CloudWorkspaceId, StringComparison.Ordinal))
+            throw new InvalidDataException("Cloud Employee snapshot Workspace identity does not match this device.");
+
+        employees.ReplaceSnapshot(
+            snapshot.WorkspaceId,
+            snapshot.WorkspaceRevision,
+            snapshot.Employees);
+    }
+
+    private async Task RefreshForExecutionAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RefreshAuthorityAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            // A transport failure is genuine Offline. Continue with the last trusted
+            // protected snapshot from the same Built-in Cloud authority.
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The Cloud request timed out independently of caller cancellation.
+            // This is the other approved Offline fallback path.
+        }
     }
 
     private static AppPrincipal? ToPrincipal(CloudEmployeeCachedAccount? account)
