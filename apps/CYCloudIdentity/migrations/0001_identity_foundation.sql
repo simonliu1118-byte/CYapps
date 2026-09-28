@@ -4,7 +4,8 @@ CREATE TABLE workspaces (
     workspace_id TEXT PRIMARY KEY,
     workspace_code TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL CHECK (length(trim(display_name)) BETWEEN 1 AND 120),
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+    status TEXT NOT NULL DEFAULT 'bootstrap' CHECK (status IN ('bootstrap', 'active', 'disabled')),
+    super_admin_employee_id TEXT,
     recovery_email_normalized TEXT,
     recovery_email_verified_at TEXT,
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
@@ -14,13 +15,18 @@ CREATE TABLE workspaces (
     CHECK (length(workspace_code) BETWEEN 4 AND 32),
     CHECK (workspace_code = upper(workspace_code)),
     CHECK (workspace_code NOT GLOB '*[^A-Z0-9_-]*'),
+    CHECK (status <> 'active' OR super_admin_employee_id IS NOT NULL),
     CHECK (
       recovery_email_normalized IS NULL
       OR (
         length(trim(recovery_email_normalized)) BETWEEN 3 AND 320
         AND instr(recovery_email_normalized, '@') > 1
       )
-    )
+    ),
+    FOREIGN KEY (super_admin_employee_id, workspace_id)
+        REFERENCES employees(employee_id, workspace_id)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT
 );
 
 CREATE TABLE employees (
@@ -30,7 +36,6 @@ CREATE TABLE employees (
     name TEXT NOT NULL,
     email_normalized TEXT NOT NULL,
     email_verified_at TEXT,
-    role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'EMPLOYEE')),
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -42,8 +47,7 @@ CREATE TABLE employees (
     CHECK (
       length(trim(email_normalized)) BETWEEN 3 AND 320
       AND instr(email_normalized, '@') > 1
-    ),
-    CHECK (role <> 'SUPER_ADMIN' OR enabled = 1)
+    )
 );
 
 CREATE UNIQUE INDEX idx_employees_employee_workspace
@@ -52,15 +56,91 @@ CREATE UNIQUE INDEX idx_employees_workspace_employee_no
     ON employees(workspace_id, employee_no);
 CREATE UNIQUE INDEX idx_employees_workspace_email
     ON employees(workspace_id, email_normalized);
-CREATE UNIQUE INDEX idx_employees_single_super_admin
-    ON employees(workspace_id)
-    WHERE role = 'SUPER_ADMIN';
-CREATE INDEX idx_employees_workspace_role_enabled
-    ON employees(workspace_id, role, enabled);
+CREATE INDEX idx_employees_workspace_enabled
+    ON employees(workspace_id, enabled, employee_no);
+
+CREATE TRIGGER trg_workspace_super_admin_must_be_enabled
+BEFORE UPDATE OF super_admin_employee_id, status ON workspaces
+WHEN NEW.super_admin_employee_id IS NOT NULL
+ AND NOT EXISTS (
+    SELECT 1
+      FROM employees e
+     WHERE e.employee_id = NEW.super_admin_employee_id
+       AND e.workspace_id = NEW.workspace_id
+       AND e.enabled = 1
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'workspace super admin must be an enabled employee in the same workspace');
+END;
+
+CREATE TRIGGER trg_employee_current_super_admin_cannot_disable
+BEFORE UPDATE OF enabled ON employees
+WHEN OLD.enabled = 1
+ AND NEW.enabled = 0
+ AND EXISTS (
+    SELECT 1
+      FROM workspaces w
+     WHERE w.workspace_id = OLD.workspace_id
+       AND w.super_admin_employee_id = OLD.employee_id
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'current workspace super admin cannot be disabled');
+END;
+
+CREATE TRIGGER trg_employee_current_super_admin_cannot_delete
+BEFORE DELETE ON employees
+WHEN EXISTS (
+    SELECT 1
+      FROM workspaces w
+     WHERE w.workspace_id = OLD.workspace_id
+       AND w.super_admin_employee_id = OLD.employee_id
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'current workspace super admin cannot be deleted');
+END;
+
+CREATE TABLE identity_groups (
+    group_id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    group_key TEXT NOT NULL,
+    display_name TEXT NOT NULL CHECK (length(trim(display_name)) BETWEEN 1 AND 120),
+    description TEXT CHECK (description IS NULL OR length(description) <= 500),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(workspace_id) ON DELETE CASCADE,
+    CHECK (length(group_id) BETWEEN 5 AND 80),
+    CHECK (length(group_key) BETWEEN 1 AND 64),
+    CHECK (group_key = upper(group_key)),
+    CHECK (group_key NOT GLOB '*[^A-Z0-9_-]*')
+);
+
+CREATE UNIQUE INDEX idx_identity_groups_group_workspace
+    ON identity_groups(group_id, workspace_id);
+CREATE UNIQUE INDEX idx_identity_groups_workspace_key
+    ON identity_groups(workspace_id, group_key);
+CREATE INDEX idx_identity_groups_workspace_status
+    ON identity_groups(workspace_id, status, display_name);
+
+CREATE TABLE employee_identity_groups (
+    workspace_id TEXT NOT NULL,
+    employee_id TEXT NOT NULL,
+    group_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (workspace_id, employee_id, group_id),
+    FOREIGN KEY (employee_id, workspace_id)
+        REFERENCES employees(employee_id, workspace_id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id, workspace_id)
+        REFERENCES identity_groups(group_id, workspace_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_employee_identity_groups_group
+    ON employee_identity_groups(workspace_id, group_id, employee_id);
 
 CREATE TABLE employee_credentials (
     employee_id TEXT PRIMARY KEY,
-    algorithm TEXT NOT NULL CHECK (algorithm IN ('pbkdf2-sha256')),
+    algorithm TEXT NOT NULL CHECK (length(trim(algorithm)) BETWEEN 3 AND 64),
     verifier TEXT NOT NULL CHECK (length(verifier) BETWEEN 80 AND 512),
     credential_version INTEGER NOT NULL DEFAULT 1 CHECK (credential_version >= 1),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -108,6 +188,23 @@ CREATE TABLE employee_application_access (
 
 CREATE INDEX idx_employee_application_access_application
     ON employee_application_access(workspace_id, application_id, enabled, employee_id);
+
+CREATE TABLE identity_group_application_access (
+    workspace_id TEXT NOT NULL,
+    group_id TEXT NOT NULL,
+    application_id TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (workspace_id, group_id, application_id),
+    FOREIGN KEY (group_id, workspace_id)
+        REFERENCES identity_groups(group_id, workspace_id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, application_id)
+        REFERENCES workspace_applications(workspace_id, application_id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_identity_group_application_access_application
+    ON identity_group_application_access(workspace_id, application_id, enabled, group_id);
 
 CREATE TABLE identity_sessions (
     session_hash TEXT PRIMARY KEY CHECK (length(session_hash) = 64),
@@ -188,10 +285,3 @@ CREATE INDEX idx_identity_audit_workspace_created
     ON identity_audit_events(workspace_id, created_at DESC);
 CREATE INDEX idx_identity_audit_actor_created
     ON identity_audit_events(actor_employee_id, created_at DESC);
-
-INSERT INTO applications(application_id, display_name)
-VALUES
-    ('CYWEB', 'CY Web'),
-    ('CYACCOUNTINGWEB', 'CY Accounting Web'),
-    ('CYINVOICE', 'CYInvoice')
-ON CONFLICT(application_id) DO NOTHING;
