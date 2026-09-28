@@ -1,0 +1,86 @@
+name: CYInvoice Package 2 Patch
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'cyinvoice/fix-cloud-authority-freshness'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Apply exact Package 2 integration changes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exact pattern once, found {count}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          replace_once(
+              'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/Program.cs',
+              '    ("identity providers normalize Local and Built-in Cloud authority", IdentityProviderFoundationTests.RunAsync),\n',
+              '    ("identity providers normalize Local and Built-in Cloud authority", IdentityProviderFoundationTests.RunAsync),\n'
+              '    ("Built-in Cloud execution authentication refreshes current authority before fallback", IdentityProviderFreshnessTests.RunAsync),\n')
+
+          replace_once(
+              'apps/CYInvoice/src/CYInvoice.WinForms/MainForm.cs',
+              '                var syncProblem = await TryRefreshCloudEmployeeCacheAsync(requested, requestedUrl);',
+              '                var syncProblem = await TryRefreshCloudEmployeeCacheAsync();')
+
+          old_refresh = '''    private async Task<string> TryRefreshCloudEmployeeCacheAsync(Settings settings, string baseUrl)\n    {\n        if (!settings.CloudEmployeeAuthorityReady || settings.CloudMode != CloudModes.CloudPreferred)\n            return string.Empty;\n        if (settings.CloudWorkspaceId.Length == 0 || settings.CloudDeviceId.Length == 0)\n            return "本機 Cloud Workspace／Device identity 不完整。";\n        try\n        {\n            var token = repository.Settings.CloudDeviceToken(settings);\n            if (token.Length == 0) return "本機 Cloud Device Token 不存在。";\n            var authority = new CloudEmployeeAuthorityClient(\n                cloudHealthHttpClient,\n                new Uri(baseUrl, UriKind.Absolute),\n                token);\n            var snapshot = await authority.GetSnapshotAsync(syncLifetime.Token);\n            if (!string.Equals(snapshot.WorkspaceId, settings.CloudWorkspaceId, StringComparison.Ordinal))\n                return "中央帳號快取回傳的 Workspace identity 與本機不一致。";\n            repository.CloudEmployees.ReplaceSnapshot(\n                snapshot.WorkspaceId,\n                snapshot.WorkspaceRevision,\n                snapshot.Employees);\n            return string.Empty;\n        }\n        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)\n        {\n            throw;\n        }\n        catch (Exception error)\n        {\n            return ExceptionDetails(error);\n        }\n    }'''
+          new_refresh = '''    private async Task<string> TryRefreshCloudEmployeeCacheAsync()\n    {\n        try\n        {\n            await repository.IdentityProvider.RefreshAuthorityAsync(syncLifetime.Token);\n            return string.Empty;\n        }\n        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)\n        {\n            throw;\n        }\n        catch (Exception error)\n        {\n            return ExceptionDetails(error);\n        }\n    }'''
+          replace_once('apps/CYInvoice/src/CYInvoice.WinForms/MainForm.cs', old_refresh, new_refresh)
+
+          login = Path('apps/CYInvoice/src/CYInvoice.WinForms/EmployeeAdminLoginForm.cs')
+          text = login.read_text(encoding='utf-8')
+          if not text.startswith('using CYInvoice.Core.Storage;'):
+              raise SystemExit('EmployeeAdminLoginForm using header changed unexpectedly')
+          text = text.replace(
+              'using CYInvoice.Core.Storage;\n',
+              'using CYInvoice.Core.Cloud;\nusing CYInvoice.Core.Storage;\n',
+              1)
+          old_catch = '''        catch (InvalidOperationException)\n        {\n            ValidationError("員工編號或密碼錯誤", employeeNo);\n        }'''
+          new_catch = '''        catch (Exception error) when (error is CloudApiException or InvalidDataException)\n        {\n            AuthenticationServiceError();\n        }\n        catch (InvalidOperationException)\n        {\n            ValidationError("員工編號或密碼錯誤", employeeNo);\n        }'''
+          if text.count(old_catch) != 1:
+              raise SystemExit('EmployeeAdminLoginForm catch pattern changed unexpectedly')
+          text = text.replace(old_catch, new_catch)
+          marker = '''    private void ValidationError(string message, TextBox target)\n    {'''
+          helper = '''    private void AuthenticationServiceError()\n    {\n        MessageBox.Show(\n            this,\n            "目前無法確認最新雲端帳號權限，為避免使用過期權限，本次操作已停止。請確認網路與雲端狀態後再試。",\n            "驗證服務異常",\n            MessageBoxButtons.OK,\n            MessageBoxIcon.Warning);\n        BeginInvoke((Action)(() =>\n        {\n            employeeNo.Focus();\n            employeeNo.SelectAll();\n        }));\n    }\n\n'''
+          if text.count(marker) != 1:
+              raise SystemExit('EmployeeAdminLoginForm validation helper marker changed unexpectedly')
+          text = text.replace(marker, helper + marker)
+          login.write_text(text, encoding='utf-8')
+
+          Path('.github/workflows/cyinvoice-package2-patch.yml').unlink()
+      - name: Validate patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          grep -q 'IdentityProviderFreshnessTests.RunAsync' apps/CYInvoice/tests/CYInvoice.Cloud.Tests/Program.cs
+          grep -q 'repository.IdentityProvider.RefreshAuthorityAsync' apps/CYInvoice/src/CYInvoice.WinForms/MainForm.cs
+          if grep -q 'new CloudEmployeeAuthorityClient' apps/CYInvoice/src/CYInvoice.WinForms/MainForm.cs; then
+            echo 'MainForm still duplicates Cloud Employee authority refresh.' >&2
+            exit 1
+          fi
+      - name: Commit integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/CYInvoice .github/workflows/cyinvoice-package2-patch.yml
+          git commit -m 'fix(CYInvoice): centralize online authority refresh in provider'
+          git push origin HEAD:${{ github.head_ref }}
