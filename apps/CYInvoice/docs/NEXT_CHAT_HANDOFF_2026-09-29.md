@@ -11,8 +11,8 @@
 - Current engineering version before new source work: **CYInvoice V2.6.6 Build 4**
 - Development Cloud baseline: **Cloud 0.8.5 / API 1 / storage Schema 9**
 - Formal Release remains `cyinvoice-v2.4.2`
-- Current branch head after this planning documentation: `7ebd41fbe4d92500d07b22c430fdd3c6b301c149`
-- This latest round changed documentation only. No source implementation, deployment, merge, tag or Release was performed.
+- This latest planning round changed documentation only. No source implementation, deployment, merge, tag or Release was performed.
+- Before continuing, read the current PR head rather than relying on a SHA copied into a handoff document.
 
 Before work, obey governance precedence:
 
