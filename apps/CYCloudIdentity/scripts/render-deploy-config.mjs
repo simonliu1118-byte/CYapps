@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
-const templatePath = path.join(root, 'wrangler.deploy.template.jsonc');
+const templatePath = path.join(root, 'deploy-config.template.jsonc');
 const outputArgIndex = process.argv.indexOf('--output');
 const outputName = outputArgIndex >= 0 ? process.argv[outputArgIndex + 1] : 'wrangler.deploy.generated.jsonc';
 if (!outputName || path.basename(outputName) !== outputName) {
