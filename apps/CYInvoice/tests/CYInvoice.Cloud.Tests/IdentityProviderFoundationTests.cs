@@ -43,7 +43,9 @@ internal static class IdentityProviderFoundationTests
                     Seed("emp_disabled", "0003", "Disabled User", "disabled@example.test", EmployeeRoles.User, "CloudPass3", 1, 3, enabled: false),
                 });
 
-            var cloud = new BuiltInCloudIdentityProvider(cloudCache);
+            var offlineAuthority = new ScriptedAuthoritySource(_ =>
+                throw new HttpRequestException("foundation test deliberately exercises protected Offline cache behavior"));
+            var cloud = new BuiltInCloudIdentityProvider(cloudCache, offlineAuthority);
             Equal(IdentityProviderKind.BuiltInCloud, cloud.Kind, "Built-in Cloud provider kind");
             True(cloud.OwnsAccountManagement, "Built-in Cloud provider must own CYInvoice account management");
 
