@@ -67,7 +67,9 @@ VALUES('workspace-test-001', 'TEST001', 'Synthetic Test Workspace', 'bootstrap')
 INSERT INTO employees(employee_id, workspace_id, employee_no, name, email_normalized, email_verified_at, enabled)
 VALUES
   ('employee-test-super', 'workspace-test-001', '0001', 'Synthetic Super', 'super@example.test', '2026-09-28T00:00:00.000Z', 1),
-  ('employee-test-user', 'workspace-test-001', '0002', 'Synthetic User', 'user@example.test', '2026-09-28T00:00:00.000Z', 1);
+  ('employee-test-user', 'workspace-test-001', '0002', 'Synthetic User', 'user@example.test', '2026-09-28T00:00:00.000Z', 1),
+  ('employee-test-admin', 'workspace-test-001', '0003', 'Synthetic Admin', 'admin@example.test', '2026-09-28T00:00:00.000Z', 1),
+  ('employee-test-direct', 'workspace-test-001', '0004', 'Synthetic Direct', 'direct@example.test', '2026-09-28T00:00:00.000Z', 1);
 
 UPDATE workspaces
 SET super_admin_employee_id = 'employee-test-super',
@@ -79,22 +81,36 @@ WHERE workspace_id = 'workspace-test-001';
 INSERT INTO employee_credentials(employee_id, algorithm, verifier, credential_version)
 VALUES
   ('employee-test-super', 'pbkdf2-sha256', '$VERIFIER', 1),
-  ('employee-test-user', 'pbkdf2-sha256', '$VERIFIER', 1);
+  ('employee-test-user', 'pbkdf2-sha256', '$VERIFIER', 1),
+  ('employee-test-admin', 'pbkdf2-sha256', '$VERIFIER', 1),
+  ('employee-test-direct', 'pbkdf2-sha256', '$VERIFIER', 1);
 
 INSERT INTO applications(application_id, display_name)
 VALUES('APP_TEST_LOGIN', 'Synthetic Login App');
 
-INSERT INTO workspace_applications(workspace_id, application_id, enabled)
-VALUES('workspace-test-001', 'APP_TEST_LOGIN', 1);
+INSERT INTO workspace_applications(workspace_id, application_id, enabled, compatibility_role_mode)
+VALUES('workspace-test-001', 'APP_TEST_LOGIN', 1, 'USER_ADMIN');
 
 INSERT INTO identity_groups(group_id, workspace_id, group_key, display_name)
-VALUES('group-test-users', 'workspace-test-001', 'TEST_USERS', 'Synthetic Test Users');
+VALUES
+  ('group-test-users', 'workspace-test-001', 'TEST_USERS', 'Synthetic Test Users'),
+  ('group-test-admins', 'workspace-test-001', 'TEST_ADMINS', 'Synthetic Test Admins');
 
 INSERT INTO employee_identity_groups(workspace_id, employee_id, group_id)
-VALUES('workspace-test-001', 'employee-test-user', 'group-test-users');
+VALUES
+  ('workspace-test-001', 'employee-test-user', 'group-test-users'),
+  ('workspace-test-001', 'employee-test-admin', 'group-test-users'),
+  ('workspace-test-001', 'employee-test-admin', 'group-test-admins');
 
-INSERT INTO identity_group_application_access(workspace_id, group_id, application_id, enabled)
-VALUES('workspace-test-001', 'group-test-users', 'APP_TEST_LOGIN', 1);
+INSERT INTO identity_group_application_access(
+  workspace_id, group_id, application_id, enabled, application_role_key
+)
+VALUES
+  ('workspace-test-001', 'group-test-users', 'APP_TEST_LOGIN', 1, 'USER'),
+  ('workspace-test-001', 'group-test-admins', 'APP_TEST_LOGIN', 1, 'ADMIN');
+
+INSERT INTO employee_application_access(workspace_id, employee_id, application_id, enabled)
+VALUES('workspace-test-001', 'employee-test-direct', 'APP_TEST_LOGIN', 1);
 SQL
 )
 
@@ -145,16 +161,54 @@ principal = payload['principal']
 assert principal['employeeNo'] == '0002'
 assert principal['isWorkspaceSuperAdmin'] is False
 assert principal['groupKeys'] == ['TEST_USERS']
+assert principal['applicationRoleKey'] == 'USER'
 token = payload['session']['token']
 assert token.startswith('cyid_') and len(token) == 69
 print(token)
 PY
 )"
 
-curl --silent --show-error --fail-with-body \
+RESOLVE_RESPONSE="$(curl --silent --show-error --fail-with-body \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/session/resolve" \
   -H "authorization: Bearer ${TOKEN}" \
-  -H 'x-identity-application: APP_TEST_LOGIN' >/dev/null
+  -H 'x-identity-application: APP_TEST_LOGIN')"
+RESOLVE_RESPONSE="$RESOLVE_RESPONSE" python3 - <<'PY'
+import json
+import os
+payload = json.loads(os.environ['RESOLVE_RESPONSE'])
+assert payload['ok'] is True
+assert payload['principal']['applicationRoleKey'] == 'USER'
+PY
+
+ADMIN_RESPONSE="$(curl --silent --show-error --fail-with-body \
+  -X POST "http://127.0.0.1:${PORT}/v1/identity/login" \
+  -H 'content-type: application/json' \
+  --data '{"workspaceId":"workspace-test-001","applicationId":"APP_TEST_LOGIN","employeeNo":"0003","password":"test-pass-123"}')"
+ADMIN_RESPONSE="$ADMIN_RESPONSE" python3 - <<'PY'
+import json
+import os
+payload = json.loads(os.environ['ADMIN_RESPONSE'])
+assert payload['ok'] is True
+principal = payload['principal']
+assert principal['isWorkspaceSuperAdmin'] is False
+assert principal['groupKeys'] == ['TEST_ADMINS', 'TEST_USERS']
+assert principal['applicationRoleKey'] == 'ADMIN'
+PY
+
+DIRECT_RESPONSE="$(curl --silent --show-error --fail-with-body \
+  -X POST "http://127.0.0.1:${PORT}/v1/identity/login" \
+  -H 'content-type: application/json' \
+  --data '{"workspaceId":"workspace-test-001","applicationId":"APP_TEST_LOGIN","employeeNo":"0004","password":"test-pass-123"}')"
+DIRECT_RESPONSE="$DIRECT_RESPONSE" python3 - <<'PY'
+import json
+import os
+payload = json.loads(os.environ['DIRECT_RESPONSE'])
+assert payload['ok'] is True
+principal = payload['principal']
+assert principal['isWorkspaceSuperAdmin'] is False
+assert principal['groupKeys'] == []
+assert principal['applicationRoleKey'] == 'USER'
+PY
 
 SUPER_RESPONSE="$(curl --silent --show-error --fail-with-body \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/login" \
@@ -167,6 +221,7 @@ import os
 payload = json.loads(os.environ['SUPER_RESPONSE'])
 assert payload['ok'] is True
 assert payload['principal']['isWorkspaceSuperAdmin'] is True
+assert payload['principal']['applicationRoleKey'] == 'SUPER_ADMIN'
 token = payload['session']['token']
 assert token.startswith('cyid_') and len(token) == 69
 print(token)
@@ -239,7 +294,10 @@ fi
 
 echo 'PASS CYCloud Identity local login/session/logout roundtrip'
 echo 'PASS group-based application access'
-echo 'PASS Workspace highest-authority application access'
+echo 'PASS effective application role USER projection'
+echo 'PASS effective application role ADMIN precedence'
+echo 'PASS direct application grant defaults to USER compatibility role'
+echo 'PASS Workspace highest-authority projects SUPER_ADMIN compatibility role'
 echo 'PASS highest-authority OTP security policy management'
 echo 'PASS non-highest-authority policy update rejection'
 echo 'PASS revoked session rejection'

@@ -35,6 +35,7 @@ Successful response contains:
     "displayName": "<display name>",
     "isWorkspaceSuperAdmin": false,
     "groupKeys": ["<current identity group key>"],
+    "applicationRoleKey": "USER",
     "credentialVersion": 1,
     "employeeRevision": 1
   },
@@ -44,6 +45,8 @@ Successful response contains:
   }
 }
 ```
+
+`applicationRoleKey` is optional. It is present only when the target Workspace Application enables a reviewed coarse compatibility-role mode. Consumers must not assume every Application has this field.
 
 The caller must not persist the password. The raw session token is returned only on login and must not be logged.
 
@@ -59,6 +62,28 @@ Authentication requires all of the following:
 - effective Application Access exists through the protected Workspace highest authority, a direct Employee grant, or an active Identity Group grant.
 
 Ordinary Identity Groups are data-driven. Consumers must not reconstruct a fixed `EMPLOYEE / ADMIN / SUPER_ADMIN` enum from `groupKeys`. Workspace highest-authority semantics use `isWorkspaceSuperAdmin` separately.
+
+## Effective Application role projection
+
+An Application may opt into the generic `USER_ADMIN` compatibility-role mode on its Workspace Application record. This is for consumer compatibility only; it is not a universal Identity role model.
+
+When the mode is enabled, CYCloud Identity computes `principal.applicationRoleKey` server-side using current authority:
+
+1. Workspace highest authority → `SUPER_ADMIN`.
+2. Otherwise any active Group grant mapped `ADMIN` → `ADMIN`.
+3. Otherwise any active Group grant mapped `USER` → `USER`.
+4. Otherwise an active direct Employee Application grant → `USER`.
+5. Otherwise the Employee has no effective Application access.
+
+Therefore the deterministic precedence is:
+
+```text
+SUPER_ADMIN > ADMIN > USER
+```
+
+Ordinary Group mappings may store only `USER` or `ADMIN`. They can never create `SUPER_ADMIN` authority.
+
+Applications without compatibility-role mode omit `applicationRoleKey`. Fine-grained module/business permissions remain inside the consumer App.
 
 ## Resolve session
 
@@ -78,9 +103,12 @@ A successful response returns current `principal` plus session expiry. Resolve r
 - Employee remains enabled;
 - credential version still matches;
 - Application remains active/enabled for the Workspace;
-- current highest-authority/direct/group Application Access still permits entry.
+- current highest-authority/direct/group Application Access still permits entry;
+- when compatibility-role mode is enabled, `applicationRoleKey` is recomputed from current authority.
 
 Normal resolve is read-only and does not use sliding heartbeat writes.
+
+This means a Group membership/access-role change can change the projected compatibility role on the next resolve without copying role state into the consumer App or Identity session row.
 
 ## Logout
 
@@ -129,6 +157,7 @@ A consumer App should depend on this contract through its own provider/adapter b
 - copy credential/OTP/recovery tables into its own database;
 - persist credential verifiers returned from another service;
 - hard-code actual Workspace IDs or Application access matrices in Public source;
-- infer highest Workspace authority from an editable Identity Group name.
+- infer highest Workspace authority from an editable Identity Group name;
+- reconstruct compatibility roles from Group display names instead of using `applicationRoleKey` when the Application contract enables it.
 
 App-specific module/business permissions remain inside each App after Identity authenticates the principal.
