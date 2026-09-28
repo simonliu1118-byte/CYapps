@@ -1,4 +1,15 @@
+import {
+  handleChangeOwnPassword,
+  handleConfirmOwnEmailChange,
+  handleConfirmPasswordRecovery,
+  handleStartOwnEmailChange,
+  handleStartPasswordRecovery,
+} from "./account-lifecycle";
 import { handleLogin, handleLogout, handleResolveSession } from "./auth";
+import {
+  handleConfirmHighestAuthorityTransfer,
+  handleStartHighestAuthorityTransfer,
+} from "./authority-transfer";
 import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import { json, requestIdFrom } from "./http";
 import {
@@ -58,12 +69,40 @@ export default {
         return await handleLogout(request, env, requestId);
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/identity/password/change") {
+        return await handleChangeOwnPassword(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/identity/email-change/start") {
+        return await handleStartOwnEmailChange(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/identity/email-change/confirm") {
+        return await handleConfirmOwnEmailChange(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/identity/password-recovery/start") {
+        return await handleStartPasswordRecovery(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/identity/password-recovery/confirm") {
+        return await handleConfirmPasswordRecovery(request, env, requestId);
+      }
+
       if (request.method === "GET" && url.pathname === "/v1/admin/security-policy") {
         return await handleGetSecurityPolicy(request, env, requestId);
       }
 
       if (request.method === "PUT" && url.pathname === "/v1/admin/security-policy") {
         return await handleUpdateSecurityPolicy(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/admin/authority-transfer/start") {
+        return await handleStartHighestAuthorityTransfer(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/admin/authority-transfer/confirm") {
+        return await handleConfirmHighestAuthorityTransfer(request, env, requestId);
       }
 
       if (request.method === "GET" && url.pathname === "/v1/admin/identity/snapshot") {
