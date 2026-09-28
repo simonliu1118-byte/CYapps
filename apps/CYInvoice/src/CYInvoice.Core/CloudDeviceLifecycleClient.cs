@@ -69,9 +69,14 @@ public sealed class CloudDeviceLifecycleClient
         var devices = new List<CloudManagedDevice>();
         foreach (var device in devicesElement.EnumerateArray())
             devices.Add(ReadDevice(device));
-        if (devices.All(device => !device.Current || device.DeviceId != currentDeviceId))
-            throw new InvalidDataException("Cloud Device response does not identify the current Device.");
-        if (activeDeviceCount != devices.Count(device => device.Status == "active"))
+
+        var currentDevices = devices.Where(device => device.Current).ToArray();
+        if (currentDevices.Length != 1
+            || !string.Equals(currentDevices[0].DeviceId, currentDeviceId, StringComparison.Ordinal)
+            || currentDevices[0].Status != "active")
+            throw new InvalidDataException("Cloud Device response must identify exactly one current active Device.");
+        if (activeDeviceCount < 1
+            || activeDeviceCount != devices.Count(device => device.Status == "active"))
             throw new InvalidDataException("Cloud Device active count is inconsistent.");
 
         return new CloudManagedDeviceList(currentDeviceId, activeDeviceCount, devices);
