@@ -17,6 +17,7 @@
 9. Device Token 不寄 Email、不寫 log、不存 Cloud 明文；Windows protected storage 保存，Cloud 只存 hash。
 10. Identity matching 不使用姓名猜測；只使用 Employee No + Email 的明確規則。
 11. Cloud 是協作／中央身分服務，不是發票業務 kill switch；AMEGO 仍是發票／作廢／折讓官方真相。
+12. 已完成 Cloud cutover 的電腦若選擇改回單機版，視為**本機恢復首次使用狀態**：必須雙重確認本機資料將全部清除，清除既有本機資料、Cloud Device identity／token、Employee cache 與 Local EmployeeStore，重新進入首次使用流程；Cloud Workspace 與其他 Device／中央 Employee 不因單一電腦退出而刪除。
 
 ## 2. Local Mode
 
@@ -173,6 +174,7 @@ Cutover 後：
 - Local EmployeeStore 不再作權限 authority。
 - 本機 Cloud Employee cache 只供顯示、離線驗證與安全 fallback。
 - Cloud 更新成功後，各 Device 重新抓 Employee snapshot 更新 cache。
+- 「切回單機版」不是復活舊 Local authority，而是執行第 8.1 節的破壞性本機重置。
 
 ## 7. Cloud Mode execution-time authentication
 
@@ -188,6 +190,8 @@ Offline：本機以最後同步的 protected Cloud credential cache 驗證
   ↓
 只授權此次操作
 ```
+
+Cloud 可連線時，任何 Employee 密碼／權限驗證必須使用當下最新 Cloud authority，不得因其他 Device 尚未等到週期同步而只相信舊本機 cache。新建 Employee、停用、role 或 password 變更在其他 Device 的下一次權限驗證即應生效；成功取得最新 snapshot 時同步刷新本機 cache。
 
 開啟帳號管理視窗時驗證過某個帳號，不代表後續帳號異動可以沿用該身分。新增、修改、role、enabled、password、conflict resolution、SUPER_ADMIN transfer 等敏感動作仍須執行時重新驗證。
 
@@ -222,6 +226,34 @@ Cloud Mode / Offline
 - Device / Workspace 管理。
 
 因此不需要設計「A 離線改一次、B 又改一次、上線再 merge」的雙主帳號衝突機制。
+
+### 8.1 Cloud → Local destructive reset
+
+使用者在已完成 Cloud cutover 的電腦選擇「單機版」時，不允許單純把 `CloudMode` flag 改回 `LocalOnly`。正式行為如下：
+
+```text
+使用者選擇切換單機版
+  ↓
+第一次警告：切換將清除這台電腦全部 CYInvoice 本機資料
+  ↓
+第二次明確確認：資料清除後不可由本機復原，需重新建立單機版 SUPER_ADMIN
+  ↓
+停止背景同步／敏感操作
+  ↓
+若當前 Device 已有 Cloud identity，先依正式 Device revoke/retire 規則處理該 Device，避免留下可用的舊 Device Token
+  ↓
+清除本機 Data／Cache／Local EmployeeStore／Cloud Employee cache／Cloud identity、token、pending state 與本機設定
+  ↓
+重新啟動到首次使用狀態
+  ↓
+選擇單機版並重新建立 Local SUPER_ADMIN
+```
+
+此動作只清除**目前這台 Windows 電腦的 CYInvoice 本機資料**；不得刪除既有 Cloud Workspace、其他 Device 或中央 Employee。
+
+之後若再次選擇雲端版，必須視為一台具有全新 Local authority 的裝置，重新走正常的 Local → Cloud 路線：建立／加入 Workspace、建立新的 Device identity，並執行 whole-device Employee Transition。不得沿用被清除前的 Device Token、舊 Cloud cache 或舊 Local authority。
+
+若退出 Cloud 前無法安全完成必要的 Device revoke/retire，正式實作必須 fail-closed 或明確保留可恢復狀態；不可先刪掉唯一可用的本機 Device Token 再留下無法辨識的 active Device。
 
 ## 9. Credential
 
@@ -320,11 +352,12 @@ Cloudflare Worker + D1 是 reference implementation；Windows contract 維持 pr
 
 ## 15. 尚待完成的生命週期
 
-- Remote development deployment + D1 Schema 7 migration 實際驗證。
-- Brevo runtime secrets 完成後 live OTP delivery。
 - A/B 多機 transition / offline / reconnect 實機測試。
+- Cloud 在線 execution-time Employee authority 即時刷新／驗證，避免新建或異動帳號需等背景同步。
+- Cloud → Local 破壞性重置：雙重確認、本機全清、Device revoke/retire、首次使用重新建立 Local SUPER_ADMIN，再次加入 Cloud 走完整 Local → Cloud transition。
 - Device revoke。
 - all-Device-Token-loss Recovery Device flow。
 - 後續 business sync / Work Item / Audit。
+- **延後／非目前阻塞：**評估為 Cloud Employee offline cache 加入 server-signed snapshot／完整性簽章，以偵測刻意修改本機 SQLite 的 role、enabled 等 metadata。除非實際發生竄改事件、威脅模型提高或有稽核需求，否則先保留 TODO，不投入目前版本成本。
 
 任何正式 merge、tag、Release 仍需明確授權。
