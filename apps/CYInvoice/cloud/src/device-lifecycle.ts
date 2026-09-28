@@ -228,10 +228,31 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
       WHERE device_id = ?1 AND workspace_id = ?2
       LIMIT 1`
   ).bind(targetDeviceId, actorDevice.workspaceId).first<DeviceRow>();
-  if (!target)
+  if (!target) {
+    await recordSecurityEvent(env.DB, {
+      workspaceId: actorDevice.workspaceId,
+      type: "device_revoked",
+      outcome: "denied",
+      actorDeviceId: actorDevice.deviceId,
+      actorEmployeeId: superAdmin.employee_id,
+      targetDeviceId,
+      reasonCode: "DEVICE_NOT_FOUND",
+      requestId,
+    });
     return errorResponse(env, requestId, 404, "DEVICE_NOT_FOUND", "Target Device was not found in this Workspace.");
+  }
 
   if (target.status === "revoked") {
+    await recordSecurityEvent(env.DB, {
+      workspaceId: actorDevice.workspaceId,
+      type: "device_revoked",
+      outcome: "success",
+      actorDeviceId: actorDevice.deviceId,
+      actorEmployeeId: superAdmin.employee_id,
+      targetDeviceId,
+      reasonCode: "ALREADY_REVOKED",
+      requestId,
+    });
     return json(env, requestId, 200, {
       device: deviceJson(target, actorDevice.deviceId),
       alreadyRevoked: true,
@@ -282,6 +303,16 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
         LIMIT 1`
     ).bind(targetDeviceId, actorDevice.workspaceId).first<DeviceRow>();
     if (latest?.status === "revoked") {
+      await recordSecurityEvent(env.DB, {
+        workspaceId: actorDevice.workspaceId,
+        type: "device_revoked",
+        outcome: "success",
+        actorDeviceId: actorDevice.deviceId,
+        actorEmployeeId: superAdmin.employee_id,
+        targetDeviceId,
+        reasonCode: "ALREADY_REVOKED",
+        requestId,
+      });
       return json(env, requestId, 200, {
         device: deviceJson(latest, actorDevice.deviceId),
         alreadyRevoked: true,
@@ -329,9 +360,24 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
 export async function handleDeviceLifecycle(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
   const requestId = requestIdFrom(request);
-  if (request.method === "GET" && url.pathname === "/v1/devices")
-    return listDevices(request, env, requestId);
-  if (request.method === "POST" && url.pathname === "/v1/devices/revoke")
-    return revokeDevice(request, env, requestId);
-  return null;
+  try {
+    if (request.method === "GET" && url.pathname === "/v1/devices")
+      return await listDevices(request, env, requestId);
+    if (request.method === "POST" && url.pathname === "/v1/devices/revoke")
+      return await revokeDevice(request, env, requestId);
+    return null;
+  } catch (error) {
+    console.error("device_lifecycle_request_failed", {
+      requestId,
+      path: url.pathname,
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+    return errorResponse(
+      env,
+      requestId,
+      500,
+      "DEVICE_LIFECYCLE_REQUEST_FAILED",
+      "Device lifecycle request could not be completed.",
+    );
+  }
 }
