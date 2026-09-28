@@ -1,4 +1,5 @@
 import baseWorker from "./worker";
+import { handleDeviceLifecycle } from "./device-lifecycle";
 import { handleEmployeeTransition } from "./employee-transition";
 import { handleEmployeeTransitionActions } from "./employee-transition-actions";
 import { handleEmployeeTransitionConflicts } from "./employee-transition-conflicts";
@@ -34,6 +35,9 @@ export default {
 
     const webAuthResponse = await handleWebAuth(request, env);
     if (webAuthResponse) return webAuthResponse;
+
+    const deviceLifecycleResponse = await handleDeviceLifecycle(request, env);
+    if (deviceLifecycleResponse) return deviceLifecycleResponse;
 
     const employeePasswordRecoveryResponse = await handleEmployeePasswordRecovery(request, env);
     if (employeePasswordRecoveryResponse) return employeePasswordRecoveryResponse;
