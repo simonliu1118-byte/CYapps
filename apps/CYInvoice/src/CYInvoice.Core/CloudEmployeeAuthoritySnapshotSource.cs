@@ -4,6 +4,8 @@ namespace CYInvoice.Core.Storage;
 
 public interface ICloudEmployeeAuthoritySnapshotSource
 {
+    string CurrentWorkspaceId { get; }
+
     Task<CloudEmployeeAuthoritySnapshot> GetCurrentSnapshotAsync(
         CancellationToken cancellationToken = default);
 }
@@ -29,6 +31,18 @@ public sealed class ConfiguredCloudEmployeeAuthoritySnapshotSource : ICloudEmplo
     {
         this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
         this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+    }
+
+    public string CurrentWorkspaceId
+    {
+        get
+        {
+            var current = settings.LoadOrCreate();
+            var workspaceId = current.CloudWorkspaceId.Trim();
+            if (workspaceId.Length == 0)
+                throw new InvalidOperationException("Cloud Workspace identity 不完整。");
+            return workspaceId;
+        }
     }
 
     public async Task<CloudEmployeeAuthoritySnapshot> GetCurrentSnapshotAsync(
