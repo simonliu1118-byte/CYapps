@@ -94,7 +94,9 @@ public sealed class LocalRepository
         var identityRuntime = new IdentityProviderRuntime(
             settings,
             new LocalIdentityProvider(employees),
-            new BuiltInCloudIdentityProvider(cloudEmployees));
+            new BuiltInCloudIdentityProvider(
+                cloudEmployees,
+                new ConfiguredCloudEmployeeAuthoritySnapshotSource(settings)));
         invoices.LoadOrCreate();
         buyerNames.LoadOrCreate();
 
