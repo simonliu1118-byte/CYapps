@@ -117,31 +117,62 @@ public sealed class LocalIdentityProvider(EmployeeStore employees) : IIdentityPr
     }
 }
 
-public sealed class BuiltInCloudIdentityProvider(CloudEmployeeCacheStore employees) : IIdentityProvider
+public sealed class BuiltInCloudIdentityProvider : IIdentityProvider
 {
-    private readonly CloudEmployeeCacheStore employees = employees ?? throw new ArgumentNullException(nameof(employees));
+    private readonly CloudEmployeeCacheStore employees;
+    private readonly ICloudEmployeeAuthoritySnapshotSource authority;
+
+    public BuiltInCloudIdentityProvider(
+        CloudEmployeeCacheStore employees,
+        ICloudEmployeeAuthoritySnapshotSource authority)
+    {
+        this.employees = employees ?? throw new ArgumentNullException(nameof(employees));
+        this.authority = authority ?? throw new ArgumentNullException(nameof(authority));
+    }
 
     public IdentityProviderKind Kind => IdentityProviderKind.BuiltInCloud;
     public bool OwnsAccountManagement => true;
 
-    public Task<AppPrincipal?> AuthenticateAsync(
+    public async Task<AppPrincipal?> AuthenticateAsync(
         IdentityAuthenticationRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(ToPrincipal(employees.Authenticate(request.EmployeeNo, request.Password)));
+        await RefreshCacheFromCurrentAuthorityAsync(cancellationToken).ConfigureAwait(false);
+        return ToPrincipal(employees.Authenticate(request.EmployeeNo, request.Password));
     }
 
-    public Task<AppPrincipal?> RefreshPrincipalAsync(
+    public async Task<AppPrincipal?> RefreshPrincipalAsync(
         string employeeNo,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await RefreshCacheFromCurrentAuthorityAsync(cancellationToken).ConfigureAwait(false);
         var normalized = (employeeNo ?? string.Empty).Trim();
         var account = employees.LoadAll().FirstOrDefault(candidate =>
             string.Equals(candidate.EmployeeNo, normalized, StringComparison.Ordinal));
-        return Task.FromResult(ToPrincipal(account));
+        return ToPrincipal(account);
+    }
+
+    private async Task RefreshCacheFromCurrentAuthorityAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var snapshot = await authority.GetCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            employees.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
+        }
+        catch (HttpRequestException)
+        {
+            // A genuine transport failure is the approved Offline boundary.
+            // The last successfully synchronized protected cache remains trusted.
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The Cloud request timed out rather than being cancelled by the caller.
+            // Treat timeout as temporary network unreachability and use the last
+            // trusted protected cache. Caller cancellation must still propagate.
+        }
     }
 
     private static AppPrincipal? ToPrincipal(CloudEmployeeCachedAccount? account)
