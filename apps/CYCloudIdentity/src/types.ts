@@ -1,5 +1,6 @@
 export interface Env {
   DB: D1Database;
+  LOGIN_RATE_LIMITER?: RateLimit;
   APP_ENV?: string;
   API_VERSION?: string;
   SESSION_TTL_SECONDS?: string;
