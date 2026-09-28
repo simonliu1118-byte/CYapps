@@ -13,6 +13,8 @@ export interface Env {
   BOOTSTRAP_SECRET?: string;
 }
 
+export type ApplicationRoleKey = "USER" | "ADMIN" | "SUPER_ADMIN";
+
 export interface IdentityPrincipal {
   workspaceId: string;
   employeeId: string;
@@ -20,6 +22,7 @@ export interface IdentityPrincipal {
   displayName: string;
   isWorkspaceSuperAdmin: boolean;
   groupKeys: string[];
+  applicationRoleKey?: ApplicationRoleKey;
   credentialVersion: number;
   employeeRevision: number;
 }
