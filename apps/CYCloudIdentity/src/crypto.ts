@@ -1,9 +1,13 @@
-import { pbkdf2 as nodePbkdf2 } from "node:crypto";
+import { scrypt as nodeScrypt } from "node:crypto";
 
-const PBKDF2_ALGORITHM = "pbkdf2-sha256";
-export const DEFAULT_PBKDF2_ITERATIONS = 210_000;
-const MIN_PBKDF2_ITERATIONS = 100_000;
-const MAX_PBKDF2_ITERATIONS = 2_000_000;
+export const CURRENT_CREDENTIAL_ALGORITHM = "scrypt";
+const LEGACY_PBKDF2_ALGORITHM = "pbkdf2-sha256";
+const LEGACY_PBKDF2_MAX_ITERATIONS = 100_000;
+const SCRYPT_N = 16_384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+const SCRYPT_KEY_LENGTH = 32;
+const SCRYPT_MAX_MEMORY = 64 * 1024 * 1024;
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 16;
 const SESSION_TOKEN_PREFIX = "cyid_";
@@ -30,18 +34,50 @@ function constantTimeEquals(left: Uint8Array, right: Uint8Array): boolean {
   return difference === 0;
 }
 
-async function derivePbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+async function deriveScrypt(
+  password: string,
+  salt: Uint8Array,
+  n = SCRYPT_N,
+  r = SCRYPT_R,
+  p = SCRYPT_P,
+): Promise<Uint8Array> {
   const passwordBytes = new TextEncoder().encode(password);
   const saltCopy = Uint8Array.from(salt);
   return new Promise<Uint8Array>((resolve, reject) => {
-    nodePbkdf2(passwordBytes, saltCopy, iterations, 32, "sha256", (error, derivedKey) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(Uint8Array.from(derivedKey));
-    });
+    nodeScrypt(
+      passwordBytes,
+      saltCopy,
+      SCRYPT_KEY_LENGTH,
+      { N: n, r, p, maxmem: SCRYPT_MAX_MEMORY },
+      (error, derivedKey) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(Uint8Array.from(derivedKey));
+      },
+    );
   });
+}
+
+async function deriveLegacyPbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  return new Uint8Array(await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: Uint8Array.from(salt),
+      iterations,
+    },
+    key,
+    256,
+  ));
 }
 
 export function normalizePassword(value: unknown): string | null {
@@ -51,37 +87,52 @@ export function normalizePassword(value: unknown): string | null {
   return value;
 }
 
-export async function createCredentialVerifier(
-  password: string,
-  iterations = DEFAULT_PBKDF2_ITERATIONS,
-): Promise<string> {
+export async function createCredentialVerifier(password: string): Promise<string> {
   if (!normalizePassword(password)) throw new Error("password does not satisfy credential bounds");
-  if (!Number.isInteger(iterations) || iterations < MIN_PBKDF2_ITERATIONS || iterations > MAX_PBKDF2_ITERATIONS)
-    throw new Error("PBKDF2 iterations are outside accepted bounds");
-
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const derived = await derivePbkdf2(password, salt, iterations);
-  return `${PBKDF2_ALGORITHM}$${iterations}$${toHex(salt)}$${toHex(derived)}`;
+  const derived = await deriveScrypt(password, salt);
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${toHex(salt)}$${toHex(derived)}`;
 }
 
-export async function verifyCredential(password: string, verifier: string): Promise<boolean> {
-  if (typeof verifier !== "string") return false;
+async function verifyScrypt(password: string, verifier: string): Promise<boolean> {
   const parts = verifier.toLowerCase().split("$");
-  if (parts.length !== 4 || parts[0] !== PBKDF2_ALGORITHM) return false;
-
-  const iterations = Number.parseInt(parts[1], 10);
-  const salt = fromHex(parts[2]);
-  const expected = fromHex(parts[3]);
-  if (!Number.isInteger(iterations) || iterations < MIN_PBKDF2_ITERATIONS || iterations > MAX_PBKDF2_ITERATIONS)
-    return false;
-  if (!salt || salt.length < 16 || salt.length > 64 || !expected || expected.length !== 32) return false;
-
+  if (parts.length !== 6 || parts[0] !== CURRENT_CREDENTIAL_ALGORITHM) return false;
+  const n = Number.parseInt(parts[1], 10);
+  const r = Number.parseInt(parts[2], 10);
+  const p = Number.parseInt(parts[3], 10);
+  const salt = fromHex(parts[4]);
+  const expected = fromHex(parts[5]);
+  if (n !== SCRYPT_N || r !== SCRYPT_R || p !== SCRYPT_P) return false;
+  if (!salt || salt.length !== 16 || !expected || expected.length !== SCRYPT_KEY_LENGTH) return false;
   try {
-    const actual = await derivePbkdf2(password, salt, iterations);
+    const actual = await deriveScrypt(password, salt, n, r, p);
     return constantTimeEquals(actual, expected);
   } catch {
     return false;
   }
+}
+
+async function verifyLegacyPbkdf2(password: string, verifier: string): Promise<boolean> {
+  const parts = verifier.toLowerCase().split("$");
+  if (parts.length !== 4 || parts[0] !== LEGACY_PBKDF2_ALGORITHM) return false;
+  const iterations = Number.parseInt(parts[1], 10);
+  const salt = fromHex(parts[2]);
+  const expected = fromHex(parts[3]);
+  if (!Number.isInteger(iterations) || iterations < 1 || iterations > LEGACY_PBKDF2_MAX_ITERATIONS) return false;
+  if (!salt || salt.length < 16 || salt.length > 64 || !expected || expected.length !== 32) return false;
+  try {
+    const actual = await deriveLegacyPbkdf2(password, salt, iterations);
+    return constantTimeEquals(actual, expected);
+  } catch {
+    return false;
+  }
+}
+
+export async function verifyCredential(password: string, algorithm: string, verifier: string): Promise<boolean> {
+  if (!normalizePassword(password) || typeof algorithm !== "string" || typeof verifier !== "string") return false;
+  if (algorithm === CURRENT_CREDENTIAL_ALGORITHM) return verifyScrypt(password, verifier);
+  if (algorithm === LEGACY_PBKDF2_ALGORITHM) return verifyLegacyPbkdf2(password, verifier);
+  return false;
 }
 
 export async function sha256Hex(value: string): Promise<string> {
