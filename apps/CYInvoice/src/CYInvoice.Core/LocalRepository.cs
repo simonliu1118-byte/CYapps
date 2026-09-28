@@ -52,11 +52,12 @@ public sealed class LocalRepository
             ? CloudEmployees.LoadAll().Select(ToEmployeeAccount).ToArray()
             : Employees.LoadAll();
 
-    public AppPrincipal? AuthenticatePrincipal(string employeeNo, string password) =>
-        IdentityProvider
-            .AuthenticateAsync(new IdentityAuthenticationRequest(employeeNo, password))
-            .GetAwaiter()
-            .GetResult();
+    public AppPrincipal? AuthenticatePrincipal(string employeeNo, string password)
+    {
+        var provider = IdentityProvider;
+        var request = new IdentityAuthenticationRequest(employeeNo, password);
+        return Task.Run(() => provider.AuthenticateAsync(request)).GetAwaiter().GetResult();
+    }
 
     public EmployeeAccount? AuthenticateEmployee(string employeeNo, string password)
     {
@@ -94,7 +95,7 @@ public sealed class LocalRepository
         var identityRuntime = new IdentityProviderRuntime(
             settings,
             new LocalIdentityProvider(employees),
-            new BuiltInCloudIdentityProvider(cloudEmployees));
+            new BuiltInCloudIdentityProvider(settings, cloudEmployees));
         invoices.LoadOrCreate();
         buyerNames.LoadOrCreate();
 
