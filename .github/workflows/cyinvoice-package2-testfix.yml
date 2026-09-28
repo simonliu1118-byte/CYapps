@@ -1,0 +1,44 @@
+name: CYInvoice Package 2 Test Fixture Fix
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'cyinvoice/fix-cloud-authority-freshness'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Fix complete-snapshot test fixture
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('apps/CYInvoice/tests/CYInvoice.Cloud.Tests/IdentityProviderFreshnessTests.cs')
+          text = path.read_text(encoding='utf-8')
+          old = '''        {\n            var payload = JsonSerializer.Serialize(new\n            {\n                ok = true,\n                employeeSnapshot = new\n                {\n                    workspaceId,\n                    workspaceRevision,\n                    employees = employees.Select(employee => new'''
+          new = '''        {\n            var snapshotEmployees = employees.Any(employee => employee.Role == EmployeeRoles.SuperAdmin)\n                ? employees.ToArray()\n                : new[]\n                {\n                    Seed("emp_super", "0001", "Cloud Admin", "admin@example.test", EmployeeRoles.SuperAdmin, "AdminPass1", 1, 1),\n                }.Concat(employees).ToArray();\n            var payload = JsonSerializer.Serialize(new\n            {\n                ok = true,\n                employeeSnapshot = new\n                {\n                    workspaceId,\n                    workspaceRevision,\n                    employees = snapshotEmployees.Select(employee => new'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected snapshot fixture pattern once, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          Path('.github/workflows/cyinvoice-package2-testfix.yml').unlink()
+      - name: Validate fixture patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          grep -q 'snapshotEmployees' apps/CYInvoice/tests/CYInvoice.Cloud.Tests/IdentityProviderFreshnessTests.cs
+      - name: Commit fixture fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/CYInvoice/tests/CYInvoice.Cloud.Tests/IdentityProviderFreshnessTests.cs .github/workflows/cyinvoice-package2-testfix.yml
+          git commit -m 'test(CYInvoice): use complete authority snapshots in freshness tests'
+          git push origin HEAD:${{ github.head_ref }}
