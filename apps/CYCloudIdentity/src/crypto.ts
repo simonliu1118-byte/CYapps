@@ -2,6 +2,8 @@ const PBKDF2_ALGORITHM = "pbkdf2-sha256";
 export const DEFAULT_PBKDF2_ITERATIONS = 210_000;
 const MIN_PBKDF2_ITERATIONS = 100_000;
 const MAX_PBKDF2_ITERATIONS = 2_000_000;
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_LENGTH = 16;
 const SESSION_TOKEN_PREFIX = "cyid_";
 
 function toHex(bytes: Uint8Array): string {
@@ -48,7 +50,9 @@ async function derivePbkdf2(password: string, salt: Uint8Array, iterations: numb
 }
 
 export function normalizePassword(value: unknown): string | null {
-  if (typeof value !== "string" || value.length < 8 || value.length > 200) return null;
+  if (typeof value !== "string") return null;
+  const length = Array.from(value).length;
+  if (length < MIN_PASSWORD_LENGTH || length > MAX_PASSWORD_LENGTH) return null;
   return value;
 }
 

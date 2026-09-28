@@ -22,6 +22,7 @@
 ## 3. Credential／Session／OTP
 
 - Password 明文不得儲存、寫 log、進 Git、進 Audit 或進 backup metadata；credential verifier 只能存在 Shared Identity authority。
+- Password 長度固定為 8–16 字元，所有 consumer App 必須遵循 CYCloud Identity 的同一驗證規則，不得自行放寬或縮限。
 - Browser session token 只在 client cookie 保存原值；server 只保存不可逆 hash。Session 必須有 application、workspace、employee 與 expiry 邊界。
 - 一般 session resolve 不採 sliding-write heartbeat；避免無意義 D1 writes。Logout、停用、credential version 變更與 application access 失效必須可使 session 失效。
 - OTP 必須 purpose-scoped、single-use、有 expiry、錯誤次數限制與 resend cooldown；不同 purpose 的 OTP 不得互相重放。
