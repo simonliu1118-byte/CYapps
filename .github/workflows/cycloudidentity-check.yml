@@ -24,6 +24,9 @@ jobs:
       - name: Validate D1 identity foundation
         run: python3 apps/CYCloudIdentity/scripts/validate_schema.py
 
+      - name: Validate bootstrap and email budget migrations
+        run: python3 apps/CYCloudIdentity/scripts/validate_bootstrap_schema.py
+
       - name: Scan CYCloud Identity public source
         run: python3 .github/scripts/scan-public-package.py apps/CYCloudIdentity
 
