@@ -1,14 +1,11 @@
 PRAGMA defer_foreign_keys = ON;
-PRAGMA legacy_alter_table = ON;
 
 -- CYInvoice's canonical application roles are SUPER_ADMIN / ADMIN / USER.
 -- Rebuild the two role-constrained tables so storage no longer accepts EMPLOYEE.
 -- Any pre-release development row that still contains EMPLOYEE is normalized once
 -- during this migration; runtime code does not keep an EMPLOYEE compatibility alias.
 
-ALTER TABLE cloud_employees RENAME TO cloud_employees_schema9;
-
-CREATE TABLE cloud_employees (
+CREATE TABLE cloud_employees_schema10 (
     employee_id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL,
     employee_no TEXT NOT NULL,
@@ -34,7 +31,7 @@ CREATE TABLE cloud_employees (
     CHECK(role <> 'SUPER_ADMIN' OR enabled = 1)
 );
 
-INSERT INTO cloud_employees (
+INSERT INTO cloud_employees_schema10 (
     employee_id, workspace_id, employee_no, name, email_normalized,
     email_verified_at, role, enabled, source_device_id, created_at, updated_at,
     credential_verifier, credential_algorithm, credential_version,
@@ -56,9 +53,10 @@ SELECT employee_id,
        credential_version,
        credential_updated_at,
        revision
-  FROM cloud_employees_schema9;
+  FROM cloud_employees;
 
-DROP TABLE cloud_employees_schema9;
+DROP TABLE cloud_employees;
+ALTER TABLE cloud_employees_schema10 RENAME TO cloud_employees;
 
 CREATE UNIQUE INDEX idx_cloud_employees_workspace_employee_no
     ON cloud_employees (workspace_id, employee_no);
@@ -72,9 +70,7 @@ CREATE INDEX idx_cloud_employees_workspace_role
 CREATE INDEX idx_cloud_employees_workspace_revision
     ON cloud_employees (workspace_id, revision);
 
-ALTER TABLE employee_transition_items RENAME TO employee_transition_items_schema9;
-
-CREATE TABLE employee_transition_items (
+CREATE TABLE employee_transition_items_schema10 (
     transition_item_id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
@@ -117,7 +113,7 @@ CREATE TABLE employee_transition_items (
     CHECK(length(trim(local_email_normalized)) BETWEEN 3 AND 320)
 );
 
-INSERT INTO employee_transition_items (
+INSERT INTO employee_transition_items_schema10 (
     transition_item_id, workspace_id, device_id, local_employee_no, local_name,
     local_email_normalized, local_role, suggested_cloud_role, state, match_kind,
     matched_employee_id, employee_no_match_id, email_match_id,
@@ -140,9 +136,10 @@ SELECT transition_item_id,
        updated_at,
        resolved_at,
        local_enabled
-  FROM employee_transition_items_schema9;
+  FROM employee_transition_items;
 
-DROP TABLE employee_transition_items_schema9;
+DROP TABLE employee_transition_items;
+ALTER TABLE employee_transition_items_schema10 RENAME TO employee_transition_items;
 
 CREATE INDEX idx_employee_transition_device_state
     ON employee_transition_items (device_id, state, local_employee_no);
@@ -152,6 +149,5 @@ CREATE INDEX idx_employee_transition_matched_employee
     ON employee_transition_items (matched_employee_id)
     WHERE matched_employee_id IS NOT NULL;
 
-PRAGMA legacy_alter_table = OFF;
 PRAGMA defer_foreign_keys = OFF;
 PRAGMA foreign_key_check;
