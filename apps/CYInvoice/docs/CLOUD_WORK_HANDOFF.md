@@ -1,19 +1,19 @@
 # CYInvoice Cloud Work Handoff
 
-更新日期：2026-09-26
+更新日期：2026-09-28
 
 ## 接手摘要（以此節為目前狀態；下方舊階段紀錄保留歷史脈絡）
 
 - Repository：`simonliu1118-byte/CYapps`。目前工作為 Draft [PR #121](https://github.com/simonliu1118-byte/CYapps/pull/121)，branch `cyinvoice/feat-cloud-security-audit`，疊在 PR #100 branch `cyinvoice/fix-v264-build2-ui-review-details` 上；PR #100 再承接 PR #73。接手時先讀 Git 上最新 head、三層永久規則與本文件，不以舊階段的版本／待辦敘述覆蓋此節。
-- PR #121 最新工程原始碼：**CYInvoice V2.6.6 Build 4**、Cloud `0.8.5`／API `1`／D1 migration `0009`（source storage Schema `9`）。Build 4 修正 Cloud 跨版本相容策略；CI Run #36039794681 / workflow Run #255 的 `validate`、Windows x64 build、WinForms startup smoke、Cloud contract tests、跨版本 regression 與工程包產出均成功。Artifact：`CYInvoice_cloud-foundation_engineering-run255`，SHA-256 `5ba818446d357e054dbefe13b04bca2cb6ba6f43637fbc85ccfe431bebc1ea43`。**尚未執行 Cloudflare remote migration／Worker 部署、merge 或正式 release。**
-- A 機恢復與向下相容驗收均已實機通過。第一階段：原 A 機、原 Windows 使用者帳戶、原 `Data` 搭配 PR #100 V2.6.5 Build 4（Run #36015789588，Artifact `CYInvoice_V2.6.5_Build4_engineering-run229`）可正常重新連回 development Cloud。第二階段：同一 A 機以原 `Data` 搭配 PR #121 **V2.6.6 Build 4 / Run255**，也可直接連目前仍是 Schema 8 的 development Cloud，沒有 Schema incompatibility，也不需重建 Workspace／Device。
-- **Run229 暫時保留作 rollback 基準，不刪除。** 建議獨立保存整個 Run229 測試資料夾與其中已驗證可用的 `Data`。等 migration `0009` + Worker `0.8.5` 上線後，A 機以 Run255 完成既有功能與重新啟動驗收，必要時再用 Run229 驗證 legacy API 1 正常連線；全部通過後才可刪除 Run229 備份。
-- development 遠端目前仍以先前唯讀查核為準：1 個 Workspace、1 台 active A Device、Cloud Employee authority 已完成；遠端 D1 為 Schema 8。PR #121 的 migration `0009` 尚未套用。不要重新 bootstrap、不要清空 D1、不要重新建立 Workspace。
-- **版本相容策略已修正並完成 A 機實測**：Windows `CloudCompatibility.Problem()` 不再用 D1 migration 編號完全相等作硬性 gate，仍嚴格檢查 CYInvoice service、storage readiness 與 API version。Worker `/v1/health` 在 API 1 保留 `schemaVersion=8` 作為已發布 V2.6.5 Build 4 的 legacy compatibility marker，實際 D1 migration 另以 `storageSchemaVersion` 回報，並附 capabilities／minimum client metadata。Run255 對目前 remote Schema 8 的實機成功，已證明「新 Client + 舊 Worker／Schema」的向下相容路徑可用。
+- PR #121 最新工程原始碼：**CYInvoice V2.6.6 Build 4**、Cloud `0.8.5`／API `1`／D1 migration `0009`（storage Schema `9`）。Build 4 修正 Cloud 跨版本相容策略；CI Run #36039794681 / workflow Run #255 的 `validate`、Windows x64 build、WinForms startup smoke、Cloud contract tests、跨版本 regression 與工程包產出均成功。Artifact：`CYInvoice_cloud-foundation_engineering-run255`，SHA-256 `5ba818446d357e054dbefe13b04bca2cb6ba6f43637fbc85ccfe431bebc1ea43`。
+- **development remote 已完成 staged deployment**：repository canonical migration `0009_device_invites_and_audit.sql` 已由 Wrangler 正式套用且只執行一次；之後使用 repository Wrangler deploy 成功部署 `cyinvoice-cloud-dev` 至 Cloud `0.8.5`。remote D1 目前為 Schema `9`，Worker 為 Cloud `0.8.5` / API `1`。沒有手動 SQL、沒有重建 Workspace／Device、沒有 merge、tag 或正式 Release。
+- 部署後 remote 唯讀核對正常：仍為 1 Workspace、1 active A Device、1 Employee；Cloud authority 與關聯正常。`/v1/health` 實測 service `cyinvoice-cloud`、storage `ok`、Cloud `0.8.5`、API `1`、legacy compatibility `schemaVersion=8`、實際 `storageSchemaVersion=9`；六項 capabilities 均回傳；minimum client `2.6.5`、recommended client `2.6.6`。
+- **A 機目前所有相容／部署驗收均已實機通過。** 先以原 `Data` + PR #100 V2.6.5 Build 4 / Run229 成功恢復舊 Schema 8 Cloud；再以原 `Data` + PR #121 V2.6.6 Build 4 / Run255 對舊 Schema 8 Worker 完成向下相容驗證；migration `0009` 後在 Schema 9 + 舊 Worker 0.8.3 中間狀態仍正常；最後 Worker 0.8.5 部署後，Run255 的 Cloud 連線、帳號／員工、已開立清單、重新整理及完整關閉重開均正常。
+- **Run229 暫時仍保留作 rollback 基準。** A 機本身已不需要靠 Run229 才能連線，但在 B 機新裝置加入流程尚未驗收前先不刪除。等配對碼／邀請碼等新加入路徑至少完成實機驗收，再決定是否清除 Run229 備份。
+- **目前下一個阻塞項是 B 機新裝置加入實機驗收。** 正式加入方式只有「配對碼」與「邀請碼」；Workspace ID＋超管直接加入已移除。先以乾淨、獨立的 B 機 Run255 測試一條加入路徑，不複製 A 機 `Data`、不重新 bootstrap、不建立新 Workspace。成功後核對 A 端加入狀態、B 端 Workspace identity、Cloud Employee authority 與重新啟動；再規劃第二條加入路徑，避免無意留下多餘 active Device。
 - PR #121 曾在 `apiVersion=1` 下移除舊 `/v1/direct-join/*` 並改變配對授權 request shape；因此不能只放寬 Schema 檢查。Build 4 修正後，新 Worker 對已淘汰的 Workspace-ID direct join 與缺少現行超管認證的舊配對核發 shape 明確回 `CLIENT_UPDATE_REQUIRED`，不默默 404、也不降低認證要求；既有 Device 的 API 1 正常操作仍保持可用。跨版本測試同時保護「新 Client + 舊 API 1 storage schema」與「舊 Build 4 + 新 Worker health compatibility」。
-- migration `0009` 為 additive migration：只替 `devices` 增加 nullable `invitation_id`，並新增 `device_invitations`、`security_audit_events` 與索引，沒有 drop／rename／改寫既有核心資料。本輪 SQLite 全 migration 驗證已成功；remote migration 與 Worker 上線仍必須分階段進行。
-- **目前 deployment gate 已開啟，下一步由具 Cloudflare MCP 的本機 Codex 執行受控 development 部署。** 順序固定：① 先做 deployment 前唯讀查核，確認仍為既有 1 Workspace／1 active A Device、Employee authority 正常、remote migration 僅到 `0008`／Schema 8，並保留可回復的 pre-deploy 狀態；② **只套 migration `0009`，先不要部署 Worker**；③ migration 後唯讀核對既有 Workspace／Device／Employee 筆數與關聯不變，A 機 Run255 再開啟驗證既有 Cloud 功能；④ 通過後才部署 Worker `0.8.5`；⑤ 驗證 `/v1/health` 為 API 1、legacy compatibility `schemaVersion=8`、實際 `storageSchemaVersion=9`，並確認 capabilities／minimum client metadata；⑥ A 機 Run255 再驗既有 Workspace／Employee／發票相關操作與重新啟動；⑦ B 機可用時再驗收配對碼、邀請碼、撤銷／重寄、加入狀態及結果不明恢復。任何一步失敗立即停止後續 deployment，不用 fallback 特例繞過正式 authority model。
-- 本輪只允許 development remote migration／Worker 驗證，不 merge PR、不 tag、不正式 Release。受控災難復原與安全操作紀錄查看 UI 仍是後續 TODO。
+- migration `0009` 為 additive migration：只替 `devices` 增加 nullable `invitation_id`，並新增 `device_invitations`、`security_audit_events` 與索引，沒有 drop／rename／改寫既有核心資料。remote 套用與 A 機實測均已通過。
+- 本階段仍禁止自行 merge、tag、正式 Release。B 機加入驗收、安全操作紀錄查看 UI、Device revoke 與「所有原裝置遺失且無有效邀請」的受控災難復原仍是後續工作。
 
 ## 2026-09-25 新裝置加入設計決議
 
@@ -21,9 +21,9 @@
 
 Cloud 安全操作紀錄涵蓋配對、邀請、撤銷與新機加入。紀錄不寫入配對碼、邀請碼、密碼、OTP 或 Device Token 原文。安全操作／稽核紀錄的查看介面列為後續版本 TODO。
 
-目前工作分支已修改 Worker、D1 migration `0009`、Windows 加入視窗、用戶端與跨版本相容層，工程身分為 **CYInvoice V2.6.6 Build 4**、Cloud `0.8.5` / API `1` / storage Schema `9` source。Run #255 已完整通過並產生 `CYInvoice_cloud-foundation_engineering-run255`。A 機已完成 Run229 恢復驗證，且 **V2.6.6 Build 4 / Run255 對目前 Schema 8 development 的實機向下相容驗證也已通過**。本輪尚未部署 Cloudflare、合併或發版；下一步依本文件頂端的 staged deployment gate 執行。
+目前工作分支已修改 Worker、D1 migration `0009`、Windows 加入視窗、用戶端與跨版本相容層，工程身分為 **CYInvoice V2.6.6 Build 4**、Cloud `0.8.5` / API `1` / storage Schema `9`。Run #255 已完整通過並產生 `CYInvoice_cloud-foundation_engineering-run255`。A 機從 Run229 恢復、Run255 對舊 Schema 8 向下相容、Schema 9 中間狀態與 Worker 0.8.5 最終既有功能四個階段均已實機通過。development remote 現已部署 Cloud 0.8.5 / Schema 9；下一步為 B 機新裝置加入實機驗收。
 
-2026-09-26 A 機相容性驗證：先前舊 Windows 客戶端因 Schema 7 vs remote Schema 8 被相容 gate 阻擋，不是 Device identity 遺失。使用者先以 PR #100 V2.6.5 Build 4 / Run229 搭配原 `Data` 成功恢復，再以 PR #121 V2.6.6 Build 4 / Run255 搭配同一份原 `Data` 成功連線 remote Schema 8。這表示 Client 端 schema hard gate 修正已達成預期；現在可進入 migration `0009` 與 Worker `0.8.5` 的分階段 development 部署。若未來所有 active Device 真正遺失且沒有有效邀請，現有兩條常規加入流程無法自行恢復，需另設受控災難復原流程。
+2026-09-26 A 機相容性驗證：先前舊 Windows 客戶端因 Schema 7 vs remote Schema 8 被相容 gate 阻擋，不是 Device identity 遺失。使用者先以 PR #100 V2.6.5 Build 4 / Run229 搭配原 `Data` 成功恢復，再以 PR #121 V2.6.6 Build 4 / Run255 搭配同一份原 `Data` 成功連線 remote Schema 8。這表示 Client 端 schema hard gate 修正已達成預期；後續 2026-09-28 staged deployment 與 A 機最終驗收也已完成。若未來所有 active Device 真正遺失且沒有有效邀請，現有兩條常規加入流程無法自行恢復，需另設受控災難復原流程。
 
 ## PR #100 最新進度
 
@@ -117,7 +117,6 @@ Build 1 的 Run #211 已通過：
 同日使用者在 Windows V2.6.4 Build 1 重新寄送 OTP 並執行首次建立；CYInvoice 畫面回報第一個 Workspace 與 Device 建立成功，且 Device identity 驗證完成。此為 Windows client 收到的成功結果；**建立後尚未從 Cloudflare D1 獨立唯讀核對筆數與記錄，也未確認 whole-device Employee Transition / cutover 完成**。不要再次執行 bootstrap 或清除資料。
 
 2026-09-24 本機 Codex 透過已連線的 Cloudflare MCP 唯讀查核 development D1：已有 1 個 Workspace、1 台 active Device、1 位已驗證且啟用的中央 SUPER_ADMIN；Device 與員工關聯有效，轉換待辦已完成且沒有未解決項目。使用者隨後於 A 機完成雲端帳號切換，回報目前運作正常；B 機尚未測試。Cloudflare MCP 的 HTTP fetch 對 workers.dev 回覆 403（requests to workers.dev are not allowed），所以本次未能從該工具獨立確認即時 `/v1/health`，不可沿用 2026-09-23 的 health 結果當作本次查核。不要再次 bootstrap 或清除資料。
-
 Cloudflare API、Bindings、Builds、Observability 四個官方 MCP 端點已由使用者在本機 Codex 檢查為「已設定／已載入／連線成功／目前不需 OAuth 登入」；該檢查尚未讀取 `cyinvoice-cloud-dev` 的 Workspace／Device。網頁版 Work 對話沒有這四個工具，不能把本機設定檔已登記誤當作網頁對話可用。這次工作採網頁版為主；需要 Cloudflare 即時狀態時，由已連線的本機 Codex 讀本文件後執行限定範圍的唯讀查核，並把去識別結果帶回主要工作對話。
 
 ## 5. 歷史階段的 Work 優先順序（A 機首次建立／切換已完成）
