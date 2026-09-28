@@ -157,22 +157,31 @@ public sealed class BuiltInCloudIdentityProvider : IIdentityProvider
 
     private async Task RefreshCacheFromCurrentAuthorityAsync(CancellationToken cancellationToken)
     {
+        var offlineFallback = false;
         try
         {
             var snapshot = await authority.GetCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
             employees.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
+            return;
         }
         catch (HttpRequestException)
         {
             // A genuine transport failure is the approved Offline boundary.
-            // The last successfully synchronized protected cache remains trusted.
+            offlineFallback = true;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             // The Cloud request timed out rather than being cancelled by the caller.
-            // Treat timeout as temporary network unreachability and use the last
-            // trusted protected cache. Caller cancellation must still propagate.
+            offlineFallback = true;
         }
+
+        if (!offlineFallback) return;
+        var state = employees.LoadState();
+        var currentWorkspaceId = authority.CurrentWorkspaceId;
+        if (state is null
+            || !string.Equals(state.WorkspaceId, currentWorkspaceId, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "目前無法連線 Cloud，且本機沒有屬於目前 Workspace 的可信 Employee 離線快取。");
     }
 
     private static AppPrincipal? ToPrincipal(CloudEmployeeCachedAccount? account)
