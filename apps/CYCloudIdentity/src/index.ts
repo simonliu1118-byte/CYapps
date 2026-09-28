@@ -2,6 +2,7 @@ import { handleLogin, handleLogout, handleResolveSession } from "./auth";
 import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import { json, requestIdFrom } from "./http";
 import { enforceLoginRateLimit } from "./rate-limit";
+import { handleGetSecurityPolicy, handleUpdateSecurityPolicy } from "./security-policy";
 import type { Env } from "./types";
 
 export default {
@@ -37,6 +38,14 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/v1/identity/logout") {
         return await handleLogout(request, env, requestId);
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/admin/security-policy") {
+        return await handleGetSecurityPolicy(request, env, requestId);
+      }
+
+      if (request.method === "PUT" && url.pathname === "/v1/admin/security-policy") {
+        return await handleUpdateSecurityPolicy(request, env, requestId);
       }
 
       return json(env, requestId, 404, {
