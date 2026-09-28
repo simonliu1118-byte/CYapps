@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cycloud-identity-local-test",
   "main": "src/index.ts",
-  "compatibility_date": "2026-09-28",
+  "compatibility_date": "2026-09-25",
   "workers_dev": false,
   "d1_databases": [
     {
