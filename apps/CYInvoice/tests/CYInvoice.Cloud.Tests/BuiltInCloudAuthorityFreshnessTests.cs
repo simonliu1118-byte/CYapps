@@ -36,7 +36,7 @@ internal static class BuiltInCloudAuthorityFreshnessTests
             Seed("emp_user", "0002", "Current Admin", EmployeeRoles.Admin, "NewPass22", 2, 6),
             Seed("emp_new", "0003", "New User", EmployeeRoles.User, "NewUser33", 1, 3),
             Seed("emp_disabled", "0004", "Disabled", EmployeeRoles.User, "Disabled44", 1, 4, enabled: false));
-        var source = new ScriptedAuthoritySource(_ => Task.FromResult(current));
+        var source = new ScriptedAuthoritySource("ws_freshness", _ => Task.FromResult(current));
         var provider = new BuiltInCloudIdentityProvider(cache, source);
 
         True(await provider.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "OldPass22")) is null,
@@ -73,7 +73,9 @@ internal static class BuiltInCloudAuthorityFreshnessTests
                 Seed("emp_user", "0002", "Offline User", EmployeeRoles.User, "Offline22", 1, 2),
             });
 
-        var source = new ScriptedAuthoritySource(_ => throw new HttpRequestException("network unavailable"));
+        var source = new ScriptedAuthoritySource(
+            "ws_offline",
+            _ => throw new HttpRequestException("network unavailable"));
         var provider = new BuiltInCloudIdentityProvider(cache, source);
         NotNull(await provider.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "Offline22")),
             "genuine transport failure may use the last trusted protected cache");
@@ -107,6 +109,12 @@ internal static class BuiltInCloudAuthorityFreshnessTests
         await ThrowsAsync<InvalidDataException>(
             () => provider.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "Offline22")),
             "malformed Cloud authority data must fail closed");
+
+        source.CurrentWorkspaceId = "ws_other";
+        source.Handler = _ => throw new HttpRequestException("offline after Workspace changed");
+        await ThrowsAsync<InvalidOperationException>(
+            () => provider.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "Offline22")),
+            "Offline cache from another Workspace must never authenticate current Workspace operations");
     }
 
     private static async Task ReconnectReplacesOfflineAuthorityAsync()
@@ -122,7 +130,7 @@ internal static class BuiltInCloudAuthorityFreshnessTests
                 Seed("emp_user", "0002", "Before", EmployeeRoles.User, "Before222", 1, 2),
             });
 
-        var source = new ScriptedAuthoritySource(_ => throw new HttpRequestException("offline"));
+        var source = new ScriptedAuthoritySource("ws_reconnect", _ => throw new HttpRequestException("offline"));
         var provider = new BuiltInCloudIdentityProvider(cache, source);
         var offline = await provider.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "Before222"));
         NotNull(offline, "trusted cache must remain usable during a true outage");
@@ -272,9 +280,11 @@ internal static class BuiltInCloudAuthorityFreshnessTests
 }
 
 internal sealed class ScriptedAuthoritySource(
+    string currentWorkspaceId,
     Func<CancellationToken, Task<CloudEmployeeAuthoritySnapshot>> handler)
     : ICloudEmployeeAuthoritySnapshotSource
 {
+    public string CurrentWorkspaceId { get; set; } = currentWorkspaceId;
     public Func<CancellationToken, Task<CloudEmployeeAuthoritySnapshot>> Handler { get; set; } = handler;
 
     public Task<CloudEmployeeAuthoritySnapshot> GetCurrentSnapshotAsync(
