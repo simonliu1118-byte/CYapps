@@ -188,6 +188,15 @@ export async function handleUpdateEmployee(
     });
   }
 
+  if (employeeId === actor.employeeId && !enabled) {
+    return json(env, requestId, 409, {
+      error: {
+        code: "HIGHEST_AUTHORITY_TRANSFER_REQUIRED",
+        message: "Transfer Workspace highest authority before disabling the current highest-authority Employee.",
+      },
+    });
+  }
+
   if (enabled) {
     const ready = await env.DB.prepare(
       `SELECT e.email_verified_at,
