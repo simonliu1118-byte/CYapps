@@ -160,13 +160,67 @@ SUPER_RESPONSE="$(curl --silent --show-error --fail-with-body \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/login" \
   -H 'content-type: application/json' \
   --data '{"workspaceId":"workspace-test-001","applicationId":"APP_TEST_LOGIN","employeeNo":"0001","password":"test-password-123"}')"
-SUPER_RESPONSE="$SUPER_RESPONSE" python3 - <<'PY'
+
+SUPER_TOKEN="$(SUPER_RESPONSE="$SUPER_RESPONSE" python3 - <<'PY'
 import json
 import os
 payload = json.loads(os.environ['SUPER_RESPONSE'])
 assert payload['ok'] is True
 assert payload['principal']['isWorkspaceSuperAdmin'] is True
+token = payload['session']['token']
+assert token.startswith('cyid_') and len(token) == 69
+print(token)
 PY
+)"
+
+POLICY_RESPONSE="$(curl --silent --show-error --fail-with-body \
+  "http://127.0.0.1:${PORT}/v1/admin/security-policy" \
+  -H "authorization: Bearer ${SUPER_TOKEN}" \
+  -H 'x-identity-application: APP_TEST_LOGIN')"
+POLICY_RESPONSE="$POLICY_RESPONSE" python3 - <<'PY'
+import json
+import os
+payload = json.loads(os.environ['POLICY_RESPONSE'])
+assert payload['ok'] is True
+assert payload['systemEmailDailyCeiling'] == 50
+assert payload['policy']['otpResendCooldownSeconds'] == 60
+assert payload['policy']['otpMaxAttempts'] == 5
+assert payload['policy']['otpMaxSentPerEmailPurposeHour'] == 5
+assert payload['policy']['emailDailyLimit'] == 50
+assert payload['policy']['revision'] == 0
+PY
+
+UPDATED_POLICY_RESPONSE="$(curl --silent --show-error --fail-with-body \
+  -X PUT "http://127.0.0.1:${PORT}/v1/admin/security-policy" \
+  -H "authorization: Bearer ${SUPER_TOKEN}" \
+  -H 'x-identity-application: APP_TEST_LOGIN' \
+  -H 'content-type: application/json' \
+  --data '{"otpResendCooldownSeconds":90,"otpMaxAttempts":6,"otpMaxSentPerEmailPurposeHour":4,"emailDailyLimit":40}')"
+UPDATED_POLICY_RESPONSE="$UPDATED_POLICY_RESPONSE" python3 - <<'PY'
+import json
+import os
+payload = json.loads(os.environ['UPDATED_POLICY_RESPONSE'])
+assert payload['ok'] is True
+assert payload['policy'] == {
+    'otpResendCooldownSeconds': 90,
+    'otpMaxAttempts': 6,
+    'otpMaxSentPerEmailPurposeHour': 4,
+    'emailDailyLimit': 40,
+    'revision': 1,
+}
+PY
+
+NON_SUPER_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  -X PUT "http://127.0.0.1:${PORT}/v1/admin/security-policy" \
+  -H "authorization: Bearer ${TOKEN}" \
+  -H 'x-identity-application: APP_TEST_LOGIN' \
+  -H 'content-type: application/json' \
+  --data '{"otpResendCooldownSeconds":90,"otpMaxAttempts":6,"otpMaxSentPerEmailPurposeHour":4,"emailDailyLimit":40}')"
+if [[ "$NON_SUPER_STATUS" != "403" ]]; then
+  echo "Expected non-super security policy update to return 403, got $NON_SUPER_STATUS" >&2
+  print_worker_log
+  exit 1
+fi
 
 curl --silent --show-error --fail-with-body \
   -X POST "http://127.0.0.1:${PORT}/v1/identity/logout" \
@@ -186,4 +240,6 @@ fi
 echo 'PASS CYCloud Identity local login/session/logout roundtrip'
 echo 'PASS group-based application access'
 echo 'PASS Workspace highest-authority application access'
+echo 'PASS highest-authority OTP security policy management'
+echo 'PASS non-highest-authority policy update rejection'
 echo 'PASS revoked session rejection'
