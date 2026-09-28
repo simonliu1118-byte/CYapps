@@ -1,0 +1,93 @@
+name: CYInvoice Identity Finalize Patch
+
+on:
+  pull_request:
+    branches:
+      - cyinvoice/feat-cloud-security-audit
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'cyinvoice/identity-foundation-refactor'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Apply exact Package 1 test and version updates
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise SystemExit(f'{path}: expected exact pattern once, found {text.count(old)}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          replace_once(
+              'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/Program.cs',
+              '    ("cloud settings default to local-only with no endpoint", TestSettingsAsync),\n',
+              '    ("cloud settings default to local-only with no endpoint", TestSettingsAsync),\n'
+              '    ("identity providers normalize Local and Built-in Cloud authority", IdentityProviderFoundationTests.RunAsync),\n')
+
+          Path('apps/CYInvoice/VERSION').write_text('2.6.7\n', encoding='utf-8')
+          Path('apps/CYInvoice/BUILD').write_text('0\n', encoding='utf-8')
+
+          replace_once(
+              'apps/CYInvoice/cloud/package.json',
+              '  "version": "0.8.5",',
+              '  "version": "0.8.6",')
+          replace_once(
+              'apps/CYInvoice/cloud/wrangler.jsonc',
+              '    "SCHEMA_VERSION": "9"',
+              '    "SCHEMA_VERSION": "10"')
+
+          changed_versions = 0
+          for path in Path('apps/CYInvoice/cloud/src').rglob('*.ts'):
+              text = path.read_text(encoding='utf-8')
+              old = 'const CLOUD_VERSION = "0.8.5";'
+              count = text.count(old)
+              if count:
+                  path.write_text(text.replace(old, 'const CLOUD_VERSION = "0.8.6";'), encoding='utf-8')
+                  changed_versions += count
+          if changed_versions == 0:
+              raise SystemExit('No Cloud source version constants were updated')
+
+          Path('.github/workflows/cyinvoice-identity-finalize-patch.yml').unlink()
+      - name: Validate exact update
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+
+          subprocess.run(['git', 'diff', '--check'], check=True)
+          if Path('apps/CYInvoice/VERSION').read_text(encoding='utf-8').strip() != '2.6.7':
+              raise SystemExit('VERSION mismatch')
+          if Path('apps/CYInvoice/BUILD').read_text(encoding='utf-8').strip() != '0':
+              raise SystemExit('BUILD mismatch')
+          if '"version": "0.8.6"' not in Path('apps/CYInvoice/cloud/package.json').read_text(encoding='utf-8'):
+              raise SystemExit('Cloud package version mismatch')
+          if '"SCHEMA_VERSION": "10"' not in Path('apps/CYInvoice/cloud/wrangler.jsonc').read_text(encoding='utf-8'):
+              raise SystemExit('Cloud schema version mismatch')
+          if 'IdentityProviderFoundationTests.RunAsync' not in Path('apps/CYInvoice/tests/CYInvoice.Cloud.Tests/Program.cs').read_text(encoding='utf-8'):
+              raise SystemExit('identity provider regression test is not registered')
+          leftovers = []
+          for path in Path('apps/CYInvoice/cloud/src').rglob('*.ts'):
+              if 'const CLOUD_VERSION = "0.8.5";' in path.read_text(encoding='utf-8'):
+                  leftovers.append(str(path))
+          if leftovers:
+              raise SystemExit('old Cloud source version remains:\n' + '\n'.join(leftovers))
+      - name: Commit Package 1 finalization updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/CYInvoice .github/workflows/cyinvoice-identity-finalize-patch.yml
+          git commit -m 'chore(CYInvoice): classify identity foundation as 2.6.7'
+          git push origin HEAD:${{ github.head_ref }}
