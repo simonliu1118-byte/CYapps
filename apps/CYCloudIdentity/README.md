@@ -43,5 +43,7 @@ CYInvoice-specific Device pairing、Device Token、Local→Cloud Employee transi
 
 - `PROJECT_RULES.md` — project-level permanent rules
 - `docs/ARCHITECTURE.md` — current extraction architecture / lifecycle
+- `docs/AUTH_CONTRACT.md` — executable login/session consumer contract
+- `docs/APPLICATION_ROLE_MAPPING.md` — approved coarse per-Application role mapping design, including CYInvoice USER/ADMIN compatibility and protected SUPER_ADMIN semantics
 - `TODO.md` — current implementation status and next sequence
 - `migrations/` — forward D1 schema source of truth
