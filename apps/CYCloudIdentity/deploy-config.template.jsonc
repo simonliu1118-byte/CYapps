@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "__CYID_WORKER_NAME__",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-25",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "__CYID_D1_DATABASE_NAME__",
+      "database_id": "__CYID_D1_DATABASE_ID__",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "LOGIN_RATE_LIMITER",
+      "namespace_id": "__CYID_LOGIN_RATE_LIMIT_NAMESPACE_ID__",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
+  ],
+  "vars": {
+    "APP_ENV": "development",
+    "API_VERSION": "v1",
+    "SESSION_TTL_SECONDS": "__CYID_SESSION_TTL_SECONDS__",
+    "EMAIL_PROVIDER": "__CYID_EMAIL_PROVIDER__",
+    "EMAIL_FROM": "__CYID_EMAIL_FROM__",
+    "EMAIL_DAILY_BUDGET": "__CYID_EMAIL_DAILY_BUDGET__"
+  }
+}
