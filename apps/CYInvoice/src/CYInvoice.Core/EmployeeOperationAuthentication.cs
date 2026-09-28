@@ -10,29 +10,8 @@ internal static class EmployeeOperationAuthentication
         string password,
         DateTimeOffset now)
     {
-        employeeNo = (employeeNo ?? string.Empty).Trim();
-        password ??= string.Empty;
-        var delay = EmployeeVoidAuthenticationThrottle.Remaining(employeeNo, now);
-        if (delay > TimeSpan.Zero) throw new EmployeeVoidAuthenticationDelayException(delay);
-
-        EmployeeAccount? employee = null;
-        try
-        {
-            employee = repository.AuthenticateEmployee(employeeNo, password);
-        }
-        catch (InvalidOperationException)
-        {
-            // Invalid employee-number shape is intentionally indistinguishable from bad credentials.
-        }
-
-        if (employee is null)
-        {
-            EmployeeVoidAuthenticationThrottle.RegisterFailure(employeeNo, now);
-            throw new InvalidOperationException("員工編號或密碼錯誤");
-        }
-
-        EmployeeVoidAuthenticationThrottle.Reset(employeeNo);
-        return employee;
+        var principal = AuthenticatePrincipal(repository, employeeNo, password, now);
+        return principal.ToEmployeeAccount();
     }
 
     public static EmployeeAccount AuthenticateManager(
@@ -40,11 +19,42 @@ internal static class EmployeeOperationAuthentication
         string employeeNo,
         string password)
     {
-        EmployeeAccount? employee = null;
-        try { employee = repository.AuthenticateEmployee(employeeNo, password ?? string.Empty); }
+        AppPrincipal? principal = null;
+        try { principal = repository.AuthenticatePrincipal(employeeNo, password ?? string.Empty); }
         catch (InvalidOperationException) { }
-        if (employee is null || !EmployeeRoles.CanManageAccounts(employee.Role))
+        if (principal is null || !AppRoles.CanManageAccounts(principal.Role))
             throw new UnauthorizedAccessException("管理員驗證失敗");
-        return employee;
+        return principal.ToEmployeeAccount();
+    }
+
+    private static AppPrincipal AuthenticatePrincipal(
+        LocalRepository repository,
+        string employeeNo,
+        string password,
+        DateTimeOffset now)
+    {
+        employeeNo = (employeeNo ?? string.Empty).Trim();
+        password ??= string.Empty;
+        var delay = EmployeeVoidAuthenticationThrottle.Remaining(employeeNo, now);
+        if (delay > TimeSpan.Zero) throw new EmployeeVoidAuthenticationDelayException(delay);
+
+        AppPrincipal? principal = null;
+        try
+        {
+            principal = repository.AuthenticatePrincipal(employeeNo, password);
+        }
+        catch (InvalidOperationException)
+        {
+            // Invalid employee-number shape is intentionally indistinguishable from bad credentials.
+        }
+
+        if (principal is null)
+        {
+            EmployeeVoidAuthenticationThrottle.RegisterFailure(employeeNo, now);
+            throw new InvalidOperationException("員工編號或密碼錯誤");
+        }
+
+        EmployeeVoidAuthenticationThrottle.Reset(employeeNo);
+        return principal;
     }
 }
