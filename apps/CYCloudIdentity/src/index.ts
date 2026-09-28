@@ -11,6 +11,12 @@ import {
   handleStartHighestAuthorityTransfer,
 } from "./authority-transfer";
 import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
+import {
+  handleConfirmEmployeeActivation,
+  handleCreateEmployee,
+  handleStartEmployeeActivation,
+  handleUpdateEmployee,
+} from "./employee-lifecycle";
 import { json, requestIdFrom } from "./http";
 import {
   handleCreateIdentityGroup,
@@ -69,6 +75,14 @@ export default {
         return await handleLogout(request, env, requestId);
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/identity/activation/start") {
+        return await handleStartEmployeeActivation(request, env, requestId);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/identity/activation/confirm") {
+        return await handleConfirmEmployeeActivation(request, env, requestId);
+      }
+
       if (request.method === "POST" && url.pathname === "/v1/identity/password/change") {
         return await handleChangeOwnPassword(request, env, requestId);
       }
@@ -109,11 +123,21 @@ export default {
         return await handleIdentityAdminSnapshot(request, env, requestId);
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/admin/identity/employees") {
+        return await handleCreateEmployee(request, env, requestId);
+      }
+
       if (request.method === "POST" && url.pathname === "/v1/admin/identity/groups") {
         return await handleCreateIdentityGroup(request, env, requestId);
       }
 
-      let match = /^\/v1\/admin\/identity\/groups\/([^/]+)$/.exec(url.pathname);
+      let match = /^\/v1\/admin\/identity\/employees\/([^/]+)$/.exec(url.pathname);
+      if (request.method === "PATCH" && match) {
+        const employeeId = decodedSegment(match[1]);
+        if (employeeId) return await handleUpdateEmployee(request, env, requestId, employeeId);
+      }
+
+      match = /^\/v1\/admin\/identity\/groups\/([^/]+)$/.exec(url.pathname);
       if (request.method === "PATCH" && match) {
         const groupId = decodedSegment(match[1]);
         if (groupId) return await handleUpdateIdentityGroup(request, env, requestId, groupId);
