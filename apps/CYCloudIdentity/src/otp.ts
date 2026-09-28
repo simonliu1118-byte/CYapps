@@ -69,8 +69,8 @@ function utcUsageDate(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
-async function reserveEmailBudget(env: Env, now: Date): Promise<boolean> {
-  const date = utcUsageDate(now);
+async function reserveEmailBudget(env: Env, now: Date): Promise<string | null> {
+  const usageDate = utcUsageDate(now);
   const budget = emailDailyBudget(env);
   const row = await env.DB.prepare(
     `INSERT INTO email_delivery_budget(usage_date_utc, reserved_count, sent_count, updated_at)
@@ -80,27 +80,27 @@ async function reserveEmailBudget(env: Env, now: Date): Promise<boolean> {
        updated_at = excluded.updated_at
      WHERE email_delivery_budget.sent_count + email_delivery_budget.reserved_count < ?3
      RETURNING reserved_count, sent_count`
-  ).bind(date, now.toISOString(), budget).first<{ reserved_count: number; sent_count: number }>();
-  return Boolean(row);
+  ).bind(usageDate, now.toISOString(), budget).first<{ reserved_count: number; sent_count: number }>();
+  return row ? usageDate : null;
 }
 
-async function releaseEmailBudget(env: Env, now: Date): Promise<void> {
+async function releaseEmailBudget(env: Env, usageDate: string, now: Date): Promise<void> {
   await env.DB.prepare(
     `UPDATE email_delivery_budget
         SET reserved_count = CASE WHEN reserved_count > 0 THEN reserved_count - 1 ELSE 0 END,
             updated_at = ?2
       WHERE usage_date_utc = ?1`
-  ).bind(utcUsageDate(now), now.toISOString()).run();
+  ).bind(usageDate, now.toISOString()).run();
 }
 
-async function commitEmailBudget(env: Env, now: Date): Promise<void> {
+async function commitEmailBudget(env: Env, usageDate: string, now: Date): Promise<void> {
   await env.DB.prepare(
     `UPDATE email_delivery_budget
         SET reserved_count = CASE WHEN reserved_count > 0 THEN reserved_count - 1 ELSE 0 END,
             sent_count = sent_count + 1,
             updated_at = ?2
       WHERE usage_date_utc = ?1`
-  ).bind(utcUsageDate(now), now.toISOString()).run();
+  ).bind(usageDate, now.toISOString()).run();
 }
 
 function randomOtpCode(): string {
@@ -179,7 +179,8 @@ export async function issueEmailOtp(
   const email = normalizeAddress(input.email);
   await enforceOtpFrequency(env, input.purpose, input.scopeKey, email, now);
 
-  if (!await reserveEmailBudget(env, now)) throw new Error("EMAIL_DAILY_BUDGET_EXHAUSTED");
+  const budgetUsageDate = await reserveEmailBudget(env, now);
+  if (!budgetUsageDate) throw new Error("EMAIL_DAILY_BUDGET_EXHAUSTED");
 
   const challengeId = `otp_${crypto.randomUUID()}`;
   const code = randomOtpCode();
@@ -206,7 +207,7 @@ export async function issueEmailOtp(
       now.toISOString(),
     ).run();
   } catch (error) {
-    await releaseEmailBudget(env, now);
+    await releaseEmailBudget(env, budgetUsageDate, now);
     throw error;
   }
 
@@ -222,7 +223,7 @@ export async function issueEmailOtp(
           SET delivery_state = 'sent', sent_at = ?2, updated_at = ?2
         WHERE challenge_id = ?1 AND delivery_state = 'pending'`
     ).bind(challengeId, sentAt.toISOString()).run();
-    await commitEmailBudget(env, sentAt);
+    await commitEmailBudget(env, budgetUsageDate, sentAt);
   } catch (error) {
     const failedAt = new Date();
     await env.DB.prepare(
@@ -230,7 +231,7 @@ export async function issueEmailOtp(
           SET delivery_state = 'failed', updated_at = ?2
         WHERE challenge_id = ?1 AND delivery_state = 'pending'`
     ).bind(challengeId, failedAt.toISOString()).run();
-    await releaseEmailBudget(env, failedAt);
+    await releaseEmailBudget(env, budgetUsageDate, failedAt);
     throw error;
   }
 
