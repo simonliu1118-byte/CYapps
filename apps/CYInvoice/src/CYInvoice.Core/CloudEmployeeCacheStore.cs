@@ -5,11 +5,42 @@ using Microsoft.Data.Sqlite;
 
 namespace CYInvoice.Core.Storage;
 
-public sealed record CloudEmployeeCacheSeed(string EmployeeId, string EmployeeNo, string Name, string Email, string Role, bool Enabled, bool EmailVerified, string CredentialVerifier, int CredentialVersion, int Revision);
-public sealed record CloudEmployeeCachedAccount(string EmployeeId, string EmployeeNo, string Name, string Email, string Role, bool Enabled, bool EmailVerified, int CredentialVersion, int Revision, DateTimeOffset SyncedUtc);
-public sealed record CloudEmployeeCacheState(string WorkspaceId, int WorkspaceRevision, DateTimeOffset SyncedUtc);
+public sealed record CloudEmployeeCacheSeed(
+    string EmployeeId,
+    string EmployeeNo,
+    string Name,
+    string Email,
+    string Role,
+    bool Enabled,
+    bool EmailVerified,
+    string CredentialVerifier,
+    int CredentialVersion,
+    int Revision);
 
-/// <summary>Protected offline cache for the Built-in Cloud employee authority. It is a cache, never a second authority.</summary>
+public sealed record CloudEmployeeCachedAccount(
+    string EmployeeId,
+    string EmployeeNo,
+    string Name,
+    string Email,
+    string Role,
+    bool Enabled,
+    bool EmailVerified,
+    int CredentialVersion,
+    int Revision,
+    DateTimeOffset SyncedUtc);
+
+public sealed record CloudEmployeeCacheState(
+    string WorkspaceId,
+    int WorkspaceRevision,
+    DateTimeOffset SyncedUtc);
+
+/// <summary>
+/// Local synchronized cache for Cloud Employee authority. This is not a second
+/// account authority: in Cloud mode Cloud remains authoritative, while this
+/// cache permits action-time authorization during temporary network loss.
+/// Credential verifiers are additionally protected by the platform secret
+/// protector before being written to SQLite.
+/// </summary>
 public sealed class CloudEmployeeCacheStore
 {
     private const string PasswordAlgorithm = "pbkdf2-sha256";
@@ -31,9 +62,18 @@ public sealed class CloudEmployeeCacheStore
         lock (gate)
         {
             using var connection = Open(SqliteOpenMode.ReadOnly);
-            using var command = Command(connection, "SELECT workspace_id, workspace_revision, synced_utc FROM cloud_employee_cache_state WHERE singleton_id = 1;");
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT workspace_id, workspace_revision, synced_utc
+                FROM cloud_employee_cache_state
+                WHERE singleton_id = 1;
+                """;
             using var reader = command.ExecuteReader();
-            return reader.Read() ? new CloudEmployeeCacheState(reader.GetString(0), reader.GetInt32(1), ParseUtc(reader.GetString(2))) : null;
+            if (!reader.Read()) return null;
+            return new CloudEmployeeCacheState(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                ParseUtc(reader.GetString(2)));
         }
     }
 
@@ -42,14 +82,30 @@ public sealed class CloudEmployeeCacheStore
         lock (gate)
         {
             using var connection = Open(SqliteOpenMode.ReadOnly);
-            using var command = Command(connection, """
-                SELECT employee_id, employee_no, name, email, role, enabled, email_verified, credential_version, revision, synced_utc
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT employee_id, employee_no, name, email, role, enabled,
+                       email_verified, credential_version, revision, synced_utc
                 FROM cloud_employee_cache
-                ORDER BY CASE role WHEN 'SUPER_ADMIN' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END, employee_no;
-                """);
+                ORDER BY CASE role WHEN 'SUPER_ADMIN' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END,
+                         employee_no;
+                """;
             using var reader = command.ExecuteReader();
             var result = new List<CloudEmployeeCachedAccount>();
-            while (reader.Read()) result.Add(ReadAccount(reader));
+            while (reader.Read())
+            {
+                result.Add(new CloudEmployeeCachedAccount(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4),
+                    reader.GetInt64(5) == 1,
+                    reader.GetInt64(6) == 1,
+                    reader.GetInt32(7),
+                    reader.GetInt32(8),
+                    ParseUtc(reader.GetString(9))));
+            }
             return result;
         }
     }
@@ -61,16 +117,31 @@ public sealed class CloudEmployeeCacheStore
         lock (gate)
         {
             using var connection = Open(SqliteOpenMode.ReadOnly);
-            using var command = Command(connection, """
-                SELECT employee_id, employee_no, name, email, role, enabled, email_verified,
-                       credential_verifier_enc, credential_version, revision, synced_utc
-                FROM cloud_employee_cache WHERE employee_no = $employee_no;
-                """);
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT employee_id, employee_no, name, email, role, enabled,
+                       email_verified, credential_verifier_enc, credential_version,
+                       revision, synced_utc
+                FROM cloud_employee_cache
+                WHERE employee_no = $employee_no;
+                """;
             command.Parameters.AddWithValue("$employee_no", employeeNo);
             using var reader = command.ExecuteReader();
             if (!reader.Read() || reader.GetInt64(5) != 1) return null;
-            if (!VerifyPassword(password, UnprotectVerifier(reader.GetString(7)))) return null;
-            return new CloudEmployeeCachedAccount(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), true, reader.GetInt64(6) == 1, reader.GetInt32(8), reader.GetInt32(9), ParseUtc(reader.GetString(10)));
+
+            var verifier = UnprotectVerifier(reader.GetString(7));
+            if (!VerifyPassword(password, verifier)) return null;
+            return new CloudEmployeeCachedAccount(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                Enabled: true,
+                reader.GetInt64(6) == 1,
+                reader.GetInt32(8),
+                reader.GetInt32(9),
+                ParseUtc(reader.GetString(10)));
         }
     }
 
@@ -80,10 +151,14 @@ public sealed class CloudEmployeeCacheStore
         if (workspaceRevision < 0) throw new InvalidOperationException("Workspace Employee revision 不可小於 0。");
         ArgumentNullException.ThrowIfNull(employees);
         if (employees.Count == 0) throw new InvalidOperationException("Cloud Employee 快取不可為空。");
+
         var normalized = employees.Select(NormalizeSeed).ToArray();
-        if (normalized.Select(x => x.EmployeeId).Distinct(StringComparer.Ordinal).Count() != normalized.Length) throw new InvalidOperationException("Cloud Employee ID 不可重複。");
-        if (normalized.Select(x => x.EmployeeNo).Distinct(StringComparer.Ordinal).Count() != normalized.Length) throw new InvalidOperationException("Cloud Employee 編號不可重複。");
-        if (normalized.Count(x => x.Role == EmployeeRoles.SuperAdmin) != 1) throw new InvalidOperationException("Cloud Employee 快取必須且只能有一位 SUPER_ADMIN。");
+        if (normalized.Select(item => item.EmployeeId).Distinct(StringComparer.Ordinal).Count() != normalized.Length)
+            throw new InvalidOperationException("Cloud Employee ID 不可重複。");
+        if (normalized.Select(item => item.EmployeeNo).Distinct(StringComparer.Ordinal).Count() != normalized.Length)
+            throw new InvalidOperationException("Cloud Employee 編號不可重複。");
+        if (normalized.Count(item => item.Role == EmployeeRoles.SuperAdmin) != 1)
+            throw new InvalidOperationException("Cloud Employee 快取必須且只能有一位 SUPER_ADMIN。");
 
         var now = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
         lock (gate)
@@ -91,13 +166,29 @@ public sealed class CloudEmployeeCacheStore
             using var connection = Open(SqliteOpenMode.ReadWrite);
             ConfigureWritableConnection(connection);
             using var transaction = connection.BeginTransaction();
-            using (var clear = Command(connection, "DELETE FROM cloud_employee_cache;", transaction)) clear.ExecuteNonQuery();
+
+            using (var clear = connection.CreateCommand())
+            {
+                clear.Transaction = transaction;
+                clear.CommandText = "DELETE FROM cloud_employee_cache;";
+                clear.ExecuteNonQuery();
+            }
+
             foreach (var employee in normalized)
             {
-                using var insert = Command(connection, """
-                    INSERT INTO cloud_employee_cache (employee_id, workspace_id, employee_no, name, email, role, enabled, email_verified, credential_verifier_enc, credential_version, revision, synced_utc)
-                    VALUES ($employee_id, $workspace_id, $employee_no, $name, $email, $role, $enabled, $email_verified, $credential_verifier_enc, $credential_version, $revision, $synced_utc);
-                    """, transaction);
+                using var insert = connection.CreateCommand();
+                insert.Transaction = transaction;
+                insert.CommandText = """
+                    INSERT INTO cloud_employee_cache (
+                        employee_id, workspace_id, employee_no, name, email, role,
+                        enabled, email_verified, credential_verifier_enc,
+                        credential_version, revision, synced_utc
+                    ) VALUES (
+                        $employee_id, $workspace_id, $employee_no, $name, $email, $role,
+                        $enabled, $email_verified, $credential_verifier_enc,
+                        $credential_version, $revision, $synced_utc
+                    );
+                    """;
                 insert.Parameters.AddWithValue("$employee_id", employee.EmployeeId);
                 insert.Parameters.AddWithValue("$workspace_id", workspaceId);
                 insert.Parameters.AddWithValue("$employee_no", employee.EmployeeNo);
@@ -112,17 +203,25 @@ public sealed class CloudEmployeeCacheStore
                 insert.Parameters.AddWithValue("$synced_utc", now);
                 insert.ExecuteNonQuery();
             }
-            using (var state = Command(connection, """
-                INSERT INTO cloud_employee_cache_state (singleton_id, workspace_id, workspace_revision, synced_utc)
-                VALUES (1, $workspace_id, $workspace_revision, $synced_utc)
-                ON CONFLICT(singleton_id) DO UPDATE SET workspace_id = excluded.workspace_id, workspace_revision = excluded.workspace_revision, synced_utc = excluded.synced_utc;
-                """, transaction))
+
+            using (var state = connection.CreateCommand())
             {
+                state.Transaction = transaction;
+                state.CommandText = """
+                    INSERT INTO cloud_employee_cache_state (
+                        singleton_id, workspace_id, workspace_revision, synced_utc
+                    ) VALUES (1, $workspace_id, $workspace_revision, $synced_utc)
+                    ON CONFLICT(singleton_id) DO UPDATE SET
+                        workspace_id = excluded.workspace_id,
+                        workspace_revision = excluded.workspace_revision,
+                        synced_utc = excluded.synced_utc;
+                    """;
                 state.Parameters.AddWithValue("$workspace_id", workspaceId);
                 state.Parameters.AddWithValue("$workspace_revision", workspaceRevision);
                 state.Parameters.AddWithValue("$synced_utc", now);
                 state.ExecuteNonQuery();
             }
+
             transaction.Commit();
         }
     }
@@ -134,7 +233,9 @@ public sealed class CloudEmployeeCacheStore
             using var connection = Open(SqliteOpenMode.ReadWrite);
             ConfigureWritableConnection(connection);
             using var transaction = connection.BeginTransaction();
-            using var command = Command(connection, "DELETE FROM cloud_employee_cache; DELETE FROM cloud_employee_cache_state;", transaction);
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "DELETE FROM cloud_employee_cache; DELETE FROM cloud_employee_cache_state;";
             command.ExecuteNonQuery();
             transaction.Commit();
         }
@@ -147,7 +248,8 @@ public sealed class CloudEmployeeCacheStore
         {
             using var connection = Open(SqliteOpenMode.ReadWrite);
             ConfigureWritableConnection(connection);
-            using var command = Command(connection, "UPDATE cloud_employee_cache SET enabled = 0 WHERE employee_no = $employee_no;");
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE cloud_employee_cache SET enabled = 0 WHERE employee_no = $employee_no;";
             command.Parameters.AddWithValue("$employee_no", employeeNo);
             command.ExecuteNonQuery();
         }
@@ -159,22 +261,34 @@ public sealed class CloudEmployeeCacheStore
         {
             using var connection = Open(SqliteOpenMode.ReadWrite);
             ConfigureWritableConnection(connection);
-            using var command = Command(connection, """
+            using var command = connection.CreateCommand();
+            command.CommandText = """
                 CREATE TABLE IF NOT EXISTS cloud_employee_cache (
-                    employee_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, employee_no TEXT NOT NULL UNIQUE,
-                    name TEXT NOT NULL, email TEXT NOT NULL,
+                    employee_id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL,
+                    employee_no TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    email TEXT NOT NULL,
                     role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'USER')),
-                    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)), email_verified INTEGER NOT NULL CHECK (email_verified IN (0, 1)),
-                    credential_verifier_enc TEXT NOT NULL, credential_version INTEGER NOT NULL CHECK (credential_version >= 1),
-                    revision INTEGER NOT NULL CHECK (revision >= 1), synced_utc TEXT NOT NULL,
+                    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+                    email_verified INTEGER NOT NULL CHECK (email_verified IN (0, 1)),
+                    credential_verifier_enc TEXT NOT NULL,
+                    credential_version INTEGER NOT NULL CHECK (credential_version >= 1),
+                    revision INTEGER NOT NULL CHECK (revision >= 1),
+                    synced_utc TEXT NOT NULL,
                     CHECK(length(employee_no) = 4 AND employee_no NOT GLOB '*[^0-9]*')
                 );
+
                 CREATE TABLE IF NOT EXISTS cloud_employee_cache_state (
-                    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1), workspace_id TEXT NOT NULL,
-                    workspace_revision INTEGER NOT NULL CHECK (workspace_revision >= 0), synced_utc TEXT NOT NULL
+                    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+                    workspace_id TEXT NOT NULL,
+                    workspace_revision INTEGER NOT NULL CHECK (workspace_revision >= 0),
+                    synced_utc TEXT NOT NULL
                 );
-                CREATE INDEX IF NOT EXISTS idx_cloud_employee_cache_role ON cloud_employee_cache (role, enabled, employee_no);
-                """);
+
+                CREATE INDEX IF NOT EXISTS idx_cloud_employee_cache_role
+                    ON cloud_employee_cache (role, enabled, employee_no);
+                """;
             command.ExecuteNonQuery();
         }
     }
@@ -182,24 +296,29 @@ public sealed class CloudEmployeeCacheStore
     private CloudEmployeeCacheSeed NormalizeSeed(CloudEmployeeCacheSeed value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        var normalized = value with
+        var employeeId = NormalizeIdentifier(value.EmployeeId, 100, "Cloud Employee ID");
+        var employeeNo = NormalizeEmployeeNo(value.EmployeeNo);
+        var name = value.Name?.Trim() ?? string.Empty;
+        var email = value.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+        var role = value.Role?.Trim().ToUpperInvariant() ?? string.Empty;
+        if (name.Length is < 1 or > 120) throw new InvalidOperationException("Cloud Employee 姓名格式無效。");
+        if (email.Length is < 3 or > 320 || !email.Contains('@')) throw new InvalidOperationException("Cloud Employee Email 格式無效。");
+        if (!EmployeeRoles.IsValid(role)) throw new InvalidOperationException("Cloud Employee Role 格式無效。");
+        if (!value.EmailVerified) throw new InvalidOperationException("Cloud Employee Email 尚未驗證，不可進入離線帳號快取。");
+        if (value.CredentialVersion < 1 || value.Revision < 1) throw new InvalidOperationException("Cloud Employee 版本資訊格式無效。");
+        if (!ValidPasswordVerifier(value.CredentialVerifier)) throw new InvalidOperationException("Cloud Employee 登入憑證格式無效。");
+        return value with
         {
-            EmployeeId = NormalizeIdentifier(value.EmployeeId, 100, "Cloud Employee ID"),
-            EmployeeNo = NormalizeEmployeeNo(value.EmployeeNo),
-            Name = value.Name?.Trim() ?? string.Empty,
-            Email = value.Email?.Trim().ToLowerInvariant() ?? string.Empty,
-            Role = value.Role?.Trim().ToUpperInvariant() ?? string.Empty,
+            EmployeeId = employeeId,
+            EmployeeNo = employeeNo,
+            Name = name,
+            Email = email,
+            Role = role,
         };
-        if (normalized.Name.Length is < 1 or > 120) throw new InvalidOperationException("Cloud Employee 姓名格式無效。");
-        if (normalized.Email.Length is < 3 or > 320 || !normalized.Email.Contains('@')) throw new InvalidOperationException("Cloud Employee Email 格式無效。");
-        if (!EmployeeRoles.IsValid(normalized.Role)) throw new InvalidOperationException("Cloud Employee Role 格式無效。");
-        if (!normalized.EmailVerified) throw new InvalidOperationException("Cloud Employee Email 尚未驗證，不可進入離線帳號快取。");
-        if (normalized.CredentialVersion < 1 || normalized.Revision < 1) throw new InvalidOperationException("Cloud Employee 版本資訊格式無效。");
-        if (!ValidPasswordVerifier(normalized.CredentialVerifier)) throw new InvalidOperationException("Cloud Employee 登入憑證格式無效。");
-        return normalized;
     }
 
-    private string ProtectVerifier(string verifier) => protector.Protect(Encoding.UTF8.GetBytes(verifier));
+    private string ProtectVerifier(string verifier) =>
+        protector.Protect(Encoding.UTF8.GetBytes(verifier));
 
     private string UnprotectVerifier(string encrypted)
     {
@@ -215,66 +334,87 @@ public sealed class CloudEmployeeCacheStore
         }
     }
 
-    private static CloudEmployeeCachedAccount ReadAccount(SqliteDataReader reader) => new(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetInt64(5) == 1, reader.GetInt64(6) == 1, reader.GetInt32(7), reader.GetInt32(8), ParseUtc(reader.GetString(9)));
-
     private static bool VerifyPassword(string password, string verifier)
     {
         var parts = verifier.Split('$');
-        if (parts.Length != 4 || parts[0] != PasswordAlgorithm || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var iterations) || iterations < 100_000 || !TryHex(parts[2], out var salt) || salt.Length < 16 || !TryHex(parts[3], out var expected) || expected.Length != 32) return false;
-        var actual = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password), salt, iterations, HashAlgorithmName.SHA256, expected.Length);
+        if (parts.Length != 4 || parts[0] != PasswordAlgorithm
+            || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var iterations)
+            || iterations < 100_000
+            || !TryHex(parts[2], out var salt) || salt.Length < 16
+            || !TryHex(parts[3], out var expected) || expected.Length != 32)
+            return false;
+
+        var actual = Rfc2898DeriveBytes.Pbkdf2(
+            Encoding.UTF8.GetBytes(password), salt, iterations, HashAlgorithmName.SHA256, expected.Length);
         return CryptographicOperations.FixedTimeEquals(actual, expected);
     }
 
     private static bool ValidPasswordVerifier(string value)
     {
         var parts = value.Split('$');
-        return parts.Length == 4 && parts[0] == PasswordAlgorithm && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var iterations) && iterations is >= 100_000 and <= 2_000_000 && TryHex(parts[2], out var salt) && salt.Length is >= 16 and <= 64 && TryHex(parts[3], out var hash) && hash.Length == 32;
+        return parts.Length == 4
+            && parts[0] == PasswordAlgorithm
+            && int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var iterations)
+            && iterations is >= 100_000 and <= 2_000_000
+            && TryHex(parts[2], out var salt) && salt.Length is >= 16 and <= 64
+            && TryHex(parts[3], out var hash) && hash.Length == 32;
     }
 
     private static bool TryHex(string value, out byte[] bytes)
     {
-        try { bytes = Convert.FromHexString(value); return true; }
-        catch (FormatException) { bytes = []; return false; }
+        try
+        {
+            bytes = Convert.FromHexString(value);
+            return true;
+        }
+        catch (FormatException)
+        {
+            bytes = [];
+            return false;
+        }
     }
 
     private static string NormalizeIdentifier(string value, int maximumLength, string field)
     {
         value = value?.Trim() ?? string.Empty;
-        if (value.Length is < 1 || value.Length > maximumLength) throw new InvalidOperationException($"{field} 格式無效。");
+        if (value.Length is < 1 || value.Length > maximumLength)
+            throw new InvalidOperationException($"{field} 格式無效。");
         return value;
     }
 
     private static string NormalizeEmployeeNo(string value)
     {
         value = value?.Trim() ?? string.Empty;
-        if (value.Length != 4 || !value.All(character => character is >= '0' and <= '9')) throw new InvalidOperationException("員工編號必須為 4 碼數字。");
+        if (value.Length != 4 || !value.All(character => character is >= '0' and <= '9'))
+            throw new InvalidOperationException("員工編號必須為 4 碼數字。");
         return value;
     }
 
     private SqliteConnection Open(SqliteOpenMode mode)
     {
-        var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = mode, Cache = SqliteCacheMode.Private, Pooling = false }.ToString());
+        var builder = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = mode,
+            Cache = SqliteCacheMode.Private,
+            Pooling = false,
+        };
+        var connection = new SqliteConnection(builder.ToString());
         connection.Open();
         return connection;
     }
 
-    private static SqliteCommand Command(SqliteConnection connection, string text, SqliteTransaction? transaction = null)
-    {
-        var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = text;
-        return command;
-    }
-
     private static void ConfigureWritableConnection(SqliteConnection connection)
     {
-        using var command = Command(connection, "PRAGMA foreign_keys = ON; PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL;");
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA foreign_keys = ON; PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL;";
         command.ExecuteNonQuery();
     }
 
     private static DateTimeOffset ParseUtc(string value)
     {
-        if (!DateTimeOffset.TryParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)) throw new InvalidDataException("Cloud Employee 快取時間格式無效。");
+        if (!DateTimeOffset.TryParseExact(value, "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+            throw new InvalidDataException("Cloud Employee 快取時間格式無效。");
         return parsed;
     }
 }
