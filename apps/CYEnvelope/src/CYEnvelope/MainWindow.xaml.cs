@@ -426,11 +426,15 @@ public partial class MainWindow : Window
             ShowFrameBox.IsChecked = ShowFrameBox.IsChecked != true;
             return;
         }
+        var previewScale = Math.Max(.1, PreviewHost.TransformToAncestor(this)
+            .TransformBounds(new Rect(0, 0, 1, 1)).Width);
+        var editorHeight = 34 / previewScale;
+        var suggestionHeight = 120 / previewScale;
         var editor = new TextBox
         {
-            Text = source.Text, Width = Math.Min(200, DirectLayer.Width - 12),
-            FontSize = 16, Background = Brushes.White, BorderBrush = Brushes.SteelBlue,
-            BorderThickness = new Thickness(2), Padding = new Thickness(4),
+            Text = source.Text, Width = Math.Min(300 / previewScale, DirectLayer.Width - 12),
+            MinHeight = editorHeight, FontSize = 14 / previewScale, Background = Brushes.White, BorderBrush = Brushes.SteelBlue,
+            BorderThickness = new Thickness(1 / previewScale), Padding = new Thickness(6 / previewScale, 4 / previewScale, 6 / previewScale, 4 / previewScale),
             ToolTip = $"輸入{field}，按 Enter 完成"
         };
         var original = source.Text;
@@ -447,7 +451,7 @@ public partial class MainWindow : Window
         {
             var suggestions = new ListBox
             {
-                Width = editor.Width, MaxHeight = 105,
+                Width = editor.Width, MaxHeight = suggestionHeight, FontSize = 14 / previewScale,
                 DisplayMemberPath = "Name", Background = Brushes.White,
                 BorderBrush = Brushes.SteelBlue
             };
@@ -462,8 +466,8 @@ public partial class MainWindow : Window
             DirectLayer.Children.Add(suggestions);
             Canvas.SetLeft(suggestions, Math.Clamp(Canvas.GetLeft(target), 2,
                 Math.Max(2, DirectLayer.Width - editor.Width - 2)));
-            Canvas.SetTop(suggestions, Math.Clamp(Canvas.GetTop(target) + 40, 2,
-                Math.Max(2, DirectLayer.Height - 110)));
+            Canvas.SetTop(suggestions, Math.Clamp(Canvas.GetTop(target) + editorHeight, 2,
+                Math.Max(2, DirectLayer.Height - suggestionHeight - 2)));
         }
         editor.TextChanged += (_, _) =>
         {
@@ -520,7 +524,7 @@ public partial class MainWindow : Window
         };
         DirectLayer.Children.Add(editor);
         Canvas.SetLeft(editor, Math.Clamp(Canvas.GetLeft(target), 2, Math.Max(2, DirectLayer.Width - editor.Width - 2)));
-        Canvas.SetTop(editor, Math.Clamp(Canvas.GetTop(target), 2, Math.Max(2, DirectLayer.Height - 40)));
+        Canvas.SetTop(editor, Math.Clamp(Canvas.GetTop(target), 2, Math.Max(2, DirectLayer.Height - editorHeight - 2)));
         editor.Focus();
         editor.SelectAll();
         e.Handled = true;

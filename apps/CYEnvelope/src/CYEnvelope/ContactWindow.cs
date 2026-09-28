@@ -61,6 +61,8 @@ public sealed class ContactWindow : Window
             ("刪除電話", (_, _) => { if (_phones.SelectedItem is ContactPhone p && Confirm()) _phoneRows.Remove(p); })));
         for (var i = 0; i < right.Children.Count; i++) Grid.SetRow(right.Children[i], i);
         RefreshContacts();
+        if (_contacts.Items.Count > 0) _contacts.SelectedIndex = 0;
+        else NewContact();
     }
 
     private static StackPanel Row(params (string Name, RoutedEventHandler Action)[] actions)

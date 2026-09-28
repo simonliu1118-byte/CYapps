@@ -44,7 +44,7 @@ public sealed class FormatWindow : Window
             BorderThickness = new Thickness(0, 1, 0, 0), Child = footer };
         DockPanel.SetDock(footerLine, Dock.Bottom); shell.Children.Add(footerLine);
         shell.Children.Add(root);
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(0, 0, 10, 0) };
         Grid.SetColumn(scroll, 0); root.Children.Add(scroll);
         var left = new StackPanel(); scroll.Content = left;
         left.Children.Add(new TextBlock { Text = "信封格式", FontSize = 16, FontWeight = FontWeights.SemiBold });
@@ -109,7 +109,7 @@ public sealed class FormatWindow : Window
 
     private static StackPanel AddField(Panel panel, string title, TextBox entry, int column = 0, int row = 0)
     {
-        var group = new StackPanel { Margin = new Thickness(0, 4, 0, 6) };
+        var group = new StackPanel { Margin = new Thickness(0, 2, 0, 4) };
         group.Children.Add(new TextBlock { Text = title, Margin = new Thickness(0, 0, 0, 4) });
         entry.MinHeight = 30;
         group.Children.Add(entry);

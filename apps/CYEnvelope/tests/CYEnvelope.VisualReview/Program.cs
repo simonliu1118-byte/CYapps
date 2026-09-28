@@ -44,6 +44,10 @@ internal static class Program
             var contacts = new ContactWindow(repository) { Owner = main }; contacts.Show(); Flush();
             ((ListBox)Field(contacts, "_contacts")).SelectedIndex = 0; Flush(); Capture(contacts, "04-contacts");
             AssertNoDialogIcon(contacts); contacts.Close();
+            var emptyContacts = new ContactWindow(new Repository(Path.Combine(AppContext.BaseDirectory, "EmptyData", "CYEnvelope.db"))) { Owner = main };
+            emptyContacts.Show(); Flush();
+            Assert(((DataGrid)Field(emptyContacts, "_addresses")).ItemsSource is not null, "Empty contacts: address editor initialized");
+            Capture(emptyContacts, "10-contacts-empty"); emptyContacts.Close();
             var format = new FormatWindow(repository, repository.Formats()[0]) { Owner = main };
             format.Show(); Flush(); Capture(format, "05-format"); AssertNoDialogIcon(format); format.Close();
             var settings = repository.Settings();
@@ -55,6 +59,9 @@ internal static class Program
             Assert(target.Focusable, "Direct entry fields support keyboard focus");
             target.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush();
             Assert(layer.Children.OfType<TextBox>().Any(), "Direct entry activation creates editor");
+            var editor = layer.Children.OfType<TextBox>().Single();
+            var scale = editor.TransformToAncestor(main).TransformBounds(new System.Windows.Rect(0, 0, 1, 1)).Width;
+            Assert(editor.FontSize * scale >= 13.9 && editor.ActualHeight * scale >= 33.9, "Direct editor remains readable at fitted preview scale");
             Capture(main, "09-direct-edit");
             main.Close();
             // Actual final published EXEs: validate native RT_GROUP_ICON and payload against canonical ICO.

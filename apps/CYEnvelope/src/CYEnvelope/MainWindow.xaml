@@ -47,14 +47,28 @@
               <Grid Margin="0,0,0,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
                 <TextBlock Text="地址" VerticalAlignment="Center"/>
-                <ComboBox x:Name="AddressChoice" Grid.Column="2" DisplayMemberPath="Label" SelectionChanged="AddressChoiceChanged" AutomationProperties.Name="已存地址" ToolTip="選取已存地址"/>
+                <Grid Grid.Column="2">
+                  <ComboBox x:Name="AddressChoice" DisplayMemberPath="Label" SelectionChanged="AddressChoiceChanged" AutomationProperties.Name="已存地址" ToolTip="選取已存地址" IsEnabled="{Binding HasItems, RelativeSource={RelativeSource Self}}"/>
+                  <TextBlock Text="已存地址" Margin="8,0,28,0" VerticalAlignment="Center" Foreground="#98A2B3" IsHitTestVisible="False">
+                    <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                      <DataTrigger Binding="{Binding HasItems, ElementName=AddressChoice}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </Style.Triggers></Style></TextBlock.Style>
+                  </TextBlock>
+                </Grid>
               </Grid>
               <TextBox x:Name="AddressBox" TextChanged="InputChanged" LostKeyboardFocus="AddressLostFocus" KeyDown="InputKeyDown"
                        AcceptsReturn="False" TextWrapping="Wrap" MinHeight="56" Margin="0,0,0,14" AutomationProperties.Name="地址"/>
               <Grid Margin="0,0,0,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
                 <TextBlock Text="電話（選填）" VerticalAlignment="Center"/>
-                <ComboBox x:Name="PhoneChoice" Grid.Column="2" DisplayMemberPath="Display" SelectionChanged="PhoneChoiceChanged" AutomationProperties.Name="已存電話" ToolTip="選取已存電話"/>
+                <Grid Grid.Column="2">
+                  <ComboBox x:Name="PhoneChoice" DisplayMemberPath="Display" SelectionChanged="PhoneChoiceChanged" AutomationProperties.Name="已存電話" ToolTip="選取已存電話" IsEnabled="{Binding HasItems, RelativeSource={RelativeSource Self}}"/>
+                  <TextBlock Text="已存電話" Margin="8,0,28,0" VerticalAlignment="Center" Foreground="#98A2B3" IsHitTestVisible="False">
+                    <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                      <DataTrigger Binding="{Binding HasItems, ElementName=PhoneChoice}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </Style.Triggers></Style></TextBlock.Style>
+                  </TextBlock>
+                </Grid>
               </Grid>
               <TextBox x:Name="PhoneBox" TextChanged="InputChanged" LostKeyboardFocus="PhoneLostFocus" Margin="0,0,0,18" AutomationProperties.Name="電話"/>
               <Border BorderBrush="#E5E8EC" BorderThickness="0,1,0,0" Padding="0,14,0,0">

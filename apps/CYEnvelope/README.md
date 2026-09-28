@@ -6,7 +6,7 @@
 
 - 主畫面收件人／郵遞區號並排，已存地址／電話選單與對應欄位整合；日常欄位及方框文字在預設視窗完整顯示。
 - 主畫面與聯絡人、格式、方框文字、設定共用 `Theme.xaml`；一般按鈕使用 WPF 原生樣板，主動作用 Blue；焦點只改色、不改尺寸。管理視窗不顯示應用程式標題圖示。
-- 格式設定與聯絡人儲存列固定在視窗底部；聯絡人表格随視窗伸縮。直接輸入區支援 Button 的 Tab／Enter 操作，顯示可編輯範圍。
+- 格式設定與聯絡人儲存列固定在視窗底部；聯絡人表格隨視窗伸縮。直接輸入區支援 Button 的 Tab／Enter 操作，顯示可編輯範圍；浮動輸入框依預覽縮放補償，維持可讀字級。
 - 移除將多尺寸 ICO 覆蓋為單一 BitmapImage 的程式；視窗保留 ICO decoder，封包驗證直接比對兩個最終 EXE 的七組原生 icon payload。
 - 可攜封裝維持一層 `CYEnvelope` 資料夾；根目錄為 `CYEnvelope.exe`、`VERSION`、`BUILD`、`Runtime`。WPF 程式與六個原生 DLL 在 Runtime；首次啟動於根目錄建立 Data。沒有內層 ZIP 或獨立 SHA 檔。
 
@@ -35,7 +35,7 @@ dotnet run --project .\tests\CYEnvelope.Tests\CYEnvelope.Tests.csproj
 dotnet run --project ./tests/CYEnvelope.VisualReview/CYEnvelope.VisualReview.csproj -- ./dist/visual-review ./dist/stage/CYEnvelope ./assets/ENV.ico
 ```
 
-檢查會產生實際 WPF 主畫面（空白、已填、最小視窗、直接輸入）與四個管理視窗 PNG，驗證預設／最小視窗的表單可見性、焦點尺寸、圖示及原生 EXE 資源。素材皆為合成範例，與測試包分開上傳。CI 同時執行核心資料測試、安全掃描、下載結構與封裝啟動驗證。Windows 125%／150% 顯示縮放、實機互動與列印仍須另驗；不得將 96 DPI 圖像當成所有 DPI 的驗收。
+Build 2 的 Windows CI #34 已完成畫面與七尺寸圖示驗證；後續檢查也涵蓋直接輸入框的可讀尺寸與空白聯絡人的編輯初始化，結果及擷取圖以最新提交的 CI 為準。檢查會產生實際 WPF 主畫面（空白、已填、最小視窗、直接輸入）與四個管理視窗 PNG，驗證預設／最小視窗的表單可見性、焦點尺寸、圖示及原生 EXE 資源。素材皆為合成範例，與測試包分開上傳。CI 同時執行核心資料測試、安全掃描、下載結構與封裝啟動驗證。Windows 125%／150% 顯示縮放、實機互動與列印仍須另驗；不得將 96 DPI 圖像當成所有 DPI 的驗收。
 
 從 [CYEnvelope Windows 檢查](https://github.com/simonliu1118-byte/CYapps/actions/workflows/cyenvelope-build.yml) 的 Build 2 執行下載 `CYEnvelope-V0.2.1-Build-2-windows-x64-test`。解壓縮一次後開啟 `CYEnvelope/CYEnvelope.exe`，保留 Runtime；不需另裝 .NET。Artifact 保留 14 天。本分支及 PR 保持開發測試狀態，不是正式 Release。
 
