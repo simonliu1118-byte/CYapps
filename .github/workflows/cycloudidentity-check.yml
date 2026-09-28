@@ -42,3 +42,6 @@ jobs:
       - name: Run CYCloud Identity auth-core tests
         working-directory: apps/CYCloudIdentity
         run: npm test
+
+      - name: Accept CYCloud Identity local D1 login roundtrip
+        run: bash apps/CYCloudIdentity/scripts/accept_auth_local.sh
