@@ -1,0 +1,37 @@
+name: CYCloud Identity Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/CYCloudIdentity/**'
+      - '.github/workflows/cycloudidentity-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cycloudidentity-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate D1 identity foundation
+        run: python3 apps/CYCloudIdentity/scripts/validate_schema.py
+
+      - name: Reject concrete deployment secrets and resource IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE --exclude='PROJECT_RULES.md' --exclude='README.md' --exclude='TODO.md' --exclude='ARCHITECTURE.md' \
+            '(CLOUDFLARE_API_TOKEN[[:space:]]*=|BREVO_API_KEY[[:space:]]*=|RESEND_API_KEY[[:space:]]*=|OTP_PEPPER[[:space:]]*=|database_id[[:space:]]*[:=][[:space:]]*["'"'][0-9a-fA-F-]{20,})' \
+            apps/CYCloudIdentity; then
+            echo 'ERROR: concrete secret/resource assignment detected in CYCloudIdentity source.'
+            exit 1
+          fi
+          echo 'Public source deployment-safety check passed.'
