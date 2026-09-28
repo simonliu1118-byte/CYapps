@@ -92,6 +92,7 @@ internal static class IdentityProviderFoundationTests
         }
 
         await BuiltInCloudAuthorityFreshnessTests.RunAsync();
+        await CloudDeviceLifecycleClientTests.RunAsync();
     }
 
     private static CloudEmployeeCacheSeed Seed(
