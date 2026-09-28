@@ -31,6 +31,10 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v7
 
+      - name: Scan public source
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/scan-public-package.py apps/CYCloudIdentity
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
@@ -62,10 +66,6 @@ jobs:
 
       - name: Validate Worker bundle
         run: npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc
-
-      - name: Scan public source
-        working-directory: ${{ github.workspace }}
-        run: python3 .github/scripts/scan-public-package.py apps/CYCloudIdentity
 
       - name: Remove generated config
         if: always()
