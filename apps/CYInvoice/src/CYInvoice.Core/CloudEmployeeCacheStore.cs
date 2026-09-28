@@ -167,6 +167,20 @@ public sealed class CloudEmployeeCacheStore
             ConfigureWritableConnection(connection);
             using var transaction = connection.BeginTransaction();
 
+            using (var currentState = connection.CreateCommand())
+            {
+                currentState.Transaction = transaction;
+                currentState.CommandText = "SELECT workspace_id, workspace_revision FROM cloud_employee_cache_state WHERE singleton_id = 1;";
+                using var reader = currentState.ExecuteReader();
+                if (reader.Read()
+                    && string.Equals(reader.GetString(0), workspaceId, StringComparison.Ordinal)
+                    && reader.GetInt32(1) > workspaceRevision)
+                {
+                    transaction.Rollback();
+                    return;
+                }
+            }
+
             using (var clear = connection.CreateCommand())
             {
                 clear.Transaction = transaction;

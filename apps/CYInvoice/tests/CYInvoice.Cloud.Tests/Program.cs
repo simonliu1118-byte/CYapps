@@ -8,6 +8,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
     ("cloud settings default to local-only with no endpoint", TestSettingsAsync),
     ("identity providers normalize Local and Built-in Cloud authority", IdentityProviderFoundationTests.RunAsync),
+    ("Built-in Cloud execution authentication refreshes current authority before fallback", IdentityProviderFreshnessTests.RunAsync),
     ("cloud client rejects non-HTTPS base URLs", TestHttpsOnlyAsync),
     ("cloud health parses provider-neutral backend status", TestHealthAsync),
     ("cloud health preserves backend storage outage diagnostics", TestStorageOutageAsync),

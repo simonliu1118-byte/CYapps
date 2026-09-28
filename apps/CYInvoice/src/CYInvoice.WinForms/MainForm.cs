@@ -621,7 +621,7 @@ internal sealed class MainForm : Form
 
             if (requestedMode == CloudModes.CloudPreferred && requested.CloudEmployeeAuthorityReady)
             {
-                var syncProblem = await TryRefreshCloudEmployeeCacheAsync(requested, requestedUrl);
+                var syncProblem = await TryRefreshCloudEmployeeCacheAsync();
                 if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
                 if (syncProblem.Length != 0)
                 {
@@ -654,27 +654,11 @@ internal sealed class MainForm : Form
         }
     }
 
-    private async Task<string> TryRefreshCloudEmployeeCacheAsync(Settings settings, string baseUrl)
+    private async Task<string> TryRefreshCloudEmployeeCacheAsync()
     {
-        if (!settings.CloudEmployeeAuthorityReady || settings.CloudMode != CloudModes.CloudPreferred)
-            return string.Empty;
-        if (settings.CloudWorkspaceId.Length == 0 || settings.CloudDeviceId.Length == 0)
-            return "本機 Cloud Workspace／Device identity 不完整。";
         try
         {
-            var token = repository.Settings.CloudDeviceToken(settings);
-            if (token.Length == 0) return "本機 Cloud Device Token 不存在。";
-            var authority = new CloudEmployeeAuthorityClient(
-                cloudHealthHttpClient,
-                new Uri(baseUrl, UriKind.Absolute),
-                token);
-            var snapshot = await authority.GetSnapshotAsync(syncLifetime.Token);
-            if (!string.Equals(snapshot.WorkspaceId, settings.CloudWorkspaceId, StringComparison.Ordinal))
-                return "中央帳號快取回傳的 Workspace identity 與本機不一致。";
-            repository.CloudEmployees.ReplaceSnapshot(
-                snapshot.WorkspaceId,
-                snapshot.WorkspaceRevision,
-                snapshot.Employees);
+            await repository.IdentityProvider.RefreshAuthorityAsync(syncLifetime.Token);
             return string.Empty;
         }
         catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)

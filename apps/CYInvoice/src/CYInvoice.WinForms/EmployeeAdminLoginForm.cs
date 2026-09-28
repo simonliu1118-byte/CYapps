@@ -1,3 +1,4 @@
+using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Storage;
 
 namespace CYInvoice.WinForms;
@@ -147,6 +148,10 @@ internal sealed class EmployeeAdminLoginForm : Form
             DialogResult = DialogResult.OK;
             Close();
         }
+        catch (Exception error) when (error is CloudApiException or InvalidDataException)
+        {
+            AuthenticationServiceError();
+        }
         catch (InvalidOperationException)
         {
             ValidationError("員工編號或密碼錯誤", employeeNo);
@@ -167,6 +172,21 @@ internal sealed class EmployeeAdminLoginForm : Form
         eventArgs.Handled = true;
         eventArgs.SuppressKeyPress = true;
         login.PerformClick();
+    }
+
+    private void AuthenticationServiceError()
+    {
+        MessageBox.Show(
+            this,
+            "目前無法確認最新雲端帳號權限，為避免使用過期權限，本次操作已停止。請確認網路與雲端狀態後再試。",
+            "驗證服務異常",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+        BeginInvoke((Action)(() =>
+        {
+            employeeNo.Focus();
+            employeeNo.SelectAll();
+        }));
     }
 
     private void ValidationError(string message, TextBox target)

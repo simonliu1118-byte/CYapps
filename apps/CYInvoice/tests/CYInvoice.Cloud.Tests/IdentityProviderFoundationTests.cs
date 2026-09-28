@@ -39,24 +39,9 @@ internal static class IdentityProviderFoundationTests
                     Seed("emp_disabled", "0003", "Disabled User", "disabled@example.test", EmployeeRoles.User, "CloudPass3", 1, 3, enabled: false),
                 });
 
-            var cloud = new BuiltInCloudIdentityProvider(cloudCache);
-            Equal(IdentityProviderKind.BuiltInCloud, cloud.Kind, "Built-in Cloud provider kind");
-            True(cloud.OwnsAccountManagement, "Built-in Cloud provider must own CYInvoice account management");
-
-            var cloudUser = await cloud.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "CloudPass2"));
-            NotNull(cloudUser, "valid Built-in Cloud USER authentication");
-            Equal("emp_user", cloudUser!.StableEmployeeId, "Cloud stable employee ID");
-            Equal(AppRole.User, cloudUser.Role, "Cloud USER normalization");
-            Equal(8, cloudUser.AuthorityRevision, "Cloud authority revision");
-            True(await cloud.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "WrongPass2")) is null,
-                "Cloud invalid credentials must be rejected");
-            True(await cloud.AuthenticateAsync(new IdentityAuthenticationRequest("0003", "CloudPass3")) is null,
-                "disabled Cloud authority must be rejected");
-            var disabledPrincipal = await cloud.RefreshPrincipalAsync("0003");
-            NotNull(disabledPrincipal, "refresh should still expose disabled authority metadata");
-            True(!disabledPrincipal!.Enabled, "refreshed disabled authority must stay disabled");
-
             var settingsStore = new SettingsStore(directory, protector);
+            using var offlineHttp = new HttpClient(new FoundationOfflineHandler());
+            var cloud = new BuiltInCloudIdentityProvider(settingsStore, cloudCache, offlineHttp);
             var runtime = new IdentityProviderRuntime(settingsStore, local, cloud);
             Equal(IdentityProviderKind.Local, runtime.Current.Kind, "runtime starts with Local authority");
 
@@ -72,6 +57,22 @@ internal static class IdentityProviderFoundationTests
 
             Equal(IdentityProviderKind.BuiltInCloud, runtime.Current.Kind,
                 "runtime switches centrally to Built-in Cloud authority");
+            Equal(IdentityProviderKind.BuiltInCloud, cloud.Kind, "Built-in Cloud provider kind");
+            True(cloud.OwnsAccountManagement, "Built-in Cloud provider must own CYInvoice account management");
+
+            var cloudUser = await cloud.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "CloudPass2"));
+            NotNull(cloudUser, "valid protected-cache fallback authentication");
+            Equal("emp_user", cloudUser!.StableEmployeeId, "Cloud stable employee ID");
+            Equal(AppRole.User, cloudUser.Role, "Cloud USER normalization");
+            Equal(8, cloudUser.AuthorityRevision, "Cloud authority revision");
+            True(await cloud.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "WrongPass2")) is null,
+                "Cloud invalid credentials must be rejected");
+            True(await cloud.AuthenticateAsync(new IdentityAuthenticationRequest("0003", "CloudPass3")) is null,
+                "disabled Cloud authority must be rejected");
+            var disabledPrincipal = await cloud.RefreshPrincipalAsync("0003");
+            NotNull(disabledPrincipal, "offline refresh should still expose disabled cached authority metadata");
+            True(!disabledPrincipal!.Enabled, "refreshed disabled authority must stay disabled");
+
             True(AppRoles.CanManageAccounts(AppRole.Admin), "ADMIN remains manager authority");
             True(AppRoles.CanManageAccounts(AppRole.SuperAdmin), "SUPER_ADMIN remains manager authority");
         }
@@ -135,5 +136,11 @@ internal static class IdentityProviderFoundationTests
     private static void NotNull(object? value, string description)
     {
         if (value is null) throw new InvalidOperationException(description);
+    }
+
+    private sealed class FoundationOfflineHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(new HttpRequestException("synthetic offline transport failure"));
     }
 }
