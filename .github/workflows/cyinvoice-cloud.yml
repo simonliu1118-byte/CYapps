@@ -8,6 +8,7 @@ on:
       - 'apps/CYInvoice/src/CYInvoice.Core/**'
       - 'apps/CYInvoice/src/CYInvoice.WinForms/**'
       - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
+      - 'apps/CYInvoice/tests/CYInvoice.SqliteMigration.Tests/**'
       - '.github/workflows/cyinvoice-cloud.yml'
   push:
     branches:
@@ -17,6 +18,7 @@ on:
       - 'apps/CYInvoice/src/CYInvoice.Core/**'
       - 'apps/CYInvoice/src/CYInvoice.WinForms/**'
       - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
+      - 'apps/CYInvoice/tests/CYInvoice.SqliteMigration.Tests/**'
       - '.github/workflows/cyinvoice-cloud.yml'
 
 permissions:
@@ -226,6 +228,10 @@ jobs:
       - name: Run Windows-client cloud contract tests
         working-directory: apps/CYInvoice
         run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release
+
+      - name: Run SQLite upgrade migration tests
+        working-directory: apps/CYInvoice
+        run: dotnet run --project tests/CYInvoice.SqliteMigration.Tests/CYInvoice.SqliteMigration.Tests.csproj -c Release
 
   windows-client:
     runs-on: windows-2022
