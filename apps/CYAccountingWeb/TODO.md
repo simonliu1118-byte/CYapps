@@ -2,7 +2,22 @@
 
 本文件只記錄待辦、後續方向與未來評估項目，不作為永久規則來源。
 
-> 目前 conversation/workspace continuity：[`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)
+
+## CYCloud Identity 接入 — development workstream
+
+- [x] 採用 CYID Consumer Contract `1.0.1`，新增 `CYID_CONSUMER_VERSION`，並在 `PROJECT_RULES.md` 固定 shared Identity / app-local accounting authorization 邊界。
+- [x] CYACC-specific migration handoff 改由 `../CYCloudIdentity/docs/consumers/CYACC_INTEGRATION_HANDOFF.md` 維護；dated conversation handoff 已退役。
+- [ ] **Provider prerequisite**：在第一次 end-to-end login 前，由 CYID workstream 確認／建立 CYACC Application registry row 與 Workspace enablement；不得由 CYAccountingWeb 直接寫 CYID D1。
+- [ ] deployment template / render script / GitHub Environment contract 加入 CYID Application ID + Workspace ID；Public source 只放 placeholder／env name，不提交實值。
+- [ ] 將 `/api/auth/login` 從 legacy `/v1/web-auth/login` 改為 CYID permanent-password login；非 core App 必須拒絕 first-login-required response。
+- [ ] 將 `/api/auth/me` 與所有 protected accounting request 的 Identity authority 改為 CYID Session resolve；不得以 local `web_sessions` 作 fallback。
+- [ ] logout 改為先撤銷 CYID provider Session，再清除 CYACC cookie。
+- [ ] password recovery 改接 CYID `/v1/identity/password-recovery/start|confirm`，並改用 8–16 Unicode permanent-password boundary／non-enumerating UX。
+- [ ] provider Session path development acceptance 通過後，以 forward migration 退休 `web_sessions`；已套用的 `0002_web_sessions.sql` 不重寫。
+- [ ] 驗證 USER/ADMIN/SUPER_ADMIN direct Role projection、Identity Admin capability、CYACC Application Access allow/deny、Employee disable／credential change／App Access revoke 的 immediate invalidation。
+- [ ] 保留 Build 8 起已驗證的 Tablet Safari `SameSite=Lax + Expires + navigation-safe` 相容性，並重新做 Desktop/Tablet/Mobile login/session acceptance。
+- [ ] production Identity cutover 需使用者另行明確批准；不得與 accounting D1、backup topology、帳務語意或 hostname 改動綁在同一次 cutover。
+
 
 ## 電腦版核心功能移植
 
@@ -10,7 +25,7 @@
 - [x] 帳戶、收入／支出科目、常用科目管理。
 - [x] 期初餘額與月份鎖帳。
 - [x] 常用摘要基本版（帳戶＋收支＋科目）。
-- [x] CYInvoice Cloud 共用員工登入、Session 與 Email 忘記密碼。
+- [x] Legacy CYInvoice Cloud 共用員工登入、Session 與 Email 忘記密碼（目前 runtime migration source；將由上方 CYID workstream 取代）。
 - [x] 記帳資料表月份前後切換、摘要搜尋、完整月統計、逐筆餘額與帳戶分組檢視（V0.6.0）。
 - [x] 記帳資料表直接欄位編輯：按編輯後原列直接切換為輸入控制，Enter 儲存、Esc 取消；鎖帳列不可編輯（V0.14.0）。
 - [x] 輸入確認區：最近 10 筆存檔結果、成功／失敗狀態與千分位顯示（V0.7.0；後續 Desktop presentation 已再重整）。
@@ -78,6 +93,6 @@
 - [ ] 若未來 Chihyuan 企業管理系統整合多個 CY 工具，再統一規劃入口、導覽、角色／App 權限與共用帳號體驗。
 - [ ] Backup 整合優先採「各 App → 共用 CY Backup Service／Worker → app-scoped R2/GCS」；不以直接共用同一把廣權限 storage credential 作為整合方式。
 - [ ] 即使改由共用 Backup Service 管理，各 App 的備份資料仍維持邏輯隔離與獨立還原能力；caller identity 必須由 server-side mapping 決定可存取 dataset，不得只信任 caller 傳入的 `appId`。
-- [ ] 共用員工帳號權威目前仍暫由 **CYInvoice Cloud** 提供；跨 App Identity／SSO 正由 **CY-WEB / CYCloudIdentity workstream** 逐步遷移。CYAccountingWeb 不直接讀取 CYInvoice D1，只透過 `IDENTITY` Service Binding contract 使用帳號能力。
-- [ ] 涉及 Identity authority、跨 App 帳號／角色、shared account database、Service Binding、shared Worker、跨 App D1 ownership 或 shared Backup Service routing 等底層變更時，實作前必須先同步 CY-WEB / CYCloudIdentity 最新決策，不由 CYAccountingWeb 單獨先行定義。
-- [ ] 在 shared Identity 正式遷移完成前，CYAccountingWeb 仍維持自己的帳務 D1 與 application session 邊界；共用帳號不代表合併 runtime database。
+- [ ] Shared Identity 未來 authority 已定案為 **CYCloud Identity**；目前 CYInvoice Cloud Web Auth 只保留到 CYID development migration 驗證完成。CYAccountingWeb 不直接讀取任何 Identity D1，只透過 private `IDENTITY` Service Binding 使用 provider contract。
+- [ ] Shared Identity 變更一律先讀同 repo CYID canonical Consumer Standard／Changelog 與 CYACC-specific handoff；CYAccountingWeb 不單獨定義 Role／App Access／Session／Recovery。Shared Backup Service routing 仍依各自 canonical workstream 處理。
+- [ ] Identity migration 期間 CYAccountingWeb 帳務 D1 持續獨立；provider Session authority 轉移到 CYID 不代表合併 runtime database，也不代表保留本地 Identity Session authority。
