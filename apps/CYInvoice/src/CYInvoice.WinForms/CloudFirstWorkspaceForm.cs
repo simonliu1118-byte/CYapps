@@ -330,8 +330,8 @@ internal sealed class CloudFirstWorkspaceForm : Form
 
     private void RequireSuperAdminAuthentication()
     {
-        var authenticated = repository.Employees.Authenticate(superAdmin.EmployeeNo, superAdminPassword.Text);
-        if (authenticated is null || authenticated.Role != EmployeeRoles.SuperAdmin || !authenticated.Enabled)
+        var authenticated = repository.AuthenticatePrincipal(superAdmin.EmployeeNo, superAdminPassword.Text);
+        if (authenticated is null || authenticated.Role != AppRole.SuperAdmin || !authenticated.Enabled)
             throw new InvalidOperationException("本機超級管理員密碼錯誤。");
     }
 

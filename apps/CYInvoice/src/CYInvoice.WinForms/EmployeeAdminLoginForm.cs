@@ -11,27 +11,35 @@ internal sealed class EmployeeAdminLoginForm : Form
     private const int ActionRowHeight = 40;
     private const int CompactButtonWidth = 70;
     private const int CompactButtonHeight = 28;
-    private readonly Func<string, string, EmployeeAccount?> authenticate;
+    private readonly IIdentityProvider identityProvider;
+    private readonly bool administratorRequired;
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(200);
     private readonly Button login = CompactButton("確定");
     private readonly Button cancel = CompactButton("取消");
 
     public EmployeeAdminLoginForm(EmployeeStore employees, string title = WindowTitle)
-        : this((employeeNo, password) => employees.Authenticate(employeeNo, password), title)
+        : this(new LocalIdentityProvider(employees), title, true)
     {
         ArgumentNullException.ThrowIfNull(employees);
     }
 
     public EmployeeAdminLoginForm(LocalRepository repository, string title = WindowTitle)
-        : this((employeeNo, password) => repository.AuthenticateEmployee(employeeNo, password), title)
+        : this(repository.IdentityProvider, title, true)
     {
         ArgumentNullException.ThrowIfNull(repository);
     }
 
-    private EmployeeAdminLoginForm(Func<string, string, EmployeeAccount?> authenticate, string title)
+    public EmployeeAdminLoginForm(LocalRepository repository, string title, bool administratorRequired)
+        : this(repository.IdentityProvider, title, administratorRequired)
     {
-        this.authenticate = authenticate ?? throw new ArgumentNullException(nameof(authenticate));
+        ArgumentNullException.ThrowIfNull(repository);
+    }
+
+    internal EmployeeAdminLoginForm(IIdentityProvider identityProvider, string title, bool administratorRequired)
+    {
+        this.identityProvider = identityProvider ?? throw new ArgumentNullException(nameof(identityProvider));
+        this.administratorRequired = administratorRequired;
         Text = string.IsNullOrWhiteSpace(title) ? WindowTitle : title.Trim();
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, WindowHeight);
@@ -46,7 +54,8 @@ internal sealed class EmployeeAdminLoginForm : Form
     }
 
     public EmployeeAccount? AuthenticatedEmployee { get; private set; }
-    public string AuthenticatedPassword => AuthenticatedEmployee is null ? string.Empty : password.Text;
+    public AppPrincipal? AuthenticatedPrincipal { get; private set; }
+    public string AuthenticatedPassword => AuthenticatedPrincipal is null ? string.Empty : password.Text;
 
     private void BuildLayout()
     {
@@ -115,24 +124,26 @@ internal sealed class EmployeeAdminLoginForm : Form
         field.TextAlign = HorizontalAlignment.Left;
     }
 
-    private void LoginClicked(object? sender, EventArgs eventArgs)
+    private async void LoginClicked(object? sender, EventArgs eventArgs)
     {
         try
         {
-            var account = authenticate(employeeNo.Text, password.Text);
-            if (account is null)
+            var principal = await identityProvider.AuthenticateAsync(
+                new IdentityAuthenticationRequest(employeeNo.Text, password.Text));
+            if (principal is null)
             {
                 ValidationError("員工編號或密碼錯誤", password);
                 return;
             }
-            if (!EmployeeRoles.CanManageAccounts(account.Role))
+            if (administratorRequired && !AppRoles.CanManageAccounts(principal.Role))
             {
                 MessageBox.Show(this, "權限不足，僅管理員可執行此操作。", "權限不足",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            AuthenticatedEmployee = account;
+            AuthenticatedPrincipal = principal;
+            AuthenticatedEmployee = principal.ToEmployeeAccount();
             DialogResult = DialogResult.OK;
             Close();
         }

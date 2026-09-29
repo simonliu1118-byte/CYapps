@@ -47,7 +47,7 @@ internal sealed class EmployeeEditForm : Form
     public string Password => password.Text;
     public string Role => existingRole == EmployeeRoles.SuperAdmin
         ? EmployeeRoles.SuperAdmin
-        : role.SelectedIndex == 1 ? EmployeeRoles.Admin : EmployeeRoles.Employee;
+        : role.SelectedIndex == 1 ? EmployeeRoles.Admin : EmployeeRoles.User;
 
     private int FieldCount => createMode ? 6 : 4;
     private int CalculateHeight() => 16 + FieldCount * FieldRowHeight + ActionRowHeight;

@@ -157,7 +157,7 @@ public sealed class CloudEmployeeManagementClient
             throw new ArgumentException("Employee No must be four digits.", nameof(proposal));
         if (string.IsNullOrWhiteSpace(proposal.Name) || string.IsNullOrWhiteSpace(proposal.Email))
             throw new ArgumentException("Employee name and Email are required.", nameof(proposal));
-        if (proposal.Role is not ("ADMIN" or "EMPLOYEE"))
+        if (proposal.Role is not ("ADMIN" or "USER"))
             throw new ArgumentException("New Cloud Employee role must be ADMIN or EMPLOYEE.", nameof(proposal));
         if (!proposal.CredentialVerifier.StartsWith("pbkdf2-sha256$", StringComparison.Ordinal))
             throw new ArgumentException("Cloud Employee credential verifier is invalid.", nameof(proposal));

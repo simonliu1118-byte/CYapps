@@ -47,7 +47,7 @@ internal sealed class MainForm : Form
     private readonly TabPage invoiceTab = new("開立發票");
     private readonly TabPage recordsTab = new("已開立發票清單");
     private readonly Button forgotPasswordButton = UiControls.StandardButton("忘記密碼");
-    private readonly Button accountManagementButton = UiControls.StandardButton("帳戶管理");
+    private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
     private readonly Label copyrightLabel = new()
     {
@@ -273,7 +273,7 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
-        if (!TryAuthenticateAdministrator("開啟設定", out _)) return;
+        if (!TryAuthenticateAdministrator("密碼驗證", out _)) return;
         using var form = new SettingsForm(repository);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         UpdateEnvironment();
@@ -285,21 +285,41 @@ internal sealed class MainForm : Form
 
     private void OpenAccountManagement()
     {
-        if (!TryAuthenticateAdministrator("帳戶管理驗證", out var account)) return;
-        using var form = new AccountManagementForm(repository, account!);
-        form.ShowDialog(this);
+        if (!repository.HasAuthorityEmployees())
+        {
+            MessageBox.Show(this, "尚未建立可用的員工帳戶，請先完成首次設定或雲端帳號同步。", "密碼驗證",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        using var login = new EmployeeAdminLoginForm(repository, "密碼驗證", administratorRequired: false);
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        if (EmployeeRoles.CanManageAccounts(login.AuthenticatedEmployee.Role))
+        {
+            using var adminForm = new AccountManagementForm(repository, login.AuthenticatedEmployee);
+            adminForm.ShowDialog(this);
+        }
+        else
+        {
+            using var selfForm = new SelfAccountManagementForm(repository, login.AuthenticatedEmployee,
+                login.AuthenticatedPassword, cloudHealthHttpClient);
+            selfForm.ShowDialog(this);
+        }
     }
 
     private void OpenPasswordRecovery()
     {
         if (repository.UsesCloudEmployeeAuthority())
         {
-            MessageBox.Show(
-                this,
-                "這台電腦已使用 Cloud Employee 作為唯一帳號主資料。原本 Local SUPER_ADMIN 復原碼不再具有雲端帳號權限；請使用後續中央帳號復原流程。",
-                "雲端帳號復原",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            try
+            {
+                using var cloudRecovery = new CloudPasswordRecoveryForm(repository, cloudHealthHttpClient);
+                if (cloudRecovery.ShowDialog(this) == DialogResult.OK) _ = RefreshRuntimeModeAsync();
+            }
+            catch (Exception problem)
+            {
+                MessageBox.Show(this, problem.Message, "無法復原密碼",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             return;
         }
         if (!repository.Employees.HasEmployees())

@@ -8,6 +8,7 @@ on:
       - 'apps/CYInvoice/src/CYInvoice.Core/**'
       - 'apps/CYInvoice/src/CYInvoice.WinForms/**'
       - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
+      - 'apps/CYInvoice/tests/CYInvoice.SqliteMigration.Tests/**'
       - '.github/workflows/cyinvoice-cloud.yml'
   push:
     branches:
@@ -17,6 +18,7 @@ on:
       - 'apps/CYInvoice/src/CYInvoice.Core/**'
       - 'apps/CYInvoice/src/CYInvoice.WinForms/**'
       - 'apps/CYInvoice/tests/CYInvoice.Cloud.Tests/**'
+      - 'apps/CYInvoice/tests/CYInvoice.SqliteMigration.Tests/**'
       - '.github/workflows/cyinvoice-cloud.yml'
 
 permissions:
@@ -67,7 +69,8 @@ jobs:
           tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           required_tables = {
               'workspaces', 'devices', 'device_pairing_codes', 'email_otp_challenges',
-              'cloud_employees', 'device_employee_links', 'employee_link_candidates'
+              'cloud_employees', 'device_employee_links', 'employee_link_candidates',
+              'device_invitations', 'security_audit_events'
           }
           missing_tables = required_tables - tables
           if missing_tables:
@@ -77,7 +80,8 @@ jobs:
           required_device_columns = {
               'token_hash', 'token_created_at', 'pairing_id', 'revoked_at',
               'employee_onboarding_closed_at', 'employee_authority_state',
-              'employee_transition_started_at', 'employee_transition_completed_at'
+              'employee_transition_started_at', 'employee_transition_completed_at',
+              'invitation_id'
           }
           missing_columns = required_device_columns - device_columns
           if missing_columns:
@@ -114,7 +118,7 @@ jobs:
 
           device_indexes = {row[1] for row in db.execute("PRAGMA index_list('devices')")}
           required_device_indexes = {
-              'idx_devices_token_hash', 'idx_devices_pairing_id',
+              'idx_devices_token_hash', 'idx_devices_pairing_id', 'idx_devices_invitation_id',
               'idx_devices_employee_authority_state'
           }
           missing_indexes = required_device_indexes - device_indexes
@@ -146,6 +150,10 @@ jobs:
           if 'idx_single_workspace' not in workspace_indexes:
               raise SystemExit('missing single-workspace bootstrap invariant index')
 
+          audit_indexes = {row[1] for row in db.execute("PRAGMA index_list('security_audit_events')")}
+          if 'idx_security_audit_workspace_time' not in audit_indexes:
+              raise SystemExit('missing security audit workspace/time index after Schema 11 rebuild')
+
           db.execute("INSERT INTO workspaces (workspace_id, display_name) VALUES ('ws_one', 'One')")
           try:
               db.execute("INSERT INTO workspaces (workspace_id, display_name) VALUES ('ws_two', 'Two')")
@@ -166,6 +174,25 @@ jobs:
               pass
           else:
               raise SystemExit('single-SUPER_ADMIN invariant did not reject a second SUPER_ADMIN')
+
+          # Schema 11 must accept the dedicated Device revoke event without
+          # weakening the existing audit table or losing its workspace index.
+          db.execute("""
+              INSERT INTO security_audit_events (
+                  event_id, workspace_id, event_type, outcome,
+                  actor_device_id, actor_employee_id, target_device_id,
+                  reason_code, request_id, occurred_at
+              ) VALUES (
+                  'evt_device_revoke_schema11', 'ws_one', 'device_revoked', 'success',
+                  'dev_a', 'emp_x', 'dev_a', 'SELF_RETIRE',
+                  'schema11-regression', '2026-09-29T00:00:00Z'
+              )
+          """)
+          event_type = db.execute(
+              "SELECT event_type FROM security_audit_events WHERE event_id='evt_device_revoke_schema11'"
+          ).fetchone()[0]
+          if event_type != 'device_revoked':
+              raise SystemExit(f'Schema 11 Device revoke audit event was not retained: {event_type!r}')
 
           # Regression: schema 3 rejected the scoped purpose already used by
           # the pairing Worker. Schema 5 must accept it without weakening the
@@ -199,6 +226,25 @@ jobs:
               )
           """, ('b' * 64,))
 
+          # Password recovery uses its own purpose and cannot be confused with
+          # Employee Email change or Workspace recovery challenges.
+          db.execute("""
+              INSERT INTO email_otp_challenges (
+                  challenge_id, purpose, scope_key, email_normalized, otp_digest,
+                  delivery_state, expires_at, resend_after
+              ) VALUES (
+                  'otp_password_recovery_regression',
+                  'employee_password_recovery',
+                  'employee_password_recovery:ws_one:emp_x:1',
+                  'x@example.test',
+                  ?, 'sent', '2026-09-21T00:10:00Z', '2026-09-21T00:01:00Z'
+              )
+          """, ('c' * 64,))
+
+          foreign_key_errors = list(db.execute('PRAGMA foreign_key_check'))
+          if foreign_key_errors:
+              raise SystemExit(f'foreign key errors after migrations: {foreign_key_errors}')
+
           print('D1 migrations syntax/shape/invariant check passed')
           PY
 
@@ -209,6 +255,10 @@ jobs:
       - name: Run Windows-client cloud contract tests
         working-directory: apps/CYInvoice
         run: dotnet run --project tests/CYInvoice.Cloud.Tests/CYInvoice.Cloud.Tests.csproj -c Release
+
+      - name: Run SQLite upgrade migration tests
+        working-directory: apps/CYInvoice
+        run: dotnet run --project tests/CYInvoice.SqliteMigration.Tests/CYInvoice.SqliteMigration.Tests.csproj -c Release
 
   windows-client:
     runs-on: windows-2022

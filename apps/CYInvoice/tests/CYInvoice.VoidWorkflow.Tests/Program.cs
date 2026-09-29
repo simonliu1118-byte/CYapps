@@ -173,6 +173,10 @@ static async Task TestAdminApprovesReviewAsync()
     var stored = setup.Repository.Invoices.LoadOrCreate().Single();
     Equal(InvoiceStates.Voided, stored.InvoiceState);
     Equal(null, setup.Workflow.ManualReviewFor(stored));
+    var handled = setup.Workflow.HandledReviewFor(stored);
+    Equal("3015", handled?.RequesterEmployeeNo);
+    Equal("2000", handled?.ReviewerEmployeeNo);
+    Equal("退貨", handled?.Reason);
     Equal(false, HasCorePending(stored));
     var resolved = new InvoiceSyncIssueStore(setup.Repository.DataDirectory).All(AccountKey()).Single(item => item.Id == issue.Id);
     Equal(true, resolved.ResolvedUtc is not null);
@@ -195,6 +199,7 @@ static async Task TestApprovedPendingVoidAsync()
     var stored = setup.Repository.Invoices.LoadOrCreate().Single();
     Equal(true, HasCorePending(stored));
     Equal(null, setup.Workflow.ManualReviewFor(stored));
+    Equal("0001", setup.Workflow.HandledReviewFor(stored)?.ReviewerEmployeeNo);
     var resolved = new InvoiceSyncIssueStore(setup.Repository.DataDirectory).All(AccountKey()).Single(item => item.Id == issue.Id);
     Equal(true, resolved.ResolvedUtc is not null);
 }

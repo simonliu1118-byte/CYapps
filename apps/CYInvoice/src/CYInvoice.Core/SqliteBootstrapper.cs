@@ -24,6 +24,8 @@ public static class SqliteBootstrapper
         var databasePath = Path.Combine(dataDirectory, DatabaseFileName);
         if (File.Exists(databasePath))
         {
+            _ = ValidateExistingDatabase(databasePath);
+            RoleVocabularySchemaMigration.Ensure(databasePath);
             return ValidateExistingDatabase(databasePath);
         }
 

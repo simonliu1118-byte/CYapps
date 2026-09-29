@@ -378,7 +378,7 @@ internal sealed class CloudEmployeeTransitionForm : Form
     {
         EmployeeRoles.SuperAdmin => "超級管理員",
         EmployeeRoles.Admin => "管理員",
-        EmployeeRoles.Employee => "一般員工",
+        EmployeeRoles.User => "一般使用者",
         _ => role,
     };
 

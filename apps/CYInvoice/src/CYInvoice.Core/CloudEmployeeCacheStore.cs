@@ -241,6 +241,20 @@ public sealed class CloudEmployeeCacheStore
         }
     }
 
+    public void DisableOfflineCredential(string employeeNo)
+    {
+        employeeNo = NormalizeEmployeeNo(employeeNo);
+        lock (gate)
+        {
+            using var connection = Open(SqliteOpenMode.ReadWrite);
+            ConfigureWritableConnection(connection);
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE cloud_employee_cache SET enabled = 0 WHERE employee_no = $employee_no;";
+            command.Parameters.AddWithValue("$employee_no", employeeNo);
+            command.ExecuteNonQuery();
+        }
+    }
+
     private void EnsureSchema()
     {
         lock (gate)
@@ -255,7 +269,7 @@ public sealed class CloudEmployeeCacheStore
                     employee_no TEXT NOT NULL UNIQUE,
                     name TEXT NOT NULL,
                     email TEXT NOT NULL,
-                    role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'EMPLOYEE')),
+                    role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'USER')),
                     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
                     email_verified INTEGER NOT NULL CHECK (email_verified IN (0, 1)),
                     credential_verifier_enc TEXT NOT NULL,
