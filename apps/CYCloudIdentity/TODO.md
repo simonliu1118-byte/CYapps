@@ -5,7 +5,7 @@
 ## Current checkpoint — 2026-09-30
 
 - Current formal source baseline is **CYCloudIdentity 0.3.3 Build 0**；本 patch 建立 governed shared consumer standard / compatibility lifecycle，development runtime 仍是已部署的 **0.3.0 Build 0**，不因治理／文件調整自動重部署。
-- CY Web formal source/development baseline is **0.4.0 Build 0**，已接上 CYID 0.3 first-login Email verification，並完成 direct Employee × Module Access management / server-check foundation。固定入口仍為 `https://admin.chihyuancm.com`。
+- CY Web formal source baseline is **0.5.1 Build 0**；development runtime is **0.5.0 Build 0**。已接上 CYID 0.3 first-login Email verification、direct Module Access，以及 Customer/Item/Defect protected Worker API Phase 1。固定入口仍為 `https://admin.chihyuancm.com`。
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
   - 只允許 CY Web core account application；
@@ -20,7 +20,7 @@
 - Provider local acceptance 已證明：expiry、single-use、core-app-only、ticket-not-session、completion-no-session、ticket replay rejection、explicit re-login、resend/edit invalidation。
 - CYID 0.3 development deploy 已成功完成 remote migration `0007_initial_email_password.sql`、Worker deploy 與 Identity secret configuration。
 - Controlled real Email/browser lifecycle 驗收依使用者目前條件暫緩；這不重開已定案 contract，但仍是 production 前必要 acceptance。
-- CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.0 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
+- CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.1 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
 - CYAccountingWeb（CYACCweb）handoff 已收斂為 app-specific migration guide：`docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；共同 Role / Session / App Access / first-login / recovery 規範只讀 `docs/CONSUMER_INTEGRATION_STANDARD.md`。
 - Cross-repository contract mirror 已定義 manifest + exact-sync 規則：CY Web 等外部 repo 必須鏡像 manifest 所列 7 個 artifacts 並在 governance/CI/deploy 前 byte-compare；同 repo consumer 直接讀 canonical files。
 - Production、backup rollout 與其他 consumer production cutover 均未進行。
