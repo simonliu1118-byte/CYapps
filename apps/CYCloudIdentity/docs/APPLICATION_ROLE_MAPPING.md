@@ -1,111 +1,68 @@
-# CYCloud Identity — Application Role Mapping
+# CYCloud Identity — Legacy Application Role Mapping
 
-> Status: executable coarse consumer-App compatibility-role contract. It does not replace App-local module/business permissions.
+> **Status: legacy implementation note. Superseded for forward design by `ROLE_AND_ACCESS_MODEL.md`.**
+>
+> The deployed CYCloud Identity `0.1.14` still contains this Group-based compatibility-role mechanism. It remains documented only so the current runtime can be understood and migrated safely. New product work must not extend this model.
 
-## Purpose
+## Legacy purpose
 
-CYCloud Identity decides whether an Employee may enter an enabled Application through Workspace highest authority, a direct Employee grant, or an Identity Group grant.
+The existing implementation decides Application entry through a combination of:
 
-Some consumer Apps also need one **coarse compatibility role** after entry so they can preserve an existing simple authorization model without rebuilding a second account/role system. The first required case is CYInvoice, whose existing compatibility role is only `USER`, `ADMIN`, or protected `SUPER_ADMIN`.
+- protected Workspace Super Admin access;
+- direct Employee Application grants;
+- Identity Group Application grants.
 
-The mapping remains Application-scoped and does not turn ordinary Identity Groups into a fixed global role enum.
+An optional `USER_ADMIN` compatibility mode then projects a coarse consumer role.
 
-## Data model
+## Legacy data model
 
-`workspace_applications` owns the optional compatibility mode:
+`workspace_applications` currently supports:
 
 ```text
 compatibility_role_mode = NULL | USER_ADMIN
 ```
 
-`identity_group_application_access` owns the per-Group, per-Application mapping:
+`identity_group_application_access` currently supports:
 
 ```text
 application_role_key = NULL | USER | ADMIN
 ```
 
-Rules:
+Under this legacy mode:
 
-- the role mapping belongs to the specific **Group + Application** grant, not to the Identity Group globally;
-- Applications that do not need a compatibility role keep `compatibility_role_mode = NULL` and omit `applicationRoleKey` from the principal;
-- when `USER_ADMIN` mode is enabled, active Group grants require `USER` or `ADMIN`;
-- `SUPER_ADMIN` is reserved Workspace authority and may never be stored by an ordinary Group mapping;
-- disabling/removing a Group Application grant removes that mapping from effective authorization;
-- Public migrations/tests use synthetic Application data only; no real Workspace access matrix is seeded.
+1. Workspace Super Admin resolves to `SUPER_ADMIN`.
+2. An active Group mapping to `ADMIN` resolves to `ADMIN`.
+3. Otherwise an active Group mapping to `USER` resolves to `USER`.
+4. Otherwise a direct Employee Application grant resolves to `USER`.
+5. Otherwise there is no effective Application access.
 
-The existing `employee_application_access` direct grant remains an entry grant. Under `USER_ADMIN` mode a direct grant without a qualifying Group role resolves to `USER`, so there is no second per-Employee Admin/User configuration surface.
-
-## CYInvoice mapping
-
-For a normal Identity Group that has CYInvoice Application Access, the management UI shows exactly one field:
+The legacy precedence is therefore:
 
 ```text
-CYInvoice 權限
-- User
-- Admin
+SUPER_ADMIN > ADMIN > USER
 ```
 
-Stored values:
+Ordinary Groups cannot create `SUPER_ADMIN`.
 
-```text
-USER
-ADMIN
-```
+## Why this is being replaced
 
-There is no `SUPER_ADMIN` option.
+The approved product model has been simplified:
 
-### Effective CYInvoice role
+- CYID has exactly three Workspace roles: `SUPER_ADMIN`, `ADMIN`, `USER`;
+- `Identity Admin` is an ADMIN capability, not a fourth role;
+- Application Access decides **entry only**;
+- consumer Apps receive the CYID Workspace role directly instead of deriving another role from Group mappings;
+- App-local module/business permissions remain inside the consumer App;
+- CY Web is the special multi-module core App with always-on entry and its own Module Access model.
 
-Resolve in this order:
+See `ROLE_AND_ACCESS_MODEL.md` for the approved target contract.
 
-1. `isWorkspaceSuperAdmin = true` → `SUPER_ADMIN`.
-2. Otherwise, if any active CYInvoice-enabled Identity Group for the Employee maps to `ADMIN` → `ADMIN`.
-3. Otherwise, if any active CYInvoice-enabled Identity Group maps to `USER` → `USER`.
-4. Otherwise, if the Employee has an active direct CYInvoice Application grant → `USER`.
-5. Otherwise → no CYInvoice access.
+## Migration rule
 
-This gives a deterministic conflict rule: **SUPER_ADMIN > ADMIN > USER**.
+Until runtime migration is complete:
 
-A normal Group can therefore never create or impersonate the protected Workspace highest authority.
-
-## API projection
-
-For an Application with `compatibility_role_mode = USER_ADMIN`, both login and session resolve return the current effective role in the normalized principal:
-
-```json
-{
-  "principal": {
-    "applicationRoleKey": "USER"
-  }
-}
-```
-
-Allowed values are:
-
-```text
-USER
-ADMIN
-SUPER_ADMIN
-```
-
-The value is computed server-side from **current** Workspace authority, active Group memberships, Group Application grants and direct Application access. Session resolve recomputes the projection; consumers must not reconstruct it from editable Group display names or cache it as an independent authority source.
-
-Applications without compatibility-role mode omit the field.
-
-## UI behavior
-
-CY Web Shared Identity management UI presents the mapping on the **Identity Group → Application Access** row, not as a second global Group role field.
-
-Expected behavior:
-
-- Application compatibility mode off → no role selector;
-- `USER_ADMIN` mode on + Group Application access on → require `User` or `Admin`;
-- current Workspace highest authority does not need this selector to obtain `SUPER_ADMIN`;
-- changing Group membership or mapping changes the effective role on the next Identity session resolve without copying role state into the consumer App;
-- Group rename does not affect the mapping because authorization references stable `group_id`.
-
-## Boundary
-
-This mechanism is only a coarse compatibility projection. Detailed CYInvoice business/module permissions, Device lifecycle, Local/Cloud transition and Windows offline behavior remain in the CYInvoice workstream.
-
-Other Apps may use the same generic `application_role_key` field only when they genuinely need a coarse compatibility role. CYCloud Identity must not grow a global fixed role enum or a universal fine-grained permission catalog.
+- existing Group/direct grants and `applicationRoleKey` behavior remain current implementation facts;
+- do not add new Group-derived role semantics;
+- do not teach new consumer Apps to reconstruct authority from Group names/mappings;
+- migration must preserve a safe authorization path while Employee Workspace Role and target App Access are introduced;
+- CYInvoice source/runtime remains unchanged in this workstream and will adopt the stable three-role contract only in its dedicated integration work.
