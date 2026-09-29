@@ -46,17 +46,17 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '8');
+assert.equal(build, '9');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0212\.js'/);
 assert.match(build11Js, /ensureV0215Stylesheet\(\)/);
-assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b8'/);
+assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b9'/);
 assert.match(build11Js, /ensureV0215Build3Script\(\)/);
 assert.match(build11Js, /script\.src = '\/v0215b3\.js'/);
 assert.match(build11Js, /ensureV0215Build4Script\(\)/);
-assert.match(build11Js, /script\.src = '\/v0215b4\.js\?v=0215b8'/);
+assert.match(build11Js, /script\.src = '\/v0215b4\.js\?v=0215b9'/);
 assert.match(build12Js, /CY_V21_BUILD12_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build13Js, /CY_V21_BUILD13_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build14Js, /CY_V21_BUILD14_DESKTOP = '\(min-width: 1024px\)'/);
@@ -89,7 +89,7 @@ assert.match(workerApp, /SameSite=Lax/);
 assert.match(workerApp, /Expires=\$\{expires\}/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
-// V0.21.5 Build 8 keeps Build 7 behavior while fixing Safari auth, switch corners, and the five-slot month toolbar.
+// V0.21.5 Build 9 keeps auth untouched and decouples the visible mobile month label from Safari's native month rendering.
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
 assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?linear-gradient\(to right, rgba\(86, 176, 113/);
 assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?linear-gradient\(to right, rgba\(207, 104, 94/);
@@ -100,6 +100,10 @@ assert.match(patch5Css, /\.entry-card > \.section-title[\s\S]*?background:\s*tra
 assert.match(patch5Css, /\.entry-kind-switch-field[\s\S]*?background:\s*transparent !important/);
 assert.match(patch5Css, /\.entry-kind-switch\s*\{[\s\S]*?overflow:\s*hidden !important[\s\S]*?clip-path:\s*inset\(0 round 10px\) !important/);
 assert.match(patch5Css, /#ledgerMonthSlot > \.month-picker[\s\S]*?width:\s*100% !important/);
+assert.match(patch5Css, /#mobileLedgerMonthDisplay[\s\S]*?pointer-events:\s*none !important/);
+assert.match(patch5Css, /\.ledger-month-tools input\[type="month"\][\s\S]*?opacity:\s*0\.01 !important/);
+assert.match(patch5Css, /input\[type="month"\]::-webkit-calendar-picker-indicator[\s\S]*?opacity:\s*0 !important/);
+assert.match(patch5Css, /#ledgerMonthSlot[\s\S]*?overflow:\s*hidden !important/);
 assert.match(patch5Css, /#ledgerDisplayMonth\s*\{[\s\S]*?display:\s*none !important/);
 assert.match(patch5Css, /"save"[\s\S]*?"secondary"[\s\S]*?"message"/);
 assert.match(patch5Css, /\.v0215-mobile-save-message[\s\S]*?transition:\s*opacity 400ms ease/);
@@ -121,6 +125,10 @@ assert.match(patch5Build4Js, /monthTools\.classList\.add\('v0215-toolbar-ready'\
 assert.match(patch5Build4Js, /const slot = document\.querySelector\('#ledgerMonthSlot'\)/);
 assert.match(patch5Build4Js, /if \(picker\.parentElement !== slot\) slot\.append\(picker\)/);
 assert.match(patch5Build4Js, /monthTools\.append\(balance, prev, slot, next, more\)/);
+assert.match(patch5Build4Js, /setupV0215Build4MonthDisplay\(slot\)/);
+assert.match(patch5Build4Js, /display\.id = 'mobileLedgerMonthDisplay'/);
+assert.match(patch5Build4Js, /syncV0215Build4MonthDisplay/);
+assert.match(patch5Build4Js, /display\.textContent = match \? \`\$\{Number\(match\[1\]\)\}年\$\{Number\(match\[2\]\)\}月\` : '選擇月份'/);
 assert.match(patch5Build4Js, /button\.id = 'mobileEntrySecondaryButton'/);
 assert.match(patch5Build4Js, /button\.textContent = cyV0215Build4Edit \? '取消' : '清空'/);
 assert.match(patch5Build4Js, /cancelV0215Build4MobileEditAndReturn/);
@@ -195,4 +203,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 Build 8 adaptive UI regression tests passed.');
+console.log('V0.21.5 Build 9 adaptive UI regression tests passed.');
