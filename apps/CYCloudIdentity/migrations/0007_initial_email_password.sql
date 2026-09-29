@@ -10,6 +10,7 @@ CREATE TABLE employee_initial_credentials (
   exchange_token_digest TEXT,
   exchange_expires_at TEXT,
   issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
   sent_at TEXT,
   revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
 );
