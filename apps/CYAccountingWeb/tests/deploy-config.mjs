@@ -18,13 +18,16 @@ try {
     CF_D1_DATABASE_ID: '11111111-1111-4111-8111-111111111111',
     CF_IDENTITY_SERVICE: 'cyidentity-ci-placeholder',
     CF_R2_BACKUP_BUCKET: 'cyaccounting-backup-ci',
-    CF_BACKUP_TOPOLOGY: 'legacy_gcs'
+    CF_BACKUP_TOPOLOGY: 'legacy_gcs',
+    CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: 'acc.example.com'
   };
   renderWrangler({ env, templatePath: TEMPLATE, outputPath: output });
   const renderedText = fs.readFileSync(output, 'utf8');
   const rendered = JSON.parse(renderedText);
   assert.equal(rendered.name, env.CF_WORKER_NAME);
   assert.equal(rendered.main, 'src/app-v19.js');
+  assert.equal(rendered.routes[0].pattern, env.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN);
+  assert.equal(rendered.routes[0].custom_domain, true);
   assert.equal(rendered.d1_databases[0].binding, 'DB');
   assert.equal(rendered.d1_databases[0].database_name, env.CF_D1_DATABASE_NAME);
   assert.equal(rendered.d1_databases[0].database_id, env.CF_D1_DATABASE_ID);
@@ -40,12 +43,15 @@ try {
   assert.throws(() => renderWrangler({ env: { ...env, CF_D1_DATABASE_ID: 'not-a-uuid' }, templatePath: TEMPLATE, outputPath: output }), /valid UUID/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_R2_BACKUP_BUCKET: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_BACKUP_TOPOLOGY: 'r2_only' }, templatePath: TEMPLATE, outputPath: output }), /legacy_gcs or parallel_dual_provider/);
+  assert.throws(() => renderWrangler({ env: { ...env, CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
+  assert.throws(() => renderWrangler({ env: { ...env, CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: 'https://acc.example.com' }, templatePath: TEMPLATE, outputPath: output }), /valid hostname/);
 
   const template = fs.readFileSync(TEMPLATE, 'utf8');
   assert.match(template, /__CF_D1_DATABASE_ID__/);
   assert.match(template, /__CF_IDENTITY_SERVICE__/);
   assert.match(template, /__CF_R2_BACKUP_BUCKET__/);
   assert.match(template, /__CF_BACKUP_TOPOLOGY__/);
+  assert.match(template, /__CF_CUSTOM_DOMAIN__/);
   console.log('Deployment config tests passed.');
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });

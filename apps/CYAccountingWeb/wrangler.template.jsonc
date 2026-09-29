@@ -10,6 +10,12 @@
       "/api/*"
     ]
   },
+  "routes": [
+    {
+      "pattern": "__CF_CUSTOM_DOMAIN__",
+      "custom_domain": true
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
