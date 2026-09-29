@@ -10,6 +10,7 @@ ensureV21Build16Script();
 ensureV0211PatchScript();
 ensureV0211KeyboardScript();
 ensureV0212PatchScript();
+ensureV0214PatchScript();
 
 document.addEventListener('DOMContentLoaded', () => {
   syncV21Build11Version();
@@ -89,6 +90,14 @@ function ensureV0212PatchScript() {
   if (document.querySelector('script[src="/v0212.js"]')) return;
   const script = document.createElement('script');
   script.src = '/v0212.js';
+  script.async = false;
+  document.head.appendChild(script);
+}
+
+function ensureV0214PatchScript() {
+  if (document.querySelector('script[src="/v0214.js"]')) return;
+  const script = document.createElement('script');
+  script.src = '/v0214.js';
   script.async = false;
   document.head.appendChild(script);
 }

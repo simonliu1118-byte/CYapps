@@ -326,6 +326,7 @@
       if (typeof refreshBootstrap === 'function') await refreshBootstrap();
       if (typeof loadTransactions === 'function') await loadTransactions();
       renderMigrationPreviewV19(pane, { ...preview, plan: { ...preview.plan, canCommit: false, warnings: [...(preview.plan.warnings || []), '本次移轉已完成；如來源資料之後有新增內容，請重新選取更新後的 SQLite 檔。'] } });
+      window.cyShowMigrationComplete?.(result);
     } catch (error) {
       setMigrationMessageV19(pane, error.message || '移轉失敗。', true);
       if (error.preview) renderMigrationPreviewV19(pane, error.preview);
