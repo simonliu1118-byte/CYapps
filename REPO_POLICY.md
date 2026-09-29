@@ -45,6 +45,7 @@
 - CYID consumer-visible contract 變更必須在 PR 標示 `CYID Consumer Impact: NONE / BACKWARD_COMPATIBLE / CONSUMER_UPDATE_REQUIRED`。後兩者必須同步更新 consumer standard、consumer contract version 與 consumer changelog。
 - 若變更要求 consumer 更新，CYID provider 不得先移除仍有正式 consumer 使用的相容行為。應先保留 compatibility path／完成 consumer migration，再提升最低相容 consumer version；不得以 provider 單邊更新造成既有 production consumer 中斷。
 - 各 consumer 的 app-local business/module authorization 仍由該 App 自己負責；遵守 CYID consumer standard 不代表把業務權限搬進 CYID。
+- 若 consumer 位於 CYID 以外的 repository，必須依 CYID `CONSUMER_SYNC_MANIFEST.json` 維護 canonical contract mirror，並以 CI/deploy gate 驗證逐檔同步；同一 CYapps repository 內的 consumer 直接引用 canonical CYID files，不建立重複副本。
 
 ## 5. CY 共用視覺準則
 
