@@ -246,7 +246,193 @@ CYACC-local permissions must be server-side enforced inside CYACC. Do not move a
 
 CY Web remains the primary account-management UI. CYACC does not need to duplicate Employee creation, Email verification, resend verification Email, Identity Admin grant/revoke, App Access administration, forced Email recovery, Super Admin transfer, or Workspace security policy.
 
-## 15. Recommended CYACC implementation sequence
+## 15. Current CYACC source migration map
+
+This handoff was checked against CYAccountingWeb V0.21.5 Build 8 on 2026-09-30. The current source already has the correct high-level Cloudflare shape — Worker, D1, Static Assets and a private `IDENTITY` Service Binding — but the Identity contract is still the legacy CYInvoice Cloud Web Auth contract.
+
+### 15.1 Current source that must change
+
+Current CYACC `src/app.js` still does all of the following:
+
+- calls `/v1/web-auth/login` through `IDENTITY`;
+- sends a literal `application: "CYAccountingWeb"`;
+- expects an `employee` response rather than the normalized CYID `principal`;
+- generates a second CYACC-local random session token;
+- hashes that local token and stores it in CYACC D1 `web_sessions`;
+- resolves `/api/auth/me` only from CYACC D1;
+- logs out by deleting the local `web_sessions` row;
+- calls legacy `/v1/web-auth/password-reset/challenge` and `.../confirm`;
+- accepts login passwords up to 200 characters;
+- constrains reset passwords to 8–200 ASCII letters/digits.
+
+All of those Identity-specific behaviors must be replaced by the CYID contract. CYACC accounting data, backup logic, UI layout and D1 business tables remain CYACC-owned.
+
+### 15.2 Login replacement
+
+Replace:
+
+~~~text
+CYACC /api/auth/login
+  -> IDENTITY /v1/web-auth/login
+  -> employee response
+  -> mint CYACC local token
+  -> INSERT web_sessions
+~~~
+
+with:
+
+~~~text
+CYACC /api/auth/login
+  -> IDENTITY /v1/identity/login
+     workspaceId = runtime IDENTITY_WORKSPACE_ID
+     applicationId = runtime IDENTITY_APPLICATION_ID
+  -> normalized principal + provider session
+  -> place the raw provider session token only in the reviewed CYACC HttpOnly cookie
+  -> no CYACC D1 session INSERT
+~~~
+
+The current literal `APPLICATION = "CYAccountingWeb"` is not the future authority key. Use the registered CYID Application ID injected by deployment.
+
+CYACC login input must adopt the shared permanent-password boundary: **8–16 Unicode characters**.
+
+### 15.3 Local `web_sessions` retirement
+
+Migration `0002_web_sessions.sql` is already historical/applied source and must not be rewritten.
+
+During CYID migration:
+
+1. implement provider-session login/resolve/logout first;
+2. prove development login/session behavior;
+3. add a new forward CYACC migration that removes or retires `web_sessions`;
+4. remove local session mint/hash helpers only after the provider path is accepted.
+
+Do not keep `web_sessions` as a fallback authorization source after cutover. A provider outage must fail closed as `IDENTITY_UNAVAILABLE`, not silently fall back to a stale local Identity session.
+
+### 15.4 `/api/auth/me` and protected API replacement
+
+Current `sessionFromRequest(request, env.DB)` reads only CYACC D1. Replace that boundary with a provider resolve helper that:
+
+1. reads the CYACC Identity cookie;
+2. calls `POST /v1/identity/session/resolve`;
+3. sends `x-identity-application: <CYACC application id>`;
+4. validates the normalized principal;
+5. returns current authority to the accounting API.
+
+Existing accounting handlers may temporarily receive a compatibility session object, but any `role` field must be a direct alias of `principal.workspaceRole`. Do not invent a second CYACC role projection.
+
+### 15.5 Logout replacement
+
+Replace local-only `DELETE FROM web_sessions` logout with:
+
+~~~text
+CYACC Worker
+  -> CYID /v1/identity/logout
+  -> provider revokes app-scoped Identity Session
+  -> CYACC clears its cookie
+~~~
+
+Cookie deletion is cleanup, not the authority revocation itself.
+
+### 15.6 Password recovery replacement
+
+Current CYACC recovery uses:
+
+~~~text
+/v1/web-auth/password-reset/challenge
+/v1/web-auth/password-reset/confirm
+~~~
+
+Move to:
+
+~~~text
+POST /v1/identity/password-recovery/start
+POST /v1/identity/password-recovery/confirm
+~~~
+
+The CYACC Worker supplies the runtime Workspace ID server-side.
+
+Start request:
+
+~~~json
+{
+  "workspaceId": "<runtime workspace id>",
+  "employeeNo": "0001"
+}
+~~~
+
+Confirm request:
+
+~~~json
+{
+  "workspaceId": "<runtime workspace id>",
+  "employeeNo": "0001",
+  "challengeId": "<opaque challenge>",
+  "code": "123456",
+  "newPassword": "<8–16 Unicode chars>"
+}
+~~~
+
+CYID password-recovery start is intentionally non-enumerating and returns `challengeId / expiresAt / resendAfter`; it does **not** promise the current CYACC legacy `maskedEmail` field. Update CYACC copy to a neutral message such as:
+
+~~~text
+若帳號符合條件，驗證碼已寄至登記且已驗證的 Email。
+~~~
+
+Do not reintroduce account enumeration merely to preserve the old masked-Email UI.
+
+### 15.7 Existing tablet/Safari cookie compatibility
+
+CYAccountingWeb Build 8 intentionally changed its first-party cookie behavior to `SameSite=Lax` plus `Expires` and a navigation-safe post-login flow because immediate tablet Safari session handoff had failed in prior builds.
+
+Do **not** blindly replace that known-compatible browser behavior with `SameSite=Strict` merely because CY Web uses Strict.
+
+Required invariant is:
+
+- raw provider token stays HttpOnly + Secure;
+- no JS/localStorage exposure;
+- no cross-site login-token transport;
+- SameSite policy is explicitly reviewed and tested on CYACC Desktop/Tablet/Mobile;
+- keep the current Lax compatibility behavior until real-device acceptance proves a stricter setting safe.
+
+This is a CYACC browser-compatibility choice, not a change to CYID session authority.
+
+### 15.8 Deployment-template delta
+
+CYACC already has:
+
+~~~text
+services:
+  binding = IDENTITY
+~~~
+
+The migration therefore does not need a new browser-facing Identity endpoint.
+
+The deployment template/render script still needs runtime-injected values for:
+
+~~~text
+IDENTITY_APPLICATION_ID
+IDENTITY_WORKSPACE_ID
+~~~
+
+and the `IDENTITY` Service Binding target must be changed from the legacy CYInvoice Cloud identity provider to CYCloud Identity only in the governed CYACC development deployment.
+
+Do not commit the resolved provider service name, Workspace ID or registered Application ID.
+
+### 15.9 Scope that must remain untouched
+
+The CYID migration must not alter merely as a side effect:
+
+- CYACC authoritative accounting D1;
+- transaction/account/category/opening-balance/lock semantics;
+- SQLite import;
+- Excel import/export;
+- R2/GCS backup topology;
+- production custom domain `acc.chihyuancm.com`;
+- Desktop/Tablet/Mobile bookkeeping presentation.
+
+Identity cutover and accounting behavior are separate acceptance dimensions.
+
+## 16. Recommended CYACC implementation sequence
 
 1. add a provider-neutral Identity adapter inside CYACC;
 2. add private CYID Service Binding and runtime Application/Workspace IDs;
@@ -264,7 +450,7 @@ CY Web remains the primary account-management UI. CYACC does not need to duplica
 14. run the acceptance matrix below;
 15. production cutover only after explicit approval.
 
-## 16. Minimum acceptance matrix
+## 17. Minimum acceptance matrix
 
 Before CYACC production cutover prove:
 
@@ -283,7 +469,7 @@ Before CYACC production cutover prove:
 - no raw CYID token appears in source/log/localStorage;
 - CYACC business permission enforcement remains app-local and server-side.
 
-## 17. Current known acceptance gap
+## 18. Current known acceptance gap
 
 As of 2026-09-30, CYID 0.3 provider source, migrations, typecheck, auth-core, synthetic login/first-login acceptance and development deployment are complete.
 
@@ -300,7 +486,7 @@ create Employee
 
 CYACC development integration may proceed against the stable provider contract. Final production acceptance must still include this real lifecycle evidence.
 
-## 18. Canonical references
+## 19. Canonical references
 
 Read in this order:
 
