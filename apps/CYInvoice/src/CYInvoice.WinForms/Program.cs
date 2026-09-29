@@ -106,20 +106,20 @@ internal static class Program
             directJoin.VerifySmokeLayout();
             directJoin.Close();
 
-            // Device Join now deliberately prompts for Local ADMIN/SUPER_ADMIN on Shown.
+            // Device Join deliberately prompts for Local ADMIN/SUPER_ADMIN on Shown.
             // The startup smoke validates static layout without displaying the form so CI
             // never bypasses or blocks on the real runtime authorization gate.
             using var join = new CloudJoinWorkspaceForm(repository, settings, "https://cloud.example.test/");
             join.PerformLayout();
             join.VerifySmokeLayout();
 
+            // Device Management now loads the trusted-Device inventory from Cloud on Shown.
+            // Smoke validation must remain deterministic and offline, so validate the complete
+            // static layout without firing Shown or any real network request.
             var token = $"cydev_{new string('a', 64)}";
             using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
-            management.Show();
             management.PerformLayout();
-            Application.DoEvents();
             management.VerifySmokeLayout();
-            management.Close();
         }
         finally
         {
