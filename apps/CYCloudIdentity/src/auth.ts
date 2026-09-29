@@ -6,30 +6,24 @@ import {
   verifyCredential,
 } from "./crypto";
 import { json, readJsonObject } from "./http";
-import type {
-  ApplicationRoleKey,
-  Env,
-  IdentityPrincipal,
-  JsonValue,
-  LoginSuccess,
-} from "./types";
+import { effectiveWorkspaceRole, hasApplicationEntry, type StoredEmployeeRole } from "./role-access";
+import type { Env, IdentityPrincipal, JsonValue, LoginSuccess } from "./types";
 
 type EmployeeAuthRow = {
   employee_id: string;
   workspace_id: string;
   employee_no: string;
   name: string;
+  email_verified_at: string | null;
   enabled: number;
+  role_key: StoredEmployeeRole;
+  identity_admin: number;
   revision: number;
   workspace_status: string;
   super_admin_employee_id: string | null;
   credential_algorithm: string;
   credential_verifier: string;
   credential_version: number;
-};
-
-type WorkspaceApplicationRow = {
-  compatibility_role_mode: "USER_ADMIN" | null;
 };
 
 type SessionAuthorityRow = {
@@ -42,19 +36,16 @@ type SessionAuthorityRow = {
   revoked_at: string | null;
   employee_no: string;
   name: string;
+  email_verified_at: string | null;
   employee_enabled: number;
+  employee_role_key: StoredEmployeeRole;
+  employee_identity_admin: number;
   employee_revision: number;
   current_credential_version: number;
   workspace_status: string;
   super_admin_employee_id: string | null;
   application_status: string;
   workspace_application_enabled: number;
-  compatibility_role_mode: "USER_ADMIN" | null;
-};
-
-type ApplicationAccessProjection = {
-  allowed: boolean;
-  applicationRoleKey?: ApplicationRoleKey;
 };
 
 const DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -107,7 +98,10 @@ async function employeeForLogin(
             e.workspace_id,
             e.employee_no,
             e.name,
+            e.email_verified_at,
             e.enabled,
+            e.role_key,
+            e.identity_admin,
             e.revision,
             w.status AS workspace_status,
             w.super_admin_employee_id,
@@ -123,13 +117,13 @@ async function employeeForLogin(
   ).bind(workspaceId, employeeNo).first<EmployeeAuthRow>();
 }
 
-async function workspaceApplication(
+async function workspaceApplicationAvailable(
   env: Env,
   workspaceId: string,
   applicationId: string,
-): Promise<WorkspaceApplicationRow | null> {
-  return env.DB.prepare(
-    `SELECT wa.compatibility_role_mode
+): Promise<boolean> {
+  return Boolean(await env.DB.prepare(
+    `SELECT 1 AS available
        FROM workspace_applications wa
        JOIN applications a ON a.application_id = wa.application_id
       WHERE wa.workspace_id = ?1
@@ -137,90 +131,7 @@ async function workspaceApplication(
         AND wa.enabled = 1
         AND a.status = 'active'
       LIMIT 1`
-  ).bind(workspaceId, applicationId).first<WorkspaceApplicationRow>();
-}
-
-async function applicationAccessProjection(
-  env: Env,
-  workspaceId: string,
-  employeeId: string,
-  applicationId: string,
-  isWorkspaceSuperAdmin: boolean,
-  compatibilityRoleMode: "USER_ADMIN" | null,
-): Promise<ApplicationAccessProjection> {
-  if (isWorkspaceSuperAdmin) {
-    return compatibilityRoleMode === "USER_ADMIN"
-      ? { allowed: true, applicationRoleKey: "SUPER_ADMIN" }
-      : { allowed: true };
-  }
-
-  if (compatibilityRoleMode === "USER_ADMIN") {
-    const groupRole = await env.DB.prepare(
-      `SELECT CASE
-                WHEN MAX(CASE WHEN ga.application_role_key = 'ADMIN' THEN 2
-                              WHEN ga.application_role_key = 'USER' THEN 1
-                              ELSE 0 END) = 2 THEN 'ADMIN'
-                WHEN MAX(CASE WHEN ga.application_role_key = 'ADMIN' THEN 2
-                              WHEN ga.application_role_key = 'USER' THEN 1
-                              ELSE 0 END) = 1 THEN 'USER'
-                ELSE NULL
-              END AS role_key
-         FROM employee_identity_groups eg
-         JOIN identity_groups g
-           ON g.group_id = eg.group_id
-          AND g.workspace_id = eg.workspace_id
-         JOIN identity_group_application_access ga
-           ON ga.group_id = eg.group_id
-          AND ga.workspace_id = eg.workspace_id
-        WHERE eg.workspace_id = ?1
-          AND eg.employee_id = ?2
-          AND ga.application_id = ?3
-          AND g.status = 'active'
-          AND ga.enabled = 1
-          AND ga.application_role_key IN ('USER', 'ADMIN')`
-    ).bind(workspaceId, employeeId, applicationId).first<{ role_key: "USER" | "ADMIN" | null }>();
-
-    if (groupRole?.role_key === "ADMIN") return { allowed: true, applicationRoleKey: "ADMIN" };
-    if (groupRole?.role_key === "USER") return { allowed: true, applicationRoleKey: "USER" };
-
-    const direct = await env.DB.prepare(
-      `SELECT 1 AS allowed
-         FROM employee_application_access
-        WHERE workspace_id = ?1
-          AND employee_id = ?2
-          AND application_id = ?3
-          AND enabled = 1
-        LIMIT 1`
-    ).bind(workspaceId, employeeId, applicationId).first<{ allowed: number }>();
-    return direct
-      ? { allowed: true, applicationRoleKey: "USER" }
-      : { allowed: false };
-  }
-
-  const row = await env.DB.prepare(
-    `SELECT 1 AS allowed
-       FROM employee_application_access ea
-      WHERE ea.workspace_id = ?1
-        AND ea.employee_id = ?2
-        AND ea.application_id = ?3
-        AND ea.enabled = 1
-      UNION ALL
-     SELECT 1 AS allowed
-       FROM employee_identity_groups eg
-       JOIN identity_groups g
-         ON g.group_id = eg.group_id
-        AND g.workspace_id = eg.workspace_id
-       JOIN identity_group_application_access ga
-         ON ga.group_id = eg.group_id
-        AND ga.workspace_id = eg.workspace_id
-      WHERE eg.workspace_id = ?1
-        AND eg.employee_id = ?2
-        AND ga.application_id = ?3
-        AND g.status = 'active'
-        AND ga.enabled = 1
-      LIMIT 1`
-  ).bind(workspaceId, employeeId, applicationId).first<{ allowed: number }>();
-  return { allowed: Boolean(row) };
+  ).bind(workspaceId, applicationId).first<{ available: number }>());
 }
 
 async function groupKeys(
@@ -242,20 +153,23 @@ async function groupKeys(
   return (result.results ?? []).map(row => row.group_key);
 }
 
-async function principalFromEmployee(
-  env: Env,
-  employee: EmployeeAuthRow,
-  access: ApplicationAccessProjection,
-): Promise<IdentityPrincipal> {
-  const isWorkspaceSuperAdmin = employee.super_admin_employee_id === employee.employee_id;
+async function principalFromEmployee(env: Env, employee: EmployeeAuthRow): Promise<IdentityPrincipal> {
+  const workspaceRole = effectiveWorkspaceRole(
+    employee.employee_id,
+    employee.super_admin_employee_id,
+    employee.role_key,
+  );
   return {
     workspaceId: employee.workspace_id,
     employeeId: employee.employee_id,
     employeeNo: employee.employee_no,
     displayName: employee.name,
-    isWorkspaceSuperAdmin,
+    workspaceRole,
+    isIdentityAdmin: workspaceRole === "ADMIN" && employee.identity_admin === 1,
+    emailVerified: Boolean(employee.email_verified_at),
+    isWorkspaceSuperAdmin: workspaceRole === "SUPER_ADMIN",
     groupKeys: await groupKeys(env, employee.workspace_id, employee.employee_id),
-    ...(access.applicationRoleKey ? { applicationRoleKey: access.applicationRoleKey } : {}),
+    applicationRoleKey: workspaceRole,
     credentialVersion: employee.credential_version,
     employeeRevision: employee.revision,
   };
@@ -265,7 +179,6 @@ async function createSession(
   env: Env,
   employee: EmployeeAuthRow,
   applicationId: string,
-  access: ApplicationAccessProjection,
 ): Promise<LoginSuccess> {
   const token = createSessionToken();
   const tokenHash = await sha256Hex(token);
@@ -297,7 +210,7 @@ async function createSession(
   if (!result.success) throw new Error("identity session insert failed");
 
   return {
-    principal: await principalFromEmployee(env, employee, access),
+    principal: await principalFromEmployee(env, employee),
     session: {
       token,
       expiresAt: expiresAt.toISOString(),
@@ -318,10 +231,7 @@ export async function handleLogin(
 
   if (!workspaceId || !applicationId || !employeeNo || !password) {
     return json(env, requestId, 400, {
-      error: {
-        code: "INVALID_LOGIN_REQUEST",
-        message: "Identity login request is invalid.",
-      },
+      error: { code: "INVALID_LOGIN_REQUEST", message: "Identity login request is invalid." },
     });
   }
 
@@ -339,42 +249,24 @@ export async function handleLogin(
 
   if (!employee || !authenticated) {
     return json(env, requestId, 401, {
-      error: {
-        code: "AUTHENTICATION_FAILED",
-        message: "Employee authentication failed.",
-      },
+      error: { code: "AUTHENTICATION_FAILED", message: "Employee authentication failed." },
     });
   }
 
-  const application = await workspaceApplication(env, workspaceId, applicationId);
-  if (!application) {
+  if (!await workspaceApplicationAvailable(env, workspaceId, applicationId)) {
     return json(env, requestId, 403, {
-      error: {
-        code: "APPLICATION_ACCESS_DENIED",
-        message: "Application access is not enabled for this Workspace.",
-      },
+      error: { code: "APPLICATION_ACCESS_DENIED", message: "Application access is not enabled for this Workspace." },
     });
   }
 
   const isWorkspaceSuperAdmin = employee.super_admin_employee_id === employee.employee_id;
-  const access = await applicationAccessProjection(
-    env,
-    workspaceId,
-    employee.employee_id,
-    applicationId,
-    isWorkspaceSuperAdmin,
-    application.compatibility_role_mode,
-  );
-  if (!access.allowed) {
+  if (!await hasApplicationEntry(env, workspaceId, employee.employee_id, applicationId, isWorkspaceSuperAdmin)) {
     return json(env, requestId, 403, {
-      error: {
-        code: "APPLICATION_ACCESS_DENIED",
-        message: "Employee does not have access to this application.",
-      },
+      error: { code: "APPLICATION_ACCESS_DENIED", message: "Employee does not have access to this application." },
     });
   }
 
-  const login = await createSession(env, employee, applicationId, access);
+  const login = await createSession(env, employee, applicationId);
   return json(env, requestId, 200, {
     principal: login.principal as unknown as JsonValue,
     session: login.session as unknown as JsonValue,
@@ -396,14 +288,16 @@ async function sessionAuthority(
             s.revoked_at,
             e.employee_no,
             e.name,
+            e.email_verified_at,
             e.enabled AS employee_enabled,
+            e.role_key AS employee_role_key,
+            e.identity_admin AS employee_identity_admin,
             e.revision AS employee_revision,
             c.credential_version AS current_credential_version,
             w.status AS workspace_status,
             w.super_admin_employee_id,
             a.status AS application_status,
-            wa.enabled AS workspace_application_enabled,
-            wa.compatibility_role_mode
+            wa.enabled AS workspace_application_enabled
        FROM identity_sessions s
        JOIN employees e
          ON e.employee_id = s.employee_id
@@ -420,35 +314,37 @@ async function sessionAuthority(
   ).bind(sessionHash, applicationId).first<SessionAuthorityRow>();
 }
 
-async function resolvedPrincipal(
-  env: Env,
-  row: SessionAuthorityRow,
-): Promise<IdentityPrincipal | null> {
+async function resolvedPrincipal(env: Env, row: SessionAuthorityRow): Promise<IdentityPrincipal | null> {
   const now = new Date().toISOString();
   if (row.revoked_at || row.expires_at <= now) return null;
   if (row.workspace_status !== "active" || row.employee_enabled !== 1) return null;
   if (row.application_status !== "active" || row.workspace_application_enabled !== 1) return null;
   if (row.session_credential_version !== row.current_credential_version) return null;
 
-  const isWorkspaceSuperAdmin = row.super_admin_employee_id === row.employee_id;
-  const access = await applicationAccessProjection(
+  const workspaceRole = effectiveWorkspaceRole(
+    row.employee_id,
+    row.super_admin_employee_id,
+    row.employee_role_key,
+  );
+  if (!await hasApplicationEntry(
     env,
     row.workspace_id,
     row.employee_id,
     row.application_id,
-    isWorkspaceSuperAdmin,
-    row.compatibility_role_mode,
-  );
-  if (!access.allowed) return null;
+    workspaceRole === "SUPER_ADMIN",
+  )) return null;
 
   return {
     workspaceId: row.workspace_id,
     employeeId: row.employee_id,
     employeeNo: row.employee_no,
     displayName: row.name,
-    isWorkspaceSuperAdmin,
+    workspaceRole,
+    isIdentityAdmin: workspaceRole === "ADMIN" && row.employee_identity_admin === 1,
+    emailVerified: Boolean(row.email_verified_at),
+    isWorkspaceSuperAdmin: workspaceRole === "SUPER_ADMIN",
     groupKeys: await groupKeys(env, row.workspace_id, row.employee_id),
-    ...(access.applicationRoleKey ? { applicationRoleKey: access.applicationRoleKey } : {}),
+    applicationRoleKey: workspaceRole,
     credentialVersion: row.current_credential_version,
     employeeRevision: row.employee_revision,
   };
@@ -483,9 +379,7 @@ export async function handleResolveSession(
 
   return json(env, requestId, 200, {
     principal: principal as unknown as JsonValue,
-    session: {
-      expiresAt: row.expires_at,
-    },
+    session: { expiresAt: row.expires_at },
   });
 }
 
