@@ -1,5 +1,11 @@
 # CYApps Governance Changelog
 
+## 2.3.19 — 2026/09/30
+
+- 依使用者決定，CYEnvelope 以 C#／WPF（.NET 10）為唯一正式實作；Go／Win32 版（V0.1.x）停止開發，不再維護、建置或作為行為基準。
+- `apps/CYEnvelope/PROJECT_RULES.md` 移除「正式版本基準 0.1.1」的 Go 版敘述，改為以 `VERSION` 與 `BUILD` 為版本身分來源，並記錄可攜資料夾結構（根目錄僅啟動 EXE、`VERSION`、`BUILD`、`Runtime`）。
+- 新增 CYEnvelope 專案例外：CI 測試 Artifact 與畫面證據保留 3 天（共通規則預設 14 天）；需要更長保存時由該次工作另行決定。
+
 ## 2.3.18 — 2026/09/30
 
 - 依使用者最終確認，CYCloud Identity 新 Employee 首次使用流程對外統一稱 **Email 驗證**；不再以獨立「啟用帳號」流程作產品模型。

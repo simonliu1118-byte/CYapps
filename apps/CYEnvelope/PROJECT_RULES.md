@@ -5,8 +5,10 @@
 ## 1. 正式基準
 
 - 專案名稱固定為 `CYEnvelope`，不得再使用舊誤名 `CYEnvelop`。
-- 目前正式版本基準：`0.1.1`；唯一正式版本來源為本目錄 `VERSION`。
-- 專案是 Windows 信封列印工具，正式發行以 Windows x64 portable package 為原則。
+- 唯一正式實作為 C#／WPF（.NET 10）；Go／Win32 版（V0.1.x）已依使用者決定停止開發，不再維護、建置或作為行為基準。
+- 版本身分來源為本目錄 `VERSION` 與 `BUILD`；目前尚無正式 Release。
+- 專案是 Windows 信封列印工具，正式發行以 Windows x64 portable package 為原則：解壓縮一次得到 `CYEnvelope` 資料夾，根目錄只有啟動 EXE、`VERSION`、`BUILD` 與 `Runtime`，不需另裝 .NET。
+- 例外：本專案 CI 測試 Artifact 與畫面證據保留 3 天（共通規則預設 14 天）；需要更長保存時由該次工作另行決定。
 
 ## 2. 資料與列印安全
 
@@ -24,4 +26,4 @@
 ## 4. 發行驗證
 
 - 正式 Release 前除共通檢查外，至少驗證 Windows x64 啟動、icon/manifest、信封預覽、列印輸出、直排文字、地址／電話格式與資料保存流程。
-- 不因本專案採用 Go／Win32 就把相同 UI 技術規則強加到其他 CYApps 專案。
+- 不因本專案採用 C#／WPF 就把相同 UI 技術規則強加到其他 CYApps 專案。
