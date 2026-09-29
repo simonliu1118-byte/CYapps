@@ -111,6 +111,7 @@ jobs:
           CF_IDENTITY_SERVICE: cyidentity-ci-placeholder
           CF_R2_BACKUP_BUCKET: cyaccounting-backup-ci
           CF_BACKUP_TOPOLOGY: legacy_gcs
+          CF_CUSTOM_DOMAIN: acc.example.com
         run: node scripts/render-wrangler.mjs --output wrangler.ci.generated.jsonc
 
       - name: Validate D1 migrations locally
@@ -144,6 +145,7 @@ jobs:
       CF_IDENTITY_SERVICE: ${{ vars.CF_IDENTITY_SERVICE }}
       CF_R2_BACKUP_BUCKET: ${{ vars.CF_R2_BACKUP_BUCKET }}
       CF_BACKUP_TOPOLOGY: ${{ vars.CF_BACKUP_TOPOLOGY }}
+      CF_CUSTOM_DOMAIN: ${{ vars.CF_CUSTOM_DOMAIN }}
 
     steps:
       - name: Checkout source
