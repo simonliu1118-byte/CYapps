@@ -5,8 +5,22 @@ namespace CYInvoice.Core.Storage;
 public static class CloudModes
 {
     public const string LocalOnly = "local_only";
+    public const string CloudTransition = "cloud_transition";
     public const string CloudPreferred = "cloud_preferred";
 }
+
+public sealed record CloudPendingBootstrapState(
+    string BaseUrl,
+    string WorkspaceDisplayName,
+    string DeviceDisplayName,
+    DateTimeOffset StartedAtUtc,
+    string DeviceToken);
+
+public sealed record CloudPendingDeviceJoinState(
+    string BaseUrl,
+    string DeviceDisplayName,
+    DateTimeOffset StartedAtUtc,
+    string DeviceToken);
 
 public sealed class Settings
 {
@@ -20,6 +34,16 @@ public sealed class Settings
     [JsonPropertyName("cloud_workspace_id")] public string CloudWorkspaceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_id")] public string CloudDeviceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_token_enc")] public string CloudDeviceTokenEncrypted { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_employee_authority_ready")] public bool CloudEmployeeAuthorityReady { get; set; }
+    [JsonPropertyName("cloud_pending_bootstrap_url")] public string CloudPendingBootstrapUrl { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_bootstrap_workspace_name")] public string CloudPendingBootstrapWorkspaceName { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_bootstrap_device_name")] public string CloudPendingBootstrapDeviceName { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_bootstrap_started_utc")] public string CloudPendingBootstrapStartedUtc { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_bootstrap_token_enc")] public string CloudPendingBootstrapTokenEncrypted { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_device_join_url")] public string CloudPendingDeviceJoinUrl { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_device_join_device_name")] public string CloudPendingDeviceJoinDeviceName { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_device_join_started_utc")] public string CloudPendingDeviceJoinStartedUtc { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_pending_device_join_token_enc")] public string CloudPendingDeviceJoinTokenEncrypted { get; set; } = string.Empty;
 }
 
 public interface ISecretProtector

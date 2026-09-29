@@ -73,6 +73,7 @@ internal sealed class ManualReviewDetailForm : Form
         {
             var cancelReturn = UiControls.StandardButton("取消退回");
             cancelReturn.Width = 100;
+            cancelReturn.TabIndex = 1;
             cancelReturn.Click += (_, _) => Complete(ManualReviewDetailAction.CancelReturn);
             actions.Controls.Add(cancelReturn);
         }
@@ -81,7 +82,14 @@ internal sealed class ManualReviewDetailForm : Form
             var primary = primaryDanger
                 ? UiControls.DangerButton(primaryActionText)
                 : UiControls.StandardButton(primaryActionText);
+            if (!primaryDanger && primaryActionText == "已人工處理")
+            {
+                primary.UseVisualStyleBackColor = false;
+                primary.BackColor = SystemColors.Highlight;
+                primary.ForeColor = Color.White;
+            }
             primary.Width = primaryActionText.Length >= 7 ? 132 : 112;
+            primary.TabIndex = 0;
             primary.Click += (_, _) => Complete(ManualReviewDetailAction.Primary);
             actions.Controls.Add(primary);
         }
@@ -121,7 +129,7 @@ internal sealed class ManualReviewDetailForm : Form
         {
             Text = label,
             AutoSize = true,
-            Margin = new Padding(0, 5, 8, 5),
+            Margin = new Padding(0, 2, 8, 2),
             Font = new Font(Font, FontStyle.Bold),
             ForeColor = Color.FromArgb(70, 70, 70),
         }, 0, row);
@@ -130,7 +138,7 @@ internal sealed class ManualReviewDetailForm : Form
             Text = string.IsNullOrWhiteSpace(value) ? "－" : value.Trim(),
             AutoSize = true,
             MaximumSize = new Size(400, 0),
-            Margin = new Padding(0, 5, 0, 5),
+            Margin = new Padding(0, 2, 0, 2),
             ForeColor = SystemColors.ControlText,
         }, 1, row);
     }
