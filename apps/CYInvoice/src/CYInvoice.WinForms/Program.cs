@@ -4,15 +4,31 @@ namespace CYInvoice.WinForms;
 
 internal static class ApplicationIcon
 {
+    private const string ResourceName = "CYInvoice.AppIcon";
+    private const string CanonicalSha256 = "6f4f89a1611e2b731d489c76851fb06fa1b75aba2edc9f1d70d9a22ed6e77d6d";
+
     private static readonly Lazy<Icon> Current = new(() =>
     {
-        using var stream = typeof(ApplicationIcon).Assembly.GetManifestResourceStream("CYInvoice.AppIcon")
+        using var stream = typeof(ApplicationIcon).Assembly.GetManifestResourceStream(ResourceName)
             ?? throw new InvalidOperationException("CYInvoice 內嵌視窗圖示不存在");
         using var icon = new Icon(stream);
         return (Icon)icon.Clone();
     });
 
     public static Icon Load() => (Icon)Current.Value.Clone();
+
+    internal static void VerifyCanonicalForSmoke()
+    {
+        using var stream = typeof(ApplicationIcon).Assembly.GetManifestResourceStream(ResourceName)
+            ?? throw new InvalidOperationException("CYInvoice canonical icon resource is missing.");
+        var actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).ToLowerInvariant();
+        if (!string.Equals(actual, CanonicalSha256, StringComparison.Ordinal))
+            throw new InvalidOperationException($"CYInvoice embedded icon is not the canonical AITeam INV.ico: {actual}");
+
+        using var icon = Load();
+        if (icon.Width <= 0 || icon.Height <= 0)
+            throw new InvalidOperationException("CYInvoice canonical icon cannot be decoded by Windows Forms.");
+    }
 }
 
 internal static class Program
@@ -111,6 +127,8 @@ internal static class Program
 
     private static void RunStartupSmokeTest()
     {
+        ApplicationIcon.VerifyCanonicalForSmoke();
+
         using var form = new MainForm(startupSmokeTest: true);
         form.Show();
         form.PerformLayout();
