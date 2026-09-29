@@ -5,6 +5,8 @@ namespace CYInvoice.WinForms;
 
 internal sealed class CloudPasswordRecoveryForm : Form
 {
+    private const int FirstStepHeight = 210;
+    private const int SecondStepHeight = 250;
     private readonly LocalRepository repository;
     private readonly CloudEmployeeAccountClient accountClient;
     private readonly CloudEmployeeAuthorityClient authorityClient;
@@ -16,11 +18,11 @@ internal sealed class CloudPasswordRecoveryForm : Form
     private readonly TextBox newPassword = UiControls.TextBox(200);
     private readonly TextBox confirmPassword = UiControls.TextBox(200);
     private readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Button send = UiControls.StandardButton("下一步");
-    private readonly Button resend = UiControls.StandardButton("重寄驗證碼");
-    private readonly Button back = UiControls.StandardButton("上一步");
-    private readonly Button reset = UiControls.StandardButton("重設密碼");
-    private readonly Button cancel = UiControls.StandardButton("取消");
+    private readonly Button send = CompactButton("下一步", 96);
+    private readonly Button resend = CompactButton("重寄驗證碼", 112);
+    private readonly Button back = CompactButton("上一步", 84);
+    private readonly Button reset = CompactButton("重設密碼", 96);
+    private readonly Button cancel = CompactButton("取消", 84);
     private CloudEmployeePasswordRecoveryChallenge? challenge;
     private readonly System.Windows.Forms.Timer countdown = new() { Interval = 1000 };
     private readonly Panel firstStep = new() { Dock = DockStyle.Fill };
@@ -34,15 +36,15 @@ internal sealed class CloudPasswordRecoveryForm : Form
         var settings = repository.Settings.LoadOrCreate();
         var token = repository.Settings.CloudDeviceToken(settings);
         if (!repository.UsesCloudEmployeeAuthority() || token.Length == 0 || settings.CloudBaseUrl.Length == 0)
-            throw new InvalidOperationException("雲端密碼復原需要已完成帳號切換、有效的裝置身分與雲端連線。");
+            throw new InvalidOperationException("忘記密碼需要已完成帳號切換、有效的裝置身分與雲端連線。");
         workspaceId = settings.CloudWorkspaceId;
         var baseUri = new Uri(settings.CloudBaseUrl, UriKind.Absolute);
         accountClient = new CloudEmployeeAccountClient(httpClient, baseUri, token);
         authorityClient = new CloudEmployeeAuthorityClient(httpClient, baseUri, token);
 
-        Text = "雲端密碼復原";
+        Text = "忘記密碼";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(620, 300);
+        ClientSize = new Size(500, FirstStepHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -68,23 +70,26 @@ internal sealed class CloudPasswordRecoveryForm : Form
             ColumnCount = 1,
             Padding = new Padding(14, 10, 14, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 188));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         root.Controls.Add(status, 0, 0);
 
         var firstFields = Fields(2);
         AddField(firstFields, "員工編號", employeeNo, 0);
         AddField(firstFields, "Email", email, 1);
         firstStep.Controls.Add(firstFields);
+
         var secondFields = Fields(3);
         AddField(secondFields, "Email 驗證碼", otp, 0);
         AddField(secondFields, "新密碼", newPassword, 1);
         AddField(secondFields, "再次輸入", confirmPassword, 2);
         secondStep.Controls.Add(secondFields);
-        var steps = new Panel { Dock = DockStyle.Fill };
-        steps.Controls.Add(firstStep);
+
+        var steps = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
         steps.Controls.Add(secondStep);
+        steps.Controls.Add(firstStep);
+        firstStep.BringToFront();
         root.Controls.Add(steps, 0, 1);
 
         var actions = new FlowLayoutPanel
@@ -107,16 +112,33 @@ internal sealed class CloudPasswordRecoveryForm : Form
         actions.Controls.Add(send);
         root.Controls.Add(actions, 0, 2);
         Controls.Add(root);
-        AcceptButton = null;
+        AcceptButton = send;
         CancelButton = cancel;
+    }
+
+    private static Button CompactButton(string text, int width)
+    {
+        var button = UiControls.StandardButton(text);
+        button.Width = width;
+        button.Margin = new Padding(4, 2, 4, 2);
+        return button;
     }
 
     private static TableLayoutPanel Fields(int rows)
     {
-        var fields = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = rows };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        var fields = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2,
+            RowCount = rows,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 4, 0, 0),
+        };
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var row = 0; row < rows; row++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        for (var row = 0; row < rows; row++) fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         return fields;
     }
 
@@ -125,8 +147,11 @@ internal sealed class CloudPasswordRecoveryForm : Form
         challenge = null;
         secondStep.Visible = false;
         firstStep.Visible = true;
+        firstStep.BringToFront();
         status.Text = "第一步：輸入員工編號與帳號已驗證的 Email。";
+        ClientSize = new Size(500, FirstStepHeight);
         otp.Clear();
+        AcceptButton = send;
         UpdateActions();
         employeeNo.Focus();
     }
@@ -136,11 +161,14 @@ internal sealed class CloudPasswordRecoveryForm : Form
         fields.Controls.Add(new Label
         {
             Text = label,
-            Dock = DockStyle.Fill,
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
             TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0, 0, 8, 0),
         }, 0, row);
-        input.Dock = DockStyle.Fill;
-        input.Margin = new Padding(3, 8, 3, 8);
+        input.Dock = DockStyle.None;
+        input.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        input.Margin = new Padding(0, 5, 0, 5);
         fields.Controls.Add(input, 1, row);
     }
 
@@ -153,7 +181,10 @@ internal sealed class CloudPasswordRecoveryForm : Form
             return;
         }
         if (email.Text.Trim().Length == 0 || !email.Text.Contains('@'))
-        { ShowError("請輸入帳號已驗證的 Email。"); return; }
+        {
+            ShowError("請輸入帳號已驗證的 Email。");
+            return;
+        }
         await RunBusyAsync(async () =>
         {
             challenge = await accountClient.StartPasswordRecoveryAsync(employeeNo.Text.Trim(), email.Text.Trim(), lifetime.Token);
@@ -161,8 +192,11 @@ internal sealed class CloudPasswordRecoveryForm : Form
             otp.Clear();
             firstStep.Visible = false;
             secondStep.Visible = true;
+            secondStep.BringToFront();
+            ClientSize = new Size(500, SecondStepHeight);
             countdown.Start();
             status.Text = $"第二步：驗證碼已寄至 {challenge.MaskedEmail}，有效至 {challenge.ExpiresAt.ToLocalTime():HH:mm}。";
+            AcceptButton = reset;
             otp.Focus();
         });
     }
@@ -170,11 +204,21 @@ internal sealed class CloudPasswordRecoveryForm : Form
     private async Task ResetAsync()
     {
         if (busy) return;
-        if (challenge is null) { ShowError("請先寄送 Email 驗證碼。"); return; }
+        if (challenge is null)
+        {
+            ShowError("請先寄送 Email 驗證碼。");
+            return;
+        }
         if (otp.Text.Trim().Length != 6 || !otp.Text.Trim().All(char.IsAsciiDigit))
-        { ShowError("請輸入 6 碼 Email 驗證碼。"); return; }
+        {
+            ShowError("請輸入 6 碼 Email 驗證碼。");
+            return;
+        }
         if (newPassword.Text != confirmPassword.Text)
-        { ShowError("兩次輸入的新密碼不一致。"); return; }
+        {
+            ShowError("兩次輸入的新密碼不一致。");
+            return;
+        }
 
         await RunBusyAsync(async () =>
         {
@@ -209,8 +253,13 @@ internal sealed class CloudPasswordRecoveryForm : Form
         busy = true;
         UseWaitCursor = true;
         UpdateActions();
-        try { await action(); }
-        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        try
+        {
+            await action();
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+        }
         catch (Exception problem)
         {
             if (!IsDisposed)
@@ -258,7 +307,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
     }
 
     private void ShowError(string message) =>
-        MessageBox.Show(this, message, "無法復原密碼", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        MessageBox.Show(this, message, "忘記密碼", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
     private static string FriendlyMessage(Exception problem)
     {
@@ -273,10 +322,10 @@ internal sealed class CloudPasswordRecoveryForm : Form
             "OTP_RESEND_COOLDOWN" or "OTP_RATE_LIMITED" => "驗證碼寄送過於頻繁，請稍後再試。",
             "EMAIL_DELIVERY_FAILED" => "驗證信目前無法寄出，請稍後再試。",
             "EMAIL_PROVIDER_NOT_CONFIGURED" or "OTP_NOT_CONFIGURED" => "雲端 Email 驗證服務尚未完成設定。",
-            "RECOVERY_STATE_CHANGED" => "帳號狀態已變更，請重新開始密碼復原。",
-            "NOT_FOUND" => "目前連線的雲端服務尚未更新密碼復原功能，請先更新 development Worker。",
+            "RECOVERY_STATE_CHANGED" => "帳號狀態已變更，請重新開始忘記密碼流程。",
+            "NOT_FOUND" => "目前連線的雲端服務尚未更新忘記密碼功能，請先更新 development Worker。",
             "UNAUTHORIZED" => "這台電腦的雲端裝置驗證失敗，請先檢查雲端連線。",
-            _ => $"雲端密碼復原失敗：{api.Code}",
+            _ => $"忘記密碼失敗：{api.Code}",
         };
     }
 
