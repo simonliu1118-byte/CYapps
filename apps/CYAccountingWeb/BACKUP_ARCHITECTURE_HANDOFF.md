@@ -2,7 +2,7 @@
 
 > Updated: 2026-09-27（Taiwan time）
 >
-> Current formal baseline: **V0.18.1 Build 0**
+> Backup-phase baseline: **V0.18.1 Build 0**. Current application VERSION/BUILD must be read from `VERSION`, `BUILD`, README and TODO; this topic handoff is not the app-wide current-version source.
 >
 > Current migration phase: **Phase C production acceptance in progress**
 >
@@ -403,28 +403,24 @@ Future shared services do not mean one broad cross-app credential.
 
 Caller identity must be mapped server-side to the permitted app dataset. Do not trust a caller-supplied `appId` by itself as authorization.
 
-## 16. Identity / database boundary with CY-WEB
+## 16. Identity / database boundary
 
-Current account state is transitional:
+This backup handoff does **not** define the current Shared Identity contract.
 
-- CYAccountingWeb currently consumes the shared employee account authority hosted by **CYInvoice Cloud** through the private `IDENTITY` Service Binding contract;
-- CYAccountingWeb does **not** directly access CYInvoice D1 for login or employee lookup;
-- after identity validation, CYAccountingWeb maintains its own application `web_sessions` in its own D1;
-- CYAccountingWeb accounting data remains in the independent CYAccountingWeb D1.
+CYAccountingWeb now follows the canonical CYCloud Identity consumer contract in:
 
-The shared Identity / SSO extraction is being planned progressively by the **CY-WEB workstream**.
+- `../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`;
+- `../CYCloudIdentity/docs/consumers/CYACC_INTEGRATION_HANDOFF.md`;
+- `PROJECT_RULES.md` / `CYID_CONSUMER_VERSION`.
 
-Therefore, before changing any of the following, synchronize the latest CY-WEB decision first:
+The currently deployed legacy CYInvoice Cloud Web Auth + local `web_sessions` path is a migration source only and must not be treated as permanent backup architecture.
 
-- Identity authority or SSO topology;
-- cross-App employee / role / access model;
-- shared account database ownership;
-- private Service Binding topology;
-- shared Worker responsibilities;
-- cross-App D1 ownership;
-- shared Backup Service routing.
+Backup invariants remain unchanged during Identity migration:
 
-Do not treat the present CYInvoice-hosted identity implementation as permanent architecture, and do not pre-emptively merge CYAccountingWeb accounting D1 with another App's database.
+- CYAccountingWeb accounting D1 remains independent and authoritative for accounting data;
+- backup datasets/credentials remain app-scoped;
+- Identity Session authority moving to CYID does not merge accounting databases;
+- shared Backup Service routing remains a separate workstream and must not be coupled to CYID cutover.
 
 ## 17. Restore — future / high risk
 
