@@ -236,7 +236,7 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
     <td class="summary">${escapeHtml(tx.summary || '')}</td>
     <td class="num ledger-amount">${money(tx.amount)}</td>
     <td class="num ledger-balance" data-balance-popover-id="${id}" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="查看此筆後帳戶餘額">${money(balance)}</td>
-    <td class="action-col"><button type="button" class="row-action" data-edit-id="${tx.id}" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪</span></button></td>
+    <td class="action-col"><button type="button" class="row-action" data-edit-id="${tx.id}" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button></td>
   </tr>`;
 }
 
