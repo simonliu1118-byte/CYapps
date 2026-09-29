@@ -70,7 +70,8 @@ internal static class UiConsistencyManager
         if (!list.OwnerDraw && FillColumnIndex(list) >= 0)
         {
             list.OwnerDraw = true;
-            list.DrawColumnHeader += (_, eventArgs) => NativeListViewHost.DrawHeader(eventArgs, list.Font);
+            list.DrawColumnHeader += (_, eventArgs) =>
+                NativeListViewHost.DrawHeader(eventArgs, list.Font, alignToNativeGridLines: list.GridLines);
             list.DrawItem += (_, eventArgs) =>
             {
                 if (list.View != View.Details) eventArgs.DrawDefault = true;
@@ -109,7 +110,7 @@ internal static class UiConsistencyManager
             if (IsOperationHistory(list))
             {
                 list.Columns[0].Width = Math.Max(list.Columns[0].Width,
-                    Math.Max(60, TextRenderer.MeasureText("類型", list.Font).Width + 18));
+                    Math.Max(76, TextRenderer.MeasureText("類型", list.Font).Width + 24));
                 list.Columns[1].Width = Math.Max(list.Columns[1].Width,
                     TextRenderer.MeasureText("2026/09/29", list.Font).Width + 16);
             }
@@ -238,11 +239,28 @@ internal static class UiConsistencyManager
 
     private static void NormalizeRecordDetailActions(RecordDetailForm form)
     {
-        foreach (var button in Descendants(form).OfType<Button>())
+        var buttons = Descendants(form).OfType<Button>().ToArray();
+        foreach (var button in buttons)
         {
             if (!string.Equals(button.Text, "關閉", StringComparison.Ordinal)) continue;
             button.Width = 112;
             button.Height = UiControls.StandardButtonHeight;
+        }
+
+        foreach (var panel in Descendants(form).OfType<FlowLayoutPanel>())
+        {
+            var allowance = panel.Controls.OfType<Button>()
+                .FirstOrDefault(button => string.Equals(button.Text, "折讓", StringComparison.Ordinal));
+            var voidButton = panel.Controls.OfType<Button>()
+                .FirstOrDefault(button => string.Equals(button.Text, "作廢", StringComparison.Ordinal));
+            var close = panel.Controls.OfType<Button>()
+                .FirstOrDefault(button => string.Equals(button.Text, "關閉", StringComparison.Ordinal));
+            if (allowance is null || voidButton is null || close is null) continue;
+
+            var voidIndex = panel.Controls.GetChildIndex(voidButton);
+            var allowanceIndex = panel.Controls.GetChildIndex(allowance);
+            if (allowanceIndex > voidIndex)
+                panel.Controls.SetChildIndex(allowance, voidIndex);
         }
     }
 

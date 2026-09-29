@@ -124,7 +124,7 @@ internal sealed class NativeListViewHost : UserControl
         return headerHeight + (Math.Max(1, rowCount) * actualRowHeight) + 2;
     }
 
-    public static void DrawHeader(DrawListViewColumnHeaderEventArgs eventArgs, Font font)
+    public static void DrawHeader(DrawListViewColumnHeaderEventArgs eventArgs, Font font, bool alignToNativeGridLines = false)
     {
         using (var background = new SolidBrush(Color.FromArgb(246, 246, 246)))
             eventArgs.Graphics.FillRectangle(background, eventArgs.Bounds);
@@ -141,7 +141,25 @@ internal sealed class NativeListViewHost : UserControl
         var text = string.Equals(header?.Text, "來源 ▲", StringComparison.Ordinal) ? "來源 [分組]" : header?.Text ?? string.Empty;
         TextRenderer.DrawText(eventArgs.Graphics, text, font, textBounds, SystemColors.ControlText, flags);
         using var pen = new Pen(Color.FromArgb(190, 190, 190));
-        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+        if (alignToNativeGridLines)
+        {
+            // Native ListView GridLines paints each body separator at the next column's
+            // left edge. Drawing the owner-painted header at Right - 1 leaves a visible
+            // one-pixel step. Paint internal separators from the following column's left
+            // edge instead, and finish the final column at its right edge.
+            if (eventArgs.ColumnIndex > 0)
+                eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Top,
+                    eventArgs.Bounds.Left, eventArgs.Bounds.Bottom);
+            var columnCount = header?.ListView?.Columns.Count ?? 0;
+            if (columnCount > 0 && eventArgs.ColumnIndex == columnCount - 1)
+                eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right, eventArgs.Bounds.Top,
+                    eventArgs.Bounds.Right, eventArgs.Bounds.Bottom);
+        }
+        else
+        {
+            eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top,
+                eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+        }
         eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1, eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
     }
 

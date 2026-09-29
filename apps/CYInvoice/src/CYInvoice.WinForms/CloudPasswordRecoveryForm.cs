@@ -5,8 +5,10 @@ namespace CYInvoice.WinForms;
 
 internal sealed class CloudPasswordRecoveryForm : Form
 {
-    private const int FirstStepHeight = 210;
-    private const int SecondStepHeight = 250;
+    private const int WindowWidth = 260;
+    private const int FirstStepHeight = 240;
+    private const int SecondStepHeight = 280;
+    private const int ActionRowHeight = 84;
     private readonly LocalRepository repository;
     private readonly CloudEmployeeAccountClient accountClient;
     private readonly CloudEmployeeAuthorityClient authorityClient;
@@ -18,11 +20,11 @@ internal sealed class CloudPasswordRecoveryForm : Form
     private readonly TextBox newPassword = UiControls.TextBox(200);
     private readonly TextBox confirmPassword = UiControls.TextBox(200);
     private readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Button send = CompactButton("下一步", 96);
-    private readonly Button resend = CompactButton("重寄驗證碼", 112);
-    private readonly Button back = CompactButton("上一步", 84);
-    private readonly Button reset = CompactButton("重設密碼", 96);
-    private readonly Button cancel = CompactButton("取消", 84);
+    private readonly Button send = CompactButton("下一步", 88);
+    private readonly Button resend = CompactButton("重寄驗證碼", 100);
+    private readonly Button back = CompactButton("上一步", 72);
+    private readonly Button reset = CompactButton("重設密碼", 88);
+    private readonly Button cancel = CompactButton("取消", 72);
     private CloudEmployeePasswordRecoveryChallenge? challenge;
     private readonly System.Windows.Forms.Timer countdown = new() { Interval = 1000 };
     private readonly Panel firstStep = new() { Dock = DockStyle.Fill };
@@ -44,7 +46,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
 
         Text = "忘記密碼";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(500, FirstStepHeight);
+        ClientSize = new Size(WindowWidth, FirstStepHeight);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -70,9 +72,9 @@ internal sealed class CloudPasswordRecoveryForm : Form
             ColumnCount = 1,
             Padding = new Padding(14, 10, 14, 10),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, ActionRowHeight));
         root.Controls.Add(status, 0, 0);
 
         var firstFields = Fields(2);
@@ -96,7 +98,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
+            WrapContents = true,
             Margin = Padding.Empty,
             Padding = new Padding(0, 5, 0, 0),
         };
@@ -149,7 +151,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
         firstStep.Visible = true;
         firstStep.BringToFront();
         status.Text = "第一步：輸入員工編號與帳號已驗證的 Email。";
-        ClientSize = new Size(500, FirstStepHeight);
+        ClientSize = new Size(WindowWidth, FirstStepHeight);
         otp.Clear();
         AcceptButton = send;
         UpdateActions();
@@ -193,7 +195,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
             firstStep.Visible = false;
             secondStep.Visible = true;
             secondStep.BringToFront();
-            ClientSize = new Size(500, SecondStepHeight);
+            ClientSize = new Size(WindowWidth, SecondStepHeight);
             countdown.Start();
             status.Text = $"第二步：驗證碼已寄至 {challenge.MaskedEmail}，有效至 {challenge.ExpiresAt.ToLocalTime():HH:mm}。";
             AcceptButton = reset;

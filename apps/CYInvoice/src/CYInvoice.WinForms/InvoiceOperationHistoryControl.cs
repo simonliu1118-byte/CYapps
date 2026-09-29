@@ -27,7 +27,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         Dock = DockStyle.Fill;
         Margin = Padding.Empty;
         headerCursor = new FixedColumnHeaderCursor(list);
-        list.Columns.Add("類型", 46, HorizontalAlignment.Left);
+        list.Columns.Add("類型", 76, HorizontalAlignment.Left);
         list.Columns.Add("日期", 100, HorizontalAlignment.Left);
         list.Columns.Add("摘要", 140, HorizontalAlignment.Left);
         list.OwnerDraw = true;
@@ -110,7 +110,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
     private void LayoutColumns()
     {
         if (list.ClientSize.Width <= 0) return;
-        var typeWidth = TextRenderer.MeasureText("類型", list.Font).Width + 10;
+        var typeWidth = Math.Max(76, TextRenderer.MeasureText("類型", list.Font).Width + 24);
         var dateWidth = TextRenderer.MeasureText("2026/09/08", list.Font).Width + 14;
         list.Columns[0].Width = typeWidth;
         list.Columns[1].Width = dateWidth;
