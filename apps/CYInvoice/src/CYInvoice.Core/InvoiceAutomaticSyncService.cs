@@ -6,6 +6,7 @@ namespace CYInvoice.Core.Invoicing;
 public sealed class InvoiceAutomaticSyncService
 {
     internal const string DailyReconcileScope = "daily-two-period";
+    private const string UnconfirmedVoidQueryMessage = "目前仍無法向光貿確認作廢結果；禁止直接重送";
     private readonly LocalRepository repository;
     private readonly InvoiceSyncService syncService;
     private readonly InvoiceSyncRepository syncRepository;
@@ -143,12 +144,24 @@ public sealed class InvoiceAutomaticSyncService
                     if (reconciliation.LocalSaveError is not null)
                         problems.Add($"{number}: 作廢狀態已確認，但本機保存不完整：{reconciliation.LocalSaveError.Message}");
 
-                    // Waiting for AMEGO to finish is an invoice lifecycle state, not an upload problem.
-                    // A successful authoritative query therefore clears any prior query failure and
-                    // simply keeps the durable waiting-void marker until a later sync confirms the result.
-                    ResolveVoidQueryIssue(accountKey, number, orderId);
                     if (reconciliation.Outcome == InvoiceVoidOutcome.PendingConfirmation)
+                    {
+                        // AMEGO explicitly reporting an in-progress void is a normal invoice lifecycle
+                        // state. Only an indeterminate/failed authoritative lookup belongs in upload issues.
+                        if (string.Equals(reconciliation.Message, UnconfirmedVoidQueryMessage, StringComparison.Ordinal))
+                        {
+                            var message = "作廢狀態回查失敗：" + reconciliation.Message;
+                            RecordVoidQueryIssue(accountKey, number, orderId, message);
+                            problems.Add($"{number}: {message}");
+                        }
+                        else
+                        {
+                            ResolveVoidQueryIssue(accountKey, number, orderId);
+                        }
                         continue;
+                    }
+
+                    ResolveVoidQueryIssue(accountKey, number, orderId);
                 }
                 catch (Exception error)
                 {
