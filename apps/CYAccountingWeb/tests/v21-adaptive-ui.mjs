@@ -45,13 +45,13 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '4');
+assert.equal(build, '5');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0212\.js'/);
 assert.match(build11Js, /ensureV0215Stylesheet\(\)/);
-assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b4'/);
+assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b5'/);
 assert.match(build11Js, /ensureV0215Build3Script\(\)/);
 assert.match(build11Js, /script\.src = '\/v0215b3\.js'/);
 assert.match(build11Js, /ensureV0215Build4Script\(\)/);
@@ -82,19 +82,23 @@ assert.match(indexHtml, /auth\.js\?v=0214b1-recovery/);
 assert.match(indexHtml, /v021b11\.js\?v=0214b1-recovery/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
-// V0.21.5 Build 4 keeps the delegated swipe model, moves mobile editing into the shared entry form,
-// and refines mobile toolbar/statistics/search without a row-repaint observer.
+// V0.21.5 Build 5 fixes mobile edit initialization and restores the stronger visual treatment.
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
-assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?box-shadow:\s*inset 0 0 54px rgba\(86, 176, 113/);
-assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?box-shadow:\s*inset 0 0 54px rgba\(207, 104, 94/);
+assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?linear-gradient\(to right, rgba\(86, 176, 113/);
+assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?linear-gradient\(to right, rgba\(207, 104, 94/);
 assert.match(patch5Css, /"save"[\s\S]*?"message"/);
 assert.match(patch5Css, /\.v0215-mobile-save-message[\s\S]*?transition:\s*opacity 400ms ease/);
 assert.match(patch5Css, /\.quick-chip-list[\s\S]*?overflow-x:\s*auto !important/);
 assert.match(patch5Css, /\.entry-grid input,[\s\S]*?text-align:\s*center !important/);
 assert.match(patch5Css, /\.ledger-month-tools[\s\S]*?grid-template-columns:\s*48px 32px minmax\(0, 1fr\) 32px 48px/);
-assert.match(patch5Css, /grid-template-areas:[\s\S]*?"opening opening ending ending net net"[\s\S]*?"income income income expense expense expense"/);
+assert.match(patch5Css, /grid-template-areas:\s*"opening income expense ending net"/);
 assert.match(patch5Css, /\.net\.profit[\s\S]*?color:\s*#2f7a4c/);
 assert.match(patch5Css, /\.net\.loss[\s\S]*?color:\s*#a54b45/);
+assert.match(patch5Css, /\.topbar\s*\{[\s\S]*?border-bottom:\s*0 !important/);
+assert.match(patch5Build4Js, /document\.readyState === 'loading'/);
+assert.match(patch5Build4Js, /document\.addEventListener\('DOMContentLoaded', setupV0215Build4/);
+assert.match(patch5Build4Js, /window\.setTimeout\(setupV0215Build4, 0\)/);
+assert.match(patch5Build4Js, /if \(cyV0215Build4SetupDone\) return/);
 assert.match(patch5Css, /\.ledger-search-submit\s*\{[\s\S]*?display:\s*none !important/);
 assert.match(patch5Css, /#ledgerSummarySearch:placeholder-shown ~ #ledgerSearchClear/);
 assert.match(v06, /enterkeyhint="search"/);
@@ -164,4 +168,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 Build 4 adaptive UI regression tests passed.');
+console.log('V0.21.5 Build 5 adaptive UI regression tests passed.');
