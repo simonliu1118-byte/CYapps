@@ -7,6 +7,7 @@ public sealed record CloudDeviceSelfStatus(
     string DeviceId,
     string WorkspaceId,
     string Status,
+    string WorkspaceStatus,
     DateTimeOffset? RevokedAt);
 
 public sealed class CloudDeviceSelfStatusClient
@@ -63,15 +64,18 @@ public sealed class CloudDeviceSelfStatusClient
         var deviceId = ReadRequiredString(root, "deviceId");
         var workspaceId = ReadRequiredString(root, "workspaceId");
         var status = ReadRequiredString(root, "status");
+        var workspaceStatus = ReadRequiredString(root, "workspaceStatus");
         if (status is not "active" and not "revoked")
             throw new InvalidDataException("Cloud Device self status is invalid.");
+        if (workspaceStatus is not "active" and not "disabled")
+            throw new InvalidDataException("Cloud Workspace self status is invalid.");
         var revokedAt = ReadOptionalDateTimeOffset(root, "revokedAt");
         if (status == "revoked" && revokedAt is null)
             throw new InvalidDataException("Revoked Device self status is missing revokedAt.");
         if (status == "active" && revokedAt is not null)
             throw new InvalidDataException("Active Device self status unexpectedly contains revokedAt.");
 
-        return new CloudDeviceSelfStatus(deviceId, workspaceId, status, revokedAt);
+        return new CloudDeviceSelfStatus(deviceId, workspaceId, status, workspaceStatus, revokedAt);
     }
 
     private static string ReadErrorCode(JsonElement root) =>
