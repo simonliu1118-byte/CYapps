@@ -38,7 +38,7 @@ type UpdateProposal = {
   targetEmployeeNo: string;
   name: string;
   email: string;
-  role: "SUPER_ADMIN" | "ADMIN" | "EMPLOYEE";
+  role: "SUPER_ADMIN" | "ADMIN" | "USER";
 };
 
 type OtpRow = {
@@ -54,7 +54,7 @@ type OtpRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.5";
+const CLOUD_VERSION = "0.8.6";
 const EMAIL_PURPOSE = "employee_email_verification";
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
@@ -175,7 +175,7 @@ function normalizeEmail(value: unknown): string | null {
 function normalizeRole(value: unknown): UpdateProposal["role"] | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toUpperCase();
-  if (normalized === "SUPER_ADMIN" || normalized === "ADMIN" || normalized === "EMPLOYEE") return normalized;
+  if (normalized === "SUPER_ADMIN" || normalized === "ADMIN" || normalized === "USER") return normalized;
   return null;
 }
 

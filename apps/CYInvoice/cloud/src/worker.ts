@@ -32,7 +32,7 @@ type EmployeeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.5";
+const CLOUD_VERSION = "0.8.8";
 const LEGACY_SCHEMA_COMPATIBILITY_VERSION = "8";
 const MINIMUM_CLIENT_VERSION = "2.6.5";
 const MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION = "2.6.6";
@@ -42,6 +42,8 @@ const CAPABILITIES = [
   "device-pairing-v2",
   "device-invitation-v1",
   "device-join-status-v1",
+  "device-revoke-v1",
+  "device-self-status-v1",
   "security-audit-v1",
 ];
 
@@ -98,6 +100,7 @@ async function compatibilityHealth(request: Request, env: Env): Promise<Response
   // schemaVersion is retained as the API 1 compatibility marker because released
   // V2.6.5 Build 4 clients gate on exact value 8. D1 migration progress is exposed
   // separately so a storage migration does not disconnect an otherwise compatible client.
+  body.cloudVersion = CLOUD_VERSION;
   body.schemaVersion = LEGACY_SCHEMA_COMPATIBILITY_VERSION;
   body.storageSchemaVersion = actualSchemaVersion;
   body.capabilities = [...CAPABILITIES];

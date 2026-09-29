@@ -113,21 +113,21 @@ internal static class EmployeeStoreTests
         store.CreateFirstSuperAdmin("3015", "Simon", "simon@example.com", "SuperPass1");
         store.CreateEmployee("3015", "3020", "管理員甲", "admin-a@example.com", "AdminPass1", EmployeeRoles.Admin);
         store.CreateEmployee("3015", "3030", "管理員乙", "admin-b@example.com", "AdminPass2", EmployeeRoles.Admin);
-        store.CreateEmployee("3015", "3040", "一般員工", "employee@example.com", "Employee1", EmployeeRoles.Employee);
+        store.CreateEmployee("3015", "3040", "一般使用者", "user@example.com", "UserPass1", EmployeeRoles.User);
 
-        store.SetRole("3020", "3030", EmployeeRoles.Employee);
-        EmployeeEqual(EmployeeRoles.Employee, store.Find("3030")?.Role);
-        EmployeeThrows<InvalidOperationException>(() => store.SetRole("3020", "3020", EmployeeRoles.Employee));
-        EmployeeThrows<InvalidOperationException>(() => store.SetRole("3020", "3015", EmployeeRoles.Employee));
+        store.SetRole("3020", "3030", EmployeeRoles.User);
+        EmployeeEqual(EmployeeRoles.User, store.Find("3030")?.Role);
+        EmployeeThrows<InvalidOperationException>(() => store.SetRole("3020", "3020", EmployeeRoles.User));
+        EmployeeThrows<InvalidOperationException>(() => store.SetRole("3020", "3015", EmployeeRoles.User));
         EmployeeThrows<InvalidOperationException>(() => store.SetEnabled("3020", "3015", false));
         EmployeeThrows<InvalidOperationException>(() => store.DeleteEmployee("3020", "3015"));
         EmployeeThrows<InvalidOperationException>(() =>
             store.ResetPasswordByAdministrator("3020", "3015", "ShouldNotWork1"));
 
         store.SetEnabled("3020", "3040", false);
-        EmployeeEqual<EmployeeAccount?>(null, store.Authenticate("3040", "Employee1"));
+        EmployeeEqual<EmployeeAccount?>(null, store.Authenticate("3040", "UserPass1"));
         store.SetEnabled("3020", "3040", true);
-        EmployeeEqual("3040", store.Authenticate("3040", "Employee1")?.EmployeeNo);
+        EmployeeEqual("3040", store.Authenticate("3040", "UserPass1")?.EmployeeNo);
 
         var databasePath = Path.Combine(temporary.Path, SqliteBootstrapper.DatabaseFileName);
         using var connection = OpenReadWrite(databasePath);
@@ -156,15 +156,15 @@ internal static class EmployeeStoreTests
         EmployeeThrows<InvalidOperationException>(() =>
             store.CreateEmployee("3015", "ABCD", "錯誤編號", "bad@example.com", "Password8"));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "3050", "", "employee@example.com", "Password8"));
+            store.CreateEmployee("3015", "3050", "", "user@example.com", "Password8"));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "3050", "員工", "", "Password8"));
+            store.CreateEmployee("3015", "3050", "使用者", "", "Password8"));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "3050", "員工", "employee@example.com", "short7", EmployeeRoles.Employee));
+            store.CreateEmployee("3015", "3050", "使用者", "user@example.com", "short7", EmployeeRoles.User));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "3050", "員工", "employee@example.com", "Invalid-1", EmployeeRoles.Employee));
+            store.CreateEmployee("3015", "3050", "使用者", "user@example.com", "Invalid-1", EmployeeRoles.User));
         EmployeeThrows<InvalidOperationException>(() =>
-            store.CreateEmployee("3015", "3050", "員工", "employee@example.com", "Password8", EmployeeRoles.SuperAdmin));
+            store.CreateEmployee("3015", "3050", "使用者", "user@example.com", "Password8", EmployeeRoles.SuperAdmin));
     }
 
     public static void SettingsModelHasNoLegacyManagementPasswordFields()
