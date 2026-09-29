@@ -1,10 +1,12 @@
 # CYInvoice Windows 候選版驗證清單
 
-本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。
+本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
 
-- 目前工程測試基準：**V2.6.2 Build 0**。
+- 目前工程測試基準：**V2.6.10 Build 0**。
+- Development Cloud：**Cloud 0.8.8 / API 1 / compatibility Schema 8 / storage Schema 11**。
+- 建議 Windows 測試包：`CYInvoice_cloud-foundation_engineering-run343`。
 - 最新公開正式 Release：**V2.4.2**。
-- V2.6.2 Windows engineering CI 已通過；本清單專注於 CI 無法取代的實機、光貿及互動驗證。
+- V2.6.10 main CI、Windows portable smoke、Governance 與 development Cloud staged deployment 均已通過；本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
 
 ## A. 全新啟動、超級管理員與設定
 
@@ -22,7 +24,7 @@
 ## B. 帳號管理與權限
 
 1. 超級管理員可建立一般使用者與管理員；新增視窗顯示「新增使用者」。
-2. 一般角色 UI 顯示為「一般使用者」，內部 role 可維持 `EMPLOYEE`。
+2. 一般角色 UI 顯示為「一般使用者」，正式內部 role 必須為 `USER`；active runtime 不得再把 `EMPLOYEE` 當作 role 或相容 alias。
 3. 新密碼至少 8 碼且只能使用 ASCII 英文字母／數字。
 4. 管理員不得修改、停用、刪除或重設超級管理員。
 5. 管理員不得取消自己的管理員權限、停用或刪除自己。
@@ -189,11 +191,76 @@
 2. 不得包含 `Version` 資料夾、`todo.txt`、執行期 Data／Cache／Logs。
 3. engineering Artifact 明確標示 `Channel: engineering`。
 4. WebView2 managed DLL 集中於 `Runtime/WebView2`。
-5. 正式 Release 必須由 `main` 重新執行全部必要驗證；engineering CI 成功不能直接視為正式發布完成。
+5. engineering/public artifact 上傳前必須通過 repository `scan-public-package.py`，不得包含 secrets、production bindings 或被治理規則禁止的檔案。
+6. 正式 Release 必須由 `main` 重新執行全部必要驗證；engineering CI 成功不能直接視為正式發布完成。
+
+## Q. Built-in Cloud V2.6.10 baseline
+
+> 先做本節，再進行 R～U。既有 A/B 兩台都是目前 Workspace 的 recovery path，不應一開始就做破壞性動作。
+
+1. A、B 均使用 Run343 V2.6.10 engineering package 啟動。
+2. 兩台都應能連上 development Cloud，既有 Workspace 不應被重新 bootstrap。
+3. `裝置管理` 應看到既有 active Device inventory；不應因升級產生重複 Device。
+4. 既有中央 Employees 應仍可登入，角色為 `SUPER_ADMIN / ADMIN / USER` vocabulary，不得出現 active `EMPLOYEE` role。
+5. 一般發票清單、recent sync、手動重新整理及既有 Cloud status 顯示應無回歸。
+6. 若任一台 baseline 不正常，停止後續 destructive lifecycle 測試；先保存 Logs 並修復，不得用重建 Workspace 規避問題。
+
+## R. Cloud authority freshness A/B
+
+> 本節驗證 Package 2。只做可回復的中央 Employee 變更；不要用目前唯一 SUPER_ADMIN 做停用實驗。
+
+1. 在 A 對測試用中央 Employee 做一項可回復變更，例如密碼、`USER ↔ ADMIN` 或 enabled 狀態。
+2. 不等待 5 分鐘、不重新啟動 B，立即在 B 觸發需要 Employee authentication/authorization 的 protected operation。
+3. B 必須使用最新 Cloud authority；舊密碼、舊角色或舊 enabled 狀態不得繼續被 online cache 認為有效。
+4. B 成功取得新 authority 後，本機 protected cache 應被最新 snapshot 取代。
+5. 將 B 暫時置於真正無法連線到 Cloud 的狀態；最後可信 protected cache 可供允許的 Offline authentication 使用，不得 fallback 到舊 Local EmployeeStore。
+6. 恢復 B 網路後，下一個 protected operation 必須重新以 Online authority 為準，不必重啟程式。
+7. HTTP authorization failure、revoked Device、malformed authority 或 Workspace mismatch 不得被當成「離線」而使用 cache 繞過。
+8. 測試完成後把中央 Employee 恢復原狀，A/B 都應立即看到恢復後 authority。
+
+## S. Device revoke / retire A/B/C
+
+> 本節驗證 Package 3。優先建立可拋棄的 Device C，不直接拿 A 或 B 當 revoke 目標。
+
+1. 以既有已驗證的 pairing 流程建立新的測試 Device C。
+2. A/B 的 `裝置管理` 應看到 C 為 active，且 active count 與清單一致。
+3. 從 A 針對 C 執行遠端撤銷；必須要求 execution-time `SUPER_ADMIN` credential 驗證與 destructive confirmation。
+4. 撤銷成功後 C row 必須保留為 revoked history，不得 hard-delete。
+5. C 的舊 Device Token 從此不得通過一般 Device-authenticated Cloud API。
+6. 重複 revoke 同一個已 revoked C 應保持 idempotent，不產生第二個 active identity。
+7. 同一台實體測試電腦若重新加入，必須建立新的 Device ID / Device Token；不得復活舊 revoked token。
+8. A、B 的身份、Workspace、中央 Employee authority 不得受 C revoke 影響。
+
+## T. Cloud → Local destructive reset
+
+> 本節驗證 Package 4。使用可拋棄的 C installation；A/B 必須保持 active，確保 Workspace 仍有 recovery path。
+
+1. C 處於 Built-in Cloud 且是 active Device，A/B 仍在線。
+2. 在 C 選擇回到 Local／destructive reset，應看到兩次明確確認；不能只切一個 mode flag。
+3. 確認後 App 應先關閉主 UI／背景同步，再執行 current Device revoke 與 reset transaction。
+4. Cloud 明確確認 C 已 revoked 後，才允許刪除 C 的 CYInvoice `Data` / `Cache` / Local Employee / Cloud Employee cache / Cloud identity/token/pending state。
+5. 與 CYInvoice local state 無關的診斷／外部檔案不得被過度刪除。
+6. 重啟 C 應回到 first-run，不應殘留舊 Workspace、Device Token 或舊 Local SUPER_ADMIN authority。
+7. 重新選 Local 時需建立新的 Local `SUPER_ADMIN`。
+8. A/B、中央 Workspace、其他 Devices、中央 Employees 與 audit history 必須保持完整。
+9. C 之後若再次加入原 Workspace，應視為 fresh Device identity。
+
+## U. Final Device、Workspace inactive 與 ambiguous-result 安全邊界
+
+1. **不要在目前 A/B recovery topology 上故意測最後一台 Device。** Final-Device destructive acceptance 應另建可拋棄 Workspace／環境。
+2. Built-in Cloud active Workspace 只剩最後一台 active Device 時，revoke 必須回 `LAST_ACTIVE_DEVICE`，本機不得 wipe。
+3. 若要保留 Workspace，先加入另一台 active Device 才可退出目前 Device。
+4. 若 Workspace 已由外部中央管理面手動 disable/archive，Windows Client 只能讀取並確認 inactive；不得提供 disable/delete/purge Workspace 的按鈕或 API 權限。
+5. Workspace 已確認 inactive 時，最後一台本機可以完成 local destructive reset；不得因此刪除中央 Workspace history／Employees／Audit。
+6. 模擬「revoke request 可能已到 Cloud，但 success response 遺失」時，本機必須保留 Data、Token 與 reset marker，不得猜測成功後 wipe。
+7. 下一次啟動應透過 narrow `/v1/devices/self-status` 確認 Device terminal state / Workspace state；該 endpoint 不得讓 revoked token 恢復一般 API authorization。
+8. 若 self-status 證明 Device revoked 或 Workspace inactive，可繼續已授權 wipe；若仍 active，取消未完成 reset 並完整保留資料；若狀態仍不明，fail closed 並停止進入正常 App。
+9. CY ID 尚未成為正式 recovery authority 前，不得因「未來可能支援 0 Device」而放寬 Built-in `LAST_ACTIVE_DEVICE`。
 
 ## 通過條件
 
-- 本次變更涉及的 A～P 項目實機通過，且 Logs 沒有未處理 `ERROR` 或未處理例外。
+- 本次變更涉及的 A～U 項目依實際 scope 通過，且 Logs 沒有未處理 `ERROR` 或未處理例外。
 - 所有需要光貿實際回覆的結果均以真實測試回覆為準，不以 UI 顯示自行推定 API 行為。
-- 發票成功判定、防重、環境隔離、結果不明禁止重送等安全不變量不得因 UI 或人工流程調整而改變。
-- V2.6.2 實機驗證完成前不得把它描述為正式 Release。
+- Cloud lifecycle 測試必須以 development Cloud 與可回復／可拋棄 Device 為主，不為驗證 destructive path 而破壞唯一 recovery path。
+- 發票成功判定、防重、環境隔離、Cloud authority、Device trust、結果不明禁止重送／誤刪等安全不變量不得因 UI 或人工流程調整而改變。
+- **V2.6.10 實機驗證完成前不得把 V2.6.10 描述為正式 Release；merge 到 main 或 development Cloud deploy 均不等於正式 Release。**
