@@ -1,4 +1,4 @@
-/* V0.21.5 Build 10 - compact mobile balance + direct month lock. Auth/CYID unchanged. */
+/* V0.21.5 Build 10 - mobile opening/settings/lock controls. Auth/CYID unchanged. */
 @media (max-width: 767px) {
   .topbar {
     border-bottom: 0 !important;
@@ -937,131 +937,253 @@
     font-size: 10.5px !important;
   }
 
-  .v0215-mobile-balance-popover {
-    position: fixed;
-    z-index: 2600;
-    box-sizing: border-box;
-    width: 190px;
-    max-width: calc(100vw - 16px);
-    max-height: 220px;
-    overflow-y: auto;
-    padding: 7px 8px;
-    border: 1px solid #d8e0e8;
-    border-radius: 9px;
-    background: #fff;
-    box-shadow: 0 10px 26px rgba(31, 44, 61, .17);
+  /* Opening balance remains the meaning of the top-left 餘額 button,
+     but the phone dialog is a compact editable list instead of a desktop form. */
+  .opening-modal[open] {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    background: #fff !important;
   }
 
-  .v0215-mobile-balance-popover[hidden] {
+  .opening-modal > .modal-header {
+    flex: 0 0 auto !important;
+    padding: 10px 12px 8px !important;
+    border-bottom: 1px solid #e8edf2 !important;
+  }
+
+  .opening-modal > .modal-header h2 {
+    font-size: 19px !important;
+  }
+
+  .opening-modal > .modal-header p {
+    margin-top: 2px !important;
+    font-size: 10.5px !important;
+    line-height: 1.35 !important;
+  }
+
+  .opening-dialog-heading {
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 5px !important;
+    margin: 0 !important;
+    padding: 8px 12px !important;
+    border-bottom: 1px solid #edf0f3 !important;
+    background: #fbfcfd !important;
+  }
+
+  .opening-dialog-heading .compact-label {
+    order: 1 !important;
+    display: grid !important;
+    grid-template-columns: 44px minmax(0, 1fr) !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .opening-dialog-heading .compact-label > span {
+    color: #647385 !important;
+    font-size: 12px !important;
+    font-weight: 650 !important;
+    text-align: center !important;
+  }
+
+  .opening-dialog-heading #openingMonth {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 36px !important;
+    height: 36px !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    font-size: 15px !important;
+    text-align: center !important;
+  }
+
+  .opening-dialog-heading .hint {
+    order: 2 !important;
+    margin: 0 !important;
+    color: #7a8795 !important;
+    font-size: 9.5px !important;
+    line-height: 1.35 !important;
+  }
+
+  .opening-modal #openingRows {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    display: grid !important;
+    align-content: start !important;
+    gap: 0 !important;
+    margin: 0 !important;
+    padding: 4px 12px 8px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .opening-modal .opening-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 126px !important;
+    align-items: center !important;
+    gap: 10px !important;
+    min-height: 48px !important;
+    padding: 6px 0 !important;
+    border-bottom: 1px solid #eef1f4 !important;
+  }
+
+  .opening-modal .opening-row > span {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    color: #425164 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .opening-modal .opening-row .historical {
+    display: block !important;
+    margin: 1px 0 0 !important;
+    font-size: 9px !important;
+  }
+
+  .opening-modal .opening-row input {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 36px !important;
+    height: 36px !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    font-size: 15px !important;
+    text-align: right !important;
+  }
+
+  .opening-modal #openingMessage {
+    flex: 0 0 auto !important;
+    min-height: 18px !important;
+    margin: 0 !important;
+    padding: 2px 12px 0 !important;
+    font-size: 10px !important;
+  }
+
+  .opening-modal > .modal-actions {
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: .8fr 1.2fr !important;
+    gap: 8px !important;
+    margin: 0 !important;
+    padding: 8px 12px calc(10px + env(safe-area-inset-bottom)) !important;
+    border-top: 1px solid #e8edf2 !important;
+    background: #fff !important;
+  }
+
+  .opening-modal > .modal-actions button {
+    min-height: 38px !important;
+    height: 38px !important;
+    margin: 0 !important;
+    font-size: 12px !important;
+  }
+
+  /* Account/category from More are focused phone settings pages.
+     Other desktop/tablet settings stay hidden on phone. */
+  .settings-modal.v0215-mobile-settings-focus[open] {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .settings-modal.v0215-mobile-settings-focus > .modal-header {
+    flex: 0 0 auto !important;
+  }
+
+  .settings-modal.v0215-mobile-settings-focus > .modal-header p {
     display: none !important;
   }
 
-  .v0215-mobile-balance-title {
-    margin: 0 0 4px;
-    color: #5f6d7c;
-    font-size: 10px;
-    font-weight: 700;
+  .settings-modal.v0215-mobile-settings-focus .settings-layout {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    display: block !important;
+    overflow: hidden !important;
   }
 
-  .v0215-mobile-balance-list {
-    display: grid;
-    gap: 0;
+  .settings-modal.v0215-mobile-settings-focus .settings-nav {
+    display: none !important;
   }
 
-  .v0215-mobile-balance-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-    min-height: 24px;
-    padding: 2px 1px;
-    color: #344355;
-    font-size: 10.5px;
+  .settings-modal.v0215-mobile-settings-focus .settings-content {
+    box-sizing: border-box !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    padding: 10px 10px calc(18px + env(safe-area-inset-bottom)) !important;
+    -webkit-overflow-scrolling: touch;
   }
 
-  .v0215-mobile-balance-row span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .v0215-mobile-balance-row strong {
-    color: #243345;
-    font-size: 10.5px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-
-  .v0215-mobile-balance-loading,
-  .v0215-mobile-balance-empty,
-  .v0215-mobile-balance-error {
-    padding: 5px 1px 2px;
-    color: #778495;
-    font-size: 10px;
-  }
-
-  .v0215-mobile-balance-error {
-    color: #a54b45;
-  }
-
+  /* Month lock is a small direct action, never the full Settings dialog. */
   .v0215-mobile-lock-dialog {
-    width: min(310px, calc(100vw - 28px)) !important;
+    box-sizing: border-box !important;
+    width: min(330px, calc(100vw - 28px)) !important;
     max-width: none !important;
+    height: auto !important;
+    max-height: calc(100dvh - 40px) !important;
+    margin: auto !important;
     padding: 0 !important;
+    overflow: hidden !important;
     border: 1px solid #d8e0e8 !important;
     border-radius: 12px !important;
     background: #fff !important;
   }
 
   .v0215-mobile-lock-dialog::backdrop {
-    background: rgba(30, 39, 51, .22);
+    background: rgba(30, 39, 51, .28) !important;
   }
 
   .v0215-mobile-lock-head {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 10px;
-    padding: 14px 14px 10px;
-    border-bottom: 1px solid #edf0f3;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: start !important;
+    gap: 10px !important;
+    padding: 13px 14px 10px !important;
+    border-bottom: 1px solid #edf0f3 !important;
   }
 
   .v0215-mobile-lock-head h2 {
-    margin: 0;
-    color: #2c3a4a;
-    font-size: 17px;
+    margin: 0 !important;
+    color: #2c3a4a !important;
+    font-size: 17px !important;
   }
 
   .v0215-mobile-lock-head p {
-    margin: 3px 0 0;
-    color: #718092;
-    font-size: 11px;
+    margin: 3px 0 0 !important;
+    color: #718092 !important;
+    font-size: 11px !important;
   }
 
   .v0215-mobile-lock-head .icon-button {
-    width: 30px;
-    min-width: 30px;
-    height: 30px;
-    min-height: 30px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: #667587;
-    font-size: 24px;
-    line-height: 1;
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #667587 !important;
+    font-size: 24px !important;
   }
 
   .v0215-mobile-lock-body {
-    display: grid;
-    gap: 6px;
-    padding: 12px 14px 8px;
+    display: grid !important;
+    gap: 6px !important;
+    padding: 12px 14px 8px !important;
   }
 
   .v0215-mobile-lock-body p {
-    margin: 0;
-    color: #344355;
-    font-size: 12px;
-    line-height: 1.45;
+    margin: 0 !important;
+    color: #344355 !important;
+    font-size: 12px !important;
+    line-height: 1.45 !important;
   }
 
   .v0215-mobile-lock-note {
@@ -1070,29 +1192,29 @@
   }
 
   .v0215-mobile-lock-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    padding: 8px 14px 12px;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    padding: 8px 14px 12px !important;
   }
 
   .v0215-mobile-lock-actions button {
-    min-height: 36px;
-    height: 36px;
-    padding: 0 8px;
-    border-radius: 8px;
-    font-size: 11px;
+    min-height: 36px !important;
+    height: 36px !important;
+    padding: 0 8px !important;
+    border-radius: 8px !important;
+    font-size: 11px !important;
   }
 
   .v0215-mobile-lock-message {
-    min-height: 0;
-    margin: -5px 14px 10px;
-    color: #2f7a4c;
-    font-size: 10px;
+    min-height: 0 !important;
+    margin: -5px 14px 10px !important;
+    color: #2f7a4c !important;
+    font-size: 10px !important;
   }
 
   .v0215-mobile-lock-message.error {
-    color: #a54b45;
+    color: #a54b45 !important;
   }
 }
 
