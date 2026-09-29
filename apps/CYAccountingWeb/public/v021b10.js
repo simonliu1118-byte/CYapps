@@ -276,8 +276,14 @@ function setupV21Build10LedgerTools() {
       return;
     }
     close();
-    if (action === 'opening') document.querySelector('#ledgerOpeningBalanceButton')?.click();
-    if (action === 'lock') document.querySelector('#ledgerLockSettingsButton')?.click();
+    if (action === 'opening') {
+      if (typeof window.cyOpenMobileLedgerBalance === 'function') window.cyOpenMobileLedgerBalance();
+      else document.querySelector('#ledgerOpeningBalanceButton')?.click();
+    }
+    if (action === 'lock') {
+      if (typeof window.cyOpenMobileLedgerLock === 'function') window.cyOpenMobileLedgerLock();
+      else document.querySelector('#ledgerLockSettingsButton')?.click();
+    }
     if (action === 'export') document.querySelector('#ledgerExcelExport')?.click();
   });
 
