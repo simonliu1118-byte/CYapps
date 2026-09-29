@@ -1,5 +1,15 @@
 # CYApps Governance Changelog
 
+## 2.3.17 — 2026/09/29
+
+- 依使用者最終確認，CYCloud Identity Workspace Role 正式收斂為 `SUPER_ADMIN / ADMIN / USER` 三層；`Identity Admin` 改定義為附掛於 ADMIN 的特殊 Identity-management capability，而不是第四個 Role。
+- 一般 ADMIN 僅管理 USER lifecycle，不再具 App／CY Web Module Access 設定權；Identity Admin／Super Admin 才可管理 eligible Employee Access，且 Identity Admin 不得自行擴權、不得授予或撤銷 Identity Admin capability、不得修改 Super Admin protected state。
+- CY Web 正式定義為核心帳號管理 App：所有有效 Employee 的 CY Web entry access 固定為 TRUE／不可取消；CY Web Module Access 仍由 CY Web 自己管理，Super Admin 全模組自動允許，Identity Admin／Super Admin 可管理其他 eligible Employee 的模組 Access。
+- 所有接入 CYID 的 CY App 暫時直接採用 CYID 三層 Role：`SUPER_ADMIN -> SUPER_ADMIN`、`ADMIN -> ADMIN`、`USER -> USER`；既有 Identity Group + `USER_ADMIN` compatibility-role projection 降為 legacy implementation，後續不得再擴充其產品語意。
+- Employee 新增時直接指定 Role：普通 ADMIN 只能新增 USER；Identity Admin／Super Admin 可新增 USER 或 ADMIN。建立成功後應自動寄第一封啟用信，信內含可直接開啟 CY Web 啟用流程的連結；寄信失敗不回滾 Employee，保留 pending 並提供重寄。
+- 已啟用 Employee 的 Email 若失效，Identity Admin／Super Admin 可強制變更 Email 並重新驗證；帳號維持 activated、密碼保留、Session 撤銷，不回到第一次待啟用。只有從未完成第一次啟用的 Employee 可實體刪除。
+- 保留 future HR 備註：若未來需要非 ADMIN 的專職 HR 具 Identity lifecycle 能力，再把相關操作 capability 化；目前不新增第四種 Workspace Role。
+
 ## 2.3.16 — 2026/09/28
 
 - CYCloud Identity 的 Password 長度固定為 8–16 字元；所有 consumer App 必須遵循 Shared Identity 的同一 credential 驗證邊界，不得自行放寬或縮限。
