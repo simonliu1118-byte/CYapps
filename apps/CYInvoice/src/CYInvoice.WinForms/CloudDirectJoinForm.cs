@@ -204,8 +204,8 @@ internal sealed class CloudDirectJoinForm : Form
     {
         if (ClientSize.Width > 620 || ClientSize.Height > 450)
             throw new InvalidOperationException("雲端加入視窗尺寸異常");
-        VerifyActions(inputActions, "第一步");
-        VerifyActions(confirmationActions, "確認步驟");
+        VerifyActions(inputActions, "input");
+        VerifyActions(confirmationActions, "confirmation");
         if (next.Text != "下一步" || inputCancel.Text != "取消"
             || confirmJoin.Text != "確認加入" || back.Text != "上一步" || confirmCancel.Text != "取消")
             throw new InvalidOperationException("雲端加入流程按鈕文字異常");
@@ -213,12 +213,20 @@ internal sealed class CloudDirectJoinForm : Form
 
     private static void VerifyActions(FlowLayoutPanel actions, string page)
     {
+        var requiredWidth = actions.Controls.Cast<Control>()
+            .Sum(control => control.Width + control.Margin.Horizontal);
+        if (requiredWidth > 420)
+            throw new InvalidOperationException($"Cloud direct-join {page} action row is too wide: {requiredWidth}");
+
+        if (!actions.Visible || actions.ClientSize.Width <= 0 || actions.ClientSize.Height <= 0)
+            return;
+
         actions.PerformLayout();
         foreach (Control button in actions.Controls)
         {
             if (button.Left < 0 || button.Top < 0 || button.Right > actions.ClientSize.Width
                 || button.Bottom > actions.ClientSize.Height)
-                throw new InvalidOperationException($"雲端加入{page}操作按鈕被裁切");
+                throw new InvalidOperationException($"Cloud direct-join {page} action button is clipped");
         }
     }
 
