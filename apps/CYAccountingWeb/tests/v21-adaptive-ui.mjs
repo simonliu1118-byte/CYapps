@@ -12,6 +12,7 @@ const build = read('BUILD').trim();
 const appJs = read('public/app.js');
 const v03 = read('public/v03.js');
 const authJs = read('public/auth.js');
+const authCss = read('public/auth.css');
 const indexHtml = read('public/index.html');
 const workerApp = read('src/app.js');
 const build8Js = read('public/v021b8.js');
@@ -45,7 +46,7 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '5');
+assert.equal(build, '6');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
@@ -79,6 +80,11 @@ assert.match(authJs, /sessionResponse = await fetch\('\/api\/auth\/me'/);
 assert.match(authJs, /credentials: 'same-origin'/);
 assert.match(authJs, /帳號密碼已通過，但登入狀態沒有保存/);
 assert.match(indexHtml, /auth\.js\?v=0214b1-recovery/);
+assert.match(indexHtml, /auth\.css\?v=0215b6/);
+assert.match(authCss, /@media \(min-width: 641px\) and \(max-width: 1023px\)/);
+assert.match(authCss, /max-height:\s*calc\(100dvh - 40px\)/);
+assert.match(authCss, /overflow-y:\s*auto/);
+assert.match(authCss, /font-size:\s*16px/);
 assert.match(indexHtml, /v021b11\.js\?v=0214b1-recovery/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
@@ -168,4 +174,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 Build 5 adaptive UI regression tests passed.');
+console.log('V0.21.5 Build 6 adaptive UI regression tests passed.');
