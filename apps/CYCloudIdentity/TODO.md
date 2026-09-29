@@ -4,8 +4,8 @@
 
 ## Current checkpoint — 2026-09-30
 
-- Current formal source baseline is **CYCloudIdentity 0.3.0 Build 0**，development runtime 也已部署 **0.3.0 Build 0**。
-- CY Web formal source/development baseline is **0.3.0 Build 0**，並已接上 CYID 0.3 first-login Email verification contract。固定入口仍為 `https://admin.chihyuancm.com`。
+- Current formal source baseline is **CYCloudIdentity 0.3.1 Build 0**；本 patch 為 CYACC consumer handoff／status consolidation，development runtime 仍是已部署的 **0.3.0 Build 0**，不因純文件交接自動重部署。
+- CY Web formal source/development baseline is **0.4.0 Build 0**，已接上 CYID 0.3 first-login Email verification，並完成 direct Employee × Module Access management / server-check foundation。固定入口仍為 `https://admin.chihyuancm.com`。
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
   - 只允許 CY Web core account application；
@@ -19,6 +19,8 @@
 - Email delivery / Email-budget reservation 失敗時，不留下「未寄出但仍可登入」的新 temporary credential；Employee 保持 Email 未驗證並可由管理員重寄。
 - Provider local acceptance 已證明：expiry、single-use、core-app-only、ticket-not-session、completion-no-session、ticket replay rejection、explicit re-login、resend/edit invalidation。
 - CYID 0.3 development deploy 已成功完成 remote migration `0007_initial_email_password.sql`、Worker deploy 與 Identity secret configuration。
+- Controlled real Email/browser lifecycle 驗收依使用者目前條件暫緩；這不重開已定案 contract，但仍是 production 前必要 acceptance。
+- CYAccountingWeb（CYACCweb）consumer-specific integration handoff 已由 canonical CYID contract 產生於 `docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；CYACC development integration 可依此開始，production 前仍須補完共享 lifecycle acceptance。
 - Production、backup rollout 與其他 consumer production cutover 均未進行。
 
 ## Documentation consolidation
@@ -29,6 +31,7 @@
 - `docs/UI_ACCESS.md` 保存 account-management UI terminology、action 與 authority matrix。
 - `docs/ARCHITECTURE.md` 保存 technical architecture / ownership / migration boundary。
 - `docs/OTP_SECURITY.md` 保存 OTP/security-policy contract。
+- `docs/consumers/CYACC_INTEGRATION_HANDOFF.md` 是 CYACC implementation guide；若與 canonical contract 衝突，以 canonical contract 為準。
 - `TODO.md` 是唯一 current status / next-work tracker。
 - Dated conversation handoff 與 obsolete Application Role Mapping 不留在 active tree；歷史用 Git history 追溯。
 
@@ -48,8 +51,9 @@
 12. [ ] 實際驗收首次登入密碼 expiry、重寄驗證 Email、pending Email 修改、舊 credential 失效與 delivery-failure recovery。
 13. [ ] 實際驗收既有 Super Admin permanent-password login/F5/session resolve，並完成 USER self-service、正常 ADMIN、Identity Admin、Super Admin 權限矩陣。
 14. [ ] 驗收 role/App Access change session invalidation、literal expired normal Session、forgot-password、own Email change 與 controlled Super Admin transfer。
-15. [ ] Shared Identity contract 瀏覽器驗收穩定後，產出 CYAccountingWeb 與 CYInvoice consumer integration handoff；實作留在各自工作線。
-16. [ ] Production 前完成 low-frequency backup + restore acceptance；production cutover 需使用者另行明確同意。
+15. [x] 產出 CYAccountingWeb（CYACCweb）consumer integration handoff；明確標示 real Email/browser acceptance 暫緩但仍屬 production gate，CYACC development integration 可先開始。
+16. [ ] 在 CYInvoice 工作線適合的接入點產出其 consumer-specific handoff；Device/local/offline 邊界仍由 CYInvoice 自己管理。
+17. [ ] Production 前完成 low-frequency backup + restore acceptance；production cutover 需使用者另行明確同意。
 
 ## Explicitly deferred
 

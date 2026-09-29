@@ -1,6 +1,6 @@
 # CYCloud Identity — Role and Access Model
 
-> **Status:** approved current product model. CYID 0.2 role/access runtime is deployed in development; 0.3 first-login Email verification changes are approved forward contract and tracked in `../TODO.md`.
+> **Status:** current product model for CYID `0.3.x`. Direct Role / Identity Admin / App Access and first-login Email verification are deployed to development; exact rollout and acceptance status is tracked in `../TODO.md`.
 
 ## 1. Scope
 
