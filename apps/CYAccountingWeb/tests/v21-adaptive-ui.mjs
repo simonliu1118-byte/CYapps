@@ -36,15 +36,19 @@ const patch2Js = read('public/v0212.js');
 const patch2Css = read('public/v0212.css');
 const patch4Js = read('public/v0214.js');
 const patch4Css = read('public/v0214.css');
+const patch5Css = read('public/v0215.css');
+const v06 = read('public/v06.js');
 const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
-assert.equal(version, '0.21.4');
+assert.equal(version, '0.21.5');
 assert.equal(build, '1');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0212\.js'/);
+assert.match(build11Js, /ensureV0215Stylesheet\(\)/);
+assert.match(build11Js, /link\.href = '\/v0215\.css'/);
 assert.match(build12Js, /CY_V21_BUILD12_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build13Js, /CY_V21_BUILD13_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build14Js, /CY_V21_BUILD14_DESKTOP = '\(min-width: 1024px\)'/);
@@ -70,6 +74,18 @@ assert.match(authJs, /帳號密碼已通過，但登入狀態沒有保存/);
 assert.match(indexHtml, /auth\.js\?v=0214b1-recovery/);
 assert.match(indexHtml, /v021b11\.js\?v=0214b1-recovery/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
+
+// V0.21.5 Build 1 mobile refinement is render/CSS based and introduces no V0.21.5 observer.
+assert.match(patch5Css, /@media \(max-width: 767px\)/);
+assert.match(patch5Css, /"account date"[\s\S]*?"category favorite"[\s\S]*?"summary quicksummary"[\s\S]*?"amount save"/);
+assert.match(patch5Css, /input\[type="date"\][\s\S]*?-webkit-appearance:\s*auto/);
+assert.match(patch5Css, /tr\.ledger-row:not\(\.inline-editing\)/);
+assert.match(v06, /splitLedgerAccountName/);
+assert.match(v06, /ledger-date-mobile/);
+assert.match(v06, /ledger-account-mobile/);
+assert.match(indexHtml, /<details id="favoriteCategoryGroup"/);
+assert.match(indexHtml, /<details id="summarySuggestionGroup"/);
+assert.doesNotMatch(build11Js, /v0215\.js/);
 
 // Breakpoint ownership: Build 10 phone, Build 9 Tablet, manager/date patch work Desktop only.
 assert.match(build10Css, /@media \(max-width: 767px\)/);
@@ -117,4 +133,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.4 Build 1 adaptive UI regression tests passed.');
+console.log('V0.21.5 Build 1 adaptive UI regression tests passed.');
