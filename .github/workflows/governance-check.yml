@@ -265,8 +265,8 @@ jobs:
                 [ "$consumer_changelog_changed" -eq 1 ] || { echo "ERROR: consumer-visible CYID change must update CONSUMER_CONTRACT_CHANGELOG.md"; exit 1; }
               fi
 
-              if [ "$consumer_min_changed" -eq 1 ] && [ "$impact" != "CONSUMER_UPDATE_REQUIRED" ]; then
-                echo "ERROR: raising/changing the minimum compatible consumer version requires CYID Consumer Impact CONSUMER_UPDATE_REQUIRED"
+              if [ "$consumer_min_changed" -eq 1 ] && [ "$consumer_min_existed" -eq 1 ] && [ "$impact" != "CONSUMER_UPDATE_REQUIRED" ]; then
+                echo "ERROR: changing an established minimum compatible consumer version requires CYID Consumer Impact CONSUMER_UPDATE_REQUIRED"
                 exit 1
               fi
             fi
