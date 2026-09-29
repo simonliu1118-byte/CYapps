@@ -4,63 +4,60 @@
 
 ## Current checkpoint — 2026-09-29
 
-- Current development baseline: `CYCloudIdentity` `0.1.14` on `main` and deployed in development.
-- CYInvoice Cloud remains reference-only in this workstream; do not modify CYInvoice Device/runtime/D1 until its dedicated migration conversation.
-- Workspace Super Admin is a protected authority pointer and `isWorkspaceSuperAdmin` signal, separate from ordinary extensible Identity Groups. Consumer-facing management UI uses `超級管理員 (Super Admin)` while stable protocol/storage field names remain unchanged.
-- Application Registry is generic runtime data. Public source does not seed or disclose the real App catalog, Workspace/Employee access matrix, Cloudflare resource IDs, sender addresses, credentials, OTP pepper or bootstrap secret.
-- New credentials use `scrypt`; bounded legacy `pbkdf2-sha256` verification remains compatibility-only. Password boundary is 8–16 Unicode characters.
-- Identity-owned login/session/resolve/logout is implemented and deployed in development. Session TTL is runtime-configured and the accepted development path uses an 8-hour session.
-- Provider-neutral Email Sender, Email OTP, login abuse protection, first-Workspace bootstrap and free-tier email budget controls are implemented.
-- OTP defaults remain 60-second resend cooldown, 5 attempts, 5 sends per Email+purpose/hour, Workspace daily limit 100, 10-minute validity, with a lower runtime global ceiling taking precedence.
-- Employee lifecycle is implemented: Super Admin creates a pending Employee; Employee activates by Email OTP and sets the first password; self password change, Email change and Email OTP password recovery are implemented.
-- Employee lifecycle semantics now explicitly distinguish first-time `尚未驗證／待啟用`, activated `啟用`, and previously activated `停用`. A pending first-time Employee may be deleted by the Workspace Super Admin; the provider rejects deletion after activation and rejects deletion of the current Super Admin.
-- Super Admin transfer is implemented with current-password re-auth + OTP. Completion moves the authority pointer and Recovery Email and revokes the previous authority sessions.
-- Super Admin lifecycle protection is implemented server-side: the current Super Admin Employee cannot be disabled or deleted before authority transfer.
-- Super Admin summary API remains available for consumer use, including Recovery Email verification state and Workspace revision.
-- Identity Group create/update/disable, membership management, direct/group Application Access and coarse per-Application compatibility-role mapping are implemented.
-- `USER_ADMIN` compatibility projection is recomputed during login/session resolve. CYInvoice compatibility is fixed as `SUPER_ADMIN > ADMIN > USER`; ordinary Groups can only project `USER` or `ADMIN`; direct access defaults to `USER`; Workspace Super Admin always projects `SUPER_ADMIN`.
-- CY Web is the first accepted Shared Identity consumer. Login, F5 session resolve, logout and post-logout F5 were manually accepted with the first development Super Admin account.
-- CY Web `0.1.50` invalid-provider-session runtime gate was accepted in Development Deploy run `#20`.
-- CY Web `0.1.51` is merged and awaits manual development deployment/browser acceptance. It presents the three Employee lifecycle states, pending-only delete, and Super Admin transfer from the Employee table in a modal instead of a standalone authority block.
-- CY Web only renders Workspace management / OTP settings when `isWorkspaceSuperAdmin=true`; backend authorization remains authoritative.
-- Latest CYCloud Identity `0.1.14` development deployment completed successfully, including validation, remote migrations, Worker deployment and secret configuration.
-- Current cost assumption remains free Cloudflare / Email provider / Google Cloud usage; no paid-tier dependency or automatic upgrade.
+- Current deployed development baseline remains `CYCloudIdentity` `0.1.14`.
+- **Approved forward Identity model is now finalized** in `PROJECT_RULES.md` and `docs/ROLE_AND_ACCESS_MODEL.md`: Workspace roles are exactly `SUPER_ADMIN / ADMIN / USER`; `Identity Admin` is an ADMIN capability, not a fourth role; Application Access is entry authorization; App-local business/module permissions stay in each App.
+- The deployed `0.1.14` runtime is **not yet migrated** to that model. It still contains extensible Identity Groups, Group/direct Application Access and optional `USER_ADMIN` compatibility-role projection. Those mechanisms are legacy implementation to be migrated, not a direction to extend.
+- CYInvoice remains reference-only in this workstream; no CYInvoice source/runtime/D1 change is authorized here.
+- Super Admin remains the protected Workspace authority pointer. Consumer-facing terminology is `超級管理員 (Super Admin)`; stable protocol fields may remain during migration.
+- Target Employee role creation: normal ADMIN can create USER only; Identity Admin / Super Admin can create USER or ADMIN directly. Identity Admin capability itself is granted/revoked only by Super Admin.
+- Target Access management: normal ADMIN has no App/Module Access configuration capability. Identity Admin / Super Admin manage eligible Employee Access; Identity Admin cannot modify its own Access or Super Admin Access.
+- CY Web is the mandatory core account-management App: every valid Employee must retain CY Web entry access even with no business-module access. Other App Access defaults ungranted and is configured after Employee creation.
+- CY Web Module Access remains CY Web-local. Super Admin gets all modules automatically; Identity Admin / Super Admin can configure eligible USER/ADMIN/other Identity Admin module access; an ADMIN with a module has full management authority in that module.
+- Target role projection for all CYID consumers is direct: `SUPER_ADMIN -> SUPER_ADMIN`, `ADMIN -> ADMIN`, `USER -> USER`. Group-derived consumer roles are being retired.
+- Future HR note is explicitly deferred: if a non-ADMIN HR role later needs Identity lifecycle authority, decompose narrower Identity capabilities then; do not add a fourth Workspace role now.
+- Employee lifecycle target remains distinct: first-time `尚未驗證／待啟用`, activated `啟用`, previously activated `停用`, plus activated `Email 待驗證` when an authorized Email recovery is in progress.
+- Only never-activated Employees may be physically deleted. Activated Employees are retained and may only be disabled/re-enabled.
+- Target activated-account Email recovery: Identity Admin / Super Admin may replace unusable Email, keep the password/account activated, mark the new Email unverified, revoke existing sessions and resend verification. Normal ADMIN may not perform this.
+- **Current first-activation email behavior is incomplete:** `handleCreateEmployee()` creates a pending Employee but does not send Email. Email OTP is currently sent only when the Employee starts activation. This explains why a newly created Employee produces no Brevo event. Target behavior is create -> automatically send first activation email containing a direct link to the CY Web activation flow; send failure must keep the pending Employee and allow resend.
+- New credentials use `scrypt`; password boundary remains 8–16 Unicode characters. Session/OTP/provider-neutral Email security rules remain in force.
+- Invalid provider-session handling through CY Web is already accepted; literal expired-session evidence remains outstanding.
 - Production remains untouched.
 
 ## Active next sequence
 
-1. [x] Audit CYInvoice Cloud Identity lifecycle and freeze the Shared Identity ownership boundary.
-2. [x] Implement Workspace / Employee / Credential / Application / Group / Session / OTP / Audit foundation and local schema/auth acceptance.
-3. [x] Implement `scrypt` credential flow, application-aware login, Identity sessions and login rate limiting.
-4. [x] Implement provider-neutral Email Sender, Email OTP, bootstrap and configurable Workspace OTP security policy.
-5. [x] Implement Employee activation, self password/Email lifecycle and password recovery.
-6. [x] Implement Super Admin transfer + Recovery Email update + previous-authority session revocation.
-7. [x] Implement Group/membership/direct+group Application Access and `USER_ADMIN` compatibility projection.
-8. [x] Add development deployment pipeline and deploy/bootstrap the first development Workspace.
-9. [x] Cut CY Web development login/session/logout over to CYCloud Identity and accept it in the browser.
-10. [x] Add CY Web Shared Identity management UI and Super-Admin-only OTP settings.
-11. [x] Protect the current Super Admin Employee from direct disable/delete and add pending-first-activation Employee deletion.
-12. [ ] Manually deploy and accept CY Web `0.1.51` Employee lifecycle/Super Admin UI behavior.
-13. [ ] Expand executable Worker acceptance for Employee activation, Email change/recovery, Super Admin transfer, Group/access mutations, live-session role changes, abuse limits and cross-Workspace rejection.
-14. [ ] Add one ordinary non-Super-Admin development Employee and manually accept activation, login, Group/direct access, hidden Super Admin UI, and compatibility role projection.
-15. [ ] Accept literal expired Identity session handling through CY Web; invalid-session handling is already accepted separately.
-16. [ ] Manually accept CY Web self-service recovery/Email-change paths and, with a controlled test Employee, Super Admin transfer without risking lockout.
-17. [ ] Remove post-bootstrap operational debt: change deployment so the one-time bootstrap secret is no longer required/rewritten after initialization, then remove it from runtime/GitHub only after that change is accepted.
-18. [ ] Re-tighten the development Cloudflare deployment token to minimum permissions after deployment behavior is stable.
-19. [ ] Publish the stable consumer handoff for CY Accounting Web and CYInvoice after the remaining CY Web acceptance items above are complete.
-20. [ ] Switch additional development Apps to CYCloud Identity and accept their login/session/recovery paths.
-21. [ ] Add low-frequency backup + restore acceptance compatible with the approved free Google Cloud usage envelope before production rollout.
-22. [ ] CYInvoice performs its separate Device/desktop-safe migration and removes duplicate account-management ownership only in its own workstream.
+1. [x] Audit the original Identity lifecycle and establish a dedicated CYCloud Identity authority.
+2. [x] Implement/deploy the initial Workspace / Employee / Credential / Application / Group / Session / OTP / Audit foundation.
+3. [x] Cut CY Web login/session/logout to CYCloud Identity and accept the first development Super Admin login/F5/logout path.
+4. [x] Implement initial Employee activation/self-service/recovery/Super Admin transfer and initial management UI.
+5. [x] Add pending-first-activation deletion and protect current Super Admin from disable/delete.
+6. [x] Finalize the replacement role/access product contract: `SUPER_ADMIN / ADMIN / USER` + Identity Admin capability + independent App Access + CY Web multi-module exception.
+7. [ ] Design a safe forward D1 migration from legacy Group-derived role authority to Employee Workspace Role + Identity Admin capability without breaking the existing development authority path.
+8. [ ] Update CYID principal/login/resolve authorization to return/enforce the direct Workspace role and remove dependency on Group-derived `applicationRoleKey` as the forward authority.
+9. [ ] Implement management authorization boundaries: normal ADMIN USER-lifecycle only; Identity Admin role/access/Email-recovery capabilities; Super Admin-only Identity Admin grant/revoke, Recovery/security policy and transfer.
+10. [ ] Implement create-time Role selection and automatic first activation email with direct CY Web activation link; add pending edit/resend/send-failure state.
+11. [ ] Implement activated-account forced Email recovery + re-verification + required session revocation.
+12. [ ] Implement target Application Access semantics: CY Web locked entry TRUE; other Apps default ungranted; Super Admin automatic access; Identity Admin anti-self-escalation.
+13. [ ] Migrate/remove legacy Identity Group role projection and `USER_ADMIN` compatibility-role UI/runtime once target replacement is validated. Do not remove data prematurely before migration acceptance.
+14. [ ] Update CY Web management UI/adapter to the new Role + Identity Admin + Access contract, including CY Web Module Access management.
+15. [ ] Create controlled ADMIN / Identity Admin / USER development accounts and accept each management boundary in the browser.
+16. [ ] Accept activation email delivery/resend through the configured provider and confirm the direct CY Web activation link flow.
+17. [ ] Accept role/access changes and immediate session invalidation behavior, including self-escalation rejection.
+18. [ ] Obtain literal expired-session handling evidence through CY Web; invalid-session handling is already accepted separately.
+19. [ ] Manually accept self-service forgot-password / own Email-change and protected Super Admin transfer without risking lockout.
+20. [ ] Remove post-bootstrap operational debt and re-tighten the development Cloudflare deployment token after the new model is stable.
+21. [ ] Publish stable consumer handoffs for CY Accounting Web and CYInvoice; implementation happens in their own workstreams.
+22. [ ] Add low-frequency backup + restore acceptance before production rollout.
 
 ## Explicitly deferred
 
+- Non-ADMIN HR Identity capability model until a real HR workflow exists.
+- Fine-grained universal permission catalog inside CYID.
 - CYInvoice Device pairing / Device Token authority.
-- CYInvoice Local → Cloud Employee transition.
-- CYInvoice Windows offline credential cache.
+- CYInvoice Local -> Cloud Employee transition and Windows offline credential cache.
 - CYInvoice source/runtime changes before its dedicated migration workstream.
 - Production DNS/custom domain and production Identity rollout.
 - Paid Cloudflare/Email/Google Cloud plans.
 
 ## Continuity note
 
-For AI/conversation handoff only, read `docs/HANDOFF_2026-09-29.md` after this TODO. The handoff is non-canonical and must not override `PROJECT_RULES.md`, architecture/contracts or later Business Decisions.
+Read `docs/ROLE_AND_ACCESS_MODEL.md` before implementing further Identity authorization work. `docs/APPLICATION_ROLE_MAPPING.md` is now a legacy implementation note only. For AI/conversation continuity, read `docs/HANDOFF_2026-09-29.md` after this TODO.
