@@ -1,63 +1,59 @@
 # CYCloud Identity TODO
 
-> 本文件只記錄 current implementation status 與下一步，不是永久規則來源。
+> 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
-## Current checkpoint — 2026-09-29
+## Current checkpoint — 2026-09-30
 
-- Current deployed development baseline remains `CYCloudIdentity` `0.1.14`.
-- **Approved forward Identity model is now finalized** in `PROJECT_RULES.md` and `docs/ROLE_AND_ACCESS_MODEL.md`: Workspace roles are exactly `SUPER_ADMIN / ADMIN / USER`; `Identity Admin` is an ADMIN capability, not a fourth role; Application Access is entry authorization; App-local business/module permissions stay in each App.
-- The deployed `0.1.14` runtime is **not yet migrated** to that model. It still contains extensible Identity Groups, Group/direct Application Access and optional `USER_ADMIN` compatibility-role projection. Those mechanisms are legacy implementation to be migrated, not a direction to extend.
-- CYInvoice remains reference-only in this workstream; no CYInvoice source/runtime/D1 change is authorized here.
-- Super Admin remains the protected Workspace authority pointer. Consumer-facing terminology is `超級管理員 (Super Admin)`; stable protocol fields may remain during migration.
-- Target Employee role creation: normal ADMIN can create USER only; Identity Admin / Super Admin can create USER or ADMIN directly. Identity Admin capability itself is granted/revoked only by Super Admin.
-- Target Access management: normal ADMIN has no App/Module Access configuration capability. Identity Admin / Super Admin manage eligible Employee Access; Identity Admin cannot modify its own Access or Super Admin Access.
-- CY Web is the mandatory core account-management App: every valid Employee must retain CY Web entry access even with no business-module access. Other App Access defaults ungranted and is configured after Employee creation.
-- CY Web Module Access remains CY Web-local. Super Admin gets all modules automatically; Identity Admin / Super Admin can configure eligible USER/ADMIN/other Identity Admin module access; an ADMIN with a module has full management authority in that module.
-- Target role projection for all CYID consumers is direct: `SUPER_ADMIN -> SUPER_ADMIN`, `ADMIN -> ADMIN`, `USER -> USER`. Group-derived consumer roles are being retired.
-- Future HR note is explicitly deferred: if a non-ADMIN HR role later needs Identity lifecycle authority, decompose narrower Identity capabilities then; do not add a fourth Workspace role now.
-- Employee lifecycle target remains distinct: first-time `尚未驗證／待啟用`, activated `啟用`, previously activated `停用`, plus activated `Email 待驗證` when an authorized Email recovery is in progress.
-- Only never-activated Employees may be physically deleted. Activated Employees are retained and may only be disabled/re-enabled.
-- Target activated-account Email recovery: Identity Admin / Super Admin may replace unusable Email, keep the password/account activated, mark the new Email unverified, revoke existing sessions and resend verification. Normal ADMIN may not perform this.
-- **Current first-activation email behavior is incomplete:** `handleCreateEmployee()` creates a pending Employee but does not send Email. Email OTP is currently sent only when the Employee starts activation. This explains why a newly created Employee produces no Brevo event. Target behavior is create -> automatically send first activation email containing a direct link to the CY Web activation flow; send failure must keep the pending Employee and allow resend.
-- New credentials use `scrypt`; password boundary remains 8–16 Unicode characters. Session/OTP/provider-neutral Email security rules remain in force.
-- Invalid provider-session handling through CY Web is already accepted; literal expired-session evidence remains outstanding.
-- Production remains untouched.
+- Current source line on this documentation-consolidation branch is **CYCloudIdentity 0.2.2 Build 0**. The currently deployed development runtime remains **0.2.1 Build 0**; this docs-only change does not itself require a runtime deployment.
+- 0.2.x 已完成 direct Workspace Role `SUPER_ADMIN / ADMIN / USER`、ADMIN-only Identity Admin capability、direct Employee App Access、durable first-lifecycle state、pending lifecycle、forced activated-account Email recovery，以及 Group-derived authority retirement。Legacy Group structures只可作 compatibility/history，不是 forward authority。
+- CY Web `0.2.4` 已在 development 接入 0.2 principal/session model，`https://admin.chihyuancm.com` 為固定 canonical user-facing URL。
+- PR `#214` / branch `feature/cycloudidentity-first-login-password` 目標為 **CYID 0.3.0** first-login Email verification runtime。其 CI validation 可驗 source/migrations，但 PR event 不會真正 deploy development。
+- 已定案的 0.3 產品流程：新增 Employee -> 自動寄出 **Email 驗證**郵件與一次性首次登入密碼 -> 使用者從 CY Web 一般登入口登入 -> 強制設定正式密碼 -> CYID 完成 Email verification / first lifecycle -> **不建立一般 Session** -> 回到登入頁 -> 使用正式密碼重新登入。
+- 首次登入密碼必須有 expiry；逾期、管理員重寄驗證 Email 或 pending Email 修改時，舊首次登入密碼立即失效並產生新 credential／新 expiry。
+- CY Web 不再保留獨立「啟用帳號」入口；對外名稱維持 **Email 驗證**。技術欄位或 legacy endpoint 名稱若暫時保留，不得反向決定 UI/product terminology。
+- PR #214 目前 source 已具 initial credential、first-login ticket、forced first password 基礎，但仍需對齊最終 contract：**initial password expiry**、**first-login complete 不得直接發 normal session**、consumer-visible Email verification wording。
+- Production、backup rollout 與 consumer production cutover 均未進行。
+
+## Documentation consolidation
+
+- `PROJECT_RULES.md` 是唯一 project-level 永久規則來源。
+- `docs/ROLE_AND_ACCESS_MODEL.md` 保存 Role / Identity Admin / App Access / lifecycle product contract。
+- `docs/AUTH_CONTRACT.md` 保存 login/session/first-login/Email verification consumer contract。
+- `docs/UI_ACCESS.md` 保存 account-management UI terminology、action 與 authority matrix。
+- `docs/ARCHITECTURE.md` 保存 technical architecture / ownership / migration boundary。
+- `docs/OTP_SECURITY.md` 保存 OTP/security-policy contract。
+- `TODO.md` 是唯一 current status / next-work tracker。
+- Dated conversation handoff 與 obsolete Application Role Mapping 不再留在 active tree；需要歷史 checkpoint 時看 Git history。
+- Consumer handoff 只在 shared contract 驗收後，針對目標 consumer 工作線由上述 canonical docs 產生。
 
 ## Active next sequence
 
-1. [x] Audit the original Identity lifecycle and establish a dedicated CYCloud Identity authority.
-2. [x] Implement/deploy the initial Workspace / Employee / Credential / Application / Group / Session / OTP / Audit foundation.
-3. [x] Cut CY Web login/session/logout to CYCloud Identity and accept the first development Super Admin login/F5/logout path.
-4. [x] Implement initial Employee activation/self-service/recovery/Super Admin transfer and initial management UI.
-5. [x] Add pending-first-activation deletion and protect current Super Admin from disable/delete.
-6. [x] Finalize the replacement role/access product contract: `SUPER_ADMIN / ADMIN / USER` + Identity Admin capability + independent App Access + CY Web multi-module exception.
-7. [ ] Design a safe forward D1 migration from legacy Group-derived role authority to Employee Workspace Role + Identity Admin capability without breaking the existing development authority path.
-8. [ ] Update CYID principal/login/resolve authorization to return/enforce the direct Workspace role and remove dependency on Group-derived `applicationRoleKey` as the forward authority.
-9. [ ] Implement management authorization boundaries: normal ADMIN USER-lifecycle only; Identity Admin role/access/Email-recovery capabilities; Super Admin-only Identity Admin grant/revoke, Recovery/security policy and transfer.
-10. [ ] Implement create-time Role selection and automatic first activation email with direct CY Web activation link; add pending edit/resend/send-failure state.
-11. [ ] Implement activated-account forced Email recovery + re-verification + required session revocation.
-12. [ ] Implement target Application Access semantics: CY Web locked entry TRUE; other Apps default ungranted; Super Admin automatic access; Identity Admin anti-self-escalation.
-13. [ ] Migrate/remove legacy Identity Group role projection and `USER_ADMIN` compatibility-role UI/runtime once target replacement is validated. Do not remove data prematurely before migration acceptance.
-14. [ ] Update CY Web management UI/adapter to the new Role + Identity Admin + Access contract, including CY Web Module Access management.
-15. [ ] Create controlled ADMIN / Identity Admin / USER development accounts and accept each management boundary in the browser.
-16. [ ] Accept activation email delivery/resend through the configured provider and confirm the direct CY Web activation link flow.
-17. [ ] Accept role/access changes and immediate session invalidation behavior, including self-escalation rejection.
-18. [ ] Obtain literal expired-session handling evidence through CY Web; invalid-session handling is already accepted separately.
-19. [ ] Manually accept self-service forgot-password / own Email-change and protected Super Admin transfer without risking lockout.
-20. [ ] Remove post-bootstrap operational debt and re-tighten the development Cloudflare deployment token after the new model is stable.
-21. [ ] Publish stable consumer handoffs for CY Accounting Web and CYInvoice; implementation happens in their own workstreams.
-22. [ ] Add low-frequency backup + restore acceptance before production rollout.
+1. [x] 建立獨立 CYCloud Identity authority 與 initial Workspace/Employee/Credential/Session/OTP/Audit foundation。
+2. [x] 完成並 development-deploy 0.2 direct Role / Identity Admin / direct App Access migration。
+3. [x] 修正 0.2.1 first-lifecycle Email verified durability race並 development-deploy。
+4. [x] 收斂 active documentation，移除 dated handoff 與 obsolete role-mapping 文件。
+5. [ ] 對齊 PR #214 source：加入首次登入密碼 expiry 與 resend/pending-email-change invalidation。
+6. [ ] 對齊 PR #214 source：first-login complete 成功後不建立 normal Identity session，只回傳 completion / relogin-required result。
+7. [ ] 對齊 0.3 API/UI wording，使對外流程統一為 Email 驗證。
+8. [ ] Merge CYID 0.3.0 to `main`，再經 governed `deploy/cycloudidentity-development` 部署 development。
+9. [ ] 驗證 development migration/Worker health、既有 Super Admin 正式密碼登入與 session resolve。
+10. [ ] 由 CY Web consumer 實作單一登入入口 + first-login password-change flow + 完成後回登入頁。
+11. [ ] 建立 controlled USER，驗收新增 -> 驗證 Email -> 首次登入密碼 -> 強制正式密碼 -> 回登入 -> 正式密碼登入全流程。
+12. [ ] 驗收首次登入密碼 expiry、重寄驗證 Email、pending Email 修改、舊 initial credential 立即失效與寄送失敗 recovery。
+13. [ ] 驗收 USER self-service、正常 ADMIN USER lifecycle、Identity Admin role/App Access/Email recovery/anti-self-escalation、Super Admin-only security controls。
+14. [ ] 驗收 role/App Access change 的 session invalidation、literal expired-session evidence、forgot-password、own Email change 與 controlled Super Admin transfer。
+15. [ ] Shared contract 驗收穩定後，產出 CYAccountingWeb 與 CYInvoice consumer integration handoff；實作留在各自工作線。
+16. [ ] Production 前完成 low-frequency backup + restore acceptance；production cutover 需使用者另行明確同意。
 
 ## Explicitly deferred
 
-- Non-ADMIN HR Identity capability model until a real HR workflow exists.
-- Fine-grained universal permission catalog inside CYID.
-- CYInvoice Device pairing / Device Token authority.
-- CYInvoice Local -> Cloud Employee transition and Windows offline credential cache.
-- CYInvoice source/runtime changes before its dedicated migration workstream.
-- Production DNS/custom domain and production Identity rollout.
-- Paid Cloudflare/Email/Google Cloud plans.
+- Non-ADMIN HR Identity capability，直到有真實 HR workflow。
+- Universal fine-grained business permission catalog inside CYID。
+- CYInvoice Device pairing / Device Token / Local->Cloud / Windows offline credential cache。
+- Production Identity rollout、paid Cloudflare/Email/Google Cloud plans。
 
-## Continuity note
+## Reading order for current work
 
-Read `docs/ROLE_AND_ACCESS_MODEL.md` before implementing further Identity authorization work. `docs/APPLICATION_ROLE_MAPPING.md` is now a legacy implementation note only. For AI/conversation continuity, read `docs/HANDOFF_2026-09-29.md` after this TODO.
+`PROJECT_RULES.md` -> `README.md` -> relevant active contract -> this `TODO.md` -> current source/tests/migrations。
+
+不再讀 dated handoff 作 current state；需要歷史 checkpoint 時看 Git history。
