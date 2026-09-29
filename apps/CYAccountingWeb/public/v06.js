@@ -33,9 +33,10 @@ function setupLedgerDesktopTools() {
       <button id="ledgerOpeningBalanceButton" class="secondary compact ledger-tool-button emphasis" type="button">期初餘額</button>
     </div>
     <form id="ledgerSearchForm" class="ledger-search" role="search">
-      <input id="ledgerSummarySearch" type="search" maxlength="100" placeholder="搜尋摘要">
-      <button class="secondary compact" type="submit">搜尋</button>
-      <button id="ledgerSearchClear" class="secondary compact" type="button">清除</button>
+      <span class="ledger-search-icon" aria-hidden="true">⌕</span>
+      <input id="ledgerSummarySearch" type="search" maxlength="100" placeholder="搜尋摘要" autocomplete="off" inputmode="search" enterkeyhint="search">
+      <button class="secondary compact ledger-search-submit" type="submit">搜尋</button>
+      <button id="ledgerSearchClear" class="secondary compact" type="button" aria-label="清除搜尋"><span class="ledger-search-clear-desktop">清除</span><span class="ledger-search-clear-mobile" aria-hidden="true">×</span></button>
     </form>
     <div class="ledger-view-tools"></div>
   `;
@@ -119,6 +120,9 @@ function renderDesktopLedger() {
   const expense = allTransactions.reduce((sum, tx) => sum + (tx.kind === 'expense' ? Number(tx.amount) || 0 : 0), 0);
   const openingTotal = [...openingMap.values()].reduce((sum, value) => sum + value, 0);
   const endingTotal = openingTotal + income - expense;
+  const net = income - expense;
+  const netLabel = net > 0 ? '淨利' : net < 0 ? '淨損' : '淨利損';
+  const netClass = net > 0 ? 'profit' : net < 0 ? 'loss' : 'neutral';
 
   const query = cyLedgerSearch.toLocaleLowerCase('zh-Hant');
   const visible = (query
@@ -126,7 +130,7 @@ function renderDesktopLedger() {
     : [...allTransactions]
   ).sort(compareLedgerChronological);
 
-  els.monthSummary.innerHTML = `<span class="ledger-summary-item">期初 <strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item income">收入 <strong>${money(income)}</strong></span><span class="ledger-summary-item expense">支出 <strong>${money(expense)}</strong></span><span class="ledger-summary-item">淨利損 <strong>${money(income - expense)}</strong></span><span class="ledger-summary-item ending">期末 <strong>${money(endingTotal)}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
+  els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
   const display = document.querySelector('#ledgerDisplayMonth');
   if (display) display.textContent = `目前顯示｜${month.replace('-', '/')}`;
   updateLedgerGroupButton();
