@@ -1,7 +1,7 @@
 import type { Env, JsonValue } from "./types";
 
 const SERVICE_NAME = "cycloud-identity";
-const SERVICE_VERSION = "0.1.8";
+const SERVICE_VERSION = "0.3.0";
 
 export function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
@@ -39,7 +39,7 @@ export function json(
   });
 }
 
-export async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
+export async function readJsonObject(request: { json(): Promise<unknown> }): Promise<Record<string, unknown> | null> {
   try {
     const value: unknown = await request.json();
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;

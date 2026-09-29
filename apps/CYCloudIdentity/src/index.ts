@@ -5,7 +5,7 @@ import {
   handleStartOwnEmailChange,
   handleStartPasswordRecovery,
 } from "./account-lifecycle";
-import { handleLogin, handleLogout, handleResolveSession } from "./auth";
+import { handleLogout, handleResolveSession } from "./auth";
 import {
   handleConfirmHighestAuthorityTransfer,
   handleGetHighestAuthority,
@@ -14,16 +14,18 @@ import {
 import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import { handleStartCurrentEmailVerification } from "./current-email-verification";
 import {
-  handleConfirmEmployeeActivation,
-  handleCreateEmployee,
   handleDeletePendingEmployee,
   handleForceEmployeeEmailRecovery,
   handleResendActivatedEmailVerification,
-  handleResendEmployeeActivation,
   handleSetEmployeeIdentityAdmin,
-  handleStartEmployeeActivation,
-  handleUpdateEmployee,
 } from "./employee-lifecycle";
+import {
+  handleCompleteFirstLogin,
+  handleCreateEmployeeWithInitialPassword,
+  handleEmployeeUpdateWithInitialPassword,
+  handleLoginWithInitialPassword,
+  handleResendInitialEmailVerification,
+} from "./initial-access";
 import { json, requestIdFrom } from "./http";
 import {
   handleCreateIdentityGroup,
@@ -66,19 +68,16 @@ export default {
       if (request.method === "POST" && url.pathname === "/v1/identity/login") {
         const limited = await enforceLoginRateLimit(request, env, requestId);
         if (limited) return limited;
-        return await handleLogin(request, env, requestId);
+        return await handleLoginWithInitialPassword(request, env, requestId);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/identity/first-login/complete") {
+        return await handleCompleteFirstLogin(request, env, requestId);
       }
       if (request.method === "POST" && url.pathname === "/v1/identity/session/resolve") {
         return await handleResolveSession(request, env, requestId);
       }
       if (request.method === "POST" && url.pathname === "/v1/identity/logout") {
         return await handleLogout(request, env, requestId);
-      }
-      if (request.method === "POST" && url.pathname === "/v1/identity/activation/start") {
-        return await handleStartEmployeeActivation(request, env, requestId);
-      }
-      if (request.method === "POST" && url.pathname === "/v1/identity/activation/confirm") {
-        return await handleConfirmEmployeeActivation(request, env, requestId);
       }
       if (request.method === "POST" && url.pathname === "/v1/identity/password/change") {
         return await handleChangeOwnPassword(request, env, requestId);
@@ -119,14 +118,14 @@ export default {
         return await handleRoleAccessSnapshot(request, env, requestId);
       }
       if (request.method === "POST" && url.pathname === "/v1/admin/identity/employees") {
-        return await handleCreateEmployee(request, env, requestId);
+        return await handleCreateEmployeeWithInitialPassword(request, env, requestId);
       }
 
       let match = /^\/v1\/admin\/identity\/employees\/([^/]+)$/.exec(url.pathname);
       if (match) {
         const employeeId = decodedSegment(match[1]);
         if (employeeId && request.method === "PATCH") {
-          return await handleUpdateEmployee(request, env, requestId, employeeId);
+          return await handleEmployeeUpdateWithInitialPassword(request, env, requestId, employeeId);
         }
         if (employeeId && request.method === "DELETE") {
           return await handleDeletePendingEmployee(request, env, requestId, employeeId);
@@ -136,7 +135,7 @@ export default {
       match = /^\/v1\/admin\/identity\/employees\/([^/]+)\/activation\/resend$/.exec(url.pathname);
       if (request.method === "POST" && match) {
         const employeeId = decodedSegment(match[1]);
-        if (employeeId) return await handleResendEmployeeActivation(request, env, requestId, employeeId);
+        if (employeeId) return await handleResendInitialEmailVerification(request, env, requestId, employeeId);
       }
 
       match = /^\/v1\/admin\/identity\/employees\/([^/]+)\/identity-admin$/.exec(url.pathname);
