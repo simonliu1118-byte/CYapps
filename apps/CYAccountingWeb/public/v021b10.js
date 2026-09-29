@@ -37,9 +37,8 @@ function syncV21Build10Version() {
 function setupV21Build10MobileAppBar() {
   const topbar = document.querySelector('.topbar');
   const currentUser = document.querySelector('#currentUser');
-  const settingsButton = document.querySelector('#settingsButton');
   const logoutButton = document.querySelector('#logoutButton');
-  if (!topbar || !currentUser || !settingsButton || !logoutButton) return;
+  if (!topbar || !currentUser || !logoutButton) return;
 
   let trigger = document.querySelector('#mobileAccountMenuButton');
   if (!trigger) {
@@ -64,7 +63,6 @@ function setupV21Build10MobileAppBar() {
         <strong id="mobileAccountMenuName">帳號</strong>
         <span id="mobileAccountMenuRole"></span>
       </div>
-      <button type="button" data-mobile-account-action="settings">設定</button>
       <button type="button" class="danger-lite" data-mobile-account-action="logout">登出</button>`;
     document.body.append(menu);
   }
@@ -89,7 +87,6 @@ function setupV21Build10MobileAppBar() {
     const action = event.target.closest('[data-mobile-account-action]')?.dataset.mobileAccountAction;
     if (!action) return;
     close();
-    if (action === 'settings') settingsButton.click();
     if (action === 'logout') logoutButton.click();
   });
 
