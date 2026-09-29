@@ -11,6 +11,7 @@ internal static class UiConsistencyManager
 {
     private static readonly HashSet<Control> Registered = [];
     private static readonly HashSet<ListView> LayoutInProgress = [];
+    private static readonly HashSet<ListView> LayoutQueued = [];
     private static readonly ToolTip ClippedTextToolTip = new()
     {
         AutoPopDelay = 8000,
@@ -63,7 +64,7 @@ internal static class UiConsistencyManager
 
     private static void RegisterListView(ListView list)
     {
-        if (!list.OwnerDraw)
+        if (!list.OwnerDraw && FillColumnIndex(list) >= 0)
         {
             list.OwnerDraw = true;
             list.DrawColumnHeader += (_, eventArgs) => NativeListViewHost.DrawHeader(eventArgs, list.Font);
@@ -74,11 +75,23 @@ internal static class UiConsistencyManager
             list.DrawSubItem += (_, eventArgs) => eventArgs.DrawDefault = true;
         }
 
-        list.SizeChanged += (_, _) => ApplyListLayout(list);
-        list.HandleCreated += (_, _) => ApplyListLayout(list);
+        list.SizeChanged += (_, _) => QueueListLayout(list);
+        list.HandleCreated += (_, _) => QueueListLayout(list);
+        list.ColumnWidthChanged += (_, _) => QueueListLayout(list);
         list.MouseMove += (_, eventArgs) => ShowClippedListText(list, eventArgs.Location);
         list.MouseLeave += (_, _) => HideToolTip(list);
         ApplyListLayout(list);
+    }
+
+    private static void QueueListLayout(ListView list)
+    {
+        if (list.IsDisposed || LayoutInProgress.Contains(list) || !list.IsHandleCreated) return;
+        if (!LayoutQueued.Add(list)) return;
+        list.BeginInvoke((Action)(() =>
+        {
+            LayoutQueued.Remove(list);
+            if (!list.IsDisposed) ApplyListLayout(list);
+        }));
     }
 
     private static void ApplyListLayout(ListView list)
@@ -209,7 +222,8 @@ internal static class UiConsistencyManager
         toolTipOwner = owner;
         toolTipText = text;
         ClippedTextToolTip.Show(text, owner,
-            new Point(Math.Min(owner.ClientSize.Width - 4, location.X + 14), Math.Min(owner.ClientSize.Height - 4, location.Y + 18)),
+            new Point(Math.Max(0, Math.Min(owner.ClientSize.Width - 4, location.X + 14)),
+                Math.Max(0, Math.Min(owner.ClientSize.Height - 4, location.Y + 18))),
             8000);
     }
 
