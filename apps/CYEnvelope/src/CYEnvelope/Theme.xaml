@@ -71,6 +71,18 @@
     <Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#DBEAFE"/><Setter Property="Foreground" Value="#1F2937"/><Setter Property="BorderBrush" Value="Transparent"/></Trigger>
     <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="#60A5FA"/></Trigger></Style.Triggers>
   </Style>
+  <!-- Click areas over the printed mail-type table and frame: invisible until hovered or focused. -->
+  <Style x:Key="TickTarget" TargetType="Button">
+    <Setter Property="Background" Value="#01FFFFFF"/><Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="0"/><Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+      <Border x:Name="HitArea" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"/>
+      <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HitArea" Property="Background" Value="#332563EB"/></Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="HitArea" Property="BorderBrush" Value="#2563EB"/></Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate></Setter.Value></Setter>
+  </Style>
   <Style x:Key="DirectTarget" TargetType="Button">
     <Setter Property="Background" Value="#0D2563EB"/><Setter Property="BorderBrush" Value="#802563EB"/>
     <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="0"/>

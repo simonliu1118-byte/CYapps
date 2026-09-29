@@ -28,9 +28,9 @@ internal static class DesktopUi
             SetWindowPos(handle, 0, 0, 0, 0, 0, 0x27); // frame changed, preserve position/size/z-order
         };
     }
-    public static Button Action(string text, RoutedEventHandler click, bool primary = false)
+    public static Button Action(string text, RoutedEventHandler click, bool primary = false, bool cancel = false)
     {
-        var button = new Button { Content = text, Margin = new Thickness(0, 0, 8, 0) };
+        var button = new Button { Content = text, Margin = new Thickness(0, 0, 8, 0), IsCancel = cancel };
         if (primary) button.SetResourceReference(FrameworkElement.StyleProperty, "PrimaryButton");
         button.Click += click;
         return button;

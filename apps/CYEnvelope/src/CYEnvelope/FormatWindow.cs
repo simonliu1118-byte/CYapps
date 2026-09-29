@@ -266,11 +266,7 @@ public sealed class FormatWindow : Window
     private void SetDefault()
     {
         if (!Save()) return;
-        foreach (var format in _repository.Formats())
-        {
-            format.IsDefault = format.Id == _working.Id;
-            _repository.SaveFormat(format);
-        }
+        _repository.SetDefaultFormat(_working.Id);
         ReloadFormats(_working.Id);
     }
     private void SelectAndClose()

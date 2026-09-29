@@ -21,8 +21,78 @@ public sealed class Repository
             CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1), document TEXT NOT NULL);
             """;
         command.ExecuteNonQuery();
+        // user_version marks the schema for future migrations; 1 = document tables above.
+        command.CommandText = "PRAGMA user_version";
+        if (Convert.ToInt32(command.ExecuteScalar()) == 0)
+        {
+            command.CommandText = "PRAGMA user_version = 1";
+            command.ExecuteNonQuery();
+        }
         if (Formats().Count == 0) SaveFormat(new EnvelopeFormat { Id = "format-15k" });
         else UpgradePristineBuiltIn();
+        DailyBackup();
+    }
+
+    public string DatabasePath => _path;
+
+    // Integrity problem found before the app opened the database.
+    public sealed class CorruptDatabaseException(string message) : Exception(message);
+
+    // Runs before the constructor touches the file: a damaged database must never be silently overwritten.
+    public static void EnsureReadable(string path)
+    {
+        if (!File.Exists(path)) return;
+        try
+        {
+            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+                { DataSource = path, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA quick_check";
+            if ((command.ExecuteScalar() as string) != "ok") throw new CorruptDatabaseException("資料庫完整性檢查未通過。");
+        }
+        catch (SqliteException error)
+        {
+            throw new CorruptDatabaseException("無法讀取資料庫：" + error.Message);
+        }
+    }
+
+    public static string BackupFolder(string dbPath) => System.IO.Path.Combine(System.IO.Path.GetDirectoryName(dbPath)!, "Backups");
+
+    public static string? LatestBackup(string dbPath) =>
+        Directory.Exists(BackupFolder(dbPath))
+            ? Directory.EnumerateFiles(BackupFolder(dbPath), "CYEnvelope-*.db").OrderDescending().FirstOrDefault()
+            : null;
+
+    // Keeps the damaged file next to the data (never deleted) and restores the newest backup in its place.
+    public static bool RestoreLatestBackup(string dbPath)
+    {
+        var backup = LatestBackup(dbPath);
+        if (backup is null) return false;
+        if (File.Exists(dbPath))
+            File.Move(dbPath, dbPath + $".damaged-{DateTime.Now:yyyyMMdd-HHmmss}", overwrite: false);
+        File.Copy(backup, dbPath);
+        return true;
+    }
+
+    // One consistent copy per day (only when there is customer data), newest KeepBackups kept.
+    private const int KeepBackups = 14;
+    private void DailyBackup()
+    {
+        if (Contacts().Count == 0) return;
+        var folder = BackupFolder(_path);
+        var target = System.IO.Path.Combine(folder, $"CYEnvelope-{DateTime.Now:yyyyMMdd}.db");
+        if (File.Exists(target)) return;
+        Directory.CreateDirectory(folder);
+        using (var connection = Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "VACUUM INTO $target";
+            command.Parameters.AddWithValue("$target", target);
+            command.ExecuteNonQuery();
+        }
+        foreach (var old in Directory.EnumerateFiles(folder, "CYEnvelope-*.db").OrderDescending().Skip(KeepBackups))
+            File.Delete(old);
     }
 
     // Built-in 15K layouts shipped earlier. A stored format that still equals one of them was never
@@ -81,6 +151,41 @@ public sealed class Repository
         return result;
     }
 
+    // Customer-name search: names containing the query, names starting with it first.
+    public List<Contact> SearchContacts(string query, int limit = 12)
+    {
+        var q = Names.Normalize(query);
+        var result = new List<Contact>();
+        if (q.Length == 0) return result;
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT document FROM contacts WHERE instr(lower(name), lower($q)) > 0
+            ORDER BY (instr(lower(name), lower($q)) = 1) DESC, name COLLATE NOCASE, id LIMIT $limit
+            """;
+        command.Parameters.AddWithValue("$q", q);
+        command.Parameters.AddWithValue("$limit", limit);
+        using var rows = command.ExecuteReader();
+        while (rows.Read()) result.Add(JsonSerializer.Deserialize<Contact>(rows.GetString(0), Json)!);
+        return result;
+    }
+
+    public Contact? GetContact(string id)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT document FROM contacts WHERE id=$id";
+        command.Parameters.AddWithValue("$id", id);
+        return command.ExecuteScalar() is string value ? JsonSerializer.Deserialize<Contact>(value, Json) : null;
+    }
+
+    // Customers whose normalised name equals the given one (there should be at most one).
+    public List<Contact> FindByName(string name)
+    {
+        var n = Names.Normalize(name);
+        return Contacts().Where(c => string.Equals(Names.Normalize(c.Name), n, StringComparison.CurrentCultureIgnoreCase)).ToList();
+    }
+
     public void SaveContact(Contact contact)
     {
         using var connection = Open();
@@ -126,6 +231,32 @@ public sealed class Repository
         command.Parameters.AddWithValue("$id", format.Id);
         command.Parameters.AddWithValue("$document", JsonSerializer.Serialize(format, Json));
         command.ExecuteNonQuery();
+    }
+
+    // One transaction: never leaves two default formats, or none, after a failure.
+    public void SetDefaultFormat(string id)
+    {
+        using var connection = Open();
+        using var transaction = connection.BeginTransaction();
+        var formats = new List<EnvelopeFormat>();
+        using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = "SELECT document FROM formats";
+            using var rows = read.ExecuteReader();
+            while (rows.Read()) formats.Add(JsonSerializer.Deserialize<EnvelopeFormat>(rows.GetString(0), Json)!);
+        }
+        foreach (var format in formats)
+        {
+            format.IsDefault = format.Id == id;
+            using var write = connection.CreateCommand();
+            write.Transaction = transaction;
+            write.CommandText = "UPDATE formats SET document=$document WHERE id=$id";
+            write.Parameters.AddWithValue("$id", format.Id);
+            write.Parameters.AddWithValue("$document", JsonSerializer.Serialize(format, Json));
+            write.ExecuteNonQuery();
+        }
+        transaction.Commit();
     }
 
     public void DeleteFormat(string id)

@@ -15,7 +15,8 @@ public partial class MainWindow : Window
     private Contact? _selectedContact;
     private ContactAddress? _selectedAddress;
     private ContactPhone? _selectedPhone;
-    private readonly Dictionary<string, CheckBox> _delivery = [];
+    // Mail types ticked on the envelope preview (ids of _format.Delivery).
+    private readonly HashSet<string> _delivery = [];
     private TextBox? _directEditor;
     private ListBox? _directSuggestions;
     private bool _loading;
@@ -35,7 +36,7 @@ public partial class MainWindow : Window
             ? Path.GetDirectoryName(programDirectory)!
             : programDirectory;
         var data = Path.Combine(appRoot, "Data", "CYEnvelope.db");
-        _repository = new Repository(data);
+        _repository = OpenRepository(data);
         _settings = _repository.Settings();
         var formats = _repository.Formats();
         _format = formats.FirstOrDefault(f => f.Id == _settings.SelectedFormatId)
@@ -49,23 +50,33 @@ public partial class MainWindow : Window
         Refresh();
     }
 
+    // A damaged database is never opened or overwritten: offer the newest daily backup instead.
+    private static Repository OpenRepository(string path)
+    {
+        try { Repository.EnsureReadable(path); }
+        catch (Repository.CorruptDatabaseException error)
+        {
+            var latest = Repository.LatestBackup(path);
+            var restore = latest is not null && MessageBox.Show(
+                $"{error.Message}\n\n要用最近一份備份（{Path.GetFileName(latest)}）還原嗎？\n損毀的檔案會保留為 .damaged-… 檔，不會刪除。",
+                "資料庫損毀", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+            if (!restore)
+            {
+                MessageBox.Show("未開啟資料庫。請保留 Data 資料夾並聯絡維護者，資料不會被覆蓋。", "資料庫損毀",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                Environment.Exit(1);
+            }
+            Repository.RestoreLatestBackup(path);
+        }
+        return new Repository(path);
+    }
+
     // Rebuilds format-dependent options while keeping the envelope currently being prepared.
     private void RebuildOptions()
     {
-        var checkedIds = _delivery.Where(x => x.Value.IsChecked == true).Select(x => x.Key).ToHashSet();
         var frameText = FrameChoice.SelectedItem as string;
         _loading = true;
-        DeliveryPanel.Children.Clear();
-        _delivery.Clear();
-        foreach (var option in _format.Delivery)
-        {
-            var item = new CheckBox { Content = option.Label, Margin = new Thickness(0, 0, 8, 9),
-                                      MinWidth = 76, Tag = option.Id, IsChecked = checkedIds.Contains(option.Id) };
-            item.Checked += InputChanged;
-            item.Unchecked += InputChanged;
-            DeliveryPanel.Children.Add(item);
-            _delivery[option.Id] = item;
-        }
+        _delivery.RemoveWhere(id => _format.Delivery.All(x => x.Id != id));
         FrameChoice.ItemsSource = _settings.FrameTexts.ToArray();
         var frameIndex = frameText is null ? -1 : _settings.FrameTexts.IndexOf(frameText);
         FrameChoice.SelectedIndex = frameIndex >= 0 ? frameIndex : _settings.FrameTexts.Count > 0 ? 0 : -1;
@@ -76,11 +87,11 @@ public partial class MainWindow : Window
 
     private PrintData CurrentData() => new()
     {
-        Recipient = RecipientBox.Text.Trim(),
+        Recipient = Names.Normalize(RecipientBox.Text),
         Address = AddressBox.Text.Trim(),
         PostalCode = PostalBox.Text.Trim(),
         Phone = PhoneBox.Text.Trim(),
-        DeliveryIds = _delivery.Where(x => x.Value.IsChecked == true).Select(x => x.Key).ToList(),
+        DeliveryIds = _format.Delivery.Where(x => _delivery.Contains(x.Id)).Select(x => x.Id).ToList(),
         ShowFrame = ShowFrameBox.IsChecked == true,
         FrameText = FrameChoice.SelectedItem as string ?? ""
     };
@@ -102,9 +113,7 @@ public partial class MainWindow : Window
         // Editing the name only detaches the chosen contact; typed address/phone stay (清空 resets all).
         if (_selectedContact is not null && RecipientBox.Text.Trim() != _selectedContact.Name) Detach();
         var query = RecipientBox.Text.Trim();
-        var matches = query.Length == 0 ? [] : _repository.Contacts()
-            .Where(c => c.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase))
-            .Take(12).ToList();
+        var matches = _repository.SearchContacts(query);
         Suggestions.ItemsSource = matches;
         Suggestions.Visibility = matches.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         Refresh();
@@ -153,8 +162,8 @@ public partial class MainWindow : Window
         var address = contact.Addresses.FirstOrDefault(x => x.Id == contact.LastAddressId) ?? contact.Addresses.FirstOrDefault();
         AddressChoice.SelectedItem = address;
         ApplyAddress(address);
-        foreach (var (id, checkbox) in _delivery)
-            checkbox.IsChecked = contact.LastDeliveryIds.Contains(id);
+        _delivery.Clear();
+        foreach (var id in contact.LastDeliveryIds.Where(id => _format.Delivery.Any(x => x.Id == id))) _delivery.Add(id);
         _loading = false;
         Refresh();
     }
@@ -281,55 +290,11 @@ public partial class MainWindow : Window
 
     private void SaveBeforePrinting(PrintData data)
     {
-        // Always merge into the stored record: the contacts window may have edited or deleted it.
-        var contacts = _repository.Contacts();
-        var contact = _selectedContact is null ? null : contacts.FirstOrDefault(x => x.Id == _selectedContact.Id);
-        if (contact is null)
-        {
-            var matches = contacts.Where(x => x.Name == data.Recipient).ToList();
-            contact = matches.Count == 1 ? matches[0] : new Contact { Name = data.Recipient };
-        }
-        contact.Name = data.Recipient;
-        var address = _selectedAddress is null ? null : contact.Addresses.FirstOrDefault(x => x.Id == _selectedAddress.Id);
-        if (address is not null && !Postal.SameAddress(address.Value, data.Address))
-        {
-            var choice = MessageBox.Show(this, "地址已變更。選「是」覆蓋原地址，選「否」另存為新地址。",
-                "保存地址", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-            if (choice == MessageBoxResult.Cancel) throw new OperationCanceledException();
-            if (choice == MessageBoxResult.No) address = null;
-        }
-        address ??= contact.Addresses.FirstOrDefault(x => Postal.SameAddress(x.Value, data.Address));
-        if (address is null)
-        {
-            address = new ContactAddress { Label = $"地址{contact.Addresses.Count + 1}" };
-            contact.Addresses.Add(address);
-        }
-        address.Value = data.Address;
-        address.PostalCode = data.PostalCode;
-        contact.LastAddressId = address.Id;
-        if (data.Phone.Length > 0)
-        {
-            var number = PhoneFormatting.Format(data.Phone);
-            var phone = _selectedPhone is null ? null : contact.Phones.FirstOrDefault(x => x.Id == _selectedPhone.Id);
-            if (phone is not null && phone.Display != number)
-            {
-                var choice = MessageBox.Show(this, "電話已變更。選「是」覆蓋原電話，選「否」另存新電話。",
-                    "保存電話", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-                if (choice == MessageBoxResult.Cancel) throw new OperationCanceledException();
-                if (choice == MessageBoxResult.No) phone = null;
-            }
-            phone ??= contact.Phones.FirstOrDefault(x => x.Display == number);
-            if (phone is null) { phone = new ContactPhone(); contact.Phones.Add(phone); }
-            var parts = number.Split(" #", 2);
-            phone.Number = parts[0];
-            phone.Extension = parts.Length == 2 ? parts[1] : "";
-            address.LastPhoneId = phone.Id;
-            _selectedPhone = phone;
-        }
-        contact.LastDeliveryIds = data.DeliveryIds;
-        _repository.SaveContact(contact);
-        _selectedContact = contact;
-        _selectedAddress = address;
+        var saved = ContactSaver.Save(_repository, _selectedContact, _selectedAddress, _selectedPhone, data,
+            request => ChoiceDialog.Ask(this, request));
+        _selectedContact = saved.Contact;
+        _selectedAddress = saved.Address;
+        _selectedPhone = saved.Phone;
         BindChoices();
     }
 
@@ -459,7 +424,7 @@ public partial class MainWindow : Window
         _postalCleared = false;
         AddressChoice.ItemsSource = null; PhoneChoice.ItemsSource = null;
         Suggestions.Visibility = Visibility.Collapsed;
-        foreach (var item in _delivery.Values) item.IsChecked = false;
+        _delivery.Clear();
         ShowFrameBox.IsChecked = true;
         FrameChoice.SelectedIndex = FrameChoice.Items.Count > 0 ? 0 : -1;
         _loading = false;
@@ -521,8 +486,10 @@ public partial class MainWindow : Window
         EntryPanel.Visibility = _settings.DirectEntry ? Visibility.Collapsed : Visibility.Visible;
         EntryColumn.Width = new GridLength(_settings.DirectEntry ? 0 : 400);
         EntryGap.Width = new GridLength(_settings.DirectEntry ? 0 : 20);
-        DirectLayer.Visibility = _settings.DirectEntry ? Visibility.Visible : Visibility.Collapsed;
-        PreviewHint.Text = _settings.DirectEntry ? "點選藍色欄位輸入；也可用 Tab、Enter 操作。" : "紅線為信封底圖，僅套印黑色內容。";
+        DirectLayer.Visibility = Visibility.Visible; // mail-type and frame-text clicks work in both modes
+        PreviewHint.Text = _settings.DirectEntry
+            ? "點選藍色欄位輸入；點左側表格勾選郵件種類，點黑框選方框文字。"
+            : "點左側表格勾選郵件種類，點黑框選方框文字。紅線為信封底圖，僅套印黑色內容。";
         RebuildDirectTargets();
     }
     private void RebuildDirectTargets()
@@ -532,44 +499,72 @@ public partial class MainWindow : Window
         _directSuggestions = null;
         DirectLayer.Width = _format.WidthMm * EnvelopeRenderer.DipPerMm;
         DirectLayer.Height = _format.HeightMm * EnvelopeRenderer.DipPerMm;
-        foreach (var (field, rect) in new[]
-        {
-            ("收件人", _format.Recipient.Rect), ("地址", _format.Address.Rect),
-            ("電話", _format.Phone.Rect), ("郵遞區號", _format.PostalCode.Rect),
-            ("方框文字", _format.Frame)
-        })
+        Button Target(string style, string tip, object tag, RectMm rect, double offsetX, double offsetY, Action click)
         {
             var target = new Button
             {
-                Width = Math.Max(20, rect.Width * EnvelopeRenderer.DipPerMm),
-                Height = Math.Max(20, rect.Height * EnvelopeRenderer.DipPerMm),
-                Style = (Style)FindResource("DirectTarget"),
-                ToolTip = $"點選輸入{field}",
-                Tag = field
+                Width = Math.Max(4, rect.Width * EnvelopeRenderer.DipPerMm),
+                Height = Math.Max(4, rect.Height * EnvelopeRenderer.DipPerMm),
+                Style = (Style)FindResource(style), ToolTip = tip, Tag = tag
             };
-            System.Windows.Automation.AutomationProperties.SetName(target, $"編輯{field}");
-            target.Click += DirectTargetClick;
-            Canvas.SetLeft(target, (rect.X + _format.OffsetX) * EnvelopeRenderer.DipPerMm);
-            Canvas.SetTop(target, (rect.Y + _format.OffsetY) * EnvelopeRenderer.DipPerMm);
+            System.Windows.Automation.AutomationProperties.SetName(target, tip);
+            target.Click += (_, _) => click(); // not marked Handled: DirectTargetClick is attached after it
+            Canvas.SetLeft(target, (rect.X + offsetX) * EnvelopeRenderer.DipPerMm);
+            Canvas.SetTop(target, (rect.Y + offsetY) * EnvelopeRenderer.DipPerMm);
             DirectLayer.Children.Add(target);
+            return target;
         }
+        if (_settings.DirectEntry)
+            foreach (var (field, rect) in new[]
+            {
+                ("收件人", _format.Recipient.Rect), ("地址", _format.Address.Rect),
+                ("電話", _format.Phone.Rect), ("郵遞區號", _format.PostalCode.Rect)
+            })
+            {
+                RectMm area = new(rect.X, rect.Y, Math.Max(rect.Width, 6), Math.Max(rect.Height, 6));
+                var button = Target("DirectTarget", $"點選輸入{field}", field, area, _format.OffsetX, _format.OffsetY, () => { });
+                button.Click += DirectTargetClick;
+            }
+        // The black frame the statement text is printed in: click to pick from the saved list.
+        Target(_settings.DirectEntry ? "DirectTarget" : "TickTarget", "選擇方框文字", "方框文字", _format.Frame,
+            _format.OffsetX, _format.OffsetY, () => ShowFrameMenu());
+        // Mail types sit on the printed table rows (not shifted by the printer offset): click a row to tick it.
         foreach (var item in _format.Delivery)
         {
-            var target = new Button
+            var row = _format.Landscape ? new RectMm(item.X - 1, item.Y - .8, 4.2, 4.2) : new RectMm(item.X - 1, item.Y - .3, 20, 4);
+            var id = item.Id;
+            Target("TickTarget", $"{item.Label}（點選勾選／取消）", id, row, 0, 0, () =>
             {
-                Width = 18, Height = 18, Style = (Style)FindResource("DirectTarget"),
-                ToolTip = $"勾選／取消{item.Label}", Tag = item.Id
-            };
-            target.Click += (_, _) =>
-            {
-                if (_delivery.TryGetValue((string)target.Tag, out var check))
-                    check.IsChecked = check.IsChecked != true;
-            };
-            Canvas.SetLeft(target, (item.X + _format.OffsetX - 1) * EnvelopeRenderer.DipPerMm);
-            Canvas.SetTop(target, (item.Y + _format.OffsetY - .8) * EnvelopeRenderer.DipPerMm);
-            DirectLayer.Children.Add(target);
+                if (!_delivery.Remove(id)) _delivery.Add(id);
+                Refresh();
+            });
         }
     }
+
+    // Statement text list on the envelope itself: pick one, or choose not to print it.
+    private void ShowFrameMenu()
+    {
+        var menu = new ContextMenu { Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint };
+        var showing = ShowFrameBox.IsChecked == true;
+        var current = FrameChoice.SelectedItem as string;
+        var none = new MenuItem { Header = "不印方框文字", IsCheckable = true, IsChecked = !showing };
+        none.Click += (_, _) => ShowFrameBox.IsChecked = false;
+        menu.Items.Add(none);
+        menu.Items.Add(new Separator());
+        foreach (var text in _settings.FrameTexts)
+        {
+            var value = text;
+            var item = new MenuItem { Header = value, IsCheckable = true, IsChecked = showing && value == current };
+            item.Click += (_, _) => { FrameChoice.SelectedItem = value; ShowFrameBox.IsChecked = true; Refresh(); };
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        var manage = new MenuItem { Header = "管理清單…" };
+        manage.Click += (_, _) => FrameClick(this, new RoutedEventArgs());
+        menu.Items.Add(manage);
+        menu.IsOpen = true;
+    }
+
     private void DirectTargetClick(object sender, RoutedEventArgs e)
     {
         var target = (Button)sender;
@@ -585,11 +580,7 @@ public partial class MainWindow : Window
             "郵遞區號" => PostalBox,
             _ => null
         };
-        if (source is null)
-        {
-            ShowFrameBox.IsChecked = ShowFrameBox.IsChecked != true;
-            return;
-        }
+        if (source is null) return;
         var previewScale = Math.Max(.1, PreviewHost.TransformToAncestor(this)
             .TransformBounds(new Rect(0, 0, 1, 1)).Width);
         var editorHeight = 34 / previewScale;
@@ -639,9 +630,7 @@ public partial class MainWindow : Window
             if (_directSuggestions is not null)
             {
                 var query = editor.Text.Trim();
-                var matches = query.Length == 0 ? [] : _repository.Contacts()
-                    .Where(c => c.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase))
-                    .Take(10).ToList();
+                var matches = _repository.SearchContacts(query, 10);
                 _directSuggestions.ItemsSource = matches;
                 _directSuggestions.Visibility = matches.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             }

@@ -96,6 +96,75 @@ try
 
     Check(EnvelopeRenderer.DrawCalibration(fresh).ContentBounds.Width > 0, "calibration sheet renders");
 
+    // Customer-name search: contains, prefix matches first, whitespace-tolerant.
+    string Db(string folder) => Path.Combine(Path.GetDirectoryName(path)!, folder, "CYEnvelope.db");
+    var search = new Repository(Db("search"));
+    foreach (var customer in new[] { "美好高美", "高美中醫診所", "高雄大學", "美好公司" })
+        search.SaveContact(new Contact { Name = customer });
+    Check(search.SearchContacts("高美").Select(c => c.Name).SequenceEqual(["高美中醫診所", "美好高美"]),
+        "search: names containing the text, prefix matches first");
+    Check(search.SearchContacts("  高美 ").Count == 2 && search.SearchContacts("").Count == 0, "search: whitespace and empty query");
+    Check(search.FindByName(" 高雄大學 ").Count == 1, "exact lookup ignores surrounding whitespace");
+
+    // Printing saves the customer; a new address/phone for a known customer asks add / overwrite / cancel.
+    var savePath = Db("save");
+    var saving = new Repository(savePath);
+    SaveChoice Never(SaveRequest request) => throw new Exception("unexpected prompt: " + request);
+    var first = ContactSaver.Save(saving, null, null, null,
+        new PrintData { Recipient = "  王  小明 ", Address = "台北市 中正區重慶南路1號", PostalCode = "100", Phone = "02-23810435", DeliveryIds = ["delivery-3"] }, Never);
+    Check(first.Contact.Name == "王 小明" && first.Contact.Addresses.Count == 1 && first.Contact.Phones.Count == 1, "first print saves a new customer without asking");
+    Check(saving.Contacts().Single().LastDeliveryIds.SequenceEqual(["delivery-3"]), "mail type is saved with the customer");
+    var again = ContactSaver.Save(saving, null, null, null,
+        new PrintData { Recipient = "王 小明", Address = "臺北市中正區重慶南路1號", PostalCode = "100", Phone = "(02) 2381-0435" }, Never);
+    Check(saving.Contacts().Single().Addresses.Count == 1 && saving.Contacts().Single().Phones.Count == 1,
+        "same customer typed by hand and same address/phone (台/臺, spacing) never asks or duplicates");
+    SaveRequest? asked = null;
+    var added = ContactSaver.Save(saving, null, null, null,
+        new PrintData { Recipient = "王 小明", Address = "高雄市新興區中正三路2號", PostalCode = "800", Phone = "02-23810435" },
+        request => { asked = request; return SaveChoice.Add; });
+    Check(asked is { IsAddress: true, ExistingCount: 1 } && added.Contact.Addresses.Count == 2 && added.Address.Label == "地址2",
+        "a new address for a known customer asks, and Add keeps both");
+    var overwritten = ContactSaver.Save(saving, null, null, null,
+        new PrintData { Recipient = "王 小明", Address = "臺南市中西區民權路3號", PostalCode = "700" },
+        request => SaveChoice.Overwrite);
+    Check(overwritten.Contact.Addresses.Count == 2 && overwritten.Contact.Addresses.Count(a => a.Value.StartsWith("臺南市")) == 1
+          && saving.Contacts().Single().Addresses.All(a => !a.Value.StartsWith("高雄市")), "Overwrite replaces the last-used address");
+    var phoneAsked = new List<bool>();
+    ContactSaver.Save(saving, null, null, null,
+        new PrintData { Recipient = "王 小明", Address = "臺南市中西區民權路3號", PostalCode = "700", Phone = "0912-345-678" },
+        request => { phoneAsked.Add(request.IsAddress); return SaveChoice.Add; });
+    Check(phoneAsked.SequenceEqual([false]) && saving.Contacts().Single().Phones.Count == 2, "a new phone asks once and Add keeps both");
+    var before = saving.Contacts().Single().Addresses.Count;
+    var cancelled = false;
+    try
+    {
+        ContactSaver.Save(saving, null, null, null, new PrintData { Recipient = "王 小明", Address = "花蓮縣花蓮市中山路4號" },
+            request => SaveChoice.Cancel);
+    }
+    catch (OperationCanceledException) { cancelled = true; }
+    Check(cancelled && saving.Contacts().Single().Addresses.Count == before, "Cancel stops printing and saves nothing");
+    Check(saving.Contacts().Count == 1, "one customer name is never saved twice");
+
+    // Daily backup, damage detection and atomic default format.
+    Check(!Directory.Exists(Path.Combine(Path.GetDirectoryName(savePath)!, "Backups")),
+        "no backup is made while the database is still empty at opening");
+    _ = new Repository(savePath);
+    var backups = Directory.GetFiles(Path.Combine(Path.GetDirectoryName(savePath)!, "Backups"), "CYEnvelope-*.db");
+    Repository.EnsureReadable(backups[0]);
+    Check(backups.Length == 1 && new FileInfo(backups[0]).Length > 0, "opening with data makes one readable daily backup");
+    var damaged = Db("damaged");
+    Directory.CreateDirectory(Path.GetDirectoryName(damaged)!);
+    File.WriteAllBytes(damaged, Enumerable.Range(0, 4096).Select(i => (byte)(i * 31)).ToArray());
+    var detected = false;
+    try { Repository.EnsureReadable(damaged); }
+    catch (Repository.CorruptDatabaseException) { detected = true; }
+    Check(detected, "a damaged database is detected before it is opened");
+    var twoFormats = new Repository(Db("formats"));
+    twoFormats.SaveFormat(new EnvelopeFormat { Id = "second", Name = "第二格式", IsDefault = false });
+    twoFormats.SetDefaultFormat("second");
+    Check(twoFormats.Formats().Count(f => f.IsDefault) == 1 && twoFormats.Formats().Single(f => f.IsDefault).Id == "second",
+        "exactly one default format after SetDefaultFormat");
+
     // Layouts shipped by earlier builds upgrade only while unedited.
     var legacyPath = Path.Combine(Path.GetDirectoryName(path)!, "legacy", "CYEnvelope.db");
     EnvelopeFormat Build3() => new()

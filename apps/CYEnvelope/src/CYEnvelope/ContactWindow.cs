@@ -117,7 +117,14 @@ public sealed class ContactWindow : Window
             return;
         }
         _editing ??= new Contact();
-        _editing.Name = _name.Text.Trim();
+        var name = Names.Normalize(_name.Text);
+        if (_repository.FindByName(name).Any(x => x.Id != _editing.Id))
+        {
+            MessageBox.Show(this, $"已有名為「{name}」的客戶。同名客戶請合併資料，或在名稱加上區別（例如分公司）。",
+                "客戶名稱重複", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        _editing.Name = name;
         // Same rules as the main window: blank rows are dropped, missing postal codes are
         // inferred from the address, and numbers use the shared phone format.
         _editing.Addresses = _addressRows.Where(a => !string.IsNullOrWhiteSpace(a.Value)).ToList();

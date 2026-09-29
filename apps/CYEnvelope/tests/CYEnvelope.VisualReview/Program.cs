@@ -30,6 +30,15 @@ internal static class Program
             contact.LastDeliveryIds.Add("delivery-1"); repository.SaveContact(contact);
             var main = new MainWindow(); main.Show(); Flush();
             Capture(main, "01-main-empty");
+            var previewLayer = (Canvas)main.FindName("DirectLayer");
+            var rows = previewLayer.Children.OfType<Button>().Where(b => b.Tag is string id && id.StartsWith("delivery-")).ToList();
+            Assert(rows.Count == 7 && previewLayer.Visibility == Visibility.Visible, "Mail types are clickable on the envelope preview");
+            var chosen = (HashSet<string>)Field(main, "_delivery");
+            rows[2].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush();
+            Assert(chosen.SetEquals(["delivery-3"]), "Clicking a preview row ticks that mail type");
+            Capture(main, "01b-main-ticked");
+            rows[2].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush();
+            Assert(chosen.Count == 0, "Clicking the row again clears it");
             Assert(((ScrollViewer)main.FindName("EntryScroll")).ScrollableHeight < 1, "Default main: all entry fields fit");
             var print = (Button)main.FindName("PrintButton");
             var size = print.RenderSize; print.Focus(); Flush();
