@@ -244,6 +244,7 @@ function cancelV0215Build4MobileEdit(options = {}) {
   if (!edit) return;
   cyV0215Build4Edit = null;
 
+  clearV0215Build4TemporaryOptions();
   restoreV0215Build4EntryDraft(edit.draft);
   els.kindButtons.forEach(button => { button.disabled = false; });
   els.saveButton.textContent = '儲存';
@@ -284,7 +285,14 @@ function ensureV0215Build4Option(select, value) {
   const option = document.createElement('option');
   option.value = text;
   option.textContent = text + '（歷史）';
+  option.dataset.v0215EditTemporary = '1';
   select.append(option);
+}
+
+function clearV0215Build4TemporaryOptions() {
+  for (const select of [els.accountName, els.categoryName]) {
+    select?.querySelectorAll('[data-v0215-edit-temporary="1"]').forEach(option => option.remove());
+  }
 }
 
 function switchV0215Build4MobilePage(page) {
