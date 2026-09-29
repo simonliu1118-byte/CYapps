@@ -9,6 +9,7 @@ const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 
 const version = read('VERSION').trim();
 const build = read('BUILD').trim();
+const appJs = read('public/app.js');
 const v03 = read('public/v03.js');
 const authJs = read('public/auth.js');
 const indexHtml = read('public/index.html');
@@ -38,20 +39,23 @@ const patch4Js = read('public/v0214.js');
 const patch4Css = read('public/v0214.css');
 const patch5Css = read('public/v0215.css');
 const patch5Build3Js = read('public/v0215b3.js');
+const patch5Build4Js = read('public/v0215b4.js');
 const v06 = read('public/v06.js');
 const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '3');
+assert.equal(build, '4');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0212\.js'/);
 assert.match(build11Js, /ensureV0215Stylesheet\(\)/);
-assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b3'/);
+assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b4'/);
 assert.match(build11Js, /ensureV0215Build3Script\(\)/);
 assert.match(build11Js, /script\.src = '\/v0215b3\.js'/);
+assert.match(build11Js, /ensureV0215Build4Script\(\)/);
+assert.match(build11Js, /script\.src = '\/v0215b4\.js'/);
 assert.match(build12Js, /CY_V21_BUILD12_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build13Js, /CY_V21_BUILD13_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build14Js, /CY_V21_BUILD14_DESKTOP = '\(min-width: 1024px\)'/);
@@ -60,7 +64,7 @@ assert.match(build16Js, /CY_V21_BUILD16_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(patchJs, /CY_V0211_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(keyboardJs, /CY_V0211_KEYBOARD_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(patch2Js, /CY_V0212_DESKTOP = '\(min-width: 1024px\)'/);
-for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, keyboardJs, patch2Js, patch4Js, patch5Build3Js]) {
+for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, keyboardJs, patch2Js, patch4Js, patch5Build3Js, patch5Build4Js]) {
   assert.doesNotThrow(() => new Function(js), 'adaptive overlay JavaScript must parse');
 }
 
@@ -78,25 +82,41 @@ assert.match(indexHtml, /auth\.js\?v=0214b1-recovery/);
 assert.match(indexHtml, /v021b11\.js\?v=0214b1-recovery/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
-// V0.21.5 Build 3 refines the mobile entry/ledger and adds delegated swipe actions without an observer.
+// V0.21.5 Build 4 keeps the delegated swipe model, moves mobile editing into the shared entry form,
+// and refines mobile toolbar/statistics/search without a row-repaint observer.
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
-assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?linear-gradient\(to right, rgba\(86, 176, 113/);
-assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?linear-gradient\(to right, rgba\(207, 104, 94/);
-assert.match(patch5Css, /#favoriteCategoryGroup\.hidden[\s\S]*?display:\s*grid !important/);
-assert.match(patch5Css, /#summarySuggestionGroup\.hidden[\s\S]*?display:\s*grid !important/);
+assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?box-shadow:\s*inset 0 0 54px rgba\(86, 176, 113/);
+assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?box-shadow:\s*inset 0 0 54px rgba\(207, 104, 94/);
+assert.match(patch5Css, /"save"[\s\S]*?"message"/);
+assert.match(patch5Css, /\.v0215-mobile-save-message[\s\S]*?transition:\s*opacity 400ms ease/);
 assert.match(patch5Css, /\.quick-chip-list[\s\S]*?overflow-x:\s*auto !important/);
 assert.match(patch5Css, /\.entry-grid input,[\s\S]*?text-align:\s*center !important/);
-assert.match(patch5Css, /\.ledger-month-tools[\s\S]*?grid-template-columns:\s*34px minmax\(0, 1fr\) 34px/);
-assert.match(patch5Css, /tr\.ledger-row:not\(\.inline-editing\)[\s\S]*?touch-action:\s*pan-y !important/);
-assert.match(patch5Css, /data-swipe-open="edit"/);
-assert.match(patch5Css, /data-swipe-open="delete"/);
+assert.match(patch5Css, /\.ledger-month-tools[\s\S]*?grid-template-columns:\s*48px 32px minmax\(0, 1fr\) 32px 48px/);
+assert.match(patch5Css, /grid-template-areas:[\s\S]*?"opening opening ending ending net net"[\s\S]*?"income income income expense expense expense"/);
+assert.match(patch5Css, /\.net\.profit[\s\S]*?color:\s*#2f7a4c/);
+assert.match(patch5Css, /\.net\.loss[\s\S]*?color:\s*#a54b45/);
+assert.match(patch5Css, /\.ledger-search-submit\s*\{[\s\S]*?display:\s*none !important/);
+assert.match(patch5Css, /#ledgerSummarySearch:placeholder-shown ~ #ledgerSearchClear/);
+assert.match(v06, /enterkeyhint="search"/);
+assert.match(v06, /netLabel = net > 0 \? '淨利' : net < 0 \? '淨損' : '淨利損'/);
+assert.match(v06, /money\(Math\.abs\(net\)\)/);
+assert.match(v06, /data-transaction-id="\$\{id\}"/);
+assert.match(appJs, /window\.cyAfterSaveMessage\?\.\(els\.saveMessage, text, isError\)/);
 assert.match(patch5Build3Js, /CY_V0215_BUILD3_EDGE_GUARD = 24/);
 assert.match(patch5Build3Js, /openV0215Build3SwipeRow\(row, 'edit'\)/);
 assert.match(patch5Build3Js, /openV0215Build3SwipeRow\(row, 'delete'\)/);
 assert.doesNotMatch(patch5Build3Js, /MutationObserver/);
-assert.match(indexHtml, /<div id="favoriteCategoryGroup"/);
-assert.match(indexHtml, /<div id="summarySuggestionGroup"/);
-assert.doesNotMatch(indexHtml, /<details id="favoriteCategoryGroup"/);
+assert.match(patch5Build4Js, /beginV0215Build4MobileEdit/);
+assert.match(patch5Build4Js, /els\.saveButton\.textContent = '儲存修改'/);
+assert.match(patch5Build4Js, /event\.stopImmediatePropagation\(\)/);
+assert.match(patch5Build4Js, /api\('\/api\/transactions\/' \+ edit\.id,[\s\S]*?method: 'PUT'/);
+assert.match(patch5Build4Js, /cancelV0215Build4MobileEdit\(\)/);
+assert.match(patch5Build4Js, /switchV0215Build4MobilePage\('ledger'\)/);
+assert.match(patch5Build4Js, /rowTop: row\?\.getBoundingClientRect\(\)\.top/);
+assert.match(patch5Build4Js, /2500/);
+assert.match(patch5Build4Js, /mobileLedgerBalanceButton/);
+assert.match(patch5Build4Js, /data-mobile-ledger-action="opening"/);
+assert.doesNotMatch(patch5Build4Js, /MutationObserver/);
 
 // Breakpoint ownership: Build 10 phone, Build 9 Tablet, manager/date patch work Desktop only.
 assert.match(build10Css, /@media \(max-width: 767px\)/);
@@ -144,4 +164,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 Build 3 adaptive UI regression tests passed.');
+console.log('V0.21.5 Build 4 adaptive UI regression tests passed.');
