@@ -1,5 +1,14 @@
 # CYID Consumer Contract Changelog
 
+## 1.0.1 — 2026-09-30
+
+Backward-compatible governance addition:
+
+- define `CONSUMER_SYNC_MANIFEST.json` as the canonical cross-repository contract package membership;
+- require cross-repository consumers to keep an exact synchronized mirror and validate it in governance/CI and before deployment;
+- keep same-repository consumers on direct canonical reads rather than redundant copies;
+- separate contract semantic versioning from document-byte synchronization so documentation-only corrections can sync without artificial contract-version bumps.
+
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
 ## 1.0.0 — 2026-09-30
