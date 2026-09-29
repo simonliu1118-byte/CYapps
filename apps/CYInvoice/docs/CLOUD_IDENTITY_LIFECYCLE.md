@@ -22,6 +22,8 @@ CY ID 整合的專門邊界另見 `CY_ID_INTEGRATION.md`。本文件是設計／
 12. Identity matching 不使用姓名猜測；只使用 Employee No + Email 等明確 identity 規則。
 13. Cloud 是協作／身分／裝置協調層，不是發票業務 kill switch；AMEGO 仍是發票／作廢／折讓官方真相。
 14. 已完成 Cloud cutover 的電腦若改回單機版，視為本機恢復首次使用狀態：必須雙重確認本機資料將全部清除，並安全退出目前 Device identity 後重新建立 Local SUPER_ADMIN。
+15. 一個 active Workspace 必須至少存在一條可驗證的管理恢復路徑；這條路徑不必永遠等同於 active Device。Built-in Cloud 目前仍以可信任 Device + 中央 SUPER_ADMIN 為恢復路徑，因此最後一台 active Device 不可直接撤銷；未來 CY ID 模式若已有獨立的 CY ID SUPER_ADMIN recovery contract，則可合法存在 0 active Device。
+16. 刪除本機資料、撤銷 Device、停用 Workspace、永久刪除 Workspace 是四個不同 lifecycle action，不得以 mode flag 或單一 destructive API 混為同一件事。
 
 ## 2. 三種正式使用模式
 
@@ -256,7 +258,7 @@ Workspace-wide account mutations 不支援 offline。
 
 ## 10. Cloud → Local destructive reset
 
-使用者在已完成 Cloud cutover 的電腦選擇「單機版」時，不允許只把 mode flag 改成 Local。
+使用者在已有 Cloud Device identity 的電腦選擇「單機版」時，不允許只把 mode flag 改成 Local。已完成 cutover 的 CloudPreferred 與尚在 whole-device transition 的 CloudTransition，都必須先安全處理目前 Device identity；差別只在當下 Employee authority 來源。
 
 ```text
 使用者選擇切換單機版
@@ -265,9 +267,11 @@ Workspace-wide account mutations 不支援 offline。
   ↓
 第二次明確確認：資料清除後不可由本機復原，需重新建立單機版 SUPER_ADMIN
   ↓
-停止背景同步／敏感操作
+完整關閉 CYInvoice，停止背景同步／敏感操作
   ↓
 若當前 Device 已有 Cloud identity，先依正式 Device revoke/retire 規則處理該 Device
+  ↓
+Cloud 明確確認 Device 已 revoked，或 Workspace 已 disabled
   ↓
 清除本機 Data／Cache／Local EmployeeStore／Cloud Employee cache／
 Cloud identity、token、pending state 與本機設定
@@ -281,7 +285,53 @@ Cloud identity、token、pending state 與本機設定
 
 之後若再次選擇 Cloud，視為全新 Local authority 的裝置，重新走正式加入／轉換流程，建立新的 Device identity，不得復活被清除前的 Device Token、舊 Cloud cache 或舊 Local authority。
 
-若退出 Cloud 前無法安全完成必要 Device revoke/retire，正式實作必須 fail-closed 或保留可恢復狀態；不可先刪掉唯一可用的本機 Device Token 再留下無法管理的 active Device。
+### 10.1 Crash-safe reset transaction
+
+Cloud revoke 可能已在 server commit，但 client 因網路中斷收不到成功回應。Windows 因此不得以「呼叫失敗」或「HTTP 斷線」推測 Device 是否仍 active。
+
+正式 reset 必須在本機 Data／Cache 外保留最小 reset marker，且 marker 不存 Employee password 或 Device Token。只有以下任一條件經 Cloud 明確確認後才可進入本機 wipe：
+
+- 目前 Device 已 `revoked`；或
+- Workspace 已 `disabled`。
+
+若結果不明，保留 Data、Cache、Device Token 與 marker；下次啟動先使用狹窄的 Device self-status recovery surface 重新確認。若 Cloud 仍回報 Device `active` 且 Workspace `active`，取消未完成 reset 並完整保留本機狀態；若狀態仍無法確認則 fail-closed，不進入一般程式操作。
+
+### 10.2 Built-in Cloud 最後一台 Device
+
+Built-in Cloud 目前沒有 Device 之外的獨立 recovery root，因此 active Workspace 的最後一台 active Device 不可直接 revoke。
+
+```text
+仍有其他 active Device
+→ revoke current Device
+→ Cloud 確認 revoked
+→ wipe local
+
+最後一台 active Device + 要保留 Workspace
+→ 先加入另一台 Device
+→ 再退出目前 Device
+
+最後一台 active Device + 不再使用 Workspace
+→ 操作者在中央 Workspace 管理端手動停用 Workspace
+→ Windows 只確認 Workspace 已 disabled
+→ wipe local
+```
+
+Windows Client 不提供 Workspace disable、delete、purge、全 Device 銷毀或其他 Workspace 級 destructive action。這些屬高 blast-radius 中央資源管理，不應由一般桌面程式持有。
+
+### 10.3 CY ID Cloud 未來規則
+
+CY ID 模式若正式完成以下 recovery contract：
+
+```text
+有效 CY ID SUPER_ADMIN
++ CYInvoice App Access
++ 有效 CY ID Workspace ↔ CYInvoice Workspace binding
+→ 可重新授權新的 CYInvoice Device
+```
+
+則 CYInvoice Workspace 可以合法存在 `0 active Device`。CY ID SUPER_ADMIN 可在新電腦重新認證後，為原 Workspace 建立全新的 Device identity；不需要復活舊 Device Token。
+
+在上述 CY ID recovery 尚未正式實作與驗收前，不修改 Built-in Cloud 現有 `LAST_ACTIVE_DEVICE` 保護，也不讓 CY ID 假設滲入 Package 4。
 
 ## 11. Built-in Credential
 
@@ -379,11 +429,11 @@ CY ID 模式的 SUPER_ADMIN ownership 與 transfer 由 CY ID 帳號中心處理�
 
 CYInvoice Workspace 不因 Device loss 重建。
 
-若仍有可信 Device，新增 Device 使用既有 Workspace 授權流程。
+Built-in Cloud 若仍有可信 Device，新增 Device 使用既有 Workspace 授權流程。若只剩最後一台 active Device，在沒有另一條正式 recovery path 前不得把該 Device 撤銷並留下 active Workspace。
 
-若所有 Device Token 都失效但 recovery path 仍可用，後續需完成正式 Recovery Device flow。
+CY ID Cloud 未來若已具備有效的 CY ID SUPER_ADMIN recovery contract，則可以 0 active Device 保留原 CYInvoice Workspace；SUPER_ADMIN 重新通過 CY ID authority 後可授權全新的 Device identity 加回原 Workspace。
 
-Device recovery 是 CYInvoice Device lifecycle 問題；即使 CY ID 提供 Employee recovery，也不能把 CY ID password recovery 誤當成 Device Token recovery。
+Device recovery 是 CYInvoice Device lifecycle 問題；即使 CY ID 提供 Employee recovery，也不能把 CY ID password recovery 誤當成舊 Device Token recovery。
 
 ## 16. Legacy reconciliation
 
@@ -404,15 +454,14 @@ Cloudflare Worker + D1 是 reference implementation；CYInvoice 對外可自架�
 
 ## 18. 目前尚待完成
 
-- Cloud 在線 execution-time Employee authority 即時刷新／驗證，避免新建或異動帳號需等背景同步。
-- Device revoke / retire。
-- Cloud → Local 破壞性重置。
+- Cloud → Local destructive reset Package 4 的最終 CI／development deployment／A-B acceptance 與 merge 收尾。
 - 邀請碼加入、撤銷／重寄、result-unknown recovery 實機驗收。
 - A/B Built-in Employee CRUD、role、enabled、password 與 reconnect 行為驗收。
 - CY ID consumer contract 穩定後的 CYInvoice 專用整合；目前不修改 source。
 - CY ID 模式 Windows Offline credential/cache 技術方案。
-- all-Device-Token-loss Recovery Device flow。
+- CY ID `0 active Device` recovery / re-authorize Device flow。
+- Built-in all-Device-Token-loss 的獨立 Recovery Device flow（若未來產品需要）。
 - 後續 business sync / Work Item / Audit。
 - **延後／非目前阻塞：**Cloud Employee offline cache server-signed snapshot／完整性簽章。除非實際發生竄改事件、威脅模型提高或有稽核需求，否則保留 TODO，不投入目前版本成本。
 
-任何正式 merge、tag、Release 仍需明確授權。
+Merge／deploy 依 repository governance 與當前使用者授權執行；tag 與正式 GitHub Release 仍另行確認。
