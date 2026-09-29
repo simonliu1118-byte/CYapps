@@ -8,6 +8,7 @@ namespace CYInvoice.WinForms;
 
 internal sealed class InvoiceOperationHistoryControl : UserControl
 {
+    private readonly FixedColumnHeaderCursor headerCursor;
     private readonly ListView list = new HistoryListView
     {
         Dock = DockStyle.Fill,
@@ -25,15 +26,28 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
     {
         Dock = DockStyle.Fill;
         Margin = Padding.Empty;
-        list.Columns.Add("類型", 48, HorizontalAlignment.Left);
-        list.Columns.Add("日期", 82, HorizontalAlignment.Left);
-        list.Columns.Add("狀態", 58, HorizontalAlignment.Center);
-        list.Columns.Add("摘要", 92, HorizontalAlignment.Left);
+        headerCursor = new FixedColumnHeaderCursor(list);
+        list.Columns.Add("類型", 46, HorizontalAlignment.Left);
+        list.Columns.Add("日期", 100, HorizontalAlignment.Left);
+        list.Columns.Add("摘要", 140, HorizontalAlignment.Left);
+        list.OwnerDraw = true;
+        list.DrawColumnHeader += (_, eventArgs) => NativeListViewHost.DrawHeader(eventArgs, list.Font);
+        list.DrawItem += (_, eventArgs) => { if (list.View != View.Details) eventArgs.DrawDefault = true; };
+        list.DrawSubItem += DrawSubItem;
+        list.ColumnWidthChanging += (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            eventArgs.NewWidth = list.Columns[eventArgs.ColumnIndex].Width;
+        };
+        list.ClientSizeChanged += (_, _) => LayoutColumns();
         list.DoubleClick += (_, _) => OpenSelected();
         Controls.Add(list);
     }
 
-    public void LoadRecord(InvoiceRecord record)
+    public void LoadRecord(
+        InvoiceRecord record,
+        InvoiceVoidHandledReview? handledReview = null,
+        InvoiceAllowanceManualReview? allowanceReview = null)
     {
         list.BeginUpdate();
         try
@@ -42,8 +56,14 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
             if (record.InvoiceState == InvoiceStates.Voided && InvoiceOfficialMetadata.CancelDate(record) > 0)
             {
                 var cancelText = InvoiceOfficialMetadata.CancelDateText(record);
-                var parsed = VoidOperationSessionCache.Parse(VoidOperationSessionCache.ReasonFor(record.InvoiceNumber));
-                var row = NewRow("作廢", ShortDate(cancelText), "已完成", parsed?.Reason ?? "已作廢");
+                var parsed = handledReview is null
+                    ? VoidOperationSessionCache.Parse(VoidOperationSessionCache.ReasonFor(record.InvoiceNumber))
+                    : new ParsedVoidReason(
+                        handledReview.RequesterEmployeeNo,
+                        handledReview.ReviewerEmployeeNo,
+                        handledReview.Reason);
+                var row = NewRow("作廢", ShortDate(cancelText),
+                    "已作廢(" + (parsed?.Reason ?? "原因未取得") + ")");
                 row.Tag = new VoidHistoryItem(record.InvoiceNumber, cancelText, parsed);
                 list.Items.Add(row);
             }
@@ -52,7 +72,12 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
                          .Where(item => item.InvoiceStatus == UploadStatuses.Complete))
             {
                 var inclusive = InclusiveAmount(allowance);
-                var row = NewRow("折讓", FormatAllowanceDate(allowance.AllowanceDate), "已完成", "$" + inclusive);
+                var reason = allowanceReview is not null &&
+                    string.Equals(allowanceReview.ConfirmedAllowanceNumber, allowance.AllowanceNumber,
+                        StringComparison.OrdinalIgnoreCase)
+                    ? allowanceReview.Reason : "原因未取得";
+                var row = NewRow("折讓", FormatAllowanceDate(allowance.AllowanceDate),
+                    "$" + inclusive + "(" + reason + ")");
                 row.Tag = new AllowanceHistoryItem(record, allowance);
                 list.Items.Add(row);
             }
@@ -60,6 +85,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         finally
         {
             list.EndUpdate();
+            LayoutColumns();
         }
     }
 
@@ -81,13 +107,45 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         }
     }
 
-    private static ListViewItem NewRow(string type, string date, string state, string summary)
+    private void LayoutColumns()
+    {
+        if (list.ClientSize.Width <= 0) return;
+        var typeWidth = TextRenderer.MeasureText("類型", list.Font).Width + 10;
+        var dateWidth = TextRenderer.MeasureText("2026/09/08", list.Font).Width + 14;
+        list.Columns[0].Width = typeWidth;
+        list.Columns[1].Width = dateWidth;
+        list.Columns[2].Width = Math.Max(60, list.ClientSize.Width - typeWidth - dateWidth - 4);
+    }
+
+    private void DrawSubItem(object? sender, DrawListViewSubItemEventArgs eventArgs)
+    {
+        if (eventArgs.SubItem is null || eventArgs.Item is null) return;
+        var background = eventArgs.Item.Selected ? SystemColors.Highlight : eventArgs.SubItem.BackColor;
+        var foreground = eventArgs.Item.Selected ? SystemColors.HighlightText : eventArgs.SubItem.ForeColor;
+        using (var brush = new SolidBrush(background))
+            eventArgs.Graphics.FillRectangle(brush, eventArgs.Bounds);
+        TextRenderer.DrawText(eventArgs.Graphics, eventArgs.SubItem.Text, list.Font,
+            Rectangle.Inflate(eventArgs.Bounds, -5, 0), foreground,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+        using var pen = new Pen(Color.FromArgb(190, 190, 190));
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Right - 1, eventArgs.Bounds.Top,
+            eventArgs.Bounds.Right - 1, eventArgs.Bounds.Bottom);
+        eventArgs.Graphics.DrawLine(pen, eventArgs.Bounds.Left, eventArgs.Bounds.Bottom - 1,
+            eventArgs.Bounds.Right, eventArgs.Bounds.Bottom - 1);
+    }
+
+    private static ListViewItem NewRow(string type, string date, string summary)
     {
         var row = new ListViewItem(type);
         row.SubItems.Add(date);
-        row.SubItems.Add(state);
         row.SubItems.Add(summary);
         return row;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) headerCursor.Dispose();
+        base.Dispose(disposing);
     }
 
     private static string ShortDate(string value)
@@ -136,7 +194,7 @@ internal sealed class VoidHistoryDetailForm : Form
     {
         Text = "作廢詳細資訊";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(360, item.ParsedReason?.Reviewed == true ? 250 : 220);
+        ClientSize = new Size(360, 270);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -149,16 +207,9 @@ internal sealed class VoidHistoryDetailForm : Form
             new("發票號碼", item.InvoiceNumber),
             new("作廢時間", item.CancelDate),
         };
-        if (item.ParsedReason is { } parsed)
-        {
-            rows.Add(new("使用者", parsed.UserEmployeeNo));
-            if (parsed.Reviewed) rows.Add(new("覆核管理員", parsed.ReviewerEmployeeNo));
-            rows.Add(new("作廢原因", parsed.Reason));
-        }
-        else
-        {
-            rows.Add(new("作廢原因", "本次資料未取得"));
-        }
+        rows.Add(new("操作使用者", item.ParsedReason?.UserEmployeeNo is { Length: > 0 } user ? user : "未取得"));
+        rows.Add(new("覆核管理員", item.ParsedReason?.ReviewerEmployeeNo is { Length: > 0 } reviewer ? reviewer : "－"));
+        rows.Add(new("作廢原因", item.ParsedReason?.Reason is { Length: > 0 } reason ? reason : "本次資料未取得"));
         Build(rows);
     }
 

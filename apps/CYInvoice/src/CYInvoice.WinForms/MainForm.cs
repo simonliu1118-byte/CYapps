@@ -1,5 +1,6 @@
 using CYInvoice.Core;
 using CYInvoice.Core.Amego;
+using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Invoicing;
 using CYInvoice.Core.Storage;
 
@@ -23,6 +24,7 @@ internal sealed class MainForm : Form
     private readonly InvoiceService service;
     private readonly InvoiceSyncCoordinator syncCoordinator;
     private readonly AmegoConnectivityProbe connectivityProbe = new();
+    private readonly HttpClient cloudHealthHttpClient = new();
     private readonly CancellationTokenSource syncLifetime = new();
     private readonly System.Windows.Forms.Timer syncTimer = new() { Interval = SyncIntervalMilliseconds };
     private readonly InvoiceEntryControl invoicePage;
@@ -33,15 +35,19 @@ internal sealed class MainForm : Form
     private readonly Label environmentBadgeLabel = new();
     private readonly Label environmentWarningLabel = new();
     private readonly Label environmentCompanyLabel = new();
+    private readonly TableLayoutPanel runtimeStatusLayout = new();
+    private readonly Label runtimeModeLabel = new();
+    private readonly Label runtimeSeparatorLabel = new() { Text = "/" };
     private readonly Label apiLabel = new();
     private readonly ToolTip apiToolTip = new();
+    private readonly ToolTip runtimeModeToolTip = new();
     private readonly ToolTip environmentToolTip = new();
     private readonly TabControl tabs = new NoFocusCueTabControl();
     private readonly Panel tabHost = new();
     private readonly TabPage invoiceTab = new("開立發票");
     private readonly TabPage recordsTab = new("已開立發票清單");
     private readonly Button forgotPasswordButton = UiControls.StandardButton("忘記密碼");
-    private readonly Button accountManagementButton = UiControls.StandardButton("帳戶管理");
+    private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
     private readonly Label copyrightLabel = new()
     {
@@ -83,13 +89,14 @@ internal sealed class MainForm : Form
         syncTimer.Tick += async (_, _) => await RunScheduledSyncAsync();
         FormClosing += (_, _) => StopBackgroundSync();
         BuildShell();
+        SetAmegoConnectionState("啟動中", Color.FromArgb(128, 128, 128), "首次設定完成後將檢查光貿 API 連線。");
         UpdateEnvironment();
         if (!startupSmokeTest) Shown += async (_, _) =>
         {
             if (!EnsureInitialSetup()) return;
             UpdateEnvironment();
             invoicePage.RefreshEnvironment();
-            await RefreshApiAsync();
+            await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync());
             if (shuttingDown) return;
             await RunStartupSyncAsync();
             if (!shuttingDown) syncTimer.Start();
@@ -139,13 +146,28 @@ internal sealed class MainForm : Form
         environmentCompanyLabel.ForeColor = Color.FromArgb(0, 72, 170);
         environmentCompanyLabel.AutoEllipsis = false;
 
-        apiLabel.Dock = DockStyle.Fill;
-        apiLabel.Margin = Padding.Empty;
-        apiLabel.TextAlign = ContentAlignment.MiddleRight;
-        apiLabel.Padding = new Padding(0, 0, 14, 0);
+        runtimeStatusLayout.Dock = DockStyle.Fill;
+        runtimeStatusLayout.Margin = Padding.Empty;
+        runtimeStatusLayout.Padding = new Padding(0, 0, 14, 0);
+        runtimeStatusLayout.ColumnCount = 4;
+        runtimeStatusLayout.RowCount = 1;
+        ConfigureRuntimeText(runtimeModeLabel);
+        ConfigureRuntimeText(runtimeSeparatorLabel);
+        ConfigureRuntimeText(apiLabel);
+        runtimeSeparatorLabel.ForeColor = SystemColors.ControlText;
+        runtimeSeparatorLabel.Margin = new Padding(6, 0, 6, 0);
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        runtimeStatusLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        runtimeStatusLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        runtimeStatusLayout.Controls.Add(runtimeModeLabel, 1, 0);
+        runtimeStatusLayout.Controls.Add(runtimeSeparatorLabel, 2, 0);
+        runtimeStatusLayout.Controls.Add(apiLabel, 3, 0);
+
         bannerLayout.Controls.Add(environmentTags, 0, 0);
         bannerLayout.Controls.Add(environmentCompanyLabel, 1, 0);
-        bannerLayout.Controls.Add(apiLabel, 2, 0);
+        bannerLayout.Controls.Add(runtimeStatusLayout, 2, 0);
         banner.Controls.Add(bannerLayout);
 
         tabHost.Dock = DockStyle.Fill;
@@ -191,6 +213,17 @@ internal sealed class MainForm : Form
         label.BorderStyle = BorderStyle.FixedSingle;
         label.TextAlign = ContentAlignment.MiddleCenter;
         label.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
+    }
+
+    private void ConfigureRuntimeText(Label label)
+    {
+        label.AutoSize = true;
+        label.Anchor = AnchorStyles.None;
+        label.BorderStyle = BorderStyle.None;
+        label.BackColor = Color.Transparent;
+        label.TextAlign = ContentAlignment.MiddleCenter;
+        label.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
+        label.Margin = Padding.Empty;
     }
 
     private static void ConfigureHeaderButton(Button button, Action action)
@@ -240,24 +273,55 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
-        if (!TryAuthenticateAdministrator("開啟設定", out _)) return;
+        if (!TryAuthenticateAdministrator("密碼驗證", out _)) return;
         using var form = new SettingsForm(repository);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         UpdateEnvironment();
         invoicePage.RefreshEnvironment();
         recordsPage.Reload();
+        _ = RefreshRuntimeModeAsync();
         _ = RefreshApiAsync();
     }
 
     private void OpenAccountManagement()
     {
-        if (!TryAuthenticateAdministrator("帳戶管理驗證", out var account)) return;
-        using var form = new AccountManagementForm(repository.Employees, account!);
-        form.ShowDialog(this);
+        if (!repository.HasAuthorityEmployees())
+        {
+            MessageBox.Show(this, "尚未建立可用的員工帳戶，請先完成首次設定或雲端帳號同步。", "密碼驗證",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        using var login = new EmployeeAdminLoginForm(repository, "密碼驗證", administratorRequired: false);
+        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        if (EmployeeRoles.CanManageAccounts(login.AuthenticatedEmployee.Role))
+        {
+            using var adminForm = new AccountManagementForm(repository, login.AuthenticatedEmployee);
+            adminForm.ShowDialog(this);
+        }
+        else
+        {
+            using var selfForm = new SelfAccountManagementForm(repository, login.AuthenticatedEmployee,
+                login.AuthenticatedPassword, cloudHealthHttpClient);
+            selfForm.ShowDialog(this);
+        }
     }
 
     private void OpenPasswordRecovery()
     {
+        if (repository.UsesCloudEmployeeAuthority())
+        {
+            try
+            {
+                using var cloudRecovery = new CloudPasswordRecoveryForm(repository, cloudHealthHttpClient);
+                if (cloudRecovery.ShowDialog(this) == DialogResult.OK) _ = RefreshRuntimeModeAsync();
+            }
+            catch (Exception problem)
+            {
+                MessageBox.Show(this, problem.Message, "無法復原密碼",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            return;
+        }
         if (!repository.Employees.HasEmployees())
         {
             MessageBox.Show(this, "尚未建立員工帳戶，請先完成首次設定。", "無法復原密碼",
@@ -271,13 +335,13 @@ internal sealed class MainForm : Form
     private bool TryAuthenticateAdministrator(string title, out EmployeeAccount? account)
     {
         account = null;
-        if (!repository.Employees.HasEmployees())
+        if (!repository.HasAuthorityEmployees())
         {
-            MessageBox.Show(this, "尚未建立員工帳戶，請先完成首次設定。", title,
+            MessageBox.Show(this, "尚未建立可用的員工帳戶，請先完成首次設定或雲端帳號同步。", title,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
-        using var login = new EmployeeAdminLoginForm(repository.Employees, title);
+        using var login = new EmployeeAdminLoginForm(repository, title);
         if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return false;
         account = login.AuthenticatedEmployee;
         return true;
@@ -285,7 +349,34 @@ internal sealed class MainForm : Form
 
     private bool EnsureInitialSetup()
     {
-        if (repository.Employees.HasEmployees()) return true;
+        if (repository.HasAuthorityEmployees()) return true;
+        var settings = repository.Settings.LoadOrCreate();
+        if (settings.CloudMode != CloudModes.LocalOnly || settings.CloudWorkspaceId.Length != 0)
+        {
+            MessageBox.Show(this, "這台電腦已綁定雲端，但目前沒有可用的中央員工帳號快取。請檢查連線並完成帳號同步；不會重新建立本機超管。",
+                "雲端帳號尚未就緒", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Close();
+            return false;
+        }
+        if (!repository.Employees.HasEmployees())
+        {
+            var pending = repository.Settings.CloudPendingDeviceJoin(settings);
+            if (pending is null)
+            {
+                using var choice = new FirstRunModeForm();
+                if (choice.ShowDialog(this) != DialogResult.OK) { Close(); return false; }
+                if (!choice.DirectCloud) return RunLocalInitialSetup();
+            }
+            using var cloud = new CloudDirectJoinForm(repository);
+            if (cloud.ShowDialog(this) == DialogResult.OK && cloud.IdentityCompleted) return true;
+            Close();
+            return false;
+        }
+        return RunLocalInitialSetup();
+    }
+
+    private bool RunLocalInitialSetup()
+    {
         using var setup = new InitialSetupForm(repository);
         if (setup.ShowDialog(this) == DialogResult.OK) return true;
         Close();
@@ -320,10 +411,20 @@ internal sealed class MainForm : Form
             bannerLayout.GetColumnWidths()[0] != bannerLayout.GetColumnWidths()[2] ||
             bannerLayout.GetColumn(environmentTags) != 0 ||
             bannerLayout.GetColumn(environmentCompanyLabel) != 1 ||
-            bannerLayout.GetColumn(apiLabel) != 2 ||
+            bannerLayout.GetColumn(runtimeStatusLayout) != 2 ||
+            runtimeStatusLayout.GetColumn(runtimeModeLabel) != 1 ||
+            runtimeStatusLayout.GetColumn(runtimeSeparatorLabel) != 2 ||
+            runtimeStatusLayout.GetColumn(apiLabel) != 3 ||
+            runtimeStatusLayout.GetRow(runtimeModeLabel) != 0 ||
+            runtimeStatusLayout.GetRow(runtimeSeparatorLabel) != 0 ||
+            runtimeStatusLayout.GetRow(apiLabel) != 0 ||
             environmentBadgeLabel.Width != environmentWarningLabel.Width ||
-            environmentBadgeLabel.Width != EnvironmentTagWidth)
-            throw new InvalidOperationException("標題列環境標籤、警告標籤或公司名稱未依指定方式排列");
+            environmentBadgeLabel.Width != EnvironmentTagWidth ||
+            Math.Abs(runtimeModeLabel.Font.SizeInPoints - 10F) > 0.1F ||
+            Math.Abs(apiLabel.Font.SizeInPoints - 10F) > 0.1F ||
+            runtimeModeLabel.BorderStyle != BorderStyle.None || apiLabel.BorderStyle != BorderStyle.None ||
+            runtimeModeLabel.Text != "單機模式" || runtimeSeparatorLabel.Text != "/" || apiLabel.Text != "啟動中")
+            throw new InvalidOperationException("標題列環境標籤、執行模式、連線狀態或公司名稱未依指定方式排列");
         PositionHeaderButtons();
         var tabHeader = tabs.GetTabRect(0);
         if (settingsButton.Right != tabHost.ClientSize.Width - HeaderButtonGap ||
@@ -426,6 +527,7 @@ internal sealed class MainForm : Form
     private void UpdateEnvironment()
     {
         var settings = repository.Settings.LoadOrCreate();
+        UpdateRuntimeModeInitial(settings);
         if (settings.Environment == Environments.Production)
         {
             environmentBadgeLabel.Text = "正式環境｜將開立正式發票";
@@ -447,6 +549,172 @@ internal sealed class MainForm : Form
         }
     }
 
+    private void UpdateRuntimeModeInitial(Settings settings)
+    {
+        if (settings.CloudMode == CloudModes.LocalOnly)
+        {
+            SetRuntimeModeState(
+                "單機模式",
+                SystemColors.ControlText,
+                "CYInvoice 目前使用單機模式，不會呼叫 CYInvoice Cloud API。");
+            return;
+        }
+
+        if (settings.CloudMode == CloudModes.CloudTransition)
+        {
+            SetRuntimeModeState(
+                "雲端轉換中",
+                Color.FromArgb(166, 92, 0),
+                "Cloud Device 已加入，但 Employee 主資料尚未完成切換；轉換完成前仍使用原本 Local Employee 權限。",
+                showToolTip: true);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
+        {
+            SetRuntimeModeState(
+                "雲端離線",
+                Color.FromArgb(180, 0, 0),
+                "這台電腦仍是 Cloud Mode，但目前缺少可用的 Cloud API 網址。帳號驗證只會使用最後同步的 Cloud Employee 離線快取。",
+                showToolTip: true);
+            return;
+        }
+
+        SetRuntimeModeState(
+            "雲端模式",
+            SystemColors.ControlText,
+            "Cloud Employee 是唯一帳號主資料，正在確認 CYInvoice Cloud API 與中央帳號快取狀態。");
+    }
+
+    private async Task RefreshRuntimeModeAsync()
+    {
+        var requested = repository.Settings.LoadOrCreate();
+        var requestedMode = requested.CloudMode;
+        var requestedUrl = requested.CloudBaseUrl.Trim();
+
+        if (requestedMode == CloudModes.LocalOnly)
+        {
+            UpdateRuntimeModeInitial(requested);
+            return;
+        }
+
+        if (requestedUrl.Length == 0)
+        {
+            UpdateRuntimeModeInitial(requested);
+            return;
+        }
+
+        try
+        {
+            var client = new CloudClient(cloudHealthHttpClient, new Uri(requestedUrl, UriKind.Absolute));
+            var health = await client.CheckHealthAsync(syncLifetime.Token);
+            if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
+            var problem = CloudCompatibility.Problem(health);
+            if (problem.Length != 0)
+            {
+                SetCloudUnavailableState(requested, problem);
+                return;
+            }
+
+            var onboarding = await client.GetOnboardingStatusAsync(syncLifetime.Token);
+            if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
+
+            if (requestedMode == CloudModes.CloudPreferred && requested.CloudEmployeeAuthorityReady)
+            {
+                var syncProblem = await TryRefreshCloudEmployeeCacheAsync(requested, requestedUrl);
+                if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
+                if (syncProblem.Length != 0)
+                {
+                    SetRuntimeModeState(
+                        "雲端帳號同步異常",
+                        Color.FromArgb(180, 0, 0),
+                        "Cloud API 可連線，但中央帳號快取這次沒有更新。程式仍使用最後一次成功同步的 Cloud Employee 快取。\n\n" + syncProblem,
+                        showToolTip: true);
+                    return;
+                }
+            }
+
+            var onboardingText = onboarding.WorkspaceInitialized ? "已建立雲端空間" : "尚未建立雲端空間";
+            var modeText = requestedMode == CloudModes.CloudTransition ? "雲端轉換中" : "雲端模式";
+            var detail = requestedMode == CloudModes.CloudTransition
+                ? "Cloud Device identity 已連線，但 Employee authority 尚未切換。\n"
+                : "Cloud Employee 為唯一帳號主資料；本機已同步可供暫時離線驗證的安全快取。\n";
+            SetRuntimeModeState(
+                modeText,
+                requestedMode == CloudModes.CloudTransition ? Color.FromArgb(166, 92, 0) : SystemColors.ControlText,
+                detail + $"{CloudCompatibility.SuccessSummary(health)}\n{onboardingText}");
+        }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
+            SetCloudUnavailableState(requested, ExceptionDetails(error));
+        }
+    }
+
+    private async Task<string> TryRefreshCloudEmployeeCacheAsync(Settings settings, string baseUrl)
+    {
+        if (!settings.CloudEmployeeAuthorityReady || settings.CloudMode != CloudModes.CloudPreferred)
+            return string.Empty;
+        if (settings.CloudWorkspaceId.Length == 0 || settings.CloudDeviceId.Length == 0)
+            return "本機 Cloud Workspace／Device identity 不完整。";
+        try
+        {
+            var token = repository.Settings.CloudDeviceToken(settings);
+            if (token.Length == 0) return "本機 Cloud Device Token 不存在。";
+            var authority = new CloudEmployeeAuthorityClient(
+                cloudHealthHttpClient,
+                new Uri(baseUrl, UriKind.Absolute),
+                token);
+            var snapshot = await authority.GetSnapshotAsync(syncLifetime.Token);
+            if (!string.Equals(snapshot.WorkspaceId, settings.CloudWorkspaceId, StringComparison.Ordinal))
+                return "中央帳號快取回傳的 Workspace identity 與本機不一致。";
+            repository.CloudEmployees.ReplaceSnapshot(
+                snapshot.WorkspaceId,
+                snapshot.WorkspaceRevision,
+                snapshot.Employees);
+            return string.Empty;
+        }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            return ExceptionDetails(error);
+        }
+    }
+
+    private void SetCloudUnavailableState(Settings settings, string details)
+    {
+        if (settings.CloudMode == CloudModes.CloudTransition)
+        {
+            SetRuntimeModeState(
+                "雲端轉換中(離線)",
+                Color.FromArgb(180, 0, 0),
+                "帳號轉換目前無法連線 Cloud；切換尚未完成，因此原本 Local Employee 權限仍有效。\n\n" + details,
+                showToolTip: true);
+            return;
+        }
+
+        SetRuntimeModeState(
+            "雲端離線",
+            Color.FromArgb(180, 0, 0),
+            "這台電腦仍維持 Cloud Mode，不會切回舊 Local 帳號系統。需要權限的操作會使用最後一次成功同步的 Cloud Employee 離線快取。\n\n" + details,
+            showToolTip: true);
+    }
+
+    private void SetRuntimeModeState(string text, Color foreground, string details, bool showToolTip = false)
+    {
+        runtimeModeLabel.Text = text;
+        runtimeModeLabel.BackColor = Color.Transparent;
+        runtimeModeLabel.ForeColor = foreground;
+        runtimeModeLabel.AccessibleDescription = details;
+        runtimeModeToolTip.SetToolTip(runtimeModeLabel, showToolTip ? details : string.Empty);
+    }
+
     private async Task RefreshApiAsync()
     {
         var requestedSettings = repository.Settings.LoadOrCreate();
@@ -454,10 +722,10 @@ internal sealed class MainForm : Form
         var requestedInvoice = requestedEnvironment == Environments.Production
             ? requestedSettings.ProductionInvoice.Trim()
             : AmegoDefaults.TestInvoice;
-        apiLabel.Text = "● API 檢查中";
-        apiLabel.ForeColor = Color.FromArgb(196, 126, 0);
-        apiLabel.AccessibleDescription = string.Empty;
-        apiToolTip.SetToolTip(apiLabel, "正在檢查光貿 API 服務連線");
+        SetAmegoConnectionState(
+            "光貿連線中",
+            Color.FromArgb(128, 128, 128),
+            "正在檢查光貿 API 服務連線");
 
         try
         {
@@ -471,18 +739,19 @@ internal sealed class MainForm : Form
         {
             if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
             var details = ExceptionDetails(error);
-            apiLabel.Text = "● API 異常";
-            apiLabel.ForeColor = Color.FromArgb(196, 0, 0);
-            apiLabel.AccessibleDescription = details;
-            apiToolTip.SetToolTip(apiLabel, "光貿 API 連線異常\n" + details);
+            SetAmegoConnectionState(
+                "光貿連線異常",
+                Color.FromArgb(180, 0, 0),
+                "光貿 API 連線異常\n" + details,
+                showToolTip: true);
             return;
         }
 
         if (!CurrentEnvironmentMatches(requestedEnvironment, requestedInvoice)) return;
-        apiLabel.Text = "● API 正常";
-        apiLabel.ForeColor = Color.FromArgb(0, 155, 72);
-        apiLabel.AccessibleDescription = "光貿 API 服務連線正常";
-        apiToolTip.SetToolTip(apiLabel, "光貿 API 服務連線正常");
+        SetAmegoConnectionState(
+            "光貿連線正常",
+            Color.FromArgb(0, 120, 60),
+            "光貿 API 服務連線正常");
 
         if (requestedEnvironment != Environments.Production)
         {
@@ -524,6 +793,15 @@ internal sealed class MainForm : Form
                 lookupFailed: true);
             SetProductionWarning("正式公司資料查詢失敗。\n" + ExceptionDetails(error));
         }
+    }
+
+    private void SetAmegoConnectionState(string text, Color foreground, string details, bool showToolTip = false)
+    {
+        apiLabel.Text = text;
+        apiLabel.BackColor = Color.Transparent;
+        apiLabel.ForeColor = foreground;
+        apiLabel.AccessibleDescription = details;
+        apiToolTip.SetToolTip(apiLabel, showToolTip ? details : string.Empty);
     }
 
     private string ProductionConfigurationProblem(Settings settings)
@@ -585,6 +863,7 @@ internal sealed class MainForm : Form
 
     private async Task RunScheduledSyncAsync()
     {
+        _ = RefreshRuntimeModeAsync();
         try
         {
             var run = await syncCoordinator.RunScheduledAsync(syncLifetime.Token);
@@ -618,6 +897,13 @@ internal sealed class MainForm : Form
         return current.Environment == environment && currentInvoice == invoice;
     }
 
+    private bool CurrentCloudSettingsMatch(string mode, string baseUrl)
+    {
+        var current = repository.Settings.LoadOrCreate();
+        return current.CloudMode == mode
+            && string.Equals(current.CloudBaseUrl.Trim(), baseUrl, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string EnvironmentCompanyText(
         string environment,
         string invoice,
@@ -638,7 +924,9 @@ internal sealed class MainForm : Form
         {
             StopBackgroundSync();
             syncTimer.Dispose();
+            cloudHealthHttpClient.Dispose();
             apiToolTip.Dispose();
+            runtimeModeToolTip.Dispose();
             environmentToolTip.Dispose();
         }
         base.Dispose(disposing);

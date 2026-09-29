@@ -2,6 +2,8 @@ namespace CYInvoice.Core.Storage;
 
 public sealed class LocalRepository
 {
+    private readonly IdentityProviderRuntime identityRuntime;
+
     private LocalRepository(
         string dataDirectory,
         string cacheDirectory,
@@ -10,7 +12,9 @@ public sealed class LocalRepository
         SettingsStore settings,
         InvoiceStore invoices,
         BuyerNameStore buyerNames,
-        EmployeeStore employees)
+        EmployeeStore employees,
+        CloudEmployeeCacheStore cloudEmployees,
+        IdentityProviderRuntime identityRuntime)
     {
         DataDirectory = dataDirectory;
         CacheDirectory = cacheDirectory;
@@ -20,6 +24,8 @@ public sealed class LocalRepository
         Invoices = invoices;
         BuyerNames = buyerNames;
         Employees = employees;
+        CloudEmployees = cloudEmployees;
+        this.identityRuntime = identityRuntime;
     }
 
     public string DataDirectory { get; }
@@ -30,6 +36,42 @@ public sealed class LocalRepository
     public InvoiceStore Invoices { get; }
     public BuyerNameStore BuyerNames { get; }
     public EmployeeStore Employees { get; }
+    public CloudEmployeeCacheStore CloudEmployees { get; }
+    public IIdentityProvider IdentityProvider => identityRuntime.Current;
+
+    public bool UsesCloudEmployeeAuthority() =>
+        IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud;
+
+    public bool HasAuthorityEmployees() =>
+        IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud
+            ? CloudEmployees.LoadAll().Count != 0
+            : Employees.HasEmployees();
+
+    public IReadOnlyList<EmployeeAccount> LoadAuthorityEmployees() =>
+        IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud
+            ? CloudEmployees.LoadAll().Select(ToEmployeeAccount).ToArray()
+            : Employees.LoadAll();
+
+    public AppPrincipal? AuthenticatePrincipal(string employeeNo, string password) =>
+        IdentityProvider
+            .AuthenticateAsync(new IdentityAuthenticationRequest(employeeNo, password))
+            .GetAwaiter()
+            .GetResult();
+
+    public EmployeeAccount? AuthenticateEmployee(string employeeNo, string password)
+    {
+        var principal = AuthenticatePrincipal(employeeNo, password);
+        return principal?.ToEmployeeAccount();
+    }
+
+    private static EmployeeAccount ToEmployeeAccount(CloudEmployeeCachedAccount account) => new(
+        account.EmployeeNo,
+        account.Name,
+        account.Email,
+        account.Role,
+        account.Enabled,
+        account.SyncedUtc,
+        account.SyncedUtc);
 
     public static LocalRepository Open(string baseDirectory, ISecretProtector protector)
     {
@@ -48,6 +90,13 @@ public sealed class LocalRepository
         var invoices = new InvoiceStore(data, currentSettings.ProductionInvoice);
         var buyerNames = new BuyerNameStore(data);
         var employees = new EmployeeStore(data);
+        var cloudEmployees = new CloudEmployeeCacheStore(data, protector);
+        var identityRuntime = new IdentityProviderRuntime(
+            settings,
+            new LocalIdentityProvider(employees),
+            new BuiltInCloudIdentityProvider(
+                cloudEmployees,
+                new ConfiguredCloudEmployeeAuthoritySnapshotSource(settings)));
         invoices.LoadOrCreate();
         buyerNames.LoadOrCreate();
 
@@ -59,6 +108,8 @@ public sealed class LocalRepository
             settings,
             invoices,
             buyerNames,
-            employees);
+            employees,
+            cloudEmployees,
+            identityRuntime);
     }
 }

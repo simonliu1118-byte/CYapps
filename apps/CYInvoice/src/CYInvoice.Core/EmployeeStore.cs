@@ -9,9 +9,9 @@ public static class EmployeeRoles
 {
     public const string SuperAdmin = "SUPER_ADMIN";
     public const string Admin = "ADMIN";
-    public const string Employee = "EMPLOYEE";
+    public const string User = "USER";
 
-    public static bool IsValid(string role) => role is SuperAdmin or Admin or Employee;
+    public static bool IsValid(string role) => role is SuperAdmin or Admin or User;
     public static bool CanManageAccounts(string role) => role is SuperAdmin or Admin;
 }
 
@@ -166,15 +166,15 @@ public sealed class EmployeeStore
         string name,
         string email,
         string password,
-        string role = EmployeeRoles.Employee)
+        string role = EmployeeRoles.User)
     {
         actorEmployeeNo = NormalizeEmployeeNo(actorEmployeeNo);
         employeeNo = NormalizeEmployeeNo(employeeNo);
         name = NormalizeName(name);
         email = NormalizeEmail(email);
         RequirePassword(password);
-        if (role is not EmployeeRoles.Employee and not EmployeeRoles.Admin)
-            throw new InvalidOperationException("新增員工只能指定一般員工或管理員權限");
+        if (role is not EmployeeRoles.User and not EmployeeRoles.Admin)
+            throw new InvalidOperationException("新增員工只能指定一般使用者或管理員權限");
 
         var now = UtcNowText();
         var passwordHash = PasswordHash.Create(password);
@@ -246,8 +246,8 @@ public sealed class EmployeeStore
     {
         actorEmployeeNo = NormalizeEmployeeNo(actorEmployeeNo);
         targetEmployeeNo = NormalizeEmployeeNo(targetEmployeeNo);
-        if (role is not EmployeeRoles.Employee and not EmployeeRoles.Admin)
-            throw new InvalidOperationException("只能設定一般員工或管理員權限");
+        if (role is not EmployeeRoles.User and not EmployeeRoles.Admin)
+            throw new InvalidOperationException("只能設定一般使用者或管理員權限");
 
         lock (gate)
         {
@@ -509,7 +509,7 @@ public sealed class EmployeeStore
                 CHECK(length(employee_no) = 4 AND employee_no NOT GLOB '*[^0-9]*'),
                 CHECK(length(trim(name)) > 0),
                 CHECK(length(password_hash) > 0),
-                CHECK(role IN ('SUPER_ADMIN', 'ADMIN', 'EMPLOYEE')),
+                CHECK(role IN ('SUPER_ADMIN', 'ADMIN', 'USER')),
                 CHECK(enabled IN (0, 1)),
                 CHECK(role <> 'SUPER_ADMIN' OR enabled = 1),
                 CHECK((role = 'SUPER_ADMIN' AND length(recovery_hash) > 0) OR

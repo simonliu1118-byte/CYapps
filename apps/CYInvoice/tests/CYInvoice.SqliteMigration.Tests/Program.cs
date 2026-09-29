@@ -14,6 +14,7 @@ var tests = new (string Name, Action Run)[]
     ("super-admin recovery is one-time and secrets are hashed", EmployeeStoreTests.SuperAdminRecoveryIsOneTimeAndSecretsAreHashed),
     ("employee role rules protect super-admin and allow peer admin management", EmployeeStoreTests.RoleRulesProtectSuperAdminAndAllowAdminPeerManagement),
     ("employee identity constraints are enforced", EmployeeStoreTests.EmployeeIdentityConstraintsAreEnforced),
+    ("legacy employee and cloud cache role constraints migrate to USER", RoleVocabularyMigrationTests.LegacyEmployeeAndCloudCacheConstraintsMigrateToUser),
     ("legacy management password mechanism is absent", EmployeeStoreTests.SettingsModelHasNoLegacyManagementPasswordFields),
     ("production retention prunes all expired rows", RetentionTests.ProductionPrunesAllExpiredRows),
     ("test retention keeps today only", RetentionTests.TestEnvironmentKeepsTodayOnly),
