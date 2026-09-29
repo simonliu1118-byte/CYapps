@@ -45,8 +45,8 @@ const v06 = read('public/v06.js');
 const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
-assert.equal(version, '0.21.5');
-assert.equal(build, '10');
+assert.equal(version, '0.21.6');
+assert.equal(build, '0');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
@@ -224,4 +224,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 Build 10 adaptive UI regression tests passed.');
+console.log('V0.21.6 source baseline retains V0.21.5 Build 10 adaptive UI regression behavior.');
