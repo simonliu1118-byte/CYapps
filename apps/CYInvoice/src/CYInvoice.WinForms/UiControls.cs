@@ -58,10 +58,107 @@ internal sealed class NoFocusCueTabControl : TabControl
     }
 }
 
+internal sealed class EnterNavigationMessageFilter : IMessageFilter
+{
+    private const int WmKeyDown = 0x0100;
+    private const int VkReturn = 0x0D;
+
+    public bool PreFilterMessage(ref Message message)
+    {
+        if (message.Msg != WmKeyDown || message.WParam.ToInt32() != VkReturn) return false;
+        if ((Control.ModifierKeys & (Keys.Control | Keys.Alt)) != Keys.None) return false;
+
+        var form = Form.ActiveForm;
+        if (form is null || (!form.Modal && form.FormBorderStyle != FormBorderStyle.FixedDialog)) return false;
+
+        var focused = LogicalInput(FindFocusedControl(form));
+        if (focused is null || PreserveNativeEnter(focused)) return false;
+
+        var reverse = (Control.ModifierKeys & Keys.Shift) == Keys.Shift;
+        var inputs = EnumerateInputs(form).ToList();
+        var index = inputs.FindIndex(control => ReferenceEquals(control, focused));
+        if (index < 0) return false;
+
+        var nextIndex = reverse ? index - 1 : index + 1;
+        if (nextIndex >= 0 && nextIndex < inputs.Count)
+        {
+            var next = inputs[nextIndex];
+            next.Focus();
+            if (next is TextBoxBase textBox) textBox.SelectAll();
+            return true;
+        }
+
+        if (!reverse && form.AcceptButton is Button button && button.Visible && button.Enabled)
+        {
+            button.PerformClick();
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Control? FindFocusedControl(Control root)
+    {
+        Control current = root;
+        while (current is ContainerControl container && container.ActiveControl is { } active)
+            current = active;
+        return current == root ? null : current;
+    }
+
+    private static Control? LogicalInput(Control? focused)
+    {
+        if (focused is null) return null;
+        Control? logical = null;
+        for (var current = focused; current is not null && current is not Form; current = current.Parent)
+        {
+            if (current is DataGridView or InvoiceEntryControl or BuyerNameField) return null;
+            if (IsInput(current)) logical = current;
+        }
+        return logical;
+    }
+
+    private static IEnumerable<Control> EnumerateInputs(Control parent)
+    {
+        var children = parent.Controls.Cast<Control>()
+            .Where(control => control.Visible && control.Enabled)
+            .OrderBy(control => control.TabIndex)
+            .ThenBy(control => parent.Controls.GetChildIndex(control));
+
+        foreach (var child in children)
+        {
+            if (child is DataGridView or InvoiceEntryControl or BuyerNameField) continue;
+            if (IsInput(child) && child.TabStop && !PreserveNativeEnter(child))
+            {
+                yield return child;
+                continue;
+            }
+
+            if (!child.HasChildren) continue;
+            foreach (var nested in EnumerateInputs(child)) yield return nested;
+        }
+    }
+
+    private static bool IsInput(Control control) => control is TextBoxBase or ComboBox or DateTimePicker or UpDownBase;
+
+    private static bool PreserveNativeEnter(Control control)
+    {
+        if (control is TextBoxBase { Multiline: true }) return true;
+        return control is ComboBox { DroppedDown: true };
+    }
+}
+
 internal static class UiControls
 {
     private const int WmUpdateUiState = 0x0128;
     private static readonly IntPtr HideFocusState = new(0x00010001);
+    private static bool enterNavigationInstalled;
+
+    internal static void InstallGlobalEnterNavigation()
+    {
+        if (enterNavigationInstalled) return;
+        Application.AddMessageFilter(new EnterNavigationMessageFilter());
+        enterNavigationInstalled = true;
+    }
 
     internal static void HideFocusCue(Control control)
     {
