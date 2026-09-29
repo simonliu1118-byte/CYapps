@@ -16,7 +16,8 @@ CYCloud Identity（CYID）是志遠 Cloud App 共用的 Identity authority，負
 6. `docs/OTP_SECURITY.md` — OTP/security-policy contract。
 7. `docs/EMAIL_OTP_BOOTSTRAP.md` — first Workspace bootstrap 專用流程。
 8. `docs/DEVELOPMENT_DEPLOYMENT.md` — development deployment procedure。
-9. `TODO.md` — **唯一 current implementation status / next-work tracker**。
+9. `docs/consumers/CYACC_INTEGRATION_HANDOFF.md` — CYAccountingWeb 接入 CYID 的 consumer-specific implementation guide；內容由 canonical contract 衍生，不是新的 authority。
+10. `TODO.md` — **唯一 current implementation status / next-work tracker**。
 
 `migrations/` 與 current source 是 executable implementation evidence；已套用 migration 不重寫。
 
@@ -24,7 +25,7 @@ CYCloud Identity（CYID）是志遠 Cloud App 共用的 Identity authority，負
 
 - 不再在 active tree 維護 dated conversation handoff。需要追溯舊 checkpoint 時使用 Git history。
 - `TODO.md` 不重複保存永久規則；contract 文件也不維護第二份進度表。
-- 若 consumer integration 需要交接，交接內容由上述 canonical contract 產生，放到目標 consumer 工作線；不得建立新的 master handoff 取代 CYID contract。
+- Consumer integration handoff 必須由 canonical contract 衍生，並明確標示 canonical docs 優先；不得建立新的 master handoff 取代 CYID contract。CYACC handoff 現存於 `docs/consumers/CYACC_INTEGRATION_HANDOFF.md`，其用途是實作交接。
 - 舊 Identity Group／Group-derived role 文件只屬歷史實作，不得作 forward authority。
 
 ## Public repository boundary
