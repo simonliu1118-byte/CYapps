@@ -1,4 +1,4 @@
-/* V0.21.5 Build 9 - mobile month display control. Auth/CYID unchanged. */
+/* V0.21.5 Build 10 - compact mobile balance + direct month lock. Auth/CYID unchanged. */
 @media (max-width: 767px) {
   .topbar {
     border-bottom: 0 !important;
@@ -935,6 +935,164 @@
 
   .v0214-balance-row strong {
     font-size: 10.5px !important;
+  }
+
+  .v0215-mobile-balance-popover {
+    position: fixed;
+    z-index: 2600;
+    box-sizing: border-box;
+    width: 190px;
+    max-width: calc(100vw - 16px);
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 7px 8px;
+    border: 1px solid #d8e0e8;
+    border-radius: 9px;
+    background: #fff;
+    box-shadow: 0 10px 26px rgba(31, 44, 61, .17);
+  }
+
+  .v0215-mobile-balance-popover[hidden] {
+    display: none !important;
+  }
+
+  .v0215-mobile-balance-title {
+    margin: 0 0 4px;
+    color: #5f6d7c;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .v0215-mobile-balance-list {
+    display: grid;
+    gap: 0;
+  }
+
+  .v0215-mobile-balance-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+    padding: 2px 1px;
+    color: #344355;
+    font-size: 10.5px;
+  }
+
+  .v0215-mobile-balance-row span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .v0215-mobile-balance-row strong {
+    color: #243345;
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .v0215-mobile-balance-loading,
+  .v0215-mobile-balance-empty,
+  .v0215-mobile-balance-error {
+    padding: 5px 1px 2px;
+    color: #778495;
+    font-size: 10px;
+  }
+
+  .v0215-mobile-balance-error {
+    color: #a54b45;
+  }
+
+  .v0215-mobile-lock-dialog {
+    width: min(310px, calc(100vw - 28px)) !important;
+    max-width: none !important;
+    padding: 0 !important;
+    border: 1px solid #d8e0e8 !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+  }
+
+  .v0215-mobile-lock-dialog::backdrop {
+    background: rgba(30, 39, 51, .22);
+  }
+
+  .v0215-mobile-lock-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid #edf0f3;
+  }
+
+  .v0215-mobile-lock-head h2 {
+    margin: 0;
+    color: #2c3a4a;
+    font-size: 17px;
+  }
+
+  .v0215-mobile-lock-head p {
+    margin: 3px 0 0;
+    color: #718092;
+    font-size: 11px;
+  }
+
+  .v0215-mobile-lock-head .icon-button {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #667587;
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .v0215-mobile-lock-body {
+    display: grid;
+    gap: 6px;
+    padding: 12px 14px 8px;
+  }
+
+  .v0215-mobile-lock-body p {
+    margin: 0;
+    color: #344355;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .v0215-mobile-lock-note {
+    color: #718092 !important;
+    font-size: 10.5px !important;
+  }
+
+  .v0215-mobile-lock-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 8px 14px 12px;
+  }
+
+  .v0215-mobile-lock-actions button {
+    min-height: 36px;
+    height: 36px;
+    padding: 0 8px;
+    border-radius: 8px;
+    font-size: 11px;
+  }
+
+  .v0215-mobile-lock-message {
+    min-height: 0;
+    margin: -5px 14px 10px;
+    color: #2f7a4c;
+    font-size: 10px;
+  }
+
+  .v0215-mobile-lock-message.error {
+    color: #a54b45;
   }
 }
 
