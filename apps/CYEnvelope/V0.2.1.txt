@@ -1,6 +1,6 @@
 CYEnvelope V0.2.1（開發測試版，尚未正式發行）
 日期：2026/09/27
-BUILD：0
+BUILD：0（各 Build 記錄依序附於下方；目前為 Build 3，見 BUILD 檔）
 
 下載方式調整
 - 將 .NET 管理組件打包進 CYEnvelope.exe；保留必要原生元件 D3DCompiler_47_cor3.dll、e_sqlite3.dll、PenImc_cor3.dll、PresentationNative_cor3.dll、vcruntime140_cor3.dll、wpfgfx_cor3.dll。資料夾另外只有 VERSION 與 BUILD，沒有多語系資源目錄。
