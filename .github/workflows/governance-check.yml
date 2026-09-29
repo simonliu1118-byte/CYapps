@@ -193,7 +193,12 @@ jobs:
             consumer_standard_changed=0
             consumer_version_changed=0
             consumer_min_changed=0
+            consumer_min_existed=0
             consumer_changelog_changed=0
+
+            if git cat-file -e "origin/main:apps/CYCloudIdentity/CONSUMER_MIN_COMPATIBLE_VERSION" 2>/dev/null; then
+              consumer_min_existed=1
+            fi
 
             for path in "${changed[@]}"; do
               case "$path" in
