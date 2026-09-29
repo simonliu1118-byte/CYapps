@@ -4,8 +4,8 @@
 
 ## Current checkpoint — 2026-09-30
 
-- Current formal source baseline is **CYCloudIdentity 0.3.4 Build 0**；本 patch 建立 governed shared consumer standard / compatibility lifecycle，development runtime 仍是已部署的 **0.3.0 Build 0**，不因治理／文件調整自動重部署。
-- CY Web formal source baseline is **0.5.1 Build 0**；development runtime is **0.5.0 Build 0**。已接上 CYID 0.3 first-login Email verification、direct Module Access，以及 Customer/Item/Defect protected Worker API Phase 1。固定入口仍為 `https://admin.chihyuancm.com`。
+- Current formal source baseline is **CYCloudIdentity 0.3.4 Build 0**；本 patch 完成 CYACC 接入前治理／handoff consolidation，development runtime 仍是已部署的 **0.3.0 Build 0**，不因純治理／文件調整自動重部署。
+- CY Web formal source baseline is **0.5.2 Build 0**；development runtime is **0.5.0 Build 0**。已接上 CYID 0.3 first-login Email verification、direct Module Access，以及 Customer/Item/Defect protected Worker API Phase 1。固定入口仍為 `https://admin.chihyuancm.com`。
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
   - 只允許 CY Web core account application；
