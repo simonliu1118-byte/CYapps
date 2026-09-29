@@ -1,4 +1,4 @@
-/* V0.21.5 Build 8 - tablet auth recovery and mobile visual/toolbar fixes. */
+/* V0.21.5 Build 9 - mobile month display control. Auth/CYID unchanged. */
 @media (max-width: 767px) {
   .topbar {
     border-bottom: 0 !important;
@@ -343,15 +343,50 @@
   .ledger-month-tools.v0215-toolbar-ready > #ledgerPrevMonth { grid-column: 2 !important; }
   .ledger-month-tools.v0215-toolbar-ready > #ledgerMonthSlot {
     grid-column: 3 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
     width: 100% !important;
     min-width: 0 !important;
+    min-height: 34px !important;
+    height: 34px !important;
+    overflow: hidden !important;
+    border: 1px solid #dbe2e9 !important;
+    border-radius: 7px !important;
+    background: #fff !important;
   }
   .ledger-month-tools.v0215-toolbar-ready > #ledgerNextMonth { grid-column: 4 !important; }
   .ledger-month-tools.v0215-toolbar-ready > #mobileLedgerMoreButton { grid-column: 5 !important; }
 
   #ledgerMonthSlot > .month-picker {
+    position: absolute !important;
+    z-index: 2 !important;
+    inset: 0 !important;
+    display: block !important;
     width: 100% !important;
     min-width: 0 !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    background: transparent !important;
+    opacity: 1 !important;
+  }
+
+  #mobileLedgerMonthDisplay {
+    position: absolute !important;
+    z-index: 1 !important;
+    inset: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 6px !important;
+    color: #253546 !important;
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    pointer-events: none !important;
   }
 
   #ledgerDisplayMonth {
@@ -377,37 +412,41 @@
     font-weight: 650 !important;
   }
 
-  .ledger-month-tools .month-picker {
-    display: block !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    min-height: 34px !important;
-    height: 34px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-  }
-
   .ledger-month-tools .month-picker > span {
     display: none !important;
   }
 
   .ledger-month-tools input[type="month"] {
+    position: absolute !important;
+    z-index: 3 !important;
+    inset: 0 !important;
     box-sizing: border-box !important;
     width: 100% !important;
     min-width: 0 !important;
-    min-height: 34px !important;
-    height: 34px !important;
+    height: 100% !important;
+    min-height: 0 !important;
     margin: 0 !important;
-    padding: 0 4px !important;
-    border: 1px solid #dbe2e9 !important;
-    border-radius: 7px !important;
-    background: #fff !important;
-    color: #253546 !important;
-    font-size: 15px !important;
-    font-weight: 650 !important;
-    text-align: center !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: transparent !important;
+    opacity: 0.01 !important;
+    -webkit-appearance: auto !important;
+    appearance: auto !important;
+    font-size: 16px !important;
+    cursor: pointer !important;
+  }
+
+  .ledger-month-tools input[type="month"]::-webkit-calendar-picker-indicator {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
   }
 
   #ledgerDisplayMonth {

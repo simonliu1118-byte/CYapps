@@ -56,6 +56,7 @@ function setupV0215Build4Toolbar(attempt = 0) {
   // the slot leaves an extra grid child and breaks the five-column mobile toolbar.
   if (picker.parentElement !== slot) slot.append(picker);
   monthTools.append(balance, prev, slot, next, more);
+  setupV0215Build4MonthDisplay(slot);
   monthTools.classList.add('v0215-toolbar-ready');
 
   const displayMonth = document.querySelector('#ledgerDisplayMonth');
@@ -63,6 +64,35 @@ function setupV0215Build4Toolbar(attempt = 0) {
 
   const sheet = document.querySelector('#mobileLedgerToolsSheet');
   sheet?.querySelector('[data-mobile-ledger-action="opening"]')?.remove();
+}
+
+function setupV0215Build4MonthDisplay(slot) {
+  if (!slot || !els.monthFilter) return;
+
+  let display = slot.querySelector('#mobileLedgerMonthDisplay');
+  if (!display) {
+    display = document.createElement('span');
+    display.id = 'mobileLedgerMonthDisplay';
+    display.className = 'v0215-mobile-month-display';
+    display.setAttribute('aria-hidden', 'true');
+    slot.append(display);
+  }
+
+  els.monthFilter.setAttribute('aria-label', '選擇月份');
+  if (els.monthFilter.dataset.v0215MonthDisplayBound !== '1') {
+    els.monthFilter.dataset.v0215MonthDisplayBound = '1';
+    els.monthFilter.addEventListener('input', syncV0215Build4MonthDisplay);
+    els.monthFilter.addEventListener('change', syncV0215Build4MonthDisplay);
+  }
+  syncV0215Build4MonthDisplay();
+}
+
+function syncV0215Build4MonthDisplay() {
+  const display = document.querySelector('#mobileLedgerMonthDisplay');
+  const value = String(els.monthFilter?.value || '');
+  if (!display) return;
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  display.textContent = match ? `${Number(match[1])}年${Number(match[2])}月` : '選擇月份';
 }
 
 function setupV0215Build4Search() {
@@ -399,6 +429,7 @@ function restoreV0215Build4LedgerContext(context, highlightId) {
   if (context.month && els.monthFilter.value !== context.month) {
     els.monthFilter.value = context.month;
   }
+  syncV0215Build4MonthDisplay();
   const searchInput = document.querySelector('#ledgerSummarySearch');
   if (searchInput) searchInput.value = context.search || '';
 
