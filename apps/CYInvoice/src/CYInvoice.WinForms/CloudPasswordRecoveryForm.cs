@@ -5,10 +5,11 @@ namespace CYInvoice.WinForms;
 
 internal sealed class CloudPasswordRecoveryForm : Form
 {
-    private const int WindowWidth = 260;
-    private const int FirstStepHeight = 240;
+    private const int WindowWidth = 286;
+    private const int FirstStepHeight = 200;
     private const int SecondStepHeight = 280;
-    private const int ActionRowHeight = 84;
+    private const int FirstActionRowHeight = 44;
+    private const int SecondActionRowHeight = 84;
     private readonly LocalRepository repository;
     private readonly CloudEmployeeAccountClient accountClient;
     private readonly CloudEmployeeAuthorityClient authorityClient;
@@ -25,6 +26,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
     private readonly Button back = CompactButton("上一步", 72);
     private readonly Button reset = CompactButton("重設密碼", 88);
     private readonly Button cancel = CompactButton("取消", 72);
+    private readonly RowStyle actionRowStyle = new(SizeType.Absolute, FirstActionRowHeight);
     private CloudEmployeePasswordRecoveryChallenge? challenge;
     private readonly System.Windows.Forms.Timer countdown = new() { Interval = 1000 };
     private readonly Panel firstStep = new() { Dock = DockStyle.Fill };
@@ -56,7 +58,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
         newPassword.UseSystemPasswordChar = true;
         confirmPassword.UseSystemPasswordChar = true;
         otp.TextAlign = HorizontalAlignment.Center;
-        status.Text = "第一步：輸入員工編號與帳號已驗證的 Email。";
+        status.Text = "輸入員工編號與帳號已驗證的 Email。";
         BuildLayout();
         countdown.Tick += (_, _) => UpdateActions();
         UpdateActions();
@@ -74,7 +76,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, ActionRowHeight));
+        root.RowStyles.Add(actionRowStyle);
         root.Controls.Add(status, 0, 0);
 
         var firstFields = Fields(2);
@@ -150,7 +152,8 @@ internal sealed class CloudPasswordRecoveryForm : Form
         secondStep.Visible = false;
         firstStep.Visible = true;
         firstStep.BringToFront();
-        status.Text = "第一步：輸入員工編號與帳號已驗證的 Email。";
+        status.Text = "輸入員工編號與帳號已驗證的 Email。";
+        actionRowStyle.Height = FirstActionRowHeight;
         ClientSize = new Size(WindowWidth, FirstStepHeight);
         otp.Clear();
         AcceptButton = send;
@@ -195,6 +198,7 @@ internal sealed class CloudPasswordRecoveryForm : Form
             firstStep.Visible = false;
             secondStep.Visible = true;
             secondStep.BringToFront();
+            actionRowStyle.Height = SecondActionRowHeight;
             ClientSize = new Size(WindowWidth, SecondStepHeight);
             countdown.Start();
             status.Text = $"第二步：驗證碼已寄至 {challenge.MaskedEmail}，有效至 {challenge.ExpiresAt.ToLocalTime():HH:mm}。";
