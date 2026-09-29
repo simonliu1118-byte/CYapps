@@ -10,6 +10,9 @@ const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 const version = read('VERSION').trim();
 const build = read('BUILD').trim();
 const v03 = read('public/v03.js');
+const authJs = read('public/auth.js');
+const indexHtml = read('public/index.html');
+const workerApp = read('src/app.js');
 const build8Js = read('public/v021b8.js');
 const build9Css = read('public/v021b9.css');
 const build10Js = read('public/v021b10.js');
@@ -37,7 +40,7 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.4');
-assert.equal(build, '0');
+assert.equal(build, '1');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
@@ -59,6 +62,14 @@ assert.match(v03, /enterStep\(els\.summary,[\s\S]*?els\.amount\?\.focus\(\)/);
 assert.match(v03, /enterStep\(els\.amount,[\s\S]*?els\.form\.requestSubmit\(\)/);
 assert.match(v03, /cyFocusSummaryAfterSave[\s\S]*?els\.summary\.focus\(\)/);
 assert.match(keyboardJs, /if \(!window\.matchMedia\(CY_V0211_KEYBOARD_DESKTOP\)\.matches\) return;/);
+
+// Recovery: login verifies the HttpOnly session before reload and critical JS uses a fresh URL.
+assert.match(authJs, /sessionResponse = await fetch\('\/api\/auth\/me'/);
+assert.match(authJs, /credentials: 'same-origin'/);
+assert.match(authJs, /帳號密碼已通過，但登入狀態沒有保存/);
+assert.match(indexHtml, /auth\.js\?v=0214b1-recovery/);
+assert.match(indexHtml, /v021b11\.js\?v=0214b1-recovery/);
+assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
 // Breakpoint ownership: Build 10 phone, Build 9 Tablet, manager/date patch work Desktop only.
 assert.match(build10Css, /@media \(max-width: 767px\)/);
@@ -106,4 +117,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.4 adaptive UI regression tests passed.');
+console.log('V0.21.4 Build 1 adaptive UI regression tests passed.');

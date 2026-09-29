@@ -48,7 +48,7 @@ const appV19 = read('src/app-v19.js');
 const v11Tools = read('src/v11-tools.js');
 
 assert.equal(version, '0.21.4');
-assert.equal(build, '0');
+assert.equal(build, '1');
 assert.match(build11Js, /ensureV21Build12Script\(\)/);
 assert.match(build11Js, /ensureV21Build13Script\(\)/);
 assert.match(build11Js, /ensureV21Build14Script\(\)/);
@@ -189,4 +189,4 @@ assert.match(v013, /button\.setAttribute\('aria-busy', 'true'\)/);
 assert.match(v021, /if \(account\.textContent !== nextText\) account\.textContent = nextText;/);
 assert.match(v021, /if \(empty && empty\.textContent !== '本次尚無輸入紀錄。'\) empty\.textContent = '本次尚無輸入紀錄。';/);
 
-console.log('V0.21.4 desktop regression tests passed.');
+console.log('V0.21.4 Build 1 desktop regression tests passed.');
