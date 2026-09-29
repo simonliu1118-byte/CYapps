@@ -2,9 +2,9 @@
 
 > **Purpose:** CYAccountingWeb-specific migration handoff only.
 >
-> **Shared standard:** `../CONSUMER_INTEGRATION_STANDARD.md`
+> **Shared standard:** `../CONSUMER_INTEGRATION_STANDARD.md` — Consumer Contract `1.0.1` (minimum compatible `1.0.0`).
 >
-> **Provider source baseline:** CYID 0.3.x.
+> **Provider source baseline:** CYID 0.3.3 source/docs; development runtime remains CYID 0.3.0 until a runtime-changing provider deployment.
 >
 > If this handoff conflicts with the shared standard or CYID canonical contracts, the canonical documents win.
 
@@ -12,7 +12,7 @@ This file intentionally does **not** restate shared Role, Session, App Access, f
 
 ## 1. Current CYACC baseline
 
-This migration map was checked against CYAccountingWeb V0.21.5 Build 8 on 2026-09-30.
+This migration map was re-checked against CYAccountingWeb V0.21.5 Build 10 on 2026-09-30. Builds 9–10 changed Mobile presentation/tools and did not change the legacy Identity implementation described below.
 
 CYACC already has the useful high-level Cloudflare shape:
 
@@ -119,7 +119,22 @@ During CYID migration:
 
 This exception changes browser transport presentation only; CYID remains the Session authority.
 
-## 7. Deployment-template delta
+## 7. Provider Application registration prerequisite
+
+Before the **first end-to-end CYACC login/App Access acceptance**, the CYID workstream must prove that:
+
+1. a registered CYACC Application exists in CYID `applications`;
+2. that Application is enabled for the target Workspace in `workspace_applications`;
+3. the development CYACC deployment receives that registered Application ID and Workspace ID;
+4. eligible Employee App Access is then managed through CYID authority.
+
+The current CYID schema/runtime supports generic Application registry and direct App Access, but post-bootstrap Application registration is a **provider operational prerequisite** and must not be emulated by CYAccountingWeb writing CYID D1 directly.
+
+If the development Workspace does not already contain CYACC, complete the governed provider-side registration/provisioning step in the CYID workstream before attempting real login. Do not hard-code actual Workspace/Application IDs into Public source.
+
+This prerequisite does **not** block CYACC from implementing its provider adapter, login/resolve/logout/recovery code and deployment placeholders in development.
+
+## 8. Deployment-template delta
 
 CYACC already declares an `IDENTITY` Service Binding.
 
@@ -129,7 +144,7 @@ The binding target must be changed from the legacy CYInvoice Cloud identity prov
 
 Do not commit resolved provider service names, Workspace IDs or registered Application IDs to Public source.
 
-## 8. Scope that stays untouched
+## 9. Scope that stays untouched
 
 Identity migration must not alter as a side effect:
 
@@ -143,23 +158,24 @@ Identity migration must not alter as a side effect:
 
 Identity cutover and accounting behavior are separate acceptance dimensions.
 
-## 9. CYACC implementation sequence
+## 10. CYACC implementation sequence
 
 1. read current `../CONSUMER_INTEGRATION_STANDARD.md` and consumer contract changelog;
-2. when CYID integration becomes active, add CYACC `CYID_CONSUMER_VERSION` for the contract revision being implemented;
+2. confirm CYACC `CYID_CONSUMER_VERSION=1.0.1` is inside the current provider support window;
 3. add/adapt a provider-neutral Identity adapter inside CYACC;
 4. render development runtime Application/Workspace IDs from deployment environment;
 5. replace legacy login with CYID permanent-password login;
 6. replace local `/api/auth/me` authority with CYID Session resolve;
 7. replace local-only logout with provider logout + cookie cleanup;
 8. replace legacy password reset with CYID recovery;
-9. prove the provider path in development;
-10. retire `web_sessions` via forward migration;
-11. retain CYACC business authorization locally;
-12. run CYACC Desktop/Tablet/Mobile acceptance;
-13. production cutover only after explicit approval.
+9. before first end-to-end login, prove/provision CYACC Application registry + Workspace enablement on the CYID provider side;
+10. prove the provider path in development;
+11. retire `web_sessions` via forward migration;
+12. retain CYACC business authorization locally;
+13. run CYACC Desktop/Tablet/Mobile acceptance;
+14. production cutover only after explicit approval.
 
-## 10. CYACC-specific acceptance
+## 11. CYACC-specific acceptance
 
 In addition to the shared acceptance matrix, CYACC must prove:
 
@@ -169,22 +185,23 @@ In addition to the shared acceptance matrix, CYACC must prove:
 - legacy local `web_sessions` no longer authorizes after cutover;
 - accounting CRUD/import/export/backup behavior is unchanged by Identity migration.
 
-## 11. Current known acceptance gap
+## 12. Current known acceptance gap
 
 The controlled real new-Employee Email/browser lifecycle is temporarily deferred by current test conditions.
 
 That gap does not reopen the contract. CYACC development integration may continue, but final production acceptance still requires the shared lifecycle evidence defined by CYID.
 
-## 12. Canonical references
+## 13. Canonical references
 
 Read in this order:
 
 1. `../../PROJECT_RULES.md`
-2. `../CONSUMER_INTEGRATION_STANDARD.md`
-3. `../CONSUMER_CONTRACT_CHANGELOG.md`
-4. `../ROLE_AND_ACCESS_MODEL.md`
-5. `../AUTH_CONTRACT.md`
-6. `../ARCHITECTURE.md`
-7. this handoff.
+2. `../../CYAccountingWeb/CYID_CONSUMER_VERSION`
+3. `../CONSUMER_INTEGRATION_STANDARD.md`
+4. `../CONSUMER_CONTRACT_CHANGELOG.md`
+5. `../ROLE_AND_ACCESS_MODEL.md`
+6. `../AUTH_CONTRACT.md`
+7. `../ARCHITECTURE.md`
+8. this handoff.
 
 This handoff is intentionally app-specific and must remain smaller than the shared standard.
