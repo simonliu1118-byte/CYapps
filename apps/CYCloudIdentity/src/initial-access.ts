@@ -23,6 +23,7 @@ import type { Env, IdentityPrincipal, JsonValue } from "./types";
 const INITIAL_PASSWORD_LENGTH = 8;
 const INITIAL_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 const FIRST_LOGIN_TICKET_TTL_MS = 10 * 60 * 1000;
+const INITIAL_PASSWORD_TTL_MS = 24 * 60 * 60 * 1000;
 
 type ManagedEmployeeRow = {
   employee_id: string;
@@ -50,7 +51,9 @@ type InitialCredentialRow = {
   exchange_token_digest: string | null;
   exchange_expires_at: string | null;
   issued_at: string;
+  expires_at: string;
   sent_at: string | null;
+  verified_at: string | null;
   revision: number;
 };
 
@@ -248,9 +251,13 @@ async function settleEmailBudget(
   }
 }
 
-async function issueInitialCredential(env: Env, employee: ManagedEmployeeRow): Promise<void> {
+async function issueInitialCredential(
+  env: Env,
+  employee: ManagedEmployeeRow,
+  options: { bypassCooldown?: boolean } = {},
+): Promise<{ expiresAt: string }> {
   const policy = await loadWorkspaceSecurityPolicy(env, employee.workspace_id);
-  if (employee.initial_sent_at) {
+  if (!options.bypassCooldown && employee.initial_sent_at) {
     const nextAllowed = new Date(employee.initial_sent_at).getTime() + policy.otpResendCooldownSeconds * 1000;
     if (Number.isFinite(nextAllowed) && nextAllowed > Date.now()) throw new Error("OTP_RESEND_COOLDOWN");
   }
@@ -258,19 +265,26 @@ async function issueInitialCredential(env: Env, employee: ManagedEmployeeRow): P
   const password = createInitialPassword();
   const verifier = await createCredentialVerifier(password);
   const now = new Date();
-  await env.DB.prepare(
+  const expiresAt = new Date(now.getTime() + INITIAL_PASSWORD_TTL_MS).toISOString();
+  const stored = await env.DB.prepare(
     `INSERT INTO employee_initial_credentials(
-       employee_id, algorithm, verifier, exchange_token_digest, exchange_expires_at, issued_at, sent_at, revision
-     ) VALUES(?1, ?2, ?3, NULL, NULL, ?4, NULL, 1)
+       employee_id, algorithm, verifier, exchange_token_digest, exchange_expires_at,
+       issued_at, expires_at, sent_at, verified_at, revision
+     ) VALUES(?1, ?2, ?3, NULL, NULL, ?4, ?5, NULL, NULL, 1)
      ON CONFLICT(employee_id) DO UPDATE SET
        algorithm = excluded.algorithm,
        verifier = excluded.verifier,
        exchange_token_digest = NULL,
        exchange_expires_at = NULL,
        issued_at = excluded.issued_at,
+       expires_at = excluded.expires_at,
        sent_at = NULL,
-       revision = employee_initial_credentials.revision + 1`
-  ).bind(employee.employee_id, CURRENT_CREDENTIAL_ALGORITHM, verifier, now.toISOString()).run();
+       verified_at = NULL,
+       revision = employee_initial_credentials.revision + 1
+     RETURNING revision`
+  ).bind(employee.employee_id, CURRENT_CREDENTIAL_ALGORITHM, verifier, now.toISOString(), expiresAt)
+   .first<{ revision: number }>();
+  if (!stored) throw new Error("INITIAL_CREDENTIAL_WRITE_FAILED");
 
   const reservation = await reserveEmailBudget(env, employee.workspace_id, now);
   let sent = false;
@@ -282,18 +296,30 @@ async function issueInitialCredential(env: Env, employee: ManagedEmployeeRow): P
         "您的 CY Web 帳號已建立。",
         "",
         `帳號：${employee.employee_no}`,
-        `一次性預設密碼：${password}`,
+        `一次性首次登入密碼：${password}`,
         "",
-        "請前往 CY Web，使用上述帳號與預設密碼登入。",
-        "第一次登入後系統會要求您設定新的正式密碼；完成後即完成 Email 驗證與帳號啟用。",
+        "此密碼僅可使用一次，並於 24 小時後失效。",
+        "請前往 CY Web，使用上述帳號與首次登入密碼登入。",
+        "登入後請在 10 分鐘內設定新的正式密碼。",
+        "設定完成後系統會回到登入頁，請使用新密碼重新登入。",
         "",
+        "若首次登入密碼或驗證流程已逾期，請聯絡有權限的管理員重寄驗證 Email。",
         "若您未預期收到此信，請聯絡系統管理員。",
       ].join("\n"),
     });
     sent = true;
     await env.DB.prepare(
-      `UPDATE employee_initial_credentials SET sent_at = ?2 WHERE employee_id = ?1`
-    ).bind(employee.employee_id, new Date().toISOString()).run();
+      `UPDATE employee_initial_credentials
+          SET sent_at = ?3
+        WHERE employee_id = ?1 AND revision = ?2 AND sent_at IS NULL`
+    ).bind(employee.employee_id, stored.revision, new Date().toISOString()).run();
+    return { expiresAt };
+  } catch (error) {
+    await env.DB.prepare(
+      `DELETE FROM employee_initial_credentials
+        WHERE employee_id = ?1 AND revision = ?2 AND sent_at IS NULL`
+    ).bind(employee.employee_id, stored.revision).run();
+    throw error;
   } finally {
     await settleEmailBudget(env, employee.workspace_id, reservation, sent);
   }
@@ -349,8 +375,8 @@ export async function handleCreateEmployeeWithInitialPassword(request: Request, 
   if (!created) throw new Error("EMPLOYEE_CREATE_READBACK_FAILED");
   let activationDelivery: JsonValue;
   try {
-    await issueInitialCredential(env, created);
-    activationDelivery = { sent: true };
+    const issued = await issueInitialCredential(env, created);
+    activationDelivery = { sent: true, expiresAt: issued.expiresAt };
     await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: employeeId, eventType: "employee_activation_email_sent", detail: { method: "initial_password" } });
   } catch (error) {
     const errorCode = deliveryCode(error);
@@ -373,9 +399,9 @@ export async function handleResendInitialEmailVerification(request: Request, env
   if (!actorCanManage(actor, employee) || targetRole(employee) === "SUPER_ADMIN") return json(env, requestId, 403, { error: { code: "EMPLOYEE_MANAGEMENT_NOT_ALLOWED", message: "This Employee cannot be managed by the current administrator." } });
   if (employee.activated_at || employee.credential_present !== 0) return json(env, requestId, 409, { error: { code: "EMPLOYEE_ALREADY_ACTIVATED", message: "This Employee has already completed first activation." } });
   try {
-    await issueInitialCredential(env, employee);
+    const issued = await issueInitialCredential(env, employee);
     await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: employee.employee_id, eventType: "employee_activation_email_resent", detail: { method: "initial_password" } });
-    return json(env, requestId, 202, { activationDelivery: { sent: true } });
+    return json(env, requestId, 202, { activationDelivery: { sent: true, expiresAt: issued.expiresAt } });
   } catch (error) {
     const code = deliveryCode(error);
     return json(env, requestId, deliveryStatus(code), { error: { code, message: "Email verification could not be sent." } });
@@ -430,8 +456,12 @@ export async function handleEmployeeUpdateWithInitialPassword(request: Request, 
   if (identityChanged) {
     const refreshed = await managedEmployee(env, actor.workspaceId, existing.employee_id);
     if (refreshed) {
-      try { await issueInitialCredential(env, refreshed); activationDelivery = { sent: true }; }
-      catch (error) { activationDelivery = { sent: false, errorCode: deliveryCode(error) }; }
+      try {
+        const issued = await issueInitialCredential(env, refreshed, { bypassCooldown: true });
+        activationDelivery = { sent: true, expiresAt: issued.expiresAt };
+      } catch (error) {
+        activationDelivery = { sent: false, errorCode: deliveryCode(error) };
+      }
     }
   }
   return json(env, requestId, 200, {
@@ -455,21 +485,37 @@ export async function handleLoginWithInitialPassword(request: Request, env: Env,
     return json(env, requestId, 401, { error: { code: "AUTHENTICATION_FAILED", message: "Authentication failed." } });
   }
   const initial = await env.DB.prepare(
-    `SELECT employee_id, algorithm, verifier, exchange_token_digest, exchange_expires_at, issued_at, sent_at, revision
+    `SELECT employee_id, algorithm, verifier, exchange_token_digest, exchange_expires_at,
+            issued_at, expires_at, sent_at, verified_at, revision
        FROM employee_initial_credentials WHERE employee_id = ?1 LIMIT 1`
   ).bind(employee.employee_id).first<InitialCredentialRow>();
-  if (!initial || !await verifyCredential(password, initial.algorithm, initial.verifier)) {
+  if (!initial || initial.sent_at === null || initial.verified_at !== null
+      || !await verifyCredential(password, initial.algorithm, initial.verifier)) {
     return json(env, requestId, 401, { error: { code: "AUTHENTICATION_FAILED", message: "Authentication failed." } });
+  }
+  const initialExpiresAt = new Date(initial.expires_at).getTime();
+  if (!Number.isFinite(initialExpiresAt) || initialExpiresAt <= Date.now()) {
+    return json(env, requestId, 401, {
+      error: { code: "FIRST_LOGIN_PASSWORD_EXPIRED", message: "Email verification has expired. Ask an authorized administrator to resend the verification Email." },
+    });
   }
 
   const token = createFirstLoginToken();
   const digest = await sha256Hex(token);
-  const expiresAt = new Date(Date.now() + FIRST_LOGIN_TICKET_TTL_MS).toISOString();
-  await env.DB.prepare(
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + FIRST_LOGIN_TICKET_TTL_MS).toISOString();
+  const consumed = await env.DB.prepare(
     `UPDATE employee_initial_credentials
-        SET exchange_token_digest = ?2, exchange_expires_at = ?3, revision = revision + 1
-      WHERE employee_id = ?1`
-  ).bind(employee.employee_id, digest, expiresAt).run();
+        SET exchange_token_digest = ?2, exchange_expires_at = ?3, verified_at = ?4,
+            revision = revision + 1
+      WHERE employee_id = ?1 AND revision = ?5 AND verified_at IS NULL
+        AND sent_at IS NOT NULL AND expires_at > ?4
+      RETURNING revision`
+  ).bind(employee.employee_id, digest, expiresAt, now.toISOString(), initial.revision)
+   .first<{ revision: number }>();
+  if (!consumed) {
+    return json(env, requestId, 401, { error: { code: "AUTHENTICATION_FAILED", message: "Authentication failed." } });
+  }
   await audit(env, { workspaceId, targetEmployeeId: employee.employee_id, eventType: "employee_initial_password_verified" });
   return json(env, requestId, 200, {
     passwordChangeRequired: true,
@@ -531,10 +577,9 @@ export async function handleCompleteFirstLogin(request: Request, env: Env, reque
     return json(env, requestId, 409, { error: { code: "FIRST_LOGIN_CONFLICT", message: "First login could not be completed." } });
   }
 
-  const loginRequest = new Request("https://identity.internal/v1/identity/login", {
-    method: "POST",
-    headers: request.headers,
-    body: JSON.stringify({ workspaceId, applicationId, employeeNo: row.employee_no, password }),
+  return json(env, requestId, 200, {
+    emailVerified: true,
+    passwordChanged: true,
+    reloginRequired: true,
   });
-  return handleRegularLogin(loginRequest, env, requestId);
 }
