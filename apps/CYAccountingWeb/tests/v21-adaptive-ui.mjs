@@ -42,13 +42,13 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '1');
+assert.equal(build, '2');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0212\.js'/);
 assert.match(build11Js, /ensureV0215Stylesheet\(\)/);
-assert.match(build11Js, /link\.href = '\/v0215\.css'/);
+assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b2'/);
 assert.match(build12Js, /CY_V21_BUILD12_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build13Js, /CY_V21_BUILD13_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build14Js, /CY_V21_BUILD14_DESKTOP = '\(min-width: 1024px\)'/);
@@ -75,11 +75,16 @@ assert.match(indexHtml, /auth\.js\?v=0214b1-recovery/);
 assert.match(indexHtml, /v021b11\.js\?v=0214b1-recovery/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
-// V0.21.5 Build 1 mobile refinement is render/CSS based and introduces no V0.21.5 observer.
+// V0.21.5 Build 2 keeps one task per entry row and fully resets legacy ledger-card row placement.
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
-assert.match(patch5Css, /"account date"[\s\S]*?"category favorite"[\s\S]*?"summary quicksummary"[\s\S]*?"amount save"/);
+assert.match(patch5Css, /grid-template-areas:[\s\S]*?"entry-head"[\s\S]*?"account"[\s\S]*?"date"[\s\S]*?"category"[\s\S]*?"favorite"[\s\S]*?"summary"[\s\S]*?"quicksummary"[\s\S]*?"amount"[\s\S]*?"save"/);
+assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?border:\s*2px solid #73b889/);
+assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?border:\s*2px solid #d48780/);
+assert.match(patch5Css, /height:\s*calc\(100dvh - 120px\)/);
+assert.match(patch5Css, /overflow:\s*hidden !important/);
 assert.match(patch5Css, /input\[type="date"\][\s\S]*?-webkit-appearance:\s*auto/);
-assert.match(patch5Css, /tr\.ledger-row:not\(\.inline-editing\)/);
+assert.match(patch5Css, /tr\.ledger-row:not\(\.inline-editing\)[\s\S]*?grid-template-rows:\s*38px/);
+assert.match(patch5Css, /tr\.ledger-row:not\(\.inline-editing\) > td[\s\S]*?grid-row:\s*1 !important/);
 assert.match(v06, /splitLedgerAccountName/);
 assert.match(v06, /ledger-date-mobile/);
 assert.match(v06, /ledger-account-mobile/);
@@ -133,4 +138,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 Build 1 adaptive UI regression tests passed.');
+console.log('V0.21.5 Build 2 adaptive UI regression tests passed.');
