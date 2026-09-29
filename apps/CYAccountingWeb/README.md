@@ -4,7 +4,6 @@
 
 > Current formal baseline: **V0.21.5 Build 10**（2026-09-30）
 >
-> Current continuity handoff: [`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)
 
 ## 專案定位
 
@@ -69,29 +68,38 @@ Domain namespace 的跨 App 規劃仍以 `chihyuan-web/docs/DOMAIN_STRATEGY.md` 
 
 ## 帳號與 Identity 邊界
 
-目前 CYAccountingWeb 使用的共用員工帳號權威仍暫由 **CYInvoice Cloud** 提供，但 CYAccountingWeb **不直接讀取 CYInvoice D1**。
+CYAccountingWeb 已正式採用 **CYCloud Identity（CYID）Consumer Contract 1.0.1** 作 shared Identity contract；canonical source 位於同 repository 的 `apps/CYCloudIdentity/`。
 
-目前流程：
+目前 production/development runtime 在 migration cutover 前仍暫時執行 legacy CYInvoice Cloud Web Auth + CYAccountingWeb local `web_sessions`，這只是**待替換的現況**，不再是未來架構 authority。
+
+CYID migration 目標：
 
 ```text
-CYAccountingWeb
-  ↓ IDENTITY Service Binding
-CYInvoice Cloud Web Auth contract
+Browser
   ↓
-回傳 employee identity / role / credential metadata
+CYAccountingWeb Worker
+  ↓ private IDENTITY Service Binding
+CYCloud Identity
   ↓
-CYAccountingWeb 自己的 D1 建立本系統 web session
+permanent-password login / provider Session / resolve / logout / recovery
 ```
 
-跨 App 的 Identity / SSO 正在由 **CY-WEB workstream** 逐步規劃抽離與共用化。涉及下列底層項目時，不在 CYAccountingWeb 單獨決定：
+Shared Identity 的共同規格只讀：
 
-- Identity / SSO authority；
-- 跨 App 帳號、角色、App access contract；
-- 跨 App D1 / database ownership；
-- Service Binding 與 shared Worker；
-- shared Backup Service 與 app-scoped dataset routing。
+- `../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`
+- `../CYCloudIdentity/docs/CONSUMER_CONTRACT_CHANGELOG.md`
+- `../CYCloudIdentity/docs/AUTH_CONTRACT.md`
+- `../CYCloudIdentity/docs/ROLE_AND_ACCESS_MODEL.md`
 
-這些項目實作前必須先同步 CY-WEB / CYCloudIdentity 最新決策。CYAccountingWeb 的帳務 D1 仍保持獨立，不因共用帳號而合併資料庫。
+CYACC-specific migration 只讀：
+
+- `../CYCloudIdentity/docs/consumers/CYACC_INTEGRATION_HANDOFF.md`
+
+CYAccountingWeb 以本目錄 `CYID_CONSUMER_VERSION` 宣告採用 revision。Shared Role／Session／Application Access／first-login／Recovery 語意不得在本 App 自行分叉；會計資料、會計 module/domain authorization、backup dataset 與帳務 D1 仍保持 CYAccountingWeb-owned。
+
+第一次 end-to-end CYID login acceptance 前，CYID provider 必須確認／建立 CYACC Application registry + Workspace enablement，再由 Deployment Environment 注入 CYACC Application ID／Workspace ID。CYAccountingWeb 不直接修改 CYID D1。
+
+Production Identity cutover 仍需使用者明確批准。
 
 ## 已完成核心功能
 
@@ -211,7 +219,7 @@ Phase D 才會切成：R2 每日、GCS 每週三／週日 cross-cloud DR replica
 - Desktop 與 Mobile/Tablet presentation 分層維護，Desktop 改版不得反向覆寫 `<1024px` Adaptive UI；
 - Desktop、Tablet、Mobile 仍需持續以真實裝置／尺寸做視覺 acceptance；自動測試只驗證 presentation boundary 與結構，不取代人工畫面驗收。
 
-重要 Desktop interaction / layout 決策已集中記錄於 [`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)，接手時不要從舊 Build 對話逐項重播。
+Desktop／Tablet／Mobile current status 以本 README、`TODO.md`、目前 `main` source/tests 與最新驗收證據為準；dated conversation handoff 已退役，歷史需要時查 Git history。
 
 CYAccountingWeb 是 Web project，**不自動套用 Windows Desktop Visual Guide 的 WinForms 尺寸／元件規則**。
 
@@ -231,8 +239,8 @@ npm run dev
 - `PROJECT_RULES.md`：CYAccountingWeb 專案補充／永久規則。
 - `REPOSITORY_RULES.md`、`REPO_POLICY.md`：repository 共通治理與 Public repo 安全規則。
 - `TODO.md`：目前完成狀態、待辦與未來方向，不是永久規則。
-- `BACKUP_ARCHITECTURE_HANDOFF.md`：目前 Tiered Backup migration / acceptance handoff。
-- `HANDOFF_2026-09-29.md`：Conversation / workspace continuity note，不是永久規則。
+- `BACKUP_ARCHITECTURE_HANDOFF.md`：Tiered Backup 專題 migration / acceptance handoff；不定義 Identity contract。
+- `../CYCloudIdentity/docs/consumers/CYACC_INTEGRATION_HANDOFF.md`：CYID migration 的 CYACC-specific handoff。
 - `README.md`：專案入口與現況摘要。
 
 若文件描述與實際程式版本不一致，先讀目前 `main`、`VERSION` / `BUILD`、migrations、source 與最新 Actions，再更新狀態文件；不得只依舊 README 或舊 handoff 直接修改 production。
