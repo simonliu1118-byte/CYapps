@@ -24,6 +24,7 @@ internal static class Program
         try
         {
             ApplicationConfiguration.Initialize();
+            UiControls.InstallGlobalEnterNavigation();
             if (smokeTest)
             {
                 RunStartupSmokeTest();
