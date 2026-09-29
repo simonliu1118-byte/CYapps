@@ -1,4 +1,4 @@
-/* V0.21.5 Build 7 - mobile toolbar/clear-cancel and visual correction. */
+/* V0.21.5 Build 8 - tablet auth recovery and mobile visual/toolbar fixes. */
 @media (max-width: 767px) {
   .topbar {
     border-bottom: 0 !important;
@@ -62,6 +62,18 @@
   .entry-card > .section-title {
     grid-area: entry-head !important;
     margin: 0 0 2px !important;
+    background: transparent !important;
+  }
+
+  .entry-card > .section-title .title-with-badge,
+  .entry-kind-switch-field {
+    background: transparent !important;
+  }
+
+  .entry-kind-switch {
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    clip-path: inset(0 round 10px) !important;
   }
 
   #transactionForm,
@@ -325,6 +337,25 @@
 
   .ledger-month-tools.v0215-toolbar-ready {
     grid-template-columns: 48px 32px minmax(0, 1fr) 32px 48px !important;
+  }
+
+  .ledger-month-tools.v0215-toolbar-ready > #mobileLedgerBalanceButton { grid-column: 1 !important; }
+  .ledger-month-tools.v0215-toolbar-ready > #ledgerPrevMonth { grid-column: 2 !important; }
+  .ledger-month-tools.v0215-toolbar-ready > #ledgerMonthSlot {
+    grid-column: 3 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .ledger-month-tools.v0215-toolbar-ready > #ledgerNextMonth { grid-column: 4 !important; }
+  .ledger-month-tools.v0215-toolbar-ready > #mobileLedgerMoreButton { grid-column: 5 !important; }
+
+  #ledgerMonthSlot > .month-picker {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  #ledgerDisplayMonth {
+    display: none !important;
   }
 
   .ledger-month-tools button {
