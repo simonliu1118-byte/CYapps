@@ -14,7 +14,7 @@ const REQUIRED = {
   CF_IDENTITY_SERVICE: '__CF_IDENTITY_SERVICE__',
   CF_R2_BACKUP_BUCKET: '__CF_R2_BACKUP_BUCKET__',
   CF_BACKUP_TOPOLOGY: '__CF_BACKUP_TOPOLOGY__',
-  CF_CUSTOM_DOMAIN: '__CF_CUSTOM_DOMAIN__'
+  CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: '__CF_CUSTOM_DOMAIN__'
 };
 
 function requireValue(env, name) {
@@ -36,7 +36,9 @@ function validateValues(values) {
     throw new Error('CF_BACKUP_TOPOLOGY must be legacy_gcs or parallel_dual_provider.');
   }
   const hostname = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
-  if (!hostname.test(values.CF_CUSTOM_DOMAIN)) throw new Error('CF_CUSTOM_DOMAIN must be a valid hostname.');
+  if (!hostname.test(values.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN)) {
+    throw new Error('CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN must be a valid hostname.');
+  }
 }
 
 function jsonFragment(value) {
