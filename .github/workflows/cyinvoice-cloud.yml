@@ -300,6 +300,10 @@ jobs:
             throw "Cloud foundation engineering artifact is missing CYInvoice.exe"
           }
 
+      - name: Scan cloud foundation engineering package
+        working-directory: .
+        run: python .github/scripts/scan-public-package.py apps/CYInvoice/dist/cloud-foundation-artifact
+
       - name: Upload cloud foundation engineering package
         uses: actions/upload-artifact@v7
         with:
