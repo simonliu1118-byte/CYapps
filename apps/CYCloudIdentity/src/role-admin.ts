@@ -87,7 +87,8 @@ export async function handleRoleAccessSnapshot(
       `SELECT wa.application_id,
               a.display_name,
               a.status AS application_status,
-              wa.enabled
+              wa.enabled,
+              wa.compatibility_role_mode
          FROM workspace_applications wa
          JOIN applications a ON a.application_id = wa.application_id
         WHERE wa.workspace_id = ?1
@@ -146,6 +147,7 @@ export async function handleRoleAccessSnapshot(
       display_name: string;
       application_status: string;
       enabled: number;
+      compatibility_role_mode: "USER_ADMIN" | null;
     };
     return {
       ...row,
