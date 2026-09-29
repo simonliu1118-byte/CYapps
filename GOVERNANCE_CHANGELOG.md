@@ -1,5 +1,13 @@
 # CYApps Governance Changelog
 
+## 2.3.21 — 2026/09/30
+
+- CYAccountingWeb 正式進入 CYID development integration 準備階段：`PROJECT_RULES.md` 採用同 repo canonical CYID Consumer Integration Standard，新增 `CYID_CONSUMER_VERSION=1.0.1`，不得再維護 app-local shared Role／Session／App Access／Recovery 語意。
+- CYAccountingWeb dated `HANDOFF_2026-09-29.md` 從 active tree 退役；README/TODO 改以 CYID canonical standard + `docs/consumers/CYACC_INTEGRATION_HANDOFF.md` 作 Identity 接入來源，歷史 continuity 改由 Git history 追溯。
+- CYACC-specific handoff 已重新核對 V0.21.5 Build 10 現況，保留 Build 8 起 Tablet Safari `SameSite=Lax + Expires + navigation-safe` 相容性，並新增第一次 end-to-end login 前的 CYID Application registry / Workspace enablement provider gate。
+- CYAccountingWeb deployment workflow 新增 same-repo CYID consumer support-window validation；每次 validate/deploy 都確認 `CYID_CONSUMER_VERSION` 位於 provider `minimum..current` 支援範圍內。
+- Tiered Backup handoff 移除已過時的 Identity authority 定義；backup 文件只維護 backup migration/acceptance，不再與 CYID contract 平行。
+- CYAccountingWeb source/governance prep baseline 升為 V0.21.6 Build 0；最後已驗收 bookkeeping/UI runtime baseline 仍是 V0.21.5 Build 10，真正 Identity cutover 尚未進行。
 ## 2.3.20 — 2026/09/30
 
 - CYID consumer contract 增加跨 repository 同步治理：`CONSUMER_SYNC_MANIFEST.json` 明列外部 consumer 必須鏡像的 7 個 canonical artifacts（consumer current/minimum version、shared standard、consumer changelog、Auth、Role/Access、Architecture）。
