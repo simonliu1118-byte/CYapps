@@ -46,17 +46,17 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '7');
+assert.equal(build, '8');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0212\.js'/);
 assert.match(build11Js, /ensureV0215Stylesheet\(\)/);
-assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b7'/);
+assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b8'/);
 assert.match(build11Js, /ensureV0215Build3Script\(\)/);
 assert.match(build11Js, /script\.src = '\/v0215b3\.js'/);
 assert.match(build11Js, /ensureV0215Build4Script\(\)/);
-assert.match(build11Js, /script\.src = '\/v0215b4\.js\?v=0215b7'/);
+assert.match(build11Js, /script\.src = '\/v0215b4\.js\?v=0215b8'/);
 assert.match(build12Js, /CY_V21_BUILD12_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build13Js, /CY_V21_BUILD13_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build14Js, /CY_V21_BUILD14_DESKTOP = '\(min-width: 1024px\)'/);
@@ -75,26 +75,32 @@ assert.match(v03, /enterStep\(els\.amount,[\s\S]*?els\.form\.requestSubmit\(\)/)
 assert.match(v03, /cyFocusSummaryAfterSave[\s\S]*?els\.summary\.focus\(\)/);
 assert.match(keyboardJs, /if \(!window\.matchMedia\(CY_V0211_KEYBOARD_DESKTOP\)\.matches\) return;/);
 
-// Recovery: login verifies the HttpOnly session before reload and critical JS uses a fresh URL.
-assert.match(authJs, /sessionResponse = await fetch\('\/api\/auth\/me'/);
-assert.match(authJs, /credentials: 'same-origin'/);
-assert.match(authJs, /帳號密碼已通過，但登入狀態沒有保存/);
-assert.match(indexHtml, /auth\.js\?v=0214b1-recovery/);
-assert.match(indexHtml, /auth\.css\?v=0215b6/);
-assert.match(authCss, /@media \(min-width: 641px\) and \(max-width: 1023px\)/);
-assert.match(authCss, /max-height:\s*calc\(100dvh - 40px\)/);
-assert.match(authCss, /overflow-y:\s*auto/);
-assert.match(authCss, /font-size:\s*16px/);
-assert.match(indexHtml, /v021b11\.js\?v=0214b1-recovery/);
+// Build 8 auth recovery: let the browser finish a top-level navigation before verifying
+// the freshly-set HttpOnly cookie, and keep Tablet touch behavior on the proven overlay.
+assert.match(authJs, /credentials: 'include'/);
+assert.match(authJs, /location\.replace\('\/\?auth_recovery=0215b8'\)/);
+assert.doesNotMatch(authJs, /帳號密碼已通過，但登入狀態沒有保存/);
+assert.match(indexHtml, /auth\.js\?v=0215b8/);
+assert.match(indexHtml, /auth\.css\?v=0215b8/);
+assert.match(indexHtml, /v021b11\.js\?v=0215b8/);
+assert.doesNotMatch(authCss, /@media \(min-width: 641px\) and \(max-width: 1023px\)/);
+assert.match(authCss, /@media \(max-width: 640px\)/);
+assert.match(workerApp, /SameSite=Lax/);
+assert.match(workerApp, /Expires=\$\{expires\}/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
-// V0.21.5 Build 7 fixes the legacy hard edge, stabilizes the five-slot toolbar, and adds clear/cancel.
+// V0.21.5 Build 8 keeps Build 7 behavior while fixing Safari auth, switch corners, and the five-slot month toolbar.
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
 assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?linear-gradient\(to right, rgba\(86, 176, 113/);
 assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?linear-gradient\(to right, rgba\(207, 104, 94/);
 assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?border-top:\s*0 !important/);
 assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?border-top:\s*0 !important/);
 assert.match(patch5Css, /#mobileEntrySecondaryButton[\s\S]*?grid-area:\s*secondary !important/);
+assert.match(patch5Css, /\.entry-card > \.section-title[\s\S]*?background:\s*transparent !important/);
+assert.match(patch5Css, /\.entry-kind-switch-field[\s\S]*?background:\s*transparent !important/);
+assert.match(patch5Css, /\.entry-kind-switch\s*\{[\s\S]*?overflow:\s*hidden !important[\s\S]*?clip-path:\s*inset\(0 round 10px\) !important/);
+assert.match(patch5Css, /#ledgerMonthSlot > \.month-picker[\s\S]*?width:\s*100% !important/);
+assert.match(patch5Css, /#ledgerDisplayMonth\s*\{[\s\S]*?display:\s*none !important/);
 assert.match(patch5Css, /"save"[\s\S]*?"secondary"[\s\S]*?"message"/);
 assert.match(patch5Css, /\.v0215-mobile-save-message[\s\S]*?transition:\s*opacity 400ms ease/);
 assert.match(patch5Css, /\.quick-chip-list[\s\S]*?overflow-x:\s*auto !important/);
@@ -110,8 +116,11 @@ assert.match(patch5Build4Js, /document\.addEventListener\('DOMContentLoaded', se
 assert.match(patch5Build4Js, /window\.setTimeout\(setupV0215Build4, 0\)/);
 assert.match(patch5Build4Js, /if \(cyV0215Build4SetupDone\) return/);
 assert.match(patch5Build4Js, /setupV0215Build4Toolbar\(attempt = 0\)/);
-assert.match(patch5Build4Js, /attempt < 40/);
+assert.match(patch5Build4Js, /attempt < 60/);
 assert.match(patch5Build4Js, /monthTools\.classList\.add\('v0215-toolbar-ready'\)/);
+assert.match(patch5Build4Js, /const slot = document\.querySelector\('#ledgerMonthSlot'\)/);
+assert.match(patch5Build4Js, /if \(picker\.parentElement !== slot\) slot\.append\(picker\)/);
+assert.match(patch5Build4Js, /monthTools\.append\(balance, prev, slot, next, more\)/);
 assert.match(patch5Build4Js, /button\.id = 'mobileEntrySecondaryButton'/);
 assert.match(patch5Build4Js, /button\.textContent = cyV0215Build4Edit \? '取消' : '清空'/);
 assert.match(patch5Build4Js, /cancelV0215Build4MobileEditAndReturn/);
@@ -186,4 +195,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 Build 7 adaptive UI regression tests passed.');
+console.log('V0.21.5 Build 8 adaptive UI regression tests passed.');
