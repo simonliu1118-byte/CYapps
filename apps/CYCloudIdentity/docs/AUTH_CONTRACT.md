@@ -1,6 +1,6 @@
 # CYCloud Identity — Authentication Contract
 
-> **Status:** approved forward consumer contract for CYID `0.3.0`. `main`/development deployment state is tracked only in `../TODO.md`. Source on PR #214 must conform to this document before merge/deploy.
+> **Status:** current CYID `0.3.x` consumer authentication contract. CYID 0.3 runtime is merged and deployed to development; exact source/deployment status is tracked only in `../TODO.md`.
 
 ## 1. Transport boundary
 
