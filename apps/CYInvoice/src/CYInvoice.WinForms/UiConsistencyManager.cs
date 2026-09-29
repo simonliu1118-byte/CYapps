@@ -40,7 +40,10 @@ internal static class UiConsistencyManager
     {
         if (!Registered.Add(control)) return;
         control.Disposed += (_, _) => Registered.Remove(control);
-        control.ControlAdded += (_, eventArgs) => RegisterTree(eventArgs.Control);
+        control.ControlAdded += (_, eventArgs) =>
+        {
+            if (eventArgs.Control is { } added) RegisterTree(added);
+        };
 
         switch (control)
         {
@@ -103,8 +106,6 @@ internal static class UiConsistencyManager
             var fillIndex = FillColumnIndex(list);
             if (fillIndex < 0) return;
 
-            // Operation history used to make the 類型 header too narrow and then let 摘要
-            // stop short of the actual viewport. Keep the semantic columns readable first.
             if (IsOperationHistory(list))
             {
                 list.Columns[0].Width = Math.Max(list.Columns[0].Width,
