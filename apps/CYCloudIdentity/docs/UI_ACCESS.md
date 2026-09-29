@@ -1,173 +1,90 @@
 # CYCloud Identity — Management UI Access
 
-> **Status: approved target consumer UI contract; runtime migration pending.**
->
-> The deployed CYCloud Identity `0.1.14` / current CY Web management UI still reflects the earlier Super-Admin-only + Identity Group implementation in several areas. New UI work must converge on this document and `ROLE_AND_ACCESS_MODEL.md`.
+> **Status:** approved consumer UI contract. Backend authority remains CYID; current rollout/acceptance state is tracked only in `../TODO.md`.
 
 ## 1. Terminology
 
-Consumer-facing management UI uses:
+Consumer-facing role names:
 
-- **超級管理員 (Super Admin)** — protected unique Workspace final authority;
-- **管理員 (Admin)** — normal Workspace administrator;
-- **身分管理員 (Identity Admin)** — special capability on an ADMIN, not a fourth Workspace role;
-- **使用者 (User)** — normal Employee.
+- **超級管理員 (Super Admin)**
+- **管理員 (Admin)**
+- **身分管理員 (Identity Admin)** — ADMIN capability, not a fourth role
+- **使用者 (User)**
 
-Stable protocol/storage identifiers such as `isWorkspaceSuperAdmin`, `superAdminEmployeeId` and `super_admin_employee_id` may remain during migration.
+New-Employee flow is always called **Email 驗證**. Do not expose a separate「啟用帳號」entry or rename the process because the Email contains a temporary first-login password.
 
-## 2. Employee lifecycle states
+## 2. Employee lifecycle display
 
-Employee management UI distinguishes at least:
+- **Email 未驗證** — new Employee has not completed first Email verification/permanent-password setup;
+- **啟用** — lifecycle complete and enabled;
+- **停用** — previously completed lifecycle and disabled;
+- **啟用 · Email 待驗證** — activated account whose replacement Email still requires verification.
 
-- **尚未驗證／待啟用** — first activation incomplete;
-- **啟用** — activation complete and enabled;
-- **停用** — previously activated and currently disabled;
-- **啟用 · Email 待驗證** — activated account whose Email is being re-verified after an authorized Email change/recovery.
+Pending Email verification must not look like a disabled activated account.
 
-A pending account must never be displayed as a disabled activated account.
+## 3. Employee creation and first verification
 
-## 3. Employee creation
+Create form selects initial role under current actor authority. Identity Admin capability is never granted in create.
 
-Employee creation selects the initial role at creation time.
+After create:
 
-- normal ADMIN can create `USER` only;
-- Identity Admin can create `USER` or `ADMIN`;
-- Super Admin can create `USER` or `ADMIN`;
-- no create form directly grants Identity Admin capability.
+- Employee remains Email-unverified;
+- CYID automatically sends the verification Email;
+- Email includes the one-time first-login password;
+- user goes to the ordinary CY Web login screen;
+- valid initial password enters a forced permanent-password screen;
+- after password setup CY Web returns to the login screen and the user must log in again with the new permanent password.
 
-After successful creation:
+CY Web must not display an independent「啟用帳號」button/link.
 
-- the Employee remains pending first activation;
-- the first activation email is sent automatically;
-- the email contains a direct link to the CY Web activation flow;
-- Application Access / CY Web Module Access are configured separately after creation.
+## 4. Pending actions
 
-## 4. Pending Employee actions
+At minimum:
 
-Pending first-activation rows expose at least:
+~~~text
+編輯 | 重寄驗證 Email | 刪除
+~~~
 
-```text
-編輯 | 重寄啟用信 | 刪除
-```
+`重寄驗證 Email` creates a new initial password and expiry and invalidates the old one. Editing the pending Email does the same for the new address.
 
-They do **not** expose an admin-side `啟用` button because the Employee must complete Email verification and first-password setup.
+If delivery fails, keep the Employee and show an actionable resend state. Only never-completed first-verification Employees may be deleted.
 
-If the first activation email fails to send, the pending Employee remains created and the UI must show a clear send-failure state with a resend action.
+## 5. Normal ADMIN surface
 
-Only never-activated Employees can be deleted. Activated or disabled Employees remain historical records and are not physically deleted.
+Normal ADMIN may create USER, edit Email-unverified USER, resend verification Email, delete never-verified USER and disable/re-enable activated USER.
 
-## 5. Normal ADMIN management surface
+Normal ADMIN gets no App Access controls, CY Web Module Access controls, USER<->ADMIN controls, forced activated-account Email recovery, Identity Admin management, Super Admin transfer or security-core settings.
 
-Normal ADMIN may perform ordinary USER lifecycle work:
+## 6. Identity Admin surface
 
-- create USER;
-- edit pending USER data;
-- resend pending USER activation email;
-- delete never-activated USER;
-- disable/re-enable activated USER.
+Identity Admin gets normal ADMIN actions plus USER<->ADMIN, eligible direct App Access, CY Web Module Access through CY Web and forced activated-account Email recovery.
 
-Normal ADMIN does not receive:
+UI must prevent self-escalation: own App/Module Access non-editable; no Identity Admin grant/revoke; no direct demotion of another Identity Admin; no Super Admin protected-state actions.
 
-- App Access management;
-- CY Web Module Access management;
-- USER ↔ ADMIN controls;
-- forced Email recovery for activated Employees;
-- Identity Admin grant/revoke;
-- Super Admin transfer;
-- Workspace Recovery / security-core / OTP policy controls.
+## 7. Super Admin surface
 
-## 6. Identity Admin management surface
+Super Admin has the full surface and is the only authority for Identity Admin grant/revoke, protected demotion path, Super Admin transfer, Workspace Recovery/final-control recovery and security-core/OTP policy.
 
-Identity Admin receives the normal ADMIN surface plus:
+Super Admin App Access and CY Web Module Access are implicit/all-enabled and not shown as cancellable ordinary grants.
 
-- create USER or ADMIN;
-- USER ↔ ADMIN;
-- Application Access management for USER / ADMIN / other Identity Admin accounts;
-- CY Web Module Access management through the CY Web management UI;
-- forced Email recovery for activated Employees.
+## 8. Application and CY Web Module Access
 
-Identity Admin UI must prevent self-escalation:
-
-- its own App Access controls are non-editable;
-- its own CY Web Module Access controls are non-editable;
-- Identity Admin cannot grant/revoke Identity Admin capability;
-- Identity Admin cannot demote another Identity Admin to USER;
-- Identity Admin cannot modify Super Admin identity/access/security state.
-
-Another Identity Admin or Super Admin may change an Identity Admin's normal App/Module Access.
-
-## 7. Super Admin management surface
-
-Super Admin receives the full management surface and is the only authority for:
-
-- grant/revoke Identity Admin capability;
-- protected Identity Admin demotion path;
-- Super Admin transfer;
-- Workspace Recovery / final-control recovery;
-- Workspace security-core / OTP policy.
-
-Super Admin Application Access is implicit for all Workspace-enabled CY Apps and is not presented as a cancellable ordinary grant.
-
-CY Web Module Access for Super Admin is also implicit/all-enabled and non-cancellable.
-
-## 8. Application Access UI
-
-Application Access is entry authorization, not the App's detailed business permission model.
-
-- CY Web core entry is shown as required/locked `TRUE` for every valid Employee and cannot be unchecked.
-- Other Apps default to no grant after Employee creation.
+- CY Web core entry is required/locked TRUE for every valid Employee.
+- Other Apps default ungranted after create.
 - normal ADMIN sees no Access-management controls.
-- Identity Admin / Super Admin manage eligible Employee App Access under the anti-self-escalation restrictions above.
-- changing Role does not silently change existing Access.
+- Identity Admin/Super Admin manage eligible App Access under anti-self-escalation rules.
+- CY Web module controls may appear in the same account-management experience, but authoritative data/enforcement is CY Web-local.
 
-## 9. CY Web multi-module special case
+## 9. Forced Email recovery
 
-CY Web is the core multi-module App.
+For an activated Employee, Identity Admin/Super Admin may replace an unusable Email. Password remains; new Email becomes unverified; sessions are revoked; UI exposes resend verification. This state is not the new-Employee first-login flow.
 
-CY Web entry remains available for self-service even when an Employee has zero business-module access.
+## 10. Super Admin transfer and OTP settings
 
-CY Web itself owns Module Access. The Identity management UI may surface those controls in the same management experience, but the authoritative data/enforcement remains CY Web-local.
+Super Admin transfer belongs with Employee account management and still requires provider-owned re-authentication plus Email OTP. Workspace security-core/OTP policy controls are visible only to Super Admin; backend authorization remains authoritative.
 
-- Super Admin: all modules implicitly allowed;
-- Identity Admin / Super Admin: may configure eligible Employee Module Access;
-- normal ADMIN: no Module Access configuration capability;
-- ADMIN with access to a module has full administration authority within that module.
+Established OTP defaults and editable bounds live only in `OTP_SECURITY.md`; this UI contract does not duplicate them.
 
-## 10. Forced Email recovery UI
+## 11. Ownership
 
-For an activated Employee with an unusable Email:
-
-- Identity Admin / Super Admin may start forced Email change;
-- new Email becomes unverified;
-- existing password remains;
-- existing sessions are revoked;
-- account remains an activated account;
-- UI exposes resend verification for the new Email.
-
-Normal ADMIN cannot perform this operation.
-
-## 11. Super Admin transfer
-
-The Super Admin transfer entry belongs with Employee account management rather than a separate authority block.
-
-The current Super Admin row presents the transfer action. The flow still requires provider-owned credential re-authentication and Email OTP confirmation, and the Recovery Email follows the new Super Admin on successful transfer.
-
-## 12. OTP settings visibility
-
-Workspace security-core / OTP policy controls remain Super-Admin-only.
-
-Non-Super-Admin accounts must not receive a disabled fake control or a permission-error page inviting an unsupported operation. Backend authorization remains authoritative even when controls are hidden.
-
-Established defaults remain:
-
-- resend cooldown: 60 seconds;
-- maximum verification attempts: 5;
-- maximum sent OTP messages per Email + purpose per hour: 5;
-- Workspace daily Email limit: 100, capped by the lower system-wide ceiling;
-- OTP validity: 10 minutes.
-
-## 13. Ownership
-
-CY Web may host the account-management UI. Shared Employee identity, Workspace Role, Identity Admin capability, Application Access, Session, Email/OTP/Recovery authority belong to CYCloud Identity.
-
-CY Web Module Access belongs to CY Web and is enforced server-side by CY Web.
+CY Web may host the account-management UI. CYID owns Employee identity, role/capability, App Access, credentials, session, Email verification, OTP/recovery and security policy. CY Web owns its business Module Access and enforces it server-side.
