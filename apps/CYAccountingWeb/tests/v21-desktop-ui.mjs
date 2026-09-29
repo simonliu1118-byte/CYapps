@@ -49,7 +49,7 @@ const appV19 = read('src/app-v19.js');
 const v11Tools = read('src/v11-tools.js');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '1');
+assert.equal(build, '2');
 assert.match(build11Js, /ensureV21Build12Script\(\)/);
 assert.match(build11Js, /ensureV21Build13Script\(\)/);
 assert.match(build11Js, /ensureV21Build14Script\(\)/);
@@ -184,7 +184,7 @@ assert.match(patch4Js, /handleV0214FavoriteToggle/);
 assert.match(patch4Js, /已還原/);
 assert.match(patch4Css, /\.v0214-balance-popover/);
 
-// V0.21.5 Build 1 keeps the new layout scoped to phone widths.
+// V0.21.5 Build 2 keeps the corrected layout scoped to phone widths.
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
 assert.doesNotMatch(patch5Css, /@media \(min-width: 1024px\)[\s\S]*?grid-template-areas/);
 
@@ -194,4 +194,4 @@ assert.match(v013, /button\.setAttribute\('aria-busy', 'true'\)/);
 assert.match(v021, /if \(account\.textContent !== nextText\) account\.textContent = nextText;/);
 assert.match(v021, /if \(empty && empty\.textContent !== '本次尚無輸入紀錄。'\) empty\.textContent = '本次尚無輸入紀錄。';/);
 
-console.log('V0.21.5 Build 1 desktop regression tests passed.');
+console.log('V0.21.5 Build 2 desktop regression tests passed.');
