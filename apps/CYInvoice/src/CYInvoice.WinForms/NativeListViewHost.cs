@@ -12,6 +12,7 @@ internal sealed class NativeListViewHost : UserControl
     private const long WsHScroll = 0x00100000L;
     private const long WsVScroll = 0x00200000L;
     private readonly ImageList rowHeightImages = new();
+    private readonly FixedColumnHeaderCursor headerCursor;
     private readonly int configuredRowHeight;
     private readonly bool lockUserColumnResize = true;
     private bool settingColumnWidths;
@@ -41,6 +42,7 @@ internal sealed class NativeListViewHost : UserControl
             BorderStyle = BorderStyle.FixedSingle,
             Font = new Font("Microsoft JhengHei UI", fontSize),
         };
+        headerCursor = new FixedColumnHeaderCursor(List);
         rowHeightImages.ColorDepth = ColorDepth.Depth32Bit;
         rowHeightImages.ImageSize = new Size(1, rowHeight);
         rowHeightImages.Images.Add(new Bitmap(1, rowHeight));
@@ -200,7 +202,11 @@ internal sealed class NativeListViewHost : UserControl
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) rowHeightImages.Dispose();
+        if (disposing)
+        {
+            headerCursor.Dispose();
+            rowHeightImages.Dispose();
+        }
         base.Dispose(disposing);
     }
 

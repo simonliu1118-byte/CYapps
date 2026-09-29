@@ -87,6 +87,9 @@ jobs:
       - name: Run employee void workflow tests
         run: dotnet run --project tests/CYInvoice.VoidWorkflow.Tests/CYInvoice.VoidWorkflow.Tests.csproj -c Release --no-build
 
+      - name: Run allowance PDF and void workflow tests
+        run: dotnet run --project tests/CYInvoice.Allowance.Tests/CYInvoice.Allowance.Tests.csproj -c Release --no-build
+
       - name: Run SQLite migration tests
         run: dotnet run --project tests/CYInvoice.SqliteMigration.Tests/CYInvoice.SqliteMigration.Tests.csproj -c Release --no-build
 

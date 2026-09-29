@@ -6,21 +6,37 @@ namespace CYInvoice.WinForms;
 
 internal sealed class InvoicePdfViewerForm : Form
 {
-    private readonly InvoicePdfDocument document;
+    private readonly string documentPath;
     private readonly string userDataDirectory;
     private readonly WebView2 webView = new() { Dock = DockStyle.Fill };
 
     public InvoicePdfViewerForm(InvoicePdfDocument document, string userDataDirectory)
+        : this(
+            document?.Path ?? throw new ArgumentNullException(nameof(document)),
+            $"官方發票 PDF－{document.InvoiceNumber}－{document.Style.Name}",
+            userDataDirectory)
     {
-        this.document = document;
+    }
+
+    public InvoicePdfViewerForm(AllowancePdfDocument document, string userDataDirectory)
+        : this(
+            document?.Path ?? throw new ArgumentNullException(nameof(document)),
+            $"官方折讓單 PDF－{document.AllowanceNumber}－{document.Style.Name}",
+            userDataDirectory)
+    {
+    }
+
+    private InvoicePdfViewerForm(string documentPath, string title, string userDataDirectory)
+    {
+        this.documentPath = documentPath;
         this.userDataDirectory = userDataDirectory;
-        Text = $"官方發票 PDF－{document.InvoiceNumber}－{document.Style.Name}";
+        Text = title;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(1180, 860);
         MinimumSize = new Size(820, 600);
         ShowInTaskbar = false;
+        ShowIcon = false;
         KeyPreview = true;
-        Icon = ApplicationIcon.Load();
         Controls.Add(webView);
         Shown += async (_, _) => await InitializeViewerAsync();
         KeyDown += (_, eventArgs) =>
@@ -42,7 +58,7 @@ internal sealed class InvoicePdfViewerForm : Form
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
             webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-            var source = new Uri(document.Path).AbsoluteUri;
+            var source = new Uri(documentPath).AbsoluteUri;
             webView.CoreWebView2.NavigationStarting += (_, eventArgs) =>
             {
                 if (!string.Equals(eventArgs.Uri, source, StringComparison.OrdinalIgnoreCase)) eventArgs.Cancel = true;
@@ -68,15 +84,12 @@ internal sealed class InvoicePdfViewerForm : Form
             throw new InvalidOperationException("PDF Viewer 未填滿可視區域");
         if (ClientSize.Height < 800)
             throw new InvalidOperationException("PDF Viewer 高度不足以顯示完整 A4 頁面");
+        if (ShowIcon) throw new InvalidOperationException("PDF Viewer 不應顯示標題列圖示");
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            webView.Dispose();
-            Icon?.Dispose();
-        }
+        if (disposing) webView.Dispose();
         base.Dispose(disposing);
     }
 }

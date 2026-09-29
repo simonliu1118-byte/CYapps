@@ -751,10 +751,6 @@ public sealed class InvoiceService
         var appKey = AmegoDefaults.TestAppKey;
         if (settings.Environment == Environments.Production)
         {
-            if (!settings.AdminPasswordSet)
-            {
-                throw new InvalidOperationException("首次使用請先到設定視窗建立管理密碼，正式環境目前已鎖定");
-            }
             invoice = settings.ProductionInvoice.Trim();
             try
             {
