@@ -4,7 +4,7 @@
 
 ## Current checkpoint — 2026-09-30
 
-- Current formal source baseline is **CYCloudIdentity 0.3.3 Build 0**；本 patch 建立 governed shared consumer standard / compatibility lifecycle，development runtime 仍是已部署的 **0.3.0 Build 0**，不因治理／文件調整自動重部署。
+- Current formal source baseline is **CYCloudIdentity 0.3.4 Build 0**；本 patch 建立 governed shared consumer standard / compatibility lifecycle，development runtime 仍是已部署的 **0.3.0 Build 0**，不因治理／文件調整自動重部署。
 - CY Web formal source baseline is **0.5.1 Build 0**；development runtime is **0.5.0 Build 0**。已接上 CYID 0.3 first-login Email verification、direct Module Access，以及 Customer/Item/Defect protected Worker API Phase 1。固定入口仍為 `https://admin.chihyuancm.com`。
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
@@ -21,7 +21,7 @@
 - CYID 0.3 development deploy 已成功完成 remote migration `0007_initial_email_password.sql`、Worker deploy 與 Identity secret configuration。
 - Controlled real Email/browser lifecycle 驗收依使用者目前條件暫緩；這不重開已定案 contract，但仍是 production 前必要 acceptance。
 - CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.1 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
-- CYAccountingWeb（CYACCweb）handoff 已收斂為 app-specific migration guide：`docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；共同 Role / Session / App Access / first-login / recovery 規範只讀 `docs/CONSUMER_INTEGRATION_STANDARD.md`。
+- CYAccountingWeb（CYACCweb）已宣告 `CYID_CONSUMER_VERSION=1.0.1`，handoff 已重驗至 V0.21.5 Build 10 並收斂為 app-specific migration guide：`docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；共同 Role / Session / App Access / first-login / recovery 規範只讀 `docs/CONSUMER_INTEGRATION_STANDARD.md`。
 - Cross-repository contract mirror 已定義 manifest + exact-sync 規則：CY Web 等外部 repo 必須鏡像 manifest 所列 7 個 artifacts 並在 governance/CI/deploy 前 byte-compare；同 repo consumer 直接讀 canonical files。
 - Production、backup rollout 與其他 consumer production cutover 均未進行。
 
@@ -56,9 +56,11 @@
 13. [ ] 實際驗收既有 Super Admin permanent-password login/F5/session resolve，並完成 USER self-service、正常 ADMIN、Identity Admin、Super Admin 權限矩陣。
 14. [ ] 驗收 role/App Access change session invalidation、literal expired normal Session、forgot-password、own Email change 與 controlled Super Admin transfer。
 15. [x] 建立 governed CYID Consumer Integration Standard + contract compatibility versions + PR consumer-impact gate；再加入 cross-repository sync manifest / exact mirror requirement；CYACC handoff 收斂為 app-specific migration guide。
-16. [ ] CYAccountingWeb development integration 開始時加入 `CYID_CONSUMER_VERSION` 並依 standard 遷移；real Email/browser lifecycle acceptance 仍是 production gate。
-17. [ ] 在 CYInvoice 工作線適合的接入點，以同一 consumer standard 建立其 app-specific migration handoff；Device/local/offline 邊界仍由 CYInvoice 自己管理。
-18. [ ] Production 前完成 low-frequency backup + restore acceptance；production cutover 需使用者另行明確同意。
+16. [x] CYAccountingWeb 接入前治理完成：採用 Consumer Contract 1.0.1、加入 `CYID_CONSUMER_VERSION`、移除 dated Identity handoff current-source、建立 deployment support-window gate 與 Build 10 migration handoff。
+17. [ ] CYACC 第一次 end-to-end login 前確認／建立 CYID Application registry + Workspace enablement；實際 Application/Workspace ID 只存在 deployment/runtime data，不由 CYACC 直接寫 CYID D1。
+18. [ ] CYAccountingWeb development runtime 依 handoff 遷移 login / session resolve / logout / recovery / `web_sessions` retirement；real Email/browser lifecycle acceptance 仍是 production gate。
+19. [ ] 在 CYInvoice 工作線適合的接入點，以同一 consumer standard 建立其 app-specific migration handoff；Device/local/offline 邊界仍由 CYInvoice 自己管理。
+20. [ ] Production 前完成 low-frequency backup + restore acceptance；production cutover 需使用者另行明確同意。
 
 ## Explicitly deferred
 
