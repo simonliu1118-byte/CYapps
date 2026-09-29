@@ -33,19 +33,15 @@ const patch2Js = read('public/v0212.js');
 const patch2Css = read('public/v0212.css');
 const patch4Js = read('public/v0214.js');
 const patch4Css = read('public/v0214.css');
-const patch5Js = read('public/v0215.js');
-const patch5Css = read('public/v0215.css');
 const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
-assert.equal(version, '0.21.5');
+assert.equal(version, '0.21.4');
 assert.equal(build, '0');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0212\.js'/);
-assert.match(build11Js, /ensureV0215PatchScript\(\)/);
-assert.match(build11Js, /script\.src = '\/v0215\.js'/);
 assert.match(build12Js, /CY_V21_BUILD12_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build13Js, /CY_V21_BUILD13_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build14Js, /CY_V21_BUILD14_DESKTOP = '\(min-width: 1024px\)'/);
@@ -54,7 +50,7 @@ assert.match(build16Js, /CY_V21_BUILD16_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(patchJs, /CY_V0211_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(keyboardJs, /CY_V0211_KEYBOARD_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(patch2Js, /CY_V0212_DESKTOP = '\(min-width: 1024px\)'/);
-for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, keyboardJs, patch2Js, patch4Js, patch5Js]) {
+for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, keyboardJs, patch2Js, patch4Js]) {
   assert.doesNotThrow(() => new Function(js), 'adaptive overlay JavaScript must parse');
 }
 
@@ -77,15 +73,7 @@ assert.match(build16Css, /@media \(min-width: 1024px\)/);
 assert.match(patchCss, /@media \(min-width: 1024px\)/);
 assert.match(patch2Css, /@media \(min-width: 1024px\)/);
 
-// V0.21.5 replaces the prior mobile card presentation with compact two-column entry and one-row ledger.
-assert.match(patch5Js, /CY_V0215_MOBILE = '\(max-width: 767px\)'/);
-assert.match(patch5Css, /grid-template-areas:[\s\S]*?"account date"[\s\S]*?"category favorite"[\s\S]*?"summary quicksummary"[\s\S]*?"amount save"/);
-assert.match(patch5Css, /grid-template-columns:\s*42px 38px minmax\(50px, \.85fr\)/);
-assert.match(patch5Css, /input\[type="date"\][\s\S]*?-webkit-appearance:\s*auto/);
-assert.match(patch5Js, /splitAccountV0215/);
-assert.match(patch5Js, /data-v0215-row-menu/);
-
-// Build 10 mobile-first navigation remains intact.
+// Build 10 mobile-first direction remains unchanged.
 assert.match(build8Js, /setupV21Build9MobilePages\(\)/);
 assert.match(build8Js, /nav\.id = 'mobileMainNav'/);
 assert.match(build10Js, /trigger\.id = 'mobileAccountMenuButton'/);
@@ -114,9 +102,8 @@ assert.match(patch4Js, /CY_V0214_HOVER/);
 assert.match(patch4Js, /document\.addEventListener\('click'/);
 assert.match(patch4Css, /@media \(max-width: 767px\)/);
 
-// Legacy card CSS remains underneath, but V0.21.5 overrides it only on mobile.
-assert.match(v20Css, /@media \(max-width: 767px\)/);
-assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)/);
-assert.match(patch5Css, /@media \(max-width: 767px\)/);
+// Existing phone transaction-card ledger remains intact.
+assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
+assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 adaptive UI regression tests passed.');
+console.log('V0.21.4 adaptive UI regression tests passed.');
