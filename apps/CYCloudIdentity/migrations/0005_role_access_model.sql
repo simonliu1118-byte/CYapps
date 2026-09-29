@@ -113,7 +113,9 @@ END;
 
 -- Every current/future Super Admin keeps ADMIN as its ordinary fallback role.
 -- SUPER_ADMIN itself is still derived exclusively from the protected Workspace
--- pointer and is never stored as an editable Employee role value.
+-- pointer and is never stored as an editable Employee role value. Any authority
+-- change also invalidates both old/new authority sessions so the role boundary is
+-- re-established by fresh authentication.
 CREATE TRIGGER trg_workspace_super_admin_fallback_role
 AFTER UPDATE OF super_admin_employee_id ON workspaces
 WHEN NEW.super_admin_employee_id IS NOT NULL
@@ -123,4 +125,9 @@ BEGIN
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
    WHERE workspace_id = NEW.workspace_id
      AND employee_id = NEW.super_admin_employee_id;
+
+  UPDATE identity_sessions
+     SET revoked_at = COALESCE(revoked_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   WHERE workspace_id = NEW.workspace_id
+     AND employee_id IN (OLD.super_admin_employee_id, NEW.super_admin_employee_id);
 END;
