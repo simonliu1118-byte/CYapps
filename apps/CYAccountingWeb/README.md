@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current formal baseline: **V0.21.5 Build 10**（2026-09-30）
+> Current formal source baseline: **V0.21.6 Build 0**（2026-09-30；CYID integration-prep patch）。Last accepted bookkeeping/UI runtime baseline before Identity cutover remains **V0.21.5 Build 10**.
 >
 
 ## 專案定位
@@ -109,7 +109,7 @@ Production Identity cutover 仍需使用者明確批准。
 - 帳戶、收入／支出大分類與科目管理；
 - 期初餘額與逐月鎖帳；
 - 常用摘要與設定；
-- CYInvoice Cloud 共用員工登入、Session、Email 忘記密碼；
+- Legacy CYInvoice Cloud 共用員工登入、Session、Email 忘記密碼（current migration source；CYID workstream 將取代此 Identity path）；
 - 月份切換、摘要搜尋、月統計、逐筆餘額與帳戶分組；
 - 記帳資料列直接編輯；
 - 日期鍵盤快速輸入；
