@@ -24,27 +24,31 @@
 
 - 新增 Employee 時直接指定初始 Role，不要求先建立 USER 再另外升級。
 - 一般 `ADMIN` 只能新增 `USER`；`Identity Admin` 與 `SUPER_ADMIN` 可以直接新增 `USER` 或 `ADMIN`。新增 Employee 時不得直接授予 `Identity Admin` capability。
-- 一般 ADMIN 可處理一般 USER 的日常帳號 lifecycle：建立 USER、編輯尚未啟用 USER 的資料、重寄啟用信、刪除尚未完成第一次啟用的 USER、停用／重新啟用已啟用 USER。一般 ADMIN 不具任何 App Access／CY Web Module Access 設定能力。
+- 一般 ADMIN 可處理一般 USER 的日常帳號 lifecycle：建立 USER、編輯尚未驗證 USER 的資料、重寄 Email 驗證、刪除尚未完成第一次驗證／登入的 USER、停用／重新啟用已啟用 USER。一般 ADMIN 不具任何 App Access／CY Web Module Access 設定能力。
 - Identity Admin 除上述能力外，可執行 `USER ↔ ADMIN`、管理非 Super Admin Employee 的 Application Access，以及執行已啟用 Employee 的管理員強制 Email recovery。Super Admin 擁有同等能力並保留最終控制權。
 - Identity Admin 可以管理其他 Identity Admin 的 Application Access，但不得修改自己的 Application Access；自己的 Access 必須由另一名 Identity Admin 或 Super Admin 調整。
 - Role 升降不得自動新增、刪除或重算既有 Application Access；Role 與 Access 是兩個獨立維度。
-- 若一名 Identity Admin 要降為 USER，必須先由 Super Admin撤銷其 `Identity Admin` capability，再完成 Role 降級；目前不得存在 `USER + Identity Admin` 組合。
-- 只有從未完成第一次啟用的 Employee 可以真正刪除。任何曾完成啟用的 Employee 後續離職或停權都只能停用，不得實體刪除，以保留 Audit 與歷史 referential integrity。
+- 若一名 Identity Admin 要降為 USER，必須先由 Super Admin 撤銷其 `Identity Admin` capability，再完成 Role 降級；目前不得存在 `USER + Identity Admin` 組合。
+- 只有從未完成第一次 Email 驗證／正式密碼設定的 Employee 可以真正刪除。任何曾完成啟用的 Employee 後續離職或停權都只能停用，不得實體刪除，以保留 Audit 與歷史 referential integrity。
 
-## 4. 啟用信、Email recovery、Credential／Session／OTP
+## 4. 第一次 Email 驗證、Email recovery、Credential／Session／OTP
 
-- 管理員建立 pending Employee 成功後，CYCloud Identity 必須主動發送第一封啟用信；不得要求管理員另外通知使用者自行尋找啟用入口。
-- 第一封啟用信必須包含可直接開啟 **CY Web 帳號啟用流程**的連結。該連結只負責導向正確啟用 UI，不得本身構成登入憑證或繞過 Email 驗證／OTP／第一次密碼設定。
-- Pending Employee 的管理 UI 至少提供 **編輯／重寄啟用信／刪除**。修改 pending Employee 的 Email 後應對新 Email 重新發送啟用信。
-- Email provider 暫時寄送失敗時，已成功建立的 Employee 不回滾刪除；應保存 pending Employee、回報寄送失敗狀態並允許管理員重寄。
+- 管理員建立尚未驗證 Employee 成功後，CYCloud Identity 必須主動發送 Email 驗證信；不得要求管理員另外通知使用者自行尋找啟用入口。
+- 第一次 Email 驗證信不使用 activation link／activation OTP。信件提供 **4 碼使用者帳號 + 8 位亂數一次性預設密碼**；使用者直接到 CY Web 一般登入頁輸入帳號與該一次性預設密碼。
+- 一次性預設密碼驗證成功後，CYID 只能核發短效且不可當作 Session 使用的 first-login ticket；在使用者設定正式密碼前，不得建立一般 Identity Session、不得取得其他 App／CY Web Module 使用權。
+- 使用者必須立即設定新的 8–16 字元正式密碼。完成後才一次寫入 Email 已驗證、第一次啟用時間與 enabled 狀態，刪除／失效一次性預設 credential，並建立正常 Identity Session 進入 CY Web。
+- 尚未完成第一次登入的管理 UI 狀態使用 **尚未驗證**；操作至少提供 **編輯／重寄 Email 驗證／刪除**。`重寄 Email 驗證` 必須產生新的 8 位一次性預設密碼，舊的一次性預設密碼及其尚未完成的 first-login ticket 必須失效。
+- 修改尚未驗證 Employee 的帳號或 Email 時，若需要重新通知使用者，必須針對最新資料產生並寄送新的 Email 驗證資料。
+- Email provider 暫時寄送失敗時，已成功建立的 Employee 不回滾刪除；應保存尚未驗證 Employee、回報寄送失敗狀態並允許管理員重寄。
+- 一次性預設密碼明文只允許在產生後到 Email transport 的瞬時記憶體路徑存在；不得寫入 D1、Git、Audit、log、Actions output、API response 或 backup metadata。D1 只保存 verifier/hash。正式密碼不得透過 Email 傳送。
 - 已啟用 Employee 的 Email 若失效、被停權或不可使用，`Identity Admin`／`SUPER_ADMIN` 可執行管理員強制 Email 變更。普通 ADMIN 不可執行此操作。
-- 強制 Email 變更後，Employee 帳號仍屬已啟用帳號、原密碼保留，新 Email 變為待驗證，既有 Session 必須撤銷；不得把帳號錯誤退回「第一次待啟用」狀態。新 Email 可重寄驗證信。
-- Password 明文不得儲存、寫 log、進 Git、進 Audit 或進 backup metadata；credential verifier 只能存在 Shared Identity authority。
-- Password 長度固定為 8–16 字元，所有 consumer App 必須遵循 CYCloud Identity 的同一驗證規則，不得自行放寬或縮限。
+- 強制 Email 變更後，Employee 帳號仍屬已啟用帳號、原密碼保留，新 Email 變為待驗證，既有 Session 必須撤銷；不得把帳號錯誤退回第一次 `尚未驗證` 狀態。新 Email 可重寄驗證信。
+- Password／credential 明文不得儲存、寫 log、進 Git、進 Audit 或進 backup metadata；credential verifier 只能存在 Shared Identity authority。
+- 正式 Password 長度固定為 8–16 字元，所有 consumer App 必須遵循 CYCloud Identity 的同一驗證規則，不得自行放寬或縮限。
 - Browser session token 只在 client cookie 保存原值；server 只保存不可逆 hash。Session 必須有 application、workspace、employee 與 expiry 邊界。
 - 一般 session resolve 不採 sliding-write heartbeat；避免無意義 D1 writes。
 - Employee 停用、Role 變更、credential version 變更、管理員強制 Email 變更與 Application Access 失效都必須立即反映 server-side authority；相關既有 Session 必須撤銷或在下一次 resolve/request 失效，不能依賴舊前端畫面繼續授權。
-- OTP 必須 purpose-scoped、single-use、有 expiry、錯誤次數限制與 resend cooldown；不同 purpose 的 OTP 不得互相重放。
+- OTP 仍適用於忘記密碼、已啟用帳號 Email 驗證、Super Admin 移交等需要 OTP 的 purpose；OTP 必須 purpose-scoped、single-use、有 expiry、錯誤次數限制與 resend cooldown，不同 purpose 不得互相重放。第一次新帳號驗證不再要求 activation OTP。
 - Email transport 必須 provider-neutral。Brevo、Resend 或未來 provider 都只能作寄送 adapter，不得改變 Identity API contract。
 
 ## 5. Application Access 與 consumer role contract
