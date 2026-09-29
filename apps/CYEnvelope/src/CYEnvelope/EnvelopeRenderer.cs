@@ -35,7 +35,7 @@ public static class EnvelopeRenderer
         if (data.ShowFrame && data.FrameText.Length != 0)
         {
             dc.DrawRectangle(null, Black, Dip(format.Frame));
-            Write(dc, data.FrameText, FrameText(format));
+            Write(dc, data.FrameText, FrameText(format), centre: true);
         }
         dc.Pop();
         if (preview && highlight is not null) DrawHighlight(dc, format, highlight);
@@ -166,12 +166,24 @@ public static class EnvelopeRenderer
         return (glyphs, true);
     }
 
-    private static void Write(DrawingContext dc, string value, TextPlacement p)
+    // centre: the frame text sits inside a printed black box, so it is centred instead of
+    // starting at the box edge like the open recipient/address fields.
+    private static void Write(DrawingContext dc, string value, TextPlacement p, bool centre = false)
     {
         if (string.IsNullOrEmpty(value)) return;
         var (glyphs, size, _) = Layout(value, p);
+        var (dx, dy) = (0.0, 0.0);
+        if (centre && glyphs.Count > 0)
+        {
+            var columnMm = Math.Max(4, size * DipPerPoint) / DipPerMm;
+            var rowMm = Math.Max(4, size * 1.2 * DipPerPoint) / DipPerMm;
+            var usedWidth = glyphs.Max(g => g.X) - glyphs.Min(g => g.X) + columnMm;
+            var usedHeight = glyphs.Max(g => g.Y) - glyphs.Min(g => g.Y) + rowMm;
+            dx = p.Vertical ? -(p.Rect.Width - usedWidth) / 2 : (p.Rect.Width - usedWidth) / 2;
+            dy = (p.Rect.Height - usedHeight) / 2;
+        }
         dc.PushClip(new RectangleGeometry(Dip(p.Rect)));
-        foreach (var (glyph, x, y) in glyphs) WriteAt(dc, glyph, x, y, size, p.FontFamily);
+        foreach (var (glyph, x, y) in glyphs) WriteAt(dc, glyph, x + dx, y + dy, size, p.FontFamily);
         dc.Pop();
     }
 
