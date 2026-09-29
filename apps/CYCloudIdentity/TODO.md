@@ -4,9 +4,9 @@
 
 ## Current checkpoint — 2026-09-30
 
-- Current source line on this documentation-consolidation branch is **CYCloudIdentity 0.2.2 Build 0**. The currently deployed development runtime remains **0.2.1 Build 0**; this docs-only change does not itself require a runtime deployment.
+- Current formal source baseline is **CYCloudIdentity 0.2.2 Build 1**. The currently deployed development runtime remains **0.2.1 Build 0**; this documentation consolidation does not itself require a runtime deployment.
 - 0.2.x 已完成 direct Workspace Role `SUPER_ADMIN / ADMIN / USER`、ADMIN-only Identity Admin capability、direct Employee App Access、durable first-lifecycle state、pending lifecycle、forced activated-account Email recovery，以及 Group-derived authority retirement。Legacy Group structures只可作 compatibility/history，不是 forward authority。
-- CY Web `0.2.4` 已在 development 接入 0.2 principal/session model，`https://admin.chihyuancm.com` 為固定 canonical user-facing URL。
+- CY Web formal source baseline is **0.2.5 Build 1** after the same documentation consolidation；currently deployed development runtime remains **0.2.4 Build 0**，且已接入 0.2 principal/session model。`https://admin.chihyuancm.com` 為固定 canonical user-facing URL。
 - PR `#214` / branch `feature/cycloudidentity-first-login-password` 目標為 **CYID 0.3.0** first-login Email verification runtime。其 CI validation 可驗 source/migrations，但 PR event 不會真正 deploy development。
 - 已定案的 0.3 產品流程：新增 Employee -> 自動寄出 **Email 驗證**郵件與一次性首次登入密碼 -> 使用者從 CY Web 一般登入口登入 -> 強制設定正式密碼 -> CYID 完成 Email verification / first lifecycle -> **不建立一般 Session** -> 回到登入頁 -> 使用正式密碼重新登入。
 - 首次登入密碼必須有 expiry；逾期、管理員重寄驗證 Email 或 pending Email 修改時，舊首次登入密碼立即失效並產生新 credential／新 expiry。
