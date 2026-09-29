@@ -1,12 +1,12 @@
 # CYCloud Identity — Authentication Contract
 
-> **Status:** current CYID `0.3.x` consumer authentication contract. CYID 0.3 runtime is merged and deployed to development; exact source/deployment status is tracked only in `../TODO.md`.
+> **Status:** provider authentication contract for current CYID `0.3.x`. All consumer implementations must also follow `CONSUMER_INTEGRATION_STANDARD.md`; exact source/deployment status is tracked only in `../TODO.md`.
 
 ## 1. Transport boundary
 
 Cloud App Workers call CYID through a private Cloudflare Service Binding. Browsers never receive provider secrets, credential verifiers, OTP peppers or Identity D1 identifiers.
 
-Normal Identity session tokens are opaque. Consumer Apps keep the raw token only in reviewed transport such as an `HttpOnly; Secure; SameSite=Strict` cookie; CYID stores only a digest.
+Normal Identity session tokens are opaque. Consumer Apps keep the raw token only in reviewed protected transport such as an `HttpOnly; Secure` cookie with an app-tested SameSite policy; CYID stores only a digest. Shared browser/session transport requirements and permitted app-specific cookie compatibility are defined in `CONSUMER_INTEGRATION_STANDARD.md`.
 
 ## 2. Normalized principal
 
