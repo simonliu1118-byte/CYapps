@@ -54,3 +54,6 @@ jobs:
 
       - name: Accept CYCloud Identity local D1 login roundtrip
         run: bash apps/CYCloudIdentity/scripts/accept_auth_local.sh
+
+      - name: Accept CYCloud Identity first-login password roundtrip
+        run: bash apps/CYCloudIdentity/scripts/accept_first_login_local.sh
