@@ -37,6 +37,15 @@
 - 任何 AI 接手 APP 前，先直接比對本 repo `COMMON_RULES_VERSION` 與 AITeam `main`；若不同或內容有疑義，先同步再開發。
 - 同步只可更新三個共通母本副本，不得覆蓋本 repo `REPO_POLICY.md` 或任何 APP 的 `PROJECT_RULES.md`。
 
+## 4.1 CYCloud Identity Consumer Governance
+
+- CYCloud Identity（CYID）是 CY Cloud Apps 的 shared Identity authority。凡專案實際接入 CYID，都必須遵守 `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 與 CYID canonical contracts；consumer 不得以自己的 handoff、README、legacy auth code 或 app-local文件分叉 Workspace Role、Identity Admin、Application Access、Session、Email verification、Recovery 等 shared Identity 語意。
+- CYID 以 `apps/CYCloudIdentity/CONSUMER_CONTRACT_VERSION` 與 `CONSUMER_MIN_COMPATIBLE_VERSION` 公布目前 consumer contract 與最低相容版本。完成接入的 consumer 必須保存自己的 `CYID_CONSUMER_VERSION`，且部署版本必須落在 CYID 公布的支援範圍內。
+- Consumer-specific handoff 只可描述該 App 的現況差異、遷移步驟、app-specific browser/device constraint 與 acceptance；共同 Identity 規範必須回到 CYID consumer standard，不得複製成第二份 authority。
+- CYID consumer-visible contract 變更必須在 PR 標示 `CYID Consumer Impact: NONE / BACKWARD_COMPATIBLE / CONSUMER_UPDATE_REQUIRED`。後兩者必須同步更新 consumer standard、consumer contract version 與 consumer changelog。
+- 若變更要求 consumer 更新，CYID provider 不得先移除仍有正式 consumer 使用的相容行為。應先保留 compatibility path／完成 consumer migration，再提升最低相容 consumer version；不得以 provider 單邊更新造成既有 production consumer 中斷。
+- 各 consumer 的 app-local business/module authorization 仍由該 App 自己負責；遵守 CYID consumer standard 不代表把業務權限搬進 CYID。
+
 ## 5. CY 共用視覺準則
 
 AITeam `main` 是 CY 共用桌面視覺與 Icon Family 的唯一 canonical source：
