@@ -33,9 +33,10 @@ function setupV0215Build4Toolbar(attempt = 0) {
   const prev = document.querySelector('#ledgerPrevMonth');
   const next = document.querySelector('#ledgerNextMonth');
   const more = document.querySelector('#mobileLedgerMoreButton');
-  const picker = monthTools?.querySelector('.month-picker') || document.querySelector('.ledger-month-tools input[type="month"]')?.closest('.month-picker');
-  if (!monthTools || !prev || !next || !more || !picker) {
-    if (attempt < 40) window.setTimeout(() => setupV0215Build4Toolbar(attempt + 1), 50);
+  const slot = document.querySelector('#ledgerMonthSlot');
+  const picker = document.querySelector('.ledger-title .month-picker');
+  if (!monthTools || !prev || !next || !more || !slot || !picker) {
+    if (attempt < 60) window.setTimeout(() => setupV0215Build4Toolbar(attempt + 1), 50);
     return;
   }
 
@@ -51,8 +52,14 @@ function setupV0215Build4Toolbar(attempt = 0) {
     });
   }
 
-  monthTools.append(balance, prev, picker, next, more);
+  // Keep the month picker inside its original slot. Moving the label itself out of
+  // the slot leaves an extra grid child and breaks the five-column mobile toolbar.
+  if (picker.parentElement !== slot) slot.append(picker);
+  monthTools.append(balance, prev, slot, next, more);
   monthTools.classList.add('v0215-toolbar-ready');
+
+  const displayMonth = document.querySelector('#ledgerDisplayMonth');
+  if (displayMonth) displayMonth.hidden = true;
 
   const sheet = document.querySelector('#mobileLedgerToolsSheet');
   sheet?.querySelector('[data-mobile-ledger-action="opening"]')?.remove();
