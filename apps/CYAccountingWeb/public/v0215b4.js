@@ -3,12 +3,11 @@ let cyV0215Build4Edit = null;
 let cyV0215Build4SaveHideTimer = null;
 let cyV0215Build4SaveClearTimer = null;
 let cyV0215Build4SetupDone = false;
-let cyV0215MobileBalancePopover = null;
-let cyV0215MobileBalanceAnchor = null;
 
 window.cyAfterSaveMessage = handleV0215Build4SaveMessage;
-window.cyOpenMobileLedgerBalance = openV0215MobileLedgerBalance;
+window.cyOpenMobileLedgerOpening = openV0215MobileLedgerOpening;
 window.cyOpenMobileLedgerLock = openV0215MobileLedgerLock;
+window.cyOpenMobileSettingsPane = openV0215MobileSettingsPane;
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', setupV0215Build4, { once: true });
@@ -52,7 +51,7 @@ function setupV0215Build4Toolbar(attempt = 0) {
     balance.type = 'button';
     balance.textContent = '餘額';
     balance.addEventListener('click', () => {
-      openV0215MobileLedgerBalance();
+      openV0215MobileLedgerOpening();
     });
   }
 
@@ -70,103 +69,39 @@ function setupV0215Build4Toolbar(attempt = 0) {
   sheet?.querySelector('[data-mobile-ledger-action="opening"]')?.remove();
 }
 
-function ensureV0215MobileBalancePopover() {
-  if (cyV0215MobileBalancePopover?.isConnected) return cyV0215MobileBalancePopover;
-  const popover = document.createElement('div');
-  popover.id = 'mobileLedgerBalancePopoverV0215';
-  popover.className = 'v0215-mobile-balance-popover';
-  popover.setAttribute('role', 'dialog');
-  popover.setAttribute('aria-label', '各帳戶餘額');
-  popover.hidden = true;
-  document.body.append(popover);
-  cyV0215MobileBalancePopover = popover;
-
-  document.addEventListener('click', event => {
-    if (popover.hidden) return;
-    if (popover.contains(event.target) || cyV0215MobileBalanceAnchor?.contains(event.target)) return;
-    closeV0215MobileLedgerBalance();
-  }, true);
-  window.addEventListener('resize', closeV0215MobileLedgerBalance);
-  window.addEventListener('scroll', closeV0215MobileLedgerBalance, true);
-  return popover;
-}
-
-async function openV0215MobileLedgerBalance() {
+async function openV0215MobileLedgerOpening() {
   if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
-  const anchor = document.querySelector('#mobileLedgerBalanceButton');
   const month = String(els.monthFilter?.value || '');
-  if (!anchor || !/^\d{4}-\d{2}$/.test(month)) return;
+  if (!/^\d{4}-\d{2}$/.test(month)) return;
+  if (els.openingMonth) els.openingMonth.value = month;
+  if (typeof loadOpeningBalances === 'function') await loadOpeningBalances();
+  if (els.openingDialog && !els.openingDialog.open) els.openingDialog.showModal();
+}
 
-  const popover = ensureV0215MobileBalancePopover();
-  cyV0215MobileBalanceAnchor = anchor;
-  popover.innerHTML = '<div class="v0215-mobile-balance-title">各帳戶餘額</div><div class="v0215-mobile-balance-loading">讀取中…</div>';
-  popover.hidden = false;
-  positionV0215MobileBalancePopover(anchor, popover);
+function openV0215MobileSettingsPane(tab) {
+  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  if (!['accounts', 'categories'].includes(tab)) return;
+  if (typeof openSettings === 'function') openSettings();
+  if (typeof setSettingsTab === 'function') setSettingsTab(tab);
 
-  try {
-    let opening = cyLedgerOpeningData;
-    if (!opening || opening.month !== month) {
-      opening = await api('/api/opening-balances?month=' + encodeURIComponent(month));
-      if (month !== String(els.monthFilter?.value || '')) return closeV0215MobileLedgerBalance();
-      cyLedgerOpeningData = opening;
-    }
-
-    const openingMap = new Map();
-    for (const item of opening?.accounts || []) {
-      const value = item.amount === null || item.amount === undefined || item.amount === '' ? 0 : Number(item.amount);
-      openingMap.set(String(item.name || ''), Number.isFinite(value) ? value : 0);
-    }
-    const calculated = calculateLedgerBalances(Array.isArray(state.transactions) ? state.transactions : [], openingMap);
-    const names = (state.accounts || []).map(account => String(account.name || '')).filter(Boolean);
-
-    popover.replaceChildren();
-    const title = document.createElement('div');
-    title.className = 'v0215-mobile-balance-title';
-    title.textContent = '各帳戶餘額';
-    popover.append(title);
-
-    const list = document.createElement('div');
-    list.className = 'v0215-mobile-balance-list';
-    if (!names.length) {
-      const empty = document.createElement('div');
-      empty.className = 'v0215-mobile-balance-empty';
-      empty.textContent = '尚無帳戶';
-      list.append(empty);
-    } else {
-      for (const name of names) {
-        const row = document.createElement('div');
-        row.className = 'v0215-mobile-balance-row';
-        const label = document.createElement('span');
-        label.textContent = name;
-        const value = document.createElement('strong');
-        value.textContent = money(calculated.endingByAccount.get(name) ?? openingMap.get(name) ?? 0);
-        row.append(label, value);
-        list.append(row);
-      }
-    }
-    popover.append(list);
-    positionV0215MobileBalancePopover(anchor, popover);
-  } catch (error) {
-    popover.innerHTML = '<div class="v0215-mobile-balance-title">各帳戶餘額</div><div class="v0215-mobile-balance-error"></div>';
-    const target = popover.querySelector('.v0215-mobile-balance-error');
-    if (target) target.textContent = error?.message || '餘額讀取失敗。';
-    positionV0215MobileBalancePopover(anchor, popover);
+  const dialog = els.settingsDialog || document.querySelector('#settingsDialog');
+  if (!dialog) return;
+  dialog.classList.add('v0215-mobile-settings-focus');
+  dialog.dataset.mobileSettingsFocus = tab;
+  const title = dialog.querySelector('.modal-header h2');
+  if (title) {
+    if (!title.dataset.v0215OriginalTitle) title.dataset.v0215OriginalTitle = title.textContent || '設定';
+    title.textContent = tab === 'accounts' ? '帳戶設定' : '科目設定';
   }
-}
-
-function positionV0215MobileBalancePopover(anchor, popover) {
-  if (!anchor || !popover || popover.hidden) return;
-  const anchorBox = anchor.getBoundingClientRect();
-  const popoverBox = popover.getBoundingClientRect();
-  const left = Math.max(8, Math.min(anchorBox.left, window.innerWidth - popoverBox.width - 8));
-  const top = Math.min(anchorBox.bottom + 6, window.innerHeight - popoverBox.height - 8);
-  popover.style.left = Math.round(left) + 'px';
-  popover.style.top = Math.round(Math.max(8, top)) + 'px';
-}
-
-function closeV0215MobileLedgerBalance() {
-  cyV0215MobileBalanceAnchor = null;
-  if (cyV0215MobileBalancePopover) cyV0215MobileBalancePopover.hidden = true;
+  if (!dialog.dataset.v0215FocusBound) {
+    dialog.dataset.v0215FocusBound = '1';
+    dialog.addEventListener('close', () => {
+      dialog.classList.remove('v0215-mobile-settings-focus');
+      delete dialog.dataset.mobileSettingsFocus;
+      const heading = dialog.querySelector('.modal-header h2');
+      if (heading?.dataset.v0215OriginalTitle) heading.textContent = heading.dataset.v0215OriginalTitle;
+    });
+  }
 }
 
 function ensureV0215MobileLockDialog() {
@@ -212,7 +147,6 @@ function openV0215MobileLedgerLock() {
   const month = String(els.monthFilter?.value || '');
   if (!/^\d{4}-\d{2}$/.test(month)) return;
 
-  closeV0215MobileLedgerBalance();
   const dialog = ensureV0215MobileLockDialog();
   const lockedThrough = String(state.lockedThrough || '');
   const locked = Boolean(lockedThrough && month <= lockedThrough);
