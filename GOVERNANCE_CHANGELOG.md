@@ -1,5 +1,13 @@
 # CYApps Governance Changelog
 
+## 2.3.19 — 2026/09/30
+
+- 建立 CYCloud Identity 唯一 shared consumer technical standard：`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`。所有接入 CYID 的 App 必須以該 standard 與 CYID canonical contracts 為共同 Identity contract；consumer-specific handoff 只可保存 app 差異／遷移／例外／驗收，不得複製共同規範成第二套 authority。
+- 新增 `CONSUMER_CONTRACT_VERSION` 與 `CONSUMER_MIN_COMPATIBLE_VERSION`，分離 CYID product version 與 consumer contract version；完成接入的 consumer 以自己的 `CYID_CONSUMER_VERSION` 宣告所採用 revision，且部署版本必須落在 provider 支援窗內。
+- CYID PR 新增 mandatory `CYID Consumer Impact: NONE / BACKWARD_COMPATIBLE / CONSUMER_UPDATE_REQUIRED` 分類。Consumer-visible 變更必須同步更新 standard、contract version 與 consumer contract changelog；提高最低相容版本只允許在 update-required migration 下進行。
+- 明確禁止 provider 單邊 breaking cutover：受影響 production consumer 尚未遷移時，CYID 必須保留 compatibility path 或先完成協調 migration，不得先提高最低相容版本造成既有 consumer 中斷。
+- CYAccountingWeb handoff 收斂為 CYACC-specific migration map；shared Role／Session／App Access／first-login／recovery 規範改由 consumer standard 單一維護。
+
 ## 2.3.18 — 2026/09/30
 
 - 依使用者最終確認，CYCloud Identity 新 Employee 首次使用流程對外統一稱 **Email 驗證**；不再以獨立「啟用帳號」流程作產品模型。

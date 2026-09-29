@@ -75,8 +75,15 @@
 - 架構不得預設需要付費 Cloudflare／Email／Backup tier；若容量超出可用額度，先量測與最佳化，再由使用者決定升級。
 - Identity 查詢必須有索引；避免 full scan、高頻 polling、session heartbeat writes、無必要 Cron 或其他會快速消耗免費額度的背景工作。
 
-## 9. Consumer 工作線邊界
+## 9. Consumer contract 與工作線治理
 
+- `docs/CONSUMER_INTEGRATION_STANDARD.md` 是所有 CYID consumer 的唯一 shared technical integration standard；永久遵循義務由本文件與 repository governance 建立。Consumer-specific handoff 不得複製共同規範後形成第二套 Identity authority。
+- CYID 以 `CONSUMER_CONTRACT_VERSION` 發布最新 consumer contract revision，以 `CONSUMER_MIN_COMPATIBLE_VERSION` 定義 provider runtime 仍支援的最舊 consumer revision。完成 CYID 接入的 consumer 必須保存自己的 `CYID_CONSUMER_VERSION`。
+- CYID product `VERSION` 與 consumer contract version 是不同維度；只有 consumer-visible obligation / endpoint / field / authority semantics 改變時才需要推進 consumer contract version。
+- 每個修改 CYID 的 PR 都必須標示 consumer impact：`NONE`、`BACKWARD_COMPATIBLE` 或 `CONSUMER_UPDATE_REQUIRED`。後兩者必須同一工作項目更新 consumer standard、contract version 與 consumer contract changelog。
+- `BACKWARD_COMPATIBLE` 變更不得使目前最低相容版本失效；consumer 可在支援版本窗內逐步升級。
+- `CONSUMER_UPDATE_REQUIRED` 變更必須先保留可讓既有正式 consumer 運作的 compatibility path，或完成協調 migration；在受影響 consumer 尚未更新前，不得先提高最低相容版本並部署會讓 production consumer 失效的 provider。
+- Consumer-specific handoff 只保存 app 現況差異、migration plan、app-specific例外與 acceptance，不保存 shared Role / Session / App Access / first-login / recovery 規格副本。
 - CY Web 是第一個 Shared Identity consumer 與核心帳號管理入口。
-- CYAccountingWeb（CYACCweb）與 CYInvoice 採同一 CYID shared contract，但實際 consumer migration 在各自工作線執行；本專案不直接修改其業務 runtime。
+- CYAccountingWeb（CYACCweb）與 CYInvoice 採同一 CYID consumer standard，但實際 consumer migration 在各自工作線執行；本專案不直接修改其業務 runtime。
 - CYInvoice-specific Device pairing、Device Token、Local→Cloud transition 與 Windows offline credential cache 保留在 CYInvoice 工作線，不反向升格為 CYID 共通規則。

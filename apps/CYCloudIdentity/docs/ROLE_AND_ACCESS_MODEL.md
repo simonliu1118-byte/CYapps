@@ -111,4 +111,4 @@ Old Identity Group memberships, Group Application grants and `USER_ADMIN` compat
 
 ## 12. Consumer boundary
 
-CY Web is the first consumer/core account portal. CYAccountingWeb and CYInvoice adopt the same shared role/session/App Access contract in their own workstreams. CYInvoice-specific Device/local/offline behavior remains outside CYID.
+All consumers implement shared Identity through `CONSUMER_INTEGRATION_STANDARD.md` and the machine-readable compatibility window. CY Web is the first consumer/core account portal. CYAccountingWeb and CYInvoice adopt the same shared role/session/App Access contract in their own workstreams. Consumer-specific business/module permissions stay app-local, and CYInvoice-specific Device/local/offline behavior remains outside CYID.

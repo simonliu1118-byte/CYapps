@@ -26,6 +26,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           HEAD_REF: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
 
@@ -59,6 +60,59 @@ jobs:
               p = pathlib.Path(rel)
               if not p.is_file() or not re.fullmatch(r'\d+\.\d+\.\d+\n?', p.read_text(encoding='utf-8')):
                   print(f'ERROR: {rel} must contain X.Y.Z')
+                  sys.exit(1)
+
+          provider_root = pathlib.Path('apps/CYCloudIdentity')
+          current_path = provider_root / 'CONSUMER_CONTRACT_VERSION'
+          minimum_path = provider_root / 'CONSUMER_MIN_COMPATIBLE_VERSION'
+          standard_path = provider_root / 'docs/CONSUMER_INTEGRATION_STANDARD.md'
+          changelog_path = provider_root / 'docs/CONSUMER_CONTRACT_CHANGELOG.md'
+          for p in [current_path, minimum_path, standard_path, changelog_path]:
+              if not p.is_file():
+                  print(f'ERROR: missing CYID consumer contract file: {p.as_posix()}')
+                  sys.exit(1)
+
+          def semver(text: str):
+              value = text.strip()
+              if not re.fullmatch(r'\d+\.\d+\.\d+', value):
+                  raise ValueError(value)
+              return tuple(int(x) for x in value.split('.'))
+
+          try:
+              consumer_current = semver(current_path.read_text(encoding='utf-8'))
+              consumer_min = semver(minimum_path.read_text(encoding='utf-8'))
+          except ValueError as exc:
+              print(f'ERROR: invalid CYID consumer contract version: {exc}')
+              sys.exit(1)
+          if consumer_min > consumer_current:
+              print('ERROR: CYID minimum compatible consumer version exceeds current contract version')
+              sys.exit(1)
+
+          standard_text = standard_path.read_text(encoding='utf-8')
+          current_text = '.'.join(str(x) for x in consumer_current)
+          minimum_text = '.'.join(str(x) for x in consumer_min)
+          if f'Contract version:** `{current_text}`' not in standard_text:
+              print('ERROR: CYID consumer standard header does not match CONSUMER_CONTRACT_VERSION')
+              sys.exit(1)
+          if f'Minimum compatible consumer version:** `{minimum_text}`' not in standard_text:
+              print('ERROR: CYID consumer standard header does not match CONSUMER_MIN_COMPATIBLE_VERSION')
+              sys.exit(1)
+
+          for marker_path in sorted(pathlib.Path('apps').glob('*/CYID_CONSUMER_VERSION')):
+              try:
+                  adopted = semver(marker_path.read_text(encoding='utf-8'))
+              except ValueError as exc:
+                  print(f'ERROR: invalid {marker_path.as_posix()}: {exc}')
+                  sys.exit(1)
+              if adopted < consumer_min or adopted > consumer_current:
+                  print(
+                      f'ERROR: {marker_path.as_posix()}={marker_path.read_text().strip()} '
+                      f'is outside CYID supported consumer window {minimum_text}..{current_text}'
+                  )
+                  sys.exit(1)
+              project_rules = marker_path.parent / 'PROJECT_RULES.md'
+              if not project_rules.is_file() or 'CONSUMER_INTEGRATION_STANDARD.md' not in project_rules.read_text(encoding='utf-8'):
+                  print(f'ERROR: {marker_path.parent.as_posix()} declares CYID_CONSUMER_VERSION but PROJECT_RULES does not adopt the CYID consumer standard')
                   sys.exit(1)
 
           required_root = [
@@ -135,6 +189,16 @@ jobs:
             repo_gov_changed=0
             gov_version_changed=0
             gov_changelog_changed=0
+            cyid_changed=0
+            consumer_standard_changed=0
+            consumer_version_changed=0
+            consumer_min_changed=0
+            consumer_min_existed=0
+            consumer_changelog_changed=0
+
+            if git cat-file -e "origin/main:apps/CYCloudIdentity/CONSUMER_MIN_COMPATIBLE_VERSION" 2>/dev/null; then
+              consumer_min_existed=1
+            fi
 
             for path in "${changed[@]}"; do
               case "$path" in
@@ -151,6 +215,14 @@ jobs:
               esac
               [ "$path" = "GOVERNANCE_VERSION" ] && gov_version_changed=1
               [ "$path" = "GOVERNANCE_CHANGELOG.md" ] && gov_changelog_changed=1
+
+              case "$path" in
+                apps/CYCloudIdentity/*) cyid_changed=1 ;;
+              esac
+              [ "$path" = "apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md" ] && consumer_standard_changed=1
+              [ "$path" = "apps/CYCloudIdentity/CONSUMER_CONTRACT_VERSION" ] && consumer_version_changed=1
+              [ "$path" = "apps/CYCloudIdentity/CONSUMER_MIN_COMPATIBLE_VERSION" ] && consumer_min_changed=1
+              [ "$path" = "apps/CYCloudIdentity/docs/CONSUMER_CONTRACT_CHANGELOG.md" ] && consumer_changelog_changed=1
             done
 
             if [ "$common_changed" -eq 1 ]; then
@@ -170,6 +242,33 @@ jobs:
               esac
               [ "$gov_version_changed" -eq 1 ] || { echo "ERROR: repository governance change must update GOVERNANCE_VERSION"; exit 1; }
               [ "$gov_changelog_changed" -eq 1 ] || { echo "ERROR: repository governance change must update GOVERNANCE_CHANGELOG.md"; exit 1; }
+            fi
+
+            if [ "$cyid_changed" -eq 1 ]; then
+              impact="$(printf '%s' "$PR_BODY" | sed -nE 's/.*CYID Consumer Impact:[[:space:]]*(NONE|BACKWARD_COMPATIBLE|CONSUMER_UPDATE_REQUIRED).*/\1/p' | head -n 1)"
+              case "$impact" in
+                NONE|BACKWARD_COMPATIBLE|CONSUMER_UPDATE_REQUIRED) ;;
+                *)
+                  echo "ERROR: CYID PR must declare 'CYID Consumer Impact: NONE|BACKWARD_COMPATIBLE|CONSUMER_UPDATE_REQUIRED' in the PR body"
+                  exit 1
+                  ;;
+              esac
+
+              if [ "$impact" = "NONE" ]; then
+                if [ "$consumer_version_changed" -eq 1 ] || [ "$consumer_min_changed" -eq 1 ]; then
+                  echo "ERROR: CYID Consumer Impact NONE cannot change consumer compatibility versions"
+                  exit 1
+                fi
+              else
+                [ "$consumer_standard_changed" -eq 1 ] || { echo "ERROR: consumer-visible CYID change must update CONSUMER_INTEGRATION_STANDARD.md"; exit 1; }
+                [ "$consumer_version_changed" -eq 1 ] || { echo "ERROR: consumer-visible CYID change must update CONSUMER_CONTRACT_VERSION"; exit 1; }
+                [ "$consumer_changelog_changed" -eq 1 ] || { echo "ERROR: consumer-visible CYID change must update CONSUMER_CONTRACT_CHANGELOG.md"; exit 1; }
+              fi
+
+              if [ "$consumer_min_changed" -eq 1 ] && [ "$consumer_min_existed" -eq 1 ] && [ "$impact" != "CONSUMER_UPDATE_REQUIRED" ]; then
+                echo "ERROR: changing an established minimum compatible consumer version requires CYID Consumer Impact CONSUMER_UPDATE_REQUIRED"
+                exit 1
+              fi
             fi
           fi
 
