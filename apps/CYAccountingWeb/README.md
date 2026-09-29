@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current formal baseline: **V0.21.5 Build 6**（2026-09-30）
+> Current formal baseline: **V0.21.5 Build 7**（2026-09-30）
 >
 > Current continuity handoff: [`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)
 
@@ -118,6 +118,7 @@ CYAccountingWeb 自己的 D1 建立本系統 web session
 - **V0.21.5 Build 4 Mobile edit + ledger toolbar**：手機看帳工具列改為 `餘額｜<｜月份｜>｜更多`，更多只保留鎖帳與 Excel；月統計改為小卡並以淨利綠／淨損紅呈現；摘要搜尋改為單列 search field、鍵盤 Search/Enter 直接送出；手機右滑編輯改用共用新增記帳表單，儲存成功回原月份／原清單位置，中途離開則視為取消且不寫入資料庫；存檔成功提示移至儲存鍵下方約 2.5 秒淡出；
 - **V0.21.5 Build 5 Mobile fix**：修正 Build 4 手機編輯接管可能因動態 script 載入時機而未初始化；手機標題列下方硬橫線移除；收入／支出恢復 Build 3 較強的四邊漸層；月統計小卡改為單排 `期初｜收入｜支出｜期末｜淨利/淨損`；
 - **V0.21.5 Build 6 Tablet auth hotfix**：平板登入 overlay 改為鍵盤安全的 `dvh` 高度與可捲動配置，避免 iPad/Android 平板鍵盤彈出後登入卡被遮住且無法操作；auth stylesheet 加 cache key 強制更新；
+- **V0.21.5 Build 7 Mobile toolbar + clear/cancel fix**：手機收入／支出舊版 3px 上緣硬線改以相同 specificity 明確清除；看帳月份列先保持穩定三欄，等餘額／更多工具完成建立後再切成 `餘額｜<｜月份｜>｜更多` 五欄；新增記帳儲存鍵下方新增「清空」，編輯模式自動改成「取消」，取消時不寫入資料庫並回原本看帳年月與清單位置；
 - **V0.20.0 RWD / Adaptive UI Phase 1**：建立 Desktop / Tablet / Mobile presentation 分層；
 - **V0.20.1 Mobile refinement**：收斂交易卡片資訊層級、inline edit 可視性、Header／搜尋／設定操作密度與窄手機 presentation；
 - **V0.21.0 Desktop Business UI**：Desktop `>=1024px` 改為現代、簡潔的商務 Web presentation；

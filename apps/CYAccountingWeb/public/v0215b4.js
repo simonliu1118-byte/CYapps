@@ -15,21 +15,29 @@ window.addEventListener('load', setupV0215Build4, { once: true });
 
 function setupV0215Build4() {
   if (cyV0215Build4SetupDone) return;
-  if (!document.querySelector('#transactionRows') || !document.querySelector('#transactionForm') || !document.querySelector('#mobileMainNav')) return;
+  if (!document.querySelector('#transactionRows') || !document.querySelector('#transactionForm') || !document.querySelector('#mobileMainNav')) {
+    window.setTimeout(setupV0215Build4, 50);
+    return;
+  }
   cyV0215Build4SetupDone = true;
   setupV0215Build4Toolbar();
   setupV0215Build4Search();
   setupV0215Build4SaveMessage();
+  setupV0215Build4EntrySecondaryAction();
   setupV0215Build4MobileEdit();
 }
 
-function setupV0215Build4Toolbar() {
+function setupV0215Build4Toolbar(attempt = 0) {
   if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
   const monthTools = document.querySelector('.ledger-month-tools');
   const prev = document.querySelector('#ledgerPrevMonth');
   const next = document.querySelector('#ledgerNextMonth');
   const more = document.querySelector('#mobileLedgerMoreButton');
-  if (!monthTools || !prev || !next || !more) return;
+  const picker = monthTools?.querySelector('.month-picker') || document.querySelector('.ledger-month-tools input[type="month"]')?.closest('.month-picker');
+  if (!monthTools || !prev || !next || !more || !picker) {
+    if (attempt < 40) window.setTimeout(() => setupV0215Build4Toolbar(attempt + 1), 50);
+    return;
+  }
 
   let balance = document.querySelector('#mobileLedgerBalanceButton');
   if (!balance) {
@@ -43,8 +51,8 @@ function setupV0215Build4Toolbar() {
     });
   }
 
-  monthTools.insertBefore(balance, prev);
-  monthTools.append(more);
+  monthTools.append(balance, prev, picker, next, more);
+  monthTools.classList.add('v0215-toolbar-ready');
 
   const sheet = document.querySelector('#mobileLedgerToolsSheet');
   sheet?.querySelector('[data-mobile-ledger-action="opening"]')?.remove();
@@ -87,6 +95,61 @@ function setupV0215Build4SaveMessage() {
   if (typeof media.addEventListener === 'function') media.addEventListener('change', sync);
   else media.addListener?.(sync);
   sync();
+}
+
+function setupV0215Build4EntrySecondaryAction() {
+  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  const saveButton = document.querySelector('#saveButton');
+  const message = document.querySelector('#saveMessage');
+  if (!saveButton || !message) return;
+
+  let button = document.querySelector('#mobileEntrySecondaryButton');
+  if (!button) {
+    button = document.createElement('button');
+    button.id = 'mobileEntrySecondaryButton';
+    button.className = 'secondary v0215-entry-secondary-button';
+    button.type = 'button';
+    button.textContent = '清空';
+    button.addEventListener('click', () => {
+      if (cyV0215Build4Edit) {
+        cancelV0215Build4MobileEditAndReturn();
+        return;
+      }
+      clearV0215Build4EntryForm();
+    });
+  }
+
+  message.insertAdjacentElement('beforebegin', button);
+  syncV0215Build4EntrySecondaryAction();
+}
+
+function syncV0215Build4EntrySecondaryAction() {
+  const button = document.querySelector('#mobileEntrySecondaryButton');
+  if (!button) return;
+  button.textContent = cyV0215Build4Edit ? '取消' : '清空';
+  button.classList.toggle('is-cancel', Boolean(cyV0215Build4Edit));
+}
+
+function clearV0215Build4EntryForm() {
+  showMessage('');
+  const today = typeof localDateString === 'function' ? localDateString(new Date()) : new Date().toISOString().slice(0, 10);
+  els.txDate.value = today;
+  renderAccounts();
+  renderCategories();
+  els.summary.value = '';
+  els.amount.value = '';
+  updateEntryLockState();
+  els.summary.blur();
+  els.amount.blur();
+}
+
+function cancelV0215Build4MobileEditAndReturn() {
+  const context = cyV0215Build4Edit?.returnContext;
+  if (!context) return false;
+  cancelV0215Build4MobileEdit();
+  switchV0215Build4MobilePage('ledger');
+  restoreV0215Build4LedgerContext(context, false);
+  return true;
 }
 
 function handleV0215Build4SaveMessage(message, text, isError) {
@@ -141,10 +204,7 @@ function setupV0215Build4MobileEdit() {
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    const context = cyV0215Build4Edit.returnContext;
-    cancelV0215Build4MobileEdit();
-    switchV0215Build4MobilePage('ledger');
-    restoreV0215Build4LedgerContext(context, false);
+    cancelV0215Build4MobileEditAndReturn();
   }, true);
 
   window.addEventListener('pagehide', () => {
@@ -183,6 +243,7 @@ function beginV0215Build4MobileEdit(id) {
 
   els.kindButtons.forEach(button => { button.disabled = true; });
   els.saveButton.textContent = '儲存修改';
+  syncV0215Build4EntrySecondaryAction();
   document.querySelector('.entry-card')?.classList.add('v0215-mobile-editing');
   showMessage('');
   updateEntryLockState();
@@ -258,6 +319,7 @@ function cancelV0215Build4MobileEdit(options = {}) {
   restoreV0215Build4EntryDraft(edit.draft);
   els.kindButtons.forEach(button => { button.disabled = false; });
   els.saveButton.textContent = '儲存';
+  syncV0215Build4EntrySecondaryAction();
   document.querySelector('.entry-card')?.classList.remove('v0215-mobile-editing');
   showMessage('');
   updateEntryLockState();
