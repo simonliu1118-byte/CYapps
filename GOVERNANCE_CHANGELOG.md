@@ -1,5 +1,13 @@
 # CYApps Governance Changelog
 
+## 2.3.18 — 2026/09/30
+
+- 依使用者最終確認，CYCloud Identity 新 Employee 首次使用流程對外統一稱 **Email 驗證**；不再以獨立「啟用帳號」流程作產品模型。
+- 新 Employee 建立後由 CYID 自動寄出 Email 驗證郵件，內含具 expiry 的一次性首次登入密碼；temporary credential 只能進 CY Web 核心帳號流程，不得建立一般 Identity Session，也不得登入其他 CY App。
+- 有效首次登入密碼只可換取短效 first-login ticket；使用者設定正式密碼後，CYID 完成 Email 驗證、正式 credential 建立與 temporary credential/ticket 作廢，但**不得直接發 normal Session**，必須回到 CY Web 一般登入頁重新以正式密碼登入。
+- 首次登入密碼逾期、管理員「重寄驗證 Email」或 pending Email 修改時，舊 temporary credential 必須立即失效並重新產生 credential／expiry；寄送失敗保留 pending Employee。
+- CYCloud Identity active 文件正式收斂為 project rules、Role/Access、Auth、UI、Architecture、OTP/security 與單一 TODO；dated handoff 與舊 Application Role Mapping 不再留在 active tree，歷史由 Git history 追溯。
+
 ## 2.3.17 — 2026/09/29
 
 - 依使用者最終確認，CYCloud Identity Workspace Role 正式收斂為 `SUPER_ADMIN / ADMIN / USER` 三層；`Identity Admin` 改定義為附掛於 ADMIN 的特殊 Identity-management capability，而不是第四個 Role。

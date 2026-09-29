@@ -25,6 +25,9 @@ const build15Css = read('public/v021b15.css');
 const build16Css = read('public/v021b16.css');
 const patchCss = read('public/v0211.css');
 const patch2Css = read('public/v0212.css');
+const patch4Js = read('public/v0214.js');
+const patch4Css = read('public/v0214.css');
+const patch5Css = read('public/v0215.css');
 const v021 = read('public/v021.js');
 const build8Js = read('public/v021b8.js');
 const build10Js = read('public/v021b10.js');
@@ -41,11 +44,12 @@ const v03 = read('public/v03.js');
 const v06 = read('public/v06.js');
 const v07 = read('public/v07.js');
 const v013 = read('public/v013.js');
+const v019 = read('public/v019.js');
 const appV19 = read('src/app-v19.js');
 const v11Tools = read('src/v11-tools.js');
 
-assert.equal(version, '0.21.2');
-assert.equal(build, '0');
+assert.equal(version, '0.21.5');
+assert.equal(build, '2');
 assert.match(build11Js, /ensureV21Build12Script\(\)/);
 assert.match(build11Js, /ensureV21Build13Script\(\)/);
 assert.match(build11Js, /ensureV21Build14Script\(\)/);
@@ -62,7 +66,7 @@ assert.match(build15Js, /CY_V21_BUILD15_VERSION = 'V0\.21\.0 Build 15'/);
 assert.match(build16Js, /CY_V21_BUILD16_VERSION = 'V0\.21\.0 Build 16'/);
 assert.match(patchJs, /CY_V0211_VERSION = 'V0\.21\.1'/);
 assert.match(patch2Js, /CY_V0212_VERSION = 'V0\.21\.2'/);
-for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, patch2Js, keyboardJs]) {
+for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, patch2Js, patch4Js, keyboardJs]) {
   assert.doesNotThrow(() => new Function(js), 'V0.21 overlay JavaScript must parse');
 }
 
@@ -170,10 +174,24 @@ assert.match(patchJs, /\[data-category-delete\]/);
 assert.match(patchJs, /\[data-group-delete\]/);
 assert.match(patchCss, /\.cy-confirm-dialog/);
 
+// V0.21.4 completion feedback, balance breakdown and safe optimistic interactions.
+assert.match(v019, /window\.cyShowMigrationComplete\?\.\(result\)/);
+assert.match(patch4Js, /帳本移轉完成/);
+assert.match(v06, /balancesById/);
+assert.match(v06, /data-balance-popover-id/);
+assert.match(patch4Js, /handleV0214AccountDefault/);
+assert.match(patch4Js, /handleV0214FavoriteToggle/);
+assert.match(patch4Js, /已還原/);
+assert.match(patch4Css, /\.v0214-balance-popover/);
+
+// V0.21.5 Build 2 keeps the corrected layout scoped to phone widths.
+assert.match(patch5Css, /@media \(max-width: 767px\)/);
+assert.doesNotMatch(patch5Css, /@media \(min-width: 1024px\)[\s\S]*?grid-template-areas/);
+
 // Ledger/export behavior and Build 4 observer hotfix remain protected.
 assert.match(v013, /button\.textContent = '匯出中…'/);
 assert.match(v013, /button\.setAttribute\('aria-busy', 'true'\)/);
 assert.match(v021, /if \(account\.textContent !== nextText\) account\.textContent = nextText;/);
 assert.match(v021, /if \(empty && empty\.textContent !== '本次尚無輸入紀錄。'\) empty\.textContent = '本次尚無輸入紀錄。';/);
 
-console.log('V0.21.2 desktop regression tests passed.');
+console.log('V0.21.5 Build 2 desktop regression tests passed.');

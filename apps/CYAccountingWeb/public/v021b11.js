@@ -10,6 +10,8 @@ ensureV21Build16Script();
 ensureV0211PatchScript();
 ensureV0211KeyboardScript();
 ensureV0212PatchScript();
+ensureV0214PatchScript();
+ensureV0215Stylesheet();
 
 document.addEventListener('DOMContentLoaded', () => {
   syncV21Build11Version();
@@ -91,6 +93,22 @@ function ensureV0212PatchScript() {
   script.src = '/v0212.js';
   script.async = false;
   document.head.appendChild(script);
+}
+
+function ensureV0214PatchScript() {
+  if (document.querySelector('script[src="/v0214.js"]')) return;
+  const script = document.createElement('script');
+  script.src = '/v0214.js';
+  script.async = false;
+  document.head.appendChild(script);
+}
+
+function ensureV0215Stylesheet() {
+  if (document.querySelector('link[href^="/v0215.css"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/v0215.css?v=0215b2';
+  document.head.appendChild(link);
 }
 
 function syncV21Build11Version() {

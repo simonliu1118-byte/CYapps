@@ -9,12 +9,25 @@ const SESSION_COOKIE = 'cyaccounting_session';
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
 const APPLICATION = 'CYAccountingWeb';
 
+function shouldDisableBrowserCache(pathname) {
+  return pathname === '/' || pathname.endsWith('.html') || pathname.endsWith('.js');
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     if (!url.pathname.startsWith('/api/')) {
-      return env.ASSETS.fetch(request);
+      const response = await env.ASSETS.fetch(request);
+      if (!shouldDisableBrowserCache(url.pathname)) return response;
+      const headers = new Headers(response.headers);
+      headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
+      headers.set('pragma', 'no-cache');
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers
+      });
     }
 
     if (url.pathname === '/api/health' && request.method === 'GET') {

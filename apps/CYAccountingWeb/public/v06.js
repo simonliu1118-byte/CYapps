@@ -4,6 +4,7 @@ let cyLedgerOpeningData = null;
 let cyLedgerRefreshTimer = null;
 let cyLedgerObserver = null;
 let cyLedgerRequestId = 0;
+window.cyLedgerBalanceBreakdowns = new Map();
 
 window.addEventListener('load', () => {
   setupLedgerDesktopTools();
@@ -111,6 +112,8 @@ function renderDesktopLedger() {
     openingMap.set(String(item.name), Number.isFinite(value) ? value : 0);
   }
 
+  window.cyCloseLedgerBalancePopover?.();
+  window.cyLedgerBalanceBreakdowns = new Map();
   const calculated = calculateLedgerBalances(allTransactions, openingMap);
   const income = allTransactions.reduce((sum, tx) => sum + (tx.kind === 'income' ? Number(tx.amount) || 0 : 0), 0);
   const expense = allTransactions.reduce((sum, tx) => sum + (tx.kind === 'expense' ? Number(tx.amount) || 0 : 0), 0);
@@ -138,7 +141,12 @@ function renderDesktopLedger() {
   if (cyLedgerGroupByAccount) {
     writeLedgerRows(renderGroupedLedgerRows(visible, allTransactions, openingMap, calculated));
   } else {
-    writeLedgerRows(visible.map(tx => renderLedgerRow(tx, calculated.globalById.get(Number(tx.id)) ?? 0)).join(''));
+    writeLedgerRows(visible.map(tx => renderLedgerRow(
+      tx,
+      calculated.globalById.get(Number(tx.id)) ?? 0,
+      calculated.balancesById.get(Number(tx.id)) || new Map(),
+      false
+    )).join(''));
   }
 }
 
@@ -148,6 +156,7 @@ function calculateLedgerBalances(transactions, openingMap) {
   let globalBalance = [...openingMap.values()].reduce((sum, value) => sum + value, 0);
   const globalById = new Map();
   const accountById = new Map();
+  const balancesById = new Map();
 
   for (const tx of chronological) {
     const account = String(tx.account_name || '');
@@ -158,8 +167,9 @@ function calculateLedgerBalances(transactions, openingMap) {
     accountBalances.set(account, nextAccount);
     globalById.set(Number(tx.id), globalBalance);
     accountById.set(Number(tx.id), nextAccount);
+    balancesById.set(Number(tx.id), new Map(accountBalances));
   }
-  return { globalById, accountById, endingByAccount: accountBalances };
+  return { globalById, accountById, balancesById, endingByAccount: accountBalances };
 }
 
 function compareLedgerChronological(left, right) {
@@ -181,21 +191,52 @@ function renderGroupedLedgerRows(visible, allTransactions, openingMap, calculate
     const opening = openingMap.get(name) || 0;
     const ending = calculated.endingByAccount.get(name) ?? opening;
     const heading = `<tr class="account-group-row"><td colspan="8"><strong>${escapeHtml(name)}</strong><span>期初 ${money(opening)}　期末 ${money(ending)}</span></td></tr>`;
-    return heading + rows.map(tx => renderLedgerRow(tx, calculated.accountById.get(Number(tx.id)) ?? 0)).join('');
+    return heading + rows.map(tx => {
+      const accountBalance = calculated.accountById.get(Number(tx.id)) ?? 0;
+      return renderLedgerRow(tx, accountBalance, new Map([[name, accountBalance]]), true);
+    }).join('');
   }).join('');
 }
 
-function renderLedgerRow(tx, balance) {
+function splitLedgerAccountName(value) {
+  const chars = Array.from(String(value || '').trim());
+  if (chars.length <= 2) return [chars.join('')];
+  const cut = Math.floor(chars.length / 2);
+  return [chars.slice(0, cut).join(''), chars.slice(cut).join('')];
+}
+
+function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly = false) {
   const locked = isLocked(String(tx.tx_date || '').slice(0, 7));
-  return `<tr>
-    <td>${escapeHtml(String(tx.tx_date || '').replaceAll('-', '/'))}</td>
-    <td>${escapeHtml(tx.account_name)}</td>
+  const id = Number(tx.id);
+  if (Number.isInteger(id) && id > 0) {
+    const accounts = [...accountBalances.entries()].map(([name, value]) => ({
+      name: String(name || ''),
+      value: Number(value) || 0
+    }));
+    window.cyLedgerBalanceBreakdowns?.set(id, {
+      accountOnly,
+      activeAccount: String(tx.account_name || ''),
+      accounts,
+      total: Number(balance) || 0
+    });
+  }
+
+  const fullDate = String(tx.tx_date || '').replaceAll('-', '/');
+  const mobileDate = fullDate.length >= 10 ? fullDate.slice(5) : fullDate;
+  const accountName = String(tx.account_name || '');
+  const accountLines = splitLedgerAccountName(accountName);
+  const mobileAccount = accountLines.map(line => `<span>${escapeHtml(line)}</span>`).join('');
+  const kindClass = tx.kind === 'income' ? 'ledger-row-income' : 'ledger-row-expense';
+
+  return `<tr class="ledger-row ${kindClass}">
+    <td><span class="ledger-date-desktop">${escapeHtml(fullDate)}</span><span class="ledger-date-mobile">${escapeHtml(mobileDate)}</span></td>
+    <td class="ledger-account-name"><span class="ledger-account-desktop">${escapeHtml(accountName)}</span><span class="ledger-account-mobile" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
     <td>${escapeHtml(tx.category_name)}</td>
     <td class="summary">${escapeHtml(tx.summary || '')}</td>
-    <td class="num">${money(tx.amount)}</td>
-    <td class="num ledger-balance">${money(balance)}</td>
-    <td class="action-col"><button type="button" class="row-action" data-edit-id="${tx.id}" ${locked ? 'disabled' : ''}>編輯</button><button type="button" class="row-action delete" data-delete-id="${tx.id}" ${locked ? 'disabled' : ''}>刪除</button></td>
+    <td class="num ledger-amount">${money(tx.amount)}</td>
+    <td class="num ledger-balance" data-balance-popover-id="${id}" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="查看此筆後帳戶餘額">${money(balance)}</td>
+    <td class="action-col"><button type="button" class="row-action" data-edit-id="${tx.id}" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪</span></button></td>
   </tr>`;
 }
 
