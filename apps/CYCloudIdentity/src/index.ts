@@ -15,6 +15,7 @@ import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import {
   handleConfirmEmployeeActivation,
   handleCreateEmployee,
+  handleDeletePendingEmployee,
   handleStartEmployeeActivation,
   handleUpdateEmployee,
 } from "./employee-lifecycle";
@@ -137,9 +138,14 @@ export default {
       }
 
       let match = /^\/v1\/admin\/identity\/employees\/([^/]+)$/.exec(url.pathname);
-      if (request.method === "PATCH" && match) {
+      if (match) {
         const employeeId = decodedSegment(match[1]);
-        if (employeeId) return await handleUpdateEmployee(request, env, requestId, employeeId);
+        if (employeeId && request.method === "PATCH") {
+          return await handleUpdateEmployee(request, env, requestId, employeeId);
+        }
+        if (employeeId && request.method === "DELETE") {
+          return await handleDeletePendingEmployee(request, env, requestId, employeeId);
+        }
       }
 
       match = /^\/v1\/admin\/identity\/groups\/([^/]+)$/.exec(url.pathname);
