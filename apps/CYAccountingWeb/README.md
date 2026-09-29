@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current formal baseline: **V0.21.5 Build 10**（2026-09-30）
+> Current formal baseline: **V0.21.5 Build 11**（2026-09-30）
 >
 > Current continuity handoff: [`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)
 
@@ -122,6 +122,7 @@ CYAccountingWeb 自己的 D1 建立本系統 web session
 - **V0.21.5 Build 8 Tablet auth + Mobile fix**：撤回 Build 6 造成 iPad Safari 觸控異常的 Tablet auth overlay 改動；登入成功後改由完整頁面導向後再驗證 session，auth fetch 改用 `credentials: include`，Web session cookie 改為 `SameSite=Lax` 並補 `Expires`；手機收入／支出 slider 外層背景改為透明並裁切圓角；看帳月份 picker 保留在原本 `#ledgerMonthSlot`，五欄工具列固定為 `餘額｜<｜月份｜>｜更多`；
 - **V0.21.5 Build 9 Mobile month control**：只修手機看帳月份列，不碰 auth/session/CYID；畫面上的 `YYYY年M月` 改由 Web 自行繪製，原生 `input type=month` 保留為透明觸控層負責叫出手機原生月份選擇器，避免 iPhone Safari 原生 month control 溢出欄位與 `>` 重疊；
 - **V0.21.5 Build 10 Mobile tools refinement**：手機 `餘額` 維持期初餘額設定，但改為緊湊的手機版編輯介面並預設帶入目前看帳月份；`更多` 收斂為帳戶設定、科目設定、月份鎖帳、匯出 Excel；帳戶／科目在手機只開被選取的設定頁，月份鎖帳改為獨立小確認視窗，不再把整個設定介面拉出；auth/session/CYID 本輪不動；
+- **V0.21.5 Build 11 Mobile account menu cleanup**：手機右上角使用者選單移除「設定」，只保留身分資訊與「登出」；手機需要的設定功能仍保留在看帳頁 `更多`：帳戶設定、科目設定、月份鎖帳、匯出 Excel；Tablet / Desktop 設定入口不變；
 - **V0.20.0 RWD / Adaptive UI Phase 1**：建立 Desktop / Tablet / Mobile presentation 分層；
 - **V0.20.1 Mobile refinement**：收斂交易卡片資訊層級、inline edit 可視性、Header／搜尋／設定操作密度與窄手機 presentation；
 - **V0.21.0 Desktop Business UI**：Desktop `>=1024px` 改為現代、簡潔的商務 Web presentation；
