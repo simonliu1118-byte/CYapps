@@ -98,3 +98,29 @@ WHEN NEW.identity_admin = 1 AND NEW.role_key <> 'ADMIN'
 BEGIN
   SELECT RAISE(ABORT, 'identity admin capability requires ADMIN role');
 END;
+
+-- Credential presence is the durable proof that first activation was completed.
+-- This also covers bootstrap-created credentials on a fresh database where this
+-- migration has already been applied before the first Workspace exists.
+CREATE TRIGGER trg_employee_credential_marks_activated
+AFTER INSERT ON employee_credentials
+WHEN (SELECT activated_at FROM employees WHERE employee_id = NEW.employee_id) IS NULL
+BEGIN
+  UPDATE employees
+     SET activated_at = COALESCE(email_verified_at, NEW.updated_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   WHERE employee_id = NEW.employee_id;
+END;
+
+-- Every current/future Super Admin keeps ADMIN as its ordinary fallback role.
+-- SUPER_ADMIN itself is still derived exclusively from the protected Workspace
+-- pointer and is never stored as an editable Employee role value.
+CREATE TRIGGER trg_workspace_super_admin_fallback_role
+AFTER UPDATE OF super_admin_employee_id ON workspaces
+WHEN NEW.super_admin_employee_id IS NOT NULL
+BEGIN
+  UPDATE employees
+     SET role_key = 'ADMIN',
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+   WHERE workspace_id = NEW.workspace_id
+     AND employee_id = NEW.super_admin_employee_id;
+END;
