@@ -76,7 +76,7 @@ public sealed class ContactWindow : Window
         }
         return row;
     }
-    private static bool Confirm() => MessageBox.Show("確定刪除所選資料？", "確認刪除",
+    private bool Confirm() => MessageBox.Show(this, "確定刪除所選資料？", "確認刪除",
         MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
     private void RefreshContacts() => _contacts.ItemsSource = _repository.Contacts();
     private void LoadSelection()
@@ -111,11 +111,23 @@ public sealed class ContactWindow : Window
     {
         _addresses.CommitEdit(DataGridEditingUnit.Row, true);
         _phones.CommitEdit(DataGridEditingUnit.Row, true);
-        if (string.IsNullOrWhiteSpace(_name.Text)) { MessageBox.Show("請輸入收件人姓名。"); return; }
+        if (string.IsNullOrWhiteSpace(_name.Text))
+        {
+            MessageBox.Show(this, "請輸入收件人姓名。", "資料不足", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         _editing ??= new Contact();
         _editing.Name = _name.Text.Trim();
-        _editing.Addresses = _addressRows.ToList();
-        _editing.Phones = _phoneRows.ToList();
+        // Same rules as the main window: blank rows are dropped, missing postal codes are
+        // inferred from the address, and numbers use the shared phone format.
+        _editing.Addresses = _addressRows.Where(a => !string.IsNullOrWhiteSpace(a.Value)).ToList();
+        foreach (var address in _editing.Addresses)
+        {
+            address.Value = address.Value.Trim();
+            if (string.IsNullOrWhiteSpace(address.PostalCode)) address.PostalCode = Postal.Infer(address.Value) ?? "";
+        }
+        _editing.Phones = _phoneRows.Where(p => !string.IsNullOrWhiteSpace(p.Number)).ToList();
+        foreach (var phone in _editing.Phones) phone.Number = PhoneFormatting.Format(phone.Number);
         _repository.SaveContact(_editing);
         var id = _editing.Id;
         RefreshContacts();

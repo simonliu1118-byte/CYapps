@@ -246,9 +246,9 @@ public sealed class FormatWindow : Window
     {
         if (_working.Id == "format-15k" || _working.IsDefault)
         {
-            MessageBox.Show("內建或目前預設格式不可刪除。"); return;
+            MessageBox.Show(this, "內建或目前預設格式不可刪除。", "無法刪除", MessageBoxButton.OK, MessageBoxImage.Information); return;
         }
-        if (MessageBox.Show("確定刪除此格式？", "確認刪除", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(this, "確定刪除此格式？", "確認刪除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         _repository.DeleteFormat(_working.Id);
         ReloadFormats("format-15k");
     }
@@ -256,7 +256,7 @@ public sealed class FormatWindow : Window
     {
         if (!Apply() || _working.Name.Length == 0)
         {
-            MessageBox.Show("請檢查名稱與毫米、字級數值。"); return false;
+            MessageBox.Show(this, "請檢查名稱與毫米、字級數值。", "數值有誤", MessageBoxButton.OK, MessageBoxImage.Warning); return false;
         }
         _repository.SaveFormat(_working);
         var id = _working.Id;

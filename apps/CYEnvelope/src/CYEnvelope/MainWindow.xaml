@@ -16,7 +16,7 @@
     </Border>
     <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="#E5E8EC" BorderThickness="0,1,0,0" Padding="20,12">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <TextBlock Style="{StaticResource SecondaryText}" VerticalAlignment="Center" Text="請核對收件資料，再列印至預印信封。"/>
+        <TextBlock x:Name="StatusText" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,16,0" Text="請核對收件資料，再列印至預印信封。"/>
         <StackPanel Grid.Column="1" Orientation="Horizontal">
           <Button Content="清空" MinWidth="84" Margin="0,0,8,0" Click="ClearClick"/>
           <Button x:Name="PrintButton" Content="列印信封" MinWidth="120" Style="{StaticResource PrimaryButton}" Click="PrintClick"/>
@@ -39,7 +39,7 @@
                   <TextBox x:Name="RecipientBox" TextChanged="RecipientChanged" KeyDown="RecipientKeyDown" AutomationProperties.Name="收件人"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2"><TextBlock Text="郵遞區號" Style="{StaticResource FieldLabel}"/>
-                  <TextBox x:Name="PostalBox" MaxLength="3" TextChanged="InputChanged" AutomationProperties.Name="郵遞區號"/>
+                  <TextBox x:Name="PostalBox" MaxLength="3" TextChanged="PostalChanged" AutomationProperties.Name="郵遞區號"/>
                 </StackPanel>
               </Grid>
               <ListBox x:Name="Suggestions" MaxHeight="108" Visibility="Collapsed" MouseDoubleClick="SuggestionChosen"

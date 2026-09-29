@@ -50,14 +50,14 @@ public sealed class FrameWindow : Window
     private void Edit(object sender, RoutedEventArgs e)
     {
         if (_list.SelectedIndex < 0 || _entry.Text.Trim().Length == 0) return;
-        if (MessageBox.Show("修改這筆方框文字？", "確認", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(this, "修改這筆方框文字？", "確認修改", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         _working[_list.SelectedIndex] = _entry.Text.Trim();
         Refresh();
     }
     private void Delete(object sender, RoutedEventArgs e)
     {
         if (_list.SelectedIndex < 0) return;
-        if (MessageBox.Show("刪除這筆方框文字？", "確認", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show(this, "刪除這筆方框文字？", "確認刪除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         _working.RemoveAt(_list.SelectedIndex);
         Refresh(); _entry.Clear();
     }

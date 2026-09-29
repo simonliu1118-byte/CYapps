@@ -19,6 +19,12 @@ public partial class MainWindow : Window
     private TextBox? _directEditor;
     private ListBox? _directSuggestions;
     private bool _loading;
+    // Address text the postal code was derived from or confirmed for; null means typed before any address.
+    private string? _postalAddress;
+    private bool _settingPostal;
+    // Set when an unresolvable address cleared the previous code; printing stops once to confirm.
+    private bool _postalCleared;
+    private const string ReadyStatus = "請核對收件資料，再列印至預印信封。";
 
     public MainWindow()
     {
@@ -43,24 +49,30 @@ public partial class MainWindow : Window
         Refresh();
     }
 
+    // Rebuilds format-dependent options while keeping the envelope currently being prepared.
     private void RebuildOptions()
     {
+        var checkedIds = _delivery.Where(x => x.Value.IsChecked == true).Select(x => x.Key).ToHashSet();
+        var frameText = FrameChoice.SelectedItem as string;
         _loading = true;
         DeliveryPanel.Children.Clear();
         _delivery.Clear();
         foreach (var option in _format.Delivery)
         {
             var item = new CheckBox { Content = option.Label, Margin = new Thickness(0, 0, 8, 9),
-                                      MinWidth = 76, Tag = option.Id };
+                                      MinWidth = 76, Tag = option.Id, IsChecked = checkedIds.Contains(option.Id) };
             item.Checked += InputChanged;
             item.Unchecked += InputChanged;
             DeliveryPanel.Children.Add(item);
             _delivery[option.Id] = item;
         }
         FrameChoice.ItemsSource = _settings.FrameTexts.ToArray();
-        FrameChoice.SelectedIndex = _settings.FrameTexts.Count > 0 ? 0 : -1;
+        var frameIndex = frameText is null ? -1 : _settings.FrameTexts.IndexOf(frameText);
+        FrameChoice.SelectedIndex = frameIndex >= 0 ? frameIndex : _settings.FrameTexts.Count > 0 ? 0 : -1;
         _loading = false;
     }
+
+    private void Status(string text) => StatusText.Text = text;
 
     private PrintData CurrentData() => new()
     {
@@ -87,17 +99,8 @@ public partial class MainWindow : Window
     {
         if (_loading) return;
         // Independent ListBox: filtering never replaces TextBox.Text or touches SelectionStart.
-        _selectedContact = null;
-        _selectedAddress = null;
-        _selectedPhone = null;
-        _loading = true;
-        AddressChoice.ItemsSource = null;
-        PhoneChoice.ItemsSource = null;
-        AddressBox.Clear();
-        PhoneBox.Clear();
-        PostalBox.Clear();
-        foreach (var box in _delivery.Values) box.IsChecked = false;
-        _loading = false;
+        // Editing the name only detaches the chosen contact; typed address/phone stay (清空 resets all).
+        if (_selectedContact is not null && RecipientBox.Text.Trim() != _selectedContact.Name) Detach();
         var query = RecipientBox.Text.Trim();
         var matches = query.Length == 0 ? [] : _repository.Contacts()
             .Where(c => c.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase))
@@ -156,11 +159,49 @@ public partial class MainWindow : Window
         Refresh();
     }
 
+    private void Detach()
+    {
+        _selectedContact = null;
+        _selectedAddress = null;
+        _selectedPhone = null;
+        BindChoices();
+    }
+
+    // Saved-address/phone lists always show the selected contact's current objects.
+    private void BindChoices()
+    {
+        var loading = _loading;
+        _loading = true;
+        AddressChoice.ItemsSource = _selectedContact?.Addresses;
+        AddressChoice.SelectedItem = _selectedAddress;
+        PhoneChoice.ItemsSource = _selectedContact?.Phones;
+        PhoneChoice.SelectedItem = _selectedPhone;
+        _loading = loading;
+    }
+
+    private void SetPostal(string code, string address)
+    {
+        _settingPostal = true;
+        PostalBox.Text = code;
+        _settingPostal = false;
+        _postalAddress = address;
+    }
+
+    private void PostalChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_settingPostal)
+        {
+            _postalAddress = AddressBox.Text.Trim().Length == 0 ? null : AddressBox.Text;
+            _postalCleared = false;
+        }
+        Refresh();
+    }
+
     private void ApplyAddress(ContactAddress? address)
     {
         _selectedAddress = address;
         AddressBox.Text = address?.Value ?? "";
-        PostalBox.Text = address?.PostalCode ?? "";
+        SetPostal(address?.PostalCode ?? "", AddressBox.Text);
         PhoneChoice.ItemsSource = _selectedContact?.Phones;
         var phone = _selectedContact?.Phones.FirstOrDefault(x => x.Id == address?.LastPhoneId)
                     ?? _selectedContact?.Phones.FirstOrDefault();
@@ -198,10 +239,34 @@ public partial class MainWindow : Window
     {
         UpdatePostalFromAddress();
     }
+    // Re-derive the postal code whenever the address it belongs to changed. An address that
+    // cannot be resolved must not keep the previous address's code (no guessed codes).
     private void UpdatePostalFromAddress()
     {
-        var code = Postal.Infer(AddressBox.Text);
-        if (code is not null) PostalBox.Text = code; // unknown: preserve the user's previous code
+        var address = AddressBox.Text;
+        if (address.Trim().Length == 0) return;
+        if (_postalAddress is not null && Postal.SameAddress(_postalAddress, address) && PostalBox.Text.Length > 0)
+            return;
+        var code = Postal.Infer(address);
+        if (code is not null)
+        {
+            SetPostal(code, address);
+            _postalCleared = false;
+            Status(ReadyStatus);
+        }
+        else if (_postalAddress is null && PostalBox.Text.Length > 0)
+        {
+            _postalAddress = address; // typed before the address: keep the user's code for it
+        }
+        else
+        {
+            if (PostalBox.Text.Length > 0)
+            {
+                _postalCleared = true;
+                Status("無法由地址判斷郵遞區號，已清除原區號；請手動輸入。");
+            }
+            SetPostal("", address);
+        }
     }
     private void PhoneLostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
@@ -216,22 +281,24 @@ public partial class MainWindow : Window
 
     private void SaveBeforePrinting(PrintData data)
     {
-        var contact = _selectedContact;
+        // Always merge into the stored record: the contacts window may have edited or deleted it.
+        var contacts = _repository.Contacts();
+        var contact = _selectedContact is null ? null : contacts.FirstOrDefault(x => x.Id == _selectedContact.Id);
         if (contact is null)
         {
-            var matches = _repository.Contacts().Where(x => x.Name == data.Recipient).ToList();
+            var matches = contacts.Where(x => x.Name == data.Recipient).ToList();
             contact = matches.Count == 1 ? matches[0] : new Contact { Name = data.Recipient };
         }
         contact.Name = data.Recipient;
-        var address = _selectedAddress;
-        if (address is not null && address.Value != data.Address)
+        var address = _selectedAddress is null ? null : contact.Addresses.FirstOrDefault(x => x.Id == _selectedAddress.Id);
+        if (address is not null && !Postal.SameAddress(address.Value, data.Address))
         {
-            var choice = MessageBox.Show("地址已變更。選「是」覆蓋原地址，選「否」另存為新地址。",
+            var choice = MessageBox.Show(this, "地址已變更。選「是」覆蓋原地址，選「否」另存為新地址。",
                 "保存地址", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
             if (choice == MessageBoxResult.Cancel) throw new OperationCanceledException();
             if (choice == MessageBoxResult.No) address = null;
         }
-        address ??= contact.Addresses.FirstOrDefault(x => x.Value == data.Address);
+        address ??= contact.Addresses.FirstOrDefault(x => Postal.SameAddress(x.Value, data.Address));
         if (address is null)
         {
             address = new ContactAddress { Label = $"地址{contact.Addresses.Count + 1}" };
@@ -243,10 +310,10 @@ public partial class MainWindow : Window
         if (data.Phone.Length > 0)
         {
             var number = PhoneFormatting.Format(data.Phone);
-            var phone = _selectedPhone;
+            var phone = _selectedPhone is null ? null : contact.Phones.FirstOrDefault(x => x.Id == _selectedPhone.Id);
             if (phone is not null && phone.Display != number)
             {
-                var choice = MessageBox.Show("電話已變更。選「是」覆蓋原電話，選「否」另存新電話。",
+                var choice = MessageBox.Show(this, "電話已變更。選「是」覆蓋原電話，選「否」另存新電話。",
                     "保存電話", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
                 if (choice == MessageBoxResult.Cancel) throw new OperationCanceledException();
                 if (choice == MessageBoxResult.No) phone = null;
@@ -257,36 +324,86 @@ public partial class MainWindow : Window
             phone.Number = parts[0];
             phone.Extension = parts.Length == 2 ? parts[1] : "";
             address.LastPhoneId = phone.Id;
+            _selectedPhone = phone;
         }
         contact.LastDeliveryIds = data.DeliveryIds;
         _repository.SaveContact(contact);
         _selectedContact = contact;
         _selectedAddress = address;
+        BindChoices();
     }
 
     private void PrintClick(object sender, RoutedEventArgs e)
     {
+        UpdatePostalFromAddress();
+        FormatPhone();
         var data = CurrentData();
         if (data.Recipient.Length == 0 || data.Address.Length == 0)
         {
-            MessageBox.Show("請輸入收件人及地址。", "資料不足", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "請輸入收件人及地址。", "資料不足", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (_postalCleared && data.PostalCode.Length == 0)
+        {
+            _postalCleared = false;
+            MessageBox.Show(this, "無法由目前地址判斷郵遞區號，原本的區號已清除。\n\n請輸入郵遞區號；確定不需要時再按一次「列印信封」。",
+                "郵遞區號已清除", MessageBoxButton.OK, MessageBoxImage.Information);
+            PostalBox.Focus();
+            return;
+        }
+        var overflow = EnvelopeRenderer.Overflows(_format, data);
+        if (overflow.Count > 0 && MessageBox.Show(this,
+                $"{string.Join("、", overflow)}的文字超出欄位範圍，縮小字級後仍放不下，超出的部分不會印出。\n\n請調整格式設定或縮短文字。仍要保存並列印嗎？",
+                "文字超出範圍", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
         try { SaveBeforePrinting(data); }
         catch (OperationCanceledException) { return; }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "保存失敗"); return; }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "保存失敗", MessageBoxButton.OK, MessageBoxImage.Error); return; }
+        Status($"已保存「{data.Recipient}」。");
         try
         {
             var dialog = CreatePrintDialog();
             if (dialog.ShowDialog() != true) return;
             _settings.PrinterName = dialog.PrintQueue.FullName;
             _repository.SaveSettings(_settings);
-            dialog.PrintTicket.PageOrientation = _format.Landscape ? PageOrientation.Landscape : PageOrientation.Portrait;
-            dialog.PrintTicket.PageMediaSize = new PageMediaSize(_format.WidthMm * EnvelopeRenderer.DipPerMm,
-                _format.HeightMm * EnvelopeRenderer.DipPerMm);
-            dialog.PrintVisual(EnvelopeRenderer.Draw(_format, data, false), $"CYEnvelope - {data.Recipient}");
+            if (!PreparePage(dialog, out var origin)) return;
+            dialog.PrintVisual(EnvelopeRenderer.Draw(_format, data, false, printerOrigin: origin), $"CYEnvelope - {data.Recipient}");
+            Status($"已保存「{data.Recipient}」並送出列印。");
         }
-        catch (Exception ex) { MessageBox.Show(ex.Message, "列印失敗；聯絡人資料已保存"); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "列印失敗；聯絡人資料已保存", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // Requests the envelope size from the driver, confirms what it accepted, and returns the
+    // imageable-area origin: PrintVisual draws from that origin, the renderer from the paper edge.
+    private bool PreparePage(PrintDialog dialog, out Vector origin)
+    {
+        origin = default;
+        var ticket = dialog.PrintTicket;
+        var shortSide = Math.Min(_format.WidthMm, _format.HeightMm) * EnvelopeRenderer.DipPerMm;
+        var longSide = Math.Max(_format.WidthMm, _format.HeightMm) * EnvelopeRenderer.DipPerMm;
+        ticket.PageOrientation = _format.Landscape ? PageOrientation.Landscape : PageOrientation.Portrait;
+        ticket.PageMediaSize = new PageMediaSize(shortSide, longSide); // media size is always portrait
+        var accepted = dialog.PrintQueue.MergeAndValidatePrintTicket(dialog.PrintQueue.UserPrintTicket, ticket)
+            .ValidatedPrintTicket;
+        var media = accepted.PageMediaSize;
+        const double tolerance = 1.5 * EnvelopeRenderer.DipPerMm;
+        if (media?.Width is not double width || media.Height is not double height ||
+            Math.Abs(width - shortSide) > tolerance || Math.Abs(height - longSide) > tolerance)
+        {
+            var actual = media?.Width is double w && media.Height is double h
+                ? $"{w / EnvelopeRenderer.DipPerMm:0} × {h / EnvelopeRenderer.DipPerMm:0} mm" : "未知尺寸";
+            if (MessageBox.Show(this,
+                    $"印表機驅動程式未接受 {_format.WidthMm:0.#} × {_format.HeightMm:0.#} mm 信封尺寸，改用 {actual}。\n\n位置可能偏移。仍要列印嗎？",
+                    "紙張尺寸不符", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return false;
+        }
+        dialog.PrintTicket = accepted;
+        var area = dialog.PrintQueue.GetPrintCapabilities(accepted).PageImageableArea;
+        if (area is not null) origin = new Vector(area.OriginWidth, area.OriginHeight);
+        return true;
     }
     private void PrinterClick(object sender, RoutedEventArgs e)
     {
@@ -315,24 +432,48 @@ public partial class MainWindow : Window
         _loading = true;
         _selectedContact = null; _selectedAddress = null; _selectedPhone = null;
         RecipientBox.Clear(); AddressBox.Clear(); PhoneBox.Clear(); PostalBox.Clear();
+        _postalAddress = null;
+        _postalCleared = false;
         AddressChoice.ItemsSource = null; PhoneChoice.ItemsSource = null;
         Suggestions.Visibility = Visibility.Collapsed;
         foreach (var item in _delivery.Values) item.IsChecked = false;
         ShowFrameBox.IsChecked = true;
         FrameChoice.SelectedIndex = FrameChoice.Items.Count > 0 ? 0 : -1;
         _loading = false;
+        Status(ReadyStatus);
         Refresh();
         RecipientBox.Focus();
     }
-    private void ContactsClick(object sender, RoutedEventArgs e) =>
+    private void ContactsClick(object sender, RoutedEventArgs e)
+    {
         new ContactWindow(_repository) { Owner = this }.ShowDialog();
+        // Re-read the chosen contact so later saves never write back an outdated copy.
+        if (_selectedContact is null) return;
+        var current = _repository.Contacts().FirstOrDefault(x => x.Id == _selectedContact.Id);
+        if (current is null)
+        {
+            Detach();
+            Status("原選取的聯絡人已刪除；列印時會以目前輸入的資料另存。");
+            return;
+        }
+        _selectedContact = current;
+        _selectedAddress = current.Addresses.FirstOrDefault(x => x.Id == _selectedAddress?.Id);
+        _selectedPhone = current.Phones.FirstOrDefault(x => x.Id == _selectedPhone?.Id);
+        BindChoices();
+    }
     private void FormatClick(object sender, RoutedEventArgs e)
     {
         var window = new FormatWindow(_repository, _format) { Owner = this };
-        if (window.ShowDialog() != true) return;
-        _format = window.SelectedFormat;
-        _settings.SelectedFormatId = _format.Id;
-        _repository.SaveSettings(_settings);
+        var chosen = window.ShowDialog() == true;
+        // The window saves directly; reload even when it was closed without choosing a format.
+        var formats = _repository.Formats();
+        var id = chosen ? window.SelectedFormat.Id : _format.Id;
+        _format = formats.FirstOrDefault(f => f.Id == id) ?? formats.FirstOrDefault(f => f.IsDefault) ?? formats[0];
+        if (_settings.SelectedFormatId != _format.Id)
+        {
+            _settings.SelectedFormatId = _format.Id;
+            _repository.SaveSettings(_settings);
+        }
         RebuildOptions();
         RebuildDirectTargets();
         Refresh();

@@ -14,10 +14,13 @@ public static class EnvelopeRenderer
     private static readonly Pen Red = new(new SolidColorBrush(Color.FromRgb(176, 61, 64)), .24 * DipPerMm);
     private static readonly Pen Black = new(Ink, .35 * DipPerMm);
 
-    public static DrawingVisual Draw(EnvelopeFormat format, PrintData data, bool preview, string? highlight = null)
+    // printerOrigin: the printer's imageable-area origin (DIP), removed so millimetres stay paper-relative.
+    public static DrawingVisual Draw(EnvelopeFormat format, PrintData data, bool preview, string? highlight = null,
+        Vector printerOrigin = default)
     {
         var visual = new DrawingVisual();
         using var dc = visual.RenderOpen();
+        dc.PushTransform(new TranslateTransform(-printerOrigin.X, -printerOrigin.Y));
         if (preview)
         {
             DrawPrintedEnvelopeReference(dc, format);
@@ -31,17 +34,12 @@ public static class EnvelopeRenderer
             WriteAt(dc, "✓", item.X, item.Y, 11, "Microsoft JhengHei UI");
         if (data.ShowFrame && data.FrameText.Length != 0)
         {
-            var frame = Dip(format.Frame);
-            dc.DrawRectangle(null, Black, frame);
-            var text = new TextPlacement
-            {
-                Rect = new RectMm(format.Frame.X, format.Frame.Y, format.Frame.Width, format.Frame.Height),
-                FontFamily = "DFKai-SB", FontSize = 11, Vertical = true
-            };
-            Write(dc, data.FrameText, text);
+            dc.DrawRectangle(null, Black, Dip(format.Frame));
+            Write(dc, data.FrameText, FrameText(format));
         }
         dc.Pop();
         if (preview && highlight is not null) DrawHighlight(dc, format, highlight);
+        dc.Pop();
         return visual;
     }
 
@@ -100,19 +98,54 @@ public static class EnvelopeRenderer
                 position.FontSize, position.FontFamily);
     }
 
-    private static void Write(DrawingContext dc, string value, TextPlacement p)
+    // Long text first shrinks towards this share of the configured size (never below the floor).
+    private const double ShrinkLimit = .7;
+    private const double MinimumPoint = 7;
+
+    // Field names whose text cannot fit in its box even after shrinking; the rest would be cut off.
+    public static List<string> Overflows(EnvelopeFormat format, PrintData data)
     {
-        if (string.IsNullOrEmpty(value)) return;
+        var result = new List<string>();
+        foreach (var (name, value, placement) in new[]
+        {
+            ("收件人", data.Recipient, format.Recipient), ("地址", data.Address, format.Address),
+            ("電話", data.Phone, format.Phone),
+            ("方框文字", data.ShowFrame ? data.FrameText : "", FrameText(format))
+        })
+            if (!Layout(value, placement).Complete) result.Add(name);
+        return result;
+    }
+
+    private static TextPlacement FrameText(EnvelopeFormat format) => new()
+    {
+        Rect = new RectMm(format.Frame.X, format.Frame.Y, format.Frame.Width, format.Frame.Height),
+        FontFamily = "DFKai-SB", FontSize = 11, Vertical = true
+    };
+
+    private static (List<(string Glyph, double X, double Y)> Glyphs, double Size, bool Complete) Layout(
+        string value, TextPlacement p)
+    {
+        var elements = new List<string>();
+        var enumerator = StringInfo.GetTextElementEnumerator(value);
+        while (enumerator.MoveNext()) elements.Add(enumerator.GetTextElement());
+        var minimum = Math.Min(p.FontSize, Math.Max(MinimumPoint, p.FontSize * ShrinkLimit));
+        for (var size = p.FontSize; ; size -= .5)
+        {
+            var (glyphs, complete) = LayoutAt(elements, p, size);
+            if (complete || size - .5 < minimum) return (glyphs, size, complete);
+        }
+    }
+
+    private static (List<(string Glyph, double X, double Y)>, bool) LayoutAt(List<string> elements, TextPlacement p, double size)
+    {
         var r = Dip(p.Rect);
-        dc.PushClip(new RectangleGeometry(r));
-        var glyphs = StringInfo.GetTextElementEnumerator(value);
+        var glyphs = new List<(string, double, double)>();
         var line = 0;
         var column = 0;
-        var rowHeight = Math.Max(4, p.FontSize * 1.2 * DipPerPoint);
-        var columnWidth = Math.Max(4, p.FontSize * DipPerPoint);
-        while (glyphs.MoveNext())
+        var rowHeight = Math.Max(4, size * 1.2 * DipPerPoint);
+        var columnWidth = Math.Max(4, size * DipPerPoint);
+        foreach (var glyph in elements)
         {
-            var glyph = glyphs.GetTextElement();
             if (glyph == "\n" || (p.Vertical && (line + 1) * rowHeight > r.Height) ||
                 (!p.Vertical && (line + 1) * columnWidth > r.Width))
             {
@@ -121,14 +154,24 @@ public static class EnvelopeRenderer
                 if (glyph == "\n") continue;
             }
             if (column >= Math.Max(1, p.Columns) ||
-                (!p.Vertical && (column + 1) * rowHeight > r.Height)) break;
+                (p.Vertical && (column + 1) * columnWidth > r.Width) ||
+                (!p.Vertical && (column + 1) * rowHeight > r.Height)) return (glyphs, false);
             var x = p.Vertical ? p.Rect.X + p.Rect.Width - (column + 1) * columnWidth / DipPerMm
                                : p.Rect.X + line * columnWidth / DipPerMm;
             var y = p.Vertical ? p.Rect.Y + line * rowHeight / DipPerMm
                                : p.Rect.Y + column * rowHeight / DipPerMm;
-            WriteAt(dc, glyph, x, y, p.FontSize, p.FontFamily);
+            glyphs.Add((glyph, x, y));
             line++;
         }
+        return (glyphs, true);
+    }
+
+    private static void Write(DrawingContext dc, string value, TextPlacement p)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        var (glyphs, size, _) = Layout(value, p);
+        dc.PushClip(new RectangleGeometry(Dip(p.Rect)));
+        foreach (var (glyph, x, y) in glyphs) WriteAt(dc, glyph, x, y, size, p.FontFamily);
         dc.Pop();
     }
 

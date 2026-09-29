@@ -5,8 +5,6 @@
 !/Logs/.gitkeep
 /Cache/*
 !/Cache/.gitkeep
-*.syso
-/assets/icon.ico
 /src/**/bin/
 /src/**/obj/
 /tests/**/bin/
