@@ -96,7 +96,7 @@ internal sealed class SettingsForm : Form
         localReset.Width = 112;
         localReset.Margin = new Padding(4, 0, 0, 0);
         cloudSettings.Click += (_, _) => OpenCloudSettings();
-        deviceManagement.Click += (_, _) => OpenDeviceManagement();
+        deviceManagement.Click += async (_, _) => await OpenDeviceManagementAsync();
         localReset.Click += async (_, _) => await BeginLocalResetAsync();
         modeChoices.Controls.Add(localMode);
         modeChoices.Controls.Add(cloudMode);
@@ -222,7 +222,7 @@ internal sealed class SettingsForm : Form
         UpdateCloudControls();
     }
 
-    private void OpenDeviceManagement()
+    private async Task OpenDeviceManagementAsync()
     {
         try
         {
@@ -239,12 +239,33 @@ internal sealed class SettingsForm : Form
 
             using var form = new CloudDeviceManagementForm(settings.CloudBaseUrl, token);
             form.ShowDialog(this);
-            if (form.CurrentDeviceResetRequest is not null)
-                LocalResetApplication.Schedule(form.CurrentDeviceResetRequest);
+            if (IsDisposed || Disposing || LocalResetApplication.IsPending) return;
+
+            var assessment = await LocalResetCoordinator.AssessBuiltInCloudAsync(repository);
+            if (assessment.Disposition != CloudExitDisposition.DeviceAlreadyRevoked) return;
+
+            MessageBox.Show(
+                this,
+                "目前這台電腦的 Device 已被撤銷。為避免留下無法再使用 Cloud 身分的半完成狀態，請完成本機重設；Cloud Workspace 與其他 Device 不會被刪除。",
+                "目前裝置已撤銷",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            if (!ConfirmDestructiveReset(cloudExit: true) || !ConfirmFinalReset())
+            {
+                MessageBox.Show(
+                    this,
+                    "本機資料目前仍完整保留，但這台 Device 已失效。在完成本機重設或重新加入 Workspace 前，不應繼續執行 Cloud 操作。",
+                    "雲端裝置已失效",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            LocalResetApplication.Schedule(new LocalResetExecutionRequest(LocalResetKind.BuiltInCloud));
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "無法開啟裝置管理", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, error.Message, "裝置管理狀態確認失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
