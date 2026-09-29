@@ -355,4 +355,17 @@
   .action-label-mobile {
     display: none !important;
   }
+
+  details.quick-tool-row > summary {
+    list-style: none;
+    pointer-events: none;
+  }
+
+  details.quick-tool-row > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  details.quick-tool-row > .quick-chip-list {
+    display: flex !important;
+  }
 }
