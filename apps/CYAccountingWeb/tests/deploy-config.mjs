@@ -26,6 +26,7 @@ try {
   const rendered = JSON.parse(renderedText);
   assert.equal(rendered.name, env.CF_WORKER_NAME);
   assert.equal(rendered.main, 'src/app-v19.js');
+  assert.equal(rendered.workers_dev, true);
   assert.equal(rendered.routes[0].pattern, env.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN);
   assert.equal(rendered.routes[0].custom_domain, true);
   assert.equal(rendered.d1_databases[0].binding, 'DB');
@@ -47,6 +48,7 @@ try {
   assert.throws(() => renderWrangler({ env: { ...env, CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: 'https://acc.example.com' }, templatePath: TEMPLATE, outputPath: output }), /valid hostname/);
 
   const template = fs.readFileSync(TEMPLATE, 'utf8');
+  assert.match(template, /"workers_dev"\s*:\s*true/);
   assert.match(template, /__CF_D1_DATABASE_ID__/);
   assert.match(template, /__CF_IDENTITY_SERVICE__/);
   assert.match(template, /__CF_R2_BACKUP_BUCKET__/);
