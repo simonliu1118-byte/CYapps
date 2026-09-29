@@ -33,3 +33,15 @@
 - Public source 若需提供 Wrangler／Cloudflare 設定範例，應使用 placeholder／template；Production Deploy 可在 Runner 暫時產生正式 deploy config，但不得 commit、上傳 Artifact 或發布 Release。
 - Google OAuth Client Secret、Google Drive token encryption key 等執行期機密只可存在 Cloudflare Secrets；source 只可引用 `env.*` 名稱。OAuth refresh token 只能以受保護形式保存於 runtime storage，不得進 Git、build package、Artifact 或 Release。
 - CYAccountingWeb 的 Production Deploy workflow 與任何 Public Release／Artifact build 不得共用「把正式 Secret／resource metadata 烘焙進產物」的流程；公開產物若未通過 repository public-package safety scan，不得發布。
+
+## 5. CYCloud Identity consumer contract
+
+- CYCloud Identity（CYID）是 CYAccountingWeb 的 shared Identity authority。CYAccountingWeb 必須遵守同 repository canonical `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`、consumer contract changelog 與相關 canonical contracts，不得另建 Workspace Role、Identity Admin、Application Access、Credential、Recovery 或 Identity Session 的平行語意。
+- CYAccountingWeb 以 `CYID_CONSUMER_VERSION` 宣告已採用的 shared consumer contract revision；該版本必須位於 CYID `CONSUMER_MIN_COMPATIBLE_VERSION..CONSUMER_CONTRACT_VERSION` 支援窗內。因 CYAccountingWeb 與 CYID 位於同一 repository，直接讀 canonical CYID files，不建立重複 mirror。
+- CYAccountingWeb 的 normal login 只接受已完成首次 Email 驗證後的 permanent password + normal CYID Session。新 Employee 的首次登入密碼／first-login ticket 只屬 CY Web + CYID；CYAccountingWeb 不實作第二套「啟用帳號」或首次正式密碼設定流程。
+- CYID Workspace Role 直接投影為 `SUPER_ADMIN / ADMIN / USER`；Identity Admin 是 ADMIN capability，不是第四個 CYAccountingWeb role。CYAccountingWeb 的會計／模組／domain authorization 繼續由本 App server-side 管理，不反向放進 CYID。
+- Provider raw Session token 只可存在受保護的 server/browser transport；不得寫入 localStorage、sessionStorage、URL、log、Audit payload 或 CYAccountingWeb business tables。CYAccountingWeb 不得再把自己 mint 的 `web_sessions` 當 forward Identity authority。
+- Tablet Safari 已驗證的 first-party cookie/navigation 相容性可保留 `SameSite=Lax` 等 app-specific presentation；任何調整仍必須維持 `HttpOnly + Secure`、不曝露 raw token，並經 Desktop/Tablet/Mobile acceptance。
+- CYID registered Application ID、Workspace ID 與實際 Service Binding target 都是 deployment/runtime data，只由 Deployment Environment 注入；Public source 只保存 placeholder／binding contract。CYAccountingWeb 不得直接修改 CYID D1 來建立 Application 或 Access。
+- CYID migration 先在 development 完成；production Identity cutover 仍需使用者明確批准，且不得藉 Identity migration 改動 accounting D1、帳務語意、backup topology 或 production hostname。
+
