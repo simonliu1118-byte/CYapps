@@ -1,8 +1,54 @@
 # CYApps Governance Changelog
 
+## 2.3.18 — 2026/09/30
+
+- 依使用者最終確認，CYCloud Identity 新 Employee 首次使用流程對外統一稱 **Email 驗證**；不再以獨立「啟用帳號」流程作產品模型。
+- 新 Employee 建立後由 CYID 自動寄出 Email 驗證郵件，內含具 expiry 的一次性首次登入密碼；temporary credential 只能進 CY Web 核心帳號流程，不得建立一般 Identity Session，也不得登入其他 CY App。
+- 有效首次登入密碼只可換取短效 first-login ticket；使用者設定正式密碼後，CYID 完成 Email 驗證、正式 credential 建立與 temporary credential/ticket 作廢，但**不得直接發 normal Session**，必須回到 CY Web 一般登入頁重新以正式密碼登入。
+- 首次登入密碼逾期、管理員「重寄驗證 Email」或 pending Email 修改時，舊 temporary credential 必須立即失效並重新產生 credential／expiry；寄送失敗保留 pending Employee。
+- CYCloud Identity active 文件正式收斂為 project rules、Role/Access、Auth、UI、Architecture、OTP/security 與單一 TODO；dated handoff 與舊 Application Role Mapping 不再留在 active tree，歷史由 Git history 追溯。
+
+## 2.3.17 — 2026/09/29
+
+- 依使用者最終確認，CYCloud Identity Workspace Role 正式收斂為 `SUPER_ADMIN / ADMIN / USER` 三層；`Identity Admin` 改定義為附掛於 ADMIN 的特殊 Identity-management capability，而不是第四個 Role。
+- 一般 ADMIN 僅管理 USER lifecycle，不再具 App／CY Web Module Access 設定權；Identity Admin／Super Admin 才可管理 eligible Employee Access，且 Identity Admin 不得自行擴權、不得授予或撤銷 Identity Admin capability、不得修改 Super Admin protected state。
+- CY Web 正式定義為核心帳號管理 App：所有有效 Employee 的 CY Web entry access 固定為 TRUE／不可取消；CY Web Module Access 仍由 CY Web 自己管理，Super Admin 全模組自動允許，Identity Admin／Super Admin 可管理其他 eligible Employee 的模組 Access。
+- 所有接入 CYID 的 CY App 暫時直接採用 CYID 三層 Role：`SUPER_ADMIN -> SUPER_ADMIN`、`ADMIN -> ADMIN`、`USER -> USER`；既有 Identity Group + `USER_ADMIN` compatibility-role projection 降為 legacy implementation，後續不得再擴充其產品語意。
+- Employee 新增時直接指定 Role：普通 ADMIN 只能新增 USER；Identity Admin／Super Admin 可新增 USER 或 ADMIN。建立成功後應自動寄第一封啟用信，信內含可直接開啟 CY Web 啟用流程的連結；寄信失敗不回滾 Employee，保留 pending 並提供重寄。
+- 已啟用 Employee 的 Email 若失效，Identity Admin／Super Admin 可強制變更 Email 並重新驗證；帳號維持 activated、密碼保留、Session 撤銷，不回到第一次待啟用。只有從未完成第一次啟用的 Employee 可實體刪除。
+- 保留 future HR 備註：若未來需要非 ADMIN 的專職 HR 具 Identity lifecycle 能力，再把相關操作 capability 化；目前不新增第四種 Workspace Role。
+
+## 2.3.16 — 2026/09/28
+
+- CYCloud Identity 的 Password 長度固定為 8–16 字元；所有 consumer App 必須遵循 Shared Identity 的同一 credential 驗證邊界，不得自行放寬或縮限。
+- Runtime implementation 與 boundary tests 同步採用 8／16 字元有效、7／17 字元拒絕，並以 Unicode code point 計算字元數。
+
+## 2.3.15 — 2026/09/28
+
+- CYCloud Identity 的普通身分組改為資料驅動，可新增、重新命名、停用或調整，不再以固定 `SUPER_ADMIN / ADMIN / EMPLOYEE` enum 或 schema `CHECK` 封死；Workspace 最高管理 authority 與可編輯身分組分離。
+- Application registry 與實際「哪些 Workspace／Employee 可以進哪些 App」改明確視為 deployment/runtime data；Public migration／fixture 不預置公司目前實際 App catalog 或 access matrix。
+- 強化 CYCloud Identity 的 Public repo 資料最小化：Public source 只保存 generic schema/contract/placeholder，正式 Workspace、Employee、Email、App access、Cloudflare resource ID、provider target 與 secrets 均不得進 Git／PR／Actions log／Artifact metadata。
+
+## 2.3.14 — 2026/09/28
+
+- 新增正式維護專案 `CYCloudIdentity`，作為 CY Web、CYAccountingWeb 與後續 CYInvoice 共用的 Workspace／Employee／Credential／Application Access／Session／Email OTP／Recovery 身分服務。
+- 新增 `apps/CYCloudIdentity/PROJECT_RULES.md`，固定 Workspace scoped Employee、每 Workspace 恰好一名啟用 `SUPER_ADMIN`、Recovery Email、provider-neutral Email、Public source／secret 邊界與目前免費額度優先的資源原則。
+- 同步建立 `VERSION=0.1.0`、`BUILD=0`，並將 `CYCloudIdentity` 加入 `REPO_POLICY.md` 正式維護專案清單；CYInvoice runtime 與 Device lifecycle 不因本次治理登錄而變更。
+
+## 2.3.13 — 2026/09/27
+
+- Public package safety scanner only interprets real contiguous UTF-16 ASCII
+  strings, instead of removing every NUL from native binaries. This preserves
+  ASCII/UTF-16 token detection while avoiding false positives in .NET/WPF
+  runtime DLLs and self-contained EXEs.
+- Add synthetic credential and binary false-positive regression tests; final
+  public packages still require the scanner before upload or Release.
+- Pin the exact SHA-256 of the known .NET 10 WPF native dependency that still
+  contains a token-shaped UTF-16 string; modified copies receive full scanning.
+
 ## 2.3.12 — 2026/09/25
 
-- Public Build／Actions Artifact／GitHub Release 與 Production Deploy 正式分離；公開產物不得取得、注入或烘焙正式 Secret、Token、Private Key、OAuth Client Secret、Refresh Token、正式帳密或可直接取得正式服務權限的憑證。
+- Public Build／Artifact／Release 與 Production Deploy 正式分離；公開產物不得取得、注入或烘焙正式 Secret、Token、Private Key、OAuth Client Secret、Refresh Token、正式帳密或可直接取得正式服務權限的憑證。
 - Cloudflare deployment-specific resource identifiers（D1 database ID／name、Worker／Service Binding 實際 service 名稱、R2／KV／Queue 等）改採 Deployment Environment 注入原則；公開設定只能使用 placeholder／template，Runner 暫存的正式 deploy config 不得 commit、上傳 Artifact 或發布 Release。
 - 新增 repository 共用 `.github/scripts/scan-public-package.py`；所有包含 `actions/upload-artifact` 或 `gh release create` 的 workflow 都必須在公開前掃描最終 package，Governance Check 會阻止未接 safety gate 的發行流程。
 - CYAccountingWeb `PROJECT_RULES.md` 同步固定 `DB`／`IDENTITY` 只保存 binding contract，正式 Cloudflare resource metadata 由部署環境注入；Google OAuth／Drive 執行期機密只允許存在 Cloudflare Secrets／受保護 runtime storage。

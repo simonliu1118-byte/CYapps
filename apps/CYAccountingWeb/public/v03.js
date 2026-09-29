@@ -10,20 +10,24 @@ window.addEventListener('load', () => {
 });
 
 function bindFastEntryKeys() {
-  const flow = [els.txDate, els.accountName, els.categoryName, els.summary, els.amount];
-  flow.forEach((element, index) => {
+  const enterStep = (element, action) => {
     element?.addEventListener('keydown', event => {
-      if (event.key !== 'Enter' || event.isComposing) return;
+      if (event.key !== 'Enter' || event.isComposing || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
       event.preventDefault();
-      if (element === els.amount) {
-        if (!els.saveButton.disabled) {
-          cyFocusSummaryAfterSave = true;
-          els.form.requestSubmit();
-        }
-        return;
-      }
-      flow[index + 1]?.focus();
+      action();
     });
+  };
+
+  enterStep(els.txDate, () => els.summary?.focus());
+  enterStep(els.summary, () => {
+    els.amount?.focus();
+    els.amount?.select();
+  });
+  enterStep(els.amount, () => {
+    if (!els.saveButton.disabled) {
+      cyFocusSummaryAfterSave = true;
+      els.form.requestSubmit();
+    }
   });
 
   els.form?.addEventListener('submit', () => {

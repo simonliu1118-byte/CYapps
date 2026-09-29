@@ -108,6 +108,7 @@ jobs:
             echo "ERROR: public artifact safety scanner failed its blocking self-test"
             exit 1
           fi
+          python3 .github/scripts/test-public-package-scan.py
           rm -rf "$scan_tmp"
           echo "Public artifact safety scanner self-test OK."
 
@@ -145,7 +146,7 @@ jobs:
               [ "$path" = "COMMON_RULES_CHANGELOG.md" ] && common_changelog_changed=1
 
               case "$path" in
-                REPO_POLICY.md|RULES_INDEX.md|GOVERNANCE_VERSION|GOVERNANCE_CHANGELOG.md|AGENTS.md|apps/*/PROJECT_RULES.md|.github/workflows/governance-check.yml|.github/workflows/sync-common-rules.yml|.github/scripts/scan-public-package.py)
+                REPO_POLICY.md|RULES_INDEX.md|GOVERNANCE_VERSION|GOVERNANCE_CHANGELOG.md|AGENTS.md|apps/*/PROJECT_RULES.md|.github/workflows/governance-check.yml|.github/workflows/sync-common-rules.yml|.github/scripts/scan-public-package.py|.github/scripts/test-public-package-scan.py)
                   repo_gov_changed=1 ;;
               esac
               [ "$path" = "GOVERNANCE_VERSION" ] && gov_version_changed=1

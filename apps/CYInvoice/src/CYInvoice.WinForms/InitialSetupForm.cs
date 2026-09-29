@@ -4,63 +4,43 @@ namespace CYInvoice.WinForms;
 
 internal sealed class InitialSetupForm : Form
 {
-    private const int WindowWidth = 470;
-    private const int HeaderHeight = 56;
-    private const int FieldRowHeight = 38;
-    private const int ActionRowHeight = 48;
-    private const int HorizontalPadding = 18;
-    private const int VerticalPadding = 10;
+    private const int WindowWidth = 330;
+    private const int HeaderHeight = 38;
+    private const int FieldRowHeight = 34;
+    private const int ActionRowHeight = 42;
+    private const int HorizontalPadding = 12;
+    private const int VerticalPadding = 6;
+    private const int FieldCount = 5;
+    private const int CompactButtonWidth = 118;
+    private const int CompactButtonHeight = 30;
 
     private readonly LocalRepository repository;
-    private readonly Settings settings;
-    private readonly bool legacyPasswordRequired;
-    private readonly bool moPasswordRequired;
-    private readonly TextBox legacyPassword = PasswordBox();
-    private readonly TextBox moPassword = PasswordBox();
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox employeeName = UiControls.TextBox(80);
     private readonly TextBox email = UiControls.TextBox(160);
     private readonly TextBox employeePassword = PasswordBox();
     private readonly TextBox confirmPassword = PasswordBox();
-    private readonly Button save = UiControls.StandardButton("建立超級管理員");
-    private readonly Button cancel = UiControls.StandardButton("取消並關閉");
+    private readonly Button save = CompactButton("建立超級管理員");
+    private readonly Button cancel = CompactButton("取消並關閉");
 
     public InitialSetupForm(LocalRepository repository)
     {
         this.repository = repository;
-        settings = repository.Settings.LoadOrCreate();
-        legacyPasswordRequired = settings.AdminPasswordSet;
-        moPasswordRequired = MoPasswordNeedsSetup();
-        Text = legacyPasswordRequired ? "CYInvoice V2.5 帳戶遷移" : "CYInvoice 首次設定";
+        Text = "首次設定";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(WindowWidth, CalculateHeight());
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
+        ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
-        Icon = ApplicationIcon.Load();
         BuildLayout();
-        Shown += (_, _) => FirstField().Focus();
+        Shown += (_, _) => employeeNo.Focus();
     }
 
-    private int FieldCount => 5 + (legacyPasswordRequired ? 1 : 0) + (moPasswordRequired ? 1 : 0);
-
-    private int CalculateHeight() =>
+    private static int CalculateHeight() =>
         VerticalPadding * 2 + HeaderHeight + FieldCount * FieldRowHeight + ActionRowHeight;
-
-    private bool MoPasswordNeedsSetup()
-    {
-        if (settings.MoPasswordEncrypted.Length == 0) return true;
-        try
-        {
-            return string.IsNullOrWhiteSpace(repository.Settings.MoPassword(settings));
-        }
-        catch (Exception)
-        {
-            return true;
-        }
-    }
 
     private void BuildLayout()
     {
@@ -72,19 +52,19 @@ internal sealed class InitialSetupForm : Form
             ColumnCount = 1,
             RowCount = 3,
             Padding = new Padding(HorizontalPadding, VerticalPadding, HorizontalPadding, VerticalPadding),
+            Margin = Padding.Empty,
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, HeaderHeight));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldCount * FieldRowHeight));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, ActionRowHeight));
         root.Controls.Add(new Label
         {
-            Text = legacyPasswordRequired
-                ? "請先驗證舊版 CYInvoice 管理密碼，再建立第一位超級管理員。完成後舊管理密碼即退出使用。"
-                : "請建立第一位超級管理員。復原碼將在完成後只顯示一次，請妥善保存。",
+            Text = "首次開啟程式需設定超級管理員，超級管理員無法變更。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             AutoSize = false,
             Margin = Padding.Empty,
+            Padding = Padding.Empty,
         }, 0, 0);
 
         var fields = new TableLayoutPanel
@@ -93,23 +73,14 @@ internal sealed class InitialSetupForm : Form
             ColumnCount = 2,
             RowCount = FieldCount,
             Margin = Padding.Empty,
+            Padding = Padding.Empty,
         };
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 102));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         for (var index = 0; index < FieldCount; index++)
             fields.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight));
 
         var row = 0;
-        if (legacyPasswordRequired)
-        {
-            fields.Controls.Add(FieldLabel("舊管理密碼"), 0, row);
-            fields.Controls.Add(legacyPassword, 1, row++);
-        }
-        if (moPasswordRequired)
-        {
-            fields.Controls.Add(FieldLabel("MO店+ Excel 密碼"), 0, row);
-            fields.Controls.Add(moPassword, 1, row++);
-        }
         fields.Controls.Add(FieldLabel("員工編號"), 0, row);
         fields.Controls.Add(employeeNo, 1, row++);
         fields.Controls.Add(FieldLabel("姓名"), 0, row);
@@ -145,8 +116,6 @@ internal sealed class InitialSetupForm : Form
 
     private IEnumerable<TextBox> InputFields()
     {
-        if (legacyPasswordRequired) yield return legacyPassword;
-        if (moPasswordRequired) yield return moPassword;
         yield return employeeNo;
         yield return employeeName;
         yield return email;
@@ -180,28 +149,12 @@ internal sealed class InitialSetupForm : Form
         }
     }
 
-    private Control FirstField() => legacyPasswordRequired
-        ? legacyPassword
-        : moPasswordRequired
-            ? moPassword
-            : employeeNo;
-
     private void SaveClicked(object? sender, EventArgs eventArgs)
     {
         if (repository.Employees.HasEmployees())
         {
-            MessageBox.Show(this, "已建立員工帳戶，不能再次執行首次設定。", "無法建立帳戶",
+            MessageBox.Show(this, "已建立員工帳號，不能再次執行首次設定。", "無法建立帳號",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        if (legacyPasswordRequired && !SettingsStore.CheckAdminPassword(settings, legacyPassword.Text))
-        {
-            ValidationError("舊管理密碼不正確", legacyPassword);
-            return;
-        }
-        if (moPasswordRequired && moPassword.Text.Length == 0)
-        {
-            ValidationError("請輸入 MO店+ Excel 保護密碼", moPassword);
             return;
         }
         var no = employeeNo.Text.Trim();
@@ -220,9 +173,9 @@ internal sealed class InitialSetupForm : Form
             ValidationError("請輸入 Email", email);
             return;
         }
-        if (employeePassword.Text.Length == 0)
+        if (employeePassword.Text.Length < 8 || !employeePassword.Text.All(char.IsAsciiLetterOrDigit))
         {
-            ValidationError("請輸入員工密碼", employeePassword);
+            ValidationError("員工密碼至少 8 碼，且只能使用英文字母或數字", employeePassword);
             return;
         }
         if (confirmPassword.Text.Length == 0 || employeePassword.Text != confirmPassword.Text)
@@ -233,24 +186,11 @@ internal sealed class InitialSetupForm : Form
 
         try
         {
-            if (moPasswordRequired)
-            {
-                repository.Settings.SetMoPassword(settings, moPassword.Text);
-                repository.Settings.Save(settings);
-            }
-
             var setup = repository.Employees.CreateFirstSuperAdmin(
                 no,
                 employeeName.Text,
                 email.Text,
                 employeePassword.Text);
-
-            if (legacyPasswordRequired)
-            {
-                repository.Settings.RetireLegacyAdminPassword(settings);
-                repository.Settings.Save(settings);
-            }
-
             using var recovery = new RecoveryCodeForm(setup.RecoveryCode);
             recovery.ShowDialog(this);
             DialogResult = DialogResult.OK;
@@ -258,7 +198,7 @@ internal sealed class InitialSetupForm : Form
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "無法完成帳戶設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, error.Message, "無法完成帳號設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -280,7 +220,7 @@ internal sealed class InitialSetupForm : Form
 
     private void ValidationError(string message, TextBox target)
     {
-        MessageBox.Show(this, message, "無法完成帳戶設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        MessageBox.Show(this, message, "無法完成帳號設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         BeginInvoke((Action)(() =>
         {
             target.Focus();
@@ -291,14 +231,12 @@ internal sealed class InitialSetupForm : Form
     internal void VerifySmokeLayout()
     {
         var fields = InputFields().ToArray();
-        if (Icon is null || employeeNo.MaxLength != 4 || !employeePassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
-            (legacyPasswordRequired && !legacyPassword.UseSystemPasswordChar) ||
-            (moPasswordRequired && !moPassword.UseSystemPasswordChar) ||
+        if (Text != "首次設定" || ShowIcon || employeeNo.MaxLength != 4 || !employeePassword.UseSystemPasswordChar || !confirmPassword.UseSystemPasswordChar ||
             fields.Any(field => field.TextAlign != HorizontalAlignment.Left) ||
             ClientSize.Width != WindowWidth || ClientSize.Height != CalculateHeight() ||
             AcceptButton is not null || CancelButton != cancel ||
-            !UiControls.HasLogicalSize(save, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight))
-            throw new InvalidOperationException("V2.5 首次帳戶設定視窗配置不正確");
+            !UiControls.HasLogicalSize(save, CompactButtonWidth, CompactButtonHeight))
+            throw new InvalidOperationException("V2.6.1 首次設定視窗配置不正確");
     }
 
     private static TextBox PasswordBox()
@@ -314,7 +252,17 @@ internal sealed class InitialSetupForm : Form
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft,
         AutoEllipsis = false,
-        Margin = new Padding(0, 0, 8, 0),
+        Margin = new Padding(0, 0, 6, 0),
+    };
+
+    private static Button CompactButton(string text) => new NoFocusCueButton
+    {
+        Text = text,
+        Width = CompactButtonWidth,
+        Height = CompactButtonHeight,
+        Margin = new Padding(5, 2, 5, 2),
+        AutoSize = false,
+        UseVisualStyleBackColor = true,
     };
 
     private static void CenterButtons(FlowLayoutPanel panel)

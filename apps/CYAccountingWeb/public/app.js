@@ -520,7 +520,11 @@ async function api(path, options) {
 
 function jsonHeaders() { return { 'content-type': 'application/json' }; }
 function setConnection(text, type) { els.connectionStatus.textContent = text; els.connectionStatus.className = `status ${type || ''}`.trim(); }
-function showMessage(text, isError = false) { els.saveMessage.textContent = text; els.saveMessage.classList.toggle('error', isError); }
+function showMessage(text, isError = false) {
+  els.saveMessage.textContent = text;
+  els.saveMessage.classList.toggle('error', isError);
+  window.cyAfterSaveMessage?.(els.saveMessage, text, isError);
+}
 function setDialogMessage(element, text, isError = false) { element.textContent = text; element.classList.toggle('error', isError); }
 function money(value) { return `$${Number(value || 0).toLocaleString('zh-TW')}`; }
 function formatMonth(value) { const [year, month] = String(value || '').split('-'); return year && month ? `${year}年${month}月` : ''; }

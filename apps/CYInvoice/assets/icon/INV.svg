@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="CYInvoice INV">
+  <title>CYInvoice INV</title>
+  <metadata>CY Apps Icon Family. Vectorized from user-approved visual source; frame normalized to family master. App-specific content preserves approved silhouette.</metadata>
+  <defs><linearGradient id="accent" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0076FF"/><stop offset="1" stop-color="#006AF6"/></linearGradient></defs>
+  <rect x="36" y="36" width="440" height="440" rx="54" fill="url(#accent)"/>
+  <rect x="62" y="62" width="388" height="388" rx="39" fill="#FFFFFF"/>
+  <path d="M 121.46,365.80 L 121.46,370.29 L 123.10,375.20 L 126.78,379.29 L 131.69,381.74 L 378.27,381.74 L 385.22,377.65 L 388.90,369.88 L 388.90,365.80 L 386.45,359.66 L 381.95,355.57 L 376.63,353.94 L 132.10,354.35 L 128.01,355.98 L 124.33,359.25 Z M 121.46,321.22 L 121.46,325.72 L 123.10,330.63 L 126.78,334.72 L 131.69,337.17 L 377.04,337.17 L 380.31,336.35 L 384.81,333.49 L 386.86,331.04 L 388.90,325.31 L 388.49,319.59 L 386.45,315.09 L 381.95,311.00 L 377.45,309.36 L 132.10,309.77 L 128.01,311.41 L 124.33,314.68 Z M 111.65,144.16 L 110.42,145.80 L 110.42,266.43 L 112.06,268.47 L 145.59,268.06 L 146.00,144.98 L 145.18,144.16 Z M 163.17,144.16 L 162.77,267.25 L 163.58,268.06 L 195.89,268.06 L 196.71,267.25 L 196.71,199.36 L 242.51,267.65 L 277.26,268.06 L 278.08,266.84 L 278.08,144.98 L 276.86,143.75 L 244.55,143.75 L 243.32,144.98 L 243.32,212.86 L 197.52,144.16 Z M 410.16,143.34 L 372.54,143.34 L 371.72,144.16 L 345.96,226.35 L 322.25,144.57 L 321.43,143.75 L 285.44,143.75 L 284.62,144.57 L 325.93,267.25 L 363.96,267.25 Z" fill="url(#accent)" fill-rule="evenodd"/>
+</svg>

@@ -1,130 +1,266 @@
 # CYInvoice Windows 候選版驗證清單
 
-本清單供現行 C#／WinForms 正式線的候選工程測試包與正式 Release 前驗收使用。所有開票測試先使用光貿測試環境；只有使用者明確指定的正式驗證才可切換正式公司環境。
+本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
 
-目前正式基準：**V2.4.2 Build 0**。
+- 目前工程測試基準：**V2.6.10 Build 0**。
+- Development Cloud：**Cloud 0.8.8 / API 1 / compatibility Schema 8 / storage Schema 11**。
+- 建議 Windows 測試包：`CYInvoice_cloud-foundation_engineering-run343`。
+- 最新公開正式 Release：**V2.4.2**。
+- V2.6.10 main CI、Windows portable smoke、Governance 與 development Cloud staged deployment 均已通過；本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
 
-## A. 全新啟動與安全設定
+## A. 全新啟動、超級管理員與設定
 
-1. 將候選版解壓縮到全新資料夾，確認原本沒有 `Data/settings.json`。
-2. 啟動 `CYInvoice.exe`，應強制顯示「首次安全設定」。
-3. 關閉或取消首次設定時，程式應直接結束，不得略過設定進入主畫面。
-4. 管理密碼或 MO店+ Excel 密碼任一留白，應拒絕儲存。
-5. 輸入 MO店+ Excel 密碼與兩次相同的管理密碼後才可完成；首次環境固定為光貿測試。
-6. Enter 導覽必須依目前正式設定頁定義前進，最後一欄 Enter 才可觸發完成；不得因 Enter 誤觸發其他功能。
-7. 關閉後重新啟動，首次設定視窗不應再次出現。
-8. `Data/settings.json` 不得出現 App Key、MO 密碼或管理密碼明文。
+1. 將候選版解壓縮到全新資料夾，確認沒有既有 `Data`。
+2. 啟動 `CYInvoice.exe`，應顯示標題「首次設定」。
+3. 視窗應顯示「首次開啟程式需設定超級管理員，超級管理員無法變更。」
+4. 首次設定欄位依序為：員工編號、姓名、Email、員工密碼、再次輸入密碼；不應要求 App Key 或 MO店+ Excel 密碼。
+5. 員工編號不是 4 碼數字、姓名／Email 空白、密碼少於 8 碼、含非 ASCII 英數字、兩次密碼不同時都應阻擋。
+6. Enter 應依欄位順序前進；最後一欄 Enter 才執行建立。
+7. 建立成功後應顯示一次性超級管理員復原碼；關閉後不得再次從本機明文讀回舊復原碼。
+8. 關閉並重啟後不得再次進入首次設定。
+9. `settings.json` 與 SQLite 不得保存員工密碼、復原碼、App Key 或 MO店+ 密碼明文。
+10. 設定選單與帳號管理進入時都使用同一套「權限驗證」視窗。
 
-## B. 手動開立與買方名稱
+## B. 帳號管理與權限
 
-1. 使用自動訂單編號，確認格式為 `MYYYYMMDDXXX`，再開立一般消費者測試發票。
-2. 一般消費者固定含稅；統編／買方名稱欄位保持停用外觀。
-3. 切換公司統編後輸入合法 8 碼統編：輸入完整即自動查詢，查詢期間主視窗仍可操作，欄位外觀不得被附加 `↻` 撐大或裁切。
-4. 人工把買方名稱改成與 API 名稱不同時應顯示不一致提示／紅字；點 `↻` 後直接重查 API 並繞過本機人工記憶。
-5. 快速連續輸入不同統編時，較早的非同步查詢結果不得覆蓋目前最新統編。
-6. 光貿正常回覆但查無名稱時允許人工輸入；連線、逾時、授權、簽章、帳號或服務錯誤不得當成「查無名稱」。
-7. 公司統編切換未稅輸入後，驗證固定精度：含稅 `200` → 未稅 `190.4761905` → 含稅 `200`。
-8. 商品明細品名 Enter → 數量 → 單價；單價 Enter 後，有下一列就移至下一列品名，沒有則新增列並移至新品名。
-9. 同一來源＋原始訂單再次開立必須阻擋；結果不明時禁止重送。
+1. 超級管理員可建立一般使用者與管理員；新增視窗顯示「新增使用者」。
+2. 一般角色 UI 顯示為「一般使用者」，正式內部 role 必須為 `USER`；active runtime 不得再把 `EMPLOYEE` 當作 role 或相容 alias。
+3. 新密碼至少 8 碼且只能使用 ASCII 英文字母／數字。
+4. 管理員不得修改、停用、刪除或重設超級管理員。
+5. 管理員不得取消自己的管理員權限、停用或刪除自己。
+6. 超級管理員不得被降級、停用或刪除。
+7. 超級管理員復原碼使用成功後舊碼應立即失效並產生新碼。
+8. 主畫面與子視窗文字應統一為「帳號管理」，不得殘留「帳戶管理」。
 
-## C. 測試環境 OrderID namespace 與去識別化
+## C. MO店+ 密碼與匯入入口
 
-1. 測試環境開立的 API OrderID 必須使用 CYInvoice technical namespace，避免共用測試池撞號。
-2. 主畫面、已開立清單與一般使用者可見位置仍顯示原始可讀 OrderID，不直接顯示 technical prefix。
-3. 開立後安全回查、discovery、`invoice_query` 必須能以相同 namespaced OrderID 找回該筆測試發票。
-4. 不得把其他公司／其他執行個體的共享測試池資料誤認成本機發票。
+1. 全新設定完成但尚未設定 MO店+ Excel 密碼時，按「MO店+」應先提示至設定頁完成密碼設定。
+2. 上述情況不得先開啟檔案選擇器。
+3. 設定 MO 密碼後，可正常選擇受密碼保護 `.xls` 或一般 `.xlsx`。
+4. 受密碼保護 `.xls` 仍由 Excel COM 唯讀開啟，不建立中介 Excel，也不得將密碼寫入 LOG。
+
+## D. 手動開立與買方名稱
+
+1. 自動訂單編號格式為 `MYYYYMMDDXXX`。
+2. 一般消費者固定含稅；公司統編可切換含稅／未稅。
+3. 完整 8 碼統編輸入後自動查詢；API 技術失敗不得顯示為單純「查無名稱」。
+4. 人工名稱與 API 名稱不同時顯示提示；`↻` 強制重查不得撐大或裁切欄位。
+5. 快速連續輸入不同統編時，舊查詢結果不得覆蓋新輸入。
+6. 固定精度：含稅 `200` → 未稅 `190.4761905` → 含稅 `200`。
+7. 商品 Enter 流程：品名 → 數量 → 單價；單價 Enter 後有下一列就移到下一列品名，否則新增一列。
+8. 同來源＋原始訂單已有不可重開狀態時必須阻擋；結果不明不得盲目重送。
+
+## E. 測試環境 OrderID namespace 與去識別化
+
+1. 測試環境 API OrderID 使用 CYInvoice technical namespace。
+2. 一般 UI 仍顯示原始可讀 OrderID。
+3. 開立後 discovery／`invoice_query` 使用相同 namespace 可正確找回。
+4. 不得誤認共享測試池其他公司／執行個體資料。
 5. 正式環境不得套用測試 namespace。
-6. 測試環境真實統編、姓名、聯絡資料、商品文字、備註與載具識別仍依既有規則去識別化。
+6. 測試環境可識別資料仍依現行規則去識別化。
 
-## D. Excel 匯入
+## F. Excel 匯入
 
-### D1. MO店+
+### F1. MO店+
 
-1. 匯入受密碼保護 `.xls`，確認 Excel COM 唯讀開啟且沒有 PowerShell 中介。
-2. 匯入 `.xlsx`，確認依欄名辨識，不依檔名或固定欄位位置。
-3. 以既有實際樣本核對官方開票金額：`6×113 + 3×112 + 65 - 65 = 1014`，不得用商品售價或平台淨入帳覆蓋。
-4. 選檔後立即開啟匯入確認視窗；解析、統編查詢、勾選與開立進度都在該視窗內完成。
-5. 公司官方含稅總額 1014 顯示為銷售額 966、稅額 48、總額 1014；送出仍保持既有含稅明細與 DetailVat 規則。
-6. 取消、未勾選、明確失敗或結果不明時，不得寫入人工買方名稱；成功或日後嚴格確認已開立後才可保存。
+1. 依欄名辨識，不依固定欄位位置。
+2. 以既有樣本核對官方開票金額，不能用平台淨入帳取代。
+3. 公司訂單總額拆稅後總額不得改變。
+4. 取消、未勾選、失敗或結果不明時不得送出或保存不該保存的人工名稱。
 
-### D2. 酷澎
+### F2. 酷澎
 
-1. 匯入已驗證的已寄出 DeliveryList `.xlsx`，依欄名辨識並進入共用確認視窗。
-2. 使用「應開立予買家之發票金額」；不得把「應開立予酷澎之發票金額」加到買家發票。
-3. 尚未取得可靠樣本的特殊格式必須安全停止，不猜測。
+1. 已驗證 DeliveryList 可依欄名解析並進入共用確認視窗。
+2. 只使用「應開立予買家之發票金額」。
+3. 尚未取得可靠樣本的格式必須安全停止，不猜測。
 
-### D3. 鼎新 ERP
+### F3. 鼎新 ERP
 
-1. 匯入實際鼎新 `.xlsx`；必須找到「單頭資料」與「單身資料」，且一個活頁簿只允許一張銷貨單。
-2. 單頭必要欄位：銷貨單號、客戶全名、統一編號、本幣合計；單身必要欄位：品名、數量、金額。
-3. 若單身有「單位」，匯入後對應商品項目的 Unit；沒有單位欄仍可正常處理。
-4. 單價以 `金額 ÷ 數量` 推導；負數折扣列保持一般明細。單身金額合計不等於單頭本幣合計時必須停止。
-5. 公司統編匯入後使用與手動畫面同一套自動查詢／名稱基準／`↻` 重查行為。
-6. 修改統編或買方名稱後必須先按「套用資料」；未套用前不得開立。
-7. 鼎新一律紙本；消費者統編空白時不得把原始客戶名稱當公司名稱送出。
+1. 必須找到「單頭資料」及「單身資料」，一個活頁簿只允許一張銷貨單。
+2. 單頭必要欄位與單身必要欄位缺少時停止。
+3. 單價由金額 ÷ 數量推導；單身金額合計必須等於單頭本幣合計。
+4. 公司統編／名稱修改後必須先按「套用資料」。
+5. 鼎新一律紙本。
 
-## E. SQLite 遷移、同步與資料保存
+## G. SQLite、同步與 retention
 
-1. 以 V2.3.0 或舊 JSON 的 `Data` 備份首次啟動：建立 `CYInvoice.db` 前必須完整讀取與驗證舊資料；成功後舊 JSON 保留。
-2. 刻意損壞舊 JSON、既有 SQLite 或 schema 時，程式應停止並保留原資料，不得用空白 DB 靜默覆蓋。
-3. 正式環境啟動 recent sync、每 5 分鐘排程 sync、手動重新整理必須共用同一套同步核心；重疊同步直接略過。
-4. 手動重新整理完成後維持 30 秒冷卻。
-5. 每個本機日第一次正式環境自動同步應涵蓋目前兩月期別＋上一期；同日後續回到 recent 3 天。
-6. 同步只更新官方資料與本機 Cache，不得因同步呼叫開立 API 重送發票。
-7. 同一發票號碼或 OrderID 若對到多筆本機候選，建立 `ambiguous_match` 並停止該筆自動更新，不得猜一筆覆寫。
-8. 正式環境只保留目前及上一個兩月期別；測試環境只保留當日。可確認過期資料清理時，相關 PDF／preview Cache 與舊 sync issue 一併清除。
-9. 日期無法判定的紀錄不得靠猜測刪除。
+1. 以舊版 `Data` 備份升級，確認 SQLite 遷移成功且舊 JSON 保留。
+2. 損壞舊 JSON、SQLite 或 schema 時應停止，不得建立空 DB 覆蓋。
+3. 啟動、每 5 分鐘及手動重新整理共用最近 3 天同步核心。
+4. 手動重新整理維持 30 秒冷卻。
+5. 每個本機日第一次正式環境同步涵蓋目前兩月期別＋上一期。
+6. 同步不得呼叫開票 API 重送發票。
+7. 多筆本機候選時建立／保留問題，不猜測覆寫。
+8. 正式環境發票 Cache 保留目前及上一期；測試環境只保留當日。
+9. 未解決作廢／折讓 pending 在有效追蹤期間不得被一般 retention 提前清除。
+10. 超過兩期的可結案作業，由管理員手動結案後才恢復一般 retention 清理資格。
 
-## F. 已開立清單、詳細資訊與上傳問題
+## H. 發票作廢
 
-1. 清單應明確區分完成、已開立、處理中、需確認、失敗與作廢。
-2. 日期、發票號碼、訂單、買受人、統編、來源、發票狀態篩選必須正確。
-3. 可排序欄位表頭點擊後排序正確，且不改變原資料內容或同步狀態。
-4. 來源與 Order ID 欄應能清楚辨識一般資料；欄寬不應讓常用內容無故被截斷。
-5. 單擊發票號碼可複製並顯示短暫完成提示。
-6. 雙擊任何實際發票，不論是否超過 recent 3 天，都必須先執行 `invoice_query` 再顯示詳細資訊。
-7. `invoice_query` 無法確認最新資料時，不得把舊 Cache 冒充最新內容開啟。
-8. 空白斑馬列不可選取、不可雙擊、不可寫進本機資料。
-9. 「上傳問題」視窗上半部技術問題、下半部 Failed 紀錄的格線、欄寬、水平捲動與刪除數量顯示應正常。
-10. API technical field／code 顯示為可理解摘要時，原始 API 訊息仍應保留本機診斷資訊。
-11. 已作廢紀錄清單、詳細資訊與載具預覽均應清楚標示作廢，文字與交易明細仍可閱讀。
-12. 模擬 AMEGO 成功、本機保存失敗時，必須明確表示遠端已開立／本機保存失敗並禁止直接重送。
-13. 同時啟動第二個 `CYInvoice.exe` 應被單一程序鎖阻擋。
+### H1. 直接作廢
 
-## G. PDF、詳細資訊與直接列印
+1. 使用已開立且可作廢的測試發票。
+2. 輸入作廢原因，再於確認視窗輸入發票號碼、員工編號與密碼。
+3. 證明聯狀態區塊應位於員工驗證欄位下方，三個選項一列一顆，不得裁切。
+4. 背景已開立清單在確認視窗開啟期間，所有可見發票號碼都應保持空白，即使背景重新整理或重建列也不能重新出現。
+5. 不需管理員覆核時，實際送出的 `CancelReason` 應為 `使用者編號-原因`，例如 `3015-消退`。
+6. 光貿確認成功後詳細資訊應重新 query 並更新為最新狀態。
+7. 若光貿仍是等待確認，CYInvoice 不得自動重送。
 
-1. 準備一般消費者紙本、公司統編紙本、會員載具各一張。
-2. 紙本詳細資訊自動顯示官方 A4 style 0 第一頁預覽；完整 PDF 有第二頁時，預覽只能顯示第一頁但原始 PDF 不得被改寫。
-3. 同日重新開啟同一張時沿用有效 `InvoicePDF`／`InvoicePreview` Cache；隔日重新取得。損壞 PDF／PNG 必須重建。
-4. 一般消費者「檢視 PDF」直接開 A4；公司統編先顯示五張去識別化版型卡片，選定後才取得真實 PDF。
-5. PDF Viewer 不顯示 CYInvoice 自製縮放列；使用 Edge PDF Viewer 原生工具列測試縮放、下載與手動列印。
-6. 「列印發票」直接使用官方 PDF 並送到 CYInvoice 記住的發票印表機，不開啟可見 PDF Viewer，也不得修改 Windows 全域預設印表機。
-7. 一般消費者固定 A4、雙面、長邊翻轉；公司統編先選版型，再使用記住的印表機與其 duplex 設定。
-8. 記住的印表機不存在或不再支援雙面時，必須要求重新選擇，不得偷偷改送 Windows 預設印表機。
-9. 會員載具不得呼叫 `invoice_file`、不得建立紙本 PDF／PNG Cache、不得顯示一般紙本列印按鈕；模擬票面需清楚標示非正式憑證。
-10. 關閉 PDF 視窗後主程式仍可操作；主程式結束後，本次 WebView2 子程序應結束。
+### H2. 紙本未收回人工覆核
 
-## H. UI 與主視窗
+1. 紙本證明聯選「尚未收回」時，不得直接呼叫作廢 API；應建立「紙本作廢確認」待辦。
+2. 一般使用者不能在待辦中批准或取消。
+3. 管理員雙擊待辦後可「確認送出作廢」或「取消退回」。
+4. 管理員批准後 `CancelReason` 應為 `管理員編號-使用者編號-原因`，例如 `3001-3015-消退`。
+5. 取消退回不得呼叫光貿作廢 API，發票維持原官方狀態。
+6. 實際測試保留完整 `invoice_query` 回覆，確認光貿是否提供可回查的 CancelReason／作廢原因；目前不得假設未文件化欄位一定存在。
 
-1. 主視窗一般狀態維持正式預設尺寸；最大化、最小化、還原後控制項不得重疊或消失。
-2. 設定按鈕固定在頁籤列右上角，尺寸不隨最大化比例放大。
-3. 商品與主要已開立清單維持既有單一欄寬／scrollbar 路徑，不得出現未命名假欄位；問題清單若內容較長，可使用明確原生水平 scrollbar。
-4. 主視窗最下方右側顯示低調灰色 `Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.`。
-5. 三個匯入按鈕、頁籤、表格、文字背景與金額顯示維持既有正式視覺，不因局部修正加入第二套 layout/state 路徑。
+## I. 折讓人工流程
 
-## I. 發行包
+1. 在可折讓發票詳細資訊按「折讓」。
+2. 輸入原因、含稅折讓總額、員工編號及密碼；錯誤帳密不得建立待辦。
+3. 成功後顯示「折讓申請已建立。請通知管理員查看並完成操作。」之現行使用者提示。
+4. 「上傳問題」應出現折讓人工處理待辦。
+5. 管理員在光貿網站完成人工折讓後，於待辦詳細頁標記已解決；CYInvoice 應透過 `invoice_query.allowance[]` 比對申請前基線與新折讓。
+6. 唯一新折讓且含稅金額吻合時可確認完成。
+7. 多筆新候選、金額不符或仍在處理中時不得猜測結案，待辦必須保留。
+8. 已進入等待官方確認階段後不得「取消退回」。
+9. 完成後發票詳細資訊的「作廢 / 折讓紀錄」應顯示折讓摘要；pending 不應出現在歷史區。
+
+## J. 折讓 PDF
+
+1. 準備至少一張光貿已完成折讓單。
+2. 雙擊折讓歷史開啟詳細資訊，按「檢視 PDF」。
+3. 應顯示三個版型：A4、A4 (地址+A5)、A5；不得顯示發票專用其他兩種版型。
+4. 不應預先選定版型；使用者選擇後才呼叫 `/json/allowance_file`。
+5. 三種版型各實測一次，確認光貿回傳可正常在 WebView2 PDF Viewer 開啟。
+6. 同一折讓單與版型重開時可使用有效 `Cache/AllowancePDF`。
+7. 非 PDF、異常網址、錯誤 API 回覆不得被當成成功檔案保存。
+8. PDF Viewer 關閉後主程式仍可正常操作。
+
+## K. 折讓作廢人工流程
+
+1. 在狀態已完成的折讓詳細資訊按「折讓作廢」。
+2. 輸入原因、員工編號與密碼；錯誤帳密不得建立待辦。
+3. 建立前 CYInvoice 應重新 query 發票，確認該折讓單仍唯一存在且官方狀態已完成。
+4. 成功後「上傳問題」出現「折讓作廢人工處理」。
+5. 本版不得直接呼叫 `/json/g0501`。
+6. 管理員在光貿網站人工完成後可在詳細待辦按「已解決」。
+7. 尚未人工處理前可「取消退回」；兩者都只更新本機待辦，不得假裝呼叫光貿成功。
+8. 同一張發票已有另一張折讓單的作廢申請時，應阻擋建立第二筆互相覆蓋的待辦。
+
+## L. 上傳問題單一清單
+
+1. 主視窗「上傳問題」應只有一張清單，不再分上下兩張。
+2. 技術問題、開立失敗、紙本作廢確認、折讓人工處理、折讓作廢人工處理都在同一表中。
+3. 只有開立失敗列可勾選；其他列不得被 checkbox 當作刪除目標。
+4. `清除開立失敗紀錄` 只刪除本機 Failed 紀錄，不影響其他 issue／pending，也不影響光貿資料。
+5. 人工待辦雙擊開詳細視窗；操作按鈕位於詳細頁，不堆在主清單工具列。
+6. 一般技術 issue 可依既有流程標記已解決；作廢／折讓人工流程不得被一般標記繞過。
+7. 清單重新整理、縮放與水平捲動時不得持續閃爍。
+
+## M. 超過兩期管理員結案
+
+1. 準備超過目前＋上一個兩月期別的作廢或折讓 pending 測試資料。
+2. 一般使用者不能結案。
+3. 管理員只有在詳細待辦中看到「管理員結案」。
+4. 結案後清除相應本機 pending／人工 metadata，並解決 issue。
+5. 管理員結案不得呼叫光貿 API。
+6. 作廢 pending 不得因本機結案被偽造成官方 `Voided`；應保持不確定／歷史語意。
+
+## N. 發票 PDF、列印與會員載具
+
+1. 紙本詳細資訊可取得官方 A4 第一頁預覽。
+2. 一般消費者檢視 PDF 直接使用 A4；公司統編先顯示五個版型卡片。
+3. 發票 PDF Viewer 使用 Edge 原生工具列，不加入第二套自製縮放工具列。
+4. 直接列印不得修改 Windows 全域預設印表機。
+5. 會員載具不得呼叫紙本 `invoice_file`，並清楚標示模擬預覽非正式憑證。
+
+## O. UI 與穩定性
+
+1. 主視窗最大化／最小化／還原後不得重疊或消失。
+2. 設定選單開啟後持續觀察至少 30 秒，不得出現連續閃爍。
+3. 首次設定、權限驗證、作廢原因、作廢確認、人工待辦詳細視窗都不得出現不必要 title-bar icon。
+4. 危險動作按鈕採一致圓角外觀與較淡紅色，不回到方角高飽和舊樣式。
+5. 使用者可見名稱統一：「帳號管理」、「新增使用者」、「一般使用者」、「權限驗證」。
+
+## P. 發行包
 
 1. 根目錄包含 `CYInvoice.exe`、當版唯一 `V版本號.txt` 及 `使用說明.txt`。
-2. 不得包含 `Version` 資料夾或 `todo.txt`。
-3. 套件第一次啟動後由程式建立 Data／Cache／Logs；正式 ZIP 不依賴空資料夾 entry。
-4. 工程 Artifact 版本文字包含 `Channel: engineering`；正式 ZIP 包含 `Channel: formal`。
-5. WebView2 managed DLL 集中於 `Runtime/WebView2`；根目錄不得殘留開發用 WebView2 XML 說明檔。
-6. 正式 Release 必須由 `main` 重新執行必要測試、WinForms startup smoke、公開安全掃描、Windows x64 build、PE／package 驗證、portable smoke 與 SHA-256。
-7. 正式發布後再次確認 tag、Release 名稱、ZIP、SHA-256 與 target commit 均一致。
+2. 不得包含 `Version` 資料夾、`todo.txt`、執行期 Data／Cache／Logs。
+3. engineering Artifact 明確標示 `Channel: engineering`。
+4. WebView2 managed DLL 集中於 `Runtime/WebView2`。
+5. engineering/public artifact 上傳前必須通過 repository `scan-public-package.py`，不得包含 secrets、production bindings 或被治理規則禁止的檔案。
+6. 正式 Release 必須由 `main` 重新執行全部必要驗證；engineering CI 成功不能直接視為正式發布完成。
+
+## Q. Built-in Cloud V2.6.10 baseline
+
+> 先做本節，再進行 R～U。既有 A/B 兩台都是目前 Workspace 的 recovery path，不應一開始就做破壞性動作。
+
+1. A、B 均使用 Run343 V2.6.10 engineering package 啟動。
+2. 兩台都應能連上 development Cloud，既有 Workspace 不應被重新 bootstrap。
+3. `裝置管理` 應看到既有 active Device inventory；不應因升級產生重複 Device。
+4. 既有中央 Employees 應仍可登入，角色為 `SUPER_ADMIN / ADMIN / USER` vocabulary，不得出現 active `EMPLOYEE` role。
+5. 一般發票清單、recent sync、手動重新整理及既有 Cloud status 顯示應無回歸。
+6. 若任一台 baseline 不正常，停止後續 destructive lifecycle 測試；先保存 Logs 並修復，不得用重建 Workspace 規避問題。
+
+## R. Cloud authority freshness A/B
+
+> 本節驗證 Package 2。只做可回復的中央 Employee 變更；不要用目前唯一 SUPER_ADMIN 做停用實驗。
+
+1. 在 A 對測試用中央 Employee 做一項可回復變更，例如密碼、`USER ↔ ADMIN` 或 enabled 狀態。
+2. 不等待 5 分鐘、不重新啟動 B，立即在 B 觸發需要 Employee authentication/authorization 的 protected operation。
+3. B 必須使用最新 Cloud authority；舊密碼、舊角色或舊 enabled 狀態不得繼續被 online cache 認為有效。
+4. B 成功取得新 authority 後，本機 protected cache 應被最新 snapshot 取代。
+5. 將 B 暫時置於真正無法連線到 Cloud 的狀態；最後可信 protected cache 可供允許的 Offline authentication 使用，不得 fallback 到舊 Local EmployeeStore。
+6. 恢復 B 網路後，下一個 protected operation 必須重新以 Online authority 為準，不必重啟程式。
+7. HTTP authorization failure、revoked Device、malformed authority 或 Workspace mismatch 不得被當成「離線」而使用 cache 繞過。
+8. 測試完成後把中央 Employee 恢復原狀，A/B 都應立即看到恢復後 authority。
+
+## S. Device revoke / retire A/B/C
+
+> 本節驗證 Package 3。優先建立可拋棄的 Device C，不直接拿 A 或 B 當 revoke 目標。
+
+1. 以既有已驗證的 pairing 流程建立新的測試 Device C。
+2. A/B 的 `裝置管理` 應看到 C 為 active，且 active count 與清單一致。
+3. 從 A 針對 C 執行遠端撤銷；必須要求 execution-time `SUPER_ADMIN` credential 驗證與 destructive confirmation。
+4. 撤銷成功後 C row 必須保留為 revoked history，不得 hard-delete。
+5. C 的舊 Device Token 從此不得通過一般 Device-authenticated Cloud API。
+6. 重複 revoke 同一個已 revoked C 應保持 idempotent，不產生第二個 active identity。
+7. 同一台實體測試電腦若重新加入，必須建立新的 Device ID / Device Token；不得復活舊 revoked token。
+8. A、B 的身份、Workspace、中央 Employee authority 不得受 C revoke 影響。
+
+## T. Cloud → Local destructive reset
+
+> 本節驗證 Package 4。使用可拋棄的 C installation；A/B 必須保持 active，確保 Workspace 仍有 recovery path。
+
+1. C 處於 Built-in Cloud 且是 active Device，A/B 仍在線。
+2. 在 C 選擇回到 Local／destructive reset，應看到兩次明確確認；不能只切一個 mode flag。
+3. 確認後 App 應先關閉主 UI／背景同步，再執行 current Device revoke 與 reset transaction。
+4. Cloud 明確確認 C 已 revoked 後，才允許刪除 C 的 CYInvoice `Data` / `Cache` / Local Employee / Cloud Employee cache / Cloud identity/token/pending state。
+5. 與 CYInvoice local state 無關的診斷／外部檔案不得被過度刪除。
+6. 重啟 C 應回到 first-run，不應殘留舊 Workspace、Device Token 或舊 Local SUPER_ADMIN authority。
+7. 重新選 Local 時需建立新的 Local `SUPER_ADMIN`。
+8. A/B、中央 Workspace、其他 Devices、中央 Employees 與 audit history 必須保持完整。
+9. C 之後若再次加入原 Workspace，應視為 fresh Device identity。
+
+## U. Final Device、Workspace inactive 與 ambiguous-result 安全邊界
+
+1. **不要在目前 A/B recovery topology 上故意測最後一台 Device。** Final-Device destructive acceptance 應另建可拋棄 Workspace／環境。
+2. Built-in Cloud active Workspace 只剩最後一台 active Device 時，revoke 必須回 `LAST_ACTIVE_DEVICE`，本機不得 wipe。
+3. 若要保留 Workspace，先加入另一台 active Device 才可退出目前 Device。
+4. 若 Workspace 已由外部中央管理面手動 disable/archive，Windows Client 只能讀取並確認 inactive；不得提供 disable/delete/purge Workspace 的按鈕或 API 權限。
+5. Workspace 已確認 inactive 時，最後一台本機可以完成 local destructive reset；不得因此刪除中央 Workspace history／Employees／Audit。
+6. 模擬「revoke request 可能已到 Cloud，但 success response 遺失」時，本機必須保留 Data、Token 與 reset marker，不得猜測成功後 wipe。
+7. 下一次啟動應透過 narrow `/v1/devices/self-status` 確認 Device terminal state / Workspace state；該 endpoint 不得讓 revoked token 恢復一般 API authorization。
+8. 若 self-status 證明 Device revoked 或 Workspace inactive，可繼續已授權 wipe；若仍 active，取消未完成 reset 並完整保留資料；若狀態仍不明，fail closed 並停止進入正常 App。
+9. CY ID 尚未成為正式 recovery authority 前，不得因「未來可能支援 0 Device」而放寬 Built-in `LAST_ACTIVE_DEVICE`。
 
 ## 通過條件
 
-- A～I 對本次變更涉及的範圍全部通過，且 `Logs` 沒有未處理的 `ERROR` 或未處理例外。
-- 正式環境不做任何未經使用者確認的實際開票。
-- 發票成功判定、防重、環境隔離、結果不明禁止重送等安全不變量不得因 UI／文件調整而改變。
-- SQLite、recent sync、daily sync、double-click query 與 sync issue 已是 V2.4.2 現行功能，不再列為「未來規劃」。
+- 本次變更涉及的 A～U 項目依實際 scope 通過，且 Logs 沒有未處理 `ERROR` 或未處理例外。
+- 所有需要光貿實際回覆的結果均以真實測試回覆為準，不以 UI 顯示自行推定 API 行為。
+- Cloud lifecycle 測試必須以 development Cloud 與可回復／可拋棄 Device 為主，不為驗證 destructive path 而破壞唯一 recovery path。
+- 發票成功判定、防重、環境隔離、Cloud authority、Device trust、結果不明禁止重送／誤刪等安全不變量不得因 UI 或人工流程調整而改變。
+- **V2.6.10 實機驗證完成前不得把 V2.6.10 描述為正式 Release；merge 到 main 或 development Cloud deploy 均不等於正式 Release。**

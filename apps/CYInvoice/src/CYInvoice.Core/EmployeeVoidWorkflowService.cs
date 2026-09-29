@@ -24,6 +24,13 @@ public sealed record InvoiceVoidManualReview(
     string Reason,
     DateTimeOffset RequestedUtc);
 
+public sealed record InvoiceVoidHandledReview(
+    string RequesterEmployeeNo,
+    string Reason,
+    DateTimeOffset RequestedUtc,
+    string ReviewerEmployeeNo,
+    DateTimeOffset SubmittedUtc);
+
 public sealed record EmployeeVoidWorkflowResult(
     bool ManualReviewRequired,
     InvoiceRecord Record,
@@ -40,6 +47,7 @@ public sealed class EmployeeVoidWorkflowService
 {
     public const int MaxReasonLength = 10;
     private const string ManualReviewMetadataKey = "cyinvoice_void_manual_review";
+    private const string HandledReviewMetadataKey = "cyinvoice_void_handled_review";
     private readonly LocalRepository repository;
     private readonly InvoiceVoidService voidService;
     private readonly InvoiceSyncRepository syncRepository;
@@ -98,10 +106,9 @@ public sealed class EmployeeVoidWorkflowService
         if (paperInvoice && paperReceiptState == PaperInvoiceReceiptStates.Uncollected)
             return QueueManualReview(stored, employee.EmployeeNo, reason);
 
-        var result = await voidService.VoidAsync(
-            stored,
-            CancelReason(employee.EmployeeNo, reason),
-            cancellationToken).ConfigureAwait(false);
+        var cancelReason = CancelReason(employee.EmployeeNo, reason);
+        var result = await voidService.VoidAsync(stored, cancelReason, cancellationToken).ConfigureAwait(false);
+        RememberAcceptedVoid(expectedNumber, cancelReason, result.Outcome);
         return new EmployeeVoidWorkflowResult(
             ManualReviewRequired: false,
             result.Record,
@@ -115,6 +122,17 @@ public sealed class EmployeeVoidWorkflowService
         return ReadManualReview(record);
     }
 
+    public InvoiceVoidHandledReview? HandledReviewFor(InvoiceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.ExtensionData is null ||
+            !record.ExtensionData.TryGetValue(HandledReviewMetadataKey, out var value) ||
+            value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        try { return value.Deserialize<InvoiceVoidHandledReview>(); }
+        catch (JsonException error) { throw new InvalidDataException("作廢人工處理紀錄格式錯誤", error); }
+    }
+
     public async Task<InvoiceVoidResult> ApproveManualReviewAsync(
         InvoiceSyncIssue issue,
         string actorEmployeeNo,
@@ -122,22 +140,29 @@ public sealed class EmployeeVoidWorkflowService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(issue);
-        AuthenticateManager(actorEmployeeNo, actorPassword);
+        var manager = AuthenticateManager(actorEmployeeNo, actorPassword);
         RequireManualReviewIssue(issue);
         var record = FindIssueRecord(issue);
         var review = ReadManualReview(record)
             ?? throw new InvalidOperationException("這筆人工確認已沒有可送出的作廢申請資料");
 
-        var result = await voidService.VoidAsync(
-            record,
-            CancelReason(review.RequesterEmployeeNo, review.Reason),
-            cancellationToken).ConfigureAwait(false);
+        var cancelReason = CancelReason(manager.EmployeeNo, review.RequesterEmployeeNo, review.Reason);
+        var result = await voidService.VoidAsync(record, cancelReason, cancellationToken).ConfigureAwait(false);
+        RememberAcceptedVoid(record.InvoiceNumber, cancelReason, result.Outcome);
 
         if (result.Outcome is InvoiceVoidOutcome.Confirmed or
             InvoiceVoidOutcome.AlreadyVoided or
             InvoiceVoidOutcome.PendingConfirmation)
         {
             var latest = Reload(result.Record);
+            latest.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            latest.ExtensionData[HandledReviewMetadataKey] = JsonSerializer.SerializeToElement(
+                new InvoiceVoidHandledReview(
+                    review.RequesterEmployeeNo,
+                    review.Reason,
+                    review.RequestedUtc,
+                    manager.EmployeeNo,
+                    now().ToUniversalTime()));
             ClearManualReview(latest);
             syncRepository.UpsertMany([latest]);
             issueStore.Resolve(issue.Id, now());
@@ -284,12 +309,29 @@ public sealed class EmployeeVoidWorkflowService
         record.ApiOrderId.Trim().Length != 0 ? record.ApiOrderId.Trim() :
         record.OrderId.Trim().Length != 0 ? record.OrderId.Trim() : record.OriginalOrderId.Trim();
 
-    private static string CancelReason(string employeeNo, string reason)
+    internal static string CancelReason(string employeeNo, string reason) =>
+        CancelReasonCore([employeeNo], reason);
+
+    internal static string CancelReason(string reviewerEmployeeNo, string requesterEmployeeNo, string reason) =>
+        CancelReasonCore([reviewerEmployeeNo, requesterEmployeeNo], reason);
+
+    private static string CancelReasonCore(IEnumerable<string> employeeNumbers, string reason)
     {
-        var value = employeeNo.Trim() + " " + reason.Trim();
+        var ids = employeeNumbers.Select(value => (value ?? string.Empty).Trim()).ToArray();
+        if (ids.Length is < 1 or > 2 || ids.Any(value => value.Length != 4 || !value.All(char.IsAsciiDigit)))
+            throw new InvalidOperationException("作廢員工編號格式錯誤");
+        reason = (reason ?? string.Empty).Trim();
+        ValidateReason(reason);
+        var value = string.Join('-', ids.Append(reason));
         if (value.EnumerateRunes().Count() > 20)
             throw new InvalidOperationException("員工編號與作廢原因合計超過光貿允許長度");
         return value;
+    }
+
+    private static void RememberAcceptedVoid(string invoiceNumber, string cancelReason, InvoiceVoidOutcome outcome)
+    {
+        if (outcome is InvoiceVoidOutcome.Confirmed or InvoiceVoidOutcome.AlreadyVoided or InvoiceVoidOutcome.PendingConfirmation)
+            VoidOperationSessionCache.Remember(invoiceNumber, cancelReason);
     }
 
     private static void ValidateReason(string reason)

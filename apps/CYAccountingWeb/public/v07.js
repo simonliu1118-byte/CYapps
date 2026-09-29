@@ -24,7 +24,7 @@ function setupEntryWorkflowUi() {
 
   const hint = card?.querySelector('.keyboard-hint');
   if (hint) {
-    hint.innerHTML = '鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　<kbd>F2</kbd> 切換收入／支出';
+    hint.innerHTML = '鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　<kbd>Tab</kbd> 切換收入／支出';
   }
 
   const ledger = document.querySelector('.ledger-card');
@@ -50,10 +50,11 @@ function bindEntryKindVisuals() {
 }
 
 function bindEntryKindShortcut() {
-  document.addEventListener('keydown', event => {
-    if (event.key !== 'F2' || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+  els.form?.addEventListener('keydown', event => {
+    if (event.key !== 'Tab' || event.shiftKey || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
     if (document.body.classList.contains('auth-locked')) return;
     if (document.querySelector('dialog[open]')) return;
+    if (!(event.target instanceof HTMLElement) || !event.target.matches('input, select')) return;
 
     event.preventDefault();
     const active = document.activeElement;

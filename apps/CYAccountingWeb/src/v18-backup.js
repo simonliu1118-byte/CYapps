@@ -9,6 +9,7 @@ const R2_PROVIDER = 'cloudflare_r2';
 const GCS_PROVIDER = 'google_cloud_storage';
 const R2_RETENTION_DAYS = 30;
 const GCS_PHASE_C_RETENTION_DAYS = 14;
+const PHASE_C_REQUIRED_SCHEDULED_BACKUPS = 14;
 
 export function resolveTieredBackupTopology(env) {
   const value = String(env?.BACKUP_TOPOLOGY || '').trim();
@@ -244,6 +245,19 @@ export async function parallelBackupStatus(env) {
     });
   }
 
+  const acceptanceResult = await env.DB.prepare(`
+    SELECT bs.backup_id, bs.created_at, bs.package_sha256,
+           MAX(CASE WHEN bc.provider = ? AND bc.status = 'success' THEN 1 ELSE 0 END) AS r2_success,
+           MAX(CASE WHEN bc.provider = ? AND bc.status = 'success' THEN 1 ELSE 0 END) AS gcs_success
+    FROM backup_sets bs
+    LEFT JOIN backup_copies bc ON bc.backup_id = bs.backup_id
+    WHERE bs.trigger_kind = 'scheduled'
+    GROUP BY bs.backup_id, bs.created_at, bs.package_sha256
+    ORDER BY bs.created_at DESC
+    LIMIT 14
+  `).bind(R2_PROVIDER, GCS_PROVIDER).all();
+  const phaseCAcceptance = summarizePhaseCAcceptance(acceptanceResult.results || []);
+
   const latestSuccess = logicalBackups.find(item => item.status === 'success') || null;
   return json({
     ok: true,
@@ -256,11 +270,38 @@ export async function parallelBackupStatus(env) {
     },
     schedule: { cron: '30 19 * * *', localTime: '每日 03:30（台灣時間）' },
     retentionDays: GCS_PHASE_C_RETENTION_DAYS,
+    phaseCAcceptance,
     latestSuccess: latestSuccess ? logicalToLegacyRun(latestSuccess) : null,
     recentRuns: logicalBackups.map(logicalToLegacyRun),
     logicalBackups,
     restoreAvailable: false
   });
+}
+
+export function summarizePhaseCAcceptance(rows, required = PHASE_C_REQUIRED_SCHEDULED_BACKUPS) {
+  const requiredCount = Math.max(1, Number(required) || PHASE_C_REQUIRED_SCHEDULED_BACKUPS);
+  const candidates = Array.isArray(rows) ? rows : [];
+  let consecutive = 0;
+
+  for (const row of candidates) {
+    if (consecutive >= requiredCount) break;
+    const r2Success = Number(row?.r2_success ?? row?.r2Success ?? 0) === 1;
+    const gcsSuccess = Number(row?.gcs_success ?? row?.gcsSuccess ?? 0) === 1;
+    const packageSha256 = String(row?.package_sha256 ?? row?.packageSha256 ?? '');
+    if (!(r2Success && gcsSuccess && /^[0-9a-f]{64}$/i.test(packageSha256))) break;
+    consecutive += 1;
+  }
+
+  const latest = candidates[0] || null;
+  return {
+    requiredConsecutiveScheduled: requiredCount,
+    consecutiveScheduledSuccesses: consecutive,
+    remaining: Math.max(0, requiredCount - consecutive),
+    completed: consecutive >= requiredCount,
+    latestScheduledBackupId: latest ? String(latest.backup_id ?? latest.backupId ?? '') : null,
+    latestScheduledAt: latest ? String(latest.created_at ?? latest.createdAt ?? '') : null,
+    manualRunsCount: false
+  };
 }
 
 function logicalToLegacyRun(item) {

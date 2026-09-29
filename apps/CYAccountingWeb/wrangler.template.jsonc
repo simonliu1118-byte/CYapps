@@ -1,8 +1,9 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "__CF_WORKER_NAME__",
-  "main": "src/app-v17.js",
+  "main": "src/app-v19.js",
   "compatibility_date": "2026-09-22",
+  "workers_dev": true,
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -10,6 +11,12 @@
       "/api/*"
     ]
   },
+  "routes": [
+    {
+      "pattern": "__CF_CUSTOM_DOMAIN__",
+      "custom_domain": true
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -23,6 +30,15 @@
       "service": "__CF_IDENTITY_SERVICE__"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "BACKUP_R2",
+      "bucket_name": "__CF_R2_BACKUP_BUCKET__"
+    }
+  ],
+  "vars": {
+    "BACKUP_TOPOLOGY": "__CF_BACKUP_TOPOLOGY__"
+  },
   "triggers": {
     "crons": [
       "30 19 * * *"

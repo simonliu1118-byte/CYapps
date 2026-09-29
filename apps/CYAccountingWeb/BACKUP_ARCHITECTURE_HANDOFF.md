@@ -1,349 +1,436 @@
-# CYAccountingWeb — Tiered Backup Architecture Handoff
+# CYAccountingWeb — Tiered Backup Architecture / Operational Handoff
 
-> Status: implementation handoff for the CYAccountingWeb workstream.
+> Updated: 2026-09-27（Taiwan time）
 >
-> This document does **not** authorize changes to CYAccountingWeb from the CY Web workstream. It records the agreed target architecture and migration sequence so the CYAccountingWeb conversation can implement it deliberately.
+> Current formal baseline: **V0.18.1 Build 0**
+>
+> Current migration phase: **Phase C production acceptance in progress**
+>
+> This document consolidates the earlier V0.17 architecture handoff and the 2026-09-27 R2 Phase C operational handoff. Completed C2/C3 wiring steps are historical record only and must not be repeated as fresh setup work.
 
-## 1. Current accepted CYAccountingWeb baseline
+## 1. Source-of-truth order for continuation
 
-Read current `simonliu1118-byte/CYapps` `main` before implementation.
+Before changing backup infrastructure, read current `main` and use this order:
 
-As of the handoff:
+1. current explicit user instruction;
+2. `apps/CYAccountingWeb/PROJECT_RULES.md`;
+3. repository governance / public-repo policy;
+4. current `VERSION` / `BUILD` / migrations / source;
+5. this handoff and `TODO.md` as current-state / migration documents.
 
-- CYAccountingWeb version: **V0.17.0**.
+`README.md`, `TODO.md` and this handoff are state/reference documents, not permanent governance rules.
+
+Cross-application infrastructure decisions involving Identity / SSO, shared Workers, database ownership or shared Backup Service must also be synchronized with the latest **CY-WEB workstream** decision before implementation.
+
+## 2. Current accepted production baseline
+
+As of 2026-09-27:
+
+- CYAccountingWeb version: **V0.18.1 Build 0**.
 - Cloudflare D1 is the authoritative live accounting database.
-- GCS production backup has completed real production acceptance.
-- Existing scheduled backup time: daily 03:30 Taiwan time.
-- Existing GCS retention: 14 days.
-- Existing production package: `manifest.json + data.json`.
-- Existing provider-neutral interface already requires `putObject`, `getObject`, `listObjects`, `deleteObject`.
-- Existing GCS backup verifies read-back SHA-256, byte size, record counts and manifest compatibility.
+- V0.17 GCS production backup path has completed real production acceptance and remains the rollback / safety path during migration.
+- Phase A is complete.
+- Phase B is complete.
+- Phase C implementation is deployed.
+- Phase C manual paired R2 + GCS production acceptance passed on **2026-09-27**.
+- Phase C scheduled acceptance counter is implemented and shown as `x / 14`.
+- Phase D is blocked until the scheduled gate reaches `14 / 14`.
+- Restore remains future/high-risk work and is not exposed as a completed user-facing capability.
 
-Do **not** break or remove the accepted V0.17 GCS path while the new architecture is being introduced.
-
-Relevant current source:
+Current implementation files include:
 
 ```text
-apps/CYAccountingWeb/src/backup-storage-provider.js
+apps/CYAccountingWeb/src/app-v18.js
+apps/CYAccountingWeb/src/v18-backup.js
+apps/CYAccountingWeb/src/r2-backup-provider.js
 apps/CYAccountingWeb/src/gcs-backup-provider.js
 apps/CYAccountingWeb/src/v17-backup.js
-apps/CYAccountingWeb/src/app-v17.js
-apps/CYAccountingWeb/BACKUP_ARCHITECTURE_HANDOFF.md
-apps/CYAccountingWeb/TODO.md
+apps/CYAccountingWeb/migrations/0004_tiered_backup_catalog.sql
+apps/CYAccountingWeb/tests/v18-tiered-backup.mjs
+apps/CYAccountingWeb/tests/v18-backup-ui.mjs
+apps/CYAccountingWeb/tests/deploy-config.mjs
+apps/CYAccountingWeb/wrangler.template.jsonc
 ```
 
-## 2. New target architecture
+## 3. Current Phase C topology
+
+Production Phase C behavior is:
 
 ```text
 Cloudflare D1
     ↓ authoritative live DB
-CYAccountingWeb BackupService
+build one immutable backup set
     ↓ export once
-portable CYBackupSet
-    ├─ R2  — daily operational backup
-    └─ GCS — lower-frequency cross-cloud DR replica
+one logical backupId + one package digest
+    ├─ Cloudflare R2 verified copy
+    └─ Google Cloud Storage verified copy
 ```
 
-### Provider roles
-
-**R2**
-
-- daily operational backup;
-- normal in-app restore source while Cloudflare is healthy;
-- schedule: daily 03:30 Taiwan time;
-- retention: 30 rolling days.
-
-**GCS**
-
-- independent cross-cloud disaster recovery;
-- normal scheduled replication: Wednesday and Sunday, Taiwan local date;
-- retention: 26 rolling weeks / 182 days;
-- receives the exact same portable backup-set bytes as the R2 logical backup;
-- must not trigger a second D1 export.
-
-Manual / pre-restore safety backup should target both providers regardless of weekday.
-
-## 3. Export-once requirement
-
-One logical backup operation creates one `backupId` and one set of bytes:
+Current topology values supported by the deployed Phase C code:
 
 ```text
-build data.json once
-→ hash once
-→ build manifest.json once
-→ store/verify R2
-→ store/verify same bytes on GCS when policy requires
+legacy_gcs
+parallel_dual_provider
 ```
 
-Do not run `buildBackupPackage()` or an equivalent D1 export again for GCS replication.
+`legacy_gcs` remains the rollback-compatible mode.
 
-If GCS replication fails, retry from the already-created backup set. Do not create a new payload while pretending it is the same backup event.
+`parallel_dual_provider` is the active Phase C model used for paired production acceptance.
 
-## 4. Shared portable backup contract
+Do not invent or enable future topology names until the corresponding implementation phase exists.
 
-Target common outer format for CY Web and CYAccountingWeb:
+## 4. Deployment contracts
+
+Public source may contain binding / contract names, but not production resource identifiers.
+
+Current contracts:
+
+```text
+DB               Cloudflare D1 binding
+IDENTITY         private employee-identity service binding
+BACKUP_R2        Cloudflare R2 binding
+BACKUP_TOPOLOGY  backup rollout mode
+```
+
+Current Worker entrypoint:
+
+```text
+src/app-v18.js
+```
+
+Current cron:
+
+```text
+30 19 * * *
+```
+
+= daily 03:30 Taiwan time.
+
+Production Worker name, D1 database ID/name, Identity service actual name, R2 bucket actual name and similar deployment-specific identifiers are injected by GitHub Deployment Environment / Secrets through generated deploy config. Do not hard-code them into public source merely because an earlier operational handoff recorded a real resource name.
+
+## 5. Phase C provider roles and retention
+
+During Phase C acceptance:
+
+### R2
+
+- role: operational backup copy;
+- schedule: daily 03:30 Taiwan;
+- application retention: **30 rolling days**;
+- accessed through Worker R2 binding;
+- no public R2 endpoint is required;
+- no application-level S3 access key / R2 API token is required for the Worker binding path.
+
+### GCS
+
+- role during Phase C: paired cross-cloud validation + accepted V0.17 rollback/safety copy;
+- schedule: still **daily** during Phase C;
+- application retention: still **14 days** during Phase C;
+- current accepted GCS credential / provider path remains available through the gate.
+
+Do **not** switch GCS to Wednesday/Sunday or 182-day retention before Phase C completes.
+
+## 6. Export-once / immutable package requirement
+
+One logical backup operation creates one `backupId` and one set of immutable bytes:
+
+```text
+D1 export once
+→ build data.json once
+→ build manifest.json once
+→ calculate package digest
+→ write/read-back verify R2
+→ write/read-back verify GCS using the exact same package bytes
+```
+
+Phase C code must not perform a second D1 export merely to create the GCS copy.
+
+Provider retry / future replication should reuse the already-created backup set whenever the logical backup event is intended to remain the same.
+
+## 7. Current backup format compatibility
+
+Current production output remains the accepted V0.17 application-specific package:
+
+```text
+format = CYAccountingWebBackupSet
+formatVersion = 2
+```
+
+Package layout:
+
+```text
+CYAccountingWeb/<backup-id>/
+├─ manifest.json
+└─ data.json
+```
+
+The future common outer contract:
 
 ```text
 format = CYBackupSet
 formatVersion = 1
 ```
 
-Layout:
+is **not** a completed production format migration.
 
-```text
-<app-scope>/<backup-id>/
-├─ manifest.json
-└─ data.json
-```
+Rules:
 
-Required common manifest semantics:
+- do not rewrite existing V0.17 GCS objects;
+- keep old-format reader / validator support through the compatibility window;
+- provider migration and format migration remain separate changes;
+- do not combine a destructive provider cutover with a destructive format cutover.
 
-```text
-format
-formatVersion
-backupId
-appId
-appVersion
-schemaVersion
-createdAtUtc
-sourceDatabaseEngine = d1
-workspaceScope / tenant scope when applicable
-recordCounts
-totalRecordCount
-dataObjectName
-dataSha256
-dataByteLength
-```
+## 8. Logical backup / provider-copy catalog — implemented
 
-`data.json` remains application-specific accounting data. The shared contract is the outer package/integrity contract, not a requirement that CY Web and CYAccountingWeb have identical tables.
-
-Provider-specific copy status, bucket names, object generations, R2/GCS metadata and credentials must not be written into the portable manifest.
-
-## 5. Compatibility with V0.17 backup format
-
-Current V0.17 uses its accepted application-specific backup format/version. Existing GCS backups must remain readable and valid.
-
-Therefore:
-
-- introduce the common `CYBackupSet` format through a versioned compatibility path;
-- do not rewrite old GCS objects in place;
-- keep old-format validation/reader support for the accepted retention/restore compatibility window;
-- only switch production output after tests prove current V0.17 backups are unaffected.
-
-A format migration is separate from a provider migration. Do not change both destructively at the same time.
-
-## 6. BackupStorageProvider contract
-
-Keep the current four-operation boundary:
-
-```text
-putObject(key, bytes, metadata)
-getObject(key)
-listObjects(prefix)
-deleteObject(key, versionToken?)
-```
-
-Normalize provider-specific metadata instead of leaking GCS/R2 details into `BackupService`.
-
-Recommended normalized object/list fields:
-
-```text
-key
-byteSize
-timeCreated
-versionToken?    // opaque
-```
-
-For GCS, an implementation may map `versionToken` to a generation. R2 may use no token or another opaque token. Domain code must not branch on provider-specific token semantics.
-
-## 7. Logical backup / provider-copy catalog
-
-Move toward one logical backup with multiple provider copies rather than one provider row pretending to be the backup identity.
-
-Recommended semantics:
+Migration `0004` introduced the additive logical catalog:
 
 ```text
 backup_sets
-  backup_id
-  app_id
-  created_at
-  app_version
-  schema_version
-  data_sha256
-  data_byte_length
-  record_count
-  trigger_kind
-
 backup_copies
-  backup_id
-  provider
-  status
-  verified_at
-  storage_prefix
-  version_token
-  last_error
 ```
 
-The exact D1 schema may be adapted to existing `backup_runs`, but the business/UI behavior must be:
-
-> one logical backup is listed once, with R2/GCS copy health beneath it.
-
-## 8. Shared service boundary
-
-The long-term target is:
+Current semantics:
 
 ```text
-CYAccountingWeb BackupService ─┐
-CY Web BackupService ──────────+→ CY Backup Service / Worker
-future apps ───────────────────┘       │
-                                       ├─ app-scoped R2 provider
-                                       └─ app-scoped GCS provider
+one logical backupId
+  ├─ one R2 copy status
+  └─ one GCS copy status
 ```
 
-### Remains inside CYAccountingWeb
+The UI/business meaning is one backup listed once, with provider health shown separately.
 
-- accounting D1 export;
-- accounting schema compatibility;
-- accounting record-count/data validation;
-- user/SUPER_ADMIN authorization;
-- double-confirmation restore;
-- accounting D1 restore ordering and writes;
-- accounting audit evidence.
+Legacy GCS `backup_runs` evidence is still written for compatibility / rollback and must not be removed during Phase C.
 
-### Moves to shared CY Backup Service / Worker
+## 9. Manual paired production acceptance — completed
 
-- R2/GCS provider adapters;
-- object storage/read-back verification;
-- provider-copy catalog;
-- R2→GCS replication;
-- provider retention;
-- retry/copy health;
-- app-scoped storage routing.
+The first real `parallel_dual_provider` production acceptance completed on **2026-09-27**.
 
-The shared Backup Worker must not perform accounting D1 restore writes.
+Accepted behavior includes:
 
-## 9. Dataset / credential isolation
+- one logical `backupId`;
+- one logical backup-set catalog row;
+- separate R2 / GCS provider-copy rows;
+- R2 copy verified success;
+- GCS copy verified success;
+- same logical backup ID for both providers;
+- same package digest / same portable package bytes;
+- legacy GCS compatibility evidence retained;
+- UI presents one logical backup with per-provider health.
 
-Isolation remains required throughout migration.
+This manual acceptance proves the Phase C production wiring works, but **does not count toward the 14 scheduled-backup gate**.
 
-CYAccountingWeb must have its own:
+## 10. Scheduled Phase C acceptance gate — current active work
 
-- R2 bucket/dataset binding;
-- GCS bucket/dataset;
-- least-privilege GCS identity/credential.
-
-CY Web keeps separate equivalents.
-
-When the future shared CY Backup Worker is introduced, it still uses separate app-scoped bindings/credentials. Do not replace two isolated credentials with one broad cross-application credential.
-
-Caller identity must be mapped server-side to the allowed application dataset. A caller must not gain CY Web access merely by changing an `appId` parameter.
-
-## 10. Migration plan — do not skip phases
-
-### Phase A — freeze V0.17 GCS production path
-
-Current GCS implementation remains the production safety path.
-
-Do not remove:
-
-- current GCS provider;
-- current GCS secrets;
-- current daily schedule;
-- current 14-day retention behavior;
-
-until the later acceptance gate explicitly permits cutover.
-
-### Phase B — separate package creation from storage execution
-
-Refactor only enough to guarantee:
+Required gate:
 
 ```text
-D1 export → BackupSet object/bytes → provider writes
+14 consecutive scheduled production backups
 ```
 
-The package builder must be callable once and reused by more than one provider.
-
-Add compatibility tests for existing V0.17 format before switching to the common outer format.
-
-### Phase C — add R2 in parallel
-
-Implement `R2BackupStorageProvider` using the same provider contract.
-
-During production parallel validation:
-
-- schedule remains daily 03:30;
-- export D1 once;
-- write/verify R2;
-- write/verify GCS using the exact same backup-set bytes;
-- GCS remains daily and retains the current 14-day policy during this phase;
-- R2 retention is 30 days.
-
-**Acceptance gate: at least 14 consecutive scheduled production backups** where both provider copies verify successfully and paired copies have the same logical backup ID and package digest.
-
-Also test provider-specific failure isolation: a GCS copy failure must not invalidate a valid R2 copy, and an R2 copy failure must be reported distinctly.
-
-### Phase D — enable tiered schedule
-
-Only after Phase C acceptance:
-
-- keep R2 daily 03:30;
-- change GCS from daily backup target to Wednesday/Sunday replication;
-- change GCS retention target to 26 weeks;
-- GCS replication reuses the existing backup-set bytes;
-- do not bulk-delete pre-cutover daily GCS objects on cutover day;
-- let old daily copies age out through an explicit compatibility cleanup policy.
-
-### Phase E — shared CY Backup Service / Worker
-
-Do this after the tiered per-App model is stable and CY Web is ready to consume the same contract.
-
-Migration order:
-
-1. create shared service with app-scoped provider configuration;
-2. route a non-destructive copy/verification path through it;
-3. compare shared-service results with current direct App provider path;
-4. move replication/retention/catalog into shared service;
-5. move storage writes/reads behind private Service Binding;
-6. keep direct GCS path available as rollback during acceptance;
-7. only after acceptance remove direct R2/GCS bindings/credentials from the Accounting Worker.
-
-Do not make the shared service a prerequisite for the initial R2 tier if that would delay or destabilize the accepted V0.17 production backup.
-
-## 11. Suggested topology switch
-
-A deployment/runtime mode is recommended so rollout is reversible:
+Only backups where:
 
 ```text
-legacy_gcs
-parallel_dual_provider
-tiered_direct
-tiered_shared_service
+trigger_kind = scheduled
 ```
 
-Exact variable naming is an implementation detail, but the rollout must provide an explicit rollback switch rather than requiring emergency source edits.
+are eligible.
 
-## 12. Retention details
+Each passing run must prove:
 
-Application policy:
+- one logical backup ID;
+- R2 copy status = `success`;
+- GCS copy status = `success`;
+- a valid 64-hex package SHA-256 digest;
+- same logical package represented by both provider copies.
+
+The application derives the current consecutive count from D1 catalog evidence and exposes it as:
 
 ```text
-R2  30 days
-GCS 182 days / 26 weeks
+x / 14
 ```
 
 Rules:
 
-- cleanup occurs after successful verification;
-- cleanup failure is warning/follow-up, not new-backup failure;
-- a source backup required for pending replication cannot be cleaned first;
-- provider lifecycle may be a second guard only when configured longer than the application policy;
-- old V0.17 GCS daily backups are not destructively rewritten or mass-deleted during migration.
+- manual runs do not count;
+- a partial provider run does not count;
+- the consecutive counter stops at the first failed scheduled backup in the latest sequence;
+- Phase D remains blocked until `14 / 14` is reached.
 
-## 13. Restore behavior
+## 11. Failure isolation
 
-Restore remains future/high-risk work.
+Runtime behavior is provider-specific:
 
-Required flow:
+- valid R2 success must remain valid when GCS fails;
+- valid GCS success must remain valid when R2 fails;
+- provider failures are stored and displayed independently;
+- one provider failure must not cause deletion of the other provider's verified copy.
+
+Current automated regression coverage explicitly verifies the `R2 success / GCS failure` direction and confirms the R2 copy remains intact.
+
+The runtime structure supports the mirror direction as well; however, a dedicated automated `R2 failure / GCS success` mirror test is still a useful small test-debt item for the next backup-code change. It is not a reason to interrupt the current production acceptance gate by itself.
+
+Do not intentionally damage the accepted production GCS dataset merely to simulate failure.
+
+## 12. Phase A / B / C status
+
+### Phase A — complete
+
+Accepted V0.17 GCS production path frozen as safety / rollback path.
+
+Still retained through Phase C:
+
+- GCS provider;
+- GCS runtime credentials;
+- daily 03:30 behavior;
+- 14-day GCS application retention;
+- legacy compatibility evidence.
+
+### Phase B — complete
+
+Completed requirements:
+
+- package creation separated from provider storage execution;
+- single BackupSet reusable by multiple providers;
+- GCS generation normalized behind opaque `versionToken` semantics;
+- V0.17 compatibility tests;
+- export-once tests;
+- no production format cutover.
+
+### Phase C — implementation complete, acceptance in progress
+
+Completed implementation:
+
+- R2 provider;
+- R2 Worker binding contract;
+- `parallel_dual_provider`;
+- logical backup / provider-copy catalog;
+- export-once paired storage;
+- digest parity checks;
+- provider failure isolation behavior;
+- topology-aware backup UI;
+- manual paired production acceptance;
+- scheduled `x / 14` acceptance counter.
+
+Remaining Phase C work:
+
+- accumulate **14 consecutive successful scheduled production paired backups**.
+
+## 13. Phase D — blocked until 14/14
+
+Only after Phase C gate passes:
+
+```text
+R2
+  daily 03:30 Taiwan
+  30-day application retention
+
+GCS
+  Wednesday + Sunday replication
+  26 weeks / 182 days
+```
+
+Phase D requirements:
+
+- GCS must reuse already-created backup-set bytes;
+- GCS replication must not trigger a second D1 export;
+- do not bulk-delete old daily GCS objects on cutover day;
+- let pre-cutover daily objects age out under an explicit compatibility cleanup policy;
+- keep rollback ability until the new policy is accepted.
+
+Before `14 / 14`, do **not**:
+
+- change GCS to Wednesday/Sunday;
+- change GCS retention to 182 days;
+- remove the legacy GCS path;
+- remove direct GCS rollback capability;
+- rewrite/delete accepted V0.17 backup objects;
+- remove legacy `backup_runs`;
+- move production storage ownership to a shared Backup Worker.
+
+## 14. Phase E — future shared CY Backup Service
+
+Long-term target:
+
+```text
+CYAccountingWeb BackupService ─┐
+CY Web BackupService ──────────+→ CY Backup Service / Worker
+future CY apps ────────────────┘       │
+                                       ├─ app-scoped R2
+                                       └─ app-scoped GCS
+```
+
+This phase starts only after:
+
+1. the per-App tiered model is stable;
+2. Phase C / D acceptance permits it;
+3. CY-WEB workstream has finalized the relevant shared-infrastructure contract.
+
+### Remains inside CYAccountingWeb
+
+- accounting D1 export semantics;
+- accounting schema / record validation;
+- authorization;
+- restore compatibility checks;
+- double-confirmation restore flow;
+- accounting D1 restore ordering / writes;
+- accounting-specific audit evidence.
+
+### May move to shared Backup Service
+
+- provider adapters;
+- object read/write / read-back verification;
+- provider-copy health/catalog responsibility;
+- R2 → GCS replication;
+- retention;
+- retry orchestration;
+- app-scoped storage routing.
+
+The shared Backup Worker must **not** perform accounting D1 restore writes.
+
+## 15. Dataset / credential isolation
+
+CYAccountingWeb and CY Web must remain isolated at the storage-data level.
+
+CYAccountingWeb keeps its own app-scoped:
+
+- R2 dataset / binding;
+- GCS dataset;
+- least-privilege GCS identity / credential.
+
+CY Web uses separate equivalents.
+
+Future shared services do not mean one broad cross-app credential.
+
+Caller identity must be mapped server-side to the permitted app dataset. Do not trust a caller-supplied `appId` by itself as authorization.
+
+## 16. Identity / database boundary with CY-WEB
+
+Current account state is transitional:
+
+- CYAccountingWeb currently consumes the shared employee account authority hosted by **CYInvoice Cloud** through the private `IDENTITY` Service Binding contract;
+- CYAccountingWeb does **not** directly access CYInvoice D1 for login or employee lookup;
+- after identity validation, CYAccountingWeb maintains its own application `web_sessions` in its own D1;
+- CYAccountingWeb accounting data remains in the independent CYAccountingWeb D1.
+
+The shared Identity / SSO extraction is being planned progressively by the **CY-WEB workstream**.
+
+Therefore, before changing any of the following, synchronize the latest CY-WEB decision first:
+
+- Identity authority or SSO topology;
+- cross-App employee / role / access model;
+- shared account database ownership;
+- private Service Binding topology;
+- shared Worker responsibilities;
+- cross-App D1 ownership;
+- shared Backup Service routing.
+
+Do not treat the present CYInvoice-hosted identity implementation as permanent architecture, and do not pre-emptively merge CYAccountingWeb accounting D1 with another App's database.
+
+## 17. Restore — future / high risk
+
+Restore is not yet a completed user-facing feature.
+
+Required target flow:
 
 ```text
 list logical backups
@@ -352,7 +439,7 @@ list logical backups
 → fallback to valid GCS copy
 → verify package integrity
 → verify app/schema compatibility
-→ SUPER_ADMIN authorization
+→ SUPER_ADMIN server-side authorization
 → double confirmation
 → optional pre-restore backup to both providers
 → controlled D1 restore
@@ -360,29 +447,74 @@ list logical backups
 → audit result
 ```
 
-For Cloudflare-wide disaster recovery, GCS is the independent recovery source.
+Rules:
 
-## 14. Acceptance tests
+- only `SUPER_ADMIN` may restore;
+- `ADMIN` / `EMPLOYEE` must not gain restore permission;
+- second confirmation must explicitly state that current D1 data will be overwritten;
+- Worker/API authorization is authoritative; UI hiding is insufficient;
+- record operator, time, backup ID and outcome as audit evidence;
+- Web UI must not expose a general-purpose “clear all accounting data / opening balances” action.
 
-Do not consider the new architecture complete until all are verified:
+Disaster-recovery exercises still required:
 
-1. one D1 export creates one logical backup ID;
-2. R2 upload/read-back SHA-256 passes;
-3. GCS receives identical portable bytes for an eligible backup;
-4. paired R2/GCS copy digests are identical;
-5. GCS retry does not re-export D1;
-6. R2 30-day retention works;
-7. GCS 26-week retention works after tiered cutover;
-8. cleanup failure does not invalidate a new verified copy;
-9. one logical backup appears once in UI/catalog;
-10. provider-copy health is visible separately;
-11. R2-unavailable restore can load the valid GCS copy;
-12. cross-app dataset access is rejected;
-13. existing V0.17 GCS backup objects remain readable/valid;
-14. rollback to current accepted GCS topology remains possible through the migration window.
+- R2 unavailable → restore/load from valid GCS copy;
+- Cloudflare/D1 failure → rebuild a new D1 using valid GCS cross-cloud DR backup.
 
-## 15. Explicit instruction to the CYAccountingWeb workstream
+## 18. Future common outer format
 
-Start by reading current `main`, especially V0.17 backup source and this handoff. Do not immediately replace the working GCS implementation.
+Target common contract remains:
 
-Implement the migration in the phases above, with V0.17 GCS kept as the accepted rollback path until the parallel 14-backup acceptance gate has passed.
+```text
+CYBackupSet / formatVersion 1
+```
+
+This is a future versioned compatibility path shared conceptually with CY Web, not a reason to rewrite accepted V0.17 production objects.
+
+App-specific `data.json` schemas remain app-specific.
+
+Provider metadata, bucket names, generations, R2 metadata and credentials must not be written into the portable manifest.
+
+## 19. Remaining non-code operational items
+
+Still pending / future:
+
+- Google Cloud Billing low-budget alert target: NT$100 per month;
+- GCS provider lifecycle only as a second guard, configured longer than application retention;
+- Phase C `14 / 14` scheduled gate;
+- Phase D tiered schedule / long GCS retention;
+- full restore implementation;
+- full DR drills;
+- future common `CYBackupSet` compatibility path;
+- Phase E shared Backup Service after CY-WEB contract is ready.
+
+## 20. Continuation instruction
+
+The old operational sequence:
+
+```text
+add BACKUP_R2
+→ wire app-v18.js
+→ deploy legacy_gcs
+→ smoke test GCS
+→ switch parallel_dual_provider
+→ manual paired acceptance
+```
+
+is **already completed** and must not be repeated as if R2 were not active.
+
+The correct continuation point is:
+
+```text
+V0.18.1 Build 0
+Phase C parallel dual-provider deployed
+manual paired acceptance passed 2026-09-27
+↓
+observe scheduled production backups
+↓
+require 14 consecutive paired successes
+↓
+only then plan / execute Phase D
+```
+
+Until that gate passes, preserve the accepted GCS rollback path and avoid unrelated backup-topology churn.
