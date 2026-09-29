@@ -68,23 +68,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        credentials: 'same-origin',
+        credentials: 'include',
         cache: 'no-store',
         body: JSON.stringify({ employeeNo: no, password: pwd })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data.ok === false) throw new Error(data.error || '登入失敗。');
 
-      const sessionResponse = await fetch('/api/auth/me', {
-        credentials: 'same-origin',
-        cache: 'no-store'
-      });
-      const sessionData = await sessionResponse.json().catch(() => ({}));
-      if (!sessionResponse.ok || sessionData.ok === false) {
-        throw new Error('帳號密碼已通過，但登入狀態沒有保存。請把這個訊息回報給我。');
-      }
-
-      location.replace('/?auth_recovery=0214b1');
+      // Safari/iPadOS can expose a freshly-set first-party cookie to the next
+      // top-level navigation before it is visible to an immediate follow-up fetch.
+      // Complete a real navigation first, then checkSession() verifies the session.
+      location.replace('/?auth_recovery=0215b8');
     } catch (error) {
       setLoginMessage(error.message || '登入失敗。', true);
       password?.select();
@@ -258,12 +252,12 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const response = await fetch('/api/auth/me', {
         cache: 'no-store',
-        credentials: 'same-origin'
+        credentials: 'include'
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data.ok === false) {
         const recovery = new URLSearchParams(location.search).get('auth_recovery');
-        showLogin(recovery ? '登入狀態在重新載入後失效，請把這個訊息回報給我。' : '');
+        showLogin(recovery ? '登入狀態在重新載入後仍未建立，請把這個訊息回報給我。' : '');
         return;
       }
       const user = data.user || {};
