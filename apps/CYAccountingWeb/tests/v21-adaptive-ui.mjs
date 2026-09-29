@@ -46,7 +46,7 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '10');
+assert.equal(build, '11');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
@@ -83,14 +83,14 @@ assert.doesNotMatch(authJs, /帳號密碼已通過，但登入狀態沒有保存
 assert.match(indexHtml, /auth\.js\?v=0215b8/);
 assert.match(indexHtml, /auth\.css\?v=0215b8/);
 assert.match(indexHtml, /v021b11\.js\?v=0215b10/);
-assert.match(indexHtml, /v021b10\.js\?v=0215b10/);
+assert.match(indexHtml, /v021b10\.js\?v=0215b11/);
 assert.doesNotMatch(authCss, /@media \(min-width: 641px\) and \(max-width: 1023px\)/);
 assert.match(authCss, /@media \(max-width: 640px\)/);
 assert.match(workerApp, /SameSite=Lax/);
 assert.match(workerApp, /Expires=\$\{expires\}/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
-// V0.21.5 Build 10 keeps auth untouched, retains the mobile month control, and limits phone tools to opening/account/category/lock/export.
+// V0.21.5 Build 11 keeps Build 10 phone tools and makes the top-right account menu logout-only.
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
 assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?linear-gradient\(to right, rgba\(86, 176, 113/);
 assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?linear-gradient\(to right, rgba\(207, 104, 94/);
@@ -188,6 +188,9 @@ assert.match(build8Js, /setupV21Build9MobilePages\(\)/);
 assert.match(build8Js, /nav\.id = 'mobileMainNav'/);
 assert.match(build10Js, /trigger\.id = 'mobileAccountMenuButton'/);
 assert.match(build10Js, /menu\.id = 'mobileAccountMenu'/);
+assert.match(build10Js, /data-mobile-account-action="logout">登出/);
+assert.doesNotMatch(build10Js, /data-mobile-account-action="settings"/);
+assert.doesNotMatch(build10Js, /settingsButton\.click\(\)/);
 assert.match(build10Js, /button\.id = 'mobileLedgerMoreButton'/);
 assert.match(build10Js, /data-mobile-ledger-action="accounts">帳戶設定/);
 assert.match(build10Js, /data-mobile-ledger-action="categories">科目設定/);
@@ -224,4 +227,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 Build 10 adaptive UI regression tests passed.');
+console.log('V0.21.5 Build 11 adaptive UI regression tests passed.');
