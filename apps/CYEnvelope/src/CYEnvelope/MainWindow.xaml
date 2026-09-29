@@ -9,6 +9,7 @@
       <StackPanel Orientation="Horizontal">
         <Button Content="聯絡人資料" Style="{StaticResource ToolbarButton}" Click="ContactsClick"/>
         <Button Content="列印設定" Style="{StaticResource ToolbarButton}" Click="PrinterClick"/>
+        <Button Content="校正列印" Style="{StaticResource ToolbarButton}" Click="CalibrationClick"/>
         <Button Content="格式設定" Style="{StaticResource ToolbarButton}" Click="FormatClick"/>
         <Button Content="方框文字" Style="{StaticResource ToolbarButton}" Click="FrameClick"/>
         <Button Content="設定" Style="{StaticResource ToolbarButton}" Click="SettingsClick"/>

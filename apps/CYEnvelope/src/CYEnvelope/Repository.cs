@@ -25,9 +25,12 @@ public sealed class Repository
         else UpgradePristineBuiltIn();
     }
 
-    private void UpgradePristineBuiltIn()
+    // Built-in 15K layouts shipped earlier. A stored format that still equals one of them was never
+    // edited by the user and is replaced by the current defaults; edited or custom formats are kept.
+    private static IEnumerable<EnvelopeFormat> PreviousBuiltIns()
     {
-        var old = new EnvelopeFormat
+        // Go-era layout (V0.1.x).
+        var goEra = new EnvelopeFormat
         {
             Id = "format-15k",
             Recipient = new() { Rect = new(43, 49, 18, 142), FontSize = 24 },
@@ -35,10 +38,26 @@ public sealed class Repository
             Phone = new() { Rect = new(32, 59, 8, 132), FontSize = 10 },
             PostalCode = new() { Rect = new(52, 21, 40, 8), FontSize = 12, Vertical = false }
         };
-        for (var i = 0; i < old.Delivery.Count; i++) { old.Delivery[i].X = 8.2; old.Delivery[i].Y = 63 + i * 4; }
-        var current = Formats().FirstOrDefault(f => f.Id == old.Id);
-        if (current is not null && JsonSerializer.Serialize(current, Json) == JsonSerializer.Serialize(old, Json))
-            SaveFormat(new EnvelopeFormat { Id = old.Id });
+        for (var i = 0; i < goEra.Delivery.Count; i++) { goEra.Delivery[i].X = 8.2; goEra.Delivery[i].Y = 63 + i * 4; }
+        yield return goEra;
+        // C# V0.2.1 Build 1-3: phone left of the recipient frame, address above the recipient.
+        yield return new EnvelopeFormat
+        {
+            Id = "format-15k",
+            Recipient = new() { Rect = new(39, 62, 26, 134), FontSize = 24 },
+            Address = new() { Rect = new(72, 60, 27, 140), FontSize = 14, Columns = 2 },
+            Phone = new() { Rect = new(28, 98, 8, 104), FontSize = 10 },
+            PostalCode = new() { Rect = new(49, 31, 24, 9), FontSize = 12, Vertical = false }
+        };
+    }
+
+    private void UpgradePristineBuiltIn()
+    {
+        var current = Formats().FirstOrDefault(f => f.Id == "format-15k");
+        if (current is null) return;
+        var stored = JsonSerializer.Serialize(current, Json);
+        if (PreviousBuiltIns().Any(old => JsonSerializer.Serialize(old, Json) == stored))
+            SaveFormat(new EnvelopeFormat { Id = current.Id });
     }
 
     private SqliteConnection Open()

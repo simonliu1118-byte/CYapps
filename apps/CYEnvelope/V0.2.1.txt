@@ -1,6 +1,6 @@
 CYEnvelope V0.2.1（開發測試版，尚未正式發行）
 日期：2026/09/27
-BUILD：0（各 Build 記錄依序附於下方；目前為 Build 3，見 BUILD 檔）
+BUILD：0（各 Build 記錄依序附於下方；目前為 Build 4，見 BUILD 檔）
 
 下載方式調整
 - 將 .NET 管理組件打包進 CYEnvelope.exe；保留必要原生元件 D3DCompiler_47_cor3.dll、e_sqlite3.dll、PenImc_cor3.dll、PresentationNative_cor3.dll、vcruntime140_cor3.dll、wpfgfx_cor3.dll。資料夾另外只有 VERSION 與 BUILD，沒有多語系資源目錄。
@@ -50,3 +50,13 @@ BUILD 3（接手返修；2026/09/30）
 驗證狀態
 - Linux 上以 .NET 10 SDK（EnableWindowsTargeting）編譯主程式、啟動程式與兩個測試專案：0 warnings／0 errors；電話與郵遞區號檢查在 Linux 實際執行通過。
 - Windows CI 結果見本 Build 提交；15K 實機試印、印表機偏移與 125%／150% DPI 仍待驗收。
+
+BUILD 4（Build 3 實機截圖驗收後的返修；2026/09/30）
+- 內建 15K 版面重排，由左至右為收件人、電話、地址：收件人水平置中於印好的中央框並留在上半部；地址第一個字比收件人第一個字低 5 mm；電話移到收件人框右側、緊鄰地址左邊並與地址頂端同高。電話位置中華郵政未規定，依信封空間所定。
+- 收件人欄新增「置中」屬性（TextPlacement.CenterHorizontally）；文字排版與置中集中在 EnvelopeRenderer.Layout，預覽、列印與測試共用。
+- 新增「校正列印」：在普通紙印出各欄位外框、範例文字、郵件種類標記與毫米刻度，使用與正式列印相同的偏移與紙張設定，供疊在信封上檢查。
+- 尚未編輯過的舊內建 15K 版面（Go 版與 Build 1–3）自動升級為新版面；已調整或自訂的格式保持原值。
+- 核心檢查新增：收件人置中、地址低於收件人、電話位置、舊版面升級與編輯後保留、校正頁繪製。
+
+尚待
+- 信封掃描圖（預計下週）：到位後改用掃描圖量測位置與預覽底圖，並依 §5.1 記錄雜湊；屆時只需微調座標。

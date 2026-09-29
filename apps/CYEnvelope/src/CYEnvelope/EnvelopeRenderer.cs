@@ -43,6 +43,55 @@ public static class EnvelopeRenderer
         return visual;
     }
 
+    // Calibration sheet: everything is black line work so it can be printed on plain paper.
+    // The ruler is drawn at true paper position; fields follow the format offset exactly like a real print.
+    public static DrawingVisual DrawCalibration(EnvelopeFormat format, Vector printerOrigin = default)
+    {
+        var visual = new DrawingVisual();
+        using var dc = visual.RenderOpen();
+        dc.PushTransform(new TranslateTransform(-printerOrigin.X, -printerOrigin.Y));
+        var hair = new Pen(Ink, .15 * DipPerMm);
+        static Point At(double x, double y) => new(x * DipPerMm, y * DipPerMm);
+        for (var x = 0; x <= format.WidthMm; x += 10)
+        {
+            var major = x % 50 == 0;
+            dc.DrawLine(hair, At(x, 0), At(x, major ? 6 : 3));
+            if (major && x > 0) Label(dc, x.ToString(CultureInfo.InvariantCulture), x + .6, 3, 6, Ink);
+        }
+        for (var y = 0; y <= format.HeightMm; y += 10)
+        {
+            var major = y % 50 == 0;
+            dc.DrawLine(hair, At(0, y), At(major ? 6 : 3, y));
+            if (major && y > 0) Label(dc, y.ToString(CultureInfo.InvariantCulture), 6.5, y - 1.5, 6, Ink);
+        }
+        dc.PushTransform(new TranslateTransform(format.OffsetX * DipPerMm, format.OffsetY * DipPerMm));
+        foreach (var (name, rect, text, placement) in new (string, RectMm, string, TextPlacement?)[]
+        {
+            ("收件人", format.Recipient.Rect, "範例收件人", format.Recipient),
+            ("地址", format.Address.Rect, "高雄市新興區範例路一號", format.Address),
+            ("電話", format.Phone.Rect, "0912-345-678", format.Phone),
+            ("郵遞區號", format.PostalCode.Rect, "", null),
+            ("方框", format.Frame, "", null)
+        })
+        {
+            dc.DrawRectangle(null, hair, Dip(rect));
+            Label(dc, name, rect.X, rect.Y - 2.6, 6, Ink);
+            if (placement is not null) Write(dc, text, placement);
+        }
+        DrawPostal(dc, "800", format.PostalCode);
+        Write(dc, "內附對帳單", FrameText(format), centre: true);
+        foreach (var item in format.Delivery)
+        {
+            dc.DrawLine(hair, At(item.X - 1.5, item.Y), At(item.X + 1.5, item.Y));
+            dc.DrawLine(hair, At(item.X, item.Y - 1.5), At(item.X, item.Y + 1.5));
+        }
+        dc.Pop();
+        Label(dc, $"CYEnvelope 校正列印　{format.Name}　{format.WidthMm:0.#}×{format.HeightMm:0.#} mm　偏移 {format.OffsetX:0.#}, {format.OffsetY:0.#} mm",
+            10, format.HeightMm - 6, 6, Ink);
+        dc.Pop();
+        return visual;
+    }
+
     private static void DrawPrintedEnvelopeReference(DrawingContext dc, EnvelopeFormat f)
     {
         // Fixed preprinted artwork: never derive the paper's red ink from editable text boxes.
@@ -119,11 +168,14 @@ public static class EnvelopeRenderer
     private static TextPlacement FrameText(EnvelopeFormat format) => new()
     {
         Rect = new RectMm(format.Frame.X, format.Frame.Y, format.Frame.Width, format.Frame.Height),
-        FontFamily = "DFKai-SB", FontSize = 11, Vertical = true
+        FontFamily = "DFKai-SB", FontSize = 11, Vertical = true, CenterHorizontally = true
     };
 
-    private static (List<(string Glyph, double X, double Y)> Glyphs, double Size, bool Complete) Layout(
-        string value, TextPlacement p)
+    // Final glyph origins in millimetres (before the format's printer offset), after shrinking and centring.
+    // CenterHorizontally centres the columns/lines in the rect; centreVertically also centres them
+    // top-to-bottom (used for text inside a printed box).
+    public static (List<(string Glyph, double X, double Y)> Glyphs, double Size, bool Complete) Layout(
+        string value, TextPlacement p, bool centreVertically = false)
     {
         var elements = new List<string>();
         var enumerator = StringInfo.GetTextElementEnumerator(value);
@@ -132,7 +184,27 @@ public static class EnvelopeRenderer
         for (var size = p.FontSize; ; size -= .5)
         {
             var (glyphs, complete) = LayoutAt(elements, p, size);
-            if (complete || size - .5 < minimum) return (glyphs, size, complete);
+            if (!complete && size - .5 >= minimum) continue;
+            if (glyphs.Count > 0 && (p.CenterHorizontally || centreVertically))
+            {
+                var columnMm = Math.Max(4, size * DipPerPoint) / DipPerMm;
+                var rowMm = Math.Max(4, size * 1.2 * DipPerPoint) / DipPerMm;
+                var dx = 0.0;
+                var dy = 0.0;
+                if (p.CenterHorizontally)
+                {
+                    var used = glyphs.Max(g => g.X) - glyphs.Min(g => g.X) + columnMm;
+                    // Vertical columns are anchored to the right edge, horizontal lines to the left.
+                    dx = (p.Rect.Width - used) / 2 * (p.Vertical ? -1 : 1);
+                }
+                if (centreVertically)
+                {
+                    var used = glyphs.Max(g => g.Y) - glyphs.Min(g => g.Y) + rowMm;
+                    dy = (p.Rect.Height - used) / 2;
+                }
+                glyphs = glyphs.Select(g => (g.Glyph, g.X + dx, g.Y + dy)).ToList();
+            }
+            return (glyphs, size, complete);
         }
     }
 
@@ -166,24 +238,14 @@ public static class EnvelopeRenderer
         return (glyphs, true);
     }
 
-    // centre: the frame text sits inside a printed black box, so it is centred instead of
-    // starting at the box edge like the open recipient/address fields.
+    // centre: the frame text sits inside a printed black box, so it is also centred top-to-bottom
+    // instead of starting at the box edge like the open recipient/address fields.
     private static void Write(DrawingContext dc, string value, TextPlacement p, bool centre = false)
     {
         if (string.IsNullOrEmpty(value)) return;
-        var (glyphs, size, _) = Layout(value, p);
-        var (dx, dy) = (0.0, 0.0);
-        if (centre && glyphs.Count > 0)
-        {
-            var columnMm = Math.Max(4, size * DipPerPoint) / DipPerMm;
-            var rowMm = Math.Max(4, size * 1.2 * DipPerPoint) / DipPerMm;
-            var usedWidth = glyphs.Max(g => g.X) - glyphs.Min(g => g.X) + columnMm;
-            var usedHeight = glyphs.Max(g => g.Y) - glyphs.Min(g => g.Y) + rowMm;
-            dx = p.Vertical ? -(p.Rect.Width - usedWidth) / 2 : (p.Rect.Width - usedWidth) / 2;
-            dy = (p.Rect.Height - usedHeight) / 2;
-        }
+        var (glyphs, size, _) = Layout(value, p, centre);
         dc.PushClip(new RectangleGeometry(Dip(p.Rect)));
-        foreach (var (glyph, x, y) in glyphs) WriteAt(dc, glyph, x + dx, y + dy, size, p.FontFamily);
+        foreach (var (glyph, x, y) in glyphs) WriteAt(dc, glyph, x, y, size, p.FontFamily);
         dc.Pop();
     }
 

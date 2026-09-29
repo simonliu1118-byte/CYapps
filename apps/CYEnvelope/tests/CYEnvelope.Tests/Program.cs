@@ -77,6 +77,42 @@ try
     var preview = EnvelopeRenderer.Draw(format, new PrintData { Recipient = "測試對象", PostalCode = "800" }, true);
     var output = EnvelopeRenderer.Draw(format, new PrintData { Recipient = "測試對象", PostalCode = "800" }, false);
     Check(preview.ContentBounds.Width > 0 && output.ContentBounds.Width > 0, "shared renderer output");
+    // Default 15K layout, left to right: recipient in the printed frame, then phone, then address.
+    var fresh = new EnvelopeFormat();
+    const double MmPerPoint = 25.4 / 72;
+    var recipientLayout = EnvelopeRenderer.Layout("王小明", fresh.Recipient).Glyphs;
+    var recipientCentre = recipientLayout.Average(g => g.X) + 24 * MmPerPoint / 2;
+    Check(Math.Abs(recipientCentre - 53) < .5, $"recipient centred in the printed frame (centre {recipientCentre:0.0} mm, frame 53 mm)");
+    var addressLayout = EnvelopeRenderer.Layout("高雄市新興區中正三路一號", fresh.Address).Glyphs;
+    Check(addressLayout.Min(g => g.Y) - recipientLayout.Min(g => g.Y) >= 4,
+        "first address glyph starts lower than the first recipient glyph");
+    Check(recipientLayout.Min(g => g.Y) < 111, "recipient stays in the upper half of the frame");
+    var phoneLayout = EnvelopeRenderer.Layout("0912-345-678", fresh.Phone).Glyphs;
+    Check(phoneLayout.Min(g => g.X) >= 69 && phoneLayout.Max(g => g.X) + 10 * MmPerPoint <= addressLayout.Min(g => g.X),
+        "phone sits right of the recipient frame and left of the address");
+    Check(phoneLayout.Min(g => g.Y) == addressLayout.Min(g => g.Y), "phone shares the address's top edge");
+    Check(EnvelopeRenderer.Overflows(fresh, new PrintData { Recipient = "王小明", Address = "高雄市新興區中正三路一號", Phone = "0912-345-678 #123" }).Count == 0,
+        "default layout fits ordinary data");
+
+    Check(EnvelopeRenderer.DrawCalibration(fresh).ContentBounds.Width > 0, "calibration sheet renders");
+
+    // Layouts shipped by earlier builds upgrade only while unedited.
+    var legacyPath = Path.Combine(Path.GetDirectoryName(path)!, "legacy", "CYEnvelope.db");
+    EnvelopeFormat Build3() => new()
+    {
+        Id = "format-15k",
+        Recipient = new() { Rect = new(39, 62, 26, 134), FontSize = 24 },
+        Address = new() { Rect = new(72, 60, 27, 140), FontSize = 14, Columns = 2 },
+        Phone = new() { Rect = new(28, 98, 8, 104), FontSize = 10 },
+        PostalCode = new() { Rect = new(49, 31, 24, 9), FontSize = 12, Vertical = false }
+    };
+    var legacy = new Repository(legacyPath);
+    legacy.SaveFormat(Build3());
+    Check(new Repository(legacyPath).Formats().Single().Recipient.CenterHorizontally, "unedited Build 3 layout upgrades to the current defaults");
+    var edited = Build3(); edited.Address.Rect.X += 1;
+    legacy.SaveFormat(edited);
+    Check(new Repository(legacyPath).Formats().Single().Address.Rect.X == 73, "edited layout is kept as the user left it");
+
     var builtIn = new EnvelopeFormat();
     Check(EnvelopeRenderer.Overflows(builtIn, new PrintData { Recipient = "王小明", Address = "高雄市新興區中正三路1號" }).Count == 0,
         "ordinary envelope fits");

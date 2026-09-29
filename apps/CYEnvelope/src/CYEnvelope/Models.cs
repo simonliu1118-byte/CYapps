@@ -59,6 +59,8 @@ public sealed class TextPlacement
     public string FontFamily { get; set; } = "DFKai-SB";
     public bool Vertical { get; set; } = true;
     public int Columns { get; set; } = 1;
+    // Centre the columns/lines in Rect (recipient inside its printed frame) instead of anchoring them.
+    public bool CenterHorizontally { get; set; }
 }
 
 public sealed class DeliveryPlacement
@@ -79,9 +81,12 @@ public sealed class EnvelopeFormat
     public bool IsDefault { get; set; } = true;
     public double OffsetX { get; set; }
     public double OffsetY { get; set; }
-    public TextPlacement Recipient { get; set; } = new() { Rect = new(39, 62, 26, 134), FontSize = 24 };
-    public TextPlacement Address { get; set; } = new() { Rect = new(72, 60, 27, 140), FontSize = 14, Columns = 2 };
-    public TextPlacement Phone { get; set; } = new() { Rect = new(28, 98, 8, 104), FontSize = 10 };
+    // Vertical layout, left to right: printed recipient frame (X 37-69), phone, address at the right.
+    // Recipient is centred in the frame in the upper half; the address's first glyph starts 5 mm
+    // lower than the recipient's, and the phone shares the address's top edge.
+    public TextPlacement Recipient { get; set; } = new() { Rect = new(37, 64, 32, 130), FontSize = 24, CenterHorizontally = true };
+    public TextPlacement Address { get; set; } = new() { Rect = new(87, 69, 12, 135), FontSize = 14, Columns = 2 };
+    public TextPlacement Phone { get; set; } = new() { Rect = new(77, 69, 9, 110), FontSize = 10 };
     public TextPlacement PostalCode { get; set; } = new() { Rect = new(49, 31, 24, 9), FontSize = 12, Vertical = false };
     public RectMm Frame { get; set; } = new(7, 95, 12, 30);
     public List<DeliveryPlacement> Delivery { get; set; } =

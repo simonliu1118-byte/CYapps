@@ -362,18 +362,41 @@ public partial class MainWindow : Window
         Status($"已保存「{data.Recipient}」。");
         try
         {
-            var dialog = CreatePrintDialog();
-            if (dialog.ShowDialog() != true) return;
-            _settings.PrinterName = dialog.PrintQueue.FullName;
-            _repository.SaveSettings(_settings);
-            if (!PreparePage(dialog, out var origin)) return;
-            dialog.PrintVisual(EnvelopeRenderer.Draw(_format, data, false, printerOrigin: origin), $"CYEnvelope - {data.Recipient}");
-            Status($"已保存「{data.Recipient}」並送出列印。");
+            if (SendToPrinter(origin => EnvelopeRenderer.Draw(_format, data, false, printerOrigin: origin),
+                    $"CYEnvelope - {data.Recipient}"))
+                Status($"已保存「{data.Recipient}」並送出列印。");
         }
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "列印失敗；聯絡人資料已保存", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    // Test print for plain paper: field boxes, sample text and a millimetre ruler drawn with the same
+    // geometry, offset and page setup as a real print, so the result can be laid over the envelope.
+    private void CalibrationClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (SendToPrinter(origin => EnvelopeRenderer.DrawCalibration(_format, origin), "CYEnvelope - 校正列印"))
+                Status("已送出校正列印；請以普通紙印出後疊在信封上對光檢查。");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "校正列印失敗", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // Shared by real and calibration prints. Returns false when the user cancelled at any dialog.
+    private bool SendToPrinter(Func<Vector, DrawingVisual> render, string title)
+    {
+        var dialog = CreatePrintDialog();
+        if (dialog.ShowDialog() != true) return false;
+        _settings.PrinterName = dialog.PrintQueue.FullName;
+        _repository.SaveSettings(_settings);
+        if (!PreparePage(dialog, out var origin)) return false;
+        dialog.PrintVisual(render(origin), title);
+        return true;
     }
 
     // Requests the envelope size from the driver, confirms what it accepted, and returns the
