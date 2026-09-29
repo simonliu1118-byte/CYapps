@@ -666,13 +666,15 @@ function positiveInteger(value, label) {
 }
 function dateValue(value, label) {
   const text = String(value || '').trim();
-  if (!isDate(text)) throw new DesktopMigrationError(`${label}格式無效。`, 'INVALID_SOURCE_DATE', 400);
-  return text;
+  const normalized = /^\d{4}\/\d{2}\/\d{2}$/.test(text) ? text.replaceAll('/', '-') : text;
+  if (!isDate(normalized)) throw new DesktopMigrationError(`${label}格式無效。`, 'INVALID_SOURCE_DATE', 400);
+  return normalized;
 }
 function monthValue(value, label) {
   const text = String(value || '').trim();
-  if (!isMonth(text)) throw new DesktopMigrationError(`${label}格式無效。`, 'INVALID_SOURCE_MONTH', 400);
-  return text;
+  const normalized = /^\d{4}\/\d{2}$/.test(text) ? text.replaceAll('/', '-') : text;
+  if (!isMonth(normalized)) throw new DesktopMigrationError(`${label}格式無效。`, 'INVALID_SOURCE_MONTH', 400);
+  return normalized;
 }
 function isMonth(value) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(value || ''));

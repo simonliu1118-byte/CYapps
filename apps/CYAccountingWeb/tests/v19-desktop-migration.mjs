@@ -74,6 +74,25 @@ assert.equal(normalized.source.schemaVersion, 2);
 assert.equal(normalized.transactions.length, 2);
 assert.equal(normalized.accounts.find(item => item.isDefault === 1)?.name, '現金');
 
+const desktopSlashDates = normalizeDesktopSnapshot(sourceSnapshot({
+  transactions: sourceSnapshot().transactions.map((item, index) => ({
+    ...item,
+    txDate: index === 0 ? '2026/09/01' : '2026/09/02'
+  })),
+  openingBalances: [
+    { ...sourceSnapshot().openingBalances[0], month: '2026/09' }
+  ],
+  lockedThrough: '2026/08'
+}));
+assert.equal(desktopSlashDates.transactions[0].txDate, '2026-09-01', 'desktop slash transaction date should normalize to Web format');
+assert.equal(desktopSlashDates.transactions[1].txDate, '2026-09-02');
+assert.equal(desktopSlashDates.openingBalances[0].month, '2026-09', 'desktop slash opening-balance month should normalize to Web format');
+assert.equal(desktopSlashDates.lockedThrough, '2026-08', 'desktop slash locked month should normalize to Web format');
+
+assert.throws(() => normalizeDesktopSnapshot(sourceSnapshot({
+  transactions: [{ ...sourceSnapshot().transactions[0], txDate: '2026/09-01' }]
+})), error => error?.code === 'INVALID_SOURCE_DATE');
+
 const v1 = normalizeDesktopSnapshot(sourceSnapshot({
   source: { schemaVersion: 1, fileName: 'old.db', fileSize: 2048, fileSha256: 'b'.repeat(64) },
   categories: sourceSnapshot().categories.map(({ isFavorite, ...item }) => ({ ...item, isFavorite: 0 }))
