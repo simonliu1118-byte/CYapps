@@ -1,0 +1,358 @@
+/* V0.21.5 Build 1 - safe mobile-only refinement.
+   No DOM observer or self-redraw loop is introduced here. */
+@media (max-width: 767px) {
+  .entry-card {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    grid-template-areas:
+      "entry-head entry-head"
+      "account date"
+      "category favorite"
+      "summary quicksummary"
+      "amount save" !important;
+    gap: 8px !important;
+    align-content: start;
+  }
+
+  .entry-card > .section-title {
+    grid-area: entry-head !important;
+    margin-bottom: 0 !important;
+  }
+
+  #transactionForm,
+  #transactionForm > .entry-grid,
+  .quick-entry-tools {
+    display: contents !important;
+  }
+
+  #entryAccountChoiceRow {
+    display: none !important;
+  }
+
+  .entry-grid > .account-source-field {
+    grid-area: account !important;
+    display: grid !important;
+  }
+
+  .entry-grid > .date-field { grid-area: date !important; }
+  .entry-grid > .category-field { grid-area: category !important; }
+  .entry-grid > .summary-field { grid-area: summary !important; }
+  .entry-grid > .amount-field { grid-area: amount !important; }
+
+  #favoriteCategoryGroup:not(.hidden) {
+    grid-area: favorite !important;
+    display: block !important;
+  }
+
+  #summarySuggestionGroup:not(.hidden) {
+    grid-area: quicksummary !important;
+    display: block !important;
+  }
+
+  .entry-grid > #saveButton {
+    grid-area: save !important;
+    grid-column: auto !important;
+    grid-row: auto !important;
+    min-height: 44px !important;
+    height: 44px !important;
+    margin: 0 !important;
+  }
+
+  .entry-grid > label,
+  .entry-grid > .date-field,
+  .entry-grid > .category-field,
+  .entry-grid > .summary-field,
+  .entry-grid > .amount-field {
+    grid-column: auto !important;
+    grid-row: auto !important;
+    grid-template-columns: 40px minmax(0, 1fr) !important;
+    gap: 4px !important;
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px 7px !important;
+    border-radius: 8px !important;
+  }
+
+  .entry-card label > span,
+  .entry-field-label {
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+  }
+
+  .entry-grid input,
+  .entry-grid select {
+    min-height: 34px !important;
+    height: 34px !important;
+    font-size: 14px !important;
+    line-height: 34px !important;
+  }
+
+  .entry-grid input[type="date"] {
+    appearance: auto !important;
+    -webkit-appearance: auto !important;
+    min-width: 0 !important;
+    padding-inline: 0 !important;
+    font-size: 13px !important;
+  }
+
+  .entry-grid .amount-field input {
+    font-size: 17px !important;
+  }
+
+  .quick-tool-row {
+    position: relative;
+    min-width: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  .quick-tool-row > summary {
+    box-sizing: border-box;
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+    padding: 0 9px;
+    border: 1px solid #dde3e9;
+    border-radius: 8px;
+    background: #fff;
+    color: #556476 !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .quick-tool-row > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .quick-tool-row > summary::after {
+    content: "▾";
+    color: #8491a0;
+    font-size: 12px;
+  }
+
+  .quick-tool-row[open] > summary::after {
+    transform: rotate(180deg);
+  }
+
+  .quick-tool-row > .quick-chip-list {
+    position: absolute !important;
+    z-index: 2300;
+    top: calc(100% + 4px);
+    right: 0;
+    display: none !important;
+    width: min(180px, calc(100vw - 20px));
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 5px !important;
+    border: 1px solid #d7dfe7;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(31, 42, 55, .16);
+  }
+
+  .quick-tool-row[open] > .quick-chip-list {
+    display: grid !important;
+    gap: 3px !important;
+  }
+
+  .quick-tool-row .quick-chip {
+    width: 100%;
+    min-height: 32px !important;
+    margin: 0 !important;
+    padding: 5px 7px !important;
+    border: 0 !important;
+    border-radius: 5px !important;
+    background: transparent !important;
+    font-size: 12px !important;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .ledger-card .table-wrap {
+    overflow-x: hidden !important;
+    padding: 4px 6px 12px !important;
+    background: #fff !important;
+  }
+
+  .ledger-card table,
+  .ledger-card tbody {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .ledger-card thead {
+    display: none !important;
+  }
+
+  .ledger-card tbody {
+    gap: 0 !important;
+  }
+
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) {
+    display: grid !important;
+    grid-template-columns: 39px 36px minmax(48px, .9fr) minmax(42px, 1.15fr) 55px 55px 42px !important;
+    align-items: center !important;
+    gap: 2px !important;
+    width: 100% !important;
+    min-height: 40px;
+    margin: 0 !important;
+    padding: 2px 0 !important;
+    border: 0 !important;
+    border-bottom: 1px solid #e7ebef !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+  }
+
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td {
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 2px !important;
+    border: 0 !important;
+    background: transparent !important;
+    font-size: 10.5px !important;
+    line-height: 1.12 !important;
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left !important;
+  }
+
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td::before {
+    content: none !important;
+    display: none !important;
+  }
+
+  .ledger-date-desktop,
+  .ledger-account-desktop,
+  .action-label-desktop {
+    display: none !important;
+  }
+
+  .ledger-date-mobile {
+    display: inline !important;
+  }
+
+  .ledger-account-mobile {
+    display: grid !important;
+    justify-items: center;
+    gap: 0;
+    font-size: 9px !important;
+    line-height: 1.02 !important;
+    white-space: normal !important;
+    text-align: center;
+  }
+
+  .ledger-account-mobile > span {
+    display: block;
+    max-width: 100%;
+  }
+
+  .action-label-mobile {
+    display: inline !important;
+  }
+
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td:nth-child(1) { grid-column: 1; color: #596879; }
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td:nth-child(2) { grid-column: 2; overflow: visible; }
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td:nth-child(3) { display: none !important; }
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td:nth-child(4) { grid-column: 3; }
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td:nth-child(5) { grid-column: 4; min-height: 0 !important; }
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td:nth-child(6) {
+    grid-column: 5;
+    font-size: 10.5px !important;
+    font-weight: 700 !important;
+    text-align: right !important;
+    overflow: visible;
+  }
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td:nth-child(7) {
+    grid-column: 6;
+    font-size: 10px !important;
+    font-weight: 650 !important;
+    text-align: right !important;
+  }
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td:nth-child(8) {
+    grid-column: 7;
+    display: flex !important;
+    justify-content: flex-end;
+    gap: 2px !important;
+    min-height: 28px !important;
+    padding: 0 !important;
+  }
+
+  .ledger-card tbody > tr.ledger-row-income:not(.inline-editing) > td:nth-child(6) {
+    color: #2f7a4c !important;
+  }
+
+  .ledger-card tbody > tr.ledger-row-expense:not(.inline-editing) > td:nth-child(6) {
+    color: #a54b45 !important;
+  }
+
+  .ledger-card tbody > tr.ledger-row-income:not(.inline-editing) > td:nth-child(6)::before {
+    content: "+" !important;
+    display: inline !important;
+  }
+
+  .ledger-card tbody > tr.ledger-row-expense:not(.inline-editing) > td:nth-child(6)::before {
+    content: "−" !important;
+    display: inline !important;
+  }
+
+  .ledger-card tbody > tr.ledger-row:not(.inline-editing) .row-action {
+    min-width: 19px !important;
+    width: 19px !important;
+    min-height: 26px !important;
+    height: 26px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 5px !important;
+    font-size: 9px !important;
+    line-height: 1 !important;
+  }
+
+  .ledger-card .account-group-row {
+    display: none !important;
+  }
+
+  .v0214-balance-popover {
+    width: min(148px, calc(100vw - 16px)) !important;
+    max-height: 190px !important;
+    padding: 5px !important;
+    border-radius: 7px !important;
+  }
+
+  .v0214-balance-popover-header,
+  .v0214-balance-total {
+    display: none !important;
+  }
+
+  .v0214-balance-list {
+    gap: 0 !important;
+  }
+
+  .v0214-balance-row {
+    min-height: 22px !important;
+    padding: 3px 5px !important;
+    gap: 7px !important;
+    border-radius: 4px !important;
+    font-size: 10px !important;
+  }
+
+  .v0214-balance-row strong {
+    font-size: 10.5px !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .ledger-date-mobile,
+  .ledger-account-mobile,
+  .action-label-mobile {
+    display: none !important;
+  }
+}
