@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current formal baseline: **V0.21.4 Build 0**（2026-09-29）
+> Current formal baseline: **V0.21.5 Build 0**（2026-09-29）
 >
 > Current continuity handoff: [`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)
 
@@ -111,6 +111,7 @@ CYAccountingWeb 自己的 D1 建立本系統 web session
 - **V0.19.0 Build 1 D1 寫入安全修正**：bulk insert 改採 JSON1 展開，限制單一 JSON payload 與 batch statement 數，符合 D1 bound-parameter、2 MB string/row 與 Free plan 每 invocation query 上限；
 - **V0.21.3 桌面帳本日期相容修正**：移轉時接受 CYAccounting 桌面版既有的 `YYYY/MM/DD`、`YYYY/MM` 日期／月份格式，送入 Web 帳本前正規化為 `YYYY-MM-DD`、`YYYY-MM`；
 - **V0.21.4 操作回饋改善**：帳本移轉完成後顯示明顯完成視窗；記帳資料餘額可查看該筆後各帳戶餘額；預設帳戶與常用科目改為先更新畫面、儲存失敗再還原；
+- **V0.21.5 Mobile compact layout**：手機新增記帳改為四列兩欄、帳戶回到原生 select、日期使用原生 date picker；記帳資料改為單列高密度清單，帳戶名稱兩行小字呈現，餘額浮窗縮小為只顯示各帳戶；
 - **V0.20.0 RWD / Adaptive UI Phase 1**：建立 Desktop / Tablet / Mobile presentation 分層；
 - **V0.20.1 Mobile refinement**：收斂交易卡片資訊層級、inline edit 可視性、Header／搜尋／設定操作密度與窄手機 presentation；
 - **V0.21.0 Desktop Business UI**：Desktop `>=1024px` 改為現代、簡潔的商務 Web presentation；

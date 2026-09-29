@@ -191,10 +191,13 @@ function showLedgerBalancePopoverV0214(cell, pinned) {
   cell.setAttribute('aria-expanded', 'true');
 
   popover.replaceChildren();
-  const header = document.createElement('div');
-  header.className = 'v0214-balance-popover-header';
-  header.textContent = detail.accountOnly ? '此筆後帳戶餘額' : '此筆後各帳戶餘額';
-  popover.appendChild(header);
+  const mobile = window.matchMedia('(max-width: 767px)').matches;
+  if (!mobile) {
+    const header = document.createElement('div');
+    header.className = 'v0214-balance-popover-header';
+    header.textContent = detail.accountOnly ? '此筆後帳戶餘額' : '此筆後各帳戶餘額';
+    popover.appendChild(header);
+  }
 
   const list = document.createElement('div');
   list.className = 'v0214-balance-list';
@@ -210,7 +213,7 @@ function showLedgerBalancePopoverV0214(cell, pinned) {
   }
   popover.appendChild(list);
 
-  if (!detail.accountOnly) {
+  if (!detail.accountOnly && !mobile) {
     const total = document.createElement('div');
     total.className = 'v0214-balance-total';
     const label = document.createElement('span');
