@@ -286,7 +286,17 @@ async function issueInitialCredential(
    .first<{ revision: number }>();
   if (!stored) throw new Error("INITIAL_CREDENTIAL_WRITE_FAILED");
 
-  const reservation = await reserveEmailBudget(env, employee.workspace_id, now);
+  let reservation: { usageDate: string; workspaceReserved: boolean };
+  try {
+    reservation = await reserveEmailBudget(env, employee.workspace_id, now);
+  } catch (error) {
+    await env.DB.prepare(
+      `DELETE FROM employee_initial_credentials
+        WHERE employee_id = ?1 AND revision = ?2 AND sent_at IS NULL`
+    ).bind(employee.employee_id, stored.revision).run();
+    throw error;
+  }
+
   let sent = false;
   try {
     await emailSenderFrom(env).send({
@@ -385,7 +395,14 @@ export async function handleCreateEmployeeWithInitialPassword(request: Request, 
   }
 
   return json(env, requestId, 201, {
-    employee: { employeeId, employeeNo, displayName, email, roleKey, isIdentityAdmin: false, emailVerified: false, enabled: false, activated: false, pendingActivation: true, revision: 1 },
+    employee: {
+      employeeId, employeeNo, displayName, email, roleKey,
+      isIdentityAdmin: false, emailVerified: false, enabled: false, activated: false,
+      pendingEmailVerification: true,
+      pendingActivation: true,
+      revision: 1,
+    },
+    emailVerificationDelivery: activationDelivery,
     activationDelivery,
   });
 }
@@ -401,7 +418,11 @@ export async function handleResendInitialEmailVerification(request: Request, env
   try {
     const issued = await issueInitialCredential(env, employee);
     await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: employee.employee_id, eventType: "employee_activation_email_resent", detail: { method: "initial_password" } });
-    return json(env, requestId, 202, { activationDelivery: { sent: true, expiresAt: issued.expiresAt } });
+    const delivery = { sent: true, expiresAt: issued.expiresAt };
+    return json(env, requestId, 202, {
+      emailVerificationDelivery: delivery,
+      activationDelivery: delivery,
+    });
   } catch (error) {
     const code = deliveryCode(error);
     return json(env, requestId, deliveryStatus(code), { error: { code, message: "Email verification could not be sent." } });
@@ -466,7 +487,10 @@ export async function handleEmployeeUpdateWithInitialPassword(request: Request, 
   }
   return json(env, requestId, 200, {
     employee: { employeeId: row.employee_id, employeeNo: row.employee_no, displayName: row.name, email: row.email_normalized, emailVerified: false, enabled: false, roleKey: row.role_key, isIdentityAdmin: row.identity_admin === 1, activated: false, revision: row.revision },
-    ...(activationDelivery ? { activationDelivery } : {}),
+    ...(activationDelivery ? {
+      emailVerificationDelivery: activationDelivery,
+      activationDelivery,
+    } : {}),
   });
 }
 
