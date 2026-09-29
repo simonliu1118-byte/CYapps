@@ -12,6 +12,7 @@ CREATE TABLE employee_initial_credentials (
   issued_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   sent_at TEXT,
+  verified_at TEXT,
   revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
 );
 
