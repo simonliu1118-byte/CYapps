@@ -31,11 +31,13 @@ const keyboardJs = read('public/v0211-keyboard.js');
 const patchCss = read('public/v0211.css');
 const patch2Js = read('public/v0212.js');
 const patch2Css = read('public/v0212.css');
+const patch4Js = read('public/v0214.js');
+const patch4Css = read('public/v0214.css');
 const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
-assert.equal(version, '0.21.3');
-assert.equal(build, '2');
+assert.equal(version, '0.21.4');
+assert.equal(build, '0');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
@@ -48,7 +50,7 @@ assert.match(build16Js, /CY_V21_BUILD16_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(patchJs, /CY_V0211_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(keyboardJs, /CY_V0211_KEYBOARD_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(patch2Js, /CY_V0212_DESKTOP = '\(min-width: 1024px\)'/);
-for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, keyboardJs, patch2Js]) {
+for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, keyboardJs, patch2Js, patch4Js]) {
   assert.doesNotThrow(() => new Function(js), 'adaptive overlay JavaScript must parse');
 }
 
@@ -94,8 +96,14 @@ assert.match(patchCss, /\.cy-confirm-dialog/);
 assert.match(patchJs, /window\.cyConfirm = options => new Promise/);
 assert.match(patchJs, /installV0211ConfirmInterceptors\(\)/);
 
+// V0.21.4 balance detail remains available on pointer and touch/click without creating a second mobile implementation.
+assert.match(patch4Js, /data-balance-popover-id/);
+assert.match(patch4Js, /CY_V0214_HOVER/);
+assert.match(patch4Js, /document\.addEventListener\('click'/);
+assert.match(patch4Css, /@media \(max-width: 767px\)/);
+
 // Existing phone transaction-card ledger remains intact.
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.3 Build 2 adaptive UI regression tests passed.');
+console.log('V0.21.4 adaptive UI regression tests passed.');
