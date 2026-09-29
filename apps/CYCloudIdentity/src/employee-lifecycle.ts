@@ -18,6 +18,14 @@ type PendingEmployeeRow = {
   credential_present: number;
 };
 
+type PendingDeleteEmployeeRow = {
+  employee_id: string;
+  employee_no: string;
+  email_verified_at: string | null;
+  enabled: number;
+  credential_present: number;
+};
+
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_FALLBACK_MS = 60 * 1000;
 
@@ -159,6 +167,109 @@ export async function handleCreateEmployee(
       pendingActivation: true,
       revision: 1,
     },
+  });
+}
+
+export async function handleDeletePendingEmployee(
+  request: Request,
+  env: Env,
+  requestId: string,
+  employeeIdRaw: string,
+): Promise<Response> {
+  const actor = await requireWorkspaceSuperAdmin(request, env);
+  if (!actor) {
+    return json(env, requestId, 403, {
+      error: { code: "WORKSPACE_SUPER_ADMIN_REQUIRED", message: "Workspace highest authority is required." },
+    });
+  }
+
+  const employeeId = normalizeEmployeeId(employeeIdRaw);
+  if (!employeeId) {
+    return json(env, requestId, 400, {
+      error: { code: "INVALID_EMPLOYEE", message: "Employee delete request is invalid." },
+    });
+  }
+  if (employeeId === actor.employeeId) {
+    return json(env, requestId, 409, {
+      error: { code: "EMPLOYEE_DELETE_NOT_ALLOWED", message: "The Workspace super administrator cannot be deleted." },
+    });
+  }
+
+  const employee = await env.DB.prepare(
+    `SELECT e.employee_id,
+            e.employee_no,
+            e.email_verified_at,
+            e.enabled,
+            CASE WHEN c.employee_id IS NULL THEN 0 ELSE 1 END AS credential_present
+       FROM employees e
+       LEFT JOIN employee_credentials c ON c.employee_id = e.employee_id
+      WHERE e.workspace_id = ?1
+        AND e.employee_id = ?2
+      LIMIT 1`
+  ).bind(actor.workspaceId, employeeId).first<PendingDeleteEmployeeRow>();
+
+  if (!employee) {
+    return json(env, requestId, 404, {
+      error: { code: "EMPLOYEE_NOT_FOUND", message: "Employee was not found." },
+    });
+  }
+  if (employee.enabled !== 0 || employee.email_verified_at || employee.credential_present !== 0) {
+    return json(env, requestId, 409, {
+      error: {
+        code: "EMPLOYEE_DELETE_NOT_ALLOWED",
+        message: "Only an Employee that is still pending first-time activation can be deleted.",
+      },
+    });
+  }
+
+  const deleted = await env.DB.prepare(
+    `DELETE FROM employees
+      WHERE workspace_id = ?1
+        AND employee_id = ?2
+        AND enabled = 0
+        AND email_verified_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM employee_credentials c
+           WHERE c.employee_id = employees.employee_id
+        )
+    RETURNING employee_id, employee_no`
+  ).bind(actor.workspaceId, employeeId).first<{ employee_id: string; employee_no: string }>();
+
+  if (!deleted) {
+    return json(env, requestId, 409, {
+      error: {
+        code: "EMPLOYEE_DELETE_NOT_ALLOWED",
+        message: "Employee activation state changed and the account was not deleted.",
+      },
+    });
+  }
+
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      `DELETE FROM email_otp_challenges
+        WHERE purpose = 'employee_email_verification'
+          AND scope_key = ?1`
+    ).bind(activationScope(actor.workspaceId, employeeId)),
+    env.DB.prepare(
+      `INSERT INTO identity_audit_events(
+         event_id, workspace_id, actor_employee_id, target_employee_id,
+         event_type, detail_json, created_at
+       ) VALUES(?1, ?2, ?3, NULL, 'employee_pending_activation_deleted', ?4, ?5)`
+    ).bind(
+      `audit_${crypto.randomUUID()}`,
+      actor.workspaceId,
+      actor.employeeId,
+      JSON.stringify({ employeeId: deleted.employee_id, employeeNo: deleted.employee_no }),
+      now,
+    ),
+  ]);
+
+  return json(env, requestId, 200, {
+    deleted: true,
+    employeeId: deleted.employee_id,
+    employeeNo: deleted.employee_no,
   });
 }
 
