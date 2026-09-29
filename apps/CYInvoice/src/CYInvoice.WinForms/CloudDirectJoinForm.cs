@@ -10,6 +10,7 @@ internal sealed class CloudDirectJoinForm : Form
     private readonly Settings settings;
     private readonly HttpClient http = new();
     private readonly CancellationTokenSource lifetime = new();
+
     private readonly TextBox url = UiControls.TextBox(200);
     private readonly RadioButton pairingMethod = new() { Text = "使用配對碼", Checked = true, AutoSize = true };
     private readonly RadioButton ownerMethod = new() { Text = "使用邀請碼與超管帳密", AutoSize = true };
@@ -19,6 +20,7 @@ internal sealed class CloudDirectJoinForm : Form
     private readonly TextBox password = UiControls.TextBox(200);
     private readonly TextBox deviceName = UiControls.TextBox(120);
     private readonly Label status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft };
+
     private readonly Panel inputPage = new() { Dock = DockStyle.Fill };
     private readonly Panel confirmationPage = new() { Dock = DockStyle.Fill, Visible = false };
     private readonly Button next = UiControls.StandardButton("下一步");
@@ -30,20 +32,22 @@ internal sealed class CloudDirectJoinForm : Form
     {
         Dock = DockStyle.Fill,
         FlowDirection = FlowDirection.RightToLeft,
-        WrapContents = false
+        WrapContents = false,
     };
     private readonly FlowLayoutPanel confirmationActions = new()
     {
         Dock = DockStyle.Fill,
         FlowDirection = FlowDirection.RightToLeft,
-        WrapContents = false
+        WrapContents = false,
     };
+
     private readonly Label confirmWorkspace = ConfirmationValue();
     private readonly Label confirmWorkspaceId = ConfirmationValue();
     private readonly Label confirmEndpoint = ConfirmationValue();
     private readonly Label confirmMethod = ConfirmationValue();
     private readonly Label confirmAdmin = ConfirmationValue();
     private readonly Label confirmDevice = ConfirmationValue();
+
     private CloudWorkspacePreview? preview;
     private bool busy;
     private bool resourcesDisposed;
@@ -52,20 +56,25 @@ internal sealed class CloudDirectJoinForm : Form
     {
         this.repository = repository;
         settings = repository.Settings.LoadOrCreate();
+
         Text = "首次開啟：直接加入雲端";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(600, 430);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
+        ShowInTaskbar = false;
         ShowIcon = false;
         Font = new Font("Microsoft JhengHei UI", 10F);
+
         url.Text = settings.CloudBaseUrl;
         deviceName.Text = Environment.MachineName[..Math.Min(Environment.MachineName.Length, 120)];
         password.UseSystemPasswordChar = true;
         pairingCode.CharacterCasing = CharacterCasing.Lower;
         invitationCode.CharacterCasing = CharacterCasing.Lower;
+
         BuildLayout();
+
         pairingMethod.CheckedChanged += (_, _) => ChangeMethod();
         ownerMethod.CheckedChanged += (_, _) => ChangeMethod();
         url.TextChanged += (_, _) => ResetAuthorization();
@@ -74,12 +83,18 @@ internal sealed class CloudDirectJoinForm : Form
         employeeNo.TextChanged += (_, _) => ResetAuthorization();
         password.TextChanged += (_, _) => ResetAuthorization();
         deviceName.TextChanged += (_, _) => ResetAuthorization();
+
         next.Click += async (_, _) => await NextAsync();
         confirmJoin.Click += async (_, _) => await JoinAsync();
-        back.Click += (_, _) => ShowInputPage();
+        back.Click += (_, _) => ShowInputPage(focus: true);
+
         ChangeMethod();
-        ShowInputPage();
-        Shown += async (_, _) => await RecoverPendingAsync();
+        ShowInputPage(focus: false);
+        Shown += async (_, _) =>
+        {
+            FocusFirstInput();
+            await RecoverPendingAsync();
+        };
     }
 
     public bool IdentityCompleted { get; private set; }
@@ -93,7 +108,7 @@ internal sealed class CloudDirectJoinForm : Form
         back.Width = 100;
         inputCancel.Width = confirmCancel.Width = 90;
 
-        var root = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0) };
+        var root = new Panel { Dock = DockStyle.Fill };
         BuildInputPage();
         BuildConfirmationPage();
         root.Controls.Add(confirmationPage);
@@ -108,7 +123,7 @@ internal sealed class CloudDirectJoinForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 10,
-            Padding = new Padding(16)
+            Padding = new Padding(16),
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -142,7 +157,7 @@ internal sealed class CloudDirectJoinForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 10,
-            Padding = new Padding(16)
+            Padding = new Padding(16),
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -157,10 +172,11 @@ internal sealed class CloudDirectJoinForm : Form
             Text = "請確認要加入的 Workspace",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font(Font, FontStyle.Bold)
+            Font = new Font(Font, FontStyle.Bold),
         };
         root.Controls.Add(title, 0, 0);
         root.SetColumnSpan(title, 2);
+
         AddConfirmation(root, 1, "Workspace", confirmWorkspace);
         AddConfirmation(root, 2, "Workspace ID", confirmWorkspaceId);
         AddConfirmation(root, 3, "Cloud API", confirmEndpoint);
@@ -173,7 +189,7 @@ internal sealed class CloudDirectJoinForm : Form
             Text = "確認後才會正式建立這台 Device 並加入 Workspace。",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.TopLeft,
-            ForeColor = Color.DimGray
+            ForeColor = Color.DimGray,
         };
         root.Controls.Add(note, 1, 8);
 
@@ -190,7 +206,8 @@ internal sealed class CloudDirectJoinForm : Form
             throw new InvalidOperationException("雲端加入視窗尺寸異常");
         VerifyActions(inputActions, "第一步");
         VerifyActions(confirmationActions, "確認步驟");
-        if (next.Text != "下一步" || confirmJoin.Text != "確認加入")
+        if (next.Text != "下一步" || inputCancel.Text != "取消"
+            || confirmJoin.Text != "確認加入" || back.Text != "上一步" || confirmCancel.Text != "取消")
             throw new InvalidOperationException("雲端加入流程按鈕文字異常");
     }
 
@@ -212,7 +229,7 @@ internal sealed class CloudDirectJoinForm : Form
         AutoEllipsis = true,
         BorderStyle = BorderStyle.FixedSingle,
         Padding = new Padding(6, 0, 6, 0),
-        BackColor = Color.White
+        BackColor = Color.White,
     };
 
     private static void AddField(TableLayoutPanel root, int row, string name, Control field)
@@ -221,7 +238,7 @@ internal sealed class CloudDirectJoinForm : Form
         {
             Text = name,
             Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft
+            TextAlign = ContentAlignment.MiddleLeft,
         }, 0, row);
         field.Dock = DockStyle.Fill;
         root.Controls.Add(field, 1, row);
@@ -233,7 +250,7 @@ internal sealed class CloudDirectJoinForm : Form
         {
             Text = name,
             Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft
+            TextAlign = ContentAlignment.MiddleLeft,
         }, 0, row);
         root.Controls.Add(value, 1, row);
     }
@@ -248,17 +265,19 @@ internal sealed class CloudDirectJoinForm : Form
     private void ResetAuthorization()
     {
         preview = null;
+        confirmJoin.Enabled = false;
         status.Text = "輸入完成後按「下一步」確認 Workspace。";
     }
 
-    private void ShowInputPage()
+    private void ShowInputPage(bool focus)
     {
         confirmationPage.Visible = false;
         inputPage.Visible = true;
         inputPage.BringToFront();
         AcceptButton = next;
         CancelButton = inputCancel;
-        BeginInvoke(() => FocusFirstInput());
+        if (focus && IsHandleCreated)
+            BeginInvoke((Action)FocusFirstInput);
     }
 
     private void ShowConfirmationPage()
@@ -269,7 +288,8 @@ internal sealed class CloudDirectJoinForm : Form
         confirmationPage.BringToFront();
         AcceptButton = confirmJoin;
         CancelButton = confirmCancel;
-        BeginInvoke(() => confirmJoin.Focus());
+        if (IsHandleCreated)
+            BeginInvoke((Action)(() => confirmJoin.Focus()));
     }
 
     private void FocusFirstInput()
@@ -358,23 +378,38 @@ internal sealed class CloudDirectJoinForm : Form
             var pending = repository.Settings.CloudPendingDeviceJoin(settings);
             if (pending is not null && !string.Equals(pending.BaseUrl, endpoint, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("另一個 Cloud 有未完成的裝置加入；請先返回原網址處理。");
+
             var attempt = pending is null
                 ? CloudDeviceJoinAttempt.Create()
                 : new CloudDeviceJoinAttempt(pending.DeviceToken);
-            repository.Settings.SetCloudPendingDeviceJoin(settings, endpoint, displayName,
-                attempt.DeviceToken, pending?.StartedAtUtc ?? DateTimeOffset.UtcNow);
+            repository.Settings.SetCloudPendingDeviceJoin(
+                settings,
+                endpoint,
+                displayName,
+                attempt.DeviceToken,
+                pending?.StartedAtUtc ?? DateTimeOffset.UtcNow);
             settings.CloudBaseUrl = endpoint;
             repository.Settings.Save(settings);
+
             CloudDeviceIdentity claimed;
             try
             {
                 claimed = pairingMethod.Checked
                     ? await Client().ClaimPairingAsync(
                         pairingCode.Text.Replace("-", "", StringComparison.Ordinal).Trim(),
-                        displayName, Application.ProductVersion, attempt, lifetime.Token, directJoin: true)
+                        displayName,
+                        Application.ProductVersion,
+                        attempt,
+                        lifetime.Token,
+                        directJoin: true)
                     : await Client().ClaimInvitationAsync(
-                        invitationCode.Text.Trim(), employeeNo.Text.Trim(), password.Text,
-                        displayName, Application.ProductVersion, attempt, lifetime.Token);
+                        invitationCode.Text.Trim(),
+                        employeeNo.Text.Trim(),
+                        password.Text,
+                        displayName,
+                        Application.ProductVersion,
+                        attempt,
+                        lifetime.Token);
                 password.Clear();
             }
             catch (Exception error) when (error is HttpRequestException or TaskCanceledException
@@ -382,8 +417,10 @@ internal sealed class CloudDirectJoinForm : Form
             {
                 if (await TryRecoverAsync(endpoint, attempt.DeviceToken)) return;
                 throw new InvalidOperationException(
-                    "加入結果尚未確認，裝置憑證已保留。請重新開啟此流程，先嘗試找回裝置。", error);
+                    "加入結果尚未確認，裝置憑證已保留。請重新開啟此流程，先嘗試找回裝置。",
+                    error);
             }
+
             if (claimed.WorkspaceId != preview.WorkspaceId)
                 throw new InvalidDataException("Cloud 回傳的 Workspace 與確認的目標不一致。");
             await CompleteAsync(endpoint, attempt.DeviceToken, claimed.WorkspaceId, claimed.DeviceId);
@@ -394,13 +431,14 @@ internal sealed class CloudDirectJoinForm : Form
     {
         var pending = repository.Settings.CloudPendingDeviceJoin(settings);
         if (pending is null) return;
+
         url.Text = pending.BaseUrl;
         deviceName.Text = pending.DeviceDisplayName;
         await RunAsync(async () =>
         {
             if (!await TryRecoverAsync(pending.BaseUrl, pending.DeviceToken))
             {
-                ShowInputPage();
+                ShowInputPage(focus: true);
                 status.Text = "先前加入尚未成功；裝置憑證已保留，請重新授權後繼續。";
             }
         });
@@ -427,13 +465,16 @@ internal sealed class CloudDirectJoinForm : Form
         var identity = await client.GetCurrentDeviceAsync(lifetime.Token);
         if (identity.WorkspaceId != workspaceId || identity.DeviceId != deviceId)
             throw new InvalidDataException("裝置身分驗證結果不一致。");
+
         var authorityClient = new CloudEmployeeAuthorityClient(http, new Uri(endpoint), token);
         var authority = await authorityClient.GetStatusAsync(lifetime.Token);
         if (authority.State != "cloud" || authority.WorkspaceId != workspaceId || authority.DeviceId != deviceId)
             throw new InvalidDataException("中央帳號尚未準備好直接加入。");
+
         var snapshot = await authorityClient.GetSnapshotAsync(lifetime.Token);
         if (snapshot.WorkspaceId != workspaceId)
             throw new InvalidDataException("中央帳號 Workspace 不一致。");
+
         repository.CloudEmployees.ReplaceSnapshot(workspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
         settings.CloudBaseUrl = endpoint;
         settings.CloudWorkspaceId = workspaceId;
@@ -442,6 +483,7 @@ internal sealed class CloudDirectJoinForm : Form
         repository.Settings.ClearCloudPendingDeviceJoin(settings);
         repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
         repository.Settings.Save(settings);
+
         IdentityCompleted = true;
         MessageBox.Show(this, "裝置已加入，雲端員工帳號已同步。", "加入完成",
             MessageBoxButtons.OK, MessageBoxIcon.Information);
