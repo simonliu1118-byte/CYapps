@@ -117,31 +117,71 @@ public sealed class LocalIdentityProvider(EmployeeStore employees) : IIdentityPr
     }
 }
 
-public sealed class BuiltInCloudIdentityProvider(CloudEmployeeCacheStore employees) : IIdentityProvider
+public sealed class BuiltInCloudIdentityProvider : IIdentityProvider
 {
-    private readonly CloudEmployeeCacheStore employees = employees ?? throw new ArgumentNullException(nameof(employees));
+    private readonly CloudEmployeeCacheStore employees;
+    private readonly ICloudEmployeeAuthoritySnapshotSource authority;
+
+    public BuiltInCloudIdentityProvider(
+        CloudEmployeeCacheStore employees,
+        ICloudEmployeeAuthoritySnapshotSource authority)
+    {
+        this.employees = employees ?? throw new ArgumentNullException(nameof(employees));
+        this.authority = authority ?? throw new ArgumentNullException(nameof(authority));
+    }
 
     public IdentityProviderKind Kind => IdentityProviderKind.BuiltInCloud;
     public bool OwnsAccountManagement => true;
 
-    public Task<AppPrincipal?> AuthenticateAsync(
+    public async Task<AppPrincipal?> AuthenticateAsync(
         IdentityAuthenticationRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(ToPrincipal(employees.Authenticate(request.EmployeeNo, request.Password)));
+        await RefreshCacheFromCurrentAuthorityAsync(cancellationToken).ConfigureAwait(false);
+        return ToPrincipal(employees.Authenticate(request.EmployeeNo, request.Password));
     }
 
-    public Task<AppPrincipal?> RefreshPrincipalAsync(
+    public async Task<AppPrincipal?> RefreshPrincipalAsync(
         string employeeNo,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await RefreshCacheFromCurrentAuthorityAsync(cancellationToken).ConfigureAwait(false);
         var normalized = (employeeNo ?? string.Empty).Trim();
         var account = employees.LoadAll().FirstOrDefault(candidate =>
             string.Equals(candidate.EmployeeNo, normalized, StringComparison.Ordinal));
-        return Task.FromResult(ToPrincipal(account));
+        return ToPrincipal(account);
+    }
+
+    private async Task RefreshCacheFromCurrentAuthorityAsync(CancellationToken cancellationToken)
+    {
+        var offlineFallback = false;
+        try
+        {
+            var snapshot = await authority.GetCurrentSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            employees.ReplaceSnapshot(snapshot.WorkspaceId, snapshot.WorkspaceRevision, snapshot.Employees);
+            return;
+        }
+        catch (HttpRequestException)
+        {
+            // A genuine transport failure is the approved Offline boundary.
+            offlineFallback = true;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The Cloud request timed out rather than being cancelled by the caller.
+            offlineFallback = true;
+        }
+
+        if (!offlineFallback) return;
+        var state = employees.LoadState();
+        var currentWorkspaceId = authority.CurrentWorkspaceId;
+        if (state is null
+            || !string.Equals(state.WorkspaceId, currentWorkspaceId, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "目前無法連線 Cloud，且本機沒有屬於目前 Workspace 的可信 Employee 離線快取。");
     }
 
     private static AppPrincipal? ToPrincipal(CloudEmployeeCachedAccount? account)

@@ -46,13 +46,15 @@ public sealed class CloudEmployeeAuthorityClient
 
     public async Task<CloudEmployeeAuthorityStatus> GetStatusAsync(CancellationToken cancellationToken = default)
     {
-        using var document = await SendAsync(HttpMethod.Get, "v1/employee-authority/status", null, cancellationToken);
+        using var document = await SendAsync(HttpMethod.Get, "v1/employee-authority/status", null, cancellationToken)
+            .ConfigureAwait(false);
         return ReadStatus(document.RootElement);
     }
 
     public async Task<CloudEmployeeAuthoritySnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
     {
-        using var document = await SendAsync(HttpMethod.Get, "v1/employee-authority/snapshot", null, cancellationToken);
+        using var document = await SendAsync(HttpMethod.Get, "v1/employee-authority/snapshot", null, cancellationToken)
+            .ConfigureAwait(false);
         if (!document.RootElement.TryGetProperty("employeeSnapshot", out var snapshot) || snapshot.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Cloud Employee authority response is missing employeeSnapshot.");
         if (!snapshot.TryGetProperty("employees", out var employeesElement) || employeesElement.ValueKind != JsonValueKind.Array)
@@ -89,10 +91,11 @@ public sealed class CloudEmployeeAuthorityClient
     {
         ValidateSnapshotHash(snapshotHash);
         using var document = await SendAsync(
-            HttpMethod.Post,
-            "v1/employee-authority/cutover",
-            new { snapshotHash },
-            cancellationToken);
+                HttpMethod.Post,
+                "v1/employee-authority/cutover",
+                new { snapshotHash },
+                cancellationToken)
+            .ConfigureAwait(false);
         return ReadStatus(document.RootElement);
     }
 
@@ -110,9 +113,11 @@ public sealed class CloudEmployeeAuthorityClient
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(DefaultRequestTimeout);
-        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-        await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
-        var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token);
+        using var response = await httpClient
+            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
+            .ConfigureAwait(false);
+        await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
+        var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token).ConfigureAwait(false);
         if (response.IsSuccessStatusCode) return document;
 
         var code = ReadErrorCode(document.RootElement);

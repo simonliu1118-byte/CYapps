@@ -150,6 +150,10 @@ jobs:
           if 'idx_single_workspace' not in workspace_indexes:
               raise SystemExit('missing single-workspace bootstrap invariant index')
 
+          audit_indexes = {row[1] for row in db.execute("PRAGMA index_list('security_audit_events')")}
+          if 'idx_security_audit_workspace_time' not in audit_indexes:
+              raise SystemExit('missing security audit workspace/time index after Schema 11 rebuild')
+
           db.execute("INSERT INTO workspaces (workspace_id, display_name) VALUES ('ws_one', 'One')")
           try:
               db.execute("INSERT INTO workspaces (workspace_id, display_name) VALUES ('ws_two', 'Two')")
@@ -170,6 +174,25 @@ jobs:
               pass
           else:
               raise SystemExit('single-SUPER_ADMIN invariant did not reject a second SUPER_ADMIN')
+
+          # Schema 11 must accept the dedicated Device revoke event without
+          # weakening the existing audit table or losing its workspace index.
+          db.execute("""
+              INSERT INTO security_audit_events (
+                  event_id, workspace_id, event_type, outcome,
+                  actor_device_id, actor_employee_id, target_device_id,
+                  reason_code, request_id, occurred_at
+              ) VALUES (
+                  'evt_device_revoke_schema11', 'ws_one', 'device_revoked', 'success',
+                  'dev_a', 'emp_x', 'dev_a', 'SELF_RETIRE',
+                  'schema11-regression', '2026-09-29T00:00:00Z'
+              )
+          """)
+          event_type = db.execute(
+              "SELECT event_type FROM security_audit_events WHERE event_id='evt_device_revoke_schema11'"
+          ).fetchone()[0]
+          if event_type != 'device_revoked':
+              raise SystemExit(f'Schema 11 Device revoke audit event was not retained: {event_type!r}')
 
           # Regression: schema 3 rejected the scoped purpose already used by
           # the pairing Worker. Schema 5 must accept it without weakening the
@@ -217,6 +240,10 @@ jobs:
                   ?, 'sent', '2026-09-21T00:10:00Z', '2026-09-21T00:01:00Z'
               )
           """, ('c' * 64,))
+
+          foreign_key_errors = list(db.execute('PRAGMA foreign_key_check'))
+          if foreign_key_errors:
+              raise SystemExit(f'foreign key errors after migrations: {foreign_key_errors}')
 
           print('D1 migrations syntax/shape/invariant check passed')
           PY
