@@ -2,11 +2,21 @@ const CY_V0215_BUILD4_MOBILE = '(max-width: 767px)';
 let cyV0215Build4Edit = null;
 let cyV0215Build4SaveHideTimer = null;
 let cyV0215Build4SaveClearTimer = null;
+let cyV0215Build4SetupDone = false;
 
 window.cyAfterSaveMessage = handleV0215Build4SaveMessage;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupV0215Build4, { once: true });
+} else {
+  window.setTimeout(setupV0215Build4, 0);
+}
 window.addEventListener('load', setupV0215Build4, { once: true });
 
 function setupV0215Build4() {
+  if (cyV0215Build4SetupDone) return;
+  if (!document.querySelector('#transactionRows') || !document.querySelector('#transactionForm') || !document.querySelector('#mobileMainNav')) return;
+  cyV0215Build4SetupDone = true;
   setupV0215Build4Toolbar();
   setupV0215Build4Search();
   setupV0215Build4SaveMessage();
