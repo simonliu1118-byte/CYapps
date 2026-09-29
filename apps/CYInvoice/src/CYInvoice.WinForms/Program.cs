@@ -26,46 +26,14 @@ internal static class Program
             ApplicationConfiguration.Initialize();
             if (smokeTest)
             {
-                using var form = new MainForm(startupSmokeTest: true);
-                form.Show();
-                form.PerformLayout();
-                Application.DoEvents();
-                form.VerifySmokeLayout();
-                form.Close();
-
-                var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
-                using var syncIssues = new SyncIssuesForm(repository);
-                syncIssues.Show();
-                syncIssues.PerformLayout();
-                Application.DoEvents();
-                syncIssues.VerifySmokeLayout();
-                syncIssues.Close();
-
-                using var diagnostics = new SystemDiagnosticsForm(repository, startupSmokeTest: true);
-                diagnostics.Show();
-                diagnostics.PerformLayout();
-                Application.DoEvents();
-                diagnostics.VerifySmokeLayout();
-                diagnostics.Close();
-
-                using var settings = new SettingsForm(repository);
-                settings.Show();
-                settings.PerformLayout();
-                Application.DoEvents();
-                settings.VerifySmokeLayout();
-                settings.Close();
-
-                using var cloudSetup = new CloudSetupForm(repository);
-                cloudSetup.Show();
-                cloudSetup.PerformLayout();
-                Application.DoEvents();
-                cloudSetup.VerifySmokeLayout();
-                cloudSetup.Close();
-
-                SmokeCloudDeviceForms();
+                RunStartupSmokeTest();
                 return;
             }
+
+            if (!RecoverPendingReset()) return;
+
             Application.Run(new MainForm());
+            RunScheduledResetAfterShutdown();
         }
         catch (Exception error)
         {
@@ -82,6 +50,103 @@ internal static class Program
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
+    }
+
+    private static bool RecoverPendingReset()
+    {
+        var result = LocalResetCoordinator
+            .RecoverPendingAsync(AppContext.BaseDirectory, new DpapiSecretProtector())
+            .GetAwaiter()
+            .GetResult();
+
+        switch (result.Disposition)
+        {
+            case LocalResetRecoveryDisposition.None:
+                return true;
+            case LocalResetRecoveryDisposition.Completed:
+                return true;
+            case LocalResetRecoveryDisposition.AbortedSafely:
+                MessageBox.Show(
+                    result.Message,
+                    "本機重設已取消",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return true;
+            case LocalResetRecoveryDisposition.Blocked:
+                MessageBox.Show(
+                    result.Message,
+                    "本機重設待確認",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return false;
+            default:
+                throw new InvalidOperationException("未知的本機重設復原狀態。");
+        }
+    }
+
+    private static void RunScheduledResetAfterShutdown()
+    {
+        if (!LocalResetApplication.TryTake(out var request) || request is null) return;
+        try
+        {
+            LocalResetCoordinator
+                .ExecuteAsync(AppContext.BaseDirectory, new DpapiSecretProtector(), request)
+                .GetAwaiter()
+                .GetResult();
+            Application.Restart();
+        }
+        catch (Exception error)
+        {
+            WriteStartupError(error);
+            var recoveryPending = LocalResetCoordinator.HasPendingReset(AppContext.BaseDirectory);
+            var title = recoveryPending ? "雲端退出待確認" : "無法完成本機重設";
+            var message = recoveryPending
+                ? error.Message + "\n\n本機資料尚未刪除。請稍後重新開啟 CYInvoice，程式會先確認 Cloud 狀態後再決定是否繼續。"
+                : error.Message + "\n\n本機資料已保留，CYInvoice 將重新開啟。";
+            MessageBox.Show(message, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (!recoveryPending) Application.Restart();
+        }
+    }
+
+    private static void RunStartupSmokeTest()
+    {
+        using var form = new MainForm(startupSmokeTest: true);
+        form.Show();
+        form.PerformLayout();
+        Application.DoEvents();
+        form.VerifySmokeLayout();
+        form.Close();
+
+        var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
+        using var syncIssues = new SyncIssuesForm(repository);
+        syncIssues.Show();
+        syncIssues.PerformLayout();
+        Application.DoEvents();
+        syncIssues.VerifySmokeLayout();
+        syncIssues.Close();
+
+        using var diagnostics = new SystemDiagnosticsForm(repository, startupSmokeTest: true);
+        diagnostics.Show();
+        diagnostics.PerformLayout();
+        Application.DoEvents();
+        diagnostics.VerifySmokeLayout();
+        diagnostics.Close();
+
+        using var settings = new SettingsForm(repository);
+        settings.Show();
+        settings.PerformLayout();
+        Application.DoEvents();
+        settings.VerifySmokeLayout();
+        settings.Close();
+
+        using var cloudSetup = new CloudSetupForm(repository);
+        cloudSetup.Show();
+        cloudSetup.PerformLayout();
+        Application.DoEvents();
+        cloudSetup.VerifySmokeLayout();
+        cloudSetup.Close();
+
+        SmokeCloudDeviceForms();
     }
 
     private static void SmokeCloudDeviceForms()
