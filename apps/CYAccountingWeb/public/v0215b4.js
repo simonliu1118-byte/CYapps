@@ -3,8 +3,12 @@ let cyV0215Build4Edit = null;
 let cyV0215Build4SaveHideTimer = null;
 let cyV0215Build4SaveClearTimer = null;
 let cyV0215Build4SetupDone = false;
+let cyV0215MobileBalancePopover = null;
+let cyV0215MobileBalanceAnchor = null;
 
 window.cyAfterSaveMessage = handleV0215Build4SaveMessage;
+window.cyOpenMobileLedgerBalance = openV0215MobileLedgerBalance;
+window.cyOpenMobileLedgerLock = openV0215MobileLedgerLock;
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', setupV0215Build4, { once: true });
@@ -48,7 +52,7 @@ function setupV0215Build4Toolbar(attempt = 0) {
     balance.type = 'button';
     balance.textContent = '餘額';
     balance.addEventListener('click', () => {
-      document.querySelector('#ledgerOpeningBalanceButton')?.click();
+      openV0215MobileLedgerBalance();
     });
   }
 
@@ -64,6 +68,229 @@ function setupV0215Build4Toolbar(attempt = 0) {
 
   const sheet = document.querySelector('#mobileLedgerToolsSheet');
   sheet?.querySelector('[data-mobile-ledger-action="opening"]')?.remove();
+}
+
+function ensureV0215MobileBalancePopover() {
+  if (cyV0215MobileBalancePopover?.isConnected) return cyV0215MobileBalancePopover;
+  const popover = document.createElement('div');
+  popover.id = 'mobileLedgerBalancePopoverV0215';
+  popover.className = 'v0215-mobile-balance-popover';
+  popover.setAttribute('role', 'dialog');
+  popover.setAttribute('aria-label', '各帳戶餘額');
+  popover.hidden = true;
+  document.body.append(popover);
+  cyV0215MobileBalancePopover = popover;
+
+  document.addEventListener('click', event => {
+    if (popover.hidden) return;
+    if (popover.contains(event.target) || cyV0215MobileBalanceAnchor?.contains(event.target)) return;
+    closeV0215MobileLedgerBalance();
+  }, true);
+  window.addEventListener('resize', closeV0215MobileLedgerBalance);
+  window.addEventListener('scroll', closeV0215MobileLedgerBalance, true);
+  return popover;
+}
+
+async function openV0215MobileLedgerBalance() {
+  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  const anchor = document.querySelector('#mobileLedgerBalanceButton');
+  const month = String(els.monthFilter?.value || '');
+  if (!anchor || !/^\d{4}-\d{2}$/.test(month)) return;
+
+  const popover = ensureV0215MobileBalancePopover();
+  cyV0215MobileBalanceAnchor = anchor;
+  popover.innerHTML = '<div class="v0215-mobile-balance-title">各帳戶餘額</div><div class="v0215-mobile-balance-loading">讀取中…</div>';
+  popover.hidden = false;
+  positionV0215MobileBalancePopover(anchor, popover);
+
+  try {
+    let opening = cyLedgerOpeningData;
+    if (!opening || opening.month !== month) {
+      opening = await api('/api/opening-balances?month=' + encodeURIComponent(month));
+      if (month !== String(els.monthFilter?.value || '')) return closeV0215MobileLedgerBalance();
+      cyLedgerOpeningData = opening;
+    }
+
+    const openingMap = new Map();
+    for (const item of opening?.accounts || []) {
+      const value = item.amount === null || item.amount === undefined || item.amount === '' ? 0 : Number(item.amount);
+      openingMap.set(String(item.name || ''), Number.isFinite(value) ? value : 0);
+    }
+    const calculated = calculateLedgerBalances(Array.isArray(state.transactions) ? state.transactions : [], openingMap);
+    const names = (state.accounts || []).map(account => String(account.name || '')).filter(Boolean);
+
+    popover.replaceChildren();
+    const title = document.createElement('div');
+    title.className = 'v0215-mobile-balance-title';
+    title.textContent = '各帳戶餘額';
+    popover.append(title);
+
+    const list = document.createElement('div');
+    list.className = 'v0215-mobile-balance-list';
+    if (!names.length) {
+      const empty = document.createElement('div');
+      empty.className = 'v0215-mobile-balance-empty';
+      empty.textContent = '尚無帳戶';
+      list.append(empty);
+    } else {
+      for (const name of names) {
+        const row = document.createElement('div');
+        row.className = 'v0215-mobile-balance-row';
+        const label = document.createElement('span');
+        label.textContent = name;
+        const value = document.createElement('strong');
+        value.textContent = money(calculated.endingByAccount.get(name) ?? openingMap.get(name) ?? 0);
+        row.append(label, value);
+        list.append(row);
+      }
+    }
+    popover.append(list);
+    positionV0215MobileBalancePopover(anchor, popover);
+  } catch (error) {
+    popover.innerHTML = '<div class="v0215-mobile-balance-title">各帳戶餘額</div><div class="v0215-mobile-balance-error"></div>';
+    const target = popover.querySelector('.v0215-mobile-balance-error');
+    if (target) target.textContent = error?.message || '餘額讀取失敗。';
+    positionV0215MobileBalancePopover(anchor, popover);
+  }
+}
+
+function positionV0215MobileBalancePopover(anchor, popover) {
+  if (!anchor || !popover || popover.hidden) return;
+  const anchorBox = anchor.getBoundingClientRect();
+  const popoverBox = popover.getBoundingClientRect();
+  const left = Math.max(8, Math.min(anchorBox.left, window.innerWidth - popoverBox.width - 8));
+  const top = Math.min(anchorBox.bottom + 6, window.innerHeight - popoverBox.height - 8);
+  popover.style.left = Math.round(left) + 'px';
+  popover.style.top = Math.round(Math.max(8, top)) + 'px';
+}
+
+function closeV0215MobileLedgerBalance() {
+  cyV0215MobileBalanceAnchor = null;
+  if (cyV0215MobileBalancePopover) cyV0215MobileBalancePopover.hidden = true;
+}
+
+function ensureV0215MobileLockDialog() {
+  let dialog = document.querySelector('#mobileLedgerLockDialogV0215');
+  if (dialog) return dialog;
+
+  dialog = document.createElement('dialog');
+  dialog.id = 'mobileLedgerLockDialogV0215';
+  dialog.className = 'modal v0215-mobile-lock-dialog';
+  dialog.innerHTML = `
+    <div class="v0215-mobile-lock-head">
+      <div>
+        <h2>月份鎖帳</h2>
+        <p data-v0215-lock-month></p>
+      </div>
+      <button type="button" class="icon-button" data-v0215-lock-close aria-label="關閉">×</button>
+    </div>
+    <div class="v0215-mobile-lock-body">
+      <p data-v0215-lock-status></p>
+      <p class="v0215-mobile-lock-note" data-v0215-lock-note></p>
+    </div>
+    <div class="v0215-mobile-lock-actions">
+      <button type="button" class="secondary" data-v0215-lock-close>取消</button>
+      <button type="button" class="primary" data-v0215-lock-apply></button>
+    </div>
+    <p class="v0215-mobile-lock-message" data-v0215-lock-message></p>
+  `;
+  document.body.append(dialog);
+
+  dialog.addEventListener('click', event => {
+    if (event.target.closest('[data-v0215-lock-close]')) {
+      dialog.close();
+      return;
+    }
+    const apply = event.target.closest('[data-v0215-lock-apply]');
+    if (apply) saveV0215MobileLedgerLock(dialog, apply);
+  });
+  return dialog;
+}
+
+function openV0215MobileLedgerLock() {
+  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  const month = String(els.monthFilter?.value || '');
+  if (!/^\d{4}-\d{2}$/.test(month)) return;
+
+  closeV0215MobileLedgerBalance();
+  const dialog = ensureV0215MobileLockDialog();
+  const lockedThrough = String(state.lockedThrough || '');
+  const locked = Boolean(lockedThrough && month <= lockedThrough);
+  const displayMonth = formatV0215MobileMonth(month);
+  const status = dialog.querySelector('[data-v0215-lock-status]');
+  const note = dialog.querySelector('[data-v0215-lock-note]');
+  const apply = dialog.querySelector('[data-v0215-lock-apply]');
+  const message = dialog.querySelector('[data-v0215-lock-message]');
+
+  dialog.dataset.month = month;
+  dialog.dataset.nextLockedThrough = locked ? previousV0215MobileMonth(month) : month;
+  dialog.querySelector('[data-v0215-lock-month]').textContent = displayMonth;
+  message.textContent = '';
+  message.classList.remove('error');
+
+  if (!locked) {
+    status.textContent = '此月份目前未鎖帳。';
+    note.textContent = '鎖定後，' + displayMonth + ' 以及更早月份都不可新增、修改或刪除記帳。';
+    apply.textContent = '鎖定本月';
+  } else if (lockedThrough === month) {
+    status.textContent = '此月份目前已鎖帳。';
+    note.textContent = '解除後，系統會保留鎖帳至 ' + formatV0215MobileMonth(previousV0215MobileMonth(month)) + '。';
+    apply.textContent = '解除本月鎖帳';
+  } else {
+    status.textContent = '此月份包含在鎖帳範圍內，目前鎖帳至 ' + formatV0215MobileMonth(lockedThrough) + '。';
+    note.textContent = '若解除，' + displayMonth + ' 到 ' + formatV0215MobileMonth(lockedThrough) + ' 都會一起解除鎖帳。';
+    apply.textContent = '解除自本月起鎖帳';
+  }
+
+  if (!dialog.open) dialog.showModal();
+}
+
+async function saveV0215MobileLedgerLock(dialog, button) {
+  const month = String(dialog?.dataset.month || '');
+  const nextLockedThrough = String(dialog?.dataset.nextLockedThrough || '');
+  const message = dialog?.querySelector('[data-v0215-lock-message]');
+  if (!/^\d{4}-\d{2}$/.test(month) || !/^\d{4}-\d{2}$/.test(nextLockedThrough)) return;
+
+  button.disabled = true;
+  if (message) {
+    message.textContent = '處理中…';
+    message.classList.remove('error');
+  }
+  try {
+    const data = await api('/api/settings/lock', {
+      method: 'PUT',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ lockedThrough: nextLockedThrough })
+    });
+    state.lockedThrough = data.lockedThrough || null;
+    if (els.lockedThrough) els.lockedThrough.value = state.lockedThrough || '';
+    updateEntryLockState();
+    await loadTransactions();
+    if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
+    dialog.close();
+    showV0215Build4LedgerNotice(state.lockedThrough
+      ? '已鎖帳至 ' + formatV0215MobileMonth(state.lockedThrough) + '。'
+      : '已取消鎖帳。');
+  } catch (error) {
+    if (message) {
+      message.textContent = error?.message || '鎖帳設定失敗。';
+      message.classList.add('error');
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function previousV0215MobileMonth(month) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  if (!match) return '';
+  const date = new Date(Number(match[1]), Number(match[2]) - 2, 1);
+  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+}
+
+function formatV0215MobileMonth(month) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  return match ? Number(match[1]) + '年' + Number(match[2]) + '月' : String(month || '');
 }
 
 function setupV0215Build4MonthDisplay(slot) {
