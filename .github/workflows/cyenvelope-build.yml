@@ -25,7 +25,7 @@ jobs:
         working-directory: apps/CYEnvelope
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
@@ -82,7 +82,7 @@ jobs:
 
       - name: Upload Windows visual evidence
         if: always() && steps.evidence.outputs.safe == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CYEnvelope-windows-visual-review
           path: apps/CYEnvelope/dist/visual-review/
@@ -110,7 +110,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Public package safety scan failed' }
 
       - name: Upload scanned portable test folder
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CYEnvelope-${{ steps.package.outputs.label }}-windows-x64-test
           path: apps/CYEnvelope/dist/stage/*
@@ -118,7 +118,7 @@ jobs:
           retention-days: 3
 
       - name: Download artifact to verify one-extraction layout
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: CYEnvelope-${{ steps.package.outputs.label }}-windows-x64-test
           path: apps/CYEnvelope/dist/verify-download
