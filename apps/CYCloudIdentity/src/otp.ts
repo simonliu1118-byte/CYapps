@@ -234,6 +234,38 @@ async function enforceOtpFrequency(
   if ((recent?.count ?? 0) >= maxSentPerEmailPurposeHour) throw new Error("OTP_RATE_LIMITED");
 }
 
+export async function findActiveEmailOtp(
+  env: Env,
+  input: {
+    purpose: OtpPurpose;
+    scopeKey: string | null;
+    email: string;
+  },
+): Promise<OtpIssueResult | null> {
+  const email = normalizeAddress(input.email);
+  const now = new Date().toISOString();
+  const row = await env.DB.prepare(
+    `SELECT challenge_id, expires_at, resend_after
+       FROM email_otp_challenges
+      WHERE purpose = ?1
+        AND ((scope_key = ?2) OR (scope_key IS NULL AND ?2 IS NULL))
+        AND email_normalized = ?3
+        AND delivery_state = 'sent'
+        AND consumed_at IS NULL
+        AND expires_at > ?4
+        AND attempt_count < max_attempts
+      ORDER BY created_at DESC
+      LIMIT 1`
+  ).bind(input.purpose, input.scopeKey, email, now).first<{
+    challenge_id: string;
+    expires_at: string;
+    resend_after: string;
+  }>();
+  return row
+    ? { challengeId: row.challenge_id, expiresAt: row.expires_at, resendAfter: row.resend_after }
+    : null;
+}
+
 export async function issueEmailOtp(
   env: Env,
   sender: EmailSender,
@@ -244,6 +276,7 @@ export async function issueEmailOtp(
     email: string;
     subject: string;
     textPrefix: string;
+    textSuffix?: string;
   },
 ): Promise<OtpIssueResult> {
   const now = new Date();
@@ -310,10 +343,11 @@ export async function issueEmailOtp(
   }
 
   try {
+    const suffix = input.textSuffix?.trim();
     await sender.send({
       to: email,
       subject: input.subject,
-      text: `${input.textPrefix}\n\n驗證碼：${code}\n\n此驗證碼 10 分鐘內有效。請勿將驗證碼提供給其他人。`,
+      text: `${input.textPrefix}\n\n驗證碼：${code}\n\n此驗證碼 10 分鐘內有效。請勿將驗證碼提供給其他人。${suffix ? `\n\n${suffix}` : ""}`,
     });
     const sentAt = new Date();
     await env.DB.prepare(

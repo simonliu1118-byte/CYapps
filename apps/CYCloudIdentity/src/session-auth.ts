@@ -1,4 +1,5 @@
 import { isSessionToken, sha256Hex } from "./crypto";
+import { effectiveWorkspaceRole, hasApplicationEntry, type StoredEmployeeRole } from "./role-access";
 import type { Env, IdentityPrincipal } from "./types";
 
 type SessionAuthorityRow = {
@@ -10,14 +11,16 @@ type SessionAuthorityRow = {
   revoked_at: string | null;
   employee_no: string;
   name: string;
+  email_verified_at: string | null;
   employee_enabled: number;
+  employee_role_key: StoredEmployeeRole;
+  employee_identity_admin: number;
   employee_revision: number;
   current_credential_version: number;
   workspace_status: string;
   super_admin_employee_id: string | null;
   application_status: string;
   workspace_application_enabled: number;
-  compatibility_role_mode: "USER_ADMIN" | null;
 };
 
 function bearerSessionToken(request: Request): string | null {
@@ -48,45 +51,6 @@ async function groupKeys(env: Env, workspaceId: string, employeeId: string): Pro
   return (result.results ?? []).map(row => row.group_key);
 }
 
-async function hasApplicationAccess(
-  env: Env,
-  row: SessionAuthorityRow,
-  isWorkspaceSuperAdmin: boolean,
-): Promise<boolean> {
-  if (isWorkspaceSuperAdmin) return true;
-  const access = await env.DB.prepare(
-    `SELECT 1 AS allowed
-       FROM employee_application_access ea
-      WHERE ea.workspace_id = ?1
-        AND ea.employee_id = ?2
-        AND ea.application_id = ?3
-        AND ea.enabled = 1
-      UNION ALL
-     SELECT 1 AS allowed
-       FROM employee_identity_groups eg
-       JOIN identity_groups g
-         ON g.group_id = eg.group_id
-        AND g.workspace_id = eg.workspace_id
-       JOIN identity_group_application_access ga
-         ON ga.group_id = eg.group_id
-        AND ga.workspace_id = eg.workspace_id
-       JOIN workspace_applications wa
-         ON wa.workspace_id = ga.workspace_id
-        AND wa.application_id = ga.application_id
-      WHERE eg.workspace_id = ?1
-        AND eg.employee_id = ?2
-        AND ga.application_id = ?3
-        AND g.status = 'active'
-        AND ga.enabled = 1
-        AND (
-          wa.compatibility_role_mode IS NULL
-          OR ga.application_role_key IN ('USER', 'ADMIN')
-        )
-      LIMIT 1`
-  ).bind(row.workspace_id, row.employee_id, row.application_id).first<{ allowed: number }>();
-  return Boolean(access);
-}
-
 export async function requireIdentitySession(
   request: Request,
   env: Env,
@@ -104,14 +68,16 @@ export async function requireIdentitySession(
             s.revoked_at,
             e.employee_no,
             e.name,
+            e.email_verified_at,
             e.enabled AS employee_enabled,
+            e.role_key AS employee_role_key,
+            e.identity_admin AS employee_identity_admin,
             e.revision AS employee_revision,
             c.credential_version AS current_credential_version,
             w.status AS workspace_status,
             w.super_admin_employee_id,
             a.status AS application_status,
-            wa.enabled AS workspace_application_enabled,
-            wa.compatibility_role_mode
+            wa.enabled AS workspace_application_enabled
        FROM identity_sessions s
        JOIN employees e
          ON e.employee_id = s.employee_id
@@ -133,16 +99,30 @@ export async function requireIdentitySession(
   if (row.application_status !== "active" || row.workspace_application_enabled !== 1) return null;
   if (row.session_credential_version !== row.current_credential_version) return null;
 
-  const isWorkspaceSuperAdmin = row.super_admin_employee_id === row.employee_id;
-  if (!await hasApplicationAccess(env, row, isWorkspaceSuperAdmin)) return null;
+  const workspaceRole = effectiveWorkspaceRole(
+    row.employee_id,
+    row.super_admin_employee_id,
+    row.employee_role_key,
+  );
+  if (!await hasApplicationEntry(
+    env,
+    row.workspace_id,
+    row.employee_id,
+    row.application_id,
+    workspaceRole === "SUPER_ADMIN",
+  )) return null;
 
   return {
     workspaceId: row.workspace_id,
     employeeId: row.employee_id,
     employeeNo: row.employee_no,
     displayName: row.name,
-    isWorkspaceSuperAdmin,
+    workspaceRole,
+    isIdentityAdmin: workspaceRole === "ADMIN" && row.employee_identity_admin === 1,
+    emailVerified: Boolean(row.email_verified_at),
+    isWorkspaceSuperAdmin: workspaceRole === "SUPER_ADMIN",
     groupKeys: await groupKeys(env, row.workspace_id, row.employee_id),
+    applicationRoleKey: workspaceRole,
     credentialVersion: row.current_credential_version,
     employeeRevision: row.employee_revision,
   };

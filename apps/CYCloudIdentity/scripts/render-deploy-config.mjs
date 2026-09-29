@@ -32,6 +32,20 @@ function requireInteger(name, min, max) {
   return String(number);
 }
 
+function requireHttpUrl(name) {
+  const value = required(name);
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${name} must be an absolute HTTP(S) URL`);
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error(`${name} must be an absolute HTTP(S) URL`);
+  }
+  return value;
+}
+
 const values = {
   CYID_WORKER_NAME: requirePattern('CYID_WORKER_NAME', /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, 'a valid lowercase Worker name'),
   CYID_D1_DATABASE_NAME: requirePattern('CYID_D1_DATABASE_NAME', /^[A-Za-z0-9_-]{1,64}$/, 'a valid D1 database name'),
@@ -41,6 +55,8 @@ const values = {
   CYID_EMAIL_PROVIDER: requirePattern('CYID_EMAIL_PROVIDER', /^(brevo|resend)$/i, 'brevo or resend').toLowerCase(),
   CYID_EMAIL_FROM: required('CYID_EMAIL_FROM'),
   CYID_EMAIL_DAILY_BUDGET: requireInteger('CYID_EMAIL_DAILY_BUDGET', 1, 10000),
+  CYID_CORE_ACCOUNT_APPLICATION_ID: requirePattern('CYID_CORE_ACCOUNT_APPLICATION_ID', /^[A-Z0-9_-]{2,64}$/i, 'a valid Application ID').toUpperCase(),
+  CYID_ACCOUNT_PORTAL_URL: requireHttpUrl('CYID_ACCOUNT_PORTAL_URL'),
 };
 
 if (/[\r\n]/.test(values.CYID_EMAIL_FROM) || values.CYID_EMAIL_FROM.length > 320) {
