@@ -1,4 +1,5 @@
 using CYInvoice.Core.Cloud;
+using CYInvoice.Core.Storage;
 
 namespace CYInvoice.WinForms;
 
@@ -370,13 +371,13 @@ internal sealed class CloudDeviceManagementForm : Form
         if (activeDeviceCount <= 1)
         {
             MessageBox.Show(this,
-                "最後一台使用中的裝置不能撤銷。請先讓另一台可信任裝置加入 Workspace。",
+                "最後一台使用中的裝置不能撤銷。請先讓另一台可信任裝置加入 Workspace；若不再使用此 Built-in Cloud Workspace，請在中央管理端手動停用 Workspace。",
                 "不能撤銷裝置", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         var warning = selected.Current
-            ? "你選的是目前這台電腦。撤銷完成後，這台電腦的 Device Token 會立即失效，Cloud 功能將停止，直到重新加入 Workspace。確定繼續？"
+            ? "你選的是目前這台電腦。此操作會退出 Built-in Cloud，並在安全確認撤銷完成後永久刪除這台電腦的所有 CYInvoice 本機資料。Cloud Workspace、其他 Device 與中央資料不會被刪除。確定繼續？"
             : $"撤銷「{selected.DisplayName}」後，該裝置的 Device Token 會立即失效。歷史紀錄仍會保留。確定繼續？";
         if (MessageBox.Show(this, warning, "確認撤銷裝置",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
@@ -385,6 +386,23 @@ internal sealed class CloudDeviceManagementForm : Form
         using var credentials = new CloudDeviceRevokeAuthenticationForm(selected.DisplayName, selected.Current);
         if (credentials.ShowDialog(this) != DialogResult.OK) return;
 
+        if (selected.Current)
+        {
+            if (MessageBox.Show(this,
+                    "最後確認：CYInvoice 會先完整關閉，停止背景同步後才向 Cloud 撤銷目前 Device。Cloud 明確確認 Device 已撤銷後，才會刪除本機 Data / Cache 並回到首次使用。\n\n若 Cloud 結果不明，本機資料與 Device Token 都會保留，不會猜測成功。\n\n確定立即執行？",
+                    "最後確認",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+
+            LocalResetApplication.Schedule(new LocalResetExecutionRequest(
+                LocalResetKind.BuiltInCloud,
+                credentials.EmployeeNo,
+                credentials.Password));
+            return;
+        }
+
         await RunBusyAsync(async () =>
         {
             var result = await lifecycleClient.RevokeAsync(
@@ -392,16 +410,6 @@ internal sealed class CloudDeviceManagementForm : Form
                 credentials.EmployeeNo,
                 credentials.Password,
                 lifetime.Token);
-            if (result.Device.Current)
-            {
-                MessageBox.Show(this,
-                    "目前這台裝置已撤銷，Device Token 已失效。若要繼續使用 Cloud，需重新加入 Workspace。",
-                    "裝置已撤銷", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                DialogResult = DialogResult.OK;
-                Close();
-                return;
-            }
-
             await LoadDevicesAsync(silent: true);
             deviceStatus.ForeColor = SystemColors.ControlText;
             deviceStatus.Text = result.AlreadyRevoked
