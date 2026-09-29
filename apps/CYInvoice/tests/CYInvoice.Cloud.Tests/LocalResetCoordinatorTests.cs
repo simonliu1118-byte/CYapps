@@ -52,7 +52,18 @@ internal static class LocalResetCoordinatorTests
 
     private sealed class ResetTestProtector : ISecretProtector
     {
-        public string Protect(string value) => value;
-        public string Unprotect(string value) => value;
+        public string Protect(ReadOnlySpan<byte> plaintext)
+        {
+            var bytes = plaintext.ToArray();
+            Array.Reverse(bytes);
+            return Convert.ToBase64String(bytes);
+        }
+
+        public byte[] Unprotect(string ciphertext)
+        {
+            var bytes = Convert.FromBase64String(ciphertext);
+            Array.Reverse(bytes);
+            return bytes;
+        }
     }
 }
