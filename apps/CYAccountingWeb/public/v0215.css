@@ -768,13 +768,13 @@
     display: none !important;
   }
 
-  .ledger-card tbody > tr.v0215-edit-highlight:not(.inline-editing) {
+  .ledger-card tbody > tr.v0215-edit-highlight:not(.inline-editing)::before {
     animation: v0215-edit-highlight 1.8s ease-out;
   }
 
   @keyframes v0215-edit-highlight {
-    0% { box-shadow: inset 0 0 0 999px rgba(69, 126, 171, .16) !important; }
-    100% { box-shadow: inset 0 0 0 999px rgba(69, 126, 171, 0) !important; }
+    0% { background: rgba(69, 126, 171, .16); }
+    100% { background: #fff; }
   }
 
   .v0215-ledger-notice {
