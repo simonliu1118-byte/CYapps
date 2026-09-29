@@ -9,7 +9,8 @@ type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string
 type SelfStatusRow = {
   device_id: string;
   workspace_id: string;
-  status: string;
+  device_status: string;
+  workspace_status: string;
   revoked_at: string | null;
 };
 
@@ -66,21 +67,29 @@ async function selfStatus(request: Request, env: Env, requestId: string): Promis
 
   const tokenHash = await sha256Hex(token);
   const row = await env.DB.prepare(
-    `SELECT device_id, workspace_id, status, revoked_at
-       FROM devices
-      WHERE token_hash = ?1
+    `SELECT d.device_id,
+            d.workspace_id,
+            d.status AS device_status,
+            d.revoked_at,
+            w.status AS workspace_status
+       FROM devices d
+       JOIN workspaces w ON w.workspace_id = d.workspace_id
+      WHERE d.token_hash = ?1
       LIMIT 1`
   ).bind(tokenHash).first<SelfStatusRow>();
 
   if (!row)
     return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device token is unknown.");
-  if (row.status !== "active" && row.status !== "revoked")
+  if (row.device_status !== "active" && row.device_status !== "revoked")
     return errorResponse(env, requestId, 409, "DEVICE_STATE_INVALID", "Device lifecycle state is invalid.");
+  if (row.workspace_status !== "active" && row.workspace_status !== "disabled")
+    return errorResponse(env, requestId, 409, "WORKSPACE_STATE_INVALID", "Workspace lifecycle state is invalid.");
 
   return json(env, requestId, 200, {
     deviceId: row.device_id,
     workspaceId: row.workspace_id,
-    status: row.status,
+    status: row.device_status,
+    workspaceStatus: row.workspace_status,
     revokedAt: row.revoked_at ?? "",
   });
 }
