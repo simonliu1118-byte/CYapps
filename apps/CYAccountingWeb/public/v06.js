@@ -232,7 +232,7 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
   const mobileAccount = accountLines.map(line => `<span>${escapeHtml(line)}</span>`).join('');
   const kindClass = tx.kind === 'income' ? 'ledger-row-income' : 'ledger-row-expense';
 
-  return `<tr class="ledger-row ${kindClass}">
+  return `<tr class="ledger-row ${kindClass}" data-transaction-id="${id}">
     <td><span class="ledger-date-desktop">${escapeHtml(fullDate)}</span><span class="ledger-date-mobile">${escapeHtml(mobileDate)}</span></td>
     <td class="ledger-account-name"><span class="ledger-account-desktop">${escapeHtml(accountName)}</span><span class="ledger-account-mobile" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
