@@ -2,10 +2,10 @@
 
 本檔只保留目前仍未完成、需要後續驗證或已明確延後的工作。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-目前 PR #121 工程開發基準：**CYInvoice V2.6.6 Build 4**；development remote 已部署 **Cloud 0.8.5 / API 1 / storage Schema 9**，A 機既有功能與 B 機配對碼加入均已實機通過。
+目前 `main` 工程基準：**CYInvoice V2.6.10 Build 0**（整合 commit `ede1fa37cf01a6f78730f7dd656f3b3b0098c7c5`）；development remote 已部署 **Cloud 0.8.8 / API 1 / compatibility Schema 8 / storage Schema 11**。Identity Foundation、Cloud Authority Freshness、Device Revoke/Retire 與 Cloud → Local destructive reset 已合併；下一個主要 gate 是 A/B Windows 實機 lifecycle acceptance。
 最新正式 Release：`cyinvoice-v2.4.2`
 
-> V3 Cloud identity 工作接手時，先讀 `docs/CLOUD_WORK_HANDOFF.md`、`docs/CLOUD_IDENTITY_LIFECYCLE.md`、`docs/CY_ID_INTEGRATION.md`，再讀 `CLOUD_ARCHITECTURE_STATUS.md`、`CLOUD_ROADMAP.md` 與本檔。仍必須依 `AGENTS.md` 指示先讀三層永久規則。
+> V3 Cloud identity 工作接手時，先讀 `docs/NEXT_CHAT_HANDOFF_2026-09-29.md`、`docs/CLOUD_WORK_HANDOFF.md`、`docs/CLOUD_IDENTITY_LIFECYCLE.md`、`docs/CY_ID_INTEGRATION.md`，再讀 `CLOUD_ARCHITECTURE_STATUS.md`、`CLOUD_ROADMAP.md` 與本檔。仍必須依 `AGENTS.md` 指示先讀三層永久規則。
 
 ## 1. V2.6.x 實機與光貿驗證
 
@@ -97,22 +97,32 @@
 - [x] 新 Employee Email 必須驗證；Email 修改時新 Email 必須驗證後才 commit。
 - [x] SUPER_ADMIN transfer foundation 已完成。
 - [x] Cloud compatibility 已從 D1 schema equality gate 改為 API contract／capability 策略。
+- [x] Identity Provider foundation：`AppPrincipal` / `AppRole` / `IIdentityProvider`、Local / Built-in Cloud provider 與集中式 provider selection 已完成。
+- [x] Role 正式收斂為 `SUPER_ADMIN / ADMIN / USER`；active runtime 不再保留 `EMPLOYEE` role alias，既有 Local/Cloud schema 有一次性 migration。
+- [x] Built-in Cloud online execution-time authority freshness 已完成；只有真正 transport failure / timeout 才可使用最後可信 protected cache，其他錯誤 fail closed。
+- [x] Device inventory / revoke / retire API 與 Windows Device Management 已完成；Built-in 最後一台 active Device 保留 `LAST_ACTIVE_DEVICE` 防護。
+- [x] Cloud → Local crash-safe destructive reset 已完成；ambiguous revoke 結果保留本機資料／Token，使用 narrow self-status recovery 收斂。
 
 ### 7.2 目前剩餘驗證／修正
 
-- [x] development staged deployment：migration `0009` 只套一次、Worker `0.8.5` 已部署、health API 1 / storage Schema 9，A 機最終回歸通過。
+- [x] development staged deployment：Worker `0.8.8` 已部署；live health 已驗證 API 1 / compatibility Schema 8 / storage Schema 11 / storage ok，`device-revoke-v1` 與 `device-self-status-v1` capabilities 可用。
+- [x] development remote migration 狀態已核對：Run #7 部署前即為 `No migrations to apply`，因此未重複執行既有 migration；前後 aggregate row/role 狀態與 FK audit 正常。
 - [x] B 機以乾淨 Run255 使用配對碼加入既有 Workspace 實機通過。
+- [ ] **V2.6.10 A/B baseline acceptance：**兩台既有 Device 升級 Run343 工程版後仍可連線，Device Management 清單、一般同步／開票既有路徑無回歸。
 - [ ] 邀請碼加入路徑、邀請撤銷／重寄與結果不明恢復實機驗收。
 - [ ] 精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。
-- [ ] **Built-in Cloud Employee 即時驗證 defect：**Cloud 在線時，任何 Employee 密碼／權限驗證前必須取得最新 Cloud authority／snapshot，再驗證並刷新本機 cache；不得等待 5 分鐘背景同步或重開程式。
+- [x] **Built-in Cloud Employee 即時驗證 defect（工程修正）：**Cloud 在線時 protected authentication 會先取得最新 Cloud authority／snapshot；不再依賴 5 分鐘背景同步或重開程式。
+- [ ] **Authority freshness A/B 實機驗收：**A 修改中央 Employee 密碼／role／enabled 後，B 不等待背景同步或重開即可在下一次 protected operation 套用最新 authority；真正斷網時使用最後可信 cache，恢復連線後 Online authority 重新覆蓋。
 - [ ] Built-in Employee CRUD、Email OTP、password、enabled、role 在 A/B 間即時與背景 snapshot 同步實機測試。
-- [ ] Cloud Mode 斷網：以最後 Cloud cache 做 execution-time auth；恢復連線後 Online authority 覆蓋 cache。
-- [ ] **Cloud → Local 破壞性重置：**雙重確認、Device revoke/retire、本機全清、重啟首次使用並重新建立 Local SUPER_ADMIN。
-- [ ] Device revoke UI/API；亦作為 Cloud → Local 安全退場的一部分。
+- [x] **Cloud → Local destructive reset（工程實作）：**雙重確認、App 關閉後 current Device revoke/確認、本機 Data/Cache/identity 清除、重啟首次使用；狀態不明時 fail closed 並保留 recoverable state。
+- [ ] **Cloud → Local 實機驗收：**優先用可拋棄的 Device C，在 A/B 仍保留 Workspace recovery path 的前提下測 current-device reset；確認 A/B、Workspace、中央 Employees 完整保留。
+- [x] Device revoke/retire UI/API 與 Device history preservation 已完成。
+- [ ] **Device revoke A/B/C 實機驗收：**新增可拋棄 Device C，從 A/B 遠端 revoke C，確認 C 舊 Token 立即失效、history 保留 revoked、重新加入產生新 Device identity。
+- [ ] **LAST_ACTIVE_DEVICE 實機驗收：**只在專用可拋棄 Workspace／環境驗證，不為測試而破壞目前 A/B 唯一 recovery topology。
+- [ ] **Ambiguous revoke fault-injection：**模擬 Cloud 已執行但 response 遺失／狀態暫時無法確認，確認不 wipe、本機資料／Token 保留，下一次啟動由 self-status 收斂。
 - [ ] 所有 Device Token 遺失但 Recovery path 可用時的 Recovery Device flow。
 - [ ] 所有 Device Token + recovery path 同時失效時的 reference-backend 人工維運文件。
 - [ ] 驗收 fresh-install 首次分流。
-- [ ] **Role 正式改名：**CYInvoice `EMPLOYEE` role 改為 `USER`，最終只保留 `SUPER_ADMIN / ADMIN / USER`。目前沒有已持久化的 `EMPLOYEE` role 資料需要 migration；同步修 source、schema fixtures、tests、docs、UI。
 - [ ] **延後／非目前阻塞：Cloud Employee offline cache 完整性簽章。** 未來可評估 server-signed snapshot／等效完整性保護；沒有實際竄改事件、威脅模型提高或稽核需求時長期擱置。
 
 ### 7.3 CY ID / Self-hosted 架構定案（尚未實作）
@@ -126,9 +136,11 @@
 - [x] CY ID 的 Group、App Access schema 與 CYWEB 帳號中心內部設計不在 CYInvoice 工作線決定。
 - [x] 不為 Entra ID／LDAP／Google Workspace／任意第三方 provider 預先建插件框架；需要者可 fork 自行擴充。
 - [x] 現階段不建立 Built-in → CY ID 通用 migration framework；正式切換前只做必要 acceptance check。
-- [ ] 等 CY ID consumer contract 穩定後，設計 CYInvoice 最小 Employee authority abstraction，避免把 Built-in backend 寫死在所有驗證路徑。
+- [x] CYInvoice 已建立 provider-neutral Employee authority abstraction；CY ID 後續應以新 provider/adapter 接入，不得把 CY ID-specific API 寫死到既有 Forms/workflows。
+- [ ] 等 CY ID consumer contract 穩定後實作 `CyIdIdentityProvider`／adapter，包含 Workspace binding、App Access、role/enabled authority 與 fresh Device recovery contract。
 - [ ] CY ID 模式 Windows Offline credential/cache 協定：Online 以 CY ID authority 為準、Offline 使用最後可信 protected cache、reconnect 後最新 authority 重生效；不得直接讀 CY ID D1 或形成雙 authority。
 - [ ] CY ID 模式 Account Management visibility / settings status / execution-time auth Windows UI acceptance。
+- [ ] CY ID 0-active-Device recovery 完成並驗證後，才把 `LAST_ACTIVE_DEVICE` server policy 改為 identity-provider-aware；此前 Built-in 規則維持不變。
 
 ### 7.4 新裝置加入方式與安全紀錄
 
@@ -137,7 +149,7 @@
 - [x] A 機 Email 邀請：72 小時一次性邀請碼，可撤銷／重寄；B 機使用 invitation code + SUPER_ADMIN credential，確認 Workspace 名稱後加入。
 - [x] 程式不內嵌 Cloud API URL；Workspace ID 不作為新機手動輸入欄位。
 - [x] Cloud D1 安全操作紀錄涵蓋配對、邀請、撤銷與加入，且不記錄 secret 原文。
-- [x] migration `0009`／Worker `0.8.5` staged deployment 完成。
+- [x] development Worker 已升級至 `0.8.8`，storage Schema 11；裝置 revoke/self-status lifecycle 已在 live health capability contract 驗證。
 - [x] B 機 Run255 配對碼加入實機通過。
 - [ ] 邀請碼加入、邀請撤銷／重寄、result-unknown recovery 實機驗收。
 - [ ] 安全操作紀錄／稽核紀錄查看介面。
@@ -184,4 +196,4 @@ AMEGO App Key 不列入 Cloud sync，仍由各電腦自行設定並以 Windows s
 - 發票 Excel／CSV 匯出：不做；需要時使用光貿網站。
 - 管理員開機待辦提醒：不做；沒有持續登入，無法可靠知道開程式的人是管理員。
 
-任何 merge、tag、正式 Release 均需明確授權。
+工程 merge 與 development Cloud deployment 在達到對應 CI／Governance／安全驗證 gate 後可依技術需要進行，不應讓已完成的 stacked work 長期停放；**正式 tag / Release 仍視為獨立 promotion 行為，需另行明確決定。**
