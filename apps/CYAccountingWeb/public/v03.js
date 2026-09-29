@@ -51,6 +51,7 @@ function bindQuickTools() {
     const name = button.dataset.quickCategory;
     if (![...els.categoryName.options].some(option => option.value === name)) return;
     els.categoryName.value = name;
+    document.querySelector('#favoriteCategoryGroup')?.removeAttribute('open');
     loadFrequentSummaries();
     els.summary.focus();
   });
@@ -59,6 +60,7 @@ function bindQuickTools() {
     const button = event.target.closest('[data-summary-suggestion]');
     if (!button) return;
     els.summary.value = button.dataset.summarySuggestion || '';
+    document.querySelector('#summarySuggestionGroup')?.removeAttribute('open');
     els.amount.focus();
   });
 }
