@@ -4,7 +4,7 @@
 >
 > **Shared standard:** `../CONSUMER_INTEGRATION_STANDARD.md` — Consumer Contract `1.0.1` (minimum compatible `1.0.0`).
 >
-> **Provider source baseline:** CYID 0.3.3 source/docs; development runtime remains CYID 0.3.0 until a runtime-changing provider deployment.
+> **Provider source baseline:** CYID 0.3.4 source/docs; development runtime remains CYID 0.3.0 until a runtime-changing provider deployment.
 >
 > If this handoff conflicts with the shared standard or CYID canonical contracts, the canonical documents win.
 
