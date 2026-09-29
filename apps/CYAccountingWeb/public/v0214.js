@@ -1,4 +1,4 @@
-const CY_V0214_VERSION = 'V0.21.5 Build 9';
+const CY_V0214_VERSION = 'V0.21.5 Build 10';
 const CY_V0214_HOVER = '(hover: hover) and (pointer: fine)';
 let cyV0214BalancePopover = null;
 let cyV0214BalanceAnchor = null;

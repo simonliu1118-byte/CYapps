@@ -243,8 +243,9 @@ function setupV21Build10LedgerTools() {
     sheet.hidden = true;
     sheet.innerHTML = `
       <div class="v21-mobile-sheet-handle" aria-hidden="true"></div>
-      <h3>記帳工具</h3>
-      <button type="button" data-mobile-ledger-action="opening">期初餘額</button>
+      <h3>更多</h3>
+      <button type="button" data-mobile-ledger-action="accounts">帳戶設定</button>
+      <button type="button" data-mobile-ledger-action="categories">科目設定</button>
       <button type="button" data-mobile-ledger-action="lock">月份鎖帳</button>
       <button type="button" data-mobile-ledger-action="export">匯出 Excel</button>
       <button type="button" class="secondary" data-mobile-ledger-action="close">取消</button>`;
@@ -276,8 +277,24 @@ function setupV21Build10LedgerTools() {
       return;
     }
     close();
-    if (action === 'opening') document.querySelector('#ledgerOpeningBalanceButton')?.click();
-    if (action === 'lock') document.querySelector('#ledgerLockSettingsButton')?.click();
+    if (action === 'accounts') {
+      if (typeof window.cyOpenMobileSettingsPane === 'function') window.cyOpenMobileSettingsPane('accounts');
+      else {
+        if (typeof openSettings === 'function') openSettings();
+        if (typeof setSettingsTab === 'function') setSettingsTab('accounts');
+      }
+    }
+    if (action === 'categories') {
+      if (typeof window.cyOpenMobileSettingsPane === 'function') window.cyOpenMobileSettingsPane('categories');
+      else {
+        if (typeof openSettings === 'function') openSettings();
+        if (typeof setSettingsTab === 'function') setSettingsTab('categories');
+      }
+    }
+    if (action === 'lock') {
+      if (typeof window.cyOpenMobileLedgerLock === 'function') window.cyOpenMobileLedgerLock();
+      else document.querySelector('#ledgerLockSettingsButton')?.click();
+    }
     if (action === 'export') document.querySelector('#ledgerExcelExport')?.click();
   });
 

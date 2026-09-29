@@ -46,17 +46,17 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '9');
+assert.equal(build, '10');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
 assert.match(build11Js, /script\.src = '\/v0212\.js'/);
 assert.match(build11Js, /ensureV0215Stylesheet\(\)/);
-assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b9'/);
+assert.match(build11Js, /link\.href = '\/v0215\.css\?v=0215b10'/);
 assert.match(build11Js, /ensureV0215Build3Script\(\)/);
 assert.match(build11Js, /script\.src = '\/v0215b3\.js'/);
 assert.match(build11Js, /ensureV0215Build4Script\(\)/);
-assert.match(build11Js, /script\.src = '\/v0215b4\.js\?v=0215b9'/);
+assert.match(build11Js, /script\.src = '\/v0215b4\.js\?v=0215b10'/);
 assert.match(build12Js, /CY_V21_BUILD12_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build13Js, /CY_V21_BUILD13_DESKTOP = '\(min-width: 1024px\)'/);
 assert.match(build14Js, /CY_V21_BUILD14_DESKTOP = '\(min-width: 1024px\)'/);
@@ -82,14 +82,15 @@ assert.match(authJs, /location\.replace\('\/\?auth_recovery=0215b8'\)/);
 assert.doesNotMatch(authJs, /帳號密碼已通過，但登入狀態沒有保存/);
 assert.match(indexHtml, /auth\.js\?v=0215b8/);
 assert.match(indexHtml, /auth\.css\?v=0215b8/);
-assert.match(indexHtml, /v021b11\.js\?v=0215b8/);
+assert.match(indexHtml, /v021b11\.js\?v=0215b10/);
+assert.match(indexHtml, /v021b10\.js\?v=0215b10/);
 assert.doesNotMatch(authCss, /@media \(min-width: 641px\) and \(max-width: 1023px\)/);
 assert.match(authCss, /@media \(max-width: 640px\)/);
 assert.match(workerApp, /SameSite=Lax/);
 assert.match(workerApp, /Expires=\$\{expires\}/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
-// V0.21.5 Build 9 keeps auth untouched and decouples the visible mobile month label from Safari's native month rendering.
+// V0.21.5 Build 10 keeps auth untouched, retains the mobile month control, and limits phone tools to opening/account/category/lock/export.
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
 assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?linear-gradient\(to right, rgba\(86, 176, 113/);
 assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?linear-gradient\(to right, rgba\(207, 104, 94/);
@@ -105,6 +106,11 @@ assert.match(patch5Css, /\.ledger-month-tools input\[type="month"\][\s\S]*?opaci
 assert.match(patch5Css, /input\[type="month"\]::-webkit-calendar-picker-indicator[\s\S]*?opacity:\s*0 !important/);
 assert.match(patch5Css, /#ledgerMonthSlot[\s\S]*?overflow:\s*hidden !important/);
 assert.match(patch5Css, /#ledgerDisplayMonth\s*\{[\s\S]*?display:\s*none !important/);
+assert.match(patch5Css, /\.opening-modal\[open\][\s\S]*?display:\s*flex !important/);
+assert.match(patch5Css, /\.opening-modal \.opening-row[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 126px !important/);
+assert.match(patch5Css, /\.opening-modal > \.modal-actions[\s\S]*?grid-template-columns:\s*\.8fr 1\.2fr !important/);
+assert.match(patch5Css, /\.settings-modal\.v0215-mobile-settings-focus \.settings-nav[\s\S]*?display:\s*none !important/);
+assert.match(patch5Css, /\.v0215-mobile-lock-dialog[\s\S]*?width:\s*min\(330px, calc\(100vw - 28px\)\) !important/);
 assert.match(patch5Css, /"save"[\s\S]*?"secondary"[\s\S]*?"message"/);
 assert.match(patch5Css, /\.v0215-mobile-save-message[\s\S]*?transition:\s*opacity 400ms ease/);
 assert.match(patch5Css, /\.quick-chip-list[\s\S]*?overflow-x:\s*auto !important/);
@@ -154,7 +160,14 @@ assert.match(patch5Build4Js, /switchV0215Build4MobilePage\('ledger'\)/);
 assert.match(patch5Build4Js, /rowTop: row\?\.getBoundingClientRect\(\)\.top/);
 assert.match(patch5Build4Js, /2500/);
 assert.match(patch5Build4Js, /mobileLedgerBalanceButton/);
-assert.match(patch5Build4Js, /data-mobile-ledger-action="opening"/);
+assert.match(patch5Build4Js, /window\.cyOpenMobileLedgerOpening = openV0215MobileLedgerOpening/);
+assert.match(patch5Build4Js, /els\.openingMonth\.value = month/);
+assert.match(patch5Build4Js, /await loadOpeningBalances\(\)/);
+assert.match(patch5Build4Js, /els\.openingDialog\.showModal\(\)/);
+assert.match(patch5Build4Js, /window\.cyOpenMobileLedgerLock = openV0215MobileLedgerLock/);
+assert.match(patch5Build4Js, /api\('\/api\/settings\/lock',[\s\S]*?method: 'PUT'/);
+assert.match(patch5Build4Js, /window\.cyOpenMobileSettingsPane = openV0215MobileSettingsPane/);
+assert.match(patch5Build4Js, /\['accounts', 'categories'\]\.includes\(tab\)/);
 assert.doesNotMatch(patch5Build4Js, /MutationObserver/);
 
 // Breakpoint ownership: Build 10 phone, Build 9 Tablet, manager/date patch work Desktop only.
@@ -176,6 +189,14 @@ assert.match(build8Js, /nav\.id = 'mobileMainNav'/);
 assert.match(build10Js, /trigger\.id = 'mobileAccountMenuButton'/);
 assert.match(build10Js, /menu\.id = 'mobileAccountMenu'/);
 assert.match(build10Js, /button\.id = 'mobileLedgerMoreButton'/);
+assert.match(build10Js, /data-mobile-ledger-action="accounts">帳戶設定/);
+assert.match(build10Js, /data-mobile-ledger-action="categories">科目設定/);
+assert.match(build10Js, /data-mobile-ledger-action="lock">月份鎖帳/);
+assert.match(build10Js, /data-mobile-ledger-action="export">匯出 Excel/);
+assert.doesNotMatch(build10Js, /data-mobile-ledger-action="opening">期初餘額/);
+assert.match(build10Js, /window\.cyOpenMobileSettingsPane\('accounts'\)/);
+assert.match(build10Js, /window\.cyOpenMobileSettingsPane\('categories'\)/);
+assert.match(build10Js, /window\.cyOpenMobileLedgerLock\(\)/);
 assert.match(build10Css, /\.v21-mobile-main-nav\.v21-mobile-bottom-nav\s*\{[\s\S]*?position:\s*fixed !important;[\s\S]*?bottom:\s*0;/);
 assert.match(build10Css, /\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*1fr !important;/);
 
@@ -203,4 +224,4 @@ assert.match(patch4Css, /@media \(max-width: 767px\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.5 Build 9 adaptive UI regression tests passed.');
+console.log('V0.21.5 Build 10 adaptive UI regression tests passed.');
