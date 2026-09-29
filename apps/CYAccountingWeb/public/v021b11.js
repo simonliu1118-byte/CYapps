@@ -109,7 +109,7 @@ function ensureV0215Stylesheet() {
   if (document.querySelector('link[href^="/v0215.css"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/v0215.css?v=0215b7';
+  link.href = '/v0215.css?v=0215b8';
   document.head.appendChild(link);
 }
 
@@ -124,7 +124,7 @@ function ensureV0215Build3Script() {
 function ensureV0215Build4Script() {
   if (document.querySelector('script[src^="/v0215b4.js"]')) return;
   const script = document.createElement('script');
-  script.src = '/v0215b4.js?v=0215b7';
+  script.src = '/v0215b4.js?v=0215b8';
   script.async = false;
   document.head.appendChild(script);
 }

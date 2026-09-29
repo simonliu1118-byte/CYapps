@@ -275,7 +275,7 @@ async function handleLogout(request, db) {
     await db.prepare('DELETE FROM web_sessions WHERE session_hash = ?').bind(hash).run();
   }
   return json({ ok: true }, 200, {
-    'set-cookie': `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`
+    'set-cookie': `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`
   });
 }
 
@@ -328,7 +328,8 @@ function cookieValue(request, name) {
 }
 
 function sessionCookie(token, maxAge) {
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
+  const expires = new Date(Date.now() + Number(maxAge || 0) * 1000).toUTCString();
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}; Expires=${expires}`;
 }
 
 function randomToken() {
