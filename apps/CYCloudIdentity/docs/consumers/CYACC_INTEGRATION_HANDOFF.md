@@ -196,7 +196,7 @@ That gap does not reopen the contract. CYACC development integration may continu
 Read in this order:
 
 1. `../../PROJECT_RULES.md`
-2. `../../CYAccountingWeb/CYID_CONSUMER_VERSION`
+2. `../../../CYAccountingWeb/CYID_CONSUMER_VERSION`
 3. `../CONSUMER_INTEGRATION_STANDARD.md`
 4. `../CONSUMER_CONTRACT_CHANGELOG.md`
 5. `../ROLE_AND_ACCESS_MODEL.md`
