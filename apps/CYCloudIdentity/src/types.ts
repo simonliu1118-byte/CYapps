@@ -11,17 +11,27 @@ export interface Env {
   RESEND_API_KEY?: string;
   OTP_PEPPER?: string;
   BOOTSTRAP_SECRET?: string;
+  CORE_ACCOUNT_APPLICATION_ID?: string;
+  ACCOUNT_PORTAL_URL?: string;
 }
 
-export type ApplicationRoleKey = "USER" | "ADMIN" | "SUPER_ADMIN";
+export type WorkspaceRole = "USER" | "ADMIN" | "SUPER_ADMIN";
+
+/** @deprecated Compatibility alias while existing consumers cut over to workspaceRole. */
+export type ApplicationRoleKey = WorkspaceRole;
 
 export interface IdentityPrincipal {
   workspaceId: string;
   employeeId: string;
   employeeNo: string;
   displayName: string;
+  workspaceRole: WorkspaceRole;
+  isIdentityAdmin: boolean;
+  emailVerified: boolean;
   isWorkspaceSuperAdmin: boolean;
+  /** @deprecated Legacy descriptive data. New authorization must not depend on Groups. */
   groupKeys: string[];
+  /** @deprecated Compatibility alias. Consumers should read workspaceRole. */
   applicationRoleKey?: ApplicationRoleKey;
   credentialVersion: number;
   employeeRevision: number;
