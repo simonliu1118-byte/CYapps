@@ -12,6 +12,7 @@ ensureV0211KeyboardScript();
 ensureV0212PatchScript();
 ensureV0214PatchScript();
 ensureV0215Stylesheet();
+ensureV0215Build3Script();
 
 document.addEventListener('DOMContentLoaded', () => {
   syncV21Build11Version();
@@ -107,8 +108,16 @@ function ensureV0215Stylesheet() {
   if (document.querySelector('link[href^="/v0215.css"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/v0215.css?v=0215b2';
+  link.href = '/v0215.css?v=0215b3';
   document.head.appendChild(link);
+}
+
+function ensureV0215Build3Script() {
+  if (document.querySelector('script[src="/v0215b3.js"]')) return;
+  const script = document.createElement('script');
+  script.src = '/v0215b3.js';
+  script.async = false;
+  document.head.appendChild(script);
 }
 
 function syncV21Build11Version() {
