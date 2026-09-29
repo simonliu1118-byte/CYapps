@@ -47,7 +47,7 @@ function json(env: Env, id: string, status: number, body: Record<string, JsonVal
   return new Response(JSON.stringify({
     ok: status >= 200 && status < 300,
     service: "cyinvoice-cloud",
-    cloudVersion: "0.8.4",
+    cloudVersion: "0.8.5",
     apiVersion: env.API_VERSION,
     environment: env.APP_ENV,
     requestId: id,

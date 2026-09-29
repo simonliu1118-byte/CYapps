@@ -44,9 +44,13 @@ public sealed record CloudDeviceJoinAttempt(string DeviceToken)
         $"cydev_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}");
 }
 
-public sealed record CloudPairingTicket(string Code, DateTimeOffset ExpiresAt);
+public sealed record CloudPairingTicket(string PairingId, string Code, DateTimeOffset ExpiresAt);
 public sealed record CloudWorkspacePreview(string WorkspaceId, string DisplayName);
-public sealed record CloudDirectJoinChallenge(CloudWorkspacePreview Workspace, CloudEmailChallenge Challenge);
+public sealed record CloudInvitationTicket(string InvitationId, DateTimeOffset ExpiresAt);
+public sealed record CloudJoinTicketStatus(string Status, string JoinedDeviceName, DateTimeOffset? JoinedAt);
+public sealed record CloudRecentJoinTicket(string Id, string Status, DateTimeOffset ExpiresAt,
+    string JoinedDeviceName);
+public sealed record CloudRecentJoinTickets(CloudRecentJoinTicket? Pairing, CloudRecentJoinTicket? Invitation);
 
 public sealed class CloudApiException(string code, string message, HttpStatusCode statusCode, int? retryAfterSeconds = null)
     : InvalidOperationException(message)
@@ -217,12 +221,13 @@ public sealed class CloudClient
         return ReadDeviceIdentity(document.RootElement, requireToken: false) with { DeviceToken = deviceToken };
     }
 
-    public async Task<CloudEmailChallenge> StartPairingAuthorizationAsync(CancellationToken cancellationToken = default)
+    public async Task<CloudEmailChallenge> StartPairingAuthorizationAsync(
+        string employeeNo, string password, CancellationToken cancellationToken = default)
     {
         using var document = await SendAsync(
             HttpMethod.Post,
             "v1/device-pairings/authorization-email",
-            new { },
+            new { employeeNo, password },
             true,
             null,
             cancellationToken);
@@ -230,8 +235,7 @@ public sealed class CloudClient
     }
 
     public async Task<CloudPairingTicket> CreatePairingAsync(
-        string emailChallengeId,
-        string emailOtp,
+        string emailChallengeId, string emailOtp, string employeeNo, string password,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(emailChallengeId))
@@ -242,7 +246,7 @@ public sealed class CloudClient
         using var document = await SendAsync(
             HttpMethod.Post,
             "v1/device-pairings",
-            new { emailChallengeId = emailChallengeId.Trim(), emailOtp },
+            new { emailChallengeId = emailChallengeId.Trim(), emailOtp, employeeNo, password },
             true,
             null,
             cancellationToken);
@@ -254,7 +258,7 @@ public sealed class CloudClient
         var expiresAtText = ReadRequiredString(pairing, "expiresAt");
         if (!DateTimeOffset.TryParse(expiresAtText, out var expiresAt))
             throw new InvalidDataException("Cloud pairing expiry is invalid.");
-        return new CloudPairingTicket(code, expiresAt);
+        return new CloudPairingTicket(ReadRequiredString(pairing, "pairingId"), code, expiresAt);
     }
 
     public async Task<CloudDeviceIdentity> ClaimPairingAsync(
@@ -296,31 +300,70 @@ public sealed class CloudClient
         return ReadWorkspacePreview(document.RootElement);
     }
 
-    public async Task<CloudDirectJoinChallenge> StartDirectJoinAsync(
-        string workspaceId, string employeeNo, string password, CancellationToken cancellationToken = default)
+    public async Task<CloudInvitationTicket> IssueInvitationAsync(
+        string employeeNo, string password, CancellationToken cancellationToken = default)
     {
-        using var document = await SendAsync(HttpMethod.Post, "v1/direct-join/authorize",
-            new { workspaceId, employeeNo, password }, false, null, cancellationToken);
-        var root = document.RootElement;
-        var workspace = ReadWorkspacePreview(root);
-        var challenge = root.GetProperty("challenge");
-        return new CloudDirectJoinChallenge(workspace, new CloudEmailChallenge(
-            ReadRequiredString(challenge, "challengeId"), ReadRequiredString(challenge, "maskedEmail"),
-            DateTimeOffset.Parse(ReadRequiredString(challenge, "expiresAt")),
-            DateTimeOffset.Parse(ReadRequiredString(challenge, "resendAfter"))));
+        using var document = await SendAsync(HttpMethod.Post, "v1/device-invitations",
+            new { employeeNo, password }, true, null, cancellationToken);
+        var invitation = document.RootElement.GetProperty("invitation");
+        return new CloudInvitationTicket(ReadRequiredString(invitation, "invitationId"),
+            DateTimeOffset.Parse(ReadRequiredString(invitation, "expiresAt")));
     }
 
-    public async Task<CloudDeviceIdentity> ClaimDirectJoinAsync(
-        string workspaceId, string employeeNo, string challengeId, string otp,
-        string deviceDisplayName, string clientVersion, CloudDeviceJoinAttempt attempt,
+    public async Task RevokeInvitationAsync(string invitationId, string employeeNo, string password,
         CancellationToken cancellationToken = default)
     {
+        using var document = await SendAsync(HttpMethod.Post, "v1/device-invitations/revoke",
+            new { invitationId, employeeNo, password }, true, null, cancellationToken);
+    }
+
+    public async Task<CloudWorkspacePreview> PreviewInvitationAsync(
+        string code, string employeeNo, string password, CancellationToken cancellationToken = default)
+    {
+        using var document = await SendAsync(HttpMethod.Post, "v1/device-invitations/preview",
+            new { code, employeeNo, password }, false, null, cancellationToken);
+        return ReadWorkspacePreview(document.RootElement);
+    }
+
+    public async Task<CloudDeviceIdentity> ClaimInvitationAsync(
+        string code, string employeeNo, string password, string deviceDisplayName,
+        string clientVersion, CloudDeviceJoinAttempt attempt, CancellationToken cancellationToken = default)
+    {
         if (!ValidDeviceToken(attempt.DeviceToken)) throw new ArgumentException("Device token is invalid.", nameof(attempt));
-        using var document = await SendAsync(HttpMethod.Post, "v1/direct-join/claim",
-            new { workspaceId, employeeNo, emailChallengeId = challengeId, emailOtp = otp,
-                  deviceDisplayName, clientVersion, deviceToken = attempt.DeviceToken },
+        using var document = await SendAsync(HttpMethod.Post, "v1/device-invitations/claim",
+            new { code, employeeNo, password, deviceDisplayName, clientVersion, deviceToken = attempt.DeviceToken },
             false, null, cancellationToken);
         return ReadDeviceIdentity(document.RootElement, requireToken: false) with { DeviceToken = attempt.DeviceToken };
+    }
+
+    public async Task<CloudJoinTicketStatus> GetJoinTicketStatusAsync(
+        string kind, string id, CancellationToken cancellationToken = default)
+    {
+        if (kind is not "device-pairings" and not "device-invitations")
+            throw new ArgumentException("Unknown join ticket kind.", nameof(kind));
+        using var document = await SendAsync(HttpMethod.Get, $"v1/{kind}/status/{Uri.EscapeDataString(id)}",
+            null, true, null, cancellationToken);
+        var ticket = document.RootElement.GetProperty("ticket");
+        var joinedAtText = ReadString(ticket, "joinedAt");
+        return new CloudJoinTicketStatus(ReadRequiredString(ticket, "status"),
+            ReadString(ticket, "joinedDeviceName"),
+            DateTimeOffset.TryParse(joinedAtText, out var joinedAt) ? joinedAt : null);
+    }
+
+    public async Task<CloudRecentJoinTickets> GetRecentJoinTicketsAsync(CancellationToken cancellationToken = default)
+    {
+        using var document = await SendAsync(HttpMethod.Get, "v1/device-join-tickets",
+            null, true, null, cancellationToken);
+        static CloudRecentJoinTicket? ReadTicket(JsonElement root, string name)
+        {
+            if (!root.TryGetProperty(name, out var ticket) || ticket.ValueKind == JsonValueKind.Null) return null;
+            return new CloudRecentJoinTicket(ReadRequiredString(ticket, "id"),
+                ReadRequiredString(ticket, "status"),
+                DateTimeOffset.Parse(ReadRequiredString(ticket, "expiresAt")),
+                ReadString(ticket, "joinedDeviceName"));
+        }
+        return new CloudRecentJoinTickets(ReadTicket(document.RootElement, "pairing"),
+            ReadTicket(document.RootElement, "invitation"));
     }
 
     private static CloudWorkspacePreview ReadWorkspacePreview(JsonElement root)

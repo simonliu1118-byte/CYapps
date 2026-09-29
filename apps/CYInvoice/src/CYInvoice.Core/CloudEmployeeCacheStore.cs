@@ -269,7 +269,7 @@ public sealed class CloudEmployeeCacheStore
                     employee_no TEXT NOT NULL UNIQUE,
                     name TEXT NOT NULL,
                     email TEXT NOT NULL,
-                    role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'EMPLOYEE')),
+                    role TEXT NOT NULL CHECK (role IN ('SUPER_ADMIN', 'ADMIN', 'USER')),
                     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
                     email_verified INTEGER NOT NULL CHECK (email_verified IN (0, 1)),
                     credential_verifier_enc TEXT NOT NULL,

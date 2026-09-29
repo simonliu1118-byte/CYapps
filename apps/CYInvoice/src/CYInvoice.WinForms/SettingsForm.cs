@@ -1,4 +1,5 @@
 using CYInvoice.Core;
+using CYInvoice.Core.Cloud;
 using CYInvoice.Core.Storage;
 
 namespace CYInvoice.WinForms;
@@ -17,6 +18,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox moPassword = UiControls.TextBox(200);
     private readonly Button cloudSettings = UiControls.StandardButton("雲端連線設定");
     private readonly Button deviceManagement = UiControls.StandardButton("裝置管理");
+    private readonly Button localReset = UiControls.StandardButton("重設本機資料");
     private readonly Button diagnostics = UiControls.StandardButton("系統診斷");
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
@@ -27,6 +29,7 @@ internal sealed class SettingsForm : Form
     private Label appKeyLabel = null!;
     private Label moPasswordLabel = null!;
     private BufferedFlowLayoutPanel actionButtons = null!;
+    private bool resetFlowBusy;
 
     public SettingsForm(LocalRepository repository)
     {
@@ -90,12 +93,16 @@ internal sealed class SettingsForm : Form
         cloudSettings.Margin = new Padding(0, 0, 4, 0);
         deviceManagement.Width = 92;
         deviceManagement.Margin = Padding.Empty;
+        localReset.Width = 112;
+        localReset.Margin = new Padding(4, 0, 0, 0);
         cloudSettings.Click += (_, _) => OpenCloudSettings();
-        deviceManagement.Click += (_, _) => OpenDeviceManagement();
+        deviceManagement.Click += async (_, _) => await OpenDeviceManagementAsync();
+        localReset.Click += async (_, _) => await BeginLocalResetAsync();
         modeChoices.Controls.Add(localMode);
         modeChoices.Controls.Add(cloudMode);
         modeChoices.Controls.Add(cloudSettings);
         modeChoices.Controls.Add(deviceManagement);
+        modeChoices.Controls.Add(localReset);
         modeGroup.Controls.Add(modeChoices);
 
         var environmentGroup = new GroupBox { Text = "使用環境", Dock = DockStyle.Fill };
@@ -215,7 +222,7 @@ internal sealed class SettingsForm : Form
         UpdateCloudControls();
     }
 
-    private void OpenDeviceManagement()
+    private async Task OpenDeviceManagementAsync()
     {
         try
         {
@@ -230,12 +237,35 @@ internal sealed class SettingsForm : Form
             if (string.IsNullOrWhiteSpace(token))
                 throw new InvalidOperationException("目前無法讀取這台電腦的 Cloud Device Token。");
 
-            using var form = new CloudDeviceManagementForm(settings.CloudBaseUrl, token, settings.CloudWorkspaceId);
+            using var form = new CloudDeviceManagementForm(settings.CloudBaseUrl, token);
             form.ShowDialog(this);
+            if (IsDisposed || Disposing || LocalResetApplication.IsPending) return;
+
+            var assessment = await LocalResetCoordinator.AssessBuiltInCloudAsync(repository);
+            if (assessment.Disposition != CloudExitDisposition.DeviceAlreadyRevoked) return;
+
+            MessageBox.Show(
+                this,
+                "目前這台電腦的 Device 已被撤銷。為避免留下無法再使用 Cloud 身分的半完成狀態，請完成本機重設；Cloud Workspace 與其他 Device 不會被刪除。",
+                "目前裝置已撤銷",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            if (!ConfirmDestructiveReset(cloudExit: true) || !ConfirmFinalReset())
+            {
+                MessageBox.Show(
+                    this,
+                    "本機資料目前仍完整保留，但這台 Device 已失效。在完成本機重設或重新加入 Workspace 前，不應繼續執行 Cloud 操作。",
+                    "雲端裝置已失效",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            LocalResetApplication.Schedule(new LocalResetExecutionRequest(LocalResetKind.BuiltInCloud));
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, error.Message, "無法開啟裝置管理", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, error.Message, "裝置管理狀態確認失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -298,12 +328,19 @@ internal sealed class SettingsForm : Form
 
     private void UpdateCloudControls()
     {
-        cloudSettings.Enabled = cloudMode.Checked;
+        cloudSettings.Visible = cloudMode.Checked;
+        deviceManagement.Visible = cloudMode.Checked;
+        localReset.Visible = localMode.Checked && settings.CloudMode == CloudModes.LocalOnly;
+        cloudSettings.Enabled = cloudMode.Checked && !resetFlowBusy;
         deviceManagement.Enabled = cloudMode.Checked
+            && !resetFlowBusy
             && settings.CloudMode == CloudModes.CloudPreferred
             && settings.CloudEmployeeAuthorityReady
             && HasCloudIdentity(settings)
             && !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
+        localReset.Enabled = localReset.Visible && !resetFlowBusy;
+        save.Enabled = !resetFlowBusy;
+        cancel.Enabled = !resetFlowBusy;
     }
 
     private void UpdateEnvironmentFields()
@@ -313,12 +350,20 @@ internal sealed class SettingsForm : Form
         if (appKey.ReadOnly != locked) UiControls.SetTextBoxLocked(appKey, locked);
     }
 
-    private void SaveClicked(object? sender, EventArgs eventArgs)
+    private async void SaveClicked(object? sender, EventArgs eventArgs)
     {
         try
         {
+            if (resetFlowBusy) return;
             if (!localMode.Checked && !cloudMode.Checked)
                 throw new InvalidOperationException("請選擇單機版或雲端版。");
+
+            if (localMode.Checked && settings.CloudMode != CloudModes.LocalOnly)
+            {
+                await BeginCloudToLocalResetAsync();
+                return;
+            }
+
             if (cloudMode.Checked && string.IsNullOrWhiteSpace(settings.CloudBaseUrl))
                 throw new InvalidOperationException("請先按「雲端連線設定」完成 Cloud API 連線設定。");
             if (cloudMode.Checked && !HasCloudIdentity(settings))
@@ -348,6 +393,117 @@ internal sealed class SettingsForm : Form
             MessageBox.Show(this, error.Message, "無法儲存設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
+
+    private async Task BeginCloudToLocalResetAsync()
+    {
+        if (!ConfirmDestructiveReset(cloudExit: true)) return;
+        await RunResetPreflightAsync(async () =>
+        {
+            var assessment = await LocalResetCoordinator.AssessBuiltInCloudAsync(repository);
+            if (assessment.Disposition == CloudExitDisposition.LastActiveDevice)
+            {
+                MessageBox.Show(
+                    this,
+                    "這是 Built-in Cloud Workspace 最後一台使用中的裝置，目前不能直接切回單機版。\n\n" +
+                    "若要保留 Workspace：請先讓另一台電腦加入成為可信任 Device。\n\n" +
+                    "若不再使用 Workspace：請到中央 Workspace 管理端手動停用 Workspace，再回來重試。\n\n" +
+                    "CYInvoice 桌面程式不提供 Workspace 停用或刪除功能。",
+                    "最後一台雲端裝置",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            var employeeNo = string.Empty;
+            var password = string.Empty;
+            if (assessment.Disposition == CloudExitDisposition.ReadyForRevoke)
+            {
+                using var credentials = new CloudDeviceRevokeAuthenticationForm(
+                    assessment.DeviceDisplayName.Length == 0 ? "目前這台電腦" : assessment.DeviceDisplayName,
+                    currentDevice: true);
+                if (credentials.ShowDialog(this) != DialogResult.OK) return;
+                employeeNo = credentials.EmployeeNo;
+                password = credentials.Password;
+            }
+
+            if (!ConfirmFinalReset()) return;
+            LocalResetApplication.Schedule(new LocalResetExecutionRequest(
+                LocalResetKind.BuiltInCloud,
+                employeeNo,
+                password));
+        });
+    }
+
+    private async Task BeginLocalResetAsync()
+    {
+        if (settings.CloudMode != CloudModes.LocalOnly || !localMode.Checked) return;
+        if (!ConfirmDestructiveReset(cloudExit: false)) return;
+        if (!ConfirmFinalReset()) return;
+        await Task.Yield();
+        LocalResetApplication.Schedule(new LocalResetExecutionRequest(LocalResetKind.Local));
+    }
+
+    private async Task RunResetPreflightAsync(Func<Task> action)
+    {
+        if (resetFlowBusy) return;
+        resetFlowBusy = true;
+        UseWaitCursor = true;
+        UpdateCloudControls();
+        try
+        {
+            await action();
+        }
+        catch (CloudApiException error)
+        {
+            MessageBox.Show(
+                this,
+                $"目前無法向 Cloud 確認退出條件。\n\n{error.Message}\n\n本機資料沒有變更。",
+                "無法切回單機版",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(
+                this,
+                $"目前無法安全確認雲端狀態。\n\n{error.Message}\n\n本機資料沒有變更。",
+                "無法切回單機版",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            resetFlowBusy = false;
+            if (!IsDisposed && !Disposing)
+            {
+                UseWaitCursor = false;
+                UpdateCloudControls();
+            }
+        }
+    }
+
+    private bool ConfirmDestructiveReset(bool cloudExit)
+    {
+        var message = cloudExit
+            ? "切回單機版不是單純切換模式。執行後會永久刪除這台電腦的所有 CYInvoice 本機資料，包括發票與明細、本機／雲端員工快取、程式設定、PDF 與預覽快取。\n\nCloud Workspace、其他 Device 與中央資料不會被刪除。\n\n是否繼續？"
+            : "重設單機版會永久刪除這台電腦的所有 CYInvoice 本機資料，包括發票與明細、員工帳號、程式設定、PDF 與預覽快取。\n\n完成後會回到首次使用狀態。\n\n是否繼續？";
+        return MessageBox.Show(
+            this,
+            message,
+            cloudExit ? "確認切回單機版" : "確認重設本機資料",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+    }
+
+    private bool ConfirmFinalReset() =>
+        MessageBox.Show(
+            this,
+            "最後確認：本機資料刪除後無法復原。CYInvoice 會先完整關閉，再執行雲端退出／本機清除；完成後重新開啟並回到首次使用。\n\n確定立即執行？",
+            "最後確認",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2) == DialogResult.Yes;
 
     private static bool HasCloudIdentity(Settings value) =>
         value.CloudWorkspaceId.Length != 0
@@ -414,26 +570,28 @@ internal sealed class SettingsForm : Form
             && settings.CloudEmployeeAuthorityReady
             && HasCloudIdentity(settings)
             && !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
+        var expectedLocalResetVisible = localMode.Checked && settings.CloudMode == CloudModes.LocalOnly;
         if (string.IsNullOrEmpty(toolTip.GetToolTip(moPasswordLabel)) ||
             appKeyLabel.PreferredWidth > appKeyLabel.Width ||
             cloudSettings.PreferredSize.Width > cloudSettings.Width ||
             deviceManagement.PreferredSize.Width > deviceManagement.Width ||
+            localReset.PreferredSize.Width > localReset.Width ||
             diagnostics.Text != "系統診斷" || cloudSettings.Text != "雲端連線設定" ||
-            deviceManagement.Text != "裝置管理" ||
+            deviceManagement.Text != "裝置管理" || localReset.Text != "重設本機資料" ||
             localMode.Text != "單機版" || cloudMode.Text != "雲端版" ||
+            cloudSettings.Visible != cloudMode.Checked || deviceManagement.Visible != cloudMode.Checked ||
+            localReset.Visible != expectedLocalResetVisible ||
             cloudSettings.Enabled != cloudMode.Checked ||
             deviceManagement.Enabled != expectedDeviceManagementEnabled ||
             actionButtons.Controls.Count != 3 ||
             Math.Abs(environmentX - platformX) > 1 ||
             actionButtons.Controls.Cast<Control>().Any(control => control.Bottom > actionButtons.ClientSize.Height) ||
-            cloudSettings.Bottom > modeChoices.ClientSize.Height ||
-            deviceManagement.Bottom > modeChoices.ClientSize.Height ||
             appKeyLabel.Bottom > environmentLayout.ClientSize.Height - environmentLayout.Padding.Bottom ||
             appKey.Bottom > environmentLayout.ClientSize.Height - environmentLayout.Padding.Bottom ||
             moPassword.Bottom > platformLayout.ClientSize.Height - platformLayout.Padding.Bottom ||
             Math.Abs((actionButtons.Controls.Cast<Control>().Min(control => control.Left) +
                 actionButtons.Controls.Cast<Control>().Max(control => control.Right)) / 2 - actionButtons.ClientSize.Width / 2) > 2)
-            throw new InvalidOperationException("設定動作、雲端裝置管理、運作模式、MO店+ 對齊、提示或 App Key 標籤配置不正確");
+            throw new InvalidOperationException("設定動作、雲端裝置管理、本機重設、運作模式、MO店+ 對齊或提示配置不正確");
         var logicalWidth = ClientSize.Width * 96D / DeviceDpi;
         var logicalHeight = ClientSize.Height * 96D / DeviceDpi;
         if (logicalWidth > 430 || logicalHeight > 390)

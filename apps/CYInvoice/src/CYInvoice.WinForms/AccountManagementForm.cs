@@ -599,7 +599,7 @@ internal sealed class AccountManagementForm : Form
     {
         var target = SelectedAccount;
         if (target is null || !role.Enabled) return;
-        var nextRole = target.Role == EmployeeRoles.Admin ? EmployeeRoles.Employee : EmployeeRoles.Admin;
+        var nextRole = target.Role == EmployeeRoles.Admin ? EmployeeRoles.User : EmployeeRoles.Admin;
         var action = nextRole == EmployeeRoles.Admin ? "設為管理員" : "取消管理員權限";
         if (MessageBox.Show(this, $"確定要將 {target.EmployeeNo} {target.Name} {action}?", "帳號管理",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
@@ -618,7 +618,7 @@ internal sealed class AccountManagementForm : Form
     private async Task ToggleCloudRoleAsync()
     {
         if (repository is null || SelectedAccount is not { } target || !role.Enabled) return;
-        var nextRole = target.Role == EmployeeRoles.Admin ? EmployeeRoles.Employee : EmployeeRoles.Admin;
+        var nextRole = target.Role == EmployeeRoles.Admin ? EmployeeRoles.User : EmployeeRoles.Admin;
         var action = nextRole == EmployeeRoles.Admin ? "設為管理員" : "取消管理員權限";
         if (MessageBox.Show(this, $"確定要將 {target.EmployeeNo} {target.Name} {action}?", "帳號管理",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
