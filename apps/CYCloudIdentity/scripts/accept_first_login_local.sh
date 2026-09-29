@@ -193,6 +193,7 @@ python3 - "$STATE_DIR/edit.json" <<'PY'
 import json, pathlib, sys
 p = json.loads(pathlib.Path(sys.argv[1]).read_text())
 assert p['employee']['email'] == 'edit-new@example.test'
+assert p['emailVerificationDelivery']['sent'] is False
 assert p['activationDelivery']['sent'] is False
 PY
 EDIT_OLD_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}'   -X POST "http://127.0.0.1:${PORT}/v1/identity/login"   -H 'content-type: application/json'   --data '{"workspaceId":"workspace-first-login","applicationId":"APP_TEST_LOGIN","employeeNo":"9005","password":"TempP4ss"}')"
