@@ -1,5 +1,12 @@
 # CYApps Governance Changelog
 
+## 2.3.20 — 2026/09/30
+
+- CYID consumer contract 增加跨 repository 同步治理：`CONSUMER_SYNC_MANIFEST.json` 明列外部 consumer 必須鏡像的 7 個 canonical artifacts（consumer current/minimum version、shared standard、consumer changelog、Auth、Role/Access、Architecture）。
+- Cross-repository consumer 必須保存 read-only mirror、提供可重現 sync 流程，並在 governance/CI 與 deployment 前逐檔 byte-compare CYID `main`；mirror 漂移時不得繼續部署。
+- 同一 `CYapps` repository 內的 consumer（例如 CYAccountingWeb／未來 CYInvoice）直接讀 canonical CYID files，不建立無意義重複副本。
+- Consumer Contract 升為 `1.0.1`、Minimum Compatible 維持 `1.0.0`；contract version 只表示 consumer 語意相容性，documentation-only byte 變更仍透過 manifest mirror 同步，不必為每個 typo 人工升 contract version。
+- Governance Check 驗證 sync manifest schema、source/target path safety、canonical membership 與 source-file existence，避免漏檔或錯誤 mirror package。
 ## 2.3.19 — 2026/09/30
 
 - 建立 CYCloud Identity 唯一 shared consumer technical standard：`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`。所有接入 CYID 的 App 必須以該 standard 與 CYID canonical contracts 為共同 Identity contract；consumer-specific handoff 只可保存 app 差異／遷移／例外／驗收，不得複製共同規範成第二套 authority。

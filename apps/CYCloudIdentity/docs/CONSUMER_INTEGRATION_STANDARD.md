@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.0.0`
+> **Contract version:** `1.0.1`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -56,6 +56,20 @@ Every CYID PR must declare one of:
 For `BACKWARD_COMPATIBLE` and `CONSUMER_UPDATE_REQUIRED`, update this standard, `CONSUMER_CONTRACT_VERSION`, and `CONSUMER_CONTRACT_CHANGELOG.md` in the same work item.
 
 A breaking provider deployment must not strand an existing production consumer outside the supported version window. Keep a compatibility path during migration, or coordinate the affected consumer updates before raising `CONSUMER_MIN_COMPATIBLE_VERSION`.
+
+### Cross-repository contract synchronization
+
+CYID publishes `CONSUMER_SYNC_MANIFEST.json` as the machine-readable list of shared contract artifacts that must be mirrored by consumers living in another repository.
+
+Cross-repository consumers must:
+
+- keep a synchronized mirror of every manifest-listed file under their governed contract-mirror directory;
+- provide a repeatable sync command/script that refreshes those files from CYID `main`;
+- validate mirror bytes against CYID `main` in governance/CI and before development/production deployment;
+- treat the mirror as a read-only synchronized copy, never as a new authority;
+- update the mirror whenever any manifest-listed source file changes, even when `CONSUMER_CONTRACT_VERSION` does not change.
+
+Consumers in the same repository as CYID must read the canonical files directly and must not create a redundant mirror.
 
 ## 3. Identity authority boundary
 
@@ -347,13 +361,14 @@ When an application begins CYID integration:
 1. read the current `CONSUMER_INTEGRATION_STANDARD.md`;
 2. read the current consumer contract/version window;
 3. add `CYID_CONSUMER_VERSION` to the consumer project/repository;
-4. implement against canonical CYID endpoints/fields;
-5. keep domain authorization local;
-6. add automated source/session/error acceptance;
-7. deploy to development first;
-8. run app-specific browser/device acceptance;
-9. record any app-specific permanent exception only in that app's `PROJECT_RULES.md`;
-10. never copy shared CYID semantics into a handoff as an independent authority.
+4. if the consumer is in another repository, synchronize the full `CONSUMER_SYNC_MANIFEST.json` package and enable exact mirror validation;
+5. implement against canonical CYID endpoints/fields;
+6. keep domain authorization local;
+7. add automated source/session/error acceptance;
+8. deploy to development first;
+9. run app-specific browser/device acceptance;
+10. record any app-specific permanent exception only in that app's `PROJECT_RULES.md`;
+11. never copy shared CYID semantics into a handoff as an independent authority.
 
 When CYID updates the consumer contract:
 
@@ -391,6 +406,7 @@ Shared technical consumer contract:
 - this document;
 - `AUTH_CONTRACT.md`;
 - `ROLE_AND_ACCESS_MODEL.md`;
-- `ARCHITECTURE.md`.
+- `ARCHITECTURE.md`;
+- `../CONSUMER_SYNC_MANIFEST.json` for cross-repository mirror membership.
 
 Consumer-specific handoffs contain only migration/app differences and may never override the documents above.

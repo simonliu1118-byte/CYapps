@@ -112,6 +112,8 @@ OTP remains a shared engine for bootstrap, password recovery, activated Email ve
 ## 11. Source map
 
 - permanent product rules: `../PROJECT_RULES.md`
+- shared consumer integration standard: `CONSUMER_INTEGRATION_STANDARD.md`
+- cross-repository mirror membership: `../CONSUMER_SYNC_MANIFEST.json`
 - role/access product model: `ROLE_AND_ACCESS_MODEL.md`
 - executable consumer auth contract: `AUTH_CONTRACT.md`
 - management UI contract: `UI_ACCESS.md`

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "sourceRepository": "simonliu1118-byte/CYapps",
+  "sourceBranch": "main",
+  "sourceRoot": "apps/CYCloudIdentity",
+  "consumerMirrorRoot": "docs/contracts/cyid",
+  "files": [
+    {
+      "source": "CONSUMER_CONTRACT_VERSION",
+      "target": "CONSUMER_CONTRACT_VERSION"
+    },
+    {
+      "source": "CONSUMER_MIN_COMPATIBLE_VERSION",
+      "target": "CONSUMER_MIN_COMPATIBLE_VERSION"
+    },
+    {
+      "source": "docs/CONSUMER_INTEGRATION_STANDARD.md",
+      "target": "CONSUMER_INTEGRATION_STANDARD.md"
+    },
+    {
+      "source": "docs/CONSUMER_CONTRACT_CHANGELOG.md",
+      "target": "CONSUMER_CONTRACT_CHANGELOG.md"
+    },
+    {
+      "source": "docs/AUTH_CONTRACT.md",
+      "target": "AUTH_CONTRACT.md"
+    },
+    {
+      "source": "docs/ROLE_AND_ACCESS_MODEL.md",
+      "target": "ROLE_AND_ACCESS_MODEL.md"
+    },
+    {
+      "source": "docs/ARCHITECTURE.md",
+      "target": "ARCHITECTURE.md"
+    }
+  ]
+}

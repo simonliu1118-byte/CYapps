@@ -31,7 +31,7 @@ jobs:
           set -euo pipefail
 
           python3 - <<'PY'
-          import pathlib, re, sys
+          import json, pathlib, re, sys
 
           allowed = [
               re.compile(r'^REPOSITORY_RULES\.md$'),
@@ -67,10 +67,68 @@ jobs:
           minimum_path = provider_root / 'CONSUMER_MIN_COMPATIBLE_VERSION'
           standard_path = provider_root / 'docs/CONSUMER_INTEGRATION_STANDARD.md'
           changelog_path = provider_root / 'docs/CONSUMER_CONTRACT_CHANGELOG.md'
-          for p in [current_path, minimum_path, standard_path, changelog_path]:
+          manifest_path = provider_root / 'CONSUMER_SYNC_MANIFEST.json'
+          for p in [current_path, minimum_path, standard_path, changelog_path, manifest_path]:
               if not p.is_file():
                   print(f'ERROR: missing CYID consumer contract file: {p.as_posix()}')
                   sys.exit(1)
+
+          try:
+              manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          except Exception as exc:
+              print(f'ERROR: invalid CYID consumer sync manifest: {exc}')
+              sys.exit(1)
+          if manifest.get('schemaVersion') != 1:
+              print('ERROR: CYID consumer sync manifest schemaVersion must be 1')
+              sys.exit(1)
+          if manifest.get('sourceRepository') != 'simonliu1118-byte/CYapps' or manifest.get('sourceBranch') != 'main':
+              print('ERROR: CYID consumer sync manifest source repository/branch mismatch')
+              sys.exit(1)
+          if manifest.get('sourceRoot') != 'apps/CYCloudIdentity' or manifest.get('consumerMirrorRoot') != 'docs/contracts/cyid':
+              print('ERROR: CYID consumer sync manifest roots mismatch')
+              sys.exit(1)
+
+          expected_sync_sources = {
+              'CONSUMER_CONTRACT_VERSION',
+              'CONSUMER_MIN_COMPATIBLE_VERSION',
+              'docs/CONSUMER_INTEGRATION_STANDARD.md',
+              'docs/CONSUMER_CONTRACT_CHANGELOG.md',
+              'docs/AUTH_CONTRACT.md',
+              'docs/ROLE_AND_ACCESS_MODEL.md',
+              'docs/ARCHITECTURE.md',
+          }
+          entries = manifest.get('files')
+          if not isinstance(entries, list) or not entries:
+              print('ERROR: CYID consumer sync manifest files must be a non-empty list')
+              sys.exit(1)
+          sources = set()
+          targets = set()
+          for entry in entries:
+              if not isinstance(entry, dict):
+                  print('ERROR: CYID consumer sync manifest entries must be objects')
+                  sys.exit(1)
+              source = entry.get('source')
+              target = entry.get('target')
+              if not isinstance(source, str) or not isinstance(target, str):
+                  print('ERROR: CYID consumer sync manifest source/target must be strings')
+                  sys.exit(1)
+              if source.startswith('/') or '..' in pathlib.PurePosixPath(source).parts:
+                  print(f'ERROR: unsafe CYID sync source path: {source}')
+                  sys.exit(1)
+              if target.startswith('/') or '..' in pathlib.PurePosixPath(target).parts:
+                  print(f'ERROR: unsafe CYID sync target path: {target}')
+                  sys.exit(1)
+              if source in sources or target in targets:
+                  print(f'ERROR: duplicate CYID sync manifest entry: {source} -> {target}')
+                  sys.exit(1)
+              sources.add(source)
+              targets.add(target)
+              if not (provider_root / source).is_file():
+                  print(f'ERROR: CYID sync source does not exist: {source}')
+                  sys.exit(1)
+          if sources != expected_sync_sources:
+              print(f'ERROR: CYID sync manifest membership mismatch: {sorted(sources)}')
+              sys.exit(1)
 
           def semver(text: str):
               value = text.strip()

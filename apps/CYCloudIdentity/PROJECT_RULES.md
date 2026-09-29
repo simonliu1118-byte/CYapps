@@ -84,6 +84,8 @@
 - `BACKWARD_COMPATIBLE` 變更不得使目前最低相容版本失效；consumer 可在支援版本窗內逐步升級。
 - `CONSUMER_UPDATE_REQUIRED` 變更必須先保留可讓既有正式 consumer 運作的 compatibility path，或完成協調 migration；在受影響 consumer 尚未更新前，不得先提高最低相容版本並部署會讓 production consumer 失效的 provider。
 - Consumer-specific handoff 只保存 app 現況差異、migration plan、app-specific例外與 acceptance，不保存 shared Role / Session / App Access / first-login / recovery 規格副本。
+- 跨 repository consumer 必須依 `CONSUMER_SYNC_MANIFEST.json` 保存 shared contract 的同步鏡像，提供可重現 sync 流程，並在 governance/CI 與 deployment 前逐檔驗證與 CYID `main` canonical bytes 一致；鏡像只讀、不形成新 authority。同一 repository 內 consumer 直接讀 canonical files，不另建重複鏡像。
+- Manifest-listed 文件即使只是 documentation-only 修正、未推進 consumer contract version，跨 repo mirror 仍必須同步；consumer contract version 只表示相容語意，不取代文件同步。
 - CY Web 是第一個 Shared Identity consumer 與核心帳號管理入口。
 - CYAccountingWeb（CYACCweb）與 CYInvoice 採同一 CYID consumer standard，但實際 consumer migration 在各自工作線執行；本專案不直接修改其業務 runtime。
 - CYInvoice-specific Device pairing、Device Token、Local→Cloud transition 與 Windows offline credential cache 保留在 CYInvoice 工作線，不反向升格為 CYID 共通規則。
