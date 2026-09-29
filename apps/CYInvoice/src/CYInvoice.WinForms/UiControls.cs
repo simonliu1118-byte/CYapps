@@ -157,6 +157,7 @@ internal static class UiControls
     {
         if (enterNavigationInstalled) return;
         Application.AddMessageFilter(new EnterNavigationMessageFilter());
+        UiConsistencyManager.Install();
         enterNavigationInstalled = true;
     }
 
@@ -185,7 +186,8 @@ internal static class UiControls
     public static Button StandardButton(string text)
     {
         if (text == "帳戶管理") text = "帳號管理";
-        var button = new NoFocusCueButton
+        if (IsDangerText(text)) return new ThemedDangerButton(text);
+        return new NoFocusCueButton
         {
             Text = text,
             Width = StandardButtonWidth,
@@ -194,34 +196,11 @@ internal static class UiControls
             AutoSize = false,
             UseVisualStyleBackColor = true,
         };
-        if (IsDangerText(text)) ApplyDangerButtonTheme(button);
-        return button;
     }
 
-    public static Button DangerButton(string text)
-    {
-        var button = new NoFocusCueButton
-        {
-            Text = text,
-            Width = StandardButtonWidth,
-            Height = StandardButtonHeight,
-            Margin = new Padding(6, 2, 6, 2),
-            AutoSize = false,
-            UseVisualStyleBackColor = true,
-        };
-        ApplyDangerButtonTheme(button);
-        return button;
-    }
+    public static Button DangerButton(string text) => new ThemedDangerButton(text);
 
     private static bool IsDangerText(string text) => text is "作廢" or "確認作廢" or "確認送出作廢";
-
-    private static void ApplyDangerButtonTheme(Button button)
-    {
-        button.UseVisualStyleBackColor = false;
-        button.FlatStyle = FlatStyle.Standard;
-        button.BackColor = Color.FromArgb(183, 28, 28);
-        button.ForeColor = Color.White;
-    }
 
     public static Button ImportButton(string text, ImportBrand brand) => new ImportBrandButton(text, brand);
 
@@ -265,7 +244,7 @@ internal static class UiControls
             ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single, ColumnHeadersHeight = 28,
             ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
             EnableHeadersVisualStyles = false, GridColor = Color.FromArgb(226, 226, 226), RowHeadersVisible = false,
-            ScrollBars = ScrollBars.Vertical,
+            ScrollBars = ScrollBars.Vertical, ShowCellToolTips = true,
         };
         grid.RowTemplate.Height = 27;
         grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(246, 246, 246);
