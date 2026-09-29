@@ -35,7 +35,7 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.3');
-assert.equal(build, '1');
+assert.equal(build, '2');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
@@ -98,4 +98,4 @@ assert.match(patchJs, /installV0211ConfirmInterceptors\(\)/);
 assert.match(v20Css, /@media \(max-width: 767px\)[\s\S]*?\.ledger-card table,[\s\S]*?display:\s*block;/);
 assert.match(v201Css, /tbody > tr:not\(\.account-group-row\)\s*\{[\s\S]*?display:\s*grid;/);
 
-console.log('V0.21.3 Build 1 adaptive UI regression tests passed.');
+console.log('V0.21.3 Build 2 adaptive UI regression tests passed.');
