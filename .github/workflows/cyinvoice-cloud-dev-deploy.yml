@@ -1,0 +1,157 @@
+name: CYInvoice Development Cloud Deploy
+
+on:
+  push:
+    branches:
+      - cyinvoice/cloud-dev-deploy
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cyinvoice-development-cloud-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Migrate and deploy development Cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: development
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/CYInvoice/cloud
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Verify development credentials are available
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "The development environment is missing Cloudflare credentials."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify required development runtime secret names
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          secret_file="$RUNNER_TEMP/cyinvoice-cloud-secret-names.json"
+          npx wrangler secret list --format json >"$secret_file"
+
+          node - "$secret_file" <<'NODE'
+          const fs = require('node:fs');
+          const configured = new Set(
+            JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).map(secret => secret.name)
+          );
+          const required = ['BOOTSTRAP_KEY', 'OTP_PEPPER', 'BREVO_API_KEY', 'EMAIL_FROM'];
+          const missing = required.filter(name => !configured.has(name));
+          if (missing.length !== 0) {
+            throw new Error(`Missing required development runtime secret names: ${missing.join(', ')}`);
+          }
+          console.log('All required development runtime secret names are configured.');
+          NODE
+
+      - name: Validate source and Worker bundle
+        run: |
+          npm run check
+          npm test
+          npm run deploy:dry-run
+
+      - name: Capture D1 restore bookmark
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler d1 time-travel info DB
+
+      - name: Audit development state before migration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Unapplied migrations before deployment:"
+          npx wrangler d1 migrations list DB --remote
+          npx wrangler d1 execute DB --remote --command \
+            "SELECT (SELECT COUNT(*) FROM workspaces) AS workspaces, (SELECT COUNT(*) FROM devices) AS devices, (SELECT COUNT(*) FROM cloud_employees) AS employees, (SELECT COUNT(*) FROM device_pairing_codes) AS pairings;"
+          npx wrangler d1 execute DB --remote --command \
+            "SELECT status, COUNT(*) AS count FROM devices GROUP BY status ORDER BY status; SELECT role, COUNT(*) AS count FROM cloud_employees GROUP BY role ORDER BY role;"
+
+      - name: Apply canonical remote D1 migrations
+        env:
+          CI: 'true'
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 migrations apply DB --remote
+          echo "Unapplied migrations after deployment:"
+          npx wrangler d1 migrations list DB --remote
+
+      - name: Audit development state after migration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler d1 execute DB --remote --command \
+            "SELECT (SELECT COUNT(*) FROM workspaces) AS workspaces, (SELECT COUNT(*) FROM devices) AS devices, (SELECT COUNT(*) FROM cloud_employees) AS employees, (SELECT COUNT(*) FROM device_pairing_codes) AS pairings;"
+          npx wrangler d1 execute DB --remote --command \
+            "SELECT status, COUNT(*) AS count FROM devices GROUP BY status ORDER BY status; SELECT role, COUNT(*) AS count FROM cloud_employees GROUP BY role ORDER BY role; PRAGMA foreign_key_check;"
+
+      - name: Deploy development Worker and verify health contract
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          deploy_log="$RUNNER_TEMP/cyinvoice-cloud-deploy.log"
+          if ! npx wrangler deploy >"$deploy_log" 2>&1; then
+            sed -E 's#https://[^[:space:]]+\.workers\.dev#<worker-url>#g' "$deploy_log"
+            exit 1
+          fi
+
+          worker_url="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' "$deploy_log" | tail -n 1)"
+          if [[ -z "$worker_url" ]]; then
+            echo "Worker deployment completed, but its health URL could not be determined."
+            exit 1
+          fi
+
+          health_file="$RUNNER_TEMP/cyinvoice-cloud-health.json"
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 \
+            "$worker_url/v1/health" >"$health_file"
+
+          node - "$health_file" <<'NODE'
+          const fs = require('node:fs');
+          const health = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const capabilities = new Set(Array.isArray(health.capabilities) ? health.capabilities : []);
+
+          if (health.ok !== true || health.storage !== 'ok') {
+            throw new Error('Development Worker health or storage check failed.');
+          }
+          if (health.cloudVersion !== '0.8.8') {
+            throw new Error(`Expected Cloud 0.8.8, got ${health.cloudVersion ?? 'unknown'}.`);
+          }
+          if (String(health.apiVersion) !== '1') {
+            throw new Error(`Expected API 1, got ${health.apiVersion ?? 'unknown'}.`);
+          }
+          if (String(health.schemaVersion) !== '8') {
+            throw new Error(`Expected API-1 compatibility schema marker 8, got ${health.schemaVersion ?? 'unknown'}.`);
+          }
+          if (String(health.storageSchemaVersion) !== '11') {
+            throw new Error(`Expected storage Schema 11, got ${health.storageSchemaVersion ?? 'unknown'}.`);
+          }
+          for (const required of ['device-revoke-v1', 'device-self-status-v1']) {
+            if (!capabilities.has(required)) throw new Error(`Missing required capability: ${required}.`);
+          }
+
+          console.log(`Verified development Cloud ${health.cloudVersion}, API ${health.apiVersion}, compatibility Schema ${health.schemaVersion}, storage Schema ${health.storageSchemaVersion}, storage ${health.storage}.`);
+          NODE
