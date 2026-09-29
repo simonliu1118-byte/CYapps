@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current formal baseline: **V0.21.5 Build 1**（2026-09-30）
+> Current formal baseline: **V0.21.5 Build 2**（2026-09-30）
 >
 > Current continuity handoff: [`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)
 
@@ -113,6 +113,7 @@ CYAccountingWeb 自己的 D1 建立本系統 web session
 - **V0.21.4 操作回饋改善**：帳本移轉完成後顯示明顯完成視窗；記帳資料餘額可查看該筆後各帳戶餘額；預設帳戶與常用科目改為先更新畫面、儲存失敗再還原；
 - **V0.21.4 Build 1 recovery**：V0.21.5 手機版故障回退後，暫時停用 HTML/JS 瀏覽器快取並替登入／主 overlay script 加 recovery cache key；登入成功後先驗證 Web session，再重新載入頁面，避免舊前端造成假性登入失敗；
 - **V0.21.5 Build 1 Mobile safe retry**：重新實作手機四列兩欄新增記帳與單列看帳；改採既有 render output + mobile-only CSS，不使用 V0.21.5 Build 0 的自我重畫 MutationObserver；帳戶名稱依字數拆成上下兩行，手機餘額浮窗只顯示各帳戶；
+- **V0.21.5 Build 2 Mobile layout correction**：手機新增記帳改為一列一件事並限制在單一 viewport 內；收入／支出使用整個記帳區綠／紅外框；看帳完整清除舊卡片式 `grid-row` 定位，回復真正一筆一列的固定欄位清單；
 - **V0.20.0 RWD / Adaptive UI Phase 1**：建立 Desktop / Tablet / Mobile presentation 分層；
 - **V0.20.1 Mobile refinement**：收斂交易卡片資訊層級、inline edit 可視性、Header／搜尋／設定操作密度與窄手機 presentation；
 - **V0.21.0 Desktop Business UI**：Desktop `>=1024px` 改為現代、簡潔的商務 Web presentation；
