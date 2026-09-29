@@ -1,5 +1,5 @@
-/* V0.21.5 Build 3 - mobile visual refinement + swipe actions.
-   Mobile only. No DOM observer or automatic row re-render loop. */
+/* V0.21.5 Build 4 - mobile edit flow, compact ledger toolbar/statistics/search.
+   Mobile only. Swipe remains delegated; no row-repaint observer is introduced. */
 @media (max-width: 767px) {
   /* ===== Entry page ===== */
   .entry-card {
@@ -15,7 +15,8 @@
       "summary"
       "quicksummary"
       "amount"
-      "save" !important;
+      "save"
+      "message" !important;
     align-content: start !important;
     gap: 6px !important;
     width: 100% !important;
@@ -31,21 +32,13 @@
   }
 
   .entry-card.entry-income {
-    background:
-      linear-gradient(to right, rgba(86, 176, 113, .25) 0%, rgba(86, 176, 113, .10) 8%, rgba(86, 176, 113, 0) 20%),
-      linear-gradient(to left, rgba(86, 176, 113, .25) 0%, rgba(86, 176, 113, .10) 8%, rgba(86, 176, 113, 0) 20%),
-      linear-gradient(to bottom, rgba(86, 176, 113, .25) 0%, rgba(86, 176, 113, .10) 8%, rgba(86, 176, 113, 0) 20%),
-      linear-gradient(to top, rgba(86, 176, 113, .25) 0%, rgba(86, 176, 113, .10) 8%, rgba(86, 176, 113, 0) 20%),
-      #fff !important;
+    background: #fff !important;
+    box-shadow: inset 0 0 54px rgba(86, 176, 113, .22) !important;
   }
 
   .entry-card.entry-expense {
-    background:
-      linear-gradient(to right, rgba(207, 104, 94, .24) 0%, rgba(207, 104, 94, .10) 8%, rgba(207, 104, 94, 0) 20%),
-      linear-gradient(to left, rgba(207, 104, 94, .24) 0%, rgba(207, 104, 94, .10) 8%, rgba(207, 104, 94, 0) 20%),
-      linear-gradient(to bottom, rgba(207, 104, 94, .24) 0%, rgba(207, 104, 94, .10) 8%, rgba(207, 104, 94, 0) 20%),
-      linear-gradient(to top, rgba(207, 104, 94, .24) 0%, rgba(207, 104, 94, .10) 8%, rgba(207, 104, 94, 0) 20%),
-      #fff !important;
+    background: #fff !important;
+    box-shadow: inset 0 0 54px rgba(207, 104, 94, .20) !important;
   }
 
   .entry-card > .section-title {
@@ -96,6 +89,36 @@
     border-radius: 8px !important;
     font-size: 15px !important;
     text-align: center !important;
+  }
+
+  .v0215-mobile-save-message {
+    grid-area: message !important;
+    display: block !important;
+    min-height: 18px !important;
+    height: 18px !important;
+    margin: -2px 0 0 !important;
+    color: #216536 !important;
+    font-size: 11px !important;
+    line-height: 18px !important;
+    text-align: center !important;
+    opacity: 0;
+    transition: opacity 400ms ease;
+  }
+
+  .v0215-mobile-save-message.error {
+    color: #a72b22 !important;
+  }
+
+  .v0215-mobile-save-message.is-visible {
+    opacity: 1;
+  }
+
+  .v0215-mobile-save-message.is-fading {
+    opacity: 0;
+  }
+
+  .entry-card.v0215-mobile-editing #saveButton {
+    font-weight: 750 !important;
   }
 
   .entry-grid > label,
@@ -256,20 +279,29 @@
 
   .ledger-month-tools {
     display: grid !important;
-    grid-template-columns: 34px minmax(0, 1fr) 34px !important;
+    grid-template-columns: 48px 32px minmax(0, 1fr) 32px 48px !important;
     align-items: center !important;
     gap: 4px !important;
     width: 100% !important;
   }
 
   .ledger-month-tools button {
-    min-width: 34px !important;
-    width: 34px !important;
+    min-width: 32px !important;
+    width: 32px !important;
     min-height: 34px !important;
     height: 34px !important;
     padding: 0 !important;
     border-radius: 7px !important;
-    font-size: 18px !important;
+    font-size: 17px !important;
+  }
+
+  .ledger-month-tools #mobileLedgerBalanceButton,
+  .ledger-month-tools #mobileLedgerMoreButton {
+    width: 48px !important;
+    min-width: 48px !important;
+    padding: 0 4px !important;
+    font-size: 11px !important;
+    font-weight: 650 !important;
   }
 
   .ledger-month-tools .month-picker {
@@ -310,34 +342,73 @@
   }
 
   .v21-ledger-summary-bar {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto !important;
-    align-items: start !important;
-    gap: 5px !important;
-    margin-top: 4px !important;
+    display: block !important;
+    margin-top: 5px !important;
   }
 
   #monthSummary {
     display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 1px 8px !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    grid-template-areas:
+      "opening opening ending ending net net"
+      "income income income expense expense expense"
+      "search search search search search search" !important;
+    gap: 5px 4px !important;
     margin: 0 !important;
+    padding: 7px 8px !important;
+    border: 1px solid #e0e6ec !important;
+    border-radius: 9px !important;
+    background: #f8fafc !important;
     color: #627081 !important;
-    font-size: 11px !important;
-    line-height: 1.35 !important;
+    font-size: 10.5px !important;
+    line-height: 1.2 !important;
   }
 
   #monthSummary .ledger-summary-item {
-    display: inline-flex !important;
-    align-items: baseline !important;
-    gap: 3px !important;
+    display: grid !important;
+    justify-items: center !important;
+    align-content: center !important;
+    gap: 2px !important;
     min-width: 0 !important;
     white-space: nowrap !important;
   }
 
+  #monthSummary .ledger-summary-item > span {
+    color: #718092 !important;
+    font-size: 9.5px !important;
+  }
+
+  #monthSummary .ledger-summary-item strong {
+    color: #2e3c4d !important;
+    font-size: 11.5px !important;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #monthSummary .opening { grid-area: opening !important; }
+  #monthSummary .ending { grid-area: ending !important; }
+  #monthSummary .net { grid-area: net !important; }
+  #monthSummary .income { grid-area: income !important; }
+  #monthSummary .expense { grid-area: expense !important; }
+
+  #monthSummary .income > span,
+  #monthSummary .income strong,
+  #monthSummary .net.profit > span,
+  #monthSummary .net.profit strong {
+    color: #2f7a4c !important;
+  }
+
+  #monthSummary .expense > span,
+  #monthSummary .expense strong,
+  #monthSummary .net.loss > span,
+  #monthSummary .net.loss strong {
+    color: #a54b45 !important;
+  }
+
   #monthSummary .ledger-summary-search {
-    grid-column: 1 / -1 !important;
-    font-size: 10px !important;
+    grid-area: search !important;
+    color: #7a8796 !important;
+    font-size: 9.5px !important;
+    text-align: center !important;
   }
 
   .v21-summary-actions,
@@ -369,29 +440,74 @@
   }
 
   .ledger-search {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto auto !important;
-    gap: 4px !important;
+    position: relative !important;
+    display: block !important;
     width: 100% !important;
     max-width: none !important;
   }
 
-  .ledger-search input,
-  .ledger-search button {
-    min-height: 34px !important;
-    height: 34px !important;
+  .ledger-search-icon {
+    position: absolute !important;
+    z-index: 2 !important;
+    left: 11px !important;
+    top: 50% !important;
+    transform: translateY(-52%) !important;
+    color: #718092 !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    pointer-events: none !important;
   }
 
   .ledger-search input {
+    box-sizing: border-box !important;
+    width: 100% !important;
     min-width: 0 !important;
-    padding-inline: 8px !important;
+    min-height: 38px !important;
+    height: 38px !important;
+    padding: 0 40px 0 36px !important;
+    border-radius: 19px !important;
     font-size: 14px !important;
   }
 
-  .ledger-search button {
-    min-width: 48px !important;
-    padding-inline: 7px !important;
-    font-size: 11px !important;
+  #ledgerSummarySearch::-webkit-search-cancel-button {
+    display: none !important;
+  }
+
+  .ledger-search-submit {
+    display: none !important;
+  }
+
+  #ledgerSearchClear {
+    position: absolute !important;
+    z-index: 3 !important;
+    right: 5px !important;
+    top: 4px !important;
+    display: grid !important;
+    place-items: center !important;
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 50% !important;
+    background: #edf1f5 !important;
+    color: #697788 !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+  }
+
+  .ledger-search-clear-desktop {
+    display: none !important;
+  }
+
+  .ledger-search-clear-mobile {
+    display: inline !important;
+  }
+
+  #ledgerSummarySearch:placeholder-shown ~ #ledgerSearchClear {
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   /* ===== Ledger rows ===== */
@@ -652,6 +768,37 @@
     display: none !important;
   }
 
+  .ledger-card tbody > tr.v0215-edit-highlight:not(.inline-editing)::before {
+    animation: v0215-edit-highlight 1.8s ease-out;
+  }
+
+  @keyframes v0215-edit-highlight {
+    0% { background: rgba(69, 126, 171, .16); }
+    100% { background: #fff; }
+  }
+
+  .v0215-ledger-notice {
+    position: fixed;
+    z-index: 2500;
+    left: 50%;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    max-width: calc(100vw - 32px);
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(42, 55, 70, .92);
+    color: #fff;
+    font-size: 11px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 8px);
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+
+  .v0215-ledger-notice.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
   /* Compact per-account balance detail. */
   .v0214-balance-popover {
     width: min(148px, calc(100vw - 16px)) !important;
@@ -685,7 +832,13 @@
 @media (min-width: 768px) {
   .ledger-date-mobile,
   .ledger-account-mobile,
-  .action-label-mobile {
+  .action-label-mobile,
+  .ledger-search-icon,
+  .ledger-search-clear-mobile {
     display: none !important;
+  }
+
+  .ledger-search-clear-desktop {
+    display: inline !important;
   }
 }

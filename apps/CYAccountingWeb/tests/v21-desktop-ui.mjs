@@ -28,6 +28,7 @@ const patch2Css = read('public/v0212.css');
 const patch4Js = read('public/v0214.js');
 const patch4Css = read('public/v0214.css');
 const patch5Css = read('public/v0215.css');
+const patch5Build4Js = read('public/v0215b4.js');
 const v021 = read('public/v021.js');
 const build8Js = read('public/v021b8.js');
 const build10Js = read('public/v021b10.js');
@@ -49,7 +50,7 @@ const appV19 = read('src/app-v19.js');
 const v11Tools = read('src/v11-tools.js');
 
 assert.equal(version, '0.21.5');
-assert.equal(build, '3');
+assert.equal(build, '4');
 assert.match(build11Js, /ensureV21Build12Script\(\)/);
 assert.match(build11Js, /ensureV21Build13Script\(\)/);
 assert.match(build11Js, /ensureV21Build14Script\(\)/);
@@ -66,7 +67,7 @@ assert.match(build15Js, /CY_V21_BUILD15_VERSION = 'V0\.21\.0 Build 15'/);
 assert.match(build16Js, /CY_V21_BUILD16_VERSION = 'V0\.21\.0 Build 16'/);
 assert.match(patchJs, /CY_V0211_VERSION = 'V0\.21\.1'/);
 assert.match(patch2Js, /CY_V0212_VERSION = 'V0\.21\.2'/);
-for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, patch2Js, patch4Js, keyboardJs]) {
+for (const js of [build8Js, build10Js, build11Js, build12Js, build13Js, build14Js, build15Js, build16Js, patchJs, patch2Js, patch4Js, patch5Build4Js, keyboardJs]) {
   assert.doesNotThrow(() => new Function(js), 'V0.21 overlay JavaScript must parse');
 }
 
@@ -184,7 +185,9 @@ assert.match(patch4Js, /handleV0214FavoriteToggle/);
 assert.match(patch4Js, /已還原/);
 assert.match(patch4Css, /\.v0214-balance-popover/);
 
-// V0.21.5 Build 3 keeps the refined layout scoped to phone widths.
+// V0.21.5 Build 4 keeps the new edit/toolbar/search layer scoped to phone widths.
+assert.match(patch5Build4Js, /CY_V0215_BUILD4_MOBILE = '\(max-width: 767px\)'/);
+assert.doesNotMatch(patch5Css, /@media \(min-width: 1024px\)[\s\S]*?v0215-mobile-save-message/);
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
 assert.doesNotMatch(patch5Css, /@media \(min-width: 1024px\)[\s\S]*?grid-template-areas/);
 
@@ -194,4 +197,4 @@ assert.match(v013, /button\.setAttribute\('aria-busy', 'true'\)/);
 assert.match(v021, /if \(account\.textContent !== nextText\) account\.textContent = nextText;/);
 assert.match(v021, /if \(empty && empty\.textContent !== '本次尚無輸入紀錄。'\) empty\.textContent = '本次尚無輸入紀錄。';/);
 
-console.log('V0.21.5 Build 3 desktop regression tests passed.');
+console.log('V0.21.5 Build 4 desktop regression tests passed.');
