@@ -1,14 +1,33 @@
 # CYCloud Identity — Authentication Contract
 
-> **Status: executable authentication contract for the currently deployed runtime.** This document contains generic protocol only; actual Workspace/Application/Employee runtime data is not stored in Public source.
->
-> **Forward contract note — 2026-09-29:** the approved product model is now the three-role Workspace model in `ROLE_AND_ACCESS_MODEL.md`. The deployed `0.1.14` runtime still returns legacy Group/compatibility-role fields. Treat `groupKeys` and Group-derived `applicationRoleKey` as migration compatibility, not as the forward authorization design. Do not build new product behavior that depends on the legacy Group role projection.
+> **Status:** source contract for CYCloud Identity `0.2.0`. Deployment/acceptance state is tracked in `../TODO.md`; actual Workspace/Application/Employee runtime data is never stored in Public source.
 
 ## Transport boundary
 
-Cloud App Workers should call CYCloud Identity through a private Cloudflare Service Binding. Browsers do not call the Identity Worker directly and never receive provider secrets, credential verifiers, OTP peppers or D1 identifiers.
+Cloud App Workers call CYCloud Identity through a private Cloudflare Service Binding. Browsers never receive provider secrets, credential verifiers, OTP peppers or D1 identifiers.
 
-The consumer App is responsible for keeping the raw Identity session token in an `HttpOnly; Secure` cookie or another reviewed server-side transport. CYCloud Identity stores only the SHA-256 hash of that raw token.
+The consumer App keeps the raw Identity session token in an `HttpOnly; Secure` cookie or another reviewed server-side transport. CYCloud Identity stores only the SHA-256 hash of that raw token.
+
+## Workspace role model
+
+Every Employee resolves to exactly one effective Workspace role:
+
+```text
+SUPER_ADMIN
+ADMIN
+USER
+```
+
+`SUPER_ADMIN` is not stored as an editable Employee role. It is derived from the protected Workspace `super_admin_employee_id` pointer. Ordinary Employee storage uses only `ADMIN` or `USER`.
+
+`Identity Admin` is an ADMIN capability, not a fourth role:
+
+```text
+workspaceRole = ADMIN
+isIdentityAdmin = true | false
+```
+
+The role and Identity Admin authority boundaries are canonical in `ROLE_AND_ACCESS_MODEL.md` and `PROJECT_RULES.md`.
 
 ## Login
 
@@ -25,7 +44,7 @@ Request body:
 }
 ```
 
-Current `0.1.14` successful response contains:
+Successful `0.2.0` response:
 
 ```json
 {
@@ -35,8 +54,11 @@ Current `0.1.14` successful response contains:
     "employeeId": "<employee id>",
     "employeeNo": "0001",
     "displayName": "<display name>",
+    "workspaceRole": "USER",
+    "isIdentityAdmin": false,
+    "emailVerified": true,
     "isWorkspaceSuperAdmin": false,
-    "groupKeys": ["<current identity group key>"],
+    "groupKeys": [],
     "applicationRoleKey": "USER",
     "credentialVersion": 1,
     "employeeRevision": 1
@@ -48,46 +70,45 @@ Current `0.1.14` successful response contains:
 }
 ```
 
-`groupKeys` and Group-derived `applicationRoleKey` are legacy compatibility fields in the current runtime. The approved migration target is a direct Workspace role (`SUPER_ADMIN` / `ADMIN` / `USER`) plus Identity Admin capability and independent Application Access. Consumer Apps should be prepared to move to that contract rather than treating legacy Group projection as permanent.
+Authoritative fields for new consumers:
 
-The caller must not persist the password. The raw session token is returned only on login and must not be logged.
+- `workspaceRole`
+- `isIdentityAdmin`
+- `emailVerified`
+- `isWorkspaceSuperAdmin` as the stable protected-authority compatibility signal
+- `credentialVersion`
+- `employeeRevision`
 
-Before credential/D1 work, the Worker applies the configured Cloudflare `LOGIN_RATE_LIMITER` to a SHA-256 key derived from Application + Workspace + Employee No. The deployed rate-limit binding is mandatory; if it is missing, authentication fails closed instead of running an unprotected password verifier.
+Temporary compatibility fields:
 
-Current runtime authentication requires all of the following:
+- `groupKeys` remains descriptive only while older consumers are removed; it is **not** an authorization source.
+- `applicationRoleKey` temporarily mirrors `workspaceRole` so existing consumers do not break during cutover. New consumers must use `workspaceRole`.
+
+The caller must never persist or log the password or raw session token.
+
+## Application entry authorization
+
+Authentication requires all of the following:
 
 - login rate limiter permits the attempt;
 - Workspace is active;
-- Employee exists in that Workspace and is enabled;
-- credential algorithm is currently supported and password verifies;
-- Application is active and enabled for that Workspace;
-- effective Application Access exists through the protected Workspace Super Admin, a direct Employee grant, or a legacy active Identity Group grant.
+- Employee exists, is enabled and has a valid credential;
+- Application is active and enabled for the Workspace;
+- Application entry is currently allowed.
 
-The approved target model removes Group-derived role authority. See `ROLE_AND_ACCESS_MODEL.md`.
+Entry authorization in `0.2.0`:
 
-## Current legacy compatibility-role projection
+1. current Workspace Super Admin may enter every Workspace-enabled CY App;
+2. the configured core CY Web account application is always available to every valid Employee and cannot be revoked;
+3. every other Employee/Application combination requires an enabled direct `employee_application_access` grant.
 
-The deployed runtime may use optional `USER_ADMIN` compatibility mode. This section documents only the current implementation pending migration.
+Legacy Identity Group membership and Group Application grants no longer authorize login or session resolve.
 
-When enabled, CYCloud Identity computes `principal.applicationRoleKey` server-side using current authority:
+During migration, active legacy Group grants are materialized once into direct Employee grants before the runtime stops consulting Groups. The old Group tables/endpoints may remain temporarily for consumer compatibility, but changes to them do not change effective login authorization.
 
-1. Workspace Super Admin → `SUPER_ADMIN`.
-2. Otherwise any active Group grant mapped `ADMIN` → `ADMIN`.
-3. Otherwise any active Group grant mapped `USER` → `USER`.
-4. Otherwise an active direct Employee Application grant → `USER`.
-5. Otherwise the Employee has no effective Application access.
+## Role projection into consumer Apps
 
-Legacy precedence:
-
-```text
-SUPER_ADMIN > ADMIN > USER
-```
-
-This projection is superseded for forward design by the direct Workspace-role model. New consumer integrations should not add dependencies on Group names or Group-to-App role mappings.
-
-## Approved target role/access contract
-
-After the role/access migration, all CYID-integrated CY Apps consume the Workspace role directly:
+All CYID-integrated CY Apps receive the Workspace role directly:
 
 ```text
 CYID SUPER_ADMIN -> App SUPER_ADMIN
@@ -95,11 +116,7 @@ CYID ADMIN       -> App ADMIN
 CYID USER        -> App USER
 ```
 
-Application Access is a separate entry decision. CY Web is the core-account special case whose entry access is always available for valid Employees; other App Access is configured independently.
-
-`Identity Admin` is a capability on ADMIN, not a fourth role. Exact target lifecycle, Access-management and CY Web multi-module rules are canonical in `ROLE_AND_ACCESS_MODEL.md` and `PROJECT_RULES.md`.
-
-The runtime response schema for that migration must be versioned/changed only when implementation and consumer adapters are updated together; this document does not pretend that the target fields already exist in `0.1.14`.
+Application Access remains a separate entry decision. App-local USER permissions remain owned by the target App. CY Web's module-access exception is documented in `ROLE_AND_ACCESS_MODEL.md`.
 
 ## Resolve session
 
@@ -112,69 +129,127 @@ Authorization: Bearer <raw Identity session token>
 X-Identity-Application: <application id>
 ```
 
-A successful response returns current `principal` plus session expiry. Resolve re-checks current authority on every request:
+Resolve re-checks current authority on every request:
 
 - session exists, is not expired and not revoked;
 - Workspace remains active;
 - Employee remains enabled;
 - credential version still matches;
 - Application remains active/enabled for the Workspace;
-- current effective Application Access still permits entry;
-- current role/authority state is not accepted from stale browser UI.
+- current direct/core/Super-Admin Application Access still permits entry;
+- current Workspace role and Identity Admin capability are read from current authority state.
 
 Normal resolve is read-only and does not use sliding heartbeat writes.
 
-In the current legacy implementation, Group membership/access-role changes can alter the compatibility projection on the next resolve. In the approved target implementation, Workspace Role and Application Access changes must similarly take effect immediately through session revocation/re-resolution rules defined in `ROLE_AND_ACCESS_MODEL.md`.
+Protected authority changes also revoke sessions where required by the role/access contract. In particular:
+
+- Employee disable or role change revokes that Employee's sessions;
+- direct App Access removal revokes sessions for that Employee + App;
+- forced Email recovery revokes that Employee's sessions;
+- Super Admin authority transfer invalidates both old and new authority sessions so fresh authentication establishes the new role boundary.
 
 ## Logout
 
 `POST /v1/identity/logout`
 
-Uses the same `Authorization` and `X-Identity-Application` headers. Logout is idempotent and revokes the matching Identity session. The consumer App must clear its browser cookie regardless of whether the remote session had already expired/revoked.
+Uses the same `Authorization` and `X-Identity-Application` headers. Logout is idempotent and revokes the matching Identity session. The consumer App clears its browser cookie regardless of whether the remote session had already expired/revoked.
+
+## Employee activation
+
+New Employee creation is role-aware:
+
+- normal ADMIN may create USER only;
+- Identity Admin and Super Admin may create USER or ADMIN;
+- Identity Admin capability is never granted through Employee creation.
+
+A new Employee remains pending until first activation completes. Creation attempts to send the first activation Email immediately. The Email contains:
+
+- the Email OTP;
+- a direct CY Web account-activation link.
+
+The link opens the activation UI only; it is not an authentication credential. Email OTP verification and first-password creation remain mandatory.
+
+If delivery fails, the Employee record remains pending and an authorized administrator may resend. `POST /v1/identity/activation/start` reuses a still-valid already-sent activation challenge before attempting another Email, so clicking the first Email link does not immediately collide with OTP resend cooldown.
+
+Only never-activated Employees may be physically deleted. `activated_at` is the durable first-activation marker and is not cleared by later Email recovery.
+
+## Activated-account Email recovery
+
+Identity Admin or Super Admin may replace the Email of an already activated non-Super-Admin account through the controlled recovery endpoint.
+
+The operation:
+
+- preserves the Employee and password credential;
+- preserves activated state;
+- sets the new Email to unverified;
+- revokes existing sessions;
+- sends a verification OTP to the replacement Email when delivery is available.
+
+The Employee may then authenticate with the existing password and verify the current Email. An account in this state is `啟用 · Email 待驗證`, not first-time pending activation.
+
+## Current management endpoints added by 0.2.0
+
+Generic paths, with provider authorization enforced server-side:
+
+```text
+GET    /v1/admin/identity/snapshot
+POST   /v1/admin/identity/employees
+PATCH  /v1/admin/identity/employees/:employeeId
+DELETE /v1/admin/identity/employees/:employeeId
+POST   /v1/admin/identity/employees/:employeeId/activation/resend
+PUT    /v1/admin/identity/employees/:employeeId/identity-admin
+PUT    /v1/admin/identity/employees/:employeeId/applications/:applicationId
+POST   /v1/admin/identity/employees/:employeeId/email-recovery
+POST   /v1/admin/identity/employees/:employeeId/email-verification/resend
+POST   /v1/identity/email-verification/start-current
+```
+
+Legacy Group-management endpoints are temporarily retained for migration compatibility only and must not be used as a new authorization model.
 
 ## Current errors
 
-Callers should branch primarily on HTTP status and `error.code`:
+Consumers should branch on HTTP status and stable `error.code`. Relevant authentication errors include:
 
-- `400 INVALID_LOGIN_REQUEST` — malformed login request;
-- `401 AUTHENTICATION_FAILED` — credential authentication failed;
-- `403 APPLICATION_ACCESS_DENIED` — App is not enabled or Employee has no effective App entry grant;
-- `429 AUTH_RATE_LIMITED` — too many login attempts for the current logical login key; current response includes `Retry-After: 60`;
-- `503 AUTH_RATE_LIMITER_UNAVAILABLE` — deployment is missing its required login-protection binding;
-- `401 SESSION_INVALID` — session missing, malformed, expired, revoked or no longer authorized;
-- `404 NOT_FOUND` — unsupported endpoint;
-- `500 IDENTITY_REQUEST_FAILED` — Identity runtime failure.
+- `400 INVALID_LOGIN_REQUEST`
+- `401 AUTHENTICATION_FAILED`
+- `401 SESSION_INVALID`
+- `403 APPLICATION_ACCESS_DENIED`
+- `429 AUTH_RATE_LIMITED`
+- `503 AUTH_RATE_LIMITER_UNAVAILABLE`
+- `404 NOT_FOUND`
+- `500 IDENTITY_REQUEST_FAILED`
+
+Management APIs return operation-specific 4xx errors such as `WORKSPACE_ADMIN_REQUIRED`, `IDENTITY_ADMIN_REQUIRED`, `EMPLOYEE_ROLE_NOT_ALLOWED`, `SELF_ACCESS_CHANGE_NOT_ALLOWED`, `CORE_APPLICATION_ACCESS_LOCKED`, `SUPER_ADMIN_PROTECTED`, and lifecycle/email-recovery conflict codes. Browser UI must not be treated as the authorization boundary.
 
 ## Credential compatibility
 
-New CYCloud Identity credentials use the data-driven algorithm key `scrypt` and the verifier form:
+New CYCloud Identity credentials use `scrypt`:
 
 ```text
 scrypt$16384$8$1$<16-byte-salt-hex>$<32-byte-digest-hex>
 ```
 
-Current parameters are N=16,384, r=8, p=1 with a random 16-byte salt. The password policy is 8 through 16 Unicode characters. Plaintext passwords never enter D1, Git, Audit or backup metadata.
+Current parameters are N=16,384, r=8, p=1. Password policy is 8–16 Unicode characters. Plaintext passwords never enter D1, Git, Audit or backup metadata.
 
-The Worker may verify legacy `pbkdf2-sha256` verifiers only when their iteration count is within the Cloudflare production ceiling of 100,000. Higher-iteration PBKDF2 credentials must be migrated through a reviewed rehash/reset flow rather than silently weakening or mislabelling the stored algorithm.
-
-The schema keeps `algorithm` data-driven so later reviewed password-algorithm upgrades do not require replacing the account model. New credential generation must always store the actual algorithm used; algorithm labels may not be reused for a different KDF.
+The Worker may verify legacy `pbkdf2-sha256` verifiers only when their iteration count is within the reviewed Cloudflare ceiling. New credential generation always records the actual algorithm used.
 
 ## Session compatibility
 
-The current opaque token is 32 random bytes represented as a prefixed lowercase-hex string. Its exact representation is an Identity implementation detail. Consumers must treat the token as opaque and must not parse role, Workspace or Employee information from it.
+The opaque token representation is an implementation detail. Consumers must not parse Workspace, Employee, Role or Access data from it.
 
-Default session TTL is 8 hours, with runtime configuration constrained to reviewed bounds. Credential change/reset invalidates older sessions through `credential_version` mismatch without requiring heartbeat writes.
+Default session TTL is 8 hours, constrained by runtime bounds. Credential changes/resets invalidate older sessions through credential-version mismatch and explicit revocation where required.
 
-## Consumer migration rule
+## Consumer rules
 
-A consumer App should depend on this contract through its own provider/adapter boundary. It must not:
+A consumer App must not:
 
-- read the Identity D1 directly;
+- read Identity D1 directly;
 - copy credential/OTP/recovery tables into its own database;
-- persist credential verifiers returned from another service;
-- hard-code actual Workspace IDs or access matrices in Public source;
-- infer Super Admin authority from an editable field other than the protected provider authority signal;
-- reconstruct a permanent role model from legacy Identity Group names/mappings;
-- treat legacy `applicationRoleKey` compatibility projection as the forward source of Workspace role once the three-role migration begins.
+- persist credential verifiers;
+- hard-code actual Workspace IDs, Application IDs or access matrices in Public source;
+- infer Workspace role from Identity Group names;
+- use Group grants as current App authorization;
+- treat deprecated `applicationRoleKey` as the long-term role field;
+- implement App Access only by hiding frontend controls.
 
-App-specific module/business permissions remain inside each App after Identity authenticates the principal. CY Web's mandatory core entry and multi-module exception are defined in `ROLE_AND_ACCESS_MODEL.md`.
+App-specific module/business permissions remain inside each App after CYID authenticates the principal.
