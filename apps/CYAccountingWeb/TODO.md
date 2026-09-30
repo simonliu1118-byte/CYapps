@@ -4,7 +4,7 @@
 
 - [x] 採用 `CYID_CONSUMER_VERSION=1.0.1` 並加入 provider support-window validator。
 - [x] Login / Session Resolve / Logout / Password Recovery 改走 CYCloudIdentity private Service Binding。
-- [x] 移除 active Worker 對 local `web_sessions` 的 Identity authority 依賴，新增 forward migration 退休舊表。
+- [x] 移除 active Worker 對 local `web_sessions` 的 Identity authority 依賴；V0.21.6 cutover 暫不 DROP 舊表，以保留 deploy failure rollback safety。
 - [x] 建立獨立 `/login`；未登入不載入完整帳務 App，`/` / `/index.html` 由 Worker 先驗證 Session。
 - [x] CYID App Access 可讓 `USER` 進入 CYACC；CYACC server-side business gate 固定 USER 只能讀取與匯出 Excel。
 - [x] PC / Tablet / Mobile 共用同一登入與 Session authority；RWD 只負責 presentation。
@@ -13,6 +13,7 @@
 - [ ] Development environment 端到端登入、Session invalidation、App Access revoke、USER read-only、Recovery 驗收。
 - [ ] iPad / Android Tablet 真機登入與操作驗收。
 - [ ] Production cutover explicit approval；未取得前不得把 CYID migration 視為 production accepted。
+- [ ] CYID production cutover 穩定後，以獨立 forward migration 退休 `web_sessions` 實體 table；不得和首次 authority cutover 同一步驟執行。
 
 本文件只記錄待辦、後續方向與未來評估項目，不作為永久規則來源。
 
