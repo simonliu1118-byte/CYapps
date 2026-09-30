@@ -8,7 +8,11 @@
     "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": [
-      "/api/*"
+      "/api/*",
+      "/",
+      "/index.html",
+      "/login",
+      "/login.html"
     ]
   },
   "routes": [
@@ -37,7 +41,9 @@
     }
   ],
   "vars": {
-    "BACKUP_TOPOLOGY": "__CF_BACKUP_TOPOLOGY__"
+    "BACKUP_TOPOLOGY": "__CF_BACKUP_TOPOLOGY__",
+    "CYID_APPLICATION_ID": "__CF_CYID_APPLICATION_ID__",
+    "CYID_WORKSPACE_ID": "__CF_CYID_WORKSPACE_ID__"
   },
   "triggers": {
     "crons": [
