@@ -15,6 +15,7 @@ const authJs = read('public/auth.js');
 const authCss = read('public/auth.css');
 const indexHtml = read('public/index.html');
 const workerApp = read('src/app.js');
+const identityAdapter = read('src/identity-adapter.js');
 const build8Js = read('public/v021b8.js');
 const build9Css = read('public/v021b9.css');
 const build10Js = read('public/v021b10.js');
@@ -45,8 +46,8 @@ const v06 = read('public/v06.js');
 const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
-assert.equal(version, '0.21.5');
-assert.equal(build, '11');
+assert.equal(version, '0.21.6');
+assert.equal(build, '0');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
@@ -75,22 +76,22 @@ assert.match(v03, /enterStep\(els\.amount,[\s\S]*?els\.form\.requestSubmit\(\)/)
 assert.match(v03, /cyFocusSummaryAfterSave[\s\S]*?els\.summary\.focus\(\)/);
 assert.match(keyboardJs, /if \(!window\.matchMedia\(CY_V0211_KEYBOARD_DESKTOP\)\.matches\) return;/);
 
-// Build 8 auth recovery: let the browser finish a top-level navigation before verifying
-// the freshly-set HttpOnly cookie, and keep Tablet touch behavior on the proven overlay.
+// V0.21.6 uses a standalone, navigation-safe login entry and CYID provider session.
 assert.match(authJs, /credentials: 'include'/);
-assert.match(authJs, /location\.replace\('\/\?auth_recovery=0215b8'\)/);
-assert.doesNotMatch(authJs, /帳號密碼已通過，但登入狀態沒有保存/);
-assert.match(indexHtml, /auth\.js\?v=0215b8/);
-assert.match(indexHtml, /auth\.css\?v=0215b8/);
+assert.match(authJs, /location\.replace\('\/login'\)/);
+assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
+assert.match(indexHtml, /auth\.js\?v=0216/);
+assert.match(indexHtml, /auth\.css\?v=0216/);
+assert.match(indexHtml, /v0216\.js\?v=0216/);
 assert.match(indexHtml, /v021b11\.js\?v=0215b10/);
 assert.match(indexHtml, /v021b10\.js\?v=0215b11/);
 assert.doesNotMatch(authCss, /@media \(min-width: 641px\) and \(max-width: 1023px\)/);
 assert.match(authCss, /@media \(max-width: 640px\)/);
-assert.match(workerApp, /SameSite=Lax/);
-assert.match(workerApp, /Expires=\$\{expires\}/);
+assert.match(identityAdapter, /SameSite=Lax/);
+assert.match(identityAdapter, /Expires=\$\{expires\.toUTCString\(\)\}/);
 assert.match(workerApp, /no-store, no-cache, must-revalidate, max-age=0/);
 
-// V0.21.5 Build 11 keeps Build 10 phone tools and makes the top-right account menu logout-only.
+// V0.21.6 preserves Build 11 phone tools while CYID access control sits above the presentation layer.
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
 assert.match(patch5Css, /\.entry-card\.entry-income\s*\{[\s\S]*?linear-gradient\(to right, rgba\(86, 176, 113/);
 assert.match(patch5Css, /\.entry-card\.entry-expense\s*\{[\s\S]*?linear-gradient\(to right, rgba\(207, 104, 94/);
