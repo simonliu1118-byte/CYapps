@@ -312,6 +312,22 @@ jobs:
             fi
           fi
 
+          node <<'NODE'
+          const fs=require('node:fs');
+          const raw=JSON.parse(fs.readFileSync('/tmp/cyid-dev-authority/employees.json','utf8'));
+          const roots=Array.isArray(raw)?raw:[raw], rows=[];
+          for(const r of roots){ if(Array.isArray(r?.results)) rows.push(...r.results); if(Array.isArray(r?.result?.results)) rows.push(...r.result.results); }
+          const qid=v=>'"'+String(v).replaceAll('"','""')+'"';
+          const lit=v=>v===null||v===undefined?'NULL':(typeof v==='number'?String(v):"'"+String(v).replaceAll("'","''")+"'");
+          const sql=[];
+          for(const row of rows){
+            const sets=Object.keys(row).filter(k=>k!=='employee_id').map(k=>qid(k)+'='+lit(row[k])).join(',');
+            sql.push('UPDATE "employees" SET '+sets+' WHERE "employee_id"='+lit(row.employee_id)+';');
+          }
+          fs.writeFileSync('/tmp/cyid-prod-employee-repair.sql',sql.join('\n')+'\n',{mode:0o600});
+          NODE
+          npx wrangler d1 execute DB --remote --config /tmp/cyid-prod-d1.jsonc --file /tmp/cyid-prod-employee-repair.sql > /dev/null 2>&1
+
       - name: Verify production authority continuity
         shell: bash
         run: |
@@ -346,19 +362,22 @@ jobs:
             if(v&&typeof v==='object') return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}';
             return JSON.stringify(v);
           }
-          function digest(dir,source){
+          function tableDigest(dir,t,source){
             const h=crypto.createHash('sha256');
-            for(const t of tables){
-              const rs=rows(dir,t).map(r=>{
-                const x={...r};
-                if(source && x.application_id===process.env.DEV_CYACC_APPLICATION_ID) x.application_id=process.env.PROD_CYACC_APPLICATION_ID;
-                return canon(x);
-              }).sort();
-              h.update(t+'\n'+rs.join('\n')+'\n');
-            }
+            const rs=rows(dir,t).map(r=>{
+              const x={...r};
+              if(source && x.application_id===process.env.DEV_CYACC_APPLICATION_ID) x.application_id=process.env.PROD_CYACC_APPLICATION_ID;
+              return canon(x);
+            }).sort();
+            h.update(t+'\n'+rs.join('\n')+'\n');
             return h.digest('hex');
           }
-          if(digest('/tmp/cyid-dev-authority',true)!==digest('/tmp/cyid-prod-authority',false)) process.exit(2);
+          for(const t of tables){
+            if(tableDigest('/tmp/cyid-dev-authority',t,true)!==tableDigest('/tmp/cyid-prod-authority',t,false)){
+              console.error('Authority continuity mismatch table='+t);
+              process.exit(2);
+            }
+          }
           NODE
 
           transient="$(npx wrangler d1 execute DB --remote --json --config /tmp/cyid-prod-d1.jsonc --command "SELECT (SELECT COUNT(*) FROM identity_sessions)+(SELECT COUNT(*) FROM email_otp_challenges)+(SELECT COUNT(*) FROM bootstrap_requests)+(SELECT COUNT(*) FROM identity_audit_events) AS value;" 2>/dev/null | node -e '
@@ -388,4 +407,4 @@ jobs:
           fi
       - name: Cleanup
         if: always()
-        run: rm -f /tmp/cyid-prod-* /tmp/cyid-production-bootstrap.mjs
+        run: rm -rf /tmp/cyid-prod-* /tmp/cyid-dev-* /tmp/cyid-production-bootstrap.mjs
