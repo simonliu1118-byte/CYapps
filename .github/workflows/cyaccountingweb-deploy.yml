@@ -201,7 +201,7 @@ jobs:
               exit 1
               ;;
           esac
-          location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); sub(/$/, ""); print; exit}' /tmp/cyacc-http-login.headers)"
+          location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); print; exit}' /tmp/cyacc-http-login.headers | tr -d '\\r')"
           if [[ "$location" != "https://$host/login" ]]; then
             echo "CYACC HTTP login redirect target is not the HTTPS login entry." >&2
             exit 1
