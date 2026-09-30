@@ -19,5 +19,12 @@
     <Content Include="../../BUILD" Link="BUILD" CopyToOutputDirectory="Always" />
     <Resource Include="../../assets/ENV.ico" Link="ENV.ico" />
     <EmbeddedResource Include="postal.tsv" />
+    <Content Include="Fonts/FONT_LICENSES.txt" Link="FONT_LICENSES.txt" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+  <!-- Bundled fonts are fetched by tools/fetch-fonts.ps1 (pinned URL + SHA-256) and are not stored in Git.
+       Without them the build still works and the Settings list marks them as not included. -->
+  <ItemGroup Condition="Exists('Fonts/NotoSansTC-Regular.otf') And Exists('Fonts/LXGWWenKaiTC-Regular.ttf')">
+    <Resource Include="Fonts/NotoSansTC-Regular.otf" />
+    <Resource Include="Fonts/LXGWWenKaiTC-Regular.ttf" />
   </ItemGroup>
 </Project>

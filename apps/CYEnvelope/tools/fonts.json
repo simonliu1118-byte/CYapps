@@ -1,0 +1,25 @@
+{
+  "note": "Bundled fonts are downloaded at build time from these pinned URLs and verified by size and SHA-256 (tools/fetch-fonts.ps1). The font files are not stored in Git.",
+  "fonts": [
+    {
+      "file": "NotoSansTC-Regular.otf",
+      "family": "Noto Sans TC",
+      "display": "思源黑體",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/TC/NotoSansTC-Regular.otf",
+      "bytes": 5683368,
+      "sha256": "5bab0cb3c1cf89dde07c4a95a4054b195afbcfe784d69d75c340780712237537",
+      "license": "SIL Open Font License 1.1",
+      "copyright": "© 2014-2021 Adobe (http://www.adobe.com/)"
+    },
+    {
+      "file": "LXGWWenKaiTC-Regular.ttf",
+      "family": "LXGW WenKai TC",
+      "display": "霞鶩文楷（楷書風）",
+      "url": "https://raw.githubusercontent.com/lxgw/LxgwWenkaiTC/55e77118285a064250abd0324da312223806368a/fonts/TTF/LXGWWenKaiTC-Regular.ttf",
+      "bytes": 15267616,
+      "sha256": "b1a0795862c1415bf3f393ea50b2a4ea6275012cf5bad3f94feeb1222f555731",
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright 2022-2026 LXGW (https://github.com/lxgw/LxgwWenkaiTC); Copyright 2020 The Klee Project Authors"
+    }
+  ]
+}

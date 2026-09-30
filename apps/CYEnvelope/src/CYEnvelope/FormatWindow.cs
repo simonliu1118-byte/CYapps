@@ -13,7 +13,7 @@ public sealed class FormatWindow : Window
     private readonly VisualHost _preview = new();
     private readonly TextBox _name = new(), _width = new(), _height = new();
     private readonly TextBox _x = new(), _y = new(), _w = new(), _h = new();
-    private readonly TextBox _font = new(), _size = new(), _columns = new();
+    private readonly TextBox _size = new(), _columns = new();
     private readonly TextBox _offsetX = new(), _offsetY = new();
     private readonly CheckBox _landscape = new() { Content = "橫式", Margin = new Thickness(0, 8, 0, 8) };
     private EnvelopeFormat _working;
@@ -82,7 +82,6 @@ public sealed class FormatWindow : Window
         AddField(position, "寬（mm）", _w, 0, 1);
         AddField(position, "高（mm）", _h, 2, 1);
         left.Children.Add(position);
-        AddField(left, "字型", _font);
         var typography = new Grid();
         typography.ColumnDefinitions.Add(new ColumnDefinition());
         typography.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
@@ -98,7 +97,7 @@ public sealed class FormatWindow : Window
         AddField(offsets, "水平", _offsetX, 0);
         AddField(offsets, "垂直", _offsetY, 2);
         left.Children.Add(offsets);
-        foreach (var box in new[] { _name, _width, _height, _x, _y, _w, _h, _font, _size, _columns, _offsetX, _offsetY })
+        foreach (var box in new[] { _name, _width, _height, _x, _y, _w, _h, _size, _columns, _offsetX, _offsetY })
             box.LostKeyboardFocus += Changed;
         var frame = new Border { Background = Brushes.White, BorderBrush = Brushes.LightGray,
                                  BorderThickness = new Thickness(1), Padding = new Thickness(12) };
@@ -163,10 +162,9 @@ public sealed class FormatWindow : Window
         var r = p?.Rect ?? _working.Frame;
         _x.Text = r.X.ToString("0.##"); _y.Text = r.Y.ToString("0.##");
         _w.Text = r.Width.ToString("0.##"); _h.Text = r.Height.ToString("0.##");
-        _font.Text = p?.FontFamily ?? "DFKai-SB";
         _size.Text = (p?.FontSize ?? 11).ToString("0.##");
         _columns.Text = (p?.Columns ?? 1).ToString();
-        _font.IsEnabled = _size.IsEnabled = _columns.IsEnabled = p is not null;
+        _size.IsEnabled = _columns.IsEnabled = p is not null;
         _loading = false;
         Draw();
     }
@@ -215,7 +213,7 @@ public sealed class FormatWindow : Window
         {
             if (!Num(_size, out var size) || size < 5 || size > 72 ||
                 !int.TryParse(_columns.Text, out var columns) || columns < 1 || columns > 8) return false;
-            p.FontFamily = _font.Text.Trim(); p.FontSize = size; p.Columns = columns;
+            p.FontSize = size; p.Columns = columns;
         }
         return true;
     }

@@ -1,6 +1,6 @@
 # CYEnvelope
 
-志遠專用 Windows 信封套印工具，以 C#／WPF（.NET 10）開發。目前測試版本 V0.2.1 Build 10，尚未正式發行。
+志遠專用 Windows 信封套印工具，以 C#／WPF（.NET 10）開發。目前測試版本 V0.2.1 Build 11，尚未正式發行。
 
 Go 版（V0.1.x）已依使用者決定停止開發，程式碼自本分支移除；歷史保留在 Git 與 `V0.1.0.txt`、`V0.1.1.txt`。不遷移 Go 版測試資料。
 
@@ -22,7 +22,12 @@ Go 版（V0.1.x）已依使用者決定停止開發，程式碼自本分支移�
 - `src/CYEnvelope.Launcher/`：可攜資料夾根目錄的原生啟動程式，開啟 `Runtime/CYEnvelope.exe`。
 - `tests/CYEnvelope.Tests/`：核心檢查（郵遞區號、電話、保存、繪製、溢出判斷）。
 - `tests/CYEnvelope.VisualReview/`：Windows 上的實際視窗擷取、表單可見性、圖示與最終 EXE 資源驗證。
-- `build-csharp.ps1`：重建可攜測試資料夾並執行公開封包安全掃描。
+- `tools/fetch-fonts.ps1`＋`tools/fonts.json`：下載內建字體（固定網址、驗證大小與 SHA-256；字體檔不進 Git）。
+- `build-csharp.ps1`：先取得字體，再重建可攜測試資料夾並執行公開封包安全掃描。
+
+## 字體
+
+「設定」的「信封字體」一個選擇套用到收件人、地址、電話、郵遞區號與方框文字，預覽與列印相同。可選：標楷體、新細明體（Windows 內建，未安裝時標示）、思源黑體 Noto Sans TC 與霞鶩文楷 TC（內建於程式，皆為 SIL Open Font License 1.1）。內建字體的來源、雜湊與授權全文見 `tools/fonts.json`、`src/CYEnvelope/Fonts/FONT_LICENSES.txt`，可攜資料夾根目錄附 `FONT_LICENSES.txt`。字體檔在建置時下載，第一次在本機建置前請先執行 `./tools/fetch-fonts.ps1`（`build-csharp.ps1` 會自動執行）；沒有字體檔的建置仍可編譯，只是設定中標示「此版本未內建」。
 
 ## 版面（15K 預設）
 
@@ -36,7 +41,11 @@ Go 版（V0.1.x）已依使用者決定停止開發，程式碼自本分支移�
 
 ## 開發驗證
 
-需要 .NET 10 SDK。Windows：
+需要 .NET 10 SDK 與 PowerShell。Windows：
+
+```powershell
+./tools/fetch-fonts.ps1   # 第一次建置前，下載內建字體
+```
 
 ```powershell
 dotnet build .\src\CYEnvelope\CYEnvelope.csproj

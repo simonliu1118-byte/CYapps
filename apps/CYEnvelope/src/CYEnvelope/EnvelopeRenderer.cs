@@ -31,7 +31,7 @@ public static class EnvelopeRenderer
         Write(dc, data.Phone, format.Phone);
         DrawPostal(dc, data.PostalCode, format.PostalCode);
         foreach (var item in format.Delivery.Where(x => data.DeliveryIds.Contains(x.Id)))
-            WriteAt(dc, "✓", item.X, item.Y, 11, "Microsoft JhengHei UI");
+            WriteAt(dc, "✓", item.X, item.Y, 11, "Microsoft JhengHei UI", useSelected: false);
         if (data.ShowFrame && data.FrameText.Length != 0)
         {
             dc.DrawRectangle(null, Black, Dip(format.Frame));
@@ -249,9 +249,10 @@ public static class EnvelopeRenderer
         dc.Pop();
     }
 
-    private static void WriteAt(DrawingContext dc, string value, double x, double y, double size, string family)
+    private static void WriteAt(DrawingContext dc, string value, double x, double y, double size, string family,
+        bool useSelected = true)
     {
-        var font = new Typeface(new FontFamily(family), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        var font = FontCatalog.Typeface(family, useSelected);
         var text = new FormattedText(value, CultureInfo.GetCultureInfo("zh-TW"), FlowDirection.LeftToRight,
             font, size * DipPerPoint, Ink, 1);
         dc.DrawText(text, new Point(x * DipPerMm, y * DipPerMm));

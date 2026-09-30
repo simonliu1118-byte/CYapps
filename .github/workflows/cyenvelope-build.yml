@@ -39,6 +39,10 @@ jobs:
             throw "Invalid CYEnvelope VERSION/BUILD: $version / $build"
           }
 
+      - name: Fetch bundled fonts (pinned URL, SHA-256 verified)
+        shell: pwsh
+        run: ./tools/fetch-fonts.ps1
+
       - name: Build Windows application
         shell: pwsh
         run: dotnet build ./src/CYEnvelope/CYEnvelope.csproj -c Release --nologo -warnaserror
@@ -135,7 +139,7 @@ jobs:
             throw 'CYEnvelope.exe missing after one extraction'
           }
           $contents = @(Get-ChildItem ./dist/verify-download/CYEnvelope -Force | Select-Object -ExpandProperty Name)
-          $expected = @('CYEnvelope.exe', 'VERSION', 'BUILD', 'Runtime')
+          $expected = @('CYEnvelope.exe', 'VERSION', 'BUILD', 'FONT_LICENSES.txt', 'Runtime')
           if (@(Compare-Object $expected $contents).Count -ne 0) {
             throw "Unexpected portable folder contents: $($contents -join ', ')"
           }

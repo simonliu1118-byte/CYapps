@@ -70,6 +70,25 @@ internal static class Program
             postalBox.Text = "123"; Flush();
             Assert(postalBox.BorderBrush is not SolidColorBrush { Color: { R: 0xB4 } }, "Typing a code clears the red frame");
             addressBox.Clear(); postalBox.Clear(); Flush();
+            // Bundled fonts: present in the package, real family, cover the envelope text; picture of each.
+            var sampleData = new PrintData { Recipient = "王小明", Address = "高雄市新興區範例路一號臺北市彰化縣員林", Phone = "0912-345-678",
+                PostalCode = "800", DeliveryIds = ["delivery-3"], FrameText = "內附對帳單" };
+            foreach (var choice in FontCatalog.Choices.Where(c => c.ResourceFile is not null))
+            {
+                Assert(FontCatalog.IsAvailable(choice), $"{choice.Family} is bundled in the package");
+                var typeface = FontCatalog.Typeface(choice.Family, useSelected: false);
+                Assert(typeface.TryGetGlyphTypeface(out var glyphs) && glyphs.FamilyNames.Values.Contains(choice.Family) &&
+                       sampleData.Recipient.Concat(sampleData.Address).Concat("內附對帳單").All(ch => glyphs.CharacterToGlyphMap.ContainsKey(ch)),
+                    $"{choice.Family} loads from the package and covers the envelope text");
+                FontCatalog.Selected = choice.Family;
+                var envelopeFormat = repository.Formats()[0];
+                var page = new RenderTargetBitmap((int)(envelopeFormat.WidthMm * EnvelopeRenderer.DipPerMm), (int)(envelopeFormat.HeightMm * EnvelopeRenderer.DipPerMm), 96, 96, PixelFormats.Pbgra32);
+                var back = new DrawingVisual();
+                using (var dc = back.RenderOpen()) dc.DrawRectangle(Brushes.White, null, new System.Windows.Rect(0, 0, page.Width, page.Height));
+                page.Render(back); page.Render(EnvelopeRenderer.Draw(envelopeFormat, sampleData, true));
+                Save(page, "14-font-" + choice.Family.Replace(' ', '-') + ".png");
+            }
+            FontCatalog.Selected = null;
             // Reprint last: brings the printed data back without printing; auto-clear empties the entry.
             var last = new PrintData { Recipient = "範例收件人", Address = "高雄市新興區範例路一號", PostalCode = "800",
                 Phone = "0912-345-678", DeliveryIds = ["delivery-2"], ShowFrame = true, FrameText = "內附對帳單" };

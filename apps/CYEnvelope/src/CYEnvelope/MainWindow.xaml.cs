@@ -47,6 +47,7 @@ public partial class MainWindow : Window
         var data = Path.Combine(appRoot, "Data", "CYEnvelope.db");
         _repository = OpenRepository(data);
         _settings = _repository.Settings();
+        FontCatalog.Selected = _settings.FontFamily;
         var formats = _repository.Formats();
         _format = formats.FirstOrDefault(f => f.Id == _settings.SelectedFormatId)
                   ?? formats.FirstOrDefault(f => f.IsDefault) ?? formats[0];
@@ -607,7 +608,9 @@ public partial class MainWindow : Window
         var dialog = new SettingsWindow(_settings) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         _repository.SaveSettings(_settings);
+        FontCatalog.Selected = _settings.FontFamily;
         ApplyEntryMode();
+        Refresh();
     }
     private void ApplyEntryMode()
     {

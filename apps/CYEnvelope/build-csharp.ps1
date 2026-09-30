@@ -6,6 +6,8 @@ $build = (Get-Content (Join-Path $root 'BUILD') -Raw).Trim()
 if ($version -notmatch '^\d+\.\d+\.\d+$' -or $build -notmatch '^\d+$') {
     throw "Invalid VERSION/BUILD: $version / $build"
 }
+# Bundled fonts (pinned URL + SHA-256, not stored in Git); the app is compiled with them embedded.
+& (Join-Path $root 'tools/fetch-fonts.ps1')
 $stageRoot = Join-Path $root 'dist/stage'
 $output = Join-Path $stageRoot 'CYEnvelope'
 if (Test-Path $stageRoot) { Remove-Item $stageRoot -Recurse -Force }
@@ -24,6 +26,7 @@ if ((Get-Item (Join-Path $runtime 'CYEnvelope.exe')).Length -lt 1000000) {
 }
 Move-Item (Join-Path $runtime 'VERSION') $output
 Move-Item (Join-Path $runtime 'BUILD') $output
+Move-Item (Join-Path $runtime 'FONT_LICENSES.txt') $output
 dotnet publish (Join-Path $root 'src/CYEnvelope.Launcher/CYEnvelope.Launcher.csproj') -c Release -r win-x64 -p:DebugType=None -p:DebugSymbols=false -o $launcherStage --nologo
 if ($LASTEXITCODE -ne 0) { throw 'CYEnvelope native launcher publish failed' }
 Move-Item (Join-Path $launcherStage 'CYEnvelope.exe') $output
@@ -38,7 +41,7 @@ foreach ($name in $nativeNames) {
     }
 }
 $rootNames = @(Get-ChildItem -LiteralPath $output -Force | Select-Object -ExpandProperty Name)
-$expectedRoot = @('CYEnvelope.exe', 'VERSION', 'BUILD', 'Runtime')
+$expectedRoot = @('CYEnvelope.exe', 'VERSION', 'BUILD', 'FONT_LICENSES.txt', 'Runtime')
 if (@(Compare-Object $expectedRoot $rootNames).Count -ne 0) {
     throw "Unexpected portable root contents: $($rootNames -join ', ')"
 }
