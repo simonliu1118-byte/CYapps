@@ -54,13 +54,21 @@ internal static class Program
             addressBox.Clear(); postalBox.Clear(); Flush();
             // Unresolved address: red frame and a short text in the label, nothing blocks printing.
             addressBox.Text = "某某路一號"; postalBox.Clear(); Invoke(main, "UpdatePostalFromAddress"); Flush();
-            var postalLabel = (TextBlock)main.FindName("PostalLabel");
-            Assert(postalBox.BorderBrush is SolidColorBrush { Color: { R: 0xB4, G: 0x37, B: 0x37 } } && postalLabel.Text == "請手動輸入",
-                "An address that cannot be resolved marks the postal box red and asks for a code");
+            Assert(postalBox.BorderBrush is SolidColorBrush { Color: { R: 0xB4, G: 0x37, B: 0x37 } },
+                "An address that cannot be resolved marks the postal box red");
+            // No postal code: printing is refused with a notice (the notifier is replaced so nothing can block CI).
+            var notices = new List<string>();
+            MainWindow.Notifier = (_, title, message) => notices.Add(title + ": " + message);
+            ((TextBox)main.FindName("RecipientBox")).Text = "測試客戶"; Flush();
+            Invoke(main, "PrintClick", null!, null!); Flush();
+            Assert(notices.Any(n => n.Contains("請先填入郵遞區號") && n.Contains("無法列印")),
+                "Printing without a postal code is refused with a notice");
+            postalBox.Text = "12"; Invoke(main, "PrintClick", null!, null!); Flush();
+            Assert(notices.Any(n => n.Contains("三碼數字")), "A postal code that is not three digits is refused too");
+            ((TextBox)main.FindName("RecipientBox")).Clear(); Flush();
             Capture(main, "13-postal-needed");
             postalBox.Text = "123"; Flush();
-            Assert(postalBox.BorderBrush is not SolidColorBrush { Color: { R: 0xB4 } } && postalLabel.Text == "郵遞區號",
-                "Typing a code clears the red frame");
+            Assert(postalBox.BorderBrush is not SolidColorBrush { Color: { R: 0xB4 } }, "Typing a code clears the red frame");
             addressBox.Clear(); postalBox.Clear(); Flush();
             // Reprint last: brings the printed data back without printing; auto-clear empties the entry.
             var last = new PrintData { Recipient = "範例收件人", Address = "高雄市新興區範例路一號", PostalCode = "800",
@@ -90,6 +98,12 @@ internal static class Program
             var size = print.RenderSize; print.Focus(); Flush();
             Assert(size == print.RenderSize, "Primary focus preserves geometry");
             Invoke(main, "ChooseContact", contact); Flush(); Capture(main, "02-main-filled");
+            foreach (var (boxName, expected) in new[] { ("AddressChoice", "公司"), ("PhoneChoice", "0912-345-678") })
+            {
+                var combo = (ComboBox)main.FindName(boxName);
+                Assert(FirstText(combo.Template.FindName("Content", combo) as DependencyObject) == expected,
+                    $"{boxName} shows its display text ({expected}), not the object type");
+            }
             main.Width = main.MinWidth; main.Height = main.MinHeight; Flush(); Capture(main, "03-main-minimum");
             Assert(((ScrollViewer)main.FindName("EntryScroll")).ScrollableHeight < 1, "Minimum main: all entry fields fit");
             var icon = main.Icon as BitmapFrame;
@@ -129,6 +143,14 @@ internal static class Program
             app.Shutdown(); return Results.Any(r => r.StartsWith("FAIL ", StringComparison.Ordinal)) ? 1 : 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); File.WriteAllText(Path.Combine(Output, "failure.txt"), ex.ToString()); app.Shutdown(); return 1; }
+    }
+    private static string? FirstText(DependencyObject? root)
+    {
+        if (root is null) return null;
+        if (root is TextBlock text) return text.Text;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            if (FirstText(VisualTreeHelper.GetChild(root, i)) is { } found) return found;
+        return null;
     }
     private static object Field(object target, string name) => target.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(target)!;
     private static void Invoke(object target, string name, params object[] args) => target.GetType().GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(target, args);

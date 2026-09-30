@@ -54,6 +54,7 @@
         <ContentPresenter x:Name="Content" IsHitTestVisible="False" Margin="{TemplateBinding Padding}"
                           HorizontalAlignment="Left" VerticalAlignment="Center"
                           Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
                           ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"/>
         <Border x:Name="Focus" Margin="1" CornerRadius="1" BorderThickness="1" BorderBrush="Transparent" IsHitTestVisible="False"/>
         <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" Focusable="False"

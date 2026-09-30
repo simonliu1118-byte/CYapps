@@ -24,8 +24,13 @@ public partial class MainWindow : Window
     private string? _postalAddress;
     private bool _settingPostal;
     // Set when an unresolvable address cleared the previous code; printing stops once to confirm.
-    // The address could not be resolved: the postal box shows a red frame and asks for a hand-typed code.
+    // The address could not be resolved (or the code is missing): the postal box gets a red frame.
     private bool _postalNeeded;
+    // Address text a "no postal code" notice was already shown for (one notice per address).
+    private string? _postalPromptedFor;
+    // Message seam: the real app shows a message box; the visual review replaces it so it can never block.
+    public static Action<Window, string, string> Notifier { get; set; } = (owner, title, message) =>
+        MessageBox.Show(owner, message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
     private static readonly Brush DangerBrush = new SolidColorBrush(Color.FromRgb(0xB4, 0x37, 0x37));
     // Code last inferred from the address text; a hand-corrected code survives edits that keep the same area.
     private string? _lastInferredCode;
@@ -302,6 +307,18 @@ public partial class MainWindow : Window
     private void AddressLostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         UpdatePostalFromAddress();
+        // Unresolvable address: tell the user once, then put the cursor in the postal box.
+        var address = AddressBox.Text;
+        if (_postalNeeded && PostalBox.Text.Length == 0 && address.Trim().Length > 0 &&
+            (_postalPromptedFor is null || !Postal.SameAddress(_postalPromptedFor, address)))
+        {
+            _postalPromptedFor = address;
+            Dispatcher.BeginInvoke(() =>
+            {
+                Notifier(this, "郵遞區號", "無法由地址判斷郵遞區號。\n\n請在紅框內自行填入三碼；沒有郵遞區號無法列印。");
+                PostalBox.Focus();
+            });
+        }
     }
     // Re-derive the postal code whenever the address it belongs to changed. An address that
     // cannot be resolved must not keep the previous address's code (no guessed codes).
@@ -329,24 +346,13 @@ public partial class MainWindow : Window
         }
     }
 
-    // Inline validation: Danger frame plus a short text in the label, same size so nothing moves.
+    // Red Danger frame on the postal box (a notice or a blocked print explains it); nothing moves.
     private void MarkPostalNeeded(bool needed)
     {
         if (needed == _postalNeeded) return;
         _postalNeeded = needed;
-        if (needed)
-        {
-            PostalBox.BorderBrush = DangerBrush;
-            PostalLabel.Text = "請手動輸入";
-            PostalLabel.Foreground = DangerBrush;
-            Status("無法由地址判斷郵遞區號，請在紅框內手動輸入。");
-        }
-        else
-        {
-            PostalBox.ClearValue(Control.BorderBrushProperty);
-            PostalLabel.Text = "郵遞區號";
-            PostalLabel.ClearValue(TextBlock.ForegroundProperty);
-        }
+        if (needed) PostalBox.BorderBrush = DangerBrush;
+        else PostalBox.ClearValue(Control.BorderBrushProperty);
     }
     private void PhoneLostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
@@ -377,6 +383,16 @@ public partial class MainWindow : Window
         if (data.Recipient.Length == 0 || data.Address.Length == 0)
         {
             MessageBox.Show(this, "請輸入收件人及地址。", "資料不足", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        // A three-digit postal code is required: without one nothing is saved or printed.
+        if (data.PostalCode.Length != 3 || !data.PostalCode.All(char.IsAsciiDigit))
+        {
+            MarkPostalNeeded(true);
+            Notifier(this, "郵遞區號", data.PostalCode.Length == 0
+                ? "請先填入郵遞區號（三碼），沒有郵遞區號無法列印。"
+                : "郵遞區號需為三碼數字。");
+            PostalBox.Focus();
             return;
         }
         var overflow = EnvelopeRenderer.Overflows(_format, data);

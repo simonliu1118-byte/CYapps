@@ -28,25 +28,24 @@
     </Border>
     <Grid Margin="20,16">
       <Grid.ColumnDefinitions><ColumnDefinition x:Name="EntryColumn" Width="400"/><ColumnDefinition x:Name="EntryGap" Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
-      <Border x:Name="EntryPanel" Background="White" BorderBrush="#D1D5DB" BorderThickness="1" Padding="18">
+      <Border x:Name="EntryPanel" Background="White" BorderBrush="#D1D5DB" BorderThickness="1" Padding="16">
         <DockPanel>
-          <StackPanel DockPanel.Dock="Top" Margin="0,0,0,18">
+          <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14">
             <TextBlock Text="收件資料" Style="{StaticResource SectionTitle}"/>
             <TextBlock Text="輸入後同步更新信封預覽" Style="{StaticResource SecondaryText}" Margin="0,4,0,0"/>
           </StackPanel>
           <ScrollViewer x:Name="EntryScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
-              <Grid Margin="0,0,0,14">
-                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition Width="88"/></Grid.ColumnDefinitions>
-                <StackPanel><TextBlock Text="收件人" Style="{StaticResource FieldLabel}"/>
-                  <TextBox x:Name="RecipientBox" TextChanged="RecipientChanged" KeyDown="RecipientKeyDown" AutomationProperties.Name="收件人"/>
-                </StackPanel>
-                <StackPanel Grid.Column="2"><TextBlock x:Name="PostalLabel" Text="郵遞區號" Style="{StaticResource FieldLabel}"/>
-                  <TextBox x:Name="PostalBox" MaxLength="3" TextChanged="PostalChanged" AutomationProperties.Name="郵遞區號"/>
-                </StackPanel>
-              </Grid>
+              <StackPanel Margin="0,0,0,12"><TextBlock Text="收件人" Style="{StaticResource FieldLabel}"/>
+                <TextBox x:Name="RecipientBox" TextChanged="RecipientChanged" KeyDown="RecipientKeyDown" AutomationProperties.Name="收件人"/>
+              </StackPanel>
               <ListBox x:Name="Suggestions" MaxHeight="108" Visibility="Collapsed" MouseDoubleClick="SuggestionChosen"
                        KeyDown="SuggestionKeyDown" DisplayMemberPath="Name" Margin="0,0,0,12" AutomationProperties.Name="符合的聯絡人"/>
+              <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition Width="64"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                <TextBlock x:Name="PostalLabel" Text="郵遞區號（3碼）" VerticalAlignment="Center"/>
+                <TextBox x:Name="PostalBox" Grid.Column="2" MaxLength="3" TextChanged="PostalChanged" HorizontalContentAlignment="Center" AutomationProperties.Name="郵遞區號"/>
+              </Grid>
               <Grid Margin="0,0,0,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
                 <TextBlock Text="地址" VerticalAlignment="Center"/>
@@ -60,7 +59,7 @@
                 </Grid>
               </Grid>
               <TextBox x:Name="AddressBox" TextChanged="AddressTextChanged" LostKeyboardFocus="AddressLostFocus" KeyDown="InputKeyDown"
-                       AcceptsReturn="False" TextWrapping="Wrap" MinHeight="56" Margin="0,0,0,14" AutomationProperties.Name="地址"/>
+                       AcceptsReturn="False" TextWrapping="Wrap" MinHeight="48" Margin="0,0,0,12" AutomationProperties.Name="地址"/>
               <Grid Margin="0,0,0,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
                 <TextBlock Text="電話（選填）" VerticalAlignment="Center"/>
@@ -73,7 +72,7 @@
                   </TextBlock>
                 </Grid>
               </Grid>
-              <TextBox x:Name="PhoneBox" TextChanged="InputChanged" LostKeyboardFocus="PhoneLostFocus" Margin="0,0,0,18" AutomationProperties.Name="電話"/>
+              <TextBox x:Name="PhoneBox" TextChanged="InputChanged" LostKeyboardFocus="PhoneLostFocus" Margin="0,0,0,14" AutomationProperties.Name="電話"/>
               <Border BorderBrush="#E5E8EC" BorderThickness="0,1,0,0" Padding="0,14,0,0">
                 <StackPanel>
                   <TextBlock Margin="0,0,0,10"><Run Text="郵件種類" FontWeight="SemiBold"/><Run Text="　也可直接點右側信封的表格" Foreground="#667085" FontSize="13"/></TextBlock>
