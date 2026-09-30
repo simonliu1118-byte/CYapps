@@ -93,8 +93,8 @@ jobs:
         working-directory: apps/CYAccountingWeb
 
     env:
-      CYACC_SMOKE_BASE_URL: ${{ vars.CYACC_CYID_DEV_BASE_URL }}
-      CYACC_SMOKE_EXPECTED_ROLE: ${{ vars.CYACC_CYID_DEV_SMOKE_EXPECTED_ROLE }}
+      CYACC_SMOKE_BASE_URL: https://cyacc-cyid-development-cyaccounting-web.simonliu1118.workers.dev
+      CYACC_SMOKE_EXPECTED_ROLE: USER
       CYACC_SMOKE_EMPLOYEE_NO: ${{ secrets.CYACC_CYID_DEV_SMOKE_EMPLOYEE_NO }}
       CYACC_SMOKE_PASSWORD: ${{ secrets.CYACC_CYID_DEV_SMOKE_PASSWORD }}
 
@@ -112,7 +112,6 @@ jobs:
         run: |
           set -euo pipefail
           required=(
-            CYACC_SMOKE_BASE_URL CYACC_SMOKE_EXPECTED_ROLE
             CYACC_SMOKE_EMPLOYEE_NO CYACC_SMOKE_PASSWORD
           )
           for name in "${required[@]}"; do
