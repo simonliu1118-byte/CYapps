@@ -39,8 +39,8 @@
               <StackPanel KeyboardNavigation.TabIndex="0" Margin="0,0,0,12"><TextBlock Text="收件人" Style="{StaticResource FieldLabel}"/>
                 <TextBox x:Name="RecipientBox" TextChanged="RecipientChanged" KeyDown="RecipientKeyDown" AutomationProperties.Name="收件人"/>
               </StackPanel>
-              <ListBox x:Name="Suggestions" KeyboardNavigation.TabIndex="1" MaxHeight="108" Visibility="Collapsed" MouseDoubleClick="SuggestionChosen"
-                       KeyDown="SuggestionKeyDown" DisplayMemberPath="Name" Margin="0,0,0,12" AutomationProperties.Name="符合的聯絡人"/>
+              <Grid KeyboardNavigation.TabIndex="1"><ListBox x:Name="Suggestions" MaxHeight="108" Visibility="Collapsed" MouseDoubleClick="SuggestionChosen"
+                       KeyDown="SuggestionKeyDown" DisplayMemberPath="Name" Margin="0,0,0,12" AutomationProperties.Name="符合的聯絡人"/></Grid>
               <Grid KeyboardNavigation.TabIndex="4" Margin="0,0,0,12">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition Width="64"/><ColumnDefinition/></Grid.ColumnDefinitions>
                 <TextBlock x:Name="PostalLabel" Text="郵遞區號（3碼）" VerticalAlignment="Center"/>
@@ -58,8 +58,8 @@
                   </TextBlock>
                 </Grid>
               </Grid>
-              <TextBox x:Name="AddressBox" KeyboardNavigation.TabIndex="3" TextChanged="AddressTextChanged" LostKeyboardFocus="AddressLostFocus" KeyDown="InputKeyDown"
-                       AcceptsReturn="False" TextWrapping="Wrap" MinHeight="48" Margin="0,0,0,12" AutomationProperties.Name="地址"/>
+              <Grid KeyboardNavigation.TabIndex="3"><TextBox x:Name="AddressBox" TextChanged="AddressTextChanged" LostKeyboardFocus="AddressLostFocus" KeyDown="InputKeyDown"
+                       AcceptsReturn="False" TextWrapping="Wrap" MinHeight="48" Margin="0,0,0,12" AutomationProperties.Name="地址"/></Grid>
               <Grid KeyboardNavigation.TabIndex="5" Margin="0,0,0,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
                 <TextBlock Text="電話（選填）" VerticalAlignment="Center"/>
@@ -72,7 +72,7 @@
                   </TextBlock>
                 </Grid>
               </Grid>
-              <TextBox x:Name="PhoneBox" KeyboardNavigation.TabIndex="6" TextChanged="InputChanged" KeyDown="PhoneKeyDown" LostKeyboardFocus="PhoneLostFocus" Margin="0,0,0,14" AutomationProperties.Name="電話"/>
+              <Grid KeyboardNavigation.TabIndex="6"><TextBox x:Name="PhoneBox" TextChanged="InputChanged" KeyDown="PhoneKeyDown" LostKeyboardFocus="PhoneLostFocus" Margin="0,0,0,14" AutomationProperties.Name="電話"/></Grid>
               <Border KeyboardNavigation.TabIndex="7" BorderBrush="#E5E8EC" BorderThickness="0,1,0,0" Padding="0,14,0,0">
                 <StackPanel>
                   <TextBlock Margin="0,0,0,10"><Run Text="郵件種類" FontWeight="SemiBold"/><Run Text="　也可直接點右側信封的表格" Foreground="#667085" FontSize="13"/></TextBlock>
