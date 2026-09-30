@@ -1,0 +1,44 @@
+name: CYAccountingWeb Build 8 Live Diagnostics
+
+on:
+  push:
+    branches:
+      - diagnostics/cyacc-build8-live
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe Build 8 production assets
+        shell: bash
+        run: |
+          set -u
+          base="https://acc.chihyuancm.com"
+          probe() {
+            local path="$1"
+            local marker="$2"
+            local file="/tmp/$(echo "$path" | tr '/?=&' '____')"
+            echo "=== $path ==="
+            curl --max-time 10 -sS -D "$file.headers" -o "$file.body" -w 'HTTP=%{http_code} seconds=%{time_total} bytes=%{size_download} type=%{content_type}\n' "$base$path" || echo "curl_exit=$?"
+            sha256sum "$file.body" || true
+            if grep -F "$marker" "$file.body" >/dev/null; then
+              echo "MARKER=FOUND :: $marker"
+            else
+              echo "MARKER=MISSING :: $marker"
+              echo "--- matching hints ---"
+              grep -nE 'CYACC_BOOT|cyaccSessionPromise|checkSessionFallback|core-ready|startCyaccApp' "$file.body" | head -20 || true
+            fi
+          }
+
+          probe "/auth.js?v=0216b8" "window.__CYACC_BOOT_USER__"
+          probe "/auth.js?v=0216b8" "bootUser ? Promise.resolve(bootUser) : checkSessionFallback()"
+          probe "/app.js?v=0216b8" "if (window.cyaccSessionPromise) await window.cyaccSessionPromise"
+          probe "/v06.js?v=0216b7" "cyacc:core-ready"
+          probe "/v021b10.css?v=0216b6" "@media (max-width: 767px)"
+          probe "/v0215.css?v=0216b6" ".ledger-month-tools.v0215-toolbar-ready"
+          probe "/v021b8.js?v=0216b6" "runV21Build8Step('mobile-pages'"
+          probe "/v021b10.js?v=0216b6" "runV21Build10Step('mobile-app-bar'"
