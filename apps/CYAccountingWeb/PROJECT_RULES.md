@@ -41,7 +41,7 @@
 - Workspace Role 直接採 `SUPER_ADMIN / ADMIN / USER`；Identity Admin 是 ADMIN capability，不是第四 Role。Role 與 CYACC Application Access 是獨立維度。
 - CYAccountingWeb 是 non-core consumer：不得接受首次登入密碼建立一般 Session、不得接收或保存 first-login ticket、不得建立平行「啟用帳號」流程。若 CYID 回傳 first-login-required，必須 fail closed 並引導使用者先到 CY Web 完成 Email 驗證／正式密碼設定。
 - 正常登入、Session resolve、logout 與 password recovery 一律透過 private `IDENTITY` Service Binding 呼叫 CYID canonical endpoint；raw provider Session token 只存在 HttpOnly + Secure cookie／受控 server transport，不得進 localStorage、sessionStorage、URL、log、Audit payload 或 CYAccountingWeb business tables。
-- CYAccountingWeb 不再 mint 第二個 Identity Session；CYID cutover 後既有 `web_sessions` 不得作 fallback authority，並以 forward migration 退休。
+- CYAccountingWeb 不再 mint 第二個 Identity Session；CYID cutover 後既有 `web_sessions` 不得作 fallback authority。實體 table 的 DROP 必須等新 CYID runtime 完成 development／production acceptance 後，另以後續 forward migration 執行，不得和首次 authority cutover 綁在同一次「migration 先於 Worker deploy」流程。
 - CYID Application ID、Workspace ID、Identity provider service target 等 deployment-specific 值只由 Deployment Environment 注入；Public source 只保存 env name／placeholder。
 - 既有 Tablet Safari 相容條件保留：CYACC provider Session cookie 採 `SameSite=Lax`、明確 `Expires` 與 navigation-safe login completion，直到真實裝置驗收證明更嚴格 policy 安全為止；這只屬 browser transport presentation，不得形成 Tablet-specific Identity authority。
 - permanent password input 固定遵循 CYID 8–16 Unicode 字元邊界；password recovery 必須保持 non-enumerating，不得為顯示 masked Email 而重新洩漏帳號是否存在。
