@@ -5,7 +5,18 @@ const CY_V21_BUILD9_MOBILE = '(max-width: 767px)';
 ensureV21Build8Stylesheet();
 ensureV21Build9Stylesheet();
 
-document.addEventListener('DOMContentLoaded', () => {
+let cyV21Build8Started = false;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startV21Build8, { once: true });
+} else {
+  startV21Build8();
+}
+window.addEventListener('load', syncV21Build8AfterLoad, { once: true });
+
+function startV21Build8() {
+  if (cyV21Build8Started) return;
+  cyV21Build8Started = true;
   syncV21Build8Version();
   setupV21Build8AccountChoices();
   setupV21Build8SummaryLimit();
@@ -14,15 +25,16 @@ document.addEventListener('DOMContentLoaded', () => {
   setupV21Build9MobileAccountPicker();
   setupV21Build9MobilePages();
   syncV21Build9HelpCopy();
-});
+}
 
-window.addEventListener('load', () => {
+function syncV21Build8AfterLoad() {
+  startV21Build8();
   syncV21Build8Version();
   syncV21Build8AccountChoices();
   syncV21Build8RoleMedal();
   syncV21Build9AccountPickerLabel();
   syncV21Build9HelpCopy();
-});
+}
 
 function ensureV21Build8Stylesheet() {
   if (document.querySelector('link[href="/v021b8.css"]')) return;
