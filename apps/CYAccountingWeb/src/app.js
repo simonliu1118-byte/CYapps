@@ -227,7 +227,21 @@ async function fetchAsset(request, env, pathname) {
     method: 'GET',
     headers: request.headers
   });
-  return noCache(await env.ASSETS.fetch(assetRequest));
+  const response = noCache(await env.ASSETS.fetch(assetRequest));
+  return pathname === '/login.html' ? secureLoginDocument(response, request) : response;
+}
+
+function secureLoginDocument(response, request) {
+  const hostname = new URL(request.url).hostname;
+  if (['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)) return response;
+
+  const headers = new Headers(response.headers);
+  headers.set('content-security-policy', 'upgrade-insecure-requests; form-action https:');
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
 }
 
 function noCache(response) {
