@@ -45,18 +45,18 @@ function syncV21Build8AfterLoad() {
 }
 
 function ensureV21Build8Stylesheet() {
-  if (document.querySelector('link[href="/v021b8.css"]')) return;
+  if (document.querySelector('link[href^="/v021b8.css"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/v021b8.css';
+  link.href = '/v021b8.css?v=0216b6';
   document.head.appendChild(link);
 }
 
 function ensureV21Build9Stylesheet() {
-  if (document.querySelector('link[href="/v021b9.css"]')) return;
+  if (document.querySelector('link[href^="/v021b9.css"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/v021b9.css';
+  link.href = '/v021b9.css?v=0216b6';
   document.head.appendChild(link);
 }
 
