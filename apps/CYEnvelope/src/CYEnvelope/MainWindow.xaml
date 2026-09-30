@@ -57,7 +57,7 @@
                   </TextBlock>
                 </Grid>
               </Grid>
-              <TextBox x:Name="AddressBox" TextChanged="InputChanged" LostKeyboardFocus="AddressLostFocus" KeyDown="InputKeyDown"
+              <TextBox x:Name="AddressBox" TextChanged="AddressTextChanged" LostKeyboardFocus="AddressLostFocus" KeyDown="InputKeyDown"
                        AcceptsReturn="False" TextWrapping="Wrap" MinHeight="56" Margin="0,0,0,14" AutomationProperties.Name="地址"/>
               <Grid Margin="0,0,0,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>

@@ -10,6 +10,7 @@ public sealed class Contact
     public List<ContactPhone> Phones { get; set; } = [];
     public string LastAddressId { get; set; } = "";
     public List<string> LastDeliveryIds { get; set; } = [];
+    [JsonIgnore] public string Summary => $"{Addresses.Count} 組地址　{Phones.Count} 組電話";
 }
 
 public sealed class ContactAddress

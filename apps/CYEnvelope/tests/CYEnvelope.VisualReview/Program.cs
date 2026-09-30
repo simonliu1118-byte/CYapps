@@ -39,6 +39,14 @@ internal static class Program
             Capture(main, "01b-main-ticked");
             rows[2].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush();
             Assert(chosen.Count == 0, "Clicking the row again clears it");
+            var addressBox = (TextBox)main.FindName("AddressBox"); var postalBox = (TextBox)main.FindName("PostalBox");
+            addressBox.Text = "彰化縣員林市中山路"; Flush();
+            Assert(postalBox.Text == "510", "Pasting an address without a postal code fills it at once");
+            postalBox.Text = "511"; addressBox.Text = "彰化縣員林市中山路一段3號"; Flush();
+            Assert(postalBox.Text == "511", "A hand-corrected code survives edits inside the same area");
+            addressBox.Text = "臺北市大安區忠孝東路"; Flush();
+            Assert(postalBox.Text == "106", "A different area replaces the code");
+            addressBox.Clear(); postalBox.Clear(); Flush();
             Assert(((ScrollViewer)main.FindName("EntryScroll")).ScrollableHeight < 1, "Default main: all entry fields fit");
             var print = (Button)main.FindName("PrintButton");
             var size = print.RenderSize; print.Focus(); Flush();

@@ -25,6 +25,8 @@ public partial class MainWindow : Window
     private bool _settingPostal;
     // Set when an unresolvable address cleared the previous code; printing stops once to confirm.
     private bool _postalCleared;
+    // Code last inferred from the address text; a hand-corrected code survives edits that keep the same area.
+    private string? _lastInferredCode;
     private const string ReadyStatus = "請核對收件資料，再列印至預印信封。";
 
     public MainWindow()
@@ -196,6 +198,22 @@ public partial class MainWindow : Window
         _postalAddress = address;
     }
 
+    // Pasting or typing an address fills the postal code at once (offline table, three digits).
+    private void AddressTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_loading)
+        {
+            var code = Postal.Infer(AddressBox.Text);
+            if (code is not null && code != _lastInferredCode)
+            {
+                SetPostal(code, AddressBox.Text);
+                _postalCleared = false;
+            }
+            _lastInferredCode = code;
+        }
+        Refresh();
+    }
+
     private void PostalChanged(object sender, TextChangedEventArgs e)
     {
         if (!_settingPostal)
@@ -211,6 +229,7 @@ public partial class MainWindow : Window
         _selectedAddress = address;
         AddressBox.Text = address?.Value ?? "";
         SetPostal(address?.PostalCode ?? "", AddressBox.Text);
+        _lastInferredCode = Postal.Infer(AddressBox.Text);
         PhoneChoice.ItemsSource = _selectedContact?.Phones;
         var phone = _selectedContact?.Phones.FirstOrDefault(x => x.Id == address?.LastPhoneId)
                     ?? _selectedContact?.Phones.FirstOrDefault();
@@ -422,6 +441,7 @@ public partial class MainWindow : Window
         RecipientBox.Clear(); AddressBox.Clear(); PhoneBox.Clear(); PostalBox.Clear();
         _postalAddress = null;
         _postalCleared = false;
+        _lastInferredCode = null;
         AddressChoice.ItemsSource = null; PhoneChoice.ItemsSource = null;
         Suggestions.Visibility = Visibility.Collapsed;
         _delivery.Clear();
