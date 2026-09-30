@@ -397,6 +397,21 @@ jobs:
           fi
           echo "CYID production D1 durable authority continuity verified."
 
+      - name: Probe temporary production-token delegation capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          list_code="$(curl -sS -o /tmp/cyid-token-groups.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/permission_groups")"
+          create_probe="$(curl -sS -o /tmp/cyid-token-create-probe.json -w '%{http_code}' -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens" --data '{}')"
+          if [[ "$list_code" == "200" && ( "$create_probe" == "400" || "$create_probe" == "422" ) ]]; then
+            echo "CYID_TEMP_TOKEN_DELEGATION=1" >> "$GITHUB_ENV"
+            echo "Cloudflare credential can provision a temporary account token."
+          else
+            echo "CYID_TEMP_TOKEN_DELEGATION=0" >> "$GITHUB_ENV"
+            echo "Cloudflare credential cannot provision a temporary account token."
+          fi
+
       - name: Final production provider resource gate
         shell: bash
         run: |
