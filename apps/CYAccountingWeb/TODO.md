@@ -1,5 +1,19 @@
 # CYAccountingWeb TODO
 
+## V0.21.6 CYID integration
+
+- [x] 採用 `CYID_CONSUMER_VERSION=1.0.1` 並加入 provider support-window validator。
+- [x] Login / Session Resolve / Logout / Password Recovery 改走 CYCloudIdentity private Service Binding。
+- [x] 移除 active Worker 對 local `web_sessions` 的 Identity authority 依賴，新增 forward migration 退休舊表。
+- [x] 建立獨立 `/login`；未登入不載入完整帳務 App，`/` / `/index.html` 由 Worker 先驗證 Session。
+- [x] CYID App Access 可讓 `USER` 進入 CYACC；CYACC server-side business gate 固定 USER 只能讀取與匯出 Excel。
+- [x] PC / Tablet / Mobile 共用同一登入與 Session authority；RWD 只負責 presentation。
+- [x] Deployment config 加入 Application ID / Workspace ID runtime-only gate，不把實際值寫入 Public Git。
+- [ ] Development CYID registry 已建立 CYACC Application / Workspace enablement，並完成 runtime variables 設定。
+- [ ] Development environment 端到端登入、Session invalidation、App Access revoke、USER read-only、Recovery 驗收。
+- [ ] iPad / Android Tablet 真機登入與操作驗收。
+- [ ] Production cutover explicit approval；未取得前不得把 CYID migration 視為 production accepted。
+
 本文件只記錄待辦、後續方向與未來評估項目，不作為永久規則來源。
 
 > 目前 conversation/workspace continuity：[`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)
