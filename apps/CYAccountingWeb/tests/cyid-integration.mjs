@@ -158,6 +158,28 @@ assert.equal(
   'upgrade-insecure-requests; form-action https:'
 );
 
+const appEntryEnv = {
+  ...env,
+  ASSETS: {
+    async fetch() {
+      return new Response('<!doctype html><html><head></head><body>APP</body></html>', {
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      });
+    }
+  }
+};
+const appEntry = await appV19.fetch(new Request('https://acc.example.com/', {
+  headers: { cookie: `cyaccounting_session=${token}` }
+}), appEntryEnv);
+assert.equal(appEntry.status, 200);
+const appEntryHtml = await appEntry.text();
+assert.match(appEntryHtml, /id="cyaccBootContext"/);
+assert.match(appEntryHtml, /"employeeNo":"0123"/);
+assert.match(appEntryHtml, /"role":"USER"/);
+assert.match(appEntryHtml, /"canWriteAccounting":false/);
+assert.doesNotMatch(appEntryHtml, /cyid_[0-9a-f]{64}/);
+assert.doesNotMatch(appEntryHtml, /employee-ci/);
+
 const routeEnv = { ...env, DB: {} };
 for (const [method, route, body] of [
   ['POST', '/api/transactions', '{}'],
@@ -198,6 +220,11 @@ assert.doesNotMatch(loginHtml, /src="\/app\.js"/);
 assert.match(workerApp, /url\.pathname === '\/login\.html'[\s\S]*?redirect\('\/login'/);
 assert.match(workerApp, /upgrade-insecure-requests; form-action https:/);
 assert.match(authJs, /activateReadOnlyMobileLedger/);
+assert.match(authJs, /window\.__CYACC_BOOT_USER__/);
+assert.match(authJs, /bootUser \? Promise\.resolve\(bootUser\) : checkSessionFallback\(\)/);
+assert.match(workerApp, /fetchAppEntry\(request, env, resolved\.user\)/);
+assert.match(workerApp, /id="cyaccBootContext"/);
+assert.doesNotMatch(workerApp, /session\.token/);
 assert.match(authJs, /data-mobile-page="ledger"/);
 assert.match(authCss, /data-mobile-ledger-action="accounts"/);
 assert.match(authCss, /data-mobile-ledger-action="categories"/);
@@ -205,7 +232,7 @@ assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(versionPatch, /MutationObserver/);
-assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 7'/);
+assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 8'/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)
