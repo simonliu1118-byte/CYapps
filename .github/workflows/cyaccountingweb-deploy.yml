@@ -69,6 +69,7 @@ jobs:
           node --check public/auth.js
           node --check public/login.js
           node --check public/app.js
+          node --check public/app-baseline.js
           node --check public/v03.js
           node --check public/v06.js
           node --check public/v07.js
