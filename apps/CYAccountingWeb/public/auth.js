@@ -1,4 +1,15 @@
-document.addEventListener('DOMContentLoaded', () => {
+let cyaccAuthStarted = false;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startCyaccAuth, { once: true });
+} else {
+  startCyaccAuth();
+}
+
+function startCyaccAuth() {
+  if (cyaccAuthStarted) return;
+  cyaccAuthStarted = true;
+
   const currentUser = document.querySelector('#currentUser');
   const logoutButton = document.querySelector('#logoutButton');
   const readOnlyNotice = document.querySelector('#readOnlyNotice');
@@ -6,24 +17,24 @@ document.addEventListener('DOMContentLoaded', () => {
   logoutButton?.addEventListener('click', async () => {
     logoutButton.disabled = true;
     try {
-      await fetch('/api/auth/logout', {
+      await fetchWithTimeout('/api/auth/logout', {
         method: 'POST',
         credentials: 'include',
         cache: 'no-store'
-      });
+      }, 8_000);
     } finally {
       location.replace('/login');
     }
   });
 
-  checkSession();
+  void checkSession();
 
   async function checkSession() {
     try {
-      const response = await fetch('/api/auth/me', {
+      const response = await fetchWithTimeout('/api/auth/me', {
         cache: 'no-store',
         credentials: 'include'
-      });
+      }, 8_000);
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data.ok === false) {
         location.replace('/login');
@@ -69,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
       readOnlyNotice?.classList.add('hidden');
     }
   }
+
   function activateReadOnlyMobileLedger(attempt = 0) {
     if (!window.matchMedia('(max-width: 767px)').matches) return;
     const ledgerButton = document.querySelector('#mobileMainNav [data-mobile-page="ledger"]');
@@ -76,6 +88,16 @@ document.addEventListener('DOMContentLoaded', () => {
       ledgerButton.click();
       return;
     }
-    if (attempt < 40) window.setTimeout(() => activateReadOnlyMobileLedger(attempt + 1), 50);
+    if (attempt < 60) window.setTimeout(() => activateReadOnlyMobileLedger(attempt + 1), 50);
   }
-});
+}
+
+async function fetchWithTimeout(input, init = {}, timeoutMs = 8_000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
