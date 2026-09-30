@@ -145,10 +145,10 @@ internal static class Program
                 ((UIElement)Keyboard.FocusedElement).MoveFocus(new TraversalRequest(FocusNavigationDirection.Next)); Flush();
                 if (Keyboard.FocusedElement is FrameworkElement { Name: "RecipientBox" }) break;
             }
-            var wanted = new[] { "RecipientBox", "AddressBox", "PostalBox", "PhoneBox" };
+            var wanted = new[] { "RecipientBox", "PostalBox", "AddressBox", "PhoneBox" };
             var indexes = wanted.Select(name => tabOrder.IndexOf(name)).ToArray();
             Assert(indexes.All(x => x >= 0) && indexes.SequenceEqual(indexes.OrderBy(x => x)),
-                "Tab visits recipient, address, postal code, phone in that order: " + string.Join(" > ", tabOrder));
+                "Tab follows the screen: recipient, postal code, address, phone: " + string.Join(" > ", tabOrder));
             // Add/overwrite dialogs and focus states, photographed because native dialogs cannot be.
             foreach (var isAddress in new[] { true, false })
             {
