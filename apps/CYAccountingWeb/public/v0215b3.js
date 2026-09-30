@@ -7,6 +7,11 @@ let cyV0215Build3OpenRow = null;
 let cyV0215Build3Gesture = null;
 let cyV0215Build3SuppressClickUntil = 0;
 
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupV0215Build3SwipeActions, { once: true });
+} else {
+  window.setTimeout(setupV0215Build3SwipeActions, 0);
+}
 window.addEventListener('load', setupV0215Build3SwipeActions, { once: true });
 
 function setupV0215Build3SwipeActions() {
