@@ -1,5 +1,12 @@
 # CYApps Governance Changelog
 
+## 2.3.21 — 2026/09/30
+
+- 依使用者決定，CYEnvelope 以 C#／WPF（.NET 10）為唯一正式實作；Go／Win32 版（V0.1.x）停止開發，不再維護、建置或作為行為基準。
+- `apps/CYEnvelope/PROJECT_RULES.md` 移除「正式版本基準 0.1.1」的 Go 版敘述，改為以 `VERSION` 與 `BUILD` 為版本身分來源，並記錄可攜資料夾結構（根目錄為啟動 EXE、`VERSION`、`BUILD`、`FONT_LICENSES.txt`、`Runtime`）。
+- 新增 CYEnvelope 專案例外：CI 測試 Artifact 與畫面證據保留 3 天（共通規則預設 14 天）；需要更長保存時由該次工作另行決定。
+- 新增 CYEnvelope 內建字體規則：思源黑體 Noto Sans TC、思源宋體 Noto Serif TC、霞鶩文楷 TC（皆 SIL Open Font License 1.1）於建置時由固定提交網址下載並驗證大小與 SHA-256，嵌入程式，字體檔不進 Git；來源、雜湊與授權記錄於 `tools/fonts.json` 與 `FONT_LICENSES.txt`。不內建教育部標準楷書（CC BY-ND，內嵌散布需另行申請）與 Windows 系統字體（僅供選用）。
+
 ## 2.3.20 — 2026/09/30
 
 - CYID consumer contract 增加跨 repository 同步治理：`CONSUMER_SYNC_MANIFEST.json` 明列外部 consumer 必須鏡像的 7 個 canonical artifacts（consumer current/minimum version、shared standard、consumer changelog、Auth、Role/Access、Architecture）。
