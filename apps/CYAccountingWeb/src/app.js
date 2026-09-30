@@ -231,7 +231,15 @@ async function fetchAppEntry(request, env, user) {
   if (!response.ok) return response;
 
   const html = await response.text();
-  const bootScript = `<script id="cyaccBootContext">window.__CYACC_BOOT_USER__=Object.freeze(${safeJsonForScript(user)});</script>`;
+  const bootUser = {
+    employeeNo: String(user?.employeeNo || ''),
+    name: String(user?.name || ''),
+    role: String(user?.role || ''),
+    isIdentityAdmin: Boolean(user?.isIdentityAdmin),
+    canWriteAccounting: Boolean(user?.canWriteAccounting),
+    canExportExcel: user?.canExportExcel !== false
+  };
+  const bootScript = `<script id="cyaccBootContext">window.__CYACC_BOOT_USER__=Object.freeze(${safeJsonForScript(bootUser)});</script>`;
   const body = html.includes('</head>')
     ? html.replace('</head>', `  ${bootScript}\n</head>`)
     : bootScript + html;
