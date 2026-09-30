@@ -106,7 +106,7 @@ V0.21.6 Build 1 provides a dedicated CYID development path that is intentionally
 - template: `wrangler.cyid-development.template.jsonc`
 - workflow: `.github/workflows/cyaccountingweb-cyid-development.yml`
 - allowed trigger: explicit `workflow_dispatch` or dedicated `deploy/cyaccountingweb-cyid-development` branch
-- protected GitHub Environment: `cyaccountingweb-cyid-development`
+- protected GitHub Environment: existing shared `development` (Cloudflare credentials only; CYACC resources remain dedicated)
 - dedicated Worker + dedicated D1 + CYID development Service Binding only
 - no production Custom Domain route
 - no R2 / GCS backup binding
