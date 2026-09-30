@@ -1,6 +1,7 @@
-CYEnvelope V0.2.1（開發測試版，尚未正式發行）
+CYEnvelope V0.3.0（開發測試版，尚未正式發行）
 日期：2026/09/27
-BUILD：0（各 Build 記錄依序附於下方；目前為 Build 12，見 BUILD 檔）
+BUILD：0
+版本說明：本檔前半為 C# 重做期間以 V0.2.1 記錄的 Build 0–14；功能範圍已達新版本階段（客戶資料庫、列印即存入、郵遞區號判斷、版型字體、鍵盤流程等），依治理規則升 Minor 為 V0.3.0，Build 歸零。下方各 Build 為 V0.2.1 期間的編號。
 
 下載方式調整
 - 將 .NET 管理組件打包進 CYEnvelope.exe；保留必要原生元件 D3DCompiler_47_cor3.dll、e_sqlite3.dll、PenImc_cor3.dll、PresentationNative_cor3.dll、vcruntime140_cor3.dll、wpfgfx_cor3.dll。資料夾另外只有 VERSION 與 BUILD，沒有多語系資源目錄。

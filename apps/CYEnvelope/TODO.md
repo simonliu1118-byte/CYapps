@@ -2,7 +2,7 @@
 
 本檔為狀態文件（非規則）；規則見 `PROJECT_RULES.md`。用途與範圍見 `README.md`。
 
-## 目前狀態（V0.2.1 Build 12，尚未正式發行）
+## 目前狀態（V0.3.0，尚未正式發行）
 
 已完成：C#／WPF 主線、客戶資料庫（名稱查詢、多地址多電話、列印即存、新增／覆蓋詢問）、郵件種類與方框文字點選、每日備份與損毀偵測、校正列印、15K 預設版面（收件人／電話／地址）。
 
@@ -31,9 +31,20 @@
 
 ## 發行前
 
-- [ ] 版本身分確認（`VERSION`／`BUILD`），Release workflow（從 `main`、`workflow_dispatch`、SHA-256、掃描）。
+- [x] 版本身分：從 V0.3.0 起（Minor：重做版、客戶資料庫與列印即存等完整功能階段），後續依治理規則推版本；試印通過後才發正式版。
+- [ ] Release workflow（從 `main`、`workflow_dispatch`、SHA-256、掃描）。
 - [ ] Release 說明加上版權聲明（共通規則 §10 與 REPO_POLICY §7）。
 - [ ] PROJECT_RULES §4 的發行驗證項目逐項完成。
+
+## 第二階段（Local 版 release 後）：CYID 與 Built-in Cloud 的已定案方向
+
+僅為方向記錄，設計文件另寫，屆時再走治理分支更新 `PROJECT_RULES.md`。
+- 三種模式（比照 CYInvoice）：Local（無登入）／Built-in Cloud（自行部署、自有帳號）／CY ID。與 CYInvoice 的差異：CYEnvelope 要求先登入，CYInvoice 只在關鍵操作驗證權限。
+- CYID 模式：USER 只能檢視、列印，列印時的存入變成「待確認提案」，ADMIN／SUPER_ADMIN（權限相同）審核；ADMIN 可編輯資料庫、信封格式與方框文字清單。USER 在自己的電腦上看得到自己的待確認資料；兩人提案同名新客戶時由管理員選擇合併或退回。
+- **離線：CYID 模式離線鎖定**——本機不保留登入快取，離線即不可使用，以免客戶資料外洩。Built-in Cloud 可設定離線可用天數 0–7 天（0 ＝ 離線不可用）。
+- 共用資料：客戶、地址、電話、信封格式（含字體與字級，隨版型）、方框文字清單。印表機等因電腦而異者留在本機。
+- 雲端資料庫：傾向多個輕量桌面程式共用一個 D1（資料表前綴、各自 migration 記錄表），CYID 的 Identity D1 與 CYInvoice 既有 D1 不併入；各程式各自定期備份到 R2，僅備份自己前綴的表。需先對照 Cloudflare 官方限制，並列入治理規則。
+- CYInvoice 綁定 CYID 屬其自己的工作線。
 
 ## 合併順序
 
