@@ -228,10 +228,16 @@ jobs:
 
           run_query "SELECT e.employee_id AS value FROM employees e JOIN employee_credentials c ON c.employee_id=e.employee_id JOIN workspaces w ON w.workspace_id=e.workspace_id WHERE e.workspace_id='$CYACC_WORKSPACE_ID' AND e.enabled=1 AND e.role_key='ADMIN' AND e.activated_at IS NOT NULL AND e.employee_id<>w.super_admin_employee_id ORDER BY e.employee_no LIMIT 1;"
           if ! CYACC_ADMIN_ID="$(scalar_value)"; then
-            echo "CYACC provisioning requires one enabled credentialed ADMIN in development." >&2
-            exit 1
+            run_query "SELECT e.employee_id AS value FROM employees e JOIN employee_credentials c ON c.employee_id=e.employee_id WHERE e.workspace_id='$CYACC_WORKSPACE_ID' AND e.enabled=1 AND e.role_key='USER' AND e.activated_at IS NOT NULL AND e.employee_id<>'$CYACC_USER_ID' ORDER BY e.employee_no LIMIT 1;"
+            if ! CYACC_ADMIN_ID="$(scalar_value)"; then
+              echo "CYACC provisioning needs a second enabled credentialed development USER to promote as the ADMIN acceptance principal." >&2
+              exit 1
+            fi
+            echo "::add-mask::$CYACC_ADMIN_ID"
+            run_query "UPDATE employees SET role_key='ADMIN', identity_admin=0, revision=revision+1, updated_at=$now_sql WHERE workspace_id='$CYACC_WORKSPACE_ID' AND employee_id='$CYACC_ADMIN_ID' AND role_key='USER'; UPDATE identity_sessions SET revoked_at=COALESCE(revoked_at,$now_sql) WHERE workspace_id='$CYACC_WORKSPACE_ID' AND employee_id='$CYACC_ADMIN_ID'; INSERT INTO identity_audit_events(event_id,workspace_id,target_employee_id,application_id,event_type,detail_json,created_at) VALUES('audit_'||lower(hex(randomblob(16))),'$CYACC_WORKSPACE_ID','$CYACC_ADMIN_ID','$CYACC_APPLICATION_ID','development_acceptance_role_provisioned','{\"role\":\"ADMIN\",\"purpose\":\"CYACC development acceptance\"}',$now_sql);"
+          else
+            echo "::add-mask::$CYACC_ADMIN_ID"
           fi
-          echo "::add-mask::$CYACC_ADMIN_ID"
 
           run_query "SELECT e.employee_id AS value FROM employees e JOIN employee_credentials c ON c.employee_id=e.employee_id JOIN workspaces w ON w.workspace_id=e.workspace_id WHERE e.workspace_id='$CYACC_WORKSPACE_ID' AND e.enabled=1 AND e.employee_id=w.super_admin_employee_id LIMIT 1;"
           if ! CYACC_SUPER_ID="$(scalar_value)"; then
@@ -377,8 +383,10 @@ jobs:
 
       - name: Remove isolated CYACC generated files
         if: always()
-        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
-        run: rm -f wrangler.cyid-development.generated.jsonc /tmp/cyacc-migrate.log /tmp/cyacc-deploy.log /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
+        shell: bash
+        run: |
+          rm -f "${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb/wrangler.cyid-development.generated.jsonc"
+          rm -f /tmp/cyacc-migrate.log /tmp/cyacc-deploy.log /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
 
       - name: Remove generated config
         if: always()
