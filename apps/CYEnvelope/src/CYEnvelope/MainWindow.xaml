@@ -41,7 +41,7 @@
                 <StackPanel><TextBlock Text="收件人" Style="{StaticResource FieldLabel}"/>
                   <TextBox x:Name="RecipientBox" TextChanged="RecipientChanged" KeyDown="RecipientKeyDown" AutomationProperties.Name="收件人"/>
                 </StackPanel>
-                <StackPanel Grid.Column="2"><TextBlock Text="郵遞區號" Style="{StaticResource FieldLabel}"/>
+                <StackPanel Grid.Column="2"><TextBlock x:Name="PostalLabel" Text="郵遞區號" Style="{StaticResource FieldLabel}"/>
                   <TextBox x:Name="PostalBox" MaxLength="3" TextChanged="PostalChanged" AutomationProperties.Name="郵遞區號"/>
                 </StackPanel>
               </Grid>

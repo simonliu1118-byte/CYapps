@@ -52,6 +52,16 @@ internal static class Program
             addressBox.Text = "臺北市大安區忠孝東路"; Flush();
             Assert(postalBox.Text == "106", "A different area replaces the code");
             addressBox.Clear(); postalBox.Clear(); Flush();
+            // Unresolved address: red frame and a short text in the label, nothing blocks printing.
+            addressBox.Text = "某某路一號"; postalBox.Clear(); Invoke(main, "UpdatePostalFromAddress"); Flush();
+            var postalLabel = (TextBlock)main.FindName("PostalLabel");
+            Assert(postalBox.BorderBrush is SolidColorBrush { Color: { R: 0xB4, G: 0x37, B: 0x37 } } && postalLabel.Text == "請手動輸入",
+                "An address that cannot be resolved marks the postal box red and asks for a code");
+            Capture(main, "13-postal-needed");
+            postalBox.Text = "123"; Flush();
+            Assert(postalBox.BorderBrush is not SolidColorBrush { Color: { R: 0xB4 } } && postalLabel.Text == "郵遞區號",
+                "Typing a code clears the red frame");
+            addressBox.Clear(); postalBox.Clear(); Flush();
             // Reprint last: brings the printed data back without printing; auto-clear empties the entry.
             var last = new PrintData { Recipient = "範例收件人", Address = "高雄市新興區範例路一號", PostalCode = "800",
                 Phone = "0912-345-678", DeliveryIds = ["delivery-2"], ShowFrame = true, FrameText = "內附對帳單" };

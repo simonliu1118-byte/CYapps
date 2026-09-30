@@ -24,7 +24,9 @@ public partial class MainWindow : Window
     private string? _postalAddress;
     private bool _settingPostal;
     // Set when an unresolvable address cleared the previous code; printing stops once to confirm.
-    private bool _postalCleared;
+    // The address could not be resolved: the postal box shows a red frame and asks for a hand-typed code.
+    private bool _postalNeeded;
+    private static readonly Brush DangerBrush = new SolidColorBrush(Color.FromRgb(0xB4, 0x37, 0x37));
     // Code last inferred from the address text; a hand-corrected code survives edits that keep the same area.
     private string? _lastInferredCode;
     private const string ReadyStatus = "請核對收件資料，再列印至預印信封。";
@@ -226,6 +228,7 @@ public partial class MainWindow : Window
         PostalBox.Text = code;
         _settingPostal = false;
         _postalAddress = address;
+        if (code.Length > 0) MarkPostalNeeded(false);
     }
 
     // Pasting or typing an address fills the postal code at once (offline table, three digits).
@@ -237,7 +240,6 @@ public partial class MainWindow : Window
             if (code is not null && code != _lastInferredCode)
             {
                 SetPostal(code, AddressBox.Text);
-                _postalCleared = false;
             }
             _lastInferredCode = code;
         }
@@ -249,7 +251,7 @@ public partial class MainWindow : Window
         if (!_settingPostal)
         {
             _postalAddress = AddressBox.Text.Trim().Length == 0 ? null : AddressBox.Text;
-            _postalCleared = false;
+            if (PostalBox.Text.Length > 0) MarkPostalNeeded(false);
         }
         Refresh();
     }
@@ -258,7 +260,11 @@ public partial class MainWindow : Window
     {
         _selectedAddress = address;
         AddressBox.Text = address?.Value ?? "";
-        SetPostal(address?.PostalCode ?? "", AddressBox.Text);
+        // A saved address without a code (unresolved when it was saved) is looked up again.
+        var code = address?.PostalCode ?? "";
+        if (code.Length == 0 && address is not null) code = Postal.Infer(address.Value) ?? "";
+        SetPostal(code, AddressBox.Text);
+        MarkPostalNeeded(address is not null && code.Length == 0);
         _lastInferredCode = Postal.Infer(AddressBox.Text);
         PhoneChoice.ItemsSource = _selectedContact?.Phones;
         var phone = _selectedContact?.Phones.FirstOrDefault(x => x.Id == address?.LastPhoneId)
@@ -309,7 +315,6 @@ public partial class MainWindow : Window
         if (code is not null)
         {
             SetPostal(code, address);
-            _postalCleared = false;
             Status(ReadyStatus);
         }
         else if (_postalAddress is null && PostalBox.Text.Length > 0)
@@ -318,12 +323,29 @@ public partial class MainWindow : Window
         }
         else
         {
-            if (PostalBox.Text.Length > 0)
-            {
-                _postalCleared = true;
-                Status("無法由地址判斷郵遞區號，已清除原區號；請手動輸入。");
-            }
+            // Never keep the previous address's code; ask for one instead (no popup, printing is not blocked).
             SetPostal("", address);
+            MarkPostalNeeded(true);
+        }
+    }
+
+    // Inline validation: Danger frame plus a short text in the label, same size so nothing moves.
+    private void MarkPostalNeeded(bool needed)
+    {
+        if (needed == _postalNeeded) return;
+        _postalNeeded = needed;
+        if (needed)
+        {
+            PostalBox.BorderBrush = DangerBrush;
+            PostalLabel.Text = "請手動輸入";
+            PostalLabel.Foreground = DangerBrush;
+            Status("無法由地址判斷郵遞區號，請在紅框內手動輸入。");
+        }
+        else
+        {
+            PostalBox.ClearValue(Control.BorderBrushProperty);
+            PostalLabel.Text = "郵遞區號";
+            PostalLabel.ClearValue(TextBlock.ForegroundProperty);
         }
     }
     private void PhoneLostFocus(object sender, KeyboardFocusChangedEventArgs e)
@@ -355,14 +377,6 @@ public partial class MainWindow : Window
         if (data.Recipient.Length == 0 || data.Address.Length == 0)
         {
             MessageBox.Show(this, "請輸入收件人及地址。", "資料不足", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        if (_postalCleared && data.PostalCode.Length == 0)
-        {
-            _postalCleared = false;
-            MessageBox.Show(this, "無法由目前地址判斷郵遞區號，原本的區號已清除。\n\n請輸入郵遞區號；確定不需要時再按一次「列印信封」。",
-                "郵遞區號已清除", MessageBoxButton.OK, MessageBoxImage.Information);
-            PostalBox.Focus();
             return;
         }
         var overflow = EnvelopeRenderer.Overflows(_format, data);
@@ -481,7 +495,7 @@ public partial class MainWindow : Window
         _selectedContact = null; _selectedAddress = null; _selectedPhone = null;
         RecipientBox.Clear(); AddressBox.Clear(); PhoneBox.Clear(); PostalBox.Clear();
         _postalAddress = null;
-        _postalCleared = false;
+        MarkPostalNeeded(false);
         _lastInferredCode = null;
         AddressChoice.ItemsSource = null; PhoneChoice.ItemsSource = null;
         Suggestions.Visibility = Visibility.Collapsed;
@@ -523,7 +537,7 @@ public partial class MainWindow : Window
         ShowFrameBox.IsChecked = last.ShowFrame;
         var frameIndex = _settings.FrameTexts.IndexOf(last.FrameText);
         if (frameIndex >= 0) FrameChoice.SelectedIndex = frameIndex;
-        _postalCleared = false;
+        MarkPostalNeeded(false);
         _loading = false;
         Status($"已帶回上一筆「{last.Recipient}」；確認後按「列印信封」。");
         Refresh();
