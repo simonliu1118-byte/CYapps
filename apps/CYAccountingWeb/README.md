@@ -99,23 +99,24 @@ CYCloudIdentity
 - Password Recovery 直接委派 CYID，密碼長度採 8–16 Unicode code points，UI 不揭露是否存在帳號或 masked email；
 - Tablet Safari compatibility 暫保留 `SameSite=Lax + Expires + navigation-safe`，直到真機驗收證明可收緊。
 
-## Isolated CYID development deployment
+## Isolated CYID development acceptance
 
-V0.21.6 Build 1 provides a dedicated CYID development path that is intentionally separate from the current production Worker.
+CYID development owns the provider-side provisioning and isolated preview lifecycle. The retained CYACC template `wrangler.cyid-development.template.jsonc` describes the consumer preview shape: dedicated Worker Preview + dedicated D1 + CYID development Service Binding, with no production Custom Domain, Backup binding, Cron or production accounting D1.
 
-- template: `wrangler.cyid-development.template.jsonc`
-- workflow: `.github/workflows/cyaccountingweb-cyid-development.yml`
-- allowed trigger: explicit `workflow_dispatch` or dedicated `deploy/cyaccountingweb-cyid-development` branch
-- protected GitHub Environment: `cyaccountingweb-cyid-development` (live smoke endpoint + controlled acceptance credentials only)
-- dedicated Worker + dedicated D1 + CYID development Service Binding only
-- no production Custom Domain route
-- no R2 / GCS backup binding
-- no Cron trigger
-- no production accounting D1
+Development live acceptance completed successfully on **CYCloud Identity Development Deploy run #96** using synthetic development-only principals and runtime-random masked credentials. The acceptance verified:
 
-CYID development provisioning/deployment is completed on the provider side. The CYACC workflow now consumes only the protected preview base URL, expected role, and controlled smoke credentials from `cyaccountingweb-cyid-development`; it does not require or duplicate Cloudflare deploy credentials. Actual values remain deployment data and must not be committed or pasted into public logs.
+- standalone CYACC login through the real CYID development Service Binding;
+- CYID Session resolve and direct Role projection;
+- `USER + CYACC App Access` can enter and read accounting data;
+- USER accounting mutation returns server-side `403 READ_ONLY_USER`;
+- USER Excel export returns a valid XLSX payload;
+- USER → ADMIN Role change revokes the old Session;
+- re-login as ADMIN exposes writable accounting authority and an isolated create/delete transaction roundtrip succeeds;
+- CYACC App Access revoke revokes the active Session and fresh login is denied;
+- App Access restore + Role restore returns the synthetic target to USER;
+- CYACC logout invalidates the provider Session.
 
-The CYID Application/Workspace registration and isolated preview deployment are provider-side prerequisites. CYACC does not create or mutate the registry in its own workflow; once the preview exists, this workflow performs live consumer acceptance only.
+The synthetic acceptance identities are development-only. Their passwords are generated at runtime, masked before use, never committed, and the target is restored to USER + App Access enabled with test Sessions revoked during cleanup.
 
 ## CYID development smoke
 
@@ -131,7 +132,7 @@ node scripts/smoke-cyid-development.mjs
 
 可選 `CYACC_SMOKE_MONTH=YYYY-MM`；未指定時使用執行當月。實際 hostname、Employee No、密碼與其他 runtime values 不得 commit、不得寫入 Actions log，也不得放進 Public artifact。
 
-Smoke runner 驗證 standalone login、CYID Session cookie、`/api/auth/me`、bootstrap、交易讀取、USER mutation 403、Excel 匯出與 logout。它不會自行變更 Role / App Access，也不會觸發 Password Recovery 寄信；App Access revoke、Role 變更與 Session immediate invalidation 仍需在 development CYID 管理流程中人工切換後立即重試既有 Session。
+CYACC 的低風險 smoke runner 仍可單獨驗證 login/read-only/Excel/logout；完整 Role/App Access/Session invalidation acceptance 已由 CYID development workflow 以 synthetic principals 自動執行並於 run #96 通過。Password Recovery 的 Email delivery/browser acceptance 仍屬獨立 gate。
 
 Canonical references：
 
