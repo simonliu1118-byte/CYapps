@@ -68,12 +68,12 @@ Migration `0002_web_sessions.sql` is historical/applied source and must not be r
 
 Migration order:
 
-1. implement provider login/resolve/logout;
-2. prove development login/session behavior;
-3. add a new forward CYACC migration that retires/drops `web_sessions`;
-4. remove local session mint/hash helpers after the provider path is accepted.
+1. implement provider login/resolve/logout and remove active local session mint/hash/resolve authority;
+2. prove the provider path in an isolated development deployment;
+3. cut over production only after explicit approval, while keeping the physical legacy `web_sessions` table temporarily available for rollback safety;
+4. after stable production acceptance, add a separate forward CYACC migration that retires/drops the physical `web_sessions` table.
 
-Do not keep `web_sessions` as a fallback Identity authority. Provider outage fails closed.
+The retained table must never remain an authorization fallback after source cutover. This staging exists only because CYACC applies D1 migrations before Worker deployment; dropping the table in the same first-cutover deployment could break the previous Worker if the new Worker deployment failed. Provider outage still fails closed.
 
 ## 4. Protected API boundary
 
@@ -153,11 +153,11 @@ Identity cutover and accounting behavior are separate acceptance dimensions.
 6. replace local `/api/auth/me` authority with CYID Session resolve;
 7. replace local-only logout with provider logout + cookie cleanup;
 8. replace legacy password reset with CYID recovery;
-9. prove the provider path in development;
-10. retire `web_sessions` via forward migration;
-11. retain CYACC business authorization locally;
-12. run CYACC Desktop/Tablet/Mobile acceptance;
-13. production cutover only after explicit approval.
+9. prove the provider path in isolated development;
+10. retain CYACC business authorization locally;
+11. run CYACC Desktop/Tablet/Mobile acceptance;
+12. production authority cutover only after explicit approval, without dropping the legacy table in the same deployment;
+13. after stable production acceptance, retire the physical `web_sessions` table via a separate forward migration.
 
 ## 10. CYACC-specific acceptance
 
