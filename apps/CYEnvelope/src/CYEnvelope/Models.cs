@@ -108,4 +108,6 @@ public sealed class AppSettings
     public string PrinterName { get; set; } = "";
     public bool DirectEntry { get; set; }
     public List<string> FrameTexts { get; set; } = ["內附對帳單"];
+    // The last envelope sent to the printer, kept so it can be brought back for a reprint (even after a restart).
+    public PrintData? LastPrint { get; set; }
 }

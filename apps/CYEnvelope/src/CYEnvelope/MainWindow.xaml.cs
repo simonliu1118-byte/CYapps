@@ -47,6 +47,7 @@ public partial class MainWindow : Window
         var build = File.ReadAllText(Path.Combine(appRoot, "BUILD")).Trim();
         Title = $"CYEnvelope V{version}" + (build != "0" ? $" Build {build}" : "");
         ShowFrameBox.IsChecked = true;
+        ReprintButton.IsEnabled = _settings.LastPrint is not null;
         RebuildOptions();
         ApplyEntryMode();
         Refresh();
@@ -377,7 +378,14 @@ public partial class MainWindow : Window
         {
             if (SendToPrinter(origin => EnvelopeRenderer.Draw(_format, data, false, printerOrigin: origin),
                     $"CYEnvelope - {data.Recipient}"))
-                Status($"已保存「{data.Recipient}」並送出列印。");
+            {
+                // Sent: remember it for "reprint last" and empty the entry for the next customer.
+                _settings.LastPrint = data;
+                _repository.SaveSettings(_settings);
+                ReprintButton.IsEnabled = true;
+                ResetEntry(resetFrame: false);
+                Status($"已列印「{data.Recipient}」。可輸入下一筆；「重印上一筆」可帶回剛才的資料。");
+            }
         }
         catch (Exception ex)
         {
@@ -463,7 +471,11 @@ public partial class MainWindow : Window
         catch (PrintSystemException) { } // removed/offline printer: native dialog chooses a valid printer
         return dialog;
     }
-    private void ClearClick(object sender, RoutedEventArgs e)
+    private void ClearClick(object sender, RoutedEventArgs e) => ResetEntry(resetFrame: true);
+
+    // Empties the entry for the next envelope. After a print the statement text choice is kept
+    // (every envelope of a batch normally carries the same one); the Clear button resets it too.
+    private void ResetEntry(bool resetFrame)
     {
         _loading = true;
         _selectedContact = null; _selectedAddress = null; _selectedPhone = null;
@@ -475,13 +487,49 @@ public partial class MainWindow : Window
         Suggestions.Visibility = Visibility.Collapsed;
         _delivery.Clear();
         SyncDeliveryBoxes();
-        ShowFrameBox.IsChecked = true;
-        FrameChoice.SelectedIndex = FrameChoice.Items.Count > 0 ? 0 : -1;
+        if (resetFrame)
+        {
+            ShowFrameBox.IsChecked = true;
+            FrameChoice.SelectedIndex = FrameChoice.Items.Count > 0 ? 0 : -1;
+        }
         _loading = false;
         Status(ReadyStatus);
         Refresh();
         RecipientBox.Focus();
     }
+
+    private void ReprintClick(object sender, RoutedEventArgs e) => ReprintLast();
+
+    // Brings the last printed envelope back exactly as it was sent; printing stays a deliberate click.
+    private void ReprintLast()
+    {
+        if (_settings.LastPrint is not { } last) return;
+        var contact = _repository.FindByName(last.Recipient).FirstOrDefault();
+        var number = last.Phone.Length == 0 ? "" : PhoneFormatting.Format(last.Phone);
+        _loading = true;
+        RecipientBox.Text = last.Recipient;
+        AddressBox.Text = last.Address;
+        SetPostal(last.PostalCode, last.Address);
+        _lastInferredCode = Postal.Infer(last.Address);
+        PhoneBox.Text = last.Phone;
+        _selectedContact = contact;
+        _selectedAddress = contact?.Addresses.FirstOrDefault(x => Postal.SameAddress(x.Value, last.Address));
+        _selectedPhone = contact?.Phones.FirstOrDefault(x => x.Display == number);
+        BindChoices();
+        Suggestions.Visibility = Visibility.Collapsed;
+        _delivery.Clear();
+        foreach (var id in last.DeliveryIds.Where(id => _format.Delivery.Any(x => x.Id == id))) _delivery.Add(id);
+        SyncDeliveryBoxes();
+        ShowFrameBox.IsChecked = last.ShowFrame;
+        var frameIndex = _settings.FrameTexts.IndexOf(last.FrameText);
+        if (frameIndex >= 0) FrameChoice.SelectedIndex = frameIndex;
+        _postalCleared = false;
+        _loading = false;
+        Status($"已帶回上一筆「{last.Recipient}」；確認後按「列印信封」。");
+        Refresh();
+        PrintButton.Focus();
+    }
+
     private void ContactsClick(object sender, RoutedEventArgs e)
     {
         new ContactWindow(_repository) { Owner = this }.ShowDialog();

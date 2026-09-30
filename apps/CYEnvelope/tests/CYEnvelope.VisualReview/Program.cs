@@ -52,6 +52,29 @@ internal static class Program
             addressBox.Text = "臺北市大安區忠孝東路"; Flush();
             Assert(postalBox.Text == "106", "A different area replaces the code");
             addressBox.Clear(); postalBox.Clear(); Flush();
+            // Reprint last: brings the printed data back without printing; auto-clear empties the entry.
+            var last = new PrintData { Recipient = "範例收件人", Address = "高雄市新興區範例路一號", PostalCode = "800",
+                Phone = "0912-345-678", DeliveryIds = ["delivery-2"], ShowFrame = true, FrameText = "內附對帳單" };
+            ((AppSettings)Field(main, "_settings")).LastPrint = last;
+            Invoke(main, "ReprintLast"); Flush();
+            var recipientBox = (TextBox)main.FindName("RecipientBox");
+            Assert(recipientBox.Text == "範例收件人" && addressBox.Text == last.Address && postalBox.Text == "800" &&
+                   chosen.SetEquals(["delivery-2"]), "Reprint last brings the printed envelope back");
+            Invoke(main, "ResetEntry", false); Flush();
+            Assert(recipientBox.Text.Length == 0 && addressBox.Text.Length == 0 && postalBox.Text.Length == 0 && chosen.Count == 0 &&
+                   ((CheckBox)main.FindName("ShowFrameBox")).IsChecked == true, "After printing the entry is emptied for the next customer");
+            // Flat drop-down: capture it opened (the popup is its own window, so render its content).
+            var frameChoice = (ComboBox)main.FindName("FrameChoice");
+            frameChoice.IsDropDownOpen = true; Flush();
+            var popup = (System.Windows.Controls.Primitives.Popup)frameChoice.Template.FindName("PART_Popup", frameChoice);
+            Assert(popup.IsOpen && popup.Child is FrameworkElement { ActualWidth: > 0 }, "Drop-down opens with the flat template");
+            if (popup.Child is FrameworkElement dropdown && dropdown.ActualWidth > 0)
+            {
+                var dropdownBitmap = new RenderTargetBitmap((int)Math.Ceiling(dropdown.ActualWidth), (int)Math.Ceiling(dropdown.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+                dropdownBitmap.Render(dropdown); Save(dropdownBitmap, "11-dropdown-open.png");
+            }
+            Capture(main, "12-main-dropdown-closed-focus");
+            frameChoice.IsDropDownOpen = false; Flush();
             Assert(((ScrollViewer)main.FindName("EntryScroll")).ScrollableHeight < 1, "Default main: all entry fields fit");
             var print = (Button)main.FindName("PrintButton");
             var size = print.RenderSize; print.Focus(); Flush();

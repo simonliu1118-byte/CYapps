@@ -19,6 +19,8 @@
       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <TextBlock x:Name="StatusText" Style="{StaticResource SecondaryText}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,16,0" Text="請核對收件資料，再列印至預印信封。"/>
         <StackPanel Grid.Column="1" Orientation="Horizontal">
+          <Button x:Name="ReprintButton" Content="重印上一筆" MinWidth="104" Margin="0,0,8,0" IsEnabled="False" Click="ReprintClick"
+                  ToolTip="帶回剛才列印的資料；仍需自己按「列印信封」"/>
           <Button Content="清空" MinWidth="84" Margin="0,0,8,0" Click="ClearClick"/>
           <Button x:Name="PrintButton" Content="列印信封" MinWidth="120" Style="{StaticResource PrimaryButton}" Click="PrintClick"/>
         </StackPanel>
