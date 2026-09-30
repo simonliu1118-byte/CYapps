@@ -63,15 +63,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (user.canWriteAccounting === false || role === 'USER') {
       document.body.dataset.cyaccReadOnly = 'true';
       readOnlyNotice?.classList.remove('hidden');
+      activateReadOnlyMobileLedger();
     } else {
       delete document.body.dataset.cyaccReadOnly;
       readOnlyNotice?.classList.add('hidden');
     }
   }
-});
-
-window.addEventListener('load', () => {
-  if (document.body.dataset.cyaccReadOnly !== 'true') return;
-  const ledgerButton = document.querySelector('#mobileMainNav [data-mobile-page="ledger"]');
-  ledgerButton?.click();
+  function activateReadOnlyMobileLedger(attempt = 0) {
+    if (!window.matchMedia('(max-width: 767px)').matches) return;
+    const ledgerButton = document.querySelector('#mobileMainNav [data-mobile-page="ledger"]');
+    if (ledgerButton) {
+      ledgerButton.click();
+      return;
+    }
+    if (attempt < 40) window.setTimeout(() => activateReadOnlyMobileLedger(attempt + 1), 50);
+  }
 });
