@@ -366,19 +366,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CYID_WRANGLER="$GITHUB_WORKSPACE/apps/CYCloudIdentity/node_modules/.bin/wrangler"
-          if [[ ! -x "$CYID_WRANGLER" ]]; then
-            echo "Pinned CYID Wrangler is unavailable." >&2
+          PREVIEW_WRANGLER="./node_modules/.bin/wrangler"
+          if [[ ! -x "$PREVIEW_WRANGLER" ]]; then
+            echo "Pinned CYACC Wrangler is unavailable." >&2
             exit 1
           fi
-          if ! "$CYID_WRANGLER" preview --name "$CYACC_PREVIEW_NAME" --config wrangler.cyid-development.generated.jsonc --ignore-base-config --json >/tmp/cyacc-preview.json 2>/tmp/cyacc-preview.err; then
+          if ! "$PREVIEW_WRANGLER" preview --name "$CYACC_PREVIEW_NAME" --config wrangler.cyid-development.generated.jsonc --ignore-base-config --json >/tmp/cyacc-preview.json 2>/tmp/cyacc-preview.err; then
             node -e "const fs=require('node:fs');const inputs=['/tmp/cyacc-preview.json','/tmp/cyacc-preview.err'];const text=inputs.filter(fs.existsSync).map(p=>fs.readFileSync(p,'utf8')).join('\\n');for(let line of text.split(/\\r?\\n/).slice(-32)){line=line.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi,'[redacted-uuid]').replace(/https?:\\/\\/[^\\s]+/gi,'[redacted-url]').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[0-9a-f]{32,}/gi,'[redacted-long-id]').replace(/cyacc[-_a-z0-9]*/gi,'[redacted-cyacc-resource]');console.error('CYACC preview detail: '+line.slice(0,500));}"
             echo "Unable to create or update the isolated CYACC Worker Preview." >&2
             exit 1
           fi
           CYACC_BASE_URL="$(node -e '
             const fs=require("node:fs");
-            const data=JSON.parse(fs.readFileSync("/tmp/cyacc-preview.json","utf8"));
+            const text=fs.readFileSync("/tmp/cyacc-preview.json","utf8");
+            let data=null;
+            for (let i=text.lastIndexOf("{"); i>=0; i=text.lastIndexOf("{", i-1)) {
+              try {
+                const candidate=JSON.parse(text.slice(i).trim());
+                if (candidate && candidate.preview) { data=candidate; break; }
+              } catch {}
+            }
             const url=data?.preview?.urls?.[0];
             if (typeof url === "string" && /^https:\/\//.test(url)) process.stdout.write(url);
           ')"
