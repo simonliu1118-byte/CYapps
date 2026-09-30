@@ -106,16 +106,16 @@ V0.21.6 Build 1 provides a dedicated CYID development path that is intentionally
 - template: `wrangler.cyid-development.template.jsonc`
 - workflow: `.github/workflows/cyaccountingweb-cyid-development.yml`
 - allowed trigger: explicit `workflow_dispatch` or dedicated `deploy/cyaccountingweb-cyid-development` branch
-- protected GitHub Environment: existing shared `development` (Cloudflare credentials only; CYACC resources remain dedicated)
+- protected GitHub Environment: `cyaccountingweb-cyid-development` (live smoke endpoint + controlled acceptance credentials only)
 - dedicated Worker + dedicated D1 + CYID development Service Binding only
 - no production Custom Domain route
 - no R2 / GCS backup binding
 - no Cron trigger
 - no production accounting D1
 
-Required protected environment variables use the `CYACC_CYID_DEV_*` namespace for Worker/D1/Identity/Application/Workspace/base-URL values; smoke Employee No/password are environment secrets. Actual values remain deployment data and must not be committed or pasted into public logs.
+CYID development provisioning/deployment is completed on the provider side. The CYACC workflow now consumes only the protected preview base URL, expected role, and controlled smoke credentials from `cyaccountingweb-cyid-development`; it does not require or duplicate Cloudflare deploy credentials. Actual values remain deployment data and must not be committed or pasted into public logs.
 
-The CYID Application must already exist in the provider registry and be enabled for the development Workspace before this deployment can pass live smoke. CYACC does not create or mutate the CYID Application registry.
+The CYID Application/Workspace registration and isolated preview deployment are provider-side prerequisites. CYACC does not create or mutate the registry in its own workflow; once the preview exists, this workflow performs live consumer acceptance only.
 
 ## CYID development smoke
 
