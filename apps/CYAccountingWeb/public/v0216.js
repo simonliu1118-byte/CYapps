@@ -1,7 +1,11 @@
-const CY_V0216_VERSION = 'V0.21.6 Build 5';
+const CY_V0216_VERSION = 'V0.21.6 Build 6';
 
-document.addEventListener('DOMContentLoaded', setupV0216Version);
-window.addEventListener('load', setupV0216Version);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupV0216Version, { once: true });
+} else {
+  setupV0216Version();
+}
+window.addEventListener('load', setupV0216Version, { once: true });
 
 function setupV0216Version() {
   syncV0216Version();

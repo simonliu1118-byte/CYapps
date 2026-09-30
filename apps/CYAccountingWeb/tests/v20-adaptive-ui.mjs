@@ -13,7 +13,7 @@ const refineCss = read('public/v0201.css');
 const js = read('public/v020.js');
 
 assert.match(html, /href="\/v020\.css"/);
-assert.match(html, /src="\/v020\.js"/);
+assert.match(html, /src="\/v020\.js\?v=0216b6"/);
 assert.ok(html.indexOf('/v020.css') > html.indexOf('/v019.css'), 'v020.css must load after v019.css');
 assert.ok(html.indexOf('/v020.js') > html.indexOf('/v019.js'), 'v020.js must load after v019.js');
 

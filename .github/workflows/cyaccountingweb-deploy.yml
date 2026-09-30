@@ -89,6 +89,11 @@ jobs:
           node --check public/v020.js
           node --check public/v021.js
           node --check public/v021b8.js
+          node --check public/v0216.js
+          node --check public/v0215b4.js
+          node --check public/v0215b3.js
+          node --check public/v021b11.js
+          node --check public/v021b10.js
 
       - name: Run application tests
         run: |
@@ -105,6 +110,7 @@ jobs:
           node tests/v21-adaptive-ui.mjs
           node tests/deploy-config.mjs
           node tests/cyid-integration.mjs
+          node tests/mobile-startup.mjs
           node tests/cyid-provider-contract.mjs
           node tests/cyid-production-runtime.mjs
           node scripts/validate-cyid-consumer-version.mjs
@@ -240,6 +246,18 @@ jobs:
             exit 1
           }
           echo "CYACC production secure login entry verified."
+
+      - name: Verify production mobile startup assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
+          curl --max-time 8 -fsS "$base/v021b10.css?v=0216b6" | grep -F '@media (max-width: 767px)' >/dev/null
+          curl --max-time 8 -fsS "$base/v0215.css?v=0216b6" | grep -F '.ledger-month-tools.v0215-toolbar-ready' >/dev/null
+          curl --max-time 8 -fsS "$base/v021b8.js?v=0216b6" | grep -F "runV21Build8Step('mobile-pages'" >/dev/null
+          curl --max-time 8 -fsS "$base/v021b10.js?v=0216b6" | grep -F "runV21Build10Step('mobile-app-bar'" >/dev/null
+          curl --max-time 8 -fsS "$base/app.js?v=0216b6" | grep -F 'startCyaccApp' >/dev/null
+          echo "CYACC production mobile startup assets verified."
 
       - name: Remove production generated files
         if: always()

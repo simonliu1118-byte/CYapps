@@ -5,38 +5,58 @@ const CY_V21_BUILD9_MOBILE = '(max-width: 767px)';
 ensureV21Build8Stylesheet();
 ensureV21Build9Stylesheet();
 
-document.addEventListener('DOMContentLoaded', () => {
-  syncV21Build8Version();
-  setupV21Build8AccountChoices();
-  setupV21Build8SummaryLimit();
-  setupV21Build8RoleMedal();
-  setupV21Build9EnterHints();
-  setupV21Build9MobileAccountPicker();
-  setupV21Build9MobilePages();
-  syncV21Build9HelpCopy();
-});
+let cyV21Build8Started = false;
 
-window.addEventListener('load', () => {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startV21Build8, { once: true });
+} else {
+  startV21Build8();
+}
+window.addEventListener('load', syncV21Build8AfterLoad, { once: true });
+
+function startV21Build8() {
+  if (cyV21Build8Started) return;
+  cyV21Build8Started = true;
+  runV21Build8Step('mobile-pages', setupV21Build9MobilePages);
+  runV21Build8Step('mobile-account-picker', setupV21Build9MobileAccountPicker);
+  runV21Build8Step('account-choices', setupV21Build8AccountChoices);
+  runV21Build8Step('summary-limit', setupV21Build8SummaryLimit);
+  runV21Build8Step('role-medal', setupV21Build8RoleMedal);
+  runV21Build8Step('enter-hints', setupV21Build9EnterHints);
+  runV21Build8Step('help-copy', syncV21Build9HelpCopy);
+  runV21Build8Step('version', syncV21Build8Version);
+}
+
+function runV21Build8Step(name, task) {
+  try {
+    task();
+  } catch (error) {
+    console.error('cyaccounting_mobile_build8_step_failed', name, error instanceof Error ? error.message : 'unknown_error');
+  }
+}
+
+function syncV21Build8AfterLoad() {
+  startV21Build8();
   syncV21Build8Version();
   syncV21Build8AccountChoices();
   syncV21Build8RoleMedal();
   syncV21Build9AccountPickerLabel();
   syncV21Build9HelpCopy();
-});
+}
 
 function ensureV21Build8Stylesheet() {
-  if (document.querySelector('link[href="/v021b8.css"]')) return;
+  if (document.querySelector('link[href^="/v021b8.css"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/v021b8.css';
+  link.href = '/v021b8.css?v=0216b6';
   document.head.appendChild(link);
 }
 
 function ensureV21Build9Stylesheet() {
-  if (document.querySelector('link[href="/v021b9.css"]')) return;
+  if (document.querySelector('link[href^="/v021b9.css"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/v021b9.css';
+  link.href = '/v021b9.css?v=0216b6';
   document.head.appendChild(link);
 }
 
