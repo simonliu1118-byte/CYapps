@@ -1,5 +1,7 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 const WORKER_NAME = /^[a-z0-9][a-z0-9._-]{1,62}$/i;
 const APPLICATION_ID = /^[A-Z0-9][A-Z0-9_-]{1,63}$/;
@@ -87,6 +89,6 @@ async function cli() {
   }
 }
 
-if (import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   await cli();
 }
