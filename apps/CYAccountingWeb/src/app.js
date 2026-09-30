@@ -23,6 +23,10 @@ export default {
     const url = new URL(request.url);
 
     try {
+      if (url.pathname === '/login.html' && request.method === 'GET') {
+        return redirect('/login' + url.search);
+      }
+
       if (url.pathname === '/login' && request.method === 'GET') {
         const resolved = await resolveIdentitySession(request, env);
         if (resolved.ok) return redirect('/');
