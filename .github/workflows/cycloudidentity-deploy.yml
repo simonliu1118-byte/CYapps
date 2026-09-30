@@ -161,6 +161,225 @@ jobs:
             printf '%s' "$CYID_RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY --config wrangler.deploy.generated.jsonc
           fi
 
+      - name: Provision CYACC development registry and acceptance access
+        shell: bash
+        run: |
+          set -euo pipefail
+          query_file="$(mktemp)"
+          cleanup_query() { rm -f "$query_file"; }
+          trap cleanup_query EXIT
+
+          run_query() {
+            local sql="$1"
+            if ! npx wrangler d1 execute DB --remote --config wrangler.deploy.generated.jsonc --json --command "$sql" >"$query_file" 2>/dev/null; then
+              echo "CYACC development provisioning query failed." >&2
+              exit 1
+            fi
+          }
+
+          scalar_value() {
+            node -e '
+              const fs=require("fs");
+              const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+              const roots=Array.isArray(data)?data:[data];
+              const rows=[];
+              for (const root of roots) {
+                if (Array.isArray(root?.results)) rows.push(...root.results);
+                else if (Array.isArray(root?.result?.results)) rows.push(...root.result.results);
+              }
+              if (rows.length !== 1 || rows[0]?.value === undefined || rows[0]?.value === null) process.exit(2);
+              process.stdout.write(String(rows[0].value));
+            ' "$query_file"
+          }
+
+          run_query "SELECT workspace_id AS value FROM workspaces WHERE status='active' ORDER BY created_at;"
+          if ! CYACC_WORKSPACE_ID="$(scalar_value)"; then
+            echo "CYACC provisioning requires exactly one active development Workspace." >&2
+            exit 1
+          fi
+          echo "::add-mask::$CYACC_WORKSPACE_ID"
+
+          run_query "SELECT COUNT(*) AS value FROM applications WHERE upper(replace(display_name,' ','')) IN ('CYACCOUNTINGWEB','CYACC');"
+          app_count="$(scalar_value)"
+          if [[ "$app_count" == "0" ]]; then
+            CYACC_APPLICATION_ID="CYACC_DEV_$(tr -d '-' </proc/sys/kernel/random/uuid | cut -c1-20 | tr '[:lower:]' '[:upper:]')"
+          elif [[ "$app_count" == "1" ]]; then
+            run_query "SELECT application_id AS value FROM applications WHERE upper(replace(display_name,' ','')) IN ('CYACCOUNTINGWEB','CYACC') LIMIT 1;"
+            CYACC_APPLICATION_ID="$(scalar_value)"
+          else
+            echo "CYACC provisioning found multiple candidate Application registry rows." >&2
+            exit 1
+          fi
+          if [[ ! "$CYACC_APPLICATION_ID" =~ ^[A-Z0-9][A-Z0-9_-]{1,63}$ ]]; then
+            echo "CYACC Application ID failed validation." >&2
+            exit 1
+          fi
+          echo "::add-mask::$CYACC_APPLICATION_ID"
+
+          now_sql="strftime('%Y-%m-%dT%H:%M:%fZ','now')"
+          run_query "INSERT INTO applications(application_id,display_name,status,created_at,updated_at) VALUES('$CYACC_APPLICATION_ID','CYAccountingWeb','active',$now_sql,$now_sql) ON CONFLICT(application_id) DO UPDATE SET display_name='CYAccountingWeb',status='active',updated_at=$now_sql; INSERT INTO workspace_applications(workspace_id,application_id,enabled,created_at,updated_at) VALUES('$CYACC_WORKSPACE_ID','$CYACC_APPLICATION_ID',1,$now_sql,$now_sql) ON CONFLICT(workspace_id,application_id) DO UPDATE SET enabled=1,updated_at=$now_sql;"
+
+          run_query "SELECT e.employee_id AS value FROM employees e JOIN employee_credentials c ON c.employee_id=e.employee_id WHERE e.workspace_id='$CYACC_WORKSPACE_ID' AND e.enabled=1 AND e.role_key='USER' AND e.activated_at IS NOT NULL ORDER BY e.employee_no LIMIT 1;"
+          if ! CYACC_USER_ID="$(scalar_value)"; then
+            echo "CYACC provisioning requires one enabled credentialed USER in development." >&2
+            exit 1
+          fi
+          echo "::add-mask::$CYACC_USER_ID"
+
+          run_query "SELECT e.employee_id AS value FROM employees e JOIN employee_credentials c ON c.employee_id=e.employee_id JOIN workspaces w ON w.workspace_id=e.workspace_id WHERE e.workspace_id='$CYACC_WORKSPACE_ID' AND e.enabled=1 AND e.role_key='ADMIN' AND e.activated_at IS NOT NULL AND e.employee_id<>w.super_admin_employee_id ORDER BY e.employee_no LIMIT 1;"
+          if ! CYACC_ADMIN_ID="$(scalar_value)"; then
+            echo "CYACC provisioning requires one enabled credentialed ADMIN in development." >&2
+            exit 1
+          fi
+          echo "::add-mask::$CYACC_ADMIN_ID"
+
+          run_query "SELECT e.employee_id AS value FROM employees e JOIN employee_credentials c ON c.employee_id=e.employee_id JOIN workspaces w ON w.workspace_id=e.workspace_id WHERE e.workspace_id='$CYACC_WORKSPACE_ID' AND e.enabled=1 AND e.employee_id=w.super_admin_employee_id LIMIT 1;"
+          if ! CYACC_SUPER_ID="$(scalar_value)"; then
+            echo "CYACC provisioning requires an enabled credentialed Super Admin in development." >&2
+            exit 1
+          fi
+          echo "::add-mask::$CYACC_SUPER_ID"
+
+          run_query "INSERT INTO employee_application_access(workspace_id,employee_id,application_id,enabled,created_at,updated_at) VALUES('$CYACC_WORKSPACE_ID','$CYACC_USER_ID','$CYACC_APPLICATION_ID',1,$now_sql,$now_sql) ON CONFLICT(workspace_id,employee_id,application_id) DO UPDATE SET enabled=1,updated_at=$now_sql; INSERT INTO employee_application_access(workspace_id,employee_id,application_id,enabled,created_at,updated_at) VALUES('$CYACC_WORKSPACE_ID','$CYACC_ADMIN_ID','$CYACC_APPLICATION_ID',1,$now_sql,$now_sql) ON CONFLICT(workspace_id,employee_id,application_id) DO UPDATE SET enabled=1,updated_at=$now_sql;"
+
+          run_query "SELECT CASE WHEN (SELECT COUNT(*) FROM applications WHERE application_id='$CYACC_APPLICATION_ID' AND status='active')=1 AND (SELECT COUNT(*) FROM workspace_applications WHERE workspace_id='$CYACC_WORKSPACE_ID' AND application_id='$CYACC_APPLICATION_ID' AND enabled=1)=1 AND (SELECT COUNT(*) FROM employee_application_access WHERE workspace_id='$CYACC_WORKSPACE_ID' AND employee_id='$CYACC_USER_ID' AND application_id='$CYACC_APPLICATION_ID' AND enabled=1)=1 AND (SELECT COUNT(*) FROM employee_application_access WHERE workspace_id='$CYACC_WORKSPACE_ID' AND employee_id='$CYACC_ADMIN_ID' AND application_id='$CYACC_APPLICATION_ID' AND enabled=1)=1 AND (SELECT COUNT(*) FROM workspaces WHERE workspace_id='$CYACC_WORKSPACE_ID' AND super_admin_employee_id='$CYACC_SUPER_ID' AND status='active')=1 THEN 1 ELSE 0 END AS value;"
+          if [[ "$(scalar_value)" != "1" ]]; then
+            echo "CYACC development provisioning validation failed." >&2
+            exit 1
+          fi
+
+          echo "::add-mask::$CYID_WORKER_NAME"
+          runtime_hash="$(printf '%s' "$CYACC_APPLICATION_ID" | sha256sum | cut -c1-12)"
+          CYACC_WORKER_NAME="cyacc-cyid-dev-$runtime_hash"
+          CYACC_D1_NAME="cyacc_cyid_dev_$runtime_hash"
+          echo "::add-mask::$CYACC_WORKER_NAME"
+          echo "::add-mask::$CYACC_D1_NAME"
+
+          {
+            echo "CF_IDENTITY_SERVICE=$CYID_WORKER_NAME"
+            echo "CF_CYID_APPLICATION_ID=$CYACC_APPLICATION_ID"
+            echo "CF_CYID_WORKSPACE_ID=$CYACC_WORKSPACE_ID"
+            echo "CF_WORKER_NAME=$CYACC_WORKER_NAME"
+            echo "CF_D1_DATABASE_NAME=$CYACC_D1_NAME"
+          } >> "$GITHUB_ENV"
+
+          echo "CYACC development registry, Workspace enablement, USER/ADMIN grants and Super Admin implicit access are ready."
+
+      - name: Checkout CYACC integration candidate
+        uses: actions/checkout@v7
+        with:
+          ref: governance/cyacc-cyid-runtime-integration
+          path: cyacc-candidate
+
+      - name: Install CYACC development dependencies
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        run: npm ci --no-audit --no-fund
+
+      - name: Prepare isolated CYACC development D1
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        shell: bash
+        run: |
+          set -euo pipefail
+          list_file="$(mktemp)"
+          cleanup_list() { rm -f "$list_file" /tmp/cyacc-d1-create.log; }
+          trap cleanup_list EXIT
+
+          list_databases() {
+            if ! npx wrangler d1 list --json >"$list_file" 2>/dev/null; then
+              echo "Unable to inspect isolated CYACC development D1." >&2
+              exit 1
+            fi
+          }
+          find_database_id() {
+            DB_LOOKUP_NAME="$CF_D1_DATABASE_NAME" node -e '
+              const fs=require("fs");
+              const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+              const rows=Array.isArray(data)?data:(Array.isArray(data?.result)?data.result:[]);
+              const hit=rows.find(x=>x?.name===process.env.DB_LOOKUP_NAME);
+              if (hit?.uuid) process.stdout.write(String(hit.uuid));
+              else if (hit?.id) process.stdout.write(String(hit.id));
+            ' "$list_file"
+          }
+
+          list_databases
+          CF_D1_DATABASE_ID="$(find_database_id)"
+          if [[ -z "$CF_D1_DATABASE_ID" ]]; then
+            if ! npx wrangler d1 create "$CF_D1_DATABASE_NAME" >/tmp/cyacc-d1-create.log 2>&1; then
+              echo "Unable to create isolated CYACC development D1." >&2
+              exit 1
+            fi
+            list_databases
+            CF_D1_DATABASE_ID="$(find_database_id)"
+          fi
+          if [[ ! "$CF_D1_DATABASE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "Isolated CYACC development D1 ID failed validation." >&2
+            exit 1
+          fi
+          echo "::add-mask::$CF_D1_DATABASE_ID"
+          echo "CF_D1_DATABASE_ID=$CF_D1_DATABASE_ID" >> "$GITHUB_ENV"
+
+      - name: Render isolated CYACC development config
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        run: node scripts/render-wrangler.mjs --template wrangler.cyid-development.template.jsonc --output wrangler.cyid-development.generated.jsonc
+
+      - name: Apply isolated CYACC D1 migrations
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! npx wrangler d1 migrations apply DB --remote --config wrangler.cyid-development.generated.jsonc >/tmp/cyacc-migrate.log 2>&1; then
+            echo "Isolated CYACC development D1 migration failed." >&2
+            exit 1
+          fi
+
+      - name: Deploy isolated CYACC development Worker with CYID binding
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! npx wrangler deploy --config wrangler.cyid-development.generated.jsonc >/tmp/cyacc-deploy.log 2>&1; then
+            echo "Isolated CYACC development Worker deploy failed." >&2
+            exit 1
+          fi
+          CYACC_BASE_URL="$(node -e '
+            const fs=require("fs");
+            const text=fs.readFileSync("/tmp/cyacc-deploy.log","utf8");
+            const m=text.match(/https:\/\/[A-Za-z0-9.-]+\.workers\.dev/);
+            if (m) process.stdout.write(m[0]);
+          ')"
+          if [[ -z "$CYACC_BASE_URL" ]]; then
+            echo "Unable to determine isolated CYACC development URL." >&2
+            exit 1
+          fi
+          echo "::add-mask::$CYACC_BASE_URL"
+          echo "CYACC_BASE_URL=$CYACC_BASE_URL" >> "$GITHUB_ENV"
+
+      - name: Verify isolated CYACC runtime and CYID Service Binding
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/cyacc-login.html -w '%{http_code}' "$CYACC_BASE_URL/login")"
+          if [[ "$code" != "200" ]]; then
+            echo "CYACC isolated login entry is not healthy." >&2
+            exit 1
+          fi
+
+          headers="$(mktemp)"
+          code="$(curl -sS -o /tmp/cyacc-invalid-login.out -D "$headers" -w '%{http_code}' -X POST "$CYACC_BASE_URL/login" -H 'content-type: application/x-www-form-urlencoded' --data 'employeeNo=9999&password=abcdefgh')"
+          location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {gsub(/\r/,""); sub(/^location:[[:space:]]*/,""); print; exit}' "$headers")"
+          rm -f "$headers"
+          if [[ "$code" != "303" || "$location" != "/login?error=failed" ]]; then
+            echo "CYACC isolated runtime could not prove the CYID Service Binding login path." >&2
+            exit 1
+          fi
+          echo "CYACC isolated development runtime is deployed and its CYID Service Binding is live."
+
+      - name: Remove isolated CYACC generated files
+        if: always()
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        run: rm -f wrangler.cyid-development.generated.jsonc /tmp/cyacc-migrate.log /tmp/cyacc-deploy.log /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
+
       - name: Remove generated config
         if: always()
         run: rm -f wrangler.deploy.generated.jsonc
