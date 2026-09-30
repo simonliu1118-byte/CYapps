@@ -4,6 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
+  <script>
+    (() => {
+      const localHosts = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+      if (window.location.protocol === 'http:' && !localHosts.has(window.location.hostname)) {
+        const secureUrl = new URL(window.location.href);
+        secureUrl.protocol = 'https:';
+        window.location.replace(secureUrl.toString());
+      }
+    })();
+  </script>
   <title>登入｜志遠記帳系統</title>
   <link rel="stylesheet" href="/login.css?v=0216">
 </head>
