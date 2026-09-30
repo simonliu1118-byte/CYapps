@@ -83,3 +83,15 @@ body[data-cyacc-read-only="true"] #mobileMainNav {
     font-size: 13px;
   }
 }
+
+
+@media (min-width: 768px) {
+  body[data-cyacc-read-only="true"] .shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body[data-cyacc-read-only="true"] .ledger-card {
+    grid-column: 1 / -1 !important;
+    width: 100%;
+  }
+}
