@@ -98,6 +98,22 @@ CYCloudIdentity
 - Password Recovery 直接委派 CYID，密碼長度採 8–16 Unicode code points，UI 不揭露是否存在帳號或 masked email；
 - Tablet Safari compatibility 暫保留 `SameSite=Lax + Expires + navigation-safe`，直到真機驗收證明可收緊。
 
+## CYID development smoke
+
+在 development registry 與 runtime variables 設定完成後，可從受信任環境執行：
+
+```bash
+CYACC_SMOKE_BASE_URL="https://<development-host>" \\
+CYACC_SMOKE_EMPLOYEE_NO="<4-digit-employee-no>" \\
+CYACC_SMOKE_PASSWORD="<password>" \\
+CYACC_SMOKE_EXPECTED_ROLE="USER" \\
+node scripts/smoke-cyid-development.mjs
+```
+
+可選 `CYACC_SMOKE_MONTH=YYYY-MM`；未指定時使用執行當月。實際 hostname、Employee No、密碼與其他 runtime values 不得 commit、不得寫入 Actions log，也不得放進 Public artifact。
+
+Smoke runner 驗證 standalone login、CYID Session cookie、`/api/auth/me`、bootstrap、交易讀取、USER mutation 403、Excel 匯出與 logout。它不會自行變更 Role / App Access，也不會觸發 Password Recovery 寄信；App Access revoke、Role 變更與 Session immediate invalidation 仍需在 development CYID 管理流程中人工切換後立即重試既有 Session。
+
 Canonical references：
 
 - shared standard：`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`；
