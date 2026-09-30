@@ -48,6 +48,7 @@ jobs:
         run: |
           node --check src/index.js
           node --check src/app.js
+          node --check src/identity-adapter.js
           node --check src/app-v17.js
           node --check src/app-v18.js
           node --check src/app-v19.js
@@ -65,7 +66,9 @@ jobs:
           node --check src/v19-migration-safe.js
           node --check scripts/render-wrangler.mjs
           node --check scripts/prepare-sqljs.mjs
+          node --check scripts/validate-cyid-consumer-version.mjs
           node --check public/auth.js
+          node --check public/login.js
           node --check public/app.js
           node --check public/v03.js
           node --check public/v06.js
@@ -99,6 +102,8 @@ jobs:
           node tests/v21-desktop-ui.mjs
           node tests/v21-adaptive-ui.mjs
           node tests/deploy-config.mjs
+          node tests/cyid-integration.mjs
+          node scripts/validate-cyid-consumer-version.mjs
 
       - name: Prepare pinned browser SQLite runtime
         run: node scripts/prepare-sqljs.mjs
@@ -109,6 +114,8 @@ jobs:
           CF_D1_DATABASE_NAME: cyaccounting-web-ci-db
           CF_D1_DATABASE_ID: 11111111-1111-4111-8111-111111111111
           CF_IDENTITY_SERVICE: cyidentity-ci-placeholder
+          CF_CYID_APPLICATION_ID: CYACC_CI
+          CF_CYID_WORKSPACE_ID: workspace-ci-placeholder
           CF_R2_BACKUP_BUCKET: cyaccounting-backup-ci
           CF_BACKUP_TOPOLOGY: legacy_gcs
           CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: acc.example.com
@@ -143,6 +150,8 @@ jobs:
       CF_D1_DATABASE_NAME: ${{ vars.CF_D1_DATABASE_NAME }}
       CF_D1_DATABASE_ID: ${{ vars.CF_D1_DATABASE_ID }}
       CF_IDENTITY_SERVICE: ${{ vars.CF_IDENTITY_SERVICE }}
+      CF_CYID_APPLICATION_ID: ${{ vars.CF_CYID_APPLICATION_ID }}
+      CF_CYID_WORKSPACE_ID: ${{ vars.CF_CYID_WORKSPACE_ID }}
       CF_R2_BACKUP_BUCKET: ${{ vars.CF_R2_BACKUP_BUCKET }}
       CF_BACKUP_TOPOLOGY: ${{ vars.CF_BACKUP_TOPOLOGY }}
       CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: ${{ vars.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN }}
