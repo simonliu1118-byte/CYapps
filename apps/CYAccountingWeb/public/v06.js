@@ -6,12 +6,24 @@ let cyLedgerObserver = null;
 let cyLedgerRequestId = 0;
 window.cyLedgerBalanceBreakdowns = new Map();
 
-window.addEventListener('load', () => {
+let cyV06Started = false;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startV06LedgerTools, { once: true });
+} else {
+  startV06LedgerTools();
+}
+window.addEventListener('load', startV06LedgerTools, { once: true });
+
+function startV06LedgerTools() {
+  if (cyV06Started) return;
+  if (!document.querySelector('.ledger-card') || !document.querySelector('#monthFilter')) return;
+  cyV06Started = true;
   setupLedgerDesktopTools();
   bindLedgerDesktopTools();
   observeLedgerRefreshes();
   scheduleLedgerDesktopRefresh();
-});
+}
 
 function setupLedgerDesktopTools() {
   const card = document.querySelector('.ledger-card');
