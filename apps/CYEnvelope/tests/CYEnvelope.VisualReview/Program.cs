@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -137,13 +138,12 @@ internal static class Program
             Assert(postalBox.IsKeyboardFocused, "An unresolved postal code stops at the postal box");
             addressBox.Clear(); postalBox.Clear(); Flush();
             var tabOrder = new List<string>();
-            DependencyObject? cursor = recipientField;
-            for (var i = 0; i < 40 && cursor is UIElement element; i++)
+            recipientField.Focus(); Flush();
+            for (var i = 0; i < 40; i++)
             {
-                element.Focus(); Flush();
-                tabOrder.Add(((FrameworkElement)cursor).Name);
-                cursor = element.PredictFocus(System.Windows.Input.FocusNavigationDirection.Next);
-                if (cursor is FrameworkElement { Name: "RecipientBox" }) break;
+                tabOrder.Add((Keyboard.FocusedElement as FrameworkElement)?.Name ?? "");
+                ((UIElement)Keyboard.FocusedElement).MoveFocus(new TraversalRequest(FocusNavigationDirection.Next)); Flush();
+                if (Keyboard.FocusedElement is FrameworkElement { Name: "RecipientBox" }) break;
             }
             var wanted = new[] { "RecipientBox", "AddressBox", "PostalBox", "PhoneBox" };
             var indexes = wanted.Select(name => tabOrder.IndexOf(name)).ToArray();
