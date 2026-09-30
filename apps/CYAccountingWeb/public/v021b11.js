@@ -32,10 +32,10 @@ function startV21Build11() {
 }
 
 function ensureV21Build11Stylesheet() {
-  if (document.querySelector('link[href="/v021b11.css"]')) return;
+  if (document.querySelector('link[href^="/v021b11.css"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/v021b11.css';
+  link.href = '/v021b11.css?v=0216b6';
   document.head.appendChild(link);
 }
 
@@ -115,7 +115,7 @@ function ensureV0215Stylesheet() {
   if (document.querySelector('link[href^="/v0215.css"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/v0215.css?v=0215b10';
+  link.href = '/v0215.css?v=0216b6';
   document.head.appendChild(link);
 }
 
