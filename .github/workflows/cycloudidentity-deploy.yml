@@ -341,7 +341,8 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s\n' 'export default { async fetch() { return new Response("CYACC development bootstrap"); } };' > /tmp/cyacc-bootstrap.mjs
-          if ! npx wrangler deploy /tmp/cyacc-bootstrap.mjs --name "$CF_WORKER_NAME" --compatibility-date 2026-09-22 --no-bundle >/tmp/cyacc-bootstrap.log 2>&1; then
+          if ! npx wrangler deploy /tmp/cyacc-bootstrap.mjs --name "$CF_WORKER_NAME" --compatibility-date 2026-09-22 >/tmp/cyacc-bootstrap.log 2>&1; then
+            node -e "const fs=require('node:fs');let text=fs.readFileSync('/tmp/cyacc-bootstrap.log','utf8');for(let line of text.split(/\\r?\\n/).slice(-24)){line=line.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi,'[redacted-uuid]').replace(/https?:\\/\\/[^\\s]+/gi,'[redacted-url]').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[0-9a-f]{32,}/gi,'[redacted-long-id]');console.error('CYACC bootstrap detail: '+line.slice(0,500));}"
             echo "Unable to create the isolated CYACC development Worker resource." >&2
             exit 1
           fi
