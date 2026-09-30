@@ -2,10 +2,10 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
-## Current checkpoint — 2026-09-30
+## Current checkpoint — 2026-10-01
 
 - Current formal source baseline is **CYCloudIdentity 0.3.3 Build 0**；本 patch 建立 governed shared consumer standard / compatibility lifecycle，development runtime 仍是已部署的 **0.3.0 Build 0**，不因治理／文件調整自動重部署。
-- CY Web formal source baseline is **0.5.1 Build 0**；development runtime is **0.5.0 Build 0**。已接上 CYID 0.3 first-login Email verification、direct Module Access，以及 Customer/Item/Defect protected Worker API Phase 1。固定入口仍為 `https://admin.chihyuancm.com`。
+- CY Web formal source/development baseline is **0.6.0 Build 0** at `f9025de4ad9247c035b744e90bc2f015f2cdaf28`；development deploy #71 已通過。Item/Customer/Defect/Order/Outsourcing 使用 Worker API → D1；WorkLog API source 仍在未合併工作分支，Settings/Audit 仍有 browser-local runtime。固定入口仍為 `https://admin.chihyuancm.com`。
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
   - 只允許 CY Web core account application；
@@ -24,7 +24,11 @@
 - CYAccountingWeb（CYACCweb）handoff 已收斂為 app-specific migration guide：`docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；共同 Role / Session / App Access / first-login / recovery 規範只讀 `docs/CONSUMER_INTEGRATION_STANDARD.md`。
 - CYACC **V0.21.6 Build 1 / Draft PR #243** isolated development live acceptance run #96 已通過：USER login/read-only/Excel、Role change Session invalidation、ADMIN isolated write、App Access revoke/restore + Session invalidation、logout。Password Recovery Email/browser、Tablet 真機與 production cutover 仍為獨立 gate。
 - Cross-repository contract mirror 已定義 manifest + exact-sync 規則：CY Web 等外部 repo 必須鏡像 manifest 所列 7 個 artifacts 並在 governance/CI/deploy 前 byte-compare；同 repo consumer 直接讀 canonical files。
-- Production、backup rollout 與其他 consumer production cutover 均未進行。
+- **CYID production provisioning 已獲批准並完成**：`deploy/cycloudidentity-production` at `0e9dc3342cd581bf41090012aae0759bce026329`，Production Provisioning run #12 成功，包含獨立 Worker/D1、durable authority continuity、CYACC registry/Workspace enablement、runtime binding 與 Session resolve/logout/revoke probe；不是 development provider。該 deployment workflow 尚未整合到 main，source VERSION/BUILD 未變。
+- Production probe 使用短效合成 Session，並非真實密碼/Email/browser 驗收；這些 acceptance 與 backup/restore 尚未因此通過。CYACC 自己的正式部署/驗收由 CYACC 工作線追蹤。
+- **相容層與部署檢查完成**：讀 `docs/COMPATIBILITY_REVIEW.md`。已確認 obsolete Group API/projections、兩份 Session authority 檢查、舊不可達 lifecycle handlers 與 initial-access wrapper；未執行 runtime 清理。
+- **下次 production deploy 前優先處理 provisioning replay 風險**：舊 workflow 會由 development 無條件 UPDATE production Employee，不能重跑作日常 deploy；必須先分離一次性 continuity 與日常 production deployment。不得直接把含舊 consumer baseline 的整個 deployment branch 合入 main。
+- Backup rollout / restore acceptance 與 CY Web production business-data rollout 未完成。
 
 ## Documentation consolidation
 
@@ -59,14 +63,17 @@
 15. [x] 建立 governed CYID Consumer Integration Standard + contract compatibility versions + PR consumer-impact gate；再加入 cross-repository sync manifest / exact mirror requirement；CYACC handoff 收斂為 app-specific migration guide。
 16. [x] CYAccountingWeb 已採用 `CYID_CONSUMER_VERSION=1.0.1`，V0.21.6 Build 1 source + isolated development live Role/App Access/Session acceptance 已完成；real Email/browser lifecycle、Tablet 與 production cutover 仍是後續 gate。
 17. [ ] 在 CYInvoice 工作線適合的接入點，以同一 consumer standard 建立其 app-specific migration handoff；Device/local/offline 邊界仍由 CYInvoice 自己管理。
-18. [ ] Production 前完成 low-frequency backup + restore acceptance；production cutover 需使用者另行明確同意。
+18. [ ] 完成 low-frequency backup + restore acceptance；production provisioning 已明確批准並由 run #12 完成，這不代表 backup/restore 或 broader Email/browser acceptance 已通過。
+19. [x] 完成 CYWEB/CYID 相容層與 production workflow 檢查，結果在 `docs/COMPATIBILITY_REVIEW.md`。
+20. [ ] 先收斂 production deployment，移除 routine deploy 中的 development→production Employee overwrite 與一次性 continuity 步驟；本輪只記錄風險，未重跑 deployment。
+21. [ ] 依 review 次序移除不可達舊 handlers、統一 Session resolver，協調 CY Web consumer 後退休 Group API/fields；不得增加另一層相容殼。
 
 ## Explicitly deferred
 
 - Non-ADMIN HR Identity capability，直到有真實 HR workflow。
 - Universal fine-grained business permission catalog inside CYID。
 - CYInvoice Device pairing / Device Token / Local->Cloud / Windows offline credential cache。
-- Production Identity rollout、paid Cloudflare/Email/Google Cloud plans。
+- 尚未批准的其他 production rollout、paid Cloudflare/Email/Google Cloud plans。
 
 ## Reading order for current work
 
