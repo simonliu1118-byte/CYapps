@@ -12,6 +12,8 @@ const REQUIRED = {
   CF_D1_DATABASE_NAME: '__CF_D1_DATABASE_NAME__',
   CF_D1_DATABASE_ID: '__CF_D1_DATABASE_ID__',
   CF_IDENTITY_SERVICE: '__CF_IDENTITY_SERVICE__',
+  CF_CYID_APPLICATION_ID: '__CF_CYID_APPLICATION_ID__',
+  CF_CYID_WORKSPACE_ID: '__CF_CYID_WORKSPACE_ID__',
   CF_R2_BACKUP_BUCKET: '__CF_R2_BACKUP_BUCKET__',
   CF_BACKUP_TOPOLOGY: '__CF_BACKUP_TOPOLOGY__',
   CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: '__CF_CUSTOM_DOMAIN__'
@@ -31,6 +33,8 @@ function validateValues(values) {
     throw new Error('CF_D1_DATABASE_ID must be a valid UUID.');
   }
   if (!workerLike.test(values.CF_IDENTITY_SERVICE)) throw new Error('CF_IDENTITY_SERVICE has an invalid format.');
+  if (!/^[A-Z0-9][A-Z0-9_-]{1,63}$/.test(values.CF_CYID_APPLICATION_ID)) throw new Error('CF_CYID_APPLICATION_ID has an invalid format.');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{4,79}$/.test(values.CF_CYID_WORKSPACE_ID)) throw new Error('CF_CYID_WORKSPACE_ID has an invalid format.');
   if (!/^[a-z0-9][a-z0-9-]{1,62}$/i.test(values.CF_R2_BACKUP_BUCKET)) throw new Error('CF_R2_BACKUP_BUCKET has an invalid format.');
   if (!['legacy_gcs', 'parallel_dual_provider'].includes(values.CF_BACKUP_TOPOLOGY)) {
     throw new Error('CF_BACKUP_TOPOLOGY must be legacy_gcs or parallel_dual_provider.');
