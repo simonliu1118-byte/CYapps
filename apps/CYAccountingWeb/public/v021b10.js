@@ -4,7 +4,18 @@ const CY_V21_CONFIRMATION_KEY = 'cyaccounting.confirmationDrawerOpen';
 
 ensureV21Build10Stylesheet();
 
-document.addEventListener('DOMContentLoaded', () => {
+let cyV21Build10Started = false;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startV21Build10, { once: true });
+} else {
+  startV21Build10();
+}
+window.addEventListener('load', syncV21Build10AfterLoad, { once: true });
+
+function startV21Build10() {
+  if (cyV21Build10Started) return;
+  cyV21Build10Started = true;
   syncV21Build10Version();
   setupV21Build10MobileAppBar();
   setupV21Build10MobileNavigation();
@@ -12,14 +23,15 @@ document.addEventListener('DOMContentLoaded', () => {
   setupV21Build10LedgerTools();
   setupV21Build10ConfirmationPolicy();
   setupV21Build10MobileFormCopy();
-});
+}
 
-window.addEventListener('load', () => {
+function syncV21Build10AfterLoad() {
+  startV21Build10();
   syncV21Build10Version();
   syncV21Build10MobileIdentity();
   syncV21Build10MobileNavigation();
   syncV21Build10ConfirmationPolicy();
-});
+}
 
 function ensureV21Build10Stylesheet() {
   if (document.querySelector('link[href="/v021b10.css"]')) return;
