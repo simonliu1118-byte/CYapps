@@ -29,7 +29,7 @@ try {
   const renderedText = fs.readFileSync(output, 'utf8');
   const rendered = JSON.parse(renderedText);
   assert.equal(rendered.name, env.CF_WORKER_NAME);
-  assert.equal(rendered.main, 'src/app-v19.js');
+  assert.equal(rendered.main, 'src/app.js');
   assert.equal(rendered.workers_dev, true);
   assert.equal(rendered.routes[0].pattern, env.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN);
   assert.equal(rendered.routes[0].custom_domain, true);
@@ -69,6 +69,7 @@ try {
   const devRenderedText = fs.readFileSync(devOutput, 'utf8');
   const devRendered = JSON.parse(devRenderedText);
   assert.equal(devRendered.name, devEnv.CF_WORKER_NAME);
+  assert.equal(devRendered.main, 'src/app.js');
   assert.equal(devRendered.workers_dev, true);
   assert.equal(devRendered.d1_databases[0].database_name, devEnv.CF_D1_DATABASE_NAME);
   assert.equal(devRendered.d1_databases[0].database_id, devEnv.CF_D1_DATABASE_ID);
