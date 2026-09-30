@@ -158,9 +158,13 @@ public partial class MainWindow : Window
         Refresh();
     }
 
+    // Keyboard flow for a batch: name -> Enter. A saved customer arrives complete, so focus goes to the print
+    // button (Enter again prints); a new customer continues with the address. Enter with several matches moves
+    // into the list first; the choice is then made with Enter on the highlighted customer.
     private void RecipientKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Down && Suggestions.Visibility == Visibility.Visible)
+        var listed = Suggestions.Visibility == Visibility.Visible && Suggestions.Items.Count > 0;
+        if (e.Key == Key.Down && listed)
         {
             Suggestions.SelectedIndex = 0;
             Suggestions.Focus();
@@ -168,9 +172,14 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.Enter)
         {
-            if (Suggestions.Visibility == Visibility.Visible && Suggestions.Items.Count == 1)
-                ChooseContact((Contact)Suggestions.Items[0]);
-            AddressBox.Focus();
+            if (listed && Suggestions.Items.Count == 1) PickContact((Contact)Suggestions.Items[0]);
+            else if (listed)
+            {
+                var exact = Suggestions.Items.OfType<Contact>().FirstOrDefault(c => c.Name == Names.Normalize(RecipientBox.Text));
+                if (exact is not null) PickContact(exact);
+                else { Suggestions.SelectedIndex = 0; Suggestions.Focus(); }
+            }
+            else AddressBox.Focus();
             e.Handled = true;
         }
     }
@@ -179,15 +188,20 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Enter && Suggestions.SelectedItem is Contact contact)
         {
-            ChooseContact(contact);
-            AddressBox.Focus();
+            PickContact(contact);
             e.Handled = true;
         }
         else if (e.Key == Key.Escape) { Suggestions.Visibility = Visibility.Collapsed; RecipientBox.Focus(); }
     }
     private void SuggestionChosen(object sender, MouseButtonEventArgs e)
     {
-        if (Suggestions.SelectedItem is Contact contact) ChooseContact(contact);
+        if (Suggestions.SelectedItem is Contact contact) PickContact(contact);
+    }
+
+    private void PickContact(Contact contact)
+    {
+        ChooseContact(contact);
+        if (contact.Addresses.Count > 0) PrintButton.Focus(); else AddressBox.Focus();
     }
 
     private void ChooseContact(Contact contact)
@@ -302,8 +316,36 @@ public partial class MainWindow : Window
     private void InputKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
+        FocusAfterAddress();
+        e.Handled = true;
+    }
+    // After the address: the postal box only when it still needs a code, otherwise straight on to the phone.
+    private void FocusAfterAddress()
+    {
+        UpdatePostalFromAddress();
+        if (PostalBox.Text.Length != 3) PostalBox.Focus(); else PhoneBox.Focus();
+    }
+    private void PostalKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
         PhoneBox.Focus();
         e.Handled = true;
+    }
+    private void PhoneKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        FormatPhone();
+        PrintButton.Focus();
+        e.Handled = true;
+    }
+
+    // Ctrl+P prints, Ctrl+R brings back the last envelope (same as the buttons).
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+        if (e.Key == Key.P) { PrintClick(this, new RoutedEventArgs()); e.Handled = true; }
+        else if (e.Key == Key.R && ReprintButton.IsEnabled) { ReprintLast(); e.Handled = true; }
     }
     private void AddressLostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
@@ -636,7 +678,9 @@ public partial class MainWindow : Window
             {
                 Width = Math.Max(4, rect.Width * EnvelopeRenderer.DipPerMm),
                 Height = Math.Max(4, rect.Height * EnvelopeRenderer.DipPerMm),
-                Style = (Style)FindResource(style), ToolTip = tip, Tag = tag
+                Style = (Style)FindResource(style), ToolTip = tip, Tag = tag,
+                // With the left panel visible the mouse-only ticks stay out of the Tab order.
+                IsTabStop = _settings.DirectEntry
             };
             System.Windows.Automation.AutomationProperties.SetName(target, tip);
             target.Click += (_, _) => click(); // not marked Handled: DirectTargetClick is attached after it

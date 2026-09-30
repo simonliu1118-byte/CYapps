@@ -123,6 +123,50 @@ internal static class Program
                 Assert(FirstText(combo.Template.FindName("Content", combo) as DependencyObject) == expected,
                     $"{boxName} shows its display text ({expected}), not the object type");
             }
+            // Keyboard flow: a saved customer jumps to the print button; a new one goes to the address.
+            var recipientField = (TextBox)main.FindName("RecipientBox");
+            Invoke(main, "PickContact", contact); Flush();
+            Assert(print.IsKeyboardFocused, "Picking a saved customer moves focus to the print button");
+            Invoke(main, "ResetEntry", false); Flush();
+            Assert(recipientField.IsKeyboardFocused, "After clearing, focus returns to the recipient");
+            addressBox.Text = "臺北市大安區忠孝東路"; Flush();
+            Invoke(main, "FocusAfterAddress"); Flush();
+            Assert(((UIElement)main.FindName("PhoneBox")).IsKeyboardFocused, "A resolved postal code lets Enter skip to the phone");
+            addressBox.Text = "某某路一號"; postalBox.Clear(); Flush();
+            Invoke(main, "FocusAfterAddress"); Flush();
+            Assert(postalBox.IsKeyboardFocused, "An unresolved postal code stops at the postal box");
+            addressBox.Clear(); postalBox.Clear(); Flush();
+            var tabOrder = new List<string>();
+            DependencyObject? cursor = recipientField;
+            for (var i = 0; i < 40 && cursor is UIElement element; i++)
+            {
+                element.Focus(); Flush();
+                tabOrder.Add(((FrameworkElement)cursor).Name);
+                cursor = element.PredictFocus(System.Windows.Input.FocusNavigationDirection.Next);
+                if (cursor is FrameworkElement { Name: "RecipientBox" }) break;
+            }
+            var wanted = new[] { "RecipientBox", "AddressBox", "PostalBox", "PhoneBox" };
+            var indexes = wanted.Select(name => tabOrder.IndexOf(name)).ToArray();
+            Assert(indexes.All(x => x >= 0) && indexes.SequenceEqual(indexes.OrderBy(x => x)),
+                "Tab visits recipient, address, postal code, phone in that order");
+            // Add/overwrite dialogs and focus states, photographed because native dialogs cannot be.
+            foreach (var isAddress in new[] { true, false })
+            {
+                var choiceDialog = ChoiceDialog.Create(main, new SaveRequest(isAddress,
+                    isAddress ? "高雄市苓雅區範例路二號" : "07-1234567", isAddress ? "公司：高雄市新興區範例路一號" : "0912-345-678", 1));
+                choiceDialog.Show(); Flush(); Capture(choiceDialog, isAddress ? "15-choice-address" : "15b-choice-phone");
+                choiceDialog.Close();
+            }
+            foreach (var (name, control) in new (string, Control)[]
+            {
+                ("recipient", recipientField), ("address", addressBox), ("postal", postalBox),
+                ("phone", (Control)main.FindName("PhoneBox")), ("checkbox", boxes[0]),
+                ("combo", (Control)main.FindName("FrameChoice")), ("print", print),
+                ("reprint", (Control)main.FindName("ReprintButton")), ("clear", (Control)main.FindName("ClearButton"))
+            })
+            {
+                control.Focus(); Flush(); Capture(main, "16-focus-" + name);
+            }
             main.Width = main.MinWidth; main.Height = main.MinHeight; Flush(); Capture(main, "03-main-minimum");
             Assert(((ScrollViewer)main.FindName("EntryScroll")).ScrollableHeight < 1, "Minimum main: all entry fields fit");
             var icon = main.Icon as BitmapFrame;

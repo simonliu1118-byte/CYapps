@@ -29,14 +29,20 @@ public sealed class ChoiceDialog : Window
 
     private void Finish(SaveChoice choice) { Choice = choice; DialogResult = true; }
 
-    public static SaveChoice Ask(Window owner, SaveRequest request)
+    // Separate from Ask so tests can show and photograph the dialog without blocking on ShowDialog.
+    public static ChoiceDialog Create(Window owner, SaveRequest request)
     {
         var kind = request.IsAddress ? "地址" : "電話";
-        var dialog = new ChoiceDialog(
+        return new ChoiceDialog(
             $"新的{kind}",
             $"此客戶已有 {request.ExistingCount} 筆{kind}，這次的{kind}是新的：\n{request.NewValue}",
             $"要覆蓋的{kind}：{request.ExistingLabel}",
             $"新增為另一筆{kind}", $"覆蓋上面的{kind}") { Owner = owner };
+    }
+
+    public static SaveChoice Ask(Window owner, SaveRequest request)
+    {
+        var dialog = Create(owner, request);
         dialog.ShowDialog();
         return dialog.Choice;
     }
