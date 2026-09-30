@@ -274,6 +274,10 @@ jobs:
         working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
         run: npm ci --no-audit --no-fund
 
+      - name: Prepare pinned CYACC browser SQLite runtime
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        run: node scripts/prepare-sqljs.mjs
+
       - name: Prepare isolated CYACC development D1
         working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
         shell: bash
@@ -380,6 +384,9 @@ jobs:
         shell: bash
         run: |
           rm -f "${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb/wrangler.cyid-development.generated.jsonc"
+          if [[ -d "${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb" ]]; then
+            (cd "${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb" && node scripts/prepare-sqljs.mjs --clean || true)
+          fi
           rm -f /tmp/cyacc-migrate.log /tmp/cyacc-deploy.log /tmp/cyacc-wrangler-output.ndjson /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
 
       - name: Remove generated config
