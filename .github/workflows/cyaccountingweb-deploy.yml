@@ -109,6 +109,7 @@ jobs:
           node tests/deploy-config.mjs
           node tests/cyid-integration.mjs
           node tests/mobile-startup.mjs
+          node tests/frontend-baseline.mjs
           node tests/cyid-provider-contract.mjs
           node tests/cyid-production-runtime.mjs
           node scripts/validate-cyid-consumer-version.mjs
