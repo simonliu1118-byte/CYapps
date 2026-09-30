@@ -100,6 +100,7 @@ jobs:
       CYID_RESEND_API_KEY: ${{ secrets.CYID_RESEND_API_KEY }}
       CYID_OTP_PEPPER: ${{ secrets.CYID_OTP_PEPPER }}
       CYID_BOOTSTRAP_SECRET: ${{ secrets.CYID_BOOTSTRAP_SECRET }}
+      CYACC_TARGET_WORKER_NAME: ${{ vars.CF_WORKER_NAME }}
 
     steps:
       - name: Checkout source
@@ -247,19 +248,24 @@ jobs:
             exit 1
           fi
 
+          if [[ -z "${CYACC_TARGET_WORKER_NAME:-}" ]]; then
+            echo "Existing CYACC Worker target is not configured in the development Environment." >&2
+            exit 1
+          fi
           echo "::add-mask::$CYID_WORKER_NAME"
+          echo "::add-mask::$CYACC_TARGET_WORKER_NAME"
           runtime_hash="$(printf '%s' "$CYACC_APPLICATION_ID" | sha256sum | cut -c1-12)"
-          CYACC_WORKER_NAME="cyacc-cyid-dev-$runtime_hash"
           CYACC_D1_NAME="cyacc_cyid_dev_$runtime_hash"
-          echo "::add-mask::$CYACC_WORKER_NAME"
+          CYACC_PREVIEW_NAME="cyacc-cyid-development"
           echo "::add-mask::$CYACC_D1_NAME"
 
           {
             echo "CF_IDENTITY_SERVICE=$CYID_WORKER_NAME"
             echo "CF_CYID_APPLICATION_ID=$CYACC_APPLICATION_ID"
             echo "CF_CYID_WORKSPACE_ID=$CYACC_WORKSPACE_ID"
-            echo "CF_WORKER_NAME=$CYACC_WORKER_NAME"
+            echo "CF_WORKER_NAME=$CYACC_TARGET_WORKER_NAME"
             echo "CF_D1_DATABASE_NAME=$CYACC_D1_NAME"
+            echo "CYACC_PREVIEW_NAME=$CYACC_PREVIEW_NAME"
           } >> "$GITHUB_ENV"
 
           echo "CYACC development registry, Workspace enablement, USER/ADMIN grants and Super Admin implicit access are ready."
@@ -335,36 +341,49 @@ jobs:
             exit 1
           fi
 
-      - name: Bootstrap isolated CYACC Worker resource
+      - name: Convert isolated config to Worker Preview settings
         working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s\n' 'export default { async fetch() { return new Response("CYACC development bootstrap"); } };' > /tmp/cyacc-bootstrap.mjs
-          if ! npx wrangler deploy /tmp/cyacc-bootstrap.mjs --name "$CF_WORKER_NAME" --compatibility-date 2026-09-22 >/tmp/cyacc-bootstrap.log 2>&1; then
-            node -e "const fs=require('node:fs');let text=fs.readFileSync('/tmp/cyacc-bootstrap.log','utf8');for(let line of text.split(/\\r?\\n/).slice(-24)){line=line.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi,'[redacted-uuid]').replace(/https?:\\/\\/[^\\s]+/gi,'[redacted-url]').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[0-9a-f]{32,}/gi,'[redacted-long-id]');console.error('CYACC bootstrap detail: '+line.slice(0,500));}"
-            echo "Unable to create the isolated CYACC development Worker resource." >&2
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'wrangler.cyid-development.generated.jsonc';
+          const config = JSON.parse(fs.readFileSync(path, 'utf8'));
+          config.previews = {
+            vars: config.vars,
+            d1_databases: config.d1_databases,
+            services: config.services
+          };
+          delete config.vars;
+          delete config.d1_databases;
+          delete config.services;
+          fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
+          NODE
+
+      - name: Deploy isolated CYACC Worker Preview with CYID binding
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        shell: bash
+        run: |
+          set -euo pipefail
+          CYID_WRANGLER="$GITHUB_WORKSPACE/apps/CYCloudIdentity/node_modules/.bin/wrangler"
+          if [[ ! -x "$CYID_WRANGLER" ]]; then
+            echo "Pinned CYID Wrangler is unavailable." >&2
             exit 1
           fi
-
-      - name: Deploy isolated CYACC development Worker with CYID binding
-        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
-        shell: bash
-        run: |
-          set -euo pipefail
-          export WRANGLER_OUTPUT_FILE_PATH=/tmp/cyacc-wrangler-output.ndjson
-          if ! npx wrangler deploy --config wrangler.cyid-development.generated.jsonc >/tmp/cyacc-deploy.log 2>&1; then
-            node -e "const fs=require('node:fs');const inputs=['/tmp/cyacc-wrangler-output.ndjson','/tmp/cyacc-deploy.log'];const text=inputs.filter(fs.existsSync).map(p=>fs.readFileSync(p,'utf8')).join('\\n');const codes=[...new Set([...text.matchAll(/(?:code|error_code)[^0-9]{0,12}([0-9]{3,6})/gi)].map(x=>x[1]))];const low=text.toLowerCase();const categories=[];if(low.includes('service binding')||(low.includes('service')&&low.includes('not found')))categories.push('SERVICE_BINDING');if(low.includes('assets'))categories.push('ASSETS');if(low.includes('permission')||low.includes('forbidden')||low.includes('unauthorized'))categories.push('PERMISSION');if(low.includes('name')&&(low.includes('invalid')||low.includes('already')))categories.push('NAME');if(low.includes('d1'))categories.push('D1');console.error('Isolated CYACC deploy failure codes='+(codes.join(',')||'none')+' categories='+(categories.join(',')||'unclassified'));const selected=text.split(/\\r?\\n/).slice(-36);for(let line of selected){line=line.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi,'[redacted-uuid]').replace(/https?:\\/\\/[^\\s]+/gi,'[redacted-url]').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[0-9a-f]{32,}/gi,'[redacted-long-id]');console.error('CYACC deploy detail: '+line.slice(0,500));}"
+          if ! "$CYID_WRANGLER" preview --name "$CYACC_PREVIEW_NAME" --config wrangler.cyid-development.generated.jsonc --ignore-base-config --json >/tmp/cyacc-preview.json 2>/tmp/cyacc-preview.err; then
+            node -e "const fs=require('node:fs');const p='/tmp/cyacc-preview.err';const text=fs.existsSync(p)?fs.readFileSync(p,'utf8'):'';for(let line of text.split(/\\r?\\n/).slice(-24)){line=line.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi,'[redacted-uuid]').replace(/https?:\\/\\/[^\\s]+/gi,'[redacted-url]').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[0-9a-f]{32,}/gi,'[redacted-long-id]');console.error('CYACC preview detail: '+line.slice(0,500));}"
+            echo "Unable to create or update the isolated CYACC Worker Preview." >&2
             exit 1
           fi
           CYACC_BASE_URL="$(node -e '
-            const fs=require("fs");
-            const text=fs.readFileSync("/tmp/cyacc-deploy.log","utf8");
-            const m=text.match(/https:\/\/[A-Za-z0-9.-]+\.workers\.dev/);
-            if (m) process.stdout.write(m[0]);
+            const fs=require("node:fs");
+            const data=JSON.parse(fs.readFileSync("/tmp/cyacc-preview.json","utf8"));
+            const url=data?.preview?.urls?.[0];
+            if (typeof url === "string" && /^https:\/\//.test(url)) process.stdout.write(url);
           ')"
           if [[ -z "$CYACC_BASE_URL" ]]; then
-            echo "Unable to determine isolated CYACC development URL." >&2
+            echo "Worker Preview deployed but did not return a stable Preview URL." >&2
             exit 1
           fi
           echo "::add-mask::$CYACC_BASE_URL"
@@ -399,7 +418,7 @@ jobs:
           if [[ -d "${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb" ]]; then
             (cd "${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb" && node scripts/prepare-sqljs.mjs --clean || true)
           fi
-          rm -f /tmp/cyacc-bootstrap.mjs /tmp/cyacc-bootstrap.log /tmp/cyacc-migrate.log /tmp/cyacc-deploy.log /tmp/cyacc-wrangler-output.ndjson /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
+          rm -f /tmp/cyacc-preview.json /tmp/cyacc-preview.err /tmp/cyacc-migrate.log /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
 
       - name: Remove generated config
         if: always()
