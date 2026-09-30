@@ -38,7 +38,7 @@
 
 ## 第二階段（Local 版 release 後）：CYID 與 Built-in Cloud 的已定案方向
 
-僅為方向記錄，設計文件另寫，屆時再走治理分支更新 `PROJECT_RULES.md`。
+設計草案見 `CY_ID_INTEGRATION.md`；實作等 Local 版試印並發正式版之後，屆時再走治理分支更新 `PROJECT_RULES.md`。以下為已定案方向摘要。
 - 三種模式（比照 CYInvoice）：Local（無登入）／Built-in Cloud（自行部署、自有帳號）／CY ID。與 CYInvoice 的差異：CYEnvelope 要求先登入，CYInvoice 只在關鍵操作驗證權限。
 - CYID 模式：USER 只能檢視、列印，列印時的存入變成「待確認提案」，ADMIN／SUPER_ADMIN（權限相同）審核；ADMIN 可編輯資料庫、信封格式與方框文字清單。USER 在自己的電腦上看得到自己的待確認資料；兩人提案同名新客戶時由管理員選擇合併或退回。
 - **離線：CYID 模式離線鎖定**——本機不保留登入快取，離線即不可使用，以免客戶資料外洩。Built-in Cloud 可設定離線可用天數 0–7 天（0 ＝ 離線不可用）。
