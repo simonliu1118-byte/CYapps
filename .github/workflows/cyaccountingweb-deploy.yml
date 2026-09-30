@@ -197,10 +197,14 @@ jobs:
           case "$http_code" in
             301|302|307|308)
               location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); print; exit}' /tmp/cyacc-http-login.headers | tr -d '\\r')"
-              if [[ "$location" != "https://$host/login" ]]; then
+              LOCATION="$location" HOST="$host" node -e '
+                const u = new URL(process.env.LOCATION);
+                const host = process.env.HOST;
+                if (u.protocol !== "https:" || u.hostname !== host || !["/login", "/login/"].includes(u.pathname)) process.exit(1);
+              ' || {
                 echo "CYACC HTTP login redirect target is not the HTTPS login entry." >&2
                 exit 1
-              fi
+              }
               ;;
             200)
               grep -Eiq '^content-security-policy:.*upgrade-insecure-requests.*form-action https:' /tmp/cyacc-http-login.headers || {
