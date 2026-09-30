@@ -23,7 +23,13 @@ public static class FontCatalog
     // postal code, frame text). Null keeps each text's own font name (unit checks, older data).
     public static string? Selected { get; set; }
 
-    private static readonly Uri BundledFolder = new("pack://application:,,,/CYEnvelope;component/Fonts/");
+    // Only built when a bundled font is really used: the pack:// scheme is registered by WPF's Application,
+    // which the plain core checks do not have, so touch PackUriHelper first to register it.
+    private static Uri BundledFolder()
+    {
+        _ = System.IO.Packaging.PackUriHelper.UriSchemePack;
+        return new Uri("pack://application:,,,/CYEnvelope;component/Fonts/");
+    }
     private static readonly Dictionary<string, Typeface> Cache = [];
 
     // useSelected false: decorative marks (the tick) that must not follow the chosen font.
@@ -32,7 +38,7 @@ public static class FontCatalog
         var name = useSelected ? Selected ?? family : family;
         if (Cache.TryGetValue(name, out var cached)) return cached;
         var choice = Choices.FirstOrDefault(c => c.Family == name);
-        var fontFamily = choice?.ResourceFile is not null ? new FontFamily(BundledFolder, "./#" + name) : new FontFamily(name);
+        var fontFamily = choice?.ResourceFile is not null ? new FontFamily(BundledFolder(), "./#" + name) : new FontFamily(name);
         return Cache[name] = new Typeface(fontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
     }
 
@@ -42,7 +48,7 @@ public static class FontCatalog
         try
         {
             if (choice.ResourceFile is not null)
-                return Application.GetResourceStream(new Uri(BundledFolder, choice.ResourceFile)) is not null;
+                return Application.GetResourceStream(new Uri(BundledFolder(), choice.ResourceFile)) is not null;
             return Fonts.SystemFontFamilies.Any(f => string.Equals(f.Source, choice.Family, StringComparison.OrdinalIgnoreCase) ||
                 f.FamilyNames.Values.Any(n => string.Equals(n, choice.Family, StringComparison.OrdinalIgnoreCase)));
         }
