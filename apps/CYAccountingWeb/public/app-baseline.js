@@ -7490,3 +7490,1647 @@ function v0211Escape(value) {
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
 }
+
+/* ---- baseline section ---- */
+/* V0.21.1 keyboard bridge for the Desktop custom date trigger. */
+
+const CY_V0211_KEYBOARD_DESKTOP = '(min-width: 1024px)';
+
+const setupV0211KeyboardBridge = () => {
+  if (!window.matchMedia(CY_V0211_KEYBOARD_DESKTOP).matches) return;
+  const input = document.querySelector('#txDate');
+  const root = input?.nextElementSibling?.classList?.contains('v0211-date-picker') ? input.nextElementSibling : null;
+  const trigger = root?.querySelector('.v0211-date-trigger');
+  if (!input || !trigger || trigger.dataset.v0211KeyboardBound === '1') return;
+  trigger.dataset.v0211KeyboardBound = '1';
+
+  trigger.addEventListener('keydown', event => {
+    if (event.isComposing) return;
+
+    if (event.key === 'Enter' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      document.querySelector('#summary')?.focus();
+      return;
+    }
+
+    if (event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof state === 'object' && typeof setEntryKind === 'function') {
+        setEntryKind(state.kind === 'expense' ? 'income' : 'expense');
+        if (typeof updateEntryKindVisual === 'function') updateEntryKindVisual();
+        if (typeof renderFavoriteCategories === 'function') renderFavoriteCategories();
+        if (typeof loadFrequentSummaries === 'function') loadFrequentSummaries();
+      }
+      trigger.focus();
+      return;
+    }
+
+    const quickDigit = /^\d$/.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey;
+    const quickStep = event.ctrlKey && !event.altKey && !event.metaKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown');
+    if (!quickDigit && !quickStep) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      key: event.key,
+      code: event.code,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      bubbles: true,
+      cancelable: true
+    }));
+  });
+};
+
+if (document.readyState === 'complete') setTimeout(setupV0211KeyboardBridge, 0);
+else window.addEventListener('load', () => setTimeout(setupV0211KeyboardBridge, 0), { once: true });
+setTimeout(setupV0211KeyboardBridge, 350);
+
+/* ---- baseline section ---- */
+const CY_V0212_VERSION = 'V0.21.2';
+const CY_V0212_DESKTOP = '(min-width: 1024px)';
+let cyV0212DialogState = null;
+let cyV0212Rendering = false;
+
+if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0212Stylesheet();
+const runV0212 = () => {
+  enforceV0212Version();
+  if (!window.matchMedia(CY_V0212_DESKTOP).matches) return;
+  installV0212CategoryRenderer();
+  if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0212ManagerDialog();
+  bindV0212ManagerActions();
+  renderV0212CategoryManager();
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => setTimeout(runV0212, 0), { once: true });
+} else {
+  setTimeout(runV0212, 0);
+}
+window.addEventListener('load', () => {
+  setTimeout(runV0212, 0);
+  setTimeout(runV0212, 120);
+  setTimeout(runV0212, 420);
+}, { once: true });
+
+function ensureV0212Stylesheet() {
+  if (document.querySelector('link[href="/v0212.css"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/v0212.css';
+  document.head.appendChild(link);
+}
+
+function enforceV0212Version() {
+  let version = document.querySelector('.version');
+  if (!version) return;
+  if (version.dataset.v0212Version !== '1') {
+    const replacement = version.cloneNode(true);
+    replacement.dataset.v0212Version = '1';
+    version.replaceWith(replacement);
+    version = replacement;
+  }
+  version.textContent = CY_V0212_VERSION;
+}
+
+function installV0212CategoryRenderer() {
+  window.renderCategoryManager = renderV0212CategoryManager;
+  if (typeof window.renderV21Build15CategoryManager === 'function') window.renderV21Build15CategoryManager = renderV0212CategoryManager;
+  if (typeof window.renderV21Build16CategoryManager === 'function') window.renderV21Build16CategoryManager = renderV0212CategoryManager;
+  if (typeof window.renderV0211CategoryManager === 'function') window.renderV0211CategoryManager = renderV0212CategoryManager;
+}
+
+function renderV0212CategoryManager() {
+  if (!window.matchMedia(CY_V0212_DESKTOP).matches || typeof state !== 'object') return;
+  const host = document.querySelector('#categoryManager');
+  const pane = document.querySelector('[data-settings-pane="categories"]');
+  if (!host || !pane || cyV0212Rendering) return;
+
+  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
+  const groups = (state.groups || []).filter(group => group.kind === kind);
+  pane.classList.toggle('v0211-category-income', kind === 'income');
+  pane.classList.toggle('v0211-category-expense', kind === 'expense');
+  pane.classList.toggle('v0212-category-income', kind === 'income');
+  pane.classList.toggle('v0212-category-expense', kind === 'expense');
+
+  const legacyGroupAdd = document.querySelector('#newGroupName')?.parentElement;
+  legacyGroupAdd?.classList.add('v0212-legacy-group-add');
+
+  const toolbar = `<div class="v0212-category-toolbar">
+    <div class="entry-kind-switch v0212-kind-switch" role="group" aria-label="收入或支出">
+      <button type="button" class="kind-button${kind === 'income' ? ' active' : ''}" data-kind="income" data-v0212-manager-kind="income">收入</button>
+      <button type="button" class="kind-button${kind === 'expense' ? ' active' : ''}" data-kind="expense" data-v0212-manager-kind="expense">支出</button>
+    </div>
+    <button type="button" class="secondary compact v0212-toolbar-button" data-v0212-add-group>＋ 新增大分類</button>
+    <span class="v0212-toolbar-spacer" aria-hidden="true"></span>
+    <button type="button" class="secondary compact v0212-toolbar-button v0212-add-category-button" data-v0212-add-category${groups.length ? '' : ' disabled title="請先新增大分類"'}>＋ 新增科目</button>
+  </div>`;
+
+  const body = groups.length
+    ? `<div class="v0212-category-list">${groups.map(group => v0212GroupHtml(group, kind)).join('')}</div>`
+    : '<div class="v0212-category-list-empty">目前沒有大分類。請先使用上方「新增大分類」。</div>';
+
+  cyV0212Rendering = true;
+  try {
+    host.innerHTML = `<div class="v0211-category-shell v0212-category-shell">${toolbar}${body}</div>`;
+  } finally {
+    cyV0212Rendering = false;
+  }
+}
+
+function v0212GroupHtml(group, kind) {
+  const groupId = Number(group.id);
+  const categories = (state.categories || []).filter(category =>
+    category.kind === kind && Number(category.group_id) === groupId
+  );
+  const rows = categories.map(category => {
+    const id = Number(category.id);
+    const favorite = Number(category.is_favorite) === 1;
+    return `<div class="v0212-category-row" data-v21-category-row="${id}" data-v21-category-group="${groupId}">
+      <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-category="${id}" title="拖曳調整科目順序或分類" aria-label="拖曳調整科目順序或分類">⠿</button>
+      <button type="button" class="v0212-favorite${favorite ? ' active' : ''}" data-category-favorite="${id}" title="${favorite ? '取消常用科目' : '設為常用科目'}" aria-label="${favorite ? '取消常用科目' : '設為常用科目'}">${favorite ? '★' : '☆'}</button>
+      <span class="v0212-category-name" title="${v0212Escape(category.name)}">${v0212Escape(category.name)}</span>
+      <button type="button" class="mini-button v0212-edit-button" data-v0212-rename="category" data-v0212-id="${id}" title="編輯科目名稱" aria-label="編輯科目名稱">✎</button>
+      <button type="button" class="mini-button danger v21-manager-delete" data-category-delete="${id}">刪除</button>
+    </div>`;
+  }).join('');
+
+  return `<section class="v0212-category-group" data-group-id="${groupId}">
+    <div class="v21-category-group-head v0212-category-group-head">
+      <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-group="${groupId}" title="拖曳調整大分類順序" aria-label="拖曳調整大分類順序">⠿</button>
+      <strong class="v0212-group-name" title="${v0212Escape(group.name)}">${v0212Escape(group.name)}</strong>
+      <button type="button" class="mini-button v0212-edit-button" data-v0212-rename="group" data-v0212-id="${groupId}" title="編輯大分類名稱" aria-label="編輯大分類名稱">✎</button>
+      <button type="button" class="mini-button danger v21-manager-delete" data-group-delete="${groupId}">刪除</button>
+    </div>
+    <div class="v0212-category-items" data-v21-category-dropzone="${groupId}">
+      ${rows || '<div class="v0212-empty-group">尚無科目</div>'}
+    </div>
+  </section>`;
+}
+
+function bindV0212ManagerActions() {
+  if (window.__cyV0212ManagerActionsBound) return;
+  window.__cyV0212ManagerActionsBound = true;
+
+  window.addEventListener('click', event => {
+    if (!window.matchMedia(CY_V0212_DESKTOP).matches) return;
+    const rename = event.target.closest('[data-v0212-rename]');
+    const legacyRename = event.target.closest('[data-account-rename], [data-category-rename], [data-group-rename]');
+    const addGroup = event.target.closest('[data-v0212-add-group]');
+    const addCategory = event.target.closest('[data-v0212-add-category]');
+    if (!rename && !legacyRename && !addGroup && !addCategory) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    if (addGroup) return openV0212AddGroupDialog();
+    if (addCategory) {
+      if (addCategory.disabled) return;
+      return openV0212AddCategoryDialog();
+    }
+    if (rename) return openV0212RenameDialog(rename.dataset.v0212Rename, Number(rename.dataset.v0212Id));
+
+    if (legacyRename?.dataset.accountRename) return openV0212RenameDialog('account', Number(legacyRename.dataset.accountRename));
+    if (legacyRename?.dataset.categoryRename) return openV0212RenameDialog('category', Number(legacyRename.dataset.categoryRename));
+    if (legacyRename?.dataset.groupRename) return openV0212RenameDialog('group', Number(legacyRename.dataset.groupRename));
+  }, true);
+
+  document.querySelector('#categoryManager')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-v0212-manager-kind]');
+    if (!button || typeof state !== 'object') return;
+    const kind = button.dataset.v0212ManagerKind;
+    if (!['income', 'expense'].includes(kind) || kind === state.settingsKind) return;
+    state.settingsKind = kind;
+    if (typeof cyV21Build15Drag !== 'undefined' && cyV21Build15Drag && typeof finishV21Build15Drag === 'function') finishV21Build15Drag();
+    renderV0212CategoryManager();
+  });
+
+  const host = document.querySelector('#categoryManager');
+  if (host && host.dataset.v0212Guard !== '1') {
+    host.dataset.v0212Guard = '1';
+    const observer = new MutationObserver(() => {
+      if (cyV0212Rendering || !window.matchMedia(CY_V0212_DESKTOP).matches) return;
+      if (!host.querySelector('.v0212-category-shell') && host.children.length) queueMicrotask(renderV0212CategoryManager);
+    });
+    observer.observe(host, { childList: true, subtree: false });
+  }
+}
+
+function ensureV0212ManagerDialog() {
+  if (document.querySelector('#v0212ManagerDialog')) return;
+  const dialog = document.createElement('dialog');
+  dialog.id = 'v0212ManagerDialog';
+  dialog.className = 'v0212-manager-dialog';
+  dialog.innerHTML = `<form method="dialog" class="v0212-manager-dialog-shell" id="v0212ManagerForm">
+    <div class="v0212-manager-dialog-head">
+      <div><h2 id="v0212ManagerTitle">新增科目</h2><p id="v0212ManagerSubtitle"></p></div>
+      <button type="button" class="icon-button" data-v0212-dialog-close aria-label="關閉">×</button>
+    </div>
+    <label class="v0212-dialog-field" id="v0212GroupField" hidden>
+      <span>大分類</span>
+      <select id="v0212GroupSelect"></select>
+    </label>
+    <label class="v0212-dialog-field">
+      <span id="v0212NameLabel">科目名稱</span>
+      <input id="v0212NameInput" type="text" maxlength="60" autocomplete="off">
+    </label>
+    <div id="v0212ManagerMessage" class="dialog-message"></div>
+    <div class="v0212-manager-dialog-actions">
+      <button type="button" class="secondary" data-v0212-dialog-close>取消</button>
+      <button type="submit" class="primary" id="v0212ManagerSave">新增</button>
+    </div>
+  </form>`;
+  document.body.append(dialog);
+
+  dialog.querySelectorAll('[data-v0212-dialog-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
+  dialog.querySelector('#v0212ManagerForm')?.addEventListener('submit', saveV0212ManagerDialog);
+  dialog.addEventListener('close', () => { cyV0212DialogState = null; });
+}
+
+function openV0212AddGroupDialog() {
+  if (typeof state !== 'object') return;
+  openV0212ManagerDialog({
+    mode: 'add-group',
+    title: '新增大分類',
+    subtitle: state.settingsKind === 'income' ? '新增到收入分類' : '新增到支出分類',
+    label: '大分類名稱',
+    maxLength: 60,
+    value: '',
+    showGroup: false,
+    saveText: '新增'
+  });
+}
+
+function openV0212AddCategoryDialog() {
+  if (typeof state !== 'object') return;
+  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
+  const groups = (state.groups || []).filter(group => group.kind === kind);
+  if (!groups.length) return;
+  openV0212ManagerDialog({
+    mode: 'add-category',
+    title: '新增科目',
+    subtitle: kind === 'income' ? '新增收入科目' : '新增支出科目',
+    label: '科目名稱',
+    maxLength: 60,
+    value: '',
+    showGroup: true,
+    groups,
+    saveText: '新增'
+  });
+}
+
+function openV0212RenameDialog(type, id) {
+  if (typeof state !== 'object' || !Number.isInteger(id) || id <= 0) return;
+  let item = null;
+  let title = '';
+  let label = '';
+  let maxLength = 60;
+  if (type === 'account') {
+    item = (state.accounts || []).find(row => Number(row.id) === id);
+    title = '編輯帳戶名稱';
+    label = '帳戶名稱';
+    maxLength = 8;
+  } else if (type === 'group') {
+    item = (state.groups || []).find(row => Number(row.id) === id);
+    title = '編輯大分類';
+    label = '大分類名稱';
+  } else if (type === 'category') {
+    item = (state.categories || []).find(row => Number(row.id) === id);
+    title = '編輯科目';
+    label = '科目名稱';
+  }
+  if (!item) return;
+  openV0212ManagerDialog({
+    mode: 'rename',
+    type,
+    id,
+    title,
+    subtitle: '編輯時不改變目前排序與分類位置',
+    label,
+    maxLength,
+    value: item.name || '',
+    showGroup: false,
+    saveText: '儲存'
+  });
+}
+window.openV0212RenameDialog = openV0212RenameDialog;
+
+function openV0212ManagerDialog(config) {
+  if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0212ManagerDialog();
+  const dialog = document.querySelector('#v0212ManagerDialog');
+  if (!dialog) return;
+  cyV0212DialogState = config;
+  dialog.querySelector('#v0212ManagerTitle').textContent = config.title || '';
+  dialog.querySelector('#v0212ManagerSubtitle').textContent = config.subtitle || '';
+  dialog.querySelector('#v0212NameLabel').textContent = config.label || '名稱';
+  const input = dialog.querySelector('#v0212NameInput');
+  input.maxLength = Number(config.maxLength || 60);
+  input.value = config.value || '';
+  const groupField = dialog.querySelector('#v0212GroupField');
+  const select = dialog.querySelector('#v0212GroupSelect');
+  groupField.hidden = !config.showGroup;
+  if (config.showGroup) {
+    select.innerHTML = (config.groups || []).map(group => `<option value="${Number(group.id)}">${v0212Escape(group.name)}</option>`).join('');
+  } else {
+    select.innerHTML = '';
+  }
+  dialog.querySelector('#v0212ManagerSave').textContent = config.saveText || '儲存';
+  setDialogMessage(dialog.querySelector('#v0212ManagerMessage'), '');
+  if (!dialog.open) dialog.showModal();
+  setTimeout(() => input.focus(), 0);
+}
+
+async function saveV0212ManagerDialog(event) {
+  event.preventDefault();
+  const config = cyV0212DialogState;
+  const dialog = document.querySelector('#v0212ManagerDialog');
+  if (!config || !dialog || typeof state !== 'object') return;
+  const input = dialog.querySelector('#v0212NameInput');
+  const select = dialog.querySelector('#v0212GroupSelect');
+  const save = dialog.querySelector('#v0212ManagerSave');
+  const message = dialog.querySelector('#v0212ManagerMessage');
+  const name = String(input?.value || '').trim();
+  if (!name) {
+    setDialogMessage(message, '請輸入名稱。', true);
+    input?.focus();
+    return;
+  }
+
+  save.disabled = true;
+  let ok = false;
+  try {
+    if (config.mode === 'add-group') {
+      ok = await mutateSettings('/api/category-groups', {
+        method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, name })
+      }, '大分類已新增。');
+    } else if (config.mode === 'add-category') {
+      const groupId = Number(select?.value);
+      if (!Number.isInteger(groupId) || groupId <= 0) {
+        setDialogMessage(message, '請選擇大分類。', true);
+        return;
+      }
+      ok = await mutateSettings('/api/categories', {
+        method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, groupId, name })
+      }, '科目已新增。');
+    } else if (config.mode === 'rename') {
+      const endpoints = {
+        account: `/api/accounts/${config.id}`,
+        group: `/api/category-groups/${config.id}`,
+        category: `/api/categories/${config.id}`
+      };
+      const endpoint = endpoints[config.type];
+      if (!endpoint) return;
+      ok = await mutateSettings(endpoint, {
+        method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ name })
+      }, '名稱已更新。');
+    }
+    if (ok) {
+      dialog.close();
+      setTimeout(() => {
+        installV0212CategoryRenderer();
+        renderV0212CategoryManager();
+      }, 0);
+    }
+  } finally {
+    save.disabled = false;
+  }
+}
+
+function v0212Escape(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+/* ---- baseline section ---- */
+const CY_V0214_VERSION = 'V0.21.5 Build 11';
+const CY_V0214_HOVER = '(hover: hover) and (pointer: fine)';
+let cyV0214BalancePopover = null;
+let cyV0214BalanceAnchor = null;
+let cyV0214BalancePinned = false;
+let cyV0214BalanceHideTimer = null;
+const cyV0214PendingWrites = new Set();
+
+if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0214Stylesheet();
+window.cyShowMigrationComplete = showMigrationCompleteV0214;
+window.cyCloseLedgerBalancePopover = closeLedgerBalancePopoverV0214;
+
+const runV0214 = () => {
+  enforceV0214Version();
+  if (!window.__CYACC_BASELINE_BUNDLE__) ensureMigrationCompleteDialogV0214();
+  setupBalancePopoverV0214();
+  setupOptimisticSettingsV0214();
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => setTimeout(runV0214, 0), { once: true });
+} else {
+  setTimeout(runV0214, 0);
+}
+window.addEventListener('load', () => {
+  runV0214();
+  setTimeout(runV0214, 160);
+  setTimeout(runV0214, 520);
+  setTimeout(runV0214, 900);
+}, { once: true });
+
+function ensureV0214Stylesheet() {
+  if (document.querySelector('link[href="/v0214.css"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/v0214.css';
+  document.head.appendChild(link);
+}
+
+function enforceV0214Version() {
+  let version = document.querySelector('.version');
+  if (!version) return;
+  if (version.dataset.v0214Version !== '1') {
+    const replacement = version.cloneNode(true);
+    replacement.dataset.v0214Version = '1';
+    version.replaceWith(replacement);
+    version = replacement;
+  }
+  version.textContent = CY_V0214_VERSION;
+}
+
+function ensureMigrationCompleteDialogV0214() {
+  let dialog = document.querySelector('#migrationCompleteDialogV0214');
+  if (dialog) return dialog;
+  dialog = document.createElement('dialog');
+  dialog.id = 'migrationCompleteDialogV0214';
+  dialog.className = 'modal small-modal v0214-complete-dialog';
+  dialog.innerHTML =
+    '<div class="modal-header">' +
+      '<div><span class="v0214-success-mark" aria-hidden="true">✓</span><h2>帳本移轉完成</h2><p>桌面帳本已成功複製到 Web。</p></div>' +
+      '<button class="icon-button" type="button" data-v0214-close aria-label="關閉">×</button>' +
+    '</div>' +
+    '<div class="v0214-complete-grid">' +
+      '<div><span>交易</span><strong data-v0214-result="transactions">—</strong></div>' +
+      '<div><span>期初餘額</span><strong data-v0214-result="opening">—</strong></div>' +
+      '<div><span>帳戶</span><strong data-v0214-result="accounts">—</strong></div>' +
+      '<div><span>科目</span><strong data-v0214-result="categories">—</strong></div>' +
+      '<div><span>重複交易</span><strong data-v0214-result="duplicates">—</strong></div>' +
+      '<div><span>鎖帳至</span><strong data-v0214-result="locked">—</strong></div>' +
+    '</div>' +
+    '<p class="v0214-complete-note">原本電腦版的 SQLite 帳本不會被刪除或修改。</p>' +
+    '<div class="modal-actions"><button class="primary" type="button" data-v0214-close>完成</button></div>';
+  document.body.appendChild(dialog);
+  dialog.addEventListener('click', event => {
+    if (event.target.closest('[data-v0214-close]')) dialog.close();
+  });
+  return dialog;
+}
+
+function showMigrationCompleteV0214(result = {}) {
+  const dialog = ensureMigrationCompleteDialogV0214();
+  if (!dialog) return;
+  const set = (key, value) => {
+    const node = dialog.querySelector('[data-v0214-result="' + key + '"]');
+    if (node) node.textContent = value;
+  };
+  const number = value => Number(value || 0).toLocaleString('zh-TW');
+  set('transactions', '新增 ' + number(result.insertedTransactions) + ' 筆');
+  set('opening', '新增 ' + number(result.insertedOpeningBalances) + ' 筆');
+  set('accounts', '新增 ' + number(result.insertedAccounts) + ' 個');
+  set('categories', '新增 ' + number(result.insertedCategories) + ' 個');
+  set('duplicates', '略過 ' + number(result.skippedDuplicateTransactions) + ' 筆');
+  set('locked', result.lockedThrough ? String(result.lockedThrough).replace('-', '/') : '未設定');
+  if (dialog.open) dialog.close();
+  dialog.showModal();
+}
+
+function ensureBalancePopoverV0214() {
+  if (cyV0214BalancePopover?.isConnected) return cyV0214BalancePopover;
+  const popover = document.createElement('div');
+  popover.id = 'ledgerBalancePopoverV0214';
+  popover.className = 'v0214-balance-popover';
+  popover.setAttribute('role', 'dialog');
+  popover.setAttribute('aria-label', '帳戶餘額明細');
+  popover.hidden = true;
+  document.body.appendChild(popover);
+  popover.addEventListener('pointerenter', clearBalanceHideV0214);
+  popover.addEventListener('pointerleave', () => scheduleBalanceHideV0214());
+  cyV0214BalancePopover = popover;
+  return popover;
+}
+
+function setupBalancePopoverV0214() {
+  const body = document.body;
+  if (!body || body.dataset.v0214BalanceBound === '1') return;
+  body.dataset.v0214BalanceBound = '1';
+  if (!window.__CYACC_BASELINE_BUNDLE__) ensureBalancePopoverV0214();
+  document.addEventListener('pointerover', event => {
+    if (!window.matchMedia(CY_V0214_HOVER).matches) return;
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (!cell || cell.contains(event.relatedTarget)) return;
+    if (cyV0214BalancePinned && cyV0214BalanceAnchor !== cell) return;
+    clearBalanceHideV0214();
+    showLedgerBalancePopoverV0214(cell, false);
+  });
+
+  document.addEventListener('pointerout', event => {
+    if (!window.matchMedia(CY_V0214_HOVER).matches) return;
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (!cell || cell.contains(event.relatedTarget)) return;
+    if (cyV0214BalancePopover?.contains(event.relatedTarget)) return;
+    scheduleBalanceHideV0214();
+  });
+
+  document.addEventListener('click', event => {
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (cell) {
+      event.preventDefault();
+      if (cyV0214BalancePinned && cyV0214BalanceAnchor === cell) {
+        closeLedgerBalancePopoverV0214();
+        return;
+      }
+      showLedgerBalancePopoverV0214(cell, true);
+      return;
+    }
+    if (cyV0214BalancePinned && !cyV0214BalancePopover?.contains(event.target)) {
+      closeLedgerBalancePopoverV0214();
+    }
+  });
+
+  document.addEventListener('focusin', event => {
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (cell && !cyV0214BalancePinned) showLedgerBalancePopoverV0214(cell, false);
+  });
+
+  document.addEventListener('focusout', event => {
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (!cell || cyV0214BalancePinned) return;
+    if (cyV0214BalancePopover?.contains(event.relatedTarget)) return;
+    scheduleBalanceHideV0214();
+  });
+
+  document.addEventListener('keydown', event => {
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (cell && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      showLedgerBalancePopoverV0214(cell, true);
+    } else if (event.key === 'Escape' && !cyV0214BalancePopover?.hidden) {
+      closeLedgerBalancePopoverV0214();
+      cyV0214BalanceAnchor?.focus?.();
+    }
+  });
+
+  window.addEventListener('resize', closeLedgerBalancePopoverV0214);
+  window.addEventListener('scroll', closeLedgerBalancePopoverV0214, true);
+}
+
+function showLedgerBalancePopoverV0214(cell, pinned) {
+  const id = Number(cell?.dataset.balancePopoverId || 0);
+  const detail = window.cyLedgerBalanceBreakdowns?.get(id);
+  if (!cell || !detail) return;
+  const popover = ensureBalancePopoverV0214();
+  clearBalanceHideV0214();
+
+  if (cyV0214BalanceAnchor && cyV0214BalanceAnchor !== cell) {
+    cyV0214BalanceAnchor.setAttribute('aria-expanded', 'false');
+  }
+  cyV0214BalanceAnchor = cell;
+  cyV0214BalancePinned = Boolean(pinned);
+  cell.setAttribute('aria-expanded', 'true');
+
+  popover.replaceChildren();
+  const header = document.createElement('div');
+  header.className = 'v0214-balance-popover-header';
+  header.textContent = detail.accountOnly ? '此筆後帳戶餘額' : '此筆後各帳戶餘額';
+  popover.appendChild(header);
+
+  const list = document.createElement('div');
+  list.className = 'v0214-balance-list';
+  for (const item of detail.accounts || []) {
+    const row = document.createElement('div');
+    row.className = 'v0214-balance-row' + (item.name === detail.activeAccount ? ' active' : '');
+    const name = document.createElement('span');
+    const amount = document.createElement('strong');
+    name.textContent = item.name || '未命名帳戶';
+    amount.textContent = formatV0214Money(item.value);
+    row.append(name, amount);
+    list.appendChild(row);
+  }
+  popover.appendChild(list);
+
+  if (!detail.accountOnly) {
+    const total = document.createElement('div');
+    total.className = 'v0214-balance-total';
+    const label = document.createElement('span');
+    const amount = document.createElement('strong');
+    label.textContent = '總餘額';
+    amount.textContent = formatV0214Money(detail.total);
+    total.append(label, amount);
+    popover.appendChild(total);
+  }
+
+  popover.hidden = false;
+  positionBalancePopoverV0214(cell, popover);
+}
+
+function positionBalancePopoverV0214(cell, popover) {
+  const anchor = cell.getBoundingClientRect();
+  const box = popover.getBoundingClientRect();
+  const margin = 12;
+  let left = anchor.right - box.width;
+  left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
+  let top = anchor.bottom + 8;
+  if (top + box.height > window.innerHeight - margin) top = anchor.top - box.height - 8;
+  top = Math.max(margin, top);
+  popover.style.left = Math.round(left) + 'px';
+  popover.style.top = Math.round(top) + 'px';
+}
+
+function scheduleBalanceHideV0214() {
+  clearBalanceHideV0214();
+  if (cyV0214BalancePinned) return;
+  cyV0214BalanceHideTimer = window.setTimeout(closeLedgerBalancePopoverV0214, 140);
+}
+
+function clearBalanceHideV0214() {
+  if (cyV0214BalanceHideTimer) window.clearTimeout(cyV0214BalanceHideTimer);
+  cyV0214BalanceHideTimer = null;
+}
+
+function closeLedgerBalancePopoverV0214() {
+  clearBalanceHideV0214();
+  if (cyV0214BalanceAnchor) cyV0214BalanceAnchor.setAttribute('aria-expanded', 'false');
+  cyV0214BalanceAnchor = null;
+  cyV0214BalancePinned = false;
+  if (cyV0214BalancePopover) cyV0214BalancePopover.hidden = true;
+}
+
+function formatV0214Money(value) {
+  if (typeof money === 'function') return money(Number(value) || 0);
+  return (Number(value) || 0).toLocaleString('zh-TW');
+}
+
+function setupOptimisticSettingsV0214() {
+  const accounts = document.querySelector('#accountRows');
+  if (accounts && accounts.dataset.v0214OptimisticBound !== '1') {
+    accounts.dataset.v0214OptimisticBound = '1';
+    accounts.addEventListener('click', handleV0214AccountDefault, true);
+  }
+  const categories = document.querySelector('#categoryManager');
+  if (categories && categories.dataset.v0214OptimisticBound !== '1') {
+    categories.dataset.v0214OptimisticBound = '1';
+    categories.addEventListener('click', handleV0214FavoriteToggle, true);
+  }
+}
+
+async function handleV0214AccountDefault(event) {
+  const button = event.target.closest('[data-account-default]');
+  if (!button || typeof state !== 'object') return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const id = Number(button.dataset.accountDefault || 0);
+  const key = 'default:' + id;
+  if (!Number.isInteger(id) || id <= 0 || cyV0214PendingWrites.has(key)) return;
+  const previous = (state.accounts || []).map(item => ({ ...item }));
+  if (!previous.some(item => Number(item.id) === id)) return;
+  const selected = document.querySelector('#accountName')?.value || '';
+
+  cyV0214PendingWrites.add(key);
+  state.accounts = previous.map(item => ({ ...item, is_default: Number(item.id) === id ? 1 : 0 }));
+  renderV0214AccountState(selected);
+  setV0214SettingsMessage('正在儲存預設帳戶…');
+
+  try {
+    await api('/api/accounts/' + id + '/default', { method: 'POST' });
+    setV0214SettingsMessage('已更新預設帳戶。');
+  } catch (error) {
+    state.accounts = previous;
+    renderV0214AccountState(selected);
+    setV0214SettingsMessage(error.message || '預設帳戶儲存失敗，已還原。', true);
+  } finally {
+    cyV0214PendingWrites.delete(key);
+  }
+}
+
+async function handleV0214FavoriteToggle(event) {
+  const button = event.target.closest('[data-category-favorite]');
+  if (!button || typeof state !== 'object') return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const id = Number(button.dataset.categoryFavorite || 0);
+  const key = 'favorite:' + id;
+  const current = (state.categories || []).find(item => Number(item.id) === id);
+  if (!current || cyV0214PendingWrites.has(key)) return;
+  const previous = (state.categories || []).map(item => ({ ...item }));
+  const nextFavorite = Number(current.is_favorite) !== 1;
+
+  cyV0214PendingWrites.add(key);
+  state.categories = previous.map(item => Number(item.id) === id ? { ...item, is_favorite: nextFavorite ? 1 : 0 } : item);
+  renderV0214CategoryState();
+  setV0214SettingsMessage('正在儲存常用科目…');
+
+  try {
+    await api('/api/categories/' + id + '/favorite', {
+      method: 'PUT',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ favorite: nextFavorite })
+    });
+    setV0214SettingsMessage(nextFavorite ? '已加入常用科目。' : '已取消常用科目。');
+  } catch (error) {
+    state.categories = previous;
+    renderV0214CategoryState();
+    setV0214SettingsMessage(error.message || '常用科目儲存失敗，已還原。', true);
+  } finally {
+    cyV0214PendingWrites.delete(key);
+  }
+}
+
+function renderV0214AccountState(selected) {
+  if (typeof renderV0211AccountManager === 'function') renderV0211AccountManager();
+  else if (typeof renderAccountManager === 'function') renderAccountManager();
+  if (typeof renderAccounts === 'function') renderAccounts(selected);
+  if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
+}
+
+function renderV0214CategoryState() {
+  if (typeof renderV0212CategoryManager === 'function' && window.matchMedia('(min-width: 1024px)').matches) {
+    renderV0212CategoryManager();
+  } else if (typeof renderCategoryManager === 'function') {
+    renderCategoryManager();
+  }
+  if (typeof renderFavoriteCategories === 'function') renderFavoriteCategories();
+}
+
+function setV0214SettingsMessage(text, error = false) {
+  const target = document.querySelector('#settingsMessage');
+  if (target && typeof setDialogMessage === 'function') setDialogMessage(target, text, error);
+}
+
+/* ---- baseline section ---- */
+const CY_V0215_BUILD3_MOBILE = '(max-width: 767px)';
+const CY_V0215_BUILD3_EDGE_GUARD = 24;
+const CY_V0215_BUILD3_ACTION_WIDTH = 72;
+const CY_V0215_BUILD3_OPEN_THRESHOLD = 34;
+
+let cyV0215Build3OpenRow = null;
+let cyV0215Build3Gesture = null;
+let cyV0215Build3SuppressClickUntil = 0;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupV0215Build3SwipeActions, { once: true });
+} else {
+  window.setTimeout(setupV0215Build3SwipeActions, 0);
+}
+window.addEventListener('load', setupV0215Build3SwipeActions, { once: true });
+
+function setupV0215Build3SwipeActions() {
+  const rows = document.querySelector('#transactionRows');
+  if (!rows || rows.dataset.v0215Build3SwipeBound === '1') return;
+  rows.dataset.v0215Build3SwipeBound = '1';
+
+  rows.addEventListener('pointerdown', event => {
+    if (!window.matchMedia(CY_V0215_BUILD3_MOBILE).matches) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (event.target.closest('button, input, select, textarea, a')) return;
+
+    const row = event.target.closest('tr.ledger-row:not(.inline-editing)');
+    if (!row) return;
+
+    if (event.clientX <= CY_V0215_BUILD3_EDGE_GUARD) {
+      closeV0215Build3SwipeRow();
+      return;
+    }
+
+    if (cyV0215Build3OpenRow && cyV0215Build3OpenRow !== row) {
+      closeV0215Build3SwipeRow();
+    }
+
+    cyV0215Build3Gesture = {
+      pointerId: event.pointerId,
+      row,
+      startX: event.clientX,
+      startY: event.clientY,
+      startOffset: readV0215Build3OpenOffset(row),
+      horizontal: false,
+      cancelled: false,
+      moved: false
+    };
+
+    row.classList.remove('v0215-swipe-animate');
+    row.setPointerCapture?.(event.pointerId);
+  });
+
+  rows.addEventListener('pointermove', event => {
+    const gesture = cyV0215Build3Gesture;
+    if (!gesture || gesture.pointerId !== event.pointerId || gesture.cancelled) return;
+
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+
+    if (!gesture.horizontal) {
+      if (Math.max(absX, absY) < 7) return;
+      if (absY > absX) {
+        gesture.cancelled = true;
+        return;
+      }
+      gesture.horizontal = true;
+    }
+
+    const row = gesture.row;
+    let next = clampV0215Build3(
+      gesture.startOffset + dx,
+      -CY_V0215_BUILD3_ACTION_WIDTH,
+      CY_V0215_BUILD3_ACTION_WIDTH
+    );
+
+    const edit = row.querySelector('[data-edit-id]');
+    const remove = row.querySelector('[data-delete-id]');
+    if (next > 0 && (!edit || edit.disabled)) next = 0;
+    if (next < 0 && (!remove || remove.disabled)) next = 0;
+
+    gesture.moved = gesture.moved || Math.abs(next - gesture.startOffset) > 7;
+    setV0215Build3SwipeOffset(row, next);
+    row.dataset.swipeDirection = next > 1 ? 'edit' : next < -1 ? 'delete' : '';
+    event.preventDefault();
+  });
+
+  const finish = event => {
+    const gesture = cyV0215Build3Gesture;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    cyV0215Build3Gesture = null;
+
+    const row = gesture.row;
+    row.releasePointerCapture?.(event.pointerId);
+
+    if (gesture.cancelled || !gesture.horizontal) {
+      row.classList.add('v0215-swipe-animate');
+      return;
+    }
+
+    const current = readV0215Build3Offset(row);
+    if (gesture.moved) cyV0215Build3SuppressClickUntil = Date.now() + 260;
+
+    if (current >= CY_V0215_BUILD3_OPEN_THRESHOLD) {
+      openV0215Build3SwipeRow(row, 'edit');
+    } else if (current <= -CY_V0215_BUILD3_OPEN_THRESHOLD) {
+      openV0215Build3SwipeRow(row, 'delete');
+    } else {
+      closeV0215Build3SwipeRow(row);
+    }
+  };
+
+  rows.addEventListener('pointerup', finish);
+  rows.addEventListener('pointercancel', finish);
+
+  rows.addEventListener('click', event => {
+    const action = event.target.closest('[data-edit-id], [data-delete-id]');
+    if (action) {
+      const row = action.closest('tr.ledger-row');
+      window.setTimeout(() => closeV0215Build3SwipeRow(row), 0);
+      return;
+    }
+
+    if (Date.now() < cyV0215Build3SuppressClickUntil) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const row = event.target.closest('tr.ledger-row:not(.inline-editing)');
+    if (row && row === cyV0215Build3OpenRow) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeV0215Build3SwipeRow(row);
+    }
+  }, true);
+
+  document.addEventListener('pointerdown', event => {
+    if (!cyV0215Build3OpenRow) return;
+    if (cyV0215Build3OpenRow.contains(event.target)) return;
+    closeV0215Build3SwipeRow();
+  }, true);
+
+  window.addEventListener('scroll', () => closeV0215Build3SwipeRow(), { passive: true });
+}
+
+function openV0215Build3SwipeRow(row, mode) {
+  if (!row?.isConnected) return;
+  if (cyV0215Build3OpenRow && cyV0215Build3OpenRow !== row) {
+    closeV0215Build3SwipeRow(cyV0215Build3OpenRow);
+  }
+
+  const action = mode === 'edit'
+    ? row.querySelector('[data-edit-id]')
+    : row.querySelector('[data-delete-id]');
+  if (!action || action.disabled) {
+    closeV0215Build3SwipeRow(row);
+    return;
+  }
+
+  row.classList.add('v0215-swipe-animate');
+  row.dataset.swipeOpen = mode;
+  row.dataset.swipeDirection = mode;
+  setV0215Build3SwipeOffset(
+    row,
+    mode === 'edit' ? CY_V0215_BUILD3_ACTION_WIDTH : -CY_V0215_BUILD3_ACTION_WIDTH
+  );
+  cyV0215Build3OpenRow = row;
+}
+
+function closeV0215Build3SwipeRow(row = cyV0215Build3OpenRow) {
+  if (!row) return;
+  row.classList.add('v0215-swipe-animate');
+  row.dataset.swipeOpen = '';
+  row.dataset.swipeDirection = '';
+  setV0215Build3SwipeOffset(row, 0);
+  if (cyV0215Build3OpenRow === row) cyV0215Build3OpenRow = null;
+}
+
+function readV0215Build3OpenOffset(row) {
+  if (row?.dataset.swipeOpen === 'edit') return CY_V0215_BUILD3_ACTION_WIDTH;
+  if (row?.dataset.swipeOpen === 'delete') return -CY_V0215_BUILD3_ACTION_WIDTH;
+  return 0;
+}
+
+function readV0215Build3Offset(row) {
+  const value = Number(row?.style.getPropertyValue('--v0215-swipe-x').replace('px', ''));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function setV0215Build3SwipeOffset(row, value) {
+  row?.style.setProperty('--v0215-swipe-x', value + 'px');
+}
+
+function clampV0215Build3(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+/* ---- baseline section ---- */
+const CY_V0215_BUILD4_MOBILE = '(max-width: 767px)';
+let cyV0215Build4Edit = null;
+let cyV0215Build4SaveHideTimer = null;
+let cyV0215Build4SaveClearTimer = null;
+let cyV0215Build4SetupDone = false;
+
+window.cyAfterSaveMessage = handleV0215Build4SaveMessage;
+window.cyOpenMobileLedgerOpening = openV0215MobileLedgerOpening;
+window.cyOpenMobileLedgerLock = openV0215MobileLedgerLock;
+window.cyOpenMobileSettingsPane = openV0215MobileSettingsPane;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupV0215Build4, { once: true });
+} else {
+  window.setTimeout(setupV0215Build4, 0);
+}
+window.addEventListener('load', setupV0215Build4, { once: true });
+
+function setupV0215Build4() {
+  if (cyV0215Build4SetupDone) return;
+  if (!document.querySelector('#transactionRows') || !document.querySelector('#transactionForm') || !document.querySelector('#mobileMainNav')) {
+    window.setTimeout(setupV0215Build4, 50);
+    return;
+  }
+  cyV0215Build4SetupDone = true;
+  setupV0215Build4Toolbar();
+  setupV0215Build4Search();
+  setupV0215Build4SaveMessage();
+  setupV0215Build4EntrySecondaryAction();
+  setupV0215Build4MobileEdit();
+}
+
+function setupV0215Build4Toolbar(attempt = 0) {
+  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  const monthTools = document.querySelector('.ledger-month-tools');
+  const prev = document.querySelector('#ledgerPrevMonth');
+  const next = document.querySelector('#ledgerNextMonth');
+  const more = document.querySelector('#mobileLedgerMoreButton');
+  const slot = document.querySelector('#ledgerMonthSlot');
+  const picker = document.querySelector('.ledger-title .month-picker');
+  if (!monthTools || !prev || !next || !more || !slot || !picker) {
+    if (attempt < 60) window.setTimeout(() => setupV0215Build4Toolbar(attempt + 1), 50);
+    return;
+  }
+
+  let balance = document.querySelector('#mobileLedgerBalanceButton');
+  if (!balance) {
+    balance = document.createElement('button');
+    balance.id = 'mobileLedgerBalanceButton';
+    balance.className = 'secondary compact v0215-mobile-balance-button';
+    balance.type = 'button';
+    balance.textContent = '餘額';
+    balance.addEventListener('click', () => {
+      openV0215MobileLedgerOpening();
+    });
+  }
+
+  // Keep the month picker inside its original slot. Moving the label itself out of
+  // the slot leaves an extra grid child and breaks the five-column mobile toolbar.
+  if (picker.parentElement !== slot) slot.append(picker);
+  monthTools.append(balance, prev, slot, next, more);
+  setupV0215Build4MonthDisplay(slot);
+  monthTools.classList.add('v0215-toolbar-ready');
+
+  const displayMonth = document.querySelector('#ledgerDisplayMonth');
+  if (displayMonth) displayMonth.hidden = true;
+
+  const sheet = document.querySelector('#mobileLedgerToolsSheet');
+  sheet?.querySelector('[data-mobile-ledger-action="opening"]')?.remove();
+}
+
+async function openV0215MobileLedgerOpening() {
+  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  const month = String(els.monthFilter?.value || '');
+  if (!/^\d{4}-\d{2}$/.test(month)) return;
+  if (els.openingMonth) els.openingMonth.value = month;
+  if (typeof loadOpeningBalances === 'function') await loadOpeningBalances();
+  if (els.openingDialog && !els.openingDialog.open) els.openingDialog.showModal();
+}
+
+function openV0215MobileSettingsPane(tab) {
+  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  if (!['accounts', 'categories'].includes(tab)) return;
+  if (typeof openSettings === 'function') openSettings();
+  if (typeof setSettingsTab === 'function') setSettingsTab(tab);
+
+  const dialog = els.settingsDialog || document.querySelector('#settingsDialog');
+  if (!dialog) return;
+  dialog.classList.add('v0215-mobile-settings-focus');
+  dialog.dataset.mobileSettingsFocus = tab;
+  const title = dialog.querySelector('.modal-header h2');
+  if (title) {
+    if (!title.dataset.v0215OriginalTitle) title.dataset.v0215OriginalTitle = title.textContent || '設定';
+    title.textContent = tab === 'accounts' ? '帳戶設定' : '科目設定';
+  }
+  if (!dialog.dataset.v0215FocusBound) {
+    dialog.dataset.v0215FocusBound = '1';
+    dialog.addEventListener('close', () => {
+      dialog.classList.remove('v0215-mobile-settings-focus');
+      delete dialog.dataset.mobileSettingsFocus;
+      const heading = dialog.querySelector('.modal-header h2');
+      if (heading?.dataset.v0215OriginalTitle) heading.textContent = heading.dataset.v0215OriginalTitle;
+    });
+  }
+}
+
+function ensureV0215MobileLockDialog() {
+  let dialog = document.querySelector('#mobileLedgerLockDialogV0215');
+  if (dialog) return dialog;
+
+  dialog = document.createElement('dialog');
+  dialog.id = 'mobileLedgerLockDialogV0215';
+  dialog.className = 'modal v0215-mobile-lock-dialog';
+  dialog.innerHTML = `
+    <div class="v0215-mobile-lock-head">
+      <div>
+        <h2>月份鎖帳</h2>
+        <p data-v0215-lock-month></p>
+      </div>
+      <button type="button" class="icon-button" data-v0215-lock-close aria-label="關閉">×</button>
+    </div>
+    <div class="v0215-mobile-lock-body">
+      <p data-v0215-lock-status></p>
+      <p class="v0215-mobile-lock-note" data-v0215-lock-note></p>
+    </div>
+    <div class="v0215-mobile-lock-actions">
+      <button type="button" class="secondary" data-v0215-lock-close>取消</button>
+      <button type="button" class="primary" data-v0215-lock-apply></button>
+    </div>
+    <p class="v0215-mobile-lock-message" data-v0215-lock-message></p>
+  `;
+  document.body.append(dialog);
+
+  dialog.addEventListener('click', event => {
+    if (event.target.closest('[data-v0215-lock-close]')) {
+      dialog.close();
+      return;
+    }
+    const apply = event.target.closest('[data-v0215-lock-apply]');
+    if (apply) saveV0215MobileLedgerLock(dialog, apply);
+  });
+  return dialog;
+}
+
+function openV0215MobileLedgerLock() {
+  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  const month = String(els.monthFilter?.value || '');
+  if (!/^\d{4}-\d{2}$/.test(month)) return;
+
+  const dialog = ensureV0215MobileLockDialog();
+  const lockedThrough = String(state.lockedThrough || '');
+  const locked = Boolean(lockedThrough && month <= lockedThrough);
+  const displayMonth = formatV0215MobileMonth(month);
+  const status = dialog.querySelector('[data-v0215-lock-status]');
+  const note = dialog.querySelector('[data-v0215-lock-note]');
+  const apply = dialog.querySelector('[data-v0215-lock-apply]');
+  const message = dialog.querySelector('[data-v0215-lock-message]');
+
+  dialog.dataset.month = month;
+  dialog.dataset.nextLockedThrough = locked ? previousV0215MobileMonth(month) : month;
+  dialog.querySelector('[data-v0215-lock-month]').textContent = displayMonth;
+  message.textContent = '';
+  message.classList.remove('error');
+
+  if (!locked) {
+    status.textContent = '此月份目前未鎖帳。';
+    note.textContent = '鎖定後，' + displayMonth + ' 以及更早月份都不可新增、修改或刪除記帳。';
+    apply.textContent = '鎖定本月';
+  } else if (lockedThrough === month) {
+    status.textContent = '此月份目前已鎖帳。';
+    note.textContent = '解除後，系統會保留鎖帳至 ' + formatV0215MobileMonth(previousV0215MobileMonth(month)) + '。';
+    apply.textContent = '解除本月鎖帳';
+  } else {
+    status.textContent = '此月份包含在鎖帳範圍內，目前鎖帳至 ' + formatV0215MobileMonth(lockedThrough) + '。';
+    note.textContent = '若解除，' + displayMonth + ' 到 ' + formatV0215MobileMonth(lockedThrough) + ' 都會一起解除鎖帳。';
+    apply.textContent = '解除自本月起鎖帳';
+  }
+
+  if (!dialog.open) dialog.showModal();
+}
+
+async function saveV0215MobileLedgerLock(dialog, button) {
+  const month = String(dialog?.dataset.month || '');
+  const nextLockedThrough = String(dialog?.dataset.nextLockedThrough || '');
+  const message = dialog?.querySelector('[data-v0215-lock-message]');
+  if (!/^\d{4}-\d{2}$/.test(month) || !/^\d{4}-\d{2}$/.test(nextLockedThrough)) return;
+
+  button.disabled = true;
+  if (message) {
+    message.textContent = '處理中…';
+    message.classList.remove('error');
+  }
+  try {
+    const data = await api('/api/settings/lock', {
+      method: 'PUT',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ lockedThrough: nextLockedThrough })
+    });
+    state.lockedThrough = data.lockedThrough || null;
+    if (els.lockedThrough) els.lockedThrough.value = state.lockedThrough || '';
+    updateEntryLockState();
+    await loadTransactions();
+    if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
+    dialog.close();
+    showV0215Build4LedgerNotice(state.lockedThrough
+      ? '已鎖帳至 ' + formatV0215MobileMonth(state.lockedThrough) + '。'
+      : '已取消鎖帳。');
+  } catch (error) {
+    if (message) {
+      message.textContent = error?.message || '鎖帳設定失敗。';
+      message.classList.add('error');
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function previousV0215MobileMonth(month) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  if (!match) return '';
+  const date = new Date(Number(match[1]), Number(match[2]) - 2, 1);
+  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+}
+
+function formatV0215MobileMonth(month) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  return match ? Number(match[1]) + '年' + Number(match[2]) + '月' : String(month || '');
+}
+
+function setupV0215Build4MonthDisplay(slot) {
+  if (!slot || !els.monthFilter) return;
+
+  let display = slot.querySelector('#mobileLedgerMonthDisplay');
+  if (!display) {
+    display = document.createElement('span');
+    display.id = 'mobileLedgerMonthDisplay';
+    display.className = 'v0215-mobile-month-display';
+    display.setAttribute('aria-hidden', 'true');
+    slot.append(display);
+  }
+
+  els.monthFilter.setAttribute('aria-label', '選擇月份');
+  if (els.monthFilter.dataset.v0215MonthDisplayBound !== '1') {
+    els.monthFilter.dataset.v0215MonthDisplayBound = '1';
+    els.monthFilter.addEventListener('input', syncV0215Build4MonthDisplay);
+    els.monthFilter.addEventListener('change', syncV0215Build4MonthDisplay);
+  }
+  syncV0215Build4MonthDisplay();
+}
+
+function syncV0215Build4MonthDisplay() {
+  const display = document.querySelector('#mobileLedgerMonthDisplay');
+  const value = String(els.monthFilter?.value || '');
+  if (!display) return;
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  display.textContent = match ? `${Number(match[1])}年${Number(match[2])}月` : '選擇月份';
+}
+
+function setupV0215Build4Search() {
+  const form = document.querySelector('#ledgerSearchForm');
+  const input = document.querySelector('#ledgerSummarySearch');
+  if (!form || !input) return;
+  input.setAttribute('enterkeyhint', 'search');
+  input.setAttribute('inputmode', 'search');
+  form.addEventListener('submit', () => {
+    if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+    window.setTimeout(() => input.blur(), 0);
+  });
+}
+
+function setupV0215Build4SaveMessage() {
+  const media = window.matchMedia(CY_V0215_BUILD4_MOBILE);
+  const message = document.querySelector('#saveMessage');
+  const saveButton = document.querySelector('#saveButton');
+  if (!message || !saveButton) return;
+
+  const originalParent = message.parentElement;
+  const originalNext = message.nextSibling;
+
+  const sync = () => {
+    if (media.matches) {
+      if (message.previousElementSibling !== saveButton) saveButton.insertAdjacentElement('afterend', message);
+      message.classList.add('v0215-mobile-save-message');
+    } else {
+      message.classList.remove('v0215-mobile-save-message', 'is-visible', 'is-fading');
+      if (originalParent && message.parentElement !== originalParent) {
+        if (originalNext && originalNext.parentNode === originalParent) originalParent.insertBefore(message, originalNext);
+        else originalParent.append(message);
+      }
+    }
+  };
+
+  if (typeof media.addEventListener === 'function') media.addEventListener('change', sync);
+  else media.addListener?.(sync);
+  sync();
+}
+
+function setupV0215Build4EntrySecondaryAction() {
+  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  const saveButton = document.querySelector('#saveButton');
+  const message = document.querySelector('#saveMessage');
+  if (!saveButton || !message) return;
+
+  let button = document.querySelector('#mobileEntrySecondaryButton');
+  if (!button) {
+    button = document.createElement('button');
+    button.id = 'mobileEntrySecondaryButton';
+    button.className = 'secondary v0215-entry-secondary-button';
+    button.type = 'button';
+    button.textContent = '清空';
+    button.addEventListener('click', () => {
+      if (cyV0215Build4Edit) {
+        cancelV0215Build4MobileEditAndReturn();
+        return;
+      }
+      clearV0215Build4EntryForm();
+    });
+  }
+
+  message.insertAdjacentElement('beforebegin', button);
+  syncV0215Build4EntrySecondaryAction();
+}
+
+function syncV0215Build4EntrySecondaryAction() {
+  const button = document.querySelector('#mobileEntrySecondaryButton');
+  if (!button) return;
+  button.textContent = cyV0215Build4Edit ? '取消' : '清空';
+  button.classList.toggle('is-cancel', Boolean(cyV0215Build4Edit));
+}
+
+function clearV0215Build4EntryForm() {
+  showMessage('');
+  const today = typeof localDateString === 'function' ? localDateString(new Date()) : new Date().toISOString().slice(0, 10);
+  els.txDate.value = today;
+  renderAccounts();
+  renderCategories();
+  els.summary.value = '';
+  els.amount.value = '';
+  updateEntryLockState();
+  els.summary.blur();
+  els.amount.blur();
+}
+
+function cancelV0215Build4MobileEditAndReturn() {
+  const context = cyV0215Build4Edit?.returnContext;
+  if (!context) return false;
+  cancelV0215Build4MobileEdit();
+  switchV0215Build4MobilePage('ledger');
+  restoreV0215Build4LedgerContext(context, false);
+  return true;
+}
+
+function handleV0215Build4SaveMessage(message, text, isError) {
+  if (!message) return;
+  window.clearTimeout(cyV0215Build4SaveHideTimer);
+  window.clearTimeout(cyV0215Build4SaveClearTimer);
+  message.classList.remove('is-fading');
+  message.classList.toggle('is-visible', Boolean(text));
+
+  if (!text || isError || !window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+
+  cyV0215Build4SaveHideTimer = window.setTimeout(() => {
+    message.classList.add('is-fading');
+    cyV0215Build4SaveClearTimer = window.setTimeout(() => {
+      if (message.classList.contains('is-fading')) {
+        message.textContent = '';
+        message.classList.remove('is-visible', 'is-fading');
+      }
+    }, 420);
+  }, 2500);
+}
+
+function setupV0215Build4MobileEdit() {
+  const rows = document.querySelector('#transactionRows');
+  const form = document.querySelector('#transactionForm');
+  const nav = document.querySelector('#mobileMainNav');
+  if (!rows || !form || !nav) return;
+
+  rows.addEventListener('click', event => {
+    if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+    const edit = event.target.closest('[data-edit-id]');
+    if (!edit) return;
+    const id = Number(edit.dataset.editId || 0);
+    if (!Number.isInteger(id) || id <= 0 || edit.disabled) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    beginV0215Build4MobileEdit(id);
+  }, true);
+
+  form.addEventListener('submit', event => {
+    if (!cyV0215Build4Edit || !window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    saveV0215Build4MobileEdit();
+  }, true);
+
+  nav.addEventListener('click', event => {
+    if (!cyV0215Build4Edit || !window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+    const button = event.target.closest('[data-mobile-page]');
+    if (!button || button.dataset.mobilePage === 'entry') return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    cancelV0215Build4MobileEditAndReturn();
+  }, true);
+
+  window.addEventListener('pagehide', () => {
+    if (!cyV0215Build4Edit) return;
+    cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+  });
+}
+
+function beginV0215Build4MobileEdit(id) {
+  const tx = state.transactions.find(item => Number(item.id) === id);
+  if (!tx || isLocked(String(tx.tx_date || '').slice(0, 7))) return;
+
+  const row = document.querySelector('#transactionRows tr[data-transaction-id="' + id + '"]');
+  cyV0215Build4Edit = {
+    id,
+    kind: tx.kind,
+    originalMonth: String(tx.tx_date || '').slice(0, 7),
+    draft: captureV0215Build4EntryDraft(),
+    returnContext: {
+      month: els.monthFilter?.value || '',
+      search: document.querySelector('#ledgerSummarySearch')?.value || '',
+      scrollY: window.scrollY,
+      rowId: id,
+      rowTop: row?.getBoundingClientRect().top ?? null
+    }
+  };
+
+  setEntryKind(tx.kind);
+  ensureV0215Build4Option(els.accountName, tx.account_name);
+  els.accountName.value = tx.account_name;
+  ensureV0215Build4Option(els.categoryName, tx.category_name);
+  els.categoryName.value = tx.category_name;
+  els.txDate.value = tx.tx_date;
+  els.summary.value = tx.summary || '';
+  els.amount.value = String(tx.amount || '');
+
+  els.kindButtons.forEach(button => { button.disabled = true; });
+  els.saveButton.textContent = '儲存修改';
+  syncV0215Build4EntrySecondaryAction();
+  document.querySelector('.entry-card')?.classList.add('v0215-mobile-editing');
+  showMessage('');
+  updateEntryLockState();
+
+  switchV0215Build4MobilePage('entry');
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
+
+async function saveV0215Build4MobileEdit() {
+  const edit = cyV0215Build4Edit;
+  if (!edit) return;
+
+  const month = String(els.txDate.value || '').slice(0, 7);
+  if (isLocked(month)) {
+    showMessage('此月份已鎖帳，無法修改資料。', true);
+    return;
+  }
+
+  const amount = Number(els.amount.value);
+  if (!Number.isInteger(amount) || amount < 1 || amount > 9_999_999) {
+    showMessage('金額必須為 1～9,999,999。', true);
+    els.amount.focus();
+    return;
+  }
+
+  els.saveButton.disabled = true;
+  const destinationMonth = month;
+  try {
+    await api('/api/transactions/' + edit.id, {
+      method: 'PUT',
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        txDate: els.txDate.value,
+        accountName: els.accountName.value,
+        categoryName: els.categoryName.value,
+        summary: els.summary.value.trim(),
+        amount
+      })
+    });
+
+    const context = edit.returnContext;
+    const editedId = edit.id;
+    cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+
+    if (context.month && els.monthFilter.value !== context.month) {
+      els.monthFilter.value = context.month;
+    }
+    const searchInput = document.querySelector('#ledgerSummarySearch');
+    if (searchInput) searchInput.value = context.search || '';
+    if (typeof cyLedgerSearch !== 'undefined') cyLedgerSearch = context.search || '';
+
+    await loadTransactions();
+    if (typeof renderDesktopLedger === 'function') renderDesktopLedger();
+
+    switchV0215Build4MobilePage('ledger');
+    restoreV0215Build4LedgerContext(context, destinationMonth === context.month ? editedId : false);
+
+    if (destinationMonth !== context.month) {
+      showV0215Build4LedgerNotice('修改完成，資料已移至 ' + destinationMonth.replace('-', '/') + '。');
+    }
+  } catch (error) {
+    showMessage(error.message || '修改失敗。', true);
+    updateEntryLockState();
+  }
+}
+
+function cancelV0215Build4MobileEdit(options = {}) {
+  const edit = cyV0215Build4Edit;
+  if (!edit) return;
+  cyV0215Build4Edit = null;
+
+  clearV0215Build4TemporaryOptions();
+  restoreV0215Build4EntryDraft(edit.draft);
+  els.kindButtons.forEach(button => { button.disabled = false; });
+  els.saveButton.textContent = '儲存';
+  syncV0215Build4EntrySecondaryAction();
+  document.querySelector('.entry-card')?.classList.remove('v0215-mobile-editing');
+  showMessage('');
+  updateEntryLockState();
+
+  if (!options.restoreDraftOnly) window.cyCloseLedgerBalancePopover?.();
+}
+
+function captureV0215Build4EntryDraft() {
+  return {
+    kind: state.kind,
+    txDate: els.txDate.value,
+    accountName: els.accountName.value,
+    categoryName: els.categoryName.value,
+    summary: els.summary.value,
+    amount: els.amount.value
+  };
+}
+
+function restoreV0215Build4EntryDraft(draft) {
+  if (!draft) return;
+  setEntryKind(draft.kind);
+  ensureV0215Build4Option(els.accountName, draft.accountName);
+  els.accountName.value = draft.accountName || els.accountName.value;
+  ensureV0215Build4Option(els.categoryName, draft.categoryName);
+  els.categoryName.value = draft.categoryName || els.categoryName.value;
+  els.txDate.value = draft.txDate || els.txDate.value;
+  els.summary.value = draft.summary || '';
+  els.amount.value = draft.amount || '';
+}
+
+function ensureV0215Build4Option(select, value) {
+  const text = String(value || '').trim();
+  if (!select || !text) return;
+  if ([...select.options].some(option => option.value === text)) return;
+  const option = document.createElement('option');
+  option.value = text;
+  option.textContent = text + '（歷史）';
+  option.dataset.v0215EditTemporary = '1';
+  select.append(option);
+}
+
+function clearV0215Build4TemporaryOptions() {
+  for (const select of [els.accountName, els.categoryName]) {
+    select?.querySelectorAll('[data-v0215-edit-temporary="1"]').forEach(option => option.remove());
+  }
+}
+
+function switchV0215Build4MobilePage(page) {
+  const shell = document.querySelector('.shell');
+  const entry = shell?.querySelector('.entry-card');
+  const ledger = shell?.querySelector('.ledger-card');
+  const nav = document.querySelector('#mobileMainNav');
+  if (!shell || !entry || !ledger || !nav) return;
+
+  const current = page === 'ledger' ? 'ledger' : 'entry';
+  entry.classList.toggle('v21-mobile-page-hidden', current !== 'entry');
+  ledger.classList.toggle('v21-mobile-page-hidden', current !== 'ledger');
+  shell.dataset.mobilePage = current;
+
+  for (const button of nav.querySelectorAll('[data-mobile-page]')) {
+    const active = button.dataset.mobilePage === current;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  }
+}
+
+function restoreV0215Build4LedgerContext(context, highlightId) {
+  if (!context) return;
+
+  if (context.month && els.monthFilter.value !== context.month) {
+    els.monthFilter.value = context.month;
+  }
+  syncV0215Build4MonthDisplay();
+  const searchInput = document.querySelector('#ledgerSummarySearch');
+  if (searchInput) searchInput.value = context.search || '';
+
+  const restore = () => {
+    const row = context.rowId
+      ? document.querySelector('#transactionRows tr[data-transaction-id="' + context.rowId + '"]')
+      : null;
+
+    if (row && context.rowTop !== null) {
+      const delta = row.getBoundingClientRect().top - context.rowTop;
+      window.scrollBy({ top: delta, behavior: 'auto' });
+    } else {
+      window.scrollTo({ top: context.scrollY || 0, behavior: 'auto' });
+    }
+
+    if (highlightId) {
+      const highlight = document.querySelector('#transactionRows tr[data-transaction-id="' + highlightId + '"]');
+      if (highlight) {
+        highlight.classList.add('v0215-edit-highlight');
+        window.setTimeout(() => highlight.classList.remove('v0215-edit-highlight'), 1800);
+      }
+    }
+  };
+
+  window.requestAnimationFrame(() => window.requestAnimationFrame(restore));
+}
+
+function showV0215Build4LedgerNotice(text) {
+  let notice = document.querySelector('#v0215LedgerNotice');
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'v0215LedgerNotice';
+    notice.className = 'v0215-ledger-notice';
+    document.body.append(notice);
+  }
+  notice.textContent = text;
+  notice.classList.add('show');
+  window.setTimeout(() => notice.classList.remove('show'), 2600);
+}
+
+/* ---- baseline section ---- */
+const CY_V0216_VERSION = 'V0.21.6 Build 8';
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupV0216Version, { once: true });
+} else {
+  setupV0216Version();
+}
+window.addEventListener('load', setupV0216Version, { once: true });
+
+function setupV0216Version() {
+  syncV0216Version();
+  window.setTimeout(syncV0216Version, 250);
+  window.setTimeout(syncV0216Version, 1000);
+
+  const version = document.querySelector('.version');
+  if (!version || version.dataset.v0216Observed === 'true') return;
+  version.dataset.v0216Observed = 'true';
+  new MutationObserver(syncV0216Version).observe(version, {
+    childList: true,
+    characterData: true,
+    subtree: true
+  });
+}
+
+function syncV0216Version() {
+  const version = document.querySelector('.version');
+  if (version && version.textContent !== CY_V0216_VERSION) version.textContent = CY_V0216_VERSION;
+}
