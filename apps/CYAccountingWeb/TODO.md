@@ -2,7 +2,18 @@
 
 本文件只記錄待辦、後續方向與未來評估項目，不作為永久規則來源。
 
-> 目前 conversation/workspace continuity：[`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)
+> 目前 conversation/workspace continuity：[`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)
+
+## Current checkpoint — 2026-09-30
+
+- Formal production baseline：**V0.21.5 Build 11**；current `main` baseline at handoff is `edfbaec2416a85f4089281f383fd10dbcc7d3d6d`，latest CYAccountingWeb main validation/deploy **run #199 success**。
+- Production user entry remains `https://acc.chihyuancm.com`；workers.dev fallback remains enabled。
+- Mobile Build 10/11 已部署：`餘額` 維持期初餘額設定、`更多` 保留帳戶設定／科目設定／月份鎖帳／匯出 Excel；右上角使用者選單只保留身分資訊＋登出。**仍需真實手機最終驗收，不得因 CI 綠燈直接標 final acceptance。**
+- Tablet real-device acceptance **失敗／未完成**：使用者回報觸控/focus 很差且登入仍不可靠。Build 6/8 legacy auth hotfix 未取得 acceptance；在 CYID governed integration 決策完成前，不再疊加 Tablet-specific legacy auth patch。
+- CYID shared consumer contract current version **1.0.1**，minimum compatible **1.0.0**；current canonical integration references are under `apps/CYCloudIdentity/docs/`，not removed dated handoffs。
+- Open PR **#239** (`CYAccountingWeb 0.21.6: prepare governed CYID integration`) is **not production baseline and not merged**；it has diverged from Build 11 main and must be reconciled/rebased only after reading the latest CYWEB/CYID controlling handoff。
+- A real production SQLite migration was executed successfully during this workstream, but final migrated-ledger content acceptance has not been explicitly closed；Public Git must not record production accounting counts/values/evidence。
+- Backup Phase C scheduled `x/14` remains a production-evidence gate；never infer it from dates，read catalog/UI when needed。
 
 ## 電腦版核心功能移植
 
@@ -20,7 +31,7 @@
 - [x] 逐月鎖帳操作流程（V0.12.0）；設定頁管理介面沿用相同月份語意並使用自製年月選擇器。
 - [x] 單月 Excel 匯出：直接產生標準 `.xlsx`，包含月統計、逐筆餘額與期初餘額工作表（V0.13.0）。
 - [x] Excel 匯入：`.xlsx` 工作表選擇、標題列／欄位對應、預覽、7 位數驗證、鎖帳檢查、重複略過與確認後寫入（V0.15.0）。
-- [ ] **CYAccounting SQLite 帳本匯入／遷移工具（V0.19.0）**：實作已完成瀏覽器本機 SQLite 解析、schema/integrity 驗證、SUPER_ADMIN server-side 權限、保守合併預覽、transaction occurrence dedupe、期初餘額／科目結構衝突阻擋、鎖帳只取較嚴格月份與 D1 atomic commit；原始 `.db` 不上傳。V0.19.0 Build 1 已修正 D1 bound parameter／query／payload limit並正式部署；仍需以真實桌面帳本 production acceptance 證據確認後才勾選完成。
+- [ ] **CYAccounting SQLite 帳本匯入／遷移工具（V0.19.0）**：實作已完成瀏覽器本機 SQLite 解析、schema/integrity 驗證、SUPER_ADMIN server-side 權限、保守合併預覽、transaction occurrence dedupe、期初餘額／科目結構衝突阻擋、鎖帳只取較嚴格月份與 D1 atomic commit；原始 `.db` 不上傳。V0.19.0 Build 1 已修正 D1 bound parameter／query／payload limit並正式部署；**本 workstream 已成功執行真實 production migration，但最終 migrated-ledger content acceptance 尚未由使用者明確關閉**，因此仍保持未完成。Public Git 不記錄 production accounting counts/values/evidence。
 
 ## Production / Domain
 
@@ -65,9 +76,9 @@
 - [x] 採單一網站的 RWD 為基礎，不另做獨立 PC／手機兩套網站。
 - [x] 在 RWD 基礎上加入 Adaptive UI：相同資料與功能依裝置使用不同 presentation，而非只把桌面版等比例縮小。
 - [x] breakpoint：Desktop `>= 1024px`、Tablet `768–1023px`、Mobile `< 768px` 已落地；後續依真實裝置驗收可微調數值。
-- [x] **Mobile Build 10 overall direction**：使用者已確認大方向可接受；新增記帳／記帳資料分成不同頁，帳戶採點擊後展開 chooser/sheet，不採橫向可滑按鈕列。
-- [ ] **Mobile refinement / final acceptance**：Build 10 方向可保留，但細節仍需真實手機持續驗收，不標為最終完成。
-- [ ] **Tablet visual acceptance**：程式有 Adaptive presentation，但截至 2026-09-29 使用者尚未能完整實機測試，不得宣稱已驗收。
+- [x] **Mobile Build 10 overall direction**：使用者已確認大方向可接受；新增記帳／記帳資料分成不同頁，帳戶採點擊後展開 chooser/sheet，不採橫向可滑按鈕列。Build 10/11 後手機工具入口收斂為：`餘額` = 期初餘額設定、`更多` = 帳戶設定／科目設定／月份鎖帳／匯出 Excel、右上角使用者選單 = 身分資訊＋登出。
+- [ ] **Mobile refinement / final acceptance**：Build 11 為目前正式 mobile baseline；仍需真實手機逐項驗收月份列、期初餘額手機介面、Account/Category focused settings、direct Month Lock dialog、user menu logout-only、slider corner、swipe edit/delete 與 edit cancel/return context，不標為最終完成。
+- [ ] **Tablet visual / interaction / login acceptance**：真實平板測試已確認目前狀態不可接受：觸控/focus 很差且登入仍不可靠。Build 6/8 legacy auth hotfix 未解決問題；先停止 Tablet-specific legacy auth 疊 patch，待 CYID governed integration handoff / development path 收斂後再做真實裝置 login + post-login acceptance。
 - [ ] Desktop 仍以高資訊密度與鍵盤高效率輸入為主要操作模式；Mobile 以查詢、確認、快速輸入與簡單修改為優先。待 Desktop/Tablet/Mobile 實機交叉驗收後再勾選完成。
 - [ ] 若未來出現掃碼、拍攝單據、離線作業、Push Notification 等強烈行動裝置需求，再評估 PWA 或原生 App；目前不提前拆成第二套前端。
 
@@ -79,5 +90,7 @@
 - [ ] Backup 整合優先採「各 App → 共用 CY Backup Service／Worker → app-scoped R2/GCS」；不以直接共用同一把廣權限 storage credential 作為整合方式。
 - [ ] 即使改由共用 Backup Service 管理，各 App 的備份資料仍維持邏輯隔離與獨立還原能力；caller identity 必須由 server-side mapping 決定可存取 dataset，不得只信任 caller 傳入的 `appId`。
 - [ ] 共用員工帳號權威目前仍暫由 **CYInvoice Cloud** 提供；跨 App Identity／SSO 正由 **CY-WEB / CYCloudIdentity workstream** 逐步遷移。CYAccountingWeb 不直接讀取 CYInvoice D1，只透過 `IDENTITY` Service Binding contract 使用帳號能力。
+- [ ] CYID consumer integration 必須依 canonical `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 與 `docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；current contract `1.0.1` / minimum compatible `1.0.0`。舊 dated CYID handoff 已移除，不得作 current authority。
+- [ ] Open PR #239 是 **governance/pre-integration prep only**，目前未 merge 且已與 Build 11 main 分岔；下一次 Identity work 必須先讀 CYWEB/CYID controlling handoff，再 reconcile/rebase，不得直接 merge。Production CYID cutover 仍需另行明確 approval 與 browser/device acceptance。
 - [ ] 涉及 Identity authority、跨 App 帳號／角色、shared account database、Service Binding、shared Worker、跨 App D1 ownership 或 shared Backup Service routing 等底層變更時，實作前必須先同步 CY-WEB / CYCloudIdentity 最新決策，不由 CYAccountingWeb 單獨先行定義。
 - [ ] 在 shared Identity 正式遷移完成前，CYAccountingWeb 仍維持自己的帳務 D1 與 application session 邊界；共用帳號不代表合併 runtime database。

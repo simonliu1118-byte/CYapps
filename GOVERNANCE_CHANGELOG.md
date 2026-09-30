@@ -1,10 +1,26 @@
 # CYApps Governance Changelog
 
-## 2.3.19 — 2026/09/30
+## 2.3.21 — 2026/09/30
 
 - 依使用者決定，CYEnvelope 以 C#／WPF（.NET 10）為唯一正式實作；Go／Win32 版（V0.1.x）停止開發，不再維護、建置或作為行為基準。
-- `apps/CYEnvelope/PROJECT_RULES.md` 移除「正式版本基準 0.1.1」的 Go 版敘述，改為以 `VERSION` 與 `BUILD` 為版本身分來源，並記錄可攜資料夾結構（根目錄僅啟動 EXE、`VERSION`、`BUILD`、`Runtime`）。
+- `apps/CYEnvelope/PROJECT_RULES.md` 移除「正式版本基準 0.1.1」的 Go 版敘述，改為以 `VERSION` 與 `BUILD` 為版本身分來源，並記錄可攜資料夾結構（根目錄為啟動 EXE、`VERSION`、`BUILD`、`FONT_LICENSES.txt`、`Runtime`）。
 - 新增 CYEnvelope 專案例外：CI 測試 Artifact 與畫面證據保留 3 天（共通規則預設 14 天）；需要更長保存時由該次工作另行決定。
+- 新增 CYEnvelope 內建字體規則：思源黑體 Noto Sans TC、霞鶩文楷 TC（皆 SIL Open Font License 1.1）於建置時由固定提交網址下載並驗證大小與 SHA-256，嵌入程式，字體檔不進 Git；來源、雜湊與授權記錄於 `tools/fonts.json` 與 `FONT_LICENSES.txt`。不內建教育部標準楷書（CC BY-ND，內嵌散布需另行申請）與 Windows 系統字體（僅供選用）。
+
+## 2.3.20 — 2026/09/30
+
+- CYID consumer contract 增加跨 repository 同步治理：`CONSUMER_SYNC_MANIFEST.json` 明列外部 consumer 必須鏡像的 7 個 canonical artifacts（consumer current/minimum version、shared standard、consumer changelog、Auth、Role/Access、Architecture）。
+- Cross-repository consumer 必須保存 read-only mirror、提供可重現 sync 流程，並在 governance/CI 與 deployment 前逐檔 byte-compare CYID `main`；mirror 漂移時不得繼續部署。
+- 同一 `CYapps` repository 內的 consumer（例如 CYAccountingWeb／未來 CYInvoice）直接讀 canonical CYID files，不建立無意義重複副本。
+- Consumer Contract 升為 `1.0.1`、Minimum Compatible 維持 `1.0.0`；contract version 只表示 consumer 語意相容性，documentation-only byte 變更仍透過 manifest mirror 同步，不必為每個 typo 人工升 contract version。
+- Governance Check 驗證 sync manifest schema、source/target path safety、canonical membership 與 source-file existence，避免漏檔或錯誤 mirror package。
+## 2.3.19 — 2026/09/30
+
+- 建立 CYCloud Identity 唯一 shared consumer technical standard：`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`。所有接入 CYID 的 App 必須以該 standard 與 CYID canonical contracts 為共同 Identity contract；consumer-specific handoff 只可保存 app 差異／遷移／例外／驗收，不得複製共同規範成第二套 authority。
+- 新增 `CONSUMER_CONTRACT_VERSION` 與 `CONSUMER_MIN_COMPATIBLE_VERSION`，分離 CYID product version 與 consumer contract version；完成接入的 consumer 以自己的 `CYID_CONSUMER_VERSION` 宣告所採用 revision，且部署版本必須落在 provider 支援窗內。
+- CYID PR 新增 mandatory `CYID Consumer Impact: NONE / BACKWARD_COMPATIBLE / CONSUMER_UPDATE_REQUIRED` 分類。Consumer-visible 變更必須同步更新 standard、contract version 與 consumer contract changelog；提高最低相容版本只允許在 update-required migration 下進行。
+- 明確禁止 provider 單邊 breaking cutover：受影響 production consumer 尚未遷移時，CYID 必須保留 compatibility path 或先完成協調 migration，不得先提高最低相容版本造成既有 consumer 中斷。
+- CYAccountingWeb handoff 收斂為 CYACC-specific migration map；shared Role／Session／App Access／first-login／recovery 規範改由 consumer standard 單一維護。
 
 ## 2.3.18 — 2026/09/30
 

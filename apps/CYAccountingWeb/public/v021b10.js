@@ -37,9 +37,8 @@ function syncV21Build10Version() {
 function setupV21Build10MobileAppBar() {
   const topbar = document.querySelector('.topbar');
   const currentUser = document.querySelector('#currentUser');
-  const settingsButton = document.querySelector('#settingsButton');
   const logoutButton = document.querySelector('#logoutButton');
-  if (!topbar || !currentUser || !settingsButton || !logoutButton) return;
+  if (!topbar || !currentUser || !logoutButton) return;
 
   let trigger = document.querySelector('#mobileAccountMenuButton');
   if (!trigger) {
@@ -64,7 +63,6 @@ function setupV21Build10MobileAppBar() {
         <strong id="mobileAccountMenuName">帳號</strong>
         <span id="mobileAccountMenuRole"></span>
       </div>
-      <button type="button" data-mobile-account-action="settings">設定</button>
       <button type="button" class="danger-lite" data-mobile-account-action="logout">登出</button>`;
     document.body.append(menu);
   }
@@ -89,7 +87,6 @@ function setupV21Build10MobileAppBar() {
     const action = event.target.closest('[data-mobile-account-action]')?.dataset.mobileAccountAction;
     if (!action) return;
     close();
-    if (action === 'settings') settingsButton.click();
     if (action === 'logout') logoutButton.click();
   });
 
@@ -243,8 +240,9 @@ function setupV21Build10LedgerTools() {
     sheet.hidden = true;
     sheet.innerHTML = `
       <div class="v21-mobile-sheet-handle" aria-hidden="true"></div>
-      <h3>記帳工具</h3>
-      <button type="button" data-mobile-ledger-action="opening">期初餘額</button>
+      <h3>更多</h3>
+      <button type="button" data-mobile-ledger-action="accounts">帳戶設定</button>
+      <button type="button" data-mobile-ledger-action="categories">科目設定</button>
       <button type="button" data-mobile-ledger-action="lock">月份鎖帳</button>
       <button type="button" data-mobile-ledger-action="export">匯出 Excel</button>
       <button type="button" class="secondary" data-mobile-ledger-action="close">取消</button>`;
@@ -276,8 +274,24 @@ function setupV21Build10LedgerTools() {
       return;
     }
     close();
-    if (action === 'opening') document.querySelector('#ledgerOpeningBalanceButton')?.click();
-    if (action === 'lock') document.querySelector('#ledgerLockSettingsButton')?.click();
+    if (action === 'accounts') {
+      if (typeof window.cyOpenMobileSettingsPane === 'function') window.cyOpenMobileSettingsPane('accounts');
+      else {
+        if (typeof openSettings === 'function') openSettings();
+        if (typeof setSettingsTab === 'function') setSettingsTab('accounts');
+      }
+    }
+    if (action === 'categories') {
+      if (typeof window.cyOpenMobileSettingsPane === 'function') window.cyOpenMobileSettingsPane('categories');
+      else {
+        if (typeof openSettings === 'function') openSettings();
+        if (typeof setSettingsTab === 'function') setSettingsTab('categories');
+      }
+    }
+    if (action === 'lock') {
+      if (typeof window.cyOpenMobileLedgerLock === 'function') window.cyOpenMobileLedgerLock();
+      else document.querySelector('#ledgerLockSettingsButton')?.click();
+    }
     if (action === 'export') document.querySelector('#ledgerExcelExport')?.click();
   });
 

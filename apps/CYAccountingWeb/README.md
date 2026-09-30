@@ -2,9 +2,9 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current formal baseline: **V0.21.5 Build 8**（2026-09-30）
+> Current formal baseline: **V0.21.5 Build 11**（2026-09-30）
 >
-> Current continuity handoff: [`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)
+> Current continuity handoff: [`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)
 
 ## 專案定位
 
@@ -93,6 +93,14 @@ CYAccountingWeb 自己的 D1 建立本系統 web session
 
 這些項目實作前必須先同步 CY-WEB / CYCloudIdentity 最新決策。CYAccountingWeb 的帳務 D1 仍保持獨立，不因共用帳號而合併資料庫。
 
+Current governed CYID consumer references：
+
+- shared standard：`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`；
+- contract version：`1.0.1`，minimum compatible：`1.0.0`；
+- CYACC-specific migration guide：`apps/CYCloudIdentity/docs/consumers/CYACC_INTEGRATION_HANDOFF.md`。
+
+Open PR #239 (`CYAccountingWeb 0.21.6: prepare governed CYID integration`) is governance/pre-integration preparation only，**not current production baseline and not merged**。At the current handoff it has diverged from V0.21.5 Build 11 `main`; future Identity work must first reconcile it against the latest CYWEB/CYID controlling handoff and current canonical contract。
+
 ## 已完成核心功能
 
 目前已完成：
@@ -120,6 +128,9 @@ CYAccountingWeb 自己的 D1 建立本系統 web session
 - **V0.21.5 Build 6 Tablet auth hotfix**：平板登入 overlay 改為鍵盤安全的 `dvh` 高度與可捲動配置，避免 iPad/Android 平板鍵盤彈出後登入卡被遮住且無法操作；auth stylesheet 加 cache key 強制更新；
 - **V0.21.5 Build 7 Mobile toolbar + clear/cancel fix**：手機收入／支出舊版 3px 上緣硬線改以相同 specificity 明確清除；看帳月份列先保持穩定三欄，等餘額／更多工具完成建立後再切成 `餘額｜<｜月份｜>｜更多` 五欄；新增記帳儲存鍵下方新增「清空」，編輯模式自動改成「取消」，取消時不寫入資料庫並回原本看帳年月與清單位置；
 - **V0.21.5 Build 8 Tablet auth + Mobile fix**：撤回 Build 6 造成 iPad Safari 觸控異常的 Tablet auth overlay 改動；登入成功後改由完整頁面導向後再驗證 session，auth fetch 改用 `credentials: include`，Web session cookie 改為 `SameSite=Lax` 並補 `Expires`；手機收入／支出 slider 外層背景改為透明並裁切圓角；看帳月份 picker 保留在原本 `#ledgerMonthSlot`，五欄工具列固定為 `餘額｜<｜月份｜>｜更多`；
+- **V0.21.5 Build 9 Mobile month control**：只修手機看帳月份列，不碰 auth/session/CYID；畫面上的 `YYYY年M月` 改由 Web 自行繪製，原生 `input type=month` 保留為透明觸控層負責叫出手機原生月份選擇器，避免 iPhone Safari 原生 month control 溢出欄位與 `>` 重疊；
+- **V0.21.5 Build 10 Mobile tools refinement**：手機 `餘額` 維持期初餘額設定，但改為緊湊的手機版編輯介面並預設帶入目前看帳月份；`更多` 收斂為帳戶設定、科目設定、月份鎖帳、匯出 Excel；帳戶／科目在手機只開被選取的設定頁，月份鎖帳改為獨立小確認視窗，不再把整個設定介面拉出；auth/session/CYID 本輪不動；
+- **V0.21.5 Build 11 Mobile account menu cleanup**：手機右上角使用者選單移除「設定」，只保留身分資訊與「登出」；手機需要的設定功能仍保留在看帳頁 `更多`：帳戶設定、科目設定、月份鎖帳、匯出 Excel；Tablet / Desktop 設定入口不變；
 - **V0.20.0 RWD / Adaptive UI Phase 1**：建立 Desktop / Tablet / Mobile presentation 分層；
 - **V0.20.1 Mobile refinement**：收斂交易卡片資訊層級、inline edit 可視性、Header／搜尋／設定操作密度與窄手機 presentation；
 - **V0.21.0 Desktop Business UI**：Desktop `>=1024px` 改為現代、簡潔的商務 Web presentation；
@@ -204,12 +215,12 @@ Phase D 才會切成：R2 每日、GCS 每週三／週日 cross-cloud DR replica
 目前 presentation 分層：
 
 - Desktop `>= 1024px`：V0.21.x 採現代、簡潔的商務 Web presentation，同時維持高資訊密度與鍵盤高速輸入；目前視覺要求為「精緻、商務、簡潔」；
-- Tablet `768–1023px`：沿用 Adaptive UI；截至 2026-09-29 仍缺完整實機 acceptance；
-- Mobile `< 768px`：Build 10 的整體方向已獲使用者肯定，採新增記帳／記帳資料分頁、觸控優先與帳戶 chooser/sheet；仍非最終完整驗收；
+- Tablet `768–1023px`：沿用 Adaptive UI；真實平板已確認目前 touch/focus/login 不可接受，Build 6/8 legacy auth hotfix 未取得 acceptance；在 CYID governed integration 收斂前不再疊 Tablet-specific legacy auth patch；
+- Mobile `< 768px`：目前 formal baseline 為 Build 11；Build 10 direction 繼續保留，`餘額` = 期初餘額設定，`更多` = 帳戶設定／科目設定／月份鎖帳／匯出 Excel，右上角使用者選單只留身分資訊＋登出；仍需真實手機 final acceptance；
 - Desktop 與 Mobile/Tablet presentation 分層維護，Desktop 改版不得反向覆寫 `<1024px` Adaptive UI；
 - Desktop、Tablet、Mobile 仍需持續以真實裝置／尺寸做視覺 acceptance；自動測試只驗證 presentation boundary 與結構，不取代人工畫面驗收。
 
-重要 Desktop interaction / layout 決策已集中記錄於 [`HANDOFF_2026-09-29.md`](./HANDOFF_2026-09-29.md)，接手時不要從舊 Build 對話逐項重播。
+目前 workstream / acceptance / CYID integration 交接集中記錄於 [`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)；接手時不要從舊 Build 對話逐項重播。
 
 CYAccountingWeb 是 Web project，**不自動套用 Windows Desktop Visual Guide 的 WinForms 尺寸／元件規則**。
 
@@ -230,7 +241,8 @@ npm run dev
 - `REPOSITORY_RULES.md`、`REPO_POLICY.md`：repository 共通治理與 Public repo 安全規則。
 - `TODO.md`：目前完成狀態、待辦與未來方向，不是永久規則。
 - `BACKUP_ARCHITECTURE_HANDOFF.md`：目前 Tiered Backup migration / acceptance handoff。
-- `HANDOFF_2026-09-29.md`：Conversation / workspace continuity note，不是永久規則。
+- `HANDOFF_2026-09-30.md`：Current conversation / workspace continuity note，不是永久規則。
+- `HANDOFF_2026-09-29.md`：Historical continuity checkpoint；不得當作 current state。
 - `README.md`：專案入口與現況摘要。
 
 若文件描述與實際程式版本不一致，先讀目前 `main`、`VERSION` / `BUILD`、migrations、source 與最新 Actions，再更新狀態文件；不得只依舊 README 或舊 handoff 直接修改 production。

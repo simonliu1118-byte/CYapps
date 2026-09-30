@@ -1,4 +1,4 @@
-/* V0.21.5 Build 8 - tablet auth recovery and mobile visual/toolbar fixes. */
+/* V0.21.5 Build 10 - mobile opening/settings/lock controls. Auth/CYID unchanged. */
 @media (max-width: 767px) {
   .topbar {
     border-bottom: 0 !important;
@@ -343,15 +343,50 @@
   .ledger-month-tools.v0215-toolbar-ready > #ledgerPrevMonth { grid-column: 2 !important; }
   .ledger-month-tools.v0215-toolbar-ready > #ledgerMonthSlot {
     grid-column: 3 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
     width: 100% !important;
     min-width: 0 !important;
+    min-height: 34px !important;
+    height: 34px !important;
+    overflow: hidden !important;
+    border: 1px solid #dbe2e9 !important;
+    border-radius: 7px !important;
+    background: #fff !important;
   }
   .ledger-month-tools.v0215-toolbar-ready > #ledgerNextMonth { grid-column: 4 !important; }
   .ledger-month-tools.v0215-toolbar-ready > #mobileLedgerMoreButton { grid-column: 5 !important; }
 
   #ledgerMonthSlot > .month-picker {
+    position: absolute !important;
+    z-index: 2 !important;
+    inset: 0 !important;
+    display: block !important;
     width: 100% !important;
     min-width: 0 !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border: 0 !important;
+    background: transparent !important;
+    opacity: 1 !important;
+  }
+
+  #mobileLedgerMonthDisplay {
+    position: absolute !important;
+    z-index: 1 !important;
+    inset: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 6px !important;
+    color: #253546 !important;
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    pointer-events: none !important;
   }
 
   #ledgerDisplayMonth {
@@ -377,37 +412,41 @@
     font-weight: 650 !important;
   }
 
-  .ledger-month-tools .month-picker {
-    display: block !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    min-height: 34px !important;
-    height: 34px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-  }
-
   .ledger-month-tools .month-picker > span {
     display: none !important;
   }
 
   .ledger-month-tools input[type="month"] {
+    position: absolute !important;
+    z-index: 3 !important;
+    inset: 0 !important;
     box-sizing: border-box !important;
     width: 100% !important;
     min-width: 0 !important;
-    min-height: 34px !important;
-    height: 34px !important;
+    height: 100% !important;
+    min-height: 0 !important;
     margin: 0 !important;
-    padding: 0 4px !important;
-    border: 1px solid #dbe2e9 !important;
-    border-radius: 7px !important;
-    background: #fff !important;
-    color: #253546 !important;
-    font-size: 15px !important;
-    font-weight: 650 !important;
-    text-align: center !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: transparent !important;
+    opacity: 0.01 !important;
+    -webkit-appearance: auto !important;
+    appearance: auto !important;
+    font-size: 16px !important;
+    cursor: pointer !important;
+  }
+
+  .ledger-month-tools input[type="month"]::-webkit-calendar-picker-indicator {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
   }
 
   #ledgerDisplayMonth {
@@ -896,6 +935,286 @@
 
   .v0214-balance-row strong {
     font-size: 10.5px !important;
+  }
+
+  /* Opening balance remains the meaning of the top-left 餘額 button,
+     but the phone dialog is a compact editable list instead of a desktop form. */
+  .opening-modal[open] {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    background: #fff !important;
+  }
+
+  .opening-modal > .modal-header {
+    flex: 0 0 auto !important;
+    padding: 10px 12px 8px !important;
+    border-bottom: 1px solid #e8edf2 !important;
+  }
+
+  .opening-modal > .modal-header h2 {
+    font-size: 19px !important;
+  }
+
+  .opening-modal > .modal-header p {
+    margin-top: 2px !important;
+    font-size: 10.5px !important;
+    line-height: 1.35 !important;
+  }
+
+  .opening-dialog-heading {
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 5px !important;
+    margin: 0 !important;
+    padding: 8px 12px !important;
+    border-bottom: 1px solid #edf0f3 !important;
+    background: #fbfcfd !important;
+  }
+
+  .opening-dialog-heading .compact-label {
+    order: 1 !important;
+    display: grid !important;
+    grid-template-columns: 44px minmax(0, 1fr) !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .opening-dialog-heading .compact-label > span {
+    color: #647385 !important;
+    font-size: 12px !important;
+    font-weight: 650 !important;
+    text-align: center !important;
+  }
+
+  .opening-dialog-heading #openingMonth {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 36px !important;
+    height: 36px !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    font-size: 15px !important;
+    text-align: center !important;
+  }
+
+  .opening-dialog-heading .hint {
+    order: 2 !important;
+    margin: 0 !important;
+    color: #7a8795 !important;
+    font-size: 9.5px !important;
+    line-height: 1.35 !important;
+  }
+
+  .opening-modal #openingRows {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    display: grid !important;
+    align-content: start !important;
+    gap: 0 !important;
+    margin: 0 !important;
+    padding: 4px 12px 8px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .opening-modal .opening-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 126px !important;
+    align-items: center !important;
+    gap: 10px !important;
+    min-height: 48px !important;
+    padding: 6px 0 !important;
+    border-bottom: 1px solid #eef1f4 !important;
+  }
+
+  .opening-modal .opening-row > span {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    color: #425164 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .opening-modal .opening-row .historical {
+    display: block !important;
+    margin: 1px 0 0 !important;
+    font-size: 9px !important;
+  }
+
+  .opening-modal .opening-row input {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 36px !important;
+    height: 36px !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    font-size: 15px !important;
+    text-align: right !important;
+  }
+
+  .opening-modal #openingMessage {
+    flex: 0 0 auto !important;
+    min-height: 18px !important;
+    margin: 0 !important;
+    padding: 2px 12px 0 !important;
+    font-size: 10px !important;
+  }
+
+  .opening-modal > .modal-actions {
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: .8fr 1.2fr !important;
+    gap: 8px !important;
+    margin: 0 !important;
+    padding: 8px 12px calc(10px + env(safe-area-inset-bottom)) !important;
+    border-top: 1px solid #e8edf2 !important;
+    background: #fff !important;
+  }
+
+  .opening-modal > .modal-actions button {
+    min-height: 38px !important;
+    height: 38px !important;
+    margin: 0 !important;
+    font-size: 12px !important;
+  }
+
+  /* Account/category from More are focused phone settings pages.
+     Other desktop/tablet settings stay hidden on phone. */
+  .settings-modal.v0215-mobile-settings-focus[open] {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .settings-modal.v0215-mobile-settings-focus > .modal-header {
+    flex: 0 0 auto !important;
+  }
+
+  .settings-modal.v0215-mobile-settings-focus > .modal-header p {
+    display: none !important;
+  }
+
+  .settings-modal.v0215-mobile-settings-focus .settings-layout {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    display: block !important;
+    overflow: hidden !important;
+  }
+
+  .settings-modal.v0215-mobile-settings-focus .settings-nav {
+    display: none !important;
+  }
+
+  .settings-modal.v0215-mobile-settings-focus .settings-content {
+    box-sizing: border-box !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    padding: 10px 10px calc(18px + env(safe-area-inset-bottom)) !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Month lock is a small direct action, never the full Settings dialog. */
+  .v0215-mobile-lock-dialog {
+    box-sizing: border-box !important;
+    width: min(330px, calc(100vw - 28px)) !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: calc(100dvh - 40px) !important;
+    margin: auto !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border: 1px solid #d8e0e8 !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+  }
+
+  .v0215-mobile-lock-dialog::backdrop {
+    background: rgba(30, 39, 51, .28) !important;
+  }
+
+  .v0215-mobile-lock-head {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: start !important;
+    gap: 10px !important;
+    padding: 13px 14px 10px !important;
+    border-bottom: 1px solid #edf0f3 !important;
+  }
+
+  .v0215-mobile-lock-head h2 {
+    margin: 0 !important;
+    color: #2c3a4a !important;
+    font-size: 17px !important;
+  }
+
+  .v0215-mobile-lock-head p {
+    margin: 3px 0 0 !important;
+    color: #718092 !important;
+    font-size: 11px !important;
+  }
+
+  .v0215-mobile-lock-head .icon-button {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #667587 !important;
+    font-size: 24px !important;
+  }
+
+  .v0215-mobile-lock-body {
+    display: grid !important;
+    gap: 6px !important;
+    padding: 12px 14px 8px !important;
+  }
+
+  .v0215-mobile-lock-body p {
+    margin: 0 !important;
+    color: #344355 !important;
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+  }
+
+  .v0215-mobile-lock-note {
+    color: #718092 !important;
+    font-size: 10.5px !important;
+  }
+
+  .v0215-mobile-lock-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    padding: 8px 14px 12px !important;
+  }
+
+  .v0215-mobile-lock-actions button {
+    min-height: 36px !important;
+    height: 36px !important;
+    padding: 0 8px !important;
+    border-radius: 8px !important;
+    font-size: 11px !important;
+  }
+
+  .v0215-mobile-lock-message {
+    min-height: 0 !important;
+    margin: -5px 14px 10px !important;
+    color: #2f7a4c !important;
+    font-size: 10px !important;
+  }
+
+  .v0215-mobile-lock-message.error {
+    color: #a54b45 !important;
   }
 }
 
