@@ -336,8 +336,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export WRANGLER_OUTPUT_FILE_PATH=/tmp/cyacc-wrangler-output.ndjson
           if ! npx wrangler deploy --config wrangler.cyid-development.generated.jsonc >/tmp/cyacc-deploy.log 2>&1; then
-            echo "Isolated CYACC development Worker deploy failed." >&2
+            node - <<'NODE'
+              const fs=require('node:fs');
+              const inputs=['/tmp/cyacc-wrangler-output.ndjson','/tmp/cyacc-deploy.log'];
+              const text=inputs.filter(fs.existsSync).map(p=>fs.readFileSync(p,'utf8')).join('\n');
+              const codes=[...new Set([...text.matchAll(/(?:code|error_code)[^0-9]{0,12}([0-9]{3,6})/gi)].map(x=>x[1]))];
+              const low=text.toLowerCase();
+              const categories=[];
+              if (low.includes('service binding') || (low.includes('service') && low.includes('not found'))) categories.push('SERVICE_BINDING');
+              if (low.includes('assets')) categories.push('ASSETS');
+              if (low.includes('permission') || low.includes('forbidden') || low.includes('unauthorized')) categories.push('PERMISSION');
+              if (low.includes('name') && (low.includes('invalid') || low.includes('already'))) categories.push('NAME');
+              if (low.includes('d1')) categories.push('D1');
+              console.error('Isolated CYACC deploy failure codes='+(codes.join(',')||'none')+' categories='+(categories.join(',')||'unclassified'));
+            NODE
             exit 1
           fi
           CYACC_BASE_URL="$(node -e '
@@ -379,7 +393,7 @@ jobs:
         shell: bash
         run: |
           rm -f "${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb/wrangler.cyid-development.generated.jsonc"
-          rm -f /tmp/cyacc-migrate.log /tmp/cyacc-deploy.log /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
+          rm -f /tmp/cyacc-migrate.log /tmp/cyacc-deploy.log /tmp/cyacc-wrangler-output.ndjson /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
 
       - name: Remove generated config
         if: always()
