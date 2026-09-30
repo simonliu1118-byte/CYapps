@@ -7,14 +7,8 @@ window.addEventListener('load', () => {
 let backupTopologyV18 = 'legacy_gcs';
 
 async function setupBackupSettingsV17() {
-  let me;
-  try {
-    const response = await fetch('/api/auth/me', { cache: 'no-store' });
-    me = await response.json().catch(() => null);
-    if (!response.ok || me?.user?.role !== 'SUPER_ADMIN') return;
-  } catch {
-    return;
-  }
+  const user = await sharedSessionUserV17();
+  if (user?.role !== 'SUPER_ADMIN') return;
 
   const nav = document.querySelector('.settings-nav');
   const content = document.querySelector('.settings-content');
@@ -42,6 +36,15 @@ async function setupBackupSettingsV17() {
   });
   pane.querySelector('#backupRunNow')?.addEventListener('click', runBackupNowV17);
   pane.querySelector('#backupRefreshStatus')?.addEventListener('click', loadBackupStatusV17);
+}
+
+async function sharedSessionUserV17() {
+  if (window.cyaccCurrentUser) return window.cyaccCurrentUser;
+  try {
+    return window.cyaccSessionPromise ? await window.cyaccSessionPromise : null;
+  } catch {
+    return null;
+  }
 }
 
 function backupSettingsHtmlV17() {
