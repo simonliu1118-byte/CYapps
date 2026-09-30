@@ -38,7 +38,7 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: production
+    environment: development
     defaults:
       run:
         working-directory: apps/CYCloudIdentity
@@ -105,6 +105,16 @@ jobs:
           code="$(curl -sS -o /tmp/cyid-prod-worker-check.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$PROD_CYID_WORKER_NAME/settings")"
 
           if [[ "$code" == "404" ]]; then
+            create_code="$(curl -sS -o /tmp/cyid-prod-worker-resource.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/workers" \
+              --data "$(node -e 'process.stdout.write(JSON.stringify({name:process.env.PROD_CYID_WORKER_NAME}))')")"
+            if [[ "$create_code" != "200" && "$create_code" != "201" ]]; then
+              echo "CYID production Worker resource creation failed." >&2
+              exit 1
+            fi
+
             printf '%s\n' 'export default { async fetch() { return new Response("CYID production bootstrap"); } };' > /tmp/cyid-production-bootstrap.mjs
             if ! npx wrangler deploy /tmp/cyid-production-bootstrap.mjs --name "$PROD_CYID_WORKER_NAME" --compatibility-date 2026-09-25 > /tmp/cyid-prod-worker-create.log 2>&1; then
               node -e '
@@ -113,8 +123,7 @@ jobs:
                 const c=[];
                 if(t.includes("access")||t.includes("permission")||t.includes("forbidden")||t.includes("unauthorized")) c.push("PERMISSION");
                 if(t.includes("quota")||t.includes("limit")) c.push("QUOTA");
-                if(t.includes("name")&&(t.includes("invalid")||t.includes("already"))) c.push("NAME");
-                console.error("CYID production Worker creation failed category="+(c.join(",")||"unclassified"));
+                console.error("CYID production Worker bootstrap deployment failed category="+(c.join(",")||"unclassified"));
               '
               exit 1
             fi
