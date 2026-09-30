@@ -1,7 +1,7 @@
 import {
   DesktopMigrationError,
   analyzeDesktopMigration,
-  handleLegacyDesktopMigrationApi as handleBaseMigrationApi
+  publicAnalysis
 } from './desktop-migration-core.js';
 
 const HISTORY_KEY = 'desktop_migration_history_v1';
@@ -12,38 +12,52 @@ const MAX_SAFE_BATCH_STATEMENTS = 40;
 
 export async function handleDesktopMigrationApi(request, env, session) {
   const url = new URL(request.url);
-  if (url.pathname !== '/api/migration/desktop/commit' || request.method !== 'POST') {
-    return handleBaseMigrationApi(request, env, session);
-  }
+  if (!url.pathname.startsWith('/api/migration/desktop/')) return null;
 
   if (String(session?.role || '') !== 'SUPER_ADMIN') {
     return json({ ok: false, error: '只有超級管理員可以執行桌面帳本移轉。', code: 'SUPER_ADMIN_REQUIRED' }, 403);
   }
-  if (!env?.DB) return json({ ok: false, error: 'D1 尚未綁定。', code: 'DB_NOT_CONFIGURED' }, 503);
-
-  try {
-    const body = await request.json().catch(() => null);
-    if (body?.confirm !== true) {
-      throw new DesktopMigrationError('必須先完成預覽並確認移轉。', 'MIGRATION_CONFIRM_REQUIRED', 400);
-    }
-
-    const analysis = await analyzeDesktopMigration(body?.snapshot, env.DB);
-    const expectedMode = String(body?.expectedMode || '');
-    if (expectedMode && expectedMode !== analysis.plan.mode) {
-      throw new DesktopMigrationError('目標帳本狀態已變更，請重新建立移轉預覽。', 'MIGRATION_TARGET_CHANGED', 409);
-    }
-    if (analysis.plan.alreadyImported) {
-      throw new DesktopMigrationError('這個 SQLite 檔案先前已完成移轉。若桌面資料有更新，請重新選擇更新後的資料庫檔。', 'MIGRATION_SOURCE_ALREADY_IMPORTED', 409);
-    }
-    if (!analysis.plan.canCommit) {
-      throw new DesktopMigrationError('仍有資料衝突或驗證錯誤，未寫入任何資料。', 'MIGRATION_CONFLICT', 409);
-    }
-
-    const result = await executeDesktopMigrationSafe(analysis, env.DB, session);
-    return json({ ok: true, migration: result });
-  } catch (error) {
-    return migrationErrorResponse(error);
+  if (!env?.DB) {
+    return json({ ok: false, error: 'D1 尚未綁定。', code: 'DB_NOT_CONFIGURED' }, 503);
   }
+
+  if (url.pathname === '/api/migration/desktop/preview' && request.method === 'POST') {
+    try {
+      const body = await request.json().catch(() => null);
+      const analysis = await analyzeDesktopMigration(body?.snapshot, env.DB);
+      return json({ ok: true, ...publicAnalysis(analysis) });
+    } catch (error) {
+      return migrationErrorResponse(error);
+    }
+  }
+
+  if (url.pathname === '/api/migration/desktop/commit' && request.method === 'POST') {
+    try {
+      const body = await request.json().catch(() => null);
+      if (body?.confirm !== true) {
+        throw new DesktopMigrationError('必須先完成預覽並確認移轉。', 'MIGRATION_CONFIRM_REQUIRED', 400);
+      }
+
+      const analysis = await analyzeDesktopMigration(body?.snapshot, env.DB);
+      const expectedMode = String(body?.expectedMode || '');
+      if (expectedMode && expectedMode !== analysis.plan.mode) {
+        throw new DesktopMigrationError('目標帳本狀態已變更，請重新建立移轉預覽。', 'MIGRATION_TARGET_CHANGED', 409);
+      }
+      if (analysis.plan.alreadyImported) {
+        throw new DesktopMigrationError('這個 SQLite 檔案先前已完成移轉。若桌面資料有更新，請重新選擇更新後的資料庫檔。', 'MIGRATION_SOURCE_ALREADY_IMPORTED', 409);
+      }
+      if (!analysis.plan.canCommit) {
+        throw new DesktopMigrationError('仍有資料衝突或驗證錯誤，未寫入任何資料。', 'MIGRATION_CONFLICT', 409, publicAnalysis(analysis));
+      }
+
+      const result = await executeDesktopMigrationSafe(analysis, env.DB, session);
+      return json({ ok: true, migration: result });
+    } catch (error) {
+      return migrationErrorResponse(error);
+    }
+  }
+
+  return json({ ok: false, error: '找不到此資料移轉功能。', code: 'MIGRATION_ROUTE_NOT_FOUND' }, 404);
 }
 
 export function buildSafeMigrationStatements(analysis, db, session) {
