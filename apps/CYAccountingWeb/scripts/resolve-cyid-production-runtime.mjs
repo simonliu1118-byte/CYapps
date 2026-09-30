@@ -37,19 +37,25 @@ export function parseCyidProductionSettings(payload, configuredService) {
   return { service, applicationId, workspaceId };
 }
 
+export function deriveCyidProductionServiceName(developmentService) {
+  const source = String(developmentService || '').trim();
+  if (!WORKER_NAME.test(source)) throw new Error('CYID development Worker name has an invalid format.');
+  if (source.endsWith('-development')) return source.slice(0, -'-development'.length) + '-production';
+  if (source.endsWith('-dev')) return source.slice(0, -'-dev'.length) + '-prod';
+  return source + '-prod';
+}
+
 export async function resolveCyidProductionRuntime({
   accountId,
   apiToken,
-  configuredService,
+  developmentService,
   fetchImpl = fetch
 }) {
   const account = String(accountId || '').trim();
   const token = String(apiToken || '').trim();
   if (!account || !token) throw new Error('Cloudflare deployment credentials are required for CYID production runtime verification.');
 
-  const service = String(configuredService || '').trim();
-  if (!WORKER_NAME.test(service)) throw new Error('Configured CYID Service Binding target has an invalid format.');
-
+  const service = deriveCyidProductionServiceName(developmentService);
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/workers/scripts/${encodeURIComponent(service)}/settings`;
   const response = await fetchImpl(url, {
     headers: { authorization: `Bearer ${token}` }
@@ -67,7 +73,7 @@ async function cli() {
     const runtime = await resolveCyidProductionRuntime({
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
       apiToken: process.env.CLOUDFLARE_API_TOKEN,
-      configuredService: process.env.CF_IDENTITY_SERVICE
+      developmentService: process.env.CYID_WORKER_NAME
     });
 
     for (const value of [runtime.service, runtime.applicationId, runtime.workspaceId]) {
@@ -78,7 +84,7 @@ async function cli() {
     if (!githubEnv) throw new Error('GITHUB_ENV is unavailable.');
     fs.appendFileSync(
       githubEnv,
-      `CF_CYID_APPLICATION_ID=${runtime.applicationId}\nCF_CYID_WORKSPACE_ID=${runtime.workspaceId}\n`,
+      `CF_IDENTITY_SERVICE=${runtime.service}\nCF_CYID_APPLICATION_ID=${runtime.applicationId}\nCF_CYID_WORKSPACE_ID=${runtime.workspaceId}\n`,
       { encoding: 'utf8' }
     );
 
