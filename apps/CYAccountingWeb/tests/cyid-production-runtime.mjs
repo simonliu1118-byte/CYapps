@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
 import {
+  deriveCyidProductionServiceName,
   parseCyidProductionSettings,
   resolveCyidProductionRuntime
 } from '../scripts/resolve-cyid-production-runtime.mjs';
 
-const service = 'cyid-production-provider';
+assert.equal(deriveCyidProductionServiceName('cyid-development'), 'cyid-production');
+assert.equal(deriveCyidProductionServiceName('cyid-dev'), 'cyid-prod');
+assert.equal(deriveCyidProductionServiceName('cyid'), 'cyid-prod');
+
+const developmentService = 'cyid-development-provider';
+const service = 'cyid-development-provider-prod';
 const payload = {
   success: true,
   result: {
@@ -50,7 +56,7 @@ let authorization = '';
 const runtime = await resolveCyidProductionRuntime({
   accountId: 'account-ci',
   apiToken: 'token-ci',
-  configuredService: service,
+  developmentService,
   fetchImpl: async (url, init) => {
     requestedUrl = String(url);
     authorization = new Headers(init.headers).get('authorization') || '';
@@ -58,14 +64,14 @@ const runtime = await resolveCyidProductionRuntime({
   }
 });
 assert.equal(runtime.applicationId, 'CYACC_PROD_TEST');
-assert.match(requestedUrl, /workers\/scripts\/cyid-production-provider\/settings$/);
+assert.match(requestedUrl, /workers\/scripts\/cyid-development-provider-prod\/settings$/);
 assert.equal(authorization, 'Bearer token-ci');
 
 await assert.rejects(
   resolveCyidProductionRuntime({
     accountId: 'account-ci',
     apiToken: 'token-ci',
-    configuredService: service,
+    developmentService,
     fetchImpl: async () => Response.json({ success: false }, { status: 403 })
   }),
   /Unable to verify/
