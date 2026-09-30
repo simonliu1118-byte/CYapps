@@ -149,7 +149,7 @@ class MockStatement {
   }
 }
 const db = { prepare(sql) { return new MockStatement(sql); } };
-const backupSet = await buildV17BackupSet(db, new Date('2026-09-26T03:30:00.000Z'));
+const backupSet = await buildBackupSet(db, new Date('2026-09-26T03:30:00.000Z'));
 assert(backupSet.backupId === '20260926T033000Z', 'backupId mismatch');
 assert(backupSet.dataKey.endsWith('/data.json'), 'data.json key missing');
 assert(backupSet.manifestKey.endsWith('/manifest.json'), 'manifest.json key missing');
