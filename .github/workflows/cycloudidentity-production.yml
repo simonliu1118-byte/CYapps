@@ -34,8 +34,96 @@ jobs:
           npm run check
           npm test
 
-  provision-resources:
+
+  bootstrap-production-worker:
     needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    defaults:
+      run:
+        working-directory: apps/CYCloudIdentity
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Create or confirm isolated production Worker with production credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "GitHub production Environment does not provide the required Cloudflare credential." >&2
+              exit 1
+            fi
+          done
+
+          api="https://api.cloudflare.com/client/v4"
+          if ! curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts" > /tmp/cyid-prod-bootstrap-workers.json; then
+            echo "Production Cloudflare credential cannot inspect Worker inventory." >&2
+            exit 1
+          fi
+
+          DEV_WORKER="$(node -e '
+            const fs=require("node:fs");
+            const data=JSON.parse(fs.readFileSync("/tmp/cyid-prod-bootstrap-workers.json","utf8"));
+            const rows=Array.isArray(data?.result)?data.result:[];
+            const hits=rows.map(x=>String(x?.id||"")).filter(Boolean).filter(name=>{
+              const n=name.toLowerCase();
+              return n.includes("identity") && (n.includes("dev") || n.includes("development")) && !n.includes("prod");
+            });
+            if(hits.length!==1) process.exit(2);
+            process.stdout.write(hits[0]);
+          ')"
+          echo "::add-mask::$DEV_WORKER"
+
+          if [[ "$DEV_WORKER" == *-development ]]; then
+            PROD_WORKER="${DEV_WORKER%-development}-production"
+          elif [[ "$DEV_WORKER" == *-dev ]]; then
+            PROD_WORKER="${DEV_WORKER%-dev}-prod"
+          else
+            PROD_WORKER="${DEV_WORKER}-prod"
+          fi
+          echo "::add-mask::$PROD_WORKER"
+
+          code="$(curl -sS -o /tmp/cyid-prod-bootstrap-check.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$PROD_WORKER/settings")"
+          if [[ "$code" == "200" ]]; then
+            echo "Isolated CYID production Worker already exists."
+            exit 0
+          fi
+          if [[ "$code" != "404" ]]; then
+            echo "Production Cloudflare credential cannot inspect the production Worker target." >&2
+            exit 1
+          fi
+
+          printf '%s\n' 'export default { async fetch() { return new Response("CYID production bootstrap"); } };' > /tmp/cyid-production-bootstrap.mjs
+          if ! npx wrangler deploy /tmp/cyid-production-bootstrap.mjs --name "$PROD_WORKER" --compatibility-date 2026-09-25 > /tmp/cyid-prod-bootstrap-deploy.log 2>&1; then
+            node -e '
+              const fs=require("node:fs");
+              const t=fs.existsSync("/tmp/cyid-prod-bootstrap-deploy.log")?fs.readFileSync("/tmp/cyid-prod-bootstrap-deploy.log","utf8").toLowerCase():"";
+              const c=[];
+              if(t.includes("access")||t.includes("permission")||t.includes("forbidden")||t.includes("unauthorized")) c.push("PERMISSION");
+              if(t.includes("quota")||t.includes("limit")) c.push("QUOTA");
+              console.error("Production Worker bootstrap failed category="+(c.join(",")||"unclassified"));
+            '
+            exit 1
+          fi
+
+          verify="$(curl -sS -o /tmp/cyid-prod-bootstrap-verify.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$PROD_WORKER/settings")"
+          [[ "$verify" == "200" ]] || { echo "Production Worker creation could not be verified." >&2; exit 1; }
+          echo "Isolated CYID production Worker resource created."
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/cyid-prod-bootstrap-* /tmp/cyid-production-bootstrap.mjs
+
+  provision-resources:
+    needs: [validate, bootstrap-production-worker]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: development
