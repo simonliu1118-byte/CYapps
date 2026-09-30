@@ -65,7 +65,7 @@ export default {
           const error = resolved.status >= 500 ? '?error=service' : '';
           return redirect('/login' + error);
         }
-        return fetchAsset(request, env, '/index.html');
+        return fetchAppEntry(request, env, resolved.user);
       }
 
       if (!url.pathname.startsWith('/api/')) {
@@ -217,6 +217,45 @@ function authFailure(result) {
     error: status === 401 ? '尚未登入。' : '中央帳號服務目前無法驗證登入狀態。',
     code: status === 401 ? 'AUTH_REQUIRED' : 'IDENTITY_UNAVAILABLE'
   }, status, headers);
+}
+
+async function fetchAppEntry(request, env, user) {
+  const url = new URL(request.url);
+  url.pathname = '/index.html';
+  url.search = '';
+  const assetRequest = new Request(url.toString(), {
+    method: 'GET',
+    headers: request.headers
+  });
+  const response = noCache(await env.ASSETS.fetch(assetRequest));
+  if (!response.ok) return response;
+
+  const html = await response.text();
+  const bootScript = `<script id="cyaccBootContext">window.__CYACC_BOOT_USER__=Object.freeze(${safeJsonForScript(user)});</script>`;
+  const body = html.includes('</head>')
+    ? html.replace('</head>', `  ${bootScript}\n</head>`)
+    : bootScript + html;
+
+  const headers = new Headers(response.headers);
+  headers.delete('content-length');
+  headers.delete('content-encoding');
+  headers.delete('etag');
+  headers.set('content-type', 'text/html; charset=utf-8');
+
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
+function safeJsonForScript(value) {
+  return JSON.stringify(value ?? null)
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e')
+    .replaceAll('&', '\\u0026')
+    .replaceAll('\u2028', '\\u2028')
+    .replaceAll('\u2029', '\\u2029');
 }
 
 async function fetchAsset(request, env, pathname) {
