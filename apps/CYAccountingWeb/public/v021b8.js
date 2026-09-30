@@ -17,14 +17,22 @@ window.addEventListener('load', syncV21Build8AfterLoad, { once: true });
 function startV21Build8() {
   if (cyV21Build8Started) return;
   cyV21Build8Started = true;
-  syncV21Build8Version();
-  setupV21Build8AccountChoices();
-  setupV21Build8SummaryLimit();
-  setupV21Build8RoleMedal();
-  setupV21Build9EnterHints();
-  setupV21Build9MobileAccountPicker();
-  setupV21Build9MobilePages();
-  syncV21Build9HelpCopy();
+  runV21Build8Step('mobile-pages', setupV21Build9MobilePages);
+  runV21Build8Step('mobile-account-picker', setupV21Build9MobileAccountPicker);
+  runV21Build8Step('account-choices', setupV21Build8AccountChoices);
+  runV21Build8Step('summary-limit', setupV21Build8SummaryLimit);
+  runV21Build8Step('role-medal', setupV21Build8RoleMedal);
+  runV21Build8Step('enter-hints', setupV21Build9EnterHints);
+  runV21Build8Step('help-copy', syncV21Build9HelpCopy);
+  runV21Build8Step('version', syncV21Build8Version);
+}
+
+function runV21Build8Step(name, task) {
+  try {
+    task();
+  } catch (error) {
+    console.error('cyaccounting_mobile_build8_step_failed', name, error instanceof Error ? error.message : 'unknown_error');
+  }
 }
 
 function syncV21Build8AfterLoad() {
