@@ -90,6 +90,7 @@ CYCloudIdentity
 - Application ID / Workspace ID 只由 deployment/runtime variables 注入，不寫入 Public source；
 - raw provider Session token 只存在 HttpOnly cookie 與 CYID request Authorization，不進 JS storage、URL、log 或帳務資料表；
 - protected request 由 CYID current authority resolve，CYACC 不保留 local `web_sessions` fallback；
+- V0.21.6 cutover 只移除 active authority；舊 `web_sessions` 實體 table 暫時保留，避免 Worker deploy 失敗時舊版 runtime 因 migration 先行而失效。完成 development + production acceptance 後，再以後續獨立 forward migration 清除；
 - CYID App Access 決定能否進入 CYAccountingWeb；CYACC 自己負責帳務 business authorization；
 - `SUPER_ADMIN` / `ADMIN` 保留既有可寫入能力，既有 Super-Admin-only 功能仍只允許 `SUPER_ADMIN`；
 - 有 CYACC App Access 的 `USER` 可登入，但只可檢視帳務資料與匯出 Excel；所有帳務 mutation、設定、匯入、移轉與 backup/restore 都由 server-side gate 拒絕；
@@ -125,7 +126,7 @@ Canonical references：
 
 目前已完成：
 
-- **V0.21.6 CYID integration**：獨立登入入口、CYID provider Session authority、USER 唯讀 + Excel export、server-side write gate、舊 `web_sessions` forward retirement migration、runtime Application/Workspace ID deploy gate；
+- **V0.21.6 CYID integration**：獨立登入入口、CYID provider Session authority、USER 唯讀 + Excel export、server-side write gate、active source 移除 `web_sessions` authority、延後實體 table drop 的 rollback-safe cutover、runtime Application/Workspace ID deploy gate；
 
 - 基本記帳新增、編輯、刪除；
 - 帳戶、收入／支出大分類與科目管理；
