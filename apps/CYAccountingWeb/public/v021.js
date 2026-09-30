@@ -9,7 +9,18 @@ ensureV21Build5Stylesheet();
 ensureV21Build6Stylesheet();
 ensureV21Build7Stylesheet();
 
-window.addEventListener('load', () => {
+let cyV21Started = false;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startV21, { once: true });
+} else {
+  startV21();
+}
+window.addEventListener('load', startV21, { once: true });
+
+function startV21() {
+  if (cyV21Started) return;
+  cyV21Started = true;
   syncV21Version();
   updateV21KeyboardHint();
   setupV21HeaderLayout();
@@ -22,7 +33,7 @@ window.addEventListener('load', () => {
   setupV21DataSettings();
   cleanupV21InterfaceCopy();
   setupV21UserIdentity();
-});
+}
 
 function ensureV21Build1Stylesheet() {
   if (document.querySelector('link[href="/v021b1.css"]')) return;
