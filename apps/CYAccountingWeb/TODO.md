@@ -9,6 +9,7 @@
 - [x] CYID App Access 可讓 `USER` 進入 CYACC；CYACC server-side business gate 固定 USER 只能讀取與匯出 Excel。
 - [x] PC / Tablet / Mobile 共用同一登入與 Session authority；RWD 只負責 presentation。
 - [x] Deployment config 加入 Application ID / Workspace ID runtime-only gate，不把實際值寫入 Public Git。
+- [x] 建立隔離 CYID development deploy path：dedicated Worker / D1 / CYID development Service Binding，無 production route、Backup binding 或 Cron，並接 live smoke。
 - [ ] Development CYID registry 已建立 CYACC Application / Workspace enablement，並完成 runtime variables 設定。
 - [ ] Development environment 端到端登入、Session invalidation、App Access revoke、USER read-only、Recovery 驗收。
 - [ ] iPad / Android Tablet 真機登入與操作驗收。
