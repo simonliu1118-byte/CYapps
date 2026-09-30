@@ -49,21 +49,18 @@ jobs:
           node --check src/index.js
           node --check src/app.js
           node --check src/identity-adapter.js
-          node --check src/app-v17.js
-          node --check src/app-v18.js
-          node --check src/app-v19.js
           node --check src/backup-storage-provider.js
           node --check src/gcs-backup-provider.js
           node --check src/r2-backup-provider.js
-          node --check src/v11-tools.js
-          node --check src/v12-tools.js
-          node --check src/v13-export.js
-          node --check src/v15-import.js
-          node --check src/v16-backup.js
-          node --check src/v17-backup.js
-          node --check src/v18-backup.js
-          node --check src/v19-migration.js
-          node --check src/v19-migration-safe.js
+          node --check src/accounting-tools.js
+          node --check src/accounting-controls.js
+          node --check src/excel-export.js
+          node --check src/excel-import.js
+          node --check src/backup-package.js
+          node --check src/gcs-backup.js
+          node --check src/backup-service.js
+          node --check src/desktop-migration-core.js
+          node --check src/desktop-migration.js
           node --check scripts/render-wrangler.mjs
           node --check scripts/prepare-sqljs.mjs
           node --check scripts/validate-cyid-consumer-version.mjs
@@ -97,14 +94,14 @@ jobs:
 
       - name: Run application tests
         run: |
-          node tests/v15-import.mjs
-          node tests/v16-backup.mjs
-          node tests/v17-backup.mjs
-          node tests/v17-phase-b.mjs
-          node tests/v18-tiered-backup.mjs
+          node tests/excel-transfer.mjs
+          node tests/backup-package.mjs
+          node tests/gcs-backup.mjs
+          node tests/backup-compatibility.mjs
+          node tests/backup-service.mjs
           node tests/v18-backup-ui.mjs
-          node tests/v19-desktop-migration.mjs
-          node tests/v19-d1-limits.mjs
+          node tests/desktop-migration.mjs
+          node tests/desktop-migration-d1.mjs
           node tests/v20-adaptive-ui.mjs
           node tests/v21-desktop-ui.mjs
           node tests/v21-adaptive-ui.mjs
