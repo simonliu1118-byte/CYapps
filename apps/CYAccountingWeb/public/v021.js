@@ -390,10 +390,8 @@ async function setupV21UserIdentity() {
   observer.observe(target, { childList: true, subtree: true, characterData: true });
 
   try {
-    const response = await fetch('/api/auth/me', { cache: 'no-store' });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.ok === false || !data.user) return;
-    user = data.user;
+    user = window.cyaccCurrentUser || (window.cyaccSessionPromise ? await window.cyaccSessionPromise : null);
+    if (!user) return;
     target.innerHTML = '';
     render();
   } catch {
