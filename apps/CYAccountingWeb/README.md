@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current integration candidate: **V0.21.6 Build 0**（2026-09-30）。Production CYID cutover still requires explicit approval.
+> Current integration candidate: **V0.21.6 Build 1**（2026-09-30）。Production CYID cutover still requires explicit approval.
 >
 > Current continuity handoff: [`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)
 
