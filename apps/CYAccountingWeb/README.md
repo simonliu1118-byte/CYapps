@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current formal baseline: **V0.21.5 Build 11**（2026-09-30）
+> Current integration candidate: **V0.21.6 Build 1**（2026-09-30）。Production CYID cutover still requires explicit approval.
 >
 > Current continuity handoff: [`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)
 
@@ -24,7 +24,7 @@ Browser
   ↓
 Cloudflare Worker + Static Assets
   ├─ DB       → CYAccountingWeb D1
-  ├─ IDENTITY → 目前的共用員工帳號服務 contract
+  ├─ IDENTITY → CYCloudIdentity provider
   ├─ BACKUP_R2
   └─ GCS runtime secrets/provider
 ```
@@ -69,47 +69,89 @@ Domain namespace 的跨 App 規劃仍以 `chihyuan-web/docs/DOMAIN_STRATEGY.md` 
 
 ## 帳號與 Identity 邊界
 
-目前 CYAccountingWeb 使用的共用員工帳號權威仍暫由 **CYInvoice Cloud** 提供，但 CYAccountingWeb **不直接讀取 CYInvoice D1**。
+V0.21.6 將 CYAccountingWeb 正式接到 **CYCloudIdentity (CYID)** consumer contract。CYID 是 Workspace / Employee / Credential / Workspace Role / App Access / provider Session / Email verification / Recovery 的唯一 Identity authority；CYAccountingWeb 不再建立第二套 Identity session。
 
-目前流程：
+Runtime 流程：
 
 ```text
-CYAccountingWeb
+Browser
+  ↓ app-scoped HttpOnly + Secure + SameSite=Lax cookie
+CYAccountingWeb Worker
   ↓ IDENTITY Service Binding
-CYInvoice Cloud Web Auth contract
-  ↓
-回傳 employee identity / role / credential metadata
-  ↓
-CYAccountingWeb 自己的 D1 建立本系統 web session
+CYCloudIdentity
+  ├─ login
+  ├─ session/resolve
+  ├─ logout
+  └─ password recovery
 ```
 
-跨 App 的 Identity / SSO 正在由 **CY-WEB workstream** 逐步規劃抽離與共用化。涉及下列底層項目時，不在 CYAccountingWeb 單獨決定：
+固定規則：
 
-- Identity / SSO authority；
-- 跨 App 帳號、角色、App access contract；
-- 跨 App D1 / database ownership；
-- Service Binding 與 shared Worker；
-- shared Backup Service 與 app-scoped dataset routing。
+- Application ID / Workspace ID 只由 deployment/runtime variables 注入，不寫入 Public source；
+- raw provider Session token 只存在 HttpOnly cookie 與 CYID request Authorization，不進 JS storage、URL、log 或帳務資料表；
+- protected request 由 CYID current authority resolve，CYACC 不保留 local `web_sessions` fallback；
+- V0.21.6 cutover 只移除 active authority；舊 `web_sessions` 實體 table 暫時保留，避免 Worker deploy 失敗時舊版 runtime 因 migration 先行而失效。完成 development + production acceptance 後，再以後續獨立 forward migration 清除；
+- CYID App Access 決定能否進入 CYAccountingWeb；CYACC 自己負責帳務 business authorization；
+- `SUPER_ADMIN` / `ADMIN` 保留既有可寫入能力，既有 Super-Admin-only 功能仍只允許 `SUPER_ADMIN`；
+- 有 CYACC App Access 的 `USER` 可登入，但只可檢視帳務資料與匯出 Excel；所有帳務 mutation、設定、匯入、移轉與 backup/restore 都由 server-side gate 拒絕；
+- 未登入使用者只會載入獨立 `/login`；`/` / `/index.html` 先由 Worker 驗證 CYID Session，不再使用 full-app login overlay；
+- 非核心 consumer 不處理 first-login / Email verification；若帳號尚未完成首次流程，必須回 CY Web 帳號管理入口；
+- Password Recovery 直接委派 CYID，密碼長度採 8–16 Unicode code points，UI 不揭露是否存在帳號或 masked email；
+- Tablet Safari compatibility 暫保留 `SameSite=Lax + Expires + navigation-safe`，直到真機驗收證明可收緊。
 
-這些項目實作前必須先同步 CY-WEB / CYCloudIdentity 最新決策。CYAccountingWeb 的帳務 D1 仍保持獨立，不因共用帳號而合併資料庫。
+## Isolated CYID development acceptance
 
-Current governed CYID consumer references：
+CYID development owns the provider-side provisioning and isolated preview lifecycle. The retained CYACC template `wrangler.cyid-development.template.jsonc` describes the consumer preview shape: dedicated Worker Preview + dedicated D1 + CYID development Service Binding, with no production Custom Domain, Backup binding, Cron or production accounting D1.
+
+Development live acceptance completed successfully on **CYCloud Identity Development Deploy run #96** using synthetic development-only principals and runtime-random masked credentials. The acceptance verified:
+
+- standalone CYACC login through the real CYID development Service Binding;
+- CYID Session resolve and direct Role projection;
+- `USER + CYACC App Access` can enter and read accounting data;
+- USER accounting mutation returns server-side `403 READ_ONLY_USER`;
+- USER Excel export returns a valid XLSX payload;
+- USER → ADMIN Role change revokes the old Session;
+- re-login as ADMIN exposes writable accounting authority and an isolated create/delete transaction roundtrip succeeds;
+- CYACC App Access revoke revokes the active Session and fresh login is denied;
+- App Access restore + Role restore returns the synthetic target to USER;
+- CYACC logout invalidates the provider Session.
+
+The synthetic acceptance identities are development-only. Their passwords are generated at runtime, masked before use, never committed, and the target is restored to USER + App Access enabled with test Sessions revoked during cleanup.
+
+## CYID development smoke
+
+在 development registry 與 runtime variables 設定完成後，可從受信任環境執行：
+
+```bash
+CYACC_SMOKE_BASE_URL="https://<development-host>" \\
+CYACC_SMOKE_EMPLOYEE_NO="<4-digit-employee-no>" \\
+CYACC_SMOKE_PASSWORD="<password>" \\
+CYACC_SMOKE_EXPECTED_ROLE="USER" \\
+node scripts/smoke-cyid-development.mjs
+```
+
+可選 `CYACC_SMOKE_MONTH=YYYY-MM`；未指定時使用執行當月。實際 hostname、Employee No、密碼與其他 runtime values 不得 commit、不得寫入 Actions log，也不得放進 Public artifact。
+
+CYACC 的低風險 smoke runner 仍可單獨驗證 login/read-only/Excel/logout；完整 Role/App Access/Session invalidation acceptance 已由 CYID development workflow 以 synthetic principals 自動執行並於 run #96 通過。Password Recovery 的 Email delivery/browser acceptance 仍屬獨立 gate。
+
+Canonical references：
 
 - shared standard：`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`；
-- contract version：`1.0.1`，minimum compatible：`1.0.0`；
+- adopted consumer version：`apps/CYAccountingWeb/CYID_CONSUMER_VERSION`；
+- provider contract version / minimum：`apps/CYCloudIdentity/CONSUMER_CONTRACT_VERSION` / `CONSUMER_MIN_COMPATIBLE_VERSION`；
 - CYACC-specific migration guide：`apps/CYCloudIdentity/docs/consumers/CYACC_INTEGRATION_HANDOFF.md`。
-
-Open PR #239 (`CYAccountingWeb 0.21.6: prepare governed CYID integration`) is governance/pre-integration preparation only，**not current production baseline and not merged**。At the current handoff it has diverged from V0.21.5 Build 11 `main`; future Identity work must first reconcile it against the latest CYWEB/CYID controlling handoff and current canonical contract。
 
 ## 已完成核心功能
 
 目前已完成：
 
+- **V0.21.6 CYID integration**：獨立登入入口、CYID provider Session authority、USER 唯讀 + Excel export、server-side write gate、active source 移除 `web_sessions` authority、延後實體 table drop 的 rollback-safe cutover、runtime Application/Workspace ID deploy gate；
+
 - 基本記帳新增、編輯、刪除；
 - 帳戶、收入／支出大分類與科目管理；
 - 期初餘額與逐月鎖帳；
 - 常用摘要與設定；
-- CYInvoice Cloud 共用員工登入、Session、Email 忘記密碼；
+- CYCloudIdentity 共用員工登入、provider Session、App Access 與 Email Password Recovery；
 - 月份切換、摘要搜尋、月統計、逐筆餘額與帳戶分組；
 - 記帳資料列直接編輯；
 - 日期鍵盤快速輸入；

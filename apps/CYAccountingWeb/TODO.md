@@ -1,5 +1,22 @@
 # CYAccountingWeb TODO
 
+## V0.21.6 CYID integration
+
+- [x] 採用 `CYID_CONSUMER_VERSION=1.0.1` 並加入 provider support-window validator。
+- [x] Login / Session Resolve / Logout / Password Recovery 改走 CYCloudIdentity private Service Binding。
+- [x] 移除 active Worker 對 local `web_sessions` 的 Identity authority 依賴；V0.21.6 cutover 暫不 DROP 舊表，以保留 deploy failure rollback safety。
+- [x] 建立獨立 `/login`；未登入不載入完整帳務 App，`/` / `/index.html` 由 Worker 先驗證 Session。
+- [x] CYID App Access 可讓 `USER` 進入 CYACC；CYACC server-side business gate 固定 USER 只能讀取與匯出 Excel。
+- [x] PC / Tablet / Mobile 共用同一登入與 Session authority；RWD 只負責 presentation。
+- [x] Deployment config 加入 Application ID / Workspace ID runtime-only gate，不把實際值寫入 Public Git。
+- [x] 建立隔離 CYID development deploy path：dedicated Worker / D1 / CYID development Service Binding，無 production route、Backup binding 或 Cron，並接 live smoke。
+- [x] Development CYID registry 已建立 CYACC Application / Workspace enablement，isolated preview + runtime Service Binding 已部署並驗證。
+- [x] Development environment live acceptance：登入／Session resolve／logout、USER 唯讀、Excel、USER→ADMIN Role change、App Access revoke/restore 與 Session invalidation 已於 CYID development run #96 通過。
+- [ ] Password Recovery real Email/browser delivery acceptance；不因上述 Session/App Access acceptance 自動視為完成。
+- [ ] iPad / Android Tablet 真機登入與操作驗收。
+- [ ] Production cutover explicit approval；未取得前不得把 CYID migration 視為 production accepted。
+- [ ] CYID production cutover 穩定後，以獨立 forward migration 退休 `web_sessions` 實體 table；不得和首次 authority cutover 同一步驟執行。
+
 本文件只記錄待辦、後續方向與未來評估項目，不作為永久規則來源。
 
 > 目前 conversation/workspace continuity：[`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)
@@ -11,7 +28,7 @@
 - Mobile Build 10/11 已部署：`餘額` 維持期初餘額設定、`更多` 保留帳戶設定／科目設定／月份鎖帳／匯出 Excel；右上角使用者選單只保留身分資訊＋登出。**仍需真實手機最終驗收，不得因 CI 綠燈直接標 final acceptance。**
 - Tablet real-device acceptance **失敗／未完成**：使用者回報觸控/focus 很差且登入仍不可靠。Build 6/8 legacy auth hotfix 未取得 acceptance；在 CYID governed integration 決策完成前，不再疊加 Tablet-specific legacy auth patch。
 - CYID shared consumer contract current version **1.0.1**，minimum compatible **1.0.0**；current canonical integration references are under `apps/CYCloudIdentity/docs/`，not removed dated handoffs。
-- Open PR **#239** (`CYAccountingWeb 0.21.6: prepare governed CYID integration`) is **not production baseline and not merged**；it has diverged from Build 11 main and must be reconciled/rebased only after reading the latest CYWEB/CYID controlling handoff。
+- Active CYID integration candidate is **V0.21.6 Build 1 / Draft PR #243**；#239/#242 已關閉。CYID isolated development live acceptance run #96 已通過，但 production 仍是 V0.21.5 Build 11。
 - A real production SQLite migration was executed successfully during this workstream, but final migrated-ledger content acceptance has not been explicitly closed；Public Git must not record production accounting counts/values/evidence。
 - Backup Phase C scheduled `x/14` remains a production-evidence gate；never infer it from dates，read catalog/UI when needed。
 

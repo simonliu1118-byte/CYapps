@@ -22,6 +22,7 @@
 - Controlled real Email/browser lifecycle 驗收依使用者目前條件暫緩；這不重開已定案 contract，但仍是 production 前必要 acceptance。
 - CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.1 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
 - CYAccountingWeb（CYACCweb）handoff 已收斂為 app-specific migration guide：`docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；共同 Role / Session / App Access / first-login / recovery 規範只讀 `docs/CONSUMER_INTEGRATION_STANDARD.md`。
+- CYACC **V0.21.6 Build 1 / Draft PR #243** isolated development live acceptance run #96 已通過：USER login/read-only/Excel、Role change Session invalidation、ADMIN isolated write、App Access revoke/restore + Session invalidation、logout。Password Recovery Email/browser、Tablet 真機與 production cutover 仍為獨立 gate。
 - Cross-repository contract mirror 已定義 manifest + exact-sync 規則：CY Web 等外部 repo 必須鏡像 manifest 所列 7 個 artifacts 並在 governance/CI/deploy 前 byte-compare；同 repo consumer 直接讀 canonical files。
 - Production、backup rollout 與其他 consumer production cutover 均未進行。
 
@@ -54,9 +55,9 @@
 11. [ ] 建立 controlled USER，實際瀏覽器驗收：建立 -> 收驗證 Email -> 首次登入密碼 -> 設正式密碼 -> 回登入 -> 正式密碼登入。
 12. [ ] 實際驗收首次登入密碼 expiry、重寄驗證 Email、pending Email 修改、舊 credential 失效與 delivery-failure recovery。
 13. [ ] 實際驗收既有 Super Admin permanent-password login/F5/session resolve，並完成 USER self-service、正常 ADMIN、Identity Admin、Super Admin 權限矩陣。
-14. [ ] 驗收 role/App Access change session invalidation、literal expired normal Session、forgot-password、own Email change 與 controlled Super Admin transfer。
+14. [ ] 驗收 role/App Access change session invalidation、literal expired normal Session、forgot-password、own Email change 與 controlled Super Admin transfer。**CYACC consumer 子矩陣的 Role/App Access Session invalidation 已於 run #96 通過；其餘項目仍未完成。**
 15. [x] 建立 governed CYID Consumer Integration Standard + contract compatibility versions + PR consumer-impact gate；再加入 cross-repository sync manifest / exact mirror requirement；CYACC handoff 收斂為 app-specific migration guide。
-16. [ ] CYAccountingWeb development integration 開始時加入 `CYID_CONSUMER_VERSION` 並依 standard 遷移；real Email/browser lifecycle acceptance 仍是 production gate。
+16. [x] CYAccountingWeb 已採用 `CYID_CONSUMER_VERSION=1.0.1`，V0.21.6 Build 1 source + isolated development live Role/App Access/Session acceptance 已完成；real Email/browser lifecycle、Tablet 與 production cutover 仍是後續 gate。
 17. [ ] 在 CYInvoice 工作線適合的接入點，以同一 consumer standard 建立其 app-specific migration handoff；Device/local/offline 邊界仍由 CYInvoice 自己管理。
 18. [ ] Production 前完成 low-frequency backup + restore acceptance；production cutover 需使用者另行明確同意。
 

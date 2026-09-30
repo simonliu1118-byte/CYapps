@@ -49,8 +49,8 @@ const v019 = read('public/v019.js');
 const appV19 = read('src/app-v19.js');
 const v11Tools = read('src/v11-tools.js');
 
-assert.equal(version, '0.21.5');
-assert.equal(build, '11');
+assert.equal(version, '0.21.6');
+assert.equal(build, '1');
 assert.match(build11Js, /ensureV21Build12Script\(\)/);
 assert.match(build11Js, /ensureV21Build13Script\(\)/);
 assert.match(build11Js, /ensureV21Build14Script\(\)/);
@@ -185,7 +185,7 @@ assert.match(patch4Js, /handleV0214FavoriteToggle/);
 assert.match(patch4Js, /已還原/);
 assert.match(patch4Css, /\.v0214-balance-popover/);
 
-// V0.21.5 Build 11 keeps the logout-only mobile account menu scoped to Mobile and leaves Desktop unchanged.
+// V0.21.6 preserves the accepted Build 11 adaptive presentation while Identity moves to CYID.
 assert.match(patch5Build4Js, /CY_V0215_BUILD4_MOBILE = '\(max-width: 767px\)'/);
 assert.doesNotMatch(patch5Css, /@media \(min-width: 1024px\)[\s\S]*?v0215-mobile-save-message/);
 assert.match(patch5Css, /@media \(max-width: 767px\)/);
@@ -197,4 +197,4 @@ assert.match(v013, /button\.setAttribute\('aria-busy', 'true'\)/);
 assert.match(v021, /if \(account\.textContent !== nextText\) account\.textContent = nextText;/);
 assert.match(v021, /if \(empty && empty\.textContent !== '本次尚無輸入紀錄。'\) empty\.textContent = '本次尚無輸入紀錄。';/);
 
-console.log('V0.21.5 Build 11 desktop regression tests passed.');
+console.log('V0.21.6 Build 1 desktop regression tests passed.');

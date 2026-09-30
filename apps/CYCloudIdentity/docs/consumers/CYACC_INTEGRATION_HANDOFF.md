@@ -68,12 +68,12 @@ Migration `0002_web_sessions.sql` is historical/applied source and must not be r
 
 Migration order:
 
-1. implement provider login/resolve/logout;
-2. prove development login/session behavior;
-3. add a new forward CYACC migration that retires/drops `web_sessions`;
-4. remove local session mint/hash helpers after the provider path is accepted.
+1. implement provider login/resolve/logout and remove active local session mint/hash/resolve authority;
+2. prove the provider path in an isolated development deployment;
+3. cut over production only after explicit approval, while keeping the physical legacy `web_sessions` table temporarily available for rollback safety;
+4. after stable production acceptance, add a separate forward CYACC migration that retires/drops the physical `web_sessions` table.
 
-Do not keep `web_sessions` as a fallback Identity authority. Provider outage fails closed.
+The retained table must never remain an authorization fallback after source cutover. This staging exists only because CYACC applies D1 migrations before Worker deployment; dropping the table in the same first-cutover deployment could break the previous Worker if the new Worker deployment failed. Provider outage still fails closed.
 
 ## 4. Protected API boundary
 
@@ -153,11 +153,11 @@ Identity cutover and accounting behavior are separate acceptance dimensions.
 6. replace local `/api/auth/me` authority with CYID Session resolve;
 7. replace local-only logout with provider logout + cookie cleanup;
 8. replace legacy password reset with CYID recovery;
-9. prove the provider path in development;
-10. retire `web_sessions` via forward migration;
-11. retain CYACC business authorization locally;
-12. run CYACC Desktop/Tablet/Mobile acceptance;
-13. production cutover only after explicit approval.
+9. prove the provider path in isolated development;
+10. retain CYACC business authorization locally;
+11. run CYACC Desktop/Tablet/Mobile acceptance;
+12. production authority cutover only after explicit approval, without dropping the legacy table in the same deployment;
+13. after stable production acceptance, retire the physical `web_sessions` table via a separate forward migration.
 
 ## 10. CYACC-specific acceptance
 
@@ -169,11 +169,25 @@ In addition to the shared acceptance matrix, CYACC must prove:
 - legacy local `web_sessions` no longer authorizes after cutover;
 - accounting CRUD/import/export/backup behavior is unchanged by Identity migration.
 
-## 11. Current known acceptance gap
+## 11. Development acceptance state
 
-The controlled real new-Employee Email/browser lifecycle is temporarily deferred by current test conditions.
+CYAccountingWeb **V0.21.6 Build 1 / Draft PR #243** completed isolated provider-side live acceptance on CYID development run **#96**.
 
-That gap does not reopen the contract. CYACC development integration may continue, but final production acceptance still requires the shared lifecycle evidence defined by CYID.
+Proven live against the development provider and isolated CYACC D1/Worker Preview:
+
+- permanent-password consumer login and Session resolve;
+- direct USER projection with CYACC App Access;
+- CYACC server-side USER read-only enforcement;
+- valid Excel export for USER;
+- USER → ADMIN Role update through CYID admin authority revokes the old Session;
+- ADMIN re-login gains CYACC write authority and completes an isolated create/delete transaction roundtrip;
+- direct CYACC App Access revoke revokes the active Session and denies fresh login;
+- App Access + USER Role restore succeeds;
+- provider logout invalidates the consumer Session.
+
+Synthetic acceptance identities are development-only, use runtime-random masked credentials, and are restored to USER/App-Access-enabled baseline with test Sessions revoked during cleanup.
+
+Still separate from this acceptance: Tablet real-device behavior, real Password Recovery Email/browser delivery, the broader CYID new-Employee Email lifecycle matrix, and production cutover approval.
 
 ## 12. Canonical references
 
