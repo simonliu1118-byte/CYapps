@@ -13,8 +13,21 @@ const state = {
 };
 const els = {};
 
-document.addEventListener('DOMContentLoaded', async () => {
-  Object.assign(els, {
+let cyaccAppStarted = false;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startCyaccApp, { once: true });
+} else {
+  void startCyaccApp();
+}
+
+async function startCyaccApp() {
+  if (cyaccAppStarted) return;
+  cyaccAppStarted = true;
+  let startupError = null;
+
+  try {
+    Object.assign(els, {
     form: document.querySelector('#transactionForm'),
     txDate: document.querySelector('#txDate'),
     accountName: document.querySelector('#accountName'),
@@ -63,13 +76,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     editSaveButton: document.querySelector('#editSaveButton')
   });
 
-  const today = localDateString(new Date());
-  els.txDate.value = today;
-  els.monthFilter.value = today.slice(0, 7);
-  els.openingMonth.value = today.slice(0, 7);
-  bindEvents();
-  await initialize();
-});
+    const today = localDateString(new Date());
+    els.txDate.value = today;
+    els.monthFilter.value = today.slice(0, 7);
+    els.openingMonth.value = today.slice(0, 7);
+    bindEvents();
+    await initialize();
+  } catch (error) {
+    startupError = error instanceof Error ? error : new Error('APP_STARTUP_FAILED');
+    console.error('cyaccounting_app_start_failed', startupError.message);
+    if (els.connectionStatus) setConnection('載入失敗', 'warn');
+    if (els.saveMessage) showMessage(startupError.message || '載入失敗，請重新整理。', true);
+  } finally {
+    finishCyaccBoot(startupError);
+  }
+}
+
+function finishCyaccBoot(error = null) {
+  if (window.__cyaccBootWatchdog) {
+    window.clearTimeout(window.__cyaccBootWatchdog);
+    window.__cyaccBootWatchdog = null;
+  }
+  const status = document.querySelector('#cyaccBootStatus');
+  document.body.classList.remove('cyacc-booting');
+  if (error) {
+    document.body.classList.add('cyacc-boot-failed');
+    if (status) {
+      status.hidden = false;
+      status.textContent = '載入失敗，請重新整理後再試。';
+    }
+    return;
+  }
+  document.body.classList.remove('cyacc-boot-failed');
+  status?.remove();
+}
 
 function bindEvents() {
   els.kindButtons.forEach(button => button.addEventListener('click', () => setEntryKind(button.dataset.kind)));
@@ -139,6 +179,7 @@ async function initialize() {
   } catch (error) {
     setConnection('連線失敗', 'warn');
     showMessage(error.message, true);
+    throw error;
   }
 }
 
@@ -511,11 +552,25 @@ function numericInput(event) {
   event.target.value = event.target.value.replace(/\D/g, '').slice(0, 7);
 }
 
-async function api(path, options) {
-  const response = await fetch(path, options);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
-  return data;
+async function api(path, options = {}) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12_000);
+  try {
+    const response = await fetch(path, {
+      ...options,
+      credentials: 'include',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
+    return data;
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('連線逾時，請重新整理後再試。');
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 function jsonHeaders() { return { 'content-type': 'application/json' }; }
