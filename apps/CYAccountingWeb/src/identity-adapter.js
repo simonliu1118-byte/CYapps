@@ -2,6 +2,7 @@ export const SESSION_COOKIE = 'cyaccounting_session';
 
 const SESSION_TOKEN_PATTERN = /^cyid_[0-9a-f]{64}$/;
 const ROLES = new Set(['USER', 'ADMIN', 'SUPER_ADMIN']);
+const resolutionCache = new WeakMap();
 
 export function identityRuntimeConfig(env) {
   const workspaceId = String(env?.CYID_WORKSPACE_ID || '').trim();
@@ -74,7 +75,7 @@ export async function loginWithCyid(request, env, employeeNo, password) {
   const principal = normalizePrincipal(payload?.principal);
   const token = String(payload?.session?.token || '');
   const expiresAt = String(payload?.session?.expiresAt || '');
-  if (!principal || !SESSION_TOKEN_PATTERN.test(token) || !validFutureTimestamp(expiresAt)) {
+  if (!principal || principal.workspaceId !== config.workspaceId || !SESSION_TOKEN_PATTERN.test(token) || !validFutureTimestamp(expiresAt)) {
     return failure(502, 'IDENTITY_INVALID_RESPONSE');
   }
 
@@ -89,6 +90,13 @@ export async function loginWithCyid(request, env, employeeNo, password) {
 }
 
 export async function resolveIdentitySession(request, env) {
+  if (resolutionCache.has(request)) return resolutionCache.get(request);
+  const pending = resolveIdentitySessionUncached(request, env);
+  resolutionCache.set(request, pending);
+  return pending;
+}
+
+async function resolveIdentitySessionUncached(request, env) {
   const config = identityRuntimeConfig(env);
   if (!config.ready) return failure(503, 'IDENTITY_NOT_CONFIGURED');
 
@@ -102,7 +110,7 @@ export async function resolveIdentitySession(request, env) {
   }
 
   const principal = normalizePrincipal(payload?.principal);
-  if (!principal) return failure(502, 'IDENTITY_INVALID_RESPONSE');
+  if (!principal || principal.workspaceId !== config.workspaceId) return failure(502, 'IDENTITY_INVALID_RESPONSE');
 
   return {
     ok: true,
