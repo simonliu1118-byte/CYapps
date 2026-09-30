@@ -141,7 +141,15 @@ assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:
 assert.match(versionPatch, /MutationObserver/);
 assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6'/);
 
-const migration = fs.readFileSync(path.join(ROOT, 'migrations/0005_retire_web_sessions.sql'), 'utf8');
-assert.match(migration, /DROP TABLE IF EXISTS web_sessions/i);
+const migrationDir = path.join(ROOT, 'migrations');
+const migrationTexts = fs.readdirSync(migrationDir)
+  .filter(name => name.endsWith('.sql'))
+  .map(name => fs.readFileSync(path.join(migrationDir, name), 'utf8'))
+  .join('\n');
+assert.doesNotMatch(
+  migrationTexts,
+  /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?web_sessions/i,
+  '0.21.6 cutover must not drop the legacy table before post-cutover acceptance'
+);
 
 console.log('CYID integration tests passed.');
