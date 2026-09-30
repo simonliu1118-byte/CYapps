@@ -48,6 +48,13 @@ jobs:
       DEV_CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
       DEV_CYID_D1_DATABASE_NAME: ${{ vars.CYID_D1_DATABASE_NAME }}
       DEV_CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
+      CYID_SESSION_TTL_SECONDS: ${{ vars.CYID_SESSION_TTL_SECONDS }}
+      CYID_EMAIL_PROVIDER: ${{ vars.CYID_EMAIL_PROVIDER }}
+      CYID_EMAIL_FROM: ${{ vars.CYID_EMAIL_FROM }}
+      CYID_EMAIL_DAILY_BUDGET: ${{ vars.CYID_EMAIL_DAILY_BUDGET }}
+      CYID_CORE_ACCOUNT_APPLICATION_ID: ${{ vars.CYID_CORE_ACCOUNT_APPLICATION_ID }}
+      CYID_BREVO_API_KEY: ${{ secrets.CYID_BREVO_API_KEY }}
+      CYID_RESEND_API_KEY: ${{ secrets.CYID_RESEND_API_KEY }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -92,9 +99,18 @@ jobs:
           for value in "$DEV_CYID_WORKER_NAME" "$DEV_CYID_D1_DATABASE_NAME" "$DEV_CYID_D1_DATABASE_ID" "$PROD_CYID_WORKER_NAME" "$PROD_CYID_D1_DATABASE_NAME"; do
             echo "::add-mask::$value"
           done
+          PROD_RATE_NAMESPACE_ID="$(PROD_CYID_WORKER_NAME="$PROD_CYID_WORKER_NAME" node -e '
+            const crypto=require("node:crypto");
+            const h=crypto.createHash("sha256").update(process.env.PROD_CYID_WORKER_NAME+":rate").digest("hex").slice(0,10);
+            process.stdout.write(String(Number(BigInt("0x"+h)%900000000n)+100000000));
+          ')"
+          for value in "$PROD_RATE_NAMESPACE_ID" "${CYID_EMAIL_FROM:-}" "${CYID_CORE_ACCOUNT_APPLICATION_ID:-}"; do
+            [[ -n "$value" ]] && echo "::add-mask::$value"
+          done
           {
             echo "PROD_CYID_WORKER_NAME=$PROD_CYID_WORKER_NAME"
             echo "PROD_CYID_D1_DATABASE_NAME=$PROD_CYID_D1_DATABASE_NAME"
+            echo "PROD_RATE_NAMESPACE_ID=$PROD_RATE_NAMESPACE_ID"
           } >> "$GITHUB_ENV"
 
       - name: Create or confirm production Worker
@@ -412,6 +428,190 @@ jobs:
             echo "Cloudflare credential cannot provision a temporary account token."
           fi
 
+      - name: Render CYID production Worker runtime
+        if: env.CYID_PROD_WORKER_READY == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(CYID_SESSION_TTL_SECONDS CYID_EMAIL_PROVIDER CYID_EMAIL_FROM CYID_EMAIL_DAILY_BUDGET CYID_CORE_ACCOUNT_APPLICATION_ID PROD_RATE_NAMESPACE_ID)
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing protected CYID production runtime prerequisite." >&2
+              exit 1
+            fi
+          done
+          node <<'NODE'
+          const fs=require('node:fs');
+          const config={
+            name:process.env.PROD_CYID_WORKER_NAME,
+            main:'src/index.ts',
+            compatibility_date:'2026-09-25',
+            workers_dev:true,
+            d1_databases:[{
+              binding:'DB',
+              database_name:process.env.PROD_CYID_D1_DATABASE_NAME,
+              database_id:process.env.PROD_CYID_D1_DATABASE_ID,
+              migrations_dir:'migrations'
+            }],
+            ratelimits:[{
+              name:'LOGIN_RATE_LIMITER',
+              namespace_id:process.env.PROD_RATE_NAMESPACE_ID,
+              simple:{limit:10,period:60}
+            }],
+            vars:{
+              APP_ENV:'production',
+              API_VERSION:'v1',
+              SESSION_TTL_SECONDS:process.env.CYID_SESSION_TTL_SECONDS,
+              EMAIL_PROVIDER:process.env.CYID_EMAIL_PROVIDER,
+              EMAIL_FROM:process.env.CYID_EMAIL_FROM,
+              EMAIL_DAILY_BUDGET:process.env.CYID_EMAIL_DAILY_BUDGET,
+              CORE_ACCOUNT_APPLICATION_ID:process.env.CYID_CORE_ACCOUNT_APPLICATION_ID,
+              ACCOUNT_PORTAL_URL:'https://admin.chihyuancm.com',
+              CYACC_APPLICATION_ID:process.env.PROD_CYACC_APPLICATION_ID,
+              CYACC_WORKSPACE_ID:process.env.PROD_WORKSPACE_ID,
+              CYACC_SERVICE_BINDING_TARGET:process.env.PROD_CYID_WORKER_NAME
+            }
+          };
+          fs.writeFileSync('wrangler.production.generated.jsonc',JSON.stringify(config,null,2)+'\n',{mode:0o600});
+          NODE
+
+      - name: Deploy CYID production Worker runtime
+        if: env.CYID_PROD_WORKER_READY == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! npx wrangler deploy --config wrangler.production.generated.jsonc > /tmp/cyid-prod-deploy.log 2>&1; then
+            echo "CYID production Worker deployment failed." >&2
+            exit 1
+          fi
+          CYID_PRODUCTION_URL="$(node -e '
+            const fs=require("node:fs");
+            const text=fs.readFileSync("/tmp/cyid-prod-deploy.log","utf8");
+            const m=text.match(/https:\/\/[A-Za-z0-9.-]+\.workers\.dev/);
+            if(m) process.stdout.write(m[0]);
+          ')"
+          if [[ -z "$CYID_PRODUCTION_URL" ]]; then
+            echo "CYID production Worker deployed without a validation URL." >&2
+            exit 1
+          fi
+          echo "::add-mask::$CYID_PRODUCTION_URL"
+          echo "CYID_PRODUCTION_URL=$CYID_PRODUCTION_URL" >> "$GITHUB_ENV"
+
+      - name: Configure production-only CYID secrets
+        if: env.CYID_PROD_WORKER_READY == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4"
+          curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$PROD_CYID_WORKER_NAME/settings" > /tmp/cyid-prod-runtime-settings-before-secrets.json
+
+          has_secret() {
+            SECRET_NAME="$1" node -e '
+              const fs=require("node:fs");
+              const data=JSON.parse(fs.readFileSync("/tmp/cyid-prod-runtime-settings-before-secrets.json","utf8"))?.result||{};
+              const bindings=Array.isArray(data.bindings)?data.bindings:[];
+              process.exit(bindings.some(x=>String(x?.name||"")===process.env.SECRET_NAME && String(x?.type||"").includes("secret"))?0:1);
+            '
+          }
+
+          if ! has_secret OTP_PEPPER; then
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            printf '%s' "$value" | npx wrangler secret put OTP_PEPPER --config wrangler.production.generated.jsonc > /dev/null
+          fi
+          if ! has_secret BOOTSTRAP_SECRET; then
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            printf '%s' "$value" | npx wrangler secret put BOOTSTRAP_SECRET --config wrangler.production.generated.jsonc > /dev/null
+          fi
+
+          if [[ "$CYID_EMAIL_PROVIDER" == "brevo" ]]; then
+            [[ -n "${CYID_BREVO_API_KEY:-}" ]] || { echo "Missing protected production Email provider credential." >&2; exit 1; }
+            printf '%s' "$CYID_BREVO_API_KEY" | npx wrangler secret put BREVO_API_KEY --config wrangler.production.generated.jsonc > /dev/null
+          elif [[ "$CYID_EMAIL_PROVIDER" == "resend" ]]; then
+            [[ -n "${CYID_RESEND_API_KEY:-}" ]] || { echo "Missing protected production Email provider credential." >&2; exit 1; }
+            printf '%s' "$CYID_RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY --config wrangler.production.generated.jsonc > /dev/null
+          else
+            echo "Unsupported production Email provider." >&2
+            exit 1
+          fi
+
+      - name: Verify CYID production provider runtime
+        if: env.CYID_PROD_WORKER_READY == '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          health="$(curl -sS -o /tmp/cyid-prod-health.json -w '%{http_code}' "$CYID_PRODUCTION_URL/v1/health")"
+          [[ "$health" == "200" ]] || { echo "CYID production health verification failed." >&2; exit 1; }
+
+          api="https://api.cloudflare.com/client/v4"
+          curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$PROD_CYID_WORKER_NAME/settings" > /tmp/cyid-prod-runtime-settings.json
+          node <<'NODE'
+          const fs=require('node:fs');
+          const data=JSON.parse(fs.readFileSync('/tmp/cyid-prod-runtime-settings.json','utf8'))?.result||{};
+          const bindings=Array.isArray(data.bindings)?data.bindings:[];
+          const by=new Map(bindings.map(x=>[String(x?.name||''),x]));
+          const text=n=>String(by.get(n)?.text??'');
+          const db=by.get('DB');
+          const dbid=String(db?.database_id||db?.id||'');
+          if(text('APP_ENV')!=='production') process.exit(2);
+          if(text('CYACC_APPLICATION_ID')!==process.env.PROD_CYACC_APPLICATION_ID) process.exit(3);
+          if(text('CYACC_WORKSPACE_ID')!==process.env.PROD_WORKSPACE_ID) process.exit(4);
+          if(text('CYACC_SERVICE_BINDING_TARGET')!==process.env.PROD_CYID_WORKER_NAME) process.exit(5);
+          if(dbid!==process.env.PROD_CYID_D1_DATABASE_ID) process.exit(6);
+          for(const name of ['OTP_PEPPER','BOOTSTRAP_SECRET']){
+            const b=by.get(name);
+            if(!b || !String(b.type||'').includes('secret')) process.exit(7);
+          }
+          NODE
+
+          npx wrangler d1 execute DB --remote --json --config /tmp/cyid-prod-d1.jsonc --command "SELECT e.employee_id,e.revision,c.credential_version,e.workspace_id,aa.application_id FROM employee_application_access aa JOIN employees e ON e.workspace_id=aa.workspace_id AND e.employee_id=aa.employee_id JOIN employee_credentials c ON c.employee_id=e.employee_id WHERE aa.workspace_id='$PROD_WORKSPACE_ID' AND aa.application_id='$PROD_CYACC_APPLICATION_ID' AND aa.enabled=1 AND e.enabled=1 ORDER BY e.employee_no LIMIT 1;" > /tmp/cyid-prod-principal.json 2>/dev/null
+
+          PROBE_TOKEN="cyid_$(openssl rand -hex 32)"
+          PROBE_HASH="$(printf '%s' "$PROBE_TOKEN" | sha256sum | awk '{print $1}')"
+          echo "::add-mask::$PROBE_TOKEN"
+          echo "::add-mask::$PROBE_HASH"
+
+          PROBE_HASH="$PROBE_HASH" node <<'NODE'
+          const fs=require('node:fs');
+          const raw=JSON.parse(fs.readFileSync('/tmp/cyid-prod-principal.json','utf8'));
+          const roots=Array.isArray(raw)?raw:[raw], rows=[];
+          for(const r of roots){ if(Array.isArray(r?.results)) rows.push(...r.results); if(Array.isArray(r?.result?.results)) rows.push(...r.result.results); }
+          if(rows.length!==1) process.exit(2);
+          const r=rows[0];
+          const q=v=>"'"+String(v).replaceAll("'","''")+"'";
+          const now=new Date(), exp=new Date(now.getTime()+300000);
+          const sql='INSERT INTO identity_sessions(session_hash,workspace_id,employee_id,application_id,credential_version,employee_revision,created_at,expires_at,revoked_at) VALUES('+
+            [q(process.env.PROBE_HASH),q(r.workspace_id),q(r.employee_id),q(r.application_id),Number(r.credential_version),Number(r.revision),q(now.toISOString()),q(exp.toISOString()),'NULL'].join(',')+');\n';
+          fs.writeFileSync('/tmp/cyid-prod-probe.sql',sql,{mode:0o600});
+          fs.writeFileSync('/tmp/cyid-prod-probe-app.txt',String(r.application_id),{mode:0o600});
+          NODE
+          npx wrangler d1 execute DB --remote --config /tmp/cyid-prod-d1.jsonc --file /tmp/cyid-prod-probe.sql > /dev/null 2>&1
+          PROBE_APP="$(cat /tmp/cyid-prod-probe-app.txt)"
+          echo "::add-mask::$PROBE_APP"
+
+          cleanup_probe() {
+            printf "DELETE FROM identity_sessions WHERE session_hash='%s';\n" "$PROBE_HASH" > /tmp/cyid-prod-probe-cleanup.sql
+            npx wrangler d1 execute DB --remote --config /tmp/cyid-prod-d1.jsonc --file /tmp/cyid-prod-probe-cleanup.sql > /dev/null 2>&1 || true
+          }
+          trap cleanup_probe EXIT
+
+          code="$(curl -sS -o /tmp/cyid-prod-resolve.json -w '%{http_code}' -X POST "$CYID_PRODUCTION_URL/v1/identity/session/resolve" -H "authorization: Bearer $PROBE_TOKEN" -H "x-identity-application: $PROBE_APP")"
+          [[ "$code" == "200" ]] || { echo "CYID production Session resolve verification failed." >&2; exit 1; }
+          code="$(curl -sS -o /tmp/cyid-prod-logout.json -w '%{http_code}' -X POST "$CYID_PRODUCTION_URL/v1/identity/logout" -H "authorization: Bearer $PROBE_TOKEN" -H "x-identity-application: $PROBE_APP")"
+          [[ "$code" == "200" ]] || { echo "CYID production logout verification failed." >&2; exit 1; }
+          code="$(curl -sS -o /tmp/cyid-prod-after.json -w '%{http_code}' -X POST "$CYID_PRODUCTION_URL/v1/identity/session/resolve" -H "authorization: Bearer $PROBE_TOKEN" -H "x-identity-application: $PROBE_APP")"
+          [[ "$code" == "401" ]] || { echo "CYID production Session invalidation verification failed." >&2; exit 1; }
+          cleanup_probe
+          trap - EXIT
+
+          remaining="$(npx wrangler d1 execute DB --remote --json --config /tmp/cyid-prod-d1.jsonc --command "SELECT COUNT(*) AS value FROM identity_sessions;" 2>/dev/null | node -e '
+            let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const raw=JSON.parse(s), roots=Array.isArray(raw)?raw:[raw], rows=[];for(const r of roots){if(Array.isArray(r?.results))rows.push(...r.results);if(Array.isArray(r?.result?.results))rows.push(...r.result.results);}if(rows.length!==1)process.exit(2);process.stdout.write(String(rows[0].value));});
+          ')"
+          [[ "$remaining" == "0" ]] || { echo "CYID production verification left Session state." >&2; exit 1; }
+          echo "CYID_PROD_PROVIDER_VERIFIED=1" >> "$GITHUB_ENV"
+          echo "CYID production provider runtime verified."
+
       - name: Final production provider resource gate
         shell: bash
         run: |
@@ -420,6 +620,13 @@ jobs:
             echo "CYID production D1 and authority continuity are ready, but production Worker creation remains blocked by Cloudflare authorization." >&2
             exit 1
           fi
+          if [[ "${CYID_PROD_PROVIDER_VERIFIED:-0}" != "1" ]]; then
+            echo "CYID production Worker exists but provider runtime verification is incomplete." >&2
+            exit 1
+          fi
+          echo "CYID production provider provisioning and self-verification passed."
       - name: Cleanup
         if: always()
-        run: rm -rf /tmp/cyid-prod-* /tmp/cyid-dev-* /tmp/cyid-production-bootstrap.mjs
+        run: |
+          rm -rf /tmp/cyid-prod-* /tmp/cyid-dev-* /tmp/cyid-production-bootstrap.mjs
+          rm -f wrangler.production.generated.jsonc
