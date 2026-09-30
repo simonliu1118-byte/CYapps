@@ -111,8 +111,9 @@ jobs:
               "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/workers" \
               --data "$(node -e 'process.stdout.write(JSON.stringify({name:process.env.PROD_CYID_WORKER_NAME}))')")"
             if [[ "$create_code" != "200" && "$create_code" != "201" ]]; then
-              echo "CYID production Worker resource creation failed." >&2
-              exit 1
+              echo "CYID_PROD_WORKER_READY=0" >> "$GITHUB_ENV"
+              echo "CYID production Worker resource creation is blocked by current Cloudflare authorization." >&2
+              exit 0
             fi
 
             printf '%s\n' 'export default { async fetch() { return new Response("CYID production bootstrap"); } };' > /tmp/cyid-production-bootstrap.mjs
@@ -125,12 +126,14 @@ jobs:
                 if(t.includes("quota")||t.includes("limit")) c.push("QUOTA");
                 console.error("CYID production Worker bootstrap deployment failed category="+(c.join(",")||"unclassified"));
               '
-              exit 1
+              echo "CYID_PROD_WORKER_READY=0" >> "$GITHUB_ENV"
+              exit 0
             fi
           elif [[ "$code" != "200" ]]; then
             echo "Unable to inspect CYID production Worker target." >&2
             exit 1
           fi
+          echo "CYID_PROD_WORKER_READY=1" >> "$GITHUB_ENV"
           echo "Distinct CYID production Worker resource is available."
 
       - name: Create or confirm production D1
@@ -164,8 +167,225 @@ jobs:
             exit 1
           fi
           echo "::add-mask::$PROD_CYID_D1_DATABASE_ID"
-          echo "CYID production resource preflight passed."
+          echo "PROD_CYID_D1_DATABASE_ID=$PROD_CYID_D1_DATABASE_ID" >> "$GITHUB_ENV"
+          echo "CYID production D1 isolation is ready."
 
+      - name: Apply CYID production schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/cyid-prod-d1.jsonc <<EOF
+          {
+            "name": "cyid-production-d1-maintenance",
+            "compatibility_date": "2026-09-25",
+            "d1_databases": [{
+              "binding": "DB",
+              "database_name": "$PROD_CYID_D1_DATABASE_NAME",
+              "database_id": "$PROD_CYID_D1_DATABASE_ID",
+              "migrations_dir": "$GITHUB_WORKSPACE/apps/CYCloudIdentity/migrations"
+            }]
+          }
+          EOF
+          if ! npx wrangler d1 migrations apply DB --remote --config /tmp/cyid-prod-d1.jsonc > /tmp/cyid-prod-migrate.log 2>&1; then
+            echo "CYID production schema migration failed." >&2
+            exit 1
+          fi
+
+      - name: Capture durable development authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/cyid-dev-d1.jsonc <<EOF
+          {
+            "name": "cyid-development-d1-source",
+            "compatibility_date": "2026-09-25",
+            "d1_databases": [{
+              "binding": "DB",
+              "database_name": "$DEV_CYID_D1_DATABASE_NAME",
+              "database_id": "$DEV_CYID_D1_DATABASE_ID"
+            }]
+          }
+          EOF
+
+          mkdir -p /tmp/cyid-dev-authority
+          tables=(
+            workspaces employees employee_credentials employee_initial_credentials
+            applications workspace_applications employee_application_access
+            identity_groups employee_identity_groups identity_group_application_access
+            identity_security_policies
+          )
+          for table in "${tables[@]}"; do
+            npx wrangler d1 execute DB --remote --json --config /tmp/cyid-dev-d1.jsonc --command "SELECT * FROM $table;" > "/tmp/cyid-dev-authority/$table.json" 2>/dev/null
+          done
+
+          scalar() {
+            local sql="$1" out="$2"
+            npx wrangler d1 execute DB --remote --json --config /tmp/cyid-dev-d1.jsonc --command "$sql" > "$out" 2>/dev/null
+            node -e '
+              const fs=require("node:fs");
+              const raw=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+              const roots=Array.isArray(raw)?raw:[raw], rows=[];
+              for(const r of roots){ if(Array.isArray(r?.results)) rows.push(...r.results); if(Array.isArray(r?.result?.results)) rows.push(...r.result.results); }
+              if(rows.length!==1 || rows[0]?.value===undefined || rows[0]?.value===null) process.exit(2);
+              process.stdout.write(String(rows[0].value));
+            ' "$out"
+          }
+
+          inflight="$(scalar "SELECT COUNT(*) AS value FROM employee_initial_credentials WHERE exchange_token_digest IS NOT NULL OR verified_at IS NOT NULL;" /tmp/cyid-inflight.json)"
+          if [[ "$inflight" != "0" ]]; then
+            echo "Production continuity blocked by an in-flight first-login exchange." >&2
+            exit 1
+          fi
+
+          DEV_WORKSPACE_ID="$(scalar "SELECT workspace_id AS value FROM workspaces WHERE status='active';" /tmp/cyid-dev-workspace.json)"
+          DEV_CYACC_APPLICATION_ID="$(scalar "SELECT application_id AS value FROM applications WHERE status='active' AND upper(replace(display_name,' ','')) IN ('CYACCOUNTINGWEB','CYACC');" /tmp/cyid-dev-cyacc.json)"
+          echo "::add-mask::$DEV_WORKSPACE_ID"
+          echo "::add-mask::$DEV_CYACC_APPLICATION_ID"
+
+          PROD_CYACC_APPLICATION_ID="$(DEV_CYACC_APPLICATION_ID="$DEV_CYACC_APPLICATION_ID" node -e '
+            const crypto=require("node:crypto");
+            const h=crypto.createHash("sha256").update(process.env.DEV_CYACC_APPLICATION_ID+":production").digest("hex").slice(0,24).toUpperCase();
+            process.stdout.write("CYACC_"+h);
+          ')"
+          echo "::add-mask::$PROD_CYACC_APPLICATION_ID"
+          {
+            echo "PROD_WORKSPACE_ID=$DEV_WORKSPACE_ID"
+            echo "DEV_CYACC_APPLICATION_ID=$DEV_CYACC_APPLICATION_ID"
+            echo "PROD_CYACC_APPLICATION_ID=$PROD_CYACC_APPLICATION_ID"
+          } >> "$GITHUB_ENV"
+
+      - name: Import production authority continuity
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEV_CYACC_APPLICATION_ID="$DEV_CYACC_APPLICATION_ID" PROD_CYACC_APPLICATION_ID="$PROD_CYACC_APPLICATION_ID" node <<'NODE'
+          const fs=require('node:fs');
+          const dir='/tmp/cyid-dev-authority';
+          const tableOrder=[
+            'workspaces','employees','employee_credentials','employee_initial_credentials',
+            'applications','workspace_applications','employee_application_access',
+            'identity_groups','employee_identity_groups','identity_group_application_access',
+            'identity_security_policies'
+          ];
+          function rows(table){
+            const raw=JSON.parse(fs.readFileSync(dir+'/'+table+'.json','utf8'));
+            const roots=Array.isArray(raw)?raw:[raw], out=[];
+            for(const r of roots){ if(Array.isArray(r?.results)) out.push(...r.results); if(Array.isArray(r?.result?.results)) out.push(...r.result.results); }
+            return out;
+          }
+          function qid(v){ return '"'+String(v).replaceAll('"','""')+'"'; }
+          function lit(v){
+            if(v===null || v===undefined) return 'NULL';
+            if(typeof v==='number') return String(v);
+            return "'"+String(v).replaceAll("'","''")+"'";
+          }
+          function mapped(row){
+            const r={...row};
+            if(r.application_id===process.env.DEV_CYACC_APPLICATION_ID) r.application_id=process.env.PROD_CYACC_APPLICATION_ID;
+            return r;
+          }
+          function ins(table,row){
+            const keys=Object.keys(row);
+            return 'INSERT INTO '+qid(table)+'('+keys.map(qid).join(',')+') VALUES('+keys.map(k=>lit(row[k])).join(',')+');';
+          }
+          const data=Object.fromEntries(tableOrder.map(t=>[t,rows(t)]));
+          const sql=['PRAGMA foreign_keys = ON;'];
+          for(const row of data.workspaces) sql.push(ins('workspaces',{...row,status:'bootstrap',super_admin_employee_id:null}));
+          for(const t of ['employees','employee_credentials','employee_initial_credentials']) for(const row of data[t]) sql.push(ins(t,row));
+          for(const row of data.workspaces){
+            const sets=Object.keys(row).filter(k=>k!=='workspace_id').map(k=>qid(k)+'='+lit(row[k])).join(',');
+            sql.push('UPDATE "workspaces" SET '+sets+' WHERE "workspace_id"='+lit(row.workspace_id)+';');
+          }
+          for(const t of ['applications','workspace_applications','employee_application_access','identity_groups','employee_identity_groups','identity_group_application_access','identity_security_policies']){
+            for(const row of data[t]) sql.push(ins(t,mapped(row)));
+          }
+          fs.writeFileSync('/tmp/cyid-prod-continuity.sql',sql.join('\n')+'\n',{mode:0o600});
+          NODE
+
+          existing="$(npx wrangler d1 execute DB --remote --json --config /tmp/cyid-prod-d1.jsonc --command "SELECT COUNT(*) AS value FROM workspaces;" 2>/dev/null | node -e '
+            let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const raw=JSON.parse(s), roots=Array.isArray(raw)?raw:[raw], rows=[];for(const r of roots){if(Array.isArray(r?.results))rows.push(...r.results);if(Array.isArray(r?.result?.results))rows.push(...r.result.results);}if(rows.length!==1)process.exit(2);process.stdout.write(String(rows[0].value));});
+          ')"
+          if [[ "$existing" == "0" ]]; then
+            if ! npx wrangler d1 execute DB --remote --config /tmp/cyid-prod-d1.jsonc --file /tmp/cyid-prod-continuity.sql > /tmp/cyid-prod-import.log 2>&1; then
+              echo "CYID production authority continuity import failed." >&2
+              exit 1
+            fi
+          fi
+
+      - name: Verify production authority continuity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/cyid-prod-authority
+          tables=(
+            workspaces employees employee_credentials employee_initial_credentials
+            applications workspace_applications employee_application_access
+            identity_groups employee_identity_groups identity_group_application_access
+            identity_security_policies
+          )
+          for table in "${tables[@]}"; do
+            npx wrangler d1 execute DB --remote --json --config /tmp/cyid-prod-d1.jsonc --command "SELECT * FROM $table;" > "/tmp/cyid-prod-authority/$table.json" 2>/dev/null
+          done
+
+          DEV_CYACC_APPLICATION_ID="$DEV_CYACC_APPLICATION_ID" PROD_CYACC_APPLICATION_ID="$PROD_CYACC_APPLICATION_ID" node <<'NODE'
+          const fs=require('node:fs'), crypto=require('node:crypto');
+          const tables=[
+            'workspaces','employees','employee_credentials','employee_initial_credentials',
+            'applications','workspace_applications','employee_application_access',
+            'identity_groups','employee_identity_groups','identity_group_application_access',
+            'identity_security_policies'
+          ];
+          function rows(dir,t){
+            const raw=JSON.parse(fs.readFileSync(dir+'/'+t+'.json','utf8'));
+            const roots=Array.isArray(raw)?raw:[raw], out=[];
+            for(const r of roots){ if(Array.isArray(r?.results)) out.push(...r.results); if(Array.isArray(r?.result?.results)) out.push(...r.result.results); }
+            return out;
+          }
+          function canon(v){
+            if(Array.isArray(v)) return '['+v.map(canon).join(',')+']';
+            if(v&&typeof v==='object') return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}';
+            return JSON.stringify(v);
+          }
+          function digest(dir,source){
+            const h=crypto.createHash('sha256');
+            for(const t of tables){
+              const rs=rows(dir,t).map(r=>{
+                const x={...r};
+                if(source && x.application_id===process.env.DEV_CYACC_APPLICATION_ID) x.application_id=process.env.PROD_CYACC_APPLICATION_ID;
+                return canon(x);
+              }).sort();
+              h.update(t+'\n'+rs.join('\n')+'\n');
+            }
+            return h.digest('hex');
+          }
+          if(digest('/tmp/cyid-dev-authority',true)!==digest('/tmp/cyid-prod-authority',false)) process.exit(2);
+          NODE
+
+          transient="$(npx wrangler d1 execute DB --remote --json --config /tmp/cyid-prod-d1.jsonc --command "SELECT (SELECT COUNT(*) FROM identity_sessions)+(SELECT COUNT(*) FROM email_otp_challenges)+(SELECT COUNT(*) FROM bootstrap_requests)+(SELECT COUNT(*) FROM identity_audit_events) AS value;" 2>/dev/null | node -e '
+            let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const raw=JSON.parse(s), roots=Array.isArray(raw)?raw:[raw], rows=[];for(const r of roots){if(Array.isArray(r?.results))rows.push(...r.results);if(Array.isArray(r?.result?.results))rows.push(...r.result.results);}if(rows.length!==1)process.exit(2);process.stdout.write(String(rows[0].value));});
+          ')"
+          if [[ "$transient" != "0" ]]; then
+            echo "CYID production continuity contains forbidden transient development authority." >&2
+            exit 1
+          fi
+
+          enabled="$(npx wrangler d1 execute DB --remote --json --config /tmp/cyid-prod-d1.jsonc --command "SELECT COUNT(*) AS value FROM workspace_applications WHERE workspace_id='$PROD_WORKSPACE_ID' AND application_id='$PROD_CYACC_APPLICATION_ID' AND enabled=1;" 2>/dev/null | node -e '
+            let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const raw=JSON.parse(s), roots=Array.isArray(raw)?raw:[raw], rows=[];for(const r of roots){if(Array.isArray(r?.results))rows.push(...r.results);if(Array.isArray(r?.result?.results))rows.push(...r.result.results);}if(rows.length!==1)process.exit(2);process.stdout.write(String(rows[0].value));});
+          ')"
+          if [[ "$enabled" != "1" ]]; then
+            echo "CYACC production Application enablement validation failed." >&2
+            exit 1
+          fi
+          echo "CYID production D1 durable authority continuity verified."
+
+      - name: Final production provider resource gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${CYID_PROD_WORKER_READY:-0}" != "1" ]]; then
+            echo "CYID production D1 and authority continuity are ready, but production Worker creation remains blocked by Cloudflare authorization." >&2
+            exit 1
+          fi
       - name: Cleanup
         if: always()
         run: rm -f /tmp/cyid-prod-* /tmp/cyid-production-bootstrap.mjs
