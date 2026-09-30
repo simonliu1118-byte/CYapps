@@ -372,7 +372,7 @@ jobs:
             exit 1
           fi
           if ! "$CYID_WRANGLER" preview --name "$CYACC_PREVIEW_NAME" --config wrangler.cyid-development.generated.jsonc --ignore-base-config --json >/tmp/cyacc-preview.json 2>/tmp/cyacc-preview.err; then
-            node -e "const fs=require('node:fs');const p='/tmp/cyacc-preview.err';const text=fs.existsSync(p)?fs.readFileSync(p,'utf8'):'';for(let line of text.split(/\\r?\\n/).slice(-24)){line=line.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi,'[redacted-uuid]').replace(/https?:\\/\\/[^\\s]+/gi,'[redacted-url]').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[0-9a-f]{32,}/gi,'[redacted-long-id]');console.error('CYACC preview detail: '+line.slice(0,500));}"
+            node -e "const fs=require('node:fs');const inputs=['/tmp/cyacc-preview.json','/tmp/cyacc-preview.err'];const text=inputs.filter(fs.existsSync).map(p=>fs.readFileSync(p,'utf8')).join('\\n');for(let line of text.split(/\\r?\\n/).slice(-32)){line=line.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi,'[redacted-uuid]').replace(/https?:\\/\\/[^\\s]+/gi,'[redacted-url]').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g,'[redacted-email]').replace(/[0-9a-f]{32,}/gi,'[redacted-long-id]').replace(/cyacc[-_a-z0-9]*/gi,'[redacted-cyacc-resource]');console.error('CYACC preview detail: '+line.slice(0,500));}"
             echo "Unable to create or update the isolated CYACC Worker Preview." >&2
             exit 1
           fi
