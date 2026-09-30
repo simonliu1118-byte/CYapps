@@ -30,8 +30,8 @@ assert.match(indexHtml, /v021b10\.css\?v=0216b6/);
 assert.match(indexHtml, /v021b11\.css\?v=0216b6/);
 assert.match(indexHtml, /v0215\.css\?v=0216b6/);
 assert.match(indexHtml, /rel="preload" as="style"/);
-assert.match(indexHtml, /auth\.js\?v=0216b7/);
-assert.match(indexHtml, /app\.js\?v=0216b7/);
+assert.match(indexHtml, /auth\.js\?v=0216b8/);
+assert.match(indexHtml, /app\.js\?v=0216b8/);
 assert.match(indexHtml, /v06\.js\?v=0216b7/);
 assert.match(indexHtml, /v016\.js\?v=0216b7/);
 assert.match(indexHtml, /v019\.js\?v=0216b7/);
@@ -40,13 +40,14 @@ assert.match(indexHtml, /v021\.js\?v=0216b7/);
 assert.match(indexHtml, /v021b8\.js\?v=0216b6/);
 assert.match(indexHtml, /v021b10\.js\?v=0216b6/);
 assert.match(indexHtml, /v021b11\.js\?v=0216b6/);
-assert.match(indexHtml, /v0216\.js\?v=0216b7/);
+assert.match(indexHtml, /v0216\.js\?v=0216b8/);
 
 assert.match(authJs, /document\.readyState === 'loading'/);
 assert.match(authJs, /startCyaccAuth/);
 assert.match(authJs, /AbortController/);
 assert.match(authJs, /8_000/);
-assert.match(authJs, /window\.cyaccSessionPromise = checkSession\(\)/);
+assert.match(authJs, /window\.__CYACC_BOOT_USER__/);
+assert.match(authJs, /bootUser \? Promise\.resolve\(bootUser\) : checkSessionFallback\(\)/);
 assert.match(authJs, /window\.cyaccCurrentUser = user/);
 assert.match(appJs, /if \(window\.cyaccSessionPromise\) await window\.cyaccSessionPromise/);
 assert.match(v06, /cyacc:core-ready/);
@@ -81,7 +82,7 @@ assert.match(build10, /runV21Build10Step\('mobile-navigation', setupV21Build10Mo
 assert.match(build10, /cyaccounting_mobile_build10_step_failed/);
 assert.match(build11, /startV21Build11/);
 assert.match(patch5Build3, /document\.readyState === 'loading'/);
-assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 7'/);
+assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 8'/);
 assert.match(versionPatch, /document\.readyState === 'loading'/);
 
 console.log('Mobile deterministic startup regression checks passed.');
