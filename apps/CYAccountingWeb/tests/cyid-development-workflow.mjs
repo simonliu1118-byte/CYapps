@@ -11,7 +11,7 @@ const workflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'cyacco
 const template = fs.readFileSync(path.join(projectRoot, 'wrangler.cyid-development.template.jsonc'), 'utf8');
 
 assert.match(workflow, /deploy\/cyaccountingweb-cyid-development/);
-assert.match(workflow, /environment:\s*cyaccountingweb-cyid-development/);
+assert.match(workflow, /environment:\s*development/);
 assert.match(workflow, /wrangler\.cyid-development\.template\.jsonc/);
 assert.match(workflow, /smoke-cyid-development\.mjs/);
 assert.match(workflow, /CYACC_CYID_DEV_WORKER_NAME/);
