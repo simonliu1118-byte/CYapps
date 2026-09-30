@@ -1,5 +1,12 @@
 # CYApps Governance Changelog
 
+## 2.3.21 — 2026/09/30
+
+- CYAccountingWeb adopts CYCloudIdentity Consumer Contract 1.0.1 as its sole Identity authority path; active runtime must not mint or resolve a local second Identity session after cutover.
+- CYID App Access controls CYACC entry while CYACC owns accounting authorization: SUPER_ADMIN / ADMIN keep normal writable behavior, and USER with CYACC App Access is read-only except monthly Excel export; server-side enforcement is mandatory across Desktop / Tablet / Mobile.
+- CYAccountingWeb login becomes a standalone server-gated entry instead of an overlay on the full accounting App. Browser Session keeps the Tablet-safe HttpOnly + Secure + SameSite=Lax + Expires navigation pattern until real-device acceptance proves stricter settings safe.
+- CYACC deployment must inject CYID Application ID and Workspace ID at runtime and validate its adopted consumer version is inside the provider support window; public source must not contain actual deployment identifiers.
+
 ## 2.3.20 — 2026/09/30
 
 - CYID consumer contract 增加跨 repository 同步治理：`CONSUMER_SYNC_MANIFEST.json` 明列外部 consumer 必須鏡像的 7 個 canonical artifacts（consumer current/minimum version、shared standard、consumer changelog、Auth、Role/Access、Architecture）。
