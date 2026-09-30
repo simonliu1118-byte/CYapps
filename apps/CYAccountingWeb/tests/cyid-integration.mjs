@@ -107,9 +107,22 @@ for (const file of ['src/app.js', 'src/app-v17.js', 'src/app-v18.js', 'src/app-v
 
 const indexHtml = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
 const loginHtml = fs.readFileSync(path.join(ROOT, 'public/login.html'), 'utf8');
+const authJs = fs.readFileSync(path.join(ROOT, 'public/auth.js'), 'utf8');
+const authCss = fs.readFileSync(path.join(ROOT, 'public/auth.css'), 'utf8');
+const versionPatch = fs.readFileSync(path.join(ROOT, 'public/v0216.js'), 'utf8');
+const workerApp = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
 assert.match(loginHtml, /action="\/login"/);
 assert.doesNotMatch(loginHtml, /src="\/app\.js"/);
+assert.match(workerApp, /url\.pathname === '\/login\.html'[\s\S]*?redirect\('\/login'/);
+assert.match(authJs, /activateReadOnlyMobileLedger/);
+assert.match(authJs, /data-mobile-page="ledger"/);
+assert.match(authCss, /data-mobile-ledger-action="accounts"/);
+assert.match(authCss, /data-mobile-ledger-action="categories"/);
+assert.match(authCss, /data-mobile-ledger-action="lock"/);
+assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
+assert.match(versionPatch, /MutationObserver/);
+assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6'/);
 
 const migration = fs.readFileSync(path.join(ROOT, 'migrations/0005_retire_web_sessions.sql'), 'utf8');
 assert.match(migration, /DROP TABLE IF EXISTS web_sessions/i);
