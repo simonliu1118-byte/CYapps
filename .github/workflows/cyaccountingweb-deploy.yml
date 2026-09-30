@@ -256,8 +256,10 @@ jobs:
           curl --max-time 8 -fsS "$base/v0215.css?v=0216b6" | grep -F '.ledger-month-tools.v0215-toolbar-ready' >/dev/null
           curl --max-time 8 -fsS "$base/v021b8.js?v=0216b6" | grep -F "runV21Build8Step('mobile-pages'" >/dev/null
           curl --max-time 8 -fsS "$base/v021b10.js?v=0216b6" | grep -F "runV21Build10Step('mobile-app-bar'" >/dev/null
-          curl --max-time 8 -fsS "$base/app.js?v=0216b6" | grep -F 'startCyaccApp' >/dev/null
-          echo "CYACC production mobile startup assets verified."
+          curl --max-time 8 -fsS "$base/auth.js?v=0216b7" | grep -F 'window.cyaccSessionPromise = checkSession()' >/dev/null
+          curl --max-time 8 -fsS "$base/app.js?v=0216b7" | grep -F 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise' >/dev/null
+          curl --max-time 8 -fsS "$base/v06.js?v=0216b7" | grep -F "cyacc:core-ready" >/dev/null
+          echo "CYACC production mobile/session startup assets verified."
 
       - name: Remove production generated files
         if: always()
