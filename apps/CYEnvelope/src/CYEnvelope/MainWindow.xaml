@@ -35,7 +35,7 @@
             <TextBlock Text="輸入後同步更新信封預覽" Style="{StaticResource SecondaryText}" Margin="0,4,0,0"/>
           </StackPanel>
           <ScrollViewer x:Name="EntryScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel>
+            <StackPanel KeyboardNavigation.TabNavigation="Local">
               <StackPanel KeyboardNavigation.TabIndex="0" Margin="0,0,0,12"><TextBlock Text="收件人" Style="{StaticResource FieldLabel}"/>
                 <TextBox x:Name="RecipientBox" TextChanged="RecipientChanged" KeyDown="RecipientKeyDown" AutomationProperties.Name="收件人"/>
               </StackPanel>
