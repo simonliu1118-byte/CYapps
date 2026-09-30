@@ -139,7 +139,7 @@ assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(versionPatch, /MutationObserver/);
-assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 2'/);
+assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 3'/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)
