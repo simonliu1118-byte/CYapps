@@ -17,6 +17,8 @@ try {
     CF_D1_DATABASE_NAME: 'cyaccounting-web-ci-db',
     CF_D1_DATABASE_ID: '11111111-1111-4111-8111-111111111111',
     CF_IDENTITY_SERVICE: 'cyidentity-ci-placeholder',
+    CF_CYID_APPLICATION_ID: 'CYACC_CI',
+    CF_CYID_WORKSPACE_ID: 'workspace-ci-placeholder',
     CF_R2_BACKUP_BUCKET: 'cyaccounting-backup-ci',
     CF_BACKUP_TOPOLOGY: 'legacy_gcs',
     CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: 'acc.example.com'
@@ -37,11 +39,17 @@ try {
   assert.equal(rendered.r2_buckets[0].binding, 'BACKUP_R2');
   assert.equal(rendered.r2_buckets[0].bucket_name, env.CF_R2_BACKUP_BUCKET);
   assert.equal(rendered.vars.BACKUP_TOPOLOGY, 'legacy_gcs');
+  assert.equal(rendered.vars.CYID_APPLICATION_ID, env.CF_CYID_APPLICATION_ID);
+  assert.equal(rendered.vars.CYID_WORKSPACE_ID, env.CF_CYID_WORKSPACE_ID);
+  assert.deepEqual(rendered.assets.run_worker_first, ['/api/*', '/', '/index.html', '/login', '/login.html']);
   assert.equal(rendered.triggers.crons[0], '30 19 * * *');
   assert.equal(/__CF_[A-Z0-9_]+__/.test(renderedText), false);
 
   assert.throws(() => renderWrangler({ env: { ...env, CF_D1_DATABASE_ID: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_D1_DATABASE_ID: 'not-a-uuid' }, templatePath: TEMPLATE, outputPath: output }), /valid UUID/);
+  assert.throws(() => renderWrangler({ env: { ...env, CF_CYID_APPLICATION_ID: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
+  assert.throws(() => renderWrangler({ env: { ...env, CF_CYID_APPLICATION_ID: 'bad app' }, templatePath: TEMPLATE, outputPath: output }), /CF_CYID_APPLICATION_ID has an invalid format/);
+  assert.throws(() => renderWrangler({ env: { ...env, CF_CYID_WORKSPACE_ID: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_R2_BACKUP_BUCKET: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_BACKUP_TOPOLOGY: 'r2_only' }, templatePath: TEMPLATE, outputPath: output }), /legacy_gcs or parallel_dual_provider/);
   assert.throws(() => renderWrangler({ env: { ...env, CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: '' }, templatePath: TEMPLATE, outputPath: output }), /Missing required deployment variable/);
@@ -51,6 +59,8 @@ try {
   assert.match(template, /"workers_dev"\s*:\s*true/);
   assert.match(template, /__CF_D1_DATABASE_ID__/);
   assert.match(template, /__CF_IDENTITY_SERVICE__/);
+  assert.match(template, /__CF_CYID_APPLICATION_ID__/);
+  assert.match(template, /__CF_CYID_WORKSPACE_ID__/);
   assert.match(template, /__CF_R2_BACKUP_BUCKET__/);
   assert.match(template, /__CF_BACKUP_TOPOLOGY__/);
   assert.match(template, /__CF_CUSTOM_DOMAIN__/);
