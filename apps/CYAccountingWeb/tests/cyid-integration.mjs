@@ -95,6 +95,43 @@ assert.equal(canWriteAccounting(resolved.principal), false);
 assert.equal(canWriteAccounting({ workspaceRole: 'ADMIN' }), true);
 assert.equal(appUserFromPrincipal({ ...basePrincipal, workspaceRole: 'SUPER_ADMIN' }).canWriteAccounting, true);
 
+const httpsAssetEnv = {
+  ASSETS: {
+    async fetch(request) {
+      return new Response('<!doctype html><form action="/login" method="post"></form>', {
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      });
+    }
+  }
+};
+
+const httpGet = await appV19.fetch(new Request('http://acc.example.com/login'), httpsAssetEnv);
+assert.equal(httpGet.status, 308, 'HTTP login GET must redirect to HTTPS before serving credentials form');
+assert.equal(httpGet.headers.get('location'), 'https://acc.example.com/login');
+
+const httpPost = await appV19.fetch(new Request('http://acc.example.com/login', {
+  method: 'POST',
+  headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams({ employeeNo: '0123', password: '12345678' })
+}), httpsAssetEnv);
+assert.equal(httpPost.status, 308, 'HTTP login POST must redirect before credential processing');
+assert.equal(httpPost.headers.get('location'), 'https://acc.example.com/login');
+
+const forwardedHttp = await appV19.fetch(new Request('https://acc.example.com/login', {
+  headers: { 'x-forwarded-proto': 'http' }
+}), httpsAssetEnv);
+assert.equal(forwardedHttp.status, 308, 'forwarded HTTP login must redirect to HTTPS');
+assert.equal(forwardedHttp.headers.get('location'), 'https://acc.example.com/login');
+
+const cfVisitorHttp = await appV19.fetch(new Request('https://acc.example.com/login', {
+  headers: { 'cf-visitor': '{"scheme":"http"}' }
+}), httpsAssetEnv);
+assert.equal(cfVisitorHttp.status, 308, 'Cloudflare HTTP visitor login must redirect to HTTPS');
+
+const secureLoginPage = await appV19.fetch(new Request('https://acc.example.com/login'), httpsAssetEnv);
+assert.equal(secureLoginPage.status, 200);
+assert.equal(secureLoginPage.headers.get('strict-transport-security'), 'max-age=31536000');
+
 const routeEnv = { ...env, DB: {} };
 for (const [method, route, body] of [
   ['POST', '/api/transactions', '{}'],
@@ -128,7 +165,7 @@ const authCss = fs.readFileSync(path.join(ROOT, 'public/auth.css'), 'utf8');
 const versionPatch = fs.readFileSync(path.join(ROOT, 'public/v0216.js'), 'utf8');
 const workerApp = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
-assert.match(loginHtml, /action="\/login"/);
+assert.match(loginHtml, /action="\/login" method="post"/);
 assert.doesNotMatch(loginHtml, /src="\/app\.js"/);
 assert.match(workerApp, /url\.pathname === '\/login\.html'[\s\S]*?redirect\('\/login'/);
 assert.match(authJs, /activateReadOnlyMobileLedger/);
@@ -139,7 +176,7 @@ assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(versionPatch, /MutationObserver/);
-assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 3'/);
+assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 4'/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)

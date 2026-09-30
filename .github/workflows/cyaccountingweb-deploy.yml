@@ -187,6 +187,37 @@ jobs:
       - name: Deploy Worker and static assets
         run: npx wrangler deploy --config wrangler.deploy.jsonc
 
+      - name: Verify production HTTPS login entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
+
+          http_code="$(curl -sS -o /dev/null -D /tmp/cyacc-http-login.headers -w '%{http_code}' "http://$host/login")"
+          case "$http_code" in
+            301|302|307|308) ;;
+            *)
+              echo "CYACC HTTP login entry did not redirect to HTTPS (status $http_code)." >&2
+              exit 1
+              ;;
+          esac
+          location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); print; exit}' /tmp/cyacc-http-login.headers | tr -d '\\r')"
+          if [[ "$location" != "https://$host/login" ]]; then
+            echo "CYACC HTTP login redirect target is not the HTTPS login entry." >&2
+            exit 1
+          fi
+
+          curl -fsS -D /tmp/cyacc-https-login.headers -o /tmp/cyacc-https-login.html "https://$host/login"
+          grep -Eiq '^strict-transport-security:[[:space:]]*max-age=31536000' /tmp/cyacc-https-login.headers || {
+            echo "CYACC HTTPS login response is missing HSTS." >&2
+            exit 1
+          }
+          grep -Fq 'action="/login" method="post"' /tmp/cyacc-https-login.html || {
+            echo "CYACC HTTPS login page is not the expected standalone login form." >&2
+            exit 1
+          }
+          echo "CYACC production HTTPS login entry verified."
+
       - name: Remove production generated files
         if: always()
         run: |
