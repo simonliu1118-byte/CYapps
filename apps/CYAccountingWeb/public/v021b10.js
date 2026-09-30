@@ -16,13 +16,21 @@ window.addEventListener('load', syncV21Build10AfterLoad, { once: true });
 function startV21Build10() {
   if (cyV21Build10Started) return;
   cyV21Build10Started = true;
-  syncV21Build10Version();
-  setupV21Build10MobileAppBar();
-  setupV21Build10MobileNavigation();
-  setupV21Build10AccountSheet();
-  setupV21Build10LedgerTools();
-  setupV21Build10ConfirmationPolicy();
-  setupV21Build10MobileFormCopy();
+  runV21Build10Step('mobile-app-bar', setupV21Build10MobileAppBar);
+  runV21Build10Step('mobile-navigation', setupV21Build10MobileNavigation);
+  runV21Build10Step('account-sheet', setupV21Build10AccountSheet);
+  runV21Build10Step('ledger-tools', setupV21Build10LedgerTools);
+  runV21Build10Step('confirmation-policy', setupV21Build10ConfirmationPolicy);
+  runV21Build10Step('mobile-form-copy', setupV21Build10MobileFormCopy);
+  runV21Build10Step('version', syncV21Build10Version);
+}
+
+function runV21Build10Step(name, task) {
+  try {
+    task();
+  } catch (error) {
+    console.error('cyaccounting_mobile_build10_step_failed', name, error instanceof Error ? error.message : 'unknown_error');
+  }
 }
 
 function syncV21Build10AfterLoad() {
