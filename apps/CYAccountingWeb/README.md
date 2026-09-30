@@ -99,6 +99,24 @@ CYCloudIdentity
 - Password Recovery 直接委派 CYID，密碼長度採 8–16 Unicode code points，UI 不揭露是否存在帳號或 masked email；
 - Tablet Safari compatibility 暫保留 `SameSite=Lax + Expires + navigation-safe`，直到真機驗收證明可收緊。
 
+## Isolated CYID development deployment
+
+V0.21.6 Build 1 provides a dedicated CYID development path that is intentionally separate from the current production Worker.
+
+- template: `wrangler.cyid-development.template.jsonc`
+- workflow: `.github/workflows/cyaccountingweb-cyid-development.yml`
+- allowed trigger: explicit `workflow_dispatch` or dedicated `deploy/cyaccountingweb-cyid-development` branch
+- protected GitHub Environment: `cyaccountingweb-cyid-development`
+- dedicated Worker + dedicated D1 + CYID development Service Binding only
+- no production Custom Domain route
+- no R2 / GCS backup binding
+- no Cron trigger
+- no production accounting D1
+
+Required protected environment variables use the `CYACC_CYID_DEV_*` namespace for Worker/D1/Identity/Application/Workspace/base-URL values; smoke Employee No/password are environment secrets. Actual values remain deployment data and must not be committed or pasted into public logs.
+
+The CYID Application must already exist in the provider registry and be enabled for the development Workspace before this deployment can pass live smoke. CYACC does not create or mutate the CYID Application registry.
+
 ## CYID development smoke
 
 在 development registry 與 runtime variables 設定完成後，可從受信任環境執行：
