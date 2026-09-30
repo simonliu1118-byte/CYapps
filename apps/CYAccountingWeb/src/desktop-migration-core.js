@@ -12,59 +12,6 @@ const OPENING_INSERT_CHUNK = 50;
 const HISTORY_KEY = 'desktop_migration_history_v1';
 const HISTORY_LIMIT = 20;
 
-export async function handleLegacyDesktopMigrationApi(request, env, session) {
-  const url = new URL(request.url);
-  if (!url.pathname.startsWith('/api/migration/desktop/')) return null;
-  if (String(session?.role || '') !== 'SUPER_ADMIN') {
-    return json({ ok: false, error: '只有超級管理員可以執行桌面帳本移轉。', code: 'SUPER_ADMIN_REQUIRED' }, 403);
-  }
-  if (!env?.DB) return json({ ok: false, error: 'D1 尚未綁定。', code: 'DB_NOT_CONFIGURED' }, 503);
-
-  if (url.pathname === '/api/migration/desktop/preview' && request.method === 'POST') {
-    return previewDesktopMigration(request, env.DB);
-  }
-  if (url.pathname === '/api/migration/desktop/commit' && request.method === 'POST') {
-    return commitDesktopMigrationRequest(request, env.DB, session);
-  }
-  return json({ ok: false, error: '找不到此資料移轉功能。', code: 'MIGRATION_ROUTE_NOT_FOUND' }, 404);
-}
-
-async function previewDesktopMigration(request, db) {
-  try {
-    const body = await request.json().catch(() => null);
-    const analysis = await analyzeDesktopMigration(body?.snapshot, db);
-    return json({ ok: true, ...publicAnalysis(analysis) });
-  } catch (error) {
-    return migrationErrorResponse(error);
-  }
-}
-
-async function commitDesktopMigrationRequest(request, db, session) {
-  try {
-    const body = await request.json().catch(() => null);
-    if (body?.confirm !== true) {
-      throw new DesktopMigrationError('必須先完成預覽並確認移轉。', 'MIGRATION_CONFIRM_REQUIRED', 400);
-    }
-
-    const analysis = await analyzeDesktopMigration(body?.snapshot, db);
-    const expectedMode = String(body?.expectedMode || '');
-    if (expectedMode && expectedMode !== analysis.plan.mode) {
-      throw new DesktopMigrationError('目標帳本狀態已變更，請重新建立移轉預覽。', 'MIGRATION_TARGET_CHANGED', 409);
-    }
-    if (analysis.plan.alreadyImported) {
-      throw new DesktopMigrationError('這個 SQLite 檔案先前已完成移轉。若桌面資料有更新，請重新選擇更新後的資料庫檔。', 'MIGRATION_SOURCE_ALREADY_IMPORTED', 409);
-    }
-    if (!analysis.plan.canCommit) {
-      throw new DesktopMigrationError('仍有資料衝突或驗證錯誤，未寫入任何資料。', 'MIGRATION_CONFLICT', 409, publicAnalysis(analysis));
-    }
-
-    const result = await executeDesktopMigration(analysis, db, session);
-    return json({ ok: true, migration: result });
-  } catch (error) {
-    return migrationErrorResponse(error);
-  }
-}
-
 export async function analyzeDesktopMigration(rawSnapshot, db) {
   const snapshot = normalizeDesktopSnapshot(rawSnapshot);
   const target = await loadTargetState(db, snapshot);
@@ -364,148 +311,7 @@ export function planDesktopMigration(snapshot, target) {
   };
 }
 
-async function executeDesktopMigration(analysis, db, session) {
-  const { snapshot, target, plan } = analysis;
-  const now = new Date().toISOString();
-  const statements = [];
-
-  for (const item of plan.missingAccounts) {
-    statements.push(db.prepare(`
-      INSERT INTO accounts(name, sort_order, is_default, created_at)
-      VALUES (?, ?, ?, ?)
-    `).bind(
-      item.name,
-      plan.mode === 'pristine_merge' ? item.sortOrder : item.targetSortOrder,
-      plan.mode === 'pristine_merge' ? item.isDefault : 0,
-      item.createdAt
-    ));
-  }
-
-  if (plan.mode === 'pristine_merge') {
-    for (const item of snapshot.accounts) {
-      statements.push(db.prepare('UPDATE accounts SET sort_order = ? WHERE name = ?').bind(item.sortOrder, item.name));
-    }
-    const defaultName = snapshot.accounts.find(item => item.isDefault === 1)?.name;
-    if (defaultName) statements.push(db.prepare('UPDATE accounts SET is_default = CASE WHEN name = ? THEN 1 ELSE 0 END').bind(defaultName));
-  }
-
-  for (const item of plan.missingGroups) {
-    statements.push(db.prepare(`
-      INSERT INTO category_groups(kind, name, sort_order, created_at)
-      VALUES (?, ?, ?, ?)
-    `).bind(item.kind, item.name, plan.mode === 'pristine_merge' ? item.sortOrder : item.targetSortOrder, item.createdAt));
-  }
-  if (plan.mode === 'pristine_merge') {
-    for (const item of snapshot.groups) {
-      statements.push(db.prepare('UPDATE category_groups SET sort_order = ? WHERE kind = ? AND name = ?')
-        .bind(item.sortOrder, item.kind, item.name));
-    }
-  }
-
-  for (const item of plan.missingCategories) {
-    statements.push(db.prepare(`
-      INSERT INTO categories(kind, group_id, name, sort_order, is_favorite, created_at)
-      SELECT ?, id, ?, ?, ?, ? FROM category_groups WHERE kind = ? AND name = ? LIMIT 1
-    `).bind(
-      item.kind,
-      item.name,
-      plan.mode === 'pristine_merge' ? item.sortOrder : item.targetSortOrder,
-      item.isFavorite,
-      item.createdAt,
-      item.kind,
-      item.groupName
-    ));
-  }
-  if (plan.mode === 'pristine_merge') {
-    for (const pair of plan.reusedCategories) {
-      statements.push(db.prepare(`
-        UPDATE categories SET sort_order = ?, is_favorite = ? WHERE kind = ? AND name = ?
-      `).bind(pair.source.sortOrder, pair.source.isFavorite, pair.source.kind, pair.source.name));
-    }
-    for (const pair of plan.realignCategories) {
-      statements.push(db.prepare(`
-        UPDATE categories
-        SET group_id = (SELECT id FROM category_groups WHERE kind = ? AND name = ? LIMIT 1),
-            sort_order = ?, is_favorite = ?
-        WHERE kind = ? AND name = ?
-      `).bind(pair.source.kind, pair.source.groupName, pair.source.sortOrder, pair.source.isFavorite, pair.source.kind, pair.source.name));
-    }
-  }
-
-  for (let start = 0; start < plan.readyTransactions.length; start += TRANSACTION_INSERT_CHUNK) {
-    const chunk = plan.readyTransactions.slice(start, start + TRANSACTION_INSERT_CHUNK);
-    const placeholders = chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
-    const values = [];
-    for (const item of chunk) {
-      values.push(item.txDate, item.accountName, item.kind, item.categoryName, item.summary, item.amount, item.createdAt, item.updatedAt);
-    }
-    statements.push(db.prepare(`
-      INSERT INTO transactions(tx_date, account_name, kind, category_name, summary, amount, created_at, updated_at)
-      VALUES ${placeholders}
-    `).bind(...values));
-  }
-
-  for (let start = 0; start < plan.readyOpeningBalances.length; start += OPENING_INSERT_CHUNK) {
-    const chunk = plan.readyOpeningBalances.slice(start, start + OPENING_INSERT_CHUNK);
-    const placeholders = chunk.map(() => '(?, ?, ?, ?, ?)').join(', ');
-    const values = [];
-    for (const item of chunk) values.push(item.month, item.accountName, item.amount, item.createdAt, item.updatedAt);
-    statements.push(db.prepare(`
-      INSERT INTO opening_balances(month, account_name, amount, created_at, updated_at)
-      VALUES ${placeholders}
-    `).bind(...values));
-  }
-
-  if (plan.resultingLockedThrough) {
-    statements.push(db.prepare(`
-      INSERT INTO app_settings(key, value) VALUES ('locked_through', ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `).bind(plan.resultingLockedThrough));
-  }
-
-  const historyEntry = {
-    sha256: snapshot.source.fileSha256,
-    fileName: snapshot.source.fileName,
-    schemaVersion: snapshot.source.schemaVersion,
-    importedAt: now,
-    employeeNo: String(session?.employee_no || ''),
-    mode: plan.mode,
-    insertedTransactions: plan.readyTransactions.length,
-    skippedDuplicateTransactions: plan.duplicateTransactions,
-    insertedOpeningBalances: plan.readyOpeningBalances.length
-  };
-  const history = [historyEntry, ...target.history].slice(0, HISTORY_LIMIT);
-  statements.push(db.prepare(`
-    INSERT INTO app_settings(key, value) VALUES (?, ?)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).bind(HISTORY_KEY, JSON.stringify(history)));
-
-  try {
-    await db.batch(statements);
-  } catch (error) {
-    console.error('cyaccounting_desktop_migration_write_failed', error instanceof Error ? error.message : String(error));
-    throw new DesktopMigrationError('桌面帳本移轉寫入失敗；D1 transaction 已回滾，請重新建立預覽後再試。', 'MIGRATION_WRITE_FAILED', 500);
-  }
-
-  return {
-    sourceSha256: snapshot.source.fileSha256,
-    sourceSchemaVersion: snapshot.source.schemaVersion,
-    mode: plan.mode,
-    insertedAccounts: plan.missingAccounts.length,
-    insertedGroups: plan.missingGroups.length,
-    insertedCategories: plan.missingCategories.length,
-    insertedTransactions: plan.readyTransactions.length,
-    skippedDuplicateTransactions: plan.duplicateTransactions,
-    insertedOpeningBalances: plan.readyOpeningBalances.length,
-    skippedDuplicateOpeningBalances: plan.duplicateOpeningBalances,
-    historicalAccountsPreserved: plan.historicalAccounts,
-    historicalCategoriesPreserved: plan.historicalCategories,
-    lockedThrough: plan.resultingLockedThrough,
-    completedAt: now
-  };
-}
-
-function publicAnalysis(analysis) {
+export function publicAnalysis(analysis) {
   const { snapshot, target, plan } = analysis;
   return {
     source: {
@@ -689,16 +495,6 @@ function assertUnique(values, message) {
   if (new Set(values).size !== values.length) throw new DesktopMigrationError(message, 'SOURCE_DUPLICATE_KEY', 400);
 }
 
-function migrationErrorResponse(error) {
-  if (error instanceof DesktopMigrationError) {
-    const body = { ok: false, error: error.message, code: error.code };
-    if (error.detail) body.preview = error.detail;
-    return json(body, error.status);
-  }
-  console.error('cyaccounting_desktop_migration_failed', error instanceof Error ? error.message : String(error));
-  return json({ ok: false, error: '桌面帳本移轉處理失敗，請稍後再試。', code: 'MIGRATION_FAILED' }, 500);
-}
-
 export class DesktopMigrationError extends Error {
   constructor(message, code, status = 400, detail = null) {
     super(message);
@@ -707,15 +503,4 @@ export class DesktopMigrationError extends Error {
     this.status = status;
     this.detail = detail;
   }
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
-      'x-content-type-options': 'nosniff'
-    }
-  });
 }
