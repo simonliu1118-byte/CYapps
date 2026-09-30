@@ -16,6 +16,7 @@ public static class FontCatalog
         new("DFKai-SB", "標楷體", null),
         new("PMingLiU", "新細明體", null),
         new("Noto Sans TC", "思源黑體（內建）", "NotoSansTC-Regular.otf"),
+        new("Noto Serif TC", "思源宋體（內建）", "NotoSerifTC-Regular.otf"),
         new("LXGW WenKai TC", "霞鶩文楷（內建，楷書風）", "LXGWWenKaiTC-Regular.ttf")
     ];
 

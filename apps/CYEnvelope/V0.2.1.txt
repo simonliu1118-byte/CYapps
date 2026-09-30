@@ -1,6 +1,6 @@
 CYEnvelope V0.2.1（開發測試版，尚未正式發行）
 日期：2026/09/27
-BUILD：0（各 Build 記錄依序附於下方；目前為 Build 11，見 BUILD 檔）
+BUILD：0（各 Build 記錄依序附於下方；目前為 Build 12，見 BUILD 檔）
 
 下載方式調整
 - 將 .NET 管理組件打包進 CYEnvelope.exe；保留必要原生元件 D3DCompiler_47_cor3.dll、e_sqlite3.dll、PenImc_cor3.dll、PresentationNative_cor3.dll、vcruntime140_cor3.dll、wpfgfx_cor3.dll。資料夾另外只有 VERSION 與 BUILD，沒有多語系資源目錄。
@@ -111,3 +111,7 @@ BUILD 11（信封字體設定與內建字體；2026/09/30）
 - 內建字體皆為 SIL Open Font License 1.1：建置時由 tools/fetch-fonts.ps1 從固定提交網址下載並驗證大小與 SHA-256（清單 tools/fonts.json），嵌入程式；字體檔不進 Git。可攜資料夾根目錄新增 FONT_LICENSES.txt（授權全文）。CI 先取得字體再建置。
 - 「格式設定」移除各欄位的字型輸入（字體改由「設定」統一選擇）；既有格式內的字型名稱不再使用。
 - 畫面檢查新增：內建字體確實在封包內、字體家族名稱正確、涵蓋信封文字，並輸出各字體的信封擷取圖。
+
+BUILD 12（加入思源宋體；2026/09/30）
+- 內建字體新增思源宋體 Noto Serif TC（SIL OFL 1.1，約 8 MB）；設定的信封字體共 5 個選項：標楷體、新細明體、思源黑體、思源宋體、霞鶩文楷 TC。來源固定於與思源黑體相同的提交，雜湊記錄於 tools/fonts.json，授權全文併入 FONT_LICENSES.txt。
+- 每款內建字體在專案中各自可缺（缺少的字體在設定中標示「此版本未內建」）。畫面檢查自動涵蓋新字體（封包內、家族名稱、涵蓋信封文字、輸出擷取圖）。

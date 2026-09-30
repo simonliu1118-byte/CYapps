@@ -12,6 +12,16 @@
       "copyright": "© 2014-2021 Adobe (http://www.adobe.com/)"
     },
     {
+      "file": "NotoSerifTC-Regular.otf",
+      "family": "Noto Serif TC",
+      "display": "思源宋體",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Serif/SubsetOTF/TC/NotoSerifTC-Regular.otf",
+      "bytes": 7936104,
+      "sha256": "63515eb0622d589a2f4062e8757c598b3da3bffd053f69abd181c210158ef10c",
+      "license": "SIL Open Font License 1.1",
+      "copyright": "© 2017-2024 Adobe (http://www.adobe.com/)"
+    },
+    {
       "file": "LXGWWenKaiTC-Regular.ttf",
       "family": "LXGW WenKai TC",
       "display": "霞鶩文楷（楷書風）",
