@@ -2,6 +2,9 @@ export const SESSION_COOKIE = 'cyaccounting_session';
 
 const SESSION_TOKEN_PATTERN = /^cyid_[0-9a-f]{64}$/;
 const ROLES = new Set(['USER', 'ADMIN', 'SUPER_ADMIN']);
+const DEFAULT_IDENTITY_TIMEOUT_MS = 5_000;
+const MIN_IDENTITY_TIMEOUT_MS = 100;
+const MAX_IDENTITY_TIMEOUT_MS = 15_000;
 const resolutionCache = new WeakMap();
 
 export function identityRuntimeConfig(env) {
@@ -222,11 +225,34 @@ async function identityFetch(request, env, path, options = {}) {
   }
   if (options.body !== undefined) headers.set('content-type', 'application/json');
 
-  return env.IDENTITY.fetch(new Request(`https://cyid.internal${path}`, {
+  const providerRequest = new Request(`https://cyid.internal${path}`, {
     method: 'POST',
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body)
-  }));
+  });
+
+  const timeoutMs = identityProviderTimeoutMs(env);
+  let timeoutId;
+  const timeout = new Promise(resolve => {
+    timeoutId = setTimeout(() => resolve(new Response(JSON.stringify({
+      error: { code: 'IDENTITY_TIMEOUT', message: 'Identity provider did not respond in time.' }
+    }), {
+      status: 504,
+      headers: { 'content-type': 'application/json; charset=utf-8' }
+    })), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([env.IDENTITY.fetch(providerRequest), timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
+function identityProviderTimeoutMs(env) {
+  const configured = Number(env?.CYID_PROVIDER_TIMEOUT_MS);
+  if (!Number.isFinite(configured)) return DEFAULT_IDENTITY_TIMEOUT_MS;
+  return Math.max(MIN_IDENTITY_TIMEOUT_MS, Math.min(Math.trunc(configured), MAX_IDENTITY_TIMEOUT_MS));
 }
 
 function normalizePrincipal(value) {
