@@ -131,6 +131,10 @@ assert.equal(cfVisitorHttp.status, 308, 'Cloudflare HTTP visitor login must redi
 const secureLoginPage = await appV19.fetch(new Request('https://acc.example.com/login'), httpsAssetEnv);
 assert.equal(secureLoginPage.status, 200);
 assert.equal(secureLoginPage.headers.get('strict-transport-security'), 'max-age=31536000');
+assert.equal(
+  secureLoginPage.headers.get('content-security-policy'),
+  'upgrade-insecure-requests; form-action https:'
+);
 
 const routeEnv = { ...env, DB: {} };
 for (const [method, route, body] of [
@@ -166,8 +170,11 @@ const versionPatch = fs.readFileSync(path.join(ROOT, 'public/v0216.js'), 'utf8')
 const workerApp = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
 assert.match(loginHtml, /action="\/login" method="post"/);
+assert.match(loginHtml, /window\.location\.protocol === 'http:'/);
+assert.match(loginHtml, /window\.location\.replace/);
 assert.doesNotMatch(loginHtml, /src="\/app\.js"/);
 assert.match(workerApp, /url\.pathname === '\/login\.html'[\s\S]*?redirect\('\/login'/);
+assert.match(workerApp, /upgrade-insecure-requests; form-action https:/);
 assert.match(authJs, /activateReadOnlyMobileLedger/);
 assert.match(authJs, /data-mobile-page="ledger"/);
 assert.match(authCss, /data-mobile-ledger-action="accounts"/);
