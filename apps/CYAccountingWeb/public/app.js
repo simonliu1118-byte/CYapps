@@ -81,7 +81,13 @@ async function startCyaccApp() {
     els.monthFilter.value = today.slice(0, 7);
     els.openingMonth.value = today.slice(0, 7);
     bindEvents();
+
+    setCyaccBootStage('正在驗證帳號…');
+    if (window.cyaccSessionPromise) await window.cyaccSessionPromise;
+
     await initialize();
+    window.cyaccCoreReady = true;
+    window.dispatchEvent(new CustomEvent('cyacc:core-ready'));
   } catch (error) {
     startupError = error instanceof Error ? error : new Error('APP_STARTUP_FAILED');
     console.error('cyaccounting_app_start_failed', startupError.message);
@@ -90,6 +96,11 @@ async function startCyaccApp() {
   } finally {
     finishCyaccBoot(startupError);
   }
+}
+
+function setCyaccBootStage(message) {
+  const status = document.querySelector('#cyaccBootStatus');
+  if (status) status.textContent = message;
 }
 
 function finishCyaccBoot(error = null) {
@@ -166,6 +177,7 @@ function bindEvents() {
 
 async function initialize() {
   try {
+    setCyaccBootStage('正在檢查服務…');
     const health = await api('/api/health');
     if (!health.database) {
       setConnection('網站已啟動，等待 D1 設定', 'warn');
@@ -173,8 +185,10 @@ async function initialize() {
       els.saveButton.disabled = true;
       return;
     }
+    setCyaccBootStage('正在載入帳戶與科目…');
     await refreshBootstrap();
     setConnection('已連線', 'ok');
+    setCyaccBootStage('正在載入本月資料…');
     await loadTransactions();
   } catch (error) {
     setConnection('連線失敗', 'warn');
