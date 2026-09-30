@@ -20,49 +20,24 @@ jobs:
       run:
         working-directory: apps/CYCloudIdentity
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
       - name: Scan public source
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/scan-public-package.py apps/CYCloudIdentity
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
-      - name: Install development dependencies
+      - name: Install dependencies
         run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
-      - name: Type-check Worker
-        run: npm run check
-      - name: Run auth-core tests
-        run: npm test
-      - name: Render CI-only Cloudflare config
-        env:
-          CYID_WORKER_NAME: cycloud-identity-ci
-          CYID_D1_DATABASE_NAME: cycloud_identity_ci
-          CYID_D1_DATABASE_ID: 11111111-1111-4111-8111-111111111111
-          CYID_LOGIN_RATE_LIMIT_NAMESPACE_ID: "900101"
-          CYID_SESSION_TTL_SECONDS: "3600"
-          CYID_EMAIL_PROVIDER: brevo
-          CYID_EMAIL_FROM: Identity Test <identity@example.test>
-          CYID_EMAIL_DAILY_BUDGET: "50"
-          CYID_CORE_ACCOUNT_APPLICATION_ID: APP_TEST_LOGIN
-          CYID_ACCOUNT_PORTAL_URL: https://portal.example.test/
-        run: node scripts/render-deploy-config.mjs --output wrangler.ci.generated.jsonc
-      - name: Validate migrations locally
-        run: npx wrangler d1 migrations apply DB --local --persist-to /tmp/cycloudidentity-production-ci-d1 --config wrangler.ci.generated.jsonc
-      - name: Validate Worker bundle
-        run: npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc
-      - name: Remove generated config
-        if: always()
-        run: rm -f wrangler.ci.generated.jsonc
+      - name: Validate provider source
+        run: |
+          npm run check
+          npm test
 
-  provision-production:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-production'
+  provision-resources:
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    # The protected development Environment is used only as the existing deploy-
-    # credential source. Production Worker/D1/runtime/secrets are separate resources.
+    timeout-minutes: 15
     environment: development
     defaults:
       run:
@@ -70,286 +45,93 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CYID_BREVO_API_KEY: ${{ secrets.CYID_BREVO_API_KEY }}
-      CYID_RESEND_API_KEY: ${{ secrets.CYID_RESEND_API_KEY }}
-
+      DEV_CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
+      DEV_CYID_D1_DATABASE_NAME: ${{ vars.CYID_D1_DATABASE_NAME }}
+      DEV_CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
-
-      - name: Install development dependencies
+      - name: Install dependencies
         run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
 
-      - name: Verify protected deploy credentials
+      - name: Derive isolated production resource targets
         shell: bash
         run: |
           set -euo pipefail
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+          required=(CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DEV_CYID_WORKER_NAME DEV_CYID_D1_DATABASE_NAME DEV_CYID_D1_DATABASE_ID)
+          for name in "${required[@]}"; do
             if [[ -z "${!name:-}" ]]; then
-              echo "Missing protected Cloudflare deployment credential." >&2
+              echo "Missing protected production provisioning prerequisite." >&2
               exit 1
             fi
           done
 
-      - name: Discover current CYID development authority without logging identifiers
-        shell: bash
-        run: |
-          set -euo pipefail
-          api="https://api.cloudflare.com/client/v4"
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          if [[ "$DEV_CYID_WORKER_NAME" == *-development ]]; then
+            PROD_CYID_WORKER_NAME="${DEV_CYID_WORKER_NAME%-development}-production"
+          elif [[ "$DEV_CYID_WORKER_NAME" == *-dev ]]; then
+            PROD_CYID_WORKER_NAME="${DEV_CYID_WORKER_NAME%-dev}-prod"
+          else
+            PROD_CYID_WORKER_NAME="${DEV_CYID_WORKER_NAME}-prod"
+          fi
 
-          if ! curl -fsS "${auth[@]}" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts" > /tmp/cyid-workers.json; then
-            echo "Unable to inspect Cloudflare Worker inventory." >&2
+          if [[ "$DEV_CYID_D1_DATABASE_NAME" == *-dev-db ]]; then
+            PROD_CYID_D1_DATABASE_NAME="${DEV_CYID_D1_DATABASE_NAME%-dev-db}-prod-db"
+          elif [[ "$DEV_CYID_D1_DATABASE_NAME" == *_dev_db ]]; then
+            PROD_CYID_D1_DATABASE_NAME="${DEV_CYID_D1_DATABASE_NAME%_dev_db}_prod_db"
+          else
+            PROD_CYID_D1_DATABASE_NAME="${DEV_CYID_D1_DATABASE_NAME}-prod"
+          fi
+
+          if [[ "$PROD_CYID_WORKER_NAME" == "$DEV_CYID_WORKER_NAME" || "$PROD_CYID_D1_DATABASE_NAME" == "$DEV_CYID_D1_DATABASE_NAME" ]]; then
+            echo "Production resources must be distinct from development." >&2
             exit 1
           fi
 
-          CYID_DEV_WORKER_NAME="$(node -e '
-            const fs=require("node:fs");
-            const data=JSON.parse(fs.readFileSync("/tmp/cyid-workers.json","utf8"));
-            const rows=Array.isArray(data?.result)?data.result:[];
-            const candidates=rows.map(x=>String(x?.id||"")).filter(Boolean).filter(name=>{
-              const n=name.toLowerCase();
-              return n.includes("identity") && (n.includes("dev") || n.includes("development")) && !n.includes("prod");
-            });
-            if (candidates.length!==1) process.exit(2);
-            process.stdout.write(candidates[0]);
-          ')"
-          echo "::add-mask::$CYID_DEV_WORKER_NAME"
-
-          if ! curl -fsS "${auth[@]}" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$CYID_DEV_WORKER_NAME/settings" > /tmp/cyid-dev-settings.json; then
-            echo "Unable to read current CYID development runtime settings." >&2
-            exit 1
-          fi
-
-          if ! npx wrangler d1 list --json > /tmp/cyid-d1-list.json 2>/dev/null; then
-            echo "Unable to inspect Cloudflare D1 inventory." >&2
-            exit 1
-          fi
-
-          CYID_DEV_WORKER_NAME="$CYID_DEV_WORKER_NAME" node <<'NODE'
-          const fs=require('node:fs');
-          const crypto=require('node:crypto');
-          const settings=JSON.parse(fs.readFileSync('/tmp/cyid-dev-settings.json','utf8'))?.result || {};
-          const bindings=Array.isArray(settings.bindings)?settings:[];
-          const byName=new Map(bindings.map(x=>[String(x?.name||''),x]));
-          const db=byName.get('DB');
-          const databaseId=String(db?.database_id || db?.id || '');
-          const list=JSON.parse(fs.readFileSync('/tmp/cyid-d1-list.json','utf8'));
-          const dbs=Array.isArray(list)?list:(Array.isArray(list?.result)?list.result:[]);
-          const dbRow=dbs.find(x=>String(x?.uuid||x?.id||'')===databaseId);
-          const text=(name)=>String(byName.get(name)?.text ?? '');
-          const required={
-            databaseId,
-            databaseName:String(dbRow?.name||''),
-            sessionTtl:text('SESSION_TTL_SECONDS'),
-            emailProvider:text('EMAIL_PROVIDER'),
-            emailFrom:text('EMAIL_FROM'),
-            emailDailyBudget:text('EMAIL_DAILY_BUDGET'),
-            coreApplicationId:text('CORE_ACCOUNT_APPLICATION_ID'),
-          };
-          if (!required.databaseId || !required.databaseName || !required.sessionTtl || !required.emailProvider ||
-              !required.emailFrom || !required.emailDailyBudget || !required.coreApplicationId) process.exit(3);
-          const devWorker=process.env.CYID_DEV_WORKER_NAME;
-          const prodWorker=/(?:-dev|-development)$/i.test(devWorker)
-            ? devWorker.replace(/(?:-dev|-development)$/i,'-prod')
-            : `${devWorker}-prod`;
-          const devDb=required.databaseName;
-          const prodDb=/(?:-dev(?:-db)?|_dev(?:_db)?)$/i.test(devDb)
-            ? devDb.replace(/(?:-dev(?:-db)?|_dev(?:_db)?)$/i, m=>m.startsWith('_')?'_prod_db':'-prod-db')
-            : `${devDb}-prod`;
-          const h=crypto.createHash('sha256').update(prodWorker).digest('hex').slice(0,15);
-         ÛÛÝ]OJYÒ[
-	ÚX
-INLÌLKÔÝ[Ê
-NÂËÜ]Q[TÞ[Ê	ËÝ\ØÞZYY\ØÛÝ\YÛÛËÓÓÝ[ÚYJÂ\]Z\YÙÛÜÙ\Ù]BJKÛ[ÙNÍJNÂÑB^ÜÙÛWÚÛÛ
-HÂØØ[Ù^OHH[Û[YOHØØ[[YB[YOH
-ÑVOHÙ^HÙHYH	ÂÛÛÝÏ\\]Z\JÙNÈNÂÛÛÝRÓÓ\ÙJËXY[TÞ[ÊÝ\ØÞZYY\ØÛÝ\YÛÛ]JNÂÛÛÝZÜØÙ\ÜË[ÑVWNÂY
-OO][Y[YOO[[Ý[ÊOOOHHØÙ\ÜË^]
-NÂØÙ\ÜËÝÝ]Ü]JÝ[ÊJNÂ	ÊHXÚÈY[X\ÚÎ[YH[	É\ÏI\×È[Û[YH[YHÒUPÑSB[	É\ÏI\×ÈÖRQÑUÕÓÔÑTÓSQHÖRQÑUÕÓÔÑTÓSQHÒUPÑS^ÜÙÛWÚÛÛ]X\ÙRYÖRQÑUÑWÑUPTÑWÒQ^ÜÙÛWÚÛÛ]X\ÙS[YHÖRQÑUÑWÑUPTÑWÓSQB^ÜÙÛWÚÛÛÙÛÜÙ\ÖRQÕÓÔÑTÓSQB^ÜÙÛWÚÛÛÙÖRQÑWÑUPTÑWÓSQB^ÜÙÛWÚÛÛ]HÖRQÓÑÒSÔUWÓSRUÓSQTÔPÑWÒQ^ÜÙÛWÚÛÛÙ\ÜÚ[ÛÖRQÔÑTÔÒSÓÕÔÑPÓÓÂ^ÜÙÛWÚÛÛ[XZ[ÝY\ÖRQÑSPRSÔÕQT^ÜÙÛWÚÛÛ[XZ[ÛHÖRQÑSPRSÑÓB^ÜÙÛWÚÛÛ[XZ[Z[PYÙ]ÖRQÑSPRSÑRSWÐQÑU^ÜÙÛWÚÛÛÛÜP\XØ][ÛYÖRQÐÓÔWÐPÐÓÕSÐTPÐUSÓÒQXÚÈÖRQÐPÐÓÕSÔÔSÕTZÎËØYZ[ÚZ]X[ÛKÛÛHÒUPÑSXÚÈÖRQ][ÜY[]]Ü]H\ØÛÝ\YÈÙXÝ[Û\Ù][Y\È\]YÚ]Ý]^ÜÚ[ÈY[YY\ËH[YNÜX]HÜÛÛ\H\Ý[ÝÖRQÙXÝ[ÛÛÜÙ\\ÛÝ\ÙBÚ[\Ú[Ù]Y][È\YZ[\OHÎËØ\KÛÝY\KÛÛKØÛY[ÝÛÙOH
-Ý\\ÔÈ[ÈÝ\ØÞZY\Ù]ÛÜÙ\XÚXÚËÛÛ]È	É^ÚØÛÙ_IÈR]]Ü^][ÛX\\	ÓÕQTWÐTWÕÒÑS\KØXØÛÝ[ËÉÓÕQTWÐPÐÓÕSÒQÝÛÜÙ\ËÜØÜ\ËÉÖRQÕÓÔÑTÓSQKÜÙ][ÜÈHYÖÈÛÙHOHWNÈ[[	É\×È	Ù^ÜY][È\Þ[È]Ú
-
-HÈ]\]È\ÜÛÙJÖRQÙXÝ[ÛÛÝÝ\NÈHNÉÈÝ\ØÞZY\ÙXÝ[ÛXÛÝÝ\ZÂYHÜ[Û\\ÞHÝ\ØÞZY\ÙXÝ[ÛXÛÝÝ\ZÈK[[YHÖRQÕÓÔÑTÓSQHKXÛÛ\]X[]KY]HLKLHÝ\ØÞZY\ÙXÝ[ÛXÛÝÝ\ÙÈNÈ[ÙHYH	ÂÛÛÝÏ\\]Z\JÙNÈNÂÛÛÝHÝ\ØÞZY\ÙXÝ[ÛXÛÝÝ\ÙÈÂÛÛÝ^YË^\ÝÔÞ[Ê
-OÙËXY[TÞ[Ê]NÂÛÛÝÝÏ]^ÓÝÙ\Ø\ÙJ
-NÂÛÛÝØ]ÏV×NÂYÝË[ÛY\ÊXØÙ\ÜÈ_ÝË[ÛY\Ê\Z\ÜÚ[Û_ÝË[ÛY\ÊÜY[_ÝË[ÛY\Ê[]]Ü^YJXØ]Ë\Ú
-TRTÔÒSÓNÂYÝË[ÛY\Ê[Z]_ÝË[ÛY\Ê][ÝHJXØ]Ë\Ú
-USÕHNÂYÝË[ÛY\Ê[YHIÝË[ÛY\Ê[[Y_ÝË[ÛY\Ê[XYHJJXØ]Ë\Ú
-SQHNÂÛÛÛÛK\ÜÖRQÙXÝ[ÛÛÜÙ\ÜX][ÛZ[YØ]YÛÜOHÊØ]ËÚ[_[Û\ÜÚYYYJNÂ	Â^]BB[YÖÈÛÙHOHWNÈ[XÚÈ[XHÈÛÛ\HHÖRQÙXÝ[ÛÛÜÙ\\Ù]^]BBYÖÈÖRQÕÓÔÑTÓSQHOHÖRQÑUÕÓÔÑTÓSQHWNÈ[XÚÈÙXÝ[ÛÛÜÙ\]\ÝH\Ý[ÝÛH][ÜY[^]BBXÚÈ\Ý[ÝÖRQÙXÝ[ÛÛÜÙ\\ÛÝ\ÙH\È]Z[XKH[YNÜX]HÜÛÛ\H\Ý[ÝÖRQÙXÝ[ÛBÚ[\Ú[Ù]Y][È\YZ[\ÝÙ[OH
-ZÝ[\
-HÛX[\Û\Ý
-
-HÈHY\ÝÙ[HÝ\ØÞZY\ÙYKXÜX]KÙÎÈB\ÛX[\Û\ÝVU\ÝÙJ
-HÂÜ[Û\H\ÝKZÛÛ\ÝÙ[HÙ]Û[B[ÚY
-
-HÂÓSQOHÖRQÑWÑUPTÑWÓSQHÙHYH	ÂÛÛÝÏ\\]Z\JÙNÈNÂÛÛÝ]ORÓÓ\ÙJËXY[TÞ[ÊØÙ\ÜË\ÝÌWK]JNÂÛÛÝÝÜÏP\^K\Ð\^J]JOÙ]N\^K\Ð\^J]OË\Ý[
-OÙ]K\Ý[×JNÂÛÛÝ]\ÝÜË[
-OÝ[ÊË[Y_OOO\ØÙ\ÜË[ÓSQJNÂY]
-HØÙ\ÜËÝÝ]Ü]JÝ[Ê]]ZY]YJNÂ	È\ÝÙ[HB\ÝÙBÖRQÑWÑUPTÑWÒQH
-[ÚY
-HYÖÈ^ÖRQÑWÑUPTÑWÒQWNÈ[YHÜ[Û\HÜX]HÖRQÑWÑUPTÑWÓSQHK[ØØ][Û\XÈÝ\ØÞZY\ÙYKXÜX]KÙÈNÈ[XÚÈ[XHÈÜX]HÖRQÙXÝ[ÛK^]BB\ÝÙBÖRQÑWÑUPTÑWÒQH
-[ÚY
-HBYÖÈHÖRQÑWÑUPTÑWÒQ_ÌNXKYKQW^ÌÍIWNÈ[XÚÈÖRQÙXÝ[ÛHY[YY\Z[Y[Y][Û^]BBYÖÈÖRQÑWÑUPTÑWÒQOHÖRQÑUÑWÑUPTÑWÒQWNÈ[XÚÈÙXÝ[ÛH]\ÝH\Ý[ÝÛH][ÜY[^]BBXÚÈY[X\ÚÎÖRQÑWÑUPTÑWÒQXÚÈÖRQÑWÑUPTÑWÒQIÖRQÑWÑUPTÑWÒQÒUPÑSXÚÈ\Ý[ÝÖRQÙXÝ[ÛH\È]Z[XKH[YN[\ÙXÝ[Û[ÛÝ\ÙK[ÛHHÛÛYÜÂÚ[\Ú[Ù]Y][È\YZ[ÙHØÜ\ËÜ[\Y\ÞKXÛÛYËZÈK[Ý]]Ü[Û\ÙXÝ[ÛÙ[\]YÛÛÂÙH	ÓÑIÂ6öç7Bg3×&WV&RvæöFS¦g2r°¢6öç7B&öEFÒww&ævÆW"ç&öGV7FöâævVæW&FVBæ§6öæ2s°¢6öç7B&öCÔ¥4ôâç'6Rg2ç&VDfÆU7æ2&öEFÂwWFcr°¢&öBçf'2äôTåcÒw&öGV7Föâs°¢g2çw&FTfÆU7æ2&öEFÄ¥4ôâç7G&ævg&öBÆçVÆÂÃ"²uÆârÇ¶ÖöFS£ócÒ° ¢½¹ÍÐÍ½ÕÉõì(¹µèå¥µ½¹Ñ¥¹Õ¥ÑäµÍ½ÕÉµÁ±¡½±È°(½µÁÑ¥¥±¥Ñå}ÑèÈÀÈØ´Àä´ÈÔ°(Å}ÑÍÌémì(¥¹¥¹è°(ÑÍ}¹µéÁÉ½ÍÌ¹¹Ø¹e%}Y}Å}Q	M}95°(ÑÍ}¥éÁÉ½ÍÌ¹¹Ø¹e%}Y}Å}Q	M}%(õt(ôì(Ì¹ÝÉ¥Ñ¥±Må¹ ÝÉ¹±È¹Ù±½Áµ¹ÐµÍ½ÕÉ¹¹ÉÑ¹©Í½¹±)M=8¹ÍÑÉ¥¹¥ä¡Í½ÕÉ±¹Õ±°°È¤¬q¸±íµ½èÁ¼ØÀÁô¤ì(9=((´¹µèÁÁ±äÁÉ½ÕÑ¥½¸Äµ¥ÉÑ¥½¹Ì(Í¡±°èÍ (ÉÕ¸èð(ÍÐµÕ¼Á¥Á¥°(¥¹ÁàÝÉ¹±ÈÄµ¥ÉÑ¥½¹ÌÁÁ±ä´µÉµ½Ñ´µ½¹¥ÝÉ¹±È¹ÁÉ½ÕÑ¥½¸¹¹ÉÑ¹©Í½¹ø½ÑµÀ½å¥µÁÉ½µµ¥ÉÑ¹±½ÈøÄìÑ¡¸(¡¼e%ÁÉ½ÕÑ¥½¸Äµ¥ÉÑ¥½¸¥±¸øÈ(á¥ÐÄ(¤((´¹µèÁÑÕÉÙ±½Áµ¹ÐÕÑ¡½É¥Ñä½¹Ñ¥¹Õ¥Ñä¥¸ÉÕ¹¹Èµ½¹±ä¥±Ì(Í¡±°èÍ (ÉÕ¸èð(ÍÐµÕ¼Á¥Á¥°(µ­¥ÈµÀ½ÑµÀ½å¥µØµ½¹Ñ¥¹Õ¥Ñä(Ñ±Ìô (Ý½É­ÍÁÌ(µÁ±½åÌ(µÁ±½å}É¹Ñ¥±Ì(µÁ±½å}¥¹¥Ñ¥±}É¹Ñ¥±Ì(ÁÁ±¥Ñ¥½¹Ì(Ý½É­ÍÁ}ÁÁ±¥Ñ¥½¹Ì(µÁ±½å}ÁÁ±¥Ñ¥½¹}ÍÌ(¥¹Ñ¥Ñå}É½ÕÁÌ(µÁ±½å}¥¹Ñ¥Ñå}É½ÕÁÌ(¥¹Ñ¥Ñå}É½ÕÁ}ÁÁ±¥Ñ¥½¹}ÍÌ(¥¹Ñ¥Ñå}ÍÕÉ¥Ñå}Á½±¥¥Ì(¤(½ÈÑ±¥¸íÑ±Ímuôì¼(¥¹ÁàÝÉ¹±ÈÄáÕÑ´µÉµ½Ñ´µ©Í½¸p(´µ½¹¥ÝÉ¹±È¹Ù±½Áµ¹ÐµÍ½ÕÉ¹¹ÉÑ¹©Í½¹p(´µ½µµ¹M1P¨I=4íÑ±ôìp(ø½ÑµÀ½å¥µØµ½¹Ñ¥¹Õ¥Ñä¼íÑ±ô¹©Í½¸Èø½Ø½¹Õ±°ìÑ¡¸(¡¼U¹±Ñ¼Ée%½¹Ñ¥¹Õ¥ÑäÍ½ÕÉÑ±¸øÈ(á¥ÐÄ(¤(½¹((Í±É}ÅÕÉä ¤ì(±½°ÍÅ°ôÄ½ÕÑÁÕÐôÈ(¹ÁàÝÉ¹±ÈÄáÕÑ´µÉµ½Ñ´µ©Í½¸p(´µ½¹¥ÝÉ¹±È¹Ù±½Áµ¹ÐµÍ½ÕÉ¹¹ÉÑ¹©Í½¹p(´µ½µµ¹ÍÅ°ø½ÕÑÁÕÐÈø½Ø½¹Õ±°(¹½µ(½¹ÍÐÌõÉÅÕ¥É ¹½éÌ¤ì(½¹ÍÐÉÜõ)M=8¹ÁÉÍ¡Ì¹É¥±Må¹¡ÁÉ½ÍÌ¹ÉÙlÅt°ÕÑà¤¤ì(½¹ÍÐÉ½½ÑÌõÉÉä¹¥ÍÉÉä¡ÉÜ¤ýÉÜémÉÝtì(const rows=[];
-              for(const root of roots){
-                if(Array.isArray(root?.results)) rows.push(...root.results);
-                if(Array.isArray(root?.result?.results)) rows.push(...root.result.results);
-              }
-              if(rows.length!==1 || rows[0]?.value===undefined || rows[0]?.value===null) process.exit(2);
-              process.stdout.write(String(rows[0].value));
-            ' "$output"
-          }
-
-          inflight="$(scalar_query "SELECT COUNT(*) AS value FROM employee_initial_credentials WHERE exchange_token_digest IS NOT NULL OR verified_at IS NOT NULL;" /tmp/cyid-inflight.json)"
-          if [[ "$inflight" != "0" ]]; then
-            echo "Production continuity is blocked by an in-flight first-login exchange ticket." >&2
-            exit 1
-          fi
-
-          CYACC_PROD_WORKSPACE_ID="$(scalar_query "SELECT workspace_id AS value FROM workspaces WHERE status='active' ORDER BY workspace_id;" /tmp/cyid-workspace.json)"
-          echo "::add-mask::$CYACC_PROD_WORKSPACE_ID"
-
-          CYACC_PROD_APPLICATION_ID="$(scalar_query "SELECT application_id AS value FROM applications WHERE status='active' AND upper(replace(display_name,' ','')) IN ('CYACCOUNTINGWEB','CYACC') ORDER BY application_id;" /tmp/cyid-cyacc-app.json)"
-          echo "::add-mask::$CYACC_PROD_APPLICATION_ID"
-
-          enabled="$(scalar_query "SELECT COUNT(*) AS value FROM workspace_applications WHERE workspace_id='${CYACC_PROD_WORKSPACE_ID}' AND application_id='${CYACC_PROD_APPLICATION_ID}' AND enabled=1;" /tmp/cyid-cyacc-enabled.json)"
-          grants="$(scalar_query "SELECT COUNT(*) AS value FROM employee_application_access WHERE workspace_id='${CYACC_PROD_WORKSPACE_ID}' AND application_id='${CYACC_PROD_APPLICATION_ID}' AND enabled=1;" /tmp/cyid-cyacc-grants.json)"
-          super_ok="$(scalar_query "SELECT COUNT(*) AS value FROM workspaces w JOIN employees e ON e.workspace_id=w.workspace_id AND e.employee_id=w.super_admin_employee_id JOIN employee_credentials c ON c.employee_id=e.employee_id WHERE w.workspace_id='${CYACC_PROD_WORKSPACE_ID}' AND w.status='active' AND e.enabled=1;" /tmp/cyid-super.json)"
-          if [[ "$enabled" != "1" || "$grants" == "0" || "$super_ok" != "1" ]]; then
-            echo "CYACC development authority is not in a production-continuity-ready state." >&2
-            exit 1
-          fi
-
+          for value in "$DEV_CYID_WORKER_NAME" "$DEV_CYID_D1_DATABASE_NAME" "$DEV_CYID_D1_DATABASE_ID" "$PROD_CYID_WORKER_NAME" "$PROD_CYID_D1_DATABASE_NAME"; do
+            echo "::add-mask::$value"
+          done
           {
-            echo "CYACC_PROD_WORKSPACE_ID=$CYACC_PROD_WORKSPACE_ID"
-            echo "CYACC_PROD_APPLICATION_ID=$CYACC_PROD_APPLICATION_ID"
+            echo "PROD_CYID_WORKER_NAME=$PROD_CYID_WORKER_NAME"
+            echo "PROD_CYID_D1_DATABASE_NAME=$PROD_CYID_D1_DATABASE_NAME"
           } >> "$GITHUB_ENV"
 
-          CYACC_PROD_WORKSPACE_ID="$CYACC_PROD_WORKSPACE_ID" CYACC_PROD_APPLICATION_ID="$CYACC_PROD_APPLICATION_ID" node <<'NODE'
-         ÛÛÝÏ\\]Z\J	ÛÙNÉÊNÂ6öç7BFÒww&ævÆW"ç&öGV7FöâævVæW&FVBæ§6öæ2s°¢6öç7B3Ô¥4ôâç'6Rg2ç&VDfÆU7æ2FÂwWFcr°¢2çf'2ä545ôÄ4DôåôC×&ö6W72æVçbä545õ$ôEôÄ4DôåôC°¢2çf'2ä545õtõ$µ54UôC×&ö6W72æVçbä545õ$ôEõtõ$µ54UôC°¢g2çw&FTfÆU7æ2FÄ¥4ôâç7G&ævg2ÆçVÆÂÃ"²uÆârÇ¶ÖöFS£ócÒ°¢äôDP ¢V6ò%'VææW"ÖöæÇWF÷&G6öçFçVG6æ6÷B2&VGâ  ¢ÒæÖS¢'VÆB'VææW"ÖöæÇ&öGV7Föâ6öçFçVG×÷'@¢6VÆÃ¢&6¢'Vã¢À¢6WBÖWVòVfÀ¢æöFRÃÂtäôDRp¢6öç7Bg3×&WV&RvæöFS¦g2r°¢6öç7BF#Òr÷F×ö7BÖFWbÖ6öçFçVGs°¢6öç7BF&ÆT÷&FW#Õ°¢wv÷&·76W2rÀ¢vV×Æ÷VW2rÀ¢vV×Æ÷VUö7&VFVçFÇ2rÀ¢vV×Æ÷VUöæFÅö7&VFVçFÇ2rÀ¢vÆ6Föç2rÀ¢wv÷&·76UöÆ6Föç2rÀ¢vV×Æ÷VUöÆ6Föåö66W72rÀ¢vFVçFGöw&÷W2rÀ¢vV×Æ÷VUöFVçFGöw&÷W2rÀ¢vFVçFGöw&÷WöÆ6Föåö66W72rÀ¢vFVçFG÷6V7W&G÷öÆ6W2p¢Ó°¢gVæ7Föâ&W7VÇG2F&ÆR°¢6öç7B&sÔ¥4ôâç'6Rg2ç&VDfÆU7æ2G¶F'ÒòG·F&ÆWÒæ§6öæÂwWFcr°¢½¹ÍÐÉ½½ÑÌõÉÉä¹¥ÍÉÉä¡ÉÜ¤ýÉÜémÉÝtì(const rows=[];
-            for(const root of roots){
-              if(Array.isArray(root?.results)) rows.push(...root.results);
-              if(Array.isArray(root?.result?.results)) rows.push(...root.result.results);
-            }
-            return rows;
-          }
-          function ident(v){ return `"${String(v).replaceAll('"','""')}"`; }
-          function lit(v){
-            if(v===null || v===undefined) return 'NULL';
-            if(typeof v==='number') return Number.isFinite(v)?String(v):'NULL';
-            if(typeof v==='boolean') return v?'1':'0';
-            return `'${String(v).replaceAll("'","''")}'`;
-          }
-          function insert(table,row){
-            const keys=Object.keys(row);
-            return `INSERT INTO ${ident(table)}(${keys.map(ident).join(',')}) VALUES(${keys.map(k=>lit(row[k])).join(',')});`;
-          }
-
-         ÛÛÝÝÜÏSØXÝÛQ[Y\ÊXSÜ\X\
-OÝ\Ý[Ê
-WJJNÂÛÛÝÜ[VÉÔQÓPHÜZYÛÚÙ^\ÈHÓÉ×NÂÜÛÛÝÝÈÙÝÜËÛÜÜÜXÙ\Ê^ÂÜ[\Ú
-[Ù\
-	ÝÛÜÜÜXÙ\ÉËËÝËÝ]\ÎØÛÝÝ\	ËÝ\\ØYZ[Ù[\ÞYYWÚY[JJNÂBÜÛÛÝXHÙÉÙ[\ÞYY\ÉË	Ù[\ÞYYWØÜY[X[ÉË	Ù[\ÞYYWÚ[]X[ØÜY[X[É×J^ÂÜÛÛÝÝÈÙÝÜÖÝXWJHÜ[\Ú
-[Ù\
-XKÝÊJNÂBÜÛÛÝÝÈÙÝÜËÛÜÜÜXÙ\Ê^ÂÛÛÝÙ]ÏSØXÝÙ^\ÊÝÊK[\ÏOÈOOIÝÛÜÜÜXÙWÚY	ÊKX\
-ÏO	ÚY[
-Ê_OIÛ]
-ÝÖÚ×J_X
-KÚ[	Ë	ÊNÂÜ[\Ú
-TUHÛÜÜÜXÙ\ÈÑU	ÜÙ]ßHÒTHÛÜÜÜXÙWÚYIÛ]
-ÝËÛÜÜÜXÙWÚY
-_NØ
-NÂBÜÛÛÝXHÙÂ	Ø\XØ][ÛÉË	ÝÛÜÜÜXÙWØ\XØ][ÛÉË	Ù[\ÞYYWØ\XØ][ÛØXØÙ\ÜÉË	ÚY[]WÙÜÝ\ÉË	Ù[\ÞYYWÚY[]WÙÜÝ\ÉË	ÚY[]WÙÜÝ\Ø\XØ][ÛØXØÙ\ÜÉË	ÚY[]WÜÙXÝ\]WÜÛXÚY\ÉÂJ^ÂÜÛÛÝÝÈÙÝÜÖÝXWJHÜ[\Ú
-[Ù\
-XKÝÊJNÂBËÜ]Q[TÞ[Ê	ËÝ\ØÞZY\ÙXÝ[ÛXÛÛ[Z]KÜ[	ËÜ[Ú[	×ÊJÉ×ËÛ[ÙNÍJNÂÑBH[YN[\ÜÜ\YHÙXÝ[Û]]Ü]HÛÛ[Z]BÚ[\Ú[Ù]Y][È\YZ[ØØ[\ÜÙ
-
-HÂØØ[Ü[HHÝ]]HÜ[Û\H^XÝ]HK\[[ÝHKZÛÛKXÛÛYÈÜ[Û\ÙXÝ[ÛÙ[\]YÛÛÈKXÛÛ[X[Ü[Ý]]Ù]Û[ÙHYH	ÂÛÛÝÏ\\]Z\JÙNÈNÂÛÛÝ]ÏRÓÓ\ÙJËXY[TÞ[ÊØÙ\ÜË\ÝÌWK]JNÂÛÛÝÛÝÏP\^K\Ð\^J]ÊOÜ]ÎÜ]×NÂ6öç7B&÷w3ÕµÓ°¢f÷"6öç7B&ö÷Böb&ö÷G2°¢b'&æ4'&&ö÷Còç&W7VÇG2&÷w2çW6ââç&ö÷Bç&W7VÇG2°¢b'&æ4'&&ö÷Còç&W7VÇCòç&W7VÇG2&÷w2çW6ââç&ö÷Bç&W7VÇBç&W7VÇG2°¢Ð¢b&÷w2æÆVæwFÓÓÇÂ&÷w5³ÓòçfÇVSÓÓ×VæFVfæVBÇÂ&÷w5³ÓòçfÇVSÓÓÖçVÆÂ&ö6W72æWB"°¢&ö6W72ç7FF÷WBçw&FR7G&ær&÷w5³ÒçfÇVR°¢r"F÷WGWB ¢Ð ¢W7FæsÒ"B66Æ%÷&öB%4TÄT5B4õTåB¢2fÇVRe$ôÒv÷&·76W3²"÷F×ö7B×&öB×v÷&·76RÖ6÷VçBæ§6öâ ¢bµ²"FW7Fær"ÓÒ#"ÕÓ²FVà¢bçw&ævÆW"CWV7WFRD"Ò×&VÖ÷FRÀ¢ÒÖ6öæfrw&ævÆW"ç&öGV7FöâævVæW&FVBæ§6öæ2À¢ÒÖfÆR÷F×ö7B×&öGV7FöâÖ6öçFçVGç7ÂÀ¢â÷F×ö7B×&öBÖ×÷'BæÆör#âc²FVà¢V6ò$5B&öGV7FöâWF÷&G6öçFçVG×÷'BfÆVBâ"âc ¢WB¢f¢f ¢Ö¶F"×÷F×ö7B×&öBÖ6öçFçVG¢F&ÆW3Ò¢v÷&·76W0¢V×Æ÷VW0¢V×Æ÷VUö7&VFVçFÇ0¢V×Æ÷VUöæFÅö7&VFVçFÇ0¢Æ6Föç0¢v÷&·76UöÆ6Föç0¢V×Æ÷VUöÆ6Föåö66W70¢FVçFGöw&÷W0¢V×Æ÷VUöFVçFGöw&÷W0¢FVçFGöw&÷WöÆ6Föåö66W70ker, prodDb, rate
-          }),{mode:0o600});
-          NODE
-
-          export_from_json() {
-            local key="$1" env_name="$2"
-            local value
-            value="$(KEY="$key" node -e '
-              const fs=require("node:fs");
-              const j=JSON.parse(fs.readFileSync("/tmp/cyid-discovered.json","utf8"));
-              const v=j[process.env.KEY];
-              if (v===undefined || v===null || String(v)==="") process.exit(2);
-              process.stdout.write(String(v));
-            ')"
-            echo "::add-mask::$value"
-            printf '%s=%s\n' "$env_name" "$value" >> "$GITHUB_ENV"
-          }
-
-          printf '%s=%s\n' "CYID_DEV_WORKER_NAME" "$CYID_DEV_WORKER_NAME" >> "$GITHUB_ENV"
-          export_from_json databaseId CYID_DEV_D1_DATABASE_ID
-          export_from_json databaseName CYID_DEV_D1_DATABASE_NAME
-          export_from_json prodWorker CYID_WORKER_NAME
-          export_from_json prodDb CYID_D1_DATABASE_NAME
-          export_from_json rate CYID_LOGIN_RATE_LIMIT_NAMESPACE_ID
-          export_from_json sessionTtl CYID_SESSION_TTL_SECONDS
-          export_from_json emailProvider CYID_EMAIL_PROVIDER
-          export_from_json emailFrom CYID_EMAIL_FROM
-          export_from_json emailDailyBudget CYID_EMAIL_DAILY_BUDGET
-          export_from_json coreApplicationId CYID_CORE_ACCOUNT_APPLICATION_ID
-          echo "CYID_ACCOUNT_PORTAL_URL=https://admin.chihyuancm.com" >> "$GITHUB_ENV"
-
-          echo "CYID development authority discovered; production target names derived without exposing identifiers."
-
-      - name: Create or confirm distinct CYID production Worker resource
+      - name: Create or confirm production Worker
         shell: bash
         run: |
           set -euo pipefail
           api="https://api.cloudflare.com/client/v4"
-          code="$(curl -sS -o /tmp/cyid-prod-worker-check.json -w '%{http_code}' \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$CYID_WORKER_NAME/settings")"
+          code="$(curl -sS -o /tmp/cyid-prod-worker-check.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$PROD_CYID_WORKER_NAME/settings")"
 
           if [[ "$code" == "404" ]]; then
             printf '%s\n' 'export default { async fetch() { return new Response("CYID production bootstrap"); } };' > /tmp/cyid-production-bootstrap.mjs
-            if ! npx wrangler deploy /tmp/cyid-production-bootstrap.mjs \
-              --name "$CYID_WORKER_NAME" \
-              --compatibility-date 2026-09-25 \
-              > /tmp/cyid-production-bootstrap.log 2>&1; then
+            if ! npx wrangler deploy /tmp/cyid-production-bootstrap.mjs --name "$PROD_CYID_WORKER_NAME" --compatibility-date 2026-09-25 > /tmp/cyid-prod-worker-create.log 2>&1; then
               node -e '
                 const fs=require("node:fs");
-                const p="/tmp/cyid-production-bootstrap.log";
-                const text=fs.existsSync(p)?fs.readFileSync(p,"utf8"):"";
-                const low=text.toLowerCase();
-                const cats=[];
-                if(low.includes("access")||low.includes("permission")||low.includes("forbidden")||low.includes("unauthorized"))cats.push("PERMISSION");
-                if(low.includes("limit")||low.includes("quota"))cats.push("QUOTA");
-                if(low.includes("name")&&(low.includes("invalid")||low.includes("already")))cats.push("NAME");
-                console.error("CYID production Worker creation failed category="+(cats.join(",")||"unclassified"));
+                const t=fs.existsSync("/tmp/cyid-prod-worker-create.log")?fs.readFileSync("/tmp/cyid-prod-worker-create.log","utf8").toLowerCase():"";
+                const c=[];
+                if(t.includes("access")||t.includes("permission")||t.includes("forbidden")||t.includes("unauthorized")) c.push("PERMISSION");
+                if(t.includes("quota")||t.includes("limit")) c.push("QUOTA");
+                if(t.includes("name")&&(t.includes("invalid")||t.includes("already"))) c.push("NAME");
+                console.error("CYID production Worker creation failed category="+(c.join(",")||"unclassified"));
               '
               exit 1
             fi
           elif [[ "$code" != "200" ]]; then
-            echo "Unable to confirm the CYID production Worker target." >&2
-            exit 1
-          fi
-
-          if [[ "$CYID_WORKER_NAME" == "$CYID_DEV_WORKER_NAME" ]]; then
-            echo "Production Worker must be distinct from development." >&2
+            echo "Unable to inspect CYID production Worker target." >&2
             exit 1
           fi
           echo "Distinct CYID production Worker resource is available."
 
-      - name: Create or confirm distinct CYID production D1
+      - name: Create or confirm production D1
         shell: bash
         run: |
           set -euo pipefail
           list_file="$(mktemp)"
-          cleanup_list() { rm -f "$list_file" /tmp/cyid-prod-d1-create.log; }
-          trap cleanup_list EXIT
-
-          list_d1() {
-            npx wrangler d1 list --json > "$list_file" 2>/dev/null
-          }
+          npx wrangler d1 list --json > "$list_file" 2>/dev/null
           find_id() {
-            DB_NAME="$CYID_D1_DATABASE_NAME" node -e '
+            DB_NAME="$PROD_CYID_D1_DATABASE_NAME" node -e '
               const fs=require("node:fs");
               const data=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
               const rows=Array.isArray(data)?data:(Array.isArray(data?.result)?data.result:[]);
@@ -358,114 +140,23 @@ HÂØØ[Ü[HHÝ]]HÜ[�
             ' "$list_file"
           }
 
-          list_d1
-          CYID_D1_DATABASE_ID="$(find_id)"
-          if [[ -z "$CYID_D1_DATABASE_ID" ]]; then
-            if ! npx wrangler d1 create "$CYID_D1_DATABASE_NAME" --location apac > /tmp/cyid-prod-d1-create.log 2>&1; then
+          PROD_CYID_D1_DATABASE_ID="$(find_id)"
+          if [[ -z "$PROD_CYID_D1_DATABASE_ID" ]]; then
+            if ! npx wrangler d1 create "$PROD_CYID_D1_DATABASE_NAME" --location apac > /tmp/cyid-prod-d1-create.log 2>&1; then
               echo "Unable to create CYID production D1." >&2
               exit 1
             fi
-            list_d1
-            CYID_D1_DATABASE_ID="$(find_id)"
+            npx wrangler d1 list --json > "$list_file" 2>/dev/null
+            PROD_CYID_D1_DATABASE_ID="$(find_id)"
           fi
-          if [[ ! "$CYID_D1_DATABASE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-            echo "CYID production D1 identifier failed validation." >&2
+
+          if [[ ! "$PROD_CYID_D1_DATABASE_ID" =~ ^[0-9a-fA-F-]{36}$ || "$PROD_CYID_D1_DATABASE_ID" == "$DEV_CYID_D1_DATABASE_ID" ]]; then
+            echo "Production D1 isolation validation failed." >&2
             exit 1
           fi
-          if [[ "$CYID_D1_DATABASE_ID" == "$CYID_DEV_D1_DATABASE_ID" ]]; then
-            echo "Production D1 must be distinct from development." >&2
-            exit 1
-          fi
-          echo "::add-mask::$CYID_D1_DATABASE_ID"
-          echo "CYID_D1_DATABASE_ID=$CYID_D1_DATABASE_ID" >> "$GITHUB_ENV"
-          echo "Distinct CYID production D1 is available."
+          echo "::add-mask::$PROD_CYID_D1_DATABASE_ID"
+          echo "CYID production resource preflight passed."
 
-      - name: Render production and source-only D1 configs
-        shell: bash
-        run: |
-          set -euo pipefail
-          node scripts/render-deploy-config.mjs --output wrangler.production.generated.jsonc
-          node <<'NODE'
-         ÛÛÝÏ\\]Z\J	ÛÙNÉÊNÂ6öç7B&öEFÒww&ævÆW"ç&öGV7FöâævVæW&FVBæ§6öæ2s°¢6öç7B&öCÔ¥4ôâç'6Rg2ç&VDfÆU7æ2&öEFÂwWFcr°¢&öBçf'2äôTåcÒw&öGV7Föâs°¢g2çw&FTfÆU7æ2&öEFÄ¥4ôâç7G&ævg&öBÆçVÆÂÃ"²uÆârÇ¶ÖöFS£ócÒ° ¢½¹ÍÐÍ½ÕÉõì(¹µèå¥µ½¹Ñ¥¹Õ¥ÑäµÍ½ÕÉµÁ±¡½±È°(½µÁÑ¥¥±¥Ñå}ÑèÈÀÈØ´Àä´ÈÔ°(Å}ÑÍÌémì(¥¹¥¹è°(ÑÍ}¹µéÁÉ½ÍÌ¹¹Ø¹e%}Y}Å}Q	M}95°(ÑÍ}¥éÁÉ½ÍÌ¹¹Ø¹e%}Y}Å}Q	M}%(õt(ôì(Ì¹ÝÉ¥Ñ¥±Må¹ ÝÉ¹±È¹Ù±½Áµ¹ÐµÍ½ÕÉ¹¹ÉÑ¹©Í½¹±)M=8¹ÍÑÉ¥¹¥ä¡Í½ÕÉ±¹Õ±°°È¤¬q¸±íµ½èÁ¼ØÀÁô¤ì(9=((´¹µèÁÁ±äÁÉ½ÕÑ¥½¸Äµ¥ÉÑ¥½¹Ì(Í¡±°èÍ (ÉÕ¸èð(ÍÐµÕ¼Á¥Á¥°(¥¹ÁàÝÉ¹±ÈÄµ¥ÉÑ¥½¹ÌÁÁ±ä´µÉµ½Ñ´µ½¹¥ÝÉ¹±È¹ÁÉ½ÕÑ¥½¸¹¹ÉÑ¹©Í½¹ø½ÑµÀ½å¥µÁÉ½µµ¥ÉÑ¹±½ÈøÄìÑ¡¸(¡¼e%ÁÉ½ÕÑ¥½¸Äµ¥ÉÑ¥½¸¥±¸øÈ(á¥ÐÄ(¤((´¹µèÁÑÕÉÙ±½Áµ¹ÐÕÑ¡½É¥Ñä½¹Ñ¥¹Õ¥Ñä¥¸ÉÕ¹¹Èµ½¹±ä¥±Ì(Í¡±°èÍ (ÉÕ¸èð(ÍÐµÕ¼Á¥Á¥°(µ­¥ÈµÀ½ÑµÀ½å¥µØµ½¹Ñ¥¹Õ¥Ñä(Ñ±Ìô (Ý½É­ÍÁÌ(µÁ±½åÌ(µÁ±½å}É¹Ñ¥±Ì(µÁ±½å}¥¹¥Ñ¥±}É¹Ñ¥±Ì(ÁÁ±¥Ñ¥½¹Ì(Ý½É­ÍÁ}ÁÁ±¥Ñ¥½¹Ì(µÁ±½å}ÁÁ±¥Ñ¥½¹}ÍÌ(¥¹Ñ¥Ñå}É½ÕÁÌ(µÁ±½å}¥¹Ñ¥Ñå}É½ÕÁÌ(¥¹Ñ¥Ñå}É½ÕÁ}ÁÁ±¥Ñ¥½¹}ÍÌ(¥¹Ñ¥Ñå}ÍÕÉ¥Ñå}Á½±¥¥Ì(¤(½ÈÑ±¥¸íÑ±Ímuôì¼(¥¹ÁàÝÉ¹±ÈÄáÕÑ´µÉµ½Ñ´µ©Í½¸p(´µ½¹¥ÝÉ¹±È¹Ù±½Áµ¹ÐµÍ½ÕÉ¹¹ÉÑ¹©Í½¹p(´µ½µµ¹M1P¨I=4íÑ±ôìp(ø½ÑµÀ½å¥µØµ½¹Ñ¥¹Õ¥Ñä¼íÑ±ô¹©Í½¸Èø½Ø½¹Õ±°ìÑ¡¸(¡¼U¹±Ñ¼Ée%½¹Ñ¥¹Õ¥ÑäÍ½ÕÉÑ±¸øÈ(á¥ÐÄ(¤(½¹((Í±É}ÅÕÉä ¤ì(±½°ÍÅ°ôÄ½ÕÑÁÕÐôÈ(¹ÁàÝÉ¹±ÈÄáÕÑ´µÉµ½Ñ´µ©Í½¸p(´µ½¹¥ÝÉ¹±È¹Ù±½Áµ¹ÐµÍ½ÕÉ¹¹ÉÑ¹©Í½¹p(´µ½µµ¹ÍÅ°ø½ÕÑÁÕÐÈø½Ø½¹Õ±°(¹½µ(½¹ÍÐÌõÉÅÕ¥É ¹½éÌ¤ì(½¹ÍÐÉÜõ)M=8¹ÁÉÍ¡Ì¹É¥±Må¹¡ÁÉ½ÍÌ¹ÉÙlÅt°ÕÑà¤¤ì(½¹ÍÐÉ½½ÑÌõÉÉä¹¥ÍÉÉä¡ÉÜ¤ýÉÜémÉÝtì(const rows=[];
-              for(const root of roots){
-                if(Array.isArray(root?.results)) rows.push(...root.results);
-                if(Array.isArray(root?.result?.results)) rows.push(...root.result.results);
-              }
-              if(rows.length!==1 || rows[0]?.value===undefined || rows[0]?.value===null) process.exit(2);
-              process.stdout.write(String(rows[0].value));
-            ' "$output"
-          }
-
-          inflight="$(scalar_query "SELECT COUNT(*) AS value FROM employee_initial_credentials WHERE exchange_token_digest IS NOT NULL OR verified_at IS NOT NULL;" /tmp/cyid-inflight.json)"
-          if [[ "$inflight" != "0" ]]; then
-            echo "Production continuity is blocked by an in-flight first-login exchange ticket." >&2
-            exit 1
-          fi
-
-          CYACC_PROD_WORKSPACE_ID="$(scalar_query "SELECT workspace_id AS value FROM workspaces WHERE status='active' ORDER BY workspace_id;" /tmp/cyid-workspace.json)"
-          echo "::add-mask::$CYACC_PROD_WORKSPACE_ID"
-
-          CYACC_PROD_APPLICATION_ID="$(scalar_query "SELECT application_id AS value FROM applications WHERE status='active' AND upper(replace(display_name,' ','')) IN ('CYACCOUNTINGWEB','CYACC') ORDER BY application_id;" /tmp/cyid-cyacc-app.json)"
-          echo "::add-mask::$CYACC_PROD_APPLICATION_ID"
-
-          enabled="$(scalar_query "SELECT COUNT(*) AS value FROM workspace_applications WHERE workspace_id='${CYACC_PROD_WORKSPACE_ID}' AND application_id='${CYACC_PROD_APPLICATION_ID}' AND enabled=1;" /tmp/cyid-cyacc-enabled.json)"
-          grants="$(scalar_query "SELECT COUNT(*) AS value FROM employee_application_access WHERE workspace_id='${CYACC_PROD_WORKSPACE_ID}' AND application_id='${CYACC_PROD_APPLICATION_ID}' AND enabled=1;" /tmp/cyid-cyacc-grants.json)"
-          super_ok="$(scalar_query "SELECT COUNT(*) AS value FROM workspaces w JOIN employees e ON e.workspace_id=w.workspace_id AND e.employee_id=w.super_admin_employee_id JOIN employee_credentials c ON c.employee_id=e.employee_id WHERE w.workspace_id='${CYACC_PROD_WORKSPACE_ID}' AND w.status='active' AND e.enabled=1;" /tmp/cyid-super.json)"
-          if [[ "$enabled" != "1" || "$grants" == "0" || "$super_ok" != "1" ]]; then
-            echo "CYACC development authority is not in a production-continuity-ready state." >&2
-            exit 1
-          fi
-
-          {
-            echo "CYACC_PROD_WORKSPACE_ID=$CYACC_PROD_WORKSPACE_ID"
-            echo "CYACC_PROD_APPLICATION_ID=$CYACC_PROD_APPLICATION_ID"
-          } >> "$GITHUB_ENV"
-
-          CYACC_PROD_WORKSPACE_ID="$CYACC_PROD_WORKSPACE_ID" CYACC_PROD_APPLICATION_ID="$CYACC_PROD_APPLICATION_ID" node <<'NODE'
-         ÛÛÝÏ\\]Z\J	ÛÙNÉÊNÂ6öç7BFÒww&ævÆW"ç&öGV7FöâævVæW&FVBæ§6öæ2s°¢½¹ÍÐõ)M=8¹ÁÉÍ¡Ì¹É¥±Må¹¡ÁÑ °ÕÑà¤¤ì(const c.vars.CYACC_APPLICATION_ID=process.env.CYACC_PROD_APPLICATION_ID;
-          c.vars.CYACC_WORKSPACE_ID=process.env.CYACC_PROD_WORKSPACE_ID;
-          fs.writeFileSync(path,JSON.stringify(c,null,2)+'\n',{mode:0o600});
-          NODE
-
-          echo "Runner-only authority continuity snapshot is ready."
-
-      - name: Build runner-only production continuity import
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const fs=require('node:fs');
-          const dir='/tmp/cyid-dev-continuity';
-          const tableOrder=[
-            'workspaces',
-            'employees',
-            'employee_credentials',
-            'employee_initial_credentials',
-            'applications',
-            'workspace_applications',
-            'employee_application_accessV6ò$542FWfVÆ÷ÖVçBWF÷&G2æ÷Bâ&öGV7FöâÖ6öçFçVG×&VG7FFRâ"âc ¢WB¢f ¢°¢V6ò$545õ$ôEõtõ$µ54UôCÒD545õ$ôEõtõ$µ54UôB ¢V6ò$545õ$ôEôÄ4DôåôCÒD545õ$ôEôÄ4DôåôB ¢Òãâ"DtDT%ôTåb  ¢545õ$ôEõtõ$µ54UôCÒ"D545õ$ôEõtõ$µ54UôB"545õ$ôEôÄ4DôåôCÒ"D545õ$ôEôÄ4DôåôB"æöFRÃÂtäôDRp¢6öç7Bg3×&WV&RvæöFS¦g2r°¢6öç7BFÒww&ævÆW"ç&öGV7FöâævVæW&FVBæ§6öæ2s°¢½¹ÍÐõ)M=8¹ÁÉÍ¡Ì¹É¥±Må¹¡ÁÑ °ÕÑà¤¤ì(const c.vars.CYACC_APPLICATION_ID=process.env.CYACC_PROD_APPLICATION_ID;
-          c.vars.CYACC_WORKSPACE_ID=process.env.CYACC_PROD_WORKSPACE_ID;
-          fs.writeFileSync(path,JSON.stringify(c,null,2)+'\n',{mode:0o600});
-          NODE
-
-          echo "Runner-only authority continuity snapshot is ready."
-
-      - name: Build runner-only production continuity import
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const fs=require('node:fs');
-          const dir='/tmp/cyid-dev-continuity';
-          const tableOrder=[
-            'workspaces',
-            'employees',
-            'employee_credentials',
-            'employee_initial_credentials',
-            'applications',
-            'workspace_applications',
-            'employee_application_access6V7&WBWB%$Udõôô´UÒÖ6öæfrw&ævÆW"ç&öGV7FöâævVæW&FVBæ§6öæ2âöFWböçVÆÀ¢VÆbµ²"D5EôTÔÅõ$õdDU""ÓÒ'&W6VæB"ÕÓ²FVà¢bµ²×¢"G´5Eõ$U4TäEôô´U¢×Ò"ÕÓ²FVà¢V6ò%&÷FV7FVB&W6VæB¶W2VæfÆ&ÆRf÷"&öGV7Föâ&÷fFW"â"âc ¢WB¢f¢&çFbrW2r"D5Eõ$U4TäEôô´U"Âçw&ævÆW"6V7&WBWB$U4TäEôô´UÒÖ6öæfrw&ævÆW"ç&öGV7FöâævVæW&FVBæ§6öæ2âöFWböçVÆÀ¢VÇ6P¢V6ò%Vç7W÷'FVB&öGV7FöâVÖÂ&÷fFW"â"âc ¢WB¢f¢V6ò%&öGV7FöâÖöæÇFVçFG6V7&WG26öæfwW&VBâ  ¢ÒæÖS¢fW&g5B&öGV7Föâ&÷fFW"WF÷&GVæBFòVæ@¢6VÆÃ¢&6¢'Vã¢À¢6WBÖWVòVfÀ ¢VÇFö6öFSÒ"B7W&Â×52Öò÷F×ö7B×&öBÖVÇFæ§6öâ×rrW¶GGö6öFWÒr"D5Eõ$ôET5DôåõU$Â÷cöVÇF" ¢bµ²"FVÇFö6öFR"Ò##"ÕÓ²FVà¢V6ò$5B&öGV7FöâVÇFfW&f6FöâfÆVBâ"âc ¢WB¢f ¢b7W&ÂÖg52À¢Ô$WF÷&¦Föã¢&V&W"D4ÄõTDdÄ$UôõDô´Tâ"À¢&GG3¢òöæ6Æ÷VFfÆ&Ræ6öÒö6ÆVçB÷cBö66÷VçG2òD4ÄõTDdÄ$Uô44õTåEôB÷v÷&¶W'2÷67&G2òD5Eõtõ$´U%ôäÔR÷6WGFæw2"À¢â÷F×ö7B×&öB×6WGFæw2æ§6öã²FVà¢V6ò%Væ&ÆRFòfW&g&öGV7Föâv÷&¶W"'VçFÖR6WGFæw2â"âc ¢WB¢f¢æöFRÃÂtäôDRp¢½¹ÍÐÌõÉÅÕ¥É ¹½éÌ¤ì(const s=JSON.parse(fs.readFileSync('/tmp/cyid-prod-settings.json','utf8'))?.result || {};
-          const b=Array.isArray(s.bindings)?s.bindings:[];
-         ÛÛÝO[]ÈX\
-X\
-OÔÝ[ÊË[Y_	ÉÊKJJNÂ6öç7BFWCÖãÓå7G&ær'ævWBâòçFWCóòrr°¢6öç7BF#Ö'ævWBtD"r°¢6öç7BF&CÕ7G&ærF#òæFF&6UöGÇÆF#òæGÇÂrr°¢¥¡ÑáÐ AA}9X¤ôôÁÉ½ÕÑ¥½¸¤ÁÉ½ÍÌ¹á¥Ð È¤ì(¥¡ÑáÐ e}AA1%Q%=9}%¤ôõÁÉ½ÍÌ¹¹Ø¹e}AI=}AA1%Q%=9}%¤ÁÉ½ÍÌ¹á¥Ð Ì¤ì(¥¡ÑáÐ e}]=I-MA}%¤ôõÁÉ½ÍÌ¹¹Ø¹e}AI=}]=I-MA}%¤ÁÉ½ÍÌ¹á¥Ð Ð¤ì(¥¡¥ôõÁÉ½ÍÌ¹¹Ø¹e%}Å}Q	M}%¤ÁÉ½ÍÌ¹á¥Ð Ô¤ì(9=((¹ÁàÝÉ¹±ÈÄáÕÑ´µÉµ½Ñ´µ©Í½¸p(´µ½¹¥ÝÉ¹±È¹ÁÉ½ÕÑ¥½¸¹¹ÉÑ¹©Í½¹p(´µ½µµ¹M1P¹µÁ±½å}¥°¹ÉÙ¥Í¥½¸°¹É¹Ñ¥±}ÙÉÍ¥½¸°¹Ý½É­ÍÁ}¥°¹ÁÁ±¥Ñ¥½¹}¥I=4µÁ±½å}ÁÁ±¥Ñ¥½¹}ÍÌ)=%8µÁ±½åÌ=8¹Ý½É­ÍÁ}¥õ¹Ý½É­ÍÁ}¥9¹µÁ±½å}¥õ¹µÁ±½å}¥)=%8µÁ±½å}É¹Ñ¥±Ì=8¹µÁ±½å}¥õ¹µÁ±½å}¥)=%8Ý½É­ÍÁ}ÁÁ±¥Ñ¥½¹ÌÝ=8Ý¹Ý½É­ÍÁ}¥õ¹Ý½É­ÍÁ}¥9Ý¹ÁÁ±¥Ñ¥½¹}¥õ¹ÁÁ±¥Ñ¥½¹}¥)=%8ÁÁ±¥Ñ¥½¹Ì=8¹ÁÁ±¥Ñ¥½¹}¥õ¹ÁÁ±¥Ñ¥½¹}¥]!I¹Ý½É­ÍÁ}¥ôíe}AI=}]=I-MA}%ô9¹ÁÁ±¥Ñ¥½¹}¥ôíe}AI=}AA1%Q%=9}%ô9¹¹±ôÄ9Ý¹¹±ôÄ9¹ÍÑÑÕÌôÑ¥Ù9¹¹±ôÄ=IH	d¹µÁ±½å}¹¼1%5%PÄìp(ø½ÑµÀ½å¥µÁÉ½µÁÉ½µÁÉ¥¹¥Á°¹©Í½¸Èø½Ø½¹Õ±°((AI=	}MMM%=9}Q=-8ôå¥|¡½Á¹ÍÍ°É¹µ¡àÌÈ¤(AI=	}MMM%=9}!M ô¡ÁÉ¥¹ÑÌAI=	}MMM%=9}Q=-8ðÍ¡ÈÔÙÍÕ´ðÝ¬íÁÉ¥¹ÐÅô¤(¡¼èéµµÍ¬èèAI=	}MMM%=9}Q=-8(¡¼èéµµÍ¬èèAI=	}MMM%=9}!M ((AI=	}MMM%=9}!M ôAI=	}MMM%=9}!M ¹½ðð9=(½¹ÍÐÌõÉÅÕ¥É ¹½éÌ¤ì(½¹ÍÐÉÜõ)M=8¹ÁÉÍ¡Ì¹É¥±Må¹ ½ÑµÀ½å¥µÁÉ½µÁÉ½µÁÉ¥¹¥Á°¹©Í½¸°ÕÑà¤¤ì(½¹ÍÐÉ½½ÑÌõÉÉä¹¥ÍÉÉä¡ÉÜ¤ýÉÜémÉÝtì(½¹ÍÐÉ½ÝÌõmtì(½È¡½¹ÍÐÉ½½Ð½É½½ÑÌ¥ì(¥¡ÉÉä¹¥ÍÉÉä¡É½½Ðü¹ÉÍÕ±ÑÌ¤¤É½ÝÌ¹ÁÕÍ  ¸¸¹É½½Ð¹ÉÍÕ±ÑÌ¤ì(¥¡ÉÉä¹¥ÍÉÉä¡É½½Ðü¹ÉÍÕ±Ðü¹ÉÍÕ±ÑÌ¤¤É½ÝÌ¹ÁÕÍ  ¸¸¹É½½Ð¹ÉÍÕ±Ð¹ÉÍÕ±ÑÌ¤ì(ô(¥¡É½ÝÌ¹±¹Ñ ôôÄ¤ÁÉ½ÍÌ¹á¥Ð È¤ì(½¹ÍÐÈõÉ½ÝÍlÁtì(½È¡½¹ÍÐ¬½lµÁ±½å}¥°ÉÙ¥Í¥½¸°É¹Ñ¥±}ÙÉÍ¥½¸°Ý½É­ÍÁ}¥°ÁÁ±¥Ñ¥½¹}¥t¥ì(¥¡Ém­tôôõÕ¹¥¹ñðÉm­tôôõ¹Õ±°¤ÁÉ½ÍÌ¹á¥Ð Ì¤ì(ô(½¹ÍÐÄõØôùíMÑÉ¥¹¡Ø¤¹ÉÁ±±° °¥ôì(½¹ÍÐ¹½Üõ¹ÜÑ ¤ì(½¹ÍÐáÁ¥Éäõ¹ÜÑ¡¹½Ü¹ÑQ¥µ ¤¬Ô¨ØÀ¨ÄÀÀÀ¤ì(½¹ÍÐÍÅ°õ%9MIP%9Q<¥¹Ñ¥Ñå}ÍÍÍ¥½¹Ì¡ÍÍÍ¥½¹}¡Í ±Ý½É­ÍÁ}¥±µÁ±½å}¥±ÁÁ±¥Ñ¥½¹}¥±É¹Ñ¥±}ÙÉÍ¥½¸±µÁ±½å}ÉÙ¥Í¥½¸±ÉÑ}Ð±áÁ¥ÉÍ}Ð±ÉÙ½­}Ð¤Y1UL íÄ¡ÁÉ½ÍÌ¹¹Ø¹AI=	}MMM%=9}!M ¥ô°íÄ¡È¹Ý½É­ÍÁ}¥¥ô°íÄ¡È¹µÁ±½å}¥¥ô°íÄ¡È¹ÁÁ±¥Ñ¥½¹}¥¥ô°í9ÕµÈ¡È¹É¹Ñ¥±}ÙÉÍ¥½¸¥ô°í9ÕµÈ¡È¹ÉÙ¥Í¥½¸¥ô°íÄ¡¹½Ü¹Ñ½%M=MÑÉ¥¹ ¤¥ô°íÄ¡áÁ¥Éä¹Ñ½%M=MÑÉ¥¹ ¤¥ô±9U10¤íq¹ì(Ì¹ÝÉ¥Ñ¥±Må¹ ½ÑµÀ½å¥µÁÉ½µÁÉ½µÍÍÍ¥½¸¹ÍÅ°±ÍÅ°±íµ½èÁ¼ØÀÁô¤ì(Ì¹ÝÉ¥Ñ¥±Må¹ ½ÑµÀ½å¥µÁÉ½µÁÉ½µÁÀ¹ÑáÐ±MÑÉ¥¹¡È¹ÁÁ±¥Ñ¥½¹}¥¤±íµ½èÁ¼ØÀÁô¤ì(9=((±¹ÕÁ}ÁÉ½ ¤ì(ÁÉ¥¹Ñ1QI=4¥¹Ñ¥Ñå}ÍÍÍ¥½¹Ì]!IÍÍÍ¥½¹}¡Í ôÌíq¸AI=	}MMM%=9}!M ø½ÑµÀ½å¥µÁÉ½µÁÉ½µ±¹ÕÀ¹ÍÅ°(¹ÁàÝÉ¹±ÈÄáÕÑ´µÉµ½Ñ´µ½¹¥ÝÉ¹±È¹ÁÉ½ÕÑ¥½¸¹¹ÉÑ¹©Í½¹´µ¥±½ÑµÀ½å¥µÁÉ½µÁÉ½µ±¹ÕÀ¹ÍÅ°ø½Ø½¹Õ±°ÈøÄñðÑÉÕ(ô(ÑÉÀ±¹ÕÁ}ÁÉ½a%P((¹ÁàÝÉ¹±ÈÄáÕÑ´µÉµ½Ñ´µ½¹¥ÝÉ¹±È¹ÁÉ½ÕÑ¥½¸¹¹ÉÑ¹©Í½¹´µ¥±½ÑµÀ½å¥µÁÉ½µÁÉ½µÍÍÍ¥½¸¹ÍÅ°ø½Ø½¹Õ±°ÈøÄ(AI=	}A@ô¡Ð½ÑµÀ½å¥µÁÉ½µÁÉ½µÁÀ¹ÑáÐ¤(¡¼èéµµÍ¬èèAI=	}A@((ÉÍ½±Ù}½ô¡ÕÉ°µÍLµ¼½ÑµÀ½å¥µÁÉ½µÉÍ½±Ù¹©Í½¸µÜí¡ÑÑÁ}½ôµ`A=MPp(e%}AI=UQ%=9}UI0½ØÄ½¥¹Ñ¥Ñä½ÍÍÍ¥½¸½ÉÍ½±Ùp(µ ÕÑ¡½É¥éÑ¥½¸è	ÉÈAI=	}MMM%=9}Q=-8p(µ àµ¥¹Ñ¥ÑäµÁÁ±¥Ñ¥½¸èAI=	}A@¤(¥mlÉÍ½±Ù}½ôÈÀÀutìÑ¡¸(¡¼e%ÁÉ½ÕÑ¥½¸MÍÍ¥½¸ÉÍ½±ÙÙÉ¥¥Ñ¥½¸¥±¸øÈ(á¥ÐÄ(¤((±½½ÕÑ}½ô¡ÕÉ°µÍLµ¼½ÑµÀ½å¥µÁÉ½µ±½½ÕÐ¹©Í½¸µÜí¡ÑÑÁ}½ôµ`A=MPp(e%}AI=UQ%=9}UI0½ØÄ½¥¹Ñ¥Ñä½±½½ÕÐp(µ ÕÑ¡½É¥éÑ¥½¸è	ÉÈAI=	}MMM%=9}Q=-8p(µ àµ¥¹Ñ¥ÑäµÁÁ±¥Ñ¥½¸èAI=	}A@¤(¥ml±½½ÕÑ}½ôÈÀÀutìÑ¡¸(¡¼e%ÁÉ½ÕÑ¥½¸±½½ÕÐÙÉ¥¥Ñ¥½¸¥±¸øÈ(á¥ÐÄ(¤((ÑÉ}½ô¡ÕÉ°µÍLµ¼½ÑµÀ½å¥µÁÉ½µÑÈµ±½½ÕÐ¹©Í½¸µÜí¡ÑÑÁ}½ôµ`A=MPp(e%}AI=UQ%=9}UI0½ØÄ½¥¹Ñ¥Ñä½ÍÍÍ¥½¸½ÉÍ½±Ùp(µ ÕÑ¡½É¥éÑ¥½¸è	ÉÈAI=	}MMM%=9}Q=-8p(µ àµ¥¹Ñ¥ÑäµÁÁ±¥Ñ¥½¸èAI=	}A@¤(¥mlÑÉ}½ôÐÀÄutìÑ¡¸(¡¼e%ÁÉ½ÕÑ¥½¸MÍÍ¥½¸¥¹Ù±¥Ñ¥½¸ÙÉ¥¥Ñ¥½¸¥±¸øÈ(á¥ÐÄ(¤((±¹ÕÁ}ÁÉ½(ÑÉÀ´a%P((Éµ¥¹¥¹ô¡¹ÁàÝÉ¹±ÈÄáÕÑ´µÉµ½Ñ´µ©Í½¸´µ½¹¥ÝÉ¹±È¹ÁÉ½ÕÑ¥½¸¹¹ÉÑ¹©Í½¹´µ½µµ¹M1P=U9P ¨¤LÙ±ÕI=4¥¹Ñ¥Ñå}ÍÍÍ¥½¹ÌìÈø½Ø½¹Õ±°ð¹½µ(±ÐÌôíÁÉ½ÍÌ¹ÍÑ¥¸¹½¸ Ñ±ôùÌ¬õ¤íÁÉ½ÍÌ¹ÍÑ¥¸¹½¸ ¹° ¤ôùí½¹ÍÐÉÜõ)M=8¹ÁÉÍ¡Ì¤í½¹ÍÐÉ½½ÑÌõÉÉä¹¥ÍÉÉä¡ÉÜ¤ýÉÜémÉÝtí½¹ÍÐÉ½ÝÌõmtí½È¡½¹ÍÐÉ½½Ð½É½½ÑÌ¥í¥¡ÉÉä¹¥ÍÉÉä¡É½½Ðü¹ÉÍÕ±ÑÌ¤¥É½ÝÌ¹ÁÕÍ  ¸¸¹É½½Ð¹ÉÍÕ±ÑÌ¤í¥¡ÉÉä¹¥ÍÉÉä¡É½½Ðü¹ÉÍÕ±Ðü¹ÉÍÕ±ÑÌ¤¥É½ÝÌ¹ÁÕÍ  ¸¸¹É½½Ð¹ÉÍÕ±Ð¹ÉÍÕ±ÑÌ¤íõ¥¡É½ÝÌ¹±¹Ñ ôôÄ¥ÁÉ½ÍÌ¹á¥Ð È¤íÁÉ½ÍÌ¹ÍÑ½ÕÐ¹ÝÉ¥Ñ¡MÑÉ¥¹¡É½ÝÍlÁt¹Ù±Õ¤¤íô¤ì(¤(¥mlÉµ¥¹¥¹ôÀutìÑ¡¸(¡¼e%ÁÉ½ÕÑ¥½¸Í±µÑÍÐ±ÐÕ¹áÁÑMÍÍ¥½¸ÍÑÑ¸øÈ(á¥ÐÄ(¤((¡¼e%ÁÉ½ÕÑ¥½¸ÁÉ½Ù¥È¡±Ñ °ÉÕ¹Ñ¥µ¥¹¥¹Ì°ÕÉÉ¹ÐÕÑ¡½É¥Ñä°MÍÍ¥½¸ÉÍ½±Ù¹¥¹Ù±¥Ñ¥½¸ÙÉ¥¥¸((´¹µèIµ½Ù±°¹ÉÑÁÉ½ÕÑ¥½¸¹½¹Ñ¥¹Õ¥Ñä¥±Ì(¥è±ÝåÌ ¤(Í¡±°èÍ (ÉÕ¸èð(É´µÉ½ÑµÀ½å¥µØµ½¹Ñ¥¹Õ¥Ñä½ÑµÀ½å¥µÁÉ½µ½¹Ñ¥¹Õ¥Ñä(É´µ½ÑµÀ½å¥´¨¹©Í½¸½ÑµÀ½å¥´¨¹±½½ÑµÀ½å¥´¨¹ÍÅ°½ÑµÀ½å¥´¨¹ÑáÐ½ÑµÀ½å¥µÁÉ½ÕÑ¥½¸µ½½ÑÍÑÉÀ¹µ©Ì(É´µÝÉ¹±È¹ÁÉ½ÕÑ¥½¸¹¹ÉÑ¹©Í½¹ÝÉ¹±È¹Ù±½Áµ¹ÐµÍ½ÕÉ¹¹ÉÑ¹©Í½¹(
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/cyid-prod-* /tmp/cyid-production-bootstrap.mjs
