@@ -10,6 +10,7 @@ import {
   resolveIdentitySession,
   startPasswordRecovery
 } from '../src/identity-adapter.js';
+import appV19 from '../src/app-v19.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -94,6 +95,21 @@ assert.equal(canWriteAccounting(resolved.principal), false);
 assert.equal(canWriteAccounting({ workspaceRole: 'ADMIN' }), true);
 assert.equal(appUserFromPrincipal({ ...basePrincipal, workspaceRole: 'SUPER_ADMIN' }).canWriteAccounting, true);
 
+const routeEnv = { ...env, DB: {} };
+for (const [method, route, body] of [
+  ['POST', '/api/transactions', '{}'],
+  ['PUT', '/api/opening-balances', '{}']
+]) {
+  const response = await appV19.fetch(new Request('https://acc.example.com' + route, {
+    method,
+    headers: { cookie: `cyaccounting_session=${token}`, 'content-type': 'application/json' },
+    body
+  }), routeEnv);
+  assert.equal(response.status, 403, `${method} ${route} must reject USER before D1 mutation`);
+  const payload = await response.json();
+  assert.equal(payload.code, 'READ_ONLY_USER');
+}
+
 const recovery = await startPasswordRecovery(new Request('https://acc.example.com/api/auth/password-recovery/start'), env, '0123');
 assert.equal(recovery.ok, true);
 assert.equal(recovery.recovery.challengeId, 'challenge-ci');
@@ -120,6 +136,7 @@ assert.match(authJs, /data-mobile-page="ledger"/);
 assert.match(authCss, /data-mobile-ledger-action="accounts"/);
 assert.match(authCss, /data-mobile-ledger-action="categories"/);
 assert.match(authCss, /data-mobile-ledger-action="lock"/);
+assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(versionPatch, /MutationObserver/);
 assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6'/);
