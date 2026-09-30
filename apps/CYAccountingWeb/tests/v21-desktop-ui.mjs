@@ -46,8 +46,8 @@ const v06 = read('public/v06.js');
 const v07 = read('public/v07.js');
 const v013 = read('public/v013.js');
 const v019 = read('public/v019.js');
-const appV19 = read('src/app-v19.js');
-const v11Tools = read('src/v11-tools.js');
+const workerApp = read('src/app.js');
+const accountingTools = read('src/accounting-tools.js');
 
 assert.equal(version, '0.21.6');
 assert.equal(build, '8');
@@ -101,8 +101,8 @@ assert.match(patchCss, /#currentUser\.current-user\s*\{[\s\S]*?align-items:\s*ce
 assert.match(build12Css, /\.entry-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 86px 78px !important;/);
 assert.match(build12Js, /summary\.placeholder = '最多20個字'/);
 assert.match(build8Js, /CY_V21_BUILD8_SUMMARY_UNITS = 40/);
-assert.match(appV19, /SUMMARY_MAX_UNITS = 40/);
-assert.match(appV19, /SUMMARY_TOO_LONG/);
+assert.match(workerApp, /SUMMARY_MAX_UNITS = 40/);
+assert.match(workerApp, /SUMMARY_TOO_LONG/);
 
 // Enter flow remains date -> summary -> amount -> save, then returns to summary.
 assert.match(v03, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/);
@@ -163,9 +163,9 @@ assert.match(patch2Css, /\.v0212-manager-dialog\s*\{[\s\S]*?width:\s*min\(340px/
 assert.match(build16Js, /state\.accounts = v21Build16OrderObjects\(previous, nextIds\);[\s\S]*?await persistV21Build16Optimistic/);
 assert.match(build16Js, /state\.groups = v21Build16ReplaceKindOrder\(previous, kind, nextIds\);[\s\S]*?await persistV21Build16Optimistic/);
 assert.match(build16Js, /state\.categories = v21Build16ApplyCategoryPayload\(previous, kind, payload\);[\s\S]*?await persistV21Build16Optimistic/);
-assert.match(v11Tools, /url\.pathname === '\/api\/accounts\/reorder'/);
-assert.match(v11Tools, /url\.pathname === '\/api\/category-groups\/reorder'/);
-assert.match(v11Tools, /url\.pathname === '\/api\/categories\/reorder'/);
+assert.match(accountingTools, /url\.pathname === '\/api\/accounts\/reorder'/);
+assert.match(accountingTools, /url\.pathname === '\/api\/category-groups\/reorder'/);
+assert.match(accountingTools, /url\.pathname === '\/api\/categories\/reorder'/);
 
 // Native browser confirmation boxes remain intercepted by the app-owned dialog.
 assert.match(patchJs, /window\.cyConfirm = options => new Promise/);
