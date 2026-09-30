@@ -1,7 +1,7 @@
 import previousApp from './app-v18.js';
 import { handleV19MigrationApi } from './v19-migration-safe.js';
+import { canWriteAccounting, resolveIdentitySession } from './identity-adapter.js';
 
-const SESSION_COOKIE = 'cyaccounting_session';
 const SUMMARY_MAX_UNITS = 40;
 const ACCOUNT_NAME_MAX_CHARS = 8;
 
@@ -19,8 +19,12 @@ export default {
     if (!env.DB) return json({ ok: false, error: 'D1 尚未綁定。', code: 'DB_NOT_CONFIGURED' }, 503);
 
     try {
-      const session = await sessionFromRequest(request, env.DB);
-      if (!session) return json({ ok: false, error: '尚未登入。', code: 'AUTH_REQUIRED' }, 401);
+      const resolved = await resolveIdentitySession(request, env);
+      if (!resolved.ok) return authFailure(resolved);
+
+      if ((transactionWrite || accountWrite) && !canWriteAccounting(resolved.principal)) {
+        return json({ ok: false, error: '此帳號為唯讀權限，只能檢視資料與匯出 Excel。', code: 'READ_ONLY_USER' }, 403);
+      }
 
       if (transactionWrite) {
         const body = await request.clone().json().catch(() => null);
@@ -40,7 +44,7 @@ export default {
         return previousApp.fetch(request, env);
       }
 
-      const response = await handleV19MigrationApi(request, env, session);
+      const response = await handleV19MigrationApi(request, env, resolved.session);
       if (response) return response;
       return json({ ok: false, error: '找不到此資料移轉功能。', code: 'MIGRATION_ROUTE_NOT_FOUND' }, 404);
     } catch (error) {
@@ -77,35 +81,11 @@ function normalizeAccountName(value) {
   return String(value ?? '').trim().replace(/\s+/g, ' ');
 }
 
-async function sessionFromRequest(request, db) {
-  const token = cookieValue(request, SESSION_COOKIE);
-  if (!token || token.length > 128) return null;
-  const hash = await sha256Hex(token);
-  const now = new Date().toISOString();
-  return db.prepare(`
-    SELECT session_hash, employee_id, employee_no, employee_name, role,
-           credential_version, employee_revision, created_at, expires_at
-    FROM web_sessions
-    WHERE session_hash = ? AND expires_at > ?
-    LIMIT 1
-  `).bind(hash, now).first();
-}
-
-function cookieValue(request, name) {
-  const raw = request.headers.get('cookie') || '';
-  for (const part of raw.split(';')) {
-    const index = part.indexOf('=');
-    if (index < 0) continue;
-    const key = part.slice(0, index).trim();
-    if (key !== name) continue;
-    return decodeURIComponent(part.slice(index + 1).trim());
+function authFailure(result) {
+  if (result.status >= 500) {
+    return json({ ok: false, error: '中央帳號服務目前無法驗證登入狀態。', code: 'IDENTITY_UNAVAILABLE' }, 503);
   }
-  return null;
-}
-
-async function sha256Hex(value) {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
-  return Array.from(digest, part => part.toString(16).padStart(2, '0')).join('');
+  return json({ ok: false, error: '尚未登入。', code: 'AUTH_REQUIRED' }, 401);
 }
 
 function json(data, status = 200) {
