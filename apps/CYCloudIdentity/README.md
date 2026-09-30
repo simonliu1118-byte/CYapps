@@ -23,6 +23,8 @@ CYCloud Identity（CYID）是志遠 Cloud App 共用的 Identity authority，負
 13. `docs/consumers/CYACC_INTEGRATION_HANDOFF.md` — **只保存 CYACC 現況差異／遷移／app-specific acceptance**，不得重複 shared standard。
 14. `TODO.md` — **唯一 current implementation status / next-work tracker**。
 
+Implementation review evidence: `docs/COMPATIBILITY_REVIEW.md` records obsolete runtime paths, consumer retirement dependencies and the production provisioning replay risk. It is not a new rules/contract layer or a second progress tracker.
+
 `migrations/` 與 current source 是 executable implementation evidence；已套用 migration 不重寫。
 
 ## Documentation discipline
