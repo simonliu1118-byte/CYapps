@@ -67,6 +67,7 @@ jobs:
           node --check scripts/render-wrangler.mjs
           node --check scripts/prepare-sqljs.mjs
           node --check scripts/validate-cyid-consumer-version.mjs
+          node --check scripts/smoke-cyid-development.mjs
           node --check public/auth.js
           node --check public/login.js
           node --check public/app.js
