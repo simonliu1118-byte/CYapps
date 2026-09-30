@@ -335,6 +335,17 @@ jobs:
             exit 1
           fi
 
+      - name: Bootstrap isolated CYACC Worker resource
+        working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'export default { async fetch() { return new Response("CYACC development bootstrap"); } };' > /tmp/cyacc-bootstrap.mjs
+          if ! npx wrangler deploy /tmp/cyacc-bootstrap.mjs --name "$CF_WORKER_NAME" --compatibility-date 2026-09-22 --no-bundle >/tmp/cyacc-bootstrap.log 2>&1; then
+            echo "Unable to create the isolated CYACC development Worker resource." >&2
+            exit 1
+          fi
+
       - name: Deploy isolated CYACC development Worker with CYID binding
         working-directory: ${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb
         shell: bash
@@ -387,7 +398,7 @@ jobs:
           if [[ -d "${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb" ]]; then
             (cd "${{ github.workspace }}/cyacc-candidate/apps/CYAccountingWeb" && node scripts/prepare-sqljs.mjs --clean || true)
           fi
-          rm -f /tmp/cyacc-migrate.log /tmp/cyacc-deploy.log /tmp/cyacc-wrangler-output.ndjson /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
+          rm -f /tmp/cyacc-bootstrap.mjs /tmp/cyacc-bootstrap.log /tmp/cyacc-migrate.log /tmp/cyacc-deploy.log /tmp/cyacc-wrangler-output.ndjson /tmp/cyacc-login.html /tmp/cyacc-invalid-login.out
 
       - name: Remove generated config
         if: always()
