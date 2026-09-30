@@ -80,11 +80,15 @@ assert.match(keyboardJs, /if \(!window\.matchMedia\(CY_V0211_KEYBOARD_DESKTOP\)\
 assert.match(authJs, /credentials: 'include'/);
 assert.match(authJs, /location\.replace\('\/login'\)/);
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
-assert.match(indexHtml, /auth\.js\?v=0216b8/);
-assert.match(indexHtml, /auth\.css\?v=0216b1/);
-assert.match(indexHtml, /v0216\.js\?v=0216b8/);
-assert.match(indexHtml, /v021b11\.js\?v=0216b6/);
-assert.match(indexHtml, /v021b10\.js\?v=0216b6/);
+assert.match(indexHtml, /href="\/app-baseline\.css\?v=0216b9"/);
+assert.match(indexHtml, /src="\/app-baseline\.js\?v=0216b9"/);
+assert.equal((indexHtml.match(/<link\b[^>]*(?:stylesheet|preload)/g) || []).length, 1);
+assert.equal((indexHtml.match(/<script\b[^>]*src=/g) || []).length, 1);
+
+
+
+
+
 assert.doesNotMatch(authCss, /@media \(min-width: 641px\) and \(max-width: 1023px\)/);
 assert.match(authCss, /@media \(max-width: 640px\)/);
 assert.match(identityAdapter, /SameSite=Lax/);
