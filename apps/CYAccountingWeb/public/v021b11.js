@@ -15,15 +15,21 @@ ensureV0215Stylesheet();
 ensureV0215Build3Script();
 ensureV0215Build4Script();
 
-document.addEventListener('DOMContentLoaded', () => {
+let cyV21Build11Started = false;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startV21Build11, { once: true });
+} else {
+  startV21Build11();
+}
+window.addEventListener('load', startV21Build11, { once: true });
+
+function startV21Build11() {
+  if (cyV21Build11Started) return;
+  cyV21Build11Started = true;
   syncV21Build11Version();
   setupV21Build11DesktopIsolation();
-});
-
-window.addEventListener('load', () => {
-  syncV21Build11Version();
-  syncV21Build11DesktopIsolation();
-});
+}
 
 function ensureV21Build11Stylesheet() {
   if (document.querySelector('link[href="/v021b11.css"]')) return;
