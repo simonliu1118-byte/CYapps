@@ -32,7 +32,7 @@
 ## 發行前
 
 - [x] 版本身分：從 V0.3.0 起（Minor：重做版、客戶資料庫與列印即存等完整功能階段），後續依治理規則推版本；試印通過後才發正式版。
-- [ ] Release workflow（從 `main`、`workflow_dispatch`、SHA-256、掃描）。
+- [x] Release workflow 已寫好（`.github/workflows/cyenvelope-release.yml`：從 `main` 手動啟動、BUILD 必須為 0、重新建置與檢查、封包掃描、SHA-256、不覆寫既有 tag）；合併到 `main` 後才能啟動，試印通過前不啟動。
 - [ ] Release 說明加上版權聲明（共通規則 §10 與 REPO_POLICY §7）。
 - [ ] PROJECT_RULES §4 的發行驗證項目逐項完成。
 
