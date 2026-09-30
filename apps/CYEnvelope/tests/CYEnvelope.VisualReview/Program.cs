@@ -148,7 +148,7 @@ internal static class Program
             var wanted = new[] { "RecipientBox", "AddressBox", "PostalBox", "PhoneBox" };
             var indexes = wanted.Select(name => tabOrder.IndexOf(name)).ToArray();
             Assert(indexes.All(x => x >= 0) && indexes.SequenceEqual(indexes.OrderBy(x => x)),
-                "Tab visits recipient, address, postal code, phone in that order");
+                "Tab visits recipient, address, postal code, phone in that order: " + string.Join(" > ", tabOrder));
             // Add/overwrite dialogs and focus states, photographed because native dialogs cannot be.
             foreach (var isAddress in new[] { true, false })
             {
