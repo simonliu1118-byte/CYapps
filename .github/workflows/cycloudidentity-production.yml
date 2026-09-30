@@ -601,8 +601,23 @@ jobs:
           [[ "$code" == "200" ]] || { echo "CYID production Session resolve verification failed." >&2; exit 1; }
           code="$(curl -sS -o /tmp/cyid-prod-logout.json -w '%{http_code}' -X POST "$CYID_PRODUCTION_URL/v1/identity/logout" -H "authorization: Bearer $PROBE_TOKEN" -H "x-identity-application: $PROBE_APP")"
           [[ "$code" == "200" ]] || { echo "CYID production logout verification failed." >&2; exit 1; }
-          code="$(curl -sS -o /tmp/cyid-prod-after.json -w '%{http_code}' -X POST "$CYID_PRODUCTION_URL/v1/identity/session/resolve" -H "authorization: Bearer $PROBE_TOKEN" -H "x-identity-application: $PROBE_APP")"
-          [[ "$code" == "401" ]] || { echo "CYID production Session invalidation verification failed." >&2; exit 1; }
+
+          revoked="$(npx wrangler d1 execute DB --remote --json --config /tmp/cyid-prod-d1.jsonc --command "SELECT COUNT(*) AS value FROM identity_sessions WHERE session_hash='$PROBE_HASH' AND revoked_at IS NOT NULL;" 2>/dev/null | node -e '
+            let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const raw=JSON.parse(s), roots=Array.isArray(raw)?raw:[raw], rows=[];for(const r of roots){if(Array.isArray(r?.results))rows.push(...r.results);if(Array.isArray(r?.result?.results))rows.push(...r.result.results);}if(rows.length!==1)process.exit(2);process.stdout.write(String(rows[0].value));});
+          ')"
+          [[ "$revoked" == "1" ]] || { echo "CYID production logout returned success but did not revoke the Session row." >&2; exit 1; }
+
+          invalidated=0
+          for attempt in $(seq 1 10); do
+            code="$(curl -sS -o /tmp/cyid-prod-after.json -w '%{http_code}' -X POST "$CYID_PRODUCTION_URL/v1/identity/session/resolve" -H "authorization: Bearer $PROBE_TOKEN" -H "x-identity-application: $PROBE_APP")"
+            if [[ "$code" == "401" ]]; then
+              invalidated=1
+              break
+            fi
+            echo "CYID production post-logout resolve not invalidated yet (attempt $attempt/10, status $code)."
+            sleep 1
+          done
+          [[ "$invalidated" == "1" ]] || { echo "CYID production Session invalidation verification failed after confirmed database revoke." >&2; exit 1; }
           cleanup_probe
           trap - EXIT
 
