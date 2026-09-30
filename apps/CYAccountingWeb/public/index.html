@@ -4,6 +4,40 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>志遠記帳系統 Web</title>
+  <style id="cyaccBootStyle">
+    #cyaccBootStatus { display: none; }
+    @media (max-width: 767px) {
+      body.cyacc-booting .shell,
+      body.cyacc-booting #readOnlyNotice {
+        visibility: hidden !important;
+      }
+      body.cyacc-booting .topbar-actions {
+        display: none !important;
+      }
+      body.cyacc-booting #cyaccBootStatus,
+      body.cyacc-boot-failed #cyaccBootStatus {
+        display: flex;
+        min-height: calc(100dvh - 72px);
+        align-items: center;
+        justify-content: center;
+        padding: 32px 24px;
+        color: #526273;
+        font-size: 15px;
+        text-align: center;
+      }
+      body.cyacc-boot-failed #cyaccBootStatus {
+        color: #a34b45;
+      }
+    }
+  </style>
+  <script>
+    window.__cyaccBootWatchdog = window.setTimeout(() => {
+      const body = document.body;
+      const status = document.querySelector('#cyaccBootStatus');
+      if (!body?.classList.contains('cyacc-booting') || !status) return;
+      status.textContent = '載入時間過久，請重新整理頁面。';
+    }, 12000);
+  </script>
   <link rel="stylesheet" href="/app.css">
   <link rel="stylesheet" href="/v03.css">
   <link rel="stylesheet" href="/auth.css?v=0216b1">
@@ -23,12 +57,17 @@
   <link rel="stylesheet" href="/v019.css">
   <link rel="stylesheet" href="/v020.css">
   <link rel="stylesheet" href="/v021.css">
+  <link rel="stylesheet" href="/v021b8.css?v=0216b6">
+  <link rel="stylesheet" href="/v021b9.css?v=0216b6">
+  <link rel="stylesheet" href="/v021b10.css?v=0216b6">
+  <link rel="stylesheet" href="/v021b11.css?v=0216b6">
+  <link rel="stylesheet" href="/v0215.css?v=0216b6">
 </head>
-<body>
+<body class="cyacc-booting">
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.21.6 Build 5</span></p>
+      <p>CYAccounting Web <span class="version">V0.21.6 Build 6</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -37,6 +76,8 @@
       <div id="connectionStatus" class="status">連線檢查中</div>
     </div>
   </header>
+
+  <div id="cyaccBootStatus" role="status" aria-live="polite">正在載入記帳資料…</div>
 
   <div id="readOnlyNotice" class="read-only-banner hidden" role="status">唯讀模式：可檢視帳務資料與匯出 Excel；新增、編輯與管理功能已停用。</div>
 
@@ -139,10 +180,10 @@
     </div>
   </dialog>
 
-  <script src="/auth.js?v=0216b1" defer></script>
-  <script src="/app.js" defer></script>
+  <script src="/auth.js?v=0216b6" defer></script>
+  <script src="/app.js?v=0216b6" defer></script>
   <script src="/v03.js" defer></script>
-  <script src="/v06.js" defer></script>
+  <script src="/v06.js?v=0216b6" defer></script>
   <script src="/v07.js" defer></script>
   <script src="/v08.js" defer></script>
   <script src="/v09.js" defer></script>
@@ -155,11 +196,11 @@
   <script src="/v016.js" defer></script>
   <script src="/v0181.js" defer></script>
   <script src="/v019.js" defer></script>
-  <script src="/v020.js" defer></script>
-  <script src="/v021.js" defer></script>
-  <script src="/v021b8.js" defer></script>
-  <script src="/v021b10.js?v=0215b11" defer></script>
-  <script src="/v021b11.js?v=0215b10" defer></script>
-  <script src="/v0216.js?v=0216b5" defer></script>
+  <script src="/v020.js?v=0216b6" defer></script>
+  <script src="/v021.js?v=0216b6" defer></script>
+  <script src="/v021b8.js?v=0216b6" defer></script>
+  <script src="/v021b10.js?v=0216b6" defer></script>
+  <script src="/v021b11.js?v=0216b6" defer></script>
+  <script src="/v0216.js?v=0216b6" defer></script>
 </body>
 </html>
