@@ -95,6 +95,28 @@ assert.equal(canWriteAccounting(resolved.principal), false);
 assert.equal(canWriteAccounting({ workspaceRole: 'ADMIN' }), true);
 assert.equal(appUserFromPrincipal({ ...basePrincipal, workspaceRole: 'SUPER_ADMIN' }).canWriteAccounting, true);
 
+const hangingEnv = {
+  CYID_WORKSPACE_ID: 'workspace-ci-placeholder',
+  CYID_APPLICATION_ID: 'CYACC_CI',
+  CYID_PROVIDER_TIMEOUT_MS: '100',
+  IDENTITY: {
+    async fetch() {
+      return await new Promise(() => {});
+    }
+  }
+};
+const timeoutRequest = new Request('https://acc.example.com/api/auth/me', {
+  headers: { cookie: `cyaccounting_session=${token}` }
+});
+const timeoutStarted = Date.now();
+const timeoutResolved = await resolveIdentitySession(timeoutRequest, hangingEnv);
+const timeoutElapsed = Date.now() - timeoutStarted;
+assert.equal(timeoutResolved.ok, false, 'IDENTITY_TIMEOUT must fail closed');
+assert.equal(timeoutResolved.status, 504);
+assert.equal(timeoutResolved.code, 'IDENTITY_TIMEOUT');
+assert.ok(timeoutElapsed >= 80 && timeoutElapsed < 1000, `identity timeout should be bounded, got ${timeoutElapsed}ms`);
+
+
 const httpsAssetEnv = {
   ASSETS: {
     async fetch(request) {
@@ -183,7 +205,7 @@ assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(versionPatch, /MutationObserver/);
-assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 6'/);
+assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 7'/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)
