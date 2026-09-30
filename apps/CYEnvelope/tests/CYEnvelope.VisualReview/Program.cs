@@ -36,7 +36,12 @@ internal static class Program
             var chosen = (HashSet<string>)Field(main, "_delivery");
             rows[2].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush();
             Assert(chosen.SetEquals(["delivery-3"]), "Clicking a preview row ticks that mail type");
+            var boxes = ((Panel)main.FindName("DeliveryPanel")).Children.OfType<CheckBox>().ToList();
+            Assert(boxes.Count == 7 && boxes[2].IsChecked == true, "The left-hand checkbox follows a click on the envelope table");
             Capture(main, "01b-main-ticked");
+            boxes[4].IsChecked = true; Flush();
+            Assert(chosen.SetEquals(["delivery-3", "delivery-5"]), "Ticking the left-hand checkbox marks the envelope too");
+            boxes[4].IsChecked = false; Flush();
             rows[2].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush();
             Assert(chosen.Count == 0, "Clicking the row again clears it");
             var addressBox = (TextBox)main.FindName("AddressBox"); var postalBox = (TextBox)main.FindName("PostalBox");

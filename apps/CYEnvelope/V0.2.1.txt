@@ -1,6 +1,6 @@
 CYEnvelope V0.2.1（開發測試版，尚未正式發行）
 日期：2026/09/27
-BUILD：0（各 Build 記錄依序附於下方；目前為 Build 6，見 BUILD 檔）
+BUILD：0（各 Build 記錄依序附於下方；目前為 Build 7，見 BUILD 檔）
 
 下載方式調整
 - 將 .NET 管理組件打包進 CYEnvelope.exe；保留必要原生元件 D3DCompiler_47_cor3.dll、e_sqlite3.dll、PenImc_cor3.dll、PresentationNative_cor3.dll、vcruntime140_cor3.dll、wpfgfx_cor3.dll。資料夾另外只有 VERSION 與 BUILD，沒有多語系資源目錄。
@@ -81,3 +81,8 @@ BUILD 6（討論定案後的客戶管理、郵遞區號貼上與按鈕外觀；2
 
 尚待
 - 視覺準則其餘項目（欄位旁短訊息取代彈窗、125％／150％ DPI）見 TODO.md。
+
+BUILD 7（郵件種類兩種操作並存；2026/09/30）
+- 郵件種類的勾選框放回左側，與信封預覽上的表格點選共用同一份狀態，使用者任選其一（Build 5 移除勾選框是誤解需求）。
+- 客戶管理視窗搜尋框加入提示文字。
+- 畫面檢查新增：預覽點選會同步左側勾選框，左側勾選也會標記信封。

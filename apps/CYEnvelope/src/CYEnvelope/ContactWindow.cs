@@ -51,7 +51,14 @@ public sealed class ContactWindow : Window
         Grid.SetColumn(left, 0); root.Children.Add(left);
         var heading = DesktopUi.Heading("聯絡人"); heading.Margin = new Thickness(0, 0, 0, 8);
         DockPanel.SetDock(heading, Dock.Top); left.Children.Add(heading);
-        DockPanel.SetDock(_search, Dock.Top); left.Children.Add(_search);
+        var searchBox = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+        _search.Margin = new Thickness(0);
+        var hint = new TextBlock { Text = "搜尋客戶名稱（輸入一部分即可）", Foreground = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(0x98, 0xA2, 0xB3)), Margin = new Thickness(9, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
+        _search.TextChanged += (_, _) => hint.Visibility = _search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        searchBox.Children.Add(_search); searchBox.Children.Add(hint);
+        DockPanel.SetDock(searchBox, Dock.Top); left.Children.Add(searchBox);
         DockPanel.SetDock(_count, Dock.Top); left.Children.Add(_count);
         var name = new FrameworkElementFactory(typeof(TextBlock));
         name.SetBinding(TextBlock.TextProperty, new Binding(nameof(Contact.Name)));

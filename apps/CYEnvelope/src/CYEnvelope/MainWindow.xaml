@@ -74,7 +74,8 @@
               <TextBox x:Name="PhoneBox" TextChanged="InputChanged" LostKeyboardFocus="PhoneLostFocus" Margin="0,0,0,18" AutomationProperties.Name="電話"/>
               <Border BorderBrush="#E5E8EC" BorderThickness="0,1,0,0" Padding="0,14,0,0">
                 <StackPanel>
-                  <TextBlock Text="郵件種類（平信、掛號…）請直接點右側信封左邊的表格勾選。" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                  <TextBlock Margin="0,0,0,10"><Run Text="郵件種類" FontWeight="SemiBold"/><Run Text="　也可直接點右側信封的表格" Foreground="#667085" FontSize="13"/></TextBlock>
+                  <WrapPanel x:Name="DeliveryPanel"/>
                   <CheckBox x:Name="ShowFrameBox" Content="印出方框文字" Margin="0,0,0,8" Checked="InputChanged" Unchecked="InputChanged"/>
                   <ComboBox x:Name="FrameChoice" SelectionChanged="InputChanged" AutomationProperties.Name="方框文字"
                             IsEnabled="{Binding IsChecked, ElementName=ShowFrameBox}"/>

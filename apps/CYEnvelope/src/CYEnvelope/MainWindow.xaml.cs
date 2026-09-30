@@ -79,10 +79,38 @@ public partial class MainWindow : Window
         var frameText = FrameChoice.SelectedItem as string;
         _loading = true;
         _delivery.RemoveWhere(id => _format.Delivery.All(x => x.Id != id));
+        // Left-hand checkboxes and the clickable envelope table edit the same set.
+        DeliveryPanel.Children.Clear();
+        foreach (var option in _format.Delivery)
+        {
+            var box = new CheckBox { Content = option.Label, Margin = new Thickness(0, 0, 8, 9), MinWidth = 76,
+                                     Tag = option.Id, IsChecked = _delivery.Contains(option.Id) };
+            box.Checked += DeliveryBoxChanged;
+            box.Unchecked += DeliveryBoxChanged;
+            DeliveryPanel.Children.Add(box);
+        }
         FrameChoice.ItemsSource = _settings.FrameTexts.ToArray();
         var frameIndex = frameText is null ? -1 : _settings.FrameTexts.IndexOf(frameText);
         FrameChoice.SelectedIndex = frameIndex >= 0 ? frameIndex : _settings.FrameTexts.Count > 0 ? 0 : -1;
         _loading = false;
+    }
+
+    private void DeliveryBoxChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        var box = (CheckBox)sender;
+        var id = (string)box.Tag;
+        if (box.IsChecked == true) _delivery.Add(id); else _delivery.Remove(id);
+        Refresh();
+    }
+
+    // Shows the current mail-type set in the checkboxes (after a preview click, a customer pick or a clear).
+    private void SyncDeliveryBoxes()
+    {
+        var loading = _loading;
+        _loading = true;
+        foreach (var box in DeliveryPanel.Children.OfType<CheckBox>()) box.IsChecked = _delivery.Contains((string)box.Tag);
+        _loading = loading;
     }
 
     private void Status(string text) => StatusText.Text = text;
@@ -166,6 +194,7 @@ public partial class MainWindow : Window
         ApplyAddress(address);
         _delivery.Clear();
         foreach (var id in contact.LastDeliveryIds.Where(id => _format.Delivery.Any(x => x.Id == id))) _delivery.Add(id);
+        SyncDeliveryBoxes();
         _loading = false;
         Refresh();
     }
@@ -445,6 +474,7 @@ public partial class MainWindow : Window
         AddressChoice.ItemsSource = null; PhoneChoice.ItemsSource = null;
         Suggestions.Visibility = Visibility.Collapsed;
         _delivery.Clear();
+        SyncDeliveryBoxes();
         ShowFrameBox.IsChecked = true;
         FrameChoice.SelectedIndex = FrameChoice.Items.Count > 0 ? 0 : -1;
         _loading = false;
@@ -556,6 +586,7 @@ public partial class MainWindow : Window
             Target("TickTarget", $"{item.Label}（點選勾選／取消）", id, row, 0, 0, () =>
             {
                 if (!_delivery.Remove(id)) _delivery.Add(id);
+                SyncDeliveryBoxes();
                 Refresh();
             });
         }
