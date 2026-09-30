@@ -18,11 +18,33 @@ function shouldDisableBrowserCache(pathname) {
   return pathname === '/' || pathname === '/login' || pathname.endsWith('.html') || pathname.endsWith('.js');
 }
 
+function requestUsesInsecureTransport(request, url) {
+  if (url.protocol === 'http:') return true;
+  if (String(request.headers.get('x-forwarded-proto') || '').toLowerCase() === 'http') return true;
+  const visitor = String(request.headers.get('cf-visitor') || '');
+  return /"scheme"\s*:\s*"http"/i.test(visitor);
+}
+
+function enforceHttps(request, url) {
+  if (!requestUsesInsecureTransport(request, url)) return null;
+  const secureUrl = new URL(url.toString());
+  secureUrl.protocol = 'https:';
+  return new Response(null, {
+    status: 308,
+    headers: {
+      location: secureUrl.toString(),
+      'cache-control': 'no-store'
+    }
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     try {
+      const httpsRedirect = enforceHttps(request, url);
+      if (httpsRedirect) return httpsRedirect;
       if (url.pathname === '/login.html' && request.method === 'GET') {
         return redirect('/login' + url.search);
       }
@@ -212,6 +234,7 @@ function noCache(response) {
   const headers = new Headers(response.headers);
   headers.set('cache-control', 'no-store, no-cache, must-revalidate, max-age=0');
   headers.set('pragma', 'no-cache');
+  headers.set('strict-transport-security', 'max-age=31536000');
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -225,6 +248,7 @@ function redirect(location, extraHeaders = {}) {
     headers: {
       location,
       'cache-control': 'no-store',
+      'strict-transport-security': 'max-age=31536000',
       ...extraHeaders
     }
   });
@@ -236,6 +260,7 @@ function json(data, status = 200, extraHeaders = {}) {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
+      'strict-transport-security': 'max-age=31536000',
       'x-content-type-options': 'nosniff',
       ...extraHeaders
     }
