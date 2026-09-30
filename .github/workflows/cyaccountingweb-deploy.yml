@@ -107,6 +107,7 @@ jobs:
           node tests/deploy-config.mjs
           node tests/cyid-integration.mjs
           node tests/cyid-provider-contract.mjs
+          node tests/cyid-development-workflow.mjs
           node scripts/validate-cyid-consumer-version.mjs
 
       - name: Prepare pinned browser SQLite runtime
