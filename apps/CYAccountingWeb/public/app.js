@@ -82,7 +82,7 @@ async function startCyaccApp() {
     els.openingMonth.value = today.slice(0, 7);
     bindEvents();
 
-    setCyaccBootStage('正在驗證帳號…');
+    setCyaccBootStage('正在準備帳務資料…');
     if (window.cyaccSessionPromise) await window.cyaccSessionPromise;
 
     await initialize();

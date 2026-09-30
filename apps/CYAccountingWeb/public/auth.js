@@ -27,12 +27,20 @@ function startCyaccAuth() {
     }
   });
 
-  setBootStage('正在驗證帳號…');
-  window.cyaccSessionPromise = checkSession();
-  window.cyaccSessionPromise.catch(() => {});
+  setBootStage('正在準備帳務資料…');
+  const bootUser = validBootUser(window.__CYACC_BOOT_USER__) ? window.__CYACC_BOOT_USER__ : null;
+  window.cyaccSessionPromise = bootUser ? Promise.resolve(bootUser) : checkSessionFallback();
+  window.cyaccSessionPromise
+    .then(user => {
+      window.cyaccCurrentUser = user;
+      applyUser(user);
+      window.dispatchEvent(new CustomEvent('cyacc:session-ready', { detail: { user } }));
+    })
+    .catch(() => {});
 
-  async function checkSession() {
+  async function checkSessionFallback() {
     try {
+      setBootStage('正在驗證帳號…');
       const response = await fetchWithTimeout('/api/auth/me', {
         cache: 'no-store',
         credentials: 'include'
@@ -45,11 +53,8 @@ function startCyaccAuth() {
       if (!response.ok || data.ok === false) {
         throw new Error(data.error || '帳號服務目前無法驗證登入狀態。');
       }
-      const user = data.user || {};
-      window.cyaccCurrentUser = user;
-      applyUser(user);
-      window.dispatchEvent(new CustomEvent('cyacc:session-ready', { detail: { user } }));
-      return user;
+      if (!validBootUser(data.user)) throw new Error('帳號資料格式不正確。');
+      return data.user;
     } catch (error) {
       if (String(error?.message || '') === 'AUTH_REQUIRED') throw error;
       const message = error?.name === 'AbortError'
@@ -58,6 +63,14 @@ function startCyaccAuth() {
       setBootFailure(message);
       throw new Error(message);
     }
+  }
+
+  function validBootUser(user) {
+    return Boolean(
+      user
+      && /^\d{4}$/.test(String(user.employeeNo || ''))
+      && ['USER', 'ADMIN', 'SUPER_ADMIN'].includes(String(user.role || ''))
+    );
   }
 
   function applyUser(user) {
