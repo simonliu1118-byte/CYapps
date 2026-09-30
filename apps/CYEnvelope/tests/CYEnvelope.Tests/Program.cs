@@ -164,6 +164,10 @@ try
     twoFormats.SetDefaultFormat("second");
     Check(twoFormats.Formats().Count(f => f.IsDefault) == 1 && twoFormats.Formats().Single(f => f.IsDefault).Id == "second",
         "exactly one default format after SetDefaultFormat");
+    twoFormats.SaveFormat(new EnvelopeFormat { Id = "third", Name = "第三格式", IsDefault = false, FontFamily = "Noto Serif TC" });
+    Check(twoFormats.Formats().Single(f => f.Id == "third").FontFamily == "Noto Serif TC" &&
+          twoFormats.Formats().Single(f => f.Id == "second").FontFamily == "DFKai-SB",
+        "each format keeps its own font");
 
     // Layouts shipped by earlier builds upgrade only while unedited.
     var legacyPath = Path.Combine(Path.GetDirectoryName(path)!, "legacy", "CYEnvelope.db");

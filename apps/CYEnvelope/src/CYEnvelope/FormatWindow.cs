@@ -15,6 +15,8 @@ public sealed class FormatWindow : Window
     private readonly TextBox _x = new(), _y = new(), _w = new(), _h = new();
     private readonly TextBox _size = new(), _columns = new();
     private readonly TextBox _offsetX = new(), _offsetY = new();
+    private readonly ComboBox _font = new();
+    private readonly TextBlock _fontSample = new() { Text = "王小明　高雄市新興區範例路一號", FontSize = 18, Margin = new Thickness(0, 6, 0, 0) };
     private readonly CheckBox _landscape = new() { Content = "橫式", Margin = new Thickness(0, 8, 0, 8) };
     private EnvelopeFormat _working;
     private bool _loading;
@@ -58,6 +60,7 @@ public sealed class FormatWindow : Window
         left.Children.Add(Buttons(("新增", (_, _) => New()), ("複製", (_, _) => Duplicate()),
             ("刪除", (_, _) => Delete())));
         AddField(left, "名稱", _name);
+        AddFont(left);
         var dimensions = new Grid();
         dimensions.ColumnDefinitions.Add(new ColumnDefinition());
         dimensions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
@@ -130,6 +133,25 @@ public sealed class FormatWindow : Window
         }
         return panel;
     }
+    // The font belongs to the format, like positions and sizes.
+    private void AddFont(StackPanel panel)
+    {
+        panel.Children.Add(new TextBlock { Text = "字體（此格式所有文字）", Margin = new Thickness(0, 8, 0, 4) });
+        _font.ItemsSource = FontCatalog.Choices
+            .Select(c => FontCatalog.IsAvailable(c) ? c.Display : c.Display + (c.ResourceFile is null ? "（本機未安裝）" : "（此版本未內建）"))
+            .ToList();
+        _font.SelectionChanged += (_, _) =>
+        {
+            if (_loading || _font.SelectedIndex < 0) return;
+            _working.FontFamily = FontCatalog.Choices[_font.SelectedIndex].Family;
+            ShowFontSample();
+            Draw();
+        };
+        panel.Children.Add(_font);
+        panel.Children.Add(_fontSample);
+    }
+    private void ShowFontSample() =>
+        _fontSample.FontFamily = FontCatalog.Typeface(_working.FontFamily, useSelected: false).FontFamily;
     private static EnvelopeFormat Copy(EnvelopeFormat format) =>
         JsonSerializer.Deserialize<EnvelopeFormat>(JsonSerializer.Serialize(format))!;
     private void ReloadFormats(string id)
@@ -149,6 +171,8 @@ public sealed class FormatWindow : Window
         _width.Text = _working.WidthMm.ToString("0.##");
         _height.Text = _working.HeightMm.ToString("0.##");
         _landscape.IsChecked = _working.Landscape;
+        _font.SelectedIndex = Math.Max(0, FontCatalog.Choices.ToList().FindIndex(c => c.Family == _working.FontFamily));
+        ShowFontSample();
         _offsetX.Text = _working.OffsetX.ToString("0.##");
         _offsetY.Text = _working.OffsetY.ToString("0.##");
         _loading = false;

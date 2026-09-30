@@ -27,7 +27,7 @@ Go 版（V0.1.x）已依使用者決定停止開發，程式碼自本分支移�
 
 ## 字體
 
-「設定」的「信封字體」一個選擇套用到收件人、地址、電話、郵遞區號與方框文字，預覽與列印相同。可選：標楷體、新細明體（Windows 內建，未安裝時標示）、思源黑體 Noto Sans TC、思源宋體 Noto Serif TC 與霞鶩文楷 TC（內建於程式，皆為 SIL Open Font License 1.1）。內建字體的來源、雜湊與授權全文見 `tools/fonts.json`、`src/CYEnvelope/Fonts/FONT_LICENSES.txt`，可攜資料夾根目錄附 `FONT_LICENSES.txt`。字體檔在建置時下載，第一次在本機建置前請先執行 `./tools/fetch-fonts.ps1`（`build-csharp.ps1` 會自動執行）；沒有字體檔的建置仍可編譯，只是設定中標示「此版本未內建」。
+信封字體隨信封格式（版型）保存：每個格式各有位置、字級與字體，字體套用到該格式的收件人、地址、電話、郵遞區號與方框文字，預覽與列印相同。可選：標楷體、新細明體（Windows 內建，未安裝時標示）、思源黑體 Noto Sans TC、思源宋體 Noto Serif TC 與霞鶩文楷 TC（內建於程式，皆為 SIL Open Font License 1.1）。內建字體的來源、雜湊與授權全文見 `tools/fonts.json`、`src/CYEnvelope/Fonts/FONT_LICENSES.txt`，可攜資料夾根目錄附 `FONT_LICENSES.txt`。字體檔在建置時下載，第一次在本機建置前請先執行 `./tools/fetch-fonts.ps1`（`build-csharp.ps1` 會自動執行）；沒有字體檔的建置仍可編譯，只是設定中標示「此版本未內建」。
 
 ## 版面（15K 預設）
 

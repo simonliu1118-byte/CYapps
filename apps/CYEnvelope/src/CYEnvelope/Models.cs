@@ -80,6 +80,8 @@ public sealed class EnvelopeFormat
     public double HeightMm { get; set; } = 222;
     public bool Landscape { get; set; }
     public bool IsDefault { get; set; } = true;
+    // One font for every text of this format (see FontCatalog); a format is a complete "版型": positions, sizes and font.
+    public string FontFamily { get; set; } = "DFKai-SB";
     public double OffsetX { get; set; }
     public double OffsetY { get; set; }
     // Vertical layout, left to right: printed recipient frame (X 37-69), phone, address at the right.
@@ -107,8 +109,6 @@ public sealed class AppSettings
     public string SelectedFormatId { get; set; } = "";
     public string PrinterName { get; set; } = "";
     public bool DirectEntry { get; set; }
-    // Font of all envelope text (see FontCatalog); replaces the per-text font names of older formats.
-    public string FontFamily { get; set; } = "DFKai-SB";
     public List<string> FrameTexts { get; set; } = ["內附對帳單"];
     // The last envelope sent to the printer, kept so it can be brought back for a reprint (even after a restart).
     public PrintData? LastPrint { get; set; }

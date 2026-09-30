@@ -81,8 +81,8 @@ internal static class Program
                 Assert(typeface.TryGetGlyphTypeface(out var glyphs) && glyphs.FamilyNames.Values.Contains(choice.Family) &&
                        sampleData.Recipient.Concat(sampleData.Address).Concat("內附對帳單").All(ch => glyphs.CharacterToGlyphMap.ContainsKey(ch)),
                     $"{choice.Family} loads from the package and covers the envelope text");
-                FontCatalog.Selected = choice.Family;
                 var envelopeFormat = repository.Formats()[0];
+                envelopeFormat.FontFamily = choice.Family; // the format carries its font; Draw applies it
                 var page = new RenderTargetBitmap((int)(envelopeFormat.WidthMm * EnvelopeRenderer.DipPerMm), (int)(envelopeFormat.HeightMm * EnvelopeRenderer.DipPerMm), 96, 96, PixelFormats.Pbgra32);
                 var back = new DrawingVisual();
                 using (var dc = back.RenderOpen()) dc.DrawRectangle(Brushes.White, null, new System.Windows.Rect(0, 0, page.Width, page.Height));

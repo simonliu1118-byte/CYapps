@@ -20,8 +20,8 @@ public static class FontCatalog
         new("LXGW WenKai TC", "霞鶩文楷（內建，楷書風）", "LXGWWenKaiTC-Regular.ttf")
     ];
 
-    // The family chosen in Settings; it is used for every envelope text (recipient, address, phone,
-    // postal code, frame text). Null keeps each text's own font name (unit checks, older data).
+    // The font of the format being drawn (EnvelopeRenderer sets it): used for every envelope text
+    // (recipient, address, phone, postal code, frame text). Null keeps each text's own font name (unit checks).
     public static string? Selected { get; set; }
 
     // Only built when a bundled font is really used: the pack:// scheme is registered by WPF's Application,

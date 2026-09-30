@@ -19,6 +19,7 @@ public static class EnvelopeRenderer
         Vector printerOrigin = default)
     {
         var visual = new DrawingVisual();
+        FontCatalog.Selected = format.FontFamily;
         using var dc = visual.RenderOpen();
         dc.PushTransform(new TranslateTransform(-printerOrigin.X, -printerOrigin.Y));
         if (preview)
@@ -48,6 +49,7 @@ public static class EnvelopeRenderer
     public static DrawingVisual DrawCalibration(EnvelopeFormat format, Vector printerOrigin = default)
     {
         var visual = new DrawingVisual();
+        FontCatalog.Selected = format.FontFamily;
         using var dc = visual.RenderOpen();
         dc.PushTransform(new TranslateTransform(-printerOrigin.X, -printerOrigin.Y));
         var hair = new Pen(Ink, .15 * DipPerMm);
