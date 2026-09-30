@@ -42,10 +42,10 @@ function syncV21Build10AfterLoad() {
 }
 
 function ensureV21Build10Stylesheet() {
-  if (document.querySelector('link[href="/v021b10.css"]')) return;
+  if (document.querySelector('link[href^="/v021b10.css"]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/v021b10.css';
+  link.href = '/v021b10.css?v=0216b6';
   document.head.appendChild(link);
 }
 
