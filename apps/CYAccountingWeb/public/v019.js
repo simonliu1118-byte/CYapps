@@ -22,10 +22,8 @@
 
   async function currentRoleV19() {
     try {
-      const response = await fetch('/api/auth/me', { cache: 'no-store' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.ok === false) return '';
-      return String(data?.user?.role || '');
+      const user = window.cyaccCurrentUser || (window.cyaccSessionPromise ? await window.cyaccSessionPromise : null);
+      return String(user?.role || '');
     } catch {
       return '';
     }

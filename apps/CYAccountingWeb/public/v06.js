@@ -22,7 +22,8 @@ function startV06LedgerTools() {
   setupLedgerDesktopTools();
   bindLedgerDesktopTools();
   observeLedgerRefreshes();
-  scheduleLedgerDesktopRefresh();
+  if (window.cyaccCoreReady) scheduleLedgerDesktopRefresh();
+  else window.addEventListener('cyacc:core-ready', scheduleLedgerDesktopRefresh, { once: true });
 }
 
 function setupLedgerDesktopTools() {
@@ -84,6 +85,7 @@ function observeLedgerRefreshes() {
 }
 
 function scheduleLedgerDesktopRefresh() {
+  if (!window.cyaccCoreReady) return;
   clearTimeout(cyLedgerRefreshTimer);
   cyLedgerRefreshTimer = setTimeout(loadLedgerOpeningAndRender, 25);
 }

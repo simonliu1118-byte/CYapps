@@ -47,7 +47,7 @@ const v20Css = read('public/v020.css');
 const v201Css = read('public/v0201.css');
 
 assert.equal(version, '0.21.6');
-assert.equal(build, '6');
+assert.equal(build, '7');
 assert.match(build11Js, /ensureV0211PatchScript\(\)/);
 assert.match(build11Js, /ensureV0211KeyboardScript\(\)/);
 assert.match(build11Js, /ensureV0212PatchScript\(\)/);
@@ -80,9 +80,9 @@ assert.match(keyboardJs, /if \(!window\.matchMedia\(CY_V0211_KEYBOARD_DESKTOP\)\
 assert.match(authJs, /credentials: 'include'/);
 assert.match(authJs, /location\.replace\('\/login'\)/);
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
-assert.match(indexHtml, /auth\.js\?v=0216b6/);
+assert.match(indexHtml, /auth\.js\?v=0216b7/);
 assert.match(indexHtml, /auth\.css\?v=0216b1/);
-assert.match(indexHtml, /v0216\.js\?v=0216b6/);
+assert.match(indexHtml, /v0216\.js\?v=0216b7/);
 assert.match(indexHtml, /v021b11\.js\?v=0216b6/);
 assert.match(indexHtml, /v021b10\.js\?v=0216b6/);
 assert.doesNotMatch(authCss, /@media \(min-width: 641px\) and \(max-width: 1023px\)/);

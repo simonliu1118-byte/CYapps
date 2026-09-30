@@ -27,7 +27,9 @@ function startCyaccAuth() {
     }
   });
 
-  void checkSession();
+  setBootStage('正在驗證帳號…');
+  window.cyaccSessionPromise = checkSession();
+  window.cyaccSessionPromise.catch(() => {});
 
   async function checkSession() {
     try {
@@ -36,13 +38,25 @@ function startCyaccAuth() {
         credentials: 'include'
       }, 8_000);
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.ok === false) {
+      if (response.status === 401 || data.code === 'AUTH_REQUIRED') {
         location.replace('/login');
-        return;
+        throw new Error('AUTH_REQUIRED');
       }
-      applyUser(data.user || {});
-    } catch {
-      location.replace('/login?error=service');
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.error || '帳號服務目前無法驗證登入狀態。');
+      }
+      const user = data.user || {};
+      window.cyaccCurrentUser = user;
+      applyUser(user);
+      window.dispatchEvent(new CustomEvent('cyacc:session-ready', { detail: { user } }));
+      return user;
+    } catch (error) {
+      if (String(error?.message || '') === 'AUTH_REQUIRED') throw error;
+      const message = error?.name === 'AbortError'
+        ? '帳號驗證逾時，請重新整理後再試。'
+        : (error?.message || '帳號服務目前無法驗證登入狀態。');
+      setBootFailure(message);
+      throw new Error(message);
     }
   }
 
@@ -89,6 +103,21 @@ function startCyaccAuth() {
       return;
     }
     if (attempt < 60) window.setTimeout(() => activateReadOnlyMobileLedger(attempt + 1), 50);
+  }
+}
+
+function setBootStage(message) {
+  const status = document.querySelector('#cyaccBootStatus');
+  if (status) status.textContent = message;
+}
+
+function setBootFailure(message) {
+  const status = document.querySelector('#cyaccBootStatus');
+  document.body.classList.remove('cyacc-booting');
+  document.body.classList.add('cyacc-boot-failed');
+  if (status) {
+    status.hidden = false;
+    status.textContent = message;
   }
 }
 
