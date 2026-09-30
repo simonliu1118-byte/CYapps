@@ -1,4 +1,4 @@
-const CY_V0216_VERSION = 'V0.21.6';
+const CY_V0216_VERSION = 'V0.21.6 Build 1';
 
 document.addEventListener('DOMContentLoaded', setupV0216Version);
 window.addEventListener('load', setupV0216Version);
