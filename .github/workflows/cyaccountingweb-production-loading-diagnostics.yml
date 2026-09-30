@@ -1,0 +1,65 @@
+name: CYAccountingWeb Production Loading Diagnostics
+
+on:
+  push:
+    branches:
+      - diagnostics/cyacc-production-loading
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe production loading chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://acc.chihyuancm.com"
+          assets=(
+            /app.css /v03.css '/auth.css?v=0216b1' /v06.css /v07.css /v08.css /v09.css /v091.css /v010.css
+            /v011.css /v012.css /v013.css /v014.css /v015.css /v016.css /v0181.css /v019.css /v020.css /v021.css
+            '/auth.js?v=0216b1' /app.js /v03.js /v06.js /v07.js /v08.js /v09.js /v091.js /v011.js /v012.js /v013.js
+            /v014.js /v015.js /v016.js /v0181.js /v019.js /v020.js /v021.js /v021b8.js '/v021b10.js?v=0215b11'
+            '/v021b11.js?v=0215b10' '/v0216.js?v=0216b5'
+            /v021b8.css /v021b9.css /v021b10.css /v021b11.css
+            /v021b12.js /v021b12.css /v021b13.js /v021b13.css /v021b14.js /v021b14.css
+            /v021b15.js /v021b15.css /v021b16.js /v021b16.css
+            /v0211.js /v0211.css /v0211-keyboard.js /v0212.js /v0212.css
+            /v0214.js /v0214.css '/v0215.css?v=0215b10' /v0215b3.js '/v0215b4.js?v=0215b10'
+          )
+          printf '%-34s %-4s %-9s %-9s %s\n' "ASSET" "HTTP" "SECONDS" "BYTES" "TYPE"
+          failures=0
+          for path in "${assets[@]}"; do
+            metrics="$(curl --max-time 12 -sS -o /tmp/cyacc-asset -w '%{http_code} %{time_total} %{size_download} %{content_type}' "$base$path" || true)"
+            code="${metrics%% *}"
+            rest="${metrics#* }"
+            time="${rest%% *}"
+            rest="${rest#* }"
+            bytes="${rest%% *}"
+            type="${rest#* }"
+            printf '%-34s %-4s %-9s %-9s %s\n' "$path" "$code" "$time" "$bytes" "$type"
+            if [[ "$code" != "200" || "$bytes" == "0" ]]; then failures=$((failures + 1)); fi
+          done
+
+          echo "--- marker checks ---"
+          curl --max-time 12 -fsS "$base/v021b10.js?v=0215b11" | grep -F "setupV21Build10MobileAppBar" >/dev/null
+          curl --max-time 12 -fsS "$base/v021b10.css" | grep -F "@media (max-width: 767px)" >/dev/null
+          curl --max-time 12 -fsS "$base/v021b11.js?v=0215b10" | grep -F "ensureV0215Build4Script" >/dev/null
+          echo "mobile asset markers: OK"
+
+          echo "--- API timing ---"
+          curl --max-time 12 -sS -o /tmp/cyacc-health -D /tmp/cyacc-health-h -w 'health HTTP=%{http_code} seconds=%{time_total} bytes=%{size_download}\n' "$base/api/health"
+          cat /tmp/cyacc-health
+          echo
+          curl --max-time 12 -sS -o /tmp/cyacc-me -D /tmp/cyacc-me-h -w 'auth-me HTTP=%{http_code} seconds=%{time_total} bytes=%{size_download}\n' "$base/api/auth/me"
+          cat /tmp/cyacc-me
+          echo
+
+          if [[ "$failures" -ne 0 ]]; then
+            echo "Asset probe failures: $failures" >&2
+            exit 1
+          fi
