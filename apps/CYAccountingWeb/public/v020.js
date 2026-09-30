@@ -3,13 +3,24 @@ const CY_V20_MOBILE_CONFIRMATION_INIT = 'cyaccounting.v20.mobileConfirmationInit
 
 ensureV201Stylesheet();
 
-window.addEventListener('load', () => {
+let cyV20Started = false;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startV20, { once: true });
+} else {
+  startV20();
+}
+window.addEventListener('load', startV20, { once: true });
+
+function startV20() {
+  if (cyV20Started) return;
+  cyV20Started = true;
   syncV20Version();
   setupV20ViewportState();
   setupV20MobileConfirmationDefault();
   setupV20SettingsTabVisibility();
   setupV201MobileInlineEditVisibility();
-});
+}
 
 function ensureV201Stylesheet() {
   if (document.querySelector('link[href="/v0201.css"]')) return;
