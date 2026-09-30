@@ -417,6 +417,13 @@ jobs:
           fi
           echo "CYACC isolated development runtime is deployed and its CYID Service Binding is live."
 
+      - name: Run CYACC live Role/App Access/Session acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/cyacc-development-acceptance.mjs
+          node scripts/cyacc-development-acceptance.mjs
+
       - name: Remove isolated CYACC generated files
         if: always()
         shell: bash
