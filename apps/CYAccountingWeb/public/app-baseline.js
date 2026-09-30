@@ -1,6 +1,3 @@
-window.__CYACC_BASELINE_BUNDLE__ = true;
-
-
 /* ---- baseline section ---- */
 let cyaccAuthStarted = false;
 
@@ -3888,8 +3885,6 @@ function v17Escape(value) {
 /* ---- baseline section ---- */
 const CY_V20_VERSION = 'V0.20.1';
 const CY_V20_MOBILE_CONFIRMATION_INIT = 'cyaccounting.v20.mobileConfirmationInitialized';
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV201Stylesheet();
 let cyV20Started = false;
 
 if (document.readyState === 'loading') {
@@ -3909,13 +3904,6 @@ function startV20() {
   setupV201MobileInlineEditVisibility();
 }
 
-function ensureV201Stylesheet() {
-  if (document.querySelector('link[href="/v0201.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v0201.css';
-  document.head.appendChild(link);
-}
 
 function syncV20Version() {
   const version = document.querySelector('.version');
@@ -3968,13 +3956,6 @@ function setupV201MobileInlineEditVisibility() {
 const CY_V21_VERSION = 'V0.21.0 Build 7';
 const CY_V21_SPLIT_MEDIA = '(min-width: 1360px)';
 const CY_V21_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build1Stylesheet();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build2Stylesheet();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build3Stylesheet();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build5Stylesheet();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build6Stylesheet();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build7Stylesheet();
 let cyV21Started = false;
 
 if (document.readyState === 'loading') {
@@ -4001,53 +3982,11 @@ function startV21() {
   setupV21UserIdentity();
 }
 
-function ensureV21Build1Stylesheet() {
-  if (document.querySelector('link[href="/v021b1.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b1.css';
-  document.head.appendChild(link);
-}
 
-function ensureV21Build2Stylesheet() {
-  if (document.querySelector('link[href="/v021b2.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b2.css';
-  document.head.appendChild(link);
-}
 
-function ensureV21Build3Stylesheet() {
-  if (document.querySelector('link[href="/v021b3.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b3.css';
-  document.head.appendChild(link);
-}
 
-function ensureV21Build5Stylesheet() {
-  if (document.querySelector('link[href="/v021b5.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b5.css';
-  document.head.appendChild(link);
-}
 
-function ensureV21Build6Stylesheet() {
-  if (document.querySelector('link[href="/v021b6.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b6.css';
-  document.head.appendChild(link);
-}
 
-function ensureV21Build7Stylesheet() {
-  if (document.querySelector('link[href="/v021b7.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b7.css';
-  document.head.appendChild(link);
-}
 
 function syncV21Version() {
   const version = document.querySelector('.version');
@@ -4440,9 +4379,6 @@ function applyV21DesktopSplitWorkspace(enabled) {
 const CY_V21_BUILD8_VERSION = 'V0.21.0 Build 9';
 const CY_V21_BUILD8_SUMMARY_UNITS = 40;
 const CY_V21_BUILD9_MOBILE = '(max-width: 767px)';
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build8Stylesheet();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build9Stylesheet();
 let cyV21Build8Started = false;
 
 if (document.readyState === 'loading') {
@@ -4482,21 +4418,7 @@ function syncV21Build8AfterLoad() {
   syncV21Build9HelpCopy();
 }
 
-function ensureV21Build8Stylesheet() {
-  if (document.querySelector('link[href^="/v021b8.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b8.css?v=0216b6';
-  document.head.appendChild(link);
-}
 
-function ensureV21Build9Stylesheet() {
-  if (document.querySelector('link[href^="/v021b9.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b9.css?v=0216b6';
-  document.head.appendChild(link);
-}
 
 function syncV21Build8Version() {
   const version = document.querySelector('.version');
@@ -4835,8 +4757,6 @@ function v21Build8Escape(value) {
 const CY_V21_BUILD10_VERSION = 'V0.21.0 Build 10';
 const CY_V21_BUILD10_MOBILE = '(max-width: 767px)';
 const CY_V21_CONFIRMATION_KEY = 'cyaccounting.confirmationDrawerOpen';
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build10Stylesheet();
 let cyV21Build10Started = false;
 
 if (document.readyState === 'loading') {
@@ -4874,13 +4794,6 @@ function syncV21Build10AfterLoad() {
   syncV21Build10ConfirmationPolicy();
 }
 
-function ensureV21Build10Stylesheet() {
-  if (document.querySelector('link[href^="/v021b10.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b10.css?v=0216b6';
-  document.head.appendChild(link);
-}
 
 function syncV21Build10Version() {
   const version = document.querySelector('.version');
@@ -5187,20 +5100,6 @@ function setupV21Build10MobileFormCopy() {
 /* ---- baseline section ---- */
 const CY_V21_BUILD11_VERSION = 'V0.21.0 Build 11';
 const CY_V21_BUILD11_DESKTOP = '(min-width: 768px)';
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build11Stylesheet();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build12Script();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build13Script();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build14Script();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build15Script();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build16Script();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0211PatchScript();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0211KeyboardScript();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0212PatchScript();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0214PatchScript();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0215Stylesheet();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0215Build3Script();
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0215Build4Script();
 let cyV21Build11Started = false;
 
 if (document.readyState === 'loading') {
@@ -5217,109 +5116,18 @@ function startV21Build11() {
   setupV21Build11DesktopIsolation();
 }
 
-function ensureV21Build11Stylesheet() {
-  if (document.querySelector('link[href^="/v021b11.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b11.css?v=0216b6';
-  document.head.appendChild(link);
-}
 
-function ensureV21Build12Script() {
-  if (document.querySelector('script[src="/v021b12.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v021b12.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV21Build13Script() {
-  if (document.querySelector('script[src="/v021b13.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v021b13.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV21Build14Script() {
-  if (document.querySelector('script[src="/v021b14.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v021b14.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV21Build15Script() {
-  if (document.querySelector('script[src="/v021b15.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v021b15.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV21Build16Script() {
-  if (document.querySelector('script[src="/v021b16.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v021b16.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV0211PatchScript() {
-  if (document.querySelector('script[src="/v0211.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v0211.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV0211KeyboardScript() {
-  if (document.querySelector('script[src="/v0211-keyboard.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v0211-keyboard.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV0212PatchScript() {
-  if (document.querySelector('script[src="/v0212.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v0212.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV0214PatchScript() {
-  if (document.querySelector('script[src="/v0214.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v0214.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV0215Stylesheet() {
-  if (document.querySelector('link[href^="/v0215.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v0215.css?v=0216b6';
-  document.head.appendChild(link);
-}
 
-function ensureV0215Build3Script() {
-  if (document.querySelector('script[src="/v0215b3.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v0215b3.js';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
-function ensureV0215Build4Script() {
-  if (document.querySelector('script[src^="/v0215b4.js"]')) return;
-  const script = document.createElement('script');
-  script.src = '/v0215b4.js?v=0215b10';
-  script.async = false;
-  document.head.appendChild(script);
-}
 
 function syncV21Build11Version() {
   const version = document.querySelector('.version');
@@ -5370,8 +5178,6 @@ function syncV21Build11DesktopIsolation(desktop = window.matchMedia(CY_V21_BUILD
 const CY_V21_BUILD12_VERSION = 'V0.21.0 Build 12';
 const CY_V21_BUILD12_DESKTOP = '(min-width: 1024px)';
 const CY_V21_BUILD12_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build12Stylesheet();
 syncV21Build12Version();
 syncV21Build12Copy();
 
@@ -5381,13 +5187,6 @@ window.addEventListener('load', () => {
   setupV21Build12DesktopMonthPicker();
 });
 
-function ensureV21Build12Stylesheet() {
-  if (document.querySelector('link[href="/v021b12.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b12.css';
-  document.head.appendChild(link);
-}
 
 function syncV21Build12Version() {
   const version = document.querySelector('.version');
@@ -5589,8 +5388,6 @@ function v21Build12ReadMonth(input) {
 /* ---- baseline section ---- */
 const CY_V21_BUILD13_VERSION = 'V0.21.0 Build 13';
 const CY_V21_BUILD13_DESKTOP = '(min-width: 1024px)';
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build13Stylesheet();
 syncV21Build13Version();
 setupV21Build13ConnectionStatus();
 
@@ -5605,21 +5402,6 @@ const runV21Build13 = () => {
 if (document.readyState === 'complete') setTimeout(runV21Build13, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build13, 0), { once: true });
 
-function ensureV21Build13Stylesheet() {
-  if (document.querySelector('link[href="/v021b13.css"]')) return;
-  const attach = () => {
-    if (document.querySelector('link[href="/v021b13.css"]')) return;
-    if (!document.querySelector('link[href="/v021b12.css"]')) {
-      setTimeout(attach, 20);
-      return;
-    }
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = '/v021b13.css';
-    document.head.appendChild(link);
-  };
-  attach();
-}
 
 function syncV21Build13Version() {
   const version = document.querySelector('.version');
@@ -5775,8 +5557,6 @@ const CY_V21_BUILD14_VERSION = 'V0.21.0 Build 14';
 const CY_V21_BUILD14_DESKTOP = '(min-width: 1024px)';
 const CY_V21_BUILD14_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 let cyV21Build14InlineEdit = null;
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build14Stylesheet();
 syncV21Build14Version();
 
 const runV21Build14 = () => {
@@ -5791,13 +5571,6 @@ const runV21Build14 = () => {
 if (document.readyState === 'complete') setTimeout(runV21Build14, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build14, 0), { once: true });
 
-function ensureV21Build14Stylesheet() {
-  if (document.querySelector('link[href="/v021b14.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b14.css';
-  document.head.appendChild(link);
-}
 
 function syncV21Build14Version() {
   const version = document.querySelector('.version');
@@ -6231,8 +6004,6 @@ function v21Build14Escape(value) {
 const CY_V21_BUILD15_VERSION = 'V0.21.0 Build 15';
 const CY_V21_BUILD15_DESKTOP = '(min-width: 1024px)';
 let cyV21Build15Drag = null;
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build15Stylesheet();
 syncV21Build15Version();
 
 const runV21Build15 = () => {
@@ -6245,13 +6016,6 @@ const runV21Build15 = () => {
 if (document.readyState === 'complete') setTimeout(runV21Build15, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build15, 0), { once: true });
 
-function ensureV21Build15Stylesheet() {
-  if (document.querySelector('link[href="/v021b15.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b15.css';
-  document.head.appendChild(link);
-}
 
 function syncV21Build15Version() {
   const version = document.querySelector('.version');
@@ -6565,8 +6329,6 @@ function v21Build15Escape(value) {
 const CY_V21_BUILD16_VERSION = 'V0.21.0 Build 16';
 const CY_V21_BUILD16_DESKTOP = '(min-width: 1024px)';
 let cyV21Build16Saving = false;
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV21Build16Stylesheet();
 syncV21Build16Version();
 
 const runV21Build16 = () => {
@@ -6578,13 +6340,6 @@ const runV21Build16 = () => {
 if (document.readyState === 'complete') setTimeout(runV21Build16, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build16, 0), { once: true });
 
-function ensureV21Build16Stylesheet() {
-  if (document.querySelector('link[href="/v021b16.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v021b16.css';
-  document.head.appendChild(link);
-}
 
 function syncV21Build16Version() {
   const version = document.querySelector('.version');
@@ -6883,8 +6638,6 @@ const CY_V0211_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六�
 const CY_V0211_WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 let cyV0211RenderingManagers = false;
 const cyV0211ConfirmBypass = new WeakSet();
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0211Stylesheet();
 installV0211ConfirmDialog();
 installV0211ConfirmInterceptors();
 enforceV0211Version();
@@ -6910,13 +6663,6 @@ window.addEventListener('load', () => {
   setTimeout(runV0211Patch, 300);
 }, { once: true });
 
-function ensureV0211Stylesheet() {
-  if (document.querySelector('link[href="/v0211.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v0211.css';
-  document.head.appendChild(link);
-}
 
 function enforceV0211Version() {
   const version = document.querySelector('.version');
@@ -7555,8 +7301,6 @@ const CY_V0212_VERSION = 'V0.21.2';
 const CY_V0212_DESKTOP = '(min-width: 1024px)';
 let cyV0212DialogState = null;
 let cyV0212Rendering = false;
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0212Stylesheet();
 const runV0212 = () => {
   enforceV0212Version();
   if (!window.matchMedia(CY_V0212_DESKTOP).matches) return;
@@ -7577,13 +7321,6 @@ window.addEventListener('load', () => {
   setTimeout(runV0212, 420);
 }, { once: true });
 
-function ensureV0212Stylesheet() {
-  if (document.querySelector('link[href="/v0212.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v0212.css';
-  document.head.appendChild(link);
-}
 
 function enforceV0212Version() {
   let version = document.querySelector('.version');
@@ -7918,8 +7655,6 @@ let cyV0214BalanceAnchor = null;
 let cyV0214BalancePinned = false;
 let cyV0214BalanceHideTimer = null;
 const cyV0214PendingWrites = new Set();
-
-if (!window.__CYACC_BASELINE_BUNDLE__) ensureV0214Stylesheet();
 window.cyShowMigrationComplete = showMigrationCompleteV0214;
 window.cyCloseLedgerBalancePopover = closeLedgerBalancePopoverV0214;
 
@@ -7942,13 +7677,6 @@ window.addEventListener('load', () => {
   setTimeout(runV0214, 900);
 }, { once: true });
 
-function ensureV0214Stylesheet() {
-  if (document.querySelector('link[href="/v0214.css"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/v0214.css';
-  document.head.appendChild(link);
-}
 
 function enforceV0214Version() {
   let version = document.querySelector('.version');
