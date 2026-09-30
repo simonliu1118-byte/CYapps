@@ -11,16 +11,17 @@ const workflow = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'cyacco
 const template = fs.readFileSync(path.join(projectRoot, 'wrangler.cyid-development.template.jsonc'), 'utf8');
 
 assert.match(workflow, /deploy\/cyaccountingweb-cyid-development/);
-assert.match(workflow, /environment:\s*development/);
+assert.match(workflow, /environment:\s*cyaccountingweb-cyid-development/);
 assert.match(workflow, /wrangler\.cyid-development\.template\.jsonc/);
 assert.match(workflow, /smoke-cyid-development\.mjs/);
-assert.match(workflow, /CYACC_CYID_DEV_WORKER_NAME/);
-assert.match(workflow, /CYACC_CYID_DEV_D1_DATABASE_ID/);
-assert.match(workflow, /CYACC_CYID_DEV_APPLICATION_ID/);
-assert.match(workflow, /CYACC_CYID_DEV_WORKSPACE_ID/);
+assert.match(workflow, /CYACC_CYID_DEV_BASE_URL/);
+assert.match(workflow, /CYACC_CYID_DEV_SMOKE_EMPLOYEE_NO/);
+assert.match(workflow, /CYACC_CYID_DEV_SMOKE_PASSWORD/);
 assert.doesNotMatch(workflow, /CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN/);
 assert.doesNotMatch(workflow, /CF_R2_BACKUP_BUCKET/);
 assert.doesNotMatch(workflow, /CF_BACKUP_TOPOLOGY/);
+assert.doesNotMatch(workflow, /CLOUDFLARE_API_TOKEN/);
+assert.doesNotMatch(workflow, /CF_D1_DATABASE_ID/);
 assert.doesNotMatch(workflow, /branches:\s*\n\s*-\s*main/);
 
 const renderedTemplate = JSON.parse(template);
