@@ -169,11 +169,25 @@ In addition to the shared acceptance matrix, CYACC must prove:
 - legacy local `web_sessions` no longer authorizes after cutover;
 - accounting CRUD/import/export/backup behavior is unchanged by Identity migration.
 
-## 11. Current known acceptance gap
+## 11. Development acceptance state
 
-The controlled real new-Employee Email/browser lifecycle is temporarily deferred by current test conditions.
+CYAccountingWeb **V0.21.6 Build 1 / Draft PR #243** completed isolated provider-side live acceptance on CYID development run **#96**.
 
-That gap does not reopen the contract. CYACC development integration may continue, but final production acceptance still requires the shared lifecycle evidence defined by CYID.
+Proven live against the development provider and isolated CYACC D1/Worker Preview:
+
+- permanent-password consumer login and Session resolve;
+- direct USER projection with CYACC App Access;
+- CYACC server-side USER read-only enforcement;
+- valid Excel export for USER;
+- USER → ADMIN Role update through CYID admin authority revokes the old Session;
+- ADMIN re-login gains CYACC write authority and completes an isolated create/delete transaction roundtrip;
+- direct CYACC App Access revoke revokes the active Session and denies fresh login;
+- App Access + USER Role restore succeeds;
+- provider logout invalidates the consumer Session.
+
+Synthetic acceptance identities are development-only, use runtime-random masked credentials, and are restored to USER/App-Access-enabled baseline with test Sessions revoked during cleanup.
+
+Still separate from this acceptance: Tablet real-device behavior, real Password Recovery Email/browser delivery, the broader CYID new-Employee Email lifecycle matrix, and production cutover approval.
 
 ## 12. Canonical references
 
