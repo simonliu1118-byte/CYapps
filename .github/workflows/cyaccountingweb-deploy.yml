@@ -48,57 +48,58 @@ jobs:
         run: |
           node --check src/index.js
           node --check src/app.js
-          node --check src/app-v17.js
-          node --check src/app-v18.js
-          node --check src/app-v19.js
+          node --check src/identity-adapter.js
           node --check src/backup-storage-provider.js
           node --check src/gcs-backup-provider.js
           node --check src/r2-backup-provider.js
-          node --check src/v11-tools.js
-          node --check src/v12-tools.js
-          node --check src/v13-export.js
-          node --check src/v15-import.js
-          node --check src/v16-backup.js
-          node --check src/v17-backup.js
-          node --check src/v18-backup.js
-          node --check src/v19-migration.js
-          node --check src/v19-migration-safe.js
+          node --check src/accounting-tools.js
+          node --check src/accounting-controls.js
+          node --check src/excel-export.js
+          node --check src/excel-import.js
+          node --check src/backup-package.js
+          node --check src/gcs-backup.js
+          node --check src/backup-service.js
+          node --check src/desktop-migration-core.js
+          node --check src/desktop-migration.js
           node --check scripts/render-wrangler.mjs
           node --check scripts/prepare-sqljs.mjs
+          node --check scripts/validate-cyid-consumer-version.mjs
+          node --check scripts/resolve-cyid-production-runtime.mjs
+          node --check scripts/smoke-cyid-development.mjs
           node --check public/auth.js
+          node --check public/login.js
           node --check public/app.js
-          node --check public/v03.js
-          node --check public/v06.js
-          node --check public/v07.js
-          node --check public/v08.js
-          node --check public/v09.js
-          node --check public/v091.js
-          node --check public/v011.js
-          node --check public/v012.js
-          node --check public/v013.js
-          node --check public/v014.js
-          node --check public/v015.js
-          node --check public/v016.js
-          node --check public/v0181.js
-          node --check public/v019.js
-          node --check public/v020.js
-          node --check public/v021.js
-          node --check public/v021b8.js
+          node --check public/quick-entry.js
+          node --check public/ledger-tools.js
+          node --check public/input-confirmation.js
+          node --check public/quick-entry-settings.js
+          node --check public/category-management.js
+          node --check public/excel-export-ui.js
+          node --check public/ledger-inline-edit.js
+          node --check public/excel-import-ui.js
+          node --check public/backup-ui.js
+          node --check public/desktop-migration-ui.js
+          node --check public/adaptive-ui.js
 
       - name: Run application tests
         run: |
-          node tests/v15-import.mjs
-          node tests/v16-backup.mjs
-          node tests/v17-backup.mjs
-          node tests/v17-phase-b.mjs
-          node tests/v18-tiered-backup.mjs
-          node tests/v18-backup-ui.mjs
-          node tests/v19-desktop-migration.mjs
-          node tests/v19-d1-limits.mjs
-          node tests/v20-adaptive-ui.mjs
-          node tests/v21-desktop-ui.mjs
-          node tests/v21-adaptive-ui.mjs
+          node tests/excel-transfer.mjs
+          node tests/backup-package.mjs
+          node tests/gcs-backup.mjs
+          node tests/backup-compatibility.mjs
+          node tests/backup-service.mjs
+          node tests/backup-ui.mjs
+          node tests/desktop-migration.mjs
+          node tests/desktop-migration-d1.mjs
+          node tests/adaptive-ui.mjs
+          node tests/desktop-ui.mjs
           node tests/deploy-config.mjs
+          node tests/cyid-integration.mjs
+          node tests/startup.mjs
+          node tests/frontend-architecture.mjs
+          node tests/cyid-provider-contract.mjs
+          node tests/cyid-production-runtime.mjs
+          node scripts/validate-cyid-consumer-version.mjs
 
       - name: Prepare pinned browser SQLite runtime
         run: node scripts/prepare-sqljs.mjs
@@ -109,6 +110,8 @@ jobs:
           CF_D1_DATABASE_NAME: cyaccounting-web-ci-db
           CF_D1_DATABASE_ID: 11111111-1111-4111-8111-111111111111
           CF_IDENTITY_SERVICE: cyidentity-ci-placeholder
+          CF_CYID_APPLICATION_ID: CYACC_CI
+          CF_CYID_WORKSPACE_ID: workspace-ci-placeholder
           CF_R2_BACKUP_BUCKET: cyaccounting-backup-ci
           CF_BACKUP_TOPOLOGY: legacy_gcs
           CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: acc.example.com
@@ -142,7 +145,7 @@ jobs:
       CF_WORKER_NAME: ${{ vars.CF_WORKER_NAME }}
       CF_D1_DATABASE_NAME: ${{ vars.CF_D1_DATABASE_NAME }}
       CF_D1_DATABASE_ID: ${{ vars.CF_D1_DATABASE_ID }}
-      CF_IDENTITY_SERVICE: ${{ vars.CF_IDENTITY_SERVICE }}
+      CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
       CF_R2_BACKUP_BUCKET: ${{ vars.CF_R2_BACKUP_BUCKET }}
       CF_BACKUP_TOPOLOGY: ${{ vars.CF_BACKUP_TOPOLOGY }}
       CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: ${{ vars.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN }}
@@ -164,6 +167,9 @@ jobs:
       - name: Prepare pinned browser SQLite runtime
         run: node scripts/prepare-sqljs.mjs
 
+      - name: Resolve CYID production consumer runtime
+        run: node scripts/resolve-cyid-production-runtime.mjs
+
       - name: Render production Cloudflare config
         run: node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc
 
@@ -172,6 +178,75 @@ jobs:
 
       - name: Deploy Worker and static assets
         run: npx wrangler deploy --config wrangler.deploy.jsonc
+
+      - name: Verify production secure login entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
+
+          http_code="$(curl -sS -o /tmp/cyacc-http-login.html -D /tmp/cyacc-http-login.headers -w '%{http_code}' "http://$host/login")"
+          case "$http_code" in
+            301|302|307|308)
+              location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); print; exit}' /tmp/cyacc-http-login.headers | tr -d '\\r')"
+              LOCATION="$location" HOST="$host" node -e '
+                const u = new URL(process.env.LOCATION);
+                const host = process.env.HOST;
+                if (u.protocol !== "https:" || u.hostname !== host || !["/login", "/login/"].includes(u.pathname)) process.exit(1);
+              ' || {
+                echo "CYACC HTTP login redirect target is not the HTTPS login entry." >&2
+                exit 1
+              }
+              ;;
+            200)
+              grep -Eiq '^content-security-policy:.*upgrade-insecure-requests.*form-action https:' /tmp/cyacc-http-login.headers || {
+                echo "CYACC HTTP login document does not force secure form submission." >&2
+                exit 1
+              }
+              grep -Fq "window.location.protocol === 'http:'" /tmp/cyacc-http-login.html || {
+                echo "CYACC HTTP login document is missing the browser HTTPS bootstrap." >&2
+                exit 1
+              }
+              grep -Fq 'window.location.replace' /tmp/cyacc-http-login.html || {
+                echo "CYACC HTTP login browser bootstrap does not replace the insecure URL." >&2
+                exit 1
+              }
+              ;;
+            *)
+              echo "CYACC HTTP login entry returned an unsafe status ($http_code)." >&2
+              exit 1
+              ;;
+          esac
+
+          curl -fsS -D /tmp/cyacc-https-login.headers -o /tmp/cyacc-https-login.html "https://$host/login"
+          grep -Eiq '^strict-transport-security:[[:space:]]*max-age=31536000' /tmp/cyacc-https-login.headers || {
+            echo "CYACC HTTPS login response is missing HSTS." >&2
+            exit 1
+          }
+          grep -Eiq '^content-security-policy:.*upgrade-insecure-requests.*form-action https:' /tmp/cyacc-https-login.headers || {
+            echo "CYACC HTTPS login response is missing secure form CSP." >&2
+            exit 1
+          }
+          grep -Fq 'action="/login" method="post"' /tmp/cyacc-https-login.html || {
+            echo "CYACC HTTPS login page is not the expected standalone login form." >&2
+            exit 1
+          }
+          echo "CYACC production secure login entry verified."
+
+      - name: Verify production semantic frontend assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
+          curl --max-time 8 -fsS "$base/adaptive-ui.css?rev=semantic1" | grep -F '@media (max-width: 767px)' >/dev/null
+          curl --max-time 8 -fsS "$base/adaptive-ui.js?rev=semantic1" | grep -F 'mobileAccountMenuButton' >/dev/null
+          curl --max-time 8 -fsS "$base/auth.js?rev=semantic1" | grep -F 'window.__CYACC_BOOT_USER__' >/dev/null
+          curl --max-time 8 -fsS "$base/app.js?rev=semantic1" | grep -F 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise' >/dev/null
+          curl --max-time 8 -fsS "$base/ledger-tools.js?rev=semantic1" | grep -F 'cyacc:core-ready' >/dev/null
+          curl --max-time 8 -fsS "$base/quick-entry-settings.js?rev=semantic1" | grep -F 'setupQuickEntrySettingsPane' >/dev/null
+          curl --max-time 8 -fsS "$base/category-management.js?rev=semantic1" | grep -F 'setupCategoryTransfer' >/dev/null
+          curl --max-time 8 -fsS "$base/backup-ui.js?rev=semantic1" | grep -F 'setupBackupSettings' >/dev/null
+          echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files
         if: always()

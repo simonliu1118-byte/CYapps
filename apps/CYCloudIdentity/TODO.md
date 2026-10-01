@@ -2,29 +2,47 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
-## Current checkpoint — 2026-09-30
+## Current checkpoint — 2026-10-01
 
-- Current formal source baseline is **CYCloudIdentity 0.2.2 Build 1**. The currently deployed development runtime remains **0.2.1 Build 0**; this documentation consolidation does not itself require a runtime deployment.
-- 0.2.x 已完成 direct Workspace Role `SUPER_ADMIN / ADMIN / USER`、ADMIN-only Identity Admin capability、direct Employee App Access、durable first-lifecycle state、pending lifecycle、forced activated-account Email recovery，以及 Group-derived authority retirement。Legacy Group structures只可作 compatibility/history，不是 forward authority。
-- CY Web formal source baseline is **0.2.5 Build 1** after the same documentation consolidation；currently deployed development runtime remains **0.2.4 Build 0**，且已接入 0.2 principal/session model。`https://admin.chihyuancm.com` 為固定 canonical user-facing URL。
-- PR `#214` / branch `feature/cycloudidentity-first-login-password` 目標為 **CYID 0.3.0** first-login Email verification runtime。其 CI validation 可驗 source/migrations，但 PR event 不會真正 deploy development。
-- 已定案的 0.3 產品流程：新增 Employee -> 自動寄出 **Email 驗證**郵件與一次性首次登入密碼 -> 使用者從 CY Web 一般登入口登入 -> 強制設定正式密碼 -> CYID 完成 Email verification / first lifecycle -> **不建立一般 Session** -> 回到登入頁 -> 使用正式密碼重新登入。
-- 首次登入密碼必須有 expiry；逾期、管理員重寄驗證 Email 或 pending Email 修改時，舊首次登入密碼立即失效並產生新 credential／新 expiry。
-- CY Web 不再保留獨立「啟用帳號」入口；對外名稱維持 **Email 驗證**。技術欄位或 legacy endpoint 名稱若暫時保留，不得反向決定 UI/product terminology。
-- PR #214 目前 source 已具 initial credential、first-login ticket、forced first password 基礎，但仍需對齊最終 contract：**initial password expiry**、**first-login complete 不得直接發 normal session**、consumer-visible Email verification wording。
-- Production、backup rollout 與 consumer production cutover 均未進行。
+- Current source release is **CYCloudIdentity 0.3.5 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。Deployment evidence is tracked below; source version is not deployed-version evidence.
+- CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
+- 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
+- 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
+  - 只允許 CY Web core account application；
+  - 24 小時 expiry；
+  - 真正 single-use，成功驗證一次後不得再換第二張 ticket；
+  - 不建立 normal Identity Session。
+- 成功驗證首次登入密碼後，只簽發 10 分鐘的 opaque first-login ticket。ticket 不是 Session，normal session resolve 必須拒絕。
+- first-login completion 建立正式 scrypt credential、完成 Email verification / durable first lifecycle、刪除 temporary credential/ticket，回傳 `reloginRequired: true`，**不發 normal Session**。
+- 使用者必須回到 CY Web 一般登入頁，使用剛設定的正式密碼重新登入後，才會得到一般 CYID Session。
+- `重寄驗證 Email`、pending Email 修改都會先輪替 temporary credential 並使舊密碼/ticket 立即失效；pending Email 修改不受舊信 resend cooldown 阻擋。
+- Email delivery / Email-budget reservation 失敗時，不留下「未寄出但仍可登入」的新 temporary credential；Employee 保持 Email 未驗證並可由管理員重寄。
+- Provider local acceptance 已證明：expiry、single-use、core-app-only、ticket-not-session、completion-no-session、ticket replay rejection、explicit re-login、resend/edit invalidation。
+- CYID 0.3 development deploy 已成功完成 remote migration `0007_initial_email_password.sql`、Worker deploy 與 Identity secret configuration。
+- Controlled real Email/browser lifecycle 驗收依使用者目前條件暫緩；這不重開已定案 contract，但仍是 production 前必要 acceptance。
+- CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.2 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
+- CYAccountingWeb（CYACCweb）handoff 已收斂為 app-specific migration guide：`docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；共同 Role / Session / App Access / first-login / recovery 規範只讀 `docs/CONSUMER_INTEGRATION_STANDARD.md`。
+- CYACC **V0.21.6 Build 1 / Draft PR #243** isolated development live acceptance run #96 已通過：USER login/read-only/Excel、Role change Session invalidation、ADMIN isolated write、App Access revoke/restore + Session invalidation、logout。Password Recovery Email/browser、Tablet 真機與 production cutover 仍為獨立 gate。
+- Cross-repository contract mirror 已定義 manifest + exact-sync 規則：CY Web 等外部 repo 必須鏡像 manifest 所列 7 個 artifacts 並在 governance/CI/deploy 前 byte-compare；同 repo consumer 直接讀 canonical files。
+- **CYID production provisioning 已獲批准並完成**：`deploy/cycloudidentity-production` at `0e9dc3342cd581bf41090012aae0759bce026329`，Production Provisioning run #12 成功，包含獨立 Worker/D1、durable authority continuity、CYACC registry/Workspace enablement、runtime binding 與 Session resolve/logout/revoke probe；不是 development provider。該 deployment workflow 尚未整合到 main，source VERSION/BUILD 未變。
+- Production probe 使用短效合成 Session，並非真實密碼/Email/browser 驗收；這些 acceptance 與 backup/restore 尚未因此通過。CYACC 自己的正式部署/驗收由 CYACC 工作線追蹤。
+- **相容層與部署檢查完成**：讀 `docs/COMPATIBILITY_REVIEW.md`。已確認 obsolete Group API/projections、兩份 Session authority 檢查、舊不可達 lifecycle handlers 與 initial-access wrapper；第一批 source 清理已完成：resolve API 與 management/self-service 共用 `resolveIdentitySession`；移除 6 個未 dispatch 的 legacy lifecycle/admin handlers。Provider Group endpoints／public fields、initial-access wrapper 與 Email budget 重複尚待下一批協調清理。
+- **Production provisioning replay 已封住**：PR #254 直接在既有 production deployment branch 退休一次性 workflow；main 保存相同 inert gate。重跑只回 retirement error，不持有 Secrets，也沒有 continuity／migrations／deploy。日常 production deployment path 已建立於 `cycloudidentity-production-deploy.yml`：只接受 main 手動觸發，讀既有正式 bindings，consumer readiness 與 dry-run 通過後只做 forward migration/source deploy，不重播 authority。不得直接把含舊 consumer baseline 的整個 deployment branch 合入 main。
+- Backup rollout / restore acceptance 與 CY Web production business-data rollout 未完成。
 
 ## Documentation consolidation
 
 - `PROJECT_RULES.md` 是唯一 project-level 永久規則來源。
+- `docs/CONSUMER_INTEGRATION_STANDARD.md` 保存所有 CYID consumer 的 shared technical contract；`CONSUMER_CONTRACT_VERSION` / `CONSUMER_MIN_COMPATIBLE_VERSION` 保存 machine-readable compatibility window。
+- `docs/CONSUMER_CONTRACT_CHANGELOG.md` 保存 consumer-visible contract revision history。
 - `docs/ROLE_AND_ACCESS_MODEL.md` 保存 Role / Identity Admin / App Access / lifecycle product contract。
 - `docs/AUTH_CONTRACT.md` 保存 login/session/first-login/Email verification consumer contract。
 - `docs/UI_ACCESS.md` 保存 account-management UI terminology、action 與 authority matrix。
 - `docs/ARCHITECTURE.md` 保存 technical architecture / ownership / migration boundary。
 - `docs/OTP_SECURITY.md` 保存 OTP/security-policy contract。
+- `docs/consumers/CYACC_INTEGRATION_HANDOFF.md` 是 CYACC implementation guide；若與 canonical contract 衝突，以 canonical contract 為準。
 - `TODO.md` 是唯一 current status / next-work tracker。
-- Dated conversation handoff 與 obsolete Application Role Mapping 不再留在 active tree；需要歷史 checkpoint 時看 Git history。
-- Consumer handoff 只在 shared contract 驗收後，針對目標 consumer 工作線由上述 canonical docs 產生。
+- Dated conversation handoff 與 obsolete Application Role Mapping 不留在 active tree；歷史用 Git history 追溯。
 
 ## Active next sequence
 
@@ -32,28 +50,47 @@
 2. [x] 完成並 development-deploy 0.2 direct Role / Identity Admin / direct App Access migration。
 3. [x] 修正 0.2.1 first-lifecycle Email verified durability race並 development-deploy。
 4. [x] 收斂 active documentation，移除 dated handoff 與 obsolete role-mapping 文件。
-5. [ ] 對齊 PR #214 source：加入首次登入密碼 expiry 與 resend/pending-email-change invalidation。
-6. [ ] 對齊 PR #214 source：first-login complete 成功後不建立 normal Identity session，只回傳 completion / relogin-required result。
-7. [ ] 對齊 0.3 API/UI wording，使對外流程統一為 Email 驗證。
-8. [ ] Merge CYID 0.3.0 to `main`，再經 governed `deploy/cycloudidentity-development` 部署 development。
-9. [ ] 驗證 development migration/Worker health、既有 Super Admin 正式密碼登入與 session resolve。
-10. [ ] 由 CY Web consumer 實作單一登入入口 + first-login password-change flow + 完成後回登入頁。
-11. [ ] 建立 controlled USER，驗收新增 -> 驗證 Email -> 首次登入密碼 -> 強制正式密碼 -> 回登入 -> 正式密碼登入全流程。
-12. [ ] 驗收首次登入密碼 expiry、重寄驗證 Email、pending Email 修改、舊 initial credential 立即失效與寄送失敗 recovery。
-13. [ ] 驗收 USER self-service、正常 ADMIN USER lifecycle、Identity Admin role/App Access/Email recovery/anti-self-escalation、Super Admin-only security controls。
-14. [ ] 驗收 role/App Access change 的 session invalidation、literal expired-session evidence、forgot-password、own Email change 與 controlled Super Admin transfer。
-15. [ ] Shared contract 驗收穩定後，產出 CYAccountingWeb 與 CYInvoice consumer integration handoff；實作留在各自工作線。
-16. [ ] Production 前完成 low-frequency backup + restore acceptance；production cutover 需使用者另行明確同意。
+5. [x] 實作首次登入密碼 expiry、single-use、resend/pending-email-change invalidation。
+6. [x] first-login complete 改為只回 completion + `reloginRequired`，不建立 normal Identity Session。
+7. [x] 對外 UI/API wording 收斂為 Email 驗證，保留必要 legacy technical alias 但不再作產品語意。
+8. [x] Merge CYID 0.3.0 to `main` 並經 `deploy/cycloudidentity-development` 成功部署 development。
+9. [x] 驗證 0.3 migration、Worker bundle、auth-core、local login/first-login acceptance 與 development deployment health。
+10. [x] CY Web 0.3 consumer source完成並 development-deploy：單一登入入口、HttpOnly first-login ticket transport、forced permanent-password screen、完成後回登入。
+11. [ ] 建立 controlled USER，實際瀏覽器驗收：建立 -> 收驗證 Email -> 首次登入密碼 -> 設正式密碼 -> 回登入 -> 正式密碼登入。
+12. [ ] 實際驗收首次登入密碼 expiry、重寄驗證 Email、pending Email 修改、舊 credential 失效與 delivery-failure recovery。
+13. [ ] 實際驗收既有 Super Admin permanent-password login/F5/session resolve，並完成 USER self-service、正常 ADMIN、Identity Admin、Super Admin 權限矩陣。
+14. [ ] 驗收 role/App Access change session invalidation、literal expired normal Session、forgot-password、own Email change 與 controlled Super Admin transfer。**CYACC consumer 子矩陣的 Role/App Access Session invalidation 已於 run #96 通過；其餘項目仍未完成。**
+15. [x] 建立 governed CYID Consumer Integration Standard + contract compatibility versions + PR consumer-impact gate；再加入 cross-repository sync manifest / exact mirror requirement；CYACC handoff 收斂為 app-specific migration guide。
+16. [x] CYAccountingWeb 已採用 `CYID_CONSUMER_VERSION=1.0.1`，V0.21.6 Build 1 source + isolated development live Role/App Access/Session acceptance 已完成；real Email/browser lifecycle、Tablet 與 production cutover 仍是後續 gate。
+17. [ ] 在 CYInvoice 工作線適合的接入點，以同一 consumer standard 建立其 app-specific migration handoff；Device/local/offline 邊界仍由 CYInvoice 自己管理。
+18. [ ] 完成 low-frequency backup + restore acceptance；production provisioning 已明確批准並由 run #12 完成，這不代表 backup/restore 或 broader Email/browser acceptance 已通過。
+19. [x] 完成 CYWEB/CYID 相容層與 production workflow 檢查，結果在 `docs/COMPATIBILITY_REVIEW.md`。
+20. [x] 收斂 routine production deployment：既有 production settings/DB isolation、deployed core consumer 1.0.2 gate、dry-run、forward schema/source only；本批不執行尚未滿足 consumer/real Email acceptance 的 production release。
+21. [x] 移除不可達 handlers，統一 Session resolver、Login/Employee boundary、Email budget，退休 Group API/fields 與初次寄信 aliases；CY Web 0.7.0 coordinated consumer source 採 1.0.2。
 
 ## Explicitly deferred
 
 - Non-ADMIN HR Identity capability，直到有真實 HR workflow。
 - Universal fine-grained business permission catalog inside CYID。
 - CYInvoice Device pairing / Device Token / Local->Cloud / Windows offline credential cache。
-- Production Identity rollout、paid Cloudflare/Email/Google Cloud plans。
+- 尚未批准的其他 production rollout、paid Cloudflare/Email/Google Cloud plans。
 
 ## Reading order for current work
 
 `PROJECT_RULES.md` -> `README.md` -> relevant active contract -> this `TODO.md` -> current source/tests/migrations。
 
-不再讀 dated handoff 作 current state；需要歷史 checkpoint 時看 Git history。
+不讀 dated handoff 作 current state；需要歷史 checkpoint 時看 Git history。
+
+## 0.3.4 source cleanup validation
+
+- Consumer Impact: **NONE**；Consumer Contract remains 1.0.1 / minimum 1.0.0。Public response fields 與仍在 provider 的 Group APIs 未在本批改動。
+- Typecheck 與 25 個 Node tests 通過，含 Session resolve/guard parity、revoked/expired/disabled/credential-version/App Access cases。
+- Local Wrangler acceptance 被執行環境 `uv_interface_addresses` 錯誤阻擋；合併 gate 使用 GitHub Actions 的 existing auth + first-login Worker/D1 acceptance，不以 unit tests 替代。
+- 本 patch 未更新 development／production Worker；runtime deploy acceptance 與下一批移除 provider public legacy fields 分開追蹤。
+
+## 0.3.5 cleanup verification
+
+- Consumer Impact: **CONSUMER_UPDATE_REQUIRED** for callers of retired Group/role-mode APIs, `groupKeys`/`applicationRoleKey`, `activationDelivery` and `/activation/resend`. Canonical re-send is `/email-verification/resend-initial`. CYACC's direct 1.0.1 fields/routes are unaffected; minimum remains 1.0.0.
+- Typecheck and 38 Node tests pass, including obsolete-route rejection without DB access, shared Email-budget rollback/settlement and strict existing production configuration rendering. Auth + first-login real Worker/D1 acceptance remain required CI gates.
+- Physical historical tables/migrations remain. Bounded PBKDF2 verification remains for credential continuity; all newly written credentials use scrypt. No credentials were exported to establish this change.
+- Routine production workflow has no authority import/Employee repair, resource creation, secret replacement or synthetic Session writes. Real Email/browser, backup/restore and CY Web production cutover remain deferred separately.

@@ -1,0 +1,20 @@
+name: CYCloud Identity Production Provisioning (retired)
+
+on:
+  push:
+    branches:
+      - deploy/cycloudidentity-production
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retired:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Block completed one-time provisioning
+        run: |
+          echo "::error::One-time CYID production provisioning is retired. Do not replay development authority into production."
+          exit 1

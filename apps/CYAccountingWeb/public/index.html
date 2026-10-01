@@ -4,45 +4,56 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>志遠記帳系統 Web</title>
-  <link rel="stylesheet" href="/app.css">
-  <link rel="stylesheet" href="/v03.css">
-  <link rel="stylesheet" href="/auth.css">
-  <link rel="stylesheet" href="/v06.css">
-  <link rel="stylesheet" href="/v07.css">
-  <link rel="stylesheet" href="/v08.css">
-  <link rel="stylesheet" href="/v09.css">
-  <link rel="stylesheet" href="/v091.css">
-  <link rel="stylesheet" href="/v010.css">
-  <link rel="stylesheet" href="/v011.css">
-  <link rel="stylesheet" href="/v012.css">
-  <link rel="stylesheet" href="/v013.css">
-  <link rel="stylesheet" href="/v014.css">
-  <link rel="stylesheet" href="/v015.css">
-  <link rel="stylesheet" href="/v016.css">
-  <link rel="stylesheet" href="/v0181.css">
-  <link rel="stylesheet" href="/v019.css">
-  <link rel="stylesheet" href="/v020.css">
-  <link rel="stylesheet" href="/v021.css">
+  <style id="cyaccBootStyle">
+    #cyaccBootStatus { display: none; }
+    @media (max-width: 767px) {
+      body.cyacc-booting .shell,
+      body.cyacc-booting #readOnlyNotice {
+        visibility: hidden !important;
+      }
+      body.cyacc-booting .topbar-actions {
+        display: none !important;
+      }
+      body.cyacc-booting #cyaccBootStatus,
+      body.cyacc-boot-failed #cyaccBootStatus {
+        display: flex;
+        min-height: calc(100dvh - 72px);
+        align-items: center;
+        justify-content: center;
+        padding: 32px 24px;
+        color: #526273;
+        font-size: 15px;
+        text-align: center;
+      }
+      body.cyacc-boot-failed #cyaccBootStatus {
+        color: #a34b45;
+      }
+    }
+  </style>
+  <script>
+    window.__cyaccBootWatchdog = window.setTimeout(() => {
+      const body = document.body;
+      const status = document.querySelector('#cyaccBootStatus');
+      if (!body?.classList.contains('cyacc-booting') || !status) return;
+      status.textContent = '載入時間過久，請重新整理頁面。';
+    }, 12000);
+  </script>
+  <link rel="stylesheet" href="/app.css?rev=semantic1">
+  <link rel="stylesheet" href="/accounting-ui.css?rev=semantic1">
+  <link rel="stylesheet" href="/quick-entry-settings.css?rev=semantic1">
+  <link rel="stylesheet" href="/category-management.css?rev=semantic1">
+  <link rel="stylesheet" href="/excel-export.css?rev=semantic1">
+  <link rel="stylesheet" href="/ledger-inline-edit.css?rev=semantic1">
+  <link rel="stylesheet" href="/excel-import.css?rev=semantic1">
+  <link rel="stylesheet" href="/backup.css?rev=semantic1">
+  <link rel="stylesheet" href="/desktop-migration.css?rev=semantic1">
+  <link rel="stylesheet" href="/adaptive-ui.css?rev=semantic1">
 </head>
-<body class="auth-locked">
-  <div id="authOverlay" class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-    <div class="auth-card">
-      <h2 id="loginTitle">志遠記帳系統</h2>
-      <p class="auth-subtitle">使用 CY 員工帳號登入</p>
-      <form id="loginForm" class="auth-form" autocomplete="on">
-        <label><span>員工編號</span><input id="loginEmployeeNo" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="username" required></label>
-        <label><span>密碼</span><input id="loginPassword" type="password" maxlength="200" autocomplete="current-password" required></label>
-        <button id="loginSubmit" class="primary" type="submit">登入</button>
-        <p id="loginMessage" class="auth-message" aria-live="polite"></p>
-      </form>
-      <p class="auth-note">帳號由 CYInvoice Cloud 員工帳號系統管理。目前開放 SUPER_ADMIN 與 ADMIN 使用記帳系統。</p>
-    </div>
-  </div>
-
+<body class="cyacc-booting">
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.21.0</span></p>
+      <p>CYAccounting Web <span class="version">V0.21.7 Build 2</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -51,6 +62,10 @@
       <div id="connectionStatus" class="status">連線檢查中</div>
     </div>
   </header>
+
+  <div id="cyaccBootStatus" role="status" aria-live="polite">正在載入介面…</div>
+
+  <div id="readOnlyNotice" class="read-only-banner hidden" role="status">唯讀模式：可檢視帳務資料與匯出 Excel；新增、編輯與管理功能已停用。</div>
 
   <main class="shell">
     <section class="card entry-card">
@@ -74,8 +89,8 @@
         </div>
       </form>
       <div class="quick-entry-tools" aria-label="快速輸入">
-        <details id="favoriteCategoryGroup" class="quick-tool-row hidden"><summary class="quick-tool-label">常用科目</summary><div id="favoriteCategoryButtons" class="quick-chip-list"></div></details>
-        <details id="summarySuggestionGroup" class="quick-tool-row hidden"><summary class="quick-tool-label">常用摘要</summary><div id="summarySuggestions" class="quick-chip-list"></div></details>
+        <div id="favoriteCategoryGroup" class="quick-tool-row hidden"><span class="quick-tool-label">常用科目</span><div id="favoriteCategoryButtons" class="quick-chip-list"></div></div>
+        <div id="summarySuggestionGroup" class="quick-tool-row hidden"><span class="quick-tool-label">常用摘要</span><div id="summarySuggestions" class="quick-chip-list"></div></div>
       </div>
       <p class="keyboard-hint">鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　Tab 切換收入／支出</p>
     </section>
@@ -151,26 +166,18 @@
     </div>
   </dialog>
 
-  <script src="/auth.js?v=0214b1-recovery" defer></script>
-  <script src="/app.js" defer></script>
-  <script src="/v03.js" defer></script>
-  <script src="/v06.js" defer></script>
-  <script src="/v07.js" defer></script>
-  <script src="/v08.js" defer></script>
-  <script src="/v09.js" defer></script>
-  <script src="/v091.js" defer></script>
-  <script src="/v011.js" defer></script>
-  <script src="/v012.js" defer></script>
-  <script src="/v013.js" defer></script>
-  <script src="/v014.js" defer></script>
-  <script src="/v015.js" defer></script>
-  <script src="/v016.js" defer></script>
-  <script src="/v0181.js" defer></script>
-  <script src="/v019.js" defer></script>
-  <script src="/v020.js" defer></script>
-  <script src="/v021.js" defer></script>
-  <script src="/v021b8.js" defer></script>
-  <script src="/v021b10.js" defer></script>
-  <script src="/v021b11.js?v=0214b1-recovery" defer></script>
+  <script src="/auth.js?rev=semantic1" defer></script>
+  <script src="/app.js?rev=semantic1" defer></script>
+  <script src="/quick-entry.js?rev=semantic1" defer></script>
+  <script src="/ledger-tools.js?rev=semantic1" defer></script>
+  <script src="/input-confirmation.js?rev=semantic1" defer></script>
+  <script src="/quick-entry-settings.js?rev=semantic1" defer></script>
+  <script src="/category-management.js?rev=semantic1" defer></script>
+  <script src="/excel-export-ui.js?rev=semantic1" defer></script>
+  <script src="/ledger-inline-edit.js?rev=semantic1" defer></script>
+  <script src="/excel-import-ui.js?rev=semantic1" defer></script>
+  <script src="/backup-ui.js?rev=semantic1" defer></script>
+  <script src="/desktop-migration-ui.js?rev=semantic1" defer></script>
+  <script src="/adaptive-ui.js?rev=semantic1" defer></script>
 </body>
 </html>

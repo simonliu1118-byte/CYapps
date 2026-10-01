@@ -112,9 +112,14 @@ OTP remains a shared engine for bootstrap, password recovery, activated Email ve
 ## 11. Source map
 
 - permanent product rules: `../PROJECT_RULES.md`
+- shared consumer integration standard: `CONSUMER_INTEGRATION_STANDARD.md`
+- cross-repository mirror membership: `../CONSUMER_SYNC_MANIFEST.json`
 - role/access product model: `ROLE_AND_ACCESS_MODEL.md`
 - executable consumer auth contract: `AUTH_CONTRACT.md`
 - management UI contract: `UI_ACCESS.md`
 - OTP policy: `OTP_SECURITY.md`
 - implementation status: `../TODO.md`
 - schema source of truth: `../migrations/`
+### 1.0.2 runtime cleanup
+
+Legacy Group endpoints/projections and compatibility role aliases are retired from runtime. Applied migrations and historical tables remain intact. Login parses/reads Employee authority once and selects permanent credential or purpose-scoped first-login exchange; Employee PATCH uses one guarded handler for pending and verified lifecycle. Email OTP and initial Email delivery share one global/Workspace budget reservation/settlement operation. No HTTP handler re-enters another handler.

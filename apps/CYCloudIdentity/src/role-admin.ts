@@ -63,7 +63,7 @@ export async function handleRoleAccessSnapshot(
     });
   }
 
-  const [employees, applications, directAccess, groups, memberships, groupAccess] = await Promise.all([
+  const [employees, applications, directAccess] = await Promise.all([
     env.DB.prepare(
       `SELECT e.employee_id,
               e.employee_no,
@@ -87,8 +87,7 @@ export async function handleRoleAccessSnapshot(
       `SELECT wa.application_id,
               a.display_name,
               a.status AS application_status,
-              wa.enabled,
-              wa.compatibility_role_mode
+              wa.enabled
          FROM workspace_applications wa
          JOIN applications a ON a.application_id = wa.application_id
         WHERE wa.workspace_id = ?1
@@ -99,24 +98,6 @@ export async function handleRoleAccessSnapshot(
          FROM employee_application_access
         WHERE workspace_id = ?1
         ORDER BY employee_id, application_id`
-    ).bind(actor.workspaceId).all(),
-    env.DB.prepare(
-      `SELECT group_id, group_key, display_name, description, status, revision
-         FROM identity_groups
-        WHERE workspace_id = ?1
-        ORDER BY display_name, group_key`
-    ).bind(actor.workspaceId).all(),
-    env.DB.prepare(
-      `SELECT employee_id, group_id
-         FROM employee_identity_groups
-        WHERE workspace_id = ?1
-        ORDER BY employee_id, group_id`
-    ).bind(actor.workspaceId).all(),
-    env.DB.prepare(
-      `SELECT group_id, application_id, enabled, application_role_key
-         FROM identity_group_application_access
-        WHERE workspace_id = ?1
-        ORDER BY group_id, application_id`
     ).bind(actor.workspaceId).all(),
   ]);
 
@@ -147,7 +128,6 @@ export async function handleRoleAccessSnapshot(
       display_name: string;
       application_status: string;
       enabled: number;
-      compatibility_role_mode: "USER_ADMIN" | null;
     };
     return {
       ...row,
@@ -165,12 +145,7 @@ export async function handleRoleAccessSnapshot(
     employees: employeeRows as unknown as JsonValue,
     applications: applicationRows as unknown as JsonValue,
     directAccess: (directAccess.results ?? []) as JsonValue,
-    // Legacy read-only projection kept temporarily so a not-yet-updated consumer
-    // does not fail while the new CY Web UI is deployed. These rows no longer
-    // participate in login/session authorization.
-    groups: (groups.results ?? []) as JsonValue,
-    memberships: (memberships.results ?? []) as JsonValue,
-    groupAccess: (groupAccess.results ?? []) as JsonValue,
+
   });
 }
 

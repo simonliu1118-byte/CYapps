@@ -182,7 +182,7 @@ print(p['session']['token'])
 PY
 )"
 
-RESEND_STATUS="$(curl --silent --output "$STATE_DIR/resend.json" --write-out '%{http_code}'   -X POST "http://127.0.0.1:${PORT}/v1/admin/identity/employees/employee-first-resend/activation/resend"   -H "authorization: Bearer ${SUPER_TOKEN}"   -H 'x-identity-application: APP_TEST_LOGIN')"
+RESEND_STATUS="$(curl --silent --output "$STATE_DIR/resend.json" --write-out '%{http_code}'   -X POST "http://127.0.0.1:${PORT}/v1/admin/identity/employees/employee-first-resend/email-verification/resend-initial"   -H "authorization: Bearer ${SUPER_TOKEN}"   -H 'x-identity-application: APP_TEST_LOGIN')"
 [[ "$RESEND_STATUS" == "503" ]]
 RESEND_OLD_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}'   -X POST "http://127.0.0.1:${PORT}/v1/identity/login"   -H 'content-type: application/json'   --data '{"workspaceId":"workspace-first-login","applicationId":"APP_TEST_LOGIN","employeeNo":"9004","password":"TempP4ss"}')"
 [[ "$RESEND_OLD_STATUS" == "401" ]]
@@ -194,7 +194,7 @@ import json, pathlib, sys
 p = json.loads(pathlib.Path(sys.argv[1]).read_text())
 assert p['employee']['email'] == 'edit-new@example.test'
 assert p['emailVerificationDelivery']['sent'] is False
-assert p['activationDelivery']['sent'] is False
+assert p['emailVerificationDelivery']['sent'] is False
 PY
 EDIT_OLD_STATUS="$(curl --silent --output /dev/null --write-out '%{http_code}'   -X POST "http://127.0.0.1:${PORT}/v1/identity/login"   -H 'content-type: application/json'   --data '{"workspaceId":"workspace-first-login","applicationId":"APP_TEST_LOGIN","employeeNo":"9005","password":"TempP4ss"}')"
 [[ "$EDIT_OLD_STATUS" == "401" ]]

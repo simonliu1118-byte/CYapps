@@ -1,6 +1,6 @@
 # CYCloud Identity — Role and Access Model
 
-> **Status:** approved current product model. CYID 0.2 role/access runtime is deployed in development; 0.3 first-login Email verification changes are approved forward contract and tracked in `../TODO.md`.
+> **Status:** current product model for CYID `0.3.x`. Direct Role / Identity Admin / App Access and first-login Email verification are deployed to development; exact rollout and acceptance status is tracked in `../TODO.md`.
 
 ## 1. Scope
 
@@ -111,4 +111,7 @@ Old Identity Group memberships, Group Application grants and `USER_ADMIN` compat
 
 ## 12. Consumer boundary
 
-CY Web is the first consumer/core account portal. CYAccountingWeb and CYInvoice adopt the same shared role/session/App Access contract in their own workstreams. CYInvoice-specific Device/local/offline behavior remains outside CYID.
+All consumers implement shared Identity through `CONSUMER_INTEGRATION_STANDARD.md` and the machine-readable compatibility window. CY Web is the first consumer/core account portal. CYAccountingWeb and CYInvoice adopt the same shared role/session/App Access contract in their own workstreams. Consumer-specific business/module permissions stay app-local, and CYInvoice-specific Device/local/offline behavior remains outside CYID.
+### 1.0.2 runtime cleanup
+
+Legacy Group endpoints/projections and compatibility role aliases are retired from runtime. Applied migrations and historical tables remain intact. Login parses/reads Employee authority once and selects permanent credential or purpose-scoped first-login exchange; Employee PATCH uses one guarded handler for pending and verified lifecycle. Email OTP and initial Email delivery share one global/Workspace budget reservation/settlement operation. No HTTP handler re-enters another handler.
