@@ -8963,3 +8963,368 @@
     width: min(300px, calc(100vw - 20px));
   }
 }
+
+/* Mobile compact utility dialogs.
+   Account, category, opening balance and month lock share one visual language. */
+@media (max-width: 767px) {
+  .mobile-utility-dialog {
+    box-sizing: border-box !important;
+    width: min(350px, calc(100vw - 28px)) !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: calc(100dvh - 40px) !important;
+    margin: auto !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border: 1px solid #d8e0e8 !important;
+    border-radius: 12px !important;
+    background: #fff !important;
+  }
+
+  .mobile-utility-dialog[open] {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .mobile-utility-dialog::backdrop {
+    background: rgba(30, 39, 51, .28) !important;
+  }
+
+  .mobile-utility-dialog > .modal-header,
+  .mobile-utility-head {
+    position: static !important;
+    z-index: auto !important;
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: start !important;
+    gap: 10px !important;
+    min-height: 0 !important;
+    padding: 13px 14px 10px !important;
+    border-bottom: 1px solid #edf0f3 !important;
+    background: #fff !important;
+  }
+
+  .mobile-utility-dialog > .modal-header h2,
+  .mobile-utility-head h2 {
+    margin: 0 !important;
+    color: #2c3a4a !important;
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    line-height: 1.25 !important;
+  }
+
+  .mobile-utility-dialog > .modal-header p,
+  .mobile-utility-head p {
+    display: block !important;
+    margin: 3px 0 0 !important;
+    color: #718092 !important;
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  .mobile-utility-dialog > .modal-header .icon-button,
+  .mobile-utility-head .icon-button {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #667587 !important;
+    font-size: 24px !important;
+    line-height: 30px !important;
+  }
+
+  .mobile-utility-body {
+    display: grid !important;
+    gap: 6px !important;
+    padding: 12px 14px 8px !important;
+  }
+
+  .mobile-utility-body p {
+    margin: 0 !important;
+    color: #344355 !important;
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+  }
+
+  .mobile-utility-note {
+    color: #718092 !important;
+    font-size: 10.5px !important;
+  }
+
+  .mobile-utility-actions,
+  .mobile-opening-dialog > .modal-actions {
+    position: static !important;
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    margin: 0 !important;
+    padding: 8px 14px 12px !important;
+    border-top: 1px solid #edf0f3 !important;
+    background: #fff !important;
+  }
+
+  .mobile-utility-actions button,
+  .mobile-opening-dialog > .modal-actions button {
+    min-height: 36px !important;
+    height: 36px !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    border-radius: 8px !important;
+    font-size: 11px !important;
+  }
+
+  .mobile-utility-message {
+    min-height: 0 !important;
+    margin: -5px 14px 10px !important;
+    color: #2f7a4c !important;
+    font-size: 10px !important;
+  }
+
+  .mobile-utility-message.error {
+    color: #a54b45 !important;
+  }
+
+  .mobile-settings-dialog .settings-layout {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .mobile-settings-dialog .settings-nav {
+    display: none !important;
+  }
+
+  .mobile-settings-dialog .settings-content {
+    box-sizing: border-box !important;
+    height: auto !important;
+    max-height: min(66dvh, 560px) !important;
+    min-height: 0 !important;
+    padding: 10px 12px 12px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-settings-dialog .settings-pane {
+    display: none !important;
+    padding: 0 !important;
+  }
+
+  .mobile-settings-dialog .settings-pane.active {
+    display: block !important;
+  }
+
+  .mobile-settings-dialog .settings-pane > h3,
+  .mobile-settings-dialog .settings-pane > .hint {
+    display: none !important;
+  }
+
+  .mobile-settings-dialog .pane-heading {
+    display: block !important;
+    margin: 0 0 8px !important;
+  }
+
+  .mobile-settings-dialog .pane-heading > div:first-child > h3,
+  .mobile-settings-dialog .pane-heading > div:first-child > .hint {
+    display: none !important;
+  }
+
+  .mobile-settings-dialog .settings-kind {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+    width: 100% !important;
+    margin: 0 0 10px !important;
+  }
+
+  .mobile-settings-dialog .settings-kind .kind-button {
+    min-height: 36px !important;
+    height: 36px !important;
+    border-radius: 8px !important;
+    font-size: 12px !important;
+  }
+
+  .mobile-settings-dialog .manager-list,
+  .mobile-settings-dialog #categoryManager {
+    display: grid !important;
+    gap: 8px !important;
+  }
+
+  .mobile-manager-row,
+  .mobile-category-group {
+    padding: 10px !important;
+    border: 1px solid #e3e8ed !important;
+    border-radius: 9px !important;
+    background: #fbfcfd !important;
+  }
+
+  .mobile-manager-main,
+  .mobile-category-group-head,
+  .mobile-category-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+
+  .mobile-manager-main strong,
+  .mobile-category-group-head strong,
+  .mobile-category-row > span:first-child {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    color: #334255 !important;
+    font-size: 13px !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .mobile-manager-badge {
+    flex: 0 0 auto !important;
+    padding: 2px 6px !important;
+    border-radius: 999px !important;
+    background: #edf4fa !important;
+    color: #2f648e !important;
+    font-size: 9.5px !important;
+    font-weight: 700 !important;
+  }
+
+  .mobile-manager-actions,
+  .mobile-category-actions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-end !important;
+    gap: 5px !important;
+  }
+
+  .mobile-manager-actions {
+    margin-top: 8px !important;
+  }
+
+  .mobile-manager-actions .mini-button,
+  .mobile-category-actions .mini-button {
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0 8px !important;
+    font-size: 10.5px !important;
+  }
+
+  .mobile-category-group {
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .mobile-category-group-head {
+    padding: 9px 10px !important;
+    border-bottom: 1px solid #e8edf1 !important;
+    background: #f7f9fb !important;
+  }
+
+  .mobile-category-items {
+    display: grid !important;
+    gap: 0 !important;
+    padding: 0 10px 9px !important;
+  }
+
+  .mobile-category-row {
+    min-height: 42px !important;
+    padding: 6px 0 !important;
+    border-bottom: 1px solid #edf0f3 !important;
+  }
+
+  .mobile-category-empty,
+  .mobile-manager-empty {
+    padding: 16px 8px !important;
+    color: #7b8898 !important;
+    font-size: 12px !important;
+    text-align: center !important;
+  }
+
+  .mobile-category-add,
+  .mobile-settings-dialog .inline-add {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 6px !important;
+    margin: 9px 0 0 !important;
+  }
+
+  .mobile-category-add input,
+  .mobile-settings-dialog .inline-add input {
+    min-width: 0 !important;
+    min-height: 36px !important;
+    height: 36px !important;
+    padding: 0 9px !important;
+    font-size: 12px !important;
+  }
+
+  .mobile-category-add button,
+  .mobile-settings-dialog .inline-add button {
+    min-height: 36px !important;
+    height: 36px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
+  }
+
+  .mobile-settings-dialog #settingsMessage {
+    margin: 8px 0 0 !important;
+    min-height: 0 !important;
+    font-size: 10.5px !important;
+  }
+
+  .mobile-opening-dialog .opening-dialog-heading {
+    display: none !important;
+  }
+
+  .mobile-opening-dialog #openingRows {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: min(58dvh, 500px) !important;
+    margin: 0 !important;
+    padding: 4px 14px 8px !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-opening-dialog .opening-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 112px !important;
+    align-items: center !important;
+    gap: 8px !important;
+    min-height: 44px !important;
+    padding: 5px 0 !important;
+    border-bottom: 1px solid #edf0f3 !important;
+  }
+
+  .mobile-opening-dialog .opening-row > span {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    color: #425164 !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .mobile-opening-dialog .opening-row input {
+    box-sizing: border-box !important;
+    width: 112px !important;
+    min-width: 0 !important;
+    min-height: 34px !important;
+    height: 34px !important;
+    padding: 0 8px !important;
+    font-size: 13px !important;
+    text-align: right !important;
+  }
+
+  .mobile-opening-dialog #openingMessage {
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    margin: 0 14px !important;
+    padding: 3px 0 0 !important;
+    font-size: 10px !important;
+  }
+}
