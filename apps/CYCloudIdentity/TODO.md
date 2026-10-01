@@ -110,3 +110,17 @@
 - CY Web synthetic Customer create/read-after-reload passed; this establishes business persistence for that operation only, not every lifecycle or role. No real Employee identifiers, credentials or opaque tokens are recorded in Public source.
 - Real Email/new USER/initial-password/credential-setting journey remains pending. A controlled inbox not already assigned in the development Workspace must be designated before creation; creation sends a real Email and grants mandatory core-App entry. No new Employee, Email send, Role/Access change, credential change or transfer was performed in this browser session.
 - USER/normal ADMIN/Identity Admin real-browser matrix, resend/expiry/pending-email-edit/recovery, backup/restore and production rollout remain open. Product/consumer versions are unchanged; Consumer Impact: NONE.
+
+## Durable pending tests — user deferred Email on 2026-10-01
+
+The user explicitly deferred real Email acceptance and asked that the checklist remain in Git across conversations. Continue engineering work without requiring an inbox. Automated/source acceptance does not close these real-browser/provider items.
+
+- [ ] Controlled new USER Email receipt, initial password, ticket-only first login, user-entered permanent password and explicit fresh login with no automatic Session.
+- [ ] Expired initial credential, resend, pending Email edit, invalidation of prior credential/tickets, send failure and retry.
+- [ ] Activated Employee forced Email recovery/re-verification, forgot-password and own Email change.
+- [ ] Protected Super Admin transfer with credential/OTP/user confirmation.
+- [ ] USER/normal ADMIN/Identity Admin real-browser capability matrix; role/App Access/Session expiry and revocation. Current real-browser evidence is SUPER_ADMIN login/reload only.
+- [ ] Backup/restore acceptance specific to CYID authority data; CY Web business-backup rehearsal does not back up CYID credentials or prove provider recovery.
+- [ ] Production source release readiness and explicit authorization; existing provisioning success does not close Email/browser/restore gates.
+
+Prerequisites for later Email tests: user-designated controlled inbox, explicit recipient/account-creation authority, secure login/OTP collection and user handoff for new permanent credential entry. No credentials or real recipient addresses belong in Public documents. CY Web's business backup target remains R2 + GCS under its own approved architecture; independent App/scope/credentials must be preserved.
