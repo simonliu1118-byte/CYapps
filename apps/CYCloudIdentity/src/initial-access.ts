@@ -5,10 +5,9 @@ import {
   sha256Hex,
   verifyCredential,
 } from "./crypto";
-import { handleLogin as handleRegularLogin } from "./auth";
-import { handleUpdateEmployee as handleRegularEmployeeUpdate } from "./employee-lifecycle";
 import { createEmailSender, normalizeAddress } from "./email";
 import { json, readJsonObject } from "./http";
+import { reserveEmailBudget, settleEmailBudget, type EmailBudgetReservation } from "./email-budget";
 import { requireWorkspaceAdmin } from "./admin-auth";
 import {
   canCreateRole,
@@ -17,7 +16,7 @@ import {
   normalizeStoredEmployeeRole,
   type StoredEmployeeRole,
 } from "./role-access";
-import { globalEmailDailyCeiling, loadWorkspaceSecurityPolicy } from "./security-policy";
+import { loadWorkspaceSecurityPolicy } from "./security-policy";
 import type { Env, IdentityPrincipal, JsonValue } from "./types";
 
 const INITIAL_PASSWORD_LENGTH = 8;
@@ -164,23 +163,6 @@ async function managedEmployee(env: Env, workspaceId: string, employeeId: string
   ).bind(workspaceId, employeeId).first<ManagedEmployeeRow>();
 }
 
-async function employeeByNo(env: Env, workspaceId: string, employeeNo: string): Promise<ManagedEmployeeRow | null> {
-  return env.DB.prepare(
-    `SELECT e.employee_id, e.workspace_id, e.employee_no, e.name, e.email_normalized,
-            e.email_verified_at, e.enabled, e.role_key, e.identity_admin, e.activated_at,
-            e.revision, w.status AS workspace_status, w.super_admin_employee_id,
-            CASE WHEN c.employee_id IS NULL THEN 0 ELSE 1 END AS credential_present,
-            CASE WHEN i.employee_id IS NULL THEN 0 ELSE 1 END AS initial_credential_present,
-            i.sent_at AS initial_sent_at
-       FROM employees e
-       JOIN workspaces w ON w.workspace_id = e.workspace_id
-       LEFT JOIN employee_credentials c ON c.employee_id = e.employee_id
-       LEFT JOIN employee_initial_credentials i ON i.employee_id = e.employee_id
-      WHERE e.workspace_id = ?1 AND e.employee_no = ?2
-      LIMIT 1`
-  ).bind(workspaceId, employeeNo).first<ManagedEmployeeRow>();
-}
-
 function targetRole(row: ManagedEmployeeRow) {
   return effectiveWorkspaceRole(row.employee_id, row.super_admin_employee_id, row.role_key);
 }
@@ -191,69 +173,9 @@ function actorCanManage(actor: IdentityPrincipal, row: ManagedEmployeeRow): bool
   return canManageEmployeeLifecycle(actor, role, row.identity_admin === 1);
 }
 
-function utcDate(now: Date): string {
-  return now.toISOString().slice(0, 10);
-}
-
-async function reserveEmailBudget(env: Env, workspaceId: string, now: Date): Promise<{ usageDate: string; workspaceReserved: boolean }> {
-  const usageDate = utcDate(now);
-  const globalLimit = globalEmailDailyCeiling(env);
-  const global = await env.DB.prepare(
-    `INSERT INTO email_delivery_budget(usage_date_utc, reserved_count, sent_count, updated_at)
-     VALUES(?1, 1, 0, ?2)
-     ON CONFLICT(usage_date_utc) DO UPDATE SET reserved_count = reserved_count + 1, updated_at = excluded.updated_at
-     WHERE email_delivery_budget.sent_count + email_delivery_budget.reserved_count < ?3
-     RETURNING reserved_count`
-  ).bind(usageDate, now.toISOString(), globalLimit).first<{ reserved_count: number }>();
-  if (!global) throw new Error("EMAIL_DAILY_BUDGET_EXHAUSTED");
-
-  const policy = await loadWorkspaceSecurityPolicy(env, workspaceId);
-  if (policy.emailDailyLimit === null) return { usageDate, workspaceReserved: false };
-  const workspace = await env.DB.prepare(
-    `INSERT INTO workspace_email_delivery_budget(workspace_id, usage_date_utc, reserved_count, sent_count, updated_at)
-     VALUES(?1, ?2, 1, 0, ?3)
-     ON CONFLICT(workspace_id, usage_date_utc) DO UPDATE SET reserved_count = reserved_count + 1, updated_at = excluded.updated_at
-     WHERE workspace_email_delivery_budget.sent_count + workspace_email_delivery_budget.reserved_count < ?4
-     RETURNING reserved_count`
-  ).bind(workspaceId, usageDate, now.toISOString(), policy.emailDailyLimit).first<{ reserved_count: number }>();
-  if (!workspace) {
-    await env.DB.prepare(
-      `UPDATE email_delivery_budget SET reserved_count = CASE WHEN reserved_count > 0 THEN reserved_count - 1 ELSE 0 END, updated_at = ?2
-        WHERE usage_date_utc = ?1`
-    ).bind(usageDate, now.toISOString()).run();
-    throw new Error("WORKSPACE_EMAIL_DAILY_LIMIT_EXHAUSTED");
-  }
-  return { usageDate, workspaceReserved: true };
-}
-
-async function settleEmailBudget(
+export async function issueInitialCredential(
   env: Env,
-  workspaceId: string,
-  reservation: { usageDate: string; workspaceReserved: boolean },
-  sent: boolean,
-): Promise<void> {
-  const now = new Date().toISOString();
-  await env.DB.prepare(
-    `UPDATE email_delivery_budget
-        SET reserved_count = CASE WHEN reserved_count > 0 THEN reserved_count - 1 ELSE 0 END,
-            sent_count = sent_count + ?2,
-            updated_at = ?3
-      WHERE usage_date_utc = ?1`
-  ).bind(reservation.usageDate, sent ? 1 : 0, now).run();
-  if (reservation.workspaceReserved) {
-    await env.DB.prepare(
-      `UPDATE workspace_email_delivery_budget
-          SET reserved_count = CASE WHEN reserved_count > 0 THEN reserved_count - 1 ELSE 0 END,
-              sent_count = sent_count + ?3,
-              updated_at = ?4
-        WHERE workspace_id = ?1 AND usage_date_utc = ?2`
-    ).bind(workspaceId, reservation.usageDate, sent ? 1 : 0, now).run();
-  }
-}
-
-async function issueInitialCredential(
-  env: Env,
-  employee: ManagedEmployeeRow,
+  employee: Pick<ManagedEmployeeRow, "workspace_id" | "employee_id" | "employee_no" | "email_normalized" | "initial_sent_at">,
   options: { bypassCooldown?: boolean } = {},
 ): Promise<{ expiresAt: string }> {
   const policy = await loadWorkspaceSecurityPolicy(env, employee.workspace_id);
@@ -286,7 +208,7 @@ async function issueInitialCredential(
    .first<{ revision: number }>();
   if (!stored) throw new Error("INITIAL_CREDENTIAL_WRITE_FAILED");
 
-  let reservation: { usageDate: string; workspaceReserved: boolean };
+  let reservation: EmailBudgetReservation;
   try {
     reservation = await reserveEmailBudget(env, employee.workspace_id, now);
   } catch (error) {
@@ -331,7 +253,7 @@ async function issueInitialCredential(
     ).bind(employee.employee_id, stored.revision).run();
     throw error;
   } finally {
-    await settleEmailBudget(env, employee.workspace_id, reservation, sent);
+    await settleEmailBudget(env, reservation, sent);
   }
 }
 
@@ -350,7 +272,7 @@ function deliveryStatus(code: string): number {
     || code === "WORKSPACE_EMAIL_DAILY_LIMIT_EXHAUSTED" ? 429 : 503;
 }
 
-export async function handleCreateEmployeeWithInitialPassword(request: Request, env: Env, requestId: string): Promise<Response> {
+export async function handleCreateEmployee(request: Request, env: Env, requestId: string): Promise<Response> {
   const actor = await requireWorkspaceAdmin(request, env);
   if (!actor) return json(env, requestId, 403, { error: { code: "WORKSPACE_ADMIN_REQUIRED", message: "Workspace administrator authority is required." } });
   const body = await readJsonObject(request);
@@ -383,14 +305,14 @@ export async function handleCreateEmployeeWithInitialPassword(request: Request, 
 
   const created = await managedEmployee(env, actor.workspaceId, employeeId);
   if (!created) throw new Error("EMPLOYEE_CREATE_READBACK_FAILED");
-  let activationDelivery: JsonValue;
+  let emailVerificationDelivery: JsonValue;
   try {
     const issued = await issueInitialCredential(env, created);
-    activationDelivery = { sent: true, expiresAt: issued.expiresAt };
+    emailVerificationDelivery = { sent: true, expiresAt: issued.expiresAt };
     await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: employeeId, eventType: "employee_activation_email_sent", detail: { method: "initial_password" } });
   } catch (error) {
     const errorCode = deliveryCode(error);
-    activationDelivery = { sent: false, errorCode };
+    emailVerificationDelivery = { sent: false, errorCode };
     await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: employeeId, eventType: "employee_activation_email_failed", detail: { errorCode, method: "initial_password" } });
   }
 
@@ -402,8 +324,7 @@ export async function handleCreateEmployeeWithInitialPassword(request: Request, 
       pendingActivation: true,
       revision: 1,
     },
-    emailVerificationDelivery: activationDelivery,
-    activationDelivery,
+    emailVerificationDelivery,
   });
 }
 
@@ -421,7 +342,6 @@ export async function handleResendInitialEmailVerification(request: Request, env
     const delivery = { sent: true, expiresAt: issued.expiresAt };
     return json(env, requestId, 202, {
       emailVerificationDelivery: delivery,
-      activationDelivery: delivery,
     });
   } catch (error) {
     const code = deliveryCode(error);
@@ -429,83 +349,14 @@ export async function handleResendInitialEmailVerification(request: Request, env
   }
 }
 
-export async function handleEmployeeUpdateWithInitialPassword(request: Request, env: Env, requestId: string, employeeIdRaw: string): Promise<Response> {
-  const employeeId = normalizeEmployeeId(employeeIdRaw);
-  const actor = await requireWorkspaceAdmin(request, env);
-  if (!actor || !employeeId) return handleRegularEmployeeUpdate(request, env, requestId, employeeIdRaw);
-  const existing = await managedEmployee(env, actor.workspaceId, employeeId);
-  if (!existing || existing.activated_at || existing.credential_present !== 0) return handleRegularEmployeeUpdate(request, env, requestId, employeeIdRaw);
-
-  const cloned = request.clone();
-  const body = await readJsonObject(cloned);
-  const employeeNo = body?.employeeNo === undefined ? existing.employee_no : normalizeEmployeeNo(body.employeeNo);
-  const displayName = body?.displayName === undefined ? existing.name : normalizeDisplayName(body.displayName);
-  const enabled = body?.enabled === undefined ? false : typeof body.enabled === "boolean" ? body.enabled : null;
-  const roleKey = body?.roleKey === undefined ? existing.role_key : normalizeStoredEmployeeRole(body.roleKey);
-  const revision = typeof body?.revision === "number" && Number.isInteger(body.revision) && body.revision >= 1 ? body.revision : null;
-  let email = existing.email_normalized;
-  if (body?.email !== undefined) {
-    try { if (typeof body.email !== "string") throw new Error("invalid"); email = normalizeAddress(body.email); }
-    catch { return json(env, requestId, 400, { error: { code: "INVALID_EMPLOYEE", message: "Employee Email is invalid." } }); }
-  }
-  if (!employeeNo || !displayName || enabled === null || !roleKey || !revision) return json(env, requestId, 400, { error: { code: "INVALID_EMPLOYEE", message: "Employee update is invalid." } });
-  if (!actorCanManage(actor, existing)) return json(env, requestId, 403, { error: { code: "EMPLOYEE_MANAGEMENT_NOT_ALLOWED", message: "This Employee cannot be managed by the current administrator." } });
-  if (enabled) return json(env, requestId, 409, { error: { code: "EMPLOYEE_NOT_ACTIVATED", message: "Employee must complete first activation before being enabled." } });
-  const roleChanged = roleKey !== existing.role_key;
-  if (roleChanged && actor.workspaceRole !== "SUPER_ADMIN" && !actor.isIdentityAdmin) return json(env, requestId, 403, { error: { code: "EMPLOYEE_ROLE_CHANGE_NOT_ALLOWED", message: "Identity administration authority is required to change Employee role." } });
-  if (existing.identity_admin === 1 && roleKey !== "ADMIN") return json(env, requestId, 409, { error: { code: "IDENTITY_ADMIN_REVOKE_REQUIRED", message: "Remove Identity Admin capability before changing this Employee to USER." } });
-
-  const identityChanged = employeeNo !== existing.employee_no || email !== existing.email_normalized;
-  const now = new Date().toISOString();
-  let row: any;
-  try {
-    row = await env.DB.prepare(
-      `UPDATE employees
-          SET employee_no = ?3, name = ?4, email_normalized = ?5, email_verified_at = NULL,
-              enabled = 0, role_key = ?6, revision = revision + 1, updated_at = ?7
-        WHERE workspace_id = ?1 AND employee_id = ?2 AND revision = ?8
-      RETURNING employee_id, employee_no, name, email_normalized, email_verified_at, enabled, role_key, identity_admin, activated_at, revision`
-    ).bind(actor.workspaceId, existing.employee_id, employeeNo, displayName, email, roleKey, now, revision).first();
-  } catch {
-    return json(env, requestId, 409, { error: { code: "EMPLOYEE_CONFLICT", message: "Employee could not be updated." } });
-  }
-  if (!row) return json(env, requestId, 409, { error: { code: "EMPLOYEE_REVISION_CONFLICT", message: "Employee revision no longer matches." } });
-
-  await audit(env, { workspaceId: actor.workspaceId, actorEmployeeId: actor.employeeId, targetEmployeeId: existing.employee_id, eventType: "employee_updated", detail: { employeeNo: row.employee_no, enabled: false, roleKey: row.role_key, emailChanged: email !== existing.email_normalized, revision: row.revision } });
-
-  let activationDelivery: JsonValue | undefined;
-  if (identityChanged) {
-    const refreshed = await managedEmployee(env, actor.workspaceId, existing.employee_id);
-    if (refreshed) {
-      try {
-        const issued = await issueInitialCredential(env, refreshed, { bypassCooldown: true });
-        activationDelivery = { sent: true, expiresAt: issued.expiresAt };
-      } catch (error) {
-        activationDelivery = { sent: false, errorCode: deliveryCode(error) };
-      }
-    }
-  }
-  return json(env, requestId, 200, {
-    employee: { employeeId: row.employee_id, employeeNo: row.employee_no, displayName: row.name, email: row.email_normalized, emailVerified: false, enabled: false, roleKey: row.role_key, isIdentityAdmin: row.identity_admin === 1, activated: false, revision: row.revision },
-    ...(activationDelivery ? {
-      emailVerificationDelivery: activationDelivery,
-      activationDelivery,
-    } : {}),
-  });
-}
-
-export async function handleLoginWithInitialPassword(request: Request, env: Env, requestId: string): Promise<Response> {
-  const body = await readJsonObject(request.clone());
-  const workspaceId = normalizeWorkspaceId(body?.workspaceId);
-  const employeeNo = normalizeEmployeeNo(body?.employeeNo);
-  const applicationId = normalizedApplicationId(body?.applicationId);
-  const password = normalizePassword(body?.password);
+export async function exchangeInitialPassword(
+  env: Env, requestId: string,
+  employee: { employee_id: string; workspace_id: string; employee_no: string; name: string; workspace_status: string; enabled: number },
+  applicationId: string, password: string,
+): Promise<Response> {
   const coreApp = coreApplicationId(env);
-  if (!workspaceId || !employeeNo || !applicationId || !password || !coreApp) return handleRegularLogin(request, env, requestId);
-
-  const employee = await employeeByNo(env, workspaceId, employeeNo);
-  if (!employee?.initial_credential_present || employee.activated_at || employee.credential_present !== 0) return handleRegularLogin(request, env, requestId);
-  if (applicationId !== coreApp || employee.workspace_status !== "active" || employee.enabled !== 0) {
+  const workspaceId = employee.workspace_id;
+  if (!coreApp || applicationId !== coreApp || employee.workspace_status !== "active" || employee.enabled !== 0) {
     return json(env, requestId, 401, { error: { code: "AUTHENTICATION_FAILED", message: "Authentication failed." } });
   }
   const initial = await env.DB.prepare(

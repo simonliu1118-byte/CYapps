@@ -410,3 +410,10 @@ Shared technical consumer contract:
 - `../CONSUMER_SYNC_MANIFEST.json` for cross-repository mirror membership.
 
 Consumer-specific handoffs contain only migration/app differences and may never override the documents above.
+
+## Consumer Contract 1.0.2 retirement
+
+- Direct principal fields remain the shared authority. Optional legacy `groupKeys` / `applicationRoleKey`, Group CRUD/membership/App Access routes, compatibility-role-mode and Group snapshot arrays are retired. Historical applied D1 migrations/data remain; they are not runtime authority.
+- Initial Email verification re-send uses `/v1/admin/identity/employees/{employeeId}/email-verification/resend-initial`; activated-account re-verification retains `/email-verification/resend`. Initial delivery results use `emailVerificationDelivery`; the old `activationDelivery` alias and `/activation/resend` route are retired.
+- Consumer Impact: **CONSUMER_UPDATE_REQUIRED** for consumers of these obsolete fields/routes. CY Web adopts 1.0.2 and must deploy before provider retirement reaches production. CYACC direct-principal/session integration does not use these fields/routes and remains compatible with its declared 1.0.1. Minimum compatible remains 1.0.0; it is not raised across unaffected consumers.
+- Daily production deployment requires the deployed core consumer to report adopted contract 1.0.2 and does not import development authority.

@@ -1,4 +1,5 @@
 import { createEmailSender, normalizeAddress } from "./email";
+import { issueInitialCredential } from "./initial-access";
 import { json, readJsonObject } from "./http";
 import { issueEmailOtp, type OtpIssueResult } from "./otp";
 import { requireIdentityAdministrator, requireWorkspaceAdmin, requireWorkspaceSuperAdmin } from "./admin-auth";
@@ -25,6 +26,7 @@ type ManagedEmployeeRow = {
   workspace_status: string;
   super_admin_employee_id: string | null;
   credential_present: number;
+  initial_sent_at: string | null;
 };
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -153,43 +155,16 @@ async function managedEmployee(
             e.revision,
             w.status AS workspace_status,
             w.super_admin_employee_id,
-            CASE WHEN c.employee_id IS NULL THEN 0 ELSE 1 END AS credential_present
+            CASE WHEN c.employee_id IS NULL THEN 0 ELSE 1 END AS credential_present,
+            i.sent_at AS initial_sent_at
        FROM employees e
        JOIN workspaces w ON w.workspace_id = e.workspace_id
        LEFT JOIN employee_credentials c ON c.employee_id = e.employee_id
+       LEFT JOIN employee_initial_credentials i ON i.employee_id = e.employee_id
       WHERE e.workspace_id = ?1
         AND e.employee_id = ?2
       LIMIT 1`
   ).bind(workspaceId, employeeId).first<ManagedEmployeeRow>();
-}
-
-async function pendingEmployee(
-  env: Env,
-  workspaceId: string,
-  employeeNo: string,
-): Promise<ManagedEmployeeRow | null> {
-  return env.DB.prepare(
-    `SELECT e.employee_id,
-            e.workspace_id,
-            e.employee_no,
-            e.name,
-            e.email_normalized,
-            e.email_verified_at,
-            e.enabled,
-            e.role_key,
-            e.identity_admin,
-            e.activated_at,
-            e.revision,
-            w.status AS workspace_status,
-            w.super_admin_employee_id,
-            CASE WHEN c.employee_id IS NULL THEN 0 ELSE 1 END AS credential_present
-       FROM employees e
-       JOIN workspaces w ON w.workspace_id = e.workspace_id
-       LEFT JOIN employee_credentials c ON c.employee_id = e.employee_id
-      WHERE e.workspace_id = ?1
-        AND e.employee_no = ?2
-      LIMIT 1`
-  ).bind(workspaceId, employeeNo).first<ManagedEmployeeRow>();
 }
 
 function targetRole(row: ManagedEmployeeRow) {
@@ -200,19 +175,6 @@ function actorCanManage(actor: IdentityPrincipal, row: ManagedEmployeeRow): bool
   const role = targetRole(row);
   if (role === "SUPER_ADMIN") return actor.workspaceRole === "SUPER_ADMIN" && actor.employeeId === row.employee_id;
   return canManageEmployeeLifecycle(actor, role, row.identity_admin === 1);
-}
-
-async function sendActivationEmail(env: Env, employee: ManagedEmployeeRow): Promise<OtpIssueResult> {
-  const link = portalUrl(env, { activate: "1", employeeNo: employee.employee_no });
-  return issueEmailOtp(env, emailSenderFrom(env), {
-    purpose: "employee_email_verification",
-    scopeKey: activationScope(employee.workspace_id, employee.employee_id),
-    workspaceId: employee.workspace_id,
-    email: employee.email_normalized,
-    subject: "CY Identity 帳號啟用",
-    textPrefix: "您的 CY Identity 帳號已建立。請使用下方驗證碼完成 Email 驗證並設定第一次登入密碼。",
-    textSuffix: `開啟 CY Web 完成帳號啟用：${link}`,
-  });
 }
 
 async function sendActivatedEmailVerification(env: Env, employee: ManagedEmployeeRow): Promise<OtpIssueResult> {
@@ -501,15 +463,15 @@ export async function handleUpdateEmployee(
   );
   await env.DB.batch(statements);
 
-  let activationDelivery: JsonValue | undefined;
-  if (emailChanged && pendingFirstActivation) {
+  let emailVerificationDelivery: JsonValue | undefined;
+  if (pendingFirstActivation && (emailChanged || employeeNo !== existing.employee_no)) {
     const refreshed = await managedEmployee(env, actor.workspaceId, existing.employee_id);
     if (refreshed) {
       try {
-        const issued = await sendActivationEmail(env, refreshed);
-        activationDelivery = { sent: true, ...issued };
+        const issued = await issueInitialCredential(env, refreshed, { bypassCooldown: true });
+        emailVerificationDelivery = { sent: true, ...issued };
       } catch (error) {
-        activationDelivery = { sent: false, errorCode: publicDeliveryError(error) };
+        emailVerificationDelivery = { sent: false, errorCode: publicDeliveryError(error) };
       }
     }
   }
@@ -527,7 +489,7 @@ export async function handleUpdateEmployee(
       activated: Boolean(row.activated_at),
       revision: row.revision,
     },
-    ...(activationDelivery ? { activationDelivery } : {}),
+    ...(emailVerificationDelivery ? { emailVerificationDelivery } : {}),
   });
 }
 
