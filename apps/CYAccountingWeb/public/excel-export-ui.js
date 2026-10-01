@@ -56,10 +56,34 @@ async function downloadMonthlyExcel() {
     const blob = await response.blob();
     if (!blob.size) throw new Error('匯出檔案內容為空。');
 
+    const fileName = `CYAccounting_${month}.xlsx`;
+    const file = new File([blob], fileName, {
+      type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const mobileShare = window.matchMedia('(max-width: 767px)').matches
+      && typeof navigator.share === 'function'
+      && (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [file] }));
+
+    if (mobileShare) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `志遠記帳 ${month} Excel`
+        });
+        setExportStatus('已開啟系統分享。');
+        return;
+      } catch (shareError) {
+        if (shareError?.name === 'AbortError') {
+          setExportStatus('已取消分享。');
+          return;
+        }
+      }
+    }
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `CYAccounting_${month}.xlsx`;
+    link.download = fileName;
     document.body.append(link);
     link.click();
     link.remove();

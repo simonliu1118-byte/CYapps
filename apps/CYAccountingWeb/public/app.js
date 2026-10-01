@@ -274,6 +274,7 @@ async function loadTransactions() {
   const month = String(els.monthFilter.value || '');
   if (!month) return;
   const requestId = ++cyTransactionRequestId;
+  setLedgerLoadingState(true);
   try {
     const data = await api(`/api/transactions?month=${encodeURIComponent(month)}`);
     if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
@@ -286,6 +287,20 @@ async function loadTransactions() {
   } catch (error) {
     if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
     els.transactionRows.innerHTML = `<tr><td colspan="7" class="empty">${escapeHtml(error.message)}</td></tr>`;
+  } finally {
+    if (requestId === cyTransactionRequestId) setLedgerLoadingState(false);
+  }
+}
+
+function setLedgerLoadingState(loading) {
+  const busy = Boolean(loading);
+  const ledger = document.querySelector('.ledger-card');
+  ledger?.classList.toggle('is-loading', busy);
+  ledger?.setAttribute('aria-busy', busy ? 'true' : 'false');
+  for (const control of document.querySelectorAll(
+    '#ledgerPrevMonth, #ledgerNextMonth, #monthFilter, #mobileLedgerMoreButton, #mobileLedgerBalanceButton, #ledgerSearchForm input, #ledgerSearchForm button'
+  )) {
+    if ('disabled' in control) control.disabled = busy;
   }
 }
 
