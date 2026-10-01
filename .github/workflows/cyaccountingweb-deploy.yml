@@ -245,7 +245,7 @@ jobs:
           curl --max-time 8 -fsS "$base/ledger-tools.js?rev=semantic1" | grep -F 'cyacc:core-ready' >/dev/null
           curl --max-time 8 -fsS "$base/quick-entry-settings.js?rev=semantic1" | grep -F 'setupQuickEntrySettingsPane' >/dev/null
           curl --max-time 8 -fsS "$base/category-management.js?rev=semantic1" | grep -F 'setupCategoryTransfer' >/dev/null
-          curl --max-time 8 -fsS "$base/backup-ui.js?rev=semantic1" | grep -F 'setupBackupSettingsV17' >/dev/null
+          curl --max-time 8 -fsS "$base/backup-ui.js?rev=semantic1" | grep -F 'setupBackupSettings' >/dev/null
           echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files

@@ -1,15 +1,13 @@
 /* CYAccountingWeb backup UI functional module. */
 
 window.addEventListener('load', () => {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = 'V0.18.0';
-  setupBackupSettingsV17();
+  setupBackupSettings();
 });
 
-let backupTopologyV18 = 'legacy_gcs';
+let backupTopology = 'legacy_gcs';
 
-async function setupBackupSettingsV17() {
-  const user = await sharedSessionUserV17();
+async function setupBackupSettings() {
+  const user = await sharedSessionUser();
   if (user?.role !== 'SUPER_ADMIN') return;
 
   const nav = document.querySelector('.settings-nav');
@@ -26,7 +24,7 @@ async function setupBackupSettingsV17() {
   const pane = document.createElement('section');
   pane.className = 'settings-pane backup-settings-pane';
   pane.dataset.settingsPane = 'backup';
-  pane.innerHTML = backupSettingsHtmlV17();
+  pane.innerHTML = backupSettingsHtml();
   content.append(pane);
 
   els.settingsTabs?.push(tab);
@@ -34,13 +32,13 @@ async function setupBackupSettingsV17() {
 
   tab.addEventListener('click', async () => {
     setSettingsTab('backup');
-    await loadBackupStatusV17();
+    await loadBackupStatus();
   });
-  pane.querySelector('#backupRunNow')?.addEventListener('click', runBackupNowV17);
-  pane.querySelector('#backupRefreshStatus')?.addEventListener('click', loadBackupStatusV17);
+  pane.querySelector('#backupRunNow')?.addEventListener('click', runBackupNow);
+  pane.querySelector('#backupRefreshStatus')?.addEventListener('click', loadBackupStatus);
 }
 
-async function sharedSessionUserV17() {
+async function sharedSessionUser() {
   if (window.cyaccCurrentUser) return window.cyaccCurrentUser;
   try {
     return window.cyaccSessionPromise ? await window.cyaccSessionPromise : null;
@@ -49,7 +47,7 @@ async function sharedSessionUserV17() {
   }
 }
 
-function backupSettingsHtmlV17() {
+function backupSettingsHtml() {
   return `
     <div class="backup-heading">
       <div>
@@ -107,22 +105,22 @@ function backupSettingsHtmlV17() {
     </div>`;
 }
 
-async function loadBackupStatusV17() {
+async function loadBackupStatus() {
   const run = document.querySelector('#backupRunNow');
   if (run) run.disabled = true;
-  setBackupMessageV17('');
+  setBackupMessage('');
 
   try {
     const data = await api('/api/backup/status');
-    renderBackupStatusV17(data);
+    renderBackupStatus(data);
   } catch (error) {
-    setBackupMessageV17(error.message || '無法讀取備份狀態。', true);
+    setBackupMessage(error.message || '無法讀取備份狀態。', true);
     const state = document.querySelector('#backupConnectionState');
     if (state) state.textContent = '狀態讀取失敗';
   }
 }
 
-function backupUiModelV18(data) {
+function backupUiModel(data) {
   const tiered = data?.topology === 'parallel_dual_provider' || data?.provider === 'tiered';
   const providers = data?.providers || {};
   const r2 = providers.cloudflare_r2 || {};
@@ -173,9 +171,9 @@ function backupUiModelV18(data) {
   };
 }
 
-function renderBackupStatusV17(data) {
-  const model = backupUiModelV18(data);
-  backupTopologyV18 = model.topology;
+function renderBackupStatus(data) {
+  const model = backupUiModel(data);
+  backupTopology = model.topology;
 
   const heading = document.querySelector('#backupHeadingTitle');
   const hint = document.querySelector('#backupHeadingHint');
@@ -198,30 +196,30 @@ function renderBackupStatusV17(data) {
 
   if (model.tiered) {
     const latest = model.latest;
-    if (lastTime) lastTime.textContent = latest?.createdAt ? backupLocalDateTimeV17(latest.createdAt) : '尚無';
+    if (lastTime) lastTime.textContent = latest?.createdAt ? backupLocalDateTime(latest.createdAt) : '尚無';
     if (lastDetail) {
       lastDetail.textContent = latest
-        ? `${Number(latest.rowCount || 0).toLocaleString()} 筆 · ${backupBytesV17(latest.byteSize || 0)} · Package SHA ${String(latest.packageSha256 || '').slice(0, 10)}…`
+        ? `${Number(latest.rowCount || 0).toLocaleString()} 筆 · ${backupBytes(latest.byteSize || 0)} · Package SHA ${String(latest.packageSha256 || '').slice(0, 10)}…`
         : (model.configured ? '可執行一次 paired backup 驗證 R2 + GCS' : '完成兩個 provider 設定後即可測試');
     }
-    renderBackupProviderHealthV18(model, latest);
-    renderTieredBackupHistoryV18(model.logicalBackups);
+    renderBackupProviderHealth(model, latest);
+    renderTieredBackupHistory(model.logicalBackups);
   } else {
     const latest = model.latest;
-    if (lastTime) lastTime.textContent = latest?.completedAt ? backupLocalDateTimeV17(latest.completedAt) : '尚無';
+    if (lastTime) lastTime.textContent = latest?.completedAt ? backupLocalDateTime(latest.completedAt) : '尚無';
     if (lastDetail) {
       lastDetail.textContent = latest
-        ? `${Number(latest.rowCount || 0).toLocaleString()} 筆 · ${backupBytesV17(latest.byteSize || 0)} · SHA ${String(latest.fileSha256 || '').slice(0, 10)}…`
+        ? `${Number(latest.rowCount || 0).toLocaleString()} 筆 · ${backupBytes(latest.byteSize || 0)} · SHA ${String(latest.fileSha256 || '').slice(0, 10)}…`
         : (model.configured ? '可先執行一次測試備份確認 GCS 權限與讀回驗證' : '完成 Cloudflare Secrets 後即可測試');
     }
-    renderLegacyProviderHealthV18(model);
-    renderBackupHistoryV17(model.recentRuns || []);
+    renderLegacyProviderHealth(model);
+    renderBackupHistory(model.recentRuns || []);
   }
 
   if (run) run.disabled = !model.configured;
 }
 
-function renderBackupProviderHealthV18(model, latest) {
+function renderBackupProviderHealth(model, latest) {
   const container = document.querySelector('#backupProviderHealth');
   if (!container) return;
   const copies = Array.isArray(latest?.copies) ? latest.copies : [];
@@ -229,15 +227,15 @@ function renderBackupProviderHealthV18(model, latest) {
   const gcsCopy = copies.find(copy => copy.provider === 'google_cloud_storage');
 
   container.innerHTML = [
-    providerHealthCardV18('Cloudflare R2', 'Operational backup', model.r2, r2Copy),
-    providerHealthCardV18('Google Cloud Storage', 'Cross-cloud validation', model.gcs, gcsCopy)
+    providerHealthCard('Cloudflare R2', 'Operational backup', model.r2, r2Copy),
+    providerHealthCard('Google Cloud Storage', 'Cross-cloud validation', model.gcs, gcsCopy)
   ].join('');
 }
 
-function renderLegacyProviderHealthV18(model) {
+function renderLegacyProviderHealth(model) {
   const container = document.querySelector('#backupProviderHealth');
   if (!container) return;
-  container.innerHTML = providerHealthCardV18(
+  container.innerHTML = providerHealthCard(
     'Google Cloud Storage',
     'Legacy production / rollback path',
     { configured: model.configured, retentionDays: Number(String(model.retention).match(/\d+/)?.[0] || 14) },
@@ -245,19 +243,19 @@ function renderLegacyProviderHealthV18(model) {
   );
 }
 
-function providerHealthCardV18(name, role, provider, copy) {
+function providerHealthCard(name, role, provider, copy) {
   const status = copy?.status || (provider?.configured ? 'configured' : 'not_configured');
   const badge = status === 'success' ? '成功' : status === 'failed' ? '失敗' : provider?.configured ? '已設定' : '未設定';
   const badgeClass = status === 'success' ? 'success' : status === 'failed' ? 'failed' : 'neutral';
-  const verified = copy?.verifiedAt ? ` · 驗證 ${backupLocalDateTimeV17(copy.verifiedAt)}` : '';
+  const verified = copy?.verifiedAt ? ` · 驗證 ${backupLocalDateTime(copy.verifiedAt)}` : '';
   const detail = copy?.lastError || `${Number(provider?.retentionDays || 0)} 天${verified}`;
   return `<article class="backup-provider-card">
-    <div class="backup-provider-card-head"><div><strong>${v17Escape(name)}</strong><span>${v17Escape(role)}</span></div><span class="backup-run-badge ${badgeClass}">${badge}</span></div>
-    <div class="backup-provider-card-detail">${v17Escape(detail)}</div>
+    <div class="backup-provider-card-head"><div><strong>${escapeBackupHtml(name)}</strong><span>${escapeBackupHtml(role)}</span></div><span class="backup-run-badge ${badgeClass}">${badge}</span></div>
+    <div class="backup-provider-card-detail">${escapeBackupHtml(detail)}</div>
   </article>`;
 }
 
-function renderBackupHistoryV17(runs) {
+function renderBackupHistory(runs) {
   const tbody = document.querySelector('#backupHistoryRows');
   if (!tbody) return;
   if (!runs.length) {
@@ -269,19 +267,19 @@ function renderBackupHistoryV17(runs) {
     const success = run.status === 'success';
     const detail = success ? run.fileName : (run.errorMessage || '備份失敗');
     return `<tr>
-      <td>${v17Escape(backupLocalDateTimeV17(run.completedAt || run.startedAt))}</td>
+      <td>${escapeBackupHtml(backupLocalDateTime(run.completedAt || run.startedAt))}</td>
       <td>${run.trigger === 'scheduled' ? '自動' : '手動測試'}</td>
       <td><span class="backup-run-badge ${success ? 'success' : 'failed'}">${success ? '成功' : '失敗'}</span></td>
-      <td class="backup-run-detail" title="${v17Escape(detail)}">${v17Escape(detail)}</td>
+      <td class="backup-run-detail" title="${escapeBackupHtml(detail)}">${escapeBackupHtml(detail)}</td>
       <td class="backup-copy-cell">—</td>
       <td class="backup-copy-cell"><span class="backup-run-badge ${success ? 'success' : 'failed'}">${success ? '成功' : '失敗'}</span></td>
       <td class="num">${Number(run.rowCount || 0).toLocaleString()}</td>
-      <td class="num">${run.byteSize ? backupBytesV17(run.byteSize) : '—'}</td>
+      <td class="num">${run.byteSize ? backupBytes(run.byteSize) : '—'}</td>
     </tr>`;
   }).join('');
 }
 
-function renderTieredBackupHistoryV18(backups) {
+function renderTieredBackupHistory(backups) {
   const tbody = document.querySelector('#backupHistoryRows');
   if (!tbody) return;
   if (!backups.length) {
@@ -297,31 +295,31 @@ function renderTieredBackupHistoryV18(backups) {
     const failed = copies.find(copy => copy.status !== 'success');
     const detail = failed?.lastError || item.backupId || '—';
     return `<tr>
-      <td>${v17Escape(backupLocalDateTimeV17(item.createdAt))}</td>
+      <td>${escapeBackupHtml(backupLocalDateTime(item.createdAt))}</td>
       <td>${item.trigger === 'scheduled' ? '自動' : '手動測試'}</td>
       <td><span class="backup-run-badge ${overall ? 'success' : 'failed'}">${overall ? '成功' : '部分失敗'}</span></td>
-      <td class="backup-run-detail" title="${v17Escape(detail)}">${v17Escape(item.backupId || detail)}</td>
-      <td class="backup-copy-cell">${copyBadgeV18(r2)}</td>
-      <td class="backup-copy-cell">${copyBadgeV18(gcs)}</td>
+      <td class="backup-run-detail" title="${escapeBackupHtml(detail)}">${escapeBackupHtml(item.backupId || detail)}</td>
+      <td class="backup-copy-cell">${backupCopyBadgeBase(r2)}</td>
+      <td class="backup-copy-cell">${backupCopyBadgeBase(gcs)}</td>
       <td class="num">${Number(item.rowCount || 0).toLocaleString()}</td>
-      <td class="num">${item.byteSize ? backupBytesV17(item.byteSize) : '—'}</td>
+      <td class="num">${item.byteSize ? backupBytes(item.byteSize) : '—'}</td>
     </tr>`;
   }).join('');
 }
 
-function copyBadgeV18(copy) {
+function backupCopyBadgeBase(copy) {
   if (!copy) return '<span class="backup-run-badge neutral">—</span>';
   const success = copy.status === 'success';
-  return `<span class="backup-run-badge ${success ? 'success' : 'failed'}" title="${v17Escape(copy.lastError || copy.verifiedAt || '')}">${success ? '成功' : '失敗'}</span>`;
+  return `<span class="backup-run-badge ${success ? 'success' : 'failed'}" title="${escapeBackupHtml(copy.lastError || copy.verifiedAt || '')}">${success ? '成功' : '失敗'}</span>`;
 }
 
-async function runBackupNowV17() {
-  const tiered = backupTopologyV18 === 'parallel_dual_provider';
+async function runBackupNow() {
+  const tiered = backupTopology === 'parallel_dual_provider';
   const target = tiered ? 'R2 + GCS paired backup' : 'Google Cloud Storage 測試備份';
   if (!confirm(`現在立即執行一次 ${target}？\n正常每日備份仍會在排程時間自動執行。`)) return;
   const button = document.querySelector('#backupRunNow');
   if (button) button.disabled = true;
-  setBackupMessageV17(tiered
+  setBackupMessage(tiered
     ? '正在建立單一 BackupSet、寫入 R2 + GCS 並逐一回讀驗證…'
     : '正在建立 data.json／manifest.json、上傳並回讀驗證…');
   try {
@@ -330,21 +328,21 @@ async function runBackupNowV17() {
       headers: jsonHeaders(),
       body: '{}'
     });
-    setBackupMessageV17(`備份完成：${data.backup?.backupId || data.backup?.fileName || ''}`);
-    await loadBackupStatusV17();
+    setBackupMessage(`備份完成：${data.backup?.backupId || data.backup?.fileName || ''}`);
+    await loadBackupStatus();
   } catch (error) {
-    setBackupMessageV17(error.message || '測試備份失敗。', true);
-    await loadBackupStatusV17();
+    setBackupMessage(error.message || '測試備份失敗。', true);
+    await loadBackupStatus();
   }
 }
 
-function setBackupMessageV17(message, isError = false) {
+function setBackupMessage(message, isError = false) {
   const element = document.querySelector('#backupMessage');
   if (!element) return;
   setDialogMessage(element, message || '', isError);
 }
 
-function backupLocalDateTimeV17(value) {
+function backupLocalDateTime(value) {
   if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
@@ -353,14 +351,14 @@ function backupLocalDateTimeV17(value) {
   }).format(date);
 }
 
-function backupBytesV17(value) {
+function backupBytes(value) {
   const bytes = Number(value || 0);
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function v17Escape(value) {
+function escapeBackupHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -372,8 +370,8 @@ function v17Escape(value) {
 (() => {
   const PHASE_C_REQUIRED = 14;
 
-  const baseBackupSettingsHtml = backupSettingsHtmlV17;
-  backupSettingsHtmlV17 = function backupSettingsHtmlV181() {
+  const baseBackupSettingsHtml = backupSettingsHtml;
+  backupSettingsHtml = function backupSettingsHtmlWithAcceptance() {
     return baseBackupSettingsHtml()
       .replace(
         '<div id="backupProviderHealth" class="backup-provider-health"></div>\n\n    <div class="backup-actions-row">',
@@ -386,13 +384,13 @@ function v17Escape(value) {
       .replace('colspan="8" class="empty">讀取中…', 'colspan="6" class="empty">讀取中…');
   };
 
-  const baseRenderBackupStatus = renderBackupStatusV17;
-  renderBackupStatusV17 = function renderBackupStatusV181(data) {
+  const baseRenderBackupStatus = renderBackupStatus;
+  renderBackupStatus = function renderBackupStatusWithAcceptance(data) {
     baseRenderBackupStatus(data);
-    renderPhaseCAcceptanceV181(data);
+    renderPhaseCAcceptance(data);
   };
 
-  renderTieredBackupHistoryV18 = function renderTieredBackupHistoryV181(backups) {
+  renderTieredBackupHistory = function renderTieredBackupHistory1(backups) {
     const tbody = document.querySelector('#backupHistoryRows');
     if (!tbody) return;
     const items = Array.isArray(backups) ? backups.slice(0, 8) : [];
@@ -409,17 +407,17 @@ function v17Escape(value) {
         ? `Package SHA ${String(item.packageSha256 || '')}`
         : copies.filter(copy => copy.status !== 'success').map(copy => copy.lastError || `${copy.provider} failed`).join(' · ');
       return `<tr>
-        <td>${v17Escape(backupLocalDateTimeV17(item.createdAt))}</td>
+        <td>${escapeBackupHtml(backupLocalDateTime(item.createdAt))}</td>
         <td>${item.trigger === 'scheduled' ? '自動' : '手動'}</td>
-        <td class="backup-run-detail" title="${v17Escape(title)}">${v17Escape(item.backupId || '—')}</td>
-        <td class="backup-copy-cell">${copyBadgeV181(r2)}</td>
-        <td class="backup-copy-cell">${copyBadgeV181(gcs)}</td>
-        <td class="backup-data-summary">${Number(item.rowCount || 0).toLocaleString()} 筆 · ${backupBytesV17(item.byteSize || 0)}</td>
+        <td class="backup-run-detail" title="${escapeBackupHtml(title)}">${escapeBackupHtml(item.backupId || '—')}</td>
+        <td class="backup-copy-cell">${backupCopyBadgeBase1(r2)}</td>
+        <td class="backup-copy-cell">${backupCopyBadgeBase1(gcs)}</td>
+        <td class="backup-data-summary">${Number(item.rowCount || 0).toLocaleString()} 筆 · ${backupBytes(item.byteSize || 0)}</td>
       </tr>`;
     }).join('');
   };
 
-  renderBackupHistoryV17 = function renderBackupHistoryV181(runs) {
+  renderBackupHistory = function renderBackupHistoryCompact(runs) {
     const tbody = document.querySelector('#backupHistoryRows');
     if (!tbody) return;
     const items = Array.isArray(runs) ? runs.slice(0, 8) : [];
@@ -432,26 +430,26 @@ function v17Escape(value) {
       const success = run.status === 'success';
       const detail = success ? run.fileName : (run.errorMessage || '備份失敗');
       return `<tr>
-        <td>${v17Escape(backupLocalDateTimeV17(run.completedAt || run.startedAt))}</td>
+        <td>${escapeBackupHtml(backupLocalDateTime(run.completedAt || run.startedAt))}</td>
         <td>${run.trigger === 'scheduled' ? '自動' : '手動'}</td>
-        <td class="backup-run-detail" title="${v17Escape(detail)}">${v17Escape(run.fileName || '—')}</td>
+        <td class="backup-run-detail" title="${escapeBackupHtml(detail)}">${escapeBackupHtml(run.fileName || '—')}</td>
         <td class="backup-copy-cell">—</td>
         <td class="backup-copy-cell"><span class="backup-run-badge ${success ? 'success' : 'failed'}">${success ? '成功' : '失敗'}</span></td>
-        <td class="backup-data-summary">${Number(run.rowCount || 0).toLocaleString()} 筆 · ${run.byteSize ? backupBytesV17(run.byteSize) : '—'}</td>
+        <td class="backup-data-summary">${Number(run.rowCount || 0).toLocaleString()} 筆 · ${run.byteSize ? backupBytes(run.byteSize) : '—'}</td>
       </tr>`;
     }).join('');
   };
 
-  function copyBadgeV181(copy) {
+  function backupCopyBadgeBase1(copy) {
     if (!copy) return '<span class="backup-run-badge neutral">—</span>';
     const success = copy.status === 'success';
     const failed = copy.status === 'failed';
     const label = success ? '成功' : failed ? '失敗' : '處理中';
     const cls = success ? 'success' : failed ? 'failed' : 'neutral';
-    return `<span class="backup-run-badge ${cls}" title="${v17Escape(copy.lastError || '')}">${label}</span>`;
+    return `<span class="backup-run-badge ${cls}" title="${escapeBackupHtml(copy.lastError || '')}">${label}</span>`;
   }
 
-  function deriveAcceptanceFromLogicalBackupsV181(backups, required) {
+  function derivePhaseCAcceptanceFromLogicalBackups(backups, required) {
     const scheduled = (Array.isArray(backups) ? backups : []).filter(item => item?.trigger === 'scheduled');
     let count = 0;
     for (const item of scheduled) {
@@ -466,13 +464,13 @@ function v17Escape(value) {
     return count;
   }
 
-  function phaseCAcceptanceUiModelV181(data) {
+  function phaseCAcceptanceUiModel(data) {
     const tiered = data?.topology === 'parallel_dual_provider' || data?.provider === 'tiered';
     if (!tiered) return { visible: false, required: PHASE_C_REQUIRED, count: 0, remaining: PHASE_C_REQUIRED, completed: false };
 
     const server = data?.phaseCAcceptance || {};
     const required = Math.max(1, Number(server.requiredConsecutiveScheduled || PHASE_C_REQUIRED));
-    const fallbackCount = deriveAcceptanceFromLogicalBackupsV181(data?.logicalBackups, required);
+    const fallbackCount = derivePhaseCAcceptanceFromLogicalBackups(data?.logicalBackups, required);
     const count = Math.max(0, Math.min(required, Number.isFinite(Number(server.consecutiveScheduledSuccesses))
       ? Number(server.consecutiveScheduledSuccesses)
       : fallbackCount));
@@ -487,10 +485,10 @@ function v17Escape(value) {
     };
   }
 
-  function renderPhaseCAcceptanceV181(data) {
+  function renderPhaseCAcceptance(data) {
     const container = document.querySelector('#backupAcceptance');
     if (!container) return;
-    const model = phaseCAcceptanceUiModelV181(data);
+    const model = phaseCAcceptanceUiModel(data);
     container.hidden = !model.visible;
     if (!model.visible) {
       container.innerHTML = '';
@@ -499,7 +497,7 @@ function v17Escape(value) {
 
     const state = model.completed ? 'Phase C gate 已完成' : `尚差 ${model.remaining} 次`;
     const latest = model.latestScheduledAt
-      ? `最近排程：${backupLocalDateTimeV17(model.latestScheduledAt)}`
+      ? `最近排程：${backupLocalDateTime(model.latestScheduledAt)}`
       : '尚未有 Phase C 排程備份';
     container.innerHTML = `
       <div class="backup-acceptance-main">
@@ -507,12 +505,8 @@ function v17Escape(value) {
         <strong>${model.count} / ${model.required}</strong>
       </div>
       <progress class="backup-acceptance-progress" max="${model.required}" value="${model.count}"></progress>
-      <div class="backup-acceptance-detail"><span>${v17Escape(state)}</span><span>${v17Escape(latest)}；手動測試不計</span></div>`;
+      <div class="backup-acceptance-detail"><span>${escapeBackupHtml(state)}</span><span>${escapeBackupHtml(latest)}；手動測試不計</span></div>`;
   }
 
-  window.phaseCAcceptanceUiModelV181 = phaseCAcceptanceUiModelV181;
-  window.addEventListener('load', () => {
-    const version = document.querySelector('.version');
-    if (version) version.textContent = 'V0.18.1';
-  });
+  window.phaseCAcceptanceUiModel = phaseCAcceptanceUiModel;
 })();

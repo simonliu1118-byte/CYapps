@@ -24,7 +24,7 @@ const context = vm.createContext({
 });
 vm.runInContext(source, context, { filename: 'backup-ui.js' });
 
-const tiered = context.backupUiModelV18({
+const tiered = context.backupUiModel({
   ok: true,
   provider: 'tiered',
   topology: 'parallel_dual_provider',
@@ -51,7 +51,7 @@ assert.equal(tiered.gcs.retentionDays, 14);
 assert.equal(tiered.latest.backupId, '20260926T165125Z');
 assert.match(tiered.heading, /R2 \+ GCS/);
 
-const acceptance = context.window.phaseCAcceptanceUiModelV181({
+const acceptance = context.window.phaseCAcceptanceUiModel({
   provider: 'tiered',
   topology: 'parallel_dual_provider',
   phaseCAcceptance: {
@@ -69,7 +69,7 @@ assert.equal(acceptance.required, 14);
 assert.equal(acceptance.remaining, 11);
 assert.equal(acceptance.completed, false);
 
-const manualOnly = context.window.phaseCAcceptanceUiModelV181({
+const manualOnly = context.window.phaseCAcceptanceUiModel({
   provider: 'tiered',
   topology: 'parallel_dual_provider',
   logicalBackups: [{
@@ -84,7 +84,7 @@ const manualOnly = context.window.phaseCAcceptanceUiModelV181({
 });
 assert.equal(manualOnly.count, 0, 'manual runs must not count toward Phase C scheduled acceptance');
 
-const legacy = context.backupUiModelV18({
+const legacy = context.backupUiModel({
   configured: true,
   retentionDays: 14,
   latestSuccess: { fileName: 'legacy' },
@@ -95,9 +95,9 @@ assert.equal(legacy.topology, 'legacy_gcs');
 assert.equal(legacy.latest.fileName, 'legacy');
 assert.equal(legacy.recentRuns.length, 1);
 assert.match(legacy.heading, /Google Cloud Storage/);
-assert.equal(context.window.phaseCAcceptanceUiModelV181({ configured: true }).visible, false);
+assert.equal(context.window.phaseCAcceptanceUiModel({ configured: true }).visible, false);
 
-const renderedHtml = context.backupSettingsHtmlV17();
+const renderedHtml = context.backupSettingsHtml();
 assert.match(renderedHtml, /<th>時間<\/th><th>方式<\/th><th>備份 ID<\/th><th>R2<\/th><th>GCS<\/th><th>資料<\/th>/);
 assert.doesNotMatch(renderedHtml, /<th>整體<\/th>/);
 assert.doesNotMatch(renderedHtml, /資料筆數<\/th>/);
