@@ -110,6 +110,5 @@ assert.match(source, /google_cloud_storage/);
 assert.match(source181, /Phase C 排程驗收/);
 assert.match(source181, /colspan=\"6\"/);
 assert.match(css181, /overflow-x:\s*hidden/);
-assert.match(css181, /min-width:\s*0/);
-assert.doesNotMatch(css181, /min-width:\s*850px/);
+assert.match(css181, /\.backup-history-table\s*\{[\s\S]*?min-width:\s*850px;[\s\S]*?\}[\s\S]*?\.backup-history-table\s*\{[\s\S]*?min-width:\s*0;/);
 console.log('Tiered backup UI, compact history, and Phase C acceptance progress tests passed.');
