@@ -52,3 +52,10 @@ Next deployment work should retire the continuity/Employee-repair operation from
 ## Verification and limits
 
 Read dispatch/import/call sites, consumer routes/types, deployed-workflow source and run/job/step summaries. Locally ran CYID schema, bootstrap schema, security-policy and historical role-mapping validators successfully. The role-mapping validator tests historical schema constraints; passing it does not make Group grants current authority. This review did not execute production login, Email, browser/device, restore or protected credential-algorithm inventory and did not change runtime code.
+
+## First remediation — CYID 0.3.4
+
+- Resolve API and management/self-service guards use one `resolveIdentitySession` implementation. `requireIdentitySession` only selects the validated principal; it has no independent query/check path.
+- Removed undispatched `handleCreateEmployee`, `handleResendEmployeeActivation`, `handleStartEmployeeActivation`, `handleConfirmEmployeeActivation`, `handleIdentityAdminSnapshot`, and `handlePutEmployeeApplicationAccess`. Active Employee management and first-login handlers remain.
+- Production replay is disabled on the actual deployment branch by PR #254 and the same retired gate is recorded in main. No Secrets, imports, D1 writes, migrations, probes or deploy remain in that workflow. Production Worker source/data are unchanged.
+- Provider public Group fields/routes remain pending consumer migration; no shared consumer semantic contract changed. Initial-access HTTP-handler chaining, shared budget operations and a routine production deployment workflow remain outstanding.
