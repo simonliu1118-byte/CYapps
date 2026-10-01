@@ -243,7 +243,7 @@ jobs:
           curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'window.cyaccSessionPromise = checkSessionFallback()' >/dev/null
           curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'Promise.race([request, timeout])' >/dev/null
           curl --max-time 8 -fsS "$base/app.js?rev=0218-mobile-loading" | grep -F 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise' >/dev/null
-          curl --max-time 8 -fsS "$base/ledger-tools.js?rev=semantic1" | grep -F 'cyacc:core-ready' >/dev/null
+          curl --max-time 8 -fsS "$base/ledger-tools.js?rev=semantic1" | grep -F 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender' >/dev/null
           curl --max-time 8 -fsS "$base/quick-entry-settings.js?rev=semantic1" | grep -F 'setupQuickEntrySettingsPane' >/dev/null
           curl --max-time 8 -fsS "$base/category-management.js?rev=semantic1" | grep -F 'setupCategoryTransfer' >/dev/null
           curl --max-time 8 -fsS "$base/backup-ui.js?rev=semantic1" | grep -F 'setupBackupSettings' >/dev/null
