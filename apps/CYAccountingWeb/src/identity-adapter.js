@@ -225,27 +225,28 @@ async function identityFetch(request, env, path, options = {}) {
   }
   if (options.body !== undefined) headers.set('content-type', 'application/json');
 
+  const timeoutMs = identityProviderTimeoutMs(env);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   const providerRequest = new Request(`https://cyid.internal${path}`, {
     method: 'POST',
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body)
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: controller.signal
   });
 
-  const timeoutMs = identityProviderTimeoutMs(env);
-  let timeoutId;
-  const timeout = new Promise(resolve => {
-    timeoutId = setTimeout(() => resolve(new Response(JSON.stringify({
+  try {
+    return await env.IDENTITY.fetch(providerRequest);
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+    return new Response(JSON.stringify({
       error: { code: 'IDENTITY_TIMEOUT', message: 'Identity provider did not respond in time.' }
     }), {
       status: 504,
       headers: { 'content-type': 'application/json; charset=utf-8' }
-    })), timeoutMs);
-  });
-
-  try {
-    return await Promise.race([env.IDENTITY.fetch(providerRequest), timeout]);
+    });
   } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    clearTimeout(timeoutId);
   }
 }
 

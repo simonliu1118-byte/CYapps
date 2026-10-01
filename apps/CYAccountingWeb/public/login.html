@@ -31,7 +31,7 @@
       <section id="loginPanel">
         <h2>員工帳號登入</h2>
         <p class="subtitle">使用 CY Identity 員工帳號與記帳系統 App Access。</p>
-        <form action="/login" method="post" class="login-form" autocomplete="on">
+        <form id="loginForm" action="/login" method="post" class="login-form" autocomplete="on">
           <label>
             <span>員工編號</span>
             <input id="employeeNo" name="employeeNo" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="username" required autofocus>
@@ -41,7 +41,7 @@
             <input name="password" type="password" autocomplete="current-password" required>
           </label>
           <p id="loginMessage" class="message" role="alert" aria-live="polite"></p>
-          <button class="primary" type="submit">登入</button>
+          <button id="loginButton" class="primary" type="submit">登入</button>
           <button id="forgotPassword" class="link-button" type="button">忘記密碼</button>
         </form>
       </section>
@@ -83,6 +83,6 @@
       <p class="identity-note">首次帳號啟用與 Email 驗證由 CY Web 帳號管理入口完成；本系統不建立第二套帳號或 Session。</p>
     </section>
   </main>
-  <script src="/login.js?v=0216" defer></script>
+  <script src="/login.js?v=0217b1" defer></script>
 </body>
 </html>

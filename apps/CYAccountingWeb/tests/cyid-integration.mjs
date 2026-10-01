@@ -100,8 +100,12 @@ const hangingEnv = {
   CYID_APPLICATION_ID: 'CYACC_CI',
   CYID_PROVIDER_TIMEOUT_MS: '100',
   IDENTITY: {
-    async fetch() {
-      return await new Promise(() => {});
+    async fetch(request) {
+      return await new Promise((resolve, reject) => {
+        const rejectOnAbort = () => reject(request.signal.reason || new Error('aborted'));
+        if (request.signal.aborted) rejectOnAbort();
+        else request.signal.addEventListener('abort', rejectOnAbort, { once: true });
+      });
     }
   }
 };
@@ -149,6 +153,18 @@ const cfVisitorHttp = await app.fetch(new Request('https://acc.example.com/login
   headers: { 'cf-visitor': '{"scheme":"http"}' }
 }), httpsAssetEnv);
 assert.equal(cfVisitorHttp.status, 308, 'Cloudflare HTTP visitor login must redirect to HTTPS');
+
+const apiLogin = await app.fetch(new Request('https://acc.example.com/api/auth/login', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ employeeNo: '0123', password: '12345678' })
+}), env);
+assert.equal(apiLogin.status, 200);
+assert.match(apiLogin.headers.get('set-cookie') || '', /cyaccounting_session=/);
+const apiLoginPayload = await apiLogin.json();
+assert.equal(apiLoginPayload.ok, true);
+assert.equal(apiLoginPayload.user.employeeNo, '0123');
+assert.equal('token' in apiLoginPayload, false);
 
 const secureLoginPage = await app.fetch(new Request('https://acc.example.com/login'), httpsAssetEnv);
 assert.equal(secureLoginPage.status, 200);
@@ -213,6 +229,8 @@ const adaptiveUi = fs.readFileSync(path.join(ROOT, 'public/adaptive-ui.js'), 'ut
 const workerApp = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
 assert.match(loginHtml, /action="\/login" method="post"/);
+assert.match(loginHtml, /id="loginForm"/);
+assert.match(workerApp, /url\.pathname === '\/api\/auth\/login'/);
 assert.match(loginHtml, /window\.location\.protocol === 'http:'/);
 assert.match(loginHtml, /window\.location\.replace/);
 assert.doesNotMatch(loginHtml, /src="\/app\.js"/);
@@ -231,7 +249,7 @@ assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(adaptiveUi, /MutationObserver/);
-assert.match(adaptiveUi, /CY_APP_VERSION = 'V0\.21\.7'/);
+assert.match(adaptiveUi, /CY_APP_VERSION = 'V0\.21\.7 Build 1'/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)

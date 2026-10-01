@@ -3,7 +3,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const recoveryPanel = document.querySelector('#recoveryPanel');
   const loginMessage = document.querySelector('#loginMessage');
   const forgot = document.querySelector('#forgotPassword');
+  const loginForm = document.querySelector('#loginForm');
   const loginEmployeeNo = document.querySelector('#employeeNo');
+  const loginPassword = document.querySelector('input[name="password"]');
+  const loginButton = document.querySelector('#loginButton');
 
   const form = document.querySelector('#recoveryForm');
   const employeeNo = document.querySelector('#recoveryEmployeeNo');
@@ -22,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let resendTimer = null;
 
   showLoginError();
+
+  loginForm?.addEventListener('submit', handleLoginSubmit);
 
   forgot?.addEventListener('click', () => {
     employeeNo.value = /^\d{4}$/.test(String(loginEmployeeNo?.value || '').trim()) ? loginEmployeeNo.value.trim() : '';
@@ -47,6 +52,61 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     await confirmRecovery();
   });
+
+  async function handleLoginSubmit(event) {
+    event.preventDefault();
+    const no = String(loginEmployeeNo?.value || '').trim();
+    const loginPasswordValue = String(loginPassword?.value || '');
+    loginMessage.textContent = '';
+    loginMessage.classList.remove('error');
+
+    if (!/^\d{4}$/.test(no) || Array.from(loginPasswordValue).length < 8 || Array.from(loginPasswordValue).length > 16) {
+      loginMessage.textContent = '請輸入正確的 4 碼員工編號與 8–16 字元密碼。';
+      loginMessage.classList.add('error');
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8_000);
+    let navigating = false;
+    setLoginBusy(true);
+    loginMessage.textContent = '正在驗證帳號…';
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        cache: 'no-store',
+        signal: controller.signal,
+        body: JSON.stringify({ employeeNo: no, password: loginPasswordValue })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.ok === false) throw new Error(data.error || '登入失敗。');
+      loginMessage.textContent = '登入成功，正在開啟記帳系統…';
+      navigating = true;
+      window.location.replace('/');
+    } catch (error) {
+      const timedOut = controller.signal.aborted || error?.name === 'AbortError';
+      loginMessage.textContent = timedOut
+        ? '登入逾時，請確認網路後再試。'
+        : (error?.message || '登入失敗，請稍後再試。');
+      loginMessage.classList.add('error');
+    } finally {
+      window.clearTimeout(timeout);
+      if (!navigating) setLoginBusy(false);
+    }
+  }
+
+  function setLoginBusy(busy) {
+    if (loginButton) {
+      loginButton.disabled = busy;
+      loginButton.textContent = busy ? '登入中…' : '登入';
+    }
+    if (loginEmployeeNo) loginEmployeeNo.disabled = busy;
+    if (loginPassword) loginPassword.disabled = busy;
+    if (forgot) forgot.disabled = busy;
+  }
 
   async function sendCode() {
     const no = String(employeeNo?.value || '').trim();

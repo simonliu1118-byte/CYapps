@@ -59,18 +59,20 @@ export default {
 };
 
 async function handleBootstrap(db) {
-  const [accounts, groups, categories, lockedThrough] = await Promise.all([
-    db.prepare('SELECT id, name, sort_order, is_default FROM accounts ORDER BY sort_order, id').all(),
-    db.prepare('SELECT id, kind, name, sort_order FROM category_groups ORDER BY kind, sort_order, id').all(),
+  const [accounts, groups, categories, lockSetting] = await db.batch([
+    db.prepare('SELECT id, name, sort_order, is_default FROM accounts ORDER BY sort_order, id'),
+    db.prepare('SELECT id, kind, name, sort_order FROM category_groups ORDER BY kind, sort_order, id'),
     db.prepare(`
       SELECT c.id, c.kind, c.name, c.sort_order, c.is_favorite,
              g.id AS group_id, g.name AS group_name, g.sort_order AS group_sort_order
       FROM categories c
       JOIN category_groups g ON g.id = c.group_id
       ORDER BY c.kind, g.sort_order, g.id, c.sort_order, c.id
-    `).all(),
-    getLockedThrough(db)
+    `),
+    db.prepare("SELECT value FROM app_settings WHERE key = 'locked_through'")
   ]);
+  const lockedValue = String(lockSetting.results?.[0]?.value || '').trim();
+  const lockedThrough = isMonth(lockedValue) ? lockedValue : null;
   return json({
     ok: true,
     accounts: accounts.results || [],
