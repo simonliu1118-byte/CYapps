@@ -4935,31 +4935,31 @@ function showV0215Build4LedgerNotice(text) {
   window.setTimeout(() => notice.classList.remove('show'), 2600);
 }
 
-const CY_V0216_VERSION = 'V0.21.6 Build 8';
+const CY_APP_VERSION = 'V0.21.7';
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setupV0216Version, { once: true });
+  document.addEventListener('DOMContentLoaded', setupAppVersion, { once: true });
 } else {
-  setupV0216Version();
+  setupAppVersion();
 }
-window.addEventListener('load', setupV0216Version, { once: true });
+window.addEventListener('load', setupAppVersion, { once: true });
 
-function setupV0216Version() {
-  syncV0216Version();
-  window.setTimeout(syncV0216Version, 250);
-  window.setTimeout(syncV0216Version, 1000);
+function setupAppVersion() {
+  syncAppVersion();
+  window.setTimeout(syncAppVersion, 250);
+  window.setTimeout(syncAppVersion, 1000);
 
   const version = document.querySelector('.version');
-  if (!version || version.dataset.v0216Observed === 'true') return;
-  version.dataset.v0216Observed = 'true';
-  new MutationObserver(syncV0216Version).observe(version, {
+  if (!version || version.dataset.appVersionObserved === 'true') return;
+  version.dataset.appVersionObserved = 'true';
+  new MutationObserver(syncAppVersion).observe(version, {
     childList: true,
     characterData: true,
     subtree: true
   });
 }
 
-function syncV0216Version() {
+function syncAppVersion() {
   const version = document.querySelector('.version');
-  if (version && version.textContent !== CY_V0216_VERSION) version.textContent = CY_V0216_VERSION;
+  if (version && version.textContent !== CY_APP_VERSION) version.textContent = CY_APP_VERSION;
 }
