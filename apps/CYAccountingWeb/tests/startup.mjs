@@ -52,7 +52,7 @@ assert.match(login, /Promise\.race\(\[request, timeout\]\)/);
 assert.match(login, /TimeoutError/);
 assert.match(login, /window\.location\.replace\('\/'\)/);
 assert.match(html, /auth\.js\?rev=session-hard-timeout/);
-assert.match(html, /app\.js\?rev=startup-hard-timeout/);
+assert.match(html, /app\.js\?rev=0218-mobile-loading/);
 const bootstrapSource = core.slice(core.indexOf('async function handleBootstrap'), core.indexOf('async function handleListTransactions'));
 assert.match(bootstrapSource, /await db\.batch\(/);
 assert.doesNotMatch(bootstrapSource, /Promise\.all\(/);
