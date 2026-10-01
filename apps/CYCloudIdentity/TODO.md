@@ -4,7 +4,7 @@
 
 ## Current checkpoint — 2026-10-01
 
-- Current formal source baseline is **CYCloudIdentity 0.3.3 Build 0**；本 patch 建立 governed shared consumer standard / compatibility lifecycle，development runtime 仍是已部署的 **0.3.0 Build 0**，不因治理／文件調整自動重部署。
+- Current formal source baseline is **CYCloudIdentity 0.3.4 Build 0**；本 patch 收斂 Session authority 並移除不可達 lifecycle handlers，development runtime 仍是已部署的 **0.3.0 Build 0**，不因治理／文件調整自動重部署。
 - CY Web formal source/development baseline is **0.6.0 Build 0** at `f9025de4ad9247c035b744e90bc2f015f2cdaf28`；development deploy #71 已通過。Item/Customer/Defect/Order/Outsourcing 使用 Worker API → D1；WorkLog API source 仍在未合併工作分支，Settings/Audit 仍有 browser-local runtime。固定入口仍為 `https://admin.chihyuancm.com`。
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
@@ -26,8 +26,8 @@
 - Cross-repository contract mirror 已定義 manifest + exact-sync 規則：CY Web 等外部 repo 必須鏡像 manifest 所列 7 個 artifacts 並在 governance/CI/deploy 前 byte-compare；同 repo consumer 直接讀 canonical files。
 - **CYID production provisioning 已獲批准並完成**：`deploy/cycloudidentity-production` at `0e9dc3342cd581bf41090012aae0759bce026329`，Production Provisioning run #12 成功，包含獨立 Worker/D1、durable authority continuity、CYACC registry/Workspace enablement、runtime binding 與 Session resolve/logout/revoke probe；不是 development provider。該 deployment workflow 尚未整合到 main，source VERSION/BUILD 未變。
 - Production probe 使用短效合成 Session，並非真實密碼/Email/browser 驗收；這些 acceptance 與 backup/restore 尚未因此通過。CYACC 自己的正式部署/驗收由 CYACC 工作線追蹤。
-- **相容層與部署檢查完成**：讀 `docs/COMPATIBILITY_REVIEW.md`。已確認 obsolete Group API/projections、兩份 Session authority 檢查、舊不可達 lifecycle handlers 與 initial-access wrapper；未執行 runtime 清理。
-- **下次 production deploy 前優先處理 provisioning replay 風險**：舊 workflow 會由 development 無條件 UPDATE production Employee，不能重跑作日常 deploy；必須先分離一次性 continuity 與日常 production deployment。不得直接把含舊 consumer baseline 的整個 deployment branch 合入 main。
+- **相容層與部署檢查完成**：讀 `docs/COMPATIBILITY_REVIEW.md`。已確認 obsolete Group API/projections、兩份 Session authority 檢查、舊不可達 lifecycle handlers 與 initial-access wrapper；第一批 source 清理已完成：resolve API 與 management/self-service 共用 `resolveIdentitySession`；移除 6 個未 dispatch 的 legacy lifecycle/admin handlers。Provider Group endpoints／public fields、initial-access wrapper 與 Email budget 重複尚待下一批協調清理。
+- **Production provisioning replay 已封住**：PR #254 直接在既有 production deployment branch 退休一次性 workflow；main 保存相同 inert gate。重跑只回 retirement error，不持有 Secrets，也沒有 continuity／migrations／deploy。下一次日常 production deploy 仍需另建正式 deployment path。不得直接把含舊 consumer baseline 的整個 deployment branch 合入 main。
 - Backup rollout / restore acceptance 與 CY Web production business-data rollout 未完成。
 
 ## Documentation consolidation
@@ -80,3 +80,10 @@
 `PROJECT_RULES.md` -> `README.md` -> relevant active contract -> this `TODO.md` -> current source/tests/migrations。
 
 不讀 dated handoff 作 current state；需要歷史 checkpoint 時看 Git history。
+
+## 0.3.4 source cleanup validation
+
+- Consumer Impact: **NONE**；Consumer Contract remains 1.0.1 / minimum 1.0.0。Public response fields 與仍在 provider 的 Group APIs 未在本批改動。
+- Typecheck 與 25 個 Node tests 通過，含 Session resolve/guard parity、revoked/expired/disabled/credential-version/App Access cases。
+- Local Wrangler acceptance 被執行環境 `uv_interface_addresses` 錯誤阻擋；合併 gate 使用 GitHub Actions 的 existing auth + first-login Worker/D1 acceptance，不以 unit tests 替代。
+- 本 patch 未更新 development／production Worker；runtime deploy acceptance 與下一批移除 provider public legacy fields 分開追蹤。

@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.22 — 2026/10/01
+
+- Retire completed CYID one-time production provisioning. The retired workflow has no credentials, checkout, resource creation, migrations, authority imports, or deployment steps; ordinary provider releases require a separate deployment path.
+
 ## 2.3.21 — 2026/09/30
 
 - CYAccountingWeb adopts CYCloudIdentity Consumer Contract 1.0.1 as its sole Identity authority path; active runtime must not mint or resolve a local second Identity session after cutover.

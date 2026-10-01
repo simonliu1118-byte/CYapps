@@ -51,10 +51,10 @@ async function groupKeys(env: Env, workspaceId: string, employeeId: string): Pro
   return (result.results ?? []).map(row => row.group_key);
 }
 
-export async function requireIdentitySession(
+export async function resolveIdentitySession(
   request: Request,
   env: Env,
-): Promise<IdentityPrincipal | null> {
+): Promise<{ principal: IdentityPrincipal; expiresAt: string } | null> {
   const token = bearerSessionToken(request);
   const applicationId = applicationHeader(request);
   if (!token || !applicationId) return null;
@@ -112,7 +112,7 @@ export async function requireIdentitySession(
     workspaceRole === "SUPER_ADMIN",
   )) return null;
 
-  return {
+  const principal: IdentityPrincipal = {
     workspaceId: row.workspace_id,
     employeeId: row.employee_id,
     employeeNo: row.employee_no,
@@ -126,4 +126,12 @@ export async function requireIdentitySession(
     credentialVersion: row.current_credential_version,
     employeeRevision: row.employee_revision,
   };
+  return { principal, expiresAt: row.expires_at };
+}
+
+export async function requireIdentitySession(
+  request: Request,
+  env: Env,
+): Promise<IdentityPrincipal | null> {
+  return (await resolveIdentitySession(request, env))?.principal ?? null;
 }

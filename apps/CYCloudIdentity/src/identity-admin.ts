@@ -134,71 +134,6 @@ async function employeeInWorkspace(env: Env, workspaceId: string, employeeId: st
   ).bind(workspaceId, employeeId).first<{ present: number }>());
 }
 
-export async function handleIdentityAdminSnapshot(
-  request: Request,
-  env: Env,
-  requestId: string,
-): Promise<Response> {
-  const actor = await requireWorkspaceSuperAdmin(request, env);
-  if (!actor) {
-    return json(env, requestId, 403, {
-      error: { code: "WORKSPACE_SUPER_ADMIN_REQUIRED", message: "Workspace highest authority is required." },
-    });
-  }
-
-  const [employees, groups, memberships, applications, directAccess, groupAccess] = await Promise.all([
-    env.DB.prepare(
-      `SELECT employee_id, employee_no, name, email_normalized, email_verified_at,
-              enabled, revision
-         FROM employees
-        WHERE workspace_id = ?1
-        ORDER BY employee_no`
-    ).bind(actor.workspaceId).all(),
-    env.DB.prepare(
-      `SELECT group_id, group_key, display_name, description, status, revision
-         FROM identity_groups
-        WHERE workspace_id = ?1
-        ORDER BY display_name, group_key`
-    ).bind(actor.workspaceId).all(),
-    env.DB.prepare(
-      `SELECT employee_id, group_id
-         FROM employee_identity_groups
-        WHERE workspace_id = ?1
-        ORDER BY employee_id, group_id`
-    ).bind(actor.workspaceId).all(),
-    env.DB.prepare(
-      `SELECT wa.application_id, a.display_name, a.status AS application_status,
-              wa.enabled, wa.compatibility_role_mode
-         FROM workspace_applications wa
-         JOIN applications a ON a.application_id = wa.application_id
-        WHERE wa.workspace_id = ?1
-        ORDER BY a.display_name, wa.application_id`
-    ).bind(actor.workspaceId).all(),
-    env.DB.prepare(
-      `SELECT employee_id, application_id, enabled
-         FROM employee_application_access
-        WHERE workspace_id = ?1
-        ORDER BY employee_id, application_id`
-    ).bind(actor.workspaceId).all(),
-    env.DB.prepare(
-      `SELECT group_id, application_id, enabled, application_role_key
-         FROM identity_group_application_access
-        WHERE workspace_id = ?1
-        ORDER BY group_id, application_id`
-    ).bind(actor.workspaceId).all(),
-  ]);
-
-  return json(env, requestId, 200, {
-    workspaceId: actor.workspaceId,
-    employees: (employees.results ?? []) as JsonValue,
-    groups: (groups.results ?? []) as JsonValue,
-    memberships: (memberships.results ?? []) as JsonValue,
-    applications: (applications.results ?? []) as JsonValue,
-    directAccess: (directAccess.results ?? []) as JsonValue,
-    groupAccess: (groupAccess.results ?? []) as JsonValue,
-  });
-}
-
 export async function handleCreateIdentityGroup(
   request: Request,
   env: Env,
@@ -460,59 +395,6 @@ export async function handlePutGroupApplicationAccess(
   return json(env, requestId, 200, {
     access: { groupId, applicationId, enabled, applicationRoleKey: enabled ? roleKey ?? null : null },
   });
-}
-
-export async function handlePutEmployeeApplicationAccess(
-  request: Request,
-  env: Env,
-  requestId: string,
-  employeeIdRaw: string,
-  applicationIdRaw: string,
-): Promise<Response> {
-  const actor = await requireWorkspaceSuperAdmin(request, env);
-  if (!actor) {
-    return json(env, requestId, 403, {
-      error: { code: "WORKSPACE_SUPER_ADMIN_REQUIRED", message: "Workspace highest authority is required." },
-    });
-  }
-  const employeeId = normalizeId(employeeIdRaw);
-  const applicationId = normalizeApplicationId(applicationIdRaw);
-  const body = await readJsonObject(request);
-  const enabled = typeof body?.enabled === "boolean" ? body.enabled : null;
-  if (!employeeId || !applicationId || enabled === null) {
-    return json(env, requestId, 400, {
-      error: { code: "INVALID_APPLICATION_ACCESS", message: "Application access input is invalid." },
-    });
-  }
-  if (!await employeeInWorkspace(env, actor.workspaceId, employeeId)) {
-    return json(env, requestId, 404, {
-      error: { code: "EMPLOYEE_NOT_FOUND", message: "Employee was not found." },
-    });
-  }
-  const application = await workspaceApplication(env, actor.workspaceId, applicationId);
-  if (!application || application.application_status !== "active" || application.enabled !== 1) {
-    return json(env, requestId, 404, {
-      error: { code: "APPLICATION_NOT_AVAILABLE", message: "Application is not enabled for this Workspace." },
-    });
-  }
-  const now = new Date().toISOString();
-  await env.DB.prepare(
-    `INSERT INTO employee_application_access(
-       workspace_id, employee_id, application_id, enabled, created_at, updated_at
-     ) VALUES(?1, ?2, ?3, ?4, ?5, ?5)
-     ON CONFLICT(workspace_id, employee_id, application_id) DO UPDATE SET
-       enabled = excluded.enabled,
-       updated_at = excluded.updated_at`
-  ).bind(actor.workspaceId, employeeId, applicationId, enabled ? 1 : 0, now).run();
-  await audit(env, {
-    workspaceId: actor.workspaceId,
-    actorEmployeeId: actor.employeeId,
-    targetEmployeeId: employeeId,
-    applicationId,
-    eventType: "employee_application_access_updated",
-    detail: { enabled },
-  });
-  return json(env, requestId, 200, { access: { employeeId, applicationId, enabled } });
 }
 
 export async function handlePutApplicationCompatibilityRoleMode(
