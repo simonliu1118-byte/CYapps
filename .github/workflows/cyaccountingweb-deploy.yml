@@ -69,29 +69,17 @@ jobs:
           node --check public/auth.js
           node --check public/login.js
           node --check public/app.js
-          node --check public/app-baseline.js
-          node --check public/v03.js
-          node --check public/v06.js
-          node --check public/v07.js
-          node --check public/v08.js
-          node --check public/v09.js
-          node --check public/v091.js
-          node --check public/v011.js
-          node --check public/v012.js
-          node --check public/v013.js
-          node --check public/v014.js
-          node --check public/v015.js
-          node --check public/v016.js
-          node --check public/v0181.js
-          node --check public/v019.js
-          node --check public/v020.js
-          node --check public/v021.js
-          node --check public/v021b8.js
-          node --check public/v0216.js
-          node --check public/v0215b4.js
-          node --check public/v0215b3.js
-          node --check public/v021b11.js
-          node --check public/v021b10.js
+          node --check public/quick-entry.js
+          node --check public/ledger-tools.js
+          node --check public/input-confirmation.js
+          node --check public/quick-entry-settings.js
+          node --check public/category-management.js
+          node --check public/excel-export-ui.js
+          node --check public/ledger-inline-edit.js
+          node --check public/excel-import-ui.js
+          node --check public/backup-ui.js
+          node --check public/desktop-migration-ui.js
+          node --check public/adaptive-ui.js
 
       - name: Run application tests
         run: |
@@ -100,16 +88,15 @@ jobs:
           node tests/gcs-backup.mjs
           node tests/backup-compatibility.mjs
           node tests/backup-service.mjs
-          node tests/v18-backup-ui.mjs
+          node tests/backup-ui.mjs
           node tests/desktop-migration.mjs
           node tests/desktop-migration-d1.mjs
-          node tests/v20-adaptive-ui.mjs
-          node tests/v21-desktop-ui.mjs
-          node tests/v21-adaptive-ui.mjs
+          node tests/adaptive-ui.mjs
+          node tests/desktop-ui.mjs
           node tests/deploy-config.mjs
           node tests/cyid-integration.mjs
-          node tests/mobile-startup.mjs
-          node tests/frontend-baseline.mjs
+          node tests/startup.mjs
+          node tests/frontend-architecture.mjs
           node tests/cyid-provider-contract.mjs
           node tests/cyid-production-runtime.mjs
           node scripts/validate-cyid-consumer-version.mjs
@@ -246,20 +233,20 @@ jobs:
           }
           echo "CYACC production secure login entry verified."
 
-      - name: Verify production mobile startup assets
+      - name: Verify production semantic frontend assets
         shell: bash
         run: |
           set -euo pipefail
           base="https://$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
-          curl --max-time 8 -fsS "$base/v021b10.css?v=0216b6" | grep -F '@media (max-width: 767px)' >/dev/null
-          curl --max-time 8 -fsS "$base/v0215.css?v=0216b6" | grep -F '.ledger-month-tools.v0215-toolbar-ready' >/dev/null
-          curl --max-time 8 -fsS "$base/v021b8.js?v=0216b6" | grep -F "runV21Build8Step('mobile-pages'" >/dev/null
-          curl --max-time 8 -fsS "$base/v021b10.js?v=0216b6" | grep -F "runV21Build10Step('mobile-app-bar'" >/dev/null
-          curl --max-time 8 -fsS "$base/auth.js?v=0216b8" | grep -F 'window.__CYACC_BOOT_USER__' >/dev/null
-          curl --max-time 8 -fsS "$base/auth.js?v=0216b8" | grep -F 'bootUser ? Promise.resolve(bootUser) : checkSessionFallback()' >/dev/null
-          curl --max-time 8 -fsS "$base/app.js?v=0216b8" | grep -F 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise' >/dev/null
-          curl --max-time 8 -fsS "$base/v06.js?v=0216b7" | grep -F "cyacc:core-ready" >/dev/null
-          echo "CYACC production mobile/session startup assets verified."
+          curl --max-time 8 -fsS "$base/adaptive-ui.css?rev=semantic1" | grep -F '@media (max-width: 767px)' >/dev/null
+          curl --max-time 8 -fsS "$base/adaptive-ui.js?rev=semantic1" | grep -F 'mobileAccountMenuButton' >/dev/null
+          curl --max-time 8 -fsS "$base/auth.js?rev=semantic1" | grep -F 'window.__CYACC_BOOT_USER__' >/dev/null
+          curl --max-time 8 -fsS "$base/app.js?rev=semantic1" | grep -F 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise' >/dev/null
+          curl --max-time 8 -fsS "$base/ledger-tools.js?rev=semantic1" | grep -F 'cyacc:core-ready' >/dev/null
+          curl --max-time 8 -fsS "$base/quick-entry-settings.js?rev=semantic1" | grep -F 'setupQuickEntrySettingsPane' >/dev/null
+          curl --max-time 8 -fsS "$base/category-management.js?rev=semantic1" | grep -F 'setupCategoryTransfer' >/dev/null
+          curl --max-time 8 -fsS "$base/backup-ui.js?rev=semantic1" | grep -F 'setupBackupSettingsV17' >/dev/null
+          echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files
         if: always()
