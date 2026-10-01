@@ -153,6 +153,7 @@ const cfVisitorHttp = await app.fetch(new Request('https://acc.example.com/login
 }), httpsAssetEnv);
 assert.equal(cfVisitorHttp.status, 308, 'Cloudflare HTTP visitor login must redirect to HTTPS');
 
+const apiLoginCallStart = calls.length;
 const apiLogin = await app.fetch(new Request('https://acc.example.com/api/auth/login', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
@@ -164,6 +165,36 @@ const apiLoginPayload = await apiLogin.json();
 assert.equal(apiLoginPayload.ok, true);
 assert.equal(apiLoginPayload.user.employeeNo, '0123');
 assert.equal('token' in apiLoginPayload, false);
+assert.deepEqual(
+  calls.slice(apiLoginCallStart).map(call => call.pathname),
+  ['/v1/identity/login', '/v1/identity/session/resolve'],
+  'login success must be returned only after the newly created CYID Session resolves successfully'
+);
+
+const loginThenHangEnv = {
+  CYID_WORKSPACE_ID: 'workspace-ci-placeholder',
+  CYID_APPLICATION_ID: 'CYACC_CI',
+  CYID_PROVIDER_TIMEOUT_MS: '100',
+  IDENTITY: {
+    async fetch(request) {
+      const url = new URL(request.url);
+      if (url.pathname === '/v1/identity/login') {
+        return Response.json({ principal: basePrincipal, session: { token, expiresAt } });
+      }
+      return await new Promise(() => {});
+    }
+  }
+};
+const loginResolveStarted = Date.now();
+const loginResolveFailure = await app.fetch(new Request('https://acc.example.com/api/auth/login', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ employeeNo: '0123', password: '12345678' })
+}), loginThenHangEnv);
+const loginResolveElapsed = Date.now() - loginResolveStarted;
+assert.equal(loginResolveFailure.status, 503);
+assert.equal(loginResolveFailure.headers.get('set-cookie'), null, 'unverified Session must not be committed to browser');
+assert.ok(loginResolveElapsed >= 80 && loginResolveElapsed < 1000, `post-login Session verification must be bounded, got ${loginResolveElapsed}ms`);
 
 const secureLoginPage = await app.fetch(new Request('https://acc.example.com/login'), httpsAssetEnv);
 assert.equal(secureLoginPage.status, 200);
@@ -188,12 +219,21 @@ const appEntry = await app.fetch(new Request('https://acc.example.com/', {
 }), appEntryEnv);
 assert.equal(appEntry.status, 200);
 const appEntryHtml = await appEntry.text();
-assert.match(appEntryHtml, /id="cyaccBootContext"/);
-assert.match(appEntryHtml, /"employeeNo":"0123"/);
-assert.match(appEntryHtml, /"role":"USER"/);
-assert.match(appEntryHtml, /"canWriteAccounting":false/);
-assert.doesNotMatch(appEntryHtml, /cyid_[0-9a-f]{64}/);
-assert.doesNotMatch(appEntryHtml, /employee-ci/);
+assert.equal(appEntryHtml, '<!doctype html><html><head></head><body>APP</body></html>');
+assert.doesNotMatch(appEntryHtml, /cyaccBootContext|cyid_[0-9a-f]{64}|employee-ci/);
+
+const hangingAssetsEnv = {
+  ...env,
+  CYACC_ASSET_TIMEOUT_MS: '100',
+  ASSETS: { async fetch() { return await new Promise(() => {}); } }
+};
+const assetTimeoutStarted = Date.now();
+const assetTimeoutEntry = await app.fetch(new Request('https://acc.example.com/', {
+  headers: { cookie: `cyaccounting_session=${token}` }
+}), hangingAssetsEnv);
+const assetTimeoutElapsed = Date.now() - assetTimeoutStarted;
+assert.equal(assetTimeoutEntry.status, 504);
+assert.ok(assetTimeoutElapsed >= 80 && assetTimeoutElapsed < 1000, `protected static entry must be bounded, got ${assetTimeoutElapsed}ms`);
 
 const routeEnv = { ...env, DB: {} };
 for (const [method, route, body] of [
@@ -236,10 +276,10 @@ assert.doesNotMatch(loginHtml, /src="\/app\.js"/);
 assert.match(workerApp, /url\.pathname === '\/login\.html'[\s\S]*?redirect\('\/login'/);
 assert.match(workerApp, /upgrade-insecure-requests; form-action https:/);
 assert.match(authJs, /activateReadOnlyMobileLedger/);
-assert.match(authJs, /window\.__CYACC_BOOT_USER__/);
-assert.match(authJs, /bootUser \? Promise\.resolve\(bootUser\) : checkSessionFallback\(\)/);
-assert.match(workerApp, /fetchAppEntry\(request, env, resolved\.user\)/);
-assert.match(workerApp, /id="cyaccBootContext"/);
+assert.doesNotMatch(authJs, /window\.__CYACC_BOOT_USER__/);
+assert.match(authJs, /window\.cyaccSessionPromise = checkSessionFallback\(\)/);
+assert.match(workerApp, /fetchAsset\(request, env, '\/index\.html'\)/);
+assert.doesNotMatch(workerApp, /fetchAppEntry|cyaccBootContext|safeJsonForScript/);
 assert.doesNotMatch(workerApp, /session\.token/);
 assert.match(authJs, /data-mobile-page="ledger"/);
 assert.match(authCss, /data-mobile-ledger-action="accounts"/);
@@ -248,7 +288,7 @@ assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(adaptiveUi, /MutationObserver/);
-assert.match(adaptiveUi, /CY_APP_VERSION = 'V0\.21\.7 Build 2'/);
+assert.match(adaptiveUi, /CY_APP_VERSION = 'V0\.21\.7 Build 3'/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)

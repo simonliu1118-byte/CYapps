@@ -28,8 +28,7 @@ function startCyaccAuth() {
   });
 
   setBootStage('正在準備帳務資料…');
-  const bootUser = validBootUser(window.__CYACC_BOOT_USER__) ? window.__CYACC_BOOT_USER__ : null;
-  window.cyaccSessionPromise = bootUser ? Promise.resolve(bootUser) : checkSessionFallback();
+  window.cyaccSessionPromise = checkSessionFallback();
   window.cyaccSessionPromise
     .then(user => {
       window.cyaccCurrentUser = user;

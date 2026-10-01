@@ -17,6 +17,9 @@ import {
 
 const SUMMARY_MAX_UNITS = 40;
 const ACCOUNT_NAME_MAX_CHARS = 8;
+const DEFAULT_ASSET_TIMEOUT_MS = 5_000;
+const MIN_ASSET_TIMEOUT_MS = 100;
+const MAX_ASSET_TIMEOUT_MS = 15_000;
 
 function shouldDisableBrowserCache(pathname) {
   return pathname === '/' || pathname === '/login' || pathname.endsWith('.html') || pathname.endsWith('.js');
@@ -69,11 +72,11 @@ export default {
           const error = resolved.status >= 500 ? '?error=service' : '';
           return redirect('/login' + error);
         }
-        return fetchAppEntry(request, env, resolved.user);
+        return fetchAsset(request, env, '/index.html');
       }
 
       if (!url.pathname.startsWith('/api/')) {
-        const response = await env.ASSETS.fetch(request);
+        const response = await boundedAssetFetch(request, env);
         return shouldDisableBrowserCache(url.pathname) ? noCache(response) : response;
       }
 
@@ -213,9 +216,14 @@ async function handleNavigationLogin(request, env) {
   const employeeNo = String(form?.get('employeeNo') || '').trim();
   const password = typeof form?.get('password') === 'string' ? form.get('password') : '';
   const result = await loginWithCyid(request, env, employeeNo, password);
-
   if (!result.ok) {
     const error = loginErrorKey(result);
+    return redirect('/login?error=' + encodeURIComponent(error));
+  }
+
+  const verified = await verifyFreshLoginSession(request, env, result.token);
+  if (!verified.ok) {
+    const error = loginErrorKey(verified);
     return redirect('/login?error=' + encodeURIComponent(error));
   }
 
@@ -227,15 +235,28 @@ async function handleApiLogin(request, env) {
   const employeeNo = String(body?.employeeNo || '').trim();
   const password = typeof body?.password === 'string' ? body.password : '';
   const result = await loginWithCyid(request, env, employeeNo, password);
-
   if (!result.ok) return apiLoginFailure(result);
+
+  const verified = await verifyFreshLoginSession(request, env, result.token);
+  if (!verified.ok) return apiLoginFailure(verified);
 
   return json({
     ok: true,
-    user: result.user
+    user: verified.user
   }, 200, {
     'set-cookie': result.cookie
   });
+}
+
+async function verifyFreshLoginSession(request, env, token) {
+  const headers = new Headers();
+  const clientIp = request.headers.get('cf-connecting-ip');
+  if (clientIp) headers.set('cf-connecting-ip', clientIp);
+  const requestId = request.headers.get('x-request-id');
+  if (requestId) headers.set('x-request-id', requestId);
+  headers.set('cookie', `cyaccounting_session=${encodeURIComponent(String(token || ''))}`);
+  const verifyRequest = new Request(request.url, { method: 'GET', headers });
+  return resolveIdentitySession(verifyRequest, env);
 }
 
 function apiLoginFailure(result) {
@@ -326,53 +347,6 @@ function authFailure(result) {
   }, status, headers);
 }
 
-async function fetchAppEntry(request, env, user) {
-  const url = new URL(request.url);
-  url.pathname = '/index.html';
-  url.search = '';
-  const assetRequest = new Request(url.toString(), {
-    method: 'GET',
-    headers: request.headers
-  });
-  const response = noCache(await env.ASSETS.fetch(assetRequest));
-  if (!response.ok) return response;
-
-  const html = await response.text();
-  const bootUser = {
-    employeeNo: String(user?.employeeNo || ''),
-    name: String(user?.name || ''),
-    role: String(user?.role || ''),
-    isIdentityAdmin: Boolean(user?.isIdentityAdmin),
-    canWriteAccounting: Boolean(user?.canWriteAccounting),
-    canExportExcel: user?.canExportExcel !== false
-  };
-  const bootScript = `<script id="cyaccBootContext">window.__CYACC_BOOT_USER__=Object.freeze(${safeJsonForScript(bootUser)});</script>`;
-  const body = html.includes('</head>')
-    ? html.replace('</head>', `  ${bootScript}\n</head>`)
-    : bootScript + html;
-
-  const headers = new Headers(response.headers);
-  headers.delete('content-length');
-  headers.delete('content-encoding');
-  headers.delete('etag');
-  headers.set('content-type', 'text/html; charset=utf-8');
-
-  return new Response(body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers
-  });
-}
-
-function safeJsonForScript(value) {
-  return JSON.stringify(value ?? null)
-    .replaceAll('<', '\\u003c')
-    .replaceAll('>', '\\u003e')
-    .replaceAll('&', '\\u0026')
-    .replaceAll('\u2028', '\\u2028')
-    .replaceAll('\u2029', '\\u2029');
-}
-
 async function fetchAsset(request, env, pathname) {
   const url = new URL(request.url);
   url.pathname = pathname;
@@ -381,8 +355,38 @@ async function fetchAsset(request, env, pathname) {
     method: 'GET',
     headers: request.headers
   });
-  const response = noCache(await env.ASSETS.fetch(assetRequest));
+  const response = noCache(await boundedAssetFetch(assetRequest, env));
   return pathname === '/login.html' ? secureLoginDocument(response, request) : response;
+}
+
+async function boundedAssetFetch(request, env) {
+  if (!env?.ASSETS || typeof env.ASSETS.fetch !== 'function') {
+    return new Response('介面資源服務未設定。', {
+      status: 503,
+      headers: { 'content-type': 'text/plain; charset=utf-8' }
+    });
+  }
+
+  const timeoutMs = assetTimeoutMs(env);
+  let timeoutId;
+  const timeout = new Promise(resolve => {
+    timeoutId = setTimeout(() => resolve(new Response('介面資源載入逾時，請重新整理後再試。', {
+      status: 504,
+      headers: { 'content-type': 'text/plain; charset=utf-8' }
+    })), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([Promise.resolve().then(() => env.ASSETS.fetch(request)), timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
+function assetTimeoutMs(env) {
+  const configured = Number(env?.CYACC_ASSET_TIMEOUT_MS);
+  if (!Number.isFinite(configured)) return DEFAULT_ASSET_TIMEOUT_MS;
+  return Math.max(MIN_ASSET_TIMEOUT_MS, Math.min(Math.trunc(configured), MAX_ASSET_TIMEOUT_MS));
 }
 
 function secureLoginDocument(response, request) {
