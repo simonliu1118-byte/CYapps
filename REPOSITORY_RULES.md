@@ -171,3 +171,8 @@
 - 使用者提出的需求若會造成既有資料語意、狀態規則、UI 規則或主流程出現新的特例，AI 也必須先明確提醒「這會形成例外流程／特判」，再依使用者決定繼續；不得因需求由使用者提出就省略這個提醒。
 - 已核准的例外若屬單一專案永久行為，才寫入該專案唯一 `PROJECT_RULES.md`；若只是當次工作需要，記錄在該次 PR／Issue／設計說明即可。不得為每個例外新增新的規則檔或平行規則層。
 - 測試應優先驗證共通規則本身，並對核准例外補最小必要覆蓋，防止後續修改把例外擴散成新的主路徑，或反過來讓例外改寫共通資料語意。
+- **不得以版本殼、wrapper chain、patch-on-patch 或動態載入舊版本檔作為一般演進方式。** 新功能、修正與重構應收斂到目前正式主路徑與依功能命名的模組；不得以 `app-v1 -> app-v2 -> app-v3`、`vNNN.js/css` 疊載、Build 專屬 wrapper、或「先保留舊實作再包一層新實作」來取代正常整併。
+- 確有外部 backward compatibility、資料格式過渡、第三方 API 遷移、rolling deployment 或不可同步升級的 consumer 需求時，可以建立**最小必要相容層**，但必須同時滿足：單一明確入口、責任範圍可界定、不形成第二套 authority／business logic、不得再疊第二層 wrapper，且 PR／設計說明需記錄存在理由、影響範圍、owner／主責、移除條件與可驗證的退場時機。
+- 相容層不得以版本號本身作為長期架構邊界；若保留的是正式 protocol／file-format version reader，應以「格式／contract 相容」命名與測試，而不是保留整套歷史 application runtime。資料格式相容與 source/runtime wrapper 相容必須分開處理。
+- 若某次修改發現同一功能已出現多層 wrapper、overlay、patch chain 或版本檔互相覆寫，優先任務是先收斂為單一路徑再繼續除錯；不得在未釐清主路徑前再加下一層 hotfix。必要緊急修復若暫時無法先重構，PR 必須明確標示暫時性、風險、後續收斂工作與移除 gate，且不得把臨時層視為完成架構。
+- 對已完成收斂的專案，CI／architecture test 應在合理範圍內防止版本殼、歷史 wrapper 與已淘汰 patch loader 被重新引入；測試應驗證現行功能與 contract，不得因舊測試依賴歷史載入順序而要求把已移除的版本殼加回來。
