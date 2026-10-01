@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildProductionConfig, productionWorkerName } from '../scripts/render-production-config.mjs';
+import { buildProductionConfig, productionWorkerName, requireProductionCoreConsumer } from '../scripts/render-production-config.mjs';
 const id='11111111-1111-4111-8111-111111111111';
 function input(){
   const values={APP_ENV:'production',API_VERSION:'v1',SESSION_TTL_SECONDS:'3600',EMAIL_PROVIDER:'brevo',EMAIL_FROM:'Synthetic <test@example.test>',EMAIL_DAILY_BUDGET:'50',CORE_ACCOUNT_APPLICATION_ID:'APP_TEST',ACCOUNT_PORTAL_URL:'https://portal.example.test',CYACC_APPLICATION_ID:'APP_ACCOUNTING_TEST'};
@@ -29,3 +29,23 @@ for(const [name,mutate] of [
   ['wrong database metadata',args=>{args.database.uuid=args.developmentDatabaseId;}],
   ['non-HTTPS portal',args=>{args.settings.bindings.find(b=>b.name==='ACCOUNT_PORTAL_URL').text='http://portal.example.test';}],
 ])test(`production config fails closed for ${name}`,()=>{const args=input();mutate(args);assert.throws(()=>buildProductionConfig(args));});
+
+function consumer() {
+  return { providerName: 'identity-test-prod', applicationId: 'APP_TEST', consumerVersion: '1.0.2',
+    settings: { success: true, result: { bindings: [
+      { type: 'service', name: 'IDENTITY', service: 'identity-test-prod' },
+      { type: 'plain_text', name: 'IDENTITY_APPLICATION_ID', text: 'APP_TEST' },
+      { type: 'plain_text', name: 'IDENTITY_CONSUMER_VERSION', text: '1.0.2' },
+    ] } }, health: { ok: true, data: { service: 'cyweb', database: 'ok', identityConsumerVersion: '1.0.2' } },
+  };
+}
+test('production readiness requires a healthy consumer bound to the intended production authority', () => {
+  assert.doesNotThrow(() => requireProductionCoreConsumer(consumer()));
+});
+for (const [name, mutate] of [
+  ['healthy development provider binding', value => { value.settings.result.bindings[0].service = 'identity-test-dev'; }],
+  ['development Service environment', value => { value.settings.result.bindings[0].environment = 'development'; }],
+  ['wrong core application', value => { value.settings.result.bindings[1].text = 'APP_OTHER'; }],
+  ['undeclared consumer migration', value => { value.settings.result.bindings[2].text = '1.0.1'; }],
+  ['unhealthy D1', value => { value.health.data.database = 'unavailable'; }],
+]) test(`production readiness rejects ${name}`, () => { const value = consumer(); mutate(value); assert.throws(() => requireProductionCoreConsumer(value), /PRODUCTION_CORE_CONSUMER_NOT_READY/); });

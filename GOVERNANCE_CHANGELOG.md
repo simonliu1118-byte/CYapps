@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.25 — 2026/10/01
+
+- Production consumer readiness also reads the protected existing core Worker binding/application/consumer declaration. A development consumer health marker alone cannot authorize provider retirement. No production resource/configuration was changed.
+
 ## 2.3.24 — 2026/10/01
 
 - Verify deployed CYID development Worker/D1 isolation, source version and invalid Session rejection after routine source deployment. No account/Session injection or authority replay.
