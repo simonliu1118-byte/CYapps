@@ -16,8 +16,6 @@
   };
 
   window.addEventListener('load', async () => {
-    const version = document.querySelector('.version');
-    if (version) version.textContent = 'V0.19.0';
     const role = await currentRoleV19();
     if (role === 'SUPER_ADMIN') installMigrationSettingsV19();
   });

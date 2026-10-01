@@ -69,6 +69,8 @@ const runtime = scripts.map(name => read('public/' + name)).join('\n');
 assert.doesNotMatch(runtime, /__CYACC_BASELINE_BUNDLE__/);
 assert.doesNotMatch(runtime, /script\.src\s*=\s*['"]\/v[0-9]/);
 assert.doesNotMatch(runtime, /link\.href\s*=\s*['"]\/v[0-9]/);
+assert.doesNotMatch(runtime, /querySelector\(['"]\.version['"]\)/, 'frontend feature modules must not own the global version element');
+assert.doesNotMatch(runtime, /V0\.\d+\.\d+(?: Build \d+)?/, 'frontend feature modules must not embed application version strings');
 
 assert.match(read('public/quick-entry-settings.js'), /setupQuickEntrySettingsPane/);
 assert.match(read('public/category-management.js'), /setupCategoryTransfer/);
