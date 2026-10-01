@@ -27,7 +27,6 @@ function startCyaccAuth() {
     }
   });
 
-  setBootStage('正在準備帳務資料…');
   window.cyaccSessionPromise = checkSessionFallback();
   window.cyaccSessionPromise
     .then(user => {
@@ -56,7 +55,7 @@ function startCyaccAuth() {
       return data.user;
     } catch (error) {
       if (String(error?.message || '') === 'AUTH_REQUIRED') throw error;
-      const message = error?.name === 'AbortError'
+      const message = ['AbortError', 'TimeoutError'].includes(error?.name)
         ? '帳號驗證逾時，請重新整理後再試。'
         : (error?.message || '帳號服務目前無法驗證登入狀態。');
       setBootFailure(message);
@@ -135,10 +134,20 @@ function setBootFailure(message) {
 
 async function fetchWithTimeout(input, init = {}, timeoutMs = 8_000) {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  let timeoutId;
+  const request = Promise.resolve().then(() => fetch(input, { ...init, signal: controller.signal }));
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      controller.abort();
+      const error = new Error('CYACC_BROWSER_TIMEOUT');
+      error.name = 'TimeoutError';
+      reject(error);
+    }, timeoutMs);
+  });
+
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await Promise.race([request, timeout]);
   } finally {
-    window.clearTimeout(timeout);
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
   }
 }

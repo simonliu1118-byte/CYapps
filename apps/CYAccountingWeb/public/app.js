@@ -82,8 +82,8 @@ async function startCyaccApp() {
     els.openingMonth.value = today.slice(0, 7);
     bindEvents();
 
-    setCyaccBootStage('正在準備帳務資料…');
     if (window.cyaccSessionPromise) await window.cyaccSessionPromise;
+    setCyaccBootStage('正在準備帳務資料…');
 
     await initialize();
     window.cyaccCoreReady = true;
@@ -114,7 +114,7 @@ function finishCyaccBoot(error = null) {
     document.body.classList.add('cyacc-boot-failed');
     if (status) {
       status.hidden = false;
-      status.textContent = '載入失敗，請重新整理後再試。';
+      status.textContent = error?.message || '載入失敗，請重新整理後再試。';
     }
     return;
   }
@@ -568,8 +568,8 @@ function numericInput(event) {
 
 async function api(path, options = {}) {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12_000);
-  try {
+  let timeoutId;
+  const request = Promise.resolve().then(async () => {
     const response = await fetch(path, {
       ...options,
       credentials: 'include',
@@ -579,11 +579,25 @@ async function api(path, options = {}) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
     return data;
+  });
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      controller.abort();
+      const error = new Error('CYACC_BROWSER_TIMEOUT');
+      error.name = 'TimeoutError';
+      reject(error);
+    }, 12_000);
+  });
+
+  try {
+    return await Promise.race([request, timeout]);
   } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('連線逾時，請重新整理後再試。');
+    if (['AbortError', 'TimeoutError'].includes(error?.name)) {
+      throw new Error('連線逾時，請重新整理後再試。');
+    }
     throw error;
   } finally {
-    window.clearTimeout(timeout);
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
   }
 }
 

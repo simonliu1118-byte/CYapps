@@ -67,33 +67,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 8_000);
+    let timeoutId;
     let navigating = false;
     setLoginBusy(true);
     loginMessage.textContent = '正在驗證帳號…';
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        cache: 'no-store',
-        signal: controller.signal,
-        body: JSON.stringify({ employeeNo: no, password: loginPasswordValue })
+      const request = Promise.resolve().then(async () => {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'include',
+          cache: 'no-store',
+          signal: controller.signal,
+          body: JSON.stringify({ employeeNo: no, password: loginPasswordValue })
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
       });
-      const data = await response.json().catch(() => ({}));
+      const timeout = new Promise((_, reject) => {
+        timeoutId = window.setTimeout(() => {
+          controller.abort();
+          const error = new Error('CYACC_BROWSER_TIMEOUT');
+          error.name = 'TimeoutError';
+          reject(error);
+        }, 8_000);
+      });
+      const { response, data } = await Promise.race([request, timeout]);
       if (!response.ok || data.ok === false) throw new Error(data.error || '登入失敗。');
       loginMessage.textContent = '登入成功，正在開啟記帳系統…';
       navigating = true;
       window.location.replace('/');
     } catch (error) {
-      const timedOut = controller.signal.aborted || error?.name === 'AbortError';
+      const timedOut = controller.signal.aborted || ['AbortError', 'TimeoutError'].includes(error?.name);
       loginMessage.textContent = timedOut
         ? '登入逾時，請確認網路後再試。'
         : (error?.message || '登入失敗，請稍後再試。');
       loginMessage.classList.add('error');
     } finally {
-      window.clearTimeout(timeout);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       if (!navigating) setLoginBusy(false);
     }
   }
