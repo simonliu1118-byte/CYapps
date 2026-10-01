@@ -3,10 +3,10 @@
 let cyLedgerGroupByAccount = false;
 let cyLedgerSearch = '';
 let cyLedgerOpeningData = null;
-let cyLedgerRefreshTimer = null;
-let cyLedgerObserver = null;
 let cyLedgerRequestId = 0;
+let cyLedgerRenderedMonth = '';
 window.cyLedgerBalanceBreakdowns = new Map();
+window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender;
 
 let cyV06Started = false;
 
@@ -23,9 +23,6 @@ function startV06LedgerTools() {
   cyV06Started = true;
   setupLedgerDesktopTools();
   bindLedgerDesktopTools();
-  observeLedgerRefreshes();
-  if (window.cyaccCoreReady) scheduleLedgerDesktopRefresh();
-  else window.addEventListener('cyacc:core-ready', scheduleLedgerDesktopRefresh, { once: true });
 }
 
 function setupLedgerDesktopTools() {
@@ -73,28 +70,20 @@ function bindLedgerDesktopTools() {
     cyLedgerSearch = '';
     renderDesktopLedger();
   });
-  els.monthFilter?.addEventListener('change', () => {
-    cyLedgerOpeningData = null;
-    cyLedgerGroupByAccount = false;
-    scheduleLedgerDesktopRefresh();
-  });
-}
-
-function observeLedgerRefreshes() {
-  if (!els.transactionRows) return;
-  cyLedgerObserver = new MutationObserver(() => scheduleLedgerDesktopRefresh());
-  cyLedgerObserver.observe(els.transactionRows, { childList: true, subtree: true });
 }
 
 function scheduleLedgerDesktopRefresh() {
-  if (!window.cyaccCoreReady) return;
-  clearTimeout(cyLedgerRefreshTimer);
-  cyLedgerRefreshTimer = setTimeout(loadLedgerOpeningAndRender, 25);
+  void loadLedgerOpeningAndRender();
 }
 
-async function loadLedgerOpeningAndRender() {
-  const month = els.monthFilter?.value;
-  if (!month) return;
+async function loadLedgerOpeningAndRender(expectedMonth = els.monthFilter?.value) {
+  const month = String(expectedMonth || '');
+  if (!month || month !== els.monthFilter?.value) return;
+  if (month !== cyLedgerRenderedMonth) {
+    cyLedgerRenderedMonth = month;
+    cyLedgerOpeningData = null;
+    cyLedgerGroupByAccount = false;
+  }
   const requestId = ++cyLedgerRequestId;
   try {
     const data = await api(`/api/opening-balances?month=${encodeURIComponent(month)}`);
@@ -280,7 +269,5 @@ function updateLedgerGroupButton() {
 
 function writeLedgerRows(html) {
   if (!els.transactionRows) return;
-  cyLedgerObserver?.disconnect();
   els.transactionRows.innerHTML = html;
-  cyLedgerObserver?.observe(els.transactionRows, { childList: true, subtree: true });
 }

@@ -11,6 +11,8 @@ const TESTS = path.join(ROOT, 'tests');
 const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 
 const html = read('public/index.html');
+const appJs = read('public/app.js');
+const ledgerTools = read('public/ledger-tools.js');
 const adaptiveUi = read('public/adaptive-ui.js');
 const files = fs.readdirSync(PUBLIC);
 const styles = [
@@ -71,6 +73,10 @@ assert.doesNotMatch(runtime, /script\.src\s*=\s*['"]\/v[0-9]/);
 assert.doesNotMatch(runtime, /link\.href\s*=\s*['"]\/v[0-9]/);
 assert.doesNotMatch(runtime, /querySelector\(['"]\.version['"]\)/, 'frontend feature modules must not own the global version element');
 assert.doesNotMatch(runtime, /V0\.\d+\.\d+(?: Build \d+)?/, 'frontend feature modules must not embed application version strings');
+assert.match(appJs, /window\.cyaccRefreshLedgerView/, 'transaction loading must hand off to the canonical ledger renderer');
+assert.match(ledgerTools, /window\.cyaccRefreshLedgerView = loadLedgerOpeningAndRender/, 'ledger tools must expose one canonical refresh path');
+assert.doesNotMatch(ledgerTools, /new MutationObserver/, 'ledger rows must not trigger a second refresh through MutationObserver');
+assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change'/, 'ledger tools must not own a second month-change refresh path');
 
 assert.match(read('public/quick-entry-settings.js'), /setupQuickEntrySettingsPane/);
 assert.match(read('public/category-management.js'), /setupCategoryTransfer/);
@@ -91,7 +97,7 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.match(html, /<span class="version">V0\.21\.7 Build 6<\/span>/, 'index.html must own the current visible version');
+assert.match(html, /<span class="version">V0\.21\.7 Build 7<\/span>/, 'index.html must own the current visible version');
 assert.doesNotMatch(adaptiveUi, /querySelector\(['"]\.version['"]\)/, 'adaptive UI must not mutate the global version element');
 assert.doesNotMatch(adaptiveUi, /\bCY_[A-Z0-9_]*VERSION\b|\b(?:sync|enforce)[A-Za-z0-9_]*Version\b/, 'historical version mutators must not return');
 assert.doesNotMatch(adaptiveUi, /V0\.2[01]\.[0-9]+(?: Build [0-9]+)?/, 'adaptive UI must not embed historical application version strings');
