@@ -29,8 +29,8 @@ const adaptive = read('public/adaptive-ui.js');
 const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 
-assert.equal(version, '0.21.7');
-assert.equal(build, '7');
+assert.equal(version, '0.21.8');
+assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
@@ -45,6 +45,8 @@ assert.match(quick, /enterStep\(els\.amount,[\s\S]*?els\.form\.requestSubmit\(\)
 assert.match(category, /data-category-transfer/);
 assert.match(exportUi, /button\.textContent = '匯出中…'/);
 assert.match(exportUi, /aria-busy/);
+assert.match(exportUi, /navigator\.share/);
+assert.match(exportUi, /navigator\.canShare/);
 assert.match(inlineEdit, /beginInlineLedgerEdit/);
 assert.match(adaptive, /window\.cyConfirm = options => new Promise/);
 assert.match(adaptive, /renderV0212CategoryManager/);
