@@ -288,7 +288,8 @@ assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(adaptiveUi, /MutationObserver/);
-assert.match(adaptiveUi, /CY_APP_VERSION = 'V0\.21\.7 Build 4'/);
+assert.doesNotMatch(adaptiveUi, /querySelector\(['"]\.version['"]\)|CY_[A-Z0-9_]*VERSION|(?:sync|enforce)[A-Za-z0-9_]*Version/);
+assert.match(indexHtml, /<span class="version">V0\.21\.7 Build 5<\/span>/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)
