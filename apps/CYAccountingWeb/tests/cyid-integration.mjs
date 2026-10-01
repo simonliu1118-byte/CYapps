@@ -248,7 +248,7 @@ assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(adaptiveUi, /MutationObserver/);
-assert.match(adaptiveUi, /CY_APP_VERSION = 'V0\.21\.7 Build 1'/);
+assert.match(adaptiveUi, /CY_APP_VERSION = 'V0\.21\.7 Build 2'/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)
