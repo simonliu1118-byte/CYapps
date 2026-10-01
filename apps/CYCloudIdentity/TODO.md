@@ -103,3 +103,10 @@
 - Routine production release additionally requires protected `CYID_PRODUCTION_CORE_CONSUMER_WORKER_NAME` and actual core Worker `IDENTITY` binding to the production provider plus the production core Application ID and consumer declaration. A development health marker cannot satisfy this target check. The prerequisite is not provisioned by this work.
 - TypeScript and 44 Node tests pass after the production-binding readiness guard was added; regression cases reject a healthy development binding, wrong Application/consumer declaration and unhealthy D1.
 - Production source release remains unexecuted. Real Email/browser/device acceptance, backup/restore and CY Web production business-data rollout remain pending.
+
+## CY Web real browser checkpoint — 2026-10-01
+
+- The deployed CY Web/CYID development pair accepted permanent-password SUPER_ADMIN login in a dedicated cloud browser; full reload re-resolved the Session and returned to the protected business UI. CY Web Identity management, Settings/Audit and all six business page reads completed.
+- CY Web synthetic Customer create/read-after-reload passed; this establishes business persistence for that operation only, not every lifecycle or role. No real Employee identifiers, credentials or opaque tokens are recorded in Public source.
+- Real Email/new USER/initial-password/credential-setting journey remains pending. A controlled inbox not already assigned in the development Workspace must be designated before creation; creation sends a real Email and grants mandatory core-App entry. No new Employee, Email send, Role/Access change, credential change or transfer was performed in this browser session.
+- USER/normal ADMIN/Identity Admin real-browser matrix, resend/expiry/pending-email-edit/recovery, backup/restore and production rollout remain open. Product/consumer versions are unchanged; Consumer Impact: NONE.
