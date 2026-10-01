@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const PUBLIC = path.join(ROOT, 'public');
+const SRC = path.join(ROOT, 'src');
+const TESTS = path.join(ROOT, 'tests');
 const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 
 const html = read('public/index.html');
@@ -39,6 +41,8 @@ const scripts = [
 ];
 
 assert.deepEqual(files.filter(name => /^v[0-9].*\.(?:js|css)$/.test(name)), [], 'versioned frontend assets must not exist');
+assert.deepEqual(fs.readdirSync(SRC).filter(name => /^(?:app-v|v[0-9])/.test(name)), [], 'versioned backend wrappers/modules must not exist');
+assert.deepEqual(fs.readdirSync(TESTS).filter(name => /^v[0-9].*\.mjs$/.test(name)), [], 'version-named regression tests must not exist');
 assert.equal(files.includes('app-baseline.js'), false);
 assert.equal(files.includes('app-baseline.css'), false);
 
@@ -71,5 +75,18 @@ assert.match(read('public/excel-export-ui.js'), /downloadMonthlyExcel/);
 assert.match(read('public/ledger-inline-edit.js'), /beginInlineLedgerEdit/);
 assert.match(read('public/excel-import-ui.js'), /setupExcelImport/);
 assert.match(read('public/backup-ui.js'), /setupBackupSettings/);
+
+for (const name of [
+  'quick-entry-settings.js',
+  'category-management.js',
+  'excel-export-ui.js',
+  'ledger-inline-edit.js',
+  'excel-import-ui.js',
+  'backup-ui.js'
+]) {
+  const source = read('public/' + name);
+  assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
+}
+assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
 
 console.log('Semantic frontend architecture checks passed.');

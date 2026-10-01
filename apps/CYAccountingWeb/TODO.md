@@ -26,7 +26,7 @@
 
 - Formal `main` source baseline：**V0.21.6 Build 8** at `2a95557`。
 - Build 8 production workflow run **#266** successfully resolved the CYID production runtime, applied migrations, deployed Worker/static assets and verified the secure login entry. The workflow ended red only because the final legacy mobile-asset verification request timed out; do not treat that final verification failure as proof that the preceding deployment rolled back.
-- Draft PR **#252** (`refactor/cyaccountingweb-baseline`) is the active structural cleanup line. It does **not** deploy production on PR events. Current PR validation run **#288** and Governance Check **#895** are green.
+- Draft PR **#252** (`refactor/cyaccountingweb-baseline`) is the active structural cleanup line. It does **not** deploy production on PR events. Latest PR validation and Governance Check are green; PR events do not deploy production.
 - PR #252 removes the active Worker wrapper chain and all version-named frontend JS/CSS/test shells. Frontend runtime is now loaded through functional modules such as `quick-entry`, `ledger-tools`, `category-management`, `excel-export-ui`, `excel-import-ui`, `backup-ui`, `desktop-migration-ui`, and `adaptive-ui`; `app-baseline.js/css` are gone.
 - Last real-device startup observation after Build 8 progressed beyond the initial CYID account-verification stage into accounting-data loading. Further production debugging must focus on accounting bootstrap/initialization on the clean baseline, not add another auth/version compatibility layer.
 - Mobile Build 10/11 behavior is preserved by the Build 8 source and #252 semantic modules: `餘額` = 期初餘額、`更多` = 帳戶設定／科目設定／月份鎖帳／匯出 Excel、top-right user menu = identity + logout only. Final real-device acceptance remains open.
@@ -111,6 +111,6 @@
 - [ ] 即使改由共用 Backup Service 管理，各 App 的備份資料仍維持邏輯隔離與獨立還原能力；caller identity 必須由 server-side mapping 決定可存取 dataset，不得只信任 caller 傳入的 `appId`。
 - [x] 共用員工帳號權威已切到 **CYCloud Identity (CYID)**；CYAccountingWeb 不直接讀寫 CYID D1，只透過 canonical `IDENTITY` Service Binding contract 使用 Identity 能力。
 - [x] CYID consumer integration 依 canonical `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 與 `docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；current contract `1.0.1` / minimum compatible `1.0.0`。舊 dated CYID handoff 不得作 current authority。
-- [ ] Draft PR #252 是目前的結構清理線：移除版本 wrapper/shell、改成功能模組，`CYID Consumer Impact: NONE`。PR validation 已通過，但 production 不因 Draft PR 自動變更；合併／部署仍走正常 review 與 production acceptance。
+- [ ] Draft PR #252 是目前的結構清理線：移除版本 wrapper/shell、改成功能模組，`CYID Consumer Impact: NONE`。PR validation 已通過；V11–V16-era functional modules also use semantic internal identifiers, and CI guards against reintroducing version-named source/test shells. Production 不因 Draft PR 自動變更；合併／部署仍走正常 review 與 production acceptance。
 - [ ] 涉及 Identity authority、跨 App 帳號／角色、shared account database、Service Binding、shared Worker、跨 App D1 ownership 或 shared Backup Service routing 等底層變更時，實作前必須先同步 CY-WEB / CYCloudIdentity 最新決策，不由 CYAccountingWeb 單獨先行定義。
 - [ ] 在 shared Identity 正式遷移完成前，CYAccountingWeb 仍維持自己的帳務 D1 與 application session 邊界；共用帳號不代表合併 runtime database。
