@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.24 — 2026/10/01
+
+- Verify deployed CYID development Worker/D1 isolation, source version and invalid Session rejection after routine source deployment. No account/Session injection or authority replay.
+
 ## 2.3.23 — 2026/10/01
 
 - Add main-only manual CYID production deployment with protected existing-target readback, strict DB/environment/binding isolation, deployed core-consumer adoption gate, dry-run before mutations, forward schema and source deployment only. No resource creation, development authority export/import, Employee repair, secret replacement or synthetic Session injection.
