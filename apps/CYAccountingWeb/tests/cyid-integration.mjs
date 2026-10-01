@@ -10,7 +10,7 @@ import {
   resolveIdentitySession,
   startPasswordRecovery
 } from '../src/identity-adapter.js';
-import appV19 from '../src/app-v19.js';
+import app from '../src/app.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -127,11 +127,11 @@ const httpsAssetEnv = {
   }
 };
 
-const httpGet = await appV19.fetch(new Request('http://acc.example.com/login'), httpsAssetEnv);
+const httpGet = await app.fetch(new Request('http://acc.example.com/login'), httpsAssetEnv);
 assert.equal(httpGet.status, 308, 'HTTP login GET must redirect to HTTPS before serving credentials form');
 assert.equal(httpGet.headers.get('location'), 'https://acc.example.com/login');
 
-const httpPost = await appV19.fetch(new Request('http://acc.example.com/login', {
+const httpPost = await app.fetch(new Request('http://acc.example.com/login', {
   method: 'POST',
   headers: { 'content-type': 'application/x-www-form-urlencoded' },
   body: new URLSearchParams({ employeeNo: '0123', password: '12345678' })
@@ -139,18 +139,18 @@ const httpPost = await appV19.fetch(new Request('http://acc.example.com/login', 
 assert.equal(httpPost.status, 308, 'HTTP login POST must redirect before credential processing');
 assert.equal(httpPost.headers.get('location'), 'https://acc.example.com/login');
 
-const forwardedHttp = await appV19.fetch(new Request('https://acc.example.com/login', {
+const forwardedHttp = await app.fetch(new Request('https://acc.example.com/login', {
   headers: { 'x-forwarded-proto': 'http' }
 }), httpsAssetEnv);
 assert.equal(forwardedHttp.status, 308, 'forwarded HTTP login must redirect to HTTPS');
 assert.equal(forwardedHttp.headers.get('location'), 'https://acc.example.com/login');
 
-const cfVisitorHttp = await appV19.fetch(new Request('https://acc.example.com/login', {
+const cfVisitorHttp = await app.fetch(new Request('https://acc.example.com/login', {
   headers: { 'cf-visitor': '{"scheme":"http"}' }
 }), httpsAssetEnv);
 assert.equal(cfVisitorHttp.status, 308, 'Cloudflare HTTP visitor login must redirect to HTTPS');
 
-const secureLoginPage = await appV19.fetch(new Request('https://acc.example.com/login'), httpsAssetEnv);
+const secureLoginPage = await app.fetch(new Request('https://acc.example.com/login'), httpsAssetEnv);
 assert.equal(secureLoginPage.status, 200);
 assert.equal(secureLoginPage.headers.get('strict-transport-security'), 'max-age=31536000');
 assert.equal(
@@ -168,7 +168,7 @@ const appEntryEnv = {
     }
   }
 };
-const appEntry = await appV19.fetch(new Request('https://acc.example.com/', {
+const appEntry = await app.fetch(new Request('https://acc.example.com/', {
   headers: { cookie: `cyaccounting_session=${token}` }
 }), appEntryEnv);
 assert.equal(appEntry.status, 200);
@@ -185,7 +185,7 @@ for (const [method, route, body] of [
   ['POST', '/api/transactions', '{}'],
   ['PUT', '/api/opening-balances', '{}']
 ]) {
-  const response = await appV19.fetch(new Request('https://acc.example.com' + route, {
+  const response = await app.fetch(new Request('https://acc.example.com' + route, {
     method,
     headers: { cookie: `cyaccounting_session=${token}`, 'content-type': 'application/json' },
     body
@@ -200,17 +200,16 @@ assert.equal(recovery.ok, true);
 assert.equal(recovery.recovery.challengeId, 'challenge-ci');
 assert.equal('maskedEmail' in recovery.recovery, false);
 
-for (const file of ['src/app.js', 'src/app-v17.js', 'src/app-v18.js', 'src/app-v19.js']) {
-  const source = fs.readFileSync(path.join(ROOT, file), 'utf8');
-  assert.doesNotMatch(source, /web_sessions/);
-  assert.match(source, /identity-adapter|resolveIdentitySession/);
-}
+const workerSource = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
+assert.doesNotMatch(workerSource, /web_sessions/);
+assert.match(workerSource, /identity-adapter|resolveIdentitySession/);
+assert.doesNotMatch(workerSource, /app-v17|app-v18|app-v19|handleV\d+Api/);
 
 const indexHtml = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
 const loginHtml = fs.readFileSync(path.join(ROOT, 'public/login.html'), 'utf8');
 const authJs = fs.readFileSync(path.join(ROOT, 'public/auth.js'), 'utf8');
 const authCss = fs.readFileSync(path.join(ROOT, 'public/auth.css'), 'utf8');
-const versionPatch = fs.readFileSync(path.join(ROOT, 'public/v0216.js'), 'utf8');
+const adaptiveUi = fs.readFileSync(path.join(ROOT, 'public/adaptive-ui.js'), 'utf8');
 const workerApp = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
 assert.match(loginHtml, /action="\/login" method="post"/);
@@ -231,8 +230,8 @@ assert.match(authCss, /data-mobile-ledger-action="categories"/);
 assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
-assert.match(versionPatch, /MutationObserver/);
-assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 8'/);
+assert.match(adaptiveUi, /MutationObserver/);
+assert.match(adaptiveUi, /CY_APP_VERSION = 'V0\.21\.7'/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)

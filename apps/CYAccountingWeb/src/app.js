@@ -1,9 +1,10 @@
 import coreWorker from './index.js';
-import { handleV11Api } from './v11-tools.js';
-import { handleV12Api } from './v12-tools.js';
-import { handleV13Api } from './v13-export.js';
-import { handleV15Api } from './v15-import.js';
-import { handleV16Api, handleV16OAuthCallback, runScheduledBackup } from './v16-backup.js';
+import { handleAccountingToolsApi } from './accounting-tools.js';
+import { handleAccountingControlsApi } from './accounting-controls.js';
+import { handleExcelExportApi } from './excel-export.js';
+import { handleExcelImportApi } from './excel-import.js';
+import { handleBackupApi, runScheduledBackup } from './backup-service.js';
+import { handleDesktopMigrationApi } from './desktop-migration.js';
 import {
   canWriteAccounting,
   clearProviderSessionCookie,
@@ -13,6 +14,9 @@ import {
   resolveIdentitySession,
   startPasswordRecovery
 } from './identity-adapter.js';
+
+const SUMMARY_MAX_UNITS = 40;
+const ACCOUNT_NAME_MAX_CHARS = 8;
 
 function shouldDisableBrowserCache(pathname) {
   return pathname === '/' || pathname === '/login' || pathname.endsWith('.html') || pathname.endsWith('.js');
@@ -105,23 +109,38 @@ export default {
         }, 403);
       }
 
-      const v16Callback = await handleV16OAuthCallback(request, env);
-      if (v16Callback) return v16Callback;
+      const mutationValidation = await validateMutationRequest(request, url);
+      if (mutationValidation) return mutationValidation;
 
-      const v16Response = await handleV16Api(request, env, resolved.session);
-      if (v16Response) return v16Response;
+      if (url.pathname.startsWith('/api/backup/')) {
+        const backupResponse = await handleBackupApi(request, env, resolved.session);
+        return backupResponse || json({
+          ok: false,
+          error: '找不到此備份功能。',
+          code: 'BACKUP_ROUTE_NOT_FOUND'
+        }, 404);
+      }
 
-      const v15Response = await handleV15Api(request, env);
-      if (v15Response) return v15Response;
+      if (url.pathname.startsWith('/api/migration/desktop/')) {
+        const migrationResponse = await handleDesktopMigrationApi(request, env, resolved.session);
+        return migrationResponse || json({
+          ok: false,
+          error: '找不到此資料移轉功能。',
+          code: 'MIGRATION_ROUTE_NOT_FOUND'
+        }, 404);
+      }
 
-      const v13Response = await handleV13Api(request, env);
-      if (v13Response) return v13Response;
+      const importResponse = await handleExcelImportApi(request, env);
+      if (importResponse) return importResponse;
 
-      const v12Response = await handleV12Api(request, env);
-      if (v12Response) return v12Response;
+      const exportResponse = await handleExcelExportApi(request, env);
+      if (exportResponse) return exportResponse;
 
-      const v11Response = await handleV11Api(request, env);
-      if (v11Response) return v11Response;
+      const controlsResponse = await handleAccountingControlsApi(request, env);
+      if (controlsResponse) return controlsResponse;
+
+      const toolsResponse = await handleAccountingToolsApi(request, env);
+      if (toolsResponse) return toolsResponse;
 
       return coreWorker.fetch(request, env);
     } catch (error) {
@@ -134,6 +153,57 @@ export default {
     ctx.waitUntil(runScheduledBackup(env));
   }
 };
+
+async function validateMutationRequest(request, url) {
+  const transactionWrite = isTransactionWrite(url.pathname, request.method);
+  const accountWrite = isAccountWrite(url.pathname, request.method);
+  if (!transactionWrite && !accountWrite) return null;
+
+  const body = await request.clone().json().catch(() => null);
+
+  if (transactionWrite && body && summaryWeightedUnits(body.summary) > SUMMARY_MAX_UNITS) {
+    return json({
+      ok: false,
+      error: '摘要不可超過 20 個中文字或 40 個英數字元。',
+      code: 'SUMMARY_TOO_LONG'
+    }, 400);
+  }
+
+  if (accountWrite) {
+    const name = normalizeAccountName(body?.name);
+    if (!name) {
+      return json({ ok: false, error: '帳戶名稱不可空白。', code: 'ACCOUNT_NAME_REQUIRED' }, 400);
+    }
+    if (Array.from(name).length > ACCOUNT_NAME_MAX_CHARS) {
+      return json({ ok: false, error: '帳戶名稱最多 8 個字。', code: 'ACCOUNT_NAME_TOO_LONG' }, 400);
+    }
+  }
+
+  return null;
+}
+
+function isTransactionWrite(pathname, method) {
+  if (method === 'POST' && pathname === '/api/transactions') return true;
+  return method === 'PUT' && /^\/api\/transactions\/\d+$/.test(pathname);
+}
+
+function isAccountWrite(pathname, method) {
+  if (method === 'POST' && pathname === '/api/accounts') return true;
+  return method === 'PUT' && /^\/api\/accounts\/\d+$/.test(pathname);
+}
+
+function summaryWeightedUnits(value) {
+  let units = 0;
+  for (const char of String(value ?? '').trim()) {
+    const code = char.codePointAt(0) || 0;
+    units += code <= 0x7f || (code >= 0xff61 && code <= 0xff9f) ? 1 : 2;
+  }
+  return units;
+}
+
+function normalizeAccountName(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ');
+}
 
 async function handleNavigationLogin(request, env) {
   const form = await request.formData().catch(() => null);
