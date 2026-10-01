@@ -1,5 +1,13 @@
 # Shared Common Rules Changelog
 
+## 2.7.0 — 2026/10/01
+
+- 新增全域「禁止版本殼／wrapper 疊床架屋」架構紀律：功能演進與修正必須收斂到正式主路徑與依功能命名模組，不得以 app-vN chain、vNNN.js/css 疊載、Build wrapper 或 patch-on-patch 取代正常整併。
+- 保留合理例外：外部 backward compatibility、資料格式過渡、第三方 API 遷移、rolling deployment 或不可同步升級 consumer 可使用最小必要相容層，但必須單一入口、最小範圍、不形成第二套 authority／business logic、不可再疊第二層，並記錄理由、owner、影響範圍、移除條件與退場時機。
+- 明確區分「protocol／file-format compatibility」與「application runtime wrapper compatibility」；前者可長期依 contract version 保留 reader，後者不得因此保留整套歷史 runtime。
+- 發現既有多層 wrapper／overlay／patch chain 時，優先先收斂主路徑再除錯；緊急暫時層必須有明確 cleanup gate，不得把臨時 workaround 當完成架構。
+- CI／architecture test 應防止已淘汰版本殼與 patch loader 回流；舊測試不得以歷史載入順序為理由要求恢復已移除的殼。
+
 ## 2.6.0 — 2026/09/19
 
 - 新增「一致性優先與例外流程控制」共通規則：相同資料值、狀態碼、欄位語意、權限判斷與 UI 樣式在不同入口維持相同解讀，不因單一流程任意改變既有語意。
