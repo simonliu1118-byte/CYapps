@@ -44,7 +44,7 @@ assert.match(app, /finishCyaccBoot/);
 assert.match(app, /12_000/);
 assert.match(app, /Promise\.race\(\[request, timeout\]\)/);
 assert.match(app, /error\?\.message \|\| '載入失敗，請重新整理後再試。'/);
-assert.match(ledger, /cyacc:core-ready/);
+assert.match(ledger, /window\.cyaccRefreshLedgerView = loadLedgerOpeningAndRender/);
 assert.match(login, /\/api\/auth\/login/);
 assert.match(login, /AbortController/);
 assert.match(login, /8_000/);
