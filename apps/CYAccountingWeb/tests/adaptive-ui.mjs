@@ -20,6 +20,9 @@ assert.match(css, /\.mobile-utility-dialog\s*\{[\s\S]*?width:\s*min\(350px, calc
 assert.match(css, /\.mobile-settings-dialog \.settings-nav\s*\{[\s\S]*?display:\s*none !important/);
 assert.match(css, /\.mobile-opening-dialog \.opening-dialog-heading\s*\{[\s\S]*?display:\s*none !important/);
 assert.match(css, /\.quick-chip-list[\s\S]*?overflow-x:\s*auto !important/);
+assert.match(css, /body\.v21-mobile-app \.entry-card\s*\{[\s\S]*?min-height:\s*calc\(100dvh - 110px - env\(safe-area-inset-bottom\)\) !important/);
+assert.match(css, /\.ledger-card\.is-loading \.table-wrap::after[\s\S]*?content:\s*"載入中…"/);
+assert.match(css, /\.mobile-opening-dialog #openingRows\s*\{[\s\S]*?flex:\s*0 1 auto !important/);
 
 assert.match(js, /trigger\.id = 'mobileAccountMenuButton'/);
 assert.match(js, /data-mobile-account-action="logout">登出/);
