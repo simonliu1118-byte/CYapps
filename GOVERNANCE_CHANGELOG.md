@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.22 — 2026/10/01
+
+- Retire completed one-time CYID production provisioning; this branch can no longer replay development authority, create resources, migrate, or deploy. Existing production Worker/D1 remain as deployed.
+
 ## 2.3.20 — 2026/09/30
 
 - CYID consumer contract 增加跨 repository 同步治理：`CONSUMER_SYNC_MANIFEST.json` 明列外部 consumer 必須鏡像的 7 個 canonical artifacts（consumer current/minimum version、shared standard、consumer changelog、Auth、Role/Access、Architecture）。
