@@ -1,6 +1,5 @@
 /* CYAccountingWeb adaptive UI functional module. */
 
-const CY_V20_VERSION = 'V0.20.1';
 const CY_V20_MOBILE_CONFIRMATION_INIT = 'cyaccounting.v20.mobileConfirmationInitialized';
 let cyV20Started = false;
 
@@ -14,7 +13,6 @@ window.addEventListener('load', startV20, { once: true });
 function startV20() {
   if (cyV20Started) return;
   cyV20Started = true;
-  syncV20Version();
   setupV20ViewportState();
   setupV20MobileConfirmationDefault();
   setupV20SettingsTabVisibility();
@@ -22,10 +20,6 @@ function startV20() {
 }
 
 
-function syncV20Version() {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = CY_V20_VERSION;
-}
 
 function setupV20ViewportState() {
   const sync = () => {
@@ -69,7 +63,6 @@ function setupV201MobileInlineEditVisibility() {
   observer.observe(rows, { subtree: true, attributes: true, attributeFilter: ['class'] });
 }
 
-const CY_V21_VERSION = 'V0.21.0 Build 7';
 const CY_V21_SPLIT_MEDIA = '(min-width: 1360px)';
 const CY_V21_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 let cyV21Started = false;
@@ -84,7 +77,6 @@ window.addEventListener('load', startV21, { once: true });
 function startV21() {
   if (cyV21Started) return;
   cyV21Started = true;
-  syncV21Version();
   updateV21KeyboardHint();
   setupV21HeaderLayout();
   setupV21DesktopSplitWorkspace();
@@ -104,10 +96,6 @@ function startV21() {
 
 
 
-function syncV21Version() {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = CY_V21_VERSION;
-}
 
 function updateV21KeyboardHint() {
   const hint = document.querySelector('.keyboard-hint');
@@ -491,7 +479,6 @@ function applyV21DesktopSplitWorkspace(enabled) {
   }
 }
 
-const CY_V21_BUILD8_VERSION = 'V0.21.0 Build 9';
 const CY_V21_BUILD8_SUMMARY_UNITS = 40;
 const CY_V21_BUILD9_MOBILE = '(max-width: 767px)';
 let cyV21Build8Started = false;
@@ -513,7 +500,6 @@ function startV21Build8() {
   runV21Build8Step('role-medal', setupV21Build8RoleMedal);
   runV21Build8Step('enter-hints', setupV21Build9EnterHints);
   runV21Build8Step('help-copy', syncV21Build9HelpCopy);
-  runV21Build8Step('version', syncV21Build8Version);
 }
 
 function runV21Build8Step(name, task) {
@@ -526,7 +512,6 @@ function runV21Build8Step(name, task) {
 
 function syncV21Build8AfterLoad() {
   startV21Build8();
-  syncV21Build8Version();
   syncV21Build8AccountChoices();
   syncV21Build8RoleMedal();
   syncV21Build9AccountPickerLabel();
@@ -535,10 +520,6 @@ function syncV21Build8AfterLoad() {
 
 
 
-function syncV21Build8Version() {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = CY_V21_BUILD8_VERSION;
-}
 
 function setupV21Build8AccountChoices() {
   const select = document.querySelector('#accountName');
@@ -868,7 +849,6 @@ function v21Build8Escape(value) {
     .replaceAll("'", '&#039;');
 }
 
-const CY_V21_BUILD10_VERSION = 'V0.21.0 Build 10';
 const CY_V21_BUILD10_MOBILE = '(max-width: 767px)';
 const CY_V21_CONFIRMATION_KEY = 'cyaccounting.confirmationDrawerOpen';
 let cyV21Build10Started = false;
@@ -889,7 +869,6 @@ function startV21Build10() {
   runV21Build10Step('ledger-tools', setupV21Build10LedgerTools);
   runV21Build10Step('confirmation-policy', setupV21Build10ConfirmationPolicy);
   runV21Build10Step('mobile-form-copy', setupV21Build10MobileFormCopy);
-  runV21Build10Step('version', syncV21Build10Version);
 }
 
 function runV21Build10Step(name, task) {
@@ -902,17 +881,12 @@ function runV21Build10Step(name, task) {
 
 function syncV21Build10AfterLoad() {
   startV21Build10();
-  syncV21Build10Version();
   syncV21Build10MobileIdentity();
   syncV21Build10MobileNavigation();
   syncV21Build10ConfirmationPolicy();
 }
 
 
-function syncV21Build10Version() {
-  const version = document.querySelector('.version');
-  if (version && version.textContent !== CY_V21_BUILD10_VERSION) version.textContent = CY_V21_BUILD10_VERSION;
-}
 
 function setupV21Build10MobileAppBar() {
   const topbar = document.querySelector('.topbar');
@@ -1211,7 +1185,6 @@ function setupV21Build10MobileFormCopy() {
   if (arrow) arrow.textContent = '›';
 }
 
-const CY_V21_BUILD11_VERSION = 'V0.21.0 Build 11';
 const CY_V21_BUILD11_DESKTOP = '(min-width: 768px)';
 let cyV21Build11Started = false;
 
@@ -1225,7 +1198,6 @@ window.addEventListener('load', startV21Build11, { once: true });
 function startV21Build11() {
   if (cyV21Build11Started) return;
   cyV21Build11Started = true;
-  syncV21Build11Version();
   setupV21Build11DesktopIsolation();
 }
 
@@ -1242,10 +1214,6 @@ function startV21Build11() {
 
 
 
-function syncV21Build11Version() {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = CY_V21_BUILD11_VERSION;
-}
 
 function setupV21Build11DesktopIsolation() {
   const media = window.matchMedia(CY_V21_BUILD11_DESKTOP);
@@ -1287,23 +1255,16 @@ function syncV21Build11DesktopIsolation(desktop = window.matchMedia(CY_V21_BUILD
   ledgerMore?.setAttribute('aria-expanded', 'false');
 }
 
-const CY_V21_BUILD12_VERSION = 'V0.21.0 Build 12';
 const CY_V21_BUILD12_DESKTOP = '(min-width: 1024px)';
 const CY_V21_BUILD12_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
-syncV21Build12Version();
 syncV21Build12Copy();
 
 window.addEventListener('load', () => {
-  syncV21Build12Version();
   syncV21Build12Copy();
   setupV21Build12DesktopMonthPicker();
 });
 
 
-function syncV21Build12Version() {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = CY_V21_BUILD12_VERSION;
-}
 
 function syncV21Build12Copy() {
   const summary = document.querySelector('#summary');
@@ -1497,13 +1458,10 @@ function v21Build12ReadMonth(input) {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-const CY_V21_BUILD13_VERSION = 'V0.21.0 Build 13';
 const CY_V21_BUILD13_DESKTOP = '(min-width: 1024px)';
-syncV21Build13Version();
 setupV21Build13ConnectionStatus();
 
 const runV21Build13 = () => {
-  syncV21Build13Version();
   setupV21Build13ConnectionStatus();
   setupV21Build13HeaderManagement();
   setupV21Build13OpeningDialog();
@@ -1514,10 +1472,6 @@ if (document.readyState === 'complete') setTimeout(runV21Build13, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build13, 0), { once: true });
 
 
-function syncV21Build13Version() {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = CY_V21_BUILD13_VERSION;
-}
 
 function setupV21Build13ConnectionStatus() {
   const status = document.querySelector('#connectionStatus');
@@ -1663,14 +1617,11 @@ function syncV21Build13CrudCopy() {
   if (editSave) editSave.textContent = '儲存';
 }
 
-const CY_V21_BUILD14_VERSION = 'V0.21.0 Build 14';
 const CY_V21_BUILD14_DESKTOP = '(min-width: 1024px)';
 const CY_V21_BUILD14_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 let cyV21Build14InlineEdit = null;
-syncV21Build14Version();
 
 const runV21Build14 = () => {
-  syncV21Build14Version();
   setupV21Build14Managers();
   setupV21Build14InlineEditing();
   setupV21Build14AccountLimit();
@@ -1682,10 +1633,6 @@ if (document.readyState === 'complete') setTimeout(runV21Build14, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build14, 0), { once: true });
 
 
-function syncV21Build14Version() {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = CY_V21_BUILD14_VERSION;
-}
 
 function setupV21Build14Managers() {
   if (typeof window.renderAccountManager === 'function') window.renderAccountManager = renderV21Build14AccountManager;
@@ -2110,13 +2057,10 @@ function v21Build14Escape(value) {
     .replaceAll("'", '&#39;');
 }
 
-const CY_V21_BUILD15_VERSION = 'V0.21.0 Build 15';
 const CY_V21_BUILD15_DESKTOP = '(min-width: 1024px)';
 let cyV21Build15Drag = null;
-syncV21Build15Version();
 
 const runV21Build15 = () => {
-  syncV21Build15Version();
   setupV21Build15Managers();
   setupV21Build15KindSwitch();
   setupV21Build15DragAndDrop();
@@ -2126,10 +2070,6 @@ if (document.readyState === 'complete') setTimeout(runV21Build15, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build15, 0), { once: true });
 
 
-function syncV21Build15Version() {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = CY_V21_BUILD15_VERSION;
-}
 
 function setupV21Build15Managers() {
   if (typeof window.renderAccountManager === 'function') window.renderAccountManager = renderV21Build15AccountManager;
@@ -2434,13 +2374,10 @@ function v21Build15Escape(value) {
     .replaceAll("'", '&#039;');
 }
 
-const CY_V21_BUILD16_VERSION = 'V0.21.0 Build 16';
 const CY_V21_BUILD16_DESKTOP = '(min-width: 1024px)';
 let cyV21Build16Saving = false;
-syncV21Build16Version();
 
 const runV21Build16 = () => {
-  syncV21Build16Version();
   setupV21Build16CategoryManager();
   setupV21Build16OptimisticDrag();
 };
@@ -2449,10 +2386,6 @@ if (document.readyState === 'complete') setTimeout(runV21Build16, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build16, 0), { once: true });
 
 
-function syncV21Build16Version() {
-  const version = document.querySelector('.version');
-  if (version) version.textContent = CY_V21_BUILD16_VERSION;
-}
 
 function setupV21Build16CategoryManager() {
   if (typeof window.renderCategoryManager === 'function') window.renderCategoryManager = renderV21Build16CategoryManager;
@@ -2739,7 +2672,6 @@ function v21Build16Escape(value) {
     .replaceAll("'", '&#039;');
 }
 
-const CY_V0211_VERSION = 'V0.21.1';
 const CY_V0211_DESKTOP = '(min-width: 1024px)';
 const CY_V0211_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 const CY_V0211_WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -2747,10 +2679,8 @@ let cyV0211RenderingManagers = false;
 const cyV0211ConfirmBypass = new WeakSet();
 installV0211ConfirmDialog();
 installV0211ConfirmInterceptors();
-enforceV0211Version();
 
 const runV0211Patch = () => {
-  enforceV0211Version();
   installV0211ManagerOverrides();
   setupV0211ManagerGuards();
   renderV0211ManagersIfVisible();
@@ -2771,17 +2701,6 @@ window.addEventListener('load', () => {
 }, { once: true });
 
 
-function enforceV0211Version() {
-  const version = document.querySelector('.version');
-  if (version && version.textContent !== CY_V0211_VERSION) version.textContent = CY_V0211_VERSION;
-  if (version && version.dataset.v0211VersionGuard !== '1') {
-    version.dataset.v0211VersionGuard = '1';
-    const observer = new MutationObserver(() => {
-      if (version.textContent !== CY_V0211_VERSION) version.textContent = CY_V0211_VERSION;
-    });
-    observer.observe(version, { childList: true, characterData: true, subtree: true });
-  }
-}
 
 /* -------------------------------------------------------------------------- */
 /* Managed confirmation dialog                                                */
@@ -3344,7 +3263,7 @@ function v0211Escape(value) {
     .replaceAll("'", '&#039;');
 }
 
-/* V0.21.1 keyboard bridge for the Desktop custom date trigger. */
+/* Desktop custom date keyboard bridge. */
 
 const CY_V0211_KEYBOARD_DESKTOP = '(min-width: 1024px)';
 
@@ -3402,12 +3321,10 @@ if (document.readyState === 'complete') setTimeout(setupV0211KeyboardBridge, 0);
 else window.addEventListener('load', () => setTimeout(setupV0211KeyboardBridge, 0), { once: true });
 setTimeout(setupV0211KeyboardBridge, 350);
 
-const CY_V0212_VERSION = 'V0.21.2';
 const CY_V0212_DESKTOP = '(min-width: 1024px)';
 let cyV0212DialogState = null;
 let cyV0212Rendering = false;
 const runV0212 = () => {
-  enforceV0212Version();
   if (!window.matchMedia(CY_V0212_DESKTOP).matches) return;
   installV0212CategoryRenderer();
   ensureV0212ManagerDialog();
@@ -3427,17 +3344,6 @@ window.addEventListener('load', () => {
 }, { once: true });
 
 
-function enforceV0212Version() {
-  let version = document.querySelector('.version');
-  if (!version) return;
-  if (version.dataset.v0212Version !== '1') {
-    const replacement = version.cloneNode(true);
-    replacement.dataset.v0212Version = '1';
-    version.replaceWith(replacement);
-    version = replacement;
-  }
-  version.textContent = CY_V0212_VERSION;
-}
 
 function installV0212CategoryRenderer() {
   window.renderCategoryManager = renderV0212CategoryManager;
@@ -3752,7 +3658,6 @@ function v0212Escape(value) {
     .replaceAll("'", '&#039;');
 }
 
-const CY_V0214_VERSION = 'V0.21.5 Build 11';
 const CY_V0214_HOVER = '(hover: hover) and (pointer: fine)';
 let cyV0214BalancePopover = null;
 let cyV0214BalanceAnchor = null;
@@ -3763,7 +3668,6 @@ window.cyShowMigrationComplete = showMigrationCompleteV0214;
 window.cyCloseLedgerBalancePopover = closeLedgerBalancePopoverV0214;
 
 const runV0214 = () => {
-  enforceV0214Version();
   ensureMigrationCompleteDialogV0214();
   setupBalancePopoverV0214();
   setupOptimisticSettingsV0214();
@@ -3782,17 +3686,6 @@ window.addEventListener('load', () => {
 }, { once: true });
 
 
-function enforceV0214Version() {
-  let version = document.querySelector('.version');
-  if (!version) return;
-  if (version.dataset.v0214Version !== '1') {
-    const replacement = version.cloneNode(true);
-    replacement.dataset.v0214Version = '1';
-    version.replaceWith(replacement);
-    version = replacement;
-  }
-  version.textContent = CY_V0214_VERSION;
-}
 
 function ensureMigrationCompleteDialogV0214() {
   let dialog = document.querySelector('#migrationCompleteDialogV0214');
@@ -4933,33 +4826,4 @@ function showV0215Build4LedgerNotice(text) {
   notice.textContent = text;
   notice.classList.add('show');
   window.setTimeout(() => notice.classList.remove('show'), 2600);
-}
-
-const CY_APP_VERSION = 'V0.21.7 Build 4';
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setupAppVersion, { once: true });
-} else {
-  setupAppVersion();
-}
-window.addEventListener('load', setupAppVersion, { once: true });
-
-function setupAppVersion() {
-  syncAppVersion();
-  window.setTimeout(syncAppVersion, 250);
-  window.setTimeout(syncAppVersion, 1000);
-
-  const version = document.querySelector('.version');
-  if (!version || version.dataset.appVersionObserved === 'true') return;
-  version.dataset.appVersionObserved = 'true';
-  new MutationObserver(syncAppVersion).observe(version, {
-    childList: true,
-    characterData: true,
-    subtree: true
-  });
-}
-
-function syncAppVersion() {
-  const version = document.querySelector('.version');
-  if (version && version.textContent !== CY_APP_VERSION) version.textContent = CY_APP_VERSION;
 }
