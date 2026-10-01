@@ -71,3 +71,7 @@ The findings above describe the reviewed historical baseline. The remaining sour
 - Added a separate main-only manual production release workflow: read existing production settings and bound DB metadata, fail closed on isolation/binding/config drift, require deployed core consumer adoption, validate bundle, then forward migrations and source deployment. No development authority export/import, Employee repair, resource creation, secret replacement or synthetic Session insertion.
 
 38 Node tests and TypeScript checks pass locally. CI must additionally pass actual Worker/D1 auth and first-login acceptance. Production release is not claimed: core-consumer production readiness, real Email/browser lifecycle and backup/restore retain their independent gates.
+
+## Release evidence — 2026-10-01
+
+CYID 0.3.5 and CY Web 0.7.0 are development-deployed, with actual version/binding/D1-health/invalid-Session readback in runs 36821423383 and 36821410198. Routine production readiness also checks the protected existing core Worker Service Binding, Application ID and consumer declaration; development consumer health alone is insufficient. No production release or real Email/browser acceptance is claimed.

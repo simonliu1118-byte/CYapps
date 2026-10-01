@@ -43,6 +43,18 @@ export function buildProductionConfig({ settings, database, workerName, developm
   };
 }
 
+/** A healthy development consumer cannot satisfy production retirement readiness. */
+export function requireProductionCoreConsumer({ settings, health, providerName, applicationId, consumerVersion }) {
+  const bindings = settings?.result?.bindings;
+  const plain = name => bindings?.find(b => b.type === 'plain_text' && b.name === name)?.text;
+  const identity = bindings?.find(b => b.type === 'service' && b.name === 'IDENTITY');
+  if (settings?.success !== true || !Array.isArray(bindings)
+      || identity?.service !== providerName || ![undefined, 'production'].includes(identity?.environment)
+      || plain('IDENTITY_APPLICATION_ID') !== applicationId || plain('IDENTITY_CONSUMER_VERSION') !== consumerVersion
+      || health?.ok !== true || health.data?.service !== 'cyweb' || health.data?.database !== 'ok'
+      || health.data?.identityConsumerVersion !== consumerVersion) throw new Error('PRODUCTION_CORE_CONSUMER_NOT_READY');
+}
+
 function cli() {
   const [settingsPath, databasePath, outputPath] = process.argv.slice(2);
   const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));

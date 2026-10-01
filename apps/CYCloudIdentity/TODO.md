@@ -4,7 +4,7 @@
 
 ## Current checkpoint — 2026-10-01
 
-- Current source release is **CYCloudIdentity 0.3.5 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。Deployment evidence is tracked below; source version is not deployed-version evidence.
+- Current source release is **CYCloudIdentity 0.3.5 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.5 Build 0 已部署並驗證**，run `36821423383`；source 與部署證據分開記錄。
 - CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
@@ -94,3 +94,12 @@
 - Typecheck and 38 Node tests pass, including obsolete-route rejection without DB access, shared Email-budget rollback/settlement and strict existing production configuration rendering. Auth + first-login real Worker/D1 acceptance remain required CI gates.
 - Physical historical tables/migrations remain. Bounded PBKDF2 verification remains for credential continuity; all newly written credentials use scrypt. No credentials were exported to establish this change.
 - Routine production workflow has no authority import/Employee repair, resource creation, secret replacement or synthetic Session writes. Real Email/browser, backup/restore and CY Web production cutover remain deferred separately.
+
+## Development release acceptance — 2026-10-01
+
+- Formal CYID source `cca89e30eec2e7df6938bb37736c520af9db8197`; deployment commit `26ae3424df2ee2c57a9877682c4bb51dd593db58` uses the exact formal-main tree while preserving the old development branch history. It does not merge old one-time provisioning code into runtime.
+- [Development Deploy run 36821423383](https://github.com/simonliu1118-byte/CYapps/actions/runs/36821423383) passed migrations, bundle/source deployment, existing secret configuration, actual development Worker/D1 binding isolation, health serviceVersion 0.3.5 and unregistered Session rejection. No account/Session was created by the verification.
+- CY Web 0.7.0 / consumer 1.0.2 deployed through [run 36821410198](https://github.com/simonliu1118-byte/chihyuan-web/actions/runs/36821410198), with actual canonical/workers.dev D1 health/version/consumer readback and provider Session rejection.
+- Routine production release additionally requires protected `CYID_PRODUCTION_CORE_CONSUMER_WORKER_NAME` and actual core Worker `IDENTITY` binding to the production provider plus the production core Application ID and consumer declaration. A development health marker cannot satisfy this target check. The prerequisite is not provisioned by this work.
+- TypeScript and 44 Node tests pass after the production-binding readiness guard was added; regression cases reject a healthy development binding, wrong Application/consumer declaration and unhealthy D1.
+- Production source release remains unexecuted. Real Email/browser/device acceptance, backup/restore and CY Web production business-data rollout remain pending.
