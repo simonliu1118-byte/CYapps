@@ -4205,9 +4205,12 @@ let cyV0215Build4SaveClearTimer = null;
 let cyV0215Build4SetupDone = false;
 
 window.cyAfterSaveMessage = handleV0215Build4SaveMessage;
-window.cyOpenMobileLedgerOpening = openMobileLedgerOpening;
-window.cyOpenMobileLedgerLock = openMobileLedgerLock;
-window.cyOpenMobileSettingsPane = openMobileSettingsPane;
+window.cyOpenMobileUtility = openMobileUtility;
+window.cyOpenMobileLedgerOpening = () => openMobileUtility('opening');
+window.cyOpenMobileLedgerLock = () => openMobileUtility('lock');
+window.cyOpenMobileSettingsPane = tab => openMobileUtility(tab);
+
+let cyMobileOpeningMount = null;
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', setupV0215Build4, { once: true });
@@ -4251,7 +4254,7 @@ function setupV0215Build4Toolbar(attempt = 0) {
     balance.type = 'button';
     balance.textContent = '餘額';
     balance.addEventListener('click', () => {
-      openMobileLedgerOpening();
+      openMobileUtility('opening');
     });
   }
 
@@ -4269,248 +4272,111 @@ function setupV0215Build4Toolbar(attempt = 0) {
   sheet?.querySelector('[data-mobile-ledger-action="opening"]')?.remove();
 }
 
-async function openMobileLedgerOpening() {
+async function openMobileUtility(type) {
   if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
-  const month = String(els.monthFilter?.value || '');
-  if (!/^\d{4}-\d{2}$/.test(month)) return;
-  if (!els.openingDialog) return;
-
-  if (els.openingMonth) els.openingMonth.value = month;
-  els.openingDialog.classList.add('mobile-utility-dialog', 'mobile-opening-dialog');
-  const subtitle = els.openingDialog.querySelector('.modal-header p');
-  if (subtitle) subtitle.textContent = formatMobileMonth(month);
-  if (!els.openingDialog.open) els.openingDialog.showModal();
-  if (typeof loadOpeningBalances === 'function') await loadOpeningBalances();
-}
-
-function openMobileSettingsPane(tab) {
-  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
-  if (!['accounts', 'categories'].includes(tab)) return;
+  if (!['opening', 'accounts', 'categories', 'lock'].includes(type)) return;
 
   const dialog = els.settingsDialog || document.querySelector('#settingsDialog');
   if (!dialog) return;
 
+  restoreMobileOpeningMount();
   if (typeof setDialogMessage === 'function' && els.settingsMessage) setDialogMessage(els.settingsMessage, '');
-  if (typeof setSettingsTab === 'function') setSettingsTab(tab);
-  if (tab === 'accounts') renderMobileAccountManager();
-  else renderMobileCategoryManager();
+  if (typeof renderSettings === 'function') renderSettings();
 
   dialog.classList.add('mobile-utility-dialog', 'mobile-settings-dialog');
-  dialog.dataset.mobileSettingsFocus = tab;
+  dialog.dataset.mobileUtility = type;
 
   const title = dialog.querySelector('.modal-header h2');
   const subtitle = dialog.querySelector('.modal-header p');
-  if (title && !title.dataset.originalTitle) title.dataset.originalTitle = title.textContent || '設定';
-  if (subtitle && !subtitle.dataset.originalText) subtitle.dataset.originalText = subtitle.textContent || '';
-  if (title) title.textContent = tab === 'accounts' ? '帳戶設定' : '科目設定';
-  if (subtitle) subtitle.textContent = tab === 'accounts'
-    ? '管理帳戶與預設帳戶'
-    : '管理收入／支出大分類與科目';
+  if (title && !title.dataset.mobileUtilityOriginal) title.dataset.mobileUtilityOriginal = title.textContent || '設定';
+  if (subtitle && !subtitle.dataset.mobileUtilityOriginal) subtitle.dataset.mobileUtilityOriginal = subtitle.textContent || '';
 
-  if (!dialog.dataset.mobileFocusBound) {
-    dialog.dataset.mobileFocusBound = '1';
+  if (!dialog.dataset.mobileUtilityBound) {
+    dialog.dataset.mobileUtilityBound = '1';
     dialog.addEventListener('close', () => {
-      dialog.classList.remove('mobile-utility-dialog', 'mobile-settings-dialog');
-      delete dialog.dataset.mobileSettingsFocus;
+      restoreMobileOpeningMount();
+      dialog.classList.remove('mobile-utility-dialog', 'mobile-settings-dialog', 'mobile-opening-dialog');
+      delete dialog.dataset.mobileUtility;
       const heading = dialog.querySelector('.modal-header h2');
       const description = dialog.querySelector('.modal-header p');
-      if (heading?.dataset.originalTitle) heading.textContent = heading.dataset.originalTitle;
-      if (description?.dataset.originalText !== undefined) description.textContent = description.dataset.originalText;
+      if (heading?.dataset.mobileUtilityOriginal) heading.textContent = heading.dataset.mobileUtilityOriginal;
+      if (description?.dataset.mobileUtilityOriginal !== undefined) description.textContent = description.dataset.mobileUtilityOriginal;
     });
   }
 
-  if (!dialog.open) dialog.showModal();
-}
+  if (type === 'opening') {
+    const month = String(els.monthFilter?.value || '');
+    if (!/^\d{4}-\d{2}$/.test(month) || !els.openingRows || !els.openingMessage || !els.saveOpeningButton) return;
+    if (els.openingMonth) els.openingMonth.value = month;
 
-function renderMobileAccountManager() {
-  if (typeof state !== 'object') return;
-  const host = document.querySelector('#accountRows');
-  if (!host) return;
-  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  if (!accounts.length) {
-    host.innerHTML = '<div class="empty mobile-manager-empty">尚無帳戶。</div>';
+    dialog.classList.add('mobile-opening-dialog');
+    if (title) title.textContent = '期初餘額';
+    if (subtitle) subtitle.textContent = formatMobileMonth(month);
+
+    const content = dialog.querySelector('.settings-content');
+    if (!content) return;
+
+    const pane = document.createElement('section');
+    pane.className = 'settings-pane active mobile-utility-opening-pane';
+    const actions = document.createElement('div');
+    actions.className = 'mobile-utility-actions';
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'secondary';
+    close.textContent = '關閉';
+    close.addEventListener('click', () => dialog.close());
+    actions.append(close);
+
+    cyMobileOpeningMount = {
+      rows: mountMobileUtilityNode(els.openingRows, pane),
+      message: mountMobileUtilityNode(els.openingMessage, pane),
+      save: mountMobileUtilityNode(els.saveOpeningButton, actions),
+      pane
+    };
+    pane.append(actions);
+    content.append(pane);
+
+    dialog.querySelectorAll('.settings-pane:not(.mobile-utility-opening-pane)').forEach(item => item.classList.remove('active'));
+    if (!dialog.open) dialog.showModal();
+    if (typeof loadOpeningBalances === 'function') await loadOpeningBalances();
     return;
   }
 
-  host.innerHTML = accounts.map(account => {
-    const id = Number(account.id);
-    const isDefault = Number(account.is_default) === 1;
-    return `<div class="mobile-manager-row" data-mobile-account-row="${id}">
-      <div class="mobile-manager-main">
-        <strong>${v0211Escape(account.name)}</strong>
-        ${isDefault ? '<span class="mobile-manager-badge">預設</span>' : ''}
-      </div>
-      <div class="mobile-manager-actions">
-        ${isDefault ? '' : `<button type="button" class="mini-button" data-account-default="${id}">設為預設</button>`}
-        <button type="button" class="mini-button" data-account-rename="${id}">改名</button>
-        <button type="button" class="mini-button danger" data-account-delete="${id}">刪除</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function renderMobileCategoryManager() {
-  if (typeof state !== 'object') return;
-  const host = document.querySelector('#categoryManager');
-  if (!host) return;
-
-  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
-  document.querySelectorAll('[data-settings-kind]').forEach(button =>
-    button.classList.toggle('active', button.dataset.settingsKind === kind)
-  );
-  const groups = (state.groups || []).filter(group => group.kind === kind);
-
-  if (!groups.length) {
-    host.innerHTML = '<div class="empty mobile-manager-empty">目前沒有大分類。</div>';
-    return;
-  }
-
-  host.innerHTML = groups.map(group => {
-    const groupId = Number(group.id);
-    const categories = (state.categories || []).filter(category =>
-      category.kind === kind && Number(category.group_id) === groupId
-    );
-    const items = categories.length
-      ? categories.map(category => {
-          const id = Number(category.id);
-          return `<div class="mobile-category-row">
-            <span>${v0211Escape(category.name)}</span>
-            <span class="mobile-category-actions">
-              <button type="button" class="mini-button" data-category-rename="${id}">改名</button>
-              <button type="button" class="mini-button danger" data-category-delete="${id}">刪除</button>
-            </span>
-          </div>`;
-        }).join('')
-      : '<div class="mobile-category-empty">此分類尚無科目。</div>';
-
-    return `<section class="category-group mobile-category-group" data-group-id="${groupId}">
-      <div class="mobile-category-group-head">
-        <strong>${v0211Escape(group.name)}</strong>
-        <span class="mobile-category-actions">
-          <button type="button" class="mini-button" data-group-rename="${groupId}">改名</button>
-          <button type="button" class="mini-button danger" data-group-delete="${groupId}">刪除</button>
-        </span>
-      </div>
-      <div class="category-items mobile-category-items">
-        ${items}
-        <div class="category-add mobile-category-add">
-          <input type="text" maxlength="60" placeholder="新增科目" data-new-category-group="${groupId}">
-          <button type="button" class="mini-button" data-category-add="${groupId}">新增</button>
-        </div>
-      </div>
-    </section>`;
-  }).join('');
-}
-
-function ensureMobileLockDialog() {
-  let dialog = document.querySelector('#mobileLedgerLockDialogV0215');
-  if (dialog) return dialog;
-
-  dialog = document.createElement('dialog');
-  dialog.id = 'mobileLedgerLockDialogV0215';
-  dialog.className = 'modal mobile-utility-dialog mobile-lock-dialog';
-  dialog.innerHTML = `
-    <div class="mobile-utility-head">
-      <div>
-        <h2>月份鎖帳</h2>
-        <p data-v0215-lock-month></p>
-      </div>
-      <button type="button" class="icon-button" data-v0215-lock-close aria-label="關閉">×</button>
-    </div>
-    <div class="mobile-utility-body">
-      <p data-v0215-lock-status></p>
-      <p class="mobile-utility-note" data-v0215-lock-note></p>
-    </div>
-    <div class="mobile-utility-actions">
-      <button type="button" class="secondary" data-v0215-lock-close>取消</button>
-      <button type="button" class="primary" data-v0215-lock-apply></button>
-    </div>
-    <p class="mobile-utility-message" data-v0215-lock-message></p>
-  `;
-  document.body.append(dialog);
-
-  dialog.addEventListener('click', event => {
-    if (event.target.closest('[data-v0215-lock-close]')) {
-      dialog.close();
-      return;
-    }
-    const apply = event.target.closest('[data-v0215-lock-apply]');
-    if (apply) saveMobileLedgerLock(dialog, apply);
-  });
-  return dialog;
-}
-
-function openMobileLedgerLock() {
-  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
-  const month = String(els.monthFilter?.value || '');
-  if (!/^\d{4}-\d{2}$/.test(month)) return;
-
-  const dialog = ensureMobileLockDialog();
-  const lockedThrough = String(state.lockedThrough || '');
-  const locked = Boolean(lockedThrough && month <= lockedThrough);
-  const displayMonth = formatMobileMonth(month);
-  const status = dialog.querySelector('[data-v0215-lock-status]');
-  const note = dialog.querySelector('[data-v0215-lock-note]');
-  const apply = dialog.querySelector('[data-v0215-lock-apply]');
-  const message = dialog.querySelector('[data-v0215-lock-message]');
-
-  dialog.dataset.month = month;
-  dialog.dataset.nextLockedThrough = locked ? previousMobileMonth(month) : month;
-  dialog.querySelector('[data-v0215-lock-month]').textContent = displayMonth;
-  message.textContent = '';
-  message.classList.remove('error');
-
-  if (!locked) {
-    status.textContent = '此月份目前未鎖帳。';
-    note.textContent = '鎖定後，' + displayMonth + ' 以及更早月份都不可新增、修改或刪除記帳。';
-    apply.textContent = '鎖定本月';
-  } else if (lockedThrough === month) {
-    status.textContent = '此月份目前已鎖帳。';
-    note.textContent = '解除後，系統會保留鎖帳至 ' + formatMobileMonth(previousMobileMonth(month)) + '。';
-    apply.textContent = '解除本月鎖帳';
+  dialog.classList.remove('mobile-opening-dialog');
+  if (typeof setSettingsTab === 'function') setSettingsTab(type);
+  if (type === 'accounts') {
+    if (title) title.textContent = '帳戶設定';
+    if (subtitle) subtitle.textContent = '管理帳戶與預設帳戶';
+    renderMobileAccountManager();
+  } else if (type === 'categories') {
+    if (title) title.textContent = '科目設定';
+    if (subtitle) subtitle.textContent = '管理收入／支出大分類與科目';
+    renderMobileCategoryManager();
   } else {
-    status.textContent = '此月份包含在鎖帳範圍內，目前鎖帳至 ' + formatMobileMonth(lockedThrough) + '。';
-    note.textContent = '若解除，' + displayMonth + ' 到 ' + formatMobileMonth(lockedThrough) + ' 都會一起解除鎖帳。';
-    apply.textContent = '解除自本月起鎖帳';
+    if (title) title.textContent = '月份鎖帳';
+    if (subtitle) subtitle.textContent = '設定鎖帳月份';
   }
 
   if (!dialog.open) dialog.showModal();
 }
 
-async function saveMobileLedgerLock(dialog, button) {
-  const month = String(dialog?.dataset.month || '');
-  const nextLockedThrough = String(dialog?.dataset.nextLockedThrough || '');
-  const message = dialog?.querySelector('[data-v0215-lock-message]');
-  if (!/^\d{4}-\d{2}$/.test(month) || !/^\d{4}-\d{2}$/.test(nextLockedThrough)) return;
+function mountMobileUtilityNode(node, target) {
+  if (!node?.parentNode || !target) return null;
+  const marker = document.createComment('cyacc-mobile-utility');
+  node.parentNode.insertBefore(marker, node);
+  target.append(node);
+  return { node, marker };
+}
 
-  button.disabled = true;
-  if (message) {
-    message.textContent = '處理中…';
-    message.classList.remove('error');
+function restoreMobileOpeningMount() {
+  if (!cyMobileOpeningMount) return;
+  for (const mount of [cyMobileOpeningMount.rows, cyMobileOpeningMount.message, cyMobileOpeningMount.save]) {
+    if (mount?.marker?.parentNode) mount.marker.parentNode.insertBefore(mount.node, mount.marker);
+    mount?.marker?.remove();
   }
-  try {
-    const data = await api('/api/settings/lock', {
-      method: 'PUT',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ lockedThrough: nextLockedThrough })
-    });
-    state.lockedThrough = data.lockedThrough || null;
-    if (els.lockedThrough) els.lockedThrough.value = state.lockedThrough || '';
-    updateEntryLockState();
-    await loadTransactions();
-    if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
-    dialog.close();
-    showV0215Build4LedgerNotice(state.lockedThrough
-      ? '已鎖帳至 ' + formatMobileMonth(state.lockedThrough) + '。'
-      : '已取消鎖帳。');
-  } catch (error) {
-    if (message) {
-      message.textContent = error?.message || '鎖帳設定失敗。';
-      message.classList.add('error');
-    }
-  } finally {
-    button.disabled = false;
-  }
+  cyMobileOpeningMount.pane?.remove();
+  cyMobileOpeningMount = null;
 }
 
 function previousMobileMonth(month) {
