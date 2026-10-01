@@ -4935,7 +4935,7 @@ function showV0215Build4LedgerNotice(text) {
   window.setTimeout(() => notice.classList.remove('show'), 2600);
 }
 
-const CY_APP_VERSION = 'V0.21.7 Build 3';
+const CY_APP_VERSION = 'V0.21.7 Build 4';
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', setupAppVersion, { once: true });
