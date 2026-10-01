@@ -8,12 +8,12 @@ window.addEventListener('load', () => {
   bindDateQuickEntry();
   setupQuickEntrySettingsPane();
   setupOrderingControls();
-  updateKeyboardHintV11();
+  updateQuickEntryKeyboardHint();
 });
 
 function bindDateQuickEntry() {
-  if (!els.txDate || els.txDate.dataset.v11DateBound === '1') return;
-  els.txDate.dataset.v11DateBound = '1';
+  if (!els.txDate || els.txDate.dataset.quickDateBound === '1') return;
+  els.txDate.dataset.quickDateBound = '1';
 
   els.txDate.addEventListener('keydown', event => {
     if (event.isComposing) return;
@@ -84,7 +84,7 @@ function setEntryDateValue(value) {
   els.txDate.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function updateKeyboardHintV11() {
+function updateQuickEntryKeyboardHint() {
   const hint = document.querySelector('.keyboard-hint');
   if (!hint) return;
   hint.innerHTML = '鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　<kbd>Tab</kbd> 切換收入／支出　｜　日期可輸入 <kbd>0924</kbd> / <kbd>20260924</kbd>，<kbd>Ctrl</kbd>+<kbd>↑↓</kbd> ±1 天';
@@ -184,12 +184,12 @@ async function saveQuickEntrySettings() {
 
 function setupOrderingControls() {
   if (els.accountRows) {
-    els.accountRows.addEventListener('click', handleV11OrderAction);
+    els.accountRows.addEventListener('click', handleOrderingAction);
     const observer = new MutationObserver(injectAccountOrderButtons);
     observer.observe(els.accountRows, { childList: true, subtree: true });
   }
   if (els.categoryManager) {
-    els.categoryManager.addEventListener('click', handleV11OrderAction);
+    els.categoryManager.addEventListener('click', handleOrderingAction);
     const observer = new MutationObserver(injectCategoryOrderButtons);
     observer.observe(els.categoryManager, { childList: true, subtree: true });
   }
@@ -202,7 +202,7 @@ function injectAccountOrderButtons() {
   rows.forEach((row, index) => {
     const rename = row.querySelector('[data-account-rename]');
     const actions = row.querySelector('.manager-row-actions');
-    if (!rename || !actions || actions.querySelector('[data-v11-move-account]')) return;
+    if (!rename || !actions || actions.querySelector('[data-order-account]')) return;
     const id = rename.dataset.accountRename;
     actions.prepend(orderButton('account', id, 'up', index === 0), orderButton('account', id, 'down', index === rows.length - 1));
   });
@@ -213,7 +213,7 @@ function injectCategoryOrderButtons() {
   groups.forEach((groupElement, groupIndex) => {
     const renameGroup = groupElement.querySelector('.category-group-head [data-group-rename]');
     const groupActions = renameGroup?.parentElement;
-    if (renameGroup && groupActions && !groupActions.querySelector('[data-v11-move-group]')) {
+    if (renameGroup && groupActions && !groupActions.querySelector('[data-order-group]')) {
       const id = renameGroup.dataset.groupRename;
       groupActions.prepend(orderButton('group', id, 'up', groupIndex === 0), orderButton('group', id, 'down', groupIndex === groups.length - 1));
     }
@@ -222,7 +222,7 @@ function injectCategoryOrderButtons() {
     items.forEach((item, index) => {
       const rename = item.querySelector('[data-category-rename]');
       const actions = rename?.parentElement;
-      if (!rename || !actions || actions.querySelector('[data-v11-move-category]')) return;
+      if (!rename || !actions || actions.querySelector('[data-order-category]')) return;
       const id = rename.dataset.categoryRename;
       actions.prepend(orderButton('category', id, 'up', index === 0), orderButton('category', id, 'down', index === items.length - 1));
     });
@@ -233,7 +233,7 @@ function orderButton(type, id, direction, disabled) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'mini-button order-button';
-  button.dataset[`v11Move${type[0].toUpperCase()}${type.slice(1)}`] = String(id);
+  button.dataset[`orderMove${type[0].toUpperCase()}${type.slice(1)}`] = String(id);
   button.dataset.direction = direction;
   button.disabled = disabled;
   button.title = direction === 'up' ? '往上移' : '往下移';
@@ -242,16 +242,16 @@ function orderButton(type, id, direction, disabled) {
   return button;
 }
 
-async function handleV11OrderAction(event) {
-  const button = event.target.closest('[data-v11-move-account], [data-v11-move-group], [data-v11-move-category]');
+async function handleOrderingAction(event) {
+  const button = event.target.closest('[data-order-account], [data-order-group], [data-order-category]');
   if (!button || button.disabled) return;
   event.preventDefault();
   event.stopPropagation();
 
   let path = '';
-  if (button.dataset.v11MoveAccount) path = `/api/accounts/${button.dataset.v11MoveAccount}/move`;
-  else if (button.dataset.v11MoveGroup) path = `/api/category-groups/${button.dataset.v11MoveGroup}/move`;
-  else if (button.dataset.v11MoveCategory) path = `/api/categories/${button.dataset.v11MoveCategory}/move`;
+  if (button.dataset.orderAccount) path = `/api/accounts/${button.dataset.orderAccount}/move`;
+  else if (button.dataset.orderGroup) path = `/api/category-groups/${button.dataset.orderGroup}/move`;
+  else if (button.dataset.orderCategory) path = `/api/categories/${button.dataset.orderCategory}/move`;
   if (!path) return;
 
   button.disabled = true;

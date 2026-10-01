@@ -42,7 +42,7 @@ assert.match(css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(300px, calc\(100vw 
 assert.match(quick, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/);
 assert.match(quick, /enterStep\(els\.summary,[\s\S]*?els\.amount\?\.focus\(\)/);
 assert.match(quick, /enterStep\(els\.amount,[\s\S]*?els\.form\.requestSubmit\(\)/);
-assert.match(category, /data-v12-category-transfer/);
+assert.match(category, /data-category-transfer/);
 assert.match(exportUi, /button\.textContent = '匯出中…'/);
 assert.match(exportUi, /aria-busy/);
 assert.match(inlineEdit, /beginInlineLedgerEdit/);

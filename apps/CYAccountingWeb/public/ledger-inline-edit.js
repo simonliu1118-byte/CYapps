@@ -1,21 +1,21 @@
 /* CYAccountingWeb ledger inline editing functional module. */
 
-let cyV14InlineEdit = null;
-let cyV14ObserverSuspended = false;
+let cyInlineLedgerEdit = null;
+let cyInlineLedgerObserverSuspended = false;
 
 window.addEventListener('load', () => {
   setupInlineLedgerEditing();
 });
 
 function setupInlineLedgerEditing() {
-  if (!els.transactionRows || els.transactionRows.dataset.v14InlineEdit === '1') return;
-  els.transactionRows.dataset.v14InlineEdit = '1';
+  if (!els.transactionRows || els.transactionRows.dataset.inlineLedgerEdit === '1') return;
+  els.transactionRows.dataset.inlineLedgerEdit = '1';
 
   els.transactionRows.addEventListener('click', handleInlineLedgerClick, true);
   els.monthFilter?.addEventListener('change', () => cancelInlineLedgerEdit(false), true);
 
   document.querySelector('#ledgerDesktopTools')?.addEventListener('click', () => {
-    if (cyV14InlineEdit) cancelInlineLedgerEdit(true);
+    if (cyInlineLedgerEdit) cancelInlineLedgerEdit(true);
   }, true);
 }
 
@@ -45,7 +45,7 @@ function handleInlineLedgerClick(event) {
   }
 
   const deleteButton = event.target.closest('[data-delete-id]');
-  if (deleteButton && cyV14InlineEdit) cancelInlineLedgerEdit(true);
+  if (deleteButton && cyInlineLedgerEdit) cancelInlineLedgerEdit(true);
 }
 
 function beginInlineLedgerEdit(id, row) {
@@ -53,15 +53,15 @@ function beginInlineLedgerEdit(id, row) {
   const tx = state.transactions.find(item => Number(item.id) === id);
   if (!tx || isLocked(String(tx.tx_date || '').slice(0, 7))) return;
 
-  if (cyV14InlineEdit?.id === id) {
+  if (cyInlineLedgerEdit?.id === id) {
     row.querySelector('[data-inline-summary]')?.focus();
     return;
   }
 
-  if (cyV14InlineEdit) restoreInlineLedgerRow(false);
+  if (cyInlineLedgerEdit) restoreInlineLedgerRow(false);
   suspendLedgerRefreshObserver();
 
-  cyV14InlineEdit = {
+  cyInlineLedgerEdit = {
     id,
     tx,
     row,
@@ -80,12 +80,12 @@ function beginInlineLedgerEdit(id, row) {
 
 function inlineEditRowHtml(tx) {
   return `
-    <td><input class="inline-edit-control inline-edit-date" data-inline-date type="date" value="${v14Escape(tx.tx_date || '')}" aria-label="日期"></td>
+    <td><input class="inline-edit-control inline-edit-date" data-inline-date type="date" value="${escapeInlineLedgerHtml(tx.tx_date || '')}" aria-label="日期"></td>
     <td><select class="inline-edit-control" data-inline-account aria-label="帳戶">${inlineAccountOptions(tx.account_name)}</select></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
     <td><select class="inline-edit-control" data-inline-category aria-label="科目">${inlineCategoryOptions(tx)}</select></td>
-    <td class="summary"><input class="inline-edit-control inline-edit-summary" data-inline-summary type="text" maxlength="100" value="${v14Escape(tx.summary || '')}" aria-label="摘要"></td>
-    <td class="num"><input class="inline-edit-control inline-edit-amount" data-inline-amount type="text" inputmode="numeric" maxlength="7" value="${v14Escape(String(tx.amount ?? ''))}" aria-label="金額"></td>
+    <td class="summary"><input class="inline-edit-control inline-edit-summary" data-inline-summary type="text" maxlength="100" value="${escapeInlineLedgerHtml(tx.summary || '')}" aria-label="摘要"></td>
+    <td class="num"><input class="inline-edit-control inline-edit-amount" data-inline-amount type="text" inputmode="numeric" maxlength="7" value="${escapeInlineLedgerHtml(String(tx.amount ?? ''))}" aria-label="金額"></td>
     <td class="num inline-edit-balance">儲存後重算</td>
     <td class="action-col inline-edit-action-cell">
       <div class="inline-edit-actions">
@@ -101,7 +101,7 @@ function inlineAccountOptions(current) {
   if (current && !names.includes(current)) names.unshift(current);
   return names.map(name => {
     const historical = !state.accounts.some(item => item.name === name);
-    return `<option value="${v14Escape(name)}" ${name === current ? 'selected' : ''}>${historical ? '（歷史）' : ''}${v14Escape(name)}</option>`;
+    return `<option value="${escapeInlineLedgerHtml(name)}" ${name === current ? 'selected' : ''}>${historical ? '（歷史）' : ''}${escapeInlineLedgerHtml(name)}</option>`;
   }).join('');
 }
 
@@ -110,19 +110,19 @@ function inlineCategoryOptions(tx) {
   const names = new Set(categories.map(item => String(item.name || '')));
   const options = [];
   if (tx.category_name && !names.has(tx.category_name)) {
-    options.push(`<option value="${v14Escape(tx.category_name)}" selected>（歷史）${v14Escape(tx.category_name)}</option>`);
+    options.push(`<option value="${escapeInlineLedgerHtml(tx.category_name)}" selected>（歷史）${escapeInlineLedgerHtml(tx.category_name)}</option>`);
   }
   for (const category of categories) {
     const name = String(category.name || '');
     const group = String(category.group_name || '');
     const label = group ? `${group}｜${name}` : name;
-    options.push(`<option value="${v14Escape(name)}" ${name === tx.category_name ? 'selected' : ''}>${v14Escape(label)}</option>`);
+    options.push(`<option value="${escapeInlineLedgerHtml(name)}" ${name === tx.category_name ? 'selected' : ''}>${escapeInlineLedgerHtml(label)}</option>`);
   }
   return options.join('');
 }
 
 function handleInlineLedgerKeydown(event) {
-  if (!cyV14InlineEdit || event.isComposing) return;
+  if (!cyInlineLedgerEdit || event.isComposing) return;
   if (event.key === 'Escape') {
     event.preventDefault();
     cancelInlineLedgerEdit(true);
@@ -139,7 +139,7 @@ function handleInlineLedgerKeydown(event) {
 }
 
 async function saveInlineLedgerEdit() {
-  const active = cyV14InlineEdit;
+  const active = cyInlineLedgerEdit;
   if (!active?.row?.isConnected) {
     cancelInlineLedgerEdit(false);
     return;
@@ -174,7 +174,7 @@ async function saveInlineLedgerEdit() {
       body: JSON.stringify({ txDate: date, accountName, categoryName, summary, amount })
     });
 
-    cyV14InlineEdit = null;
+    cyInlineLedgerEdit = null;
     resumeLedgerRefreshObserver();
     showMessage('修改成功');
     await loadTransactions();
@@ -187,40 +187,40 @@ async function saveInlineLedgerEdit() {
 }
 
 function cancelInlineLedgerEdit(restore = true) {
-  if (!cyV14InlineEdit) {
+  if (!cyInlineLedgerEdit) {
     resumeLedgerRefreshObserver();
     return;
   }
   if (restore) restoreInlineLedgerRow(false);
-  else cyV14InlineEdit = null;
+  else cyInlineLedgerEdit = null;
   resumeLedgerRefreshObserver();
 }
 
 function restoreInlineLedgerRow(resume = true) {
-  const active = cyV14InlineEdit;
+  const active = cyInlineLedgerEdit;
   if (active?.row?.isConnected) {
     active.row.removeEventListener('keydown', handleInlineLedgerKeydown);
     active.row.classList.remove('inline-editing');
     active.row.innerHTML = active.originalHtml;
   }
-  cyV14InlineEdit = null;
+  cyInlineLedgerEdit = null;
   if (resume) resumeLedgerRefreshObserver();
 }
 
 function suspendLedgerRefreshObserver() {
-  if (cyV14ObserverSuspended) return;
+  if (cyInlineLedgerObserverSuspended) return;
   if (typeof cyLedgerObserver !== 'undefined' && cyLedgerObserver) {
     cyLedgerObserver.disconnect();
-    cyV14ObserverSuspended = true;
+    cyInlineLedgerObserverSuspended = true;
   }
 }
 
 function resumeLedgerRefreshObserver() {
-  if (!cyV14ObserverSuspended) return;
+  if (!cyInlineLedgerObserverSuspended) return;
   if (typeof cyLedgerObserver !== 'undefined' && cyLedgerObserver && els.transactionRows) {
     cyLedgerObserver.observe(els.transactionRows, { childList: true, subtree: true });
   }
-  cyV14ObserverSuspended = false;
+  cyInlineLedgerObserverSuspended = false;
 }
 
 function setInlineEditMessage(element, message, isError = true) {
@@ -229,7 +229,7 @@ function setInlineEditMessage(element, message, isError = true) {
   element.classList.toggle('error', Boolean(message && isError));
 }
 
-function v14Escape(value) {
+function escapeInlineLedgerHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')

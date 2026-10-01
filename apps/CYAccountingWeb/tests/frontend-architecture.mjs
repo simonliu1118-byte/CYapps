@@ -69,7 +69,7 @@ assert.match(read('public/quick-entry-settings.js'), /setupQuickEntrySettingsPan
 assert.match(read('public/category-management.js'), /setupCategoryTransfer/);
 assert.match(read('public/excel-export-ui.js'), /downloadMonthlyExcel/);
 assert.match(read('public/ledger-inline-edit.js'), /beginInlineLedgerEdit/);
-assert.match(read('public/excel-import-ui.js'), /setupExcelImportV15/);
-assert.match(read('public/backup-ui.js'), /setupBackupSettingsV17/);
+assert.match(read('public/excel-import-ui.js'), /setupExcelImport/);
+assert.match(read('public/backup-ui.js'), /setupBackupSettings/);
 
 console.log('Semantic frontend architecture checks passed.');

@@ -11,11 +11,11 @@ function setupCategoryTransfer() {
   if (!els.categoryManager) return;
   ensureCategoryTransferDialog();
   els.categoryManager.addEventListener('click', event => {
-    const button = event.target.closest('[data-v12-category-transfer]');
+    const button = event.target.closest('[data-category-transfer]');
     if (!button) return;
     event.preventDefault();
     event.stopPropagation();
-    openCategoryTransfer(Number(button.dataset.v12CategoryTransfer));
+    openCategoryTransfer(Number(button.dataset.categoryTransfer));
   });
 
   const observer = new MutationObserver(injectCategoryTransferButtons);
@@ -27,7 +27,7 @@ function injectCategoryTransferButtons() {
   for (const itemElement of els.categoryManager?.querySelectorAll('.category-item') || []) {
     const rename = itemElement.querySelector('[data-category-rename]');
     const actions = rename?.parentElement;
-    if (!rename || !actions || actions.querySelector('[data-v12-category-transfer]')) continue;
+    if (!rename || !actions || actions.querySelector('[data-category-transfer]')) continue;
 
     const id = Number(rename.dataset.categoryRename);
     const category = state.categories.find(item => Number(item.id) === id);
@@ -40,7 +40,7 @@ function injectCategoryTransferButtons() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'mini-button category-transfer-button';
-    button.dataset.v12CategoryTransfer = String(id);
+    button.dataset.categoryTransfer = String(id);
     button.textContent = '移動';
     button.title = '移動到其他大分類';
     actions.append(document.createTextNode(' '), button);
@@ -55,7 +55,7 @@ function ensureCategoryTransferDialog() {
   dialog.innerHTML = `
     <div class="modal-header">
       <div><h2>移動科目</h2><p id="categoryTransferDescription"></p></div>
-      <button class="icon-button" type="button" data-v12-transfer-close aria-label="關閉">×</button>
+      <button class="icon-button" type="button" data-category-transfer-close aria-label="關閉">×</button>
     </div>
     <div class="form-grid">
       <label><span>移動到大分類</span><select id="categoryTransferTarget"></select></label>
@@ -63,12 +63,12 @@ function ensureCategoryTransferDialog() {
     <p class="hint category-transfer-note">只可在相同收支類型的大分類之間移動；既有歷史記帳資料不會被改寫。</p>
     <div id="categoryTransferMessage" class="dialog-message"></div>
     <div class="modal-actions">
-      <button class="secondary" type="button" data-v12-transfer-close>取消</button>
+      <button class="secondary" type="button" data-category-transfer-close>取消</button>
       <button id="categoryTransferConfirm" class="primary" type="button">確認移動</button>
     </div>
   `;
   document.body.append(dialog);
-  dialog.querySelectorAll('[data-v12-transfer-close]').forEach(button =>
+  dialog.querySelectorAll('[data-category-transfer-close]').forEach(button =>
     button.addEventListener('click', () => dialog.close())
   );
   dialog.querySelector('#categoryTransferConfirm')?.addEventListener('click', confirmCategoryTransfer);
