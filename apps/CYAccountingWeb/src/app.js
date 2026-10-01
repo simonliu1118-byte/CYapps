@@ -81,6 +81,9 @@ export default {
         return coreWorker.fetch(request, env);
       }
 
+      if (url.pathname === '/api/auth/login' && request.method === 'POST') {
+        return handleApiLogin(request, env);
+      }
       if (url.pathname === '/api/auth/password-recovery/start' && request.method === 'POST') {
         return handlePasswordRecoveryStart(request, env);
       }
@@ -217,6 +220,40 @@ async function handleNavigationLogin(request, env) {
   }
 
   return redirect('/', { 'set-cookie': result.cookie });
+}
+
+async function handleApiLogin(request, env) {
+  const body = await request.json().catch(() => null);
+  const employeeNo = String(body?.employeeNo || '').trim();
+  const password = typeof body?.password === 'string' ? body.password : '';
+  const result = await loginWithCyid(request, env, employeeNo, password);
+
+  if (!result.ok) return apiLoginFailure(result);
+
+  return json({
+    ok: true,
+    user: result.user
+  }, 200, {
+    'set-cookie': result.cookie
+  });
+}
+
+function apiLoginFailure(result) {
+  const key = loginErrorKey(result);
+  const messages = {
+    invalid: '請輸入正確的 4 碼員工編號與密碼。',
+    failed: '員工編號或密碼不正確。',
+    access: '此員工帳號沒有記帳系統 App Access。',
+    rate: '登入嘗試次數過多，請稍後再試。',
+    service: '中央帳號服務目前無法使用，請稍後再試。',
+    'first-login': '請先至 CY Web 帳號管理入口完成首次帳號啟用與 Email 驗證。'
+  };
+  const status = result.status >= 500 ? 503 : Math.max(400, Number(result.status) || 401);
+  return json({
+    ok: false,
+    error: messages[key] || messages.failed,
+    code: String(result.code || 'LOGIN_FAILED')
+  }, status);
 }
 
 async function handlePasswordRecoveryStart(request, env) {
