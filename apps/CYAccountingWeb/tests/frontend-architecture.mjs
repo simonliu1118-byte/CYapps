@@ -91,7 +91,7 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.match(html, /<span class="version">V0\.21\.7 Build 5<\/span>/, 'index.html must own the current visible version');
+assert.match(html, /<span class="version">V0\.21\.7 Build 6<\/span>/, 'index.html must own the current visible version');
 assert.doesNotMatch(adaptiveUi, /querySelector\(['"]\.version['"]\)/, 'adaptive UI must not mutate the global version element');
 assert.doesNotMatch(adaptiveUi, /\bCY_[A-Z0-9_]*VERSION\b|\b(?:sync|enforce)[A-Za-z0-9_]*Version\b/, 'historical version mutators must not return');
 assert.doesNotMatch(adaptiveUi, /V0\.2[01]\.[0-9]+(?: Build [0-9]+)?/, 'adaptive UI must not embed historical application version strings');

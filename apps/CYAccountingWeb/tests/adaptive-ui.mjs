@@ -16,7 +16,9 @@ assert.match(css, /@media \(min-width: 1024px\)/);
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /\.v21-mobile-main-nav\.v21-mobile-bottom-nav\s*\{[\s\S]*?position:\s*fixed !important;[\s\S]*?bottom:\s*0;/);
 assert.match(css, /\.ledger-month-tools\.v0215-toolbar-ready/);
-assert.match(css, /\.opening-modal\[open\][\s\S]*?display:\s*flex !important/);
+assert.match(css, /\.mobile-utility-dialog\s*\{[\s\S]*?width:\s*min\(350px, calc\(100vw - 28px\)\) !important/);
+assert.match(css, /\.mobile-settings-dialog \.settings-nav\s*\{[\s\S]*?display:\s*none !important/);
+assert.match(css, /\.mobile-opening-dialog \.opening-dialog-heading\s*\{[\s\S]*?display:\s*none !important/);
 assert.match(css, /\.quick-chip-list[\s\S]*?overflow-x:\s*auto !important/);
 
 assert.match(js, /trigger\.id = 'mobileAccountMenuButton'/);
@@ -34,3 +36,11 @@ assert.match(js, /window\.cyOpenMobileLedgerLock/);
 assert.match(js, /window\.cyOpenMobileSettingsPane/);
 
 console.log('Adaptive UI regression checks passed.');
+
+assert.match(js, /function renderMobileAccountManager\(\)/);
+assert.match(js, /function renderMobileCategoryManager\(\)/);
+assert.match(js, /if \(!window\.matchMedia\(CY_V0211_DESKTOP\)\.matches\) return renderMobileAccountManager\(\)/);
+assert.match(js, /if \(!window\.matchMedia\(CY_V0212_DESKTOP\)\.matches\) return renderMobileCategoryManager\(\)/);
+assert.match(js, /mobile-utility-dialog', 'mobile-opening-dialog/);
+assert.match(js, /mobile-utility-dialog', 'mobile-settings-dialog/);
+assert.match(js, /modal mobile-utility-dialog mobile-lock-dialog/);
