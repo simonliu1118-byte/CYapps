@@ -69,40 +69,6 @@ jobs:
       - name: Validate Worker bundle
         run: npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc
 
-      - name: Verify deployed development bindings and release
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const api='https://api.cloudflare.com/client/v4/accounts/'+process.env.CLOUDFLARE_ACCOUNT_ID;
-          async function read(path){
-            const response=await fetch(api+path,{headers:{authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN},signal:AbortSignal.timeout(20000)});
-            const body=await response.json();
-            if(!response.ok||body.success!==true) throw new Error('DEVELOPMENT_RESOURCE_READBACK_FAILED');
-            return body.result;
-          }
-          const settings=await read('/workers/scripts/'+process.env.CYID_WORKER_NAME+'/settings');
-          if(settings.bindings?.find(b=>b.type==='plain_text'&&b.name==='APP_ENV')?.text!=='development'
-            ||settings.bindings?.find(b=>b.type==='d1'&&b.name==='DB')?.id!==process.env.CYID_D1_DATABASE_ID) throw new Error('DEVELOPMENT_BINDING_ISOLATION_FAILED');
-          const account=await read('/workers/subdomain');
-          if(!account?.subdomain) throw new Error('DEVELOPMENT_ENDPOINT_UNAVAILABLE');
-          const origin='https://'+process.env.CYID_WORKER_NAME+'.'+account.subdomain+'.workers.dev';
-          const expected=fs.readFileSync('VERSION','utf8').trim();
-          let ready=false;
-          for(let attempt=0;attempt<10;attempt++){
-            const response=await fetch(origin+'/v1/health',{signal:AbortSignal.timeout(10000)});
-            const body=await response.json();
-            if(response.ok&&body.ok===true&&body.environment==='development'&&body.serviceVersion===expected){ready=true;break;}
-            await new Promise(resolve=>setTimeout(resolve,1000));
-          }
-          if(!ready) throw new Error('DEVELOPMENT_RELEASE_NOT_READY');
-          const token='cyid_'+crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
-          const response=await fetch(origin+'/v1/identity/session/resolve',{method:'POST',headers:{authorization:'Bearer '+token,'x-identity-application':process.env.CYID_CORE_ACCOUNT_APPLICATION_ID},signal:AbortSignal.timeout(10000)});
-          const body=await response.json();
-          if(response.status!==401||body.error?.code!=='SESSION_INVALID') throw new Error('DEVELOPMENT_SESSION_REJECTION_FAILED');
-          console.log('Deployed development bindings, source version '+expected+' and fail-closed D1 Session resolution verified.');
-          NODE
-
       - name: Remove generated config
         if: always()
         run: rm -f wrangler.ci.generated.jsonc
@@ -194,6 +160,40 @@ jobs:
           else
             printf '%s' "$CYID_RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY --config wrangler.deploy.generated.jsonc
           fi
+
+      - name: Verify deployed development bindings and release
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const api='https://api.cloudflare.com/client/v4/accounts/'+process.env.CLOUDFLARE_ACCOUNT_ID;
+          async function read(path){
+            const response=await fetch(api+path,{headers:{authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN},signal:AbortSignal.timeout(20000)});
+            const body=await response.json();
+            if(!response.ok||body.success!==true) throw new Error('DEVELOPMENT_RESOURCE_READBACK_FAILED');
+            return body.result;
+          }
+          const settings=await read('/workers/scripts/'+process.env.CYID_WORKER_NAME+'/settings');
+          if(settings.bindings?.find(b=>b.type==='plain_text'&&b.name==='APP_ENV')?.text!=='development'
+            ||settings.bindings?.find(b=>b.type==='d1'&&b.name==='DB')?.id!==process.env.CYID_D1_DATABASE_ID) throw new Error('DEVELOPMENT_BINDING_ISOLATION_FAILED');
+          const account=await read('/workers/subdomain');
+          if(!account?.subdomain) throw new Error('DEVELOPMENT_ENDPOINT_UNAVAILABLE');
+          const origin='https://'+process.env.CYID_WORKER_NAME+'.'+account.subdomain+'.workers.dev';
+          const expected=fs.readFileSync('VERSION','utf8').trim();
+          let ready=false;
+          for(let attempt=0;attempt<10;attempt++){
+            const response=await fetch(origin+'/v1/health',{signal:AbortSignal.timeout(10000)});
+            const body=await response.json();
+            if(response.ok&&body.ok===true&&body.environment==='development'&&body.serviceVersion===expected){ready=true;break;}
+            await new Promise(resolve=>setTimeout(resolve,1000));
+          }
+          if(!ready) throw new Error('DEVELOPMENT_RELEASE_NOT_READY');
+          const token='cyid_'+crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
+          const response=await fetch(origin+'/v1/identity/session/resolve',{method:'POST',headers:{authorization:'Bearer '+token,'x-identity-application':process.env.CYID_CORE_ACCOUNT_APPLICATION_ID},signal:AbortSignal.timeout(10000)});
+          const body=await response.json();
+          if(response.status!==401||body.error?.code!=='SESSION_INVALID') throw new Error('DEVELOPMENT_SESSION_REJECTION_FAILED');
+          console.log('Deployed development bindings, source version '+expected+' and fail-closed D1 Session resolution verified.');
+          NODE
 
       - name: Remove generated config
         if: always()
