@@ -4379,6 +4379,86 @@ function restoreMobileOpeningMount() {
   cyMobileOpeningMount = null;
 }
 
+function renderMobileAccountManager() {
+  if (typeof state !== 'object') return;
+  const host = document.querySelector('#accountRows');
+  if (!host) return;
+  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
+  if (!accounts.length) {
+    host.innerHTML = '<div class="empty mobile-manager-empty">尚無帳戶。</div>';
+    return;
+  }
+
+  host.innerHTML = accounts.map(account => {
+    const id = Number(account.id);
+    const isDefault = Number(account.is_default) === 1;
+    return `<div class="mobile-manager-row" data-mobile-account-row="${id}">
+      <div class="mobile-manager-main">
+        <strong>${v0211Escape(account.name)}</strong>
+        ${isDefault ? '<span class="mobile-manager-badge">預設</span>' : ''}
+      </div>
+      <div class="mobile-manager-actions">
+        ${isDefault ? '' : `<button type="button" class="mini-button" data-account-default="${id}">設為預設</button>`}
+        <button type="button" class="mini-button" data-account-rename="${id}">改名</button>
+        <button type="button" class="mini-button danger" data-account-delete="${id}">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMobileCategoryManager() {
+  if (typeof state !== 'object') return;
+  const host = document.querySelector('#categoryManager');
+  if (!host) return;
+
+  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
+  document.querySelectorAll('[data-settings-kind]').forEach(button =>
+    button.classList.toggle('active', button.dataset.settingsKind === kind)
+  );
+  const groups = (state.groups || []).filter(group => group.kind === kind);
+
+  if (!groups.length) {
+    host.innerHTML = '<div class="empty mobile-manager-empty">目前沒有大分類。</div>';
+    return;
+  }
+
+  host.innerHTML = groups.map(group => {
+    const groupId = Number(group.id);
+    const categories = (state.categories || []).filter(category =>
+      category.kind === kind && Number(category.group_id) === groupId
+    );
+    const items = categories.length
+      ? categories.map(category => {
+          const id = Number(category.id);
+          return `<div class="mobile-category-row">
+            <span>${v0211Escape(category.name)}</span>
+            <span class="mobile-category-actions">
+              <button type="button" class="mini-button" data-category-rename="${id}">改名</button>
+              <button type="button" class="mini-button danger" data-category-delete="${id}">刪除</button>
+            </span>
+          </div>`;
+        }).join('')
+      : '<div class="mobile-category-empty">此分類尚無科目。</div>';
+
+    return `<section class="category-group mobile-category-group" data-group-id="${groupId}">
+      <div class="mobile-category-group-head">
+        <strong>${v0211Escape(group.name)}</strong>
+        <span class="mobile-category-actions">
+          <button type="button" class="mini-button" data-group-rename="${groupId}">改名</button>
+          <button type="button" class="mini-button danger" data-group-delete="${groupId}">刪除</button>
+        </span>
+      </div>
+      <div class="category-items mobile-category-items">
+        ${items}
+        <div class="category-add mobile-category-add">
+          <input type="text" maxlength="60" placeholder="新增科目" data-new-category-group="${groupId}">
+          <button type="button" class="mini-button" data-category-add="${groupId}">新增</button>
+        </div>
+      </div>
+    </section>`;
+  }).join('');
+}
+
 function previousMobileMonth(month) {
   const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
   if (!match) return '';
