@@ -34,9 +34,12 @@ assert.match(js, /data-mobile-ledger-action="lock">月份鎖帳/);
 assert.match(js, /data-mobile-ledger-action="export">匯出 Excel/);
 assert.doesNotMatch(js, /data-mobile-ledger-action="opening">期初餘額/);
 assert.match(js, /mobileLedgerBalanceButton/);
-assert.match(js, /window\.cyOpenMobileLedgerOpening/);
-assert.match(js, /window\.cyOpenMobileLedgerLock/);
-assert.match(js, /window\.cyOpenMobileSettingsPane/);
+assert.match(js, /window\.cyOpenMobileUtility = openMobileUtility/);
+assert.match(js, /window\.cyOpenMobileLedgerOpening = \(\) => openMobileUtility\('opening'\)/);
+assert.match(js, /window\.cyOpenMobileLedgerLock = \(\) => openMobileUtility\('lock'\)/);
+assert.match(js, /window\.cyOpenMobileSettingsPane = tab => openMobileUtility\(tab\)/);
+assert.doesNotMatch(js, /openingDialog\.showModal\(\)/);
+assert.doesNotMatch(js, /mobileLedgerLockDialogV0215/);
 
 console.log('Adaptive UI regression checks passed.');
 
@@ -44,6 +47,7 @@ assert.match(js, /function renderMobileAccountManager\(\)/);
 assert.match(js, /function renderMobileCategoryManager\(\)/);
 assert.match(js, /if \(!window\.matchMedia\(CY_V0211_DESKTOP\)\.matches\) return renderMobileAccountManager\(\)/);
 assert.match(js, /if \(!window\.matchMedia\(CY_V0212_DESKTOP\)\.matches\) return renderMobileCategoryManager\(\)/);
-assert.match(js, /mobile-utility-dialog', 'mobile-opening-dialog/);
-assert.match(js, /mobile-utility-dialog', 'mobile-settings-dialog/);
-assert.match(js, /modal mobile-utility-dialog mobile-lock-dialog/);
+assert.match(js, /dialog\.classList\.add\('mobile-utility-dialog', 'mobile-settings-dialog'\)/);
+assert.match(js, /dialog\.classList\.add\('mobile-opening-dialog'\)/);
+assert.match(css, /#settingsDialog\.mobile-utility-dialog/);
+assert.match(css, /#settingsDialog\.mobile-opening-dialog/);
