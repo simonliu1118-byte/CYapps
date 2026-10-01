@@ -18,8 +18,6 @@ function principal(workspaceRole, isIdentityAdmin = false) {
     isIdentityAdmin,
     emailVerified: true,
     isWorkspaceSuperAdmin: workspaceRole === "SUPER_ADMIN",
-    groupKeys: [],
-    applicationRoleKey: workspaceRole,
     credentialVersion: 1,
     employeeRevision: 1,
   };

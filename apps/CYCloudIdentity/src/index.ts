@@ -5,7 +5,7 @@ import {
   handleStartOwnEmailChange,
   handleStartPasswordRecovery,
 } from "./account-lifecycle";
-import { handleLogout, handleResolveSession } from "./auth";
+import { handleLogin, handleLogout, handleResolveSession } from "./auth";
 import {
   handleConfirmHighestAuthorityTransfer,
   handleGetHighestAuthority,
@@ -14,6 +14,7 @@ import {
 import { handleBootstrapConfirm, handleBootstrapStart } from "./bootstrap";
 import { handleStartCurrentEmailVerification } from "./current-email-verification";
 import {
+  handleUpdateEmployee,
   handleDeletePendingEmployee,
   handleForceEmployeeEmailRecovery,
   handleResendActivatedEmailVerification,
@@ -21,20 +22,10 @@ import {
 } from "./employee-lifecycle";
 import {
   handleCompleteFirstLogin,
-  handleCreateEmployeeWithInitialPassword,
-  handleEmployeeUpdateWithInitialPassword,
-  handleLoginWithInitialPassword,
+  handleCreateEmployee,
   handleResendInitialEmailVerification,
 } from "./initial-access";
 import { json, requestIdFrom } from "./http";
-import {
-  handleCreateIdentityGroup,
-  handleDeleteIdentityGroupMember,
-  handlePutApplicationCompatibilityRoleMode,
-  handlePutGroupApplicationAccess,
-  handlePutIdentityGroupMember,
-  handleUpdateIdentityGroup,
-} from "./identity-admin";
 import { enforceLoginRateLimit } from "./rate-limit";
 import { handlePutDirectApplicationAccess, handleRoleAccessSnapshot } from "./role-admin";
 import { handleGetSecurityPolicy, handleUpdateSecurityPolicy } from "./security-policy";
@@ -68,7 +59,7 @@ export default {
       if (request.method === "POST" && url.pathname === "/v1/identity/login") {
         const limited = await enforceLoginRateLimit(request, env, requestId);
         if (limited) return limited;
-        return await handleLoginWithInitialPassword(request, env, requestId);
+        return await handleLogin(request, env, requestId);
       }
       if (request.method === "POST" && url.pathname === "/v1/identity/first-login/complete") {
         return await handleCompleteFirstLogin(request, env, requestId);
@@ -118,21 +109,21 @@ export default {
         return await handleRoleAccessSnapshot(request, env, requestId);
       }
       if (request.method === "POST" && url.pathname === "/v1/admin/identity/employees") {
-        return await handleCreateEmployeeWithInitialPassword(request, env, requestId);
+        return await handleCreateEmployee(request, env, requestId);
       }
 
       let match = /^\/v1\/admin\/identity\/employees\/([^/]+)$/.exec(url.pathname);
       if (match) {
         const employeeId = decodedSegment(match[1]);
         if (employeeId && request.method === "PATCH") {
-          return await handleEmployeeUpdateWithInitialPassword(request, env, requestId, employeeId);
+          return await handleUpdateEmployee(request, env, requestId, employeeId);
         }
         if (employeeId && request.method === "DELETE") {
           return await handleDeletePendingEmployee(request, env, requestId, employeeId);
         }
       }
 
-      match = /^\/v1\/admin\/identity\/employees\/([^/]+)\/activation\/resend$/.exec(url.pathname);
+      match = /^\/v1\/admin\/identity\/employees\/([^/]+)\/email-verification\/resend-initial$/.exec(url.pathname);
       if (request.method === "POST" && match) {
         const employeeId = decodedSegment(match[1]);
         if (employeeId) return await handleResendInitialEmailVerification(request, env, requestId, employeeId);
@@ -162,43 +153,6 @@ export default {
         const applicationId = decodedSegment(match[2]);
         if (employeeId && applicationId) {
           return await handlePutDirectApplicationAccess(request, env, requestId, employeeId, applicationId);
-        }
-      }
-
-      // Legacy Group-management routes remain during the consumer migration.
-      // They no longer participate in login/session authorization.
-      if (request.method === "POST" && url.pathname === "/v1/admin/identity/groups") {
-        return await handleCreateIdentityGroup(request, env, requestId);
-      }
-      match = /^\/v1\/admin\/identity\/groups\/([^/]+)$/.exec(url.pathname);
-      if (request.method === "PATCH" && match) {
-        const groupId = decodedSegment(match[1]);
-        if (groupId) return await handleUpdateIdentityGroup(request, env, requestId, groupId);
-      }
-      match = /^\/v1\/admin\/identity\/groups\/([^/]+)\/members\/([^/]+)$/.exec(url.pathname);
-      if (match) {
-        const groupId = decodedSegment(match[1]);
-        const employeeId = decodedSegment(match[2]);
-        if (groupId && employeeId && request.method === "PUT") {
-          return await handlePutIdentityGroupMember(request, env, requestId, groupId, employeeId);
-        }
-        if (groupId && employeeId && request.method === "DELETE") {
-          return await handleDeleteIdentityGroupMember(request, env, requestId, groupId, employeeId);
-        }
-      }
-      match = /^\/v1\/admin\/identity\/groups\/([^/]+)\/applications\/([^/]+)$/.exec(url.pathname);
-      if (request.method === "PUT" && match) {
-        const groupId = decodedSegment(match[1]);
-        const applicationId = decodedSegment(match[2]);
-        if (groupId && applicationId) {
-          return await handlePutGroupApplicationAccess(request, env, requestId, groupId, applicationId);
-        }
-      }
-      match = /^\/v1\/admin\/identity\/applications\/([^/]+)\/compatibility-role-mode$/.exec(url.pathname);
-      if (request.method === "PUT" && match) {
-        const applicationId = decodedSegment(match[1]);
-        if (applicationId) {
-          return await handlePutApplicationCompatibilityRoleMode(request, env, requestId, applicationId);
         }
       }
 

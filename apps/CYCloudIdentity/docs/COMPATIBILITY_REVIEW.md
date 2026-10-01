@@ -59,3 +59,15 @@ Read dispatch/import/call sites, consumer routes/types, deployed-workflow source
 - Removed undispatched `handleCreateEmployee`, `handleResendEmployeeActivation`, `handleStartEmployeeActivation`, `handleConfirmEmployeeActivation`, `handleIdentityAdminSnapshot`, and `handlePutEmployeeApplicationAccess`. Active Employee management and first-login handlers remain.
 - Production replay is disabled on the actual deployment branch by PR #254 and the same retired gate is recorded in main. No Secrets, imports, D1 writes, migrations, probes or deploy remain in that workflow. Production Worker source/data are unchanged.
 - Provider public Group fields/routes remain pending consumer migration; no shared consumer semantic contract changed. Initial-access HTTP-handler chaining, shared budget operations and a routine production deployment workflow remain outstanding.
+
+## Final source remediation — CYID 0.3.5 / Consumer 1.0.2
+
+The findings above describe the reviewed historical baseline. The remaining source cleanup is now implemented:
+
+- One Login HTTP handler parses and loads Employee/credential state once, then invokes permanent or initial credential operations. One Employee-update handler handles pending and activated lifecycles without re-entering another authenticated HTTP handler.
+- Initial credential and OTP delivery share one budget reservation/settlement implementation, including global rollback when Workspace reservation fails and atomic sent/reserved settlement using the reservation date.
+- Removed Group/role-mode dispatch and projections plus `applicationRoleKey`, `activationDelivery` and `/activation/resend`. Current direct Role/App Access fields and `/email-verification/resend-initial` are canonical. Historical physical tables are retained.
+- CY Web 0.7.0 coordinates 1.0.2 adoption. Existing CYACC direct 1.0.1 integration does not consume retired fields/routes and remains in the supported window.
+- Added a separate main-only manual production release workflow: read existing production settings and bound DB metadata, fail closed on isolation/binding/config drift, require deployed core consumer adoption, validate bundle, then forward migrations and source deployment. No development authority export/import, Employee repair, resource creation, secret replacement or synthetic Session insertion.
+
+38 Node tests and TypeScript checks pass locally. CI must additionally pass actual Worker/D1 auth and first-login acceptance. Production release is not claimed: core-consumer production readiness, real Email/browser lifecycle and backup/restore retain their independent gates.

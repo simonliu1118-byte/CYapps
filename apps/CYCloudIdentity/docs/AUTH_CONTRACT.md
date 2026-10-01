@@ -27,7 +27,7 @@ interface IdentityPrincipal {
 }
 ~~~
 
-`groupKeys` or `applicationRoleKey` may exist temporarily as compatibility fields but are not forward authority.
+Consumer Contract 1.0.2 retires the optional legacy `groupKeys` and `applicationRoleKey` projections. Consumers read the direct fields above and must accept their absence.
 
 ## 3. Login endpoint
 
@@ -161,7 +161,7 @@ Do not rename the new-Employee product flow away from **Email 驗證** simply be
 
 ## 10. Management endpoints
 
-Management APIs remain provider-authorized server-side. Current source may temporarily retain legacy path names such as `.../activation/resend`; those names are transport compatibility only. Consumer UI/action semantics are **重寄驗證 Email** and must not expose a separate activation product concept.
+Management APIs remain provider-authorized server-side. Initial Email re-send uses `.../email-verification/resend-initial`; activated-account Email re-verification uses `.../email-verification/resend`. The obsolete `.../activation/resend` alias is retired. Responses use only `emailVerificationDelivery` for initial Email delivery. Consumer UI/action semantics are **重寄驗證 Email** and must not expose a separate activation product concept.
 
 Representative active operations include Employee create/update/delete-pending, resend Email verification, Identity Admin management, direct Application Access, forced Email recovery, current Email verification and security policy.
 

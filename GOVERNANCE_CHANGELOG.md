@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.23 — 2026/10/01
+
+- Add main-only manual CYID production deployment with protected existing-target readback, strict DB/environment/binding isolation, deployed core-consumer adoption gate, dry-run before mutations, forward schema and source deployment only. No resource creation, development authority export/import, Employee repair, secret replacement or synthetic Session injection.
+- Consumer 1.0.2 coordinates retired Group/role/initial-delivery aliases with CY Web; unaffected direct-principal consumers retain their existing supported declaration.
+
 ## 2.3.22 — 2026/10/01
 
 - Retire completed CYID one-time production provisioning. The retired workflow has no credentials, checkout, resource creation, migrations, authority imports, or deployment steps; ordinary provider releases require a separate deployment path.

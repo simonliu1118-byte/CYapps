@@ -6,6 +6,7 @@ import {
   verifyCredential,
 } from "./crypto";
 import { json, readJsonObject } from "./http";
+import { exchangeInitialPassword } from "./initial-access";
 import { resolveIdentitySession } from "./session-auth";
 import { effectiveWorkspaceRole, hasApplicationEntry, type StoredEmployeeRole } from "./role-access";
 import type { Env, IdentityPrincipal, JsonValue, LoginSuccess } from "./types";
@@ -25,6 +26,8 @@ type EmployeeAuthRow = {
   credential_algorithm: string;
   credential_verifier: string;
   credential_version: number;
+  activated_at: string | null;
+  initial_credential_present: number;
 };
 
 const DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -86,10 +89,13 @@ async function employeeForLogin(
             w.super_admin_employee_id,
             c.algorithm AS credential_algorithm,
             c.verifier AS credential_verifier,
-            c.credential_version
+            c.credential_version,
+            e.activated_at,
+            CASE WHEN i.employee_id IS NULL THEN 0 ELSE 1 END AS initial_credential_present
        FROM employees e
        JOIN workspaces w ON w.workspace_id = e.workspace_id
-       JOIN employee_credentials c ON c.employee_id = e.employee_id
+       LEFT JOIN employee_credentials c ON c.employee_id = e.employee_id
+       LEFT JOIN employee_initial_credentials i ON i.employee_id = e.employee_id
       WHERE e.workspace_id = ?1
         AND e.employee_no = ?2
       LIMIT 1`
@@ -113,25 +119,6 @@ async function workspaceApplicationAvailable(
   ).bind(workspaceId, applicationId).first<{ available: number }>());
 }
 
-async function groupKeys(
-  env: Env,
-  workspaceId: string,
-  employeeId: string,
-): Promise<string[]> {
-  const result = await env.DB.prepare(
-    `SELECT g.group_key
-       FROM employee_identity_groups eg
-       JOIN identity_groups g
-         ON g.group_id = eg.group_id
-        AND g.workspace_id = eg.workspace_id
-      WHERE eg.workspace_id = ?1
-        AND eg.employee_id = ?2
-        AND g.status = 'active'
-      ORDER BY g.group_key`
-  ).bind(workspaceId, employeeId).all<{ group_key: string }>();
-  return (result.results ?? []).map(row => row.group_key);
-}
-
 async function principalFromEmployee(env: Env, employee: EmployeeAuthRow): Promise<IdentityPrincipal> {
   const workspaceRole = effectiveWorkspaceRole(
     employee.employee_id,
@@ -147,8 +134,6 @@ async function principalFromEmployee(env: Env, employee: EmployeeAuthRow): Promi
     isIdentityAdmin: workspaceRole === "ADMIN" && employee.identity_admin === 1,
     emailVerified: Boolean(employee.email_verified_at),
     isWorkspaceSuperAdmin: workspaceRole === "SUPER_ADMIN",
-    groupKeys: await groupKeys(env, employee.workspace_id, employee.employee_id),
-    applicationRoleKey: workspaceRole,
     credentialVersion: employee.credential_version,
     employeeRevision: employee.revision,
   };
@@ -215,6 +200,9 @@ export async function handleLogin(
   }
 
   const employee = await employeeForLogin(env, workspaceId, employeeNo);
+  if (employee && employee.initial_credential_present === 1 && !employee.activated_at && !employee.credential_algorithm) {
+    return exchangeInitialPassword(env, requestId, employee, applicationId, password);
+  }
   const credentialReady = Boolean(
     employee
     && employee.workspace_status === "active"

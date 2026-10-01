@@ -1,0 +1,126 @@
+name: CYCloud Identity Production Deploy
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/CYCloudIdentity/**"
+      - ".github/workflows/cycloudidentity-production-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cycloudidentity-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/CYCloudIdentity
+    steps:
+      - uses: actions/checkout@v7
+      - name: Scan public provider source
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/scan-public-package.py apps/CYCloudIdentity
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - run: npm run check && npm test
+      - name: Worker/D1 acceptance
+        run: bash scripts/accept_auth_local.sh && bash scripts/accept_first_login_local.sh
+
+  deploy-production:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The established production token resides here; do not manufacture new credentials.
+    environment: development
+    defaults:
+      run:
+        working-directory: apps/CYCloudIdentity
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DEV_CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
+      DEV_CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Read existing isolated production targets
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DEV_CYID_WORKER_NAME DEV_CYID_D1_DATABASE_ID; do
+            [[ -n "${!name:-}" ]] || { echo "Missing protected production prerequisite." >&2; exit 1; }
+          done
+          PROD_CYID_WORKER_NAME="$(node --input-type=module -e 'import {productionWorkerName} from "./scripts/render-production-config.mjs"; process.stdout.write(productionWorkerName(process.env.DEV_CYID_WORKER_NAME))')"
+          echo "::add-mask::$PROD_CYID_WORKER_NAME"
+          echo "PROD_CYID_WORKER_NAME=$PROD_CYID_WORKER_NAME" >> "$GITHUB_ENV"
+          export PROD_CYID_WORKER_NAME
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/workers/scripts/$PROD_CYID_WORKER_NAME/settings" > "$RUNNER_TEMP/cyid-prod-settings.json"
+          PROD_DB_ID="$(node --input-type=module -e 'import fs from "node:fs"; const s=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/cyid-prod-settings.json","utf8")); const id=s.result?.bindings?.find(b=>b.type==="d1"&&b.name==="DB")?.id; if(s.success!==true||!/^\w{8}-\w{4}-\w{4}-\w{4}-\w{12}$/.test(id??"")||id===process.env.DEV_CYID_D1_DATABASE_ID) throw new Error("PRODUCTION_DATABASE_ISOLATION_REQUIRED"); process.stdout.write(id)')"
+          echo "::add-mask::$PROD_DB_ID"
+          curl --fail --silent --show-error --max-time 30 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/d1/database/$PROD_DB_ID" > "$RUNNER_TEMP/cyid-prod-database.json"
+          node scripts/render-production-config.mjs "$RUNNER_TEMP/cyid-prod-settings.json" "$RUNNER_TEMP/cyid-prod-database.json" wrangler.production.generated.jsonc
+      - name: Require deployed consumer retirement readiness
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 "$CYID_CORE_HEALTH_URL" > "$RUNNER_TEMP/cyid-core-health.json"
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const h=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/cyid-core-health.json","utf8"));
+            const version=fs.readFileSync("CONSUMER_CONTRACT_VERSION","utf8").trim();
+            if(h.ok!==true||h.data?.service!=="cyweb"||h.data?.database!=="ok"||h.data?.identityConsumerVersion!==version) throw new Error("CORE_CONSUMER_MIGRATION_NOT_DEPLOYED");
+          '
+      - name: Validate bundle before remote mutation
+        run: npx wrangler deploy --dry-run --config wrangler.production.generated.jsonc --outdir "$RUNNER_TEMP/cyid-prod-bundle"
+      - name: Apply forward schema only
+        run: npx wrangler d1 migrations apply DB --remote --config wrangler.production.generated.jsonc
+      - name: Deploy provider without authority replay or secret replacement
+        run: npx wrangler deploy --config wrangler.production.generated.jsonc --keep-vars
+      - name: Verify production release and invalid Session rejection
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" > "$RUNNER_TEMP/cyid-account-subdomain.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const sub=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/cyid-account-subdomain.json','utf8'));
+          if(sub.success!==true||!sub.result?.subdomain) throw new Error('PRODUCTION_PUBLIC_ENDPOINT_UNAVAILABLE');
+          const origin='https://'+process.env.PROD_CYID_WORKER_NAME+'.'+sub.result.subdomain+'.workers.dev';
+          const expected=fs.readFileSync('VERSION','utf8').trim();
+          let healthy=false;
+          for(let attempt=0;attempt<10;attempt++){
+            const response=await fetch(origin+'/v1/health',{signal:AbortSignal.timeout(10000)});
+            const h=await response.json();
+            if(response.ok&&h.ok===true&&h.environment==='production'&&h.serviceVersion===expected){healthy=true;break;}
+            await new Promise(resolve=>setTimeout(resolve,1000));
+          }
+          if(!healthy) throw new Error('PRODUCTION_VERSION_NOT_READY');
+          const token='cyid_'+crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
+          const response=await fetch(origin+'/v1/identity/session/resolve',{method:'POST',headers:{authorization:'Bearer '+token,'x-identity-application':process.env.CYID_PROD_CORE_APPLICATION_ID},signal:AbortSignal.timeout(10000)});
+          const body=await response.json();
+          if(response.status!==401||body.error?.code!=='SESSION_INVALID') throw new Error('PRODUCTION_SESSION_REJECTION_FAILED');
+          console.log('Production release health and fail-closed D1 Session resolution passed; no Session was created.');
+          NODE
+      - name: Remove generated private deployment files
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root=Path(os.environ['RUNNER_TEMP'])
+          for path in root.glob('cyid-*.json'):
+              path.unlink(missing_ok=True)
+          Path('wrangler.production.generated.jsonc').unlink(missing_ok=True)
+          PY

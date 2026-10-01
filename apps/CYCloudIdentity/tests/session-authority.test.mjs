@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
@@ -8,9 +8,10 @@ import ts from "typescript";
 
 // Compile the actual modules to CommonJS for Node; the Worker uses extensionless imports.
 const directory = mkdtempSync(join(tmpdir(), "cyid-session-test-"));
-let handleResolveSession, requireIdentitySession;
+let handleResolveSession, requireIdentitySession, worker, reserveEmailBudget, settleEmailBudget;
 try {
-  for (const name of ["auth", "session-auth", "crypto", "role-access", "http"]) {
+  for (const file of readdirSync(new URL("../src/", import.meta.url)).filter(file => file.endsWith(".ts"))) {
+    const name = file.slice(0, -3);
     const source = readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
     writeFileSync(join(directory, `${name}.js`), ts.transpileModule(source, {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -19,6 +20,8 @@ try {
   const require = createRequire(join(directory, "test.cjs"));
   ({ handleResolveSession } = require("./auth.js"));
   ({ requireIdentitySession } = require("./session-auth.js"));
+  worker = require("./index.js").default;
+  ({ reserveEmailBudget, settleEmailBudget } = require("./email-budget.js"));
 } finally { rmSync(directory, { recursive: true, force: true }); }
 
 const valid = {
@@ -39,7 +42,6 @@ function environment(row, access = true) {
         return { first: async () => row };
       }
       if (sql.includes("FROM employee_application_access")) return { first: async () => access ? { allowed: 1 } : null };
-      if (sql.includes("FROM employee_identity_groups")) return { all: async () => ({ results: [] }) };
       throw new Error("Unexpected authority query");
     } };
   } } };
@@ -57,6 +59,8 @@ test("resolve API and management guard expose the same current principal", async
   const body = await response.json();
   assert.deepEqual(body.principal, await requireIdentitySession(request(), env));
   assert.equal(body.principal.workspaceRole, "ADMIN");
+  assert.equal("groupKeys" in body.principal, false);
+  assert.equal("applicationRoleKey" in body.principal, false);
   assert.equal(body.principal.isIdentityAdmin, true);
   assert.equal(body.session.expiresAt, valid.expires_at);
 });
@@ -87,4 +91,56 @@ test("role and Identity Admin changes appear immediately without Session writes"
   assert.equal(body.principal.isIdentityAdmin, false);
   assert.equal(body.principal.employeeRevision, 3);
   assert.deepEqual(body.principal, await requireIdentitySession(request(), env));
+});
+
+test("retired Group and activation-alias routes return 404 without authority queries", async () => {
+  const env = { DB: { prepare() { throw new Error("retired route accessed authority"); } } };
+  for (const [method, path] of [["POST", "groups"], ["PATCH", "groups/group-test"], ["PUT", "groups/group-test/members/employee-test"], ["DELETE", "groups/group-test/members/employee-test"], ["PUT", "groups/group-test/applications/APP_TEST"], ["PUT", "applications/APP_TEST/compatibility-role-mode"], ["POST", "employees/employee-test/activation/resend"]]) {
+    assert.equal((await worker.fetch(new Request(`https://identity.test/v1/admin/identity/${path}`, { method }), env)).status, 404);
+  }
+});
+function budgetEnvironment(workspaceResult = {}, globalResult = {}) {
+  const batches = [];
+  const env = { EMAIL_DAILY_BUDGET: "50", DB: {
+    prepare(sql) { return { bind(...values) { return {
+      sql, values,
+      async first() {
+        if (sql.includes("INSERT INTO workspace_email_delivery_budget")) {
+          if (workspaceResult instanceof Error) throw workspaceResult;
+          return workspaceResult;
+        }
+        if (sql.includes("INSERT INTO email_delivery_budget")) return globalResult;
+        throw new Error("Unexpected budget query");
+      },
+    }; } }; },
+    async batch(statements) { batches.push(statements); return statements.map(() => ({ success: true })); },
+  } };
+  return { env, batches };
+}
+test("failed Workspace reservation releases the reserved global budget", async () => {
+  for (const result of [null, new Error("D1 failure")]) {
+    const { env, batches } = budgetEnvironment(result);
+    await assert.rejects(reserveEmailBudget(env, "workspace-test", new Date("2026-10-01T23:59:00Z"), 10));
+    assert.equal(batches.length, 1);
+    assert.equal(batches[0].length, 1);
+    assert.equal(batches[0][0].values[1], 0);
+  }
+});
+test("global budget exhaustion never reserves a Workspace budget", async () => {
+  const { env, batches } = budgetEnvironment(new Error("must not be queried"), null);
+  await assert.rejects(reserveEmailBudget(env, "workspace-test", new Date(), 10), /EMAIL_DAILY_BUDGET_EXHAUSTED/);
+  assert.equal(batches.length, 0);
+});
+test("settlement commits both counters atomically against the reservation date", async () => {
+  for (const sent of [false, true]) {
+    const { env, batches } = budgetEnvironment();
+    const reservation = await reserveEmailBudget(env, "workspace-test", new Date("2026-10-01T23:59:00Z"), 10);
+    await settleEmailBudget(env, reservation, sent, new Date("2026-10-02T00:01:00Z"));
+    assert.equal(batches.length, 1);
+    assert.equal(batches[0].length, 2);
+    assert.equal(batches[0][0].values[0], "2026-10-01");
+    assert.equal(batches[0][1].values[1], "2026-10-01");
+    assert.equal(batches[0][0].values[1], sent ? 1 : 0);
+    assert.equal(batches[0][1].values[2], sent ? 1 : 0);
+  }
 });

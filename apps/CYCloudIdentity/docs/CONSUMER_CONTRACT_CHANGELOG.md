@@ -2,6 +2,10 @@
 
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
+## 1.0.2 — 2026-10-01
+
+Consumer update required for obsolete Group projections/routes, compatibility role mode, initial delivery alias and re-send route. CY Web adopts direct fields and canonical Email verification routes before provider production deployment. CYACC direct 1.0.1 integration is unaffected; minimum remains 1.0.0. No migration deletes historical authority or Group data.
+
 ## 1.0.1 — 2026-09-30
 
 Backward-compatible governance addition:
