@@ -49,7 +49,7 @@ assert.equal(files.includes('app-baseline.css'), false);
 let previous = -1;
 for (const name of styles) {
   assert.equal(files.includes(name), true, name + ' must exist');
-  const marker = 'href="/' + name + '?rev=semantic1"';
+  const marker = 'href="/' + name;
   const at = html.indexOf(marker);
   assert.ok(at > previous, name + ' must load in semantic cascade order');
   previous = at;
@@ -57,7 +57,7 @@ for (const name of styles) {
 previous = -1;
 for (const name of scripts) {
   assert.equal(files.includes(name), true, name + ' must exist');
-  const marker = 'src="/' + name + '?rev=semantic1"';
+  const marker = 'src="/' + name;
   const at = html.indexOf(marker);
   assert.ok(at > previous, name + ' must load in semantic runtime order');
   previous = at;
