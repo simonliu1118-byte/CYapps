@@ -209,7 +209,7 @@ const indexHtml = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
 const loginHtml = fs.readFileSync(path.join(ROOT, 'public/login.html'), 'utf8');
 const authJs = fs.readFileSync(path.join(ROOT, 'public/auth.js'), 'utf8');
 const authCss = fs.readFileSync(path.join(ROOT, 'public/auth.css'), 'utf8');
-const versionPatch = fs.readFileSync(path.join(ROOT, 'public/v0216.js'), 'utf8');
+const adaptiveUi = fs.readFileSync(path.join(ROOT, 'public/adaptive-ui.js'), 'utf8');
 const workerApp = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(indexHtml, /authOverlay|loginForm/);
 assert.match(loginHtml, /action="\/login" method="post"/);
@@ -230,8 +230,8 @@ assert.match(authCss, /data-mobile-ledger-action="categories"/);
 assert.match(authCss, /data-mobile-ledger-action="lock"/);
 assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)/);
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
-assert.match(versionPatch, /MutationObserver/);
-assert.match(versionPatch, /CY_V0216_VERSION = 'V0\.21\.6 Build 8'/);
+assert.match(adaptiveUi, /MutationObserver/);
+assert.match(adaptiveUi, /CY_V0216_VERSION = 'V0\.21\.6 Build 8'/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)
