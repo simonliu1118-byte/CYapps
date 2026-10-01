@@ -95,17 +95,15 @@ assert.equal(canWriteAccounting(resolved.principal), false);
 assert.equal(canWriteAccounting({ workspaceRole: 'ADMIN' }), true);
 assert.equal(appUserFromPrincipal({ ...basePrincipal, workspaceRole: 'SUPER_ADMIN' }).canWriteAccounting, true);
 
+let hangingRequestSignal = null;
 const hangingEnv = {
   CYID_WORKSPACE_ID: 'workspace-ci-placeholder',
   CYID_APPLICATION_ID: 'CYACC_CI',
   CYID_PROVIDER_TIMEOUT_MS: '100',
   IDENTITY: {
     async fetch(request) {
-      return await new Promise((resolve, reject) => {
-        const rejectOnAbort = () => reject(request.signal.reason || new Error('aborted'));
-        if (request.signal.aborted) rejectOnAbort();
-        else request.signal.addEventListener('abort', rejectOnAbort, { once: true });
-      });
+      hangingRequestSignal = request.signal;
+      return await new Promise(() => {});
     }
   }
 };
@@ -118,7 +116,8 @@ const timeoutElapsed = Date.now() - timeoutStarted;
 assert.equal(timeoutResolved.ok, false, 'IDENTITY_TIMEOUT must fail closed');
 assert.equal(timeoutResolved.status, 504);
 assert.equal(timeoutResolved.code, 'IDENTITY_TIMEOUT');
-assert.ok(timeoutElapsed >= 80 && timeoutElapsed < 1000, `identity timeout should be bounded, got ${timeoutElapsed}ms`);
+assert.ok(timeoutElapsed >= 80 && timeoutElapsed < 1000, `identity timeout should be bounded even when the Service Binding ignores abort, got ${timeoutElapsed}ms`);
+assert.equal(hangingRequestSignal?.aborted, true, 'timeout should still signal cancellation to the provider request');
 
 
 const httpsAssetEnv = {
