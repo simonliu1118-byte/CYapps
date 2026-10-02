@@ -97,7 +97,7 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.match(html, /<span class="version">V0\.21\.9<\/span>/, 'index.html must own the current visible version');
+assert.match(html, /<span class="version">V0\.21\.9 Build 1<\/span>/, 'index.html must own the current visible version');
 assert.match(appJs, /setLedgerLoadingState\(true\)/, 'month loading must expose an interaction-blocking busy state');
 assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingState\(false\)/, 'only the current month request may clear the busy state');
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');
@@ -105,5 +105,10 @@ assert.match(read('public/excel-export-ui.js'), /navigator\.canShare/, 'file sha
 assert.doesNotMatch(adaptiveUi, /querySelector\(['"]\.version['"]\)/, 'adaptive UI must not mutate the global version element');
 assert.doesNotMatch(adaptiveUi, /\bCY_[A-Z0-9_]*VERSION\b|\b(?:sync|enforce)[A-Za-z0-9_]*Version\b/, 'historical version mutators must not return');
 assert.doesNotMatch(adaptiveUi, /V0\.2[01]\.[0-9]+(?: Build [0-9]+)?/, 'adaptive UI must not embed historical application version strings');
+assert.match(appJs, /window\.cySettingsManager\?\.renderAccountManager\?\.\(\)/, 'app.js must delegate account rendering to the canonical settings manager');
+assert.match(appJs, /window\.cySettingsManager\?\.renderCategoryManager\?\.\(\)/, 'app.js must delegate category rendering to the canonical settings manager');
+assert.doesNotMatch(appJs, /function renderAccountManager\(|function renderCategoryManager\(/, 'app.js must not own a second settings renderer');
+assert.doesNotMatch(adaptiveUi, /renderV21Build1[456](?:Account|Category)Manager|renderV0211(?:Account|Category)Manager|renderV0212CategoryManager|openV0212/, 'versioned settings manager owners must not return');
+
 
 console.log('Semantic frontend architecture checks passed.');

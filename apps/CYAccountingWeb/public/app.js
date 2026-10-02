@@ -152,7 +152,7 @@ function bindEvents() {
   els.settingsTabs.forEach(button => button.addEventListener('click', () => setSettingsTab(button.dataset.settingsTab)));
   els.settingsKindButtons.forEach(button => button.addEventListener('click', () => {
     state.settingsKind = button.dataset.settingsKind;
-    renderCategoryManager();
+    window.cySettingsManager?.renderCategoryManager?.();
   }));
 
   els.addAccountButton.addEventListener('click', addAccount);
@@ -393,26 +393,11 @@ function setSettingsTab(tab) {
 }
 
 function renderSettings() {
-  renderAccountManager();
-  renderCategoryManager();
+  window.cySettingsManager?.renderAccountManager?.();
+  window.cySettingsManager?.renderCategoryManager?.();
   els.lockedThrough.value = state.lockedThrough || '';
   els.lockStatusText.textContent = state.lockedThrough ? `目前已鎖帳至 ${formatMonth(state.lockedThrough)}，更早月份也一併鎖定。` : '目前未鎖帳。';
   window.cySyncMobileLockMonthControls?.();
-}
-
-function renderAccountManager() {
-  if (!state.accounts.length) {
-    els.accountRows.innerHTML = '<div class="empty">尚無帳戶。</div>';
-    return;
-  }
-  els.accountRows.innerHTML = state.accounts.map(account => `<div class="manager-row">
-    <div class="manager-row-main"><strong>${escapeHtml(account.name)}</strong>${Number(account.is_default) === 1 ? '<span class="badge">預設</span>' : ''}</div>
-    <div class="manager-row-actions">
-      ${Number(account.is_default) === 1 ? '' : `<button type="button" class="mini-button" data-account-default="${account.id}">設為預設</button>`}
-      <button type="button" class="mini-button" data-account-rename="${account.id}">改名</button>
-      <button type="button" class="mini-button danger" data-account-delete="${account.id}">刪除</button>
-    </div>
-  </div>`).join('');
 }
 
 async function handleAccountAction(event) {
@@ -438,23 +423,6 @@ async function addAccount() {
   if (!name) return;
   const ok = await mutateSettings('/api/accounts', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ name }) }, '帳戶已新增。');
   if (ok) els.newAccountName.value = '';
-}
-
-function renderCategoryManager() {
-  els.settingsKindButtons.forEach(button => button.classList.toggle('active', button.dataset.settingsKind === state.settingsKind));
-  const groups = state.groups.filter(group => group.kind === state.settingsKind);
-  if (!groups.length) {
-    els.categoryManager.innerHTML = '<div class="empty">目前沒有大分類，請先新增。</div>';
-    return;
-  }
-  els.categoryManager.innerHTML = groups.map(group => {
-    const categories = state.categories.filter(category => Number(category.group_id) === Number(group.id));
-    const categoryHtml = categories.length ? categories.map(category => `<div class="category-item"><span>${escapeHtml(category.name)}</span><span><button type="button" class="mini-button" data-category-rename="${category.id}">改名</button> <button type="button" class="mini-button danger" data-category-delete="${category.id}">刪除</button></span></div>`).join('') : '<div class="hint">此分類尚無科目。</div>';
-    return `<div class="category-group" data-group-id="${group.id}">
-      <div class="category-group-head"><span class="category-group-title">${escapeHtml(group.name)}</span><span><button type="button" class="mini-button" data-group-rename="${group.id}">改名</button> <button type="button" class="mini-button danger" data-group-delete="${group.id}">刪除</button></span></div>
-      <div class="category-items">${categoryHtml}<div class="category-add"><input type="text" maxlength="60" placeholder="新增科目" data-new-category-group="${group.id}"><button type="button" class="mini-button" data-category-add="${group.id}">新增</button></div></div>
-    </div>`;
-  }).join('');
 }
 
 async function handleCategoryAction(event) {
