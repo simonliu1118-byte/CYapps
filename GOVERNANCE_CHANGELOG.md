@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.26 — 2026/10/02
+
+- CYAccountingWeb adopts optimistic UI as the default mutation policy for low/medium-risk, safely reversible actions: render the expected result immediately, persist through the canonical API in the background, and rollback with a clear error if persistence fails. High-risk or non-safely-reversible actions remain server-confirmed.
+
 ## 2.3.25 — 2026/10/01
 
 - Production consumer readiness also reads the protected existing core Worker binding/application/consumer declaration. A development consumer health marker alone cannot authorize provider retirement. No production resource/configuration was changed.
