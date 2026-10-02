@@ -8993,7 +8993,7 @@
     grid-template-columns: minmax(0, 140px) 112px !important;
     justify-content: center !important;
     align-items: center !important;
-    gap: 6px !important;
+    gap: 10px !important;
     min-height: 44px !important;
     padding: 5px 0 !important;
     border-bottom: 1px solid #edf0f3 !important;

@@ -2,9 +2,15 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current source release: **V0.22.0 Build 0**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
+> Current source release: **V0.22.1 Build 0**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
 >
 > Current continuity handoff: [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)
+
+## V0.22.1 跨介面檢查與期初間距
+
+期初「調整」標籤移至帳戶名稱左側，手機名稱／金額間距由 6px 增為 10px。手機、平板及桌機交易編輯共用驗證與 optimistic 寫入：立即顯示結果、失敗還原，避免月份回應蓋掉正在儲存的資料。桌機列內摘要沿用 20 個中文字／40 個英數字元限制，不保留長摘要例外。
+
+帳戶新增／改名／預設及常用科目共用 optimistic 處理；科目新增和帳戶排序移除手機專屬寫入分支。期初基準、刪除及鎖帳維持 server 成功後顯示結果。跨介面檢查證據與剩餘界面差異見目前交接文件；V0.22.0 正式 Release 保留原發布內容，本次修正不自動重發 Release。
 
 ## V0.22.0 手機穩定版
 

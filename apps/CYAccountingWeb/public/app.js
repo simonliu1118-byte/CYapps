@@ -16,6 +16,9 @@ const els = {};
 
 let cyaccAppStarted = false;
 let cyTransactionRequestId = 0;
+const cyPendingTransactionUpdates = new Map();
+const cyPendingSettingsMutations = new Set();
+let cySettingsTempId = -1;
 let cyOpeningManualEdit = false;
 let cyOpeningOriginalValues = new Map();
 
@@ -226,7 +229,9 @@ function renderAccounts(preferred) {
 }
 
 function renderCategories(preferred) {
-  const categories = state.categories.filter(category => category.kind === state.kind);
+  const groupOrder = new Map(state.groups.filter(group => group.kind === state.kind).map((group, index) => [Number(group.id), index]));
+  const categories = state.categories.filter(category => category.kind === state.kind).sort((a, b) =>
+    (groupOrder.get(Number(a.group_id)) ?? 999999) - (groupOrder.get(Number(b.group_id)) ?? 999999) || Number(a.sort_order || 0) - Number(b.sort_order || 0));
   els.categoryName.innerHTML = categories.map(category => {
     const groupName = category.group_name || state.groups.find(group => String(group.id) === String(category.group_id))?.name;
     const label = groupName ? `${groupName}／${category.name}` : category.name;
@@ -264,7 +269,7 @@ async function saveTransaction(event) {
   try {
     await api('/api/transactions', {
       method: 'POST', headers: jsonHeaders(),
-      body: JSON.stringify({ txDate: els.txDate.value, accountName: els.accountName.value, kind: state.kind, categoryName: els.categoryName.value, summary: els.summary.value.trim(), amount })
+      body: JSON.stringify({ ...manualTransactionValues({ txDate: els.txDate.value, accountName: els.accountName.value, categoryName: els.categoryName.value, summary: els.summary.value, amount }), kind: state.kind })
     });
     showMessage('存檔成功');
     els.summary.value = '';
@@ -287,7 +292,7 @@ async function loadTransactions() {
   try {
     const data = await api(`/api/transactions?month=${encodeURIComponent(month)}`);
     if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
-    state.transactions = data.transactions || [];
+    state.transactions = mergePendingTransactionUpdates(data.transactions || [], month);
     state.ledgerLocked = Boolean(data.locked);
     state.lockedThrough = data.lockedThrough || state.lockedThrough;
     if (typeof window.cyaccRefreshLedgerView === 'function') await window.cyaccRefreshLedgerView(month);
@@ -356,6 +361,77 @@ function openEditTransaction(id) {
   els.editDialog.showModal();
 }
 
+function summaryCharacterUnits(char) {
+  const code = char.codePointAt(0) || 0;
+  return code <= 0x7f || (code >= 0xff61 && code <= 0xff9f) ? 1 : 2;
+}
+
+function summaryWeightedUnits(value) {
+  return Array.from(String(value || '')).reduce((units, char) => units + summaryCharacterUnits(char), 0);
+}
+
+function manualTransactionValues(values, original = null) {
+  const body = {
+    txDate: String(values.txDate || ''),
+    accountName: String(values.accountName || ''),
+    categoryName: String(values.categoryName || ''),
+    summary: String(values.summary || '').trim(),
+    amount: Number(values.amount)
+  };
+  if (isLocked(body.txDate.slice(0, 7)) || (original && isLocked(String(original.tx_date || '').slice(0, 7)))) {
+    throw new Error('此月份已鎖帳，無法修改資料。');
+  }
+  if (!Number.isInteger(body.amount) || body.amount < 1 || body.amount > 9_999_999) {
+    throw new Error('金額必須為 1～9,999,999。');
+  }
+  if (summaryWeightedUnits(body.summary) > 40) {
+    throw new Error('摘要不可超過 20 個中文字或 40 個英數字元。');
+  }
+  return body;
+}
+
+function mergePendingTransactionUpdates(rows, month) {
+  let merged = [...rows];
+  for (const { updated } of cyPendingTransactionUpdates.values()) {
+    merged = merged.filter(item => Number(item.id) !== Number(updated.id));
+    if (String(updated.tx_date).slice(0, 7) === month) merged.push(updated);
+  }
+  return merged;
+}
+
+function renderOptimisticTransactionState() {
+  if (typeof renderDesktopLedger === 'function') renderDesktopLedger();
+  else renderTransactions();
+}
+
+async function persistTransactionUpdate(id, values, onOptimistic) {
+  id = Number(id);
+  const original = state.transactions.find(item => Number(item.id) === id);
+  if (!original) throw new Error('找不到交易。');
+  if (cyPendingTransactionUpdates.has(id)) throw new Error('此筆交易仍在儲存中。');
+  const body = manualTransactionValues(values, original);
+  const updated = { ...original, tx_date: body.txDate, account_name: body.accountName, category_name: body.categoryName, summary: body.summary, amount: body.amount };
+  cyPendingTransactionUpdates.set(id, { original, updated });
+  state.transactions = mergePendingTransactionUpdates(state.transactions, els.monthFilter.value);
+  try {
+    onOptimistic?.();
+    renderOptimisticTransactionState();
+    await api(`/api/transactions/${id}`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(body) });
+    if (String(original.tx_date).slice(0, 7) !== body.txDate.slice(0, 7) && typeof window.cyaccRefreshLedgerView === 'function') {
+      try { await window.cyaccRefreshLedgerView(els.monthFilter.value); }
+      catch { showMessage('修改已儲存，餘額載入失敗，請重新整理。', true); }
+    }
+    return true;
+  } catch (error) {
+    state.transactions = state.transactions.filter(item => Number(item.id) !== id);
+    if (String(original.tx_date).slice(0, 7) === els.monthFilter.value) state.transactions.push(original);
+    renderOptimisticTransactionState();
+    throw error;
+  } finally {
+    cyPendingTransactionUpdates.delete(id);
+  }
+}
+
 async function saveTransactionEdit(event) {
   event.preventDefault();
   if (!state.editingTx) return;
@@ -363,15 +439,13 @@ async function saveTransactionEdit(event) {
   if (!Number.isInteger(amount) || amount < 1 || amount > 9_999_999) return setDialogMessage(els.editMessage, '金額必須為 1～9,999,999。', true);
   els.editSaveButton.disabled = true;
   try {
-    await api(`/api/transactions/${state.editingTx.id}`, {
-      method: 'PUT', headers: jsonHeaders(),
-      body: JSON.stringify({ txDate: els.editDate.value, accountName: els.editAccount.value, categoryName: els.editCategory.value, summary: els.editSummary.value.trim(), amount })
-    });
-    els.editDialog.close();
+    await persistTransactionUpdate(state.editingTx.id, {
+      txDate: els.editDate.value, accountName: els.editAccount.value,
+      categoryName: els.editCategory.value, summary: els.editSummary.value, amount
+    }, () => { els.editDialog.close(); showMessage('正在儲存修改…'); });
     showMessage('修改成功');
-    await loadTransactions();
   } catch (error) {
-    setDialogMessage(els.editMessage, error.message, true);
+    showMessage(`${error.message} 已還原原資料。`, true);
   } finally {
     els.editSaveButton.disabled = false;
   }
@@ -529,7 +603,7 @@ async function addAccount() {
   const name = els.newAccountName.value.trim();
   if (!name) return;
   const ok = await mutateSettings('/api/accounts', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ name }) }, '帳戶已新增。');
-  if (ok) els.newAccountName.value = '';
+  if (ok && els.newAccountName.value.trim() === name) els.newAccountName.value = '';
 }
 
 async function handleCategoryAction(event) {
@@ -570,28 +644,91 @@ async function handleCategoryAction(event) {
 async function addGroup() {
   const name = els.newGroupName.value.trim();
   if (!name) return;
-  const ok = await mutateSettings('/api/category-groups', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, name }) }, '大分類已新增。');
-  if (ok) els.newGroupName.value = '';
+  const ok = await optimisticAddSettingsGroup(name);
+  if (ok && els.newGroupName.value.trim() === name) els.newGroupName.value = '';
 }
 
 async function addCategory(groupId, input) {
   const name = input?.value.trim();
   if (!name || !Number.isInteger(groupId) || groupId <= 0) return;
-  const ok = await mutateSettings('/api/categories', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, groupId, name }) }, '科目已新增。');
-  if (ok && input) input.value = '';
+  const ok = await optimisticAddSettingsCategory(name, groupId);
+  if (ok && input?.value.trim() === name) input.value = '';
+}
+
+function renderSettingsMutationState(account = els.accountName.value, category = els.categoryName.value) {
+  renderAccounts(account);
+  renderCategories(category);
+  renderSettings();
+  if (typeof renderFavoriteCategories === 'function') renderFavoriteCategories();
+  if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
+}
+
+function beginSettingsOptimisticMutation(path, options) {
+  const body = options.body ? JSON.parse(options.body) : {};
+  const method = options.method || 'GET';
+  const match = path.match(/^\/api\/(accounts|category-groups|categories)\/(\d+)(?:\/(default|favorite))?$/);
+  const accountCreate = path === '/api/accounts' && method === 'POST';
+  if (!accountCreate && !(match && ((method === 'PUT' && !match[3]) || (match[3] === 'default' && method === 'POST') || (match[3] === 'favorite' && method === 'PUT')))) return null;
+  const key = match?.[3] === 'default' ? 'account-default' : path;
+  if (cyPendingSettingsMutations.has(key)) throw new Error('此項設定仍在儲存中。');
+  const account = els.accountName.value;
+  const category = els.categoryName.value;
+  const accountId = state.accounts.find(item => item.name === account)?.id;
+  const categoryId = state.categories.find(item => item.name === category)?.id;
+  let rollback;
+  let commit = () => {};
+  if (accountCreate) {
+    const name = String(body.name || '').trim().replace(/\s+/g, ' ');
+    if (!name || Array.from(name).length > 8) throw new Error('帳戶名稱需為 1～8 個字。');
+    const id = cySettingsTempId--;
+    state.accounts = [...state.accounts, { id, name, sort_order: Math.max(-1, ...state.accounts.map(item => Number(item.sort_order || 0))) + 1, is_default: 0 }];
+    rollback = () => { state.accounts = state.accounts.filter(item => item.id !== id); };
+    commit = result => { const item = state.accounts.find(item => item.id === id); if (item) item.id = Number(result.id); };
+  } else {
+    const list = match[1] === 'accounts' ? 'accounts' : match[1] === 'categories' ? 'categories' : 'groups';
+    const id = Number(match[2]);
+    const original = state[list].find(item => Number(item.id) === id);
+    if (!original) throw new Error('找不到此項設定。');
+    const field = match[3] === 'default' ? 'is_default' : match[3] === 'favorite' ? 'is_favorite' : 'name';
+    const before = new Map(state[list].filter(item => field === 'is_default' || Number(item.id) === id).map(item => [Number(item.id), item[field]]));
+    const value = field === 'name' ? String(body.name || '').trim().replace(/\s+/g, ' ') : body.favorite ? 1 : 0;
+    if (field === 'name' && (!value || (list === 'accounts' && Array.from(value).length > 8))) throw new Error('名稱不可空白，帳戶名稱最多 8 個字。');
+    state[list] = state[list].map(item => field === 'is_default' ? { ...item, is_default: Number(item.id) === id ? 1 : 0 } : Number(item.id) === id ? { ...item, [field]: value } : item);
+    if (list === 'groups' && field === 'name') state.categories = state.categories.map(item => Number(item.group_id) === id ? { ...item, group_name: value } : item);
+    rollback = () => {
+      state[list] = state[list].map(item => before.has(Number(item.id)) ? { ...item, [field]: before.get(Number(item.id)) } : item);
+      if (list === 'groups' && field === 'name') state.categories = state.categories.map(item => Number(item.group_id) === id ? { ...item, group_name: before.get(id) } : item);
+    };
+  }
+  cyPendingSettingsMutations.add(key);
+  return { key, rollback, commit, account, category, preferredAccount: state.accounts.find(item => item.id === accountId)?.name || account, preferredCategory: state.categories.find(item => item.id === categoryId)?.name || category };
 }
 
 async function mutateSettings(path, options, successMessage) {
   setDialogMessage(els.settingsMessage, '');
+  let optimistic;
   try {
-    await api(path, options);
-    await refreshBootstrap();
+    optimistic = beginSettingsOptimisticMutation(path, options);
+    if (optimistic) renderSettingsMutationState(optimistic.preferredAccount, optimistic.preferredCategory);
+    const result = await api(path, options);
+    if (optimistic) {
+      optimistic.commit(result);
+      renderSettingsMutationState();
+    } else {
+      await refreshBootstrap();
+      await loadTransactions();
+    }
     setDialogMessage(els.settingsMessage, successMessage);
-    await loadTransactions();
     return true;
   } catch (error) {
+    if (optimistic) {
+      optimistic.rollback();
+      renderSettingsMutationState(els.accountName.value === optimistic.preferredAccount ? optimistic.account : els.accountName.value, els.categoryName.value === optimistic.preferredCategory ? optimistic.category : els.categoryName.value);
+    }
     setDialogMessage(els.settingsMessage, error.message, true);
     return false;
+  } finally {
+    if (optimistic) cyPendingSettingsMutations.delete(optimistic.key);
   }
 }
 
@@ -600,7 +737,7 @@ function openingAccountRowHtml(item) {
   const badge = manual ? '<span class="opening-source manual">調整</span>' : '';
   return `<label class="opening-row" data-opening-source="${manual ? 'manual' : 'automatic'}">
     <span class="opening-account-copy">
-      <span class="opening-account-title"><strong>${escapeHtml(item.name)}</strong>${badge}</span>
+      <span class="opening-account-title">${badge}<strong>${escapeHtml(item.name)}</strong></span>
     </span>
     <input type="number" step="1" value="${Number(item.amount) || 0}"
       data-opening-account="${escapeHtml(item.name)}"

@@ -65,7 +65,7 @@ assert.doesNotMatch(context.els.categoryName.innerHTML, /門市收入/);
 const automatic = context.openingAccountRowHtml({ name: '自動帳戶', amount: 50, automaticAmount: 50, source: 'automatic', automaticAnchorMonth: '2026-09' });
 assert.doesNotMatch(automatic, /<span class="opening-source|<small>|承接|歷史收支|>自動</);
 const manual = context.openingAccountRowHtml({ name: '<現金>', amount: 100, automaticAmount: 50, source: 'override', overrideReason: '對帳' });
-assert.match(manual, />調整<\/span>/);
+assert.match(manual, />調整<\/span><strong>/, 'adjustment badge precedes the account name');
 assert.doesNotMatch(manual, /<small>|手動調整|自動值|對帳/);
 assert.match(manual, /&lt;現金>/);
 assert.match(manual, /data-opening-automatic="50"/, 'clearing back to automatic remains supported');

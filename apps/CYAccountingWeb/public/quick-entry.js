@@ -72,20 +72,9 @@ function bindFavoriteManager() {
     const id = Number(button.dataset.categoryFavorite);
     const category = state.categories.find(item => Number(item.id) === id);
     if (!category) return;
-    button.disabled = true;
-    setDialogMessage(els.settingsMessage, '');
-    try {
-      await api(`/api/categories/${id}/favorite`, {
-        method: 'PUT',
-        headers: jsonHeaders(),
-        body: JSON.stringify({ favorite: Number(category.is_favorite) !== 1 })
-      });
-      await refreshBootstrap();
-      renderFavoriteCategories();
-      setDialogMessage(els.settingsMessage, Number(category.is_favorite) === 1 ? '已取消常用科目。' : '已加入常用科目。');
-    } catch (error) {
-      setDialogMessage(els.settingsMessage, error.message, true);
-    }
+    await mutateSettings(`/api/categories/${id}/favorite`, {
+      method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ favorite: Number(category.is_favorite) !== 1 })
+    }, Number(category.is_favorite) === 1 ? '已取消常用科目。' : '已加入常用科目。');
   });
 }
 
