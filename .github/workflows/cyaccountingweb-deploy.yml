@@ -243,18 +243,32 @@ jobs:
         run: |
           set -euo pipefail
           base="https://$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
-          curl --max-time 8 -fsS "$base/adaptive-ui.css?rev=02112-mobile-tap-zoom" | grep -F 'touch-action: manipulation' >/dev/null
-          curl --max-time 8 -fsS "$base/login.css?v=02112-mobile-tap-zoom" | grep -F 'touch-action: manipulation' >/dev/null
-          curl --max-time 8 -fsS "$base/adaptive-ui.js?rev=02111-automatic-opening-balances" | grep -F 'mobileAccountMenuButton' >/dev/null
-          curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'window.cyaccSessionPromise = checkSessionFallback()' >/dev/null
-          curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'Promise.race([request, timeout])' >/dev/null
-          curl --max-time 8 -fsS "$base/app.js?rev=02111-automatic-opening-balances" | grep -F 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise' >/dev/null
-          curl --max-time 8 -fsS "$base/ledger-tools.js?rev=semantic1" | grep -F 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender' >/dev/null
-          curl --max-time 8 -fsS "$base/quick-entry-settings.js?rev=semantic1" | grep -F 'setupQuickEntrySettingsPane' >/dev/null
-          curl --max-time 8 -fsS "$base/category-management.js?rev=semantic1" | grep -F 'setupCategoryTransfer' >/dev/null
-          curl --max-time 8 -fsS "$base/backup-ui.js?rev=semantic1" | grep -F 'setupBackupSettings' >/dev/null
-          curl --max-time 8 -fsS "$base/app.js?rev=02111-automatic-opening-balances" | grep -F "await api('/api/opening-balance-overrides'" >/dev/null
-          curl --max-time 8 -fsS "$base/app.css?rev=02111-automatic-opening-balances" | grep -F '.opening-source' >/dev/null
+          asset_file=$(mktemp)
+          trap 'rm -f "$asset_file"' EXIT
+          verify_asset() {
+            local asset_url="$1" marker="$2" attempt
+            for attempt in 1 2 3 4 5 6; do
+              if curl --max-time 8 -fsS "$asset_url" -o "$asset_file" && grep -F "$marker" "$asset_file" >/dev/null; then
+                return 0
+              fi
+              echo "Waiting for asset: $asset_url (attempt $attempt/6)"
+              if [ "$attempt" -lt 6 ]; then sleep 5; fi
+            done
+            echo "Asset verification failed: $asset_url" >&2
+            return 1
+          }
+          verify_asset "$base/adaptive-ui.css?rev=02112b1-mobile-tap-zoom" 'touch-action: manipulation'
+          verify_asset "$base/login.css?v=02112-mobile-tap-zoom" 'touch-action: manipulation'
+          verify_asset "$base/adaptive-ui.js?rev=02111-automatic-opening-balances" 'mobileAccountMenuButton'
+          verify_asset "$base/auth.js?rev=session-hard-timeout" 'window.cyaccSessionPromise = checkSessionFallback()'
+          verify_asset "$base/auth.js?rev=session-hard-timeout" 'Promise.race([request, timeout])'
+          verify_asset "$base/app.js?rev=02111-automatic-opening-balances" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
+          verify_asset "$base/ledger-tools.js?rev=semantic1" 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender'
+          verify_asset "$base/quick-entry-settings.js?rev=semantic1" 'setupQuickEntrySettingsPane'
+          verify_asset "$base/category-management.js?rev=semantic1" 'setupCategoryTransfer'
+          verify_asset "$base/backup-ui.js?rev=semantic1" 'setupBackupSettings'
+          verify_asset "$base/app.js?rev=02111-automatic-opening-balances" "await api('/api/opening-balance-overrides'"
+          verify_asset "$base/app.css?rev=02111-automatic-opening-balances" '.opening-source'
           echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files
