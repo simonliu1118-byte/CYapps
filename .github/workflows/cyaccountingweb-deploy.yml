@@ -55,6 +55,7 @@ jobs:
           node --check src/accounting-tools.js
           node --check src/accounting-controls.js
           node --check src/account-lifecycle.js
+          node --check src/opening-balances.js
           node --check src/excel-export.js
           node --check src/excel-import.js
           node --check src/backup-package.js
@@ -94,6 +95,7 @@ jobs:
           node tests/desktop-migration-d1.mjs
           node tests/adaptive-ui.mjs
           node tests/account-lifecycle.mjs
+          node tests/opening-balances.mjs
           node tests/desktop-ui.mjs
           node tests/deploy-config.mjs
           node tests/cyid-integration.mjs
