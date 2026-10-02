@@ -143,7 +143,8 @@ sqlite.exec(`
   CREATE TABLE category_groups(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, name TEXT NOT NULL, sort_order INTEGER NOT NULL, created_at TEXT NOT NULL, UNIQUE(kind,name));
   CREATE TABLE categories(id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, group_id INTEGER NOT NULL REFERENCES category_groups(id), name TEXT NOT NULL, sort_order INTEGER NOT NULL, is_favorite INTEGER NOT NULL, created_at TEXT NOT NULL, UNIQUE(kind,name));
   CREATE TABLE transactions(id INTEGER PRIMARY KEY AUTOINCREMENT, tx_date TEXT NOT NULL, account_name TEXT NOT NULL, kind TEXT NOT NULL, category_name TEXT NOT NULL, summary TEXT NOT NULL, amount INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-  CREATE TABLE opening_balances(month TEXT NOT NULL, account_name TEXT NOT NULL, amount INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(month,account_name));
+  CREATE TABLE opening_balance_overrides(month TEXT NOT NULL, account_name TEXT NOT NULL, amount INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by_employee_id TEXT NOT NULL, updated_by_employee_no TEXT NOT NULL, updated_by_name TEXT NOT NULL, updated_by_role TEXT NOT NULL, PRIMARY KEY(month,account_name));
+  CREATE TABLE opening_balance_audit(id INTEGER PRIMARY KEY AUTOINCREMENT, month TEXT NOT NULL, account_name TEXT NOT NULL, action TEXT NOT NULL, previous_amount INTEGER, new_amount INTEGER, reason TEXT NOT NULL, actor_employee_id TEXT NOT NULL, actor_employee_no TEXT NOT NULL, actor_name TEXT NOT NULL, actor_role TEXT NOT NULL, created_at TEXT NOT NULL);
   CREATE TABLE app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
   INSERT INTO accounts(name,sort_order,is_default,created_at) VALUES ('現金',0,1,'2026-01-01T00:00:00');
   INSERT INTO category_groups(kind,name,sort_order,created_at) VALUES ('income','收入分類',0,'2026-01-01T00:00:00'),('expense','支出分類',0,'2026-01-01T00:00:00');
@@ -166,7 +167,9 @@ assert.equal(sqlite.prepare("SELECT group_id FROM categories WHERE kind='expense
   sqlite.prepare("SELECT id FROM category_groups WHERE kind='expense' AND name='營業費用'").get().id);
 assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM transactions').get().count, 1);
 assert.equal(sqlite.prepare('SELECT account_name FROM transactions').get().account_name, '已刪除舊帳戶');
-assert.equal(sqlite.prepare('SELECT amount FROM opening_balances').get().amount, -5000);
+assert.equal(sqlite.prepare('SELECT amount FROM opening_balance_overrides').get().amount, -5000);
+assert.equal(sqlite.prepare('SELECT action FROM opening_balance_audit').get().action, 'migration');
+assert.equal(sqlite.prepare('SELECT reason FROM opening_balance_audit').get().reason, '桌面帳本移轉');
 assert.equal(sqlite.prepare("SELECT value FROM app_settings WHERE key='locked_through'").get().value, '2025-12');
 assert.ok(JSON.parse(sqlite.prepare("SELECT value FROM app_settings WHERE key='desktop_migration_history_v1'").get().value).length === 1);
 sqlite.close();
