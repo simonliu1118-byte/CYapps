@@ -2349,26 +2349,65 @@ function renderSettingsAccountManager() {
   const host = document.querySelector('#accountRows');
   if (!host) return;
   const accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  if (!accounts.length) {
-    host.innerHTML = '<div class="empty">尚無帳戶。</div>';
-    return;
-  }
+  const archived = Array.isArray(state.archivedAccounts) ? state.archivedAccounts : [];
+  const isSuperAdmin = String(window.cyaccCurrentUser?.role || '') === 'SUPER_ADMIN';
 
-  host.innerHTML = accounts.map(account => {
-    const id = Number(account.id);
-    const isDefault = Number(account.is_default) === 1;
-    return `<div class="settings-account-row" data-settings-account-row="${id}">
-      <button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-account="${id}" title="拖曳調整帳戶順序" aria-label="拖曳調整帳戶順序">⠿</button>
-      ${isDefault
-        ? '<button type="button" class="settings-default-tag active" disabled aria-label="目前預設帳戶">預設</button>'
-        : `<button type="button" class="settings-default-tag" data-account-default="${id}" title="設為預設帳戶">設為預設</button>`}
-      <div class="settings-account-name-cell">
-        <strong class="settings-editable-name">${settingsManagerEscape(account.name)}</strong>
-        <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">✎</button>
-      </div>
-      <button type="button" class="mini-button danger settings-delete-button" data-account-delete="${id}">刪除</button>
-    </div>`;
-  }).join('');
+  const activeHtml = accounts.length
+    ? accounts.map(account => {
+        const id = Number(account.id);
+        const isDefault = Number(account.is_default) === 1;
+        return `<div class="settings-account-row" data-settings-account-row="${id}">
+          <button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-account="${id}" title="拖曳調整帳戶順序" aria-label="拖曳調整帳戶順序">⠿</button>
+          ${isDefault
+            ? '<button type="button" class="settings-default-tag active" disabled aria-label="目前預設帳戶">預設</button>'
+            : `<button type="button" class="settings-default-tag" data-account-default="${id}" title="設為預設帳戶">設為預設</button>`}
+          <div class="settings-account-name-cell">
+            <strong class="settings-editable-name">${settingsManagerEscape(account.name)}</strong>
+            <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">✎</button>
+          </div>
+          <button type="button" class="mini-button settings-archive-button" data-account-archive="${id}">封存</button>
+        </div>`;
+      }).join('')
+    : '<div class="empty">尚無可用帳戶。</div>';
+
+  const archivedHtml = archived.length
+    ? archived.map(account => settingsArchivedAccountHtml(account, isSuperAdmin)).join('')
+    : '<div class="settings-archive-empty">沒有已封存帳戶。</div>';
+
+  host.innerHTML = `
+    <section class="settings-account-section">
+      <div class="settings-account-section-title">使用中</div>
+      <div class="settings-account-active-list">${activeHtml}</div>
+    </section>
+    <section class="settings-account-section settings-account-archive-section">
+      <div class="settings-account-section-title">已封存</div>
+      <div class="settings-account-archive-list">${archivedHtml}</div>
+    </section>`;
+}
+
+function settingsArchivedAccountHtml(account, isSuperAdmin) {
+  const id = Number(account.id);
+  const txCount = Number(account.transaction_count || 0);
+  const openingCount = Number(account.opening_balance_count || 0);
+  const hasHistory = txCount > 0 || openingCount > 0;
+  const usage = hasHistory
+    ? `歷史記帳 ${txCount} 筆 · 期初餘額 ${openingCount} 筆`
+    : '沒有歷史記帳或期初餘額';
+  const permanent = isSuperAdmin
+    ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${hasHistory ? ' disabled title="仍有歷史資料，不能永久刪除"' : ''}>永久刪除</button>`
+    : '';
+
+  return `<div class="settings-archived-account-row">
+    <div class="settings-archived-account-main">
+      <strong>${settingsManagerEscape(account.name)}</strong>
+      <span class="settings-archived-badge">封存</span>
+      <small>${usage}</small>
+    </div>
+    <div class="settings-archived-account-actions">
+      <button type="button" class="mini-button" data-account-restore="${id}">解封</button>
+      ${permanent}
+    </div>
+  </div>`;
 }
 
 function renderSettingsCategoryManager() {
@@ -3624,22 +3663,48 @@ function renderMobileAccountManager() {
   const host = document.querySelector('#accountRows');
   if (!host) return;
   const accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  if (!accounts.length) {
-    host.innerHTML = '<div class="empty mobile-manager-empty">尚無帳戶。</div>';
-    return;
-  }
+  const archived = Array.isArray(state.archivedAccounts) ? state.archivedAccounts : [];
+  const isSuperAdmin = String(window.cyaccCurrentUser?.role || '') === 'SUPER_ADMIN';
 
-  host.innerHTML = accounts.map(account => {
-    const id = Number(account.id);
-    const isDefault = Number(account.is_default) === 1;
-    return `<div class="mobile-account-card" data-mobile-account-row="${id}" draggable="true">
-      <button type="button" class="mobile-account-drag" data-mobile-account-drag="${id}" aria-label="拖曳調整 ${settingsManagerEscape(account.name)} 順序">⋮⋮</button>
-      <strong class="mobile-account-name">${settingsManagerEscape(account.name)}</strong>
-      ${isDefault ? '<span class="mobile-manager-badge">預設</span>' : `<button type="button" class="mini-button" data-account-default="${id}">設為預設</button>`}
-      <button type="button" class="mini-button" data-account-rename="${id}">改名</button>
-      <button type="button" class="mini-button danger" data-account-delete="${id}">刪除</button>
-    </div>`;
-  }).join('');
+  const activeHtml = accounts.length
+    ? accounts.map(account => {
+        const id = Number(account.id);
+        const isDefault = Number(account.is_default) === 1;
+        return `<div class="mobile-account-card" data-mobile-account-row="${id}" draggable="true">
+          <button type="button" class="mobile-account-drag" data-mobile-account-drag="${id}" aria-label="拖曳調整 ${settingsManagerEscape(account.name)} 順序">⋮⋮</button>
+          <strong class="mobile-account-name">${settingsManagerEscape(account.name)}</strong>
+          ${isDefault ? '<span class="mobile-manager-badge">預設</span>' : `<button type="button" class="mini-button" data-account-default="${id}">設為預設</button>`}
+          <button type="button" class="mini-button" data-account-rename="${id}">改名</button>
+          <button type="button" class="mini-button" data-account-archive="${id}">封存</button>
+        </div>`;
+      }).join('')
+    : '<div class="empty mobile-manager-empty">尚無可用帳戶。</div>';
+
+  const archivedHtml = archived.length
+    ? archived.map(account => {
+        const id = Number(account.id);
+        const txCount = Number(account.transaction_count || 0);
+        const openingCount = Number(account.opening_balance_count || 0);
+        const hasHistory = txCount > 0 || openingCount > 0;
+        return `<div class="mobile-account-archived">
+          <div class="mobile-account-archived-main">
+            <strong>${settingsManagerEscape(account.name)}</strong>
+            <span class="mobile-manager-badge">封存</span>
+            <small>${hasHistory ? `歷史 ${txCount} 筆 · 期初 ${openingCount} 筆` : '沒有歷史資料'}</small>
+          </div>
+          <div class="mobile-account-archived-actions">
+            <button type="button" class="mini-button" data-account-restore="${id}">解封</button>
+            ${isSuperAdmin ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${hasHistory ? ' disabled title="仍有歷史資料"' : ''}>永久刪除</button>` : ''}
+          </div>
+        </div>`;
+      }).join('')
+    : '<div class="mobile-account-archive-empty">沒有已封存帳戶。</div>';
+
+  host.innerHTML = `
+    <div class="mobile-account-section-title">使用中</div>
+    <div class="mobile-account-active-list">${activeHtml}</div>
+    <div class="mobile-account-section-title mobile-account-archive-title">已封存</div>
+    <div class="mobile-account-archive-list">${archivedHtml}</div>`;
 
   bindMobileAccountReorder(host);
 }
