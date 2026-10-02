@@ -25,6 +25,16 @@ assert.match(css, /body\.v21-mobile-app \.entry-card\s*\{[\s\S]*?min-height:\s*c
 assert.match(css, /\.ledger-card\.is-loading \.table-wrap::after[\s\S]*?content:\s*"載入中…"/);
 assert.match(css, /\.mobile-opening-dialog #openingRows\s*\{[\s\S]*?flex:\s*0 1 auto !important/);
 
+assert.match(css, /:root\s*\{\s*background:\s*#fff;/);
+assert.match(css, /\.v21-mobile-main-nav\.v21-mobile-bottom-nav\s*\{[\s\S]*?box-shadow:\s*none !important/);
+assert.match(css, /#settingsDialog\.mobile-opening-dialog \.opening-row\s*\{[\s\S]*?justify-content:\s*center !important/);
+assert.match(css, /#settingsDialog\.mobile-opening-dialog \.opening-row > span[\s\S]*?font-size:\s*15px !important/);
+assert.match(css, /#settingsDialog\.mobile-utility-dialog\[data-mobile-utility="lock"\] #lockedThrough[\s\S]*?-webkit-appearance:\s*auto !important/);
+assert.doesNotMatch(loginHtml, /class="subtitle"/);
+assert.doesNotMatch(loginHtml, /class="identity-note"/);
+assert.doesNotMatch(loginHtml, /class="password-note"/);
+assert.doesNotMatch(loginHtml, />CYAccounting Web<\/p>/);
+
 assert.match(js, /trigger\.id = 'mobileAccountMenuButton'/);
 assert.match(js, /data-mobile-account-action="logout">登出/);
 assert.doesNotMatch(js, /data-mobile-account-action="settings"/);
