@@ -34,13 +34,33 @@ const context = vm.createContext({
   setDialogMessage(target, value) { target.value = value; },
   handleAccountAction() { actionCalls++; },
   bindMobileAccountReorder() {},
-  els: { settingsMessage: { parent: true } }
+  els: { settingsMessage: { parent: true }, categoryName: { innerHTML: '', value: '' } }
 });
 vm.runInContext(app.slice(app.indexOf('function openingAccountRowHtml('), app.indexOf('async function loadOpening')), context);
 vm.runInContext(app.slice(app.indexOf('function accountArchiveMessage('), app.indexOf('async function restoreAccountOptimistically')), context);
 vm.runInContext(adaptive.slice(adaptive.indexOf('function renderSettingsAccountManager('), adaptive.indexOf('function renderSettingsCategoryManager(')), context);
 vm.runInContext(adaptive.slice(adaptive.indexOf('function renderMobileAccountManager('), adaptive.indexOf('function bindMobileAccountReorder(')), context);
 vm.runInContext(adaptive.slice(adaptive.indexOf('function settingsManagerEscape('), adaptive.indexOf('const CY_V0214_HOVER')), context);
+
+vm.runInContext(app.slice(app.indexOf('function renderCategories('), app.indexOf('function setEntryKind(')), context);
+context.state.kind = 'income';
+context.state.groups = [{ id: 8, name: '網路' }];
+context.state.categories = [
+  { name: '門市收入', kind: 'income', group_name: '門市' },
+  { name: '網路<&收入', kind: 'income', group_id: 8 },
+  { name: '歷史科目', kind: 'income' },
+  { name: '租金', kind: 'expense', group_name: '店務' }
+];
+context.renderCategories('網路<&收入');
+assert.match(context.els.categoryName.innerHTML, /value="門市收入">門市／門市收入<\/option>/);
+assert.match(context.els.categoryName.innerHTML, /value="網路&lt;&amp;收入">網路／網路&lt;&amp;收入<\/option>/);
+assert.match(context.els.categoryName.innerHTML, /value="歷史科目">歷史科目<\/option>/);
+assert.doesNotMatch(context.els.categoryName.innerHTML, /租金/);
+assert.equal(context.els.categoryName.value, '網路<&收入', 'displaying groups preserves transaction and favorite category values');
+context.state.kind = 'expense';
+context.renderCategories('租金');
+assert.match(context.els.categoryName.innerHTML, /value="租金">店務／租金<\/option>/);
+assert.doesNotMatch(context.els.categoryName.innerHTML, /門市收入/);
 
 const automatic = context.openingAccountRowHtml({ name: '自動帳戶', amount: 50, automaticAmount: 50, source: 'automatic', automaticAnchorMonth: '2026-09' });
 assert.doesNotMatch(automatic, /<span class="opening-source|<small>|承接|歷史收支|>自動</);
@@ -68,7 +88,11 @@ assert.match(archiveHost.innerHTML, /data-account-permanent-delete="2"[^>]* disa
 assert.match(archiveHost.innerHTML, /data-account-permanent-delete="3"[^>]* disabled/);
 context.renderSettingsAccountManager();
 assert.doesNotMatch(activeHost.innerHTML, /已封存|零餘額|有交易|有餘額/);
+assert.match(activeHost.innerHTML, /data-account-archive="9"[^>]*aria-label="封存帳戶">\s*<svg/);
+assert.doesNotMatch(activeHost.innerHTML, /settings-account-section-title/);
 context.renderMobileAccountManager();
+assert.match(activeHost.innerHTML, /data-account-archive="9"[^>]*aria-label="封存帳戶">\s*<svg/);
+assert.doesNotMatch(activeHost.innerHTML, /mobile-account-section-title/);
 assert.doesNotMatch(activeHost.innerHTML, /已封存|零餘額|有交易|有餘額/);
 context.state.archivedAccounts = [];
 context.renderArchivedAccountManager();

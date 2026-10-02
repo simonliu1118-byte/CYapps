@@ -2,9 +2,13 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current source release: **V0.21.15 Build 1**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
+> Current source release: **V0.21.16 Build 0**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
 >
 > Current continuity handoff: [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)
+
+## V0.21.16 設定與科目顯示
+
+帳戶封存使用收納盒圖示，入口改為「已封存帳戶」，移除「使用中」標題。科目設定共用記帳收支切換樣式，標題以下內容使用相同收支純色；編輯視窗移除說明文字。手機記帳各列標題垂直置中；科目欄位顯示「大分類／科目」，送出的科目值與歷史資料仍保留原名。
 
 ## V0.21.15 手機記帳與期初欄位
 

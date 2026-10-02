@@ -227,7 +227,11 @@ function renderAccounts(preferred) {
 
 function renderCategories(preferred) {
   const categories = state.categories.filter(category => category.kind === state.kind);
-  els.categoryName.innerHTML = categories.map(category => `<option value="${escapeHtml(category.name)}">${escapeHtml(category.name)}</option>`).join('');
+  els.categoryName.innerHTML = categories.map(category => {
+    const groupName = category.group_name || state.groups.find(group => String(group.id) === String(category.group_id))?.name;
+    const label = groupName ? `${groupName}／${category.name}` : category.name;
+    return `<option value="${escapeHtml(category.name)}">${escapeHtml(label)}</option>`;
+  }).join('');
   if (preferred && categories.some(c => c.name === preferred)) els.categoryName.value = preferred;
 }
 

@@ -250,7 +250,7 @@ jobs:
           verify_asset() {
             local asset_url="$1" marker="$2" attempt
             for attempt in 1 2 3 4 5 6; do
-              if curl --max-time 8 -fsS "$asset_url" -o "$asset_file" && grep -F "$marker" "$asset_file" >/dev/null; then
+              if curl --max-time 8 -fsS "$asset_url" -o "$asset_file" && grep -F -- "$marker" "$asset_file" >/dev/null; then
                 return 0
               fi
               echo "Waiting for asset: $asset_url (attempt $attempt/6)"
@@ -259,22 +259,25 @@ jobs:
             echo "Asset verification failed: $asset_url" >&2
             return 1
           }
-          verify_asset "$base/adaptive-ui.css?rev=02115b1-close-opening-fields" 'touch-action: manipulation'
+          verify_asset "$base/adaptive-ui.css?rev=02116-settings-slider" 'touch-action: manipulation'
           verify_asset "$base/login.css?v=02112-mobile-tap-zoom" 'touch-action: manipulation'
-          verify_asset "$base/adaptive-ui.js?rev=02115b1-close-opening-fields" 'startSettingsCategoryPointerDrag'
-          verify_asset "$base/adaptive-ui.js?rev=02115b1-close-opening-fields" 'data-settings-group-move'
+          verify_asset "$base/adaptive-ui.js?rev=02116-settings-slider" 'startSettingsCategoryPointerDrag'
+          verify_asset "$base/adaptive-ui.js?rev=02116-settings-slider" 'data-settings-group-move'
           verify_asset "$base/auth.js?rev=session-hard-timeout" 'window.cyaccSessionPromise = checkSessionFallback()'
           verify_asset "$base/auth.js?rev=session-hard-timeout" 'Promise.race([request, timeout])'
-          verify_asset "$base/app.js?rev=02114-simple-account-dialogs" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
+          verify_asset "$base/app.js?rev=02116-settings-slider" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
           verify_asset "$base/ledger-tools.js?rev=semantic1" 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender'
           verify_asset "$base/quick-entry-settings.js?rev=semantic1" 'setupQuickEntrySettingsPane'
           verify_asset "$base/category-management.js?rev=semantic1" 'setupCategoryTransfer'
           verify_asset "$base/backup-ui.js?rev=semantic1" 'setupBackupSettings'
-          verify_asset "$base/app.js?rev=02114-simple-account-dialogs" "await api('/api/opening-balance-overrides'"
-          verify_asset "$base/adaptive-ui.js?rev=02115b1-close-opening-fields" 'setupArchivedAccountDialog'
-          verify_asset "$base/adaptive-ui.js?rev=02115b1-close-opening-fields" 'function settingsActionIcon'
-          verify_asset "$base/app.js?rev=02114-simple-account-dialogs" 'function openingAccountRowHtml'
+          verify_asset "$base/app.js?rev=02116-settings-slider" "await api('/api/opening-balance-overrides'"
+          verify_asset "$base/adaptive-ui.js?rev=02116-settings-slider" 'setupArchivedAccountDialog'
+          verify_asset "$base/adaptive-ui.js?rev=02116-settings-slider" 'function settingsActionIcon'
+          verify_asset "$base/app.js?rev=02116-settings-slider" 'function openingAccountRowHtml'
           verify_asset "$base/app.css?rev=02114-simple-account-dialogs" '.opening-source'
+          verify_asset "$base/accounting-ui.css?rev=02116-settings-slider" 'data-settings-kind-choice'
+          verify_asset "$base/app.js?rev=02116-settings-slider" 'const groupName = category.group_name'
+          verify_asset "$base/adaptive-ui.css?rev=02116-settings-slider" '--settings-kind-canvas'
           echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files
