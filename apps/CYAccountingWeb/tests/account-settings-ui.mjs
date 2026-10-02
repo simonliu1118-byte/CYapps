@@ -63,7 +63,7 @@ assert.equal(context.accountArchiveMessage(), context.els.settingsMessage);
 
 context.window.cyaccCurrentUser.role = 'SUPER_ADMIN';
 context.renderArchivedAccountManager();
-assert.match(archiveHost.innerHTML, /data-account-permanent-delete="1"[^>]*>刪除/);
+assert.match(archiveHost.innerHTML, /data-account-permanent-delete="1"[^>]*aria-label="永久刪除帳戶"/);
 assert.match(archiveHost.innerHTML, /data-account-permanent-delete="2"[^>]* disabled/);
 assert.match(archiveHost.innerHTML, /data-account-permanent-delete="3"[^>]* disabled/);
 context.renderSettingsAccountManager();

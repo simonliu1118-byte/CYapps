@@ -2362,7 +2362,7 @@ function renderSettingsAccountManager() {
             : `<button type="button" class="settings-default-tag" data-account-default="${id}" title="設為預設帳戶">設為預設</button>`}
           <div class="settings-account-name-cell">
             <strong class="settings-editable-name">${settingsManagerEscape(account.name)}</strong>
-            <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">✎</button>
+            <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">${settingsActionIcon('edit')}</button>
           </div>
           <button type="button" class="mini-button settings-archive-button" data-account-archive="${id}">封存</button>
         </div>`;
@@ -2400,13 +2400,20 @@ function renderArchivedAccountManager() {
     : '<div class="empty">沒有已封存帳戶。</div>';
 }
 
+function settingsActionIcon(action) {
+  const path = action === 'edit'
+    ? 'M15 5l4 4M4 20l4-1L20 7a2.1 2.1 0 0 0-3-3L5 16z'
+    : 'M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6';
+  return `<svg class="settings-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${path}"/></svg>`;
+}
+
 function settingsArchivedAccountHtml(account, isSuperAdmin) {
   const id = Number(account.id);
   const txCount = Number(account.transaction_count || 0);
   const latestOpening = Number(account.latest_opening_amount || 0);
   const cannotDelete = txCount > 0 || latestOpening !== 0;
   const permanent = isSuperAdmin
-    ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${cannotDelete ? ' disabled title="仍有歷史記帳或目前期初餘額非 0"' : ''}>刪除</button>`
+    ? `<button type="button" class="mini-button danger settings-delete-button" data-account-permanent-delete="${id}" aria-label="永久刪除帳戶" title="${cannotDelete ? '仍有歷史記帳或目前期初餘額非 0' : '永久刪除帳戶'}"${cannotDelete ? ' disabled' : ''}>${settingsActionIcon('delete')}</button>`
     : '';
 
   return `<div class="settings-archived-account-row">
@@ -2484,8 +2491,8 @@ function settingsCategoryGroupHtml(group, kind) {
           <span class="settings-tree-actions">
             ${pending
               ? '<span class="settings-pending-label">儲存中…</span>'
-              : `<button type="button" class="mini-button settings-edit-button" data-settings-rename="category" data-settings-id="${id}">改名</button>
-                 <button type="button" class="mini-button danger settings-delete-button" data-category-delete="${id}">刪除</button>`}
+              : `<button type="button" class="mini-button settings-edit-button" data-settings-rename="category" data-settings-id="${id}" title="編輯科目名稱" aria-label="編輯科目名稱">${settingsActionIcon('edit')}</button>
+                 <button type="button" class="mini-button danger settings-delete-button" data-category-delete="${id}" title="刪除科目" aria-label="刪除科目">${settingsActionIcon('delete')}</button>`}
           </span>
         </div>`;
       }).join('')
@@ -2497,8 +2504,8 @@ function settingsCategoryGroupHtml(group, kind) {
       <span class="settings-tree-actions">
         ${pendingGroup
           ? '<span class="settings-pending-label">儲存中…</span>'
-          : `${settingsGroupOrderButtons(groupId, kind)}<button type="button" class="mini-button settings-edit-button" data-settings-rename="group" data-settings-id="${groupId}">改名</button>
-             <button type="button" class="mini-button danger settings-delete-button" data-group-delete="${groupId}">刪除</button>`}
+          : `${settingsGroupOrderButtons(groupId, kind)}<button type="button" class="mini-button settings-edit-button" data-settings-rename="group" data-settings-id="${groupId}" title="編輯大分類名稱" aria-label="編輯大分類名稱">${settingsActionIcon('edit')}</button>
+             <button type="button" class="mini-button danger settings-delete-button" data-group-delete="${groupId}" title="刪除大分類" aria-label="刪除大分類">${settingsActionIcon('delete')}</button>`}
       </span>
     </div>
     <div class="settings-category-children" data-settings-category-dropzone="${groupId}">
@@ -3794,7 +3801,7 @@ function renderMobileAccountManager() {
           <button type="button" class="mobile-account-drag" data-mobile-account-drag="${id}" aria-label="拖曳調整 ${settingsManagerEscape(account.name)} 順序">⋮⋮</button>
           <strong class="mobile-account-name">${settingsManagerEscape(account.name)}</strong>
           ${isDefault ? '<span class="mobile-manager-badge">預設</span>' : `<button type="button" class="mini-button" data-account-default="${id}">設為預設</button>`}
-          <button type="button" class="mini-button" data-account-rename="${id}">改名</button>
+          <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">${settingsActionIcon('edit')}</button>
           <button type="button" class="mini-button" data-account-archive="${id}">封存</button>
         </div>`;
       }).join('')

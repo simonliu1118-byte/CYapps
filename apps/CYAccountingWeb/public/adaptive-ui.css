@@ -8991,10 +8991,10 @@
 
   .mobile-opening-dialog .opening-row {
     display: grid !important;
-    grid-template-columns: minmax(118px, 150px) 112px !important;
+    grid-template-columns: minmax(0, 140px) 112px !important;
     justify-content: center !important;
     align-items: center !important;
-    gap: 14px !important;
+    gap: 6px !important;
     min-height: 44px !important;
     padding: 5px 0 !important;
     border-bottom: 1px solid #edf0f3 !important;
@@ -9278,28 +9278,27 @@
   .mobile-account-card {
     position: relative !important;
     display: grid !important;
-    grid-template-columns: 24px minmax(0, max-content) auto auto auto !important;
+    grid-template-columns: 28px minmax(0, 1fr) auto auto auto !important;
     align-items: center !important;
-    gap: 3px !important;
-    justify-content: start !important;
-    min-height: 36px !important;
-    padding: 3px 5px !important;
+    gap: 6px !important;
+    min-height: 46px !important;
+    padding: 7px 8px !important;
     border: 1px solid #e3e8ed !important;
-    border-radius: 6px !important;
+    border-radius: 9px !important;
     background: #fbfcfd !important;
   }
 
   .mobile-account-drag {
-    width: 24px !important;
-    min-width: 24px !important;
-    height: 28px !important;
-    min-height: 28px !important;
+    width: 28px !important;
+    min-width: 28px !important;
+    height: 30px !important;
+    min-height: 30px !important;
     padding: 0 !important;
     border: 0 !important;
     background: transparent !important;
     color: #8a98a8 !important;
     font-size: 15px !important;
-    line-height: 28px !important;
+    line-height: 30px !important;
     cursor: grab;
     touch-action: none;
   }
@@ -9336,10 +9335,10 @@
   }
 
   .mobile-account-card .mini-button {
-    min-height: 28px !important;
-    height: 28px !important;
-    padding: 0 5px !important;
-    font-size: 11px !important;
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0 7px !important;
+    font-size: 10px !important;
     white-space: nowrap !important;
   }
 
@@ -9473,6 +9472,20 @@
 
 
 /* Canonical account lifecycle and category hierarchy. */
+.settings-action-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.settings-edit-button,
+.settings-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 
 .settings-drag-handle {
   display: inline-flex !important;
@@ -9732,7 +9745,7 @@
 @media (max-width: 767px) {
   .mobile-account-active-list {
     display: grid;
-    gap: 3px;
+    gap: 7px;
   }
 
   #settingsDialog.mobile-utility-dialog[data-mobile-utility="categories"] #categoryManager {
@@ -9823,6 +9836,7 @@
     display: grid !important;
     gap: 2px !important;
     min-width: 0 !important;
+    text-align: right !important;
     overflow: visible !important;
     white-space: normal !important;
   }
@@ -9830,6 +9844,7 @@
   #settingsDialog.mobile-opening-dialog .opening-account-title {
     display: flex !important;
     align-items: center !important;
+    justify-content: flex-end !important;
     flex-wrap: wrap !important;
     gap: 4px !important;
     min-width: 0 !important;
