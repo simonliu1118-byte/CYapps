@@ -8563,19 +8563,6 @@
     width: 100%;
   }
 
-  .mobile-category-group {
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-  }
-
-  .mobile-category-items {
-    display: grid !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-  }
-
   #settingsDialog.mobile-utility-dialog[data-mobile-utility="lock"] .lock-form > label.mobile-lock-native-field {
     display: none !important;
   }
@@ -8922,26 +8909,21 @@
     gap: 8px !important;
   }
 
-  .mobile-manager-row,
-  .mobile-category-group {
+  .mobile-manager-row {
     padding: 10px !important;
     border: 1px solid #e3e8ed !important;
     border-radius: 9px !important;
     background: #fbfcfd !important;
   }
 
-  .mobile-manager-main,
-  .mobile-category-group-head,
-  .mobile-category-row {
+  .mobile-manager-main {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
     gap: 8px !important;
   }
 
-  .mobile-manager-main strong,
-  .mobile-category-group-head strong,
-  .mobile-category-row > span:first-child {
+  .mobile-manager-main strong {
     min-width: 0 !important;
     overflow: hidden !important;
     color: #334255 !important;
@@ -8960,8 +8942,7 @@
     font-weight: 700 !important;
   }
 
-  .mobile-manager-actions,
-  .mobile-category-actions {
+  .mobile-manager-actions {
     display: flex !important;
     flex-wrap: wrap !important;
     justify-content: flex-end !important;
@@ -8972,38 +8953,13 @@
     margin-top: 8px !important;
   }
 
-  .mobile-manager-actions .mini-button,
-  .mobile-category-actions .mini-button {
+  .mobile-manager-actions .mini-button {
     min-height: 30px !important;
     height: 30px !important;
     padding: 0 8px !important;
     font-size: 10.5px !important;
   }
 
-  .mobile-category-group {
-    padding: 0 !important;
-    overflow: hidden !important;
-  }
-
-  .mobile-category-group-head {
-    padding: 9px 10px !important;
-    border-bottom: 1px solid #e8edf1 !important;
-    background: #f7f9fb !important;
-  }
-
-  .mobile-category-items {
-    display: grid !important;
-    gap: 0 !important;
-    padding: 0 10px 9px !important;
-  }
-
-  .mobile-category-row {
-    min-height: 42px !important;
-    padding: 6px 0 !important;
-    border-bottom: 1px solid #edf0f3 !important;
-  }
-
-  .mobile-category-empty,
   .mobile-manager-empty {
     padding: 16px 8px !important;
     color: #7b8898 !important;
@@ -9011,7 +8967,6 @@
     text-align: center !important;
   }
 
-  .mobile-category-add,
   .mobile-settings-dialog .inline-add {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) auto !important;
@@ -9019,7 +8974,6 @@
     margin: 9px 0 0 !important;
   }
 
-  .mobile-category-add input,
   .mobile-settings-dialog .inline-add input {
     min-width: 0 !important;
     min-height: 36px !important;
@@ -9028,7 +8982,6 @@
     font-size: 12px !important;
   }
 
-  .mobile-category-add button,
   .mobile-settings-dialog .inline-add button {
     min-height: 36px !important;
     height: 36px !important;
@@ -9529,20 +9482,6 @@
     font-size: 12px !important;
   }
 
-  .mobile-category-group.is-pending,
-  .mobile-category-row.is-pending {
-    opacity: .72 !important;
-  }
-
-  .mobile-category-pending {
-    color: #7a8795 !important;
-    font-size: 10px !important;
-    white-space: nowrap !important;
-  }
-
-  .mobile-category-add {
-    display: none !important;
-  }
 }
 
 
