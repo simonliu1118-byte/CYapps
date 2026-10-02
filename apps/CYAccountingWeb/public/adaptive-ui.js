@@ -2330,6 +2330,7 @@ const setupSettingsManager = () => {
   ensureSettingsManagerDialog();
   bindSettingsManagerActions();
   setupSettingsManagerDragAndDrop();
+  setupArchivedAccountDialog();
   renderSettingsAccountManager();
   renderSettingsCategoryManager();
 };
@@ -2343,13 +2344,12 @@ window.addEventListener('load', () => setTimeout(setupSettingsManager, 0), { onc
 
 function renderSettingsAccountManager() {
   if (typeof state !== 'object') return;
+  renderArchivedAccountManager();
   if (!window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches) return renderMobileAccountManager();
 
   const host = document.querySelector('#accountRows');
   if (!host) return;
   const accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  const archived = Array.isArray(state.archivedAccounts) ? state.archivedAccounts : [];
-  const isSuperAdmin = String(window.cyaccCurrentUser?.role || '') === 'SUPER_ADMIN';
 
   const activeHtml = accounts.length
     ? accounts.map(account => {
@@ -2369,37 +2369,49 @@ function renderSettingsAccountManager() {
       }).join('')
     : '<div class="empty">尚無可用帳戶。</div>';
 
-  const archivedHtml = archived.length
-    ? archived.map(account => settingsArchivedAccountHtml(account, isSuperAdmin)).join('')
-    : '<div class="settings-archive-empty">沒有已封存帳戶。</div>';
-
   host.innerHTML = `
     <section class="settings-account-section">
       <div class="settings-account-section-title">使用中</div>
       <div class="settings-account-active-list">${activeHtml}</div>
-    </section>
-    <section class="settings-account-section settings-account-archive-section">
-      <div class="settings-account-section-title">已封存</div>
-      <div class="settings-account-archive-list">${archivedHtml}</div>
     </section>`;
+}
+
+function setupArchivedAccountDialog() {
+  const dialog = document.querySelector('#archivedAccountsDialog');
+  const button = document.querySelector('#openArchivedAccountsButton');
+  if (!dialog || !button || dialog.dataset.bound === '1') return;
+  dialog.dataset.bound = '1';
+  button.addEventListener('click', () => {
+    renderArchivedAccountManager();
+    setDialogMessage(dialog.querySelector('#archivedAccountsMessage'), '');
+    if (!dialog.open) dialog.showModal();
+  });
+  dialog.querySelector('[data-close-archived-accounts]').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', handleAccountAction);
+}
+
+function renderArchivedAccountManager() {
+  const host = document.querySelector('#archivedAccountRows');
+  if (!host || typeof state !== 'object') return;
+  const archived = Array.isArray(state.archivedAccounts) ? state.archivedAccounts : [];
+  const isSuperAdmin = String(window.cyaccCurrentUser?.role || '') === 'SUPER_ADMIN';
+  host.innerHTML = archived.length
+    ? archived.map(account => settingsArchivedAccountHtml(account, isSuperAdmin)).join('')
+    : '<div class="empty">沒有已封存帳戶。</div>';
 }
 
 function settingsArchivedAccountHtml(account, isSuperAdmin) {
   const id = Number(account.id);
   const txCount = Number(account.transaction_count || 0);
-  const adjustmentCount = Number(account.opening_balance_count || 0);
   const latestOpening = Number(account.latest_opening_amount || 0);
   const cannotDelete = txCount > 0 || latestOpening !== 0;
-  const usage = `歷史記帳 ${txCount} 筆 · 目前期初 ${latestOpening.toLocaleString('zh-TW')}${adjustmentCount ? ` · 歷史調整 ${adjustmentCount} 筆` : ''}`;
   const permanent = isSuperAdmin
-    ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${cannotDelete ? ' disabled title="仍有歷史記帳或目前期初餘額非 0"' : ''}>永久刪除</button>`
+    ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${cannotDelete ? ' disabled title="仍有歷史記帳或目前期初餘額非 0"' : ''}>刪除</button>`
     : '';
 
   return `<div class="settings-archived-account-row">
     <div class="settings-archived-account-main">
       <strong>${settingsManagerEscape(account.name)}</strong>
-      <span class="settings-archived-badge">封存</span>
-      <small>${usage}</small>
     </div>
     <div class="settings-archived-account-actions">
       <button type="button" class="mini-button" data-account-restore="${id}">解封</button>
@@ -3773,8 +3785,6 @@ function renderMobileAccountManager() {
   const host = document.querySelector('#accountRows');
   if (!host) return;
   const accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  const archived = Array.isArray(state.archivedAccounts) ? state.archivedAccounts : [];
-  const isSuperAdmin = String(window.cyaccCurrentUser?.role || '') === 'SUPER_ADMIN';
 
   const activeHtml = accounts.length
     ? accounts.map(account => {
@@ -3790,32 +3800,9 @@ function renderMobileAccountManager() {
       }).join('')
     : '<div class="empty mobile-manager-empty">尚無可用帳戶。</div>';
 
-  const archivedHtml = archived.length
-    ? archived.map(account => {
-        const id = Number(account.id);
-        const txCount = Number(account.transaction_count || 0);
-        const adjustmentCount = Number(account.opening_balance_count || 0);
-        const latestOpening = Number(account.latest_opening_amount || 0);
-        const cannotDelete = txCount > 0 || latestOpening !== 0;
-        return `<div class="mobile-account-archived">
-          <div class="mobile-account-archived-main">
-            <strong>${settingsManagerEscape(account.name)}</strong>
-            <span class="mobile-manager-badge">封存</span>
-            <small>歷史 ${txCount} 筆 · 目前期初 ${latestOpening.toLocaleString('zh-TW')}${adjustmentCount ? ` · 調整 ${adjustmentCount} 筆` : ''}</small>
-          </div>
-          <div class="mobile-account-archived-actions">
-            <button type="button" class="mini-button" data-account-restore="${id}">解封</button>
-            ${isSuperAdmin ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${cannotDelete ? ' disabled title="仍有歷史記帳或目前期初餘額非 0"' : ''}>永久刪除</button>` : ''}
-          </div>
-        </div>`;
-      }).join('')
-    : '<div class="mobile-account-archive-empty">沒有已封存帳戶。</div>';
-
   host.innerHTML = `
     <div class="mobile-account-section-title">使用中</div>
-    <div class="mobile-account-active-list">${activeHtml}</div>
-    <div class="mobile-account-section-title mobile-account-archive-title">已封存</div>
-    <div class="mobile-account-archive-list">${archivedHtml}</div>`;
+    <div class="mobile-account-active-list">${activeHtml}</div>`;
 
   bindMobileAccountReorder(host);
 }
