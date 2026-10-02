@@ -49,7 +49,7 @@ assert.match(exportUi, /navigator\.share/);
 assert.match(exportUi, /navigator\.canShare/);
 assert.match(inlineEdit, /beginInlineLedgerEdit/);
 assert.match(adaptive, /window\.cyConfirm = options => new Promise/);
-assert.match(adaptive, /renderV0212CategoryManager/);
+assert.match(adaptive, /renderSettingsCategoryManager/);
 assert.match(adaptive, /handleV0214AccountDefault/);
 assert.match(adaptive, /handleV0214FavoriteToggle/);
 assert.match(accountingTools, /url\.pathname === '\/api\/accounts\/reorder'/);
