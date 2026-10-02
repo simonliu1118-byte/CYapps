@@ -1,18 +1,19 @@
 const BACKUP_FORMAT = 'CYAccountingWebBackup';
-const BACKUP_FORMAT_VERSION = 1;
-const APP_VERSION = '0.16.0';
+const BACKUP_FORMAT_VERSION = 2;
+const APP_VERSION = '0.21.11';
 const BACKUP_PREFIX = 'CYAccountingWeb_backup_';
 const PAGE_SIZE = 1000;
 const encoder = new TextEncoder();
 
 export async function buildBackupPackage(db, now = new Date()) {
-  const [schemaRow, accounts, groups, categories, transactions, openings, settings] = await Promise.all([
+  const [schemaRow, accounts, groups, categories, transactions, openingOverrides, openingAudit, settings] = await Promise.all([
     db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").first(),
-    readPaged(db, 'SELECT id, name, sort_order, is_default, created_at FROM accounts ORDER BY sort_order, id', mapAccount),
+    readPaged(db, 'SELECT id, name, sort_order, is_default, created_at, archived_at FROM accounts ORDER BY sort_order, id', mapAccount),
     readPaged(db, 'SELECT id, kind, name, sort_order, created_at FROM category_groups ORDER BY kind, sort_order, id', mapGroup),
     readPaged(db, 'SELECT id, kind, group_id, name, sort_order, is_favorite, created_at FROM categories ORDER BY kind, group_id, sort_order, id', mapCategory),
     readPaged(db, 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, created_at, updated_at FROM transactions ORDER BY id', mapTransaction),
-    readPaged(db, 'SELECT month, account_name, amount, created_at, updated_at FROM opening_balances ORDER BY month, account_name', mapOpening),
+    readPaged(db, 'SELECT month, account_name, amount, reason, created_at, updated_at, updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role FROM opening_balance_overrides ORDER BY month, account_name', mapOpeningOverride),
+    readPaged(db, 'SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_id, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id', mapOpeningAudit),
     readPaged(db, 'SELECT key, value FROM app_settings ORDER BY key', mapSetting)
   ]);
 
@@ -20,7 +21,8 @@ export async function buildBackupPackage(db, now = new Date()) {
     accounts,
     categoryGroups: groups,
     categories,
-    openingBalances: openings,
+    openingBalanceOverrides: openingOverrides,
+    openingBalanceAudit: openingAudit,
     transactions,
     appSettings: settings
   };
@@ -66,7 +68,8 @@ function mapAccount(row) {
     name: String(row.name),
     sortOrder: Number(row.sort_order),
     isDefault: Number(row.is_default),
-    createdAt: String(row.created_at)
+    createdAt: String(row.created_at),
+    archivedAt: row.archived_at ? String(row.archived_at) : null
   };
 }
 
@@ -106,16 +109,37 @@ function mapTransaction(row) {
   };
 }
 
-function mapOpening(row) {
+function mapOpeningOverride(row) {
   return {
     month: String(row.month),
     accountName: String(row.account_name),
     amount: Number(row.amount),
+    reason: String(row.reason || ''),
     createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at)
+    updatedAt: String(row.updated_at),
+    updatedByEmployeeId: String(row.updated_by_employee_id || ''),
+    updatedByEmployeeNo: String(row.updated_by_employee_no || ''),
+    updatedByName: String(row.updated_by_name || ''),
+    updatedByRole: String(row.updated_by_role || '')
   };
 }
 
+function mapOpeningAudit(row) {
+  return {
+    id: Number(row.id),
+    month: String(row.month),
+    accountName: String(row.account_name),
+    action: String(row.action),
+    previousAmount: row.previous_amount === null ? null : Number(row.previous_amount),
+    newAmount: row.new_amount === null ? null : Number(row.new_amount),
+    reason: String(row.reason || ''),
+    actorEmployeeId: String(row.actor_employee_id || ''),
+    actorEmployeeNo: String(row.actor_employee_no || ''),
+    actorName: String(row.actor_name || ''),
+    actorRole: String(row.actor_role || ''),
+    createdAt: String(row.created_at)
+  };
+}
 function mapSetting(row) {
   return { key: String(row.key), value: String(row.value) };
 }
