@@ -695,8 +695,8 @@ async function saveOpeningBalances() {
       headers: jsonHeaders(),
       body: JSON.stringify({ month: els.openingMonth.value, values, reason })
     });
-    setDialogMessage(els.openingMessage, '手動調整已儲存並寫入 audit。');
     await loadOpeningBalances();
+    setDialogMessage(els.openingMessage, '手動調整已儲存並留下調整紀錄。');
     if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
   } catch (error) {
     setDialogMessage(els.openingMessage, error.message, true);
@@ -726,7 +726,7 @@ function renderOpeningAudit(entries) {
   const items = rows.slice(0, 12).map(entry => {
     const action = entry.action === 'clear' ? '恢復自動' : entry.action === 'migration' ? '舊資料移轉' : '手動設定';
     const actor = [entry.actorEmployeeNo, entry.actorName].filter(Boolean).join(' ');
-    const amount = entry.newAmount === null ? '—' : money(entry.newAmount);
+    const amount = `${entry.previousAmount === null ? '—' : money(entry.previousAmount)} → ${entry.newAmount === null ? '—' : money(entry.newAmount)}`;
     return `<div class="opening-audit-row">
       <div><strong>${escapeHtml(entry.accountName)}</strong><span>${escapeHtml(action)}</span><b>${escapeHtml(amount)}</b></div>
       <small>${escapeHtml(entry.reason || '')}${actor ? ` · ${escapeHtml(actor)}` : ''}${entry.createdAt ? ` · ${escapeHtml(entry.createdAt.replace('T', ' ').replace('Z', ' UTC'))}` : ''}</small>

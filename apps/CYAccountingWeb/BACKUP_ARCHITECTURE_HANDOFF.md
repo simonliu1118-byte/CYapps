@@ -1,8 +1,8 @@
 # CYAccountingWeb — Backup Architecture / Operational Handoff
 
-> Updated: 2026-10-01
+> Updated: 2026-10-02
 >
-> Current application baseline: **V0.21.6 Build 8**
+> Current application baseline: **V0.21.11 Build 0**
 >
 > This document describes the current backup architecture. Version-numbered source wrappers from the pre-launch development history are not part of the active architecture.
 
@@ -111,6 +111,15 @@ CYAccountingWeb/<backup-id>/
 ├─ manifest.json
 └─ data.json
 ```
+
+V0.21.11 data payload uses inner `CYAccountingWebBackup / formatVersion 2` semantics:
+
+- account `archivedAt`;
+- `openingBalanceOverrides` with reason and actor metadata;
+- append-only `openingBalanceAudit` with old/new values and CYID actor;
+- transactions, categories and settings remain included; Identity secrets/Sessions remain excluded.
+
+Outer manifest adds `dataFormat` / `dataFormatVersion` and derives `appVersion` from the package source. Legacy outer v2 objects without these fields and with `openingBalances` remain readable; existing objects are not rewritten. An old backup's future restore must translate its data schema through an explicit validated data migration before writing schema 6. Restore/DR remains unimplemented and requires its separate acceptance.
 
 Keeping this format is **data compatibility**, not a reason to keep version-numbered source wrappers.
 

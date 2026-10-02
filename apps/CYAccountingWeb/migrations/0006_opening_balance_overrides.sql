@@ -33,6 +33,18 @@ CREATE TABLE opening_balance_audit (
 CREATE INDEX idx_opening_balance_audit_account_month
 ON opening_balance_audit(account_name, month, id);
 
+CREATE TRIGGER opening_balance_audit_no_update
+BEFORE UPDATE ON opening_balance_audit
+BEGIN
+    SELECT RAISE(ABORT, 'opening_balance_audit is append-only');
+END;
+
+CREATE TRIGGER opening_balance_audit_no_delete
+BEFORE DELETE ON opening_balance_audit
+BEGIN
+    SELECT RAISE(ABORT, 'opening_balance_audit is append-only');
+END;
+
 INSERT INTO opening_balance_overrides(
     month, account_name, amount, reason, created_at, updated_at,
     updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role

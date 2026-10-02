@@ -78,6 +78,29 @@ assert(compatibility.totalRowCount === backupSet.totalRowCount, 'V0.17 compatibi
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
+assert(backupSet.manifest.dataFormat === 'CYAccountingWebBackup', 'inner data format must be declared');
+assert(backupSet.manifest.dataFormatVersion === 2, 'inner data format v2 must be declared');
+assert(backupSet.data.openingBalanceAudit.length === 1, 'audit must survive provider storage');
+
+// An actual legacy data shape remains readable without changing old objects.
+const legacyData = {
+  accounts: [{ id: 1, name: '現金', sortOrder: 0, isDefault: 1, createdAt: '2026-01-01' }],
+  categoryGroups: [], categories: [], transactions: [],
+  openingBalances: [{ month: '2026-01', accountName: '現金', amount: 100 }], appSettings: []
+};
+const legacyBytes = encoder.encode(JSON.stringify(legacyData));
+const legacyManifest = structuredClone(backupSet.manifest);
+delete legacyManifest.dataFormat;
+delete legacyManifest.dataFormatVersion;
+legacyManifest.appVersion = '0.17.0';
+legacyManifest.schemaVersion = 3;
+legacyManifest.counts = Object.fromEntries(Object.entries(legacyData).map(([key, rows]) => [key, rows.length]));
+legacyManifest.totalRowCount = 2;
+legacyManifest.files.data.byteSize = legacyBytes.byteLength;
+legacyManifest.files.data.sha256 = Buffer.from(await crypto.subtle.digest('SHA-256', legacyBytes)).toString('hex');
+const legacy = await validateBackupSetBytes(encoder.encode(JSON.stringify(legacyManifest)), legacyBytes);
+assert(legacy.data.openingBalances[0].amount === 100, 'legacy opening data must remain readable');
+assert(legacy.manifest.appVersion === '0.17.0', 'legacy manifest must not be rewritten');
 const futureManifest = JSON.parse(decoder.decode(backupSet.manifestBytes));
 futureManifest.format = 'CYBackupSet';
 futureManifest.formatVersion = 1;

@@ -176,8 +176,8 @@ const result = await runParallelBackup(
 );
 assert(result.ok, 'dual-provider backup should succeed');
 assert(result.copies.length === 2 && result.copies.every(copy => copy.status === 'success'), 'both copies must verify');
-assert(db.sourceReads.length === 6, `expected one D1 export (6 source reads), got ${db.sourceReads.length}`);
-assert(new Set(db.sourceReads).size === 6, 'each exported table must be read once');
+assert(db.sourceReads.length === 7, `expected one D1 export (7 source reads), got ${db.sourceReads.length}`);
+assert(new Set(db.sourceReads).size === 7, 'each exported table must be read once');
 assert(r2Memory.objects.size === 2 && gcsMemory.objects.size === 2, 'both providers must receive data + manifest');
 for (const [key, r2Bytes] of r2Memory.objects) {
   const gcsBytes = gcsMemory.objects.get(key);

@@ -7,7 +7,7 @@ import {
 const HISTORY_KEY = 'desktop_migration_history_v1';
 const HISTORY_LIMIT = 20;
 const TRANSACTION_JSON_CHUNK = 400;
-const OPENING_JSON_CHUNK = 1000;
+const OPENING_JSON_CHUNK = 2000;
 const MAX_SAFE_BATCH_STATEMENTS = 40;
 
 export async function handleDesktopMigrationApi(request, env, session) {

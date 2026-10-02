@@ -159,8 +159,6 @@ async function setOpeningBalanceOverrides(request, db, principal) {
     if (!Number.isSafeInteger(amount)) {
       return json({ ok: false, error: name + ' 的期初餘額必須是整數。' }, 400);
     }
-    if (amount === Number(item.amount)) continue;
-
     const previousOverride = item.overrideAmount === null ? null : Number(item.overrideAmount);
     if (amount === Number(item.automaticAmount)) {
       if (previousOverride === null) continue;
@@ -172,10 +170,12 @@ async function setOpeningBalanceOverrides(request, db, principal) {
       continue;
     }
 
+    if (amount === Number(item.amount)) continue;
+
     statements.push(
       db.prepare('INSERT INTO opening_balance_overrides(month, account_name, amount, reason, created_at, updated_at, updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(month, account_name) DO UPDATE SET amount = excluded.amount, reason = excluded.reason, updated_at = excluded.updated_at, updated_by_employee_id = excluded.updated_by_employee_id, updated_by_employee_no = excluded.updated_by_employee_no, updated_by_name = excluded.updated_by_name, updated_by_role = excluded.updated_by_role')
         .bind(month, name, amount, reason, now, now, actor.employeeId, actor.employeeNo, actor.name, actor.role),
-      auditStatement(db, month, name, 'set', previousOverride, amount, reason, actor, now)
+      auditStatement(db, month, name, 'set', Number(item.amount), amount, reason, actor, now)
     );
     changed.push({ name, action: 'set', amount });
   }

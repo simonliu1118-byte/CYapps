@@ -99,7 +99,7 @@ for (let index = 0; index < 5_000; index += 1) {
   });
 }
 const maxDb = new CollectingDB();
-const maxBuilt = buildSafeMigrationStatements(max, maxDb, { employee_no: '0001' });
+const maxBuilt = buildSafeMigrationStatements(max, maxDb, { employee_id: 'employee-ci', employee_no: '0001', employee_name: '測試管理員', role: 'SUPER_ADMIN' });
 assert.ok(maxBuilt.statements.length <= 40, `migration batch uses ${maxBuilt.statements.length} statements; expected <= 40`);
 assert.ok(maxBuilt.statements.length + 9 <= 50, 'session lookup + commit analysis + write batch must fit Free-plan 50 D1 queries per invocation');
 for (const statement of maxBuilt.statements) {
@@ -135,7 +135,7 @@ sample.plan.historicalAccounts = 1;
 sample.plan.historicalCategories = 1;
 
 const sampleDb = new CollectingDB();
-const sampleBuilt = buildSafeMigrationStatements(sample, sampleDb, { employee_no: '0001' });
+const sampleBuilt = buildSafeMigrationStatements(sample, sampleDb, { employee_id: 'employee-ci', employee_no: '0001', employee_name: '測試管理員', role: 'SUPER_ADMIN' });
 const sqlite = new DatabaseSync(':memory:');
 sqlite.exec(`
   PRAGMA foreign_keys = ON;
@@ -170,6 +170,8 @@ assert.equal(sqlite.prepare('SELECT account_name FROM transactions').get().accou
 assert.equal(sqlite.prepare('SELECT amount FROM opening_balance_overrides').get().amount, -5000);
 assert.equal(sqlite.prepare('SELECT action FROM opening_balance_audit').get().action, 'migration');
 assert.equal(sqlite.prepare('SELECT reason FROM opening_balance_audit').get().reason, '桌面帳本移轉');
+assert.equal(sqlite.prepare('SELECT actor_employee_id FROM opening_balance_audit').get().actor_employee_id, 'employee-ci');
+assert.equal(sqlite.prepare('SELECT actor_role FROM opening_balance_audit').get().actor_role, 'SUPER_ADMIN');
 assert.equal(sqlite.prepare("SELECT value FROM app_settings WHERE key='locked_through'").get().value, '2025-12');
 assert.ok(JSON.parse(sqlite.prepare("SELECT value FROM app_settings WHERE key='desktop_migration_history_v1'").get().value).length === 1);
 sqlite.close();

@@ -3,7 +3,6 @@ import { assertBackupStorageProvider } from './backup-storage-provider.js';
 import { createGcsBackupStorageProvider, gcsConfigReady, GcsProviderError } from './gcs-backup-provider.js';
 
 const BACKUP_PROVIDER = 'google_cloud_storage';
-const APP_VERSION = '0.17.0';
 const BACKUP_FORMAT = 'CYAccountingWebBackupSet';
 const BACKUP_FORMAT_VERSION = 2;
 const BACKUP_RETENTION_DAYS = 14;
@@ -230,7 +229,9 @@ export async function buildBackupSet(db, now = new Date()) {
     format: BACKUP_FORMAT,
     formatVersion: BACKUP_FORMAT_VERSION,
     app: 'CYAccountingWeb',
-    appVersion: APP_VERSION,
+    appVersion: base.manifest.appVersion,
+    dataFormat: base.manifest.format,
+    dataFormatVersion: base.manifest.formatVersion,
     schemaVersion: Number(base.manifest?.schemaVersion || 0),
     backupId,
     createdAt,

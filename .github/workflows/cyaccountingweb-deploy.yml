@@ -96,6 +96,7 @@ jobs:
           node tests/adaptive-ui.mjs
           node tests/account-lifecycle.mjs
           node tests/opening-balances.mjs
+          node tests/opening-balances-d1.mjs
           node tests/desktop-ui.mjs
           node tests/deploy-config.mjs
           node tests/cyid-integration.mjs
@@ -246,11 +247,13 @@ jobs:
           curl --max-time 8 -fsS "$base/adaptive-ui.js?rev=02111-automatic-opening-balances" | grep -F 'mobileAccountMenuButton' >/dev/null
           curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'window.cyaccSessionPromise = checkSessionFallback()' >/dev/null
           curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'Promise.race([request, timeout])' >/dev/null
-          curl --max-time 8 -fsS "$base/app.js?rev=0218-mobile-loading" | grep -F 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise' >/dev/null
+          curl --max-time 8 -fsS "$base/app.js?rev=02111-automatic-opening-balances" | grep -F 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise' >/dev/null
           curl --max-time 8 -fsS "$base/ledger-tools.js?rev=semantic1" | grep -F 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender' >/dev/null
           curl --max-time 8 -fsS "$base/quick-entry-settings.js?rev=semantic1" | grep -F 'setupQuickEntrySettingsPane' >/dev/null
           curl --max-time 8 -fsS "$base/category-management.js?rev=semantic1" | grep -F 'setupCategoryTransfer' >/dev/null
           curl --max-time 8 -fsS "$base/backup-ui.js?rev=semantic1" | grep -F 'setupBackupSettings' >/dev/null
+          curl --max-time 8 -fsS "$base/app.js?rev=02111-automatic-opening-balances" | grep -F "await api('/api/opening-balance-overrides'" >/dev/null
+          curl --max-time 8 -fsS "$base/app.css?rev=02111-automatic-opening-balances" | grep -F '.opening-source' >/dev/null
           echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files
