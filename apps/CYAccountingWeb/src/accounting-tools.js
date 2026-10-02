@@ -132,12 +132,12 @@ async function handleReorderAccounts(request, db) {
   const ids = parseOrderedIds(body?.ids);
   if (!ids) return json({ ok: false, error: '帳戶排序資料格式錯誤。' }, 400);
 
-  const result = await db.prepare('SELECT id FROM accounts ORDER BY sort_order, id').all();
+  const result = await db.prepare('SELECT id FROM accounts WHERE archived_at IS NULL ORDER BY sort_order, id').all();
   const current = (result.results || []).map(row => Number(row.id));
   if (!sameIdSet(ids, current)) return json({ ok: false, error: '帳戶清單已變更，請重新整理後再試。' }, 409);
 
   await runStatements(db, ids.map((id, index) =>
-    db.prepare('UPDATE accounts SET sort_order = ? WHERE id = ?').bind(index, id)
+    db.prepare('UPDATE accounts SET sort_order = ? WHERE id = ? AND archived_at IS NULL').bind(index, id)
   ));
   return json({ ok: true });
 }
@@ -209,9 +209,9 @@ async function handleReorderCategories(request, db) {
 async function handleMoveAccount(id, request, db) {
   const direction = await directionFromRequest(request);
   if (!direction) return json({ ok: false, error: '排序方向錯誤。' }, 400);
-  const row = await db.prepare('SELECT id FROM accounts WHERE id = ?').bind(id).first();
+  const row = await db.prepare('SELECT id FROM accounts WHERE id = ? AND archived_at IS NULL').bind(id).first();
   if (!row) return json({ ok: false, error: '找不到帳戶。' }, 404);
-  await moveWithin(db, 'accounts', '1 = 1', [], id, direction);
+  await moveWithin(db, 'accounts', 'archived_at IS NULL', [], id, direction);
   return json({ ok: true });
 }
 
