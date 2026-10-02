@@ -221,7 +221,12 @@ async function handleRenameAccount(id, request, db) {
   const body = await bodyJson(request);
   const name = normalizeName(body?.name);
   if (!name) return json({ ok: false, error: '帳戶名稱不可空白。' }, 400);
-  if (await db.prepare('SELECT 1 FROM accounts WHERE name = ? AND id <> ?').bind(name, id).first()) return json({ ok: false, error: '帳戶名稱已存在。' }, 409);
+  if (await db.prepare('SELECT 1 FROM accounts WHERE name = ? AND id <> ?').bind(name, id).first()) {
+    return json({ ok: false, error: '帳戶名稱已存在。' }, 409);
+  }
+  if (await db.prepare('SELECT 1 FROM opening_balance_audit WHERE account_name = ? LIMIT 1').bind(name).first()) {
+    return json({ ok: false, error: '此帳戶名稱已有歷史期初調整紀錄，不能改成此名稱。' }, 409);
+  }
   await db.prepare('UPDATE accounts SET name = ? WHERE id = ?').bind(name, id).run();
   return json({ ok: true });
 }
