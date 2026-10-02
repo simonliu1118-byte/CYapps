@@ -201,7 +201,12 @@ async function handleCreateAccount(request, db) {
   const body = await bodyJson(request);
   const name = normalizeName(body?.name);
   if (!name) return json({ ok: false, error: '帳戶名稱不可空白。' }, 400);
-  if (await db.prepare('SELECT 1 FROM accounts WHERE name = ?').bind(name).first()) return json({ ok: false, error: '帳戶名稱已存在。' }, 409);
+  if (await db.prepare('SELECT 1 FROM accounts WHERE name = ?').bind(name).first()) {
+    return json({ ok: false, error: '帳戶名稱已存在。' }, 409);
+  }
+  if (await db.prepare('SELECT 1 FROM opening_balance_audit WHERE account_name = ? LIMIT 1').bind(name).first()) {
+    return json({ ok: false, error: '此帳戶名稱已有歷史期初調整紀錄，不能建立同名新帳戶。請使用其他名稱。' }, 409);
+  }
   const row = await db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM accounts WHERE archived_at IS NULL').first();
   const result = await db.prepare('INSERT INTO accounts(name, sort_order, is_default, created_at) VALUES (?, ?, 0, ?)')
     .bind(name, Number(row?.next_order || 0), new Date().toISOString()).run();
