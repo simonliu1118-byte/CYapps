@@ -130,24 +130,27 @@ async function permanentlyDeleteAccount(id, db, principal) {
     currentOpeningUsageForAccount(db, name)
   ]);
   const transactionCount = Number(transactions?.count || 0);
-  const nonZeroOpeningOverrides = Number(openingUsage?.nonZeroOverrides || 0);
-  if (transactionCount > 0 || nonZeroOpeningOverrides > 0) {
+  const latestOpeningAmount = Number(openingUsage?.latestOverrideAmount || 0);
+  if (transactionCount > 0 || latestOpeningAmount !== 0) {
     return json({
       ok: false,
-      error: '此帳戶仍有歷史記帳或非 0 的期初調整，不能永久刪除。',
+      error: '此帳戶仍有歷史記帳或目前期初餘額非 0，不能永久刪除。',
       code: 'ACCOUNT_HAS_HISTORY',
       usage: {
         transactions: transactionCount,
-        nonZeroOpeningOverrides
+        latestOpeningAmount
       }
     }, 409);
   }
 
-  const results = await db.batch([
-    db.prepare('DELETE FROM opening_balance_overrides WHERE account_name = ? AND amount = 0').bind(name),
-    db.prepare('DELETE FROM accounts WHERE id = ? AND archived_at IS NOT NULL').bind(id)
-  ]);
-  const result = results?.[1];
+  const cleanupZeroOverrides = Number(openingUsage?.nonZeroOverrides || 0) === 0;
+  const statements = [];
+  if (cleanupZeroOverrides) {
+    statements.push(db.prepare('DELETE FROM opening_balance_overrides WHERE account_name = ? AND amount = 0').bind(name));
+  }
+  statements.push(db.prepare('DELETE FROM accounts WHERE id = ? AND archived_at IS NOT NULL').bind(id));
+  const results = await db.batch(statements);
+  const result = results?.[results.length - 1];
   if (!result?.meta?.changes) {
     return json({ ok: false, error: '帳戶狀態已變更，請重新整理後再試。' }, 409);
   }
