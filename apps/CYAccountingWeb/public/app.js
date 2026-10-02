@@ -232,6 +232,7 @@ function setEntryKind(kind) {
   state.kind = kind;
   els.kindButtons.forEach(button => button.classList.toggle('active', button.dataset.kind === kind));
   renderCategories();
+  window.cySyncMobileCanvasContinuation?.();
 }
 
 function updateEntryLockState() {
@@ -396,6 +397,7 @@ function renderSettings() {
   renderCategoryManager();
   els.lockedThrough.value = state.lockedThrough || '';
   els.lockStatusText.textContent = state.lockedThrough ? `目前已鎖帳至 ${formatMonth(state.lockedThrough)}，更早月份也一併鎖定。` : '目前未鎖帳。';
+  window.cySyncMobileLockMonthControls?.();
 }
 
 function renderAccountManager() {
