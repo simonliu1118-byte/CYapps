@@ -15,7 +15,7 @@
 - [ ] Password Recovery real Email/browser delivery acceptance；不因上述 Session/App Access acceptance 自動視為完成。
 - [ ] iPad / Android Tablet 真機登入與操作驗收。
 - [x] Production CYID runtime cutover 已隨 V0.21.6 Build 8 部署；正式 Worker 主路徑使用 CYID provider Session / Service Binding，不再以 local `web_sessions` 作 Identity authority。這只代表 runtime cutover 已發生，不等於所有 production acceptance gate 已完成。
-- [ ] Production post-cutover acceptance：Password Recovery real Email/browser、Mobile/Tablet 真機，以及目前帳務 bootstrap 啟動問題仍需完成；不得因 CI 綠燈直接標為 fully accepted。
+- [ ] Production post-cutover acceptance：**Mobile production login / CYID Session / protected entry 已於 V0.21.7 Build 5 真機通過**；Password Recovery real Email/browser、完整 Mobile business flow、Tablet 真機與其他 open acceptance gates 仍需完成。不得因 login 已通過就直接標為 fully accepted。
 - [ ] CYID production cutover 穩定並完成 post-cutover acceptance 後，以獨立 forward migration 退休 `web_sessions` 實體 table；不得和 authority cutover 綁成同一步驟。
 
 本文件只記錄待辦、後續方向與未來評估項目，不作為永久規則來源。
@@ -97,7 +97,7 @@
 - [x] 在 RWD 基礎上加入 Adaptive UI：相同資料與功能依裝置使用不同 presentation，而非只把桌面版等比例縮小。
 - [x] breakpoint：Desktop `>= 1024px`、Tablet `768–1023px`、Mobile `< 768px` 已落地；後續依真實裝置驗收可微調數值。
 - [x] **Mobile Build 10 overall direction**：使用者已確認大方向可接受；新增記帳／記帳資料分成不同頁，帳戶採點擊後展開 chooser/sheet，不採橫向可滑按鈕列。Build 10/11 後手機工具入口收斂為：`餘額` = 期初餘額設定、`更多` = 帳戶設定／科目設定／月份鎖帳／匯出 Excel、右上角使用者選單 = 身分資訊＋登出。
-- [ ] **Mobile refinement / final acceptance**：V0.21.6 Build 8 保留既有 Build 10/11 mobile behavior；仍需真實手機逐項驗收月份列、期初餘額手機介面、Account/Category focused settings、direct Month Lock dialog、user menu logout-only、slider corner、swipe edit/delete 與 edit cancel/return context，不標為最終完成。
+- [ ] **Mobile refinement / final acceptance**：V0.21.7 Build 5 已完成 production login / CYID Session / protected entry 真機驗收；其餘仍需真實手機逐項驗收月份列、期初餘額手機介面、Account/Category focused settings、direct Month Lock dialog、user menu logout-only、slider corner、swipe edit/delete 與 edit cancel/return context，不標為最終完成。
 - [ ] **Tablet visual / interaction / login acceptance**：真實平板測試已確認目前狀態不可接受：觸控/focus 很差且登入仍不可靠。Build 6/8 legacy auth hotfix 未解決問題；先停止 Tablet-specific legacy auth 疊 patch，待 CYID governed integration handoff / development path 收斂後再做真實裝置 login + post-login acceptance。
 - [ ] Desktop 仍以高資訊密度與鍵盤高效率輸入為主要操作模式；Mobile 以查詢、確認、快速輸入與簡單修改為優先。待 Desktop/Tablet/Mobile 實機交叉驗收後再勾選完成。
 - [ ] 若未來出現掃碼、拍攝單據、離線作業、Push Notification 等強烈行動裝置需求，再評估 PWA 或原生 App；目前不提前拆成第二套前端。
@@ -111,6 +111,6 @@
 - [ ] 即使改由共用 Backup Service 管理，各 App 的備份資料仍維持邏輯隔離與獨立還原能力；caller identity 必須由 server-side mapping 決定可存取 dataset，不得只信任 caller 傳入的 `appId`。
 - [x] 共用員工帳號權威已切到 **CYCloud Identity (CYID)**；CYAccountingWeb 不直接讀寫 CYID D1，只透過 canonical `IDENTITY` Service Binding contract 使用 Identity 能力。
 - [x] CYID consumer integration 依 canonical `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 與 `docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；current contract `1.0.1` / minimum compatible `1.0.0`。舊 dated CYID handoff 不得作 current authority。
-- [ ] Draft PR #252 是目前的結構清理線：移除版本 wrapper/shell、改成功能模組，`CYID Consumer Impact: NONE`。PR validation 已通過；V11–V16-era functional modules also use semantic internal identifiers, and CI guards against reintroducing version-named source/test shells. Production 不因 Draft PR 自動變更；合併／部署仍走正常 review 與 production acceptance。
+- [x] 結構清理已完成並進入 production：active version wrapper/shell、`app-baseline`、version-named frontend assets/tests 已移除，runtime 改成功能模組；CI 持續防止版本殼、歷史 patch loader 與 frontend version mutator 回流。
 - [ ] 涉及 Identity authority、跨 App 帳號／角色、shared account database、Service Binding、shared Worker、跨 App D1 ownership 或 shared Backup Service routing 等底層變更時，實作前必須先同步 CY-WEB / CYCloudIdentity 最新決策，不由 CYAccountingWeb 單獨先行定義。
 - [ ] 在 shared Identity 正式遷移完成前，CYAccountingWeb 仍維持自己的帳務 D1 與 application session 邊界；共用帳號不代表合併 runtime database。
