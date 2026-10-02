@@ -259,7 +259,7 @@ jobs:
             echo "Asset verification failed: $asset_url" >&2
             return 1
           }
-          verify_asset "$base/adaptive-ui.css?rev=02114-simple-account-dialogs" 'touch-action: manipulation'
+          verify_asset "$base/adaptive-ui.css?rev=02115-solid-compact-accounts" 'touch-action: manipulation'
           verify_asset "$base/login.css?v=02112-mobile-tap-zoom" 'touch-action: manipulation'
           verify_asset "$base/adaptive-ui.js?rev=02114-simple-account-dialogs" 'startSettingsCategoryPointerDrag'
           verify_asset "$base/adaptive-ui.js?rev=02114-simple-account-dialogs" 'data-settings-group-move'

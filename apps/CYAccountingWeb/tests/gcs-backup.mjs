@@ -155,7 +155,7 @@ assert(backupSet.backupId === '20260926T033000Z', 'backupId mismatch');
 assert(backupSet.dataKey.endsWith('/data.json'), 'data.json key missing');
 assert(backupSet.manifestKey.endsWith('/manifest.json'), 'manifest.json key missing');
 assert(backupSet.manifest.format === 'CYAccountingWebBackupSet', 'backup set format mismatch');
-assert(backupSet.manifest.appVersion === '0.21.14', 'backup app version mismatch');
+assert(backupSet.manifest.appVersion === '0.21.15', 'backup app version mismatch');
 assert(backupSet.manifest.files.data.sha256 === backupSet.dataSha256, 'manifest data SHA mismatch');
 
 const fakeObjects = new Map([
