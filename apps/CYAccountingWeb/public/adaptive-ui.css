@@ -1715,7 +1715,7 @@
 /* Mobile: two task pages. Entry and ledger are never stacked into one long workspace. */
 @media (max-width: 767px) {
   :root {
-    background: #f2f4f7;
+    background: #fff;
   }
 
   .topbar {
@@ -2537,7 +2537,7 @@
     border-top: 1px solid #d8dfe6 !important;
     border-bottom: 0 !important;
     background: rgba(255, 255, 255, .98) !important;
-    box-shadow: 0 -4px 16px rgba(31, 42, 55, .08);
+    box-shadow: none !important;
     backdrop-filter: blur(14px);
   }
 
