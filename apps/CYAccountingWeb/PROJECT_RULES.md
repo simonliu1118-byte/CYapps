@@ -72,13 +72,4 @@
 - 「高風險行為」是指錯誤提交後可能造成不可逆資料損失、跨大量資料的破壞性變更、權限／身分安全變更，或重大帳務狀態改變且無法可靠由前端 rollback 的操作。典型例子包含刪除、Backup Restore、資料 migration、Identity／Role／App Access 變更，以及月份鎖帳／解鎖等會改變帳務可寫範圍的操作。
 - 高風險行為可以等待 server 成功後再呈現最終狀態，並依既有 confirmation／authorization 規則執行；不得為追求即時感而犧牲資料完整性或安全性。
 - Desktop／Tablet／Mobile 對同一 business mutation 應共用相同 optimistic／high-risk 判斷與 rollback 語意；RWD 只改 presentation，不得讓不同 breakpoint 各自形成不同資料寫入時序規則。
-## 9. 帳戶生命週期與歷史帳務保護
 
-- `accounts` 是目前帳戶主檔；交易與期初餘額仍以帳戶名稱保存歷史帳務語意。任何帳戶生命週期操作都不得隱性修改、搬移或刪除既有 `transactions.account_name` 或 `opening_balances.account_name`。
-- 一般帳戶移除一律使用**封存**，不得以刪除主檔冒充封存。封存後帳戶不得出現在新增記帳、預設帳戶或可用帳戶排序中，但既有交易、期初餘額、歷史月份餘額與報表仍必須保持可讀。
-- `ADMIN` 與 `SUPER_ADMIN` 都可封存／解封帳戶。封存與解封屬可可靠 rollback 的低至中風險 mutation，前端應依第 8 節採 optimistic update。
-- 解封必須恢復原本同一個 account record，不得以新建同名帳戶取代。已封存帳戶名稱仍由 account master 保留唯一性，避免舊歷史與新帳戶產生同名但不同身分的情況。
-- 最後一個可用帳戶不得封存。若封存的是目前預設帳戶，server 必須把預設狀態移交給下一個有效帳戶。
-- **永久刪除帳戶只允許 `SUPER_ADMIN`。** 永久刪除屬高風險行為，不採 optimistic update，必須經明確確認與 server-side role 驗證。
-- 永久刪除前帳戶必須已封存，且該帳戶名稱在全部交易與全部期初餘額中的使用筆數都必須為 0。任一歷史資料仍存在時 server 必須拒絕永久刪除；不得使用 cascade、批次改名或其他方式繞過此限制。
-- 舊版本曾實體刪除 account master 但留下歷史交易／期初餘額者，migration 應把這類 historical-only 名稱重建為 archived account record，使其重新進入正式封存／解封生命週期。
