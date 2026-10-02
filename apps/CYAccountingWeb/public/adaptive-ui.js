@@ -2386,13 +2386,12 @@ function renderSettingsAccountManager() {
 function settingsArchivedAccountHtml(account, isSuperAdmin) {
   const id = Number(account.id);
   const txCount = Number(account.transaction_count || 0);
-  const openingCount = Number(account.opening_balance_count || 0);
-  const hasHistory = txCount > 0 || openingCount > 0;
-  const usage = hasHistory
-    ? `歷史記帳 ${txCount} 筆 · 期初餘額 ${openingCount} 筆`
-    : '沒有歷史記帳或期初餘額';
+  const adjustmentCount = Number(account.opening_balance_count || 0);
+  const latestOpening = Number(account.latest_opening_amount || 0);
+  const cannotDelete = txCount > 0 || latestOpening !== 0;
+  const usage = `歷史記帳 ${txCount} 筆 · 目前期初 ${latestOpening.toLocaleString('zh-TW')}${adjustmentCount ? ` · 歷史調整 ${adjustmentCount} 筆` : ''}`;
   const permanent = isSuperAdmin
-    ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${hasHistory ? ' disabled title="仍有歷史資料，不能永久刪除"' : ''}>永久刪除</button>`
+    ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${cannotDelete ? ' disabled title="仍有歷史記帳或目前期初餘額非 0"' : ''}>永久刪除</button>`
     : '';
 
   return `<div class="settings-archived-account-row">
@@ -3712,17 +3711,18 @@ function renderMobileAccountManager() {
     ? archived.map(account => {
         const id = Number(account.id);
         const txCount = Number(account.transaction_count || 0);
-        const openingCount = Number(account.opening_balance_count || 0);
-        const hasHistory = txCount > 0 || openingCount > 0;
+        const adjustmentCount = Number(account.opening_balance_count || 0);
+        const latestOpening = Number(account.latest_opening_amount || 0);
+        const cannotDelete = txCount > 0 || latestOpening !== 0;
         return `<div class="mobile-account-archived">
           <div class="mobile-account-archived-main">
             <strong>${settingsManagerEscape(account.name)}</strong>
             <span class="mobile-manager-badge">封存</span>
-            <small>${hasHistory ? `歷史 ${txCount} 筆 · 期初 ${openingCount} 筆` : '沒有歷史資料'}</small>
+            <small>歷史 ${txCount} 筆 · 目前期初 ${latestOpening.toLocaleString('zh-TW')}${adjustmentCount ? ` · 調整 ${adjustmentCount} 筆` : ''}</small>
           </div>
           <div class="mobile-account-archived-actions">
             <button type="button" class="mini-button" data-account-restore="${id}">解封</button>
-            ${isSuperAdmin ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${hasHistory ? ' disabled title="仍有歷史資料"' : ''}>永久刪除</button>` : ''}
+            ${isSuperAdmin ? `<button type="button" class="mini-button danger" data-account-permanent-delete="${id}"${cannotDelete ? ' disabled title="仍有歷史記帳或目前期初餘額非 0"' : ''}>永久刪除</button>` : ''}
           </div>
         </div>`;
       }).join('')
