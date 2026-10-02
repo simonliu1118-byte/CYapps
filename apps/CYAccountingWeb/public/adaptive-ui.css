@@ -8576,7 +8576,7 @@
     overflow: visible !important;
   }
 
-  #settingsDialog.mobile-utility-dialog[data-mobile-utility="lock"] .mobile-lock-native-field[hidden] {
+  #settingsDialog.mobile-utility-dialog[data-mobile-utility="lock"] .lock-form > label.mobile-lock-native-field {
     display: none !important;
   }
 }
