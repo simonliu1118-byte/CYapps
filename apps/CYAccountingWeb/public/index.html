@@ -53,7 +53,7 @@
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.21.16</span></p>
+      <p>CYAccounting Web <span class="version">V0.22.0</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -145,7 +145,7 @@
           <h3>帳戶管理</h3>
           <p class="hint">預設帳戶會在新增記帳時自動選取；至少需保留一個帳戶。</p>
           <div id="accountRows" class="manager-list"></div>
-          <div class="inline-add account-add-controls"><input id="newAccountName" type="text" maxlength="60" placeholder="新增帳戶名稱"><button id="addAccountButton" class="secondary" type="button">新增帳戶</button><button id="openArchivedAccountsButton" class="secondary" type="button">已封存帳戶</button></div>
+          <div class="inline-add account-add-controls"><input id="newAccountName" type="text" maxlength="8" placeholder="帳戶名稱最多八字"><button id="addAccountButton" class="secondary" type="button">新增帳戶</button><button id="openArchivedAccountsButton" class="secondary" type="button">已封存帳戶</button></div>
         </section>
 
         <section class="settings-pane" data-settings-pane="categories">
@@ -187,6 +187,6 @@
   <script src="/excel-import-ui.js?rev=semantic1" defer></script>
   <script src="/backup-ui.js?rev=semantic1" defer></script>
   <script src="/desktop-migration-ui.js?rev=semantic1" defer></script>
-  <script src="/adaptive-ui.js?rev=02116-settings-slider" defer></script>
+  <script src="/adaptive-ui.js?rev=02200-mobile-stable" defer></script>
 </body>
 </html>
