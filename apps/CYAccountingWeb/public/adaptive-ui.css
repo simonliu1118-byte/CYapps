@@ -9437,3 +9437,150 @@
     border-top: 1px solid #edf0f3 !important;
   }
 }
+
+
+/* Content-sized shared mobile utility shell.
+   The dialog grows with content and only scrolls after reaching the viewport cap. */
+@media (max-width: 767px) {
+  #settingsDialog.mobile-utility-dialog,
+  #settingsDialog.mobile-utility-dialog[open] {
+    width: min(350px, calc(100vw - 28px)) !important;
+    max-width: none !important;
+    height: fit-content !important;
+    min-height: 0 !important;
+    max-height: calc(100dvh - 40px) !important;
+    margin: auto !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  #settingsDialog.mobile-utility-dialog > .modal-header {
+    flex: 0 0 auto !important;
+  }
+
+  #settingsDialog.mobile-utility-dialog .settings-layout {
+    display: block !important;
+    flex: 0 1 auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  #settingsDialog.mobile-utility-dialog .settings-content {
+    box-sizing: border-box !important;
+    flex: 0 1 auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: calc(100dvh - 112px) !important;
+    padding: 10px 12px 12px !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #settingsDialog.mobile-utility-dialog .settings-pane.active {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  #settingsDialog.mobile-opening-dialog .settings-content {
+    max-height: calc(100dvh - 112px) !important;
+    padding: 4px 14px 8px !important;
+  }
+
+  #settingsDialog.mobile-opening-dialog .mobile-utility-opening-pane {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  #settingsDialog.mobile-opening-dialog #openingRows {
+    max-height: min(58dvh, 500px) !important;
+    overflow-y: auto !important;
+  }
+
+  #settingsDialog.mobile-utility-dialog[data-mobile-utility="lock"] .settings-content {
+    overflow: visible !important;
+  }
+
+  #settingsDialog.mobile-utility-dialog[data-mobile-utility="lock"] [data-settings-pane="lock"] {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .mobile-account-card {
+    position: relative !important;
+    display: grid !important;
+    grid-template-columns: 28px minmax(0, 1fr) auto auto auto !important;
+    align-items: center !important;
+    gap: 6px !important;
+    min-height: 46px !important;
+    padding: 7px 8px !important;
+    border: 1px solid #e3e8ed !important;
+    border-radius: 9px !important;
+    background: #fbfcfd !important;
+  }
+
+  .mobile-account-drag {
+    width: 28px !important;
+    min-width: 28px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: #8a98a8 !important;
+    font-size: 15px !important;
+    line-height: 30px !important;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .mobile-account-card.is-dragging {
+    opacity: .55;
+  }
+
+  .mobile-account-card.drop-before::before,
+  .mobile-account-card.drop-after::after {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    color: #3478a8;
+  }
+
+  .mobile-account-card.drop-before::before {
+    top: -5px;
+  }
+
+  .mobile-account-card.drop-after::after {
+    bottom: -5px;
+  }
+
+  .mobile-account-name {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .mobile-account-card .mini-button {
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0 7px !important;
+    font-size: 10px !important;
+    white-space: nowrap !important;
+  }
+
+  #accountRows.is-saving-order {
+    pointer-events: none;
+  }
+}
