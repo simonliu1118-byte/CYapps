@@ -4820,6 +4820,8 @@ function setupMobileCanvasContinuation() {
   syncMobileCanvasContinuation();
 }
 
+window.cySyncMobileCanvasContinuation = syncMobileCanvasContinuation;
+
 function syncMobileCanvasContinuation() {
   const shell = document.querySelector('.shell');
   const entry = document.querySelector('.entry-card');
