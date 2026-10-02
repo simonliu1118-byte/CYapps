@@ -2412,60 +2412,90 @@ function settingsArchivedAccountHtml(account, isSuperAdmin) {
 
 function renderSettingsCategoryManager() {
   if (typeof state !== 'object') return;
-  if (!window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches) return renderMobileCategoryManager();
 
   const host = document.querySelector('#categoryManager');
   const pane = document.querySelector('[data-settings-pane="categories"]');
   if (!host || !pane) return;
 
+  const desktop = window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches;
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
   pane.classList.toggle('settings-kind-income', kind === 'income');
   pane.classList.toggle('settings-kind-expense', kind === 'expense');
+  document.querySelectorAll('[data-settings-kind]').forEach(button =>
+    button.classList.toggle('active', button.dataset.settingsKind === kind)
+  );
+
   const groups = (state.groups || []).filter(group => group.kind === kind);
+  const toolbar = desktop
+    ? `<div class="settings-category-toolbar">
+        <div class="entry-kind-switch settings-kind-switch" role="group" aria-label="收入或支出">
+          <button type="button" class="kind-button${kind === 'income' ? ' active' : ''}" data-settings-kind-choice="income">收入</button>
+          <button type="button" class="kind-button${kind === 'expense' ? ' active' : ''}" data-settings-kind-choice="expense">支出</button>
+        </div>
+        <button type="button" class="secondary compact settings-toolbar-button" data-settings-add-group>＋ 新增分類</button>
+        <span class="settings-toolbar-spacer" aria-hidden="true"></span>
+        <button type="button" class="secondary compact settings-toolbar-button settings-add-category-button" data-settings-add-category${groups.some(group => Number(group.id) > 0) ? '' : ' disabled title="請先新增分類"'}>＋ 新增科目</button>
+      </div>`
+    : '';
 
-  const toolbar = `<div class="settings-category-toolbar">
-    <div class="entry-kind-switch settings-kind-switch" role="group" aria-label="收入或支出">
-      <button type="button" class="kind-button${kind === 'income' ? ' active' : ''}" data-settings-kind-choice="income">收入</button>
-      <button type="button" class="kind-button${kind === 'expense' ? ' active' : ''}" data-settings-kind-choice="expense">支出</button>
-    </div>
-    <button type="button" class="secondary compact settings-toolbar-button" data-settings-add-group>＋ 新增大分類</button>
-    <span class="settings-toolbar-spacer" aria-hidden="true"></span>
-    <button type="button" class="secondary compact settings-toolbar-button settings-add-category-button" data-settings-add-category${groups.length ? '' : ' disabled title="請先新增大分類"'}>＋ 新增科目</button>
-  </div>`;
+  const tree = groups.length
+    ? `<div class="settings-category-tree">${groups.map(group => settingsCategoryGroupHtml(group, kind)).join('')}</div>`
+    : '<div class="settings-category-list-empty">目前沒有分類。請先新增分類。</div>';
 
-  const body = groups.length
-    ? `<div class="settings-category-list">${groups.map(group => settingsCategoryGroupHtml(group, kind)).join('')}</div>`
-    : '<div class="settings-category-list-empty">目前沒有大分類。請先使用上方「新增大分類」。</div>';
+  host.innerHTML = `<div class="settings-category-shell">${toolbar}${tree}</div>`;
 
-  host.innerHTML = `<div class="settings-category-shell">${toolbar}${body}</div>`;
+  if (desktop) {
+    pane.querySelector('#mobileCategoryActions')?.remove();
+  } else {
+    ensureMobileCategoryActions(pane, groups.some(group => Number(group.id) > 0));
+  }
 }
 
 function settingsCategoryGroupHtml(group, kind) {
   const groupId = Number(group.id);
+  const pendingGroup = groupId < 0;
   const categories = (state.categories || []).filter(category =>
     category.kind === kind && Number(category.group_id) === groupId
   );
-  const rows = categories.map(category => {
-    const id = Number(category.id);
-    const favorite = Number(category.is_favorite) === 1;
-    return `<div class="settings-category-row" data-settings-category-row="${id}" data-settings-category-group="${groupId}">
-      <button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-category="${id}" title="拖曳調整科目順序或分類" aria-label="拖曳調整科目順序或分類">⠿</button>
-      <button type="button" class="settings-favorite${favorite ? ' active' : ''}" data-category-favorite="${id}" title="${favorite ? '取消常用科目' : '設為常用科目'}" aria-label="${favorite ? '取消常用科目' : '設為常用科目'}">${favorite ? '★' : '☆'}</button>
-      <span class="settings-category-name" title="${settingsManagerEscape(category.name)}">${settingsManagerEscape(category.name)}</span>
-      <button type="button" class="mini-button settings-edit-button" data-settings-rename="category" data-settings-id="${id}" title="編輯科目名稱" aria-label="編輯科目名稱">✎</button>
-      <button type="button" class="mini-button danger settings-delete-button" data-category-delete="${id}">刪除</button>
-    </div>`;
-  }).join('');
 
-  return `<section class="settings-category-group" data-group-id="${groupId}">
-    <div class="settings-category-group-head">
-      <button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-group="${groupId}" title="拖曳調整大分類順序" aria-label="拖曳調整大分類順序">⠿</button>
+  const rows = categories.length
+    ? categories.map(category => {
+        const id = Number(category.id);
+        const pending = id < 0;
+        const favorite = Number(category.is_favorite) === 1;
+        return `<div class="settings-category-leaf${pending ? ' is-pending' : ''}" data-settings-category-row="${id}" data-settings-category-group="${groupId}">
+          ${pending
+            ? '<span class="settings-tree-spacer" aria-hidden="true"></span>'
+            : `<button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-category="${id}" title="拖曳調整科目順序或分類" aria-label="拖曳調整科目順序或分類">⠿</button>`}
+          ${pending
+            ? '<span class="settings-tree-spacer" aria-hidden="true"></span>'
+            : `<button type="button" class="settings-favorite${favorite ? ' active' : ''}" data-category-favorite="${id}" title="${favorite ? '取消常用科目' : '設為常用科目'}" aria-label="${favorite ? '取消常用科目' : '設為常用科目'}">${favorite ? '★' : '☆'}</button>`}
+          <span class="settings-category-name" title="${settingsManagerEscape(category.name)}">${settingsManagerEscape(category.name)}</span>
+          <span class="settings-tree-actions">
+            ${pending
+              ? '<span class="settings-pending-label">儲存中…</span>'
+              : `<button type="button" class="mini-button settings-edit-button" data-settings-rename="category" data-settings-id="${id}">改名</button>
+                 <button type="button" class="mini-button danger settings-delete-button" data-category-delete="${id}">刪除</button>`}
+          </span>
+        </div>`;
+      }).join('')
+    : '<div class="settings-category-empty">尚無科目</div>';
+
+  return `<section class="settings-category-branch${pendingGroup ? ' is-pending' : ''}" data-group-id="${groupId}">
+    <div class="settings-category-parent">
+      ${pendingGroup
+        ? '<span class="settings-tree-spacer" aria-hidden="true"></span>'
+        : `<button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-group="${groupId}" title="拖曳調整分類順序" aria-label="拖曳調整分類順序">⠿</button>`}
       <strong class="settings-group-name" title="${settingsManagerEscape(group.name)}">${settingsManagerEscape(group.name)}</strong>
-      <button type="button" class="mini-button settings-edit-button" data-settings-rename="group" data-settings-id="${groupId}" title="編輯大分類名稱" aria-label="編輯大分類名稱">✎</button>
-      <button type="button" class="mini-button danger settings-delete-button" data-group-delete="${groupId}">刪除</button>
+      <span class="settings-tree-actions">
+        ${pendingGroup
+          ? '<span class="settings-pending-label">儲存中…</span>'
+          : `<button type="button" class="mini-button settings-edit-button" data-settings-rename="group" data-settings-id="${groupId}">改名</button>
+             <button type="button" class="mini-button danger settings-delete-button" data-group-delete="${groupId}">刪除</button>`}
+      </span>
     </div>
-    <div class="settings-category-items" data-settings-category-dropzone="${groupId}">
-      ${rows || '<div class="settings-empty-group">尚無科目</div>'}
+    <div class="settings-category-children" data-settings-category-dropzone="${groupId}">
+      ${rows}
     </div>
   </section>`;
 }
@@ -3630,7 +3660,7 @@ async function openMobileUtility(type) {
   } else if (type === 'categories') {
     if (title) title.textContent = '科目設定';
     if (subtitle) subtitle.textContent = '管理收入／支出大分類與科目';
-    renderMobileCategoryManager();
+    renderSettingsCategoryManager();
   } else {
     if (title) title.textContent = '月份鎖帳';
     if (subtitle) subtitle.textContent = '設定鎖帳月份';
@@ -3878,61 +3908,6 @@ function moveMobileAccountId(ids, sourceId, targetId, after) {
   return next;
 }
 
-function renderMobileCategoryManager() {
-  if (typeof state !== 'object') return;
-  const host = document.querySelector('#categoryManager');
-  const pane = host?.closest('[data-settings-pane="categories"]');
-  if (!host || !pane) return;
-
-  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
-  document.querySelectorAll('[data-settings-kind]').forEach(button =>
-    button.classList.toggle('active', button.dataset.settingsKind === kind)
-  );
-  const groups = (state.groups || []).filter(group => group.kind === kind);
-
-  if (!groups.length) {
-    host.innerHTML = '<div class="empty mobile-manager-empty">目前沒有大分類。</div>';
-  } else {
-    host.innerHTML = groups.map(group => {
-      const groupId = Number(group.id);
-      const pendingGroup = groupId < 0;
-      const categories = (state.categories || []).filter(category =>
-        category.kind === kind && Number(category.group_id) === groupId
-      );
-      const items = categories.length
-        ? categories.map(category => {
-            const id = Number(category.id);
-            const pending = id < 0;
-            return `<div class="mobile-category-row${pending ? ' is-pending' : ''}">
-              <span>${settingsManagerEscape(category.name)}</span>
-              <span class="mobile-category-actions">
-                ${pending
-                  ? '<span class="mobile-category-pending">儲存中…</span>'
-                  : `<button type="button" class="mini-button" data-category-rename="${id}">改名</button>
-                     <button type="button" class="mini-button danger" data-category-delete="${id}">刪除</button>`}
-              </span>
-            </div>`;
-          }).join('')
-        : '<div class="mobile-category-empty">此分類尚無科目。</div>';
-
-      return `<section class="category-group mobile-category-group${pendingGroup ? ' is-pending' : ''}" data-group-id="${groupId}">
-        <div class="mobile-category-group-head">
-          <strong>${settingsManagerEscape(group.name)}</strong>
-          <span class="mobile-category-actions">
-            ${pendingGroup
-              ? '<span class="mobile-category-pending">儲存中…</span>'
-              : `<button type="button" class="mini-button" data-group-rename="${groupId}">改名</button>
-                 <button type="button" class="mini-button danger" data-group-delete="${groupId}">刪除</button>`}
-          </span>
-        </div>
-        <div class="category-items mobile-category-items">${items}</div>
-      </section>`;
-    }).join('');
-  }
-
-  ensureMobileCategoryActions(pane, groups.some(group => Number(group.id) > 0));
-}
-
 function ensureMobileCategoryActions(pane, hasPersistedGroup) {
   let actions = pane.querySelector('#mobileCategoryActions');
   if (!actions) {
@@ -3968,7 +3943,7 @@ async function optimisticAddMobileGroup(rawName) {
     .filter(group => group.kind === kind)
     .map(group => Number(group.sort_order ?? -1))) + 1;
   state.groups = [...(state.groups || []), { id: tempId, kind, name, sort_order: sortOrder }];
-  renderMobileCategoryManager();
+  renderSettingsCategoryManager();
   setDialogMessage(els.settingsMessage, '');
 
   try {
@@ -3979,11 +3954,11 @@ async function optimisticAddMobileGroup(rawName) {
     });
     const pending = (state.groups || []).find(group => Number(group.id) === tempId);
     if (pending) pending.id = Number(result.id);
-    renderMobileCategoryManager();
+    renderSettingsCategoryManager();
     setDialogMessage(els.settingsMessage, '大分類已新增。');
   } catch (error) {
     state.groups = (state.groups || []).filter(group => Number(group.id) !== tempId);
-    renderMobileCategoryManager();
+    renderSettingsCategoryManager();
     setDialogMessage(els.settingsMessage, error?.message || '大分類新增失敗。', true);
   }
 }
@@ -4010,7 +3985,7 @@ async function optimisticAddMobileCategory(rawName, groupId) {
     sort_order: sortOrder,
     is_favorite: 0
   }];
-  renderMobileCategoryManager();
+  renderSettingsCategoryManager();
   if (typeof renderCategories === 'function') renderCategories();
   setDialogMessage(els.settingsMessage, '');
 
@@ -4022,12 +3997,12 @@ async function optimisticAddMobileCategory(rawName, groupId) {
     });
     const pending = (state.categories || []).find(category => Number(category.id) === tempId);
     if (pending) pending.id = Number(result.id);
-    renderMobileCategoryManager();
+    renderSettingsCategoryManager();
     if (typeof renderCategories === 'function') renderCategories();
     setDialogMessage(els.settingsMessage, '科目已新增。');
   } catch (error) {
     state.categories = (state.categories || []).filter(category => Number(category.id) !== tempId);
-    renderMobileCategoryManager();
+    renderSettingsCategoryManager();
     if (typeof renderCategories === 'function') renderCategories();
     setDialogMessage(els.settingsMessage, error?.message || '科目新增失敗。', true);
   }
