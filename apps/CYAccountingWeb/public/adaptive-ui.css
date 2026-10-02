@@ -3517,7 +3517,7 @@
     border-radius: 0 !important;
     background: transparent !important;
     color: #243345 !important;
-    font-size: 15px !important;
+    font-size: 16px !important;
     line-height: 32px !important;
     text-align: center !important;
     text-align-last: center !important;
@@ -3533,7 +3533,7 @@
     appearance: auto !important;
     -webkit-appearance: auto !important;
     min-width: 0 !important;
-    font-size: 14px !important;
+    font-size: 16px !important;
     text-align: center !important;
   }
 
@@ -3865,7 +3865,7 @@
     height: 38px !important;
     padding: 0 40px 0 36px !important;
     border-radius: 19px !important;
-    font-size: 14px !important;
+    font-size: 16px !important;
   }
 
   #ledgerSummarySearch::-webkit-search-cancel-button {
@@ -4345,7 +4345,7 @@
     height: 36px !important;
     margin: 0 !important;
     padding: 0 8px !important;
-    font-size: 15px !important;
+    font-size: 16px !important;
     text-align: right !important;
   }
 

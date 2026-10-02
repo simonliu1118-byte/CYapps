@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current source release: **V0.21.12 Build 0**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
+> Current source release: **V0.21.12 Build 1**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
 >
 > Current continuity handoff: [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)
 
