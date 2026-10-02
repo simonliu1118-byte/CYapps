@@ -9544,3 +9544,313 @@
     display: none !important;
   }
 }
+
+
+/* Canonical account lifecycle and category hierarchy. */
+.settings-account-section {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-account-section + .settings-account-section {
+  margin-top: 12px;
+}
+
+.settings-account-section-title,
+.mobile-account-section-title {
+  color: #6d7a89;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.settings-account-archive-list {
+  display: grid;
+  gap: 5px;
+}
+
+.settings-archived-account-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid #e2e7ec;
+  border-radius: 7px;
+  background: #f8fafb;
+}
+
+.settings-archived-account-main {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-archived-account-main strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-archived-account-main small {
+  grid-column: 1 / -1;
+  color: #7c8895;
+  font-size: 10.5px;
+}
+
+.settings-archived-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #eef1f4;
+  color: #687684;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.settings-archived-account-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-archive-empty,
+.mobile-account-archive-empty {
+  padding: 8px 0;
+  color: #8a96a3;
+  font-size: 11.5px;
+}
+
+.settings-category-tree {
+  overflow: hidden;
+  border-top: 1px solid #dce3ea;
+  border-bottom: 1px solid #dce3ea;
+  background: rgba(255, 255, 255, .72);
+}
+
+.settings-category-branch + .settings-category-branch {
+  border-top: 1px solid #dfe5eb;
+}
+
+.settings-category-parent {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 5px 8px;
+  background: #f4f6f8;
+}
+
+.settings-category-children {
+  position: relative;
+}
+
+.settings-category-children::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 20px;
+  width: 1px;
+  background: #dfe5eb;
+  pointer-events: none;
+}
+
+.settings-category-leaf {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 4px 8px 4px 30px;
+  border-top: 1px solid rgba(222, 228, 235, .72);
+  background: rgba(255, 255, 255, .68);
+}
+
+.settings-category-name,
+.settings-group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-group-name {
+  color: #344253;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.settings-category-name {
+  color: #39495a;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-tree-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: end;
+}
+
+.settings-tree-spacer {
+  width: 20px;
+  min-width: 20px;
+}
+
+.settings-category-empty {
+  min-height: 34px;
+  padding: 8px 12px 8px 44px;
+  border-top: 1px solid rgba(222, 228, 235, .72);
+  color: #8a96a3;
+  font-size: 12px;
+}
+
+.settings-category-branch.is-pending,
+.settings-category-leaf.is-pending {
+  opacity: .72;
+}
+
+.settings-pending-label {
+  color: #7a8795;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+  .settings-category-list {
+    display: none !important;
+  }
+
+  .settings-category-shell {
+    padding: 10px !important;
+  }
+
+  .settings-category-tree {
+    border: 1px solid #dce3ea;
+    border-radius: 8px;
+  }
+
+  .settings-archive-button {
+    min-height: 25px !important;
+    height: 25px !important;
+    padding: 0 7px !important;
+    font-size: 11.5px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .mobile-account-active-list,
+  .mobile-account-archive-list {
+    display: grid;
+    gap: 7px;
+  }
+
+  .mobile-account-archive-title {
+    margin-top: 12px;
+  }
+
+  .mobile-account-archived {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid #e3e8ed;
+    border-radius: 9px;
+    background: #f8fafb;
+  }
+
+  .mobile-account-archived-main {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-content: start;
+    gap: 5px 7px;
+    min-width: 0;
+  }
+
+  .mobile-account-archived-main strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-account-archived-main small {
+    grid-column: 1 / -1;
+    color: #7c8895;
+    font-size: 10px;
+  }
+
+  .mobile-account-archived-actions {
+    display: grid;
+    gap: 5px;
+  }
+
+  #settingsDialog.mobile-utility-dialog[data-mobile-utility="categories"] #categoryManager {
+    padding-right: 0 !important;
+  }
+
+  .settings-category-shell {
+    padding: 0 !important;
+  }
+
+  .settings-category-tree {
+    border-radius: 0 !important;
+  }
+
+  .settings-category-parent {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 42px;
+    padding: 7px 4px;
+    background: transparent;
+  }
+
+  .settings-category-parent > .settings-drag-handle,
+  .settings-category-leaf > .settings-drag-handle,
+  .settings-category-leaf > .settings-favorite,
+  .settings-category-parent > .settings-tree-spacer,
+  .settings-category-leaf > .settings-tree-spacer {
+    display: none !important;
+  }
+
+  .settings-category-children::before {
+    left: 11px;
+  }
+
+  .settings-category-leaf {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 40px;
+    padding: 6px 4px 6px 24px;
+    background: transparent;
+  }
+
+  .settings-group-name {
+    font-size: 15px;
+  }
+
+  .settings-category-name {
+    font-size: 13.5px;
+  }
+
+  .settings-tree-actions .mini-button {
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0 8px !important;
+    font-size: 10.5px !important;
+  }
+
+  .settings-category-empty {
+    min-height: 38px;
+    padding: 9px 4px 9px 24px;
+  }
+}
