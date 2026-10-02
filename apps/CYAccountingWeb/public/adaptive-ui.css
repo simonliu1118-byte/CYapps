@@ -7991,329 +7991,7 @@
     line-height: 1 !important;
   }
 
-  /* Account manager: compact, vertically aligned, name-forward hierarchy. */
-  #settingsDialog.v21-management-mode[data-management-pane="accounts"] {
-    width: min(360px, calc(100vw - 36px)) !important;
-    max-width: 360px !important;
-  }
-
-  .v0211-account-row {
-    display: grid !important;
-    grid-template-columns: 20px 54px minmax(0, 1fr) auto !important;
-    align-items: center !important;
-    gap: 5px !important;
-    min-height: 36px !important;
-    padding: 4px 6px !important;
-    border: 1px solid #dce3ea !important;
-    border-radius: 7px !important;
-    background: #fff !important;
-  }
-
-  .v0211-account-row + .v0211-account-row {
-    margin-top: 5px !important;
-  }
-
-  .v0211-account-row .v21-drag-handle {
-    width: 20px !important;
-    min-width: 20px !important;
-    height: 24px !important;
-    min-height: 24px !important;
-    padding: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-    color: #97a4b1 !important;
-    font-size: 13px !important;
-    line-height: 1 !important;
-  }
-
-  .v0211-default-tag {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 54px !important;
-    min-width: 54px !important;
-    height: 21px !important;
-    min-height: 21px !important;
-    padding: 0 3px !important;
-    overflow: hidden;
-    border: 1px solid #d7dee6 !important;
-    border-radius: 999px !important;
-    background: #fff !important;
-    color: #687789 !important;
-    font-size: 9.5px !important;
-    font-weight: 500 !important;
-    line-height: 1 !important;
-    white-space: nowrap !important;
-    box-sizing: border-box;
-  }
-
-  .v0211-default-tag.active {
-    border-color: #cce3d1 !important;
-    background: #eef8f0 !important;
-    color: #2f7041 !important;
-  }
-
-  .v0211-default-tag:disabled {
-    opacity: 1 !important;
-  }
-
-  .v0211-account-name-cell {
-    display: flex !important;
-    align-items: center !important;
-    min-width: 0 !important;
-    gap: 7px !important;
-  }
-
-  .v0211-account-name-cell .v21-editable-name {
-    min-width: 0 !important;
-    max-width: 8.5em !important;
-    overflow: hidden !important;
-    color: #2c3948 !important;
-    font-size: 14px !important;
-    font-weight: 600 !important;
-    line-height: 1.25 !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-  }
-
-  .v0211-account-row .v21-edit-name-button {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex: 0 0 18px !important;
-    width: 18px !important;
-    min-width: 18px !important;
-    height: 18px !important;
-    min-height: 18px !important;
-    padding: 0 !important;
-    border-radius: 4px !important;
-    font-size: 10px !important;
-    line-height: 1 !important;
-  }
-
-  .v0211-account-row .v21-edit-name-button[hidden],
-  .v0211-category-row .v21-edit-name-button[hidden],
-  .v0211-category-group-head .v21-edit-name-button[hidden] {
-    display: none !important;
-  }
-
-  .v0211-account-row .v21-inline-name-input {
-    width: min(9em, 100%) !important;
-    min-width: 0 !important;
-    height: 27px !important;
-    min-height: 27px !important;
-    padding: 2px 6px !important;
-    font-size: 13.5px !important;
-  }
-
-  .v0211-account-row .v21-inline-edit-confirm,
-  .v0211-account-row .v21-inline-edit-cancel {
-    width: 21px !important;
-    min-width: 21px !important;
-    height: 21px !important;
-    min-height: 21px !important;
-    padding: 0 !important;
-    font-size: 11px !important;
-  }
-
-  .v0211-account-row .v21-manager-delete {
-    min-height: 26px !important;
-    height: 26px !important;
-    padding: 0 7px !important;
-    font-size: 11.5px !important;
-  }
-
-  /* Category manager: a single deterministic hierarchy, no legacy card/actions. */
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] {
-    width: min(590px, calc(100vw - 36px)) !important;
-    max-width: 590px !important;
-  }
-
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .pane-heading {
-    display: none !important;
-  }
-
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
-    padding: 0 !important;
-    border-radius: 9px;
-  }
-
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].v0211-category-income {
-    background: #f4fbf6 !important;
-  }
-
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].v0211-category-expense {
-    background: #fff6f5 !important;
-  }
-
-  .v0211-category-shell {
-    padding: 10px !important;
-    border: 1px solid rgba(123, 140, 158, .18);
-    border-radius: 9px;
-  }
-
-  .v0211-category-toolbar {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    margin: 0 0 9px !important;
-  }
-
-  .v0211-category-toolbar .entry-kind-switch {
-    margin: 0 !important;
-  }
-
-  .v0211-category-list {
-    overflow: hidden;
-    border: 1px solid #dce3ea;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, .76);
-  }
-
-  .v0211-category-group {
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-  }
-
-  .v0211-category-group + .v0211-category-group {
-    border-top: 1px solid #dfe5eb !important;
-  }
-
-  .v0211-category-group-head {
-    display: grid !important;
-    grid-template-columns: 20px minmax(0, 1fr) 20px auto !important;
-    align-items: center !important;
-    gap: 6px !important;
-    min-height: 35px !important;
-    padding: 5px 7px !important;
-    background: rgba(243, 246, 249, .88) !important;
-  }
-
-  .v0211-category-group-head .v21-drag-handle,
-  .v0211-category-row .v21-drag-handle {
-    width: 20px !important;
-    min-width: 20px !important;
-    height: 22px !important;
-    min-height: 22px !important;
-    padding: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-    color: #98a5b3 !important;
-    font-size: 13px !important;
-    line-height: 1 !important;
-  }
-
-  .v0211-category-group-head .v21-editable-name {
-    min-width: 0;
-    color: #344253;
-    font-size: 13.5px !important;
-    font-weight: 650 !important;
-    line-height: 1.25;
-  }
-
-  .v0211-category-items {
-    padding: 0 !important;
-  }
-
-  .v0211-category-row {
-    display: grid !important;
-    grid-template-columns: 20px 24px minmax(0, 1fr) 20px auto !important;
-    align-items: center !important;
-    gap: 6px !important;
-    min-height: 34px !important;
-    padding: 4px 7px 4px 18px !important;
-    border-top: 1px solid rgba(222, 228, 235, .72) !important;
-    background: rgba(255, 255, 255, .58) !important;
-  }
-
-  .v0211-category-row .v21-editable-name {
-    min-width: 0 !important;
-    overflow: hidden;
-    color: #39495a !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    line-height: 1.25;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .v0211-category-favorite {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 24px !important;
-    min-width: 24px !important;
-    height: 22px !important;
-    min-height: 22px !important;
-    padding: 0 !important;
-    border: 1px solid #d7dee6 !important;
-    border-radius: 5px !important;
-    background: #fff !important;
-    color: #718092 !important;
-    font-size: 12px !important;
-    line-height: 1 !important;
-  }
-
-  .v0211-category-favorite.active {
-    border-color: #e6c45f !important;
-    background: #fff5ce !important;
-    color: #8b6400 !important;
-  }
-
-  .v0211-category-group-head .v21-edit-name-button,
-  .v0211-category-row .v21-edit-name-button {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 20px !important;
-    min-width: 20px !important;
-    height: 20px !important;
-    min-height: 20px !important;
-    padding: 0 !important;
-    font-size: 10px !important;
-    line-height: 1 !important;
-  }
-
-  .v0211-category-group-head .v21-manager-delete,
-  .v0211-category-row .v21-manager-delete {
-    height: 25px !important;
-    min-height: 25px !important;
-    padding: 0 7px !important;
-    font-size: 11.5px !important;
-  }
-
-  .v0211-category-add {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto !important;
-    gap: 7px !important;
-    padding: 6px 7px 7px 42px !important;
-    border-top: 1px solid rgba(222, 228, 235, .72);
-    background: rgba(255, 255, 255, .4);
-  }
-
-  .v0211-category-add input,
-  .v0211-category-add button,
-  .v0211-group-add input,
-  .v0211-group-add button {
-    min-height: 30px !important;
-    height: 30px !important;
-  }
-
-  .v0211-category-empty {
-    padding: 9px 12px 8px 42px;
-    color: #8491a0;
-    font-size: 12px;
-  }
-
-  .v0211-group-add {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto !important;
-    gap: 7px !important;
-    margin-top: 8px !important;
-  }
+  /* Settings managers use one canonical semantic renderer. */
 
   /* Desktop date controls use the same visual language as the custom month picker. */
   .v0211-native-date-source {
@@ -8498,7 +8176,8 @@
 
 /* V0.21.2 - rebuilt category manager and compact manager dialogs. */
 
-.v0212-manager-dialog {
+
+.settings-manager-dialog {
   width: min(340px, calc(100vw - 28px));
   max-width: 340px;
   padding: 0;
@@ -8509,190 +8188,101 @@
   box-shadow: 0 18px 48px rgba(34, 47, 62, .22);
 }
 
-.v0212-manager-dialog::backdrop {
+.settings-manager-dialog::backdrop {
   background: rgba(29, 39, 50, .38);
   backdrop-filter: blur(1px);
 }
 
-.v0212-manager-dialog-shell {
+.settings-manager-dialog-shell {
   display: grid;
   gap: 12px;
   padding: 16px;
 }
 
-.v0212-manager-dialog-head {
+.settings-manager-dialog-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.v0212-manager-dialog-head h2 {
+.settings-manager-dialog-head h2 {
   margin: 0;
   font-size: 17px;
   font-weight: 650;
   line-height: 1.25;
 }
 
-.v0212-manager-dialog-head p {
+.settings-manager-dialog-head p {
   margin: 4px 0 0;
   color: #7a8795;
   font-size: 12px;
   line-height: 1.4;
 }
 
-.v0212-dialog-field {
+.settings-dialog-field {
   display: grid;
   gap: 5px;
 }
 
-.v0212-dialog-field > span {
+.settings-dialog-field[hidden] {
+  display: none !important;
+}
+
+.settings-dialog-field > span {
   color: #5e6d7d;
   font-size: 12.5px;
   font-weight: 500;
 }
 
-.v0212-dialog-field input,
-.v0212-dialog-field select {
+.settings-dialog-field input,
+.settings-dialog-field select {
+  box-sizing: border-box;
   width: 100%;
   min-height: 34px;
   height: 34px;
-  box-sizing: border-box;
 }
 
-.v0212-manager-dialog-actions {
+.settings-manager-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.v0212-manager-dialog-actions button {
+.settings-manager-dialog-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 68px;
-  min-height: 32px;
-  height: 32px;
+  min-height: 34px;
+  height: 34px;
+  padding-block: 0;
+  line-height: 1;
 }
 
 @media (min-width: 1024px) {
-  /* Account manager: reserve enough width for the full default action. */
   #settingsDialog.v21-management-mode[data-management-pane="accounts"] {
     width: min(390px, calc(100vw - 36px)) !important;
     max-width: 390px !important;
   }
 
-  .v0211-account-row {
+  .settings-account-row {
+    display: grid !important;
     grid-template-columns: 20px 68px minmax(0, 1fr) auto !important;
-    gap: 6px !important;
-  }
-
-  .v0211-default-tag {
-    width: 68px !important;
-    min-width: 68px !important;
-    max-width: 68px !important;
-    padding: 0 6px !important;
-    overflow: hidden !important;
-    font-size: 10.5px !important;
-    letter-spacing: -.1px !important;
-    text-overflow: clip !important;
-    white-space: nowrap !important;
-  }
-
-  .v0211-account-name-cell .v21-editable-name {
-    max-width: none !important;
-  }
-
-  /* Category management is now a compact fixed-row manager. */
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] {
-    width: min(570px, calc(100vw - 36px)) !important;
-    max-width: 570px !important;
-  }
-
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
-    padding: 0 !important;
-  }
-
-  .v0212-legacy-group-add {
-    display: none !important;
-  }
-
-  .v0212-category-shell {
-    padding: 10px !important;
-  }
-
-  .v0212-category-toolbar {
-    display: grid !important;
-    grid-template-columns: auto auto 1fr auto !important;
-    align-items: center !important;
-    gap: 8px !important;
-    margin: 0 0 9px !important;
-  }
-
-  .v0212-kind-switch {
-    margin: 0 !important;
-  }
-
-  .v0212-toolbar-spacer {
-    min-width: 8px;
-  }
-
-  .v0212-toolbar-button {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    min-height: 30px !important;
-    height: 30px !important;
-    padding: 0 10px !important;
-    font-size: 12px !important;
-    font-weight: 500 !important;
-    line-height: 1 !important;
-    white-space: nowrap !important;
-  }
-
-  .v0212-add-category-button {
-    justify-self: end;
-  }
-
-  .v0212-category-list {
-    overflow: hidden;
-    border: 1px solid #dce3ea;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, .8);
-  }
-
-  .v0212-category-list-empty {
-    display: flex;
-    align-items: center;
-    min-height: 58px;
-    padding: 10px 12px;
-    border: 1px dashed #d6dee7;
-    border-radius: 8px;
-    background: rgba(255,255,255,.62);
-    color: #7c8997;
-    font-size: 12.5px;
-  }
-
-  .v0212-category-group {
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-  }
-
-  .v0212-category-group + .v0212-category-group {
-    border-top: 1px solid #dfe5eb !important;
-  }
-
-  .v0212-category-group-head {
-    display: grid !important;
-    grid-template-columns: 20px minmax(0, 1fr) 22px auto !important;
     align-items: center !important;
     gap: 6px !important;
-    min-height: 34px !important;
-    padding: 4px 7px !important;
-    background: rgba(243, 246, 249, .9) !important;
+    min-height: 36px !important;
+    padding: 4px 6px !important;
+    border: 1px solid #dce3ea !important;
+    border-radius: 7px !important;
+    background: #fff !important;
   }
 
-  .v0212-category-group-head .v21-drag-handle,
-  .v0212-category-row .v21-drag-handle {
+  .settings-account-row + .settings-account-row {
+    margin-top: 5px !important;
+  }
+
+  .settings-drag-handle {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -8708,7 +8298,175 @@
     line-height: 1 !important;
   }
 
-  .v0212-group-name {
+  .settings-default-tag {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 68px !important;
+    min-width: 68px !important;
+    max-width: 68px !important;
+    height: 21px !important;
+    min-height: 21px !important;
+    padding: 0 6px !important;
+    border: 1px solid #d7dee6 !important;
+    border-radius: 999px !important;
+    background: #fff !important;
+    color: #687789 !important;
+    font-size: 10.5px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  .settings-default-tag.active {
+    border-color: #cce3d1 !important;
+    background: #eef8f0 !important;
+    color: #2f7041 !important;
+  }
+
+  .settings-default-tag:disabled {
+    opacity: 1 !important;
+  }
+
+  .settings-account-name-cell {
+    display: flex !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    gap: 7px !important;
+  }
+
+  .settings-account-name-cell .settings-editable-name {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    color: #2c3948 !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 1.25 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .settings-edit-button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 22px !important;
+    min-width: 22px !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    padding: 0 !important;
+    font-size: 10px !important;
+    line-height: 1 !important;
+  }
+
+  .settings-delete-button {
+    min-height: 25px !important;
+    height: 25px !important;
+    padding: 0 7px !important;
+    font-size: 11.5px !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] {
+    width: min(570px, calc(100vw - 36px)) !important;
+    max-width: 570px !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
+    padding: 0 !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .pane-heading,
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add {
+    display: none !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].settings-kind-income {
+    background: #f4fbf6 !important;
+  }
+
+  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].settings-kind-expense {
+    background: #fff6f5 !important;
+  }
+
+  .settings-category-shell {
+    padding: 10px !important;
+    border: 1px solid rgba(123, 140, 158, .18);
+    border-radius: 9px;
+  }
+
+  .settings-category-toolbar {
+    display: grid !important;
+    grid-template-columns: auto auto 1fr auto !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin: 0 0 9px !important;
+  }
+
+  .settings-kind-switch {
+    margin: 0 !important;
+  }
+
+  .settings-toolbar-spacer {
+    min-width: 8px;
+  }
+
+  .settings-toolbar-button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  .settings-add-category-button {
+    justify-self: end;
+  }
+
+  .settings-category-list {
+    overflow: hidden;
+    border: 1px solid #dce3ea;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .8);
+  }
+
+  .settings-category-list-empty {
+    display: flex;
+    align-items: center;
+    min-height: 58px;
+    padding: 10px 12px;
+    border: 1px dashed #d6dee7;
+    border-radius: 8px;
+    background: rgba(255,255,255,.62);
+    color: #7c8997;
+    font-size: 12.5px;
+  }
+
+  .settings-category-group {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+
+  .settings-category-group + .settings-category-group {
+    border-top: 1px solid #dfe5eb !important;
+  }
+
+  .settings-category-group-head {
+    display: grid !important;
+    grid-template-columns: 20px minmax(0, 1fr) 22px auto !important;
+    align-items: center !important;
+    gap: 6px !important;
+    min-height: 34px !important;
+    padding: 4px 7px !important;
+    background: rgba(243, 246, 249, .9) !important;
+  }
+
+  .settings-group-name {
     min-width: 0;
     overflow: hidden;
     color: #344253;
@@ -8719,11 +8477,11 @@
     white-space: nowrap;
   }
 
-  .v0212-category-items {
+  .settings-category-items {
     padding: 0 !important;
   }
 
-  .v0212-category-row {
+  .settings-category-row {
     display: grid !important;
     grid-template-columns: 20px 24px minmax(0, 1fr) 22px auto !important;
     align-items: center !important;
@@ -8734,7 +8492,7 @@
     background: rgba(255, 255, 255, .62) !important;
   }
 
-  .v0212-category-name {
+  .settings-category-name {
     min-width: 0;
     overflow: hidden;
     color: #39495a;
@@ -8745,7 +8503,7 @@
     white-space: nowrap;
   }
 
-  .v0212-favorite {
+  .settings-favorite {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -8762,34 +8520,13 @@
     line-height: 1 !important;
   }
 
-  .v0212-favorite.active {
+  .settings-favorite.active {
     border-color: #e6c45f !important;
     background: #fff5ce !important;
     color: #8b6400 !important;
   }
 
-  .v0212-edit-button {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 22px !important;
-    min-width: 22px !important;
-    height: 22px !important;
-    min-height: 22px !important;
-    padding: 0 !important;
-    font-size: 10px !important;
-    line-height: 1 !important;
-  }
-
-  .v0212-category-group-head .v21-manager-delete,
-  .v0212-category-row .v21-manager-delete {
-    min-height: 25px !important;
-    height: 25px !important;
-    padding: 0 7px !important;
-    font-size: 11.5px !important;
-  }
-
-  .v0212-empty-group {
+  .settings-empty-group {
     min-height: 30px;
     padding: 7px 12px 7px 42px;
     border-top: 1px solid rgba(222, 228, 235, .72);
@@ -8798,23 +8535,53 @@
     line-height: 1.35;
   }
 
-  .v0212-category-income .v0212-category-toolbar,
-  .v0212-category-expense .v0212-category-toolbar {
-    background: transparent;
+  .settings-is-dragging {
+    opacity: .55;
   }
 
-  /* Explicitly neutralize all legacy per-group add rows and inline editors. */
-  [data-settings-pane="categories"] .v0211-category-add,
-  [data-settings-pane="categories"] .v21-category-add-row,
-  [data-settings-pane="categories"] .category-add,
-  [data-settings-pane="categories"] .v21-inline-name-input,
-  [data-settings-pane="categories"] .v21-inline-edit-confirm,
-  [data-settings-pane="categories"] .v21-inline-edit-cancel {
+  .settings-drop-before {
+    box-shadow: inset 0 2px 0 #3478a8;
+  }
+
+  .settings-drop-after {
+    box-shadow: inset 0 -2px 0 #3478a8;
+  }
+
+  .settings-drop-group {
+    outline: 1px solid #3478a8;
+    outline-offset: -1px;
+  }
+}
+
+@media (max-width: 767px) {
+  .settings-manager-dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .settings-manager-dialog-actions button {
+    width: 100%;
+  }
+
+  .mobile-category-group {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .mobile-category-items {
+    display: grid !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  #settingsDialog.mobile-utility-dialog[data-mobile-utility="lock"] .mobile-lock-native-field[hidden] {
     display: none !important;
   }
 }
 
-.v0214-complete-dialog {
+.v0214-complete-dialog {.v0214-complete-dialog {
   width: min(520px, calc(100vw - 32px));
 }
 
