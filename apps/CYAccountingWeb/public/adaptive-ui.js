@@ -3520,7 +3520,7 @@ function openV0212AddGroupDialog() {
 function openV0212AddCategoryDialog() {
   if (typeof state !== 'object') return;
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
-  const groups = (state.groups || []).filter(group => group.kind === kind);
+  const groups = (state.groups || []).filter(group => group.kind === kind && Number(group.id) > 0);
   if (!groups.length) return;
   openV0212ManagerDialog({
     mode: 'add-category',
@@ -3616,6 +3616,11 @@ async function saveV0212ManagerDialog(event) {
   let ok = false;
   try {
     if (config.mode === 'add-group') {
+      if (window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) {
+        dialog.close();
+        void optimisticAddMobileGroup(name);
+        return;
+      }
       ok = await mutateSettings('/api/category-groups', {
         method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, name })
       }, '大分類已新增。');
@@ -3623,6 +3628,11 @@ async function saveV0212ManagerDialog(event) {
       const groupId = Number(select?.value);
       if (!Number.isInteger(groupId) || groupId <= 0) {
         setDialogMessage(message, '請選擇大分類。', true);
+        return;
+      }
+      if (window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) {
+        dialog.close();
+        void optimisticAddMobileCategory(name, groupId);
         return;
       }
       ok = await mutateSettings('/api/categories', {
@@ -4229,6 +4239,7 @@ function setupV0215Build4() {
   }
   cyV0215Build4SetupDone = true;
   setupV0215Build4Toolbar();
+  setupMobileCanvasContinuation();
   setupV0215Build4Search();
   setupV0215Build4SaveMessage();
   setupV0215Build4EntrySecondaryAction();
@@ -4359,6 +4370,7 @@ async function openMobileUtility(type) {
   } else {
     if (title) title.textContent = '月份鎖帳';
     if (subtitle) subtitle.textContent = '設定鎖帳月份';
+    setupMobileLockMonthControls(dialog);
   }
 
   if (!dialog.open) dialog.showModal();
@@ -4579,7 +4591,8 @@ function moveMobileAccountId(ids, sourceId, targetId, after) {
 function renderMobileCategoryManager() {
   if (typeof state !== 'object') return;
   const host = document.querySelector('#categoryManager');
-  if (!host) return;
+  const pane = host?.closest('[data-settings-pane="categories"]');
+  if (!host || !pane) return;
 
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
   document.querySelectorAll('[data-settings-kind]').forEach(button =>
@@ -4589,44 +4602,234 @@ function renderMobileCategoryManager() {
 
   if (!groups.length) {
     host.innerHTML = '<div class="empty mobile-manager-empty">目前沒有大分類。</div>';
-    return;
+  } else {
+    host.innerHTML = groups.map(group => {
+      const groupId = Number(group.id);
+      const pendingGroup = groupId < 0;
+      const categories = (state.categories || []).filter(category =>
+        category.kind === kind && Number(category.group_id) === groupId
+      );
+      const items = categories.length
+        ? categories.map(category => {
+            const id = Number(category.id);
+            const pending = id < 0;
+            return `<div class="mobile-category-row${pending ? ' is-pending' : ''}">
+              <span>${v0211Escape(category.name)}</span>
+              <span class="mobile-category-actions">
+                ${pending
+                  ? '<span class="mobile-category-pending">儲存中…</span>'
+                  : `<button type="button" class="mini-button" data-category-rename="${id}">改名</button>
+                     <button type="button" class="mini-button danger" data-category-delete="${id}">刪除</button>`}
+              </span>
+            </div>`;
+          }).join('')
+        : '<div class="mobile-category-empty">此分類尚無科目。</div>';
+
+      return `<section class="category-group mobile-category-group${pendingGroup ? ' is-pending' : ''}" data-group-id="${groupId}">
+        <div class="mobile-category-group-head">
+          <strong>${v0211Escape(group.name)}</strong>
+          <span class="mobile-category-actions">
+            ${pendingGroup
+              ? '<span class="mobile-category-pending">儲存中…</span>'
+              : `<button type="button" class="mini-button" data-group-rename="${groupId}">改名</button>
+                 <button type="button" class="mini-button danger" data-group-delete="${groupId}">刪除</button>`}
+          </span>
+        </div>
+        <div class="category-items mobile-category-items">${items}</div>
+      </section>`;
+    }).join('');
   }
 
-  host.innerHTML = groups.map(group => {
-    const groupId = Number(group.id);
-    const categories = (state.categories || []).filter(category =>
-      category.kind === kind && Number(category.group_id) === groupId
-    );
-    const items = categories.length
-      ? categories.map(category => {
-          const id = Number(category.id);
-          return `<div class="mobile-category-row">
-            <span>${v0211Escape(category.name)}</span>
-            <span class="mobile-category-actions">
-              <button type="button" class="mini-button" data-category-rename="${id}">改名</button>
-              <button type="button" class="mini-button danger" data-category-delete="${id}">刪除</button>
-            </span>
-          </div>`;
-        }).join('')
-      : '<div class="mobile-category-empty">此分類尚無科目。</div>';
+  ensureMobileCategoryActions(pane, groups.some(group => Number(group.id) > 0));
+}
 
-    return `<section class="category-group mobile-category-group" data-group-id="${groupId}">
-      <div class="mobile-category-group-head">
-        <strong>${v0211Escape(group.name)}</strong>
-        <span class="mobile-category-actions">
-          <button type="button" class="mini-button" data-group-rename="${groupId}">改名</button>
-          <button type="button" class="mini-button danger" data-group-delete="${groupId}">刪除</button>
-        </span>
-      </div>
-      <div class="category-items mobile-category-items">
-        ${items}
-        <div class="category-add mobile-category-add">
-          <input type="text" maxlength="60" placeholder="新增科目" data-new-category-group="${groupId}">
-          <button type="button" class="mini-button" data-category-add="${groupId}">新增</button>
-        </div>
-      </div>
-    </section>`;
-  }).join('');
+function ensureMobileCategoryActions(pane, hasPersistedGroup) {
+  let actions = pane.querySelector('#mobileCategoryActions');
+  if (!actions) {
+    actions = document.createElement('div');
+    actions.id = 'mobileCategoryActions';
+    actions.className = 'mobile-category-footer';
+    actions.innerHTML = `
+      <button type="button" class="primary" data-mobile-category-add>新增科目</button>
+      <button type="button" class="secondary" data-mobile-group-add>新增分類</button>`;
+    pane.append(actions);
+
+    actions.querySelector('[data-mobile-category-add]')?.addEventListener('click', () => {
+      if (typeof openV0212AddCategoryDialog === 'function') openV0212AddCategoryDialog();
+    });
+    actions.querySelector('[data-mobile-group-add]')?.addEventListener('click', () => {
+      if (typeof openV0212AddGroupDialog === 'function') openV0212AddGroupDialog();
+    });
+  }
+  const addCategory = actions.querySelector('[data-mobile-category-add]');
+  if (addCategory) {
+    addCategory.disabled = !hasPersistedGroup;
+    addCategory.title = hasPersistedGroup ? '' : '請先新增分類';
+  }
+}
+
+let cyMobileSettingsTempId = -1;
+
+function nextMobileSettingsTempId() {
+  return cyMobileSettingsTempId--;
+}
+
+async function optimisticAddMobileGroup(rawName) {
+  const name = String(rawName || '').trim().replace(/\s+/g, ' ');
+  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
+  if (!name) return;
+
+  const tempId = nextMobileSettingsTempId();
+  const sortOrder = Math.max(-1, ...(state.groups || [])
+    .filter(group => group.kind === kind)
+    .map(group => Number(group.sort_order ?? -1))) + 1;
+  state.groups = [...(state.groups || []), { id: tempId, kind, name, sort_order: sortOrder }];
+  renderMobileCategoryManager();
+  setDialogMessage(els.settingsMessage, '');
+
+  try {
+    const result = await api('/api/category-groups', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ kind, name })
+    });
+    const pending = (state.groups || []).find(group => Number(group.id) === tempId);
+    if (pending) pending.id = Number(result.id);
+    renderMobileCategoryManager();
+    setDialogMessage(els.settingsMessage, '大分類已新增。');
+  } catch (error) {
+    state.groups = (state.groups || []).filter(group => Number(group.id) !== tempId);
+    renderMobileCategoryManager();
+    setDialogMessage(els.settingsMessage, error?.message || '大分類新增失敗。', true);
+  }
+}
+
+async function optimisticAddMobileCategory(rawName, groupId) {
+  const name = String(rawName || '').trim().replace(/\s+/g, ' ');
+  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
+  const group = (state.groups || []).find(item =>
+    Number(item.id) === Number(groupId) && Number(item.id) > 0 && item.kind === kind
+  );
+  if (!name || !group) return;
+
+  const tempId = nextMobileSettingsTempId();
+  const sortOrder = Math.max(-1, ...(state.categories || [])
+    .filter(category => category.kind === kind && Number(category.group_id) === Number(groupId))
+    .map(category => Number(category.sort_order ?? -1))) + 1;
+  state.categories = [...(state.categories || []), {
+    id: tempId,
+    kind,
+    name,
+    group_id: Number(groupId),
+    group_name: group.name,
+    group_sort_order: Number(group.sort_order || 0),
+    sort_order: sortOrder,
+    is_favorite: 0
+  }];
+  renderMobileCategoryManager();
+  if (typeof renderCategories === 'function') renderCategories();
+  setDialogMessage(els.settingsMessage, '');
+
+  try {
+    const result = await api('/api/categories', {
+      method: 'POST',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ kind, groupId: Number(groupId), name })
+    });
+    const pending = (state.categories || []).find(category => Number(category.id) === tempId);
+    if (pending) pending.id = Number(result.id);
+    renderMobileCategoryManager();
+    if (typeof renderCategories === 'function') renderCategories();
+    setDialogMessage(els.settingsMessage, '科目已新增。');
+  } catch (error) {
+    state.categories = (state.categories || []).filter(category => Number(category.id) !== tempId);
+    renderMobileCategoryManager();
+    if (typeof renderCategories === 'function') renderCategories();
+    setDialogMessage(els.settingsMessage, error?.message || '科目新增失敗。', true);
+  }
+}
+
+function setupMobileLockMonthControls(dialog) {
+  if (!dialog || !els.lockedThrough) return;
+  const nativeField = els.lockedThrough.closest('label');
+  const form = nativeField?.closest('.lock-form');
+  if (!nativeField || !form) return;
+
+  nativeField.classList.add('mobile-lock-native-field');
+
+  let controls = form.querySelector('#mobileLockMonthControls');
+  if (!controls) {
+    controls = document.createElement('div');
+    controls.id = 'mobileLockMonthControls';
+    controls.className = 'mobile-lock-month-controls';
+    controls.innerHTML = `
+      <span class="mobile-lock-month-label">鎖帳至</span>
+      <div class="mobile-lock-month-selects">
+        <label><span>年份</span><select id="mobileLockYear" aria-label="鎖帳年份"></select></label>
+        <label><span>月份</span><select id="mobileLockMonth" aria-label="鎖帳月份"></select></label>
+      </div>`;
+    form.insertBefore(controls, nativeField);
+
+    const year = controls.querySelector('#mobileLockYear');
+    const month = controls.querySelector('#mobileLockMonth');
+    year.innerHTML = Array.from({ length: 100 }, (_, index) => 2000 + index)
+      .map(value => `<option value="${value}">${value} 年</option>`).join('');
+    month.innerHTML = Array.from({ length: 12 }, (_, index) => index + 1)
+      .map(value => `<option value="${String(value).padStart(2, '0')}">${value} 月</option>`).join('');
+
+    const writeCanonical = () => {
+      if (!year.value || !month.value) return;
+      els.lockedThrough.value = year.value + '-' + month.value;
+    };
+    year.addEventListener('change', writeCanonical);
+    month.addEventListener('change', writeCanonical);
+  }
+
+  syncMobileLockMonthControls();
+}
+
+function syncMobileLockMonthControls() {
+  const controls = document.querySelector('#mobileLockMonthControls');
+  if (!controls || !els.lockedThrough) return;
+
+  let value = String(els.lockedThrough.value || '');
+  if (!/^\d{4}-\d{2}$/.test(value)) value = String(els.monthFilter?.value || '');
+  if (!/^\d{4}-\d{2}$/.test(value)) value = localDateString(new Date()).slice(0, 7);
+
+  const [yearValue, monthValue] = value.split('-');
+  const year = controls.querySelector('#mobileLockYear');
+  const month = controls.querySelector('#mobileLockMonth');
+  if (year && !year.querySelector(`option[value="${yearValue}"]`)) {
+    year.insertAdjacentHTML('beforeend', `<option value="${yearValue}">${Number(yearValue)} 年</option>`);
+  }
+  if (year) year.value = yearValue;
+  if (month) month.value = monthValue;
+  els.lockedThrough.value = value;
+}
+window.cySyncMobileLockMonthControls = syncMobileLockMonthControls;
+
+function setupMobileCanvasContinuation() {
+  const shell = document.querySelector('.shell');
+  const entry = document.querySelector('.entry-card');
+  if (!shell || !entry || shell.dataset.mobileCanvasBound === '1') return;
+  shell.dataset.mobileCanvasBound = '1';
+
+  const observer = new MutationObserver(syncMobileCanvasContinuation);
+  observer.observe(shell, { attributes: true, attributeFilter: ['data-mobile-page'] });
+  observer.observe(entry, { attributes: true, attributeFilter: ['class'] });
+  syncMobileCanvasContinuation();
+}
+
+function syncMobileCanvasContinuation() {
+  const shell = document.querySelector('.shell');
+  const entry = document.querySelector('.entry-card');
+  const mobile = window.matchMedia(CY_V0215_BUILD4_MOBILE).matches;
+  const entryActive = mobile && shell?.dataset.mobilePage !== 'ledger';
+  const income = entryActive && (entry?.classList.contains('entry-income') || state?.kind === 'income');
+  const expense = entryActive && !income;
+
+  document.documentElement.classList.toggle('mobile-entry-income-canvas', income);
+  document.documentElement.classList.toggle('mobile-entry-expense-canvas', expense);
 }
 
 function previousMobileMonth(month) {
