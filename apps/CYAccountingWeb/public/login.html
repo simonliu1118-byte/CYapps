@@ -24,13 +24,11 @@
         <span class="brand-mark" aria-hidden="true">CY</span>
         <div>
           <h1 id="loginTitle">志遠記帳系統</h1>
-          <p>CYAccounting Web</p>
         </div>
       </div>
 
       <section id="loginPanel">
         <h2>員工帳號登入</h2>
-        <p class="subtitle">使用 CY Identity 員工帳號與記帳系統 App Access。</p>
         <form id="loginForm" action="/login" method="post" class="login-form" autocomplete="on">
           <label>
             <span>員工編號</span>
@@ -48,7 +46,6 @@
 
       <section id="recoveryPanel" hidden>
         <h2>重設密碼</h2>
-        <p class="subtitle">驗證碼會寄到 CY Identity 中已驗證的 Email。</p>
         <form id="recoveryForm" class="login-form" autocomplete="off">
           <label>
             <span>員工編號</span>
@@ -77,10 +74,8 @@
           <p id="recoveryMessage" class="message" role="status" aria-live="polite"></p>
           <button id="recoveryBack" class="link-button" type="button">返回登入</button>
         </form>
-        <p class="password-note">新密碼需為 8–16 個 Unicode 字元。</p>
       </section>
 
-      <p class="identity-note">首次帳號啟用與 Email 驗證由 CY Web 帳號管理入口完成；本系統不建立第二套帳號或 Session。</p>
     </section>
   </main>
   <script src="/login.js?rev=login-hard-timeout" defer></script>
