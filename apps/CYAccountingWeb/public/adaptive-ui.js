@@ -2364,14 +2364,13 @@ function renderSettingsAccountManager() {
             <strong class="settings-editable-name">${settingsManagerEscape(account.name)}</strong>
             <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">${settingsActionIcon('edit')}</button>
           </div>
-          <button type="button" class="mini-button settings-archive-button" data-account-archive="${id}">封存</button>
+          <button type="button" class="mini-button settings-archive-button" data-account-archive="${id}" title="封存帳戶" aria-label="封存帳戶">${settingsActionIcon('archive')}</button>
         </div>`;
       }).join('')
     : '<div class="empty">尚無可用帳戶。</div>';
 
   host.innerHTML = `
     <section class="settings-account-section">
-      <div class="settings-account-section-title">使用中</div>
       <div class="settings-account-active-list">${activeHtml}</div>
     </section>`;
 }
@@ -2403,7 +2402,9 @@ function renderArchivedAccountManager() {
 function settingsActionIcon(action) {
   const path = action === 'edit'
     ? 'M15 5l4 4M4 20l4-1L20 7a2.1 2.1 0 0 0-3-3L5 16z'
-    : 'M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6';
+    : action === 'archive'
+      ? 'M3 3h18v5H3zM5 8v13h14V8M9 12h6'
+      : 'M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6';
   return `<svg class="settings-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${path}"/></svg>`;
 }
 
@@ -2682,7 +2683,7 @@ function openSettingsRenameDialog(type, id) {
     type,
     id,
     title,
-    subtitle: '編輯時不改變目前排序與分類位置',
+    subtitle: '',
     label,
     maxLength,
     value: item.name || '',
@@ -2699,6 +2700,7 @@ function openSettingsManagerDialog(config) {
 
   dialog.querySelector('#settingsManagerTitle').textContent = config.title || '';
   dialog.querySelector('#settingsManagerSubtitle').textContent = config.subtitle || '';
+  dialog.querySelector('#settingsManagerSubtitle').hidden = !config.subtitle;
   dialog.querySelector('#settingsNameLabel').textContent = config.label || '名稱';
 
   const input = dialog.querySelector('#settingsNameInput');
@@ -3802,13 +3804,12 @@ function renderMobileAccountManager() {
           <strong class="mobile-account-name">${settingsManagerEscape(account.name)}</strong>
           ${isDefault ? '<span class="mobile-manager-badge">預設</span>' : `<button type="button" class="mini-button" data-account-default="${id}">設為預設</button>`}
           <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">${settingsActionIcon('edit')}</button>
-          <button type="button" class="mini-button" data-account-archive="${id}">封存</button>
+          <button type="button" class="mini-button settings-archive-button" data-account-archive="${id}" title="封存帳戶" aria-label="封存帳戶">${settingsActionIcon('archive')}</button>
         </div>`;
       }).join('')
     : '<div class="empty mobile-manager-empty">尚無可用帳戶。</div>';
 
   host.innerHTML = `
-    <div class="mobile-account-section-title">使用中</div>
     <div class="mobile-account-active-list">${activeHtml}</div>`;
 
   bindMobileAccountReorder(host);

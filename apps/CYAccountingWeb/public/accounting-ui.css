@@ -605,22 +605,30 @@ body[data-cyacc-read-only="true"] #mobileMainNav {
   transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
 }
 
-.entry-kind-switch .kind-button[data-kind="income"] {
+.entry-kind-switch .kind-button[data-kind="income"],
+.entry-kind-switch .kind-button[data-settings-kind="income"],
+.entry-kind-switch .kind-button[data-settings-kind-choice="income"] {
   color: #2e7443;
 }
 
-.entry-kind-switch .kind-button[data-kind="expense"] {
+.entry-kind-switch .kind-button[data-kind="expense"],
+.entry-kind-switch .kind-button[data-settings-kind="expense"],
+.entry-kind-switch .kind-button[data-settings-kind-choice="expense"] {
   color: #9a443c;
 }
 
-.entry-kind-switch .kind-button[data-kind="income"].active {
+.entry-kind-switch .kind-button[data-kind="income"].active,
+.entry-kind-switch .kind-button[data-settings-kind="income"].active,
+.entry-kind-switch .kind-button[data-settings-kind-choice="income"].active {
   background: rgba(255, 255, 255, .92);
   border-color: #9fcaab;
   box-shadow: 0 1px 4px rgba(36, 99, 55, .14);
   color: #235d35;
 }
 
-.entry-kind-switch .kind-button[data-kind="expense"].active {
+.entry-kind-switch .kind-button[data-kind="expense"].active,
+.entry-kind-switch .kind-button[data-settings-kind="expense"].active,
+.entry-kind-switch .kind-button[data-settings-kind-choice="expense"].active {
   background: rgba(255, 255, 255, .92);
   border-color: #e2aaa4;
   box-shadow: 0 1px 4px rgba(139, 52, 45, .13);

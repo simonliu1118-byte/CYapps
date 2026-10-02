@@ -2678,13 +2678,17 @@
     box-shadow: none !important;
   }
 
-  .entry-kind-switch .kind-button.active[data-kind="income"] {
+  .entry-kind-switch .kind-button.active[data-kind="income"],
+  .entry-kind-switch .kind-button.active[data-settings-kind="income"],
+  .entry-kind-switch .kind-button.active[data-settings-kind-choice="income"] {
     background: #e7f4eb !important;
     color: #24633b !important;
     box-shadow: 0 1px 3px rgba(37, 94, 58, .10) !important;
   }
 
-  .entry-kind-switch .kind-button.active[data-kind="expense"] {
+  .entry-kind-switch .kind-button.active[data-kind="expense"],
+  .entry-kind-switch .kind-button.active[data-settings-kind="expense"],
+  .entry-kind-switch .kind-button.active[data-settings-kind-choice="expense"] {
     background: #fae9e7 !important;
     color: #8a342e !important;
     box-shadow: 0 1px 3px rgba(135, 52, 46, .10) !important;
@@ -3485,7 +3489,13 @@
   .entry-card label > span,
   .entry-field-label,
   .quick-tool-label {
-    display: block !important;
+    display: flex !important;
+    align-self: center !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 32px !important;
+    margin: 0 !important;
+    padding: 0 !important;
     color: #657384 !important;
     font-size: 12px !important;
     font-weight: 650 !important;
@@ -8869,18 +8879,7 @@
   }
 
   .mobile-settings-dialog .settings-kind {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 6px !important;
-    width: 100% !important;
     margin: 0 0 10px !important;
-  }
-
-  .mobile-settings-dialog .settings-kind .kind-button {
-    min-height: 36px !important;
-    height: 36px !important;
-    border-radius: 8px !important;
-    font-size: 12px !important;
   }
 
   .mobile-settings-dialog .manager-list,
@@ -9471,6 +9470,25 @@
 }
 
 
+/* Category content uses the same solid canvas colors as entry; headers stay white. */
+#settingsDialog .settings-content:has([data-settings-pane="categories"].active.settings-kind-income) {
+  --settings-kind-canvas: #f4fbf6;
+  background: var(--settings-kind-canvas) !important;
+}
+
+#settingsDialog .settings-content:has([data-settings-pane="categories"].active.settings-kind-expense) {
+  --settings-kind-canvas: #fff6f5;
+  background: var(--settings-kind-canvas) !important;
+}
+
+#settingsDialog [data-settings-pane="categories"].active,
+#settingsDialog [data-settings-pane="categories"] .settings-category-tree,
+#settingsDialog [data-settings-pane="categories"] .settings-category-parent,
+#settingsDialog [data-settings-pane="categories"] .settings-category-leaf,
+#settingsDialog [data-settings-pane="categories"] .mobile-category-footer {
+  background: var(--settings-kind-canvas, #fff) !important;
+}
+
 /* Canonical account lifecycle and category hierarchy. */
 .settings-action-icon {
   display: block;
@@ -9480,7 +9498,8 @@
 }
 
 .settings-edit-button,
-.settings-delete-button {
+.settings-delete-button,
+.settings-archive-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
