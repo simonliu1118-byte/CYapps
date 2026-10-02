@@ -41,7 +41,7 @@ for (const width of [375, 820, 1440]) {
     showV0215Build4LedgerNotice() {}, updateEntryLockState() {}, renderSettingsCategoryManager() {}, renderCategories() {},
     renderSettingsAccountManager() {}, renderTransactions() {}, renderAccounts() {}, renderSettings() {}
   });
-  vm.runInContext('const cyPendingTransactionUpdates = new Map();\n' + piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
+  vm.runInContext('let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map();\n' + piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
   vm.runInContext('let cyV0215Build4Edit = { id: 1, returnContext: { month: "2026-09", search: "" } };\n' + piece(adaptive, 'async function saveV0215Build4MobileEdit(', 'function cancelV0215Build4MobileEdit('), context);
   let intercepted = false;
   context.beginInlineLedgerEdit = () => {};
@@ -139,5 +139,44 @@ for (const width of [375, 820, 1440]) {
   assert.ok(context.state.categories.some(category => category.name === '新科目'), `${width}: optimistic category appears immediately`);
   release(); await rejected;
   assert.equal(context.state.categories.length, 0, 'failed category addition rolls back at every breakpoint');
+}
+
+// Exercise actual month reads that finish after a write has left the pending map.
+for (const scenario of ['read-before-write', 'read-during-write', 'failed-write']) {
+  const original = { id: 1, tx_date: '2026-09-01', account_name: '現金', category_name: '一般收入', kind: 'income', summary: '原值', amount: 1 };
+  let stored = { ...original };
+  let finishRead;
+  let finishWrite;
+  let reads = 0;
+  const context = vm.createContext({
+    state: { transactions: [original] }, els: { monthFilter: field('2026-09'), transactionRows: {} }, window: {},
+    setLedgerLoadingState() {}, renderTransactions() {}, updateEntryLockState() {}, isLocked: () => false,
+    jsonHeaders: () => ({}), escapeHtml: value => value,
+    async api(path, options) {
+      if (options?.method === 'PUT') {
+        await new Promise(resolve => { finishWrite = resolve; });
+        if (scenario === 'failed-write') throw new Error('write failed');
+        stored = { ...original, amount: JSON.parse(options.body).amount };
+        return {};
+      }
+      reads += 1;
+      if (reads === 1) return new Promise(resolve => { finishRead = () => resolve({ transactions: [original] }); });
+      return { transactions: [stored] };
+    }
+  });
+  vm.runInContext('let cyTransactionRequestId = 0; let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map();\n' +
+    piece(app, 'async function loadTransactions(', 'function setLedgerLoadingState(') +
+    piece(app, 'function summaryCharacterUnits(', 'async function saveTransactionEdit('), context);
+  let read;
+  if (scenario !== 'read-during-write') read = context.loadTransactions();
+  const write = context.persistTransactionUpdate(1, { txDate: original.tx_date, accountName: original.account_name, categoryName: original.category_name, summary: original.summary, amount: 8 });
+  if (!read) read = context.loadTransactions();
+  finishWrite();
+  if (scenario === 'failed-write') await assert.rejects(write, /write failed/);
+  else await write;
+  finishRead();
+  await read;
+  assert.equal(reads, 2, `${scenario}: a stale response is replaced by a fresh canonical read`);
+  assert.equal(context.state.transactions[0].amount, scenario === 'failed-write' ? 1 : 8, `${scenario}: delayed reads cannot overwrite the completed write or rollback`);
 }
 console.log('Production edit writers, locks, summary rules and optimistic settings are shared at mobile/tablet/desktop widths.');

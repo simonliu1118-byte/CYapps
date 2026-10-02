@@ -16,6 +16,7 @@ const els = {};
 
 let cyaccAppStarted = false;
 let cyTransactionRequestId = 0;
+let cyTransactionMutationRevision = 0;
 const cyPendingTransactionUpdates = new Map();
 const cyPendingSettingsMutations = new Set();
 let cySettingsTempId = -1;
@@ -288,10 +289,12 @@ async function loadTransactions() {
   const month = String(els.monthFilter.value || '');
   if (!month) return;
   const requestId = ++cyTransactionRequestId;
+  const mutationRevision = cyTransactionMutationRevision;
   setLedgerLoadingState(true);
   try {
     const data = await api(`/api/transactions?month=${encodeURIComponent(month)}`);
     if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
+    if (mutationRevision !== cyTransactionMutationRevision) return await loadTransactions();
     state.transactions = mergePendingTransactionUpdates(data.transactions || [], month);
     state.ledgerLocked = Boolean(data.locked);
     state.lockedThrough = data.lockedThrough || state.lockedThrough;
@@ -412,6 +415,7 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
   const body = manualTransactionValues(values, original);
   const updated = { ...original, tx_date: body.txDate, account_name: body.accountName, category_name: body.categoryName, summary: body.summary, amount: body.amount };
   cyPendingTransactionUpdates.set(id, { original, updated });
+  cyTransactionMutationRevision += 1;
   state.transactions = mergePendingTransactionUpdates(state.transactions, els.monthFilter.value);
   try {
     onOptimistic?.();
@@ -429,6 +433,7 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
     throw error;
   } finally {
     cyPendingTransactionUpdates.delete(id);
+    cyTransactionMutationRevision += 1;
   }
 }
 

@@ -30,7 +30,7 @@
 - 共通規則與 AITeam 同步於 2.7.0；期初／人工基準政策經 governance PR #280 更新，GOVERNANCE_VERSION=2.3.27。
 - CYID current contract 1.0.2／minimum 1.0.0；CYACC 1.0.1 使用 direct principal/session，仍在相容範圍。
 - 舊 #252 架構清理與啟動卡住問題已由後續版本處理；不得把歷史交接中的分支或停點當作現況。
-- 真機 Mobile／Tablet／Desktop、Password Recovery Email、桌面移轉最終內容驗收與 Backup Phase C production x/14 證據仍是獨立驗收，不由自動測試代替。
+- 真機 Mobile／Tablet／Desktop、Password Recovery Email、Backup Phase C production x/14 證據仍是獨立驗收，不由自動測試代替。
 
 ## 電腦版核心功能移植
 
@@ -48,7 +48,7 @@
 - [x] 逐月鎖帳操作流程（V0.12.0）；設定頁管理介面沿用相同月份語意並使用自製年月選擇器。
 - [x] 單月 Excel 匯出：直接產生標準 `.xlsx`，包含月統計、逐筆餘額與期初餘額工作表（V0.13.0）。
 - [x] Excel 匯入：`.xlsx` 工作表選擇、標題列／欄位對應、預覽、7 位數驗證、鎖帳檢查、重複略過與確認後寫入（V0.15.0）。
-- [ ] **CYAccounting SQLite 帳本匯入／遷移工具（V0.19.0）**：實作已完成瀏覽器本機 SQLite 解析、schema/integrity 驗證、SUPER_ADMIN server-side 權限、保守合併預覽、transaction occurrence dedupe、期初餘額／科目結構衝突阻擋、鎖帳只取較嚴格月份與 D1 atomic commit；原始 `.db` 不上傳。V0.19.0 Build 1 已修正 D1 bound parameter／query／payload limit並正式部署；**本 workstream 已成功執行真實 production migration，但最終 migrated-ledger content acceptance 尚未由使用者明確關閉**，因此仍保持未完成。Public Git 不記錄 production accounting counts/values/evidence。
+- [x] **CYAccounting SQLite 帳本匯入／遷移工具（V0.19.0）**：實作已完成瀏覽器本機 SQLite 解析、schema/integrity 驗證、SUPER_ADMIN server-side 權限、保守合併預覽、transaction occurrence dedupe、期初餘額／科目結構衝突阻擋、鎖帳只取較嚴格月份與 D1 atomic commit；原始 `.db` 不上傳。V0.19.0 Build 1 已修正 D1 bound parameter／query／payload limit並正式部署；**本 workstream 已成功執行真實 production migration，使用者於 2026/10/03（日本時間）明確確認移轉帳本內容 OK，最終內容驗收通過。**Public Git 不記錄 production accounting counts/values/evidence。
 
 ## Production / Domain
 
