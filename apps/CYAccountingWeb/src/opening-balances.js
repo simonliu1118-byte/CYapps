@@ -114,9 +114,16 @@ export async function buildOpeningBalanceSnapshot(db, month) {
 
 export async function currentOpeningUsageForAccount(db, accountName) {
   const name = String(accountName || '').trim();
-  if (!name) return { nonZeroOverrides: 0 };
-  const row = await db.prepare('SELECT COUNT(*) AS count FROM opening_balance_overrides WHERE account_name = ? AND amount <> 0').bind(name).first();
-  return { nonZeroOverrides: Number(row && row.count || 0) };
+  if (!name) return { latestOverrideAmount: 0, nonZeroOverrides: 0, overrideCount: 0 };
+  const [latest, counts] = await Promise.all([
+    db.prepare('SELECT amount FROM opening_balance_overrides WHERE account_name = ? ORDER BY month DESC LIMIT 1').bind(name).first(),
+    db.prepare('SELECT COUNT(*) AS count, SUM(CASE WHEN amount <> 0 THEN 1 ELSE 0 END) AS non_zero FROM opening_balance_overrides WHERE account_name = ?').bind(name).first()
+  ]);
+  return {
+    latestOverrideAmount: latest ? Number(latest.amount) || 0 : 0,
+    nonZeroOverrides: Number(counts && counts.non_zero || 0),
+    overrideCount: Number(counts && counts.count || 0)
+  };
 }
 
 async function setOpeningBalanceOverrides(request, db, principal) {
