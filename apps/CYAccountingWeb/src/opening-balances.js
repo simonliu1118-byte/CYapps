@@ -8,7 +8,11 @@ export async function handleOpeningBalanceApi(request, env, principal) {
   if (url.pathname === '/api/opening-balances' && request.method === 'GET') {
     const month = String(url.searchParams.get('month') || currentMonth()).trim();
     if (!isMonth(month)) return json({ ok: false, error: '月份格式錯誤。' }, 400);
-    return json(await buildOpeningBalanceSnapshot(env.DB, month));
+    const snapshot = await buildOpeningBalanceSnapshot(env.DB, month);
+    if (url.searchParams.get('audit') === '1') {
+      snapshot.audit = await readAuditEntries(env.DB, month, '', 30);
+    }
+    return json(snapshot);
   }
 
   if (url.pathname === '/api/opening-balance-overrides' && request.method === 'PUT') {
@@ -178,34 +182,34 @@ async function getOpeningBalanceAudit(url, db) {
   const month = String(url.searchParams.get('month') || '').trim();
   const account = String(url.searchParams.get('account') || '').trim();
   if (month && !isMonth(month)) return json({ ok: false, error: '月份格式錯誤。' }, 400);
+  return json({ ok: true, entries: await readAuditEntries(db, month, account, AUDIT_LIMIT) });
+}
 
+async function readAuditEntries(db, month, account, limit) {
   let result;
   if (month && account) {
-    result = await db.prepare('SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit WHERE month = ? AND account_name = ? ORDER BY id DESC LIMIT ?').bind(month, account, AUDIT_LIMIT).all();
+    result = await db.prepare('SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit WHERE month = ? AND account_name = ? ORDER BY id DESC LIMIT ?').bind(month, account, limit).all();
   } else if (month) {
-    result = await db.prepare('SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit WHERE month = ? ORDER BY id DESC LIMIT ?').bind(month, AUDIT_LIMIT).all();
+    result = await db.prepare('SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit WHERE month = ? ORDER BY id DESC LIMIT ?').bind(month, limit).all();
   } else if (account) {
-    result = await db.prepare('SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit WHERE account_name = ? ORDER BY id DESC LIMIT ?').bind(account, AUDIT_LIMIT).all();
+    result = await db.prepare('SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit WHERE account_name = ? ORDER BY id DESC LIMIT ?').bind(account, limit).all();
   } else {
-    result = await db.prepare('SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id DESC LIMIT ?').bind(AUDIT_LIMIT).all();
+    result = await db.prepare('SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id DESC LIMIT ?').bind(limit).all();
   }
 
-  return json({
-    ok: true,
-    entries: (result.results || []).map(row => ({
-      id: Number(row.id),
-      month: String(row.month),
-      accountName: String(row.account_name),
-      action: String(row.action),
-      previousAmount: row.previous_amount === null ? null : Number(row.previous_amount),
-      newAmount: row.new_amount === null ? null : Number(row.new_amount),
-      reason: String(row.reason || ''),
-      actorEmployeeNo: String(row.actor_employee_no || ''),
-      actorName: String(row.actor_name || ''),
-      actorRole: String(row.actor_role || ''),
-      createdAt: String(row.created_at || '')
-    }))
-  });
+  return (result.results || []).map(row => ({
+    id: Number(row.id),
+    month: String(row.month),
+    accountName: String(row.account_name),
+    action: String(row.action),
+    previousAmount: row.previous_amount === null ? null : Number(row.previous_amount),
+    newAmount: row.new_amount === null ? null : Number(row.new_amount),
+    reason: String(row.reason || ''),
+    actorEmployeeNo: String(row.actor_employee_no || ''),
+    actorName: String(row.actor_name || ''),
+    actorRole: String(row.actor_role || ''),
+    createdAt: String(row.created_at || '')
+  }));
 }
 
 function calculateFromAnchor(anchor, monthlyNets, targetMonth) {
