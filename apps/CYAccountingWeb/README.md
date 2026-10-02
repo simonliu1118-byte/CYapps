@@ -2,9 +2,13 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current source release: **V0.21.16 Build 0**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
+> Current source release: **V0.22.0 Build 0**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
 >
 > Current continuity handoff: [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)
+
+## V0.22.0 手機穩定版
+
+新增帳戶提示統一為「帳戶名稱最多八字」。本版整合手機記帳、看帳清單、共用彈窗、科目階層排序、封存帳戶與自動期初餘額；完整摘要見 [`V0.22.0.txt`](./V0.22.0.txt)。Web 正式部署成功後，以獨立 Release 流程重新驗證 main、版本、測試、公開套件掃描與 SHA-256，再發布公開原始碼包。Release 由手動啟動 workflow 或專用 `release/cyaccountingweb` 分支觸發，一般開發分支與 main push 不會自動發布 Release。
 
 ## V0.21.16 設定與科目顯示
 

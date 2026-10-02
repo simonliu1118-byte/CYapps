@@ -1634,7 +1634,7 @@ function setupV21Build14AccountLimit() {
   const button = document.querySelector('#addAccountButton');
   if (!input || !button) return;
   input.maxLength = 8;
-  input.placeholder = '新增帳戶名稱（最多8字）';
+  input.placeholder = '帳戶名稱最多八字';
 
   const validate = event => {
     const name = String(input.value || '').trim().replace(/\s+/g, ' ');

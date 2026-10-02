@@ -29,7 +29,7 @@ const adaptive = read('public/adaptive-ui.js');
 const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 
-assert.equal(version, '0.21.16');
+assert.equal(version, '0.22.0');
 assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1fr\)/);
