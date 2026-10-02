@@ -143,10 +143,12 @@ async function permanentlyDeleteAccount(id, db, principal) {
     }, 409);
   }
 
-  const result = await db.prepare(
-    'DELETE FROM accounts WHERE id = ? AND archived_at IS NOT NULL'
-  ).bind(id).run();
-  if (!result.meta?.changes) {
+  const results = await db.batch([
+    db.prepare('DELETE FROM opening_balance_overrides WHERE account_name = ? AND amount = 0').bind(name),
+    db.prepare('DELETE FROM accounts WHERE id = ? AND archived_at IS NOT NULL').bind(id)
+  ]);
+  const result = results?.[1];
+  if (!result?.meta?.changes) {
     return json({ ok: false, error: '帳戶狀態已變更，請重新整理後再試。' }, 409);
   }
 
