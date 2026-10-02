@@ -125,11 +125,11 @@
   </dialog>
 
   <dialog id="openingDialog" class="modal opening-modal">
-    <div class="modal-header"><div><h2>期初餘額</h2><p>設定選定月份各帳戶的期初金額；已鎖帳月份僅供檢視。</p></div><button class="icon-button" type="button" data-close-dialog="openingDialog" aria-label="關閉">×</button></div>
-    <div class="pane-heading opening-dialog-heading"><p class="hint">空白代表未設定；可輸入負數。歷史帳戶仍可查看既有設定。</p><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
+    <div class="modal-header"><div><h2>期初餘額</h2><p>由前期結餘自動承接；手動調整需填寫理由並保留 audit。</p></div><button class="icon-button" type="button" data-close-dialog="openingDialog" aria-label="關閉">×</button></div>
+    <div class="pane-heading opening-dialog-heading"><p class="hint">預設為自動計算；如需例外調整，請使用「手動調整」並填寫理由。</p><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
     <div id="openingRows" class="opening-list"></div>
     <div id="openingMessage" class="dialog-message"></div>
-    <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="openingDialog">關閉</button><button id="saveOpeningButton" class="primary" type="button">儲存期初餘額</button></div>
+    <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="openingDialog">關閉</button><button id="saveOpeningButton" class="primary" type="button">手動調整</button></div>
   </dialog>
 
   <dialog id="settingsDialog" class="modal settings-modal">
