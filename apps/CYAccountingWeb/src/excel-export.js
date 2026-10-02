@@ -1,3 +1,5 @@
+import { buildOpeningBalanceSnapshot } from './opening-balances.js';
+
 const encoder = new TextEncoder();
 const CRC_TABLE = buildCrcTable();
 
@@ -8,46 +10,27 @@ export async function handleExcelExportApi(request, env) {
   const month = String(url.searchParams.get('month') || currentMonth()).trim();
   if (!isMonth(month)) return json({ ok: false, error: '月份格式錯誤。' }, 400);
 
-  const [transactionsResult, accountsResult, openingsResult, lockedRow] = await Promise.all([
+  const [transactionsResult, openingData] = await Promise.all([
     env.DB.prepare(`
       SELECT id, tx_date, account_name, kind, category_name, summary, amount, created_at
       FROM transactions
       WHERE substr(tx_date, 1, 7) = ?
       ORDER BY tx_date ASC, created_at ASC, id ASC
     `).bind(month).all(),
-    env.DB.prepare('SELECT name FROM accounts ORDER BY sort_order, id').all(),
-    env.DB.prepare('SELECT account_name, amount FROM opening_balances WHERE month = ? ORDER BY account_name').bind(month).all(),
-    env.DB.prepare("SELECT value FROM app_settings WHERE key = 'locked_through'").first()
+    buildOpeningBalanceSnapshot(env.DB, month)
   ]);
 
   const transactions = transactionsResult.results || [];
-  const currentAccounts = (accountsResult.results || []).map(row => String(row.name || '')).filter(Boolean);
-  const openingRows = openingsResult.results || [];
-  const openingMap = new Map(openingRows.map(row => [String(row.account_name || ''), numberOrZero(row.amount)]));
-
-  const accountNames = [...currentAccounts];
-  const seen = new Set(accountNames);
-  for (const row of openingRows) {
-    const name = String(row.account_name || '');
-    if (name && !seen.has(name)) {
-      seen.add(name);
-      accountNames.push(name);
-    }
-  }
-  for (const tx of transactions) {
-    const name = String(tx.account_name || '');
-    if (name && !seen.has(name)) {
-      seen.add(name);
-      accountNames.push(name);
-    }
-  }
-
-  const lockedThrough = isMonth(String(lockedRow?.value || '')) ? String(lockedRow.value) : null;
+  const accountNames = (openingData.accounts || []).map(item => String(item.name || '')).filter(Boolean);
+  const openingMap = new Map((openingData.accounts || []).map(item => [String(item.name || ''), numberOrZero(item.amount)]));
+  const openingSources = new Map((openingData.accounts || []).map(item => [String(item.name || ''), String(item.source || 'automatic')]));
+  const lockedThrough = openingData.lockedThrough || null;
   const workbook = buildMonthlyWorkbook({
     month,
     transactions,
     accountNames,
     openingMap,
+    openingSources,
     locked: Boolean(lockedThrough && month <= lockedThrough),
     generatedAt: new Date()
   });
@@ -64,7 +47,7 @@ export async function handleExcelExportApi(request, env) {
   });
 }
 
-export function buildMonthlyWorkbook({ month, transactions, accountNames, openingMap, locked = false, generatedAt = new Date() }) {
+export function buildMonthlyWorkbook({ month, transactions, accountNames, openingMap, openingSources = new Map(), locked = false, generatedAt = new Date() }) {
   const openingBalances = openingMap instanceof Map ? openingMap : new Map(Object.entries(openingMap || {}));
   const txs = [...(transactions || [])].sort(compareChronological);
   const openingTotal = [...openingBalances.values()].reduce((sum, value) => sum + numberOrZero(value), 0);
@@ -94,7 +77,7 @@ export function buildMonthlyWorkbook({ month, transactions, accountNames, openin
     },
     {
       name: 'xl/worksheets/sheet2.xml',
-      text: openingSheetXml({ month, accountNames: accountNames || [], openingBalances })
+      text: openingSheetXml({ month, accountNames: accountNames || [], openingBalances, openingSources })
     }
   ];
 
@@ -171,7 +154,7 @@ function ledgerSheetXml({ month, locked, generatedAt, openingTotal, income, expe
 </worksheet>`;
 }
 
-function openingSheetXml({ month, accountNames, openingBalances }) {
+function openingSheetXml({ month, accountNames, openingBalances, openingSources }) {
   const rows = [
     rowXml(1, [inlineCell('A1', `期初餘額｜${month}`, 1)]),
     rowXml(3, [inlineCell('A3', '帳戶', 5), inlineCell('B3', '期初餘額', 5), inlineCell('C3', '狀態', 5)])
@@ -183,11 +166,11 @@ function openingSheetXml({ month, accountNames, openingBalances }) {
   } else {
     names.forEach((name, index) => {
       const row = 4 + index;
-      const hasExplicitOpening = openingBalances.has(name);
+      const source = openingSources instanceof Map ? openingSources.get(name) : null;
       rows.push(rowXml(row, [
         inlineCell(`A${row}`, name, 7),
         numberCell(`B${row}`, numberOrZero(openingBalances.get(name)), 8),
-        inlineCell(`C${row}`, hasExplicitOpening ? '已設定' : '未設定（視為 0）', 12)
+        inlineCell(`C${row}`, source === 'override' ? '手動調整' : '自動計算', 12)
       ]));
     });
   }

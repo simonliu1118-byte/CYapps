@@ -2,9 +2,18 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current integration candidate: **V0.21.6 Build 1**（2026-09-30）。Production CYID cutover still requires explicit approval.
+> Current source release: **V0.21.11 Build 0**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
 >
-> Current continuity handoff: [`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)
+> Current continuity handoff: [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)
+
+## V0.21.11 期初餘額
+
+- 預設依歷史收支自動承接期初；最近人工基準之後繼續承接收支。帳務 API 與 Excel 共用 `src/opening-balances.js`。
+- 人工調整須填理由，保存實際前／後值、CYID 操作者及時間；恢復自動值會清除該月覆寫並新增稽核紀錄。資料庫禁止更新或刪除稽核列。
+- USER 保持唯讀；ADMIN／SUPER_ADMIN 可調整未鎖帳月份，待 server 成功才顯示完成。
+- SUPER_ADMIN 可永久刪除已封存、無交易且最新期初為 0 的帳戶；歷史非零基準及稽核保留，已有稽核的帳戶名稱不得重用。
+- Migration 0006 將舊 `opening_balances` 轉為覆寫及移轉稽核後刪除舊表。部署後不得只回退到依賴舊表的 Worker。
+- 備份 inner format v2 保存封存狀態、覆寫與稽核；outer BackupSet 維持 v2，舊資料格式 reader 保留。
 
 ## 專案定位
 
@@ -262,7 +271,7 @@ Phase D 才會切成：R2 每日、GCS 每週三／週日 cross-cloud DR replica
 - Desktop 與 Mobile/Tablet presentation 分層維護，Desktop 改版不得反向覆寫 `<1024px` Adaptive UI；
 - Desktop、Tablet、Mobile 仍需持續以真實裝置／尺寸做視覺 acceptance；自動測試只驗證 presentation boundary 與結構，不取代人工畫面驗收。
 
-目前 workstream / acceptance / CYID integration 交接集中記錄於 [`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)；接手時不要從舊 Build 對話逐項重播。
+目前工作與驗收交接集中記錄於 [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)；接手時不要從舊 Build 對話逐項重播。
 
 CYAccountingWeb 是 Web project，**不自動套用 Windows Desktop Visual Guide 的 WinForms 尺寸／元件規則**。
 
@@ -283,7 +292,8 @@ npm run dev
 - `REPOSITORY_RULES.md`、`REPO_POLICY.md`：repository 共通治理與 Public repo 安全規則。
 - `TODO.md`：目前完成狀態、待辦與未來方向，不是永久規則。
 - `BACKUP_ARCHITECTURE_HANDOFF.md`：目前 Tiered Backup migration / acceptance handoff。
-- `HANDOFF_2026-09-30.md`：Current conversation / workspace continuity note，不是永久規則。
+- `HANDOFF_2026-10-02.md`：目前工作交接，不是永久規則。
+- `HANDOFF_2026-09-30.md`：歷史交接，不代表目前基準。
 - `HANDOFF_2026-09-29.md`：Historical continuity checkpoint；不得當作 current state。
 - `README.md`：專案入口與現況摘要。
 

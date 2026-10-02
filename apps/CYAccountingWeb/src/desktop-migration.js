@@ -7,7 +7,7 @@ import {
 const HISTORY_KEY = 'desktop_migration_history_v1';
 const HISTORY_LIMIT = 20;
 const TRANSACTION_JSON_CHUNK = 400;
-const OPENING_JSON_CHUNK = 1000;
+const OPENING_JSON_CHUNK = 2000;
 const MAX_SAFE_BATCH_STATEMENTS = 40;
 
 export async function handleDesktopMigrationApi(request, env, session) {
@@ -223,18 +223,54 @@ export function buildSafeMigrationStatements(analysis, db, session) {
     `).bind(JSON.stringify(chunk)));
   }
 
+  const migrationAt = new Date().toISOString();
+  const migrationActor = {
+    employeeId: String(session?.employee_id || ''),
+    employeeNo: String(session?.employee_no || ''),
+    name: String(session?.employee_name || ''),
+    role: String(session?.role || '')
+  };
+
   for (let start = 0; start < plan.readyOpeningBalances.length; start += OPENING_JSON_CHUNK) {
     const chunk = plan.readyOpeningBalances.slice(start, start + OPENING_JSON_CHUNK);
-    statements.push(db.prepare(`
-      INSERT INTO opening_balances(month, account_name, amount, created_at, updated_at)
-      SELECT
-        json_extract(value, '$.month'),
-        json_extract(value, '$.accountName'),
-        CAST(json_extract(value, '$.amount') AS INTEGER),
-        json_extract(value, '$.createdAt'),
-        json_extract(value, '$.updatedAt')
-      FROM json_each(?)
-    `).bind(JSON.stringify(chunk)));
+    const json = JSON.stringify(chunk);
+    statements.push(
+      db.prepare(`
+        INSERT INTO opening_balance_overrides(
+          month, account_name, amount, reason, created_at, updated_at,
+          updated_by_employee_id, updated_by_employee_no, updated_by_name, updated_by_role
+        )
+        SELECT
+          json_extract(value, '$.month'),
+          json_extract(value, '$.accountName'),
+          CAST(json_extract(value, '$.amount') AS INTEGER),
+          '桌面帳本移轉',
+          json_extract(value, '$.createdAt'),
+          json_extract(value, '$.updatedAt'),
+          ?, ?, ?, ?
+        FROM json_each(?)
+      `).bind(
+        migrationActor.employeeId, migrationActor.employeeNo, migrationActor.name, migrationActor.role, json
+      ),
+      db.prepare(`
+        INSERT INTO opening_balance_audit(
+          month, account_name, action, previous_amount, new_amount, reason,
+          actor_employee_id, actor_employee_no, actor_name, actor_role, created_at
+        )
+        SELECT
+          json_extract(value, '$.month'),
+          json_extract(value, '$.accountName'),
+          'migration',
+          NULL,
+          CAST(json_extract(value, '$.amount') AS INTEGER),
+          '桌面帳本移轉',
+          ?, ?, ?, ?, ?
+        FROM json_each(?)
+      `).bind(
+        migrationActor.employeeId, migrationActor.employeeNo, migrationActor.name, migrationActor.role,
+        migrationAt, json
+      )
+    );
   }
 
   if (plan.resultingLockedThrough) {
@@ -244,7 +280,7 @@ export function buildSafeMigrationStatements(analysis, db, session) {
     `).bind(plan.resultingLockedThrough));
   }
 
-  const now = new Date().toISOString();
+  const now = migrationAt;
   const historyEntry = {
     sha256: snapshot.source.fileSha256,
     fileName: snapshot.source.fileName,

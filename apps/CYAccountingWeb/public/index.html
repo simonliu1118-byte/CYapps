@@ -38,7 +38,7 @@
       status.textContent = '載入時間過久，請重新整理頁面。';
     }, 12000);
   </script>
-  <link rel="stylesheet" href="/app.css?rev=semantic1">
+  <link rel="stylesheet" href="/app.css?rev=02111-automatic-opening-balances">
   <link rel="stylesheet" href="/accounting-ui.css?rev=semantic1">
   <link rel="stylesheet" href="/quick-entry-settings.css?rev=semantic1">
   <link rel="stylesheet" href="/category-management.css?rev=semantic1">
@@ -47,13 +47,13 @@
   <link rel="stylesheet" href="/excel-import.css?rev=semantic1">
   <link rel="stylesheet" href="/backup.css?rev=semantic1">
   <link rel="stylesheet" href="/desktop-migration.css?rev=semantic1">
-  <link rel="stylesheet" href="/adaptive-ui.css?rev=02110-account-archive-category-tree">
+  <link rel="stylesheet" href="/adaptive-ui.css?rev=02111-automatic-opening-balances">
 </head>
 <body class="cyacc-booting">
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.21.10</span></p>
+      <p>CYAccounting Web <span class="version">V0.21.11</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -125,11 +125,11 @@
   </dialog>
 
   <dialog id="openingDialog" class="modal opening-modal">
-    <div class="modal-header"><div><h2>期初餘額</h2><p>設定選定月份各帳戶的期初金額；已鎖帳月份僅供檢視。</p></div><button class="icon-button" type="button" data-close-dialog="openingDialog" aria-label="關閉">×</button></div>
-    <div class="pane-heading opening-dialog-heading"><p class="hint">空白代表未設定；可輸入負數。歷史帳戶仍可查看既有設定。</p><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
+    <div class="modal-header"><div><h2>期初餘額</h2><p>由前期結餘自動承接；手動調整需填寫理由並保留 audit。</p></div><button class="icon-button" type="button" data-close-dialog="openingDialog" aria-label="關閉">×</button></div>
+    <div class="pane-heading opening-dialog-heading"><p class="hint">預設為自動計算；如需例外調整，請使用「手動調整」並填寫理由。</p><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
     <div id="openingRows" class="opening-list"></div>
     <div id="openingMessage" class="dialog-message"></div>
-    <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="openingDialog">關閉</button><button id="saveOpeningButton" class="primary" type="button">儲存期初餘額</button></div>
+    <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="openingDialog">關閉</button><button id="saveOpeningButton" class="primary" type="button">手動調整</button></div>
   </dialog>
 
   <dialog id="settingsDialog" class="modal settings-modal">
@@ -167,7 +167,7 @@
   </dialog>
 
   <script src="/auth.js?rev=session-hard-timeout" defer></script>
-  <script src="/app.js?rev=0218-mobile-loading" defer></script>
+  <script src="/app.js?rev=02111-automatic-opening-balances" defer></script>
   <script src="/quick-entry.js?rev=semantic1" defer></script>
   <script src="/ledger-tools.js?rev=semantic1" defer></script>
   <script src="/input-confirmation.js?rev=semantic1" defer></script>
@@ -178,6 +178,6 @@
   <script src="/excel-import-ui.js?rev=semantic1" defer></script>
   <script src="/backup-ui.js?rev=semantic1" defer></script>
   <script src="/desktop-migration-ui.js?rev=semantic1" defer></script>
-  <script src="/adaptive-ui.js?rev=02110-account-archive-category-tree" defer></script>
+  <script src="/adaptive-ui.js?rev=02111-automatic-opening-balances" defer></script>
 </body>
 </html>

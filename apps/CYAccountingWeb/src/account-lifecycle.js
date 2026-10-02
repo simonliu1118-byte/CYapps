@@ -1,3 +1,5 @@
+import { currentOpeningUsageForAccount } from './opening-balances.js';
+
 export async function handleAccountLifecycleApi(request, env, principal) {
   if (!env.DB) return null;
   const url = new URL(request.url);
@@ -123,28 +125,33 @@ async function permanentlyDeleteAccount(id, db, principal) {
   }
 
   const name = String(account.name || '');
-  const [transactions, openings] = await Promise.all([
+  const [transactions, openingUsage] = await Promise.all([
     db.prepare('SELECT COUNT(*) AS count FROM transactions WHERE account_name = ?').bind(name).first(),
-    db.prepare('SELECT COUNT(*) AS count FROM opening_balances WHERE account_name = ?').bind(name).first()
+    currentOpeningUsageForAccount(db, name)
   ]);
   const transactionCount = Number(transactions?.count || 0);
-  const openingBalanceCount = Number(openings?.count || 0);
-  if (transactionCount > 0 || openingBalanceCount > 0) {
+  const latestOpeningAmount = Number(openingUsage?.latestOverrideAmount || 0);
+  if (transactionCount > 0 || latestOpeningAmount !== 0) {
     return json({
       ok: false,
-      error: '此帳戶仍有歷史記帳或期初餘額，不能永久刪除。',
+      error: '此帳戶仍有歷史記帳或目前期初餘額非 0，不能永久刪除。',
       code: 'ACCOUNT_HAS_HISTORY',
       usage: {
         transactions: transactionCount,
-        openingBalances: openingBalanceCount
+        latestOpeningAmount
       }
     }, 409);
   }
 
-  const result = await db.prepare(
-    'DELETE FROM accounts WHERE id = ? AND archived_at IS NOT NULL'
-  ).bind(id).run();
-  if (!result.meta?.changes) {
+  const cleanupZeroOverrides = Number(openingUsage?.nonZeroOverrides || 0) === 0;
+  const statements = [];
+  if (cleanupZeroOverrides) {
+    statements.push(db.prepare('DELETE FROM opening_balance_overrides WHERE account_name = ? AND amount = 0').bind(name));
+  }
+  statements.push(db.prepare('DELETE FROM accounts WHERE id = ? AND archived_at IS NOT NULL').bind(id));
+  const results = await db.batch(statements);
+  const result = results?.[results.length - 1];
+  if (!result?.meta?.changes) {
     return json({ ok: false, error: '帳戶狀態已變更，請重新整理後再試。' }, 409);
   }
 

@@ -24,11 +24,12 @@ assert(resolveBackupTopology({ BACKUP_TOPOLOGY: 'legacy_gcs' }) === 'legacy_gcs'
 expectCode(() => resolveBackupTopology({ BACKUP_TOPOLOGY: 'parallel_dual_provider' }), 'BACKUP_TOPOLOGY_UNSUPPORTED');
 
 const tableData = {
-  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, created_at: '2026-09-01T00:00:00Z' }],
+  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, created_at: '2026-09-01T00:00:00Z', archived_at: null }],
   category_groups: [{ id: 1, kind: 'expense', name: '支出', sort_order: 0, created_at: '2026-09-01T00:00:00Z' }],
   categories: [{ id: 1, kind: 'expense', group_id: 1, name: '一般支出', sort_order: 0, is_favorite: 1, created_at: '2026-09-01T00:00:00Z' }],
   transactions: [{ id: 1, tx_date: '2026-09-25', account_name: '現金', kind: 'expense', category_name: '一般支出', summary: 'Phase B', amount: 10, created_at: '2026-09-25T00:00:00Z', updated_at: '2026-09-25T00:00:00Z' }],
-  opening_balances: [{ month: '2026-09', account_name: '現金', amount: 100, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }],
+  opening_balance_overrides: [{ month: '2026-09', account_name: '現金', amount: 100, reason: '測試', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z', updated_by_employee_id: 'emp-1', updated_by_employee_no: '0001', updated_by_name: '管理員', updated_by_role: 'SUPER_ADMIN' }],
+  opening_balance_audit: [{ id: 1, month: '2026-09', account_name: '現金', action: 'set', previous_amount: null, new_amount: 100, reason: '測試', actor_employee_id: 'emp-1', actor_employee_no: '0001', actor_name: '管理員', actor_role: 'SUPER_ADMIN', created_at: '2026-09-01T00:00:00Z' }],
   app_settings: [{ key: 'locked_through', value: '2026-08' }]
 };
 
@@ -37,7 +38,7 @@ class MockStatement {
   constructor(sql) { this.sql = sql; this.args = []; }
   bind(...args) { this.args = args; return this; }
   async first() {
-    return this.sql.includes("FROM meta WHERE key = 'schema_version'") ? { value: '3' } : null;
+    return this.sql.includes("FROM meta WHERE key = 'schema_version'") ? { value: '6' } : null;
   }
   async all() {
     const table = Object.keys(tableData).find(name => this.sql.includes(`FROM ${name}`));
@@ -77,6 +78,29 @@ assert(compatibility.totalRowCount === backupSet.totalRowCount, 'V0.17 compatibi
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
+assert(backupSet.manifest.dataFormat === 'CYAccountingWebBackup', 'inner data format must be declared');
+assert(backupSet.manifest.dataFormatVersion === 2, 'inner data format v2 must be declared');
+assert(backupSet.data.openingBalanceAudit.length === 1, 'audit must survive provider storage');
+
+// An actual legacy data shape remains readable without changing old objects.
+const legacyData = {
+  accounts: [{ id: 1, name: '現金', sortOrder: 0, isDefault: 1, createdAt: '2026-01-01' }],
+  categoryGroups: [], categories: [], transactions: [],
+  openingBalances: [{ month: '2026-01', accountName: '現金', amount: 100 }], appSettings: []
+};
+const legacyBytes = encoder.encode(JSON.stringify(legacyData));
+const legacyManifest = structuredClone(backupSet.manifest);
+delete legacyManifest.dataFormat;
+delete legacyManifest.dataFormatVersion;
+legacyManifest.appVersion = '0.17.0';
+legacyManifest.schemaVersion = 3;
+legacyManifest.counts = Object.fromEntries(Object.entries(legacyData).map(([key, rows]) => [key, rows.length]));
+legacyManifest.totalRowCount = 2;
+legacyManifest.files.data.byteSize = legacyBytes.byteLength;
+legacyManifest.files.data.sha256 = Buffer.from(await crypto.subtle.digest('SHA-256', legacyBytes)).toString('hex');
+const legacy = await validateBackupSetBytes(encoder.encode(JSON.stringify(legacyManifest)), legacyBytes);
+assert(legacy.data.openingBalances[0].amount === 100, 'legacy opening data must remain readable');
+assert(legacy.manifest.appVersion === '0.17.0', 'legacy manifest must not be rewritten');
 const futureManifest = JSON.parse(decoder.decode(backupSet.manifestBytes));
 futureManifest.format = 'CYBackupSet';
 futureManifest.formatVersion = 1;

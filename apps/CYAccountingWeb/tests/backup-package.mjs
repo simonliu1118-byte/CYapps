@@ -5,7 +5,7 @@ function assert(condition, message) {
 }
 
 const tableData = {
-  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, created_at: '2026-09-01T00:00:00Z' }],
+  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, created_at: '2026-09-01T00:00:00Z', archived_at: null }],
   category_groups: [
     { id: 1, kind: 'income', name: '收入分類', sort_order: 0, created_at: '2026-09-01T00:00:00Z' },
     { id: 2, kind: 'expense', name: '支出分類', sort_order: 0, created_at: '2026-09-01T00:00:00Z' }
@@ -17,8 +17,11 @@ const tableData = {
   transactions: [
     { id: 10, tx_date: '2026-09-24', account_name: '現金', kind: 'expense', category_name: '一般支出', summary: '文具', amount: 20, created_at: '2026-09-24T01:00:00Z', updated_at: '2026-09-24T01:00:00Z' }
   ],
-  opening_balances: [
-    { month: '2026-09', account_name: '現金', amount: 10000, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }
+  opening_balance_overrides: [
+    { month: '2026-09', account_name: '現金', amount: 10000, reason: '期初建帳', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z', updated_by_employee_id: 'emp-1', updated_by_employee_no: '0001', updated_by_name: '管理員', updated_by_role: 'SUPER_ADMIN' }
+  ],
+  opening_balance_audit: [
+    { id: 1, month: '2026-09', account_name: '現金', action: 'set', previous_amount: null, new_amount: 10000, reason: '期初建帳', actor_employee_id: 'emp-1', actor_employee_no: '0001', actor_name: '管理員', actor_role: 'SUPER_ADMIN', created_at: '2026-09-01T00:00:00Z' }
   ],
   app_settings: [
     { key: 'locked_through', value: '2026-08' },
@@ -36,7 +39,7 @@ class MockStatement {
     return this;
   }
   async first() {
-    if (this.sql.includes("FROM meta WHERE key = 'schema_version'")) return { value: '3' };
+    if (this.sql.includes("FROM meta WHERE key = 'schema_version'")) return { value: '6' };
     return null;
   }
   async all() {
@@ -53,13 +56,16 @@ const backup = await buildBackupPackage(db, new Date('2026-09-25T03:30:00.000Z')
 const parsed = JSON.parse(new TextDecoder().decode(backup.bytes));
 
 assert(parsed.manifest.format === 'CYAccountingWebBackup', 'backup format mismatch');
-assert(parsed.manifest.formatVersion === 1, 'backup format version mismatch');
-assert(parsed.manifest.schemaVersion === 3, 'schema version mismatch');
-assert(parsed.manifest.totalRowCount === 9, `row count mismatch: ${parsed.manifest.totalRowCount}`);
+assert(parsed.manifest.formatVersion === 2, 'backup format version mismatch');
+assert(parsed.manifest.schemaVersion === 6, 'schema version mismatch');
+assert(parsed.manifest.totalRowCount === 10, `row count mismatch: ${parsed.manifest.totalRowCount}`);
 assert(parsed.manifest.dataSha256 === backup.dataSha256, 'data checksum mismatch');
 assert(/^[0-9a-f]{64}$/.test(backup.fileSha256), 'file checksum must be SHA-256');
 assert(backup.fileName === 'CYAccountingWeb_backup_20260925T033000Z.json', `filename mismatch: ${backup.fileName}`);
 assert(parsed.data.transactions[0].summary === '文具', 'transaction data missing');
+assert(parsed.data.openingBalanceOverrides[0].reason === '期初建帳', 'opening override missing');
+assert(parsed.data.openingBalanceAudit[0].action === 'set', 'opening audit missing');
+assert(parsed.data.accounts[0].archivedAt === null, 'account archive state missing');
 assert(!('webSessions' in parsed.data), 'web sessions must never be backed up');
 assert(!('backupIntegrations' in parsed.data), 'OAuth integration data must never be backed up');
 

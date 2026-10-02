@@ -15,25 +15,22 @@
 - [ ] Password Recovery real Email/browser delivery acceptance；不因上述 Session/App Access acceptance 自動視為完成。
 - [ ] iPad / Android Tablet 真機登入與操作驗收。
 - [x] Production CYID runtime cutover 已隨 V0.21.6 Build 8 部署；正式 Worker 主路徑使用 CYID provider Session / Service Binding，不再以 local `web_sessions` 作 Identity authority。這只代表 runtime cutover 已發生，不等於所有 production acceptance gate 已完成。
-- [ ] Production post-cutover acceptance：Password Recovery real Email/browser、Mobile/Tablet 真機，以及目前帳務 bootstrap 啟動問題仍需完成；不得因 CI 綠燈直接標為 fully accepted。
+- [ ] Production post-cutover acceptance：Password Recovery real Email/browser 與 Mobile/Tablet 真機仍需完成；歷史帳務 bootstrap 卡住已由後續修正版處理，不再視為目前阻擋。不得因 CI 綠燈直接標為 fully accepted。
 - [ ] CYID production cutover 穩定並完成 post-cutover acceptance 後，以獨立 forward migration 退休 `web_sessions` 實體 table；不得和 authority cutover 綁成同一步驟。
 
 本文件只記錄待辦、後續方向與未來評估項目，不作為永久規則來源。
 
-> 目前 conversation/workspace continuity：[`HANDOFF_2026-09-30.md`](./HANDOFF_2026-09-30.md)
+> 目前工作交接：[`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)
 
-## Current checkpoint — 2026-10-01
+## Current checkpoint — 2026-10-02
 
-- Formal `main` source baseline：**V0.21.6 Build 8** at `2a95557`。
-- Build 8 production workflow run **#266** successfully resolved the CYID production runtime, applied migrations, deployed Worker/static assets and verified the secure login entry. The workflow ended red only because the final legacy mobile-asset verification request timed out; do not treat that final verification failure as proof that the preceding deployment rolled back.
-- Draft PR **#252** (`refactor/cyaccountingweb-baseline`) is the active structural cleanup line. It does **not** deploy production on PR events. Latest PR validation and Governance Check are green; PR events do not deploy production.
-- PR #252 removes the active Worker wrapper chain and all version-named frontend JS/CSS/test shells. Frontend runtime is now loaded through functional modules such as `quick-entry`, `ledger-tools`, `category-management`, `excel-export-ui`, `excel-import-ui`, `backup-ui`, `desktop-migration-ui`, and `adaptive-ui`; `app-baseline.js/css` are gone.
-- Last real-device startup observation after Build 8 progressed beyond the initial CYID account-verification stage into accounting-data loading. Further production debugging must focus on accounting bootstrap/initialization on the clean baseline, not add another auth/version compatibility layer.
-- Mobile Build 10/11 behavior is preserved by the Build 8 source and #252 semantic modules: `餘額` = 期初餘額、`更多` = 帳戶設定／科目設定／月份鎖帳／匯出 Excel、top-right user menu = identity + logout only. Final real-device acceptance remains open.
-- Tablet real-device login/touch/post-login acceptance remains open. Do not add Tablet-specific Identity authority or legacy auth wrappers.
-- CYID shared consumer contract current version is **1.0.1**，minimum compatible **1.0.0**；canonical references remain under `apps/CYCloudIdentity/docs/`。
-- A real production SQLite migration was executed successfully during this workstream, but final migrated-ledger content acceptance has not been explicitly closed；Public Git must not record production accounting counts/values/evidence。
-- Backup Phase C scheduled `x/14` remains a production-evidence gate；never infer it from dates，read catalog/UI when needed。
+- 正式前版 V0.21.10 Build 0：`f701d54`，production deploy #346 成功；帳戶封存／解封、SUPER_ADMIN 硬刪除架構、歷史帳戶回填、分類－科目單一階層 renderer、收入優先排序已完成。
+- V0.21.11 Build 0 完成自動期初服務、理由與 append-only audit、CYID actor、恢復自動值、Excel 共用計算、備份 inner v2、桌面移轉 override＋audit、最新零餘額刪除與歷史資料保留。
+- Migration 0006、實際 SQL/API 權限與鎖帳、Excel parity、帳戶刪除、舊備份相容、雙 provider export-once、最大 D1 移轉批次回歸已通過本機驗證；PR／production 結果以對應合併提交的 Actions 為準。
+- 共通規則與 AITeam 同步於 2.7.0；期初／人工基準政策經 governance PR #280 更新，GOVERNANCE_VERSION=2.3.27。
+- CYID current contract 1.0.2／minimum 1.0.0；CYACC 1.0.1 使用 direct principal/session，仍在相容範圍。
+- 舊 #252 架構清理與啟動卡住問題已由後續版本處理；不得把歷史交接中的分支或停點當作現況。
+- 真機 Mobile／Tablet／Desktop、Password Recovery Email、桌面移轉最終內容驗收與 Backup Phase C production x/14 證據仍是獨立驗收，不由自動測試代替。
 
 ## 電腦版核心功能移植
 
@@ -110,7 +107,7 @@
 - [ ] Backup 整合優先採「各 App → 共用 CY Backup Service／Worker → app-scoped R2/GCS」；不以直接共用同一把廣權限 storage credential 作為整合方式。
 - [ ] 即使改由共用 Backup Service 管理，各 App 的備份資料仍維持邏輯隔離與獨立還原能力；caller identity 必須由 server-side mapping 決定可存取 dataset，不得只信任 caller 傳入的 `appId`。
 - [x] 共用員工帳號權威已切到 **CYCloud Identity (CYID)**；CYAccountingWeb 不直接讀寫 CYID D1，只透過 canonical `IDENTITY` Service Binding contract 使用 Identity 能力。
-- [x] CYID consumer integration 依 canonical `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 與 `docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；current contract `1.0.1` / minimum compatible `1.0.0`。舊 dated CYID handoff 不得作 current authority。
-- [ ] Draft PR #252 是目前的結構清理線：移除版本 wrapper/shell、改成功能模組，`CYID Consumer Impact: NONE`。PR validation 已通過；V11–V16-era functional modules also use semantic internal identifiers, and CI guards against reintroducing version-named source/test shells. Production 不因 Draft PR 自動變更；合併／部署仍走正常 review 與 production acceptance。
+- [x] CYID consumer integration 依 canonical `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 與 `docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；current contract `1.0.2` / minimum compatible `1.0.0`，CYACC 採用 `1.0.1` 仍相容。舊 dated CYID handoff 不得作 current authority。
+- [x] 歷史 PR #252 結構清理已合併，現行 source 已無版本殼：移除版本 wrapper/shell、改成功能模組，`CYID Consumer Impact: NONE`。功能模組使用 semantic identifiers，CI 阻止版本殼回流。
 - [ ] 涉及 Identity authority、跨 App 帳號／角色、shared account database、Service Binding、shared Worker、跨 App D1 ownership 或 shared Backup Service routing 等底層變更時，實作前必須先同步 CY-WEB / CYCloudIdentity 最新決策，不由 CYAccountingWeb 單獨先行定義。
 - [ ] 在 shared Identity 正式遷移完成前，CYAccountingWeb 仍維持自己的帳務 D1 與 application session 邊界；共用帳號不代表合併 runtime database。

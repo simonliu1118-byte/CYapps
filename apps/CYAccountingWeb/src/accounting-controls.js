@@ -108,7 +108,7 @@ async function getEarliestAccountingMonth(db) {
     FROM (
       SELECT substr(tx_date, 1, 7) AS month FROM transactions
       UNION ALL
-      SELECT month FROM opening_balances
+      SELECT month FROM opening_balance_overrides
     )
     WHERE month GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
   `).first();
