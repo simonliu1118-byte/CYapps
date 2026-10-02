@@ -495,9 +495,9 @@ async function permanentlyDeleteArchivedAccount(id) {
   const account = state.archivedAccounts.find(item => Number(item.id) === id);
   if (!account) return;
   const transactions = Number(account.transaction_count || 0);
-  const openings = Number(account.opening_balance_count || 0);
-  if (transactions > 0 || openings > 0) {
-    setDialogMessage(els.settingsMessage, '此帳戶仍有歷史記帳或期初餘額，不能永久刪除。', true);
+  const latestOpening = Number(account.latest_opening_amount || 0);
+  if (transactions > 0 || latestOpening !== 0) {
+    setDialogMessage(els.settingsMessage, '此帳戶仍有歷史記帳或目前期初餘額非 0，不能永久刪除。', true);
     return;
   }
   if (!confirm(`永久刪除帳戶「${account.name}」？\n此操作無法復原。`)) return;
