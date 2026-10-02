@@ -142,10 +142,10 @@ async function loadTargetState(db, snapshot) {
       JOIN category_groups g ON g.id = c.group_id
       ORDER BY c.kind, g.sort_order, c.sort_order, c.id
     `).all(),
-    db.prepare('SELECT month, account_name, amount FROM opening_balances').all(),
+    db.prepare('SELECT month, account_name, amount FROM opening_balance_overrides').all(),
     db.prepare("SELECT key, value FROM app_settings WHERE key IN ('locked_through', ?)").bind(HISTORY_KEY).all(),
     db.prepare('SELECT COUNT(*) AS count FROM transactions').first(),
-    db.prepare('SELECT COUNT(*) AS count FROM opening_balances').first()
+    db.prepare('SELECT COUNT(*) AS count FROM opening_balance_overrides').first()
   ];
   if (minDate && maxDate) {
     tasks.push(db.prepare(`
