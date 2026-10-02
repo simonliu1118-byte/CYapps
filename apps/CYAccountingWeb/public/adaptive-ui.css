@@ -81,6 +81,23 @@
 
 /* Mobile: adaptive presentation, not a scaled desktop table. */
 @media (max-width: 767px) {
+  /* Keep focused fields readable without triggering mobile input zoom. */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Allow scrolling/pinch zoom, while avoiding double-tap zoom on controls. */
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
   :root {
     background: #f1f4f7;
   }
@@ -8979,7 +8996,7 @@
     min-height: 36px !important;
     height: 36px !important;
     padding: 0 9px !important;
-    font-size: 12px !important;
+    font-size: 16px !important;
   }
 
   .mobile-settings-dialog .inline-add button {
@@ -9037,7 +9054,7 @@
     min-height: 34px !important;
     height: 34px !important;
     padding: 0 8px !important;
-    font-size: 13px !important;
+    font-size: 16px !important;
     text-align: right !important;
   }
 
@@ -9840,7 +9857,7 @@
 
   #settingsDialog.mobile-opening-dialog .opening-reason-field textarea {
     min-height: 54px !important;
-    font-size: 13px !important;
+    font-size: 16px !important;
   }
 
   #settingsDialog.mobile-opening-dialog .opening-audit-row > div {

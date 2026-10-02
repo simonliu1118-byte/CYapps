@@ -243,7 +243,8 @@ jobs:
         run: |
           set -euo pipefail
           base="https://$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
-          curl --max-time 8 -fsS "$base/adaptive-ui.css?rev=02111-automatic-opening-balances" | grep -F '@media (max-width: 767px)' >/dev/null
+          curl --max-time 8 -fsS "$base/adaptive-ui.css?rev=02112-mobile-tap-zoom" | grep -F 'touch-action: manipulation' >/dev/null
+          curl --max-time 8 -fsS "$base/login.css?v=02112-mobile-tap-zoom" | grep -F 'touch-action: manipulation' >/dev/null
           curl --max-time 8 -fsS "$base/adaptive-ui.js?rev=02111-automatic-opening-balances" | grep -F 'mobileAccountMenuButton' >/dev/null
           curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'window.cyaccSessionPromise = checkSessionFallback()' >/dev/null
           curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'Promise.race([request, timeout])' >/dev/null
