@@ -68,10 +68,10 @@ const env = {
     });
   } }
 };
-async function call(path, method = 'GET', body) {
+async function call(path, method = 'GET', body, headers = {}) {
   return app.fetch(new Request('https://acc.example.com' + path, {
     method,
-    headers: { cookie: `cyaccounting_session=${token}`, 'content-type': 'application/json' },
+    headers: { cookie: `cyaccounting_session=${token}`, 'content-type': 'application/json', ...headers },
     ...(body ? { body: JSON.stringify(body) } : {})
   }), env);
 }
@@ -134,8 +134,32 @@ for (const month of ['2026-03', '2026-04']) {
   assert.equal(sheets[0].data[2][1], snapshot.accounts.reduce((sum, item) => sum + item.amount, 0));
 }
 
+// Browser identity never changes the domain contract. All interfaces call the same router.
+role = 'ADMIN';
+for (const browser of ['Mobile Safari iPhone', 'Mobile Safari iPad', 'Desktop Chromium']) {
+  const headers = { 'user-agent': browser };
+  const values = { txDate: '2026-04-01', accountName: '現金', kind: 'income', categoryName: '一般收入', summary: '中'.repeat(20), amount: 1 };
+  const created = await call('/api/transactions', 'POST', values, headers);
+  assert.equal(created.status, 201);
+  const txId = (await created.json()).id;
+  assert.equal((await call(`/api/transactions/${txId}`, 'PUT', { ...values, summary: '中'.repeat(21) }, headers)).status, 400);
+  assert.equal((await call(`/api/transactions/${txId}`, 'PUT', { ...values, kind: 'expense', summary: 'A'.repeat(40), amount: 7 }, headers)).status, 200);
+  assert.equal(sql.prepare('SELECT kind FROM transactions WHERE id=?').get(txId).kind, 'income', 'editing cannot change the stored kind');
+  sql.exec("INSERT INTO app_settings VALUES ('locked_through','2026-03')");
+  assert.equal((await call(`/api/transactions/${txId}`, 'PUT', { ...values, txDate: '2026-03-01' }, headers)).status, 409);
+  sql.exec("DELETE FROM app_settings WHERE key='locked_through'");
+  role = 'USER';
+  assert.equal((await call(`/api/transactions/${txId}`, 'PUT', values, headers)).status, 403);
+  role = 'ADMIN';
+  assert.equal((await call(`/api/transactions/${txId}`, 'DELETE', undefined, headers)).status, 200);
+}
+
 // Create/archive/permanent-delete through the actual authenticated router.
 role = 'ADMIN';
+assert.equal((await call('/api/accounts','POST',{ name: '一二三四五六七八九' })).status, 400);
+assert.equal((await call('/api/accounts/1','PUT',{ name: '一二三四五六七八九' })).status, 400);
+assert.equal((await call('/api/accounts','POST',{ name: '一二三四五六七八' })).status, 201);
+assert.equal((await call('/api/transactions','POST',{txDate:'2026-04-01',accountName:'現金',kind:'income',categoryName:'門市收入',summary:'長'.repeat(21),amount:1})).status, 400);
 assert.equal((await call('/api/accounts','POST',{ name: '測試帳戶' })).status, 201);
 const id = sql.prepare("SELECT id FROM accounts WHERE name='測試帳戶'").get().id;
 assert.equal((await call('/api/opening-balance-overrides','PUT',{month:'2026-01',values:{測試帳戶:100},reason:'測試期初'})).status, 200);

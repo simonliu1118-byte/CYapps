@@ -746,7 +746,7 @@ function setupV21Build8SummaryLimit() {
   const entryForm = document.querySelector('#transactionForm');
   entryForm?.addEventListener('submit', event => {
     const summary = document.querySelector('#summary');
-    if (!summary || v21Build8WeightedUnits(summary.value) <= CY_V21_BUILD8_SUMMARY_UNITS) return;
+    if (!summary || summaryWeightedUnits(summary.value) <= CY_V21_BUILD8_SUMMARY_UNITS) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (typeof showMessage === 'function') showMessage('摘要不可超過 20 個中文字或 40 個英數字元。', true);
@@ -756,7 +756,7 @@ function setupV21Build8SummaryLimit() {
   const editForm = document.querySelector('#editTransactionForm');
   editForm?.addEventListener('submit', event => {
     const summary = document.querySelector('#editSummary');
-    if (!summary || v21Build8WeightedUnits(summary.value) <= CY_V21_BUILD8_SUMMARY_UNITS) return;
+    if (!summary || summaryWeightedUnits(summary.value) <= CY_V21_BUILD8_SUMMARY_UNITS) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const message = document.querySelector('#editMessage');
@@ -766,24 +766,18 @@ function setupV21Build8SummaryLimit() {
 }
 
 function enforceV21Build8Summary(input) {
-  if (v21Build8WeightedUnits(input.value) <= CY_V21_BUILD8_SUMMARY_UNITS) return;
+  if (summaryWeightedUnits(input.value) <= CY_V21_BUILD8_SUMMARY_UNITS) return;
   const trimmed = v21Build8TrimWeighted(input.value, CY_V21_BUILD8_SUMMARY_UNITS);
   const cursor = input.selectionStart ?? trimmed.length;
   input.value = trimmed;
   try { input.setSelectionRange(Math.min(cursor, trimmed.length), Math.min(cursor, trimmed.length)); } catch { /* no-op */ }
 }
 
-function v21Build8WeightedUnits(value) {
-  let units = 0;
-  for (const char of String(value || '')) units += v21Build8CharUnits(char);
-  return units;
-}
-
 function v21Build8TrimWeighted(value, maxUnits) {
   let units = 0;
   let result = '';
   for (const char of String(value || '')) {
-    const next = v21Build8CharUnits(char);
+    const next = summaryCharacterUnits(char);
     if (units + next > maxUnits) break;
     units += next;
     result += char;
@@ -791,12 +785,7 @@ function v21Build8TrimWeighted(value, maxUnits) {
   return result;
 }
 
-function v21Build8CharUnits(char) {
-  const code = char.codePointAt(0) || 0;
-  if (code <= 0x7f) return 1;
-  if (code >= 0xff61 && code <= 0xff9f) return 1;
-  return 2;
-}
+
 
 function setupV21Build8RoleMedal() {
   const target = document.querySelector('#currentUser');
@@ -2523,6 +2512,22 @@ function settingsGroupOrderButtons(groupId, kind) {
     <button type="button" class="mini-button settings-group-order" data-settings-group-move="${groupId}" data-direction="down" aria-label="分類下移" title="分類下移"${pending || index < 0 || index >= groups.length - 1 ? ' disabled' : ''}>↓</button>`;
 }
 
+function restoreSettingsOrderState(current, previous, fields) {
+  const before = new Map(previous.map((item, index) => [Number(item.id), { item, index }]));
+  return current.map(item => {
+    const prior = before.get(Number(item.id));
+    if (!prior) return item;
+    return { ...item, ...Object.fromEntries(fields.map(field => [field, prior.item[field]])) };
+  }).sort((a, b) => (before.get(Number(a.id))?.index ?? 999999) - (before.get(Number(b.id))?.index ?? 999999));
+}
+
+function renderSettingsCategorySurfaces() {
+  const selected = document.querySelector('#categoryName')?.value || '';
+  renderSettingsCategoryManager();
+  if (typeof renderCategories === 'function') renderCategories(selected);
+  if (typeof renderFavoriteCategories === 'function') renderFavoriteCategories();
+}
+
 async function moveSettingsGroup(id, direction) {
   if (settingsManagerSaving || !['up', 'down'].includes(direction)) return;
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
@@ -2539,10 +2544,10 @@ async function moveSettingsGroup(id, direction) {
   state.groups = previous.map(group => group.kind === kind
     ? { ...byId.get(ids[cursor]), sort_order: cursor++ + 1 }
     : group);
-  renderSettingsCategoryManager();
+  renderSettingsCategorySurfaces();
   await persistSettingsOrder('/api/category-groups/reorder', { kind, ids }, '分類順序已更新。', () => {
-    state.groups = previous;
-    renderSettingsCategoryManager();
+    state.groups = restoreSettingsOrderState(state.groups, previous, ['sort_order']);
+    renderSettingsCategorySurfaces();
   });
 }
 
@@ -2745,28 +2750,18 @@ async function saveSettingsManagerDialog(event) {
   let ok = false;
   try {
     if (config.mode === 'add-group') {
-      if (window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) {
-        dialog.close();
-        void optimisticAddMobileGroup(name);
-        return;
-      }
-      ok = await mutateSettings('/api/category-groups', {
-        method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, name })
-      }, '分類已新增。');
+      dialog.close();
+      await optimisticAddSettingsGroup(name);
+      return;
     } else if (config.mode === 'add-category') {
       const groupId = Number(select?.value);
       if (!Number.isInteger(groupId) || groupId <= 0) {
         setDialogMessage(message, '請選擇大分類。', true);
         return;
       }
-      if (window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) {
-        dialog.close();
-        void optimisticAddMobileCategory(name, groupId);
-        return;
-      }
-      ok = await mutateSettings('/api/categories', {
-        method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, groupId, name })
-      }, '科目已新增。');
+      dialog.close();
+      await optimisticAddSettingsCategory(name, groupId);
+      return;
     } else if (config.mode === 'rename') {
       const endpoints = {
         account: `/api/accounts/${config.id}`,
@@ -2775,6 +2770,7 @@ async function saveSettingsManagerDialog(event) {
       };
       const endpoint = endpoints[config.type];
       if (!endpoint) return;
+      dialog.close();
       ok = await mutateSettings(endpoint, {
         method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ name })
       }, '名稱已更新。');
@@ -2920,13 +2916,7 @@ async function handleSettingsAccountDrop(event) {
   finishSettingsManagerDrag();
   if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
 
-  const byId = new Map(previous.map(item => [Number(item.id), item]));
-  state.accounts = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 })).filter(Boolean);
-  renderSettingsAccountManager();
-  await persistSettingsOrder('/api/accounts/reorder', { ids: nextIds }, '帳戶順序已更新。', () => {
-    state.accounts = previous;
-    renderSettingsAccountManager();
-  });
+  await applySettingsAccountOrder(previous, nextIds);
 }
 
 function handleSettingsCategoryDragOver(event) {
@@ -2975,11 +2965,12 @@ async function handleSettingsCategoryDrop(event) {
   }
   let cursor = 0;
   state.categories = previous.map(item => item.kind === kind ? ordered[cursor++] : item);
-  renderSettingsCategoryManager();
+  renderSettingsCategorySurfaces();
 
   await persistSettingsOrder('/api/categories/reorder', { kind, groups: payload }, '科目順序已更新。', () => {
-    state.categories = previous;
-    renderSettingsCategoryManager();
+    state.categories = restoreSettingsOrderState(state.categories, previous, ['group_id', 'sort_order']);
+    state.categories = state.categories.map(item => ({ ...item, group_name: state.groups.find(group => Number(group.id) === Number(item.group_id))?.name || item.group_name }));
+    renderSettingsCategorySurfaces();
   });
 }
 
@@ -3076,7 +3067,6 @@ let cyV0214BalancePopover = null;
 let cyV0214BalanceAnchor = null;
 let cyV0214BalancePinned = false;
 let cyV0214BalanceHideTimer = null;
-const cyV0214PendingWrites = new Set();
 window.cyShowMigrationComplete = showMigrationCompleteV0214;
 window.cyCloseLedgerBalancePopover = closeLedgerBalancePopoverV0214;
 
@@ -3331,27 +3321,8 @@ async function handleV0214AccountDefault(event) {
   event.preventDefault();
   event.stopImmediatePropagation();
   const id = Number(button.dataset.accountDefault || 0);
-  const key = 'default:' + id;
-  if (!Number.isInteger(id) || id <= 0 || cyV0214PendingWrites.has(key)) return;
-  const previous = (state.accounts || []).map(item => ({ ...item }));
-  if (!previous.some(item => Number(item.id) === id)) return;
-  const selected = document.querySelector('#accountName')?.value || '';
-
-  cyV0214PendingWrites.add(key);
-  state.accounts = previous.map(item => ({ ...item, is_default: Number(item.id) === id ? 1 : 0 }));
-  renderV0214AccountState(selected);
-  setV0214SettingsMessage('正在儲存預設帳戶…');
-
-  try {
-    await api('/api/accounts/' + id + '/default', { method: 'POST' });
-    setV0214SettingsMessage('已更新預設帳戶。');
-  } catch (error) {
-    state.accounts = previous;
-    renderV0214AccountState(selected);
-    setV0214SettingsMessage(error.message || '預設帳戶儲存失敗，已還原。', true);
-  } finally {
-    cyV0214PendingWrites.delete(key);
-  }
+  if (!Number.isInteger(id) || id <= 0) return;
+  await mutateSettings(`/api/accounts/${id}/default`, { method: 'POST' }, '已更新預設帳戶。');
 }
 
 async function handleV0214FavoriteToggle(event) {
@@ -3360,47 +3331,11 @@ async function handleV0214FavoriteToggle(event) {
   event.preventDefault();
   event.stopImmediatePropagation();
   const id = Number(button.dataset.categoryFavorite || 0);
-  const key = 'favorite:' + id;
   const current = (state.categories || []).find(item => Number(item.id) === id);
-  if (!current || cyV0214PendingWrites.has(key)) return;
-  const previous = (state.categories || []).map(item => ({ ...item }));
-  const nextFavorite = Number(current.is_favorite) !== 1;
-
-  cyV0214PendingWrites.add(key);
-  state.categories = previous.map(item => Number(item.id) === id ? { ...item, is_favorite: nextFavorite ? 1 : 0 } : item);
-  renderV0214CategoryState();
-  setV0214SettingsMessage('正在儲存常用科目…');
-
-  try {
-    await api('/api/categories/' + id + '/favorite', {
-      method: 'PUT',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ favorite: nextFavorite })
-    });
-    setV0214SettingsMessage(nextFavorite ? '已加入常用科目。' : '已取消常用科目。');
-  } catch (error) {
-    state.categories = previous;
-    renderV0214CategoryState();
-    setV0214SettingsMessage(error.message || '常用科目儲存失敗，已還原。', true);
-  } finally {
-    cyV0214PendingWrites.delete(key);
-  }
-}
-
-function renderV0214AccountState(selected) {
-  window.cySettingsManager?.renderAccountManager?.();
-  if (typeof renderAccounts === 'function') renderAccounts(selected);
-  if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
-}
-
-function renderV0214CategoryState() {
-  window.cySettingsManager?.renderCategoryManager?.();
-  if (typeof renderFavoriteCategories === 'function') renderFavoriteCategories();
-}
-
-function setV0214SettingsMessage(text, error = false) {
-  const target = document.querySelector('#settingsMessage');
-  if (target && typeof setDialogMessage === 'function') setDialogMessage(target, text, error);
+  if (!current) return;
+  await mutateSettings(`/api/categories/${id}/favorite`, {
+    method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ favorite: Number(current.is_favorite) !== 1 })
+  }, Number(current.is_favorite) === 1 ? '已取消常用科目。' : '已加入常用科目。');
 }
 
 const CY_V0215_BUILD3_MOBILE = '(max-width: 767px)';
@@ -3609,7 +3544,6 @@ let cyV0215Build4SaveHideTimer = null;
 let cyV0215Build4SaveClearTimer = null;
 let cyV0215Build4SetupDone = false;
 let cyMobileAccountDragId = 0;
-let cyMobileAccountSaving = false;
 
 window.cyAfterSaveMessage = handleV0215Build4SaveMessage;
 window.cyOpenMobileUtility = openMobileUtility;
@@ -3838,7 +3772,7 @@ function bindMobileAccountReorder(host) {
 
   host.addEventListener('pointerdown', event => {
     const handle = event.target.closest('[data-mobile-account-drag]');
-    if (!handle || cyMobileAccountSaving) return;
+    if (!handle || settingsManagerSaving) return;
     const row = handle.closest('[data-mobile-account-row]');
     const id = Number(row?.dataset.mobileAccountRow || 0);
     if (!row || !Number.isInteger(id) || id <= 0) return;
@@ -3853,13 +3787,13 @@ function bindMobileAccountReorder(host) {
   });
 
   host.addEventListener('pointermove', event => {
-    if (!cyMobileAccountDragId || pointerId !== event.pointerId || cyMobileAccountSaving) return;
+    if (!cyMobileAccountDragId || pointerId !== event.pointerId || settingsManagerSaving) return;
     updatePointerTarget(event.clientX, event.clientY);
     event.preventDefault();
   });
 
   const finishPointerReorder = async event => {
-    if (!cyMobileAccountDragId || pointerId !== event.pointerId || cyMobileAccountSaving) return;
+    if (!cyMobileAccountDragId || pointerId !== event.pointerId || settingsManagerSaving) return;
     const sourceId = cyMobileAccountDragId;
     const dropTargetId = targetId;
     const dropAfter = after;
@@ -3868,10 +3802,10 @@ function bindMobileAccountReorder(host) {
 
     const previous = [...(state.accounts || [])];
     const ids = previous.map(account => Number(account.id));
-    const nextIds = moveMobileAccountId(ids, sourceId, dropTargetId, dropAfter);
+    const nextIds = settingsMoveId(ids, sourceId, dropTargetId, dropAfter);
     if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
 
-    await applyOptimisticMobileAccountOrder(previous, nextIds);
+    await applySettingsAccountOrder(previous, nextIds);
   };
 
   host.addEventListener('pointerup', finishPointerReorder);
@@ -3883,7 +3817,7 @@ function bindMobileAccountReorder(host) {
 
   // Mouse drag remains as a desktop-browser fallback when the phone view is emulated.
   host.addEventListener('dragstart', event => {
-    if (event.pointerType === 'touch' || cyMobileAccountSaving) {
+    if (event.pointerType === 'touch' || settingsManagerSaving) {
       event.preventDefault();
       return;
     }
@@ -3898,7 +3832,7 @@ function bindMobileAccountReorder(host) {
   });
 
   host.addEventListener('dragover', event => {
-    if (!cyMobileAccountDragId || cyMobileAccountSaving) return;
+    if (!cyMobileAccountDragId || settingsManagerSaving) return;
     const row = event.target.closest('[data-mobile-account-row]');
     if (!row) return;
     event.preventDefault();
@@ -3909,7 +3843,7 @@ function bindMobileAccountReorder(host) {
   });
 
   host.addEventListener('drop', async event => {
-    if (!cyMobileAccountDragId || cyMobileAccountSaving || typeof state !== 'object') return;
+    if (!cyMobileAccountDragId || settingsManagerSaving || typeof state !== 'object') return;
     const row = event.target.closest('[data-mobile-account-row]');
     if (!row) return;
     event.preventDefault();
@@ -3922,45 +3856,31 @@ function bindMobileAccountReorder(host) {
 
     const previous = [...(state.accounts || [])];
     const ids = previous.map(account => Number(account.id));
-    const nextIds = moveMobileAccountId(ids, sourceId, dropTargetId, dropAfter);
+    const nextIds = settingsMoveId(ids, sourceId, dropTargetId, dropAfter);
     if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
 
-    await applyOptimisticMobileAccountOrder(previous, nextIds);
+    await applySettingsAccountOrder(previous, nextIds);
   });
 
   host.addEventListener('dragend', () => finishMobileAccountDrag(host));
 }
 
-async function applyOptimisticMobileAccountOrder(previous, nextIds) {
-  if (cyMobileAccountSaving) return;
+async function applySettingsAccountOrder(previous, nextIds) {
+  if (settingsManagerSaving) return;
   const byId = new Map(previous.map(account => [Number(account.id), account]));
+  if (nextIds.some(id => Number(id) <= 0) || nextIds.length !== byId.size || new Set(nextIds).size !== byId.size || nextIds.some(id => !byId.has(id))) return;
   const selectedAccount = document.querySelector('#accountName')?.value || '';
-
-  state.accounts = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 })).filter(Boolean);
-  renderMobileAccountManager();
-  if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
-  if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
-
-  cyMobileAccountSaving = true;
-  document.querySelector('#accountRows')?.classList.add('is-saving-order');
-  try {
-    await api('/api/accounts/reorder', {
-      method: 'PUT',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ ids: nextIds })
-    });
-  } catch (error) {
-    state.accounts = previous;
-    renderMobileAccountManager();
+  const render = () => {
+    renderSettingsAccountManager();
     if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
     if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
-    if (typeof setDialogMessage === 'function' && els.settingsMessage) {
-      setDialogMessage(els.settingsMessage, error?.message || '帳戶排序更新失敗。', true);
-    }
-  } finally {
-    cyMobileAccountSaving = false;
-    document.querySelector('#accountRows')?.classList.remove('is-saving-order');
-  }
+  };
+  state.accounts = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 }));
+  render();
+  return persistSettingsOrder('/api/accounts/reorder', { ids: nextIds }, '帳戶順序已更新。', () => {
+    state.accounts = restoreSettingsOrderState(state.accounts, previous, ['sort_order']);
+    render();
+  });
 }
 
 function finishMobileAccountDrag(host) {
@@ -3970,19 +3890,6 @@ function finishMobileAccountDrag(host) {
   );
 }
 
-function moveMobileAccountId(ids, sourceId, targetId, after) {
-  if (!ids.includes(sourceId)) return null;
-  if (sourceId === targetId) return [...ids];
-  const next = ids.filter(id => id !== sourceId);
-  if (!targetId || !next.includes(targetId)) {
-    next.push(sourceId);
-    return next;
-  }
-  let index = next.indexOf(targetId);
-  if (after) index += 1;
-  next.splice(index, 0, sourceId);
-  return next;
-}
 
 function ensureMobileCategoryActions(pane, hasPersistedGroup) {
   let actions = pane.querySelector('#mobileCategoryActions');
@@ -4003,18 +3910,18 @@ function ensureMobileCategoryActions(pane, hasPersistedGroup) {
   }
 }
 
-let cyMobileSettingsTempId = -1;
+let settingsTempId = -1;
 
-function nextMobileSettingsTempId() {
-  return cyMobileSettingsTempId--;
+function nextSettingsTempId() {
+  return settingsTempId--;
 }
 
-async function optimisticAddMobileGroup(rawName) {
+async function optimisticAddSettingsGroup(rawName) {
   const name = String(rawName || '').trim().replace(/\s+/g, ' ');
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
   if (!name) return;
 
-  const tempId = nextMobileSettingsTempId();
+  const tempId = nextSettingsTempId();
   const sortOrder = Math.max(-1, ...(state.groups || [])
     .filter(group => group.kind === kind)
     .map(group => Number(group.sort_order ?? -1))) + 1;
@@ -4032,14 +3939,16 @@ async function optimisticAddMobileGroup(rawName) {
     if (pending) pending.id = Number(result.id);
     renderSettingsCategoryManager();
     setDialogMessage(els.settingsMessage, '大分類已新增。');
+    return true;
   } catch (error) {
     state.groups = (state.groups || []).filter(group => Number(group.id) !== tempId);
     renderSettingsCategoryManager();
     setDialogMessage(els.settingsMessage, error?.message || '大分類新增失敗。', true);
+    return false;
   }
 }
 
-async function optimisticAddMobileCategory(rawName, groupId) {
+async function optimisticAddSettingsCategory(rawName, groupId) {
   const name = String(rawName || '').trim().replace(/\s+/g, ' ');
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
   const group = (state.groups || []).find(item =>
@@ -4047,7 +3956,7 @@ async function optimisticAddMobileCategory(rawName, groupId) {
   );
   if (!name || !group) return;
 
-  const tempId = nextMobileSettingsTempId();
+  const tempId = nextSettingsTempId();
   const sortOrder = Math.max(-1, ...(state.categories || [])
     .filter(category => category.kind === kind && Number(category.group_id) === Number(groupId))
     .map(category => Number(category.sort_order ?? -1))) + 1;
@@ -4062,7 +3971,7 @@ async function optimisticAddMobileCategory(rawName, groupId) {
     is_favorite: 0
   }];
   renderSettingsCategoryManager();
-  if (typeof renderCategories === 'function') renderCategories();
+  if (typeof renderCategories === 'function') renderCategories(els.categoryName?.value);
   setDialogMessage(els.settingsMessage, '');
 
   try {
@@ -4074,13 +3983,15 @@ async function optimisticAddMobileCategory(rawName, groupId) {
     const pending = (state.categories || []).find(category => Number(category.id) === tempId);
     if (pending) pending.id = Number(result.id);
     renderSettingsCategoryManager();
-    if (typeof renderCategories === 'function') renderCategories();
+    if (typeof renderCategories === 'function') renderCategories(els.categoryName?.value);
     setDialogMessage(els.settingsMessage, '科目已新增。');
+    return true;
   } catch (error) {
     state.categories = (state.categories || []).filter(category => Number(category.id) !== tempId);
     renderSettingsCategoryManager();
-    if (typeof renderCategories === 'function') renderCategories();
+    if (typeof renderCategories === 'function') renderCategories(els.categoryName?.value);
     setDialogMessage(els.settingsMessage, error?.message || '科目新增失敗。', true);
+    return false;
   }
 }
 
@@ -4359,6 +4270,11 @@ function setupV0215Build4MobileEdit() {
     cancelV0215Build4MobileEditAndReturn();
   }, true);
 
+  const phone = window.matchMedia(CY_V0215_BUILD4_MOBILE);
+  phone.addEventListener?.('change', () => {
+    if (!phone.matches && cyV0215Build4Edit) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+  });
+
   window.addEventListener('pagehide', () => {
     if (!cyV0215Build4Edit) return;
     cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
@@ -4424,40 +4340,24 @@ async function saveV0215Build4MobileEdit() {
   els.saveButton.disabled = true;
   const destinationMonth = month;
   try {
-    await api('/api/transactions/' + edit.id, {
-      method: 'PUT',
-      headers: jsonHeaders(),
-      body: JSON.stringify({
-        txDate: els.txDate.value,
-        accountName: els.accountName.value,
-        categoryName: els.categoryName.value,
-        summary: els.summary.value.trim(),
-        amount
-      })
-    });
-
     const context = edit.returnContext;
     const editedId = edit.id;
-    cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+    await persistTransactionUpdate(edit.id, {
+      txDate: els.txDate.value, accountName: els.accountName.value,
+      categoryName: els.categoryName.value, summary: els.summary.value, amount
+    }, () => {
+      cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+      const searchInput = document.querySelector('#ledgerSummarySearch');
+      if (searchInput) searchInput.value = context.search || '';
+      if (typeof cyLedgerSearch !== 'undefined') cyLedgerSearch = context.search || '';
+      switchV0215Build4MobilePage('ledger');
+      restoreV0215Build4LedgerContext(context, destinationMonth === context.month ? editedId : false);
+    });
+    showV0215Build4LedgerNotice(destinationMonth === context.month ? '修改成功。' : '修改完成，資料已移至 ' + destinationMonth.replace('-', '/') + '。');
 
-    if (context.month && els.monthFilter.value !== context.month) {
-      els.monthFilter.value = context.month;
-    }
-    const searchInput = document.querySelector('#ledgerSummarySearch');
-    if (searchInput) searchInput.value = context.search || '';
-    if (typeof cyLedgerSearch !== 'undefined') cyLedgerSearch = context.search || '';
-
-    await loadTransactions();
-    if (typeof renderDesktopLedger === 'function') renderDesktopLedger();
-
-    switchV0215Build4MobilePage('ledger');
-    restoreV0215Build4LedgerContext(context, destinationMonth === context.month ? editedId : false);
-
-    if (destinationMonth !== context.month) {
-      showV0215Build4LedgerNotice('修改完成，資料已移至 ' + destinationMonth.replace('-', '/') + '。');
-    }
   } catch (error) {
     showMessage(error.message || '修改失敗。', true);
+    showV0215Build4LedgerNotice((error.message || '修改失敗。') + ' 已還原原資料。');
     updateEntryLockState();
   }
 }

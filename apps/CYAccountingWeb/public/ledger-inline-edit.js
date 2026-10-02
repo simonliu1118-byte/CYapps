@@ -13,6 +13,8 @@ function setupInlineLedgerEditing() {
 
   els.transactionRows.addEventListener('click', handleInlineLedgerClick, true);
   els.monthFilter?.addEventListener('change', () => cancelInlineLedgerEdit(false), true);
+  const phone = window.matchMedia('(max-width: 767px)');
+  phone.addEventListener?.('change', () => { if (phone.matches) cancelInlineLedgerEdit(true); });
 
   document.querySelector('#ledgerDesktopTools')?.addEventListener('click', () => {
     if (cyInlineLedgerEdit) cancelInlineLedgerEdit(true);
@@ -20,6 +22,7 @@ function setupInlineLedgerEditing() {
 }
 
 function handleInlineLedgerClick(event) {
+  if (window.matchMedia('(max-width: 767px)').matches) return;
   const editButton = event.target.closest('[data-edit-id]');
   if (editButton) {
     event.preventDefault();
@@ -84,7 +87,7 @@ function inlineEditRowHtml(tx) {
     <td><select class="inline-edit-control" data-inline-account aria-label="帳戶">${inlineAccountOptions(tx.account_name)}</select></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
     <td><select class="inline-edit-control" data-inline-category aria-label="科目">${inlineCategoryOptions(tx)}</select></td>
-    <td class="summary"><input class="inline-edit-control inline-edit-summary" data-inline-summary type="text" maxlength="100" value="${escapeInlineLedgerHtml(tx.summary || '')}" aria-label="摘要"></td>
+    <td class="summary"><input class="inline-edit-control inline-edit-summary" data-inline-summary type="text" maxlength="40" value="${escapeInlineLedgerHtml(tx.summary || '')}" aria-label="摘要"></td>
     <td class="num"><input class="inline-edit-control inline-edit-amount" data-inline-amount type="text" inputmode="numeric" maxlength="7" value="${escapeInlineLedgerHtml(String(tx.amount ?? ''))}" aria-label="金額"></td>
     <td class="num inline-edit-balance">儲存後重算</td>
     <td class="action-col inline-edit-action-cell">
@@ -168,21 +171,17 @@ async function saveInlineLedgerEdit() {
   setInlineEditMessage(message, '儲存中…', false);
 
   try {
-    await api(`/api/transactions/${active.id}`, {
-      method: 'PUT',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ txDate: date, accountName, categoryName, summary, amount })
+    await persistTransactionUpdate(active.id, { txDate: date, accountName, categoryName, summary, amount }, () => {
+      cyInlineLedgerEdit = null;
+      resumeLedgerRefreshObserver();
+      showMessage('正在儲存修改…');
     });
-
-    cyInlineLedgerEdit = null;
-    resumeLedgerRefreshObserver();
     showMessage('修改成功');
-    await loadTransactions();
-    if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
+
   } catch (error) {
     if (saveButton) saveButton.disabled = false;
     if (cancelButton) cancelButton.disabled = false;
-    setInlineEditMessage(message, error?.message || '修改失敗');
+    showMessage((error?.message || '修改失敗') + ' 已還原原資料。', true);
   }
 }
 
