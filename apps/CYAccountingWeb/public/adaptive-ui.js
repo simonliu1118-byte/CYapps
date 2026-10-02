@@ -1619,10 +1619,8 @@ function syncV21Build13CrudCopy() {
 
 const CY_V21_BUILD14_DESKTOP = '(min-width: 1024px)';
 const CY_V21_BUILD14_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
-let cyV21Build14InlineEdit = null;
 
 const runV21Build14 = () => {
-   setupV21Build14InlineEditing();
   setupV21Build14AccountLimit();
   setupV21Build14MonthPickers();
   syncV21Build14LedgerMonthTrigger();
@@ -1632,147 +1630,6 @@ if (document.readyState === 'complete') setTimeout(runV21Build14, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build14, 0), { once: true });
 
 
-
-function setupV21Build14InlineEditing() {
-  const accountHost = document.querySelector('#accountRows');
-  const categoryHost = document.querySelector('#categoryManager');
-  if (accountHost && accountHost.dataset.v21Build14EditBound !== '1') {
-    accountHost.dataset.v21Build14EditBound = '1';
-    accountHost.addEventListener('click', handleV21Build14RenameClick, true);
-  }
-  if (categoryHost && categoryHost.dataset.v21Build14EditBound !== '1') {
-    categoryHost.dataset.v21Build14EditBound = '1';
-    categoryHost.addEventListener('click', handleV21Build14RenameClick, true);
-  }
-  if (document.documentElement.dataset.v21Build14EditOutsideBound !== '1') {
-    document.documentElement.dataset.v21Build14EditOutsideBound = '1';
-    document.addEventListener('pointerdown', event => {
-      if (!cyV21Build14InlineEdit) return;
-      if (cyV21Build14InlineEdit.container?.contains(event.target)) return;
-      cancelV21Build14InlineEdit();
-    });
-  }
-}
-
-function handleV21Build14RenameClick(event) {
-  const save = event.target.closest('[data-v21-inline-name-save]');
-  if (save) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    saveV21Build14InlineEdit();
-    return;
-  }
-  const cancel = event.target.closest('[data-v21-inline-name-cancel]');
-  if (cancel) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    cancelV21Build14InlineEdit();
-    return;
-  }
-
-  const button = event.target.closest('[data-account-rename], [data-category-rename], [data-group-rename]');
-  if (!button) return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-
-  if (button.dataset.accountRename) beginV21Build14InlineEdit('account', Number(button.dataset.accountRename), button);
-  else if (button.dataset.categoryRename) beginV21Build14InlineEdit('category', Number(button.dataset.categoryRename), button);
-  else if (button.dataset.groupRename) beginV21Build14InlineEdit('group', Number(button.dataset.groupRename), button);
-}
-
-function beginV21Build14InlineEdit(type, id, button) {
-  if (!Number.isInteger(id) || id <= 0) return;
-  if (cyV21Build14InlineEdit) cancelV21Build14InlineEdit();
-
-  const selector = type === 'account' ? `[data-v21-account-name="${id}"]` : type === 'category' ? `[data-v21-category-name="${id}"]` : `[data-v21-group-name="${id}"]`;
-  const label = document.querySelector(selector);
-  if (!label) return;
-  const name = String(label.textContent || '').trim();
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'v21-inline-name-input';
-  input.value = name;
-  input.maxLength = type === 'account' ? 8 : 60;
-  input.setAttribute('aria-label', type === 'account' ? '帳戶名稱' : type === 'category' ? '科目名稱' : '大分類名稱');
-
-  const container = label.parentElement;
-  label.hidden = true;
-  label.insertAdjacentElement('afterend', input);
-  button.hidden = true;
-
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.className = 'mini-button v21-inline-edit-confirm';
-  save.dataset.v21InlineNameSave = '1';
-  save.title = '儲存';
-  save.setAttribute('aria-label', '儲存');
-  save.textContent = '✓';
-
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'mini-button v21-inline-edit-cancel';
-  cancel.dataset.v21InlineNameCancel = '1';
-  cancel.title = '取消';
-  cancel.setAttribute('aria-label', '取消');
-  cancel.textContent = '×';
-
-  input.insertAdjacentElement('afterend', save);
-  save.insertAdjacentElement('afterend', cancel);
-
-  cyV21Build14InlineEdit = { type, id, name, label, button, input, save, cancel, container };
-  input.addEventListener('keydown', event => {
-    if (event.isComposing) return;
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      saveV21Build14InlineEdit();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      cancelV21Build14InlineEdit();
-    }
-  });
-  input.focus();
-  input.select();
-}
-
-async function saveV21Build14InlineEdit() {
-  const active = cyV21Build14InlineEdit;
-  if (!active) return;
-  const name = String(active.input.value || '').trim().replace(/\s+/g, ' ');
-  if (!name) return setDialogMessage(document.querySelector('#settingsMessage'), '名稱不可空白。', true);
-  if (active.type === 'account' && v21Build14CharCount(name) > 8) {
-    active.input.focus();
-    return setDialogMessage(document.querySelector('#settingsMessage'), '帳戶名稱最多 8 個字。', true);
-  }
-  if (name === active.name) {
-    cancelV21Build14InlineEdit();
-    return;
-  }
-
-  const path = active.type === 'account' ? `/api/accounts/${active.id}` : active.type === 'category' ? `/api/categories/${active.id}` : `/api/category-groups/${active.id}`;
-  active.input.disabled = true;
-  active.save.disabled = true;
-  active.cancel.disabled = true;
-  cyV21Build14InlineEdit = null;
-  const ok = await mutateSettings(path, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ name }) }, '名稱已更新。');
-  if (!ok && active.container?.isConnected) {
-    cyV21Build14InlineEdit = active;
-    active.input.disabled = false;
-    active.save.disabled = false;
-    active.cancel.disabled = false;
-    active.input.focus();
-  }
-}
-
-function cancelV21Build14InlineEdit() {
-  const active = cyV21Build14InlineEdit;
-  if (!active) return;
-  active.input?.remove();
-  active.save?.remove();
-  active.cancel?.remove();
-  if (active.label) active.label.hidden = false;
-  if (active.button) active.button.hidden = false;
-  cyV21Build14InlineEdit = null;
-}
 
 function setupV21Build14AccountLimit() {
   const input = document.querySelector('#newAccountName');
