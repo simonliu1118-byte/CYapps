@@ -61,8 +61,8 @@ console.log('Adaptive UI regression checks passed.');
 
 assert.match(js, /function renderMobileAccountManager\(\)/);
 assert.match(js, /function renderMobileCategoryManager\(\)/);
-assert.match(js, /if \(!window\.matchMedia\(CY_V0211_DESKTOP\)\.matches\) return renderMobileAccountManager\(\)/);
-assert.match(js, /if \(!window\.matchMedia\(CY_V0212_DESKTOP\)\.matches\) return renderMobileCategoryManager\(\)/);
+assert.match(js, /if \(!window\.matchMedia\(SETTINGS_MANAGER_DESKTOP\)\.matches\) return renderMobileAccountManager\(\)/);
+assert.match(js, /if \(!window\.matchMedia\(SETTINGS_MANAGER_DESKTOP\)\.matches\) return renderMobileCategoryManager\(\)/);
 assert.match(js, /dialog\.classList\.add\('mobile-utility-dialog', 'mobile-settings-dialog'\)/);
 assert.match(js, /dialog\.classList\.add\('mobile-opening-dialog'\)/);
 assert.match(css, /#settingsDialog\.mobile-utility-dialog/);
@@ -87,3 +87,14 @@ assert.match(js, /function optimisticAddMobileCategory\(rawName, groupId\)/);
 assert.match(js, /state\.groups = \[\.\.\.\(state\.groups \|\| \[\]\), \{ id: tempId/);
 assert.match(js, /state\.categories = \[\.\.\.\(state\.categories \|\| \[\]\), \{/);
 assert.match(js, /filter\(group => group\.kind === kind && Number\(group\.id\) > 0\)/);
+
+assert.match(js, /window\.cySettingsManager = \{/);
+assert.match(js, /function renderSettingsAccountManager\(\)/);
+assert.match(js, /function renderSettingsCategoryManager\(\)/);
+assert.match(js, /function ensureSettingsManagerDialog\(\)/);
+assert.match(css, /\.settings-dialog-field\[hidden\]\s*\{[\s\S]*?display:\s*none !important/);
+assert.match(css, /\.settings-manager-dialog-actions button\s*\{[\s\S]*?align-items:\s*center/);
+assert.match(css, /\.mobile-category-group\s*\{[\s\S]*?overflow:\s*visible !important/);
+assert.match(css, /mobile-lock-native-field\s*\{[\s\S]*?display:\s*none !important/);
+assert.doesNotMatch(js, /renderV21Build1[456](?:Account|Category)Manager|renderV0211(?:Account|Category)Manager|renderV0212CategoryManager|openV0212/);
+assert.doesNotMatch(css, /v0211-(?:account|category|default|group)|v0212-(?:manager|dialog|category|group|favorite|edit|toolbar|kind|legacy|empty|add)/);
