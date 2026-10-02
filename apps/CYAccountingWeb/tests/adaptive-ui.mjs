@@ -9,6 +9,7 @@ const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
 
 const css = read('public/adaptive-ui.css');
 const js = read('public/adaptive-ui.js');
+const loginHtml = read('public/login.html');
 
 assert.match(css, /@media \(max-width: 767px\)/);
 assert.match(css, /@media \(min-width: 768px\) and \(max-width: 1023px\)/);
