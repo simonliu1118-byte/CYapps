@@ -1,6 +1,6 @@
 const BACKUP_FORMAT = 'CYAccountingWebBackup';
 const BACKUP_FORMAT_VERSION = 2;
-const APP_VERSION = '0.21.14';
+const APP_VERSION = '0.21.15';
 const BACKUP_PREFIX = 'CYAccountingWeb_backup_';
 const PAGE_SIZE = 1000;
 const encoder = new TextEncoder();
