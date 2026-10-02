@@ -94,6 +94,7 @@ jobs:
           node tests/desktop-migration.mjs
           node tests/desktop-migration-d1.mjs
           node tests/adaptive-ui.mjs
+          node tests/category-sorting.mjs
           node tests/account-lifecycle.mjs
           node tests/opening-balances.mjs
           node tests/opening-balances-d1.mjs
@@ -257,9 +258,10 @@ jobs:
             echo "Asset verification failed: $asset_url" >&2
             return 1
           }
-          verify_asset "$base/adaptive-ui.css?rev=02112b1-mobile-tap-zoom" 'touch-action: manipulation'
+          verify_asset "$base/adaptive-ui.css?rev=02113-category-sorting" 'touch-action: manipulation'
           verify_asset "$base/login.css?v=02112-mobile-tap-zoom" 'touch-action: manipulation'
-          verify_asset "$base/adaptive-ui.js?rev=02111-automatic-opening-balances" 'mobileAccountMenuButton'
+          verify_asset "$base/adaptive-ui.js?rev=02113-category-sorting" 'startSettingsCategoryPointerDrag'
+          verify_asset "$base/adaptive-ui.js?rev=02113-category-sorting" 'data-settings-group-move'
           verify_asset "$base/auth.js?rev=session-hard-timeout" 'window.cyaccSessionPromise = checkSessionFallback()'
           verify_asset "$base/auth.js?rev=session-hard-timeout" 'Promise.race([request, timeout])'
           verify_asset "$base/app.js?rev=02111-automatic-opening-balances" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'

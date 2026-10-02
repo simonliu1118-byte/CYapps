@@ -2315,6 +2315,7 @@ setTimeout(setupV0211KeyboardBridge, 350);
 const SETTINGS_MANAGER_DESKTOP = '(min-width: 1024px)';
 let settingsManagerDialogState = null;
 let settingsManagerDrag = null;
+let settingsManagerPointer = null;
 let settingsManagerSaving = false;
 
 window.cySettingsManager = {
@@ -2480,14 +2481,11 @@ function settingsCategoryGroupHtml(group, kind) {
 
   return `<section class="settings-category-branch${pendingGroup ? ' is-pending' : ''}" data-group-id="${groupId}">
     <div class="settings-category-parent">
-      ${pendingGroup
-        ? '<span class="settings-tree-spacer" aria-hidden="true"></span>'
-        : `<button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-group="${groupId}" title="拖曳調整分類順序" aria-label="拖曳調整分類順序">⠿</button>`}
       <strong class="settings-group-name" title="${settingsManagerEscape(group.name)}">${settingsManagerEscape(group.name)}</strong>
       <span class="settings-tree-actions">
         ${pendingGroup
           ? '<span class="settings-pending-label">儲存中…</span>'
-          : `<button type="button" class="mini-button settings-edit-button" data-settings-rename="group" data-settings-id="${groupId}">改名</button>
+          : `${settingsGroupOrderButtons(groupId, kind)}<button type="button" class="mini-button settings-edit-button" data-settings-rename="group" data-settings-id="${groupId}">改名</button>
              <button type="button" class="mini-button danger settings-delete-button" data-group-delete="${groupId}">刪除</button>`}
       </span>
     </div>
@@ -2497,11 +2495,49 @@ function settingsCategoryGroupHtml(group, kind) {
   </section>`;
 }
 
+function settingsGroupOrderButtons(groupId, kind) {
+  const groups = (state.groups || []).filter(group => group.kind === kind);
+  const index = groups.findIndex(group => Number(group.id) === groupId);
+  const pending = groups.some(group => Number(group.id) <= 0);
+  return `<button type="button" class="mini-button settings-group-order" data-settings-group-move="${groupId}" data-direction="up" aria-label="分類上移" title="分類上移"${pending || index <= 0 ? ' disabled' : ''}>↑</button>
+    <button type="button" class="mini-button settings-group-order" data-settings-group-move="${groupId}" data-direction="down" aria-label="分類下移" title="分類下移"${pending || index < 0 || index >= groups.length - 1 ? ' disabled' : ''}>↓</button>`;
+}
+
+async function moveSettingsGroup(id, direction) {
+  if (settingsManagerSaving || !['up', 'down'].includes(direction)) return;
+  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
+  const previous = [...(state.groups || [])];
+  const groups = previous.filter(group => group.kind === kind);
+  if (groups.some(group => Number(group.id) <= 0)) return;
+  const ids = groups.map(group => Number(group.id));
+  const index = ids.indexOf(id);
+  const targetIndex = index + (direction === 'up' ? -1 : 1);
+  if (index < 0 || targetIndex < 0 || targetIndex >= ids.length) return;
+  [ids[index], ids[targetIndex]] = [ids[targetIndex], ids[index]];
+  const byId = new Map(groups.map(group => [Number(group.id), group]));
+  let cursor = 0;
+  state.groups = previous.map(group => group.kind === kind
+    ? { ...byId.get(ids[cursor]), sort_order: cursor++ + 1 }
+    : group);
+  renderSettingsCategoryManager();
+  await persistSettingsOrder('/api/category-groups/reorder', { kind, ids }, '分類順序已更新。', () => {
+    state.groups = previous;
+    renderSettingsCategoryManager();
+  });
+}
+
 function bindSettingsManagerActions() {
   if (document.documentElement.dataset.settingsManagerBound === '1') return;
   document.documentElement.dataset.settingsManagerBound = '1';
 
   window.addEventListener('click', event => {
+    const move = event.target.closest('[data-settings-group-move]');
+    if (move) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!move.disabled) void moveSettingsGroup(Number(move.dataset.settingsGroupMove), move.dataset.direction);
+      return;
+    }
     const kind = event.target.closest('[data-settings-kind-choice]');
     if (kind && typeof state === 'object') {
       const value = kind.dataset.settingsKindChoice;
@@ -2751,20 +2787,88 @@ function setupSettingsManagerDragAndDrop() {
     categoryHost.addEventListener('dragover', handleSettingsCategoryDragOver);
     categoryHost.addEventListener('drop', handleSettingsCategoryDrop);
     categoryHost.addEventListener('dragend', finishSettingsManagerDrag);
+    categoryHost.addEventListener('pointerdown', startSettingsCategoryPointerDrag);
+    categoryHost.addEventListener('pointermove', moveSettingsCategoryPointerDrag);
+    categoryHost.addEventListener('pointerup', endSettingsCategoryPointerDrag);
+    categoryHost.addEventListener('pointercancel', cancelSettingsCategoryPointerDrag);
+    categoryHost.addEventListener('lostpointercapture', cancelSettingsCategoryPointerDrag);
   }
 }
 
+function startSettingsCategoryPointerDrag(event) {
+  if (event.pointerType === 'mouse' || !event.isPrimary || settingsManagerSaving || settingsManagerPointer) return;
+  const handle = event.target.closest('[data-settings-drag-category]');
+  const id = Number(handle?.dataset.settingsDragCategory);
+  if (!Number.isInteger(id) || id <= 0) return;
+  event.preventDefault();
+  const host = event.currentTarget;
+  settingsManagerDrag = { type: 'category', id };
+  settingsManagerPointer = { pointerId: event.pointerId, host, x: event.clientX, y: event.clientY, frame: null };
+  handle.closest('[data-settings-category-row]')?.classList.add('settings-is-dragging');
+  host.setPointerCapture(event.pointerId);
+  settingsManagerPointer.frame = requestAnimationFrame(scrollSettingsCategoryDrag);
+}
+
+function settingsCategoryPointerTarget() {
+  const pointer = settingsManagerPointer;
+  if (!pointer) return null;
+  const target = document.elementFromPoint(pointer.x, pointer.y);
+  return target && pointer.host.contains(target) ? target : null;
+}
+
+function moveSettingsCategoryPointerDrag(event) {
+  const pointer = settingsManagerPointer;
+  if (!pointer || pointer.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  pointer.x = event.clientX;
+  pointer.y = event.clientY;
+  updateSettingsCategoryPointerMarker();
+}
+
+function updateSettingsCategoryPointerMarker() {
+  const target = settingsCategoryPointerTarget();
+  if (target) handleSettingsCategoryDragOver({ target, clientY: settingsManagerPointer.y, preventDefault() {} });
+  else clearSettingsDropMarkers();
+}
+
+function scrollSettingsCategoryDrag() {
+  const pointer = settingsManagerPointer;
+  if (!pointer) return;
+  const rect = pointer.host.getBoundingClientRect();
+  if (pointer.x >= rect.left && pointer.x <= rect.right) {
+    const distance = pointer.y < rect.top + 36 ? pointer.y - rect.top - 36
+      : pointer.y > rect.bottom - 36 ? pointer.y - rect.bottom + 36 : 0;
+    pointer.host.scrollTop += Math.max(-10, Math.min(10, distance / 4));
+  }
+  updateSettingsCategoryPointerMarker();
+  pointer.frame = requestAnimationFrame(scrollSettingsCategoryDrag);
+}
+
+function endSettingsCategoryPointerDrag(event) {
+  if (settingsManagerPointer?.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  settingsManagerPointer.x = event.clientX;
+  settingsManagerPointer.y = event.clientY;
+  const target = settingsCategoryPointerTarget();
+  if (target?.closest('[data-group-id]')) {
+    void handleSettingsCategoryDrop({ target, clientY: event.clientY, preventDefault() {} });
+  } else finishSettingsManagerDrag();
+}
+
+function cancelSettingsCategoryPointerDrag(event) {
+  if (settingsManagerPointer?.pointerId === event.pointerId) finishSettingsManagerDrag();
+}
+
 function handleSettingsManagerDragStart(event) {
-  if (!window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches || settingsManagerSaving) return;
-  const handle = event.target.closest('[data-settings-drag-account], [data-settings-drag-group], [data-settings-drag-category]');
+  if (settingsManagerSaving || settingsManagerPointer) { event.preventDefault(); return; }
+  const handle = event.target.closest('[data-settings-drag-account], [data-settings-drag-category]');
   if (!handle) return;
 
   let type = '';
   let id = 0;
   if (handle.dataset.settingsDragAccount) { type = 'account'; id = Number(handle.dataset.settingsDragAccount); }
-  else if (handle.dataset.settingsDragGroup) { type = 'group'; id = Number(handle.dataset.settingsDragGroup); }
   else if (handle.dataset.settingsDragCategory) { type = 'category'; id = Number(handle.dataset.settingsDragCategory); }
-  if (!type || !Number.isInteger(id) || id <= 0) return;
+  if (!type || !Number.isInteger(id) || id <= 0 || (type === 'account' && !window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches)) return;
 
   settingsManagerDrag = { type, id };
   event.dataTransfer.effectAllowed = 'move';
@@ -2805,16 +2909,9 @@ async function handleSettingsAccountDrop(event) {
 }
 
 function handleSettingsCategoryDragOver(event) {
-  if (!settingsManagerDrag || !['group', 'category'].includes(settingsManagerDrag.type)) return;
+  if (!settingsManagerDrag || settingsManagerDrag.type !== 'category') return;
   event.preventDefault();
   clearSettingsDropMarkers();
-
-  if (settingsManagerDrag.type === 'group') {
-    const group = event.target.closest('[data-group-id]');
-    if (!group) return;
-    group.classList.add(settingsAfterMidpoint(event, group) ? 'settings-drop-after' : 'settings-drop-before');
-    return;
-  }
 
   const row = event.target.closest('[data-settings-category-row]');
   if (row) {
@@ -2831,29 +2928,6 @@ async function handleSettingsCategoryDrop(event) {
 
   const drag = { ...settingsManagerDrag };
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
-
-  if (drag.type === 'group') {
-    const group = event.target.closest('[data-group-id]');
-    const targetId = Number(group?.dataset.groupId || 0);
-    const after = group ? settingsAfterMidpoint(event, group) : true;
-    const previous = [...(state.groups || [])];
-    const ids = previous.filter(item => item.kind === kind).map(item => Number(item.id));
-    const nextIds = settingsMoveId(ids, drag.id, targetId, after);
-    finishSettingsManagerDrag();
-    if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
-
-    const byId = new Map(previous.filter(item => item.kind === kind).map(item => [Number(item.id), item]));
-    const ordered = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 })).filter(Boolean);
-    let cursor = 0;
-    state.groups = previous.map(item => item.kind === kind ? ordered[cursor++] : item);
-    renderSettingsCategoryManager();
-
-    await persistSettingsOrder('/api/category-groups/reorder', { kind, ids: nextIds }, '分類順序已更新。', () => {
-      state.groups = previous;
-      renderSettingsCategoryManager();
-    });
-    return;
-  }
 
   if (drag.type !== 'category') {
     finishSettingsManagerDrag();
@@ -2875,7 +2949,7 @@ async function handleSettingsCategoryDrop(event) {
   for (const group of payload) {
     group.categoryIds.forEach((id, index) => {
       const item = byId.get(Number(id));
-      if (item) ordered.push({ ...item, group_id: Number(group.groupId), sort_order: index + 1 });
+      if (item) ordered.push({ ...item, group_id: Number(group.groupId), group_name: state.groups.find(entry => Number(entry.id) === Number(group.groupId))?.name || '', sort_order: index + 1 });
     });
   }
   let cursor = 0;
@@ -2890,6 +2964,7 @@ async function handleSettingsCategoryDrop(event) {
 
 async function persistSettingsOrder(path, body, successMessage, rollback) {
   settingsManagerSaving = true;
+  document.querySelector('#categoryManager')?.setAttribute('aria-busy', 'true');
   setDialogMessage(els.settingsMessage, '');
   try {
     await api(path, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(body) });
@@ -2901,13 +2976,15 @@ async function persistSettingsOrder(path, body, successMessage, rollback) {
     return false;
   } finally {
     settingsManagerSaving = false;
+    document.querySelector('#categoryManager')?.removeAttribute('aria-busy');
   }
 }
 
 function settingsCategoryPayload(items, kind, sourceId, targetGroupId, targetId, after) {
   if (!Number.isInteger(targetGroupId) || targetGroupId <= 0 || targetId === sourceId) return null;
   const groups = (state.groups || []).filter(group => group.kind === kind);
-  if (!groups.some(group => Number(group.id) === targetGroupId)) return null;
+  if (!groups.some(group => Number(group.id) === targetGroupId) || groups.some(group => Number(group.id) <= 0)
+      || items.some(category => category.kind === kind && Number(category.id) <= 0)) return null;
 
   const payload = groups.map(group => ({
     groupId: Number(group.id),
@@ -2953,6 +3030,12 @@ function clearSettingsDropMarkers() {
 }
 
 function finishSettingsManagerDrag() {
+  const pointer = settingsManagerPointer;
+  settingsManagerPointer = null;
+  if (pointer) {
+    cancelAnimationFrame(pointer.frame);
+    if (pointer.host.hasPointerCapture(pointer.pointerId)) pointer.host.releasePointerCapture(pointer.pointerId);
+  }
   document.querySelectorAll('.settings-is-dragging').forEach(element => element.classList.remove('settings-is-dragging'));
   clearSettingsDropMarkers();
   settingsManagerDrag = null;

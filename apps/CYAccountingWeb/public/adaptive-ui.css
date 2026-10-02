@@ -8299,21 +8299,6 @@
     margin-top: 5px !important;
   }
 
-  .settings-drag-handle {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 20px !important;
-    min-width: 20px !important;
-    height: 22px !important;
-    min-height: 22px !important;
-    padding: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-    color: #98a5b3 !important;
-    font-size: 13px !important;
-    line-height: 1 !important;
-  }
 
   .settings-default-tag {
     display: inline-flex !important;
@@ -8552,22 +8537,9 @@
     line-height: 1.35;
   }
 
-  .settings-is-dragging {
-    opacity: .55;
-  }
 
-  .settings-drop-before {
-    box-shadow: inset 0 2px 0 #3478a8;
-  }
 
-  .settings-drop-after {
-    box-shadow: inset 0 -2px 0 #3478a8;
-  }
 
-  .settings-drop-group {
-    outline: 1px solid #3478a8;
-    outline-offset: -1px;
-  }
 }
 
 @media (max-width: 767px) {
@@ -9454,6 +9426,7 @@
   }
 
   #settingsDialog.mobile-utility-dialog[data-mobile-utility="categories"] .settings-content {
+    padding: 8px 10px 10px !important;
     overflow: hidden !important;
   }
 
@@ -9466,6 +9439,11 @@
 
   #settingsDialog.mobile-utility-dialog[data-mobile-utility="categories"] .pane-heading {
     flex: 0 0 auto !important;
+    margin-bottom: 4px !important;
+  }
+
+  #settingsDialog.mobile-utility-dialog[data-mobile-utility="categories"] .settings-kind {
+    margin-bottom: 4px !important;
   }
 
   #settingsDialog.mobile-utility-dialog[data-mobile-utility="categories"] #categoryManager {
@@ -9503,6 +9481,52 @@
 
 
 /* Canonical account lifecycle and category hierarchy. */
+
+.settings-drag-handle {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #98a5b3 !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+}
+.settings-is-dragging {
+  opacity: .55;
+}
+.settings-drop-before {
+  box-shadow: inset 0 2px 0 #3478a8;
+}
+.settings-drop-after {
+  box-shadow: inset 0 -2px 0 #3478a8;
+}
+.settings-drop-group {
+  outline: 1px solid #3478a8;
+  outline-offset: -1px;
+}
+
+.settings-category-leaf > .settings-drag-handle {
+  touch-action: none;
+  cursor: grab;
+}
+
+#categoryManager[aria-busy="true"] .settings-drag-handle,
+#categoryManager[aria-busy="true"] .settings-group-order {
+  pointer-events: none;
+  opacity: .4;
+}
+
+.settings-group-order {
+  min-width: 26px;
+  padding: 0 5px !important;
+}
+
 .settings-account-section {
   display: grid;
   gap: 6px;
@@ -9595,7 +9619,7 @@
 
 .settings-category-parent {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
   min-height: 38px;
@@ -9766,13 +9790,12 @@
 
   .settings-category-parent {
     grid-template-columns: minmax(0, 1fr) auto;
-    min-height: 42px;
-    padding: 7px 4px;
+    min-height: 36px;
+    padding: 3px 2px;
     background: transparent;
   }
 
   .settings-category-parent > .settings-drag-handle,
-  .settings-category-leaf > .settings-drag-handle,
   .settings-category-leaf > .settings-favorite,
   .settings-category-parent > .settings-tree-spacer,
   .settings-category-leaf > .settings-tree-spacer {
@@ -9780,13 +9803,14 @@
   }
 
   .settings-category-children::before {
-    left: 11px;
+    left: 9px;
   }
 
   .settings-category-leaf {
-    grid-template-columns: minmax(0, 1fr) auto;
-    min-height: 40px;
-    padding: 6px 4px 6px 24px;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    gap: 4px;
+    min-height: 34px;
+    padding: 2px 2px 2px 12px;
     background: transparent;
   }
 
@@ -9795,20 +9819,42 @@
   }
 
   .settings-category-name {
-    font-size: 13.5px;
+    font-size: 14px;
+  }
+
+  .settings-category-leaf.is-pending > .settings-category-name {
+    grid-column: 2;
   }
 
   .settings-tree-actions .mini-button {
-    min-height: 30px !important;
-    height: 30px !important;
-    padding: 0 8px !important;
-    font-size: 10.5px !important;
+    min-height: 28px !important;
+    height: 28px !important;
+    padding: 0 5px !important;
+    font-size: 11px !important;
   }
 
   .settings-category-empty {
-    min-height: 38px;
-    padding: 9px 4px 9px 24px;
+    min-height: 32px;
+    padding: 6px 4px 6px 40px;
   }
+
+  .settings-category-leaf > .settings-drag-handle {
+    display: inline-flex !important;
+    width: 24px !important;
+    min-width: 24px !important;
+    min-height: 28px !important;
+    height: 28px !important;
+    font-size: 18px !important;
+  }
+
+  .settings-tree-actions {
+    gap: 3px;
+  }
+
+  .settings-tree-actions .settings-group-order {
+    font-size: 16px !important;
+  }
+
 }
 
 
