@@ -1,3 +1,5 @@
+import { currentOpeningUsageForAccount } from './opening-balances.js';
+
 export async function handleAccountLifecycleApi(request, env, principal) {
   if (!env.DB) return null;
   const url = new URL(request.url);
@@ -123,20 +125,20 @@ async function permanentlyDeleteAccount(id, db, principal) {
   }
 
   const name = String(account.name || '');
-  const [transactions, openings] = await Promise.all([
+  const [transactions, openingUsage] = await Promise.all([
     db.prepare('SELECT COUNT(*) AS count FROM transactions WHERE account_name = ?').bind(name).first(),
-    db.prepare('SELECT COUNT(*) AS count FROM opening_balances WHERE account_name = ?').bind(name).first()
+    currentOpeningUsageForAccount(db, name)
   ]);
   const transactionCount = Number(transactions?.count || 0);
-  const openingBalanceCount = Number(openings?.count || 0);
-  if (transactionCount > 0 || openingBalanceCount > 0) {
+  const nonZeroOpeningOverrides = Number(openingUsage?.nonZeroOverrides || 0);
+  if (transactionCount > 0 || nonZeroOpeningOverrides > 0) {
     return json({
       ok: false,
-      error: '此帳戶仍有歷史記帳或期初餘額，不能永久刪除。',
+      error: '此帳戶仍有歷史記帳或非 0 的期初調整，不能永久刪除。',
       code: 'ACCOUNT_HAS_HISTORY',
       usage: {
         transactions: transactionCount,
-        openingBalances: openingBalanceCount
+        nonZeroOpeningOverrides
       }
     }, 409);
   }
