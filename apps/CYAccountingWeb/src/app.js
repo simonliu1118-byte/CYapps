@@ -2,6 +2,7 @@ import coreWorker from './index.js';
 import { handleAccountingToolsApi } from './accounting-tools.js';
 import { handleAccountingControlsApi } from './accounting-controls.js';
 import { handleAccountLifecycleApi } from './account-lifecycle.js';
+import { handleOpeningBalanceApi } from './opening-balances.js';
 import { handleExcelExportApi } from './excel-export.js';
 import { handleExcelImportApi } from './excel-import.js';
 import { handleBackupApi, runScheduledBackup } from './backup-service.js';
@@ -145,6 +146,9 @@ export default {
 
       const accountLifecycleResponse = await handleAccountLifecycleApi(request, env, resolved.principal);
       if (accountLifecycleResponse) return accountLifecycleResponse;
+
+      const openingBalanceResponse = await handleOpeningBalanceApi(request, env, resolved.principal);
+      if (openingBalanceResponse) return openingBalanceResponse;
 
       const controlsResponse = await handleAccountingControlsApi(request, env);
       if (controlsResponse) return controlsResponse;
