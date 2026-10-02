@@ -129,17 +129,18 @@ const deniedProvider = createGcsBackupStorageProvider(env, {
 await expectReject(() => deniedProvider.listObjects('CYAccountingWeb/'), 'GCS_LIST_403');
 
 const tableData = {
-  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, created_at: '2026-09-01T00:00:00Z' }],
+  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, created_at: '2026-09-01T00:00:00Z', archived_at: null }],
   category_groups: [{ id: 1, kind: 'expense', name: '支出', sort_order: 0, created_at: '2026-09-01T00:00:00Z' }],
   categories: [{ id: 1, kind: 'expense', group_id: 1, name: '一般支出', sort_order: 0, is_favorite: 1, created_at: '2026-09-01T00:00:00Z' }],
   transactions: [{ id: 1, tx_date: '2026-09-25', account_name: '現金', kind: 'expense', category_name: '一般支出', summary: '測試', amount: 10, created_at: '2026-09-25T00:00:00Z', updated_at: '2026-09-25T00:00:00Z' }],
-  opening_balances: [{ month: '2026-09', account_name: '現金', amount: 100, created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' }],
+  opening_balance_overrides: [{ month: '2026-09', account_name: '現金', amount: 100, reason: '測試', created_at: '2026-09-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z', updated_by_employee_id: 'emp-1', updated_by_employee_no: '0001', updated_by_name: '管理員', updated_by_role: 'SUPER_ADMIN' }],
+  opening_balance_audit: [{ id: 1, month: '2026-09', account_name: '現金', action: 'set', previous_amount: null, new_amount: 100, reason: '測試', actor_employee_id: 'emp-1', actor_employee_no: '0001', actor_name: '管理員', actor_role: 'SUPER_ADMIN', created_at: '2026-09-01T00:00:00Z' }],
   app_settings: [{ key: 'locked_through', value: '2026-08' }]
 };
 class MockStatement {
   constructor(sql) { this.sql = sql; this.args = []; }
   bind(...args) { this.args = args; return this; }
-  async first() { return this.sql.includes("FROM meta WHERE key = 'schema_version'") ? { value: '3' } : null; }
+  async first() { return this.sql.includes("FROM meta WHERE key = 'schema_version'") ? { value: '6' } : null; }
   async all() {
     const table = Object.keys(tableData).find(name => this.sql.includes(`FROM ${name}`));
     if (!table) throw new Error(`unexpected query: ${this.sql}`);
@@ -154,7 +155,7 @@ assert(backupSet.backupId === '20260926T033000Z', 'backupId mismatch');
 assert(backupSet.dataKey.endsWith('/data.json'), 'data.json key missing');
 assert(backupSet.manifestKey.endsWith('/manifest.json'), 'manifest.json key missing');
 assert(backupSet.manifest.format === 'CYAccountingWebBackupSet', 'backup set format mismatch');
-assert(backupSet.manifest.appVersion === '0.17.0', 'backup app version mismatch');
+assert(backupSet.manifest.appVersion === '0.21.11', 'backup app version mismatch');
 assert(backupSet.manifest.files.data.sha256 === backupSet.dataSha256, 'manifest data SHA mismatch');
 
 const fakeObjects = new Map([
