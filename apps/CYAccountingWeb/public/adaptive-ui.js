@@ -2256,15 +2256,6 @@ function refineV0211HeaderIdentity() {
   user.style.removeProperty('padding-bottom');
 }
 
-function settingsManagerEscape(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
 /* Desktop custom date keyboard bridge. */
 
 const CY_V0211_KEYBOARD_DESKTOP = '(min-width: 1024px)';
@@ -3888,12 +3879,6 @@ function ensureMobileCategoryActions(pane, hasPersistedGroup) {
       <button type="button" class="secondary" data-mobile-group-add>新增分類</button>`;
     pane.append(actions);
 
-    actions.querySelector('[data-mobile-category-add]')?.addEventListener('click', () => {
-      if (typeof openSettingsAddCategoryDialog === 'function') openSettingsAddCategoryDialog();
-    });
-    actions.querySelector('[data-mobile-group-add]')?.addEventListener('click', () => {
-      if (typeof openSettingsAddGroupDialog === 'function') openSettingsAddGroupDialog();
-    });
   }
   const addCategory = actions.querySelector('[data-mobile-category-add]');
   if (addCategory) {
@@ -3990,7 +3975,6 @@ function setupMobileLockMonthControls(dialog) {
   if (!nativeField || !form) return;
 
   nativeField.classList.add('mobile-lock-native-field');
-  nativeField.hidden = true;
 
   let controls = form.querySelector('#mobileLockMonthControls');
   if (!controls) {
