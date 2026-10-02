@@ -63,3 +63,13 @@
 - 主 App 入口由 server 先判斷目前 provider Session；沒有有效 Session 則導向獨立登入頁，有有效 Session 才提供主 App。
 - 登出必須先要求 CYID revoke provider Session，再清除 CYACC browser cookie；只刪 cookie 不算完整登出。
 
+## 8. UI mutation 與 optimistic update 原則
+
+- 除高風險行為外，CYAccountingWeb 的互動式資料變更一律優先採 **optimistic update**：使用者完成操作後，前端先立即呈現預期結果，再於背景送出 API／D1 寫入，不得為等待資料庫回應而讓已完成的操作停留在舊畫面。
+- Optimistic update 必須保留可回復的操作前狀態。背景寫入成功後維持目前 UI，不得因重新抓取相同資料造成閃爍、跳回舊排序、重複 render 或多一次可見的中間狀態。
+- 背景寫入失敗時，前端必須 rollback 至操作前的有效狀態，並以清楚但不阻塞後續操作的方式提示失敗；不得讓 UI 顯示成已成功而實際資料未寫入。
+- 排序、拖曳、切換預設值、可安全回復的名稱／設定調整，以及其他低至中風險 CRUD，預設都屬 optimistic update 適用範圍。若現有 API 已能完成該 mutation，應直接共用既有 canonical API，不得另建平行 API 或 compatibility path。
+- 「高風險行為」是指錯誤提交後可能造成不可逆資料損失、跨大量資料的破壞性變更、權限／身分安全變更，或重大帳務狀態改變且無法可靠由前端 rollback 的操作。典型例子包含刪除、Backup Restore、資料 migration、Identity／Role／App Access 變更，以及月份鎖帳／解鎖等會改變帳務可寫範圍的操作。
+- 高風險行為可以等待 server 成功後再呈現最終狀態，並依既有 confirmation／authorization 規則執行；不得為追求即時感而犧牲資料完整性或安全性。
+- Desktop／Tablet／Mobile 對同一 business mutation 應共用相同 optimistic／high-risk 判斷與 rollback 語意；RWD 只改 presentation，不得讓不同 breakpoint 各自形成不同資料寫入時序規則。
+

@@ -51,3 +51,10 @@ assert.match(js, /dialog\.classList\.add\('mobile-utility-dialog', 'mobile-setti
 assert.match(js, /dialog\.classList\.add\('mobile-opening-dialog'\)/);
 assert.match(css, /#settingsDialog\.mobile-utility-dialog/);
 assert.match(css, /#settingsDialog\.mobile-opening-dialog/);
+assert.match(css, /#settingsDialog\.mobile-utility-dialog,\s*#settingsDialog\.mobile-utility-dialog\[open\][\s\S]*?height:\s*fit-content !important/);
+assert.match(js, /function bindMobileAccountReorder\(host\)/);
+assert.match(js, /addEventListener\('pointerdown'/);
+assert.match(js, /addEventListener\('pointermove'/);
+assert.match(js, /applyOptimisticMobileAccountOrder/);
+assert.match(js, /\/api\/accounts\/reorder/);
+assert.match(js, /state\.accounts = nextIds\.map/);

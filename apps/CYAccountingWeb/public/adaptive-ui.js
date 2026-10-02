@@ -4203,6 +4203,8 @@ let cyV0215Build4Edit = null;
 let cyV0215Build4SaveHideTimer = null;
 let cyV0215Build4SaveClearTimer = null;
 let cyV0215Build4SetupDone = false;
+let cyMobileAccountDragId = 0;
+let cyMobileAccountSaving = false;
 
 window.cyAfterSaveMessage = handleV0215Build4SaveMessage;
 window.cyOpenMobileUtility = openMobileUtility;
@@ -4283,6 +4285,7 @@ async function openMobileUtility(type) {
   if (typeof setDialogMessage === 'function' && els.settingsMessage) setDialogMessage(els.settingsMessage, '');
   if (typeof renderSettings === 'function') renderSettings();
 
+  dialog.classList.remove('v0215-mobile-settings-focus');
   dialog.classList.add('mobile-utility-dialog', 'mobile-settings-dialog');
   dialog.dataset.mobileUtility = type;
 
@@ -4392,18 +4395,185 @@ function renderMobileAccountManager() {
   host.innerHTML = accounts.map(account => {
     const id = Number(account.id);
     const isDefault = Number(account.is_default) === 1;
-    return `<div class="mobile-manager-row" data-mobile-account-row="${id}">
-      <div class="mobile-manager-main">
-        <strong>${v0211Escape(account.name)}</strong>
-        ${isDefault ? '<span class="mobile-manager-badge">預設</span>' : ''}
-      </div>
-      <div class="mobile-manager-actions">
-        ${isDefault ? '' : `<button type="button" class="mini-button" data-account-default="${id}">設為預設</button>`}
-        <button type="button" class="mini-button" data-account-rename="${id}">改名</button>
-        <button type="button" class="mini-button danger" data-account-delete="${id}">刪除</button>
-      </div>
+    return `<div class="mobile-account-card" data-mobile-account-row="${id}" draggable="true">
+      <button type="button" class="mobile-account-drag" data-mobile-account-drag="${id}" aria-label="拖曳調整 ${v0211Escape(account.name)} 順序">⋮⋮</button>
+      <strong class="mobile-account-name">${v0211Escape(account.name)}</strong>
+      ${isDefault ? '<span class="mobile-manager-badge">預設</span>' : `<button type="button" class="mini-button" data-account-default="${id}">設為預設</button>`}
+      <button type="button" class="mini-button" data-account-rename="${id}">改名</button>
+      <button type="button" class="mini-button danger" data-account-delete="${id}">刪除</button>
     </div>`;
   }).join('');
+
+  bindMobileAccountReorder(host);
+}
+
+function bindMobileAccountReorder(host) {
+  if (!host || host.dataset.mobileAccountReorderBound === '1') return;
+  host.dataset.mobileAccountReorderBound = '1';
+
+  let pointerId = null;
+  let targetId = 0;
+  let after = false;
+
+  const updatePointerTarget = (clientX, clientY) => {
+    const row = document.elementFromPoint(clientX, clientY)?.closest?.('[data-mobile-account-row]');
+    host.querySelectorAll('.mobile-account-card').forEach(card => card.classList.remove('drop-before', 'drop-after'));
+    if (!row || !host.contains(row)) {
+      targetId = 0;
+      return;
+    }
+    targetId = Number(row.dataset.mobileAccountRow || 0);
+    const rect = row.getBoundingClientRect();
+    after = clientY >= rect.top + rect.height / 2;
+    row.classList.add(after ? 'drop-after' : 'drop-before');
+  };
+
+  host.addEventListener('pointerdown', event => {
+    const handle = event.target.closest('[data-mobile-account-drag]');
+    if (!handle || cyMobileAccountSaving) return;
+    const row = handle.closest('[data-mobile-account-row]');
+    const id = Number(row?.dataset.mobileAccountRow || 0);
+    if (!row || !Number.isInteger(id) || id <= 0) return;
+
+    cyMobileAccountDragId = id;
+    pointerId = event.pointerId;
+    targetId = id;
+    after = false;
+    row.classList.add('is-dragging');
+    handle.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+
+  host.addEventListener('pointermove', event => {
+    if (!cyMobileAccountDragId || pointerId !== event.pointerId || cyMobileAccountSaving) return;
+    updatePointerTarget(event.clientX, event.clientY);
+    event.preventDefault();
+  });
+
+  const finishPointerReorder = async event => {
+    if (!cyMobileAccountDragId || pointerId !== event.pointerId || cyMobileAccountSaving) return;
+    const sourceId = cyMobileAccountDragId;
+    const dropTargetId = targetId;
+    const dropAfter = after;
+    pointerId = null;
+    finishMobileAccountDrag(host);
+
+    const previous = [...(state.accounts || [])];
+    const ids = previous.map(account => Number(account.id));
+    const nextIds = moveMobileAccountId(ids, sourceId, dropTargetId, dropAfter);
+    if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
+
+    await applyOptimisticMobileAccountOrder(previous, nextIds);
+  };
+
+  host.addEventListener('pointerup', finishPointerReorder);
+  host.addEventListener('pointercancel', event => {
+    if (pointerId !== event.pointerId) return;
+    pointerId = null;
+    finishMobileAccountDrag(host);
+  });
+
+  // Mouse drag remains as a desktop-browser fallback when the phone view is emulated.
+  host.addEventListener('dragstart', event => {
+    if (event.pointerType === 'touch' || cyMobileAccountSaving) {
+      event.preventDefault();
+      return;
+    }
+    const row = event.target.closest('[data-mobile-account-row]');
+    if (!row) return;
+    const id = Number(row.dataset.mobileAccountRow || 0);
+    if (!Number.isInteger(id) || id <= 0) return;
+    cyMobileAccountDragId = id;
+    row.classList.add('is-dragging');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(id));
+  });
+
+  host.addEventListener('dragover', event => {
+    if (!cyMobileAccountDragId || cyMobileAccountSaving) return;
+    const row = event.target.closest('[data-mobile-account-row]');
+    if (!row) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    host.querySelectorAll('.mobile-account-card').forEach(card => card.classList.remove('drop-before', 'drop-after'));
+    const rect = row.getBoundingClientRect();
+    row.classList.add(event.clientY >= rect.top + rect.height / 2 ? 'drop-after' : 'drop-before');
+  });
+
+  host.addEventListener('drop', async event => {
+    if (!cyMobileAccountDragId || cyMobileAccountSaving || typeof state !== 'object') return;
+    const row = event.target.closest('[data-mobile-account-row]');
+    if (!row) return;
+    event.preventDefault();
+
+    const sourceId = cyMobileAccountDragId;
+    const dropTargetId = Number(row.dataset.mobileAccountRow || 0);
+    const rect = row.getBoundingClientRect();
+    const dropAfter = event.clientY >= rect.top + rect.height / 2;
+    finishMobileAccountDrag(host);
+
+    const previous = [...(state.accounts || [])];
+    const ids = previous.map(account => Number(account.id));
+    const nextIds = moveMobileAccountId(ids, sourceId, dropTargetId, dropAfter);
+    if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
+
+    await applyOptimisticMobileAccountOrder(previous, nextIds);
+  });
+
+  host.addEventListener('dragend', () => finishMobileAccountDrag(host));
+}
+
+async function applyOptimisticMobileAccountOrder(previous, nextIds) {
+  if (cyMobileAccountSaving) return;
+  const byId = new Map(previous.map(account => [Number(account.id), account]));
+  const selectedAccount = document.querySelector('#accountName')?.value || '';
+
+  state.accounts = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 })).filter(Boolean);
+  renderMobileAccountManager();
+  if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
+  if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
+
+  cyMobileAccountSaving = true;
+  document.querySelector('#accountRows')?.classList.add('is-saving-order');
+  try {
+    await api('/api/accounts/reorder', {
+      method: 'PUT',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ ids: nextIds })
+    });
+  } catch (error) {
+    state.accounts = previous;
+    renderMobileAccountManager();
+    if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
+    if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
+    if (typeof setDialogMessage === 'function' && els.settingsMessage) {
+      setDialogMessage(els.settingsMessage, error?.message || '帳戶排序更新失敗。', true);
+    }
+  } finally {
+    cyMobileAccountSaving = false;
+    document.querySelector('#accountRows')?.classList.remove('is-saving-order');
+  }
+}
+
+function finishMobileAccountDrag(host) {
+  cyMobileAccountDragId = 0;
+  host?.querySelectorAll('.mobile-account-card').forEach(card =>
+    card.classList.remove('is-dragging', 'drop-before', 'drop-after')
+  );
+}
+
+function moveMobileAccountId(ids, sourceId, targetId, after) {
+  if (!ids.includes(sourceId)) return null;
+  if (sourceId === targetId) return [...ids];
+  const next = ids.filter(id => id !== sourceId);
+  if (!targetId || !next.includes(targetId)) {
+    next.push(sourceId);
+    return next;
+  }
+  let index = next.indexOf(targetId);
+  if (after) index += 1;
+  next.splice(index, 0, sourceId);
+  return next;
 }
 
 function renderMobileCategoryManager() {
