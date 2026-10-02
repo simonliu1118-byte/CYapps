@@ -4411,8 +4411,71 @@ function bindMobileAccountReorder(host) {
   if (!host || host.dataset.mobileAccountReorderBound === '1') return;
   host.dataset.mobileAccountReorderBound = '1';
 
+  let pointerId = null;
+  let targetId = 0;
+  let after = false;
+
+  const updatePointerTarget = (clientX, clientY) => {
+    const row = document.elementFromPoint(clientX, clientY)?.closest?.('[data-mobile-account-row]');
+    host.querySelectorAll('.mobile-account-card').forEach(card => card.classList.remove('drop-before', 'drop-after'));
+    if (!row || !host.contains(row)) {
+      targetId = 0;
+      return;
+    }
+    targetId = Number(row.dataset.mobileAccountRow || 0);
+    const rect = row.getBoundingClientRect();
+    after = clientY >= rect.top + rect.height / 2;
+    row.classList.add(after ? 'drop-after' : 'drop-before');
+  };
+
+  host.addEventListener('pointerdown', event => {
+    const handle = event.target.closest('[data-mobile-account-drag]');
+    if (!handle || cyMobileAccountSaving) return;
+    const row = handle.closest('[data-mobile-account-row]');
+    const id = Number(row?.dataset.mobileAccountRow || 0);
+    if (!row || !Number.isInteger(id) || id <= 0) return;
+
+    cyMobileAccountDragId = id;
+    pointerId = event.pointerId;
+    targetId = id;
+    after = false;
+    row.classList.add('is-dragging');
+    handle.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+
+  host.addEventListener('pointermove', event => {
+    if (!cyMobileAccountDragId || pointerId !== event.pointerId || cyMobileAccountSaving) return;
+    updatePointerTarget(event.clientX, event.clientY);
+    event.preventDefault();
+  });
+
+  const finishPointerReorder = async event => {
+    if (!cyMobileAccountDragId || pointerId !== event.pointerId || cyMobileAccountSaving) return;
+    const sourceId = cyMobileAccountDragId;
+    const dropTargetId = targetId;
+    const dropAfter = after;
+    pointerId = null;
+    finishMobileAccountDrag(host);
+
+    const previous = [...(state.accounts || [])];
+    const ids = previous.map(account => Number(account.id));
+    const nextIds = moveMobileAccountId(ids, sourceId, dropTargetId, dropAfter);
+    if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
+
+    await applyOptimisticMobileAccountOrder(previous, nextIds);
+  };
+
+  host.addEventListener('pointerup', finishPointerReorder);
+  host.addEventListener('pointercancel', event => {
+    if (pointerId !== event.pointerId) return;
+    pointerId = null;
+    finishMobileAccountDrag(host);
+  });
+
+  // Mouse drag remains as a desktop-browser fallback when the phone view is emulated.
   host.addEventListener('dragstart', event => {
-    if (cyMobileAccountSaving) {
+    if (event.pointerType === 'touch' || cyMobileAccountSaving) {
       event.preventDefault();
       return;
     }
@@ -4444,47 +4507,52 @@ function bindMobileAccountReorder(host) {
     event.preventDefault();
 
     const sourceId = cyMobileAccountDragId;
-    const targetId = Number(row.dataset.mobileAccountRow || 0);
+    const dropTargetId = Number(row.dataset.mobileAccountRow || 0);
     const rect = row.getBoundingClientRect();
-    const after = event.clientY >= rect.top + rect.height / 2;
+    const dropAfter = event.clientY >= rect.top + rect.height / 2;
     finishMobileAccountDrag(host);
 
     const previous = [...(state.accounts || [])];
     const ids = previous.map(account => Number(account.id));
-    const nextIds = moveMobileAccountId(ids, sourceId, targetId, after);
+    const nextIds = moveMobileAccountId(ids, sourceId, dropTargetId, dropAfter);
     if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
 
-    const byId = new Map(previous.map(account => [Number(account.id), account]));
-    state.accounts = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 })).filter(Boolean);
-
-    const selectedAccount = document.querySelector('#accountName')?.value || '';
-    renderMobileAccountManager();
-    if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
-    if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
-
-    cyMobileAccountSaving = true;
-    document.querySelector('#accountRows')?.classList.add('is-saving-order');
-    try {
-      await api('/api/accounts/reorder', {
-        method: 'PUT',
-        headers: jsonHeaders(),
-        body: JSON.stringify({ ids: nextIds })
-      });
-    } catch (error) {
-      state.accounts = previous;
-      renderMobileAccountManager();
-      if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
-      if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
-      if (typeof setDialogMessage === 'function' && els.settingsMessage) {
-        setDialogMessage(els.settingsMessage, error?.message || '帳戶排序更新失敗。', true);
-      }
-    } finally {
-      cyMobileAccountSaving = false;
-      document.querySelector('#accountRows')?.classList.remove('is-saving-order');
-    }
+    await applyOptimisticMobileAccountOrder(previous, nextIds);
   });
 
   host.addEventListener('dragend', () => finishMobileAccountDrag(host));
+}
+
+async function applyOptimisticMobileAccountOrder(previous, nextIds) {
+  if (cyMobileAccountSaving) return;
+  const byId = new Map(previous.map(account => [Number(account.id), account]));
+  const selectedAccount = document.querySelector('#accountName')?.value || '';
+
+  state.accounts = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 })).filter(Boolean);
+  renderMobileAccountManager();
+  if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
+  if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
+
+  cyMobileAccountSaving = true;
+  document.querySelector('#accountRows')?.classList.add('is-saving-order');
+  try {
+    await api('/api/accounts/reorder', {
+      method: 'PUT',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ ids: nextIds })
+    });
+  } catch (error) {
+    state.accounts = previous;
+    renderMobileAccountManager();
+    if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
+    if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
+    if (typeof setDialogMessage === 'function' && els.settingsMessage) {
+      setDialogMessage(els.settingsMessage, error?.message || '帳戶排序更新失敗。', true);
+    }
+  } finally {
+    cyMobileAccountSaving = false;
+    document.querySelector('#accountRows')?.classList.remove('is-saving-order');
+  }
 }
 
 function finishMobileAccountDrag(host) {
