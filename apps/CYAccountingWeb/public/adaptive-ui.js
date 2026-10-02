@@ -1611,9 +1611,7 @@ function setupV21Build13OpeningDialog() {
 }
 
 function syncV21Build13CrudCopy() {
-  const openingSave = document.querySelector('#saveOpeningButton');
   const editSave = document.querySelector('#editSaveButton');
-  if (openingSave) openingSave.textContent = '儲存';
   if (editSave) editSave.textContent = '儲存';
 }
 
