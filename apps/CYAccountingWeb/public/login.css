@@ -184,6 +184,18 @@ button:disabled {
   display: none !important;
 }
 
+@media (max-width: 767px) {
+  .login-form input {
+    font-size: 16px;
+  }
+
+  button,
+  a,
+  input {
+    touch-action: manipulation;
+  }
+}
+
 @media (max-width: 560px) {
   .login-shell {
     align-items: start;
