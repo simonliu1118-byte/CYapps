@@ -16,6 +16,8 @@ const els = {};
 
 let cyaccAppStarted = false;
 let cyTransactionRequestId = 0;
+let cyOpeningManualEdit = false;
+let cyOpeningOriginalValues = new Map();
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', startCyaccApp, { once: true });
@@ -587,43 +589,150 @@ async function mutateSettings(path, options, successMessage) {
 async function loadOpeningBalances() {
   const month = els.openingMonth.value;
   if (!month) return;
+  cyOpeningManualEdit = false;
+  cyOpeningOriginalValues = new Map();
   setDialogMessage(els.openingMessage, '');
   els.openingRows.innerHTML = '<div class="empty">載入中…</div>';
+
   try {
-    const data = await api(`/api/opening-balances?month=${encodeURIComponent(month)}`);
+    const data = await api(`/api/opening-balances?month=${encodeURIComponent(month)}&audit=1`);
     state.openingData = data;
     if (!data.accounts?.length) {
-      els.openingRows.innerHTML = '<div class="empty">沒有可設定的帳戶。</div>';
+      els.openingRows.innerHTML = '<div class="empty">沒有可計算的帳戶。</div>';
       els.saveOpeningButton.disabled = true;
+      els.saveOpeningButton.textContent = '手動調整';
       return;
     }
-    els.openingRows.innerHTML = data.accounts.map(item => `<label class="opening-row"><span>${escapeHtml(item.name)}${item.isCurrent ? '' : '<span class="historical">歷史帳戶</span>'}</span><input type="number" step="1" value="${item.amount ?? ''}" data-opening-account="${escapeHtml(item.name)}" ${data.locked ? 'disabled' : ''}></label>`).join('');
+
+    cyOpeningOriginalValues = new Map(data.accounts.map(item => [String(item.name), Number(item.amount) || 0]));
+    const rows = data.accounts.map(item => {
+      const source = item.source === 'override' ? 'manual' : 'automatic';
+      const sourceLabel = source === 'manual' ? '手動調整' : '自動';
+      const historical = item.isCurrent ? '' : '<span class="historical">歷史帳戶</span>';
+      const sourceBadge = `<span class="opening-source ${source}">${sourceLabel}</span>`;
+      const detail = source === 'manual'
+        ? `自動值 ${money(item.automaticAmount)}${item.overrideReason ? ` · ${escapeHtml(item.overrideReason)}` : ''}`
+        : (item.automaticAnchorMonth ? `承接 ${escapeHtml(item.automaticAnchorMonth)} 手動基準後自動計算` : '依歷史收支自動計算');
+      return `<label class="opening-row" data-opening-source="${source}">
+        <span class="opening-account-copy">
+          <span class="opening-account-title"><strong>${escapeHtml(item.name)}</strong>${historical}${sourceBadge}</span>
+          <small>${detail}</small>
+        </span>
+        <input type="number" step="1" value="${Number(item.amount) || 0}"
+          data-opening-account="${escapeHtml(item.name)}"
+          data-opening-automatic="${Number(item.automaticAmount) || 0}"
+          disabled>
+      </label>`;
+    }).join('');
+
+    const audit = renderOpeningAudit(data.audit || []);
+    els.openingRows.innerHTML = rows + `
+      <section id="openingManualPanel" class="opening-manual-panel" hidden>
+        <label class="opening-reason-field">
+          <span>手動調整理由 <strong>必填</strong></span>
+          <textarea id="openingAdjustmentReason" maxlength="200" rows="2" placeholder="例如：銀行對帳差異調整"></textarea>
+        </label>
+        <div class="opening-manual-actions">
+          <button id="cancelOpeningManualButton" class="secondary" type="button">取消手動調整</button>
+          <span>若輸入值等於自動值，會清除該月人工覆寫並保留 audit。</span>
+        </div>
+      </section>
+      ${audit}`;
+
+    document.querySelector('#cancelOpeningManualButton')?.addEventListener('click', cancelOpeningManualEdit);
     els.saveOpeningButton.disabled = Boolean(data.locked);
-    if (data.locked) setDialogMessage(els.openingMessage, `${month} 已鎖帳，期初餘額僅供檢視。`, true);
+    els.saveOpeningButton.textContent = data.locked ? '已鎖帳' : '手動調整';
+    if (data.locked) {
+      setDialogMessage(els.openingMessage, `${month} 已鎖帳，期初餘額僅供檢視。`, true);
+    }
   } catch (error) {
     els.openingRows.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+    els.saveOpeningButton.disabled = true;
   }
 }
 
 async function saveOpeningBalances() {
-  if (!els.openingMonth.value) return;
+  if (!els.openingMonth.value || state.openingData?.locked) return;
+
+  if (!cyOpeningManualEdit) {
+    cyOpeningManualEdit = true;
+    els.openingRows.querySelectorAll('[data-opening-account]').forEach(input => { input.disabled = false; });
+    const panel = document.querySelector('#openingManualPanel');
+    if (panel) panel.hidden = false;
+    els.saveOpeningButton.textContent = '儲存調整';
+    setDialogMessage(els.openingMessage, '手動調整會留下理由、操作者與時間；未修改的帳戶不會寫入。');
+    document.querySelector('#openingAdjustmentReason')?.focus();
+    return;
+  }
+
+  const reason = String(document.querySelector('#openingAdjustmentReason')?.value || '').trim();
+  if (!reason) {
+    setDialogMessage(els.openingMessage, '請填寫手動調整理由。', true);
+    document.querySelector('#openingAdjustmentReason')?.focus();
+    return;
+  }
+
   const values = {};
   for (const input of els.openingRows.querySelectorAll('[data-opening-account]')) {
     const raw = input.value.trim();
-    if (raw !== '' && !Number.isSafeInteger(Number(raw))) return setDialogMessage(els.openingMessage, `${input.dataset.openingAccount} 的期初餘額必須是整數。`, true);
-    values[input.dataset.openingAccount] = raw === '' ? null : Number(raw);
+    const amount = Number(raw);
+    const name = String(input.dataset.openingAccount || '');
+    if (!raw || !Number.isSafeInteger(amount)) {
+      return setDialogMessage(els.openingMessage, `${name} 的期初餘額必須是整數。`, true);
+    }
+    if (amount !== Number(cyOpeningOriginalValues.get(name) || 0)) values[name] = amount;
   }
+
+  if (!Object.keys(values).length) {
+    setDialogMessage(els.openingMessage, '沒有期初餘額變更。');
+    return;
+  }
+
   els.saveOpeningButton.disabled = true;
   try {
-    await api('/api/opening-balances', { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ month: els.openingMonth.value, values }) });
-    setDialogMessage(els.openingMessage, '期初餘額已儲存。');
+    await api('/api/opening-balance-overrides', {
+      method: 'PUT',
+      headers: jsonHeaders(),
+      body: JSON.stringify({ month: els.openingMonth.value, values, reason })
+    });
+    setDialogMessage(els.openingMessage, '手動調整已儲存並寫入 audit。');
     await loadOpeningBalances();
     if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
   } catch (error) {
     setDialogMessage(els.openingMessage, error.message, true);
   } finally {
-    els.saveOpeningButton.disabled = Boolean(state.openingData?.locked);
+    if (!state.openingData?.locked) els.saveOpeningButton.disabled = false;
   }
+}
+
+function cancelOpeningManualEdit() {
+  cyOpeningManualEdit = false;
+  for (const input of els.openingRows.querySelectorAll('[data-opening-account]')) {
+    const name = String(input.dataset.openingAccount || '');
+    input.value = String(Number(cyOpeningOriginalValues.get(name) || 0));
+    input.disabled = true;
+  }
+  const panel = document.querySelector('#openingManualPanel');
+  if (panel) panel.hidden = true;
+  els.saveOpeningButton.textContent = '手動調整';
+  setDialogMessage(els.openingMessage, '');
+}
+
+function renderOpeningAudit(entries) {
+  const rows = Array.isArray(entries) ? entries : [];
+  if (!rows.length) {
+    return '<details class="opening-audit"><summary>調整紀錄</summary><div class="opening-audit-empty">目前沒有手動調整紀錄。</div></details>';
+  }
+  const items = rows.slice(0, 12).map(entry => {
+    const action = entry.action === 'clear' ? '恢復自動' : entry.action === 'migration' ? '舊資料移轉' : '手動設定';
+    const actor = [entry.actorEmployeeNo, entry.actorName].filter(Boolean).join(' ');
+    const amount = entry.newAmount === null ? '—' : money(entry.newAmount);
+    return `<div class="opening-audit-row">
+      <div><strong>${escapeHtml(entry.accountName)}</strong><span>${escapeHtml(action)}</span><b>${escapeHtml(amount)}</b></div>
+      <small>${escapeHtml(entry.reason || '')}${actor ? ` · ${escapeHtml(actor)}` : ''}${entry.createdAt ? ` · ${escapeHtml(entry.createdAt.replace('T', ' ').replace('Z', ' UTC'))}` : ''}</small>
+    </div>`;
+  }).join('');
+  return `<details class="opening-audit"><summary>調整紀錄（${rows.length}）</summary><div class="opening-audit-list">${items}</div></details>`;
 }
 
 async function saveLock(lockedThrough) {
