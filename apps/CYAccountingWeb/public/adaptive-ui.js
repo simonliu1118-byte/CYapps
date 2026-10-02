@@ -1622,8 +1622,7 @@ const CY_V21_BUILD14_MONTHS = ['一月', '二月', '三月', '四月', '五月',
 let cyV21Build14InlineEdit = null;
 
 const runV21Build14 = () => {
-  setupV21Build14Managers();
-  setupV21Build14InlineEditing();
+   setupV21Build14InlineEditing();
   setupV21Build14AccountLimit();
   setupV21Build14MonthPickers();
   syncV21Build14LedgerMonthTrigger();
@@ -1633,99 +1632,6 @@ if (document.readyState === 'complete') setTimeout(runV21Build14, 0);
 else window.addEventListener('load', () => setTimeout(runV21Build14, 0), { once: true });
 
 
-
-function setupV21Build14Managers() {
-  if (typeof window.renderAccountManager === 'function') window.renderAccountManager = renderV21Build14AccountManager;
-  if (typeof window.renderCategoryManager === 'function') window.renderCategoryManager = renderV21Build14CategoryManager;
-  renderV21Build14AccountManager();
-  renderV21Build14CategoryManager();
-}
-
-function renderV21Build14AccountManager() {
-  const host = document.querySelector('#accountRows');
-  if (!host || typeof state !== 'object') return;
-  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  if (!accounts.length) {
-    host.innerHTML = '<div class="empty">尚無帳戶。</div>';
-    return;
-  }
-
-  host.innerHTML = accounts.map((account, index) => {
-    const id = Number(account.id);
-    const isDefault = Number(account.is_default) === 1;
-    return `<div class="manager-row v21-account-manager-row" data-v21-account-row="${id}">
-      <div class="manager-row-main v21-manager-name-cell">
-        ${isDefault
-          ? '<button type="button" class="v21-default-chip active" disabled title="預設帳戶" aria-label="預設帳戶">★ 預設</button>'
-          : `<button type="button" class="v21-default-chip" data-account-default="${id}" title="設為預設帳戶" aria-label="設為預設帳戶">☆ 預設</button>`}
-        <strong class="v21-editable-name" data-v21-account-name="${id}">${v21Build14Escape(account.name)}</strong>
-        <button type="button" class="mini-button v21-edit-name-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">✎</button>
-      </div>
-      <div class="manager-row-actions">
-        ${v21Build14OrderButton('account', id, 'up', index === 0)}
-        ${v21Build14OrderButton('account', id, 'down', index === accounts.length - 1)}
-        <button type="button" class="mini-button danger" data-account-delete="${id}">刪除</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function renderV21Build14CategoryManager() {
-  const host = document.querySelector('#categoryManager');
-  if (!host || typeof state !== 'object') return;
-  document.querySelectorAll('[data-settings-kind]').forEach(button =>
-    button.classList.toggle('active', button.dataset.settingsKind === state.settingsKind)
-  );
-
-  const groups = (state.groups || []).filter(group => group.kind === state.settingsKind);
-  if (!groups.length) {
-    host.innerHTML = '<div class="empty">目前沒有大分類。</div>';
-    return;
-  }
-
-  host.innerHTML = `<div class="v21-category-manager-list">${groups.map((group, groupIndex) => {
-    const categories = (state.categories || []).filter(category => Number(category.group_id) === Number(group.id));
-    const otherGroups = groups.filter(item => Number(item.id) !== Number(group.id));
-    const groupId = Number(group.id);
-    const items = categories.map((category, index) => {
-      const id = Number(category.id);
-      const favorite = Number(category.is_favorite) === 1;
-      return `<div class="category-item v21-category-manager-row" data-v21-category-row="${id}">
-        <button type="button" class="v21-favorite-chip${favorite ? ' active' : ''}" data-category-favorite="${id}" title="${favorite ? '取消常用科目' : '設為常用科目'}" aria-label="${favorite ? '取消常用科目' : '設為常用科目'}">${favorite ? '★' : '☆'}</button>
-        <span class="v21-editable-name" data-v21-category-name="${id}">${v21Build14Escape(category.name)}</span>
-        <button type="button" class="mini-button v21-edit-name-button" data-category-rename="${id}" title="編輯科目名稱" aria-label="編輯科目名稱">✎</button>
-        ${v21Build14OrderButton('category', id, 'up', index === 0)}
-        ${v21Build14OrderButton('category', id, 'down', index === categories.length - 1)}
-        ${otherGroups.length ? `<button type="button" class="mini-button" data-v12-category-transfer="${id}">移動</button>` : ''}
-        <button type="button" class="mini-button danger" data-category-delete="${id}">刪除</button>
-      </div>`;
-    }).join('');
-
-    return `<section class="category-group v21-category-group" data-group-id="${groupId}">
-      <div class="category-group-head v21-category-group-head">
-        <strong class="category-group-title v21-editable-name" data-v21-group-name="${groupId}">${v21Build14Escape(group.name)}</strong>
-        <button type="button" class="mini-button v21-edit-name-button" data-group-rename="${groupId}" title="編輯大分類名稱" aria-label="編輯大分類名稱">✎</button>
-        <span class="v21-manager-action-spacer" aria-hidden="true"></span>
-        ${v21Build14OrderButton('group', groupId, 'up', groupIndex === 0)}
-        ${v21Build14OrderButton('group', groupId, 'down', groupIndex === groups.length - 1)}
-        <button type="button" class="mini-button danger" data-group-delete="${groupId}">刪除</button>
-      </div>
-      <div class="category-items v21-category-items">
-        ${items || '<div class="v21-category-empty">此分類尚無科目。</div>'}
-        <div class="category-add v21-category-add-row">
-          <input type="text" maxlength="60" placeholder="新增科目" data-new-category-group="${groupId}">
-          <button type="button" class="mini-button" data-category-add="${groupId}">新增</button>
-        </div>
-      </div>
-    </section>`;
-  }).join('')}</div>`;
-}
-
-function v21Build14OrderButton(type, id, direction, disabled) {
-  const attr = type === 'account' ? 'data-v11-move-account' : type === 'group' ? 'data-v11-move-group' : 'data-v11-move-category';
-  const title = direction === 'up' ? '往上移' : '往下移';
-  return `<button type="button" class="mini-button order-button" ${attr}="${id}" data-direction="${direction}" title="${title}" aria-label="${title}"${disabled ? ' disabled' : ''}>${direction === 'up' ? '↑' : '↓'}</button>`;
-}
 
 function setupV21Build14InlineEditing() {
   const accountHost = document.querySelector('#accountRows');
@@ -2057,621 +1963,6 @@ function v21Build14Escape(value) {
     .replaceAll("'", '&#39;');
 }
 
-const CY_V21_BUILD15_DESKTOP = '(min-width: 1024px)';
-let cyV21Build15Drag = null;
-
-const runV21Build15 = () => {
-  setupV21Build15Managers();
-  setupV21Build15KindSwitch();
-  setupV21Build15DragAndDrop();
-};
-
-if (document.readyState === 'complete') setTimeout(runV21Build15, 0);
-else window.addEventListener('load', () => setTimeout(runV21Build15, 0), { once: true });
-
-
-
-function setupV21Build15Managers() {
-  if (typeof window.renderAccountManager === 'function') window.renderAccountManager = renderV21Build15AccountManager;
-  if (typeof window.renderCategoryManager === 'function') window.renderCategoryManager = renderV21Build15CategoryManager;
-  renderV21Build15AccountManager();
-  renderV21Build15CategoryManager();
-}
-
-function renderV21Build15AccountManager() {
-  const host = document.querySelector('#accountRows');
-  if (!host || typeof state !== 'object') return;
-  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  if (!accounts.length) {
-    host.innerHTML = '<div class="empty">尚無帳戶。</div>';
-    return;
-  }
-
-  host.innerHTML = accounts.map(account => {
-    const id = Number(account.id);
-    const isDefault = Number(account.is_default) === 1;
-    return `<div class="manager-row v21-account-manager-row" data-v21-account-row="${id}">
-      <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-account="${id}" title="拖曳調整帳戶順序" aria-label="拖曳調整帳戶順序">⠿</button>
-      ${isDefault
-        ? '<button type="button" class="v21-default-tag active" disabled aria-label="目前預設帳戶">預設</button>'
-        : `<button type="button" class="v21-default-tag" data-account-default="${id}" title="設為預設帳戶">設為預設</button>`}
-      <div class="v21-manager-name-cell">
-        <strong class="v21-editable-name" data-v21-account-name="${id}">${v21Build15Escape(account.name)}</strong>
-        <button type="button" class="mini-button v21-edit-name-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">✎</button>
-      </div>
-      <button type="button" class="mini-button danger v21-manager-delete" data-account-delete="${id}">刪除</button>
-    </div>`;
-  }).join('');
-}
-
-function renderV21Build15CategoryManager() {
-  const host = document.querySelector('#categoryManager');
-  const pane = document.querySelector('[data-settings-pane="categories"]');
-  if (!host || !pane || typeof state !== 'object') return;
-
-  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
-  pane.classList.toggle('v21-category-kind-income', kind === 'income');
-  pane.classList.toggle('v21-category-kind-expense', kind === 'expense');
-  document.querySelectorAll('[data-settings-kind]').forEach(button =>
-    button.classList.toggle('active', button.dataset.settingsKind === kind)
-  );
-
-  const groups = (state.groups || []).filter(group => group.kind === kind);
-  const toolbar = `<div class="v21-category-toolbar">
-    <div class="entry-kind-switch v21-category-kind-switch" role="group" aria-label="收入或支出">
-      <button type="button" class="kind-button${kind === 'income' ? ' active' : ''}" data-kind="income" data-v21-manager-kind="income">收入</button>
-      <button type="button" class="kind-button${kind === 'expense' ? ' active' : ''}" data-kind="expense" data-v21-manager-kind="expense">支出</button>
-    </div>
-  </div>`;
-
-  if (!groups.length) {
-    host.innerHTML = `${toolbar}<div class="empty v21-category-empty-state">目前沒有大分類。</div>`;
-    return;
-  }
-
-  host.innerHTML = `${toolbar}<div class="v21-category-manager-list">${groups.map(group => {
-    const groupId = Number(group.id);
-    const categories = (state.categories || []).filter(category => Number(category.group_id) === groupId);
-    const items = categories.map(category => {
-      const id = Number(category.id);
-      const favorite = Number(category.is_favorite) === 1;
-      return `<div class="category-item v21-category-manager-row" data-v21-category-row="${id}" data-v21-category-group="${groupId}">
-        <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-category="${id}" title="拖曳調整科目順序或分類" aria-label="拖曳調整科目順序或分類">⠿</button>
-        <button type="button" class="v21-favorite-chip${favorite ? ' active' : ''}" data-category-favorite="${id}" title="${favorite ? '取消常用科目' : '設為常用科目'}" aria-label="${favorite ? '取消常用科目' : '設為常用科目'}">${favorite ? '★' : '☆'}</button>
-        <span class="v21-editable-name" data-v21-category-name="${id}">${v21Build15Escape(category.name)}</span>
-        <button type="button" class="mini-button v21-edit-name-button" data-category-rename="${id}" title="編輯科目名稱" aria-label="編輯科目名稱">✎</button>
-        <button type="button" class="mini-button danger v21-manager-delete" data-category-delete="${id}">刪除</button>
-      </div>`;
-    }).join('');
-
-    return `<section class="category-group v21-category-group" data-group-id="${groupId}">
-      <div class="category-group-head v21-category-group-head">
-        <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-group="${groupId}" title="拖曳調整大分類順序" aria-label="拖曳調整大分類順序">⠿</button>
-        <strong class="category-group-title v21-editable-name" data-v21-group-name="${groupId}">${v21Build15Escape(group.name)}</strong>
-        <button type="button" class="mini-button v21-edit-name-button" data-group-rename="${groupId}" title="編輯大分類名稱" aria-label="編輯大分類名稱">✎</button>
-        <button type="button" class="mini-button danger v21-manager-delete" data-group-delete="${groupId}">刪除</button>
-      </div>
-      <div class="category-items v21-category-items" data-v21-category-dropzone="${groupId}">
-        ${items || '<div class="v21-category-empty">拖曳科目到此分類，或在下方新增。</div>'}
-        <div class="category-add v21-category-add-row">
-          <input type="text" maxlength="60" placeholder="新增科目" data-new-category-group="${groupId}">
-          <button type="button" class="mini-button" data-category-add="${groupId}">新增</button>
-        </div>
-      </div>
-    </section>`;
-  }).join('')}</div>`;
-}
-
-function setupV21Build15KindSwitch() {
-  const host = document.querySelector('#categoryManager');
-  if (!host || host.dataset.v21Build15KindBound === '1') return;
-  host.dataset.v21Build15KindBound = '1';
-  host.addEventListener('click', event => {
-    const button = event.target.closest('[data-v21-manager-kind]');
-    if (!button || typeof state !== 'object') return;
-    const kind = button.dataset.v21ManagerKind;
-    if (!['income', 'expense'].includes(kind) || state.settingsKind === kind) return;
-    state.settingsKind = kind;
-    if (cyV21Build15Drag) finishV21Build15Drag();
-    renderV21Build15CategoryManager();
-  });
-}
-
-function setupV21Build15DragAndDrop() {
-  const accountHost = document.querySelector('#accountRows');
-  const categoryHost = document.querySelector('#categoryManager');
-  if (accountHost && accountHost.dataset.v21Build15DragBound !== '1') {
-    accountHost.dataset.v21Build15DragBound = '1';
-    accountHost.addEventListener('dragstart', handleV21Build15DragStart);
-    accountHost.addEventListener('dragover', handleV21Build15AccountDragOver);
-    accountHost.addEventListener('drop', handleV21Build15AccountDrop);
-    accountHost.addEventListener('dragend', finishV21Build15Drag);
-  }
-  if (categoryHost && categoryHost.dataset.v21Build15DragBound !== '1') {
-    categoryHost.dataset.v21Build15DragBound = '1';
-    categoryHost.addEventListener('dragstart', handleV21Build15DragStart);
-    categoryHost.addEventListener('dragover', handleV21Build15CategoryDragOver);
-    categoryHost.addEventListener('drop', handleV21Build15CategoryDrop);
-    categoryHost.addEventListener('dragend', finishV21Build15Drag);
-  }
-}
-
-function handleV21Build15DragStart(event) {
-  if (!window.matchMedia(CY_V21_BUILD15_DESKTOP).matches) return;
-  const handle = event.target.closest('[data-v21-drag-account], [data-v21-drag-group], [data-v21-drag-category]');
-  if (!handle) return;
-  if (typeof cyV21Build14InlineEdit !== 'undefined' && cyV21Build14InlineEdit) {
-    event.preventDefault();
-    return;
-  }
-
-  let type = '';
-  let id = 0;
-  if (handle.dataset.v21DragAccount) { type = 'account'; id = Number(handle.dataset.v21DragAccount); }
-  else if (handle.dataset.v21DragGroup) { type = 'group'; id = Number(handle.dataset.v21DragGroup); }
-  else if (handle.dataset.v21DragCategory) { type = 'category'; id = Number(handle.dataset.v21DragCategory); }
-  if (!type || !Number.isInteger(id) || id <= 0) return;
-
-  cyV21Build15Drag = { type, id };
-  event.dataTransfer.effectAllowed = 'move';
-  event.dataTransfer.setData('text/plain', `${type}:${id}`);
-  const row = handle.closest('[data-v21-account-row], [data-group-id], [data-v21-category-row]');
-  row?.classList.add('v21-is-dragging');
-  document.body.classList.add('v21-manager-dragging');
-}
-
-function handleV21Build15AccountDragOver(event) {
-  if (cyV21Build15Drag?.type !== 'account') return;
-  event.preventDefault();
-  event.dataTransfer.dropEffect = 'move';
-  clearV21Build15DropMarkers();
-  const row = event.target.closest('[data-v21-account-row]');
-  if (!row) return;
-  row.classList.add(v21Build15AfterMidpoint(event, row) ? 'v21-drop-after' : 'v21-drop-before');
-}
-
-async function handleV21Build15AccountDrop(event) {
-  if (cyV21Build15Drag?.type !== 'account' || typeof state !== 'object') return;
-  event.preventDefault();
-  const sourceId = cyV21Build15Drag.id;
-  const row = event.target.closest('[data-v21-account-row]');
-  const targetId = Number(row?.dataset.v21AccountRow || 0);
-  const after = row ? v21Build15AfterMidpoint(event, row) : true;
-  const ids = (state.accounts || []).map(item => Number(item.id));
-  const next = v21Build15MoveId(ids, sourceId, targetId, after);
-  finishV21Build15Drag();
-  if (!next || next.every((id, index) => id === ids[index])) return;
-  await mutateSettings('/api/accounts/reorder', {
-    method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ ids: next })
-  }, '帳戶順序已更新。');
-}
-
-function handleV21Build15CategoryDragOver(event) {
-  if (!cyV21Build15Drag || !['group', 'category'].includes(cyV21Build15Drag.type)) return;
-  event.preventDefault();
-  event.dataTransfer.dropEffect = 'move';
-  clearV21Build15DropMarkers();
-
-  if (cyV21Build15Drag.type === 'group') {
-    const group = event.target.closest('[data-group-id]');
-    if (!group) return;
-    const head = group.querySelector('.v21-category-group-head') || group;
-    group.classList.add(v21Build15AfterMidpoint(event, head) ? 'v21-drop-after' : 'v21-drop-before');
-    return;
-  }
-
-  const categoryRow = event.target.closest('[data-v21-category-row]');
-  if (categoryRow) {
-    categoryRow.classList.add(v21Build15AfterMidpoint(event, categoryRow) ? 'v21-drop-after' : 'v21-drop-before');
-    categoryRow.closest('[data-group-id]')?.classList.add('v21-drop-group');
-    return;
-  }
-  event.target.closest('[data-group-id]')?.classList.add('v21-drop-group');
-}
-
-async function handleV21Build15CategoryDrop(event) {
-  if (!cyV21Build15Drag || typeof state !== 'object') return;
-  const drag = { ...cyV21Build15Drag };
-  if (drag.type === 'group') {
-    event.preventDefault();
-    const group = event.target.closest('[data-group-id]');
-    const targetId = Number(group?.dataset.groupId || 0);
-    const head = group?.querySelector('.v21-category-group-head') || group;
-    const after = group && head ? v21Build15AfterMidpoint(event, head) : true;
-    const ids = (state.groups || []).filter(item => item.kind === state.settingsKind).map(item => Number(item.id));
-    const next = v21Build15MoveId(ids, drag.id, targetId, after);
-    finishV21Build15Drag();
-    if (!next || next.every((id, index) => id === ids[index])) return;
-    await mutateSettings('/api/category-groups/reorder', {
-      method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, ids: next })
-    }, '大分類順序已更新。');
-    return;
-  }
-
-  if (drag.type !== 'category') return;
-  event.preventDefault();
-  const targetGroup = event.target.closest('[data-group-id]');
-  const targetGroupId = Number(targetGroup?.dataset.groupId || 0);
-  if (!Number.isInteger(targetGroupId) || targetGroupId <= 0) {
-    finishV21Build15Drag();
-    return;
-  }
-
-  const targetRow = event.target.closest('[data-v21-category-row]');
-  const targetId = Number(targetRow?.dataset.v21CategoryRow || 0);
-  if (targetId === drag.id) {
-    finishV21Build15Drag();
-    return;
-  }
-  const after = targetRow ? v21Build15AfterMidpoint(event, targetRow) : true;
-  const payload = v21Build15CategoryOrderPayload(drag.id, targetGroupId, targetId, after);
-  finishV21Build15Drag();
-  if (!payload) return;
-  await mutateSettings('/api/categories/reorder', {
-    method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, groups: payload })
-  }, '科目順序已更新。');
-}
-
-function v21Build15MoveId(ids, sourceId, targetId, after) {
-  if (!ids.includes(sourceId)) return null;
-  if (targetId === sourceId) return [...ids];
-  const next = ids.filter(id => id !== sourceId);
-  if (!targetId || !next.includes(targetId)) {
-    next.push(sourceId);
-    return next;
-  }
-  let index = next.indexOf(targetId);
-  if (after) index += 1;
-  next.splice(index, 0, sourceId);
-  return next;
-}
-
-function v21Build15CategoryOrderPayload(sourceId, targetGroupId, targetId, after) {
-  if (targetId === sourceId) return null;
-  const groups = (state.groups || []).filter(group => group.kind === state.settingsKind);
-  if (!groups.some(group => Number(group.id) === targetGroupId)) return null;
-  const payload = groups.map(group => ({
-    groupId: Number(group.id),
-    categoryIds: (state.categories || [])
-      .filter(category => category.kind === state.settingsKind && Number(category.group_id) === Number(group.id))
-      .map(category => Number(category.id))
-  }));
-  if (!payload.some(group => group.categoryIds.includes(sourceId))) return null;
-  payload.forEach(group => { group.categoryIds = group.categoryIds.filter(id => id !== sourceId); });
-  const target = payload.find(group => group.groupId === targetGroupId);
-  let index = target.categoryIds.length;
-  if (targetId && target.categoryIds.includes(targetId)) {
-    index = target.categoryIds.indexOf(targetId) + (after ? 1 : 0);
-  }
-  target.categoryIds.splice(index, 0, sourceId);
-  return payload;
-}
-
-function v21Build15AfterMidpoint(event, element) {
-  const rect = element.getBoundingClientRect();
-  return event.clientY > rect.top + rect.height / 2;
-}
-
-function clearV21Build15DropMarkers() {
-  document.querySelectorAll('.v21-drop-before, .v21-drop-after, .v21-drop-group').forEach(element =>
-    element.classList.remove('v21-drop-before', 'v21-drop-after', 'v21-drop-group')
-  );
-}
-
-function finishV21Build15Drag() {
-  document.querySelectorAll('.v21-is-dragging').forEach(element => element.classList.remove('v21-is-dragging'));
-  clearV21Build15DropMarkers();
-  document.body.classList.remove('v21-manager-dragging');
-  cyV21Build15Drag = null;
-}
-
-function v21Build15Escape(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-const CY_V21_BUILD16_DESKTOP = '(min-width: 1024px)';
-let cyV21Build16Saving = false;
-
-const runV21Build16 = () => {
-  setupV21Build16CategoryManager();
-  setupV21Build16OptimisticDrag();
-};
-
-if (document.readyState === 'complete') setTimeout(runV21Build16, 0);
-else window.addEventListener('load', () => setTimeout(runV21Build16, 0), { once: true });
-
-
-
-function setupV21Build16CategoryManager() {
-  if (typeof window.renderCategoryManager === 'function') window.renderCategoryManager = renderV21Build16CategoryManager;
-  const host = document.querySelector('#categoryManager');
-  if (!host) return;
-
-  if (host.dataset.v21Build16KindBound !== '1') {
-    host.dataset.v21Build16KindBound = '1';
-    host.addEventListener('click', event => {
-      const button = event.target.closest('[data-v21-manager-kind]');
-      if (!button || typeof state !== 'object') return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const kind = button.dataset.v21ManagerKind;
-      if (!['income', 'expense'].includes(kind) || kind === state.settingsKind) return;
-      state.settingsKind = kind;
-      renderV21Build16CategoryManager();
-    }, true);
-  }
-
-  renderV21Build16CategoryManager();
-}
-
-function renderV21Build16CategoryManager() {
-  const host = document.querySelector('#categoryManager');
-  const pane = document.querySelector('[data-settings-pane="categories"]');
-  if (!host || !pane || typeof state !== 'object') return;
-
-  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
-  pane.classList.toggle('v21-category-kind-income', kind === 'income');
-  pane.classList.toggle('v21-category-kind-expense', kind === 'expense');
-
-  const toolbar = `<div class="v21-category-toolbar">
-    <div class="entry-kind-switch v21-category-kind-switch" role="group" aria-label="收入或支出">
-      <button type="button" class="kind-button${kind === 'income' ? ' active' : ''}" data-kind="income" data-v21-manager-kind="income">收入</button>
-      <button type="button" class="kind-button${kind === 'expense' ? ' active' : ''}" data-kind="expense" data-v21-manager-kind="expense">支出</button>
-    </div>
-  </div>`;
-
-  const groups = (state.groups || []).filter(group => group.kind === kind);
-  if (!groups.length) {
-    host.innerHTML = `${toolbar}<div class="empty v21-category-empty-state">目前沒有大分類。</div>`;
-    return;
-  }
-
-  const list = groups.map(group => {
-    const groupId = Number(group.id);
-    const categories = (state.categories || []).filter(category =>
-      category.kind === kind && Number(category.group_id) === groupId
-    );
-    const items = categories.map(category => {
-      const id = Number(category.id);
-      const favorite = Number(category.is_favorite) === 1;
-      return `<div class="category-item v21-category-manager-row" data-v21-category-row="${id}" data-v21-category-group="${groupId}">
-        <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-category="${id}" title="拖曳調整科目順序或分類" aria-label="拖曳調整科目順序或分類">⠿</button>
-        <button type="button" class="v21-favorite-chip${favorite ? ' active' : ''}" data-category-favorite="${id}" title="${favorite ? '取消常用科目' : '設為常用科目'}" aria-label="${favorite ? '取消常用科目' : '設為常用科目'}">${favorite ? '★' : '☆'}</button>
-        <span class="v21-editable-name" data-v21-category-name="${id}">${v21Build16Escape(category.name)}</span>
-        <button type="button" class="mini-button v21-edit-name-button" data-category-rename="${id}" title="編輯科目名稱" aria-label="編輯科目名稱">✎</button>
-        <button type="button" class="mini-button danger v21-manager-delete" data-category-delete="${id}">刪除</button>
-      </div>`;
-    }).join('');
-
-    return `<section class="category-group v21-category-group" data-group-id="${groupId}">
-      <div class="category-group-head v21-category-group-head">
-        <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-group="${groupId}" title="拖曳調整大分類順序" aria-label="拖曳調整大分類順序">⠿</button>
-        <strong class="category-group-title v21-editable-name" data-v21-group-name="${groupId}">${v21Build16Escape(group.name)}</strong>
-        <button type="button" class="mini-button v21-edit-name-button" data-group-rename="${groupId}" title="編輯大分類名稱" aria-label="編輯大分類名稱">✎</button>
-        <button type="button" class="mini-button danger v21-manager-delete" data-group-delete="${groupId}">刪除</button>
-      </div>
-      <div class="category-items v21-category-items" data-v21-category-dropzone="${groupId}">
-        ${items || '<div class="v21-category-empty">拖曳科目到此分類，或在下方新增。</div>'}
-        <div class="category-add v21-category-add-row">
-          <input type="text" maxlength="60" placeholder="新增科目" data-new-category-group="${groupId}">
-          <button type="button" class="mini-button" data-category-add="${groupId}">新增</button>
-        </div>
-      </div>
-    </section>`;
-  }).join('');
-
-  host.innerHTML = `${toolbar}<div class="v21-category-manager-list">${list}</div>`;
-}
-
-function setupV21Build16OptimisticDrag() {
-  const accountHost = document.querySelector('#accountRows');
-  const categoryHost = document.querySelector('#categoryManager');
-  if (accountHost && accountHost.dataset.v21Build16DropBound !== '1') {
-    accountHost.dataset.v21Build16DropBound = '1';
-    accountHost.addEventListener('drop', handleV21Build16AccountDrop, true);
-  }
-  if (categoryHost && categoryHost.dataset.v21Build16DropBound !== '1') {
-    categoryHost.dataset.v21Build16DropBound = '1';
-    categoryHost.addEventListener('drop', handleV21Build16CategoryDrop, true);
-  }
-}
-
-async function handleV21Build16AccountDrop(event) {
-  if (!window.matchMedia(CY_V21_BUILD16_DESKTOP).matches || cyV21Build16Saving) return;
-  if (typeof cyV21Build15Drag === 'undefined' || cyV21Build15Drag?.type !== 'account' || typeof state !== 'object') return;
-
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  const sourceId = Number(cyV21Build15Drag.id);
-  const row = event.target.closest('[data-v21-account-row]');
-  const targetId = Number(row?.dataset.v21AccountRow || 0);
-  const after = row ? v21Build16AfterMidpoint(event, row) : true;
-  const previous = [...(state.accounts || [])];
-  const ids = previous.map(item => Number(item.id));
-  const nextIds = v21Build16MoveId(ids, sourceId, targetId, after);
-  finishV21Build15Drag?.();
-  if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
-
-  state.accounts = v21Build16OrderObjects(previous, nextIds);
-  renderV21Build15AccountManager?.();
-  const selectedAccount = document.querySelector('#accountName')?.value || '';
-  if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
-  if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
-
-  await persistV21Build16Optimistic(
-    '/api/accounts/reorder',
-    { ids: nextIds },
-    '帳戶順序已更新。',
-    () => {
-      state.accounts = previous;
-      renderV21Build15AccountManager?.();
-      if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
-      if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
-    }
-  );
-}
-
-async function handleV21Build16CategoryDrop(event) {
-  if (!window.matchMedia(CY_V21_BUILD16_DESKTOP).matches || cyV21Build16Saving) return;
-  if (typeof cyV21Build15Drag === 'undefined' || !cyV21Build15Drag || typeof state !== 'object') return;
-  if (!['group', 'category'].includes(cyV21Build15Drag.type)) return;
-
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  const drag = { type: cyV21Build15Drag.type, id: Number(cyV21Build15Drag.id) };
-  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
-
-  if (drag.type === 'group') {
-    const group = event.target.closest('[data-group-id]');
-    const targetId = Number(group?.dataset.groupId || 0);
-    const head = group?.querySelector('.v21-category-group-head') || group;
-    const after = group && head ? v21Build16AfterMidpoint(event, head) : true;
-    const previous = [...(state.groups || [])];
-    const ids = previous.filter(item => item.kind === kind).map(item => Number(item.id));
-    const nextIds = v21Build16MoveId(ids, drag.id, targetId, after);
-    finishV21Build15Drag?.();
-    if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
-
-    state.groups = v21Build16ReplaceKindOrder(previous, kind, nextIds);
-    renderV21Build16CategoryManager();
-    await persistV21Build16Optimistic(
-      '/api/category-groups/reorder',
-      { kind, ids: nextIds },
-      '大分類順序已更新。',
-      () => {
-        state.groups = previous;
-        renderV21Build16CategoryManager();
-      }
-    );
-    return;
-  }
-
-  const targetGroup = event.target.closest('[data-group-id]');
-  const targetGroupId = Number(targetGroup?.dataset.groupId || 0);
-  if (!Number.isInteger(targetGroupId) || targetGroupId <= 0) {
-    finishV21Build15Drag?.();
-    return;
-  }
-  const targetRow = event.target.closest('[data-v21-category-row]');
-  const targetId = Number(targetRow?.dataset.v21CategoryRow || 0);
-  const after = targetRow ? v21Build16AfterMidpoint(event, targetRow) : true;
-  const previous = [...(state.categories || [])];
-  const payload = v21Build16CategoryPayload(previous, kind, drag.id, targetGroupId, targetId, after);
-  finishV21Build15Drag?.();
-  if (!payload) return;
-
-  state.categories = v21Build16ApplyCategoryPayload(previous, kind, payload);
-  renderV21Build16CategoryManager();
-  await persistV21Build16Optimistic(
-    '/api/categories/reorder',
-    { kind, groups: payload },
-    '科目順序已更新。',
-    () => {
-      state.categories = previous;
-      renderV21Build16CategoryManager();
-    }
-  );
-}
-
-async function persistV21Build16Optimistic(path, body, successMessage, rollback) {
-  const message = document.querySelector('#settingsMessage');
-  cyV21Build16Saving = true;
-  document.body.classList.add('v21-reorder-saving');
-  if (message) setDialogMessage(message, '');
-  try {
-    await api(path, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(body) });
-    if (message) setDialogMessage(message, successMessage);
-    return true;
-  } catch (error) {
-    rollback?.();
-    if (message) setDialogMessage(message, error.message || '排序儲存失敗。', true);
-    return false;
-  } finally {
-    cyV21Build16Saving = false;
-    document.body.classList.remove('v21-reorder-saving');
-  }
-}
-
-function v21Build16MoveId(ids, sourceId, targetId, after) {
-  if (!ids.includes(sourceId)) return null;
-  if (targetId === sourceId) return [...ids];
-  const next = ids.filter(id => id !== sourceId);
-  if (!targetId || !next.includes(targetId)) {
-    next.push(sourceId);
-    return next;
-  }
-  let index = next.indexOf(targetId);
-  if (after) index += 1;
-  next.splice(index, 0, sourceId);
-  return next;
-}
-
-function v21Build16OrderObjects(items, ids) {
-  const byId = new Map(items.map(item => [Number(item.id), item]));
-  return ids.map(id => byId.get(id)).filter(Boolean);
-}
-
-function v21Build16ReplaceKindOrder(items, kind, ids) {
-  const byId = new Map(items.filter(item => item.kind === kind).map(item => [Number(item.id), item]));
-  const ordered = ids.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 })).filter(Boolean);
-  let cursor = 0;
-  return items.map(item => item.kind === kind ? ordered[cursor++] : item);
-}
-
-function v21Build16CategoryPayload(items, kind, sourceId, targetGroupId, targetId, after) {
-  const groups = (state.groups || []).filter(group => group.kind === kind);
-  if (!groups.some(group => Number(group.id) === targetGroupId)) return null;
-  const payload = groups.map(group => ({
-    groupId: Number(group.id),
-    categoryIds: items
-      .filter(category => category.kind === kind && Number(category.group_id) === Number(group.id))
-      .map(category => Number(category.id))
-  }));
-  if (!payload.some(group => group.categoryIds.includes(sourceId))) return null;
-  if (targetId === sourceId) return null;
-
-  payload.forEach(group => { group.categoryIds = group.categoryIds.filter(id => id !== sourceId); });
-  const target = payload.find(group => group.groupId === targetGroupId);
-  let index = target.categoryIds.length;
-  if (targetId && target.categoryIds.includes(targetId)) {
-    index = target.categoryIds.indexOf(targetId) + (after ? 1 : 0);
-  }
-  target.categoryIds.splice(index, 0, sourceId);
-  return payload;
-}
-
-function v21Build16ApplyCategoryPayload(items, kind, payload) {
-  const byId = new Map(items.filter(item => item.kind === kind).map(item => [Number(item.id), item]));
-  const ordered = [];
-  for (const group of payload) {
-    group.categoryIds.forEach((id, index) => {
-      const item = byId.get(Number(id));
-      if (item) ordered.push({ ...item, group_id: Number(group.groupId), sort_order: index + 1 });
-    });
-  }
-  let cursor = 0;
-  return items.map(item => item.kind === kind ? ordered[cursor++] : item);
-}
-
-function v21Build16AfterMidpoint(event, element) {
-  const rect = element.getBoundingClientRect();
-  return event.clientY > rect.top + rect.height / 2;
-}
-
-function v21Build16Escape(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
 const CY_V0211_DESKTOP = '(min-width: 1024px)';
 const CY_V0211_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 const CY_V0211_WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -2681,9 +1972,6 @@ installV0211ConfirmDialog();
 installV0211ConfirmInterceptors();
 
 const runV0211Patch = () => {
-  installV0211ManagerOverrides();
-  setupV0211ManagerGuards();
-  renderV0211ManagersIfVisible();
   setupV0211DatePickers();
   auditV0211MonthPickers();
   refineV0211HeaderIdentity();
@@ -2894,151 +2182,6 @@ function v0211ConfirmSpec(target) {
 
 /* -------------------------------------------------------------------------- */
 /* Deterministic Desktop managers                                             */
-/* -------------------------------------------------------------------------- */
-
-function installV0211ManagerOverrides() {
-  if (typeof window.renderAccountManager === 'function') window.renderAccountManager = renderV0211AccountManager;
-  if (typeof window.renderV21Build15AccountManager === 'function') window.renderV21Build15AccountManager = renderV0211AccountManager;
-  if (typeof window.renderCategoryManager === 'function') window.renderCategoryManager = renderV0211CategoryManager;
-  if (typeof window.renderV21Build15CategoryManager === 'function') window.renderV21Build15CategoryManager = renderV0211CategoryManager;
-  if (typeof window.renderV21Build16CategoryManager === 'function') window.renderV21Build16CategoryManager = renderV0211CategoryManager;
-}
-
-function renderV0211ManagersIfVisible() {
-  if (!window.matchMedia(CY_V0211_DESKTOP).matches || typeof state !== 'object') return;
-  if (document.querySelector('#accountRows')) renderV0211AccountManager();
-  if (document.querySelector('#categoryManager')) renderV0211CategoryManager();
-}
-
-function renderV0211AccountManager() {
-  if (typeof state !== 'object') return;
-  if (!window.matchMedia(CY_V0211_DESKTOP).matches) return renderMobileAccountManager();
-  const host = document.querySelector('#accountRows');
-  if (!host) return;
-  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
-  cyV0211RenderingManagers = true;
-  try {
-    if (!accounts.length) {
-      host.innerHTML = '<div class="empty">尚無帳戶。</div>';
-      return;
-    }
-    host.innerHTML = accounts.map(account => {
-      const id = Number(account.id);
-      const isDefault = Number(account.is_default) === 1;
-      return `<div class="v0211-account-row" data-v21-account-row="${id}">
-        <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-account="${id}" title="拖曳調整帳戶順序" aria-label="拖曳調整帳戶順序">⠿</button>
-        ${isDefault
-          ? '<button type="button" class="v0211-default-tag active" disabled aria-label="目前預設帳戶">預設</button>'
-          : `<button type="button" class="v0211-default-tag" data-account-default="${id}" title="設為預設帳戶">設為預設</button>`}
-        <div class="v0211-account-name-cell">
-          <strong class="v21-editable-name" data-v21-account-name="${id}">${v0211Escape(account.name)}</strong>
-          <button type="button" class="mini-button v21-edit-name-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">✎</button>
-        </div>
-        <button type="button" class="mini-button danger v21-manager-delete" data-account-delete="${id}">刪除</button>
-      </div>`;
-    }).join('');
-  } finally {
-    cyV0211RenderingManagers = false;
-  }
-}
-
-function renderV0211CategoryManager() {
-  if (typeof state !== 'object') return;
-  if (!window.matchMedia(CY_V0211_DESKTOP).matches) return renderMobileCategoryManager();
-  const host = document.querySelector('#categoryManager');
-  const pane = document.querySelector('[data-settings-pane="categories"]');
-  if (!host || !pane) return;
-
-  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
-  pane.classList.toggle('v0211-category-income', kind === 'income');
-  pane.classList.toggle('v0211-category-expense', kind === 'expense');
-  const addGroup = document.querySelector('#newGroupName')?.parentElement;
-  addGroup?.classList.add('v0211-group-add');
-
-  const groups = (state.groups || []).filter(group => group.kind === kind);
-  const toolbar = `<div class="v0211-category-toolbar">
-    <div class="entry-kind-switch" role="group" aria-label="收入或支出">
-      <button type="button" class="kind-button${kind === 'income' ? ' active' : ''}" data-kind="income" data-v0211-manager-kind="income">收入</button>
-      <button type="button" class="kind-button${kind === 'expense' ? ' active' : ''}" data-kind="expense" data-v0211-manager-kind="expense">支出</button>
-    </div>
-  </div>`;
-
-  cyV0211RenderingManagers = true;
-  try {
-    const body = groups.length ? `<div class="v0211-category-list">${groups.map(group => {
-      const groupId = Number(group.id);
-      const categories = (state.categories || []).filter(category => category.kind === kind && Number(category.group_id) === groupId);
-      const rows = categories.map(category => {
-        const id = Number(category.id);
-        const favorite = Number(category.is_favorite) === 1;
-        return `<div class="v0211-category-row" data-v21-category-row="${id}" data-v21-category-group="${groupId}">
-          <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-category="${id}" title="拖曳調整科目順序或分類" aria-label="拖曳調整科目順序或分類">⠿</button>
-          <button type="button" class="v0211-category-favorite${favorite ? ' active' : ''}" data-category-favorite="${id}" title="${favorite ? '取消常用科目' : '設為常用科目'}" aria-label="${favorite ? '取消常用科目' : '設為常用科目'}">${favorite ? '★' : '☆'}</button>
-          <span class="v21-editable-name" data-v21-category-name="${id}">${v0211Escape(category.name)}</span>
-          <button type="button" class="mini-button v21-edit-name-button" data-category-rename="${id}" title="編輯科目名稱" aria-label="編輯科目名稱">✎</button>
-          <button type="button" class="mini-button danger v21-manager-delete" data-category-delete="${id}">刪除</button>
-        </div>`;
-      }).join('');
-      return `<section class="v0211-category-group" data-group-id="${groupId}">
-        <div class="v0211-category-group-head">
-          <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-group="${groupId}" title="拖曳調整大分類順序" aria-label="拖曳調整大分類順序">⠿</button>
-          <strong class="v21-editable-name" data-v21-group-name="${groupId}">${v0211Escape(group.name)}</strong>
-          <button type="button" class="mini-button v21-edit-name-button" data-group-rename="${groupId}" title="編輯大分類名稱" aria-label="編輯大分類名稱">✎</button>
-          <button type="button" class="mini-button danger v21-manager-delete" data-group-delete="${groupId}">刪除</button>
-        </div>
-        <div class="v0211-category-items" data-v21-category-dropzone="${groupId}">
-          ${rows || '<div class="v0211-category-empty">拖曳科目到此分類，或在下方新增。</div>'}
-          <div class="v0211-category-add">
-            <input type="text" maxlength="60" placeholder="新增科目" data-new-category-group="${groupId}">
-            <button type="button" class="mini-button" data-category-add="${groupId}">新增</button>
-          </div>
-        </div>
-      </section>`;
-    }).join('')}</div>` : '<div class="empty v0211-category-empty">目前沒有大分類。</div>';
-    host.innerHTML = `<div class="v0211-category-shell">${toolbar}${body}</div>`;
-  } finally {
-    cyV0211RenderingManagers = false;
-  }
-}
-
-function setupV0211ManagerGuards() {
-  const accountHost = document.querySelector('#accountRows');
-  if (accountHost && accountHost.dataset.v0211Guard !== '1') {
-    accountHost.dataset.v0211Guard = '1';
-    const observer = new MutationObserver(() => {
-      if (cyV0211RenderingManagers || !window.matchMedia(CY_V0211_DESKTOP).matches) return;
-      const hasRows = accountHost.children.length > 0 && !accountHost.querySelector('.empty');
-      if (hasRows && !accountHost.querySelector('.v0211-account-row')) queueMicrotask(renderV0211AccountManager);
-    });
-    observer.observe(accountHost, { childList: true, subtree: true });
-  }
-
-  const categoryHost = document.querySelector('#categoryManager');
-  if (categoryHost && categoryHost.dataset.v0211Guard !== '1') {
-    categoryHost.dataset.v0211Guard = '1';
-    categoryHost.addEventListener('click', event => {
-      const button = event.target.closest('[data-v0211-manager-kind]');
-      if (!button || typeof state !== 'object') return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const kind = button.dataset.v0211ManagerKind;
-      if (!['income', 'expense'].includes(kind) || state.settingsKind === kind) return;
-      state.settingsKind = kind;
-      renderV0211CategoryManager();
-    }, true);
-
-    const observer = new MutationObserver(() => {
-      if (cyV0211RenderingManagers || !window.matchMedia(CY_V0211_DESKTOP).matches) return;
-      const polluted = categoryHost.querySelector('.category-item, .order-button, [data-v12-category-transfer], [data-v11-move-category], [data-v11-move-group]');
-      const missingPatch = categoryHost.children.length > 0 && !categoryHost.querySelector('.v0211-category-shell');
-      if (polluted || missingPatch) queueMicrotask(renderV0211CategoryManager);
-    });
-    observer.observe(categoryHost, { childList: true, subtree: true });
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Desktop date/month pickers                                                 */
 /* -------------------------------------------------------------------------- */
 
 function auditV0211MonthPickers() {
@@ -3256,7 +2399,7 @@ function refineV0211HeaderIdentity() {
   user.style.removeProperty('padding-bottom');
 }
 
-function v0211Escape(value) {
+function settingsManagerEscape(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -3323,77 +2466,94 @@ if (document.readyState === 'complete') setTimeout(setupV0211KeyboardBridge, 0);
 else window.addEventListener('load', () => setTimeout(setupV0211KeyboardBridge, 0), { once: true });
 setTimeout(setupV0211KeyboardBridge, 350);
 
-const CY_V0212_DESKTOP = '(min-width: 1024px)';
-let cyV0212DialogState = null;
-let cyV0212Rendering = false;
-const runV0212 = () => {
-  if (!window.matchMedia(CY_V0212_DESKTOP).matches) return;
-  installV0212CategoryRenderer();
-  ensureV0212ManagerDialog();
-  bindV0212ManagerActions();
-  renderV0212CategoryManager();
+const SETTINGS_MANAGER_DESKTOP = '(min-width: 1024px)';
+let settingsManagerDialogState = null;
+let settingsManagerDrag = null;
+let settingsManagerSaving = false;
+
+window.cySettingsManager = {
+  renderAccountManager: renderSettingsAccountManager,
+  renderCategoryManager: renderSettingsCategoryManager,
+  openAddGroupDialog: openSettingsAddGroupDialog,
+  openAddCategoryDialog: openSettingsAddCategoryDialog,
+  openRenameDialog: openSettingsRenameDialog
+};
+
+const setupSettingsManager = () => {
+  ensureSettingsManagerDialog();
+  bindSettingsManagerActions();
+  setupSettingsManagerDragAndDrop();
+  renderSettingsAccountManager();
+  renderSettingsCategoryManager();
 };
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => setTimeout(runV0212, 0), { once: true });
+  document.addEventListener('DOMContentLoaded', () => setTimeout(setupSettingsManager, 0), { once: true });
 } else {
-  setTimeout(runV0212, 0);
+  setTimeout(setupSettingsManager, 0);
 }
-window.addEventListener('load', () => {
-  setTimeout(runV0212, 0);
-  setTimeout(runV0212, 120);
-  setTimeout(runV0212, 420);
-}, { once: true });
+window.addEventListener('load', () => setTimeout(setupSettingsManager, 0), { once: true });
 
-
-
-function installV0212CategoryRenderer() {
-  window.renderCategoryManager = renderV0212CategoryManager;
-  if (typeof window.renderV21Build15CategoryManager === 'function') window.renderV21Build15CategoryManager = renderV0212CategoryManager;
-  if (typeof window.renderV21Build16CategoryManager === 'function') window.renderV21Build16CategoryManager = renderV0212CategoryManager;
-  if (typeof window.renderV0211CategoryManager === 'function') window.renderV0211CategoryManager = renderV0212CategoryManager;
-}
-
-function renderV0212CategoryManager() {
+function renderSettingsAccountManager() {
   if (typeof state !== 'object') return;
-  if (!window.matchMedia(CY_V0212_DESKTOP).matches) return renderMobileCategoryManager();
+  if (!window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches) return renderMobileAccountManager();
+
+  const host = document.querySelector('#accountRows');
+  if (!host) return;
+  const accounts = Array.isArray(state.accounts) ? state.accounts : [];
+  if (!accounts.length) {
+    host.innerHTML = '<div class="empty">尚無帳戶。</div>';
+    return;
+  }
+
+  host.innerHTML = accounts.map(account => {
+    const id = Number(account.id);
+    const isDefault = Number(account.is_default) === 1;
+    return `<div class="settings-account-row" data-settings-account-row="${id}">
+      <button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-account="${id}" title="拖曳調整帳戶順序" aria-label="拖曳調整帳戶順序">⠿</button>
+      ${isDefault
+        ? '<button type="button" class="settings-default-tag active" disabled aria-label="目前預設帳戶">預設</button>'
+        : `<button type="button" class="settings-default-tag" data-account-default="${id}" title="設為預設帳戶">設為預設</button>`}
+      <div class="settings-account-name-cell">
+        <strong class="settings-editable-name">${settingsManagerEscape(account.name)}</strong>
+        <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">✎</button>
+      </div>
+      <button type="button" class="mini-button danger settings-delete-button" data-account-delete="${id}">刪除</button>
+    </div>`;
+  }).join('');
+}
+
+function renderSettingsCategoryManager() {
+  if (typeof state !== 'object') return;
+  if (!window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches) return renderMobileCategoryManager();
+
   const host = document.querySelector('#categoryManager');
   const pane = document.querySelector('[data-settings-pane="categories"]');
-  if (!host || !pane || cyV0212Rendering) return;
+  if (!host || !pane) return;
 
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
+  pane.classList.toggle('settings-kind-income', kind === 'income');
+  pane.classList.toggle('settings-kind-expense', kind === 'expense');
   const groups = (state.groups || []).filter(group => group.kind === kind);
-  pane.classList.toggle('v0211-category-income', kind === 'income');
-  pane.classList.toggle('v0211-category-expense', kind === 'expense');
-  pane.classList.toggle('v0212-category-income', kind === 'income');
-  pane.classList.toggle('v0212-category-expense', kind === 'expense');
 
-  const legacyGroupAdd = document.querySelector('#newGroupName')?.parentElement;
-  legacyGroupAdd?.classList.add('v0212-legacy-group-add');
-
-  const toolbar = `<div class="v0212-category-toolbar">
-    <div class="entry-kind-switch v0212-kind-switch" role="group" aria-label="收入或支出">
-      <button type="button" class="kind-button${kind === 'income' ? ' active' : ''}" data-kind="income" data-v0212-manager-kind="income">收入</button>
-      <button type="button" class="kind-button${kind === 'expense' ? ' active' : ''}" data-kind="expense" data-v0212-manager-kind="expense">支出</button>
+  const toolbar = `<div class="settings-category-toolbar">
+    <div class="entry-kind-switch settings-kind-switch" role="group" aria-label="收入或支出">
+      <button type="button" class="kind-button${kind === 'income' ? ' active' : ''}" data-settings-kind-choice="income">收入</button>
+      <button type="button" class="kind-button${kind === 'expense' ? ' active' : ''}" data-settings-kind-choice="expense">支出</button>
     </div>
-    <button type="button" class="secondary compact v0212-toolbar-button" data-v0212-add-group>＋ 新增大分類</button>
-    <span class="v0212-toolbar-spacer" aria-hidden="true"></span>
-    <button type="button" class="secondary compact v0212-toolbar-button v0212-add-category-button" data-v0212-add-category${groups.length ? '' : ' disabled title="請先新增大分類"'}>＋ 新增科目</button>
+    <button type="button" class="secondary compact settings-toolbar-button" data-settings-add-group>＋ 新增大分類</button>
+    <span class="settings-toolbar-spacer" aria-hidden="true"></span>
+    <button type="button" class="secondary compact settings-toolbar-button settings-add-category-button" data-settings-add-category${groups.length ? '' : ' disabled title="請先新增大分類"'}>＋ 新增科目</button>
   </div>`;
 
   const body = groups.length
-    ? `<div class="v0212-category-list">${groups.map(group => v0212GroupHtml(group, kind)).join('')}</div>`
-    : '<div class="v0212-category-list-empty">目前沒有大分類。請先使用上方「新增大分類」。</div>';
+    ? `<div class="settings-category-list">${groups.map(group => settingsCategoryGroupHtml(group, kind)).join('')}</div>`
+    : '<div class="settings-category-list-empty">目前沒有大分類。請先使用上方「新增大分類」。</div>';
 
-  cyV0212Rendering = true;
-  try {
-    host.innerHTML = `<div class="v0211-category-shell v0212-category-shell">${toolbar}${body}</div>`;
-  } finally {
-    cyV0212Rendering = false;
-  }
+  host.innerHTML = `<div class="settings-category-shell">${toolbar}${body}</div>`;
 }
 
-function v0212GroupHtml(group, kind) {
+function settingsCategoryGroupHtml(group, kind) {
   const groupId = Number(group.id);
   const categories = (state.categories || []).filter(category =>
     category.kind === kind && Number(category.group_id) === groupId
@@ -3401,115 +2561,107 @@ function v0212GroupHtml(group, kind) {
   const rows = categories.map(category => {
     const id = Number(category.id);
     const favorite = Number(category.is_favorite) === 1;
-    return `<div class="v0212-category-row" data-v21-category-row="${id}" data-v21-category-group="${groupId}">
-      <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-category="${id}" title="拖曳調整科目順序或分類" aria-label="拖曳調整科目順序或分類">⠿</button>
-      <button type="button" class="v0212-favorite${favorite ? ' active' : ''}" data-category-favorite="${id}" title="${favorite ? '取消常用科目' : '設為常用科目'}" aria-label="${favorite ? '取消常用科目' : '設為常用科目'}">${favorite ? '★' : '☆'}</button>
-      <span class="v0212-category-name" title="${v0212Escape(category.name)}">${v0212Escape(category.name)}</span>
-      <button type="button" class="mini-button v0212-edit-button" data-v0212-rename="category" data-v0212-id="${id}" title="編輯科目名稱" aria-label="編輯科目名稱">✎</button>
-      <button type="button" class="mini-button danger v21-manager-delete" data-category-delete="${id}">刪除</button>
+    return `<div class="settings-category-row" data-settings-category-row="${id}" data-settings-category-group="${groupId}">
+      <button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-category="${id}" title="拖曳調整科目順序或分類" aria-label="拖曳調整科目順序或分類">⠿</button>
+      <button type="button" class="settings-favorite${favorite ? ' active' : ''}" data-category-favorite="${id}" title="${favorite ? '取消常用科目' : '設為常用科目'}" aria-label="${favorite ? '取消常用科目' : '設為常用科目'}">${favorite ? '★' : '☆'}</button>
+      <span class="settings-category-name" title="${settingsManagerEscape(category.name)}">${settingsManagerEscape(category.name)}</span>
+      <button type="button" class="mini-button settings-edit-button" data-settings-rename="category" data-settings-id="${id}" title="編輯科目名稱" aria-label="編輯科目名稱">✎</button>
+      <button type="button" class="mini-button danger settings-delete-button" data-category-delete="${id}">刪除</button>
     </div>`;
   }).join('');
 
-  return `<section class="v0212-category-group" data-group-id="${groupId}">
-    <div class="v21-category-group-head v0212-category-group-head">
-      <button type="button" class="v21-drag-handle" draggable="true" data-v21-drag-group="${groupId}" title="拖曳調整大分類順序" aria-label="拖曳調整大分類順序">⠿</button>
-      <strong class="v0212-group-name" title="${v0212Escape(group.name)}">${v0212Escape(group.name)}</strong>
-      <button type="button" class="mini-button v0212-edit-button" data-v0212-rename="group" data-v0212-id="${groupId}" title="編輯大分類名稱" aria-label="編輯大分類名稱">✎</button>
-      <button type="button" class="mini-button danger v21-manager-delete" data-group-delete="${groupId}">刪除</button>
+  return `<section class="settings-category-group" data-group-id="${groupId}">
+    <div class="settings-category-group-head">
+      <button type="button" class="settings-drag-handle" draggable="true" data-settings-drag-group="${groupId}" title="拖曳調整大分類順序" aria-label="拖曳調整大分類順序">⠿</button>
+      <strong class="settings-group-name" title="${settingsManagerEscape(group.name)}">${settingsManagerEscape(group.name)}</strong>
+      <button type="button" class="mini-button settings-edit-button" data-settings-rename="group" data-settings-id="${groupId}" title="編輯大分類名稱" aria-label="編輯大分類名稱">✎</button>
+      <button type="button" class="mini-button danger settings-delete-button" data-group-delete="${groupId}">刪除</button>
     </div>
-    <div class="v0212-category-items" data-v21-category-dropzone="${groupId}">
-      ${rows || '<div class="v0212-empty-group">尚無科目</div>'}
+    <div class="settings-category-items" data-settings-category-dropzone="${groupId}">
+      ${rows || '<div class="settings-empty-group">尚無科目</div>'}
     </div>
   </section>`;
 }
 
-function bindV0212ManagerActions() {
-  if (window.__cyV0212ManagerActionsBound) return;
-  window.__cyV0212ManagerActionsBound = true;
+function bindSettingsManagerActions() {
+  if (document.documentElement.dataset.settingsManagerBound === '1') return;
+  document.documentElement.dataset.settingsManagerBound = '1';
 
   window.addEventListener('click', event => {
-    if (!window.matchMedia(CY_V0212_DESKTOP).matches) return;
-    const rename = event.target.closest('[data-v0212-rename]');
-    const legacyRename = event.target.closest('[data-account-rename], [data-category-rename], [data-group-rename]');
-    const addGroup = event.target.closest('[data-v0212-add-group]');
-    const addCategory = event.target.closest('[data-v0212-add-category]');
-    if (!rename && !legacyRename && !addGroup && !addCategory) return;
+    const kind = event.target.closest('[data-settings-kind-choice]');
+    if (kind && typeof state === 'object') {
+      const value = kind.dataset.settingsKindChoice;
+      if (['income', 'expense'].includes(value) && value !== state.settingsKind) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        state.settingsKind = value;
+        finishSettingsManagerDrag();
+        renderSettingsCategoryManager();
+      }
+      return;
+    }
+
+    const addGroup = event.target.closest('[data-settings-add-group], [data-mobile-group-add]');
+    const addCategory = event.target.closest('[data-settings-add-category], [data-mobile-category-add]');
+    const rename = event.target.closest('[data-settings-rename], [data-account-rename], [data-category-rename], [data-group-rename]');
+    if (!addGroup && !addCategory && !rename) return;
 
     event.preventDefault();
-    event.stopPropagation();
     event.stopImmediatePropagation();
 
-    if (addGroup) return openV0212AddGroupDialog();
+    if (addGroup) return openSettingsAddGroupDialog();
     if (addCategory) {
       if (addCategory.disabled) return;
-      return openV0212AddCategoryDialog();
+      return openSettingsAddCategoryDialog();
     }
-    if (rename) return openV0212RenameDialog(rename.dataset.v0212Rename, Number(rename.dataset.v0212Id));
 
-    if (legacyRename?.dataset.accountRename) return openV0212RenameDialog('account', Number(legacyRename.dataset.accountRename));
-    if (legacyRename?.dataset.categoryRename) return openV0212RenameDialog('category', Number(legacyRename.dataset.categoryRename));
-    if (legacyRename?.dataset.groupRename) return openV0212RenameDialog('group', Number(legacyRename.dataset.groupRename));
+    if (rename.dataset.settingsRename) {
+      return openSettingsRenameDialog(rename.dataset.settingsRename, Number(rename.dataset.settingsId));
+    }
+    if (rename.dataset.accountRename) return openSettingsRenameDialog('account', Number(rename.dataset.accountRename));
+    if (rename.dataset.categoryRename) return openSettingsRenameDialog('category', Number(rename.dataset.categoryRename));
+    if (rename.dataset.groupRename) return openSettingsRenameDialog('group', Number(rename.dataset.groupRename));
   }, true);
-
-  document.querySelector('#categoryManager')?.addEventListener('click', event => {
-    const button = event.target.closest('[data-v0212-manager-kind]');
-    if (!button || typeof state !== 'object') return;
-    const kind = button.dataset.v0212ManagerKind;
-    if (!['income', 'expense'].includes(kind) || kind === state.settingsKind) return;
-    state.settingsKind = kind;
-    if (typeof cyV21Build15Drag !== 'undefined' && cyV21Build15Drag && typeof finishV21Build15Drag === 'function') finishV21Build15Drag();
-    renderV0212CategoryManager();
-  });
-
-  const host = document.querySelector('#categoryManager');
-  if (host && host.dataset.v0212Guard !== '1') {
-    host.dataset.v0212Guard = '1';
-    const observer = new MutationObserver(() => {
-      if (cyV0212Rendering || !window.matchMedia(CY_V0212_DESKTOP).matches) return;
-      if (!host.querySelector('.v0212-category-shell') && host.children.length) queueMicrotask(renderV0212CategoryManager);
-    });
-    observer.observe(host, { childList: true, subtree: false });
-  }
 }
 
-function ensureV0212ManagerDialog() {
-  if (document.querySelector('#v0212ManagerDialog')) return;
+function ensureSettingsManagerDialog() {
+  if (document.querySelector('#settingsManagerDialog')) return;
   const dialog = document.createElement('dialog');
-  dialog.id = 'v0212ManagerDialog';
-  dialog.className = 'v0212-manager-dialog';
-  dialog.innerHTML = `<form method="dialog" class="v0212-manager-dialog-shell" id="v0212ManagerForm">
-    <div class="v0212-manager-dialog-head">
-      <div><h2 id="v0212ManagerTitle">新增科目</h2><p id="v0212ManagerSubtitle"></p></div>
-      <button type="button" class="icon-button" data-v0212-dialog-close aria-label="關閉">×</button>
+  dialog.id = 'settingsManagerDialog';
+  dialog.className = 'settings-manager-dialog';
+  dialog.innerHTML = `<form method="dialog" class="settings-manager-dialog-shell" id="settingsManagerForm">
+    <div class="settings-manager-dialog-head">
+      <div><h2 id="settingsManagerTitle">新增科目</h2><p id="settingsManagerSubtitle"></p></div>
+      <button type="button" class="icon-button" data-settings-dialog-close aria-label="關閉">×</button>
     </div>
-    <label class="v0212-dialog-field" id="v0212GroupField" hidden>
+    <label class="settings-dialog-field" id="settingsGroupField" hidden>
       <span>大分類</span>
-      <select id="v0212GroupSelect"></select>
+      <select id="settingsGroupSelect"></select>
     </label>
-    <label class="v0212-dialog-field">
-      <span id="v0212NameLabel">科目名稱</span>
-      <input id="v0212NameInput" type="text" maxlength="60" autocomplete="off">
+    <label class="settings-dialog-field">
+      <span id="settingsNameLabel">科目名稱</span>
+      <input id="settingsNameInput" type="text" maxlength="60" autocomplete="off">
     </label>
-    <div id="v0212ManagerMessage" class="dialog-message"></div>
-    <div class="v0212-manager-dialog-actions">
-      <button type="button" class="secondary" data-v0212-dialog-close>取消</button>
-      <button type="submit" class="primary" id="v0212ManagerSave">新增</button>
+    <div id="settingsManagerMessage" class="dialog-message"></div>
+    <div class="settings-manager-dialog-actions">
+      <button type="button" class="secondary" data-settings-dialog-close>取消</button>
+      <button type="submit" class="primary" id="settingsManagerSave">新增</button>
     </div>
   </form>`;
   document.body.append(dialog);
 
-  dialog.querySelectorAll('[data-v0212-dialog-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
-  dialog.querySelector('#v0212ManagerForm')?.addEventListener('submit', saveV0212ManagerDialog);
-  dialog.addEventListener('close', () => { cyV0212DialogState = null; });
+  dialog.querySelectorAll('[data-settings-dialog-close]').forEach(button => button.addEventListener('click', () => dialog.close()));
+  dialog.querySelector('#settingsManagerForm')?.addEventListener('submit', saveSettingsManagerDialog);
+  dialog.addEventListener('close', () => { settingsManagerDialogState = null; });
 }
 
-function openV0212AddGroupDialog() {
+function openSettingsAddGroupDialog() {
   if (typeof state !== 'object') return;
-  openV0212ManagerDialog({
+  openSettingsManagerDialog({
     mode: 'add-group',
-    title: '新增大分類',
-    subtitle: state.settingsKind === 'income' ? '新增到收入分類' : '新增到支出分類',
-    label: '大分類名稱',
+    title: '新增分類',
+    subtitle: state.settingsKind === 'income' ? '新增收入分類' : '新增支出分類',
+    label: '分類名稱',
     maxLength: 60,
     value: '',
     showGroup: false,
@@ -3517,12 +2669,12 @@ function openV0212AddGroupDialog() {
   });
 }
 
-function openV0212AddCategoryDialog() {
+function openSettingsAddCategoryDialog() {
   if (typeof state !== 'object') return;
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
   const groups = (state.groups || []).filter(group => group.kind === kind && Number(group.id) > 0);
   if (!groups.length) return;
-  openV0212ManagerDialog({
+  openSettingsManagerDialog({
     mode: 'add-category',
     title: '新增科目',
     subtitle: kind === 'income' ? '新增收入科目' : '新增支出科目',
@@ -3535,7 +2687,7 @@ function openV0212AddCategoryDialog() {
   });
 }
 
-function openV0212RenameDialog(type, id) {
+function openSettingsRenameDialog(type, id) {
   if (typeof state !== 'object' || !Number.isInteger(id) || id <= 0) return;
   let item = null;
   let title = '';
@@ -3548,15 +2700,15 @@ function openV0212RenameDialog(type, id) {
     maxLength = 8;
   } else if (type === 'group') {
     item = (state.groups || []).find(row => Number(row.id) === id);
-    title = '編輯大分類';
-    label = '大分類名稱';
+    title = '編輯分類';
+    label = '分類名稱';
   } else if (type === 'category') {
     item = (state.categories || []).find(row => Number(row.id) === id);
     title = '編輯科目';
     label = '科目名稱';
   }
   if (!item) return;
-  openV0212ManagerDialog({
+  openSettingsManagerDialog({
     mode: 'rename',
     type,
     id,
@@ -3569,42 +2721,48 @@ function openV0212RenameDialog(type, id) {
     saveText: '儲存'
   });
 }
-window.openV0212RenameDialog = openV0212RenameDialog;
 
-function openV0212ManagerDialog(config) {
-  ensureV0212ManagerDialog();
-  const dialog = document.querySelector('#v0212ManagerDialog');
+function openSettingsManagerDialog(config) {
+  ensureSettingsManagerDialog();
+  const dialog = document.querySelector('#settingsManagerDialog');
   if (!dialog) return;
-  cyV0212DialogState = config;
-  dialog.querySelector('#v0212ManagerTitle').textContent = config.title || '';
-  dialog.querySelector('#v0212ManagerSubtitle').textContent = config.subtitle || '';
-  dialog.querySelector('#v0212NameLabel').textContent = config.label || '名稱';
-  const input = dialog.querySelector('#v0212NameInput');
+  settingsManagerDialogState = config;
+
+  dialog.querySelector('#settingsManagerTitle').textContent = config.title || '';
+  dialog.querySelector('#settingsManagerSubtitle').textContent = config.subtitle || '';
+  dialog.querySelector('#settingsNameLabel').textContent = config.label || '名稱';
+
+  const input = dialog.querySelector('#settingsNameInput');
   input.maxLength = Number(config.maxLength || 60);
   input.value = config.value || '';
-  const groupField = dialog.querySelector('#v0212GroupField');
-  const select = dialog.querySelector('#v0212GroupSelect');
+
+  const groupField = dialog.querySelector('#settingsGroupField');
+  const select = dialog.querySelector('#settingsGroupSelect');
   groupField.hidden = !config.showGroup;
   if (config.showGroup) {
-    select.innerHTML = (config.groups || []).map(group => `<option value="${Number(group.id)}">${v0212Escape(group.name)}</option>`).join('');
+    select.innerHTML = (config.groups || []).map(group =>
+      `<option value="${Number(group.id)}">${settingsManagerEscape(group.name)}</option>`
+    ).join('');
   } else {
     select.innerHTML = '';
   }
-  dialog.querySelector('#v0212ManagerSave').textContent = config.saveText || '儲存';
-  setDialogMessage(dialog.querySelector('#v0212ManagerMessage'), '');
+
+  dialog.querySelector('#settingsManagerSave').textContent = config.saveText || '儲存';
+  setDialogMessage(dialog.querySelector('#settingsManagerMessage'), '');
   if (!dialog.open) dialog.showModal();
   setTimeout(() => input.focus(), 0);
 }
 
-async function saveV0212ManagerDialog(event) {
+async function saveSettingsManagerDialog(event) {
   event.preventDefault();
-  const config = cyV0212DialogState;
-  const dialog = document.querySelector('#v0212ManagerDialog');
+  const config = settingsManagerDialogState;
+  const dialog = document.querySelector('#settingsManagerDialog');
   if (!config || !dialog || typeof state !== 'object') return;
-  const input = dialog.querySelector('#v0212NameInput');
-  const select = dialog.querySelector('#v0212GroupSelect');
-  const save = dialog.querySelector('#v0212ManagerSave');
-  const message = dialog.querySelector('#v0212ManagerMessage');
+
+  const input = dialog.querySelector('#settingsNameInput');
+  const select = dialog.querySelector('#settingsGroupSelect');
+  const save = dialog.querySelector('#settingsManagerSave');
+  const message = dialog.querySelector('#settingsManagerMessage');
   const name = String(input?.value || '').trim();
   if (!name) {
     setDialogMessage(message, '請輸入名稱。', true);
@@ -3623,7 +2781,7 @@ async function saveV0212ManagerDialog(event) {
       }
       ok = await mutateSettings('/api/category-groups', {
         method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ kind: state.settingsKind, name })
-      }, '大分類已新增。');
+      }, '分類已新增。');
     } else if (config.mode === 'add-category') {
       const groupId = Number(select?.value);
       if (!Number.isInteger(groupId) || groupId <= 0) {
@@ -3650,19 +2808,243 @@ async function saveV0212ManagerDialog(event) {
         method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ name })
       }, '名稱已更新。');
     }
+
     if (ok) {
       dialog.close();
-      setTimeout(() => {
-        installV0212CategoryRenderer();
-        renderV0212CategoryManager();
-      }, 0);
+      renderSettingsAccountManager();
+      renderSettingsCategoryManager();
     }
   } finally {
     save.disabled = false;
   }
 }
 
-function v0212Escape(value) {
+function setupSettingsManagerDragAndDrop() {
+  const accountHost = document.querySelector('#accountRows');
+  const categoryHost = document.querySelector('#categoryManager');
+
+  if (accountHost && accountHost.dataset.settingsDragBound !== '1') {
+    accountHost.dataset.settingsDragBound = '1';
+    accountHost.addEventListener('dragstart', handleSettingsManagerDragStart);
+    accountHost.addEventListener('dragover', handleSettingsAccountDragOver);
+    accountHost.addEventListener('drop', handleSettingsAccountDrop);
+    accountHost.addEventListener('dragend', finishSettingsManagerDrag);
+  }
+
+  if (categoryHost && categoryHost.dataset.settingsDragBound !== '1') {
+    categoryHost.dataset.settingsDragBound = '1';
+    categoryHost.addEventListener('dragstart', handleSettingsManagerDragStart);
+    categoryHost.addEventListener('dragover', handleSettingsCategoryDragOver);
+    categoryHost.addEventListener('drop', handleSettingsCategoryDrop);
+    categoryHost.addEventListener('dragend', finishSettingsManagerDrag);
+  }
+}
+
+function handleSettingsManagerDragStart(event) {
+  if (!window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches || settingsManagerSaving) return;
+  const handle = event.target.closest('[data-settings-drag-account], [data-settings-drag-group], [data-settings-drag-category]');
+  if (!handle) return;
+
+  let type = '';
+  let id = 0;
+  if (handle.dataset.settingsDragAccount) { type = 'account'; id = Number(handle.dataset.settingsDragAccount); }
+  else if (handle.dataset.settingsDragGroup) { type = 'group'; id = Number(handle.dataset.settingsDragGroup); }
+  else if (handle.dataset.settingsDragCategory) { type = 'category'; id = Number(handle.dataset.settingsDragCategory); }
+  if (!type || !Number.isInteger(id) || id <= 0) return;
+
+  settingsManagerDrag = { type, id };
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', `${type}:${id}`);
+  handle.closest('[data-settings-account-row], [data-group-id], [data-settings-category-row]')?.classList.add('settings-is-dragging');
+}
+
+function handleSettingsAccountDragOver(event) {
+  if (settingsManagerDrag?.type !== 'account') return;
+  event.preventDefault();
+  clearSettingsDropMarkers();
+  const row = event.target.closest('[data-settings-account-row]');
+  if (!row) return;
+  row.classList.add(settingsAfterMidpoint(event, row) ? 'settings-drop-after' : 'settings-drop-before');
+}
+
+async function handleSettingsAccountDrop(event) {
+  if (settingsManagerDrag?.type !== 'account' || settingsManagerSaving || typeof state !== 'object') return;
+  event.preventDefault();
+
+  const sourceId = settingsManagerDrag.id;
+  const row = event.target.closest('[data-settings-account-row]');
+  const targetId = Number(row?.dataset.settingsAccountRow || 0);
+  const after = row ? settingsAfterMidpoint(event, row) : true;
+  const previous = [...(state.accounts || [])];
+  const ids = previous.map(item => Number(item.id));
+  const nextIds = settingsMoveId(ids, sourceId, targetId, after);
+  finishSettingsManagerDrag();
+  if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
+
+  const byId = new Map(previous.map(item => [Number(item.id), item]));
+  state.accounts = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 })).filter(Boolean);
+  renderSettingsAccountManager();
+  await persistSettingsOrder('/api/accounts/reorder', { ids: nextIds }, '帳戶順序已更新。', () => {
+    state.accounts = previous;
+    renderSettingsAccountManager();
+  });
+}
+
+function handleSettingsCategoryDragOver(event) {
+  if (!settingsManagerDrag || !['group', 'category'].includes(settingsManagerDrag.type)) return;
+  event.preventDefault();
+  clearSettingsDropMarkers();
+
+  if (settingsManagerDrag.type === 'group') {
+    const group = event.target.closest('[data-group-id]');
+    if (!group) return;
+    group.classList.add(settingsAfterMidpoint(event, group) ? 'settings-drop-after' : 'settings-drop-before');
+    return;
+  }
+
+  const row = event.target.closest('[data-settings-category-row]');
+  if (row) {
+    row.classList.add(settingsAfterMidpoint(event, row) ? 'settings-drop-after' : 'settings-drop-before');
+    row.closest('[data-group-id]')?.classList.add('settings-drop-group');
+    return;
+  }
+  event.target.closest('[data-group-id]')?.classList.add('settings-drop-group');
+}
+
+async function handleSettingsCategoryDrop(event) {
+  if (!settingsManagerDrag || settingsManagerSaving || typeof state !== 'object') return;
+  event.preventDefault();
+
+  const drag = { ...settingsManagerDrag };
+  const kind = state.settingsKind === 'income' ? 'income' : 'expense';
+
+  if (drag.type === 'group') {
+    const group = event.target.closest('[data-group-id]');
+    const targetId = Number(group?.dataset.groupId || 0);
+    const after = group ? settingsAfterMidpoint(event, group) : true;
+    const previous = [...(state.groups || [])];
+    const ids = previous.filter(item => item.kind === kind).map(item => Number(item.id));
+    const nextIds = settingsMoveId(ids, drag.id, targetId, after);
+    finishSettingsManagerDrag();
+    if (!nextIds || nextIds.every((id, index) => id === ids[index])) return;
+
+    const byId = new Map(previous.filter(item => item.kind === kind).map(item => [Number(item.id), item]));
+    const ordered = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 })).filter(Boolean);
+    let cursor = 0;
+    state.groups = previous.map(item => item.kind === kind ? ordered[cursor++] : item);
+    renderSettingsCategoryManager();
+
+    await persistSettingsOrder('/api/category-groups/reorder', { kind, ids: nextIds }, '分類順序已更新。', () => {
+      state.groups = previous;
+      renderSettingsCategoryManager();
+    });
+    return;
+  }
+
+  if (drag.type !== 'category') {
+    finishSettingsManagerDrag();
+    return;
+  }
+
+  const targetGroup = event.target.closest('[data-group-id]');
+  const targetGroupId = Number(targetGroup?.dataset.groupId || 0);
+  const targetRow = event.target.closest('[data-settings-category-row]');
+  const targetId = Number(targetRow?.dataset.settingsCategoryRow || 0);
+  const after = targetRow ? settingsAfterMidpoint(event, targetRow) : true;
+  const previous = [...(state.categories || [])];
+  const payload = settingsCategoryPayload(previous, kind, drag.id, targetGroupId, targetId, after);
+  finishSettingsManagerDrag();
+  if (!payload) return;
+
+  const byId = new Map(previous.filter(item => item.kind === kind).map(item => [Number(item.id), item]));
+  const ordered = [];
+  for (const group of payload) {
+    group.categoryIds.forEach((id, index) => {
+      const item = byId.get(Number(id));
+      if (item) ordered.push({ ...item, group_id: Number(group.groupId), sort_order: index + 1 });
+    });
+  }
+  let cursor = 0;
+  state.categories = previous.map(item => item.kind === kind ? ordered[cursor++] : item);
+  renderSettingsCategoryManager();
+
+  await persistSettingsOrder('/api/categories/reorder', { kind, groups: payload }, '科目順序已更新。', () => {
+    state.categories = previous;
+    renderSettingsCategoryManager();
+  });
+}
+
+async function persistSettingsOrder(path, body, successMessage, rollback) {
+  settingsManagerSaving = true;
+  setDialogMessage(els.settingsMessage, '');
+  try {
+    await api(path, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(body) });
+    setDialogMessage(els.settingsMessage, successMessage);
+    return true;
+  } catch (error) {
+    rollback?.();
+    setDialogMessage(els.settingsMessage, error.message || '排序儲存失敗。', true);
+    return false;
+  } finally {
+    settingsManagerSaving = false;
+  }
+}
+
+function settingsCategoryPayload(items, kind, sourceId, targetGroupId, targetId, after) {
+  if (!Number.isInteger(targetGroupId) || targetGroupId <= 0 || targetId === sourceId) return null;
+  const groups = (state.groups || []).filter(group => group.kind === kind);
+  if (!groups.some(group => Number(group.id) === targetGroupId)) return null;
+
+  const payload = groups.map(group => ({
+    groupId: Number(group.id),
+    categoryIds: items
+      .filter(category => category.kind === kind && Number(category.group_id) === Number(group.id))
+      .map(category => Number(category.id))
+  }));
+  if (!payload.some(group => group.categoryIds.includes(sourceId))) return null;
+
+  payload.forEach(group => { group.categoryIds = group.categoryIds.filter(id => id !== sourceId); });
+  const target = payload.find(group => group.groupId === targetGroupId);
+  let index = target.categoryIds.length;
+  if (targetId && target.categoryIds.includes(targetId)) {
+    index = target.categoryIds.indexOf(targetId) + (after ? 1 : 0);
+  }
+  target.categoryIds.splice(index, 0, sourceId);
+  return payload;
+}
+
+function settingsMoveId(ids, sourceId, targetId, after) {
+  if (!ids.includes(sourceId)) return null;
+  if (targetId === sourceId) return [...ids];
+  const next = ids.filter(id => id !== sourceId);
+  if (!targetId || !next.includes(targetId)) {
+    next.push(sourceId);
+    return next;
+  }
+  let index = next.indexOf(targetId);
+  if (after) index += 1;
+  next.splice(index, 0, sourceId);
+  return next;
+}
+
+function settingsAfterMidpoint(event, element) {
+  const rect = element.getBoundingClientRect();
+  return event.clientY > rect.top + rect.height / 2;
+}
+
+function clearSettingsDropMarkers() {
+  document.querySelectorAll('.settings-drop-before, .settings-drop-after, .settings-drop-group').forEach(element =>
+    element.classList.remove('settings-drop-before', 'settings-drop-after', 'settings-drop-group')
+  );
+}
+
+function finishSettingsManagerDrag() {
+  document.querySelectorAll('.settings-is-dragging').forEach(element => element.classList.remove('settings-is-dragging'));
+  clearSettingsDropMarkers();
+  settingsManagerDrag = null;
+}
+
+function settingsManagerEscape(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -3988,18 +3370,13 @@ async function handleV0214FavoriteToggle(event) {
 }
 
 function renderV0214AccountState(selected) {
-  if (typeof renderV0211AccountManager === 'function') renderV0211AccountManager();
-  else if (typeof renderAccountManager === 'function') renderAccountManager();
+  window.cySettingsManager?.renderAccountManager?.();
   if (typeof renderAccounts === 'function') renderAccounts(selected);
   if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
 }
 
 function renderV0214CategoryState() {
-  if (typeof renderV0212CategoryManager === 'function' && window.matchMedia('(min-width: 1024px)').matches) {
-    renderV0212CategoryManager();
-  } else if (typeof renderCategoryManager === 'function') {
-    renderCategoryManager();
-  }
+  window.cySettingsManager?.renderCategoryManager?.();
   if (typeof renderFavoriteCategories === 'function') renderFavoriteCategories();
 }
 
@@ -4408,8 +3785,8 @@ function renderMobileAccountManager() {
     const id = Number(account.id);
     const isDefault = Number(account.is_default) === 1;
     return `<div class="mobile-account-card" data-mobile-account-row="${id}" draggable="true">
-      <button type="button" class="mobile-account-drag" data-mobile-account-drag="${id}" aria-label="拖曳調整 ${v0211Escape(account.name)} 順序">⋮⋮</button>
-      <strong class="mobile-account-name">${v0211Escape(account.name)}</strong>
+      <button type="button" class="mobile-account-drag" data-mobile-account-drag="${id}" aria-label="拖曳調整 ${settingsManagerEscape(account.name)} 順序">⋮⋮</button>
+      <strong class="mobile-account-name">${settingsManagerEscape(account.name)}</strong>
       ${isDefault ? '<span class="mobile-manager-badge">預設</span>' : `<button type="button" class="mini-button" data-account-default="${id}">設為預設</button>`}
       <button type="button" class="mini-button" data-account-rename="${id}">改名</button>
       <button type="button" class="mini-button danger" data-account-delete="${id}">刪除</button>
@@ -4614,7 +3991,7 @@ function renderMobileCategoryManager() {
             const id = Number(category.id);
             const pending = id < 0;
             return `<div class="mobile-category-row${pending ? ' is-pending' : ''}">
-              <span>${v0211Escape(category.name)}</span>
+              <span>${settingsManagerEscape(category.name)}</span>
               <span class="mobile-category-actions">
                 ${pending
                   ? '<span class="mobile-category-pending">儲存中…</span>'
@@ -4627,7 +4004,7 @@ function renderMobileCategoryManager() {
 
       return `<section class="category-group mobile-category-group${pendingGroup ? ' is-pending' : ''}" data-group-id="${groupId}">
         <div class="mobile-category-group-head">
-          <strong>${v0211Escape(group.name)}</strong>
+          <strong>${settingsManagerEscape(group.name)}</strong>
           <span class="mobile-category-actions">
             ${pendingGroup
               ? '<span class="mobile-category-pending">儲存中…</span>'
@@ -4655,10 +4032,10 @@ function ensureMobileCategoryActions(pane, hasPersistedGroup) {
     pane.append(actions);
 
     actions.querySelector('[data-mobile-category-add]')?.addEventListener('click', () => {
-      if (typeof openV0212AddCategoryDialog === 'function') openV0212AddCategoryDialog();
+      if (typeof openSettingsAddCategoryDialog === 'function') openSettingsAddCategoryDialog();
     });
     actions.querySelector('[data-mobile-group-add]')?.addEventListener('click', () => {
-      if (typeof openV0212AddGroupDialog === 'function') openV0212AddGroupDialog();
+      if (typeof openSettingsAddGroupDialog === 'function') openSettingsAddGroupDialog();
     });
   }
   const addCategory = actions.querySelector('[data-mobile-category-add]');
@@ -4756,6 +4133,7 @@ function setupMobileLockMonthControls(dialog) {
   if (!nativeField || !form) return;
 
   nativeField.classList.add('mobile-lock-native-field');
+  nativeField.hidden = true;
 
   let controls = form.querySelector('#mobileLockMonthControls');
   if (!controls) {
