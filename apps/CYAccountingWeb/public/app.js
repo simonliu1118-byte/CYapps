@@ -461,6 +461,11 @@ async function archiveAccountOptimistically(id) {
   }
 }
 
+function accountArchiveMessage() {
+  const dialog = document.querySelector('#archivedAccountsDialog');
+  return dialog?.open ? dialog.querySelector('#archivedAccountsMessage') : els.settingsMessage;
+}
+
 async function restoreAccountOptimistically(id) {
   if (!Number.isInteger(id) || id <= 0) return;
   const account = state.archivedAccounts.find(item => Number(item.id) === id);
@@ -476,17 +481,17 @@ async function restoreAccountOptimistically(id) {
     is_default: 0
   }];
   renderAccountSurfaces(account.name);
-  setDialogMessage(els.settingsMessage, '');
+  setDialogMessage(accountArchiveMessage(), '');
 
   try {
     await api(`/api/accounts/${id}/restore`, { method: 'POST' });
     await refreshBootstrap();
-    setDialogMessage(els.settingsMessage, '帳戶已解封。');
+    setDialogMessage(accountArchiveMessage(), '帳戶已解封。');
   } catch (error) {
     state.accounts = previousAccounts;
     state.archivedAccounts = previousArchived;
     renderAccountSurfaces();
-    setDialogMessage(els.settingsMessage, error.message || '帳戶解封失敗，已還原。', true);
+    setDialogMessage(accountArchiveMessage(), error.message || '帳戶解封失敗，已還原。', true);
   }
 }
 
@@ -497,7 +502,7 @@ async function permanentlyDeleteArchivedAccount(id) {
   const transactions = Number(account.transaction_count || 0);
   const latestOpening = Number(account.latest_opening_amount || 0);
   if (transactions > 0 || latestOpening !== 0) {
-    setDialogMessage(els.settingsMessage, '此帳戶仍有歷史記帳或目前期初餘額非 0，不能永久刪除。', true);
+    setDialogMessage(accountArchiveMessage(), '此帳戶仍有歷史記帳或目前期初餘額非 0，不能永久刪除。', true);
     return;
   }
   if (!confirm(`永久刪除帳戶「${account.name}」？\n此操作無法復原。`)) return;
@@ -505,9 +510,9 @@ async function permanentlyDeleteArchivedAccount(id) {
   try {
     await api(`/api/accounts/${id}/permanent`, { method: 'DELETE' });
     await refreshBootstrap();
-    setDialogMessage(els.settingsMessage, '帳戶已永久刪除。');
+    setDialogMessage(accountArchiveMessage(), '帳戶已永久刪除。');
   } catch (error) {
-    setDialogMessage(els.settingsMessage, error.message || '帳戶永久刪除失敗。', true);
+    setDialogMessage(accountArchiveMessage(), error.message || '帳戶永久刪除失敗。', true);
   }
 }
 
@@ -586,6 +591,19 @@ async function mutateSettings(path, options, successMessage) {
   }
 }
 
+function openingAccountRowHtml(item) {
+  const manual = item.source === 'override';
+  const badge = manual ? '<span class="opening-source manual">調整</span>' : '';
+  return `<label class="opening-row" data-opening-source="${manual ? 'manual' : 'automatic'}">
+    <span class="opening-account-copy">
+      <span class="opening-account-title"><strong>${escapeHtml(item.name)}</strong>${badge}</span>
+    </span>
+    <input type="number" step="1" value="${Number(item.amount) || 0}"
+      data-opening-account="${escapeHtml(item.name)}"
+      data-opening-automatic="${Number(item.automaticAmount) || 0}" disabled>
+  </label>`;
+}
+
 async function loadOpeningBalances() {
   const month = els.openingMonth.value;
   if (!month) return;
@@ -605,25 +623,7 @@ async function loadOpeningBalances() {
     }
 
     cyOpeningOriginalValues = new Map(data.accounts.map(item => [String(item.name), Number(item.amount) || 0]));
-    const rows = data.accounts.map(item => {
-      const source = item.source === 'override' ? 'manual' : 'automatic';
-      const sourceLabel = source === 'manual' ? '手動調整' : '自動';
-      const historical = item.isCurrent ? '' : '<span class="historical">歷史帳戶</span>';
-      const sourceBadge = `<span class="opening-source ${source}">${sourceLabel}</span>`;
-      const detail = source === 'manual'
-        ? `自動值 ${money(item.automaticAmount)}${item.overrideReason ? ` · ${escapeHtml(item.overrideReason)}` : ''}`
-        : (item.automaticAnchorMonth ? `承接 ${escapeHtml(item.automaticAnchorMonth)} 手動基準後自動計算` : '依歷史收支自動計算');
-      return `<label class="opening-row" data-opening-source="${source}">
-        <span class="opening-account-copy">
-          <span class="opening-account-title"><strong>${escapeHtml(item.name)}</strong>${historical}${sourceBadge}</span>
-          <small>${detail}</small>
-        </span>
-        <input type="number" step="1" value="${Number(item.amount) || 0}"
-          data-opening-account="${escapeHtml(item.name)}"
-          data-opening-automatic="${Number(item.automaticAmount) || 0}"
-          disabled>
-      </label>`;
-    }).join('');
+    const rows = data.accounts.map(openingAccountRowHtml).join('');
 
     const audit = renderOpeningAudit(data.audit || []);
     els.openingRows.innerHTML = rows + `
@@ -634,7 +634,6 @@ async function loadOpeningBalances() {
         </label>
         <div class="opening-manual-actions">
           <button id="cancelOpeningManualButton" class="secondary" type="button">取消手動調整</button>
-          <span>若輸入值等於自動值，會清除該月人工覆寫並保留 audit。</span>
         </div>
       </section>
       ${audit}`;

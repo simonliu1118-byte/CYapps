@@ -149,13 +149,6 @@ td.summary { white-space: normal; min-width: 180px; }
   min-width: 0;
 }
 
-.opening-account-copy small {
-  color: #7b8794;
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.35;
-}
-
 .opening-source {
   display: inline-flex;
   align-items: center;
@@ -165,11 +158,6 @@ td.summary { white-space: normal; min-width: 180px; }
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
-}
-
-.opening-source.automatic {
-  background: #edf4f8;
-  color: #46677f;
 }
 
 .opening-source.manual {

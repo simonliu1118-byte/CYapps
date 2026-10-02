@@ -38,7 +38,7 @@
       status.textContent = '載入時間過久，請重新整理頁面。';
     }, 12000);
   </script>
-  <link rel="stylesheet" href="/app.css?rev=02111-automatic-opening-balances">
+  <link rel="stylesheet" href="/app.css?rev=02114-simple-account-dialogs">
   <link rel="stylesheet" href="/accounting-ui.css?rev=semantic1">
   <link rel="stylesheet" href="/quick-entry-settings.css?rev=semantic1">
   <link rel="stylesheet" href="/category-management.css?rev=semantic1">
@@ -47,13 +47,13 @@
   <link rel="stylesheet" href="/excel-import.css?rev=semantic1">
   <link rel="stylesheet" href="/backup.css?rev=semantic1">
   <link rel="stylesheet" href="/desktop-migration.css?rev=semantic1">
-  <link rel="stylesheet" href="/adaptive-ui.css?rev=02113-category-sorting">
+  <link rel="stylesheet" href="/adaptive-ui.css?rev=02114-simple-account-dialogs">
 </head>
 <body class="cyacc-booting">
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.21.13</span></p>
+      <p>CYAccounting Web <span class="version">V0.21.14</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -145,7 +145,7 @@
           <h3>帳戶管理</h3>
           <p class="hint">預設帳戶會在新增記帳時自動選取；至少需保留一個帳戶。</p>
           <div id="accountRows" class="manager-list"></div>
-          <div class="inline-add"><input id="newAccountName" type="text" maxlength="60" placeholder="新增帳戶名稱"><button id="addAccountButton" class="secondary" type="button">新增帳戶</button></div>
+          <div class="inline-add account-add-controls"><input id="newAccountName" type="text" maxlength="60" placeholder="新增帳戶名稱"><button id="addAccountButton" class="secondary" type="button">新增帳戶</button><button id="openArchivedAccountsButton" class="secondary" type="button">封存</button></div>
         </section>
 
         <section class="settings-pane" data-settings-pane="categories">
@@ -166,8 +166,17 @@
     </div>
   </dialog>
 
+  <dialog id="archivedAccountsDialog" class="modal mobile-utility-dialog archived-accounts-dialog" aria-labelledby="archivedAccountsTitle">
+    <div class="modal-header">
+      <h2 id="archivedAccountsTitle">已封存帳戶</h2>
+      <button class="icon-button" type="button" data-close-archived-accounts aria-label="關閉">×</button>
+    </div>
+    <div id="archivedAccountRows" class="settings-account-archive-list"></div>
+    <div id="archivedAccountsMessage" class="dialog-message" role="status"></div>
+  </dialog>
+
   <script src="/auth.js?rev=session-hard-timeout" defer></script>
-  <script src="/app.js?rev=02111-automatic-opening-balances" defer></script>
+  <script src="/app.js?rev=02114-simple-account-dialogs" defer></script>
   <script src="/quick-entry.js?rev=semantic1" defer></script>
   <script src="/ledger-tools.js?rev=semantic1" defer></script>
   <script src="/input-confirmation.js?rev=semantic1" defer></script>
@@ -178,6 +187,6 @@
   <script src="/excel-import-ui.js?rev=semantic1" defer></script>
   <script src="/backup-ui.js?rev=semantic1" defer></script>
   <script src="/desktop-migration-ui.js?rev=semantic1" defer></script>
-  <script src="/adaptive-ui.js?rev=02113-category-sorting" defer></script>
+  <script src="/adaptive-ui.js?rev=02114-simple-account-dialogs" defer></script>
 </body>
 </html>
