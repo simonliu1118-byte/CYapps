@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.27 — 2026/10/02
+
+- CYAccountingWeb opening balances default to automatic carry-forward through one calculation service. Manual baseline exceptions require reason, append-only effective old/new value audit and CYID actor, and wait for server confirmation.
+- SUPER_ADMIN permanent deletion uses archived state, no transactions and latest effective zero opening; preserve historical financial/audit rows and reserve audited names against reuse.
+
 ## 2.3.26 — 2026/10/02
 
 - CYAccountingWeb adopts optimistic UI as the default mutation policy for low/medium-risk, safely reversible actions: render the expected result immediately, persist through the canonical API in the background, and rollback with a clear error if persistence fails. High-risk or non-safely-reversible actions remain server-confirmed.
