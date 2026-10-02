@@ -65,7 +65,14 @@ async function handleBootstrap(db) {
     db.prepare(`
       SELECT a.id, a.name, a.sort_order, a.archived_at,
              (SELECT COUNT(*) FROM transactions t WHERE t.account_name = a.name) AS transaction_count,
-             (SELECT COUNT(*) FROM opening_balance_overrides o WHERE o.account_name = a.name AND o.amount <> 0) AS opening_balance_count
+             (SELECT COUNT(*) FROM opening_balance_overrides o WHERE o.account_name = a.name AND o.amount <> 0) AS opening_balance_count,
+             COALESCE((
+               SELECT o.amount
+               FROM opening_balance_overrides o
+               WHERE o.account_name = a.name
+               ORDER BY o.month DESC
+               LIMIT 1
+             ), 0) AS latest_opening_amount
       FROM accounts a
       WHERE a.archived_at IS NOT NULL
       ORDER BY a.archived_at DESC, a.id
