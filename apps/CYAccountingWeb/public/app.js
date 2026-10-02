@@ -1,13 +1,14 @@
 const state = {
   kind: 'expense',
   accounts: [],
+  archivedAccounts: [],
   groups: [],
   categories: [],
   transactions: [],
   lockedThrough: null,
   ledgerLocked: false,
   editingTx: null,
-  settingsKind: 'expense',
+  settingsKind: 'income',
   activeSettingsTab: 'accounts',
   openingData: null
 };
@@ -203,6 +204,7 @@ async function refreshBootstrap() {
   const accountValue = els.accountName.value;
   const categoryValue = els.categoryName.value;
   state.accounts = bootstrap.accounts || [];
+  state.archivedAccounts = bootstrap.archivedAccounts || [];
   state.groups = bootstrap.groups || [];
   state.categories = bootstrap.categories || [];
   state.lockedThrough = bootstrap.lockedThrough || null;
@@ -403,6 +405,7 @@ function renderSettings() {
 async function handleAccountAction(event) {
   const defaultButton = event.target.closest('[data-account-default]');
   if (defaultButton) return mutateSettings(`/api/accounts/${defaultButton.dataset.accountDefault}/default`, { method: 'POST' }, '已更新預設帳戶。');
+
   const renameButton = event.target.closest('[data-account-rename]');
   if (renameButton) {
     const account = state.accounts.find(a => String(a.id) === renameButton.dataset.accountRename);
@@ -410,12 +413,105 @@ async function handleAccountAction(event) {
     if (name === null) return;
     return mutateSettings(`/api/accounts/${renameButton.dataset.accountRename}`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ name }) }, '帳戶名稱已更新。');
   }
-  const deleteButton = event.target.closest('[data-account-delete]');
-  if (deleteButton) {
-    const account = state.accounts.find(a => String(a.id) === deleteButton.dataset.accountDelete);
-    if (!confirm(`確定刪除帳戶「${account?.name || ''}」？\n既有歷史記帳仍會保留原帳戶名稱。`)) return;
-    return mutateSettings(`/api/accounts/${deleteButton.dataset.accountDelete}`, { method: 'DELETE' }, '帳戶已刪除。');
+
+  const archiveButton = event.target.closest('[data-account-archive]');
+  if (archiveButton) return archiveAccountOptimistically(Number(archiveButton.dataset.accountArchive));
+
+  const restoreButton = event.target.closest('[data-account-restore]');
+  if (restoreButton) return restoreAccountOptimistically(Number(restoreButton.dataset.accountRestore));
+
+  const permanentButton = event.target.closest('[data-account-permanent-delete]');
+  if (permanentButton) return permanentlyDeleteArchivedAccount(Number(permanentButton.dataset.accountPermanentDelete));
+}
+
+async function archiveAccountOptimistically(id) {
+  if (!Number.isInteger(id) || id <= 0) return;
+  const account = state.accounts.find(item => Number(item.id) === id);
+  if (!account || state.accounts.length <= 1) return;
+
+  const previousAccounts = state.accounts.map(item => ({ ...item }));
+  const previousArchived = state.archivedAccounts.map(item => ({ ...item }));
+  const nextAccounts = state.accounts.filter(item => Number(item.id) !== id).map(item => ({ ...item }));
+  if (Number(account.is_default) === 1 && nextAccounts.length) {
+    nextAccounts.forEach((item, index) => { item.is_default = index === 0 ? 1 : 0; });
   }
+
+  state.accounts = nextAccounts;
+  state.archivedAccounts = [{
+    ...account,
+    is_default: 0,
+    archived_at: new Date().toISOString(),
+    transaction_count: 0,
+    opening_balance_count: 0
+  }, ...state.archivedAccounts];
+  renderAccountSurfaces(account.name);
+  setDialogMessage(els.settingsMessage, '');
+
+  try {
+    await api(`/api/accounts/${id}/archive`, { method: 'POST' });
+    await refreshBootstrap();
+    setDialogMessage(els.settingsMessage, '帳戶已封存。');
+  } catch (error) {
+    state.accounts = previousAccounts;
+    state.archivedAccounts = previousArchived;
+    renderAccountSurfaces(account.name);
+    setDialogMessage(els.settingsMessage, error.message || '帳戶封存失敗，已還原。', true);
+  }
+}
+
+async function restoreAccountOptimistically(id) {
+  if (!Number.isInteger(id) || id <= 0) return;
+  const account = state.archivedAccounts.find(item => Number(item.id) === id);
+  if (!account) return;
+
+  const previousAccounts = state.accounts.map(item => ({ ...item }));
+  const previousArchived = state.archivedAccounts.map(item => ({ ...item }));
+  state.archivedAccounts = state.archivedAccounts.filter(item => Number(item.id) !== id);
+  state.accounts = [...state.accounts, {
+    id: account.id,
+    name: account.name,
+    sort_order: state.accounts.length,
+    is_default: 0
+  }];
+  renderAccountSurfaces(account.name);
+  setDialogMessage(els.settingsMessage, '');
+
+  try {
+    await api(`/api/accounts/${id}/restore`, { method: 'POST' });
+    await refreshBootstrap();
+    setDialogMessage(els.settingsMessage, '帳戶已解封。');
+  } catch (error) {
+    state.accounts = previousAccounts;
+    state.archivedAccounts = previousArchived;
+    renderAccountSurfaces();
+    setDialogMessage(els.settingsMessage, error.message || '帳戶解封失敗，已還原。', true);
+  }
+}
+
+async function permanentlyDeleteArchivedAccount(id) {
+  if (!Number.isInteger(id) || id <= 0) return;
+  const account = state.archivedAccounts.find(item => Number(item.id) === id);
+  if (!account) return;
+  const transactions = Number(account.transaction_count || 0);
+  const openings = Number(account.opening_balance_count || 0);
+  if (transactions > 0 || openings > 0) {
+    setDialogMessage(els.settingsMessage, '此帳戶仍有歷史記帳或期初餘額，不能永久刪除。', true);
+    return;
+  }
+  if (!confirm(`永久刪除帳戶「${account.name}」？\n此操作無法復原。`)) return;
+
+  try {
+    await api(`/api/accounts/${id}/permanent`, { method: 'DELETE' });
+    await refreshBootstrap();
+    setDialogMessage(els.settingsMessage, '帳戶已永久刪除。');
+  } catch (error) {
+    setDialogMessage(els.settingsMessage, error.message || '帳戶永久刪除失敗。', true);
+  }
+}
+
+function renderAccountSurfaces(preferred) {
+  renderAccounts(preferred);
+  window.cySettingsManager?.renderAccountManager?.();
 }
 
 async function addAccount() {
