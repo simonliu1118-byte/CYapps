@@ -238,8 +238,8 @@ jobs:
         run: |
           set -euo pipefail
           base="https://$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
-          curl --max-time 8 -fsS "$base/adaptive-ui.css?rev=0219-mobile-utility-patch" | grep -F '@media (max-width: 767px)' >/dev/null
-          curl --max-time 8 -fsS "$base/adaptive-ui.js?rev=0219-mobile-utility-patch" | grep -F 'mobileAccountMenuButton' >/dev/null
+          curl --max-time 8 -fsS "$base/adaptive-ui.css?rev=0219-settings-manager-convergence" | grep -F '@media (max-width: 767px)' >/dev/null
+          curl --max-time 8 -fsS "$base/adaptive-ui.js?rev=0219-settings-manager-convergence" | grep -F 'mobileAccountMenuButton' >/dev/null
           curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'window.cyaccSessionPromise = checkSessionFallback()' >/dev/null
           curl --max-time 8 -fsS "$base/auth.js?rev=session-hard-timeout" | grep -F 'Promise.race([request, timeout])' >/dev/null
           curl --max-time 8 -fsS "$base/app.js?rev=0218-mobile-loading" | grep -F 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise' >/dev/null
