@@ -23,9 +23,11 @@ assert.match(lifecycle, /ACCOUNT_MUST_BE_ARCHIVED/);
 assert.match(lifecycle, /ACCOUNT_HAS_HISTORY/);
 assert.match(lifecycle, /SELECT COUNT\(\*\) AS count FROM transactions WHERE account_name = \?/);
 assert.match(lifecycle, /currentOpeningUsageForAccount\(db, name\)/);
-assert.match(openings, /WHERE account_name = \? AND amount <> 0/);
+assert.match(openings, /ORDER BY month DESC LIMIT 1/);
+assert.match(openings, /latestOverrideAmount/);
 assert.match(lifecycle, /DELETE FROM accounts WHERE id = \? AND archived_at IS NOT NULL/);
 assert.doesNotMatch(lifecycle, /DELETE FROM transactions/);
+assert.match(lifecycle, /latestOpeningAmount !== 0/);
 assert.match(lifecycle, /DELETE FROM opening_balance_overrides WHERE account_name = \? AND amount = 0/);
 
 assert.match(core, /archivedAccounts:/);
@@ -33,6 +35,8 @@ assert.match(core, /WHERE archived_at IS NULL/);
 assert.match(core, /WHERE a\.archived_at IS NOT NULL/);
 assert.match(core, /name = \? AND archived_at IS NULL/);
 assert.doesNotMatch(core, /request\.method === 'DELETE'\) return handleDeleteAccount/);
+assert.match(core, /SELECT 1 FROM opening_balance_audit WHERE account_name = \? LIMIT 1/);
+assert.match(core, /latest_opening_amount/);
 
 assert.match(tools, /SELECT id FROM accounts WHERE archived_at IS NULL ORDER BY sort_order, id/);
 assert.match(tools, /moveWithin\(db, 'accounts', 'archived_at IS NULL'/);
