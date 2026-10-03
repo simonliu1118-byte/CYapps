@@ -1251,7 +1251,6 @@ function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DES
   ledgerMore?.setAttribute('aria-expanded', 'false');
 }
 
-const CY_DESKTOP_LEDGER_MONTH_DESKTOP = '(min-width: 1024px)';
 const CY_DESKTOP_LEDGER_MONTH_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 syncDesktopLedgerMonthCopy();
 
@@ -1270,7 +1269,7 @@ function syncDesktopLedgerMonthCopy() {
 }
 
 function setupDesktopLedgerMonthDesktopMonthPicker() {
-  const media = window.matchMedia(CY_DESKTOP_LEDGER_MONTH_DESKTOP);
+  const media = window.matchMedia('(any-pointer: coarse)');
   const syncMode = () => {
     const desktop = isDesktopInteractionWorkspace();
     const root = document.querySelector('#ledgerMonthPickerCustom');
@@ -1455,7 +1454,6 @@ function desktopLedgerMonthReadMonth(input) {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-const CY_DESKTOP_MANAGEMENT_DESKTOP = '(min-width: 1024px)';
 setupDesktopManagementConnectionStatus();
 
 const runDesktopManagement = () => {
@@ -1491,7 +1489,7 @@ function setupDesktopManagementConnectionStatus() {
 }
 
 function setupDesktopManagementHeaderManagement() {
-  const media = window.matchMedia(CY_DESKTOP_MANAGEMENT_DESKTOP);
+  const media = window.matchMedia('(any-pointer: coarse)');
   const actions = document.querySelector('.topbar-actions');
   const settings = document.querySelector('#settingsButton');
   const dialog = document.querySelector('#settingsDialog');
@@ -1612,7 +1610,6 @@ function syncDesktopManagementCrudCopy() {
   if (editSave) editSave.textContent = '儲存';
 }
 
-const CY_DESKTOP_MANAGERS_DESKTOP = '(min-width: 1024px)';
 const CY_DESKTOP_MANAGERS_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 
 const runDesktopManagers = () => {
@@ -1654,7 +1651,7 @@ function setupDesktopManagersAccountLimit() {
 }
 
 function setupDesktopManagersMonthPickers() {
-  const media = window.matchMedia(CY_DESKTOP_MANAGERS_DESKTOP);
+  const media = window.matchMedia('(any-pointer: coarse)');
   const scan = () => {
     syncDesktopManagersLedgerMonthTrigger();
     if (!isDesktopInteractionWorkspace()) return;
@@ -1815,7 +1812,6 @@ function desktopManagersEscape(value) {
     .replaceAll("'", '&#39;');
 }
 
-const CY_DesktopUi_DESKTOP = '(min-width: 1024px)';
 const CY_DesktopUi_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 const CY_DesktopUi_WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 let cyDesktopUiRenderingManagers = false;
@@ -2045,7 +2041,7 @@ function auditDesktopUiMonthPickers() {
 }
 
 function setupDesktopUiDatePickers() {
-  const media = window.matchMedia(CY_DesktopUi_DESKTOP);
+  const media = window.matchMedia('(any-pointer: coarse)');
   const scan = () => {
     if (!isDesktopInteractionWorkspace()) return;
     document.querySelectorAll('input[type="date"]').forEach(ensureDesktopUiDatePicker);
@@ -2253,7 +2249,6 @@ function refineDesktopUiHeaderIdentity() {
 
 /* Desktop custom date keyboard bridge. */
 
-const CY_DesktopUi_KEYBOARD_DESKTOP = '(min-width: 1024px)';
 
 const setupDesktopUiKeyboardBridge = () => {
   if (!isDesktopInteractionWorkspace()) return;
@@ -2309,7 +2304,6 @@ if (document.readyState === 'complete') setTimeout(setupDesktopUiKeyboardBridge,
 else window.addEventListener('load', () => setTimeout(setupDesktopUiKeyboardBridge, 0), { once: true });
 setTimeout(setupDesktopUiKeyboardBridge, 350);
 
-const SETTINGS_MANAGER_DESKTOP = '(min-width: 1024px)';
 let settingsManagerDialogState = null;
 let settingsManagerDrag = null;
 let settingsManagerPointer = null;
