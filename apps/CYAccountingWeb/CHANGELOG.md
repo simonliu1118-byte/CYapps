@@ -1,0 +1,21 @@
+# CYAccountingWeb 版本里程碑
+
+更新：2026/10/03。此處記錄歷史與開發狀態；目前交接見 WORK_HANDOFF.md，永久規則不放在版本紀錄。
+
+| 版本 | 狀態與變更 |
+| --- | --- |
+| V0.22.2 Build 0 | 開發中，Draft PR #292；平板雙方向配置、native-first 欄位、共用 entry 編輯及旋轉／草稿保護。未合併、部署或 Release |
+| V0.22.1 Build 1 | 正式部署 #370；跨裝置共用編輯／optimistic／rollback，摘要限制一致，期初調整標籤與間距，保護成功寫入後的舊月份查詢回應 |
+| V0.22.0 | 手機穩定版公開 Release；新增帳戶提示「帳戶名稱最多八字」。詳見 [V0.22.0.txt](V0.22.0.txt) |
+| V0.21.16 | 封存／編輯／刪除圖示、已封存帳戶入口、設定收支 slider 與純色、科目顯示大分類／科目 |
+| V0.21.15 Build 1 | 手機收支改純色；封存視窗動態高度；帳戶設定間距恢復，期初欄位靠近；編輯／垃圾桶圖示 |
+| V0.21.14 | 期初只顯示當月調整標籤，移除自動／手動與說明小字；封存帳戶獨立視窗 |
+| V0.21.13 | 分類－科目階層清單、分類上下排序、科目 touch/pen reorder／跨分類 |
+| V0.21.12 Build 1 | 手機及登入頁 tap zoom 限制與 viewport 處理，保留捲動及滑動操作 |
+| V0.21.11 | schema 6、自動期初、理由／append-only audit、CYID actor、Excel parity、備份 inner v2、移轉 override＋audit；零餘額刪除保留歷史 |
+| V0.21.10 | 帳戶封存／解封、永久刪除架構、歷史帳戶回填、單一階層科目 renderer、收入在前 |
+| V0.21.6 及後續收斂 | 接入 CYID、獨立登入、USER 唯讀；退休版本 runtime 殼與舊 auth overlay。早期 Build 修補不再作現行流程 |
+| V0.19–V0.21.4 | SQLite 帳本移轉、D1 批次限制、桌面日期正規化、完成視窗；內容於 2026/10/03 驗收 |
+| V0.17–V0.18 | GCS 備份、provider-neutral export-once、R2/GCS 雙副本及 Phase C catalog |
+
+更早的設計／事故快照保留於 [docs/archive/](docs/archive/) 與 Git history。舊描述（手機卡片、漸層、auth overlay、舊版 branch 停點）不可當成現行需求。
