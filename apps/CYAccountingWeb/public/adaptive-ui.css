@@ -10032,3 +10032,155 @@ html[data-tablet-layout="landscape"] .ledger-card td.action-col [data-delete-id]
 html[data-tablet-layout="landscape"] .ledger-card td.action-col .row-action:hover:not(:disabled) { background:#f2f7fd !important; }
 html[data-tablet-layout="landscape"] .ledger-card td.action-col .row-action.delete:hover:not(:disabled) { background:#fff1f0 !important; }
 
+/* V0.22.2 Build 3 - tablet landscape date/month and entry rail correction. */
+html[data-tablet-layout="landscape"] .shell.v21-split-layout {
+  grid-template-columns: minmax(250px, 28%) minmax(0, 1fr) !important;
+}
+html[data-tablet-layout="landscape"] .entry-grid {
+  min-height: calc(var(--tablet-visible-height, 100vh) - var(--tablet-header-height, 0px) - 112px) !important;
+  grid-template-rows: repeat(7, auto) 1fr auto auto auto !important;
+  align-content: start !important;
+}
+html[data-tablet-layout="landscape"] .entry-card input,
+html[data-tablet-layout="landscape"] .entry-card select {
+  text-align: center !important;
+  text-align-last: center !important;
+}
+html[data-tablet-layout="landscape"] #txDate {
+  display: block !important;
+  position: static !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  margin: 0 !important;
+  padding: 0 8px !important;
+  overflow: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
+  border: 1px solid #bdc8d2 !important;
+  border-radius: 6px !important;
+  background: #fff !important;
+  color: #273548 !important;
+  opacity: 1 !important;
+  -webkit-appearance: auto !important;
+  appearance: auto !important;
+  line-height: normal !important;
+  text-align: center !important;
+  pointer-events: auto !important;
+}
+html[data-tablet-layout="landscape"] #txDate::-webkit-date-and-time-value {
+  min-width: 0 !important;
+  width: 100% !important;
+  text-align: center !important;
+}
+html[data-tablet-layout="landscape"] #txDate::-webkit-calendar-picker-indicator {
+  display: block !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 1 !important;
+}
+html[data-tablet-layout="landscape"] .entry-grid > #favoriteCategoryGroup.quick-tool-row,
+html[data-tablet-layout="landscape"] .entry-grid > #summarySuggestionGroup.quick-tool-row,
+html[data-tablet-layout="landscape"] .entry-grid > #favoriteCategoryGroup.quick-tool-row.hidden,
+html[data-tablet-layout="landscape"] .entry-grid > #summarySuggestionGroup.quick-tool-row.hidden {
+  display: grid !important;
+  grid-template-columns: 46px minmax(0, 1fr) !important;
+  min-height: 32px !important;
+  gap: 10px !important;
+}
+html[data-tablet-layout="landscape"] .quick-chip-list {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 32px !important;
+  padding: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  flex-wrap: nowrap !important;
+  scrollbar-width: none !important;
+}
+html[data-tablet-layout="landscape"] .quick-chip-list::-webkit-scrollbar { display: none !important; }
+html[data-tablet-layout="landscape"] .quick-chip-list:empty::after {
+  content: "—" !important;
+  display: inline-block !important;
+  width: 100% !important;
+  color: #a2acb7 !important;
+  font-size: 12px !important;
+  text-align: center !important;
+}
+html[data-tablet-layout="landscape"] .quick-tool-row .quick-chip {
+  flex: 0 0 auto !important;
+  min-height: 28px !important;
+  height: 28px !important;
+  margin: 0 !important;
+  padding: 3px 9px !important;
+  border-radius: 999px !important;
+  font-size: 11.5px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  text-align: center !important;
+}
+html[data-tablet-layout="landscape"] .entry-grid > #saveButton { order: 20 !important; align-self: end !important; }
+html[data-tablet-layout="landscape"] .entry-grid > #mobileEntrySecondaryButton { order: 21 !important; align-self: end !important; }
+html[data-tablet-layout="landscape"] .entry-grid > #saveMessage { order: 22 !important; align-self: end !important; }
+
+html[data-tablet-layout="landscape"] #ledgerMonthSlot {
+  position: relative !important;
+  overflow: hidden !important;
+}
+html[data-tablet-layout="landscape"] #mobileLedgerMonthDisplay {
+  position: absolute !important;
+  z-index: 1 !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 6px !important;
+  color: #253546 !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+}
+html[data-tablet-layout="landscape"] #monthFilter {
+  position: absolute !important;
+  z-index: 2 !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: transparent !important;
+  opacity: .01 !important;
+  -webkit-appearance: auto !important;
+  appearance: auto !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+html[data-tablet-layout="landscape"] #monthFilter::-webkit-calendar-picker-indicator {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  cursor: pointer !important;
+}
+html[data-tablet-layout="landscape"] #ledgerMonthPickerCustom { display: none !important; }
+html[data-tablet-layout="landscape"] #ledgerExcelImport { display: none !important; }
+
