@@ -147,3 +147,6 @@ editEvents.get('month:change')();
 assert.equal(controller.cyTouchWorkspaceEdit, null, 'month navigation cancels the old-month entry edit');
 assert.equal(writes, 0, 'navigation never saves an unfinished edit');
 console.log('Tablet selection and month navigation preserve the shared draft/cancel semantics.');
+
+assert.match(source, /function isDesktopInteractionWorkspace\(\)/, 'desktop interaction authority is defined');
+assert.doesNotMatch(source, /min-width:\s*1024px/, 'desktop interactions must not infer desktop from 1024px');
