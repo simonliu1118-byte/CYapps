@@ -60,11 +60,13 @@ async function downloadMonthlyExcel() {
     const file = new File([blob], fileName, {
       type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
-    const mobileShare = window.matchMedia('(max-width: 767px)').matches
-      && typeof navigator.share === 'function'
+    const nativeShare = (
+      window.matchMedia('(max-width: 767px)').matches
+      || document.documentElement.dataset.tabletLayout === 'landscape'
+    ) && typeof navigator.share === 'function'
       && (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [file] }));
 
-    if (mobileShare) {
+    if (nativeShare) {
       try {
         await navigator.share({
           files: [file],

@@ -261,7 +261,7 @@ jobs:
             echo "Asset verification failed: $asset_url" >&2
             return 1
           }
-          verify_asset "$base/adaptive-ui.css?rev=02202-build1-tablet-layout" 'touch-action: manipulation'
+          verify_asset "$base/adaptive-ui.css?rev=02202-build2-tablet-landscape" 'touch-action: manipulation'
           verify_asset "$base/login.css?v=02112-mobile-tap-zoom" 'touch-action: manipulation'
           verify_asset "$base/adaptive-ui.js?rev=02202-build1-tablet-layout" 'startSettingsCategoryPointerDrag'
           verify_asset "$base/adaptive-ui.js?rev=02202-build1-tablet-layout" 'data-settings-group-move'
@@ -280,14 +280,16 @@ jobs:
           verify_asset "$base/app.css?rev=02114-simple-account-dialogs" '.opening-source'
           verify_asset "$base/accounting-ui.css?rev=02116-settings-slider" 'data-settings-kind-choice'
           verify_asset "$base/app.js?rev=02201-build1-read-consistency" 'const groupName = category.group_name'
-          verify_asset "$base/adaptive-ui.css?rev=02202-build1-tablet-layout" '--settings-kind-canvas'
+          verify_asset "$base/adaptive-ui.css?rev=02202-build2-tablet-landscape" '--settings-kind-canvas'
           verify_asset "$base/app.js?rev=02201-build1-read-consistency" 'function mergePendingTransactionUpdates'
           verify_asset "$base/ledger-inline-edit.js?rev=02202-build1-tablet-layout" 'await persistTransactionUpdate'
           verify_asset "$base/quick-entry.js?rev=02201-platform-parity" 'await mutateSettings'
           verify_asset "$base/adaptive-ui.js?rev=02202-build1-tablet-layout" 'function setupTabletWorkspace'
-          verify_asset "$base/adaptive-ui.css?rev=02202-build1-tablet-layout" 'data-tablet-layout="portrait"'
+          verify_asset "$base/adaptive-ui.css?rev=02202-build2-tablet-landscape" 'data-tablet-layout="portrait"'
           verify_asset "$base/adaptive-ui.js?rev=02202-build1-tablet-layout" 'class="tablet-entry-handle"'
-          verify_asset "$base/adaptive-ui.css?rev=02202-build1-tablet-layout" '.tablet-entry-handle > span'
+          verify_asset "$base/adaptive-ui.css?rev=02202-build2-tablet-landscape" '.tablet-entry-handle > span'
+          verify_asset "$base/adaptive-ui.css?rev=02202-build2-tablet-landscape" 'V0.22.2 Build 2 - tablet landscape refinement only'
+          verify_asset "$base/excel-export-ui.js?rev=02202-build2-tablet-share" 'nativeShare'
           echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files
