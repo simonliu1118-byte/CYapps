@@ -1177,6 +1177,11 @@ function setupMobileWorkspaceMobileFormCopy() {
 }
 
 const CY_DESKTOP_ISOLATION_DESKTOP = '(min-width: 768px)';
+
+function isDesktopInteractionWorkspace() {
+  return window.innerWidth >= 768 && !isTabletWorkspace();
+}
+window.cyIsDesktopInteractionWorkspace = isDesktopInteractionWorkspace;
 let cyDesktopIsolationStarted = false;
 
 if (document.readyState === 'loading') {
@@ -1267,13 +1272,13 @@ function syncDesktopLedgerMonthCopy() {
 function setupDesktopLedgerMonthDesktopMonthPicker() {
   const media = window.matchMedia(CY_DESKTOP_LEDGER_MONTH_DESKTOP);
   const syncMode = () => {
-    const tablet = typeof isTabletWorkspace === 'function' && isTabletWorkspace();
+    const desktop = isDesktopInteractionWorkspace();
     const root = document.querySelector('#ledgerMonthPickerCustom');
     if (root) {
-      root.hidden = !media.matches || tablet;
-      if (!media.matches || tablet) closeDesktopLedgerMonthMonthPicker(root);
+      root.hidden = !desktop;
+      if (!desktop) closeDesktopLedgerMonthMonthPicker(root);
     }
-    if (media.matches && !tablet) ensureDesktopLedgerMonthMonthPicker();
+    if (desktop) ensureDesktopLedgerMonthMonthPicker();
   };
 
   if (typeof media.addEventListener === 'function') media.addEventListener('change', syncMode);
@@ -1363,7 +1368,7 @@ function ensureDesktopLedgerMonthMonthPicker() {
 
   trigger.addEventListener('click', event => {
     event.stopPropagation();
-    if (!window.matchMedia(CY_DESKTOP_LEDGER_MONTH_DESKTOP).matches) return;
+    if (!isDesktopInteractionWorkspace()) return;
     if (popover.hidden) open(); else close(false);
   });
 
@@ -1540,7 +1545,7 @@ function setupDesktopManagementHeaderManagement() {
   }
 
   const syncDesktop = () => {
-    const enabled = media.matches;
+    const enabled = isDesktopInteractionWorkspace();
     accountsButton.hidden = !enabled;
     categoriesButton.hidden = !enabled;
     if (!enabled) {
@@ -1557,7 +1562,7 @@ function setupDesktopManagementHeaderManagement() {
 }
 
 function openDesktopManagementManagement(tab, label) {
-  if (!window.matchMedia(CY_DESKTOP_MANAGEMENT_DESKTOP).matches) return;
+  if (!isDesktopInteractionWorkspace()) return;
   const dialog = document.querySelector('#settingsDialog');
   const title = dialog?.querySelector('.modal-header h2');
   if (!dialog || !title) return;
@@ -1583,7 +1588,7 @@ function setupDesktopManagementOpeningDialog() {
   if (!dialog || !monthInput || !ledgerMonth || !title) return;
 
   const sync = () => {
-    if (!window.matchMedia(CY_DESKTOP_MANAGEMENT_DESKTOP).matches) return;
+    if (!isDesktopInteractionWorkspace()) return;
     const month = /^\d{4}-\d{2}$/.test(ledgerMonth.value || '') ? ledgerMonth.value : monthInput.value;
     if (/^\d{4}-\d{2}$/.test(month || '')) {
       if (monthInput.value !== month) {
@@ -1652,7 +1657,7 @@ function setupDesktopManagersMonthPickers() {
   const media = window.matchMedia(CY_DESKTOP_MANAGERS_DESKTOP);
   const scan = () => {
     syncDesktopManagersLedgerMonthTrigger();
-    if (!media.matches) return;
+    if (!isDesktopInteractionWorkspace()) return;
     for (const input of document.querySelectorAll('input[type="month"]')) {
       if (input.id === 'monthFilter' || input.id === 'openingMonth') continue;
       ensureDesktopManagersMonthPickerForInput(input);
@@ -1735,7 +1740,7 @@ function ensureDesktopManagersMonthPickerForInput(input) {
 
   trigger.addEventListener('click', event => {
     event.stopPropagation();
-    if (!window.matchMedia(CY_DESKTOP_MANAGERS_DESKTOP).matches) return;
+    if (!isDesktopInteractionWorkspace()) return;
     if (!popover.hidden) return close(false);
     const selected = desktopManagersReadMonth(input);
     displayYear = selected.year;
@@ -2032,7 +2037,7 @@ function desktopUiConfirmSpec(target) {
 /* -------------------------------------------------------------------------- */
 
 function auditDesktopUiMonthPickers() {
-  if (!window.matchMedia(CY_DesktopUi_DESKTOP).matches) return;
+  if (!isDesktopInteractionWorkspace()) return;
   if (typeof ensureDesktopManagersMonthPickerForInput === 'function') {
     document.querySelectorAll('input[type="month"]').forEach(input => ensureDesktopManagersMonthPickerForInput(input));
   }
@@ -2042,7 +2047,7 @@ function auditDesktopUiMonthPickers() {
 function setupDesktopUiDatePickers() {
   const media = window.matchMedia(CY_DesktopUi_DESKTOP);
   const scan = () => {
-    if (!media.matches || (typeof isTabletWorkspace === 'function' && isTabletWorkspace())) return;
+    if (!isDesktopInteractionWorkspace()) return;
     document.querySelectorAll('input[type="date"]').forEach(ensureDesktopUiDatePicker);
   };
   scan();
@@ -2251,7 +2256,7 @@ function refineDesktopUiHeaderIdentity() {
 const CY_DesktopUi_KEYBOARD_DESKTOP = '(min-width: 1024px)';
 
 const setupDesktopUiKeyboardBridge = () => {
-  if (!window.matchMedia(CY_DesktopUi_KEYBOARD_DESKTOP).matches) return;
+  if (!isDesktopInteractionWorkspace()) return;
   const input = document.querySelector('#txDate');
   const root = input?.nextElementSibling?.classList?.contains('desktopUi-date-picker') ? input.nextElementSibling : null;
   const trigger = root?.querySelector('.desktopUi-date-trigger');
@@ -4556,7 +4561,7 @@ function syncTabletPickerOwnership(orientation) {
       input.style.removeProperty('clip');
       input.style.removeProperty('clip-path');
       input.style.removeProperty('pointer-events');
-    } else if (window.matchMedia(CY_DesktopUi_DESKTOP).matches && typeof ensureDesktopUiDatePicker === 'function') {
+    } else if (isDesktopInteractionWorkspace() && typeof ensureDesktopUiDatePicker === 'function') {
       ensureDesktopUiDatePicker(input);
     }
   });
