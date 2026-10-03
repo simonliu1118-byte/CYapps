@@ -1,210 +1,58 @@
-# CYAccountingWeb — Backup Architecture / Operational Handoff
+# CYAccountingWeb 備份架構與維運交接
 
-> Updated: 2026-10-02
->
-> Current application baseline: **V0.21.11 Build 0**
->
-> This document describes the current backup architecture. Version-numbered source wrappers from the pre-launch development history are not part of the active architecture.
+更新：2026/10/03。正式功能版本 V0.22.1 Build 1；平板 V0.22.2 開發中，未變更備份拓樸／格式／排程。本文件描述現行實作與維運待辦，永久規則依 PROJECT_RULES.md、REPO_POLICY.md、REPOSITORY_RULES.md。目前版本證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。
 
-## 1. Source of truth
+## 模組與唯一資料來源
 
-Before changing backup behavior, use this order:
+D1 是唯一正式帳務資料庫；備份不是 live DB 或雙向同步。Worker 唯一入口 `src/app.js`，目前模組：
 
-1. current explicit user instruction;
-2. `apps/CYAccountingWeb/PROJECT_RULES.md`;
-3. repository governance / public-repo policy;
-4. current source, migrations, `VERSION` and `BUILD`;
-5. this handoff and `TODO.md`.
+| 模組 | 責任 |
+| --- | --- |
+| `src/backup-package.js` | D1 匯出為 portable accounting payload |
+| `src/backup-storage-provider.js` | provider-neutral storage contract |
+| `src/gcs-backup-provider.js` | GCS adapter，generation 封裝為 opaque versionToken |
+| `src/r2-backup-provider.js` | R2 adapter |
+| `src/gcs-backup.js` | 已驗收 BackupSet 格式、完整性與 GCS operations |
+| `src/backup-service.js` | 拓樸、API、logical catalog 與排程 orchestration |
 
-Production resource identifiers, employee data, credentials, Session values and provider secrets must not be committed to public Git.
+沒有 active Google Drive OAuth 備份路由、版本 Worker wrapper 或第二個備份 owner。`legacy_gcs` 保留已驗收 GCS 路徑；`parallel_dual_provider` 匯出一次，將同一 immutable package 保存為 R2／GCS copies。每個 provider 分別 read-back 驗證 hash／byte size／manifest，失敗互相隔離，不能刪除另一邊已驗證的成功 copy。
 
-## 2. Current code structure
+## 執行設定與目前 Phase C
 
-The Worker has one entrypoint:
+binding／contract 名稱為 `DB`、`IDENTITY`、`BACKUP_R2`、`BACKUP_TOPOLOGY`。正式 resource identifiers、storage credentials、Session 及實際備份內容只放受保護 runtime；不進 Public Git／Release／Artifact。
 
-```text
-src/app.js
-```
+| 項目 | 現況 |
+| --- | --- |
+| Cron | `30 19 * * *`，每日台灣時間 03:30 |
+| 正式拓樸 | Phase C，R2＋GCS parallel dual provider |
+| Retention | R2 application 30 天；GCS 每日 14 天 |
+| 已驗收 | GCS production 2026/09/26；manual paired production 2026/09/27 |
+| 排程 gate | 連續 14 次有效 scheduled paired backup；最新 `x/14` 尚未讀取，不按日期猜測 |
+| 下一階段 | Phase D 未啟用；gate 通過後才評估 R2 每日、GCS 每週三／週日、26 週／182 天 |
 
-Backup implementation is split by responsibility:
+`x/14` 只計 scheduled、同 logical backupId、有效 package digest、R2/GCS 均成功的紀錄；手動備份不計數。不要在切換當天大量刪除已驗收 GCS 備份。provider lifecycle 如啟用，期限須長於當時 application policy，避免提前刪除 replication／rollback 來源。
 
-```text
-src/backup-package.js         D1 → portable accounting backup data
-src/backup-storage-provider.js
-src/gcs-backup-provider.js    GCS provider adapter
-src/r2-backup-provider.js     R2 provider adapter
-src/gcs-backup.js             accepted GCS backup-set format and operations
-src/backup-service.js         topology, API routing and scheduled orchestration
-```
+## 格式與 catalog
 
-There is no active `app-v17 → app-v18 → app-v19` Worker chain.
+| 層次 | 現行格式 |
+| --- | --- |
+| Outer | `CYAccountingWebBackupSet / formatVersion 2` |
+| Inner | `CYAccountingWebBackup / formatVersion 2`，schema 6 |
+| 物件 | `CYAccountingWeb/<backup-id>/manifest.json` 與 `data.json` |
+| Manifest | app/schema version、row counts、SHA-256、byte size、dataFormat／dataFormatVersion |
 
-The former Google Drive V16 backup route is not part of the active baseline. Only its provider-independent D1 package-building behavior was retained and extracted into `backup-package.js`.
+inner v2 包含帳戶 `archivedAt`、openingBalanceOverrides（理由／actor）、append-only openingBalanceAudit（前／後值／CYID actor）、交易、科目及設定；不包含 Identity secrets／Sessions。appVersion 來自產生 package 的實際 source，不能因文件更新而改寫既有物件。
 
-## 3. Current topology
+舊 outer v2 物件可沒有新增 manifest 欄位，payload 可為舊 `openingBalances`；reader／validator 保留資料格式相容，既有物件不重寫。未來復原舊備份到 schema 6，仍需明確且驗證過的轉換。這是資料格式相容，不是保留舊 runtime 殼。未來共通 outer `CYBackupSet / formatVersion 1` 尚未啟用，需獨立格式遷移。
 
-Supported topology values remain:
+logical catalog 使用 `backup_sets`／`backup_copies`，一個 backupId 列一次，provider 健康狀態分開。舊 `backup_runs` 保留備份歷史證據，不作另一套 routing authority。
 
-```text
-legacy_gcs
-parallel_dual_provider
-```
+## 管理權限、復原與跨 App 邊界
 
-`legacy_gcs` keeps the accepted GCS path.
+現行備份管理由 server 判斷 SUPER_ADMIN；ADMIN／USER 不得管理。CYID 是唯一 Session 權威，UI 隱藏不代替 API 授權。
 
-`parallel_dual_provider` creates one logical backup package and stores verified copies in both R2 and GCS.
+復原尚未實作／驗收。未來流程需要有效 provider copy → 完整性／App/schema 驗證 → SUPER_ADMIN server gate → 雙重破壞性確認 → 受控 D1 restore → 對帳 → audit；是否加入 pre-restore backup 於實作時確認。R2 不可用時讀 GCS、Cloudflare/D1 故障後用 GCS 重建新 D1，仍需完整 DR 演練。
 
-The required invariant is:
+Phase E shared Backup Service 尚未啟用。未來可共用 provider storage mechanics，但不接管 CYACC accounting restore；每 App dataset／授權／復原仍隔離，caller 由 server-side mapping 識別，不只信任傳入 appId，不共享廣權限憑證。
 
-```text
-Cloudflare D1
-  ↓ export once
-one immutable backup set
-  ├─ verified R2 copy
-  └─ verified GCS copy
-```
-
-A provider copy must never trigger a second accounting D1 export for the same logical backup event.
-
-## 4. Deployment contracts
-
-Public source may contain binding names, but not production identifiers.
-
-Current contracts:
-
-```text
-DB               Cloudflare D1 binding
-IDENTITY         CYID production Service Binding
-BACKUP_R2        Cloudflare R2 binding
-BACKUP_TOPOLOGY  backup rollout mode
-```
-
-Current Worker entrypoint:
-
-```text
-src/app.js
-```
-
-Current cron:
-
-```text
-30 19 * * *
-```
-
-This is daily 03:30 Taiwan time.
-
-Actual Worker names, D1 identifiers, CYID Application/Workspace identifiers, Service Binding targets, R2 bucket names and credentials remain deployment/runtime configuration only.
-
-## 5. Backup format compatibility
-
-The accepted application backup-set format remains:
-
-```text
-format = CYAccountingWebBackupSet
-formatVersion = 2
-```
-
-Layout:
-
-```text
-CYAccountingWeb/<backup-id>/
-├─ manifest.json
-└─ data.json
-```
-
-V0.21.11 data payload uses inner `CYAccountingWebBackup / formatVersion 2` semantics:
-
-- account `archivedAt`;
-- `openingBalanceOverrides` with reason and actor metadata;
-- append-only `openingBalanceAudit` with old/new values and CYID actor;
-- transactions, categories and settings remain included; Identity secrets/Sessions remain excluded.
-
-Outer manifest adds `dataFormat` / `dataFormatVersion` and derives `appVersion` from the package source. Legacy outer v2 objects without these fields and with `openingBalances` remain readable; existing objects are not rewritten. An old backup's future restore must translate its data schema through an explicit validated data migration before writing schema 6. Restore/DR remains unimplemented and requires its separate acceptance.
-
-Keeping this format is **data compatibility**, not a reason to keep version-numbered source wrappers.
-
-Existing accepted backup objects must not be rewritten merely because source modules were consolidated.
-
-A future common outer `CYBackupSet` contract, if introduced, must be handled as a separately versioned format migration.
-
-## 6. Logical backup catalog
-
-The additive logical catalog remains:
-
-```text
-backup_sets
-backup_copies
-```
-
-Semantics:
-
-```text
-one logical backupId
-  ├─ one R2 copy status
-  └─ one GCS copy status
-```
-
-Legacy `backup_runs` evidence remains for accepted backup-history compatibility. It is data/history compatibility, not application routing compatibility.
-
-## 7. Provider failure isolation
-
-Provider copies are independent:
-
-- valid R2 success remains valid if GCS fails;
-- valid GCS success remains valid if R2 fails;
-- provider errors are recorded independently;
-- failure of one provider must not delete a verified copy on the other provider.
-
-Automated backup-service regression tests protect export-once behavior, provider isolation, digest parity and topology selection.
-
-## 8. Authorization
-
-Backup management is server-authorized.
-
-- `SUPER_ADMIN`: may access backup management routes.
-- `ADMIN` and `USER`: may not manage backup or restore.
-- UI visibility is not authorization.
-
-CYACC consumes CYID as the sole employee/session authority. CYACC does not create a second local identity session after the CYID cutover.
-
-## 9. Restore boundary
-
-Restore remains high risk and must remain accounting-owned.
-
-Required future flow:
-
-```text
-select logical backup
-→ obtain verified provider copy
-→ verify package integrity
-→ verify application/schema compatibility
-→ SUPER_ADMIN authorization
-→ explicit destructive confirmation
-→ optional pre-restore backup
-→ controlled D1 restore
-→ reconciliation
-→ audit outcome
-```
-
-A future shared backup storage service may own provider storage mechanics, but must not perform CYAccountingWeb D1 restore writes.
-
-## 10. Cross-application isolation
-
-CYAccountingWeb backup data must remain app-scoped.
-
-A future shared provider service does not imply shared unrestricted credentials or shared datasets. Caller identity must be mapped server-side to the permitted application dataset.
-
-## 11. Current continuation rule
-
-Do not add a new versioned backup wrapper such as `app-v20.js` or `v20-backup.js`.
-
-New backup behavior must be integrated into the semantic modules above. If a change needs backward data compatibility, implement an explicit format reader/adapter at the data boundary instead of wrapping the entire Worker.
-
-The backend baseline rule is:
-
-```text
-one Worker router
-→ one current backup service
-→ provider adapters
-→ explicit data-format compatibility only where required
-```
+已完成自動證據包括 inner v2、legacy outer v2 compatibility、export-once、copy digest parity、provider failure isolation 與 topology selection；不等於 scheduled `14/14` 或復原驗收。完整待辦集中於 [TODO.md](TODO.md)。
