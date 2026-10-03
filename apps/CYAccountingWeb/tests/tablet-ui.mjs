@@ -11,6 +11,10 @@ const attrs = new Map();
 const button = { textContent: '', setAttribute: (name, value) => attrs.set(name, value), addEventListener(name, fn) { this[name] = fn; } };
 const pin = { checked: false, addEventListener(name, fn) { this[name] = fn; } };
 const controls = { querySelector: selector => selector === '#tabletEntryToggle' ? button : pin };
+const quickHost = { append(group) { group.parentElement = this; } };
+const entryGrid = { append(group) { group.parentElement = this; } };
+const favoriteGroup = { parentElement: quickHost };
+const summaryGroup = { parentElement: quickHost };
 const rail = { dataset: {} };
 const shell = { dataset: {} };
 const classes = { remove() {}, contains: () => true };
@@ -22,7 +26,7 @@ let writes = 0;
 const draft = { amount: '123', summary: '尚未儲存' };
 let edit = { id: 9, draft };
 let splitCalls = 0;
-const nodes = { 'main.shell': shell, '.entry-card': entry, '.ledger-card': ledger, '.v21-entry-rail': rail, '#tabletEntryToggle': button,
+const nodes = { '.quick-entry-tools': quickHost, '.entry-grid': entryGrid, '#favoriteCategoryGroup': favoriteGroup, '#summarySuggestionGroup': summaryGroup, 'main.shell': shell, '.entry-card': entry, '.ledger-card': ledger, '.v21-entry-rail': rail, '#tabletEntryToggle': button,
   '.topbar': { getBoundingClientRect: () => ({ height: 60 }) }, '#readOnlyNotice': { classList: classes, getBoundingClientRect: () => ({ height: 30 }) } };
 const win = {
   innerWidth: 820, innerHeight: 1100, screen: { orientation: { type: 'portrait-primary', addEventListener() {} } },
@@ -44,6 +48,8 @@ for (const [width, touch, expected] of [[375,true,false],[767,true,false],[768,f
 win.innerWidth = 820; coarse = true;
 context.setupTabletWorkspace();
 assert.equal(root.dataset.tabletLayout, 'portrait');
+assert.equal(favoriteGroup.parentElement, entryGrid);
+assert.equal(summaryGroup.parentElement, entryGrid);
 assert.equal(rail.dataset.entryExpanded, 'false');
 button.click();
 assert.equal(rail.dataset.entryExpanded, 'true');
@@ -51,6 +57,16 @@ pin.checked = true; pin.change({ target: pin }); button.click();
 assert.equal(rail.dataset.entryExpanded, 'true', 'pinned entry stays open');
 pin.checked = false; button.click();
 assert.equal(rail.dataset.entryExpanded, 'false');
+// Handle drags must act once, ignore jitter and cancellation, and preserve the draft.
+button.pointerdown({ button: 0, pointerId: 1, clientY: 150 });
+button.pointerup({ pointerId: 1, clientY: 100 }); button.click();
+assert.equal(rail.dataset.entryExpanded, 'true', 'upward drag opens without synthetic click closing it');
+button.pointerdown({ button: 0, pointerId: 2, clientY: 100 });
+button.pointerup({ pointerId: 2, clientY: 160 }); button.click();
+assert.equal(rail.dataset.entryExpanded, 'false', 'downward drag closes exactly once');
+button.pointerdown({ button: 0, pointerId: 3, clientY: 100 });
+button.pointercancel(); button.pointerup({ pointerId: 3, clientY: 30 });
+assert.equal(rail.dataset.entryExpanded, 'false', 'cancelled drag does not toggle');
 context.setTabletEntryExpanded(true);
 const currentEdit = context.cyV0215Build4Edit;
 win.innerWidth = 1194; win.screen.orientation.type = 'landscape-primary'; listeners.get('resize')();
@@ -63,6 +79,11 @@ assert.equal(root.dataset.tabletLayout, 'portrait', 'software keyboard does not 
 assert.equal(style.get('--tablet-visible-height'), '420px');
 assert.equal(context.cyV0215Build4Edit, currentEdit);
 assert.equal(writes, 0, 'layout/rotation/keyboard/pinning never writes accounting data');
+win.innerWidth = 375; listeners.get('resize')();
+assert.equal(favoriteGroup.parentElement, quickHost, 'phone restores existing quick-entry container');
+assert.equal(summaryGroup.parentElement, quickHost);
+win.innerWidth = 820; listeners.get('resize')();
+assert.equal(favoriteGroup.parentElement, entryGrid);
 const count = splitCalls; context.setupTabletWorkspace(); assert.equal(splitCalls, count, 'setup binds once');
 const css = read('adaptive-ui.css');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?grid-template-rows: minmax\(0, 1fr\) auto/);

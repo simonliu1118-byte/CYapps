@@ -4536,7 +4536,7 @@ function setTabletEntryExpanded(expanded) {
   const button = document.querySelector('#tabletEntryToggle');
   if (button) {
     button.setAttribute('aria-expanded', String(Boolean(expanded)));
-    button.textContent = expanded ? '收合記帳' : '展開記帳';
+    button.setAttribute('aria-label', expanded ? '收合記帳' : '展開記帳');
   }
 }
 
@@ -4547,15 +4547,35 @@ function setupTabletWorkspace() {
   shell.dataset.tabletBound = '1';
   const controls = document.createElement('div');
   controls.className = 'tablet-entry-controls';
-  controls.innerHTML = '<button id="tabletEntryToggle" type="button" class="secondary" aria-expanded="false" aria-controls="transactionForm">展開記帳</button><label><input id="tabletEntryPinned" type="checkbox">保持展開</label>';
+  controls.innerHTML = '<button id="tabletEntryToggle" type="button" class="tablet-entry-handle" aria-label="展開記帳" aria-expanded="false" aria-controls="transactionForm"><span aria-hidden="true"></span></button><label><input id="tabletEntryPinned" type="checkbox">保持展開</label>';
   entry.prepend(controls);
   controls.querySelector('#tabletEntryToggle').addEventListener('click', () => {
+    if (suppressClick) { suppressClick = false; return; }
     if (controls.querySelector('#tabletEntryPinned').checked) return;
     const rail = document.querySelector('.v21-entry-rail');
     const expanded = rail?.dataset.entryExpanded !== 'true';
     setTabletEntryExpanded(expanded);
     if (!expanded) controls.querySelector('#tabletEntryPinned').checked = false;
   });
+  const handle = controls.querySelector('#tabletEntryToggle');
+  let drag = null;
+  let suppressClick = false;
+  handle.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || !isTabletWorkspace() || tabletWorkspaceOrientation() !== 'portrait') return;
+    drag = { id: event.pointerId, y: event.clientY };
+    suppressClick = false;
+    handle.setPointerCapture?.(event.pointerId);
+  });
+  handle.addEventListener('pointerup', event => {
+    if (!drag || event.pointerId !== drag.id) return;
+    const distance = event.clientY - drag.y;
+    drag = null;
+    if (Math.abs(distance) < 24) return;
+    suppressClick = true;
+    if (distance > 0) controls.querySelector('#tabletEntryPinned').checked = false;
+    setTabletEntryExpanded(distance < 0);
+  });
+  handle.addEventListener('pointercancel', () => { drag = null; suppressClick = false; });
   controls.querySelector('#tabletEntryPinned').addEventListener('change', event => {
     if (event.target.checked) setTabletEntryExpanded(true);
   });
@@ -4569,6 +4589,13 @@ function setupTabletWorkspace() {
     document.documentElement.dataset.tabletLayout = orientation;
     document.documentElement.dataset.viewport = window.innerWidth < 768 ? 'mobile' : tablet ? 'tablet' : 'desktop';
     if (!tablet && !wasTablet) return;
+    const quickHost = document.querySelector('.quick-entry-tools');
+    const grid = document.querySelector('.entry-grid');
+    for (const id of ['favoriteCategoryGroup', 'summarySuggestionGroup']) {
+      const group = document.querySelector('#' + id);
+      const host = tablet ? grid : quickHost;
+      if (group && host && group.parentElement !== host) host.append(group);
+    }
     applyV21DesktopSplitWorkspace(window.matchMedia(CY_V21_SPLIT_MEDIA).matches);
     if (tablet) {
       const rail = document.querySelector('.v21-entry-rail');
