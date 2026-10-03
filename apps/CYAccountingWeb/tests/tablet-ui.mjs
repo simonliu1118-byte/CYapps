@@ -101,8 +101,8 @@ assert.match(css, /data-tablet-layout="landscape"\] \.ledger-search-submit \{ di
 assert.match(css, /data-tablet-layout="landscape"\] #monthSummary \.ledger-summary-item:not\(\.opening\) \{ border-left:1px solid/, 'landscape summary uses one separated row');
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col \[data-edit-id\]::before/, 'landscape edit is icon-only');
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col \[data-delete-id\]::before/, 'landscape delete is icon-only');
-assert.match(js, /!media\.matches \|\| \(typeof isTabletWorkspace === 'function' && isTabletWorkspace\(\)\)/, 'tablet must not create desktop custom date pickers');
-assert.match(js, /syncTabletPickerOwnership\(orientation\)/, 'tablet orientation owns date and month picker presentation');
+assert.match(source, /!media\.matches \|\| \(typeof isTabletWorkspace === 'function' && isTabletWorkspace\(\)\)/, 'tablet must not create desktop custom date pickers');
+assert.match(source, /syncTabletPickerOwnership\(orientation\)/, 'tablet orientation owns date and month picker presentation');
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.v21-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
 assert.match(css, /data-tablet-layout="landscape"\] #mobileLedgerMonthDisplay/, 'landscape ledger month reuses mobile display layer');
 assert.match(css, /data-tablet-layout="landscape"\] #ledgerExcelImport \{ display: none !important/, 'tablet landscape removes Excel import');
