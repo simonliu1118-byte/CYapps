@@ -5,5 +5,10 @@
 !/Logs/.gitkeep
 /Cache/*
 !/Cache/.gitkeep
-*.syso
-/assets/icon.ico
+/src/CYEnvelope/Fonts/*.otf
+/src/CYEnvelope/Fonts/*.ttf
+/src/**/bin/
+/src/**/obj/
+/tests/**/bin/
+/tests/**/obj/
+/*/*/*_wpftmp.csproj
