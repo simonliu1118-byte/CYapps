@@ -1267,12 +1267,13 @@ function syncV21Build12Copy() {
 function setupV21Build12DesktopMonthPicker() {
   const media = window.matchMedia(CY_V21_BUILD12_DESKTOP);
   const syncMode = () => {
+    const tablet = typeof isTabletWorkspace === 'function' && isTabletWorkspace();
     const root = document.querySelector('#ledgerMonthPickerCustom');
     if (root) {
-      root.hidden = !media.matches;
-      if (!media.matches) closeV21Build12MonthPicker(root);
+      root.hidden = !media.matches || tablet;
+      if (!media.matches || tablet) closeV21Build12MonthPicker(root);
     }
-    if (media.matches) ensureV21Build12MonthPicker();
+    if (media.matches && !tablet) ensureV21Build12MonthPicker();
   };
 
   if (typeof media.addEventListener === 'function') media.addEventListener('change', syncMode);
@@ -2041,7 +2042,7 @@ function auditV0211MonthPickers() {
 function setupV0211DatePickers() {
   const media = window.matchMedia(CY_V0211_DESKTOP);
   const scan = () => {
-    if (!media.matches) return;
+    if (!media.matches || (typeof isTabletWorkspace === 'function' && isTabletWorkspace())) return;
     document.querySelectorAll('input[type="date"]').forEach(ensureV0211DatePicker);
   };
   scan();
@@ -4540,6 +4541,40 @@ function setTabletEntryExpanded(expanded) {
   }
 }
 
+function syncTabletPickerOwnership(orientation) {
+  const tablet = isTabletWorkspace();
+
+  document.querySelectorAll('input[type="date"]').forEach(input => {
+    if (tablet) {
+      const custom = input.nextElementSibling?.classList?.contains('v0211-date-picker') ? input.nextElementSibling : null;
+      custom?.remove();
+      input.classList.remove('v0211-native-date-source');
+      delete input.dataset.v0211DatePicker;
+      input.style.removeProperty('position');
+      input.style.removeProperty('width');
+      input.style.removeProperty('height');
+      input.style.removeProperty('clip');
+      input.style.removeProperty('clip-path');
+      input.style.removeProperty('pointer-events');
+    } else if (window.matchMedia(CY_V0211_DESKTOP).matches && typeof ensureV0211DatePicker === 'function') {
+      ensureV0211DatePicker(input);
+    }
+  });
+
+  const customMonth = document.querySelector('#ledgerMonthPickerCustom');
+  if (tablet && customMonth) {
+    customMonth.hidden = true;
+    if (typeof closeV21Build12MonthPicker === 'function') closeV21Build12MonthPicker(customMonth);
+  }
+
+  const slot = document.querySelector('#ledgerMonthSlot');
+  if (tablet && orientation === 'landscape') {
+    if (slot && typeof setupV0215Build4MonthDisplay === 'function') setupV0215Build4MonthDisplay(slot);
+  } else if (tablet) {
+    document.querySelector('#mobileLedgerMonthDisplay')?.remove();
+  }
+}
+
 function setupTabletWorkspace() {
   const shell = document.querySelector('main.shell');
   const entry = document.querySelector('.entry-card');
@@ -4588,6 +4623,7 @@ function setupTabletWorkspace() {
     const orientation = tablet ? tabletWorkspaceOrientation() : '';
     document.documentElement.dataset.tabletLayout = orientation;
     document.documentElement.dataset.viewport = window.innerWidth < 768 ? 'mobile' : tablet ? 'tablet' : 'desktop';
+    syncTabletPickerOwnership(orientation);
     if (!tablet && !wasTablet) return;
     const quickHost = document.querySelector('.quick-entry-tools');
     const grid = document.querySelector('.entry-grid');
