@@ -6,10 +6,10 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | V0.22.1 Build 1；main `d822afd779642fbeae745d0f643c5d7d8fb1f1ab`，PR #290 已合併 |
-| 正式部署 | [#370](https://github.com/simonliu1118-byte/CYapps/actions/runs/37035827619) 成功，D1 migrations、Worker/static assets、登入及 semantic assets 檢查成功 |
+| 正式功能基準 | V0.22.2；main `f8130e7ce4c234e57e6c4df7a1a97aaf9050240c`，PR #292 已合併 |
+| 正式部署 | [#377](https://github.com/simonliu1118-byte/CYapps/actions/runs/37113000668) 成功，D1 migrations、Worker/static assets、登入及 semantic assets 檢查成功 |
 | 公開穩定版 | [V0.22.0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyaccountingweb-v0.22.0)，tag/source 不覆寫 |
-| 平板工作 | V0.22.2 Build 0，`cyaccountingweb/tablet-interface`，[Draft PR #292](https://github.com/simonliu1118-byte/CYapps/pull/292)，未合併／部署／Release |
+| 平板工作 | V0.22.2 Build 1，`cyaccountingweb/tablet-layout-refinement`；修正實機照片中的尺寸與排列，直式改把手拖曳／點按展開收合；尚待此次 CI／部署，不建立 Release |
 | 平板功能驗證 head | `8945abf4194097f8f2e67d04be0ff5297b515240`；[應用 CI #373](https://github.com/simonliu1118-byte/CYapps/actions/runs/37093135237) 與 [Governance #961](https://github.com/simonliu1118-byte/CYapps/actions/runs/37093135220) 成功 |
 | 治理與 Identity | 共通 2.7.0、repo governance 2.3.27；CYACC consumer 1.0.1，provider 1.0.2／minimum 1.0.0 |
 
@@ -37,7 +37,7 @@ Migration 0006 已將 `opening_balances` 轉為 `opening_balance_overrides`／ap
 設計與驗收範圍集中於 [TABLET_UI_DESIGN.md](docs/TABLET_UI_DESIGN.md)。設計原始來源為 `cyaccountingweb/docs-tablet-ui-plan` 的 `b71e4108b7b3bd5e165dadeb526db4116c56be18`；使用者另明確要求 native-first，現行實作用原生 account/date/month。
 
 - 一份 tablet CSS owner 取代先前兩塊平板樣式；橫向左表單／右帳本，直向大帳本／底部收合欄。
-- 同一 DOM、草稿及 entry edit owner 跨旋轉保留；visualViewport 只改高度。保持展開使用原生 checkbox。
+- 同一 DOM、草稿及 entry edit owner 跨旋轉保留；visualViewport 只改高度。保持展開使用原生 checkbox；Build 1 收合時只保留把手，向上／向下拖曳或點按切換，checkbox 僅在展開後顯示。
 - 交易以可點擊編輯／刪除入口開始；沿用手機 entry editor／canonical writer，沒有另造平板滑動引擎。
 - 選取同筆編輯不清除修改，換下一筆先還原原新增草稿；切換看帳月份取消未儲存編輯，不寫入資料。
 - 帳戶／科目使用共用 touch/pen sorting；USER 隱藏記帳 rail，授權仍由 server 決定。
@@ -48,14 +48,14 @@ Migration 0006 已將 `opening_balances` 轉為 `opening_balance_overrides`／ap
 
 平板本機 23 組 regression、JS syntax、workflow YAML/shell、CYID supported window 通過；20 個上傳檔案逐一 read-back 核對 Git blob hash。tablet-ui 另驗證方向／觸控分類、旋轉草稿、鍵盤高度、收合／固定、換筆及切月份不誤存。
 
-本機 Chromium 下載得到截斷／損壞 archive，尚未完成實際 browser layout。模擬測試不取代真實 iPad／Android 觸控、鍵盤、登入、分享與畫面驗收。手機／桌機最終實際記帳驗收、Password Recovery Email/browser、Backup Phase C `x/14`、復原／DR 及 `web_sessions` 退休仍在 TODO。
+Build 1 已透過可執行的 Chromium 153 與合成資料完成四種尺寸排版檢查：1194×750 橫式、834×1100 直式（含把手拖曳）、390×844 手機、1440×900 電腦。手機／電腦對正式 V0.22.2 基準截圖逐位元相同（版本文字正規化）；平板日期未溢出、常用項目相鄰、拖曳保留草稿，版面操作沒有資料寫入。模擬測試不取代真實 iPad／Android 觸控、鍵盤、登入、分享與畫面驗收。手機／桌機最終實際記帳驗收、Password Recovery Email/browser、Backup Phase C `x/14`、復原／DR 及 `web_sessions` 退休仍在 TODO。
 
 桌面 production 移轉內容已由使用者於 2026/10/03 確認 OK，這項內容驗收已結案；Public Git 不保存實際帳務筆數、金額、原資料庫或 runtime evidence。
 
 ## 下一步與交接注意
 
-1. 在隔離環境預覽平板，不用正式帳務資料做測試素材，取得雙方向瀏覽器及真機驗收。
-2. 依驗收結果修正 PR #292；保持共用元件、流程、writer 與權限，之後才確認合併／部署。沒有新的公開 Release 授權。
+1. 使用者已授權先部署 V0.22.2，再依照片修正並部署 Build 1；Build 1 完成後以真實裝置確認雙方向及鍵盤。
+2. 手機／桌機保持原介面；平板只重排既有元件，不新增 writer／權限。沒有新的公開 Release 授權。
 3. 使用者補齊資料並提供開帳年月後，才處理自動計算基準；目前沒有指定年月，沒有更動正式 baseline。
 4. Phase C 只讀 production catalog／UI 記錄實際 `x/14`，不依日期推算，不提前切換 Phase D。
 

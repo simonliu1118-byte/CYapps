@@ -9,9 +9,9 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.1 Build 1**；main `d822afd779642fbeae745d0f643c5d7d8fb1f1ab`，PR #290；[部署 #370](https://github.com/simonliu1118-byte/CYapps/actions/runs/37035827619) 成功 |
+| 正式版本 | **V0.22.2**；main `f8130e7ce4c234e57e6c4df7a1a97aaf9050240c`，PR #292；[部署 #377](https://github.com/simonliu1118-byte/CYapps/actions/runs/37113000668) 成功 |
 | 公開穩定 Release | [V0.22.0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyaccountingweb-v0.22.0)；公開 Release 與網站部署分開 |
-| 平板開發 | **V0.22.2 Build 0**；`cyaccountingweb/tablet-interface`，[Draft PR #292](https://github.com/simonliu1118-byte/CYapps/pull/292)，尚未合併、部署或公開 Release |
+| 平板開發 | **V0.22.2 Build 1**；`cyaccountingweb/tablet-layout-refinement`，實機照片排版返修與直式把手；此次部署尚待檢查完成，不建立公開 Release |
 | 平板驗證 | 程式與自動測試通過；真實 iPad／Android 觸控、鍵盤、登入及排版仍待驗收 |
 | 桌面帳本移轉 | 使用者於 2026/10/03 確認內容 OK，內容驗收已完成 |
 | 備份 | Phase C；手動雙副本驗收通過，排程連續成功 `x/14` 尚需讀正式 catalog／UI，未推算進度 |
