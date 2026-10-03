@@ -106,6 +106,10 @@ assert.match(source, /syncTabletPickerOwnership\(orientation\)/, 'tablet orienta
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.v21-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
 assert.match(css, /data-tablet-layout="landscape"\] #mobileLedgerMonthDisplay/, 'landscape ledger month reuses mobile display layer');
 assert.match(css, /data-tablet-layout="landscape"\] #ledgerExcelImport \{ display: none !important/, 'tablet landscape removes Excel import');
+assert.match(source, /function isDesktopWorkspace\(\) \{[\s\S]*?!isTabletWorkspace\(\)/, 'desktop behavior must exclude tablet explicitly');
+assert.match(source, /function setupTabletDateDisplay\(input\)/, 'tablet date uses a dedicated visual display over the native control');
+assert.match(css, /data-tablet-layout="landscape"\] #txDate \{[\s\S]*?opacity: 0 !important/, 'tablet date native text is fully transparent');
+assert.match(css, /data-tablet-layout="landscape"\] #monthFilter \{[\s\S]*?opacity: 0 !important/, 'tablet month native text is fully transparent');
 console.log('Tablet classification, rotation, keyboard, pinning and shared edit ownership passed.');
 
 // Selecting another visible tablet row must not replace the original new-entry draft.
