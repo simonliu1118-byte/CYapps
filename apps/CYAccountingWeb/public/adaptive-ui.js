@@ -2342,8 +2342,7 @@ window.addEventListener('load', () => setTimeout(setupSettingsManager, 0), { onc
 function renderSettingsAccountManager() {
   if (typeof state !== 'object') return;
   renderArchivedAccountManager();
-  if (!window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches) return renderMobileAccountManager();
-  if (isTabletWorkspace()) return renderMobileAccountManager();
+  if (!isDesktopInteractionWorkspace()) return renderMobileAccountManager();
 
   const host = document.querySelector('#accountRows');
   if (!host) return;
@@ -2433,7 +2432,7 @@ function renderSettingsCategoryManager() {
   const pane = document.querySelector('[data-settings-pane="categories"]');
   if (!host || !pane) return;
 
-  const desktop = window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches || isTabletWorkspace();
+  const desktop = isDesktopInteractionWorkspace();
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
   pane.classList.toggle('settings-kind-income', kind === 'income');
   pane.classList.toggle('settings-kind-expense', kind === 'expense');
@@ -2894,7 +2893,7 @@ function handleSettingsManagerDragStart(event) {
   let id = 0;
   if (handle.dataset.settingsDragAccount) { type = 'account'; id = Number(handle.dataset.settingsDragAccount); }
   else if (handle.dataset.settingsDragCategory) { type = 'category'; id = Number(handle.dataset.settingsDragCategory); }
-  if (!type || !Number.isInteger(id) || id <= 0 || (type === 'account' && !window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches)) return;
+  if (!type || !Number.isInteger(id) || id <= 0 || (type === 'account' && !isDesktopInteractionWorkspace())) return;
 
   settingsManagerDrag = { type, id };
   event.dataTransfer.effectAllowed = 'move';
