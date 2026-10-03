@@ -27,6 +27,7 @@ const context = vm.createContext({
   },
   isTabletWorkspace: () => false,
   SETTINGS_MANAGER_DESKTOP: '(min-width: 1024px)',
+  isDesktopInteractionWorkspace: () => true,
   window: { cyaccCurrentUser: { role: 'ADMIN' }, matchMedia: () => ({ matches: true }) },
   document: { querySelector(selector) {
     return ({ '#archivedAccountsDialog': dialog, '#openArchivedAccountsButton': button, '#archivedAccountRows': archiveHost, '#accountRows': activeHost })[selector];
