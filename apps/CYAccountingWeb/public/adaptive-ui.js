@@ -1267,13 +1267,13 @@ function syncV21Build12Copy() {
 function setupV21Build12DesktopMonthPicker() {
   const media = window.matchMedia(CY_V21_BUILD12_DESKTOP);
   const syncMode = () => {
-    const tablet = typeof isTabletWorkspace === 'function' && isTabletWorkspace();
+    const desktop = typeof isDesktopWorkspace === 'function' ? isDesktopWorkspace() : media.matches;
     const root = document.querySelector('#ledgerMonthPickerCustom');
     if (root) {
-      root.hidden = !media.matches || tablet;
-      if (!media.matches || tablet) closeV21Build12MonthPicker(root);
+      root.hidden = !desktop;
+      if (!desktop) closeV21Build12MonthPicker(root);
     }
-    if (media.matches && !tablet) ensureV21Build12MonthPicker();
+    if (desktop) ensureV21Build12MonthPicker();
   };
 
   if (typeof media.addEventListener === 'function') media.addEventListener('change', syncMode);
@@ -1363,7 +1363,7 @@ function ensureV21Build12MonthPicker() {
 
   trigger.addEventListener('click', event => {
     event.stopPropagation();
-    if (!window.matchMedia(CY_V21_BUILD12_DESKTOP).matches) return;
+    if (typeof isDesktopWorkspace === 'function' ? !isDesktopWorkspace() : !window.matchMedia(CY_V21_BUILD12_DESKTOP).matches) return;
     if (popover.hidden) open(); else close(false);
   });
 
@@ -1652,7 +1652,7 @@ function setupV21Build14MonthPickers() {
   const media = window.matchMedia(CY_V21_BUILD14_DESKTOP);
   const scan = () => {
     syncV21Build14LedgerMonthTrigger();
-    if (!media.matches) return;
+    if (typeof isDesktopWorkspace === 'function' ? !isDesktopWorkspace() : !media.matches) return;
     for (const input of document.querySelectorAll('input[type="month"]')) {
       if (input.id === 'monthFilter' || input.id === 'openingMonth') continue;
       ensureV21Build14MonthPickerForInput(input);
@@ -1735,7 +1735,7 @@ function ensureV21Build14MonthPickerForInput(input) {
 
   trigger.addEventListener('click', event => {
     event.stopPropagation();
-    if (!window.matchMedia(CY_V21_BUILD14_DESKTOP).matches) return;
+    if (typeof isDesktopWorkspace === 'function' ? !isDesktopWorkspace() : !window.matchMedia(CY_V21_BUILD14_DESKTOP).matches) return;
     if (!popover.hidden) return close(false);
     const selected = v21Build14ReadMonth(input);
     displayYear = selected.year;
@@ -2032,7 +2032,7 @@ function v0211ConfirmSpec(target) {
 /* -------------------------------------------------------------------------- */
 
 function auditV0211MonthPickers() {
-  if (!window.matchMedia(CY_V0211_DESKTOP).matches) return;
+  if (typeof isDesktopWorkspace === 'function' ? !isDesktopWorkspace() : !window.matchMedia(CY_V0211_DESKTOP).matches) return;
   if (typeof ensureV21Build14MonthPickerForInput === 'function') {
     document.querySelectorAll('input[type="month"]').forEach(input => ensureV21Build14MonthPickerForInput(input));
   }
@@ -2042,7 +2042,7 @@ function auditV0211MonthPickers() {
 function setupV0211DatePickers() {
   const media = window.matchMedia(CY_V0211_DESKTOP);
   const scan = () => {
-    if (!media.matches || (typeof isTabletWorkspace === 'function' && isTabletWorkspace())) return;
+    if (typeof isDesktopWorkspace === 'function' ? !isDesktopWorkspace() : !media.matches) return;
     document.querySelectorAll('input[type="date"]').forEach(ensureV0211DatePicker);
   };
   scan();
@@ -2251,7 +2251,7 @@ function refineV0211HeaderIdentity() {
 const CY_V0211_KEYBOARD_DESKTOP = '(min-width: 1024px)';
 
 const setupV0211KeyboardBridge = () => {
-  if (!window.matchMedia(CY_V0211_KEYBOARD_DESKTOP).matches) return;
+  if (typeof isDesktopWorkspace === 'function' ? !isDesktopWorkspace() : !window.matchMedia(CY_V0211_KEYBOARD_DESKTOP).matches) return;
   const input = document.querySelector('#txDate');
   const root = input?.nextElementSibling?.classList?.contains('v0211-date-picker') ? input.nextElementSibling : null;
   const trigger = root?.querySelector('.v0211-date-trigger');
@@ -4518,6 +4518,11 @@ function isTabletWorkspace() {
     (width <= 1366 && window.matchMedia('(any-pointer: coarse)').matches));
 }
 
+function isDesktopWorkspace() {
+  return window.innerWidth >= 768 && !isTabletWorkspace();
+}
+window.cyIsDesktopWorkspace = isDesktopWorkspace;
+
 function usesEntryTransactionEditor() {
   return window.matchMedia('(max-width: 767px)').matches || isTabletWorkspace();
 }
@@ -4541,6 +4546,40 @@ function setTabletEntryExpanded(expanded) {
   }
 }
 
+function formatTabletDateDisplay(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  return match ? `${Number(match[1])}年${Number(match[2])}月${Number(match[3])}日` : '選擇日期';
+}
+
+function syncTabletPickerDisplays() {
+  const date = document.querySelector('#txDate');
+  const dateDisplay = document.querySelector('#tabletEntryDateDisplay');
+  if (date && dateDisplay) dateDisplay.textContent = formatTabletDateDisplay(date.value);
+  if (typeof syncV0215Build4MonthDisplay === 'function') syncV0215Build4MonthDisplay();
+}
+window.cySyncTabletPickerDisplays = syncTabletPickerDisplays;
+
+function setupTabletDateDisplay(input) {
+  if (!input) return;
+  const label = input.closest('.date-field');
+  if (!label) return;
+  let display = label.querySelector('#tabletEntryDateDisplay');
+  if (!display) {
+    display = document.createElement('span');
+    display.id = 'tabletEntryDateDisplay';
+    display.className = 'tablet-native-picker-display';
+    display.setAttribute('aria-hidden', 'true');
+    input.insertAdjacentElement('afterend', display);
+  }
+  input.setAttribute('aria-label', '選擇日期');
+  if (input.dataset.tabletDisplayBound !== '1') {
+    input.dataset.tabletDisplayBound = '1';
+    input.addEventListener('input', syncTabletPickerDisplays);
+    input.addEventListener('change', syncTabletPickerDisplays);
+  }
+  syncTabletPickerDisplays();
+}
+
 function syncTabletPickerOwnership(orientation) {
   const tablet = isTabletWorkspace();
 
@@ -4556,7 +4595,9 @@ function syncTabletPickerOwnership(orientation) {
       input.style.removeProperty('clip');
       input.style.removeProperty('clip-path');
       input.style.removeProperty('pointer-events');
-    } else if (window.matchMedia(CY_V0211_DESKTOP).matches && typeof ensureV0211DatePicker === 'function') {
+      if (input.id === 'txDate' && orientation === 'landscape') setupTabletDateDisplay(input);
+    } else if (isDesktopWorkspace() && typeof ensureV0211DatePicker === 'function') {
+      input.closest('.date-field')?.querySelector('#tabletEntryDateDisplay')?.remove();
       ensureV0211DatePicker(input);
     }
   });
@@ -4570,8 +4611,10 @@ function syncTabletPickerOwnership(orientation) {
   const slot = document.querySelector('#ledgerMonthSlot');
   if (tablet && orientation === 'landscape') {
     if (slot && typeof setupV0215Build4MonthDisplay === 'function') setupV0215Build4MonthDisplay(slot);
+    syncTabletPickerDisplays();
   } else if (tablet) {
     document.querySelector('#mobileLedgerMonthDisplay')?.remove();
+    document.querySelector('#tabletEntryDateDisplay')?.remove();
   }
 }
 
