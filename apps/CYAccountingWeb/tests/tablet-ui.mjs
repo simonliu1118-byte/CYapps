@@ -150,3 +150,7 @@ console.log('Tablet selection and month navigation preserve the shared draft/can
 
 assert.match(source, /function isDesktopInteractionWorkspace\(\)/, 'desktop interaction authority is defined');
 assert.doesNotMatch(source, /min-width:\s*1024px/, 'desktop interactions must not infer desktop from 1024px');
+
+assert.match(source, /setupTouchWorkspaceMonthDisplay\(slot\)/, 'tablet landscape reuses the shared touch month presenter');
+assert.match(source, /document\.querySelectorAll\('\.desktopUi-date-picker'\)\.forEach\(root => root\.remove\(\)\)/, 'tablet removes desktop date presentation instead of adding a tablet picker');
+assert.doesNotMatch(source, /tabletEntryDateDisplay|setupTabletDateDisplay/, 'tablet must not own a separate date display component');
