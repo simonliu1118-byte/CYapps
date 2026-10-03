@@ -26,7 +26,7 @@ let writes = 0;
 const draft = { amount: '123', summary: '尚未儲存' };
 let edit = { id: 9, draft };
 let splitCalls = 0;
-const nodes = { '.quick-entry-tools': quickHost, '.entry-grid': entryGrid, '#favoriteCategoryGroup': favoriteGroup, '#summarySuggestionGroup': summaryGroup, 'main.shell': shell, '.entry-card': entry, '.ledger-card': ledger, '.v21-entry-rail': rail, '#tabletEntryToggle': button,
+const nodes = { '.quick-entry-tools': quickHost, '.entry-grid': entryGrid, '#favoriteCategoryGroup': favoriteGroup, '#summarySuggestionGroup': summaryGroup, 'main.shell': shell, '.entry-card': entry, '.ledger-card': ledger, '.cy-entry-rail': rail, '#tabletEntryToggle': button,
   '.topbar': { getBoundingClientRect: () => ({ height: 60 }) }, '#readOnlyNotice': { classList: classes, getBoundingClientRect: () => ({ height: 30 }) } };
 const win = {
   innerWidth: 820, innerHeight: 1100, screen: { orientation: { type: 'portrait-primary', addEventListener() {} } },
@@ -36,9 +36,9 @@ const win = {
 };
 const context = vm.createContext({ window: win, document: { documentElement: root, createElement: () => controls,
   querySelector: selector => nodes[selector] || null, querySelectorAll: () => [] },
-  CY_V21_SPLIT_MEDIA: '(min-width: 1360px)', cyV0215Build4Edit: edit,
-  applyV21DesktopSplitWorkspace() { splitCalls++; }, setupV0215Build4EntrySecondaryAction() {}, renderSettingsAccountManager() {},
-  cancelV0215Build4MobileEdit() { context.cyV0215Build4Edit = null; }, api() { writes++; }
+  CY_V21_SPLIT_MEDIA: '(min-width: 1360px)', cyTouchWorkspaceEdit: edit,
+  applyV21DesktopSplitWorkspace() { splitCalls++; }, setupTouchWorkspaceEntrySecondaryAction() {}, renderSettingsAccountManager() {},
+  cancelTouchWorkspaceMobileEdit() { context.cyTouchWorkspaceEdit = null; }, api() { writes++; }
 });
 vm.runInContext(tabletCode, context);
 for (const [width, touch, expected] of [[375,true,false],[767,true,false],[768,false,true],[820,true,true],[1024,true,true],[1194,true,true],[1366,true,true],[1440,true,false],[1280,false,false],[1440,false,false]]) {
@@ -68,16 +68,16 @@ button.pointerdown({ button: 0, pointerId: 3, clientY: 100 });
 button.pointercancel(); button.pointerup({ pointerId: 3, clientY: 30 });
 assert.equal(rail.dataset.entryExpanded, 'false', 'cancelled drag does not toggle');
 context.setTabletEntryExpanded(true);
-const currentEdit = context.cyV0215Build4Edit;
+const currentEdit = context.cyTouchWorkspaceEdit;
 win.innerWidth = 1194; win.screen.orientation.type = 'landscape-primary'; listeners.get('resize')();
 assert.equal(root.dataset.tabletLayout, 'landscape');
-assert.equal(context.cyV0215Build4Edit, currentEdit, 'rotation preserves the existing edit owner');
+assert.equal(context.cyTouchWorkspaceEdit, currentEdit, 'rotation preserves the existing edit owner');
 assert.equal(currentEdit.draft, draft, 'rotation preserves the same draft');
 win.innerWidth = 820; win.screen.orientation.type = 'portrait-primary'; listeners.get('resize')();
 viewportHeight = 420; listeners.get('visual:resize')();
 assert.equal(root.dataset.tabletLayout, 'portrait', 'software keyboard does not change orientation');
 assert.equal(style.get('--tablet-visible-height'), '420px');
-assert.equal(context.cyV0215Build4Edit, currentEdit);
+assert.equal(context.cyTouchWorkspaceEdit, currentEdit);
 assert.equal(writes, 0, 'layout/rotation/keyboard/pinning never writes accounting data');
 win.innerWidth = 375; listeners.get('resize')();
 assert.equal(favoriteGroup.parentElement, quickHost, 'phone restores existing quick-entry container');
@@ -88,13 +88,13 @@ const count = splitCalls; context.setupTabletWorkspace(); assert.equal(splitCall
 const css = read('adaptive-ui.css');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?grid-template-rows: minmax\(0, 1fr\) auto/);
 assert.match(css, /\.ledger-card \.table-wrap \{[^}]*overflow: auto/);
-assert.match(css, /body\[data-cyacc-read-only="true"\] \.v21-entry-rail \{ display: none/);
-assert.match(css, /input\.v0211-native-date-source,[\s\S]*?pointer-events: auto !important/);
+assert.match(css, /body\[data-cyacc-read-only="true"\] \.cy-entry-rail \{ display: none/);
+assert.match(css, /input\.cy-native-date-source,[\s\S]*?pointer-events: auto !important/);
 assert.match(read('ledger-inline-edit.js'), /window\.cyUsesEntryTransactionEditor\?\.\(\)/);
 assert.match(css.slice(css.indexOf('/* Tablet workspace:')), /grid-template-columns: minmax\(0, 1fr\) !important/, 'tablet overrides important desktop entry columns');
-assert.match(css, /data-tablet-layout="landscape"\] \.shell\.v21-split-layout \{ grid-template-columns: minmax\(280px, 31%\)/, 'landscape entry rail is narrower only in landscape');
+assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{ grid-template-columns: minmax\(280px, 31%\)/, 'landscape entry rail is narrower only in landscape');
 assert.match(css, /data-tablet-layout="landscape"\] \.tablet-entry-controls,[\s\S]*?confirmation-edge-open \{ display: none !important/, 'landscape hides both non-landscape handles');
-assert.match(css, /data-tablet-layout="landscape"\] #txDate\.v0211-native-date-source[\s\S]*?-webkit-appearance:auto !important/, 'landscape date stays native');
+assert.match(css, /data-tablet-layout="landscape"\] #txDate\.cy-native-date-source[\s\S]*?-webkit-appearance:auto !important/, 'landscape date stays native');
 assert.match(css, /data-tablet-layout="landscape"\] #accountName,[\s\S]*?#categoryName \{ text-align:center !important; text-align-last:center !important/, 'landscape account and category are centered');
 assert.match(css, /data-tablet-layout="landscape"\] \.entry-grid > #favoriteCategoryGroup\.quick-tool-row\.hidden,[\s\S]*?display:grid !important/, 'landscape favorites remain visible when empty');
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-search-submit \{ display:none !important/, 'landscape search submits by Enter like mobile');
@@ -103,7 +103,7 @@ assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col \[data-delete-id\]::before/, 'landscape delete is icon-only');
 assert.match(source, /!media\.matches \|\| \(typeof isTabletWorkspace === 'function' && isTabletWorkspace\(\)\)/, 'tablet must not create desktop custom date pickers');
 assert.match(source, /syncTabletPickerOwnership\(orientation\)/, 'tablet orientation owns date and month picker presentation');
-assert.match(css, /data-tablet-layout="landscape"\] \.shell\.v21-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
+assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
 assert.match(css, /data-tablet-layout="landscape"\] #mobileLedgerMonthDisplay/, 'landscape ledger month reuses mobile display layer');
 assert.match(css, /data-tablet-layout="landscape"\] #ledgerExcelImport \{ display: none !important/, 'tablet landscape removes Excel import');
 console.log('Tablet classification, rotation, keyboard, pinning and shared edit ownership passed.');
@@ -113,22 +113,22 @@ let cancellations = 0;
 const originalDraft = { summary: '新增草稿', amount: '17' };
 let shownDraft = { summary: '第一筆修改', amount: '99' };
 const editor = vm.createContext({
-  cyV0215Build4Edit: { id: 1, draft: originalDraft },
+  cyTouchWorkspaceEdit: { id: 1, draft: originalDraft },
   state: { transactions: [{ id: 2, tx_date: '2026-10-01', kind: 'income', account_name: '現金', category_name: '一般收入', amount: 8 }] },
   els: { summary: { focus() {} }, amount: {}, txDate: {}, accountName: {}, categoryName: {}, saveButton: {}, kindButtons: [], monthFilter: { value: '2026-10' } },
   document: { querySelector: () => null }, window: { scrollY: 0, scrollTo() {} },
   isTabletWorkspace: () => true, setTabletEntryExpanded() {}, isLocked: () => false,
-  cancelV0215Build4MobileEdit() { cancellations++; shownDraft = originalDraft; editor.cyV0215Build4Edit = null; },
-  captureV0215Build4EntryDraft: () => shownDraft,
-  setEntryKind() {}, ensureV0215Build4Option() {}, syncV0215Build4EntrySecondaryAction() {}, showMessage() {}, updateEntryLockState() {}, switchV0215Build4MobilePage() {}
+  cancelTouchWorkspaceMobileEdit() { cancellations++; shownDraft = originalDraft; editor.cyTouchWorkspaceEdit = null; },
+  captureTouchWorkspaceEntryDraft: () => shownDraft,
+  setEntryKind() {}, ensureTouchWorkspaceOption() {}, syncTouchWorkspaceEntrySecondaryAction() {}, showMessage() {}, updateEntryLockState() {}, switchTouchWorkspaceMobilePage() {}
 });
-vm.runInContext(source.slice(source.indexOf('function beginV0215Build4MobileEdit('), source.indexOf('async function saveV0215Build4MobileEdit(')), editor);
-editor.beginV0215Build4MobileEdit(2);
-assert.equal(editor.cyV0215Build4Edit.draft, originalDraft);
+vm.runInContext(source.slice(source.indexOf('function beginTouchWorkspaceMobileEdit('), source.indexOf('async function saveTouchWorkspaceMobileEdit(')), editor);
+editor.beginTouchWorkspaceMobileEdit(2);
+assert.equal(editor.cyTouchWorkspaceEdit.draft, originalDraft);
 assert.equal(cancellations, 1);
-const selectedEdit = editor.cyV0215Build4Edit;
-editor.beginV0215Build4MobileEdit(2);
-assert.equal(editor.cyV0215Build4Edit, selectedEdit, 'reselecting preserves unsaved edits');
+const selectedEdit = editor.cyTouchWorkspaceEdit;
+editor.beginTouchWorkspaceMobileEdit(2);
+assert.equal(editor.cyTouchWorkspaceEdit, selectedEdit, 'reselecting preserves unsaved edits');
 assert.equal(cancellations, 1);
 
 const editEvents = new Map();
@@ -136,14 +136,14 @@ const bindNode = label => ({ addEventListener(name, fn) { editEvents.set(label +
 const editNodes = { '#transactionRows': bindNode('rows'), '#transactionForm': bindNode('form'), '#mobileMainNav': bindNode('nav') };
 const controller = vm.createContext({
   document: { querySelector: key => editNodes[key] }, window: { matchMedia: () => ({ addEventListener() {} }), addEventListener() {} },
-  els: { monthFilter: bindNode('month') }, CY_V0215_BUILD4_MOBILE: '(max-width: 767px)', cyV0215Build4Edit: { id: 2 },
+  els: { monthFilter: bindNode('month') }, CY_TOUCH_WORKSPACE_MOBILE: '(max-width: 767px)', cyTouchWorkspaceEdit: { id: 2 },
   usesEntryTransactionEditor: () => true,
-  cancelV0215Build4MobileEdit() { controller.cyV0215Build4Edit = null; },
-  saveV0215Build4MobileEdit() { writes++; }
+  cancelTouchWorkspaceMobileEdit() { controller.cyTouchWorkspaceEdit = null; },
+  saveTouchWorkspaceMobileEdit() { writes++; }
 });
-vm.runInContext(source.slice(source.indexOf('function setupV0215Build4MobileEdit()'), source.indexOf('function beginV0215Build4MobileEdit(')), controller);
-controller.setupV0215Build4MobileEdit();
+vm.runInContext(source.slice(source.indexOf('function setupTouchWorkspaceMobileEdit()'), source.indexOf('function beginTouchWorkspaceMobileEdit(')), controller);
+controller.setupTouchWorkspaceMobileEdit();
 editEvents.get('month:change')();
-assert.equal(controller.cyV0215Build4Edit, null, 'month navigation cancels the old-month entry edit');
+assert.equal(controller.cyTouchWorkspaceEdit, null, 'month navigation cancels the old-month entry edit');
 assert.equal(writes, 0, 'navigation never saves an unfinished edit');
 console.log('Tablet selection and month navigation preserve the shared draft/cancel semantics.');
