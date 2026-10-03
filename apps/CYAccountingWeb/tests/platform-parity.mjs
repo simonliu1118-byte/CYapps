@@ -43,11 +43,12 @@ for (const width of [375, 820, 1440]) {
   });
   vm.runInContext('let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map();\n' + piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
   vm.runInContext('let cyV0215Build4Edit = { id: 1, returnContext: { month: "2026-09", search: "" } };\n' + piece(adaptive, 'async function saveV0215Build4MobileEdit(', 'function cancelV0215Build4MobileEdit('), context);
+  vm.runInContext(piece(adaptive, 'function isTabletWorkspace()', 'function tabletWorkspaceOrientation()'), context);
   let intercepted = false;
   context.beginInlineLedgerEdit = () => {};
   vm.runInContext(piece(inline, 'function handleInlineLedgerClick(', 'function beginInlineLedgerEdit('), context);
   context.handleInlineLedgerClick({ target: { closest: selector => selector === '[data-edit-id]' ? { dataset: { editId: '1' }, closest: () => row } : null }, preventDefault() { intercepted = true; }, stopImmediatePropagation() {} });
-  assert.equal(intercepted, width >= 768, 'desktop inline handlers never intercept the phone edit flow');
+  assert.equal(intercepted, width >= 1024, 'desktop inline handlers never intercept the shared phone/tablet entry editor');
   context.inlineRow = row;
   vm.runInContext('let cyInlineLedgerEdit = { id: 1, row: inlineRow };\n' + piece(inline, 'async function saveInlineLedgerEdit(', 'function cancelInlineLedgerEdit('), context);
   await context.saveTransactionEdit({ preventDefault() {} });

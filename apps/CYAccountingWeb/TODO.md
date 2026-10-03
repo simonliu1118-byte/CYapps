@@ -1,3 +1,10 @@
+## V0.22.2 平板介面第一版（開發中）
+
+- [x] 橫向左記帳右看帳；直向大看帳區＋可收合／保持展開的底部記帳欄。
+- [x] 共用原生帳戶／日期／月份欄位、entry edit owner、optimistic writer 與權限。
+- [x] 旋轉保留草稿／編輯；visualViewport 只改可視高度；平板帳戶共用觸控排序。
+- [ ] 真實 iPad／Android 雙方向觸控、鍵盤、登入及視覺驗收；通過後再確認部署。
+
 # CYAccountingWeb TODO
 
 ## V0.21.6 CYID integration

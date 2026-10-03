@@ -2,7 +2,7 @@
 
 志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
 
-> Current source release: **V0.22.1 Build 1**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
+> 本分支開發版本：**V0.22.2**，平板介面第一版；正式基準為 V0.22.1 Build 1。平板真機驗收尚未完成。
 >
 > Current continuity handoff: [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)
 
@@ -293,19 +293,15 @@ Phase D 才會切成：R2 每日、GCS 每週三／週日 cross-cloud DR replica
 
 ## UI / UX 方向
 
-目前採單一網站的 Adaptive UI，資料與 API 共用，不建立獨立 PC／手機網站。
+採單一網站，資料、登入、權限、計算與 API 共用，裝置只改 presentation。
 
-目前 presentation 分層：
+- 手機 `<768px` 保留既有兩頁記帳／看帳流程。
+- 平板 `768–1023px`，及具有觸控能力的 `1024–1366px` 視窗，啟用平板配置；橫向左記帳右看帳，直向看帳為主、底部記帳欄預設收合，可展開並保持展開。
+- 桌機維持既有配置與鍵盤輸入；平板帳戶、日期與月份使用原生 select/date/month，不建立專用 picker。
+- 平板交易編輯沿用手機 entry editor 與 `persistTransactionUpdate`；設定排序沿用共用 writer 與 rollback。方向／鍵盤變動不寫入帳務，不重建表單。
+- 真實 iPad／Android 觸控、鍵盤、登入及畫面驗收仍待完成。環境沒有可用瀏覽器，模擬測試不代表視覺驗收通過。
 
-- Desktop `>= 1024px`：V0.21.x 採現代、簡潔的商務 Web presentation，同時維持高資訊密度與鍵盤高速輸入；目前視覺要求為「精緻、商務、簡潔」；
-- Tablet `768–1023px`：沿用 Adaptive UI；真實平板已確認目前 touch/focus/login 不可接受，Build 6/8 legacy auth hotfix 未取得 acceptance；在 CYID governed integration 收斂前不再疊 Tablet-specific legacy auth patch；
-- Mobile `< 768px`：目前 formal baseline 為 Build 11；Build 10 direction 繼續保留，`餘額` = 期初餘額設定，`更多` = 帳戶設定／科目設定／月份鎖帳／匯出 Excel，右上角使用者選單只留身分資訊＋登出；仍需真實手機 final acceptance；
-- Desktop 與 Mobile/Tablet presentation 分層維護，Desktop 改版不得反向覆寫 `<1024px` Adaptive UI；
-- Desktop、Tablet、Mobile 仍需持續以真實裝置／尺寸做視覺 acceptance；自動測試只驗證 presentation boundary 與結構，不取代人工畫面驗收。
-
-目前工作與驗收交接集中記錄於 [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)；接手時不要從舊 Build 對話逐項重播。
-
-CYAccountingWeb 是 Web project，**不自動套用 Windows Desktop Visual Guide 的 WinForms 尺寸／元件規則**。
+設計來源見 [`docs/TABLET_UI_PLAN_2026-10-03.md`](./docs/TABLET_UI_PLAN_2026-10-03.md)，目前交接見 [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)。
 
 ## 本機開發
 
