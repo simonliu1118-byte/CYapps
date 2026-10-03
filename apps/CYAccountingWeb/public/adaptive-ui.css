@@ -10184,3 +10184,53 @@ html[data-tablet-layout="landscape"] #monthFilter::-webkit-calendar-picker-indic
 html[data-tablet-layout="landscape"] #ledgerMonthPickerCustom { display: none !important; }
 html[data-tablet-layout="landscape"] #ledgerExcelImport { display: none !important; }
 
+/* V0.22.2 Build 4 - deterministic tablet landscape native picker display layers. */
+html[data-tablet-layout="landscape"] .entry-grid > .date-field {
+  position: relative !important;
+}
+html[data-tablet-layout="landscape"] #tabletEntryDateDisplay {
+  position: absolute !important;
+  z-index: 1 !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 62px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  color: #273548 !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+}
+html[data-tablet-layout="landscape"] #txDate {
+  position: relative !important;
+  z-index: 2 !important;
+  width: 100% !important;
+  height: 44px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: transparent !important;
+  caret-color: transparent !important;
+  opacity: 0 !important;
+  -webkit-appearance: auto !important;
+  appearance: auto !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+html[data-tablet-layout="landscape"] #txDate::-webkit-date-and-time-value,
+html[data-tablet-layout="landscape"] #txDate::-webkit-calendar-picker-indicator {
+  color: transparent !important;
+  opacity: 0 !important;
+}
+html[data-tablet-layout="landscape"] #monthFilter {
+  opacity: 0 !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
