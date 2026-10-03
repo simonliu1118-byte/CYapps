@@ -4109,8 +4109,8 @@ function setupTouchWorkspaceMonthDisplay(slot) {
   }
 
   els.monthFilter.setAttribute('aria-label', '選擇月份');
-  if (els.monthFilter.dataset.v0215MonthDisplayBound !== '1') {
-    els.monthFilter.dataset.v0215MonthDisplayBound = '1';
+  if (els.monthFilter.dataset.touchMonthDisplayBound !== '1') {
+    els.monthFilter.dataset.touchMonthDisplayBound = '1';
     els.monthFilter.addEventListener('input', syncTouchWorkspaceMonthDisplay);
     els.monthFilter.addEventListener('change', syncTouchWorkspaceMonthDisplay);
   }
@@ -4425,7 +4425,7 @@ function ensureTouchWorkspaceOption(select, value) {
   const option = document.createElement('option');
   option.value = text;
   option.textContent = text + '（歷史）';
-  option.dataset.v0215EditTemporary = '1';
+  option.dataset.entryEditTemporary = '1';
   select.append(option);
 }
 
@@ -4499,10 +4499,10 @@ function restoreTouchWorkspaceLedgerContext(context, highlightId) {
 }
 
 function showTouchWorkspaceLedgerNotice(text) {
-  let notice = document.querySelector('#v0215LedgerNotice');
+  let notice = document.querySelector('#touchLedgerNotice');
   if (!notice) {
     notice = document.createElement('div');
-    notice.id = 'v0215LedgerNotice';
+    notice.id = 'touchLedgerNotice';
     notice.className = 'cy-ledger-notice';
     document.body.append(notice);
   }
