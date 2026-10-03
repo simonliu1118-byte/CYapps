@@ -70,4 +70,45 @@ assert.match(css, /\.ledger-card \.table-wrap \{[^}]*overflow: auto/);
 assert.match(css, /body\[data-cyacc-read-only="true"\] \.v21-entry-rail \{ display: none/);
 assert.match(css, /input\.v0211-native-date-source,[\s\S]*?pointer-events: auto !important/);
 assert.match(read('ledger-inline-edit.js'), /window\.cyUsesEntryTransactionEditor\?\.\(\)/);
+assert.match(css.slice(css.indexOf('/* Tablet workspace:')), /grid-template-columns: minmax\(0, 1fr\) !important/, 'tablet overrides important desktop entry columns');
 console.log('Tablet classification, rotation, keyboard, pinning and shared edit ownership passed.');
+
+// Selecting another visible tablet row must not replace the original new-entry draft.
+let cancellations = 0;
+const originalDraft = { summary: '新增草稿', amount: '17' };
+let shownDraft = { summary: '第一筆修改', amount: '99' };
+const editor = vm.createContext({
+  cyV0215Build4Edit: { id: 1, draft: originalDraft },
+  state: { transactions: [{ id: 2, tx_date: '2026-10-01', kind: 'income', account_name: '現金', category_name: '一般收入', amount: 8 }] },
+  els: { summary: { focus() {} }, amount: {}, txDate: {}, accountName: {}, categoryName: {}, saveButton: {}, kindButtons: [], monthFilter: { value: '2026-10' } },
+  document: { querySelector: () => null }, window: { scrollY: 0, scrollTo() {} },
+  isTabletWorkspace: () => true, setTabletEntryExpanded() {}, isLocked: () => false,
+  cancelV0215Build4MobileEdit() { cancellations++; shownDraft = originalDraft; editor.cyV0215Build4Edit = null; },
+  captureV0215Build4EntryDraft: () => shownDraft,
+  setEntryKind() {}, ensureV0215Build4Option() {}, syncV0215Build4EntrySecondaryAction() {}, showMessage() {}, updateEntryLockState() {}, switchV0215Build4MobilePage() {}
+});
+vm.runInContext(source.slice(source.indexOf('function beginV0215Build4MobileEdit('), source.indexOf('async function saveV0215Build4MobileEdit(')), editor);
+editor.beginV0215Build4MobileEdit(2);
+assert.equal(editor.cyV0215Build4Edit.draft, originalDraft);
+assert.equal(cancellations, 1);
+const selectedEdit = editor.cyV0215Build4Edit;
+editor.beginV0215Build4MobileEdit(2);
+assert.equal(editor.cyV0215Build4Edit, selectedEdit, 'reselecting preserves unsaved edits');
+assert.equal(cancellations, 1);
+
+const editEvents = new Map();
+const bindNode = label => ({ addEventListener(name, fn) { editEvents.set(label + ':' + name, fn); } });
+const editNodes = { '#transactionRows': bindNode('rows'), '#transactionForm': bindNode('form'), '#mobileMainNav': bindNode('nav') };
+const controller = vm.createContext({
+  document: { querySelector: key => editNodes[key] }, window: { matchMedia: () => ({ addEventListener() {} }), addEventListener() {} },
+  els: { monthFilter: bindNode('month') }, CY_V0215_BUILD4_MOBILE: '(max-width: 767px)', cyV0215Build4Edit: { id: 2 },
+  usesEntryTransactionEditor: () => true,
+  cancelV0215Build4MobileEdit() { controller.cyV0215Build4Edit = null; },
+  saveV0215Build4MobileEdit() { writes++; }
+});
+vm.runInContext(source.slice(source.indexOf('function setupV0215Build4MobileEdit()'), source.indexOf('function beginV0215Build4MobileEdit(')), controller);
+controller.setupV0215Build4MobileEdit();
+editEvents.get('month:change')();
+assert.equal(controller.cyV0215Build4Edit, null, 'month navigation cancels the old-month entry edit');
+assert.equal(writes, 0, 'navigation never saves an unfinished edit');
+console.log('Tablet selection and month navigation preserve the shared draft/cancel semantics.');

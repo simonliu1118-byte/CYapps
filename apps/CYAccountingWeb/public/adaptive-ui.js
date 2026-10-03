@@ -4279,6 +4279,10 @@ function setupV0215Build4MobileEdit() {
     if (!usesEntryTransactionEditor() && cyV0215Build4Edit) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
   });
 
+  els.monthFilter?.addEventListener('change', () => {
+    if (cyV0215Build4Edit && usesEntryTransactionEditor()) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+  });
+
   window.addEventListener('pagehide', () => {
     if (!cyV0215Build4Edit) return;
     cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
@@ -4286,9 +4290,15 @@ function setupV0215Build4MobileEdit() {
 }
 
 function beginV0215Build4MobileEdit(id) {
+  if (cyV0215Build4Edit?.id === id) {
+    if (isTabletWorkspace()) setTabletEntryExpanded(true);
+    els.summary?.focus();
+    return;
+  }
   const tx = state.transactions.find(item => Number(item.id) === id);
   if (!tx || isLocked(String(tx.tx_date || '').slice(0, 7))) return;
 
+  if (cyV0215Build4Edit) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
   const row = document.querySelector('#transactionRows tr[data-transaction-id="' + id + '"]');
   cyV0215Build4Edit = {
     id,
