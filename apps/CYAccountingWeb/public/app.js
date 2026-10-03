@@ -665,7 +665,7 @@ function renderSettingsMutationState(account = els.accountName.value, category =
   renderCategories(category);
   renderSettings();
   if (typeof renderFavoriteCategories === 'function') renderFavoriteCategories();
-  if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
+  if (typeof syncEntryUiAccountChoices === 'function') syncEntryUiAccountChoices();
 }
 
 function beginSettingsOptimisticMutation(path, options) {

@@ -37,12 +37,12 @@ for (const width of [375, 820, 1440]) {
     isLocked: month => month === lockedMonth && Boolean(lockedMonth), jsonHeaders: () => ({ 'content-type': 'application/json' }),
     async api(path, options) { writes.push({ path, method: options.method, body: JSON.parse(options.body) }); if (hold) await new Promise(resolve => { release = resolve; }); if (fail) throw new Error('write failed'); return { id: 99 }; },
     setDialogMessage() {}, showMessage() {}, setInlineEditMessage() {}, async loadTransactions() {},
-    resumeLedgerRefreshObserver() {}, cancelInlineLedgerEdit() {}, cancelV0215Build4MobileEdit() {}, switchV0215Build4MobilePage() {}, restoreV0215Build4LedgerContext() {},
-    showV0215Build4LedgerNotice() {}, updateEntryLockState() {}, renderSettingsCategoryManager() {}, renderCategories() {},
+    resumeLedgerRefreshObserver() {}, cancelInlineLedgerEdit() {}, cancelTouchWorkspaceMobileEdit() {}, switchTouchWorkspaceMobilePage() {}, restoreTouchWorkspaceLedgerContext() {},
+    showTouchWorkspaceLedgerNotice() {}, updateEntryLockState() {}, renderSettingsCategoryManager() {}, renderCategories() {},
     renderSettingsAccountManager() {}, renderTransactions() {}, renderAccounts() {}, renderSettings() {}
   });
   vm.runInContext('let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map();\n' + piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
-  vm.runInContext('let cyV0215Build4Edit = { id: 1, returnContext: { month: "2026-09", search: "" } };\n' + piece(adaptive, 'async function saveV0215Build4MobileEdit(', 'function cancelV0215Build4MobileEdit('), context);
+  vm.runInContext('let cyTouchWorkspaceEdit = { id: 1, returnContext: { month: "2026-09", search: "" } };\n' + piece(adaptive, 'async function saveTouchWorkspaceMobileEdit(', 'function cancelTouchWorkspaceMobileEdit('), context);
   vm.runInContext(piece(adaptive, 'function isTabletWorkspace()', 'function tabletWorkspaceOrientation()'), context);
   let intercepted = false;
   context.beginInlineLedgerEdit = () => {};
@@ -52,7 +52,7 @@ for (const width of [375, 820, 1440]) {
   context.inlineRow = row;
   vm.runInContext('let cyInlineLedgerEdit = { id: 1, row: inlineRow };\n' + piece(inline, 'async function saveInlineLedgerEdit(', 'function cancelInlineLedgerEdit('), context);
   await context.saveTransactionEdit({ preventDefault() {} });
-  await context.saveV0215Build4MobileEdit();
+  await context.saveTouchWorkspaceMobileEdit();
   await context.saveInlineLedgerEdit();
   assert.equal(writes.length, 3);
   for (const write of writes) assert.deepEqual(write, { path: '/api/transactions/1', method: 'PUT', body: { txDate: '2026-09-02', accountName: '現金', categoryName: '一般收入', summary: '對帳', amount: 777 } });
@@ -60,7 +60,7 @@ for (const width of [375, 820, 1440]) {
   context.state.transactions = [tx];
   lockedMonth = '2026-08';
   await context.saveTransactionEdit({ preventDefault() {} });
-  await context.saveV0215Build4MobileEdit();
+  await context.saveTouchWorkspaceMobileEdit();
   vm.runInContext('cyInlineLedgerEdit = { id: 1, row: inlineRow };', context);
   await context.saveInlineLedgerEdit();
   assert.equal(writes.length, 0, `${width}: all edit interfaces reject a locked source month`);

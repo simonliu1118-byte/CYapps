@@ -1166,46 +1166,46 @@
   }
 }
 
-/* V0.21.0 Build 8 - desktop readability, role cue and quick-entry account buttons.
+/* desktop readability, role cue and quick-entry account buttons.
    Desktop-only. Approved income/expense slider and mode colors remain untouched. */
 
 @media (min-width: 1024px) {
   /* Role identity: subtle medal-inspired cues without changing the account cluster structure. */
-  .v21-account-cluster .current-user {
+  .cy-account-cluster .current-user {
     transition: background-color 120ms ease, box-shadow 120ms ease;
   }
 
-  .v21-account-cluster .current-user.role-super-admin {
+  .cy-account-cluster .current-user.role-super-admin {
     background: linear-gradient(180deg, #fffaf0 0%, #fff4d6 100%);
     box-shadow: inset 0 0 0 1px rgba(190, 142, 38, .18);
   }
 
-  .v21-account-cluster .current-user.role-super-admin .current-user-main {
+  .cy-account-cluster .current-user.role-super-admin .current-user-main {
     color: #4d3a12;
   }
 
-  .v21-account-cluster .current-user.role-super-admin .current-user-role {
+  .cy-account-cluster .current-user.role-super-admin .current-user-role {
     color: #8a6515;
   }
 
-  .v21-account-cluster .current-user.role-super-admin .current-user-role::before {
+  .cy-account-cluster .current-user.role-super-admin .current-user-role::before {
     color: #c49a42;
   }
 
-  .v21-account-cluster .current-user.role-admin {
+  .cy-account-cluster .current-user.role-admin {
     background: linear-gradient(180deg, #fdf8f4 0%, #f8ebe1 100%);
     box-shadow: inset 0 0 0 1px rgba(158, 99, 61, .16);
   }
 
-  .v21-account-cluster .current-user.role-admin .current-user-main {
+  .cy-account-cluster .current-user.role-admin .current-user-main {
     color: #4a3327;
   }
 
-  .v21-account-cluster .current-user.role-admin .current-user-role {
+  .cy-account-cluster .current-user.role-admin .current-user-role {
     color: #8b5a3c;
   }
 
-  .v21-account-cluster .current-user.role-admin .current-user-role::before {
+  .cy-account-cluster .current-user.role-admin .current-user-role::before {
     color: #b47a57;
   }
 
@@ -1216,16 +1216,16 @@
   }
 
   .topbar #settingsButton,
-  .v21-account-cluster #logoutButton {
+  .cy-account-cluster #logoutButton {
     font-size: 13px;
   }
 
-  .v21-account-cluster .current-user-main {
+  .cy-account-cluster .current-user-main {
     font-size: 13.5px;
     font-weight: 600;
   }
 
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-role {
     font-size: 12.5px;
   }
 
@@ -1293,16 +1293,16 @@
     font-size: 14px;
   }
 
-  .v21-inline-confirmation .confirmation-drawer-header h2 {
+  .cy-inline-confirmation .confirmation-drawer-header h2 {
     font-size: 14.5px;
   }
 
-  .v21-inline-confirmation .confirmation-drawer-header .hint,
-  .v21-inline-confirmation .confirmation-status {
+  .cy-inline-confirmation .confirmation-drawer-header .hint,
+  .cy-inline-confirmation .confirmation-status {
     font-size: 12px;
   }
 
-  .v21-inline-confirmation .confirmation-main {
+  .cy-inline-confirmation .confirmation-main {
     font-size: 13.5px;
   }
 
@@ -1448,11 +1448,11 @@
   }
 }
 
-/* V0.21.0 Build 9 - Tablet/Mobile adaptive quick-entry refinement.
+/* Tablet/Mobile adaptive quick-entry refinement.
    Keeps Desktop >=1024 layout, approved income/expense slider and accounting behavior intact. */
 
 .entry-account-picker-trigger,
-.v21-mobile-main-nav {
+.cy-mobile-main-nav {
   display: none;
 }
 
@@ -1479,7 +1479,7 @@
     min-width: 0;
   }
 
-  .v21-brand-line {
+  .cy-brand-line {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1505,11 +1505,11 @@
     font-size: 10.5px;
   }
 
-  .v21-brand-line .status.ok {
+  .cy-brand-line .status.ok {
     display: none;
   }
 
-  .v21-brand-line .status.warn {
+  .cy-brand-line .status.warn {
     display: inline-flex;
     min-height: 24px;
     padding: 2px 6px;
@@ -1532,7 +1532,7 @@
     font-size: 12.5px;
   }
 
-  .v21-account-cluster {
+  .cy-account-cluster {
     grid-column: 2;
     display: flex;
     align-items: stretch;
@@ -1545,7 +1545,7 @@
     background: #fff;
   }
 
-  .v21-account-cluster .current-user {
+  .cy-account-cluster .current-user {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1555,27 +1555,27 @@
     overflow: hidden;
   }
 
-  .v21-account-cluster .current-user-main,
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-main,
+  .cy-account-cluster .current-user-role {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .v21-account-cluster .current-user-main {
+  .cy-account-cluster .current-user-main {
     min-width: 0;
     color: #354252;
     font-size: 12.5px;
     font-weight: 600;
   }
 
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-role {
     flex: 0 1 auto;
     color: #687687;
     font-size: 10.5px;
   }
 
-  .v21-account-cluster #logoutButton {
+  .cy-account-cluster #logoutButton {
     flex: 0 0 auto;
     min-height: 34px;
     height: 34px;
@@ -1585,23 +1585,23 @@
     font-size: 11.5px;
   }
 
-  .v21-account-cluster .current-user.role-super-admin {
+  .cy-account-cluster .current-user.role-super-admin {
     background: linear-gradient(180deg, #fffaf0 0%, #fff4d6 100%);
   }
 
-  .v21-account-cluster .current-user.role-super-admin .current-user-role {
+  .cy-account-cluster .current-user.role-super-admin .current-user-role {
     color: #8a6515;
   }
 
-  .v21-account-cluster .current-user.role-admin {
+  .cy-account-cluster .current-user.role-admin {
     background: linear-gradient(180deg, #fdf8f4 0%, #f8ebe1 100%);
   }
 
-  .v21-account-cluster .current-user.role-admin .current-user-role {
+  .cy-account-cluster .current-user.role-admin .current-user-role {
     color: #8b5a3c;
   }
 
-  .v21-mobile-main-nav {
+  .cy-mobile-main-nav {
     position: sticky;
     top: 0;
     z-index: 45;
@@ -1614,11 +1614,11 @@
     backdrop-filter: blur(12px);
   }
 
-  .v21-mobile-main-nav[hidden] {
+  .cy-mobile-main-nav[hidden] {
     display: none !important;
   }
 
-  .v21-mobile-main-nav button {
+  .cy-mobile-main-nav button {
     min-height: 40px;
     border: 1px solid transparent;
     border-radius: 8px;
@@ -1628,7 +1628,7 @@
     font-weight: 550;
   }
 
-  .v21-mobile-main-nav button.active {
+  .cy-mobile-main-nav button.active {
     border-color: #cfd8e2;
     background: #fff;
     color: #26394d;
@@ -1642,7 +1642,7 @@
     gap: 0;
   }
 
-  .shell > .v21-mobile-page-hidden {
+  .shell > .cy-mobile-page-hidden {
     display: none !important;
   }
 
@@ -1889,7 +1889,7 @@
     font-size: 16.5px;
   }
 
-  .v21-ledger-context {
+  .cy-ledger-context {
     margin-top: 7px;
   }
 
@@ -1913,7 +1913,7 @@
     text-align: center;
   }
 
-  .v21-ledger-summary-bar {
+  .cy-ledger-summary-bar {
     display: grid;
     grid-template-columns: 1fr;
     gap: 7px;
@@ -1928,13 +1928,13 @@
     font-size: 12px;
   }
 
-  .v21-summary-actions {
+  .cy-summary-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
   }
 
-  .v21-summary-actions .secondary {
+  .cy-summary-actions .secondary {
     width: 100%;
     min-height: 38px;
     height: 38px;
@@ -2049,15 +2049,15 @@
     grid-template-columns: 54px minmax(0, 1fr);
   }
 
-  .v21-account-cluster .current-user {
+  .cy-account-cluster .current-user {
     padding-inline: 7px;
   }
 
-  .v21-account-cluster .current-user-main {
+  .cy-account-cluster .current-user-main {
     font-size: 12px;
   }
 
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-role {
     font-size: 10px;
   }
 
@@ -2085,7 +2085,7 @@
   }
 }
 
-/* V0.21.0 Build 10 - Mobile-first interaction layer.
+/* Mobile-first interaction layer.
    Real-phone acceptance recovery. Applies only below 768px; Tablet/Desktop are intentionally untouched. */
 
 @media (max-width: 767px) {
@@ -2095,7 +2095,7 @@
     overflow-x: hidden;
   }
 
-  body.v21-mobile-app {
+  body.cy-mobile-app {
     padding-bottom: calc(66px + env(safe-area-inset-bottom));
     background: #fff;
   }
@@ -2123,7 +2123,7 @@
     min-width: 0;
   }
 
-  .v21-brand-line {
+  .cy-brand-line {
     display: flex !important;
     align-items: center !important;
     gap: 6px !important;
@@ -2154,12 +2154,12 @@
     font-size: inherit !important;
   }
 
-  .v21-brand-line .status.ok,
+  .cy-brand-line .status.ok,
   .topbar-actions {
     display: none !important;
   }
 
-  .v21-brand-line .status.warn {
+  .cy-brand-line .status.warn {
     display: inline-flex !important;
     align-items: center;
     min-height: 22px;
@@ -2169,7 +2169,7 @@
     white-space: nowrap;
   }
 
-  .v21-mobile-account-menu-button {
+  .cy-mobile-account-menu-button {
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -2185,26 +2185,26 @@
     line-height: 1;
   }
 
-  .v21-mobile-account-menu-button .v21-mobile-account-name {
+  .cy-mobile-account-menu-button .cy-mobile-account-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .v21-mobile-account-menu-button.role-super-admin {
+  .cy-mobile-account-menu-button.role-super-admin {
     border-color: #ddc789;
     background: linear-gradient(180deg, #fffdf7, #fff4d6);
     color: #6d5317;
   }
 
-  .v21-mobile-account-menu-button.role-admin {
+  .cy-mobile-account-menu-button.role-admin {
     border-color: #d7b79e;
     background: linear-gradient(180deg, #fffaf6, #f7e8dc);
     color: #70472f;
   }
 
-  .v21-mobile-account-menu {
+  .cy-mobile-account-menu {
     position: fixed;
     z-index: 92;
     top: 58px;
@@ -2217,36 +2217,36 @@
     box-shadow: 0 12px 34px rgba(31, 42, 55, .18);
   }
 
-  .v21-mobile-account-menu[hidden] {
+  .cy-mobile-account-menu[hidden] {
     display: none !important;
   }
 
-  .v21-mobile-account-menu-identity {
+  .cy-mobile-account-menu-identity {
     display: grid;
     gap: 3px;
     padding: 12px 13px;
     border-bottom: 1px solid #e5e9ed;
   }
 
-  .v21-mobile-account-menu-identity strong {
+  .cy-mobile-account-menu-identity strong {
     color: #2b3948;
     font-size: 14px;
   }
 
-  .v21-mobile-account-menu-identity span {
+  .cy-mobile-account-menu-identity span {
     color: #718091;
     font-size: 12px;
   }
 
-  .v21-mobile-account-menu.role-super-admin .v21-mobile-account-menu-identity {
+  .cy-mobile-account-menu.role-super-admin .cy-mobile-account-menu-identity {
     background: #fff8e8;
   }
 
-  .v21-mobile-account-menu.role-admin .v21-mobile-account-menu-identity {
+  .cy-mobile-account-menu.role-admin .cy-mobile-account-menu-identity {
     background: #fbefe6;
   }
 
-  .v21-mobile-account-menu > button {
+  .cy-mobile-account-menu > button {
     width: 100%;
     min-height: 44px;
     padding: 0 13px;
@@ -2259,16 +2259,16 @@
     text-align: left;
   }
 
-  .v21-mobile-account-menu > button:last-child {
+  .cy-mobile-account-menu > button:last-child {
     border-bottom: 0;
   }
 
-  .v21-mobile-account-menu > button.danger-lite {
+  .cy-mobile-account-menu > button.danger-lite {
     color: #a34b45;
   }
 
   /* Bottom task navigation */
-  .v21-mobile-main-nav.v21-mobile-bottom-nav {
+  .cy-mobile-main-nav.cy-mobile-bottom-nav {
     position: fixed !important;
     z-index: 70 !important;
     top: auto !important;
@@ -2286,11 +2286,11 @@
     backdrop-filter: blur(14px);
   }
 
-  .v21-mobile-main-nav.v21-mobile-bottom-nav[hidden] {
+  .cy-mobile-main-nav.cy-mobile-bottom-nav[hidden] {
     display: none !important;
   }
 
-  .v21-mobile-main-nav.v21-mobile-bottom-nav button {
+  .cy-mobile-main-nav.cy-mobile-bottom-nav button {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2305,13 +2305,13 @@
     font-weight: 600 !important;
   }
 
-  .v21-mobile-main-nav.v21-mobile-bottom-nav button.active {
+  .cy-mobile-main-nav.cy-mobile-bottom-nav button.active {
     background: #edf4fa !important;
     color: #2f648e !important;
     box-shadow: none !important;
   }
 
-  .v21-mobile-nav-icon {
+  .cy-mobile-nav-icon {
     font-size: 19px;
     font-weight: 500;
     line-height: 1;
@@ -2325,7 +2325,7 @@
     gap: 0 !important;
   }
 
-  .shell > .v21-mobile-page-hidden {
+  .shell > .cy-mobile-page-hidden {
     display: none !important;
   }
 
@@ -2656,7 +2656,7 @@
     font-weight: 700 !important;
   }
 
-  .v21-mobile-sheet-backdrop {
+  .cy-mobile-sheet-backdrop {
     position: fixed;
     z-index: 98;
     inset: 0;
@@ -2669,12 +2669,12 @@
     background: rgba(28, 38, 48, .34);
   }
 
-  .v21-mobile-sheet-backdrop[hidden] {
+  .cy-mobile-sheet-backdrop[hidden] {
     display: none !important;
   }
 
-  body.v21-mobile-account-sheet-open,
-  body.v21-mobile-ledger-tools-open {
+  body.cy-mobile-account-sheet-open,
+  body.cy-mobile-ledger-tools-open {
     overflow: hidden;
   }
 
@@ -2697,7 +2697,7 @@
     display: none !important;
   }
 
-  .v21-ledger-context {
+  .cy-ledger-context {
     margin: 0 !important;
   }
 
@@ -2726,7 +2726,7 @@
     text-align: center;
   }
 
-  .v21-ledger-summary-bar {
+  .cy-ledger-summary-bar {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) auto !important;
     align-items: start;
@@ -2744,12 +2744,12 @@
     line-height: 1.45;
   }
 
-  .v21-summary-actions,
+  .cy-summary-actions,
   .ledger-view-tools {
     display: none !important;
   }
 
-  .v21-mobile-ledger-more {
+  .cy-mobile-ledger-more {
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
@@ -2833,7 +2833,7 @@
   }
 
   /* Mobile ledger tool sheet */
-  .v21-mobile-tools-sheet {
+  .cy-mobile-tools-sheet {
     position: fixed;
     z-index: 101;
     right: 0;
@@ -2847,11 +2847,11 @@
     box-shadow: 0 -12px 32px rgba(31, 42, 55, .20);
   }
 
-  .v21-mobile-tools-sheet[hidden] {
+  .cy-mobile-tools-sheet[hidden] {
     display: none !important;
   }
 
-  .v21-mobile-sheet-handle {
+  .cy-mobile-sheet-handle {
     width: 38px;
     height: 4px;
     margin: -8px auto 2px;
@@ -2859,13 +2859,13 @@
     background: #cbd3db;
   }
 
-  .v21-mobile-tools-sheet h3 {
+  .cy-mobile-tools-sheet h3 {
     margin: 0 0 4px;
     color: #2f3d4c;
     font-size: 16px;
   }
 
-  .v21-mobile-tools-sheet button {
+  .cy-mobile-tools-sheet button {
     width: 100%;
     min-height: 46px;
     border: 1px solid #d8e0e7;
@@ -2920,7 +2920,7 @@
     font-size: 17px !important;
   }
 
-  .v21-mobile-account-menu-button {
+  .cy-mobile-account-menu-button {
     max-width: 126px;
     padding-inline: 8px;
     font-size: 11.5px;
@@ -2947,7 +2947,7 @@
   }
 }
 
-/* V0.21.0 Build 11 - Desktop isolation hotfix after the phone-first Build 10 layer. */
+/* Desktop isolation hotfix after the phone-first Build 10 layer. */
 
 /* Build 10 creates mobile-only controls in the DOM. They must never participate in Tablet/Desktop layout. */
 @media (min-width: 768px) {
@@ -2961,7 +2961,7 @@
     display: none !important;
   }
 
-  body.v21-mobile-app {
+  body.cy-mobile-app {
     padding-bottom: 0 !important;
   }
 }
@@ -3020,7 +3020,7 @@
   }
 }
 
-/* V0.21.5 Build 10 - mobile opening/settings/lock controls. Auth/CYID unchanged. */
+/* mobile opening/settings/lock controls. Auth/CYID unchanged. */
 @media (max-width: 767px) {
   .topbar {
     border-bottom: 0 !important;
@@ -3153,7 +3153,7 @@
     color: #8a4a44 !important;
   }
 
-  .v0215-mobile-save-message {
+  .cy-mobile-save-message {
     grid-area: message !important;
     display: block !important;
     min-height: 18px !important;
@@ -3167,19 +3167,19 @@
     transition: opacity 400ms ease;
   }
 
-  .v0215-mobile-save-message.error {
+  .cy-mobile-save-message.error {
     color: #a72b22 !important;
   }
 
-  .v0215-mobile-save-message.is-visible {
+  .cy-mobile-save-message.is-visible {
     opacity: 1;
   }
 
-  .v0215-mobile-save-message.is-fading {
+  .cy-mobile-save-message.is-fading {
     opacity: 0;
   }
 
-  .entry-card.v0215-mobile-editing #saveButton {
+  .entry-card.cy-mobile-editing #saveButton {
     font-weight: 750 !important;
   }
 
@@ -3341,7 +3341,7 @@
     display: none !important;
   }
 
-  .v21-ledger-context {
+  .cy-ledger-context {
     margin: 0 !important;
   }
 
@@ -3353,13 +3353,13 @@
     width: 100% !important;
   }
 
-  .ledger-month-tools.v0215-toolbar-ready {
+  .ledger-month-tools.cy-toolbar-ready {
     grid-template-columns: 48px 32px minmax(0, 1fr) 32px 48px !important;
   }
 
-  .ledger-month-tools.v0215-toolbar-ready > #mobileLedgerBalanceButton { grid-column: 1 !important; }
-  .ledger-month-tools.v0215-toolbar-ready > #ledgerPrevMonth { grid-column: 2 !important; }
-  .ledger-month-tools.v0215-toolbar-ready > #ledgerMonthSlot {
+  .ledger-month-tools.cy-toolbar-ready > #mobileLedgerBalanceButton { grid-column: 1 !important; }
+  .ledger-month-tools.cy-toolbar-ready > #ledgerPrevMonth { grid-column: 2 !important; }
+  .ledger-month-tools.cy-toolbar-ready > #ledgerMonthSlot {
     grid-column: 3 !important;
     position: relative !important;
     box-sizing: border-box !important;
@@ -3372,8 +3372,8 @@
     border-radius: 7px !important;
     background: #fff !important;
   }
-  .ledger-month-tools.v0215-toolbar-ready > #ledgerNextMonth { grid-column: 4 !important; }
-  .ledger-month-tools.v0215-toolbar-ready > #mobileLedgerMoreButton { grid-column: 5 !important; }
+  .ledger-month-tools.cy-toolbar-ready > #ledgerNextMonth { grid-column: 4 !important; }
+  .ledger-month-tools.cy-toolbar-ready > #mobileLedgerMoreButton { grid-column: 5 !important; }
 
   #ledgerMonthSlot > .month-picker {
     position: absolute !important;
@@ -3471,7 +3471,7 @@
     display: none !important;
   }
 
-  .v21-ledger-summary-bar {
+  .cy-ledger-summary-bar {
     display: block !important;
     margin-top: 5px !important;
   }
@@ -3538,12 +3538,12 @@
     text-align: center !important;
   }
 
-  .v21-summary-actions,
+  .cy-summary-actions,
   .ledger-view-tools {
     display: none !important;
   }
 
-  .v21-mobile-ledger-more {
+  .cy-mobile-ledger-more {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -3664,7 +3664,7 @@
   }
 
   .ledger-card tbody > tr.ledger-row:not(.inline-editing) {
-    --v0215-swipe-x: 0px;
+    --cy-swipe-x: 0px;
     box-sizing: border-box !important;
     position: relative !important;
     display: grid !important;
@@ -3700,11 +3700,11 @@
     inset: 0;
     z-index: 1;
     background: #fff;
-    transform: translateX(var(--v0215-swipe-x));
+    transform: translateX(var(--cy-swipe-x));
   }
 
-  .ledger-card tbody > tr.ledger-row.v0215-swipe-animate:not(.inline-editing)::before,
-  .ledger-card tbody > tr.ledger-row.v0215-swipe-animate:not(.inline-editing) > td:not(:nth-child(8)) {
+  .ledger-card tbody > tr.ledger-row.cy-swipe-animate:not(.inline-editing)::before,
+  .ledger-card tbody > tr.ledger-row.cy-swipe-animate:not(.inline-editing) > td:not(:nth-child(8)) {
     transition: transform 150ms ease-out;
   }
 
@@ -3733,7 +3733,7 @@
     text-align: left !important;
     text-overflow: ellipsis !important;
     align-self: center !important;
-    transform: translateX(var(--v0215-swipe-x));
+    transform: translateX(var(--cy-swipe-x));
   }
 
   .ledger-card tbody > tr.ledger-row:not(.inline-editing) > td::before {
@@ -3895,16 +3895,16 @@
     display: none !important;
   }
 
-  .ledger-card tbody > tr.v0215-edit-highlight:not(.inline-editing)::before {
-    animation: v0215-edit-highlight 1.8s ease-out;
+  .ledger-card tbody > tr.cy-edit-highlight:not(.inline-editing)::before {
+    animation: cy-edit-highlight 1.8s ease-out;
   }
 
-  @keyframes v0215-edit-highlight {
+  @keyframes cy-edit-highlight {
     0% { background: rgba(69, 126, 171, .16); }
     100% { background: #fff; }
   }
 
-  .v0215-ledger-notice {
+  .cy-ledger-notice {
     position: fixed;
     z-index: 2500;
     left: 50%;
@@ -3921,7 +3921,7 @@
     transition: opacity 180ms ease, transform 180ms ease;
   }
 
-  .v0215-ledger-notice.show {
+  .cy-ledger-notice.show {
     opacity: 1;
     transform: translate(-50%, 0);
   }
@@ -4105,32 +4105,32 @@
 
   /* Account/category from More are focused phone settings pages.
      Other desktop/tablet settings stay hidden on phone. */
-  .settings-modal.v0215-mobile-settings-focus[open] {
+  .settings-modal.cy-mobile-settings-focus[open] {
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
   }
 
-  .settings-modal.v0215-mobile-settings-focus > .modal-header {
+  .settings-modal.cy-mobile-settings-focus > .modal-header {
     flex: 0 0 auto !important;
   }
 
-  .settings-modal.v0215-mobile-settings-focus > .modal-header p {
+  .settings-modal.cy-mobile-settings-focus > .modal-header p {
     display: none !important;
   }
 
-  .settings-modal.v0215-mobile-settings-focus .settings-layout {
+  .settings-modal.cy-mobile-settings-focus .settings-layout {
     flex: 1 1 auto !important;
     min-height: 0 !important;
     display: block !important;
     overflow: hidden !important;
   }
 
-  .settings-modal.v0215-mobile-settings-focus .settings-nav {
+  .settings-modal.cy-mobile-settings-focus .settings-nav {
     display: none !important;
   }
 
-  .settings-modal.v0215-mobile-settings-focus .settings-content {
+  .settings-modal.cy-mobile-settings-focus .settings-content {
     box-sizing: border-box !important;
     height: 100% !important;
     min-height: 0 !important;
@@ -4140,7 +4140,7 @@
   }
 
   /* Month lock is a small direct action, never the full Settings dialog. */
-  .v0215-mobile-lock-dialog {
+  .cy-mobile-lock-dialog {
     box-sizing: border-box !important;
     width: min(330px, calc(100vw - 28px)) !important;
     max-width: none !important;
@@ -4154,11 +4154,11 @@
     background: #fff !important;
   }
 
-  .v0215-mobile-lock-dialog::backdrop {
+  .cy-mobile-lock-dialog::backdrop {
     background: rgba(30, 39, 51, .28) !important;
   }
 
-  .v0215-mobile-lock-head {
+  .cy-mobile-lock-head {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) auto !important;
     align-items: start !important;
@@ -4167,19 +4167,19 @@
     border-bottom: 1px solid #edf0f3 !important;
   }
 
-  .v0215-mobile-lock-head h2 {
+  .cy-mobile-lock-head h2 {
     margin: 0 !important;
     color: #2c3a4a !important;
     font-size: 17px !important;
   }
 
-  .v0215-mobile-lock-head p {
+  .cy-mobile-lock-head p {
     margin: 3px 0 0 !important;
     color: #718092 !important;
     font-size: 11px !important;
   }
 
-  .v0215-mobile-lock-head .icon-button {
+  .cy-mobile-lock-head .icon-button {
     width: 30px !important;
     min-width: 30px !important;
     height: 30px !important;
@@ -4191,32 +4191,32 @@
     font-size: 24px !important;
   }
 
-  .v0215-mobile-lock-body {
+  .cy-mobile-lock-body {
     display: grid !important;
     gap: 6px !important;
     padding: 12px 14px 8px !important;
   }
 
-  .v0215-mobile-lock-body p {
+  .cy-mobile-lock-body p {
     margin: 0 !important;
     color: #344355 !important;
     font-size: 12px !important;
     line-height: 1.45 !important;
   }
 
-  .v0215-mobile-lock-note {
+  .cy-mobile-lock-note {
     color: #718092 !important;
     font-size: 10.5px !important;
   }
 
-  .v0215-mobile-lock-actions {
+  .cy-mobile-lock-actions {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     gap: 8px !important;
     padding: 8px 14px 12px !important;
   }
 
-  .v0215-mobile-lock-actions button {
+  .cy-mobile-lock-actions button {
     min-height: 36px !important;
     height: 36px !important;
     padding: 0 8px !important;
@@ -4224,14 +4224,14 @@
     font-size: 11px !important;
   }
 
-  .v0215-mobile-lock-message {
+  .cy-mobile-lock-message {
     min-height: 0 !important;
     margin: -5px 14px 10px !important;
     color: #2f7a4c !important;
     font-size: 10px !important;
   }
 
-  .v0215-mobile-lock-message.error {
+  .cy-mobile-lock-message.error {
     color: #a54b45 !important;
   }
 }
@@ -4575,12 +4575,12 @@
   }
 }
 
-/* V0.21.0 Build 1 - wide desktop split workspace
+/* wide desktop split workspace
    >=1360px: sticky quick-entry rail on the left, ledger workspace on the right.
    The approved income/expense segmented slider is intentionally inherited unchanged. */
 
 @media (min-width: 1360px) {
-  .shell.v21-split-layout {
+  .shell.cy-split-layout {
     width: min(1680px, calc(100% - 48px));
     margin: 22px auto 36px;
     display: grid;
@@ -4589,7 +4589,7 @@
     align-items: start;
   }
 
-  .v21-entry-rail {
+  .cy-entry-rail {
     position: sticky;
     top: 88px;
     display: grid;
@@ -4598,7 +4598,7 @@
     max-height: calc(100vh - 106px);
   }
 
-  .v21-entry-rail .entry-card {
+  .cy-entry-rail .entry-card {
     min-width: 0;
     padding: 18px;
     border-width: 1px;
@@ -4607,66 +4607,66 @@
   }
 
   /* Fast-mode recognition: keep the slider as the primary control and restore a soft workspace tint. */
-  .v21-entry-rail .entry-card.entry-income {
+  .cy-entry-rail .entry-card.entry-income {
     border-color: #cfe6d5;
     background: #f4fbf6;
     box-shadow: 0 5px 20px rgba(39, 109, 63, .055);
   }
 
-  .v21-entry-rail .entry-card.entry-expense {
+  .cy-entry-rail .entry-card.entry-expense {
     border-color: #edd1ce;
     background: #fff6f5;
     box-shadow: 0 5px 20px rgba(142, 57, 48, .05);
   }
 
-  .v21-entry-rail .entry-card .section-title {
+  .cy-entry-rail .entry-card .section-title {
     margin-bottom: 15px;
   }
 
-  .v21-entry-rail .entry-card .title-with-badge {
+  .cy-entry-rail .entry-card .title-with-badge {
     flex-wrap: wrap;
   }
 
-  .v21-entry-rail .entry-grid {
+  .cy-entry-rail .entry-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 11px 10px;
     align-items: end;
   }
 
-  .v21-entry-rail .entry-grid > label:nth-child(3),
-  .v21-entry-rail .entry-grid > .summary-field {
+  .cy-entry-rail .entry-grid > label:nth-child(3),
+  .cy-entry-rail .entry-grid > .summary-field {
     grid-column: 1 / -1;
   }
 
-  .v21-entry-rail .entry-grid > .amount-field {
+  .cy-entry-rail .entry-grid > .amount-field {
     grid-column: 1;
   }
 
-  .v21-entry-rail .entry-grid > #saveButton {
+  .cy-entry-rail .entry-grid > #saveButton {
     grid-column: 2;
     width: 100%;
     min-height: 40px;
   }
 
-  .v21-entry-rail .quick-entry-tools {
+  .cy-entry-rail .quick-entry-tools {
     margin-top: 13px;
     padding-top: 12px;
   }
 
-  .v21-entry-rail .quick-tool-row {
+  .cy-entry-rail .quick-tool-row {
     align-items: flex-start;
   }
 
-  .v21-entry-rail .quick-tool-label {
+  .cy-entry-rail .quick-tool-label {
     flex: 0 0 58px;
     padding-top: 5px;
   }
 
-  .v21-entry-rail .quick-chip-list {
+  .cy-entry-rail .quick-chip-list {
     min-width: 0;
   }
 
-  .v21-entry-rail .keyboard-hint {
+  .cy-entry-rail .keyboard-hint {
     margin: 12px 0 0;
     padding-top: 10px;
     border-top: 1px solid rgba(129, 142, 158, .14);
@@ -4674,7 +4674,7 @@
   }
 
   /* Input confirmation becomes an inline activity panel below quick entry. */
-  .confirmation-drawer.v21-inline-confirmation {
+  .confirmation-drawer.cy-inline-confirmation {
     position: relative;
     inset: auto;
     z-index: 1;
@@ -4694,35 +4694,35 @@
     pointer-events: auto;
   }
 
-  .confirmation-drawer.v21-inline-confirmation.open {
+  .confirmation-drawer.cy-inline-confirmation.open {
     transform: none;
   }
 
-  .v21-inline-confirmation .confirmation-drawer-header {
+  .cy-inline-confirmation .confirmation-drawer-header {
     min-height: 46px;
     padding: 11px 13px 9px;
     border-bottom: 1px solid #edf0f4;
     background: #fff;
   }
 
-  .v21-inline-confirmation .confirmation-drawer-header h2 {
+  .cy-inline-confirmation .confirmation-drawer-header h2 {
     font-size: 14px;
     font-weight: 700;
   }
 
-  .v21-inline-confirmation .confirmation-drawer-header .hint {
+  .cy-inline-confirmation .confirmation-drawer-header .hint {
     margin: 0 0 0 auto;
     color: #8a95a5;
     font-size: 10.5px;
   }
 
-  .v21-inline-confirmation .confirmation-drawer-close,
-  .v21-inline-confirmation .confirmation-drawer-collapse,
-  body.v21-wide-split > .confirmation-edge-open {
+  .cy-inline-confirmation .confirmation-drawer-close,
+  .cy-inline-confirmation .confirmation-drawer-collapse,
+  body.cy-wide-split > .confirmation-edge-open {
     display: none !important;
   }
 
-  .v21-inline-confirmation .confirmation-list {
+  .cy-inline-confirmation .confirmation-list {
     height: auto;
     max-height: 270px;
     padding: 7px;
@@ -4731,14 +4731,14 @@
     background: #f8fafc;
   }
 
-  .v21-inline-confirmation .confirmation-empty {
+  .cy-inline-confirmation .confirmation-empty {
     padding: 15px 10px;
     color: #8a95a5;
     font-size: 12px;
     text-align: center;
   }
 
-  .v21-inline-confirmation .confirmation-item {
+  .cy-inline-confirmation .confirmation-item {
     display: block;
     min-height: 0;
     margin-bottom: 6px;
@@ -4749,11 +4749,11 @@
     background: #fff;
   }
 
-  .v21-inline-confirmation .confirmation-item:last-child {
+  .cy-inline-confirmation .confirmation-item:last-child {
     margin-bottom: 0;
   }
 
-  .v21-inline-confirmation .confirmation-main {
+  .cy-inline-confirmation .confirmation-main {
     overflow: visible;
     color: #354254;
     font-size: 11.5px;
@@ -4761,55 +4761,55 @@
     white-space: normal;
   }
 
-  .v21-inline-confirmation .confirmation-status {
+  .cy-inline-confirmation .confirmation-status {
     display: block;
     margin-top: 3px;
     font-size: 10.5px;
   }
 
   /* Ledger owns the wide work area rather than sitting below the input card. */
-  .v21-split-layout > .ledger-card {
+  .cy-split-layout > .ledger-card {
     min-width: 0;
     min-height: calc(100vh - 126px);
     margin: 0;
     align-self: stretch;
   }
 
-  .v21-split-layout > .ledger-card .ledger-title {
+  .cy-split-layout > .ledger-card .ledger-title {
     padding: 18px 20px 13px;
   }
 
-  .v21-split-layout > .ledger-card #monthSummary {
+  .cy-split-layout > .ledger-card #monthSummary {
     margin-top: 7px;
   }
 
-  .v21-split-layout > .ledger-card .ledger-desktop-tools {
+  .cy-split-layout > .ledger-card .ledger-desktop-tools {
     grid-template-columns: auto minmax(280px, 1fr) auto;
     padding: 9px 12px;
   }
 
-  .v21-split-layout > .ledger-card .table-wrap {
+  .cy-split-layout > .ledger-card .table-wrap {
     min-width: 0;
   }
 
-  .v21-split-layout > .ledger-card table {
+  .cy-split-layout > .ledger-card table {
     min-width: 900px;
   }
 
-  .v21-split-layout > .ledger-card th,
-  .v21-split-layout > .ledger-card td {
+  .cy-split-layout > .ledger-card th,
+  .cy-split-layout > .ledger-card td {
     padding-left: 11px;
     padding-right: 11px;
   }
 }
 
 @media (min-width: 1600px) {
-  .shell.v21-split-layout {
+  .shell.cy-split-layout {
     grid-template-columns: 420px minmax(0, 1fr);
   }
 }
 
-/* V0.21.0 Build 2 - Desktop button and toolbar hierarchy
+/* Desktop button and toolbar hierarchy
    Presentation-only refinement. The approved income/expense segmented slider is untouched. */
 
 @media (min-width: 1024px) {
@@ -4948,13 +4948,13 @@
 
 @media (min-width: 1360px) {
   /* In the split workspace the save button should not fill half of the left rail. */
-  .v21-entry-rail .entry-grid > #saveButton {
+  .cy-entry-rail .entry-grid > #saveButton {
     width: 126px;
     justify-self: end;
   }
 }
 
-/* V0.21.0 Build 3 - Desktop visual hierarchy and design-system convergence.
+/* Desktop visual hierarchy and design-system convergence.
    Desktop-only visual layer. The approved income/expense slider and mode colors are intentionally untouched. */
 
 @media (min-width: 1024px) {
@@ -5193,25 +5193,25 @@
     letter-spacing: .01em;
   }
 
-  .v21-ledger-context {
+  .cy-ledger-context {
     display: flex;
     align-items: center;
     gap: 9px;
     margin-top: 4px;
   }
 
-  .v21-ledger-context .ledger-month-tools {
+  .cy-ledger-context .ledger-month-tools {
     display: flex;
     align-items: center;
     gap: 4px;
   }
 
-  .v21-ledger-context .month-picker {
+  .cy-ledger-context .month-picker {
     display: block;
     margin: 0;
   }
 
-  .v21-ledger-context .month-picker > span {
+  .cy-ledger-context .month-picker > span {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -5400,7 +5400,7 @@
     color: #334155;
   }
 
-  .ledger-account-header.v21-account-group-active {
+  .ledger-account-header.cy-account-group-active {
     color: #315f8a;
   }
 
@@ -5424,17 +5424,17 @@
     font-weight: 400;
   }
 
-  .v21-inline-confirmation .confirmation-drawer-header h2 {
+  .cy-inline-confirmation .confirmation-drawer-header h2 {
     font-weight: 600;
   }
 
-  .v21-inline-confirmation .confirmation-main {
+  .cy-inline-confirmation .confirmation-main {
     font-size: 12.5px;
     font-weight: 400;
   }
 
-  .v21-inline-confirmation .confirmation-status,
-  .v21-inline-confirmation .confirmation-drawer-header .hint {
+  .cy-inline-confirmation .confirmation-status,
+  .cy-inline-confirmation .confirmation-drawer-header .hint {
     font-weight: 400;
   }
 
@@ -5451,12 +5451,12 @@
     font-weight: 500;
   }
 
-  .v21-data-pane {
+  .cy-data-pane {
     display: grid;
     gap: 14px;
   }
 
-  .v21-data-section {
+  .cy-data-section {
     display: grid;
     gap: 8px;
     padding: 14px;
@@ -5465,14 +5465,14 @@
     background: #fbfcfd;
   }
 
-  .v21-data-section h4 {
+  .cy-data-section h4 {
     margin: 0;
     color: #344054;
     font-size: 13.5px;
     font-weight: 600;
   }
 
-  .v21-data-section p {
+  .cy-data-section p {
     margin: 0;
     color: #7b8796;
     font-size: 12px;
@@ -5480,13 +5480,13 @@
     line-height: 1.55;
   }
 
-  .v21-data-actions {
+  .cy-data-actions {
     display: flex;
     gap: 7px;
     margin-top: 2px;
   }
 
-  .v21-data-actions #ledgerExcelImport {
+  .cy-data-actions #ledgerExcelImport {
     min-height: 30px;
     padding: 5px 10px;
     border: 1px solid #dde3ea;
@@ -5499,25 +5499,25 @@
 }
 
 @media (min-width: 1360px) {
-  .v21-entry-rail .entry-grid > #saveButton {
+  .cy-entry-rail .entry-grid > #saveButton {
     width: 110px;
   }
 
-  .v21-split-layout > .ledger-card {
+  .cy-split-layout > .ledger-card {
     min-height: 0;
     align-self: start;
   }
 
-  .v21-split-layout > .ledger-card .table-wrap {
+  .cy-split-layout > .ledger-card .table-wrap {
     min-height: 250px;
   }
 
-  .v21-split-layout > .ledger-card .ledger-desktop-tools {
+  .cy-split-layout > .ledger-card .ledger-desktop-tools {
     grid-template-columns: auto minmax(260px, 1fr) auto;
   }
 }
 
-/* V0.21.0 Build 5 - Desktop workspace polish after production visual acceptance.
+/* Desktop workspace polish after production visual acceptance.
    Desktop-only. Income/expense slider styling and approved mode colors stay unchanged;
    only the fieldset wrapper is forced transparent to remove the stray white rectangle. */
 
@@ -5539,19 +5539,19 @@
   }
 
   /* Header: normal connectivity is silent; only global warnings sit beside the product title. */
-  .v21-brand-line {
+  .cy-brand-line {
     display: flex;
     align-items: center;
     gap: 10px;
     min-width: 0;
   }
 
-  .v21-brand-line .status,
-  .v21-brand-line .status.ok {
+  .cy-brand-line .status,
+  .cy-brand-line .status.ok {
     display: none;
   }
 
-  .v21-brand-line .status.warn {
+  .cy-brand-line .status.warn {
     display: inline-flex;
     align-items: center;
     min-height: 24px;
@@ -5565,7 +5565,7 @@
     white-space: nowrap;
   }
 
-  .v21-brand-line .status.warn::before {
+  .cy-brand-line .status.warn::before {
     left: 8px;
     width: 6px;
     height: 6px;
@@ -5621,7 +5621,7 @@
     padding-bottom: 10px;
   }
 
-  .v21-ledger-summary-bar {
+  .cy-ledger-summary-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -5629,20 +5629,20 @@
     margin-top: 5px;
   }
 
-  .v21-ledger-summary-bar #monthSummary {
+  .cy-ledger-summary-bar #monthSummary {
     flex: 1 1 auto;
     min-width: 0;
     margin-top: 0;
   }
 
-  .v21-summary-actions {
+  .cy-summary-actions {
     display: flex;
     align-items: center;
     gap: 6px;
     flex: 0 0 auto;
   }
 
-  .v21-summary-actions .secondary.compact {
+  .cy-summary-actions .secondary.compact {
     min-height: 28px;
     height: 28px;
     padding: 3px 9px;
@@ -5654,7 +5654,7 @@
     font-weight: 500;
   }
 
-  .v21-summary-actions .secondary.compact:hover:not(:disabled) {
+  .cy-summary-actions .secondary.compact:hover:not(:disabled) {
     border-color: #d4dbe4;
     background: #eef1f4;
     color: #344054;
@@ -5809,12 +5809,12 @@
 }
 
 @media (min-width: 1360px) {
-  .v21-split-layout > .ledger-card .ledger-desktop-tools {
+  .cy-split-layout > .ledger-card .ledger-desktop-tools {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 
-/* V0.21.0 Build 6 - compact desktop dialog and header account cluster.
+/* compact desktop dialog and header account cluster.
    Desktop-only. Approved quick-entry mode colors, slider, ledger structure and accounting behavior stay unchanged. */
 
 @media (min-width: 1024px) {
@@ -5846,7 +5846,7 @@
     color: #344054;
   }
 
-  .v21-account-cluster {
+  .cy-account-cluster {
     display: flex;
     align-items: stretch;
     min-height: 30px;
@@ -5856,7 +5856,7 @@
     background: #f8f9fb;
   }
 
-  .v21-account-cluster .current-user {
+  .cy-account-cluster .current-user {
     display: flex;
     align-items: baseline;
     gap: 7px;
@@ -5871,21 +5871,21 @@
     white-space: nowrap;
   }
 
-  .v21-account-cluster .current-user-main,
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-main,
+  .cy-account-cluster .current-user-role {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .v21-account-cluster .current-user-main {
+  .cy-account-cluster .current-user-main {
     color: #344054;
     font-size: 12.5px;
     font-weight: 500;
     line-height: 1.2;
   }
 
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-role {
     display: inline-flex;
     align-items: center;
     gap: 7px;
@@ -5896,13 +5896,13 @@
     line-height: 1.2;
   }
 
-  .v21-account-cluster .current-user-role::before {
+  .cy-account-cluster .current-user-role::before {
     content: "·";
     color: #b0b8c3;
     font-size: 12px;
   }
 
-  .v21-account-cluster #logoutButton {
+  .cy-account-cluster #logoutButton {
     flex: 0 0 auto;
     min-width: 52px;
     min-height: 28px;
@@ -5919,7 +5919,7 @@
     line-height: 1;
   }
 
-  .v21-account-cluster #logoutButton:hover:not(:disabled) {
+  .cy-account-cluster #logoutButton:hover:not(:disabled) {
     background: #eef1f4;
     color: #344054;
   }
@@ -6077,7 +6077,7 @@
   }
 }
 
-/* V0.21.0 Build 7 - Desktop settings cleanup and header alignment.
+/* Desktop settings cleanup and header alignment.
    Desktop-only. Keeps approved quick-entry colors, slider, ledger behavior and accounting semantics unchanged. */
 
 @media (min-width: 1024px) {
@@ -6093,7 +6093,7 @@
     order: 0 !important;
   }
 
-  .v21-account-cluster {
+  .cy-account-cluster {
     order: 1 !important;
     display: flex;
     align-items: center;
@@ -6105,7 +6105,7 @@
     background: #f8f9fb;
   }
 
-  .v21-account-cluster .current-user {
+  .cy-account-cluster .current-user {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -6117,8 +6117,8 @@
     line-height: 1;
   }
 
-  .v21-account-cluster .current-user-main,
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-main,
+  .cy-account-cluster .current-user-role {
     display: inline-flex;
     align-items: center;
     overflow: visible;
@@ -6127,13 +6127,13 @@
     white-space: nowrap;
   }
 
-  .v21-account-cluster .current-user-main {
+  .cy-account-cluster .current-user-main {
     color: #273548;
     font-size: 12.5px;
     font-weight: 600;
   }
 
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-role {
     gap: 8px;
     margin: 0;
     color: #667085;
@@ -6141,7 +6141,7 @@
     font-weight: 400;
   }
 
-  .v21-account-cluster .current-user-role::before {
+  .cy-account-cluster .current-user-role::before {
     content: "·";
     display: inline-flex;
     align-items: center;
@@ -6150,7 +6150,7 @@
     line-height: 1;
   }
 
-  .v21-account-cluster #logoutButton {
+  .cy-account-cluster #logoutButton {
     align-self: stretch;
     display: inline-flex;
     align-items: center;
@@ -6238,11 +6238,11 @@
   }
 
   /* Build 3 accidentally forced Data Management visible on every tab. */
-  .settings-pane.v21-data-pane {
+  .settings-pane.cy-data-pane {
     display: none;
   }
 
-  .settings-pane.v21-data-pane.active {
+  .settings-pane.cy-data-pane.active {
     display: grid;
     gap: 10px;
   }
@@ -6256,7 +6256,7 @@
   .backup-restore-note,
   .migration-heading-v19 .hint,
   .migration-privacy-v19,
-  .v21-data-section > p {
+  .cy-data-section > p {
     display: none !important;
   }
 
@@ -6383,7 +6383,7 @@
     font-size: 12px;
   }
 
-  .v21-data-section {
+  .cy-data-section {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -6394,17 +6394,17 @@
     background: #fbfcfd;
   }
 
-  .v21-data-section h4 {
+  .cy-data-section h4 {
     margin: 0;
     font-size: 13px;
     font-weight: 600;
   }
 
-  .v21-data-actions {
+  .cy-data-actions {
     margin: 0;
   }
 
-  .v21-data-actions #ledgerExcelImport {
+  .cy-data-actions #ledgerExcelImport {
     min-height: 30px;
     height: 30px;
     padding: 3px 9px;
@@ -6428,49 +6428,49 @@
   }
 }
 
-/* V0.21.0 Build 12 - Desktop readability, compact identity badge, custom month picker and quick-entry proportions. */
+/* Desktop readability, compact identity badge, custom month picker and quick-entry proportions. */
 
-.v21-month-picker-custom {
+.cy-month-picker-custom {
   display: none;
 }
 
 @media (min-width: 1024px) {
   /* Header identity: same-size role text, clearer bracketed role marker, same medal cue. */
-  .v21-account-cluster .current-user {
+  .cy-account-cluster .current-user {
     align-items: center !important;
     gap: 7px !important;
   }
 
-  .v21-account-cluster .current-user-main,
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-main,
+  .cy-account-cluster .current-user-role {
     font-size: 13.5px !important;
     line-height: 1.2 !important;
   }
 
-  .v21-account-cluster .current-user-main {
+  .cy-account-cluster .current-user-main {
     font-weight: 600 !important;
   }
 
-  .v21-account-cluster .current-user-role {
+  .cy-account-cluster .current-user-role {
     gap: 0 !important;
     font-weight: 500 !important;
   }
 
-  .v21-account-cluster .current-user-role::before {
+  .cy-account-cluster .current-user-role::before {
     content: "[" !important;
     margin: 0 !important;
     color: currentColor !important;
     font-size: inherit !important;
   }
 
-  .v21-account-cluster .current-user-role::after {
+  .cy-account-cluster .current-user-role::after {
     content: "]";
     color: currentColor;
     font-size: inherit;
   }
 
   .topbar #settingsButton,
-  .v21-account-cluster #logoutButton {
+  .cy-account-cluster #logoutButton {
     font-size: 13.5px !important;
   }
 
@@ -6495,7 +6495,7 @@
     line-height: 1.45 !important;
   }
 
-  .v21-summary-actions .secondary.compact,
+  .cy-summary-actions .secondary.compact,
   .ledger-desktop-tools .secondary.compact,
   #ledgerSearchClear,
   #ledgerExcelExport,
@@ -6516,12 +6516,12 @@
     font-size: 14.5px !important;
   }
 
-  .v21-inline-confirmation .confirmation-drawer-header .hint,
-  .v21-inline-confirmation .confirmation-status {
+  .cy-inline-confirmation .confirmation-drawer-header .hint,
+  .cy-inline-confirmation .confirmation-status {
     font-size: 12.5px !important;
   }
 
-  .v21-inline-confirmation .confirmation-main,
+  .cy-inline-confirmation .confirmation-main,
   .settings-tab,
   .settings-pane input,
   .settings-pane select,
@@ -6581,16 +6581,16 @@
     pointer-events: none !important;
   }
 
-  .v21-month-picker-custom {
+  .cy-month-picker-custom {
     position: relative;
     display: block;
   }
 
-  .v21-month-picker-custom[hidden] {
+  .cy-month-picker-custom[hidden] {
     display: none !important;
   }
 
-  .v21-month-picker-trigger {
+  .cy-month-picker-trigger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -6608,18 +6608,18 @@
     cursor: pointer;
   }
 
-  .v21-month-picker-trigger:hover,
-  .v21-month-picker-trigger[aria-expanded="true"] {
+  .cy-month-picker-trigger:hover,
+  .cy-month-picker-trigger[aria-expanded="true"] {
     background: #f4f7fa;
   }
 
-  .v21-month-picker-caret {
+  .cy-month-picker-caret {
     color: #778596;
     font-size: 11px;
     font-weight: 500;
   }
 
-  .v21-month-picker-popover {
+  .cy-month-picker-popover {
     position: absolute;
     z-index: 85;
     top: calc(100% + 7px);
@@ -6633,11 +6633,11 @@
     box-shadow: 0 12px 30px rgba(31, 42, 55, .16);
   }
 
-  .v21-month-picker-popover[hidden] {
+  .cy-month-picker-popover[hidden] {
     display: none !important;
   }
 
-  .v21-month-picker-head {
+  .cy-month-picker-head {
     display: grid;
     grid-template-columns: 34px minmax(0, 1fr) 34px;
     align-items: center;
@@ -6645,8 +6645,8 @@
     margin-bottom: 8px;
   }
 
-  .v21-month-picker-nav,
-  .v21-month-picker-year {
+  .cy-month-picker-nav,
+  .cy-month-picker-year {
     height: 32px;
     border: 0;
     border-radius: 7px;
@@ -6655,29 +6655,29 @@
     cursor: pointer;
   }
 
-  .v21-month-picker-nav {
+  .cy-month-picker-nav {
     font-size: 20px;
     font-weight: 400;
   }
 
-  .v21-month-picker-year {
+  .cy-month-picker-year {
     font-size: 15px;
     font-weight: 600;
   }
 
-  .v21-month-picker-nav:hover,
-  .v21-month-picker-year:hover {
+  .cy-month-picker-nav:hover,
+  .cy-month-picker-year:hover {
     background: #f1f5f8;
   }
 
-  .v21-month-picker-grid {
+  .cy-month-picker-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 5px;
   }
 
-  .v21-month-choice,
-  .v21-year-choice {
+  .cy-month-choice,
+  .cy-year-choice {
     min-width: 0;
     height: 34px;
     padding: 0 4px;
@@ -6690,34 +6690,34 @@
     cursor: pointer;
   }
 
-  .v21-month-choice:hover,
-  .v21-year-choice:hover {
+  .cy-month-choice:hover,
+  .cy-year-choice:hover {
     background: #f1f5f8;
   }
 
-  .v21-month-choice.active,
-  .v21-year-choice.active {
+  .cy-month-choice.active,
+  .cy-year-choice.active {
     border-color: #6c9bc4;
     background: #eaf3fb;
     color: #184f7c;
     font-weight: 600;
   }
 
-  .v21-year-choice.current:not(.active) {
+  .cy-year-choice.current:not(.active) {
     border-color: #d9e2ea;
   }
 }
 
-/* V0.21.0 Build 13 - Desktop connection-status suppression, month-picker alignment,
+/* Desktop connection-status suppression, month-picker alignment,
    compact opening-balance utility dialog and direct account/category management access. */
 
-.v21-header-management-button {
+.cy-header-management-button {
   display: none;
 }
 
 @media (min-width: 1024px) {
   /* High-frequency managers move beside Settings; regular Settings no longer duplicates those tabs. */
-  .v21-header-management-button {
+  .cy-header-management-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -6733,39 +6733,39 @@
     line-height: 1;
   }
 
-  .v21-header-management-button:hover:not(:disabled) {
+  .cy-header-management-button:hover:not(:disabled) {
     border-color: #cfd7e1;
     background: #eef1f4;
     color: #344054;
   }
 
-  #settingsDialog:not(.v21-management-mode) .settings-nav [data-settings-tab="accounts"],
-  #settingsDialog:not(.v21-management-mode) .settings-nav [data-settings-tab="categories"] {
+  #settingsDialog:not(.cy-management-mode) .settings-nav [data-settings-tab="accounts"],
+  #settingsDialog:not(.cy-management-mode) .settings-nav [data-settings-tab="categories"] {
     display: none !important;
   }
 
-  #settingsDialog.v21-management-mode .settings-layout {
+  #settingsDialog.cy-management-mode .settings-layout {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  #settingsDialog.v21-management-mode .settings-nav {
+  #settingsDialog.cy-management-mode .settings-nav {
     display: none !important;
   }
 
-  #settingsDialog.v21-management-mode .settings-content {
+  #settingsDialog.cy-management-mode .settings-content {
     min-width: 0;
   }
 
   /* Month picker header: three equal-height controls with true center alignment. */
-  .v21-month-picker-head {
+  .cy-month-picker-head {
     grid-template-columns: 36px minmax(0, 1fr) 36px !important;
     align-items: stretch !important;
     gap: 6px !important;
     min-height: 34px;
   }
 
-  .v21-month-picker-nav,
-  .v21-month-picker-year {
+  .cy-month-picker-nav,
+  .cy-month-picker-year {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -6779,11 +6779,11 @@
     vertical-align: middle !important;
   }
 
-  .v21-month-picker-nav {
+  .cy-month-picker-nav {
     font-size: 19px !important;
   }
 
-  .v21-month-picker-year {
+  .cy-month-picker-year {
     font-size: 15px !important;
   }
 
@@ -6843,11 +6843,11 @@
   }
 }
 
-/* V0.21.0 Build 14 - Desktop manager redesign, inline naming and unified month pickers. */
+/* Desktop manager redesign, inline naming and unified month pickers. */
 
 @media (min-width: 1024px) {
   /* Header management buttons use the same secondary-button language as Settings. */
-  .v21-header-management-button {
+  .cy-header-management-button {
     min-height: 32px !important;
     height: auto !important;
     padding: 4px 12px !important;
@@ -6860,23 +6860,23 @@
     line-height: normal !important;
   }
 
-  .v21-header-management-button:hover:not(:disabled) {
+  .cy-header-management-button:hover:not(:disabled) {
     border-color: #9eaab6 !important;
     background: #eef2f5 !important;
     color: #283542 !important;
   }
 
   /* Ledger month trigger is clickable without a dropdown-caret affordance. */
-  .v21-month-picker-caret {
+  .cy-month-picker-caret {
     display: none !important;
   }
 
-  .v21-month-picker-trigger {
+  .cy-month-picker-trigger {
     gap: 0 !important;
   }
 
   /* All visible Desktop month fields use the same custom picker; native controls remain data sources only. */
-  .v21-native-month-source {
+  .cy-native-month-source {
     position: absolute !important;
     width: 1px !important;
     height: 1px !important;
@@ -6890,11 +6890,11 @@
     pointer-events: none !important;
   }
 
-  .v21-month-picker-field {
+  .cy-month-picker-field {
     width: 100%;
   }
 
-  .v21-month-picker-field-trigger {
+  .cy-month-picker-field-trigger {
     width: 100%;
     min-width: 0;
     height: 34px;
@@ -6908,66 +6908,66 @@
     font-weight: 400;
   }
 
-  .v21-month-picker-field-trigger:hover,
-  .v21-month-picker-field-trigger[aria-expanded="true"] {
+  .cy-month-picker-field-trigger:hover,
+  .cy-month-picker-field-trigger[aria-expanded="true"] {
     border-color: #8297aa;
     background: #fff;
   }
 
-  .v21-month-picker-field .v21-month-picker-popover {
+  .cy-month-picker-field .cy-month-picker-popover {
     left: 0;
     transform: none;
   }
 
   /* Account manager is a small utility dialog, not a full Settings workspace. */
-  #settingsDialog.v21-management-mode[data-management-pane="accounts"] {
+  #settingsDialog.cy-management-mode[data-management-pane="accounts"] {
     width: min(430px, calc(100vw - 36px)) !important;
     max-width: 430px !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] {
     width: min(640px, calc(100vw - 36px)) !important;
     max-width: 640px !important;
   }
 
-  #settingsDialog.v21-management-mode .settings-layout {
+  #settingsDialog.cy-management-mode .settings-layout {
     min-height: 0 !important;
   }
 
-  #settingsDialog.v21-management-mode .settings-content {
+  #settingsDialog.cy-management-mode .settings-content {
     padding: 12px 14px 14px !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="accounts"] [data-settings-pane="accounts"] > h3,
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] .pane-heading > div:first-child {
+  #settingsDialog.cy-management-mode[data-management-pane="accounts"] [data-settings-pane="accounts"] > h3,
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] .pane-heading > div:first-child {
     display: none !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] .pane-heading {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] .pane-heading {
     justify-content: flex-end;
     margin-bottom: 8px;
   }
 
   /* Account rows: default control + name + inline edit, with only order/delete on the right. */
-  .v21-account-manager-row {
+  .cy-account-manager-row {
     min-height: 40px;
     padding: 5px 7px;
     background: #fff;
   }
 
-  .v21-manager-name-cell {
+  .cy-manager-name-cell {
     gap: 6px;
   }
 
-  .v21-editable-name {
+  .cy-editable-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .v21-default-chip,
-  .v21-favorite-chip {
+  .cy-default-chip,
+  .cy-favorite-chip {
     flex: 0 0 auto;
     min-height: 25px;
     height: 25px;
@@ -6981,33 +6981,33 @@
     cursor: pointer;
   }
 
-  .v21-default-chip.active {
+  .cy-default-chip.active {
     border-color: #cfe5d3;
     background: #eef8f0;
     color: #2f6e3f;
   }
 
-  .v21-default-chip:disabled {
+  .cy-default-chip:disabled {
     opacity: 1;
     cursor: default;
   }
 
-  .v21-favorite-chip {
+  .cy-favorite-chip {
     width: 27px;
     padding: 0;
     border-radius: 6px;
     font-size: 14px;
   }
 
-  .v21-favorite-chip.active {
+  .cy-favorite-chip.active {
     border-color: #e8c86c;
     background: #fff6d8;
     color: #8b6500;
   }
 
-  .v21-edit-name-button,
-  .v21-inline-edit-confirm,
-  .v21-inline-edit-cancel {
+  .cy-edit-name-button,
+  .cy-inline-edit-confirm,
+  .cy-inline-edit-cancel {
     flex: 0 0 27px;
     width: 27px;
     min-width: 27px;
@@ -7021,20 +7021,20 @@
     line-height: 1;
   }
 
-  .v21-edit-name-button {
+  .cy-edit-name-button {
     color: #4d657d;
   }
 
-  .v21-inline-edit-confirm {
+  .cy-inline-edit-confirm {
     border-color: #91b7d8;
     color: #235f91;
   }
 
-  .v21-inline-edit-cancel {
+  .cy-inline-edit-cancel {
     color: #7b8794;
   }
 
-  .v21-inline-name-input {
+  .cy-inline-name-input {
     min-width: 0;
     height: 29px !important;
     min-height: 29px !important;
@@ -7042,25 +7042,25 @@
     font-size: 13.5px !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="accounts"] .inline-add {
+  #settingsDialog.cy-management-mode[data-management-pane="accounts"] .inline-add {
     margin-top: 8px;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="accounts"] .inline-add input,
-  #settingsDialog.v21-management-mode[data-management-pane="accounts"] .inline-add button {
+  #settingsDialog.cy-management-mode[data-management-pane="accounts"] .inline-add input,
+  #settingsDialog.cy-management-mode[data-management-pane="accounts"] .inline-add button {
     height: 32px;
     min-height: 32px;
   }
 
   /* Category manager becomes one grouped list, visually close to the final dropdown hierarchy. */
-  .v21-category-manager-list {
+  .cy-category-manager-list {
     overflow: hidden;
     border: 1px solid #dfe5eb;
     border-radius: 8px;
     background: #fff;
   }
 
-  .v21-category-group {
+  .cy-category-group {
     margin: 0 !important;
     border: 0 !important;
     border-radius: 0 !important;
@@ -7068,11 +7068,11 @@
     background: transparent;
   }
 
-  .v21-category-group + .v21-category-group {
+  .cy-category-group + .cy-category-group {
     border-top: 1px solid #dfe5eb !important;
   }
 
-  .v21-category-group-head {
+  .cy-category-group-head {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) 27px 1fr 28px 28px auto;
     align-items: center;
@@ -7082,21 +7082,21 @@
     background: #f6f8fa !important;
   }
 
-  .v21-category-group-head .category-group-title {
+  .cy-category-group-head .category-group-title {
     min-width: 0;
     font-size: 13.5px;
     font-weight: 600;
   }
 
-  .v21-manager-action-spacer {
+  .cy-manager-action-spacer {
     min-width: 0;
   }
 
-  .v21-category-items {
+  .cy-category-items {
     padding: 0 !important;
   }
 
-  .v21-category-manager-row {
+  .cy-category-manager-row {
     display: grid !important;
     grid-template-columns: 27px minmax(0, 1fr) 27px 28px 28px auto auto;
     align-items: center;
@@ -7106,18 +7106,18 @@
     border-bottom: 1px solid #edf1f4;
   }
 
-  .v21-category-manager-row .v21-editable-name {
+  .cy-category-manager-row .cy-editable-name {
     font-size: 13.5px;
   }
 
-  .v21-category-empty {
+  .cy-category-empty {
     padding: 9px 18px;
     color: #7b8794;
     font-size: 12.5px;
     border-bottom: 1px solid #edf1f4;
   }
 
-  .v21-category-add-row {
+  .cy-category-add-row {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px;
@@ -7126,24 +7126,24 @@
     background: #fcfdfe;
   }
 
-  .v21-category-add-row input,
-  .v21-category-add-row button {
+  .cy-category-add-row input,
+  .cy-category-add-row button {
     min-height: 30px !important;
     height: 30px !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] > .settings-layout .inline-add {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] > .settings-layout .inline-add {
     margin-top: 8px;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] > .settings-layout .inline-add input,
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] > .settings-layout .inline-add button {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] > .settings-layout .inline-add input,
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] > .settings-layout .inline-add button {
     min-height: 32px;
     height: 32px;
   }
 }
 
-/* V0.21.0 Build 15 - refined business managers with drag reorder. */
+/* refined business managers with drag reorder. */
 
 @media (min-width: 1024px) {
   /* Header management actions: identical visual language to Settings. */
@@ -7172,12 +7172,12 @@
   }
 
   /* Account manager: drag -> fixed-width default tag -> name/edit -> delete. */
-  #settingsDialog.v21-management-mode[data-management-pane="accounts"] {
+  #settingsDialog.cy-management-mode[data-management-pane="accounts"] {
     width: min(430px, calc(100vw - 36px)) !important;
     max-width: 430px !important;
   }
 
-  .v21-account-manager-row {
+  .cy-account-manager-row {
     display: grid !important;
     grid-template-columns: 24px 66px minmax(0, 1fr) auto !important;
     align-items: center;
@@ -7188,14 +7188,14 @@
     background: #fff !important;
   }
 
-  .v21-manager-name-cell {
+  .cy-manager-name-cell {
     display: flex;
     align-items: center;
     gap: 5px;
     min-width: 0;
   }
 
-  .v21-default-tag {
+  .cy-default-tag {
     width: 66px;
     min-width: 66px;
     height: 23px;
@@ -7212,22 +7212,22 @@
     cursor: pointer;
   }
 
-  .v21-default-tag.active {
+  .cy-default-tag.active {
     border-color: #cfe3d3;
     background: #f0f8f2;
     color: #336d43;
     cursor: default;
   }
 
-  .v21-default-tag:disabled {
+  .cy-default-tag:disabled {
     opacity: 1;
   }
 
-  .v21-manager-delete {
+  .cy-manager-delete {
     min-width: 42px;
   }
 
-  .v21-drag-handle {
+  .cy-drag-handle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7247,27 +7247,27 @@
     user-select: none;
   }
 
-  .v21-drag-handle:hover {
+  .cy-drag-handle:hover {
     background: #f0f3f6;
     color: #667789;
   }
 
-  .v21-drag-handle:active,
-  .v21-manager-dragging .v21-drag-handle {
+  .cy-drag-handle:active,
+  .cy-manager-dragging .cy-drag-handle {
     cursor: grabbing;
   }
 
-  .v21-is-dragging {
+  .cy-is-dragging {
     opacity: .42;
   }
 
-  .v21-drop-before,
-  .v21-drop-after {
+  .cy-drop-before,
+  .cy-drop-after {
     position: relative;
   }
 
-  .v21-drop-before::before,
-  .v21-drop-after::after {
+  .cy-drop-before::before,
+  .cy-drop-after::after {
     content: "";
     position: absolute;
     z-index: 8;
@@ -7279,24 +7279,24 @@
     pointer-events: none;
   }
 
-  .v21-drop-before::before { top: -2px; }
-  .v21-drop-after::after { bottom: -2px; }
+  .cy-drop-before::before { top: -2px; }
+  .cy-drop-after::after { bottom: -2px; }
 
   /* Category manager: same segmented control as entry + mode tint. */
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] {
     width: min(620px, calc(100vw - 36px)) !important;
     max-width: 620px !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] .settings-content {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] .settings-content {
     padding: 10px 12px 12px !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] .pane-heading {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] .pane-heading {
     display: none !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
     margin: 0;
     padding: 10px;
     border: 1px solid transparent;
@@ -7304,47 +7304,47 @@
     transition: background-color 120ms ease, border-color 120ms ease;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].v21-category-kind-income {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].cy-category-kind-income {
     border-color: #cfe6d5;
     background: #f4fbf6;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].v21-category-kind-expense {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].cy-category-kind-expense {
     border-color: #edd1ce;
     background: #fff6f5;
   }
 
-  .v21-category-toolbar {
+  .cy-category-toolbar {
     display: flex;
     align-items: center;
     justify-content: flex-start;
     margin-bottom: 9px;
   }
 
-  .v21-category-kind-switch {
+  .cy-category-kind-switch {
     width: 156px !important;
     height: 32px !important;
   }
 
-  .v21-category-manager-list {
+  .cy-category-manager-list {
     overflow: hidden;
     border: 1px solid rgba(211, 219, 227, .95);
     border-radius: 8px;
     background: rgba(255, 255, 255, .78);
   }
 
-  .v21-category-group {
+  .cy-category-group {
     margin: 0 !important;
     border: 0 !important;
     border-radius: 0 !important;
     background: transparent !important;
   }
 
-  .v21-category-group + .v21-category-group {
+  .cy-category-group + .cy-category-group {
     border-top: 1px solid #dde4ea !important;
   }
 
-  .v21-category-group-head {
+  .cy-category-group-head {
     display: grid !important;
     grid-template-columns: 24px minmax(0, 1fr) 27px auto !important;
     align-items: center;
@@ -7354,11 +7354,11 @@
     background: rgba(247, 249, 251, .92) !important;
   }
 
-  .v21-category-group-head:has(.v21-inline-name-input) {
+  .cy-category-group-head:has(.cy-inline-name-input) {
     grid-template-columns: 24px minmax(0, 1fr) 27px 27px auto !important;
   }
 
-  .v21-category-group-head .category-group-title {
+  .cy-category-group-head .category-group-title {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -7368,12 +7368,12 @@
     color: #344054;
   }
 
-  .v21-category-items {
+  .cy-category-items {
     padding: 0 !important;
     min-height: 35px;
   }
 
-  .v21-category-manager-row {
+  .cy-category-manager-row {
     display: grid !important;
     grid-template-columns: 24px 27px minmax(0, 1fr) 27px auto !important;
     align-items: center;
@@ -7384,11 +7384,11 @@
     background: rgba(255, 255, 255, .76);
   }
 
-  .v21-category-manager-row:has(.v21-inline-name-input) {
+  .cy-category-manager-row:has(.cy-inline-name-input) {
     grid-template-columns: 24px 27px minmax(0, 1fr) 27px 27px auto !important;
   }
 
-  .v21-category-manager-row .v21-editable-name {
+  .cy-category-manager-row .cy-editable-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -7396,7 +7396,7 @@
     font-size: 13.5px;
   }
 
-  .v21-category-empty {
+  .cy-category-empty {
     min-height: 34px;
     padding: 8px 16px;
     border-bottom: 1px solid #edf1f4;
@@ -7404,7 +7404,7 @@
     font-size: 12px;
   }
 
-  .v21-category-add-row {
+  .cy-category-add-row {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) auto !important;
     gap: 6px !important;
@@ -7413,36 +7413,36 @@
     background: rgba(252, 253, 254, .92);
   }
 
-  .v21-category-add-row input,
-  .v21-category-add-row button {
+  .cy-category-add-row input,
+  .cy-category-add-row button {
     min-height: 30px !important;
     height: 30px !important;
   }
 
-  .v21-category-empty-state {
+  .cy-category-empty-state {
     margin: 0;
     border: 1px dashed #d8e0e6;
     border-radius: 7px;
     background: rgba(255, 255, 255, .65);
   }
 
-  .v21-drop-group {
+  .cy-drop-group {
     box-shadow: inset 0 0 0 2px rgba(77, 136, 187, .28);
   }
 
   /* Group add row belongs to the tinted manager surface. */
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add {
     margin-top: 8px !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add input,
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add button {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add input,
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add button {
     min-height: 32px;
     height: 32px;
   }
 }
 
-/* V0.21.0 Build 16 - optimistic drag, compact account controls and stable category manager. */
+/* optimistic drag, compact account controls and stable category manager. */
 
 @media (min-width: 1024px) {
   /* Header controls: exact visual parity and true vertical centering. */
@@ -7478,19 +7478,19 @@
   }
 
   /* Account manager: compact width, small fixed default tag, quieter edit control. */
-  #settingsDialog.v21-management-mode[data-management-pane="accounts"] {
+  #settingsDialog.cy-management-mode[data-management-pane="accounts"] {
     width: min(360px, calc(100vw - 36px)) !important;
     max-width: 360px !important;
   }
 
-  .v21-account-manager-row {
+  .cy-account-manager-row {
     grid-template-columns: 21px 58px minmax(0, 1fr) auto !important;
     gap: 5px !important;
     min-height: 37px !important;
     padding: 4px 6px !important;
   }
 
-  .v21-account-manager-row .v21-drag-handle {
+  .cy-account-manager-row .cy-drag-handle {
     width: 21px !important;
     min-width: 21px !important;
     height: 25px !important;
@@ -7498,7 +7498,7 @@
     font-size: 14px !important;
   }
 
-  .v21-default-tag {
+  .cy-default-tag {
     width: 58px !important;
     min-width: 58px !important;
     height: 22px !important;
@@ -7508,16 +7508,16 @@
     font-weight: 500 !important;
   }
 
-  .v21-manager-name-cell {
+  .cy-manager-name-cell {
     gap: 8px !important;
   }
 
-  .v21-account-manager-row .v21-editable-name {
+  .cy-account-manager-row .cy-editable-name {
     max-width: 9em;
     font-size: 13px;
   }
 
-  .v21-account-manager-row .v21-edit-name-button {
+  .cy-account-manager-row .cy-edit-name-button {
     flex: 0 0 21px !important;
     width: 21px !important;
     min-width: 21px !important;
@@ -7528,18 +7528,18 @@
     line-height: 1 !important;
   }
 
-  .v21-account-manager-row .v21-edit-name-button[hidden] {
+  .cy-account-manager-row .cy-edit-name-button[hidden] {
     display: none !important;
   }
 
-  .v21-account-manager-row .v21-inline-name-input {
+  .cy-account-manager-row .cy-inline-name-input {
     width: min(116px, 100%) !important;
     max-width: 116px !important;
     min-width: 0 !important;
   }
 
-  .v21-account-manager-row .v21-inline-edit-confirm,
-  .v21-account-manager-row .v21-inline-edit-cancel {
+  .cy-account-manager-row .cy-inline-edit-confirm,
+  .cy-account-manager-row .cy-inline-edit-cancel {
     flex: 0 0 22px !important;
     width: 22px !important;
     min-width: 22px !important;
@@ -7549,31 +7549,31 @@
     font-size: 12px !important;
   }
 
-  .v21-account-manager-row .v21-manager-delete {
+  .cy-account-manager-row .cy-manager-delete {
     min-width: 40px !important;
     padding-inline: 6px !important;
   }
 
   /* While one optimistic reorder is being persisted, keep the new position and block a second drag. */
-  body.v21-reorder-saving .v21-drag-handle {
+  body.cy-reorder-saving .cy-drag-handle {
     pointer-events: none !important;
     opacity: .55;
   }
 
   /* Category manager: only the new slider is visible; old settings-kind buttons never coexist with it. */
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] .pane-heading {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] .pane-heading {
     display: none !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] .settings-kind {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] .settings-kind {
     display: none !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
     padding: 10px !important;
   }
 
-  .v21-category-toolbar {
+  .cy-category-toolbar {
     display: flex !important;
     align-items: center !important;
     justify-content: flex-start !important;
@@ -7581,14 +7581,14 @@
     margin: 0 0 9px !important;
   }
 
-  .v21-category-kind-switch {
+  .cy-category-kind-switch {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     width: 156px !important;
     height: 32px !important;
   }
 
-  .v21-category-kind-switch .kind-button {
+  .cy-category-kind-switch .kind-button {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -7598,20 +7598,20 @@
     padding: 0 10px !important;
   }
 
-  .v21-category-manager-list {
+  .cy-category-manager-list {
     margin: 0 !important;
   }
 
-  .v21-category-group-head {
+  .cy-category-group-head {
     grid-template-columns: 24px minmax(0, 1fr) 23px auto !important;
   }
 
-  .v21-category-manager-row {
+  .cy-category-manager-row {
     grid-template-columns: 24px 25px minmax(0, 1fr) 23px auto !important;
   }
 
-  .v21-category-group-head .v21-edit-name-button,
-  .v21-category-manager-row .v21-edit-name-button {
+  .cy-category-group-head .cy-edit-name-button,
+  .cy-category-manager-row .cy-edit-name-button {
     width: 23px !important;
     min-width: 23px !important;
     height: 23px !important;
@@ -7620,8 +7620,8 @@
     font-size: 12px !important;
   }
 
-  .v21-category-group-head .v21-edit-name-button[hidden],
-  .v21-category-manager-row .v21-edit-name-button[hidden] {
+  .cy-category-group-head .cy-edit-name-button[hidden],
+  .cy-category-manager-row .cy-edit-name-button[hidden] {
     display: none !important;
   }
 }
@@ -7696,14 +7696,14 @@
 @media (min-width: 1024px) {
   /* Header controls and identity badge must sit on one visual baseline. */
   .topbar-actions,
-  .v21-account-cluster {
+  .cy-account-cluster {
     align-items: center !important;
   }
 
   .topbar #headerAccountManagerButton,
   .topbar #headerCategoryManagerButton,
   .topbar #settingsButton,
-  .v21-account-cluster #logoutButton {
+  .cy-account-cluster #logoutButton {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -7714,7 +7714,7 @@
     line-height: 1 !important;
   }
 
-  .v21-account-cluster .current-user,
+  .cy-account-cluster .current-user,
   #currentUser.current-user {
     display: inline-flex !important;
     align-items: center !important;
@@ -7727,8 +7727,8 @@
     box-sizing: border-box;
   }
 
-  .v21-account-cluster .current-user-main,
-  .v21-account-cluster .current-user-role,
+  .cy-account-cluster .current-user-main,
+  .cy-account-cluster .current-user-role,
   #currentUser .current-user-main,
   #currentUser .current-user-role {
     display: inline-flex !important;
@@ -7739,7 +7739,7 @@
   /* Settings managers use one canonical semantic renderer. */
 
   /* Desktop date controls use the same visual language as the custom month picker. */
-  .v0211-native-date-source {
+  .cy-native-date-source {
     position: absolute !important;
     width: 1px !important;
     height: 1px !important;
@@ -7753,13 +7753,13 @@
     pointer-events: none !important;
   }
 
-  .v0211-date-picker {
+  .cy-date-picker {
     position: relative;
     display: block;
     width: 100%;
   }
 
-  .v0211-date-trigger {
+  .cy-date-trigger {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -7778,17 +7778,17 @@
     text-align: left;
   }
 
-  .v0211-date-trigger:hover,
-  .v0211-date-trigger[aria-expanded="true"] {
+  .cy-date-trigger:hover,
+  .cy-date-trigger[aria-expanded="true"] {
     border-color: #8ca9c4;
   }
 
-  .v0211-date-calendar-icon {
+  .cy-date-calendar-icon {
     color: #506071;
     font-size: 14px;
   }
 
-  .v0211-date-popover {
+  .cy-date-popover {
     position: absolute;
     z-index: 1400;
     top: calc(100% + 6px);
@@ -7801,7 +7801,7 @@
     box-shadow: 0 12px 30px rgba(41, 54, 68, .16);
   }
 
-  .v0211-date-head {
+  .cy-date-head {
     display: grid;
     grid-template-columns: 32px minmax(0, 1fr) 32px;
     align-items: center;
@@ -7809,7 +7809,7 @@
     min-height: 30px;
   }
 
-  .v0211-date-head button {
+  .cy-date-head button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7823,36 +7823,36 @@
     line-height: 1;
   }
 
-  .v0211-date-head .v0211-date-title {
+  .cy-date-head .cy-date-title {
     font-size: 13px;
     font-weight: 600;
   }
 
-  .v0211-date-weekdays,
-  .v0211-date-days {
+  .cy-date-weekdays,
+  .cy-date-days {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 3px;
   }
 
-  .v0211-date-weekdays {
+  .cy-date-weekdays {
     margin-top: 7px;
   }
 
-  .v0211-date-weekdays span {
+  .cy-date-weekdays span {
     padding: 3px 0;
     color: #8a96a4;
     font-size: 10.5px;
     text-align: center;
   }
 
-  .v0211-date-days {
+  .cy-date-days {
     margin-top: 3px;
   }
 
-  .v0211-date-day,
-  .v0211-date-month-choice,
-  .v0211-date-year-choice {
+  .cy-date-day,
+  .cy-date-month-choice,
+  .cy-date-year-choice {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7866,43 +7866,43 @@
     line-height: 1;
   }
 
-  .v0211-date-day:hover,
-  .v0211-date-month-choice:hover,
-  .v0211-date-year-choice:hover {
+  .cy-date-day:hover,
+  .cy-date-month-choice:hover,
+  .cy-date-year-choice:hover {
     background: #f2f6f9;
   }
 
-  .v0211-date-day.other-month {
+  .cy-date-day.other-month {
     color: #b2bbc5;
   }
 
-  .v0211-date-day.today {
+  .cy-date-day.today {
     border-color: #c8d7e5;
   }
 
-  .v0211-date-day.active,
-  .v0211-date-month-choice.active,
-  .v0211-date-year-choice.active {
+  .cy-date-day.active,
+  .cy-date-month-choice.active,
+  .cy-date-year-choice.active {
     border-color: #80a8cb;
     background: #eaf3fb;
     color: #1f5d91;
     font-weight: 600;
   }
 
-  .v0211-date-choice-grid {
+  .cy-date-choice-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 5px;
     margin-top: 8px;
   }
 
-  .v0211-date-footer {
+  .cy-date-footer {
     display: flex;
     justify-content: flex-end;
     margin-top: 7px;
   }
 
-  .v0211-date-today-button {
+  .cy-date-today-button {
     min-height: 27px;
     padding: 0 8px;
     border: 0;
@@ -7914,12 +7914,12 @@
 }
 
 @media (max-width: 1023px) {
-  .v0211-date-picker {
+  .cy-date-picker {
     display: none !important;
   }
 }
 
-/* V0.21.2 - rebuilt category manager and compact manager dialogs. */
+/* rebuilt category manager and compact manager dialogs. */
 
 
 .settings-manager-dialog {
@@ -8006,7 +8006,7 @@
 }
 
 @media (min-width: 1024px) {
-  #settingsDialog.v21-management-mode[data-management-pane="accounts"] {
+  #settingsDialog.cy-management-mode[data-management-pane="accounts"] {
     width: min(390px, calc(100vw - 36px)) !important;
     max-width: 390px !important;
   }
@@ -8095,25 +8095,25 @@
     font-size: 11.5px !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] {
     width: min(570px, calc(100vw - 36px)) !important;
     max-width: 570px !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] {
     padding: 0 !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .pane-heading,
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .pane-heading,
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"] > .inline-add {
     display: none !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].settings-kind-income {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].settings-kind-income {
     background: #f4fbf6 !important;
   }
 
-  #settingsDialog.v21-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].settings-kind-expense {
+  #settingsDialog.cy-management-mode[data-management-pane="categories"] [data-settings-pane="categories"].settings-kind-expense {
     background: #fff6f5 !important;
   }
 
@@ -8761,19 +8761,19 @@
 /* V0.21.8 mobile refinement: fill entry canvas, block ledger interaction while loading,
    and let the opening-balance dialog size to its actual row count. */
 @media (max-width: 767px) {
-  body.v21-mobile-app,
-  body.v21-mobile-app .shell {
+  body.cy-mobile-app,
+  body.cy-mobile-app .shell {
     background: #fff !important;
   }
 
-  body.v21-mobile-app .entry-card {
+  body.cy-mobile-app .entry-card {
     height: auto !important;
     min-height: calc(100dvh - 110px - env(safe-area-inset-bottom)) !important;
     max-height: none !important;
     overflow-y: auto !important;
   }
 
-  body.v21-mobile-app .ledger-card {
+  body.cy-mobile-app .ledger-card {
     min-height: calc(100dvh - 110px - env(safe-area-inset-bottom)) !important;
   }
 
@@ -9078,20 +9078,20 @@
 /* V0.21.9 mobile utility consolidation. */
 @media (max-width: 767px) {
   html.mobile-entry-income-canvas,
-  html.mobile-entry-income-canvas body.v21-mobile-app,
-  html.mobile-entry-income-canvas body.v21-mobile-app .shell {
+  html.mobile-entry-income-canvas body.cy-mobile-app,
+  html.mobile-entry-income-canvas body.cy-mobile-app .shell {
     background: #f4fbf6 !important;
   }
 
   html.mobile-entry-expense-canvas,
-  html.mobile-entry-expense-canvas body.v21-mobile-app,
-  html.mobile-entry-expense-canvas body.v21-mobile-app .shell {
+  html.mobile-entry-expense-canvas body.cy-mobile-app,
+  html.mobile-entry-expense-canvas body.cy-mobile-app .shell {
     background: #fff6f5 !important;
   }
 
   html:not(.mobile-entry-income-canvas):not(.mobile-entry-expense-canvas),
-  html:not(.mobile-entry-income-canvas):not(.mobile-entry-expense-canvas) body.v21-mobile-app,
-  html:not(.mobile-entry-income-canvas):not(.mobile-entry-expense-canvas) body.v21-mobile-app .shell {
+  html:not(.mobile-entry-income-canvas):not(.mobile-entry-expense-canvas) body.cy-mobile-app,
+  html:not(.mobile-entry-income-canvas):not(.mobile-entry-expense-canvas) body.cy-mobile-app .shell {
     background: #fff !important;
   }
 
@@ -9647,7 +9647,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar {
   min-height: 60px !important;
   padding: 8px 16px !important;
 }
-html[data-tablet-layout]:not([data-tablet-layout=""]) .shell.v21-split-layout {
+html[data-tablet-layout]:not([data-tablet-layout=""]) .shell.cy-split-layout {
   display: grid !important;
   grid-template-columns: minmax(300px, 34%) minmax(0, 1fr) !important;
   grid-template-rows: minmax(0, 1fr) !important;
@@ -9659,7 +9659,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .shell.v21-split-layout {
   margin: 8px auto !important;
   padding: 0 !important;
 }
-html[data-tablet-layout]:not([data-tablet-layout=""]) .v21-entry-rail {
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-entry-rail {
   position: static !important;
   display: block !important;
   min-width: 0 !important;
@@ -9727,14 +9727,14 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-card select {
   box-sizing: border-box;
 }
 html[data-tablet-layout]:not([data-tablet-layout=""]) #entryAccountChoiceRow,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .v0211-date-picker,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .v21-month-picker-field,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-date-picker,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-month-picker-field,
 html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthPickerCustom,
 html[data-tablet-layout]:not([data-tablet-layout=""]) #inputConfirmationCard,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .keyboard-hint,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-help-button { display: none !important; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) input.v0211-native-date-source,
-html[data-tablet-layout]:not([data-tablet-layout=""]) input.v21-native-month-source {
+html[data-tablet-layout]:not([data-tablet-layout=""]) input.cy-native-date-source,
+html[data-tablet-layout]:not([data-tablet-layout=""]) input.cy-native-month-source {
   display: block !important;
   position: static !important;
   width: 100% !important;
@@ -9766,7 +9766,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card {
 }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card .ledger-title { display: block !important; margin: 0 !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-title > div:first-child { width: 100% !important; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) .v21-ledger-context { display: flex !important; flex-wrap: wrap; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-ledger-context { display: flex !important; flex-wrap: wrap; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-month-tools { display: flex !important; gap: 6px !important; min-width: 0 !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthSlot { min-width: 0 !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) #monthFilter { min-height: 44px !important; font-size: 16px !important; width: 100% !important; }
@@ -9790,7 +9790,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card td { padding:
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card .action-col { display: table-cell !important; width: 92px !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card .row-action { display: inline-flex !important; min-height: 44px !important; min-width: 44px !important; align-items: center !important; justify-content: center; padding: 3px !important; font-size: 14px !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) button { touch-action: manipulation; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) .v21-summary-actions button,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-summary-actions button,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-month-tools button { min-height: 44px !important; min-width: 44px !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) dialog.modal { width: min(760px, calc(100vw - 32px)) !important; max-height: calc(var(--tablet-visible-height, 100dvh) - 32px) !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .settings-layout { grid-template-columns: 110px minmax(0, 1fr) !important; }
@@ -9800,24 +9800,24 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .mobile-account-drag { min
 html[data-tablet-layout]:not([data-tablet-layout=""]) .mini-button { touch-action: manipulation; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .mobile-account-card { display: flex !important; align-items: center !important; gap: 8px !important; padding: 8px 0 !important; border-bottom: 1px solid #dbe2e9; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .mobile-account-name { margin-right: auto; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .shell.v21-split-layout { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) auto !important; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .v21-entry-rail { grid-row: 2 !important; max-height: min(calc(var(--tablet-visible-height, 100dvh) * .46), 460px) !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .shell.cy-split-layout { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) auto !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail { grid-row: 2 !important; max-height: min(calc(var(--tablet-visible-height, 100dvh) * .46), 460px) !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card { grid-row: 1 !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls { display: flex !important; align-items: center !important; justify-content: space-between; gap: 8px !important; margin-bottom: 8px; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls label { display: flex !important; align-items: center !important; gap: 8px !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls input { width: 22px !important; height: 22px !important; min-height: 22px !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls button { min-height: 36px !important; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .v21-entry-rail[data-entry-expanded="false"] .section-title,
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .v21-entry-rail[data-entry-expanded="false"] .tablet-entry-controls label,
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .v21-entry-rail[data-entry-expanded="false"] #transactionForm,
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .v21-entry-rail[data-entry-expanded="false"] .quick-entry-tools,
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .v21-entry-rail[data-entry-expanded="false"] #saveMessage { display: none !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .section-title,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .tablet-entry-controls label,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] #transactionForm,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .quick-entry-tools,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] #saveMessage { display: none !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-card .section-title h2 { display: none !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #saveButton { grid-column: auto !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #mobileEntrySecondaryButton { grid-column: auto !important; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) body[data-cyacc-read-only="true"] .v21-entry-rail { display: none !important; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) body[data-cyacc-read-only="true"] .shell.v21-split-layout { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) body[data-cyacc-read-only="true"] .cy-entry-rail { display: none !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) body[data-cyacc-read-only="true"] .shell.cy-split-layout { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
 
 html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthSlot > .month-picker {
   display: block !important;
@@ -9860,9 +9860,9 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > #saveMessage
 html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > .quick-tool-row.hidden { display: none !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-title > div:first-child { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-title .title-with-badge { grid-column: 1 / -1; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) .v21-ledger-context { grid-column: 1; grid-row: 2; align-items: center; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) .v21-ledger-summary-bar { display: contents !important; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) .v21-summary-actions { grid-column: 2; grid-row: 2; display: flex !important; gap: 6px !important; align-items: center; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-ledger-context { grid-column: 1; grid-row: 2; align-items: center; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-ledger-summary-bar { display: contents !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-summary-actions { grid-column: 2; grid-row: 2; display: flex !important; gap: 6px !important; align-items: center; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary { grid-column: 1 / -1; grid-row: 3; margin: 0 !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-summary-item.opening { order: 1; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-summary-item.income { order: 2; }
@@ -9877,13 +9877,13 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-c
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-handle { grid-column: 1 / -1; display: flex !important; justify-content: center; align-items: center; width: 100%; height: 36px !important; border: 0; background: transparent; box-shadow: none; touch-action: none; cursor: ns-resize; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-handle > span { display: block; width: 52px; height: 5px; border-radius: 5px; background: #98a6b5; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls label { position: absolute; right: 0; top: 6px; font-size: 14px; margin: 0; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .v21-entry-rail[data-entry-expanded="false"] .entry-card { padding: 0 12px !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .entry-card { padding: 0 12px !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > label { grid-template-columns: 46px minmax(0, 1fr) !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .quick-tool-row.hidden { display: grid !important; min-height: 44px; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .quick-tool-row.hidden .quick-chip-list::after { content: "—"; color: #8895a4; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .account-source-field { order: 0; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #saveMessage { grid-column: 2 !important; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .v21-summary-actions button { padding: 8px !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-summary-actions button { padding: 8px !important; }
 
 html[data-tablet-layout]:not([data-tablet-layout=""]) #transactionForm { min-width: 0; width: 100%; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > label > input, html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > label > select { min-width: 0 !important; max-width: 100% !important; box-sizing: border-box; }
@@ -9901,13 +9901,13 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-card .section-title
 html[data-tablet-layout]:not([data-tablet-layout=""]) .quick-tool-label { white-space: nowrap; font-size: 13px !important; }
 
 /* V0.22.2 Build 2 - tablet landscape refinement only. */
-html[data-tablet-layout="landscape"] .shell.v21-split-layout { grid-template-columns: minmax(280px, 31%) minmax(0, 1fr) !important; }
+html[data-tablet-layout="landscape"] .shell.cy-split-layout { grid-template-columns: minmax(280px, 31%) minmax(0, 1fr) !important; }
 html[data-tablet-layout="landscape"] .tablet-entry-controls,
 html[data-tablet-layout="landscape"] .confirmation-edge-open { display: none !important; }
 html[data-tablet-layout="landscape"] .entry-card .section-title h2,
 html[data-tablet-layout="landscape"] .ledger-card .ledger-title h2 { display: none !important; }
 html[data-tablet-layout="landscape"] .entry-card .section-title { margin-bottom: 6px !important; }
-html[data-tablet-layout="landscape"] #txDate.v0211-native-date-source {
+html[data-tablet-layout="landscape"] #txDate.cy-native-date-source {
   display:block !important; position:static !important; width:100% !important; min-width:0 !important; height:44px !important;
   margin:0 !important; padding:6px 8px !important; border:1px solid #bdc8d2 !important; border-radius:6px !important;
   background:#fff !important; color:#273548 !important; opacity:1 !important; -webkit-appearance:auto !important; appearance:auto !important;
@@ -9922,20 +9922,20 @@ html[data-tablet-layout="landscape"] .entry-grid > #favoriteCategoryGroup.quick-
 html[data-tablet-layout="landscape"] .entry-grid > #summarySuggestionGroup.quick-tool-row.hidden { display:grid !important; min-height:40px !important; }
 html[data-tablet-layout="landscape"] #favoriteCategoryButtons:empty::after,
 html[data-tablet-layout="landscape"] #summarySuggestions:empty::after { content:"—"; color:#8895a4; }
-html[data-tablet-layout="landscape"] .v21-account-cluster .current-user,
-html[data-tablet-layout="landscape"] .v21-account-cluster .current-user.role-super-admin,
-html[data-tablet-layout="landscape"] .v21-account-cluster .current-user.role-admin,
-html[data-tablet-layout="landscape"] .v21-account-cluster .current-user.role-user,
-html[data-tablet-layout="landscape"] .v21-account-cluster .current-user-role {
+html[data-tablet-layout="landscape"] .cy-account-cluster .current-user,
+html[data-tablet-layout="landscape"] .cy-account-cluster .current-user.role-super-admin,
+html[data-tablet-layout="landscape"] .cy-account-cluster .current-user.role-admin,
+html[data-tablet-layout="landscape"] .cy-account-cluster .current-user.role-user,
+html[data-tablet-layout="landscape"] .cy-account-cluster .current-user-role {
   border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important;
 }
-html[data-tablet-layout="landscape"] .v21-account-cluster .current-user-role { margin:0 !important; padding:0 !important; }
+html[data-tablet-layout="landscape"] .cy-account-cluster .current-user-role { margin:0 !important; padding:0 !important; }
 html[data-tablet-layout="landscape"] .ledger-card { padding:8px !important; }
 html[data-tablet-layout="landscape"] .ledger-card .ledger-title { padding:2px 2px 0 !important; }
 html[data-tablet-layout="landscape"] .ledger-title > div:first-child { grid-template-columns:minmax(0,1fr) auto !important; gap:8px !important; }
 html[data-tablet-layout="landscape"] .ledger-title .title-with-badge { display:none !important; }
-html[data-tablet-layout="landscape"] .v21-ledger-context { grid-column:1 !important; grid-row:1 !important; min-width:0 !important; }
-html[data-tablet-layout="landscape"] .v21-summary-actions { grid-column:2 !important; grid-row:1 !important; justify-self:end !important; gap:5px !important; }
+html[data-tablet-layout="landscape"] .cy-ledger-context { grid-column:1 !important; grid-row:1 !important; min-width:0 !important; }
+html[data-tablet-layout="landscape"] .cy-summary-actions { grid-column:2 !important; grid-row:1 !important; justify-self:end !important; gap:5px !important; }
 html[data-tablet-layout="landscape"] .ledger-month-tools {
   display:grid !important; grid-template-columns:32px minmax(132px,160px) 32px !important; align-items:center !important;
   gap:4px !important; width:max-content !important; max-width:100% !important;
@@ -9945,7 +9945,7 @@ html[data-tablet-layout="landscape"] #ledgerMonthSlot > .month-picker {
   display:block !important; position:static !important; width:100% !important; height:34px !important; margin:0 !important; padding:0 !important;
 }
 html[data-tablet-layout="landscape"] .ledger-month-tools .month-picker > span { display:none !important; }
-html[data-tablet-layout="landscape"] #monthFilter.v21-native-month-source,
+html[data-tablet-layout="landscape"] #monthFilter.cy-native-month-source,
 html[data-tablet-layout="landscape"] #monthFilter {
   display:block !important; position:static !important; width:100% !important; min-width:0 !important; height:34px !important; min-height:34px !important;
   margin:0 !important; padding:0 6px !important; border:1px solid #dbe2e9 !important; border-radius:7px !important; background:#fff !important;
@@ -9957,7 +9957,7 @@ html[data-tablet-layout="landscape"] #ledgerNextMonth {
   width:32px !important; min-width:32px !important; height:34px !important; min-height:34px !important; padding:0 !important;
   border:0 !important; border-radius:7px !important; background:#f3f5f7 !important; color:#536377 !important; font-size:18px !important; line-height:1 !important;
 }
-html[data-tablet-layout="landscape"] .v21-summary-actions button { height:34px !important; min-height:34px !important; padding:0 9px !important; font-size:12.5px !important; white-space:nowrap !important; }
+html[data-tablet-layout="landscape"] .cy-summary-actions button { height:34px !important; min-height:34px !important; padding:0 9px !important; font-size:12.5px !important; white-space:nowrap !important; }
 html[data-tablet-layout="landscape"] #monthSummary {
   grid-column:1/-1 !important; grid-row:2 !important; display:flex !important; flex-wrap:nowrap !important; align-items:center !important;
   gap:0 !important; min-width:0 !important; margin:5px 0 2px !important; padding:6px 0 !important; overflow:hidden !important; border:0 !important; background:transparent !important;
@@ -10033,7 +10033,7 @@ html[data-tablet-layout="landscape"] .ledger-card td.action-col .row-action:hove
 html[data-tablet-layout="landscape"] .ledger-card td.action-col .row-action.delete:hover:not(:disabled) { background:#fff1f0 !important; }
 
 /* V0.22.2 Build 3 - tablet landscape date/month and entry rail correction. */
-html[data-tablet-layout="landscape"] .shell.v21-split-layout {
+html[data-tablet-layout="landscape"] .shell.cy-split-layout {
   grid-template-columns: minmax(250px, 28%) minmax(0, 1fr) !important;
 }
 html[data-tablet-layout="landscape"] .entry-grid {

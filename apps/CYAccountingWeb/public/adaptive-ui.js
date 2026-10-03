@@ -114,19 +114,19 @@ function setupV21HeaderLayout() {
   const logout = document.querySelector('#logoutButton');
   if (!topbar || !brand || !heading || !actions) return;
 
-  let brandLine = brand.querySelector('.v21-brand-line');
+  let brandLine = brand.querySelector('.cy-brand-line');
   if (!brandLine) {
     brandLine = document.createElement('div');
-    brandLine.className = 'v21-brand-line';
+    brandLine.className = 'cy-brand-line';
     heading.before(brandLine);
     brandLine.append(heading);
   }
   if (status && status.parentElement !== brandLine) brandLine.append(status);
 
-  let accountCluster = actions.querySelector('.v21-account-cluster');
+  let accountCluster = actions.querySelector('.cy-account-cluster');
   if (!accountCluster) {
     accountCluster = document.createElement('div');
-    accountCluster.className = 'v21-account-cluster';
+    accountCluster.className = 'cy-account-cluster';
   }
 
   if (currentUser && currentUser.parentElement !== accountCluster) accountCluster.append(currentUser);
@@ -199,26 +199,26 @@ function setupV21LedgerContext() {
   const openingButton = document.querySelector('#ledgerOpeningBalanceButton');
   if (!ledgerTitle || !titleMain || !monthTools || !summary) return;
 
-  let context = titleMain.querySelector('.v21-ledger-context');
+  let context = titleMain.querySelector('.cy-ledger-context');
   if (!context) {
     context = document.createElement('div');
-    context.className = 'v21-ledger-context';
+    context.className = 'cy-ledger-context';
     titleMain.insertBefore(context, summary);
   }
   if (monthTools.parentElement !== context) context.append(monthTools);
 
-  let summaryBar = titleMain.querySelector('.v21-ledger-summary-bar');
+  let summaryBar = titleMain.querySelector('.cy-ledger-summary-bar');
   if (!summaryBar) {
     summaryBar = document.createElement('div');
-    summaryBar.className = 'v21-ledger-summary-bar';
+    summaryBar.className = 'cy-ledger-summary-bar';
     context.insertAdjacentElement('afterend', summaryBar);
   }
   if (summary.parentElement !== summaryBar) summaryBar.append(summary);
 
-  let summaryActions = summaryBar.querySelector('.v21-summary-actions');
+  let summaryActions = summaryBar.querySelector('.cy-summary-actions');
   if (!summaryActions) {
     summaryActions = document.createElement('div');
-    summaryActions.className = 'v21-summary-actions';
+    summaryActions.className = 'cy-summary-actions';
     summaryBar.append(summaryActions);
   }
   if (openingButton && openingButton.parentElement !== summaryActions) summaryActions.append(openingButton);
@@ -253,7 +253,7 @@ function setupV21LedgerHeaderDecoration() {
     const active = typeof cyLedgerGroupByAccount !== 'undefined' && Boolean(cyLedgerGroupByAccount);
     const nextText = active ? '帳戶 ▲' : '帳戶';
     if (account.textContent !== nextText) account.textContent = nextText;
-    account.classList.toggle('v21-account-group-active', active);
+    account.classList.toggle('cy-account-group-active', active);
     account.setAttribute('aria-pressed', active ? 'true' : 'false');
     account.title = active ? '點擊取消帳戶排列' : '點擊依帳戶排列';
   };
@@ -318,13 +318,13 @@ function setupV21DataSettings() {
 
   if (!pane) {
     pane = document.createElement('section');
-    pane.className = 'settings-pane v21-data-pane';
+    pane.className = 'settings-pane cy-data-pane';
     pane.dataset.settingsPane = 'data';
     pane.innerHTML = `
       <h3>資料管理</h3>
-      <section class="v21-data-section">
+      <section class="cy-data-section">
         <h4>Excel 匯入</h4>
-        <div class="v21-data-actions" id="v21ExcelImportHost"></div>
+        <div class="cy-data-actions" id="v21ExcelImportHost"></div>
       </section>`;
     const settingsMessage = document.querySelector('#settingsMessage');
     content.insertBefore(pane, settingsMessage || null);
@@ -358,7 +358,7 @@ function cleanupV21InterfaceCopy() {
       '#settingsDialog [data-settings-pane="quick"] .quick-settings-explain',
       '#settingsDialog [data-settings-pane="lock"] > .hint',
       '#settingsDialog [data-settings-pane="data"] .hint',
-      '#settingsDialog [data-settings-pane="data"] .v21-data-section > p',
+      '#settingsDialog [data-settings-pane="data"] .cy-data-section > p',
       '#settingsDialog [data-settings-pane="backup"] #backupHeadingHint',
       '#settingsDialog [data-settings-pane="backup"] .backup-security-note',
       '#settingsDialog [data-settings-pane="backup"] .backup-restore-note',
@@ -440,12 +440,12 @@ function applyV21DesktopSplitWorkspace(enabled) {
   const confirmation = document.querySelector('#inputConfirmationCard');
   if (!shell || !entry || !ledger || !confirmation) return;
 
-  let rail = shell.querySelector('.v21-entry-rail');
+  let rail = shell.querySelector('.cy-entry-rail');
 
   if (enabled) {
     if (!rail) {
       rail = document.createElement('aside');
-      rail.className = 'v21-entry-rail';
+      rail.className = 'cy-entry-rail';
       rail.setAttribute('aria-label', '快速記帳工作區');
       shell.insertBefore(rail, ledger);
     }
@@ -453,9 +453,9 @@ function applyV21DesktopSplitWorkspace(enabled) {
     if (entry.parentElement !== rail) rail.prepend(entry);
     if (confirmation.parentElement !== rail) rail.append(confirmation);
 
-    shell.classList.add('v21-split-layout');
-    document.body.classList.add('v21-wide-split');
-    confirmation.classList.add('v21-inline-confirmation');
+    shell.classList.add('cy-split-layout');
+    document.body.classList.add('cy-wide-split');
+    confirmation.classList.add('cy-inline-confirmation');
 
     if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(!tablet, false);
     else {
@@ -465,9 +465,9 @@ function applyV21DesktopSplitWorkspace(enabled) {
     return;
   }
 
-  shell.classList.remove('v21-split-layout');
-  document.body.classList.remove('v21-wide-split');
-  confirmation.classList.remove('v21-inline-confirmation');
+  shell.classList.remove('cy-split-layout');
+  document.body.classList.remove('cy-wide-split');
+  confirmation.classList.remove('cy-inline-confirmation');
 
   if (entry.parentElement === rail) shell.insertBefore(entry, ledger);
   if (confirmation.parentElement === rail) document.body.append(confirmation);
@@ -481,30 +481,30 @@ function applyV21DesktopSplitWorkspace(enabled) {
   }
 }
 
-const CY_V21_BUILD8_SUMMARY_UNITS = 40;
-const CY_V21_BUILD9_MOBILE = '(max-width: 767px)';
-let cyV21Build8Started = false;
+const CY_ENTRY_UI_SUMMARY_UNITS = 40;
+const CY_MOBILE_ENTRY_MOBILE = '(max-width: 767px)';
+let cyEntryUiStarted = false;
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startV21Build8, { once: true });
+  document.addEventListener('DOMContentLoaded', startEntryUi, { once: true });
 } else {
-  startV21Build8();
+  startEntryUi();
 }
-window.addEventListener('load', syncV21Build8AfterLoad, { once: true });
+window.addEventListener('load', syncEntryUiAfterLoad, { once: true });
 
-function startV21Build8() {
-  if (cyV21Build8Started) return;
-  cyV21Build8Started = true;
-  runV21Build8Step('mobile-pages', setupV21Build9MobilePages);
-  runV21Build8Step('mobile-account-picker', setupV21Build9MobileAccountPicker);
-  runV21Build8Step('account-choices', setupV21Build8AccountChoices);
-  runV21Build8Step('summary-limit', setupV21Build8SummaryLimit);
-  runV21Build8Step('role-medal', setupV21Build8RoleMedal);
-  runV21Build8Step('enter-hints', setupV21Build9EnterHints);
-  runV21Build8Step('help-copy', syncV21Build9HelpCopy);
+function startEntryUi() {
+  if (cyEntryUiStarted) return;
+  cyEntryUiStarted = true;
+  runEntryUiStep('mobile-pages', setupMobileEntryMobilePages);
+  runEntryUiStep('mobile-account-picker', setupMobileEntryMobileAccountPicker);
+  runEntryUiStep('account-choices', setupEntryUiAccountChoices);
+  runEntryUiStep('summary-limit', setupEntryUiSummaryLimit);
+  runEntryUiStep('role-medal', setupEntryUiRoleMedal);
+  runEntryUiStep('enter-hints', setupMobileEntryEnterHints);
+  runEntryUiStep('help-copy', syncMobileEntryHelpCopy);
 }
 
-function runV21Build8Step(name, task) {
+function runEntryUiStep(name, task) {
   try {
     task();
   } catch (error) {
@@ -512,35 +512,35 @@ function runV21Build8Step(name, task) {
   }
 }
 
-function syncV21Build8AfterLoad() {
-  startV21Build8();
-  syncV21Build8AccountChoices();
-  syncV21Build8RoleMedal();
-  syncV21Build9AccountPickerLabel();
-  syncV21Build9HelpCopy();
+function syncEntryUiAfterLoad() {
+  startEntryUi();
+  syncEntryUiAccountChoices();
+  syncEntryUiRoleMedal();
+  syncMobileEntryAccountPickerLabel();
+  syncMobileEntryHelpCopy();
 }
 
 
 
 
-function setupV21Build8AccountChoices() {
+function setupEntryUiAccountChoices() {
   const select = document.querySelector('#accountName');
   const host = document.querySelector('#entryAccountButtons');
   const row = document.querySelector('#entryAccountChoiceRow');
   if (!select || !host || !row) return;
 
-  const mobile = window.matchMedia(CY_V21_BUILD9_MOBILE);
+  const mobile = window.matchMedia(CY_MOBILE_ENTRY_MOBILE);
   row.hidden = false;
-  const observer = new MutationObserver(syncV21Build8AccountChoices);
+  const observer = new MutationObserver(syncEntryUiAccountChoices);
   observer.observe(select, { childList: true, subtree: true });
-  select.addEventListener('change', syncV21Build8AccountChoices);
+  select.addEventListener('change', syncEntryUiAccountChoices);
 
   host.addEventListener('click', event => {
     const button = event.target.closest('[data-entry-account]');
     if (!button) return;
-    selectV21Build8Account(button.dataset.entryAccount || '', !mobile.matches);
+    selectEntryUiAccount(button.dataset.entryAccount || '', !mobile.matches);
     if (mobile.matches) {
-      setV21Build9AccountPickerOpen(false);
+      setMobileEntryAccountPickerOpen(false);
       document.querySelector('#entryAccountPickerButton')?.focus();
     }
   });
@@ -554,13 +554,13 @@ function setupV21Build8AccountChoices() {
     event.preventDefault();
     const delta = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
     const next = buttons[(index + delta + buttons.length) % buttons.length];
-    if (next) selectV21Build8Account(next.dataset.entryAccount || '', true);
+    if (next) selectEntryUiAccount(next.dataset.entryAccount || '', true);
   });
 
-  syncV21Build8AccountChoices();
+  syncEntryUiAccountChoices();
 }
 
-function syncV21Build8AccountChoices() {
+function syncEntryUiAccountChoices() {
   const select = document.querySelector('#accountName');
   const host = document.querySelector('#entryAccountButtons');
   if (!select || !host) return;
@@ -570,7 +570,7 @@ function syncV21Build8AccountChoices() {
   if (host.dataset.accountSignature !== signature) {
     host.dataset.accountSignature = signature;
     host.innerHTML = options.map(option => `
-      <button type="button" class="entry-account-choice" role="radio" data-entry-account="${v21Build8Escape(option.value)}" aria-checked="false" tabindex="-1">${v21Build8Escape(option.textContent || option.value)}</button>
+      <button type="button" class="entry-account-choice" role="radio" data-entry-account="${entryUiEscape(option.value)}" aria-checked="false" tabindex="-1">${entryUiEscape(option.textContent || option.value)}</button>
     `).join('');
   }
 
@@ -582,10 +582,10 @@ function syncV21Build8AccountChoices() {
     button.tabIndex = active ? 0 : -1;
     button.title = active ? '目前使用中的帳戶' : `切換至帳戶「${button.dataset.entryAccount}」`;
   }
-  syncV21Build9AccountPickerLabel();
+  syncMobileEntryAccountPickerLabel();
 }
 
-function selectV21Build8Account(name, focus = false) {
+function selectEntryUiAccount(name, focus = false) {
   const select = document.querySelector('#accountName');
   const host = document.querySelector('#entryAccountButtons');
   if (!select || !host || ![...select.options].some(option => option.value === name)) return;
@@ -593,11 +593,11 @@ function selectV21Build8Account(name, focus = false) {
     select.value = name;
     select.dispatchEvent(new Event('change', { bubbles: true }));
   }
-  syncV21Build8AccountChoices();
+  syncEntryUiAccountChoices();
   if (focus) host.querySelector(`[data-entry-account="${CSS.escape(name)}"]`)?.focus();
 }
 
-function setupV21Build9MobileAccountPicker() {
+function setupMobileEntryMobileAccountPicker() {
   const row = document.querySelector('#entryAccountChoiceRow');
   const host = document.querySelector('#entryAccountButtons');
   if (!row || !host) return;
@@ -615,38 +615,38 @@ function setupV21Build9MobileAccountPicker() {
   }
 
   trigger.addEventListener('click', () => {
-    if (!window.matchMedia(CY_V21_BUILD9_MOBILE).matches) return;
-    setV21Build9AccountPickerOpen(!row.classList.contains('mobile-picker-open'));
+    if (!window.matchMedia(CY_MOBILE_ENTRY_MOBILE).matches) return;
+    setMobileEntryAccountPickerOpen(!row.classList.contains('mobile-picker-open'));
   });
 
   document.addEventListener('pointerdown', event => {
-    if (!window.matchMedia(CY_V21_BUILD9_MOBILE).matches || row.contains(event.target)) return;
-    setV21Build9AccountPickerOpen(false);
+    if (!window.matchMedia(CY_MOBILE_ENTRY_MOBILE).matches || row.contains(event.target)) return;
+    setMobileEntryAccountPickerOpen(false);
   });
 
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || !row.classList.contains('mobile-picker-open')) return;
-    setV21Build9AccountPickerOpen(false);
+    setMobileEntryAccountPickerOpen(false);
     trigger.focus();
   });
 
-  const mobile = window.matchMedia(CY_V21_BUILD9_MOBILE);
+  const mobile = window.matchMedia(CY_MOBILE_ENTRY_MOBILE);
   const syncMode = () => {
-    setV21Build9AccountPickerOpen(false);
-    syncV21Build9AccountPickerLabel();
+    setMobileEntryAccountPickerOpen(false);
+    syncMobileEntryAccountPickerLabel();
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
   else mobile.addListener?.(syncMode);
   syncMode();
 }
 
-function setV21Build9AccountPickerOpen(open) {
+function setMobileEntryAccountPickerOpen(open) {
   const row = document.querySelector('#entryAccountChoiceRow');
   const trigger = document.querySelector('#entryAccountPickerButton');
   const host = document.querySelector('#entryAccountButtons');
   if (!row || !trigger || !host) return;
 
-  const isMobile = window.matchMedia(CY_V21_BUILD9_MOBILE).matches;
+  const isMobile = window.matchMedia(CY_MOBILE_ENTRY_MOBILE).matches;
   if (!isMobile) {
     row.classList.remove('mobile-picker-open');
     trigger.setAttribute('aria-expanded', 'false');
@@ -664,7 +664,7 @@ function setV21Build9AccountPickerOpen(open) {
   }
 }
 
-function syncV21Build9AccountPickerLabel() {
+function syncMobileEntryAccountPickerLabel() {
   const select = document.querySelector('#accountName');
   const trigger = document.querySelector('#entryAccountPickerButton');
   const value = trigger?.querySelector('.entry-account-picker-value');
@@ -673,7 +673,7 @@ function syncV21Build9AccountPickerLabel() {
   value.textContent = option?.textContent?.trim() || select.value || '選擇帳戶';
 }
 
-function setupV21Build9MobilePages() {
+function setupMobileEntryMobilePages() {
   const topbar = document.querySelector('.topbar');
   const shell = document.querySelector('.shell');
   const entry = shell?.querySelector('.entry-card');
@@ -684,7 +684,7 @@ function setupV21Build9MobilePages() {
   if (!nav) {
     nav = document.createElement('nav');
     nav.id = 'mobileMainNav';
-    nav.className = 'v21-mobile-main-nav';
+    nav.className = 'cy-mobile-main-nav';
     nav.setAttribute('aria-label', '主要頁面');
     nav.innerHTML = `
       <button type="button" class="active" data-mobile-page="entry" aria-selected="true">新增記帳</button>
@@ -693,14 +693,14 @@ function setupV21Build9MobilePages() {
   }
 
   let current = 'entry';
-  const mobile = window.matchMedia(CY_V21_BUILD9_MOBILE);
+  const mobile = window.matchMedia(CY_MOBILE_ENTRY_MOBILE);
 
   const apply = page => {
     current = page === 'ledger' ? 'ledger' : 'entry';
     const enabled = mobile.matches;
     nav.hidden = !enabled;
-    entry.classList.toggle('v21-mobile-page-hidden', enabled && current !== 'entry');
-    ledger.classList.toggle('v21-mobile-page-hidden', enabled && current !== 'ledger');
+    entry.classList.toggle('cy-mobile-page-hidden', enabled && current !== 'entry');
+    ledger.classList.toggle('cy-mobile-page-hidden', enabled && current !== 'ledger');
     shell.dataset.mobilePage = enabled ? current : '';
     for (const button of nav.querySelectorAll('[data-mobile-page]')) {
       const active = button.dataset.mobilePage === current;
@@ -722,7 +722,7 @@ function setupV21Build9MobilePages() {
   apply('entry');
 }
 
-function setupV21Build8SummaryLimit() {
+function setupEntryUiSummaryLimit() {
   const composing = new WeakSet();
   const fields = [document.querySelector('#summary'), document.querySelector('#editSummary')].filter(Boolean);
 
@@ -731,24 +731,24 @@ function setupV21Build8SummaryLimit() {
     input.addEventListener('compositionstart', () => composing.add(input));
     input.addEventListener('compositionend', () => {
       composing.delete(input);
-      enforceV21Build8Summary(input);
+      enforceEntryUiSummary(input);
     });
     input.addEventListener('input', () => {
-      if (!composing.has(input)) enforceV21Build8Summary(input);
+      if (!composing.has(input)) enforceEntryUiSummary(input);
     });
   }
 
   document.querySelector('#summarySuggestions')?.addEventListener('click', () => {
     setTimeout(() => {
       const summary = document.querySelector('#summary');
-      if (summary) enforceV21Build8Summary(summary);
+      if (summary) enforceEntryUiSummary(summary);
     }, 0);
   });
 
   const entryForm = document.querySelector('#transactionForm');
   entryForm?.addEventListener('submit', event => {
     const summary = document.querySelector('#summary');
-    if (!summary || summaryWeightedUnits(summary.value) <= CY_V21_BUILD8_SUMMARY_UNITS) return;
+    if (!summary || summaryWeightedUnits(summary.value) <= CY_ENTRY_UI_SUMMARY_UNITS) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (typeof showMessage === 'function') showMessage('摘要不可超過 20 個中文字或 40 個英數字元。', true);
@@ -758,7 +758,7 @@ function setupV21Build8SummaryLimit() {
   const editForm = document.querySelector('#editTransactionForm');
   editForm?.addEventListener('submit', event => {
     const summary = document.querySelector('#editSummary');
-    if (!summary || summaryWeightedUnits(summary.value) <= CY_V21_BUILD8_SUMMARY_UNITS) return;
+    if (!summary || summaryWeightedUnits(summary.value) <= CY_ENTRY_UI_SUMMARY_UNITS) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const message = document.querySelector('#editMessage');
@@ -767,15 +767,15 @@ function setupV21Build8SummaryLimit() {
   }, true);
 }
 
-function enforceV21Build8Summary(input) {
-  if (summaryWeightedUnits(input.value) <= CY_V21_BUILD8_SUMMARY_UNITS) return;
-  const trimmed = v21Build8TrimWeighted(input.value, CY_V21_BUILD8_SUMMARY_UNITS);
+function enforceEntryUiSummary(input) {
+  if (summaryWeightedUnits(input.value) <= CY_ENTRY_UI_SUMMARY_UNITS) return;
+  const trimmed = entryUiTrimWeighted(input.value, CY_ENTRY_UI_SUMMARY_UNITS);
   const cursor = input.selectionStart ?? trimmed.length;
   input.value = trimmed;
   try { input.setSelectionRange(Math.min(cursor, trimmed.length), Math.min(cursor, trimmed.length)); } catch { /* no-op */ }
 }
 
-function v21Build8TrimWeighted(value, maxUnits) {
+function entryUiTrimWeighted(value, maxUnits) {
   let units = 0;
   let result = '';
   for (const char of String(value || '')) {
@@ -789,15 +789,15 @@ function v21Build8TrimWeighted(value, maxUnits) {
 
 
 
-function setupV21Build8RoleMedal() {
+function setupEntryUiRoleMedal() {
   const target = document.querySelector('#currentUser');
   if (!target) return;
-  const observer = new MutationObserver(syncV21Build8RoleMedal);
+  const observer = new MutationObserver(syncEntryUiRoleMedal);
   observer.observe(target, { childList: true, subtree: true, characterData: true });
-  syncV21Build8RoleMedal();
+  syncEntryUiRoleMedal();
 }
 
-function syncV21Build8RoleMedal() {
+function syncEntryUiRoleMedal() {
   const target = document.querySelector('#currentUser');
   const role = String(target?.querySelector('.current-user-role')?.textContent || '').trim();
   if (!target) return;
@@ -805,7 +805,7 @@ function syncV21Build8RoleMedal() {
   target.classList.toggle('role-admin', role === '管理員');
 }
 
-function setupV21Build9EnterHints() {
+function setupMobileEntryEnterHints() {
   const date = document.querySelector('#txDate');
   const summary = document.querySelector('#summary');
   const amount = document.querySelector('#amount');
@@ -814,7 +814,7 @@ function setupV21Build9EnterHints() {
   if (amount) amount.setAttribute('enterkeyhint', 'done');
 }
 
-function syncV21Build9HelpCopy() {
+function syncMobileEntryHelpCopy() {
   const hint = document.querySelector('.keyboard-hint');
   if (hint) {
     hint.innerHTML = '鍵盤：日期 Enter → 摘要 Enter → 金額 Enter 儲存 → 回摘要　｜　<kbd>Tab</kbd> 切換收入／支出　｜　日期可輸入 <kbd>0924</kbd> / <kbd>20260924</kbd>，<kbd>Ctrl</kbd>+<kbd>↑↓</kbd> ±1 天';
@@ -831,7 +831,7 @@ function syncV21Build9HelpCopy() {
   }
 }
 
-function v21Build8Escape(value) {
+function entryUiEscape(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -840,29 +840,29 @@ function v21Build8Escape(value) {
     .replaceAll("'", '&#039;');
 }
 
-const CY_V21_BUILD10_MOBILE = '(max-width: 767px)';
+const CY_MOBILE_WORKSPACE_MOBILE = '(max-width: 767px)';
 const CY_V21_CONFIRMATION_KEY = 'cyaccounting.confirmationDrawerOpen';
-let cyV21Build10Started = false;
+let cyMobileWorkspaceStarted = false;
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startV21Build10, { once: true });
+  document.addEventListener('DOMContentLoaded', startMobileWorkspace, { once: true });
 } else {
-  startV21Build10();
+  startMobileWorkspace();
 }
-window.addEventListener('load', syncV21Build10AfterLoad, { once: true });
+window.addEventListener('load', syncMobileWorkspaceAfterLoad, { once: true });
 
-function startV21Build10() {
-  if (cyV21Build10Started) return;
-  cyV21Build10Started = true;
-  runV21Build10Step('mobile-app-bar', setupV21Build10MobileAppBar);
-  runV21Build10Step('mobile-navigation', setupV21Build10MobileNavigation);
-  runV21Build10Step('account-sheet', setupV21Build10AccountSheet);
-  runV21Build10Step('ledger-tools', setupV21Build10LedgerTools);
-  runV21Build10Step('confirmation-policy', setupV21Build10ConfirmationPolicy);
-  runV21Build10Step('mobile-form-copy', setupV21Build10MobileFormCopy);
+function startMobileWorkspace() {
+  if (cyMobileWorkspaceStarted) return;
+  cyMobileWorkspaceStarted = true;
+  runMobileWorkspaceStep('mobile-app-bar', setupMobileWorkspaceMobileAppBar);
+  runMobileWorkspaceStep('mobile-navigation', setupMobileWorkspaceMobileNavigation);
+  runMobileWorkspaceStep('account-sheet', setupMobileWorkspaceAccountSheet);
+  runMobileWorkspaceStep('ledger-tools', setupMobileWorkspaceLedgerTools);
+  runMobileWorkspaceStep('confirmation-policy', setupMobileWorkspaceConfirmationPolicy);
+  runMobileWorkspaceStep('mobile-form-copy', setupMobileWorkspaceMobileFormCopy);
 }
 
-function runV21Build10Step(name, task) {
+function runMobileWorkspaceStep(name, task) {
   try {
     task();
   } catch (error) {
@@ -870,16 +870,16 @@ function runV21Build10Step(name, task) {
   }
 }
 
-function syncV21Build10AfterLoad() {
-  startV21Build10();
-  syncV21Build10MobileIdentity();
-  syncV21Build10MobileNavigation();
-  syncV21Build10ConfirmationPolicy();
+function syncMobileWorkspaceAfterLoad() {
+  startMobileWorkspace();
+  syncMobileWorkspaceMobileIdentity();
+  syncMobileWorkspaceMobileNavigation();
+  syncMobileWorkspaceConfirmationPolicy();
 }
 
 
 
-function setupV21Build10MobileAppBar() {
+function setupMobileWorkspaceMobileAppBar() {
   const topbar = document.querySelector('.topbar');
   const currentUser = document.querySelector('#currentUser');
   const logoutButton = document.querySelector('#logoutButton');
@@ -889,11 +889,11 @@ function setupV21Build10MobileAppBar() {
   if (!trigger) {
     trigger = document.createElement('button');
     trigger.id = 'mobileAccountMenuButton';
-    trigger.className = 'v21-mobile-account-menu-button';
+    trigger.className = 'cy-mobile-account-menu-button';
     trigger.type = 'button';
     trigger.setAttribute('aria-haspopup', 'true');
     trigger.setAttribute('aria-expanded', 'false');
-    trigger.innerHTML = '<span class="v21-mobile-account-name">帳號</span><span aria-hidden="true">›</span>';
+    trigger.innerHTML = '<span class="cy-mobile-account-name">帳號</span><span aria-hidden="true">›</span>';
     topbar.append(trigger);
   }
 
@@ -901,10 +901,10 @@ function setupV21Build10MobileAppBar() {
   if (!menu) {
     menu = document.createElement('div');
     menu.id = 'mobileAccountMenu';
-    menu.className = 'v21-mobile-account-menu';
+    menu.className = 'cy-mobile-account-menu';
     menu.hidden = true;
     menu.innerHTML = `
-      <div class="v21-mobile-account-menu-identity">
+      <div class="cy-mobile-account-menu-identity">
         <strong id="mobileAccountMenuName">帳號</strong>
         <span id="mobileAccountMenuRole"></span>
       </div>
@@ -915,17 +915,17 @@ function setupV21Build10MobileAppBar() {
   const close = () => {
     menu.hidden = true;
     trigger.setAttribute('aria-expanded', 'false');
-    document.body.classList.remove('v21-mobile-account-menu-open');
+    document.body.classList.remove('cy-mobile-account-menu-open');
   };
 
   trigger.addEventListener('click', event => {
-    if (!window.matchMedia(CY_V21_BUILD10_MOBILE).matches) return;
+    if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches) return;
     event.stopPropagation();
     const open = menu.hidden;
     menu.hidden = !open;
     trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
-    document.body.classList.toggle('v21-mobile-account-menu-open', open);
-    if (open) syncV21Build10MobileIdentity();
+    document.body.classList.toggle('cy-mobile-account-menu-open', open);
+    if (open) syncMobileWorkspaceMobileIdentity();
   });
 
   menu.addEventListener('click', event => {
@@ -946,24 +946,24 @@ function setupV21Build10MobileAppBar() {
     trigger.focus();
   });
 
-  const observer = new MutationObserver(syncV21Build10MobileIdentity);
+  const observer = new MutationObserver(syncMobileWorkspaceMobileIdentity);
   observer.observe(currentUser, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
 
-  const mobile = window.matchMedia(CY_V21_BUILD10_MOBILE);
+  const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
-    document.body.classList.toggle('v21-mobile-app', mobile.matches);
+    document.body.classList.toggle('cy-mobile-app', mobile.matches);
     if (!mobile.matches) close();
-    syncV21Build10MobileIdentity();
+    syncMobileWorkspaceMobileIdentity();
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
   else mobile.addListener?.(syncMode);
   syncMode();
 }
 
-function syncV21Build10MobileIdentity() {
+function syncMobileWorkspaceMobileIdentity() {
   const source = document.querySelector('#currentUser');
   const trigger = document.querySelector('#mobileAccountMenuButton');
-  const triggerName = trigger?.querySelector('.v21-mobile-account-name');
+  const triggerName = trigger?.querySelector('.cy-mobile-account-name');
   const menu = document.querySelector('#mobileAccountMenu');
   const menuName = document.querySelector('#mobileAccountMenuName');
   const menuRole = document.querySelector('#mobileAccountMenuRole');
@@ -983,42 +983,42 @@ function syncV21Build10MobileIdentity() {
   menu.classList.toggle('role-admin', admin);
 }
 
-function setupV21Build10MobileNavigation() {
+function setupMobileWorkspaceMobileNavigation() {
   const sync = () => {
     const nav = document.querySelector('#mobileMainNav');
     if (!nav) return false;
-    nav.classList.add('v21-mobile-bottom-nav');
+    nav.classList.add('cy-mobile-bottom-nav');
     if (nav.parentElement !== document.body) document.body.append(nav);
 
     const entryButton = nav.querySelector('[data-mobile-page="entry"]');
     const ledgerButton = nav.querySelector('[data-mobile-page="ledger"]');
-    if (entryButton && !entryButton.querySelector('.v21-mobile-nav-icon')) {
-      entryButton.innerHTML = '<span class="v21-mobile-nav-icon" aria-hidden="true">＋</span><span>新增記帳</span>';
+    if (entryButton && !entryButton.querySelector('.cy-mobile-nav-icon')) {
+      entryButton.innerHTML = '<span class="cy-mobile-nav-icon" aria-hidden="true">＋</span><span>新增記帳</span>';
     }
-    if (ledgerButton && !ledgerButton.querySelector('.v21-mobile-nav-icon')) {
-      ledgerButton.innerHTML = '<span class="v21-mobile-nav-icon" aria-hidden="true">≡</span><span>記帳資料</span>';
+    if (ledgerButton && !ledgerButton.querySelector('.cy-mobile-nav-icon')) {
+      ledgerButton.innerHTML = '<span class="cy-mobile-nav-icon" aria-hidden="true">≡</span><span>記帳資料</span>';
     }
     return true;
   };
 
   if (!sync()) setTimeout(sync, 0);
-  const mobile = window.matchMedia(CY_V21_BUILD10_MOBILE);
+  const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
     sync();
-    document.body.classList.toggle('v21-mobile-app', mobile.matches);
+    document.body.classList.toggle('cy-mobile-app', mobile.matches);
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
   else mobile.addListener?.(syncMode);
 }
 
-function syncV21Build10MobileNavigation() {
+function syncMobileWorkspaceMobileNavigation() {
   const nav = document.querySelector('#mobileMainNav');
   if (!nav) return;
-  nav.classList.add('v21-mobile-bottom-nav');
+  nav.classList.add('cy-mobile-bottom-nav');
   if (nav.parentElement !== document.body) document.body.append(nav);
 }
 
-function setupV21Build10AccountSheet() {
+function setupMobileWorkspaceAccountSheet() {
   const row = document.querySelector('#entryAccountChoiceRow');
   if (!row) return;
 
@@ -1026,7 +1026,7 @@ function setupV21Build10AccountSheet() {
   if (!backdrop) {
     backdrop = document.createElement('button');
     backdrop.id = 'mobileAccountSheetBackdrop';
-    backdrop.className = 'v21-mobile-sheet-backdrop';
+    backdrop.className = 'cy-mobile-sheet-backdrop';
     backdrop.type = 'button';
     backdrop.setAttribute('aria-label', '關閉帳戶選單');
     backdrop.hidden = true;
@@ -1034,13 +1034,13 @@ function setupV21Build10AccountSheet() {
   }
 
   const sync = () => {
-    const open = window.matchMedia(CY_V21_BUILD10_MOBILE).matches && row.classList.contains('mobile-picker-open');
+    const open = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && row.classList.contains('mobile-picker-open');
     backdrop.hidden = !open;
-    document.body.classList.toggle('v21-mobile-account-sheet-open', open);
+    document.body.classList.toggle('cy-mobile-account-sheet-open', open);
   };
 
   backdrop.addEventListener('click', () => {
-    if (typeof setV21Build9AccountPickerOpen === 'function') setV21Build9AccountPickerOpen(false);
+    if (typeof setMobileEntryAccountPickerOpen === 'function') setMobileEntryAccountPickerOpen(false);
   });
 
   const observer = new MutationObserver(sync);
@@ -1049,7 +1049,7 @@ function setupV21Build10AccountSheet() {
   sync();
 }
 
-function setupV21Build10LedgerTools() {
+function setupMobileWorkspaceLedgerTools() {
   const ledger = document.querySelector('.ledger-card');
   if (!ledger) return;
 
@@ -1057,12 +1057,12 @@ function setupV21Build10LedgerTools() {
   if (!button) {
     button = document.createElement('button');
     button.id = 'mobileLedgerMoreButton';
-    button.className = 'secondary compact v21-mobile-ledger-more';
+    button.className = 'secondary compact cy-mobile-ledger-more';
     button.type = 'button';
     button.textContent = '更多';
     button.setAttribute('aria-haspopup', 'true');
     button.setAttribute('aria-expanded', 'false');
-    const summaryBar = ledger.querySelector('.v21-ledger-summary-bar') || ledger.querySelector('.ledger-title');
+    const summaryBar = ledger.querySelector('.cy-ledger-summary-bar') || ledger.querySelector('.ledger-title');
     summaryBar?.append(button);
   }
 
@@ -1070,7 +1070,7 @@ function setupV21Build10LedgerTools() {
   if (!backdrop) {
     backdrop = document.createElement('button');
     backdrop.id = 'mobileLedgerToolsBackdrop';
-    backdrop.className = 'v21-mobile-sheet-backdrop';
+    backdrop.className = 'cy-mobile-sheet-backdrop';
     backdrop.type = 'button';
     backdrop.setAttribute('aria-label', '關閉記帳工具');
     backdrop.hidden = true;
@@ -1081,10 +1081,10 @@ function setupV21Build10LedgerTools() {
   if (!sheet) {
     sheet = document.createElement('section');
     sheet.id = 'mobileLedgerToolsSheet';
-    sheet.className = 'v21-mobile-tools-sheet';
+    sheet.className = 'cy-mobile-tools-sheet';
     sheet.hidden = true;
     sheet.innerHTML = `
-      <div class="v21-mobile-sheet-handle" aria-hidden="true"></div>
+      <div class="cy-mobile-sheet-handle" aria-hidden="true"></div>
       <h3>更多</h3>
       <button type="button" data-mobile-ledger-action="accounts">帳戶設定</button>
       <button type="button" data-mobile-ledger-action="categories">科目設定</button>
@@ -1098,15 +1098,15 @@ function setupV21Build10LedgerTools() {
     sheet.hidden = true;
     backdrop.hidden = true;
     button.setAttribute('aria-expanded', 'false');
-    document.body.classList.remove('v21-mobile-ledger-tools-open');
+    document.body.classList.remove('cy-mobile-ledger-tools-open');
   };
 
   const open = () => {
-    if (!window.matchMedia(CY_V21_BUILD10_MOBILE).matches) return;
+    if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches) return;
     sheet.hidden = false;
     backdrop.hidden = false;
     button.setAttribute('aria-expanded', 'true');
-    document.body.classList.add('v21-mobile-ledger-tools-open');
+    document.body.classList.add('cy-mobile-ledger-tools-open');
   };
 
   button.addEventListener('click', open);
@@ -1147,8 +1147,8 @@ function setupV21Build10LedgerTools() {
   });
 }
 
-function setupV21Build10ConfirmationPolicy() {
-  const mobile = window.matchMedia(CY_V21_BUILD10_MOBILE);
+function setupMobileWorkspaceConfirmationPolicy() {
+  const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const sync = () => {
     if (mobile.matches) {
       if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(false, false);
@@ -1162,12 +1162,12 @@ function setupV21Build10ConfirmationPolicy() {
   sync();
 }
 
-function syncV21Build10ConfirmationPolicy() {
-  if (!window.matchMedia(CY_V21_BUILD10_MOBILE).matches) return;
+function syncMobileWorkspaceConfirmationPolicy() {
+  if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches) return;
   if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(false, false);
 }
 
-function setupV21Build10MobileFormCopy() {
+function setupMobileWorkspaceMobileFormCopy() {
   const summary = document.querySelector('#summary');
   if (summary) summary.placeholder = '可留白，最多 20 個中文字';
 
@@ -1176,20 +1176,20 @@ function setupV21Build10MobileFormCopy() {
   if (arrow) arrow.textContent = '›';
 }
 
-const CY_V21_BUILD11_DESKTOP = '(min-width: 768px)';
-let cyV21Build11Started = false;
+const CY_DESKTOP_ISOLATION_DESKTOP = '(min-width: 768px)';
+let cyDesktopIsolationStarted = false;
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startV21Build11, { once: true });
+  document.addEventListener('DOMContentLoaded', startDesktopIsolation, { once: true });
 } else {
-  startV21Build11();
+  startDesktopIsolation();
 }
-window.addEventListener('load', startV21Build11, { once: true });
+window.addEventListener('load', startDesktopIsolation, { once: true });
 
-function startV21Build11() {
-  if (cyV21Build11Started) return;
-  cyV21Build11Started = true;
-  setupV21Build11DesktopIsolation();
+function startDesktopIsolation() {
+  if (cyDesktopIsolationStarted) return;
+  cyDesktopIsolationStarted = true;
+  setupDesktopIsolationDesktopIsolation();
 }
 
 
@@ -1206,15 +1206,15 @@ function startV21Build11() {
 
 
 
-function setupV21Build11DesktopIsolation() {
-  const media = window.matchMedia(CY_V21_BUILD11_DESKTOP);
-  const sync = () => syncV21Build11DesktopIsolation(media.matches);
+function setupDesktopIsolationDesktopIsolation() {
+  const media = window.matchMedia(CY_DESKTOP_ISOLATION_DESKTOP);
+  const sync = () => syncDesktopIsolationDesktopIsolation(media.matches);
   sync();
   if (typeof media.addEventListener === 'function') media.addEventListener('change', sync);
   else media.addListener?.(sync);
 }
 
-function syncV21Build11DesktopIsolation(desktop = window.matchMedia(CY_V21_BUILD11_DESKTOP).matches) {
+function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DESKTOP_ISOLATION_DESKTOP).matches) {
   const accountTrigger = document.querySelector('#mobileAccountMenuButton');
   const ledgerMore = document.querySelector('#mobileLedgerMoreButton');
 
@@ -1222,15 +1222,15 @@ function syncV21Build11DesktopIsolation(desktop = window.matchMedia(CY_V21_BUILD
   if (ledgerMore) ledgerMore.hidden = Boolean(desktop);
 
   if (!desktop) {
-    document.body.classList.add('v21-mobile-app');
+    document.body.classList.add('cy-mobile-app');
     return;
   }
 
   document.body.classList.remove(
-    'v21-mobile-app',
-    'v21-mobile-account-menu-open',
-    'v21-mobile-account-sheet-open',
-    'v21-mobile-ledger-tools-open'
+    'cy-mobile-app',
+    'cy-mobile-account-menu-open',
+    'cy-mobile-account-sheet-open',
+    'cy-mobile-ledger-tools-open'
   );
 
   const accountMenu = document.querySelector('#mobileAccountMenu');
@@ -1246,34 +1246,34 @@ function syncV21Build11DesktopIsolation(desktop = window.matchMedia(CY_V21_BUILD
   ledgerMore?.setAttribute('aria-expanded', 'false');
 }
 
-const CY_V21_BUILD12_DESKTOP = '(min-width: 1024px)';
-const CY_V21_BUILD12_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
-syncV21Build12Copy();
+const CY_DESKTOP_LEDGER_MONTH_DESKTOP = '(min-width: 1024px)';
+const CY_DESKTOP_LEDGER_MONTH_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
+syncDesktopLedgerMonthCopy();
 
 window.addEventListener('load', () => {
-  syncV21Build12Copy();
-  setupV21Build12DesktopMonthPicker();
+  syncDesktopLedgerMonthCopy();
+  setupDesktopLedgerMonthDesktopMonthPicker();
 });
 
 
 
-function syncV21Build12Copy() {
+function syncDesktopLedgerMonthCopy() {
   const summary = document.querySelector('#summary');
   const editSummary = document.querySelector('#editSummary');
   if (summary) summary.placeholder = '最多20個字';
   if (editSummary) editSummary.placeholder = '最多20個字';
 }
 
-function setupV21Build12DesktopMonthPicker() {
-  const media = window.matchMedia(CY_V21_BUILD12_DESKTOP);
+function setupDesktopLedgerMonthDesktopMonthPicker() {
+  const media = window.matchMedia(CY_DESKTOP_LEDGER_MONTH_DESKTOP);
   const syncMode = () => {
     const tablet = typeof isTabletWorkspace === 'function' && isTabletWorkspace();
     const root = document.querySelector('#ledgerMonthPickerCustom');
     if (root) {
       root.hidden = !media.matches || tablet;
-      if (!media.matches || tablet) closeV21Build12MonthPicker(root);
+      if (!media.matches || tablet) closeDesktopLedgerMonthMonthPicker(root);
     }
-    if (media.matches && !tablet) ensureV21Build12MonthPicker();
+    if (media.matches && !tablet) ensureDesktopLedgerMonthMonthPicker();
   };
 
   if (typeof media.addEventListener === 'function') media.addEventListener('change', syncMode);
@@ -1281,35 +1281,35 @@ function setupV21Build12DesktopMonthPicker() {
   syncMode();
 }
 
-function ensureV21Build12MonthPicker() {
+function ensureDesktopLedgerMonthMonthPicker() {
   const input = document.querySelector('#monthFilter');
   const slot = document.querySelector('#ledgerMonthSlot');
   if (!input || !slot) {
-    setTimeout(ensureV21Build12MonthPicker, 60);
+    setTimeout(ensureDesktopLedgerMonthMonthPicker, 60);
     return;
   }
 
   let root = document.querySelector('#ledgerMonthPickerCustom');
   if (root) {
     root.hidden = false;
-    syncV21Build12MonthPickerLabel(root, input);
+    syncDesktopLedgerMonthMonthPickerLabel(root, input);
     return;
   }
 
   root = document.createElement('div');
   root.id = 'ledgerMonthPickerCustom';
-  root.className = 'v21-month-picker-custom';
+  root.className = 'cy-month-picker-custom';
   root.innerHTML = `
-    <button id="ledgerMonthPickerTrigger" class="v21-month-picker-trigger" type="button" aria-haspopup="dialog" aria-expanded="false">
-      <span id="ledgerMonthPickerLabel">—</span><span class="v21-month-picker-caret" aria-hidden="true">▾</span>
+    <button id="ledgerMonthPickerTrigger" class="cy-month-picker-trigger" type="button" aria-haspopup="dialog" aria-expanded="false">
+      <span id="ledgerMonthPickerLabel">—</span><span class="cy-month-picker-caret" aria-hidden="true">▾</span>
     </button>
-    <div id="ledgerMonthPickerPopover" class="v21-month-picker-popover" role="dialog" aria-label="選擇月份" hidden>
-      <div class="v21-month-picker-head">
-        <button type="button" class="v21-month-picker-nav" data-picker-nav="-1" aria-label="上一組">‹</button>
-        <button id="ledgerMonthPickerYearButton" type="button" class="v21-month-picker-year" aria-label="切換年份選擇"></button>
-        <button type="button" class="v21-month-picker-nav" data-picker-nav="1" aria-label="下一組">›</button>
+    <div id="ledgerMonthPickerPopover" class="cy-month-picker-popover" role="dialog" aria-label="選擇月份" hidden>
+      <div class="cy-month-picker-head">
+        <button type="button" class="cy-month-picker-nav" data-picker-nav="-1" aria-label="上一組">‹</button>
+        <button id="ledgerMonthPickerYearButton" type="button" class="cy-month-picker-year" aria-label="切換年份選擇"></button>
+        <button type="button" class="cy-month-picker-nav" data-picker-nav="1" aria-label="下一組">›</button>
       </div>
-      <div id="ledgerMonthPickerGrid" class="v21-month-picker-grid"></div>
+      <div id="ledgerMonthPickerGrid" class="cy-month-picker-grid"></div>
     </div>`;
   slot.append(root);
 
@@ -1318,35 +1318,35 @@ function ensureV21Build12MonthPicker() {
   const yearButton = root.querySelector('#ledgerMonthPickerYearButton');
   const grid = root.querySelector('#ledgerMonthPickerGrid');
   let view = 'months';
-  let displayYear = v21Build12ReadMonth(input).year;
+  let displayYear = desktopLedgerMonthReadMonth(input).year;
   let yearStart = displayYear - 5;
 
   const render = () => {
-    const selected = v21Build12ReadMonth(input);
+    const selected = desktopLedgerMonthReadMonth(input);
     if (view === 'months') {
       yearButton.textContent = String(displayYear);
       yearButton.title = '選擇年份';
-      grid.className = 'v21-month-picker-grid month-view';
-      grid.innerHTML = CY_V21_BUILD12_MONTHS.map((label, index) => {
+      grid.className = 'cy-month-picker-grid month-view';
+      grid.innerHTML = CY_DESKTOP_LEDGER_MONTH_MONTHS.map((label, index) => {
         const month = index + 1;
         const active = selected.year === displayYear && selected.month === month;
-        return `<button type="button" class="v21-month-choice${active ? ' active' : ''}" data-picker-month="${month}" aria-pressed="${active ? 'true' : 'false'}">${label}</button>`;
+        return `<button type="button" class="cy-month-choice${active ? ' active' : ''}" data-picker-month="${month}" aria-pressed="${active ? 'true' : 'false'}">${label}</button>`;
       }).join('');
       return;
     }
 
     yearButton.textContent = `${yearStart}–${yearStart + 11}`;
     yearButton.title = '返回月份選擇';
-    grid.className = 'v21-month-picker-grid year-view';
+    grid.className = 'cy-month-picker-grid year-view';
     grid.innerHTML = Array.from({ length: 12 }, (_, index) => yearStart + index).map(year => {
       const active = year === selected.year;
       const current = year === new Date().getFullYear();
-      return `<button type="button" class="v21-year-choice${active ? ' active' : ''}${current ? ' current' : ''}" data-picker-year="${year}" aria-pressed="${active ? 'true' : 'false'}">${year}</button>`;
+      return `<button type="button" class="cy-year-choice${active ? ' active' : ''}${current ? ' current' : ''}" data-picker-year="${year}" aria-pressed="${active ? 'true' : 'false'}">${year}</button>`;
     }).join('');
   };
 
   const open = () => {
-    const selected = v21Build12ReadMonth(input);
+    const selected = desktopLedgerMonthReadMonth(input);
     displayYear = selected.year;
     yearStart = displayYear - 5;
     view = 'months';
@@ -1363,7 +1363,7 @@ function ensureV21Build12MonthPicker() {
 
   trigger.addEventListener('click', event => {
     event.stopPropagation();
-    if (!window.matchMedia(CY_V21_BUILD12_DESKTOP).matches) return;
+    if (!window.matchMedia(CY_DESKTOP_LEDGER_MONTH_DESKTOP).matches) return;
     if (popover.hidden) open(); else close(false);
   });
 
@@ -1393,7 +1393,7 @@ function ensureV21Build12MonthPicker() {
       if (month >= 1 && month <= 12) {
         input.value = `${displayYear}-${String(month).padStart(2, '0')}`;
         input.dispatchEvent(new Event('change', { bubbles: true }));
-        syncV21Build12MonthPickerLabel(root, input);
+        syncDesktopLedgerMonthMonthPickerLabel(root, input);
         close(true);
       }
       return;
@@ -1408,9 +1408,9 @@ function ensureV21Build12MonthPicker() {
   });
 
   input.addEventListener('change', () => {
-    const selected = v21Build12ReadMonth(input);
+    const selected = desktopLedgerMonthReadMonth(input);
     displayYear = selected.year;
-    syncV21Build12MonthPickerLabel(root, input);
+    syncDesktopLedgerMonthMonthPickerLabel(root, input);
     if (!popover.hidden) render();
   });
 
@@ -1424,25 +1424,25 @@ function ensureV21Build12MonthPicker() {
     close(true);
   });
 
-  root._v21Build12Close = close;
-  syncV21Build12MonthPickerLabel(root, input);
+  root._desktopLedgerMonthClose = close;
+  syncDesktopLedgerMonthMonthPickerLabel(root, input);
 }
 
-function syncV21Build12MonthPickerLabel(root, input) {
+function syncDesktopLedgerMonthMonthPickerLabel(root, input) {
   const label = root?.querySelector('#ledgerMonthPickerLabel');
   if (!label || !input) return;
-  const selected = v21Build12ReadMonth(input);
+  const selected = desktopLedgerMonthReadMonth(input);
   label.textContent = `${selected.year}年${String(selected.month).padStart(2, '0')}月`;
 }
 
-function closeV21Build12MonthPicker(root) {
+function closeDesktopLedgerMonthMonthPicker(root) {
   const popover = root?.querySelector('#ledgerMonthPickerPopover');
   const trigger = root?.querySelector('#ledgerMonthPickerTrigger');
   if (popover) popover.hidden = true;
   trigger?.setAttribute('aria-expanded', 'false');
 }
 
-function v21Build12ReadMonth(input) {
+function desktopLedgerMonthReadMonth(input) {
   const value = String(input?.value || '');
   const match = /^(\d{4})-(\d{2})$/.exec(value);
   if (match) return { year: Number(match[1]), month: Number(match[2]) };
@@ -1450,25 +1450,25 @@ function v21Build12ReadMonth(input) {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-const CY_V21_BUILD13_DESKTOP = '(min-width: 1024px)';
-setupV21Build13ConnectionStatus();
+const CY_DESKTOP_MANAGEMENT_DESKTOP = '(min-width: 1024px)';
+setupDesktopManagementConnectionStatus();
 
-const runV21Build13 = () => {
-  setupV21Build13ConnectionStatus();
-  setupV21Build13HeaderManagement();
-  setupV21Build13OpeningDialog();
-  syncV21Build13CrudCopy();
+const runDesktopManagement = () => {
+  setupDesktopManagementConnectionStatus();
+  setupDesktopManagementHeaderManagement();
+  setupDesktopManagementOpeningDialog();
+  syncDesktopManagementCrudCopy();
 };
 
-if (document.readyState === 'complete') setTimeout(runV21Build13, 0);
-else window.addEventListener('load', () => setTimeout(runV21Build13, 0), { once: true });
+if (document.readyState === 'complete') setTimeout(runDesktopManagement, 0);
+else window.addEventListener('load', () => setTimeout(runDesktopManagement, 0), { once: true });
 
 
 
-function setupV21Build13ConnectionStatus() {
+function setupDesktopManagementConnectionStatus() {
   const status = document.querySelector('#connectionStatus');
-  if (!status || status.dataset.v21Build13Bound === '1') return;
-  status.dataset.v21Build13Bound = '1';
+  if (!status || status.dataset.desktopManagementBound === '1') return;
+  status.dataset.desktopManagementBound = '1';
 
   const sync = () => {
     const warning = status.classList.contains('warn') || status.classList.contains('error');
@@ -1485,8 +1485,8 @@ function setupV21Build13ConnectionStatus() {
   observer.observe(status, { attributes: true, childList: true, characterData: true, subtree: true });
 }
 
-function setupV21Build13HeaderManagement() {
-  const media = window.matchMedia(CY_V21_BUILD13_DESKTOP);
+function setupDesktopManagementHeaderManagement() {
+  const media = window.matchMedia(CY_DESKTOP_MANAGEMENT_DESKTOP);
   const actions = document.querySelector('.topbar-actions');
   const settings = document.querySelector('#settingsButton');
   const dialog = document.querySelector('#settingsDialog');
@@ -1497,7 +1497,7 @@ function setupV21Build13HeaderManagement() {
   if (!accountsButton) {
     accountsButton = document.createElement('button');
     accountsButton.id = 'headerAccountManagerButton';
-    accountsButton.className = 'secondary compact v21-header-management-button';
+    accountsButton.className = 'secondary compact cy-header-management-button';
     accountsButton.type = 'button';
     accountsButton.textContent = '帳戶管理';
     actions.insertBefore(accountsButton, settings);
@@ -1507,26 +1507,26 @@ function setupV21Build13HeaderManagement() {
   if (!categoriesButton) {
     categoriesButton = document.createElement('button');
     categoriesButton.id = 'headerCategoryManagerButton';
-    categoriesButton.className = 'secondary compact v21-header-management-button';
+    categoriesButton.className = 'secondary compact cy-header-management-button';
     categoriesButton.type = 'button';
     categoriesButton.textContent = '科目管理';
     actions.insertBefore(categoriesButton, settings);
   }
 
-  if (accountsButton.dataset.v21Build13Bound !== '1') {
-    accountsButton.dataset.v21Build13Bound = '1';
-    accountsButton.addEventListener('click', () => openV21Build13Management('accounts', '帳戶管理'));
+  if (accountsButton.dataset.desktopManagementBound !== '1') {
+    accountsButton.dataset.desktopManagementBound = '1';
+    accountsButton.addEventListener('click', () => openDesktopManagementManagement('accounts', '帳戶管理'));
   }
-  if (categoriesButton.dataset.v21Build13Bound !== '1') {
-    categoriesButton.dataset.v21Build13Bound = '1';
-    categoriesButton.addEventListener('click', () => openV21Build13Management('categories', '科目管理'));
+  if (categoriesButton.dataset.desktopManagementBound !== '1') {
+    categoriesButton.dataset.desktopManagementBound = '1';
+    categoriesButton.addEventListener('click', () => openDesktopManagementManagement('categories', '科目管理'));
   }
 
-  if (settings.dataset.v21Build13Bound !== '1') {
-    settings.dataset.v21Build13Bound = '1';
+  if (settings.dataset.desktopManagementBound !== '1') {
+    settings.dataset.desktopManagementBound = '1';
     settings.addEventListener('click', () => {
       setTimeout(() => {
-        dialog.classList.remove('v21-management-mode');
+        dialog.classList.remove('cy-management-mode');
         delete dialog.dataset.managementPane;
         title.textContent = '設定';
         const current = typeof state === 'object' ? String(state.activeSettingsTab || '') : '';
@@ -1544,20 +1544,20 @@ function setupV21Build13HeaderManagement() {
     accountsButton.hidden = !enabled;
     categoriesButton.hidden = !enabled;
     if (!enabled) {
-      dialog.classList.remove('v21-management-mode');
+      dialog.classList.remove('cy-management-mode');
       delete dialog.dataset.managementPane;
       title.textContent = '設定';
     }
   };
   syncDesktop();
-  if (typeof media.addEventListener === 'function' && !actions.dataset.v21Build13MediaBound) {
-    actions.dataset.v21Build13MediaBound = '1';
+  if (typeof media.addEventListener === 'function' && !actions.dataset.desktopManagementMediaBound) {
+    actions.dataset.desktopManagementMediaBound = '1';
     media.addEventListener('change', syncDesktop);
   }
 }
 
-function openV21Build13Management(tab, label) {
-  if (!window.matchMedia(CY_V21_BUILD13_DESKTOP).matches) return;
+function openDesktopManagementManagement(tab, label) {
+  if (!window.matchMedia(CY_DESKTOP_MANAGEMENT_DESKTOP).matches) return;
   const dialog = document.querySelector('#settingsDialog');
   const title = dialog?.querySelector('.modal-header h2');
   if (!dialog || !title) return;
@@ -1569,13 +1569,13 @@ function openV21Build13Management(tab, label) {
     renderSettings();
   }
 
-  dialog.classList.add('v21-management-mode');
+  dialog.classList.add('cy-management-mode');
   dialog.dataset.managementPane = tab;
   title.textContent = label;
   if (typeof setSettingsTab === 'function') setSettingsTab(tab);
 }
 
-function setupV21Build13OpeningDialog() {
+function setupDesktopManagementOpeningDialog() {
   const dialog = document.querySelector('#openingDialog');
   const monthInput = document.querySelector('#openingMonth');
   const ledgerMonth = document.querySelector('#monthFilter');
@@ -1583,7 +1583,7 @@ function setupV21Build13OpeningDialog() {
   if (!dialog || !monthInput || !ledgerMonth || !title) return;
 
   const sync = () => {
-    if (!window.matchMedia(CY_V21_BUILD13_DESKTOP).matches) return;
+    if (!window.matchMedia(CY_DESKTOP_MANAGEMENT_DESKTOP).matches) return;
     const month = /^\d{4}-\d{2}$/.test(ledgerMonth.value || '') ? ledgerMonth.value : monthInput.value;
     if (/^\d{4}-\d{2}$/.test(month || '')) {
       if (monthInput.value !== month) {
@@ -1602,26 +1602,26 @@ function setupV21Build13OpeningDialog() {
   document.querySelector('#ledgerOpeningBalanceButton')?.addEventListener('click', () => setTimeout(sync, 0));
 }
 
-function syncV21Build13CrudCopy() {
+function syncDesktopManagementCrudCopy() {
   const editSave = document.querySelector('#editSaveButton');
   if (editSave) editSave.textContent = '儲存';
 }
 
-const CY_V21_BUILD14_DESKTOP = '(min-width: 1024px)';
-const CY_V21_BUILD14_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
+const CY_DESKTOP_MANAGERS_DESKTOP = '(min-width: 1024px)';
+const CY_DESKTOP_MANAGERS_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
 
-const runV21Build14 = () => {
-  setupV21Build14AccountLimit();
-  setupV21Build14MonthPickers();
-  syncV21Build14LedgerMonthTrigger();
+const runDesktopManagers = () => {
+  setupDesktopManagersAccountLimit();
+  setupDesktopManagersMonthPickers();
+  syncDesktopManagersLedgerMonthTrigger();
 };
 
-if (document.readyState === 'complete') setTimeout(runV21Build14, 0);
-else window.addEventListener('load', () => setTimeout(runV21Build14, 0), { once: true });
+if (document.readyState === 'complete') setTimeout(runDesktopManagers, 0);
+else window.addEventListener('load', () => setTimeout(runDesktopManagers, 0), { once: true });
 
 
 
-function setupV21Build14AccountLimit() {
+function setupDesktopManagersAccountLimit() {
   const input = document.querySelector('#newAccountName');
   const button = document.querySelector('#addAccountButton');
   if (!input || !button) return;
@@ -1630,100 +1630,100 @@ function setupV21Build14AccountLimit() {
 
   const validate = event => {
     const name = String(input.value || '').trim().replace(/\s+/g, ' ');
-    if (!name || v21Build14CharCount(name) <= 8) return;
+    if (!name || desktopManagersCharCount(name) <= 8) return;
     event?.preventDefault();
     event?.stopImmediatePropagation();
     setDialogMessage(document.querySelector('#settingsMessage'), '帳戶名稱最多 8 個字。', true);
     input.focus();
   };
-  if (button.dataset.v21Build14LimitBound !== '1') {
-    button.dataset.v21Build14LimitBound = '1';
+  if (button.dataset.desktopManagersLimitBound !== '1') {
+    button.dataset.desktopManagersLimitBound = '1';
     button.addEventListener('click', validate, true);
   }
-  if (input.dataset.v21Build14LimitBound !== '1') {
-    input.dataset.v21Build14LimitBound = '1';
+  if (input.dataset.desktopManagersLimitBound !== '1') {
+    input.dataset.desktopManagersLimitBound = '1';
     input.addEventListener('keydown', event => {
       if (event.key === 'Enter') validate(event);
     }, true);
   }
 }
 
-function setupV21Build14MonthPickers() {
-  const media = window.matchMedia(CY_V21_BUILD14_DESKTOP);
+function setupDesktopManagersMonthPickers() {
+  const media = window.matchMedia(CY_DESKTOP_MANAGERS_DESKTOP);
   const scan = () => {
-    syncV21Build14LedgerMonthTrigger();
+    syncDesktopManagersLedgerMonthTrigger();
     if (!media.matches) return;
     for (const input of document.querySelectorAll('input[type="month"]')) {
       if (input.id === 'monthFilter' || input.id === 'openingMonth') continue;
-      ensureV21Build14MonthPickerForInput(input);
+      ensureDesktopManagersMonthPickerForInput(input);
     }
   };
   scan();
   if (typeof media.addEventListener === 'function') media.addEventListener('change', scan);
   else media.addListener?.(scan);
 
-  if (document.body.dataset.v21Build14MonthObserver !== '1') {
-    document.body.dataset.v21Build14MonthObserver = '1';
+  if (document.body.dataset.desktopManagersMonthObserver !== '1') {
+    document.body.dataset.desktopManagersMonthObserver = '1';
     const observer = new MutationObserver(scan);
     observer.observe(document.body, { childList: true, subtree: true });
   }
 }
 
-function syncV21Build14LedgerMonthTrigger() {
-  document.querySelector('#ledgerMonthPickerCustom .v21-month-picker-caret')?.remove();
+function syncDesktopManagersLedgerMonthTrigger() {
+  document.querySelector('#ledgerMonthPickerCustom .cy-month-picker-caret')?.remove();
 }
 
-function ensureV21Build14MonthPickerForInput(input) {
-  if (!input || input.dataset.v21Build14MonthPicker === '1') return;
+function ensureDesktopManagersMonthPickerForInput(input) {
+  if (!input || input.dataset.desktopManagersMonthPicker === '1') return;
   const label = input.closest('label') || input.parentElement;
   if (!label) return;
-  input.dataset.v21Build14MonthPicker = '1';
-  input.classList.add('v21-native-month-source');
+  input.dataset.desktopManagersMonthPicker = '1';
+  input.classList.add('cy-native-month-source');
 
   const root = document.createElement('div');
-  root.className = 'v21-month-picker-custom v21-month-picker-field';
+  root.className = 'cy-month-picker-custom cy-month-picker-field';
   root.innerHTML = `
-    <button type="button" class="v21-month-picker-trigger v21-month-picker-field-trigger" aria-haspopup="dialog" aria-expanded="false"><span data-v21-month-label>—</span></button>
-    <div class="v21-month-picker-popover" role="dialog" aria-label="選擇月份" hidden>
-      <div class="v21-month-picker-head">
-        <button type="button" class="v21-month-picker-nav" data-picker-nav="-1" aria-label="上一組">‹</button>
-        <button type="button" class="v21-month-picker-year" data-picker-year-head aria-label="切換年份選擇"></button>
-        <button type="button" class="v21-month-picker-nav" data-picker-nav="1" aria-label="下一組">›</button>
+    <button type="button" class="cy-month-picker-trigger cy-month-picker-field-trigger" aria-haspopup="dialog" aria-expanded="false"><span data-cy-month-label>—</span></button>
+    <div class="cy-month-picker-popover" role="dialog" aria-label="選擇月份" hidden>
+      <div class="cy-month-picker-head">
+        <button type="button" class="cy-month-picker-nav" data-picker-nav="-1" aria-label="上一組">‹</button>
+        <button type="button" class="cy-month-picker-year" data-picker-year-head aria-label="切換年份選擇"></button>
+        <button type="button" class="cy-month-picker-nav" data-picker-nav="1" aria-label="下一組">›</button>
       </div>
-      <div class="v21-month-picker-grid" data-picker-grid></div>
+      <div class="cy-month-picker-grid" data-picker-grid></div>
     </div>`;
   input.insertAdjacentElement('afterend', root);
 
-  const trigger = root.querySelector('.v21-month-picker-trigger');
-  const popover = root.querySelector('.v21-month-picker-popover');
+  const trigger = root.querySelector('.cy-month-picker-trigger');
+  const popover = root.querySelector('.cy-month-picker-popover');
   const yearHead = root.querySelector('[data-picker-year-head]');
   const grid = root.querySelector('[data-picker-grid]');
   let view = 'months';
-  let displayYear = v21Build14ReadMonth(input).year;
+  let displayYear = desktopManagersReadMonth(input).year;
   let yearStart = displayYear - 5;
 
   const render = () => {
-    const selected = v21Build14ReadMonth(input);
+    const selected = desktopManagersReadMonth(input);
     if (view === 'months') {
       yearHead.textContent = String(displayYear);
-      grid.className = 'v21-month-picker-grid month-view';
-      grid.innerHTML = CY_V21_BUILD14_MONTHS.map((monthLabel, index) => {
+      grid.className = 'cy-month-picker-grid month-view';
+      grid.innerHTML = CY_DESKTOP_MANAGERS_MONTHS.map((monthLabel, index) => {
         const month = index + 1;
         const active = selected.valid && selected.year === displayYear && selected.month === month;
-        return `<button type="button" class="v21-month-choice${active ? ' active' : ''}" data-picker-month="${month}">${monthLabel}</button>`;
+        return `<button type="button" class="cy-month-choice${active ? ' active' : ''}" data-picker-month="${month}">${monthLabel}</button>`;
       }).join('');
     } else {
       yearHead.textContent = `${yearStart}–${yearStart + 11}`;
-      grid.className = 'v21-month-picker-grid year-view';
+      grid.className = 'cy-month-picker-grid year-view';
       grid.innerHTML = Array.from({ length: 12 }, (_, index) => yearStart + index).map(year =>
-        `<button type="button" class="v21-year-choice${selected.valid && selected.year === year ? ' active' : ''}" data-picker-year="${year}">${year}</button>`
+        `<button type="button" class="cy-year-choice${selected.valid && selected.year === year ? ' active' : ''}" data-picker-year="${year}">${year}</button>`
       ).join('');
     }
   };
 
   const syncLabel = () => {
-    const selected = v21Build14ReadMonth(input);
-    const target = root.querySelector('[data-v21-month-label]');
+    const selected = desktopManagersReadMonth(input);
+    const target = root.querySelector('[data-cy-month-label]');
     if (target) target.textContent = selected.valid ? `${selected.year}年${String(selected.month).padStart(2, '0')}月` : '選擇月份';
   };
 
@@ -1735,9 +1735,9 @@ function ensureV21Build14MonthPickerForInput(input) {
 
   trigger.addEventListener('click', event => {
     event.stopPropagation();
-    if (!window.matchMedia(CY_V21_BUILD14_DESKTOP).matches) return;
+    if (!window.matchMedia(CY_DESKTOP_MANAGERS_DESKTOP).matches) return;
     if (!popover.hidden) return close(false);
-    const selected = v21Build14ReadMonth(input);
+    const selected = desktopManagersReadMonth(input);
     displayYear = selected.year;
     yearStart = displayYear - 5;
     view = 'months';
@@ -1790,18 +1790,18 @@ function ensureV21Build14MonthPickerForInput(input) {
   syncLabel();
 }
 
-function v21Build14ReadMonth(input) {
+function desktopManagersReadMonth(input) {
   const match = /^(\d{4})-(\d{2})$/.exec(String(input?.value || ''));
   if (match) return { valid: true, year: Number(match[1]), month: Number(match[2]) };
   const now = new Date();
   return { valid: false, year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
-function v21Build14CharCount(value) {
+function desktopManagersCharCount(value) {
   return Array.from(String(value || '')).length;
 }
 
-function v21Build14Escape(value) {
+function desktopManagersEscape(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -1810,29 +1810,29 @@ function v21Build14Escape(value) {
     .replaceAll("'", '&#39;');
 }
 
-const CY_V0211_DESKTOP = '(min-width: 1024px)';
-const CY_V0211_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
-const CY_V0211_WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
-let cyV0211RenderingManagers = false;
-const cyV0211ConfirmBypass = new WeakSet();
-installV0211ConfirmDialog();
-installV0211ConfirmInterceptors();
+const CY_DesktopUi_DESKTOP = '(min-width: 1024px)';
+const CY_DesktopUi_MONTHS = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
+const CY_DesktopUi_WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+let cyDesktopUiRenderingManagers = false;
+const cyDesktopUiConfirmBypass = new WeakSet();
+installDesktopUiConfirmDialog();
+installDesktopUiConfirmInterceptors();
 
-const runV0211Patch = () => {
-  setupV0211DatePickers();
-  auditV0211MonthPickers();
-  refineV0211HeaderIdentity();
+const runDesktopUiPatch = () => {
+  setupDesktopUiDatePickers();
+  auditDesktopUiMonthPickers();
+  refineDesktopUiHeaderIdentity();
 };
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => setTimeout(runV0211Patch, 0), { once: true });
+  document.addEventListener('DOMContentLoaded', () => setTimeout(runDesktopUiPatch, 0), { once: true });
 } else {
-  setTimeout(runV0211Patch, 0);
+  setTimeout(runDesktopUiPatch, 0);
 }
 window.addEventListener('load', () => {
-  runV0211Patch();
-  setTimeout(runV0211Patch, 80);
-  setTimeout(runV0211Patch, 300);
+  runDesktopUiPatch();
+  setTimeout(runDesktopUiPatch, 80);
+  setTimeout(runDesktopUiPatch, 300);
 }, { once: true });
 
 
@@ -1841,7 +1841,7 @@ window.addEventListener('load', () => {
 /* Managed confirmation dialog                                                */
 /* -------------------------------------------------------------------------- */
 
-function installV0211ConfirmDialog() {
+function installDesktopUiConfirmDialog() {
   if (window.cyConfirm && document.querySelector('#cyConfirmDialog')) return;
   let dialog = document.querySelector('#cyConfirmDialog');
   if (!dialog) {
@@ -1908,9 +1908,9 @@ function installV0211ConfirmDialog() {
   });
 }
 
-function installV0211ConfirmInterceptors() {
-  if (document.documentElement.dataset.v0211ConfirmBound === '1') return;
-  document.documentElement.dataset.v0211ConfirmBound = '1';
+function installDesktopUiConfirmInterceptors() {
+  if (document.documentElement.dataset.desktopUiConfirmBound === '1') return;
+  document.documentElement.dataset.desktopUiConfirmBound = '1';
 
   document.addEventListener('click', async event => {
     const target = event.target.closest([
@@ -1922,9 +1922,9 @@ function installV0211ConfirmInterceptors() {
       '#backupRunNow',
       '#desktopMigrationCommitV19'
     ].join(','));
-    if (!target || cyV0211ConfirmBypass.has(target)) return;
+    if (!target || cyDesktopUiConfirmBypass.has(target)) return;
 
-    const spec = v0211ConfirmSpec(target);
+    const spec = desktopUiConfirmSpec(target);
     if (!spec) return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -1932,21 +1932,21 @@ function installV0211ConfirmInterceptors() {
     const accepted = await window.cyConfirm(spec);
     if (!accepted || !target.isConnected) return;
 
-    cyV0211ConfirmBypass.add(target);
+    cyDesktopUiConfirmBypass.add(target);
     const nativeConfirm = window.confirm;
     window.confirm = () => true;
     try {
       target.click();
     } finally {
       window.confirm = nativeConfirm;
-      queueMicrotask(() => cyV0211ConfirmBypass.delete(target));
+      queueMicrotask(() => cyDesktopUiConfirmBypass.delete(target));
     }
   }, true);
 
   /* Build 14 owns rename UX. Capture here so legacy prompt() paths can never win. */
   document.addEventListener('click', event => {
     const button = event.target.closest('[data-account-rename], [data-category-rename], [data-group-rename]');
-    if (!button || typeof beginV21Build14InlineEdit !== 'function') return;
+    if (!button || typeof beginDesktopManagersInlineEdit !== 'function') return;
     let type = '';
     let id = 0;
     if (button.dataset.accountRename) { type = 'account'; id = Number(button.dataset.accountRename); }
@@ -1955,11 +1955,11 @@ function installV0211ConfirmInterceptors() {
     if (!type || !Number.isInteger(id) || id <= 0) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    beginV21Build14InlineEdit(type, id, button);
+    beginDesktopManagersInlineEdit(type, id, button);
   }, true);
 }
 
-function v0211ConfirmSpec(target) {
+function desktopUiConfirmSpec(target) {
   if (target.matches('[data-delete-id]')) {
     return { title: '刪除記帳', message: '確定刪除這筆記帳？', confirmText: '刪除', danger: true };
   }
@@ -2031,82 +2031,82 @@ function v0211ConfirmSpec(target) {
 /* Deterministic Desktop managers                                             */
 /* -------------------------------------------------------------------------- */
 
-function auditV0211MonthPickers() {
-  if (!window.matchMedia(CY_V0211_DESKTOP).matches) return;
-  if (typeof ensureV21Build14MonthPickerForInput === 'function') {
-    document.querySelectorAll('input[type="month"]').forEach(input => ensureV21Build14MonthPickerForInput(input));
+function auditDesktopUiMonthPickers() {
+  if (!window.matchMedia(CY_DesktopUi_DESKTOP).matches) return;
+  if (typeof ensureDesktopManagersMonthPickerForInput === 'function') {
+    document.querySelectorAll('input[type="month"]').forEach(input => ensureDesktopManagersMonthPickerForInput(input));
   }
-  if (typeof syncV21Build14LedgerMonthTrigger === 'function') syncV21Build14LedgerMonthTrigger();
+  if (typeof syncDesktopManagersLedgerMonthTrigger === 'function') syncDesktopManagersLedgerMonthTrigger();
 }
 
-function setupV0211DatePickers() {
-  const media = window.matchMedia(CY_V0211_DESKTOP);
+function setupDesktopUiDatePickers() {
+  const media = window.matchMedia(CY_DesktopUi_DESKTOP);
   const scan = () => {
     if (!media.matches || (typeof isTabletWorkspace === 'function' && isTabletWorkspace())) return;
-    document.querySelectorAll('input[type="date"]').forEach(ensureV0211DatePicker);
+    document.querySelectorAll('input[type="date"]').forEach(ensureDesktopUiDatePicker);
   };
   scan();
-  if (document.body.dataset.v0211DateObserver !== '1') {
-    document.body.dataset.v0211DateObserver = '1';
+  if (document.body.dataset.desktopUiDateObserver !== '1') {
+    document.body.dataset.desktopUiDateObserver = '1';
     const observer = new MutationObserver(scan);
     observer.observe(document.body, { childList: true, subtree: true });
   }
-  if (typeof media.addEventListener === 'function' && document.body.dataset.v0211DateMedia !== '1') {
-    document.body.dataset.v0211DateMedia = '1';
+  if (typeof media.addEventListener === 'function' && document.body.dataset.desktopUiDateMedia !== '1') {
+    document.body.dataset.desktopUiDateMedia = '1';
     media.addEventListener('change', scan);
   }
 }
 
-function ensureV0211DatePicker(input) {
-  if (!input || input.dataset.v0211DatePicker === '1') return;
-  input.dataset.v0211DatePicker = '1';
-  input.classList.add('v0211-native-date-source');
+function ensureDesktopUiDatePicker(input) {
+  if (!input || input.dataset.desktopUiDatePicker === '1') return;
+  input.dataset.desktopUiDatePicker = '1';
+  input.classList.add('desktopUi-native-date-source');
 
   const root = document.createElement('div');
-  root.className = 'v0211-date-picker';
+  root.className = 'desktopUi-date-picker';
   root.innerHTML = `
-    <button type="button" class="v0211-date-trigger" aria-haspopup="dialog" aria-expanded="false">
-      <span class="v0211-date-label">—</span><span class="v0211-date-calendar-icon" aria-hidden="true">▣</span>
+    <button type="button" class="desktopUi-date-trigger" aria-haspopup="dialog" aria-expanded="false">
+      <span class="desktopUi-date-label">—</span><span class="desktopUi-date-calendar-icon" aria-hidden="true">▣</span>
     </button>
-    <div class="v0211-date-popover" role="dialog" aria-label="選擇日期" hidden>
-      <div class="v0211-date-head">
-        <button type="button" data-v0211-date-nav="-1" aria-label="上一個">‹</button>
-        <button type="button" class="v0211-date-title" aria-label="切換年月選擇"></button>
-        <button type="button" data-v0211-date-nav="1" aria-label="下一個">›</button>
+    <div class="desktopUi-date-popover" role="dialog" aria-label="選擇日期" hidden>
+      <div class="desktopUi-date-head">
+        <button type="button" data-desktopUi-date-nav="-1" aria-label="上一個">‹</button>
+        <button type="button" class="desktopUi-date-title" aria-label="切換年月選擇"></button>
+        <button type="button" data-desktopUi-date-nav="1" aria-label="下一個">›</button>
       </div>
-      <div class="v0211-date-content"></div>
-      <div class="v0211-date-footer"><button type="button" class="v0211-date-today-button">今天</button></div>
+      <div class="desktopUi-date-content"></div>
+      <div class="desktopUi-date-footer"><button type="button" class="desktopUi-date-today-button">今天</button></div>
     </div>`;
   input.insertAdjacentElement('afterend', root);
 
-  const trigger = root.querySelector('.v0211-date-trigger');
-  const label = root.querySelector('.v0211-date-label');
-  const popover = root.querySelector('.v0211-date-popover');
-  const title = root.querySelector('.v0211-date-title');
-  const content = root.querySelector('.v0211-date-content');
+  const trigger = root.querySelector('.desktopUi-date-trigger');
+  const label = root.querySelector('.desktopUi-date-label');
+  const popover = root.querySelector('.desktopUi-date-popover');
+  const title = root.querySelector('.desktopUi-date-title');
+  const content = root.querySelector('.desktopUi-date-content');
   let view = 'days';
-  let selected = v0211ReadDate(input);
+  let selected = desktopUiReadDate(input);
   let displayYear = selected.year;
   let displayMonth = selected.month;
   let yearStart = displayYear - 5;
 
   const syncLabel = () => {
-    selected = v0211ReadDate(input);
+    selected = desktopUiReadDate(input);
     label.textContent = `${selected.year}/${String(selected.month).padStart(2, '0')}/${String(selected.day).padStart(2, '0')}`;
   };
 
   const render = () => {
-    selected = v0211ReadDate(input);
-    if (view === 'days') renderV0211Days();
-    else if (view === 'months') renderV0211Months();
-    else renderV0211Years();
+    selected = desktopUiReadDate(input);
+    if (view === 'days') renderDesktopUiDays();
+    else if (view === 'months') renderDesktopUiMonths();
+    else renderDesktopUiYears();
   };
 
-  const renderV0211Days = () => {
+  const renderDesktopUiDays = () => {
     title.textContent = `${displayYear}年${String(displayMonth).padStart(2, '0')}月`;
     const first = new Date(displayYear, displayMonth - 1, 1);
     const start = new Date(displayYear, displayMonth - 1, 1 - first.getDay());
-    const today = v0211Today();
+    const today = desktopUiToday();
     const cells = Array.from({ length: 42 }, (_, index) => {
       const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
       const y = date.getFullYear();
@@ -2116,30 +2116,30 @@ function ensureV0211DatePicker(input) {
       const active = y === selected.year && m === selected.month && d === selected.day;
       const current = y === today.year && m === today.month && d === today.day;
       const other = m !== displayMonth;
-      return `<button type="button" class="v0211-date-day${active ? ' active' : ''}${current ? ' today' : ''}${other ? ' other-month' : ''}" data-v0211-date-value="${value}">${d}</button>`;
+      return `<button type="button" class="desktopUi-date-day${active ? ' active' : ''}${current ? ' today' : ''}${other ? ' other-month' : ''}" data-desktopUi-date-value="${value}">${d}</button>`;
     }).join('');
-    content.innerHTML = `<div class="v0211-date-weekdays">${CY_V0211_WEEKDAYS.map(day => `<span>${day}</span>`).join('')}</div><div class="v0211-date-days">${cells}</div>`;
+    content.innerHTML = `<div class="desktopUi-date-weekdays">${CY_DesktopUi_WEEKDAYS.map(day => `<span>${day}</span>`).join('')}</div><div class="desktopUi-date-days">${cells}</div>`;
   };
 
-  const renderV0211Months = () => {
+  const renderDesktopUiMonths = () => {
     title.textContent = String(displayYear);
-    content.innerHTML = `<div class="v0211-date-choice-grid">${CY_V0211_MONTHS.map((name, index) => {
+    content.innerHTML = `<div class="desktopUi-date-choice-grid">${CY_DesktopUi_MONTHS.map((name, index) => {
       const month = index + 1;
       const active = selected.year === displayYear && selected.month === month;
-      return `<button type="button" class="v0211-date-month-choice${active ? ' active' : ''}" data-v0211-date-month="${month}">${name}</button>`;
+      return `<button type="button" class="desktopUi-date-month-choice${active ? ' active' : ''}" data-desktopUi-date-month="${month}">${name}</button>`;
     }).join('')}</div>`;
   };
 
-  const renderV0211Years = () => {
+  const renderDesktopUiYears = () => {
     title.textContent = `${yearStart}–${yearStart + 11}`;
-    content.innerHTML = `<div class="v0211-date-choice-grid">${Array.from({ length: 12 }, (_, index) => yearStart + index).map(year => {
+    content.innerHTML = `<div class="desktopUi-date-choice-grid">${Array.from({ length: 12 }, (_, index) => yearStart + index).map(year => {
       const active = selected.year === year;
-      return `<button type="button" class="v0211-date-year-choice${active ? ' active' : ''}" data-v0211-date-year="${year}">${year}</button>`;
+      return `<button type="button" class="desktopUi-date-year-choice${active ? ' active' : ''}" data-desktopUi-date-year="${year}">${year}</button>`;
     }).join('')}</div>`;
   };
 
   const open = () => {
-    selected = v0211ReadDate(input);
+    selected = desktopUiReadDate(input);
     displayYear = selected.year;
     displayMonth = selected.month;
     yearStart = displayYear - 5;
@@ -2160,8 +2160,8 @@ function ensureV0211DatePicker(input) {
     if (popover.hidden) open(); else close(false);
   });
 
-  root.querySelectorAll('[data-v0211-date-nav]').forEach(button => button.addEventListener('click', () => {
-    const delta = Number(button.dataset.v0211DateNav) || 0;
+  root.querySelectorAll('[data-desktopUi-date-nav]').forEach(button => button.addEventListener('click', () => {
+    const delta = Number(button.dataset.desktopUiDateNav) || 0;
     if (view === 'days') {
       const next = new Date(displayYear, displayMonth - 1 + delta, 1);
       displayYear = next.getFullYear();
@@ -2184,31 +2184,31 @@ function ensureV0211DatePicker(input) {
   });
 
   content.addEventListener('click', event => {
-    const day = event.target.closest('[data-v0211-date-value]');
+    const day = event.target.closest('[data-desktopUi-date-value]');
     if (day) {
-      input.value = day.dataset.v0211DateValue;
+      input.value = day.dataset.desktopUiDateValue;
       input.dispatchEvent(new Event('change', { bubbles: true }));
       syncLabel();
       close(true);
       return;
     }
-    const month = event.target.closest('[data-v0211-date-month]');
+    const month = event.target.closest('[data-desktopUi-date-month]');
     if (month) {
-      displayMonth = Number(month.dataset.v0211DateMonth) || displayMonth;
+      displayMonth = Number(month.dataset.desktopUiDateMonth) || displayMonth;
       view = 'days';
       render();
       return;
     }
-    const year = event.target.closest('[data-v0211-date-year]');
+    const year = event.target.closest('[data-desktopUi-date-year]');
     if (year) {
-      displayYear = Number(year.dataset.v0211DateYear) || displayYear;
+      displayYear = Number(year.dataset.desktopUiDateYear) || displayYear;
       view = 'months';
       render();
     }
   });
 
-  root.querySelector('.v0211-date-today-button')?.addEventListener('click', () => {
-    const today = v0211Today();
+  root.querySelector('.desktopUi-date-today-button')?.addEventListener('click', () => {
+    const today = desktopUiToday();
     input.value = `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`;
     input.dispatchEvent(new Event('change', { bubbles: true }));
     syncLabel();
@@ -2228,18 +2228,18 @@ function ensureV0211DatePicker(input) {
   syncLabel();
 }
 
-function v0211ReadDate(input) {
+function desktopUiReadDate(input) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(input?.value || ''));
   if (match) return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
-  return v0211Today();
+  return desktopUiToday();
 }
 
-function v0211Today() {
+function desktopUiToday() {
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() };
 }
 
-function refineV0211HeaderIdentity() {
+function refineDesktopUiHeaderIdentity() {
   const user = document.querySelector('#currentUser');
   if (!user) return;
   user.style.removeProperty('padding-top');
@@ -2248,15 +2248,15 @@ function refineV0211HeaderIdentity() {
 
 /* Desktop custom date keyboard bridge. */
 
-const CY_V0211_KEYBOARD_DESKTOP = '(min-width: 1024px)';
+const CY_DesktopUi_KEYBOARD_DESKTOP = '(min-width: 1024px)';
 
-const setupV0211KeyboardBridge = () => {
-  if (!window.matchMedia(CY_V0211_KEYBOARD_DESKTOP).matches) return;
+const setupDesktopUiKeyboardBridge = () => {
+  if (!window.matchMedia(CY_DesktopUi_KEYBOARD_DESKTOP).matches) return;
   const input = document.querySelector('#txDate');
-  const root = input?.nextElementSibling?.classList?.contains('v0211-date-picker') ? input.nextElementSibling : null;
-  const trigger = root?.querySelector('.v0211-date-trigger');
-  if (!input || !trigger || trigger.dataset.v0211KeyboardBound === '1') return;
-  trigger.dataset.v0211KeyboardBound = '1';
+  const root = input?.nextElementSibling?.classList?.contains('desktopUi-date-picker') ? input.nextElementSibling : null;
+  const trigger = root?.querySelector('.desktopUi-date-trigger');
+  if (!input || !trigger || trigger.dataset.desktopUiKeyboardBound === '1') return;
+  trigger.dataset.desktopUiKeyboardBound = '1';
 
   trigger.addEventListener('keydown', event => {
     if (event.isComposing) return;
@@ -2300,9 +2300,9 @@ const setupV0211KeyboardBridge = () => {
   });
 };
 
-if (document.readyState === 'complete') setTimeout(setupV0211KeyboardBridge, 0);
-else window.addEventListener('load', () => setTimeout(setupV0211KeyboardBridge, 0), { once: true });
-setTimeout(setupV0211KeyboardBridge, 350);
+if (document.readyState === 'complete') setTimeout(setupDesktopUiKeyboardBridge, 0);
+else window.addEventListener('load', () => setTimeout(setupDesktopUiKeyboardBridge, 0), { once: true });
+setTimeout(setupDesktopUiKeyboardBridge, 350);
 
 const SETTINGS_MANAGER_DESKTOP = '(min-width: 1024px)';
 let settingsManagerDialogState = null;
@@ -3342,61 +3342,61 @@ async function handleV0214FavoriteToggle(event) {
   }, Number(current.is_favorite) === 1 ? '已取消常用科目。' : '已加入常用科目。');
 }
 
-const CY_V0215_BUILD3_MOBILE = '(max-width: 767px)';
-const CY_V0215_BUILD3_EDGE_GUARD = 24;
-const CY_V0215_BUILD3_ACTION_WIDTH = 72;
-const CY_V0215_BUILD3_OPEN_THRESHOLD = 34;
+const CY_TRANSACTION_SWIPE_MOBILE = '(max-width: 767px)';
+const CY_TRANSACTION_SWIPE_EDGE_GUARD = 24;
+const CY_TRANSACTION_SWIPE_ACTION_WIDTH = 72;
+const CY_TRANSACTION_SWIPE_OPEN_THRESHOLD = 34;
 
-let cyV0215Build3OpenRow = null;
-let cyV0215Build3Gesture = null;
-let cyV0215Build3SuppressClickUntil = 0;
+let cyTransactionSwipeOpenRow = null;
+let cyTransactionSwipeGesture = null;
+let cyTransactionSwipeSuppressClickUntil = 0;
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setupV0215Build3SwipeActions, { once: true });
+  document.addEventListener('DOMContentLoaded', setupTransactionSwipeSwipeActions, { once: true });
 } else {
-  window.setTimeout(setupV0215Build3SwipeActions, 0);
+  window.setTimeout(setupTransactionSwipeSwipeActions, 0);
 }
-window.addEventListener('load', setupV0215Build3SwipeActions, { once: true });
+window.addEventListener('load', setupTransactionSwipeSwipeActions, { once: true });
 
-function setupV0215Build3SwipeActions() {
+function setupTransactionSwipeSwipeActions() {
   const rows = document.querySelector('#transactionRows');
-  if (!rows || rows.dataset.v0215Build3SwipeBound === '1') return;
-  rows.dataset.v0215Build3SwipeBound = '1';
+  if (!rows || rows.dataset.transactionSwipeSwipeBound === '1') return;
+  rows.dataset.transactionSwipeSwipeBound = '1';
 
   rows.addEventListener('pointerdown', event => {
-    if (!window.matchMedia(CY_V0215_BUILD3_MOBILE).matches) return;
+    if (!window.matchMedia(CY_TRANSACTION_SWIPE_MOBILE).matches) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     if (event.target.closest('button, input, select, textarea, a')) return;
 
     const row = event.target.closest('tr.ledger-row:not(.inline-editing)');
     if (!row) return;
 
-    if (event.clientX <= CY_V0215_BUILD3_EDGE_GUARD) {
-      closeV0215Build3SwipeRow();
+    if (event.clientX <= CY_TRANSACTION_SWIPE_EDGE_GUARD) {
+      closeTransactionSwipeSwipeRow();
       return;
     }
 
-    if (cyV0215Build3OpenRow && cyV0215Build3OpenRow !== row) {
-      closeV0215Build3SwipeRow();
+    if (cyTransactionSwipeOpenRow && cyTransactionSwipeOpenRow !== row) {
+      closeTransactionSwipeSwipeRow();
     }
 
-    cyV0215Build3Gesture = {
+    cyTransactionSwipeGesture = {
       pointerId: event.pointerId,
       row,
       startX: event.clientX,
       startY: event.clientY,
-      startOffset: readV0215Build3OpenOffset(row),
+      startOffset: readTransactionSwipeOpenOffset(row),
       horizontal: false,
       cancelled: false,
       moved: false
     };
 
-    row.classList.remove('v0215-swipe-animate');
+    row.classList.remove('cy-swipe-animate');
     row.setPointerCapture?.(event.pointerId);
   });
 
   rows.addEventListener('pointermove', event => {
-    const gesture = cyV0215Build3Gesture;
+    const gesture = cyTransactionSwipeGesture;
     if (!gesture || gesture.pointerId !== event.pointerId || gesture.cancelled) return;
 
     const dx = event.clientX - gesture.startX;
@@ -3414,10 +3414,10 @@ function setupV0215Build3SwipeActions() {
     }
 
     const row = gesture.row;
-    let next = clampV0215Build3(
+    let next = clampTransactionSwipe(
       gesture.startOffset + dx,
-      -CY_V0215_BUILD3_ACTION_WIDTH,
-      CY_V0215_BUILD3_ACTION_WIDTH
+      -CY_TRANSACTION_SWIPE_ACTION_WIDTH,
+      CY_TRANSACTION_SWIPE_ACTION_WIDTH
     );
 
     const edit = row.querySelector('[data-edit-id]');
@@ -3426,33 +3426,33 @@ function setupV0215Build3SwipeActions() {
     if (next < 0 && (!remove || remove.disabled)) next = 0;
 
     gesture.moved = gesture.moved || Math.abs(next - gesture.startOffset) > 7;
-    setV0215Build3SwipeOffset(row, next);
+    setTransactionSwipeSwipeOffset(row, next);
     row.dataset.swipeDirection = next > 1 ? 'edit' : next < -1 ? 'delete' : '';
     event.preventDefault();
   });
 
   const finish = event => {
-    const gesture = cyV0215Build3Gesture;
+    const gesture = cyTransactionSwipeGesture;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
-    cyV0215Build3Gesture = null;
+    cyTransactionSwipeGesture = null;
 
     const row = gesture.row;
     row.releasePointerCapture?.(event.pointerId);
 
     if (gesture.cancelled || !gesture.horizontal) {
-      row.classList.add('v0215-swipe-animate');
+      row.classList.add('cy-swipe-animate');
       return;
     }
 
-    const current = readV0215Build3Offset(row);
-    if (gesture.moved) cyV0215Build3SuppressClickUntil = Date.now() + 260;
+    const current = readTransactionSwipeOffset(row);
+    if (gesture.moved) cyTransactionSwipeSuppressClickUntil = Date.now() + 260;
 
-    if (current >= CY_V0215_BUILD3_OPEN_THRESHOLD) {
-      openV0215Build3SwipeRow(row, 'edit');
-    } else if (current <= -CY_V0215_BUILD3_OPEN_THRESHOLD) {
-      openV0215Build3SwipeRow(row, 'delete');
+    if (current >= CY_TRANSACTION_SWIPE_OPEN_THRESHOLD) {
+      openTransactionSwipeSwipeRow(row, 'edit');
+    } else if (current <= -CY_TRANSACTION_SWIPE_OPEN_THRESHOLD) {
+      openTransactionSwipeSwipeRow(row, 'delete');
     } else {
-      closeV0215Build3SwipeRow(row);
+      closeTransactionSwipeSwipeRow(row);
     }
   };
 
@@ -3463,93 +3463,93 @@ function setupV0215Build3SwipeActions() {
     const action = event.target.closest('[data-edit-id], [data-delete-id]');
     if (action) {
       const row = action.closest('tr.ledger-row');
-      window.setTimeout(() => closeV0215Build3SwipeRow(row), 0);
+      window.setTimeout(() => closeTransactionSwipeSwipeRow(row), 0);
       return;
     }
 
-    if (Date.now() < cyV0215Build3SuppressClickUntil) {
+    if (Date.now() < cyTransactionSwipeSuppressClickUntil) {
       event.preventDefault();
       event.stopPropagation();
       return;
     }
 
     const row = event.target.closest('tr.ledger-row:not(.inline-editing)');
-    if (row && row === cyV0215Build3OpenRow) {
+    if (row && row === cyTransactionSwipeOpenRow) {
       event.preventDefault();
       event.stopPropagation();
-      closeV0215Build3SwipeRow(row);
+      closeTransactionSwipeSwipeRow(row);
     }
   }, true);
 
   document.addEventListener('pointerdown', event => {
-    if (!cyV0215Build3OpenRow) return;
-    if (cyV0215Build3OpenRow.contains(event.target)) return;
-    closeV0215Build3SwipeRow();
+    if (!cyTransactionSwipeOpenRow) return;
+    if (cyTransactionSwipeOpenRow.contains(event.target)) return;
+    closeTransactionSwipeSwipeRow();
   }, true);
 
-  window.addEventListener('scroll', () => closeV0215Build3SwipeRow(), { passive: true });
+  window.addEventListener('scroll', () => closeTransactionSwipeSwipeRow(), { passive: true });
 }
 
-function openV0215Build3SwipeRow(row, mode) {
+function openTransactionSwipeSwipeRow(row, mode) {
   if (!row?.isConnected) return;
-  if (cyV0215Build3OpenRow && cyV0215Build3OpenRow !== row) {
-    closeV0215Build3SwipeRow(cyV0215Build3OpenRow);
+  if (cyTransactionSwipeOpenRow && cyTransactionSwipeOpenRow !== row) {
+    closeTransactionSwipeSwipeRow(cyTransactionSwipeOpenRow);
   }
 
   const action = mode === 'edit'
     ? row.querySelector('[data-edit-id]')
     : row.querySelector('[data-delete-id]');
   if (!action || action.disabled) {
-    closeV0215Build3SwipeRow(row);
+    closeTransactionSwipeSwipeRow(row);
     return;
   }
 
-  row.classList.add('v0215-swipe-animate');
+  row.classList.add('cy-swipe-animate');
   row.dataset.swipeOpen = mode;
   row.dataset.swipeDirection = mode;
-  setV0215Build3SwipeOffset(
+  setTransactionSwipeSwipeOffset(
     row,
-    mode === 'edit' ? CY_V0215_BUILD3_ACTION_WIDTH : -CY_V0215_BUILD3_ACTION_WIDTH
+    mode === 'edit' ? CY_TRANSACTION_SWIPE_ACTION_WIDTH : -CY_TRANSACTION_SWIPE_ACTION_WIDTH
   );
-  cyV0215Build3OpenRow = row;
+  cyTransactionSwipeOpenRow = row;
 }
 
-function closeV0215Build3SwipeRow(row = cyV0215Build3OpenRow) {
+function closeTransactionSwipeSwipeRow(row = cyTransactionSwipeOpenRow) {
   if (!row) return;
-  row.classList.add('v0215-swipe-animate');
+  row.classList.add('cy-swipe-animate');
   row.dataset.swipeOpen = '';
   row.dataset.swipeDirection = '';
-  setV0215Build3SwipeOffset(row, 0);
-  if (cyV0215Build3OpenRow === row) cyV0215Build3OpenRow = null;
+  setTransactionSwipeSwipeOffset(row, 0);
+  if (cyTransactionSwipeOpenRow === row) cyTransactionSwipeOpenRow = null;
 }
 
-function readV0215Build3OpenOffset(row) {
-  if (row?.dataset.swipeOpen === 'edit') return CY_V0215_BUILD3_ACTION_WIDTH;
-  if (row?.dataset.swipeOpen === 'delete') return -CY_V0215_BUILD3_ACTION_WIDTH;
+function readTransactionSwipeOpenOffset(row) {
+  if (row?.dataset.swipeOpen === 'edit') return CY_TRANSACTION_SWIPE_ACTION_WIDTH;
+  if (row?.dataset.swipeOpen === 'delete') return -CY_TRANSACTION_SWIPE_ACTION_WIDTH;
   return 0;
 }
 
-function readV0215Build3Offset(row) {
-  const value = Number(row?.style.getPropertyValue('--v0215-swipe-x').replace('px', ''));
+function readTransactionSwipeOffset(row) {
+  const value = Number(row?.style.getPropertyValue('--cy-swipe-x').replace('px', ''));
   return Number.isFinite(value) ? value : 0;
 }
 
-function setV0215Build3SwipeOffset(row, value) {
-  row?.style.setProperty('--v0215-swipe-x', value + 'px');
+function setTransactionSwipeSwipeOffset(row, value) {
+  row?.style.setProperty('--cy-swipe-x', value + 'px');
 }
 
-function clampV0215Build3(value, min, max) {
+function clampTransactionSwipe(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-const CY_V0215_BUILD4_MOBILE = '(max-width: 767px)';
-let cyV0215Build4Edit = null;
-let cyV0215Build4SaveHideTimer = null;
-let cyV0215Build4SaveClearTimer = null;
-let cyV0215Build4SetupDone = false;
+const CY_TOUCH_WORKSPACE_MOBILE = '(max-width: 767px)';
+let cyTouchWorkspaceEdit = null;
+let cyTouchWorkspaceSaveHideTimer = null;
+let cyTouchWorkspaceSaveClearTimer = null;
+let cyTouchWorkspaceSetupDone = false;
 let cyMobileAccountDragId = 0;
 
-window.cyAfterSaveMessage = handleV0215Build4SaveMessage;
+window.cyAfterSaveMessage = handleTouchWorkspaceSaveMessage;
 window.cyOpenMobileUtility = openMobileUtility;
 window.cyOpenMobileLedgerOpening = () => openMobileUtility('opening');
 window.cyOpenMobileLedgerLock = () => openMobileUtility('lock');
@@ -3558,29 +3558,29 @@ window.cyOpenMobileSettingsPane = tab => openMobileUtility(tab);
 let cyMobileOpeningMount = null;
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setupV0215Build4, { once: true });
+  document.addEventListener('DOMContentLoaded', setupTouchWorkspace, { once: true });
 } else {
-  window.setTimeout(setupV0215Build4, 0);
+  window.setTimeout(setupTouchWorkspace, 0);
 }
-window.addEventListener('load', setupV0215Build4, { once: true });
+window.addEventListener('load', setupTouchWorkspace, { once: true });
 
-function setupV0215Build4() {
-  if (cyV0215Build4SetupDone) return;
+function setupTouchWorkspace() {
+  if (cyTouchWorkspaceSetupDone) return;
   if (!document.querySelector('#transactionRows') || !document.querySelector('#transactionForm') || !document.querySelector('#mobileMainNav')) {
-    window.setTimeout(setupV0215Build4, 50);
+    window.setTimeout(setupTouchWorkspace, 50);
     return;
   }
-  cyV0215Build4SetupDone = true;
-  setupV0215Build4Toolbar();
+  cyTouchWorkspaceSetupDone = true;
+  setupTouchWorkspaceToolbar();
   setupMobileCanvasContinuation();
-  setupV0215Build4Search();
-  setupV0215Build4SaveMessage();
-  setupV0215Build4EntrySecondaryAction();
-  setupV0215Build4MobileEdit();
+  setupTouchWorkspaceSearch();
+  setupTouchWorkspaceSaveMessage();
+  setupTouchWorkspaceEntrySecondaryAction();
+  setupTouchWorkspaceMobileEdit();
 }
 
-function setupV0215Build4Toolbar(attempt = 0) {
-  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+function setupTouchWorkspaceToolbar(attempt = 0) {
+  if (!window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
   const monthTools = document.querySelector('.ledger-month-tools');
   const prev = document.querySelector('#ledgerPrevMonth');
   const next = document.querySelector('#ledgerNextMonth');
@@ -3588,7 +3588,7 @@ function setupV0215Build4Toolbar(attempt = 0) {
   const slot = document.querySelector('#ledgerMonthSlot');
   const picker = document.querySelector('.ledger-title .month-picker');
   if (!monthTools || !prev || !next || !more || !slot || !picker) {
-    if (attempt < 60) window.setTimeout(() => setupV0215Build4Toolbar(attempt + 1), 50);
+    if (attempt < 60) window.setTimeout(() => setupTouchWorkspaceToolbar(attempt + 1), 50);
     return;
   }
 
@@ -3596,7 +3596,7 @@ function setupV0215Build4Toolbar(attempt = 0) {
   if (!balance) {
     balance = document.createElement('button');
     balance.id = 'mobileLedgerBalanceButton';
-    balance.className = 'secondary compact v0215-mobile-balance-button';
+    balance.className = 'secondary compact cy-mobile-balance-button';
     balance.type = 'button';
     balance.textContent = '餘額';
     balance.addEventListener('click', () => {
@@ -3608,8 +3608,8 @@ function setupV0215Build4Toolbar(attempt = 0) {
   // the slot leaves an extra grid child and breaks the five-column mobile toolbar.
   if (picker.parentElement !== slot) slot.append(picker);
   monthTools.append(balance, prev, slot, next, more);
-  setupV0215Build4MonthDisplay(slot);
-  monthTools.classList.add('v0215-toolbar-ready');
+  setupTouchWorkspaceMonthDisplay(slot);
+  monthTools.classList.add('cy-toolbar-ready');
 
   const displayMonth = document.querySelector('#ledgerDisplayMonth');
   if (displayMonth) displayMonth.hidden = true;
@@ -3619,7 +3619,7 @@ function setupV0215Build4Toolbar(attempt = 0) {
 }
 
 async function openMobileUtility(type) {
-  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  if (!window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
   if (!['opening', 'accounts', 'categories', 'lock'].includes(type)) return;
 
   const dialog = els.settingsDialog || document.querySelector('#settingsDialog');
@@ -3629,7 +3629,7 @@ async function openMobileUtility(type) {
   if (typeof setDialogMessage === 'function' && els.settingsMessage) setDialogMessage(els.settingsMessage, '');
   if (typeof renderSettings === 'function') renderSettings();
 
-  dialog.classList.remove('v0215-mobile-settings-focus');
+  dialog.classList.remove('cy-mobile-settings-focus');
   dialog.classList.add('mobile-utility-dialog', 'mobile-settings-dialog');
   dialog.dataset.mobileUtility = type;
 
@@ -3877,7 +3877,7 @@ async function applySettingsAccountOrder(previous, nextIds) {
   const render = () => {
     renderSettingsAccountManager();
     if (typeof renderAccounts === 'function') renderAccounts(selectedAccount);
-    if (typeof syncV21Build8AccountChoices === 'function') syncV21Build8AccountChoices();
+    if (typeof syncEntryUiAccountChoices === 'function') syncEntryUiAccountChoices();
   };
   state.accounts = nextIds.map((id, index) => ({ ...byId.get(id), sort_order: index + 1 }));
   render();
@@ -4075,7 +4075,7 @@ window.cySyncMobileCanvasContinuation = syncMobileCanvasContinuation;
 function syncMobileCanvasContinuation() {
   const shell = document.querySelector('.shell');
   const entry = document.querySelector('.entry-card');
-  const mobile = window.matchMedia(CY_V0215_BUILD4_MOBILE).matches;
+  const mobile = window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches;
   const entryActive = mobile && shell?.dataset.mobilePage !== 'ledger';
   const income = entryActive && (entry?.classList.contains('entry-income') || state?.kind === 'income');
   const expense = entryActive && !income;
@@ -4096,28 +4096,28 @@ function formatMobileMonth(month) {
   return match ? Number(match[1]) + '年' + Number(match[2]) + '月' : String(month || '');
 }
 
-function setupV0215Build4MonthDisplay(slot) {
+function setupTouchWorkspaceMonthDisplay(slot) {
   if (!slot || !els.monthFilter) return;
 
   let display = slot.querySelector('#mobileLedgerMonthDisplay');
   if (!display) {
     display = document.createElement('span');
     display.id = 'mobileLedgerMonthDisplay';
-    display.className = 'v0215-mobile-month-display';
+    display.className = 'cy-mobile-month-display';
     display.setAttribute('aria-hidden', 'true');
     slot.append(display);
   }
 
   els.monthFilter.setAttribute('aria-label', '選擇月份');
-  if (els.monthFilter.dataset.v0215MonthDisplayBound !== '1') {
-    els.monthFilter.dataset.v0215MonthDisplayBound = '1';
-    els.monthFilter.addEventListener('input', syncV0215Build4MonthDisplay);
-    els.monthFilter.addEventListener('change', syncV0215Build4MonthDisplay);
+  if (els.monthFilter.dataset.touchMonthDisplayBound !== '1') {
+    els.monthFilter.dataset.touchMonthDisplayBound = '1';
+    els.monthFilter.addEventListener('input', syncTouchWorkspaceMonthDisplay);
+    els.monthFilter.addEventListener('change', syncTouchWorkspaceMonthDisplay);
   }
-  syncV0215Build4MonthDisplay();
+  syncTouchWorkspaceMonthDisplay();
 }
 
-function syncV0215Build4MonthDisplay() {
+function syncTouchWorkspaceMonthDisplay() {
   const display = document.querySelector('#mobileLedgerMonthDisplay');
   const value = String(els.monthFilter?.value || '');
   if (!display) return;
@@ -4125,20 +4125,20 @@ function syncV0215Build4MonthDisplay() {
   display.textContent = match ? `${Number(match[1])}年${Number(match[2])}月` : '選擇月份';
 }
 
-function setupV0215Build4Search() {
+function setupTouchWorkspaceSearch() {
   const form = document.querySelector('#ledgerSearchForm');
   const input = document.querySelector('#ledgerSummarySearch');
   if (!form || !input) return;
   input.setAttribute('enterkeyhint', 'search');
   input.setAttribute('inputmode', 'search');
   form.addEventListener('submit', () => {
-    if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+    if (!window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
     window.setTimeout(() => input.blur(), 0);
   });
 }
 
-function setupV0215Build4SaveMessage() {
-  const media = window.matchMedia(CY_V0215_BUILD4_MOBILE);
+function setupTouchWorkspaceSaveMessage() {
+  const media = window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE);
   const message = document.querySelector('#saveMessage');
   const saveButton = document.querySelector('#saveButton');
   if (!message || !saveButton) return;
@@ -4149,9 +4149,9 @@ function setupV0215Build4SaveMessage() {
   const sync = () => {
     if (usesEntryTransactionEditor()) {
       if (message.previousElementSibling !== saveButton) saveButton.insertAdjacentElement('afterend', message);
-      message.classList.add('v0215-mobile-save-message');
+      message.classList.add('cy-mobile-save-message');
     } else {
-      message.classList.remove('v0215-mobile-save-message', 'is-visible', 'is-fading');
+      message.classList.remove('cy-mobile-save-message', 'is-visible', 'is-fading');
       if (originalParent && message.parentElement !== originalParent) {
         if (originalNext && originalNext.parentNode === originalParent) originalParent.insertBefore(message, originalNext);
         else originalParent.append(message);
@@ -4165,7 +4165,7 @@ function setupV0215Build4SaveMessage() {
   sync();
 }
 
-function setupV0215Build4EntrySecondaryAction() {
+function setupTouchWorkspaceEntrySecondaryAction() {
   if (!usesEntryTransactionEditor()) return;
   const saveButton = document.querySelector('#saveButton');
   const message = document.querySelector('#saveMessage');
@@ -4175,30 +4175,30 @@ function setupV0215Build4EntrySecondaryAction() {
   if (!button) {
     button = document.createElement('button');
     button.id = 'mobileEntrySecondaryButton';
-    button.className = 'secondary v0215-entry-secondary-button';
+    button.className = 'secondary cy-entry-secondary-button';
     button.type = 'button';
     button.textContent = '清空';
     button.addEventListener('click', () => {
-      if (cyV0215Build4Edit) {
-        cancelV0215Build4MobileEditAndReturn();
+      if (cyTouchWorkspaceEdit) {
+        cancelTouchWorkspaceMobileEditAndReturn();
         return;
       }
-      clearV0215Build4EntryForm();
+      clearTouchWorkspaceEntryForm();
     });
   }
 
   message.insertAdjacentElement('beforebegin', button);
-  syncV0215Build4EntrySecondaryAction();
+  syncTouchWorkspaceEntrySecondaryAction();
 }
 
-function syncV0215Build4EntrySecondaryAction() {
+function syncTouchWorkspaceEntrySecondaryAction() {
   const button = document.querySelector('#mobileEntrySecondaryButton');
   if (!button) return;
-  button.textContent = cyV0215Build4Edit ? '取消' : '清空';
-  button.classList.toggle('is-cancel', Boolean(cyV0215Build4Edit));
+  button.textContent = cyTouchWorkspaceEdit ? '取消' : '清空';
+  button.classList.toggle('is-cancel', Boolean(cyTouchWorkspaceEdit));
 }
 
-function clearV0215Build4EntryForm() {
+function clearTouchWorkspaceEntryForm() {
   showMessage('');
   const today = typeof localDateString === 'function' ? localDateString(new Date()) : new Date().toISOString().slice(0, 10);
   els.txDate.value = today;
@@ -4211,27 +4211,27 @@ function clearV0215Build4EntryForm() {
   els.amount.blur();
 }
 
-function cancelV0215Build4MobileEditAndReturn() {
-  const context = cyV0215Build4Edit?.returnContext;
+function cancelTouchWorkspaceMobileEditAndReturn() {
+  const context = cyTouchWorkspaceEdit?.returnContext;
   if (!context) return false;
-  cancelV0215Build4MobileEdit();
-  switchV0215Build4MobilePage('ledger');
-  restoreV0215Build4LedgerContext(context, false);
+  cancelTouchWorkspaceMobileEdit();
+  switchTouchWorkspaceMobilePage('ledger');
+  restoreTouchWorkspaceLedgerContext(context, false);
   return true;
 }
 
-function handleV0215Build4SaveMessage(message, text, isError) {
+function handleTouchWorkspaceSaveMessage(message, text, isError) {
   if (!message) return;
-  window.clearTimeout(cyV0215Build4SaveHideTimer);
-  window.clearTimeout(cyV0215Build4SaveClearTimer);
+  window.clearTimeout(cyTouchWorkspaceSaveHideTimer);
+  window.clearTimeout(cyTouchWorkspaceSaveClearTimer);
   message.classList.remove('is-fading');
   message.classList.toggle('is-visible', Boolean(text));
 
-  if (!text || isError || !window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  if (!text || isError || !window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
 
-  cyV0215Build4SaveHideTimer = window.setTimeout(() => {
+  cyTouchWorkspaceSaveHideTimer = window.setTimeout(() => {
     message.classList.add('is-fading');
-    cyV0215Build4SaveClearTimer = window.setTimeout(() => {
+    cyTouchWorkspaceSaveClearTimer = window.setTimeout(() => {
       if (message.classList.contains('is-fading')) {
         message.textContent = '';
         message.classList.remove('is-visible', 'is-fading');
@@ -4240,7 +4240,7 @@ function handleV0215Build4SaveMessage(message, text, isError) {
   }, 2500);
 }
 
-function setupV0215Build4MobileEdit() {
+function setupTouchWorkspaceMobileEdit() {
   const rows = document.querySelector('#transactionRows');
   const form = document.querySelector('#transactionForm');
   const nav = document.querySelector('#mobileMainNav');
@@ -4255,43 +4255,43 @@ function setupV0215Build4MobileEdit() {
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    beginV0215Build4MobileEdit(id);
+    beginTouchWorkspaceMobileEdit(id);
   }, true);
 
   form.addEventListener('submit', event => {
-    if (!cyV0215Build4Edit || !usesEntryTransactionEditor()) return;
+    if (!cyTouchWorkspaceEdit || !usesEntryTransactionEditor()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    saveV0215Build4MobileEdit();
+    saveTouchWorkspaceMobileEdit();
   }, true);
 
   nav.addEventListener('click', event => {
-    if (!cyV0215Build4Edit || !usesEntryTransactionEditor()) return;
+    if (!cyTouchWorkspaceEdit || !usesEntryTransactionEditor()) return;
     const button = event.target.closest('[data-mobile-page]');
     if (!button || button.dataset.mobilePage === 'entry') return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    cancelV0215Build4MobileEditAndReturn();
+    cancelTouchWorkspaceMobileEditAndReturn();
   }, true);
 
-  const phone = window.matchMedia(CY_V0215_BUILD4_MOBILE);
+  const phone = window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE);
   phone.addEventListener?.('change', () => {
-    if (!usesEntryTransactionEditor() && cyV0215Build4Edit) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+    if (!usesEntryTransactionEditor() && cyTouchWorkspaceEdit) cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
   });
 
   els.monthFilter?.addEventListener('change', () => {
-    if (cyV0215Build4Edit && usesEntryTransactionEditor()) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+    if (cyTouchWorkspaceEdit && usesEntryTransactionEditor()) cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
   });
 
   window.addEventListener('pagehide', () => {
-    if (!cyV0215Build4Edit) return;
-    cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+    if (!cyTouchWorkspaceEdit) return;
+    cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
   });
 }
 
-function beginV0215Build4MobileEdit(id) {
-  if (cyV0215Build4Edit?.id === id) {
+function beginTouchWorkspaceMobileEdit(id) {
+  if (cyTouchWorkspaceEdit?.id === id) {
     if (isTabletWorkspace()) setTabletEntryExpanded(true);
     els.summary?.focus();
     return;
@@ -4299,13 +4299,13 @@ function beginV0215Build4MobileEdit(id) {
   const tx = state.transactions.find(item => Number(item.id) === id);
   if (!tx || isLocked(String(tx.tx_date || '').slice(0, 7))) return;
 
-  if (cyV0215Build4Edit) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+  if (cyTouchWorkspaceEdit) cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
   const row = document.querySelector('#transactionRows tr[data-transaction-id="' + id + '"]');
-  cyV0215Build4Edit = {
+  cyTouchWorkspaceEdit = {
     id,
     kind: tx.kind,
     originalMonth: String(tx.tx_date || '').slice(0, 7),
-    draft: captureV0215Build4EntryDraft(),
+    draft: captureTouchWorkspaceEntryDraft(),
     returnContext: {
       month: els.monthFilter?.value || '',
       search: document.querySelector('#ledgerSummarySearch')?.value || '',
@@ -4317,9 +4317,9 @@ function beginV0215Build4MobileEdit(id) {
   };
 
   setEntryKind(tx.kind);
-  ensureV0215Build4Option(els.accountName, tx.account_name);
+  ensureTouchWorkspaceOption(els.accountName, tx.account_name);
   els.accountName.value = tx.account_name;
-  ensureV0215Build4Option(els.categoryName, tx.category_name);
+  ensureTouchWorkspaceOption(els.categoryName, tx.category_name);
   els.categoryName.value = tx.category_name;
   els.txDate.value = tx.tx_date;
   els.summary.value = tx.summary || '';
@@ -4327,17 +4327,17 @@ function beginV0215Build4MobileEdit(id) {
 
   els.kindButtons.forEach(button => { button.disabled = true; });
   els.saveButton.textContent = '儲存修改';
-  syncV0215Build4EntrySecondaryAction();
-  document.querySelector('.entry-card')?.classList.add('v0215-mobile-editing');
+  syncTouchWorkspaceEntrySecondaryAction();
+  document.querySelector('.entry-card')?.classList.add('cy-mobile-editing');
   showMessage('');
   updateEntryLockState();
 
-  switchV0215Build4MobilePage('entry');
+  switchTouchWorkspaceMobilePage('entry');
   window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
-async function saveV0215Build4MobileEdit() {
-  const edit = cyV0215Build4Edit;
+async function saveTouchWorkspaceMobileEdit() {
+  const edit = cyTouchWorkspaceEdit;
   if (!edit) return;
 
   const month = String(els.txDate.value || '').slice(0, 7);
@@ -4362,40 +4362,40 @@ async function saveV0215Build4MobileEdit() {
       txDate: els.txDate.value, accountName: els.accountName.value,
       categoryName: els.categoryName.value, summary: els.summary.value, amount
     }, () => {
-      cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+      cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
       const searchInput = document.querySelector('#ledgerSummarySearch');
       if (searchInput) searchInput.value = context.search || '';
       if (typeof cyLedgerSearch !== 'undefined') cyLedgerSearch = context.search || '';
-      switchV0215Build4MobilePage('ledger');
-      restoreV0215Build4LedgerContext(context, destinationMonth === context.month ? editedId : false);
+      switchTouchWorkspaceMobilePage('ledger');
+      restoreTouchWorkspaceLedgerContext(context, destinationMonth === context.month ? editedId : false);
     });
-    showV0215Build4LedgerNotice(destinationMonth === context.month ? '修改成功。' : '修改完成，資料已移至 ' + destinationMonth.replace('-', '/') + '。');
+    showTouchWorkspaceLedgerNotice(destinationMonth === context.month ? '修改成功。' : '修改完成，資料已移至 ' + destinationMonth.replace('-', '/') + '。');
 
   } catch (error) {
     showMessage(error.message || '修改失敗。', true);
-    showV0215Build4LedgerNotice((error.message || '修改失敗。') + ' 已還原原資料。');
+    showTouchWorkspaceLedgerNotice((error.message || '修改失敗。') + ' 已還原原資料。');
     updateEntryLockState();
   }
 }
 
-function cancelV0215Build4MobileEdit(options = {}) {
-  const edit = cyV0215Build4Edit;
+function cancelTouchWorkspaceMobileEdit(options = {}) {
+  const edit = cyTouchWorkspaceEdit;
   if (!edit) return;
-  cyV0215Build4Edit = null;
+  cyTouchWorkspaceEdit = null;
 
-  clearV0215Build4TemporaryOptions();
-  restoreV0215Build4EntryDraft(edit.draft);
+  clearTouchWorkspaceTemporaryOptions();
+  restoreTouchWorkspaceEntryDraft(edit.draft);
   els.kindButtons.forEach(button => { button.disabled = false; });
   els.saveButton.textContent = '儲存';
-  syncV0215Build4EntrySecondaryAction();
-  document.querySelector('.entry-card')?.classList.remove('v0215-mobile-editing');
+  syncTouchWorkspaceEntrySecondaryAction();
+  document.querySelector('.entry-card')?.classList.remove('cy-mobile-editing');
   showMessage('');
   updateEntryLockState();
 
   if (!options.restoreDraftOnly) window.cyCloseLedgerBalancePopover?.();
 }
 
-function captureV0215Build4EntryDraft() {
+function captureTouchWorkspaceEntryDraft() {
   return {
     kind: state.kind,
     txDate: els.txDate.value,
@@ -4406,36 +4406,36 @@ function captureV0215Build4EntryDraft() {
   };
 }
 
-function restoreV0215Build4EntryDraft(draft) {
+function restoreTouchWorkspaceEntryDraft(draft) {
   if (!draft) return;
   setEntryKind(draft.kind);
-  ensureV0215Build4Option(els.accountName, draft.accountName);
+  ensureTouchWorkspaceOption(els.accountName, draft.accountName);
   els.accountName.value = draft.accountName || els.accountName.value;
-  ensureV0215Build4Option(els.categoryName, draft.categoryName);
+  ensureTouchWorkspaceOption(els.categoryName, draft.categoryName);
   els.categoryName.value = draft.categoryName || els.categoryName.value;
   els.txDate.value = draft.txDate || els.txDate.value;
   els.summary.value = draft.summary || '';
   els.amount.value = draft.amount || '';
 }
 
-function ensureV0215Build4Option(select, value) {
+function ensureTouchWorkspaceOption(select, value) {
   const text = String(value || '').trim();
   if (!select || !text) return;
   if ([...select.options].some(option => option.value === text)) return;
   const option = document.createElement('option');
   option.value = text;
   option.textContent = text + '（歷史）';
-  option.dataset.v0215EditTemporary = '1';
+  option.dataset.entryEditTemporary = '1';
   select.append(option);
 }
 
-function clearV0215Build4TemporaryOptions() {
+function clearTouchWorkspaceTemporaryOptions() {
   for (const select of [els.accountName, els.categoryName]) {
-    select?.querySelectorAll('[data-v0215-edit-temporary="1"]').forEach(option => option.remove());
+    select?.querySelectorAll('[data-cy-edit-temporary="1"]').forEach(option => option.remove());
   }
 }
 
-function switchV0215Build4MobilePage(page) {
+function switchTouchWorkspaceMobilePage(page) {
   if (isTabletWorkspace()) {
     if (page === 'entry') setTabletEntryExpanded(true);
     return;
@@ -4447,8 +4447,8 @@ function switchV0215Build4MobilePage(page) {
   if (!shell || !entry || !ledger || !nav) return;
 
   const current = page === 'ledger' ? 'ledger' : 'entry';
-  entry.classList.toggle('v21-mobile-page-hidden', current !== 'entry');
-  ledger.classList.toggle('v21-mobile-page-hidden', current !== 'ledger');
+  entry.classList.toggle('cy-mobile-page-hidden', current !== 'entry');
+  ledger.classList.toggle('cy-mobile-page-hidden', current !== 'ledger');
   shell.dataset.mobilePage = current;
 
   for (const button of nav.querySelectorAll('[data-mobile-page]')) {
@@ -4458,13 +4458,13 @@ function switchV0215Build4MobilePage(page) {
   }
 }
 
-function restoreV0215Build4LedgerContext(context, highlightId) {
+function restoreTouchWorkspaceLedgerContext(context, highlightId) {
   if (!context) return;
 
   if (context.month && els.monthFilter.value !== context.month) {
     els.monthFilter.value = context.month;
   }
-  syncV0215Build4MonthDisplay();
+  syncTouchWorkspaceMonthDisplay();
   const searchInput = document.querySelector('#ledgerSummarySearch');
   if (searchInput) searchInput.value = context.search || '';
 
@@ -4489,8 +4489,8 @@ function restoreV0215Build4LedgerContext(context, highlightId) {
     if (highlightId) {
       const highlight = document.querySelector('#transactionRows tr[data-transaction-id="' + highlightId + '"]');
       if (highlight) {
-        highlight.classList.add('v0215-edit-highlight');
-        window.setTimeout(() => highlight.classList.remove('v0215-edit-highlight'), 1800);
+        highlight.classList.add('cy-edit-highlight');
+        window.setTimeout(() => highlight.classList.remove('cy-edit-highlight'), 1800);
       }
     }
   };
@@ -4498,12 +4498,12 @@ function restoreV0215Build4LedgerContext(context, highlightId) {
   window.requestAnimationFrame(() => window.requestAnimationFrame(restore));
 }
 
-function showV0215Build4LedgerNotice(text) {
-  let notice = document.querySelector('#v0215LedgerNotice');
+function showTouchWorkspaceLedgerNotice(text) {
+  let notice = document.querySelector('#touchLedgerNotice');
   if (!notice) {
     notice = document.createElement('div');
-    notice.id = 'v0215LedgerNotice';
-    notice.className = 'v0215-ledger-notice';
+    notice.id = 'touchLedgerNotice';
+    notice.className = 'cy-ledger-notice';
     document.body.append(notice);
   }
   notice.textContent = text;
@@ -4531,7 +4531,7 @@ function tabletWorkspaceOrientation() {
 }
 
 function setTabletEntryExpanded(expanded) {
-  const rail = document.querySelector('.v21-entry-rail');
+  const rail = document.querySelector('.cy-entry-rail');
   if (!rail) return;
   rail.dataset.entryExpanded = expanded ? 'true' : 'false';
   const button = document.querySelector('#tabletEntryToggle');
@@ -4546,30 +4546,30 @@ function syncTabletPickerOwnership(orientation) {
 
   document.querySelectorAll('input[type="date"]').forEach(input => {
     if (tablet) {
-      const custom = input.nextElementSibling?.classList?.contains('v0211-date-picker') ? input.nextElementSibling : null;
+      const custom = input.nextElementSibling?.classList?.contains('desktopUi-date-picker') ? input.nextElementSibling : null;
       custom?.remove();
-      input.classList.remove('v0211-native-date-source');
-      delete input.dataset.v0211DatePicker;
+      input.classList.remove('desktopUi-native-date-source');
+      delete input.dataset.desktopUiDatePicker;
       input.style.removeProperty('position');
       input.style.removeProperty('width');
       input.style.removeProperty('height');
       input.style.removeProperty('clip');
       input.style.removeProperty('clip-path');
       input.style.removeProperty('pointer-events');
-    } else if (window.matchMedia(CY_V0211_DESKTOP).matches && typeof ensureV0211DatePicker === 'function') {
-      ensureV0211DatePicker(input);
+    } else if (window.matchMedia(CY_DesktopUi_DESKTOP).matches && typeof ensureDesktopUiDatePicker === 'function') {
+      ensureDesktopUiDatePicker(input);
     }
   });
 
   const customMonth = document.querySelector('#ledgerMonthPickerCustom');
   if (tablet && customMonth) {
     customMonth.hidden = true;
-    if (typeof closeV21Build12MonthPicker === 'function') closeV21Build12MonthPicker(customMonth);
+    if (typeof closeDesktopLedgerMonthMonthPicker === 'function') closeDesktopLedgerMonthMonthPicker(customMonth);
   }
 
   const slot = document.querySelector('#ledgerMonthSlot');
   if (tablet && orientation === 'landscape') {
-    if (slot && typeof setupV0215Build4MonthDisplay === 'function') setupV0215Build4MonthDisplay(slot);
+    if (slot && typeof setupTouchWorkspaceMonthDisplay === 'function') setupTouchWorkspaceMonthDisplay(slot);
   } else if (tablet) {
     document.querySelector('#mobileLedgerMonthDisplay')?.remove();
   }
@@ -4587,7 +4587,7 @@ function setupTabletWorkspace() {
   controls.querySelector('#tabletEntryToggle').addEventListener('click', () => {
     if (suppressClick) { suppressClick = false; return; }
     if (controls.querySelector('#tabletEntryPinned').checked) return;
-    const rail = document.querySelector('.v21-entry-rail');
+    const rail = document.querySelector('.cy-entry-rail');
     const expanded = rail?.dataset.entryExpanded !== 'true';
     setTabletEntryExpanded(expanded);
     if (!expanded) controls.querySelector('#tabletEntryPinned').checked = false;
@@ -4634,15 +4634,15 @@ function setupTabletWorkspace() {
     }
     applyV21DesktopSplitWorkspace(window.matchMedia(CY_V21_SPLIT_MEDIA).matches);
     if (tablet) {
-      const rail = document.querySelector('.v21-entry-rail');
+      const rail = document.querySelector('.cy-entry-rail');
       if (rail && !rail.dataset.entryExpanded) rail.dataset.entryExpanded = 'false';
-      document.querySelector('.entry-card')?.classList.remove('v21-mobile-page-hidden');
-      document.querySelector('.ledger-card')?.classList.remove('v21-mobile-page-hidden');
-      setupV0215Build4EntrySecondaryAction();
+      document.querySelector('.entry-card')?.classList.remove('cy-mobile-page-hidden');
+      document.querySelector('.ledger-card')?.classList.remove('cy-mobile-page-hidden');
+      setupTouchWorkspaceEntrySecondaryAction();
       // The original date/month controls are native and keep their existing listeners.
-      document.querySelectorAll('.v0211-date-popover, .v21-month-picker-popover').forEach(node => { node.hidden = true; });
-    } else if (!usesEntryTransactionEditor() && cyV0215Build4Edit) {
-      cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+      document.querySelectorAll('.desktopUi-date-popover, .cy-month-picker-popover').forEach(node => { node.hidden = true; });
+    } else if (!usesEntryTransactionEditor() && cyTouchWorkspaceEdit) {
+      cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
     }
     if (wasTablet !== tablet && typeof renderSettingsAccountManager === 'function') renderSettingsAccountManager();
   };
