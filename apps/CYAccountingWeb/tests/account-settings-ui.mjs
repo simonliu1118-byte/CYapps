@@ -27,6 +27,7 @@ const context = vm.createContext({
   },
   isTabletWorkspace: () => false,
   SETTINGS_MANAGER_DESKTOP: '(min-width: 1024px)',
+  isDesktopInteractionWorkspace: () => true,
   window: { cyaccCurrentUser: { role: 'ADMIN' }, matchMedia: () => ({ matches: true }) },
   document: { querySelector(selector) {
     return ({ '#archivedAccountsDialog': dialog, '#openArchivedAccountsButton': button, '#archivedAccountRows': archiveHost, '#accountRows': activeHost })[selector];
@@ -92,6 +93,7 @@ assert.doesNotMatch(activeHost.innerHTML, /已封存|零餘額|有交易|有餘�
 assert.match(activeHost.innerHTML, /data-account-archive="9"[^>]*aria-label="封存帳戶">\s*<svg/);
 assert.doesNotMatch(activeHost.innerHTML, /settings-account-section-title/);
 context.isTabletWorkspace = () => true;
+context.isDesktopInteractionWorkspace = () => false;
 context.renderSettingsAccountManager();
 assert.match(activeHost.innerHTML, /data-mobile-account-drag/, 'tablet uses the same touch sorting handles');
 context.renderMobileAccountManager();

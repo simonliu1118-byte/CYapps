@@ -101,7 +101,7 @@ assert.match(css, /data-tablet-layout="landscape"\] \.ledger-search-submit \{ di
 assert.match(css, /data-tablet-layout="landscape"\] #monthSummary \.ledger-summary-item:not\(\.opening\) \{ border-left:1px solid/, 'landscape summary uses one separated row');
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col \[data-edit-id\]::before/, 'landscape edit is icon-only');
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col \[data-delete-id\]::before/, 'landscape delete is icon-only');
-assert.match(source, /!media\.matches \|\| \(typeof isTabletWorkspace === 'function' && isTabletWorkspace\(\)\)/, 'tablet must not create desktop custom date pickers');
+assert.match(source, /if \(!isDesktopInteractionWorkspace\(\)\) return;/, 'tablet must not create desktop custom date pickers');
 assert.match(source, /syncTabletPickerOwnership\(orientation\)/, 'tablet orientation owns date and month picker presentation');
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
 assert.match(css, /data-tablet-layout="landscape"\] #mobileLedgerMonthDisplay/, 'landscape ledger month reuses mobile display layer');
@@ -147,3 +147,6 @@ editEvents.get('month:change')();
 assert.equal(controller.cyTouchWorkspaceEdit, null, 'month navigation cancels the old-month entry edit');
 assert.equal(writes, 0, 'navigation never saves an unfinished edit');
 console.log('Tablet selection and month navigation preserve the shared draft/cancel semantics.');
+
+assert.match(source, /function isDesktopInteractionWorkspace\(\)/, 'desktop interaction authority is defined');
+assert.doesNotMatch(source, /min-width:\s*1024px/, 'desktop interactions must not infer desktop from 1024px');
