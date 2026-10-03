@@ -86,7 +86,9 @@ async function startCyaccApp() {
 
     const today = localDateString(new Date());
     els.txDate.value = today;
+    window.cySyncTabletPickerDisplays?.();
     els.monthFilter.value = today.slice(0, 7);
+    window.cySyncTabletPickerDisplays?.();
     els.openingMonth.value = today.slice(0, 7);
     bindEvents();
 
@@ -276,6 +278,7 @@ async function saveTransaction(event) {
     els.summary.value = '';
     els.amount.value = '';
     els.monthFilter.value = els.txDate.value.slice(0, 7);
+    window.cySyncTabletPickerDisplays?.();
     await loadTransactions();
     els.amount.focus();
   } catch (error) {
