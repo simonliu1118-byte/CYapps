@@ -61,7 +61,7 @@ console.log('Adaptive UI regression checks passed.');
 
 assert.match(js, /function renderMobileAccountManager\(\)/);
 assert.match(js, /function renderSettingsCategoryManager\(\)/);
-assert.match(js, /if \(!window\.matchMedia\(SETTINGS_MANAGER_DESKTOP\)\.matches\) return renderMobileAccountManager\(\)/);
+assert.match(js, /if \(!isDesktopInteractionWorkspace\(\)\) return renderMobileAccountManager\(\)/);
 assert.doesNotMatch(js, /function renderMobileCategoryManager\(\)/);
 assert.match(js, /dialog\.classList\.add\('mobile-utility-dialog', 'mobile-settings-dialog'\)/);
 assert.match(js, /dialog\.classList\.add\('mobile-opening-dialog'\)/);
