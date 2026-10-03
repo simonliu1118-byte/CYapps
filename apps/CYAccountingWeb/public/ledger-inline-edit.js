@@ -22,7 +22,7 @@ function setupInlineLedgerEditing() {
 }
 
 function handleInlineLedgerClick(event) {
-  if (window.matchMedia('(max-width: 767px)').matches) return;
+  if (window.matchMedia('(max-width: 767px)').matches || window.cyUsesEntryTransactionEditor?.()) return;
   const editButton = event.target.closest('[data-edit-id]');
   if (editButton) {
     event.preventDefault();

@@ -25,6 +25,7 @@ const context = vm.createContext({
       { id: 3, name: '有餘額', transaction_count: 0, latest_opening_amount: 10 }
     ]
   },
+  isTabletWorkspace: () => false,
   SETTINGS_MANAGER_DESKTOP: '(min-width: 1024px)',
   window: { cyaccCurrentUser: { role: 'ADMIN' }, matchMedia: () => ({ matches: true }) },
   document: { querySelector(selector) {
@@ -90,6 +91,9 @@ context.renderSettingsAccountManager();
 assert.doesNotMatch(activeHost.innerHTML, /已封存|零餘額|有交易|有餘額/);
 assert.match(activeHost.innerHTML, /data-account-archive="9"[^>]*aria-label="封存帳戶">\s*<svg/);
 assert.doesNotMatch(activeHost.innerHTML, /settings-account-section-title/);
+context.isTabletWorkspace = () => true;
+context.renderSettingsAccountManager();
+assert.match(activeHost.innerHTML, /data-mobile-account-drag/, 'tablet uses the same touch sorting handles');
 context.renderMobileAccountManager();
 assert.match(activeHost.innerHTML, /data-account-archive="9"[^>]*aria-label="封存帳戶">\s*<svg/);
 assert.doesNotMatch(activeHost.innerHTML, /mobile-account-section-title/);

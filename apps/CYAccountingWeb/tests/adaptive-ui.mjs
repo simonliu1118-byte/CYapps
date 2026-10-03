@@ -12,7 +12,7 @@ const js = read('public/adaptive-ui.js');
 const loginHtml = read('public/login.html');
 
 assert.match(css, /@media \(max-width: 767px\)/);
-assert.match(css, /@media \(min-width: 768px\) and \(max-width: 1023px\)/);
+assert.match(css, /html\[data-tablet-layout\]/);
 assert.match(css, /@media \(min-width: 1024px\)/);
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /\.v21-mobile-main-nav\.v21-mobile-bottom-nav\s*\{[\s\S]*?position:\s*fixed !important;[\s\S]*?bottom:\s*0;/);

@@ -24,7 +24,7 @@ function startV20() {
 function setupV20ViewportState() {
   const sync = () => {
     const width = window.innerWidth;
-    document.documentElement.dataset.viewport = width < 768 ? 'mobile' : width < 1024 ? 'tablet' : 'desktop';
+    document.documentElement.dataset.viewport = width < 768 ? 'mobile' : isTabletWorkspace() ? 'tablet' : 'desktop';
   };
   sync();
   window.addEventListener('resize', sync, { passive: true });
@@ -432,6 +432,8 @@ function setupV21DesktopSplitWorkspace() {
 }
 
 function applyV21DesktopSplitWorkspace(enabled) {
+  const tablet = isTabletWorkspace();
+  enabled = enabled || tablet;
   const shell = document.querySelector('main.shell');
   const entry = shell?.querySelector('.entry-card') || document.querySelector('.entry-card');
   const ledger = shell?.querySelector('.ledger-card') || document.querySelector('.ledger-card');
@@ -455,7 +457,7 @@ function applyV21DesktopSplitWorkspace(enabled) {
     document.body.classList.add('v21-wide-split');
     confirmation.classList.add('v21-inline-confirmation');
 
-    if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(true, false);
+    if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(!tablet, false);
     else {
       confirmation.classList.add('open');
       confirmation.setAttribute('aria-hidden', 'false');
@@ -2335,6 +2337,7 @@ function renderSettingsAccountManager() {
   if (typeof state !== 'object') return;
   renderArchivedAccountManager();
   if (!window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches) return renderMobileAccountManager();
+  if (isTabletWorkspace()) return renderMobileAccountManager();
 
   const host = document.querySelector('#accountRows');
   if (!host) return;
@@ -2424,7 +2427,7 @@ function renderSettingsCategoryManager() {
   const pane = document.querySelector('[data-settings-pane="categories"]');
   if (!host || !pane) return;
 
-  const desktop = window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches;
+  const desktop = window.matchMedia(SETTINGS_MANAGER_DESKTOP).matches || isTabletWorkspace();
   const kind = state.settingsKind === 'income' ? 'income' : 'expense';
   pane.classList.toggle('settings-kind-income', kind === 'income');
   pane.classList.toggle('settings-kind-expense', kind === 'expense');
@@ -4143,7 +4146,7 @@ function setupV0215Build4SaveMessage() {
   const originalNext = message.nextSibling;
 
   const sync = () => {
-    if (media.matches) {
+    if (usesEntryTransactionEditor()) {
       if (message.previousElementSibling !== saveButton) saveButton.insertAdjacentElement('afterend', message);
       message.classList.add('v0215-mobile-save-message');
     } else {
@@ -4157,11 +4160,12 @@ function setupV0215Build4SaveMessage() {
 
   if (typeof media.addEventListener === 'function') media.addEventListener('change', sync);
   else media.addListener?.(sync);
+  window.addEventListener('resize', sync, { passive: true });
   sync();
 }
 
 function setupV0215Build4EntrySecondaryAction() {
-  if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+  if (!usesEntryTransactionEditor()) return;
   const saveButton = document.querySelector('#saveButton');
   const message = document.querySelector('#saveMessage');
   if (!saveButton || !message) return;
@@ -4242,7 +4246,7 @@ function setupV0215Build4MobileEdit() {
   if (!rows || !form || !nav) return;
 
   rows.addEventListener('click', event => {
-    if (!window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+    if (!usesEntryTransactionEditor()) return;
     const edit = event.target.closest('[data-edit-id]');
     if (!edit) return;
     const id = Number(edit.dataset.editId || 0);
@@ -4254,14 +4258,14 @@ function setupV0215Build4MobileEdit() {
   }, true);
 
   form.addEventListener('submit', event => {
-    if (!cyV0215Build4Edit || !window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+    if (!cyV0215Build4Edit || !usesEntryTransactionEditor()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     saveV0215Build4MobileEdit();
   }, true);
 
   nav.addEventListener('click', event => {
-    if (!cyV0215Build4Edit || !window.matchMedia(CY_V0215_BUILD4_MOBILE).matches) return;
+    if (!cyV0215Build4Edit || !usesEntryTransactionEditor()) return;
     const button = event.target.closest('[data-mobile-page]');
     if (!button || button.dataset.mobilePage === 'entry') return;
 
@@ -4272,7 +4276,11 @@ function setupV0215Build4MobileEdit() {
 
   const phone = window.matchMedia(CY_V0215_BUILD4_MOBILE);
   phone.addEventListener?.('change', () => {
-    if (!phone.matches && cyV0215Build4Edit) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+    if (!usesEntryTransactionEditor() && cyV0215Build4Edit) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+  });
+
+  els.monthFilter?.addEventListener('change', () => {
+    if (cyV0215Build4Edit && usesEntryTransactionEditor()) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
   });
 
   window.addEventListener('pagehide', () => {
@@ -4282,9 +4290,15 @@ function setupV0215Build4MobileEdit() {
 }
 
 function beginV0215Build4MobileEdit(id) {
+  if (cyV0215Build4Edit?.id === id) {
+    if (isTabletWorkspace()) setTabletEntryExpanded(true);
+    els.summary?.focus();
+    return;
+  }
   const tx = state.transactions.find(item => Number(item.id) === id);
   if (!tx || isLocked(String(tx.tx_date || '').slice(0, 7))) return;
 
+  if (cyV0215Build4Edit) cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
   const row = document.querySelector('#transactionRows tr[data-transaction-id="' + id + '"]');
   cyV0215Build4Edit = {
     id,
@@ -4295,6 +4309,7 @@ function beginV0215Build4MobileEdit(id) {
       month: els.monthFilter?.value || '',
       search: document.querySelector('#ledgerSummarySearch')?.value || '',
       scrollY: window.scrollY,
+      ledgerScrollTop: document.querySelector('.ledger-card .table-wrap')?.scrollTop || 0,
       rowId: id,
       rowTop: row?.getBoundingClientRect().top ?? null
     }
@@ -4420,6 +4435,10 @@ function clearV0215Build4TemporaryOptions() {
 }
 
 function switchV0215Build4MobilePage(page) {
+  if (isTabletWorkspace()) {
+    if (page === 'entry') setTabletEntryExpanded(true);
+    return;
+  }
   const shell = document.querySelector('.shell');
   const entry = shell?.querySelector('.entry-card');
   const ledger = shell?.querySelector('.ledger-card');
@@ -4449,11 +4468,17 @@ function restoreV0215Build4LedgerContext(context, highlightId) {
   if (searchInput) searchInput.value = context.search || '';
 
   const restore = () => {
+    if (isTabletWorkspace()) {
+      const scroller = document.querySelector('.ledger-card .table-wrap');
+      if (scroller) scroller.scrollTop = context.ledgerScrollTop || 0;
+    }
     const row = context.rowId
       ? document.querySelector('#transactionRows tr[data-transaction-id="' + context.rowId + '"]')
       : null;
 
-    if (row && context.rowTop !== null) {
+    if (isTabletWorkspace()) {
+      // The ledger scroll container, rather than the page, owns the return position.
+    } else if (row && context.rowTop !== null) {
       const delta = row.getBoundingClientRect().top - context.rowTop;
       window.scrollBy({ top: delta, behavior: 'auto' });
     } else {
@@ -4484,3 +4509,99 @@ function showV0215Build4LedgerNotice(text) {
   notice.classList.add('show');
   window.setTimeout(() => notice.classList.remove('show'), 2600);
 }
+
+/* Tablet presentation reuses the same entry form, ledger and entry-edit owner. */
+function isTabletWorkspace() {
+  const width = window.innerWidth;
+  return width >= 768 && (width < 1024 ||
+    (width <= 1366 && window.matchMedia('(any-pointer: coarse)').matches));
+}
+
+function usesEntryTransactionEditor() {
+  return window.matchMedia('(max-width: 767px)').matches || isTabletWorkspace();
+}
+window.cyUsesEntryTransactionEditor = usesEntryTransactionEditor;
+
+function tabletWorkspaceOrientation() {
+  const orientation = window.screen?.orientation?.type;
+  if (orientation) return orientation.startsWith('landscape') ? 'landscape' : 'portrait';
+  if (typeof window.orientation === 'number') return Math.abs(window.orientation) === 90 ? 'landscape' : 'portrait';
+  return window.matchMedia('(orientation: landscape)').matches ? 'landscape' : 'portrait';
+}
+
+function setTabletEntryExpanded(expanded) {
+  const rail = document.querySelector('.v21-entry-rail');
+  if (!rail) return;
+  rail.dataset.entryExpanded = expanded ? 'true' : 'false';
+  const button = document.querySelector('#tabletEntryToggle');
+  if (button) {
+    button.setAttribute('aria-expanded', String(Boolean(expanded)));
+    button.textContent = expanded ? '收合記帳' : '展開記帳';
+  }
+}
+
+function setupTabletWorkspace() {
+  const shell = document.querySelector('main.shell');
+  const entry = document.querySelector('.entry-card');
+  if (!shell || !entry || shell.dataset.tabletBound === '1') return;
+  shell.dataset.tabletBound = '1';
+  const controls = document.createElement('div');
+  controls.className = 'tablet-entry-controls';
+  controls.innerHTML = '<button id="tabletEntryToggle" type="button" class="secondary" aria-expanded="false" aria-controls="transactionForm">展開記帳</button><label><input id="tabletEntryPinned" type="checkbox">保持展開</label>';
+  entry.prepend(controls);
+  controls.querySelector('#tabletEntryToggle').addEventListener('click', () => {
+    if (controls.querySelector('#tabletEntryPinned').checked) return;
+    const rail = document.querySelector('.v21-entry-rail');
+    const expanded = rail?.dataset.entryExpanded !== 'true';
+    setTabletEntryExpanded(expanded);
+    if (!expanded) controls.querySelector('#tabletEntryPinned').checked = false;
+  });
+  controls.querySelector('#tabletEntryPinned').addEventListener('change', event => {
+    if (event.target.checked) setTabletEntryExpanded(true);
+  });
+
+  let active = false;
+  const sync = () => {
+    const tablet = isTabletWorkspace();
+    const wasTablet = active;
+    active = tablet;
+    const orientation = tablet ? tabletWorkspaceOrientation() : '';
+    document.documentElement.dataset.tabletLayout = orientation;
+    document.documentElement.dataset.viewport = window.innerWidth < 768 ? 'mobile' : tablet ? 'tablet' : 'desktop';
+    if (!tablet && !wasTablet) return;
+    applyV21DesktopSplitWorkspace(window.matchMedia(CY_V21_SPLIT_MEDIA).matches);
+    if (tablet) {
+      const rail = document.querySelector('.v21-entry-rail');
+      if (rail && !rail.dataset.entryExpanded) rail.dataset.entryExpanded = 'false';
+      document.querySelector('.entry-card')?.classList.remove('v21-mobile-page-hidden');
+      document.querySelector('.ledger-card')?.classList.remove('v21-mobile-page-hidden');
+      setupV0215Build4EntrySecondaryAction();
+      // The original date/month controls are native and keep their existing listeners.
+      document.querySelectorAll('.v0211-date-popover, .v21-month-picker-popover').forEach(node => { node.hidden = true; });
+    } else if (!usesEntryTransactionEditor() && cyV0215Build4Edit) {
+      cancelV0215Build4MobileEdit({ restoreDraftOnly: true });
+    }
+    if (wasTablet !== tablet && typeof renderSettingsAccountManager === 'function') renderSettingsAccountManager();
+  };
+  const syncHeight = () => {
+    const height = window.visualViewport?.height || window.innerHeight;
+    document.documentElement.style.setProperty('--tablet-visible-height', `${height}px`);
+    const topbar = document.querySelector('.topbar');
+    const notice = document.querySelector('#readOnlyNotice');
+    const headerHeight = (topbar?.getBoundingClientRect().height || 0) +
+      (notice && !notice.classList.contains('hidden') ? notice.getBoundingClientRect().height : 0);
+    document.documentElement.style.setProperty('--tablet-header-height', `${headerHeight}px`);
+  };
+  window.addEventListener('resize', () => { sync(); syncHeight(); }, { passive: true });
+  window.addEventListener('orientationchange', sync, { passive: true });
+  window.screen?.orientation?.addEventListener?.('change', sync);
+  window.matchMedia('(any-pointer: coarse)').addEventListener?.('change', sync);
+  window.visualViewport?.addEventListener('resize', syncHeight, { passive: true });
+  if (typeof ResizeObserver === 'function') {
+    const observer = new ResizeObserver(syncHeight);
+    for (const node of document.querySelectorAll('.topbar, #readOnlyNotice')) observer.observe(node);
+  }
+  sync();
+  syncHeight();
+}
+window.addEventListener('load', setupTabletWorkspace, { once: true });
