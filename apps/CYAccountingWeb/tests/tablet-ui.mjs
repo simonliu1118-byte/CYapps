@@ -37,7 +37,7 @@ const win = {
 const context = vm.createContext({ window: win, document: { documentElement: root, createElement: () => controls,
   querySelector: selector => nodes[selector] || null, querySelectorAll: () => [] },
   CY_V21_SPLIT_MEDIA: '(min-width: 1360px)', cyTouchWorkspaceEdit: edit,
-  applyV21DesktopSplitWorkspace() { splitCalls++; }, setupTouchWorkspaceEntrySecondaryAction() {}, renderSettingsAccountManager() {},
+  applyV21DesktopSplitWorkspace() { splitCalls++; }, setupTouchWorkspaceEntrySecondaryAction() {}, setupTouchWorkspaceMonthDisplay() {}, isDesktopInteractionWorkspace() { return !context.isTabletWorkspace(); }, renderSettingsAccountManager() {},
   cancelTouchWorkspaceMobileEdit() { context.cyTouchWorkspaceEdit = null; }, api() { writes++; }
 });
 vm.runInContext(tabletCode, context);
@@ -150,3 +150,7 @@ console.log('Tablet selection and month navigation preserve the shared draft/can
 
 assert.match(source, /function isDesktopInteractionWorkspace\(\)/, 'desktop interaction authority is defined');
 assert.doesNotMatch(source, /min-width:\s*1024px/, 'desktop interactions must not infer desktop from 1024px');
+
+assert.match(source, /setupTouchWorkspaceMonthDisplay\(slot\)/, 'tablet landscape reuses the shared touch month presenter');
+assert.match(source, /document\.querySelectorAll\('\.desktopUi-date-picker'\)\.forEach\(root => root\.remove\(\)\)/, 'tablet removes desktop date presentation instead of adding a tablet picker');
+assert.doesNotMatch(source, /tabletEntryDateDisplay|setupTabletDateDisplay/, 'tablet must not own a separate date display component');

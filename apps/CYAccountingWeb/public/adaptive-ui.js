@@ -4542,32 +4542,25 @@ function setTabletEntryExpanded(expanded) {
 function syncTabletPickerOwnership(orientation) {
   const tablet = isTabletWorkspace();
 
-  document.querySelectorAll('input[type="date"]').forEach(input => {
-    if (tablet) {
-      const custom = input.nextElementSibling?.classList?.contains('desktopUi-date-picker') ? input.nextElementSibling : null;
-      custom?.remove();
+  if (tablet) {
+    document.querySelectorAll('.desktopUi-date-picker').forEach(root => root.remove());
+    document.querySelectorAll('input[type="date"]').forEach(input => {
       input.classList.remove('desktopUi-native-date-source');
       delete input.dataset.desktopUiDatePicker;
-      input.style.removeProperty('position');
-      input.style.removeProperty('width');
-      input.style.removeProperty('height');
-      input.style.removeProperty('clip');
-      input.style.removeProperty('clip-path');
-      input.style.removeProperty('pointer-events');
-    } else if (isDesktopInteractionWorkspace() && typeof ensureDesktopUiDatePicker === 'function') {
-      ensureDesktopUiDatePicker(input);
-    }
-  });
+      input.removeAttribute('style');
+    });
+  } else if (isDesktopInteractionWorkspace() && typeof ensureDesktopUiDatePicker === 'function') {
+    document.querySelectorAll('input[type="date"]').forEach(ensureDesktopUiDatePicker);
+  }
 
   const customMonth = document.querySelector('#ledgerMonthPickerCustom');
   if (tablet && customMonth) {
-    customMonth.hidden = true;
-    if (typeof closeDesktopLedgerMonthMonthPicker === 'function') closeDesktopLedgerMonthMonthPicker(customMonth);
+    customMonth.remove();
   }
 
   const slot = document.querySelector('#ledgerMonthSlot');
   if (tablet && orientation === 'landscape') {
-    if (slot && typeof setupTouchWorkspaceMonthDisplay === 'function') setupTouchWorkspaceMonthDisplay(slot);
+    setupTouchWorkspaceMonthDisplay(slot);
   } else if (tablet) {
     document.querySelector('#mobileLedgerMonthDisplay')?.remove();
   }
