@@ -1,332 +1,73 @@
 # CYAccountingWeb
 
-志遠記帳系統 Web 版。此專案與 `apps/CYAccounting/` Windows 版分開維護；Windows 版仍是獨立正式產品線，Web 版不得因功能移植而覆蓋或破壞桌面版。
+志遠記帳系統 Web 版；與 `apps/CYAccounting/` Windows 版分開維護。
 
-> Current source release: **V0.22.1 Build 1**（2026-10-02）。正式部署狀態以該版本合併提交的 GitHub Actions deploy 結果為準。
->
-> Current continuity handoff: [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)
+更新：2026/10/03（日本時間）。本文件是專案入口與現況摘要，永久規則依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
-## V0.22.1 跨介面檢查與期初間距
+## 目前狀態
 
-Build 1 補上交易寫入完成後的舊月份查詢回應保護，避免畫面退回存檔前金額。
+| 項目 | 狀態與證據 |
+| --- | --- |
+| 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
+| 正式版本 | **V0.22.1 Build 1**；main `d822afd779642fbeae745d0f643c5d7d8fb1f1ab`，PR #290；[部署 #370](https://github.com/simonliu1118-byte/CYapps/actions/runs/37035827619) 成功 |
+| 公開穩定 Release | [V0.22.0](https://github.com/simonliu1118-byte/CYapps/releases/tag/cyaccountingweb-v0.22.0)；公開 Release 與網站部署分開 |
+| 平板開發 | **V0.22.2 Build 0**；`cyaccountingweb/tablet-interface`，[Draft PR #292](https://github.com/simonliu1118-byte/CYapps/pull/292)，尚未合併、部署或公開 Release |
+| 平板驗證 | 程式與自動測試通過；真實 iPad／Android 觸控、鍵盤、登入及排版仍待驗收 |
+| 桌面帳本移轉 | 使用者於 2026/10/03 確認內容 OK，內容驗收已完成 |
+| 備份 | Phase C；手動雙副本驗收通過，排程連續成功 `x/14` 尚需讀正式 catalog／UI，未推算進度 |
 
-期初「調整」標籤移至帳戶名稱左側，手機名稱／金額間距由 6px 增為 10px。手機、平板及桌機交易編輯共用驗證與 optimistic 寫入：立即顯示結果、失敗還原，避免月份回應蓋掉正在儲存的資料。桌機列內摘要沿用 20 個中文字／40 個英數字元限制，不保留長摘要例外。
+上列 main SHA 指功能部署基準；後續純文件提交不代表新版功能已部署。接手時以最新 branch／PR／Actions 再核對。
 
-帳戶新增／改名／預設及常用科目共用 optimistic 處理；科目新增和帳戶排序移除手機專屬寫入分支。期初基準、刪除及鎖帳維持 server 成功後顯示結果。跨介面檢查證據與剩餘界面差異見目前交接文件；V0.22.0 正式 Release 保留原發布內容，本次修正不自動重發 Release。
+## 文件入口
 
-## V0.22.0 手機穩定版
+| 文件 | 用途 |
+| --- | --- |
+| [PROJECT_RULES.md](PROJECT_RULES.md) | 專案唯一永久規則補充 |
+| [WORK_HANDOFF.md](WORK_HANDOFF.md) | 目前交接、分支、驗證證據與下一步 |
+| [TODO.md](TODO.md) | 尚未完成的工作與驗收清單 |
+| [docs/TABLET_UI_DESIGN.md](docs/TABLET_UI_DESIGN.md) | 平板雙方向設計、目前實作與驗收差距 |
+| [BACKUP_ARCHITECTURE_HANDOFF.md](BACKUP_ARCHITECTURE_HANDOFF.md) | 備份模組、格式、Phase C 與復原邊界 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本里程碑；歷史變更不作目前操作指南 |
+| [docs/archive/](docs/archive/) | 舊交接快照，已標記歷史，接手不需逐份重播 |
 
-新增帳戶提示統一為「帳戶名稱最多八字」。本版整合手機記帳、看帳清單、共用彈窗、科目階層排序、封存帳戶與自動期初餘額；完整摘要見 [`V0.22.0.txt`](./V0.22.0.txt)。Web 正式部署成功後，以獨立 Release 流程重新驗證 main、版本、測試、公開套件掃描與 SHA-256，再發布公開原始碼包。Release 由手動啟動 workflow 或專用 `release/cyaccountingweb` 分支觸發，一般開發分支與 main push 不會自動發布 Release。
+## 已上線功能
 
-## V0.21.16 設定與科目顯示
+- 記帳新增、編輯、刪除；月份切換、摘要搜尋、月統計、逐筆及各帳戶餘額。
+- 帳戶新增、改名、預設、排序、封存／解封；SUPER_ADMIN 永久刪除符合條件的帳戶。
+- 收入／支出大分類與科目、常用科目、分類上下排序及科目拖曳跨分類。
+- 自動承接期初餘額；人工例外需理由及 append-only 稽核，記錄 CYID 操作者、時間及實際前／後值。
+- 月份鎖帳；Excel 匯出共用期初計算；Excel 匯入有預覽、驗證與重複略過。
+- 桌面 SQLite 帳本在瀏覽器本機解析，原始 `.db` 不上傳；SUPER_ADMIN 預覽、確認後原子寫入。
+- CYID 共用登入、Session、App Access 與 Password Recovery contract；USER 唯讀並可匯出 Excel。
+- D1 匯出一次，R2／GCS 分別保存與驗證同一 logical backup；復原及災難復原尚未完成。
 
-帳戶封存使用收納盒圖示，入口改為「已封存帳戶」，移除「使用中」標題。科目設定共用記帳收支切換樣式，標題以下內容使用相同收支純色；編輯視窗移除說明文字。手機記帳各列標題垂直置中；科目欄位顯示「大分類／科目」，送出的科目值與歷史資料仍保留原名。
+帳戶名稱最多八個 Unicode 字元；手動摘要最多 40 weighted units（20 個全形／40 個 ASCII 字元），金額 1～9,999,999。當月有效期初覆寫顯示「調整」標籤，已清除覆寫則不顯示。
 
-## V0.21.15 手機記帳與期初欄位
+SUPER_ADMIN 永久刪除條件為已封存、無交易、最新有效期初為零；早期非零基準及稽核保留，不能重用已稽核帳戶名稱。Migration 0006 已把舊期初表轉成 override／audit，現行 schema 為 6。
 
-收入／支出記帳區使用與畫布相同的純色 `#f4fbf6`／`#fff6f5`。封存視窗隨內容決定高度，超過可用高度才捲動；Build 1 依使用者更正，帳戶設定恢復 V0.21.14 間距；期初餘額的名稱靠右、名稱與金額欄間距縮至 6px，金額欄仍對齊。帳戶／科目與大分類的改名、刪除按鈕改成編輯及垃圾桶圖示，保留操作名稱。
+## 跨裝置介面與共用流程
 
-## V0.21.14 期初與封存帳戶介面
+正式版手機保留新增／看帳兩頁、滑出後再點的編輯／刪除、共用彈窗及 `餘額／更多` 工具。記帳收支區使用純色收入 `#f4fbf6`、支出 `#fff6f5`；科目欄顯示「大分類／科目」，送出的資料值仍為原科目名稱。封存帳戶由「已封存帳戶」開啟獨立、隨內容高度變動的視窗。
 
-期初列只保留帳戶名稱與金額，當月有生效的手動設定才顯示「調整」。已封存帳戶由新增帳戶右側「封存」按鈕開啟獨立視窗，顯示解封及 SUPER_ADMIN 刪除操作；保留既有刪除限制。
+桌機保留鍵盤快速輸入及列內編輯。平板開發版橫向左記帳右看帳，直向看帳為主、底部記帳欄可收合／保持展開；帳戶、日期及月份優先用原生元件。詳細範圍見平板設計。
 
-## V0.21.13 科目設定
+所有裝置共用 Worker、CYID、權限、API、帳務計算及 `persistTransactionUpdate`。交易編輯與一般設定變更先呈現結果，失敗還原；期初基準、刪除、鎖帳、移轉等高風險操作等待伺服器。一般新增記帳仍沿用共用的既有送出流程，尚未改為 optimistic，不將它誤列成已完成項目。
 
-手機維持單一階層列表，縮減列高與留白；大分類用 ↑／↓ 調整順序，科目用左側 ⠿ 拖曳排序，拖到同收支類型的其他大分類即移入。放置位置有提示，接近列表邊緣會自動捲動。排序先呈現、背景儲存，失敗時還原。既有歷史記帳資料不改寫。
+## 架構與執行設定
 
-## V0.21.12 手機操作
+前端使用原生 HTML／CSS／JavaScript；Worker 入口為 `src/app.js`。D1 binding 為 `DB`，CYID private Service Binding 為 `IDENTITY`；備份使用 `BACKUP_R2` 與 GCS provider。正式 resource identifiers、帳務資料、憑證及 Session 不放入 Public Git。
 
-手機輸入欄位至少 16px，操作元件使用 `touch-action: manipulation` 減少連點放大；保留正常捲動、雙指縮放及既有拖曳／明細滑動。登入頁採相同設定。
+Identity 技術規範直接引用 [CYID consumer standard](../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)。CYACC 採用 `1.0.1`，provider 支援 `1.0.0–1.0.2`。登入走獨立 `/login`、navigation-safe server redirect 與 provider Session；沒有裝置專屬登入 authority。舊 `web_sessions` 只有實體表待退休，已不是 runtime fallback。
 
-## V0.21.11 期初餘額
+正式部署由 GitHub Actions 配合 `wrangler.template.jsonc` 及 Deployment Environment 暫時產生 config；`workers_dev: true` 備援仍保留。Domain 協調來源為 `chihyuan-web/docs/DOMAIN_STRATEGY.md`。開帳自動計算起始年月尚待使用者補齊資料後提供，這次沒有修改正式帳務基準。
 
-- 預設依歷史收支自動承接期初；最近人工基準之後繼續承接收支。帳務 API 與 Excel 共用 `src/opening-balances.js`。
-- 人工調整須填理由，保存實際前／後值、CYID 操作者及時間；恢復自動值會清除該月覆寫並新增稽核紀錄。資料庫禁止更新或刪除稽核列。
-- USER 保持唯讀；ADMIN／SUPER_ADMIN 可調整未鎖帳月份，待 server 成功才顯示完成。
-- SUPER_ADMIN 可永久刪除已封存、無交易且最新期初為 0 的帳戶；歷史非零基準及稽核保留，已有稽核的帳戶名稱不得重用。
-- Migration 0006 將舊 `opening_balances` 轉為覆寫及移轉稽核後刪除舊表。部署後不得只回退到依賴舊表的 Worker。
-- 備份 inner format v2 保存封存狀態、覆寫與稽核；outer BackupSet 維持 v2，舊資料格式 reader 保留。
-
-## 專案定位
-
-CYAccountingWeb 是以 Cloudflare 為正式執行平台的多人 Web 記帳系統。
-
-目前核心原則：
-
-- Cloudflare D1 是 CYAccountingWeb 帳務資料的唯一 authoritative live database。
-- 帳務 schema 以 `migrations/` 為正式來源。
-- Desktop 維持高資訊密度與鍵盤效率，但 presentation 採現代、簡潔的商務 Web 風格；Tablet / Mobile 使用同一網站的 RWD + Adaptive UI，不另拆第二套前端。
-- Public Git 不保存正式帳務資料、runtime secret、正式 Cloudflare resource identifiers 或 backup payload。
-
-## 正式技術架構
-
-```text
-Browser
-  ↓
-Cloudflare Worker + Static Assets
-  ├─ DB       → CYAccountingWeb D1
-  ├─ IDENTITY → CYCloudIdentity provider
-  ├─ BACKUP_R2
-  └─ GCS runtime secrets/provider
-```
-
-主要技術：
-
-- 前端：HTML / CSS / JavaScript
-- API：Cloudflare Workers
-- 靜態內容：Workers Static Assets
-- 帳務資料庫：Cloudflare D1，binding 固定為 `DB`
-- 帳號服務：private Service Binding `IDENTITY`
-- 備份：Cloudflare R2 + Google Cloud Storage
-- 部署：GitHub Actions + `wrangler.template.jsonc` 產生暫時 deploy config
-
-正式 deployment-specific 值由 GitHub Deployment Environment / Secrets 注入，不固定寫入 public source。
-
-## Production access / Custom Domain
-
-正式使用者入口：
-
-```text
-https://acc.chihyuancm.com
-```
-
-技術備援仍保留：
-
-```text
-https://cyaccounting-web.simonliu1118.workers.dev
-```
-
-目前 deployment contract：
-
-- Cloudflare Custom Domain：`acc.chihyuancm.com`；
-- GitHub Environment variable：`CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN`；
-- `wrangler.template.jsonc` 以 `custom_domain` route 管理正式 hostname；
-- `workers_dev: true` 明確保留 workers.dev fallback；
-- Custom Domain rollout：PR #205；
-- workers.dev fallback retention：PR #207；
-- 2026-09-29 production deploy / user smoke test 已通過。
-
-Domain namespace 的跨 App 規劃仍以 `chihyuan-web/docs/DOMAIN_STRATEGY.md` 為協調來源；CYAccountingWeb 不自行改動其他 App 的 hostname。
-
-## 帳號與 Identity 邊界
-
-V0.21.6 將 CYAccountingWeb 正式接到 **CYCloudIdentity (CYID)** consumer contract。CYID 是 Workspace / Employee / Credential / Workspace Role / App Access / provider Session / Email verification / Recovery 的唯一 Identity authority；CYAccountingWeb 不再建立第二套 Identity session。
-
-Runtime 流程：
-
-```text
-Browser
-  ↓ app-scoped HttpOnly + Secure + SameSite=Lax cookie
-CYAccountingWeb Worker
-  ↓ IDENTITY Service Binding
-CYCloudIdentity
-  ├─ login
-  ├─ session/resolve
-  ├─ logout
-  └─ password recovery
-```
-
-固定規則：
-
-- Application ID / Workspace ID 只由 deployment/runtime variables 注入，不寫入 Public source；
-- raw provider Session token 只存在 HttpOnly cookie 與 CYID request Authorization，不進 JS storage、URL、log 或帳務資料表；
-- protected request 由 CYID current authority resolve，CYACC 不保留 local `web_sessions` fallback；
-- V0.21.6 cutover 只移除 active authority；舊 `web_sessions` 實體 table 暫時保留，避免 Worker deploy 失敗時舊版 runtime 因 migration 先行而失效。完成 development + production acceptance 後，再以後續獨立 forward migration 清除；
-- CYID App Access 決定能否進入 CYAccountingWeb；CYACC 自己負責帳務 business authorization；
-- `SUPER_ADMIN` / `ADMIN` 保留既有可寫入能力，既有 Super-Admin-only 功能仍只允許 `SUPER_ADMIN`；
-- 有 CYACC App Access 的 `USER` 可登入，但只可檢視帳務資料與匯出 Excel；所有帳務 mutation、設定、匯入、移轉與 backup/restore 都由 server-side gate 拒絕；
-- 未登入使用者只會載入獨立 `/login`；`/` / `/index.html` 先由 Worker 驗證 CYID Session，不再使用 full-app login overlay；
-- 非核心 consumer 不處理 first-login / Email verification；若帳號尚未完成首次流程，必須回 CY Web 帳號管理入口；
-- Password Recovery 直接委派 CYID，密碼長度採 8–16 Unicode code points，UI 不揭露是否存在帳號或 masked email；
-- Tablet Safari compatibility 暫保留 `SameSite=Lax + Expires + navigation-safe`，直到真機驗收證明可收緊。
-
-## Isolated CYID development acceptance
-
-CYID development owns the provider-side provisioning and isolated preview lifecycle. The retained CYACC template `wrangler.cyid-development.template.jsonc` describes the consumer preview shape: dedicated Worker Preview + dedicated D1 + CYID development Service Binding, with no production Custom Domain, Backup binding, Cron or production accounting D1.
-
-Development live acceptance completed successfully on **CYCloud Identity Development Deploy run #96** using synthetic development-only principals and runtime-random masked credentials. The acceptance verified:
-
-- standalone CYACC login through the real CYID development Service Binding;
-- CYID Session resolve and direct Role projection;
-- `USER + CYACC App Access` can enter and read accounting data;
-- USER accounting mutation returns server-side `403 READ_ONLY_USER`;
-- USER Excel export returns a valid XLSX payload;
-- USER → ADMIN Role change revokes the old Session;
-- re-login as ADMIN exposes writable accounting authority and an isolated create/delete transaction roundtrip succeeds;
-- CYACC App Access revoke revokes the active Session and fresh login is denied;
-- App Access restore + Role restore returns the synthetic target to USER;
-- CYACC logout invalidates the provider Session.
-
-The synthetic acceptance identities are development-only. Their passwords are generated at runtime, masked before use, never committed, and the target is restored to USER + App Access enabled with test Sessions revoked during cleanup.
-
-## CYID development smoke
-
-在 development registry 與 runtime variables 設定完成後，可從受信任環境執行：
+## 開發與驗證
 
 ```bash
-CYACC_SMOKE_BASE_URL="https://<development-host>" \\
-CYACC_SMOKE_EMPLOYEE_NO="<4-digit-employee-no>" \\
-CYACC_SMOKE_PASSWORD="<password>" \\
-CYACC_SMOKE_EXPECTED_ROLE="USER" \\
-node scripts/smoke-cyid-development.mjs
-```
-
-可選 `CYACC_SMOKE_MONTH=YYYY-MM`；未指定時使用執行當月。實際 hostname、Employee No、密碼與其他 runtime values 不得 commit、不得寫入 Actions log，也不得放進 Public artifact。
-
-CYACC 的低風險 smoke runner 仍可單獨驗證 login/read-only/Excel/logout；完整 Role/App Access/Session invalidation acceptance 已由 CYID development workflow 以 synthetic principals 自動執行並於 run #96 通過。Password Recovery 的 Email delivery/browser acceptance 仍屬獨立 gate。
-
-Canonical references：
-
-- shared standard：`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`；
-- adopted consumer version：`apps/CYAccountingWeb/CYID_CONSUMER_VERSION`；
-- provider contract version / minimum：`apps/CYCloudIdentity/CONSUMER_CONTRACT_VERSION` / `CONSUMER_MIN_COMPATIBLE_VERSION`；
-- CYACC-specific migration guide：`apps/CYCloudIdentity/docs/consumers/CYACC_INTEGRATION_HANDOFF.md`。
-
-## 已完成核心功能
-
-目前已完成：
-
-- **V0.21.6 CYID integration**：獨立登入入口、CYID provider Session authority、USER 唯讀 + Excel export、server-side write gate、active source 移除 `web_sessions` authority、延後實體 table drop 的 rollback-safe cutover、runtime Application/Workspace ID deploy gate；
-
-- 基本記帳新增、編輯、刪除；
-- 帳戶、收入／支出大分類與科目管理；
-- 期初餘額與逐月鎖帳；
-- 常用摘要與設定；
-- CYCloudIdentity 共用員工登入、provider Session、App Access 與 Email Password Recovery；
-- 月份切換、摘要搜尋、月統計、逐筆餘額與帳戶分組；
-- 記帳資料列直接編輯；
-- 日期鍵盤快速輸入；
-- 單月 `.xlsx` 匯出；
-- `.xlsx` 匯入、欄位對應、預覽、驗證與重複略過；
-- **V0.19.0 CYAccounting SQLite 帳本移轉工具**：瀏覽器本機解析 `.db`、schema/integrity 驗證、保守合併預覽、重複資料判斷、衝突阻擋與 D1 atomic commit；僅 `SUPER_ADMIN` 可執行；
-- **V0.19.0 Build 1 D1 寫入安全修正**：bulk insert 改採 JSON1 展開，限制單一 JSON payload 與 batch statement 數，符合 D1 bound-parameter、2 MB string/row 與 Free plan 每 invocation query 上限；
-- **V0.21.3 桌面帳本日期相容修正**：移轉時接受 CYAccounting 桌面版既有的 `YYYY/MM/DD`、`YYYY/MM` 日期／月份格式，送入 Web 帳本前正規化為 `YYYY-MM-DD`、`YYYY-MM`；
-- **V0.21.4 操作回饋改善**：帳本移轉完成後顯示明顯完成視窗；記帳資料餘額可查看該筆後各帳戶餘額；預設帳戶與常用科目改為先更新畫面、儲存失敗再還原；
-- **V0.21.4 Build 1 recovery**：V0.21.5 手機版故障回退後，暫時停用 HTML/JS 瀏覽器快取並替登入／主 overlay script 加 recovery cache key；登入成功後先驗證 Web session，再重新載入頁面，避免舊前端造成假性登入失敗；
-- **V0.21.5 Build 1 Mobile safe retry**：重新實作手機四列兩欄新增記帳與單列看帳；改採既有 render output + mobile-only CSS，不使用 V0.21.5 Build 0 的自我重畫 MutationObserver；帳戶名稱依字數拆成上下兩行，手機餘額浮窗只顯示各帳戶；
-- **V0.21.5 Build 2 Mobile layout correction**：手機新增記帳改為一列一件事並限制在單一 viewport 內；收入／支出使用整個記帳區綠／紅外框；看帳完整清除舊卡片式 `grid-row` 定位，回復真正一筆一列的固定欄位清單；
-- **V0.21.5 Build 3 Mobile refinement**：記帳頁收入／支出改為邊緣向內約 20% 的綠／紅漸層、常用科目／摘要恢復固定高度橫向 chips、欄位文字統一置中；看帳上方月份／統計／搜尋框架收斂，交易列改為右滑露出編輯、左滑露出刪除，滑動本身不直接執行；
-- **V0.21.5 Build 4 Mobile edit + ledger toolbar**：手機看帳工具列改為 `餘額｜<｜月份｜>｜更多`，更多只保留鎖帳與 Excel；月統計改為小卡並以淨利綠／淨損紅呈現；摘要搜尋改為單列 search field、鍵盤 Search/Enter 直接送出；手機右滑編輯改用共用新增記帳表單，儲存成功回原月份／原清單位置，中途離開則視為取消且不寫入資料庫；存檔成功提示移至儲存鍵下方約 2.5 秒淡出；
-- **V0.21.5 Build 5 Mobile fix**：修正 Build 4 手機編輯接管可能因動態 script 載入時機而未初始化；手機標題列下方硬橫線移除；收入／支出恢復 Build 3 較強的四邊漸層；月統計小卡改為單排 `期初｜收入｜支出｜期末｜淨利/淨損`；
-- **V0.21.5 Build 6 Tablet auth hotfix**：平板登入 overlay 改為鍵盤安全的 `dvh` 高度與可捲動配置，避免 iPad/Android 平板鍵盤彈出後登入卡被遮住且無法操作；auth stylesheet 加 cache key 強制更新；
-- **V0.21.5 Build 7 Mobile toolbar + clear/cancel fix**：手機收入／支出舊版 3px 上緣硬線改以相同 specificity 明確清除；看帳月份列先保持穩定三欄，等餘額／更多工具完成建立後再切成 `餘額｜<｜月份｜>｜更多` 五欄；新增記帳儲存鍵下方新增「清空」，編輯模式自動改成「取消」，取消時不寫入資料庫並回原本看帳年月與清單位置；
-- **V0.21.5 Build 8 Tablet auth + Mobile fix**：撤回 Build 6 造成 iPad Safari 觸控異常的 Tablet auth overlay 改動；登入成功後改由完整頁面導向後再驗證 session，auth fetch 改用 `credentials: include`，Web session cookie 改為 `SameSite=Lax` 並補 `Expires`；手機收入／支出 slider 外層背景改為透明並裁切圓角；看帳月份 picker 保留在原本 `#ledgerMonthSlot`，五欄工具列固定為 `餘額｜<｜月份｜>｜更多`；
-- **V0.21.5 Build 9 Mobile month control**：只修手機看帳月份列，不碰 auth/session/CYID；畫面上的 `YYYY年M月` 改由 Web 自行繪製，原生 `input type=month` 保留為透明觸控層負責叫出手機原生月份選擇器，避免 iPhone Safari 原生 month control 溢出欄位與 `>` 重疊；
-- **V0.21.5 Build 10 Mobile tools refinement**：手機 `餘額` 維持期初餘額設定，但改為緊湊的手機版編輯介面並預設帶入目前看帳月份；`更多` 收斂為帳戶設定、科目設定、月份鎖帳、匯出 Excel；帳戶／科目在手機只開被選取的設定頁，月份鎖帳改為獨立小確認視窗，不再把整個設定介面拉出；auth/session/CYID 本輪不動；
-- **V0.21.5 Build 11 Mobile account menu cleanup**：手機右上角使用者選單移除「設定」，只保留身分資訊與「登出」；手機需要的設定功能仍保留在看帳頁 `更多`：帳戶設定、科目設定、月份鎖帳、匯出 Excel；Tablet / Desktop 設定入口不變；
-- **V0.20.0 RWD / Adaptive UI Phase 1**：建立 Desktop / Tablet / Mobile presentation 分層；
-- **V0.20.1 Mobile refinement**：收斂交易卡片資訊層級、inline edit 可視性、Header／搜尋／設定操作密度與窄手機 presentation；
-- **V0.21.0 Desktop Business UI**：Desktop `>=1024px` 改為現代、簡潔的商務 Web presentation；
-- **V0.21.1 Desktop interaction cleanup**：收斂自製日期／年月控制、產品 Dialog 與舊 manager 行為污染；
-- **V0.21.2 category-management rewrite**：科目管理改為較緊湊的管理器，新增加大分類／科目入口集中於頂部，保留 drag reorder / cross-group move；
-- Tiered Backup Phase A / B；
-- Phase C R2 + GCS parallel dual-provider production path 與狀態 UI；
-- `acc.chihyuancm.com` Custom Domain production rollout。
-
-V0.19.0 SQLite 移轉功能雖已完成自動測試與正式部署，仍需以最新 `TODO.md` / production evidence 判斷真實帳本 acceptance 是否完成；不得只因程式存在就自動視為結案。
-
-詳細待辦與未來方向以 [`TODO.md`](./TODO.md) 為準。
-
-## 桌面 SQLite 帳本移轉
-
-V0.19.0 的資料移轉設計：
-
-```text
-選擇 CYaccounting.db
-  ↓ 瀏覽器本機 sql.js / WebAssembly 解析
-SQLite integrity / foreign-key / schema 檢查
-  ↓
-正規化帳戶、分類、科目、交易、期初餘額、鎖帳
-  ↓ 只有正規化資料送到 Worker；原始 .db 不上傳
-SUPER_ADMIN server-side 驗證
-  ↓
-與目前 D1 建立保守合併預覽
-  ↓
-使用者確認
-  ↓
-D1 atomic batch commit
-```
-
-主要安全規則：
-
-- 原始 SQLite 檔不傳到 Worker；
-- 支援桌面 schema v1 / v2；
-- 交易金額仍受 1～9,999,999 限制；
-- 既有 Web 交易不因移轉而刪除；
-- 同內容交易按「既有／來源出現次數」判斷重複，避免誤刪合法的重複交易；
-- 同月份／帳戶的期初餘額若金額不同，視為衝突並阻擋；
-- 同名科目若已存在於不同大分類，既有 Web 帳本採阻擋而不偷偷改分類；
-- 鎖帳只會維持或變得更嚴格，不會因來源帳本而解鎖既有月份；
-- 同一來源檔 SHA-256 已有成功移轉紀錄時，預設阻擋再次提交；
-- bulk D1 write 採單一 JSON bind + `json_each(?)` 展開並限制 batch/payload 規模。
-
-桌面版使用 SQLite WAL；選擇目前使用中的 `Data/CYaccounting.db` 前應先關閉 CYAccounting，或使用最近完成且已驗證的桌面備份，避免只取得尚未 checkpoint 的主資料庫檔。
-
-## 備份目前狀態
-
-CYAccountingWeb 正在 **Tiered Backup Phase C production acceptance**。
-
-目前 production 行為：
-
-```text
-D1 authoritative live DB
-  ↓ export once
-one logical backup / one backupId / one immutable package digest
-  ├─ R2  verified copy
-  └─ GCS verified copy
-```
-
-Phase C 期間：
-
-- schedule：每日 03:30（台灣時間）；
-- R2 application retention：30 天；
-- GCS：仍維持每日 + 14 天；
-- manual paired production acceptance：**2026-09-27 已通過**；
-- scheduled acceptance gate：**連續 14 次 production scheduled paired backup**；
-- 手動備份不列入 `14` 次計數；
-- 在 `14/14` 通過前不得進入 Phase D；
-- `x/14` 必須讀 production catalog / UI，不得依日期推算。
-
-Phase D 才會切成：R2 每日、GCS 每週三／週日 cross-cloud DR replication，GCS retention 26 週 / 182 天。
-
-完整狀態與 migration guardrail 見 [`BACKUP_ARCHITECTURE_HANDOFF.md`](./BACKUP_ARCHITECTURE_HANDOFF.md)。
-
-## UI / UX 方向
-
-目前採單一網站的 Adaptive UI，資料與 API 共用，不建立獨立 PC／手機網站。
-
-目前 presentation 分層：
-
-- Desktop `>= 1024px`：V0.21.x 採現代、簡潔的商務 Web presentation，同時維持高資訊密度與鍵盤高速輸入；目前視覺要求為「精緻、商務、簡潔」；
-- Tablet `768–1023px`：沿用 Adaptive UI；真實平板已確認目前 touch/focus/login 不可接受，Build 6/8 legacy auth hotfix 未取得 acceptance；在 CYID governed integration 收斂前不再疊 Tablet-specific legacy auth patch；
-- Mobile `< 768px`：目前 formal baseline 為 Build 11；Build 10 direction 繼續保留，`餘額` = 期初餘額設定，`更多` = 帳戶設定／科目設定／月份鎖帳／匯出 Excel，右上角使用者選單只留身分資訊＋登出；仍需真實手機 final acceptance；
-- Desktop 與 Mobile/Tablet presentation 分層維護，Desktop 改版不得反向覆寫 `<1024px` Adaptive UI；
-- Desktop、Tablet、Mobile 仍需持續以真實裝置／尺寸做視覺 acceptance；自動測試只驗證 presentation boundary 與結構，不取代人工畫面驗收。
-
-目前工作與驗收交接集中記錄於 [`HANDOFF_2026-10-02.md`](./HANDOFF_2026-10-02.md)；接手時不要從舊 Build 對話逐項重播。
-
-CYAccountingWeb 是 Web project，**不自動套用 Windows Desktop Visual Guide 的 WinForms 尺寸／元件規則**。
-
-## 本機開發
-
-```bash
-npm install
+npm ci --no-audit --no-fund
 npm run dev
 ```
 
-`npm run dev` 會先下載並驗證固定版本的 `sql.js` browser runtime；產生的 `public/vendor/sqljs/` 是 build/runtime 衍生物，不提交 Git。
+`npm run dev` 準備固定版本、驗證 hash 的 sql.js browser runtime 並產生本機 config；`public/vendor/sqljs/` 是衍生物，不提交 Git。正式 CI 測試清單由 `.github/workflows/cyaccountingweb-deploy.yml` 維護，CYID 相容檢查為 `node scripts/validate-cyid-consumer-version.mjs`。
 
-正式 deploy 不使用 commit 到 Git 的 production Wrangler 檔；CI/CD 由 `wrangler.template.jsonc` 與 Deployment Environment 產生暫時設定。
-
-## 文件責任
-
-- `PROJECT_RULES.md`：CYAccountingWeb 專案補充／永久規則。
-- `REPOSITORY_RULES.md`、`REPO_POLICY.md`：repository 共通治理與 Public repo 安全規則。
-- `TODO.md`：目前完成狀態、待辦與未來方向，不是永久規則。
-- `BACKUP_ARCHITECTURE_HANDOFF.md`：目前 Tiered Backup migration / acceptance handoff。
-- `HANDOFF_2026-10-02.md`：目前工作交接，不是永久規則。
-- `HANDOFF_2026-09-30.md`：歷史交接，不代表目前基準。
-- `HANDOFF_2026-09-29.md`：Historical continuity checkpoint；不得當作 current state。
-- `README.md`：專案入口與現況摘要。
-
-若文件描述與實際程式版本不一致，先讀目前 `main`、`VERSION` / `BUILD`、migrations、source 與最新 Actions，再更新狀態文件；不得只依舊 README 或舊 handoff 直接修改 production。
+隔離 Identity 預覽使用 `wrangler.cyid-development.template.jsonc`：獨立 Worker／D1、development CYID binding，沒有正式 route、Cron 或備份 binding。低風險 smoke 可執行 `scripts/smoke-cyid-development.mjs`，所需帳號／密碼只從受保護 runtime 提供；完整 Role／App Access／Session live acceptance 已於 CYID development run #96 通過。真實 Password Recovery Email/browser 驗收仍獨立待辦。
