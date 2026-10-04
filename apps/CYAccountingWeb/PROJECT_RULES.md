@@ -90,6 +90,7 @@
 - CYID consumer transport、Session resolve／login／logout／recovery adapter：`src/identity-adapter.js`；CYACC Worker route、server-side accounting authorization 與 HTTP/API orchestration：`src/app.js`。不得建立第二套 app-local Identity authority。
 - 期初餘額計算與 carry-forward snapshot：`src/opening-balances.js`。帳本顯示、Excel 與人工調整不得自行重算另一套財務語意。
 - 帳戶封存／解封／永久刪除 domain rule：`src/account-lifecycle.js`；前端只呈現能力與呼叫 canonical API，不得複製刪除 eligibility。
+- 帳戶視覺色號 `accounts.color_slot` 由 D1 migration/trigger 負責唯一分配：改名、排序、封存、解封不得修改；永久刪除 account row 後色號自然釋出，新帳戶取得目前最小可用正整數 slot。前端只依 slot 套用 40-slot palette，不得再由帳戶名稱 hash 顏色。
 - Backup：`src/backup-package.js` → `src/backup-service.js` → storage provider adapters；provider 差異不得複製 package／business semantics。
 - Desktop SQLite migration：資料解析／normalization 使用 `src/desktop-migration-core.js`，server migration orchestration 使用 `src/desktop-migration.js`；SQLite schema version 是來源資料 contract，不是 application version shell。
 
