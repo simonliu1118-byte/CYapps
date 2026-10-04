@@ -1252,6 +1252,7 @@ body[data-cyacc-read-only="true"] #mobileMainNav {
   position: relative;
   z-index: 0;
   isolation: isolate;
+  color: var(--ledger-account-fg, inherit);
 }
 
 .ledger-account-color::before {
@@ -1283,7 +1284,7 @@ body[data-cyacc-read-only="true"] #mobileMainNav {
 }
 
 .ledger-card .account-group-row td strong {
-  color: #2f4658;
+  color: var(--ledger-account-fg, #2f4658);
 }
 
 .ledger-card .account-group-row td span {

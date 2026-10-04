@@ -24,7 +24,7 @@ assert(resolveBackupTopology({ BACKUP_TOPOLOGY: 'legacy_gcs' }) === 'legacy_gcs'
 expectCode(() => resolveBackupTopology({ BACKUP_TOPOLOGY: 'parallel_dual_provider' }), 'BACKUP_TOPOLOGY_UNSUPPORTED');
 
 const tableData = {
-  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, created_at: '2026-09-01T00:00:00Z', archived_at: null }],
+  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, color_slot: 1, created_at: '2026-09-01T00:00:00Z', archived_at: null }],
   category_groups: [{ id: 1, kind: 'expense', name: '支出', sort_order: 0, created_at: '2026-09-01T00:00:00Z' }],
   categories: [{ id: 1, kind: 'expense', group_id: 1, name: '一般支出', sort_order: 0, is_favorite: 1, created_at: '2026-09-01T00:00:00Z' }],
   transactions: [{ id: 1, tx_date: '2026-09-25', account_name: '現金', kind: 'expense', category_name: '一般支出', summary: 'Phase B', amount: 10, created_at: '2026-09-25T00:00:00Z', updated_at: '2026-09-25T00:00:00Z' }],
@@ -38,7 +38,7 @@ class MockStatement {
   constructor(sql) { this.sql = sql; this.args = []; }
   bind(...args) { this.args = args; return this; }
   async first() {
-    return this.sql.includes("FROM meta WHERE key = 'schema_version'") ? { value: '6' } : null;
+    return this.sql.includes("FROM meta WHERE key = 'schema_version'") ? { value: '7' } : null;
   }
   async all() {
     const table = Object.keys(tableData).find(name => this.sql.includes(`FROM ${name}`));
@@ -81,6 +81,7 @@ const encoder = new TextEncoder();
 assert(backupSet.manifest.dataFormat === 'CYAccountingWebBackup', 'inner data format must be declared');
 assert(backupSet.manifest.dataFormatVersion === 2, 'inner data format v2 must be declared');
 assert(backupSet.data.openingBalanceAudit.length === 1, 'audit must survive provider storage');
+assert(backupSet.data.accounts[0].colorSlot === 1, 'current backup data must preserve account color slot');
 
 // An actual legacy data shape remains readable without changing old objects.
 const legacyData = {

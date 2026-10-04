@@ -111,11 +111,20 @@ assert.doesNotMatch(quickEntry, /observe\(els\.transactionRows|ledgerObserver/, 
 assert.match(inlineEdit, /els\.transactionRows\.addEventListener\('click'/, 'inline edit keeps normal delegated row interaction');
 assert.doesNotMatch(inlineEdit, /cyLedgerObserver|suspendLedgerRefreshObserver|resumeLedgerRefreshObserver/, 'inline edit must not coordinate with a hidden ledger DOM observer');
 assert.match(ledgerTools, /function setupLedgerToolbar\(\)/, 'ledger-tools must own one shared toolbar structure');
-assert.match(ledgerTools, /function ledgerAccountBackground\(value\)/, 'canonical ledger renderer must own deterministic account colors');
-assert.match(ledgerTools, /style="--ledger-account-bg:\$\{accountBackground\}"/, 'account color must be applied through the shared ledger row renderer');
+assert.match(ledgerTools, /function ledgerAccountVisual\(value\)/, 'canonical ledger renderer must resolve persisted account color slots');
+assert.match(ledgerTools, /account\?\.color_slot/, 'ledger account colors must come from persisted account lifecycle data');
+assert.match(ledgerTools, /const cycle = \(slot - 1\) % 40/, 'account visual slots must repeat only after 40 accounts');
+assert.match(ledgerTools, /const dark = cycle >= 20/, 'slots 21-40 must use the dark-background palette');
+const lightPalette = ledgerTools.match(/LEDGER_ACCOUNT_LIGHT_PALETTE = \[([\s\S]*?)\];/)?.[1]?.match(/#[0-9a-f]{6}/gi) || [];
+const darkPalette = ledgerTools.match(/LEDGER_ACCOUNT_DARK_PALETTE = \[([\s\S]*?)\];/)?.[1]?.match(/#[0-9a-f]{6}/gi) || [];
+assert.equal(lightPalette.length, 20, 'light account palette must contain exactly 20 colors');
+assert.equal(darkPalette.length, 20, 'dark account palette must contain exactly 20 colors');
+assert.doesNotMatch(ledgerTools, /Math\.imul\(|2166136261/, 'account colors must not be derived from account-name hashes');
+assert.match(ledgerTools, /--ledger-account-bg:\$\{accountVisual\.background\};--ledger-account-fg:\$\{accountVisual\.foreground\}/, 'shared ledger rows must receive both account background and text colors');
 assert.match(ledgerTools, /ledger-account-desktop ledger-account-color/, 'desktop/tablet ledger account label must use the shared color surface');
 assert.match(ledgerTools, /ledger-account-mobile ledger-account-color/, 'mobile ledger account label must use the shared color surface');
 assert.match(accountingUiCss, /\.ledger-account-color::before\s*\{[\s\S]*?background:\s*var\(--ledger-account-bg, transparent\)/, 'account color must be a visual background layer');
+assert.match(accountingUiCss, /color:\s*var\(--ledger-account-fg, inherit\)/, 'dark account slots must be able to switch to light text');
 const accountColorRule = accountingUiCss.match(/\.ledger-account-color\s*\{([\s\S]*?)\}/)?.[1] || '';
 assert.doesNotMatch(accountColorRule, /\b(?:width|min-width|max-width|padding|margin)\s*:/, 'account color styling must not change account column geometry');
 assert.match(ledgerTools, /id="ledgerBalanceButton"[\s\S]*?id="ledgerPrevMonth"[\s\S]*?id="ledgerMonthSlot"[\s\S]*?id="ledgerNextMonth"[\s\S]*?id="ledgerMoreButton"/, 'shared month toolbar must contain the device-neutral controls');
@@ -157,7 +166,7 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.match(html, /<span class="version">V0\.22\.10 Build 0<\/span>/, 'index.html must own the current visible version');
+assert.match(html, /<span class="version">V0\.22\.11 Build 0<\/span>/, 'index.html must own the current visible version');
 assert.match(appJs, /setLedgerLoadingState\(true\)/, 'month loading must expose an interaction-blocking busy state');
 assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingState\(false\)/, 'only the current month request may clear the busy state');
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');

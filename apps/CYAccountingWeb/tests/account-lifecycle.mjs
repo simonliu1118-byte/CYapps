@@ -13,6 +13,7 @@ const core = read('src/index.js');
 const tools = read('src/accounting-tools.js');
 const migration = read('migrations/0005_account_archival.sql');
 const openingMigration = read('migrations/0006_opening_balance_overrides.sql');
+const colorSlotMigration = read('migrations/0007_account_color_slots.sql');
 const openings = read('src/opening-balances.js');
 const ui = read('public/app.js');
 
@@ -31,6 +32,9 @@ assert.match(lifecycle, /latestOpeningAmount !== 0/);
 assert.match(lifecycle, /DELETE FROM opening_balance_overrides WHERE account_name = \? AND amount = 0/);
 
 assert.match(core, /archivedAccounts:/);
+assert.match(core, /SELECT id, name, sort_order, is_default, color_slot/);
+assert.match(core, /a\.sort_order, a\.color_slot, a\.archived_at/);
+assert.match(core, /SELECT color_slot FROM accounts WHERE id = \?/);
 assert.match(core, /WHERE archived_at IS NULL/);
 assert.match(core, /WHERE a\.archived_at IS NOT NULL/);
 assert.match(core, /name = \? AND archived_at IS NULL/);
@@ -48,6 +52,12 @@ assert.match(migration, /SELECT DISTINCT account_name AS name[\s\S]*FROM opening
 assert.match(openingMigration, /CREATE TABLE opening_balance_overrides/);
 assert.match(openingMigration, /CREATE TABLE opening_balance_audit/);
 assert.match(openingMigration, /DROP TABLE opening_balances/);
+assert.match(colorSlotMigration, /ADD COLUMN color_slot INTEGER/);
+assert.match(colorSlotMigration, /CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_color_slot/);
+assert.match(colorSlotMigration, /CREATE TRIGGER IF NOT EXISTS trg_accounts_assign_color_slot/);
+assert.match(colorSlotMigration, /SELECT color_slot \+ 1 AS candidate/);
+assert.match(colorSlotMigration, /schema_version', '7'/);
+assert.doesNotMatch(lifecycle, /SET color_slot/, 'archive, restore and permanent-delete lifecycle must not mutate color slots');
 
 assert.match(ui, /async function archiveAccountOptimistically\(id\)/);
 assert.match(ui, /async function restoreAccountOptimistically\(id\)/);

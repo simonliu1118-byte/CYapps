@@ -337,8 +337,8 @@ function renderGroupedLedgerRows(visible, allTransactions, openingMap, calculate
     const rows = visible.filter(tx => tx.account_name === name).sort(compareLedgerChronological);
     const opening = openingMap.get(name) || 0;
     const ending = calculated.endingByAccount.get(name) ?? opening;
-    const accountBackground = ledgerAccountBackground(name);
-    const heading = `<tr class="account-group-row"><td colspan="8" style="--ledger-account-bg:${accountBackground}"><strong class="ledger-account-color">${escapeHtml(name)}</strong><span>期初 ${money(opening)}　期末 ${money(ending)}</span></td></tr>`;
+    const accountVisual = ledgerAccountVisual(name);
+    const heading = `<tr class="account-group-row"><td colspan="8" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><strong class="ledger-account-color">${escapeHtml(name)}</strong><span>期初 ${money(opening)}　期末 ${money(ending)}</span></td></tr>`;
     return heading + rows.map(tx => {
       const accountBalance = calculated.accountById.get(Number(tx.id)) ?? 0;
       return renderLedgerRow(tx, accountBalance, new Map([[name, accountBalance]]), true);
@@ -346,17 +346,39 @@ function renderGroupedLedgerRows(visible, allTransactions, openingMap, calculate
   }).join('');
 }
 
-function ledgerAccountBackground(value) {
-  let hash = 2166136261;
-  for (const char of Array.from(String(value || '').trim())) {
-    hash ^= char.codePointAt(0);
-    hash = Math.imul(hash, 16777619);
+const LEDGER_ACCOUNT_LIGHT_PALETTE = [
+  '#dce9ff', '#ffe4c2', '#ddf1e2', '#f8dce6', '#e9ddfc',
+  '#d7f1ee', '#fff0b8', '#ffd8cf', '#dfe3ff', '#e9f0c9',
+  '#d7eff8', '#f2daf0', '#eee7c8', '#f7dec8', '#d8efdf',
+  '#e7ddf0', '#dceaf1', '#f3d8d7', '#e9ddd4', '#d5ece8'
+];
+
+const LEDGER_ACCOUNT_DARK_PALETTE = [
+  '#315c99', '#a55d18', '#397447', '#9a4561', '#684a95',
+  '#27736a', '#806615', '#9e4a36', '#4b5da2', '#60752c',
+  '#34778a', '#88467f', '#746930', '#955732', '#3b7355',
+  '#71528a', '#416d82', '#934844', '#75513d', '#376f69'
+];
+
+function ledgerAccountVisual(value) {
+  const name = String(value || '').trim();
+  const account = [
+    ...(Array.isArray(state.accounts) ? state.accounts : []),
+    ...(Array.isArray(state.archivedAccounts) ? state.archivedAccounts : [])
+  ].find(item => String(item?.name || '') === name);
+  const slot = Number(account?.color_slot || 0);
+  if (!Number.isInteger(slot) || slot <= 0) {
+    return { slot: null, background: '#edf1f4', foreground: '#344454' };
   }
-  const unsigned = hash >>> 0;
-  const hue = unsigned % 360;
-  const saturation = 48 + ((unsigned >>> 8) % 10);
-  const lightness = 90 + ((unsigned >>> 16) % 3);
-  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+
+  const cycle = (slot - 1) % 40;
+  const paletteIndex = cycle % 20;
+  const dark = cycle >= 20;
+  return {
+    slot,
+    background: dark ? LEDGER_ACCOUNT_DARK_PALETTE[paletteIndex] : LEDGER_ACCOUNT_LIGHT_PALETTE[paletteIndex],
+    foreground: dark ? '#fffaf4' : '#263647'
+  };
 }
 
 function splitLedgerAccountName(value) {
@@ -386,13 +408,13 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
   const mobileDate = fullDate.length >= 10 ? fullDate.slice(5) : fullDate;
   const accountName = String(tx.account_name || '');
   const accountLines = splitLedgerAccountName(accountName);
-  const accountBackground = ledgerAccountBackground(accountName);
+  const accountVisual = ledgerAccountVisual(accountName);
   const mobileAccount = accountLines.map(line => `<span>${escapeHtml(line)}</span>`).join('');
   const kindClass = tx.kind === 'income' ? 'ledger-row-income' : 'ledger-row-expense';
 
   return `<tr class="ledger-row ${kindClass}" data-transaction-id="${id}">
     <td><span class="ledger-date-desktop">${escapeHtml(fullDate)}</span><span class="ledger-date-mobile">${escapeHtml(mobileDate)}</span></td>
-    <td class="ledger-account-name" style="--ledger-account-bg:${accountBackground}"><span class="ledger-account-desktop ledger-account-color">${escapeHtml(accountName)}</span><span class="ledger-account-mobile ledger-account-color" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
+    <td class="ledger-account-name" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><span class="ledger-account-desktop ledger-account-color">${escapeHtml(accountName)}</span><span class="ledger-account-mobile ledger-account-color" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
     <td>${escapeHtml(tx.category_name)}</td>
     <td class="summary">${escapeHtml(tx.summary || '')}</td>

@@ -56,13 +56,13 @@ export default {
 async function handleBootstrap(db) {
   const [accounts, archivedAccounts, groups, categories, lockSetting] = await db.batch([
     db.prepare(`
-      SELECT id, name, sort_order, is_default
+      SELECT id, name, sort_order, is_default, color_slot
       FROM accounts
       WHERE archived_at IS NULL
       ORDER BY sort_order, id
     `),
     db.prepare(`
-      SELECT a.id, a.name, a.sort_order, a.archived_at,
+      SELECT a.id, a.name, a.sort_order, a.color_slot, a.archived_at,
              (SELECT COUNT(*) FROM transactions t WHERE t.account_name = a.name) AS transaction_count,
              (SELECT COUNT(*) FROM opening_balance_overrides o WHERE o.account_name = a.name AND o.amount <> 0) AS opening_balance_count,
              COALESCE((
@@ -178,7 +178,15 @@ async function handleCreateAccount(request, db) {
   const row = await db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM accounts WHERE archived_at IS NULL').first();
   const result = await db.prepare('INSERT INTO accounts(name, sort_order, is_default, created_at) VALUES (?, ?, 0, ?)')
     .bind(name, Number(row?.next_order || 0), new Date().toISOString()).run();
-  return json({ ok: true, id: result.meta?.last_row_id ?? null }, 201);
+  const id = Number(result.meta?.last_row_id || 0);
+  const created = id > 0
+    ? await db.prepare('SELECT color_slot FROM accounts WHERE id = ?').bind(id).first()
+    : null;
+  return json({
+    ok: true,
+    id: id || null,
+    color_slot: Number(created?.color_slot || 0) || null
+  }, 201);
 }
 
 async function handleRenameAccount(id, request, db) {

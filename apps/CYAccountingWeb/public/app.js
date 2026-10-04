@@ -547,7 +547,8 @@ async function restoreAccountOptimistically(id) {
     id: account.id,
     name: account.name,
     sort_order: state.accounts.length,
-    is_default: 0
+    is_default: 0,
+    color_slot: Number(account.color_slot || 0) || null
   }];
   renderAccountSurfaces(account.name);
   setDialogMessage(accountArchiveMessage(), '');
@@ -674,7 +675,12 @@ function beginSettingsOptimisticMutation(path, options) {
     const id = cySettingsTempId--;
     state.accounts = [...state.accounts, { id, name, sort_order: Math.max(-1, ...state.accounts.map(item => Number(item.sort_order || 0))) + 1, is_default: 0 }];
     rollback = () => { state.accounts = state.accounts.filter(item => item.id !== id); };
-    commit = result => { const item = state.accounts.find(item => item.id === id); if (item) item.id = Number(result.id); };
+    commit = result => {
+      const item = state.accounts.find(item => item.id === id);
+      if (!item) return;
+      item.id = Number(result.id);
+      item.color_slot = Number(result.color_slot || 0) || null;
+    };
   } else {
     const list = match[1] === 'accounts' ? 'accounts' : match[1] === 'categories' ? 'categories' : 'groups';
     const id = Number(match[2]);
