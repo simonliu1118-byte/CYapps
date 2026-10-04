@@ -5,6 +5,7 @@ let cyFocusSummaryAfterSave = false;
 
 window.cyPrepareQuickEntryUi = prepareQuickEntryUi;
 window.addEventListener('cyacc:ledger-rendered', handleFastEntryLedgerRendered);
+window.addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged);
 
 window.addEventListener('load', () => {
   bindFastEntryKeys();
@@ -40,10 +41,6 @@ function bindFastEntryKeys() {
 
   els.accountName?.addEventListener('change', loadFrequentSummaries);
   els.categoryName?.addEventListener('change', loadFrequentSummaries);
-  els.kindButtons?.forEach(button => button.addEventListener('click', () => {
-    renderFavoriteCategories();
-    void loadFrequentSummaries();
-  }));
 }
 
 function bindQuickTools() {
@@ -76,6 +73,11 @@ function bindFavoriteManager() {
       method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ favorite: Number(category.is_favorite) !== 1 })
     }, Number(category.is_favorite) === 1 ? '已取消常用科目。' : '已加入常用科目。');
   });
+}
+
+function handleQuickEntryKindChanged() {
+  renderFavoriteCategories();
+  void loadFrequentSummaries();
 }
 
 function handleFastEntryLedgerRendered() {
