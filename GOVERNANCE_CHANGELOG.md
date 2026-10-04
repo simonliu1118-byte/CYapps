@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.28 — 2026/10/04
+
+- Sync AITeam Common Rules 2.8.0 Canonical Owner / Replacement / Architecture Exception governance.
+- CYAccountingWeb `PROJECT_RULES.md` now records the current backend/frontend canonical owner map for Identity, transactions, ledger rendering/lifecycle/toolbar, settings, adaptive presentation, opening balances, account lifecycle, backup and desktop migration.
+- CYACC architecture changes must replace/remove old paths instead of silently adding second owners. Existing legacy observer/wrapper/retry paths are not grandfathered; real API/schema/file-format/version contracts remain valid.
 ## 2.3.27 — 2026/10/02
 
 - CYAccountingWeb opening balances default to automatic carry-forward through one calculation service. Manual baseline exceptions require reason, append-only effective old/new value audit and CYID actor, and wait for server confirmation.
