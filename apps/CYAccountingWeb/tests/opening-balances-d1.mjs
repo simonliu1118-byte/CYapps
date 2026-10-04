@@ -43,7 +43,10 @@ for (const name of migrations.filter(name => name < '0006')) {
 sql.exec(`INSERT INTO opening_balances VALUES ('2025-12','現金',0,'2025-12-01','2025-12-02')`);
 const openingMigration = fs.readFileSync(new URL('../migrations/0006_opening_balance_overrides.sql', import.meta.url), 'utf8');
 sql.exec(openingMigration);
-assert.equal(sql.prepare("SELECT value FROM meta WHERE key='schema_version'").get().value, '6');
+const colorSlotMigration = fs.readFileSync(new URL('../migrations/0007_account_color_slots.sql', import.meta.url), 'utf8');
+sql.exec(colorSlotMigration);
+assert.equal(sql.prepare("SELECT value FROM meta WHERE key='schema_version'").get().value, '7');
+assert.equal(sql.prepare("SELECT color_slot FROM accounts WHERE name='現金'").get().color_slot, 1, 'existing accounts receive stable slots');
 assert.equal(sql.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name='opening_balances'").get().n, 0);
 assert.equal(sql.prepare('SELECT amount FROM opening_balance_overrides').get().amount, 0);
 assert.equal(sql.prepare('SELECT action FROM opening_balance_audit').get().action, 'migration');
@@ -158,14 +161,21 @@ for (const browser of ['Mobile Safari iPhone', 'Mobile Safari iPad', 'Desktop Ch
 role = 'ADMIN';
 assert.equal((await call('/api/accounts','POST',{ name: '一二三四五六七八九' })).status, 400);
 assert.equal((await call('/api/accounts/1','PUT',{ name: '一二三四五六七八九' })).status, 400);
-assert.equal((await call('/api/accounts','POST',{ name: '一二三四五六七八' })).status, 201);
+const validAccountResponse = await call('/api/accounts','POST',{ name: '一二三四五六七八' });
+assert.equal(validAccountResponse.status, 201);
+const validAccountCreated = await validAccountResponse.json();
+assert.equal(validAccountCreated.color_slot, 2, 'new account receives the smallest free color slot');
 assert.equal((await call('/api/transactions','POST',{txDate:'2026-04-01',accountName:'現金',kind:'income',categoryName:'門市收入',summary:'長'.repeat(21),amount:1})).status, 400);
-assert.equal((await call('/api/accounts','POST',{ name: '測試帳戶' })).status, 201);
+const testAccountResponse = await call('/api/accounts','POST',{ name: '測試帳戶' });
+assert.equal(testAccountResponse.status, 201);
+const testAccountCreated = await testAccountResponse.json();
+assert.equal(testAccountCreated.color_slot, 3);
 const id = sql.prepare("SELECT id FROM accounts WHERE name='測試帳戶'").get().id;
 assert.equal((await call('/api/opening-balance-overrides','PUT',{month:'2026-01',values:{測試帳戶:100},reason:'測試期初'})).status, 200);
 assert.equal((await call('/api/opening-balance-overrides','PUT',{month:'2026-01',values:{測試帳戶:0},reason:'恢復零期初'})).status, 200);
 assert.equal(sql.prepare("SELECT count(*) AS n FROM opening_balance_overrides WHERE account_name='測試帳戶'").get().n, 0);
 assert.equal((await call(`/api/accounts/${id}/archive`,'POST',{})).status, 200);
+assert.equal(sql.prepare("SELECT color_slot FROM accounts WHERE id=?").get(id).color_slot, 3, 'archive retains its color slot');
 assert.equal((await call(`/api/accounts/${id}/permanent`,'DELETE')).status, 403);
 role = 'SUPER_ADMIN';
 assert.equal((await call(`/api/accounts/${id}/permanent`,'DELETE')).status, 200);
@@ -174,6 +184,7 @@ assert.equal(sql.prepare("SELECT count(*) AS n FROM opening_balance_audit WHERE 
 // An old non-zero baseline followed by a newer zero is deletable, but all
 // historical financial rows and audit remain and the name stays reserved.
 sql.exec("INSERT INTO accounts(name,sort_order,is_default,created_at,archived_at) VALUES ('歷史帳戶',1,0,'2026-01-01',NULL)");
+assert.equal(sql.prepare("SELECT color_slot FROM accounts WHERE name='歷史帳戶'").get().color_slot, 3, 'permanent delete releases the slot for the next account');
 const historicalId = sql.prepare("SELECT id FROM accounts WHERE name='歷史帳戶'").get().id;
 for (const [month, amount] of [['2026-01', 100], ['2026-02', 0]]) {
   assert.equal((await call('/api/opening-balance-overrides','PUT',{month,values:{歷史帳戶:amount},reason:'測試盤點'})).status, 200);
@@ -199,9 +210,10 @@ assert.equal((await call(`/api/accounts/${nonzeroId}/permanent`,'DELETE')).statu
 
 const backup = await buildBackupPackage(db);
 assert.equal(backup.manifest.formatVersion, 2);
-assert.equal(backup.manifest.schemaVersion, 6);
+assert.equal(backup.manifest.schemaVersion, 7);
 assert.equal(backup.data.openingBalanceAudit.length, sql.prepare('SELECT count(*) AS n FROM opening_balance_audit').get().n);
 assert.equal(backup.data.openingBalanceOverrides.length, sql.prepare('SELECT count(*) AS n FROM opening_balance_overrides').get().n);
 assert.ok(backup.data.accounts.find(row => row.name === '現金').archivedAt);
+assert.equal(backup.data.accounts.find(row => row.name === '現金').colorSlot, 1);
 db.sqlite.close();
 console.log('Opening migration, real SQL, audited writes, CYID role gates, Excel parity and permanent-delete regressions passed.');
