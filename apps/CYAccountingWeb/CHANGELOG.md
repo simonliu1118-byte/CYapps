@@ -1,10 +1,10 @@
 # CYAccountingWeb 版本里程碑
 
-更新：2026/10/03。此處記錄歷史與開發狀態；目前交接見 WORK_HANDOFF.md，永久規則不放在版本紀錄。
+更新：2026/10/05。此處記錄歷史與開發狀態；目前交接見 WORK_HANDOFF.md，永久規則不放在版本紀錄。
 
 | 版本 | 狀態與變更 |
 | --- | --- |
-| V0.22.11 Build 0 | 帳戶色彩升級為正式 lifecycle：`accounts.color_slot` 永久跟隨帳戶，改名／排序／封存／解封不換色，SUPER_ADMIN 永久刪除後才釋出，下一個新帳戶優先補最小空 slot；1～20 使用高差異淡色＋深字，21～40 使用對應深色＋淺字，41 起每 40 個循環。移除帳戶名稱 hash 配色，仍不修改看帳欄寬。 |
+| V0.22.11 Build 0 | PR #311 已合併，production deploy #431 成功；帳戶色彩升級為正式 lifecycle：`accounts.color_slot` 永久跟隨帳戶，改名／排序／封存／解封不換色，SUPER_ADMIN 永久刪除後才釋出，下一個新帳戶優先補最小空 slot；1～20 使用高差異淡色＋深字，21～40 使用對應深色＋淺字，41 起每 40 個循環。移除帳戶名稱 hash 配色，仍不修改看帳欄寬。 |
 | V0.22.10 Build 0 | 看帳帳戶辨識：由 shared ledger renderer 依帳戶名稱穩定產生淡色背景，同一帳戶在手機／平板／桌機維持相同色彩；色塊僅以背景 pseudo-element 呈現，不修改既有欄寬、grid column 或帳戶欄 layout。 |
 | V0.22.9 Build 0 | 手機記帳：登入後新增記帳預設由支出改為收入；手機日期保留原生 date picker，但畫面固定顯示 `YYYY/MM/DD`，送出資料仍維持 `YYYY-MM-DD`；常用摘要改與 bootstrap 明確同步，不再靠連線文字／DOM observer 延遲補畫，並移除 `src/index.js` 重複的 frequent-summary API owner。 |
 | V0.22.8 Build 0 | 架構整理第 5/5 階段：移除現行 frontend 的歷史版本殼與版本式命名；Adaptive UI 的 V20/V21 雙 bootstrap 收斂為單一 `startAdaptiveUi()`，Input Confirmation 移除先建舊控制再由 V09/V091 覆寫的 patch chain，Ledger Tools 移除 V06 bootstrap 與已失效的 group-toggle cleanup，Desktop Migration 的 V19 函式／DOM／CSS 改為語意名稱；asset cache revision 改用模組語意名稱。資料格式／SQLite schema／CYID API 的真實版本 contract 保留。 |
@@ -12,6 +12,9 @@
 | V0.22.6 Build 0 | 架構整理：交易清單收斂為 `ledger-tools.js` 單一 row renderer；移除 `transactionRows` empty-state／quick-entry／inline-edit observer 路徑，改以明確 `cyacc:ledger-rendered` lifecycle 通知存檔後行為；保留 swipe、click 與 inline edit 的正常事件 delegation。 |
 | V0.22.5 Build 0 | 架構整理：設定管理收斂為單一 lifecycle/renderer/action owner；移除 quick-entry 的舊排序 DOM injector/observer 與 category-management 的舊科目移動 DOM injector/observer，保留現行 optimistic drag/reorder 與 canonical mutation path。 |
 | V0.22.4 Build 0 | 架構整理：移除 V0214 多階段 retry patch；帳戶餘額 popover 改為 DOM ready 單次綁定、移轉完成視窗改為按需建立，設定 favorite/default 回歸既有 canonical mutation owner；同步移除 v0214 runtime/CSS 命名。 |
+| V0.22.3 Build 3 | 平板日期／月份樣式收斂：移除多代 tablet date/month CSS override，只保留單一 presentation 規則；native date 與 touch month display 沿用 shared owner，並加入重複規則 regression guard。 |
+| V0.22.3 Build 2 | 平板橫式日期／月份共用手機 touch/native owner，不再建立 Tablet 自己的日期／月份元件或第二份 state。 |
+| V0.22.3 Build 1 | desktop interaction 判定收斂為單一 `isDesktopInteractionWorkspace()`；1024px 不再直接等同 desktop interaction。 |
 | V0.22.3 Build 0 | 架構整理第一階段：移除正式 adaptive UI 路徑中的 v21/v0211/v0215 與 Build 編號式函式、狀態、dataset、CSS class 命名，改為功能語意名稱；本版不改 breakpoint、互動條件或 UI 行為。 |
 | V0.22.2 Build 3 | 平板橫式實機返修：修正 iPad 被桌機日期／月份 picker 接管的根因，記帳日期恢復原生 date、看帳月份改用手機式顯示層＋原生 month；記帳區再縮窄、所有輸入置中、常用 pill 比照手機、儲存／清空置底，並移除平板橫式匯入 Excel。 |
 | V0.22.2 Build 2 | 平板橫式限定返修：左側記帳區縮窄、原生日期、帳戶／科目置中、常用項目常駐、移除右側把手與兩個區塊標題、帳號角色改為同行純文字、手機式月份／搜尋／清除／Excel 分享、單行統計與更高密度帳本，編輯／刪除改圖示；手機、平板直式及桌機不變。 |
