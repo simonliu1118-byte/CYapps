@@ -11,19 +11,11 @@ window.addEventListener('load', () => {
   bindInputConfirmation();
   updateEntryKindVisual();
   renderInputConfirmations();
+  setupConfirmationDrawer();
 });
 
 function setupEntryWorkflowUi() {
   const card = document.querySelector('.entry-card');
-  const title = card?.querySelector('.section-title .title-with-badge');
-  if (title && !document.querySelector('#entryKindIndicator')) {
-    const indicator = document.createElement('span');
-    indicator.id = 'entryKindIndicator';
-    indicator.className = 'entry-kind-indicator expense';
-    indicator.textContent = '支出模式';
-    title.append(indicator);
-  }
-
   const hint = card?.querySelector('.keyboard-hint');
   if (hint) {
     hint.innerHTML = '鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　<kbd>Tab</kbd> 切換收入／支出';
@@ -74,16 +66,11 @@ function bindEntryKindShortcut() {
 
 function updateEntryKindVisual() {
   const card = document.querySelector('.entry-card');
-  const indicator = document.querySelector('#entryKindIndicator');
   if (!card) return;
 
   const isIncome = state.kind === 'income';
   card.classList.toggle('entry-income', isIncome);
   card.classList.toggle('entry-expense', !isIncome);
-  if (indicator) {
-    indicator.textContent = isIncome ? '收入模式' : '支出模式';
-    indicator.className = `entry-kind-indicator ${isIncome ? 'income' : 'expense'}`;
-  }
 }
 
 function bindInputConfirmation() {
@@ -154,15 +141,9 @@ function renderInputConfirmations() {
 
 const CY_CONFIRMATION_DRAWER_KEY = 'cyaccounting.confirmationDrawerOpen';
 
-window.addEventListener('load', () => {
-  setupConfirmationDrawer();
-});
-
 function setupConfirmationDrawer() {
   const panel = document.querySelector('#inputConfirmationCard');
-  const topbarActions = document.querySelector('.topbar-actions');
-  const settingsButton = document.querySelector('#settingsButton');
-  if (!panel || !topbarActions || document.querySelector('#confirmationToggle')) return;
+  if (!panel || document.querySelector('#confirmationEdgeOpen')) return;
 
   panel.className = 'confirmation-drawer';
   panel.setAttribute('role', 'complementary');
@@ -183,84 +164,19 @@ function setupConfirmationDrawer() {
 
   document.body.append(panel);
 
-  const toggle = document.createElement('button');
-  toggle.id = 'confirmationToggle';
-  toggle.className = 'secondary compact confirmation-toggle';
-  toggle.type = 'button';
-  toggle.setAttribute('aria-controls', 'inputConfirmationCard');
-  toggle.setAttribute('aria-expanded', 'false');
-  toggle.innerHTML = '輸入確認 <span id="confirmationCount" class="confirmation-count">0</span>';
-  if (settingsButton) settingsButton.insertAdjacentElement('beforebegin', toggle);
-  else topbarActions.prepend(toggle);
-
-  toggle.addEventListener('click', () => {
-    setConfirmationDrawer(!panel.classList.contains('open'));
-  });
-  panel.querySelector('#confirmationDrawerClose')?.addEventListener('click', () => setConfirmationDrawer(false));
-
-  document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || !panel.classList.contains('open')) return;
-    if (document.querySelector('dialog[open]')) return;
-    setConfirmationDrawer(false);
-    toggle.focus();
-  });
-
-  const list = panel.querySelector('#inputConfirmationList');
-  if (list) {
-    const observer = new MutationObserver(() => {
-      updateConfirmationCount();
-      if (list.querySelector('.confirmation-item.error')) setConfirmationDrawer(true);
-    });
-    observer.observe(list, { childList: true, subtree: true });
-  }
-
-  updateConfirmationCount();
-  setConfirmationDrawer(localStorage.getItem(CY_CONFIRMATION_DRAWER_KEY) === '1', false);
-}
-
-function setConfirmationDrawer(open, persist = true) {
-  const panel = document.querySelector('#inputConfirmationCard');
-  const toggle = document.querySelector('#confirmationToggle');
-  if (!panel || !toggle) return;
-
-  panel.classList.toggle('open', open);
-  panel.setAttribute('aria-hidden', open ? 'false' : 'true');
-  toggle.classList.toggle('active', open);
-  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-  if (persist) localStorage.setItem(CY_CONFIRMATION_DRAWER_KEY, open ? '1' : '0');
-}
-
-function updateConfirmationCount() {
-  const count = document.querySelectorAll('#inputConfirmationList .confirmation-item').length;
-  const badge = document.querySelector('#confirmationCount');
-  if (!badge) return;
-  badge.textContent = String(count);
-  badge.classList.toggle('has-items', count > 0);
-}
-
-const CY_CONFIRMATION_DRAWER_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
-
-window.addEventListener('load', () => {
-  setupEntryKindIndicatorPolicy();
-  setupConfirmationEdgeControls();
-});
-
-function setupEntryKindIndicatorPolicy() {
-  document.querySelector('#entryKindIndicator')?.remove();
-}
-
-function setupConfirmationEdgeControls() {
-  const panel = document.querySelector('#inputConfirmationCard');
-  const legacyToggle = document.querySelector('#confirmationToggle');
-  if (!panel || !legacyToggle || document.querySelector('#confirmationEdgeOpen')) return;
-
   const edgeOpen = document.createElement('button');
   edgeOpen.id = 'confirmationEdgeOpen';
   edgeOpen.className = 'confirmation-edge-open';
   edgeOpen.type = 'button';
   edgeOpen.setAttribute('aria-label', '展開輸入確認');
   edgeOpen.setAttribute('aria-controls', 'inputConfirmationCard');
-  edgeOpen.innerHTML = `&lt;&lt;<span id="confirmationEdgeCount" class="confirmation-count">0</span>`;
+  edgeOpen.title = '展開輸入確認';
+  edgeOpen.innerHTML = `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M13.5 7.5 9 12l4.5 4.5"></path>
+      <path d="M18 7.5 13.5 12l4.5 4.5"></path>
+    </svg>
+    <span id="confirmationEdgeCount" class="confirmation-count">0</span>`;
   document.body.append(edgeOpen);
 
   const collapse = document.createElement('button');
@@ -268,77 +184,66 @@ function setupConfirmationEdgeControls() {
   collapse.className = 'confirmation-drawer-collapse';
   collapse.type = 'button';
   collapse.setAttribute('aria-label', '收合輸入確認');
-  collapse.textContent = '>>';
-  panel.append(collapse);
-
-  edgeOpen.addEventListener('click', () => setConfirmationDrawer(true));
-  collapse.addEventListener('click', () => setConfirmationDrawer(false));
-
-  const sync = () => {
-    const open = panel.classList.contains('open');
-    edgeOpen.classList.toggle('hidden-edge', open);
-    collapse.classList.toggle('hidden-edge', !open);
-    edgeOpen.setAttribute('aria-expanded', open ? 'true' : 'false');
-    syncConfirmationEdgeCount();
-  };
-
-  const classObserver = new MutationObserver(sync);
-  classObserver.observe(panel, { attributes: true, attributeFilter: ['class'] });
-
-  const list = panel.querySelector('#inputConfirmationList');
-  if (list) {
-    const countObserver = new MutationObserver(syncConfirmationEdgeCount);
-    countObserver.observe(list, { childList: true, subtree: true });
-  }
-
-  const stored = localStorage.getItem(CY_CONFIRMATION_DRAWER_STATE_KEY);
-  setConfirmationDrawer(stored === null ? true : stored === '1', false);
-  sync();
-}
-
-function syncConfirmationEdgeCount() {
-  const count = document.querySelectorAll('#inputConfirmationList .confirmation-item').length;
-  const badge = document.querySelector('#confirmationEdgeCount');
-  if (!badge) return;
-  badge.textContent = String(count);
-  badge.classList.toggle('has-items', count > 0);
-}
-
-window.addEventListener('load', () => {
-  polishConfirmationSidebar();
-});
-
-function polishConfirmationSidebar() {
-  const topbar = document.querySelector('.topbar');
-  const edgeOpen = document.querySelector('#confirmationEdgeOpen');
-  const collapse = document.querySelector('#confirmationDrawerCollapse');
-  if (!edgeOpen || !collapse) return;
-
-  const chevronLeft = `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M13.5 7.5 9 12l4.5 4.5"></path>
-      <path d="M18 7.5 13.5 12l4.5 4.5"></path>
-    </svg>`;
-  const chevronRight = `
+  collapse.title = '收合輸入確認';
+  collapse.innerHTML = `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="m10.5 7.5 4.5 4.5-4.5 4.5"></path>
       <path d="m6 7.5 4.5 4.5L6 16.5"></path>
     </svg>`;
+  panel.append(collapse);
 
-  const existingBadge = edgeOpen.querySelector('#confirmationEdgeCount');
-  edgeOpen.innerHTML = chevronLeft;
-  if (existingBadge) edgeOpen.append(existingBadge);
-  collapse.innerHTML = chevronRight;
+  edgeOpen.addEventListener('click', () => setConfirmationDrawer(true));
+  collapse.addEventListener('click', () => setConfirmationDrawer(false));
+  panel.querySelector('#confirmationDrawerClose')?.addEventListener('click', () => setConfirmationDrawer(false));
 
-  edgeOpen.title = '展開輸入確認';
-  collapse.title = '收合輸入確認';
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !panel.classList.contains('open')) return;
+    if (document.querySelector('dialog[open]')) return;
+    setConfirmationDrawer(false);
+    edgeOpen.focus();
+  });
 
+  const list = panel.querySelector('#inputConfirmationList');
+  if (list) {
+    const observer = new MutationObserver(() => {
+      syncConfirmationCount();
+      if (list.querySelector('.confirmation-item.error')) setConfirmationDrawer(true);
+    });
+    observer.observe(list, { childList: true, subtree: true });
+  }
+
+  const topbar = document.querySelector('.topbar');
   const syncBounds = () => {
     if (!topbar) return;
     const height = Math.ceil(topbar.getBoundingClientRect().height);
     document.documentElement.style.setProperty('--cy-confirmation-top', `${height}px`);
   };
-
   syncBounds();
   window.addEventListener('resize', syncBounds, { passive: true });
+
+  syncConfirmationCount();
+  const stored = localStorage.getItem(CY_CONFIRMATION_DRAWER_KEY);
+  setConfirmationDrawer(stored === null ? true : stored === '1', false);
+}
+
+function setConfirmationDrawer(open, persist = true) {
+  const panel = document.querySelector('#inputConfirmationCard');
+  const edgeOpen = document.querySelector('#confirmationEdgeOpen');
+  const collapse = document.querySelector('#confirmationDrawerCollapse');
+  if (!panel) return;
+
+  panel.classList.toggle('open', open);
+  panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+  edgeOpen?.classList.toggle('hidden-edge', open);
+  collapse?.classList.toggle('hidden-edge', !open);
+  edgeOpen?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (persist) localStorage.setItem(CY_CONFIRMATION_DRAWER_KEY, open ? '1' : '0');
+}
+
+function syncConfirmationCount() {
+  const count = document.querySelectorAll('#inputConfirmationList .confirmation-item').length;
+  const badge = document.querySelector('#confirmationEdgeCount');
+  if (!badge) return;
+  badge.textContent = String(count);
+  badge.classList.toggle('has-items', count > 0);
 }
