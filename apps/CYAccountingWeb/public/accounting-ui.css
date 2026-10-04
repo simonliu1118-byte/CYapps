@@ -1252,6 +1252,7 @@ body[data-cyacc-read-only="true"] #mobileMainNav {
   position: relative;
   z-index: 0;
   isolation: isolate;
+  color: var(--ledger-account-fg, inherit);
 }
 
 .ledger-account-color::before {
