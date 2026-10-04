@@ -387,12 +387,12 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
   const accountName = String(tx.account_name || '');
   const accountLines = splitLedgerAccountName(accountName);
   const accountBackground = ledgerAccountBackground(accountName);
-  const mobileAccount = accountLines.map(line => `<span class="ledger-account-color">${escapeHtml(line)}</span>`).join('');
+  const mobileAccount = accountLines.map(line => `<span>${escapeHtml(line)}</span>`).join('');
   const kindClass = tx.kind === 'income' ? 'ledger-row-income' : 'ledger-row-expense';
 
   return `<tr class="ledger-row ${kindClass}" data-transaction-id="${id}">
     <td><span class="ledger-date-desktop">${escapeHtml(fullDate)}</span><span class="ledger-date-mobile">${escapeHtml(mobileDate)}</span></td>
-    <td class="ledger-account-name" style="--ledger-account-bg:${accountBackground}"><span class="ledger-account-desktop ledger-account-color">${escapeHtml(accountName)}</span><span class="ledger-account-mobile" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
+    <td class="ledger-account-name" style="--ledger-account-bg:${accountBackground}"><span class="ledger-account-desktop ledger-account-color">${escapeHtml(accountName)}</span><span class="ledger-account-mobile ledger-account-color" aria-label="${escapeHtml(accountName)}">${mobileAccount}</span></td>
     <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
     <td>${escapeHtml(tx.category_name)}</td>
     <td class="summary">${escapeHtml(tx.summary || '')}</td>
