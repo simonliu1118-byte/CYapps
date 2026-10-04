@@ -10163,7 +10163,43 @@ html[data-tablet-layout="landscape"] .entry-grid > #saveButton { order: 20 !impo
 html[data-tablet-layout="landscape"] .entry-grid > #mobileEntrySecondaryButton { order: 21 !important; align-self: end !important; }
 html[data-tablet-layout="landscape"] .entry-grid > #saveMessage { order: 22 !important; align-self: end !important; }
 
+@media (max-width: 767px) {
+  .entry-grid > .date-field {
+    position: relative;
+  }
 
+  .entry-grid #txDate {
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+  }
 
+  .entry-grid #txDate::-webkit-date-and-time-value {
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+  }
 
+  .cy-mobile-entry-date-display {
+    position: absolute;
+    z-index: 1;
+    top: 8px;
+    right: 36px;
+    left: 82px;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    height: 38px;
+    padding: 0 4px;
+    pointer-events: none;
+    color: #243345;
+    font-size: 16px;
+    line-height: 38px;
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 768px) {
+  .cy-mobile-entry-date-display {
+    display: none !important;
+  }
+}
 

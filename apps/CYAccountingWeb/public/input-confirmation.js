@@ -4,9 +4,10 @@ const cyInputConfirmations = [];
 let cyPendingConfirmation = null;
 let cyConfirmationObserver = null;
 
+window.addEventListener('cyacc:entry-kind-changed', updateEntryKindVisual);
+
 window.addEventListener('load', () => {
   setupEntryWorkflowUi();
-  bindEntryKindVisuals();
   bindEntryKindShortcut();
   bindInputConfirmation();
   updateEntryKindVisual();
@@ -37,12 +38,6 @@ function setupEntryWorkflowUi() {
   }
 }
 
-function bindEntryKindVisuals() {
-  els.kindButtons?.forEach(button => button.addEventListener('click', () => {
-    setTimeout(updateEntryKindVisual, 0);
-  }));
-}
-
 function bindEntryKindShortcut() {
   els.form?.addEventListener('keydown', event => {
     if (event.key !== 'Tab' || event.shiftKey || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
@@ -54,13 +49,7 @@ function bindEntryKindShortcut() {
     const active = document.activeElement;
     const nextKind = state.kind === 'expense' ? 'income' : 'expense';
     setEntryKind(nextKind);
-    updateEntryKindVisual();
-
-    setTimeout(() => {
-      renderFavoriteCategories();
-      loadFrequentSummaries();
-      if (active instanceof HTMLElement && document.contains(active)) active.focus();
-    }, 0);
+    if (active instanceof HTMLElement && document.contains(active)) active.focus();
   });
 }
 

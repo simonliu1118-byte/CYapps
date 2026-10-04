@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.9 Build 0 | 手機記帳：登入後新增記帳預設由支出改為收入；手機日期保留原生 date picker，但畫面固定顯示 `YYYY/MM/DD`，送出資料仍維持 `YYYY-MM-DD`；常用摘要改與 bootstrap 明確同步，不再靠連線文字／DOM observer 延遲補畫，並移除 `src/index.js` 重複的 frequent-summary API owner。 |
 | V0.22.8 Build 0 | 架構整理第 5/5 階段：移除現行 frontend 的歷史版本殼與版本式命名；Adaptive UI 的 V20/V21 雙 bootstrap 收斂為單一 `startAdaptiveUi()`，Input Confirmation 移除先建舊控制再由 V09/V091 覆寫的 patch chain，Ledger Tools 移除 V06 bootstrap 與已失效的 group-toggle cleanup，Desktop Migration 的 V19 函式／DOM／CSS 改為語意名稱；asset cache revision 改用模組語意名稱。資料格式／SQLite schema／CYID API 的真實版本 contract 保留。 |
 | V0.22.7 Build 0 | 架構整理：Ledger Toolbar 收斂為單一 shared owner；`ledger-tools.js` 一次建立月份導覽、期初／鎖帳、搜尋、匯出與更多工具結構及 action，Mobile／Tablet／Desktop 只保留 layout／native picker 呈現差異；移除 desktop-first 搬移、touch retry toolbar、重複期初 action，以及 Excel 匯入先建在帳本再搬到設定的路徑。 |
 | V0.22.6 Build 0 | 架構整理：交易清單收斂為 `ledger-tools.js` 單一 row renderer；移除 `transactionRows` empty-state／quick-entry／inline-edit observer 路徑，改以明確 `cyacc:ledger-rendered` lifecycle 通知存檔後行為；保留 swipe、click 與 inline edit 的正常事件 delegation。 |

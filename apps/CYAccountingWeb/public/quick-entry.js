@@ -3,14 +3,14 @@
 let cyFastSummaryRequest = 0;
 let cyFocusSummaryAfterSave = false;
 
+window.cyPrepareQuickEntryUi = prepareQuickEntryUi;
 window.addEventListener('cyacc:ledger-rendered', handleFastEntryLedgerRendered);
+window.addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged);
 
 window.addEventListener('load', () => {
   bindFastEntryKeys();
   bindQuickTools();
   bindFavoriteManager();
-  observeAppRefreshes();
-  refreshFastEntryUi();
 });
 
 function bindFastEntryKeys() {
@@ -40,12 +40,6 @@ function bindFastEntryKeys() {
 
   els.accountName?.addEventListener('change', loadFrequentSummaries);
   els.categoryName?.addEventListener('change', loadFrequentSummaries);
-  els.kindButtons?.forEach(button => button.addEventListener('click', () => {
-    setTimeout(() => {
-      renderFavoriteCategories();
-      loadFrequentSummaries();
-    }, 0);
-  }));
 }
 
 function bindQuickTools() {
@@ -80,15 +74,9 @@ function bindFavoriteManager() {
   });
 }
 
-function observeAppRefreshes() {
-  const connectionObserver = new MutationObserver(() => {
-    if (els.connectionStatus?.textContent === '已連線') refreshFastEntryUi();
-  });
-  if (els.connectionStatus) connectionObserver.observe(els.connectionStatus, { childList: true, subtree: true, characterData: true });
-
-  const categoryObserver = new MutationObserver(() => injectFavoriteButtons());
-  if (els.categoryManager) categoryObserver.observe(els.categoryManager, { childList: true, subtree: true });
-
+function handleQuickEntryKindChanged() {
+  renderFavoriteCategories();
+  void loadFrequentSummaries();
 }
 
 function handleFastEntryLedgerRendered() {
@@ -100,10 +88,9 @@ function handleFastEntryLedgerRendered() {
   }, 0);
 }
 
-function refreshFastEntryUi() {
+async function prepareQuickEntryUi() {
   renderFavoriteCategories();
-  injectFavoriteButtons();
-  loadFrequentSummaries();
+  await loadFrequentSummaries();
 }
 
 function renderFavoriteCategories() {
@@ -142,23 +129,5 @@ async function loadFrequentSummaries() {
   } catch {
     if (requestId !== cyFastSummaryRequest) return;
     group.classList.add('hidden');
-  }
-}
-
-function injectFavoriteButtons() {
-  for (const item of els.categoryManager?.querySelectorAll('.category-item') || []) {
-    const rename = item.querySelector('[data-category-rename]');
-    if (!rename || item.querySelector('[data-category-favorite]')) continue;
-    const id = Number(rename.dataset.categoryRename);
-    const category = state.categories.find(entry => Number(entry.id) === id);
-    if (!category) continue;
-    const actions = rename.parentElement;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `mini-button favorite-toggle${Number(category.is_favorite) === 1 ? ' active' : ''}`;
-    button.dataset.categoryFavorite = String(id);
-    button.title = Number(category.is_favorite) === 1 ? '取消常用科目' : '設為常用科目';
-    button.textContent = Number(category.is_favorite) === 1 ? '★ 常用' : '☆ 常用';
-    actions.prepend(button, document.createTextNode(' '));
   }
 }
