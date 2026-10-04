@@ -20,6 +20,7 @@ const inputConfirmation = read('public/input-confirmation.js');
 const excelExportUi = read('public/excel-export-ui.js');
 const excelImportUi = read('public/excel-import-ui.js');
 const adaptiveCss = read('public/adaptive-ui.css');
+const accountingUiCss = read('public/accounting-ui.css');
 const accountingTools = read('src/accounting-tools.js');
 const coreApi = read('src/index.js');
 const files = fs.readdirSync(PUBLIC);
@@ -110,6 +111,13 @@ assert.doesNotMatch(quickEntry, /observe\(els\.transactionRows|ledgerObserver/, 
 assert.match(inlineEdit, /els\.transactionRows\.addEventListener\('click'/, 'inline edit keeps normal delegated row interaction');
 assert.doesNotMatch(inlineEdit, /cyLedgerObserver|suspendLedgerRefreshObserver|resumeLedgerRefreshObserver/, 'inline edit must not coordinate with a hidden ledger DOM observer');
 assert.match(ledgerTools, /function setupLedgerToolbar\(\)/, 'ledger-tools must own one shared toolbar structure');
+assert.match(ledgerTools, /function ledgerAccountBackground\(value\)/, 'canonical ledger renderer must own deterministic account colors');
+assert.match(ledgerTools, /style="--ledger-account-bg:\$\{accountBackground\}"/, 'account color must be applied through the shared ledger row renderer');
+assert.match(ledgerTools, /ledger-account-desktop ledger-account-color/, 'desktop/tablet ledger account label must use the shared color surface');
+assert.match(ledgerTools, /ledger-account-mobile ledger-account-color/, 'mobile ledger account label must use the shared color surface');
+assert.match(accountingUiCss, /\.ledger-account-color::before\s*\{[\s\S]*?background:\s*var\(--ledger-account-bg, transparent\)/, 'account color must be a visual background layer');
+const accountColorRule = accountingUiCss.match(/\.ledger-account-color\s*\{([\s\S]*?)\}/)?.[1] || '';
+assert.doesNotMatch(accountColorRule, /\b(?:width|min-width|max-width|padding|margin)\s*:/, 'account color styling must not change account column geometry');
 assert.match(ledgerTools, /id="ledgerBalanceButton"[\s\S]*?id="ledgerPrevMonth"[\s\S]*?id="ledgerMonthSlot"[\s\S]*?id="ledgerNextMonth"[\s\S]*?id="ledgerMoreButton"/, 'shared month toolbar must contain the device-neutral controls');
 assert.match(ledgerTools, /id="ledgerOpeningBalanceButton"[\s\S]*?id="ledgerLockSettingsButton"/, 'opening and lock actions belong to the shared toolbar owner');
 assert.match(ledgerTools, /id="ledgerExcelExport"[\s\S]*?id="ledgerExcelExportStatus"/, 'export control belongs to the shared toolbar structure');
@@ -149,7 +157,7 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.match(html, /<span class="version">V0\.22\.9 Build 0<\/span>/, 'index.html must own the current visible version');
+assert.match(html, /<span class="version">V0\.22\.10 Build 0<\/span>/, 'index.html must own the current visible version');
 assert.match(appJs, /setLedgerLoadingState\(true\)/, 'month loading must expose an interaction-blocking busy state');
 assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingState\(false\)/, 'only the current month request may clear the busy state');
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');
