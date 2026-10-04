@@ -268,10 +268,10 @@ jobs:
           verify_asset "$base/auth.js?rev=session-hard-timeout" 'window.cyaccSessionPromise = checkSessionFallback()'
           verify_asset "$base/auth.js?rev=session-hard-timeout" 'Promise.race([request, timeout])'
           verify_asset "$base/app.js?rev=app-mobile-income" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
-          verify_asset "$base/ledger-tools.js?rev=ledger-tools" 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender'
-          verify_asset "$base/ledger-tools.js?rev=ledger-tools" "new CustomEvent('cyacc:ledger-rendered'"
-          verify_asset "$base/ledger-tools.js?rev=ledger-tools" 'id="ledgerMoreButton"'
-          verify_asset "$base/ledger-tools.js?rev=ledger-tools" 'id="ledgerBalanceButton"'
+          verify_asset "$base/ledger-tools.js?rev=ledger-account-colors" 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender'
+          verify_asset "$base/ledger-tools.js?rev=ledger-account-colors" "new CustomEvent('cyacc:ledger-rendered'"
+          verify_asset "$base/ledger-tools.js?rev=ledger-account-colors" 'id="ledgerMoreButton"'
+          verify_asset "$base/ledger-tools.js?rev=ledger-account-colors" 'id="ledgerBalanceButton"'
           verify_asset "$base/quick-entry.js?rev=quick-entry-summary-lifecycle" "addEventListener('cyacc:ledger-rendered', handleFastEntryLedgerRendered)"
           verify_asset "$base/app.js?rev=app-mobile-income" 'function initialEntryKind'
           verify_asset "$base/app.js?rev=app-mobile-income" "new CustomEvent('cyacc:entry-kind-changed'"
@@ -289,7 +289,8 @@ jobs:
           verify_asset "$base/adaptive-ui.js?rev=adaptive-mobile-date" '帳戶名稱最多八字'
           verify_asset "$base/app.js?rev=app-mobile-income" 'function openingAccountRowHtml'
           verify_asset "$base/app.css?rev=app-shell" '.opening-source'
-          verify_asset "$base/accounting-ui.css?rev=accounting-ui" 'data-settings-kind-choice'
+          verify_asset "$base/accounting-ui.css?rev=ledger-account-colors" 'data-settings-kind-choice'
+          verify_asset "$base/accounting-ui.css?rev=ledger-account-colors" '.ledger-account-color::before'
           verify_asset "$base/app.js?rev=app-mobile-income" 'const groupName = category.group_name'
           verify_asset "$base/adaptive-ui.css?rev=adaptive-mobile-date" '--settings-kind-canvas'
           verify_asset "$base/app.js?rev=app-mobile-income" 'function mergePendingTransactionUpdates'
@@ -302,9 +303,10 @@ jobs:
           verify_asset "$base/adaptive-ui.js?rev=adaptive-mobile-date" 'syncTabletPickerOwnership'
           verify_asset "$base/adaptive-ui.js?rev=adaptive-mobile-date" 'setupLedgerBalancePopover'
           verify_asset "$base/adaptive-ui.js?rev=adaptive-mobile-date" 'showMigrationComplete'
-          verify_asset "$base/ledger-tools.js?rev=ledger-tools" 'function setupLedgerToolbar'
+          verify_asset "$base/ledger-tools.js?rev=ledger-account-colors" 'function setupLedgerToolbar'
+          verify_asset "$base/ledger-tools.js?rev=ledger-account-colors" 'function ledgerAccountBackground'
           verify_asset "$base/adaptive-ui.js?rev=adaptive-mobile-date" 'function isDesktopInteractionWorkspace'
-          verify_asset "$base/ledger-tools.js?rev=ledger-tools" 'function syncLedgerMonthDisplay'
+          verify_asset "$base/ledger-tools.js?rev=ledger-account-colors" 'function syncLedgerMonthDisplay'
           verify_asset "$base/adaptive-ui.css?rev=adaptive-mobile-date" 'Tablet landscape picker convergence: reuse the same touch controls as phone'
           verify_asset "$base/adaptive-ui.css?rev=adaptive-mobile-date" '.cy-mobile-main-nav'
           verify_asset "$base/excel-export-ui.js?rev=excel-export" 'button.dataset.excelExportBound'
