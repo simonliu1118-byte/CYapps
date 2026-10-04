@@ -79,15 +79,11 @@ internal sealed class ManualReviewDetailForm : Form
         }
         if (!string.IsNullOrWhiteSpace(primaryActionText))
         {
-            var primary = primaryDanger
+            var useDangerStyle = primaryDanger ||
+                                 string.Equals(primaryActionText, "已人工處理", StringComparison.Ordinal);
+            var primary = useDangerStyle
                 ? UiControls.DangerButton(primaryActionText)
                 : UiControls.StandardButton(primaryActionText);
-            if (!primaryDanger && primaryActionText == "已人工處理")
-            {
-                primary.UseVisualStyleBackColor = false;
-                primary.BackColor = SystemColors.Highlight;
-                primary.ForeColor = Color.White;
-            }
             primary.Width = primaryActionText.Length >= 7 ? 132 : 112;
             primary.TabIndex = 0;
             primary.Click += (_, _) => Complete(ManualReviewDetailAction.Primary);

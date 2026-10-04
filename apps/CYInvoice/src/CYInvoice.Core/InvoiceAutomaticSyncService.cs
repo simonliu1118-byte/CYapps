@@ -6,6 +6,7 @@ namespace CYInvoice.Core.Invoicing;
 public sealed class InvoiceAutomaticSyncService
 {
     internal const string DailyReconcileScope = "daily-two-period";
+    private const string UnconfirmedVoidQueryMessage = "目前仍無法向光貿確認作廢結果；禁止直接重送";
     private readonly LocalRepository repository;
     private readonly InvoiceSyncService syncService;
     private readonly InvoiceSyncRepository syncRepository;
@@ -100,7 +101,7 @@ public sealed class InvoiceAutomaticSyncService
         var account = CurrentAccount();
         var accountKey = account.Environment + "|" + account.SellerInvoice;
         var problems = result.Problems.ToList();
-        ResolveConfirmedPendingIssues(accountKey, account, problems);
+        ResolveDeprecatedPendingIssues(accountKey, problems);
 
         var pending = repository.Invoices.LoadOrCreate()
             .Where(record => InvoiceVoidService.HasPendingMarker(record) ||
@@ -132,7 +133,7 @@ public sealed class InvoiceAutomaticSyncService
                 {
                     InvoiceVoidService.ClearPendingMarker(record);
                     syncRepository.UpsertMany([record]);
-                    ResolvePendingIssue(accountKey, number, orderId);
+                    ResolveVoidQueryIssue(accountKey, number, orderId);
                     problems.AddRange(InvoiceCacheInvalidator.Invalidate(repository, account.Environment, number));
                     continue;
                 }
@@ -145,16 +146,27 @@ public sealed class InvoiceAutomaticSyncService
 
                     if (reconciliation.Outcome == InvoiceVoidOutcome.PendingConfirmation)
                     {
-                        RecordPendingIssue(accountKey, number, orderId, reconciliation.Message);
+                        // AMEGO explicitly reporting an in-progress void is a normal invoice lifecycle
+                        // state. Only an indeterminate/failed authoritative lookup belongs in upload issues.
+                        if (string.Equals(reconciliation.Message, UnconfirmedVoidQueryMessage, StringComparison.Ordinal))
+                        {
+                            var message = "作廢狀態回查失敗：" + reconciliation.Message;
+                            RecordVoidQueryIssue(accountKey, number, orderId, message);
+                            problems.Add($"{number}: {message}");
+                        }
+                        else
+                        {
+                            ResolveVoidQueryIssue(accountKey, number, orderId);
+                        }
                         continue;
                     }
 
-                    ResolvePendingIssue(accountKey, number, orderId);
+                    ResolveVoidQueryIssue(accountKey, number, orderId);
                 }
                 catch (Exception error)
                 {
                     var message = "作廢狀態回查失敗：" + error.Message;
-                    RecordPendingIssue(accountKey, number, orderId, message);
+                    RecordVoidQueryIssue(accountKey, number, orderId, message);
                     problems.Add($"{number}: {message}");
                 }
                 continue;
@@ -177,36 +189,19 @@ public sealed class InvoiceAutomaticSyncService
             : result with { Problems = problems.ToArray() };
     }
 
-    private void ResolveConfirmedPendingIssues(string accountKey, Account account, List<string> problems)
+    private void ResolveDeprecatedPendingIssues(string accountKey, List<string> problems)
     {
         try
         {
-            var voidedNumbers = repository.Invoices.LoadOrCreate()
-                .Where(record => string.Equals(record.Environment, account.Environment, StringComparison.Ordinal))
-                .Where(record => record.SellerInvoice.Trim().Length == 0 ||
-                                 string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal))
-                .Where(record => record.InvoiceState == InvoiceStates.Voided)
-                .Select(record => record.InvoiceNumber.Trim())
-                .Where(number => number.Length != 0)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var issue in issueStore.Unresolved(accountKey)
-                         .Where(issue => string.Equals(
-                             issue.IssueType,
-                             InvoiceVoidSyncIssueTypes.PendingConfirmation,
-                             StringComparison.Ordinal))
-                         .Where(issue => voidedNumbers.Contains(issue.InvoiceNumber.Trim())))
-            {
-                issueStore.Resolve(issue.Id, now());
-            }
+            issueStore.ResolveAccountType(accountKey, InvoiceVoidSyncIssueTypes.PendingConfirmation, now());
         }
         catch (Exception error)
         {
-            problems.Add("作廢待確認問題狀態清理失敗：" + error.Message);
+            problems.Add("舊版作廢待確認問題狀態清理失敗：" + error.Message);
         }
     }
 
-    private void RecordPendingIssue(string accountKey, string invoiceNumber, string orderId, string message)
+    private void RecordVoidQueryIssue(string accountKey, string invoiceNumber, string orderId, string message)
     {
         try
         {
@@ -214,7 +209,7 @@ public sealed class InvoiceAutomaticSyncService
                 accountKey,
                 invoiceNumber,
                 orderId,
-                InvoiceVoidSyncIssueTypes.PendingConfirmation,
+                InvoiceSyncIssueTypes.QueryFailed,
                 message,
                 now());
         }
@@ -223,7 +218,7 @@ public sealed class InvoiceAutomaticSyncService
         }
     }
 
-    private void ResolvePendingIssue(string accountKey, string invoiceNumber, string orderId)
+    private void ResolveVoidQueryIssue(string accountKey, string invoiceNumber, string orderId)
     {
         try
         {
@@ -232,6 +227,7 @@ public sealed class InvoiceAutomaticSyncService
                 invoiceNumber,
                 orderId,
                 now(),
+                InvoiceSyncIssueTypes.QueryFailed,
                 InvoiceVoidSyncIssueTypes.PendingConfirmation);
         }
         catch
