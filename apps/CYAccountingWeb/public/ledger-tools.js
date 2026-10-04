@@ -71,7 +71,6 @@ function setupLedgerToolbar() {
       <button id="ledgerSearchClear" class="secondary compact" type="button" aria-label="清除搜尋"><span class="ledger-search-clear-desktop">清除</span><span class="ledger-search-clear-mobile" aria-hidden="true">×</span></button>
     </form>
     <div class="ledger-view-tools">
-      <button id="ledgerExcelImport" class="secondary compact" type="button" title="匯入 .xlsx 記帳資料">匯入 Excel</button>
       <button id="ledgerExcelExport" class="secondary compact" type="button" title="匯出目前月份完整帳簿（.xlsx）">匯出 Excel</button>
       <span id="ledgerExcelExportStatus" class="ledger-export-status" aria-live="polite"></span>
     </div>`;
