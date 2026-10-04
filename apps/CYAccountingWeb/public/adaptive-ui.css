@@ -10032,57 +10032,108 @@ html[data-tablet-layout="landscape"] .ledger-card td.action-col [data-delete-id]
 html[data-tablet-layout="landscape"] .ledger-card td.action-col .row-action:hover:not(:disabled) { background:#f2f7fd !important; }
 html[data-tablet-layout="landscape"] .ledger-card td.action-col .row-action.delete:hover:not(:disabled) { background:#fff1f0 !important; }
 
-/* V0.22.2 Build 3 - tablet landscape date/month and entry rail correction. */
-html[data-tablet-layout="landscape"] .shell.cy-split-layout {
-  grid-template-columns: minmax(250px, 28%) minmax(0, 1fr) !important;
+/* Tablet landscape picker convergence: reuse the same touch controls as phone.
+   Tablet adds no date/month presentation owner; only dimensions differ. */
+html[data-tablet-layout="landscape"] .entry-grid .date-field {
+  overflow: hidden !important;
 }
-html[data-tablet-layout="landscape"] .entry-grid {
-  min-height: calc(var(--tablet-visible-height, 100vh) - var(--tablet-header-height, 0px) - 112px) !important;
-  grid-template-rows: repeat(7, auto) 1fr auto auto auto !important;
-  align-content: start !important;
-}
-html[data-tablet-layout="landscape"] .entry-card input,
-html[data-tablet-layout="landscape"] .entry-card select {
-  text-align: center !important;
-  text-align-last: center !important;
-}
-html[data-tablet-layout="landscape"] #txDate {
-  display: block !important;
-  position: static !important;
+html[data-tablet-layout="landscape"] .entry-grid #txDate {
+  box-sizing: border-box !important;
   width: 100% !important;
   min-width: 0 !important;
   max-width: 100% !important;
-  height: 44px !important;
-  min-height: 44px !important;
+  min-height: 32px !important;
+  height: 32px !important;
   margin: 0 !important;
-  padding: 0 8px !important;
-  overflow: visible !important;
-  clip: auto !important;
-  clip-path: none !important;
-  border: 1px solid #bdc8d2 !important;
-  border-radius: 6px !important;
-  background: #fff !important;
-  color: #273548 !important;
+  padding: 0 3px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #243345 !important;
   opacity: 1 !important;
   -webkit-appearance: auto !important;
   appearance: auto !important;
-  line-height: normal !important;
+  font-size: 16px !important;
+  line-height: 32px !important;
   text-align: center !important;
   pointer-events: auto !important;
 }
-html[data-tablet-layout="landscape"] #txDate::-webkit-date-and-time-value {
+html[data-tablet-layout="landscape"] .entry-grid #txDate::-webkit-date-and-time-value {
   min-width: 0 !important;
-  width: 100% !important;
   text-align: center !important;
 }
-html[data-tablet-layout="landscape"] #txDate::-webkit-calendar-picker-indicator {
+html[data-tablet-layout="landscape"] #ledgerMonthSlot {
+  position: relative !important;
+  box-sizing: border-box !important;
+  min-width: 132px !important;
+  height: 34px !important;
+  overflow: hidden !important;
+  border: 1px solid #dbe2e9 !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+}
+html[data-tablet-layout="landscape"] #ledgerMonthSlot > .month-picker {
+  position: absolute !important;
+  z-index: 2 !important;
+  inset: 0 !important;
   display: block !important;
-  width: auto !important;
-  height: auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
   margin: 0 !important;
   padding: 0 !important;
-  opacity: 1 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  background: transparent !important;
 }
+html[data-tablet-layout="landscape"] #monthFilter {
+  position: absolute !important;
+  z-index: 3 !important;
+  inset: 0 !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: transparent !important;
+  opacity: 0 !important;
+  -webkit-appearance: auto !important;
+  appearance: auto !important;
+  font-size: 16px !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+html[data-tablet-layout="landscape"] #monthFilter::-webkit-calendar-picker-indicator {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  cursor: pointer !important;
+}
+html[data-tablet-layout="landscape"] #mobileLedgerMonthDisplay {
+  position: absolute !important;
+  z-index: 4 !important;
+  inset: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 6px !important;
+  color: #253546 !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+}
+html[data-tablet-layout="landscape"] #ledgerMonthPickerCustom { display: none !important; }
+html[data-tablet-layout="landscape"] #ledgerExcelImport { display: none !important; }
 html[data-tablet-layout="landscape"] .entry-grid > #favoriteCategoryGroup.quick-tool-row,
 html[data-tablet-layout="landscape"] .entry-grid > #summarySuggestionGroup.quick-tool-row,
 html[data-tablet-layout="landscape"] .entry-grid > #favoriteCategoryGroup.quick-tool-row.hidden,
@@ -10184,104 +10235,5 @@ html[data-tablet-layout="landscape"] #monthFilter::-webkit-calendar-picker-indic
 html[data-tablet-layout="landscape"] #ledgerMonthPickerCustom { display: none !important; }
 html[data-tablet-layout="landscape"] #ledgerExcelImport { display: none !important; }
 
-/* Tablet landscape reuses the proven phone native picker presentation.
-   Tablet owns only layout sizing; picker behavior remains shared touch behavior. */
-html[data-tablet-layout="landscape"] .entry-grid .date-field {
-  overflow: hidden !important;
-  border: 1px solid #dbe2e9 !important;
-  border-radius: 7px !important;
-  background: #fff !important;
-}
-html[data-tablet-layout="landscape"] .entry-grid #txDate {
-  box-sizing: border-box !important;
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: 100% !important;
-  height: 34px !important;
-  min-height: 34px !important;
-  margin: 0 !important;
-  padding: 0 3px !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  color: #243345 !important;
-  opacity: 1 !important;
-  -webkit-appearance: auto !important;
-  appearance: auto !important;
-  font-size: 16px !important;
-  line-height: 34px !important;
-  text-align: center !important;
-  pointer-events: auto !important;
-}
-html[data-tablet-layout="landscape"] .entry-grid #txDate::-webkit-date-and-time-value {
-  min-width: 0 !important;
-  text-align: center !important;
-}
-html[data-tablet-layout="landscape"] .ledger-month-tools #ledgerMonthSlot {
-  position: relative !important;
-  box-sizing: border-box !important;
-  overflow: hidden !important;
-  border: 1px solid #dbe2e9 !important;
-  border-radius: 7px !important;
-  background: #fff !important;
-}
-html[data-tablet-layout="landscape"] .ledger-month-tools #ledgerMonthSlot > .month-picker {
-  position: absolute !important;
-  z-index: 2 !important;
-  inset: 0 !important;
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  overflow: hidden !important;
-  border: 0 !important;
-  background: transparent !important;
-}
-html[data-tablet-layout="landscape"] .ledger-month-tools #monthFilter {
-  position: absolute !important;
-  z-index: 3 !important;
-  inset: 0 !important;
-  box-sizing: border-box !important;
-  width: 100% !important;
-  min-width: 0 !important;
-  height: 100% !important;
-  min-height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  color: transparent !important;
-  opacity: 0.01 !important;
-  -webkit-appearance: auto !important;
-  appearance: auto !important;
-  font-size: 16px !important;
-  cursor: pointer !important;
-}
-html[data-tablet-layout="landscape"] .ledger-month-tools #monthFilter::-webkit-calendar-picker-indicator {
-  position: absolute !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  opacity: 0 !important;
-  cursor: pointer !important;
-}
-html[data-tablet-layout="landscape"] .ledger-month-tools #mobileLedgerMonthDisplay {
-  position: absolute !important;
-  z-index: 1 !important;
-  inset: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 0 6px !important;
-  color: #253546 !important;
-  font-size: 15px !important;
-  font-weight: 700 !important;
-  line-height: 1 !important;
-  white-space: nowrap !important;
-  pointer-events: none !important;
-}
+
 
