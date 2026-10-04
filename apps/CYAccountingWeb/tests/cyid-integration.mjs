@@ -258,7 +258,7 @@ assert.equal('maskedEmail' in recovery.recovery, false);
 const workerSource = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(workerSource, /web_sessions/);
 assert.match(workerSource, /identity-adapter|resolveIdentitySession/);
-assert.doesNotMatch(workerSource, /app-v17|app-v18|app-v19|handleV\d+Api/);
+assert.doesNotMatch(workerSource, /app-v\d+|handleV\d+Api/);
 
 const indexHtml = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
 const loginHtml = fs.readFileSync(path.join(ROOT, 'public/login.html'), 'utf8');
