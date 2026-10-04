@@ -64,7 +64,6 @@ function startV21() {
   setupV21HeaderLayout();
   setupV21DesktopSplitWorkspace();
   setupV21EntryHelp();
-  setupV21LedgerContext();
   setupV21LedgerHeaderDecoration();
   setupV21ConfirmationCopy();
   setupV21DataSettings();
@@ -171,59 +170,6 @@ function setupV21EntryHelp() {
       button.focus();
     }
   });
-}
-
-function setupV21LedgerContext() {
-  const ledgerTitle = document.querySelector('.ledger-card .ledger-title');
-  const titleMain = ledgerTitle?.firstElementChild;
-  const monthTools = document.querySelector('.ledger-month-tools');
-  const summary = document.querySelector('#monthSummary');
-  const openingButton = document.querySelector('#ledgerOpeningBalanceButton');
-  if (!ledgerTitle || !titleMain || !monthTools || !summary) return;
-
-  let context = titleMain.querySelector('.cy-ledger-context');
-  if (!context) {
-    context = document.createElement('div');
-    context.className = 'cy-ledger-context';
-    titleMain.insertBefore(context, summary);
-  }
-  if (monthTools.parentElement !== context) context.append(monthTools);
-
-  let summaryBar = titleMain.querySelector('.cy-ledger-summary-bar');
-  if (!summaryBar) {
-    summaryBar = document.createElement('div');
-    summaryBar.className = 'cy-ledger-summary-bar';
-    context.insertAdjacentElement('afterend', summaryBar);
-  }
-  if (summary.parentElement !== summaryBar) summaryBar.append(summary);
-
-  let summaryActions = summaryBar.querySelector('.cy-summary-actions');
-  if (!summaryActions) {
-    summaryActions = document.createElement('div');
-    summaryActions.className = 'cy-summary-actions';
-    summaryBar.append(summaryActions);
-  }
-  if (openingButton && openingButton.parentElement !== summaryActions) summaryActions.append(openingButton);
-
-  let lockButton = document.querySelector('#ledgerLockSettingsButton');
-  if (!lockButton) {
-    lockButton = document.createElement('button');
-    lockButton.id = 'ledgerLockSettingsButton';
-    lockButton.className = 'secondary compact';
-    lockButton.type = 'button';
-    lockButton.textContent = '鎖定月份';
-    lockButton.title = '開啟月份鎖帳設定';
-    lockButton.addEventListener('click', () => {
-      if (typeof openSettings === 'function') openSettings();
-      if (typeof setSettingsTab === 'function') setSettingsTab('lock');
-      setTimeout(() => document.querySelector('#lockedThrough')?.focus(), 0);
-    });
-  }
-  if (lockButton.parentElement !== summaryActions) summaryActions.append(lockButton);
-
-  document.querySelector('#ledgerGroupToggle')?.remove();
-  const periodTools = document.querySelector('.ledger-period-tools');
-  if (periodTools && !periodTools.children.length) periodTools.remove();
 }
 
 function setupV21LedgerHeaderDecoration() {
@@ -824,7 +770,6 @@ function startMobileWorkspace() {
   runMobileWorkspaceStep('mobile-app-bar', setupMobileWorkspaceMobileAppBar);
   runMobileWorkspaceStep('mobile-navigation', setupMobileWorkspaceMobileNavigation);
   runMobileWorkspaceStep('account-sheet', setupMobileWorkspaceAccountSheet);
-  runMobileWorkspaceStep('ledger-tools', setupMobileWorkspaceLedgerTools);
   runMobileWorkspaceStep('confirmation-policy', setupMobileWorkspaceConfirmationPolicy);
   runMobileWorkspaceStep('mobile-form-copy', setupMobileWorkspaceMobileFormCopy);
 }
@@ -1016,104 +961,6 @@ function setupMobileWorkspaceAccountSheet() {
   sync();
 }
 
-function setupMobileWorkspaceLedgerTools() {
-  const ledger = document.querySelector('.ledger-card');
-  if (!ledger) return;
-
-  let button = document.querySelector('#mobileLedgerMoreButton');
-  if (!button) {
-    button = document.createElement('button');
-    button.id = 'mobileLedgerMoreButton';
-    button.className = 'secondary compact cy-mobile-ledger-more';
-    button.type = 'button';
-    button.textContent = '更多';
-    button.setAttribute('aria-haspopup', 'true');
-    button.setAttribute('aria-expanded', 'false');
-    const summaryBar = ledger.querySelector('.cy-ledger-summary-bar') || ledger.querySelector('.ledger-title');
-    summaryBar?.append(button);
-  }
-
-  let backdrop = document.querySelector('#mobileLedgerToolsBackdrop');
-  if (!backdrop) {
-    backdrop = document.createElement('button');
-    backdrop.id = 'mobileLedgerToolsBackdrop';
-    backdrop.className = 'cy-mobile-sheet-backdrop';
-    backdrop.type = 'button';
-    backdrop.setAttribute('aria-label', '關閉記帳工具');
-    backdrop.hidden = true;
-    document.body.append(backdrop);
-  }
-
-  let sheet = document.querySelector('#mobileLedgerToolsSheet');
-  if (!sheet) {
-    sheet = document.createElement('section');
-    sheet.id = 'mobileLedgerToolsSheet';
-    sheet.className = 'cy-mobile-tools-sheet';
-    sheet.hidden = true;
-    sheet.innerHTML = `
-      <div class="cy-mobile-sheet-handle" aria-hidden="true"></div>
-      <h3>更多</h3>
-      <button type="button" data-mobile-ledger-action="accounts">帳戶設定</button>
-      <button type="button" data-mobile-ledger-action="categories">科目設定</button>
-      <button type="button" data-mobile-ledger-action="lock">月份鎖帳</button>
-      <button type="button" data-mobile-ledger-action="export">匯出 Excel</button>
-      <button type="button" class="secondary" data-mobile-ledger-action="close">取消</button>`;
-    document.body.append(sheet);
-  }
-
-  const close = () => {
-    sheet.hidden = true;
-    backdrop.hidden = true;
-    button.setAttribute('aria-expanded', 'false');
-    document.body.classList.remove('cy-mobile-ledger-tools-open');
-  };
-
-  const open = () => {
-    if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches) return;
-    sheet.hidden = false;
-    backdrop.hidden = false;
-    button.setAttribute('aria-expanded', 'true');
-    document.body.classList.add('cy-mobile-ledger-tools-open');
-  };
-
-  button.addEventListener('click', open);
-  backdrop.addEventListener('click', close);
-  sheet.addEventListener('click', event => {
-    const action = event.target.closest('[data-mobile-ledger-action]')?.dataset.mobileLedgerAction;
-    if (!action) return;
-    if (action === 'close') {
-      close();
-      return;
-    }
-    close();
-    if (action === 'accounts') {
-      if (typeof window.cyOpenMobileSettingsPane === 'function') window.cyOpenMobileSettingsPane('accounts');
-      else {
-        if (typeof openSettings === 'function') openSettings();
-        if (typeof setSettingsTab === 'function') setSettingsTab('accounts');
-      }
-    }
-    if (action === 'categories') {
-      if (typeof window.cyOpenMobileSettingsPane === 'function') window.cyOpenMobileSettingsPane('categories');
-      else {
-        if (typeof openSettings === 'function') openSettings();
-        if (typeof setSettingsTab === 'function') setSettingsTab('categories');
-      }
-    }
-    if (action === 'lock') {
-      if (typeof window.cyOpenMobileLedgerLock === 'function') window.cyOpenMobileLedgerLock();
-      else document.querySelector('#ledgerLockSettingsButton')?.click();
-    }
-    if (action === 'export') document.querySelector('#ledgerExcelExport')?.click();
-  });
-
-  document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || sheet.hidden) return;
-    close();
-    button.focus();
-  });
-}
-
 function setupMobileWorkspaceConfirmationPolicy() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const sync = () => {
@@ -1188,7 +1035,7 @@ function setupDesktopIsolationDesktopIsolation() {
 
 function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DESKTOP_ISOLATION_DESKTOP).matches) {
   const accountTrigger = document.querySelector('#mobileAccountMenuButton');
-  const ledgerMore = document.querySelector('#mobileLedgerMoreButton');
+  const ledgerMore = document.querySelector('#ledgerMoreButton');
 
   if (accountTrigger) accountTrigger.hidden = Boolean(desktop);
   if (ledgerMore) ledgerMore.hidden = Boolean(desktop);
@@ -1207,8 +1054,8 @@ function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DES
 
   const accountMenu = document.querySelector('#mobileAccountMenu');
   const accountBackdrop = document.querySelector('#mobileAccountSheetBackdrop');
-  const ledgerBackdrop = document.querySelector('#mobileLedgerToolsBackdrop');
-  const ledgerSheet = document.querySelector('#mobileLedgerToolsSheet');
+  const ledgerBackdrop = document.querySelector('#ledgerToolsBackdrop');
+  const ledgerSheet = document.querySelector('#ledgerToolsSheet');
   if (accountMenu) accountMenu.hidden = true;
   if (accountBackdrop) accountBackdrop.hidden = true;
   if (ledgerBackdrop) ledgerBackdrop.hidden = true;
@@ -3506,51 +3353,11 @@ function setupTouchWorkspace() {
     return;
   }
   cyTouchWorkspaceSetupDone = true;
-  setupTouchWorkspaceToolbar();
   setupMobileCanvasContinuation();
   setupTouchWorkspaceSearch();
   setupTouchWorkspaceSaveMessage();
   setupTouchWorkspaceEntrySecondaryAction();
   setupTouchWorkspaceMobileEdit();
-}
-
-function setupTouchWorkspaceToolbar(attempt = 0) {
-  if (!window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
-  const monthTools = document.querySelector('.ledger-month-tools');
-  const prev = document.querySelector('#ledgerPrevMonth');
-  const next = document.querySelector('#ledgerNextMonth');
-  const more = document.querySelector('#mobileLedgerMoreButton');
-  const slot = document.querySelector('#ledgerMonthSlot');
-  const picker = document.querySelector('.ledger-title .month-picker');
-  if (!monthTools || !prev || !next || !more || !slot || !picker) {
-    if (attempt < 60) window.setTimeout(() => setupTouchWorkspaceToolbar(attempt + 1), 50);
-    return;
-  }
-
-  let balance = document.querySelector('#mobileLedgerBalanceButton');
-  if (!balance) {
-    balance = document.createElement('button');
-    balance.id = 'mobileLedgerBalanceButton';
-    balance.className = 'secondary compact cy-mobile-balance-button';
-    balance.type = 'button';
-    balance.textContent = '餘額';
-    balance.addEventListener('click', () => {
-      openMobileUtility('opening');
-    });
-  }
-
-  // Keep the month picker inside its original slot. Moving the label itself out of
-  // the slot leaves an extra grid child and breaks the five-column mobile toolbar.
-  if (picker.parentElement !== slot) slot.append(picker);
-  monthTools.append(balance, prev, slot, next, more);
-  setupTouchWorkspaceMonthDisplay(slot);
-  monthTools.classList.add('cy-toolbar-ready');
-
-  const displayMonth = document.querySelector('#ledgerDisplayMonth');
-  if (displayMonth) displayMonth.hidden = true;
-
-  const sheet = document.querySelector('#mobileLedgerToolsSheet');
-  sheet?.querySelector('[data-mobile-ledger-action="opening"]')?.remove();
 }
 
 async function openMobileUtility(type) {
@@ -4031,35 +3838,6 @@ function formatMobileMonth(month) {
   return match ? Number(match[1]) + '年' + Number(match[2]) + '月' : String(month || '');
 }
 
-function setupTouchWorkspaceMonthDisplay(slot) {
-  if (!slot || !els.monthFilter) return;
-
-  let display = slot.querySelector('#mobileLedgerMonthDisplay');
-  if (!display) {
-    display = document.createElement('span');
-    display.id = 'mobileLedgerMonthDisplay';
-    display.className = 'cy-mobile-month-display';
-    display.setAttribute('aria-hidden', 'true');
-    slot.append(display);
-  }
-
-  els.monthFilter.setAttribute('aria-label', '選擇月份');
-  if (els.monthFilter.dataset.touchMonthDisplayBound !== '1') {
-    els.monthFilter.dataset.touchMonthDisplayBound = '1';
-    els.monthFilter.addEventListener('input', syncTouchWorkspaceMonthDisplay);
-    els.monthFilter.addEventListener('change', syncTouchWorkspaceMonthDisplay);
-  }
-  syncTouchWorkspaceMonthDisplay();
-}
-
-function syncTouchWorkspaceMonthDisplay() {
-  const display = document.querySelector('#mobileLedgerMonthDisplay');
-  const value = String(els.monthFilter?.value || '');
-  if (!display) return;
-  const match = /^(\d{4})-(\d{2})$/.exec(value);
-  display.textContent = match ? `${Number(match[1])}年${Number(match[2])}月` : '選擇月份';
-}
-
 function setupTouchWorkspaceSearch() {
   const form = document.querySelector('#ledgerSearchForm');
   const input = document.querySelector('#ledgerSummarySearch');
@@ -4399,7 +4177,7 @@ function restoreTouchWorkspaceLedgerContext(context, highlightId) {
   if (context.month && els.monthFilter.value !== context.month) {
     els.monthFilter.value = context.month;
   }
-  syncTouchWorkspaceMonthDisplay();
+  window.cySyncLedgerMonthDisplay?.();
   const searchInput = document.querySelector('#ledgerSummarySearch');
   if (searchInput) searchInput.value = context.search || '';
 
@@ -4495,18 +4273,7 @@ function syncTabletPickerOwnership(orientation) {
     customMonth.remove();
   }
 
-  const slot = document.querySelector('#ledgerMonthSlot');
-  if (tablet && orientation === 'landscape') {
-    if (slot) setupTouchWorkspaceMonthDisplay(slot);
-    else window.setTimeout(() => {
-      if (isTabletWorkspace() && tabletWorkspaceOrientation() === 'landscape') {
-        const readySlot = document.querySelector('#ledgerMonthSlot');
-        if (readySlot) setupTouchWorkspaceMonthDisplay(readySlot);
-      }
-    }, 60);
-  } else if (tablet) {
-    document.querySelector('#mobileLedgerMonthDisplay')?.remove();
-  }
+  if (tablet) window.cySyncLedgerMonthDisplay?.();
 }
 
 function setupTabletWorkspace() {
