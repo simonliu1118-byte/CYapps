@@ -29,6 +29,7 @@ let splitCalls = 0;
 const nodes = { '.quick-entry-tools': quickHost, '.entry-grid': entryGrid, '#favoriteCategoryGroup': favoriteGroup, '#summarySuggestionGroup': summaryGroup, 'main.shell': shell, '.entry-card': entry, '.ledger-card': ledger, '.cy-entry-rail': rail, '#tabletEntryToggle': button,
   '.topbar': { getBoundingClientRect: () => ({ height: 60 }) }, '#readOnlyNotice': { classList: classes, getBoundingClientRect: () => ({ height: 30 }) } };
 const win = {
+  setTimeout(fn) { fn(); return 1; },
   innerWidth: 820, innerHeight: 1100, screen: { orientation: { type: 'portrait-primary', addEventListener() {} } },
   visualViewport: { get height() { return viewportHeight; }, addEventListener(name, fn) { listeners.set('visual:' + name, fn); } },
   matchMedia(query) { return { matches: query.includes('coarse') ? coarse : query.includes('767') ? win.innerWidth < 768 : win.innerWidth >= 1360, addEventListener() {} }; },
