@@ -75,7 +75,7 @@ async function backupStatus(env) {
 
 /**
  * Phase A/B safety switch. Until Phase C is explicitly introduced, production
- * stays on the accepted V0.17 GCS path. Future topology names are deliberately
+ * stays on the accepted GCS backup format v2 path. Future topology names are deliberately
  * rejected rather than silently changing behavior.
  */
 export function resolveBackupTopology(env) {
@@ -266,7 +266,7 @@ export async function buildBackupSet(db, now = new Date()) {
 }
 
 /**
- * Compatibility reader for accepted V0.17 backup objects. This remains available
+ * Compatibility reader for accepted GCS backup format v2 objects. This remains available
  * when a future common CYBackupSet outer format is introduced.
  */
 export async function validateBackupSetBytes(manifestBytes, dataBytes, expectedBackupId = '') {
