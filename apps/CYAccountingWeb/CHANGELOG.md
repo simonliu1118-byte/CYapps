@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.6 Build 0 | 架構整理：交易清單收斂為 `ledger-tools.js` 單一 row renderer；移除 `transactionRows` empty-state／quick-entry／inline-edit observer 路徑，改以明確 `cyacc:ledger-rendered` lifecycle 通知存檔後行為；保留 swipe、click 與 inline edit 的正常事件 delegation。 |
 | V0.22.5 Build 0 | 架構整理：設定管理收斂為單一 lifecycle/renderer/action owner；移除 quick-entry 的舊排序 DOM injector/observer 與 category-management 的舊科目移動 DOM injector/observer，保留現行 optimistic drag/reorder 與 canonical mutation path。 |
 | V0.22.4 Build 0 | 架構整理：移除 V0214 多階段 retry patch；帳戶餘額 popover 改為 DOM ready 單次綁定、移轉完成視窗改為按需建立，設定 favorite/default 回歸既有 canonical mutation owner；同步移除 v0214 runtime/CSS 命名。 |
 | V0.22.3 Build 0 | 架構整理第一階段：移除正式 adaptive UI 路徑中的 v21/v0211/v0215 與 Build 編號式函式、狀態、dataset、CSS class 命名，改為功能語意名稱；本版不改 breakpoint、互動條件或 UI 行為。 |

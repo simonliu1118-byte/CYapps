@@ -1,7 +1,6 @@
 /* CYAccountingWeb ledger inline editing functional module. */
 
 let cyInlineLedgerEdit = null;
-let cyInlineLedgerObserverSuspended = false;
 
 window.addEventListener('load', () => {
   setupInlineLedgerEditing();
@@ -61,8 +60,7 @@ function beginInlineLedgerEdit(id, row) {
     return;
   }
 
-  if (cyInlineLedgerEdit) restoreInlineLedgerRow(false);
-  suspendLedgerRefreshObserver();
+  if (cyInlineLedgerEdit) restoreInlineLedgerRow();
 
   cyInlineLedgerEdit = {
     id,
@@ -173,7 +171,6 @@ async function saveInlineLedgerEdit() {
   try {
     await persistTransactionUpdate(active.id, { txDate: date, accountName, categoryName, summary, amount }, () => {
       cyInlineLedgerEdit = null;
-      resumeLedgerRefreshObserver();
       showMessage('正在儲存修改…');
     });
     showMessage('修改成功');
@@ -186,16 +183,12 @@ async function saveInlineLedgerEdit() {
 }
 
 function cancelInlineLedgerEdit(restore = true) {
-  if (!cyInlineLedgerEdit) {
-    resumeLedgerRefreshObserver();
-    return;
-  }
-  if (restore) restoreInlineLedgerRow(false);
+  if (!cyInlineLedgerEdit) return;
+  if (restore) restoreInlineLedgerRow();
   else cyInlineLedgerEdit = null;
-  resumeLedgerRefreshObserver();
 }
 
-function restoreInlineLedgerRow(resume = true) {
+function restoreInlineLedgerRow() {
   const active = cyInlineLedgerEdit;
   if (active?.row?.isConnected) {
     active.row.removeEventListener('keydown', handleInlineLedgerKeydown);
@@ -203,23 +196,6 @@ function restoreInlineLedgerRow(resume = true) {
     active.row.innerHTML = active.originalHtml;
   }
   cyInlineLedgerEdit = null;
-  if (resume) resumeLedgerRefreshObserver();
-}
-
-function suspendLedgerRefreshObserver() {
-  if (cyInlineLedgerObserverSuspended) return;
-  if (typeof cyLedgerObserver !== 'undefined' && cyLedgerObserver) {
-    cyLedgerObserver.disconnect();
-    cyInlineLedgerObserverSuspended = true;
-  }
-}
-
-function resumeLedgerRefreshObserver() {
-  if (!cyInlineLedgerObserverSuspended) return;
-  if (typeof cyLedgerObserver !== 'undefined' && cyLedgerObserver && els.transactionRows) {
-    cyLedgerObserver.observe(els.transactionRows, { childList: true, subtree: true });
-  }
-  cyInlineLedgerObserverSuspended = false;
 }
 
 function setInlineEditMessage(element, message, isError = true) {

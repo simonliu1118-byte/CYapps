@@ -39,7 +39,7 @@ for (const width of [375, 820, 1440]) {
     setDialogMessage() {}, showMessage() {}, setInlineEditMessage() {}, async loadTransactions() {},
     resumeLedgerRefreshObserver() {}, cancelInlineLedgerEdit() {}, cancelTouchWorkspaceMobileEdit() {}, switchTouchWorkspaceMobilePage() {}, restoreTouchWorkspaceLedgerContext() {},
     showTouchWorkspaceLedgerNotice() {}, updateEntryLockState() {}, renderSettingsCategoryManager() {}, renderCategories() {},
-    renderSettingsAccountManager() {}, renderTransactions() {}, renderAccounts() {}, renderSettings() {}
+    renderSettingsAccountManager() {}, renderDesktopLedger() {}, renderAccounts() {}, renderSettings() {}
   });
   vm.runInContext('let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map();\n' + piece(app, 'function summaryCharacterUnits(', 'async function deleteTransaction('), context);
   vm.runInContext('let cyTouchWorkspaceEdit = { id: 1, returnContext: { month: "2026-09", search: "" } };\n' + piece(adaptive, 'async function saveTouchWorkspaceMobileEdit(', 'function cancelTouchWorkspaceMobileEdit('), context);
@@ -150,8 +150,8 @@ for (const scenario of ['read-before-write', 'read-during-write', 'failed-write'
   let finishWrite;
   let reads = 0;
   const context = vm.createContext({
-    state: { transactions: [original] }, els: { monthFilter: field('2026-09'), transactionRows: {} }, window: {},
-    setLedgerLoadingState() {}, renderTransactions() {}, updateEntryLockState() {}, isLocked: () => false,
+    state: { transactions: [original] }, els: { monthFilter: field('2026-09'), transactionRows: {} }, window: { cyaccRefreshLedgerView: async () => {} },
+    setLedgerLoadingState() {}, renderDesktopLedger() {}, updateEntryLockState() {}, isLocked: () => false,
     jsonHeaders: () => ({}), escapeHtml: value => value,
     async api(path, options) {
       if (options?.method === 'PUT') {
