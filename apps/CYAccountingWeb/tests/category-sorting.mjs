@@ -63,7 +63,7 @@ const context = vm.createContext({
     return { ok: true };
   }
 });
-vm.runInContext('let settingsManagerDrag = null; let settingsManagerPointer = null; let settingsManagerSaving = false;\n' + source.slice(source.indexOf('function settingsCategoryGroupHtml('), source.indexOf('const CY_V0214_HOVER')), context);
+vm.runInContext('let settingsManagerDrag = null; let settingsManagerPointer = null; let settingsManagerSaving = false;\n' + source.slice(source.indexOf('function settingsCategoryGroupHtml('), source.indexOf('const CY_LEDGER_BALANCE_HOVER')), context);
 const ids = () => Array.from(context.state.groups, group => group.id);
 const byGroup = () => context.state.categories.map(item => [item.id, item.group_id, item.group_name]);
 const reset = () => {
