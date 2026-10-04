@@ -63,7 +63,7 @@ assert.equal((auth.match(/\/api\/auth\/me/g) || []).length, 1);
 assert.doesNotMatch(features, /\/api\/auth\/me/);
 assert.match(features, /mobileMainNav/);
 assert.match(features, /mobileAccountMenuButton/);
-assert.match(features, /mobileLedgerMoreButton/);
+assert.match(features, /ledgerMoreButton/);
 
 console.log('Deterministic startup checks passed.');
 
