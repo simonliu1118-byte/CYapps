@@ -1,6 +1,6 @@
 /* CYAccountingWeb ledger inline edit styles functional module. */
 
-/* V0.14.0 inline ledger editing */
+/* Inline ledger editing presentation. */
 .ledger-card tr.inline-editing td {
   padding-top: 3px;
   padding-bottom: 3px;
