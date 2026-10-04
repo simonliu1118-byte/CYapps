@@ -272,7 +272,7 @@ jobs:
           verify_asset "$base/ledger-tools.js?rev=02206-ledger-render-lifecycle" "new CustomEvent('cyacc:ledger-rendered'"
           verify_asset "$base/quick-entry.js?rev=02206-ledger-render-lifecycle" "addEventListener('cyacc:ledger-rendered', handleFastEntryLedgerRendered)"
           verify_asset "$base/quick-entry-settings.js?rev=semantic1" 'setupQuickEntrySettingsPane'
-          verify_asset "$base/category-management.js?rev=semantic1" 'setupCategoryTransfer'
+          verify_asset "$base/category-management.js?rev=semantic1" 'setupSequentialLockControls'
           verify_asset "$base/backup-ui.js?rev=semantic1" 'setupBackupSettings'
           verify_asset "$base/app.js?rev=02206-ledger-render-lifecycle" "await api('/api/opening-balance-overrides'"
           verify_asset "$base/adaptive-ui.js?rev=02206-ledger-render-lifecycle" 'setupArchivedAccountDialog'
