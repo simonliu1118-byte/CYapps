@@ -314,7 +314,7 @@ function setLedgerLoadingState(loading) {
   ledger?.classList.toggle('is-loading', busy);
   ledger?.setAttribute('aria-busy', busy ? 'true' : 'false');
   for (const control of document.querySelectorAll(
-    '#ledgerPrevMonth, #ledgerNextMonth, #monthFilter, #mobileLedgerMoreButton, #mobileLedgerBalanceButton, #ledgerSearchForm input, #ledgerSearchForm button'
+    '#ledgerPrevMonth, #ledgerNextMonth, #monthFilter, #ledgerMoreButton, #ledgerBalanceButton, #ledgerSearchForm input, #ledgerSearchForm button'
   )) {
     if ('disabled' in control) control.disabled = busy;
   }
@@ -814,7 +814,7 @@ async function saveOpeningBalances() {
     });
     await loadOpeningBalances();
     setDialogMessage(els.openingMessage, '手動調整已儲存並留下調整紀錄。');
-    if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
+    if (typeof scheduleLedgerRefresh === 'function') scheduleLedgerRefresh();
   } catch (error) {
     setDialogMessage(els.openingMessage, error.message, true);
   } finally {
