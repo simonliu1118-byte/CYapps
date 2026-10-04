@@ -241,15 +241,15 @@ function updateConfirmationCount() {
 const CY_CONFIRMATION_DRAWER_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 
 window.addEventListener('load', () => {
-  setupV09EntryKindSwitch();
-  setupV09ConfirmationEdgeControls();
+  setupEntryKindIndicatorPolicy();
+  setupConfirmationEdgeControls();
 });
 
-function setupV09EntryKindSwitch() {
+function setupEntryKindIndicatorPolicy() {
   document.querySelector('#entryKindIndicator')?.remove();
 }
 
-function setupV09ConfirmationEdgeControls() {
+function setupConfirmationEdgeControls() {
   const panel = document.querySelector('#inputConfirmationCard');
   const legacyToggle = document.querySelector('#confirmationToggle');
   if (!panel || !legacyToggle || document.querySelector('#confirmationEdgeOpen')) return;
@@ -279,7 +279,7 @@ function setupV09ConfirmationEdgeControls() {
     edgeOpen.classList.toggle('hidden-edge', open);
     collapse.classList.toggle('hidden-edge', !open);
     edgeOpen.setAttribute('aria-expanded', open ? 'true' : 'false');
-    syncV09ConfirmationCount();
+    syncConfirmationEdgeCount();
   };
 
   const classObserver = new MutationObserver(sync);
@@ -287,7 +287,7 @@ function setupV09ConfirmationEdgeControls() {
 
   const list = panel.querySelector('#inputConfirmationList');
   if (list) {
-    const countObserver = new MutationObserver(syncV09ConfirmationCount);
+    const countObserver = new MutationObserver(syncConfirmationEdgeCount);
     countObserver.observe(list, { childList: true, subtree: true });
   }
 
@@ -296,7 +296,7 @@ function setupV09ConfirmationEdgeControls() {
   sync();
 }
 
-function syncV09ConfirmationCount() {
+function syncConfirmationEdgeCount() {
   const count = document.querySelectorAll('#inputConfirmationList .confirmation-item').length;
   const badge = document.querySelector('#confirmationEdgeCount');
   if (!badge) return;
@@ -305,10 +305,10 @@ function syncV09ConfirmationCount() {
 }
 
 window.addEventListener('load', () => {
-  polishV091ConfirmationSidebar();
+  polishConfirmationSidebar();
 });
 
-function polishV091ConfirmationSidebar() {
+function polishConfirmationSidebar() {
   const topbar = document.querySelector('.topbar');
   const edgeOpen = document.querySelector('#confirmationEdgeOpen');
   const collapse = document.querySelector('#confirmationDrawerCollapse');
