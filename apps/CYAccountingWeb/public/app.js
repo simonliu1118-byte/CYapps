@@ -218,6 +218,7 @@ async function refreshBootstrap() {
   renderCategories(categoryValue);
   renderSettings();
   updateEntryLockState();
+  await window.cyPrepareQuickEntryUi?.();
 }
 
 function renderAccounts(preferred) {
