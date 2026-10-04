@@ -3,6 +3,8 @@
 let cyFastSummaryRequest = 0;
 let cyFocusSummaryAfterSave = false;
 
+window.addEventListener('cyacc:ledger-rendered', handleFastEntryLedgerRendered);
+
 window.addEventListener('load', () => {
   bindFastEntryKeys();
   bindQuickTools();
@@ -87,16 +89,15 @@ function observeAppRefreshes() {
   const categoryObserver = new MutationObserver(() => injectFavoriteButtons());
   if (els.categoryManager) categoryObserver.observe(els.categoryManager, { childList: true, subtree: true });
 
-  const ledgerObserver = new MutationObserver(() => {
-    if (cyFocusSummaryAfterSave && els.saveMessage?.textContent === '存檔成功') {
-      cyFocusSummaryAfterSave = false;
-      setTimeout(() => {
-        els.summary.focus();
-        loadFrequentSummaries();
-      }, 0);
-    }
-  });
-  if (els.transactionRows) ledgerObserver.observe(els.transactionRows, { childList: true, subtree: true });
+}
+
+function handleFastEntryLedgerRendered() {
+  if (!cyFocusSummaryAfterSave || els.saveMessage?.textContent !== '存檔成功') return;
+  cyFocusSummaryAfterSave = false;
+  setTimeout(() => {
+    els.summary.focus();
+    loadFrequentSummaries();
+  }, 0);
 }
 
 function refreshFastEntryUi() {
