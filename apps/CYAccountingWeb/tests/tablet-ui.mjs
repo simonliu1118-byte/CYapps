@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 const read = name => fs.readFileSync(new URL('../public/' + name, import.meta.url), 'utf8');
 const source = read('adaptive-ui.js');
+const ledger = read('ledger-tools.js');
 const tabletCode = source.slice(source.indexOf('function isTabletWorkspace()'));
 const listeners = new Map();
 let coarse = true;
@@ -105,7 +106,7 @@ assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col
 assert.match(source, /if \(!isDesktopInteractionWorkspace\(\)\) return;/, 'tablet must not create desktop custom date pickers');
 assert.match(source, /syncTabletPickerOwnership\(orientation\)/, 'tablet orientation owns date and month picker presentation');
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
-assert.match(css, /data-tablet-layout="landscape"\] #mobileLedgerMonthDisplay/, 'landscape ledger month reuses mobile display layer');
+assert.match(css, /data-tablet-layout="landscape"\] #ledgerMonthDisplay/, 'landscape ledger month reuses mobile display layer');
 assert.match(css, /data-tablet-layout="landscape"\] #ledgerExcelImport \{ display: none !important/, 'tablet landscape removes Excel import');
 console.log('Tablet classification, rotation, keyboard, pinning and shared edit ownership passed.');
 
@@ -152,12 +153,13 @@ console.log('Tablet selection and month navigation preserve the shared draft/can
 assert.match(source, /function isDesktopInteractionWorkspace\(\)/, 'desktop interaction authority is defined');
 assert.doesNotMatch(source, /min-width:\s*1024px/, 'desktop interactions must not infer desktop from 1024px');
 
-assert.match(source, /setupTouchWorkspaceMonthDisplay\(slot\)/, 'tablet landscape reuses the shared touch month presenter');
+assert.match(source, /window\.cySyncLedgerMonthDisplay\?\.\(\)/, 'tablet landscape consumes the shared ledger month presenter');
+assert.match(ledger, /function syncLedgerMonthDisplay\(\)/, 'ledger toolbar owns the shared month presenter lifecycle');
 assert.match(source, /document\.querySelectorAll\('\.desktopUi-date-picker'\)\.forEach\(root => root\.remove\(\)\)/, 'tablet removes desktop date presentation instead of adding a tablet picker');
 assert.doesNotMatch(source, /tabletEntryDateDisplay|setupTabletDateDisplay/, 'tablet must not own a separate date display component');
 
 
 assert.match(css, /data-tablet-layout="landscape"\] #monthFilter \{[\s\S]*?opacity:\s*0 !important/, 'tablet month native text is fully hidden behind the shared presenter');
-assert.match(css, /data-tablet-layout="landscape"\] #mobileLedgerMonthDisplay \{[\s\S]*?z-index:\s*4 !important/, 'shared month presenter stays visibly above the native month input');
+assert.match(css, /data-tablet-layout="landscape"\] #ledgerMonthDisplay \{[\s\S]*?z-index:\s*4 !important/, 'shared month presenter stays visibly above the native month input');
 assert.equal((css.match(/data-tablet-layout="landscape"\][^\n]*#monthFilter \{/g) || []).length, 1, 'tablet landscape has one month presentation rule');
 assert.equal((css.match(/data-tablet-layout="landscape"\][^\n]*\.entry-grid #txDate \{/g) || []).length, 1, 'tablet landscape has one entry date presentation rule');
