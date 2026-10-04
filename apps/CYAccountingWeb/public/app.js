@@ -189,7 +189,7 @@ async function initialize() {
     const health = await api('/api/health');
     if (!health.database) {
       setConnection('網站已啟動，等待 D1 設定', 'warn');
-      els.transactionRows.innerHTML = '<tr><td colspan="7" class="empty">D1 尚未綁定，完成 Cloudflare 設定後即可開始記帳。</td></tr>';
+      window.cyaccRenderLedgerMessage('D1 尚未綁定，完成 Cloudflare 設定後即可開始記帳。', 'database-unbound');
       els.saveButton.disabled = true;
       return;
     }
@@ -298,12 +298,11 @@ async function loadTransactions() {
     state.transactions = mergePendingTransactionUpdates(data.transactions || [], month);
     state.ledgerLocked = Boolean(data.locked);
     state.lockedThrough = data.lockedThrough || state.lockedThrough;
-    if (typeof window.cyaccRefreshLedgerView === 'function') await window.cyaccRefreshLedgerView(month);
-    else renderTransactions();
+    await window.cyaccRefreshLedgerView(month);
     updateEntryLockState();
   } catch (error) {
     if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
-    els.transactionRows.innerHTML = `<tr><td colspan="7" class="empty">${escapeHtml(error.message)}</td></tr>`;
+    window.cyaccRenderLedgerMessage(error.message, 'load-error');
   } finally {
     if (requestId === cyTransactionRequestId) setLedgerLoadingState(false);
   }
@@ -319,32 +318,6 @@ function setLedgerLoadingState(loading) {
   )) {
     if ('disabled' in control) control.disabled = busy;
   }
-}
-
-function renderTransactions() {
-  let income = 0, expense = 0;
-  for (const tx of state.transactions) {
-    if (tx.kind === 'income') income += Number(tx.amount) || 0;
-    else expense += Number(tx.amount) || 0;
-  }
-  els.monthSummary.textContent = `收入 ${money(income)}　支出 ${money(expense)}　收支 ${money(income - expense)}`;
-  els.ledgerLockBadge.classList.toggle('hidden', !state.ledgerLocked);
-  if (!state.transactions.length) {
-    els.transactionRows.innerHTML = '<tr><td colspan="7" class="empty">本月尚無記帳資料。</td></tr>';
-    return;
-  }
-  els.transactionRows.innerHTML = state.transactions.map(tx => {
-    const locked = isLocked(tx.tx_date.slice(0, 7));
-    return `<tr>
-      <td>${escapeHtml(tx.tx_date.replaceAll('-', '/'))}</td>
-      <td>${escapeHtml(tx.account_name)}</td>
-      <td><span class="kind-tag ${tx.kind}">${tx.kind === 'income' ? '收入' : '支出'}</span></td>
-      <td>${escapeHtml(tx.category_name)}</td>
-      <td class="summary">${escapeHtml(tx.summary || '')}</td>
-      <td class="num">${money(tx.amount)}</td>
-      <td class="action-col"><button type="button" class="row-action" data-edit-id="${tx.id}" ${locked ? 'disabled' : ''}>編輯</button><button type="button" class="row-action delete" data-delete-id="${tx.id}" ${locked ? 'disabled' : ''}>刪除</button></td>
-    </tr>`;
-  }).join('');
 }
 
 function openEditTransaction(id) {
@@ -403,8 +376,7 @@ function mergePendingTransactionUpdates(rows, month) {
 }
 
 function renderOptimisticTransactionState() {
-  if (typeof renderDesktopLedger === 'function') renderDesktopLedger();
-  else renderTransactions();
+  renderDesktopLedger();
 }
 
 async function persistTransactionUpdate(id, values, onOptimistic) {
@@ -421,7 +393,7 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
     onOptimistic?.();
     renderOptimisticTransactionState();
     await api(`/api/transactions/${id}`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(body) });
-    if (String(original.tx_date).slice(0, 7) !== body.txDate.slice(0, 7) && typeof window.cyaccRefreshLedgerView === 'function') {
+    if (String(original.tx_date).slice(0, 7) !== body.txDate.slice(0, 7)) {
       try { await window.cyaccRefreshLedgerView(els.monthFilter.value); }
       catch { showMessage('修改已儲存，餘額載入失敗，請重新整理。', true); }
     }
