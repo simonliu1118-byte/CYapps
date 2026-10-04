@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.4 Build 0 | 架構整理：移除 V0214 多階段 retry patch；帳戶餘額 popover 改為 DOM ready 單次綁定、移轉完成視窗改為按需建立，設定 favorite/default 回歸既有 canonical mutation owner；同步移除 v0214 runtime/CSS 命名。 |
 | V0.22.3 Build 0 | 架構整理第一階段：移除正式 adaptive UI 路徑中的 v21/v0211/v0215 與 Build 編號式函式、狀態、dataset、CSS class 命名，改為功能語意名稱；本版不改 breakpoint、互動條件或 UI 行為。 |
 | V0.22.2 Build 3 | 平板橫式實機返修：修正 iPad 被桌機日期／月份 picker 接管的根因，記帳日期恢復原生 date、看帳月份改用手機式顯示層＋原生 month；記帳區再縮窄、所有輸入置中、常用 pill 比照手機、儲存／清空置底，並移除平板橫式匯入 Excel。 |
 | V0.22.2 Build 2 | 平板橫式限定返修：左側記帳區縮窄、原生日期、帳戶／科目置中、常用項目常駐、移除右側把手與兩個區塊標題、帳號角色改為同行純文字、手機式月份／搜尋／清除／Excel 分享、單行統計與更高密度帳本，編輯／刪除改圖示；手機、平板直式及桌機不變。 |
