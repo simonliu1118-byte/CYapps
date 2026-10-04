@@ -332,6 +332,7 @@ function startEntryUi() {
   runEntryUiStep('summary-limit', setupEntryUiSummaryLimit);
   runEntryUiStep('role-medal', setupEntryUiRoleMedal);
   runEntryUiStep('enter-hints', setupMobileEntryEnterHints);
+  runEntryUiStep('mobile-date-display', setupMobileEntryDateDisplay);
   runEntryUiStep('help-copy', syncMobileEntryHelpCopy);
 }
 
@@ -634,6 +635,31 @@ function syncEntryUiRoleMedal() {
   if (!target) return;
   target.classList.toggle('role-super-admin', role === '超級管理員');
   target.classList.toggle('role-admin', role === '管理員');
+}
+
+function setupMobileEntryDateDisplay() {
+  const input = document.querySelector('#txDate');
+  const field = input?.closest('.date-field');
+  if (!input || !field) return;
+
+  let display = field.querySelector('.cy-mobile-entry-date-display');
+  if (!display) {
+    display = document.createElement('span');
+    display.className = 'cy-mobile-entry-date-display';
+    display.setAttribute('aria-hidden', 'true');
+    input.insertAdjacentElement('afterend', display);
+  }
+
+  const sync = () => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(input.value || ''));
+    display.textContent = match ? `${match[1]}/${match[2]}/${match[3]}` : 'YYYY/MM/DD';
+  };
+
+  input.addEventListener('input', sync);
+  input.addEventListener('change', sync);
+  window.addEventListener('cyacc:core-ready', sync);
+  window.cySyncMobileEntryDateDisplay = sync;
+  sync();
 }
 
 function setupMobileEntryEnterHints() {
@@ -3830,6 +3856,7 @@ function clearTouchWorkspaceEntryForm() {
   showMessage('');
   const today = typeof localDateString === 'function' ? localDateString(new Date()) : new Date().toISOString().slice(0, 10);
   els.txDate.value = today;
+  window.cySyncMobileEntryDateDisplay?.();
   renderAccounts();
   renderCategories();
   els.summary.value = '';
@@ -3950,6 +3977,7 @@ function beginTouchWorkspaceMobileEdit(id) {
   ensureTouchWorkspaceOption(els.categoryName, tx.category_name);
   els.categoryName.value = tx.category_name;
   els.txDate.value = tx.tx_date;
+  window.cySyncMobileEntryDateDisplay?.();
   els.summary.value = tx.summary || '';
   els.amount.value = String(tx.amount || '');
 
@@ -4042,6 +4070,7 @@ function restoreTouchWorkspaceEntryDraft(draft) {
   ensureTouchWorkspaceOption(els.categoryName, draft.categoryName);
   els.categoryName.value = draft.categoryName || els.categoryName.value;
   els.txDate.value = draft.txDate || els.txDate.value;
+  window.cySyncMobileEntryDateDisplay?.();
   els.summary.value = draft.summary || '';
   els.amount.value = draft.amount || '';
 }
