@@ -17,7 +17,6 @@ export default {
       if (url.pathname === '/api/bootstrap' && request.method === 'GET') return handleBootstrap(env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'GET') return handleListTransactions(url, env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'POST') return handleCreateTransaction(request, env.DB);
-      if (url.pathname === '/api/summaries/frequent' && request.method === 'GET') return handleFrequentSummaries(url, env.DB);
 
       let match = url.pathname.match(/^\/api\/transactions\/(\d+)$/);
       if (match && request.method === 'PUT') return handleUpdateTransaction(Number(match[1]), request, env.DB);
@@ -164,37 +163,6 @@ async function handleDeleteTransaction(id, db) {
   if (isMonthLocked(month, await getLockedThrough(db))) return json({ ok: false, error: `${month} 已鎖定，無法刪除。` }, 409);
   await db.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run();
   return json({ ok: true });
-}
-
-async function handleFrequentSummaries(url, db) {
-  const kind = String(url.searchParams.get('kind') || '').trim();
-  const account = normalizeName(url.searchParams.get('account'));
-  const category = normalizeName(url.searchParams.get('category'));
-  if (!['income', 'expense'].includes(kind) || !account || !category) {
-    return json({ ok: false, error: '常用摘要查詢條件不完整。' }, 400);
-  }
-  const result = await db.prepare(`
-    SELECT summary, tx_date, created_at, id
-    FROM transactions
-    WHERE kind = ? AND account_name = ? AND category_name = ?
-    ORDER BY tx_date DESC, created_at DESC, id DESC
-    LIMIT 100
-  `).bind(kind, account, category).all();
-
-  const stats = new Map();
-  for (const [rank, row] of (result.results || []).entries()) {
-    const summary = String(row.summary || '').trim();
-    if (!summary) continue;
-    const item = stats.get(summary) || { count: 0, latestRank: rank };
-    item.count += 1;
-    stats.set(summary, item);
-  }
-  const summaries = [...stats.entries()]
-    .filter(([, meta]) => meta.count >= 3)
-    .sort((a, b) => b[1].count - a[1].count || a[1].latestRank - b[1].latestRank)
-    .slice(0, 10)
-    .map(([summary]) => summary);
-  return json({ ok: true, summaries });
 }
 
 async function handleCreateAccount(request, db) {
