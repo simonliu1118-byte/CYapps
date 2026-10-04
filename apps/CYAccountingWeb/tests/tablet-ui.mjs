@@ -95,7 +95,7 @@ assert.match(read('ledger-inline-edit.js'), /window\.cyUsesEntryTransactionEdito
 assert.match(css.slice(css.indexOf('/* Tablet workspace:')), /grid-template-columns: minmax\(0, 1fr\) !important/, 'tablet overrides important desktop entry columns');
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{ grid-template-columns: minmax\(280px, 31%\)/, 'landscape entry rail is narrower only in landscape');
 assert.match(css, /data-tablet-layout="landscape"\] \.tablet-entry-controls,[\s\S]*?confirmation-edge-open \{ display: none !important/, 'landscape hides both non-landscape handles');
-assert.match(css, /data-tablet-layout="landscape"\] #txDate\.cy-native-date-source[\s\S]*?-webkit-appearance:auto !important/, 'landscape date stays native');
+assert.match(css, /data-tablet-layout="landscape"\] \.entry-grid #txDate \{[\s\S]*?-webkit-appearance:\s*auto !important/, 'landscape date uses the shared native touch control');
 assert.match(css, /data-tablet-layout="landscape"\] #accountName,[\s\S]*?#categoryName \{ text-align:center !important; text-align-last:center !important/, 'landscape account and category are centered');
 assert.match(css, /data-tablet-layout="landscape"\] \.entry-grid > #favoriteCategoryGroup\.quick-tool-row\.hidden,[\s\S]*?display:grid !important/, 'landscape favorites remain visible when empty');
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-search-submit \{ display:none !important/, 'landscape search submits by Enter like mobile');
