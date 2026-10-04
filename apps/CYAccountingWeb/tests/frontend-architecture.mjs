@@ -20,6 +20,8 @@ const inputConfirmation = read('public/input-confirmation.js');
 const excelExportUi = read('public/excel-export-ui.js');
 const excelImportUi = read('public/excel-import-ui.js');
 const adaptiveCss = read('public/adaptive-ui.css');
+const accountingTools = read('src/accounting-tools.js');
+const coreApi = read('src/index.js');
 const files = fs.readdirSync(PUBLIC);
 const styles = [
   'app.css',
@@ -93,6 +95,16 @@ assert.match(ledgerTools, /monthFilter\?\.addEventListener\('change', syncLedger
 assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change',\s*(?:loadLedgerOpeningAndRender|scheduleLedgerRefresh)/, 'ledger tools must not own a second month data-refresh path');
 assert.doesNotMatch(appJs, /function renderTransactions\(|transactionRows\.innerHTML/, 'app state owner must not keep a second transaction row renderer');
 assert.match(quickEntry, /addEventListener\('cyacc:ledger-rendered', handleFastEntryLedgerRendered\)/, 'quick entry must subscribe to the explicit ledger lifecycle');
+assert.match(appJs, /function initialEntryKind\(\)[\s\S]*?max-width: 767px[\s\S]*?'income'/, 'mobile entry must default to income from the canonical app state owner');
+assert.match(appJs, /new CustomEvent\('cyacc:entry-kind-changed'/, 'entry kind changes must publish an explicit lifecycle');
+assert.match(quickEntry, /addEventListener\('cyacc:entry-kind-changed', handleQuickEntryKindChanged\)/, 'quick entry must consume the canonical entry-kind lifecycle');
+assert.match(quickEntry, /window\.cyPrepareQuickEntryUi = prepareQuickEntryUi/, 'quick entry must expose an explicit bootstrap preparation hook');
+assert.doesNotMatch(quickEntry, /new MutationObserver|connectionStatus[^\n]*已連線/, 'quick entry must not infer bootstrap readiness from DOM mutations or connection text');
+assert.match(accountingTools, /url\.pathname === '\/api\/summaries\/frequent'/, 'accounting-tools must own the frequent-summary API');
+assert.doesNotMatch(coreApi, /\/api\/summaries\/frequent|handleFrequentSummaries/, 'core API must not keep a second frequent-summary owner');
+assert.match(adaptiveUi, /function setupMobileEntryDateDisplay\(\)/, 'adaptive UI must own the mobile YYYY\/MM\/DD date presentation');
+assert.match(adaptiveUi, /\$\{match\[1\]\}\/\$\{match\[2\]\}\/\$\{match\[3\]\}/, 'mobile date presentation must render YYYY/MM/DD without changing the stored date value');
+assert.match(adaptiveCss, /\.cy-mobile-entry-date-display/, 'mobile date presentation must have one adaptive CSS surface');
 assert.doesNotMatch(quickEntry, /observe\(els\.transactionRows|ledgerObserver/, 'quick entry must not infer lifecycle from transaction row DOM mutations');
 assert.match(inlineEdit, /els\.transactionRows\.addEventListener\('click'/, 'inline edit keeps normal delegated row interaction');
 assert.doesNotMatch(inlineEdit, /cyLedgerObserver|suspendLedgerRefreshObserver|resumeLedgerRefreshObserver/, 'inline edit must not coordinate with a hidden ledger DOM observer');
