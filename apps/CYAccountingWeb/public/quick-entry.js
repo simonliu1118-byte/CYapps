@@ -11,7 +11,6 @@ window.addEventListener('load', () => {
   bindFastEntryKeys();
   bindQuickTools();
   bindFavoriteManager();
-  if (window.cyaccCoreReady) void prepareQuickEntryUi();
 });
 
 function bindFastEntryKeys() {
