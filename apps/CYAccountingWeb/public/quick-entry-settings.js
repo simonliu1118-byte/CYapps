@@ -7,7 +7,6 @@ let cyQuickEntrySettingsLoaded = false;
 window.addEventListener('load', () => {
   bindDateQuickEntry();
   setupQuickEntrySettingsPane();
-  setupOrderingControls();
   updateQuickEntryKeyboardHint();
 });
 
@@ -179,92 +178,5 @@ async function saveQuickEntrySettings() {
     setDialogMessage(message, error.message, true);
   } finally {
     if (button) button.disabled = false;
-  }
-}
-
-function setupOrderingControls() {
-  if (els.accountRows) {
-    els.accountRows.addEventListener('click', handleOrderingAction);
-    const observer = new MutationObserver(injectAccountOrderButtons);
-    observer.observe(els.accountRows, { childList: true, subtree: true });
-  }
-  if (els.categoryManager) {
-    els.categoryManager.addEventListener('click', handleOrderingAction);
-    const observer = new MutationObserver(injectCategoryOrderButtons);
-    observer.observe(els.categoryManager, { childList: true, subtree: true });
-  }
-  injectAccountOrderButtons();
-  injectCategoryOrderButtons();
-}
-
-function injectAccountOrderButtons() {
-  const rows = [...(els.accountRows?.querySelectorAll('.manager-row') || [])];
-  rows.forEach((row, index) => {
-    const rename = row.querySelector('[data-account-rename]');
-    const actions = row.querySelector('.manager-row-actions');
-    if (!rename || !actions || actions.querySelector('[data-order-account]')) return;
-    const id = rename.dataset.accountRename;
-    actions.prepend(orderButton('account', id, 'up', index === 0), orderButton('account', id, 'down', index === rows.length - 1));
-  });
-}
-
-function injectCategoryOrderButtons() {
-  const groups = [...(els.categoryManager?.querySelectorAll('.category-group') || [])];
-  groups.forEach((groupElement, groupIndex) => {
-    const renameGroup = groupElement.querySelector('.category-group-head [data-group-rename]');
-    const groupActions = renameGroup?.parentElement;
-    if (renameGroup && groupActions && !groupActions.querySelector('[data-order-group]')) {
-      const id = renameGroup.dataset.groupRename;
-      groupActions.prepend(orderButton('group', id, 'up', groupIndex === 0), orderButton('group', id, 'down', groupIndex === groups.length - 1));
-    }
-
-    const items = [...groupElement.querySelectorAll('.category-item')];
-    items.forEach((item, index) => {
-      const rename = item.querySelector('[data-category-rename]');
-      const actions = rename?.parentElement;
-      if (!rename || !actions || actions.querySelector('[data-order-category]')) return;
-      const id = rename.dataset.categoryRename;
-      actions.prepend(orderButton('category', id, 'up', index === 0), orderButton('category', id, 'down', index === items.length - 1));
-    });
-  });
-}
-
-function orderButton(type, id, direction, disabled) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'mini-button order-button';
-  button.dataset[`orderMove${type[0].toUpperCase()}${type.slice(1)}`] = String(id);
-  button.dataset.direction = direction;
-  button.disabled = disabled;
-  button.title = direction === 'up' ? '往上移' : '往下移';
-  button.setAttribute('aria-label', button.title);
-  button.textContent = direction === 'up' ? '↑' : '↓';
-  return button;
-}
-
-async function handleOrderingAction(event) {
-  const button = event.target.closest('[data-order-account], [data-order-group], [data-order-category]');
-  if (!button || button.disabled) return;
-  event.preventDefault();
-  event.stopPropagation();
-
-  let path = '';
-  if (button.dataset.orderAccount) path = `/api/accounts/${button.dataset.orderAccount}/move`;
-  else if (button.dataset.orderGroup) path = `/api/category-groups/${button.dataset.orderGroup}/move`;
-  else if (button.dataset.orderCategory) path = `/api/categories/${button.dataset.orderCategory}/move`;
-  if (!path) return;
-
-  button.disabled = true;
-  setDialogMessage(els.settingsMessage, '');
-  try {
-    await api(path, {
-      method: 'PUT',
-      headers: jsonHeaders(),
-      body: JSON.stringify({ direction: button.dataset.direction })
-    });
-    await refreshBootstrap();
-    setDialogMessage(els.settingsMessage, '排序已更新。');
-  } catch (error) {
-    setDialogMessage(els.settingsMessage, error.message, true);
   }
 }
