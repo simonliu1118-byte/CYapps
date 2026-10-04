@@ -39,7 +39,7 @@ const win = {
 const context = vm.createContext({ window: win, document: { documentElement: root, createElement: () => controls,
   querySelector: selector => nodes[selector] || null, querySelectorAll: () => [] },
   CY_V21_SPLIT_MEDIA: '(min-width: 1360px)', cyTouchWorkspaceEdit: edit,
-  applyV21DesktopSplitWorkspace() { splitCalls++; }, setupTouchWorkspaceEntrySecondaryAction() {}, setupTouchWorkspaceMonthDisplay() {}, isDesktopInteractionWorkspace() { return !context.isTabletWorkspace(); }, renderSettingsAccountManager() {},
+  applyV21DesktopSplitWorkspace() { splitCalls++; }, setupTouchWorkspaceEntrySecondaryAction() {}, isDesktopInteractionWorkspace() { return !context.isTabletWorkspace(); }, renderSettingsAccountManager() {},
   cancelTouchWorkspaceMobileEdit() { context.cyTouchWorkspaceEdit = null; }, api() { writes++; }
 });
 vm.runInContext(tabletCode, context);
