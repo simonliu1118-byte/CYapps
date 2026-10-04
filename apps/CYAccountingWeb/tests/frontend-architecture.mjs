@@ -97,7 +97,7 @@ assert.match(ledgerTools, /function setupLedgerToolbar\(\)/, 'ledger-tools must 
 assert.match(ledgerTools, /id="ledgerBalanceButton"[\s\S]*?id="ledgerPrevMonth"[\s\S]*?id="ledgerMonthSlot"[\s\S]*?id="ledgerNextMonth"[\s\S]*?id="ledgerMoreButton"/, 'shared month toolbar must contain the device-neutral controls');
 assert.match(ledgerTools, /id="ledgerOpeningBalanceButton"[\s\S]*?id="ledgerLockSettingsButton"/, 'opening and lock actions belong to the shared toolbar owner');
 assert.match(ledgerTools, /id="ledgerExcelExport"[\s\S]*?id="ledgerExcelExportStatus"/, 'export control belongs to the shared toolbar structure');
-assert.match(ledgerTools, /id="ledgerToolsSheet"[\s\S]*?data-mobile-ledger-action="accounts"[\s\S]*?data-mobile-ledger-action="export"/, 'shared toolbar owns the compact utility menu');
+assert.match(ledgerTools, /sheet\.id = 'ledgerToolsSheet'[\s\S]*?data-mobile-ledger-action="accounts"[\s\S]*?data-mobile-ledger-action="export"/, 'shared toolbar owns the compact utility menu');
 assert.match(ledgerTools, /function syncLedgerMonthDisplay\(\)/, 'shared toolbar owns the month display presenter');
 assert.doesNotMatch(adaptiveUi, /setupV21LedgerContext|setupMobileWorkspaceLedgerTools|setupTouchWorkspaceToolbar|setupTouchWorkspaceMonthDisplay|syncTouchWorkspaceMonthDisplay|moveImportButton/, 'adaptive UI must not create, move, retry or post-process ledger toolbar structure');
 assert.doesNotMatch(inputConfirmation, /setupV09OpeningBalanceAction/, 'opening balance must not have a second toolbar action owner');
