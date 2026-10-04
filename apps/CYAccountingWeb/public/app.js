@@ -1,5 +1,11 @@
+const CY_MOBILE_ENTRY_MEDIA = '(max-width: 767px)';
+
+function initialEntryKind() {
+  return window.matchMedia?.(CY_MOBILE_ENTRY_MEDIA)?.matches ? 'income' : 'expense';
+}
+
 const state = {
-  kind: 'expense',
+  kind: initialEntryKind(),
   accounts: [],
   archivedAccounts: [],
   groups: [],
@@ -89,6 +95,7 @@ async function startCyaccApp() {
     els.monthFilter.value = today.slice(0, 7);
     els.openingMonth.value = today.slice(0, 7);
     bindEvents();
+    setEntryKind(state.kind);
 
     if (window.cyaccSessionPromise) await window.cyaccSessionPromise;
     setCyaccBootStage('正在準備帳務資料…');
@@ -244,10 +251,14 @@ function renderCategories(preferred) {
 
 function setEntryKind(kind) {
   if (!['income', 'expense'].includes(kind)) return;
+  const previousKind = state.kind;
   state.kind = kind;
   els.kindButtons.forEach(button => button.classList.toggle('active', button.dataset.kind === kind));
   renderCategories();
   window.cySyncMobileCanvasContinuation?.();
+  window.dispatchEvent(new CustomEvent('cyacc:entry-kind-changed', {
+    detail: { kind, previousKind }
+  }));
 }
 
 function updateEntryLockState() {
