@@ -176,6 +176,9 @@ assert.equal((await call('/api/opening-balance-overrides','PUT',{month:'2026-01'
 assert.equal(sql.prepare("SELECT count(*) AS n FROM opening_balance_overrides WHERE account_name='測試帳戶'").get().n, 0);
 assert.equal((await call(`/api/accounts/${id}/archive`,'POST',{})).status, 200);
 assert.equal(sql.prepare("SELECT color_slot FROM accounts WHERE id=?").get(id).color_slot, 3, 'archive retains its color slot');
+const afterArchiveResponse = await call('/api/accounts','POST',{ name: '封存後新增' });
+assert.equal(afterArchiveResponse.status, 201);
+assert.equal((await afterArchiveResponse.json()).color_slot, 4, 'archived account keeps its slot reserved');
 assert.equal((await call(`/api/accounts/${id}/permanent`,'DELETE')).status, 403);
 role = 'SUPER_ADMIN';
 assert.equal((await call(`/api/accounts/${id}/permanent`,'DELETE')).status, 200);
