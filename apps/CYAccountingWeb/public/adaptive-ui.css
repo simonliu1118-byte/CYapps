@@ -10018,6 +10018,21 @@ html[data-tablet-layout="landscape"] .ledger-card td.action-col [data-delete-id]
 html[data-tablet-layout="landscape"] .ledger-card td.action-col .row-action:hover:not(:disabled) { background:#f2f7fd !important; }
 html[data-tablet-layout="landscape"] .ledger-card td.action-col .row-action.delete:hover:not(:disabled) { background:#fff1f0 !important; }
 
+/* Tablet landscape layout retained independently from picker ownership. */
+html[data-tablet-layout="landscape"] .shell.cy-split-layout {
+  grid-template-columns: minmax(250px, 28%) minmax(0, 1fr) !important;
+}
+html[data-tablet-layout="landscape"] .entry-grid {
+  min-height: calc(var(--tablet-visible-height, 100vh) - var(--tablet-header-height, 0px) - 112px) !important;
+  grid-template-rows: repeat(7, auto) 1fr auto auto auto !important;
+  align-content: start !important;
+}
+html[data-tablet-layout="landscape"] .entry-card input,
+html[data-tablet-layout="landscape"] .entry-card select {
+  text-align: center !important;
+  text-align-last: center !important;
+}
+
 /* Tablet landscape picker convergence: reuse the same touch controls as phone.
    Tablet adds no date/month presentation owner; only dimensions differ. */
 html[data-tablet-layout="landscape"] .entry-grid .date-field {
