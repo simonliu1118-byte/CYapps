@@ -1,7 +1,9 @@
 const CY_MOBILE_ENTRY_MEDIA = '(max-width: 767px)';
 
 function initialEntryKind() {
-  return window.matchMedia?.(CY_MOBILE_ENTRY_MEDIA)?.matches ? 'income' : 'expense';
+  return typeof window !== 'undefined' && window.matchMedia?.(CY_MOBILE_ENTRY_MEDIA)?.matches
+    ? 'income'
+    : 'expense';
 }
 
 const state = {
