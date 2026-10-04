@@ -17,6 +17,7 @@ const adaptiveUi = read('public/adaptive-ui.js');
 const quickEntry = read('public/quick-entry.js');
 const inlineEdit = read('public/ledger-inline-edit.js');
 const inputConfirmation = read('public/input-confirmation.js');
+const backupUi = read('public/backup-ui.js');
 const excelExportUi = read('public/excel-export-ui.js');
 const excelImportUi = read('public/excel-import-ui.js');
 const adaptiveCss = read('public/adaptive-ui.css');
@@ -91,6 +92,9 @@ assert.match(ledgerTools, /window\.cyaccRefreshLedgerView = loadLedgerOpeningAnd
 assert.match(ledgerTools, /window\.cyaccRenderLedgerMessage = renderLedgerMessage/, 'ledger tools must own ledger status and empty rows');
 assert.match(ledgerTools, /new CustomEvent\('cyacc:ledger-rendered'/, 'canonical row writes must publish an explicit render lifecycle');
 assert.match(ledgerTools, /ledger-empty-state/, 'empty-state markup must be rendered by the canonical ledger renderer');
+assert.match(ledgerTools, /class="ledger-message-row"/, 'ledger status rows must be explicitly distinguished from transaction cards');
+assert.doesNotMatch(backupUi, /backupSettingsHtml\s*=\s*function|renderBackupStatus\s*=\s*function|renderTieredBackupHistory\s*=\s*function/, 'backup UI must keep one canonical function path instead of patching functions after definition');
+assert.match(backupUi, /function openMobileBackupInfo\(\)/, 'backup UI owner must provide the SA mobile read-only backup surface');
 assert.doesNotMatch(ledgerTools, /new MutationObserver/, 'ledger rows must not trigger a second refresh through MutationObserver');
 assert.match(ledgerTools, /monthFilter\?\.addEventListener\('change', syncLedgerMonthDisplay\)/, 'shared toolbar owns month presentation sync');
 assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change',\s*(?:loadLedgerOpeningAndRender|scheduleLedgerRefresh)/, 'ledger tools must not own a second month data-refresh path');

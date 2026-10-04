@@ -339,3 +339,71 @@
   .backup-history-table th:nth-child(6),
   .backup-history-table td:nth-child(6) { width: 92px; }
 }
+
+.mobile-backup-summary {
+  display: grid;
+  gap: 0;
+  border: 1px solid #e0e6ec;
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.mobile-backup-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 9px 10px;
+  border-bottom: 1px solid #edf1f4;
+}
+
+.mobile-backup-row:last-child {
+  border-bottom: 0;
+}
+
+.mobile-backup-row > span {
+  color: #71808c;
+  font-size: 11px;
+}
+
+.mobile-backup-row > strong {
+  min-width: 0;
+  color: #2b3b4c;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.mobile-backup-row > small {
+  grid-column: 2;
+  color: #7a8793;
+  font-size: 10.5px;
+  text-align: right;
+}
+
+.mobile-backup-provider-health {
+  grid-template-columns: 1fr;
+  margin: 0;
+}
+
+.mobile-backup-acceptance {
+  grid-template-columns: 1fr;
+  margin: 0;
+}
+
+.mobile-backup-acceptance .backup-acceptance-detail {
+  text-align: left;
+  white-space: normal;
+}
+
+.mobile-backup-loading,
+.mobile-backup-error {
+  padding: 10px 2px;
+  color: #71808c !important;
+  text-align: center;
+}
+
+.mobile-backup-error {
+  color: #a54b45 !important;
+}

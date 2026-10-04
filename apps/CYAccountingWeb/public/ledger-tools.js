@@ -100,6 +100,7 @@ function setupLedgerUtilityMenu() {
     <button type="button" data-mobile-ledger-action="accounts">帳戶設定</button>
     <button type="button" data-mobile-ledger-action="categories">科目設定</button>
     <button type="button" data-mobile-ledger-action="lock">月份鎖帳</button>
+    <button type="button" data-mobile-ledger-action="backup" hidden>備份資訊</button>
     <button type="button" data-mobile-ledger-action="export">匯出 Excel</button>
     <button type="button" class="secondary" data-mobile-ledger-action="close">取消</button>`;
 
@@ -188,6 +189,7 @@ function bindLedgerToolbar() {
       if (typeof window.cyOpenMobileLedgerLock === 'function') window.cyOpenMobileLedgerLock();
       else document.querySelector('#ledgerLockSettingsButton')?.click();
     }
+    if (action === 'backup') window.cyOpenMobileBackupInfo?.();
     if (action === 'export') document.querySelector('#ledgerExcelExport')?.click();
   });
   document.addEventListener('keydown', event => {
@@ -438,7 +440,7 @@ function updateLedgerHeader() {
 
 function renderLedgerMessage(message, reason = 'status') {
   writeLedgerRows(
-    `<tr><td colspan="8" class="empty"><div class="ledger-empty-state"><strong>${escapeHtml(String(message || ''))}</strong></div></td></tr>`,
+    `<tr class="ledger-message-row"><td colspan="8" class="empty"><div class="ledger-empty-state"><strong>${escapeHtml(String(message || ''))}</strong></div></td></tr>`,
     { reason }
   );
 }

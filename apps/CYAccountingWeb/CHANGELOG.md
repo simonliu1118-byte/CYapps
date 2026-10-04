@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.12 Build 0 | 手機看帳改善：SUPER_ADMIN 的「更多」新增唯讀「備份資訊」，共用既有 `/api/backup/status` 與 Backup UI model，只顯示備份狀態、排程、保留政策、最近有效備份、Provider health 與 Phase C 進度，不提供手動備份／復原操作；同時移除 Backup UI 既有函式覆寫 patch chain。手機空帳本改為純文字「本月尚無記帳資料。」而不再套交易卡片外框。 |
 | V0.22.11 Build 0 | PR #311 已合併，production deploy #431 成功；帳戶色彩升級為正式 lifecycle：`accounts.color_slot` 永久跟隨帳戶，改名／排序／封存／解封不換色，SUPER_ADMIN 永久刪除後才釋出，下一個新帳戶優先補最小空 slot；1～20 使用高差異淡色＋深字，21～40 使用對應深色＋淺字，41 起每 40 個循環。移除帳戶名稱 hash 配色，仍不修改看帳欄寬。 |
 | V0.22.10 Build 0 | 看帳帳戶辨識：由 shared ledger renderer 依帳戶名稱穩定產生淡色背景，同一帳戶在手機／平板／桌機維持相同色彩；色塊僅以背景 pseudo-element 呈現，不修改既有欄寬、grid column 或帳戶欄 layout。 |
 | V0.22.9 Build 0 | 手機記帳：登入後新增記帳預設由支出改為收入；手機日期保留原生 date picker，但畫面固定顯示 `YYYY/MM/DD`，送出資料仍維持 `YYYY-MM-DD`；常用摘要改與 bootstrap 明確同步，不再靠連線文字／DOM observer 延遲補畫，並移除 `src/index.js` 重複的 frequent-summary API owner。 |
