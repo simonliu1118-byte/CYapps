@@ -7,6 +7,7 @@ let cyLedgerRequestId = 0;
 let cyLedgerRenderedMonth = '';
 window.cyLedgerBalanceBreakdowns = new Map();
 window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender;
+window.cyaccRenderLedgerMessage = renderLedgerMessage;
 
 let cyV06Started = false;
 
@@ -143,20 +144,24 @@ function renderDesktopLedger() {
 
   if (!visible.length) {
     const text = query ? '本月沒有符合摘要搜尋條件的資料。' : '本月尚無記帳資料。';
-    writeLedgerRows(`<tr><td colspan="8" class="empty">${escapeHtml(text)}</td></tr>`);
+    renderLedgerMessage(text, query ? 'search-empty' : 'empty');
     return;
   }
 
-  if (cyLedgerGroupByAccount) {
-    writeLedgerRows(renderGroupedLedgerRows(visible, allTransactions, openingMap, calculated));
-  } else {
-    writeLedgerRows(visible.map(tx => renderLedgerRow(
-      tx,
-      calculated.globalById.get(Number(tx.id)) ?? 0,
-      calculated.balancesById.get(Number(tx.id)) || new Map(),
-      false
-    )).join(''));
-  }
+  const rowsHtml = cyLedgerGroupByAccount
+    ? renderGroupedLedgerRows(visible, allTransactions, openingMap, calculated)
+    : visible.map(tx => renderLedgerRow(
+        tx,
+        calculated.globalById.get(Number(tx.id)) ?? 0,
+        calculated.balancesById.get(Number(tx.id)) || new Map(),
+        false
+      )).join('');
+  writeLedgerRows(rowsHtml, {
+    reason: 'transactions',
+    month,
+    visibleCount: visible.length,
+    totalCount: allTransactions.length
+  });
 }
 
 function calculateLedgerBalances(transactions, openingMap) {
@@ -267,7 +272,20 @@ function updateLedgerGroupButton() {
   button.remove();
 }
 
-function writeLedgerRows(html) {
+function renderLedgerMessage(message, reason = 'status') {
+  writeLedgerRows(
+    `<tr><td colspan="8" class="empty"><div class="ledger-empty-state"><strong>${escapeHtml(String(message || ''))}</strong></div></td></tr>`,
+    { reason }
+  );
+}
+
+function writeLedgerRows(html, detail = {}) {
   if (!els.transactionRows) return;
   els.transactionRows.innerHTML = html;
+  window.dispatchEvent(new CustomEvent('cyacc:ledger-rendered', {
+    detail: {
+      month: els.monthFilter?.value || '',
+      ...detail
+    }
+  }));
 }
