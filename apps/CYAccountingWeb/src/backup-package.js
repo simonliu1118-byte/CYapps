@@ -8,7 +8,7 @@ const encoder = new TextEncoder();
 export async function buildBackupPackage(db, now = new Date()) {
   const [schemaRow, accounts, groups, categories, transactions, openingOverrides, openingAudit, settings] = await Promise.all([
     db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").first(),
-    readPaged(db, 'SELECT id, name, sort_order, is_default, created_at, archived_at FROM accounts ORDER BY sort_order, id', mapAccount),
+    readPaged(db, 'SELECT id, name, sort_order, is_default, color_slot, created_at, archived_at FROM accounts ORDER BY sort_order, id', mapAccount),
     readPaged(db, 'SELECT id, kind, name, sort_order, created_at FROM category_groups ORDER BY kind, sort_order, id', mapGroup),
     readPaged(db, 'SELECT id, kind, group_id, name, sort_order, is_favorite, created_at FROM categories ORDER BY kind, group_id, sort_order, id', mapCategory),
     readPaged(db, 'SELECT id, tx_date, account_name, kind, category_name, summary, amount, created_at, updated_at FROM transactions ORDER BY id', mapTransaction),
@@ -68,6 +68,7 @@ function mapAccount(row) {
     name: String(row.name),
     sortOrder: Number(row.sort_order),
     isDefault: Number(row.is_default),
+    colorSlot: Number(row.color_slot || 0) || null,
     createdAt: String(row.created_at),
     archivedAt: row.archived_at ? String(row.archived_at) : null
   };
