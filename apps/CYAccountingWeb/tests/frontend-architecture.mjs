@@ -108,9 +108,12 @@ assert.match(appJs, /await window\.cyPrepareQuickEntryUi\?\.\(\)/, 'app bootstra
 assert.doesNotMatch(quickEntry, /new MutationObserver|connectionStatus[^\n]*已連線/, 'quick entry must not infer bootstrap readiness from DOM mutations or connection text');
 assert.match(accountingTools, /url\.pathname === '\/api\/summaries\/frequent'/, 'accounting-tools must own the frequent-summary API');
 assert.doesNotMatch(coreApi, /\/api\/summaries\/frequent|handleFrequentSummaries/, 'core API must not keep a second frequent-summary owner');
-assert.match(adaptiveUi, /function setupMobileEntryDateDisplay\(\)/, 'adaptive UI must own the mobile YYYY\/MM\/DD date presentation');
-assert.match(adaptiveUi, /\$\{match\[1\]\}\/\$\{match\[2\]\}\/\$\{match\[3\]\}/, 'mobile date presentation must render YYYY/MM/DD without changing the stored date value');
-assert.match(adaptiveCss, /\.cy-mobile-entry-date-display/, 'mobile date presentation must have one adaptive CSS surface');
+assert.doesNotMatch(adaptiveUi, /setupMobileEntryDateDisplay|cySyncMobileEntryDateDisplay|cy-mobile-entry-date-display/, 'mobile entry date must use the native date control without a display overlay');
+assert.doesNotMatch(adaptiveCss, /cy-mobile-entry-date-display|#txDate[\s\S]*?-webkit-text-fill-color:\s*transparent/, 'mobile native date value must remain visible and tappable');
+assert.match(html, /<input id="txDate" type="date" required>/, 'index.html must keep the native entry date control');
+assert.match(adaptiveUi, /function setupTouchWorkspaceEntrySecondaryAction\(\)/, 'touch workspace must own the entry secondary action');
+assert.match(adaptiveUi, /button\.textContent = cyTouchWorkspaceEdit \? '取消' : '清空'/, 'entry secondary action must switch between clear and cancel');
+assert.match(adaptiveUi, /function cancelTouchWorkspaceMobileEditAndReturn\(\)[\s\S]*?switchTouchWorkspaceMobilePage\('ledger'\)[\s\S]*?restoreTouchWorkspaceLedgerContext\(context, false\)/, 'mobile edit cancel must return to the prior ledger context');
 assert.doesNotMatch(quickEntry, /observe\(els\.transactionRows|ledgerObserver/, 'quick entry must not infer lifecycle from transaction row DOM mutations');
 assert.match(inlineEdit, /els\.transactionRows\.addEventListener\('click'/, 'inline edit keeps normal delegated row interaction');
 assert.doesNotMatch(inlineEdit, /cyLedgerObserver|suspendLedgerRefreshObserver|resumeLedgerRefreshObserver/, 'inline edit must not coordinate with a hidden ledger DOM observer');
@@ -170,7 +173,7 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.match(html, /<span class="version">V0\.22\.12<\/span>/, 'index.html must own the current visible version');
+assert.match(html, /<span class="version">V0\.22\.13<\/span>/, 'index.html must own the current visible version');
 assert.match(appJs, /setLedgerLoadingState\(true\)/, 'month loading must expose an interaction-blocking busy state');
 assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingState\(false\)/, 'only the current month request may clear the busy state');
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');
