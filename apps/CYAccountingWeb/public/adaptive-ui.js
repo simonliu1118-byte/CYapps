@@ -2317,7 +2317,11 @@ window.cySettingsManager = {
   openRenameDialog: openSettingsRenameDialog
 };
 
+let settingsManagerInitialized = false;
+
 const setupSettingsManager = () => {
+  if (settingsManagerInitialized) return;
+  settingsManagerInitialized = true;
   ensureSettingsManagerDialog();
   bindSettingsManagerActions();
   setupSettingsManagerDragAndDrop();
@@ -2327,11 +2331,10 @@ const setupSettingsManager = () => {
 };
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => setTimeout(setupSettingsManager, 0), { once: true });
+  document.addEventListener('DOMContentLoaded', setupSettingsManager, { once: true });
 } else {
-  setTimeout(setupSettingsManager, 0);
+  setupSettingsManager();
 }
-window.addEventListener('load', () => setTimeout(setupSettingsManager, 0), { once: true });
 
 function renderSettingsAccountManager() {
   if (typeof state !== 'object') return;

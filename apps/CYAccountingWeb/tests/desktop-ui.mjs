@@ -30,7 +30,7 @@ const adaptive = read('public/adaptive-ui.js');
 const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 
-assert.equal(version, '0.22.4');
+assert.equal(version, '0.22.5');
 assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1fr\)/);
@@ -43,7 +43,7 @@ assert.match(css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(300px, calc\(100vw 
 assert.match(quick, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/);
 assert.match(quick, /enterStep\(els\.summary,[\s\S]*?els\.amount\?\.focus\(\)/);
 assert.match(quick, /enterStep\(els\.amount,[\s\S]*?els\.form\.requestSubmit\(\)/);
-assert.match(category, /data-category-transfer/);
+assert.doesNotMatch(category, /data-category-transfer|setupCategoryTransfer|injectCategoryTransferButtons/);
 assert.match(exportUi, /button\.textContent = '匯出中…'/);
 assert.match(exportUi, /aria-busy/);
 assert.match(exportUi, /navigator\.share/);

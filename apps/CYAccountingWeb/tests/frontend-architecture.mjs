@@ -79,7 +79,13 @@ assert.doesNotMatch(ledgerTools, /new MutationObserver/, 'ledger rows must not t
 assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change'/, 'ledger tools must not own a second month-change refresh path');
 
 assert.match(read('public/quick-entry-settings.js'), /setupQuickEntrySettingsPane/);
-assert.match(read('public/category-management.js'), /setupCategoryTransfer/);
+const categoryManagement = read('public/category-management.js');
+const quickEntrySettings = read('public/quick-entry-settings.js');
+assert.doesNotMatch(categoryManagement, /setupCategoryTransfer|injectCategoryTransferButtons|data-category-transfer/, 'category manager must not be post-processed by a second transfer owner');
+assert.doesNotMatch(quickEntrySettings, /setupOrderingControls|injectAccountOrderButtons|injectCategoryOrderButtons|handleOrderingAction/, 'settings ordering must not be post-processed by a second owner');
+assert.match(adaptiveUi, /let settingsManagerInitialized = false/, 'settings manager must own a single lifecycle');
+assert.match(adaptiveUi, /document\.addEventListener\('DOMContentLoaded', setupSettingsManager, \{ once: true \}\)/, 'settings manager initializes once at DOM readiness');
+assert.doesNotMatch(adaptiveUi, /setTimeout\(setupSettingsManager|addEventListener\('load',[^\n]*setupSettingsManager/, 'settings manager must not use retry or load-time rebinding');
 assert.match(read('public/excel-export-ui.js'), /downloadMonthlyExcel/);
 assert.match(read('public/ledger-inline-edit.js'), /beginInlineLedgerEdit/);
 assert.match(read('public/excel-import-ui.js'), /setupExcelImport/);
@@ -97,7 +103,7 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.match(html, /<span class="version">V0\.22\.4 Build 0<\/span>/, 'index.html must own the current visible version');
+assert.match(html, /<span class="version">V0\.22\.5 Build 0<\/span>/, 'index.html must own the current visible version');
 assert.match(appJs, /setLedgerLoadingState\(true\)/, 'month loading must expose an interaction-blocking busy state');
 assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingState\(false\)/, 'only the current month request may clear the busy state');
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');
