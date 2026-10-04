@@ -36,7 +36,7 @@ assert.match(css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1f
 assert.match(css, /\.current-user\.role-super-admin/);
 assert.match(css, /\.cy-confirm-dialog/);
 assert.match(css, /\.settings-manager-dialog/);
-assert.match(css, /\.v0214-balance-popover/);
+assert.match(css, /\.ledger-balance-popover/);
 assert.match(css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(300px, calc\(100vw - 28px\)\) !important;/);
 
 assert.match(quick, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/);
