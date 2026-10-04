@@ -134,6 +134,7 @@ assert.match(mobileHtml, /Phase C 排程驗收/);
 assert.match(mobileHtml, /Cloudflare R2/);
 assert.doesNotMatch(mobileHtml, /<button|立即執行|復原操作/);
 assert.match(source, /window\.cyOpenMobileBackupInfo = openMobileBackupInfo/);
+assert.doesNotMatch(source, /僅供檢視|不提供備份或復原操作/, 'mobile backup dialog must not add redundant explanatory copy');
 assert.doesNotMatch(source, /backupSettingsHtml\s*=\s*function|renderBackupStatus\s*=\s*function|renderTieredBackupHistory\s*=\s*function/, 'backup UI must not patch canonical functions after definition');
 
 assert.match(source, /logical backup/);

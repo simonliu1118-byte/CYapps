@@ -69,7 +69,6 @@ function ensureMobileBackupInfoDialog() {
     <div class="modal-header">
       <div>
         <h2 id="mobileBackupInfoTitle">備份資訊</h2>
-        <p>僅供檢視，不提供備份或復原操作。</p>
       </div>
       <button class="icon-button" type="button" data-close-mobile-backup-info aria-label="關閉">×</button>
     </div>
