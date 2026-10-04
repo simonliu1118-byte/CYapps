@@ -95,10 +95,11 @@ assert.match(ledgerTools, /monthFilter\?\.addEventListener\('change', syncLedger
 assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change',\s*(?:loadLedgerOpeningAndRender|scheduleLedgerRefresh)/, 'ledger tools must not own a second month data-refresh path');
 assert.doesNotMatch(appJs, /function renderTransactions\(|transactionRows\.innerHTML/, 'app state owner must not keep a second transaction row renderer');
 assert.match(quickEntry, /addEventListener\('cyacc:ledger-rendered', handleFastEntryLedgerRendered\)/, 'quick entry must subscribe to the explicit ledger lifecycle');
-assert.match(appJs, /function initialEntryKind\(\)[\s\S]*?max-width: 767px[\s\S]*?'income'/, 'mobile entry must default to income from the canonical app state owner');
+assert.match(appJs, /CY_MOBILE_ENTRY_MEDIA = '\(max-width: 767px\)'[\s\S]*?function initialEntryKind\(\)[\s\S]*?'income'/, 'mobile entry must default to income from the canonical app state owner');
 assert.match(appJs, /new CustomEvent\('cyacc:entry-kind-changed'/, 'entry kind changes must publish an explicit lifecycle');
 assert.match(quickEntry, /addEventListener\('cyacc:entry-kind-changed', handleQuickEntryKindChanged\)/, 'quick entry must consume the canonical entry-kind lifecycle');
 assert.match(quickEntry, /window\.cyPrepareQuickEntryUi = prepareQuickEntryUi/, 'quick entry must expose an explicit bootstrap preparation hook');
+assert.match(appJs, /await window\.cyPrepareQuickEntryUi\?\.\(\)/, 'app bootstrap must await quick-entry presentation before startup completes');
 assert.doesNotMatch(quickEntry, /new MutationObserver|connectionStatus[^\n]*已連線/, 'quick entry must not infer bootstrap readiness from DOM mutations or connection text');
 assert.match(accountingTools, /url\.pathname === '\/api\/summaries\/frequent'/, 'accounting-tools must own the frequent-summary API');
 assert.doesNotMatch(coreApi, /\/api\/summaries\/frequent|handleFrequentSummaries/, 'core API must not keep a second frequent-summary owner');
