@@ -154,3 +154,9 @@ assert.doesNotMatch(source, /min-width:\s*1024px/, 'desktop interactions must no
 assert.match(source, /setupTouchWorkspaceMonthDisplay\(slot\)/, 'tablet landscape reuses the shared touch month presenter');
 assert.match(source, /document\.querySelectorAll\('\.desktopUi-date-picker'\)\.forEach\(root => root\.remove\(\)\)/, 'tablet removes desktop date presentation instead of adding a tablet picker');
 assert.doesNotMatch(source, /tabletEntryDateDisplay|setupTabletDateDisplay/, 'tablet must not own a separate date display component');
+
+
+assert.match(css, /data-tablet-layout="landscape"\] #monthFilter \{[\s\S]*?opacity:\s*0 !important/, 'tablet month native text is fully hidden behind the shared presenter');
+assert.match(css, /data-tablet-layout="landscape"\] #mobileLedgerMonthDisplay \{[\s\S]*?z-index:\s*4 !important/, 'shared month presenter stays visibly above the native month input');
+assert.equal((css.match(/data-tablet-layout="landscape"\][^\n]*#monthFilter \{/g) || []).length, 1, 'tablet landscape has one month presentation rule');
+assert.equal((css.match(/data-tablet-layout="landscape"\][^\n]*\.entry-grid #txDate \{/g) || []).length, 1, 'tablet landscape has one entry date presentation rule');
