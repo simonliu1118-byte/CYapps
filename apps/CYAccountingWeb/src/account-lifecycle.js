@@ -26,7 +26,7 @@ async function archiveAccount(id, db) {
   if (!validId(id)) return json({ ok: false, error: '帳戶編號錯誤。' }, 400);
 
   const [account, activeCount] = await Promise.all([
-    db.prepare('SELECT id, name, sort_order, is_default, archived_at FROM accounts WHERE id = ?').bind(id).first(),
+    db.prepare('SELECT id, name, sort_order, is_default, color_slot, archived_at FROM accounts WHERE id = ?').bind(id).first(),
     db.prepare('SELECT COUNT(*) AS count FROM accounts WHERE archived_at IS NULL').first()
   ]);
   if (!account) return json({ ok: false, error: '找不到帳戶。' }, 404);
@@ -61,6 +61,7 @@ async function archiveAccount(id, db) {
     account: {
       id,
       name: String(account.name || ''),
+      color_slot: Number(account.color_slot || 0) || null,
       archived_at: archivedAt
     }
   });
@@ -70,7 +71,7 @@ async function restoreAccount(id, db) {
   if (!validId(id)) return json({ ok: false, error: '帳戶編號錯誤。' }, 400);
 
   const account = await db.prepare(
-    'SELECT id, name, sort_order, is_default, archived_at FROM accounts WHERE id = ?'
+    'SELECT id, name, sort_order, is_default, color_slot, archived_at FROM accounts WHERE id = ?'
   ).bind(id).first();
   if (!account) return json({ ok: false, error: '找不到帳戶。' }, 404);
   if (!account.archived_at) {
@@ -97,6 +98,7 @@ async function restoreAccount(id, db) {
     account: {
       id,
       name: String(account.name || ''),
+      color_slot: Number(account.color_slot || 0) || null,
       archived_at: null
     }
   });
@@ -113,7 +115,7 @@ async function permanentlyDeleteAccount(id, db, principal) {
   if (!validId(id)) return json({ ok: false, error: '帳戶編號錯誤。' }, 400);
 
   const account = await db.prepare(
-    'SELECT id, name, archived_at FROM accounts WHERE id = ?'
+    'SELECT id, name, color_slot, archived_at FROM accounts WHERE id = ?'
   ).bind(id).first();
   if (!account) return json({ ok: false, error: '找不到帳戶。' }, 404);
   if (!account.archived_at) {
@@ -178,6 +180,7 @@ function accountSummary(account) {
   return {
     id: Number(account.id),
     name: String(account.name || ''),
+    color_slot: Number(account.color_slot || 0) || null,
     archived_at: account.archived_at ? String(account.archived_at) : null
   };
 }
