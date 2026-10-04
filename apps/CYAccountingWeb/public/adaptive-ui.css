@@ -1,7 +1,6 @@
 /* CYAccountingWeb adaptive UI styles functional module. */
 
-/* V0.20.0 RWD / Adaptive UI Phase 1
-   Presentation-only overrides. Keep accounting behavior and API contracts unchanged. */
+/* Shared adaptive presentation. Accounting behavior and API contracts remain unchanged. */
 
 /* Desktop refinements: preserve dense accounting workflow while reducing brittle widths. */
 .shell {
@@ -571,29 +570,29 @@
   }
 
   /* Migration preview remains readable inside the mobile settings sheet. */
-  .migration-heading-v19,
-  .migration-source-v19,
-  .migration-plan-head-v19 {
+  .migration-heading,
+  .migration-source,
+  .migration-plan-head {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .migration-source-v19 label {
+  .migration-source label {
     display: grid;
     grid-template-columns: 1fr;
     min-width: 0;
   }
 
-  .migration-source-v19 input[type="file"] {
+  .migration-source input[type="file"] {
     max-width: none;
   }
 
-  .migration-source-summary-v19,
-  .migration-grid-v19 {
+  .migration-source-summary,
+  .migration-grid {
     grid-template-columns: 1fr;
   }
 
-  .migration-actions-v19 .primary {
+  .migration-actions .primary {
     width: 100%;
     min-height: 44px;
   }
@@ -608,9 +607,7 @@
   }
 }
 
-/* V0.21.0 Desktop Business UI
-   Desktop-only presentation layer. Tablet/Mobile remain on the V0.20 adaptive layers.
-   The existing income/expense segmented control is intentionally inherited unchanged. */
+/* Desktop business presentation using the shared accounting controls. */
 
 @media (min-width: 1024px) {
   :root {
@@ -2875,7 +2872,6 @@
   }
 
   /* The desktop confirmation workspace is intentionally absent on phone. */
-  #confirmationToggle,
   .confirmation-edge-open,
   .confirmation-drawer,
   .confirmation-drawer-collapse,
@@ -2945,9 +2941,9 @@
   }
 }
 
-/* Desktop isolation hotfix after the phone-first Build 10 layer. */
+/* Desktop isolation for mobile-only controls. */
 
-/* Build 10 creates mobile-only controls in the DOM. They must never participate in Tablet/Desktop layout. */
+/* Mobile-only controls must never participate in Tablet/Desktop layout. */
 @media (min-width: 768px) {
   #mobileAccountMenuButton,
   #mobileAccountMenu,
@@ -4245,8 +4241,7 @@
   }
 }
 
-/* V0.20.1 Adaptive UI Phase 2 refinement.
-   Presentation-only: preserve accounting/API/backup/identity behavior. */
+/* Mobile adaptive presentation refinement. */
 
 @media (max-width: 767px) {
   /* Compact header: keep identity/status visible without consuming a large first screen. */
@@ -6225,7 +6220,7 @@
     font-weight: 600;
   }
 
-  /* Build 3 accidentally forced Data Management visible on every tab. */
+  /* Data Management is visible only on its active settings tab. */
   .settings-pane.cy-data-pane {
     display: none;
   }
@@ -6242,8 +6237,8 @@
   #backupHeadingHint,
   .backup-security-note,
   .backup-restore-note,
-  .migration-heading-v19 .hint,
-  .migration-privacy-v19,
+  .migration-heading .hint,
+  .migration-privacy,
   .cy-data-section > p {
     display: none !important;
   }
@@ -7614,7 +7609,7 @@
   }
 }
 
-/* V0.21.1 patch - UI consistency, managed dialogs and deterministic desktop managers. */
+/* Managed dialogs and deterministic desktop manager presentation. */
 
 .cy-confirm-dialog {
   width: min(380px, calc(100vw - 28px));
@@ -8746,8 +8741,7 @@
 }
 
 
-/* V0.21.8 mobile refinement: fill entry canvas, block ledger interaction while loading,
-   and let the opening-balance dialog size to its actual row count. */
+/* Mobile entry canvas, ledger loading interaction and opening-balance sizing. */
 @media (max-width: 767px) {
   body.cy-mobile-app,
   body.cy-mobile-app .shell {
@@ -9063,7 +9057,7 @@
 }
 
 
-/* V0.21.9 mobile utility consolidation. */
+/* Mobile utility presentation. */
 @media (max-width: 767px) {
   html.mobile-entry-income-canvas,
   html.mobile-entry-income-canvas body.cy-mobile-app,
@@ -9888,7 +9882,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-date-mobile { disp
 html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-card .section-title { margin-bottom: 8px !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .quick-tool-label { white-space: nowrap; font-size: 13px !important; }
 
-/* V0.22.2 Build 2 - tablet landscape refinement only. */
+/* Tablet landscape presentation refinement. */
 html[data-tablet-layout="landscape"] .shell.cy-split-layout { grid-template-columns: minmax(280px, 31%) minmax(0, 1fr) !important; }
 html[data-tablet-layout="landscape"] .tablet-entry-controls,
 html[data-tablet-layout="landscape"] .confirmation-edge-open { display: none !important; }

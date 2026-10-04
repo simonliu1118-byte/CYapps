@@ -258,7 +258,7 @@ assert.equal('maskedEmail' in recovery.recovery, false);
 const workerSource = fs.readFileSync(path.join(ROOT, 'src/app.js'), 'utf8');
 assert.doesNotMatch(workerSource, /web_sessions/);
 assert.match(workerSource, /identity-adapter|resolveIdentitySession/);
-assert.doesNotMatch(workerSource, /app-v17|app-v18|app-v19|handleV\d+Api/);
+assert.doesNotMatch(workerSource, /app-v\d+|handleV\d+Api/);
 
 const indexHtml = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
 const loginHtml = fs.readFileSync(path.join(ROOT, 'public/login.html'), 'utf8');
@@ -289,7 +289,7 @@ assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-templat
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(adaptiveUi, /MutationObserver/);
 assert.doesNotMatch(adaptiveUi, /querySelector\(['"]\.version['"]\)|CY_[A-Z0-9_]*VERSION|(?:sync|enforce)[A-Za-z0-9_]*Version/);
-assert.match(indexHtml, /<span class="version">V0\.22\.7 Build 0<\/span>/);
+assert.match(indexHtml, /<span class="version">V0\.22\.8 Build 0<\/span>/);
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)

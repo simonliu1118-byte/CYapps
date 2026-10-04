@@ -61,20 +61,20 @@ const prepareCountAfterBuild = prepareCount;
 
 assert(Object.isFrozen(backupSet), 'BackupSet should be immutable at the outer object boundary');
 assert(backupSet.backupId === '20260926T033000Z', 'backupId changed unexpectedly');
-assert(backupSet.manifest.format === 'CYAccountingWebBackupSet', 'accepted V0.17 format must not change in Phase B');
-assert(backupSet.manifest.formatVersion === 2, 'accepted V0.17 formatVersion must remain 2 in Phase B');
-assert(backupSet.manifest.app === 'CYAccountingWeb', 'accepted V0.17 app marker changed');
-assert(backupSet.dataKey === 'CYAccountingWeb/20260926T033000Z/data.json', 'V0.17 data key changed');
-assert(backupSet.manifestKey === 'CYAccountingWeb/20260926T033000Z/manifest.json', 'V0.17 manifest key changed');
+assert(backupSet.manifest.format === 'CYAccountingWebBackupSet', 'accepted backup format v2 must not change in Phase B');
+assert(backupSet.manifest.formatVersion === 2, 'accepted backup format v2Version must remain 2 in Phase B');
+assert(backupSet.manifest.app === 'CYAccountingWeb', 'accepted backup app marker changed');
+assert(backupSet.dataKey === 'CYAccountingWeb/20260926T033000Z/data.json', 'backup format v2 data key changed');
+assert(backupSet.manifestKey === 'CYAccountingWeb/20260926T033000Z/manifest.json', 'backup format v2 manifest key changed');
 
 const compatibility = await validateBackupSetBytes(
   backupSet.manifestBytes,
   backupSet.dataBytes,
   backupSet.backupId
 );
-assert(compatibility.backupId === backupSet.backupId, 'V0.17 compatibility reader backupId mismatch');
-assert(compatibility.dataSha256 === backupSet.dataSha256, 'V0.17 compatibility reader SHA mismatch');
-assert(compatibility.totalRowCount === backupSet.totalRowCount, 'V0.17 compatibility reader count mismatch');
+assert(compatibility.backupId === backupSet.backupId, 'backup format v2 compatibility reader backupId mismatch');
+assert(compatibility.dataSha256 === backupSet.dataSha256, 'backup format v2 compatibility reader SHA mismatch');
+assert(compatibility.totalRowCount === backupSet.totalRowCount, 'backup format v2 compatibility reader count mismatch');
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();

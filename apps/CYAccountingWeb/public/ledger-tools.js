@@ -9,19 +9,19 @@ window.cyLedgerBalanceBreakdowns = new Map();
 window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender;
 window.cyaccRenderLedgerMessage = renderLedgerMessage;
 
-let cyV06Started = false;
+let cyLedgerToolsStarted = false;
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startV06LedgerTools, { once: true });
+  document.addEventListener('DOMContentLoaded', startLedgerTools, { once: true });
 } else {
-  startV06LedgerTools();
+  startLedgerTools();
 }
-window.addEventListener('load', startV06LedgerTools, { once: true });
+window.addEventListener('load', startLedgerTools, { once: true });
 
-function startV06LedgerTools() {
-  if (cyV06Started) return;
+function startLedgerTools() {
+  if (cyLedgerToolsStarted) return;
   if (!document.querySelector('.ledger-card') || !document.querySelector('#monthFilter')) return;
-  cyV06Started = true;
+  cyLedgerToolsStarted = true;
   setupLedgerToolbar();
   bindLedgerToolbar();
 }
@@ -273,7 +273,6 @@ function renderDesktopLedger() {
   els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
   const display = document.querySelector('#ledgerDisplayMonth');
   if (display) display.textContent = `目前顯示｜${month.replace('-', '/')}`;
-  updateLedgerGroupButton();
   updateLedgerHeader();
 
   if (!visible.length) {
@@ -393,17 +392,11 @@ function updateLedgerHeader() {
   if (!row) return;
   const accountLabel = cyLedgerGroupByAccount ? '帳戶 ▲' : '帳戶';
   const accountTitle = cyLedgerGroupByAccount ? '點擊取消帳戶排列' : '點擊依帳戶排列';
-  row.innerHTML = `<th>日期</th><th id="ledgerAccountHeader" class="ledger-account-header${cyLedgerGroupByAccount ? ' v21-account-group-active' : ''}" title="${accountTitle}" aria-pressed="${cyLedgerGroupByAccount ? 'true' : 'false'}">${accountLabel}</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="num">餘額</th><th class="action-col">操作</th>`;
+  row.innerHTML = `<th>日期</th><th id="ledgerAccountHeader" class="ledger-account-header${cyLedgerGroupByAccount ? ' cy-account-group-active' : ''}" title="${accountTitle}" aria-pressed="${cyLedgerGroupByAccount ? 'true' : 'false'}">${accountLabel}</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="num">餘額</th><th class="action-col">操作</th>`;
   row.querySelector('#ledgerAccountHeader')?.addEventListener('click', () => {
     cyLedgerGroupByAccount = !cyLedgerGroupByAccount;
     renderDesktopLedger();
   });
-}
-
-function updateLedgerGroupButton() {
-  const button = document.querySelector('#ledgerGroupToggle');
-  if (!button) return;
-  button.remove();
 }
 
 function renderLedgerMessage(message, reason = 'status') {

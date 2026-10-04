@@ -1,6 +1,6 @@
 /* CYAccountingWeb quick entry settings styles functional module. */
 
-/* V0.11.0 desktop efficiency controls */
+/* Quick-entry settings presentation. */
 .quick-settings-grid {
   display: grid;
   grid-template-columns: minmax(220px, 1.4fr) minmax(150px, .8fr) minmax(150px, .8fr);
