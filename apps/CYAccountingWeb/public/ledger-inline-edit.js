@@ -15,7 +15,7 @@ function setupInlineLedgerEditing() {
   const phone = window.matchMedia('(max-width: 767px)');
   phone.addEventListener?.('change', () => { if (phone.matches) cancelInlineLedgerEdit(true); });
 
-  document.querySelector('#ledgerDesktopTools')?.addEventListener('click', () => {
+  document.querySelector('#ledgerToolbar')?.addEventListener('click', () => {
     if (cyInlineLedgerEdit) cancelInlineLedgerEdit(true);
   }, true);
 }

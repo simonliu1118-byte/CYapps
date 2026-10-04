@@ -16,6 +16,10 @@ const ledgerTools = read('public/ledger-tools.js');
 const adaptiveUi = read('public/adaptive-ui.js');
 const quickEntry = read('public/quick-entry.js');
 const inlineEdit = read('public/ledger-inline-edit.js');
+const inputConfirmation = read('public/input-confirmation.js');
+const excelExportUi = read('public/excel-export-ui.js');
+const excelImportUi = read('public/excel-import-ui.js');
+const adaptiveCss = read('public/adaptive-ui.css');
 const files = fs.readdirSync(PUBLIC);
 const styles = [
   'app.css',
@@ -81,13 +85,29 @@ assert.match(ledgerTools, /window\.cyaccRenderLedgerMessage = renderLedgerMessag
 assert.match(ledgerTools, /new CustomEvent\('cyacc:ledger-rendered'/, 'canonical row writes must publish an explicit render lifecycle');
 assert.match(ledgerTools, /ledger-empty-state/, 'empty-state markup must be rendered by the canonical ledger renderer');
 assert.doesNotMatch(ledgerTools, /new MutationObserver/, 'ledger rows must not trigger a second refresh through MutationObserver');
-assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change'/, 'ledger tools must not own a second month-change refresh path');
+assert.match(ledgerTools, /monthFilter\?\.addEventListener\('change', syncLedgerMonthDisplay\)/, 'shared toolbar owns month presentation sync');
+assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change',\s*(?:loadLedgerOpeningAndRender|scheduleLedgerRefresh)/, 'ledger tools must not own a second month data-refresh path');
 assert.doesNotMatch(appJs, /function renderTransactions\(|transactionRows\.innerHTML/, 'app state owner must not keep a second transaction row renderer');
 assert.doesNotMatch(adaptiveUi, /setupV21LedgerEmptyState|setupV201MobileInlineEditVisibility/, 'adaptive UI must not post-process transaction rows through legacy observers');
 assert.match(quickEntry, /addEventListener\('cyacc:ledger-rendered', handleFastEntryLedgerRendered\)/, 'quick entry must subscribe to the explicit ledger lifecycle');
 assert.doesNotMatch(quickEntry, /observe\(els\.transactionRows|ledgerObserver/, 'quick entry must not infer lifecycle from transaction row DOM mutations');
 assert.match(inlineEdit, /els\.transactionRows\.addEventListener\('click'/, 'inline edit keeps normal delegated row interaction');
 assert.doesNotMatch(inlineEdit, /cyLedgerObserver|suspendLedgerRefreshObserver|resumeLedgerRefreshObserver/, 'inline edit must not coordinate with a hidden ledger DOM observer');
+assert.match(ledgerTools, /function setupLedgerToolbar\(\)/, 'ledger-tools must own one shared toolbar structure');
+assert.match(ledgerTools, /id="ledgerBalanceButton"[\s\S]*?id="ledgerPrevMonth"[\s\S]*?id="ledgerMonthSlot"[\s\S]*?id="ledgerNextMonth"[\s\S]*?id="ledgerMoreButton"/, 'shared month toolbar must contain the device-neutral controls');
+assert.match(ledgerTools, /id="ledgerOpeningBalanceButton"[\s\S]*?id="ledgerLockSettingsButton"/, 'opening and lock actions belong to the shared toolbar owner');
+assert.match(ledgerTools, /id="ledgerExcelExport"[\s\S]*?id="ledgerExcelExportStatus"/, 'export control belongs to the shared toolbar structure');
+assert.match(ledgerTools, /sheet\.id = 'ledgerToolsSheet'[\s\S]*?data-mobile-ledger-action="accounts"[\s\S]*?data-mobile-ledger-action="export"/, 'shared toolbar owns the compact utility menu');
+assert.match(ledgerTools, /function syncLedgerMonthDisplay\(\)/, 'shared toolbar owns the month display presenter');
+assert.doesNotMatch(adaptiveUi, /setupV21LedgerContext|setupMobileWorkspaceLedgerTools|setupTouchWorkspaceToolbar|setupTouchWorkspaceMonthDisplay|syncTouchWorkspaceMonthDisplay|moveImportButton/, 'adaptive UI must not create, move, retry or post-process ledger toolbar structure');
+assert.doesNotMatch(inputConfirmation, /setupV09OpeningBalanceAction/, 'opening balance must not have a second toolbar action owner');
+assert.match(excelExportUi, /querySelector\('#ledgerExcelExport'\)/, 'Excel export binds the shared toolbar control');
+assert.doesNotMatch(excelExportUi, /querySelector\('\.ledger-view-tools'\)|createElement\('button'\)/, 'Excel export must not create a second toolbar control');
+assert.match(excelImportUi, /querySelector\('#ledgerExcelImport'\)/, 'Excel import binds the settings-owned control directly');
+assert.doesNotMatch(excelImportUi, /querySelector\('\.ledger-view-tools'\)|createElement\('button'\)/, 'Excel import must not create a temporary ledger toolbar control');
+assert.match(adaptiveUi, /id="ledgerExcelImport"/, 'data settings directly owns the Excel import control');
+assert.match(inlineEdit, /querySelector\('#ledgerToolbar'\)/, 'inline edit observes the shared toolbar boundary');
+assert.doesNotMatch(adaptiveCss, /ledger-desktop-tools|ledger-period-tools|cy-toolbar-ready|mobileLedger(?:MoreButton|BalanceButton|ToolsSheet|ToolsBackdrop|MonthDisplay)/, 'toolbar CSS must consume the shared structure without historical desktop/mobile shells');
 
 assert.match(read('public/quick-entry-settings.js'), /setupQuickEntrySettingsPane/);
 const categoryManagement = read('public/category-management.js');
@@ -114,7 +134,7 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.match(html, /<span class="version">V0\.22\.6 Build 0<\/span>/, 'index.html must own the current visible version');
+assert.match(html, /<span class="version">V0\.22\.7 Build 0<\/span>/, 'index.html must own the current visible version');
 assert.match(appJs, /setLedgerLoadingState\(true\)/, 'month loading must expose an interaction-blocking busy state');
 assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingState\(false\)/, 'only the current month request may clear the busy state');
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');

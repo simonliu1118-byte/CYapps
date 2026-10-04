@@ -5,22 +5,10 @@ window.addEventListener('load', () => {
 });
 
 function setupMonthlyExcelExport() {
-  const tools = document.querySelector('.ledger-view-tools');
-  if (!tools || document.querySelector('#ledgerExcelExport')) return;
-
-  const button = document.createElement('button');
-  button.id = 'ledgerExcelExport';
-  button.className = 'secondary compact';
-  button.type = 'button';
-  button.textContent = '匯出 Excel';
-  button.title = '匯出目前月份完整帳簿（.xlsx）';
-
-  const status = document.createElement('span');
-  status.id = 'ledgerExcelExportStatus';
-  status.className = 'ledger-export-status';
-  status.setAttribute('aria-live', 'polite');
-
-  tools.prepend(button, status);
+  const button = document.querySelector('#ledgerExcelExport');
+  const status = document.querySelector('#ledgerExcelExportStatus');
+  if (!button || !status || button.dataset.excelExportBound === '1') return;
+  button.dataset.excelExportBound = '1';
   button.addEventListener('click', downloadMonthlyExcel);
 }
 

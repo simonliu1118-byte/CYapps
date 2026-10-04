@@ -22,44 +22,94 @@ function startV06LedgerTools() {
   if (cyV06Started) return;
   if (!document.querySelector('.ledger-card') || !document.querySelector('#monthFilter')) return;
   cyV06Started = true;
-  setupLedgerDesktopTools();
-  bindLedgerDesktopTools();
+  setupLedgerToolbar();
+  bindLedgerToolbar();
 }
 
-function setupLedgerDesktopTools() {
+function setupLedgerToolbar() {
   const card = document.querySelector('.ledger-card');
   const title = card?.querySelector('.ledger-title');
+  const titleMain = title?.firstElementChild;
   const monthPicker = title?.querySelector('.month-picker');
-  if (!card || !title || !monthPicker || document.querySelector('#ledgerDesktopTools')) return;
+  const summary = document.querySelector('#monthSummary');
+  if (!card || !title || !titleMain || !monthPicker || !summary || document.querySelector('#ledgerToolbar')) return;
 
-  const tools = document.createElement('div');
-  tools.id = 'ledgerDesktopTools';
-  tools.className = 'ledger-desktop-tools';
-  tools.innerHTML = `
-    <div class="ledger-period-tools">
-      <div class="ledger-month-tools">
-        <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月">‹</button>
-        <div id="ledgerMonthSlot"></div>
-        <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>
-        <span id="ledgerDisplayMonth" class="ledger-display-month"></span>
-      </div>
-      <button id="ledgerOpeningBalanceButton" class="secondary compact ledger-tool-button emphasis" type="button">期初餘額</button>
-    </div>
+  const context = document.createElement('div');
+  context.className = 'cy-ledger-context';
+  context.innerHTML = `
+    <div class="ledger-month-tools">
+      <button id="ledgerBalanceButton" class="secondary compact cy-ledger-balance-button" type="button">餘額</button>
+      <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月">‹</button>
+      <div id="ledgerMonthSlot"><span id="ledgerMonthDisplay" class="cy-mobile-month-display" aria-hidden="true"></span></div>
+      <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>
+      <button id="ledgerMoreButton" class="secondary compact cy-ledger-more-button" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
+      <span id="ledgerDisplayMonth" class="ledger-display-month"></span>
+    </div>`;
+  titleMain.insertBefore(context, summary);
+  context.querySelector('#ledgerMonthSlot')?.prepend(monthPicker);
+
+  const summaryBar = document.createElement('div');
+  summaryBar.className = 'cy-ledger-summary-bar';
+  summaryBar.append(summary);
+
+  const summaryActions = document.createElement('div');
+  summaryActions.className = 'cy-summary-actions';
+  summaryActions.innerHTML = `
+    <button id="ledgerOpeningBalanceButton" class="secondary compact ledger-tool-button emphasis" type="button">期初餘額</button>
+    <button id="ledgerLockSettingsButton" class="secondary compact" type="button" title="開啟月份鎖帳設定">鎖定月份</button>`;
+  summaryBar.append(summaryActions);
+  context.insertAdjacentElement('afterend', summaryBar);
+
+  const toolbar = document.createElement('div');
+  toolbar.id = 'ledgerToolbar';
+  toolbar.className = 'ledger-toolbar';
+  toolbar.innerHTML = `
     <form id="ledgerSearchForm" class="ledger-search" role="search">
       <span class="ledger-search-icon" aria-hidden="true">⌕</span>
       <input id="ledgerSummarySearch" type="search" maxlength="100" placeholder="搜尋摘要" autocomplete="off" inputmode="search" enterkeyhint="search">
       <button class="secondary compact ledger-search-submit" type="submit">搜尋</button>
       <button id="ledgerSearchClear" class="secondary compact" type="button" aria-label="清除搜尋"><span class="ledger-search-clear-desktop">清除</span><span class="ledger-search-clear-mobile" aria-hidden="true">×</span></button>
     </form>
-    <div class="ledger-view-tools"></div>
-  `;
-  title.insertAdjacentElement('afterend', tools);
-  document.querySelector('#ledgerMonthSlot')?.append(monthPicker);
+    <div class="ledger-view-tools">
+      <button id="ledgerExcelExport" class="secondary compact" type="button" title="匯出目前月份完整帳簿（.xlsx）">匯出 Excel</button>
+      <span id="ledgerExcelExportStatus" class="ledger-export-status" aria-live="polite"></span>
+    </div>`;
+  title.insertAdjacentElement('afterend', toolbar);
+
+  setupLedgerUtilityMenu();
+  syncLedgerMonthDisplay();
 }
 
-function bindLedgerDesktopTools() {
+function setupLedgerUtilityMenu() {
+  if (document.querySelector('#ledgerToolsSheet')) return;
+
+  const backdrop = document.createElement('button');
+  backdrop.id = 'ledgerToolsBackdrop';
+  backdrop.className = 'cy-mobile-sheet-backdrop';
+  backdrop.type = 'button';
+  backdrop.setAttribute('aria-label', '關閉記帳工具');
+  backdrop.hidden = true;
+
+  const sheet = document.createElement('section');
+  sheet.id = 'ledgerToolsSheet';
+  sheet.className = 'cy-mobile-tools-sheet';
+  sheet.hidden = true;
+  sheet.innerHTML = `
+    <div class="cy-mobile-sheet-handle" aria-hidden="true"></div>
+    <h3>更多</h3>
+    <button type="button" data-mobile-ledger-action="accounts">帳戶設定</button>
+    <button type="button" data-mobile-ledger-action="categories">科目設定</button>
+    <button type="button" data-mobile-ledger-action="lock">月份鎖帳</button>
+    <button type="button" data-mobile-ledger-action="export">匯出 Excel</button>
+    <button type="button" class="secondary" data-mobile-ledger-action="close">取消</button>`;
+
+  document.body.append(backdrop, sheet);
+}
+
+function bindLedgerToolbar() {
   document.querySelector('#ledgerPrevMonth')?.addEventListener('click', () => moveLedgerMonth(-1));
   document.querySelector('#ledgerNextMonth')?.addEventListener('click', () => moveLedgerMonth(1));
+  els.monthFilter?.addEventListener('change', syncLedgerMonthDisplay);
   document.querySelector('#ledgerSearchForm')?.addEventListener('submit', event => {
     event.preventDefault();
     cyLedgerSearch = document.querySelector('#ledgerSummarySearch')?.value.trim() || '';
@@ -71,9 +121,93 @@ function bindLedgerDesktopTools() {
     cyLedgerSearch = '';
     renderDesktopLedger();
   });
+
+  document.querySelector('#ledgerOpeningBalanceButton')?.addEventListener('click', async () => {
+    const dialog = document.querySelector('#openingDialog');
+    if (!dialog) return;
+    if (els.openingMonth && els.monthFilter?.value) els.openingMonth.value = els.monthFilter.value;
+    if (els.openingMessage) setDialogMessage(els.openingMessage, '');
+    dialog.showModal();
+    await loadOpeningBalances();
+  });
+
+  document.querySelector('#ledgerLockSettingsButton')?.addEventListener('click', () => {
+    if (typeof openSettings === 'function') openSettings();
+    if (typeof setSettingsTab === 'function') setSettingsTab('lock');
+    setTimeout(() => document.querySelector('#lockedThrough')?.focus(), 0);
+  });
+
+  document.querySelector('#ledgerBalanceButton')?.addEventListener('click', () => {
+    if (typeof window.cyOpenMobileLedgerOpening === 'function') window.cyOpenMobileLedgerOpening();
+    else document.querySelector('#ledgerOpeningBalanceButton')?.click();
+  });
+
+  const more = document.querySelector('#ledgerMoreButton');
+  const backdrop = document.querySelector('#ledgerToolsBackdrop');
+  const sheet = document.querySelector('#ledgerToolsSheet');
+  if (!more || !backdrop || !sheet) return;
+
+  const close = () => {
+    sheet.hidden = true;
+    backdrop.hidden = true;
+    more.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('cy-mobile-ledger-tools-open');
+  };
+  const open = () => {
+    sheet.hidden = false;
+    backdrop.hidden = false;
+    more.setAttribute('aria-expanded', 'true');
+    document.body.classList.add('cy-mobile-ledger-tools-open');
+  };
+
+  more.addEventListener('click', open);
+  backdrop.addEventListener('click', close);
+  sheet.addEventListener('click', event => {
+    const action = event.target.closest('[data-mobile-ledger-action]')?.dataset.mobileLedgerAction;
+    if (!action) return;
+    if (action === 'close') {
+      close();
+      return;
+    }
+    close();
+    if (action === 'accounts') {
+      if (typeof window.cyOpenMobileSettingsPane === 'function') window.cyOpenMobileSettingsPane('accounts');
+      else {
+        if (typeof openSettings === 'function') openSettings();
+        if (typeof setSettingsTab === 'function') setSettingsTab('accounts');
+      }
+    }
+    if (action === 'categories') {
+      if (typeof window.cyOpenMobileSettingsPane === 'function') window.cyOpenMobileSettingsPane('categories');
+      else {
+        if (typeof openSettings === 'function') openSettings();
+        if (typeof setSettingsTab === 'function') setSettingsTab('categories');
+      }
+    }
+    if (action === 'lock') {
+      if (typeof window.cyOpenMobileLedgerLock === 'function') window.cyOpenMobileLedgerLock();
+      else document.querySelector('#ledgerLockSettingsButton')?.click();
+    }
+    if (action === 'export') document.querySelector('#ledgerExcelExport')?.click();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || sheet.hidden) return;
+    close();
+    more.focus();
+  });
 }
 
-function scheduleLedgerDesktopRefresh() {
+function syncLedgerMonthDisplay() {
+  const display = document.querySelector('#ledgerMonthDisplay');
+  const value = String(els.monthFilter?.value || '');
+  if (!display) return;
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  display.textContent = match ? `${Number(match[1])}年${Number(match[2])}月` : '選擇月份';
+}
+
+window.cySyncLedgerMonthDisplay = syncLedgerMonthDisplay;
+
+function scheduleLedgerRefresh() {
   void loadLedgerOpeningAndRender();
 }
 

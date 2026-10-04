@@ -243,7 +243,6 @@ const CY_CONFIRMATION_DRAWER_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 window.addEventListener('load', () => {
   setupV09EntryKindSwitch();
   setupV09ConfirmationEdgeControls();
-  setupV09OpeningBalanceAction();
 });
 
 function setupV09EntryKindSwitch() {
@@ -303,19 +302,6 @@ function syncV09ConfirmationCount() {
   if (!badge) return;
   badge.textContent = String(count);
   badge.classList.toggle('has-items', count > 0);
-}
-
-function setupV09OpeningBalanceAction() {
-  const button = document.querySelector('#ledgerOpeningBalanceButton');
-  const dialog = document.querySelector('#openingDialog');
-  if (!button || !dialog) return;
-
-  button.addEventListener('click', async () => {
-    if (els.openingMonth && els.monthFilter?.value) els.openingMonth.value = els.monthFilter.value;
-    if (els.openingMessage) setDialogMessage(els.openingMessage, '');
-    dialog.showModal();
-    await loadOpeningBalances();
-  });
 }
 
 window.addEventListener('load', () => {
