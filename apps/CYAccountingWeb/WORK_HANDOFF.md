@@ -6,8 +6,8 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.11 Build 0**；main `a01d9a911c153ffd26ac9580a8ed30be94582a4f`，PR #311 已合併 |
-| Production Deploy | CYAccountingWeb Validate and Deploy **#431**（run `37211548340`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.13 Build 0**；功能 baseline `38f2951d1f1c19ab1ba2440a17a1e55aa2692c26`，PR #314 已合併 |
+| Production Deploy | CYAccountingWeb Validate and Deploy **#440**（run `37217573390`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.0**，tag `cyaccountingweb-v0.22.0`；網站部署與 GitHub Release 仍分離 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.28**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
@@ -23,6 +23,8 @@
 - **V0.22.9**：手機新增記帳預設改為收入；手機日期畫面固定 `YYYY/MM/DD`，資料 contract 仍為 `YYYY-MM-DD`；常用摘要改走明確 bootstrap lifecycle，移除重複 API owner。
 - **V0.22.10**：先以 shared Ledger renderer 導入帳戶顏色辨識。
 - **V0.22.11**：配色升級為正式帳戶色號 lifecycle，新增 `accounts.color_slot` 與 schema 7；改名／排序／封存／解封不換色，永久刪除後才釋出，新帳戶優先取得最小空 slot。1–20 淡色深字、21–40 對應深色淺字，41 起每 40 個循環；不改 ledger 欄寬。
+- **V0.22.12**：手機「更多」新增 SUPER_ADMIN-only 唯讀備份資訊，共用既有 `/api/backup/status` 與 Backup UI model；Ledger message row 從 transaction-card presentation 分離；Backup UI 移除函式覆寫 patch chain。
+- **V0.22.13**：iPhone 實機返修。手機記帳日期撤回自製 `YYYY/MM/DD` overlay，恢復原生 `type=date`；恢復新增「儲存／清空」與編輯「儲存修改／取消」，取消沿用既有 return context 回原月份／原位置；空月份提示置中且無底線；帳戶／科目增加小幅間距；備份資訊移除多餘說明文字。
 
 完整版本歷史見 `CHANGELOG.md`。
 
@@ -63,17 +65,18 @@
 
 ## 跨裝置現況
 
-- **手機**：新增／看帳兩頁；新增預設收入；日期視覺 `YYYY/MM/DD`；交易滑出後再點編輯／刪除；共用 `餘額／更多`、設定與 canonical writer。
+- **手機**：新增／看帳兩頁；新增預設收入；日期使用原生 `type=date`；新增為「儲存／清空」、編輯為「儲存修改／取消」且取消回原 ledger context；交易滑出後再點編輯／刪除；`更多` 中 SUPER_ADMIN 可查看唯讀備份資訊；共用 `餘額／更多`、設定與 canonical writer。
 - **平板**：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail；日期／月份與手機共用 touch/native owner，不建立平板第二套資料 state 或 writer。
 - **桌機**：保留鍵盤高效率輸入、inline edit 與桌面 layout。
 - 所有裝置共用 CYID、Role/App Access、Worker API、D1、期初計算、transaction mutation、帳戶色號與 server authorization。RWD 只負責 presentation。
 
 ## 已確認驗證
 
-V0.22.11 PR #311 head 的 CYAccountingWeb Validate and Deploy #430：validate 成功；Governance Check #1009 成功。合併 main 後 Production run #431：validate 與 deploy 均成功，包含：
+V0.22.13 PR #314 的 Governance Check #1015 與 CYAccountingWeb Validate and Deploy #439 均成功。合併功能 baseline `38f2951d1f1c19ab1ba2440a17a1e55aa2692c26` 後，Production run #440（`37217573390`）validate 與 deploy 全部成功，包含：
 
 - JavaScript syntax；
 - application tests；
+- mobile native-date / 清空取消 / ledger-message regression；
 - D1 migrations local validation；
 - Worker dry-run；
 - production D1 migration；

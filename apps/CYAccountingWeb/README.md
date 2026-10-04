@@ -9,8 +9,8 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.11 Build 0**；main `a01d9a911c153ffd26ac9580a8ed30be94582a4f`，PR #311 |
-| 正式部署 | CYAccountingWeb Validate and Deploy **#431**（run `37211548340`）成功；schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
+| 正式版本 | **V0.22.13 Build 0**；功能 baseline `38f2951d1f1c19ab1ba2440a17a1e55aa2692c26`，PR #314 |
+| 正式部署 | CYAccountingWeb Validate and Deploy **#440**（run `37217573390`）成功；schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
 | 公開穩定 Release | **V0.22.0**，tag `cyaccountingweb-v0.22.0`；公開 Release 與網站部署分開 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
@@ -51,8 +51,11 @@ SUPER_ADMIN 永久刪除條件為已封存、無交易、最新有效期初為�
 ### 手機
 
 - 新增記帳登入後預設為**收入**。
-- 日期保留原生 date picker，但畫面固定顯示 `YYYY/MM/DD`；API／DB 資料仍為 `YYYY-MM-DD`。
+- 日期使用瀏覽器／作業系統原生 `type=date` 顯示與 picker；不再疊加自製 `YYYY/MM/DD` 顯示遮罩。API／DB 資料仍為 `YYYY-MM-DD`。
+- 新增狀態保留「儲存／清空」；從看帳進入編輯後改為「儲存修改／取消」，取消會回到原月份與原看帳位置。
 - 常用科目與常用摘要透過明確 bootstrap/lifecycle 準備，不再靠連線文字 MutationObserver 延遲補載。
+- 看帳交易維持單列高密度；帳戶色塊與科目保留小幅視覺間距，空月份只顯示置中的「本月尚無記帳資料。」。
+- 「更多」中的備份資訊只對 SUPER_ADMIN 顯示，且為唯讀狀態資訊；不提供手機端備份／復原 mutation。
 - 保留新增／看帳兩頁、滑出後再點的編輯／刪除、共用彈窗及 `餘額／更多`。
 - 收支畫布維持純色收入 `#f4fbf6`、支出 `#fff6f5`。
 
