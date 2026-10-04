@@ -79,7 +79,13 @@ assert.doesNotMatch(ledgerTools, /new MutationObserver/, 'ledger rows must not t
 assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change'/, 'ledger tools must not own a second month-change refresh path');
 
 assert.match(read('public/quick-entry-settings.js'), /setupQuickEntrySettingsPane/);
-assert.match(read('public/category-management.js'), /setupCategoryTransfer/);
+const categoryManagement = read('public/category-management.js');
+const quickEntrySettings = read('public/quick-entry-settings.js');
+assert.doesNotMatch(categoryManagement, /setupCategoryTransfer|injectCategoryTransferButtons|data-category-transfer/, 'category manager must not be post-processed by a second transfer owner');
+assert.doesNotMatch(quickEntrySettings, /setupOrderingControls|injectAccountOrderButtons|injectCategoryOrderButtons|handleOrderingAction/, 'settings ordering must not be post-processed by a second owner');
+assert.match(adaptiveUi, /let settingsManagerInitialized = false/, 'settings manager must own a single lifecycle');
+assert.match(adaptiveUi, /document\.addEventListener\('DOMContentLoaded', setupSettingsManager, \{ once: true \}\)/, 'settings manager initializes once at DOM readiness');
+assert.doesNotMatch(adaptiveUi, /setTimeout\(setupSettingsManager|addEventListener\('load',[^\n]*setupSettingsManager/, 'settings manager must not use retry or load-time rebinding');
 assert.match(read('public/excel-export-ui.js'), /downloadMonthlyExcel/);
 assert.match(read('public/ledger-inline-edit.js'), /beginInlineLedgerEdit/);
 assert.match(read('public/excel-import-ui.js'), /setupExcelImport/);
