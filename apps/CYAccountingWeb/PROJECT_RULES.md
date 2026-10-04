@@ -81,3 +81,32 @@
 - 高風險行為可以等待 server 成功後再呈現最終狀態，並依既有 confirmation／authorization 規則執行；不得為追求即時感而犧牲資料完整性或安全性。
 - Desktop／Tablet／Mobile 對同一 business mutation 應共用相同 optimistic／high-risk 判斷與 rollback 語意；RWD 只改 presentation，不得讓不同 breakpoint 各自形成不同資料寫入時序規則。
 
+## 9. Canonical owner 地圖與專案架構邊界
+
+本節把共通規則的 Canonical Owner 原則具體套用到 CYAccountingWeb。它描述目前正式主路徑，不是要求永遠不能重構；若 owner 必須改變，應以明確架構 PR 完成替換、移除舊路徑、更新本節與 architecture regression tests，不得在一般 Bug/UI PR 中默默增加第二 owner。
+
+### 9.1 Backend／domain owner
+
+- CYID consumer transport、Session resolve／login／logout／recovery adapter：`src/identity-adapter.js`；CYACC Worker route、server-side accounting authorization 與 HTTP/API orchestration：`src/app.js`。不得建立第二套 app-local Identity authority。
+- 期初餘額計算與 carry-forward snapshot：`src/opening-balances.js`。帳本顯示、Excel 與人工調整不得自行重算另一套財務語意。
+- 帳戶封存／解封／永久刪除 domain rule：`src/account-lifecycle.js`；前端只呈現能力與呼叫 canonical API，不得複製刪除 eligibility。
+- Backup：`src/backup-package.js` → `src/backup-service.js` → storage provider adapters；provider 差異不得複製 package／business semantics。
+- Desktop SQLite migration：資料解析／normalization 使用 `src/desktop-migration-core.js`，server migration orchestration 使用 `src/desktop-migration.js`；SQLite schema version 是來源資料 contract，不是 application version shell。
+
+### 9.2 Frontend owner
+
+- Transaction state、month load、canonical transaction mutation／optimistic rollback orchestration：`public/app.js`。
+- Ledger transaction rows 的 canonical renderer、row-write lifecycle，以及 Ledger Toolbar structure/action owner：`public/ledger-tools.js`。`#transactionRows` 不得再出現第二 renderer；Toolbar 不得由 Adaptive/Mobile/Tablet 模組事後建立、搬移或改造。
+- Ledger inline edit：`public/ledger-inline-edit.js` 只負責 inline-edit presentation／interaction，資料提交必須委派 canonical transaction mutation path，不得自行形成第二 writer。
+- Quick-entry：`public/quick-entry.js` 只負責快速輸入／建議相關 presentation 與 lifecycle consumption，不得成為第二 transaction-row renderer 或用 DOM observer 猜測 ledger render 完成。
+- Settings account/category UI 的單一 lifecycle／renderer/action surface：`public/adaptive-ui.js` 的 `window.cySettingsManager`；`public/quick-entry-settings.js`、`public/category-management.js` 提供其專責能力，不得以 injector／observer 再建立第二 Settings renderer/action owner。
+- Device adaptation／RWD presentation：`public/adaptive-ui.js`。它可以調整 layout、native picker、gesture 與 Mobile／Tablet／Desktop presentation，但不得複製 transaction/settings/identity/business owner。
+- Input confirmation drawer：`public/input-confirmation.js`。不得再採「先建立舊控制 → 後層刪除／替換／polish」的 patch chain。
+- Excel export/import、Backup、Desktop Migration 各自的 UI module 只綁自己正式 surface／capability；不得先在其他 component 建臨時按鈕再搬家。
+
+### 9.3 修改與例外
+
+- 觸及上述 concern 前，先確認既有 owner；若修正需要新增第二 renderer／writer、app-owned DOM MutationObserver、retry bootstrap、DOM relocation、compatibility wrapper 或 breakpoint-specific business component，直接套用根 `REPOSITORY_RULES.md` 的 Architecture Review Trigger，不得先做再補理由。
+- CYACC 目前**沒有核准任何永久性的第二 business/data owner 或 patch-on-patch 例外**。日後發現的既有 legacy observer／wrapper／retry 不因本規則生效而自動取得 grandfathered 合法身分；觸及該 concern 時應重新判斷並優先收斂。
+- 合理且可長期保留的 version contract 包含：CYID consumer/API contract、D1 schema／migration、backup/file-format version、Desktop SQLite source schema、正式 `VERSION`／`BUILD`。這些不得因「去版本殼」而誤刪；但 application release number 不得重新成為 runtime function/class/module/cache revision 的架構邊界。
+- Architecture regression tests 應保護上述 ownership contract；不要以全面禁止 `MutationObserver`、`setTimeout`、fallback、device-specific presentation 或 `!important` 代替真正的 owner 檢查。
