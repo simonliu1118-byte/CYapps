@@ -4560,7 +4560,13 @@ function syncTabletPickerOwnership(orientation) {
 
   const slot = document.querySelector('#ledgerMonthSlot');
   if (tablet && orientation === 'landscape') {
-    setupTouchWorkspaceMonthDisplay(slot);
+    if (slot) setupTouchWorkspaceMonthDisplay(slot);
+    else window.setTimeout(() => {
+      if (isTabletWorkspace() && tabletWorkspaceOrientation() === 'landscape') {
+        const readySlot = document.querySelector('#ledgerMonthSlot');
+        if (readySlot) setupTouchWorkspaceMonthDisplay(readySlot);
+      }
+    }, 60);
   } else if (tablet) {
     document.querySelector('#mobileLedgerMonthDisplay')?.remove();
   }
