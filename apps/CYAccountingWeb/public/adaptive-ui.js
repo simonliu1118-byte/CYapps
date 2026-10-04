@@ -1,26 +1,31 @@
 /* CYAccountingWeb adaptive UI functional module. */
 
-const CY_V20_MOBILE_CONFIRMATION_INIT = 'cyaccounting.v20.mobileConfirmationInitialized';
-let cyV20Started = false;
+let cyAdaptiveUiStarted = false;
+const CY_ADAPTIVE_SPLIT_MEDIA = '(min-width: 1360px)';
+const CY_ADAPTIVE_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startV20, { once: true });
+  document.addEventListener('DOMContentLoaded', startAdaptiveUi, { once: true });
 } else {
-  startV20();
+  startAdaptiveUi();
 }
-window.addEventListener('load', startV20, { once: true });
+window.addEventListener('load', startAdaptiveUi, { once: true });
 
-function startV20() {
-  if (cyV20Started) return;
-  cyV20Started = true;
-  setupV20ViewportState();
-  setupV20MobileConfirmationDefault();
-  setupV20SettingsTabVisibility();
+function startAdaptiveUi() {
+  if (cyAdaptiveUiStarted) return;
+  cyAdaptiveUiStarted = true;
+  setupAdaptiveViewportState();
+  setupMobileSettingsTabVisibility();
+  updateAdaptiveKeyboardHint();
+  setupAdaptiveHeaderLayout();
+  setupAdaptiveSplitWorkspace();
+  setupAdaptiveEntryHelp();
+  setupAdaptiveDataSettings();
+  cleanupAdaptiveInterfaceCopy();
+  setupAdaptiveUserIdentity();
 }
 
-
-
-function setupV20ViewportState() {
+function setupAdaptiveViewportState() {
   const sync = () => {
     const width = window.innerWidth;
     document.documentElement.dataset.viewport = width < 768 ? 'mobile' : isTabletWorkspace() ? 'tablet' : 'desktop';
@@ -29,14 +34,7 @@ function setupV20ViewportState() {
   window.addEventListener('resize', sync, { passive: true });
 }
 
-function setupV20MobileConfirmationDefault() {
-  if (window.innerWidth >= 768) return;
-  if (localStorage.getItem(CY_V20_MOBILE_CONFIRMATION_INIT) === '1') return;
-  localStorage.setItem(CY_V20_MOBILE_CONFIRMATION_INIT, '1');
-  if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(false, false);
-}
-
-function setupV20SettingsTabVisibility() {
+function setupMobileSettingsTabVisibility() {
   const nav = document.querySelector('.settings-nav');
   if (!nav) return;
   nav.addEventListener('click', event => {
@@ -46,45 +44,13 @@ function setupV20SettingsTabVisibility() {
   });
 }
 
-const CY_V21_SPLIT_MEDIA = '(min-width: 1360px)';
-const CY_V21_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
-let cyV21Started = false;
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', startV21, { once: true });
-} else {
-  startV21();
-}
-window.addEventListener('load', startV21, { once: true });
-
-function startV21() {
-  if (cyV21Started) return;
-  cyV21Started = true;
-  updateV21KeyboardHint();
-  setupV21HeaderLayout();
-  setupV21DesktopSplitWorkspace();
-  setupV21EntryHelp();
-  setupV21LedgerHeaderDecoration();
-  setupV21ConfirmationCopy();
-  setupV21DataSettings();
-  cleanupV21InterfaceCopy();
-  setupV21UserIdentity();
-}
-
-
-
-
-
-
-
-
-function updateV21KeyboardHint() {
+function updateAdaptiveKeyboardHint() {
   const hint = document.querySelector('.keyboard-hint');
   if (!hint) return;
   hint.innerHTML = '鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　<kbd>Tab</kbd> 切換收入／支出　｜　日期可輸入 <kbd>0924</kbd> / <kbd>20260924</kbd>，<kbd>Ctrl</kbd>+<kbd>↑↓</kbd> ±1 天';
 }
 
-function setupV21HeaderLayout() {
+function setupAdaptiveHeaderLayout() {
   const topbar = document.querySelector('.topbar');
   const brand = topbar?.firstElementChild;
   const heading = brand?.querySelector('h1');
@@ -119,7 +85,7 @@ function setupV21HeaderLayout() {
   }
 }
 
-function setupV21EntryHelp() {
+function setupAdaptiveEntryHelp() {
   const card = document.querySelector('.entry-card');
   const title = card?.querySelector('.section-title .title-with-badge');
   const sectionTitle = card?.querySelector('.section-title');
@@ -172,45 +138,7 @@ function setupV21EntryHelp() {
   });
 }
 
-function setupV21LedgerHeaderDecoration() {
-  const head = document.querySelector('.ledger-card thead');
-  if (!head) return;
-  const decorate = () => {
-    const account = document.querySelector('#ledgerAccountHeader');
-    if (!account) return;
-    const active = typeof cyLedgerGroupByAccount !== 'undefined' && Boolean(cyLedgerGroupByAccount);
-    const nextText = active ? '帳戶 ▲' : '帳戶';
-    if (account.textContent !== nextText) account.textContent = nextText;
-    account.classList.toggle('cy-account-group-active', active);
-    account.setAttribute('aria-pressed', active ? 'true' : 'false');
-    account.title = active ? '點擊取消帳戶排列' : '點擊依帳戶排列';
-  };
-  decorate();
-  const observer = new MutationObserver(decorate);
-  observer.observe(head, { childList: true, subtree: true });
-}
-
-function setupV21ConfirmationCopy() {
-  const panel = document.querySelector('#inputConfirmationCard');
-  const heading = panel?.querySelector('h2');
-  const hint = panel?.querySelector('.section-title .hint');
-  const list = panel?.querySelector('#inputConfirmationList');
-  if (!panel) return;
-  if (heading) heading.textContent = '最近輸入';
-  if (hint) hint.textContent = '最近 10 筆';
-
-  const syncEmpty = () => {
-    const empty = list?.querySelector('.confirmation-empty');
-    if (empty && empty.textContent !== '本次尚無輸入紀錄。') empty.textContent = '本次尚無輸入紀錄。';
-  };
-  syncEmpty();
-  if (list) {
-    const observer = new MutationObserver(syncEmpty);
-    observer.observe(list, { childList: true, subtree: true });
-  }
-}
-
-function setupV21DataSettings() {
+function setupAdaptiveDataSettings() {
   const nav = document.querySelector('.settings-nav');
   const content = document.querySelector('.settings-content');
   if (!nav || !content || typeof setSettingsTab !== 'function') return;
@@ -237,7 +165,7 @@ function setupV21DataSettings() {
       <h3>資料管理</h3>
       <section class="cy-data-section">
         <h4>Excel 匯入</h4>
-        <div class="cy-data-actions" id="v21ExcelImportHost">
+        <div class="cy-data-actions" id="excelImportSettingsHost">
           <button id="ledgerExcelImport" class="secondary compact" type="button" title="匯入 .xlsx 記帳資料">匯入 Excel</button>
         </div>
       </section>`;
@@ -250,7 +178,7 @@ function setupV21DataSettings() {
   if (subtitle) subtitle.textContent = '';
 }
 
-function cleanupV21InterfaceCopy() {
+function cleanupAdaptiveInterfaceCopy() {
   const removeNoise = () => {
     const selectors = [
       '.auth-note',
@@ -265,8 +193,8 @@ function cleanupV21InterfaceCopy() {
       '#settingsDialog [data-settings-pane="backup"] #backupHeadingHint',
       '#settingsDialog [data-settings-pane="backup"] .backup-security-note',
       '#settingsDialog [data-settings-pane="backup"] .backup-restore-note',
-      '#settingsDialog [data-settings-pane="migration"] .migration-heading-v19 .hint',
-      '#settingsDialog [data-settings-pane="migration"] .migration-privacy-v19',
+      '#settingsDialog [data-settings-pane="migration"] .migration-heading .hint',
+      '#settingsDialog [data-settings-pane="migration"] .migration-privacy',
       '#openingDialog .opening-dialog-heading > .hint'
     ];
     for (const selector of selectors) {
@@ -282,7 +210,7 @@ function cleanupV21InterfaceCopy() {
   }
 }
 
-async function setupV21UserIdentity() {
+async function setupAdaptiveUserIdentity() {
   const target = document.querySelector('#currentUser');
   if (!target) return;
   let user = null;
@@ -293,8 +221,8 @@ async function setupV21UserIdentity() {
     const employeeNo = String(user.employeeNo || '').trim();
     const name = String(user.name || '').trim();
     const role = String(user.role || '').trim();
-    const roleLabel = v21RoleLabel(role);
-    target.innerHTML = `<span class="current-user-main">${v21EscapeHtml(`${employeeNo} ${name}`.trim())}</span><span class="current-user-role" title="權限組：${v21EscapeHtml(role || roleLabel)}">${v21EscapeHtml(roleLabel)}</span>`;
+    const roleLabel = adaptiveRoleLabel(role);
+    target.innerHTML = `<span class="current-user-main">${adaptiveEscapeHtml(`${employeeNo} ${name}`.trim())}</span><span class="current-user-role" title="權限組：${adaptiveEscapeHtml(role || roleLabel)}">${adaptiveEscapeHtml(roleLabel)}</span>`;
     target.classList.remove('hidden');
   };
 
@@ -311,13 +239,13 @@ async function setupV21UserIdentity() {
   }
 }
 
-function v21RoleLabel(role) {
+function adaptiveRoleLabel(role) {
   if (role === 'SUPER_ADMIN') return '超級管理員';
   if (role === 'ADMIN') return '管理員';
   return role || '一般使用者';
 }
 
-function v21EscapeHtml(value) {
+function adaptiveEscapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -326,15 +254,15 @@ function v21EscapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
-function setupV21DesktopSplitWorkspace() {
-  const media = window.matchMedia(CY_V21_SPLIT_MEDIA);
-  const sync = () => applyV21DesktopSplitWorkspace(media.matches);
+function setupAdaptiveSplitWorkspace() {
+  const media = window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA);
+  const sync = () => applyAdaptiveSplitWorkspace(media.matches);
   sync();
   if (typeof media.addEventListener === 'function') media.addEventListener('change', sync);
   else media.addListener?.(sync);
 }
 
-function applyV21DesktopSplitWorkspace(enabled) {
+function applyAdaptiveSplitWorkspace(enabled) {
   const tablet = isTabletWorkspace();
   enabled = enabled || tablet;
   const shell = document.querySelector('main.shell');
@@ -376,7 +304,7 @@ function applyV21DesktopSplitWorkspace(enabled) {
   if (confirmation.parentElement === rail) document.body.append(confirmation);
   rail?.remove();
 
-  const shouldOpen = localStorage.getItem(CY_V21_CONFIRMATION_STATE_KEY) === '1';
+  const shouldOpen = localStorage.getItem(CY_ADAPTIVE_CONFIRMATION_STATE_KEY) === '1';
   if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(shouldOpen, false);
   else {
     confirmation.classList.toggle('open', shouldOpen);
@@ -411,7 +339,7 @@ function runEntryUiStep(name, task) {
   try {
     task();
   } catch (error) {
-    console.error('cyaccounting_mobile_build8_step_failed', name, error instanceof Error ? error.message : 'unknown_error');
+    console.error('cyaccounting_entry_ui_step_failed', name, error instanceof Error ? error.message : 'unknown_error');
   }
 }
 
@@ -744,7 +672,6 @@ function entryUiEscape(value) {
 }
 
 const CY_MOBILE_WORKSPACE_MOBILE = '(max-width: 767px)';
-const CY_V21_CONFIRMATION_KEY = 'cyaccounting.confirmationDrawerOpen';
 let cyMobileWorkspaceStarted = false;
 
 if (document.readyState === 'loading') {
@@ -768,7 +695,7 @@ function runMobileWorkspaceStep(name, task) {
   try {
     task();
   } catch (error) {
-    console.error('cyaccounting_mobile_build10_step_failed', name, error instanceof Error ? error.message : 'unknown_error');
+    console.error('cyaccounting_mobile_workspace_step_failed', name, error instanceof Error ? error.message : 'unknown_error');
   }
 }
 
@@ -958,7 +885,7 @@ function setupMobileWorkspaceConfirmationPolicy() {
       if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(false, false);
       return;
     }
-    const shouldOpen = localStorage.getItem(CY_V21_CONFIRMATION_KEY) === '1';
+    const shouldOpen = localStorage.getItem(CY_ADAPTIVE_CONFIRMATION_STATE_KEY) === '1';
     if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(shouldOpen, false);
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', sync);
@@ -1724,7 +1651,7 @@ function installDesktopUiConfirmInterceptors() {
       '[data-group-delete]',
       '#excelImportCommitButton',
       '#backupRunNow',
-      '#desktopMigrationCommitV19'
+      '#desktopMigrationCommit'
     ].join(','));
     if (!target || cyDesktopUiConfirmBypass.has(target)) return;
 
@@ -1747,7 +1674,7 @@ function installDesktopUiConfirmInterceptors() {
     }
   }, true);
 
-  /* Build 14 owns rename UX. Capture here so legacy prompt() paths can never win. */
+  /* Capture rename actions here so legacy prompt() paths can never win. */
   document.addEventListener('click', event => {
     const button = event.target.closest('[data-account-rename], [data-category-rename], [data-group-rename]');
     if (!button || typeof beginDesktopManagersInlineEdit !== 'function') return;
@@ -1795,8 +1722,8 @@ function desktopUiConfirmSpec(target) {
     return { title: '刪除大分類', message: `確定刪除大分類「${item?.name || ''}」？`, confirmText: '刪除', danger: true };
   }
   if (target.id === 'excelImportCommitButton') {
-    const ready = Number(typeof cyV15ImportState === 'object' ? cyV15ImportState.preview?.summary?.ready : 0) || 0;
-    const duplicates = Number(typeof cyV15ImportState === 'object' ? cyV15ImportState.preview?.summary?.duplicates : 0) || 0;
+    const ready = Number(typeof cyImportState === 'object' ? cyImportState.preview?.summary?.ready : 0) || 0;
+    const duplicates = Number(typeof cyImportState === 'object' ? cyImportState.preview?.summary?.duplicates : 0) || 0;
     return {
       title: '匯入 Excel',
       message: `確定匯入 ${ready.toLocaleString()} 筆資料？`,
@@ -1805,7 +1732,7 @@ function desktopUiConfirmSpec(target) {
     };
   }
   if (target.id === 'backupRunNow') {
-    const tiered = typeof backupTopologyV18 !== 'undefined' && backupTopologyV18 === 'parallel_dual_provider';
+    const tiered = typeof backupTopology !== 'undefined' && backupTopology === 'parallel_dual_provider';
     return {
       title: '立即執行備份',
       message: tiered ? '現在立即執行一次 R2 + GCS paired backup？' : '現在立即執行一次 Google Cloud Storage 測試備份？',
@@ -1813,14 +1740,13 @@ function desktopUiConfirmSpec(target) {
       confirmText: '開始備份'
     };
   }
-  if (target.id === 'desktopMigrationCommitV19') {
-    const preview = typeof migrationState !== 'undefined' ? migrationState.preview : null;
-    const plan = preview?.plan || {};
-    const tx = Number(plan.transactions?.insert || 0);
-    const accounts = Number(plan.accounts?.insert || 0);
-    const groups = Number(plan.groups?.insert || 0);
-    const categories = Number(plan.categories?.insert || 0);
-    const opening = Number(plan.openingBalances?.insert || 0);
+  if (target.id === 'desktopMigrationCommit') {
+    const plan = window.cyDesktopMigrationConfirmationModel?.() || {};
+    const tx = Number(plan.transactions || 0);
+    const accounts = Number(plan.accounts || 0);
+    const groups = Number(plan.groups || 0);
+    const categories = Number(plan.categories || 0);
+    const opening = Number(plan.openingBalances || 0);
     return {
       title: '確認資料移轉',
       message: `確定將預覽內容寫入 Web 帳本？`,
@@ -4322,7 +4248,7 @@ function setupTabletWorkspace() {
       const host = tablet ? grid : quickHost;
       if (group && host && group.parentElement !== host) host.append(group);
     }
-    applyV21DesktopSplitWorkspace(window.matchMedia(CY_V21_SPLIT_MEDIA).matches);
+    applyAdaptiveSplitWorkspace(window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA).matches);
     if (tablet) {
       const rail = document.querySelector('.cy-entry-rail');
       if (rail && !rail.dataset.entryExpanded) rail.dataset.entryExpanded = 'false';
