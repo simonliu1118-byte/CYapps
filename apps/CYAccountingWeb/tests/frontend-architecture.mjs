@@ -79,6 +79,10 @@ assert.doesNotMatch(runtime, /script\.src\s*=\s*['"]\/v[0-9]/);
 assert.doesNotMatch(runtime, /link\.href\s*=\s*['"]\/v[0-9]/);
 assert.doesNotMatch(runtime, /querySelector\(['"]\.version['"]\)/, 'frontend feature modules must not own the global version element');
 assert.doesNotMatch(runtime, /V0\.\d+\.\d+(?: Build \d+)?/, 'frontend feature modules must not embed application version strings');
+assert.doesNotMatch(runtime, /\b[A-Za-z_$][A-Za-z0-9_$]*(?:V|v)\d{2,4}[A-Za-z0-9_$]*\b/, 'frontend runtime identifiers must be named by responsibility, not historical app versions');
+const styleRuntime = styles.map(name => read('public/' + name)).join('\n');
+assert.doesNotMatch(styleRuntime, /[-_](?:V|v)\d{2,4}(?:[-_A-Za-z0-9]|$)/, 'frontend CSS selectors must not keep historical app-version suffixes');
+assert.doesNotMatch(html, /[?&](?:rev|v)=(?:0?\d|semantic\d)/, 'asset cache revisions must use semantic module names, not app/build numbers');
 assert.match(appJs, /await window\.cyaccRefreshLedgerView\(month\)/, 'transaction loading must hand off to the canonical ledger renderer');
 assert.match(ledgerTools, /window\.cyaccRefreshLedgerView = loadLedgerOpeningAndRender/, 'ledger tools must expose one canonical refresh path');
 assert.match(ledgerTools, /window\.cyaccRenderLedgerMessage = renderLedgerMessage/, 'ledger tools must own ledger status and empty rows');
@@ -88,7 +92,6 @@ assert.doesNotMatch(ledgerTools, /new MutationObserver/, 'ledger rows must not t
 assert.match(ledgerTools, /monthFilter\?\.addEventListener\('change', syncLedgerMonthDisplay\)/, 'shared toolbar owns month presentation sync');
 assert.doesNotMatch(ledgerTools, /monthFilter\?\.addEventListener\('change',\s*(?:loadLedgerOpeningAndRender|scheduleLedgerRefresh)/, 'ledger tools must not own a second month data-refresh path');
 assert.doesNotMatch(appJs, /function renderTransactions\(|transactionRows\.innerHTML/, 'app state owner must not keep a second transaction row renderer');
-assert.doesNotMatch(adaptiveUi, /setupV21LedgerEmptyState|setupV201MobileInlineEditVisibility/, 'adaptive UI must not post-process transaction rows through legacy observers');
 assert.match(quickEntry, /addEventListener\('cyacc:ledger-rendered', handleFastEntryLedgerRendered\)/, 'quick entry must subscribe to the explicit ledger lifecycle');
 assert.doesNotMatch(quickEntry, /observe\(els\.transactionRows|ledgerObserver/, 'quick entry must not infer lifecycle from transaction row DOM mutations');
 assert.match(inlineEdit, /els\.transactionRows\.addEventListener\('click'/, 'inline edit keeps normal delegated row interaction');
@@ -99,8 +102,7 @@ assert.match(ledgerTools, /id="ledgerOpeningBalanceButton"[\s\S]*?id="ledgerLock
 assert.match(ledgerTools, /id="ledgerExcelExport"[\s\S]*?id="ledgerExcelExportStatus"/, 'export control belongs to the shared toolbar structure');
 assert.match(ledgerTools, /sheet\.id = 'ledgerToolsSheet'[\s\S]*?data-mobile-ledger-action="accounts"[\s\S]*?data-mobile-ledger-action="export"/, 'shared toolbar owns the compact utility menu');
 assert.match(ledgerTools, /function syncLedgerMonthDisplay\(\)/, 'shared toolbar owns the month display presenter');
-assert.doesNotMatch(adaptiveUi, /setupV21LedgerContext|setupMobileWorkspaceLedgerTools|setupTouchWorkspaceToolbar|setupTouchWorkspaceMonthDisplay|syncTouchWorkspaceMonthDisplay|moveImportButton/, 'adaptive UI must not create, move, retry or post-process ledger toolbar structure');
-assert.doesNotMatch(inputConfirmation, /setupV09OpeningBalanceAction/, 'opening balance must not have a second toolbar action owner');
+assert.doesNotMatch(adaptiveUi, /setupMobileWorkspaceLedgerTools|setupTouchWorkspaceToolbar|setupTouchWorkspaceMonthDisplay|syncTouchWorkspaceMonthDisplay|moveImportButton/, 'adaptive UI must not create, move, retry or post-process ledger toolbar structure');
 assert.match(excelExportUi, /querySelector\('#ledgerExcelExport'\)/, 'Excel export binds the shared toolbar control');
 assert.doesNotMatch(excelExportUi, /querySelector\('\.ledger-view-tools'\)|createElement\('button'\)/, 'Excel export must not create a second toolbar control');
 assert.match(excelImportUi, /querySelector\('#ledgerExcelImport'\)/, 'Excel import binds the settings-owned control directly');
@@ -142,16 +144,13 @@ assert.match(read('public/excel-export-ui.js'), /navigator\.canShare/, 'file sha
 assert.match(read('public/excel-export-ui.js'), /dataset\.tabletLayout === 'landscape'/, 'tablet landscape Excel export must reuse native share when available');
 assert.doesNotMatch(adaptiveUi, /querySelector\(['"]\.version['"]\)/, 'adaptive UI must not mutate the global version element');
 assert.doesNotMatch(adaptiveUi, /\bCY_[A-Z0-9_]*VERSION\b|\b(?:sync|enforce)[A-Za-z0-9_]*Version\b/, 'historical version mutators must not return');
-assert.doesNotMatch(adaptiveUi, /V0\.2[01]\.[0-9]+(?: Build [0-9]+)?/, 'adaptive UI must not embed historical application version strings');
 assert.match(appJs, /window\.cySettingsManager\?\.renderAccountManager\?\.\(\)/, 'app.js must delegate account rendering to the canonical settings manager');
 assert.match(appJs, /window\.cySettingsManager\?\.renderCategoryManager\?\.\(\)/, 'app.js must delegate category rendering to the canonical settings manager');
 assert.doesNotMatch(appJs, /function renderAccountManager\(|function renderCategoryManager\(/, 'app.js must not own a second settings renderer');
-assert.doesNotMatch(adaptiveUi, /renderV21Build1[456](?:Account|Category)Manager|renderV0211(?:Account|Category)Manager|renderV0212CategoryManager|openV0212/, 'versioned settings manager owners must not return');
-assert.doesNotMatch(adaptiveUi, /V0214|v0214/, 'historical retry patch identifiers must not return');
 assert.doesNotMatch(adaptiveUi, /setTimeout\(run[A-Za-z0-9_]+,\s*(?:160|520|900)\)/, 'frontend features must not bootstrap through staged retry timers');
 assert.match(adaptiveUi, /document\.addEventListener\('DOMContentLoaded', setupLedgerBalancePopover, \{ once: true \}\)/, 'ledger balance behavior binds once at DOM readiness');
 assert.match(adaptiveUi, /window\.cyShowMigrationComplete = showMigrationComplete/, 'migration completion dialog must use the semantic owner');
-assert.doesNotMatch(adaptiveUi, /setupOptimisticSettings|handleV0214AccountDefault|handleV0214FavoriteToggle/, 'settings mutations must not be intercepted by a historical patch layer');
+assert.doesNotMatch(adaptiveUi, /setupOptimisticSettings/, 'settings mutations must not be intercepted by a secondary patch layer');
 
 
 console.log('Semantic frontend architecture checks passed.');
