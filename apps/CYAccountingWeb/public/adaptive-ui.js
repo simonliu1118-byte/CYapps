@@ -237,24 +237,14 @@ function setupV21DataSettings() {
       <h3>資料管理</h3>
       <section class="cy-data-section">
         <h4>Excel 匯入</h4>
-        <div class="cy-data-actions" id="v21ExcelImportHost"></div>
+        <div class="cy-data-actions" id="v21ExcelImportHost">
+          <button id="ledgerExcelImport" class="secondary compact" type="button" title="匯入 .xlsx 記帳資料">匯入 Excel</button>
+        </div>
       </section>`;
     const settingsMessage = document.querySelector('#settingsMessage');
     content.insertBefore(pane, settingsMessage || null);
     if (typeof els === 'object' && Array.isArray(els.settingsPanes)) els.settingsPanes.push(pane);
   }
-
-  const moveImportButton = () => {
-    const button = document.querySelector('#ledgerExcelImport');
-    const host = document.querySelector('#v21ExcelImportHost');
-    if (!button || !host) return false;
-    if (button.parentElement !== host) host.append(button);
-    button.className = 'secondary compact';
-    button.textContent = '匯入 Excel';
-    return true;
-  };
-
-  if (!moveImportButton()) setTimeout(moveImportButton, 50);
 
   const subtitle = document.querySelector('#settingsDialog .modal-header p');
   if (subtitle) subtitle.textContent = '';
@@ -1416,7 +1406,6 @@ function setupDesktopManagementOpeningDialog() {
     if (dialog.open) sync();
   });
   observer.observe(dialog, { attributes: true, attributeFilter: ['open'] });
-  document.querySelector('#ledgerOpeningBalanceButton')?.addEventListener('click', () => setTimeout(sync, 0));
 }
 
 function syncDesktopManagementCrudCopy() {
