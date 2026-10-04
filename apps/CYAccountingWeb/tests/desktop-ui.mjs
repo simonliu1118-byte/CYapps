@@ -21,6 +21,7 @@ const css = [
   'desktop-migration.css',
   'adaptive-ui.css'
 ].map(name => read('public/' + name)).join('\n');
+const appJs = read('public/app.js');
 const quick = read('public/quick-entry.js');
 const category = read('public/category-management.js');
 const exportUi = read('public/excel-export-ui.js');
@@ -29,14 +30,14 @@ const adaptive = read('public/adaptive-ui.js');
 const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 
-assert.equal(version, '0.22.3');
-assert.equal(build, '3');
+assert.equal(version, '0.22.4');
+assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
 assert.match(css, /\.cy-confirm-dialog/);
 assert.match(css, /\.settings-manager-dialog/);
-assert.match(css, /\.v0214-balance-popover/);
+assert.match(css, /\.ledger-balance-popover/);
 assert.match(css, /\.opening-modal\s*\{[\s\S]*?width:\s*min\(300px, calc\(100vw - 28px\)\) !important;/);
 
 assert.match(quick, /enterStep\(els\.txDate, \(\) => els\.summary\?\.focus\(\)\)/);
@@ -50,8 +51,8 @@ assert.match(exportUi, /navigator\.canShare/);
 assert.match(inlineEdit, /beginInlineLedgerEdit/);
 assert.match(adaptive, /window\.cyConfirm = options => new Promise/);
 assert.match(adaptive, /renderSettingsCategoryManager/);
-assert.match(adaptive, /handleV0214AccountDefault/);
-assert.match(adaptive, /handleV0214FavoriteToggle/);
+assert.match(appJs, /const defaultButton = event\.target\.closest\('\[data-account-default\]'\)/, 'account default stays with the canonical account action owner');
+assert.match(adaptive, /const favorite = event\.target\.closest\('\[data-category-favorite\]'\)/, 'category favorite stays with the canonical settings action owner');
 assert.match(accountingTools, /url\.pathname === '\/api\/accounts\/reorder'/);
 assert.match(accountingTools, /url\.pathname === '\/api\/category-groups\/reorder'/);
 assert.match(accountingTools, /url\.pathname === '\/api\/categories\/reorder'/);

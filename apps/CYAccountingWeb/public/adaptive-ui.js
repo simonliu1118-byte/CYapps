@@ -2578,6 +2578,22 @@ function bindSettingsManagerActions() {
       return;
     }
 
+    const favorite = event.target.closest('[data-category-favorite]');
+    if (favorite && typeof state === 'object') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const id = Number(favorite.dataset.categoryFavorite || 0);
+      const current = (state.categories || []).find(item => Number(item.id) === id);
+      if (current) {
+        void mutateSettings(`/api/categories/${id}/favorite`, {
+          method: 'PUT',
+          headers: jsonHeaders(),
+          body: JSON.stringify({ favorite: Number(current.is_favorite) !== 1 })
+        }, Number(current.is_favorite) === 1 ? '已取消常用科目。' : '已加入常用科目。');
+      }
+      return;
+    }
+
     const addGroup = event.target.closest('[data-settings-add-group], [data-mobile-group-add]');
     const addCategory = event.target.closest('[data-settings-add-category], [data-mobile-category-add]');
     const rename = event.target.closest('[data-settings-rename], [data-account-rename], [data-category-rename], [data-group-rename]');
@@ -3064,67 +3080,119 @@ function settingsManagerEscape(value) {
     .replaceAll("'", '&#039;');
 }
 
-const CY_V0214_HOVER = '(hover: hover) and (pointer: fine)';
-let cyV0214BalancePopover = null;
-let cyV0214BalanceAnchor = null;
-let cyV0214BalancePinned = false;
-let cyV0214BalanceHideTimer = null;
-window.cyShowMigrationComplete = showMigrationCompleteV0214;
-window.cyCloseLedgerBalancePopover = closeLedgerBalancePopoverV0214;
+const CY_LEDGER_BALANCE_HOVER = '(hover: hover) and (pointer: fine)';
+let cyLedgerBalancePopover = null;
+let cyLedgerBalanceAnchor = null;
+let cyLedgerBalancePinned = false;
+let cyLedgerBalanceHideTimer = null;
 
-const runV0214 = () => {
-  ensureMigrationCompleteDialogV0214();
-  setupBalancePopoverV0214();
-  setupOptimisticSettingsV0214();
-};
+window.cyShowMigrationComplete = showMigrationComplete;
+window.cyCloseLedgerBalancePopover = closeLedgerBalancePopover;
+
+function setupLedgerBalancePopover() {
+  const body = document.body;
+  if (!body || body.dataset.ledgerBalancePopoverBound === '1') return;
+  body.dataset.ledgerBalancePopoverBound = '1';
+
+  document.addEventListener('pointerover', event => {
+    if (!window.matchMedia(CY_LEDGER_BALANCE_HOVER).matches) return;
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (!cell || cell.contains(event.relatedTarget)) return;
+    if (cyLedgerBalancePinned && cyLedgerBalanceAnchor !== cell) return;
+    clearLedgerBalanceHide();
+    showLedgerBalancePopover(cell, false);
+  });
+
+  document.addEventListener('pointerout', event => {
+    if (!window.matchMedia(CY_LEDGER_BALANCE_HOVER).matches) return;
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (!cell || cell.contains(event.relatedTarget)) return;
+    if (cyLedgerBalancePopover?.contains(event.relatedTarget)) return;
+    scheduleLedgerBalanceHide();
+  });
+
+  document.addEventListener('click', event => {
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (cell) {
+      event.preventDefault();
+      if (cyLedgerBalancePinned && cyLedgerBalanceAnchor === cell) {
+        closeLedgerBalancePopover();
+        return;
+      }
+      showLedgerBalancePopover(cell, true);
+      return;
+    }
+    if (cyLedgerBalancePinned && !cyLedgerBalancePopover?.contains(event.target)) {
+      closeLedgerBalancePopover();
+    }
+  });
+
+  document.addEventListener('focusin', event => {
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (cell && !cyLedgerBalancePinned) showLedgerBalancePopover(cell, false);
+  });
+
+  document.addEventListener('focusout', event => {
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (!cell || cyLedgerBalancePinned) return;
+    if (cyLedgerBalancePopover?.contains(event.relatedTarget)) return;
+    scheduleLedgerBalanceHide();
+  });
+
+  document.addEventListener('keydown', event => {
+    const cell = event.target.closest('[data-balance-popover-id]');
+    if (cell && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      showLedgerBalancePopover(cell, true);
+    } else if (event.key === 'Escape' && !cyLedgerBalancePopover?.hidden) {
+      closeLedgerBalancePopover();
+      cyLedgerBalanceAnchor?.focus?.();
+    }
+  });
+
+  window.addEventListener('resize', closeLedgerBalancePopover);
+  window.addEventListener('scroll', closeLedgerBalancePopover, true);
+}
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => setTimeout(runV0214, 0), { once: true });
+  document.addEventListener('DOMContentLoaded', setupLedgerBalancePopover, { once: true });
 } else {
-  setTimeout(runV0214, 0);
+  setupLedgerBalancePopover();
 }
-window.addEventListener('load', () => {
-  runV0214();
-  setTimeout(runV0214, 160);
-  setTimeout(runV0214, 520);
-  setTimeout(runV0214, 900);
-}, { once: true });
 
-
-
-function ensureMigrationCompleteDialogV0214() {
-  let dialog = document.querySelector('#migrationCompleteDialogV0214');
+function ensureMigrationCompleteDialog() {
+  let dialog = document.querySelector('#migrationCompleteDialog');
   if (dialog) return dialog;
   dialog = document.createElement('dialog');
-  dialog.id = 'migrationCompleteDialogV0214';
-  dialog.className = 'modal small-modal v0214-complete-dialog';
+  dialog.id = 'migrationCompleteDialog';
+  dialog.className = 'modal small-modal migration-complete-dialog';
   dialog.innerHTML =
     '<div class="modal-header">' +
-      '<div><span class="v0214-success-mark" aria-hidden="true">✓</span><h2>帳本移轉完成</h2><p>桌面帳本已成功複製到 Web。</p></div>' +
-      '<button class="icon-button" type="button" data-v0214-close aria-label="關閉">×</button>' +
+      '<div><span class="migration-complete-success-mark" aria-hidden="true">✓</span><h2>帳本移轉完成</h2><p>桌面帳本已成功複製到 Web。</p></div>' +
+      '<button class="icon-button" type="button" data-migration-complete-close aria-label="關閉">×</button>' +
     '</div>' +
-    '<div class="v0214-complete-grid">' +
-      '<div><span>交易</span><strong data-v0214-result="transactions">—</strong></div>' +
-      '<div><span>期初餘額</span><strong data-v0214-result="opening">—</strong></div>' +
-      '<div><span>帳戶</span><strong data-v0214-result="accounts">—</strong></div>' +
-      '<div><span>科目</span><strong data-v0214-result="categories">—</strong></div>' +
-      '<div><span>重複交易</span><strong data-v0214-result="duplicates">—</strong></div>' +
-      '<div><span>鎖帳至</span><strong data-v0214-result="locked">—</strong></div>' +
+    '<div class="migration-complete-grid">' +
+      '<div><span>交易</span><strong data-migration-result="transactions">—</strong></div>' +
+      '<div><span>期初餘額</span><strong data-migration-result="opening">—</strong></div>' +
+      '<div><span>帳戶</span><strong data-migration-result="accounts">—</strong></div>' +
+      '<div><span>科目</span><strong data-migration-result="categories">—</strong></div>' +
+      '<div><span>重複交易</span><strong data-migration-result="duplicates">—</strong></div>' +
+      '<div><span>鎖帳至</span><strong data-migration-result="locked">—</strong></div>' +
     '</div>' +
-    '<p class="v0214-complete-note">原本電腦版的 SQLite 帳本不會被刪除或修改。</p>' +
-    '<div class="modal-actions"><button class="primary" type="button" data-v0214-close>完成</button></div>';
+    '<p class="migration-complete-note">原本電腦版的 SQLite 帳本不會被刪除或修改。</p>' +
+    '<div class="modal-actions"><button class="primary" type="button" data-migration-complete-close>完成</button></div>';
   document.body.appendChild(dialog);
   dialog.addEventListener('click', event => {
-    if (event.target.closest('[data-v0214-close]')) dialog.close();
+    if (event.target.closest('[data-migration-complete-close]')) dialog.close();
   });
   return dialog;
 }
 
-function showMigrationCompleteV0214(result = {}) {
-  const dialog = ensureMigrationCompleteDialogV0214();
+function showMigrationComplete(result = {}) {
+  const dialog = ensureMigrationCompleteDialog();
   if (!dialog) return;
   const set = (key, value) => {
-    const node = dialog.querySelector('[data-v0214-result="' + key + '"]');
+    const node = dialog.querySelector('[data-migration-result="' + key + '"]');
     if (node) node.textContent = value;
   };
   const number = value => Number(value || 0).toLocaleString('zh-TW');
@@ -3138,115 +3206,50 @@ function showMigrationCompleteV0214(result = {}) {
   dialog.showModal();
 }
 
-function ensureBalancePopoverV0214() {
-  if (cyV0214BalancePopover?.isConnected) return cyV0214BalancePopover;
+function ensureLedgerBalancePopover() {
+  if (cyLedgerBalancePopover?.isConnected) return cyLedgerBalancePopover;
   const popover = document.createElement('div');
-  popover.id = 'ledgerBalancePopoverV0214';
-  popover.className = 'v0214-balance-popover';
+  popover.id = 'ledgerBalancePopover';
+  popover.className = 'ledger-balance-popover';
   popover.setAttribute('role', 'dialog');
   popover.setAttribute('aria-label', '帳戶餘額明細');
   popover.hidden = true;
   document.body.appendChild(popover);
-  popover.addEventListener('pointerenter', clearBalanceHideV0214);
-  popover.addEventListener('pointerleave', () => scheduleBalanceHideV0214());
-  cyV0214BalancePopover = popover;
+  popover.addEventListener('pointerenter', clearLedgerBalanceHide);
+  popover.addEventListener('pointerleave', scheduleLedgerBalanceHide);
+  cyLedgerBalancePopover = popover;
   return popover;
 }
 
-function setupBalancePopoverV0214() {
-  const body = document.body;
-  if (!body || body.dataset.v0214BalanceBound === '1') return;
-  body.dataset.v0214BalanceBound = '1';
-  ensureBalancePopoverV0214();
-  document.addEventListener('pointerover', event => {
-    if (!window.matchMedia(CY_V0214_HOVER).matches) return;
-    const cell = event.target.closest('[data-balance-popover-id]');
-    if (!cell || cell.contains(event.relatedTarget)) return;
-    if (cyV0214BalancePinned && cyV0214BalanceAnchor !== cell) return;
-    clearBalanceHideV0214();
-    showLedgerBalancePopoverV0214(cell, false);
-  });
-
-  document.addEventListener('pointerout', event => {
-    if (!window.matchMedia(CY_V0214_HOVER).matches) return;
-    const cell = event.target.closest('[data-balance-popover-id]');
-    if (!cell || cell.contains(event.relatedTarget)) return;
-    if (cyV0214BalancePopover?.contains(event.relatedTarget)) return;
-    scheduleBalanceHideV0214();
-  });
-
-  document.addEventListener('click', event => {
-    const cell = event.target.closest('[data-balance-popover-id]');
-    if (cell) {
-      event.preventDefault();
-      if (cyV0214BalancePinned && cyV0214BalanceAnchor === cell) {
-        closeLedgerBalancePopoverV0214();
-        return;
-      }
-      showLedgerBalancePopoverV0214(cell, true);
-      return;
-    }
-    if (cyV0214BalancePinned && !cyV0214BalancePopover?.contains(event.target)) {
-      closeLedgerBalancePopoverV0214();
-    }
-  });
-
-  document.addEventListener('focusin', event => {
-    const cell = event.target.closest('[data-balance-popover-id]');
-    if (cell && !cyV0214BalancePinned) showLedgerBalancePopoverV0214(cell, false);
-  });
-
-  document.addEventListener('focusout', event => {
-    const cell = event.target.closest('[data-balance-popover-id]');
-    if (!cell || cyV0214BalancePinned) return;
-    if (cyV0214BalancePopover?.contains(event.relatedTarget)) return;
-    scheduleBalanceHideV0214();
-  });
-
-  document.addEventListener('keydown', event => {
-    const cell = event.target.closest('[data-balance-popover-id]');
-    if (cell && (event.key === 'Enter' || event.key === ' ')) {
-      event.preventDefault();
-      showLedgerBalancePopoverV0214(cell, true);
-    } else if (event.key === 'Escape' && !cyV0214BalancePopover?.hidden) {
-      closeLedgerBalancePopoverV0214();
-      cyV0214BalanceAnchor?.focus?.();
-    }
-  });
-
-  window.addEventListener('resize', closeLedgerBalancePopoverV0214);
-  window.addEventListener('scroll', closeLedgerBalancePopoverV0214, true);
-}
-
-function showLedgerBalancePopoverV0214(cell, pinned) {
+function showLedgerBalancePopover(cell, pinned) {
   const id = Number(cell?.dataset.balancePopoverId || 0);
   const detail = window.cyLedgerBalanceBreakdowns?.get(id);
   if (!cell || !detail) return;
-  const popover = ensureBalancePopoverV0214();
-  clearBalanceHideV0214();
+  const popover = ensureLedgerBalancePopover();
+  clearLedgerBalanceHide();
 
-  if (cyV0214BalanceAnchor && cyV0214BalanceAnchor !== cell) {
-    cyV0214BalanceAnchor.setAttribute('aria-expanded', 'false');
+  if (cyLedgerBalanceAnchor && cyLedgerBalanceAnchor !== cell) {
+    cyLedgerBalanceAnchor.setAttribute('aria-expanded', 'false');
   }
-  cyV0214BalanceAnchor = cell;
-  cyV0214BalancePinned = Boolean(pinned);
+  cyLedgerBalanceAnchor = cell;
+  cyLedgerBalancePinned = Boolean(pinned);
   cell.setAttribute('aria-expanded', 'true');
 
   popover.replaceChildren();
   const header = document.createElement('div');
-  header.className = 'v0214-balance-popover-header';
+  header.className = 'ledger-balance-popover-header';
   header.textContent = detail.accountOnly ? '此筆後帳戶餘額' : '此筆後各帳戶餘額';
   popover.appendChild(header);
 
   const list = document.createElement('div');
-  list.className = 'v0214-balance-list';
+  list.className = 'ledger-balance-list';
   for (const item of detail.accounts || []) {
     const row = document.createElement('div');
-    row.className = 'v0214-balance-row' + (item.name === detail.activeAccount ? ' active' : '');
+    row.className = 'ledger-balance-row' + (item.name === detail.activeAccount ? ' active' : '');
     const name = document.createElement('span');
     const amount = document.createElement('strong');
     name.textContent = item.name || '未命名帳戶';
-    amount.textContent = formatV0214Money(item.value);
+    amount.textContent = formatLedgerBalanceMoney(item.value);
     row.append(name, amount);
     list.appendChild(row);
   }
@@ -3254,20 +3257,20 @@ function showLedgerBalancePopoverV0214(cell, pinned) {
 
   if (!detail.accountOnly) {
     const total = document.createElement('div');
-    total.className = 'v0214-balance-total';
+    total.className = 'ledger-balance-total';
     const label = document.createElement('span');
     const amount = document.createElement('strong');
     label.textContent = '總餘額';
-    amount.textContent = formatV0214Money(detail.total);
+    amount.textContent = formatLedgerBalanceMoney(detail.total);
     total.append(label, amount);
     popover.appendChild(total);
   }
 
   popover.hidden = false;
-  positionBalancePopoverV0214(cell, popover);
+  positionLedgerBalancePopover(cell, popover);
 }
 
-function positionBalancePopoverV0214(cell, popover) {
+function positionLedgerBalancePopover(cell, popover) {
   const anchor = cell.getBoundingClientRect();
   const box = popover.getBoundingClientRect();
   const margin = 12;
@@ -3280,64 +3283,28 @@ function positionBalancePopoverV0214(cell, popover) {
   popover.style.top = Math.round(top) + 'px';
 }
 
-function scheduleBalanceHideV0214() {
-  clearBalanceHideV0214();
-  if (cyV0214BalancePinned) return;
-  cyV0214BalanceHideTimer = window.setTimeout(closeLedgerBalancePopoverV0214, 140);
+function scheduleLedgerBalanceHide() {
+  clearLedgerBalanceHide();
+  if (cyLedgerBalancePinned) return;
+  cyLedgerBalanceHideTimer = window.setTimeout(closeLedgerBalancePopover, 140);
 }
 
-function clearBalanceHideV0214() {
-  if (cyV0214BalanceHideTimer) window.clearTimeout(cyV0214BalanceHideTimer);
-  cyV0214BalanceHideTimer = null;
+function clearLedgerBalanceHide() {
+  if (cyLedgerBalanceHideTimer) window.clearTimeout(cyLedgerBalanceHideTimer);
+  cyLedgerBalanceHideTimer = null;
 }
 
-function closeLedgerBalancePopoverV0214() {
-  clearBalanceHideV0214();
-  if (cyV0214BalanceAnchor) cyV0214BalanceAnchor.setAttribute('aria-expanded', 'false');
-  cyV0214BalanceAnchor = null;
-  cyV0214BalancePinned = false;
-  if (cyV0214BalancePopover) cyV0214BalancePopover.hidden = true;
+function closeLedgerBalancePopover() {
+  clearLedgerBalanceHide();
+  if (cyLedgerBalanceAnchor) cyLedgerBalanceAnchor.setAttribute('aria-expanded', 'false');
+  cyLedgerBalanceAnchor = null;
+  cyLedgerBalancePinned = false;
+  if (cyLedgerBalancePopover) cyLedgerBalancePopover.hidden = true;
 }
 
-function formatV0214Money(value) {
+function formatLedgerBalanceMoney(value) {
   if (typeof money === 'function') return money(Number(value) || 0);
   return (Number(value) || 0).toLocaleString('zh-TW');
-}
-
-function setupOptimisticSettingsV0214() {
-  const accounts = document.querySelector('#accountRows');
-  if (accounts && accounts.dataset.v0214OptimisticBound !== '1') {
-    accounts.dataset.v0214OptimisticBound = '1';
-    accounts.addEventListener('click', handleV0214AccountDefault, true);
-  }
-  const categories = document.querySelector('#categoryManager');
-  if (categories && categories.dataset.v0214OptimisticBound !== '1') {
-    categories.dataset.v0214OptimisticBound = '1';
-    categories.addEventListener('click', handleV0214FavoriteToggle, true);
-  }
-}
-
-async function handleV0214AccountDefault(event) {
-  const button = event.target.closest('[data-account-default]');
-  if (!button || typeof state !== 'object') return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  const id = Number(button.dataset.accountDefault || 0);
-  if (!Number.isInteger(id) || id <= 0) return;
-  await mutateSettings(`/api/accounts/${id}/default`, { method: 'POST' }, '已更新預設帳戶。');
-}
-
-async function handleV0214FavoriteToggle(event) {
-  const button = event.target.closest('[data-category-favorite]');
-  if (!button || typeof state !== 'object') return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  const id = Number(button.dataset.categoryFavorite || 0);
-  const current = (state.categories || []).find(item => Number(item.id) === id);
-  if (!current) return;
-  await mutateSettings(`/api/categories/${id}/favorite`, {
-    method: 'PUT', headers: jsonHeaders(), body: JSON.stringify({ favorite: Number(current.is_favorite) !== 1 })
-  }, Number(current.is_favorite) === 1 ? '已取消常用科目。' : '已加入常用科目。');
 }
 
 const CY_TRANSACTION_SWIPE_MOBILE = '(max-width: 767px)';

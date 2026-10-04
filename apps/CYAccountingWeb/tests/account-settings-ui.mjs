@@ -42,7 +42,7 @@ vm.runInContext(app.slice(app.indexOf('function openingAccountRowHtml('), app.in
 vm.runInContext(app.slice(app.indexOf('function accountArchiveMessage('), app.indexOf('async function restoreAccountOptimistically')), context);
 vm.runInContext(adaptive.slice(adaptive.indexOf('function renderSettingsAccountManager('), adaptive.indexOf('function renderSettingsCategoryManager(')), context);
 vm.runInContext(adaptive.slice(adaptive.indexOf('function renderMobileAccountManager('), adaptive.indexOf('function bindMobileAccountReorder(')), context);
-vm.runInContext(adaptive.slice(adaptive.indexOf('function settingsManagerEscape('), adaptive.indexOf('const CY_V0214_HOVER')), context);
+vm.runInContext(adaptive.slice(adaptive.indexOf('function settingsManagerEscape('), adaptive.indexOf('const CY_LEDGER_BALANCE_HOVER')), context);
 
 vm.runInContext(app.slice(app.indexOf('function renderCategories('), app.indexOf('function setEntryKind(')), context);
 context.state.kind = 'income';

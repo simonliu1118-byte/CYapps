@@ -97,7 +97,7 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.match(html, /<span class="version">V0\.22\.3 Build 3<\/span>/, 'index.html must own the current visible version');
+assert.match(html, /<span class="version">V0\.22\.4 Build 0<\/span>/, 'index.html must own the current visible version');
 assert.match(appJs, /setLedgerLoadingState\(true\)/, 'month loading must expose an interaction-blocking busy state');
 assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingState\(false\)/, 'only the current month request may clear the busy state');
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');
@@ -110,6 +110,11 @@ assert.match(appJs, /window\.cySettingsManager\?\.renderAccountManager\?\.\(\)/,
 assert.match(appJs, /window\.cySettingsManager\?\.renderCategoryManager\?\.\(\)/, 'app.js must delegate category rendering to the canonical settings manager');
 assert.doesNotMatch(appJs, /function renderAccountManager\(|function renderCategoryManager\(/, 'app.js must not own a second settings renderer');
 assert.doesNotMatch(adaptiveUi, /renderV21Build1[456](?:Account|Category)Manager|renderV0211(?:Account|Category)Manager|renderV0212CategoryManager|openV0212/, 'versioned settings manager owners must not return');
+assert.doesNotMatch(adaptiveUi, /V0214|v0214/, 'historical retry patch identifiers must not return');
+assert.doesNotMatch(adaptiveUi, /setTimeout\(run[A-Za-z0-9_]+,\s*(?:160|520|900)\)/, 'frontend features must not bootstrap through staged retry timers');
+assert.match(adaptiveUi, /document\.addEventListener\('DOMContentLoaded', setupLedgerBalancePopover, \{ once: true \}\)/, 'ledger balance behavior binds once at DOM readiness');
+assert.match(adaptiveUi, /window\.cyShowMigrationComplete = showMigrationComplete/, 'migration completion dialog must use the semantic owner');
+assert.doesNotMatch(adaptiveUi, /setupOptimisticSettings|handleV0214AccountDefault|handleV0214FavoriteToggle/, 'settings mutations must not be intercepted by a historical patch layer');
 
 
 console.log('Semantic frontend architecture checks passed.');
