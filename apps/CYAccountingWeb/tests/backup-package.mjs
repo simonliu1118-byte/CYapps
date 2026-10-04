@@ -5,7 +5,7 @@ function assert(condition, message) {
 }
 
 const tableData = {
-  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, created_at: '2026-09-01T00:00:00Z', archived_at: null }],
+  accounts: [{ id: 1, name: '現金', sort_order: 0, is_default: 1, color_slot: 1, created_at: '2026-09-01T00:00:00Z', archived_at: null }],
   category_groups: [
     { id: 1, kind: 'income', name: '收入分類', sort_order: 0, created_at: '2026-09-01T00:00:00Z' },
     { id: 2, kind: 'expense', name: '支出分類', sort_order: 0, created_at: '2026-09-01T00:00:00Z' }
@@ -39,7 +39,7 @@ class MockStatement {
     return this;
   }
   async first() {
-    if (this.sql.includes("FROM meta WHERE key = 'schema_version'")) return { value: '6' };
+    if (this.sql.includes("FROM meta WHERE key = 'schema_version'")) return { value: '7' };
     return null;
   }
   async all() {
@@ -57,7 +57,7 @@ const parsed = JSON.parse(new TextDecoder().decode(backup.bytes));
 
 assert(parsed.manifest.format === 'CYAccountingWebBackup', 'backup format mismatch');
 assert(parsed.manifest.formatVersion === 2, 'backup format version mismatch');
-assert(parsed.manifest.schemaVersion === 6, 'schema version mismatch');
+assert(parsed.manifest.schemaVersion === 7, 'schema version mismatch');
 assert(parsed.manifest.totalRowCount === 10, `row count mismatch: ${parsed.manifest.totalRowCount}`);
 assert(parsed.manifest.dataSha256 === backup.dataSha256, 'data checksum mismatch');
 assert(/^[0-9a-f]{64}$/.test(backup.fileSha256), 'file checksum must be SHA-256');
@@ -66,6 +66,7 @@ assert(parsed.data.transactions[0].summary === '文具', 'transaction data missi
 assert(parsed.data.openingBalanceOverrides[0].reason === '期初建帳', 'opening override missing');
 assert(parsed.data.openingBalanceAudit[0].action === 'set', 'opening audit missing');
 assert(parsed.data.accounts[0].archivedAt === null, 'account archive state missing');
+assert(parsed.data.accounts[0].colorSlot === 1, 'account color slot missing');
 assert(!('webSessions' in parsed.data), 'web sessions must never be backed up');
 assert(!('backupIntegrations' in parsed.data), 'OAuth integration data must never be backed up');
 
