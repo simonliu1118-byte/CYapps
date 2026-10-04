@@ -16,7 +16,6 @@ function startV20() {
   setupV20ViewportState();
   setupV20MobileConfirmationDefault();
   setupV20SettingsTabVisibility();
-  setupV201MobileInlineEditVisibility();
 }
 
 
@@ -47,22 +46,6 @@ function setupV20SettingsTabVisibility() {
   });
 }
 
-function setupV201MobileInlineEditVisibility() {
-  const rows = document.querySelector('#transactionRows');
-  if (!rows || typeof MutationObserver !== 'function') return;
-  const observer = new MutationObserver(mutations => {
-    if (window.innerWidth >= 768) return;
-    for (const mutation of mutations) {
-      if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') continue;
-      const row = mutation.target;
-      if (!(row instanceof HTMLElement) || !row.matches('tr.inline-editing')) continue;
-      requestAnimationFrame(() => row.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' }));
-      break;
-    }
-  });
-  observer.observe(rows, { subtree: true, attributes: true, attributeFilter: ['class'] });
-}
-
 const CY_V21_SPLIT_MEDIA = '(min-width: 1360px)';
 const CY_V21_CONFIRMATION_STATE_KEY = 'cyaccounting.confirmationDrawerOpen';
 let cyV21Started = false;
@@ -83,7 +66,6 @@ function startV21() {
   setupV21EntryHelp();
   setupV21LedgerContext();
   setupV21LedgerHeaderDecoration();
-  setupV21LedgerEmptyState();
   setupV21ConfirmationCopy();
   setupV21DataSettings();
   cleanupV21InterfaceCopy();
@@ -260,21 +242,6 @@ function setupV21LedgerHeaderDecoration() {
   decorate();
   const observer = new MutationObserver(decorate);
   observer.observe(head, { childList: true, subtree: true });
-}
-
-function setupV21LedgerEmptyState() {
-  const body = document.querySelector('#transactionRows');
-  if (!body) return;
-  const enhance = () => {
-    const empty = body.querySelector('td.empty');
-    if (!empty || empty.querySelector('.ledger-empty-state')) return;
-    const text = String(empty.textContent || '').trim();
-    if (!text) return;
-    empty.innerHTML = `<div class="ledger-empty-state"><strong>${v21EscapeHtml(text)}</strong></div>`;
-  };
-  enhance();
-  const observer = new MutationObserver(enhance);
-  observer.observe(body, { childList: true, subtree: true });
 }
 
 function setupV21ConfirmationCopy() {
