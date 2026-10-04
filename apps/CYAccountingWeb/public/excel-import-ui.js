@@ -37,19 +37,14 @@ window.addEventListener('load', () => {
 });
 
 function setupExcelImport() {
-  const tools = document.querySelector('.ledger-view-tools');
-  if (!tools || document.querySelector('#ledgerExcelImport')) return;
+  const button = document.querySelector('#ledgerExcelImport');
+  if (!button || button.dataset.excelImportBound === '1') return;
+  button.dataset.excelImportBound = '1';
 
-  const button = document.createElement('button');
-  button.id = 'ledgerExcelImport';
-  button.className = 'secondary compact';
-  button.type = 'button';
-  button.textContent = '匯入 Excel';
-  button.title = '匯入 .xlsx 記帳資料';
-  tools.prepend(button);
-
-  document.body.insertAdjacentHTML('beforeend', importDialogHtml());
-  bindExcelImportDialog();
+  if (!document.querySelector('#excelImportDialog')) {
+    document.body.insertAdjacentHTML('beforeend', importDialogHtml());
+    bindExcelImportDialog();
+  }
   button.addEventListener('click', openExcelImport);
 }
 
@@ -518,7 +513,7 @@ async function commitExcelImport() {
     const commitButton = document.querySelector('#excelImportCommitButton');
     if (commitButton) { commitButton.disabled = true; commitButton.textContent = '匯入完成'; }
     await loadTransactions();
-    if (typeof scheduleLedgerDesktopRefresh === 'function') scheduleLedgerDesktopRefresh();
+    if (typeof scheduleLedgerRefresh === 'function') scheduleLedgerRefresh();
   } catch (error) {
     setImportMessage(error.message || 'Excel 匯入失敗。', true);
   } finally {
