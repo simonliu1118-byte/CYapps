@@ -53,13 +53,15 @@ assert.match(ledger, /data-mobile-ledger-action="export">匯出 Excel/);
 assert.doesNotMatch(ledger, /data-mobile-ledger-action="opening">期初餘額/);
 assert.match(ledger, /id="ledgerBalanceButton"/);
 assert.match(ledger, /function setupLedgerToolbar\(\)/);
-assert.doesNotMatch(js, /setupV21LedgerContext|setupMobileWorkspaceLedgerTools|setupTouchWorkspaceToolbar|setupTouchWorkspaceMonthDisplay|moveImportButton/);
+assert.match(js, /function startAdaptiveUi\(\)/);
+assert.doesNotMatch(js, /\b[A-Za-z_$][A-Za-z0-9_$]*(?:V|v)\d{2,4}[A-Za-z0-9_$]*\b/);
+assert.doesNotMatch(css, /[-_](?:V|v)\d{2,4}(?:[-_A-Za-z0-9]|$)/);
+assert.doesNotMatch(js, /setupMobileWorkspaceLedgerTools|setupTouchWorkspaceToolbar|setupTouchWorkspaceMonthDisplay|moveImportButton/);
 assert.match(js, /window\.cyOpenMobileUtility = openMobileUtility/);
 assert.match(js, /window\.cyOpenMobileLedgerOpening = \(\) => openMobileUtility\('opening'\)/);
 assert.match(js, /window\.cyOpenMobileLedgerLock = \(\) => openMobileUtility\('lock'\)/);
 assert.match(js, /window\.cyOpenMobileSettingsPane = tab => openMobileUtility\(tab\)/);
 assert.doesNotMatch(js, /openingDialog\.showModal\(\)/);
-assert.doesNotMatch(js, /mobileLedgerLockDialogV0215/);
 
 console.log('Adaptive UI regression checks passed.');
 
@@ -108,5 +110,3 @@ assert.match(css, /\.settings-category-tree\s*\{[\s\S]*?border-top:/);
 assert.match(css, /\.settings-category-leaf\s*\{[\s\S]*?grid-template-columns:/);
 assert.doesNotMatch(css, /\.mobile-category-group\s*\{|\.mobile-category-row\s*\{/);
 assert.match(css, /mobile-lock-native-field\s*\{[\s\S]*?display:\s*none !important/);
-assert.doesNotMatch(js, /renderV21Build1[456](?:Account|Category)Manager|renderV0211(?:Account|Category)Manager|renderV0212CategoryManager|openV0212/);
-assert.doesNotMatch(css, /v0211-(?:account|category|default|group)|v0212-(?:manager|dialog|category|group|favorite|edit|toolbar|kind|legacy|empty|add)/);
