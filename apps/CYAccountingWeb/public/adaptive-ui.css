@@ -281,7 +281,7 @@
     gap: 8px;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) {
     overflow: hidden;
     border: 1px solid #d4dce3;
     border-radius: 8px;
@@ -289,12 +289,12 @@
     box-shadow: 0 1px 2px rgba(31, 42, 55, .04);
   }
 
-  .ledger-card tbody > tr:not(.account-group-row):nth-child(even) td,
-  .ledger-card tbody > tr:not(.account-group-row):hover td {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row):nth-child(even) td,
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row):hover td {
     background: transparent;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td {
     display: grid;
     grid-template-columns: 72px minmax(0, 1fr);
     align-items: start;
@@ -307,30 +307,30 @@
     text-align: left;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td::before {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td::before {
     color: #72808c;
     font-size: 11px;
     font-weight: 600;
     line-height: 1.6;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(1)::before { content: "日期"; }
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(2)::before { content: "帳戶"; }
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(3)::before { content: "收支"; }
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(4)::before { content: "科目"; }
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(5)::before { content: "摘要"; }
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(6)::before { content: "金額"; }
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(7)::before { content: "餘額"; }
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(1)::before { content: "日期"; }
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(2)::before { content: "帳戶"; }
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(3)::before { content: "收支"; }
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(4)::before { content: "科目"; }
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(5)::before { content: "摘要"; }
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(6)::before { content: "金額"; }
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(7)::before { content: "餘額"; }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td.num {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td.num {
     text-align: left;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td.summary {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td.summary {
     overflow-wrap: anywhere;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td.action-col {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td.action-col {
     display: flex;
     justify-content: flex-end;
     align-items: center;
@@ -342,8 +342,8 @@
     background: #fafbfc;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td.action-col::before,
-  .ledger-card tbody > tr:not(.account-group-row) > td.empty::before {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td.action-col::before,
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td.empty::before {
     display: none;
   }
 
@@ -1989,15 +1989,15 @@
     gap: 7px;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) {
     border-radius: 9px;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td {
     font-size: 13.5px;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(6) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(6) {
     font-size: 17px;
   }
 
@@ -2798,22 +2798,22 @@
     gap: 8px !important;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) {
     border: 1px solid #d9e0e6 !important;
     border-radius: 11px !important;
     background: #fff !important;
     box-shadow: 0 1px 3px rgba(31, 42, 55, .05) !important;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td {
     font-size: 14px !important;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td::before {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td::before {
     font-size: 11.5px !important;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(6) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(6) {
     font-size: 17px !important;
   }
 
@@ -4312,24 +4312,24 @@
   /* Transaction card information hierarchy.
      Row 1: date + kind, row 2: account + category, row 3: summary,
      row 4: amount + running balance, row 5: actions. */
-  .ledger-card tbody > tr:not(.account-group-row) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(112px, .78fr);
     column-gap: 8px;
     padding: 8px 9px 0;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td {
     width: auto;
     padding: 4px 2px;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(1),
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(3) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(1),
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(3) {
     align-items: center;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(1) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(1) {
     grid-column: 1;
     grid-row: 1;
     display: flex;
@@ -4337,32 +4337,32 @@
     font-weight: 650;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(1)::before {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(1)::before {
     content: none;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(3) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(3) {
     grid-column: 2;
     grid-row: 1;
     display: flex;
     justify-content: flex-end;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(3)::before {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(3)::before {
     content: none;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(2) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(2) {
     grid-column: 1;
     grid-row: 2;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(4) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(4) {
     grid-column: 2;
     grid-row: 2;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(5) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(5) {
     grid-column: 1 / -1;
     grid-row: 3;
     min-height: 30px;
@@ -4371,8 +4371,8 @@
     border-top: 1px solid #edf0f2;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(6),
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(7) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(6),
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(7) {
     grid-row: 4;
     margin-inline: -2px;
     padding: 7px 7px;
@@ -4380,18 +4380,18 @@
     background: #f6f8fa;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(6) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(6) {
     grid-column: 1;
     font-size: 16px;
     font-weight: 700;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td:nth-child(7) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(7) {
     grid-column: 2;
     font-weight: 650;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td.action-col {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td.action-col {
     grid-column: 1 / -1;
     grid-row: 5;
     width: auto;
@@ -4548,11 +4548,11 @@
     width: 100%;
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) {
     grid-template-columns: minmax(0, 1fr) minmax(102px, .72fr);
   }
 
-  .ledger-card tbody > tr:not(.account-group-row) > td {
+  .ledger-card tbody > tr:not(.account-group-row):not(.ledger-message-row) > td {
     grid-template-columns: 58px minmax(0, 1fr);
     gap: 6px;
   }

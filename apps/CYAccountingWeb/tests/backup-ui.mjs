@@ -104,6 +104,38 @@ assert.doesNotMatch(renderedHtml, /資料筆數<\/th>/);
 assert.doesNotMatch(renderedHtml, /<th class="num">大小<\/th>/);
 assert.match(renderedHtml, /backupAcceptance/);
 
+const mobileHtml = context.window.mobileBackupInfoHtml({
+  ok: true,
+  provider: 'tiered',
+  topology: 'parallel_dual_provider',
+  configured: true,
+  providers: {
+    cloudflare_r2: { configured: true, retentionDays: 30, role: 'operational' },
+    google_cloud_storage: { configured: true, retentionDays: 14, role: 'cross_cloud_validation' }
+  },
+  schedule: { localTime: '每日 03:30（台灣時間）' },
+  phaseCAcceptance: { requiredConsecutiveScheduled: 14, consecutiveScheduledSuccesses: 5, completed: false },
+  logicalBackups: [{
+    backupId: '20261005T193000Z',
+    trigger: 'scheduled',
+    status: 'success',
+    createdAt: '2026-10-05T19:30:00Z',
+    rowCount: 10,
+    byteSize: 2048,
+    packageSha256: 'c'.repeat(64),
+    copies: [
+      { provider: 'cloudflare_r2', status: 'success' },
+      { provider: 'google_cloud_storage', status: 'success' }
+    ]
+  }]
+});
+assert.match(mobileHtml, /備份狀態/);
+assert.match(mobileHtml, /Phase C 排程驗收/);
+assert.match(mobileHtml, /Cloudflare R2/);
+assert.doesNotMatch(mobileHtml, /<button|立即執行|復原操作/);
+assert.match(source, /window\.cyOpenMobileBackupInfo = openMobileBackupInfo/);
+assert.doesNotMatch(source, /backupSettingsHtml\s*=\s*function|renderBackupStatus\s*=\s*function|renderTieredBackupHistory\s*=\s*function/, 'backup UI must not patch canonical functions after definition');
+
 assert.match(source, /logical backup/);
 assert.match(source, /cloudflare_r2/);
 assert.match(source, /google_cloud_storage/);
