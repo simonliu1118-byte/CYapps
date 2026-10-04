@@ -21,6 +21,7 @@ const css = [
   'desktop-migration.css',
   'adaptive-ui.css'
 ].map(name => read('public/' + name)).join('\n');
+const appJs = read('public/app.js');
 const quick = read('public/quick-entry.js');
 const category = read('public/category-management.js');
 const exportUi = read('public/excel-export-ui.js');
@@ -50,8 +51,8 @@ assert.match(exportUi, /navigator\.canShare/);
 assert.match(inlineEdit, /beginInlineLedgerEdit/);
 assert.match(adaptive, /window\.cyConfirm = options => new Promise/);
 assert.match(adaptive, /renderSettingsCategoryManager/);
-assert.match(adaptive, /handleV0214AccountDefault/);
-assert.match(adaptive, /handleV0214FavoriteToggle/);
+assert.match(appJs, /const defaultButton = event\.target\.closest\('\[data-account-default\]'\)/, 'account default stays with the canonical account action owner');
+assert.match(adaptive, /const favorite = event\.target\.closest\('\[data-category-favorite\]'\)/, 'category favorite stays with the canonical settings action owner');
 assert.match(accountingTools, /url\.pathname === '\/api\/accounts\/reorder'/);
 assert.match(accountingTools, /url\.pathname === '\/api\/category-groups\/reorder'/);
 assert.match(accountingTools, /url\.pathname === '\/api\/categories\/reorder'/);
