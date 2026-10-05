@@ -21,10 +21,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const message = document.querySelector('#recoveryMessage');
   const back = document.querySelector('#recoveryBack');
 
+  const loginShell = document.querySelector('.login-shell');
+  const viewport = window.visualViewport;
   let recovery = null;
   let resendTimer = null;
+  let restingViewportHeight = Math.max(
+    Math.round(viewport?.height || 0),
+    window.innerHeight || 0,
+    document.documentElement.clientHeight || 0
+  );
+  let viewportFrame = 0;
 
   showLoginError();
+  setupLoginViewport();
+  focusLoginOnDesktop();
 
   loginForm?.addEventListener('submit', handleLoginSubmit);
 
@@ -108,6 +118,62 @@ document.addEventListener('DOMContentLoaded', () => {
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       if (!navigating) setLoginBusy(false);
     }
+  }
+
+  function setupLoginViewport() {
+    const scheduleSync = () => {
+      if (viewportFrame) cancelAnimationFrame(viewportFrame);
+      viewportFrame = requestAnimationFrame(syncLoginViewport);
+    };
+
+    viewport?.addEventListener('resize', scheduleSync);
+    viewport?.addEventListener('scroll', scheduleSync);
+    window.addEventListener('resize', scheduleSync);
+    document.addEventListener('focusin', scheduleSync);
+    document.addEventListener('focusout', () => {
+      window.setTimeout(scheduleSync, 0);
+    });
+
+    syncLoginViewport();
+  }
+
+  function syncLoginViewport() {
+    viewportFrame = 0;
+    const visibleHeight = Math.max(1, Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 1));
+    const active = document.activeElement;
+    const inputFocused = active instanceof HTMLInputElement && active.closest('.login-card');
+    const heightLoss = Math.max(0, restingViewportHeight - visibleHeight);
+    const keyboardOpen = Boolean(inputFocused && heightLoss >= 120);
+
+    document.documentElement.style.setProperty('--login-visible-height', `${visibleHeight}px`);
+    document.body.classList.toggle('login-keyboard-open', keyboardOpen);
+
+    if (!keyboardOpen && !inputFocused) {
+      restingViewportHeight = visibleHeight;
+      if (loginShell && !loginPanel?.hidden) loginShell.scrollTop = 0;
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
+      return;
+    }
+
+    if (!keyboardOpen) {
+      restingViewportHeight = Math.max(restingViewportHeight, visibleHeight);
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    });
+  }
+
+  function focusLoginOnDesktop() {
+    const desktopPointer = window.matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
+    if (!desktopPointer.matches) return;
+    loginEmployeeNo?.focus({ preventScroll: true });
   }
 
   function setLoginBusy(busy) {

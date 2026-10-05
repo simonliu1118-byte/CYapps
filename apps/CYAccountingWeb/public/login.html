@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="color-scheme" content="light">
   <script>
     (() => {
@@ -15,7 +15,7 @@
     })();
   </script>
   <title>登入｜志遠記帳系統</title>
-  <link rel="stylesheet" href="/login.css?rev=login-ui">
+  <link rel="stylesheet" href="/login.css?rev=keyboard-aware-layout">
 </head>
 <body>
   <main class="login-shell">
@@ -32,7 +32,7 @@
         <form id="loginForm" action="/login" method="post" class="login-form" autocomplete="on">
           <label>
             <span>員工編號</span>
-            <input id="employeeNo" name="employeeNo" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="username" required autofocus>
+            <input id="employeeNo" name="employeeNo" type="text" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="username" required>
           </label>
           <label>
             <span>密碼</span>
@@ -78,6 +78,6 @@
 
     </section>
   </main>
-  <script src="/login.js?rev=login-hard-timeout" defer></script>
+  <script src="/login.js?rev=keyboard-aware-layout" defer></script>
 </body>
 </html>
