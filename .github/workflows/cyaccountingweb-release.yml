@@ -106,14 +106,6 @@ jobs:
             --title "CYAccountingWeb V$RELEASE_VERSION｜手機穩定版" \
             --notes-file "apps/CYAccountingWeb/V$RELEASE_VERSION.txt" --latest=false
 
-      - name: Remove previous CYAccountingWeb stable Release
-        run: |
-          set -euo pipefail
-          previous_tag="cyaccountingweb-v0.22.0"
-          if gh release view "$previous_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$previous_tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
-          fi
-
       - name: Remove generated CI files
         if: always()
         working-directory: apps/CYAccountingWeb
