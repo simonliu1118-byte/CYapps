@@ -25,7 +25,7 @@ assert.match(css, /@media \(min-width: 1024px\) and \(max-width: 1365px\) and \(
 assert.match(css, /body\.login-keyboard-open \.login-shell\s*\{[\s\S]*?align-items:\s*start;/);
 assert.doesNotMatch(css, /body\.login-keyboard-open \.login-card\s*\{/);
 assert.doesNotMatch(css, /body\.login-keyboard-open \.brand-mark\s*\{/);
-assert.match(css, /@media \(min-width: 768px\) and \(max-width: 1365px\) and \(orientation: landscape\)[\s\S]*?grid-template-columns:\s*minmax\(190px, \.72fr\) minmax\(0, 1\.6fr\)/);
+assert.match(css, /@media \(min-width: 768px\) and \(max-width: 1365px\) and \(orientation: landscape\) and \(pointer: coarse\)[\s\S]*?grid-template-columns:\s*minmax\(190px, \.72fr\) minmax\(0, 1\.6fr\)/);
 assert.match(css, /#loginForm\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/);
 
 assert.match(js, /const viewport = window\.visualViewport/);
