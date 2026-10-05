@@ -17,6 +17,7 @@ obj/
 # Build output
 dist/
 package/
+publish-staging/
 *.exe
 *.zip
 rsrc_windows_*.syso

@@ -6,7 +6,7 @@ CYERPAutoInput uses third-party components for local OCR inference.
 
 - Project: PaddleOCR / PaddlePaddle
 - License: Apache License 2.0
-- Model used for recognition: `PP-OCRv5_server_rec`
+- Models used: `ch_PP-OCRv5_det_mobile` (detection), `ch_PP-OCRv5_rec_mobile` (recognition), `ch_PP-LCNet_x0_25_textline_ori_cls_mobile` (text-line orientation).
 - Model source is pinned by `tools/fetch-ocr-models.ps1`; model binaries are not committed to this public repository.
 
 ## RapidOCRSharpOnnx

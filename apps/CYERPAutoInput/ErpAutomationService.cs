@@ -137,30 +137,30 @@ internal sealed class ErpAutomationService
     private async Task FillHeaderAsync(nint root, FormSnapshot snapshot, AutomationRunResult result, CancellationToken cancellationToken)
     {
         var expectedDate = snapshot.Values.TryGetValue("order_date", out var orderDate)
-  ? new string(orderDate.Where(char.IsDigit).ToArray())
-  : string.Empty;
+            ? new string(orderDate.Where(char.IsDigit).ToArray())
+            : string.Empty;
 
         foreach (var field in FieldCatalog.All.Where(f => f.Group == "表頭"))
         {
-  if (!snapshot.Values.TryGetValue(field.Key, out var value) || string.IsNullOrWhiteSpace(value)) continue;
-  cancellationToken.ThrowIfCancellationRequested();
-  var target = ErpLayoutResolver.ResolveHeader(root, field.Key);
-  await SetFieldAsync(root, target, field, value, cancellationToken);
-  _log.Info("field", $"filled group={field.Group} key={field.Key} chars={value.Length}");
-  if (field.Key == "order_date" && string.IsNullOrWhiteSpace(result.SalesOrderNumber))
-      result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
+            if (!snapshot.Values.TryGetValue(field.Key, out var value) || string.IsNullOrWhiteSpace(value)) continue;
+            cancellationToken.ThrowIfCancellationRequested();
+            var target = ErpLayoutResolver.ResolveHeader(root, field.Key);
+            await SetFieldAsync(root, target, field, value, cancellationToken);
+            _log.Info("field", $"filled group={field.Group} key={field.Key} chars={value.Length}");
+            if (field.Key == "order_date" && string.IsNullOrWhiteSpace(result.SalesOrderNumber))
+                result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
         }
 
         if (string.IsNullOrWhiteSpace(result.SalesOrderNumber))
-  result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
+            result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
     }
 
     private async Task<string> CaptureSalesOrderNumberAsync(nint root, string expectedDate, CancellationToken cancellationToken)
     {
         if (expectedDate.Length != 8 || !expectedDate.All(char.IsDigit))
-  throw new InvalidOperationException("單據日期尚未正規化為 8 位 YYYYMMDD，無法驗證 ERP 銷貨單號。");
+            throw new InvalidOperationException("單據日期尚未正規化為 8 位 YYYYMMDD，無法驗證 ERP 銷貨單號。");
         if (!Win32Automation.PrepareForeground(root, _log))
-  throw new InvalidOperationException("讀取銷貨單號前無法把 COPI08 帶到前景。");
+            throw new InvalidOperationException("讀取銷貨單號前無法把 COPI08 帶到前景。");
 
         var deadline = Environment.TickCount64 + 2500;
         var started = Environment.TickCount64;
@@ -170,27 +170,27 @@ internal sealed class ErpAutomationService
 
         while (Environment.TickCount64 < deadline)
         {
-  cancellationToken.ThrowIfCancellationRequested();
-  attempt++;
-  var target = ErpLayoutResolver.ResolveSalesOrderNumber(root);
-  lastDirect = NativeMethods.WindowText(target.Handle).Trim();
-  if (IsExpectedSalesOrderNumber(lastDirect, expectedDate))
-  {
-      _log.Info("document", $"sales order number captured sales_no={lastDirect} source=win32-text attempts={attempt} elapsed_ms={Environment.TickCount64 - started}");
-      return lastDirect;
-  }
+            cancellationToken.ThrowIfCancellationRequested();
+            attempt++;
+            var target = ErpLayoutResolver.ResolveSalesOrderNumber(root);
+            lastDirect = NativeMethods.WindowText(target.Handle).Trim();
+            if (IsExpectedSalesOrderNumber(lastDirect, expectedDate))
+            {
+                _log.Info("document", $"sales order number captured sales_no={lastDirect} source=win32-text attempts={attempt} elapsed_ms={Environment.TickCount64 - started}");
+                return lastDirect;
+            }
 
-  if (attempt == 1 || attempt % 3 == 0)
-  {
-      lastCopied = await CopyControlTextExactlyAsync(target.Handle, cancellationToken);
-      if (IsExpectedSalesOrderNumber(lastCopied, expectedDate))
-      {
-          _log.Info("document", $"sales order number captured sales_no={lastCopied} source=clipboard attempts={attempt} elapsed_ms={Environment.TickCount64 - started}");
-          return lastCopied;
-      }
-  }
+            if (attempt == 1 || attempt % 3 == 0)
+            {
+                lastCopied = await CopyControlTextExactlyAsync(target.Handle, cancellationToken);
+                if (IsExpectedSalesOrderNumber(lastCopied, expectedDate))
+                {
+                    _log.Info("document", $"sales order number captured sales_no={lastCopied} source=clipboard attempts={attempt} elapsed_ms={Environment.TickCount64 - started}");
+                    return lastCopied;
+                }
+            }
 
-  await Delay(60, cancellationToken);
+            await Delay(60, cancellationToken);
         }
 
         _log.Warn("document", $"sales order number wait timed out expected_date={expectedDate} attempts={attempt} direct_len={lastDirect.Length} copied_len={lastCopied.Length}");
@@ -204,32 +204,32 @@ internal sealed class ErpAutomationService
         var sentinel = $"CYERP_{Guid.NewGuid():N}";
         try
         {
-  if (Clipboard.ContainsText())
-  {
-      previousText = Clipboard.GetText();
-      hadText = true;
-  }
-  Clipboard.SetText(sentinel);
-  NativeMethods.SendMessage(handle, NativeMethods.EM_SETSEL, nint.Zero, new nint(-1));
-  NativeMethods.SendMessage(handle, NativeMethods.WM_COPY, nint.Zero, nint.Zero);
-  await Delay(35, cancellationToken);
-  if (!Clipboard.ContainsText()) return string.Empty;
-  var copied = Clipboard.GetText().Trim();
-  return copied == sentinel ? string.Empty : copied;
+            if (Clipboard.ContainsText())
+            {
+                previousText = Clipboard.GetText();
+                hadText = true;
+            }
+            Clipboard.SetText(sentinel);
+            NativeMethods.SendMessage(handle, NativeMethods.EM_SETSEL, nint.Zero, new nint(-1));
+            NativeMethods.SendMessage(handle, NativeMethods.WM_COPY, nint.Zero, nint.Zero);
+            await Delay(35, cancellationToken);
+            if (!Clipboard.ContainsText()) return string.Empty;
+            var copied = Clipboard.GetText().Trim();
+            return copied == sentinel ? string.Empty : copied;
         }
         catch (Exception ex)
         {
-  _log.Warn("document", $"sales order clipboard copy raised {ex.GetType().Name}");
-  return string.Empty;
+            _log.Warn("document", $"sales order clipboard copy raised {ex.GetType().Name}");
+            return string.Empty;
         }
         finally
         {
-  try
-  {
-      if (hadText) Clipboard.SetText(previousText);
-      else Clipboard.Clear();
-  }
-  catch { }
+            try
+            {
+                if (hadText) Clipboard.SetText(previousText);
+                else Clipboard.Clear();
+            }
+            catch { }
         }
     }
 
@@ -265,10 +265,10 @@ internal sealed class ErpAutomationService
         if (sheet == 0) throw new InvalidOperationException($"找不到 ERP 頁籤物件「{group}」。");
         var page = NativeMethods.GetParent(sheet);
         if (page == 0 || !NativeMethods.ClassName(page).Equals("TcxPageControl", StringComparison.OrdinalIgnoreCase))
-  throw new InvalidOperationException($"ERP 頁籤「{group}」找不到 TcxPageControl parent。");
+            throw new InvalidOperationException($"ERP 頁籤「{group}」找不到 TcxPageControl parent。");
 
         if (!Win32Automation.PrepareForeground(root, _log))
-  throw new InvalidOperationException("切換 ERP 頁籤前無法把 COPI08 帶到前景。");
+            throw new InvalidOperationException("切換 ERP 頁籤前無法把 COPI08 帶到前景。");
         var p = await _textVision.FindTextAsync(page, [group, group.Replace("(一)", "（一）")], cancellationToken);
         if (p is null) throw new InvalidOperationException($"找不到 ERP 頁籤「{group}」。");
         InputSender.Click(p.Value);
@@ -277,21 +277,21 @@ internal sealed class ErpAutomationService
         var stableVisibleChecks = 0;
         while (Environment.TickCount64 < deadline)
         {
-  cancellationToken.ThrowIfCancellationRequested();
-  if (NativeMethods.IsWindowVisible(sheet))
-  {
-      stableVisibleChecks++;
-      if (stableVisibleChecks >= 3)
-      {
-          _log.Info("tab", $"activated and stable group={group} checks={stableVisibleChecks}");
-          return sheet;
-      }
-  }
-  else
-  {
-      stableVisibleChecks = 0;
-  }
-  await Task.Delay(40, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (NativeMethods.IsWindowVisible(sheet))
+            {
+                stableVisibleChecks++;
+                if (stableVisibleChecks >= 3)
+                {
+                    _log.Info("tab", $"activated and stable group={group} checks={stableVisibleChecks}");
+                    return sheet;
+                }
+            }
+            else
+            {
+                stableVisibleChecks = 0;
+            }
+            await Task.Delay(40, cancellationToken);
         }
         throw new InvalidOperationException($"已點擊 ERP 頁籤「{group}」，但頁籤沒有穩定進入可用狀態。");
     }
@@ -654,7 +654,7 @@ internal sealed class ErpAutomationService
     {
         geometry = await EnsureDetailColumnVisibleAsync(root, grid, geometry, visibleRow, 5, cancellationToken);
         if (!Win32Automation.PrepareForeground(root, _log))
-  throw new InvalidOperationException("檢查批號欄前無法把 ERP 帶到前景。");
+            throw new InvalidOperationException("檢查批號欄前無法把 ERP 帶到前景。");
 
         var (activeGeometry, point, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 5, cancellationToken);
         geometry = activeGeometry;
@@ -663,8 +663,8 @@ internal sealed class ErpAutomationService
         _log.Info("detail", $"batch marker visual row={visibleRow + 1} item={itemCode} state={markerState} foreground_ratio={foregroundRatio:F4}");
         if (markerState == BatchMarkerVisualState.Blank)
         {
-  _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode} reason=visually-blank-batch-cell");
-  return geometry;
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode} reason=visually-blank-batch-cell");
+            return geometry;
         }
 
         // Marker or uncertain: use ERP's own F2 behavior as the final fallback signal.
@@ -672,52 +672,52 @@ internal sealed class ErpAutomationService
         var focus = await WaitGridFocusAsync(root, grid.Handle, cancellationToken, 500);
         if (focus == 0)
         {
-  InputSender.Click(point);
-  focus = await WaitGridFocusAsync(root, grid.Handle, cancellationToken, 500);
+            InputSender.Click(point);
+            focus = await WaitGridFocusAsync(root, grid.Handle, cancellationToken, 500);
         }
         if (focus == 0)
-  throw new InvalidOperationException($"品號 {itemCode}：批號欄點擊後焦點未留在商品明細；已停止避免後續欄位錯位。");
+            throw new InvalidOperationException($"品號 {itemCode}：批號欄點擊後焦點未留在商品明細；已停止避免後續欄位錯位。");
 
         InputSender.Press(NativeMethods.VK_F2);
         var lookup = await WaitLookupAsync(cancellationToken, 1000);
         if (lookup == 0)
         {
-  if (markerState == BatchMarkerVisualState.Marker)
-      throw new InvalidOperationException($"品號 {itemCode} 的批號欄明確偵測到批號標記，但按 F2 後沒有出現批號查詢視窗；已停止避免錯位。");
+            if (markerState == BatchMarkerVisualState.Marker)
+                throw new InvalidOperationException($"品號 {itemCode} 的批號欄明確偵測到批號標記，但按 F2 後沒有出現批號查詢視窗；已停止避免錯位。");
 
-  _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode} reason=uncertain-marker-and-no-f2-lookup");
-  return geometry;
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode} reason=uncertain-marker-and-no-f2-lookup");
+            return geometry;
         }
 
         _log.Info("detail", $"batch lookup opened row={visibleRow + 1} item={itemCode} marker_state={markerState}");
         if (!Win32Automation.PrepareForeground(lookup, _log))
-  throw new InvalidOperationException("F2 批號查詢視窗無法取得前景。");
+            throw new InvalidOperationException("F2 批號查詢視窗無法取得前景。");
 
         var selection = await _batchCellLocator.FindFirstPositiveStockAsync(lookup, cancellationToken);
         InputSender.Click(selection.Point);
 
         var lookupGrid = Win32Automation.EnumerateChildren(lookup)
-  .Where(c => c.Visible && c.ClassName.Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
-  .OrderByDescending(c => c.Rect.Width * c.Rect.Height)
-  .FirstOrDefault();
+            .Where(c => c.Visible && c.ClassName.Equals("TcxGridSite", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(c => c.Rect.Width * c.Rect.Height)
+            .FirstOrDefault();
         if (lookupGrid is null)
-  throw new InvalidOperationException("批號 F2 視窗中的表格在選取後無法確認；已停止避免誤送 Enter。");
+            throw new InvalidOperationException("批號 F2 視窗中的表格在選取後無法確認；已停止避免誤送 Enter。");
 
         var lookupFocus = await WaitGridFocusAsync(lookup, lookupGrid.Handle, cancellationToken, 700);
         if (lookupFocus == 0)
         {
-  InputSender.Click(selection.Point);
-  lookupFocus = await WaitGridFocusAsync(lookup, lookupGrid.Handle, cancellationToken, 700);
+            InputSender.Click(selection.Point);
+            lookupFocus = await WaitGridFocusAsync(lookup, lookupGrid.Handle, cancellationToken, 700);
         }
         if (lookupFocus == 0)
-  throw new InvalidOperationException("已點到正庫存批號列，但 F2 表格沒有取得可驗證焦點；為避免 Enter 送到錯誤控制項已停止。");
+            throw new InvalidOperationException("已點到正庫存批號列，但 F2 表格沒有取得可驗證焦點；為避免 Enter 送到錯誤控制項已停止。");
 
         InputSender.Press(NativeMethods.VK_RETURN);
         if (!await WaitWindowClosedAsync(lookup, 1600, cancellationToken))
-  throw new InvalidOperationException("已選取正庫存批號並送出 Enter，但 F2 視窗仍未關閉。");
+            throw new InvalidOperationException("已選取正庫存批號並送出 Enter，但 F2 視窗仍未關閉。");
 
         if (!Win32Automation.PrepareForeground(root, _log))
-  throw new InvalidOperationException("批號 F2 關閉後無法回到 ERP 前景。");
+            throw new InvalidOperationException("批號 F2 關閉後無法回到 ERP 前景。");
         _log.Info("detail", $"batch selected row={visibleRow + 1} item={itemCode} lookup_row={selection.RowNumber} positive_stock={selection.Stock}");
         return geometry;
     }
@@ -727,16 +727,16 @@ internal sealed class ErpAutomationService
         var wanted = Rectangle.FromLTRB(batchCellPoint.X - 38, batchCellPoint.Y - 9, batchCellPoint.X + 34, batchCellPoint.Y + 9);
         var crop = Rectangle.Intersect(gridRect, wanted);
         if (crop.Width < 20 || crop.Height < 10)
-  return (BatchMarkerVisualState.Uncertain, 1.0);
+            return (BatchMarkerVisualState.Uncertain, 1.0);
 
         using var image = ScreenCapture.Capture(crop);
         var histogram = new Dictionary<int, int>();
         for (var y = 1; y < image.Height - 1; y++)
         for (var x = 1; x < image.Width - 1; x++)
         {
-  var c = image.GetPixel(x, y);
-  var key = ((c.R >> 4) << 8) | ((c.G >> 4) << 4) | (c.B >> 4);
-  histogram[key] = histogram.TryGetValue(key, out var n) ? n + 1 : 1;
+            var c = image.GetPixel(x, y);
+            var key = ((c.R >> 4) << 8) | ((c.G >> 4) << 4) | (c.B >> 4);
+            histogram[key] = histogram.TryGetValue(key, out var n) ? n + 1 : 1;
         }
         if (histogram.Count == 0) return (BatchMarkerVisualState.Uncertain, 1.0);
 
@@ -749,10 +749,10 @@ internal sealed class ErpAutomationService
         for (var y = 2; y < image.Height - 2; y++)
         for (var x = 2; x < image.Width - 2; x++)
         {
-  var c = image.GetPixel(x, y);
-  total++;
-  var delta = Math.Abs(c.R - br) + Math.Abs(c.G - bg) + Math.Abs(c.B - bb);
-  if (delta >= 95) foreground++;
+            var c = image.GetPixel(x, y);
+            total++;
+            var delta = Math.Abs(c.R - br) + Math.Abs(c.G - bg) + Math.Abs(c.B - bb);
+            if (delta >= 95) foreground++;
         }
 
         var ratio = total == 0 ? 1.0 : foreground / (double)total;
@@ -766,11 +766,11 @@ internal sealed class ErpAutomationService
         var stop = Environment.TickCount64 + Math.Max(100, timeoutMs);
         while (Environment.TickCount64 < stop)
         {
-  cancellationToken.ThrowIfCancellationRequested();
-  var focus = NativeMethods.FocusedControlOfForeground(root);
-  if (focus != 0 && Win32Automation.IsInside(focus, gridHandle))
-      return focus;
-  await Task.Delay(35, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            var focus = NativeMethods.FocusedControlOfForeground(root);
+            if (focus != 0 && Win32Automation.IsInside(focus, gridHandle))
+                return focus;
+            await Task.Delay(35, cancellationToken);
         }
         return 0;
     }
