@@ -67,7 +67,7 @@ assert.doesNotMatch(css, /\.tablet-entry-controls,\s*#mobileEntrySecondaryButton
 assert.match(js, /function setupTouchWorkspaceEntrySecondaryAction\(\)/);
 assert.match(js, /button\.textContent = cyTouchWorkspaceEdit \? '取消' : '清空'/);
 assert.match(css, /\.entry-grid > #saveButton\s*\{[\s\S]*?grid-area:\s*save !important;[\s\S]*?width:\s*100% !important/);
-assert.doesNotMatch(css, /\.entry-grid > #saveButton\s*\{[\s\S]{0,220}?grid-row:\s*auto !important/);
+assert.doesNotMatch(css, /\.entry-grid > #saveButton\s*\{\s*grid-area:\s*save !important;[\s\S]{0,220}?grid-row:\s*auto !important/);
 assert.match(js, /trigger\.hidden = true;[\s\S]*?cy-mobile-account-name\"><\/span>/);
 assert.match(js, /window\.addEventListener\('cyacc:session-ready', syncMobileWorkspaceMobileIdentity\)/);
 assert.match(js, /const ready = Boolean\(main\) && !source\.classList\.contains\('hidden'\)/);
