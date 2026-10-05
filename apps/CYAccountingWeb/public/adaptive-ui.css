@@ -3035,9 +3035,9 @@
       "quicksummary"
       "amount"
       "."
+      "message"
       "save"
-      "secondary"
-      "message" !important;
+      "secondary" !important;
     grid-template-rows: repeat(8, max-content) auto repeat(3, max-content) !important;
     align-content: stretch !important;
     gap: 6px !important;
@@ -3128,8 +3128,6 @@
 
   .entry-grid > #saveButton {
     grid-area: save !important;
-    grid-column: 1 !important;
-    grid-row: auto !important;
     width: 100% !important;
     min-height: 42px !important;
     height: 42px !important;
