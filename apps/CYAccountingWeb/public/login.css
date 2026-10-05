@@ -227,20 +227,100 @@ button:disabled {
   }
 }
 
+@media (min-width: 1024px) and (max-width: 1365px) and (orientation: portrait) and (pointer: coarse) {
+  .login-card {
+    width: min(460px, 100%);
+    padding: 30px;
+  }
+}
+
 @media (max-width: 560px) {
   .login-shell {
     align-items: start;
-    padding: 12px;
+    padding: max(8px, env(safe-area-inset-top)) 12px 10px;
   }
 
   .login-card {
-    padding: 18px;
-    border-radius: 16px;
+    padding: 14px 16px;
+    border-radius: 14px;
   }
 
   .brand-block {
-    gap: 12px;
-    margin-bottom: 18px;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    font-size: 14px;
+  }
+
+  .brand-block h1 {
+    font-size: 20px;
+  }
+
+  h2 {
+    margin-bottom: 4px;
+    font-size: 17px;
+  }
+
+  .login-form,
+  .recovery-fields {
+    gap: 8px;
+  }
+
+  .login-form label {
+    gap: 4px;
+    font-size: 13px;
+  }
+
+  .login-form input {
+    min-height: 42px;
+    padding-block: 8px;
+  }
+
+  button {
+    min-height: 42px;
+  }
+
+  .link-button {
+    min-height: auto;
+    padding-block: 2px;
+  }
+
+  .message {
+    min-height: 16px;
+    font-size: 12px;
+  }
+}
+
+body.login-keyboard-open .login-shell {
+  align-items: start;
+  padding-top: max(8px, env(safe-area-inset-top));
+  padding-bottom: 8px;
+}
+
+@media (min-width: 768px) and (max-width: 1365px) and (orientation: landscape) {
+  .login-shell {
+    padding: 12px 18px;
+  }
+
+  .login-card {
+    width: min(760px, 100%);
+    padding: 18px 22px;
+    display: grid;
+    grid-template-columns: minmax(190px, .72fr) minmax(0, 1.6fr);
+    column-gap: 26px;
+    align-items: start;
+  }
+
+  .brand-block {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0;
+    align-self: start;
   }
 
   .brand-mark {
@@ -251,101 +331,54 @@ button:disabled {
   }
 
   .brand-block h1 {
-    font-size: 22px;
+    font-size: 21px;
   }
 
-  h2 {
+  #loginPanel,
+  #recoveryPanel {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  #loginPanel h2,
+  #recoveryPanel h2 {
     font-size: 18px;
   }
 
-  .login-form,
-  .recovery-fields {
-    gap: 12px;
+  #loginForm {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 7px;
   }
 
-  .login-form label {
-    gap: 5px;
-  }
-
-  .message {
-    min-height: 18px;
+  #loginForm > label {
+    min-width: 0;
+    gap: 4px;
     font-size: 13px;
   }
-}
 
-body.login-keyboard-open .login-shell {
-  align-items: start;
-  padding: max(8px, env(safe-area-inset-top)) 12px 10px;
-}
-
-body.login-keyboard-open .login-card {
-  padding: 14px 16px;
-  border-radius: 14px;
-}
-
-body.login-keyboard-open .brand-block {
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-body.login-keyboard-open .brand-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  font-size: 14px;
-}
-
-body.login-keyboard-open .brand-block h1 {
-  font-size: 20px;
-}
-
-body.login-keyboard-open h2 {
-  margin-bottom: 4px;
-  font-size: 17px;
-}
-
-body.login-keyboard-open .login-form,
-body.login-keyboard-open .recovery-fields {
-  gap: 8px;
-}
-
-body.login-keyboard-open .login-form label {
-  gap: 4px;
-  font-size: 13px;
-}
-
-body.login-keyboard-open .login-form input {
-  min-height: 42px;
-  padding-block: 8px;
-}
-
-body.login-keyboard-open button {
-  min-height: 42px;
-}
-
-body.login-keyboard-open .link-button {
-  min-height: auto;
-  padding-block: 2px;
-}
-
-body.login-keyboard-open .message {
-  min-height: 16px;
-  font-size: 12px;
-}
-
-@media (max-height: 700px) and (hover: none), (max-height: 700px) and (pointer: coarse) {
-  .login-shell {
-    align-items: start;
-    padding-top: 10px;
-    padding-bottom: 10px;
+  #loginForm input {
+    min-height: 40px;
+    padding-block: 7px;
   }
 
-  .login-card {
-    padding-top: 18px;
-    padding-bottom: 18px;
+  #loginMessage,
+  #loginButton,
+  #forgotPassword {
+    grid-column: 1 / -1;
   }
 
-  .brand-block {
-    margin-bottom: 16px;
+  #loginMessage {
+    min-height: 14px;
+    font-size: 12px;
+  }
+
+  #loginButton {
+    min-height: 40px;
+  }
+
+  #forgotPassword {
+    padding-block: 2px;
   }
 }
