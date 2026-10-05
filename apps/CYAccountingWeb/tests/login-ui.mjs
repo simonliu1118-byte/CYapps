@@ -14,7 +14,7 @@ const js = read('public/login.js');
 assert.match(html, /viewport-fit=cover/);
 assert.match(html, /interactive-widget=resizes-content/);
 assert.doesNotMatch(html, /\sautofocus(?:\s|>)/);
-assert.match(html, /login\.css\?rev=landscape-login-balance/);
+assert.match(html, /login\.css\?rev=landscape-login-title/);
 assert.match(html, /login\.js\?rev=visual-viewport-offset/);
 
 assert.match(css, /html,\s*body\s*\{[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden;/);
@@ -26,7 +26,9 @@ assert.match(css, /body\.login-keyboard-open \.login-shell\s*\{[\s\S]*?align-ite
 assert.doesNotMatch(css, /body\.login-keyboard-open \.login-card\s*\{/);
 assert.doesNotMatch(css, /body\.login-keyboard-open \.brand-mark\s*\{/);
 assert.match(css, /@media \(min-width: 768px\) and \(max-width: 1365px\) and \(orientation: landscape\) and \(pointer: coarse\)[\s\S]*?body\.login-keyboard-open \.login-shell\s*\{[\s\S]*?align-items:\s*center;[\s\S]*?grid-template-columns:\s*minmax\(170px, \.68fr\) minmax\(0, 1\.7fr\)/);
-assert.match(css, /#loginForm\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/);
+assert.match(css, /#loginPanel\s*\{[\s\S]*?display:\s*contents;/);
+assert.match(css, /#loginPanel > h2\s*\{[\s\S]*?grid-column:\s*1;[\s\S]*?grid-row:\s*2;[\s\S]*?margin:\s*7px 0 0 56px;/);
+assert.match(css, /#loginForm\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?grid-row:\s*1 \/ span 2;[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/);
 
 assert.match(js, /const viewport = window\.visualViewport/);
 assert.match(js, /viewport\?\.addEventListener\('resize', scheduleSync\)/);
