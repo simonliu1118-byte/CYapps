@@ -31,7 +31,7 @@ const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 
 assert.equal(version, '0.22.14');
-assert.equal(build, '3');
+assert.equal(build, '4');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
