@@ -9,9 +9,9 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.13 Build 0**；功能 baseline `38f2951d1f1c19ab1ba2440a17a1e55aa2692c26`，PR #314 |
-| 正式部署 | CYAccountingWeb Validate and Deploy **#440**（run `37217573390`）成功；schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
-| 公開穩定 Release | **V0.22.0**，tag `cyaccountingweb-v0.22.0`；公開 Release 與網站部署分開 |
+| 正式版本 | **V0.22.15 Build 0**；Release source `ac0ade7edd88fff0de3c5a9d0474f65c4294c65d`，PR #318；目前 main `c77c1af05e709233deb0444d796dbaf843bb7f38` 只再移除一次性 Release cleanup，不改產品 source |
+| 正式部署 | CYAccountingWeb Validate and Deploy **#461**（run `37254304413`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
+| 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
 | Governance | Common Rules 2.8.0；CYapps Governance 2.3.28 |
@@ -52,7 +52,8 @@ SUPER_ADMIN 永久刪除條件為已封存、無交易、最新有效期初為�
 
 - 新增記帳登入後預設為**收入**。
 - 日期使用瀏覽器／作業系統原生 `type=date` 顯示與 picker；不再疊加自製 `YYYY/MM/DD` 顯示遮罩。API／DB 資料仍為 `YYYY-MM-DD`。
-- 新增狀態保留「儲存／清空」；從看帳進入編輯後改為「儲存修改／取消」，取消會回到原月份與原看帳位置。
+- 新增狀態保留「儲存／清空」；從看帳進入編輯後改為「儲存修改／取消」，取消會回到原月份與原看帳位置。操作區固定在底部頁籤上方：清空／取消只留小間距貼近頁籤，儲存緊鄰其上；金額與儲存之間使用彈性空間，會隨手機可用高度自然伸縮。
+- 右上角帳號按鈕不再先顯示固定「帳號」placeholder；等 CYID Session 準備完成且已有真實 `currentUser` 後才一次顯示員工編號與姓名。
 - 常用科目與常用摘要透過明確 bootstrap/lifecycle 準備，不再靠連線文字 MutationObserver 延遲補載。
 - 看帳交易維持單列高密度；帳戶色塊與科目保留小幅視覺間距，空月份只顯示置中的「本月尚無記帳資料。」。
 - 「更多」中的備份資訊只對 SUPER_ADMIN 顯示，且為唯讀狀態資訊；不提供手機端備份／復原 mutation。
@@ -107,6 +108,6 @@ npm ci --no-audit --no-fund
 npm run dev
 ```
 
-正式 CI 由 `.github/workflows/cyaccountingweb-deploy.yml` 維護，包含 JavaScript syntax、application tests、D1 local migrations、Worker dry-run 與 CYID contract 檢查。Production main push 另執行 D1 migration、Worker/static deployment、secure login 與 semantic asset 驗證。
+正式 CI 由 `.github/workflows/cyaccountingweb-deploy.yml` 維護，包含 JavaScript syntax、application tests、D1 local migrations、Worker dry-run 與 CYID contract 檢查。Production main push 另執行 D1 migration、Worker/static deployment、secure login 與 semantic asset 驗證。正式公開 Release 由 `.github/workflows/cyaccountingweb-release.yml` 負責，重新驗證 source、執行公開套件安全掃描，並只發布可重建 source package 與 SHA-256。
 
 真實 Password Recovery Email/browser、所有平板裝置組合、Backup Phase C `x/14`、Restore／DR 仍以 `TODO.md` 為準。
