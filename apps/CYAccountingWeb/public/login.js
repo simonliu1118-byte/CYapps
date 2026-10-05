@@ -149,8 +149,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.toggle('login-keyboard-open', keyboardOpen);
 
     if (!keyboardOpen && !inputFocused) {
-      restingViewportHeight = Math.max(restingViewportHeight, visibleHeight);
-      if (loginShell) loginShell.scrollTop = 0;
+      restingViewportHeight = visibleHeight;
+      if (loginShell && !loginPanel?.hidden) loginShell.scrollTop = 0;
       if (window.scrollY !== 0 || window.scrollX !== 0) {
         window.scrollTo(0, 0);
       }
@@ -159,6 +159,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!keyboardOpen) {
       restingViewportHeight = Math.max(restingViewportHeight, visibleHeight);
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
       return;
     }
 
