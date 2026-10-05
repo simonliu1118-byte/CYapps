@@ -9,7 +9,7 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.15 Build 0**；Release source `ac0ade7edd88fff0de3c5a9d0474f65c4294c65d`，PR #318；目前 main `c77c1af05e709233deb0444d796dbaf843bb7f38` 只再移除一次性 Release cleanup，不改產品 source |
+| 正式版本 | **V0.22.15 Build 0**；Release source `ac0ade7edd88fff0de3c5a9d0474f65c4294c65d`，PR #318；後續 PR #319 只移除一次性 Release cleanup，不改產品 source |
 | 正式部署 | CYAccountingWeb Validate and Deploy **#461**（run `37254304413`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
