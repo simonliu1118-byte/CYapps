@@ -6,7 +6,7 @@
 
 - [ ] 真實 iPad／Android 完整交叉驗收：直向、橫向、分割視窗、原生 picker、觸控排序／捲動、螢幕鍵盤與外接鍵盤。
 - [ ] 真實平板登入、Session、登出、USER 唯讀及 Excel 分享／下載完整驗收。
-- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.22.15 的自動回歸與 production semantic verification 不等於所有真機情境已逐項驗收。
+- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.22.16 的自動回歸與 production semantic verification 不等於所有真機情境已逐項驗收。
 
 ## 交易互動
 

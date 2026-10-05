@@ -6,8 +6,8 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.15 Build 0**；Release source `ac0ade7edd88fff0de3c5a9d0474f65c4294c65d`，PR #318 已合併；後續 PR #319 只移除一次性 Release workflow 步驟，不改產品 source |
-| Production Deploy | CYAccountingWeb Validate and Deploy **#461**（run `37254304413`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.16 Build 0**；PR #321 已合併；手機／平板登入頁採共用 keyboard-aware viewport 處理 |
+| Production Deploy | CYAccountingWeb Validate and Deploy **#467**（run `37312560974`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.28**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
@@ -27,6 +27,7 @@
 - **V0.22.13**：iPhone 實機返修。手機記帳日期撤回自製 `YYYY/MM/DD` overlay，恢復原生 `type=date`；恢復新增「儲存／清空」與編輯「儲存修改／取消」，取消沿用既有 return context 回原月份／原位置；空月份提示置中且無底線；帳戶／科目增加小幅間距；備份資訊移除多餘說明文字。
 - **V0.22.14 Build 3～5**：手機記帳列高與字級微調，並修正底部操作區定位。最終 Build 5 移除 Save 的 `grid-row:auto` 衝突，讓金額後的彈性 spacer 真正依螢幕高度伸縮；清空／取消貼近底部頁籤、儲存緊鄰其上。手機帳號按鈕改等 `cyacc:session-ready` 與真實 `currentUser` 後才顯示，不再閃過「帳號」placeholder。
 - **V0.22.15**：使用者指定正式公開 Release，Build 歸零；PR #318、Production Deploy #461、Stable Release #2 全部成功。公開 tag 為 `cyaccountingweb-v0.22.15`，舊 V0.22.0 Release/tag 已移除。
+- **V0.22.16**：手機／平板登入頁鍵盤適應。移除 touch 裝置自動 autofocus，桌機細指標環境保留；使用 `visualViewport` 同步實際可視高度，鍵盤開啟時改 compact layout，頁面本體禁止殘留 body scroll，登入 shell 只在內容真的超出可視高度時捲動。PR #321 的 Governance Check #1037 與 Validate #466 成功，Production Deploy #467 成功。
 
 完整版本歷史見 `CHANGELOG.md`。
 
@@ -67,25 +68,23 @@
 
 ## 跨裝置現況
 
-- **手機**：新增／看帳兩頁；新增預設收入；日期使用原生 `type=date`；新增為「儲存／清空」、編輯為「儲存修改／取消」且取消回原 ledger context；操作區在底部頁籤上方，金額與儲存之間依可用高度彈性伸縮；右上帳號等 CYID Session 真實 identity ready 後才顯示；交易滑出後再點編輯／刪除；`更多` 中 SUPER_ADMIN 可查看唯讀備份資訊；共用 `餘額／更多`、設定與 canonical writer。
-- **平板**：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail；日期／月份與手機共用 touch/native owner，不建立平板第二套資料 state 或 writer。
+- **手機**：新增／看帳兩頁；新增預設收入；日期使用原生 `type=date`；新增為「儲存／清空」、編輯為「儲存修改／取消」且取消回原 ledger context；操作區在底部頁籤上方，金額與儲存之間依可用高度彈性伸縮；右上帳號等 CYID Session 真實 identity ready 後才顯示；登入頁依 `visualViewport` 處理鍵盤高度並在鍵盤開啟時壓縮裝飾／間距；交易滑出後再點編輯／刪除；`更多` 中 SUPER_ADMIN 可查看唯讀備份資訊；共用 `餘額／更多`、設定與 canonical writer。
+- **平板**：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail；日期／月份與手機共用 touch/native owner，不建立平板第二套資料 state 或 writer；登入頁同樣共用 keyboard-aware login owner，橫／直式只調 presentation。
 - **桌機**：保留鍵盤高效率輸入、inline edit 與桌面 layout。
 - 所有裝置共用 CYID、Role/App Access、Worker API、D1、期初計算、transaction mutation、帳戶色號與 server authorization。RWD 只負責 presentation。
 
 ## 已確認驗證
 
-V0.22.15 PR #318 的 Governance Check #1032 與 CYAccountingWeb Validate and Deploy #460 均成功。合併 Release source `ac0ade7edd88fff0de3c5a9d0474f65c4294c65d` 後，Production run #461（`37254304413`）validate 與 deploy 全部成功；Stable Release run #2（`37254391804`）也成功。已確認：
+V0.22.16 PR #321 的 Governance Check #1037 與 CYAccountingWeb Validate and Deploy #466 均成功。合併後 Production run #467（`37312560974`）validate 與 deploy 全部成功。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
 
 - JavaScript syntax 與 application tests；
-- mobile native-date、底部儲存／清空或取消、identity readiness 等 regression；
+- mobile native-date、底部儲存／清空或取消、identity readiness，以及 login viewport／keyboard regression；
 - D1 migrations local validation 與 production migration；
 - Worker dry-run 與正式 Worker/static assets deployment；
 - secure login entry 與 semantic frontend asset verification；
 - Release source package 的公開套件安全掃描；
 - source archive SHA-256 產生與自我驗證；
 - `cyaccountingweb-v0.22.15` Release/tag 成功建立，舊 V0.22.0 Release/tag 成功移除。
-
-後續 PR #319 只移除一次性舊 Release cleanup 步驟，Governance Check #1033 成功，沒有改動 V0.22.15 產品 source。
 
 這些自動證據不取代真實 iPad／Android 的所有觸控、鍵盤、原生 picker、分享與版面情境驗收。
 
