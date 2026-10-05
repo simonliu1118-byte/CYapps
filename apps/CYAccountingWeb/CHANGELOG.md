@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.18 Build 1 | 同一平板橫式登入工作項目的實機返修，不升 Patch：灰色錯位區塊已於 Build 0 解決後，依實機畫面微調橫式鍵盤狀態的視覺平衡；登入卡在可視 viewport 內改為置中、略縮總寬與欄間距，品牌與表單垂直對齊，訊息／忘記密碼區縮短，維持欄位與登入按鈕的觸控尺寸。手機與平板直式不變。 |
 | V0.22.18 Build 0 | 平板橫式登入第三輪實機返修：修正 iPad Safari 第一次叫出鍵盤時 visual viewport 會被瀏覽器平移、同時程式又對 focus 欄位呼叫 `scrollIntoView()`，造成登入卡被二次往上推並露出一條錯位背景區塊；登入 shell 現在直接跟隨 `visualViewport.offsetTop` 與實際可視高度，移除鍵盤開啟時的 `scrollIntoView()`，並在裝置旋轉造成 viewport 寬度明顯改變時重建 resting viewport baseline。手機、平板直式與平板橫式既有尺寸策略不變。 |
 | V0.22.17 Build 0 | 登入頁第二輪實機返修：手機固定使用同一套 compact 尺寸，不再因鍵盤開啟才縮放；平板直式保留較大的既有尺寸，鍵盤只影響可視高度／位置，不改卡片字級與尺寸；平板橫式改為專用雙欄 presentation，左側品牌、右側登入表單，員工編號與密碼並排，壓低垂直高度以適應橫式螢幕鍵盤。手機／平板仍共用同一 HTML、登入流程、CYID authority 與 visualViewport owner。 |
 | V0.22.16 Build 0 | 手機／平板登入頁鍵盤適應：移除 touch 裝置自動 autofocus，桌機細指標環境仍保留；登入頁改以 `visualViewport` 同步可視高度，頁面本體禁止產生殘留 body scroll，內容由登入 shell 依實際可視高度捲動；鍵盤開啟時自動進入 compact layout，縮小 Logo、標題與間距但維持可觸控欄位高度。手機正常登入時讓兩欄與登入操作盡量留在鍵盤上方；平板橫／直式共用同一 responsive login owner，不建立第二套登入流程。 |
