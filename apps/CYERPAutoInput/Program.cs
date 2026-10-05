@@ -51,7 +51,6 @@ internal static class Program
             logger.Warn("app", $"window icon load skipped: {ex.Message}");
         }
         CyVisualTheme.Apply(form);
-        Build10UiPatch.Apply(form);
         Application.Run(form);
         return 0;
     }

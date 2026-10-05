@@ -18,9 +18,6 @@
     <ApplicationIcon>assets\Auto.ico</ApplicationIcon>
     <AssemblyName>CYERPAutoInput</AssemblyName>
     <RootNamespace>CYERPAutoInput</RootNamespace>
-    <Version>0.1.0</Version>
-    <FileVersion>0.1.0.0</FileVersion>
-    <AssemblyVersion>0.1.0.0</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,7 +28,19 @@
 
   <ItemGroup>
     <EmbeddedResource Include="assets\Auto.ico" LogicalName="CYERPAutoInput.Auto.ico" />
+    <EmbeddedResource Include="VERSION" LogicalName="CYERPAutoInput.VERSION" />
+    <EmbeddedResource Include="BUILD" LogicalName="CYERPAutoInput.BUILD" />
   </ItemGroup>
+
+  <Target Name="ReadCanonicalVersion" BeforeTargets="GenerateAssemblyInfo">
+    <ReadLinesFromFile File="$(MSBuildProjectDirectory)\VERSION">
+      <Output TaskParameter="Lines" PropertyName="Version" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <FileVersion>$(Version).0</FileVersion>
+      <AssemblyVersion>$(Version).0</AssemblyVersion>
+    </PropertyGroup>
+  </Target>
 
   <ItemGroup>
     <Content Include="runtime\ocr\*.onnx">

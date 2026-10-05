@@ -82,8 +82,6 @@ internal static class CyVisualTheme
         grid.BorderStyle = BorderStyle.FixedSingle;
         grid.GridColor = Grid;
         grid.EnableHeadersVisualStyles = false;
-        grid.ColumnHeadersHeight = 30;
-        grid.RowTemplate.Height = 28;
         grid.ColumnHeadersDefaultCellStyle.BackColor = Window;
         grid.ColumnHeadersDefaultCellStyle.ForeColor = TextPrimary;
         grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Window;

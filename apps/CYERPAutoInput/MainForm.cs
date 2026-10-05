@@ -4,6 +4,8 @@ namespace CYERPAutoInput;
 
 internal sealed class MainForm : Form
 {
+    private static readonly Size StandardWindowSize = new(1160, 720);
+
     private readonly AppLogger _log;
     private readonly ErpAutomationService _automation;
     private readonly UserSettingsStore _settingsStore;
@@ -13,9 +15,10 @@ internal sealed class MainForm : Form
     private readonly Dictionary<string, FlowLayoutPanel> _groupFlows = new(StringComparer.OrdinalIgnoreCase);
     private readonly DetailDataGridView _details = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly ToolStripStatusLabel _buildStatus = new() { Text = "V0.1.0 Build 23 · Esc：緊急停止 · 不自動儲存 ERP" };
+    private readonly ToolStripStatusLabel _buildStatus = new() { Text = $"{AppVersionInfo.Display} · Esc：緊急停止 · 不自動儲存 ERP" };
     private readonly ModeToggle _modeToggle = new();
     private readonly CyPrimaryButton _start = new();
+    private TableLayoutPanel _root = null!;
     private CancellationTokenSource? _automationCts;
 
     public MainForm(AppLogger log)
@@ -27,8 +30,8 @@ internal sealed class MainForm : Form
 
         Text = "CYERPAutoInput — SMART ERP 自動輸入工具";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(1050, 640);
-        Size = new Size(1160, 720);
+        MinimumSize = StandardWindowSize;
+        Size = StandardWindowSize;
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         KeyPreview = true;
 
@@ -40,7 +43,7 @@ internal sealed class MainForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel
+        _root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -48,11 +51,11 @@ internal sealed class MainForm : Form
             Padding = new Padding(12),
             Margin = Padding.Empty
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 228));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-        Controls.Add(root);
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 252));
+        _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        Controls.Add(_root);
 
         var toolbar = new TableLayoutPanel
         {
@@ -63,7 +66,7 @@ internal sealed class MainForm : Form
         };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        root.Controls.Add(toolbar, 0, 0);
+        _root.Controls.Add(toolbar, 0, 0);
 
         var actions = new FlowLayoutPanel
         {
@@ -143,14 +146,14 @@ internal sealed class MainForm : Form
             Margin = Padding.Empty
         };
         for (var i = 0; i < 4; i++) fieldsHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        root.Controls.Add(fieldsHost, 0, 1);
+        _root.Controls.Add(fieldsHost, 0, 1);
 
         var groups = new[] { "表頭", "交易資料", "送貨資料", "發票資料(一)" };
         for (var i = 0; i < groups.Length; i++)
         {
             var box = new GroupBox
             {
-                Text = groups[i].Replace("(一)", "（一）"),
+                Text = groups[i] == "發票資料(一)" ? "發票資料" : groups[i],
                 Dock = DockStyle.Fill,
                 Padding = new Padding(7),
                 Margin = new Padding(i == 0 ? 0 : 4, 0, i == groups.Length - 1 ? 0 : 4, 0)
@@ -177,7 +180,7 @@ internal sealed class MainForm : Form
             Padding = new Padding(7),
             Margin = new Padding(0, 4, 0, 4)
         };
-        root.Controls.Add(detailBox, 0, 2);
+        _root.Controls.Add(detailBox, 0, 2);
         ConfigureDetailGrid();
         detailBox.Controls.Add(_details);
 
@@ -192,7 +195,7 @@ internal sealed class MainForm : Form
         _status.Text = "ERP：尚未偵測";
         statusStrip.Items.Add(_status);
         statusStrip.Items.Add(_buildStatus);
-        root.Controls.Add(statusStrip, 0, 3);
+        _root.Controls.Add(statusStrip, 0, 3);
     }
 
     private void AddField(FieldDefinition field)
@@ -286,9 +289,27 @@ internal sealed class MainForm : Form
         _details.AllowUserToAddRows = true;
         _details.AllowUserToDeleteRows = true;
         _details.AutoGenerateColumns = false;
-        _details.RowHeadersVisible = true;
+        _details.RowHeadersVisible = false;
+        _details.ScrollBars = ScrollBars.Vertical;
         _details.SelectionMode = DataGridViewSelectionMode.CellSelect;
-        _details.EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2;
+        _details.EditMode = DataGridViewEditMode.EditOnEnter;
+        _details.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+        _details.ColumnHeadersHeight = 29;
+        _details.RowTemplate.Height = 27;
+
+        _details.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            Name = "Sequence",
+            HeaderText = "序號",
+            Width = 55,
+            ReadOnly = true,
+            Frozen = true,
+            SortMode = DataGridViewColumnSortMode.NotSortable,
+            DefaultCellStyle = new DataGridViewCellStyle
+            {
+                Alignment = DataGridViewContentAlignment.MiddleCenter
+            }
+        });
         _details.Columns.Add(TextColumn("ItemCode", "品號", 220));
         _details.Columns.Add(TextColumn("Unit", "單位", 105));
         _details.Columns.Add(TextColumn("Quantity", "數量", 105, DataGridViewContentAlignment.MiddleRight));
@@ -298,7 +319,24 @@ internal sealed class MainForm : Form
         _details.Columns.Add(batchColumn);
         _details.Columns.Add(TextColumn("Warehouse", "庫別", 140));
         _details.Columns.Add(TextColumn("UnitPrice", "單價", 130, DataGridViewContentAlignment.MiddleRight));
-        for (var i = 0; i < 8; i++) _details.Rows.Add();
+
+        _details.RowsDefaultCellStyle.BackColor = CyVisualTheme.White;
+        _details.RowsDefaultCellStyle.ForeColor = CyVisualTheme.TextPrimary;
+        _details.RowsDefaultCellStyle.SelectionBackColor = CyVisualTheme.Selection;
+        _details.RowsDefaultCellStyle.SelectionForeColor = CyVisualTheme.TextPrimary;
+        _details.AlternatingRowsDefaultCellStyle.BackColor = CyVisualTheme.Window;
+        _details.AlternatingRowsDefaultCellStyle.ForeColor = CyVisualTheme.TextPrimary;
+        _details.AlternatingRowsDefaultCellStyle.SelectionBackColor = CyVisualTheme.Selection;
+        _details.AlternatingRowsDefaultCellStyle.SelectionForeColor = CyVisualTheme.TextPrimary;
+
+        for (var i = 0; i < 10; i++) _details.Rows.Add();
+        _details.CellFormatting += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (!_details.Columns[e.ColumnIndex].Name.Equals("Sequence", StringComparison.Ordinal)) return;
+            e.Value = (e.RowIndex + 1).ToString();
+            e.FormattingApplied = true;
+        };
     }
 
     private static DataGridViewTextBoxColumn TextColumn(
@@ -337,9 +375,31 @@ internal sealed class MainForm : Form
     private void ApplyMode(bool advanced)
     {
         if (_fieldRows.Count == 0) return;
+
         foreach (var field in FieldCatalog.All)
             _fieldRows[field.Key].Visible = advanced || field.Standard;
-        foreach (var flow in _groupFlows.Values) flow.PerformLayout();
+        foreach (var flow in _groupFlows.Values)
+            flow.PerformLayout();
+
+        if (advanced)
+        {
+            _root.RowStyles[1].SizeType = SizeType.Percent;
+            _root.RowStyles[1].Height = 100;
+            _root.RowStyles[2].SizeType = SizeType.Absolute;
+            _root.RowStyles[2].Height = 330;
+            WindowState = FormWindowState.Maximized;
+        }
+        else
+        {
+            _root.RowStyles[1].SizeType = SizeType.Absolute;
+            _root.RowStyles[1].Height = 252;
+            _root.RowStyles[2].SizeType = SizeType.Percent;
+            _root.RowStyles[2].Height = 100;
+            WindowState = FormWindowState.Normal;
+            Size = StandardWindowSize;
+        }
+
+        _root.PerformLayout();
     }
 
     private void OpenSettings()

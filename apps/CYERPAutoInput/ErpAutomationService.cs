@@ -58,9 +58,8 @@ internal sealed class ErpAutomationService
         var root = FindErp();
         if (root == 0) throw new InvalidOperationException("找不到 SMART ERP COPI08 視窗。\n請先開啟銷貨單建立作業。");
 
-        // Build 15 deliberately standardizes ERP geometry: automation always runs
-        // against a maximized COPI08 window instead of maintaining a second windowed
-        // coordinate/viewport path.
+        // Automation uses one stable ERP geometry: always maximize COPI08 instead of
+        // maintaining a second windowed coordinate/viewport path.
         NativeMethods.ShowWindow(root, NativeMethods.SW_MAXIMIZE);
         await Delay(220, cancellationToken);
         _log.Info("window", "COPI08 maximize requested before automation");
@@ -579,9 +578,8 @@ internal sealed class ErpAutomationService
         geometry = activeGeometry;
         var point = mappedPoint;
 
-        // Prefer the exact OCR match for the 單位 header. Build 14 could enter the
-        // grid-line fallback and overwrite a correct unit X with the preceding
-        // 贈/備品量 interval. The fast analyzer keeps exact OCR X separately.
+        // Prefer the exact OCR match for the 單位 header so the grid-line fallback
+        // cannot replace a verified unit X with the preceding 贈/備品量 interval.
         if (_gridVision.TryGetExactColumnX(grid.Handle, 4, out var exactUnitX))
         {
             var exactPoint = new Point(freshRect.Left + exactUnitX, mappedPoint.Y);
