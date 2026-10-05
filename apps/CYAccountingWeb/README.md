@@ -9,8 +9,8 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.16 Build 0**；PR #321 已合併，手機／平板登入頁完成鍵盤與可視 viewport 適應 |
-| 正式部署 | CYAccountingWeb Validate and Deploy **#467**（run `37312560974`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
+| 正式版本 | **V0.22.17 Build 0**；PR #321 已合併，手機／平板登入頁完成鍵盤與可視 viewport 適應 |
+| 正式部署 | CYAccountingWeb Validate and Deploy **#471**（run `37315686210`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
@@ -59,11 +59,11 @@ SUPER_ADMIN 永久刪除條件為已封存、無交易、最新有效期初為�
 - 「更多」中的備份資訊只對 SUPER_ADMIN 顯示，且為唯讀狀態資訊；不提供手機端備份／復原 mutation。
 - 保留新增／看帳兩頁、滑出後再點的編輯／刪除、共用彈窗及 `餘額／更多`。
 - 收支畫布維持純色收入 `#f4fbf6`、支出 `#fff6f5`。
-- 登入頁在手機鍵盤開啟時使用 `visualViewport` 同步真正可視高度並進入 compact layout；touch 裝置不再自動 autofocus，鍵盤關閉後不應殘留 Safari 的超長 body 捲軸。
+- 登入頁持續使用 `visualViewport` 同步真正可視高度，touch 裝置不自動 autofocus，鍵盤關閉後不應殘留 Safari 的超長 body 捲軸。V0.22.17 起手機固定使用同一套 compact 尺寸，不再因鍵盤出現才縮放。
 
 ### 平板
 
-目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。日期／月份改與手機共用原生 touch owner，平板只保留 layout / gesture presentation；沒有平板第二套 writer、month state 或 business flow。V0.22.16 另讓平板登入頁與手機共用同一 keyboard-aware login owner，橫／直式皆依實際可視高度調整，不另造平板登入流程。
+目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。日期／月份改與手機共用原生 touch owner，平板只保留 layout / gesture presentation；沒有平板第二套 writer、month state 或 business flow。V0.22.17 的平板登入仍與手機共用同一 keyboard-aware login owner：直式保留較大的固定尺寸，不因鍵盤縮放；橫式使用 touch-tablet 專用雙欄 presentation，降低垂直高度，不另造第二套登入流程。
 
 未合併的 PR #297 / V0.22.2 Build 4 不是目前基準，後續修正已由 V0.22.3 系列取代。
 
