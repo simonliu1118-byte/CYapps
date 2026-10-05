@@ -1,0 +1,1 @@
+global using CYInvoice.Core;

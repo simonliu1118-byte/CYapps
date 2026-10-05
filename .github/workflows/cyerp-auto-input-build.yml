@@ -8,6 +8,7 @@ on:
     paths:
       - "apps/CYERPAutoInput/**"
       - ".github/workflows/cyerp-auto-input-build.yml"
+      - ".github/scripts/scan-public-package.py"
 
 permissions:
   contents: read
@@ -41,6 +42,10 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
 
       - name: Fetch canonical CYERPAutoInput icon
         shell: pwsh
@@ -117,6 +122,10 @@ jobs:
           $selfTest = Start-Process -FilePath "$root/CYERPAutoInput.exe" -ArgumentList "--vision-self-test" -Wait -PassThru -NoNewWindow
           if ($selfTest.ExitCode -ne 0) { throw "Packaged EXE vision self-test failed with code $($selfTest.ExitCode)" }
           Remove-Item -Recurse -Force "$root/logs" -ErrorAction SilentlyContinue
+
+      - name: Scan engineering package for secrets and production bindings
+        shell: pwsh
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" ./package
 
       - name: Upload engineering package
         uses: actions/upload-artifact@v7

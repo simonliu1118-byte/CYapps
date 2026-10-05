@@ -1,24 +1,36 @@
 from __future__ import annotations
 
 import tempfile
+import json
+import sqlite3
 from pathlib import Path
 from datetime import date
 from unittest.mock import patch
 
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QLabel, QGroupBox, QPushButton, QTabWidget
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import Qt
 
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 
 from db import Database
 import main as main_module
+import dialogs as dialogs_module
+import util as util_module
 from main import MainWindow
-from dialogs import AccountManagerDialog, CategoryManagerDialog, OpeningBalanceDialog, PasswordDialog, SettingsDialog
+from dialogs import AccountManagerDialog, CategoryManagerDialog, OpeningBalanceDialog, SettingsDialog
 from import_dialog import ImportTransactionsDialog
 from background import start_background_task
 from widgets import CategoryComboBox
 from util import normalize_date_input, shift_month, APP_VERSION, APP_RELEASE_DATE
 
+
+def reset_test_transactions(db: Database) -> None:
+    # Test fixture only. The application no longer offers a clear-all operation.
+    with db.tx() as conn:
+        conn.execute('DELETE FROM transactions')
+        conn.execute('DELETE FROM opening_balances')
 
 
 def test_locale_constructor_compatibility():
@@ -55,8 +67,8 @@ def test_database_core():
     assert not db.save_transaction('2026/07/31', '現金', 'income', '一般收入', '', 1).ok
     assert db.save_transaction('2026/08/01', '現金', 'income', '一般收入', '', 1).ok
 
-    # Clear only transactions/opening balances; lock and master data remain.
-    db.clear_transactions_and_openings()
+    # Reset this test's records; the user's master data and month lock remain.
+    reset_test_transactions(db)
     assert db.counts() == {'transactions': 0, 'openings': 0}
     assert db.locked_through() == '2026/07'
     assert len(db.accounts()) == 1
@@ -86,7 +98,7 @@ def test_database_core():
         assert '10' in str(exc)
 
     # Frequent summaries are account + category specific and ranked by frequency, then recency.
-    db.clear_transactions_and_openings()
+    reset_test_transactions(db)
     for summary in ['甲', '乙', '甲', '乙', '乙', '甲', '乙', '丙']:
         db.save_transaction('2026/08/01', '現金', 'income', '一般收入', summary, 1)
     db.add_account('中信')
@@ -96,7 +108,7 @@ def test_database_core():
     assert db.frequent_summaries('income', '中信', '一般收入', 100, 3, 10, 'tx_date') == ['中信專用']
 
     # Accounting-date and recent-entry sampling can intentionally differ.
-    db.clear_transactions_and_openings()
+    reset_test_transactions(db)
     for _ in range(3):
         db.save_transaction('2026/09/01', '現金', 'income', '一般收入', '新日期', 1)
     for _ in range(3):
@@ -122,12 +134,33 @@ def test_account_manager_controls_and_titles():
     assert visible_order == ['↑', '↓', '新增', '修改', '刪除']
     assert '關閉' not in button_texts
     assert dlg.windowTitle() == '帳戶管理'
-    clear_dlg = PasswordDialog()
-    assert clear_dlg.windowTitle() == '清除記帳資料與期初餘額'
+    old_palette = app.palette()
+    old_style = app.styleSheet()
+    try:
+        dark_palette = QPalette(old_palette)
+        dark_palette.setColor(QPalette.ColorRole.Base, QColor('#202020'))
+        dark_palette.setColor(QPalette.ColorRole.Text, QColor('#202020'))
+        app.setPalette(dark_palette)
+        app.setStyleSheet(main_module.APP_STYLE)
+        dlg.list.ensurePolished()
+        assert dlg.list.palette().color(QPalette.ColorRole.Base).name() == '#ffffff'
+        assert dlg.list.palette().color(QPalette.ColorRole.Text).name() == '#1f2937'
+    finally:
+        app.setStyleSheet(old_style)
+        app.setPalette(old_palette)
     category_dlg = CategoryManagerDialog(db)
     category_buttons = [b.text() for b in category_dlg.findChildren(QPushButton)]
     assert '關閉' not in category_buttons
     assert {'↑', '↓', '新增科目', '修改', '刪除', '新增大分類', '移至其他大分類'} <= set(category_buttons)
+    category_tabs = category_dlg.findChild(QTabWidget)
+    assert category_tabs is not None
+    assert category_tabs.count() == 2
+    # V1.1.0 Release implementation: plain native QTabWidget.
+    assert category_tabs.objectName() == ''
+    assert 'categoryManagerTabs' not in main_module.APP_STYLE
+    # Secondary dialogs inherit QApplication's ACC icon; no Win32
+    # fixed-dialog/no-icon manipulation remains.
+    assert not hasattr(main_module.ChineseStandardButtonFilter, '_prepare_secondary_dialog_chrome')
     combo = CategoryComboBox()
     assert combo.lineEdit().hasFrame() is False
     opening_dlg = OpeningBalanceDialog(db, '2026/07')
@@ -137,8 +170,88 @@ def test_account_manager_controls_and_titles():
     dlg.close()
     category_dlg.close()
     opening_dlg.close()
-    clear_dlg.close()
     db.close()
+
+def test_clear_data_requires_two_delete_confirmations():
+    root = Path(tempfile.mkdtemp())
+    db = Database(root / 'confirm.db')
+    db.set_opening_balances('2026/07', {'現金': 500})
+    assert db.save_transaction('2026/07/01', '現金', 'income', '一般收入', '測試', 30).ok
+    db.add_account('銀行')
+    db.add_category('income', db.category_tree('income')[0]['id'], '自訂科目')
+    db.set_locked_through('2026/07')
+    backup_path = root / 'before_clear.db'
+    db.backup_to(backup_path)
+    app = QApplication.instance() or QApplication([])
+    dlg = SettingsDialog(db, {}, lambda _p: (True, ''), lambda _p: (True, ''),
+                         db.reset_local_ledger, lambda: None)
+    assert [b.text() for b in dlg.findChildren(QPushButton)].count('清除所有記帳資料與期初餘額') == 1
+    for replies, prompts in [
+        ([('delete', True)], 1),
+        ([('DELETE', True), ('delete', True)], 2),
+        ([('DELETE', True), ('DELETE', False)], 2),
+        ([('DELETE', False)], 1),
+    ]:
+        with patch.object(dialogs_module.QInputDialog, 'getText', side_effect=replies) as get_text, \
+             patch.object(dialogs_module.QMessageBox, 'warning'):
+            dlg.clear_data()
+            assert get_text.call_count == prompts
+        assert db.counts() == {'transactions': 1, 'openings': 1}
+    with patch.object(dialogs_module.QInputDialog, 'getText', side_effect=[('DELETE', True), ('DELETE', True)]) as get_text, \
+         patch.object(dialogs_module.QMessageBox, 'information'):
+        dlg.clear_data()
+        assert get_text.call_count == 2
+    assert db.counts() == {'transactions': 0, 'openings': 0}
+    assert db.locked_through() is None
+    assert [a['name'] for a in db.accounts()] == ['現金']
+    assert db.category_names('income') == ['一般收入']
+    assert db.category_names('expense') == ['一般支出']
+    assert db.validate_database_file(backup_path)[0]
+    dlg.close()
+    db.close()
+
+def test_full_clear_resets_settings_and_preserves_recovery_backup():
+    root = Path(tempfile.mkdtemp())
+    db = Database(root / 'ledger.db')
+    db.add_account('銀行')
+    db.set_opening_balances('2026/09', {'現金': 20, '銀行': 50})
+    assert db.save_transaction('2026/09/01', '銀行', 'income', '一般收入', '舊帳', 100).ok
+    db.set_locked_through('2026/09')
+    original_config = {'database_path': str(db.path), 'google_drive_sync_enabled': True,
+                       'google_refresh_token': 'test-only', 'ledger_entry_position': 'oldest'}
+    config = dict(original_config)
+    config_file = root / 'config.json'
+    app = QApplication.instance() or QApplication([])
+    win = MainWindow(db, config, None)
+    with patch.object(util_module, 'config_path', return_value=config_file), \
+         patch.object(main_module, 'config_path', return_value=config_file):
+        util_module.save_config(config)
+        win.clear_data()
+        assert config == {'database_path': str(db.path)}
+        assert json.loads(config_file.read_text(encoding='utf-8')) == config
+        assert json.loads((root / 'config.json.bak').read_text(encoding='utf-8')) == config
+        assert db.counts() == {'transactions': 0, 'openings': 0}
+        assert [row['name'] for row in db.accounts()] == ['現金']
+        assert db.locked_through() is None
+        backups = list((root / 'RestoreBackup').glob('CYacc_beforeclear_*.db'))
+        assert len(backups) == 1
+        with sqlite3.connect(backups[0]) as archived:
+            assert archived.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 1
+            assert archived.execute('SELECT COUNT(*) FROM opening_balances').fetchone()[0] == 2
+        # If settings cannot be written, do not strand the user with an empty
+        # ledger: restore both the database and in-memory preferences.
+        db.set_locked_through('2026/09')
+        assert db.save_transaction('2026/10/01', '現金', 'income', '一般收入', '保留', 1).ok
+        before_failure = dict(config)
+        with patch.object(main_module, 'save_config', side_effect=OSError('test write failure')):
+            try:
+                win.clear_data()
+                assert False, 'a failed settings write must abort the reset'
+            except OSError:
+                pass
+        assert config == before_failure
+        assert db.counts()['transactions'] == 1
+    win.close()
 
 def test_ui_constructs():
     root = Path(tempfile.mkdtemp())
@@ -153,6 +266,12 @@ def test_ui_constructs():
     assert win.input_tab.date_edit.hasFocus() is False  # focus is queued
     assert '2026/07' in win.ledger_tab.table_title.text()
     assert len(win.input_tab.confirm_labels) == 10
+    assert win.minimumWidth() == 1120
+    assert win.minimumHeight() == 735
+    footer = win.findChild(QLabel, 'appFooter')
+    assert footer is not None
+    assert APP_VERSION in footer.text()
+    assert 'Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.' in footer.text()
     selected_button = win.input_tab.account_buttons[win.input_tab.selected_account]
     assert selected_button.isChecked()
     assert win.input_tab.income_amount.maxLength() == 7
@@ -167,9 +286,9 @@ def test_ui_constructs():
     win.input_tab.income_amount.setText('1')
     win.input_tab.save_entry('income')
     assert '(空白)' in win.input_tab.confirm_lines[0]
-    assert '#98a2b3' in win.input_tab.confirm_lines[0]
+    assert '#98A2B3' in win.input_tab.confirm_lines[0]
     assert '[現金]' in win.input_tab.confirm_lines[0]
-    assert 'background-color:#e7efe9' in win.input_tab.confirm_lines[0]
+    assert 'background-color:#EDF5F2' in win.input_tab.confirm_lines[0]
     assert '｜' not in win.input_tab.confirm_lines[0]
     assert '$1' in win.input_tab.confirm_lines[0]
     assert '&lt;存檔成功&gt;' in win.input_tab.confirm_lines[0]
@@ -192,6 +311,9 @@ def test_ui_constructs():
     assert dlg.common_summary_min.text() == '3'
     assert dlg.common_summary_recent.findChild(QPushButton) is None
     assert dlg.common_summary_min.findChild(QPushButton) is None
+    settings_titles = {group.title() for group in dlg.findChildren(QGroupBox)}
+    assert '程式資訊' not in settings_titles
+    assert '帳本重置' in settings_titles
     # The settings page intentionally remains an administrator override that
     # may move the lock backward after an explicit warning.
     db.set_locked_through('2026/07')
@@ -321,7 +443,57 @@ if __name__ == '__main__':
     test_locale_constructor_compatibility()
     test_database_core()
     test_account_manager_controls_and_titles()
+    test_clear_data_requires_two_delete_confirmations()
+    test_full_clear_resets_settings_and_preserves_recovery_backup()
     test_ui_constructs()
     test_backup_schedule_and_recovery_paths()
     test_maximized_window_state_is_restored()
     print('ALL TESTS PASSED')
+
+
+def test_phase1_section_group_titles_are_effectively_bold():
+    root = Path(tempfile.mkdtemp())
+    db = Database(root / 'visual-groups.db')
+    app = QApplication.instance() or QApplication([])
+    old_style = app.styleSheet()
+    try:
+        app.setStyleSheet(main_module.APP_STYLE)
+
+        input_tab = main_module.InputTab(db, {}, lambda _month: None)
+        input_groups = {g.title(): g for g in input_tab.findChildren(QGroupBox)}
+        for title in ('基本資訊', '收入', '支出', '輸入確認'):
+            group = input_groups[title]
+            group.ensurePolished()
+            assert group.font().bold(), title
+            labels = group.findChildren(QLabel)
+            if labels:
+                labels[0].ensurePolished()
+                assert not labels[0].font().bold(), f'{title} child text must remain regular'
+
+        settings = SettingsDialog(db, {}, lambda _p: (True, ''), lambda _p: (True, ''),
+                                  db.reset_local_ledger, lambda: None)
+        for group in settings.findChildren(QGroupBox):
+            group.ensurePolished()
+            assert group.font().bold(), group.title()
+
+        importer = ImportTransactionsDialog(db, {})
+        import_groups = {g.title(): g for g in importer.findChildren(QGroupBox)}
+        for title in ('匯入來源', '欄位對應', '匯入預覽（前 20 筆）'):
+            group = import_groups[title]
+            group.ensurePolished()
+            assert group.font().bold(), title
+
+        chrome = main_module.ChineseStandardButtonFilter(app)
+        account = AccountManagerDialog(db)
+        chrome._prepare_secondary_dialog_chrome(account)
+        assert not bool(account.windowFlags() & Qt.WindowType.WindowSystemMenuHint)
+        assert bool(account.windowFlags() & Qt.WindowType.WindowTitleHint)
+        assert bool(account.windowFlags() & Qt.WindowType.WindowCloseButtonHint)
+
+        account.close()
+        importer.close()
+        settings.close()
+        input_tab.close()
+    finally:
+        app.setStyleSheet(old_style)
+        db.close()

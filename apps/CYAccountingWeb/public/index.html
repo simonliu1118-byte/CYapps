@@ -4,35 +4,86 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>志遠記帳系統 Web</title>
-  <link rel="stylesheet" href="/app.css">
-  <link rel="stylesheet" href="/v03.css">
+  <style id="cyaccBootStyle">
+    #cyaccBootStatus { display: none; }
+    @media (max-width: 767px) {
+      body.cyacc-booting .shell,
+      body.cyacc-booting #readOnlyNotice {
+        visibility: hidden !important;
+      }
+      body.cyacc-booting .topbar-actions {
+        display: none !important;
+      }
+      body.cyacc-booting #cyaccBootStatus,
+      body.cyacc-boot-failed #cyaccBootStatus {
+        display: flex;
+        min-height: calc(100dvh - 72px);
+        align-items: center;
+        justify-content: center;
+        padding: 32px 24px;
+        color: #526273;
+        font-size: 15px;
+        text-align: center;
+      }
+      body.cyacc-boot-failed #cyaccBootStatus {
+        color: #a34b45;
+      }
+    }
+  </style>
+  <script>
+    window.__cyaccBootWatchdog = window.setTimeout(() => {
+      const body = document.body;
+      const status = document.querySelector('#cyaccBootStatus');
+      if (!body?.classList.contains('cyacc-booting') || !status) return;
+      status.textContent = '載入時間過久，請重新整理頁面。';
+    }, 12000);
+  </script>
+  <link rel="stylesheet" href="/app.css?rev=app-shell">
+  <link rel="stylesheet" href="/accounting-ui.css?rev=account-color-slots">
+  <link rel="stylesheet" href="/quick-entry-settings.css?rev=quick-entry-settings">
+  <link rel="stylesheet" href="/category-management.css?rev=category-management">
+  <link rel="stylesheet" href="/excel-export.css?rev=excel-export">
+  <link rel="stylesheet" href="/ledger-inline-edit.css?rev=ledger-inline-edit">
+  <link rel="stylesheet" href="/excel-import.css?rev=excel-import">
+  <link rel="stylesheet" href="/backup.css?rev=backup-readonly-mobile">
+  <link rel="stylesheet" href="/desktop-migration.css?rev=desktop-migration">
+  <link rel="stylesheet" href="/adaptive-ui.css?rev=mobile-entry-footer-anchor">
 </head>
-<body>
+<body class="cyacc-booting">
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.3.0</span></p>
+      <p>CYAccounting Web <span class="version">V0.22.18 Build 3</span></p>
     </div>
     <div class="topbar-actions">
+      <span id="currentUser" class="current-user hidden"></span>
+      <button id="logoutButton" class="secondary compact logout-button hidden" type="button">登出</button>
       <button id="settingsButton" class="secondary compact" type="button">設定</button>
       <div id="connectionStatus" class="status">連線檢查中</div>
     </div>
   </header>
 
+  <div id="cyaccBootStatus" role="status" aria-live="polite">正在載入介面…</div>
+
+  <div id="readOnlyNotice" class="read-only-banner hidden" role="status">唯讀模式：可檢視帳務資料與匯出 Excel；新增、編輯與管理功能已停用。</div>
+
   <main class="shell">
     <section class="card entry-card">
       <div class="section-title">
-        <div class="title-with-badge"><h2>新增記帳</h2><span id="entryLockBadge" class="lock-badge hidden">本月已鎖帳</span></div>
+        <div class="title-with-badge"><h2>新增記帳</h2><fieldset class="entry-kind-switch-field"><legend>收支模式</legend><div class="entry-kind-switch" role="group" aria-label="收入或支出"><button type="button" class="kind-button" data-kind="income">收入</button><button type="button" class="kind-button active" data-kind="expense">支出</button></div></fieldset><span id="entryLockBadge" class="lock-badge hidden">本月已鎖帳</span></div>
         <span id="saveMessage" class="save-message"></span>
       </div>
 
       <form id="transactionForm" autocomplete="off">
+        <div id="entryAccountChoiceRow" class="entry-account-choice-row" hidden>
+          <span class="entry-field-label">帳戶</span>
+          <div id="entryAccountButtons" class="entry-account-buttons" role="radiogroup" aria-label="帳戶"></div>
+        </div>
         <div class="entry-grid">
-          <label><span>日期</span><input id="txDate" type="date" required></label>
-          <label><span>帳戶</span><select id="accountName" required></select></label>
-          <fieldset class="kind-field"><legend>收支</legend><div class="kind-buttons"><button type="button" class="kind-button active" data-kind="expense">支出</button><button type="button" class="kind-button" data-kind="income">收入</button></div></fieldset>
-          <label><span>科目</span><select id="categoryName" required></select></label>
-          <label class="summary-field"><span>摘要</span><input id="summary" type="text" maxlength="100" placeholder="可留白"></label>
+          <label class="date-field"><span>日期</span><input id="txDate" type="date" required></label>
+          <label class="account-source-field"><span>帳戶</span><select id="accountName" required></select></label>
+          <label class="category-field"><span>科目</span><select id="categoryName" required></select></label>
+          <label class="summary-field"><span>摘要</span><input id="summary" type="text" maxlength="40" placeholder="可留白，最多20個中文字"></label>
           <label class="amount-field"><span>金額</span><input id="amount" type="text" inputmode="numeric" maxlength="7" placeholder="0" required></label>
           <button id="saveButton" class="primary" type="submit">儲存</button>
         </div>
@@ -41,7 +92,7 @@
         <div id="favoriteCategoryGroup" class="quick-tool-row hidden"><span class="quick-tool-label">常用科目</span><div id="favoriteCategoryButtons" class="quick-chip-list"></div></div>
         <div id="summarySuggestionGroup" class="quick-tool-row hidden"><span class="quick-tool-label">常用摘要</span><div id="summarySuggestions" class="quick-chip-list"></div></div>
       </div>
-      <p class="keyboard-hint">鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存</p>
+      <p class="keyboard-hint">鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　Tab 切換收入／支出</p>
     </section>
 
     <section class="card ledger-card">
@@ -66,20 +117,27 @@
         <label><span>帳戶</span><select id="editAccount" required></select></label>
         <label><span>科目</span><select id="editCategory" required></select></label>
         <label><span>金額</span><input id="editAmount" type="text" inputmode="numeric" maxlength="7" required></label>
-        <label class="full-row"><span>摘要</span><input id="editSummary" type="text" maxlength="100"></label>
+        <label class="full-row"><span>摘要</span><input id="editSummary" type="text" maxlength="40" placeholder="最多20個中文字"></label>
       </div>
       <div id="editMessage" class="dialog-message"></div>
       <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="editDialog">取消</button><button id="editSaveButton" class="primary" type="submit">儲存修改</button></div>
     </form>
   </dialog>
 
+  <dialog id="openingDialog" class="modal opening-modal">
+    <div class="modal-header"><div><h2>期初餘額</h2><p>由前期結餘自動承接；手動調整需填寫理由並保留 audit。</p></div><button class="icon-button" type="button" data-close-dialog="openingDialog" aria-label="關閉">×</button></div>
+    <div class="pane-heading opening-dialog-heading"><p class="hint">預設為自動計算；如需例外調整，請使用「手動調整」並填寫理由。</p><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
+    <div id="openingRows" class="opening-list"></div>
+    <div id="openingMessage" class="dialog-message"></div>
+    <div class="modal-actions"><button class="secondary" type="button" data-close-dialog="openingDialog">關閉</button><button id="saveOpeningButton" class="primary" type="button">手動調整</button></div>
+  </dialog>
+
   <dialog id="settingsDialog" class="modal settings-modal">
-    <div class="modal-header"><div><h2>設定</h2><p>帳戶、科目、期初餘額與鎖帳</p></div><button class="icon-button" type="button" data-close-dialog="settingsDialog" aria-label="關閉">×</button></div>
+    <div class="modal-header"><div><h2>設定</h2><p>帳戶、科目與鎖帳</p></div><button class="icon-button" type="button" data-close-dialog="settingsDialog" aria-label="關閉">×</button></div>
     <div class="settings-layout">
       <nav class="settings-nav" aria-label="設定分類">
         <button type="button" class="settings-tab active" data-settings-tab="accounts">帳戶</button>
         <button type="button" class="settings-tab" data-settings-tab="categories">科目</button>
-        <button type="button" class="settings-tab" data-settings-tab="opening">期初餘額</button>
         <button type="button" class="settings-tab" data-settings-tab="lock">鎖帳</button>
       </nav>
       <div class="settings-content">
@@ -87,19 +145,13 @@
           <h3>帳戶管理</h3>
           <p class="hint">預設帳戶會在新增記帳時自動選取；至少需保留一個帳戶。</p>
           <div id="accountRows" class="manager-list"></div>
-          <div class="inline-add"><input id="newAccountName" type="text" maxlength="60" placeholder="新增帳戶名稱"><button id="addAccountButton" class="secondary" type="button">新增帳戶</button></div>
+          <div class="inline-add account-add-controls"><input id="newAccountName" type="text" maxlength="8" placeholder="帳戶名稱最多八字"><button id="addAccountButton" class="secondary" type="button">新增帳戶</button><button id="openArchivedAccountsButton" class="secondary" type="button">已封存帳戶</button></div>
         </section>
 
         <section class="settings-pane" data-settings-pane="categories">
-          <div class="pane-heading"><div><h3>科目管理</h3><p class="hint">科目分為收入與支出，各自可建立大分類；每種收支最多可標記 10 個常用科目。</p></div><div class="kind-buttons settings-kind"><button type="button" class="kind-button active" data-settings-kind="expense">支出</button><button type="button" class="kind-button" data-settings-kind="income">收入</button></div></div>
+          <div class="pane-heading"><div><h3>科目管理</h3><p class="hint">科目分為收入與支出，各自可建立大分類；每種收支最多可標記 10 個常用科目。</p></div><div class="entry-kind-switch settings-kind" role="group" aria-label="收入或支出"><button type="button" class="kind-button active" data-settings-kind="income">收入</button><button type="button" class="kind-button" data-settings-kind="expense">支出</button></div></div>
           <div id="categoryManager"></div>
           <div class="inline-add"><input id="newGroupName" type="text" maxlength="60" placeholder="新增大分類"><button id="addGroupButton" class="secondary" type="button">新增大分類</button></div>
-        </section>
-
-        <section class="settings-pane" data-settings-pane="opening">
-          <div class="pane-heading"><div><h3>期初餘額</h3><p class="hint">空白代表未設定；可輸入負數。已鎖定月份不可修改。</p></div><label class="compact-label"><span>月份</span><input id="openingMonth" type="month"></label></div>
-          <div id="openingRows" class="opening-list"></div>
-          <div class="modal-actions"><button id="saveOpeningButton" class="primary" type="button">儲存期初餘額</button></div>
         </section>
 
         <section class="settings-pane" data-settings-pane="lock">
@@ -114,7 +166,27 @@
     </div>
   </dialog>
 
-  <script src="/app.js" defer></script>
-  <script src="/v03.js" defer></script>
+  <dialog id="archivedAccountsDialog" class="modal mobile-utility-dialog archived-accounts-dialog" aria-labelledby="archivedAccountsTitle">
+    <div class="modal-header">
+      <h2 id="archivedAccountsTitle">已封存帳戶</h2>
+      <button class="icon-button" type="button" data-close-archived-accounts aria-label="關閉">×</button>
+    </div>
+    <div id="archivedAccountRows" class="settings-account-archive-list"></div>
+    <div id="archivedAccountsMessage" class="dialog-message" role="status"></div>
+  </dialog>
+
+  <script src="/auth.js?rev=session-hard-timeout" defer></script>
+  <script src="/app.js?rev=account-color-slots" defer></script>
+  <script src="/quick-entry.js?rev=quick-entry-summary-lifecycle" defer></script>
+  <script src="/ledger-tools.js?rev=mobile-ledger-tools" defer></script>
+  <script src="/input-confirmation.js?rev=input-confirmation-kind-lifecycle" defer></script>
+  <script src="/quick-entry-settings.js?rev=quick-entry-settings" defer></script>
+  <script src="/category-management.js?rev=category-management" defer></script>
+  <script src="/excel-export-ui.js?rev=excel-export" defer></script>
+  <script src="/ledger-inline-edit.js?rev=ledger-inline-edit" defer></script>
+  <script src="/excel-import-ui.js?rev=excel-import" defer></script>
+  <script src="/backup-ui.js?rev=backup-mobile-info" defer></script>
+  <script src="/desktop-migration-ui.js?rev=desktop-migration" defer></script>
+  <script src="/adaptive-ui.js?rev=mobile-identity-ready" defer></script>
 </body>
 </html>

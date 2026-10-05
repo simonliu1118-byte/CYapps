@@ -8,6 +8,7 @@ on:
     paths:
       - "apps/CYEnvelope/**"
       - ".github/workflows/cyenvelope-build.yml"
+      - ".github/scripts/scan-public-package.py"
 
 permissions:
   contents: read
@@ -37,12 +38,23 @@ jobs:
           go-version: "1.22.x"
           cache-dependency-path: apps/CYEnvelope/go.sum
 
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
       - name: Test
         run: go test ./...
 
       - name: Build portable package
         shell: pwsh
         run: ./build.ps1
+
+      - name: Scan engineering package for secrets and production bindings
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem ./dist/CYEnvelope_V*.zip | Select-Object -First 1
+          if (-not $package) { throw "CYEnvelope package not found for safety scan" }
+          python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" $package.FullName
 
       - name: Upload CYEnvelope engineering package
         uses: actions/upload-artifact@v7

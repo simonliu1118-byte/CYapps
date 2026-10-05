@@ -16,6 +16,7 @@ on:
       - "apps/CYInvoice/scripts/**"
       - ".github/workflows/cyinvoice-build.yml"
       - ".github/workflows/cyinvoice-release.yml"
+      - ".github/scripts/scan-public-package.py"
 
 permissions:
   contents: read
@@ -54,6 +55,11 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Set up Python for public artifact safety scan
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
       - name: Scan tracked source for confidential runtime data
         run: ./scripts/verify-source.ps1
 
@@ -80,6 +86,9 @@ jobs:
 
       - name: Run employee void workflow tests
         run: dotnet run --project tests/CYInvoice.VoidWorkflow.Tests/CYInvoice.VoidWorkflow.Tests.csproj -c Release --no-build
+
+      - name: Run allowance PDF and void workflow tests
+        run: dotnet run --project tests/CYInvoice.Allowance.Tests/CYInvoice.Allowance.Tests.csproj -c Release --no-build
 
       - name: Run SQLite migration tests
         run: dotnet run --project tests/CYInvoice.SqliteMigration.Tests/CYInvoice.SqliteMigration.Tests.csproj -c Release --no-build
@@ -124,6 +133,9 @@ jobs:
           New-Item -Path $artifactRoot -ItemType Directory -Force | Out-Null
           Copy-Item -Path "./dist/CYInvoice" -Destination $artifactRoot -Recurse
           if (!(Test-Path "$artifactRoot/CYInvoice/CYInvoice.exe" -PathType Leaf)) { throw "Engineering artifact is missing CYInvoice.exe" }
+
+      - name: Scan engineering artifact for secrets and production bindings
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" ./dist/engineering-artifact
 
       - name: Upload engineering artifact
         uses: actions/upload-artifact@v7

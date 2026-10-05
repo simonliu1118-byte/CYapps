@@ -1,0 +1,8 @@
+Version: V1.0.28
+Date: 2026/09/25
+
+Current source on visual-alignment branch; test artifact, not a formal Release:
+- Adopted the approved canonical CYAccounting ACC icon assets from AITeam main, pinned to commit 5560f126fb5d02eac4a11b856118881fe009f2b2.
+- app.ico is the exact canonical seven-layer Windows ICO (16/24/32/48/64/128/256); app.png is the exact canonical 256 px PNG; ACC.svg is retained as the canonical editable vector source.
+- The application window and portable Go launcher continue using app/resources/app.ico, so both now resolve to the same approved ACC icon source.
+- Phase 1 UI visual alignment has not yet been applied in this marker; existing accounting workflows, keyboard behavior, database, backup, import, Google Drive, locking and local-ledger reset behavior remain unchanged.

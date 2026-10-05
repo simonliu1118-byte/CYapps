@@ -23,6 +23,16 @@ settings.json
 .env
 .env.*
 
+# Generated deployment configuration
+apps/CYAccountingWeb/wrangler.generated.jsonc
+apps/CYAccountingWeb/wrangler.ci.generated.jsonc
+apps/CYAccountingWeb/wrangler.deploy.jsonc
+apps/CYCloudIdentity/wrangler.ci.generated.jsonc
+apps/CYCloudIdentity/wrangler.deploy.generated.jsonc
+
+# Generated browser vendor runtime
+apps/CYAccountingWeb/public/vendor/sqljs/
+
 # Editors and operating systems
 .vscode/
 .idea/

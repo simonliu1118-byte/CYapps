@@ -8,6 +8,7 @@ on:
     paths:
       - "apps/CYAccounting/**"
       - ".github/workflows/cyaccounting-build.yml"
+      - ".github/scripts/scan-public-package.py"
 
 permissions:
   contents: read
@@ -30,7 +31,11 @@ jobs:
         run: |
           $version = (Get-Content ./VERSION -Raw).Trim()
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CYAccounting VERSION: $version" }
+          $build = (Get-Content ./BUILD -Raw).Trim()
+          if ($build -notmatch '^(0|[1-9][0-9]*)$') { throw "Invalid CYAccounting BUILD: $build" }
+          $buildSuffix = if ([int]$build -gt 0) { "_Build_$build" } else { "" }
           "CYACCOUNTING_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CYACCOUNTING_BUILD_SUFFIX=$buildSuffix" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - uses: actions/setup-python@v7
         with:
@@ -85,12 +90,51 @@ jobs:
         shell: pwsh
         run: go test ./launcher_go -v
 
+      - name: Build Windows x64 portable test package
+        shell: pwsh
+        run: ./tools/build_portable.ps1
+
+      - name: Verify clean package and embedded startup
+        shell: pwsh
+        run: |
+          $package = "out/portable-dist/CYAccounting_V${env:CYACCOUNTING_VERSION}${env:CYACCOUNTING_BUILD_SUFFIX}_Windows_x64.zip"
+          ./tools/verify_portable.ps1 -Package $package
+
+      - name: Verify single-extraction artifact root
+        shell: pwsh
+        run: |
+          $roots = @(Get-ChildItem -LiteralPath out/portable-stage -Force)
+          if ($roots.Count -ne 1 -or $roots[0].Name -ne "CYAccounting" -or -not $roots[0].PSIsContainer) {
+            throw "Download artifact must contain only the CYAccounting/ folder"
+          }
+          if (!(Test-Path out/portable-stage/CYAccounting/CYAccounting.exe)) {
+            throw "Download artifact must contain CYAccounting.exe"
+          }
+
+      - name: Scan portable artifact for secrets and production bindings
+        shell: pwsh
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" out/portable-stage
+
+      - name: Upload portable test package
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYAccounting_V${{ env.CYACCOUNTING_VERSION }}${{ env.CYACCOUNTING_BUILD_SUFFIX }}_Windows_x64_run${{ github.run_number }}
+          # The Actions download is itself a ZIP. Keep CYAccounting/ as its
+          # top-level directory so a single extraction is ready to run.
+          path: apps/CYAccounting/out/portable-stage/*
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Build reproducible source archive
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out | Out-Null
           $output = "out/cyaccounting-v$env:CYACCOUNTING_VERSION-source.tar.gz"
           python tools/create_source_archive.py --output $output
+
+      - name: Scan source verification archive for secrets and production bindings
+        shell: pwsh
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" "out/cyaccounting-v$env:CYACCOUNTING_VERSION-source.tar.gz"
 
       - name: Upload source verification archive
         uses: actions/upload-artifact@v7

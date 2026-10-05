@@ -23,6 +23,24 @@ internal class NoFocusCueButton : Button
     }
 }
 
+internal sealed class BufferedTableLayoutPanel : TableLayoutPanel
+{
+    public BufferedTableLayoutPanel()
+    {
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    }
+}
+
+internal sealed class BufferedFlowLayoutPanel : FlowLayoutPanel
+{
+    public BufferedFlowLayoutPanel()
+    {
+        DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    }
+}
+
 internal sealed class NoFocusCueTabControl : TabControl
 {
     public NoFocusCueTabControl() => TabStop = false;
@@ -40,10 +58,108 @@ internal sealed class NoFocusCueTabControl : TabControl
     }
 }
 
+internal sealed class EnterNavigationMessageFilter : IMessageFilter
+{
+    private const int WmKeyDown = 0x0100;
+    private const int VkReturn = 0x0D;
+
+    public bool PreFilterMessage(ref Message message)
+    {
+        if (message.Msg != WmKeyDown || message.WParam.ToInt32() != VkReturn) return false;
+        if ((Control.ModifierKeys & (Keys.Control | Keys.Alt)) != Keys.None) return false;
+
+        var form = Form.ActiveForm;
+        if (form is null || (!form.Modal && form.FormBorderStyle != FormBorderStyle.FixedDialog)) return false;
+
+        var focused = LogicalInput(FindFocusedControl(form));
+        if (focused is null || PreserveNativeEnter(focused)) return false;
+
+        var reverse = (Control.ModifierKeys & Keys.Shift) == Keys.Shift;
+        var inputs = EnumerateInputs(form).ToList();
+        var index = inputs.FindIndex(control => ReferenceEquals(control, focused));
+        if (index < 0) return false;
+
+        var nextIndex = reverse ? index - 1 : index + 1;
+        if (nextIndex >= 0 && nextIndex < inputs.Count)
+        {
+            var next = inputs[nextIndex];
+            next.Focus();
+            if (next is TextBoxBase textBox) textBox.SelectAll();
+            return true;
+        }
+
+        if (!reverse && form.AcceptButton is Button button && button.Visible && button.Enabled)
+        {
+            button.PerformClick();
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Control? FindFocusedControl(Control root)
+    {
+        Control current = root;
+        while (current is ContainerControl container && container.ActiveControl is { } active)
+            current = active;
+        return current == root ? null : current;
+    }
+
+    private static Control? LogicalInput(Control? focused)
+    {
+        if (focused is null) return null;
+        Control? logical = null;
+        for (var current = focused; current is not null && current is not Form; current = current.Parent)
+        {
+            if (current is DataGridView or InvoiceEntryControl or BuyerNameField) return null;
+            if (IsInput(current)) logical = current;
+        }
+        return logical;
+    }
+
+    private static IEnumerable<Control> EnumerateInputs(Control parent)
+    {
+        var children = parent.Controls.Cast<Control>()
+            .Where(control => control.Visible && control.Enabled)
+            .OrderBy(control => control.TabIndex)
+            .ThenBy(control => parent.Controls.GetChildIndex(control));
+
+        foreach (var child in children)
+        {
+            if (child is DataGridView or InvoiceEntryControl or BuyerNameField) continue;
+            if (IsInput(child) && child.TabStop && !PreserveNativeEnter(child))
+            {
+                yield return child;
+                continue;
+            }
+
+            if (!child.HasChildren) continue;
+            foreach (var nested in EnumerateInputs(child)) yield return nested;
+        }
+    }
+
+    private static bool IsInput(Control control) => control is TextBoxBase or ComboBox or DateTimePicker or UpDownBase;
+
+    private static bool PreserveNativeEnter(Control control)
+    {
+        if (control is TextBoxBase { Multiline: true }) return true;
+        return control is ComboBox { DroppedDown: true };
+    }
+}
+
 internal static class UiControls
 {
     private const int WmUpdateUiState = 0x0128;
     private static readonly IntPtr HideFocusState = new(0x00010001);
+    private static bool enterNavigationInstalled;
+
+    internal static void InstallGlobalEnterNavigation()
+    {
+        if (enterNavigationInstalled) return;
+        Application.AddMessageFilter(new EnterNavigationMessageFilter());
+        UiConsistencyManager.Install();
+        enterNavigationInstalled = true;
+    }
 
     internal static void HideFocusCue(Control control)
     {
@@ -53,6 +169,7 @@ internal static class UiControls
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
     public static Label Label(string text, ContentAlignment alignment = ContentAlignment.MiddleLeft) => new()
     {
         Text = text, Dock = DockStyle.Fill, TextAlign = alignment, AutoEllipsis = true, Margin = new Padding(3),
@@ -68,7 +185,9 @@ internal static class UiControls
 
     public static Button StandardButton(string text)
     {
-        var button = new NoFocusCueButton
+        if (text == "帳戶管理") text = "帳號管理";
+        if (IsDangerText(text)) return new ThemedDangerButton(text);
+        return new NoFocusCueButton
         {
             Text = text,
             Width = StandardButtonWidth,
@@ -77,17 +196,11 @@ internal static class UiControls
             AutoSize = false,
             UseVisualStyleBackColor = true,
         };
-        if (text is "作廢" or "確認作廢") ApplyDangerButtonTheme(button);
-        return button;
     }
 
-    private static void ApplyDangerButtonTheme(Button button)
-    {
-        button.UseVisualStyleBackColor = false;
-        button.FlatStyle = FlatStyle.Standard;
-        button.BackColor = Color.FromArgb(183, 28, 28);
-        button.ForeColor = Color.White;
-    }
+    public static Button DangerButton(string text) => new ThemedDangerButton(text);
+
+    private static bool IsDangerText(string text) => text is "作廢" or "確認作廢" or "確認送出作廢";
 
     public static Button ImportButton(string text, ImportBrand brand) => new ImportBrandButton(text, brand);
 
@@ -131,7 +244,7 @@ internal static class UiControls
             ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single, ColumnHeadersHeight = 28,
             ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
             EnableHeadersVisualStyles = false, GridColor = Color.FromArgb(226, 226, 226), RowHeadersVisible = false,
-            ScrollBars = ScrollBars.Vertical,
+            ScrollBars = ScrollBars.Vertical, ShowCellToolTips = true,
         };
         grid.RowTemplate.Height = 27;
         grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(246, 246, 246);

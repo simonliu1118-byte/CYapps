@@ -6,7 +6,7 @@
 
 - 本 repository 為 **Public**。
 - 原始碼公開可見，但並非開放原始碼；權利與使用限制依根目錄 `LICENSE`。
-- 目前正式維護專案為：`CYAccounting`、`CYAccountingWeb`、`CYEnvelope`、`CYInvoice`、`CYERPAutoInput`、`TriINVCalc`、`SMARTCOPIConverter`。
+- 目前正式維護專案為：`CYAccounting`、`CYAccountingWeb`、`CYCloudIdentity`、`CYEnvelope`、`CYInvoice`、`CYERPAutoInput`、`TriINVCalc`、`SMARTCOPIConverter`。
 - 任何提交、Issue、PR、Actions log、Artifact metadata、Release note 與 Release asset 都應視為可能被外部看見。
 
 ## 2. 公開安全
@@ -23,6 +23,11 @@
 - 開發測試包依共通規則使用 Actions Artifact 或經使用者同意的 Pre-release。
 - 正式 Windows x64 EXE／ZIP 可以公開放在 GitHub Releases 供下載。
 - 公開下載不改變根 `LICENSE` 的 source-available proprietary 性質。
+- **Public Build／Artifact／Release 與 Production Deploy 必須分離。** 公開建置流程不得取得、注入或烘焙正式環境的 Secret、Token、Private Key、OAuth Client Secret、Refresh Token、正式帳密或可直接取得正式服務權限的憑證。
+- 正式 Cloudflare D1 database ID、Worker／Service Binding 實際 service 名稱、R2／KV／Queue 等 deployment-specific resource identifiers 原則上由 Deployment Environment 在部署時注入；不得打包進公開 Release／Artifact。若公開 source 需要展示設定格式，只能使用 placeholder／template。
+- Production Deploy 可在 CI Runner 暫時產生正式部署設定，但該設定不得 commit 回 Git、不得保存為公開 Artifact／Release asset，也不得把實際值寫入 log。
+- 任何會公開 `actions/upload-artifact` 或 `gh release create` 產物的 workflow，都必須在公開前執行 repository 共用的 public-package safety scan；掃描未通過時必須阻止上傳／Release，不得以 warning 略過。
+- 新增或修改公開發行流程時，應確認 scanner 本身仍能辨識常見 credential 檔、private key、OAuth/refresh token、Cloudflare credential assignment 與含 concrete binding 的 deployment config；不得只掃 source 而不掃最終 package。
 
 ## 4. 共通規則同步
 
@@ -32,13 +37,50 @@
 - 任何 AI 接手 APP 前，先直接比對本 repo `COMMON_RULES_VERSION` 與 AITeam `main`；若不同或內容有疑義，先同步再開發。
 - 同步只可更新三個共通母本副本，不得覆蓋本 repo `REPO_POLICY.md` 或任何 APP 的 `PROJECT_RULES.md`。
 
-## 5. Public Git 歷史
+## 4.1 CYCloud Identity Consumer Governance
+
+- CYCloud Identity（CYID）是 CY Cloud Apps 的 shared Identity authority。凡專案實際接入 CYID，都必須遵守 `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 與 CYID canonical contracts；consumer 不得以自己的 handoff、README、legacy auth code 或 app-local文件分叉 Workspace Role、Identity Admin、Application Access、Session、Email verification、Recovery 等 shared Identity 語意。
+- CYID 以 `apps/CYCloudIdentity/CONSUMER_CONTRACT_VERSION` 與 `CONSUMER_MIN_COMPATIBLE_VERSION` 公布目前 consumer contract 與最低相容版本。完成接入的 consumer 必須保存自己的 `CYID_CONSUMER_VERSION`，且部署版本必須落在 CYID 公布的支援範圍內。
+- Consumer-specific handoff 只可描述該 App 的現況差異、遷移步驟、app-specific browser/device constraint 與 acceptance；共同 Identity 規範必須回到 CYID consumer standard，不得複製成第二份 authority。
+- CYID consumer-visible contract 變更必須在 PR 標示 `CYID Consumer Impact: NONE / BACKWARD_COMPATIBLE / CONSUMER_UPDATE_REQUIRED`。後兩者必須同步更新 consumer standard、consumer contract version 與 consumer changelog。
+- 若變更要求 consumer 更新，CYID provider 不得先移除仍有正式 consumer 使用的相容行為。應先保留 compatibility path／完成 consumer migration，再提升最低相容 consumer version；不得以 provider 單邊更新造成既有 production consumer 中斷。
+- 各 consumer 的 app-local business/module authorization 仍由該 App 自己負責；遵守 CYID consumer standard 不代表把業務權限搬進 CYID。
+- 若 consumer 位於 CYID 以外的 repository，必須依 CYID `CONSUMER_SYNC_MANIFEST.json` 維護 canonical contract mirror，並以 CI/deploy gate 驗證逐檔同步；同一 CYapps repository 內的 consumer 直接引用 canonical CYID files，不建立重複副本。
+
+## 5. CY 共用視覺準則
+
+AITeam `main` 是 CY 共用桌面視覺與 Icon Family 的唯一 canonical source：
+
+- Desktop Visual Guide：`shared/cy-visual/desktop/CY_DESKTOP_VISUAL_GUIDE.md`
+- Icon Family：`shared/cy-visual/icon-family/`
+
+本 repo 中下列 Windows 桌面專案正式採用上述 canonical source：
+
+- `CYAccounting`
+- `CYEnvelope`
+- `CYInvoice`
+- `CYERPAutoInput`
+- `TriINVCalc`
+- `SMARTCOPIConverter`
+
+`CYAccountingWeb` 是 Web 專案，不自動套用 Windows Desktop Visual Guide；若未來需要共用 Web 視覺規範，必須另由正式治理來源明確定義。
+
+採用規則：
+
+- AI／開發者在上述桌面專案進行新 UI、UI 重構、視覺調整、控制項樣式、Theme、Table/List、Dialog、Shell、Icon 或相關視覺工作前，必須先讀取 AITeam `main` 的 canonical visual source，再依目前專案 `PROJECT_RULES.md` 與實際 framework 實作。
+- 不得在 CYapps 另外維護第二套完整 Desktop Visual Guide 或 Icon Family 家族規格；family-wide／guide-wide 變更先回 AITeam canonical source 處理。
+- 個別 App 如有必要永久例外，只能寫入該 App 唯一 `PROJECT_RULES.md`；不得新增平行視覺規則檔。
+- 既有穩定 UI 不因本規則立即要求全面重製；新增畫面、被修改的視覺區域或使用者明確要求的 UI 整理應優先向 canonical direction 收斂，並遵守 native-first / complexity guardrails，避免為了外觀破壞穩定性。
+- Icon 導入只帶回該 App 自己的正式 SVG／PNG／ICO 資產，不 mirror 整套 family 文件；family-level source 永遠以 AITeam `main` 為準。
+- AITeam Visual Guide 已確認的 100% / 96 DPI 狀態可引用；125% / 150% 仍屬 Deferred，未實際驗證前不得宣稱已通過。
+
+## 6. Public Git 歷史
 
 - 新 commit 必須使用共通規則指定的 GitHub noreply email。
 - 不得從 Private repo 直接 mirror／merge 含敏感 ancestry 的歷史進來；需要遷移工作線時，以 Public 乾淨基準重建有效內容。
 - 歷史清理屬例外維護操作，必須由使用者明確同意並在完成後重新掃描 branch／tag／PR refs。
 
-## 6. 公司命名與 Copyright
+## 7. 公司命名與 Copyright
 
 - 中文名稱需要轉寫羅馬拼音時依共通規則一律採 Wade–Giles（威妥瑪）。
 - 志遠固定使用 `Chihyuan`／`Chih-yuan`，縮寫固定為 `CY`；不得使用 `Zhiyuan`。

@@ -25,7 +25,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/CYAccountingWeb
@@ -38,12 +38,105 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/CYAccountingWeb/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
 
       - name: Validate JavaScript syntax
         run: |
           node --check src/index.js
+          node --check src/app.js
+          node --check src/identity-adapter.js
+          node --check src/backup-storage-provider.js
+          node --check src/gcs-backup-provider.js
+          node --check src/r2-backup-provider.js
+          node --check src/accounting-tools.js
+          node --check src/accounting-controls.js
+          node --check src/account-lifecycle.js
+          node --check src/opening-balances.js
+          node --check src/excel-export.js
+          node --check src/excel-import.js
+          node --check src/backup-package.js
+          node --check src/gcs-backup.js
+          node --check src/backup-service.js
+          node --check src/desktop-migration-core.js
+          node --check src/desktop-migration.js
+          node --check scripts/render-wrangler.mjs
+          node --check scripts/prepare-sqljs.mjs
+          node --check scripts/validate-cyid-consumer-version.mjs
+          node --check scripts/resolve-cyid-production-runtime.mjs
+          node --check scripts/smoke-cyid-development.mjs
+          node --check public/auth.js
+          node --check public/login.js
           node --check public/app.js
-          node --check public/v03.js
+          node --check public/quick-entry.js
+          node --check public/ledger-tools.js
+          node --check public/input-confirmation.js
+          node --check public/quick-entry-settings.js
+          node --check public/category-management.js
+          node --check public/excel-export-ui.js
+          node --check public/ledger-inline-edit.js
+          node --check public/excel-import-ui.js
+          node --check public/backup-ui.js
+          node --check public/desktop-migration-ui.js
+          node --check public/adaptive-ui.js
+
+      - name: Run application tests
+        run: |
+          node tests/excel-transfer.mjs
+          node tests/backup-package.mjs
+          node tests/gcs-backup.mjs
+          node tests/backup-compatibility.mjs
+          node tests/backup-service.mjs
+          node tests/backup-ui.mjs
+          node tests/desktop-migration.mjs
+          node tests/desktop-migration-d1.mjs
+          node tests/adaptive-ui.mjs
+          node tests/category-sorting.mjs
+          node tests/account-lifecycle.mjs
+          node tests/account-settings-ui.mjs
+          node tests/platform-parity.mjs
+          node tests/tablet-ui.mjs
+          node tests/opening-balances.mjs
+          node tests/opening-balances-d1.mjs
+          node tests/desktop-ui.mjs
+          node tests/deploy-config.mjs
+          node tests/cyid-integration.mjs
+          node tests/startup.mjs
+          node tests/frontend-architecture.mjs
+          node tests/cyid-provider-contract.mjs
+          node tests/cyid-production-runtime.mjs
+          node scripts/validate-cyid-consumer-version.mjs
+
+      - name: Prepare pinned browser SQLite runtime
+        run: node scripts/prepare-sqljs.mjs
+
+      - name: Render CI-only Cloudflare config
+        env:
+          CF_WORKER_NAME: cyaccounting-web-ci
+          CF_D1_DATABASE_NAME: cyaccounting-web-ci-db
+          CF_D1_DATABASE_ID: 11111111-1111-4111-8111-111111111111
+          CF_IDENTITY_SERVICE: cyidentity-ci-placeholder
+          CF_CYID_APPLICATION_ID: CYACC_CI
+          CF_CYID_WORKSPACE_ID: workspace-ci-placeholder
+          CF_R2_BACKUP_BUCKET: cyaccounting-backup-ci
+          CF_BACKUP_TOPOLOGY: legacy_gcs
+          CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: acc.example.com
+        run: node scripts/render-wrangler.mjs --output wrangler.ci.generated.jsonc
+
+      - name: Validate D1 migrations locally
+        run: npx wrangler d1 migrations apply DB --local --persist-to /tmp/cyaccounting-ci-d1 --config wrangler.ci.generated.jsonc
+
+      - name: Validate Worker bundle
+        run: npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc
+
+      - name: Remove CI-only generated files
+        if: always()
+        run: |
+          rm -f wrangler.ci.generated.jsonc
+          node scripts/prepare-sqljs.mjs --clean
 
   deploy:
     if: github.event_name != 'pull_request'
@@ -58,6 +151,13 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CF_WORKER_NAME: ${{ vars.CF_WORKER_NAME }}
+      CF_D1_DATABASE_NAME: ${{ vars.CF_D1_DATABASE_NAME }}
+      CF_D1_DATABASE_ID: ${{ vars.CF_D1_DATABASE_ID }}
+      CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
+      CF_R2_BACKUP_BUCKET: ${{ vars.CF_R2_BACKUP_BUCKET }}
+      CF_BACKUP_TOPOLOGY: ${{ vars.CF_BACKUP_TOPOLOGY }}
+      CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: ${{ vars.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN }}
 
     steps:
       - name: Checkout source
@@ -67,12 +167,165 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/CYAccountingWeb/package-lock.json
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
+
+      - name: Prepare pinned browser SQLite runtime
+        run: node scripts/prepare-sqljs.mjs
+
+      - name: Resolve CYID production consumer runtime
+        run: node scripts/resolve-cyid-production-runtime.mjs
+
+      - name: Render production Cloudflare config
+        run: node scripts/render-wrangler.mjs --output wrangler.deploy.jsonc
 
       - name: Apply D1 migrations
-        run: npx wrangler d1 migrations apply DB --remote
+        run: npx wrangler d1 migrations apply DB --remote --config wrangler.deploy.jsonc
 
       - name: Deploy Worker and static assets
-        run: npx wrangler deploy
+        run: npx wrangler deploy --config wrangler.deploy.jsonc
+
+      - name: Verify production secure login entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
+
+          http_code="$(curl -sS -o /tmp/cyacc-http-login.html -D /tmp/cyacc-http-login.headers -w '%{http_code}' "http://$host/login")"
+          case "$http_code" in
+            301|302|307|308)
+              location="$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); print; exit}' /tmp/cyacc-http-login.headers | tr -d '\\r')"
+              LOCATION="$location" HOST="$host" node -e '
+                const u = new URL(process.env.LOCATION);
+                const host = process.env.HOST;
+                if (u.protocol !== "https:" || u.hostname !== host || !["/login", "/login/"].includes(u.pathname)) process.exit(1);
+              ' || {
+                echo "CYACC HTTP login redirect target is not the HTTPS login entry." >&2
+                exit 1
+              }
+              ;;
+            200)
+              grep -Eiq '^content-security-policy:.*upgrade-insecure-requests.*form-action https:' /tmp/cyacc-http-login.headers || {
+                echo "CYACC HTTP login document does not force secure form submission." >&2
+                exit 1
+              }
+              grep -Fq "window.location.protocol === 'http:'" /tmp/cyacc-http-login.html || {
+                echo "CYACC HTTP login document is missing the browser HTTPS bootstrap." >&2
+                exit 1
+              }
+              grep -Fq 'window.location.replace' /tmp/cyacc-http-login.html || {
+                echo "CYACC HTTP login browser bootstrap does not replace the insecure URL." >&2
+                exit 1
+              }
+              ;;
+            *)
+              echo "CYACC HTTP login entry returned an unsafe status ($http_code)." >&2
+              exit 1
+              ;;
+          esac
+
+          curl -fsS -D /tmp/cyacc-https-login.headers -o /tmp/cyacc-https-login.html "https://$host/login"
+          grep -Eiq '^strict-transport-security:[[:space:]]*max-age=31536000' /tmp/cyacc-https-login.headers || {
+            echo "CYACC HTTPS login response is missing HSTS." >&2
+            exit 1
+          }
+          grep -Eiq '^content-security-policy:.*upgrade-insecure-requests.*form-action https:' /tmp/cyacc-https-login.headers || {
+            echo "CYACC HTTPS login response is missing secure form CSP." >&2
+            exit 1
+          }
+          grep -Fq 'action="/login" method="post"' /tmp/cyacc-https-login.html || {
+            echo "CYACC HTTPS login page is not the expected standalone login form." >&2
+            exit 1
+          }
+          echo "CYACC production secure login entry verified."
+
+      - name: Verify production semantic frontend assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://$CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN"
+          asset_file=$(mktemp)
+          trap 'rm -f "$asset_file"' EXIT
+          verify_asset() {
+            local asset_url="$1" marker="$2" attempt
+            for attempt in 1 2 3 4 5 6; do
+              if curl --max-time 8 -fsS "$asset_url" -o "$asset_file" && grep -F -- "$marker" "$asset_file" >/dev/null; then
+                return 0
+              fi
+              echo "Waiting for asset: $asset_url (attempt $attempt/6)"
+              if [ "$attempt" -lt 6 ]; then sleep 5; fi
+            done
+            echo "Asset verification failed: $asset_url" >&2
+            return 1
+          }
+          verify_asset "$base/adaptive-ui.css?rev=mobile-entry-regression-fixes" 'touch-action: manipulation'
+          verify_asset "$base/login.css?rev=login-ui" 'touch-action: manipulation'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'startSettingsCategoryPointerDrag'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'data-settings-group-move'
+          verify_asset "$base/auth.js?rev=session-hard-timeout" 'window.cyaccSessionPromise = checkSessionFallback()'
+          verify_asset "$base/auth.js?rev=session-hard-timeout" 'Promise.race([request, timeout])'
+          verify_asset "$base/app.js?rev=account-color-slots" 'if (window.cyaccSessionPromise) await window.cyaccSessionPromise'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'window.cyaccRefreshLedgerView = loadLedgerOpeningAndRender'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" "new CustomEvent('cyacc:ledger-rendered'"
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'id="ledgerMoreButton"'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'id="ledgerBalanceButton"'
+          verify_asset "$base/quick-entry.js?rev=quick-entry-summary-lifecycle" "addEventListener('cyacc:ledger-rendered', handleFastEntryLedgerRendered)"
+          verify_asset "$base/app.js?rev=account-color-slots" 'function initialEntryKind'
+          verify_asset "$base/app.js?rev=account-color-slots" "new CustomEvent('cyacc:entry-kind-changed'"
+          verify_asset "$base/quick-entry.js?rev=quick-entry-summary-lifecycle" 'window.cyPrepareQuickEntryUi = prepareQuickEntryUi'
+          verify_asset "$base/quick-entry.js?rev=quick-entry-summary-lifecycle" "addEventListener('cyacc:entry-kind-changed', handleQuickEntryKindChanged)"
+          verify_asset "$base/input-confirmation.js?rev=input-confirmation-kind-lifecycle" "addEventListener('cyacc:entry-kind-changed', updateEntryKindVisual)"
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'function setupTouchWorkspaceEntrySecondaryAction'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'function cancelTouchWorkspaceMobileEditAndReturn'
+          verify_asset "$base/adaptive-ui.css?rev=mobile-entry-regression-fixes" '.ledger-card tbody > tr.ledger-message-row > td.empty'
+          verify_asset "$base/adaptive-ui.css?rev=mobile-entry-regression-fixes" '#mobileEntrySecondaryButton'
+          verify_asset "$base/quick-entry-settings.js?rev=quick-entry-settings" 'setupQuickEntrySettingsPane'
+          verify_asset "$base/category-management.js?rev=category-management" 'setupSequentialLockControls'
+          verify_asset "$base/backup-ui.js?rev=backup-mobile-info" 'setupBackupSettings'
+          verify_asset "$base/backup-ui.js?rev=backup-mobile-info" 'window.cyOpenMobileBackupInfo = openMobileBackupInfo'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'data-mobile-ledger-action="backup" hidden'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'class="ledger-message-row"'
+          verify_asset "$base/app.js?rev=account-color-slots" "await api('/api/opening-balance-overrides'"
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'setupArchivedAccountDialog'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'function settingsActionIcon'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" '帳戶名稱最多八字'
+          verify_asset "$base/app.js?rev=account-color-slots" 'function openingAccountRowHtml'
+          verify_asset "$base/app.css?rev=app-shell" '.opening-source'
+          verify_asset "$base/accounting-ui.css?rev=account-color-slots" 'data-settings-kind-choice'
+          verify_asset "$base/accounting-ui.css?rev=account-color-slots" '.ledger-account-color::before'
+          verify_asset "$base/app.js?rev=account-color-slots" 'const groupName = category.group_name'
+          verify_asset "$base/adaptive-ui.css?rev=mobile-entry-regression-fixes" '--settings-kind-canvas'
+          verify_asset "$base/app.js?rev=account-color-slots" 'function mergePendingTransactionUpdates'
+          verify_asset "$base/ledger-inline-edit.js?rev=ledger-inline-edit" 'await persistTransactionUpdate'
+          verify_asset "$base/quick-entry.js?rev=quick-entry-summary-lifecycle" 'await mutateSettings'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'function setupTabletWorkspace'
+          verify_asset "$base/adaptive-ui.css?rev=mobile-entry-regression-fixes" 'data-tablet-layout="portrait"'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'class="tablet-entry-handle"'
+          verify_asset "$base/adaptive-ui.css?rev=mobile-entry-regression-fixes" '.tablet-entry-handle > span'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'syncTabletPickerOwnership'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'setupLedgerBalancePopover'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'showMigrationComplete'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'function setupLedgerToolbar'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'function ledgerAccountVisual'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'LEDGER_ACCOUNT_LIGHT_PALETTE'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'const cycle = (slot - 1) % 40'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'function isDesktopInteractionWorkspace'
+          verify_asset "$base/ledger-tools.js?rev=mobile-ledger-tools" 'function syncLedgerMonthDisplay'
+          verify_asset "$base/adaptive-ui.css?rev=mobile-entry-regression-fixes" 'Tablet landscape picker convergence: reuse the same touch controls as phone'
+          verify_asset "$base/adaptive-ui.css?rev=mobile-entry-regression-fixes" '.cy-mobile-main-nav'
+          verify_asset "$base/excel-export-ui.js?rev=excel-export" 'button.dataset.excelExportBound'
+          verify_asset "$base/excel-export-ui.js?rev=excel-export" 'nativeShare'
+          verify_asset "$base/excel-import-ui.js?rev=excel-import" 'button.dataset.excelImportBound'
+          verify_asset "$base/input-confirmation.js?rev=input-confirmation-kind-lifecycle" 'function setupConfirmationDrawer'
+          verify_asset "$base/desktop-migration-ui.js?rev=desktop-migration" 'window.cyDesktopMigrationConfirmationModel'
+          verify_asset "$base/adaptive-ui.js?rev=mobile-entry-regression-fixes" 'function startAdaptiveUi'
+          echo "CYACC production semantic frontend assets verified."
+
+      - name: Remove production generated files
+        if: always()
+        run: |
+          rm -f wrangler.deploy.jsonc
+          node scripts/prepare-sqljs.mjs --clean

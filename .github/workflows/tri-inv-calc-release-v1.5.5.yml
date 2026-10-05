@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'apps/TriINVCalc/RELEASE_V1.5.5'
+      - '.github/scripts/scan-public-package.py'
   workflow_dispatch:
 
 permissions:
@@ -33,9 +34,18 @@ jobs:
           cache: true
           cache-dependency-path: apps/TriINVCalc/go.mod
 
+      - name: Set up Python for public artifact safety scan
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
       - name: Build and test release package
         shell: pwsh
         run: ./build.ps1
+
+      - name: Scan formal release payloads for secrets and production bindings
+        shell: pwsh
+        run: python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" ./dist
 
       - name: Generate SHA-256 checksums
         shell: pwsh

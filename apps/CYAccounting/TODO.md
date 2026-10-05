@@ -1,22 +1,37 @@
 # CYAccounting TODO
 
-## P0 — Public 前最高優先：移除固定清除密碼
+## 目前狀態
 
-目前程式仍以原始碼內建固定密碼保護「清除記帳資料與期初餘額」功能。這在 repository 公開後會失去保護效果，因此列為下一個 CYAccounting 開發回合的最高優先安全項目。
+CYAccounting **V1.3.0 已正式發布**，本階段工作已完成，專案目前暫時告一段落。
 
-### 必須達成
+- 正式版本：`V1.3.0`
+- `VERSION=1.3.0`
+- `BUILD=0`
+- 正式 Release：<https://github.com/simonliu1118-byte/CYapps/releases/tag/cyaccounting-v1.3.0>
+- 目前沒有已授權、正在進行中的功能或 UI 修改。
 
-- 移除原始碼中的固定清除／管理密碼，不得以另一組寫死字串取代。
-- 改為由使用者自行設定管理密碼；本機只保存安全雜湊與必要 salt，不保存明文密碼。
-- 清除全部記帳資料與期初餘額前，必須驗證該管理密碼。
-- 升級既有使用者時不得因安全改版造成帳本資料遺失、無預警清除或無法正常開啟既有資料。
-- 密碼設定、修改、忘記密碼／復原策略必須先定義清楚，再開始實作；不得自行猜測會影響既有資料的遷移規則。
-- 新增對應自動測試，至少涵蓋正確密碼、錯誤密碼、設定保存、舊資料升級與清除操作不誤觸。
+## 已完成
 
-### 發行限制
+- ACC Icon Family 正式導入並沿用。
+- CY Desktop Visual Guide Phase 1 視覺整理完成並經使用者實機接受。
+- 輸入頁採較大、較好輸入的主要欄位；資料表採高密度 23px 列高 / 24px 表頭。
+- 收入／支出科目管理回到 V1.1.0 已驗證的原生 `QTabWidget`。
+- 子視窗正常使用 ACC application icon，不再嘗試移除 Windows title-bar icon。
+- 雙重 `DELETE` 本機帳本重置、防誤觸與清除前復原備份流程已保留。
+- Windows x64 portable、CI、正式 Release workflow、source verification archive 與 SHA-256 發行流程已建立並完成 V1.3.0 正式發布。
 
-在此項完成並驗證前，可以公開原始碼 repository，但不應把固定密碼視為有效安全機制；下一個 CYAccounting 正式功能版本應優先完成此項。
+## Deferred
 
-## 其他待辦
+目前只保留一項明確 deferred 工作：
 
-其餘 UI、備份、Google Drive、匯入及實機驗證項目沿用 `WORK_HANDOFF.md` 的優先順序，由 CYAccounting 負責 AI 在下一個開發回合重新審視。
+- **125% / 150% DPI**：尚未做正式實機視覺驗收；未來若重新開工，再依當時 Windows / Qt 實機結果調整。
+
+## 重新開工原則
+
+若未來要繼續 CYAccounting：
+
+1. 從當時最新 `main` 開始，不接續舊 Draft branch 或舊 Build workaround。
+2. 先讀正式治理規則、`PROJECT_RULES.md`、`WORK_HANDOFF.md`、目前版本檔與 tests。
+3. 新需求建立新的 branch / PR。
+4. 不要把 V1.2.0 測試階段 Build 3～7 的 title-bar no-icon 或 category-manager 自訂 Tab 作法恢復回來。
+5. 正式 Release 仍需使用者明確要求。

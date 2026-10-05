@@ -8,7 +8,8 @@
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\..\assets\CYInvoice.ico</ApplicationIcon>
+    <CanonicalApplicationIcon>$(BaseIntermediateOutputPath)canonical-icon\CYInvoice.ico</CanonicalApplicationIcon>
+    <ApplicationIcon>$(CanonicalApplicationIcon)</ApplicationIcon>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
@@ -16,7 +17,10 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
     <PackageReference Include="PDFtoImage" Version="5.4.0" />
     <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.16" />
-    <EmbeddedResource Include="..\..\assets\CYInvoice.ico" LogicalName="CYInvoice.AppIcon" />
+    <EmbeddedResource Include="$(CanonicalApplicationIcon)" LogicalName="CYInvoice.AppIcon" />
     <Content Include="..\..\VERSION" Link="VERSION" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="PrepareCanonicalApplicationIcon" BeforeTargets="PrepareForBuild" Condition="'$(OS)' == 'Windows_NT'">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\scripts\prepare-canonical-icon.ps1&quot; -OutputPath &quot;$(MSBuildProjectDirectory)\$(CanonicalApplicationIcon)&quot;" />
+  </Target>
 </Project>

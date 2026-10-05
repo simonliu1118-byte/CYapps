@@ -1,0 +1,59 @@
+name: CYCloud Identity Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/CYCloudIdentity/**'
+      - '.github/workflows/cycloudidentity-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cycloudidentity-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate D1 identity foundation
+        run: python3 apps/CYCloudIdentity/scripts/validate_schema.py
+
+      - name: Validate bootstrap and email budget migrations
+        run: python3 apps/CYCloudIdentity/scripts/validate_bootstrap_schema.py
+
+      - name: Validate configurable security policy migration
+        run: python3 apps/CYCloudIdentity/scripts/validate_security_policy.py
+
+      - name: Validate application role mapping migration
+        run: python3 apps/CYCloudIdentity/scripts/validate_application_role_mapping.py
+
+      - name: Scan CYCloud Identity public source
+        run: python3 .github/scripts/scan-public-package.py apps/CYCloudIdentity
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install CYCloud Identity development dependencies
+        working-directory: apps/CYCloudIdentity
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+
+      - name: Type-check CYCloud Identity Worker
+        working-directory: apps/CYCloudIdentity
+        run: npm run check
+
+      - name: Run CYCloud Identity auth-core tests
+        working-directory: apps/CYCloudIdentity
+        run: npm test
+
+      - name: Accept CYCloud Identity local D1 login roundtrip
+        run: bash apps/CYCloudIdentity/scripts/accept_auth_local.sh
+
+      - name: Accept CYCloud Identity first-login password roundtrip
+        run: bash apps/CYCloudIdentity/scripts/accept_first_login_local.sh

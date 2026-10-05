@@ -1,0 +1,9 @@
+Version: V1.1.0
+Date: 2026/09/25
+
+正式 Release：
+- 導入 AITeam 已核准的 CYAccounting「ACC」正式 Icon Family。
+- app.ico 為 canonical 七層 Windows ICO（16/24/32/48/64/128/256）；app.png 為 canonical 256 px PNG；ACC.svg 保留為正式向量來源。
+- Qt 視窗與 CYAccounting.exe 共用 app/resources/app.ico，並在 Windows CI 驗證 ICO 尺寸與 EXE associated icon resource。
+- 本版尚未包含下一階段 CY Desktop Visual Guide Phase 1 UI 視覺改造。
+- 既有記帳流程、鍵盤操作、資料庫、備份／還原、Excel 匯入、Google Drive、鎖帳及雙重 DELETE 本機帳本重置流程維持不變。

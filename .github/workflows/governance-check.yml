@@ -26,11 +26,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           HEAD_REF: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
 
           python3 - <<'PY'
-          import pathlib, re, sys
+          import json, pathlib, re, sys
 
           allowed = [
               re.compile(r'^REPOSITORY_RULES\.md$'),
@@ -61,6 +62,117 @@ jobs:
                   print(f'ERROR: {rel} must contain X.Y.Z')
                   sys.exit(1)
 
+          provider_root = pathlib.Path('apps/CYCloudIdentity')
+          current_path = provider_root / 'CONSUMER_CONTRACT_VERSION'
+          minimum_path = provider_root / 'CONSUMER_MIN_COMPATIBLE_VERSION'
+          standard_path = provider_root / 'docs/CONSUMER_INTEGRATION_STANDARD.md'
+          changelog_path = provider_root / 'docs/CONSUMER_CONTRACT_CHANGELOG.md'
+          manifest_path = provider_root / 'CONSUMER_SYNC_MANIFEST.json'
+          for p in [current_path, minimum_path, standard_path, changelog_path, manifest_path]:
+              if not p.is_file():
+                  print(f'ERROR: missing CYID consumer contract file: {p.as_posix()}')
+                  sys.exit(1)
+
+          try:
+              manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          except Exception as exc:
+              print(f'ERROR: invalid CYID consumer sync manifest: {exc}')
+              sys.exit(1)
+          if manifest.get('schemaVersion') != 1:
+              print('ERROR: CYID consumer sync manifest schemaVersion must be 1')
+              sys.exit(1)
+          if manifest.get('sourceRepository') != 'simonliu1118-byte/CYapps' or manifest.get('sourceBranch') != 'main':
+              print('ERROR: CYID consumer sync manifest source repository/branch mismatch')
+              sys.exit(1)
+          if manifest.get('sourceRoot') != 'apps/CYCloudIdentity' or manifest.get('consumerMirrorRoot') != 'docs/contracts/cyid':
+              print('ERROR: CYID consumer sync manifest roots mismatch')
+              sys.exit(1)
+
+          expected_sync_sources = {
+              'CONSUMER_CONTRACT_VERSION',
+              'CONSUMER_MIN_COMPATIBLE_VERSION',
+              'docs/CONSUMER_INTEGRATION_STANDARD.md',
+              'docs/CONSUMER_CONTRACT_CHANGELOG.md',
+              'docs/AUTH_CONTRACT.md',
+              'docs/ROLE_AND_ACCESS_MODEL.md',
+              'docs/ARCHITECTURE.md',
+          }
+          entries = manifest.get('files')
+          if not isinstance(entries, list) or not entries:
+              print('ERROR: CYID consumer sync manifest files must be a non-empty list')
+              sys.exit(1)
+          sources = set()
+          targets = set()
+          for entry in entries:
+              if not isinstance(entry, dict):
+                  print('ERROR: CYID consumer sync manifest entries must be objects')
+                  sys.exit(1)
+              source = entry.get('source')
+              target = entry.get('target')
+              if not isinstance(source, str) or not isinstance(target, str):
+                  print('ERROR: CYID consumer sync manifest source/target must be strings')
+                  sys.exit(1)
+              if source.startswith('/') or '..' in pathlib.PurePosixPath(source).parts:
+                  print(f'ERROR: unsafe CYID sync source path: {source}')
+                  sys.exit(1)
+              if target.startswith('/') or '..' in pathlib.PurePosixPath(target).parts:
+                  print(f'ERROR: unsafe CYID sync target path: {target}')
+                  sys.exit(1)
+              if source in sources or target in targets:
+                  print(f'ERROR: duplicate CYID sync manifest entry: {source} -> {target}')
+                  sys.exit(1)
+              sources.add(source)
+              targets.add(target)
+              if not (provider_root / source).is_file():
+                  print(f'ERROR: CYID sync source does not exist: {source}')
+                  sys.exit(1)
+          if sources != expected_sync_sources:
+              print(f'ERROR: CYID sync manifest membership mismatch: {sorted(sources)}')
+              sys.exit(1)
+
+          def semver(text: str):
+              value = text.strip()
+              if not re.fullmatch(r'\d+\.\d+\.\d+', value):
+                  raise ValueError(value)
+              return tuple(int(x) for x in value.split('.'))
+
+          try:
+              consumer_current = semver(current_path.read_text(encoding='utf-8'))
+              consumer_min = semver(minimum_path.read_text(encoding='utf-8'))
+          except ValueError as exc:
+              print(f'ERROR: invalid CYID consumer contract version: {exc}')
+              sys.exit(1)
+          if consumer_min > consumer_current:
+              print('ERROR: CYID minimum compatible consumer version exceeds current contract version')
+              sys.exit(1)
+
+          standard_text = standard_path.read_text(encoding='utf-8')
+          current_text = '.'.join(str(x) for x in consumer_current)
+          minimum_text = '.'.join(str(x) for x in consumer_min)
+          if f'Contract version:** `{current_text}`' not in standard_text:
+              print('ERROR: CYID consumer standard header does not match CONSUMER_CONTRACT_VERSION')
+              sys.exit(1)
+          if f'Minimum compatible consumer version:** `{minimum_text}`' not in standard_text:
+              print('ERROR: CYID consumer standard header does not match CONSUMER_MIN_COMPATIBLE_VERSION')
+              sys.exit(1)
+
+          for marker_path in sorted(pathlib.Path('apps').glob('*/CYID_CONSUMER_VERSION')):
+              try:
+                  adopted = semver(marker_path.read_text(encoding='utf-8'))
+              except ValueError as exc:
+                  print(f'ERROR: invalid {marker_path.as_posix()}: {exc}')
+                  sys.exit(1)
+              if adopted < consumer_min or adopted > consumer_current:
+                  print(
+                      f'ERROR: {marker_path.as_posix()}={marker_path.read_text().strip()} '
+                      f'is outside CYID supported consumer window {minimum_text}..{current_text}'
+                  )
+                  sys.exit(1)
+              project_rules = marker_path.parent / 'PROJECT_RULES.md'
+              if not project_rules.is_file() or 'CONSUMER_INTEGRATION_STANDARD.md' not in project_rules.read_text(encoding='utf-8'):
+                  print(f'ERROR: {marker_path.parent.as_posix()} declares CYID_CONSUMER_VERSION but PROJECT_RULES does not adopt the CYID consumer standard')
+                  sys.exit(1)
+
           required_root = [
               'REPOSITORY_RULES.md','REPO_POLICY.md','RULES_INDEX.md',
               'COMMON_RULES_CHANGELOG.md','GOVERNANCE_CHANGELOG.md','AGENTS.md'
@@ -68,6 +180,18 @@ jobs:
           for rel in required_root:
               if not pathlib.Path(rel).is_file():
                   print(f'ERROR: missing governance file: {rel}')
+                  sys.exit(1)
+
+          scanner = pathlib.Path('.github/scripts/scan-public-package.py')
+          if not scanner.is_file():
+              print('ERROR: missing public artifact safety scanner')
+              sys.exit(1)
+
+          for workflow in sorted(pathlib.Path('.github/workflows').glob('*.yml')):
+              text = workflow.read_text(encoding='utf-8')
+              publishes = 'actions/upload-artifact@' in text or 'gh release create' in text
+              if publishes and 'scan-public-package.py' not in text:
+                  print(f'ERROR: public Artifact/Release workflow lacks safety scan: {workflow.as_posix()}')
                   sys.exit(1)
 
           apps = pathlib.Path('apps')
@@ -87,6 +211,18 @@ jobs:
                       sys.exit(1)
           print('Local governance structure OK')
           PY
+
+          scan_tmp="$(mktemp -d)"
+          printf '%s\n' 'CLOUDFLARE_API_TOKEN=__DEPLOYMENT_SECRET__' > "$scan_tmp/safe.txt"
+          python3 .github/scripts/scan-public-package.py "$scan_tmp/safe.txt"
+          printf '%s\n' 'CLOUDFLARE_API_TOKEN=abcdefghijklmnopqrstuvwxyz123456' > "$scan_tmp/bad.txt"
+          if python3 .github/scripts/scan-public-package.py "$scan_tmp/bad.txt" >/dev/null 2>&1; then
+            echo "ERROR: public artifact safety scanner failed its blocking self-test"
+            exit 1
+          fi
+          python3 .github/scripts/test-public-package-scan.py
+          rm -rf "$scan_tmp"
+          echo "Public artifact safety scanner self-test OK."
 
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
@@ -111,6 +247,16 @@ jobs:
             repo_gov_changed=0
             gov_version_changed=0
             gov_changelog_changed=0
+            cyid_changed=0
+            consumer_standard_changed=0
+            consumer_version_changed=0
+            consumer_min_changed=0
+            consumer_min_existed=0
+            consumer_changelog_changed=0
+
+            if git cat-file -e "origin/main:apps/CYCloudIdentity/CONSUMER_MIN_COMPATIBLE_VERSION" 2>/dev/null; then
+              consumer_min_existed=1
+            fi
 
             for path in "${changed[@]}"; do
               case "$path" in
@@ -122,11 +268,19 @@ jobs:
               [ "$path" = "COMMON_RULES_CHANGELOG.md" ] && common_changelog_changed=1
 
               case "$path" in
-                REPO_POLICY.md|RULES_INDEX.md|GOVERNANCE_VERSION|GOVERNANCE_CHANGELOG.md|AGENTS.md|apps/*/PROJECT_RULES.md|.github/workflows/governance-check.yml|.github/workflows/sync-common-rules.yml)
+                REPO_POLICY.md|RULES_INDEX.md|GOVERNANCE_VERSION|GOVERNANCE_CHANGELOG.md|AGENTS.md|apps/*/PROJECT_RULES.md|.github/workflows/governance-check.yml|.github/workflows/sync-common-rules.yml|.github/scripts/scan-public-package.py|.github/scripts/test-public-package-scan.py)
                   repo_gov_changed=1 ;;
               esac
               [ "$path" = "GOVERNANCE_VERSION" ] && gov_version_changed=1
               [ "$path" = "GOVERNANCE_CHANGELOG.md" ] && gov_changelog_changed=1
+
+              case "$path" in
+                apps/CYCloudIdentity/*) cyid_changed=1 ;;
+              esac
+              [ "$path" = "apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md" ] && consumer_standard_changed=1
+              [ "$path" = "apps/CYCloudIdentity/CONSUMER_CONTRACT_VERSION" ] && consumer_version_changed=1
+              [ "$path" = "apps/CYCloudIdentity/CONSUMER_MIN_COMPATIBLE_VERSION" ] && consumer_min_changed=1
+              [ "$path" = "apps/CYCloudIdentity/docs/CONSUMER_CONTRACT_CHANGELOG.md" ] && consumer_changelog_changed=1
             done
 
             if [ "$common_changed" -eq 1 ]; then
@@ -146,6 +300,33 @@ jobs:
               esac
               [ "$gov_version_changed" -eq 1 ] || { echo "ERROR: repository governance change must update GOVERNANCE_VERSION"; exit 1; }
               [ "$gov_changelog_changed" -eq 1 ] || { echo "ERROR: repository governance change must update GOVERNANCE_CHANGELOG.md"; exit 1; }
+            fi
+
+            if [ "$cyid_changed" -eq 1 ]; then
+              impact="$(printf '%s' "$PR_BODY" | sed -nE 's/.*CYID Consumer Impact:[[:space:]]*(NONE|BACKWARD_COMPATIBLE|CONSUMER_UPDATE_REQUIRED).*/\1/p' | head -n 1)"
+              case "$impact" in
+                NONE|BACKWARD_COMPATIBLE|CONSUMER_UPDATE_REQUIRED) ;;
+                *)
+                  echo "ERROR: CYID PR must declare 'CYID Consumer Impact: NONE|BACKWARD_COMPATIBLE|CONSUMER_UPDATE_REQUIRED' in the PR body"
+                  exit 1
+                  ;;
+              esac
+
+              if [ "$impact" = "NONE" ]; then
+                if [ "$consumer_version_changed" -eq 1 ] || [ "$consumer_min_changed" -eq 1 ]; then
+                  echo "ERROR: CYID Consumer Impact NONE cannot change consumer compatibility versions"
+                  exit 1
+                fi
+              else
+                [ "$consumer_standard_changed" -eq 1 ] || { echo "ERROR: consumer-visible CYID change must update CONSUMER_INTEGRATION_STANDARD.md"; exit 1; }
+                [ "$consumer_version_changed" -eq 1 ] || { echo "ERROR: consumer-visible CYID change must update CONSUMER_CONTRACT_VERSION"; exit 1; }
+                [ "$consumer_changelog_changed" -eq 1 ] || { echo "ERROR: consumer-visible CYID change must update CONSUMER_CONTRACT_CHANGELOG.md"; exit 1; }
+              fi
+
+              if [ "$consumer_min_changed" -eq 1 ] && [ "$consumer_min_existed" -eq 1 ] && [ "$impact" != "CONSUMER_UPDATE_REQUIRED" ]; then
+                echo "ERROR: changing an established minimum compatible consumer version requires CYID Consumer Impact CONSUMER_UPDATE_REQUIRED"
+                exit 1
+              fi
             fi
           fi
 

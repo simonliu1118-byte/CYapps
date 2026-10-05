@@ -1,0 +1,97 @@
+.current-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #344054;
+  white-space: nowrap;
+}
+
+.current-user-main {
+  min-width: 0;
+}
+
+.current-user-role {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.topbar-actions .logout-button {
+  padding-inline: 12px;
+}
+
+.read-only-banner {
+  width: min(1180px, calc(100% - 32px));
+  margin: 14px auto 0;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid #b2ccff;
+  border-radius: 10px;
+  background: #eff4ff;
+  color: #1849a9;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+body[data-cyacc-read-only="true"] .entry-card,
+body[data-cyacc-read-only="true"] #settingsButton,
+body[data-cyacc-read-only="true"] #ledgerExcelImport,
+body[data-cyacc-read-only="true"] #mobileLedgerBalanceButton,
+body[data-cyacc-read-only="true"] #mobileMainNav [data-mobile-page="entry"],
+body[data-cyacc-read-only="true"] .action-col,
+body[data-cyacc-read-only="true"] [data-edit-id],
+body[data-cyacc-read-only="true"] [data-delete-id],
+body[data-cyacc-read-only="true"] [data-mobile-ledger-action="accounts"],
+body[data-cyacc-read-only="true"] [data-mobile-ledger-action="categories"],
+body[data-cyacc-read-only="true"] [data-mobile-ledger-action="lock"],
+body[data-cyacc-read-only="true"] [data-mobile-ledger-action="opening"] {
+  display: none !important;
+}
+
+body[data-cyacc-read-only="true"] #settingsDialog,
+body[data-cyacc-read-only="true"] #openingDialog,
+body[data-cyacc-read-only="true"] #editDialog {
+  display: none !important;
+}
+
+body[data-cyacc-read-only="true"] #mobileMainNav {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .current-user {
+    display: none !important;
+  }
+
+  .read-only-banner {
+    width: calc(100% - 24px);
+    margin-top: 10px;
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+}
+
+
+@media (min-width: 768px) {
+  body[data-cyacc-read-only="true"] .shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body[data-cyacc-read-only="true"] .ledger-card {
+    grid-column: 1 / -1 !important;
+    width: 100%;
+  }
+}
