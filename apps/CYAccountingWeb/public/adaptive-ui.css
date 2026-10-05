@@ -3034,10 +3034,12 @@
       "summary"
       "quicksummary"
       "amount"
+      "."
       "save"
       "secondary"
       "message" !important;
-    align-content: start !important;
+    grid-template-rows: repeat(8, max-content) auto repeat(3, max-content) !important;
+    align-content: stretch !important;
     gap: 6px !important;
     width: 100% !important;
     height: calc(100dvh - 120px) !important;
@@ -3080,6 +3082,16 @@
     box-sizing: border-box !important;
     overflow: hidden !important;
     clip-path: inset(0 round 10px) !important;
+  }
+
+  .entry-kind-switch {
+    height: 46px !important;
+  }
+
+  .entry-kind-switch .kind-button {
+    min-height: 38px !important;
+    height: 38px !important;
+    font-size: 16px !important;
   }
 
   #transactionForm,
@@ -3191,10 +3203,10 @@
     gap: 7px !important;
     width: 100% !important;
     min-width: 0 !important;
-    min-height: 42px !important;
-    height: 42px !important;
+    min-height: 46px !important;
+    height: 46px !important;
     margin: 0 !important;
-    padding: 3px 9px !important;
+    padding: 4px 9px !important;
     border: 1px solid #dbe2e9 !important;
     border-radius: 8px !important;
     background: rgba(255, 255, 255, .96) !important;
@@ -3215,11 +3227,11 @@
     align-self: center !important;
     align-items: center !important;
     justify-content: center !important;
-    min-height: 32px !important;
+    min-height: 36px !important;
     margin: 0 !important;
     padding: 0 !important;
     color: #657384 !important;
-    font-size: 12px !important;
+    font-size: 13.5px !important;
     font-weight: 650 !important;
     line-height: 1 !important;
     text-align: center !important;
@@ -3231,16 +3243,16 @@
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100% !important;
-    min-height: 32px !important;
-    height: 32px !important;
+    min-height: 36px !important;
+    height: 36px !important;
     margin: 0 !important;
     padding: 0 3px !important;
     border: 0 !important;
     border-radius: 0 !important;
     background: transparent !important;
     color: #243345 !important;
-    font-size: 16px !important;
-    line-height: 32px !important;
+    font-size: 17px !important;
+    line-height: 36px !important;
     text-align: center !important;
     text-align-last: center !important;
     box-shadow: none !important;
@@ -3255,7 +3267,7 @@
     appearance: auto !important;
     -webkit-appearance: auto !important;
     min-width: 0 !important;
-    font-size: 16px !important;
+    font-size: 17px !important;
     text-align: center !important;
   }
 
@@ -3265,7 +3277,7 @@
   }
 
   .entry-grid .amount-field input {
-    font-size: 17px !important;
+    font-size: 18px !important;
     font-weight: 700 !important;
   }
 
@@ -3281,7 +3293,7 @@
     gap: 5px !important;
     width: 100% !important;
     min-width: 0 !important;
-    height: 32px !important;
+    height: 36px !important;
     padding: 0 !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
@@ -3305,12 +3317,12 @@
 
   .quick-tool-row .quick-chip {
     flex: 0 0 auto !important;
-    min-height: 28px !important;
-    height: 28px !important;
+    min-height: 30px !important;
+    height: 30px !important;
     margin: 0 !important;
     padding: 3px 9px !important;
     border-radius: 999px !important;
-    font-size: 11.5px !important;
+    font-size: 12.5px !important;
     line-height: 1 !important;
     white-space: nowrap !important;
     text-align: center !important;
