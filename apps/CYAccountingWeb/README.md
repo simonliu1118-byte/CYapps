@@ -9,8 +9,8 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.18 Build 1**；PR #327 已合併；同一 iPad 橫式登入工作項目依共同版本規則升 Build，不另升 Patch |
-| 正式部署 | CYAccountingWeb Validate and Deploy **#479**（run `37321943528`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
+| 正式版本 | **V0.22.18 Build 2**；PR #329 已合併；同一 iPad 橫式登入工作項目依共同版本規則繼續升 Build，不另升 Patch |
+| 正式部署 | CYAccountingWeb Validate and Deploy **#483**（run `37324654496`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
@@ -63,7 +63,7 @@ SUPER_ADMIN 永久刪除條件為已封存、無交易、最新有效期初為�
 
 ### 平板
 
-目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。日期／月份改與手機共用原生 touch owner，平板只保留 layout / gesture presentation；沒有平板第二套 writer、month state 或 business flow。平板登入仍與手機共用同一 keyboard-aware login owner：直式保留較大的固定尺寸；橫式使用 touch-tablet 雙欄 presentation。V0.22.18 修正 iPad Safari 首次鍵盤的 visual viewport offset／雙重捲動問題，旋轉時也會重建 resting viewport baseline；Build 1 再依實機畫面微調橫式可視區內置中、卡片總寬與欄間距；不另造第二套登入流程。
+目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。日期／月份改與手機共用原生 touch owner，平板只保留 layout / gesture presentation；沒有平板第二套 writer、month state 或 business flow。平板登入仍與手機共用同一 keyboard-aware login owner：直式保留較大的固定尺寸；橫式使用 touch-tablet 雙欄 presentation。V0.22.18 修正 iPad Safari 首次鍵盤的 visual viewport offset／雙重捲動問題，旋轉時也會重建 resting viewport baseline；Build 1 依實機畫面微調橫式可視區內置中、卡片總寬與欄間距；Build 2 再將「員工帳號登入」移到左側「志遠記帳系統」下方，讓右側專注於登入欄位與操作；不另造第二套登入流程。
 
 未合併的 PR #297 / V0.22.2 Build 4 不是目前基準，後續修正已由 V0.22.3 系列取代。
 
