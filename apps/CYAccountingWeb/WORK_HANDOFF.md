@@ -6,7 +6,7 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.15 Build 0**；Release source `ac0ade7edd88fff0de3c5a9d0474f65c4294c65d`，PR #318 已合併；目前 main `c77c1af05e709233deb0444d796dbaf843bb7f38` 只再清除一次性 Release workflow 步驟 |
+| 正式功能基準 | **V0.22.15 Build 0**；Release source `ac0ade7edd88fff0de3c5a9d0474f65c4294c65d`，PR #318 已合併；後續 PR #319 只移除一次性 Release workflow 步驟，不改產品 source |
 | Production Deploy | CYAccountingWeb Validate and Deploy **#461**（run `37254304413`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.28**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
