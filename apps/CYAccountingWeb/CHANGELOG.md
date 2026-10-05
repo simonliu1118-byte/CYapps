@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.17 Build 0 | 登入頁第二輪實機返修：手機固定使用同一套 compact 尺寸，不再因鍵盤開啟才縮放；平板直式保留較大的既有尺寸，鍵盤只影響可視高度／位置，不改卡片字級與尺寸；平板橫式改為專用雙欄 presentation，左側品牌、右側登入表單，員工編號與密碼並排，壓低垂直高度以適應橫式螢幕鍵盤。手機／平板仍共用同一 HTML、登入流程、CYID authority 與 visualViewport owner。 |
 | V0.22.16 Build 0 | 手機／平板登入頁鍵盤適應：移除 touch 裝置自動 autofocus，桌機細指標環境仍保留；登入頁改以 `visualViewport` 同步可視高度，頁面本體禁止產生殘留 body scroll，內容由登入 shell 依實際可視高度捲動；鍵盤開啟時自動進入 compact layout，縮小 Logo、標題與間距但維持可觸控欄位高度。手機正常登入時讓兩欄與登入操作盡量留在鍵盤上方；平板橫／直式共用同一 responsive login owner，不建立第二套登入流程。 |
 | V0.22.15 Build 0 | 正式 Release：承接 V0.22.1～V0.22.14 的跨裝置與架構收斂，包含手機／平板介面、原生日期、底部儲存／清空或取消、帳戶固定色號 lifecycle、SUPER_ADMIN 手機備份資訊、CYID Session 帳號顯示穩定化，以及 Ledger／Settings／Toolbar 單一 owner 收斂。PR #318、Production Deploy #461、Stable Release #2 均成功；公開 tag 為 `cyaccountingweb-v0.22.15`，Build 歸零；前一個 V0.22.0 Release/tag 已依發布要求移除。 |
 | V0.22.14 Build 5 | 手機 V0.22.14 實機返修：修正儲存按鈕仍被 `grid-row:auto` 拉回金額欄下一列的問題，讓金額後的彈性 spacer 真正吸收不同手機高度，操作區順序改為訊息→儲存→清空／取消，使清空／取消只留小間距貼近底部頁籤、儲存緊鄰其上；同時修正右上角帳號載入時先顯示「帳號」placeholder 的閃爍，改為 CYID Session 準備完成且 `currentUser` 有真實內容後才顯示手機帳號按鈕。 |
