@@ -722,7 +722,8 @@ function setupMobileWorkspaceMobileAppBar() {
     trigger.type = 'button';
     trigger.setAttribute('aria-haspopup', 'true');
     trigger.setAttribute('aria-expanded', 'false');
-    trigger.innerHTML = '<span class="cy-mobile-account-name">帳號</span><span aria-hidden="true">›</span>';
+    trigger.hidden = true;
+    trigger.innerHTML = '<span class="cy-mobile-account-name"></span><span aria-hidden="true">›</span>';
     topbar.append(trigger);
   }
 
@@ -734,7 +735,7 @@ function setupMobileWorkspaceMobileAppBar() {
     menu.hidden = true;
     menu.innerHTML = `
       <div class="cy-mobile-account-menu-identity">
-        <strong id="mobileAccountMenuName">帳號</strong>
+        <strong id="mobileAccountMenuName"></strong>
         <span id="mobileAccountMenuRole"></span>
       </div>
       <button type="button" class="danger-lite" data-mobile-account-action="logout">登出</button>`;
@@ -775,8 +776,7 @@ function setupMobileWorkspaceMobileAppBar() {
     trigger.focus();
   });
 
-  const observer = new MutationObserver(syncMobileWorkspaceMobileIdentity);
-  observer.observe(currentUser, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class'] });
+  window.addEventListener('cyacc:session-ready', syncMobileWorkspaceMobileIdentity);
 
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
@@ -798,11 +798,23 @@ function syncMobileWorkspaceMobileIdentity() {
   const menuRole = document.querySelector('#mobileAccountMenuRole');
   if (!source || !trigger || !triggerName || !menu || !menuName || !menuRole) return;
 
-  const main = String(source.querySelector('.current-user-main')?.textContent || source.textContent || '').trim() || '帳號';
+  const main = String(source.querySelector('.current-user-main')?.textContent || '').trim();
   const role = String(source.querySelector('.current-user-role')?.textContent || '').trim();
+  const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches;
+  const ready = Boolean(main) && !source.classList.contains('hidden');
+
+  if (!mobile || !ready) {
+    trigger.hidden = true;
+    menu.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('cy-mobile-account-menu-open');
+    return;
+  }
+
   triggerName.textContent = main;
   menuName.textContent = main;
   menuRole.textContent = role;
+  trigger.hidden = false;
 
   const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
   const admin = source.classList.contains('role-admin') || role === '管理員';
@@ -954,11 +966,12 @@ function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DES
   const accountTrigger = document.querySelector('#mobileAccountMenuButton');
   const ledgerMore = document.querySelector('#ledgerMoreButton');
 
-  if (accountTrigger) accountTrigger.hidden = Boolean(desktop);
+  if (accountTrigger && desktop) accountTrigger.hidden = true;
   if (ledgerMore) ledgerMore.hidden = Boolean(desktop);
 
   if (!desktop) {
     document.body.classList.add('cy-mobile-app');
+    syncMobileWorkspaceMobileIdentity();
     return;
   }
 
