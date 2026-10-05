@@ -6,8 +6,8 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.18 Build 0**；PR #325 已合併；iPad Safari 橫式首次鍵盤 visual viewport 錯位已修正 |
-| Production Deploy | CYAccountingWeb Validate and Deploy **#475**（run `37319821664`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.18 Build 1**；PR #327 已合併；同一 iPad 橫式登入工作項目依共同版本規則由 Build 0 → Build 1 |
+| Production Deploy | CYAccountingWeb Validate and Deploy **#479**（run `37321943528`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.28**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
@@ -29,7 +29,8 @@
 - **V0.22.15**：使用者指定正式公開 Release，Build 歸零；PR #318、Production Deploy #461、Stable Release #2 全部成功。公開 tag 為 `cyaccountingweb-v0.22.15`，舊 V0.22.0 Release/tag 已移除。
 - **V0.22.16**：手機／平板登入頁導入 `visualViewport`、touch 無 autofocus、body scroll reset 與 keyboard-aware shell，解決 iOS 鍵盤遮擋與收起後長捲軸。
 - **V0.22.17**：依實機照片返修登入 presentation。手機固定使用同一套 compact 尺寸；平板直式維持較大固定尺寸；平板橫式改為 touch-tablet 雙欄布局，左品牌、右表單，員工編號／密碼並排以壓低高度。PR #323 的 Governance Check #1039 與 Validate #470 成功，Production Deploy #471 成功。
-- **V0.22.18**：修正 iPad Safari 橫式第一次叫出鍵盤時的二次位移。登入 shell 直接跟隨 `visualViewport.offsetTop` 與實際高度，移除 focus input 的 `scrollIntoView()`；旋轉造成 viewport 寬度明顯改變時重建 baseline。PR #325 的 Governance Check #1041 與 Validate #474 成功，Production Deploy #475 成功。
+- **V0.22.18 Build 0**：修正 iPad Safari 橫式第一次叫出鍵盤時的二次位移。登入 shell 直接跟隨 `visualViewport.offsetTop` 與實際高度，移除 focus input 的 `scrollIntoView()`；旋轉造成 viewport 寬度明顯改變時重建 baseline。PR #325 的 Governance Check #1041 與 Validate #474 成功，Production Deploy #475 成功。
+- **V0.22.18 Build 1**：同一工作項目的實機排版返修，不升 Patch；橫式鍵盤狀態在 visual viewport 內置中，略縮卡片總寬與欄間距，品牌／表單垂直對齊，訊息與忘記密碼區再收斂。PR #327 的 Governance Check #1043 與 Validate #478 成功，Production Deploy #479 成功。
 
 完整版本歷史見 `CHANGELOG.md`。
 
@@ -77,7 +78,7 @@
 
 ## 已確認驗證
 
-V0.22.18 PR #325 的 Governance Check #1041 與 CYAccountingWeb Validate and Deploy #474 均成功。合併後 Production run #475（`37319821664`）validate 與 deploy 全部成功。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
+V0.22.18 Build 1 PR #327 的 Governance Check #1043 與 CYAccountingWeb Validate and Deploy #478 均成功。合併後 Production run #479（`37321943528`）validate 與 deploy 全部成功。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
 
 - JavaScript syntax 與 application tests；
 - mobile native-date、底部儲存／清空或取消、identity readiness，以及 login viewport／keyboard regression；
