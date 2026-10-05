@@ -30,6 +30,11 @@ document.addEventListener('DOMContentLoaded', () => {
     window.innerHeight || 0,
     document.documentElement.clientHeight || 0
   );
+  let restingViewportWidth = Math.max(
+    Math.round(viewport?.width || 0),
+    window.innerWidth || 0,
+    document.documentElement.clientWidth || 0
+  );
   let viewportFrame = 0;
 
   showLoginError();
@@ -140,15 +145,26 @@ document.addEventListener('DOMContentLoaded', () => {
   function syncLoginViewport() {
     viewportFrame = 0;
     const visibleHeight = Math.max(1, Math.round(viewport?.height || window.innerHeight || document.documentElement.clientHeight || 1));
+    const visibleWidth = Math.max(1, Math.round(viewport?.width || window.innerWidth || document.documentElement.clientWidth || 1));
+    const visibleTop = Math.max(0, Math.round(viewport?.offsetTop || 0));
     const active = document.activeElement;
     const inputFocused = active instanceof HTMLInputElement && active.closest('.login-card');
+
+    if (Math.abs(restingViewportWidth - visibleWidth) >= 80) {
+      restingViewportWidth = visibleWidth;
+      restingViewportHeight = visibleHeight;
+      if (loginShell) loginShell.scrollTop = 0;
+    }
+
     const heightLoss = Math.max(0, restingViewportHeight - visibleHeight);
     const keyboardOpen = Boolean(inputFocused && heightLoss >= 120);
 
     document.documentElement.style.setProperty('--login-visible-height', `${visibleHeight}px`);
+    document.documentElement.style.setProperty('--login-visible-top', `${visibleTop}px`);
     document.body.classList.toggle('login-keyboard-open', keyboardOpen);
 
     if (!keyboardOpen && !inputFocused) {
+      restingViewportWidth = visibleWidth;
       restingViewportHeight = visibleHeight;
       if (loginShell && !loginPanel?.hidden) loginShell.scrollTop = 0;
       if (window.scrollY !== 0 || window.scrollX !== 0) {
@@ -158,6 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (!keyboardOpen) {
+      restingViewportWidth = Math.max(restingViewportWidth, visibleWidth);
       restingViewportHeight = Math.max(restingViewportHeight, visibleHeight);
       if (window.scrollY !== 0 || window.scrollX !== 0) {
         window.scrollTo(0, 0);
@@ -165,9 +182,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    requestAnimationFrame(() => {
-      active?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-    });
+    if (loginShell && !loginPanel?.hidden) {
+      loginShell.scrollTop = 0;
+    }
   }
 
   function focusLoginOnDesktop() {
