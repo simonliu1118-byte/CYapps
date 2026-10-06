@@ -82,4 +82,4 @@ jobs:
           name: CYERPAutoInput-v${{ env.CYERPAUTOINPUT_VERSION }}${{ env.CYERPAUTOINPUT_ARTIFACT_SUFFIX }}-windows-x64-run${{ github.run_number }}
           path: apps/CYERPAutoInput/package/*
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3

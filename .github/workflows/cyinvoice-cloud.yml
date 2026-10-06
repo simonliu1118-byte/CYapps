@@ -310,4 +310,4 @@ jobs:
           name: CYInvoice_cloud-foundation_engineering-run${{ github.run_number }}
           path: apps/CYInvoice/dist/cloud-foundation-artifact/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
