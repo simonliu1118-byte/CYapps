@@ -885,7 +885,7 @@ function setupMobileWorkspaceMobileNavigation() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
     sync();
-    document.body.classList.toggle('cy-mobile-app', mobile.matches);
+    document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
   else mobile.addListener?.(syncMode);
@@ -1010,7 +1010,8 @@ function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DES
   if (ledgerMore) ledgerMore.hidden = Boolean(desktop);
 
   if (!desktop) {
-    document.body.classList.add('cy-mobile-app');
+    const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && !isTabletWorkspace();
+    document.body.classList.toggle('cy-mobile-app', mobile);
     syncMobileWorkspaceMobileIdentity();
     return;
   }
