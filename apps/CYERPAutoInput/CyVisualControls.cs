@@ -57,7 +57,7 @@ internal sealed class CyPrimaryButton : Button
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
         g.Clear(Parent?.BackColor ?? CyVisualTheme.Window);
 
-        // Canonical WinForms V7 geometry: 1 px horizontal safety inset,
+        // CY WinForms theme-button reference geometry: 1 px horizontal safety inset,
         // ~1.5 px vertical inset and a fixed ~2 px corner radius.
         var bounds = new RectangleF(1f, 1.5f, Math.Max(1f, Width - 3f), Math.Max(1f, Height - 4f));
         using var path = CyDrawing.RoundedRectangle(bounds, CornerRadius);

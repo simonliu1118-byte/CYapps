@@ -1,7 +1,5 @@
 namespace CYERPAutoInput;
 
-internal enum ErpMode { Unknown, Browse, Input }
-
 internal sealed class ErpAutomationService
 {
     private const int ProvenDetailRowPitch = 24;
@@ -17,7 +15,7 @@ internal sealed class ErpAutomationService
     public ErpAutomationService(AppLogger log)
     {
         _log = log;
-        var ocr = new WindowsOcrService(log);
+        var ocr = new PaddleOcrService(log);
         _gridVision = new FastDetailGridVisionService(ocr, log);
         _textVision = new OpticalTextLocator(ocr, log);
         _unitCellLocator = new F2UnitCellLocator(ocr, log);
@@ -25,16 +23,46 @@ internal sealed class ErpAutomationService
         _ = Task.Run(() => WarmUpOcrAsync(ocr));
     }
 
-    public nint FindErp() => Win32Automation.FindCopi08Window();
-
-    public ErpMode DetectMode(nint root)
+    private ErpMode DetectMode(nint root)
     {
-        if (root == 0 || !NativeMethods.GetWindowRect(root, out var rr)) return ErpMode.Unknown;
+        var (mode, total, readOnly, writable) = ReadModeSignal(root);
+        if (total > 0)
+            _log.Info("state", $"mode signal total={total} readonly={readOnly} writable={writable}");
+        return mode;
+    }
+
+    /// <summary>Read-only status probe for the UI status tag; never writes to ERP and never logs.</summary>
+    public ErpStatusProbe ProbeStatus()
+    {
+        var windows = Win32Automation.FindCopi08Windows();
+        if (windows.Count != 1) return new ErpStatusProbe(windows.Count, 0, ErpMode.Unknown, null);
+
+        var root = windows[0];
+        var (mode, _, _, _) = ReadModeSignal(root);
+        bool? numberPresent = null;
+        if (mode == ErpMode.Input)
+        {
+            try
+            {
+                var text = NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle);
+                numberPresent = text is null ? null : text.Trim().Length > 0;
+            }
+            catch (InvalidOperationException)
+            {
+                numberPresent = null;
+            }
+        }
+        return new ErpStatusProbe(1, root, mode, numberPresent);
+    }
+
+    private static (ErpMode Mode, int Total, int ReadOnly, int Writable) ReadModeSignal(nint root)
+    {
+        if (root == 0 || !NativeMethods.GetWindowRect(root, out var rr)) return (ErpMode.Unknown, 0, 0, 0);
         var edits = Win32Automation.EnumerateChildren(root)
             .Where(c => c.Visible && c.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase))
             .Where(c => c.Rect.Top - rr.Top is >= 140 and <= 245)
             .ToArray();
-        if (edits.Length < 6) return ErpMode.Unknown;
+        if (edits.Length < 6) return (ErpMode.Unknown, 0, 0, 0);
 
         var readOnly = 0;
         var writable = 0;
@@ -43,11 +71,11 @@ internal sealed class ErpAutomationService
             var style = NativeMethods.GetWindowLongPtr(edit.Handle, NativeMethods.GWL_STYLE).ToInt64();
             if ((style & NativeMethods.ES_READONLY) != 0) readOnly++; else writable++;
         }
-        _log.Info("state", $"mode signal total={edits.Length} readonly={readOnly} writable={writable}");
 
-        if (writable == 0 && readOnly >= 6) return ErpMode.Browse;
-        if (writable >= 4 && readOnly >= 2) return ErpMode.Input;
-        return ErpMode.Unknown;
+        var mode = writable == 0 && readOnly >= 6 ? ErpMode.Browse
+            : writable >= 4 && readOnly >= 2 ? ErpMode.Input
+            : ErpMode.Unknown;
+        return (mode, edits.Length, readOnly, writable);
     }
 
     public async Task<AutomationRunResult> RunAsync(FormSnapshot snapshot, IProgress<string> progress, CancellationToken cancellationToken)
@@ -55,8 +83,11 @@ internal sealed class ErpAutomationService
         var result = new AutomationRunResult();
         if (snapshot.Values.TryGetValue("order_type", out var orderType))
             result.SalesOrderType = orderType.Trim();
-        var root = FindErp();
-        if (root == 0) throw new InvalidOperationException("找不到 SMART ERP COPI08 視窗。\n請先開啟銷貨單建立作業。");
+        var windows = Win32Automation.FindCopi08Windows();
+        if (windows.Count == 0) throw new InvalidOperationException("找不到 SMART ERP COPI08 視窗。\n請先開啟銷貨單建立作業。");
+        if (windows.Count > 1)
+            throw new InvalidOperationException($"偵測到 {windows.Count} 個 COPI08 視窗。\n請只保留一個銷貨單建立作業後再開始，避免輸入到錯誤的視窗。");
+        var root = windows[0];
 
         // Automation uses one stable ERP geometry: always maximize COPI08 instead of
         // maintaining a second windowed coordinate/viewport path.
@@ -87,7 +118,7 @@ internal sealed class ErpAutomationService
         return result;
     }
 
-    private async Task WarmUpOcrAsync(WindowsOcrService ocr)
+    private async Task WarmUpOcrAsync(PaddleOcrService ocr)
     {
         try
         {
@@ -173,19 +204,19 @@ internal sealed class ErpAutomationService
             cancellationToken.ThrowIfCancellationRequested();
             attempt++;
             var target = ErpLayoutResolver.ResolveSalesOrderNumber(root);
-            lastDirect = NativeMethods.WindowText(target.Handle).Trim();
-            if (IsExpectedSalesOrderNumber(lastDirect, expectedDate))
+            lastDirect = (NativeMethods.ControlText(target.Handle) ?? string.Empty).Trim();
+            if (InputRules.IsExpectedSalesOrderNumber(lastDirect, expectedDate))
             {
-                _log.Info("document", $"sales order number captured sales_no={lastDirect} source=win32-text attempts={attempt} elapsed_ms={Environment.TickCount64 - started}");
+                _log.Info("document", $"sales order number captured sales_no={_log.Value(lastDirect)} source=win32-text attempts={attempt} elapsed_ms={Environment.TickCount64 - started}");
                 return lastDirect;
             }
 
             if (attempt == 1 || attempt % 3 == 0)
             {
                 lastCopied = await CopyControlTextExactlyAsync(target.Handle, cancellationToken);
-                if (IsExpectedSalesOrderNumber(lastCopied, expectedDate))
+                if (InputRules.IsExpectedSalesOrderNumber(lastCopied, expectedDate))
                 {
-                    _log.Info("document", $"sales order number captured sales_no={lastCopied} source=clipboard attempts={attempt} elapsed_ms={Environment.TickCount64 - started}");
+                    _log.Info("document", $"sales order number captured sales_no={_log.Value(lastCopied)} source=clipboard attempts={attempt} elapsed_ms={Environment.TickCount64 - started}");
                     return lastCopied;
                 }
             }
@@ -231,13 +262,6 @@ internal sealed class ErpAutomationService
             }
             catch { }
         }
-    }
-
-    private static bool IsExpectedSalesOrderNumber(string value, string expectedDate)
-    {
-        if (value.Length != 11 || !value.All(char.IsDigit)) return false;
-        if (!value.StartsWith(expectedDate, StringComparison.Ordinal)) return false;
-        return int.TryParse(value.AsSpan(8, 3), out var sequence) && sequence is >= 1 and <= 999;
     }
 
     private async Task FillTabGroupAsync(nint root, FormSnapshot snapshot, string group, CancellationToken cancellationToken)
@@ -607,7 +631,7 @@ internal sealed class ErpAutomationService
         }
         catch (InvalidOperationException ex) when (ex.Message.StartsWith("OCR 無法在 F2", StringComparison.Ordinal))
         {
-            _log.Warn("vision", $"F2 whole-window PaddleOCR missed requested unit; trying isolated-cell OCR target=\"{unit}\"");
+            _log.Warn("vision", $"F2 whole-window PaddleOCR missed requested unit; trying isolated-cell OCR target=\"{_log.Value(unit)}\"");
             var fallback = await _unitCellLocator.FindAsync(lookup, unit, cancellationToken);
             if (fallback is null)
                 throw;
@@ -660,10 +684,10 @@ internal sealed class ErpAutomationService
         geometry = activeGeometry;
 
         var (markerState, foregroundRatio) = InspectBatchMarkerVisual(freshRect, point);
-        _log.Info("detail", $"batch marker visual row={visibleRow + 1} item={itemCode} state={markerState} foreground_ratio={foregroundRatio:F4}");
+        _log.Info("detail", $"batch marker visual row={visibleRow + 1} item={_log.Value(itemCode)} state={markerState} foreground_ratio={foregroundRatio:F4}");
         if (markerState == BatchMarkerVisualState.Blank)
         {
-            _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode} reason=visually-blank-batch-cell");
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={_log.Value(itemCode)} reason=visually-blank-batch-cell");
             return geometry;
         }
 
@@ -685,11 +709,11 @@ internal sealed class ErpAutomationService
             if (markerState == BatchMarkerVisualState.Marker)
                 throw new InvalidOperationException($"品號 {itemCode} 的批號欄明確偵測到批號標記，但按 F2 後沒有出現批號查詢視窗；已停止避免錯位。");
 
-            _log.Info("detail", $"batch not required row={visibleRow + 1} item={itemCode} reason=uncertain-marker-and-no-f2-lookup");
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={_log.Value(itemCode)} reason=uncertain-marker-and-no-f2-lookup");
             return geometry;
         }
 
-        _log.Info("detail", $"batch lookup opened row={visibleRow + 1} item={itemCode} marker_state={markerState}");
+        _log.Info("detail", $"batch lookup opened row={visibleRow + 1} item={_log.Value(itemCode)} marker_state={markerState}");
         if (!Win32Automation.PrepareForeground(lookup, _log))
             throw new InvalidOperationException("F2 批號查詢視窗無法取得前景。");
 
@@ -718,7 +742,7 @@ internal sealed class ErpAutomationService
 
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("批號 F2 關閉後無法回到 ERP 前景。");
-        _log.Info("detail", $"batch selected row={visibleRow + 1} item={itemCode} lookup_row={selection.RowNumber} positive_stock={selection.Stock}");
+        _log.Info("detail", $"batch selected row={visibleRow + 1} item={_log.Value(itemCode)} lookup_row={selection.RowNumber} positive_stock={selection.Stock}");
         return geometry;
     }
 
@@ -808,7 +832,7 @@ internal sealed class ErpAutomationService
                 completedRow.ItemCode,
                 "批號存量不足，需人工確認");
             result.Warnings.Add(warning);
-            _log.Warn("document", $"warning recorded code={warning.Code} document={warning.DocumentKey} detail_row={warning.DetailRow} item={warning.ItemCode}");
+            _log.Warn("document", $"warning recorded code={warning.Code} document={warning.DocumentKey} detail_row={warning.DetailRow} item={_log.Value(warning.ItemCode)}");
 
             if (!Win32Automation.PrepareForeground(root, _log))
                 throw new InvalidOperationException("關閉批號存量不足警告後無法回到 COPI08；已停止避免後續錯位。");

@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace CYERPAutoInput;
 
 internal sealed class MainForm : Form
@@ -16,7 +14,13 @@ internal sealed class MainForm : Form
     private readonly DetailDataGridView _details = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ToolStripStatusLabel _buildStatus = new() { Text = $"{AppVersionInfo.Display} · Esc：緊急停止 · 不自動儲存 ERP" };
+    private readonly ToolStripStatusLabel _dpiHint = new();
     private readonly ModeToggle _modeToggle = new();
+    private readonly Label _erpStateTag = new();
+    private readonly ErpDocumentStateTracker _stateTracker = new();
+    private readonly System.Windows.Forms.Timer _statePoll = new() { Interval = 1000 };
+    private ErpDocumentState? _shownState;
+    private bool _probeFailing;
     private readonly CyPrimaryButton _start = new();
     private TableLayoutPanel _root = null!;
     private CancellationTokenSource? _automationCts;
@@ -27,6 +31,7 @@ internal sealed class MainForm : Form
         _automation = new ErpAutomationService(log);
         _settingsStore = new UserSettingsStore(log);
         _settings = _settingsStore.Load();
+        _log.Diagnostic = _settings.DiagnosticLogging;
 
         Text = "CYERPAutoInput — SMART ERP 自動輸入工具";
         StartPosition = FormStartPosition.CenterScreen;
@@ -39,6 +44,64 @@ internal sealed class MainForm : Form
         ApplyDefaultsToBlankFields();
         _modeToggle.Checked = _settings.AdvancedMode;
         ApplyMode(_settings.AdvancedMode);
+
+        _statePoll.Tick += (_, _) => RefreshErpState();
+        Shown += (_, _) =>
+        {
+            UpdateDpiHint();
+            RefreshErpState();
+            _statePoll.Start();
+        };
+        DpiChanged += (_, _) => UpdateDpiHint();
+        FormClosing += (_, _) => _statePoll.Stop();
+    }
+
+    private void RefreshErpState()
+    {
+        ErpDocumentState state;
+        try
+        {
+            state = _stateTracker.Update(_automation.ProbeStatus());
+            _probeFailing = false;
+        }
+        catch (Exception ex)
+        {
+            if (!_probeFailing) _log.Warn("state", $"status probe failed: {ex.GetType().Name}");
+            _probeFailing = true;
+            state = ErpDocumentState.Unknown;
+        }
+        if (state == _shownState) return;
+        _shownState = state;
+
+        var (text, fore, back) = state switch
+        {
+            ErpDocumentState.Browse => ("檢視", CyVisualTheme.Info, CyVisualTheme.InfoSoft),
+            ErpDocumentState.New => ("新增", CyVisualTheme.Success, CyVisualTheme.SuccessSoft),
+            ErpDocumentState.Modify => ("修改", CyVisualTheme.Danger, CyVisualTheme.DangerSoft),
+            ErpDocumentState.InputUnconfirmed => ("新增/修改？", CyVisualTheme.Warning, CyVisualTheme.WarningSoft),
+            ErpDocumentState.MultipleWindows => ("多個 COPI08", CyVisualTheme.Warning, CyVisualTheme.WarningSoft),
+            ErpDocumentState.NotFound => ("未開啟", CyVisualTheme.TextSecondary, CyVisualTheme.ReadOnly),
+            _ => ("無法判斷", CyVisualTheme.TextSecondary, CyVisualTheme.ReadOnly)
+        };
+        _erpStateTag.Text = $"ERP：{text}";
+        _erpStateTag.ForeColor = fore;
+        _erpStateTag.BackColor = back;
+        _log.Info("state", $"status tag {state}");
+    }
+
+    private void UpdateDpiHint()
+    {
+        var percent = (int)Math.Round(DeviceDpi * 100.0 / 96);
+        if (percent == 100)
+        {
+            _dpiHint.Text = "顯示比例 100%";
+            _dpiHint.ForeColor = CyVisualTheme.TextSecondary;
+        }
+        else
+        {
+            _dpiHint.Text = $"顯示比例 {percent}%：請改為 100%，否則 ERP 定位可能錯誤";
+            _dpiHint.ForeColor = CyVisualTheme.Warning;
+        }
     }
 
     private void BuildUi()
@@ -81,23 +144,16 @@ internal sealed class MainForm : Form
         var find = MakeButton("尋找 ERP", 90);
         find.Click += (_, _) =>
         {
-            var hwnd = _automation.FindErp();
-            if (hwnd == 0) SetStatus("ERP：找不到 COPI08 視窗");
+            var windows = Win32Automation.FindCopi08Windows();
+            if (windows.Count == 0) SetStatus("ERP：找不到 COPI08 視窗");
+            else if (windows.Count > 1) SetStatus($"ERP：偵測到 {windows.Count} 個 COPI08 視窗，請只保留一個");
             else
             {
-                Win32Automation.PrepareForeground(hwnd, _log);
+                Win32Automation.PrepareForeground(windows[0], _log);
                 SetStatus("ERP：已找到 COPI08");
             }
         };
         actions.Controls.Add(find);
-
-        var state = MakeButton("偵測狀態", 90);
-        state.Click += (_, _) =>
-        {
-            var hwnd = _automation.FindErp();
-            SetStatus(hwnd == 0 ? "ERP：找不到 COPI08" : $"ERP：{_automation.DetectMode(hwnd)}");
-        };
-        actions.Controls.Add(state);
 
         _start.Text = "開始輸入 ERP";
         _start.Size = new Size(122, 34);
@@ -135,6 +191,14 @@ internal sealed class MainForm : Form
         _modeToggle.Margin = new Padding(4, 1, 8, 1);
         _modeToggle.CheckedChanged += (_, _) => ApplyMode(_modeToggle.Checked);
         rightTools.Controls.Add(_modeToggle);
+
+        _erpStateTag.AutoSize = false;
+        _erpStateTag.Size = new Size(170, 34);
+        _erpStateTag.Margin = new Padding(4, 1, 12, 1);
+        _erpStateTag.TextAlign = ContentAlignment.MiddleCenter;
+        _erpStateTag.Font = new Font("Microsoft JhengHei UI", 12F, FontStyle.Bold);
+        _erpStateTag.AccessibleName = "ERP 單據狀態";
+        rightTools.Controls.Add(_erpStateTag);
 
         var fieldsHost = new TableLayoutPanel
         {
@@ -194,6 +258,7 @@ internal sealed class MainForm : Form
         };
         _status.Text = "ERP：尚未偵測";
         statusStrip.Items.Add(_status);
+        statusStrip.Items.Add(_dpiHint);
         statusStrip.Items.Add(_buildStatus);
         _root.Controls.Add(statusStrip, 0, 3);
     }
@@ -257,30 +322,13 @@ internal sealed class MainForm : Form
         text.TextChanged += (_, _) =>
         {
             if (updating) return;
-            var formatted = FormatDateForDisplay(NormalizeDateDigits(text.Text));
+            var formatted = InputRules.FormatDateForDisplay(InputRules.NormalizeDateDigits(text.Text));
             if (text.Text == formatted) return;
             updating = true;
             text.Text = formatted;
             text.SelectionStart = text.Text.Length;
             updating = false;
         };
-    }
-
-    private static string NormalizeDateDigits(string value) =>
-        new string(value.Where(char.IsDigit).Take(8).ToArray());
-
-    private static string FormatDateForDisplay(string digits)
-    {
-        if (digits.Length <= 4) return digits;
-        if (digits.Length <= 6) return $"{digits[..4]}/{digits[4..]}";
-        return $"{digits[..4]}/{digits[4..6]}/{digits[6..]}";
-    }
-
-    private static bool TryNormalizeValidDate(string value, out string digits)
-    {
-        digits = NormalizeDateDigits(value);
-        return digits.Length == 8 &&
-               DateTime.TryParseExact(digits, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
     }
 
     private void ConfigureDetailGrid()
@@ -409,6 +457,7 @@ internal sealed class MainForm : Form
         try
         {
             _settingsStore.Save(_settings);
+            _log.Diagnostic = _settings.DiagnosticLogging;
             _modeToggle.Checked = _settings.AdvancedMode;
             ApplyMode(_settings.AdvancedMode);
             ApplyDefaultsToBlankFields();
@@ -489,7 +538,7 @@ internal sealed class MainForm : Form
 
             if (value.Length > 0 && field.Kind == FieldKind.Date)
             {
-                if (!TryNormalizeValidDate(value, out var normalizedDate))
+                if (!InputRules.TryNormalizeValidDate(value, out var normalizedDate))
                 {
                     validationError = $"{field.Label}必須是有效日期（YYYY/MM/DD）。";
                     control.Focus();

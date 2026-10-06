@@ -30,7 +30,7 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 
 - Branch：`cyerp-auto-input/v0.1.0-csharp`
 - Draft PR：`#104 CYERPAutoInput V0.1.0: C# rewrite with optical ERP targeting`
-- VERSION：`0.1.0`；BUILD：見同目錄 `BUILD` 檔（2026-10-06 時為 `25`）。
+- VERSION：`0.1.0`；BUILD：見同目錄 `BUILD` 檔（2026-10-06 時為 `26`）。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU），詳見 `README.md`。
 - 本次升 Minor 是使用者已明確同意的技術棧重寫。
 - PR 仍為 Draft；未完成真實 ERP 驗收前不得合併 main。
@@ -59,6 +59,14 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - 銷貨單號由 ERP 產生，CY 只讀取並驗證 `YYYYMMDDXXX` 格式。
 - 完成後停在 ERP，**不自動儲存**；全域 Esc 只停止 CY，不按 ERP「取消」；不送 `Ctrl+A`。
 - 仍需人工確認的狀況累積在 `AutomationRunResult.Warnings`，完成時統一顯示筆數。
+- Build 26（使用者 2026-10-06 確認的整理項目）：
+  - 主畫面 ERP 單據狀態大標籤（檢視／新增／修改），由 `ErpDocumentStateTracker` 依「檢視→輸入瞬間單號是否被清空」判斷；只提示、不阻止（使用者決定不自動停止）。
+  - 多個 COPI08 視窗時不開始輸入。
+  - 顯示比例只支援 100%，以狀態列文字提示（使用者確認無 125%／150% 需求）。
+  - 診斷模式：預設 LOG 不記錄實際品號／單號／OCR 文字（只記長度），設定勾選後才記錄。
+  - 銷貨單號改以 `WM_GETTEXT`（含逾時）讀取，剪貼簿仍為後備。
+  - 純規則抽到 `InputRules.cs`／`ErpDocumentState.cs`，新增 `tests/CYERPAutoInput.Tests`（CI 執行）。
+  - `settings.example.json` 改為 C# 設定格式；移除註解中的 Build 版本號與 `WindowsOcrService` 相容命名（改名 `PaddleOcrService`）。
 
 ## 5. 已確認的 ERP 實機事實
 
@@ -97,6 +105,7 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - OCR 在不同 Windows DPI、ERP 視窗大小、字型下仍需實機驗證。
 - F2 單位與批號流程必須保留 focus gate 與「F2 必須關閉」驗證；不得退回「看起來點到了就當成功」。
 - 不得把舊 Go Build 19 的診斷 readback 當成 C# 正式選取方法。
+- 下拉選項讀取（`PROJECT_RULES.md` §5）尚未實作：Codex 時期嘗試讀不到 DevExpress `TcxDBImageComboBox` 選項；目前設定只能手動輸入本機預設值。需在真實 ERP 上做有界診斷後再決定作法。
 - 其餘規劃中功能（跨批號拆列、批次 fault isolation、批次結果總表、自動儲存）列在 `README.md` TODO。
 
 

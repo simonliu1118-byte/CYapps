@@ -30,10 +30,13 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 - 商品明細使用 WinForms `DataGridView`，標準畫面顯示約 10 列並使用垂直捲軸。
 - 有資料的明細列必須同時有「品號＋數量」。
 - 蝦皮、MO店+、酷澎商城匯入入口固定保留。
+- 右上角大標籤每秒顯示 ERP 單據狀態：`檢視`／`新增`／`修改`；另有 `新增/修改？`（CY 開啟時 ERP 已在輸入中且已有單號，無法確認）、`多個 COPI08`、`未開啟`、`無法判斷`。新增與修改的區分依據：由檢視進入輸入狀態的瞬間，`新增` 會清空銷貨單號，`修改` 會保留原單號。標籤只作提示，不會阻止開始輸入。
+- 底部狀態列提示 Windows 顯示比例；光學定位只以 100% 驗證，非 100% 時以警告色提示改回 100%。
+- 設定可開啟「診斷模式」：預設 LOG 只記錄實際 ERP 內容（品號、銷貨單號、OCR 讀到的 ERP 文字）的長度；開啟後才寫入實際內容，供現場除錯，LOG 仍只存在本機。
 
 ## 光學定位 / OCR
 
-Build 11 起正式辨識引擎改為本機 **PaddleOCR PP-OCRv5 + ONNX Runtime (CPU)**，不再依賴 `Windows.Media.Ocr` 或 Windows 中文 OCR 語言包。
+辨識引擎為本機 **PaddleOCR PP-OCRv5 + ONNX Runtime (CPU)**，不依賴 `Windows.Media.Ocr` 或 Windows 中文 OCR 語言包。
 
 - Recognition：`ch_PP-OCRv5_rec_mobile`；使用與 RapidOCRSharpOnnx 已驗證字典完全匹配的 PP-OCRv5 模型。
 - Detection：`ch_PP-OCRv5_det_mobile`。
@@ -67,6 +70,7 @@ CYERPAutoInput 使用 AITeam CY App Icon Family 的正式 `Auto` 資產：
 - 不自動操作 ERP「修改」或「取消」。
 - 不自行輸入銷貨單號；ERP 在銷貨單別／日期完成後自動產生，CY 以狀態輪詢讀取並驗證固定 `YYYYMMDDXXX`（11 位）格式。批次追蹤識別固定使用「銷貨單別 + 銷貨單號」，例如 `234-20260926001`。
 - 任何未預期視窗／焦點／欄位狀態都必須停止目前單據，禁止猜座標繼續輸入。
+- 同時開啟多個 COPI08 視窗時不開始輸入，避免輸入到錯誤的視窗。
 - 目前不自動儲存 ERP 單據。
 - 真實 ERP 代碼、客戶／品號／訂單／發票資料、runtime log 不得提交 Public source。
 
@@ -99,11 +103,14 @@ CYERPAutoInput/
 ```powershell
 ./tools/fetch-canonical-icon.ps1
 ./tools/fetch-ocr-models.ps1
+dotnet test tests/CYERPAutoInput.Tests/CYERPAutoInput.Tests.csproj
 dotnet restore CYERPAutoInput.csproj -r win-x64
 dotnet publish CYERPAutoInput.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false
 ```
 
 正式 Windows 編譯與驗收基準以 GitHub Actions Windows runner 為準。
+
+`tests/CYERPAutoInput.Tests` 只測不依賴 Win32／WinForms／OCR 的純規則（日期、銷貨單號格式、庫存數字、OCR 文字正規化、新增／修改判斷），以連結原始檔方式編譯，可在任何作業系統執行；光學流程由 `--vision-self-test` 驗證。
 
 ## TODO
 

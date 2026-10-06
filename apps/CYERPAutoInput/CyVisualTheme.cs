@@ -17,6 +17,16 @@ internal static class CyVisualTheme
     internal static readonly Color AccentFocus = Color.FromArgb(224, 161, 120);
     internal static readonly Color Selection = Color.FromArgb(246, 227, 209);
 
+    // State colors are theme-independent (CY Desktop Visual Guide §4.3).
+    internal static readonly Color Success = Color.FromArgb(0x21, 0x82, 0x5C);
+    internal static readonly Color SuccessSoft = Color.FromArgb(0xEA, 0xF5, 0xF0);
+    internal static readonly Color Warning = Color.FromArgb(0xA6, 0x6B, 0x10);
+    internal static readonly Color WarningSoft = Color.FromArgb(0xFA, 0xF1, 0xE3);
+    internal static readonly Color Danger = Color.FromArgb(0xB4, 0x37, 0x37);
+    internal static readonly Color DangerSoft = Color.FromArgb(0xF8, 0xEA, 0xEA);
+    internal static readonly Color Info = Color.FromArgb(0x35, 0x6A, 0x9A);
+    internal static readonly Color InfoSoft = Color.FromArgb(0xEA, 0xF1, 0xF7);
+
     public static void Apply(Form form)
     {
         form.BackColor = Window;

@@ -197,6 +197,31 @@ internal static class NativeMethods
         return sb.ToString();
     }
 
+    private const uint WM_GETTEXT = 0x000D;
+    private const uint WM_GETTEXTLENGTH = 0x000E;
+    private const uint SMTO_ABORTIFHUNG = 0x0002;
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", CharSet = CharSet.Unicode)]
+    private static extern nint SendMessageTimeout(nint hWnd, uint msg, nint wParam, nint lParam, uint flags, uint timeoutMs, out nint result);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", CharSet = CharSet.Unicode)]
+    private static extern nint SendMessageTimeout(nint hWnd, uint msg, nint wParam, StringBuilder lParam, uint flags, uint timeoutMs, out nint result);
+
+    // GetWindowText does not return an edit control's content when the control
+    // belongs to another process; WM_GETTEXT does. The timeout keeps CY responsive
+    // if ERP is busy. Returns null when ERP did not answer in time.
+    internal static string? ControlText(nint hwnd, uint timeoutMs = 150)
+    {
+        if (hwnd == 0) return string.Empty;
+        if (SendMessageTimeout(hwnd, WM_GETTEXTLENGTH, 0, 0, SMTO_ABORTIFHUNG, timeoutMs, out var length) == 0)
+            return null;
+        if (length <= 0) return string.Empty;
+        var sb = new StringBuilder((int)length + 2);
+        if (SendMessageTimeout(hwnd, WM_GETTEXT, sb.Capacity, sb, SMTO_ABORTIFHUNG, timeoutMs, out _) == 0)
+            return null;
+        return sb.ToString();
+    }
+
     internal static string ClassName(nint hwnd)
     {
         if (hwnd == 0) return string.Empty;

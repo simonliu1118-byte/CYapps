@@ -4,10 +4,10 @@ namespace CYERPAutoInput;
 
 internal sealed class F2UnitCellLocator
 {
-    private readonly WindowsOcrService _ocr;
+    private readonly PaddleOcrService _ocr;
     private readonly AppLogger _log;
 
-    public F2UnitCellLocator(WindowsOcrService ocr, AppLogger log)
+    public F2UnitCellLocator(PaddleOcrService ocr, AppLogger log)
     {
         _ocr = ocr;
         _log = log;
@@ -103,7 +103,7 @@ internal sealed class F2UnitCellLocator
                 .ThenBy(t => t.Rect.Left)
                 .Select(t => t.Text)));
 
-            _log.Info("vision", $"F2 unit cell PaddleOCR row={rowNumber} text=\"{Sanitize(cellText)}\" cell={left},{top},{right - left},{height}");
+            _log.Info("vision", $"F2 unit cell PaddleOCR row={rowNumber} text=\"{_log.Value(Sanitize(cellText))}\" cell={left},{top},{right - left},{height}");
             if (cellText != target && !cellText.Contains(target, StringComparison.Ordinal))
                 continue;
 

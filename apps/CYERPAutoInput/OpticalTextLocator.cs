@@ -2,7 +2,7 @@ namespace CYERPAutoInput;
 
 internal sealed class OpticalTextLocator
 {
-    private readonly WindowsOcrService _ocr;
+    private readonly PaddleOcrService _ocr;
     private readonly AppLogger _log;
 
     private static readonly Dictionary<string, int> Copi08TabCenterX = new(StringComparer.Ordinal)
@@ -17,7 +17,7 @@ internal sealed class OpticalTextLocator
         ["資料瀏覽"] = 671
     };
 
-    public OpticalTextLocator(WindowsOcrService ocr, AppLogger log)
+    public OpticalTextLocator(PaddleOcrService ocr, AppLogger log)
     {
         _ocr = ocr;
         _log = log;
@@ -138,7 +138,7 @@ internal sealed class OpticalTextLocator
         {
             var text = Sanitize(token.Text);
             if (text.Length == 0) continue;
-            _log.Info("vision", $"OCR_TOKEN context={context} target={target} raw=\"{text}\" normalized=\"{Sanitize(OcrTextNormalizer.Normalize(token.Text))}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
+            _log.Info("vision", $"OCR_TOKEN context={context} target={target} raw=\"{_log.Value(text)}\" normalized=\"{_log.Value(Sanitize(OcrTextNormalizer.Normalize(token.Text)))}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
         }
         if (tokens.Count > maxTokens)
             _log.Info("vision", $"OCR_DIAG context={context} target={target} truncated={tokens.Count - maxTokens}");

@@ -55,6 +55,10 @@ jobs:
         shell: pwsh
         run: ./tools/fetch-ocr-models.ps1
 
+      - name: Unit tests
+        shell: pwsh
+        run: dotnet test tests/CYERPAutoInput.Tests/CYERPAutoInput.Tests.csproj -c Release
+
       - name: Restore
         shell: pwsh
         run: dotnet restore CYERPAutoInput.csproj -r win-x64

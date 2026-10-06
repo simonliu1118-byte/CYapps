@@ -2,7 +2,7 @@ namespace CYERPAutoInput;
 
 internal sealed class FastDetailGridVisionService
 {
-    private readonly WindowsOcrService _ocr;
+    private readonly PaddleOcrService _ocr;
     private readonly GridVisionService _fallback;
     private readonly AppLogger _log;
     private readonly Dictionary<nint, Dictionary<int, int>> _exactColumnX = [];
@@ -18,7 +18,7 @@ internal sealed class FastDetailGridVisionService
         [7] = ["單價"]
     };
 
-    public FastDetailGridVisionService(WindowsOcrService ocr, AppLogger log)
+    public FastDetailGridVisionService(PaddleOcrService ocr, AppLogger log)
     {
         _ocr = ocr;
         _fallback = new GridVisionService(ocr, log);
@@ -59,8 +59,8 @@ internal sealed class FastDetailGridVisionService
             // Do not use the broad historical phrase matcher here. For a header such as
             // "贈 / 備 品 量 單 位", the old matcher could return the whole suffix
             // "備品量單位" when looking for "單位", shifting the click left into the
-            // previous field. Build 17 returns only the character span that actually
-            // matches the requested header text.
+            // previous field. Only the character span that actually matches the requested
+            // header text is returned.
             var match = FindExactPhrase(tokens, pair.Value);
             if (match is null)
             {
@@ -78,9 +78,8 @@ internal sealed class FastDetailGridVisionService
             _log.Info("vision", $"OCR_HEADER_MATCH_FAST logical_col={pair.Key} label={pair.Value[0]} found=true text_x={textX} cell_x={resolvedX} snapped={cellX.HasValue} rect={match.Value.Left},{match.Value.Top},{match.Value.Width},{match.Value.Height}");
         }
 
-        // Kept under the existing API name because ErpAutomationService already treats
-        // this dictionary as the trusted visible-column X. Values are now the grid cell
-        // center whenever vertical boundaries are available, not merely a text-box center.
+        // ErpAutomationService treats these values as the trusted visible-column X: the grid
+        // cell center whenever vertical boundaries are available, otherwise the text-box center.
         _exactColumnX[gridHwnd] = exact;
 
         if (!geometry.ColumnX.ContainsKey(0) || !geometry.ColumnX.ContainsKey(1))

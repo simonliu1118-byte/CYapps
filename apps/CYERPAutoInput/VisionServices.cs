@@ -45,15 +45,14 @@ internal static class ScreenCapture
     }
 }
 
-// Compatibility name retained through the V0.1.0 rewrite so established vision
-// call sites remain small. Build 11+ uses local PP-OCRv5 inference, not Windows OCR.
-internal sealed class WindowsOcrService
+// Local PaddleOCR PP-OCRv5 inference (ONNX Runtime, CPU) shared by all optical locators.
+internal sealed class PaddleOcrService
 {
     private readonly AppLogger _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private RapidOCRSharp? _engine;
 
-    public WindowsOcrService(AppLogger log) => _log = log;
+    public PaddleOcrService(AppLogger log) => _log = log;
 
     public async Task<IReadOnlyList<OcrToken>> RecognizeAsync(
         Bitmap bitmap,
@@ -169,7 +168,7 @@ internal sealed class WindowsOcrService
 
 internal sealed class GridVisionService
 {
-    private readonly WindowsOcrService _ocr;
+    private readonly PaddleOcrService _ocr;
     private readonly AppLogger _log;
 
     private static readonly Dictionary<int, string[]> ColumnAliases = new()
@@ -213,7 +212,7 @@ internal sealed class GridVisionService
         (18, ["備註"])
     ];
 
-    public GridVisionService(WindowsOcrService ocr, AppLogger log)
+    public GridVisionService(PaddleOcrService ocr, AppLogger log)
     {
         _ocr = ocr;
         _log = log;
@@ -412,7 +411,7 @@ internal sealed class GridVisionService
             throw new InvalidOperationException("OCR 無法在 F2 的「換算單位」欄可靠定位指定單位；已停止，不進行座標猜測。");
 
         var point = new Point(rect.Left + best.Rect.Left + best.Rect.Width / 2, rect.Top + best.Rect.Top + best.Rect.Height / 2);
-        _log.Info("vision", $"F2 requested unit located point={point.X},{point.Y} raw=\"{Sanitize(best.Text)}\" normalized=\"{Sanitize(OcrTextNormalizer.Normalize(best.Text))}\"");
+        _log.Info("vision", $"F2 requested unit located point={point.X},{point.Y} raw=\"{_log.Value(Sanitize(best.Text))}\" normalized=\"{_log.Value(Sanitize(OcrTextNormalizer.Normalize(best.Text)))}\"");
         return point;
     }
 
@@ -484,7 +483,7 @@ internal sealed class GridVisionService
         {
             var raw = Sanitize(token.Text);
             if (raw.Length == 0) continue;
-            _log.Info("vision", $"OCR_TOKEN context={context} raw=\"{raw}\" normalized=\"{Sanitize(OcrTextNormalizer.Normalize(token.Text))}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
+            _log.Info("vision", $"OCR_TOKEN context={context} raw=\"{_log.Value(raw)}\" normalized=\"{_log.Value(Sanitize(OcrTextNormalizer.Normalize(token.Text)))}\" rect={token.Rect.Left},{token.Rect.Top},{token.Rect.Width},{token.Rect.Height}");
         }
     }
 

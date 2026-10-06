@@ -5,6 +5,7 @@ internal sealed class SettingsForm : Form
     private readonly UserSettings _settings;
     private readonly DataGridView _grid = new();
     private readonly CheckBox _advanced = new();
+    private readonly CheckBox _diagnostic = new();
 
     private static readonly string[] ConfigurableKeys =
     [
@@ -18,7 +19,7 @@ internal sealed class SettingsForm : Form
         _settings = settings;
         Text = "CYERPAutoInput 設定";
         StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(620, 540);
+        Size = new Size(620, 574);
         MinimumSize = new Size(560, 480);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
@@ -27,8 +28,9 @@ internal sealed class SettingsForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 4, ColumnCount = 1, Padding = new Padding(12) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(12) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
@@ -37,7 +39,7 @@ internal sealed class SettingsForm : Form
         root.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "以下為本機預設值。實際 ERP 代碼只保存在這台電腦的 config/settings.json，不會寫入 Public source。",
+            Text = "以下為本機預設值。實際 ERP 代碼只保存在這台電腦的 Data/settings.json，不會寫入 Public source。",
             AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
@@ -47,6 +49,12 @@ internal sealed class SettingsForm : Form
         _advanced.AutoSize = true;
         _advanced.Padding = new Padding(3, 4, 0, 0);
         root.Controls.Add(_advanced, 0, 1);
+
+        _diagnostic.Text = "診斷模式（LOG 記錄實際 ERP 內容；僅本機，除錯時才開）";
+        _diagnostic.Checked = _settings.DiagnosticLogging;
+        _diagnostic.AutoSize = true;
+        _diagnostic.Padding = new Padding(3, 4, 0, 0);
+        root.Controls.Add(_diagnostic, 0, 2);
 
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
@@ -76,7 +84,7 @@ internal sealed class SettingsForm : Form
             var index = _grid.Rows.Add(field.Label, value);
             _grid.Rows[index].Tag = key;
         }
-        root.Controls.Add(_grid, 0, 2);
+        root.Controls.Add(_grid, 0, 3);
 
         var buttons = new FlowLayoutPanel
         {
@@ -90,7 +98,7 @@ internal sealed class SettingsForm : Form
         var cancel = new Button { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
         buttons.Controls.Add(save);
         buttons.Controls.Add(cancel);
-        root.Controls.Add(buttons, 0, 3);
+        root.Controls.Add(buttons, 0, 4);
         AcceptButton = save;
         CancelButton = cancel;
     }
@@ -98,6 +106,7 @@ internal sealed class SettingsForm : Form
     private void SaveAndClose()
     {
         _settings.AdvancedMode = _advanced.Checked;
+        _settings.DiagnosticLogging = _diagnostic.Checked;
         foreach (DataGridViewRow row in _grid.Rows)
         {
             if (row.Tag is not string key) continue;

@@ -43,7 +43,7 @@ internal abstract class BrandButtonBase : Button
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
         g.Clear(Parent?.BackColor ?? CyVisualTheme.Window);
 
-        // Same proven V7 shell as the CY themed button: native Button behavior,
+        // Same shell as CyPrimaryButton (CY WinForms theme-button reference): native Button behavior,
         // appearance-only owner paint, fixed ~2 px radius and symmetric inset.
         var bounds = new RectangleF(1f, 1.5f, Math.Max(1f, Width - 3f), Math.Max(1f, Height - 4f));
         using var path = CyDrawing.RoundedRectangle(bounds, 2f);

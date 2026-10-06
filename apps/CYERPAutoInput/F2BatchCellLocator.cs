@@ -7,10 +7,10 @@ internal sealed record BatchStockSelection(Point Point, int RowNumber, decimal S
 
 internal sealed class F2BatchCellLocator
 {
-    private readonly WindowsOcrService _ocr;
+    private readonly PaddleOcrService _ocr;
     private readonly AppLogger _log;
 
-    public F2BatchCellLocator(WindowsOcrService ocr, AppLogger log)
+    public F2BatchCellLocator(PaddleOcrService ocr, AppLogger log)
     {
         _ocr = ocr;
         _log = log;
@@ -86,7 +86,7 @@ internal sealed class F2BatchCellLocator
                 .ThenBy(t => t.Rect.Left)
                 .Select(t => t.Text));
 
-            if (!TryParseStockText(rawText, out var stock))
+            if (!InputRules.TryParseStockText(rawText, out var stock))
             {
                 var nearby = tokens
                     .Where(t => Math.Abs((t.Rect.Top + t.Rect.Height / 2) - centerY) <= 10)
@@ -101,13 +101,13 @@ internal sealed class F2BatchCellLocator
             }
 
             var normalized = rawText.Trim().Replace(" ", string.Empty).Replace("　", string.Empty).Replace(",", string.Empty).Replace("，", string.Empty);
-            if (!TryParseStockText(rawText, out stock))
+            if (!InputRules.TryParseStockText(rawText, out stock))
             {
-                _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={Sanitize(rawText)} normalized={Sanitize(normalized)} parse=false y={centerY}");
+                _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={_log.Value(Sanitize(rawText))} normalized={_log.Value(Sanitize(normalized))} parse=false y={centerY}");
                 continue;
             }
 
-            _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={Sanitize(rawText)} normalized={Sanitize(normalized)} stock={stock.ToString(CultureInfo.InvariantCulture)} y={centerY}");
+            _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={_log.Value(Sanitize(rawText))} normalized={_log.Value(Sanitize(normalized))} stock={stock.ToString(CultureInfo.InvariantCulture)} y={centerY}");
             if (stock <= 0) continue;
 
             var point = new Point(captureRect.Left + (stockLeft + stockRight) / 2, captureRect.Top + centerY);
@@ -163,21 +163,6 @@ internal sealed class F2BatchCellLocator
     {
         var text = value.Replace((char)13, (char)32).Replace((char)10, (char)32).Trim();
         return text.Length <= 64 ? text : text[..64];
-    }
-
-    internal static bool TryParseStockText(string raw, out decimal value)
-    {
-        value = 0;
-        var text = raw.Trim()
-            .Replace(" ", string.Empty)
-            .Replace("　", string.Empty)
-            .Replace(",", string.Empty)
-            .Replace("，", string.Empty);
-        if (text.Length == 0) return false;
-
-        const NumberStyles styles = NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint;
-        return decimal.TryParse(text, styles, CultureInfo.InvariantCulture, out value) ||
-               decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value);
     }
 
     private static int FindInterval(IReadOnlyList<int> boundaries, int x)

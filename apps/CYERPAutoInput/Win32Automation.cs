@@ -4,26 +4,21 @@ namespace CYERPAutoInput;
 
 internal static class Win32Automation
 {
-    public static nint FindCopi08Window()
+    public static IReadOnlyList<nint> FindCopi08Windows()
     {
-        nint visible = 0;
-        nint any = 0;
+        var visible = new List<nint>();
+        var hidden = new List<nint>();
         NativeMethods.EnumWindows((hwnd, _) =>
         {
             var title = NativeMethods.WindowText(hwnd);
-            if (!title.Contains("銷貨單建立作業", StringComparison.Ordinal) ||
-                !title.Contains("COPI08", StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (any == 0) any = hwnd;
-            if (NativeMethods.IsWindowVisible(hwnd))
+            if (title.Contains("銷貨單建立作業", StringComparison.Ordinal) &&
+                title.Contains("COPI08", StringComparison.OrdinalIgnoreCase))
             {
-                visible = hwnd;
-                return false;
+                (NativeMethods.IsWindowVisible(hwnd) ? visible : hidden).Add(hwnd);
             }
             return true;
         }, 0);
-        return visible != 0 ? visible : any;
+        return visible.Count > 0 ? visible : hidden;
     }
 
     public static bool PrepareForeground(nint hwnd, AppLogger? log = null)

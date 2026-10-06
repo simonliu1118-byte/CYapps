@@ -69,7 +69,7 @@ internal static class VisionSelfTest
             if (joinedChinese is null)
                 throw new InvalidOperationException("Joined OCR-token Chinese phrase matching failed.");
 
-            // Build 17 regression: when the OCR row is "贈 備 品 量 單 位", looking
+            // Regression: when the OCR row is "贈 備 品 量 單 位", looking
             // for 單位 must return only the two matching tokens, never the preceding
             // 備品量 span. This is what previously shifted F2 into 贈/備品量.
             var exactUnitSpan = FastDetailGridVisionService.FindExactPhrase(
@@ -133,16 +133,16 @@ internal static class VisionSelfTest
                 throw new InvalidOperationException("F2 safety failed: a same-text token outside the unit column was accepted.");
 
 
-            if (!F2BatchCellLocator.TryParseStockText("67", out var batchStock67) || batchStock67 != 67 ||
-                !F2BatchCellLocator.TryParseStockText("100.0000", out var batchStock100) || batchStock100 != 100 ||
-                !F2BatchCellLocator.TryParseStockText("1,234", out var batchStock1234) || batchStock1234 != 1234 ||
-                F2BatchCellLocator.TryParseStockText("批號", out _))
+            if (!InputRules.TryParseStockText("67", out var batchStock67) || batchStock67 != 67 ||
+                !InputRules.TryParseStockText("100.0000", out var batchStock100) || batchStock100 != 100 ||
+                !InputRules.TryParseStockText("1,234", out var batchStock1234) || batchStock1234 != 1234 ||
+                InputRules.TryParseStockText("批號", out _))
                 throw new InvalidOperationException("F2 batch stock parser regression failed.");
 
             if (OcrTextNormalizer.Normalize("现有存量") != "現有存量")
                 throw new InvalidOperationException("Batch-stock Traditional/Simplified OCR normalization failed.");
 
-            var ocr = new WindowsOcrService(log);
+            var ocr = new PaddleOcrService(log);
             var tokens = await ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: true);
             var joinedText = string.Concat(tokens.Select(t => t.Text)).Replace(" ", string.Empty).Replace("　", string.Empty);
             if (!joinedText.Contains("箱", StringComparison.Ordinal))

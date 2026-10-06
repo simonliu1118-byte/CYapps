@@ -6,6 +6,13 @@ internal sealed class AppLogger : IDisposable
     private readonly StreamWriter _writer;
 
     public string LogDirectory { get; }
+
+    /// <summary>
+    /// When false (default), actual ERP / order content (item codes, sales order
+    /// numbers, OCR text read from ERP screens) is written as its length only.
+    /// Users enable it in Settings for on-site troubleshooting; logs stay local.
+    /// </summary>
+    public bool Diagnostic { get; set; }
     public string LogPath { get; }
 
     public AppLogger()
@@ -29,6 +36,9 @@ internal sealed class AppLogger : IDisposable
         };
         Info("app", $"{AppVersionInfo.Display} starting (C# rewrite, PaddleOCR PP-OCRv5 mobile recognition)");
     }
+
+    public string Value(string? value) =>
+        Diagnostic ? value ?? string.Empty : $"<{value?.Length ?? 0} chars>";
 
     public void Info(string area, string message) => Write("INFO", area, message);
     public void Warn(string area, string message) => Write("WARN", area, message);
