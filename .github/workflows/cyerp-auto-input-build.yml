@@ -145,7 +145,7 @@ jobs:
           name: CYERPAutoInput-v${{ env.CYERPAUTOINPUT_VERSION }}${{ env.CYERPAUTOINPUT_ARTIFACT_SUFFIX }}-ui-snapshots-run${{ github.run_number }}
           path: apps/CYERPAutoInput/ui-snapshots/*.png
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
 
       - name: Upload engineering package
         uses: actions/upload-artifact@v7
@@ -153,4 +153,4 @@ jobs:
           name: CYERPAutoInput-v${{ env.CYERPAUTOINPUT_VERSION }}${{ env.CYERPAUTOINPUT_ARTIFACT_SUFFIX }}-windows-x64-run${{ github.run_number }}
           path: apps/CYERPAutoInput/package/*
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
