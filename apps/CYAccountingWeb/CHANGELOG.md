@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.20 Build 0 | 新增手機端平板介面測試入口：手機帳號選單在「登出」上方提供「測試用平板版」，啟用後以 session-scoped preview 強制使用平板 presentation，直式以 820 寬度、橫式以 1194 寬度的 viewport 參考值呈現，並沿用同一平板 layout / gesture / month / identity owner；旋轉手機會切換平板直／橫式。測試模式帳號選單提供「返回手機版」，不修改帳務資料 owner、API、D1 或 CYID contract。 |
 | V0.22.19 Build 0 | 平板主介面新工作項目：直式移除右上角與記帳無關的 confirmation drawer 把手，底部記帳 rail 保留唯一拖曳把手且首次進入預設展開；平板直／橫式右上帳號改直接共用手機 `mobileAccountMenuButton`／帳號選單 owner，SUPER_ADMIN 金色、ADMIN 銅色與手機一致；直式月份選擇改與已驗收橫式共用同一 `ledgerMonthDisplay`＋原生 `type=month` touch owner，修正年月顯示／點選不一致。無新增第二份帳號、月份或 writer state。 |
 | V0.22.18 Build 3 | 同一平板橫式登入／找回密碼工作項目續修，不升 Patch：忘記密碼／重設密碼視窗比照橫式登入版型，將「重設密碼」移到左側「志遠記帳系統」下方，右側只保留員工編號、寄送驗證碼與後續重設欄位／操作；手機、平板直式、CYID recovery 流程與 visualViewport 修正均不變。 |
 | V0.22.18 Build 2 | 同一平板橫式登入工作項目繼續實機返修，不升 Patch：將「員工帳號登入」從右側表單頂端移到左側「志遠記帳系統」下方，使左側形成完整品牌／登入標題區，右側只保留員工編號、密碼與操作；手機、平板直式、CYID 登入流程與 visualViewport 修正均不變。 |

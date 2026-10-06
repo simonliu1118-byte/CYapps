@@ -47,6 +47,9 @@ for (const [width, touch, expected] of [[375,true,false],[767,true,false],[768,f
   win.innerWidth = width; coarse = touch;
   assert.equal(context.isTabletWorkspace(), expected, `tablet classification ${width}/${touch}`);
 }
+win.innerWidth = 375; coarse = true; win.__cyaccTabletPreviewEnabled = true;
+assert.equal(context.isTabletWorkspace(), true, 'phone tablet preview forces the shared tablet presentation owner');
+win.__cyaccTabletPreviewEnabled = false;
 win.innerWidth = 820; coarse = true;
 context.setupTabletWorkspace();
 assert.equal(root.dataset.tabletLayout, 'portrait');

@@ -528,7 +528,7 @@ function setupMobileEntryMobilePages() {
 
   const apply = page => {
     current = page === 'ledger' ? 'ledger' : 'entry';
-    const enabled = mobile.matches;
+    const enabled = mobile.matches && !isTabletPreviewMode();
     nav.hidden = !enabled;
     entry.classList.toggle('cy-mobile-page-hidden', enabled && current !== 'entry');
     ledger.classList.toggle('cy-mobile-page-hidden', enabled && current !== 'ledger');
@@ -542,7 +542,7 @@ function setupMobileEntryMobilePages() {
 
   nav.addEventListener('click', event => {
     const button = event.target.closest('[data-mobile-page]');
-    if (!button || !mobile.matches) return;
+    if (!button || !mobile.matches || isTabletPreviewMode()) return;
     apply(button.dataset.mobilePage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
@@ -708,6 +708,24 @@ function syncMobileWorkspaceAfterLoad() {
 
 
 
+function isTabletPreviewMode() {
+  if (window.__cyaccTabletPreviewEnabled === true || document.documentElement.dataset.tabletPreview === 'true') return true;
+  try {
+    return sessionStorage.getItem(window.__cyaccTabletPreviewKey || 'cyacc-tablet-preview') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setTabletPreviewMode(enabled) {
+  const key = window.__cyaccTabletPreviewKey || 'cyacc-tablet-preview';
+  try {
+    if (enabled) sessionStorage.setItem(key, '1');
+    else sessionStorage.removeItem(key);
+  } catch { /* preview remains best-effort in restricted storage */ }
+  window.location.reload();
+}
+
 function usesSharedTouchAccountIdentity() {
   return window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches || isTabletWorkspace();
 }
@@ -742,6 +760,7 @@ function setupMobileWorkspaceMobileAppBar() {
         <strong id="mobileAccountMenuName"></strong>
         <span id="mobileAccountMenuRole"></span>
       </div>
+      <button type="button" data-mobile-account-action="tablet-preview" hidden>測試用平板版</button>
       <button type="button" class="danger-lite" data-mobile-account-action="logout">登出</button>`;
     document.body.append(menu);
   }
@@ -766,6 +785,10 @@ function setupMobileWorkspaceMobileAppBar() {
     const action = event.target.closest('[data-mobile-account-action]')?.dataset.mobileAccountAction;
     if (!action) return;
     close();
+    if (action === 'tablet-preview') {
+      setTabletPreviewMode(!isTabletPreviewMode());
+      return;
+    }
     if (action === 'logout') logoutButton.click();
   });
 
@@ -784,7 +807,7 @@ function setupMobileWorkspaceMobileAppBar() {
 
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
-    document.body.classList.toggle('cy-mobile-app', mobile.matches);
+    document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
     if (!usesSharedTouchAccountIdentity()) close();
     syncMobileWorkspaceMobileIdentity();
   };
@@ -800,6 +823,7 @@ function syncMobileWorkspaceMobileIdentity() {
   const menu = document.querySelector('#mobileAccountMenu');
   const menuName = document.querySelector('#mobileAccountMenuName');
   const menuRole = document.querySelector('#mobileAccountMenuRole');
+  const previewButton = menu.querySelector('[data-mobile-account-action="tablet-preview"]');
   if (!source || !trigger || !triggerName || !menu || !menuName || !menuRole) return;
 
   const main = String(source.querySelector('.current-user-main')?.textContent || '').trim();
@@ -824,6 +848,12 @@ function syncMobileWorkspaceMobileIdentity() {
   menuName.textContent = main;
   menuRole.textContent = role;
   trigger.hidden = false;
+  const preview = isTabletPreviewMode();
+  const phone = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches;
+  if (previewButton) {
+    previewButton.hidden = !preview && !phone;
+    previewButton.textContent = preview ? '返回手機版' : '測試用平板版';
+  }
 
   const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
   const admin = source.classList.contains('role-admin') || role === '管理員';
@@ -855,7 +885,7 @@ function setupMobileWorkspaceMobileNavigation() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
     sync();
-    document.body.classList.toggle('cy-mobile-app', mobile.matches);
+    document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
   else mobile.addListener?.(syncMode);
@@ -972,6 +1002,7 @@ function setupDesktopIsolationDesktopIsolation() {
 }
 
 function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DESKTOP_ISOLATION_DESKTOP).matches) {
+  desktop = Boolean(desktop && !isTabletWorkspace());
   const accountTrigger = document.querySelector('#mobileAccountMenuButton');
   const ledgerMore = document.querySelector('#ledgerMoreButton');
 
@@ -979,7 +1010,8 @@ function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DES
   if (ledgerMore) ledgerMore.hidden = Boolean(desktop);
 
   if (!desktop) {
-    document.body.classList.add('cy-mobile-app');
+    const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && !isTabletWorkspace();
+    document.body.classList.toggle('cy-mobile-app', mobile);
     syncMobileWorkspaceMobileIdentity();
     return;
   }
@@ -4163,6 +4195,9 @@ function showTouchWorkspaceLedgerNotice(text) {
 
 /* Tablet presentation reuses the same entry form, ledger and entry-edit owner. */
 function isTabletWorkspace() {
+  const preview = window.__cyaccTabletPreviewEnabled === true ||
+    document.documentElement?.dataset?.tabletPreview === 'true';
+  if (preview) return true;
   const width = window.innerWidth;
   return width >= 768 && (width < 1024 ||
     (width <= 1366 && window.matchMedia('(any-pointer: coarse)').matches));
