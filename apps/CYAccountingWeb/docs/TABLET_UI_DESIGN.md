@@ -1,6 +1,6 @@
 # CYAccountingWeb 平板介面設計與驗收
 
-更新：2026/10/06。本文件記錄平板設計、已合併實作與尚未完成的真機驗收，不是永久規則。現在正式產品基準為 **V0.22.20 Build 0**；平板相關 V0.22.2～V0.22.3 Build 3 與 V0.22.19 的直式 owner 收斂均已合併並部署。
+更新：2026/10/06。本文件記錄平板設計、已合併實作與尚未完成的真機驗收，不是永久規則。現在正式產品基準為 **V0.22.20 Build 1**；平板相關 V0.22.2～V0.22.3 Build 3 與 V0.22.19 的直式 owner 收斂均已合併並部署。
 
 原始設計來源為 `cyaccountingweb/docs-tablet-ui-plan` 的 `b71e4108b7b3bd5e165dadeb526db4116c56be18`。規劃初期的自製 picker 已被後續實作收斂為 native/shared owner；目前不得把歷史設計稿中的自製 picker 建議當成現行需求。
 
@@ -27,13 +27,14 @@
 - **V0.22.3 / PR #298**：開始移除 adaptive UI 版本殼命名。
 - **V0.22.3 Build 1 / PR #299**：以單一 `isDesktopInteractionWorkspace()` 收斂 desktop interaction 判定，1024px 不再直接等於 desktop interaction。
 - **V0.22.3 Build 2 / PR #300**：平板橫式日期／月份共用手機 touch/native owner，不再建立平板自己的日期／月份元件。
-- **V0.22.19 Build 0 / PR #336**：直式底部記帳 rail 預設展開並保留唯一把手；平板雙方向移除 confirmation drawer edge handle；直／橫式帳號直接共用手機帳號按鈕／選單與金／銅角色視覺；直式月份比照橫式共用 `ledgerMonthDisplay`＋原生 month owner。
+- **V0.22.19 Build 0 / PR #336**：直式底部記帳 rail 預設展開並保留唯一把手；平板雙方向移除 confirmation drawer edge handle；直式月份比照橫式共用 `ledgerMonthDisplay`＋原生 month owner。該版曾把平板帳號切成手機下拉元件，後續由 V0.22.20 Build 1 修正。
 - **V0.22.3 Build 3 / PR #301**：移除多代 tablet date/month CSS override，只保留單一 presentation 規則，補 architecture regression。
 - 後續 **V0.22.4～V0.22.8** 繼續移除 retry、重複 owner、toolbar relocation 與版本殼；因此平板後續修改也必須遵守現行 canonical owner，而不是把早期 patch 路徑加回。
 
-- **V0.22.20 Build 0 / PR #338**：手機帳號選單新增「測試用平板版」；使用 session-scoped preview 直接切入正式 tablet presentation，直式 reference viewport 820px、橫式 1194px，旋轉手機即可檢查兩個方向；preview 不建立第二套 business/data owner，且可由帳號選單返回手機版。
+- **V0.22.20 Build 0 / PR #338**：手機帳號選單新增「測試用平板版」；使用 session-scoped preview 直接切入正式 tablet presentation，直式 reference viewport 820px、橫式 1194px，旋轉手機即可檢查兩個方向；preview 不建立第二套 business/data owner。
+- **V0.22.20 Build 1 / PR #340**：平板直式／橫式與手機 preview 都恢復原本 inline identity：`員工編號 姓名［角色］｜登出`。角色只共用手機色票（SUPER_ADMIN 金、ADMIN 銅、USER 中性），不共用手機 dropdown 結構；preview 暫時另加「返回手機版」。下一次公開 Stable Release 前要移除兩個 preview 測試入口與 session bootstrap。
 
-目前 V0.22.20 Build 0 production deploy #498（run `37462555783`）已包含上述所有已合併平板 source。
+目前 V0.22.20 Build 1 production deploy #502（run `37487502059`）已包含上述所有已合併平板 source。
 
 ## 元件與共用操作
 
