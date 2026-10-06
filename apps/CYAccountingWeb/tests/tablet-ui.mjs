@@ -114,7 +114,10 @@ assert.match(source, /if \(!isDesktopInteractionWorkspace\(\)\) return;/, 'table
 assert.match(source, /syncTabletPickerOwnership\(orientation\)/, 'tablet orientation owns date and month picker presentation');
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) #ledgerMonthDisplay/, 'both tablet orientations reuse the shared mobile month display layer');
-assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.topbar #mobileAccountMenuButton[\s\S]*?role-super-admin[\s\S]*?#ddc789[\s\S]*?role-admin[\s\S]*?#d7b79e/, 'tablet uses the same mobile account trigger and gold/bronze role cues');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster[\s\S]*?display:\s*flex !important[\s\S]*?role-super-admin[\s\S]*?#ddc789[\s\S]*?role-admin[\s\S]*?#d7b79e/, 'tablet keeps the inline account cluster and shares mobile gold/bronze role colors');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster \.current-user-role::before[\s\S]*?content:\s*"［"/, 'tablet role label keeps the inline bracketed presentation');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.topbar #mobileAccountMenuButton,[\s\S]*?cy-mobile-account-menu[\s\S]*?display:\s*none !important/, 'tablet does not reuse the phone dropdown account owner');
+assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton[\s\S]*?display:\s*inline-flex !important/, 'phone tablet preview exposes a temporary return-to-phone button');
 assert.match(css, /data-tablet-layout="landscape"\] #ledgerExcelImport \{ display: none !important/, 'tablet landscape removes Excel import');
 console.log('Tablet classification, rotation, keyboard, pinning and shared edit ownership passed.');
 

@@ -9664,101 +9664,163 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .confirmation-drawer-colla
   display: none !important;
 }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster {
-  display: none !important;
+html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 7px !important;
 }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #mobileAccountMenuButton {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 5px !important;
-  max-width: 156px !important;
+html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #settingsButton {
+  order: 0 !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster {
+  order: 1 !important;
+  display: flex !important;
+  align-items: stretch !important;
   min-height: 34px !important;
   height: 34px !important;
-  padding: 0 9px !important;
+  overflow: hidden !important;
   border: 1px solid #d7dfe7 !important;
   border-radius: 8px !important;
   background: #fff !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  max-width: 250px !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  padding: 0 9px !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+  box-shadow: none !important;
   color: #39495a !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-main {
+  overflow: hidden !important;
+  color: #39495a !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: #6f7c89 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role::before {
+  content: "［" !important;
+  color: inherit !important;
+  font-size: inherit !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role::after {
+  content: "］" !important;
+  display: inline !important;
+  color: inherit !important;
+  font-size: inherit !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster #logoutButton {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 auto !important;
+  min-width: 50px !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  margin: 0 !important;
+  padding: 0 9px !important;
+  border: 0 !important;
+  border-left: 1px solid #d7dfe7 !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+  color: #526174 !important;
   font-size: 12px !important;
   font-weight: 600 !important;
   line-height: 1 !important;
 }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #mobileAccountMenuButton.role-super-admin {
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin {
   border-color: #ddc789 !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin .current-user {
   background: linear-gradient(180deg, #fffdf7, #fff4d6) !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin .current-user-main,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin .current-user-role {
   color: #6d5317 !important;
 }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #mobileAccountMenuButton.role-admin {
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin #logoutButton {
+  border-left-color: #ddc789 !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin {
   border-color: #d7b79e !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin .current-user {
   background: linear-gradient(180deg, #fffaf6, #f7e8dc) !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin .current-user-main,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin .current-user-role {
   color: #70472f !important;
 }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu {
-  position: fixed;
-  z-index: 92;
-  top: 66px;
-  right: 12px;
-  width: min(250px, calc(100vw - 24px));
-  overflow: hidden;
-  border: 1px solid #d8e0e7;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 12px 34px rgba(31, 42, 55, .18);
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin #logoutButton {
+  border-left-color: #d7b79e !important;
 }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu[hidden] {
+html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #mobileAccountMenuButton,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu {
   display: none !important;
 }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu-identity {
-  display: grid;
-  gap: 3px;
-  padding: 12px 13px;
-  border-bottom: 1px solid #e5e9ed;
+#tabletPreviewReturnButton[hidden] {
+  display: none !important;
 }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu-identity strong {
-  color: #2b3948;
-  font-size: 14px;
+html[data-tablet-preview="true"] #tabletPreviewReturnButton {
+  order: 2 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 0 9px !important;
+  border: 1px solid #b8c4d0 !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: #425466 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
 }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu-identity span {
-  color: #718091;
-  font-size: 12px;
-}
-
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu.role-super-admin .cy-mobile-account-menu-identity {
-  background: #fff8e8;
-}
-
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu.role-admin .cy-mobile-account-menu-identity {
-  background: #fbefe6;
-}
-
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu > button {
-  width: 100%;
-  min-height: 44px;
-  padding: 0 13px;
-  border: 0;
-  border-bottom: 1px solid #edf0f2;
-  border-radius: 0;
-  background: #fff;
-  color: #344252;
-  font-size: 14px;
-  text-align: left;
-}
-
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu > button:last-child {
-  border-bottom: 0;
-}
-
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu > button.danger-lite {
-  color: #a34b45;
-}
 #mobileEntrySecondaryButton { display: none !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) body {
   min-width: 0 !important;
@@ -10022,14 +10084,6 @@ html[data-tablet-layout="landscape"] .entry-grid > #favoriteCategoryGroup.quick-
 html[data-tablet-layout="landscape"] .entry-grid > #summarySuggestionGroup.quick-tool-row.hidden { display:grid !important; min-height:40px !important; }
 html[data-tablet-layout="landscape"] #favoriteCategoryButtons:empty::after,
 html[data-tablet-layout="landscape"] #summarySuggestions:empty::after { content:"—"; color:#8895a4; }
-html[data-tablet-layout="landscape"] .cy-account-cluster .current-user,
-html[data-tablet-layout="landscape"] .cy-account-cluster .current-user.role-super-admin,
-html[data-tablet-layout="landscape"] .cy-account-cluster .current-user.role-admin,
-html[data-tablet-layout="landscape"] .cy-account-cluster .current-user.role-user,
-html[data-tablet-layout="landscape"] .cy-account-cluster .current-user-role {
-  border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important;
-}
-html[data-tablet-layout="landscape"] .cy-account-cluster .current-user-role { margin:0 !important; padding:0 !important; }
 html[data-tablet-layout="landscape"] .ledger-card { padding:8px !important; }
 html[data-tablet-layout="landscape"] .ledger-card .ledger-title { padding:2px 2px 0 !important; }
 html[data-tablet-layout="landscape"] .ledger-title > div:first-child { grid-template-columns:minmax(0,1fr) auto !important; gap:8px !important; }

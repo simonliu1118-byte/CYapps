@@ -726,15 +726,16 @@ function setTabletPreviewMode(enabled) {
   window.location.reload();
 }
 
-function usesSharedTouchAccountIdentity() {
-  return window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches || isTabletWorkspace();
+function usesMobileAccountMenuIdentity() {
+  return window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && !isTabletWorkspace();
 }
 
 function setupMobileWorkspaceMobileAppBar() {
   const topbar = document.querySelector('.topbar');
   const currentUser = document.querySelector('#currentUser');
   const logoutButton = document.querySelector('#logoutButton');
-  if (!topbar || !currentUser || !logoutButton) return;
+  const actions = topbar?.querySelector('.topbar-actions');
+  if (!topbar || !currentUser || !logoutButton || !actions) return;
 
   let trigger = document.querySelector('#mobileAccountMenuButton');
   if (!trigger) {
@@ -748,6 +749,18 @@ function setupMobileWorkspaceMobileAppBar() {
     trigger.innerHTML = '<span class="cy-mobile-account-name"></span><span aria-hidden="true">›</span>';
     topbar.append(trigger);
   }
+
+  let returnButton = document.querySelector('#tabletPreviewReturnButton');
+  if (!returnButton) {
+    returnButton = document.createElement('button');
+    returnButton.id = 'tabletPreviewReturnButton';
+    returnButton.className = 'secondary compact tablet-preview-return';
+    returnButton.type = 'button';
+    returnButton.textContent = '返回手機版';
+    returnButton.hidden = true;
+    actions.append(returnButton);
+  }
+  returnButton.addEventListener('click', () => setTabletPreviewMode(false));
 
   let menu = document.querySelector('#mobileAccountMenu');
   if (!menu) {
@@ -772,7 +785,7 @@ function setupMobileWorkspaceMobileAppBar() {
   };
 
   trigger.addEventListener('click', event => {
-    if (!usesSharedTouchAccountIdentity()) return;
+    if (!usesMobileAccountMenuIdentity()) return;
     event.stopPropagation();
     const open = menu.hidden;
     menu.hidden = !open;
@@ -808,7 +821,7 @@ function setupMobileWorkspaceMobileAppBar() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
     document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
-    if (!usesSharedTouchAccountIdentity()) close();
+    if (!usesMobileAccountMenuIdentity()) close();
     syncMobileWorkspaceMobileIdentity();
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
@@ -823,20 +836,26 @@ function syncMobileWorkspaceMobileIdentity() {
   const menu = document.querySelector('#mobileAccountMenu');
   const menuName = document.querySelector('#mobileAccountMenuName');
   const menuRole = document.querySelector('#mobileAccountMenuRole');
-  const previewButton = menu.querySelector('[data-mobile-account-action="tablet-preview"]');
+  const previewButton = menu?.querySelector('[data-mobile-account-action="tablet-preview"]');
+  const returnButton = document.querySelector('#tabletPreviewReturnButton');
   if (!source || !trigger || !triggerName || !menu || !menuName || !menuRole) return;
 
   const main = String(source.querySelector('.current-user-main')?.textContent || '').trim();
   const role = String(source.querySelector('.current-user-role')?.textContent || '').trim();
-  const touchIdentity = usesSharedTouchAccountIdentity();
-  const tablet = isTabletWorkspace();
-  const topbar = document.querySelector('.topbar');
-  const actions = topbar?.querySelector('.topbar-actions');
-  const identityHost = tablet ? actions : topbar;
-  if (identityHost && trigger.parentElement !== identityHost) identityHost.append(trigger);
+  const mobileAccountMenu = usesMobileAccountMenuIdentity();
+  const preview = isTabletPreviewMode();
   const ready = Boolean(main) && !source.classList.contains('hidden');
+  const cluster = source.closest('.cy-account-cluster');
+  const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
+  const admin = source.classList.contains('role-admin') || role === '管理員';
 
-  if (!touchIdentity || !ready) {
+  cluster?.classList.toggle('role-super-admin', superAdmin);
+  cluster?.classList.toggle('role-admin', admin);
+  cluster?.classList.toggle('role-user', ready && !superAdmin && !admin);
+
+  if (returnButton) returnButton.hidden = !preview;
+
+  if (!mobileAccountMenu || !ready) {
     trigger.hidden = true;
     menu.hidden = true;
     trigger.setAttribute('aria-expanded', 'false');
@@ -844,19 +863,19 @@ function syncMobileWorkspaceMobileIdentity() {
     return;
   }
 
+  if (trigger.parentElement !== document.querySelector('.topbar')) {
+    document.querySelector('.topbar')?.append(trigger);
+  }
+
   triggerName.textContent = main;
   menuName.textContent = main;
   menuRole.textContent = role;
   trigger.hidden = false;
-  const preview = isTabletPreviewMode();
-  const phone = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches;
   if (previewButton) {
-    previewButton.hidden = !preview && !phone;
-    previewButton.textContent = preview ? '返回手機版' : '測試用平板版';
+    previewButton.hidden = false;
+    previewButton.textContent = '測試用平板版';
   }
 
-  const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
-  const admin = source.classList.contains('role-admin') || role === '管理員';
   trigger.classList.toggle('role-super-admin', superAdmin);
   trigger.classList.toggle('role-admin', admin);
   menu.classList.toggle('role-super-admin', superAdmin);
