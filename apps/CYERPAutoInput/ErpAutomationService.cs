@@ -78,7 +78,7 @@ internal sealed class ErpAutomationService
         return (mode, edits.Length, readOnly, writable);
     }
 
-    public async Task<AutomationRunResult> RunAsync(FormSnapshot snapshot, IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task<AutomationRunResult> RunAsync(FormSnapshot snapshot, bool autoSave, IProgress<string> progress, CancellationToken cancellationToken)
     {
         var result = new AutomationRunResult();
         if (snapshot.Values.TryGetValue("order_type", out var orderType))
@@ -98,7 +98,7 @@ internal sealed class ErpAutomationService
         if (!Win32Automation.PrepareForeground(root, _log)) throw new InvalidOperationException("無法把 COPI08 帶到前景。");
 
         progress.Report("ERP：確認新增狀態…");
-        await EnsureInputModeAsync(root, cancellationToken);
+        var isNewDocument = await EnsureInputModeAsync(root, cancellationToken);
 
         progress.Report("ERP：輸入表頭…");
         await FillHeaderAsync(root, snapshot, result, cancellationToken);
@@ -113,9 +113,63 @@ internal sealed class ErpAutomationService
         }
 
         Win32Automation.PrepareForeground(root, _log);
-        progress.Report("ERP：輸入完成；依目前安全規則未自動儲存。");
-        _log.Info("automation", $"input completed document={result.DocumentKey} warnings={result.Warnings.Count}; ERP save intentionally not invoked");
+        if (!autoSave)
+        {
+            progress.Report("ERP：輸入完成；自動儲存未開啟，請人工確認後儲存。");
+            _log.Info("automation", $"input completed document={result.DocumentKey} warnings={result.Warnings.Count}; auto-save disabled");
+            return result;
+        }
+
+        if (!isNewDocument)
+            result.SaveSkippedReason = "開始時 ERP 已在輸入狀態且已有單號（可能是修改中的單據），不自動儲存";
+        else if (result.Warnings.Count > 0)
+            result.SaveSkippedReason = $"有 {result.Warnings.Count} 筆需人工確認，不自動儲存";
+
+        if (result.SaveSkippedReason.Length > 0)
+        {
+            progress.Report($"ERP：輸入完成；{result.SaveSkippedReason}。");
+            _log.Warn("automation", $"auto-save skipped document={result.DocumentKey} new={isNewDocument} warnings={result.Warnings.Count}");
+            return result;
+        }
+
+        progress.Report("ERP：輸入完成，儲存單據…");
+        await SaveDocumentAsync(root, result, cancellationToken);
+        progress.Report("ERP：已儲存。");
         return result;
+    }
+
+    /// <summary>
+    /// Clicks the Ribbon 儲存 command and confirms ERP returned to browse mode with the
+    /// same sales order number. Any ERP message window stops the run untouched.
+    /// </summary>
+    private async Task SaveDocumentAsync(nint root, AutomationRunResult result, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("儲存前無法把 COPI08 帶到前景；未儲存。");
+        var savePoint = await _textVision.FindRibbonCommandAsync(root, "儲存", cancellationToken);
+        if (savePoint is null)
+            throw new InvalidOperationException("找不到 ERP 的「儲存」按鈕；未進行猜測點擊，單據尚未儲存。");
+
+        cancellationToken.ThrowIfCancellationRequested();
+        InputSender.Click(savePoint.Value);
+        _log.Info("document", $"save clicked document={_log.Value(result.DocumentKey)}");
+
+        var deadline = Environment.TickCount64 + 6000;
+        while (Environment.TickCount64 < deadline)
+        {
+            await Delay(150, cancellationToken);
+            if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
+                throw new InvalidOperationException("按下「儲存」後 ERP 出現訊息視窗；CY 未代為處理，請人工確認單據是否已儲存。");
+
+            if (DetectMode(root) != ErpMode.Browse) continue;
+            var number = (NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle) ?? string.Empty).Trim();
+            if (result.SalesOrderNumber.Length > 0 && number != result.SalesOrderNumber)
+                throw new InvalidOperationException("ERP 已回到檢視狀態，但顯示的單號與輸入時取得的不同；請人工確認。");
+            result.Saved = true;
+            _log.Info("document", $"saved and verified document={_log.Value(result.DocumentKey)}");
+            return;
+        }
+        throw new InvalidOperationException("按下「儲存」後 6 秒內未確認 ERP 回到檢視狀態；請人工確認單據是否已儲存。");
     }
 
     private async Task WarmUpOcrAsync(PaddleOcrService ocr)
@@ -138,10 +192,23 @@ internal sealed class ErpAutomationService
         }
     }
 
-    private async Task EnsureInputModeAsync(nint root, CancellationToken cancellationToken)
+    /// <summary>
+    /// Puts COPI08 into input mode. Returns true when the document is known to be a new
+    /// one: CY pressed 新增 itself, or ERP was already in input mode with an empty sales
+    /// order number (a 修改 always keeps the existing number).
+    /// </summary>
+    private async Task<bool> EnsureInputModeAsync(nint root, CancellationToken cancellationToken)
     {
         var mode = DetectMode(root);
-        if (mode == ErpMode.Input) return;
+        if (mode == ErpMode.Input)
+        {
+            string? number = null;
+            try { number = NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle); }
+            catch (InvalidOperationException) { }
+            var isNew = number is not null && number.Trim().Length == 0;
+            _log.Info("state", $"ERP already in input mode at start sales_no_readable={number is not null} new_document={isNew}");
+            return isNew;
+        }
         if (mode != ErpMode.Browse) throw new InvalidOperationException("無法可靠判斷 ERP 目前是瀏覽或新增狀態。");
 
         var addPoint = await _textVision.FindTextAsync(root, ["新增"], cancellationToken);
@@ -159,7 +226,7 @@ internal sealed class ErpAutomationService
             if (mode == ErpMode.Input)
             {
                 _log.Info("state", $"ERP entered input mode after_checks={checks} elapsed_ms={checks * 120}");
-                return;
+                return true;
             }
         }
         throw new InvalidOperationException("已點擊「新增」，但等待 3.5 秒後仍無法確認 ERP 進入可輸入狀態。");

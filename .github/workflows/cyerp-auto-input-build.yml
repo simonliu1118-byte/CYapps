@@ -71,6 +71,14 @@ jobs:
         shell: pwsh
         run: dotnet run --project CYERPAutoInput.csproj -c Release -r win-x64 --no-build -- --vision-self-test
 
+      - name: UI layout snapshots
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force ui-snapshots -ErrorAction SilentlyContinue
+          dotnet run --project CYERPAutoInput.csproj -c Release -r win-x64 --no-build -- --ui-snapshot "$PWD/ui-snapshots"
+          if ($LASTEXITCODE -ne 0) { throw "UI snapshot failed with code $LASTEXITCODE" }
+          python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" ./ui-snapshots
+
       - name: Publish Windows x64 portable package
         shell: pwsh
         run: |
@@ -130,6 +138,14 @@ jobs:
       - name: Scan engineering package for secrets and production bindings
         shell: pwsh
         run: python "$env:GITHUB_WORKSPACE/.github/scripts/scan-public-package.py" ./package
+
+      - name: Upload UI layout snapshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: CYERPAutoInput-v${{ env.CYERPAUTOINPUT_VERSION }}${{ env.CYERPAUTOINPUT_ARTIFACT_SUFFIX }}-ui-snapshots-run${{ github.run_number }}
+          path: apps/CYERPAutoInput/ui-snapshots/*.png
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload engineering package
         uses: actions/upload-artifact@v7

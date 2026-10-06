@@ -28,3 +28,4 @@ control-scan_*.txt
 errors_*.csv
 command-crash_*.txt
 crash_*.txt
+ui-snapshots/

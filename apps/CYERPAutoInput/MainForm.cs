@@ -13,7 +13,8 @@ internal sealed class MainForm : Form
     private readonly Dictionary<string, FlowLayoutPanel> _groupFlows = new(StringComparer.OrdinalIgnoreCase);
     private readonly DetailDataGridView _details = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
-    private readonly ToolStripStatusLabel _buildStatus = new() { Text = $"{AppVersionInfo.Display} · Esc：緊急停止 · 不自動儲存 ERP" };
+    private readonly ToolStripStatusLabel _buildStatus = new();
+    private readonly ToolStripStatusLabel _logLink = new() { Text = "開啟 LOG 資料夾", IsLink = true };
     private readonly ToolStripStatusLabel _dpiHint = new();
     private readonly ModeToggle _modeToggle = new();
     private readonly Label _erpStateTag = new();
@@ -32,6 +33,7 @@ internal sealed class MainForm : Form
         _settingsStore = new UserSettingsStore(log);
         _settings = _settingsStore.Load();
         _log.Diagnostic = _settings.DiagnosticLogging;
+        UpdateBuildStatus();
 
         Text = "CYERPAutoInput — SMART ERP 自動輸入工具";
         StartPosition = FormStartPosition.CenterScreen;
@@ -55,6 +57,8 @@ internal sealed class MainForm : Form
         DpiChanged += (_, _) => UpdateDpiHint();
         FormClosing += (_, _) => _statePoll.Stop();
     }
+
+    internal void SetAdvancedModeForSnapshot(bool advanced) => _modeToggle.Checked = advanced;
 
     private void RefreshErpState()
     {
@@ -184,6 +188,10 @@ internal sealed class MainForm : Form
         };
         toolbar.Controls.Add(rightTools, 1, 0);
 
+        var clearButton = MakeButton("清除表單", 90);
+        clearButton.Click += (_, _) => ClearForm();
+        rightTools.Controls.Add(clearButton);
+
         var settingsButton = MakeButton("設定", 76);
         settingsButton.Click += (_, _) => OpenSettings();
         rightTools.Controls.Add(settingsButton);
@@ -260,6 +268,8 @@ internal sealed class MainForm : Form
         statusStrip.Items.Add(_status);
         statusStrip.Items.Add(_dpiHint);
         statusStrip.Items.Add(_buildStatus);
+        _logLink.Click += (_, _) => OpenLogFolder();
+        statusStrip.Items.Add(_logLink);
         _root.Controls.Add(statusStrip, 0, 3);
     }
 
@@ -458,6 +468,7 @@ internal sealed class MainForm : Form
         {
             _settingsStore.Save(_settings);
             _log.Diagnostic = _settings.DiagnosticLogging;
+            UpdateBuildStatus();
             _modeToggle.Checked = _settings.AdvancedMode;
             ApplyMode(_settings.AdvancedMode);
             ApplyDefaultsToBlankFields();
@@ -496,16 +507,17 @@ internal sealed class MainForm : Form
         try
         {
             var progress = new Progress<string>(SetStatus);
-            var result = await _automation.RunAsync(snapshot, progress, token);
+            var result = await _automation.RunAsync(snapshot, _settings.AutoSave, progress, token);
             var documentKey = string.IsNullOrWhiteSpace(result.DocumentKey) ? "未取得" : result.DocumentKey;
-            if (result.Warnings.Count > 0)
-                SetStatus($"ERP：銷貨單 {documentKey} 輸入完成；{result.Warnings.Count} 筆需人工確認；尚未儲存");
-            else
-                SetStatus($"ERP：銷貨單 {documentKey} 輸入完成；尚未儲存");
+            var saveText = result.Saved ? "已儲存" : "尚未儲存";
+            SetStatus(result.Warnings.Count > 0
+                ? $"ERP：銷貨單 {documentKey} 輸入完成；{result.Warnings.Count} 筆需人工確認；{saveText}"
+                : $"ERP：銷貨單 {documentKey} 輸入完成；{saveText}");
+            ShowRunSummaryIfNeeded(result, documentKey);
         }
         catch (OperationCanceledException)
         {
-            SetStatus("ERP：自動輸入已停止；未執行 ERP 取消或儲存");
+            SetStatus("ERP：自動輸入已停止；CY 未按 ERP 取消或儲存");
             _log.Warn("automation", "cancelled by Esc/user");
         }
         catch (Exception ex)
@@ -523,6 +535,60 @@ internal sealed class MainForm : Form
             _start.Enabled = true;
         }
     }
+
+    private void ShowRunSummaryIfNeeded(AutomationRunResult result, string documentKey)
+    {
+        if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0) return;
+
+        var lines = new List<string> { $"銷貨單：{documentKey}", $"儲存：{(result.Saved ? "已儲存" : "尚未儲存")}" };
+        if (result.SaveSkippedReason.Length > 0) lines.Add($"未自動儲存原因：{result.SaveSkippedReason}");
+        if (result.Warnings.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add("需人工確認：");
+            lines.AddRange(result.Warnings.Select(w => $"・第 {w.DetailRow} 列 {w.ItemCode}：{w.Message}"));
+        }
+        MessageBox.Show(this, string.Join(Environment.NewLine, lines), "需人工確認", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void ClearForm()
+    {
+        if (_automationCts is not null) return;
+        if (MessageBox.Show(this, "清除所有欄位與商品明細？（本機預設值會重新帶入）", "清除表單",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            return;
+
+        foreach (var control in _valueControls.Values)
+        {
+            if (control is CheckBox checkBox) checkBox.Checked = false;
+            else control.Text = string.Empty;
+        }
+        ApplyDefaultsToBlankFields();
+        _details.EndEdit();
+        _details.Rows.Clear();
+        for (var i = 0; i < 10; i++) _details.Rows.Add();
+        SetStatus("已清除表單");
+    }
+
+    private void OpenLogFolder()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = _log.LogDirectory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("app", $"open log folder failed: {ex.GetType().Name}");
+            MessageBox.Show(this, $"無法開啟 LOG 資料夾：{_log.LogDirectory}", "LOG", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private void UpdateBuildStatus() =>
+        _buildStatus.Text = $"{AppVersionInfo.Display} · Esc：緊急停止 · 自動儲存：{(_settings.AutoSave ? "開" : "關")}";
 
     private FormSnapshot? CreateSnapshot(out string validationError)
     {

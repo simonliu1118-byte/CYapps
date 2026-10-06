@@ -114,6 +114,45 @@ internal sealed class OpticalTextLocator
         return null;
     }
 
+    /// <summary>
+    /// Locates a Ribbon command (for example 儲存) by exact text only: first a Win32
+    /// caption, then OCR restricted to the Ribbon area. Never falls back to a
+    /// whole-window search, so a field label with the same words cannot match.
+    /// </summary>
+    public async Task<Point?> FindRibbonCommandAsync(nint hwnd, string label, CancellationToken cancellationToken)
+    {
+        if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
+            return null;
+        var wanted = OcrTextNormalizer.Normalize(label);
+
+        var ribbonRect = new Rectangle(rect.Left, rect.Top, Math.Min(rect.Width, 720), Math.Min(rect.Height, 220));
+        var direct = Win32Automation.EnumerateChildren(hwnd)
+            .Where(c => c.Visible && c.Rect.Width > 0 && c.Rect.Height > 0)
+            .Where(c => ribbonRect.Contains((c.Rect.Left + c.Rect.Right) / 2, (c.Rect.Top + c.Rect.Bottom) / 2))
+            .FirstOrDefault(c => OcrTextNormalizer.Normalize(c.Text) == wanted);
+        if (direct is not null)
+        {
+            var p = new Point((direct.Rect.Left + direct.Rect.Right) / 2, (direct.Rect.Top + direct.Rect.Bottom) / 2);
+            _log.Info("vision", $"Ribbon command by Win32 caption label={label} class={direct.ClassName} point={p.X},{p.Y}");
+            return p;
+        }
+
+        using var ribbon = ScreenCapture.Capture(ribbonRect);
+        var tokens = await _ocr.RecognizeAsync(ribbon, cancellationToken, requireChinese: true);
+        var matches = tokens.Where(t => OcrTextNormalizer.Normalize(t.Text) == wanted).ToList();
+        if (matches.Count == 1)
+        {
+            var t = matches[0];
+            var p = new Point(ribbonRect.Left + t.Rect.Left + t.Rect.Width / 2, ribbonRect.Top + t.Rect.Top + t.Rect.Height / 2);
+            _log.Info("vision", $"Ribbon command by PaddleOCR label={label} point={p.X},{p.Y}");
+            return p;
+        }
+
+        _log.Warn("vision", $"Ribbon command not uniquely found label={label} exact_matches={matches.Count}");
+        LogTokens("ribbon-command-miss", label, tokens, 48);
+        return null;
+    }
+
     public async Task<bool> ContainsAllFragmentsAsync(nint hwnd, IReadOnlyList<string> fragments, CancellationToken cancellationToken)
     {
         if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)

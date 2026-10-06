@@ -14,6 +14,14 @@ internal static class Program
         if (args.Any(a => a.Equals("--vision-self-test", StringComparison.OrdinalIgnoreCase)))
             return VisionSelfTest.RunAsync(logger).GetAwaiter().GetResult();
 
+        var snapshotIndex = Array.FindIndex(args, a => a.Equals("--ui-snapshot", StringComparison.OrdinalIgnoreCase));
+        if (snapshotIndex >= 0)
+        {
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            var folder = snapshotIndex + 1 < args.Length ? args[snapshotIndex + 1] : "ui-snapshots";
+            return UiSnapshot.Run(logger, folder);
+        }
+
         var appIdHr = NativeMethods.SetCurrentProcessExplicitAppUserModelID("Chihyuan.CYERPAutoInput");
         if (appIdHr != 0)
             logger.Warn("app", $"SetCurrentProcessExplicitAppUserModelID failed HRESULT=0x{appIdHr:X8}");

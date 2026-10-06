@@ -7,6 +7,7 @@ internal sealed class UserSettings
     public int Version { get; set; } = 1;
     public bool AdvancedMode { get; set; }
     public bool DiagnosticLogging { get; set; }
+    public bool AutoSave { get; set; }
     public Dictionary<string, string> Defaults { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 

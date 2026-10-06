@@ -60,6 +60,11 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - 銷貨單號由 ERP 產生，CY 只讀取並驗證 `YYYYMMDDXXX` 格式。
 - 完成後停在 ERP，**不自動儲存**；全域 Esc 只停止 CY，不按 ERP「取消」；不送 `Ctrl+A`。
 - 仍需人工確認的狀況累積在 `AutomationRunResult.Warnings`，完成時統一顯示筆數。
+- Build 27（使用者 2026-10-06 指示「先把介面和基礎自動打單完成」）：
+  - 自動儲存（設定開關，預設關閉）：只限 CY 新增或開始時單號為空的單據，且無需人工確認項目；以 Ribbon「儲存」精確文字定位（Win32 caption → Ribbon OCR，不做全視窗搜尋）；儲存後須回到檢視並讀回同一單號，出現任何 ERP 訊息視窗即停止。實機尚未驗證。
+  - 工具列「清除表單」；狀態列「開啟 LOG 資料夾」；完成後需人工確認／未自動儲存原因以 MessageBox 列出。
+  - 設定視窗不顯示 App icon（視覺準則 §11.1）。
+  - CI 以 `--ui-snapshot` 產生介面 PNG Artifact 供版面檢查。
 - Build 26（使用者 2026-10-06 確認的整理項目）：
   - 主畫面 ERP 單據狀態大標籤（檢視／新增／修改），由 `ErpDocumentStateTracker` 依「檢視→輸入瞬間單號是否被清空」判斷；只提示、不阻止（使用者決定不自動停止）。
   - 多個 COPI08 視窗時不開始輸入。
@@ -132,7 +137,8 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 2. [完成 2026-10-06] PR #104 CI 全綠；Build 26 Artifact `CYERPAutoInput-v0.1.0-build26-windows-x64-run92`（run 37403614481，2026-10-20 到期；見 PR #104 留言）。
 3. [待使用者] 使用者出差返回（約 2026-10-08）後依 §5.2 實測 Build 26；依結果在同一 V0.1.0 返修（BUILD + 1）。
 4. [待使用者決策後] 下拉選項讀取（打開下拉 → OCR → 以同一鍵關閉，不送 Esc、不改值，有界）。Build 26 實測後再做。
-5. [可開始] §11 Roadmap 階段 1（Excel 批次）：決策已定（見 §11）。先做不碰 ERP 的部分（範本產生、匯入、驗證、預覽、標準銷貨單資料模型），再接批次執行與自動儲存。
+5. [暫緩，使用者 2026-10-06 指示] Excel 標準匯入格式細節：等基礎自動打單（單張含自動儲存）實機完成後再與使用者討論；之前不要自行定案範本欄位。
+5.1 [進行中] Build 27：介面補齊與自動儲存（見 §4）；需實機驗證自動儲存。
 6. [完成 2026-10-06] 使用者已刪除遠端舊分支（`ci-cyerp-build*`、舊 Go 分支）。
 6.1 [完成 2026-10-06] Governance PR #334（2.3.30）已合併：`PROJECT_RULES.md` §1 允許批次中放棄 CYERPAutoInput 自行新增且失敗的單據（須先確認仍在該張新增單據的輸入狀態）。
 7. 真實 ERP 驗收通過後才把 PR #104 轉 Ready／合併；合併後從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release。

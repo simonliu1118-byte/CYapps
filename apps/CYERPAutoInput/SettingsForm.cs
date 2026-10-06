@@ -6,6 +6,7 @@ internal sealed class SettingsForm : Form
     private readonly DataGridView _grid = new();
     private readonly CheckBox _advanced = new();
     private readonly CheckBox _diagnostic = new();
+    private readonly CheckBox _autoSave = new();
 
     private static readonly string[] ConfigurableKeys =
     [
@@ -19,7 +20,8 @@ internal sealed class SettingsForm : Form
         _settings = settings;
         Text = "CYERPAutoInput 設定";
         StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(620, 574);
+        ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
+        Size = new Size(640, 608);
         MinimumSize = new Size(560, 480);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
@@ -28,8 +30,9 @@ internal sealed class SettingsForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1, Padding = new Padding(12) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1, Padding = new Padding(12) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -55,6 +58,12 @@ internal sealed class SettingsForm : Form
         _diagnostic.AutoSize = true;
         _diagnostic.Padding = new Padding(3, 4, 0, 0);
         root.Controls.Add(_diagnostic, 0, 2);
+
+        _autoSave.Text = "輸入完成後自動儲存 ERP 單據（只限 CY 新增的單據且無需人工確認項目）";
+        _autoSave.Checked = _settings.AutoSave;
+        _autoSave.AutoSize = true;
+        _autoSave.Padding = new Padding(3, 4, 0, 0);
+        root.Controls.Add(_autoSave, 0, 3);
 
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
@@ -84,7 +93,7 @@ internal sealed class SettingsForm : Form
             var index = _grid.Rows.Add(field.Label, value);
             _grid.Rows[index].Tag = key;
         }
-        root.Controls.Add(_grid, 0, 3);
+        root.Controls.Add(_grid, 0, 4);
 
         var buttons = new FlowLayoutPanel
         {
@@ -98,7 +107,7 @@ internal sealed class SettingsForm : Form
         var cancel = new Button { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
         buttons.Controls.Add(save);
         buttons.Controls.Add(cancel);
-        root.Controls.Add(buttons, 0, 4);
+        root.Controls.Add(buttons, 0, 5);
         AcceptButton = save;
         CancelButton = cancel;
     }
@@ -107,6 +116,7 @@ internal sealed class SettingsForm : Form
     {
         _settings.AdvancedMode = _advanced.Checked;
         _settings.DiagnosticLogging = _diagnostic.Checked;
+        _settings.AutoSave = _autoSave.Checked;
         foreach (DataGridViewRow row in _grid.Rows)
         {
             if (row.Tag is not string key) continue;
