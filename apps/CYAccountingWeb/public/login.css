@@ -388,10 +388,69 @@ body.login-keyboard-open .login-shell {
   }
 
   #recoveryForm {
+    display: contents;
+  }
+
+  #recoveryForm > label:first-child {
     grid-column: 2;
-    grid-row: 1 / span 2;
+    grid-row: 1;
     min-width: 0;
-    align-self: center;
+    gap: 4px;
+    align-self: end;
+    font-size: 13px;
+  }
+
+  #recoveryForm > label:first-child input {
+    min-height: 40px;
+    padding-block: 7px;
+  }
+
+  #recoverySend {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 40px;
+    align-self: start;
+  }
+
+  #recoveryConfirmFields {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px 10px;
+  }
+
+  #recoveryConfirmFields > .delivery-note,
+  #recoveryConfirmFields > label:nth-of-type(3) {
+    grid-column: 1 / -1;
+  }
+
+  #recoveryConfirmFields > button {
+    min-height: 40px;
+  }
+
+  #recoveryMessage {
+    grid-column: 2;
+    grid-row: 3;
+    min-height: 0;
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  #recoveryMessage:empty {
+    display: none;
+  }
+
+  #recoveryBack {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: start;
+    align-self: start;
+    min-height: 22px;
+    margin: 4px 0 0 56px;
+    padding: 0;
+    font-size: 13px;
   }
 
   #loginForm > label {
