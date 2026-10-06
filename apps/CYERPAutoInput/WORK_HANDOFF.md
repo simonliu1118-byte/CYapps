@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-06  
+> 更新：2026-10-06（V0.2.0）  
 > 目的：供後續 AI 對話直接接手目前開發狀態。  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接一律以本文件 + Git 狀態為準。  
 > 本文件只記錄「目前狀態、已驗證事實、待辦與交接順序」，不是永久規則來源。
@@ -199,6 +199,25 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 3. Excel 範本先只放標準模式欄位，其他欄位用本機預設值；之後再擴充。
 4. 階段 2 對接 CYWEB 的「訂單工單模組」（CYWEB 不在本 repo；接入前先確認其 API 與是否走 CYID）。
 5. 地端專用電腦可設定自動登入、不鎖定；ERP 欄位一律由程式定位輸入（不改用 ERP API）。
+
+風險評估後的使用者回覆（2026-10-06）：
+
+- SMART ERP 沒有銷貨單匯入功能（只有匯出），模擬操作是唯一路線。
+- 有 ERP 測試環境；實測由使用者處理。
+- 速度（OCR 逐格）之後再優化。
+- ERP 內通常不存來源單號；防重複打單（本機進度紀錄、ERP 查單依據）做到批次／工單階段再討論細節。
+- 階段 2 之後會接 CYID。
+- ERP 授權沒有問題。
+- 後續階段：在裝有 ERP 的 Windows 電腦上執行 Claude Code（Claude Desktop app，或在 repo 資料夾執行 `claude remote-control`），由 AI 直接建置、執行、截圖、讀 LOG 做實測；不採用 Public repo 的 self-hosted GitHub Actions runner（安全風險）。
+
+ERP 電腦實測操作清單（後續階段使用）：
+
+1. 只用 ERP 測試公司別；開始前確認 COPI08 視窗標題為測試公司。
+2. 測試期間該電腦不得有人同時操作；Windows 顯示比例 100%；不鎖定螢幕。
+3. 建置：`dotnet test tests/CYERPAutoInput.Tests`、`dotnet build CYERPAutoInput.csproj -c Release -r win-x64`，再執行 `tools/fetch-ocr-models.ps1` 取得模型。
+4. 觀察：以 PowerShell `System.Drawing` 擷取全螢幕 PNG 存到 repo 外的暫存資料夾檢視；LOG 在 exe 同層 `logs/`。截圖與 LOG 含 ERP 資料，只留本機、不提交 Git（PROJECT_RULES §3／§4）。
+5. 需使用者先同意：開啟自動儲存、批次中按「取消」放棄單據、任何會在 ERP 產生或修改資料的新操作。
+6. 修正照常推送到工作 branch，由主控方（Claude）審查。
 
 其他已知事實：
 
