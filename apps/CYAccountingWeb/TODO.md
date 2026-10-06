@@ -1,13 +1,13 @@
 # CYAccountingWeb TODO
 
-更新：2026/10/05（日本時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+更新：2026/10/07（日本時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
 
 ## 裝置與 UI 驗收
 
 - [ ] 真實 iPad／Android 完整交叉驗收：直向、橫向、分割視窗、原生 picker、觸控排序／捲動、螢幕鍵盤與外接鍵盤。
 - [ ] 真實平板登入、Session、登出、USER 唯讀及 Excel 分享／下載完整驗收。
 - [ ] **下一次公開 Stable Release 前**移除手機「測試用平板版」、preview「返回手機版」及其 session-scoped tablet preview bootstrap／測試專用 UI；正式平板本身的 inline identity 與直／橫式 presentation 保留。
-- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.22.20 Build 1 的自動回歸與 production semantic verification 不等於所有真機情境已逐項驗收。
+- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.22.21 Build 0 的自動回歸與 production semantic verification 不等於所有真機情境已逐項驗收。
 
 ## 交易互動
 
