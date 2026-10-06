@@ -1,6 +1,6 @@
 # CYAccountingWeb 平板介面設計與驗收
 
-更新：2026/10/06。本文件記錄平板設計、已合併實作與尚未完成的真機驗收，不是永久規則。現在正式產品基準為 **V0.22.20 Build 1**；平板相關 V0.22.2～V0.22.3 Build 3 與 V0.22.19 的直式 owner 收斂均已合併並部署。
+更新：2026/10/07。本文件記錄平板設計、已合併實作與尚未完成的真機驗收，不是永久規則。現在正式產品基準為 **V0.22.21 Build 0**；V0.22.21 已再次收斂平板 identity ownership、直式兩列記帳 rail 與原生搜尋，並由 Production Deploy #509 驗證。
 
 原始設計來源為 `cyaccountingweb/docs-tablet-ui-plan` 的 `b71e4108b7b3bd5e165dadeb526db4116c56be18`。規劃初期的自製 picker 已被後續實作收斂為 native/shared owner；目前不得把歷史設計稿中的自製 picker 建議當成現行需求。
 
@@ -9,10 +9,10 @@
 | 項目 | 橫向 | 直向 |
 | --- | --- | --- |
 | 結構 | 左記帳、右看帳；記帳區已在 Build 2/3 縮窄 | 看帳主區，底部記帳 rail |
-| 表單 | 常駐左欄；帳戶／日期／科目／摘要／金額沿用共用欄位 | 底部記帳 rail 預設展開；只保留該 rail 的把手，上拉展開／下拉收合，也可點按；右上 confirmation drawer 把手不顯示 |
+| 表單 | 常駐左欄；帳戶／日期／科目／摘要／金額沿用共用欄位 | 底部記帳 rail 預設展開；唯一把手加大並顯示「展開記帳／收起記帳」，仍可點按／拖曳；展開內容濃縮為兩列，右上 confirmation drawer 把手不顯示 |
 | 帳本 | 保留表格、完整金額與餘額，獨立捲動 | 保留表格；底部表單不應覆蓋最後一筆 |
 | 編輯 | 點編輯後帶入同一 entry owner | 點編輯後展開底部同一表單 |
-| 日期／月份 | 與手機 touch path 共用原生 date/month owner；月份使用 shared `ledgerMonthDisplay`＋原生 `type=month` | 同一 owner、同一月份顯示層 |
+| 日期／月份 | 與手機 touch path 共用原生 date/month owner；月份使用 shared `ledgerMonthDisplay`＋原生 `type=month` | 同一 owner、同一月份顯示層；摘要搜尋使用原生 `type=search`，無額外搜尋／清除按鈕 |
 | 輸入方式 | 觸控、鍵盤、滑鼠／trackpad 並存 | 觸控、鍵盤、滑鼠／trackpad 並存 |
 
 程式目前仍以 adaptive UI 判斷 Mobile／Tablet／Desktop presentation，但 business/data owner 不依 breakpoint 分叉。平板日期／月份已不再建立自己的資料 state 或第二套 picker owner。
@@ -33,8 +33,9 @@
 
 - **V0.22.20 Build 0 / PR #338**：手機帳號選單新增「測試用平板版」；使用 session-scoped preview 直接切入正式 tablet presentation，直式 reference viewport 820px、橫式 1194px，旋轉手機即可檢查兩個方向；preview 不建立第二套 business/data owner。
 - **V0.22.20 Build 1 / PR #340**：平板直式／橫式與手機 preview 都恢復原本 inline identity：`員工編號 姓名［角色］｜登出`。角色只共用手機色票（SUPER_ADMIN 金、ADMIN 銅、USER 中性），不共用手機 dropdown 結構；preview 暫時另加「返回手機版」。下一次公開 Stable Release 前要移除兩個 preview 測試入口與 session bootstrap。
+- **V0.22.21 Build 0 / PR #342**：清除 V0.22.19 identity ownership 的殘留風險，平板直式／橫式固定使用 `.cy-account-cluster`，手機 account trigger/menu 在 Tablet 隱藏；角色改為姓名後方同行純文字，不做獨立 pill，設定按鈕與帳號列等高；SUPER_ADMIN／ADMIN／USER 沿用手機金／銅／中性色。手機 preview 的「返回手機版」預設隱藏，只在 `data-tablet-preview=true` 且按鈕非 hidden 時顯示，真實 iPad 不顯示。直式 rail 把手放大並加入展開／收起文字，表單濃縮為兩列；直式搜尋改原生 searchfield。Tablet／Adaptive regression tests 同步鎖定 ownership。
 
-目前 V0.22.20 Build 1 production deploy #502（run `37487502059`）已包含上述所有已合併平板 source。
+目前 V0.22.21 Build 0 的 PR #342／#343 均已合併；Production Deploy #509（run `37495315805`）已完成 application tests、D1 migration、Worker/static assets、secure login 與 semantic frontend asset verification。
 
 ## 元件與共用操作
 
@@ -58,7 +59,7 @@
 
 歷史平板回歸曾驗證方向判斷、旋轉草稿、編輯保留、visual viewport、保持展開、換筆及切月份不誤存。Build 1 使用 Chromium 153 與合成資料做過 1194×750 橫式、834×1100 直式、390×844 手機、1440×900 桌機檢查；當時手機／桌機基準在版本文字正規化後一致。
 
-後續 V0.22.3 Build 1～3 加入互動判定、shared picker 與重複 CSS 規則 regression。V0.22.11 PR #311 的完整 application tests 與 main deploy #431 均成功，因此目前 source 至少保有這些自動 guard。
+後續 V0.22.3 Build 1～3 加入互動判定、shared picker 與重複 CSS 規則 regression。V0.22.21 又新增 identity ownership、preview-only return、兩列直式 entry、原生搜尋與桌面不受影響的 regression guards；PR #342 Validate #506、PR #343 Validate #508 及 Production Deploy #509 均成功。
 
 自動測試與模擬瀏覽器仍不取代真機。
 
