@@ -4196,7 +4196,7 @@ function showTouchWorkspaceLedgerNotice(text) {
 /* Tablet presentation reuses the same entry form, ledger and entry-edit owner. */
 function isTabletWorkspace() {
   const preview = window.__cyaccTabletPreviewEnabled === true ||
-    document.documentElement.dataset.tabletPreview === 'true';
+    document.documentElement?.dataset?.tabletPreview === 'true';
   if (preview) return true;
   const width = window.innerWidth;
   return width >= 768 && (width < 1024 ||
