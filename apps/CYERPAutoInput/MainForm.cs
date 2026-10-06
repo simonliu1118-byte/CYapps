@@ -276,8 +276,8 @@ internal sealed class MainForm : Form
         _root.Controls.Add(statusStrip, 0, 3);
     }
 
-    private const int FieldLabelWidth = 84;
-    private const int FieldInputLeft = 90;
+    private const int FieldLabelWidth = 98;
+    private const int FieldInputLeft = 104;
 
     /// <summary>
     /// Sizes every field row to the group's client width (reserving the vertical

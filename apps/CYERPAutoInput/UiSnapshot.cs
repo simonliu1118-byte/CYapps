@@ -58,6 +58,9 @@ internal static class UiSnapshot
         }
     }
 
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
+
     private static void Capture(Form form, string path, Size size)
     {
         form.StartPosition = FormStartPosition.Manual;
@@ -65,7 +68,9 @@ internal static class UiSnapshot
         if (!form.Visible) form.Show();
         // A maximized window would take the CI screen size; render the intended size instead.
         form.WindowState = FormWindowState.Normal;
-        form.Bounds = new Rectangle(-32000, -32000, size.Width, size.Height);
+        // Form.SetBoundsCore caps the size at the CI screen; size the native window directly
+        // (WM_GETMINMAXINFO above lifts the OS limit).
+        NativeMethods.SetWindowPos(form.Handle, 0, -32000, -32000, size.Width, size.Height, SwpNoZOrder | SwpNoActivate);
         for (var i = 0; i < 3; i++) { Application.DoEvents(); form.PerformLayout(); }
 
         using var bitmap = new Bitmap(form.Width, form.Height);
