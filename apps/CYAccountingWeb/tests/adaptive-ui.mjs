@@ -12,6 +12,7 @@ const js = read('public/adaptive-ui.js');
 const ledger = read('public/ledger-tools.js');
 const backupUi = read('public/backup-ui.js');
 const loginHtml = read('public/login.html');
+const indexHtml = read('public/index.html');
 
 assert.match(css, /@media \(max-width: 767px\)/);
 assert.match(css, /html\[data-tablet-layout\]/);
@@ -86,7 +87,9 @@ assert.doesNotMatch(ledger, /data-mobile-ledger-action="opening">期初餘額/);
 assert.match(ledger, /id="ledgerBalanceButton"/);
 assert.match(ledger, /function setupLedgerToolbar\(\)/);
 assert.match(js, /function startAdaptiveUi\(\)/);
-assert.match(loginHtml, /employeeId/);
+assert.match(indexHtml, /cyacc-tablet-preview/);
+assert.match(indexHtml, /landscape \? '1194' : '820'/);
+assert.match(indexHtml, /data\.tabletPreview|dataset\.tabletPreview/);
 assert.doesNotMatch(js, /\b[A-Za-z_$][A-Za-z0-9_$]*(?:V|v)\d{2,4}[A-Za-z0-9_$]*\b/);
 assert.doesNotMatch(css, /[-_](?:V|v)\d{2,4}(?:[-_A-Za-z0-9]|$)/);
 assert.doesNotMatch(js, /setupMobileWorkspaceLedgerTools|setupTouchWorkspaceToolbar|setupTouchWorkspaceMonthDisplay|moveImportButton/);
