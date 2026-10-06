@@ -39,3 +39,7 @@ apps/CYAccountingWeb/public/vendor/sqljs/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Python bytecode
+__pycache__/
+*.pyc

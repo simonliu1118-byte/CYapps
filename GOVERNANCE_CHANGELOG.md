@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.29 — 2026/10/06
+
+- Public package scanner：Google refresh token pattern 改為只接受 base64url 字元（`1//[A-Za-z0-9_-]{20,}`），不再接受 `.` 與 `/`。原 pattern 會把 OpenCvSharp4.runtime.win 官方 OpenCV native DLL 內的二進位資料表誤判為 token，阻擋 CYERPAutoInput single-file package。
+- 新增對應 regression：OpenCV 樣式資料不得阻擋；既有 UTF-8／UTF-16 token 偵測、NUL 拼接誤判與 pinned dependency 檢查維持不變。
+
 ## 2.3.28 — 2026/10/04
 
 - Sync AITeam Common Rules 2.8.0 Canonical Owner / Replacement / Architecture Exception governance.
