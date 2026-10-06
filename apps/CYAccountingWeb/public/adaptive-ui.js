@@ -708,6 +708,10 @@ function syncMobileWorkspaceAfterLoad() {
 
 
 
+function usesSharedTouchAccountIdentity() {
+  return window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches || isTabletWorkspace();
+}
+
 function setupMobileWorkspaceMobileAppBar() {
   const topbar = document.querySelector('.topbar');
   const currentUser = document.querySelector('#currentUser');
@@ -749,7 +753,7 @@ function setupMobileWorkspaceMobileAppBar() {
   };
 
   trigger.addEventListener('click', event => {
-    if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches) return;
+    if (!usesSharedTouchAccountIdentity()) return;
     event.stopPropagation();
     const open = menu.hidden;
     menu.hidden = !open;
@@ -781,7 +785,7 @@ function setupMobileWorkspaceMobileAppBar() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
     document.body.classList.toggle('cy-mobile-app', mobile.matches);
-    if (!mobile.matches) close();
+    if (!usesSharedTouchAccountIdentity()) close();
     syncMobileWorkspaceMobileIdentity();
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
@@ -800,10 +804,15 @@ function syncMobileWorkspaceMobileIdentity() {
 
   const main = String(source.querySelector('.current-user-main')?.textContent || '').trim();
   const role = String(source.querySelector('.current-user-role')?.textContent || '').trim();
-  const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches;
+  const touchIdentity = usesSharedTouchAccountIdentity();
+  const tablet = isTabletWorkspace();
+  const topbar = document.querySelector('.topbar');
+  const actions = topbar?.querySelector('.topbar-actions');
+  const identityHost = tablet ? actions : topbar;
+  if (identityHost && trigger.parentElement !== identityHost) identityHost.append(trigger);
   const ready = Boolean(main) && !source.classList.contains('hidden');
 
-  if (!mobile || !ready) {
+  if (!touchIdentity || !ready) {
     trigger.hidden = true;
     menu.hidden = true;
     trigger.setAttribute('aria-expanded', 'false');
@@ -893,7 +902,7 @@ function setupMobileWorkspaceAccountSheet() {
 function setupMobileWorkspaceConfirmationPolicy() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const sync = () => {
-    if (mobile.matches) {
+    if (mobile.matches || isTabletWorkspace()) {
       if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(false, false);
       return;
     }
@@ -906,7 +915,7 @@ function setupMobileWorkspaceConfirmationPolicy() {
 }
 
 function syncMobileWorkspaceConfirmationPolicy() {
-  if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches) return;
+  if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && !isTabletWorkspace()) return;
   if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(false, false);
 }
 
@@ -4253,6 +4262,8 @@ function setupTabletWorkspace() {
     document.documentElement.dataset.tabletLayout = orientation;
     document.documentElement.dataset.viewport = window.innerWidth < 768 ? 'mobile' : tablet ? 'tablet' : 'desktop';
     syncTabletPickerOwnership(orientation);
+    syncMobileWorkspaceMobileIdentity();
+    syncMobileWorkspaceConfirmationPolicy();
     if (!tablet && !wasTablet) return;
     const quickHost = document.querySelector('.quick-entry-tools');
     const grid = document.querySelector('.entry-grid');
@@ -4264,7 +4275,7 @@ function setupTabletWorkspace() {
     applyAdaptiveSplitWorkspace(window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA).matches);
     if (tablet) {
       const rail = document.querySelector('.cy-entry-rail');
-      if (rail && !rail.dataset.entryExpanded) rail.dataset.entryExpanded = 'false';
+      if (rail && !rail.dataset.entryExpanded) rail.dataset.entryExpanded = 'true';
       document.querySelector('.entry-card')?.classList.remove('cy-mobile-page-hidden');
       document.querySelector('.ledger-card')?.classList.remove('cy-mobile-page-hidden');
       setupTouchWorkspaceEntrySecondaryAction();
