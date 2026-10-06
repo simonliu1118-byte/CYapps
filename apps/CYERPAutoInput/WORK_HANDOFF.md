@@ -31,7 +31,8 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 
 - Branch：`cyerp-auto-input/v0.1.0-csharp`
 - Draft PR：`#104 CYERPAutoInput V0.1.0: C# rewrite with optical ERP targeting`
-- VERSION：`0.1.0`；BUILD：見同目錄 `BUILD` 檔（2026-10-06 時為 `26`）。
+- VERSION：`0.2.0`；BUILD：見同目錄 `BUILD` 檔（2026-10-06 升 Minor 時歸 `0`）。
+- 版本沿革：`V0.1.0` 為 Codex C# 重寫（Build 1–27）；`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手後的版本（含原 V0.1.0 Build 26／27 的變更）。Branch 名稱沿用 `cyerp-auto-input/v0.1.0-csharp` 以保留 PR #104。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU），詳見 `README.md`。
 - 本次升 Minor 是使用者已明確同意的技術棧重寫。
 - PR 仍為 Draft；未完成真實 ERP 驗收前不得合併 main。
@@ -48,7 +49,7 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 因此 V0.1.0 改採 C#，讓 WinForms UI、Win32 interop、本機 OCR 與畫面定位集中在單一 Windows 原生開發線。
 
 
-## 4. V0.1.0 已完成架構
+## 4. C# 版已完成架構
 
 目前實際流程、UI、OCR、F2 單位、F2 批號、本機資料與安全設計以 `README.md` 為準，此處只列交接重點：
 
@@ -99,9 +100,9 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - 2026-10-06 使用者回報：最近一次 C# 測試包實測進行到「F2 選批號」步驟（Build 號與結果細節未記錄）。
 - Build 26 起，F2 批號查詢中「現有存量」無法辨識的列不再跳過：在找到第一筆正庫存之前遇到無法辨識的列即停止，避免跳過較早批號。
 
-## 5.2 下一輪驗收清單（Build 26）
+## 5.2 下一輪驗收清單（V0.2.0）
 
-1. 啟動：版本顯示 `V0.1.0 Build 26`；狀態列顯示「顯示比例 100%」。
+1. 啟動：版本顯示 `V0.2.0`（或之後的 `V0.2.0 Build N`）；狀態列顯示「顯示比例 100%」。
 2. 狀態標籤：ERP 檢視時顯示「檢視」；手動按「新增」顯示「新增」；手動按「修改」顯示「修改」；關閉 COPI08 顯示「未開啟」；開兩個 COPI08 顯示「多個 COPI08」且無法開始輸入。
 3. 找窗／新增：ERP 在檢視狀態按「開始輸入」，程式自動按新增，標籤變「新增」。
 4. 表頭／交易／送貨／發票欄位逐一確認。
@@ -135,10 +136,10 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 
 1. [完成 2026-10-06] Governance PR #333（公開套件掃描誤判 OpenCV DLL）已 squash merge（Governance 2.3.29）。
 2. [完成 2026-10-06] PR #104 CI 全綠；Build 26 Artifact `CYERPAutoInput-v0.1.0-build26-windows-x64-run92`（run 37403614481，2026-10-20 到期；見 PR #104 留言）。
-3. [待使用者] 使用者出差返回（約 2026-10-08）後依 §5.2 實測 Build 26；依結果在同一 V0.1.0 返修（BUILD + 1）。
+3. [待使用者] 使用者出差返回（約 2026-10-08）後依 §5.2 實測 V0.2.0 最新 Artifact（自動儲存先保持關閉，最後再開啟測一張）；依結果在同一 V0.2.0 返修（BUILD + 1）。V0.1.0 Build 26 Artifact（run92）仍可作為對照。
 4. [待使用者決策後] 下拉選項讀取（打開下拉 → OCR → 以同一鍵關閉，不送 Esc、不改值，有界）。Build 26 實測後再做。
 5. [暫緩，使用者 2026-10-06 指示] Excel 標準匯入格式細節：等基礎自動打單（單張含自動儲存）實機完成後再與使用者討論；之前不要自行定案範本欄位。
-5.1 [進行中] Build 27：介面補齊與自動儲存（見 §4）；需實機驗證自動儲存。
+5.1 [完成，待實機] V0.2.0：介面補齊（依 CY 視覺準則，CI 介面截圖檢查）與選用自動儲存（見 §4）；自動儲存需實機驗證。
 6. [完成 2026-10-06] 使用者已刪除遠端舊分支（`ci-cyerp-build*`、舊 Go 分支）。
 6.1 [完成 2026-10-06] Governance PR #334（2.3.30）已合併：`PROJECT_RULES.md` §1 允許批次中放棄 CYERPAutoInput 自行新增且失敗的單據（須先確認仍在該張新增單據的輸入狀態）。
 7. 真實 ERP 驗收通過後才把 PR #104 轉 Ready／合併；合併後從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release。
