@@ -1,6 +1,6 @@
 # CYAccountingWeb 平板介面設計與驗收
 
-更新：2026/10/06。本文件記錄平板設計、已合併實作與尚未完成的真機驗收，不是永久規則。現在正式產品基準為 **V0.22.19 Build 0**；平板相關 V0.22.2～V0.22.3 Build 3 與 V0.22.19 的直式 owner 收斂均已合併並部署。
+更新：2026/10/06。本文件記錄平板設計、已合併實作與尚未完成的真機驗收，不是永久規則。現在正式產品基準為 **V0.22.20 Build 0**；平板相關 V0.22.2～V0.22.3 Build 3 與 V0.22.19 的直式 owner 收斂均已合併並部署。
 
 原始設計來源為 `cyaccountingweb/docs-tablet-ui-plan` 的 `b71e4108b7b3bd5e165dadeb526db4116c56be18`。規劃初期的自製 picker 已被後續實作收斂為 native/shared owner；目前不得把歷史設計稿中的自製 picker 建議當成現行需求。
 
@@ -31,7 +31,9 @@
 - **V0.22.3 Build 3 / PR #301**：移除多代 tablet date/month CSS override，只保留單一 presentation 規則，補 architecture regression。
 - 後續 **V0.22.4～V0.22.8** 繼續移除 retry、重複 owner、toolbar relocation 與版本殼；因此平板後續修改也必須遵守現行 canonical owner，而不是把早期 patch 路徑加回。
 
-目前 V0.22.19 Build 0 production deploy #492（run `37459241735`）已包含上述所有已合併平板 source。
+- **V0.22.20 Build 0 / PR #338**：手機帳號選單新增「測試用平板版」；使用 session-scoped preview 直接切入正式 tablet presentation，直式 reference viewport 820px、橫式 1194px，旋轉手機即可檢查兩個方向；preview 不建立第二套 business/data owner，且可由帳號選單返回手機版。
+
+目前 V0.22.20 Build 0 production deploy #498（run `37462555783`）已包含上述所有已合併平板 source。
 
 ## 元件與共用操作
 
