@@ -52,6 +52,7 @@ assert.match(js, /returnButton\.addEventListener\('click', \(\) => setTabletPrev
 assert.match(js, /previewButton\.textContent = '測試用平板版'/);
 assert.match(js, /sessionStorage\.setItem\(key, '1'\)/);
 assert.match(js, /function isTabletPreviewMode\(\)/);
+assert.match(js, /function usesMobileAccountMenuIdentity\(\)[\s\S]*?matchMedia\(CY_MOBILE_WORKSPACE_MOBILE\)\.matches && !isTabletWorkspace\(\)/, 'phone account dropdown is not the tablet identity owner');
 assert.doesNotMatch(js, /data-mobile-account-action="settings"/);
 assert.match(ledger, /id="ledgerMoreButton"/);
 assert.match(ledger, /data-mobile-ledger-action="accounts">帳戶設定/);
@@ -81,6 +82,9 @@ assert.match(js, /const ready = Boolean\(main\) && !source\.classList\.contains\
 assert.match(js, /if \(!mobileAccountMenu \|\| !ready\)[\s\S]*?trigger\.hidden = true;[\s\S]*?return;/);
 assert.match(js, /cluster\?\.classList\.toggle\('role-super-admin', superAdmin\)/);
 assert.match(js, /cluster\?\.classList\.toggle\('role-admin', admin\)/);
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster[\s\S]*?display:\s*flex !important/, 'tablet identity remains the inline account cluster');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.topbar #mobileAccountMenuButton,[\s\S]*?\.cy-mobile-account-menu[\s\S]*?display:\s*none !important/, 'tablet hides phone identity surfaces');
+assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton[\s\S]*?display:\s*inline-flex !important/, 'return-to-phone is scoped to preview state');
 assert.match(js, /triggerName\.textContent = main;[\s\S]*?trigger\.hidden = false;/);
 assert.doesNotMatch(js, /new MutationObserver\(syncMobileWorkspaceMobileIdentity\)/);
 assert.doesNotMatch(js, /cy-mobile-account-name\">帳號|mobileAccountMenuName\">帳號/);
