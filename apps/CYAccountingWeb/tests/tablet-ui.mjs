@@ -123,7 +123,8 @@ assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.topba
 assert.doesNotMatch(css, /data-tablet-layout[^\n]*\.cy-account-cluster[^\{]*\{[^\}]*display:\s*none !important/, 'tablet must never hide the canonical inline account cluster');
 assert.doesNotMatch(css, /data-tablet-layout[^\n]*#mobileAccountMenuButton[^\{]*\{[^\}]*display:\s*(?:block|flex|inline-flex) !important/, 'tablet must never show the phone account trigger');
 assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton[\s\S]*?display:\s*inline-flex !important/, 'phone tablet preview exposes a temporary return-to-phone button');
-assert.match(css, /#tabletPreviewReturnButton\[hidden\][\s\S]*?display:\s*none !important/, 'real tablets keep the preview-only return button hidden without preview state');
+assert.match(css, /#tabletPreviewReturnButton \{[\s\S]*?display:\s*none !important/, 'return-to-phone is hidden by default outside preview');
+assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton:not\(\[hidden\]\)[\s\S]*?display:\s*inline-flex !important/, 'only active phone preview may expose return-to-phone');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-grid \{[\s\S]*?grid-template-columns:\s*repeat\(4,[\s\S]*?grid-template-rows:\s*repeat\(2, 44px\)/, 'portrait entry form is compacted into two field rows');
 assert.match(source, /tablet-entry-handle-label">展開記帳/, 'portrait collapsed rail exposes a labelled entry handle');
 assert.match(source, /label\.textContent = expanded \? '收起記帳' : '展開記帳'/, 'entry handle label follows expanded state');
