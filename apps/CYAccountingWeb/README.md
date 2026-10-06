@@ -2,19 +2,19 @@
 
 志遠記帳系統 Web 版；與 `apps/CYAccounting/` Windows 版分開維護。
 
-更新：2026/10/05（日本時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
+更新：2026/10/07（日本時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
 ## 目前狀態
 
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.20 Build 1**；PR #340 已合併；平板直／橫式與手機平板 preview 恢復 inline 帳號列，測試 preview 暫時提供獨立返回手機版 |
-| 正式部署 | CYAccountingWeb Validate and Deploy **#502**（run `37487502059`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
+| 正式版本 | **V0.22.21 Build 0**；PR #342 已合併；平板 identity ownership、直式兩列記帳 rail、原生搜尋與 preview-only 返回手機版已收斂 |
+| 正式部署 | CYAccountingWeb Validate and Deploy **#509**（run `37495315805`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic frontend assets 均通過 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
-| Governance | Common Rules 2.8.0；CYapps Governance 2.3.28 |
+| Governance | Common Rules 2.8.0；CYapps Governance 2.3.31 |
 | 備份 | Phase C；R2＋GCS 手動 paired 驗收完成，scheduled `x/14` 仍需讀正式 catalog，不按日期推算 |
 
 ## 文件入口
@@ -63,7 +63,7 @@ SUPER_ADMIN 永久刪除條件為已封存、無交易、最新有效期初為�
 
 ### 平板
 
-目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。V0.22.20 起手機帳號選單在「登出」上方暫時提供「測試用平板版」，只在目前分頁 session 內啟用，直接重用正式平板 presentation；直式以 820px、橫式以 1194px reference viewport 呈現，旋轉手機可檢查兩個方向，preview 內另有暫時「返回手機版」按鈕。日期／月份改與手機共用原生 touch owner，平板只保留 layout / gesture presentation；沒有平板第二套 writer、month state 或 business flow。V0.22.19 起，直式底部記帳 rail 預設展開且保留唯一拖曳把手，右上角與記帳無關的 confirmation drawer 把手在平板雙方向一律隱藏；V0.22.20 Build 1 起，平板直式、橫式與手機模擬平板都使用原本 inline 帳號列 `員工編號 姓名［角色］｜登出`，不使用手機下拉帳號元件；角色色票則與手機一致：SUPER_ADMIN 金色、ADMIN 銅色、USER 中性色。直式月份也與已驗收橫式共用 `ledgerMonthDisplay`＋原生 `type=month` touch owner。平板登入仍與手機共用同一 keyboard-aware login owner；不另造第二套登入、recovery、月份或 identity state。
+目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。手機帳號選單仍暫時提供「測試用平板版」，只在目前分頁 session 內啟用，直接重用正式平板 presentation；直式以 820px、橫式以 1194px reference viewport 呈現，旋轉手機可檢查兩個方向。V0.22.21 起平板直式與橫式都明確由 canonical `.cy-account-cluster` 擁有右上 identity，格式維持 `員工編號 姓名［角色］｜登出`；角色是姓名後方的同行純文字，不是獨立 pill，SUPER_ADMIN 金色、ADMIN 銅色、USER 中性色與手機色票一致，設定按鈕也與帳號列等高。手機 dropdown trigger/menu 在真正 Tablet 一律隱藏；「返回手機版」只有手機 tablet preview 啟用時才出現，真實 iPad 不顯示。直式底部記帳 rail 仍預設展開，唯一把手放大並顯示「展開記帳／收起記帳」，展開內容壓縮為兩列；直式摘要搜尋使用原生 `type=search`，不顯示額外「搜尋／清除」按鈕。日期／月份仍與手機共用原生 touch owner，直式與橫式共用 `ledgerMonthDisplay`＋原生 `type=month`；沒有平板第二套 writer、month、identity 或 business flow。
 
 未合併的 PR #297 / V0.22.2 Build 4 不是目前基準，後續修正已由 V0.22.3 系列取代。
 
