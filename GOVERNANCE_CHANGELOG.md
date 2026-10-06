@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.30 — 2026/10/06
+
+- CYERPAutoInput `PROJECT_RULES.md`：使用者核准批次輸入的失敗隔離方式。仍不自動操作「修改」；「取消」只允許用於放棄 CYERPAutoInput 自行新增、輸入途中失敗的單據，且必須先確認 ERP 仍在該張新增單據的輸入狀態，否則停止整批等待人工處理。Esc 緊急停止仍不得替使用者按「取消」。
+
 ## 2.3.29 — 2026/10/06
 
 - Public package scanner：Google refresh token pattern 改為只接受 base64url 字元（`1//[A-Za-z0-9_-]{20,}`），不再接受 `.` 與 `/`。原 pattern 會把 OpenCvSharp4.runtime.win 官方 OpenCV native DLL 內的二進位資料表誤判為 token，阻擋 CYERPAutoInput single-file package。
