@@ -128,8 +128,8 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 
 ## 8. 目前工作佇列（接手者從第一個未完成項目開始）
 
-1. [進行中] Governance PR #333（公開套件掃描誤判 OpenCV DLL）：使用者已授權合併；CI 全綠後 squash merge。
-2. [待辦] #333 合併後，把 `main` merge 進 `cyerp-auto-input/v0.1.0-csharp`（merge commit，不 rebase／force-push），確認 PR #104 CI 全綠並取得 Build 26 Artifact。
+1. [完成 2026-10-06] Governance PR #333（公開套件掃描誤判 OpenCV DLL）已 squash merge（Governance 2.3.29）。
+2. [進行中] `main` 已 merge 進 `cyerp-auto-input/v0.1.0-csharp`；確認 PR #104 CI 全綠並記錄 Build 26 Artifact 名稱。
 3. [待使用者] 使用者出差返回（約 2026-10-08）後依 §5.2 實測 Build 26；依結果在同一 V0.1.0 返修（BUILD + 1）。
 4. [待使用者決策後] 下拉選項讀取（打開下拉 → OCR → 以同一鍵關閉，不送 Esc、不改值，有界）。Build 26 實測後再做。
 5. [待使用者決策後] §11 Roadmap 階段 1（Excel 批次）。
