@@ -3,6 +3,7 @@ namespace CYERPAutoInput;
 internal sealed class SettingsForm : Form
 {
     private readonly UserSettings _settings;
+    private readonly Func<Task<string>>? _runProbe;
     private readonly DataGridView _grid = new();
     private readonly CheckBox _advanced = new();
     private readonly CheckBox _diagnostic = new();
@@ -15,9 +16,10 @@ internal sealed class SettingsForm : Form
         "inv_copies", "tax_type", "customs", "tax_rate"
     ];
 
-    public SettingsForm(UserSettings settings)
+    public SettingsForm(UserSettings settings, Func<Task<string>>? runProbe = null)
     {
         _settings = settings;
+        _runProbe = runProbe;
         Text = "CYERPAutoInput 設定";
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
@@ -116,9 +118,41 @@ internal sealed class SettingsForm : Form
         var cancel = new CyButton { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
         buttons.Controls.Add(save);
         buttons.Controls.Add(cancel);
+        if (_runProbe is not null)
+        {
+            var probe = new CyButton { Text = "ERP 結構探測", Width = 120, Height = 34, Margin = new Padding(3, 3, 48, 3) };
+            probe.Click += async (_, _) => await RunProbeAsync(probe);
+            buttons.Controls.Add(probe);
+        }
         root.Controls.Add(buttons, 0, 5);
         AcceptButton = save;
         CancelButton = cancel;
+    }
+
+    private async Task RunProbeAsync(Button probe)
+    {
+        if (MessageBox.Show(this,
+                "唯讀讀取 COPI08 與目前開著的 ERP 視窗結構（不會送出按鍵或點擊），結果存到本機 LOG 資料夾。\n" +
+                "開啟診斷模式時會包含畫面上的實際內容；建議在 ERP 測試公司別執行。\n\n要開始嗎？",
+                "ERP 結構探測", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+            return;
+
+        probe.Enabled = false;
+        UseWaitCursor = true;
+        try
+        {
+            var path = await _runProbe!();
+            MessageBox.Show(this, $"探測完成，結果已存到：\n{path}", "ERP 結構探測", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "ERP 結構探測", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            UseWaitCursor = false;
+            probe.Enabled = true;
+        }
     }
 
     private void SaveAndClose()

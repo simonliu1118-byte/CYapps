@@ -492,7 +492,7 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
-        using var form = new SettingsForm(_settings);
+        using var form = new SettingsForm(_settings, () => ErpProbe.RunAsync(_log));
         if (form.ShowDialog(this) != DialogResult.OK) return;
         try
         {

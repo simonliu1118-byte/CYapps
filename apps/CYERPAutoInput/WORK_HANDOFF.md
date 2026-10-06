@@ -61,6 +61,7 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - 銷貨單號由 ERP 產生，CY 只讀取並驗證 `YYYYMMDDXXX` 格式。
 - 完成後停在 ERP，**不自動儲存**；全域 Esc 只停止 CY，不按 ERP「取消」；不送 `Ctrl+A`。
 - 仍需人工確認的狀況累積在 `AutomationRunResult.Warnings`，完成時統一顯示筆數。
+- V0.2.0 Build 1：設定視窗「ERP 結構探測」（`ErpProbe`，唯讀、有界）：輸出 COPI08 與其他可見 ERP 視窗（含 F2 查詢）的 Win32 控制項樹與 MSAA 樹（含鍵盤快捷鍵）到本機 `logs/erp-probe_*.txt`；非診斷模式時可能含單據資料的文字只記長度（`ProbeRedaction`）。目的：使用者 2026-10-06 指示尋找比座標／OCR 更好的做法；不碰 SQL（使用者：有合約問題）。
 - Build 27（使用者 2026-10-06 指示「先把介面和基礎自動打單完成」）：
   - 自動儲存（設定開關，預設關閉）：只限 CY 新增或開始時單號為空的單據，且無需人工確認項目；以 Ribbon「儲存」精確文字定位（Win32 caption → Ribbon OCR，不做全視窗搜尋）；儲存後須回到檢視並讀回同一單號，出現任何 ERP 訊息視窗即停止。實機尚未驗證。
   - 工具列「清除表單」；狀態列「開啟 LOG 資料夾」；完成後需人工確認／未自動儲存原因以 MessageBox 列出。
@@ -110,6 +111,7 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 6. F2 批號：有批號標記的品號選到由上往下第一筆現有存量 > 0 的批號並關閉 F2；無批號的品號不開 F2。
 7. 完成後停在 ERP、未儲存；過程中按 Esc 只停止 CY。
 8. 失敗時提供 `logs/CYERPAutoInput_日期.log`（必要時先在設定開啟診斷模式重現）。
+9. ERP 結構探測（V0.2.0 Build 1 起，唯讀）：在 ERP 測試公司別，設定勾選診斷模式並儲存 → 再開設定按「ERP 結構探測」兩次：(a) COPI08 在新增狀態、明細有一列資料；(b) 明細單位欄開著 F2 查詢視窗。提供 `logs/erp-probe_*.txt`。用來評估 MSAA／控制項層級操作能否取代座標與 OCR。
 
 ## 6. CI 狀態
 

@@ -44,7 +44,7 @@ internal static class UiSnapshot
                 Capture(form, Path.Combine(folder, "main-advanced.png"), new Size(1600, 900));
             }
 
-            using (var settings = new SettingsForm(new UserSettings()))
+            using (var settings = new SettingsForm(new UserSettings(), () => Task.FromResult(string.Empty)))
                 Capture(settings, Path.Combine(folder, "settings.png"), settings.Size);
 
             Console.WriteLine($"ui snapshots written to {folder}");
