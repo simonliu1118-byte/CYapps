@@ -107,6 +107,8 @@ assert.match(css, /data-tablet-layout="landscape"\] \.entry-grid #txDate \{[\s\S
 assert.match(css, /data-tablet-layout="landscape"\] #accountName,[\s\S]*?#categoryName \{ text-align:center !important; text-align-last:center !important/, 'landscape account and category are centered');
 assert.match(css, /data-tablet-layout="landscape"\] \.entry-grid > #favoriteCategoryGroup\.quick-tool-row\.hidden,[\s\S]*?display:grid !important/, 'landscape favorites remain visible when empty');
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-search-submit \{ display:none !important/, 'landscape search submits by Enter like mobile');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-search-submit,[\s\S]*?#ledgerSearchClear \{[\s\S]*?display:\s*none !important/, 'portrait search uses the native search field without Search/Clear buttons');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerSummarySearch \{[\s\S]*?-webkit-appearance:\s*searchfield !important/, 'portrait search keeps native search-field affordances');
 assert.match(css, /data-tablet-layout="landscape"\] #monthSummary \.ledger-summary-item:not\(\.opening\) \{ border-left:1px solid/, 'landscape summary uses one separated row');
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col \[data-edit-id\]::before/, 'landscape edit is icon-only');
 assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col \[data-delete-id\]::before/, 'landscape delete is icon-only');
@@ -115,9 +117,16 @@ assert.match(source, /syncTabletPickerOwnership\(orientation\)/, 'tablet orienta
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) #ledgerMonthDisplay/, 'both tablet orientations reuse the shared mobile month display layer');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster[\s\S]*?display:\s*flex !important[\s\S]*?role-super-admin[\s\S]*?#ddc789[\s\S]*?role-admin[\s\S]*?#d7b79e/, 'tablet keeps the inline account cluster and shares mobile gold/bronze role colors');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster \.current-user-role \{[\s\S]*?border:\s*0 !important[\s\S]*?background:\s*transparent !important/, 'tablet role text is inline text rather than a separate pill');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster \.current-user-role::before[\s\S]*?content:\s*"［"/, 'tablet role label keeps the inline bracketed presentation');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.topbar #mobileAccountMenuButton,[\s\S]*?cy-mobile-account-menu[\s\S]*?display:\s*none !important/, 'tablet does not reuse the phone dropdown account owner');
+assert.doesNotMatch(css, /data-tablet-layout[^\n]*\.cy-account-cluster[^\{]*\{[^\}]*display:\s*none !important/, 'tablet must never hide the canonical inline account cluster');
+assert.doesNotMatch(css, /data-tablet-layout[^\n]*#mobileAccountMenuButton[^\{]*\{[^\}]*display:\s*(?:block|flex|inline-flex) !important/, 'tablet must never show the phone account trigger');
 assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton[\s\S]*?display:\s*inline-flex !important/, 'phone tablet preview exposes a temporary return-to-phone button');
+assert.match(css, /#tabletPreviewReturnButton\[hidden\][\s\S]*?display:\s*none !important/, 'real tablets keep the preview-only return button hidden without preview state');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-grid \{[\s\S]*?grid-template-columns:\s*repeat\(4,[\s\S]*?grid-template-rows:\s*repeat\(2, 44px\)/, 'portrait entry form is compacted into two field rows');
+assert.match(source, /tablet-entry-handle-label">展開記帳/, 'portrait collapsed rail exposes a labelled entry handle');
+assert.match(source, /label\.textContent = expanded \? '收起記帳' : '展開記帳'/, 'entry handle label follows expanded state');
 assert.match(css, /data-tablet-layout="landscape"\] #ledgerExcelImport \{ display: none !important/, 'tablet landscape removes Excel import');
 console.log('Tablet classification, rotation, keyboard, pinning and shared edit ownership passed.');
 
