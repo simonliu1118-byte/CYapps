@@ -4262,8 +4262,8 @@ function setupTabletWorkspace() {
     document.documentElement.dataset.tabletLayout = orientation;
     document.documentElement.dataset.viewport = window.innerWidth < 768 ? 'mobile' : tablet ? 'tablet' : 'desktop';
     syncTabletPickerOwnership(orientation);
-    syncMobileWorkspaceMobileIdentity();
-    syncMobileWorkspaceConfirmationPolicy();
+    if (typeof syncMobileWorkspaceMobileIdentity === 'function') syncMobileWorkspaceMobileIdentity();
+    if (typeof syncMobileWorkspaceConfirmationPolicy === 'function') syncMobileWorkspaceConfirmationPolicy();
     if (!tablet && !wasTablet) return;
     const quickHost = document.querySelector('.quick-entry-tools');
     const grid = document.querySelector('.entry-grid');
@@ -4275,7 +4275,7 @@ function setupTabletWorkspace() {
     applyAdaptiveSplitWorkspace(window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA).matches);
     if (tablet) {
       const rail = document.querySelector('.cy-entry-rail');
-      if (rail && !rail.dataset.entryExpanded) rail.dataset.entryExpanded = 'true';
+      if (rail && !rail.dataset.entryExpanded) setTabletEntryExpanded(true);
       document.querySelector('.entry-card')?.classList.remove('cy-mobile-page-hidden');
       document.querySelector('.ledger-card')?.classList.remove('cy-mobile-page-hidden');
       setupTouchWorkspaceEntrySecondaryAction();
