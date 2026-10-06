@@ -104,7 +104,7 @@ internal sealed class SettingsForm : Form
         };
         var save = new CyPrimaryButton { Text = "儲存", Width = 92, Height = 34 };
         save.Click += (_, _) => SaveAndClose();
-        var cancel = new Button { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
+        var cancel = new CyButton { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
         buttons.Controls.Add(save);
         buttons.Controls.Add(cancel);
         root.Controls.Add(buttons, 0, 5);

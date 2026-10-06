@@ -17,6 +17,85 @@ internal static class CyDrawing
     }
 }
 
+/// <summary>
+/// Ordinary CY button: the native themed WinForms Button (CY WinForms theme-button
+/// reference). Only the legacy dotted focus rectangle is suppressed; the native
+/// themed focus/default border keeps keyboard focus perceivable.
+/// </summary>
+internal class CyButton : Button
+{
+    private const int WmUpdateUiState = 0x0128;
+    private static readonly nint HideFocusState = 0x00010001;
+
+    public CyButton()
+    {
+        UseVisualStyleBackColor = true;
+        AutoSize = false;
+    }
+
+    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); HideFocusCue(); }
+    protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); HideFocusCue(); }
+    protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); HideFocusCue(); }
+
+    private void HideFocusCue()
+    {
+        if (IsHandleCreated)
+            NativeMethods.SendMessage(Handle, WmUpdateUiState, HideFocusState, 0);
+    }
+}
+
+/// <summary>
+/// Status badge (CY Desktop Visual Guide 11.5): soft state surface, state-colored text
+/// and a 1 px border on a small rounded rectangle; the text carries the meaning, not
+/// the color alone.
+/// </summary>
+internal sealed class CyStatusBadge : Label
+{
+    private Color _border = CyVisualTheme.Border;
+
+    public CyStatusBadge()
+    {
+        AutoSize = false;
+        TextAlign = ContentAlignment.MiddleCenter;
+        SetStyle(ControlStyles.UserPaint |
+                 ControlStyles.AllPaintingInWmPaint |
+                 ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.ResizeRedraw, true);
+    }
+
+    public void SetState(string text, Color foreground, Color surface, Color border)
+    {
+        Text = text;
+        ForeColor = foreground;
+        BackColor = surface;
+        _border = border;
+        Invalidate();
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e) =>
+        e.Graphics.Clear(Parent?.BackColor ?? CyVisualTheme.Window);
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.Clear(Parent?.BackColor ?? CyVisualTheme.Window);
+
+        var bounds = new RectangleF(1f, 1.5f, Math.Max(1f, Width - 3f), Math.Max(1f, Height - 4f));
+        using var path = CyDrawing.RoundedRectangle(bounds, 4f);
+        using var fill = new SolidBrush(BackColor);
+        using var pen = new Pen(_border, 1f);
+        g.FillPath(fill, path);
+        g.DrawPath(pen, path);
+
+        TextRenderer.DrawText(g, Text, Font, Rectangle.Round(bounds), ForeColor,
+            TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine |
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+            TextFormatFlags.EndEllipsis);
+    }
+}
+
 internal sealed class CyPrimaryButton : Button
 {
     private bool _hovered;

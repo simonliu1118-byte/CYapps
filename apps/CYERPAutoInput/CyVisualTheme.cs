@@ -27,6 +27,12 @@ internal static class CyVisualTheme
     internal static readonly Color Info = Color.FromArgb(0x35, 0x6A, 0x9A);
     internal static readonly Color InfoSoft = Color.FromArgb(0xEA, 0xF1, 0xF7);
 
+    /// <summary>Mixes <paramref name="color"/> into <paramref name="background"/>; amount 0..1.</summary>
+    public static Color Blend(Color color, Color background, double amount) => Color.FromArgb(
+        (int)Math.Round(background.R + (color.R - background.R) * amount),
+        (int)Math.Round(background.G + (color.G - background.G) * amount),
+        (int)Math.Round(background.B + (color.B - background.B) * amount));
+
     public static void Apply(Form form)
     {
         form.BackColor = Window;
@@ -67,7 +73,7 @@ internal static class CyVisualTheme
                     statusStrip.BackColor = Window;
                     statusStrip.ForeColor = TextSecondary;
                     break;
-                case Label label:
+                case Label label when label is not CyStatusBadge:
                     label.ForeColor = TextPrimary;
                     label.BackColor = Window;
                     break;

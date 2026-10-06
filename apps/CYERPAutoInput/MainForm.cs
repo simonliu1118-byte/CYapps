@@ -17,7 +17,7 @@ internal sealed class MainForm : Form
     private readonly ToolStripStatusLabel _logLink = new() { Text = "開啟 LOG 資料夾", IsLink = true };
     private readonly ToolStripStatusLabel _dpiHint = new();
     private readonly ModeToggle _modeToggle = new();
-    private readonly Label _erpStateTag = new();
+    private readonly CyStatusBadge _erpStateTag = new();
     private readonly ErpDocumentStateTracker _stateTracker = new();
     private readonly System.Windows.Forms.Timer _statePoll = new() { Interval = 1000 };
     private ErpDocumentState? _shownState;
@@ -87,9 +87,7 @@ internal sealed class MainForm : Form
             ErpDocumentState.NotFound => ("未開啟", CyVisualTheme.TextSecondary, CyVisualTheme.ReadOnly),
             _ => ("無法判斷", CyVisualTheme.TextSecondary, CyVisualTheme.ReadOnly)
         };
-        _erpStateTag.Text = $"ERP：{text}";
-        _erpStateTag.ForeColor = fore;
-        _erpStateTag.BackColor = back;
+        _erpStateTag.SetState($"ERP：{text}", fore, back, CyVisualTheme.Blend(fore, back, 0.35));
         _log.Info("state", $"status tag {state}");
     }
 
@@ -200,10 +198,8 @@ internal sealed class MainForm : Form
         _modeToggle.CheckedChanged += (_, _) => ApplyMode(_modeToggle.Checked);
         rightTools.Controls.Add(_modeToggle);
 
-        _erpStateTag.AutoSize = false;
         _erpStateTag.Size = new Size(170, 34);
         _erpStateTag.Margin = new Padding(4, 1, 12, 1);
-        _erpStateTag.TextAlign = ContentAlignment.MiddleCenter;
         _erpStateTag.Font = new Font("Microsoft JhengHei UI", 12F, FontStyle.Bold);
         _erpStateTag.AccessibleName = "ERP 單據狀態";
         rightTools.Controls.Add(_erpStateTag);
@@ -690,7 +686,7 @@ internal sealed class MainForm : Form
             "蝦皮" => new ShopeeButton(),
             "MO店+" => new MoStoreButton(),
             "酷澎商城" => new CoupangButton(),
-            _ => new Button { Text = text }
+            _ => new CyButton { Text = text }
         };
         button.Size = new Size(90, 34);
         button.Margin = new Padding(4, 1, 4, 1);
@@ -700,7 +696,7 @@ internal sealed class MainForm : Form
         return button;
     }
 
-    private static Button MakeButton(string text, int width) => new()
+    private static Button MakeButton(string text, int width) => new CyButton
     {
         Text = text,
         Size = new Size(width, 34),
