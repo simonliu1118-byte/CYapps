@@ -104,7 +104,9 @@ internal sealed class F2BatchCellLocator
             if (!InputRules.TryParseStockText(rawText, out stock))
             {
                 _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={_log.Value(Sanitize(rawText))} normalized={_log.Value(Sanitize(normalized))} parse=false y={centerY}");
-                continue;
+                // Skipping an unreadable row could pick a later batch while an earlier one
+                // still has stock; the rule is "first confirmed positive from the top".
+                throw new InvalidOperationException($"F2 批號查詢第 {rowNumber} 列的「現有存量」無法辨識；為避免跳過較早的批號已停止，請人工選擇批號並查看 LOG 的 F2_BATCH_STOCK_ROW。");
             }
 
             _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={_log.Value(Sanitize(rawText))} normalized={_log.Value(Sanitize(normalized))} stock={stock.ToString(CultureInfo.InvariantCulture)} y={centerY}");
