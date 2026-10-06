@@ -6,8 +6,8 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.20 Build 0**；PR #338 已合併；手機帳號選單新增 session-scoped 平板 preview，重用正式平板 presentation |
-| Production Deploy | CYAccountingWeb Validate and Deploy **#498**（run `37462555783`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.20 Build 1**；PR #340 已合併；平板雙方向與手機 tablet preview 恢復 inline identity，preview 暫時提供獨立返回手機版 |
+| Production Deploy | CYAccountingWeb Validate and Deploy **#502**（run `37487502059`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.28**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
@@ -33,7 +33,7 @@
 - **V0.22.18 Build 1**：同一工作項目的實機排版返修，不升 Patch；橫式鍵盤狀態在 visual viewport 內置中，略縮卡片總寬與欄間距，品牌／表單垂直對齊，訊息與忘記密碼區再收斂。PR #327 的 Governance Check #1043 與 Validate #478 成功，Production Deploy #479 成功。
 - **V0.22.18 Build 2**：同一工作項目續修，不升 Patch；將橫式「員工帳號登入」移到左側「志遠記帳系統」下方，右側只保留員工編號、密碼與登入操作。PR #329 的 Governance Check #1045 與 Validate #482 成功，Production Deploy #483 成功。
 - **V0.22.18 Build 3**：忘記密碼／重設密碼橫式畫面比照登入版型；「重設密碼」移到左側「志遠記帳系統」下方，右側只保留員工編號、寄送驗證碼與後續重設欄位／操作。PR #331 的 Governance Check #1047 與 Validate #486 成功，Production Deploy #487 成功。
-- **V0.22.19 Build 0**：開始平板直式主介面新工作項目。移除平板右上與記帳無關的 confirmation drawer 把手，直式底部記帳 rail 改預設展開並保留唯一拖曳把手；平板直／橫式右上帳號共用手機 `mobileAccountMenuButton`／選單 owner，SUPER_ADMIN 金色、ADMIN 銅色與手機一致；直式月份改共用橫式已驗收的 `ledgerMonthDisplay`＋原生 `type=month` touch owner。PR #336 的 Governance Check #1071 與 Validate #491 成功，Production Deploy #492 成功。
+- **V0.22.19 Build 0**：開始平板直式主介面新工作項目。移除平板右上與記帳無關的 confirmation drawer 把手，直式底部記帳 rail 改預設展開並保留唯一拖曳把手；當版曾把平板右上帳號切成手機下拉元件，後續已由 V0.22.20 Build 1 修正；直式月份改共用橫式已驗收的 `ledgerMonthDisplay`＋原生 `type=month` touch owner。PR #336 的 Governance Check #1071 與 Validate #491 成功，Production Deploy #492 成功。
 
 完整版本歷史見 `CHANGELOG.md`。
 
@@ -75,14 +75,15 @@
 ## 跨裝置現況
 
 - **手機**：新增／看帳兩頁；新增預設收入；日期使用原生 `type=date`；新增為「儲存／清空」、編輯為「儲存修改／取消」且取消回原 ledger context；操作區在底部頁籤上方，金額與儲存之間依可用高度彈性伸縮；右上帳號等 CYID Session 真實 identity ready 後才顯示；登入頁依 `visualViewport` 處理鍵盤高度，手機有無鍵盤維持同一 compact 尺寸；交易滑出後再點編輯／刪除；`更多` 中 SUPER_ADMIN 可查看唯讀備份資訊；共用 `餘額／更多`、設定與 canonical writer。
-- **V0.22.20 Build 0**：手機帳號選單在「登出」上方新增「測試用平板版」；preview 僅存在目前分頁 session，直式使用 820px、橫式 1194px reference viewport，手機旋轉時切換正式 tablet layout，preview 內可從同一帳號選單「返回手機版」。不建立第二套 tablet UI、writer、month 或 identity owner。PR #338 的 Governance Check #1075 與 Validate #497 成功，Production Deploy #498 成功。
-- **平板**：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail；直式 rail 預設展開且只保留底部記帳把手，confirmation drawer 把手不在平板顯示；日期／月份與手機共用 touch/native owner，直式與橫式共用同一月份顯示層；右上帳號與手機共用同一按鈕／選單及 SUPER_ADMIN 金色、ADMIN 銅色角色視覺；不建立平板第二套資料 state、writer、month 或 identity owner；登入頁同樣共用 keyboard-aware login owner。
+- **V0.22.20 Build 0**：手機帳號選單在「登出」上方新增「測試用平板版」；preview 僅存在目前分頁 session，直式使用 820px、橫式 1194px reference viewport，手機旋轉時切換正式 tablet layout。不建立第二套 tablet UI、writer、month 或 identity owner。PR #338 的 Governance Check #1075 與 Validate #497 成功，Production Deploy #498 成功。
+- **V0.22.20 Build 1**：同一 preview 工作項目返修，不升 Patch。平板直式、橫式與手機模擬平板恢復 inline 帳號列 `員工編號 姓名［角色］｜登出`，不再使用手機下拉帳號元件；SUPER_ADMIN 金色、ADMIN 銅色、USER 中性色與手機色票一致。preview 暫時新增獨立「返回手機版」按鈕；正常手機仍保留「測試用平板版」。PR #340 的 Governance Check #1077 與 Validate #501 成功，Production Deploy #502 成功。
+- **平板**：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail；直式 rail 預設展開且只保留底部記帳把手，confirmation drawer 把手不在平板顯示；日期／月份與手機共用 touch/native owner，直式與橫式共用同一月份顯示層；右上帳號維持平板 inline 元件並讓登出直接接在使用者標籤，角色色票與手機一致；不建立平板第二套資料 state、writer、month 或 identity owner；登入頁同樣共用 keyboard-aware login owner。
 - **桌機**：保留鍵盤高效率輸入、inline edit 與桌面 layout。
 - 所有裝置共用 CYID、Role/App Access、Worker API、D1、期初計算、transaction mutation、帳戶色號與 server authorization。RWD 只負責 presentation。
 
 ## 已確認驗證
 
-V0.22.20 Build 0 PR #338 的 Governance Check #1075 與 CYAccountingWeb Validate and Deploy #497 均成功。合併後 Production run #498（`37462555783`）validate 與 deploy 全部成功。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
+V0.22.20 Build 1 PR #340 的 Governance Check #1077 與 CYAccountingWeb Validate and Deploy #501 均成功。合併後 Production run #502（`37487502059`）validate 與 deploy 全部成功。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
 
 - JavaScript syntax 與 application tests；
 - mobile native-date、底部儲存／清空或取消、identity readiness，以及 login viewport／keyboard regression；
