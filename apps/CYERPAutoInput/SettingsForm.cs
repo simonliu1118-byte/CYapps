@@ -20,12 +20,20 @@ internal sealed class SettingsForm : Form
         _settings = settings;
         Text = "CYERPAutoInput 設定";
         StartPosition = FormStartPosition.CenterParent;
+        MaximizeBox = false;
+        MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
         Size = new Size(640, 608);
         MinimumSize = new Size(560, 480);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
         CyVisualTheme.Apply(this);
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        UiSnapshot.AllowOversize(ref m);
     }
 
     private void BuildUi()
@@ -42,7 +50,7 @@ internal sealed class SettingsForm : Form
         root.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "以下為本機預設值。實際 ERP 代碼只保存在這台電腦的 Data/settings.json，不會寫入 Public source。",
+            Text = "以下為本機預設值，只保存在這台電腦的 Data/settings.json。",
             AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
@@ -94,6 +102,7 @@ internal sealed class SettingsForm : Form
             _grid.Rows[index].Tag = key;
         }
         root.Controls.Add(_grid, 0, 4);
+        Shown += (_, _) => _grid.CurrentCell = _grid.Rows.Count > 0 ? _grid.Rows[0].Cells["Value"] : null;
 
         var buttons = new FlowLayoutPanel
         {

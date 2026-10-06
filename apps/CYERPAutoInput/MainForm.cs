@@ -58,6 +58,12 @@ internal sealed class MainForm : Form
         FormClosing += (_, _) => _statePoll.Stop();
     }
 
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        UiSnapshot.AllowOversize(ref m);
+    }
+
     internal void SetAdvancedModeForSnapshot(bool advanced) => _modeToggle.Checked = advanced;
 
     private void RefreshErpState()
@@ -198,9 +204,9 @@ internal sealed class MainForm : Form
         _modeToggle.CheckedChanged += (_, _) => ApplyMode(_modeToggle.Checked);
         rightTools.Controls.Add(_modeToggle);
 
-        _erpStateTag.Size = new Size(170, 34);
+        _erpStateTag.Size = new Size(150, 34);
         _erpStateTag.Margin = new Padding(4, 1, 12, 1);
-        _erpStateTag.Font = new Font("Microsoft JhengHei UI", 12F, FontStyle.Bold);
+        _erpStateTag.Font = new Font("Microsoft JhengHei UI", 11F, FontStyle.Bold);
         _erpStateTag.AccessibleName = "ERP 單據狀態";
         rightTools.Controls.Add(_erpStateTag);
 
@@ -238,6 +244,7 @@ internal sealed class MainForm : Form
             box.Controls.Add(flow);
             fieldsHost.Controls.Add(box, i, 0);
             _groupFlows[groups[i]] = flow;
+            flow.ClientSizeChanged += (_, _) => FitFieldRows(flow);
         }
         foreach (var field in FieldCatalog.All) AddField(field);
 
@@ -269,10 +276,31 @@ internal sealed class MainForm : Form
         _root.Controls.Add(statusStrip, 0, 3);
     }
 
+    private const int FieldLabelWidth = 84;
+    private const int FieldInputLeft = 90;
+
+    /// <summary>
+    /// Sizes every field row to the group's client width (reserving the vertical
+    /// scrollbar) so inputs are never clipped and no horizontal scrollbar appears.
+    /// </summary>
+    private static void FitFieldRows(FlowLayoutPanel flow)
+    {
+        var rowWidth = flow.ClientSize.Width - flow.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 2;
+        if (rowWidth < FieldInputLeft + 60) return;
+        flow.SuspendLayout();
+        foreach (Control row in flow.Controls)
+        {
+            row.Width = rowWidth;
+            foreach (Control child in row.Controls)
+                if (child is TextBox text) text.Width = rowWidth - FieldInputLeft - 2;
+        }
+        flow.ResumeLayout();
+    }
+
     private void AddField(FieldDefinition field)
     {
-        const int labelWidth = 68;
-        const int inputLeft = 76;
+        const int labelWidth = FieldLabelWidth;
+        const int inputLeft = FieldInputLeft;
         var flow = _groupFlows[field.Group];
         var row = new Panel { Width = 238, Height = 28, Margin = new Padding(1) };
         row.Controls.Add(new Label
@@ -349,6 +377,8 @@ internal sealed class MainForm : Form
         _details.EditMode = DataGridViewEditMode.EditOnEnter;
         _details.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
         _details.ColumnHeadersHeight = 29;
+        // Columns share the visible width by weight so the last column is never hidden.
+        _details.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _details.RowTemplate.Height = 27;
 
         _details.Columns.Add(new DataGridViewTextBoxColumn
@@ -356,6 +386,7 @@ internal sealed class MainForm : Form
             Name = "Sequence",
             HeaderText = "序號",
             Width = 55,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
             ReadOnly = true,
             Frozen = true,
             SortMode = DataGridViewColumnSortMode.NotSortable,
@@ -402,6 +433,8 @@ internal sealed class MainForm : Form
         Name = name,
         HeaderText = text,
         Width = width,
+        FillWeight = width,
+        MinimumWidth = 60,
         SortMode = DataGridViewColumnSortMode.NotSortable,
         DefaultCellStyle = new DataGridViewCellStyle { Alignment = alignment }
     };
@@ -688,7 +721,7 @@ internal sealed class MainForm : Form
             "酷澎商城" => new CoupangButton(),
             _ => new CyButton { Text = text }
         };
-        button.Size = new Size(90, 34);
+        button.Size = new Size(84, 34);
         button.Margin = new Padding(4, 1, 4, 1);
         button.Click += (_, _) => MessageBox.Show(this,
             $"{text} 匯入解析會在 C# ERP 核心驗收後接續；入口固定保留。",
