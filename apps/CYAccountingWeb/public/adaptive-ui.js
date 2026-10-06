@@ -4242,7 +4242,7 @@ function setTabletEntryExpanded(expanded) {
   if (button) {
     button.setAttribute('aria-expanded', String(Boolean(expanded)));
     button.setAttribute('aria-label', expanded ? '收合記帳' : '展開記帳');
-    const label = button.querySelector('.tablet-entry-handle-label');
+    const label = button.querySelector?.('.tablet-entry-handle-label');
     if (label) label.textContent = expanded ? '收起記帳' : '展開記帳';
   }
 }
