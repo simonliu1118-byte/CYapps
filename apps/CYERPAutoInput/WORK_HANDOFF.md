@@ -1,7 +1,8 @@
 # CYERPAutoInput WORK HANDOFF
 
 > 更新：2026-10-06  
-> 目的：供後續 AI 對話直接接手目前開發狀態（2026-10-06 起由 Claude Code 接手）。  
+> 目的：供後續 AI 對話直接接手目前開發狀態。  
+> 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接一律以本文件 + Git 狀態為準。  
 > 本文件只記錄「目前狀態、已驗證事實、待辦與交接順序」，不是永久規則來源。
 
 ## 1. 接手時先讀
@@ -125,13 +126,22 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - 其餘規劃中功能（跨批號拆列、批次 fault isolation、批次結果總表、自動儲存）列在 `README.md` TODO。
 
 
-## 8. 下一步建議順序
+## 8. 目前工作佇列（接手者從第一個未完成項目開始）
 
-1. 先讀治理三層 + 本文件 + PR #104 最新 source。
-2. 確認合併 main 後的 CI 通過；失敗時先修 CI，不疊加新功能。
-3. 向使用者確認最近一版工程 Artifact 的真實 ERP 測試結果，整理成驗收清單（啟動／找窗／新增／表頭／多列明細／F2 單位／F2 批號／NO SAVE）。
-4. 依實機結果修正同一 V0.1.0 工作項目；同一 rewrite 驗收返修只增加 BUILD，不另升 Patch。
-5. 真實 ERP 驗收通過後，再決定 PR #104 Ready / merge。
+1. [進行中] Governance PR #333（公開套件掃描誤判 OpenCV DLL）：使用者已授權合併；CI 全綠後 squash merge。
+2. [待辦] #333 合併後，把 `main` merge 進 `cyerp-auto-input/v0.1.0-csharp`（merge commit，不 rebase／force-push），確認 PR #104 CI 全綠並取得 Build 26 Artifact。
+3. [待使用者] 使用者出差返回（約 2026-10-08）後依 §5.2 實測 Build 26；依結果在同一 V0.1.0 返修（BUILD + 1）。
+4. [待使用者決策後] 下拉選項讀取（打開下拉 → OCR → 以同一鍵關閉，不送 Esc、不改值，有界）。Build 26 實測後再做。
+5. [待使用者決策後] §11 Roadmap 階段 1（Excel 批次）。
+6. [待使用者] 刪除遠端舊分支：`ci-cyerp-build13/17/20/21/23/24`、`cyerp-auto-input/rename-project`、`cyerp-auto-input/v0.0.11-optical-navigation`（此環境無法刪遠端分支）。
+7. 真實 ERP 驗收通過後才把 PR #104 轉 Ready／合併；合併後從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release。
+
+接手注意事項（本專案近期實際踩過的問題）：
+
+- 新 commit author／committer 必須是 `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`（REPOSITORY_RULES §4）。
+- `.github/scripts/**`、`GOVERNANCE_*`、`RULES_INDEX.md`、`PROJECT_RULES.md` 屬治理範圍，只能在 `governance/*` branch 修改並更新 `GOVERNANCE_VERSION`／`GOVERNANCE_CHANGELOG.md`；不可混進 PR #104。
+- 不得提交 `bin/`、`obj/`、`publish-staging/`、`runtime/ocr/`、`__pycache__/`、模型或任何 build 輸出；`git add` 前先看 `git status`。
+- 推送前本機至少：`dotnet test tests/CYERPAutoInput.Tests`；可用 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true` 在非 Windows 編譯檢查。
 
 ## 9. Public repository / 資料安全
 
@@ -163,3 +173,21 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 `保留已驗證 ERP interaction semantics + 用 C# / WinForms / 本機 OCR 取代舊 Go 在 virtual grid / OCR / UI 維護上的弱點。`
 
 目前最重要的驗收關卡仍是 **F2 單位選取**；使用者已證實「正確點列 + Enter」本身可行，因此下一步應驗證 C# OCR 是否能可靠完成「找到正確列並真的把 grid focus 放上去」。
+
+## 11. Roadmap（2026-10-06 提案，待使用者決策）
+
+核心架構：所有來源（手動 UI、Excel、平台訂單、CYweb 工單）先轉成同一份標準銷貨單資料，再走同一條「驗證 → ERP 輸入／儲存 → 結果」路徑；新增來源只新增 adapter，不另寫輸入流程。
+
+- 階段 0（V0.1.x）：單張輸入穩定 — Build 26 實機驗收、F2 單位／批號、下拉選項讀取。
+- 階段 1（第一個正式版）：使用者匯入程式提供格式的 Excel，ERP 自動輸入完成 — 程式產生範本（建議「單頭」「單身」兩個工作表以來源單號對應）、匯入前完整驗證與預覽、自動儲存並回讀單號、逐張失敗隔離、結果 Excel。
+- 階段 2：串接 CYweb 工單系統 — 地端主動 HTTPS 拉單、回報結果；資料格式沿用標準銷貨單資料；工單 ID 冪等防重；若接 CYID 依 REPO_POLICY §4.1。
+- 階段 3：地端無人值守 — 專用電腦自動登入／不鎖定／開機啟動、ERP 異常重啟與登入、心跳與異常通知。
+- 階段 4：辨識查詢單據 — 表頭以 `WM_GETTEXT` 讀取、明細以 OCR；先只讀不改。
+
+待使用者決策：
+
+1. 第一個正式版是否升 `V1.0.0`（Major 由使用者決定）。
+2. 批次中單據失敗時：(a) 整批停止等人工（建議先採用）或 (b) 允許程式按 ERP「取消」放棄失敗的新增單（需修改 `PROJECT_RULES.md`，走 governance）。
+3. Excel 範本欄位範圍：全部欄位或標準欄位 + 本機預設值。
+4. 「CYweb 工單系統」對應哪個專案、是否接 CYCloud Identity。
+5. 地端電腦環境：Windows 版本、ERP 登入方式、可否自動登入且不鎖定。
