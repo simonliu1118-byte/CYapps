@@ -9657,6 +9657,108 @@
 
 /* Tablet workspace: one presentation owner for both orientations. */
 .tablet-entry-controls { display: none !important; }
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .confirmation-edge-open,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .confirmation-drawer,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .confirmation-drawer-collapse {
+  display: none !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster {
+  display: none !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #mobileAccountMenuButton {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  max-width: 156px !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 0 9px !important;
+  border: 1px solid #d7dfe7 !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: #39495a !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #mobileAccountMenuButton.role-super-admin {
+  border-color: #ddc789 !important;
+  background: linear-gradient(180deg, #fffdf7, #fff4d6) !important;
+  color: #6d5317 !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #mobileAccountMenuButton.role-admin {
+  border-color: #d7b79e !important;
+  background: linear-gradient(180deg, #fffaf6, #f7e8dc) !important;
+  color: #70472f !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu {
+  position: fixed;
+  z-index: 92;
+  top: 66px;
+  right: 12px;
+  width: min(250px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid #d8e0e7;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(31, 42, 55, .18);
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu[hidden] {
+  display: none !important;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu-identity {
+  display: grid;
+  gap: 3px;
+  padding: 12px 13px;
+  border-bottom: 1px solid #e5e9ed;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu-identity strong {
+  color: #2b3948;
+  font-size: 14px;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu-identity span {
+  color: #718091;
+  font-size: 12px;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu.role-super-admin .cy-mobile-account-menu-identity {
+  background: #fff8e8;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu.role-admin .cy-mobile-account-menu-identity {
+  background: #fbefe6;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu > button {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 0;
+  border-bottom: 1px solid #edf0f2;
+  border-radius: 0;
+  background: #fff;
+  color: #344252;
+  font-size: 14px;
+  text-align: left;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu > button:last-child {
+  border-bottom: 0;
+}
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu > button.danger-lite {
+  color: #a34b45;
+}
 #mobileEntrySecondaryButton { display: none !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) body {
   min-width: 0 !important;
@@ -9788,8 +9890,6 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card .ledger-title
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-title > div:first-child { width: 100% !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-ledger-context { display: flex !important; flex-wrap: wrap; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-month-tools { display: flex !important; gap: 6px !important; min-width: 0 !important; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthSlot { min-width: 0 !important; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) #monthFilter { min-height: 44px !important; font-size: 16px !important; width: 100% !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerDisplayMonth { display: none !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary {
   display: grid !important;
@@ -9839,18 +9939,6 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #
 html[data-tablet-layout]:not([data-tablet-layout=""]) body[data-cyacc-read-only="true"] .cy-entry-rail { display: none !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) body[data-cyacc-read-only="true"] .shell.cy-split-layout { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
 
-html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthSlot > .month-picker {
-  display: block !important;
-  position: static !important;
-  width: auto !important;
-  height: auto !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  overflow: visible !important;
-  clip: auto !important;
-  clip-path: none !important;
-  pointer-events: auto !important;
-}
 html[data-tablet-layout]:not([data-tablet-layout=""]) .action-label-mobile { display: none !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .action-label-desktop { display: inline !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) .settings-tree-actions,
@@ -9922,8 +10010,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .quick-tool-label { white-
 
 /* Tablet landscape presentation refinement. */
 html[data-tablet-layout="landscape"] .shell.cy-split-layout { grid-template-columns: minmax(280px, 31%) minmax(0, 1fr) !important; }
-html[data-tablet-layout="landscape"] .tablet-entry-controls,
-html[data-tablet-layout="landscape"] .confirmation-edge-open { display: none !important; }
+html[data-tablet-layout="landscape"] .tablet-entry-controls { display: none !important; }
 html[data-tablet-layout="landscape"] .entry-card .section-title h2,
 html[data-tablet-layout="landscape"] .ledger-card .ledger-title h2 { display: none !important; }
 html[data-tablet-layout="landscape"] .entry-card .section-title { margin-bottom: 6px !important; }
@@ -9953,8 +10040,8 @@ html[data-tablet-layout="landscape"] .ledger-month-tools {
   display:grid !important; grid-template-columns:32px minmax(132px,160px) 32px !important; align-items:center !important;
   gap:4px !important; width:max-content !important; max-width:100% !important;
 }
-html[data-tablet-layout="landscape"] #ledgerMonthSlot { position:relative !important; min-width:132px !important; height:34px !important; }
-html[data-tablet-layout="landscape"] #ledgerMonthSlot > .month-picker {
+html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthSlot { position:relative !important; min-width:132px !important; height:34px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthSlot > .month-picker {
   display:block !important; position:static !important; width:100% !important; height:34px !important; margin:0 !important; padding:0 !important;
 }
 html[data-tablet-layout="landscape"] .ledger-month-tools .month-picker > span { display:none !important; }
@@ -10106,7 +10193,7 @@ html[data-tablet-layout="landscape"] #ledgerMonthSlot > .month-picker {
   border: 0 !important;
   background: transparent !important;
 }
-html[data-tablet-layout="landscape"] #monthFilter {
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthFilter {
   position: absolute !important;
   z-index: 3 !important;
   inset: 0 !important;
@@ -10127,7 +10214,7 @@ html[data-tablet-layout="landscape"] #monthFilter {
   cursor: pointer !important;
   pointer-events: auto !important;
 }
-html[data-tablet-layout="landscape"] #monthFilter::-webkit-calendar-picker-indicator {
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthFilter::-webkit-calendar-picker-indicator {
   position: absolute !important;
   inset: 0 !important;
   width: 100% !important;
@@ -10137,7 +10224,7 @@ html[data-tablet-layout="landscape"] #monthFilter::-webkit-calendar-picker-indic
   opacity: 0 !important;
   cursor: pointer !important;
 }
-html[data-tablet-layout="landscape"] #ledgerMonthDisplay {
+html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthDisplay {
   position: absolute !important;
   z-index: 4 !important;
   inset: 0 !important;
@@ -10152,7 +10239,7 @@ html[data-tablet-layout="landscape"] #ledgerMonthDisplay {
   white-space: nowrap !important;
   pointer-events: none !important;
 }
-html[data-tablet-layout="landscape"] #ledgerMonthPickerCustom { display: none !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthPickerCustom { display: none !important; }
 html[data-tablet-layout="landscape"] #ledgerExcelImport { display: none !important; }
 html[data-tablet-layout="landscape"] .entry-grid > #favoriteCategoryGroup.quick-tool-row,
 html[data-tablet-layout="landscape"] .entry-grid > #summarySuggestionGroup.quick-tool-row,

@@ -71,7 +71,7 @@ assert.doesNotMatch(css, /\.entry-grid > #saveButton\s*\{\s*grid-area:\s*save !i
 assert.match(js, /trigger\.hidden = true;[\s\S]*?cy-mobile-account-name\"><\/span>/);
 assert.match(js, /window\.addEventListener\('cyacc:session-ready', syncMobileWorkspaceMobileIdentity\)/);
 assert.match(js, /const ready = Boolean\(main\) && !source\.classList\.contains\('hidden'\)/);
-assert.match(js, /if \(!mobile \|\| !ready\)[\s\S]*?trigger\.hidden = true;[\s\S]*?return;/);
+assert.match(js, /if \(!touchIdentity \|\| !ready\)[\s\S]*?trigger\.hidden = true;[\s\S]*?return;/);
 assert.match(js, /triggerName\.textContent = main;[\s\S]*?trigger\.hidden = false;/);
 assert.doesNotMatch(js, /new MutationObserver\(syncMobileWorkspaceMobileIdentity\)/);
 assert.doesNotMatch(js, /cy-mobile-account-name\">帳號|mobileAccountMenuName\">帳號/);

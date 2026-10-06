@@ -52,6 +52,9 @@ context.setupTabletWorkspace();
 assert.equal(root.dataset.tabletLayout, 'portrait');
 assert.equal(favoriteGroup.parentElement, entryGrid);
 assert.equal(summaryGroup.parentElement, entryGrid);
+assert.equal(rail.dataset.entryExpanded, 'true', 'portrait entry rail starts expanded');
+assert.equal(attrs.get('aria-expanded'), 'true', 'entry handle aria state matches the expanded default');
+button.click();
 assert.equal(rail.dataset.entryExpanded, 'false');
 button.click();
 assert.equal(rail.dataset.entryExpanded, 'true');
@@ -95,7 +98,8 @@ assert.match(css, /input\.cy-native-date-source,[\s\S]*?pointer-events: auto !im
 assert.match(read('ledger-inline-edit.js'), /window\.cyUsesEntryTransactionEditor\?\.\(\)/);
 assert.match(css.slice(css.indexOf('/* Tablet workspace:')), /grid-template-columns: minmax\(0, 1fr\) !important/, 'tablet overrides important desktop entry columns');
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{ grid-template-columns: minmax\(280px, 31%\)/, 'landscape entry rail is narrower only in landscape');
-assert.match(css, /data-tablet-layout="landscape"\] \.tablet-entry-controls,[\s\S]*?confirmation-edge-open \{ display: none !important/, 'landscape hides both non-landscape handles');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.confirmation-edge-open,[\s\S]*?confirmation-drawer-collapse \{[\s\S]*?display: none !important/, 'tablet hides the unrelated confirmation drawer handle in both orientations');
+assert.match(css, /data-tablet-layout="landscape"\] \.tablet-entry-controls \{ display: none !important/, 'landscape hides only the portrait entry handle');
 assert.match(css, /data-tablet-layout="landscape"\] \.entry-grid #txDate \{[\s\S]*?-webkit-appearance:\s*auto !important/, 'landscape date uses the shared native touch control');
 assert.match(css, /data-tablet-layout="landscape"\] #accountName,[\s\S]*?#categoryName \{ text-align:center !important; text-align-last:center !important/, 'landscape account and category are centered');
 assert.match(css, /data-tablet-layout="landscape"\] \.entry-grid > #favoriteCategoryGroup\.quick-tool-row\.hidden,[\s\S]*?display:grid !important/, 'landscape favorites remain visible when empty');
@@ -106,7 +110,8 @@ assert.match(css, /data-tablet-layout="landscape"\] \.ledger-card td\.action-col
 assert.match(source, /if \(!isDesktopInteractionWorkspace\(\)\) return;/, 'tablet must not create desktop custom date pickers');
 assert.match(source, /syncTabletPickerOwnership\(orientation\)/, 'tablet orientation owns date and month picker presentation');
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{[\s\S]*?minmax\(250px, 28%\)/, 'landscape entry rail is reduced another ten percent');
-assert.match(css, /data-tablet-layout="landscape"\] #ledgerMonthDisplay/, 'landscape ledger month reuses mobile display layer');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) #ledgerMonthDisplay/, 'both tablet orientations reuse the shared mobile month display layer');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.topbar #mobileAccountMenuButton[\s\S]*?role-super-admin[\s\S]*?#ddc789[\s\S]*?role-admin[\s\S]*?#d7b79e/, 'tablet uses the same mobile account trigger and gold/bronze role cues');
 assert.match(css, /data-tablet-layout="landscape"\] #ledgerExcelImport \{ display: none !important/, 'tablet landscape removes Excel import');
 console.log('Tablet classification, rotation, keyboard, pinning and shared edit ownership passed.');
 
@@ -159,7 +164,7 @@ assert.match(source, /document\.querySelectorAll\('\.desktopUi-date-picker'\)\.f
 assert.doesNotMatch(source, /tabletEntryDateDisplay|setupTabletDateDisplay/, 'tablet must not own a separate date display component');
 
 
-assert.match(css, /data-tablet-layout="landscape"\] #monthFilter \{[\s\S]*?opacity:\s*0 !important/, 'tablet month native text is fully hidden behind the shared presenter');
-assert.match(css, /data-tablet-layout="landscape"\] #ledgerMonthDisplay \{[\s\S]*?z-index:\s*4 !important/, 'shared month presenter stays visibly above the native month input');
-assert.equal((css.match(/data-tablet-layout="landscape"\][^\n]*#monthFilter \{/g) || []).length, 1, 'tablet landscape has one month presentation rule');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) #monthFilter \{[\s\S]*?opacity:\s*0 !important/, 'tablet month native text is fully hidden behind the shared presenter');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) #ledgerMonthDisplay \{[\s\S]*?z-index:\s*4 !important/, 'shared month presenter stays visibly above the native month input');
+assert.equal((css.match(/data-tablet-layout\]:not\(\[data-tablet-layout=""\]\)[^\n]*#monthFilter \{/g) || []).length, 1, 'tablet has one shared month presentation rule');
 assert.equal((css.match(/data-tablet-layout="landscape"\][^\n]*\.entry-grid #txDate \{/g) || []).length, 1, 'tablet landscape has one entry date presentation rule');
