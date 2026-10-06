@@ -50,6 +50,7 @@ internal sealed class MainForm : Form
         _statePoll.Tick += (_, _) => RefreshErpState();
         Shown += (_, _) =>
         {
+            if (_details.Rows.Count > 0) _details.CurrentCell = _details.Rows[0].Cells["ItemCode"];
             UpdateDpiHint();
             RefreshErpState();
             _statePoll.Start();
