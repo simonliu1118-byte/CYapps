@@ -129,11 +129,12 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 ## 8. 目前工作佇列（接手者從第一個未完成項目開始）
 
 1. [完成 2026-10-06] Governance PR #333（公開套件掃描誤判 OpenCV DLL）已 squash merge（Governance 2.3.29）。
-2. [進行中] `main` 已 merge 進 `cyerp-auto-input/v0.1.0-csharp`；確認 PR #104 CI 全綠並記錄 Build 26 Artifact 名稱。
+2. [完成 2026-10-06] PR #104 CI 全綠；Build 26 Artifact `CYERPAutoInput-v0.1.0-build26-windows-x64-run92`（run 37403614481，2026-10-20 到期；見 PR #104 留言）。
 3. [待使用者] 使用者出差返回（約 2026-10-08）後依 §5.2 實測 Build 26；依結果在同一 V0.1.0 返修（BUILD + 1）。
 4. [待使用者決策後] 下拉選項讀取（打開下拉 → OCR → 以同一鍵關閉，不送 Esc、不改值，有界）。Build 26 實測後再做。
-5. [待使用者決策後] §11 Roadmap 階段 1（Excel 批次）。
-6. [待使用者] 刪除遠端舊分支：`ci-cyerp-build13/17/20/21/23/24`、`cyerp-auto-input/rename-project`、`cyerp-auto-input/v0.0.11-optical-navigation`（此環境無法刪遠端分支）。
+5. [可開始] §11 Roadmap 階段 1（Excel 批次）：決策已定（見 §11）。先做不碰 ERP 的部分（範本產生、匯入、驗證、預覽、標準銷貨單資料模型），再接批次執行與自動儲存。
+6. [完成 2026-10-06] 使用者已刪除遠端舊分支（`ci-cyerp-build*`、舊 Go 分支）。
+6.1 [進行中] Governance PR #334（2.3.30）：依決策 2b 修改 `PROJECT_RULES.md` §1，允許批次中放棄自行新增且失敗的單據；CI 全綠後合併。
 7. 真實 ERP 驗收通過後才把 PR #104 轉 Ready／合併；合併後從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release。
 
 接手注意事項（本專案近期實際踩過的問題）：
@@ -184,10 +185,15 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - 階段 3：地端無人值守 — 專用電腦自動登入／不鎖定／開機啟動、ERP 異常重啟與登入、心跳與異常通知。
 - 階段 4：辨識查詢單據 — 表頭以 `WM_GETTEXT` 讀取、明細以 OCR；先只讀不改。
 
-待使用者決策：
+使用者決策（2026-10-06）：
 
-1. 第一個正式版是否升 `V1.0.0`（Major 由使用者決定）。
-2. 批次中單據失敗時：(a) 整批停止等人工（建議先採用）或 (b) 允許程式按 ERP「取消」放棄失敗的新增單（需修改 `PROJECT_RULES.md`，走 governance）。
-3. Excel 範本欄位範圍：全部欄位或標準欄位 + 本機預設值。
-4. 「CYweb 工單系統」對應哪個專案、是否接 CYCloud Identity。
-5. 地端電腦環境：Windows 版本、ERP 登入方式、可否自動登入且不鎖定。
+1. 階段 1 完成時升 `V1.0.0`（第一個正式版）。開發期間依版本規則先用 `0.Y.Z`。
+2. 採 (b)：批次中單據失敗時，可按 ERP「取消」放棄 CYERPAutoInput 自行新增的該張單據後繼續；需先確認 ERP 仍在該張新增單據的輸入狀態，否則停止整批。規則變更走 Governance PR #334。
+3. Excel 範本先只放標準模式欄位，其他欄位用本機預設值；之後再擴充。
+4. 階段 2 對接 CYWEB 的「訂單工單模組」（CYWEB 不在本 repo；接入前先確認其 API 與是否走 CYID）。
+5. 地端專用電腦可設定自動登入、不鎖定；ERP 欄位一律由程式定位輸入（不改用 ERP API）。
+
+其他已知事實：
+
+- `SMARTCOPIConverter` 是 CYInvoice 上線前的 ERP 匯出轉 POS 發票方案，已停用；與本專案無相依。
+- 使用者同意在需要時使用臨時 GitHub Actions workflow（例如在 Windows runner 做一次性驗證）；用完需移除，不得留在 `main`，若會上傳 Artifact 必須含公開套件機密掃描。
