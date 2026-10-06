@@ -10317,3 +10317,18 @@ html[data-tablet-layout="landscape"] .entry-grid > #saveMessage { order: 22 !imp
 html[data-tablet-layout]:not([data-tablet-layout=""]) #mobileEntrySecondaryButton {
   display: block !important;
 }
+
+
+/* Phone-only tablet preview: tablet presentation wins even if Safari briefly keeps mobile-width state. */
+html[data-tablet-preview="true"] #mobileMainNav {
+  display: none !important;
+}
+html[data-tablet-preview="true"] .shell > .cy-mobile-page-hidden {
+  display: block !important;
+}
+html[data-tablet-preview="true"] body {
+  padding-bottom: 0 !important;
+}
+html[data-tablet-preview="true"] .cy-mobile-account-menu [data-mobile-account-action="tablet-preview"] {
+  display: block !important;
+}
