@@ -845,6 +845,13 @@ function syncMobileWorkspaceMobileIdentity() {
   const mobileAccountMenu = usesMobileAccountMenuIdentity();
   const preview = isTabletPreviewMode();
   const ready = Boolean(main) && !source.classList.contains('hidden');
+  const cluster = source.closest('.cy-account-cluster');
+  const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
+  const admin = source.classList.contains('role-admin') || role === '管理員';
+
+  cluster?.classList.toggle('role-super-admin', superAdmin);
+  cluster?.classList.toggle('role-admin', admin);
+  cluster?.classList.toggle('role-user', ready && !superAdmin && !admin);
 
   if (returnButton) returnButton.hidden = !preview;
 
@@ -869,8 +876,6 @@ function syncMobileWorkspaceMobileIdentity() {
     previewButton.textContent = '測試用平板版';
   }
 
-  const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
-  const admin = source.classList.contains('role-admin') || role === '管理員';
   trigger.classList.toggle('role-super-admin', superAdmin);
   trigger.classList.toggle('role-admin', admin);
   menu.classList.toggle('role-super-admin', superAdmin);
