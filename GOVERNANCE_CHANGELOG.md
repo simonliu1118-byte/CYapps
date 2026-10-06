@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.31 — 2026/10/06
+
+- REPO_POLICY §3：本 repository 的 Actions Artifact 一律保留 3 天（使用者指定，取代共通規則 14 天預設），每個 upload-artifact 步驟都須明確寫出；`cyerp-auto-input-build.yml`、`cyinvoice-cloud.yml` 由 14 天改為 3 天。
+- Governance Check 新增檢查：upload-artifact 步驟數須與 `retention-days: 3` 一致。
+
 ## 2.3.30 — 2026/10/06
 
 - CYERPAutoInput `PROJECT_RULES.md`：使用者核准批次輸入的失敗隔離方式。仍不自動操作「修改」；「取消」只允許用於放棄 CYERPAutoInput 自行新增、輸入途中失敗的單據，且必須先確認 ERP 仍在該張新增單據的輸入狀態，否則停止整批等待人工處理。Esc 緊急停止仍不得替使用者按「取消」。
