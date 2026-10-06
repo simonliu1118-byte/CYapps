@@ -111,9 +111,15 @@ function bindLedgerToolbar() {
   document.querySelector('#ledgerPrevMonth')?.addEventListener('click', () => moveLedgerMonth(-1));
   document.querySelector('#ledgerNextMonth')?.addEventListener('click', () => moveLedgerMonth(1));
   els.monthFilter?.addEventListener('change', syncLedgerMonthDisplay);
+  const searchInput = document.querySelector('#ledgerSummarySearch');
   document.querySelector('#ledgerSearchForm')?.addEventListener('submit', event => {
     event.preventDefault();
-    cyLedgerSearch = document.querySelector('#ledgerSummarySearch')?.value.trim() || '';
+    cyLedgerSearch = searchInput?.value.trim() || '';
+    renderDesktopLedger();
+  });
+  searchInput?.addEventListener('input', () => {
+    if (searchInput.value !== '' || cyLedgerSearch === '') return;
+    cyLedgerSearch = '';
     renderDesktopLedger();
   });
   document.querySelector('#ledgerSearchClear')?.addEventListener('click', () => {
