@@ -134,7 +134,7 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 4. [待使用者決策後] 下拉選項讀取（打開下拉 → OCR → 以同一鍵關閉，不送 Esc、不改值，有界）。Build 26 實測後再做。
 5. [可開始] §11 Roadmap 階段 1（Excel 批次）：決策已定（見 §11）。先做不碰 ERP 的部分（範本產生、匯入、驗證、預覽、標準銷貨單資料模型），再接批次執行與自動儲存。
 6. [完成 2026-10-06] 使用者已刪除遠端舊分支（`ci-cyerp-build*`、舊 Go 分支）。
-6.1 [進行中] Governance PR #334（2.3.30）：依決策 2b 修改 `PROJECT_RULES.md` §1，允許批次中放棄自行新增且失敗的單據；CI 全綠後合併。
+6.1 [完成 2026-10-06] Governance PR #334（2.3.30）已合併：`PROJECT_RULES.md` §1 允許批次中放棄 CYERPAutoInput 自行新增且失敗的單據（須先確認仍在該張新增單據的輸入狀態）。
 7. 真實 ERP 驗收通過後才把 PR #104 轉 Ready／合併；合併後從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release。
 
 接手注意事項（本專案近期實際踩過的問題）：
