@@ -46,7 +46,9 @@ Build 11 起正式辨識引擎改為本機 **PaddleOCR PP-OCRv5 + ONNX Runtime (
 - F2 單位：先定位 `TcxGridSite` 與「換算單位」欄；必要時逐格裁切後用 PP-OCRv5 辨識「支／箱」等短字，再點選該格並送一次 Enter。
 - F2 批號：完成品號／單位／數量／庫別等明細後，先檢查該列批號 cell；明確空白不送 F2，明確有批號標記才開啟，視覺不確定時才以 F2 行為作 fallback。查詢內逐列辨識「現有存量」，只選由上往下第一筆可確認 `> 0` 的批號，無法確認就停止，不猜列。
 - OCR 暫存 PNG 僅存在 Windows Temp，辨識後立即刪除。
-- 模型不提交到 Public repository；Windows build 由固定 revision 下載後包進 `runtime/ocr/`。
+- 模型不提交到 Public repository。模型組（檔名、大小、SHA-256、Release tag、上游固定 revision）唯一定義在 `tools/ocr-models.json`。
+- `tools/fetch-ocr-models.ps1` 優先從本 repo 的模型 Release 下載；Release 下載不到時才改用上游固定 revision。任何來源的檔案大小或 SHA-256 不符即中止 build。
+- 模型 Release 由 `CYERPAutoInput OCR Model Mirror` workflow 從 `main` 手動建立（pre-release，不是產品版本），已存在的 tag 不覆寫；更換模型組時改 `tools/ocr-models.json` 的 tag 與雜湊後再執行一次。
 
 ## 正式 ICON
 

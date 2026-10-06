@@ -85,6 +85,8 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - PR #104 最後一次成功的 CYERPAutoInput Build 是 run #79（head `ddfb236`，2026-09-25）。
 - 之後 `main` 新增公開套件機密掃描（`.github/scripts/scan-public-package.py`），PR 與 main 在 workflow 產生衝突，`pull_request` CI 因此未在之後 13 個 commit 上執行。
 - 2026-10-06 已合併 main 並解決衝突：保留 .NET 8 build／self-test／publish／package 驗證，加回 `setup-python` 與機密掃描步驟。合併後需確認 CI 重新通過。
+- 2026-10-06 合併 main 後的 run：build／self-test／publish／package 驗證通過，但機密掃描把 OpenCV 官方 DLL 內資料誤判為 Google refresh token；修正於治理 PR #333（Governance 2.3.29），合併後需把 main 再合併進本 branch。
+- OCR 模型改由 `tools/ocr-models.json` 固定 SHA-256，優先從本 repo 模型 Release 下載；PR #104 合併後需從 main 手動執行 `CYERPAutoInput OCR Model Mirror` 一次建立該 Release。
 - CI 成功只代表 Windows 編譯、self-test、publish 與 package 成功，**不等於已通過使用者真實 SMART ERP 驗收**。
 
 

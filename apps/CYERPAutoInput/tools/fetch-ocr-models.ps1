@@ -1,68 +1,65 @@
+param(
+    # Used only by the OCR model mirror workflow, which creates the Release
+    # asset that normal builds download first.
+    [switch]$UpstreamOnly
+)
+
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 $modelDir = Join-Path $root "runtime\ocr"
 New-Item -ItemType Directory -Force -Path $modelDir | Out-Null
 
-$rapidRevision = "a8814c3b298bab79219341e73f687ba710ab4031"
-$models = @(
-    @{
-        Name = "ch_PP-OCRv5_det_mobile.onnx"
-        Url = "https://raw.githubusercontent.com/meloht/RapidOCRSharpOnnx/$rapidRevision/RapidOCRSharpOnnx.TestCommon/Models/ch_PP-OCRv5_det_mobile.onnx"
-        MinBytes = 4000000
-    },
-    @{
-        Name = "ch_PP-OCRv5_rec_mobile.onnx"
-        Url = "https://raw.githubusercontent.com/meloht/RapidOCRSharpOnnx/$rapidRevision/RapidOCRSharpOnnx.TestCommon/Models/ch_PP-OCRv5_rec_mobile.onnx"
-        MinBytes = 15000000
-    },
-    @{
-        Name = "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"
-        Url = "https://raw.githubusercontent.com/meloht/RapidOCRSharpOnnx/$rapidRevision/RapidOCRSharpOnnx.TestCommon/Models/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"
-        MinBytes = 900000
-    }
-)
+# tools/ocr-models.json is the single source of the model set. SHA-256 is the
+# integrity gate: every source must deliver exactly these bytes.
+$manifest = Get-Content (Join-Path $PSScriptRoot "ocr-models.json") -Raw | ConvertFrom-Json
+$releaseBaseUrl = "https://github.com/simonliu1118-byte/CYapps/releases/download/$($manifest.releaseTag)"
 
-function Get-Model([hashtable]$model) {
-    $dest = Join-Path $modelDir $model.Name
-    if (Test-Path $dest) {
-        $existing = Get-Item $dest
-        if ($existing.Length -ge [int64]$model.MinBytes) {
-            Write-Host "OCR model already present: $($model.Name) ($($existing.Length) bytes)"
-            return
-        }
-        Remove-Item -Force $dest
-    }
-
-    $temp = "$dest.download"
-    Remove-Item -Force $temp -ErrorAction SilentlyContinue
-    Write-Host "Downloading pinned OCR model: $($model.Name)"
-    & curl.exe -L --fail --retry 3 --retry-delay 2 --output $temp $model.Url
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to download $($model.Name), curl exit code $LASTEXITCODE"
-    }
-
-    $item = Get-Item $temp
-    if ($item.Length -lt [int64]$model.MinBytes) {
-        Remove-Item -Force $temp
-        throw "Downloaded OCR model $($model.Name) is unexpectedly small: $($item.Length) bytes"
-    }
-    Move-Item -Force $temp $dest
+function Test-Model([string]$path, $model) {
+    if (-not (Test-Path $path)) { return $false }
+    if ((Get-Item $path).Length -ne [int64]$model.size) { return $false }
+    $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    return $hash -eq $model.sha256
 }
 
-foreach ($model in $models) {
+function Get-Model($model) {
+    $dest = Join-Path $modelDir $model.name
+    if (Test-Model $dest $model) {
+        Write-Host "OCR model already present and verified: $($model.name)"
+        return
+    }
+    Remove-Item -Force $dest -ErrorAction SilentlyContinue
+
+    # Primary source is this repository's Release asset. The pinned upstream
+    # revision is used only when the Release asset cannot be downloaded.
+    $sources = @()
+    if (-not $UpstreamOnly) { $sources += "$releaseBaseUrl/$($model.name)" }
+    $sources += "$($manifest.upstreamBaseUrl)/$($model.name)"
+
+    $temp = "$dest.download"
+    foreach ($url in $sources) {
+        Remove-Item -Force $temp -ErrorAction SilentlyContinue
+        & curl.exe -L --fail --silent --show-error --retry 3 --retry-delay 2 --output $temp $url
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "OCR model source unavailable (curl exit $LASTEXITCODE): $url"
+            continue
+        }
+        if (-not (Test-Model $temp $model)) {
+            Remove-Item -Force $temp
+            throw "OCR model $($model.name) from $url does not match the pinned size/SHA-256."
+        }
+        Move-Item -Force $temp $dest
+        Write-Host "OCR model downloaded and verified: $($model.name) <- $url"
+        return
+    }
+    throw "No source delivered OCR model $($model.name)."
+}
+
+foreach ($model in $manifest.models) {
     Get-Model $model
 }
 
-# Remove any stale server-recognizer experiment from local workspaces so the
-# package contains only the validated model family used by this build.
-Remove-Item -Force (Join-Path $modelDir "PP-OCRv5_server_rec.onnx") -ErrorAction SilentlyContinue
-
-$hashLines = foreach ($model in $models) {
-    $path = Join-Path $modelDir $model.Name
-    $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
-    "$hash  $($model.Name)"
-}
+$hashLines = foreach ($model in $manifest.models) { "$($model.sha256)  $($model.name)" }
 $hashLines | Set-Content -Encoding ascii (Join-Path $modelDir "SHA256.txt")
 
 Write-Host "PaddleOCR runtime models ready at $modelDir"
