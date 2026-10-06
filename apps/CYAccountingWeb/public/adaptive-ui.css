@@ -9819,11 +9819,11 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-mobile-account-menu {
   display: none !important;
 }
 
-#tabletPreviewReturnButton[hidden] {
+#tabletPreviewReturnButton {
   display: none !important;
 }
 
-html[data-tablet-preview="true"] #tabletPreviewReturnButton {
+html[data-tablet-preview="true"] #tabletPreviewReturnButton:not([hidden]) {
   order: 2 !important;
   display: inline-flex !important;
   align-items: center !important;
