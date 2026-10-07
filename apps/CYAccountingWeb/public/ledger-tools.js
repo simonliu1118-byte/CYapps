@@ -247,7 +247,7 @@ function ledgerQuickLockState(month) {
   const locked = Boolean(lockedThrough && month <= lockedThrough);
   const boundary = Boolean(lockedThrough && month === lockedThrough);
   const canUnlock = boundary;
-  const canLock = !locked && (!lockedThrough || month === shiftLedgerMonth(lockedThrough, 1));
+  const canLock = Boolean(lockedThrough && !locked && month === shiftLedgerMonth(lockedThrough, 1));
   return { lockedThrough, locked, boundary, canLock, canUnlock };
 }
 
