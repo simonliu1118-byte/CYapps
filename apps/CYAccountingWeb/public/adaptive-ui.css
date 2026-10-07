@@ -11351,3 +11351,172 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary {
   width: 100% !important;
   justify-self: stretch !important;
 }
+
+
+/* V0.22.27 tablet polish */
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card th.action-col {
+  text-align: center !important;
+}
+
+/* Keep ledger columns identical whether tbody has transactions or only the empty-state row. */
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card th:nth-child(1),
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(1) { width: 8% !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card th:nth-child(2),
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(2) { width: 14% !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card th:nth-child(3),
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(3) {
+  display: none !important;
+  width: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card th:nth-child(4),
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(4) { width: 16% !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card th:nth-child(5),
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(5) { width: 27% !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card th:nth-child(6),
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(6) { width: 15% !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card th:nth-child(7),
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(7) { width: 12% !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card th:nth-child(8),
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(8) { width: 8% !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card tbody > tr.ledger-message-row > td.empty {
+  display: table-cell !important;
+  width: 100% !important;
+}
+
+html[data-tablet-layout="landscape"] .ledger-card table {
+  width: 100% !important;
+  table-layout: fixed !important;
+}
+html[data-tablet-layout="landscape"] .ledger-card th:nth-child(1),
+html[data-tablet-layout="landscape"] .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(1) { width: 8% !important; }
+html[data-tablet-layout="landscape"] .ledger-card th:nth-child(2),
+html[data-tablet-layout="landscape"] .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(2) { width: 11% !important; }
+html[data-tablet-layout="landscape"] .ledger-card th:nth-child(3),
+html[data-tablet-layout="landscape"] .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(3) { width: 8% !important; }
+html[data-tablet-layout="landscape"] .ledger-card th:nth-child(4),
+html[data-tablet-layout="landscape"] .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(4) { width: 13% !important; }
+html[data-tablet-layout="landscape"] .ledger-card th:nth-child(5),
+html[data-tablet-layout="landscape"] .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(5) { width: 23% !important; }
+html[data-tablet-layout="landscape"] .ledger-card th:nth-child(6),
+html[data-tablet-layout="landscape"] .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(6) { width: 13% !important; }
+html[data-tablet-layout="landscape"] .ledger-card th:nth-child(7),
+html[data-tablet-layout="landscape"] .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(7) { width: 13% !important; }
+html[data-tablet-layout="landscape"] .ledger-card th:nth-child(8),
+html[data-tablet-layout="landscape"] .ledger-card tbody > tr:not(.ledger-message-row) > td:nth-child(8) { width: 11% !important; }
+html[data-tablet-layout="landscape"] .ledger-card tbody > tr.ledger-message-row > td.empty {
+  display: table-cell !important;
+  width: 100% !important;
+}
+
+/* Fixed five-slot monthly summary: values never collapse neighboring items. */
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 38px !important;
+  margin-top: 7px !important;
+  padding: 5px 0 !important;
+  overflow: visible !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item {
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: baseline !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  min-height: 28px !important;
+  padding: 5px 8px !important;
+  font-size: 13.5px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item strong {
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.opening { grid-column: 1 !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.income { grid-column: 2 !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.expense { grid-column: 3 !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.ending { grid-column: 4 !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.net { grid-column: 5 !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item:not(.opening) {
+  border-left: 1px solid #dfe5eb !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-search {
+  grid-column: 1 / -1 !important;
+  grid-row: 2 !important;
+  margin: 3px 0 0 !important;
+  padding: 2px 0 0 !important;
+  text-align: center !important;
+  font-size: 10.5px !important;
+}
+
+/* Neutral white tab handle. Collapsed rail shows only the tab; expanded tab blends into the panel edge. */
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-handle,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-card.entry-income .tablet-entry-handle,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-card.entry-expense .tablet-entry-handle {
+  min-width: 118px !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 10px 1px !important;
+  border-color: #d7dfe7 !important;
+  border-bottom: 0 !important;
+  border-radius: 10px 10px 0 0 !important;
+  background: #fff !important;
+  color: #526477 !important;
+  box-shadow: none !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls {
+  top: -25px !important;
+  height: 26px !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-handle::after {
+  bottom: -3px !important;
+  height: 4px !important;
+  background: #fff !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] {
+  min-height: 26px !important;
+  height: 26px !important;
+  max-height: 26px !important;
+  padding-top: 26px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .entry-card {
+  min-height: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="true"] {
+  padding-top: 25px !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="true"] .tablet-entry-handle {
+  transform: translateY(1px) !important;
+}
+
+/* The mode switch is vertical in both geometry and text. */
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-switch .kind-button {
+  writing-mode: vertical-rl !important;
+  text-orientation: upright !important;
+  letter-spacing: 2px !important;
+  line-height: 1 !important;
+}

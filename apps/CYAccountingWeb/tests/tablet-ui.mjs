@@ -137,9 +137,9 @@ assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.tablet-entry-handle \{
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.cy-entry-rail\[data-entry-expanded="false"\] \.entry-card \{[\s\S]*?height:\s*10px !important/, 'collapsed rail leaves only a thin panel edge under the raised tab');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#monthSummary \{[\s\S]*?grid-row:\s*3 !important/, 'portrait month summary stays below the month/actions row and cannot collide with the month picker');
 assert.doesNotMatch(source, /tabletEntryPinned|保持展開/, 'portrait entry rail no longer exposes a pinned-open mode');
-assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.ledger-card th\.action-col \{[\s\S]*?text-align:\s*left !important/, 'tablet action header is left aligned in both orientations');
+assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?\.ledger-card th\.action-col \{[\s\S]*?text-align:\s*center !important/, 'tablet action header is centered in both orientations');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-title \.title-with-badge \{[\s\S]*?display:\s*none !important/, 'portrait removes the ledger title row');
-assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#monthSummary \{[\s\S]*?display:\s*flex !important[\s\S]*?border:\s*0 !important[\s\S]*?background:\s*transparent !important/, 'portrait summary reuses the landscape single-row language');
+assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?#monthSummary \{[\s\S]*?grid-template-columns:\s*repeat\(5, minmax\(0, 1fr\)\) !important[\s\S]*?min-height:\s*38px !important/, 'tablet summary keeps five fixed slots regardless of values');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#monthSummary \.ledger-summary-item:not\(\.opening\) \{[\s\S]*?border-left:\s*1px solid #dfe5eb !important/, 'portrait summary uses the same separators as landscape');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerQuickLockButton\.is-locked[\s\S]*?background:\s*#fff0df !important/, 'portrait locked month has a colored lock state');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-card\.is-loading \.table-wrap::after[\s\S]*?content:\s*"載入中…"/, 'portrait reuses the visible ledger loading state');
@@ -149,6 +149,12 @@ assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerSummarySearch \{[
 assert.match(source, /syncTabletPortraitLedgerExportPlacement\(orientation\)/, 'tablet layout owns export placement');
 assert.match(source, /orientation === 'portrait' \? summaryActions : viewTools/, 'portrait moves the canonical Excel button beside opening balance');
 assert.match(exportSource, /Boolean\(document\.documentElement\.dataset\.tabletLayout\)/, 'both tablet orientations use the phone native-share owner');
+assert.match(exportSource, /window\.__cyaccTabletPreviewEnabled === true/, 'tablet preview also uses the phone native-share owner');
+assert.match(exportSource, /type:\s*'application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet'/, 'Excel native share uses the canonical xlsx MIME type');
+assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?tbody > tr:not\(\.ledger-message-row\) > td:nth-child\(5\) \{ width:\s*27% !important/, 'portrait ledger has explicit summary width independent of tbody contents');
+assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?\.cy-entry-rail\[data-entry-expanded="false"\] \.entry-card \{[\s\S]*?height:\s*0 !important[\s\S]*?border:\s*0 !important/, 'collapsed portrait rail leaves no residual line beneath the tab');
+assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?\.entry-card\.entry-income \.tablet-entry-handle,[\s\S]*?\.entry-card\.entry-expense \.tablet-entry-handle[\s\S]*?background:\s*#fff !important/, 'tab handle stays white for both income and expense');
+assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?\.entry-kind-switch \.kind-button \{[\s\S]*?writing-mode:\s*vertical-rl !important[\s\S]*?text-orientation:\s*upright !important/, 'portrait income and expense labels are vertical text');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-card th:nth-child\(3\),[\s\S]*?display:\s*none !important/, 'portrait removes the separate income-expense column');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?ledger-row-income[\s\S]*?td:nth-child\(6\)::before[\s\S]*?content:\s*"\+"/, 'portrait income amount carries the phone-style plus sign');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?ledger-row-expense[\s\S]*?td:nth-child\(6\)::before[\s\S]*?content:\s*"−"/, 'portrait expense amount carries the phone-style minus sign');
