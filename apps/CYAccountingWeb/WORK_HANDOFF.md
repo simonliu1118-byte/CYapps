@@ -6,8 +6,8 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.25 Build 0**；PR #351 已合併；平板直式新增記帳區與展開把手已重排 |
-| Production Deploy | CYAccountingWeb Validate and Deploy **#530**（run `37571521733`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.26 Build 0**；PR #353 已合併；平板直式月摘要與凸起標籤把手已修正 |
+| Production Deploy | CYAccountingWeb Validate and Deploy **#534**（run `37572824344`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.31**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
@@ -40,6 +40,7 @@
 - **V0.22.23 Build 0**：平板直式實機返修。年月選擇器改為有邊界、圓角與下拉提示的 touch capsule，值與 change 仍由原生 `type=month` owner 管理。搜尋欄由 15px 修正為 16px，並讓鍵盤開啟時 Tablet workspace 保持 layout viewport 高度，不再被 visualViewport 壓成小區塊。Excel 匯出按鈕在直式移到期初餘額右側，直／橫式都沿用既有 `navigator.share`／`canShare` native share owner。直式交易表隱藏獨立「收支」欄，金額直接顯示收入綠色 `+`、支出紅色 `−`；編輯／刪除改圖示並保留 `aria-label`。PR #347 Governance #1088、Validate #519 成功；Production Deploy #520 成功。
 - **V0.22.24 Build 0**：平板摘要／rail 控制收斂。直式與橫式的明細「操作」表頭統一靠左；直式期初／收入／支出／期末／淨利損直接使用橫式單列同行樣式與分隔線，並移除「記帳資料」標題列。直式底部記帳 rail 移除「保持展開」checkbox 與 pinned-open 行為，只保留把手點按／拖曳展開收合。欄位結構與 canonical writer 未改。PR #349 Governance #1091、Validate #524 成功；Production Deploy #525 成功。
 - **V0.22.25 Build 0**：平板直式新增區重排。把手改為中央「↑ 展開新增／↓ 收合隱藏」並移除舊灰色短槓；收入／支出仍沿用同一 `.kind-button` 與 canonical kind state，只在直式改為最左側 54px 垂直雙段。右側第一列為帳戶／日期／科目／金額，中間 30px 快捷列並排常用科目／常用摘要，最後一列為寬摘要＋儲存＋清空／取消；主要輸入欄 16px。PR #351 Governance #1094、Validate #529 成功；Production Deploy #530 成功。
+- **V0.22.26 Build 0**：修正 V0.22.25 實機返修。月摘要恢復到年月／工具列下方獨立單列，避免與年月 selector 重疊；直式把手改成面板上緣中央向上凸出的 tab，左右上邊框維持連續，收合只保留薄面板邊與「↑ 展開新增」，展開顯示「↓ 收合隱藏」。V0.22.25 左側垂直 kind switch 與三層 entry grid 不變。PR #353 Governance #1096、Validate #533 成功；Production Deploy #534 成功。
 
 完整版本歷史見 `CHANGELOG.md`。
 
@@ -89,7 +90,7 @@
 
 ## 已確認驗證
 
-V0.22.25 Build 0 PR #351 的 Governance Check #1094 與 CYAccountingWeb Validate and Deploy #529 均成功；合併後 Production run #530（`37571521733`）validate 與 deploy 全部成功。V0.22.24 的 #349 仍是前一階段摘要／操作表頭／rail 控制收斂證據。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
+V0.22.26 Build 0 PR #353 的 Governance Check #1096 與 CYAccountingWeb Validate and Deploy #533 均成功；合併後 Production run #534（`37572824344`）validate 與 deploy 全部成功。V0.22.25 的 #351 仍是前一階段直式 entry grid 重排證據。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
 
 - JavaScript syntax 與 application tests；
 - mobile native-date、底部儲存／清空或取消、identity readiness，以及 login viewport／keyboard regression；
