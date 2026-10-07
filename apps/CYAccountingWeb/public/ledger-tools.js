@@ -224,15 +224,71 @@ function syncLedgerMonthDisplay() {
   syncLedgerQuickLock();
 }
 
+function shiftLedgerMonth(month, delta) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  if (!match) return '';
+  const date = new Date(Number(match[1]), Number(match[2]) - 1 + Number(delta || 0), 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatLedgerMonthLabel(month) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  return match ? `${Number(match[1])}年${Number(match[2])}月` : String(month || '');
+}
+
+function ledgerQuickLockState(month) {
+  const lockedThrough = /^\d{4}-\d{2}$/.test(String(state?.lockedThrough || ''))
+    ? String(state.lockedThrough)
+    : '';
+  if (!/^\d{4}-\d{2}$/.test(String(month || ''))) {
+    return { lockedThrough, locked: false, boundary: false, canLock: false, canUnlock: false };
+  }
+
+  const locked = Boolean(lockedThrough && month <= lockedThrough);
+  const boundary = Boolean(lockedThrough && month === lockedThrough);
+  const canUnlock = boundary;
+  const canLock = !locked && (!lockedThrough || month === shiftLedgerMonth(lockedThrough, 1));
+  return { lockedThrough, locked, boundary, canLock, canUnlock };
+}
+
 function syncLedgerQuickLock() {
   const button = document.querySelector('#ledgerQuickLockButton');
   const month = String(els.monthFilter?.value || '');
   if (!button) return;
-  const locked = typeof isLocked === 'function' && /^\d{4}-\d{2}$/.test(month) ? isLocked(month) : false;
-  button.classList.toggle('is-locked', locked);
-  button.setAttribute('aria-pressed', locked ? 'true' : 'false');
-  button.setAttribute('aria-label', locked ? '此月份已鎖帳，開啟鎖帳設定' : '快速鎖帳至此月份');
-  button.title = locked ? '此月份已鎖帳；點擊開啟鎖帳設定' : '快速鎖帳至此月份';
+
+  const quick = ledgerQuickLockState(month);
+  const enabled = quick.canLock || quick.canUnlock;
+  button.classList.toggle('is-locked', quick.locked);
+  button.classList.toggle('is-lock-boundary', quick.boundary);
+  button.disabled = !enabled;
+  button.setAttribute('aria-pressed', quick.locked ? 'true' : 'false');
+
+  if (quick.canUnlock) {
+    const previous = shiftLedgerMonth(month, -1);
+    button.setAttribute('aria-label', `解除 ${formatLedgerMonthLabel(month)} 鎖帳`);
+    button.title = `解除最新鎖帳月份；鎖帳狀態將退回 ${formatLedgerMonthLabel(previous)}`;
+    return;
+  }
+
+  if (quick.canLock) {
+    button.setAttribute('aria-label', `鎖定 ${formatLedgerMonthLabel(month)}`);
+    button.title = quick.lockedThrough
+      ? `鎖定下一月份 ${formatLedgerMonthLabel(month)}`
+      : `建立鎖帳至 ${formatLedgerMonthLabel(month)}`;
+    return;
+  }
+
+  if (quick.locked) {
+    button.setAttribute('aria-label', `${formatLedgerMonthLabel(month)} 已鎖帳`);
+    button.title = `此月份已由鎖帳至 ${formatLedgerMonthLabel(quick.lockedThrough)} 涵蓋；只能從最新鎖帳月份逐月解除`;
+    return;
+  }
+
+  const next = quick.lockedThrough ? shiftLedgerMonth(quick.lockedThrough, 1) : '';
+  button.setAttribute('aria-label', `${formatLedgerMonthLabel(month)} 尚不可快速鎖帳`);
+  button.title = next
+    ? `請先鎖定 ${formatLedgerMonthLabel(next)}，或開啟月份鎖帳設定`
+    : '請開啟月份鎖帳設定';
 }
 
 async function handleLedgerQuickLock() {
@@ -240,31 +296,39 @@ async function handleLedgerQuickLock() {
   const month = String(els.monthFilter?.value || '');
   if (!button || !/^\d{4}-\d{2}$/.test(month)) return;
 
-  if (typeof isLocked === 'function' && isLocked(month)) {
-    if (window.cyUsesCompactTouchUtility?.() && typeof window.cyOpenMobileLedgerLock === 'function') {
-      await window.cyOpenMobileLedgerLock();
-    } else {
-      document.querySelector('#ledgerLockSettingsButton')?.click();
-    }
-    return;
-  }
+  const quick = ledgerQuickLockState(month);
+  if (!quick.canLock && !quick.canUnlock) return;
 
-  const label = month.replace(/^(\d{4})-(\d{2})$/, (_, year, value) => `${Number(year)}年${Number(value)}月`);
-  const confirmed = typeof window.cyConfirm === 'function'
-    ? await window.cyConfirm({
-        title: '快速鎖帳',
-        message: `確定鎖帳至 ${label}？`,
-        detail: '依現有鎖帳規則，此月份以及更早月份會一併鎖定。',
-        confirmText: '鎖帳'
-      })
-    : window.confirm(`確定鎖帳至 ${label}？\n此月份以及更早月份會一併鎖定。`);
+  let target = month;
+  let confirmed = false;
+  if (quick.canUnlock) {
+    target = shiftLedgerMonth(month, -1);
+    confirmed = typeof window.cyConfirm === 'function'
+      ? await window.cyConfirm({
+          title: '解除最新鎖帳月份',
+          message: `確定解除 ${formatLedgerMonthLabel(month)} 的鎖帳？`,
+          detail: `鎖帳狀態會退回至 ${formatLedgerMonthLabel(target)}；更早月份仍維持鎖定。`,
+          confirmText: '解除鎖帳'
+        })
+      : window.confirm(`確定解除 ${formatLedgerMonthLabel(month)} 的鎖帳？\n鎖帳狀態會退回至 ${formatLedgerMonthLabel(target)}。`);
+  } else {
+    confirmed = typeof window.cyConfirm === 'function'
+      ? await window.cyConfirm({
+          title: '快速鎖帳',
+          message: `確定鎖定 ${formatLedgerMonthLabel(month)}？`,
+          detail: quick.lockedThrough
+            ? `鎖帳狀態會從 ${formatLedgerMonthLabel(quick.lockedThrough)} 推進至 ${formatLedgerMonthLabel(month)}。`
+            : '這會建立目前的鎖帳截止月份；該月份以及更早月份都會鎖定。',
+          confirmText: '鎖帳'
+        })
+      : window.confirm(`確定鎖定 ${formatLedgerMonthLabel(month)}？`);
+  }
   if (!confirmed) return;
 
   button.disabled = true;
   try {
-    if (typeof window.cyaccSaveLock === 'function') await window.cyaccSaveLock(month);
+    if (typeof window.cyaccSaveLock === 'function') await window.cyaccSaveLock(target);
   } finally {
-    button.disabled = false;
     syncLedgerQuickLock();
   }
 }
