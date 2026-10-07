@@ -9,8 +9,8 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.21 Build 0**；PR #342 已合併；平板 identity ownership、直式兩列記帳 rail、原生搜尋與 preview-only 返回手機版已收斂 |
-| 正式部署 | CYAccountingWeb Validate and Deploy **#509**（run `37495315805`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic frontend assets 均通過 |
+| 正式版本 | **V0.22.22 Build 0**；PR #345 已合併；平板直式已補齊 touch lifecycle、月份載入狀態、compact utility 與逐月快速鎖帳 |
+| 正式部署 | CYAccountingWeb Validate and Deploy **#515**（run `37557784400`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic frontend assets 均通過 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
@@ -63,7 +63,7 @@ SUPER_ADMIN 永久刪除條件為已封存、無交易、最新有效期初為�
 
 ### 平板
 
-目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。手機帳號選單仍暫時提供「測試用平板版」，只在目前分頁 session 內啟用，直接重用正式平板 presentation；直式以 820px、橫式以 1194px reference viewport 呈現，旋轉手機可檢查兩個方向。V0.22.21 起平板直式與橫式都明確由 canonical `.cy-account-cluster` 擁有右上 identity，格式維持 `員工編號 姓名［角色］｜登出`；角色是姓名後方的同行純文字，不是獨立 pill，SUPER_ADMIN 金色、ADMIN 銅色、USER 中性色與手機色票一致，設定按鈕也與帳號列等高。手機 dropdown trigger/menu 在真正 Tablet 一律隱藏；「返回手機版」只有手機 tablet preview 啟用時才出現，真實 iPad 不顯示。直式底部記帳 rail 仍預設展開，唯一把手放大並顯示「展開記帳／收起記帳」，展開內容壓縮為兩列；直式摘要搜尋使用原生 `type=search`，不顯示額外「搜尋／清除」按鈕。日期／月份仍與手機共用原生 touch owner，直式與橫式共用 `ledgerMonthDisplay`＋原生 `type=month`；沒有平板第二套 writer、month、identity 或 business flow。
+目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。手機帳號選單仍暫時提供「測試用平板版」，只在目前分頁 session 內啟用，直接重用正式平板 presentation；直式以 820px、橫式以 1194px reference viewport 呈現，旋轉手機可檢查兩個方向。V0.22.21 起平板直式與橫式都明確由 canonical `.cy-account-cluster` 擁有右上 identity，格式維持 `員工編號 姓名［角色］｜登出`；角色是姓名後方的同行純文字，不是獨立 pill，SUPER_ADMIN 金色、ADMIN 銅色、USER 中性色與手機色票一致，設定按鈕也與帳號列等高。手機 dropdown trigger/menu 在真正 Tablet 一律隱藏；「返回手機版」只有手機 tablet preview 啟用時才出現，真實 iPad 不顯示。直式底部記帳 rail 仍預設展開，唯一把手放大並顯示「展開記帳／收起記帳」，展開內容壓縮為兩列；直式摘要搜尋使用原生 `type=search`，不顯示額外「搜尋／清除」按鈕。V0.22.22 起直式切月份共用手機成熟的 busy lifecycle，會顯示「載入中…」並暫停當月相關控制項；搜尋 Enter 後收鍵盤、存檔成功訊息淡出，期初餘額與月份鎖帳共用 compact touch utility。年月旁的快速鎖帳只移動既有 `lockedThrough` 邊界一個月：下一個月份才能快速上鎖，只有最新鎖帳月份能快速解鎖並退回前一月；歷史已鎖月份、跳月未鎖月份與沒有初始 `lockedThrough` 時都顯示狀態但停用，需使用既有月份鎖帳設定。日期／月份仍與手機共用原生 touch owner，直式與橫式共用 `ledgerMonthDisplay`＋原生 `type=month`；沒有平板第二套 writer、month、lock、identity 或 business flow。
 
 未合併的 PR #297 / V0.22.2 Build 4 不是目前基準，後續修正已由 V0.22.3 系列取代。
 
