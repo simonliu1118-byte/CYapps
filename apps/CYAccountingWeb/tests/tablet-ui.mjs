@@ -4,6 +4,7 @@ import vm from 'node:vm';
 const read = name => fs.readFileSync(new URL('../public/' + name, import.meta.url), 'utf8');
 const source = read('adaptive-ui.js');
 const ledgerToolsSource = read('ledger-tools.js');
+const exportSource = read('excel-export-ui.js');
 const tabletCode = source.slice(source.indexOf('function isTabletWorkspace()'));
 const listeners = new Map();
 let coarse = true;
@@ -84,7 +85,7 @@ assert.equal(currentEdit.draft, draft, 'rotation preserves the same draft');
 win.innerWidth = 820; win.screen.orientation.type = 'portrait-primary'; listeners.get('resize')();
 viewportHeight = 420; listeners.get('visual:resize')();
 assert.equal(root.dataset.tabletLayout, 'portrait', 'software keyboard does not change orientation');
-assert.equal(style.get('--tablet-visible-height'), '420px');
+assert.equal(style.get('--tablet-visible-height'), '1100px', 'software keyboard must not collapse the tablet workspace into the visual viewport');
 assert.equal(context.cyTouchWorkspaceEdit, currentEdit);
 assert.equal(writes, 0, 'layout/rotation/keyboard/pinning never writes accounting data');
 win.innerWidth = 375; listeners.get('resize')();
@@ -130,6 +131,19 @@ assert.match(source, /tablet-entry-handle-label">展開記帳/, 'portrait collap
 assert.match(source, /label\.textContent = expanded \? '收起記帳' : '展開記帳'/, 'entry handle label follows expanded state');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerQuickLockButton\.is-locked[\s\S]*?background:\s*#fff0df !important/, 'portrait locked month has a colored lock state');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-card\.is-loading \.table-wrap::after[\s\S]*?content:\s*"載入中…"/, 'portrait reuses the visible ledger loading state');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerMonthSlot \{[\s\S]*?border-radius:\s*10px !important[\s\S]*?background:\s*#fff !important/, 'portrait month selector is a bounded touch capsule');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerMonthDisplay::after[\s\S]*?content:\s*"▾"/, 'portrait month selector exposes an explicit picker cue');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerSummarySearch \{[\s\S]*?font-size:\s*16px !important/, 'portrait native search stays at iOS-safe 16px and does not trigger focus zoom');
+assert.match(source, /syncTabletPortraitLedgerExportPlacement\(orientation\)/, 'tablet layout owns export placement');
+assert.match(source, /orientation === 'portrait' \? summaryActions : viewTools/, 'portrait moves the canonical Excel button beside opening balance');
+assert.match(exportSource, /Boolean\(document\.documentElement\.dataset\.tabletLayout\)/, 'both tablet orientations use the phone native-share owner');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-card th:nth-child\(3\),[\s\S]*?display:\s*none !important/, 'portrait removes the separate income-expense column');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?ledger-row-income[\s\S]*?td:nth-child\(6\)::before[\s\S]*?content:\s*"\+"/, 'portrait income amount carries the phone-style plus sign');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?ledger-row-expense[\s\S]*?td:nth-child\(6\)::before[\s\S]*?content:\s*"−"/, 'portrait expense amount carries the phone-style minus sign');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?td\.action-col \[data-edit-id\]::before/, 'portrait edit action is icon-only');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?td\.action-col \[data-delete-id\]::before/, 'portrait delete action is icon-only');
+assert.match(ledgerToolsSource, /data-edit-id="\$\{tx\.id\}" aria-label="編輯"/, 'icon-only edit retains an accessible name');
+assert.match(ledgerToolsSource, /data-delete-id="\$\{tx\.id\}" aria-label="刪除"/, 'icon-only delete retains an accessible name');
 assert.match(source, /function usesCompactTouchUtility\(\)[\s\S]*?isTabletWorkspace\(\) && tabletWorkspaceOrientation\(\) === 'portrait'/, 'portrait tablet reuses the compact touch utility lifecycle');
 
 const quickLockFns = ledgerToolsSource.slice(
