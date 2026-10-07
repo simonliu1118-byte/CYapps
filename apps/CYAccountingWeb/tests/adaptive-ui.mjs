@@ -105,6 +105,13 @@ assert.match(js, /window\.cyOpenMobileUtility = openMobileUtility/);
 assert.match(js, /window\.cyOpenMobileLedgerOpening = \(\) => openMobileUtility\('opening'\)/);
 assert.match(js, /window\.cyOpenMobileLedgerLock = \(\) => openMobileUtility\('lock'\)/);
 assert.match(js, /window\.cyOpenMobileSettingsPane = tab => openMobileUtility\(tab\)/);
+assert.match(js, /window\.cyUsesCompactTouchUtility = usesCompactTouchUtility/);
+assert.match(js, /function usesCompactTouchUtility\(\)[\s\S]*?isTabletWorkspace\(\) && tabletWorkspaceOrientation\(\) === 'portrait'/);
+assert.match(ledger, /function ledgerQuickLockState\(month\)/);
+assert.match(ledger, /const canLock = Boolean\(lockedThrough && !locked && month === shiftLedgerMonth\(lockedThrough, 1\)\)/);
+assert.match(ledger, /const canUnlock = boundary/);
+assert.match(ledger, /window\.cyaccSaveLock\(target\)/);
+assert.doesNotMatch(ledger, /\/api\/settings\/lock/, 'quick lock must call the canonical saveLock owner rather than write lock settings itself');
 assert.doesNotMatch(js, /openingDialog\.showModal\(\)/);
 
 console.log('Adaptive UI regression checks passed.');
