@@ -50,7 +50,7 @@ async function downloadMonthlyExcel() {
     });
     const nativeShare = (
       window.matchMedia('(max-width: 767px)').matches
-      || document.documentElement.dataset.tabletLayout === 'landscape'
+      || Boolean(document.documentElement.dataset.tabletLayout)
     ) && typeof navigator.share === 'function'
       && (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [file] }));
 
