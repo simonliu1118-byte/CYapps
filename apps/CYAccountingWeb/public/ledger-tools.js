@@ -41,6 +41,10 @@ function setupLedgerToolbar() {
       <button id="ledgerBalanceButton" class="secondary compact cy-ledger-balance-button" type="button">餘額</button>
       <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月">‹</button>
       <div id="ledgerMonthSlot"><span id="ledgerMonthDisplay" class="cy-mobile-month-display" aria-hidden="true"></span></div>
+      <button id="ledgerQuickLockButton" class="secondary compact cy-ledger-quick-lock" type="button" aria-label="快速鎖帳" aria-pressed="false" title="快速鎖帳">
+        <svg class="cy-ledger-lock-icon cy-ledger-lock-icon-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 9.7-1.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <svg class="cy-ledger-lock-icon cy-ledger-lock-icon-closed" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
       <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>
       <button id="ledgerMoreButton" class="secondary compact cy-ledger-more-button" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
       <span id="ledgerDisplayMonth" class="ledger-display-month"></span>
@@ -111,6 +115,7 @@ function bindLedgerToolbar() {
   document.querySelector('#ledgerPrevMonth')?.addEventListener('click', () => moveLedgerMonth(-1));
   document.querySelector('#ledgerNextMonth')?.addEventListener('click', () => moveLedgerMonth(1));
   els.monthFilter?.addEventListener('change', syncLedgerMonthDisplay);
+  document.querySelector('#ledgerQuickLockButton')?.addEventListener('click', handleLedgerQuickLock);
   const searchInput = document.querySelector('#ledgerSummarySearch');
   document.querySelector('#ledgerSearchForm')?.addEventListener('submit', event => {
     event.preventDefault();
@@ -130,6 +135,10 @@ function bindLedgerToolbar() {
   });
 
   document.querySelector('#ledgerOpeningBalanceButton')?.addEventListener('click', async () => {
+    if (window.cyUsesCompactTouchUtility?.() && typeof window.cyOpenMobileLedgerOpening === 'function') {
+      await window.cyOpenMobileLedgerOpening();
+      return;
+    }
     const dialog = document.querySelector('#openingDialog');
     if (!dialog) return;
     if (els.openingMonth && els.monthFilter?.value) els.openingMonth.value = els.monthFilter.value;
@@ -208,12 +217,60 @@ function bindLedgerToolbar() {
 function syncLedgerMonthDisplay() {
   const display = document.querySelector('#ledgerMonthDisplay');
   const value = String(els.monthFilter?.value || '');
-  if (!display) return;
-  const match = /^(\d{4})-(\d{2})$/.exec(value);
-  display.textContent = match ? `${Number(match[1])}年${Number(match[2])}月` : '選擇月份';
+  if (display) {
+    const match = /^(\d{4})-(\d{2})$/.exec(value);
+    display.textContent = match ? `${Number(match[1])}年${Number(match[2])}月` : '選擇月份';
+  }
+  syncLedgerQuickLock();
+}
+
+function syncLedgerQuickLock() {
+  const button = document.querySelector('#ledgerQuickLockButton');
+  const month = String(els.monthFilter?.value || '');
+  if (!button) return;
+  const locked = typeof isLocked === 'function' && /^\d{4}-\d{2}$/.test(month) ? isLocked(month) : false;
+  button.classList.toggle('is-locked', locked);
+  button.setAttribute('aria-pressed', locked ? 'true' : 'false');
+  button.setAttribute('aria-label', locked ? '此月份已鎖帳，開啟鎖帳設定' : '快速鎖帳至此月份');
+  button.title = locked ? '此月份已鎖帳；點擊開啟鎖帳設定' : '快速鎖帳至此月份';
+}
+
+async function handleLedgerQuickLock() {
+  const button = document.querySelector('#ledgerQuickLockButton');
+  const month = String(els.monthFilter?.value || '');
+  if (!button || !/^\d{4}-\d{2}$/.test(month)) return;
+
+  if (typeof isLocked === 'function' && isLocked(month)) {
+    if (window.cyUsesCompactTouchUtility?.() && typeof window.cyOpenMobileLedgerLock === 'function') {
+      await window.cyOpenMobileLedgerLock();
+    } else {
+      document.querySelector('#ledgerLockSettingsButton')?.click();
+    }
+    return;
+  }
+
+  const label = month.replace(/^(\d{4})-(\d{2})$/, (_, year, value) => `${Number(year)}年${Number(value)}月`);
+  const confirmed = typeof window.cyConfirm === 'function'
+    ? await window.cyConfirm({
+        title: '快速鎖帳',
+        message: `確定鎖帳至 ${label}？`,
+        detail: '依現有鎖帳規則，此月份以及更早月份會一併鎖定。',
+        confirmText: '鎖帳'
+      })
+    : window.confirm(`確定鎖帳至 ${label}？\n此月份以及更早月份會一併鎖定。`);
+  if (!confirmed) return;
+
+  button.disabled = true;
+  try {
+    if (typeof window.cyaccSaveLock === 'function') await window.cyaccSaveLock(month);
+  } finally {
+    button.disabled = false;
+    syncLedgerQuickLock();
+  }
 }
 
 window.cySyncLedgerMonthDisplay = syncLedgerMonthDisplay;
+window.cySyncLedgerQuickLock = syncLedgerQuickLock;
 
 function scheduleLedgerRefresh() {
   void loadLedgerOpeningAndRender();
