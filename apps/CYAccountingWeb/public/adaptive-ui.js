@@ -4282,15 +4282,13 @@ function setupTabletWorkspace() {
   shell.dataset.tabletBound = '1';
   const controls = document.createElement('div');
   controls.className = 'tablet-entry-controls';
-  controls.innerHTML = '<button id="tabletEntryToggle" type="button" class="tablet-entry-handle" aria-label="展開記帳" aria-expanded="false" aria-controls="transactionForm"><span class="tablet-entry-handle-bar" aria-hidden="true"></span><span class="tablet-entry-handle-label">展開記帳</span></button><label><input id="tabletEntryPinned" type="checkbox">保持展開</label>';
+  controls.innerHTML = '<button id="tabletEntryToggle" type="button" class="tablet-entry-handle" aria-label="展開記帳" aria-expanded="false" aria-controls="transactionForm"><span class="tablet-entry-handle-bar" aria-hidden="true"></span><span class="tablet-entry-handle-label">展開記帳</span></button>';
   entry.prepend(controls);
   controls.querySelector('#tabletEntryToggle').addEventListener('click', () => {
     if (suppressClick) { suppressClick = false; return; }
-    if (controls.querySelector('#tabletEntryPinned').checked) return;
     const rail = document.querySelector('.cy-entry-rail');
     const expanded = rail?.dataset.entryExpanded !== 'true';
     setTabletEntryExpanded(expanded);
-    if (!expanded) controls.querySelector('#tabletEntryPinned').checked = false;
   });
   const handle = controls.querySelector('#tabletEntryToggle');
   let drag = null;
@@ -4307,14 +4305,9 @@ function setupTabletWorkspace() {
     drag = null;
     if (Math.abs(distance) < 24) return;
     suppressClick = true;
-    if (distance > 0) controls.querySelector('#tabletEntryPinned').checked = false;
     setTabletEntryExpanded(distance < 0);
   });
   handle.addEventListener('pointercancel', () => { drag = null; suppressClick = false; });
-  controls.querySelector('#tabletEntryPinned').addEventListener('change', event => {
-    if (event.target.checked) setTabletEntryExpanded(true);
-  });
-
   let active = false;
   const sync = () => {
     const tablet = isTabletWorkspace();
