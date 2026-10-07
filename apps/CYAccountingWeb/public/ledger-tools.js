@@ -41,11 +41,11 @@ function setupLedgerToolbar() {
       <button id="ledgerBalanceButton" class="secondary compact cy-ledger-balance-button" type="button">餘額</button>
       <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月">‹</button>
       <div id="ledgerMonthSlot"><span id="ledgerMonthDisplay" class="cy-mobile-month-display" aria-hidden="true"></span></div>
+      <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>
       <button id="ledgerQuickLockButton" class="secondary compact cy-ledger-quick-lock" type="button" aria-label="快速鎖帳" aria-pressed="false" title="快速鎖帳">
         <svg class="cy-ledger-lock-icon cy-ledger-lock-icon-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 9.7-1.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         <svg class="cy-ledger-lock-icon cy-ledger-lock-icon-closed" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
       </button>
-      <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>
       <button id="ledgerMoreButton" class="secondary compact cy-ledger-more-button" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
       <span id="ledgerDisplayMonth" class="ledger-display-month"></span>
     </div>`;
@@ -258,9 +258,10 @@ function syncLedgerQuickLock() {
 
   const quick = ledgerQuickLockState(month);
   const enabled = quick.canLock || quick.canUnlock;
+  const loading = document.querySelector('.ledger-card')?.classList.contains('is-loading') === true;
   button.classList.toggle('is-locked', quick.locked);
   button.classList.toggle('is-lock-boundary', quick.boundary);
-  button.disabled = !enabled;
+  button.disabled = loading || !enabled;
   button.setAttribute('aria-pressed', quick.locked ? 'true' : 'false');
 
   if (quick.canUnlock) {
