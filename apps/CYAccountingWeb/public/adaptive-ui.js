@@ -4324,6 +4324,7 @@ function setupTabletWorkspace() {
     document.documentElement.dataset.tabletLayout = orientation;
     document.documentElement.dataset.viewport = window.innerWidth < 768 ? 'mobile' : tablet ? 'tablet' : 'desktop';
     syncTabletPickerOwnership(orientation);
+    syncTabletPortraitLedgerExportPlacement(orientation);
     if (typeof syncMobileWorkspaceMobileIdentity === 'function') syncMobileWorkspaceMobileIdentity();
     if (typeof syncMobileWorkspaceConfirmationPolicy === 'function') syncMobileWorkspaceConfirmationPolicy();
     if (!tablet && !wasTablet) return;
@@ -4369,4 +4370,17 @@ function setupTabletWorkspace() {
   sync();
   syncHeight();
 }
+function syncTabletPortraitLedgerExportPlacement(orientation = tabletWorkspaceOrientation()) {
+  const exportButton = document.querySelector('#ledgerExcelExport');
+  const status = document.querySelector('#ledgerExcelExportStatus');
+  const summaryActions = document.querySelector('.cy-summary-actions');
+  const viewTools = document.querySelector('.ledger-view-tools');
+  if (!exportButton || !status || !summaryActions || !viewTools) return;
+
+  const target = orientation === 'portrait' ? summaryActions : viewTools;
+  if (exportButton.parentElement !== target) target.append(exportButton);
+  if (status.parentElement !== target) target.append(status);
+}
+window.cySyncTabletPortraitLedgerExportPlacement = syncTabletPortraitLedgerExportPlacement;
+
 window.addEventListener('load', setupTabletWorkspace, { once: true });
