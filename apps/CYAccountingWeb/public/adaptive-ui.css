@@ -10004,6 +10004,58 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .mobile-account-name { mar
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .shell.cy-split-layout { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) auto !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail { grid-row: 2 !important; max-height: min(calc(var(--tablet-visible-height, 100dvh) * .46), 460px) !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card { grid-row: 1 !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .section-title,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] #transactionForm,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .quick-entry-tools,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] #saveMessage { display: none !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) body[data-cyacc-read-only="true"] .cy-entry-rail { display: none !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) body[data-cyacc-read-only="true"] .shell.cy-split-layout { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .action-label-mobile { display: none !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .action-label-desktop { display: inline !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .settings-tree-actions,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .settings-edit-button { opacity: 1; visibility: visible; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .settings-category-toolbar { display: flex !important; flex-wrap: wrap; gap: 8px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .settings-category-toolbar button { min-height: 44px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-card .save-message { display: block !important; white-space: normal; min-height: 20px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > #saveMessage { grid-column: 1 / -1 !important; }
+
+html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar-actions > #headerAccountManagerButton,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar-actions > #headerCategoryManagerButton { display: none !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-toolbar button { min-height: 44px !important; font-size: 16px !important; padding: 8px 12px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-card h2,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card h2 { font-size: 18px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > label > span,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .quick-tool-label { font-size: 15px !important; align-self: center !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-kind-switch .kind-button { font-size: 17px !important; height: 44px !important; padding: 8px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-card input::-webkit-date-and-time-value { min-width: 0; text-align: center; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > .date-field { order: 1; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > .account-source-field { order: 2; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > .category-field { order: 3; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > #favoriteCategoryGroup { order: 4; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > .summary-field { order: 5; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > #summarySuggestionGroup { order: 6; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > .amount-field { order: 7; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > #saveButton { order: 8; min-width: 0 !important; font-size: 17px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > #mobileEntrySecondaryButton { order: 9; font-size: 16px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > #saveMessage { order: 10; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-grid > .quick-tool-row.hidden { display: none !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-title > div:first-child { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-title .title-with-badge { grid-column: 1 / -1; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-ledger-context { grid-column: 1; grid-row: 2; align-items: center; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-ledger-summary-bar { display: contents !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-summary-actions { grid-column: 2; grid-row: 2; display: flex !important; gap: 6px !important; align-items: center; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #monthSummary { grid-column: 1 / -1; grid-row: 3; margin: 0 !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-summary-item.opening { order: 1; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-summary-item.income { order: 2; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-summary-item.expense { order: 3; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-summary-item.ending { order: 4; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-summary-item.net { order: 5; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-summary-search { order: 6; grid-column: 1 / -1; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-view-tools { display: flex !important; margin: 0 !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card th { font-size: 14px !important; padding: 8px 6px !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card td.empty { vertical-align: top !important; padding-top: 24px !important; }
+
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail .entry-card {
   display: grid !important;
   grid-template-columns: 58px minmax(0, 1fr) !important;
