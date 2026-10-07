@@ -128,6 +128,29 @@ assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton:not\(
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-grid \{[\s\S]*?grid-template-columns:\s*repeat\(4,[\s\S]*?grid-template-rows:\s*repeat\(2, 44px\)/, 'portrait entry form is compacted into two field rows');
 assert.match(source, /tablet-entry-handle-label">展開記帳/, 'portrait collapsed rail exposes a labelled entry handle');
 assert.match(source, /label\.textContent = expanded \? '收起記帳' : '展開記帳'/, 'entry handle label follows expanded state');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerQuickLockButton\.is-locked[\s\S]*?background:\s*#fff0df !important/, 'portrait locked month has a colored lock state');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-card\.is-loading \.table-wrap::after[\s\S]*?content:\s*"載入中…"/, 'portrait reuses the visible ledger loading state');
+assert.match(source, /function usesCompactTouchUtility\(\)[\s\S]*?isTabletWorkspace\(\) && tabletWorkspaceOrientation\(\) === 'portrait'/, 'portrait tablet reuses the compact touch utility lifecycle');
+
+const quickLockFns = ledgerToolsSource.slice(
+  ledgerToolsSource.indexOf('function shiftLedgerMonth('),
+  ledgerToolsSource.indexOf('function syncLedgerQuickLock(')
+);
+const quickLock = vm.createContext({ state: { lockedThrough: '2026-08' }, Date });
+vm.runInContext(quickLockFns, quickLock);
+let quick = quickLock.ledgerQuickLockState('2026-09');
+assert.equal(quick.canLock, true, 'the month immediately after lockedThrough may quick-lock');
+assert.equal(quick.canUnlock, false);
+quick = quickLock.ledgerQuickLockState('2026-10');
+assert.equal(quick.canLock, false, 'quick-lock cannot skip a month');
+quick = quickLock.ledgerQuickLockState('2026-08');
+assert.equal(quick.canUnlock, true, 'only the current lockedThrough boundary may quick-unlock');
+quick = quickLock.ledgerQuickLockState('2026-07');
+assert.equal(quick.locked, true);
+assert.equal(quick.canUnlock, false, 'older locked months stay locked and disabled');
+quickLock.state.lockedThrough = '';
+quick = quickLock.ledgerQuickLockState('2026-09');
+assert.equal(quick.canLock, false, 'without an existing lock boundary the compact button cannot establish an arbitrary starting month');
 assert.match(css, /data-tablet-layout="landscape"\] #ledgerExcelImport \{ display: none !important/, 'tablet landscape removes Excel import');
 console.log('Tablet classification, rotation, keyboard, pinning and shared edit ownership passed.');
 
