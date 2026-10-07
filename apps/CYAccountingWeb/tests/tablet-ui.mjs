@@ -131,6 +131,11 @@ assert.match(css, /\.entry-grid > \.summary-field \{[\s\S]*?grid-column:\s*1 \/ 
 assert.match(source, /tablet-entry-handle-arrow" aria-hidden="true">↑<\/span><span class="tablet-entry-handle-label">展開新增/, 'collapsed rail exposes upward arrow and 展開新增');
 assert.match(source, /arrow\.textContent = expanded \? '↓' : '↑'/, 'entry handle arrow follows expanded state');
 assert.match(source, /label\.textContent = expanded \? '收合隱藏' : '展開新增'/, 'entry handle text follows expanded state');
+assert.match(css, /V0\.22\.26 portrait tab handle hotfix/, 'portrait handle fix is explicitly scoped');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.tablet-entry-controls \{[\s\S]*?position:\s*absolute !important[\s\S]*?top:\s*-29px !important[\s\S]*?left:\s*50% !important/, 'portrait handle is a raised tab rather than a full control row');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.tablet-entry-handle \{[\s\S]*?border-bottom:\s*0 !important[\s\S]*?border-radius:\s*11px 11px 0 0 !important/, 'portrait handle joins the panel edge as a tab');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.cy-entry-rail\[data-entry-expanded="false"\] \.entry-card \{[\s\S]*?height:\s*10px !important/, 'collapsed rail leaves only a thin panel edge under the raised tab');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#monthSummary \{[\s\S]*?grid-row:\s*3 !important/, 'portrait month summary stays below the month/actions row and cannot collide with the month picker');
 assert.doesNotMatch(source, /tabletEntryPinned|保持展開/, 'portrait entry rail no longer exposes a pinned-open mode');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.ledger-card th\.action-col \{[\s\S]*?text-align:\s*left !important/, 'tablet action header is left aligned in both orientations');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-title \.title-with-badge \{[\s\S]*?display:\s*none !important/, 'portrait removes the ledger title row');
