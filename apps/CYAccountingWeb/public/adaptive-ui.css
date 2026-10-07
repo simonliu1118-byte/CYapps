@@ -10172,7 +10172,7 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid sel
   min-height: 36px !important;
   height: 36px !important;
   padding: 0 8px !important;
-  font-size: 13px !important;
+  font-size: 16px !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .account-source-field { grid-column: 1 / 4 !important; grid-row: 1 !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .date-field { grid-column: 4 / 7 !important; grid-row: 1 !important; }
