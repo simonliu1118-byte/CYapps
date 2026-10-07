@@ -4350,7 +4350,7 @@ function setupTabletWorkspace() {
     if (wasTablet !== tablet && typeof renderSettingsAccountManager === 'function') renderSettingsAccountManager();
   };
   const syncHeight = () => {
-    const height = window.visualViewport?.height || window.innerHeight;
+    const height = Math.max(Number(window.innerHeight || 0), Number(window.visualViewport?.height || 0));
     document.documentElement.style.setProperty('--tablet-visible-height', `${height}px`);
     const topbar = document.querySelector('.topbar');
     const notice = document.querySelector('#readOnlyNotice');
