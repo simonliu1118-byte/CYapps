@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.22 Build 0 | 平板直式補齊手機成熟 touch lifecycle：月份切換顯示「載入中…」並鎖住相關控制項、原生搜尋 Enter 收鍵盤、存檔成功訊息淡出、期初餘額／月份鎖帳共用 compact utility。年月選擇器旁新增快速鎖帳圖示，但不建立第二套鎖帳規則：只允許 `lockedThrough` 下一個月逐月上鎖；只有最新鎖帳月份可逐月解鎖並將 `lockedThrough` 退回前一月；更早已鎖月份與跳月未鎖月份都顯示狀態但停用，沒有鎖帳起點時也必須先從既有月份鎖帳視窗設定。 |
 | V0.22.21 Build 0 | 平板直式介面返修：右上維持 canonical inline account cluster，設定按鈕與帳號列高度一致，角色改為姓名後方的純文字括號標示並保留 SUPER_ADMIN 金／ADMIN 銅／USER 中性色；手機 dropdown identity 在平板直／橫式均維持隱藏，返回手機版只屬手機 tablet preview。直式底部記帳 rail 改為較大的「展開記帳／收起記帳」把手，展開內容壓縮為兩列欄位配置以增加帳本可視高度；直式搜尋改用原生 type=search 欄位，移除搜尋／清除按鈕並支援原生清除回復完整清單。 |
 | V0.22.20 Build 1 | 同一手機平板測試模式工作項目返修，不升 Patch：平板直式、平板橫式與手機模擬平板恢復原本 inline 帳號列 `員工編號 姓名［角色］｜登出`，不再使用手機下拉帳號元件；角色視覺只共用手機色票，SUPER_ADMIN 金色、ADMIN 銅色、USER 中性色。手機正常模式仍使用原手機帳號下拉，並保留「測試用平板版」；平板 preview 暫時新增獨立「返回手機版」按鈕，兩個測試入口在正式 Release 前移除。 |
 | V0.22.20 Build 0 | 新增手機端平板介面測試入口：手機帳號選單在「登出」上方提供「測試用平板版」，啟用後以 session-scoped preview 強制使用平板 presentation，直式以 820 寬度、橫式以 1194 寬度的 viewport 參考值呈現，並沿用同一平板 layout / gesture / month / identity owner；旋轉手機會切換平板直／橫式。測試模式帳號選單提供「返回手機版」，不修改帳務資料 owner、API、D1 或 CYID contract。 |

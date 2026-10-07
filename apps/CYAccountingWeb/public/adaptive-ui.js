@@ -3324,8 +3324,14 @@ window.cyOpenMobileUtility = openMobileUtility;
 window.cyOpenMobileLedgerOpening = () => openMobileUtility('opening');
 window.cyOpenMobileLedgerLock = () => openMobileUtility('lock');
 window.cyOpenMobileSettingsPane = tab => openMobileUtility(tab);
+window.cyUsesCompactTouchUtility = usesCompactTouchUtility;
 
 let cyMobileOpeningMount = null;
+
+function usesCompactTouchUtility() {
+  return window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches ||
+    (isTabletWorkspace() && tabletWorkspaceOrientation() === 'portrait');
+}
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', setupTouchWorkspace, { once: true });
@@ -3349,7 +3355,7 @@ function setupTouchWorkspace() {
 }
 
 async function openMobileUtility(type) {
-  if (!window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
+  if (!usesCompactTouchUtility()) return;
   if (!['opening', 'accounts', 'categories', 'lock'].includes(type)) return;
 
   const dialog = els.settingsDialog || document.querySelector('#settingsDialog');
@@ -3833,7 +3839,7 @@ function setupTouchWorkspaceSearch() {
   input.setAttribute('enterkeyhint', 'search');
   input.setAttribute('inputmode', 'search');
   form.addEventListener('submit', () => {
-    if (!window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
+    if (!usesCompactTouchUtility()) return;
     window.setTimeout(() => input.blur(), 0);
   });
 }
@@ -3928,7 +3934,7 @@ function handleTouchWorkspaceSaveMessage(message, text, isError) {
   message.classList.remove('is-fading');
   message.classList.toggle('is-visible', Boolean(text));
 
-  if (!text || isError || !window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
+  if (!text || isError || !usesCompactTouchUtility()) return;
 
   cyTouchWorkspaceSaveHideTimer = window.setTimeout(() => {
     message.classList.add('is-fading');

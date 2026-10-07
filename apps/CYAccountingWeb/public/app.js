@@ -312,6 +312,8 @@ async function loadTransactions() {
     state.transactions = mergePendingTransactionUpdates(data.transactions || [], month);
     state.ledgerLocked = Boolean(data.locked);
     state.lockedThrough = data.lockedThrough || state.lockedThrough;
+    els.ledgerLockBadge?.classList.toggle('hidden', !state.ledgerLocked);
+    window.cySyncLedgerQuickLock?.();
     await window.cyaccRefreshLedgerView(month);
     updateEntryLockState();
   } catch (error) {
@@ -328,10 +330,11 @@ function setLedgerLoadingState(loading) {
   ledger?.classList.toggle('is-loading', busy);
   ledger?.setAttribute('aria-busy', busy ? 'true' : 'false');
   for (const control of document.querySelectorAll(
-    '#ledgerPrevMonth, #ledgerNextMonth, #monthFilter, #ledgerMoreButton, #ledgerBalanceButton, #ledgerSearchForm input, #ledgerSearchForm button'
+    '#ledgerPrevMonth, #ledgerNextMonth, #monthFilter, #ledgerMoreButton, #ledgerBalanceButton, #ledgerQuickLockButton, #ledgerOpeningBalanceButton, #ledgerLockSettingsButton, #ledgerExcelExport, #ledgerSearchForm input, #ledgerSearchForm button'
   )) {
     if ('disabled' in control) control.disabled = busy;
   }
+  if (!busy) window.cySyncLedgerQuickLock?.();
 }
 
 function openEditTransaction(id) {
@@ -878,12 +881,16 @@ async function saveLock(lockedThrough) {
     state.lockedThrough = data.lockedThrough || null;
     els.lockedThrough.value = state.lockedThrough || '';
     renderSettings();
+    window.cySyncLedgerQuickLock?.();
     setDialogMessage(els.settingsMessage, state.lockedThrough ? `已鎖帳至 ${formatMonth(state.lockedThrough)}。` : '已取消鎖帳。');
     await loadTransactions();
+    return true;
   } catch (error) {
     setDialogMessage(els.settingsMessage, error.message, true);
+    return false;
   }
 }
+window.cyaccSaveLock = saveLock;
 
 function optionsWithHistorical(currentNames, selected) {
   const names = [...currentNames];
