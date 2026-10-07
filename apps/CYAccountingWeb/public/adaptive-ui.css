@@ -10005,11 +10005,8 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .shell.cy-split
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail { grid-row: 2 !important; max-height: min(calc(var(--tablet-visible-height, 100dvh) * .46), 460px) !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card { grid-row: 1 !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls { display: flex !important; align-items: center !important; justify-content: space-between; gap: 8px !important; margin-bottom: 8px; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls label { display: flex !important; align-items: center !important; gap: 8px !important; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls input { width: 22px !important; height: 22px !important; min-height: 22px !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls button { min-height: 36px !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .section-title,
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .tablet-entry-controls label,
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] #transactionForm,
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .quick-entry-tools,
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] #saveMessage { display: none !important; }
@@ -10099,17 +10096,6 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-h
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-handle-label {
   display: block;
   white-space: nowrap;
-}
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls label {
-  position: absolute;
-  z-index: 2;
-  right: 2px;
-  top: 12px;
-  display: flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-  margin: 0;
-  font-size: 12px !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .entry-card {
   padding: 0 12px !important;
@@ -11060,4 +11046,79 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card td
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-card td.action-col [data-delete-id]::before {
   -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20fill='none'%20stroke='black'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%20d='M3%206h18M9%206V4h6v2M5%206l1%2014h12l1-14M10%2010v6M14%2010v6'/%3E%3C/svg%3E") center/contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20fill='none'%20stroke='black'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%20d='M3%206h18M9%206V4h6v2M5%206l1%2014h12l1-14M10%2010v6M14%2010v6'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+
+
+/* Tablet summary/header cleanup: portrait shares the accepted landscape summary language. */
+html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card th.action-col {
+  text-align: left !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .ledger-title .title-with-badge {
+  display: none !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary {
+  grid-column: 1 / -1 !important;
+  grid-row: 2 !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 0 !important;
+  min-width: 0 !important;
+  margin: 5px 0 2px !important;
+  padding: 6px 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item {
+  display: inline-flex !important;
+  flex: 0 1 auto !important;
+  flex-direction: row !important;
+  align-items: baseline !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+  padding: 0 9px !important;
+  color: #657386 !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.opening {
+  padding-left: 0 !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item:not(.opening) {
+  border-left: 1px solid #dfe5eb !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item > span,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item strong {
+  display: inline !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item strong {
+  color: #344054 !important;
+  font-weight: 650 !important;
+  font-variant-numeric: tabular-nums;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.income > span,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.income strong,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.net.profit > span,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.net.profit strong {
+  color: #2f7a4c !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.expense > span,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.expense strong,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.net.loss > span,
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-item.net.loss strong {
+  color: #a54b45 !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .ledger-summary-search {
+  flex: 0 0 auto !important;
+  margin-left: auto !important;
+  padding-left: 8px !important;
+  color: #7a8796 !important;
+  font-size: 10.5px !important;
+  white-space: nowrap !important;
 }
