@@ -154,8 +154,11 @@ function bindLedgerToolbar() {
   });
 
   document.querySelector('#ledgerBalanceButton')?.addEventListener('click', () => {
-    if (typeof window.cyOpenMobileLedgerOpening === 'function') window.cyOpenMobileLedgerOpening();
-    else document.querySelector('#ledgerOpeningBalanceButton')?.click();
+    if (window.cyUsesCompactTouchUtility?.() && typeof window.cyOpenMobileLedgerOpening === 'function') {
+      window.cyOpenMobileLedgerOpening();
+      return;
+    }
+    document.querySelector('#ledgerOpeningBalanceButton')?.click();
   });
 
   const more = document.querySelector('#ledgerMoreButton');
