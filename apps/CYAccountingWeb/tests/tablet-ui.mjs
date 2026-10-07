@@ -129,6 +129,11 @@ assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton:not\(
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-grid \{[\s\S]*?grid-template-columns:\s*repeat\(4,[\s\S]*?grid-template-rows:\s*repeat\(2, 44px\)/, 'portrait entry form is compacted into two field rows');
 assert.match(source, /tablet-entry-handle-label">展開記帳/, 'portrait collapsed rail exposes a labelled entry handle');
 assert.match(source, /label\.textContent = expanded \? '收起記帳' : '展開記帳'/, 'entry handle label follows expanded state');
+assert.doesNotMatch(source, /tabletEntryPinned|保持展開/, 'portrait entry rail no longer exposes a pinned-open mode');
+assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.ledger-card th\.action-col \{[\s\S]*?text-align:\s*left !important/, 'tablet action header is left aligned in both orientations');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-title \.title-with-badge \{[\s\S]*?display:\s*none !important/, 'portrait removes the ledger title row');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#monthSummary \{[\s\S]*?display:\s*flex !important[\s\S]*?border:\s*0 !important[\s\S]*?background:\s*transparent !important/, 'portrait summary reuses the landscape single-row language');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#monthSummary \.ledger-summary-item:not\(\.opening\) \{[\s\S]*?border-left:\s*1px solid #dfe5eb !important/, 'portrait summary uses the same separators as landscape');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerQuickLockButton\.is-locked[\s\S]*?background:\s*#fff0df !important/, 'portrait locked month has a colored lock state');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-card\.is-loading \.table-wrap::after[\s\S]*?content:\s*"載入中…"/, 'portrait reuses the visible ledger loading state');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerMonthSlot \{[\s\S]*?border-radius:\s*10px !important[\s\S]*?background:\s*#fff !important/, 'portrait month selector is a bounded touch capsule');
