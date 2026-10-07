@@ -46,12 +46,14 @@ async function downloadMonthlyExcel() {
 
     const fileName = `CYAccounting_${month}.xlsx`;
     const file = new File([blob], fileName, {
-      type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      lastModified: Date.now()
     });
-    const nativeShare = (
-      window.matchMedia('(max-width: 767px)').matches
+    const nativeShareSurface = window.matchMedia('(max-width: 767px)').matches
       || Boolean(document.documentElement.dataset.tabletLayout)
-    ) && typeof navigator.share === 'function'
+      || window.__cyaccTabletPreviewEnabled === true;
+    const nativeShare = nativeShareSurface
+      && typeof navigator.share === 'function'
       && (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [file] }));
 
     if (nativeShare) {
