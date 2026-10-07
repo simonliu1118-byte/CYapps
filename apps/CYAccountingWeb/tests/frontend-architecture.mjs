@@ -178,7 +178,7 @@ assert.match(appJs, /setLedgerLoadingState\(true\)/, 'month loading must expose 
 assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingState\(false\)/, 'only the current month request may clear the busy state');
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');
 assert.match(read('public/excel-export-ui.js'), /navigator\.canShare/, 'file sharing capability must be checked before native share');
-assert.match(read('public/excel-export-ui.js'), /dataset\.tabletLayout === 'landscape'/, 'tablet landscape Excel export must reuse native share when available');
+assert.match(read('public/excel-export-ui.js'), /Boolean\(document\.documentElement\.dataset\.tabletLayout\)/, 'tablet portrait and landscape Excel export must reuse native share when available');
 assert.doesNotMatch(adaptiveUi, /querySelector\(['"]\.version['"]\)/, 'adaptive UI must not mutate the global version element');
 assert.doesNotMatch(adaptiveUi, /\bCY_[A-Z0-9_]*VERSION\b|\b(?:sync|enforce)[A-Za-z0-9_]*Version\b/, 'historical version mutators must not return');
 assert.match(appJs, /window\.cySettingsManager\?\.renderAccountManager\?\.\(\)/, 'app.js must delegate account rendering to the canonical settings manager');
