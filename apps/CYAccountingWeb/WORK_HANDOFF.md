@@ -6,8 +6,8 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.26 Build 0**；PR #353 已合併；平板直式月摘要與凸起標籤把手已修正 |
-| Production Deploy | CYAccountingWeb Validate and Deploy **#534**（run `37572824344`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.27 Build 0**；PR #355 已合併；平板欄寬、五格摘要、原生 Excel 分享、把手與直式收支已修正 |
+| Production Deploy | CYAccountingWeb Validate and Deploy **#538**（run `37575180101`）成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.31**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
@@ -41,6 +41,7 @@
 - **V0.22.24 Build 0**：平板摘要／rail 控制收斂。直式與橫式的明細「操作」表頭統一靠左；直式期初／收入／支出／期末／淨利損直接使用橫式單列同行樣式與分隔線，並移除「記帳資料」標題列。直式底部記帳 rail 移除「保持展開」checkbox 與 pinned-open 行為，只保留把手點按／拖曳展開收合。欄位結構與 canonical writer 未改。PR #349 Governance #1091、Validate #524 成功；Production Deploy #525 成功。
 - **V0.22.25 Build 0**：平板直式新增區重排。把手改為中央「↑ 展開新增／↓ 收合隱藏」並移除舊灰色短槓；收入／支出仍沿用同一 `.kind-button` 與 canonical kind state，只在直式改為最左側 54px 垂直雙段。右側第一列為帳戶／日期／科目／金額，中間 30px 快捷列並排常用科目／常用摘要，最後一列為寬摘要＋儲存＋清空／取消；主要輸入欄 16px。PR #351 Governance #1094、Validate #529 成功；Production Deploy #530 成功。
 - **V0.22.26 Build 0**：修正 V0.22.25 實機返修。月摘要恢復到年月／工具列下方獨立單列，避免與年月 selector 重疊；直式把手改成面板上緣中央向上凸出的 tab，左右上邊框維持連續，收合只保留薄面板邊與「↑ 展開新增」，展開顯示「↓ 收合隱藏」。V0.22.25 左側垂直 kind switch 與三層 entry grid 不變。PR #353 Governance #1096、Validate #533 成功；Production Deploy #534 成功。
+- **V0.22.27 Build 0**：平板實機再收斂。直／橫式交易表改為 fixed layout 並指定各欄寬，空月份不再因 message row 壓縮表頭；雙方向「操作」表頭改置中。月摘要改為固定五格且放大，期初／收入／支出／期末／淨利損維持固定槽位。Excel 直／橫式與手機 tablet preview 共用同一 native file share 路徑，xlsx File 固定正確 MIME。直式凸起把手固定白色，收合時整條 rail 不再殘留，只顯示 tab；收入／支出文字改直向。PR #355 Governance #1098、Validate #537 成功；Production Deploy #538 成功。
 
 完整版本歷史見 `CHANGELOG.md`。
 
@@ -84,13 +85,13 @@
 - **手機**：新增／看帳兩頁；新增預設收入；日期使用原生 `type=date`；新增為「儲存／清空」、編輯為「儲存修改／取消」且取消回原 ledger context；操作區在底部頁籤上方，金額與儲存之間依可用高度彈性伸縮；右上帳號等 CYID Session 真實 identity ready 後才顯示；登入頁依 `visualViewport` 處理鍵盤高度，手機有無鍵盤維持同一 compact 尺寸；交易滑出後再點編輯／刪除；`更多` 中 SUPER_ADMIN 可查看唯讀備份資訊；共用 `餘額／更多`、設定與 canonical writer。
 - **V0.22.20 Build 0**：手機帳號選單在「登出」上方新增「測試用平板版」；preview 僅存在目前分頁 session，直式使用 820px、橫式 1194px reference viewport，手機旋轉時切換正式 tablet layout。不建立第二套 tablet UI、writer、month 或 identity owner。PR #338 的 Governance Check #1075 與 Validate #497 成功，Production Deploy #498 成功。
 - **V0.22.20 Build 1**：同一 preview 工作項目返修，不升 Patch。平板直式、橫式與手機模擬平板恢復 inline 帳號列 `員工編號 姓名［角色］｜登出`，不再使用手機下拉帳號元件；SUPER_ADMIN 金色、ADMIN 銅色、USER 中性色與手機色票一致。preview 暫時新增獨立「返回手機版」按鈕；正常手機仍保留「測試用平板版」。PR #340 的 Governance Check #1077 與 Validate #501 成功，Production Deploy #502 成功。
-- **平板**：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail；直式 rail 預設展開，把手為中央「↑ 展開新增／↓ 收合隱藏」，可點按／拖曳且沒有 pinned-open。直式新增區左側是窄版垂直收入／支出雙段，仍共用 canonical kind state；右側第一列帳戶／日期／科目／金額，中間常用科目／常用摘要快捷列，最後一列寬摘要＋儲存＋清空／取消。右上由 canonical `.cy-account-cluster` 在直／橫式共同顯示 `員工編號 姓名［角色］｜登出`；手機 account dropdown 不成為 Tablet owner。直式搜尋為原生 `type=search` 且至少 16px；月份切換有 visible loading/busy state；年月使用原生 month owner 搭配 bounded capsule，快速鎖帳仍只逐月移動 `lockedThrough` 邊界。Excel 直式顯示在期初餘額右側，直／橫式共用 native share owner。直式不顯示「記帳資料」標題，月摘要與橫式共用單列同行樣式；交易表不顯示獨立收支欄，金額以正負號與手機色彩表達，操作欄使用編輯／刪除圖示，表頭在雙方向統一靠左。不建立平板第二套資料 state、writer、kind、month、lock、export、identity 或 search owner。
+- **平板**：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail；直式 rail 預設展開，把手為中央「↑ 展開新增／↓ 收合隱藏」，可點按／拖曳且沒有 pinned-open。直式新增區左側是窄版垂直收入／支出雙段，仍共用 canonical kind state；右側第一列帳戶／日期／科目／金額，中間常用科目／常用摘要快捷列，最後一列寬摘要＋儲存＋清空／取消。右上由 canonical `.cy-account-cluster` 在直／橫式共同顯示 `員工編號 姓名［角色］｜登出`；手機 account dropdown 不成為 Tablet owner。直式搜尋為原生 `type=search` 且至少 16px；月份切換有 visible loading/busy state；年月使用原生 month owner 搭配 bounded capsule，快速鎖帳仍只逐月移動 `lockedThrough` 邊界。Excel 直式顯示在期初餘額右側，直／橫式共用 native share owner。直式不顯示「記帳資料」標題，月摘要與橫式共用單列同行樣式；交易表不顯示獨立收支欄，金額以正負號與手機色彩表達，操作欄使用編輯／刪除圖示，表頭在雙方向統一置中。不建立平板第二套資料 state、writer、kind、month、lock、export、identity 或 search owner。
 - **桌機**：保留鍵盤高效率輸入、inline edit 與桌面 layout。
 - 所有裝置共用 CYID、Role/App Access、Worker API、D1、期初計算、transaction mutation、帳戶色號與 server authorization。RWD 只負責 presentation。
 
 ## 已確認驗證
 
-V0.22.26 Build 0 PR #353 的 Governance Check #1096 與 CYAccountingWeb Validate and Deploy #533 均成功；合併後 Production run #534（`37572824344`）validate 與 deploy 全部成功。V0.22.25 的 #351 仍是前一階段直式 entry grid 重排證據。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
+V0.22.27 Build 0 PR #355 的 Governance Check #1098 與 CYAccountingWeb Validate and Deploy #537 均成功；合併後 Production run #538（`37575180101`）validate 與 deploy 全部成功。V0.22.26 的 #353 仍是前一階段凸起 tab 與摘要位置修正證據。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
 
 - JavaScript syntax 與 application tests；
 - mobile native-date、底部儲存／清空或取消、identity readiness，以及 login viewport／keyboard regression；
