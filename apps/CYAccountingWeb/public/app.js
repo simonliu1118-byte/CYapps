@@ -334,6 +334,7 @@ function setLedgerLoadingState(loading) {
   )) {
     if ('disabled' in control) control.disabled = busy;
   }
+  if (!busy) window.cySyncLedgerQuickLock?.();
 }
 
 function openEditTransaction(id) {
