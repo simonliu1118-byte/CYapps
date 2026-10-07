@@ -4247,9 +4247,11 @@ function setTabletEntryExpanded(expanded) {
   const button = document.querySelector('#tabletEntryToggle');
   if (button) {
     button.setAttribute('aria-expanded', String(Boolean(expanded)));
-    button.setAttribute('aria-label', expanded ? '收合記帳' : '展開記帳');
+    button.setAttribute('aria-label', expanded ? '收合隱藏' : '展開新增');
+    const arrow = button.querySelector?.('.tablet-entry-handle-arrow');
+    if (arrow) arrow.textContent = expanded ? '↓' : '↑';
     const label = button.querySelector?.('.tablet-entry-handle-label');
-    if (label) label.textContent = expanded ? '收起記帳' : '展開記帳';
+    if (label) label.textContent = expanded ? '收合隱藏' : '展開新增';
   }
 }
 
@@ -4282,7 +4284,7 @@ function setupTabletWorkspace() {
   shell.dataset.tabletBound = '1';
   const controls = document.createElement('div');
   controls.className = 'tablet-entry-controls';
-  controls.innerHTML = '<button id="tabletEntryToggle" type="button" class="tablet-entry-handle" aria-label="展開記帳" aria-expanded="false" aria-controls="transactionForm"><span class="tablet-entry-handle-bar" aria-hidden="true"></span><span class="tablet-entry-handle-label">展開記帳</span></button>';
+  controls.innerHTML = '<button id="tabletEntryToggle" type="button" class="tablet-entry-handle" aria-label="展開新增" aria-expanded="false" aria-controls="transactionForm"><span class="tablet-entry-handle-arrow" aria-hidden="true">↑</span><span class="tablet-entry-handle-label">展開新增</span></button>';
   entry.prepend(controls);
   controls.querySelector('#tabletEntryToggle').addEventListener('click', () => {
     if (suppressClick) { suppressClick = false; return; }

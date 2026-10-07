@@ -123,9 +123,14 @@ assert.doesNotMatch(css, /data-tablet-layout[^\n]*#mobileAccountMenuButton[^\{]*
 assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton[\s\S]*?display:\s*inline-flex !important/, 'phone tablet preview exposes a temporary return-to-phone button');
 assert.match(css, /#tabletPreviewReturnButton \{[\s\S]*?display:\s*none !important/, 'return-to-phone is hidden by default outside preview');
 assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton:not\(\[hidden\]\)[\s\S]*?display:\s*inline-flex !important/, 'only active phone preview may expose return-to-phone');
-assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-grid \{[\s\S]*?grid-template-columns:\s*repeat\(4,[\s\S]*?grid-template-rows:\s*repeat\(2, 44px\)/, 'portrait entry form is compacted into two field rows');
-assert.match(source, /tablet-entry-handle-label">展開記帳/, 'portrait collapsed rail exposes a labelled entry handle');
-assert.match(source, /label\.textContent = expanded \? '收起記帳' : '展開記帳'/, 'entry handle label follows expanded state');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.cy-entry-rail \.entry-card \{[\s\S]*?grid-template-columns:\s*58px minmax\(0, 1fr\)/, 'portrait entry rail reserves a narrow left mode switch column');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-kind-switch \{[\s\S]*?grid-template-columns:\s*1fr[\s\S]*?grid-template-rows:\s*repeat\(2, minmax\(0, 1fr\)\)/, 'income and expense are a vertical two-segment switch');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-grid \{[\s\S]*?grid-template-columns:\s*repeat\(12,[\s\S]*?grid-template-rows:\s*40px 30px 40px/, 'portrait entry form uses primary fields, a compact quick row and a summary/action row');
+assert.match(css, /#favoriteCategoryGroup \{ grid-column:\s*1 \/ 7[\s\S]*?#summarySuggestionGroup \{ grid-column:\s*7 \/ 13/, 'favorite category and summary suggestions share the compact quick row');
+assert.match(css, /\.entry-grid > \.summary-field \{[\s\S]*?grid-column:\s*1 \/ 9/, 'summary receives the widest final-row field');
+assert.match(source, /tablet-entry-handle-arrow" aria-hidden="true">↑<\/span><span class="tablet-entry-handle-label">展開新增/, 'collapsed rail exposes upward arrow and 展開新增');
+assert.match(source, /arrow\.textContent = expanded \? '↓' : '↑'/, 'entry handle arrow follows expanded state');
+assert.match(source, /label\.textContent = expanded \? '收合隱藏' : '展開新增'/, 'entry handle text follows expanded state');
 assert.doesNotMatch(source, /tabletEntryPinned|保持展開/, 'portrait entry rail no longer exposes a pinned-open mode');
 assert.match(css, /data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.ledger-card th\.action-col \{[\s\S]*?text-align:\s*left !important/, 'tablet action header is left aligned in both orientations');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-title \.title-with-badge \{[\s\S]*?display:\s*none !important/, 'portrait removes the ledger title row');
