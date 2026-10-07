@@ -10610,7 +10610,10 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #ledgerQuickLoc
   display: block;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #ledgerQuickLockButton:disabled {
-  opacity: .48 !important;
+  opacity: .38 !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #ledgerQuickLockButton.is-locked:disabled {
+  opacity: .72 !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #ledgerLockSettingsButton {
   display: none !important;
