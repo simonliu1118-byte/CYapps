@@ -801,11 +801,12 @@ internal sealed class ErpAutomationService
             throw new InvalidOperationException($"品號 {itemCode}：批號欄點擊後焦點未留在商品明細；已停止避免後續欄位錯位。");
 
         InputSender.Press(NativeMethods.VK_F2);
-        // Right after a unit F2 / quantity commit ERP may still be recalculating the row
-        // and swallow the first F2 (real test, V0.2.0 Build 1); wait longer and, only when
-        // nothing else opened, focus the same cell and press F2 once more.
-        var lookup = await WaitLookupAsync(cancellationToken, markerState == BatchMarkerVisualState.Marker ? 2500 : 1000);
-        if (lookup == 0 && markerState == BatchMarkerVisualState.Marker)
+        // ERP's own F2 response is the final signal: a lot-managed item opens the batch
+        // lookup, an item without lots opens nothing. The visual check above only skips F2
+        // for clearly blank cells; on the active row every cell shows a "…" editor button,
+        // which reads as a marker (real test, V0.2.0 Build 2: A00203 has no lots).
+        var lookup = await WaitLookupAsync(cancellationToken, 2000);
+        if (lookup == 0)
         {
             var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
             if (peers.Count > 0)
@@ -813,22 +814,7 @@ internal sealed class ErpAutomationService
                 LogPeerWindows("batch-f2", peers);
                 throw new InvalidOperationException($"品號 {itemCode}：按批號 F2 後 ERP 出現非批號查詢的視窗；已停止，請人工確認。");
             }
-            _log.Warn("detail", $"batch F2 lookup not shown row={visibleRow + 1}; retrying once on the same cell");
-            if (!Win32Automation.PrepareForeground(root, _log))
-                throw new InvalidOperationException("重試批號 F2 前無法把 ERP 帶到前景。");
-            InputSender.Click(point);
-            if (await WaitGridFocusAsync(root, grid.Handle, cancellationToken, 500) == 0)
-                throw new InvalidOperationException($"品號 {itemCode}：重試批號 F2 前焦點未留在商品明細；已停止避免錯位。");
-            await Delay(250, cancellationToken);
-            InputSender.Press(NativeMethods.VK_F2);
-            lookup = await WaitLookupAsync(cancellationToken, 2500);
-        }
-        if (lookup == 0)
-        {
-            if (markerState == BatchMarkerVisualState.Marker)
-                throw new InvalidOperationException($"品號 {itemCode} 的批號欄明確偵測到批號標記，但按 F2 後沒有出現批號查詢視窗；已停止避免錯位。");
-
-            _log.Info("detail", $"batch not required row={visibleRow + 1} item={_log.Value(itemCode)} reason=uncertain-marker-and-no-f2-lookup");
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={_log.Value(itemCode)} reason=no-f2-lookup marker_state={markerState}");
             return geometry;
         }
 

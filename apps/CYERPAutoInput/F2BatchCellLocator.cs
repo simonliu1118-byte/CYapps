@@ -29,29 +29,45 @@ internal sealed class F2BatchCellLocator
             throw new InvalidOperationException("F2 批號查詢找不到可用的 TcxGridSite；已停止目前單據。");
 
         var captureRect = grid.Rect.ToRectangle();
-        using var image = ScreenCapture.Capture(captureRect);
-        var tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
-        var stockHeader = FastDetailGridVisionService.FindExactPhrase(tokens, ["現有存量"]);
-        var batchHeader = FastDetailGridVisionService.FindExactPhrase(tokens, ["批號"]);
-        if (stockHeader is null || batchHeader is null)
-            throw new InvalidOperationException("F2 批號查詢無法可靠辨識「批號／現有存量」欄；已停止目前單據。");
+        Bitmap? image = null;
+        IReadOnlyList<OcrToken> tokens = [];
+        Rectangle? stockHeader = null;
+        Rectangle? batchHeader = null;
+        // The lookup may still be painting right after it appears: re-read once.
+        for (var attempt = 1; attempt <= 2 && stockHeader is null; attempt++)
+        {
+            if (attempt > 1) await Task.Delay(350, cancellationToken);
+            image?.Dispose();
+            image = ScreenCapture.Capture(captureRect);
+            tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
+            // The sorted 現有存量 header is drawn on a yellow background; accept a partial
+            // read of it. 存量 appears nowhere else in this grid.
+            stockHeader = FastDetailGridVisionService.FindExactPhrase(tokens, ["現有存量", "有存量", "現有存", "存量"]);
+            batchHeader = FastDetailGridVisionService.FindExactPhrase(tokens, ["批號"]);
+            if (stockHeader is null) LogTokens(tokens, attempt);
+        }
+        using var lookupImage = image;
+        if (image is null || stockHeader is null)
+            throw new InvalidOperationException("F2 批號查詢無法可靠辨識「現有存量」欄；已停止目前單據，請查看 LOG 的 F2_BATCH_TOKEN。");
 
         var rawVertical = GridVisionService.FindVerticalLines(image, Math.Min(image.Height - 1, 120));
         var boundaries = NormalizeBoundaries(rawVertical, image.Width);
         var stockInterval = FindInterval(boundaries, stockHeader.Value.Left + stockHeader.Value.Width / 2);
-        var batchInterval = FindInterval(boundaries, batchHeader.Value.Left + batchHeader.Value.Width / 2);
-        if (stockInterval < 0 || stockInterval + 1 >= boundaries.Count || batchInterval < 0 || batchInterval + 1 >= boundaries.Count)
-            throw new InvalidOperationException("F2 批號查詢無法由即時格線定位「批號／現有存量」欄；已停止目前單據。");
-
+        if (stockInterval < 0 || stockInterval + 1 >= boundaries.Count)
+            throw new InvalidOperationException("F2 批號查詢無法由即時格線定位「現有存量」欄；已停止目前單據。");
         var stockLeft = boundaries[stockInterval];
         var stockRight = boundaries[stockInterval + 1];
-        var batchLeft = boundaries[batchInterval];
-        var batchRight = boundaries[batchInterval + 1];
-        if (stockRight - stockLeft < 24 || batchRight - batchLeft < 24)
+        if (stockRight - stockLeft < 24)
             throw new InvalidOperationException("F2 批號查詢欄寬異常；已停止目前單據。");
 
-        var dataStart = Math.Max(stockHeader.Value.Bottom, batchHeader.Value.Bottom) + 12;
-        var rowCenters = BuildRowCentersFromBatchTokens(tokens, batchLeft, batchRight, dataStart);
+        // 批號 only anchors the row centers; without it the grid lines give them.
+        var batchInterval = batchHeader is null ? -1 : FindInterval(boundaries, batchHeader.Value.Left + batchHeader.Value.Width / 2);
+        var hasBatchColumn = batchInterval >= 0 && batchInterval + 1 < boundaries.Count && batchInterval != stockInterval;
+        var batchLeft = hasBatchColumn ? boundaries[batchInterval] : 0;
+        var batchRight = hasBatchColumn ? boundaries[batchInterval + 1] : 0;
+
+        var dataStart = Math.Max(stockHeader.Value.Bottom, batchHeader?.Bottom ?? 0) + 12;
+        var rowCenters = hasBatchColumn ? BuildRowCentersFromBatchTokens(tokens, batchLeft, batchRight, dataStart) : [];
         if (rowCenters.Count == 0)
         {
             rowCenters = BuildRowCentersFromGridLines(image, dataStart);
@@ -95,6 +111,13 @@ internal sealed class F2BatchCellLocator
                 variant = "window";
             }
 
+            // Grid-line rows may include the filter row ("=" under 現有存量); it is not data.
+            if (index == 0 && !hasBatchColumn && rawText.Trim() is "=" or "＝")
+            {
+                _log.Info("vision", "F2 batch filter row skipped (grid-line rows)");
+                continue;
+            }
+
             var normalized = rawText.Trim().Replace(" ", string.Empty).Replace("　", string.Empty).Replace(",", string.Empty).Replace("，", string.Empty);
             if (!InputRules.TryParseStockText(rawText, out var stock))
             {
@@ -113,6 +136,13 @@ internal sealed class F2BatchCellLocator
         }
 
         throw new InvalidOperationException("F2 批號查詢沒有找到可確認的「現有存量 > 0」批號；已停止，請查看 LOG 的 F2_BATCH_STOCK_ROW 原始辨識內容。");
+    }
+
+    private void LogTokens(IReadOnlyList<OcrToken> tokens, int attempt)
+    {
+        _log.Info("vision", $"F2_BATCH_TOKEN attempt={attempt} total={tokens.Count} (stock header not found)");
+        foreach (var t in tokens.Take(120))
+            _log.Info("vision", $"F2_BATCH_TOKEN raw=\"{_log.Value(Sanitize(t.Text))}\" normalized=\"{_log.Value(Sanitize(OcrTextNormalizer.Normalize(t.Text)))}\" rect={t.Rect.Left},{t.Rect.Top},{t.Rect.Width},{t.Rect.Height}");
     }
 
     private static List<int> BuildRowCentersFromBatchTokens(IReadOnlyList<OcrToken> tokens, int left, int right, int dataStart)
