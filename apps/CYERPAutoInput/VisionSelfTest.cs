@@ -40,19 +40,6 @@ internal static class VisionSelfTest
             if (vertical.Count < 6)
                 throw new InvalidOperationException($"Synthetic grid-line detector returned only {vertical.Count} vertical lines.");
 
-            using var ribbon = new Bitmap(220, 160);
-            using (var g = Graphics.FromImage(ribbon))
-            {
-                g.Clear(Color.White);
-                using var green = new SolidBrush(Color.FromArgb(50, 160, 70));
-                g.FillRectangle(green, 0, 0, 220, 32);
-                g.FillRectangle(green, 20, 68, 5, 28);
-                g.FillRectangle(green, 9, 80, 28, 5);
-            }
-            var addIcon = OpticalTextLocator.FindGreenAddIconCandidate(ribbon);
-            if (addIcon is null || addIcon.Value.X is < 10 or > 35 || addIcon.Value.Y is < 65 or > 100)
-                throw new InvalidOperationException("Synthetic Ribbon green-plus New detection failed.");
-
             var joinedLatin = GridVisionService.FindPhrase(
             [
                 new OcrToken("VIS", new Rectangle(20, 20, 45, 24)),
@@ -148,6 +135,32 @@ internal static class VisionSelfTest
             if (!joinedText.Contains("箱", StringComparison.Ordinal))
                 throw new InvalidOperationException($"PaddleOCR ran but did not recognize synthetic Traditional Chinese target 箱 (tokens={tokens.Count}, text={joinedText}).");
 
+            if (F2BatchCellLocator.StripAnchor("存量0") != "0" || F2BatchCellLocator.StripAnchor("存量：1,234") != "1,234" ||
+                F2BatchCellLocator.StripAnchor("存量") != string.Empty)
+                throw new InvalidOperationException("F2 stock anchor stripping failed.");
+
+            // Real-ERP regression (V0.2.0 Build 1): a lone "0" on the blue selected first row
+            // of F2 批號查詢 returned no OCR token. Every stock cell must read back exactly.
+            var stockReader = new F2BatchCellLocator(ocr, log);
+            var stockCells = new (string Text, Color Back, Color Fore)[]
+            {
+                ("0", Color.FromArgb(0, 120, 215), Color.White),
+                ("0", Color.White, Color.Black),
+                ("53", Color.White, Color.Black),
+                ("100", Color.White, Color.Black),
+                ("7", Color.FromArgb(0, 120, 215), Color.White)
+            };
+            var stockReads = new List<string>();
+            foreach (var (text, back, fore) in stockCells)
+            {
+                using var cell = RenderStockCell(text, back, fore);
+                var (read, variant) = await stockReader.ReadStockCellAsync(cell, CancellationToken.None);
+                stockReads.Add($"{text}->{read}({variant})");
+                if (!InputRules.TryParseStockText(read, out var value) || value != decimal.Parse(text))
+                    throw new InvalidOperationException($"F2 stock cell OCR failed: expected {text}, read \"{read}\" via {variant}.");
+            }
+            Console.WriteLine($"stock cells: {string.Join(", ", stockReads)}");
+
             var message = $"vision self-test passed engine=PP-OCRv5_mobile_rec horizontal={lines.Count} vertical={vertical.Count} tokens={tokens.Count} text={joinedText}";
             Console.WriteLine(message);
             log.Info("selftest", message);
@@ -159,5 +172,19 @@ internal static class VisionSelfTest
             log.Error("selftest", ex);
             return 10;
         }
+    }
+
+    /// <summary>An 86x22 right-aligned numeric grid cell at 100% DPI, like F2 現有存量.</summary>
+    private static Bitmap RenderStockCell(string text, Color back, Color fore)
+    {
+        var bitmap = new Bitmap(86, 22);
+        using var g = Graphics.FromImage(bitmap);
+        g.Clear(back);
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        using var font = new Font("Tahoma", 12, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var brush = new SolidBrush(fore);
+        var size = g.MeasureString(text, font);
+        g.DrawString(text, font, brush, new PointF(86 - size.Width - 4, (22 - size.Height) / 2));
+        return bitmap;
     }
 }

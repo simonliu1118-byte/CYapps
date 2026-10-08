@@ -50,55 +50,6 @@ internal sealed class OpticalTextLocator
             }
         }
 
-        if (normalizedAliases.Contains("新增", StringComparer.Ordinal))
-        {
-            // Fast path 1: use a real child caption if Delphi/DevExpress exposes it.
-            var direct = Win32Automation.EnumerateChildren(hwnd)
-                .Where(c => c.Visible && c.Rect.Width > 0 && c.Rect.Height > 0)
-                .Select(c => new { Control = c, Text = OcrTextNormalizer.Normalize(c.Text) })
-                .Where(x => normalizedAliases.Any(a => x.Text == a || x.Text.Contains(a, StringComparison.Ordinal)))
-                .OrderBy(x => x.Control.Rect.Top)
-                .ThenBy(x => x.Control.Rect.Left)
-                .FirstOrDefault();
-
-            if (direct is not null)
-            {
-                var p = new Point(
-                    (direct.Control.Rect.Left + direct.Control.Rect.Right) / 2,
-                    (direct.Control.Rect.Top + direct.Control.Rect.Bottom) / 2);
-                _log.Info("vision", $"Win32 text target found aliases={aliases.Count} class={direct.Control.ClassName} point={p.X},{p.Y}");
-                return p;
-            }
-
-            // Fast path 2: the validated green-plus icon is much cheaper than running
-            // PP-OCRv5 over the entire ERP window. Only the bounded Ribbon is captured.
-            var ribbonRect = new Rectangle(
-                rect.Left,
-                rect.Top,
-                Math.Min(rect.Width, 720),
-                Math.Min(rect.Height, 220));
-            using var ribbon = ScreenCapture.Capture(ribbonRect);
-            var iconPoint = FindGreenAddIconCandidate(ribbon);
-            if (iconPoint is not null)
-            {
-                var p = new Point(ribbonRect.Left + iconPoint.Value.X, ribbonRect.Top + iconPoint.Value.Y);
-                _log.Info("vision", $"Ribbon green-plus New candidate found point={p.X},{p.Y}");
-                return p;
-            }
-
-            // OCR is now the last-resort New-button path, and is restricted to the Ribbon.
-            var ribbonTokens = await _ocr.RecognizeAsync(ribbon, cancellationToken, requireChinese: true);
-            var retryPoint = FindPoint(ribbonTokens, normalizedAliases, ribbonRect.Left, ribbonRect.Top);
-            if (retryPoint is not null)
-            {
-                _log.Info("vision", $"Ribbon PaddleOCR target found aliases={aliases.Count} point={retryPoint.Value.X},{retryPoint.Value.Y}");
-                return retryPoint;
-            }
-
-            LogTokens("ribbon-new-miss", "新增", ribbonTokens, 48);
-            return null;
-        }
-
         // Generic optical locator remains available for bounded tasks that do not have
         // a stronger native/geometry signal.
         using var image = ScreenCapture.Capture(rect.ToRectangle());
@@ -111,45 +62,6 @@ internal sealed class OpticalTextLocator
         }
 
         LogTokens("generic-text-miss", string.Join("/", aliases), tokens, 48);
-        return null;
-    }
-
-    /// <summary>
-    /// Locates a Ribbon command (for example 儲存) by exact text only: first a Win32
-    /// caption, then OCR restricted to the Ribbon area. Never falls back to a
-    /// whole-window search, so a field label with the same words cannot match.
-    /// </summary>
-    public async Task<Point?> FindRibbonCommandAsync(nint hwnd, string label, CancellationToken cancellationToken)
-    {
-        if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)
-            return null;
-        var wanted = OcrTextNormalizer.Normalize(label);
-
-        var ribbonRect = new Rectangle(rect.Left, rect.Top, Math.Min(rect.Width, 720), Math.Min(rect.Height, 220));
-        var direct = Win32Automation.EnumerateChildren(hwnd)
-            .Where(c => c.Visible && c.Rect.Width > 0 && c.Rect.Height > 0)
-            .Where(c => ribbonRect.Contains((c.Rect.Left + c.Rect.Right) / 2, (c.Rect.Top + c.Rect.Bottom) / 2))
-            .FirstOrDefault(c => OcrTextNormalizer.Normalize(c.Text) == wanted);
-        if (direct is not null)
-        {
-            var p = new Point((direct.Rect.Left + direct.Rect.Right) / 2, (direct.Rect.Top + direct.Rect.Bottom) / 2);
-            _log.Info("vision", $"Ribbon command by Win32 caption label={label} class={direct.ClassName} point={p.X},{p.Y}");
-            return p;
-        }
-
-        using var ribbon = ScreenCapture.Capture(ribbonRect);
-        var tokens = await _ocr.RecognizeAsync(ribbon, cancellationToken, requireChinese: true);
-        var matches = tokens.Where(t => OcrTextNormalizer.Normalize(t.Text) == wanted).ToList();
-        if (matches.Count == 1)
-        {
-            var t = matches[0];
-            var p = new Point(ribbonRect.Left + t.Rect.Left + t.Rect.Width / 2, ribbonRect.Top + t.Rect.Top + t.Rect.Height / 2);
-            _log.Info("vision", $"Ribbon command by PaddleOCR label={label} point={p.X},{p.Y}");
-            return p;
-        }
-
-        _log.Warn("vision", $"Ribbon command not uniquely found label={label} exact_matches={matches.Count}");
-        LogTokens("ribbon-command-miss", label, tokens, 48);
         return null;
     }
 
@@ -187,100 +99,6 @@ internal sealed class OpticalTextLocator
     {
         var text = value.Replace("\r", " ").Replace("\n", " ").Replace("\"", "'").Trim();
         return text.Length <= 80 ? text : text[..80];
-    }
-
-    internal static Point? FindGreenAddIconCandidate(Bitmap image)
-    {
-        if (image.Width < 20 || image.Height < 60) return null;
-
-        var scanWidth = Math.Min(image.Width, 140);
-        var scanTop = Math.Min(image.Height - 1, 40);
-        var scanBottom = Math.Min(image.Height, 150);
-        if (scanBottom - scanTop < 15) return null;
-
-        var scanHeight = scanBottom - scanTop;
-        var green = new bool[scanWidth, scanHeight];
-        for (var y = 0; y < scanHeight; y++)
-        {
-            for (var x = 0; x < scanWidth; x++)
-            {
-                var c = image.GetPixel(x, scanTop + y);
-                green[x, y] = c.G >= 80 && c.G >= c.R + 20 && c.G >= c.B + 10;
-            }
-        }
-
-        var visited = new bool[scanWidth, scanHeight];
-        var candidates = new List<(int Count, int Left, int Top, int Right, int Bottom)>();
-        var directions = new (int X, int Y)[]
-        {
-            (-1, -1), (0, -1), (1, -1),
-            (-1, 0),             (1, 0),
-            (-1, 1),  (0, 1),   (1, 1)
-        };
-
-        for (var sy = 0; sy < scanHeight; sy++)
-        {
-            for (var sx = 0; sx < scanWidth; sx++)
-            {
-                if (!green[sx, sy] || visited[sx, sy]) continue;
-
-                var queue = new Queue<Point>();
-                var pixels = new List<Point>();
-                queue.Enqueue(new Point(sx, sy));
-                visited[sx, sy] = true;
-
-                var left = sx;
-                var right = sx;
-                var top = sy;
-                var bottom = sy;
-
-                while (queue.Count > 0)
-                {
-                    var p = queue.Dequeue();
-                    pixels.Add(p);
-                    left = Math.Min(left, p.X);
-                    right = Math.Max(right, p.X);
-                    top = Math.Min(top, p.Y);
-                    bottom = Math.Max(bottom, p.Y);
-
-                    foreach (var d in directions)
-                    {
-                        var nx = p.X + d.X;
-                        var ny = p.Y + d.Y;
-                        if (nx < 0 || ny < 0 || nx >= scanWidth || ny >= scanHeight) continue;
-                        if (!green[nx, ny] || visited[nx, ny]) continue;
-                        visited[nx, ny] = true;
-                        queue.Enqueue(new Point(nx, ny));
-                    }
-                }
-
-                var width = right - left + 1;
-                var height = bottom - top + 1;
-                if (pixels.Count < 20 || width < 7 || height < 7 || width > 45 || height > 45) continue;
-
-                var fill = pixels.Count / (double)(width * height);
-                if (fill > 0.82) continue;
-
-                var centerX = (left + right) / 2;
-                var centerY = (top + bottom) / 2;
-                var centralRow = pixels.Count(p => Math.Abs(p.Y - centerY) <= 1);
-                var centralColumn = pixels.Count(p => Math.Abs(p.X - centerX) <= 1);
-                if (centralRow < width || centralColumn < height) continue;
-
-                candidates.Add((pixels.Count, left, top, right, bottom));
-            }
-        }
-
-        if (candidates.Count == 0) return null;
-        var best = candidates
-            .OrderBy(c => c.Left)
-            .ThenBy(c => c.Top)
-            .ThenByDescending(c => c.Count)
-            .First();
-
-        return new Point(
-            (best.Left + best.Right) / 2,
-            scanTop + (best.Top + best.Bottom) / 2);
     }
 
     private static Point? FindPoint(

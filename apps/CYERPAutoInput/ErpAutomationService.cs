@@ -35,24 +35,32 @@ internal sealed class ErpAutomationService
     public ErpStatusProbe ProbeStatus()
     {
         var windows = Win32Automation.FindCopi08Windows();
-        if (windows.Count != 1) return new ErpStatusProbe(windows.Count, 0, ErpMode.Unknown, null);
+        if (windows.Count != 1) return new ErpStatusProbe(windows.Count, 0, ErpMode.Unknown, ErpOwnerFields.Unreadable);
 
         var root = windows[0];
         var (mode, _, _, _) = ReadModeSignal(root);
-        bool? numberPresent = null;
-        if (mode == ErpMode.Input)
+        var owner = mode == ErpMode.Input ? ReadOwnerFields(root) : ErpOwnerFields.Unreadable;
+        return new ErpStatusProbe(1, root, mode, owner);
+    }
+
+    /// <summary>
+    /// Reads 交易資料 部門代號 / 業務人員 by WM_GETTEXT (works while the tab is hidden).
+    /// A fresh 新增 leaves both empty; an existing document always has both.
+    /// </summary>
+    private static ErpOwnerFields ReadOwnerFields(nint root)
+    {
+        try
         {
-            try
-            {
-                var text = NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle);
-                numberPresent = text is null ? null : text.Trim().Length > 0;
-            }
-            catch (InvalidOperationException)
-            {
-                numberPresent = null;
-            }
+            var sheet = ErpLayoutResolver.FindTabSheet(root, "交易資料");
+            if (sheet == 0) return ErpOwnerFields.Unreadable;
+            var department = NativeMethods.ControlText(ErpLayoutResolver.ResolveTabField(sheet, "交易資料", "dept_code").Handle);
+            var salesperson = NativeMethods.ControlText(ErpLayoutResolver.ResolveTabField(sheet, "交易資料", "salesperson").Handle);
+            return ErpDocumentStateTracker.Combine(department, salesperson);
         }
-        return new ErpStatusProbe(1, root, mode, numberPresent);
+        catch (InvalidOperationException)
+        {
+            return ErpOwnerFields.Unreadable;
+        }
     }
 
     private static (ErpMode Mode, int Total, int ReadOnly, int Writable) ReadModeSignal(nint root)
@@ -121,7 +129,7 @@ internal sealed class ErpAutomationService
         }
 
         if (!isNewDocument)
-            result.SaveSkippedReason = "開始時 ERP 已在輸入狀態且已有單號（可能是修改中的單據），不自動儲存";
+            result.SaveSkippedReason = "開始時 ERP 已在輸入狀態且部門代號／業務人員已有資料（可能是修改中的單據），不自動儲存";
         else if (result.Warnings.Count > 0)
             result.SaveSkippedReason = $"有 {result.Warnings.Count} 筆需人工確認，不自動儲存";
 
@@ -139,27 +147,33 @@ internal sealed class ErpAutomationService
     }
 
     /// <summary>
-    /// Clicks the Ribbon 儲存 command and confirms ERP returned to browse mode with the
-    /// same sales order number. Any ERP message window stops the run untouched.
+    /// Saves with ERP's F12 shortcut (the Ribbon 儲存 group also holds 取消, so a click is
+    /// not used) and confirms ERP returned to browse mode with the same sales order
+    /// number. Any ERP message window stops the run untouched.
     /// </summary>
     private async Task SaveDocumentAsync(nint root, AutomationRunResult result, CancellationToken cancellationToken)
     {
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("儲存前無法把 COPI08 帶到前景；未儲存。");
-        var savePoint = await _textVision.FindRibbonCommandAsync(root, "儲存", cancellationToken);
-        if (savePoint is null)
-            throw new InvalidOperationException("找不到 ERP 的「儲存」按鈕；未進行猜測點擊，單據尚未儲存。");
+        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
+            throw new InvalidOperationException("儲存前 ERP 已有其他視窗開啟；未按 F12，單據尚未儲存。");
+        if (DetectMode(root) != ErpMode.Input)
+            throw new InvalidOperationException("儲存前 ERP 不在輸入狀態；未按 F12，請人工確認。");
 
         cancellationToken.ThrowIfCancellationRequested();
-        InputSender.Click(savePoint.Value);
-        _log.Info("document", $"save clicked document={_log.Value(result.DocumentKey)}");
+        InputSender.Press(NativeMethods.VK_F12);
+        _log.Info("document", $"save requested by F12 document={_log.Value(result.DocumentKey)}");
 
         var deadline = Environment.TickCount64 + 6000;
         while (Environment.TickCount64 < deadline)
         {
             await Delay(150, cancellationToken);
-            if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
-                throw new InvalidOperationException("按下「儲存」後 ERP 出現訊息視窗；CY 未代為處理，請人工確認單據是否已儲存。");
+            var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
+            if (peers.Count > 0)
+            {
+                LogPeerWindows("save", peers);
+                throw new InvalidOperationException("按 F12 儲存後 ERP 出現訊息視窗；CY 未代為處理，請人工確認單據是否已儲存。");
+            }
 
             if (DetectMode(root) != ErpMode.Browse) continue;
             var number = (NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle) ?? string.Empty).Trim();
@@ -169,7 +183,16 @@ internal sealed class ErpAutomationService
             _log.Info("document", $"saved and verified document={_log.Value(result.DocumentKey)}");
             return;
         }
-        throw new InvalidOperationException("按下「儲存」後 6 秒內未確認 ERP 回到檢視狀態；請人工確認單據是否已儲存。");
+        throw new InvalidOperationException("按 F12 儲存後 6 秒內未確認 ERP 回到檢視狀態；請人工確認單據是否已儲存。");
+    }
+
+    private void LogPeerWindows(string context, IReadOnlyList<nint> peers)
+    {
+        foreach (var peer in peers)
+        {
+            NativeMethods.GetWindowRect(peer, out var r);
+            _log.Info("window", $"peer window context={context} class={NativeMethods.ClassName(peer)} title={_log.Value(NativeMethods.WindowText(peer))} size={r.Width}x{r.Height}");
+        }
     }
 
     private async Task WarmUpOcrAsync(PaddleOcrService ocr)
@@ -194,26 +217,26 @@ internal sealed class ErpAutomationService
 
     /// <summary>
     /// Puts COPI08 into input mode. Returns true when the document is known to be a new
-    /// one: CY pressed 新增 itself, or ERP was already in input mode with an empty sales
-    /// order number (a 修改 always keeps the existing number).
+    /// one: CY pressed 新增 (F5) itself, or ERP was already in input mode with 部門代號 and
+    /// 業務人員 both empty (an existing document always has both).
     /// </summary>
     private async Task<bool> EnsureInputModeAsync(nint root, CancellationToken cancellationToken)
     {
         var mode = DetectMode(root);
         if (mode == ErpMode.Input)
         {
-            string? number = null;
-            try { number = NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle); }
-            catch (InvalidOperationException) { }
-            var isNew = number is not null && number.Trim().Length == 0;
-            _log.Info("state", $"ERP already in input mode at start sales_no_readable={number is not null} new_document={isNew}");
+            var owner = ReadOwnerFields(root);
+            var isNew = owner == ErpOwnerFields.BothEmpty;
+            _log.Info("state", $"ERP already in input mode at start owner_fields={owner} new_document={isNew}");
             return isNew;
         }
-        if (mode != ErpMode.Browse) throw new InvalidOperationException("無法可靠判斷 ERP 目前是瀏覽或新增狀態。");
+        if (mode != ErpMode.Browse) throw new InvalidOperationException("無法可靠判斷 ERP 目前是檢視或輸入狀態。");
+        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
+            throw new InvalidOperationException("ERP 目前有其他視窗開啟；未按 F5 新增。");
 
-        var addPoint = await _textVision.FindTextAsync(root, ["新增"], cancellationToken);
-        if (addPoint is null) throw new InvalidOperationException("找不到 ERP 的「新增」按鈕；未進行猜測點擊。");
-        InputSender.Click(addPoint.Value);
+        // ERP's own 新增 shortcut in browse mode; no Ribbon coordinates involved.
+        InputSender.Press(NativeMethods.VK_F5);
+        _log.Info("state", "new document requested by F5");
 
         var deadline = Environment.TickCount64 + 3500;
         var checks = 0;
@@ -222,14 +245,22 @@ internal sealed class ErpAutomationService
             cancellationToken.ThrowIfCancellationRequested();
             await Delay(120, cancellationToken);
             checks++;
-            mode = DetectMode(root);
-            if (mode == ErpMode.Input)
+            var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
+            if (peers.Count > 0)
             {
-                _log.Info("state", $"ERP entered input mode after_checks={checks} elapsed_ms={checks * 120}");
-                return true;
+                LogPeerWindows("new", peers);
+                throw new InvalidOperationException("按 F5 新增後 ERP 出現其他視窗；已停止，請人工確認。");
             }
+            mode = DetectMode(root);
+            if (mode != ErpMode.Input) continue;
+
+            var owner = ReadOwnerFields(root);
+            _log.Info("state", $"ERP entered input mode after_checks={checks} elapsed_ms={checks * 120} owner_fields={owner}");
+            if (owner != ErpOwnerFields.BothEmpty)
+                throw new InvalidOperationException("按 F5 後 ERP 進入輸入狀態，但部門代號／業務人員不是空白，無法確認是新單據；已停止，請人工確認。");
+            return true;
         }
-        throw new InvalidOperationException("已點擊「新增」，但等待 3.5 秒後仍無法確認 ERP 進入可輸入狀態。");
+        throw new InvalidOperationException("已按 F5 新增，但等待 3.5 秒後仍無法確認 ERP 進入可輸入狀態。");
     }
 
     private async Task FillHeaderAsync(nint root, FormSnapshot snapshot, AutomationRunResult result, CancellationToken cancellationToken)
@@ -770,7 +801,28 @@ internal sealed class ErpAutomationService
             throw new InvalidOperationException($"品號 {itemCode}：批號欄點擊後焦點未留在商品明細；已停止避免後續欄位錯位。");
 
         InputSender.Press(NativeMethods.VK_F2);
-        var lookup = await WaitLookupAsync(cancellationToken, 1000);
+        // Right after a unit F2 / quantity commit ERP may still be recalculating the row
+        // and swallow the first F2 (real test, V0.2.0 Build 1); wait longer and, only when
+        // nothing else opened, focus the same cell and press F2 once more.
+        var lookup = await WaitLookupAsync(cancellationToken, markerState == BatchMarkerVisualState.Marker ? 2500 : 1000);
+        if (lookup == 0 && markerState == BatchMarkerVisualState.Marker)
+        {
+            var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
+            if (peers.Count > 0)
+            {
+                LogPeerWindows("batch-f2", peers);
+                throw new InvalidOperationException($"品號 {itemCode}：按批號 F2 後 ERP 出現非批號查詢的視窗；已停止，請人工確認。");
+            }
+            _log.Warn("detail", $"batch F2 lookup not shown row={visibleRow + 1}; retrying once on the same cell");
+            if (!Win32Automation.PrepareForeground(root, _log))
+                throw new InvalidOperationException("重試批號 F2 前無法把 ERP 帶到前景。");
+            InputSender.Click(point);
+            if (await WaitGridFocusAsync(root, grid.Handle, cancellationToken, 500) == 0)
+                throw new InvalidOperationException($"品號 {itemCode}：重試批號 F2 前焦點未留在商品明細；已停止避免錯位。");
+            await Delay(250, cancellationToken);
+            InputSender.Press(NativeMethods.VK_F2);
+            lookup = await WaitLookupAsync(cancellationToken, 2500);
+        }
         if (lookup == 0)
         {
             if (markerState == BatchMarkerVisualState.Marker)

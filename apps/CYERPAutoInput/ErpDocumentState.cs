@@ -13,15 +13,19 @@ internal enum ErpDocumentState
     InputUnconfirmed
 }
 
+/// <summary>Whether the 交易資料 部門代號 / 業務人員 pair carries document data.</summary>
+internal enum ErpOwnerFields { Unreadable, BothEmpty, BothFilled, Mixed }
+
 /// <summary>One read of COPI08 used to classify the document state.</summary>
-/// <param name="SalesOrderNumberPresent">null when the number field could not be read.</param>
-internal sealed record ErpStatusProbe(int WindowCount, nint Window, ErpMode Mode, bool? SalesOrderNumberPresent);
+internal sealed record ErpStatusProbe(int WindowCount, nint Window, ErpMode Mode, ErpOwnerFields OwnerFields);
 
 /// <summary>
 /// Classifies COPI08 as 檢視 / 新增 / 修改 for display only.
-/// ERP enters input mode for both 新增 and 修改; the difference is visible at the
-/// Browse → Input transition: 新增 clears the sales order number, 修改 keeps the
-/// existing one. Once classified, the state holds until ERP leaves input mode.
+/// ERP enters input mode for both 新增 and 修改, and 新增 already fills today's date and
+/// the next sales order number, so the number cannot tell them apart. 部門代號 and
+/// 業務人員 can: a fresh 新增 leaves both empty, an existing document always has both.
+/// The classification is taken at the Browse → Input transition (before anyone types a
+/// customer that may auto-fill them) and held until ERP leaves input mode.
 /// </summary>
 internal sealed class ErpDocumentStateTracker
 {
@@ -45,9 +49,9 @@ internal sealed class ErpDocumentStateTracker
             case ErpMode.Input:
                 if (_inputState is null or ErpDocumentState.InputUnconfirmed)
                 {
-                    _inputState = ClassifyInput(probe.SalesOrderNumberPresent, _lastDefiniteMode == ErpMode.Browse);
-                    // An unreadable number keeps the Browse context so the next read can still classify.
-                    if (probe.SalesOrderNumberPresent is null) return _inputState.Value;
+                    _inputState = Classify(probe.OwnerFields, _lastDefiniteMode == ErpMode.Browse);
+                    // An unconfirmed read keeps the Browse context so the next read can still classify.
+                    if (_inputState == ErpDocumentState.InputUnconfirmed) return _inputState.Value;
                 }
                 _lastDefiniteMode = ErpMode.Input;
                 return _inputState.Value;
@@ -59,13 +63,23 @@ internal sealed class ErpDocumentStateTracker
         }
     }
 
-    private static ErpDocumentState ClassifyInput(bool? numberPresent, bool cameFromBrowse)
+    /// <summary>
+    /// Pure classification. Without the Browse → Input transition, filled fields may be a
+    /// 新增 whose customer already auto-filled them, so only "both empty" is conclusive.
+    /// </summary>
+    internal static ErpDocumentState Classify(ErpOwnerFields fields, bool cameFromBrowse) => fields switch
     {
-        if (numberPresent is null) return ErpDocumentState.InputUnconfirmed;
-        if (cameFromBrowse) return numberPresent.Value ? ErpDocumentState.Modify : ErpDocumentState.New;
-        // Without the transition, an empty number can only be a new document;
-        // a filled number may be 修改 or a 新增 whose number ERP already generated.
-        return numberPresent.Value ? ErpDocumentState.InputUnconfirmed : ErpDocumentState.New;
+        ErpOwnerFields.BothEmpty => ErpDocumentState.New,
+        ErpOwnerFields.BothFilled when cameFromBrowse => ErpDocumentState.Modify,
+        _ => ErpDocumentState.InputUnconfirmed
+    };
+
+    internal static ErpOwnerFields Combine(string? department, string? salesperson)
+    {
+        if (department is null || salesperson is null) return ErpOwnerFields.Unreadable;
+        var d = department.Trim().Length > 0;
+        var s = salesperson.Trim().Length > 0;
+        return d && s ? ErpOwnerFields.BothFilled : !d && !s ? ErpOwnerFields.BothEmpty : ErpOwnerFields.Mixed;
     }
 
     private void Reset(nint window)

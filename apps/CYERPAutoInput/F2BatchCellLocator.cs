@@ -79,14 +79,8 @@ internal sealed class F2BatchCellLocator
             if (crop.Width < 8 || crop.Height < 8) continue;
 
             using var cell = image.Clone(crop, PixelFormat.Format32bppArgb);
-            using var enhanced = EnhanceCell(cell, 4);
-            var cellTokens = await _ocr.RecognizeAsync(enhanced, cancellationToken, requireChinese: false);
-            var rawText = string.Concat(cellTokens
-                .OrderBy(t => t.Rect.Top)
-                .ThenBy(t => t.Rect.Left)
-                .Select(t => t.Text));
-
-            if (!InputRules.TryParseStockText(rawText, out var stock))
+            var (rawText, variant) = await ReadStockCellAsync(cell, cancellationToken);
+            if (!InputRules.TryParseStockText(rawText, out _))
             {
                 var nearby = tokens
                     .Where(t => Math.Abs((t.Rect.Top + t.Rect.Height / 2) - centerY) <= 10)
@@ -98,18 +92,19 @@ internal sealed class F2BatchCellLocator
                     .OrderBy(t => t.Rect.Left)
                     .Select(t => t.Text);
                 rawText = string.Concat(nearby);
+                variant = "window";
             }
 
             var normalized = rawText.Trim().Replace(" ", string.Empty).Replace("　", string.Empty).Replace(",", string.Empty).Replace("，", string.Empty);
-            if (!InputRules.TryParseStockText(rawText, out stock))
+            if (!InputRules.TryParseStockText(rawText, out var stock))
             {
-                _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={_log.Value(Sanitize(rawText))} normalized={_log.Value(Sanitize(normalized))} parse=false y={centerY}");
+                _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={_log.Value(Sanitize(rawText))} normalized={_log.Value(Sanitize(normalized))} parse=false y={centerY} crop={crop.Width}x{crop.Height}");
                 // Skipping an unreadable row could pick a later batch while an earlier one
                 // still has stock; the rule is "first confirmed positive from the top".
                 throw new InvalidOperationException($"F2 批號查詢第 {rowNumber} 列的「現有存量」無法辨識；為避免跳過較早的批號已停止，請人工選擇批號並查看 LOG 的 F2_BATCH_STOCK_ROW。");
             }
 
-            _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={_log.Value(Sanitize(rawText))} normalized={_log.Value(Sanitize(normalized))} stock={stock.ToString(CultureInfo.InvariantCulture)} y={centerY}");
+            _log.Info("vision", $"F2_BATCH_STOCK_ROW row={rowNumber} raw={_log.Value(Sanitize(rawText))} normalized={_log.Value(Sanitize(normalized))} stock={stock.ToString(CultureInfo.InvariantCulture)} y={centerY} variant={variant}");
             if (stock <= 0) continue;
 
             var point = new Point(captureRect.Left + (stockLeft + stockRight) / 2, captureRect.Top + centerY);
@@ -127,7 +122,8 @@ internal sealed class F2BatchCellLocator
             .Where(t =>
             {
                 var text = OcrTextNormalizer.Normalize(t.Text).Trim();
-                if (text.Length == 0 || text == "=") return false;
+                // Filter-row icons ("=", "ABC") are not data rows; batch numbers carry digits.
+                if (!text.Any(char.IsDigit)) return false;
                 var cx = t.Rect.Left + t.Rect.Width / 2;
                 return cx >= left + 2 && cx <= right - 2;
             })
@@ -194,6 +190,73 @@ internal sealed class F2BatchCellLocator
             }
         }
         return boundaries;
+    }
+
+    /// <summary>
+    /// Reads one 現有存量 cell. A lone short number (typically "0", often on the blue
+    /// selected row) is easily missed by the text detector, so the cell is tried as an
+    /// enhanced crop on a padded white canvas first and then anchored behind a fixed
+    /// Chinese label, which turns it into a normal text line; the label is stripped
+    /// before parsing.
+    /// </summary>
+    internal async Task<(string Text, string Variant)> ReadStockCellAsync(Bitmap cell, CancellationToken cancellationToken)
+    {
+        var last = string.Empty;
+        foreach (var scale in new[] { 4, 3 })
+        {
+            using var enhanced = EnhanceCell(cell, scale);
+            using var padded = Pad(enhanced, enhanced.Height, enhanced.Height / 2);
+            last = JoinTokens(await _ocr.RecognizeAsync(padded, cancellationToken, requireChinese: false));
+            if (InputRules.TryParseStockText(last, out _)) return (last, $"padded-x{scale}");
+        }
+
+        using (var enhanced = EnhanceCell(cell, 3))
+        using (var anchored = Anchor(enhanced))
+        {
+            var anchoredText = StripAnchor(JoinTokens(await _ocr.RecognizeAsync(anchored, cancellationToken, requireChinese: true)));
+            if (InputRules.TryParseStockText(anchoredText, out _)) return (anchoredText, "anchored");
+            if (anchoredText.Length > 0) last = anchoredText;
+        }
+        return (last, "none");
+    }
+
+    internal const string AnchorLabel = "存量";
+
+    /// <summary>Removes the synthetic label (and anything OCR attached to it) before the number.</summary>
+    internal static string StripAnchor(string text)
+    {
+        var lastCjk = -1;
+        for (var i = 0; i < text.Length; i++)
+            if (text[i] >= 0x2E80 || text[i] is ':' or '：') lastCjk = i;
+        return text[(lastCjk + 1)..].Trim();
+    }
+
+    private static string JoinTokens(IReadOnlyList<OcrToken> tokens) => string.Concat(tokens
+        .OrderBy(t => t.Rect.Top / 12)
+        .ThenBy(t => t.Rect.Left)
+        .Select(t => t.Text));
+
+    private static Bitmap Pad(Bitmap source, int padX, int padY)
+    {
+        var output = new Bitmap(source.Width + padX * 2, source.Height + padY * 2, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(output);
+        g.Clear(Color.White);
+        g.DrawImageUnscaled(source, padX, padY);
+        return output;
+    }
+
+    private static Bitmap Anchor(Bitmap source)
+    {
+        var h = source.Height;
+        using var font = new Font("Microsoft JhengHei UI", Math.Max(12, h * 0.55f), FontStyle.Regular, GraphicsUnit.Pixel);
+        var labelWidth = (int)Math.Ceiling(h * 0.6 * AnchorLabel.Length) + h / 2;
+        var output = new Bitmap(labelWidth + source.Width + h, h + h, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(output);
+        g.Clear(Color.White);
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        g.DrawString(AnchorLabel, font, Brushes.Black, new PointF(h / 2f, h / 2f + h * 0.18f));
+        g.DrawImageUnscaled(source, labelWidth, h / 2);
+        return output;
     }
 
     private static Bitmap EnhanceCell(Bitmap source, int scale)

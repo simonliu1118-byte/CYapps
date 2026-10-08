@@ -12,14 +12,22 @@ internal static class Win32Automation
         {
             var title = NativeMethods.WindowText(hwnd);
             if (title.Contains("銷貨單建立作業", StringComparison.Ordinal) &&
-                title.Contains("COPI08", StringComparison.OrdinalIgnoreCase))
+                title.Contains("COPI08", StringComparison.OrdinalIgnoreCase) &&
+                !IsMessageDialogClass(NativeMethods.ClassName(hwnd)))
             {
                 (NativeMethods.IsWindowVisible(hwnd) ? visible : hidden).Add(hwnd);
             }
             return true;
         }, 0);
-        return visible.Count > 0 ? visible : hidden;
+        var found = visible.Count > 0 ? visible : hidden;
+        // ERP message boxes (e.g. 是否放棄本次新增) reuse the COPI08 caption; when the real
+        // form class is present, only that class counts as a COPI08 window.
+        var forms = found.Where(h => NativeMethods.ClassName(h).Equals("TfrmCopi08", StringComparison.OrdinalIgnoreCase)).ToList();
+        return forms.Count > 0 ? forms : found;
     }
+
+    private static bool IsMessageDialogClass(string className) =>
+        className is "#32770" or "TMessageForm";
 
     public static bool PrepareForeground(nint hwnd, AppLogger? log = null)
     {

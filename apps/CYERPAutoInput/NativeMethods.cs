@@ -34,6 +34,8 @@ internal static class NativeMethods
     internal const ushort VK_END = 0x23;
     internal const ushort VK_DOWN = 0x28;
     internal const ushort VK_F2 = 0x71;
+    internal const ushort VK_F5 = 0x74;
+    internal const ushort VK_F12 = 0x7B;
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct RECT
