@@ -333,6 +333,7 @@ function startEntryUi() {
   runEntryUiStep('mobile-pages', setupMobileEntryMobilePages);
   runEntryUiStep('mobile-account-picker', setupMobileEntryMobileAccountPicker);
   runEntryUiStep('account-choices', setupEntryUiAccountChoices);
+  runEntryUiStep('desktop-quick-tools', setupDesktopEntryQuickTools);
   runEntryUiStep('summary-limit', setupEntryUiSummaryLimit);
   runEntryUiStep('role-medal', setupEntryUiRoleMedal);
   runEntryUiStep('enter-hints', setupMobileEntryEnterHints);
@@ -357,6 +358,43 @@ function syncEntryUiAfterLoad() {
 
 
 
+
+function setupDesktopEntryQuickTools() {
+  const grid = document.querySelector('.entry-card .entry-grid');
+  const quickTools = document.querySelector('.entry-card .quick-entry-tools');
+  if (!grid || !quickTools) return;
+  let clear = document.querySelector('#desktopEntryClearButton');
+  if (!clear) {
+    clear = document.createElement('button');
+    clear.id = 'desktopEntryClearButton';
+    clear.className = 'secondary cy-entry-clear-button';
+    clear.type = 'button';
+    clear.textContent = '清空';
+    clear.addEventListener('click', () => {
+      if (typeof clearTouchWorkspaceEntryForm === 'function') clearTouchWorkspaceEntryForm();
+    });
+    grid.append(clear);
+  }
+  const sync = () => {
+    const desktop = isDesktopInteractionWorkspace();
+    clear.hidden = !desktop;
+    const favorite = document.querySelector('#favoriteCategoryGroup');
+    const suggestion = document.querySelector('#summarySuggestionGroup');
+    for (const [item, anchor] of [
+      [favorite, grid.querySelector('.summary-field')],
+      [suggestion, grid.querySelector('.amount-field')]
+    ]) {
+      if (!item) continue;
+      if (desktop && anchor && (item.parentElement !== grid || item.nextElementSibling !== anchor)) {
+        grid.insertBefore(item, anchor);
+      } else if (!desktop && !isTabletWorkspace() && item.parentElement !== quickTools) {
+        quickTools.append(item);
+      }
+    }
+  };
+  window.addEventListener('resize', sync, { passive: true });
+  sync();
+}
 
 function setupEntryUiAccountChoices() {
   const select = document.querySelector('#accountName');
@@ -1873,7 +1911,7 @@ function ensureDesktopUiDatePicker(input) {
   root.className = 'desktopUi-date-picker';
   root.innerHTML = `
     <button type="button" class="desktopUi-date-trigger" aria-haspopup="dialog" aria-expanded="false">
-      <span class="desktopUi-date-label">—</span><span class="desktopUi-date-calendar-icon" aria-hidden="true">▣</span>
+      <span class="desktopUi-date-label">—</span><svg class="desktopUi-date-calendar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>
     </button>
     <div class="desktopUi-date-popover" role="dialog" aria-label="選擇日期" hidden>
       <div class="desktopUi-date-head">
@@ -4331,7 +4369,7 @@ function setupTabletWorkspace() {
     const grid = document.querySelector('.entry-grid');
     for (const id of ['favoriteCategoryGroup', 'summarySuggestionGroup']) {
       const group = document.querySelector('#' + id);
-      const host = tablet ? grid : quickHost;
+      const host = tablet || (window.innerWidth >= 1024 && isDesktopInteractionWorkspace()) ? grid : quickHost;
       if (group && host && group.parentElement !== host) host.append(group);
     }
     applyAdaptiveSplitWorkspace(window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA).matches);

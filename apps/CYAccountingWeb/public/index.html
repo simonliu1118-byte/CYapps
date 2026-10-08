@@ -63,17 +63,17 @@
   <link rel="stylesheet" href="/quick-entry-settings.css?rev=quick-entry-settings">
   <link rel="stylesheet" href="/category-management.css?rev=category-management">
   <link rel="stylesheet" href="/excel-export.css?rev=excel-export">
-  <link rel="stylesheet" href="/ledger-inline-edit.css?rev=ledger-inline-edit">
+  <link rel="stylesheet" href="/ledger-inline-edit.css?rev=desktop-entry-ledger-0.22.30">
   <link rel="stylesheet" href="/excel-import.css?rev=excel-import">
   <link rel="stylesheet" href="/backup.css?rev=backup-readonly-mobile">
   <link rel="stylesheet" href="/desktop-migration.css?rev=desktop-migration">
-  <link rel="stylesheet" href="/adaptive-ui.css?rev=desktop-layout-date-owner">
+  <link rel="stylesheet" href="/adaptive-ui.css?rev=desktop-entry-ledger-0.22.30">
 </head>
 <body class="cyacc-booting">
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.22.29</span></p>
+      <p>CYAccounting Web <span class="version">V0.22.30</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -88,9 +88,9 @@
   <div id="readOnlyNotice" class="read-only-banner hidden" role="status">唯讀模式：可檢視帳務資料與匯出 Excel；新增、編輯與管理功能已停用。</div>
 
   <main class="shell">
-    <section class="card entry-card">
+    <section class="card entry-card" aria-label="新增記帳">
       <div class="section-title">
-        <div class="title-with-badge"><h2>新增記帳</h2><fieldset class="entry-kind-switch-field"><legend>收支模式</legend><div class="entry-kind-switch" role="group" aria-label="收入或支出"><button type="button" class="kind-button" data-kind="income">收入</button><button type="button" class="kind-button active" data-kind="expense">支出</button></div></fieldset><span id="entryLockBadge" class="lock-badge hidden">本月已鎖帳</span></div>
+        <div class="title-with-badge"><fieldset class="entry-kind-switch-field"><legend>收支模式</legend><div class="entry-kind-switch" role="group" aria-label="收入或支出"><button type="button" class="kind-button" data-kind="income">收入</button><button type="button" class="kind-button active" data-kind="expense">支出</button></div></fieldset><span id="entryLockBadge" class="lock-badge hidden">本月已鎖帳</span></div>
         <span id="saveMessage" class="save-message"></span>
       </div>
 
@@ -115,14 +115,14 @@
       <p class="keyboard-hint">鍵盤：日期 Enter → 帳戶 Enter → 科目 Enter → 摘要 Enter → 金額 Enter 儲存　｜　Tab 切換收入／支出</p>
     </section>
 
-    <section class="card ledger-card">
+    <section class="card ledger-card" aria-label="記帳資料">
       <div class="section-title ledger-title">
-        <div><div class="title-with-badge"><h2>記帳資料</h2><span id="ledgerLockBadge" class="lock-badge hidden">已鎖帳</span></div><p id="monthSummary">—</p></div>
+        <div><div class="title-with-badge"><span id="ledgerLockBadge" class="lock-badge hidden">已鎖帳</span></div><p id="monthSummary">—</p></div>
         <label class="month-picker"><span>月份</span><input id="monthFilter" type="month"></label>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>日期</th><th>帳戶</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="action-col">操作</th></tr></thead>
+          <thead><tr><th>日期</th><th>帳戶</th><th>收支</th><th>科目</th><th>摘要</th><th class="num">金額</th><th class="num">餘額</th><th class="action-col">操作</th></tr></thead>
           <tbody id="transactionRows"><tr><td colspan="7" class="empty">載入中…</td></tr></tbody>
         </table>
       </div>
@@ -196,17 +196,17 @@
   </dialog>
 
   <script src="/auth.js?rev=session-hard-timeout" defer></script>
-  <script src="/app.js?rev=tablet-lock-loading" defer></script>
+  <script src="/app.js?rev=desktop-entry-ledger-0.22.30" defer></script>
   <script src="/quick-entry.js?rev=quick-entry-summary-lifecycle" defer></script>
-  <script src="/ledger-tools.js?rev=tablet-portrait-ledger-polish" defer></script>
+  <script src="/ledger-tools.js?rev=desktop-entry-ledger-0.22.30" defer></script>
   <script src="/input-confirmation.js?rev=confirmation-ready" defer></script>
   <script src="/quick-entry-settings.js?rev=quick-entry-settings" defer></script>
   <script src="/category-management.js?rev=category-management" defer></script>
   <script src="/excel-export-ui.js?rev=tablet-native-file-share" defer></script>
-  <script src="/ledger-inline-edit.js?rev=ledger-inline-edit" defer></script>
+  <script src="/ledger-inline-edit.js?rev=desktop-entry-ledger-0.22.30" defer></script>
   <script src="/excel-import-ui.js?rev=excel-import" defer></script>
   <script src="/backup-ui.js?rev=tablet-backup-heading-0.22.28" defer></script>
   <script src="/desktop-migration-ui.js?rev=desktop-only-migration-0.22.28" defer></script>
-  <script src="/adaptive-ui.js?rev=desktop-layout-date-owner" defer></script>
+  <script src="/adaptive-ui.js?rev=desktop-entry-ledger-0.22.30" defer></script>
 </body>
 </html>

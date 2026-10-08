@@ -48,6 +48,7 @@ function setupLedgerToolbar() {
       </button>
       <button id="ledgerMoreButton" class="secondary compact cy-ledger-more-button" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
       <span id="ledgerDisplayMonth" class="ledger-display-month"></span>
+      <span id="ledgerMonthLoading" class="ledger-month-loading" hidden role="status" aria-live="polite">載入中…</span>
     </div>`;
   titleMain.insertBefore(context, summary);
   context.querySelector('#ledgerMonthSlot')?.prepend(monthPicker);
@@ -403,7 +404,7 @@ function renderDesktopLedger() {
     : [...allTransactions]
   ).sort(compareLedgerChronological);
 
-  els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
+  els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
   const display = document.querySelector('#ledgerDisplayMonth');
   if (display) display.textContent = `目前顯示｜${month.replace('-', '/')}`;
   updateLedgerHeader();
