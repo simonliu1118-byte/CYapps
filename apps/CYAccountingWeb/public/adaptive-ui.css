@@ -7759,7 +7759,7 @@
   /* Settings managers use one canonical semantic renderer. */
 
   /* Desktop date controls use the same visual language as the custom month picker. */
-  .cy-native-date-source {
+  .desktopUi-native-date-source {
     position: absolute !important;
     width: 1px !important;
     height: 1px !important;
@@ -7773,13 +7773,13 @@
     pointer-events: none !important;
   }
 
-  .cy-date-picker {
+  .desktopUi-date-picker {
     position: relative;
     display: block;
     width: 100%;
   }
 
-  .cy-date-trigger {
+  .desktopUi-date-trigger {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -7798,17 +7798,17 @@
     text-align: left;
   }
 
-  .cy-date-trigger:hover,
-  .cy-date-trigger[aria-expanded="true"] {
+  .desktopUi-date-trigger:hover,
+  .desktopUi-date-trigger[aria-expanded="true"] {
     border-color: #8ca9c4;
   }
 
-  .cy-date-calendar-icon {
+  .desktopUi-date-calendar-icon {
     color: #506071;
     font-size: 14px;
   }
 
-  .cy-date-popover {
+  .desktopUi-date-popover {
     position: absolute;
     z-index: 1400;
     top: calc(100% + 6px);
@@ -7821,7 +7821,7 @@
     box-shadow: 0 12px 30px rgba(41, 54, 68, .16);
   }
 
-  .cy-date-head {
+  .desktopUi-date-head {
     display: grid;
     grid-template-columns: 32px minmax(0, 1fr) 32px;
     align-items: center;
@@ -7829,7 +7829,7 @@
     min-height: 30px;
   }
 
-  .cy-date-head button {
+  .desktopUi-date-head button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7843,36 +7843,36 @@
     line-height: 1;
   }
 
-  .cy-date-head .cy-date-title {
+  .desktopUi-date-head .desktopUi-date-title {
     font-size: 13px;
     font-weight: 600;
   }
 
-  .cy-date-weekdays,
-  .cy-date-days {
+  .desktopUi-date-weekdays,
+  .desktopUi-date-days {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 3px;
   }
 
-  .cy-date-weekdays {
+  .desktopUi-date-weekdays {
     margin-top: 7px;
   }
 
-  .cy-date-weekdays span {
+  .desktopUi-date-weekdays span {
     padding: 3px 0;
     color: #8a96a4;
     font-size: 10.5px;
     text-align: center;
   }
 
-  .cy-date-days {
+  .desktopUi-date-days {
     margin-top: 3px;
   }
 
-  .cy-date-day,
-  .cy-date-month-choice,
-  .cy-date-year-choice {
+  .desktopUi-date-day,
+  .desktopUi-date-month-choice,
+  .desktopUi-date-year-choice {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -7886,43 +7886,43 @@
     line-height: 1;
   }
 
-  .cy-date-day:hover,
-  .cy-date-month-choice:hover,
-  .cy-date-year-choice:hover {
+  .desktopUi-date-day:hover,
+  .desktopUi-date-month-choice:hover,
+  .desktopUi-date-year-choice:hover {
     background: #f2f6f9;
   }
 
-  .cy-date-day.other-month {
+  .desktopUi-date-day.other-month {
     color: #b2bbc5;
   }
 
-  .cy-date-day.today {
+  .desktopUi-date-day.today {
     border-color: #c8d7e5;
   }
 
-  .cy-date-day.active,
-  .cy-date-month-choice.active,
-  .cy-date-year-choice.active {
+  .desktopUi-date-day.active,
+  .desktopUi-date-month-choice.active,
+  .desktopUi-date-year-choice.active {
     border-color: #80a8cb;
     background: #eaf3fb;
     color: #1f5d91;
     font-weight: 600;
   }
 
-  .cy-date-choice-grid {
+  .desktopUi-date-choice-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 5px;
     margin-top: 8px;
   }
 
-  .cy-date-footer {
+  .desktopUi-date-footer {
     display: flex;
     justify-content: flex-end;
     margin-top: 7px;
   }
 
-  .cy-date-today-button {
+  .desktopUi-date-today-button {
     min-height: 27px;
     padding: 0 8px;
     border: 0;
@@ -7934,7 +7934,7 @@
 }
 
 @media (max-width: 1023px) {
-  .cy-date-picker {
+  .desktopUi-date-picker {
     display: none !important;
   }
 }
@@ -9930,13 +9930,13 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-card select {
   box-sizing: border-box;
 }
 html[data-tablet-layout]:not([data-tablet-layout=""]) #entryAccountChoiceRow,
-html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-date-picker,
+html[data-tablet-layout]:not([data-tablet-layout=""]) .desktopUi-date-picker,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-month-picker-field,
 html[data-tablet-layout]:not([data-tablet-layout=""]) #ledgerMonthPickerCustom,
 html[data-tablet-layout]:not([data-tablet-layout=""]) #inputConfirmationCard,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .keyboard-hint,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .entry-help-button { display: none !important; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) input.cy-native-date-source,
+html[data-tablet-layout]:not([data-tablet-layout=""]) input.desktopUi-native-date-source,
 html[data-tablet-layout]:not([data-tablet-layout=""]) input.cy-native-month-source {
   display: block !important;
   position: static !important;

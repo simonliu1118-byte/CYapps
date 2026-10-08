@@ -213,6 +213,9 @@ function setupConfirmationDrawer() {
   syncConfirmationCount();
   const stored = localStorage.getItem(CY_CONFIRMATION_DRAWER_KEY);
   setConfirmationDrawer(stored === null ? true : stored === '1', false);
+  // The confirmation component owns its creation; dependent layouts must wait
+  // until the drawer exists instead of relying on DOMContentLoaded timing.
+  window.dispatchEvent(new CustomEvent('cyacc:confirmation-ready'));
 }
 
 function setConfirmationDrawer(open, persist = true) {

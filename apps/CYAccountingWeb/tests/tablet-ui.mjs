@@ -98,7 +98,7 @@ const css = read('adaptive-ui.css');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?grid-template-rows: minmax\(0, 1fr\) auto/);
 assert.match(css, /\.ledger-card \.table-wrap \{[^}]*overflow: auto/);
 assert.match(css, /body\[data-cyacc-read-only="true"\] \.cy-entry-rail \{ display: none/);
-assert.match(css, /input\.cy-native-date-source,[\s\S]*?pointer-events: auto !important/);
+assert.match(css, /input\.desktopUi-native-date-source,[\s\S]*?pointer-events: auto !important/);
 assert.match(read('ledger-inline-edit.js'), /window\.cyUsesEntryTransactionEditor\?\.\(\)/);
 assert.match(css.slice(css.indexOf('/* Tablet workspace:')), /grid-template-columns: minmax\(0, 1fr\) !important/, 'tablet overrides important desktop entry columns');
 assert.match(css, /data-tablet-layout="landscape"\] \.shell\.cy-split-layout \{ grid-template-columns: minmax\(280px, 31%\)/, 'landscape entry rail is narrower only in landscape');
