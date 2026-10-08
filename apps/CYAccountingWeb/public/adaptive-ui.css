@@ -9994,7 +9994,99 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) button { touch-action: man
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-summary-actions button,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-month-tools button { min-height: 44px !important; min-width: 44px !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) dialog.modal { width: min(760px, calc(100vw - 32px)) !important; max-height: calc(var(--tablet-visible-height, 100dvh) - 32px) !important; }
-html[data-tablet-layout]:not([data-tablet-layout=""]) .settings-layout { grid-template-columns: 110px minmax(0, 1fr) !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog.settings-modal {
+  width: min(640px, calc(100vw - 48px)) !important;
+  max-width: 640px !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog .settings-layout {
+  grid-template-columns: 96px minmax(0, 1fr) !important;
+  min-height: 430px !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog .settings-content {
+  padding: 10px 12px 12px !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog [data-settings-pane="lock"] .lock-form {
+  display: grid !important;
+  grid-template-columns: minmax(168px, 1.15fr) minmax(118px, .9fr) minmax(118px, .9fr) !important;
+  gap: 8px !important;
+  width: 100% !important;
+  max-width: none !important;
+  align-items: end !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog [data-settings-pane="lock"] .lock-form > label {
+  display: grid !important;
+  grid-column: auto !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog [data-settings-pane="lock"] .lock-form input,
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog [data-settings-pane="lock"] .lock-form button {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 38px !important;
+  height: 38px !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog [data-settings-pane="lock"] .lock-step-panel {
+  box-sizing: border-box !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin-top: 10px !important;
+  padding: 9px 10px !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog [data-settings-pane="lock"] .lock-step-copy span {
+  display: none !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog [data-settings-pane="lock"] .lock-step-actions {
+  display: flex !important;
+  gap: 6px !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog [data-settings-pane="lock"] .lock-step-actions button {
+  min-width: 112px !important;
+  min-height: 36px !important;
+  height: 36px !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog .backup-settings-pane {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog .backup-heading {
+  min-height: 34px !important;
+  margin: 0 0 8px !important;
+  align-items: center !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog .backup-heading > div {
+  display: flex !important;
+  align-items: center !important;
+  min-height: 0 !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog .backup-heading h3 {
+  margin: 0 !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog #backupRefreshStatus {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  border-color: #d7dee7 !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  color: #526174 !important;
+  font-size: 0 !important;
+}
+html[data-tablet-layout]:not([data-tablet-layout=""]) #settingsDialog #backupRefreshStatus::before {
+  content: "↻";
+  font-size: 19px !important;
+  line-height: 1 !important;
+}
 html[data-tablet-layout]:not([data-tablet-layout=""]) .mini-button,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .settings-drag-handle,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .mobile-account-drag { min-width: 44px !important; min-height: 44px !important; touch-action: none; }
@@ -10058,12 +10150,12 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .ledger-card td.empty { ve
 
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail .entry-card {
   display: grid !important;
-  grid-template-columns: 58px minmax(0, 1fr) !important;
-  grid-template-rows: 32px auto !important;
+  grid-template-columns: 46px minmax(0, 1fr) !important;
+  grid-template-rows: auto !important;
   column-gap: 8px !important;
-  row-gap: 2px !important;
-  align-items: stretch !important;
-  padding: 5px 10px 8px !important;
+  row-gap: 0 !important;
+  align-items: center !important;
+  padding: 7px 10px 8px !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls {
   grid-column: 1 / -1 !important;
@@ -10135,9 +10227,9 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #entryLockBadge
   display: none !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-switch-field {
-  width: 54px !important;
-  min-width: 54px !important;
-  height: 116px !important;
+  width: 42px !important;
+  min-width: 42px !important;
+  height: 132px !important;
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
@@ -10146,15 +10238,16 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   display: grid !important;
   grid-template-columns: 1fr !important;
   grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
-  gap: 4px !important;
+  gap: 0 !important;
   box-sizing: border-box !important;
-  width: 54px !important;
-  height: 116px !important;
-  padding: 3px !important;
+  width: 42px !important;
+  height: 132px !important;
+  padding: 2px !important;
   overflow: hidden !important;
-  border: 1px solid #d8e0e8 !important;
-  border-radius: 10px !important;
-  background: rgba(255,255,255,.78) !important;
+  border: 1px solid #c9d2da !important;
+  border-radius: 999px !important;
+  background: linear-gradient(180deg, #eaf7ed 0%, #f4f7f5 46%, #f7f7f7 50%, #f8f4f4 54%, #faecea 100%) !important;
+  box-shadow: inset 0 1px 2px rgba(35, 45, 55, .05) !important;
   clip-path: none !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-switch .kind-button {
@@ -10165,24 +10258,31 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   min-width: 0 !important;
   min-height: 0 !important;
   height: auto !important;
-  padding: 0 4px !important;
-  border: 0 !important;
-  border-radius: 7px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
   background: transparent !important;
-  color: #758292 !important;
   box-shadow: none !important;
-  font-size: 13px !important;
-  font-weight: 700 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-switch .kind-button[data-kind="income"] {
+  color: #2e7443 !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-switch .kind-button[data-kind="expense"] {
+  color: #9a443c !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-switch .kind-button.active[data-kind="income"] {
-  background: #e7f4eb !important;
-  color: #24633b !important;
-  box-shadow: 0 1px 3px rgba(37, 94, 58, .10) !important;
+  background: rgba(255,255,255,.94) !important;
+  border-color: #9fcaab !important;
+  color: #235d35 !important;
+  box-shadow: 0 1px 4px rgba(36, 99, 55, .14) !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-switch .kind-button.active[data-kind="expense"] {
-  background: #fae9e7 !important;
-  color: #8a342e !important;
-  box-shadow: 0 1px 3px rgba(135, 52, 46, .10) !important;
+  background: rgba(255,255,255,.94) !important;
+  border-color: #e2aaa4 !important;
+  color: #84362f !important;
+  box-shadow: 0 1px 4px rgba(139, 52, 45, .13) !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #transactionForm {
   grid-column: 2 !important;
@@ -10196,8 +10296,8 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid {
   position: relative !important;
   display: grid !important;
   grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
-  grid-template-rows: 40px 30px 40px !important;
-  gap: 5px 7px !important;
+  grid-template-rows: repeat(3, 40px) !important;
+  gap: 6px 7px !important;
   align-items: center !important;
   min-width: 0 !important;
 }
@@ -10227,9 +10327,10 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid sel
   font-size: 16px !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .account-source-field { grid-column: 1 / 4 !important; grid-row: 1 !important; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .date-field { grid-column: 4 / 7 !important; grid-row: 1 !important; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .category-field { grid-column: 7 / 10 !important; grid-row: 1 !important; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .amount-field { grid-column: 10 / 13 !important; grid-row: 1 !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .category-field { grid-column: 4 / 8 !important; grid-row: 1 !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .date-field { grid-column: 1 / 4 !important; grid-row: 2 !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .summary-field { grid-column: 4 / 8 !important; grid-row: 2 !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .amount-field { grid-column: 1 / 4 !important; grid-row: 3 !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #favoriteCategoryGroup,
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #summarySuggestionGroup,
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #favoriteCategoryGroup.hidden,
@@ -10242,8 +10343,8 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #
   min-height: 30px !important;
   height: 30px !important;
 }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #favoriteCategoryGroup { grid-column: 1 / 7 !important; grid-row: 2 !important; }
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #summarySuggestionGroup { grid-column: 7 / 13 !important; grid-row: 2 !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #favoriteCategoryGroup { grid-column: 8 / 13 !important; grid-row: 1 !important; }
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #summarySuggestionGroup { grid-column: 8 / 13 !important; grid-row: 2 !important; }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .quick-tool-label {
   color: #718092 !important;
   font-size: 10.5px !important;
@@ -10274,10 +10375,6 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .quick-chip {
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .quick-tool-row.hidden .quick-chip-list::after {
   content: "—";
   color: #8895a4;
-}
-html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > .summary-field {
-  grid-column: 1 / 9 !important;
-  grid-row: 3 !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-grid > #saveButton {
   grid-column: 9 / 11 !important;
@@ -11254,8 +11351,9 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) #monthSummary .
 /* V0.22.26 portrait tab handle hotfix.
    The handle is part of the entry panel edge: a small raised tab, never a full-width control row. */
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail {
+  position: relative !important;
   box-sizing: border-box !important;
-  padding-top: 29px !important;
+  padding-top: 0 !important;
   overflow: visible !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail .entry-card {
@@ -11267,7 +11365,7 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail 
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls {
   position: absolute !important;
   z-index: 12 !important;
-  top: -29px !important;
+  top: -26px !important;
   left: 50% !important;
   display: block !important;
   width: auto !important;
@@ -11480,7 +11578,7 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-card.ent
   box-shadow: none !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-controls {
-  top: -25px !important;
+  top: -26px !important;
   height: 26px !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .tablet-entry-handle::after {
@@ -11492,11 +11590,14 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[
   min-height: 26px !important;
   height: 26px !important;
   max-height: 26px !important;
-  padding-top: 26px !important;
+  padding-top: 0 !important;
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
   overflow: visible !important;
+}
+html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .tablet-entry-controls {
+  top: 0 !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="false"] .entry-card {
   min-height: 0 !important;
@@ -11507,7 +11608,7 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[
   box-shadow: none !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="true"] {
-  padding-top: 25px !important;
+  padding-top: 0 !important;
 }
 html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .cy-entry-rail[data-entry-expanded="true"] .tablet-entry-handle {
   transform: translateY(1px) !important;
