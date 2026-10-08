@@ -135,10 +135,6 @@ internal static class VisionSelfTest
             if (!joinedText.Contains("箱", StringComparison.Ordinal))
                 throw new InvalidOperationException($"PaddleOCR ran but did not recognize synthetic Traditional Chinese target 箱 (tokens={tokens.Count}, text={joinedText}).");
 
-            if (F2BatchCellLocator.StripAnchor("存量0") != "0" || F2BatchCellLocator.StripAnchor("存量：1,234") != "1,234" ||
-                F2BatchCellLocator.StripAnchor("存量") != string.Empty)
-                throw new InvalidOperationException("F2 stock anchor stripping failed.");
-
             // Real-ERP regression (V0.2.0 Build 1): a lone "0" on the blue selected first row
             // of F2 批號查詢 returned no OCR token. Every stock cell must read back exactly.
             var stockReader = new F2BatchCellLocator(ocr, log);
@@ -148,7 +144,9 @@ internal static class VisionSelfTest
                 ("0", Color.White, Color.Black),
                 ("53", Color.White, Color.Black),
                 ("100", Color.White, Color.Black),
-                ("7", Color.FromArgb(0, 120, 215), Color.White)
+                ("7", Color.FromArgb(0, 120, 215), Color.White),
+                ("8", Color.White, Color.Black),
+                ("1,234", Color.White, Color.Black)
             };
             var stockReads = new List<string>();
             foreach (var (text, back, fore) in stockCells)
@@ -156,8 +154,14 @@ internal static class VisionSelfTest
                 using var cell = RenderStockCell(text, back, fore);
                 var (read, variant) = await stockReader.ReadStockCellAsync(cell, CancellationToken.None);
                 stockReads.Add($"{text}->{read}({variant})");
-                if (!InputRules.TryParseStockText(read, out var value) || value != decimal.Parse(text))
+                if (!InputRules.TryParseStockText(read, out var value) || value != decimal.Parse(text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture))
                     throw new InvalidOperationException($"F2 stock cell OCR failed: expected {text}, read \"{read}\" via {variant}.");
+            }
+            using (var blank = RenderStockCell(string.Empty, Color.White, Color.Black))
+            {
+                var (read, variant) = await stockReader.ReadStockCellAsync(blank, CancellationToken.None);
+                if (variant != "blank" || read.Length != 0)
+                    throw new InvalidOperationException($"F2 stock blank cell was not reported blank: \"{read}\" via {variant}.");
             }
             Console.WriteLine($"stock cells: {string.Join(", ", stockReads)}");
 
@@ -174,15 +178,25 @@ internal static class VisionSelfTest
         }
     }
 
-    /// <summary>An 86x22 right-aligned numeric grid cell at 100% DPI, like F2 現有存量.</summary>
+    /// <summary>
+    /// An 86x22 right-aligned numeric grid cell at 100% DPI, like F2 現有存量, including
+    /// the grid lines a row-bound crop picks up.
+    /// </summary>
     private static Bitmap RenderStockCell(string text, Color back, Color fore)
     {
         var bitmap = new Bitmap(86, 22);
         using var g = Graphics.FromImage(bitmap);
         g.Clear(back);
+        using (var line = new Pen(Color.FromArgb(160, 160, 160)))
+        {
+            g.DrawLine(line, 0, 0, 85, 0);
+            g.DrawLine(line, 0, 21, 85, 21);
+            g.DrawLine(line, 85, 0, 85, 21);
+        }
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
         using var font = new Font("Tahoma", 12, FontStyle.Regular, GraphicsUnit.Pixel);
         using var brush = new SolidBrush(fore);
+        if (text.Length == 0) return bitmap;
         var size = g.MeasureString(text, font);
         g.DrawString(text, font, brush, new PointF(86 - size.Width - 4, (22 - size.Height) / 2));
         return bitmap;

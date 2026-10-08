@@ -193,42 +193,87 @@ internal sealed class F2BatchCellLocator
     }
 
     /// <summary>
-    /// Reads one 現有存量 cell. A lone short number (typically "0", often on the blue
-    /// selected row) is easily missed by the text detector, so the cell is tried as an
-    /// enhanced crop on a padded white canvas first and then anchored behind a fixed
-    /// Chinese label, which turns it into a normal text line; the label is stripped
-    /// before parsing.
+    /// Reads one 現有存量 cell. The text detector misses a lone short number (typically
+    /// "0", often on the blue selected row), so the cell is first trimmed to its glyphs
+    /// and read by the recognizer alone; detection on a padded, enlarged crop is the
+    /// fallback.
     /// </summary>
     internal async Task<(string Text, string Variant)> ReadStockCellAsync(Bitmap cell, CancellationToken cancellationToken)
     {
         var last = string.Empty;
+        using (var enhanced = EnhanceCell(cell, 1))
+        using (var glyphs = TrimToGlyphs(enhanced))
+        {
+            if (glyphs is null) return (string.Empty, "blank");
+            var (text, confidence) = await _ocr.RecognizeLineAsync(glyphs, cancellationToken);
+            if (confidence >= MinLineConfidence && InputRules.TryParseStockText(text, out _))
+                return (text, $"line-{confidence:0.00}");
+            last = text;
+        }
+
         foreach (var scale in new[] { 4, 3 })
         {
             using var enhanced = EnhanceCell(cell, scale);
             using var padded = Pad(enhanced, enhanced.Height, enhanced.Height / 2);
-            last = JoinTokens(await _ocr.RecognizeAsync(padded, cancellationToken, requireChinese: false));
-            if (InputRules.TryParseStockText(last, out _)) return (last, $"padded-x{scale}");
-        }
-
-        using (var enhanced = EnhanceCell(cell, 3))
-        using (var anchored = Anchor(enhanced))
-        {
-            var anchoredText = StripAnchor(JoinTokens(await _ocr.RecognizeAsync(anchored, cancellationToken, requireChinese: true)));
-            if (InputRules.TryParseStockText(anchoredText, out _)) return (anchoredText, "anchored");
-            if (anchoredText.Length > 0) last = anchoredText;
+            var text = JoinTokens(await _ocr.RecognizeAsync(padded, cancellationToken, requireChinese: false));
+            if (InputRules.TryParseStockText(text, out _)) return (text, $"padded-x{scale}");
+            if (text.Length > 0) last = text;
         }
         return (last, "none");
     }
 
-    internal const string AnchorLabel = "存量";
+    internal const float MinLineConfidence = 0.6f;
 
-    /// <summary>Removes the synthetic label (and anything OCR attached to it) before the number.</summary>
-    internal static string StripAnchor(string text)
+    /// <summary>
+    /// Crops an enhanced (dark-on-light) cell to its glyphs plus a small margin. Rows and
+    /// columns that are almost entirely foreground are grid lines and are ignored.
+    /// Returns null for a blank cell.
+    /// </summary>
+    internal static Bitmap? TrimToGlyphs(Bitmap source, int margin = 4)
     {
-        var lastCjk = -1;
-        for (var i = 0; i < text.Length; i++)
-            if (text[i] >= 0x2E80 || text[i] is ':' or '：') lastCjk = i;
-        return text[(lastCjk + 1)..].Trim();
+        var w = source.Width;
+        var h = source.Height;
+        var luma = new int[w, h];
+        var values = new List<int>(w * h);
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var c = source.GetPixel(x, y);
+            luma[x, y] = (c.R * 30 + c.G * 59 + c.B * 11) / 100;
+            values.Add(luma[x, y]);
+        }
+        values.Sort();
+        var background = values[values.Count / 2];
+
+        var mask = new bool[w, h];
+        var rowCount = new int[h];
+        var colCount = new int[w];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            if (Math.Abs(luma[x, y] - background) <= 60) continue;
+            mask[x, y] = true;
+            rowCount[y]++;
+            colCount[x]++;
+        }
+
+        int left = w, right = -1, top = h, bottom = -1;
+        for (var y = 0; y < h; y++)
+        {
+            if (rowCount[y] > w * 0.6) continue;
+            for (var x = 0; x < w; x++)
+            {
+                if (!mask[x, y] || colCount[x] > h * 0.8) continue;
+                left = Math.Min(left, x); right = Math.Max(right, x);
+                top = Math.Min(top, y); bottom = Math.Max(bottom, y);
+            }
+        }
+        if (right < 0) return null;
+
+        var rect = Rectangle.FromLTRB(
+            Math.Max(0, left - margin), Math.Max(0, top - margin),
+            Math.Min(w, right + margin + 1), Math.Min(h, bottom + margin + 1));
+        return source.Clone(rect, PixelFormat.Format32bppArgb);
     }
 
     private static string JoinTokens(IReadOnlyList<OcrToken> tokens) => string.Concat(tokens
@@ -242,20 +287,6 @@ internal sealed class F2BatchCellLocator
         using var g = Graphics.FromImage(output);
         g.Clear(Color.White);
         g.DrawImageUnscaled(source, padX, padY);
-        return output;
-    }
-
-    private static Bitmap Anchor(Bitmap source)
-    {
-        var h = source.Height;
-        using var font = new Font("Microsoft JhengHei UI", Math.Max(12, h * 0.55f), FontStyle.Regular, GraphicsUnit.Pixel);
-        var labelWidth = (int)Math.Ceiling(h * 0.6 * AnchorLabel.Length) + h / 2;
-        var output = new Bitmap(labelWidth + source.Width + h, h + h, PixelFormat.Format32bppArgb);
-        using var g = Graphics.FromImage(output);
-        g.Clear(Color.White);
-        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-        g.DrawString(AnchorLabel, font, Brushes.Black, new PointF(h / 2f, h / 2f + h * 0.18f));
-        g.DrawImageUnscaled(source, labelWidth, h / 2);
         return output;
     }
 

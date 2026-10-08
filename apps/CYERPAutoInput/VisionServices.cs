@@ -109,6 +109,96 @@ internal sealed class PaddleOcrService
         }
     }
 
+    /// <summary>
+    /// Recognition only (no text detection) for an image that is already one tight text
+    /// line, such as a single grid cell trimmed to its glyphs. The detector misses a lone
+    /// short glyph like "0"; the recognizer reads it reliably once the cell is known.
+    /// Returns the CTC-decoded text and the mean character confidence.
+    /// </summary>
+    public async Task<(string Text, float Confidence)> RecognizeLineAsync(Bitmap line, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var (session, characters) = EnsureLineRecognizer();
+            const int height = 48;
+            var width = Math.Clamp((int)Math.Round(height * line.Width / (double)Math.Max(1, line.Height)), 8, 1600);
+            using var resized = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(resized))
+            {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.DrawImage(line, new Rectangle(0, 0, width, height));
+            }
+
+            var input = new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float>([1, 3, height, width]);
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var c = resized.GetPixel(x, y);
+                input[0, 0, y, x] = (c.B / 255f - 0.5f) / 0.5f;
+                input[0, 1, y, x] = (c.G / 255f - 0.5f) / 0.5f;
+                input[0, 2, y, x] = (c.R / 255f - 0.5f) / 0.5f;
+            }
+
+            var inputName = session.InputMetadata.Keys.First();
+            using var results = await Task.Run(() => session.Run(
+                [Microsoft.ML.OnnxRuntime.NamedOnnxValue.CreateFromTensor(inputName, input)]), cancellationToken);
+            var output = results.First().AsTensor<float>();
+            var steps = output.Dimensions[1];
+            var classes = output.Dimensions[2];
+
+            var text = new System.Text.StringBuilder();
+            var confidence = 0f;
+            var count = 0;
+            var last = -1;
+            for (var t = 0; t < steps; t++)
+            {
+                var best = 0;
+                var bestScore = float.MinValue;
+                for (var k = 0; k < classes; k++)
+                {
+                    var v = output[0, t, k];
+                    if (v > bestScore) { bestScore = v; best = k; }
+                }
+                if (best != last && best != 0 && best < characters.Length)
+                {
+                    text.Append(characters[best]);
+                    confidence += bestScore;
+                    count++;
+                }
+                last = best;
+            }
+
+            var mean = count == 0 ? 0f : confidence / count;
+            _log.Info("vision", $"PaddleOCR line recognition engine=PP-OCRv5_mobile_rec chars={text.Length} confidence={mean:0.000} image={line.Width}x{line.Height}");
+            return (text.ToString(), mean);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private Microsoft.ML.OnnxRuntime.InferenceSession? _lineSession;
+    private string[] _lineCharacters = [];
+
+    private (Microsoft.ML.OnnxRuntime.InferenceSession Session, string[] Characters) EnsureLineRecognizer()
+    {
+        if (_lineSession is not null) return (_lineSession, _lineCharacters);
+        var recognizer = Path.Combine(AppContext.BaseDirectory, "runtime", "ocr", "ch_PP-OCRv5_rec_mobile.onnx");
+        if (!File.Exists(recognizer))
+            throw new InvalidOperationException("PaddleOCR runtime model 缺少：ch_PP-OCRv5_rec_mobile.onnx。請使用完整 CYERPAutoInput 測試包。");
+
+        var session = new Microsoft.ML.OnnxRuntime.InferenceSession(recognizer);
+        if (!session.ModelMetadata.CustomMetadataMap.TryGetValue("character", out var dictionary) || dictionary.Length == 0)
+            throw new InvalidOperationException("PaddleOCR 辨識模型缺少字典 metadata（character）。");
+        // PaddleOCR CTC layout: index 0 = blank, then the dictionary, then a space.
+        _lineCharacters = ["", .. dictionary.Replace("\r", string.Empty).Split('\n'), " "];
+        _lineSession = session;
+        return (_lineSession, _lineCharacters);
+    }
+
     private RapidOCRSharp EnsureEngine()
     {
         if (_engine is not null) return _engine;
