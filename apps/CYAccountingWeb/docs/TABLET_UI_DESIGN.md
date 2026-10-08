@@ -15,7 +15,7 @@
 | 日期／月份 | 與手機 touch path 共用原生 date/month owner；月份使用 shared `ledgerMonthDisplay`＋原生 `type=month` | 同一 owner、同一月份顯示層；月份外觀為 bounded touch capsule；摘要搜尋使用原生 `type=search`、至少 16px，無額外搜尋／清除按鈕 |
 | 月份狀態／鎖帳 | canonical `lockedThrough` 與既有鎖帳設定 | 切月份顯示「載入中…」並暫停當月控制項；年月旁快速鎖帳只能將 `lockedThrough` 邊界逐月推進或退回，跳月、歷史已鎖與無初始邊界時按鈕停用 |
 | 輸入方式 | 觸控、鍵盤、滑鼠／trackpad 並存 | 觸控、鍵盤、滑鼠／trackpad 並存 |
-| 設定 | Desktop 保留完整設定，包含資料管理與資料移轉 | Tablet 直／橫式 Settings 縮至 640px；月份鎖帳／備份使用 compact 排版；不建立資料管理與資料移轉頁 |
+| 設定 | Settings 縮至 640px；月份鎖帳／備份使用 compact 排版；不建立資料管理與資料移轉頁 | 同一 Tablet 設定 owner；同樣不建立資料管理與資料移轉頁 |
 
 程式目前仍以 adaptive UI 判斷 Mobile／Tablet／Desktop presentation，但 business/data owner 不依 breakpoint 分叉。平板日期／月份已不再建立自己的資料 state 或第二套 picker owner。
 
