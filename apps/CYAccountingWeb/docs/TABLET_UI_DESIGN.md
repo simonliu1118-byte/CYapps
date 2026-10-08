@@ -1,6 +1,6 @@
 # CYAccountingWeb 平板介面設計與驗收
 
-更新：2026/10/07。本文件記錄平板設計、已合併實作與尚未完成的真機驗收，不是永久規則。現在正式產品基準為 **V0.22.27 Build 0**；V0.22.27 已修正平板固定欄寬、五格摘要、原生 Excel 分享、凸起把手與直式收支文字，由 Production Deploy #538 驗證。
+更新：2026/10/08。本文件記錄平板設計、已合併實作與尚未完成的真機驗收，不是永久規則。現在正式產品基準為 **V0.22.28 Build 0**；V0.22.28 已修正直式記帳 rail 把手 owner、三列輸入、canonical 直式收支、設定視窗／鎖帳／備份排版與 Desktop-only 設定項目，由 Production Deploy #547 驗證。
 
 原始設計來源為 `cyaccountingweb/docs-tablet-ui-plan` 的 `b71e4108b7b3bd5e165dadeb526db4116c56be18`。規劃初期的自製 picker 已被後續實作收斂為 native/shared owner；目前不得把歷史設計稿中的自製 picker 建議當成現行需求。
 
@@ -9,12 +9,13 @@
 | 項目 | 橫向 | 直向 |
 | --- | --- | --- |
 | 結構 | 左記帳、右看帳；記帳區已在 Build 2/3 縮窄 | 看帳主區，底部記帳 rail |
-| 表單 | 常駐左欄；帳戶／日期／科目／摘要／金額沿用共用欄位 | 底部記帳 rail 預設展開；把手固定白色，收合顯示「↑ 展開新增」、展開顯示「↓ 收合隱藏」，收合時只剩凸起 tab；左側收入／支出雙段與文字都採直向排列，右側依序為主欄位列、30px 快捷列、摘要＋儲存／清空或取消列 |
+| 表單 | 常駐左欄；帳戶／日期／科目／摘要／金額沿用共用欄位 | 底部記帳 rail 預設展開；把手由 rail 上緣向上凸出，收合顯示「↑ 展開新增」、展開顯示「↓ 收合隱藏」，收合時只剩凸起 tab；左側收入／支出沿用 canonical segmented-control 視覺，只改為 42px 窄、132px 高直式排列；右側三列為帳戶／科目／常用科目、日期／摘要／常用摘要、金額／儲存／清空或取消 |
 | 帳本 | 保留表格、完整金額與餘額，獨立捲動；固定欄寬，空月份與有資料月份一致；操作表頭置中 | 不顯示「記帳資料」標題；月摘要固定五格並放大；不顯示獨立收支欄，金額直接以綠色 `+`／紅色 `−` 表達；編輯／刪除為圖示按鈕且操作表頭置中；底部表單不應覆蓋最後一筆 |
 | 編輯 | 點編輯後帶入同一 entry owner | 點編輯後展開底部同一表單 |
 | 日期／月份 | 與手機 touch path 共用原生 date/month owner；月份使用 shared `ledgerMonthDisplay`＋原生 `type=month` | 同一 owner、同一月份顯示層；月份外觀為 bounded touch capsule；摘要搜尋使用原生 `type=search`、至少 16px，無額外搜尋／清除按鈕 |
 | 月份狀態／鎖帳 | canonical `lockedThrough` 與既有鎖帳設定 | 切月份顯示「載入中…」並暫停當月控制項；年月旁快速鎖帳只能將 `lockedThrough` 邊界逐月推進或退回，跳月、歷史已鎖與無初始邊界時按鈕停用 |
 | 輸入方式 | 觸控、鍵盤、滑鼠／trackpad 並存 | 觸控、鍵盤、滑鼠／trackpad 並存 |
+| 設定 | Desktop 保留完整設定，包含資料管理與資料移轉 | Tablet 直／橫式 Settings 縮至 640px；月份鎖帳／備份使用 compact 排版；不建立資料管理與資料移轉頁 |
 
 程式目前仍以 adaptive UI 判斷 Mobile／Tablet／Desktop presentation，但 business/data owner 不依 breakpoint 分叉。平板日期／月份已不再建立自己的資料 state 或第二套 picker owner。
 
@@ -41,8 +42,9 @@
 - **V0.22.25 Build 0 / PR #351**：直式把手改成中央「↑ 展開新增／↓ 收合隱藏」，移除灰色短槓。收入／支出仍共用原 `.kind-button` 與同一 entry kind state，只在直式變成最左側窄版垂直雙段；右側 12 欄 grid 排成帳戶／日期／科目／金額、常用科目／常用摘要快捷列、寬摘要＋儲存＋清空／取消三層。主要 input/select 維持 16px，手機與橫式 presentation 不改。
 - **V0.22.26 Build 0 / PR #353**：依實機與手繪示意返修。月摘要固定在年月／工具列下方的獨立第三列，不再與月份 selector／工具按鈕共列。直式把手改為 entry panel 上邊框中央向上凸出的 tab，border-bottom 移除並以同背景補 seam，形成與面板一體的拉耳；收合時只留 10px 薄面板邊與凸起標籤。
 - **V0.22.27 Build 0 / PR #355**：直／橫式交易表改為固定欄寬，empty row 不再改變表頭比例；操作表頭置中。月摘要改固定五格且放大，所有數值保留固定槽位。Excel 直／橫式與 tablet preview 明確共用手機 native file share，xlsx File 固定 MIME。直式把手固定白色，收合 rail 完全透明且無殘線；收入／支出文字使用 `writing-mode: vertical-rl`＋upright。
+- **V0.22.28 Build 0 / PR #357**：直式把手從 entry-card 內部移到 `.cy-entry-rail` 上緣，展開時真正由面板上邊線往上凸出，收合只留下 tab。收入／支出保留 canonical segmented-control 的 gradient、active 白底、綠／紅邊框與陰影，只改成較窄較高的直式幾何。輸入 grid 固定三列：帳戶／科目／常用科目；日期／摘要／常用摘要；金額／儲存／清空或取消。Tablet Settings 寬度縮至 640px；月份鎖帳回到穩定三欄並收斂逐月控制；備份標題列／重新整理控制縮整；資料管理與資料移轉以 Desktop interaction guard 排除所有 Tablet presentation。PR #358 再更新 production semantic verifier 到 V0.22.28 cache rev 與新 marker。
 
-目前 V0.22.27 Build 0 的 PR #355 已合併；Production Deploy #538（run `37575180101`）已完成 application tests、D1 migration、Worker/static assets、secure login 與 semantic frontend asset verification。
+目前 V0.22.28 Build 0 的 PR #357 與部署驗證修正 PR #358 已合併；Production Deploy #547（run `37714030732`）已完成 application tests、D1 migration、Worker/static assets、secure login 與 V0.22.28 semantic frontend asset verification。
 
 ## 元件與共用操作
 
@@ -66,7 +68,7 @@
 
 歷史平板回歸曾驗證方向判斷、旋轉草稿、編輯保留、visual viewport、展開收合、換筆及切月份不誤存。Build 1 使用 Chromium 153 與合成資料做過 1194×750 橫式、834×1100 直式、390×844 手機、1440×900 桌機檢查；當時手機／桌機基準在版本文字正規化後一致。
 
-後續 V0.22.3 Build 1～3 加入互動判定、shared picker 與重複 CSS 規則 regression。V0.22.21 新增 identity ownership、preview-only return、兩列直式 entry、原生搜尋與桌面不受影響的 guards；V0.22.22 直接測試 `lockedThrough` 逐月推進／退回；V0.22.23 鎖定 16px iOS-safe search、穩定 Tablet layout height、Excel native share、收支欄移除、正負號與 icon-only actions；V0.22.25 鎖定垂直 kind switch、三層 entry grid 與文字／箭頭狀態；V0.22.26 鎖定凸起 tab 與摘要位置；V0.22.27 再鎖定 fixed ledger columns、五格摘要、操作表頭置中、tablet native file share、白色 tab／無殘 rail 與直向 kind labels。PR #355 Validate #537 及 Production Deploy #538 均成功。
+後續 V0.22.3 Build 1～3 加入互動判定、shared picker 與重複 CSS 規則 regression。V0.22.21 新增 identity ownership、preview-only return、兩列直式 entry、原生搜尋與桌面不受影響的 guards；V0.22.22 直接測試 `lockedThrough` 逐月推進／退回；V0.22.23 鎖定 16px iOS-safe search、穩定 Tablet layout height、Excel native share、收支欄移除、正負號與 icon-only actions；V0.22.25 鎖定垂直 kind switch、三層 entry grid 與文字／箭頭狀態；V0.22.26 鎖定凸起 tab 與摘要位置；V0.22.27 再鎖定 fixed ledger columns、五格摘要、操作表頭置中、tablet native file share、白色 tab／無殘 rail 與直向 kind labels；V0.22.28 再鎖定 rail-owned 凸起把手、42×132 canonical 直式 kind control、三列 entry grid、640px Tablet Settings、lock/backup compact layout，以及 Data Management／Migration desktop-only guards。PR #357 Validate #544、PR #358 Validate #546 及 Production Deploy #547 均成功。
 
 自動測試與模擬瀏覽器仍不取代真機。
 
