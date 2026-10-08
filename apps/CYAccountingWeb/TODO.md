@@ -7,11 +7,11 @@
 - [ ] 真實 iPad／Android 完整交叉驗收：直向、橫向、分割視窗、原生 picker、觸控排序／捲動、螢幕鍵盤與外接鍵盤。
 - [ ] 真實平板登入、Session、登出、USER 唯讀及 Excel 分享／下載完整驗收。
 - [ ] **下一次公開 Stable Release 前**移除手機「測試用平板版」、preview「返回手機版」及其 session-scoped tablet preview bootstrap／測試專用 UI；正式平板本身的 inline identity 與直／橫式 presentation 保留。
-- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.22.28 Build 0 的自動回歸與 production semantic verification 不等於所有真機情境已逐項驗收。
+- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.22.29 Build 0 的自動回歸與 production semantic verification 不等於所有真機情境已逐項驗收；請優先確認桌機 ≥1360px 左記帳／右帳本、輸入確認 inline 區、單一日期選擇器，以及手機／平板版未受影響。
 
 ## 交易互動
 
-- [ ] 一般**新增記帳**的共用 optimistic update 與失敗 rollback 尚未實作；目前各裝置共用既有等待送出流程。
+- [ ] 一般**新增記帳**的共用 optimistic update 與失敗 rollback 尚未實作；目前各裝置共用既有等待送出流程。 先前未合併 `cyaccountingweb/optimistic-transaction-create` 分支已暫停，沒有部署或取得完整驗證；續作須從 main 正式基準重新檢視。
 - [ ] 若未來加入 PWA、掃碼、拍照、離線或 Push，再由具體需求評估；不得為行動裝置另造第二套 business/data frontend。
 
 ## 帳務與 Identity
