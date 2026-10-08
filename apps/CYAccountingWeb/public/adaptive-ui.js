@@ -4369,7 +4369,7 @@ function setupTabletWorkspace() {
     const grid = document.querySelector('.entry-grid');
     for (const id of ['favoriteCategoryGroup', 'summarySuggestionGroup']) {
       const group = document.querySelector('#' + id);
-      const host = tablet || isDesktopInteractionWorkspace() ? grid : quickHost;
+      const host = tablet || (window.innerWidth >= 1024 && isDesktopInteractionWorkspace()) ? grid : quickHost;
       if (group && host && group.parentElement !== host) host.append(group);
     }
     applyAdaptiveSplitWorkspace(window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA).matches);
