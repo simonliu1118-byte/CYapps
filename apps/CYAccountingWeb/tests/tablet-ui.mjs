@@ -54,6 +54,7 @@ win.__cyaccTabletPreviewEnabled = false;
 win.innerWidth = 820; coarse = true;
 context.setupTabletWorkspace();
 assert.equal(root.dataset.tabletLayout, 'portrait');
+assert.equal(controls.parentElement, rail, 'portrait handle is owned by the entry rail edge, not the entry-card interior');
 assert.equal(favoriteGroup.parentElement, entryGrid);
 assert.equal(summaryGroup.parentElement, entryGrid);
 assert.equal(rail.dataset.entryExpanded, 'true', 'portrait entry rail starts expanded');
@@ -87,6 +88,7 @@ assert.equal(style.get('--tablet-visible-height'), '1100px', 'software keyboard 
 assert.equal(context.cyTouchWorkspaceEdit, currentEdit);
 assert.equal(writes, 0, 'layout/rotation/keyboard/entry toggling never writes accounting data');
 win.innerWidth = 375; listeners.get('resize')();
+assert.equal(controls.parentElement, entry, 'leaving tablet restores the hidden handle node to the entry card');
 assert.equal(favoriteGroup.parentElement, quickHost, 'phone restores existing quick-entry container');
 assert.equal(summaryGroup.parentElement, quickHost);
 win.innerWidth = 820; listeners.get('resize')();
