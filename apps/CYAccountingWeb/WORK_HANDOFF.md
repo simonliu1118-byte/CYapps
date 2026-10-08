@@ -6,17 +6,20 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.29 Build 0**；PR #360 已合併；修復 Desktop split 初始化競爭與日期 CSS 名稱失配；V0.22.28 的平板 rail／三列輸入、設定修正均保留 |
-| Production Deploy | CYAccountingWeb Validate and Deploy run [`37733787088`](https://github.com/simonliu1118-byte/CYapps/actions/runs/37733787088) 成功；validate、D1 migration、Worker/static assets、secure login 與 V0.22.29 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.30 Build 0**；PR #362 已合併，恢復 V0.22.29 desktop split 基礎上收斂 10 項桌機／共用介面，平板既有排列保留 |
+| Production Deploy | CYAccountingWeb Validate and Deploy run [`37736085139`](https://github.com/simonliu1118-byte/CYapps/actions/runs/37736085139) 成功；validate、D1 migration、Worker/static assets、secure login 與 V0.22.30 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.31**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
-| 下一工作線 | 先請使用者於真實桌機確認 V0.22.29 外觀；`cyaccountingweb/optimistic-transaction-create` 是先前中斷、未合併且尚未完整驗證的工作分支，不能當正式基準。下一項開發從 main 判斷並開分支 |
+| 下一工作線 | 請使用者優先於真實桌機／手機／平板驗收 V0.22.30 畫面；`cyaccountingweb/optimistic-transaction-create` 仍未合併、未部署，不是現行基準。下一獨立開發自 main 開分支 |
 
 純文件更新不升 `VERSION`／`BUILD`。正式版本來源仍是專案根 `VERSION` 與 `BUILD`。
 
 ## 近期版本收斂
+
+- **V0.22.30 Build 0**：依 10 項桌機實機返修，入口區與帳本區移除標題；桌機收入／支出靠左，日期 icon 改單一日曆 SVG，日期／科目／常用科目／摘要／常用摘要／金額／儲存／清空逐列；收支以金額 +/- 與顏色呈現（語意 kind cell 暫保留但所有版面隱藏，避免觸控 CSS nth-child／swipe 重寫）；切月份透過 shared loading state 顯示載入中；期初餘額視窗加寬、audit 在右側預設展開；月摘要同平板期初／收入／支出／期末／淨利損五格放大；修正桌機 inline edit min-width；右上 role 去除 pill 背景、改為括號純文字。PR #362 CI 一次抓到由平板切回手機 quick tools 容器還原問題，修正後 validate／governance 成功；Production run `37736085139` 成功。未改 API／D1／CYID／canonical writer；實機視覺仍待回報。
+
 
 - **V0.22.2 ～ V0.22.3 Build 3**：完成平板雙方向介面、照片返修、原生日期／月份 owner 收斂及 desktop interaction 判定整理。PR #297 的 V0.22.2 Build 4 **未合併**，已被後續 V0.22.3 系列取代，不是有效基準。
 - **V0.22.4 ～ V0.22.8**：完成架構整理，移除 V0214 retry patch、收斂 Settings、transactionRows renderer/lifecycle、Ledger Toolbar，以及剩餘 V06/V09/V19/V20/V21／Build 式 runtime 殼與版本式命名。
