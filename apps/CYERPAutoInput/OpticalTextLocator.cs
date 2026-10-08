@@ -65,6 +65,9 @@ internal sealed class OpticalTextLocator
         return null;
     }
 
+    public Task<IReadOnlyList<OcrToken>> RecognizeAsync(Bitmap image, CancellationToken cancellationToken) =>
+        _ocr.RecognizeAsync(image, cancellationToken, requireChinese: false);
+
     public async Task<bool> ContainsAllFragmentsAsync(nint hwnd, IReadOnlyList<string> fragments, CancellationToken cancellationToken)
     {
         if (!NativeMethods.GetWindowRect(hwnd, out var rect) || rect.Width <= 0 || rect.Height <= 0)

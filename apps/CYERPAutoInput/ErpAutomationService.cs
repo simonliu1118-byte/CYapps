@@ -536,7 +536,7 @@ internal sealed class ErpAutomationService
                     throw new InvalidOperationException("開啟下一筆明細前無法把 ERP 帶到前景。");
                 InputSender.Press(NativeMethods.VK_DOWN);
                 await Delay(180, cancellationToken);
-                await HandleRowTransitionDialogsAsync(root, result, rowIndex, rows[rowIndex - 1], cancellationToken);
+                await HandleRowTransitionDialogsAsync(root, grid, result, rowIndex, rows[rowIndex - 1], cancellationToken);
                 await Delay(140, cancellationToken);
                 _log.Info("detail", $"next row activated by Down logical_row={rowIndex + 1}");
             }
@@ -904,40 +904,110 @@ internal sealed class ErpAutomationService
         return 0;
     }
 
+    /// <summary>
+    /// Handles ERP messages after Down to the next detail row. 「庫存量或批號量不足」 is
+    /// acknowledged with Enter (its default OK) and recorded as a warning, as the user
+    /// directed (2026-10-09: just press OK and finish the document). Whether ERP then created
+    /// the next row is read from the 序號 column: if it did not, Down is pressed once more,
+    /// and a second refusal stops the run. Any other window stops the run.
+    /// </summary>
     private async Task HandleRowTransitionDialogsAsync(
         nint root,
+        WindowControl grid,
         AutomationRunResult result,
         int completedDetailRow,
         DetailRow completedRow,
         CancellationToken cancellationToken)
     {
+        if (!await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, cancellationToken)) return;
+
+        var warning = new AutomationWarning(
+            "BATCH_STOCK_INSUFFICIENT",
+            result.SalesOrderType,
+            result.SalesOrderNumber,
+            completedDetailRow,
+            completedRow.ItemCode,
+            "ERP 顯示庫存量或批號量不足（已按確定繼續），需人工確認");
+        result.Warnings.Add(warning);
+        _log.Warn("document", $"warning recorded code={warning.Code} document={warning.DocumentKey} detail_row={warning.DetailRow} item={_log.Value(warning.ItemCode)}");
+
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("關閉庫存不足提示後無法回到 COPI08；已停止避免後續錯位。");
+        await Delay(200, cancellationToken);
+
+        var rows = await CountDetailRowsAsync(grid, cancellationToken);
+        _log.Info("detail", $"rows after stock warning count={rows} expected_next={completedDetailRow + 1}");
+        if (rows > completedDetailRow) return;
+        if (rows != completedDetailRow)
+            throw new InvalidOperationException("關閉庫存不足提示後無法確認 ERP 明細列數；已停止避免錯位。");
+
+        // ERP stayed in the completed row: ask for the next row once more.
+        InputSender.Press(NativeMethods.VK_DOWN);
+        await Delay(300, cancellationToken);
+        if (await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, cancellationToken))
+            throw new InvalidOperationException($"第 {completedDetailRow} 列品號 {completedRow.ItemCode}：按確定後 ERP 仍不允許換到下一列（庫存量或批號量不足）；請檢查庫別、數量或批號後人工處理。");
+        Win32Automation.PrepareForeground(root, _log);
+        rows = await CountDetailRowsAsync(grid, cancellationToken);
+        _log.Info("detail", $"rows after second Down count={rows} expected_next={completedDetailRow + 1}");
+        if (rows <= completedDetailRow)
+            throw new InvalidOperationException($"第 {completedDetailRow} 列之後 ERP 沒有建立下一列；已停止避免錯位。");
+    }
+
+    /// <summary>
+    /// Returns false when no ERP window is open; presses Enter on the stock warning and
+    /// returns true; throws for any other window. The message text is read from the Win32
+    /// tree or, retried while the box is still painting, by OCR.
+    /// </summary>
+    private async Task<bool> AcknowledgeStockWarningIfShownAsync(
+        nint root, int completedDetailRow, DetailRow completedRow, CancellationToken cancellationToken)
+    {
         var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
-        if (peers.Count == 0) return;
+        if (peers.Count == 0) return false;
 
         const string knownWarning = "庫存量或批號量不足";
         foreach (var peer in peers)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var known = Win32Automation.WindowTreeContainsText(peer, knownWarning);
-            if (!known)
-                known = await _textVision.ContainsAllFragmentsAsync(peer, ["庫存量", "批號量", "不足"], cancellationToken);
+            var known = false;
+            for (var attempt = 1; attempt <= 3 && !known; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (attempt > 1) await Delay(300, cancellationToken);
+                known = Win32Automation.WindowTreeContainsText(peer, knownWarning) ||
+                        // OCR of ERP's own message box read 「障存量或批就量不足！」 (庫→障, 號→就)
+                        // in the real test, so match the stable fragments only.
+                        await _textVision.ContainsAllFragmentsAsync(peer, ["存量", "批", "不足"], cancellationToken);
+            }
             if (!known) continue;
 
             if (!Win32Automation.PrepareForeground(peer, _log))
-                throw new InvalidOperationException("ERP 批號存量不足警告已出現，但無法安全取得警告視窗焦點。");
+                throw new InvalidOperationException("ERP 庫存不足提示已出現，但無法安全取得提示視窗焦點。");
             InputSender.Press(NativeMethods.VK_RETURN);
             if (!await WaitWindowClosedAsync(peer, 1200, cancellationToken))
-                throw new InvalidOperationException("已對批號存量不足警告送出 Enter，但警告視窗沒有關閉；已停止避免後續錯位。");
-
-            // ERP keeps the cursor in the rejected row after this message (user-confirmed,
-            // 2026-10-08; e.g. 庫別 left at a default warehouse without stock), so the row
-            // was not committed and the run cannot continue with the next row.
-            Win32Automation.PrepareForeground(root, _log);
-            _log.Warn("document", $"stock insufficient blocked row change document={_log.Value(result.DocumentKey)} detail_row={completedDetailRow} item={_log.Value(completedRow.ItemCode)}");
-            throw new InvalidOperationException($"第 {completedDetailRow} 列品號 {completedRow.ItemCode}：ERP 顯示「庫存量或批號量不足」並停在該列；請檢查庫別、數量或批號後人工處理。CY 已關閉提示並停止。");
+                throw new InvalidOperationException("已對庫存不足提示送出 Enter，但提示視窗沒有關閉；已停止避免後續錯位。");
+            _log.Info("document", $"stock warning acknowledged detail_row={completedDetailRow} item={_log.Value(completedRow.ItemCode)}");
+            return true;
         }
 
+        LogPeerWindows("row-transition", peers);
         throw new InvalidOperationException("切換商品明細下一列時 ERP 出現未預期視窗；為避免資料填入錯誤欄位已立即停止目前單據。");
+    }
+
+    /// <summary>Highest 序號 visible in the detail grid's first column (0 when unreadable).</summary>
+    private async Task<int> CountDetailRowsAsync(WindowControl grid, CancellationToken cancellationToken)
+    {
+        if (!NativeMethods.GetWindowRect(grid.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 0) return 0;
+        // 序號 only (x < ~48 at 100% scale); wider would take in 品號, which can be all digits.
+        var column = new Rectangle(rect.Left, rect.Top, Math.Min(rect.Width, 48), rect.Height);
+        using var image = ScreenCapture.Capture(column);
+        var tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+        var max = 0;
+        foreach (var token in tokens)
+        {
+            var digits = token.Text.Trim();
+            if (digits.Length is >= 2 and <= 5 && digits.All(char.IsAsciiDigit) && int.TryParse(digits, out var n))
+                max = Math.Max(max, n);
+        }
+        return max;
     }
 
     private async Task<GridGeometry> EnsureDetailColumnVisibleAsync(
