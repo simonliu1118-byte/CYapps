@@ -5946,8 +5946,8 @@
 
   /* Opening balance is a compact utility dialog, not a full settings page. */
   .opening-modal {
-    width: min(420px, calc(100% - 32px));
-    max-height: min(620px, calc(100vh - 40px));
+    width: min(880px, calc(100% - 40px));
+    max-height: min(760px, calc(100vh - 40px));
     padding: 0;
     overflow: hidden;
     border: 1px solid #e4e8ee;
@@ -11620,4 +11620,272 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   text-orientation: upright !important;
   letter-spacing: 2px !important;
   line-height: 1 !important;
+}
+
+
+/* Canonical shared ledger presentation: income/expense is carried by the
+   amount cell, not a redundant visible column on any screen size.  Retain
+   semantic kind cells while existing touch table indices are consolidated. */
+.ledger-card thead th:nth-child(3),
+.ledger-card tbody tr:not(.account-group-row):not(.ledger-message-row) > td:nth-child(3) {
+  display: none !important;
+}
+.ledger-card tbody tr.ledger-row-income:not(.inline-editing) > .ledger-amount {
+  color: #2f7a4c !important;
+  font-weight: 700;
+}
+.ledger-card tbody tr.ledger-row-expense:not(.inline-editing) > .ledger-amount {
+  color: #a54b45 !important;
+  font-weight: 700;
+}
+.ledger-card tbody tr.ledger-row-income:not(.inline-editing) > .ledger-amount::before {
+  content: "+"; 
+}
+.ledger-card tbody tr.ledger-row-expense:not(.inline-editing) > .ledger-amount::before {
+  content: "−";
+}
+#ledgerMonthLoading[hidden], #desktopEntryClearButton[hidden] {
+  display: none !important;
+}
+.ledger-month-loading {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 8px;
+  color: #657386;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.desktopUi-date-calendar-icon {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Desktop business workspace. Touch presentation and canonical writers remain
+   shared; only field placement, compact shortcuts and edit widths differ. */
+@media (min-width: 1024px) {
+  html[data-viewport="desktop"] .entry-card .section-title,
+  html[data-viewport="desktop"] .entry-card .title-with-badge {
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 78px 68px !important;
+    column-gap: 7px;
+    row-gap: 5px;
+    align-items: end;
+    min-width: 0;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid > .date-field,
+  html[data-viewport="desktop"] .entry-card .entry-grid > .category-field,
+  html[data-viewport="desktop"] .entry-card .entry-grid > .summary-field,
+  html[data-viewport="desktop"] .entry-card .entry-grid > #favoriteCategoryGroup,
+  html[data-viewport="desktop"] .entry-card .entry-grid > #summarySuggestionGroup {
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
+    width: 100%;
+    min-width: 0;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid > .amount-field {
+    grid-column: 1 !important;
+    grid-row: auto !important;
+    min-width: 0;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid > #saveButton {
+    grid-column: 2 !important;
+    grid-row: auto !important;
+    width: 100% !important;
+    min-width: 0;
+    min-height: 37px;
+    padding: 0 7px;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid > #desktopEntryClearButton {
+    grid-column: 3 !important;
+    grid-row: auto !important;
+    min-width: 0;
+    width: 100%;
+    min-height: 37px;
+    height: 37px;
+    padding: 0 5px;
+    border: 1px solid #d5dce5;
+    border-radius: 7px;
+    background: #f8fafc;
+    color: #526174;
+    font-size: 12px;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid > .quick-tool-row,
+  html[data-viewport="desktop"] .entry-card .entry-grid > .quick-tool-row.hidden {
+    display: flex !important;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    min-height: 23px;
+    gap: 7px;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid .quick-tool-label {
+    flex: 0 0 48px;
+    padding: 0;
+    font-size: 10.5px;
+    white-space: nowrap;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid .quick-chip-list {
+    min-width: 0;
+    overflow: hidden;
+    flex-wrap: wrap;
+    gap: 3px;
+    padding: 0;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid .quick-chip {
+    min-height: 22px;
+    padding: 2px 7px;
+    font-size: 10.5px;
+  }
+  html[data-viewport="desktop"] .entry-card > .quick-entry-tools {
+    display: none !important;
+  }
+  html[data-viewport="desktop"] .ledger-card table {
+    width: 100%;
+    min-width: 820px;
+    table-layout: fixed;
+  }
+  html[data-viewport="desktop"] .ledger-card th:nth-child(1),
+  html[data-viewport="desktop"] .ledger-card td:nth-child(1) { width: 128px; }
+  html[data-viewport="desktop"] .ledger-card th:nth-child(2),
+  html[data-viewport="desktop"] .ledger-card td:nth-child(2) { width: 113px; }
+  html[data-viewport="desktop"] .ledger-card th:nth-child(4),
+  html[data-viewport="desktop"] .ledger-card td:nth-child(4) { width: 144px; }
+  html[data-viewport="desktop"] .ledger-card th:nth-child(6),
+  html[data-viewport="desktop"] .ledger-card td:nth-child(6) { width: 100px; }
+  html[data-viewport="desktop"] .ledger-card th:nth-child(7),
+  html[data-viewport="desktop"] .ledger-card td:nth-child(7) { width: 108px; }
+  html[data-viewport="desktop"] .ledger-card th:nth-child(8),
+  html[data-viewport="desktop"] .ledger-card td:nth-child(8) { width: 98px; }
+  html[data-viewport="desktop"] .ledger-card tr.inline-editing > td {
+    box-sizing: border-box;
+    min-width: 0;
+    overflow: visible;
+    padding-inline: 4px;
+  }
+  html[data-viewport="desktop"] .ledger-card tr.inline-editing .inline-edit-control,
+  html[data-viewport="desktop"] .ledger-card tr.inline-editing .desktopUi-date-picker {
+    width: 100%;
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+  html[data-viewport="desktop"] .cy-ledger-summary-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+  }
+  html[data-viewport="desktop"] .cy-ledger-summary-bar #monthSummary {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    grid-template-areas: "opening income expense ending net" !important;
+    gap: 0 !important;
+    min-width: 0;
+    padding: 8px 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item {
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    padding: 3px 6px;
+    color: #657386;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item:not(.opening) {
+    border-left: 1px solid #dfe5eb;
+  }
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item strong {
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item.income,
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item.income strong,
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item.net.profit,
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item.net.profit strong {
+    color: #2f7a4c;
+  }
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item.expense,
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item.expense strong,
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item.net.loss,
+  html[data-viewport="desktop"] #monthSummary .ledger-summary-item.net.loss strong {
+    color: #a54b45;
+  }
+  html[data-viewport="desktop"] .opening-modal {
+    width: min(880px, calc(100vw - 48px)) !important;
+    max-height: min(760px, calc(100vh - 40px));
+  }
+  html[data-viewport="desktop"] .opening-modal .opening-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 18px;
+    max-height: min(520px, calc(100vh - 220px));
+    align-items: start;
+    padding: 12px 18px 12px;
+  }
+  html[data-viewport="desktop"] .opening-modal .opening-account-column {
+    min-width: 0;
+  }
+  html[data-viewport="desktop"] .opening-modal .opening-audit {
+    min-width: 0;
+    max-height: 490px;
+    margin: 0;
+    overflow-y: auto;
+    border-left: 1px solid #e4e9ee;
+    padding: 0 0 0 16px;
+  }
+  html[data-viewport="desktop"] .opening-modal .opening-audit > summary {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  /* Role is inline text, as in the accepted tablet identity format; no pill
+     or tinted/gradient role container in the desktop header. */
+  html[data-viewport="desktop"] .cy-account-cluster {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    gap: 6px;
+  }
+  html[data-viewport="desktop"] .cy-account-cluster .current-user,
+  html[data-viewport="desktop"] .cy-account-cluster .current-user.role-super-admin,
+  html[data-viewport="desktop"] .cy-account-cluster .current-user.role-admin {
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding-inline: 4px !important;
+    gap: 4px !important;
+  }
+  html[data-viewport="desktop"] .cy-account-cluster .current-user-role {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  html[data-viewport="desktop"] .cy-account-cluster .current-user-role::before {
+    content: "［" !important;
+    margin: 0 !important;
+  }
+  html[data-viewport="desktop"] .cy-account-cluster .current-user-role::after {
+    content: "］" !important;
+    display: inline !important;
+  }
 }
