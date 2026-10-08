@@ -518,6 +518,12 @@ internal sealed class MainForm : Form
             if (!_valueControls.TryGetValue(pair.Key, out var control) || control is CheckBox) continue;
             if (string.IsNullOrWhiteSpace(control.Text)) control.Text = pair.Value;
         }
+
+        // ERP pre-fills its own default warehouse on every new row, so the configured 庫別
+        // is put straight into the form's first detail row and typed into ERP like any cell.
+        if (_settings.FirstRowWarehouseEnabled && _settings.FirstRowWarehouse.Length > 0 && _details.Rows.Count > 0 &&
+            !_details.Rows[0].IsNewRow && string.IsNullOrWhiteSpace(Convert.ToString(_details["Warehouse", 0].Value)))
+            _details["Warehouse", 0].Value = _settings.FirstRowWarehouse;
     }
 
     private async Task StartAutomationAsync()
@@ -593,10 +599,10 @@ internal sealed class MainForm : Form
             if (control is CheckBox checkBox) checkBox.Checked = false;
             else control.Text = string.Empty;
         }
-        ApplyDefaultsToBlankFields();
         _details.EndEdit();
         _details.Rows.Clear();
         for (var i = 0; i < 10; i++) _details.Rows.Add();
+        ApplyDefaultsToBlankFields();
         SetStatus("已清除表單");
     }
 
@@ -686,14 +692,12 @@ internal sealed class MainForm : Form
             details.Add(d);
         }
 
-        // Settings: fill a blank 庫別 on the first detail row (ERP carries it to later rows),
-        // and show it in the grid so the user sees what is sent.
+        // Fallback for a form whose first data row is not the grid's first row.
         if (_settings.FirstRowWarehouseEnabled && _settings.FirstRowWarehouse.Length > 0 &&
             details.Count > 0 && string.IsNullOrWhiteSpace(details[0].Warehouse))
         {
             details[0].Warehouse = _settings.FirstRowWarehouse;
             _details["Warehouse", firstDetailGridRow].Value = _settings.FirstRowWarehouse;
-            _log.Info("settings", $"first detail row warehouse filled from settings warehouse={_log.Value(_settings.FirstRowWarehouse)}");
         }
 
         if (values.Count == 0 && details.Count == 0)

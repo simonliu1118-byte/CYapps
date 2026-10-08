@@ -79,7 +79,7 @@ internal sealed class SettingsForm : Form
         root.Controls.Add(_autoSave, 0, 3);
 
         var warehouseRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
-        _firstRowWarehouse.Text = "商品明細第一列的庫別空白時自動帶入：";
+        _firstRowWarehouse.Text = "商品明細第一列庫別預設填入：";
         _firstRowWarehouse.Checked = _settings.FirstRowWarehouseEnabled;
         _firstRowWarehouse.AutoSize = true;
         _firstRowWarehouse.Padding = new Padding(3, 4, 0, 0);
