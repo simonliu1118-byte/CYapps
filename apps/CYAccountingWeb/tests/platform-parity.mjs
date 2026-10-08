@@ -180,4 +180,55 @@ for (const scenario of ['read-before-write', 'read-during-write', 'failed-write'
   assert.equal(reads, 2, `${scenario}: a stale response is replaced by a fresh canonical read`);
   assert.equal(context.state.transactions[0].amount, scenario === 'failed-write' ? 1 : 8, `${scenario}: delayed reads cannot overwrite the completed write or rollback`);
 }
+
+// The shared POST writer must render a temporary row immediately, replace it
+// with the server ID on success, and restore the form and ledger on failure.
+for (const width of [375, 820, 1440]) {
+  let resolvePost;
+  let failPost = false;
+  const snapshots = [];
+  const controls = {
+    txDate: field('2026-09-02'), accountName: field('現金'),
+    categoryName: field('一般收入'), summary: field('測試新增'), amount: field('88'),
+    monthFilter: field('2026-09'), saveButton: field(''),
+    saveMessage: { textContent: '', classList: { toggle() {} } }
+  };
+  const ctx = vm.createContext({
+    state: { kind: 'income', transactions: [] }, els: controls,
+    window: { matchMedia: () => ({ matches: width < 768 }), cyAfterSaveMessage() {} },
+    isLocked: () => false, jsonHeaders: () => ({}),
+    renderDesktopLedger() { snapshots.push(ctx.state.transactions.map(tx => ({ ...tx }))); },
+    updateEntryLockState() { controls.saveButton.disabled = false; },
+    showMessage() {}, async loadTransactions() {},
+    async api() {
+      await new Promise(resolve => { resolvePost = resolve; });
+      if (failPost) throw new Error('POST rejected');
+      return { id: 57 };
+    }
+  });
+  vm.runInContext('let cyTransactionMutationRevision = 0; const cyPendingTransactionUpdates = new Map(); const cyPendingTransactionCreates = new Map(); let cyTransactionTemporaryId = -1;\\n' +
+    piece(app, 'async function saveTransaction(event)', 'async function loadTransactions()') +
+    piece(app, 'function summaryCharacterUnits(', 'async function saveTransactionEdit('), ctx);
+  const first = ctx.saveTransaction({ preventDefault() {} });
+  assert.equal(ctx.state.transactions.length, 1, `${width}: create appears before POST succeeds`);
+  assert.ok(ctx.state.transactions[0].id < 0, 'temporary id is negative');
+  assert.equal(controls.amount.value, '', 'entry field resets immediately');
+  assert.equal(ctx.mergePendingTransactionUpdates([], '2026-09').length, 1, 'pending create survives a stale read');
+  resolvePost();
+  await first;
+  assert.equal(ctx.state.transactions[0].id, 57, 'confirmed transaction adopts the server id');
+  assert.equal(ctx.mergePendingTransactionUpdates([], '2026-09').length, 0, 'pending create is removed after POST');
+  controls.summary.value = '失敗應回復';
+  controls.amount.value = '123';
+  failPost = true;
+  const second = ctx.saveTransaction({ preventDefault() {} });
+  assert.equal(ctx.state.transactions.length, 2, 'second pending create is visible');
+  resolvePost();
+  await second;
+  assert.equal(ctx.state.transactions.length, 1, 'rejected create is rolled back');
+  assert.equal(controls.summary.value, '失敗應回復');
+  assert.equal(controls.amount.value, '123');
+  assert.ok(snapshots.length >= 4, 'one canonical renderer handles create and rollback');
+}
+
 console.log('Production edit writers, locks, summary rules and optimistic settings are shared at mobile/tablet/desktop widths.');
