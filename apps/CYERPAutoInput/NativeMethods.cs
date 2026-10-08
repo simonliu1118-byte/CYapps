@@ -11,7 +11,6 @@ internal static class NativeMethods
     internal const uint SWP_NOMOVE = 0x0002;
     internal const uint SWP_SHOWWINDOW = 0x0040;
     internal static readonly nint HWND_TOP = 0;
-    internal static readonly nint HWND_BOTTOM = 1;
 
     internal const int GWL_STYLE = -16;
     internal const long ES_READONLY = 0x0800;

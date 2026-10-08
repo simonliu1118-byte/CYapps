@@ -29,10 +29,10 @@ internal sealed class F2BatchCellLocator
             throw new InvalidOperationException("F2 批號查詢找不到可用的 TcxGridSite；已停止目前單據。");
 
         var captureRect = grid.Rect.ToRectangle();
-        // Screen capture reads whatever is on top: in the real test (V0.2.0 Build 6) the CY
-        // window covered part of the lookup and its own 單位 header was read into a stock
-        // cell. Only read a frame that is unobstructed, stable and shows both batch headers
-        // without unit text.
+        // Screen capture reads whatever is on screen: in the real test (V0.2.0 Build 6) the
+        // lookup was captured before it had painted, so the COPI08 detail header 單位 behind
+        // it was read into a stock cell. Only read a frame that is unobstructed, stable and
+        // shows both batch headers without unit text.
         Bitmap? image = null;
         IReadOnlyList<OcrToken> tokens = [];
         Rectangle? stockHeader = null;
@@ -149,28 +149,13 @@ internal sealed class F2BatchCellLocator
         throw new InvalidOperationException("F2 批號查詢沒有找到可確認的「現有存量 > 0」批號；已停止，請查看 LOG 的 F2_BATCH_STOCK_ROW 原始辨識內容。");
     }
 
-    /// <summary>
-    /// Makes sure nothing covers the lookup grid: brings the lookup to the front and, if a
-    /// window of this process (the CY form) still covers it, sends that window to the bottom.
-    /// </summary>
+    /// <summary>Makes sure nothing covers the lookup grid; brings the lookup to the front once if needed.</summary>
     private async Task<bool> EnsureUnobstructedAsync(nint lookupHwnd, Rectangle area, CancellationToken cancellationToken)
     {
         if (Win32Automation.IsAreaShownBy(lookupHwnd, area)) return true;
         _log.Warn("vision", "F2 batch lookup covered by another window; bringing it to the front");
         Win32Automation.PrepareForeground(lookupHwnd, _log);
         await Task.Delay(150, cancellationToken);
-        if (Win32Automation.IsAreaShownBy(lookupHwnd, area)) return true;
-
-        foreach (Form form in Application.OpenForms)
-        {
-            if (form.IsDisposed || !form.Visible) continue;
-            var handle = form.Handle;
-            form.Invoke(() => NativeMethods.SetWindowPos(handle, NativeMethods.HWND_BOTTOM, 0, 0, 0, 0,
-                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | 0x0010 /* SWP_NOACTIVATE */));
-        }
-        _log.Warn("vision", "CY windows sent to the bottom so the F2 batch lookup is fully visible");
-        Win32Automation.PrepareForeground(lookupHwnd, _log);
-        await Task.Delay(200, cancellationToken);
         return Win32Automation.IsAreaShownBy(lookupHwnd, area);
     }
 
