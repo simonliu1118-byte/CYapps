@@ -8,6 +8,8 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _advanced = new();
     private readonly CheckBox _diagnostic = new();
     private readonly CheckBox _autoSave = new();
+    private readonly CheckBox _firstRowWarehouse = new();
+    private readonly TextBox _firstRowWarehouseCode = new();
 
     private static readonly string[] ConfigurableKeys =
     [
@@ -25,7 +27,7 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
-        Size = new Size(640, 608);
+        Size = new Size(640, 642);
         MinimumSize = new Size(560, 480);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
@@ -40,8 +42,9 @@ internal sealed class SettingsForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 6, ColumnCount = 1, Padding = new Padding(12) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 7, ColumnCount = 1, Padding = new Padding(12) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
@@ -75,6 +78,21 @@ internal sealed class SettingsForm : Form
         _autoSave.Padding = new Padding(3, 4, 0, 0);
         root.Controls.Add(_autoSave, 0, 3);
 
+        var warehouseRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        _firstRowWarehouse.Text = "商品明細第一列的庫別空白時自動帶入：";
+        _firstRowWarehouse.Checked = _settings.FirstRowWarehouseEnabled;
+        _firstRowWarehouse.AutoSize = true;
+        _firstRowWarehouse.Padding = new Padding(3, 4, 0, 0);
+        _firstRowWarehouseCode.Width = 110;
+        _firstRowWarehouseCode.MaxLength = 20;
+        _firstRowWarehouseCode.Text = _settings.FirstRowWarehouse;
+        _firstRowWarehouseCode.Margin = new Padding(0, 4, 0, 0);
+        _firstRowWarehouseCode.Enabled = _firstRowWarehouse.Checked;
+        _firstRowWarehouse.CheckedChanged += (_, _) => _firstRowWarehouseCode.Enabled = _firstRowWarehouse.Checked;
+        warehouseRow.Controls.Add(_firstRowWarehouse);
+        warehouseRow.Controls.Add(_firstRowWarehouseCode);
+        root.Controls.Add(warehouseRow, 0, 4);
+
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
         _grid.AllowUserToDeleteRows = false;
@@ -103,7 +121,7 @@ internal sealed class SettingsForm : Form
             var index = _grid.Rows.Add(field.Label, value);
             _grid.Rows[index].Tag = key;
         }
-        root.Controls.Add(_grid, 0, 4);
+        root.Controls.Add(_grid, 0, 5);
         Shown += (_, _) => _grid.CurrentCell = _grid.Rows.Count > 0 ? _grid.Rows[0].Cells["Value"] : null;
 
         var buttons = new FlowLayoutPanel
@@ -124,7 +142,7 @@ internal sealed class SettingsForm : Form
             probe.Click += async (_, _) => await RunProbeAsync(probe);
             buttons.Controls.Add(probe);
         }
-        root.Controls.Add(buttons, 0, 5);
+        root.Controls.Add(buttons, 0, 6);
         AcceptButton = save;
         CancelButton = cancel;
     }
@@ -157,6 +175,15 @@ internal sealed class SettingsForm : Form
 
     private void SaveAndClose()
     {
+        var warehouse = _firstRowWarehouseCode.Text.Trim();
+        if (_firstRowWarehouse.Checked && warehouse.Length == 0)
+        {
+            MessageBox.Show(this, "已勾選自動帶入第一列庫別，請填入庫別代號。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _firstRowWarehouseCode.Focus();
+            return;
+        }
+        _settings.FirstRowWarehouseEnabled = _firstRowWarehouse.Checked;
+        _settings.FirstRowWarehouse = warehouse;
         _settings.AdvancedMode = _advanced.Checked;
         _settings.DiagnosticLogging = _diagnostic.Checked;
         _settings.AutoSave = _autoSave.Checked;

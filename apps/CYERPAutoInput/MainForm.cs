@@ -654,6 +654,7 @@ internal sealed class MainForm : Form
         }
 
         var details = new List<DetailRow>();
+        var firstDetailGridRow = -1;
         for (var r = 0; r < _details.Rows.Count; r++)
         {
             var row = _details.Rows[r];
@@ -681,7 +682,18 @@ internal sealed class MainForm : Form
                 _details.CurrentCell = _details[string.IsNullOrWhiteSpace(d.ItemCode) ? "ItemCode" : "Quantity", r];
                 return null;
             }
+            if (details.Count == 0) firstDetailGridRow = r;
             details.Add(d);
+        }
+
+        // Settings: fill a blank 庫別 on the first detail row (ERP carries it to later rows),
+        // and show it in the grid so the user sees what is sent.
+        if (_settings.FirstRowWarehouseEnabled && _settings.FirstRowWarehouse.Length > 0 &&
+            details.Count > 0 && string.IsNullOrWhiteSpace(details[0].Warehouse))
+        {
+            details[0].Warehouse = _settings.FirstRowWarehouse;
+            _details["Warehouse", firstDetailGridRow].Value = _settings.FirstRowWarehouse;
+            _log.Info("settings", $"first detail row warehouse filled from settings warehouse={_log.Value(_settings.FirstRowWarehouse)}");
         }
 
         if (values.Count == 0 && details.Count == 0)

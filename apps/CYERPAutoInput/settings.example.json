@@ -3,5 +3,7 @@
   "AdvancedMode": false,
   "DiagnosticLogging": false,
   "AutoSave": false,
+  "FirstRowWarehouseEnabled": false,
+  "FirstRowWarehouse": "",
   "Defaults": {}
 }

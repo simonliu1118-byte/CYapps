@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-08（V0.2.0 Build 4）  
+> 更新：2026-10-08（V0.2.0 Build 5）  
 > 目的：供後續 AI 對話直接接手目前開發狀態。  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接一律以本文件 + Git 狀態為準。  
 > 本文件只記錄「目前狀態、已驗證事實、待辦與交接順序」，不是永久規則來源。
@@ -61,6 +61,7 @@ Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - 銷貨單號由 ERP 產生，CY 只讀取並驗證 `YYYYMMDDXXX` 格式。
 - 完成後停在 ERP，**不自動儲存**；全域 Esc 只停止 CY，不按 ERP「取消」；不送 `Ctrl+A`。
 - 仍需人工確認的狀況累積在 `AutomationRunResult.Warnings`，完成時統一顯示筆數。
+- V0.2.0 Build 5（2026-10-08 使用者要求）：設定新增「商品明細第一列的庫別空白時自動帶入」勾選＋庫別代號（`FirstRowWarehouseEnabled`／`FirstRowWarehouse`，只存本機 settings.json）。開始輸入時若第一筆明細的庫別空白就帶入，並寫回畫面表格；ERP 會把上一列庫別帶到後續列。
 - V0.2.0 Build 4（2026-10-08 Build 3 實測返修）：
   - F2 第 1 列存量 `0` 仍讀不到。用使用者截圖的真實儲存格在本機以同一模型重現：ERP 的 0 是**斜線 0**，單獨出現時辨識首選為 0 但信心僅約 0.3–0.5（候選 0／O／Q），被 0.6 門檻擋下；53、100 信心 ≥ 0.99。
   - 改為：儲存格先依「字比背景亮或暗」決定是否反相再拉滿對比（原本依平均亮度，選取列中藍底黑字會判錯）；信心不足時，只有在每個字的首選都是數字／分隔符或像 0 的字形、且候選中沒有其他數字（≥ 0.05）時才接受（`InputRules.TryAcceptLowConfidenceStock`，單元測試涵蓋）。拒絕時 LOG 記錄每字候選。
