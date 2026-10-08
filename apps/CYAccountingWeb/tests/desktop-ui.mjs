@@ -119,6 +119,7 @@ const windowMock = {
   addEventListener: (event, callback) => listeners.set(event, callback)
 };
 const layoutContext = vm.createContext({
+  CY_ADAPTIVE_SPLIT_MEDIA: '(min-width: 1360px)',
   window: windowMock, document: documentMock,
   isTabletWorkspace: () => false,
   setConfirmationDrawer: open => { drawerOpen = open; }
