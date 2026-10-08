@@ -9690,6 +9690,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .topbar #settingsButton {
   line-height: 1 !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster {
   order: 1 !important;
   display: flex !important;
@@ -9702,6 +9703,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster {
   background: #fff !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster .current-user,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user {
   display: flex !important;
   align-items: center !important;
@@ -9720,6 +9722,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .curre
   white-space: nowrap !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster .current-user-main,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-main {
   overflow: hidden !important;
   color: #39495a !important;
@@ -9730,6 +9733,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .curre
   white-space: nowrap !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster .current-user-role,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role {
   display: inline-flex !important;
   align-items: center !important;
@@ -9747,12 +9751,14 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .curre
   white-space: nowrap !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster .current-user-role::before,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role::before {
   content: "［" !important;
   color: inherit !important;
   font-size: inherit !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster .current-user-role::after,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role::after {
   content: "］" !important;
   display: inline !important;
@@ -9760,6 +9766,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .curre
   font-size: inherit !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster #logoutButton,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster #logoutButton {
   display: inline-flex !important;
   align-items: center !important;
@@ -9780,36 +9787,46 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster #logou
   line-height: 1 !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster.role-super-admin,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin {
   border-color: #ddc789 !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster.role-super-admin .current-user,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin .current-user {
   background: linear-gradient(180deg, #fffdf7, #fff4d6) !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster.role-super-admin .current-user-main,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin .current-user-main,
+html[data-viewport="desktop"] .cy-account-cluster.role-super-admin .current-user-role,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin .current-user-role {
   color: #6d5317 !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster.role-super-admin #logoutButton,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-super-admin #logoutButton {
   border-left-color: #ddc789 !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster.role-admin,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin {
   border-color: #d7b79e !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster.role-admin .current-user,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin .current-user {
   background: linear-gradient(180deg, #fffaf6, #f7e8dc) !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster.role-admin .current-user-main,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin .current-user-main,
+html[data-viewport="desktop"] .cy-account-cluster.role-admin .current-user-role,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin .current-user-role {
   color: #70472f !important;
 }
 
+html[data-viewport="desktop"] .cy-account-cluster.role-admin #logoutButton,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster.role-admin #logoutButton {
   border-left-color: #d7b79e !important;
 }
@@ -11675,19 +11692,134 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     justify-content: flex-start;
     gap: 8px;
   }
+  html[data-viewport="desktop"] #entryAccountChoiceRow > .entry-field-label {
+    display: none;
+  }
+  html[data-viewport="desktop"] .entry-kind-switch-field {
+    flex: 0 1 320px;
+    width: 320px;
+    max-width: 320px;
+  }
+  html[data-viewport="desktop"] .entry-card .title-with-badge {
+    flex: 1;
+    min-width: 0;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-kind-switch {
+    width: 100% !important;
+    height: 42px !important;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-kind-switch .kind-button {
+    width: 100% !important;
+    min-height: 38px !important;
+    height: 38px !important;
+    font-size: 18px !important;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid > label:not(.account-source-field) {
+    display: grid !important;
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid > label > span {
+    margin: 0;
+    color: #111;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  html[data-viewport="desktop"] .entry-card .entry-grid > label > input,
+  html[data-viewport="desktop"] .entry-card .entry-grid > label > select,
+  html[data-viewport="desktop"] .entry-card .desktopUi-date-trigger {
+    min-height: 40px !important;
+    height: 40px !important;
+    min-width: 0;
+  }
+  html[data-viewport="desktop"] .entry-card .desktopUi-date-picker {
+    min-width: 0;
+    width: 100%;
+  }
+  html[data-viewport="desktop"] .ledger-card .ledger-title {
+    padding: 12px 14px 8px;
+    margin-bottom: 0;
+  }
+  html[data-viewport="desktop"] .ledger-title .title-with-badge:has(#ledgerLockBadge.hidden) {
+    display: none;
+  }
+  html[data-viewport="desktop"] .cy-ledger-context {
+    margin-top: 0;
+  }
+  html[data-viewport="desktop"] #ledgerMonthPickerTrigger,
+  html[data-viewport="desktop"] #ledgerPrevMonth,
+  html[data-viewport="desktop"] #ledgerNextMonth {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px !important;
+    height: 36px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 7px !important;
+    background: #fff !important;
+  }
+  html[data-viewport="desktop"] #ledgerMonthPickerTrigger {
+    padding: 0 12px !important;
+  }
+  html[data-viewport="desktop"] #ledgerPrevMonth,
+  html[data-viewport="desktop"] #ledgerNextMonth {
+    width: 32px;
+    padding: 0 !important;
+  }
+  html[data-viewport="desktop"] .settings-account-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  html[data-viewport="desktop"] #settingsDialog:not(.cy-management-mode) {
+    width: min(640px, calc(100vw - 36px)) !important;
+  }
+  html[data-viewport="desktop"] #settingsDialog:not(.cy-management-mode) .settings-layout {
+    grid-template-columns: 112px minmax(0, 1fr);
+    min-height: 0;
+  }
+  html[data-viewport="desktop"] #settingsDialog:not(.cy-management-mode) .settings-content {
+    padding: 12px 14px;
+  }
+  html[data-viewport="desktop"] #settingsDialog .backup-heading,
+  html[data-viewport="desktop"] #settingsDialog .backup-heading > div {
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    align-items: center;
+  }
+  html[data-viewport="desktop"] #settingsDialog .backup-heading h3 {
+    margin: 0;
+  }
+  html[data-viewport="desktop"] #settingsDialog #settingsMessage:empty,
+  html[data-viewport="desktop"] #settingsDialog #backupMessage:empty {
+    display: none;
+  }
+  html[data-viewport="desktop"] #settingsDialog .migration-pane {
+    display: block;
+    min-width: 0;
+  }
+  html[data-viewport="desktop"] #settingsDialog .migration-pane .migration-source label {
+    min-width: 0;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  html[data-viewport="desktop"] #settingsDialog .migration-pane .migration-source input {
+    max-width: 100%;
+  }
   html[data-viewport="desktop"] .entry-card .entry-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 78px 68px !important;
     column-gap: 7px;
-    row-gap: 5px;
+    row-gap: 8px;
     align-items: end;
     min-width: 0;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid > .date-field,
   html[data-viewport="desktop"] .entry-card .entry-grid > .category-field,
-  html[data-viewport="desktop"] .entry-card .entry-grid > .summary-field,
-  html[data-viewport="desktop"] .entry-card .entry-grid > #favoriteCategoryGroup,
-  html[data-viewport="desktop"] .entry-card .entry-grid > #summarySuggestionGroup {
+  html[data-viewport="desktop"] .entry-card .entry-grid > .summary-field {
     grid-column: 1 / -1 !important;
     grid-row: auto !important;
     width: 100%;
@@ -11703,7 +11835,8 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     grid-row: auto !important;
     width: 100% !important;
     min-width: 0;
-    min-height: 37px;
+    min-height: 40px !important;
+    height: 40px !important;
     padding: 0 7px;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid > #desktopEntryClearButton {
@@ -11711,8 +11844,8 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     grid-row: auto !important;
     min-width: 0;
     width: 100%;
-    min-height: 37px;
-    height: 37px;
+    min-height: 40px !important;
+    height: 40px !important;
     padding: 0 5px;
     border: 1px solid #d5dce5;
     border-radius: 7px;
@@ -11726,8 +11859,15 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     flex-direction: row;
     align-items: center;
     flex-wrap: nowrap;
-    min-height: 23px;
-    gap: 7px;
+    grid-column: 1 / -1 !important;
+    grid-row: auto !important;
+    margin-left: 52px;
+    width: calc(100% - 52px) !important;
+    min-height: 28px;
+    padding: 4px 6px;
+    border: 1px dashed #b8c3cf;
+    border-radius: 7px;
+    gap: 6px;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid .quick-tool-label {
     flex: 0 0 48px;
@@ -11743,9 +11883,11 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     padding: 0;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid .quick-chip {
-    min-height: 22px;
-    padding: 2px 7px;
-    font-size: 10.5px;
+    min-height: 19px !important;
+    height: 19px !important;
+    padding: 0 5px !important;
+    font-size: 10px !important;
+    line-height: 17px !important;
   }
   html[data-viewport="desktop"] .entry-card > .quick-entry-tools {
     display: none !important;
@@ -11756,17 +11898,17 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     table-layout: fixed;
   }
   html[data-viewport="desktop"] .ledger-card th:nth-child(1),
-  html[data-viewport="desktop"] .ledger-card td:nth-child(1) { width: 128px; }
+  html[data-viewport="desktop"] .ledger-card tr:not(.ledger-message-row):not(.account-group-row) > td:nth-child(1) { width: 128px; }
   html[data-viewport="desktop"] .ledger-card th:nth-child(2),
-  html[data-viewport="desktop"] .ledger-card td:nth-child(2) { width: 113px; }
+  html[data-viewport="desktop"] .ledger-card tr:not(.ledger-message-row):not(.account-group-row) > td:nth-child(2) { width: 113px; }
   html[data-viewport="desktop"] .ledger-card th:nth-child(4),
-  html[data-viewport="desktop"] .ledger-card td:nth-child(4) { width: 144px; }
+  html[data-viewport="desktop"] .ledger-card tr:not(.ledger-message-row):not(.account-group-row) > td:nth-child(4) { width: 144px; }
   html[data-viewport="desktop"] .ledger-card th:nth-child(6),
-  html[data-viewport="desktop"] .ledger-card td:nth-child(6) { width: 100px; }
+  html[data-viewport="desktop"] .ledger-card tr:not(.ledger-message-row):not(.account-group-row) > td:nth-child(6) { width: 100px; }
   html[data-viewport="desktop"] .ledger-card th:nth-child(7),
-  html[data-viewport="desktop"] .ledger-card td:nth-child(7) { width: 108px; }
+  html[data-viewport="desktop"] .ledger-card tr:not(.ledger-message-row):not(.account-group-row) > td:nth-child(7) { width: 108px; }
   html[data-viewport="desktop"] .ledger-card th:nth-child(8),
-  html[data-viewport="desktop"] .ledger-card td:nth-child(8) { width: 98px; }
+  html[data-viewport="desktop"] .ledger-card tr:not(.ledger-message-row):not(.account-group-row) > td:nth-child(8) { width: 98px; }
   html[data-viewport="desktop"] .ledger-card tr.inline-editing > td {
     box-sizing: border-box;
     min-width: 0;
@@ -11855,37 +11997,4 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     font-weight: 600;
   }
 
-  /* Role is inline text, as in the accepted tablet identity format; no pill
-     or tinted/gradient role container in the desktop header. */
-  html[data-viewport="desktop"] .cy-account-cluster {
-    overflow: visible;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    gap: 6px;
-  }
-  html[data-viewport="desktop"] .cy-account-cluster .current-user,
-  html[data-viewport="desktop"] .cy-account-cluster .current-user.role-super-admin,
-  html[data-viewport="desktop"] .cy-account-cluster .current-user.role-admin {
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    padding-inline: 4px !important;
-    gap: 4px !important;
-  }
-  html[data-viewport="desktop"] .cy-account-cluster .current-user-role {
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-  }
-  html[data-viewport="desktop"] .cy-account-cluster .current-user-role::before {
-    content: "［" !important;
-    margin: 0 !important;
-  }
-  html[data-viewport="desktop"] .cy-account-cluster .current-user-role::after {
-    content: "］" !important;
-    display: inline !important;
-  }
 }

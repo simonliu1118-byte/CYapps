@@ -472,7 +472,7 @@ function renderGroupedLedgerRows(visible, allTransactions, openingMap, calculate
     const opening = openingMap.get(name) || 0;
     const ending = calculated.endingByAccount.get(name) ?? opening;
     const accountVisual = ledgerAccountVisual(name);
-    const heading = `<tr class="account-group-row"><td colspan="8" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><strong class="ledger-account-color">${escapeHtml(name)}</strong><span>期初 ${money(opening)}　期末 ${money(ending)}</span></td></tr>`;
+    const heading = `<tr class="account-group-row"><td colspan="${ledgerPresentationColumnSpan()}" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><strong class="ledger-account-color">${escapeHtml(name)}</strong><span>期初 ${money(opening)}　期末 ${money(ending)}</span></td></tr>`;
     return heading + rows.map(tx => {
       const accountBalance = calculated.accountById.get(Number(tx.id)) ?? 0;
       return renderLedgerRow(tx, accountBalance, new Map([[name, accountBalance]]), true);
@@ -570,9 +570,15 @@ function updateLedgerHeader() {
   });
 }
 
+function ledgerPresentationColumnSpan() {
+  // Desktop hides the semantic kind cell. Spanning eight visible columns would
+  // create a phantom table column in empty and account-group headings.
+  return window.cyIsDesktopInteractionWorkspace?.() ? 7 : 8;
+}
+
 function renderLedgerMessage(message, reason = 'status') {
   writeLedgerRows(
-    `<tr class="ledger-message-row"><td colspan="8" class="empty"><div class="ledger-empty-state"><strong>${escapeHtml(String(message || ''))}</strong></div></td></tr>`,
+    `<tr class="ledger-message-row"><td colspan="${ledgerPresentationColumnSpan()}" class="empty"><div class="ledger-empty-state"><strong>${escapeHtml(String(message || ''))}</strong></div></td></tr>`,
     { reason }
   );
 }

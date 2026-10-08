@@ -42,29 +42,13 @@
 
   function installMigrationSettings() {
     if (typeof window.cyIsDesktopInteractionWorkspace === 'function' && !window.cyIsDesktopInteractionWorkspace()) return;
-    if (document.querySelector('[data-settings-tab="migration"]')) return;
-    const nav = document.querySelector('.settings-nav');
-    const content = document.querySelector('.settings-content');
-    if (!nav || !content || typeof setSettingsTab !== 'function') return;
-
-    const tab = document.createElement('button');
-    tab.type = 'button';
-    tab.className = 'settings-tab';
-    tab.dataset.settingsTab = 'migration';
-    tab.textContent = '資料移轉';
-    nav.appendChild(tab);
+    const content = document.querySelector('[data-settings-pane="data"]');
+    if (!content || content.querySelector('.migration-pane')) return;
 
     const pane = document.createElement('section');
-    pane.className = 'settings-pane migration-pane';
-    pane.dataset.settingsPane = 'migration';
+    pane.className = 'cy-data-section migration-pane';
     pane.innerHTML = migrationPaneHtml();
-    content.insertBefore(pane, document.querySelector('#settingsMessage'));
-
-    if (typeof els === 'object' && Array.isArray(els.settingsTabs) && Array.isArray(els.settingsPanes)) {
-      els.settingsTabs.push(tab);
-      els.settingsPanes.push(pane);
-    }
-    tab.addEventListener('click', () => setSettingsTab('migration'));
+    content.append(pane);
     bindMigrationPane(pane);
   }
 

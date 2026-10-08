@@ -37,7 +37,7 @@ const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 
 assert.equal(version, '0.22.30');
-assert.equal(build, '0');
+assert.equal(build, '1');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
@@ -164,8 +164,15 @@ assert.match(appJs, /cyIsDesktopInteractionWorkspace\?\.\(\) \? ' open' : ''/);
 assert.match(editCss, /\.inline-edit-date\s*\{\s*min-width: 0;/);
 assert.match(adaptive, /svg class="desktopUi-date-calendar-icon"/);
 assert.doesNotMatch(adaptive, /desktopUi-date-calendar-icon" aria-hidden="true">▣/);
-assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user\.role-super-admin,[\s\S]*?background: transparent !important/);
-assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::before\s*\{\s*content: "［" !important;/);
-assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::after\s*\{\s*content: "］" !important;/);
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster,\s*html\[data-tablet-layout\]:not\(\[data-tablet-layout=""\]\) \.cy-account-cluster\s*\{[\s\S]*?height: 34px !important/);
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::before,[\s\S]*?\{\s*content: "［" !important;/);
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::after,[\s\S]*?\{\s*content: "］" !important;/);
 
 console.log('Desktop UI regression checks passed.');
+
+const spanSource = ledgerSource.match(/function ledgerPresentationColumnSpan\(\) \{[\s\S]*?\n\}/)[0];
+for (const desktop of [true, false]) {
+  const scope = vm.createContext({ window: { cyIsDesktopInteractionWorkspace: () => desktop } });
+  vm.runInContext(spanSource, scope);
+  assert.equal(vm.runInContext('ledgerPresentationColumnSpan()', scope), desktop ? 7 : 8);
+}

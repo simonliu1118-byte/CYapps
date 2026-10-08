@@ -2200,9 +2200,11 @@ function renderSettingsAccountManager() {
             : `<button type="button" class="settings-default-tag" data-account-default="${id}" title="設為預設帳戶">設為預設</button>`}
           <div class="settings-account-name-cell">
             <strong class="settings-editable-name">${settingsManagerEscape(account.name)}</strong>
-            <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">${settingsActionIcon('edit')}</button>
           </div>
-          <button type="button" class="mini-button settings-archive-button" data-account-archive="${id}" title="封存帳戶" aria-label="封存帳戶">${settingsActionIcon('archive')}</button>
+          <div class="settings-account-actions">
+            <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">${settingsActionIcon('edit')}</button>
+            <button type="button" class="mini-button settings-archive-button" data-account-archive="${id}" title="封存帳戶" aria-label="封存帳戶">${settingsActionIcon('archive')}</button>
+          </div>
         </div>`;
       }).join('')
     : '<div class="empty">尚無可用帳戶。</div>';
