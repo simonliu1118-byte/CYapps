@@ -929,19 +929,12 @@ internal sealed class ErpAutomationService
             if (!await WaitWindowClosedAsync(peer, 1200, cancellationToken))
                 throw new InvalidOperationException("已對批號存量不足警告送出 Enter，但警告視窗沒有關閉；已停止避免後續錯位。");
 
-            var warning = new AutomationWarning(
-                "BATCH_STOCK_INSUFFICIENT",
-                result.SalesOrderType,
-                result.SalesOrderNumber,
-                completedDetailRow + 1,
-                completedRow.ItemCode,
-                "批號存量不足，需人工確認");
-            result.Warnings.Add(warning);
-            _log.Warn("document", $"warning recorded code={warning.Code} document={warning.DocumentKey} detail_row={warning.DetailRow} item={_log.Value(warning.ItemCode)}");
-
-            if (!Win32Automation.PrepareForeground(root, _log))
-                throw new InvalidOperationException("關閉批號存量不足警告後無法回到 COPI08；已停止避免後續錯位。");
-            return;
+            // ERP keeps the cursor in the rejected row after this message (user-confirmed,
+            // 2026-10-08; e.g. 庫別 left at a default warehouse without stock), so the row
+            // was not committed and the run cannot continue with the next row.
+            Win32Automation.PrepareForeground(root, _log);
+            _log.Warn("document", $"stock insufficient blocked row change document={_log.Value(result.DocumentKey)} detail_row={completedDetailRow} item={_log.Value(completedRow.ItemCode)}");
+            throw new InvalidOperationException($"第 {completedDetailRow} 列品號 {completedRow.ItemCode}：ERP 顯示「庫存量或批號量不足」並停在該列；請檢查庫別、數量或批號後人工處理。CY 已關閉提示並停止。");
         }
 
         throw new InvalidOperationException("切換商品明細下一列時 ERP 出現未預期視窗；為避免資料填入錯誤欄位已立即停止目前單據。");

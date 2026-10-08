@@ -231,14 +231,18 @@ internal sealed class F2BatchCellLocator
     internal async Task<(string Text, string Variant)> ReadStockCellAsync(Bitmap cell, CancellationToken cancellationToken)
     {
         var last = string.Empty;
-        using (var enhanced = EnhanceCell(cell, 1))
-        using (var glyphs = TrimToGlyphs(enhanced))
+        using (var normalized = NormalizeCell(cell))
+        using (var glyphs = TrimToGlyphs(normalized))
         {
             if (glyphs is null) return (string.Empty, "blank");
-            var (text, confidence) = await _ocr.RecognizeLineAsync(glyphs, cancellationToken);
-            if (confidence >= MinLineConfidence && InputRules.TryParseStockText(text, out _))
-                return (text, $"line-{confidence:0.00}");
-            last = text;
+            var line = await _ocr.RecognizeLineAsync(glyphs, cancellationToken);
+            if (line.Confidence >= MinLineConfidence && InputRules.TryParseStockText(line.Text, out _))
+                return (line.Text, $"line-{line.Confidence:0.00}");
+            // ERP draws a slashed zero; alone it reads as 0/O/Q at ~0.3–0.5.
+            if (InputRules.TryAcceptLowConfidenceStock(line.Chars, out var accepted))
+                return (accepted, $"line-unambiguous-{line.Confidence:0.00}");
+            _log.Info("vision", $"F2 stock line read rejected text={_log.Value(Sanitize(line.Text))} confidence={line.Confidence:0.00} candidates={_log.Value(string.Join(" ", line.Chars.Select(c => $"{c.Text}:{c.Probability:0.00}[{string.Join(",", c.Alternatives.Select(a => $"{(a.Text.Length == 0 ? "_" : a.Text)}:{a.Probability:0.00}"))}]")))}");
+            last = line.Text;
         }
 
         foreach (var scale in new[] { 4, 3 })
@@ -253,6 +257,45 @@ internal sealed class F2BatchCellLocator
     }
 
     internal const float MinLineConfidence = 0.6f;
+
+    /// <summary>
+    /// Grayscale, dark glyphs on white: the polarity comes from whether the glyph pixels
+    /// are darker or lighter than the cell background (not from the average brightness,
+    /// which fails for black text on the mid-blue selected cell), then the range between
+    /// the darkest glyph pixel and the background is stretched to full contrast.
+    /// </summary>
+    internal static Bitmap NormalizeCell(Bitmap source)
+    {
+        var w = source.Width;
+        var h = source.Height;
+        var luma = new int[w * h];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var c = source.GetPixel(x, y);
+            luma[y * w + x] = (c.R * 30 + c.G * 59 + c.B * 11) / 100;
+        }
+        var sorted = (int[])luma.Clone();
+        Array.Sort(sorted);
+        var background = sorted[sorted.Length / 2];
+        var invert = sorted[^1] - background > background - sorted[0];
+        if (invert)
+        {
+            for (var i = 0; i < luma.Length; i++) luma[i] = 255 - luma[i];
+            background = 255 - background;
+        }
+        var darkest = luma.Min();
+        var range = Math.Max(1, background - darkest);
+
+        var output = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var v = Math.Clamp((luma[y * w + x] - darkest) * 255 / range, 0, 255);
+            output.SetPixel(x, y, Color.FromArgb(255, v, v, v));
+        }
+        return output;
+    }
 
     /// <summary>
     /// Crops an enhanced (dark-on-light) cell to its glyphs plus a small margin. Rows and

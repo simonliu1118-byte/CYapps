@@ -45,4 +45,41 @@ internal static class InputRules
         return decimal.TryParse(text, styles, CultureInfo.InvariantCulture, out value) ||
                decimal.TryParse(text, NumberStyles.Number, CultureInfo.CurrentCulture, out value);
     }
+
+    /// <summary>One CTC output character with its runner-up candidates (best first).</summary>
+    public sealed record RecognizedChar(string Text, float Probability, IReadOnlyList<(string Text, float Probability)> Alternatives);
+
+    private static readonly HashSet<string> ZeroLike = ["0", "O", "o", "Q", "Ø", "ø", "θ", "〇", "D"];
+    private const float MinCharProbability = 0.2f;
+    private const float RivalDigitProbability = 0.05f;
+
+    /// <summary>
+    /// Accepts a low-confidence 現有存量 read only when it is unambiguous: every character's
+    /// best candidate is a digit, a number separator, or a zero-shaped glyph (ERP draws a
+    /// slashed zero, read as 0/O/Q at ~0.3–0.5), and no other digit is a runner-up for that
+    /// character. A real 8/6/9 shows up as a rival digit and is rejected.
+    /// </summary>
+    public static bool TryAcceptLowConfidenceStock(IReadOnlyList<RecognizedChar> chars, out string text)
+    {
+        text = string.Empty;
+        if (chars.Count == 0) return false;
+        var builder = new System.Text.StringBuilder();
+        foreach (var c in chars)
+        {
+            if (c.Probability < MinCharProbability) return false;
+            string mapped;
+            if (ZeroLike.Contains(c.Text)) mapped = "0";
+            else if (c.Text.Length == 1 && (char.IsAsciiDigit(c.Text[0]) || c.Text is "." or "," or "-")) mapped = c.Text;
+            else return false;
+
+            foreach (var (alt, probability) in c.Alternatives)
+            {
+                if (probability < RivalDigitProbability || alt.Length != 1 || !char.IsAsciiDigit(alt[0])) continue;
+                if (alt != mapped) return false;
+            }
+            builder.Append(mapped);
+        }
+        text = builder.ToString();
+        return TryParseStockText(text, out _);
+    }
 }

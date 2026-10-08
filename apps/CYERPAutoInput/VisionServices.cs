@@ -9,6 +9,8 @@ namespace CYERPAutoInput;
 
 internal sealed record OcrToken(string Text, Rectangle Rect);
 
+internal sealed record LineRecognition(string Text, float Confidence, IReadOnlyList<InputRules.RecognizedChar> Chars);
+
 internal sealed class GridGeometry
 {
     public Rectangle ScreenRect { get; init; }
@@ -113,9 +115,10 @@ internal sealed class PaddleOcrService
     /// Recognition only (no text detection) for an image that is already one tight text
     /// line, such as a single grid cell trimmed to its glyphs. The detector misses a lone
     /// short glyph like "0"; the recognizer reads it reliably once the cell is known.
-    /// Returns the CTC-decoded text and the mean character confidence.
+    /// Returns the CTC-decoded text, the mean character confidence and, per character,
+    /// the best candidate with its runner-ups.
     /// </summary>
-    public async Task<(string Text, float Confidence)> RecognizeLineAsync(Bitmap line, CancellationToken cancellationToken)
+    public async Task<LineRecognition> RecognizeLineAsync(Bitmap line, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
         try
@@ -149,30 +152,37 @@ internal sealed class PaddleOcrService
             var classes = output.Dimensions[2];
 
             var text = new System.Text.StringBuilder();
+            var chars = new List<InputRules.RecognizedChar>();
             var confidence = 0f;
-            var count = 0;
             var last = -1;
             for (var t = 0; t < steps; t++)
             {
-                var best = 0;
-                var bestScore = float.MinValue;
+                // Top three classes at this step (index 0 = CTC blank, shown as "").
+                var top = new (int Index, float Score)[] { (-1, float.MinValue), (-1, float.MinValue), (-1, float.MinValue) };
                 for (var k = 0; k < classes; k++)
                 {
                     var v = output[0, t, k];
-                    if (v > bestScore) { bestScore = v; best = k; }
+                    if (v <= top[2].Score) continue;
+                    top[2] = (k, v);
+                    Array.Sort(top, (a, b) => b.Score.CompareTo(a.Score));
                 }
-                if (best != last && best != 0 && best < characters.Length)
+                var best = top[0].Index;
+                if (best != last && best > 0 && best < characters.Length)
                 {
+                    var alternatives = top.Skip(1)
+                        .Where(x => x.Index >= 0 && x.Index < characters.Length)
+                        .Select(x => (characters[x.Index], x.Score))
+                        .ToArray();
+                    chars.Add(new InputRules.RecognizedChar(characters[best], top[0].Score, alternatives));
                     text.Append(characters[best]);
-                    confidence += bestScore;
-                    count++;
+                    confidence += top[0].Score;
                 }
                 last = best;
             }
 
-            var mean = count == 0 ? 0f : confidence / count;
+            var mean = chars.Count == 0 ? 0f : confidence / chars.Count;
             _log.Info("vision", $"PaddleOCR line recognition engine=PP-OCRv5_mobile_rec chars={text.Length} confidence={mean:0.000} image={line.Width}x{line.Height}");
-            return (text.ToString(), mean);
+            return new LineRecognition(text.ToString(), mean, chars);
         }
         finally
         {

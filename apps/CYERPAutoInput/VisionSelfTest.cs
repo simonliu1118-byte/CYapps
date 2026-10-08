@@ -146,6 +146,7 @@ internal static class VisionSelfTest
                 ("100", Color.White, Color.Black),
                 ("7", Color.FromArgb(0, 120, 215), Color.White),
                 ("8", Color.White, Color.Black),
+                ("0", Color.FromArgb(143, 170, 220), Color.Black), // real F2 selected cell colors
                 ("1,234", Color.White, Color.Black)
             };
             var stockReads = new List<string>();
