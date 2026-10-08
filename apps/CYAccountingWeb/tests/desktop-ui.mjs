@@ -30,10 +30,13 @@ const inlineEdit = read('public/ledger-inline-edit.js');
 const adaptive = read('public/adaptive-ui.js');
 const adaptiveCss = read('public/adaptive-ui.css');
 const confirmationJs = read('public/input-confirmation.js');
+const markup = read('public/index.html');
+const ledgerSource = read('public/ledger-tools.js');
+const editCss = read('public/ledger-inline-edit.css');
 const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 
-assert.equal(version, '0.22.29');
+assert.equal(version, '0.22.30');
 assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1fr\)/);
@@ -137,5 +140,32 @@ assert.equal(entry.parentElement, rail, 'entry returns to the left desktop rail'
 assert.equal(confirmation.parentElement, rail, 'confirmation is inline instead of overlaying the ledger');
 assert.equal(confirmation.classList.contains('cy-inline-confirmation'), true);
 assert.equal(drawerOpen, true);
+
+
+/* V0.22.30: all breakpoints share a ledger without visible kind column;
+   desktop alone reflows the canonical entry quick-tools and edit fields. */
+assert.doesNotMatch(markup, /<h2>新增記帳<\/h2>|<h2>記帳資料<\/h2>/);
+assert.match(markup, /class="card entry-card" aria-label="新增記帳"/);
+assert.match(markup, /class="card ledger-card" aria-label="記帳資料"/);
+assert.match(adaptiveCss, /Canonical shared ledger presentation/);
+assert.match(adaptiveCss, /\.ledger-card thead th:nth-child\(3\),[\s\S]*?display: none !important;/);
+assert.match(adaptiveCss, /ledger-row-income:not\(\.inline-editing\) > \.ledger-amount::before\s*\{\s*content: "\+"/);
+assert.match(adaptiveCss, /ledger-row-expense:not\(\.inline-editing\) > \.ledger-amount::before\s*\{\s*content: "−"/);
+assert.match(ledgerSource, /id="ledgerMonthLoading"/);
+assert.match(appJs, /loadingLabel\.hidden = !busy/);
+assert.match(adaptive, /function setupDesktopEntryQuickTools\(\)/);
+assert.match(adaptive, /grid\.insertBefore\(item, anchor\)/);
+assert.match(adaptive, /clearTouchWorkspaceEntryForm\(\)/);
+assert.match(adaptiveCss, /grid-template-columns: minmax\(0, 1fr\) 78px 68px !important/);
+assert.match(adaptiveCss, /#monthSummary[\s\S]*?grid-template-areas: "opening income expense ending net" !important/);
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.opening-modal\s*\{\s*width: min\(880px/);
+assert.match(appJs, /class="opening-account-column"/);
+assert.match(appJs, /cyIsDesktopInteractionWorkspace\?\.\(\) \? ' open' : ''/);
+assert.match(editCss, /\.inline-edit-date\s*\{\s*min-width: 0;/);
+assert.match(adaptive, /svg class="desktopUi-date-calendar-icon"/);
+assert.doesNotMatch(adaptive, /desktopUi-date-calendar-icon" aria-hidden="true">▣/);
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user\.role-super-admin,[\s\S]*?background: transparent !important/);
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::before\s*\{\s*content: "［" !important;/);
+assert.match(adaptiveCss, /html\[data-viewport="desktop"\] \.cy-account-cluster \.current-user-role::after\s*\{\s*content: "］" !important;/);
 
 console.log('Desktop UI regression checks passed.');
