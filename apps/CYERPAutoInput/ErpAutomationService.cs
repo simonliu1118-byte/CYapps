@@ -128,10 +128,10 @@ internal sealed class ErpAutomationService
             return result;
         }
 
+        // Warnings (e.g. ERP's stock warning acknowledged with OK) do not block saving; the
+        // user decided 2026-10-09 that such documents are saved and listed for review.
         if (!isNewDocument)
             result.SaveSkippedReason = "開始時 ERP 已在輸入狀態且部門代號／業務人員已有資料（可能是修改中的單據），不自動儲存";
-        else if (result.Warnings.Count > 0)
-            result.SaveSkippedReason = $"有 {result.Warnings.Count} 筆需人工確認，不自動儲存";
 
         if (result.SaveSkippedReason.Length > 0)
         {

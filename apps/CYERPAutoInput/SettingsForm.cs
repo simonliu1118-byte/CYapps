@@ -72,7 +72,7 @@ internal sealed class SettingsForm : Form
         _diagnostic.Padding = new Padding(3, 4, 0, 0);
         root.Controls.Add(_diagnostic, 0, 2);
 
-        _autoSave.Text = "輸入完成後自動儲存 ERP 單據（只限 CY 新增的單據且無需人工確認項目）";
+        _autoSave.Text = "輸入完成後自動儲存 ERP 單據（只限 CY 新增的單據；需人工確認項目於完成後列出）";
         _autoSave.Checked = _settings.AutoSave;
         _autoSave.AutoSize = true;
         _autoSave.Padding = new Padding(3, 4, 0, 0);
