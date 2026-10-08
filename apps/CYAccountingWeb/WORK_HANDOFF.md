@@ -1,15 +1,15 @@
 # CYAccountingWeb 目前工作交接
 
-更新：2026/10/08（日本時間）。本文件只描述目前狀態，不新增永久規則。接手順序仍為根 `AGENTS.md` → `REPOSITORY_RULES.md` → `REPO_POLICY.md` → 本專案 `PROJECT_RULES.md`，之後才讀本文件、README、TODO 與其他狀態文件。
+更新：2026/10/09（日本時間）。本文件只描述目前狀態，不新增永久規則。接手順序仍為根 `AGENTS.md` → `REPOSITORY_RULES.md` → `REPO_POLICY.md` → 本專案 `PROJECT_RULES.md`，之後才讀本文件、README、TODO 與其他狀態文件。
 
-目前工作分支：**V0.22.30 Build 1（桌機返修）**：右上帳號列恢復平板同款；帳戶標題隱藏，日期／科目／摘要／金額標籤同行、放大黑字；收支控制加寬；常用項目加虛線框及小型 pill；金額／儲存／清空統一 40px。月份控制靠上並加框，空／有資料欄位固定；帳戶改名與封存同行靠右。設定縮為 640px，桌面帳本移轉併入資料管理，清除備份空訊息占位。只調整桌機 presentation，手機／平板尺寸與流程保留。 本地 application tests 與六種 viewport 瀏覽器驗證通過；遠端 CI／合併／部署待確認。下表仍是已部署基準。
+**V0.22.30 Build 1（桌機返修，已部署）**：右上帳號列恢復平板同款；帳戶標題隱藏，日期／科目／摘要／金額標籤同行、放大黑字；收支控制加寬；常用項目加虛線框及小型 pill；金額／儲存／清空統一 40px。月份控制靠上並加框，空／有資料欄位固定；帳戶改名與封存同行靠右。設定縮為 640px，桌面帳本移轉併入資料管理，清除備份空訊息占位。只調整桌機 presentation，手機／平板尺寸與流程保留。 本地 24 組 application tests、六種 viewport 瀏覽器驗證、PR #364 治理／CI 與正式部署 #564 全部成功。真實桌機視覺仍待使用者驗收。
 
 ## 正式基準、部署與治理
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.30 Build 0**；PR #362 已合併，恢復 V0.22.29 desktop split 基礎上收斂 10 項桌機／共用介面，平板既有排列保留 |
-| Production Deploy | CYAccountingWeb Validate and Deploy run [`37736085139`](https://github.com/simonliu1118-byte/CYapps/actions/runs/37736085139) 成功；validate、D1 migration、Worker/static assets、secure login 與 V0.22.30 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.30 Build 1**；PR #364 已合併，完成桌機記帳／帳本／帳號／設定返修，手機與平板既有排列保留 |
+| Production Deploy | [CYAccountingWeb Validate and Deploy #564（run `37823795188`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37823795188) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.31**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
@@ -19,6 +19,8 @@
 純文件更新不升 `VERSION`／`BUILD`。正式版本來源仍是專案根 `VERSION` 與 `BUILD`。
 
 ## 近期版本收斂
+
+- **V0.22.30 Build 1**：完成本次桌機返修；PR #364 治理／CI 成功、已合併。正式部署 #564（run `37823795188`）成功；功能基準 commit `e0fae7b1e9ba3f8c1c59ef76ff1eef7ff91a8e83`。手機／平板版面尺寸比對一致；桌機有／無資料的欄位座標一致，金額／儲存／清空均 40px。Stable Release 維持 V0.22.15。
 
 - **V0.22.30 Build 0**：依 10 項桌機實機返修，入口區與帳本區移除標題；桌機收入／支出靠左，日期 icon 改單一日曆 SVG，日期／科目／常用科目／摘要／常用摘要／金額／儲存／清空逐列；收支以金額 +/- 與顏色呈現（語意 kind cell 暫保留但所有版面隱藏，避免觸控 CSS nth-child／swipe 重寫）；切月份透過 shared loading state 顯示載入中；期初餘額視窗加寬、audit 在右側預設展開；月摘要同平板期初／收入／支出／期末／淨利損五格放大；修正桌機 inline edit min-width；右上 role 去除 pill 背景、改為括號純文字。PR #362 CI 一次抓到由平板切回手機 quick tools 容器還原問題，修正後 validate／governance 成功；Production run `37736085139` 成功。未改 API／D1／CYID／canonical writer；實機視覺仍待回報。
 
