@@ -258,6 +258,9 @@ function adaptiveEscapeHtml(value) {
 function setupAdaptiveSplitWorkspace() {
   const media = window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA);
   const sync = () => applyAdaptiveSplitWorkspace(media.matches);
+  // The confirmation drawer is created on window load by its canonical owner.
+  // Reconcile the desktop split only after that owner signals readiness.
+  window.addEventListener('cyacc:confirmation-ready', sync);
   sync();
   if (typeof media.addEventListener === 'function') media.addEventListener('change', sync);
   else media.addListener?.(sync);
