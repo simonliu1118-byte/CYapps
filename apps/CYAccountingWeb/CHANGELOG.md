@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.30 Build 0 | 使用者電腦版 10 項實機返修：所有版本移除新增記帳／記帳資料標題；桌機保留原 split 左右版面並將收支靠左、日曆改單一 SVG、表單改成帳戶後依日期／科目＋小常用／摘要＋小常用／金額＋儲存＋清空逐列；全裝置帳本獨立收支欄隱藏，以金額正負號及相應色彩呈現；桌機切月顯示載入中；期初餘額對話窗加寬，手動調整 audit 直接顯示在右半邊；期初／收入／支出／期末／淨利損同平板五格放大；修正編輯列輸入最小寬導致跑版；右上角色標籤改平板式括號純文字，沒有 pill／漸層背景。保留共用 writer 與既有觸控表格欄位 index。PR #362 已合併，Production run `37736085139` validate/deploy 及 semantic assets 成功，仍待真實裝置畫面驗收。 |
 | V0.22.29 Build 0 | 電腦版實機回報恢復：Input Confirmation 建立時間晚於 Adaptive split 初始化，造成桌機雙欄工作區未建立、確認側欄遮住帳本；修正為由正式 Confirmation owner 發出 `cyacc:confirmation-ready`，既有 Adaptive owner 收到後完成左右分欄。Desktop 日期 JS 已改以 `desktopUi-date-*` 命名，原 CSS 卻仍使用 `cy-date-*`，造成原生 date 與自製日期重複顯示；本次直接同步原 CSS selector，不另加相容殼。加入時序與 selector 回歸、更新 production semantic verifier；PR #360 已合併，Production run `37733787088` 成功，真實桌機視覺待確認。 |
 | V0.22.28 Build 0 | 平板直式把手移到 rail 上緣，展開向上凸出、收合只留 tab；左側收支沿用 canonical segmented-control 視覺，右側改為「帳戶／科目／常用科目」、「日期／摘要／常用摘要」、「金額／儲存／清空（取消）」三列；平板設定視窗縮至 640px，修正月份鎖帳與備份標題列，資料管理／資料移轉限制 Desktop-only。PR #357、部署驗證調整 PR #358、Production Deploy #547 成功。 |
 | V0.22.27 Build 0 | 平板直／橫式實機修正：交易表改為固定欄寬，空月份與有資料月份不再因 tbody 內容改變欄位比例；「操作」表頭雙方向改置中。月摘要改為固定五格並放大，期初／收入／支出／期末／淨利損無論數值長短皆保留相同欄位。Excel 匯出明確共用手機 native file share，平板直／橫式與手機 preview 都走同一 navigator.share/canShare 路徑，File 固定使用 xlsx MIME。直式凸起把手固定白色、不再依收支著色；收合時移除整條殘留 rail，只顯示把手，展開時縮小並與面板邊界融合。左側收入／支出文字改為真正直向排列。 |
