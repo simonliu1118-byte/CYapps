@@ -28,15 +28,15 @@
 }
 
 .inline-edit-date {
-  min-width: 124px;
+  min-width: 0;
 }
 
 .inline-edit-summary {
-  min-width: 130px;
+  min-width: 0;
 }
 
 .inline-edit-amount {
-  min-width: 78px;
+  min-width: 0;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -49,7 +49,7 @@
 }
 
 .inline-edit-action-cell {
-  min-width: 126px;
+  min-width: 0;
 }
 
 .inline-edit-actions {
@@ -85,4 +85,24 @@
 
 .inline-editing .kind-tag {
   white-space: nowrap;
+}
+/* Inline desktop editing keeps the exact ledger columns, without forcing
+   wider minimum input widths than the available account/date/amount cells. */
+@media (min-width: 1024px) {
+  html[data-viewport="desktop"] .ledger-card tr.inline-editing .inline-edit-control {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    font-size: 12px;
+  }
+  html[data-viewport="desktop"] .ledger-card tr.inline-editing .inline-edit-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  html[data-viewport="desktop"] .ledger-card tr.inline-editing .desktopUi-date-trigger {
+    width: 100%;
+    min-width: 0;
+    padding: 0 4px;
+    font-size: 11px;
+  }
 }
