@@ -139,6 +139,7 @@ function setupAdaptiveEntryHelp() {
 }
 
 function setupAdaptiveDataSettings() {
+  if (typeof isDesktopInteractionWorkspace === 'function' && !isDesktopInteractionWorkspace()) return;
   const nav = document.querySelector('.settings-nav');
   const content = document.querySelector('.settings-content');
   if (!nav || !content || typeof setSettingsTab !== 'function') return;
@@ -4333,14 +4334,18 @@ function setupTabletWorkspace() {
     applyAdaptiveSplitWorkspace(window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA).matches);
     if (tablet) {
       const rail = document.querySelector('.cy-entry-rail');
+      if (rail && controls.parentElement !== rail) rail.prepend(controls);
       if (rail && !rail.dataset.entryExpanded) setTabletEntryExpanded(true);
       document.querySelector('.entry-card')?.classList.remove('cy-mobile-page-hidden');
       document.querySelector('.ledger-card')?.classList.remove('cy-mobile-page-hidden');
       setupTouchWorkspaceEntrySecondaryAction();
       // The original date/month controls are native and keep their existing listeners.
       document.querySelectorAll('.desktopUi-date-popover, .cy-month-picker-popover').forEach(node => { node.hidden = true; });
-    } else if (!usesEntryTransactionEditor() && cyTouchWorkspaceEdit) {
-      cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+    } else {
+      if (controls.parentElement !== entry) entry.prepend(controls);
+      if (!usesEntryTransactionEditor() && cyTouchWorkspaceEdit) {
+        cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+      }
     }
     if (wasTablet !== tablet && typeof renderSettingsAccountManager === 'function') renderSettingsAccountManager();
   };

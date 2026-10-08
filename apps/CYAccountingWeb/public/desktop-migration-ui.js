@@ -41,6 +41,7 @@
   }
 
   function installMigrationSettings() {
+    if (typeof window.cyIsDesktopInteractionWorkspace === 'function' && !window.cyIsDesktopInteractionWorkspace()) return;
     if (document.querySelector('[data-settings-tab="migration"]')) return;
     const nav = document.querySelector('.settings-nav');
     const content = document.querySelector('.settings-content');

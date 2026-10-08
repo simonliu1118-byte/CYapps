@@ -5,21 +5,22 @@ const read = name => fs.readFileSync(new URL('../public/' + name, import.meta.ur
 const source = read('adaptive-ui.js');
 const ledgerToolsSource = read('ledger-tools.js');
 const exportSource = read('excel-export-ui.js');
+const migrationSource = read('desktop-migration-ui.js');
 const tabletCode = source.slice(source.indexOf('function isTabletWorkspace()'));
 const listeners = new Map();
 let coarse = true;
 let viewportHeight = 1100;
 const attrs = new Map();
 const button = { textContent: '', setAttribute: (name, value) => attrs.set(name, value), addEventListener(name, fn) { this[name] = fn; } };
-const controls = { querySelector: selector => selector === '#tabletEntryToggle' ? button : null };
+const controls = { parentElement: null, querySelector: selector => selector === '#tabletEntryToggle' ? button : null };
 const quickHost = { append(group) { group.parentElement = this; } };
 const entryGrid = { append(group) { group.parentElement = this; } };
 const favoriteGroup = { parentElement: quickHost };
 const summaryGroup = { parentElement: quickHost };
-const rail = { dataset: {} };
+const rail = { dataset: {}, prepend(node) { assert.equal(node, controls); node.parentElement = this; } };
 const shell = { dataset: {} };
 const classes = { remove() {}, contains: () => true };
-const entry = { prepend(node) { assert.equal(node, controls); }, classList: classes };
+const entry = { prepend(node) { assert.equal(node, controls); node.parentElement = this; }, classList: classes };
 const ledger = { classList: classes };
 const style = new Map();
 const root = { dataset: {}, style: { setProperty: (key, value) => style.set(key, value) } };
@@ -53,6 +54,7 @@ win.__cyaccTabletPreviewEnabled = false;
 win.innerWidth = 820; coarse = true;
 context.setupTabletWorkspace();
 assert.equal(root.dataset.tabletLayout, 'portrait');
+assert.equal(controls.parentElement, rail, 'portrait handle is owned by the entry rail edge, not the entry-card interior');
 assert.equal(favoriteGroup.parentElement, entryGrid);
 assert.equal(summaryGroup.parentElement, entryGrid);
 assert.equal(rail.dataset.entryExpanded, 'true', 'portrait entry rail starts expanded');
@@ -86,6 +88,7 @@ assert.equal(style.get('--tablet-visible-height'), '1100px', 'software keyboard 
 assert.equal(context.cyTouchWorkspaceEdit, currentEdit);
 assert.equal(writes, 0, 'layout/rotation/keyboard/entry toggling never writes accounting data');
 win.innerWidth = 375; listeners.get('resize')();
+assert.equal(controls.parentElement, entry, 'leaving tablet restores the hidden handle node to the entry card');
 assert.equal(favoriteGroup.parentElement, quickHost, 'phone restores existing quick-entry container');
 assert.equal(summaryGroup.parentElement, quickHost);
 win.innerWidth = 820; listeners.get('resize')();
@@ -123,18 +126,18 @@ assert.doesNotMatch(css, /data-tablet-layout[^\n]*#mobileAccountMenuButton[^\{]*
 assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton[\s\S]*?display:\s*inline-flex !important/, 'phone tablet preview exposes a temporary return-to-phone button');
 assert.match(css, /#tabletPreviewReturnButton \{[\s\S]*?display:\s*none !important/, 'return-to-phone is hidden by default outside preview');
 assert.match(css, /data-tablet-preview="true"\] #tabletPreviewReturnButton:not\(\[hidden\]\)[\s\S]*?display:\s*inline-flex !important/, 'only active phone preview may expose return-to-phone');
-assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.cy-entry-rail \.entry-card \{[\s\S]*?grid-template-columns:\s*58px minmax\(0, 1fr\)/, 'portrait entry rail reserves a narrow left mode switch column');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.cy-entry-rail \.entry-card \{[\s\S]*?grid-template-columns:\s*46px minmax\(0, 1fr\)/, 'portrait entry rail reserves a slimmer left mode switch column');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-kind-switch \{[\s\S]*?grid-template-columns:\s*1fr[\s\S]*?grid-template-rows:\s*repeat\(2, minmax\(0, 1fr\)\)/, 'income and expense are a vertical two-segment switch');
-assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-grid \{[\s\S]*?grid-template-columns:\s*repeat\(12,[\s\S]*?grid-template-rows:\s*40px 30px 40px/, 'portrait entry form uses primary fields, a compact quick row and a summary/action row');
-assert.match(css, /#favoriteCategoryGroup \{ grid-column:\s*1 \/ 7[\s\S]*?#summarySuggestionGroup \{ grid-column:\s*7 \/ 13/, 'favorite category and summary suggestions share the compact quick row');
-assert.match(css, /\.entry-grid > \.summary-field \{[\s\S]*?grid-column:\s*1 \/ 9/, 'summary receives the widest final-row field');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.entry-grid \{[\s\S]*?grid-template-columns:\s*repeat\(12,[\s\S]*?grid-template-rows:\s*repeat\(3, 40px\)/, 'portrait entry form uses three equal compact rows');
+assert.match(css, /#favoriteCategoryGroup \{ grid-column:\s*8 \/ 13[\s\S]*?grid-row:\s*1[\s\S]*?#summarySuggestionGroup \{ grid-column:\s*8 \/ 13[\s\S]*?grid-row:\s*2/, 'favorite category and summary suggestions occupy the right side of rows one and two');
+assert.match(css, /\.entry-grid > \.summary-field \{ grid-column:\s*4 \/ 8 !important; grid-row:\s*2 !important; \}/, 'summary is paired with date and common-summary controls on row two');
 assert.match(source, /tablet-entry-handle-arrow" aria-hidden="true">↑<\/span><span class="tablet-entry-handle-label">展開新增/, 'collapsed rail exposes upward arrow and 展開新增');
 assert.match(source, /arrow\.textContent = expanded \? '↓' : '↑'/, 'entry handle arrow follows expanded state');
 assert.match(source, /label\.textContent = expanded \? '收合隱藏' : '展開新增'/, 'entry handle text follows expanded state');
 assert.match(css, /V0\.22\.26 portrait tab handle hotfix/, 'portrait handle fix is explicitly scoped');
-assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.tablet-entry-controls \{[\s\S]*?position:\s*absolute !important[\s\S]*?top:\s*-29px !important[\s\S]*?left:\s*50% !important/, 'portrait handle is a raised tab rather than a full control row');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.tablet-entry-controls \{[\s\S]*?position:\s*absolute !important[\s\S]*?top:\s*-26px !important[\s\S]*?left:\s*50% !important/, 'portrait handle is raised from the entry panel top edge');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.tablet-entry-handle \{[\s\S]*?border-bottom:\s*0 !important[\s\S]*?border-radius:\s*11px 11px 0 0 !important/, 'portrait handle joins the panel edge as a tab');
-assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.cy-entry-rail\[data-entry-expanded="false"\] \.entry-card \{[\s\S]*?height:\s*10px !important/, 'collapsed rail leaves only a thin panel edge under the raised tab');
+assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.cy-entry-rail\[data-entry-expanded="false"\] \.entry-card \{[\s\S]*?height:\s*0 !important[\s\S]*?border:\s*0 !important/, 'collapsed rail leaves only the raised tab and no panel edge');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#monthSummary \{[\s\S]*?grid-row:\s*3 !important/, 'portrait month summary stays below the month/actions row and cannot collide with the month picker');
 assert.doesNotMatch(source, /tabletEntryPinned|保持展開/, 'portrait entry rail no longer exposes a pinned-open mode');
 assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?\.ledger-card th\.action-col \{[\s\S]*?text-align:\s*center !important/, 'tablet action header is centered in both orientations');
@@ -154,6 +157,7 @@ assert.match(exportSource, /type:\s*'application\/vnd\.openxmlformats-officedocu
 assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?tbody > tr:not\(\.ledger-message-row\) > td:nth-child\(5\) \{ width:\s*27% !important/, 'portrait ledger has explicit summary width independent of tbody contents');
 assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?\.cy-entry-rail\[data-entry-expanded="false"\] \.entry-card \{[\s\S]*?height:\s*0 !important[\s\S]*?border:\s*0 !important/, 'collapsed portrait rail leaves no residual line beneath the tab');
 assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?\.entry-card\.entry-income \.tablet-entry-handle,[\s\S]*?\.entry-card\.entry-expense \.tablet-entry-handle[\s\S]*?background:\s*#fff !important/, 'tab handle stays white for both income and expense');
+assert.match(css, /\.entry-kind-switch-field \{[\s\S]*?width:\s*42px !important[\s\S]*?height:\s*132px !important/, 'portrait income/expense switch is the canonical pill rotated into a slimmer, taller vertical control');
 assert.match(css, /V0\.22\.27 tablet polish[\s\S]*?\.entry-kind-switch \.kind-button \{[\s\S]*?writing-mode:\s*vertical-rl !important[\s\S]*?text-orientation:\s*upright !important/, 'portrait income and expense labels are vertical text');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-card th:nth-child\(3\),[\s\S]*?display:\s*none !important/, 'portrait removes the separate income-expense column');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?ledger-row-income[\s\S]*?td:nth-child\(6\)::before[\s\S]*?content:\s*"\+"/, 'portrait income amount carries the phone-style plus sign');
@@ -163,6 +167,11 @@ assert.match(css, /data-tablet-layout="portrait"[\s\S]*?td\.action-col \[data-de
 assert.match(ledgerToolsSource, /data-edit-id="\$\{tx\.id\}" aria-label="編輯"/, 'icon-only edit retains an accessible name');
 assert.match(ledgerToolsSource, /data-delete-id="\$\{tx\.id\}" aria-label="刪除"/, 'icon-only delete retains an accessible name');
 assert.match(source, /function usesCompactTouchUtility\(\)[\s\S]*?isTabletWorkspace\(\) && tabletWorkspaceOrientation\(\) === 'portrait'/, 'portrait tablet reuses the compact touch utility lifecycle');
+assert.match(source, /setupAdaptiveDataSettings\(\)[\s\S]*?!isDesktopInteractionWorkspace\(\)\) return;/, 'tablet never installs desktop-only Data Management');
+assert.match(migrationSource, /installMigrationSettings\(\)[\s\S]*?!window\.cyIsDesktopInteractionWorkspace\(\)\) return;/, 'tablet never installs desktop-only Data Migration');
+assert.match(css, /#settingsDialog\.settings-modal \{[\s\S]*?width:\s*min\(640px, calc\(100vw - 48px\)\) !important/, 'tablet settings dialog is materially narrower');
+assert.match(css, /data-settings-pane="lock"[\s\S]*?\.lock-form \{[\s\S]*?grid-template-columns:\s*minmax\(168px, 1\.15fr\) minmax\(118px, \.9fr\) minmax\(118px, \.9fr\)/, 'tablet month-lock controls stay on one stable row');
+assert.match(css, /#backupRefreshStatus \{[\s\S]*?width:\s*34px !important[\s\S]*?font-size:\s*0 !important/, 'tablet backup refresh is a compact icon control');
 
 const quickLockFns = ledgerToolsSource.slice(
   ledgerToolsSource.indexOf('function shiftLedgerMonth('),
