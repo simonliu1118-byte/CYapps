@@ -6,13 +6,13 @@
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.28 Build 0**；PR #357 已合併；直式記帳 rail／三列輸入、canonical 直式收支、設定視窗與 Desktop-only 設定項目已修正 |
-| Production Deploy | CYAccountingWeb Validate and Deploy **#547**（run `37714030732`）成功；validate、D1 migration、Worker/static assets、secure login 與 V0.22.28 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.29 Build 0**；PR #360 已合併；修復 Desktop split 初始化競爭與日期 CSS 名稱失配；V0.22.28 的平板 rail／三列輸入、設定修正均保留 |
+| Production Deploy | CYAccountingWeb Validate and Deploy run [`37733787088`](https://github.com/simonliu1118-byte/CYapps/actions/runs/37733787088) 成功；validate、D1 migration、Worker/static assets、secure login 與 V0.22.29 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.31**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
-| 下一工作線 | 本次交接沒有指定新的功能 branch；下一個獨立工作應由目前 main 另開 branch，不從未合併的舊實驗 branch 延續 |
+| 下一工作線 | 先請使用者於真實桌機確認 V0.22.29 外觀；`cyaccountingweb/optimistic-transaction-create` 是先前中斷、未合併且尚未完整驗證的工作分支，不能當正式基準。下一項開發從 main 判斷並開分支 |
 
 純文件更新不升 `VERSION`／`BUILD`。正式版本來源仍是專案根 `VERSION` 與 `BUILD`。
 
@@ -43,6 +43,7 @@
 - **V0.22.26 Build 0**：修正 V0.22.25 實機返修。月摘要恢復到年月／工具列下方獨立單列，避免與年月 selector 重疊；直式把手改成面板上緣中央向上凸出的 tab，左右上邊框維持連續，收合只保留薄面板邊與「↑ 展開新增」，展開顯示「↓ 收合隱藏」。V0.22.25 左側垂直 kind switch 與三層 entry grid 不變。PR #353 Governance #1096、Validate #533 成功；Production Deploy #534 成功。
 - **V0.22.27 Build 0**：平板實機再收斂。直／橫式交易表改為 fixed layout 並指定各欄寬，空月份不再因 message row 壓縮表頭；雙方向「操作」表頭改置中。月摘要改為固定五格且放大，期初／收入／支出／期末／淨利損維持固定槽位。Excel 直／橫式與手機 tablet preview 共用同一 native file share 路徑，xlsx File 固定正確 MIME。直式凸起把手固定白色，收合時整條 rail 不再殘留，只顯示 tab；收入／支出文字改直向。PR #355 Governance #1098、Validate #537 成功；Production Deploy #538 成功。
 - **V0.22.28 Build 0**：依平板實機再修直式新增區與 Settings。把手 owner 移到 `.cy-entry-rail`，展開時由記帳面板上緣向上凸出，收合時只留 tab；收入／支出不再另造樣式，改用 canonical segmented-control 的色彩、邊框與 active 狀態，只在直式做 42px 窄、132px 高排列。右側三列固定為「帳戶／科目／常用科目」、「日期／摘要／常用摘要」、「金額／儲存／清空（編輯時取消）」。Tablet Settings 縮至 640px；月份鎖帳改回穩定單列與 compact 逐月控制；備份標題列／重新整理控制收斂。資料管理與資料移轉新增 Desktop interaction guard，平板直／橫式不建立這兩個設定頁。PR #357 Governance #1103、Validate #544 成功；PR #358 修正 deployment verifier 的 V0.22.27 舊 cache revision／marker，Governance #1104、Validate #546 成功；最終 Production Deploy #547 成功。
+- **V0.22.29 Build 0**：使用者以 Desktop 實機截圖回報：原本的左記帳／右帳本變成上下堆疊、輸入確認抽屜覆蓋帳本，且桌機原生日期欄位與自製日期控制重複顯示。根因一是 `applyAdaptiveSplitWorkspace` 在確認元件建立前執行並直接 return，根因二是日期 JS 的 `.desktopUi-date-*` 命名與 CSS 殘留 `.cy-date-*` 不一致。Input Confirmation canonical owner 新增 `cyacc:confirmation-ready` lifecycle，Adaptive owner 直接訂閱並重算既有分欄；CSS 收斂至實際 DOM 名稱，無新增第二套 renderer、observer、retry 或 business owner。PR #360 治理與驗證成功、Production run `37733787088` 成功，V0.22.15 公開 Stable Release 未變；真實桌機視覺仍待使用者再次確認。
 
 完整版本歷史見 `CHANGELOG.md`。
 
@@ -92,7 +93,7 @@
 
 ## 已確認驗證
 
-V0.22.28 Build 0 PR #357 的 Governance Check #1103 與 CYAccountingWeb Validate and Deploy #544 均成功；部署驗證修正 PR #358 的 Governance #1104 與 Validate #546 也成功；合併後 Production run #547（`37714030732`）validate 與 deploy（含新版 semantic asset verification）全部成功。V0.22.26 的 #353 仍是前一階段凸起 tab 與摘要位置修正證據。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
+V0.22.29 Build 0 PR #360 的 Governance Check 與 Validate 均成功；Production run `37733787088`（validate、deploy、secure login、frontend semantic assets）成功。V0.22.29 的桌機左右分欄與日期 CSS 已增加時序／名稱測試，仍需真實瀏覽器視覺驗收。先前 V0.22.28 Build 0 PR #357 的 Governance Check #1103 與 CYAccountingWeb Validate and Deploy #544 均成功；部署驗證修正 PR #358 的 Governance #1104 與 Validate #546 也成功；合併後 Production run #547（`37714030732`）validate 與 deploy（含新版 semantic asset verification）全部成功。V0.22.26 的 #353 仍是前一階段凸起 tab 與摘要位置修正證據。V0.22.15 的 Stable Release run #2（`37254391804`）仍是目前公開 Release 證據。已確認：
 
 - JavaScript syntax 與 application tests；
 - mobile native-date、底部儲存／清空或取消、identity readiness，以及 login viewport／keyboard regression；
