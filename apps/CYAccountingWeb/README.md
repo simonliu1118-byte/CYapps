@@ -9,8 +9,8 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.29 Build 0**；PR #360 已合併；修復 Desktop 左記帳／右帳本布局的初始化競爭與自製日期選擇器 CSS 命名失配，保留 V0.22.28 平板功能 |
-| 正式部署 | CYAccountingWeb Validate and Deploy run [`37733787088`](https://github.com/simonliu1118-byte/CYapps/actions/runs/37733787088) 成功；application tests、schema 7 migration、Worker/static assets、secure login 與 V0.22.29 semantic frontend assets 均通過 |
+| 正式版本 | **V0.22.30 Build 0**；PR #362 已合併，桌機記帳排列、月摘要、期初調整紀錄、日期 icon、編輯欄與角色標示等十項 UI 修正 |
+| 正式部署 | [CYAccountingWeb Validate and Deploy run `37736085139`](https://github.com/simonliu1118-byte/CYapps/actions/runs/37736085139) 成功；application tests、schema 7 migration、Worker/static assets、secure login 與 V0.22.30 semantic frontend assets 均通過 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
@@ -18,6 +18,8 @@
 | 備份 | Phase C；R2＋GCS 手動 paired 驗收完成，scheduled `x/14` 仍需讀正式 catalog，不按日期推算 |
 
 電腦版仍沿用既有 Desktop UI/UX 設計（PR #115 為歷史設計里程碑），與手機／平板共用原本資料及帳務 owner。V0.22.29 以 `cyacc:confirmation-ready` 明確 lifecycle 恢復桌機左右分欄，修正 `.desktopUi-date-*` 樣式對應；部署驗證通過不代替使用者於真實電腦瀏覽器的視覺驗收。
+
+V0.22.30 Desktop 呈現依使用者 10 項實機要求調整：移除記帳／帳本標題；收支以金額加減號及顏色識別；桌機帳戶選擇下方改日期、科目＋小型常用科目、摘要＋小型常用摘要、金額／儲存／清空；日期日曆圖示改為單一 SVG；月份 loading 明示；期初餘額調整 audit 於寬視窗右側展開；五格月摘要與平板同序放大；修正 inline edit 欄寬；桌機帳號角色以平板同款括號文字、無 pill 背景。手機／平板保留原版面及既有共用 writer；UI 視覺仍待實機再確認。
 
 ## 文件入口
 
