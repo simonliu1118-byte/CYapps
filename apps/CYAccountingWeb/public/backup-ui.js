@@ -145,7 +145,7 @@ function backupSettingsHtml() {
         <h3 id="backupHeadingTitle">自動備份</h3>
         <p id="backupHeadingHint" class="hint">Cloudflare D1 是正式資料來源；正在讀取備份拓撲。</p>
       </div>
-      <button id="backupRefreshStatus" class="secondary compact" type="button">重新整理</button>
+      <button id="backupRefreshStatus" class="secondary compact backup-refresh-button" type="button" aria-label="重新整理備份狀態" title="重新整理備份狀態">↻</button>
     </div>
 
     <div id="backupMessage" class="dialog-message"></div>
