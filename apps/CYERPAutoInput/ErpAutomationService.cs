@@ -141,7 +141,7 @@ internal sealed class ErpAutomationService
         }
 
         progress.Report("ERP：輸入完成，儲存單據…");
-        await SaveDocumentAsync(root, result, cancellationToken);
+        await SaveDocumentAsync(root, result, snapshot.Details, cancellationToken);
         progress.Report("ERP：已儲存。");
         return result;
     }
@@ -151,7 +151,7 @@ internal sealed class ErpAutomationService
     /// not used) and confirms ERP returned to browse mode with the same sales order
     /// number. Any ERP message window stops the run untouched.
     /// </summary>
-    private async Task SaveDocumentAsync(nint root, AutomationRunResult result, CancellationToken cancellationToken)
+    private async Task SaveDocumentAsync(nint root, AutomationRunResult result, IReadOnlyList<DetailRow> details, CancellationToken cancellationToken)
     {
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("儲存前無法把 COPI08 帶到前景；未儲存。");
@@ -164,15 +164,32 @@ internal sealed class ErpAutomationService
         InputSender.Press(NativeMethods.VK_F12);
         _log.Info("document", $"save requested by F12 document={_log.Value(result.DocumentKey)}");
 
+        // The last detail row is validated on save, so ERP's stock warning can appear here
+        // (real test, Build 8: a one-row document). As on a row change it is acknowledged
+        // with OK and recorded; if ERP then stays in input mode, F12 is pressed once more.
+        var lastRow = details.Count > 0 ? details[^1] : new DetailRow();
+        var warningsAcknowledged = 0;
         var deadline = Environment.TickCount64 + 6000;
         while (Environment.TickCount64 < deadline)
         {
             await Delay(150, cancellationToken);
-            var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
-            if (peers.Count > 0)
+            if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
             {
-                LogPeerWindows("save", peers);
-                throw new InvalidOperationException("按 F12 儲存後 ERP 出現訊息視窗；CY 未代為處理，請人工確認單據是否已儲存。");
+                if (warningsAcknowledged >= 2)
+                    throw new InvalidOperationException("按 F12 儲存後 ERP 連續出現庫存不足提示；請人工確認單據是否已儲存。");
+                await AcknowledgeStockWarningIfShownAsync(root, details.Count, lastRow,
+                    "按 F12 儲存後 ERP 出現訊息視窗；CY 未代為處理，請人工確認單據是否已儲存。", cancellationToken);
+                warningsAcknowledged++;
+                AddStockWarning(result, details.Count, lastRow);
+                Win32Automation.PrepareForeground(root, _log);
+                await Delay(600, cancellationToken);
+                if (Win32Automation.FindVisibleProcessPeerWindows(root).Count == 0 && DetectMode(root) == ErpMode.Input)
+                {
+                    InputSender.Press(NativeMethods.VK_F12);
+                    _log.Info("document", $"save requested again by F12 after stock warning document={_log.Value(result.DocumentKey)}");
+                }
+                deadline = Environment.TickCount64 + 6000;
+                continue;
             }
 
             if (DetectMode(root) != ErpMode.Browse) continue;
@@ -919,17 +936,8 @@ internal sealed class ErpAutomationService
         DetailRow completedRow,
         CancellationToken cancellationToken)
     {
-        if (!await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, cancellationToken)) return;
-
-        var warning = new AutomationWarning(
-            "BATCH_STOCK_INSUFFICIENT",
-            result.SalesOrderType,
-            result.SalesOrderNumber,
-            completedDetailRow,
-            completedRow.ItemCode,
-            "ERP 顯示庫存量或批號量不足（已按確定繼續），需人工確認");
-        result.Warnings.Add(warning);
-        _log.Warn("document", $"warning recorded code={warning.Code} document={warning.DocumentKey} detail_row={warning.DetailRow} item={_log.Value(warning.ItemCode)}");
+        if (!await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, RowChangeUnexpected, cancellationToken)) return;
+        AddStockWarning(result, completedDetailRow, completedRow);
 
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("關閉庫存不足提示後無法回到 COPI08；已停止避免後續錯位。");
@@ -944,7 +952,7 @@ internal sealed class ErpAutomationService
         // ERP stayed in the completed row: ask for the next row once more.
         InputSender.Press(NativeMethods.VK_DOWN);
         await Delay(300, cancellationToken);
-        if (await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, cancellationToken))
+        if (await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, RowChangeUnexpected, cancellationToken))
             throw new InvalidOperationException($"第 {completedDetailRow} 列品號 {completedRow.ItemCode}：按確定後 ERP 仍不允許換到下一列（庫存量或批號量不足）；請檢查庫別、數量或批號後人工處理。");
         Win32Automation.PrepareForeground(root, _log);
         rows = await CountDetailRowsAsync(grid, cancellationToken);
@@ -953,13 +961,28 @@ internal sealed class ErpAutomationService
             throw new InvalidOperationException($"第 {completedDetailRow} 列之後 ERP 沒有建立下一列；已停止避免錯位。");
     }
 
+    private const string RowChangeUnexpected = "切換商品明細下一列時 ERP 出現未預期視窗；為避免資料填入錯誤欄位已立即停止目前單據。";
+
+    private void AddStockWarning(AutomationRunResult result, int detailRow, DetailRow row)
+    {
+        var warning = new AutomationWarning(
+            "BATCH_STOCK_INSUFFICIENT",
+            result.SalesOrderType,
+            result.SalesOrderNumber,
+            detailRow,
+            row.ItemCode,
+            "ERP 顯示庫存量或批號量不足（已按確定繼續），需人工確認");
+        result.Warnings.Add(warning);
+        _log.Warn("document", $"warning recorded code={warning.Code} document={warning.DocumentKey} detail_row={warning.DetailRow} item={_log.Value(warning.ItemCode)}");
+    }
+
     /// <summary>
     /// Returns false when no ERP window is open; presses Enter on the stock warning and
     /// returns true; throws for any other window. The message text is read from the Win32
     /// tree or, retried while the box is still painting, by OCR.
     /// </summary>
     private async Task<bool> AcknowledgeStockWarningIfShownAsync(
-        nint root, int completedDetailRow, DetailRow completedRow, CancellationToken cancellationToken)
+        nint root, int completedDetailRow, DetailRow completedRow, string unexpectedMessage, CancellationToken cancellationToken)
     {
         var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
         if (peers.Count == 0) return false;
@@ -988,8 +1011,8 @@ internal sealed class ErpAutomationService
             return true;
         }
 
-        LogPeerWindows("row-transition", peers);
-        throw new InvalidOperationException("切換商品明細下一列時 ERP 出現未預期視窗；為避免資料填入錯誤欄位已立即停止目前單據。");
+        LogPeerWindows("unexpected", peers);
+        throw new InvalidOperationException(unexpectedMessage);
     }
 
     /// <summary>Highest 序號 visible in the detail grid's first column (0 when unreadable).</summary>
