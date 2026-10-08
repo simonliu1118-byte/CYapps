@@ -26,6 +26,29 @@ internal static class Win32Automation
         return forms.Count > 0 ? forms : found;
     }
 
+    /// <summary>
+    /// True when the window owning the screen at the area's center and inset corners is
+    /// <paramref name="root"/> itself, i.e. nothing (such as the CY window) covers it.
+    /// </summary>
+    public static bool IsAreaShownBy(nint root, Rectangle area)
+    {
+        var inset = 6;
+        var points = new[]
+        {
+            new Point(area.Left + area.Width / 2, area.Top + area.Height / 2),
+            new Point(area.Left + inset, area.Top + inset),
+            new Point(area.Right - inset, area.Top + inset),
+            new Point(area.Left + inset, area.Bottom - inset),
+            new Point(area.Right - inset, area.Bottom - inset)
+        };
+        foreach (var p in points)
+        {
+            var hit = NativeMethods.WindowFromPoint(new NativeMethods.POINT { X = p.X, Y = p.Y });
+            if (hit == 0 || NativeMethods.GetAncestor(hit, NativeMethods.GA_ROOT) != root) return false;
+        }
+        return true;
+    }
+
     private static bool IsMessageDialogClass(string className) =>
         className is "#32770" or "TMessageForm";
 

@@ -29,26 +29,37 @@ internal sealed class F2BatchCellLocator
             throw new InvalidOperationException("F2 批號查詢找不到可用的 TcxGridSite；已停止目前單據。");
 
         var captureRect = grid.Rect.ToRectangle();
+        // Screen capture reads whatever is on top: in the real test (V0.2.0 Build 6) the CY
+        // window covered part of the lookup and its own 單位 header was read into a stock
+        // cell. Only read a frame that is unobstructed, stable and shows both batch headers
+        // without unit text.
         Bitmap? image = null;
         IReadOnlyList<OcrToken> tokens = [];
         Rectangle? stockHeader = null;
         Rectangle? batchHeader = null;
-        // The lookup may still be painting right after it appears: re-read once.
-        for (var attempt = 1; attempt <= 2 && stockHeader is null; attempt++)
+        var ready = false;
+        for (var attempt = 1; attempt <= 4 && !ready; attempt++)
         {
-            if (attempt > 1) await Task.Delay(350, cancellationToken);
+            await Task.Delay(attempt == 1 ? 250 : 400, cancellationToken);
+            if (!await EnsureUnobstructedAsync(lookupHwnd, captureRect, cancellationToken))
+                throw new InvalidOperationException("F2 批號查詢視窗被其他視窗遮住，無法辨識；已停止目前單據。");
             image?.Dispose();
-            image = ScreenCapture.Capture(captureRect);
+            image = await CaptureStableAsync(captureRect, cancellationToken);
             tokens = await _ocr.RecognizeAsync(image, cancellationToken, requireChinese: true);
-            // The sorted 現有存量 header is drawn on a yellow background; accept a partial
-            // read of it. 存量 appears nowhere else in this grid.
+            // The sorted 現有存量 header is drawn on a yellow background; accept a partial read.
             stockHeader = FastDetailGridVisionService.FindExactPhrase(tokens, ["現有存量", "有存量", "現有存", "存量"]);
             batchHeader = FastDetailGridVisionService.FindExactPhrase(tokens, ["批號"]);
-            if (stockHeader is null) LogTokens(tokens, attempt);
+            var staleUnitLookup = FastDetailGridVisionService.FindExactPhrase(tokens, ["換算", "單位"]) is not null;
+            ready = stockHeader is not null && batchHeader is not null && !staleUnitLookup;
+            if (!ready)
+            {
+                _log.Info("vision", $"F2 batch lookup not ready attempt={attempt} stock_header={stockHeader is not null} batch_header={batchHeader is not null} stale_unit_text={staleUnitLookup}");
+                LogTokens(tokens, attempt);
+            }
         }
         using var lookupImage = image;
-        if (image is null || stockHeader is null)
-            throw new InvalidOperationException("F2 批號查詢無法可靠辨識「現有存量」欄；已停止目前單據，請查看 LOG 的 F2_BATCH_TOKEN。");
+        if (image is null || !ready || stockHeader is null)
+            throw new InvalidOperationException("F2 批號查詢畫面未穩定顯示「批號／現有存量」欄；已停止目前單據，請查看 LOG 的 F2_BATCH_TOKEN。");
 
         var rawVertical = GridVisionService.FindVerticalLines(image, Math.Min(image.Height - 1, 120));
         var boundaries = NormalizeBoundaries(rawVertical, image.Width);
@@ -138,9 +149,62 @@ internal sealed class F2BatchCellLocator
         throw new InvalidOperationException("F2 批號查詢沒有找到可確認的「現有存量 > 0」批號；已停止，請查看 LOG 的 F2_BATCH_STOCK_ROW 原始辨識內容。");
     }
 
+    /// <summary>
+    /// Makes sure nothing covers the lookup grid: brings the lookup to the front and, if a
+    /// window of this process (the CY form) still covers it, sends that window to the bottom.
+    /// </summary>
+    private async Task<bool> EnsureUnobstructedAsync(nint lookupHwnd, Rectangle area, CancellationToken cancellationToken)
+    {
+        if (Win32Automation.IsAreaShownBy(lookupHwnd, area)) return true;
+        _log.Warn("vision", "F2 batch lookup covered by another window; bringing it to the front");
+        Win32Automation.PrepareForeground(lookupHwnd, _log);
+        await Task.Delay(150, cancellationToken);
+        if (Win32Automation.IsAreaShownBy(lookupHwnd, area)) return true;
+
+        foreach (Form form in Application.OpenForms)
+        {
+            if (form.IsDisposed || !form.Visible) continue;
+            var handle = form.Handle;
+            form.Invoke(() => NativeMethods.SetWindowPos(handle, NativeMethods.HWND_BOTTOM, 0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | 0x0010 /* SWP_NOACTIVATE */));
+        }
+        _log.Warn("vision", "CY windows sent to the bottom so the F2 batch lookup is fully visible");
+        Win32Automation.PrepareForeground(lookupHwnd, _log);
+        await Task.Delay(200, cancellationToken);
+        return Win32Automation.IsAreaShownBy(lookupHwnd, area);
+    }
+
+    /// <summary>Captures until two frames 200 ms apart are identical (at most ~1.4 s).</summary>
+    private static async Task<Bitmap> CaptureStableAsync(Rectangle rect, CancellationToken cancellationToken)
+    {
+        var previous = ScreenCapture.Capture(rect);
+        for (var i = 0; i < 6; i++)
+        {
+            await Task.Delay(200, cancellationToken);
+            var current = ScreenCapture.Capture(rect);
+            if (SameFrame(previous, current))
+            {
+                previous.Dispose();
+                return current;
+            }
+            previous.Dispose();
+            previous = current;
+        }
+        return previous;
+    }
+
+    private static bool SameFrame(Bitmap a, Bitmap b)
+    {
+        if (a.Size != b.Size) return false;
+        for (var y = 0; y < a.Height; y += 3)
+        for (var x = 0; x < a.Width; x += 3)
+            if (a.GetPixel(x, y).ToArgb() != b.GetPixel(x, y).ToArgb()) return false;
+        return true;
+    }
+
     private void LogTokens(IReadOnlyList<OcrToken> tokens, int attempt)
     {
-        _log.Info("vision", $"F2_BATCH_TOKEN attempt={attempt} total={tokens.Count} (stock header not found)");
+        _log.Info("vision", $"F2_BATCH_TOKEN attempt={attempt} total={tokens.Count}");
         foreach (var t in tokens.Take(120))
             _log.Info("vision", $"F2_BATCH_TOKEN raw=\"{_log.Value(Sanitize(t.Text))}\" normalized=\"{_log.Value(Sanitize(OcrTextNormalizer.Normalize(t.Text)))}\" rect={t.Rect.Left},{t.Rect.Top},{t.Rect.Width},{t.Rect.Height}");
     }
