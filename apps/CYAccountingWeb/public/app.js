@@ -26,6 +26,8 @@ let cyaccAppStarted = false;
 let cyTransactionRequestId = 0;
 let cyTransactionMutationRevision = 0;
 const cyPendingTransactionUpdates = new Map();
+const cyPendingTransactionCreates = new Map();
+let cyTransactionTemporaryId = -1;
 const cyPendingSettingsMutations = new Set();
 let cySettingsTempId = -1;
 let cyOpeningManualEdit = false;
@@ -272,31 +274,95 @@ function updateEntryLockState() {
 
 async function saveTransaction(event) {
   event.preventDefault();
+  if (cyPendingTransactionCreates.size) return;
   showMessage('');
-  if (isLocked(els.txDate.value.slice(0, 7))) return showMessage('此月份已鎖帳，無法新增資料。', true);
-  const amount = Number(els.amount.value);
-  if (!Number.isInteger(amount) || amount < 1 || amount > 9_999_999) {
-    showMessage('金額必須為 1～9,999,999。', true);
-    els.amount.focus();
-    return;
-  }
-  els.saveButton.disabled = true;
+
+  let values;
   try {
-    await api('/api/transactions', {
-      method: 'POST', headers: jsonHeaders(),
-      body: JSON.stringify({ ...manualTransactionValues({ txDate: els.txDate.value, accountName: els.accountName.value, categoryName: els.categoryName.value, summary: els.summary.value, amount }), kind: state.kind })
+    values = manualTransactionValues({
+      txDate: els.txDate.value, accountName: els.accountName.value,
+      categoryName: els.categoryName.value, summary: els.summary.value,
+      amount: Number(els.amount.value)
     });
-    showMessage('存檔成功');
-    els.summary.value = '';
-    els.amount.value = '';
-    els.monthFilter.value = els.txDate.value.slice(0, 7);
-    await loadTransactions();
-    els.amount.focus();
   } catch (error) {
     showMessage(error.message, true);
+    if (/金額/.test(error.message)) els.amount.focus();
+    return;
+  }
+
+  const kind = state.kind;
+  const month = values.txDate.slice(0, 7);
+  const previousMonth = els.monthFilter.value;
+  const submittedSummary = els.summary.value;
+  const submittedAmount = els.amount.value;
+  const temporaryId = cyTransactionTemporaryId--;
+  const now = new Date().toISOString();
+  let settleCreation;
+  const settled = new Promise(resolve => { settleCreation = resolve; });
+  cyPendingTransactionCreates.set(temporaryId, {
+    created: {
+      id: temporaryId, tx_date: values.txDate, account_name: values.accountName,
+      category_name: values.categoryName, summary: values.summary, amount: values.amount,
+      kind, created_at: now, updated_at: now
+    },
+    settled
+  });
+  cyTransactionMutationRevision += 1;
+  els.saveButton.disabled = true;
+  els.summary.value = '';
+  els.amount.value = '';
+  if (els.monthFilter.value === month) {
+    state.transactions = mergePendingTransactionUpdates(state.transactions, month);
+    renderOptimisticTransactionState();
+  }
+  showMessage('正在儲存…');
+
+  let saved;
+  try {
+    saved = await api('/api/transactions', {
+      method: 'POST', headers: jsonHeaders(),
+      body: JSON.stringify({ ...values, kind })
+    });
+  } catch (error) {
+    cyPendingTransactionCreates.delete(temporaryId);
+    cyTransactionMutationRevision += 1;
+    if (els.monthFilter.value === month) {
+      state.transactions = state.transactions.filter(item => Number(item.id) !== temporaryId);
+      renderOptimisticTransactionState();
+    }
+    // Do not overwrite a new entry the user started typing while this request was pending.
+    if (!els.summary.value && !els.amount.value) {
+      els.summary.value = submittedSummary;
+      els.amount.value = submittedAmount;
+    }
+    showMessage(`${error.message}，新增未儲存，已還原。`, true);
+    return;
   } finally {
+    settleCreation();
     updateEntryLockState();
   }
+
+  cyPendingTransactionCreates.delete(temporaryId);
+  cyTransactionMutationRevision += 1;
+  const id = Number(saved?.id);
+  const validId = Number.isInteger(id) && id > 0;
+  const alreadyVisible = state.transactions.some(item => Number(item.id) === temporaryId);
+  if (els.monthFilter.value === month) {
+    state.transactions = validId
+      ? state.transactions.map(item => Number(item.id) === temporaryId ? { ...item, id } : item)
+      : state.transactions.filter(item => Number(item.id) !== temporaryId);
+    if (validId && alreadyVisible) renderOptimisticTransactionState();
+  }
+
+  showMessage('存檔成功');
+  // Only follow the saved entry to another month when the user has not navigated away.
+  if (els.monthFilter.value === previousMonth && previousMonth !== month) {
+    els.monthFilter.value = month;
+  }
+  if (els.monthFilter.value === month && (!validId || !alreadyVisible || previousMonth !== month)) {
+    await loadTransactions();
+  }
+  if (!els.amount.value) els.amount.focus();
 }
 
 async function loadTransactions() {
@@ -309,6 +375,15 @@ async function loadTransactions() {
     const data = await api(`/api/transactions?month=${encodeURIComponent(month)}`);
     if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
     if (mutationRevision !== cyTransactionMutationRevision) return await loadTransactions();
+    // A read racing with a POST cannot identify the new server ID yet. Wait for the
+    // pending create to settle instead of briefly displaying it twice.
+    const creating = [...cyPendingTransactionCreates.values()]
+      .filter(item => item.created.tx_date.slice(0, 7) === month);
+    if (creating.length) {
+      await Promise.all(creating.map(item => item.settled));
+      if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
+      return await loadTransactions();
+    }
     state.transactions = mergePendingTransactionUpdates(data.transactions || [], month);
     state.ledgerLocked = Boolean(data.locked);
     state.lockedThrough = data.lockedThrough || state.lockedThrough;
@@ -388,6 +463,10 @@ function mergePendingTransactionUpdates(rows, month) {
   for (const { updated } of cyPendingTransactionUpdates.values()) {
     merged = merged.filter(item => Number(item.id) !== Number(updated.id));
     if (String(updated.tx_date).slice(0, 7) === month) merged.push(updated);
+  }
+  for (const { created } of cyPendingTransactionCreates.values()) {
+    merged = merged.filter(item => Number(item.id) !== Number(created.id));
+    if (String(created.tx_date).slice(0, 7) === month) merged.push(created);
   }
   return merged;
 }
