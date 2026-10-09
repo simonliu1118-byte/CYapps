@@ -6884,15 +6884,6 @@
     color: #283542 !important;
   }
 
-  /* Ledger month trigger is clickable without a dropdown-caret affordance. */
-  .cy-month-picker-caret {
-    display: none !important;
-  }
-
-  .cy-month-picker-trigger {
-    gap: 0 !important;
-  }
-
   /* All visible Desktop month fields use the same custom picker; native controls remain data sources only. */
   .cy-native-month-source {
     position: absolute !important;
@@ -11739,7 +11730,7 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     width: 100%;
   }
   html[data-viewport="desktop"] .ledger-card .ledger-title {
-    padding: 12px 14px 8px;
+    padding: 18px 14px 8px;
     margin-bottom: 0;
   }
   html[data-viewport="desktop"] .ledger-title .title-with-badge:has(#ledgerLockBadge.hidden) {
@@ -11754,14 +11745,18 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 36px !important;
-    height: 36px !important;
+    min-height: 32px !important;
+    height: 32px !important;
     border: 1px solid #cbd5e1 !important;
     border-radius: 7px !important;
     background: #fff !important;
   }
   html[data-viewport="desktop"] #ledgerMonthPickerTrigger {
-    padding: 0 12px !important;
+    padding: 0 9px !important;
+    min-width: 132px;
+    font-size: 14px !important;
+    font-weight: 600;
+    gap: 7px;
   }
   html[data-viewport="desktop"] #ledgerPrevMonth,
   html[data-viewport="desktop"] #ledgerNextMonth {
@@ -11801,8 +11796,33 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     justify-content: flex-end;
     gap: 6px;
   }
-  html[data-viewport="desktop"] #settingsDialog:not(.cy-management-mode) {
+  html[data-viewport="desktop"] #settingsDialog.settings-modal {
     width: min(640px, calc(100vw - 36px)) !important;
+    max-width: 640px !important;
+    height: min(532px, calc(100dvh - 36px)) !important;
+    max-height: calc(100dvh - 36px) !important;
+    overflow: hidden !important;
+  }
+  html[data-viewport="desktop"] #settingsDialog[open] {
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  html[data-viewport="desktop"] #settingsDialog .settings-layout {
+    min-height: 0 !important;
+    height: 100%;
+    overflow: hidden;
+  }
+  html[data-viewport="desktop"] #settingsDialog .settings-content {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  html[data-viewport="desktop"] #settingsDialog .settings-category-parent {
+    min-height: 32px;
+    padding-block: 3px;
+  }
+  html[data-viewport="desktop"] #settingsDialog .settings-category-leaf {
+    min-height: 30px;
+    padding-block: 2px;
   }
   html[data-viewport="desktop"] #settingsDialog:not(.cy-management-mode) .settings-layout {
     grid-template-columns: 112px minmax(0, 1fr);
@@ -11872,33 +11892,25 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th,
   html[data-viewport="desktop"] #settingsDialog .backup-history-table td { padding: 6px 4px; font-size: 10.5px; }
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(1),
-  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(1) { width: 112px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(1) { width: 126px; white-space: nowrap; }
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(2),
-  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(2) { width: 34px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(2) { width: 34px; white-space: nowrap; }
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(4),
   html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(4),
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(5),
-  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(5) { width: 40px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(5) { width: 36px; }
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(6),
-  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(6) { width: 88px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(6) { width: 105px; white-space: nowrap; overflow-wrap: normal; }
   html[data-viewport="desktop"] #settingsDialog .migration-pane {
     display: block;
     min-width: 0;
   }
-  html[data-viewport="desktop"] #settingsDialog .migration-details > summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    min-height: 30px;
-    cursor: pointer;
-    list-style: none;
+  html[data-viewport="desktop"] #settingsDialog .migration-pane > h4 { margin: 0; font-size: 13px; }
+  html[data-viewport="desktop"] #settingsDialog .migration-warning {
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 10px 12px;
   }
-  html[data-viewport="desktop"] #settingsDialog .migration-details > summary::-webkit-details-marker { display: none; }
-  html[data-viewport="desktop"] #settingsDialog .migration-details h4 { margin: 0; font-size: 13px; }
-  html[data-viewport="desktop"] #settingsDialog .migration-expand-label { color: #486787; font-size: 13px; }
-  html[data-viewport="desktop"] #settingsDialog .migration-expand-label::after { content: " ▾"; }
-  html[data-viewport="desktop"] #settingsDialog .migration-details[open] .migration-expand-label::after { content: " ▴"; }
   html[data-viewport="desktop"] #settingsDialog #desktopMigrationMessage:empty { display: none; }
   html[data-viewport="desktop"] #settingsDialog .migration-pane:has(#desktopMigrationPreview.hidden) .migration-actions { display: none; }
   html[data-viewport="desktop"] #settingsDialog .migration-pane .migration-source label {
@@ -11961,18 +11973,18 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     flex-wrap: nowrap;
     grid-column: 1 / -1 !important;
     grid-row: auto !important;
-    margin-left: 52px;
-    width: calc(100% - 52px) !important;
+    margin-left: 0;
+    width: 100% !important;
     min-height: 28px;
-    padding: 4px 6px;
+    padding: 4px 0;
     border: 1px dashed #b8c3cf;
     border-radius: 7px;
     gap: 6px;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid .quick-tool-label {
-    flex: 0 0 48px;
+    flex: 0 0 58px;
     padding: 0;
-    font-size: 10.5px;
+    font-size: 11.5px;
     white-space: nowrap;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid .quick-chip-list {
@@ -11983,11 +11995,11 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     padding: 0;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid .quick-chip {
-    min-height: 19px !important;
-    height: 19px !important;
-    padding: 0 5px !important;
-    font-size: 10px !important;
-    line-height: 17px !important;
+    min-height: 22px !important;
+    height: 22px !important;
+    padding: 0 6px !important;
+    font-size: 11px !important;
+    line-height: 20px !important;
   }
   html[data-viewport="desktop"] .entry-card > .quick-entry-tools {
     display: none !important;

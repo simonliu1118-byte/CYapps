@@ -1460,7 +1460,6 @@ const CY_DESKTOP_MANAGERS_MONTHS = ['一月', '二月', '三月', '四月', '五
 const runDesktopManagers = () => {
   setupDesktopManagersAccountLimit();
   setupDesktopManagersMonthPickers();
-  syncDesktopManagersLedgerMonthTrigger();
 };
 
 if (document.readyState === 'complete') setTimeout(runDesktopManagers, 0);
@@ -1498,7 +1497,6 @@ function setupDesktopManagersAccountLimit() {
 function setupDesktopManagersMonthPickers() {
   const media = window.matchMedia('(any-pointer: coarse)');
   const scan = () => {
-    syncDesktopManagersLedgerMonthTrigger();
     if (!isDesktopInteractionWorkspace()) return;
     for (const input of document.querySelectorAll('input[type="month"]')) {
       if (input.id === 'monthFilter' || input.id === 'openingMonth') continue;
@@ -1514,10 +1512,6 @@ function setupDesktopManagersMonthPickers() {
     const observer = new MutationObserver(scan);
     observer.observe(document.body, { childList: true, subtree: true });
   }
-}
-
-function syncDesktopManagersLedgerMonthTrigger() {
-  document.querySelector('#ledgerMonthPickerCustom .cy-month-picker-caret')?.remove();
 }
 
 function ensureDesktopManagersMonthPickerForInput(input) {
@@ -1881,7 +1875,6 @@ function auditDesktopUiMonthPickers() {
   if (typeof ensureDesktopManagersMonthPickerForInput === 'function') {
     document.querySelectorAll('input[type="month"]').forEach(input => ensureDesktopManagersMonthPickerForInput(input));
   }
-  if (typeof syncDesktopManagersLedgerMonthTrigger === 'function') syncDesktopManagersLedgerMonthTrigger();
 }
 
 function setupDesktopUiDatePickers() {
