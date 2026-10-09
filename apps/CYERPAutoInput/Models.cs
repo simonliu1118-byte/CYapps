@@ -40,6 +40,22 @@ internal sealed class FormSnapshot
 {
     public Dictionary<string, string> Values { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public List<DetailRow> Details { get; init; } = [];
+    /// <summary>ERP combo options by field key, in ERP list order (see <see cref="ErpComboOptions"/>).</summary>
+    public Dictionary<string, List<string>> ComboOptions { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// COPI08 drop-down options, in the order ERP lists them (user-confirmed 2026-10-09).
+/// They are standard tax / invoice types with no confidential data; the user allowed them
+/// in the public source as an exception to PROJECT_RULES §3 (recorded in WORK_HANDOFF).
+/// </summary>
+internal static class ErpComboOptions
+{
+    public static readonly IReadOnlyDictionary<string, string[]> ByField = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["tax_type"] = ["1:應稅內含", "2:應稅外加", "3:零稅率", "4:免稅", "9:不計稅"],
+        ["inv_copies"] = ["1:二聯式", "2:三聯式", "3:二聯式收銀機發票", "4:三聯式收銀機發票", "5:電子計算機發票", "6:免用統一發票", "7:電子發票"]
+    };
 }
 
 internal static class FieldCatalog

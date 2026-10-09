@@ -32,6 +32,7 @@ internal static class NativeMethods
     internal const ushort VK_ESCAPE = 0x1B;
     internal const ushort VK_HOME = 0x24;
     internal const ushort VK_END = 0x23;
+    internal const ushort VK_UP = 0x26;
     internal const ushort VK_DOWN = 0x28;
     internal const ushort VK_F2 = 0x71;
     internal const ushort VK_F5 = 0x74;

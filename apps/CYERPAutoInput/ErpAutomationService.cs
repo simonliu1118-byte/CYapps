@@ -393,7 +393,8 @@ internal sealed class ErpAutomationService
             cancellationToken.ThrowIfCancellationRequested();
             var value = snapshot.Values[field.Key];
             var target = ErpLayoutResolver.ResolveTabField(sheet, group, field.Key);
-            await SetFieldAsync(root, target, field, value, cancellationToken);
+            snapshot.ComboOptions.TryGetValue(field.Key, out var options);
+            await SetFieldAsync(root, target, field, value, cancellationToken, options);
             _log.Info("field", $"filled group={field.Group} key={field.Key} chars={value.Length}");
         }
     }
@@ -435,7 +436,7 @@ internal sealed class ErpAutomationService
         throw new InvalidOperationException($"已點擊 ERP 頁籤「{group}」，但頁籤沒有穩定進入可用狀態。");
     }
 
-    private async Task SetFieldAsync(nint root, WindowControl target, FieldDefinition field, string value, CancellationToken cancellationToken)
+    private async Task SetFieldAsync(nint root, WindowControl target, FieldDefinition field, string value, CancellationToken cancellationToken, IReadOnlyList<string>? options = null)
     {
         Win32Automation.PrepareForeground(root, _log);
         var center = new Point((target.Rect.Left + target.Rect.Right) / 2, (target.Rect.Top + target.Rect.Bottom) / 2);
@@ -451,11 +452,7 @@ internal sealed class ErpAutomationService
 
         if (field.Kind == FieldKind.Combo || target.ClassName.Contains("IMAGECOMBOBOX", StringComparison.OrdinalIgnoreCase))
         {
-            InputSender.Click(new Point(Math.Max(target.Rect.Left + 4, target.Rect.Right - 9), center.Y));
-            await Delay(140, cancellationToken);
-            InputSender.UnicodeText(value);
-            InputSender.Press(NativeMethods.VK_RETURN);
-            await Delay(220, cancellationToken);
+            await SelectComboAsync(root, target, field, value, options, cancellationToken);
             return;
         }
 
@@ -526,6 +523,59 @@ internal sealed class ErpAutomationService
         await Delay(100, cancellationToken);
         InputSender.Press(NativeMethods.VK_TAB);
         await Delay(field.Kind == FieldKind.Lookup ? 420 : 220, cancellationToken);
+    }
+
+    /// <summary>
+    /// Selects a COPI08 drop-down value. With a known option list (ERP order) the list is
+    /// opened, moved to the top with Up and down to the option's position, and confirmed
+    /// with Enter; otherwise the value is typed as before. The text ERP then shows is read
+    /// back (Win32, then OCR of the field) and a different value stops the run.
+    /// </summary>
+    private async Task SelectComboAsync(nint root, WindowControl target, FieldDefinition field, string value,
+        IReadOnlyList<string>? options, CancellationToken cancellationToken)
+    {
+        var center = new Point((target.Rect.Left + target.Rect.Right) / 2, (target.Rect.Top + target.Rect.Bottom) / 2);
+        var index = options?.ToList().FindIndex(o => InputRules.ComboShowsOption(o, value) || InputRules.ComboShowsOption(value, o)) ?? -1;
+
+        if (!await ComboAlreadyShowsAsync(target, value, cancellationToken))
+        {
+            InputSender.Click(new Point(Math.Max(target.Rect.Left + 4, target.Rect.Right - 9), center.Y));
+            await Delay(220, cancellationToken);
+            if (index >= 0)
+            {
+                for (var i = 0; i < options!.Count; i++) { InputSender.Press(NativeMethods.VK_UP); await Delay(35, cancellationToken); }
+                for (var i = 0; i < index; i++) { InputSender.Press(NativeMethods.VK_DOWN); await Delay(35, cancellationToken); }
+            }
+            else
+            {
+                InputSender.UnicodeText(value);
+            }
+            await Delay(80, cancellationToken);
+            InputSender.Press(NativeMethods.VK_RETURN);
+            await Delay(260, cancellationToken);
+        }
+
+        var shown = await ReadComboTextAsync(target, cancellationToken);
+        _log.Info("field", $"combo selected key={field.Key} list_index={index} shown={_log.Value(shown)}");
+        if (!InputRules.ComboShowsOption(shown, value))
+            throw new InvalidOperationException($"ERP 欄位「{field.Label}」選取後顯示「{shown}」，與指定的「{value}」不符；已停止，請人工確認。");
+    }
+
+    private async Task<bool> ComboAlreadyShowsAsync(WindowControl target, string value, CancellationToken cancellationToken) =>
+        InputRules.ComboShowsOption(await ReadComboTextAsync(target, cancellationToken), value);
+
+    /// <summary>The text a TcxDBImageComboBox shows: its inner edit via WM_GETTEXT, else OCR of the field.</summary>
+    private async Task<string> ReadComboTextAsync(WindowControl target, CancellationToken cancellationToken)
+    {
+        var inner = Win32Automation.EnumerateChildren(target.Handle)
+            .FirstOrDefault(c => c.ClassName.Contains("InnerEdit", StringComparison.OrdinalIgnoreCase));
+        var text = (NativeMethods.ControlText(inner?.Handle ?? target.Handle) ?? string.Empty).Trim();
+        if (text.Length > 0) return text;
+
+        if (!NativeMethods.GetWindowRect(target.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 0) return string.Empty;
+        using var image = ScreenCapture.Capture(rect.ToRectangle());
+        var tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+        return string.Concat(tokens.OrderBy(t => t.Rect.Left).Select(t => t.Text)).Trim();
     }
 
     private async Task FillDetailsAsync(nint root, IReadOnlyList<DetailRow> rows, AutomationRunResult result, IProgress<string> progress, CancellationToken cancellationToken)

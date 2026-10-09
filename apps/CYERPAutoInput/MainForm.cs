@@ -44,8 +44,9 @@ internal sealed class MainForm : Form
 
         BuildUi();
         ApplyDefaultsToBlankFields();
-        _modeToggle.Checked = _settings.AdvancedMode;
-        ApplyMode(_settings.AdvancedMode);
+        // Advanced mode is hidden for now (user, 2026-10-09); the code stays for later.
+        _modeToggle.Checked = false;
+        ApplyMode(false);
 
         _statePoll.Tick += (_, _) => RefreshErpState();
         Shown += (_, _) =>
@@ -202,6 +203,7 @@ internal sealed class MainForm : Form
         rightTools.Controls.Add(settingsButton);
 
         _modeToggle.Margin = new Padding(4, 1, 8, 1);
+        _modeToggle.Visible = false;
         _modeToggle.CheckedChanged += (_, _) => ApplyMode(_modeToggle.Checked);
         rightTools.Controls.Add(_modeToggle);
 
@@ -242,6 +244,7 @@ internal sealed class MainForm : Form
                 Padding = new Padding(3, 2, 0, 2),
                 Margin = Padding.Empty
             };
+            DisableHorizontalScroll(flow);
             box.Controls.Add(flow);
             fieldsHost.Controls.Add(box, i, 0);
             _groupFlows[groups[i]] = flow;
@@ -293,9 +296,22 @@ internal sealed class MainForm : Form
         {
             row.Width = rowWidth;
             foreach (Control child in row.Controls)
-                if (child is TextBox text) text.Width = rowWidth - FieldInputLeft - 2;
+                if (child is TextBox or ComboBox) child.Width = rowWidth - FieldInputLeft - 2;
         }
         flow.ResumeLayout();
+    }
+
+    /// <summary>
+    /// FlowLayoutPanel keeps the widest layout it has seen as its scroll extent, so after
+    /// a wider layout (advanced mode, maximized) a horizontal scrollbar stayed behind.
+    /// </summary>
+    private static void DisableHorizontalScroll(FlowLayoutPanel flow)
+    {
+        flow.AutoScroll = false;
+        flow.HorizontalScroll.Maximum = 0;
+        flow.HorizontalScroll.Enabled = false;
+        flow.HorizontalScroll.Visible = false;
+        flow.AutoScroll = true;
     }
 
     private void AddField(FieldDefinition field)
@@ -326,6 +342,21 @@ internal sealed class MainForm : Form
                 Location = new Point(inputLeft, 4),
                 Tag = field.Key
             };
+        }
+        else if (ErpComboOptions.ByField.TryGetValue(field.Key, out var options))
+        {
+            var combo = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = 158,
+                Location = new Point(inputLeft, 2),
+                Tag = field.Key,
+                AccessibleName = field.Label
+            };
+            combo.Items.Add(string.Empty);
+            combo.Items.AddRange(options);
+            combo.SelectedIndex = 0;
+            value = combo;
         }
         else
         {
@@ -499,8 +530,8 @@ internal sealed class MainForm : Form
             _settingsStore.Save(_settings);
             _log.Diagnostic = _settings.DiagnosticLogging;
             UpdateBuildStatus();
-            _modeToggle.Checked = _settings.AdvancedMode;
-            ApplyMode(_settings.AdvancedMode);
+            _modeToggle.Checked = false;
+            ApplyMode(false);
             ApplyDefaultsToBlankFields();
             SetStatus("設定：已儲存本機設定");
         }
@@ -511,12 +542,24 @@ internal sealed class MainForm : Form
         }
     }
 
+    /// <summary>A drop-down only takes one of its options; anything else leaves it blank.</summary>
+    private static void SetFieldText(Control control, string value)
+    {
+        if (control is ComboBox combo)
+        {
+            var index = combo.Items.IndexOf(value.Trim());
+            combo.SelectedIndex = index >= 0 ? index : 0;
+            return;
+        }
+        control.Text = value;
+    }
+
     private void ApplyDefaultsToBlankFields()
     {
         foreach (var pair in _settings.Defaults)
         {
             if (!_valueControls.TryGetValue(pair.Key, out var control) || control is CheckBox) continue;
-            if (string.IsNullOrWhiteSpace(control.Text)) control.Text = pair.Value;
+            if (string.IsNullOrWhiteSpace(control.Text)) SetFieldText(control, pair.Value);
         }
 
         // ERP pre-fills its own default warehouse on every new row, so the configured 庫別
@@ -597,7 +640,7 @@ internal sealed class MainForm : Form
         foreach (var control in _valueControls.Values)
         {
             if (control is CheckBox checkBox) checkBox.Checked = false;
-            else control.Text = string.Empty;
+            else SetFieldText(control, string.Empty);
         }
         _details.EndEdit();
         _details.Rows.Clear();
@@ -707,7 +750,8 @@ internal sealed class MainForm : Form
         }
 
         validationError = string.Empty;
-        return new FormSnapshot { Values = values, Details = details };
+        var comboOptions = ErpComboOptions.ByField.ToDictionary(p => p.Key, p => p.Value.ToList(), StringComparer.OrdinalIgnoreCase);
+        return new FormSnapshot { Values = values, Details = details, ComboOptions = comboOptions };
     }
 
     private static string Cell(DataGridViewRow row, string column) =>

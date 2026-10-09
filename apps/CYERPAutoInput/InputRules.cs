@@ -82,4 +82,29 @@ internal static class InputRules
         text = builder.ToString();
         return TryParseStockText(text, out _);
     }
+
+    /// <summary>ERP shows combo options as "code:label"; the code is the part before the colon.</summary>
+    public static string ComboOptionCode(string option)
+    {
+        var text = NormalizeComboText(option);
+        var colon = text.IndexOf(':');
+        return colon > 0 ? text[..colon] : text;
+    }
+
+    /// <summary>True when the text ERP shows after selection is the wanted option.</summary>
+    public static bool ComboShowsOption(string? shown, string option)
+    {
+        var text = NormalizeComboText(shown ?? string.Empty);
+        var wanted = NormalizeComboText(option);
+        if (text.Length == 0 || wanted.Length == 0) return false;
+        if (text == wanted) return true;
+        if (!wanted.Contains(':')) return false;
+        // Match on the code ("7" of "7:電子發票"); OCR may drop the colon or misread the label.
+        var code = ComboOptionCode(wanted);
+        return text.StartsWith(code, StringComparison.Ordinal) &&
+               (text.Length == code.Length || !char.IsAsciiDigit(text[code.Length]));
+    }
+
+    private static string NormalizeComboText(string value) =>
+        value.Trim().Replace(" ", string.Empty).Replace("　", string.Empty).Replace("：", ":");
 }

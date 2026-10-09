@@ -64,6 +64,8 @@ internal sealed class SettingsForm : Form
         _advanced.Checked = _settings.AdvancedMode;
         _advanced.AutoSize = true;
         _advanced.Padding = new Padding(3, 4, 0, 0);
+        _advanced.Visible = false; // advanced mode is hidden for now (user, 2026-10-09)
+        root.RowStyles[1].Height = 0;
         root.Controls.Add(_advanced, 0, 1);
 
         _diagnostic.Text = "診斷模式（LOG 記錄實際 ERP 內容；僅本機，除錯時才開）";
