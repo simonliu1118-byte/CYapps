@@ -2,9 +2,9 @@
 
 本文件描述目前 C#／WinForms 工程線產品行為；永久治理規則仍以 `PROJECT_RULES.md` 為準。
 
-- 目前工程測試基準：**V2.6.2 Build 0**。
+- 目前工程測試基準：**V2.6.11 Build 2**。
 - 最新公開正式 Release：**V2.4.2**（tag：`cyinvoice-v2.4.2`）。
-- V2.6.2 已通過 Windows engineering CI，但仍需實機／光貿驗證；未經使用者當次明確要求不得建立正式 Release。
+- 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258；PR #216 尚未合併，仍需實機／光貿驗證；未經使用者當次明確要求不得建立正式 Release。
 
 ## 1. 平台與基本開立
 
@@ -90,7 +90,7 @@
 ## 7. 員工帳號與權限
 
 - 員工編號固定 4 碼數字。
-- 角色：`SUPER_ADMIN`、`ADMIN`、`EMPLOYEE`；UI 顯示為超級管理員、管理員、一般使用者。
+- 角色：`SUPER_ADMIN`、`ADMIN`、`USER`；UI 顯示為超級管理員、管理員、一般使用者。
 - 新密碼至少 8 碼，僅接受 ASCII 英文字母與數字；既有舊密碼仍可驗證，不因規則更新而直接鎖死。
 - 全新資料第一次啟動只建立第一位超級管理員；超級管理員唯一，不能降級、停用或刪除。
 - 超級管理員建立時產生一次性離線復原碼；SQLite 只保存 Hash，不保存明文。
@@ -117,13 +117,13 @@
 - 建立申請前先以 `invoice_query` 取得最新發票及既有 `allowance[]` 基線。
 - 申請進入「上傳問題」的折讓人工處理待辦，由管理員到光貿網站人工建立折讓。
 - 管理員標記人工操作完成後，CYInvoice 繼續共用 `invoice_query.allowance[]` 查詢新折讓，不另外新增折讓查詢流程。
-- 若只有一筆符合的新折讓且金額吻合，系統可確認完成；多筆候選、金額不符或仍處理中時保留待辦，不猜測。
+- 若只有一筆符合的新折讓且金額吻合，系統可確認完成；多筆候選、金額不符或仍處理中時保留追蹤，不猜測；正常等待移到「處理中」，多候選／金額不符／查詢失敗仍在「上傳問題」。
 - 已進入官方確認階段的申請不可取消退回。
 - 超過目前＋上一個兩月期別仍 pending 的折讓，可由管理員手動結案；結案只清除本機追蹤，不代表官方折讓完成。
 
 ### 9.2 已完成折讓歷史
 
-- 發票詳細資訊左側「作廢 / 折讓紀錄」只顯示已完成／官方可確認的歷史；待辦仍留在「上傳問題」。
+- 發票詳細資訊左側「作廢 / 折讓紀錄」只顯示已完成／官方可確認的歷史；待辦依是否需要人工／技術處理分流至「上傳問題」或「處理中」。
 - 折讓資料來源為 `invoice_query.allowance[]`。
 - 雙擊折讓紀錄可開啟折讓詳細資訊。
 
@@ -153,22 +153,27 @@
 - 「列印發票」直接送往 CYInvoice 記住的雙面印表機，不修改 Windows 全域預設印表機。
 - 會員載具不呼叫紙本 PDF API，不建立紙本 PDF／預覽 Cache。
 
-## 11. 上傳問題
+## 11. 上傳問題與處理中
 
-V2.6.2 起「上傳問題」使用單一清單，集中顯示：
+V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上傳問題」集中顯示：
 
 - invoice list／query／同步／本機寫入／解析／ambiguous match 等技術問題。
 - 發票開立失敗紀錄。
 - 紙本作廢人工確認。
 - 折讓人工處理。
 - 折讓作廢人工處理。
-- 作廢／折讓等待官方確認及可管理員結案的工作。
+- 結果不明、回查失敗與需管理員判定的 pending。
+
+「處理中」顯示官方上傳狀態 1／2／3／31／32、官方明確確認的作廢等待，以及已人工操作且正常等待官方確認的折讓。99 完成從處理中移除；91／未知狀態不分類成正常等待。未解決技術問題優先於舊快照；完成／失敗／恢復由既有同步核心收斂。
 
 行為：
 
 - 人工待辦與一般 issue 由雙擊開啟詳細視窗；操作按鈕不堆在主清單工具列。
 - 只有「開立失敗」列可勾選並清除；清除失敗紀錄不得刪除光貿資料。
 - Pending／人工工作不得被一般「標記已解決」繞過既有流程。
+- 處理中禁止 checkbox／刪除／手動標成功；舊作廢／折讓仍由同一管理員結案核心停止本機追蹤。
+- 處理中不改上傳問題已讀狀態；兩者均限制目前環境／公司。
+- 舊折讓缺少明確 ConfirmationProblem 分類時先保留上傳問題，正常回查後再分類。
 
 ## 12. 安全設定與 UI
 
@@ -179,7 +184,18 @@ V2.6.2 起「上傳問題」使用單一清單，集中顯示：
 - App 自有子視窗不顯示多餘 title-bar icon；主程式仍保留應用程式 icon。
 - 使用者可見的帳號管理名稱統一為「帳號管理」；一般角色顯示「一般使用者」。
 
-## 13. 目前尚未完成
+## 13. Cloud／身分工程基準
+
+- Local／Built-in Cloud 已透過 IIdentityProvider、AppPrincipal／AppRole 與集中 provider selection 驗證；Cloud cutover 後只有中央 authority。
+- Online execution-time authentication 先取最新 credential／role／enabled snapshot；只有 transport outage／timeout 可用 protected offline cache。HTTP error、revoked Device、malformed／Workspace mismatch 或 caller cancellation fail closed。
+- Built-in Employee 全域異動 Online-only；Email 以 OTP 驗證；SUPER_ADMIN transfer 使用專用原子流程。
+- Device inventory／revoke 保留 history／audit，舊 Token 失效，rejoin 為新 identity；最後一台 active Built-in Device 有 LAST_ACTIVE_DEVICE 防護。
+- Cloud → Local 以雙重確認、關閉程式後 revoke／self-status 確認，再清目前安裝 Data／Cache／identity；不明結果保留資料，Windows 不刪中央 Workspace。
+- Built-in Cloud 忘記密碼已使用 Email challenge／confirm；尚需 live Email 與 A/B 測試。
+- Source Cloud 0.8.8／API 1／compatibility Schema 8／storage Schema 11，deployment 與人工驗收證據見 CLOUD_WORK_HANDOFF.md。
+- CY ID 模式是已定案未接線的後續模式，共同 contract 直接引用 CYCloudIdentity canonical standard。
+
+## 14. 目前尚未完成
 
 - 正式折讓自動開立 `/json/g0401`。
 - 正式折讓作廢 `/json/g0501`。
@@ -187,6 +203,6 @@ V2.6.2 起「上傳問題」使用單一清單，集中顯示：
 - `allowance_query`／`allowance_status` 的正式獨立同步模型；目前刻意共用 `invoice_query`。
 - 折讓正式資料模型與跨機／雲端同步。
 - 酷澎未出貨、公司統編、多商品／多數量、特殊折扣等缺可靠實際樣本的情境。
-- 雲端化：員工跨機同步、Device Token、Email 復原、MO 密碼雲端同步等。
+- CYID adapter／desktop offline／Workspace binding、Recovery Device flow、Cloud Work Items／revision、跨機 OrderID 防撞、audit viewer、自架手冊及 MO 密碼同步。中央 Employee／Device Token／Email 忘記密碼／revoke／reset 已完成工程實作，仍需實機驗收。
 
 具體驗證與後續工作以 `RC_TEST.md`、`TODO.md` 為準。

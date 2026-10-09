@@ -8,7 +8,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 - 目前工程測試基準：**V2.6.11 Build 2**。
 - 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
-- V2.6.11 Build 2 將正常等待光貿／電子發票平台處理的項目獨立至「處理中」清單；目前為工程測試版，實機驗收與 CI 狀態見 PR #216。
+- V2.6.11 Build 2 將正常等待光貿／電子發票平台處理的項目獨立至「處理中」清單；目前為工程測試版；功能 commit `66ec3671` 的 Governance #1137、Cloud #369、Windows #258 全部通過，PR #216 尚未合併，實機驗收仍待完成。最新停點與測試包見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
 - 唯一版本來源為 `VERSION`；正式 Release 必須由 `main` 重新建置與驗證。
 - 只有使用者於當次工作明確要求 `release` 時，才可建立正式 tag／Release；PR、VERSION、BUILD 或 engineering Artifact 都不代表發布授權。
@@ -75,18 +75,27 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ### 上傳問題與處理中
 
-V2.6.2 起整併為單一清單，包含：
+V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表顯示：
 
 - 同步／查詢／解析等技術問題。
 - 發票開立失敗紀錄。
 - 紙本作廢人工確認。
 - 折讓人工處理。
 - 折讓作廢人工處理。
-- 等待官方確認或可由管理員結案的 pending。
+- 結果不明、回查失敗或需人工判定的 pending；正常等待顯示在「處理中」。
 
 只有「開立失敗」列可勾選清除；人工待辦一律雙擊開啟詳細視窗處理。
 
 「上傳問題」旁的「處理中」沿用相同清單與雙擊明細，顯示正常上傳等待、光貿明確確認處理中的作廢，以及人工操作完成且正常等待官方確認的折讓。資料由現有發票狀態與待辦投影，沒有第二套 pending 資料庫。完成後從處理中移除；回查失敗、折讓金額／候選衝突仍保留在上傳問題。處理中項目不能勾選刪除或直接標記成功；超過保留期的作廢／折讓仍保留管理員結案入口。舊折讓未保存明確確認分類時，先留在上傳問題，經正常回查後再分類。
+
+### Built-in Cloud 與身分基礎
+
+- Workspace／Device、配對碼／邀請碼、whole-device Employee Transition 與中央 Employee 管理已實作。
+- Local／Built-in provider 共用 IIdentityProvider；正式 role 為 SUPER_ADMIN / ADMIN / USER。
+- Online 權限操作取最新中央 authority；只有真正傳輸斷線／timeout 使用最後可信 protected offline cache。
+- 裝置管理支援 inventory／revoke，保留歷史與最後一台 active Device 防護；Cloud → Local 使用雙重確認及 crash-safe 本機重置。
+- Source 為 Cloud 0.8.8／API 1／compatibility Schema 8／storage Schema 11。最後 development deployment 證據為 2026-09-29 Run #7，本次未重新驗證 live 狀態。
+- CY ID adapter、Windows offline 接線及跨機業務 Work Item 尚未實作；canonical shared contract 已發布，詳見 [CY ID 整合](docs/CY_ID_INTEGRATION.md)。
 
 ### 系統診斷（V2.6.3）
 
@@ -112,7 +121,7 @@ V2.6.2 起整併為單一清單，包含：
 - 人工折讓建立、管理員處理、`invoice_query.allowance[]` 自動比對。
 - 折讓 PDF 三種版型的光貿實際回傳與官方資料變更後 Cache 換版。
 - 折讓作廢人工待辦的建立、取消退回與人工完成。
-- 單一「上傳問題」清單、開立失敗清除與各類詳細待辦。
+- 「上傳問題／處理中」分流、數量、開立失敗清除、正常等待轉完成／錯誤與各類詳細待辦。
 - 超過兩期 pending 的管理員結案。
 - `設定 → 系統診斷` 的實機資訊、重新檢查與複製摘要。
 
@@ -135,8 +144,8 @@ V2.6.2 起整併為單一清單，包含：
 - 正式折讓作廢 API `/json/g0501`。
 - `allowance_query`／`allowance_status` 等獨立折讓同步模型；現階段仍共用 `invoice_query`。
 - 折讓單號自動產生與跨裝置防重。
-- 雲端化後的中央員工／權限、Device Token、跨機待辦、防重與操作稽核。
-- Email 復原、MO 密碼雲端同步與小型營運摘要等非第一階段功能。
+- Cloud Work Item、跨機原子結案、離線 OrderID 防撞、audit viewer 與 all-device-loss recovery；中央 Employee／權限、Device Token、裝置撤銷及本機重置已完成工程實作，A/B/C 實機驗收仍待完成。
+- Built-in Cloud Email 忘記密碼已接線，仍待實機驗收；MO 密碼雲端同步與小型營運摘要屬後續功能。
 - 酷澎未出貨、公司統編、多商品／多數量、折扣等尚缺可靠實際樣本的格式。
 
 雲端上線需求見 [雲端版上線需求盤點](docs/CLOUD_ROADMAP.md)。詳細待辦見 [docs/TODO.md](docs/TODO.md)。
@@ -169,6 +178,8 @@ apps/CYInvoice/
 ├─ tests/CYInvoice.SqliteMigration.Tests/ # SQLite migration／retention／員工 schema
 ├─ tests/CYInvoice.Sync.Tests/            # AMEGO 同步與 sync issue
 ├─ tests/CYInvoice.SyncCoordinator.Tests/ # 啟動／排程／手動同步協調
+├─ tests/CYInvoice.Cloud.Tests/          # Cloud／identity／device／reset contract
+├─ cloud/                               # Reference Worker／D1 forward migrations
 ├─ assets/
 ├─ scripts/
 └─ docs/
@@ -176,6 +187,9 @@ apps/CYInvoice/
 
 ## 文件
 
+- [現行交接與 CI／測試包](docs/CLOUD_WORK_HANDOFF.md)
+- [Cloud 工程狀態](docs/CLOUD_ARCHITECTURE_STATUS.md)
+- [CY ID 整合差異](docs/CY_ID_INTEGRATION.md)
 - [功能基準](docs/REQUIREMENTS.md)
 - [CYInvoice 永久規則](PROJECT_RULES.md)
 - [待辦與後續規劃](docs/TODO.md)

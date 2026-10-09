@@ -9,7 +9,16 @@
 - 處理中取自現有 invoice metadata／workflow，不另建排程或 pending store；完成後移除，禁止勾選刪除及手動標記成功。
 - 行政結案共用同一核心，支援處理中作廢超過保留期後由管理員停止本機追蹤；一般回查失敗不會被誤當作廢待辦。
 - 保留本批原有修正：移除作廢確認的黑色發票號碼遮罩、文字與預覽仍隱藏；等待作廢使用半形括號；折讓「已人工處理」採 Danger button。
-- 同步最新 main；本批工程驗證結果以 PR #216 為準，尚未宣稱 Windows 實機驗收完成。
+- 已同步 main 3b22f9f8；功能 commit 66ec3671 的 Governance #1137、Cloud #369、Windows #258 全部通過，含 Employee void workflow 29/29 與完整封裝。PR #216 尚未合併，Windows 實機／AMEGO live 驗收未宣稱完成。
+- 10/09 文件彙整：統一現行版本／資料格式／Cloud 0.8.8 與驗收停點，封存舊階段交接為歷史，TODO 分開已完成、待實測、未實作及延後。文件整理不推進 VERSION／BUILD。
+
+## V2.6.7～V2.6.10 — 2026/09/28～29（已整合至 main，未正式 Release）
+
+- V2.6.7 Identity Foundation：AppPrincipal／AppRole／IIdentityProvider、Local／Built-in provider 與集中選擇；USER role 一次性 schema／forward migration。
+- V2.6.8 Authority Freshness：Online operation 使用最新中央 credential／role／enabled；僅 transport outage／timeout 可採最後可信 protected offline cache，其餘 fail closed。
+- V2.6.9 Device Revoke：inventory／revoke／Token invalidation／history／audit 與 Windows 裝置管理，保留 LAST_ACTIVE_DEVICE。
+- V2.6.10 Cloud → Local：雙重確認、關閉程式後 revoke／self-status 確認再 wipe，結果不明保留資料與下次啟動 recovery；Build 1／2 整理 engineering 收尾。
+- 四包已經 ede1fa37 整合至 main；main CYInvoice 版本後續為 V2.6.10 Build 2。2026/09/29 development staged Run #7 已驗證 Cloud 0.8.8／API 1／compatibility marker 8／storage Schema 11；部署前無未套用 migration。人工 A/B/C acceptance 仍待完成，證據見 CLOUD_WORK_HANDOFF.md 及 9/29 歷史快照。
 
 ## V2.6.6 Build 3 — 2026/09/25（工程測試中，未正式 Release）
 

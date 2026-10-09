@@ -1,5 +1,7 @@
 # CYInvoice 雲端版長期藍圖與上線路線
 
+更新日期：2026-10-09。現行工程版本 V2.6.11 Build 2；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
+
 本文件整理 CYInvoice 從目前單機版進入多機雲端協調後的產品邊界、長期擴充方向、資料責任與分階段順序。若由新的長時間工作階段／ChatGPT Work 接手目前 Identity 階段，先依 `AGENTS.md` 讀永久規則，再讀 `CLOUD_WORK_HANDOFF.md`。
 
 目前定案的核心策略是：**V3.0 先解決志遠高雄單一公司的多機協同，不提前把尚未發生的多公司／SaaS需求做進產品；但底層不得把未來擴充路堵死。**
@@ -176,7 +178,7 @@ Cloud Employee account management 採 execution-time credential verification。
 
 - 新 Employee：管理員帳密 re-auth + 新 Employee 自己的 Email OTP。
 - 修改 Email：管理員 re-auth + 新 Email OTP，成功前舊 Email 不變。
-- role：`ADMIN ↔ EMPLOYEE`，不可自改 role。
+- role：`ADMIN ↔ USER`，不可自改 role。
 - enabled：不可自停用；SUPER_ADMIN 不可停用。
 - password：本人可改自己；管理員可重設其他非 SUPER_ADMIN；SUPER_ADMIN 密碼只能本人改。
 - `SUPER_ADMIN` 不得由一般 role update 建立或移除。
@@ -260,9 +262,10 @@ Cloud：
 - conflict resolution。
 - central Employee CRUD。
 - SUPER_ADMIN transfer。
-- Schema 7 / API 1 compatibility。
+- API 1／capability compatibility；source Cloud 0.8.8、legacy schema marker 8／storage Schema 11。
+- Identity Provider／Online authority freshness／Device inventory-revoke／crash-safe Cloud → Local reset。
 
-剩餘：remote development deployment、D1 migration、live Email OTP、多機 Windows 實測、Device revoke / recovery。
+9/29 staged development deployment 與 migration audit 已完成。剩餘是最新版 A/B/C／live OTP／invitation／transfer 人工驗收與 all-device-loss recovery；不重開已完成的四個 package。最新證據見 CLOUD_WORK_HANDOFF.md；唯一進度表為 TODO.md。
 
 ### Phase B — 多機資料同步
 
@@ -291,7 +294,7 @@ Cloud coordination 成熟後再完成 `/json/g0401` / `/json/g0501` 與 allowanc
 
 ## 10. 上線前必要驗證
 
-- Remote Worker / D1 Schema 7 實際狀態。
+- 在下一次需要 live 驗收／部署時核對 Worker／API／capability／storage 狀態；既有 9/29 Run #7 是歷史證據，不冒充即時健康檢查。
 - Live Brevo Email OTP。
 - A/B Windows whole-device transition 與 exact/new/conflict identity matrix。
 - Central account CRUD / snapshot sync。
@@ -322,4 +325,4 @@ Guide 只定義 endpoint、request／response schema、Device authentication、E
 
 AMEGO App Key 不列入雲端同步範圍，仍維持各電腦自行設定、Windows protected storage 本機保護。
 
-正式 merge、tag、Release 仍需使用者明確授權。
+工程工作依 repository／project governance 與當次使用者授權處理；正式 tag／Release 仍需另行明確 release 指示。

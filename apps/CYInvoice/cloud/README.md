@@ -4,20 +4,21 @@ Cloudflare Worker + D1 reference implementation for CYInvoice V3 coordination an
 
 AMEGO remains the authoritative source for invoice / void / allowance business state. AMEGO App Keys remain local to Windows and are not part of this backend.
 
-The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; current engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`.
+The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current Windows baseline is V2.6.11 Build 2 (PR #216, not merged); source CI evidence and package are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
 
 ## Current compatibility
 
 - Service: `cyinvoice-cloud`
-- Cloud implementation: `0.8.5`
+- Cloud implementation: `0.8.8`
 - API: `1`
-- Schema: `9`
-- Migrations: `0001` through `0009`
+- Legacy API compatibility marker: `schemaVersion=8`
+- Actual storage schema: `storageSchemaVersion=11`
+- Migrations: `0001` through `0011`
 - Worker entrypoint: `src/app.ts`
 
 `wrangler.jsonc` advertises the client compatibility schema. Applied migrations are immutable; future changes must use new forward migrations.
 
-> GitHub Actions validates the Worker bundle and migrations with local SQLite. It does not prove the remote Cloudflare deployment or remote D1 has already reached Schema 9.
+> GitHub Actions validates the Worker bundle and migrations with local SQLite. It does not prove current remote deployment health. The last recorded development deployment is 2026-09-29 staged Run #7 at Cloud 0.8.8 / API 1 / storage Schema 11; this documentation update did not query or deploy the live service.
 
 ## Development commands
 
@@ -104,13 +105,21 @@ Central account mutations are Online-only:
 
 - Employee create.
 - name / Email update.
-- `ADMIN ↔ EMPLOYEE`.
+- `ADMIN ↔ USER`.
 - enabled state.
 - password change / reset.
 - pending identity resolution.
 - SUPER_ADMIN transfer.
 
 New or changed Email is committed only after OTP verification where required.
+
+Online desktop authentication refreshes current central authority before each protected operation. Only transport outage/timeout permits the last trusted protected cache; HTTP rejection, revoked Device, malformed data, Workspace mismatch and caller cancellation fail closed.
+
+## Device lifecycle
+
+Revoke preserves Device history and audit while invalidating the old Token. Rejoining creates a fresh identity. Built-in active Workspaces keep LAST_ACTIVE_DEVICE protection. The Windows Cloud-to-Local reset uses double confirmation, shutdown, revoke/self-status confirmation and local wipe; unknown results preserve local state for startup recovery. Windows does not disable/delete/purge Workspaces.
+
+USER is the current role vocabulary. Forward migration 0010 converts legacy EMPLOYEE storage; 0011 adds revoked-device lifecycle state. No active role alias is retained.
 
 ## SUPER_ADMIN
 
@@ -137,6 +146,9 @@ Foundation / Device:
 - `POST /v1/onboarding/bootstrap-email`
 - `POST /v1/bootstrap`
 - `GET /v1/device`
+- `GET /v1/devices` (inventory)
+- `POST /v1/devices/revoke` (execution-time SUPER_ADMIN)
+- `GET /v1/devices/self-status` (narrow terminal-state recovery)
 - Device pairing authorization / create / claim routes
 
 Employee Transition:

@@ -4,14 +4,14 @@
 
 - 目前工程測試基準：**V2.6.11 Build 2**。
 - Development Cloud：**Cloud 0.8.8 / API 1 / compatibility Schema 8 / storage Schema 11**。
-- 本輪 Windows 測試包：PR #216 最新 `V2.6.11 Build 2` engineering Artifact；Cloud 舊基線驗收另保留 Run343 記錄。
+- 本輪 Windows 測試包：PR #216 最新 `V2.6.11 Build 2` engineering Artifact；已通過功能 commit 66ec3671 的 Windows #258；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
 - 最新公開正式 Release：**V2.4.2**。
-- V2.6.10 main CI、Windows portable smoke、Governance 與 development Cloud staged deployment 均已通過；本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
+- V2.6.11 功能 commit 的 Governance #1137、Cloud #369、Windows #258 全部通過；9/29 development staged deployment 為既有歷史證據，本次未重查 live。PR #216 尚未合併，本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
 
 ## A. 全新啟動、超級管理員與設定
 
 1. 將候選版解壓縮到全新資料夾，確認沒有既有 `Data`。
-2. 啟動 `CYInvoice.exe`，應顯示標題「首次設定」。
+2. 啟動 CYInvoice.exe，先驗收首次模式分流；選單機版後應顯示「首次設定」，直接加入雲端另依 Q／invitation 驗收。
 3. 視窗應顯示「首次開啟程式需設定超級管理員，超級管理員無法變更。」
 4. 首次設定欄位依序為：員工編號、姓名、Email、員工密碼、再次輸入密碼；不應要求 App Key 或 MO店+ Excel 密碼。
 5. 員工編號不是 4 碼數字、姓名／Email 空白、密碼少於 8 碼、含非 ASCII 英數字、兩次密碼不同時都應阻擋。
@@ -122,7 +122,7 @@
 2. 輸入原因、含稅折讓總額、員工編號及密碼；錯誤帳密不得建立待辦。
 3. 成功後顯示「折讓申請已建立。請通知管理員查看並完成操作。」之現行使用者提示。
 4. 「上傳問題」應出現折讓人工處理待辦。
-5. 管理員在光貿網站完成人工折讓後，於待辦詳細頁標記已解決；CYInvoice 應透過 `invoice_query.allowance[]` 比對申請前基線與新折讓。
+5. 管理員在光貿網站完成人工折讓後，於待辦詳細頁按「已人工處理」；CYInvoice 應透過 `invoice_query.allowance[]` 比對申請前基線與新折讓。
 6. 唯一新折讓且含稅金額吻合時可確認完成。
 7. 多筆新候選、金額不符或仍在處理中時不得猜測結案，待辦必須保留。
 8. 已進入等待官方確認階段後不得「取消退回」。
@@ -146,7 +146,7 @@
 3. 建立前 CYInvoice 應重新 query 發票，確認該折讓單仍唯一存在且官方狀態已完成。
 4. 成功後「上傳問題」出現「折讓作廢人工處理」。
 5. 本版不得直接呼叫 `/json/g0501`。
-6. 管理員在光貿網站人工完成後可在詳細待辦按「已解決」。
+6. 管理員在光貿網站人工完成後可在詳細待辦按「已人工處理」。
 7. 尚未人工處理前可「取消退回」；兩者都只更新本機待辦，不得假裝呼叫光貿成功。
 8. 同一張發票已有另一張折讓單的作廢申請時，應阻擋建立第二筆互相覆蓋的待辦。
 
@@ -194,11 +194,11 @@
 5. engineering/public artifact 上傳前必須通過 repository `scan-public-package.py`，不得包含 secrets、production bindings 或被治理規則禁止的檔案。
 6. 正式 Release 必須由 `main` 重新執行全部必要驗證；engineering CI 成功不能直接視為正式發布完成。
 
-## Q. Built-in Cloud V2.6.10 baseline
+## Q. Built-in Cloud 現行候選版 baseline
 
 > 先做本節，再進行 R～U。既有 A/B 兩台都是目前 Workspace 的 recovery path，不應一開始就做破壞性動作。
 
-1. A、B 均使用 Run343 V2.6.10 engineering package 啟動。
+1. A、B 均使用目前 V2.6.11 Build 2 通過 CI 的工程包啟動；來源／digest 見 CLOUD_WORK_HANDOFF.md，不使用已到期 Run343 Artifact。
 2. 兩台都應能連上 development Cloud，既有 Workspace 不應被重新 bootstrap。
 3. `裝置管理` 應看到既有 active Device inventory；不應因升級產生重複 Device。
 4. 既有中央 Employees 應仍可登入，角色為 `SUPER_ADMIN / ADMIN / USER` vocabulary，不得出現 active `EMPLOYEE` role。
@@ -259,14 +259,16 @@
 
 ## 通過條件
 
-- 本次變更涉及的 A～U 項目依實際 scope 通過，且 Logs 沒有未處理 `ERROR` 或未處理例外。
+- 本次變更涉及的 A～U 與 W 項目依實際 scope 通過，且 Logs 沒有未處理 `ERROR` 或未處理例外。
 - 所有需要光貿實際回覆的結果均以真實測試回覆為準，不以 UI 顯示自行推定 API 行為。
 - Cloud lifecycle 測試必須以 development Cloud 與可回復／可拋棄 Device 為主，不為驗證 destructive path 而破壞唯一 recovery path。
 - 發票成功判定、防重、環境隔離、Cloud authority、Device trust、結果不明禁止重送／誤刪等安全不變量不得因 UI 或人工流程調整而改變。
-- **V2.6.10 實機驗證完成前不得把 V2.6.10 描述為正式 Release；merge 到 main 或 development Cloud deploy 均不等於正式 Release。**
+- **目前 V2.6.11 Build 2 仍為工程版；CI／實機驗收、merge 到 main 或 development Cloud deploy 均不等於正式 Release。**
 
 
 ## W. V2.6.11 Build 2 上傳問題／處理中分流
+
+優先驗收本節；通過結果填入 TODO.md。此處為操作清單，不代表已有人工作業證據。
 
 1. 確認「處理中」位於「上傳問題」旁，數量與清單一致；開啟處理中不改上傳問題已讀狀態。
 2. 官方上傳狀態 1／2／3／31／32 顯示處理中；99 完成不再列出，91／未知狀態不得冒充正常等待。
@@ -274,3 +276,6 @@
 4. 背景同步或主清單重新整理完成後，重新整理兩個清單，確認完成項目移除，錯誤項目歸回上傳問題，沒有重複送出 API。
 5. 處理中不得勾選刪除或「標記已解決」；等待中的作廢／折讓超過保留期仍可經管理員驗證結案，只停止本機追蹤、不宣稱官方成功。
 6. 正式／測試環境與不同公司資料不得混入。舊折讓待確認資料沒有新分類欄位時，先保留上傳問題，正常同步回查後才重新分類。
+7. 使用舊資料回歸：沒有 active upload issue 的正常作廢等待，超過兩期仍能由管理員結案；一般 QueryFailed 不得藉結案清除其他業務 pending。
+8. 作廢確認期間發票文字／預覽維持隱藏，黑色號碼遮罩不再出現；已開立(等待作廢) 為半形括號。折讓「已人工處理」與作廢採同一 Danger button 外觀。
+9. 先以 96 DPI 檢查按鈕並排／明細不裁切；125%／150% 保持既定延後項目，不宣稱已通過。

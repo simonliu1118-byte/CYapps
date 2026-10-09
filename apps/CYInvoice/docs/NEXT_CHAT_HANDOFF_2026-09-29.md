@@ -1,5 +1,7 @@
 # CYInvoice Next Chat Handoff — 2026-09-29
 
+> **歷史快照（2026-09-29）**：保留當時整合／deployment 證據，不能作為今日 branch／版本／Artifact 指令。現行交接以 [CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md) 為準，待辦只在 [TODO.md](TODO.md)；Run343 等舊 Artifact 已逾 3 天保留期。
+
 > Purpose: continue CYInvoice Cloud / identity work from the actual merged and deployed state without re-deriving the architecture or reopening completed packages.
 
 ## 1. Repository / main / release state
