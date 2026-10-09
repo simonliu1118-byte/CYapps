@@ -54,8 +54,7 @@
 
   function migrationPaneHtml() {
     return `
-      <details class="migration-details">
-        <summary><h4>CYAccounting 桌面帳本移轉</h4><span class="migration-expand-label">移轉帳本</span></summary>
+      <h4>CYAccounting 桌面帳本移轉</h4>
       <div class="migration-warning">
         <strong>選檔前請先關閉桌面版 CYAccounting。</strong>
         <span>桌面版使用 SQLite WAL；若程式仍開啟，單獨讀取 <code>Data/CYaccounting.db</code> 可能尚未包含 WAL 中的最新資料。也可以選擇最近完成且已驗證的桌面備份檔。</span>
@@ -70,7 +69,7 @@
       <div id="desktopMigrationPreview" class="migration-preview hidden"></div>
       <div class="migration-actions">
         <button id="desktopMigrationCommit" class="primary" type="button" disabled>確認執行移轉</button>
-      </div></details>`;
+      </div>`;
   }
 
   function bindMigrationPane(pane) {
