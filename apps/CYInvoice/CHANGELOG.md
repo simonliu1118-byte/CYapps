@@ -2,6 +2,15 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.13 — 2026/10/09（工程測試中，未正式 Release）
+
+- 依使用者新介面要求統一所有應用程式按鈕的小圓角；共用 RoundedButton 的 state／render／lifecycle，移除舊 NoFocusCueButton 與各自重複繪圖事件。品牌匯入、Primary、Danger、PDF 版型與商品列刪除均納入盤點，保留原生操作及鍵盤行為。
+- 處理中／上傳問題共用 NativeListViewHost，零筆顯示「無資料」，依筆數縮放，最多十二列並受工作區限制；不再顯示大量空行。保留原有唯讀／刪除／行政結案核心。
+- 作廢／折讓紀錄固定五列，超過以原生捲軸查看；上方發票資訊取得剩餘高度，長文字可捲動。
+- 裝置管理改顯示「加入時版本」，移除舊 informational version 的 +Git SHA，新加入使用 VERSION／BUILD；套件攜帶並驗證 BUILD。未新增 Cloud heartbeat，不宣稱歷史資料是目前執行版本。
+- Startup smoke 增加原生 Enter／Escape、停用與圖片保留、待辦 0／1／4／20／1／0 列、歷史 0／1／5／8 筆與版本格式／套件身分檢查。96 DPI 實機視覺驗收及 125／150 DPI 仍待測；CI 結果以 PR 精確 head 為準。
+- 此為邀請修正以外的新介面需求，Patch 推進、BUILD 歸零。PR #216 尚未合併；未建立 tag／正式 Release。
+
 ## V2.6.12 — 2026/10/09（工程測試中，未正式 Release）
 
 - 修正「邀請碼＋超管帳密」首次加入：Cloud claim 已完成後清空密碼觸發 TextChanged，原本會清掉 preview，接著讀取 preview.WorkspaceId 發生 NullReferenceException。本次加入先保存已確認的 Workspace；清密碼仍使可編輯授權失效，執行中的 Workspace 驗證不受影響。

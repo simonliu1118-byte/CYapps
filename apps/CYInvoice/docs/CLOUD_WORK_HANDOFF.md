@@ -12,11 +12,21 @@
 | main | `3b22f9f8c9f070454148da89d1986882985b1f92`；CYInvoice V2.6.10 Build 2 |
 | 現行 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
 | 分支 | `cyinvoice/fix-void-workflow-ui`；已同步上述 main |
-| 工程版本 | **V2.6.12**；來源為 ../VERSION、../BUILD |
+| 工程版本 | **V2.6.13**；來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
 
-本次修正邀請 UI 空物件錯誤與首次說明，屬新的獨立 bug／需求，Patch 推進 2.6.12、BUILD 歸零。Cloud API／schema／deployment 與正式 Release 不變。精確 head／CI／最新測試包以 PR 即時狀態為準，上表 66ec3671 僅為先前分流證據。
+本次使用者追加按鈕圓角、動態清單、五列歷史與版本顯示，屬新的獨立介面需求，Patch 推進 2.6.13、BUILD 歸零。保留 V2.6.12 邀請修正。Cloud API／schema／deployment 與正式 Release 不變。精確 head／CI／最新測試包以 PR 即時狀態為準，上表 66ec3671 僅為先前分流證據。
+
+## V2.6.13 最新介面停點
+
+共用 RoundedButton 取代舊無焦點點線 Button 及重複品牌／Primary／Danger renderer，保留 native Button 的 action／DialogResult／keyboard／accessibility owner，PDF 版型只自訂顏色，商品列刪除共用同一 surface。使用者要求所有方形按鈕圓角，屬本次 Secondary 外觀例外，不變更共通永久規則。
+
+SyncIssuesForm 是兩清單的唯一 state／height owner，重用 NativeListViewHost 的原生列高與捲軸，零筆顯示無資料、依列數縮放最多十二列。InvoiceOperationHistoryControl 重用同一 host，RecordDetailForm 分配固定五列，其餘給發票資訊；刪除原有 Buffered／History ListView 重複類別與 header cursor。
+
+版本 owner 收斂為 ApplicationVersion（VERSION／BUILD）；Cloud 加入 client 改傳可讀版本，Device Management 明確標示加入時快照。舊 +SHA 去除，舊 Build 不補猜。Cloud API／schema 不變，不提供 heartbeat 或當前版本刷新。
+
+最新 CI／engineering Artifact 以 [PR #216 checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks) 精確 head 為準；V2.6.12 Windows #260 通過是上一版證據，不能當新介面驗收。自動 smoke 覆蓋動態列數、固定五列原生捲軸、鍵盤／disabled／圖片與版本身分；實機仍待 RC Y，125／150 DPI 尚未驗收。
 
 ## 2. V2.6.11 已完成的變更
 

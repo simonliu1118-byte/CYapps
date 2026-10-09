@@ -270,7 +270,7 @@ internal sealed class CloudJoinWorkspaceForm : Form
                 claimed = await anonymous.ClaimPairingAsync(
                     code,
                     displayName,
-                    Application.ProductVersion,
+                    ApplicationVersion.ReadDisplay(),
                     attempt,
                     lifetime.Token);
             }

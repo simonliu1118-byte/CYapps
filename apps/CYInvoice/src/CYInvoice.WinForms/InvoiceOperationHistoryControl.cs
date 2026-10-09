@@ -8,25 +8,19 @@ namespace CYInvoice.WinForms;
 
 internal sealed class InvoiceOperationHistoryControl : UserControl
 {
-    private readonly FixedColumnHeaderCursor headerCursor;
-    private readonly ListView list = new HistoryListView
-    {
-        Dock = DockStyle.Fill,
-        View = View.Details,
-        FullRowSelect = true,
-        MultiSelect = false,
-        HideSelection = false,
-        GridLines = true,
-        Scrollable = true,
-        BorderStyle = BorderStyle.FixedSingle,
-        HeaderStyle = ColumnHeaderStyle.Nonclickable,
-    };
+    internal const int VisibleRows = 5;
+    private readonly NativeListViewHost listHost = new(fontSize: 10F, rowHeight: 22);
+    private ListView list => listHost.List;
+    internal int FiveRowHeight => listHost.HeightForRows(VisibleRows);
 
     public InvoiceOperationHistoryControl()
     {
         Dock = DockStyle.Fill;
         Margin = Padding.Empty;
-        headerCursor = new FixedColumnHeaderCursor(list);
+        list.MultiSelect = false;
+        list.HideSelection = false;
+        list.GridLines = true;
+        list.HeaderStyle = ColumnHeaderStyle.Nonclickable;
         list.Columns.Add("類型", 76, HorizontalAlignment.Left);
         list.Columns.Add("日期", 100, HorizontalAlignment.Left);
         list.Columns.Add("摘要", 140, HorizontalAlignment.Left);
@@ -41,7 +35,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         };
         list.ClientSizeChanged += (_, _) => LayoutColumns();
         list.DoubleClick += (_, _) => OpenSelected();
-        Controls.Add(list);
+        Controls.Add(listHost);
     }
 
     public void LoadRecord(
@@ -142,10 +136,34 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         return row;
     }
 
-    protected override void Dispose(bool disposing)
+    internal static void VerifySmokeFiveRows()
     {
-        if (disposing) headerCursor.Dispose();
-        base.Dispose(disposing);
+        using var host = new Form { ClientSize = new Size(320, 180), ShowInTaskbar = false };
+        using var history = new InvoiceOperationHistoryControl();
+        host.Controls.Add(history);
+        host.Show();
+        host.ClientSize = new Size(320, history.FiveRowHeight);
+        var list = history.list;
+        var listHost = history.listHost;
+        var original = list.Items.Cast<ListViewItem>().ToArray();
+        try
+        {
+            foreach (var count in new[] { 0, 1, 5, 8 })
+            {
+                list.Items.Clear();
+                for (var index = 0; index < count; index++)
+                    list.Items.Add(NewRow("折讓", "2026/10/09", "合成測試"));
+                Application.DoEvents();
+                if (listHost.VisibleRowCapacity() != VisibleRows || !listHost.UsesOnlyNativeScrollBar ||
+                    (count > VisibleRows && !listHost.VerticalScrollVisible))
+                    throw new InvalidOperationException("作廢/折讓紀錄必須固定五列，超過使用原生捲軸");
+            }
+        }
+        finally
+        {
+            list.Items.Clear();
+            list.Items.AddRange(original);
+        }
     }
 
     private static string ShortDate(string value)
@@ -177,15 +195,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
     internal sealed record VoidHistoryItem(string InvoiceNumber, string CancelDate, ParsedVoidReason? ParsedReason);
     internal sealed record AllowanceHistoryItem(InvoiceRecord Record, InvoiceAllowanceResult Allowance);
 
-    private sealed class HistoryListView : ListView
-    {
-        public HistoryListView()
-        {
-            DoubleBuffered = true;
-            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
-            UpdateStyles();
-        }
-    }
+
 }
 
 internal sealed class VoidHistoryDetailForm : Form

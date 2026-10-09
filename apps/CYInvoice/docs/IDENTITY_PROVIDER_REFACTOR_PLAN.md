@@ -293,4 +293,4 @@ Do not reverse this order by wiring CY ID directly into Forms/workflows before t
 
 ## 12. Current scope / version / release boundary
 
-The current engineering baseline is V2.6.12; the invitation UI fix advances Patch from V2.6.11 because it is a separate defect. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.
+The current engineering baseline is V2.6.13; the new UI requirements advance Patch from V2.6.12 and retain the invitation fix. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.

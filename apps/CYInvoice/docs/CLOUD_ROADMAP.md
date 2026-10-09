@@ -1,6 +1,6 @@
 # CYInvoice 雲端版長期藍圖與上線路線
 
-更新日期：2026-10-09。現行工程版本 V2.6.12；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
+更新日期：2026-10-09。現行工程版本 V2.6.13；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
 
 本文件整理 CYInvoice 從目前單機版進入多機雲端協調後的產品邊界、長期擴充方向、資料責任與分階段順序。若由新的長時間工作階段／ChatGPT Work 接手目前 Identity 階段，先依 `AGENTS.md` 讀永久規則，再讀 `CLOUD_WORK_HANDOFF.md`。
 

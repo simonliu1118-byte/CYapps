@@ -200,7 +200,7 @@ internal sealed class EmployeeAdminLoginForm : Form
         Margin = new Padding(0, 0, 8, 0),
     };
 
-    private static Button CompactButton(string text) => new NoFocusCueButton
+    private static Button CompactButton(string text) => new RoundedButton
     {
         Text = text,
         Width = CompactButtonWidth,

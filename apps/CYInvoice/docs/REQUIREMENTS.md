@@ -2,7 +2,7 @@
 
 本文件描述目前 C#／WinForms 工程線產品行為；永久治理規則仍以 `PROJECT_RULES.md` 為準。
 
-- 目前工程測試基準：**V2.6.12**。
+- 目前工程測試基準：**V2.6.13**。
 - 最新公開正式 Release：**V2.4.2**（tag：`cyinvoice-v2.4.2`）。
 - 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258；PR #216 尚未合併，仍需實機／光貿驗證；未經使用者當次明確要求不得建立正式 Release。
 
@@ -206,3 +206,10 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - CYID adapter／desktop offline／Workspace binding、Recovery Device flow、Cloud Work Items／revision、跨機 OrderID 防撞、audit viewer、自架手冊及 MO 密碼同步。中央 Employee／Device Token／Email 忘記密碼／revoke／reset 已完成工程實作，仍需實機驗收。
 
 具體驗證與後續工作以 `RC_TEST.md`、`TODO.md` 為準。
+
+## V2.6.13 介面收斂（2026-10-09 使用者要求）
+
+- 所有應用程式 Button 與商品列刪除動作使用共通 2px 小圓角、對稱垂直內縮；涵蓋工具列、設定／帳號／雲端視窗、匯入品牌、主操作與 PDF 版型。保留原生 Button 操作、焦點／鍵盤、無障礙與既有品牌／Danger 色彩。此為本次明確使用者要求的 Secondary 外觀例外，不改永久規則。
+- 「處理中」與「上傳問題」共用動態高度：空清單顯示「無資料」、一筆只顯示一列，最多十二列並受螢幕工作區限制，超過使用原生捲軸；既有分類與授權不變。
+- 發票詳細資訊的作廢／折讓紀錄固定五列（含表頭以外五筆容量），超過使用原生捲軸；其餘高度留給發票資訊，長內容仍可捲動完整閱讀。
+- 裝置管理欄位為「加入時版本」，舊組件版本移除 +Git 提交碼，顯示 VX.Y.Z；有 Build 時保留 Build N。新裝置加入使用 VERSION／BUILD，歷史紀錄沒有 Build 時不猜測。此欄位不代表升級後目前執行版本，未新增 Cloud heartbeat／schema。

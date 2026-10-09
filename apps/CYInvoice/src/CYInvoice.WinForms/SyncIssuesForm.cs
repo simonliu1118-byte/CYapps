@@ -24,21 +24,18 @@ internal sealed class SyncIssuesForm : Form
     private bool manualReviewBusy;
     private bool settingColumnWidths;
     private readonly ToolTip contentToolTip = new();
-    private readonly FixedColumnHeaderCursor headerCursor;
     private string visibleToolTip = string.Empty;
 
-    private readonly ListView list = new BufferedListView
+    private const int MaximumVisibleRows = 12;
+    private readonly NativeListViewHost listHost = new(fontSize: 10F, rowHeight: 22);
+    private ListView list => listHost.List;
+    private readonly Panel body = new() { Dock = DockStyle.Fill, Margin = Padding.Empty };
+    private readonly Label empty = new()
     {
-        Dock = DockStyle.Fill,
-        View = View.Details,
-        FullRowSelect = true,
-        MultiSelect = true,
-        HideSelection = false,
-        CheckBoxes = true,
-        BorderStyle = BorderStyle.FixedSingle,
-        GridLines = true,
-        Scrollable = true,
+        Text = "無資料", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter,
+        ForeColor = Color.DimGray, BorderStyle = BorderStyle.FixedSingle, Margin = Padding.Empty,
     };
+    private TableLayoutPanel root = null!;
     private readonly Label summary = new()
     {
         AutoSize = true,
@@ -61,11 +58,13 @@ internal sealed class SyncIssuesForm : Form
         administrativeClosure = new InvoiceAdministrativeClosureService(repository);
         accountKey = CurrentAccountKey();
         lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
-        headerCursor = new FixedColumnHeaderCursor(list);
 
         Text = processing ? "處理中" : "上傳問題";
         StartPosition = FormStartPosition.CenterParent;
-        MinimumSize = new Size(900, 450);
+        MinimumSize = new Size(900, 0);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
         ClientSize = new Size(960, 520);
         Font = new Font("Microsoft JhengHei UI", 10F);
         BackColor = Color.White;
@@ -74,11 +73,16 @@ internal sealed class SyncIssuesForm : Form
         BuildLayout();
         if (!processing) MarkVisibleIssuesRead();
         ReloadAll();
+        Shown += (_, _) => FitToRows();
     }
 
     private void BuildLayout()
     {
         list.CheckBoxes = !processing;
+        list.MultiSelect = true;
+        list.HideSelection = false;
+        list.GridLines = true;
+        list.HeaderStyle = ColumnHeaderStyle.Nonclickable;
         ConfigureList();
         var reload = UiControls.StandardButton("重新整理");
         reload.Click += (_, _) => ReloadAll();
@@ -136,7 +140,7 @@ internal sealed class SyncIssuesForm : Form
         bottom.Controls.Add(failedActions, 0, 0);
         bottom.Controls.Add(close, 1, 0);
 
-        var root = new TableLayoutPanel
+        root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -148,7 +152,9 @@ internal sealed class SyncIssuesForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
         root.Controls.Add(header, 0, 0);
-        root.Controls.Add(list, 0, 1);
+        body.Controls.Add(listHost);
+        body.Controls.Add(empty);
+        root.Controls.Add(body, 0, 1);
         root.Controls.Add(bottom, 0, 2);
         Controls.Add(root);
         Resize += (_, _) => LayoutColumns();
@@ -250,11 +256,59 @@ internal sealed class SyncIssuesForm : Form
             var unresolved = issues.Count(issue => issue.ResolvedUtc is null);
             summary.Text = processing ? $"處理中：{queue.ProcessingCount} 項" : $"尚未解決：{unresolved} 項｜開立失敗：{failed.Count} 筆";
             UpdateFailedButtons();
+            FitToRows();
             LayoutColumns();
         }
         catch (Exception error)
         {
             MessageBox.Show(this, "讀取" + Text + "失敗：" + error.Message, "讀取失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void FitToRows()
+    {
+        var hasRows = list.Items.Count > 0;
+        empty.Visible = !hasRows;
+        listHost.Visible = hasRows;
+        var chrome = root.Padding.Vertical + (int)Math.Ceiling(root.RowStyles[0].Height + root.RowStyles[2].Height);
+        var workArea = Screen.FromControl(this).WorkingArea;
+        var maximumBodyHeight = Math.Max(listHost.HeightForRows(1), workArea.Height - (Height - ClientSize.Height) - chrome - 40);
+        var visibleRows = Math.Min(MaximumVisibleRows, list.Items.Count);
+        while (visibleRows > 1 && listHost.HeightForRows(visibleRows) > maximumBodyHeight) visibleRows--;
+        var bodyHeight = hasRows ? listHost.HeightForRows(visibleRows) : Math.Max(40, empty.Font.Height + 16);
+        ClientSize = new Size(ClientSize.Width, chrome + bodyHeight);
+        root.PerformLayout();
+        if (Visible && Bottom > workArea.Bottom) Top = Math.Max(workArea.Top, workArea.Bottom - Height);
+    }
+
+    internal void VerifySmokeRowSizing()
+    {
+        var original = list.Items.Cast<ListViewItem>().ToArray();
+        try
+        {
+            foreach (var count in new[] { 0, 1, 4, 20, 1, 0 })
+            {
+                list.Items.Clear();
+                for (var index = 0; index < count; index++)
+                    list.Items.Add(new ListViewItem(["2026/10/09", "合成測試", "AA00000000", "synthetic", "測試資料", "處理中"]));
+                FitToRows();
+                Application.DoEvents();
+                if (count == 0)
+                {
+                    if (!empty.Visible || listHost.Visible || empty.Text != "無資料")
+                        throw new InvalidOperationException("空待辦清單必須只顯示無資料");
+                }
+                else if (listHost.VisibleRowCapacity() != Math.Min(count, MaximumVisibleRows))
+                    throw new InvalidOperationException("待辦清單高度未符合實際資料列數");
+                if (body.Bottom > root.ClientSize.Height || body.Height <= 0)
+                    throw new InvalidOperationException("待辦動態高度超出視窗");
+            }
+        }
+        finally
+        {
+            list.Items.Clear();
+            list.Items.AddRange(original);
+            FitToRows();
         }
     }
 
@@ -935,7 +989,6 @@ internal sealed class SyncIssuesForm : Form
     {
         if (disposing)
         {
-            headerCursor.Dispose();
             contentToolTip.Dispose();
         }
         base.Dispose(disposing);
@@ -1004,7 +1057,7 @@ internal sealed class SyncIssuesForm : Form
     {
         if (Text != (processing ? "處理中" : "上傳問題") || ShowIcon || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
             throw new InvalidOperationException("上傳問題視窗標題、圖示或字級不正確");
-        if (list is not BufferedListView || list.CheckBoxes == processing || list.Columns.Count != 6 || !list.GridLines || !list.Scrollable)
+        if (!listHost.UsesOnlyNativeScrollBar || list.CheckBoxes == processing || list.Columns.Count != 6 || !list.GridLines || !list.Scrollable)
             throw new InvalidOperationException("上傳問題單一清單結構不正確");
         if (list.Columns[5].Text != "狀態" || clearFailed.Text != "清除開立失敗紀錄")
             throw new InvalidOperationException("上傳問題欄位或開立失敗清除按鈕不正確");
@@ -1044,13 +1097,4 @@ internal sealed class SyncIssuesForm : Form
         _ => type,
     };
 
-    private sealed class BufferedListView : ListView
-    {
-        public BufferedListView()
-        {
-            DoubleBuffered = true;
-            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
-            UpdateStyles();
-        }
-    }
 }

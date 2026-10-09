@@ -32,6 +32,14 @@ try {
         $NormalizedName = $Entry.FullName -replace '\\', '/'
         $EntryLengths[$NormalizedName] = $Entry.Length
     }
+    foreach ($Identity in @{ VERSION = $Version; BUILD = [string]$Build }.GetEnumerator()) {
+        $IdentityEntry = $Archive.GetEntry("CYInvoice/$($Identity.Key)")
+        if ($null -eq $IdentityEntry) { throw "Package ZIP is missing $($Identity.Key)." }
+        $IdentityReader = [System.IO.StreamReader]::new($IdentityEntry.Open())
+        try { $IdentityText = $IdentityReader.ReadToEnd().Trim() }
+        finally { $IdentityReader.Dispose() }
+        if ($IdentityText -cne $Identity.Value) { throw "Package $($Identity.Key) does not match the build identity." }
+    }
     $VersionEntry = $Archive.GetEntry("CYInvoice/$ArtifactVersion.txt")
     if ($null -eq $VersionEntry) { throw "Package ZIP is missing the version identity file." }
     $Reader = [System.IO.StreamReader]::new($VersionEntry.Open())
@@ -45,6 +53,7 @@ finally {
 $RequiredEntries = @(
     "CYInvoice/CYInvoice.exe",
     "CYInvoice/VERSION",
+    "CYInvoice/BUILD",
     "CYInvoice/$ArtifactVersion.txt",
     "CYInvoice/使用說明.txt",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",

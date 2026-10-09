@@ -128,6 +128,9 @@ internal static class Program
     private static void RunStartupSmokeTest()
     {
         ApplicationIcon.VerifyCanonicalForSmoke();
+        ApplicationVersion.VerifySmokeVersion();
+        RoundedButtonSmokeTests.Verify();
+        InvoiceOperationHistoryControl.VerifySmokeFiveRows();
 
         using var form = new MainForm(startupSmokeTest: true);
         form.Show();
@@ -142,6 +145,7 @@ internal static class Program
         syncIssues.PerformLayout();
         Application.DoEvents();
         syncIssues.VerifySmokeLayout();
+        syncIssues.VerifySmokeRowSizing();
         syncIssues.Close();
 
         using var processing = new SyncIssuesForm(repository, processing: true);
@@ -149,6 +153,7 @@ internal static class Program
         processing.PerformLayout();
         Application.DoEvents();
         processing.VerifySmokeLayout();
+        processing.VerifySmokeRowSizing();
         processing.Close();
 
         using var diagnostics = new SystemDiagnosticsForm(repository, startupSmokeTest: true);

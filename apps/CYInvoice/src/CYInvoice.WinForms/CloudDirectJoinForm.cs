@@ -419,7 +419,7 @@ internal sealed partial class CloudDirectJoinForm : Form
                     ? await Client().ClaimPairingAsync(
                         pairingCode.Text.Replace("-", "", StringComparison.Ordinal).Trim(),
                         displayName,
-                        Application.ProductVersion,
+                        ApplicationVersion.ReadDisplay(),
                         attempt,
                         lifetime.Token,
                         directJoin: true)
@@ -428,7 +428,7 @@ internal sealed partial class CloudDirectJoinForm : Form
                         employeeNo.Text.Trim(),
                         password.Text,
                         displayName,
-                        Application.ProductVersion,
+                        ApplicationVersion.ReadDisplay(),
                         attempt,
                         lifetime.Token);
                 password.Clear();

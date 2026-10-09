@@ -7,7 +7,7 @@
 ## 1. 工程基準
 
 - Windows 正式產品線：C# / WinForms。
-- 工程版本：V2.6.12。
+- 工程版本：V2.6.13。
 - Reference backend：Cloudflare Worker + D1。
 - Cloud API：`1`。
 - Cloud implementation version：`0.8.8`。

@@ -6,11 +6,11 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程測試基準：**V2.6.12**。
+- 目前工程測試基準：**V2.6.13**。
 - 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
-- V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 尚未合併，精確 head CI／測試包與人工停點見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
+- V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 尚未合併，精確 head CI／測試包與人工停點見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
-- 唯一版本來源為 `VERSION`；正式 Release 必須由 `main` 重新建置與驗證。
+- 版本來源為 `VERSION`／`BUILD`；正式 Release 必須由 `main` 重新建置與驗證。
 - 只有使用者於當次工作明確要求 `release` 時，才可建立正式 tag／Release；PR、VERSION、BUILD 或 engineering Artifact 都不代表發布授權。
 - Go／Win32 V1.1.0 只保留為歷史公開回退版本。
 

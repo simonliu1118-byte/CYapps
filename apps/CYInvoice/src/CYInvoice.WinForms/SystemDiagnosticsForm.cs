@@ -149,7 +149,7 @@ internal sealed class SystemDiagnosticsForm : Form
         try
         {
             list.Items.Clear();
-            AddRow("程式版本", "資訊", $"CYInvoice V{ApplicationVersion.Read()}");
+            AddRow("程式版本", "資訊", $"CYInvoice V{ApplicationVersion.ReadDisplay()}");
             AddRow("Windows / .NET", "資訊", $"{RuntimeInformation.OSDescription}; .NET {Environment.Version}; {(Environment.Is64BitProcess ? "x64" : "非 x64")}");
 
             var settings = repository.Settings.LoadOrCreate();

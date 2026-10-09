@@ -201,7 +201,8 @@ internal sealed class CloudDeviceManagementForm : Form
         });
         deviceGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            HeaderText = "版本",
+            HeaderText = "加入時版本",
+            ToolTipText = "裝置加入時記錄的版本；升級後不會自動更新。舊資料可能未記錄 Build。",
             FillWeight = 75,
         });
         deviceGrid.Columns.Add(new DataGridViewTextBoxColumn
@@ -344,7 +345,7 @@ internal sealed class CloudDeviceManagementForm : Form
             var rowIndex = deviceGrid.Rows.Add(
                 name,
                 statusText,
-                device.ClientVersion,
+                ApplicationVersion.FormatClientVersion(device.ClientVersion),
                 DisplayTime(device.PairedAt ?? device.CreatedAt),
                 DisplayTime(device.RevokedAt));
             var row = deviceGrid.Rows[rowIndex];

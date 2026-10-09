@@ -2,27 +2,6 @@ using System.Runtime.InteropServices;
 
 namespace CYInvoice.WinForms;
 
-internal class NoFocusCueButton : Button
-{
-    protected override void OnHandleCreated(EventArgs eventArgs)
-    {
-        base.OnHandleCreated(eventArgs);
-        UiControls.HideFocusCue(this);
-    }
-
-    protected override void OnGotFocus(EventArgs eventArgs)
-    {
-        base.OnGotFocus(eventArgs);
-        UiControls.HideFocusCue(this);
-    }
-
-    protected override void OnMouseDown(MouseEventArgs eventArgs)
-    {
-        base.OnMouseDown(eventArgs);
-        UiControls.HideFocusCue(this);
-    }
-}
-
 internal sealed class BufferedTableLayoutPanel : TableLayoutPanel
 {
     public BufferedTableLayoutPanel()
@@ -187,14 +166,14 @@ internal static class UiControls
     {
         if (text == "帳戶管理") text = "帳號管理";
         if (IsDangerText(text)) return new ThemedDangerButton(text);
-        return new NoFocusCueButton
+        return new RoundedButton
         {
             Text = text,
             Width = StandardButtonWidth,
             Height = StandardButtonHeight,
             Margin = new Padding(6, 2, 6, 2),
             AutoSize = false,
-            UseVisualStyleBackColor = true,
+            UseVisualStyleBackColor = false,
         };
     }
 

@@ -803,9 +803,8 @@ internal sealed class InvoiceEntryControl : UserControl
         if (columnIndex == 6 && !IsPlaceholder(eventArgs.Item))
         {
             var button = DeleteButtonBounds(eventArgs.Item);
-            var state = pressedDeleteRow == rowIndex ? System.Windows.Forms.VisualStyles.PushButtonState.Pressed : hotDeleteRow == rowIndex ? System.Windows.Forms.VisualStyles.PushButtonState.Hot : System.Windows.Forms.VisualStyles.PushButtonState.Normal;
-            ButtonRenderer.DrawButton(eventArgs.Graphics, button, state);
-            TextRenderer.DrawText(eventArgs.Graphics, "刪除", Items.Font, button, Color.FromArgb(190, 24, 24), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            RoundedButtonSurface.DrawRowAction(eventArgs.Graphics, button, Items.Font, "刪除", Items.DeviceDpi,
+                Items.Enabled, hotDeleteRow == rowIndex, pressedDeleteRow == rowIndex);
         }
         else
         {

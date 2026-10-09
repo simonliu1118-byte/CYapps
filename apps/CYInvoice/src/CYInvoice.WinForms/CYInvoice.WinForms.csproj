@@ -18,6 +18,7 @@
     <PackageReference Include="PDFtoImage" Version="5.4.0" />
     <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.16" />
     <EmbeddedResource Include="$(CanonicalApplicationIcon)" LogicalName="CYInvoice.AppIcon" />
+    <Content Include="..\..\BUILD" Link="BUILD" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\VERSION" Link="VERSION" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="PrepareCanonicalApplicationIcon" BeforeTargets="PrepareForBuild" Condition="'$(OS)' == 'Windows_NT'">
