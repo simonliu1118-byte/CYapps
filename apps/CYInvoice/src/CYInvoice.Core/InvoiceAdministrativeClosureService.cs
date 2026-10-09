@@ -15,7 +15,7 @@ public sealed class InvoiceAdministrativeClosureService
     private static readonly string[] ActiveWorkIssueTypes =
     [
         InvoiceVoidIssueTypes.ManualReview,
-        InvoiceVoidSyncIssueTypes.PendingConfirmation,
+        InvoiceSyncIssueTypes.QueryFailed,
         InvoiceAllowanceIssueTypes.ManualReview,
         InvoiceAllowanceVoidIssueTypes.ManualReview,
     ];
