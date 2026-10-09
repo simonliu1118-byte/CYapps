@@ -579,19 +579,29 @@ internal sealed class MainForm : Form
             return;
         }
 
+        var order = _loadedOrder;
+        if (order is not null && !ConfirmNotDuplicate(order)) return;
         if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return;
 
         await RunGuardedAsync(async token =>
         {
             if (abandonFirst) await AbandonCurrentErpDocumentAsync(token);
             var result = await RunDocumentAsync(snapshot, _settings.AutoSave, token);
+            var notes = new List<string>();
+            if (order is not null)
+            {
+                var ledgerProblem = RecordOutcome(order, result);
+                if (ledgerProblem.Length > 0) notes.Add(ledgerProblem);
+                if (order.TrackingNumber.Trim().Length == 0) notes.Add("物流單號空白：取得後請回補到送貨地址(一)。");
+            }
             if (result.HandedOff.Length > 0)
             {
-                MessageBox.Show(this, $"銷貨單 {DocumentKeyText(result)} 已輸入單頭，依訂單備註停止，請人工輸入明細並儲存。\n\n{result.HandedOff}",
+                MessageBox.Show(this, $"銷貨單 {DocumentKeyText(result)} 已輸入單頭後停止，請人工輸入明細並儲存。\n\n{result.HandedOff}" +
+                    (notes.Count > 0 ? "\n\n" + string.Join("\n", notes) : string.Empty),
                     "轉人工處理", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            ShowRunSummaryIfNeeded(result, DocumentKeyText(result));
+            ShowRunSummaryIfNeeded(result, DocumentKeyText(result), notes);
         });
     }
 
@@ -691,18 +701,13 @@ internal sealed class MainForm : Form
             return;
         }
 
-        using var dialog = new OpenFileDialog
-        {
-            Title = "選擇蝦皮訂單匯出檔",
-            Filter = "Excel 活頁簿 (*.xlsx)|*.xlsx",
-            CheckFileExists = true
-        };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        var path = PickExportFile("選擇蝦皮訂單匯出檔", "Excel 活頁簿 (*.xlsx)|*.xlsx");
+        if (path is null) return;
 
         ShopeeImportResult parsed;
         try
         {
-            await using var stream = File.OpenRead(dialog.FileName);
+            await using var stream = File.OpenRead(path);
             parsed = ShopeeOrderImport.Parse(XlsxReader.ReadFirstSheet(stream));
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
@@ -713,66 +718,200 @@ internal sealed class MainForm : Form
         }
         _log.Info("shopee", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
 
-        using var preview = new ShopeeImportForm(Path.GetFileName(dialog.FileName), parsed, _settings.AutoSave);
+        var mapping = new ShopeeMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix);
+        var orders = parsed.Orders.Select(o => ShopeeOrderImport.ToImported(o, mapping)).ToList();
+        await PreviewAndRunAsync(ShopeeOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
+    }
+
+    private async Task ImportMoAsync()
+    {
+        if (_automationCts is not null) return;
+        var missing = new[]
+        {
+            _settings.MoOrderType.Length == 0 ? "銷貨單別" : null,
+            _settings.MoCustomerCode.Length == 0 ? "客戶代號" : null,
+            _settings.MoDiscountItemCode.Length == 0 ? "折價券品號" : null,
+            _settings.MoShippingItemCode.Length == 0 ? "運費品號" : null
+        }.Where(x => x is not null).ToList();
+        if (missing.Count > 0)
+        {
+            MessageBox.Show(this, $"請先在「設定」填入 MO店+ 匯入的{string.Join("、", missing)}。", "MO店+訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var path = PickExportFile("選擇 MO店+ 訂單匯出檔（OrderExport）", "MO店+ 匯出檔 (*.xls;*.xlsx)|*.xls;*.xlsx");
+        if (path is null) return;
+
+        MoImportResult parsed;
+        try
+        {
+            await using var stream = File.OpenRead(path);
+            var rows = Path.GetExtension(path).Equals(".xlsx", StringComparison.OrdinalIgnoreCase)
+                ? XlsxReader.ReadFirstSheet(stream)
+                : XlsReader.ReadFirstSheet(stream, LocalSecret.Unprotect(_settings.MoPasswordProtected));
+            parsed = MoOrderImport.Parse(rows);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
+        {
+            _log.Warn("mo", $"export read failed: {ex.GetType().Name}");
+            MessageBox.Show(this, $"無法讀取這個檔案：{ex.Message}", "MO店+訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _log.Info("mo", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
+
+        var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
+            _settings.MoDiscountItemCode, _settings.MoShippingItemCode, _settings.MoFreightTypes);
+        var orders = parsed.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
+        await PreviewAndRunAsync(MoOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
+    }
+
+    private string? PickExportFile(string title, string filter)
+    {
+        using var dialog = new OpenFileDialog { Title = title, Filter = filter, CheckFileExists = true };
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
+    }
+
+    private async Task PreviewAndRunAsync(string source, string fileName, List<ImportedOrder> orders, IReadOnlyList<string> errors)
+    {
+        var ledger = LoadLedger();
+        if (ledger is null) return;
+
+        using var preview = new OrderImportForm(source, fileName, orders, errors, _settings.AutoSave, o => ledger.Find(o.LedgerKey));
         if (preview.ShowDialog(this) != DialogResult.OK) return;
 
-        if (preview.Action == ShopeeImportAction.StartSelected && preview.SelectedOrder is not null)
+        if (preview.Action == OrderImportAction.StartSelected && preview.SelectedOrder is not null)
         {
-            LoadShopeeOrder(preview.SelectedOrder);
-            SetStatus($"蝦皮訂單 {preview.SelectedOrder.OrderSn}：開始輸入 ERP");
+            LoadOrder(preview.SelectedOrder);
+            SetStatus($"{source}訂單 {preview.SelectedOrder.OrderSn}：開始輸入 ERP");
             await StartAutomationAsync();
         }
-        else if (preview.Action == ShopeeImportAction.RunAll)
+        else if (preview.Action == OrderImportAction.RunAll)
         {
-            await RunShopeeBatchAsync(parsed.Orders);
+            await RunImportBatchAsync(source, orders, ledger);
         }
     }
 
-    /// <summary>Handoff reason of the Shopee order currently loaded on the form (empty when none).</summary>
-    private string _loadedOrderHandoff = string.Empty;
+    /// <summary>Duplicate-order ledger; null (with a message) when it cannot be read, so nothing is entered blind.</summary>
+    private OrderLedger? LoadLedger()
+    {
+        try
+        {
+            return _ledger ??= new OrderLedger(OrderLedger.DefaultPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            _log.Error("ledger", ex);
+            MessageBox.Show(this, $"無法讀取防重複紀錄（{OrderLedger.DefaultPath}）：{ex.Message}\n為避免重複打單，暫不匯入。",
+                "訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return null;
+        }
+    }
 
-    private ShopeeMapping ShopeeMappingFromSettings() =>
-        new(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix);
+    private OrderLedger? _ledger;
+
+    /// <summary>Platform order currently loaded on the form (null after 清除 or manual input).</summary>
+    private ImportedOrder? _loadedOrder;
+
+    /// <summary>Form fields an import may set; cleared on each load so one order's values never leak into the next.</summary>
+    private static readonly string[] ImportedFieldKeys =
+        ["order_type", "customer_code", "trade_note", "ship_addr1", "freight_type", "cod", "freight_fee", "tax_id", "inv_name", "inv_date", "inv_no"];
 
     /// <summary>
-    /// Puts one order on the form: the Shopee header fields and a fresh detail grid; every
-    /// other field keeps its current value (local defaults such as 單據日期 or 員工代號).
+    /// Puts one order on the form: its header fields and a fresh detail grid; every other
+    /// field keeps its current value (local defaults such as 單據日期 or 員工代號).
     /// </summary>
-    private void LoadShopeeOrder(ShopeeOrder order)
+    private void LoadOrder(ImportedOrder order)
     {
-        foreach (var pair in ShopeeOrderImport.HeaderValues(order, ShopeeMappingFromSettings()))
+        foreach (var key in ImportedFieldKeys)
+            if (_valueControls.TryGetValue(key, out var control)) SetFieldText(control, string.Empty);
+        foreach (var pair in order.HeaderValues())
             if (_valueControls.TryGetValue(pair.Key, out var control)) SetFieldText(control, pair.Value);
 
         _details.EndEdit();
         _details.Rows.Clear();
-        var rowCount = Math.Max(10, order.Items.Count);
+        // A handed-off order stops before the details; items it cannot enter are left out.
+        var items = order.Items.Where(i => i.ItemCode.Length > 0).ToList();
+        var rowCount = Math.Max(10, items.Count);
         for (var i = 0; i < rowCount; i++) _details.Rows.Add();
-        for (var i = 0; i < order.Items.Count; i++)
+        for (var i = 0; i < items.Count; i++)
         {
-            var item = order.Items[i];
-            _details["ItemCode", i].Value = item.ItemCode;
-            _details["Quantity", i].Value = item.Quantity;
-            _details["UnitPrice", i].Value = item.UnitPrice;
+            _details["ItemCode", i].Value = items[i].ItemCode;
+            _details["Quantity", i].Value = items[i].Quantity;
+            _details["UnitPrice", i].Value = items[i].UnitPrice;
         }
         ApplyDefaultsToBlankFields();
-        _loadedOrderHandoff = order.HandoffReason;
+        _loadedOrder = order;
+    }
+
+    /// <summary>
+    /// Duplicate check before a single order (user, 2026-10-10): an order CY saved is blocked;
+    /// one entered without saving or handed off only warns.
+    /// </summary>
+    private bool ConfirmNotDuplicate(ImportedOrder order)
+    {
+        var entry = _ledger?.Find(order.LedgerKey);
+        if (entry is null) return true;
+        if (entry.Status == LedgerStatus.Saved)
+        {
+            MessageBox.Show(this, $"{order.Source}訂單 {order.OrderSn} {entry.Describe()}。\n\n為避免重複打單，已擋下。",
+                "重複訂單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+        return MessageBox.Show(this,
+            $"{order.Source}訂單 {order.OrderSn} {entry.Describe()}。\n\n請先確認 ERP 沒有這張單。仍要再輸入一次嗎？",
+            "可能重複", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+    }
+
+    /// <summary>Writes a run's outcome to the ledger; a write failure is logged and reported, never fatal.</summary>
+    private string RecordOutcome(ImportedOrder order, AutomationRunResult result)
+    {
+        var status = result.HandedOff.Length > 0 ? LedgerStatus.HandedOff
+            : result.Saved ? LedgerStatus.Saved
+            : LedgerStatus.Entered;
+        try
+        {
+            _ledger?.Record(order.LedgerKey, status, result.DocumentKey);
+            return string.Empty;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.Error("ledger", ex);
+            return $"{order.OrderSn}：防重複紀錄寫入失敗（{ex.Message}），下次匯入不會提醒這張已輸入";
+        }
     }
 
     /// <summary>
     /// Enters every order in turn; each must be saved before the next starts. When an
     /// order fails, the document CY created for it is abandoned (PROJECT_RULES §1) and the
-    /// batch continues; orders with remarks are skipped and listed for a person. The batch
-    /// only stops when abandoning is not safe or on Esc. Ends with saved / review / handoff /
-    /// failed / stopped / not started lists.
+    /// batch continues; orders to hand off and orders CY already saved are skipped and
+    /// listed. The batch only stops when abandoning is not safe or on Esc. Ends with saved /
+    /// review / handoff / duplicate / failed / missing tracking / stopped / not started lists.
     /// </summary>
-    private async Task RunShopeeBatchAsync(IReadOnlyList<ShopeeOrder> orders)
+    private async Task RunImportBatchAsync(string source, IReadOnlyList<ImportedOrder> orders, OrderLedger ledger)
     {
+        var earlier = orders
+            .Where(o => o.HandoffReason.Length == 0 && ledger.Find(o.LedgerKey) is { Status: not LedgerStatus.Saved })
+            .ToList();
+        var skipEarlier = false;
+        if (earlier.Count > 0)
+        {
+            var answer = MessageBox.Show(this,
+                $"以下 {earlier.Count} 張曾經輸入，但不是由 CY 儲存（可能已人工儲存）：\n" +
+                string.Join("\n", earlier.Take(15).Select(o => $"・{o.OrderSn}：{ledger.Find(o.LedgerKey)!.Describe()}")) +
+                (earlier.Count > 15 ? $"\n…另 {earlier.Count - 15} 張" : string.Empty) +
+                "\n\n是：仍要輸入　否：略過這些　取消：不開始批次",
+                "可能重複", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (answer == DialogResult.Cancel) return;
+            skipEarlier = answer == DialogResult.No;
+        }
         if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return;
 
         var done = new List<string>();
         var review = new List<string>();
         var failed = new List<string>();
         var handOff = new List<string>();
+        var duplicates = new List<string>();
+        var noTracking = new List<string>();
         string? stoppedAt = null;
         var next = 0;
 
@@ -783,16 +922,23 @@ internal sealed class MainForm : Form
             {
                 token.ThrowIfCancellationRequested();
                 var order = orders[next];
-                // Orders with a buyer remark or seller note are not entered in a batch at all;
-                // they are listed for a person at the end (user, 2026-10-10).
+                // Orders for a person are not entered in a batch at all; they are listed at
+                // the end (user, 2026-10-10).
                 if (order.HandoffReason.Length > 0)
                 {
                     handOff.Add($"{order.OrderSn}：{order.HandoffReason}");
-                    _log.Info("shopee", $"batch order skipped for handoff index={next + 1}/{orders.Count}");
+                    _log.Info("import", $"batch order skipped for handoff index={next + 1}/{orders.Count}");
                     continue;
                 }
-                LoadShopeeOrder(order);
-                SetStatus($"蝦皮批次 {next + 1}/{orders.Count}：訂單 {order.OrderSn}");
+                var entry = ledger.Find(order.LedgerKey);
+                if (entry is not null && (entry.Status == LedgerStatus.Saved || skipEarlier))
+                {
+                    duplicates.Add($"{order.OrderSn}：{entry.Describe()}");
+                    _log.Info("import", $"batch order skipped as duplicate index={next + 1}/{orders.Count} status={entry.Status}");
+                    continue;
+                }
+                LoadOrder(order);
+                SetStatus($"{source}批次 {next + 1}/{orders.Count}：訂單 {order.OrderSn}");
                 var snapshot = CreateSnapshot(out var validationError);
                 if (snapshot is null) { failed.Add($"{order.OrderSn}：{validationError}"); continue; }
 
@@ -808,7 +954,7 @@ internal sealed class MainForm : Form
                 }
                 catch (Exception ex)
                 {
-                    _log.Error("shopee", ex);
+                    _log.Error("import", ex);
                     var createdNumber = _automation.LastSalesOrderNumber;
                     if (createdNumber.Length == 0 && Win32Automation.FindCopi08Windows().Count == 1 &&
                         _automation.ProbeStatus().Mode == ErpMode.Browse)
@@ -824,27 +970,39 @@ internal sealed class MainForm : Form
                     }
                     catch (Exception abandonError) when (abandonError is not OperationCanceledException)
                     {
-                        _log.Error("shopee", abandonError);
+                        _log.Error("import", abandonError);
                         stoppedAt = $"訂單 {order.OrderSn}：{ex.Message}；無法安全放棄這張 ERP 單據（{abandonError.Message}），請人工處理";
                         return;
                     }
                 }
+                var ledgerProblem = RecordOutcome(order, result);
+                if (ledgerProblem.Length > 0) review.Add(ledgerProblem);
                 if (!result.Saved)
                 {
                     stoppedAt = $"訂單 {order.OrderSn}：未儲存（{result.SaveSkippedReason}）";
                     return;
                 }
                 done.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
+                if (order.TrackingNumber.Trim().Length == 0) noTracking.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
                 review.AddRange(result.Warnings.Select(w => $"{order.OrderSn}（{DocumentKeyText(result)}）第 {w.DetailRow} 列 {w.ItemCode}：{w.Message}"));
-                _log.Info("shopee", $"batch order saved index={next + 1}/{orders.Count} document={_log.Value(DocumentKeyText(result))}");
+                _log.Info("import", $"batch order saved index={next + 1}/{orders.Count} document={_log.Value(DocumentKeyText(result))}");
             }
         });
 
         var lines = new List<string> { $"已儲存 {done.Count} / {orders.Count} 張" };
         lines.AddRange(done.Select(d => "・" + d));
-        if (review.Count > 0) { lines.Add(string.Empty); lines.Add("需人工確認："); lines.AddRange(review.Select(r => "・" + r)); }
-        if (handOff.Count > 0) { lines.Add(string.Empty); lines.Add($"需人工處理 {handOff.Count} 張（有備註，未輸入 ERP）："); lines.AddRange(handOff.Select(h => "・" + h)); }
-        if (failed.Count > 0) { lines.Add(string.Empty); lines.Add($"失敗 {failed.Count} 張（未儲存，已略過）："); lines.AddRange(failed.Select(f => "・" + f)); }
+        void Section(string title, List<string> items)
+        {
+            if (items.Count == 0) return;
+            lines.Add(string.Empty);
+            lines.Add(title);
+            lines.AddRange(items.Select(i => "・" + i));
+        }
+        Section($"需回補物流單號 {noTracking.Count} 張（送貨地址(一) 空白）：", noTracking);
+        Section("需人工確認：", review);
+        Section($"需人工處理 {handOff.Count} 張（未輸入 ERP）：", handOff);
+        Section($"重複略過 {duplicates.Count} 張（未輸入 ERP）：", duplicates);
+        Section($"失敗 {failed.Count} 張（未儲存，已略過）：", failed);
         if (stoppedAt is not null)
         {
             lines.Add(string.Empty);
@@ -852,14 +1010,16 @@ internal sealed class MainForm : Form
             var rest = orders.Skip(next + 1).Select(o => o.OrderSn).ToList();
             if (rest.Count > 0) lines.Add($"未處理 {rest.Count} 張：{string.Join("、", rest)}（處理完 ERP 上這張單後再重新匯入）");
         }
-        SetStatus($"蝦皮批次結束：已儲存 {done.Count}/{orders.Count} 張");
-        MessageBox.Show(this, string.Join(Environment.NewLine, lines), "蝦皮批次結果", MessageBoxButtons.OK,
-            stoppedAt is null && failed.Count == 0 && review.Count == 0 && handOff.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        SetStatus($"{source}批次結束：已儲存 {done.Count}/{orders.Count} 張");
+        var clean = stoppedAt is null && failed.Count == 0 && review.Count == 0 && handOff.Count == 0 && duplicates.Count == 0 && noTracking.Count == 0;
+        MessageBox.Show(this, string.Join(Environment.NewLine, lines), $"{source}批次結果", MessageBoxButtons.OK,
+            clean ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
-    private void ShowRunSummaryIfNeeded(AutomationRunResult result, string documentKey)
+    private void ShowRunSummaryIfNeeded(AutomationRunResult result, string documentKey, IReadOnlyList<string>? notes = null)
     {
-        if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0) return;
+        notes ??= [];
+        if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && notes.Count == 0) return;
 
         var lines = new List<string> { $"銷貨單：{documentKey}", $"儲存：{(result.Saved ? "已儲存" : "尚未儲存")}" };
         if (result.SaveSkippedReason.Length > 0) lines.Add($"未自動儲存原因：{result.SaveSkippedReason}");
@@ -868,6 +1028,11 @@ internal sealed class MainForm : Form
             lines.Add(string.Empty);
             lines.Add("需人工確認：");
             lines.AddRange(result.Warnings.Select(w => $"・第 {w.DetailRow} 列 {w.ItemCode}：{w.Message}"));
+        }
+        if (notes.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.AddRange(notes.Select(n => "・" + n));
         }
         MessageBox.Show(this, string.Join(Environment.NewLine, lines), "需人工確認", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
@@ -888,7 +1053,7 @@ internal sealed class MainForm : Form
         _details.Rows.Clear();
         for (var i = 0; i < 10; i++) _details.Rows.Add();
         ApplyDefaultsToBlankFields();
-        _loadedOrderHandoff = string.Empty;
+        _loadedOrder = null;
         SetStatus("已清除表單");
     }
 
@@ -994,7 +1159,7 @@ internal sealed class MainForm : Form
 
         validationError = string.Empty;
         var comboOptions = ErpComboOptions.ByField.ToDictionary(p => p.Key, p => p.Value.ToList(), StringComparer.OrdinalIgnoreCase);
-        return new FormSnapshot { Values = values, Details = details, ComboOptions = comboOptions, HandoffBeforeDetails = _loadedOrderHandoff };
+        return new FormSnapshot { Values = values, Details = details, ComboOptions = comboOptions, HandoffBeforeDetails = _loadedOrder?.HandoffReason ?? string.Empty };
     }
 
     private static string Cell(DataGridViewRow row, string column) =>
@@ -1030,6 +1195,8 @@ internal sealed class MainForm : Form
         button.Margin = new Padding(4, 1, 4, 1);
         if (text == "蝦皮")
             button.Click += async (_, _) => await ImportShopeeAsync();
+        else if (text == "MO店+")
+            button.Click += async (_, _) => await ImportMoAsync();
         else
             button.Click += (_, _) => MessageBox.Show(this,
                 $"{text} 匯入尚未實作；入口固定保留。",

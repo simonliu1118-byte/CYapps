@@ -613,8 +613,8 @@ internal sealed class ErpAutomationService
 
             if (!string.IsNullOrWhiteSpace(before))
             {
-                // ERP fills 付款條件 from the customer; the form value is meant to replace it.
-                if (field.Key != "payment_terms")
+                // ERP fills these from the customer master; the form value is meant to replace it.
+                if (!CustomerDerivedKeys.Contains(field.Key))
                     throw new InvalidOperationException($"ERP 欄位「{field.Label}」目前已有內容；為避免覆蓋既有值已停止。");
                 InputSender.EndBackspace(before.Length + 2);
                 await Delay(80, cancellationToken);
@@ -627,6 +627,13 @@ internal sealed class ErpAutomationService
         InputSender.Press(NativeMethods.VK_TAB);
         await Delay(field.Kind == FieldKind.Lookup ? 420 : 220, cancellationToken);
     }
+
+    /// <summary>
+    /// Fields ERP may pre-fill from the customer on a new document (付款條件, 貨運別, and the
+    /// invoice 客戶全名／統一編號); a different form value replaces them instead of stopping.
+    /// </summary>
+    private static readonly HashSet<string> CustomerDerivedKeys =
+        new(["payment_terms", "freight_type", "inv_name", "tax_id"], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Selects a COPI08 drop-down value. With a known option list (ERP order) the list is

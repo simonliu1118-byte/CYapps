@@ -8,5 +8,12 @@
   "ShopeeOrderType": "",
   "ShopeeCustomerCode": "",
   "ShopeeNotePrefix": "蝦皮訂單",
+  "MoOrderType": "",
+  "MoCustomerCode": "",
+  "MoNotePrefix": "MO店+訂單",
+  "MoDiscountItemCode": "",
+  "MoShippingItemCode": "",
+  "MoFreightTypes": {},
+  "MoPasswordProtected": "",
   "Defaults": {}
 }

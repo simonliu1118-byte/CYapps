@@ -47,6 +47,21 @@ internal static class UiSnapshot
             using (var settings = new SettingsForm(new UserSettings(), () => Task.FromResult(string.Empty)))
                 Capture(settings, Path.Combine(folder, "settings.png"), settings.Size);
 
+            // Fictitious MO店+ orders: one ready, one handed off, one needing the invoice name.
+            var mapping = new MoMapping("T01", "C0001", "MO店+訂單", "D901", "S100", MoOrderImport.ParseFreightTable("7-11=F1"));
+            var sample = new List<ImportedOrder>
+            {
+                MoOrderImport.ToImported(new MoOrder(2, "90000000000001", [new MoOrderLine("X00001", 2, 300, 560, "測試商品")],
+                    "7-11店出", "T0000001", "", "", "", "", 605), mapping),
+                MoOrderImport.ToImported(new MoOrder(3, "90000000000002", [new MoOrderLine("X00002+ X00003", 1, 360, 360, "組合")],
+                    "7-11店出", "", "", "", "", "", 360), mapping),
+                MoOrderImport.ToImported(new MoOrder(4, "90000000000003", [new MoOrderLine("X00004", 1, 500, 500, "測試商品")],
+                    "全家店出", "", "", "12345678", "", "", 500), mapping)
+            };
+            using (var preview = new OrderImportForm(MoOrderImport.Source, "OrderExport_TEST.xls", sample,
+                       ["第 9 列訂單 90000000000009：運費對不上：開立發票金額推算為 45，運費欄位合計為 0。"], autoSave: true, _ => null))
+                Capture(preview, Path.Combine(folder, "mo-import.png"), preview.Size);
+
             Console.WriteLine($"ui snapshots written to {folder}");
             return 0;
         }

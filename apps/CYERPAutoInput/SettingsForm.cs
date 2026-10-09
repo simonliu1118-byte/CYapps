@@ -13,6 +13,13 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _shopeeOrderType = new();
     private readonly TextBox _shopeeCustomerCode = new();
     private readonly TextBox _shopeeNotePrefix = new();
+    private readonly TextBox _moOrderType = new();
+    private readonly TextBox _moCustomerCode = new();
+    private readonly TextBox _moNotePrefix = new();
+    private readonly TextBox _moPassword = new();
+    private readonly TextBox _moDiscountItem = new();
+    private readonly TextBox _moShippingItem = new();
+    private readonly TextBox _moFreightTypes = new();
 
     private static readonly string[] ConfigurableKeys =
     [
@@ -30,7 +37,7 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
-        Size = new Size(640, 726);
+        Size = new Size(680, 880);
         MinimumSize = new Size(560, 480);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
@@ -45,13 +52,16 @@ internal sealed class SettingsForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 8, ColumnCount = 1, Padding = new Padding(12) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 11, ColumnCount = 1, Padding = new Padding(12) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         Controls.Add(root);
@@ -99,20 +109,53 @@ internal sealed class SettingsForm : Form
         warehouseRow.Controls.Add(_firstRowWarehouseCode);
         root.Controls.Add(warehouseRow, 0, 4);
 
-        var shopeeRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
-        void AddShopeeField(string label, TextBox box, string value, int width)
+        FlowLayoutPanel FieldRow() => new() { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        void AddField(FlowLayoutPanel row, string label, TextBox box, string value, int width)
         {
-            shopeeRow.Controls.Add(new Label { Text = label, AutoSize = true, Padding = new Padding(3, 7, 0, 0) });
+            row.Controls.Add(new Label { Text = label, AutoSize = true, Padding = new Padding(3, 7, 0, 0) });
             box.Width = width;
             box.Text = value;
             box.Margin = new Padding(0, 4, 10, 0);
-            shopeeRow.Controls.Add(box);
+            row.Controls.Add(box);
         }
-        AddShopeeField("蝦皮匯入　銷貨單別", _shopeeOrderType, _settings.ShopeeOrderType, 60);
-        AddShopeeField("客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 90);
-        AddShopeeField("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 100);
+        var shopeeRow = FieldRow();
+        AddField(shopeeRow, "蝦皮匯入　銷貨單別", _shopeeOrderType, _settings.ShopeeOrderType, 60);
+        AddField(shopeeRow, "客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 90);
+        AddField(shopeeRow, "備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 100);
         _shopeeOrderType.MaxLength = 4;
         root.Controls.Add(shopeeRow, 0, 5);
+
+        var moRow = FieldRow();
+        AddField(moRow, "MO店+匯入 銷貨單別", _moOrderType, _settings.MoOrderType, 60);
+        AddField(moRow, "客戶代號", _moCustomerCode, _settings.MoCustomerCode, 90);
+        AddField(moRow, "備註前綴", _moNotePrefix, _settings.MoNotePrefix, 100);
+        _moOrderType.MaxLength = 4;
+        root.Controls.Add(moRow, 0, 6);
+
+        var moRow2 = FieldRow();
+        AddField(moRow2, "　　　　 匯出檔密碼", _moPassword, string.Empty, 110);
+        _moPassword.UseSystemPasswordChar = true;
+        _moPassword.PlaceholderText = _settings.MoPasswordProtected.Length > 0 ? "已設定，空白不變更" : string.Empty;
+        AddField(moRow2, "折價券品號", _moDiscountItem, _settings.MoDiscountItemCode, 80);
+        AddField(moRow2, "運費品號", _moShippingItem, _settings.MoShippingItemCode, 80);
+        root.Controls.Add(moRow2, 0, 7);
+
+        var freightPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        freightPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
+        freightPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        freightPanel.Controls.Add(new Label
+        {
+            Text = "MO店+ 物流商→貨運別\n一行一組：物流商關鍵字=貨運別\n（關鍵字包含在匯出檔的物流商文字中即可）",
+            Dock = DockStyle.Fill,
+            Padding = new Padding(3, 4, 0, 0)
+        }, 0, 0);
+        _moFreightTypes.Multiline = true;
+        _moFreightTypes.ScrollBars = ScrollBars.Vertical;
+        _moFreightTypes.AcceptsReturn = true;
+        _moFreightTypes.Dock = DockStyle.Fill;
+        _moFreightTypes.Text = MoOrderImport.FormatFreightTable(_settings.MoFreightTypes);
+        freightPanel.Controls.Add(_moFreightTypes, 1, 0);
+        root.Controls.Add(freightPanel, 0, 8);
 
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
@@ -142,7 +185,7 @@ internal sealed class SettingsForm : Form
             var index = _grid.Rows.Add(field.Label, value);
             _grid.Rows[index].Tag = key;
         }
-        root.Controls.Add(_grid, 0, 6);
+        root.Controls.Add(_grid, 0, 9);
         Shown += (_, _) => _grid.CurrentCell = _grid.Rows.Count > 0 ? _grid.Rows[0].Cells["Value"] : null;
 
         var buttons = new FlowLayoutPanel
@@ -163,7 +206,7 @@ internal sealed class SettingsForm : Form
             probe.Click += async (_, _) => await RunProbeAsync(probe);
             buttons.Controls.Add(probe);
         }
-        root.Controls.Add(buttons, 0, 7);
+        root.Controls.Add(buttons, 0, 10);
         AcceptButton = save;
         CancelButton = cancel;
     }
@@ -206,6 +249,13 @@ internal sealed class SettingsForm : Form
         _settings.ShopeeOrderType = _shopeeOrderType.Text.Trim();
         _settings.ShopeeCustomerCode = _shopeeCustomerCode.Text.Trim();
         _settings.ShopeeNotePrefix = _shopeeNotePrefix.Text.Trim();
+        _settings.MoOrderType = _moOrderType.Text.Trim();
+        _settings.MoCustomerCode = _moCustomerCode.Text.Trim();
+        _settings.MoNotePrefix = _moNotePrefix.Text.Trim();
+        _settings.MoDiscountItemCode = _moDiscountItem.Text.Trim();
+        _settings.MoShippingItemCode = _moShippingItem.Text.Trim();
+        _settings.MoFreightTypes = MoOrderImport.ParseFreightTable(_moFreightTypes.Text);
+        if (_moPassword.Text.Length > 0) _settings.MoPasswordProtected = LocalSecret.Protect(_moPassword.Text);
         _settings.FirstRowWarehouseEnabled = _firstRowWarehouse.Checked;
         _settings.FirstRowWarehouse = warehouse;
         _settings.AdvancedMode = _advanced.Checked;

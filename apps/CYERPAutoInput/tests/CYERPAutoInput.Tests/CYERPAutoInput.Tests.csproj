@@ -18,6 +18,15 @@
     <Compile Include="..\..\ProbeRedaction.cs" Link="Linked\ProbeRedaction.cs" />
     <Compile Include="..\..\XlsxReader.cs" Link="Linked\XlsxReader.cs" />
     <Compile Include="..\..\ShopeeOrderImport.cs" Link="Linked\ShopeeOrderImport.cs" />
+    <Compile Include="..\..\XlsReader.cs" Link="Linked\XlsReader.cs" />
+    <Compile Include="..\..\MoOrderImport.cs" Link="Linked\MoOrderImport.cs" />
+    <Compile Include="..\..\ImportedOrder.cs" Link="Linked\ImportedOrder.cs" />
+    <Compile Include="..\..\OrderLedger.cs" Link="Linked\OrderLedger.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Fake, password-protected MO店+ exports built by Fixtures/make_mo_fixture.py. -->
+    <None Include="Fixtures\*.xls" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

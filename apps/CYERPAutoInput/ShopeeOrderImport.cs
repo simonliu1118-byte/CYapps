@@ -128,6 +128,24 @@ internal static partial class ShopeeOrderImport
         ["ship_addr1"] = order.TrackingNumber
     };
 
+    public const string Source = "蝦皮";
+
+    /// <summary>Converts a parsed order with the local settings into a form-ready order.</summary>
+    public static ImportedOrder ToImported(ShopeeOrder order, ShopeeMapping mapping)
+    {
+        var header = HeaderValues(order, mapping);
+        header.Remove("ship_addr1"); // carried by ImportedOrder.TrackingNumber
+        return new ImportedOrder
+        {
+            Source = Source,
+            OrderSn = order.OrderSn,
+            Header = header,
+            Items = order.Items.Select(i => new ImportedItem(i.ItemCode, i.Quantity, i.UnitPrice)).ToList(),
+            HandoffReason = order.HandoffReason,
+            TrackingNumber = order.TrackingNumber
+        };
+    }
+
     [GeneratedRegex(@"\[\d+\]")]
     private static partial Regex ItemMarker();
 }
