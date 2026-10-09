@@ -761,8 +761,9 @@ internal sealed class MainForm : Form
     /// <summary>
     /// Enters every order in turn; each must be saved before the next starts. When an
     /// order fails, the document CY created for it is abandoned (PROJECT_RULES §1) and the
-    /// batch continues; if that cannot be confirmed safe, or on Esc or an order handed to a
-    /// person, the batch stops. Ends with saved / failed / stopped / not started lists.
+    /// batch continues; orders with remarks are skipped and listed for a person. The batch
+    /// only stops when abandoning is not safe or on Esc. Ends with saved / review / handoff /
+    /// failed / stopped / not started lists.
     /// </summary>
     private async Task RunShopeeBatchAsync(IReadOnlyList<ShopeeOrder> orders)
     {
@@ -771,6 +772,7 @@ internal sealed class MainForm : Form
         var done = new List<string>();
         var review = new List<string>();
         var failed = new List<string>();
+        var handOff = new List<string>();
         string? stoppedAt = null;
         var next = 0;
 
@@ -781,6 +783,14 @@ internal sealed class MainForm : Form
             {
                 token.ThrowIfCancellationRequested();
                 var order = orders[next];
+                // Orders with a buyer remark or seller note are not entered in a batch at all;
+                // they are listed for a person at the end (user, 2026-10-10).
+                if (order.HandoffReason.Length > 0)
+                {
+                    handOff.Add($"{order.OrderSn}：{order.HandoffReason}");
+                    _log.Info("shopee", $"batch order skipped for handoff index={next + 1}/{orders.Count}");
+                    continue;
+                }
                 LoadShopeeOrder(order);
                 SetStatus($"蝦皮批次 {next + 1}/{orders.Count}：訂單 {order.OrderSn}");
                 var snapshot = CreateSnapshot(out var validationError);
@@ -819,11 +829,6 @@ internal sealed class MainForm : Form
                         return;
                     }
                 }
-                if (result.HandedOff.Length > 0)
-                {
-                    stoppedAt = $"訂單 {order.OrderSn}（{DocumentKeyText(result)}）有備註，已打完單頭停在 ERP 轉人工：{result.HandedOff}";
-                    return;
-                }
                 if (!result.Saved)
                 {
                     stoppedAt = $"訂單 {order.OrderSn}：未儲存（{result.SaveSkippedReason}）";
@@ -838,6 +843,7 @@ internal sealed class MainForm : Form
         var lines = new List<string> { $"已儲存 {done.Count} / {orders.Count} 張" };
         lines.AddRange(done.Select(d => "・" + d));
         if (review.Count > 0) { lines.Add(string.Empty); lines.Add("需人工確認："); lines.AddRange(review.Select(r => "・" + r)); }
+        if (handOff.Count > 0) { lines.Add(string.Empty); lines.Add($"需人工處理 {handOff.Count} 張（有備註，未輸入 ERP）："); lines.AddRange(handOff.Select(h => "・" + h)); }
         if (failed.Count > 0) { lines.Add(string.Empty); lines.Add($"失敗 {failed.Count} 張（未儲存，已略過）："); lines.AddRange(failed.Select(f => "・" + f)); }
         if (stoppedAt is not null)
         {
@@ -848,7 +854,7 @@ internal sealed class MainForm : Form
         }
         SetStatus($"蝦皮批次結束：已儲存 {done.Count}/{orders.Count} 張");
         MessageBox.Show(this, string.Join(Environment.NewLine, lines), "蝦皮批次結果", MessageBoxButtons.OK,
-            stoppedAt is null && failed.Count == 0 && review.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            stoppedAt is null && failed.Count == 0 && review.Count == 0 && handOff.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
     private void ShowRunSummaryIfNeeded(AutomationRunResult result, string documentKey)

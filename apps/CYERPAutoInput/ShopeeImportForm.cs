@@ -95,7 +95,7 @@ internal sealed class ShopeeImportForm : Form
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "物流單號", FillWeight = 150 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "品項", FillWeight = 50 });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "明細（品號×數量＠單價）", FillWeight = 300 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "備註（有則單頭後轉人工）", FillWeight = 200 });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "備註（有則轉人工）", FillWeight = 200 });
         foreach (var order in _orders)
         {
             var summary = string.Join("、", order.Items.Select(i => $"{i.ItemCode}×{i.Quantity}＠{i.UnitPrice}"));
