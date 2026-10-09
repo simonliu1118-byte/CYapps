@@ -141,11 +141,11 @@ internal sealed class SettingsForm : Form
         root.Controls.Add(moRow2, 0, 7);
 
         var freightPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
-        freightPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
+        freightPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 236));
         freightPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         freightPanel.Controls.Add(new Label
         {
-            Text = "MO店+ 物流商→貨運別\n一行一組：物流商關鍵字=貨運別\n（關鍵字包含在匯出檔的物流商文字中即可）",
+            Text = "MO店+ 物流商→貨運別\n每行一組：關鍵字=貨運別\n關鍵字只要包含在物流商文字中\n例如：全家=代號",
             Dock = DockStyle.Fill,
             Padding = new Padding(3, 4, 0, 0)
         }, 0, 0);

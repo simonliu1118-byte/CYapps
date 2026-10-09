@@ -84,7 +84,6 @@ internal sealed class OrderImportForm : Form
         CancelButton = cancel;
 
         CyVisualTheme.Apply(this);
-        StyleEditableColumns();
     }
 
     private void ConfigureGrid()
@@ -99,30 +98,32 @@ internal sealed class OrderImportForm : Form
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.EditMode = DataGridViewEditMode.EditOnEnter;
 
-        void Column(string name, string header, float weight, bool editable = false) =>
+        void Column(string name, string header, float weight, int minWidth, bool editable = false) =>
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
                 Name = name,
                 HeaderText = header,
                 FillWeight = weight,
+                MinimumWidth = minWidth,
                 ReadOnly = !editable,
                 SortMode = DataGridViewColumnSortMode.NotSortable
             });
 
-        Column("OrderSn", "訂單編號", 130);
-        if (_editable) Column("Carrier", "物流商", 110);
-        Column("Tracking", "物流單號", 120, _editable);
+        Column("OrderSn", "訂單編號", 140, 128);
+        if (_editable) Column("Carrier", "物流商", 100, 70);
+        Column("Tracking", "物流單號", 120, 90, _editable);
         if (_editable)
         {
-            Column("TaxId", "統編", 80);
-            Column("InvoiceName", "客戶全名", 110, true);
-            Column("InvoiceDate", "發票日期", 90, true);
-            Column("InvoiceNo", "發票號碼", 100, true);
-            Column("Total", "代收", 60);
+            Column("TaxId", "統編", 80, 76);
+            Column("InvoiceName", "客戶全名", 110, 80, true);
+            Column("InvoiceDate", "發票日期", 90, 84, true);
+            Column("InvoiceNo", "發票號碼", 100, 90, true);
+            Column("Total", "代收", 55, 50);
         }
-        Column("Items", "明細（品號×數量＠單價）", 260);
-        Column("Handoff", "轉人工原因", 170);
-        Column("Ledger", "輸入紀錄", 110);
+        Column("Items", "明細（品號×數量＠單價）", 260, 120);
+        Column("Handoff", "轉人工原因", 170, 90);
+        Column("Ledger", "輸入紀錄", 90, 70);
+        _grid.ShowCellToolTips = true; // truncated details and reasons show in full on hover
 
         foreach (var order in _orders)
         {
@@ -147,6 +148,7 @@ internal sealed class OrderImportForm : Form
             if (entry?.Status == LedgerStatus.Saved) row.DefaultCellStyle.ForeColor = CyVisualTheme.TextDisabled;
         }
 
+        _grid.CellFormatting += TintReadOnlyCells;
         _grid.CellEndEdit += (_, e) => WriteBack(e.RowIndex, e.ColumnIndex);
         _grid.CellDoubleClick += (_, e) =>
         {
@@ -154,11 +156,14 @@ internal sealed class OrderImportForm : Form
         };
     }
 
-    /// <summary>Editable cells are white; read-only cells keep the theme's read-only tint.</summary>
-    private void StyleEditableColumns()
+    /// <summary>
+    /// Editable cells are white and read-only cells tinted, set per cell at paint time so the
+    /// theme's row styles cannot override it.
+    /// </summary>
+    private void TintReadOnlyCells(object? sender, DataGridViewCellFormattingEventArgs e)
     {
-        foreach (DataGridViewColumn column in _grid.Columns)
-            column.DefaultCellStyle.BackColor = column.ReadOnly ? CyVisualTheme.ReadOnly : CyVisualTheme.White;
+        if (!_editable || e.ColumnIndex < 0 || e.CellStyle is null) return;
+        e.CellStyle.BackColor = _grid.Columns[e.ColumnIndex].ReadOnly ? CyVisualTheme.ReadOnly : CyVisualTheme.White;
     }
 
     private void WriteBack(int rowIndex, int columnIndex)
