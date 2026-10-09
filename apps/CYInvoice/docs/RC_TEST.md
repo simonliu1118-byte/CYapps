@@ -3,7 +3,7 @@
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
 
 - 目前工程測試基準：**V2.6.14**。
-- Cloud source：**0.8.9 / API 1 / compatibility marker 8 / storage Schema 12**；實際 development 部署結果見交接／PR，勿拿 source 代替 live。
+- Development Cloud：**0.8.9 / API 1 / compatibility marker 8 / storage Schema 12**；10/10 staged Run #8 attempt 2 已驗證新 capabilities，實機操作仍待驗收。
 - 本輪 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.14` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
 - 最新公開正式 Release：**V2.4.2**。
 - V2.6.11 功能 commit 的 Governance #1137、Cloud #369、Windows #258 全部通過；9/29 development staged deployment 為既有歷史證據，本次未重查 live。PR #216 尚未合併，本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。

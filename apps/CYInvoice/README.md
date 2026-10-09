@@ -94,7 +94,7 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 - Local／Built-in provider 共用 IIdentityProvider；正式 role 為 SUPER_ADMIN / ADMIN / USER。
 - Online 權限操作取最新中央 authority；只有真正傳輸斷線／timeout 使用最後可信 protected offline cache。
 - 裝置管理支援 inventory／revoke，保留歷史與最後一台 active Device 防護；Cloud → Local 使用雙重確認及 crash-safe 本機重置。
-- Source 為 Cloud 0.8.9／API 1／compatibility Schema 8／storage Schema 12。最後 development deployment 證據為 2026-09-29 Run #7，本次未重新驗證 live 狀態。
+- Source 為 Cloud 0.8.9／API 1／compatibility Schema 8／storage Schema 12。2026-10-10 development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) 已驗證 Cloud 0.8.9／storage 12 與新能力；人工 A/B/C 行為仍待驗收。
 - CY ID adapter、Windows offline 接線及跨機業務 Work Item 尚未實作；canonical shared contract 已發布，詳見 [CY ID 整合](docs/CY_ID_INTEGRATION.md)。
 
 ### 系統診斷（V2.6.3）

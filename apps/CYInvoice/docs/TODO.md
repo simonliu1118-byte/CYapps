@@ -6,13 +6,13 @@
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
-Cloud source 0.8.9／API 1／compatibility marker 8／storage Schema 12；最後 development 遠端部署證據為 **9/29 Run #7**，本次未重查 live health／D1。CI 成功不等於實機驗收或遠端部署。
+Cloud source 0.8.9／API 1／compatibility marker 8／storage Schema 12；development staged **10/10 Run #8 attempt 2** 已通過 migration／aggregate／FK／health／新 capabilities，0012 已套用且無 pending migration。CI 成功不等於實機驗收或遠端部署。
 
 ## 0. 接續優先順序
 
 | 優先 | 未完成工作 | 驗收位置／依賴 |
 | --- | --- | --- |
-| 目前 | V2.6.14 裝置管理、使用版本／最後使用與改名；保留 V2.6.13 介面 | RC Z／Y；精確 head CI 及人工驗收 |
+| 目前 | V2.6.14 裝置管理、使用版本／最後使用與改名；保留 V2.6.13 介面 | RC Z／Y；source CI 已通過、人工尚待驗收 |
 | 目前 | V2.6.12 邀請首次加入與首次說明 | RC X；舊包重開成功有使用者證據，修正版首次成功待實機 |
 | 目前 | V2.6.11 處理中／上傳問題分流、舊資料結案、Danger button／號碼隱藏 | RC W；Windows #258 通過，人工待測 |
 | 目前 | A/B 最新工程版基線與即時中央權限／Offline reconnect | RC Q／R；四包已實作，不再重做 |
@@ -57,6 +57,9 @@ Cloud source 0.8.9／API 1／compatibility marker 8／storage Schema 12；最後
 - [ ] **CancelReason 回查。** 取得真實 invoice_query 樣本後，再決定完成作廢歷史能否跨重新啟動解析使用者／覆核管理員／原因；沒有官方欄位就不自行保存一套永久作廢歷史。
 
 ## 3. 已完成工程證據（不重排為 TODO）
+
+V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 全部通過，含 client contracts、WinForms label 測量、完整回歸、packaged smoke／safety scan。Development staged Run #8 attempt 2 已驗證 Cloud 0.8.9／storage 12／usage／rename；0012 一次套用，撤銷歷史保留。後續僅文件更新不推進 VERSION／BUILD，精確 head 以 PR checks 為準。
+
 
 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258。Core／Void／Employee void workflow（29/29）／Allowance／SQLite／Sync／SyncCoordinator 與 Windows smoke／package 全綠；歷史行政結案契約已修正，source TODO／FIXME／NotImplementedException 盤點沒有另找到明確未實作 placeholder。
 

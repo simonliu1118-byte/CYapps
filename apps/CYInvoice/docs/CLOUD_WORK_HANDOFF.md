@@ -28,7 +28,18 @@ MainForm 啟動在既有 lifetime 下回報自己的 VERSION／BUILD；POST /v1/
 
 本機 TypeScript、bootstrap SQL、實際 lifecycle handler／SQL 回歸及 bundle dry-run 已通過。回歸含 own-device 更新、server time、空白／控制字元／長度、撤銷／disabled Workspace、credential race、audit failure rollback 及歷史保留；C# client 增加 wire contract／錯誤回傳拒絕，Windows smoke 增加四欄／active filtering／最後一台防護／新增視窗標籤測量。Windows CI 與工程包結果以 PR 精確 head 為準；實機 RC Z、125／150 DPI 尚未取得證據。
 
-Development 部署沿用 cyinvoice/cloud-dev-deploy 既有 staged workflow，先 bookmark／aggregate／FK audit，再套用 0012、部署與核對 Cloud 0.8.9／API 1／marker 8／storage 12 及新 capabilities；實際部署結果另記 PR，未通過前不能將 source 版本宣稱為 live。
+Development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) 已成功；deploy commit 3b7325ea 與功能 source db1a3b95 的 tree 相同。先 capture bookmark／aggregate audit，0012 一次套用；Device 總量及 active／revoked 分組前後保持，仍存在 revoked 歷史，FK 無異常。第一次 immediate health 尚讀到 0.8.8；完全相同 source 重跑後無 pending migration，health 已驗證 Cloud 0.8.9／API 1／marker 8／storage 12／storage ok 及 usage／rename capabilities。未重跑 0010／0011，未操作真人裝置名稱或憑證。
+
+### V2.6.14 自動化與工程包
+
+功能 source **db1a3b9560510a94400ffb308a1536a3a1ef8754**：
+
+- [Governance #1171 通過](https://github.com/simonliu1118-byte/CYapps/actions/runs/37982871612)。
+- [Cloud #377 通過](https://github.com/simonliu1118-byte/CYapps/actions/runs/37982871621)，含 lifecycle SQL／migration／Linux 及 Windows client contracts。
+- [Windows #266 通過](https://github.com/simonliu1118-byte/CYapps/actions/runs/37982871637)，含編譯、全部回歸、startup／packaged smoke、PE／VERSION／BUILD 及 public-package scan。
+- 當輪 [V2.6.14 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/37982871637/artifacts/11642360855)，SHA-256 4f150a845bb8eaa119e9ab5a8d348dfa278e12d814e1393aab3e4c6a592052c6，原 Artifact 至 2026-10-13 03:53（Asia/Taipei）。
+
+本次收尾只更新部署／CI 證據文件，不推進 VERSION／BUILD；下載最新版及精確 head checks 以 PR #216 為準。功能 source 的 CI 不冒充後續文件 head 已完成檢查。
 
 ## V2.6.13 歷史介面停點（版本快照已由 V2.6.14 取代）
 
@@ -84,7 +95,7 @@ Windows Artifact：[CYInvoice_V2.6.11_Build2_engineering-run258](https://github.
 
 Reference backend source：Cloud **0.8.9**／API **1**／legacy compatibility schemaVersion=8／actual storage Schema **12**；forward migrations 0001～0012。不可把 compatibility marker 與 storage migration progress 當同一欄位。
 
-最後可引用的 development 遠端證據是 **2026-09-29 staged deploy Run #7**：health／storage／device-revoke-v1／device-self-status-v1 通過；部署前已無未套用 migration，沒有重跑 0010／0011。前後 aggregate audit／FK 正常。詳見 [9/29 歷史快照](NEXT_CHAT_HANDOFF_2026-09-29.md)。本次未連線重查 live Worker／D1，不把當時資料筆數或健康狀態宣稱為今日即時狀態。
+最新 development 遠端證據為 2026-10-10 staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509)，詳見上方 V2.6.14。9/29 Run #7／Cloud 0.8.8／storage 11 保留為 [歷史快照](NEXT_CHAT_HANDOFF_2026-09-29.md)，不再當最新部署基準。
 
 以下四包已合併進 main，不再列為未實作：
 

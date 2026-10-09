@@ -11,6 +11,8 @@
 - Cloud source 0.8.9／API 1／compatibility marker 8／storage Schema 12；新 capabilities device-usage-v1／device-rename-v1。撤銷紀錄仍保留雲端資料庫及既有 API，只從程式清單隱藏。
 - 本次獨立功能需求推進 Patch、BUILD 歸零；已同步 main 6d997be0，保留先前分流、邀請修正與介面。自動化、部署及工程包證據以現行交接／PR 精確 head 為準；實機 RC Z 尚待驗收，未建立 tag／正式 Release。
 
+- V2.6.14 功能 source db1a3b95 的 Governance #1171／Cloud #377／Windows #266 全部通過，development staged Run #8 attempt 2 已驗證 Cloud 0.8.9／Schema 12／新 capabilities。0012 一次套用，重跑無 pending，Device aggregate／revoked 歷史與 FK 正常。初次立即 health 尚讀到 0.8.8，相同 source 重跑通過；收尾文件更新不另推進 VERSION／BUILD。
+
 ## V2.6.13 — 2026/10/09（工程測試中，未正式 Release）
 
 - 依使用者新介面要求統一所有應用程式按鈕的小圓角；共用 RoundedButton 的 state／render／lifecycle，移除舊 NoFocusCueButton 與各自重複繪圖事件。品牌匯入、Primary、Danger、PDF 版型與商品列刪除均納入盤點，保留原生操作及鍵盤行為。

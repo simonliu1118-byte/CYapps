@@ -17,7 +17,8 @@
 
 GitHub Actions 驗證 source、Worker bundle、local migration、contract、Windows build／smoke／package；功能 commit 66ec3671 的 Governance #1137、Cloud #369、Windows #258 全部通過，證據見 [現行交接](CLOUD_WORK_HANDOFF.md)。不等同 live deployment 或人工驗收。
 
-最後 development 遠端部署證據為 2026-09-29 staged Run #7：Cloud 0.8.8／API 1／compatibility marker 8／storage Schema 11／storage ok，device-revoke-v1 與 device-self-status-v1 已驗證。當時 canonical migration 無未套用項目、aggregate／FK audit 正常；本次未重新查詢即時資料，不引用舊部署前 0 筆作為今日狀態。
+目前 development 遠端部署證據為 2026-10-10 staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509)：Cloud 0.8.9／API 1／compatibility marker 8／storage Schema 12／storage ok，包含 device-usage-v1／device-rename-v1；0012 已套用，aggregate Device 狀態保持、FK 無異常，重跑無 pending migration。第一次即時 health 尚讀到 0.8.8，相同 source 再驗證正常。Windows A/B/C 操作仍待 RC Z，不能以部署 health 冒充人工通過。
+
 ## 2. 帳號權威模型
 
 CYInvoice 不採「程式啟動後持續登入某人」的模型。

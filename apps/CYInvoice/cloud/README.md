@@ -18,7 +18,7 @@ The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engin
 
 `wrangler.jsonc` advertises the client compatibility schema. Applied migrations are immutable; future changes must use new forward migrations.
 
-> GitHub Actions validates the Worker bundle and migrations with local SQLite. It does not prove current remote deployment health. The last recorded development deployment is 2026-09-29 staged Run #7 at Cloud 0.8.8 / API 1 / storage Schema 11; this documentation update did not query or deploy the live service.
+> Source CI passed on db1a3b95 (Cloud #377 / Windows #266). Development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) verified Cloud 0.8.9 / API 1 / compatibility marker 8 / storage Schema 12 and both new capabilities. Migration 0012 was applied once, with stable aggregate Device state and an empty foreign-key check; retry found no unapplied migrations. The first immediate health read still returned 0.8.8; identical-source retry passed. This does not replace Windows A/B/C manual acceptance.
 
 ## Development commands
 
