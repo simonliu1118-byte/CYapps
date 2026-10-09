@@ -2,25 +2,25 @@
 
 更新：2026/10/10（日本時間）。本文件只描述目前狀態，不新增永久規則。接手順序仍為根 `AGENTS.md` → `REPOSITORY_RULES.md` → `REPO_POLICY.md` → 本專案 `PROJECT_RULES.md`，之後才讀本文件、README、TODO 與其他狀態文件。
 
-**V0.22.30 Build 1（桌機返修，已部署）**：右上帳號列恢復平板同款；帳戶標題隱藏，日期／科目／摘要／金額標籤同行、放大黑字；收支控制加寬；常用項目加虛線框及小型 pill；金額／儲存／清空統一 40px。月份控制靠上並加框，空／有資料欄位固定；帳戶改名與封存同行靠右。設定縮為 640px，桌面帳本移轉併入資料管理，清除備份空訊息占位。只調整桌機 presentation，手機／平板尺寸與流程保留。 本地 24 組 application tests、六種 viewport 瀏覽器驗證、PR #364 治理／CI 與正式部署 #564 全部成功。真實桌機視覺仍待使用者驗收。
-
-**V0.22.31 Build 0（目前工作分支）**：桌機收支控制維持 320px 寬、降為 32px 高；切月改用清單遮罩與轉圈提示；快速輸入適配 640px 設定視窗，備份完整換行、資料移轉改成與 Excel 匯入同級的可展開區塊。Excel 匯入增加下載模板（空白輸入＋填寫說明／目前帳戶科目）。共用 Auth 依 CYID expiresAt 到期導回登入頁，API 401 也走同一導頁；不改手機／平板版面。待遠端 CI、合併與部署確認。
+**V0.22.31 Build 0（已部署）**：桌機收支控制維持 320px 寬、降為 32px 高；切月改用清單遮罩與轉圈提示；快速輸入適配 640px 設定視窗，備份完整換行、資料移轉改成與 Excel 匯入同級的可展開區塊。Excel 匯入增加下載模板（空白輸入＋填寫說明／目前帳戶科目）。共用 Auth 依 CYID expiresAt 到期導回登入頁，API 401 也走同一導頁；不改手機／平板版面。本地 24 組測試、六種 viewport、模板填寫後實際匯入預覽與登入逾時導頁驗證通過；PR #366 治理／CI 與正式部署 #568（run `37955721498`）成功。真實桌機視覺待使用者驗收。
 
 ## 正式基準、部署與治理
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.30 Build 1**；PR #364 已合併，完成桌機記帳／帳本／帳號／設定返修，手機與平板既有排列保留 |
-| Production Deploy | [CYAccountingWeb Validate and Deploy #564（run `37823795188`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37823795188) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.31 Build 0**；PR #366 已合併，完成桌機設定／載入遮罩返修、Excel 模板下載與共用 Session 到期導頁，手機與平板既有排列保留 |
+| Production Deploy | [CYAccountingWeb Validate and Deploy #568（run `37955721498`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37955721498) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.31**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
-| 下一工作線 | 請使用者優先於真實桌機／手機／平板驗收 V0.22.30 畫面；`cyaccountingweb/optimistic-transaction-create` 仍未合併、未部署，不是現行基準。下一獨立開發自 main 開分支 |
+| 下一工作線 | 請使用者優先於真實桌機／手機／平板驗收 V0.22.31 畫面；`cyaccountingweb/optimistic-transaction-create` 仍未合併、未部署，不是現行基準。下一獨立開發自 main 開分支 |
 
 純文件更新不升 `VERSION`／`BUILD`。正式版本來源仍是專案根 `VERSION` 與 `BUILD`。
 
 ## 近期版本收斂
+
+- **V0.22.31 Build 0**：PR #366 治理／CI 成功、已合併；正式部署 #568（run `37955721498`）成功，功能基準 commit `801cbbfda21d58083913e0f8942ab2c210059e0c`。桌機 slider 320×32、切月清單遮罩、快速輸入／備份無水平溢出；Excel 模板填入收入／支出後實際 parser 預覽 2 筆、0 錯誤。登入 401 與 CYID 到期時間導回 `/login`；手機／平板版面保留，Stable Release 維持 V0.22.15。
 
 - **V0.22.30 Build 1**：完成本次桌機返修；PR #364 治理／CI 成功、已合併。正式部署 #564（run `37823795188`）成功；功能基準 commit `e0fae7b1e9ba3f8c1c59ef76ff1eef7ff91a8e83`。手機／平板版面尺寸比對一致；桌機有／無資料的欄位座標一致，金額／儲存／清空均 40px。Stable Release 維持 V0.22.15。
 
