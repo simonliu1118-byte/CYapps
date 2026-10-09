@@ -4,15 +4,15 @@
 
 更新：2026/10/10（日本時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
-**V0.22.31 Build 3（待部署）**：接續歷史帳目調查，修正月帳簿與期初工作表 OOXML 的 autoFilter／mergeCells 順序；加入空月、180 筆跨帳戶及模板結構回歸。24 組本地測試通過。使用者已授權一次性 D1 唯讀調查與加密傳回；私鑰保留本地，不把真實帳務寫入 Git。查完立即移除暫時 CI／查詢腳本與工作分支。缺帳仍待正式查詢證據，不修改正式帳務或手機／平板呈現，Stable Release 維持 V0.22.15。
+**V0.22.31 Build 3（已部署）**：月帳簿與期初工作表 OOXML 改為 autoFilter 先於 mergeCells，修正結構缺陷；空月、180 筆跨帳戶及模板結構回歸、24 組本地測試與 PR #373 CI 通過，正式部署 #581（run `37965124293`）成功。已完成正式 D1 唯讀比對：月份清單與 D1 分組結果一致，日期格式正常，移轉記錄筆數與目前交易總數相同；缺少帳戶的歷史資料目前不在正式 D1 內，需原始完整桌面帳本核對來源／SQLite WAL，尚未修復資料。依授權移除暫時查詢腳本、public key 與 CI 步驟，真實帳務未寫入 Git，未改正式資料或手機／平板呈現。Stable Release 維持 V0.22.15。
 
 ## 目前狀態
 
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.31 Build 3** 待部署；Excel 結構修正待 CI，歷史缺帳未結案 |
-| 正式部署 | [CYAccountingWeb Validate and Deploy #576（run `37962825541`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37962825541) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式版本 | **V0.22.31 Build 3**；PR #373 已合併，Excel 結構修正已部署；唯讀 D1 證實清單與資料庫一致，歷史帳本來源仍待核對 |
+| 正式部署 | [CYAccountingWeb Validate and Deploy #581（run `37965124293`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37965124293) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |

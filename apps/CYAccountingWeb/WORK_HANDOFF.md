@@ -2,14 +2,14 @@
 
 更新：2026/10/10（日本時間）。本文件只描述目前狀態，不新增永久規則。接手順序仍為根 `AGENTS.md` → `REPOSITORY_RULES.md` → `REPO_POLICY.md` → 本專案 `PROJECT_RULES.md`，之後才讀本文件、README、TODO 與其他狀態文件。
 
-**V0.22.31 Build 3（待部署）**：接續歷史帳目調查，修正月帳簿與期初工作表 OOXML 的 autoFilter／mergeCells 順序；加入空月、180 筆跨帳戶及模板結構回歸。24 組本地測試通過。使用者已授權一次性 D1 唯讀調查與加密傳回；私鑰保留本地，不把真實帳務寫入 Git。查完立即移除暫時 CI／查詢腳本與工作分支。缺帳仍待正式查詢證據，不修改正式帳務或手機／平板呈現，Stable Release 維持 V0.22.15。
+**V0.22.31 Build 3（已部署）**：月帳簿與期初工作表 OOXML 改為 autoFilter 先於 mergeCells，修正結構缺陷；空月、180 筆跨帳戶及模板結構回歸、24 組本地測試與 PR #373 CI 通過，正式部署 #581（run `37965124293`）成功。已完成正式 D1 唯讀比對：月份清單與 D1 分組結果一致，日期格式正常，移轉記錄筆數與目前交易總數相同；缺少帳戶的歷史資料目前不在正式 D1 內，需原始完整桌面帳本核對來源／SQLite WAL，尚未修復資料。依授權移除暫時查詢腳本、public key 與 CI 步驟，真實帳務未寫入 Git，未改正式資料或手機／平板呈現。Stable Release 維持 V0.22.15。
 
 ## 正式基準、部署與治理
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.31 Build 3** 待部署；Excel 結構修正待 CI，歷史缺帳未結案 |
-| Production Deploy | [CYAccountingWeb Validate and Deploy #576（run `37962825541`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37962825541) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.31 Build 3**；PR #373 已合併，Excel 結構修正已部署；唯讀 D1 證實清單與資料庫一致，歷史帳本來源仍待核對 |
+| Production Deploy | [CYAccountingWeb Validate and Deploy #581（run `37965124293`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37965124293) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
 | Governance | Common Rules **2.8.0**；CYapps Governance **2.3.32**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
@@ -19,6 +19,8 @@
 純文件更新不升 `VERSION`／`BUILD`。正式版本來源仍是專案根 `VERSION` 與 `BUILD`。
 
 ## 近期版本收斂
+
+- **V0.22.31 Build 3**：PR #373、Production Deploy #581（run `37965124293`）成功；功能基準 `464006ba230aeb08e53a26510e6e7b9e5f8e8e0c`。Excel 工作表順序修正；唯讀 D1 已排除前端帳戶篩選及日期格式。資料缺列尚待原始完整帳本；未重匯或改寫正式庫。暫時 audit script／CI 與 public key 已移除，真實帳務不進 Git。Windows Excel LTSC 修正版仍待實機開啟。
 
 - **V0.22.31 Build 2**：PR #371 已合併，正式部署 #576（run `37962825541`）成功；功能基準 commit `2fb46d6a1e314113cfeb63c673deaf33684e7c63`。桌機月份與收支上下緣同高、單列統計／工具、共用 quick-lock 規則；跨帳戶 120 筆回歸與 90% 縮放通過。歷史月份缺帳／收支不符仍未結案，等待正式 Excel 與來源帳本比對，不能以本地 mock 成功替代。Stable Release 維持 V0.22.15。
 
