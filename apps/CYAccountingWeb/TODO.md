@@ -7,7 +7,7 @@
 - [ ] 真實 iPad／Android 完整交叉驗收：直向、橫向、分割視窗、原生 picker、觸控排序／捲動、螢幕鍵盤與外接鍵盤。
 - [ ] 真實平板登入、Session、登出、USER 唯讀及 Excel 分享／下載完整驗收。
 - [ ] **下一次公開 Stable Release 前**移除手機「測試用平板版」、preview「返回手機版」及其 session-scoped tablet preview bootstrap／測試專用 UI；正式平板本身的 inline identity 與直／橫式 presentation 保留。
-- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.22.31 Build 0 桌機返修的自動回歸與 production semantic verification 不等於所有真機情境已逐項驗收；優先檢查 32px 收支控制、月份清單遮罩／轉圈、快速輸入與備份完整顯示、同級資料管理區塊、Excel 模板填寫匯入及 Session 逾時導回登入，同時確保手機／平板版未受影響。
+- [ ] 手機、桌機以實際記帳資料完成最終交叉驗收；目前 V0.22.31 Build 1 桌機返修的自動回歸與 production semantic verification 不等於所有真機情境已逐項驗收；優先檢查 32px 收支控制、月份清單遮罩／轉圈、快速輸入與備份完整顯示、同級資料管理區塊、Excel 模板填寫匯入及 Session 逾時導回登入，同時確保手機／平板版未受影響。
 
 ## 交易互動
 
@@ -36,3 +36,5 @@
 - [ ] Identity authority、跨 App ownership／routing／shared Backup 底層調整先同步 CYWEB／CYID 最新決策，沿用 canonical consumer contract。
 
 下一個獨立開發項目應從目前 main 建新 branch，不延續未合併舊 branch。已完成項目不再堆在 TODO；請回 README／CHANGELOG 查已上線能力與版本歷史。
+
+- [ ] 授權歷史帳本替換：Google Drive 來源 2024～2026/03 待連線／讀取／核對；替換既有 2025/12～2026/03，保留 2026/04 之後。先備份、再原子替換並比對筆數／收支／後續資料。2024 首期期初由使用者後補，尚未執行正式資料變更。

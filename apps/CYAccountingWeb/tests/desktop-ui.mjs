@@ -37,7 +37,7 @@ const worker = read('src/app.js');
 const accountingTools = read('src/accounting-tools.js');
 
 assert.equal(version, '0.22.31');
-assert.equal(build, '0');
+assert.equal(build, '3');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*minmax\(380px, 420px\) minmax\(0, 1fr\)/);
 assert.match(css, /\.current-user\.role-super-admin/);
@@ -176,3 +176,35 @@ for (const desktop of [true, false]) {
   vm.runInContext(spanSource, scope);
   assert.equal(vm.runInContext('ledgerPresentationColumnSpan()', scope), desktop ? 7 : 8);
 }
+
+// Desktop routes non-boundary months to the existing settings action; touch
+// retains disabled state. Boundary writes keep the shared confirmation/writer.
+const quickLockSource = ledgerSource.slice(ledgerSource.indexOf('function shiftLedgerMonth('),
+  ledgerSource.indexOf('window.cySyncLedgerMonthDisplay'));
+const lockTargets = [];
+let desktopMode = true, settingsVisits = 0;
+const quickButton = { disabled: false, title: '', classList: { toggle() {} }, setAttribute() {} };
+const lockContext = vm.createContext({
+  state: { lockedThrough: '2026-08' }, els: { monthFilter: { value: '2026-06' } }, Date,
+  document: { querySelector: selector => selector === '#ledgerQuickLockButton' ? quickButton
+    : selector === '#ledgerLockSettingsButton' ? { click() { settingsVisits++; } }
+    : { classList: { contains() { return false; } } } },
+  window: { cyIsDesktopInteractionWorkspace: () => desktopMode,
+    cyConfirm: async () => true, cyaccSaveLock: async target => lockTargets.push(target) }
+});
+vm.runInContext(quickLockSource, lockContext);
+lockContext.syncLedgerQuickLock();
+assert.equal(quickButton.disabled, false);
+await lockContext.handleLedgerQuickLock();
+assert.equal(settingsVisits, 1);
+desktopMode = false;
+lockContext.syncLedgerQuickLock();
+assert.equal(quickButton.disabled, true);
+await lockContext.handleLedgerQuickLock();
+assert.equal(settingsVisits, 1);
+desktopMode = true;
+lockContext.els.monthFilter.value = '2026-09';
+await lockContext.handleLedgerQuickLock();
+lockContext.els.monthFilter.value = '2026-08';
+await lockContext.handleLedgerQuickLock();
+assert.deepEqual(lockTargets, ['2026-09', '2026-07']);

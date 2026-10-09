@@ -20,7 +20,7 @@ async function downloadMonthlyExcel() {
     return;
   }
 
-  const defaultLabel = '匯出 Excel';
+  const defaultLabel = window.cyIsDesktopInteractionWorkspace?.() ? '匯出' : '匯出 Excel';
   let failed = false;
   if (button) {
     button.disabled = true;

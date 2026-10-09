@@ -6884,15 +6884,6 @@
     color: #283542 !important;
   }
 
-  /* Ledger month trigger is clickable without a dropdown-caret affordance. */
-  .cy-month-picker-caret {
-    display: none !important;
-  }
-
-  .cy-month-picker-trigger {
-    gap: 0 !important;
-  }
-
   /* All visible Desktop month fields use the same custom picker; native controls remain data sources only. */
   .cy-native-month-source {
     position: absolute !important;
@@ -11681,7 +11672,7 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   stroke-linejoin: round;
 }
 
-.ledger-loading-overlay { display: none; }
+.ledger-loading-overlay, .ledger-month-arrow-icon { display: none; }
 @keyframes ledger-loading-spin { to { transform: rotate(360deg); } }
 
 /* Desktop business workspace. Touch presentation and canonical writers remain
@@ -11738,36 +11729,86 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     min-width: 0;
     width: 100%;
   }
+  html[data-viewport="desktop"] .cy-entry-rail { top: 18px; }
   html[data-viewport="desktop"] .ledger-card .ledger-title {
-    padding: 12px 14px 8px;
+    padding: 18px 14px 12px !important;
     margin-bottom: 0;
   }
-  html[data-viewport="desktop"] .ledger-title .title-with-badge:has(#ledgerLockBadge.hidden) {
+  html[data-viewport="desktop"] .ledger-title .title-with-badge {
     display: none;
+  }
+  html[data-viewport="desktop"] .ledger-title > div:first-child {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: 32px;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
   }
   html[data-viewport="desktop"] .cy-ledger-context {
     margin-top: 0;
+    height: 32px;
   }
+  html[data-viewport="desktop"] .ledger-month-tools { gap: 4px; }
+  html[data-viewport="desktop"] #ledgerMonthPickerCustom,
+  html[data-viewport="desktop"] #ledgerMonthSlot { height: 32px; }
+  html[data-viewport="desktop"] #ledgerMonthPickerTrigger .cy-month-picker-caret { display: none !important; }
+  html[data-viewport="desktop"] #ledgerQuickLockButton {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    border: 1px solid #c9d1da;
+    border-radius: 7px;
+    background: #fff;
+    color: #445365;
+  }
+  html[data-viewport="desktop"] #ledgerQuickLockButton .cy-ledger-lock-icon { width: 18px; height: 18px; }
+  html[data-viewport="desktop"] #ledgerQuickLockButton .cy-ledger-lock-icon-closed { display: none; }
+  html[data-viewport="desktop"] #ledgerQuickLockButton.is-locked {
+    border-color: #d98c55;
+    background: #fff0df;
+    color: #c15f25;
+  }
+  html[data-viewport="desktop"] #ledgerQuickLockButton.is-locked .cy-ledger-lock-icon-open { display: none; }
+  html[data-viewport="desktop"] #ledgerQuickLockButton.is-locked .cy-ledger-lock-icon-closed { display: block; }
+  html[data-viewport="desktop"] #ledgerLockSettingsButton { display: none; }
+  html[data-viewport="desktop"] body[data-cyacc-read-only="true"] #ledgerQuickLockButton { display: none !important; }
+
   html[data-viewport="desktop"] #ledgerMonthPickerTrigger,
   html[data-viewport="desktop"] #ledgerPrevMonth,
   html[data-viewport="desktop"] #ledgerNextMonth {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 36px !important;
-    height: 36px !important;
+    min-height: 32px !important;
+    height: 32px !important;
     border: 1px solid #cbd5e1 !important;
     border-radius: 7px !important;
     background: #fff !important;
   }
   html[data-viewport="desktop"] #ledgerMonthPickerTrigger {
-    padding: 0 12px !important;
+    padding: 0 9px !important;
+    min-width: 112px;
+    font-size: 14px !important;
+    font-weight: 600;
+    gap: 7px;
   }
   html[data-viewport="desktop"] #ledgerPrevMonth,
   html[data-viewport="desktop"] #ledgerNextMonth {
-    width: 32px;
+    width: 28px;
+    min-width: 28px;
     padding: 0 !important;
+    font-family: Arial, sans-serif;
+    font-size: 18px;
+    line-height: 1 !important;
   }
+  html[data-viewport="desktop"] .ledger-month-arrow-text { display: none; }
+  html[data-viewport="desktop"] .ledger-month-arrow-icon { display: block; width: 14px; height: 14px; }
   html[data-viewport="desktop"] #ledgerMonthLoading { display: none; }
   html[data-viewport="desktop"] .ledger-card .table-wrap {
     position: relative;
@@ -11801,8 +11842,33 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     justify-content: flex-end;
     gap: 6px;
   }
-  html[data-viewport="desktop"] #settingsDialog:not(.cy-management-mode) {
+  html[data-viewport="desktop"] #settingsDialog.settings-modal {
     width: min(640px, calc(100vw - 36px)) !important;
+    max-width: 640px !important;
+    height: min(532px, calc(100dvh - 36px)) !important;
+    max-height: calc(100dvh - 36px) !important;
+    overflow: hidden !important;
+  }
+  html[data-viewport="desktop"] #settingsDialog[open] {
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  html[data-viewport="desktop"] #settingsDialog .settings-layout {
+    min-height: 0 !important;
+    height: 100%;
+    overflow: hidden;
+  }
+  html[data-viewport="desktop"] #settingsDialog .settings-content {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  html[data-viewport="desktop"] #settingsDialog .settings-category-parent {
+    min-height: 32px;
+    padding-block: 3px;
+  }
+  html[data-viewport="desktop"] #settingsDialog .settings-category-leaf {
+    min-height: 30px;
+    padding-block: 2px;
   }
   html[data-viewport="desktop"] #settingsDialog:not(.cy-management-mode) .settings-layout {
     grid-template-columns: 112px minmax(0, 1fr);
@@ -11872,33 +11938,25 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th,
   html[data-viewport="desktop"] #settingsDialog .backup-history-table td { padding: 6px 4px; font-size: 10.5px; }
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(1),
-  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(1) { width: 112px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(1) { width: 126px; white-space: nowrap; }
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(2),
-  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(2) { width: 34px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(2) { width: 34px; white-space: nowrap; }
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(4),
   html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(4),
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(5),
-  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(5) { width: 40px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(5) { width: 36px; }
   html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(6),
-  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(6) { width: 88px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(6) { width: 105px; white-space: nowrap; overflow-wrap: normal; }
   html[data-viewport="desktop"] #settingsDialog .migration-pane {
     display: block;
     min-width: 0;
   }
-  html[data-viewport="desktop"] #settingsDialog .migration-details > summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    min-height: 30px;
-    cursor: pointer;
-    list-style: none;
+  html[data-viewport="desktop"] #settingsDialog .migration-pane > h4 { margin: 0; font-size: 13px; }
+  html[data-viewport="desktop"] #settingsDialog .migration-warning {
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 10px 12px;
   }
-  html[data-viewport="desktop"] #settingsDialog .migration-details > summary::-webkit-details-marker { display: none; }
-  html[data-viewport="desktop"] #settingsDialog .migration-details h4 { margin: 0; font-size: 13px; }
-  html[data-viewport="desktop"] #settingsDialog .migration-expand-label { color: #486787; font-size: 13px; }
-  html[data-viewport="desktop"] #settingsDialog .migration-expand-label::after { content: " ▾"; }
-  html[data-viewport="desktop"] #settingsDialog .migration-details[open] .migration-expand-label::after { content: " ▴"; }
   html[data-viewport="desktop"] #settingsDialog #desktopMigrationMessage:empty { display: none; }
   html[data-viewport="desktop"] #settingsDialog .migration-pane:has(#desktopMigrationPreview.hidden) .migration-actions { display: none; }
   html[data-viewport="desktop"] #settingsDialog .migration-pane .migration-source label {
@@ -11961,18 +12019,18 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     flex-wrap: nowrap;
     grid-column: 1 / -1 !important;
     grid-row: auto !important;
-    margin-left: 52px;
-    width: calc(100% - 52px) !important;
+    margin-left: 0;
+    width: 100% !important;
     min-height: 28px;
-    padding: 4px 6px;
+    padding: 4px 0;
     border: 1px dashed #b8c3cf;
     border-radius: 7px;
     gap: 6px;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid .quick-tool-label {
-    flex: 0 0 48px;
+    flex: 0 0 58px;
     padding: 0;
-    font-size: 10.5px;
+    font-size: 11.5px;
     white-space: nowrap;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid .quick-chip-list {
@@ -11983,11 +12041,11 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     padding: 0;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid .quick-chip {
-    min-height: 19px !important;
-    height: 19px !important;
-    padding: 0 5px !important;
-    font-size: 10px !important;
-    line-height: 17px !important;
+    min-height: 22px !important;
+    height: 22px !important;
+    padding: 0 6px !important;
+    font-size: 11px !important;
+    line-height: 20px !important;
   }
   html[data-viewport="desktop"] .entry-card > .quick-entry-tools {
     display: none !important;
@@ -12022,18 +12080,24 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     max-width: 100%;
   }
   html[data-viewport="desktop"] .cy-ledger-summary-bar {
+    height: 32px;
+    padding: 0 !important;
+    margin: 0 !important;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 9px;
+    gap: 6px;
   }
+  html[data-viewport="desktop"] .cy-summary-actions { display: flex; gap: 5px; flex-wrap: nowrap; }
+  html[data-viewport="desktop"] .cy-summary-actions button { height: 32px !important; min-height: 32px !important; padding: 0 7px !important; font-size: 11.5px !important; white-space: nowrap; }
+  html[data-viewport="desktop"] #ledgerExcelExportStatus:empty { display: none; }
   html[data-viewport="desktop"] .cy-ledger-summary-bar #monthSummary {
     display: grid !important;
     grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
     grid-template-areas: "opening income expense ending net" !important;
     gap: 0 !important;
     min-width: 0;
-    padding: 8px 0 !important;
+    padding: 0 !important;
     margin: 0 !important;
     border: 0 !important;
     background: transparent !important;
@@ -12042,18 +12106,18 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     display: flex;
     justify-content: center;
     align-items: baseline;
-    gap: 5px;
+    gap: 4px;
     min-width: 0;
-    padding: 3px 6px;
+    padding: 0 4px;
     color: #657386;
-    font-size: 13px;
+    font-size: 11.5px;
     white-space: nowrap;
   }
   html[data-viewport="desktop"] #monthSummary .ledger-summary-item:not(.opening) {
     border-left: 1px solid #dfe5eb;
   }
   html[data-viewport="desktop"] #monthSummary .ledger-summary-item strong {
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }

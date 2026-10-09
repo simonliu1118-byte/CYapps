@@ -2,16 +2,20 @@
 
 更新：2026/10/10（日本時間）。本文件只描述目前狀態，不新增永久規則。接手順序仍為根 `AGENTS.md` → `REPOSITORY_RULES.md` → `REPO_POLICY.md` → 本專案 `PROJECT_RULES.md`，之後才讀本文件、README、TODO 與其他狀態文件。
 
-**V0.22.31 Build 0（已部署）**：桌機收支控制維持 320px 寬、降為 32px 高；切月改用清單遮罩與轉圈提示；快速輸入適配 640px 設定視窗，備份完整換行、資料移轉改成與 Excel 匯入同級的可展開區塊。Excel 匯入增加下載模板（空白輸入＋填寫說明／目前帳戶科目）。共用 Auth 依 CYID expiresAt 到期導回登入頁，API 401 也走同一導頁；不改手機／平板版面。本地 24 組測試、六種 viewport、模板填寫後實際匯入預覽與登入逾時導頁驗證通過；PR #366 治理／CI 與正式部署 #568（run `37955721498`）成功。真實桌機視覺待使用者驗收。
+**V0.22.31 Build 3（已部署）**：月帳簿與期初工作表 OOXML 改為 autoFilter 先於 mergeCells，修正結構缺陷；空月、180 筆跨帳戶及模板結構回歸、24 組本地測試與 PR #373 CI 通過，正式部署 #581（run `37965124293`）成功。已完成正式 D1 唯讀比對：月份清單與 D1 分組結果一致，日期格式正常，移轉記錄筆數與目前交易總數相同；缺少帳戶的歷史資料目前不在正式 D1 內，需原始完整桌面帳本核對來源／SQLite WAL，尚未修復資料。依授權移除暫時查詢腳本、public key 與 CI 步驟，真實帳務未寫入 Git，未改正式資料或手機／平板呈現。Stable Release 維持 V0.22.15。
+
+加密診斷清理：使用者另行明確授權一次性 `actions:write`。PR #375 合併後，Production workflow #585 的 `cleanup-ledger-audit` job 成功刪除指定查詢 run `37965124293` 的加密 log；私鑰、原查詢腳本／CI 與查詢工作分支先前已移除。本次收尾 PR 完全移除清理 job 與新增權限，正式版本仍 V0.22.31 Build 3。
+
+下一筆資料工作：使用者已授權從 Google Drive 原始流水帳匯入 2024～2026/03，替換既有 2025/12～2026/03，保留 2026/04 之後的更新資料。Google Drive 尚未確認連線，來源未讀取、沒有執行帳務刪除／匯入。2024 首期期初尚未提供，不可把暫算餘額當作核對完成。取得來源後先核對月份／帳戶／重複／收支、建立正式備份，再執行授權的期間替換，並驗證後續資料完整保留；真實帳務／來源檔不進 Public Git。
 
 ## 正式基準、部署與治理
 
 | 範圍 | 最新已確認狀態 |
 | --- | --- |
-| 正式功能基準 | **V0.22.31 Build 0**；PR #366 已合併，完成桌機設定／載入遮罩返修、Excel 模板下載與共用 Session 到期導頁，手機與平板既有排列保留 |
-| Production Deploy | [CYAccountingWeb Validate and Deploy #568（run `37955721498`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37955721498) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式功能基準 | **V0.22.31 Build 3**；PR #373 已合併，Excel 結構修正已部署；唯讀 D1 證實清單與資料庫一致，歷史帳本來源仍待核對 |
+| Production Deploy | [CYAccountingWeb Validate and Deploy #581（run `37965124293`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37965124293) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；前一個 V0.22.0 Release/tag 已移除 |
-| Governance | Common Rules **2.8.0**；CYapps Governance **2.3.31**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
+| Governance | Common Rules **2.8.0**；CYapps Governance **2.3.32**；AITeam 與 CYapps 的 `REPOSITORY_RULES.md` 已核對為同一 blob |
 | CYID | CYACC consumer **1.0.1**；CYID contract **1.0.2**；minimum compatible **1.0.0** |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | 下一工作線 | 請使用者優先於真實桌機／手機／平板驗收 V0.22.31 畫面；`cyaccountingweb/optimistic-transaction-create` 仍未合併、未部署，不是現行基準。下一獨立開發自 main 開分支 |
@@ -19,6 +23,12 @@
 純文件更新不升 `VERSION`／`BUILD`。正式版本來源仍是專案根 `VERSION` 與 `BUILD`。
 
 ## 近期版本收斂
+
+- **V0.22.31 Build 3**：PR #373、Production Deploy #581（run `37965124293`）成功；功能基準 `464006ba230aeb08e53a26510e6e7b9e5f8e8e0c`。Excel 工作表順序修正；唯讀 D1 已排除前端帳戶篩選及日期格式。資料缺列尚待原始完整帳本；未重匯或改寫正式庫。暫時 audit script／CI 與 public key 已移除，真實帳務不進 Git。Windows Excel LTSC 修正版仍待實機開啟。
+
+- **V0.22.31 Build 2**：PR #371 已合併，正式部署 #576（run `37962825541`）成功；功能基準 commit `2fb46d6a1e314113cfeb63c673deaf33684e7c63`。桌機月份與收支上下緣同高、單列統計／工具、共用 quick-lock 規則；跨帳戶 120 筆回歸與 90% 縮放通過。歷史月份缺帳／收支不符仍未結案，等待正式 Excel 與來源帳本比對，不能以本地 mock 成功替代。Stable Release 維持 V0.22.15。
+
+- **V0.22.31 Build 1**：PR #369 已合併，正式部署 #572（run `37958243594`）成功；功能基準 commit `00a7fbc7e7f07443101165bd8fa5b26f27367a04`。640×532px 設定尺寸各 pane 固定，桌機科目列 30px、備份 KB 同行，六種 viewport 無 browser error。治理更新為 2.3.32（其他 App 專案例外，CYACC 規則未變）。Stable Release 維持 V0.22.15。
 
 - **V0.22.31 Build 0**：PR #366 治理／CI 成功、已合併；正式部署 #568（run `37955721498`）成功，功能基準 commit `801cbbfda21d58083913e0f8942ab2c210059e0c`。桌機 slider 320×32、切月清單遮罩、快速輸入／備份無水平溢出；Excel 模板填入收入／支出後實際 parser 預覽 2 筆、0 錯誤。登入 401 與 CYID 到期時間導回 `/login`；手機／平板版面保留，Stable Release 維持 V0.22.15。
 

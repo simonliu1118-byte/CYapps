@@ -1460,7 +1460,6 @@ const CY_DESKTOP_MANAGERS_MONTHS = ['一月', '二月', '三月', '四月', '五
 const runDesktopManagers = () => {
   setupDesktopManagersAccountLimit();
   setupDesktopManagersMonthPickers();
-  syncDesktopManagersLedgerMonthTrigger();
 };
 
 if (document.readyState === 'complete') setTimeout(runDesktopManagers, 0);
@@ -1498,7 +1497,6 @@ function setupDesktopManagersAccountLimit() {
 function setupDesktopManagersMonthPickers() {
   const media = window.matchMedia('(any-pointer: coarse)');
   const scan = () => {
-    syncDesktopManagersLedgerMonthTrigger();
     if (!isDesktopInteractionWorkspace()) return;
     for (const input of document.querySelectorAll('input[type="month"]')) {
       if (input.id === 'monthFilter' || input.id === 'openingMonth') continue;
@@ -1514,10 +1512,6 @@ function setupDesktopManagersMonthPickers() {
     const observer = new MutationObserver(scan);
     observer.observe(document.body, { childList: true, subtree: true });
   }
-}
-
-function syncDesktopManagersLedgerMonthTrigger() {
-  document.querySelector('#ledgerMonthPickerCustom .cy-month-picker-caret')?.remove();
 }
 
 function ensureDesktopManagersMonthPickerForInput(input) {
@@ -1881,7 +1875,6 @@ function auditDesktopUiMonthPickers() {
   if (typeof ensureDesktopManagersMonthPickerForInput === 'function') {
     document.querySelectorAll('input[type="month"]').forEach(input => ensureDesktopManagersMonthPickerForInput(input));
   }
-  if (typeof syncDesktopManagersLedgerMonthTrigger === 'function') syncDesktopManagersLedgerMonthTrigger();
 }
 
 function setupDesktopUiDatePickers() {
@@ -4363,7 +4356,7 @@ function setupTabletWorkspace() {
     document.documentElement.dataset.tabletLayout = orientation;
     document.documentElement.dataset.viewport = window.innerWidth < 768 ? 'mobile' : tablet ? 'tablet' : 'desktop';
     syncTabletPickerOwnership(orientation);
-    syncTabletPortraitLedgerExportPlacement(orientation);
+    syncLedgerToolbarPlacement(orientation);
     if (typeof syncMobileWorkspaceMobileIdentity === 'function') syncMobileWorkspaceMobileIdentity();
     if (typeof syncMobileWorkspaceConfirmationPolicy === 'function') syncMobileWorkspaceConfirmationPolicy();
     if (!tablet && !wasTablet) return;
@@ -4413,17 +4406,20 @@ function setupTabletWorkspace() {
   sync();
   syncHeight();
 }
-function syncTabletPortraitLedgerExportPlacement(orientation = tabletWorkspaceOrientation()) {
+function syncLedgerToolbarPlacement(orientation = tabletWorkspaceOrientation()) {
   const exportButton = document.querySelector('#ledgerExcelExport');
   const status = document.querySelector('#ledgerExcelExportStatus');
   const summaryActions = document.querySelector('.cy-summary-actions');
   const viewTools = document.querySelector('.ledger-view-tools');
   if (!exportButton || !status || !summaryActions || !viewTools) return;
 
-  const target = orientation === 'portrait' ? summaryActions : viewTools;
+  const desktop = isDesktopInteractionWorkspace();
+  if (exportButton.getAttribute('aria-busy') !== 'true') exportButton.textContent = desktop ? '匯出' : '匯出 Excel';
+  const target = desktop || orientation === 'portrait' ? summaryActions : viewTools;
+  window.cySyncLedgerQuickLock?.();
   if (exportButton.parentElement !== target) target.append(exportButton);
   if (status.parentElement !== target) target.append(status);
 }
-window.cySyncTabletPortraitLedgerExportPlacement = syncTabletPortraitLedgerExportPlacement;
+window.cySyncLedgerToolbarPlacement = syncLedgerToolbarPlacement;
 
 window.addEventListener('load', setupTabletWorkspace, { once: true });

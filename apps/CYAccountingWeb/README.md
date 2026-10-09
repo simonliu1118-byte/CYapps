@@ -4,19 +4,19 @@
 
 更新：2026/10/10（日本時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
-**V0.22.31 Build 0（已部署）**：桌機收支控制維持 320px 寬、降為 32px 高；切月改用清單遮罩與轉圈提示；快速輸入適配 640px 設定視窗，備份完整換行、資料移轉改成與 Excel 匯入同級的可展開區塊。Excel 匯入增加下載模板（空白輸入＋填寫說明／目前帳戶科目）。共用 Auth 依 CYID expiresAt 到期導回登入頁，API 401 也走同一導頁；不改手機／平板版面。本地 24 組測試、六種 viewport、模板填寫後實際匯入預覽與登入逾時導頁驗證通過；PR #366 治理／CI 與正式部署 #568（run `37955721498`）成功。真實桌機視覺待使用者驗收。
+**V0.22.31 Build 3（已部署）**：月帳簿與期初工作表 OOXML 改為 autoFilter 先於 mergeCells，修正結構缺陷；空月、180 筆跨帳戶及模板結構回歸、24 組本地測試與 PR #373 CI 通過，正式部署 #581（run `37965124293`）成功。已完成正式 D1 唯讀比對：月份清單與 D1 分組結果一致，日期格式正常，移轉記錄筆數與目前交易總數相同；缺少帳戶的歷史資料目前不在正式 D1 內，需原始完整桌面帳本核對來源／SQLite WAL，尚未修復資料。依授權移除暫時查詢腳本、public key 與 CI 步驟，真實帳務未寫入 Git，未改正式資料或手機／平板呈現。Stable Release 維持 V0.22.15。
 
 ## 目前狀態
 
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.31 Build 0**；PR #366 已合併，完成桌機設定／載入遮罩返修、Excel 模板下載與共用 Session 到期導頁，手機與平板既有排列保留 |
-| 正式部署 | [CYAccountingWeb Validate and Deploy #568（run `37955721498`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37955721498) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 正式版本 | **V0.22.31 Build 3**；PR #373 已合併，Excel 結構修正已部署；唯讀 D1 證實清單與資料庫一致，歷史帳本來源仍待核對 |
+| 正式部署 | [CYAccountingWeb Validate and Deploy #581（run `37965124293`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37965124293) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
-| Governance | Common Rules 2.8.0；CYapps Governance 2.3.31 |
+| Governance | Common Rules 2.8.0；CYapps Governance 2.3.32 |
 | 備份 | Phase C；R2＋GCS 手動 paired 驗收完成，scheduled `x/14` 仍需讀正式 catalog，不按日期推算 |
 
 電腦版仍沿用既有 Desktop UI/UX 設計（PR #115 為歷史設計里程碑），與手機／平板共用原本資料及帳務 owner。V0.22.29 以 `cyacc:confirmation-ready` 明確 lifecycle 恢復桌機左右分欄，修正 `.desktopUi-date-*` 樣式對應；部署驗證通過不代替使用者於真實電腦瀏覽器的視覺驗收。
