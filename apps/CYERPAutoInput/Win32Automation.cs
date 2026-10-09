@@ -221,8 +221,14 @@ internal static class InputSender
         NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 
+    /// <summary>Tick of the last Esc CY itself sent, so the global Esc watcher can ignore it.</summary>
+    public static long LastSyntheticEscapeTick;
+
+    public static bool IsRecentSyntheticEscape => Environment.TickCount64 - Interlocked.Read(ref LastSyntheticEscapeTick) < 600;
+
     public static void Press(ushort key)
     {
+        if (key == NativeMethods.VK_ESCAPE) Interlocked.Exchange(ref LastSyntheticEscapeTick, Environment.TickCount64);
         var inputs = new[]
         {
             Key(key, 0),

@@ -89,6 +89,7 @@ internal sealed class ErpAutomationService
     public async Task<AutomationRunResult> RunAsync(FormSnapshot snapshot, bool autoSave, IProgress<string> progress, CancellationToken cancellationToken)
     {
         var result = new AutomationRunResult();
+        LastSalesOrderNumber = string.Empty;
         if (snapshot.Values.TryGetValue("order_type", out var orderType))
             result.SalesOrderType = orderType.Trim();
         var windows = Win32Automation.FindCopi08Windows();
@@ -220,6 +221,85 @@ internal sealed class ErpAutomationService
         }
     }
 
+    /// <summary>Sales order number of the document the last run worked on (empty before one is read).</summary>
+    public string LastSalesOrderNumber { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// ERP's own "放棄本次新增／修改": focus a header field (客戶代號; never the detail grid,
+    /// where Esc only leaves the cell), press Esc, confirm ERP's 「是否放棄…」 with Enter (OK is
+    /// the default) and verify COPI08 is back in browse mode. With
+    /// <paramref name="expectedSalesOrderNumber"/> it only abandons that document.
+    /// Allowed uses (PROJECT_RULES §1): a user-confirmed restart, and a batch document CY
+    /// itself created that failed.
+    /// </summary>
+    public async Task AbandonInputAsync(string? expectedSalesOrderNumber, CancellationToken cancellationToken)
+    {
+        var windows = Win32Automation.FindCopi08Windows();
+        if (windows.Count != 1) throw new InvalidOperationException("放棄前必須只有一個 COPI08 視窗。");
+        var root = windows[0];
+        if (!Win32Automation.PrepareForeground(root, _log))
+            throw new InvalidOperationException("放棄前無法把 COPI08 帶到前景。");
+        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
+            throw new InvalidOperationException("ERP 有其他視窗開著；未執行放棄，請人工處理。");
+        if (DetectMode(root) != ErpMode.Input)
+            throw new InvalidOperationException("ERP 不在新增／修改狀態，不需要放棄。");
+        if (!string.IsNullOrEmpty(expectedSalesOrderNumber))
+        {
+            var shown = (NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle) ?? string.Empty).Trim();
+            if (shown != expectedSalesOrderNumber)
+                throw new InvalidOperationException("ERP 目前的單號與 CY 建立的單據不同；未執行放棄，請人工處理。");
+        }
+
+        var customer = ErpLayoutResolver.ResolveHeader(root, "customer_code");
+        var center = new Point((customer.Rect.Left + customer.Rect.Right) / 2, (customer.Rect.Top + customer.Rect.Bottom) / 2);
+        InputSender.Click(center);
+        if (await WaitFocusedEditAsync(root, customer.Rect, cancellationToken, 800) == 0)
+            throw new InvalidOperationException("無法把焦點放到客戶代號欄；未執行放棄，請人工處理。");
+        await Delay(150, cancellationToken);
+        InputSender.Press(NativeMethods.VK_ESCAPE);
+
+        nint confirm = 0;
+        var deadline = Environment.TickCount64 + 2500;
+        while (confirm == 0 && Environment.TickCount64 < deadline)
+        {
+            await Delay(120, cancellationToken);
+            confirm = Win32Automation.FindVisibleProcessPeerWindows(root).FirstOrDefault();
+        }
+        if (confirm == 0)
+            throw new InvalidOperationException("按 Esc 後 ERP 沒有出現「是否放棄」確認；未放棄，請人工處理。");
+
+        var isAbandonPrompt = false;
+        for (var attempt = 1; attempt <= 3 && !isAbandonPrompt; attempt++)
+        {
+            if (attempt > 1) await Delay(300, cancellationToken);
+            isAbandonPrompt = Win32Automation.WindowTreeContainsText(confirm, "放棄") ||
+                              await _textVision.ContainsAllFragmentsAsync(confirm, ["放棄"], cancellationToken);
+        }
+        if (!isAbandonPrompt)
+        {
+            LogPeerWindows("abandon", [confirm]);
+            throw new InvalidOperationException("按 Esc 後 ERP 出現的不是「是否放棄」確認；CY 未代為處理，請人工確認。");
+        }
+
+        if (!Win32Automation.PrepareForeground(confirm, _log))
+            throw new InvalidOperationException("無法取得「是否放棄」確認視窗焦點；請人工處理。");
+        InputSender.Press(NativeMethods.VK_RETURN);
+        if (!await WaitWindowClosedAsync(confirm, 1500, cancellationToken))
+            throw new InvalidOperationException("已對「是否放棄」按 Enter，但確認視窗沒有關閉；請人工處理。");
+
+        deadline = Environment.TickCount64 + 3500;
+        while (Environment.TickCount64 < deadline)
+        {
+            await Delay(150, cancellationToken);
+            if (DetectMode(root) == ErpMode.Browse)
+            {
+                _log.Info("document", $"input abandoned expected_sales_no={_log.Value(expectedSalesOrderNumber)}");
+                return;
+            }
+        }
+        throw new InvalidOperationException("已確認放棄，但 ERP 沒有回到檢視狀態；請人工確認。");
+    }
+
     private async Task WarmUpOcrAsync(PaddleOcrService ocr)
     {
         try
@@ -307,6 +387,7 @@ internal sealed class ErpAutomationService
 
         if (string.IsNullOrWhiteSpace(result.SalesOrderNumber))
             result.SalesOrderNumber = await CaptureSalesOrderNumberAsync(root, expectedDate, cancellationToken);
+        LastSalesOrderNumber = result.SalesOrderNumber;
     }
 
     private async Task<string> CaptureSalesOrderNumberAsync(nint root, string expectedDate, CancellationToken cancellationToken)

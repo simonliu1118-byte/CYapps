@@ -1,6 +1,6 @@
 namespace CYERPAutoInput;
 
-internal enum ShopeeImportAction { None, LoadSelected, RunAll }
+internal enum ShopeeImportAction { None, StartSelected, RunAll }
 
 /// <summary>
 /// Preview of a parsed Shopee export: lists the importable orders and the rows that were
@@ -62,24 +62,19 @@ internal sealed class ShopeeImportForm : Form
             WrapContents = false,
             Padding = new Padding(4, 8, 4, 0)
         };
-        var runAll = new CyPrimaryButton { Text = $"全部依序輸入 ERP（{_orders.Count} 張）", Width = 220, Height = 34, Enabled = _orders.Count > 0 };
+        var runAll = new CyPrimaryButton { Text = $"批次輸入（{_orders.Count} 張）", Width = 150, Height = 34, Enabled = autoSave && _orders.Count > 0 };
         runAll.Click += (_, _) =>
         {
-            if (!autoSave)
-            {
-                MessageBox.Show(this, "批次輸入需要每張單儲存後才能接續下一張；請先在「設定」開啟自動儲存。",
-                    "蝦皮訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
             Action = ShopeeImportAction.RunAll;
             DialogResult = DialogResult.OK;
         };
-        var load = new CyButton { Text = "載入選取的訂單到表單", Width = 180, Height = 34, Enabled = _orders.Count > 0 };
-        load.Click += (_, _) => LoadSelected();
+        var start = new CyPrimaryButton { Text = "開始輸入選取的訂單", Width = 170, Height = 34, Enabled = _orders.Count > 0 };
+        start.Click += (_, _) => StartSelected();
         var cancel = new CyButton { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
         buttons.Controls.Add(runAll);
-        buttons.Controls.Add(load);
+        buttons.Controls.Add(start);
         buttons.Controls.Add(cancel);
+        if (!autoSave) ExplainDisabled(buttons, runAll, "批次輸入需要每張單儲存後才能接續下一張；請先在「設定」勾選自動儲存。");
         root.Controls.Add(buttons, 0, 3);
         CancelButton = cancel;
 
@@ -106,15 +101,33 @@ internal sealed class ShopeeImportForm : Form
             var summary = string.Join("、", order.Items.Select(i => $"{i.ItemCode}×{i.Quantity}＠{i.UnitPrice}"));
             _grid.Rows.Add(order.OrderSn, order.TrackingNumber, order.Items.Count, summary, order.HandoffReason);
         }
-        _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) LoadSelected(); };
+        _grid.CellDoubleClick += (_, e) => { if (e.RowIndex >= 0) StartSelected(); };
     }
 
-    private void LoadSelected()
+    /// <summary>
+    /// A disabled button gets no mouse messages, so its explanation is shown from the
+    /// container when the pointer is over the button's area.
+    /// </summary>
+    private static void ExplainDisabled(Control host, Control button, string text)
+    {
+        var tip = new ToolTip();
+        var shown = false;
+        host.MouseMove += (_, e) =>
+        {
+            var over = button.Bounds.Contains(e.Location);
+            if (over && !shown) { tip.Show(text, host, button.Left, button.Top - 44, 6000); shown = true; }
+            else if (!over && shown) { tip.Hide(host); shown = false; }
+        };
+        host.MouseLeave += (_, _) => { tip.Hide(host); shown = false; };
+        host.Disposed += (_, _) => tip.Dispose();
+    }
+
+    private void StartSelected()
     {
         var index = _grid.CurrentRow?.Index ?? -1;
         if (index < 0 || index >= _orders.Count) return;
         SelectedOrder = _orders[index];
-        Action = ShopeeImportAction.LoadSelected;
+        Action = ShopeeImportAction.StartSelected;
         DialogResult = DialogResult.OK;
     }
 }

@@ -579,8 +579,11 @@ internal sealed class MainForm : Form
             return;
         }
 
+        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return;
+
         await RunGuardedAsync(async token =>
         {
+            if (abandonFirst) await AbandonCurrentErpDocumentAsync(token);
             var result = await RunDocumentAsync(snapshot, _settings.AutoSave, token);
             if (result.HandedOff.Length > 0)
             {
@@ -624,6 +627,40 @@ internal sealed class MainForm : Form
             _automationCts = null;
             _start.Enabled = true;
         }
+    }
+
+    /// <summary>
+    /// Safeguard (user, 2026-10-10): when ERP is already in 新增／修改, CY asks before
+    /// starting; on confirmation it first abandons that document (ERP back to 檢視) and then
+    /// runs the normal flow from 新增. Returns false when the user declines.
+    /// </summary>
+    private bool ConfirmRestartIfErpBusy(out bool abandonFirst)
+    {
+        abandonFirst = false;
+        RefreshErpState();
+        var state = _shownState;
+        if (state is not (ErpDocumentState.New or ErpDocumentState.Modify or ErpDocumentState.InputUnconfirmed)) return true;
+
+        var what = state switch
+        {
+            ErpDocumentState.New => "新增",
+            ErpDocumentState.Modify => "修改",
+            _ => "新增或修改"
+        };
+        var answer = MessageBox.Show(this,
+            $"ERP 目前在「{what}」狀態。\n\n要放棄 ERP 上這張尚未儲存的單據（{what}的內容不會保留），回到檢視後再從新增開始輸入嗎？",
+            "ERP 正在輸入中", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+        if (answer != DialogResult.Yes) return false;
+        abandonFirst = true;
+        _log.Info("automation", $"user confirmed abandoning the ERP document in state {state} before starting");
+        return true;
+    }
+
+    private async Task AbandonCurrentErpDocumentAsync(CancellationToken token)
+    {
+        SetStatus("ERP：放棄目前的輸入，回到檢視…");
+        await _automation.AbandonInputAsync(null, token);
+        SetStatus("ERP：已回到檢視");
     }
 
     private async Task<AutomationRunResult> RunDocumentAsync(FormSnapshot snapshot, bool autoSave, CancellationToken token)
@@ -679,13 +716,11 @@ internal sealed class MainForm : Form
         using var preview = new ShopeeImportForm(Path.GetFileName(dialog.FileName), parsed, _settings.AutoSave);
         if (preview.ShowDialog(this) != DialogResult.OK) return;
 
-        if (preview.Action == ShopeeImportAction.LoadSelected && preview.SelectedOrder is not null)
+        if (preview.Action == ShopeeImportAction.StartSelected && preview.SelectedOrder is not null)
         {
             LoadShopeeOrder(preview.SelectedOrder);
-            SetStatus($"已載入蝦皮訂單 {preview.SelectedOrder.OrderSn}；確認後按「開始輸入 ERP」");
-            if (_loadedOrderHandoff.Length > 0)
-                MessageBox.Show(this, $"這張訂單有備註，輸入 ERP 時只會打完單頭就停止，明細轉人工處理。\n\n{_loadedOrderHandoff}",
-                    "蝦皮訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            SetStatus($"蝦皮訂單 {preview.SelectedOrder.OrderSn}：開始輸入 ERP");
+            await StartAutomationAsync();
         }
         else if (preview.Action == ShopeeImportAction.RunAll)
         {
@@ -724,19 +759,24 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Enters every order in turn; each must be saved before the next starts. The batch
-    /// stops at the first failure (abandoning a failed document is not automated yet) and
-    /// lists what was saved, what failed and what was not started.
+    /// Enters every order in turn; each must be saved before the next starts. When an
+    /// order fails, the document CY created for it is abandoned (PROJECT_RULES §1) and the
+    /// batch continues; if that cannot be confirmed safe, or on Esc or an order handed to a
+    /// person, the batch stops. Ends with saved / failed / stopped / not started lists.
     /// </summary>
     private async Task RunShopeeBatchAsync(IReadOnlyList<ShopeeOrder> orders)
     {
+        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return;
+
         var done = new List<string>();
         var review = new List<string>();
-        string? failure = null;
+        var failed = new List<string>();
+        string? stoppedAt = null;
         var next = 0;
 
         await RunGuardedAsync(async token =>
         {
+            if (abandonFirst) await AbandonCurrentErpDocumentAsync(token);
             for (; next < orders.Count; next++)
             {
                 token.ThrowIfCancellationRequested();
@@ -744,7 +784,7 @@ internal sealed class MainForm : Form
                 LoadShopeeOrder(order);
                 SetStatus($"蝦皮批次 {next + 1}/{orders.Count}：訂單 {order.OrderSn}");
                 var snapshot = CreateSnapshot(out var validationError);
-                if (snapshot is null) { failure = $"訂單 {order.OrderSn}：{validationError}"; return; }
+                if (snapshot is null) { failed.Add($"{order.OrderSn}：{validationError}"); continue; }
 
                 AutomationRunResult result;
                 try
@@ -753,23 +793,40 @@ internal sealed class MainForm : Form
                 }
                 catch (OperationCanceledException)
                 {
-                    failure = $"訂單 {order.OrderSn}：已按 Esc 停止，這張可能已部分輸入，請在 ERP 確認";
+                    stoppedAt = $"訂單 {order.OrderSn}：已按 Esc 停止，這張可能已部分輸入，請在 ERP 確認";
                     throw;
                 }
                 catch (Exception ex)
                 {
                     _log.Error("shopee", ex);
-                    failure = $"訂單 {order.OrderSn}：{ex.Message}";
-                    return;
+                    var createdNumber = _automation.LastSalesOrderNumber;
+                    if (createdNumber.Length == 0 && Win32Automation.FindCopi08Windows().Count == 1 &&
+                        _automation.ProbeStatus().Mode == ErpMode.Browse)
+                    {
+                        failed.Add($"{order.OrderSn}：{ex.Message}");
+                        continue; // failed before ERP opened a document; nothing to abandon
+                    }
+                    try
+                    {
+                        await _automation.AbandonInputAsync(createdNumber, token);
+                        failed.Add($"{order.OrderSn}：{ex.Message}（ERP 單據已放棄）");
+                        continue;
+                    }
+                    catch (Exception abandonError) when (abandonError is not OperationCanceledException)
+                    {
+                        _log.Error("shopee", abandonError);
+                        stoppedAt = $"訂單 {order.OrderSn}：{ex.Message}；無法安全放棄這張 ERP 單據（{abandonError.Message}），請人工處理";
+                        return;
+                    }
                 }
                 if (result.HandedOff.Length > 0)
                 {
-                    failure = $"訂單 {order.OrderSn}（{DocumentKeyText(result)}）有備註，已打完單頭停在 ERP 轉人工：{result.HandedOff}";
+                    stoppedAt = $"訂單 {order.OrderSn}（{DocumentKeyText(result)}）有備註，已打完單頭停在 ERP 轉人工：{result.HandedOff}";
                     return;
                 }
                 if (!result.Saved)
                 {
-                    failure = $"訂單 {order.OrderSn}：未儲存（{result.SaveSkippedReason}）";
+                    stoppedAt = $"訂單 {order.OrderSn}：未儲存（{result.SaveSkippedReason}）";
                     return;
                 }
                 done.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
@@ -781,17 +838,17 @@ internal sealed class MainForm : Form
         var lines = new List<string> { $"已儲存 {done.Count} / {orders.Count} 張" };
         lines.AddRange(done.Select(d => "・" + d));
         if (review.Count > 0) { lines.Add(string.Empty); lines.Add("需人工確認："); lines.AddRange(review.Select(r => "・" + r)); }
-        if (failure is not null) { lines.Add(string.Empty); lines.Add("停止於：" + failure); }
-        if (failure is not null && next + 1 < orders.Count) lines.Add("請處理完 ERP 上這張單後，再重新匯入剩下的訂單。");
-        var notStarted = orders.Count - done.Count - (failure is null ? 0 : 1);
-        if (notStarted > 0 && next < orders.Count)
+        if (failed.Count > 0) { lines.Add(string.Empty); lines.Add($"失敗 {failed.Count} 張（未儲存，已略過）："); lines.AddRange(failed.Select(f => "・" + f)); }
+        if (stoppedAt is not null)
         {
             lines.Add(string.Empty);
-            lines.Add($"未處理 {notStarted} 張：" + string.Join("、", orders.Skip(next + (failure is null ? 0 : 1)).Select(o => o.OrderSn)));
+            lines.Add("停止於：" + stoppedAt);
+            var rest = orders.Skip(next + 1).Select(o => o.OrderSn).ToList();
+            if (rest.Count > 0) lines.Add($"未處理 {rest.Count} 張：{string.Join("、", rest)}（處理完 ERP 上這張單後再重新匯入）");
         }
         SetStatus($"蝦皮批次結束：已儲存 {done.Count}/{orders.Count} 張");
         MessageBox.Show(this, string.Join(Environment.NewLine, lines), "蝦皮批次結果", MessageBoxButtons.OK,
-            failure is null && review.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            stoppedAt is null && failed.Count == 0 && review.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
     private void ShowRunSummaryIfNeeded(AutomationRunResult result, string documentKey)
@@ -943,7 +1000,8 @@ internal sealed class MainForm : Form
         while (!cts.IsCancellationRequested)
         {
             var down = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0;
-            if (down && !wasDown)
+            // An Esc CY sent itself (abandoning an ERP document) is not an emergency stop.
+            if (down && !wasDown && !InputSender.IsRecentSyntheticEscape)
             {
                 cts.Cancel();
                 break;
