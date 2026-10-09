@@ -8,7 +8,7 @@
 
 1. `/REPOSITORY_RULES.md`
 2. `/REPO_POLICY.md`
-3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.32）
+3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.33）
 4. 本文件 → `README.md` → `CHANGELOG.md`
 5. PR #104 與工作 branch 的實際 source
 
@@ -87,7 +87,7 @@
 
 - SMART ERP 沒有銷貨單匯入功能，模擬操作是唯一路線；不碰 SQL（合約問題）。
 - 所有來源先轉成同一份標準銷貨單資料，再走同一條「驗證 → ERP 輸入／儲存 → 結果」路徑；新增來源只新增 adapter。
-- 批次中單據失敗時可放棄 CY 自行新增的該張單據後繼續（Governance 2.3.30）。
+- 批次中單據失敗時可放棄 CY 自行新增的該張單據後繼續（Governance 2.3.30）；開始輸入時 ERP 已在新增／修改中，經使用者確認可先放棄再從新增開始（Governance 2.3.33，PR #377 已於 2026-10-10 合併）。
 - ERP 內通常不存來源單號；防重複打單到批次階段再討論。
 - 速度（OCR 逐格）之後再優化；mobile 與 server 模型的準確度／速度比較留待 ERP 電腦實測時做。
 - 後續可在裝有 ERP 的 Windows 電腦執行 Claude Code 直接實測；不採用 Public repo 的 self-hosted runner。實測只用 ERP 測試公司別、顯示比例 100%、測試期間無人操作；開啟自動儲存、批次放棄單據等會在 ERP 產生或修改資料的新操作須先經使用者同意；截圖與 LOG 只留本機。
