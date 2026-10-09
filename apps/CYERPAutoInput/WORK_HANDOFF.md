@@ -1,288 +1,100 @@
 # CYERPAutoInput WORK HANDOFF
 
 > 更新：2026-10-09（V0.2.0 Build 10）  
-> 目的：供後續 AI 對話直接接手目前開發狀態。  
-> 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接一律以本文件 + Git 狀態為準。  
-> 本文件只記錄「目前狀態、已驗證事實、待辦與交接順序」，不是永久規則來源。
+> 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
+> 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
 ## 1. 接手時先讀
 
-依 repository 治理順序：
-
 1. `/REPOSITORY_RULES.md`
 2. `/REPO_POLICY.md`
-3. `/apps/CYERPAutoInput/PROJECT_RULES.md`
-4. 本 `WORK_HANDOFF.md`
-5. `README.md`
-6. PR #104 與目前工作 branch 的實際 source
+3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.32）
+4. 本文件 → `README.md` → `CHANGELOG.md`
+5. PR #104 與工作 branch 的實際 source
 
-不要依舊聊天記憶覆蓋目前 Git 狀態。
+不要以舊聊天記憶覆蓋目前 Git 狀態。
 
+## 2. Branch／PR／版本
 
-## 2. Repository / branch / PR 現況
+- Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
+- `main`：仍是舊 Go 線（`V0.0.10` Build 19）。舊 Go optical prototype PR #103 已關閉。
+- 工作 branch：`cyerp-auto-input/v0.1.0-csharp`（名稱沿用以保留 PR #104）；Draft PR #104。
+- VERSION `0.2.0`，BUILD 見 `BUILD`。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。
+- 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
+- 測試包：每次 push 由 PR #104 CI 產生 Artifact（保留 3 天），連結貼在 PR #104 留言。
+- 第一階段完成前 PR #104 維持 Draft；合併 `main` 後需從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release。
 
-Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
+## 3. 目前功能（細節見 README）
 
-### 正式 main
+單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存）→ 選用 F12 自動儲存並讀回單號。輔助功能：ERP 狀態大標籤、診斷模式、第一列庫別預設、ERP 結構探測、清除表單、開啟 LOG。進階模式隱藏中。
 
-`main` 仍是舊 Go 線（VERSION `0.0.10` / BUILD `19`），尚未切到 C#。舊 Go V0.0.11 optical prototype PR #103 已關閉、未合併。
+## 4. 實機驗證狀態
 
-### 現行開發線
+已實機通過（使用者回報／LOG）：
 
-- Branch：`cyerp-auto-input/v0.1.0-csharp`
-- Draft PR：`#104 CYERPAutoInput V0.1.0: C# rewrite with optical ERP targeting`
-- VERSION：`0.2.0`；BUILD：見同目錄 `BUILD` 檔（2026-10-06 升 Minor 時歸 `0`）。
-- 版本沿革：`V0.1.0` 為 Codex C# 重寫（Build 1–27）；`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手後的版本（含原 V0.1.0 Build 26／27 的變更）。Branch 名稱沿用 `cyerp-auto-input/v0.1.0-csharp` 以保留 PR #104。
-- 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU），詳見 `README.md`。
-- 本次升 Minor 是使用者已明確同意的技術棧重寫。
-- PR 仍為 Draft；未完成真實 ERP 驗收前不得合併 main。
+- F5 新增與新單判斷（部門代號／業務人員空白）— Build 2 起。
+- 表頭、交易資料、送貨資料、發票資料欄位輸入。
+- 多列明細、F2 單位選取。
+- 無批號品號略過（F2 無查詢視窗）；F2 批號跳過存量 0、選第一筆正庫存 — Build 7。
+- F12 自動儲存並讀回同一單號 — Build 7／8 LOG（`saved and verified`）。
+- 課稅別、發票聯數下拉選取正確 — Build 10。
 
-## 3. 為什麼由 Go 改寫 C#
+尚未實機確認：
 
-舊 Go 線已證明一般 COPI08 Win32 輸入可行，但在 DevExpress virtual grid / F2 單位查詢遇到核心限制：
+- 換列時「庫存量或批號量不足」按確定後繼續打完（Build 8）。
+- F12 儲存時出現同一提示，按確定後完成儲存（Build 9；觸發的單列案例當時在 Build 8 停止）。
+- 狀態標籤的「修改」顯示（Build 2 起以部門代號／業務人員判斷）。
+- 非 100% 顯示比例、不同電腦／字型（使用者表示只用 100%）。
 
-- `TcxGridSite` 的可見 cell 文字通常不是獨立 HWND text。
-- `GetWindowText` / child control text 無法可靠讀到使用者肉眼看見的單位 cell。
-- 舊 Build 18 的實機 LOG 明確顯示：F2 已開啟、焦點在 `TcxGridSite`，但 40 次 readback 仍找不到指定單位，因此舊流程在送 Enter 之前就因 `UNIT_LOOKUP_FAILED` 停止。
-- 使用者已人工確認真正 ERP 行為：F2 開啟後，人工點選正確單位列，再按實體 Enter，F2 會正常關閉並完成選取。
+## 5. 已確認的 ERP 行為（實作依據）
 
-因此 V0.1.0 改採 C#，讓 WinForms UI、Win32 interop、本機 OCR 與畫面定位集中在單一 Windows 原生開發線。
+- COPI08 為 Delphi／DevExpress：`TfrmCopi08`、`TDBEdit`、`TcxDBImageComboBox`（內嵌 `TcxCustomComboBoxInnerEdit`）、`TcxPageControl`／`TcxTabSheet`、`TcxGridSite`（明細編輯中為 `TcxCustomInnerTextEdit`）。訊息框為 `TMessageForm`，標題與 COPI08 相同。
+- 檢視／輸入狀態由表頭 `TDBEdit` 的唯讀／可寫數量判斷。
+- 快捷鍵：檢視狀態 `F5` 新增；編輯狀態 `F12` 儲存。Ribbon「儲存」是群組名稱，群組內含「儲存」與「取消」，點群組中心會按到「取消」。
+- 按新增後 ERP 立即帶出今日日期與銷貨單號；交易資料部門代號／業務人員新單必定空白、舊單必定有值。
+- 日期輸入 `YYYYMMDD`，離焦後 ERP 轉為 `YYYY/MM/DD`；lookup 欄位必須真的離焦觸發驗證；Unicode 直接輸入比 IME 穩定。銷貨單別以 `End` + `Backspace×4` 清除後重輸；代收貨款／運費 click → type → leave。
+- 明細新增列會沿用上一列庫別；未指定時 ERP 帶預設庫別（可能無庫存）。
+- F2 查詢視窗標題 `F2開窗查詢`，每次重新開啟；點到正確列後按 Enter 即選取並關閉。不得假設單位固定在第幾列。
+- 是否需要批號：ERP 對無批號品號按 F2 不會開查詢視窗。目前列每格右側都有「…」按鈕，不能當成批號標記。
+- F2 批號查詢：第 1 列為篩選列（`=` 與 ABC 圖示）；數字字型為斜線 0；剛開啟時可能尚未繪製。
+- 「庫存量或批號量不足！」為 ERP 自繪訊息框（OK／Cancel，焦點預設 OK），文字不在 Win32 控制項，OCR 會把「庫」「號」讀錯。換列時出現；單列單據在 F12 儲存時出現。漏填庫別時按確定後會停在原格。
+- 下拉（課稅別、發票聯數）的選項順序見 `Models.cs` 的 `ErpComboOptions`。
+- Ribbon 按鈕、明細 cell、F2 表格內容、訊息框文字都沒有暴露給 Win32／MSAA（結構探測確認）。
+- 尚未實作、使用者已說明的 ERP 操作：
+  - 放棄本次新增：焦點須在表頭（不能在表身輸入中）→ 點「客戶代號」→ `Esc` → 「是否放棄本次新增」預設焦點在確定 → 確定。實作時須先暫停 CY 自己的全域 Esc 監看（`GetAsyncKeyState`），且只限 PROJECT_RULES §1 的批次放棄例外。
+  - 鍵盤進入明細：在「客戶描述」欄位輸入中按 `Tab` 帶出明細、焦點在數量；再 `Tab` 回欄位選擇，左移 3 格到品號，`Enter` 開始輸入。使用者不確定各電腦是否一致，需實機確認後才可取代「點一次明細區」。
 
+## 6. Roadmap（使用者 2026-10-09 確定）
 
-## 4. C# 版已完成架構
+1. 自動輸入核心穩定（單張新增 → 輸入 → F2 單位／批號 → F12 儲存）。剩 §4「尚未實機確認」項目。
+2. 蝦皮訂單匯出檔 → 自動打單。需使用者提供匯出檔範例（含客戶資料，不得提交 Git）；需要批次流程：逐張失敗隔離、批次結果總表、儲存後接續下一張。
+3. 串接 CYID（依 REPO_POLICY §4.1 與 CYID consumer 標準）。
+4. CYWEB 訂單工單系統完成後，撈單自動打單並寄信通知。
+5. 辨識查詢單據，完成地端無人值守（專用電腦自動登入、不鎖定、ERP 異常處理、心跳與通知）。
 
-目前實際流程、UI、OCR、F2 單位、F2 批號、本機資料與安全設計以 `README.md` 為準，此處只列交接重點：
+版本：第一個正式版 `V1.0.0` 的時點待使用者依上述階段決定（2026-10-06 原定為「Excel 匯入完成」，已由本 roadmap 取代）。
 
-- 欄位有內容才送入 ERP；明細有資料的列必須有「品號 + 數量」。
-- 表頭 / 交易 / 送貨 / 發票使用 Win32 control + ERP 原生焦點、離焦、Enter／Tab。
-- 商品明細只點一次 `TcxGridSite` 建立第一列，再以目前 Grid 幾何 + OCR 定位 cell。
-- F2 單位：以 OCR 定位「換算單位」欄中指定單位，點選後送一次 Enter，並確認 F2 關閉。
-- F2 批號：明確空白不開 F2；有標記才開；查詢內只選由上往下第一筆可確認 `現有存量 > 0` 的批號，無法確認就停止（使用者已確認此業務規則）。
-- 銷貨單號由 ERP 產生，CY 只讀取並驗證 `YYYYMMDDXXX` 格式。
-- 完成後停在 ERP，**不自動儲存**；全域 Esc 只停止 CY，不按 ERP「取消」；不送 `Ctrl+A`。
-- 仍需人工確認的狀況累積在 `AutomationRunResult.Warnings`，完成時統一顯示筆數。
-- V0.2.0 Build 10（2026-10-09 使用者要求）：
-  - 進階模式先隱藏（主畫面切換開關與設定勾選隱藏，固定標準模式；程式碼保留，日後確定不用再移除）。
-  - 修正：切換進階再切回標準後欄位群組殘留橫向捲軸（FlowLayoutPanel 保留最大版面寬度）→ 群組停用橫向捲動，ComboBox 也隨欄寬調整。
-  - 課稅別、發票聯數改為下拉選單，選項寫在 `Models.cs` 的 `ErpComboOptions`（依 ERP 清單順序）。使用者 2026-10-09 確認這兩組是標準選項、非機密，同意寫入公開 source，治理 PR #368（Governance 2.3.32）已合併，PROJECT_RULES §3 明列此例外。
-  - ERP 端選取：點開下拉 → 按上鍵 N 次到頂 → 按下鍵到該選項位置 → Enter；再讀回 ERP 顯示的值（內嵌編輯框 `WM_GETTEXT`，讀不到則 OCR 欄位）比對代碼，不符即停止。欄位已顯示相同值則不操作。實機尚未驗證。
-- V0.2.0 Build 9（2026-10-09 Build 8 實測返修）：
-  - 單列單據（數量超過庫存）沒有換列，最後一列在 F12 儲存時才驗證，ERP 跳出同一個庫存不足提示（`TMessageForm`），儲存流程未處理而停止。改為：儲存中出現該提示同樣按 OK、記成需人工確認；若 ERP 仍在輸入狀態再按一次 F12（最多處理 2 次提示）；其他視窗仍停止。
-  - 設定視窗下緣按鈕列被切到：視窗加高到 690、按鈕列 52。
-- V0.2.0 Build 8（2026-10-09 Build 7 實測回饋）：
-  - 實測：F12 自動儲存成功（`saved and verified`）。
-  - 換列時的「庫存量或批號量不足！」（ERP 自繪訊息框，OK 預設焦點）被判為未預期視窗：訊息文字不在 Win32 控制項，OCR 讀成「障存量或批就量不足！」。改為比對「存量／批／不足」片段，最多讀 3 次。
-  - 使用者指示：此提示直接按 OK（Enter）並把單打完，且有警告的單也照樣自動儲存。改為：Enter 關閉並記成需人工確認（完成後列出，不再阻擋自動儲存）；再讀明細「序號」欄確認 ERP 是否已建立下一列，沒有就再按一次 Down；第二次仍出現提示或仍無下一列才停止。取代 Build 4 的「一律停止」。
-- V0.2.0 Build 7（2026-10-08 Build 6 實測返修）：
-  - 實測：第 1 列斜線 0 已正確讀出（`line-unambiguous-0.36`）；第 2 列讀成「單位53」而停止。該次 F2 擷取 118 個 token、找不到「批號」表頭、列距異常。使用者確認選完單位後單位查詢視窗已關閉、批號是重新開啟的新視窗，使用者也確認 CY 視窗全程沒有到前面。比對座標：COPI08 明細表頭「單位」（螢幕約 x 820–860、y 441）正好落在查詢視窗「現有存量」欄範圍內 → 擷取時查詢視窗剛出現、尚未繪製，拍到的是底下的 COPI08 明細。
-  - 改為：擷取前以 `WindowFromPoint` 檢查查詢表格中心與四角都屬於查詢視窗（`Win32Automation.IsAreaShownBy`）；被遮住時把查詢視窗帶到前景一次；連拍兩張（間隔 200ms）相同才判讀；「批號」「現有存量」表頭都要讀到且不得出現「換算／單位」字樣，最多重試 4 次，失敗記錄 `F2_BATCH_TOKEN`。
-  - 使用者確認：ERP 新增列會沿用上一列庫別，只需預填第一列。
-- V0.2.0 Build 6（2026-10-08 使用者修正需求）：設定「商品明細第一列庫別預設填入」（勾選＋庫別代號，`FirstRowWarehouseEnabled`／`FirstRowWarehouse`，只存本機 settings.json）直接預填到表單第一列（啟動、儲存設定、清除表單；已有值不覆蓋），CY 照一般明細欄位輸入 ERP。原因（使用者說明）：ERP 新列固定帶預設庫別，必須由程式輸入正確庫別才會帶出正確庫存量。Build 5 只在開始輸入時才帶入，與需求不符。
-- V0.2.0 Build 4（2026-10-08 Build 3 實測返修）：
-  - F2 第 1 列存量 `0` 仍讀不到。用使用者截圖的真實儲存格在本機以同一模型重現：ERP 的 0 是**斜線 0**，單獨出現時辨識首選為 0 但信心僅約 0.3–0.5（候選 0／O／Q），被 0.6 門檻擋下；53、100 信心 ≥ 0.99。
-  - 改為：儲存格先依「字比背景亮或暗」決定是否反相再拉滿對比（原本依平均亮度，選取列中藍底黑字會判錯）；信心不足時，只有在每個字的首選都是數字／分隔符或像 0 的字形、且候選中沒有其他數字（≥ 0.05）時才接受（`InputRules.TryAcceptLowConfidenceStock`，單元測試涵蓋）。拒絕時 LOG 記錄每字候選。
-  - 「庫存量或批號量不足」：使用者確認關閉提示後 ERP 停在原格、擋住換列（例：漏填庫別、預設庫無庫存），因此 CY 關閉提示後改為停止並說明，不再記成警告繼續。
-- V0.2.0 Build 3（2026-10-08 Build 2 實測返修）：
-  - 批號是否需要改以 ERP 的 F2 反應為準：按 F2 後 2 秒內沒有批號查詢視窗（也沒有其他視窗）即視為無批號、繼續。原因：目前列每格右側都有「…」按鈕，視覺檢查會誤判為批號標記（A00203 無批號，兩次比例皆 0.1071、F2 皆無反應）。移除 Build 2 的 F2 重試（Build 1 那次「F2 被吞掉」其實就是 A00203 無批號）。視覺檢查仍保留「明確空白就不按 F2」。
-  - F2 批號查詢表頭：「現有存量」接受部分讀取（有存量／現有存／存量），讀不到時隔 350ms 重拍一次，失敗時以 `F2_BATCH_TOKEN` 記錄 OCR 內容；「批號」表頭改為選用（找不到時以格線定列，並略過第一列的篩選列 `=`）。
-- V0.2.0 Build 2（2026-10-08 實機回饋返修）：
-  - 新增改按 ERP 快捷鍵 `F5`、自動儲存改按 `F12`（使用者指示）；不再用 Ribbon 綠色＋號／文字點擊。前後都檢查沒有其他 ERP 視窗、模式正確才送鍵。
-  - 新增／修改判斷改看「交易資料」頁籤的 部門代號／業務人員（`WM_GETTEXT`，頁籤隱藏時也讀得到）：新單兩格必定空白、舊單必定有值（使用者確認）。原依「單號是否清空」判斷錯誤：ERP 按新增即自動帶今日日期＋單號。按 F5 後若兩格不是空白即停止。
-  - 「多個 COPI08」誤判修正：ERP 訊息視窗沿用 COPI08 標題；只要有 `TfrmCopi08` 視窗就只計該 class，並排除 `#32770`／`TMessageForm`。
-  - F2 批號：(a) 有批號標記時等待查詢視窗 2.5 秒，仍未出現且沒有其他視窗才重新點同一格再按一次 F2；(b)「現有存量」單格改為：裁到只剩字形（忽略格線）後只跑辨識模型、不跑文字偵測（`PaddleOcrService.RecognizeLineAsync`，信心 ≥ 0.6）→ 加白邊放大的偵測後備 → 整窗 OCR 後備。單獨一個 `0`、藍色選取列會被偵測器整個漏掉（CI 合成測試重現、本機以同一模型驗證只跑辨識可讀出）；(c) 批號欄必須含數字才算資料列（排除篩選列圖示）。`--vision-self-test` 以合成儲存格（含藍底白字 `0`）驗證。
-- V0.2.0 Build 1：設定視窗「ERP 結構探測」（`ErpProbe`，唯讀、有界）：輸出 COPI08 與其他可見 ERP 視窗（含 F2 查詢）的 Win32 控制項樹與 MSAA 樹（含鍵盤快捷鍵）到本機 `logs/erp-probe_*.txt`；非診斷模式時可能含單據資料的文字只記長度（`ProbeRedaction`）。目的：使用者 2026-10-06 指示尋找比座標／OCR 更好的做法；不碰 SQL（使用者：有合約問題）。
-- Build 27（使用者 2026-10-06 指示「先把介面和基礎自動打單完成」）：
-  - 自動儲存（設定開關，預設關閉）：只限 CY 新增（或開始時 部門代號／業務人員 皆空白）的單據，且無需人工確認項目；Build 2 起改按 `F12`；儲存後須回到檢視並讀回同一單號，出現任何 ERP 訊息視窗即停止。
-  - 工具列「清除表單」；狀態列「開啟 LOG 資料夾」；完成後需人工確認／未自動儲存原因以 MessageBox 列出。
-  - 設定視窗不顯示 App icon（視覺準則 §11.1）。
-  - CI 以 `--ui-snapshot` 產生介面 PNG Artifact 供版面檢查。
-- Build 26（使用者 2026-10-06 確認的整理項目）：
-  - 主畫面 ERP 單據狀態大標籤（檢視／新增／修改），由 `ErpDocumentStateTracker` 依「檢視→輸入瞬間單號是否被清空」判斷；只提示、不阻止（使用者決定不自動停止）。
-  - 多個 COPI08 視窗時不開始輸入。
-  - 顯示比例只支援 100%，以狀態列文字提示（使用者確認無 125%／150% 需求）。
-  - 診斷模式：預設 LOG 不記錄實際品號／單號／OCR 文字（只記長度），設定勾選後才記錄。
-  - 銷貨單號改以 `WM_GETTEXT`（含逾時）讀取，剪貼簿仍為後備。
-  - 純規則抽到 `InputRules.cs`／`ErpDocumentState.cs`，新增 `tests/CYERPAutoInput.Tests`（CI 執行）。
-  - `settings.example.json` 改為 C# 設定格式；移除註解中的 Build 版本號與 `WindowsOcrService` 相容命名（改名 `PaddleOcrService`）。
+背景決策（2026-10-06，仍有效）：
 
-## 5. 已確認的 ERP 實機事實
+- SMART ERP 沒有銷貨單匯入功能，模擬操作是唯一路線；不碰 SQL（合約問題）。
+- 所有來源先轉成同一份標準銷貨單資料，再走同一條「驗證 → ERP 輸入／儲存 → 結果」路徑；新增來源只新增 adapter。
+- 批次中單據失敗時可放棄 CY 自行新增的該張單據後繼續（Governance 2.3.30）。
+- ERP 內通常不存來源單號；防重複打單到批次階段再討論。
+- 速度（OCR 逐格）之後再優化；mobile 與 server 模型的準確度／速度比較留待 ERP 電腦實測時做。
+- 後續可在裝有 ERP 的 Windows 電腦執行 Claude Code 直接實測；不採用 Public repo 的 self-hosted runner。實測只用 ERP 測試公司別、顯示比例 100%、測試期間無人操作；開啟自動儲存、批次放棄單據等會在 ERP 產生或修改資料的新操作須先經使用者同意；截圖與 LOG 只留本機。
+- `SMARTCOPIConverter` 已停用，與本專案無相依。
 
-以下是舊 Go prototype 實機測試累積出的有效行為，C# rewrite 應保留：
+## 7. 接手注意事項
 
-- COPI08 是 Delphi / DevExpress UI。
-- 常見 class：`TDBEdit`、`TcxDBImageComboBox`、`TcxCustomComboBoxInnerEdit`、`TcxPageControl`、`TcxTabSheet`、`TcxGrid`、`TcxGridSite`。
-- 明細 active editor 可見 `TcxCustomInnerTextEdit`。
-- BROWSE / INPUT 可由上方 TDBEdit readonly / writable 狀態判斷；不可只看畫面文字。
-- 日期輸入 raw `YYYYMMDD`，離焦後 ERP 可正規化成 `YYYY/MM/DD`。
-- lookup 類欄位必須真的觸發 ERP leave / validation。
-- Unicode 直接輸入比依賴中文 IME 穩定。
-- 銷貨單別舊實機已確認 `End -> Backspace x4` 可可靠清除後重輸。
-- 代收貨款 / 運費舊實機已確認採 click -> type -> leave，不先清除。
-- 多列商品明細在舊 Go Build 11 已實機確認可工作。
-- F2 單位查詢視窗 title 是 `F2開窗查詢`。
-- F2 內 grid 為 DevExpress virtual grid。
-- 使用者已人工確認：**點到正確單位列後，按 Enter 就能正常完成選取並關閉 F2。**
-- 不得硬編碼某個單位固定在第幾列；不同品號的單位/換算列可能不同。
-- F2 批號查詢的數字字型是斜線 0；單獨一個 0 對 OCR 是模糊字形（見 §4 Build 4）。
-- 「庫存量或批號量不足」提示：按確定後 ERP 停在原輸入格、不換列（使用者 2026-10-08 確認）。
-- 鍵盤快捷鍵（使用者 2026-10-08 確認）：檢視狀態 `F5` = 新增；編輯狀態 `F12` = 儲存。
-- Ribbon「儲存」是群組名稱（`TdxRibbonGroupBarControl` caption），群組內含「儲存」與「取消」兩個按鈕；點群組中心會按到「取消」（Build 1 實測）。Ribbon 按鈕與明細 cell 都沒有暴露給 Win32／MSAA（結構探測確認），只有群組與頁籤 caption 有。
-- 按「新增」後 ERP 立即帶出今日日期與單號；交易資料 部門代號／業務人員 在新單必定空白、舊單必定有值。
-- 取消（放棄本次新增）的 ERP 操作（使用者 2026-10-08 說明，尚未實作）：焦點必須在表頭欄位（不能在表身輸入狀態）→ 點「客戶代號」欄 → 按 `Esc` → 出現「是否放棄本次新增」確認，預設焦點在「確定」→ 按確定即取消。實作前注意：CY 自身以 `GetAsyncKeyState(VK_ESCAPE)` 監看全域 Esc，程式送出的 Esc 也會被偵測，必須先暫停該監看；且只限 PROJECT_RULES §1 的批次放棄例外。
-- 明細的鍵盤進入方式（使用者 2026-10-08 補充，尚未採用）：在「客戶描述」頁籤的客戶描述欄位為輸入中狀態時按 `Tab` 會帶出品號明細、焦點在「數量」；再按 `Tab` 回到欄位選擇，往左 3 格到「品號」，按 `Enter` 即可開始輸入。使用者不確定不同 Windows 版本／電腦是否一致。可作為取代「點一次明細區建立第一列」的候選，需實機確認。
+- Commit author／committer 必須是 `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`。
+- `PROJECT_RULES.md`、`GOVERNANCE_*`、`.github/scripts/**` 只能在 `governance/*` branch 修改並更新 `GOVERNANCE_VERSION`／`GOVERNANCE_CHANGELOG.md`，不可混進 PR #104。
+- 返修測試版 BUILD + 1；同一 Build 尚未交付使用者前的修正不另加 Build。
+- 不得提交 `bin/`、`obj/`、`publish-staging/`、`runtime/ocr/`、模型或 build 輸出。
+- 推送前本機至少執行 `dotnet test tests/CYERPAutoInput.Tests` 與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
+- 實機問題請使用者開啟診斷模式重現並提供 `logs/CYERPAutoInput_日期.log`；非診斷模式下 OCR 文字只記長度。
+- CI 成功只代表 Windows 編譯、self-test 與封裝成功，不等於通過真實 ERP 驗收。
+- F2 與下拉選取必須保留焦點檢查、視窗關閉確認與讀回比對，不得退回「看起來點到了就當成功」。
 
+## 8. Public repository 資料安全
 
-## 5.1 C# 版實機測試紀錄
-
-- 2026-10-06 使用者回報：最近一次 C# 測試包實測進行到「F2 選批號」步驟（Build 號與結果細節未記錄）。
-- 2026-10-08 V0.2.0 Build 1 實測（LOG＋兩份結構探測，非診斷模式）：
-  - 表頭、三個頁籤、明細第 1–2 列（無批號）、F2 單位均成功。
-  - 第 3 列（有批號標記）第一次：F2 單位剛關閉後按批號 F2，1 秒內沒有出現查詢視窗而停止；第二次同品號 F2 有開。
-  - 批號查詢第 1 列為藍色選取列、現有存量 `0`，單格 OCR 回傳 0 個 token 而停止（第 2、3 列為 53、100）。
-  - 自動儲存：以 Win32 caption 找到的是 Ribbon「儲存」群組，點中心按到「取消」，ERP 跳出確認視窗，狀態標籤因同標題視窗顯示「多個 COPI08」。
-  - 狀態標籤無論新增或修改都顯示「修改」（ERP 新增即帶單號）。
-  - 以上於 Build 2 修正（見 §4）。
-- 2026-10-08 V0.2.0 Build 2 實測（診斷模式 LOG）：
-  - F5 新增、部門代號／業務人員判斷（`owner_fields=BothEmpty`）正常。
-  - A00203（無批號）仍被判定有批號標記而停止 → Build 3 改以 F2 反應為準。
-  - A00124 批號查詢有開，但「批號／現有存量」表頭 OCR 比對失敗（當時未記錄 token）→ Build 3 放寬並記錄。
-  - 另一次：第 1 列 A00001 數量 20 換列時出現「庫存量或批號量不足」，CY 按 Enter 關閉並記錄警告，但接著第 2 列品號格點擊後焦點在 `TcxCustomComboBoxInnerEdit`、無法進入編輯而停止。使用者確認：關閉後停在原輸入格；那次是漏填庫別（預設庫無庫存）→ Build 4 改為停止。
-- 2026-10-08 V0.2.0 Build 7 實測：**F2 批號選取成功**（使用者回報）。至此單張流程已實機通過：F5 新增、表頭／交易／送貨／發票欄位、多列明細、F2 單位、無批號品號略過、F2 批號跳過存量 0 選第一筆正庫存。尚未實測：F12 自動儲存。
-- Build 26 起，F2 批號查詢中「現有存量」無法辨識的列不再跳過：在找到第一筆正庫存之前遇到無法辨識的列即停止，避免跳過較早批號。
-
-## 5.2 下一輪驗收清單（V0.2.0）
-
-1. 啟動：版本顯示 `V0.2.0`（或之後的 `V0.2.0 Build N`）；狀態列顯示「顯示比例 100%」。
-2. 狀態標籤：ERP 檢視時顯示「檢視」；手動按「新增」（F5）顯示「新增」；手動按「修改」顯示「修改」；關閉 COPI08 顯示「未開啟」；開兩個 COPI08 顯示「多個 COPI08」且無法開始輸入。
-3. 找窗／新增：ERP 在檢視狀態按「開始輸入」，程式送 F5 新增，標籤變「新增」。
-4. 表頭／交易／送貨／發票欄位逐一確認。
-5. 商品明細：第一列、第二列；有指定單位的列 F2 單位選取並關閉。
-6. F2 批號：有批號標記的品號選到由上往下第一筆現有存量 > 0 的批號並關閉 F2（含第一列為 0 的情況）；無批號的品號不開 F2；接在 F2 單位之後的批號也要測。
-7. 完成後停在 ERP、未儲存；過程中按 Esc 只停止 CY。最後開啟自動儲存測一張：應以 F12 儲存、回到檢視並讀回同一單號。
-8. 失敗時提供 `logs/CYERPAutoInput_日期.log`（必要時先在設定開啟診斷模式重現）。
-9. ERP 結構探測（V0.2.0 Build 1 起，唯讀）：在 ERP 測試公司別，設定勾選診斷模式並儲存 → 再開設定按「ERP 結構探測」兩次：(a) COPI08 在新增狀態、明細有一列資料；(b) 明細單位欄開著 F2 查詢視窗。提供 `logs/erp-probe_*.txt`。用來評估 MSAA／控制項層級操作能否取代座標與 OCR。
-
-## 6. CI 狀態
-
-- PR #104 最後一次成功的 CYERPAutoInput Build 是 run #79（head `ddfb236`，2026-09-25）。
-- 之後 `main` 新增公開套件機密掃描（`.github/scripts/scan-public-package.py`），PR 與 main 在 workflow 產生衝突，`pull_request` CI 因此未在之後 13 個 commit 上執行。
-- 2026-10-06 已合併 main 並解決衝突：保留 .NET 8 build／self-test／publish／package 驗證，加回 `setup-python` 與機密掃描步驟。合併後需確認 CI 重新通過。
-- 2026-10-06 合併 main 後的 run：build／self-test／publish／package 驗證通過，但機密掃描把 OpenCV 官方 DLL 內資料誤判為 Google refresh token；修正於治理 PR #333（Governance 2.3.29），合併後需把 main 再合併進本 branch。
-- OCR 模型改由 `tools/ocr-models.json` 固定 SHA-256，優先從本 repo 模型 Release 下載；PR #104 合併後需從 main 手動執行 `CYERPAutoInput OCR Model Mirror` 一次建立該 Release。
-- CI 成功只代表 Windows 編譯、self-test、publish 與 package 成功，**不等於已通過使用者真實 SMART ERP 驗收**。
-
-
-## 7. 目前尚未完成 / 不得誤判為已完成
-
-- C# V0.1.0 尚未完成使用者真實 ERP 全流程驗收；Build 20 之後各版的實機結果需向使用者確認。
-- PR #104 尚未合併；目前仍不自動 Save；匯入解析（蝦皮／MO店+／酷澎商城）尚未完成。
-- OCR 在不同 Windows DPI、ERP 視窗大小、字型下仍需實機驗證。
-- F2 單位與批號流程必須保留 focus gate 與「F2 必須關閉」驗證；不得退回「看起來點到了就當成功」。
-- 不得把舊 Go Build 19 的診斷 readback 當成 C# 正式選取方法。
-- 下拉選項讀取（`PROJECT_RULES.md` §5）尚未實作：Codex 時期嘗試讀不到 DevExpress `TcxDBImageComboBox` 選項；目前設定只能手動輸入本機預設值。需在真實 ERP 上做有界診斷後再決定作法。
-- 其餘規劃中功能（跨批號拆列、批次 fault isolation、批次結果總表、自動儲存）列在 `README.md` TODO。
-
-
-## 8. 目前工作佇列（接手者從第一個未完成項目開始）
-
-1. [完成 2026-10-06] Governance PR #333（公開套件掃描誤判 OpenCV DLL）已 squash merge（Governance 2.3.29）。
-2. [完成 2026-10-06] PR #104 CI 全綠；Build 26 Artifact `CYERPAutoInput-v0.1.0-build26-windows-x64-run92`（run 37403614481，2026-10-20 到期；見 PR #104 留言）。
-3. [完成 2026-10-08] V0.2.0 Build 1 實測（§5.1）→ Build 2 返修。
-3.1 [完成 2026-10-08] Build 2–7 逐版實測返修，Build 7 單張輸入（含批號）實機通過。
-3.2 [待使用者] 開啟自動儲存實測 F12 儲存一張（§5.2 第 7 項）。原 3.1：依 §5.2 實測 V0.2.0 Build 2；批號失敗時請先在設定開啟診斷模式再重現並提供 LOG（非診斷模式下 F2 的 OCR 文字只記長度，無法判讀）。
-4. [待使用者決策後] 下拉選項讀取（打開下拉 → OCR → 以同一鍵關閉，不送 Esc、不改值，有界）。Build 26 實測後再做。
-5. [暫緩，使用者 2026-10-06 指示] Excel 標準匯入格式細節：等基礎自動打單（單張含自動儲存）實機完成後再與使用者討論；之前不要自行定案範本欄位。
-5.1 [完成，待實機] V0.2.0：介面補齊（依 CY 視覺準則，CI 介面截圖檢查）與選用自動儲存（見 §4）；自動儲存需實機驗證。
-6. [完成 2026-10-06] 使用者已刪除遠端舊分支（`ci-cyerp-build*`、舊 Go 分支）。
-6.1 [完成 2026-10-06] Governance PR #334（2.3.30）已合併：`PROJECT_RULES.md` §1 允許批次中放棄 CYERPAutoInput 自行新增且失敗的單據（須先確認仍在該張新增單據的輸入狀態）。
-7. 真實 ERP 驗收通過後才把 PR #104 轉 Ready／合併；合併後從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release。
-
-接手注意事項（本專案近期實際踩過的問題）：
-
-- 新 commit author／committer 必須是 `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`（REPOSITORY_RULES §4）。
-- `.github/scripts/**`、`GOVERNANCE_*`、`RULES_INDEX.md`、`PROJECT_RULES.md` 屬治理範圍，只能在 `governance/*` branch 修改並更新 `GOVERNANCE_VERSION`／`GOVERNANCE_CHANGELOG.md`；不可混進 PR #104。
-- 不得提交 `bin/`、`obj/`、`publish-staging/`、`runtime/ocr/`、`__pycache__/`、模型或任何 build 輸出；`git add` 前先看 `git status`。
-- 推送前本機至少：`dotnet test tests/CYERPAutoInput.Tests`；可用 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true` 在非 Windows 編譯檢查。
-
-## 9. Public repository / 資料安全
-
-這個 repo 是 Public。
-
-禁止提交：
-
-- 真實客戶代號
-- 真實品號
-- 倉別 / 部門 / 人員
-- ERP 實際下拉選項
-- 訂單 / 發票 / 交易資料
-- 公司內部路徑
-- 帳密 / token / secret
-- 使用者提供的 runtime log
-- ERP 截圖
-- `config/settings.json`
-- `logs/`
-- runtime cache / 匯入資料
-
-診斷 log 可在使用者本機產生並由使用者主動提供給對話分析，但不得自動提交 GitHub。
-
-## 10. 重要原則
-
-不要因 C# rewrite 就丟掉舊實機已驗證的 ERP 行為。
-
-這次 rewrite 的目的不是重新猜 ERP，而是：
-
-`保留已驗證 ERP interaction semantics + 用 C# / WinForms / 本機 OCR 取代舊 Go 在 virtual grid / OCR / UI 維護上的弱點。`
-
-目前最重要的驗收關卡仍是 **F2 單位選取**；使用者已證實「正確點列 + Enter」本身可行，因此下一步應驗證 C# OCR 是否能可靠完成「找到正確列並真的把 grid focus 放上去」。
-
-## 11. Roadmap
-
-**使用者 2026-10-09 確定的五個階段（順序優先於下方 2026-10-06 的提案）：**
-
-1. 第一階段：自動輸入核心（單張 COPI08 新增 → 輸入 → F2 單位／批號 → F12 儲存）穩定。截至 Build 8：單張含批號與 F12 儲存已實機通過。
-2. 第二階段：蝦皮訂單匯出檔 → 本程式自動打單（工具列已有「蝦皮」匯入按鈕位置；匯出檔欄位對應待使用者提供範例後設計，範例含客戶資料不得提交 Git）。
-3. 第三階段：串接 CYID（依 REPO_POLICY §4.1）。
-4. 第四階段：CYWEB 訂單工單系統完成後，從該系統撈單自動打單，完成後寄信通知。
-5. 第五階段：加上辨識查詢單據功能，完成 2026-10-06 roadmap 全部內容（含地端無人值守）。
-
-以下為 2026-10-06 的原提案與決策紀錄，供參考：
-
-核心架構：所有來源（手動 UI、Excel、平台訂單、CYweb 工單）先轉成同一份標準銷貨單資料，再走同一條「驗證 → ERP 輸入／儲存 → 結果」路徑；新增來源只新增 adapter，不另寫輸入流程。
-
-- 階段 0（V0.1.x）：單張輸入穩定 — Build 26 實機驗收、F2 單位／批號、下拉選項讀取。
-- 階段 1（第一個正式版）：使用者匯入程式提供格式的 Excel，ERP 自動輸入完成 — 程式產生範本（建議「單頭」「單身」兩個工作表以來源單號對應）、匯入前完整驗證與預覽、自動儲存並回讀單號、逐張失敗隔離、結果 Excel。
-- 階段 2：串接 CYweb 工單系統 — 地端主動 HTTPS 拉單、回報結果；資料格式沿用標準銷貨單資料；工單 ID 冪等防重；若接 CYID 依 REPO_POLICY §4.1。
-- 階段 3：地端無人值守 — 專用電腦自動登入／不鎖定／開機啟動、ERP 異常重啟與登入、心跳與異常通知。
-- 階段 4：辨識查詢單據 — 表頭以 `WM_GETTEXT` 讀取、明細以 OCR；先只讀不改。
-
-使用者決策（2026-10-06）：
-
-1. 階段 1 完成時升 `V1.0.0`（第一個正式版）。開發期間依版本規則先用 `0.Y.Z`。
-2. 採 (b)：批次中單據失敗時，可按 ERP「取消」放棄 CYERPAutoInput 自行新增的該張單據後繼續；需先確認 ERP 仍在該張新增單據的輸入狀態，否則停止整批。規則變更走 Governance PR #334。
-3. Excel 範本先只放標準模式欄位，其他欄位用本機預設值；之後再擴充。
-4. 階段 2 對接 CYWEB 的「訂單工單模組」（CYWEB 不在本 repo；接入前先確認其 API 與是否走 CYID）。
-5. 地端專用電腦可設定自動登入、不鎖定；ERP 欄位一律由程式定位輸入（不改用 ERP API）。
-
-風險評估後的使用者回覆（2026-10-06）：
-
-- SMART ERP 沒有銷貨單匯入功能（只有匯出），模擬操作是唯一路線。
-- 有 ERP 測試環境；實測由使用者處理。
-- 速度（OCR 逐格）之後再優化。
-- ERP 內通常不存來源單號；防重複打單（本機進度紀錄、ERP 查單依據）做到批次／工單階段再討論細節。
-- 階段 2 之後會接 CYID。
-- ERP 授權沒有問題。
-- 後續階段：在裝有 ERP 的 Windows 電腦上執行 Claude Code（Claude Desktop app，或在 repo 資料夾執行 `claude remote-control`），由 AI 直接建置、執行、截圖、讀 LOG 做實測；不採用 Public repo 的 self-hosted GitHub Actions runner（安全風險）。
-
-ERP 電腦實測操作清單（後續階段使用）：
-
-1. 只用 ERP 測試公司別；開始前確認 COPI08 視窗標題為測試公司。
-2. 測試期間該電腦不得有人同時操作；Windows 顯示比例 100%；不鎖定螢幕。
-3. 建置：`dotnet test tests/CYERPAutoInput.Tests`、`dotnet build CYERPAutoInput.csproj -c Release -r win-x64`，再執行 `tools/fetch-ocr-models.ps1` 取得模型。
-4. 觀察：以 PowerShell `System.Drawing` 擷取全螢幕 PNG 存到 repo 外的暫存資料夾檢視；LOG 在 exe 同層 `logs/`。截圖與 LOG 含 ERP 資料，只留本機、不提交 Git（PROJECT_RULES §3／§4）。
-5. 需使用者先同意：開啟自動儲存、批次中按「取消」放棄單據、任何會在 ERP 產生或修改資料的新操作。
-6. 修正照常推送到工作 branch，由主控方（Claude）審查。
-
-其他已知事實：
-
-- `SMARTCOPIConverter` 是 CYInvoice 上線前的 ERP 匯出轉 POS 發票方案，已停用；與本專案無相依。
-- 使用者同意在需要時使用臨時 GitHub Actions workflow（例如在 Windows runner 做一次性驗證）；用完需移除，不得留在 `main`，若會上傳 Artifact 必須含公開套件機密掃描。
+本 repo 為 Public。不得提交：真實客戶代號、品號、倉別、部門、人員、訂單／發票／交易資料、公司內部路徑、帳密與 token、使用者提供的 LOG 或 ERP 截圖、`Data/settings.json`、`logs/`、匯入資料。ERP 下拉選項除 PROJECT_RULES §3 核准的課稅別、發票聯數外，不得寫入 source。診斷 LOG 只在使用者本機產生、由使用者主動提供分析。
