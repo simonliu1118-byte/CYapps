@@ -312,6 +312,8 @@ async function loadTransactions() {
     state.transactions = mergePendingTransactionUpdates(data.transactions || [], month);
     state.ledgerLocked = Boolean(data.locked);
     state.lockedThrough = data.lockedThrough || state.lockedThrough;
+    els.ledgerLockBadge?.classList.toggle('hidden', !state.ledgerLocked);
+    window.cySyncLedgerQuickLock?.();
     await window.cyaccRefreshLedgerView(month);
     updateEntryLockState();
   } catch (error) {
@@ -327,11 +329,17 @@ function setLedgerLoadingState(loading) {
   const ledger = document.querySelector('.ledger-card');
   ledger?.classList.toggle('is-loading', busy);
   ledger?.setAttribute('aria-busy', busy ? 'true' : 'false');
+  const loadingLabel = document.querySelector('#ledgerMonthLoading');
+  if (loadingLabel) loadingLabel.hidden = !busy;
+  const loadingOverlay = document.querySelector('#ledgerLoadingOverlay');
+  if (loadingOverlay) loadingOverlay.hidden = !busy;
+  ledger?.querySelector('.table-wrap table')?.toggleAttribute('inert', busy && Boolean(window.cyIsDesktopInteractionWorkspace?.()));
   for (const control of document.querySelectorAll(
-    '#ledgerPrevMonth, #ledgerNextMonth, #monthFilter, #ledgerMoreButton, #ledgerBalanceButton, #ledgerSearchForm input, #ledgerSearchForm button'
+    '#ledgerPrevMonth, #ledgerNextMonth, #monthFilter, #ledgerMoreButton, #ledgerBalanceButton, #ledgerQuickLockButton, #ledgerOpeningBalanceButton, #ledgerLockSettingsButton, #ledgerExcelExport, #ledgerSearchForm input, #ledgerSearchForm button'
   )) {
     if ('disabled' in control) control.disabled = busy;
   }
+  if (!busy) window.cySyncLedgerQuickLock?.();
 }
 
 function openEditTransaction(id) {
@@ -764,7 +772,7 @@ async function loadOpeningBalances() {
     const rows = data.accounts.map(openingAccountRowHtml).join('');
 
     const audit = renderOpeningAudit(data.audit || []);
-    els.openingRows.innerHTML = rows + `
+    els.openingRows.innerHTML = `<div class="opening-account-column">${rows}
       <section id="openingManualPanel" class="opening-manual-panel" hidden>
         <label class="opening-reason-field">
           <span>手動調整理由 <strong>必填</strong></span>
@@ -774,6 +782,7 @@ async function loadOpeningBalances() {
           <button id="cancelOpeningManualButton" class="secondary" type="button">取消手動調整</button>
         </div>
       </section>
+      </div>
       ${audit}`;
 
     document.querySelector('#cancelOpeningManualButton')?.addEventListener('click', cancelOpeningManualEdit);
@@ -857,8 +866,9 @@ function cancelOpeningManualEdit() {
 
 function renderOpeningAudit(entries) {
   const rows = Array.isArray(entries) ? entries : [];
+  const expanded = window.cyIsDesktopInteractionWorkspace?.() ? ' open' : '';
   if (!rows.length) {
-    return '<details class="opening-audit"><summary>調整紀錄</summary><div class="opening-audit-empty">目前沒有手動調整紀錄。</div></details>';
+    return `<details class="opening-audit"${expanded}><summary>調整紀錄</summary><div class="opening-audit-empty">目前沒有手動調整紀錄。</div></details>`;
   }
   const items = rows.slice(0, 12).map(entry => {
     const action = entry.action === 'clear' ? '恢復自動' : entry.action === 'migration' ? '舊資料移轉' : '手動設定';
@@ -869,7 +879,7 @@ function renderOpeningAudit(entries) {
       <small>${escapeHtml(entry.reason || '')}${actor ? ` · ${escapeHtml(actor)}` : ''}${entry.createdAt ? ` · ${escapeHtml(entry.createdAt.replace('T', ' ').replace('Z', ' UTC'))}` : ''}</small>
     </div>`;
   }).join('');
-  return `<details class="opening-audit"><summary>調整紀錄（${rows.length}）</summary><div class="opening-audit-list">${items}</div></details>`;
+  return `<details class="opening-audit"${expanded}><summary>調整紀錄（${rows.length}）</summary><div class="opening-audit-list">${items}</div></details>`;
 }
 
 async function saveLock(lockedThrough) {
@@ -878,12 +888,16 @@ async function saveLock(lockedThrough) {
     state.lockedThrough = data.lockedThrough || null;
     els.lockedThrough.value = state.lockedThrough || '';
     renderSettings();
+    window.cySyncLedgerQuickLock?.();
     setDialogMessage(els.settingsMessage, state.lockedThrough ? `已鎖帳至 ${formatMonth(state.lockedThrough)}。` : '已取消鎖帳。');
     await loadTransactions();
+    return true;
   } catch (error) {
     setDialogMessage(els.settingsMessage, error.message, true);
+    return false;
   }
 }
+window.cyaccSaveLock = saveLock;
 
 function optionsWithHistorical(currentNames, selected) {
   const names = [...currentNames];
@@ -910,6 +924,7 @@ async function api(path, options = {}) {
       signal: controller.signal
     });
     const data = await response.json().catch(() => ({}));
+    if (window.cyaccHandleAuthResponse?.(response, data)) throw new Error('AUTH_REQUIRED');
     if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
     return data;
   });

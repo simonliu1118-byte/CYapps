@@ -145,7 +145,7 @@ function backupSettingsHtml() {
         <h3 id="backupHeadingTitle">自動備份</h3>
         <p id="backupHeadingHint" class="hint">Cloudflare D1 是正式資料來源；正在讀取備份拓撲。</p>
       </div>
-      <button id="backupRefreshStatus" class="secondary compact" type="button">重新整理</button>
+      <button id="backupRefreshStatus" class="secondary compact backup-refresh-button" type="button" aria-label="重新整理備份狀態" title="重新整理備份狀態">重新整理</button>
     </div>
 
     <div id="backupMessage" class="dialog-message"></div>
@@ -307,6 +307,15 @@ function renderBackupStatus(data) {
     }
     renderLegacyProviderHealth(model);
     renderBackupHistory(model.recentRuns || []);
+  }
+
+  if (window.cyIsDesktopInteractionWorkspace?.()) {
+    const latest = model.latest;
+    if (lastDetail && latest) lastDetail.textContent = `${Number(latest.rowCount || 0).toLocaleString()} 筆 · ${backupBytes(latest.byteSize || 0)} · ${latest.status === 'success' ? '驗證成功' : '待確認驗證結果'}`;
+    const historyTitle = document.querySelector('.backup-history-title strong');
+    const historyHint = document.querySelector('.backup-history-title .hint');
+    if (historyTitle) historyTitle.textContent = '最近備份紀錄';
+    if (historyHint) historyHint.textContent = '每筆備份分別顯示 R2 與 GCS 的驗證結果';
   }
 
   if (run) run.disabled = !model.configured;

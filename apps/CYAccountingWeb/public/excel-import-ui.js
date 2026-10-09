@@ -46,6 +46,8 @@ function setupExcelImport() {
     bindExcelImportDialog();
   }
   button.addEventListener('click', openExcelImport);
+  document.querySelector('#excelImportTemplate')?.addEventListener('click', downloadImportTemplate);
+
 }
 
 function importDialogHtml() {
@@ -529,6 +531,7 @@ async function uploadXlsx(file, query) {
     cache: 'no-store'
   });
   const data = await response.json().catch(() => null);
+  if (window.cyaccHandleAuthResponse?.(response, data)) throw new Error('AUTH_REQUIRED');
   if (!response.ok) throw new Error(data?.error || `Excel 解析失敗（HTTP ${response.status}）。`);
   return data;
 }
@@ -592,4 +595,23 @@ function escapeImportHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+async function downloadImportTemplate(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/import/template.xlsx', { credentials: 'include', cache: 'no-store' });
+    if (window.cyaccHandleAuthResponse?.(response)) throw new Error('AUTH_REQUIRED');
+    if (!response.ok) throw new Error('無法下載 Excel 模板，請稍後再試。');
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'CYAccounting_import_template.xlsx';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    setDialogMessage(document.querySelector('#settingsMessage'), error.message);
+  } finally { button.disabled = false; }
 }

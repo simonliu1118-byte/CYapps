@@ -2,20 +2,26 @@
 
 志遠記帳系統 Web 版；與 `apps/CYAccounting/` Windows 版分開維護。
 
-更新：2026/10/05（日本時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
+更新：2026/10/10（日本時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
+
+**V0.22.31 Build 0（已部署）**：桌機收支控制維持 320px 寬、降為 32px 高；切月改用清單遮罩與轉圈提示；快速輸入適配 640px 設定視窗，備份完整換行、資料移轉改成與 Excel 匯入同級的可展開區塊。Excel 匯入增加下載模板（空白輸入＋填寫說明／目前帳戶科目）。共用 Auth 依 CYID expiresAt 到期導回登入頁，API 401 也走同一導頁；不改手機／平板版面。本地 24 組測試、六種 viewport、模板填寫後實際匯入預覽與登入逾時導頁驗證通過；PR #366 治理／CI 與正式部署 #568（run `37955721498`）成功。真實桌機視覺待使用者驗收。
 
 ## 目前狀態
 
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.18 Build 3**；PR #331 已合併；同一 iPad 橫式登入／Password Recovery 工作項目依共同版本規則續升 Build，不另升 Patch |
-| 正式部署 | CYAccountingWeb Validate and Deploy **#487**（run `37338292419`）成功；application tests、schema 7 migration、Worker/static assets、secure login、semantic assets 均通過 |
+| 正式版本 | **V0.22.31 Build 0**；PR #366 已合併，完成桌機設定／載入遮罩返修、Excel 模板下載與共用 Session 到期導頁，手機與平板既有排列保留 |
+| 正式部署 | [CYAccountingWeb Validate and Deploy #568（run `37955721498`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37955721498) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
-| Governance | Common Rules 2.8.0；CYapps Governance 2.3.28 |
+| Governance | Common Rules 2.8.0；CYapps Governance 2.3.31 |
 | 備份 | Phase C；R2＋GCS 手動 paired 驗收完成，scheduled `x/14` 仍需讀正式 catalog，不按日期推算 |
+
+電腦版仍沿用既有 Desktop UI/UX 設計（PR #115 為歷史設計里程碑），與手機／平板共用原本資料及帳務 owner。V0.22.29 以 `cyacc:confirmation-ready` 明確 lifecycle 恢復桌機左右分欄，修正 `.desktopUi-date-*` 樣式對應；部署驗證通過不代替使用者於真實電腦瀏覽器的視覺驗收。
+
+V0.22.30 Desktop 呈現依使用者 10 項實機要求調整：移除記帳／帳本標題；收支以金額加減號及顏色識別；桌機帳戶選擇下方改日期、科目＋小型常用科目、摘要＋小型常用摘要、金額／儲存／清空；日期日曆圖示改為單一 SVG；月份 loading 明示；期初餘額調整 audit 於寬視窗右側展開；五格月摘要與平板同序放大；修正 inline edit 欄寬；桌機帳號角色以平板同款括號文字、無 pill 背景。手機／平板保留原版面及既有共用 writer；UI 視覺仍待實機再確認。
 
 ## 文件入口
 
@@ -63,7 +69,7 @@ SUPER_ADMIN 永久刪除條件為已封存、無交易、最新有效期初為�
 
 ### 平板
 
-目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。日期／月份改與手機共用原生 touch owner，平板只保留 layout / gesture presentation；沒有平板第二套 writer、month state 或 business flow。平板登入仍與手機共用同一 keyboard-aware login owner：直式保留較大的固定尺寸；橫式使用 touch-tablet 雙欄 presentation。V0.22.18 修正 iPad Safari 首次鍵盤的 visual viewport offset／雙重捲動問題，旋轉時也會重建 resting viewport baseline；Build 1 依實機畫面微調橫式可視區內置中、卡片總寬與欄間距；Build 2 將「員工帳號登入」移到左側「志遠記帳系統」下方；Build 3 將忘記密碼／重設密碼畫面比照同一橫式版型，把「重設密碼」移到左側品牌下方，右側只保留 recovery 欄位與操作；不另造第二套登入或 recovery 流程。
+目前正式 main 已包含 V0.22.2～V0.22.3 Build 3 的平板主介面收斂：橫向左記帳／右看帳，直向看帳主區＋底部記帳 rail。手機帳號選單仍暫時提供「測試用平板版」，只在目前分頁 session 內啟用，直接重用正式平板 presentation；直式以 820px、橫式以 1194px reference viewport 呈現，旋轉手機可檢查兩個方向。V0.22.21 起平板直式與橫式都明確由 canonical `.cy-account-cluster` 擁有右上 identity，格式維持 `員工編號 姓名［角色］｜登出`；角色是姓名後方的同行純文字，不是獨立 pill，SUPER_ADMIN 金色、ADMIN 銅色、USER 中性色與手機色票一致，設定按鈕也與帳號列等高。手機 dropdown trigger/menu 在真正 Tablet 一律隱藏；「返回手機版」只有手機 tablet preview 啟用時才出現，真實 iPad 不顯示。直式底部記帳 rail 仍預設展開，唯一把手放大並顯示「展開記帳／收起記帳」，展開內容壓縮為兩列；直式摘要搜尋使用原生 `type=search`，不顯示額外「搜尋／清除」按鈕。V0.22.22 起直式切月份共用手機成熟的 busy lifecycle，會顯示「載入中…」並暫停當月相關控制項；搜尋 Enter 後收鍵盤、存檔成功訊息淡出，期初餘額與月份鎖帳共用 compact touch utility。年月旁的快速鎖帳只移動既有 `lockedThrough` 邊界一個月：下一個月份才能快速上鎖，只有最新鎖帳月份能快速解鎖並退回前一月；歷史已鎖月份、跳月未鎖月份與沒有初始 `lockedThrough` 時都顯示狀態但停用，需使用既有月份鎖帳設定。V0.22.23 再把直式年月選擇器收斂為有邊界與下拉提示的原生 touch capsule；搜尋欄固定 16px 並避免鍵盤開啟時用 visualViewport 壓縮整個 Tablet workspace，修正 iPhone Safari focus zoom／灰色空區。Excel 按鈕移到期初餘額右側，Tablet 直／橫式都沿用手機 native share owner。直式明細隱藏獨立「收支」欄，金額直接以綠色 `+`／紅色 `−` 顯示，操作欄改筆／垃圾桶圖示。V0.22.24 起直式月摘要直接共用橫式的單列同行樣式與分隔線，移除「記帳資料」標題；平板直／橫式的「操作」表頭統一靠左。V0.22.25 將直式新增區改為左側垂直收入／支出與右側三層輸入配置。V0.22.26 修正該版返修：月摘要恢復為年月／工具列下方獨立單列；新增把手依實機示意改成面板上緣中央向上凸出的標籤式拉耳，收合為「↑ 展開新增」、展開為「↓ 收合隱藏」，不再佔用面板內一整列；收合時僅留下薄面板邊線與凸起標籤。V0.22.27 再依實機收斂：交易表在空月份與有資料月份使用固定欄寬；平板直／橫式「操作」表頭置中；月摘要改為固定五格並放大，數值長短不再影響位置。Excel 直／橫式與手機 preview 明確共用同一 native file share 路徑；凸起把手固定白色，收合時不保留整條 rail；左側收入／支出文字改為直向排列。V0.22.28 再把凸起把手移到記帳 rail 上緣 owner，展開時從面板上邊線向上凸出、收合只留把手；直式收入／支出回到 canonical segmented-control 視覺，只做 42px 窄、132px 高的直向排列。右側固定三列為「帳戶／科目／常用科目」、「日期／摘要／常用摘要」、「金額／儲存／清空（編輯時取消）」；平板 Settings 縮至 640px，月份鎖帳恢復穩定單列並收斂逐月控制，備份標題列與重新整理按鈕同步縮整。資料管理與資料移轉只在 Desktop interaction workspace 建立，平板直／橫式不顯示。日期／月份仍與手機共用原生 touch owner，直式與橫式共用 `ledgerMonthDisplay`＋原生 `type=month`；沒有平板第二套 writer、kind、month、lock、export、identity 或 business flow。
 
 未合併的 PR #297 / V0.22.2 Build 4 不是目前基準，後續修正已由 V0.22.3 系列取代。
 

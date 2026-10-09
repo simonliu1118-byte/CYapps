@@ -1,5 +1,5 @@
 import readExcelFile, { readSheet } from 'read-excel-file/universal';
-import { buildMonthlyWorkbook } from '../src/excel-export.js';
+import { buildMonthlyWorkbook, buildImportTemplateWorkbook, handleExcelExportApi } from '../src/excel-export.js';
 import { analyzeImportRows } from '../src/excel-import.js';
 
 function assert(condition, message) {
@@ -69,3 +69,15 @@ assert(preview.summary.errors === 1, `expected one invalid row: ${JSON.stringify
 assert(preview.canCommit === false, 'preview with locked/error rows must not commit');
 
 console.log('Excel import/export tests passed');
+
+const templateResponse = await handleExcelExportApi(new Request('https://acc.example.com/api/import/template.xlsx'), { DB: db });
+assert(templateResponse.status === 200, 'template download succeeds');
+assert(templateResponse.headers.get('content-disposition').includes('CYAccounting_import_template.xlsx'), 'template has a download filename');
+const template = await templateResponse.arrayBuffer();
+const templateSheets = await readExcelFile(template);
+assert(templateSheets[0].sheet === '記帳匯入' && templateSheets[1].sheet === '填寫說明', 'template separates writable records from instructions');
+const templateRows = await readSheet(template, '記帳匯入');
+assert(JSON.stringify(templateRows[0]) === JSON.stringify(['日期', '帳戶', '收支', '科目', '摘要', '金額']), 'template headers match importer aliases');
+assert(templateRows.slice(1).every(row => row.every(cell => cell == null || cell === '')), 'template has no example transactions that could accidentally import');
+const templateNotes = await readSheet(template, '填寫說明');
+assert(templateNotes.some(row => row.includes('現金')) && templateNotes.some(row => row.includes('一般支出')), 'template contains currently valid names');

@@ -36,6 +36,7 @@ async function downloadMonthlyExcel() {
       cache: 'no-store'
     });
 
+    if (window.cyaccHandleAuthResponse?.(response)) throw new Error('AUTH_REQUIRED');
     if (!response.ok) {
       const data = await response.json().catch(() => null);
       throw new Error(data?.error || `匯出失敗（HTTP ${response.status}）。`);
@@ -46,12 +47,14 @@ async function downloadMonthlyExcel() {
 
     const fileName = `CYAccounting_${month}.xlsx`;
     const file = new File([blob], fileName, {
-      type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      lastModified: Date.now()
     });
-    const nativeShare = (
-      window.matchMedia('(max-width: 767px)').matches
-      || document.documentElement.dataset.tabletLayout === 'landscape'
-    ) && typeof navigator.share === 'function'
+    const nativeShareSurface = window.matchMedia('(max-width: 767px)').matches
+      || Boolean(document.documentElement.dataset.tabletLayout)
+      || window.__cyaccTabletPreviewEnabled === true;
+    const nativeShare = nativeShareSurface
+      && typeof navigator.share === 'function'
       && (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [file] }));
 
     if (nativeShare) {

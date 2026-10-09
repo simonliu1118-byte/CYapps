@@ -289,7 +289,7 @@ assert.match(authCss, /data-cyacc-read-only="true"\] \.shell[\s\S]*?grid-templat
 assert.doesNotMatch(authCss, /data-mobile-ledger-action="export"[\s\S]*?display:\s*none/);
 assert.match(adaptiveUi, /MutationObserver/);
 assert.doesNotMatch(adaptiveUi, /querySelector\(['"]\.version['"]\)|CY_[A-Z0-9_]*VERSION|(?:sync|enforce)[A-Za-z0-9_]*Version/);
-assert.match(indexHtml, /<span class="version">V0\.22\.18 Build 3<\/span>/);
+assert.ok(indexHtml.includes('<span class="version">V' + fs.readFileSync(path.join(ROOT, 'VERSION'), 'utf8').trim() + '</span>'), 'frontend version must match canonical VERSION file');
 
 const migrationDir = path.join(ROOT, 'migrations');
 const migrationTexts = fs.readdirSync(migrationDir)

@@ -139,6 +139,7 @@ function setupAdaptiveEntryHelp() {
 }
 
 function setupAdaptiveDataSettings() {
+  if (typeof isDesktopInteractionWorkspace === 'function' && !isDesktopInteractionWorkspace()) return;
   const nav = document.querySelector('.settings-nav');
   const content = document.querySelector('.settings-content');
   if (!nav || !content || typeof setSettingsTab !== 'function') return;
@@ -166,6 +167,7 @@ function setupAdaptiveDataSettings() {
       <section class="cy-data-section">
         <h4>Excel 匯入</h4>
         <div class="cy-data-actions" id="excelImportSettingsHost">
+          <button id="excelImportTemplate" class="secondary compact" type="button">下載 Excel 模板</button>
           <button id="ledgerExcelImport" class="secondary compact" type="button" title="匯入 .xlsx 記帳資料">匯入 Excel</button>
         </div>
       </section>`;
@@ -193,7 +195,6 @@ function cleanupAdaptiveInterfaceCopy() {
       '#settingsDialog [data-settings-pane="backup"] #backupHeadingHint',
       '#settingsDialog [data-settings-pane="backup"] .backup-security-note',
       '#settingsDialog [data-settings-pane="backup"] .backup-restore-note',
-      '#settingsDialog [data-settings-pane="migration"] .migration-heading .hint',
       '#settingsDialog [data-settings-pane="migration"] .migration-privacy',
       '#openingDialog .opening-dialog-heading > .hint'
     ];
@@ -257,6 +258,9 @@ function adaptiveEscapeHtml(value) {
 function setupAdaptiveSplitWorkspace() {
   const media = window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA);
   const sync = () => applyAdaptiveSplitWorkspace(media.matches);
+  // The confirmation drawer is created on window load by its canonical owner.
+  // Reconcile the desktop split only after that owner signals readiness.
+  window.addEventListener('cyacc:confirmation-ready', sync);
   sync();
   if (typeof media.addEventListener === 'function') media.addEventListener('change', sync);
   else media.addListener?.(sync);
@@ -329,6 +333,7 @@ function startEntryUi() {
   runEntryUiStep('mobile-pages', setupMobileEntryMobilePages);
   runEntryUiStep('mobile-account-picker', setupMobileEntryMobileAccountPicker);
   runEntryUiStep('account-choices', setupEntryUiAccountChoices);
+  runEntryUiStep('desktop-quick-tools', setupDesktopEntryQuickTools);
   runEntryUiStep('summary-limit', setupEntryUiSummaryLimit);
   runEntryUiStep('role-medal', setupEntryUiRoleMedal);
   runEntryUiStep('enter-hints', setupMobileEntryEnterHints);
@@ -353,6 +358,43 @@ function syncEntryUiAfterLoad() {
 
 
 
+
+function setupDesktopEntryQuickTools() {
+  const grid = document.querySelector('.entry-card .entry-grid');
+  const quickTools = document.querySelector('.entry-card .quick-entry-tools');
+  if (!grid || !quickTools) return;
+  let clear = document.querySelector('#desktopEntryClearButton');
+  if (!clear) {
+    clear = document.createElement('button');
+    clear.id = 'desktopEntryClearButton';
+    clear.className = 'secondary cy-entry-clear-button';
+    clear.type = 'button';
+    clear.textContent = '清空';
+    clear.addEventListener('click', () => {
+      if (typeof clearTouchWorkspaceEntryForm === 'function') clearTouchWorkspaceEntryForm();
+    });
+    grid.append(clear);
+  }
+  const sync = () => {
+    const desktop = isDesktopInteractionWorkspace();
+    clear.hidden = !desktop;
+    const favorite = document.querySelector('#favoriteCategoryGroup');
+    const suggestion = document.querySelector('#summarySuggestionGroup');
+    for (const [item, anchor] of [
+      [favorite, grid.querySelector('.summary-field')],
+      [suggestion, grid.querySelector('.amount-field')]
+    ]) {
+      if (!item) continue;
+      if (desktop && anchor && (item.parentElement !== grid || item.nextElementSibling !== anchor)) {
+        grid.insertBefore(item, anchor);
+      } else if (!desktop && !isTabletWorkspace() && item.parentElement !== quickTools) {
+        quickTools.append(item);
+      }
+    }
+  };
+  window.addEventListener('resize', sync, { passive: true });
+  sync();
+}
 
 function setupEntryUiAccountChoices() {
   const select = document.querySelector('#accountName');
@@ -528,7 +570,7 @@ function setupMobileEntryMobilePages() {
 
   const apply = page => {
     current = page === 'ledger' ? 'ledger' : 'entry';
-    const enabled = mobile.matches;
+    const enabled = mobile.matches && !isTabletPreviewMode();
     nav.hidden = !enabled;
     entry.classList.toggle('cy-mobile-page-hidden', enabled && current !== 'entry');
     ledger.classList.toggle('cy-mobile-page-hidden', enabled && current !== 'ledger');
@@ -542,7 +584,7 @@ function setupMobileEntryMobilePages() {
 
   nav.addEventListener('click', event => {
     const button = event.target.closest('[data-mobile-page]');
-    if (!button || !mobile.matches) return;
+    if (!button || !mobile.matches || isTabletPreviewMode()) return;
     apply(button.dataset.mobilePage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
@@ -708,11 +750,34 @@ function syncMobileWorkspaceAfterLoad() {
 
 
 
+function isTabletPreviewMode() {
+  if (window.__cyaccTabletPreviewEnabled === true || document.documentElement.dataset.tabletPreview === 'true') return true;
+  try {
+    return sessionStorage.getItem(window.__cyaccTabletPreviewKey || 'cyacc-tablet-preview') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setTabletPreviewMode(enabled) {
+  const key = window.__cyaccTabletPreviewKey || 'cyacc-tablet-preview';
+  try {
+    if (enabled) sessionStorage.setItem(key, '1');
+    else sessionStorage.removeItem(key);
+  } catch { /* preview remains best-effort in restricted storage */ }
+  window.location.reload();
+}
+
+function usesMobileAccountMenuIdentity() {
+  return window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && !isTabletWorkspace();
+}
+
 function setupMobileWorkspaceMobileAppBar() {
   const topbar = document.querySelector('.topbar');
   const currentUser = document.querySelector('#currentUser');
   const logoutButton = document.querySelector('#logoutButton');
-  if (!topbar || !currentUser || !logoutButton) return;
+  const actions = topbar?.querySelector('.topbar-actions');
+  if (!topbar || !currentUser || !logoutButton || !actions) return;
 
   let trigger = document.querySelector('#mobileAccountMenuButton');
   if (!trigger) {
@@ -727,6 +792,18 @@ function setupMobileWorkspaceMobileAppBar() {
     topbar.append(trigger);
   }
 
+  let returnButton = document.querySelector('#tabletPreviewReturnButton');
+  if (!returnButton) {
+    returnButton = document.createElement('button');
+    returnButton.id = 'tabletPreviewReturnButton';
+    returnButton.className = 'secondary compact tablet-preview-return';
+    returnButton.type = 'button';
+    returnButton.textContent = '返回手機版';
+    returnButton.hidden = true;
+    actions.append(returnButton);
+  }
+  returnButton.addEventListener('click', () => setTabletPreviewMode(false));
+
   let menu = document.querySelector('#mobileAccountMenu');
   if (!menu) {
     menu = document.createElement('div');
@@ -738,6 +815,7 @@ function setupMobileWorkspaceMobileAppBar() {
         <strong id="mobileAccountMenuName"></strong>
         <span id="mobileAccountMenuRole"></span>
       </div>
+      <button type="button" data-mobile-account-action="tablet-preview" hidden>測試用平板版</button>
       <button type="button" class="danger-lite" data-mobile-account-action="logout">登出</button>`;
     document.body.append(menu);
   }
@@ -749,7 +827,7 @@ function setupMobileWorkspaceMobileAppBar() {
   };
 
   trigger.addEventListener('click', event => {
-    if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches) return;
+    if (!usesMobileAccountMenuIdentity()) return;
     event.stopPropagation();
     const open = menu.hidden;
     menu.hidden = !open;
@@ -762,6 +840,10 @@ function setupMobileWorkspaceMobileAppBar() {
     const action = event.target.closest('[data-mobile-account-action]')?.dataset.mobileAccountAction;
     if (!action) return;
     close();
+    if (action === 'tablet-preview') {
+      setTabletPreviewMode(!isTabletPreviewMode());
+      return;
+    }
     if (action === 'logout') logoutButton.click();
   });
 
@@ -780,8 +862,8 @@ function setupMobileWorkspaceMobileAppBar() {
 
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
-    document.body.classList.toggle('cy-mobile-app', mobile.matches);
-    if (!mobile.matches) close();
+    document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
+    if (!usesMobileAccountMenuIdentity()) close();
     syncMobileWorkspaceMobileIdentity();
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
@@ -796,14 +878,26 @@ function syncMobileWorkspaceMobileIdentity() {
   const menu = document.querySelector('#mobileAccountMenu');
   const menuName = document.querySelector('#mobileAccountMenuName');
   const menuRole = document.querySelector('#mobileAccountMenuRole');
+  const previewButton = menu?.querySelector('[data-mobile-account-action="tablet-preview"]');
+  const returnButton = document.querySelector('#tabletPreviewReturnButton');
   if (!source || !trigger || !triggerName || !menu || !menuName || !menuRole) return;
 
   const main = String(source.querySelector('.current-user-main')?.textContent || '').trim();
   const role = String(source.querySelector('.current-user-role')?.textContent || '').trim();
-  const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches;
+  const mobileAccountMenu = usesMobileAccountMenuIdentity();
+  const preview = isTabletPreviewMode();
   const ready = Boolean(main) && !source.classList.contains('hidden');
+  const cluster = source.closest('.cy-account-cluster');
+  const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
+  const admin = source.classList.contains('role-admin') || role === '管理員';
 
-  if (!mobile || !ready) {
+  cluster?.classList.toggle('role-super-admin', superAdmin);
+  cluster?.classList.toggle('role-admin', admin);
+  cluster?.classList.toggle('role-user', ready && !superAdmin && !admin);
+
+  if (returnButton) returnButton.hidden = !preview;
+
+  if (!mobileAccountMenu || !ready) {
     trigger.hidden = true;
     menu.hidden = true;
     trigger.setAttribute('aria-expanded', 'false');
@@ -811,13 +905,19 @@ function syncMobileWorkspaceMobileIdentity() {
     return;
   }
 
+  if (trigger.parentElement !== document.querySelector('.topbar')) {
+    document.querySelector('.topbar')?.append(trigger);
+  }
+
   triggerName.textContent = main;
   menuName.textContent = main;
   menuRole.textContent = role;
   trigger.hidden = false;
+  if (previewButton) {
+    previewButton.hidden = false;
+    previewButton.textContent = '測試用平板版';
+  }
 
-  const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
-  const admin = source.classList.contains('role-admin') || role === '管理員';
   trigger.classList.toggle('role-super-admin', superAdmin);
   trigger.classList.toggle('role-admin', admin);
   menu.classList.toggle('role-super-admin', superAdmin);
@@ -846,7 +946,7 @@ function setupMobileWorkspaceMobileNavigation() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const syncMode = () => {
     sync();
-    document.body.classList.toggle('cy-mobile-app', mobile.matches);
+    document.body.classList.toggle('cy-mobile-app', mobile.matches && !isTabletPreviewMode());
   };
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
   else mobile.addListener?.(syncMode);
@@ -893,7 +993,7 @@ function setupMobileWorkspaceAccountSheet() {
 function setupMobileWorkspaceConfirmationPolicy() {
   const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE);
   const sync = () => {
-    if (mobile.matches) {
+    if (mobile.matches || isTabletWorkspace()) {
       if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(false, false);
       return;
     }
@@ -906,7 +1006,7 @@ function setupMobileWorkspaceConfirmationPolicy() {
 }
 
 function syncMobileWorkspaceConfirmationPolicy() {
-  if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches) return;
+  if (!window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && !isTabletWorkspace()) return;
   if (typeof setConfirmationDrawer === 'function') setConfirmationDrawer(false, false);
 }
 
@@ -963,6 +1063,7 @@ function setupDesktopIsolationDesktopIsolation() {
 }
 
 function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DESKTOP_ISOLATION_DESKTOP).matches) {
+  desktop = Boolean(desktop && !isTabletWorkspace());
   const accountTrigger = document.querySelector('#mobileAccountMenuButton');
   const ledgerMore = document.querySelector('#ledgerMoreButton');
 
@@ -970,7 +1071,8 @@ function syncDesktopIsolationDesktopIsolation(desktop = window.matchMedia(CY_DES
   if (ledgerMore) ledgerMore.hidden = Boolean(desktop);
 
   if (!desktop) {
-    document.body.classList.add('cy-mobile-app');
+    const mobile = window.matchMedia(CY_MOBILE_WORKSPACE_MOBILE).matches && !isTabletWorkspace();
+    document.body.classList.toggle('cy-mobile-app', mobile);
     syncMobileWorkspaceMobileIdentity();
     return;
   }
@@ -1809,7 +1911,7 @@ function ensureDesktopUiDatePicker(input) {
   root.className = 'desktopUi-date-picker';
   root.innerHTML = `
     <button type="button" class="desktopUi-date-trigger" aria-haspopup="dialog" aria-expanded="false">
-      <span class="desktopUi-date-label">—</span><span class="desktopUi-date-calendar-icon" aria-hidden="true">▣</span>
+      <span class="desktopUi-date-label">—</span><svg class="desktopUi-date-calendar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>
     </button>
     <div class="desktopUi-date-popover" role="dialog" aria-label="選擇日期" hidden>
       <div class="desktopUi-date-head">
@@ -2098,9 +2200,11 @@ function renderSettingsAccountManager() {
             : `<button type="button" class="settings-default-tag" data-account-default="${id}" title="設為預設帳戶">設為預設</button>`}
           <div class="settings-account-name-cell">
             <strong class="settings-editable-name">${settingsManagerEscape(account.name)}</strong>
-            <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">${settingsActionIcon('edit')}</button>
           </div>
-          <button type="button" class="mini-button settings-archive-button" data-account-archive="${id}" title="封存帳戶" aria-label="封存帳戶">${settingsActionIcon('archive')}</button>
+          <div class="settings-account-actions">
+            <button type="button" class="mini-button settings-edit-button" data-account-rename="${id}" title="編輯帳戶名稱" aria-label="編輯帳戶名稱">${settingsActionIcon('edit')}</button>
+            <button type="button" class="mini-button settings-archive-button" data-account-archive="${id}" title="封存帳戶" aria-label="封存帳戶">${settingsActionIcon('archive')}</button>
+          </div>
         </div>`;
       }).join('')
     : '<div class="empty">尚無可用帳戶。</div>';
@@ -3264,8 +3368,14 @@ window.cyOpenMobileUtility = openMobileUtility;
 window.cyOpenMobileLedgerOpening = () => openMobileUtility('opening');
 window.cyOpenMobileLedgerLock = () => openMobileUtility('lock');
 window.cyOpenMobileSettingsPane = tab => openMobileUtility(tab);
+window.cyUsesCompactTouchUtility = usesCompactTouchUtility;
 
 let cyMobileOpeningMount = null;
+
+function usesCompactTouchUtility() {
+  return window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches ||
+    (isTabletWorkspace() && tabletWorkspaceOrientation() === 'portrait');
+}
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', setupTouchWorkspace, { once: true });
@@ -3289,7 +3399,7 @@ function setupTouchWorkspace() {
 }
 
 async function openMobileUtility(type) {
-  if (!window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
+  if (!usesCompactTouchUtility()) return;
   if (!['opening', 'accounts', 'categories', 'lock'].includes(type)) return;
 
   const dialog = els.settingsDialog || document.querySelector('#settingsDialog');
@@ -3773,7 +3883,7 @@ function setupTouchWorkspaceSearch() {
   input.setAttribute('enterkeyhint', 'search');
   input.setAttribute('inputmode', 'search');
   form.addEventListener('submit', () => {
-    if (!window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
+    if (!usesCompactTouchUtility()) return;
     window.setTimeout(() => input.blur(), 0);
   });
 }
@@ -3868,7 +3978,7 @@ function handleTouchWorkspaceSaveMessage(message, text, isError) {
   message.classList.remove('is-fading');
   message.classList.toggle('is-visible', Boolean(text));
 
-  if (!text || isError || !window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches) return;
+  if (!text || isError || !usesCompactTouchUtility()) return;
 
   cyTouchWorkspaceSaveHideTimer = window.setTimeout(() => {
     message.classList.add('is-fading');
@@ -4154,6 +4264,9 @@ function showTouchWorkspaceLedgerNotice(text) {
 
 /* Tablet presentation reuses the same entry form, ledger and entry-edit owner. */
 function isTabletWorkspace() {
+  const preview = window.__cyaccTabletPreviewEnabled === true ||
+    document.documentElement?.dataset?.tabletPreview === 'true';
+  if (preview) return true;
   const width = window.innerWidth;
   return width >= 768 && (width < 1024 ||
     (width <= 1366 && window.matchMedia('(any-pointer: coarse)').matches));
@@ -4178,7 +4291,11 @@ function setTabletEntryExpanded(expanded) {
   const button = document.querySelector('#tabletEntryToggle');
   if (button) {
     button.setAttribute('aria-expanded', String(Boolean(expanded)));
-    button.setAttribute('aria-label', expanded ? '收合記帳' : '展開記帳');
+    button.setAttribute('aria-label', expanded ? '收合隱藏' : '展開新增');
+    const arrow = button.querySelector?.('.tablet-entry-handle-arrow');
+    if (arrow) arrow.textContent = expanded ? '↓' : '↑';
+    const label = button.querySelector?.('.tablet-entry-handle-label');
+    if (label) label.textContent = expanded ? '收合隱藏' : '展開新增';
   }
 }
 
@@ -4211,15 +4328,13 @@ function setupTabletWorkspace() {
   shell.dataset.tabletBound = '1';
   const controls = document.createElement('div');
   controls.className = 'tablet-entry-controls';
-  controls.innerHTML = '<button id="tabletEntryToggle" type="button" class="tablet-entry-handle" aria-label="展開記帳" aria-expanded="false" aria-controls="transactionForm"><span aria-hidden="true"></span></button><label><input id="tabletEntryPinned" type="checkbox">保持展開</label>';
+  controls.innerHTML = '<button id="tabletEntryToggle" type="button" class="tablet-entry-handle" aria-label="展開新增" aria-expanded="false" aria-controls="transactionForm"><span class="tablet-entry-handle-arrow" aria-hidden="true">↑</span><span class="tablet-entry-handle-label">展開新增</span></button>';
   entry.prepend(controls);
   controls.querySelector('#tabletEntryToggle').addEventListener('click', () => {
     if (suppressClick) { suppressClick = false; return; }
-    if (controls.querySelector('#tabletEntryPinned').checked) return;
     const rail = document.querySelector('.cy-entry-rail');
     const expanded = rail?.dataset.entryExpanded !== 'true';
     setTabletEntryExpanded(expanded);
-    if (!expanded) controls.querySelector('#tabletEntryPinned').checked = false;
   });
   const handle = controls.querySelector('#tabletEntryToggle');
   let drag = null;
@@ -4236,14 +4351,9 @@ function setupTabletWorkspace() {
     drag = null;
     if (Math.abs(distance) < 24) return;
     suppressClick = true;
-    if (distance > 0) controls.querySelector('#tabletEntryPinned').checked = false;
     setTabletEntryExpanded(distance < 0);
   });
   handle.addEventListener('pointercancel', () => { drag = null; suppressClick = false; });
-  controls.querySelector('#tabletEntryPinned').addEventListener('change', event => {
-    if (event.target.checked) setTabletEntryExpanded(true);
-  });
-
   let active = false;
   const sync = () => {
     const tablet = isTabletWorkspace();
@@ -4253,30 +4363,37 @@ function setupTabletWorkspace() {
     document.documentElement.dataset.tabletLayout = orientation;
     document.documentElement.dataset.viewport = window.innerWidth < 768 ? 'mobile' : tablet ? 'tablet' : 'desktop';
     syncTabletPickerOwnership(orientation);
+    syncTabletPortraitLedgerExportPlacement(orientation);
+    if (typeof syncMobileWorkspaceMobileIdentity === 'function') syncMobileWorkspaceMobileIdentity();
+    if (typeof syncMobileWorkspaceConfirmationPolicy === 'function') syncMobileWorkspaceConfirmationPolicy();
     if (!tablet && !wasTablet) return;
     const quickHost = document.querySelector('.quick-entry-tools');
     const grid = document.querySelector('.entry-grid');
     for (const id of ['favoriteCategoryGroup', 'summarySuggestionGroup']) {
       const group = document.querySelector('#' + id);
-      const host = tablet ? grid : quickHost;
+      const host = tablet || (window.innerWidth >= 1024 && isDesktopInteractionWorkspace()) ? grid : quickHost;
       if (group && host && group.parentElement !== host) host.append(group);
     }
     applyAdaptiveSplitWorkspace(window.matchMedia(CY_ADAPTIVE_SPLIT_MEDIA).matches);
     if (tablet) {
       const rail = document.querySelector('.cy-entry-rail');
-      if (rail && !rail.dataset.entryExpanded) rail.dataset.entryExpanded = 'false';
+      if (rail && controls.parentElement !== rail) rail.prepend(controls);
+      if (rail && !rail.dataset.entryExpanded) setTabletEntryExpanded(true);
       document.querySelector('.entry-card')?.classList.remove('cy-mobile-page-hidden');
       document.querySelector('.ledger-card')?.classList.remove('cy-mobile-page-hidden');
       setupTouchWorkspaceEntrySecondaryAction();
       // The original date/month controls are native and keep their existing listeners.
       document.querySelectorAll('.desktopUi-date-popover, .cy-month-picker-popover').forEach(node => { node.hidden = true; });
-    } else if (!usesEntryTransactionEditor() && cyTouchWorkspaceEdit) {
-      cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+    } else {
+      if (controls.parentElement !== entry) entry.prepend(controls);
+      if (!usesEntryTransactionEditor() && cyTouchWorkspaceEdit) {
+        cancelTouchWorkspaceMobileEdit({ restoreDraftOnly: true });
+      }
     }
     if (wasTablet !== tablet && typeof renderSettingsAccountManager === 'function') renderSettingsAccountManager();
   };
   const syncHeight = () => {
-    const height = window.visualViewport?.height || window.innerHeight;
+    const height = Math.max(Number(window.innerHeight || 0), Number(window.visualViewport?.height || 0));
     document.documentElement.style.setProperty('--tablet-visible-height', `${height}px`);
     const topbar = document.querySelector('.topbar');
     const notice = document.querySelector('#readOnlyNotice');
@@ -4296,4 +4413,17 @@ function setupTabletWorkspace() {
   sync();
   syncHeight();
 }
+function syncTabletPortraitLedgerExportPlacement(orientation = tabletWorkspaceOrientation()) {
+  const exportButton = document.querySelector('#ledgerExcelExport');
+  const status = document.querySelector('#ledgerExcelExportStatus');
+  const summaryActions = document.querySelector('.cy-summary-actions');
+  const viewTools = document.querySelector('.ledger-view-tools');
+  if (!exportButton || !status || !summaryActions || !viewTools) return;
+
+  const target = orientation === 'portrait' ? summaryActions : viewTools;
+  if (exportButton.parentElement !== target) target.append(exportButton);
+  if (status.parentElement !== target) target.append(status);
+}
+window.cySyncTabletPortraitLedgerExportPlacement = syncTabletPortraitLedgerExportPlacement;
+
 window.addEventListener('load', setupTabletWorkspace, { once: true });

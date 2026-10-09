@@ -42,8 +42,13 @@ function setupLedgerToolbar() {
       <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月">‹</button>
       <div id="ledgerMonthSlot"><span id="ledgerMonthDisplay" class="cy-mobile-month-display" aria-hidden="true"></span></div>
       <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>
+      <button id="ledgerQuickLockButton" class="secondary compact cy-ledger-quick-lock" type="button" aria-label="快速鎖帳" aria-pressed="false" title="快速鎖帳">
+        <svg class="cy-ledger-lock-icon cy-ledger-lock-icon-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 9.7-1.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        <svg class="cy-ledger-lock-icon cy-ledger-lock-icon-closed" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      </button>
       <button id="ledgerMoreButton" class="secondary compact cy-ledger-more-button" type="button" aria-haspopup="true" aria-expanded="false">更多</button>
       <span id="ledgerDisplayMonth" class="ledger-display-month"></span>
+      <span id="ledgerMonthLoading" class="ledger-month-loading" hidden role="status" aria-live="polite">載入中…</span>
     </div>`;
   titleMain.insertBefore(context, summary);
   context.querySelector('#ledgerMonthSlot')?.prepend(monthPicker);
@@ -76,6 +81,17 @@ function setupLedgerToolbar() {
     </div>`;
   title.insertAdjacentElement('afterend', toolbar);
 
+  const tableWrap = card.querySelector('.table-wrap');
+  if (tableWrap) {
+    const overlay = document.createElement('div');
+    overlay.id = 'ledgerLoadingOverlay';
+    overlay.className = 'ledger-loading-overlay';
+    overlay.hidden = true;
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'polite');
+    overlay.innerHTML = '<span class="ledger-loading-spinner" aria-hidden="true"></span><span>載入中…</span>';
+    tableWrap.append(overlay);
+  }
   setupLedgerUtilityMenu();
   syncLedgerMonthDisplay();
 }
@@ -111,9 +127,16 @@ function bindLedgerToolbar() {
   document.querySelector('#ledgerPrevMonth')?.addEventListener('click', () => moveLedgerMonth(-1));
   document.querySelector('#ledgerNextMonth')?.addEventListener('click', () => moveLedgerMonth(1));
   els.monthFilter?.addEventListener('change', syncLedgerMonthDisplay);
+  document.querySelector('#ledgerQuickLockButton')?.addEventListener('click', handleLedgerQuickLock);
+  const searchInput = document.querySelector('#ledgerSummarySearch');
   document.querySelector('#ledgerSearchForm')?.addEventListener('submit', event => {
     event.preventDefault();
-    cyLedgerSearch = document.querySelector('#ledgerSummarySearch')?.value.trim() || '';
+    cyLedgerSearch = searchInput?.value.trim() || '';
+    renderDesktopLedger();
+  });
+  searchInput?.addEventListener('input', () => {
+    if (searchInput.value !== '' || cyLedgerSearch === '') return;
+    cyLedgerSearch = '';
     renderDesktopLedger();
   });
   document.querySelector('#ledgerSearchClear')?.addEventListener('click', () => {
@@ -124,6 +147,10 @@ function bindLedgerToolbar() {
   });
 
   document.querySelector('#ledgerOpeningBalanceButton')?.addEventListener('click', async () => {
+    if (window.cyUsesCompactTouchUtility?.() && typeof window.cyOpenMobileLedgerOpening === 'function') {
+      await window.cyOpenMobileLedgerOpening();
+      return;
+    }
     const dialog = document.querySelector('#openingDialog');
     if (!dialog) return;
     if (els.openingMonth && els.monthFilter?.value) els.openingMonth.value = els.monthFilter.value;
@@ -139,8 +166,11 @@ function bindLedgerToolbar() {
   });
 
   document.querySelector('#ledgerBalanceButton')?.addEventListener('click', () => {
-    if (typeof window.cyOpenMobileLedgerOpening === 'function') window.cyOpenMobileLedgerOpening();
-    else document.querySelector('#ledgerOpeningBalanceButton')?.click();
+    if (window.cyUsesCompactTouchUtility?.() && typeof window.cyOpenMobileLedgerOpening === 'function') {
+      window.cyOpenMobileLedgerOpening();
+      return;
+    }
+    document.querySelector('#ledgerOpeningBalanceButton')?.click();
   });
 
   const more = document.querySelector('#ledgerMoreButton');
@@ -202,12 +232,125 @@ function bindLedgerToolbar() {
 function syncLedgerMonthDisplay() {
   const display = document.querySelector('#ledgerMonthDisplay');
   const value = String(els.monthFilter?.value || '');
-  if (!display) return;
-  const match = /^(\d{4})-(\d{2})$/.exec(value);
-  display.textContent = match ? `${Number(match[1])}年${Number(match[2])}月` : '選擇月份';
+  if (display) {
+    const match = /^(\d{4})-(\d{2})$/.exec(value);
+    display.textContent = match ? `${Number(match[1])}年${Number(match[2])}月` : '選擇月份';
+  }
+  syncLedgerQuickLock();
+}
+
+function shiftLedgerMonth(month, delta) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  if (!match) return '';
+  const date = new Date(Number(match[1]), Number(match[2]) - 1 + Number(delta || 0), 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatLedgerMonthLabel(month) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  return match ? `${Number(match[1])}年${Number(match[2])}月` : String(month || '');
+}
+
+function ledgerQuickLockState(month) {
+  const lockedThrough = /^\d{4}-\d{2}$/.test(String(state?.lockedThrough || ''))
+    ? String(state.lockedThrough)
+    : '';
+  if (!/^\d{4}-\d{2}$/.test(String(month || ''))) {
+    return { lockedThrough, locked: false, boundary: false, canLock: false, canUnlock: false };
+  }
+
+  const locked = Boolean(lockedThrough && month <= lockedThrough);
+  const boundary = Boolean(lockedThrough && month === lockedThrough);
+  const canUnlock = boundary;
+  const canLock = Boolean(lockedThrough && !locked && month === shiftLedgerMonth(lockedThrough, 1));
+  return { lockedThrough, locked, boundary, canLock, canUnlock };
+}
+
+function syncLedgerQuickLock() {
+  const button = document.querySelector('#ledgerQuickLockButton');
+  const month = String(els.monthFilter?.value || '');
+  if (!button) return;
+
+  const quick = ledgerQuickLockState(month);
+  const enabled = quick.canLock || quick.canUnlock;
+  const loading = document.querySelector('.ledger-card')?.classList.contains('is-loading') === true;
+  button.classList.toggle('is-locked', quick.locked);
+  button.classList.toggle('is-lock-boundary', quick.boundary);
+  button.disabled = loading || !enabled;
+  button.setAttribute('aria-pressed', quick.locked ? 'true' : 'false');
+
+  if (quick.canUnlock) {
+    const previous = shiftLedgerMonth(month, -1);
+    button.setAttribute('aria-label', `解除 ${formatLedgerMonthLabel(month)} 鎖帳`);
+    button.title = `解除最新鎖帳月份；鎖帳狀態將退回 ${formatLedgerMonthLabel(previous)}`;
+    return;
+  }
+
+  if (quick.canLock) {
+    button.setAttribute('aria-label', `鎖定 ${formatLedgerMonthLabel(month)}`);
+    button.title = quick.lockedThrough
+      ? `鎖定下一月份 ${formatLedgerMonthLabel(month)}`
+      : `建立鎖帳至 ${formatLedgerMonthLabel(month)}`;
+    return;
+  }
+
+  if (quick.locked) {
+    button.setAttribute('aria-label', `${formatLedgerMonthLabel(month)} 已鎖帳`);
+    button.title = `此月份已由鎖帳至 ${formatLedgerMonthLabel(quick.lockedThrough)} 涵蓋；只能從最新鎖帳月份逐月解除`;
+    return;
+  }
+
+  const next = quick.lockedThrough ? shiftLedgerMonth(quick.lockedThrough, 1) : '';
+  button.setAttribute('aria-label', `${formatLedgerMonthLabel(month)} 尚不可快速鎖帳`);
+  button.title = next
+    ? `請先鎖定 ${formatLedgerMonthLabel(next)}，或開啟月份鎖帳設定`
+    : '請開啟月份鎖帳設定';
+}
+
+async function handleLedgerQuickLock() {
+  const button = document.querySelector('#ledgerQuickLockButton');
+  const month = String(els.monthFilter?.value || '');
+  if (!button || !/^\d{4}-\d{2}$/.test(month)) return;
+
+  const quick = ledgerQuickLockState(month);
+  if (!quick.canLock && !quick.canUnlock) return;
+
+  let target = month;
+  let confirmed = false;
+  if (quick.canUnlock) {
+    target = shiftLedgerMonth(month, -1);
+    confirmed = typeof window.cyConfirm === 'function'
+      ? await window.cyConfirm({
+          title: '解除最新鎖帳月份',
+          message: `確定解除 ${formatLedgerMonthLabel(month)} 的鎖帳？`,
+          detail: `鎖帳狀態會退回至 ${formatLedgerMonthLabel(target)}；更早月份仍維持鎖定。`,
+          confirmText: '解除鎖帳'
+        })
+      : window.confirm(`確定解除 ${formatLedgerMonthLabel(month)} 的鎖帳？\n鎖帳狀態會退回至 ${formatLedgerMonthLabel(target)}。`);
+  } else {
+    confirmed = typeof window.cyConfirm === 'function'
+      ? await window.cyConfirm({
+          title: '快速鎖帳',
+          message: `確定鎖定 ${formatLedgerMonthLabel(month)}？`,
+          detail: quick.lockedThrough
+            ? `鎖帳狀態會從 ${formatLedgerMonthLabel(quick.lockedThrough)} 推進至 ${formatLedgerMonthLabel(month)}。`
+            : '這會建立目前的鎖帳截止月份；該月份以及更早月份都會鎖定。',
+          confirmText: '鎖帳'
+        })
+      : window.confirm(`確定鎖定 ${formatLedgerMonthLabel(month)}？`);
+  }
+  if (!confirmed) return;
+
+  button.disabled = true;
+  try {
+    if (typeof window.cyaccSaveLock === 'function') await window.cyaccSaveLock(target);
+  } finally {
+    syncLedgerQuickLock();
+  }
 }
 
 window.cySyncLedgerMonthDisplay = syncLedgerMonthDisplay;
+window.cySyncLedgerQuickLock = syncLedgerQuickLock;
 
 function scheduleLedgerRefresh() {
   void loadLedgerOpeningAndRender();
@@ -272,7 +415,7 @@ function renderDesktopLedger() {
     : [...allTransactions]
   ).sort(compareLedgerChronological);
 
-  els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
+  els.monthSummary.innerHTML = `<span class="ledger-summary-item opening"><span>期初</span><strong>${money(openingTotal)}</strong></span><span class="ledger-summary-item income"><span>收入</span><strong>${money(income)}</strong></span><span class="ledger-summary-item expense"><span>支出</span><strong>${money(expense)}</strong></span><span class="ledger-summary-item ending"><span>期末</span><strong>${money(endingTotal)}</strong></span><span class="ledger-summary-item net ${netClass}"><span>${netLabel}</span><strong>${money(Math.abs(net))}</strong></span>${query ? `<span class="ledger-summary-search">搜尋 ${visible.length}/${allTransactions.length} 筆</span>` : ''}`;
   const display = document.querySelector('#ledgerDisplayMonth');
   if (display) display.textContent = `目前顯示｜${month.replace('-', '/')}`;
   updateLedgerHeader();
@@ -340,7 +483,7 @@ function renderGroupedLedgerRows(visible, allTransactions, openingMap, calculate
     const opening = openingMap.get(name) || 0;
     const ending = calculated.endingByAccount.get(name) ?? opening;
     const accountVisual = ledgerAccountVisual(name);
-    const heading = `<tr class="account-group-row"><td colspan="8" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><strong class="ledger-account-color">${escapeHtml(name)}</strong><span>期初 ${money(opening)}　期末 ${money(ending)}</span></td></tr>`;
+    const heading = `<tr class="account-group-row"><td colspan="${ledgerPresentationColumnSpan()}" data-account-color-slot="${accountVisual.slot || ''}" style="--ledger-account-bg:${accountVisual.background};--ledger-account-fg:${accountVisual.foreground}"><strong class="ledger-account-color">${escapeHtml(name)}</strong><span>期初 ${money(opening)}　期末 ${money(ending)}</span></td></tr>`;
     return heading + rows.map(tx => {
       const accountBalance = calculated.accountById.get(Number(tx.id)) ?? 0;
       return renderLedgerRow(tx, accountBalance, new Map([[name, accountBalance]]), true);
@@ -422,7 +565,7 @@ function renderLedgerRow(tx, balance, accountBalances = new Map(), accountOnly =
     <td class="summary">${escapeHtml(tx.summary || '')}</td>
     <td class="num ledger-amount">${money(tx.amount)}</td>
     <td class="num ledger-balance" data-balance-popover-id="${id}" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" aria-label="查看此筆後帳戶餘額">${money(balance)}</td>
-    <td class="action-col"><button type="button" class="row-action" data-edit-id="${tx.id}" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button></td>
+    <td class="action-col"><button type="button" class="row-action" data-edit-id="${tx.id}" aria-label="編輯" ${locked ? 'disabled' : ''}><span class="action-label-desktop">編輯</span><span class="action-label-mobile">編輯</span></button><button type="button" class="row-action delete" data-delete-id="${tx.id}" aria-label="刪除" ${locked ? 'disabled' : ''}><span class="action-label-desktop">刪除</span><span class="action-label-mobile">刪除</span></button></td>
   </tr>`;
 }
 
@@ -438,9 +581,15 @@ function updateLedgerHeader() {
   });
 }
 
+function ledgerPresentationColumnSpan() {
+  // Desktop hides the semantic kind cell. Spanning eight visible columns would
+  // create a phantom table column in empty and account-group headings.
+  return window.cyIsDesktopInteractionWorkspace?.() ? 7 : 8;
+}
+
 function renderLedgerMessage(message, reason = 'status') {
   writeLedgerRows(
-    `<tr class="ledger-message-row"><td colspan="8" class="empty"><div class="ledger-empty-state"><strong>${escapeHtml(String(message || ''))}</strong></div></td></tr>`,
+    `<tr class="ledger-message-row"><td colspan="${ledgerPresentationColumnSpan()}" class="empty"><div class="ledger-empty-state"><strong>${escapeHtml(String(message || ''))}</strong></div></td></tr>`,
     { reason }
   );
 }

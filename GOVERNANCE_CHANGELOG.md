@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.32 — 2026/10/09
+
+- CYERPAutoInput `PROJECT_RULES.md` §3：使用者確認「課稅別」「發票聯數」是一般稅務／發票標準分類、非機密資料，核准依 ERP 清單順序寫入 source，作為「ERP 下拉選項不得硬編碼」的明列例外；其他欄位的下拉選項與公司實際值仍只能來自本機設定或 ERP 現場讀取。
+
 ## 2.3.31 — 2026/10/06
 
 - REPO_POLICY §3：本 repository 的 Actions Artifact 一律保留 3 天（使用者指定，取代共通規則 14 天預設），每個 upload-artifact 步驟都須明確寫出；`cyerp-auto-input-build.yml`、`cyinvoice-cloud.yml` 由 14 天改為 3 天。
