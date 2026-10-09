@@ -177,6 +177,7 @@ apps/CYInvoice/
 - [功能基準](docs/REQUIREMENTS.md)
 - [CYInvoice 永久規則](PROJECT_RULES.md)
 - [待辦與後續規劃](docs/TODO.md)
+- [CYID Consumer 接入交接與待決架構](docs/CY_ID_INTEGRATION.md#13-cyid-consumer-接入交接--2026-10-10)
 - [雲端版上線需求盤點](docs/CLOUD_ROADMAP.md)
 - [RC／實機測試](docs/RC_TEST.md)
 - [本機資料格式與安全規則](docs/DATA_FORMAT.md)

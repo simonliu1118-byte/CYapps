@@ -239,6 +239,9 @@ After the identity/refactor/reset foundations are stable, complete:
 
 ## 9. Package 6 — CY ID integration
 
+**2026-10-10 planning addendum:** CYID shared Consumer Contract 1.0.2 (minimum 1.0.0) is published and CY Web / CYACCweb already use private `IDENTITY` Service Binding; CYInvoice itself is **not integrated**. Identity foundation, Built-in freshness, Device revoke/retire and Cloud→Local reset have source implementation, but remaining A/B/C Windows acceptance persists. Package 6 now has an app-specific handoff at `CY_ID_INTEGRATION.md` §13. Resolve operation-scoped CYID Session vs CYInvoice execution-time authentication, CYInvoice Worker gateway, per-Device authorization, Workspace binding and CYID-safe Offline protocol before adding the third provider. This addendum does not declare earlier device/acceptance packages closed or authorize runtime modifications.
+
+
 Do not start until CYCloudIdentity/CYWEB publishes a stable consumer handoff/contract.
 
 Expected CYInvoice consumer inputs are intentionally small:
