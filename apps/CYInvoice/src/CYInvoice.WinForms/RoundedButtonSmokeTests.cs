@@ -4,6 +4,8 @@ internal static class RoundedButtonSmokeTests
 {
     internal static void Verify()
     {
+        // The fixture owns the image until all button handles have been disposed.
+        using var image = new Bitmap(24, 24);
         using var form = new DialogKeyForm { ClientSize = new Size(420, 160), ShowInTaskbar = false };
         using var button = new RoundedButton { Text = "確認", Bounds = new Rectangle(12, 12, 100, 34) };
         using var cancel = new RoundedButton { Text = "取消", Bounds = new Rectangle(124, 12, 100, 34) };
@@ -24,7 +26,6 @@ internal static class RoundedButtonSmokeTests
         button.PerformClick();
         if (clicks != 1) throw new InvalidOperationException("停用圓角按鈕仍執行操作");
 
-        using var image = new Bitmap(24, 24);
         using (var graphics = Graphics.FromImage(image)) graphics.Clear(Color.Magenta);
         button.Enabled = true;
         button.Image = image;
