@@ -11,7 +11,7 @@ internal static class AdministrativeClosureTests
     public static void WithinTwoPeriodsCannotClose()
     {
         using var temporary = new AdministrativeClosureTemporaryDirectory();
-        var setup = CreateSetup(temporary.Path, "2026/08/15", InvoiceVoidSyncIssueTypes.PendingConfirmation);
+        var setup = CreateSetup(temporary.Path, "2026/08/15", InvoiceSyncIssueTypes.QueryFailed);
         var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
 
         Equal(false, service.CanClose(setup.Issue));
@@ -25,7 +25,7 @@ internal static class AdministrativeClosureTests
     public static void OrdinaryEmployeeCannotCloseExpiredWork()
     {
         using var temporary = new AdministrativeClosureTemporaryDirectory();
-        var setup = CreateSetup(temporary.Path, "2026/06/30", InvoiceVoidSyncIssueTypes.PendingConfirmation);
+        var setup = CreateSetup(temporary.Path, "2026/06/30", InvoiceSyncIssueTypes.QueryFailed);
         var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
 
         Equal(true, service.CanClose(setup.Issue));
@@ -39,7 +39,7 @@ internal static class AdministrativeClosureTests
     public static void AdministratorClosesExpiredVoidPendingWork()
     {
         using var temporary = new AdministrativeClosureTemporaryDirectory();
-        var setup = CreateSetup(temporary.Path, "2026/06/30", InvoiceVoidSyncIssueTypes.PendingConfirmation);
+        var setup = CreateSetup(temporary.Path, "2026/06/30", InvoiceSyncIssueTypes.QueryFailed);
         var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
 
         service.Close(setup.Issue, "2000", "AdminPass1");
