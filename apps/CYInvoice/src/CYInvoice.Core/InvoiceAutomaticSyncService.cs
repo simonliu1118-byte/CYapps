@@ -6,7 +6,6 @@ namespace CYInvoice.Core.Invoicing;
 public sealed class InvoiceAutomaticSyncService
 {
     internal const string DailyReconcileScope = "daily-two-period";
-    private const string UnconfirmedVoidQueryMessage = "目前仍無法向光貿確認作廢結果；禁止直接重送";
     private readonly LocalRepository repository;
     private readonly InvoiceSyncService syncService;
     private readonly InvoiceSyncRepository syncRepository;
@@ -148,7 +147,7 @@ public sealed class InvoiceAutomaticSyncService
                     {
                         // AMEGO explicitly reporting an in-progress void is a normal invoice lifecycle
                         // state. Only an indeterminate/failed authoritative lookup belongs in upload issues.
-                        if (string.Equals(reconciliation.Message, UnconfirmedVoidQueryMessage, StringComparison.Ordinal))
+                        if (!InvoiceVoidService.IsOfficiallyPending(reconciliation.Record))
                         {
                             var message = "作廢狀態回查失敗：" + reconciliation.Message;
                             RecordVoidQueryIssue(accountKey, number, orderId, message);

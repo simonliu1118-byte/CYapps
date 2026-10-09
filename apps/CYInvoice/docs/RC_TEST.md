@@ -2,9 +2,9 @@
 
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
 
-- 目前工程測試基準：**V2.6.10 Build 0**。
+- 目前工程測試基準：**V2.6.11 Build 2**。
 - Development Cloud：**Cloud 0.8.8 / API 1 / compatibility Schema 8 / storage Schema 11**。
-- 建議 Windows 測試包：`CYInvoice_cloud-foundation_engineering-run343`。
+- 本輪 Windows 測試包：PR #216 最新 `V2.6.11 Build 2` engineering Artifact；Cloud 舊基線驗收另保留 Run343 記錄。
 - 最新公開正式 Release：**V2.4.2**。
 - V2.6.10 main CI、Windows portable smoke、Governance 與 development Cloud staged deployment 均已通過；本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
 
@@ -264,3 +264,13 @@
 - Cloud lifecycle 測試必須以 development Cloud 與可回復／可拋棄 Device 為主，不為驗證 destructive path 而破壞唯一 recovery path。
 - 發票成功判定、防重、環境隔離、Cloud authority、Device trust、結果不明禁止重送／誤刪等安全不變量不得因 UI 或人工流程調整而改變。
 - **V2.6.10 實機驗證完成前不得把 V2.6.10 描述為正式 Release；merge 到 main 或 development Cloud deploy 均不等於正式 Release。**
+
+
+## W. V2.6.11 Build 2 上傳問題／處理中分流
+
+1. 確認「處理中」位於「上傳問題」旁，數量與清單一致；開啟處理中不改上傳問題已讀狀態。
+2. 官方上傳狀態 1／2／3／31／32 顯示處理中；99 完成不再列出，91／未知狀態不得冒充正常等待。
+3. 正常等待作廢及已人工操作、正常等待光貿確認的折讓移至處理中；雙擊沿用既有明細。需要管理員確認折讓候選、金額不符、回查失敗仍在上傳問題。
+4. 背景同步或主清單重新整理完成後，重新整理兩個清單，確認完成項目移除，錯誤項目歸回上傳問題，沒有重複送出 API。
+5. 處理中不得勾選刪除或「標記已解決」；等待中的作廢／折讓超過保留期仍可經管理員驗證結案，只停止本機追蹤、不宣稱官方成功。
+6. 正式／測試環境與不同公司資料不得混入。舊折讓待確認資料沒有新分類欄位時，先保留上傳問題，正常同步回查後才重新分類。

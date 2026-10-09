@@ -1,10 +1,9 @@
-import { createCredentialVerifier, CURRENT_CREDENTIAL_ALGORITHM, normalizePassword } from "./crypto";
 import { createEmailSender, normalizeAddress } from "./email";
+import { issueInitialCredential } from "./initial-access";
 import { json, readJsonObject } from "./http";
-import { findActiveEmailOtp, issueEmailOtp, verifyEmailOtp, consumeVerifiedOtp, type OtpIssueResult } from "./otp";
+import { issueEmailOtp, type OtpIssueResult } from "./otp";
 import { requireIdentityAdministrator, requireWorkspaceAdmin, requireWorkspaceSuperAdmin } from "./admin-auth";
 import {
-  canCreateRole,
   canManageEmployeeLifecycle,
   effectiveWorkspaceRole,
   normalizeStoredEmployeeRole,
@@ -27,16 +26,11 @@ type ManagedEmployeeRow = {
   workspace_status: string;
   super_admin_employee_id: string | null;
   credential_present: number;
+  initial_sent_at: string | null;
 };
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_FALLBACK_MS = 60 * 1000;
-
-function normalizeWorkspaceId(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim();
-  return normalized.length >= 5 && normalized.length <= 80 ? normalized : null;
-}
 
 function normalizeEmployeeId(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -161,43 +155,16 @@ async function managedEmployee(
             e.revision,
             w.status AS workspace_status,
             w.super_admin_employee_id,
-            CASE WHEN c.employee_id IS NULL THEN 0 ELSE 1 END AS credential_present
+            CASE WHEN c.employee_id IS NULL THEN 0 ELSE 1 END AS credential_present,
+            i.sent_at AS initial_sent_at
        FROM employees e
        JOIN workspaces w ON w.workspace_id = e.workspace_id
        LEFT JOIN employee_credentials c ON c.employee_id = e.employee_id
+       LEFT JOIN employee_initial_credentials i ON i.employee_id = e.employee_id
       WHERE e.workspace_id = ?1
         AND e.employee_id = ?2
       LIMIT 1`
   ).bind(workspaceId, employeeId).first<ManagedEmployeeRow>();
-}
-
-async function pendingEmployee(
-  env: Env,
-  workspaceId: string,
-  employeeNo: string,
-): Promise<ManagedEmployeeRow | null> {
-  return env.DB.prepare(
-    `SELECT e.employee_id,
-            e.workspace_id,
-            e.employee_no,
-            e.name,
-            e.email_normalized,
-            e.email_verified_at,
-            e.enabled,
-            e.role_key,
-            e.identity_admin,
-            e.activated_at,
-            e.revision,
-            w.status AS workspace_status,
-            w.super_admin_employee_id,
-            CASE WHEN c.employee_id IS NULL THEN 0 ELSE 1 END AS credential_present
-       FROM employees e
-       JOIN workspaces w ON w.workspace_id = e.workspace_id
-       LEFT JOIN employee_credentials c ON c.employee_id = e.employee_id
-      WHERE e.workspace_id = ?1
-        AND e.employee_no = ?2
-      LIMIT 1`
-  ).bind(workspaceId, employeeNo).first<ManagedEmployeeRow>();
 }
 
 function targetRole(row: ManagedEmployeeRow) {
@@ -208,19 +175,6 @@ function actorCanManage(actor: IdentityPrincipal, row: ManagedEmployeeRow): bool
   const role = targetRole(row);
   if (role === "SUPER_ADMIN") return actor.workspaceRole === "SUPER_ADMIN" && actor.employeeId === row.employee_id;
   return canManageEmployeeLifecycle(actor, role, row.identity_admin === 1);
-}
-
-async function sendActivationEmail(env: Env, employee: ManagedEmployeeRow): Promise<OtpIssueResult> {
-  const link = portalUrl(env, { activate: "1", employeeNo: employee.employee_no });
-  return issueEmailOtp(env, emailSenderFrom(env), {
-    purpose: "employee_email_verification",
-    scopeKey: activationScope(employee.workspace_id, employee.employee_id),
-    workspaceId: employee.workspace_id,
-    email: employee.email_normalized,
-    subject: "CY Identity 帳號啟用",
-    textPrefix: "您的 CY Identity 帳號已建立。請使用下方驗證碼完成 Email 驗證並設定第一次登入密碼。",
-    textSuffix: `開啟 CY Web 完成帳號啟用：${link}`,
-  });
 }
 
 async function sendActivatedEmailVerification(env: Env, employee: ManagedEmployeeRow): Promise<OtpIssueResult> {
@@ -234,160 +188,6 @@ async function sendActivatedEmailVerification(env: Env, employee: ManagedEmploye
     textPrefix: "您的 CY Identity Email 已由身分管理員更新，請完成新 Email 驗證。原有密碼不變。",
     textSuffix: `開啟 CY Web 完成 Email 驗證：${link}`,
   });
-}
-
-export async function handleCreateEmployee(
-  request: Request,
-  env: Env,
-  requestId: string,
-): Promise<Response> {
-  const actor = await requireWorkspaceAdmin(request, env);
-  if (!actor) {
-    return json(env, requestId, 403, {
-      error: { code: "WORKSPACE_ADMIN_REQUIRED", message: "Workspace administrator authority is required." },
-    });
-  }
-
-  const body = await readJsonObject(request);
-  const employeeNo = normalizeEmployeeNo(body?.employeeNo);
-  const displayName = normalizeDisplayName(body?.displayName);
-  const roleKey = normalizeStoredEmployeeRole(body?.roleKey ?? "USER");
-  let email: string | null = null;
-  try {
-    if (typeof body?.email === "string") email = normalizeAddress(body.email);
-  } catch {
-    email = null;
-  }
-  if (!employeeNo || !displayName || !email || !roleKey) {
-    return json(env, requestId, 400, {
-      error: { code: "INVALID_EMPLOYEE", message: "Employee input is invalid." },
-    });
-  }
-  if (!canCreateRole(actor, roleKey)) {
-    return json(env, requestId, 403, {
-      error: { code: "EMPLOYEE_ROLE_NOT_ALLOWED", message: "The requested Employee role cannot be created by this administrator." },
-    });
-  }
-
-  const employeeId = `emp_${crypto.randomUUID()}`;
-  const now = new Date().toISOString();
-  try {
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO employees(
-           employee_id, workspace_id, employee_no, name, email_normalized,
-           email_verified_at, enabled, role_key, identity_admin, activated_at,
-           revision, created_at, updated_at
-         ) VALUES(?1, ?2, ?3, ?4, ?5, NULL, 0, ?6, 0, NULL, 1, ?7, ?7)`
-      ).bind(employeeId, actor.workspaceId, employeeNo, displayName, email, roleKey, now),
-      env.DB.prepare(
-        `INSERT INTO identity_audit_events(
-           event_id, workspace_id, actor_employee_id, target_employee_id,
-           event_type, detail_json, created_at
-         ) VALUES(?1, ?2, ?3, ?4, 'employee_created_pending_activation', ?5, ?6)`
-      ).bind(
-        `audit_${crypto.randomUUID()}`,
-        actor.workspaceId,
-        actor.employeeId,
-        employeeId,
-        JSON.stringify({ employeeNo, roleKey }),
-        now,
-      ),
-    ]);
-  } catch {
-    return json(env, requestId, 409, {
-      error: { code: "EMPLOYEE_CONFLICT", message: "Employee No or Email already exists in this Workspace." },
-    });
-  }
-
-  const created = await managedEmployee(env, actor.workspaceId, employeeId);
-  if (!created) throw new Error("EMPLOYEE_CREATE_READBACK_FAILED");
-
-  let activationDelivery: JsonValue;
-  try {
-    const issued = await sendActivationEmail(env, created);
-    activationDelivery = { sent: true, ...issued };
-    await audit(env, {
-      workspaceId: actor.workspaceId,
-      actorEmployeeId: actor.employeeId,
-      targetEmployeeId: employeeId,
-      eventType: "employee_activation_email_sent",
-    });
-  } catch (error) {
-    const errorCode = publicDeliveryError(error);
-    activationDelivery = { sent: false, errorCode };
-    await audit(env, {
-      workspaceId: actor.workspaceId,
-      actorEmployeeId: actor.employeeId,
-      targetEmployeeId: employeeId,
-      eventType: "employee_activation_email_failed",
-      detail: { errorCode },
-    });
-  }
-
-  return json(env, requestId, 201, {
-    employee: {
-      employeeId,
-      employeeNo,
-      displayName,
-      email,
-      roleKey,
-      isIdentityAdmin: false,
-      emailVerified: false,
-      enabled: false,
-      activated: false,
-      pendingActivation: true,
-      revision: 1,
-    },
-    activationDelivery,
-  });
-}
-
-export async function handleResendEmployeeActivation(
-  request: Request,
-  env: Env,
-  requestId: string,
-  employeeIdRaw: string,
-): Promise<Response> {
-  const actor = await requireWorkspaceAdmin(request, env);
-  if (!actor) {
-    return json(env, requestId, 403, {
-      error: { code: "WORKSPACE_ADMIN_REQUIRED", message: "Workspace administrator authority is required." },
-    });
-  }
-  const employeeId = normalizeEmployeeId(employeeIdRaw);
-  const employee = employeeId ? await managedEmployee(env, actor.workspaceId, employeeId) : null;
-  if (!employee) {
-    return json(env, requestId, 404, {
-      error: { code: "EMPLOYEE_NOT_FOUND", message: "Employee was not found." },
-    });
-  }
-  if (!actorCanManage(actor, employee) || targetRole(employee) === "SUPER_ADMIN") {
-    return json(env, requestId, 403, {
-      error: { code: "EMPLOYEE_MANAGEMENT_NOT_ALLOWED", message: "This Employee cannot be managed by the current administrator." },
-    });
-  }
-  if (employee.activated_at || employee.credential_present !== 0) {
-    return json(env, requestId, 409, {
-      error: { code: "EMPLOYEE_ALREADY_ACTIVATED", message: "This Employee has already completed first activation." },
-    });
-  }
-
-  try {
-    const issued = await sendActivationEmail(env, employee);
-    await audit(env, {
-      workspaceId: actor.workspaceId,
-      actorEmployeeId: actor.employeeId,
-      targetEmployeeId: employee.employee_id,
-      eventType: "employee_activation_email_resent",
-    });
-    return json(env, requestId, 202, { activationDelivery: { sent: true, ...issued } as unknown as JsonValue });
-  } catch (error) {
-    const code = publicDeliveryError(error);
-    return json(env, requestId, deliveryStatus(code), {
-      error: { code, message: "Activation email could not be sent." },
-    });
-  }
 }
 
 export async function handleDeletePendingEmployee(
@@ -663,15 +463,15 @@ export async function handleUpdateEmployee(
   );
   await env.DB.batch(statements);
 
-  let activationDelivery: JsonValue | undefined;
-  if (emailChanged && pendingFirstActivation) {
+  let emailVerificationDelivery: JsonValue | undefined;
+  if (pendingFirstActivation && (emailChanged || employeeNo !== existing.employee_no)) {
     const refreshed = await managedEmployee(env, actor.workspaceId, existing.employee_id);
     if (refreshed) {
       try {
-        const issued = await sendActivationEmail(env, refreshed);
-        activationDelivery = { sent: true, ...issued };
+        const issued = await issueInitialCredential(env, refreshed, { bypassCooldown: true });
+        emailVerificationDelivery = { sent: true, ...issued };
       } catch (error) {
-        activationDelivery = { sent: false, errorCode: publicDeliveryError(error) };
+        emailVerificationDelivery = { sent: false, errorCode: publicDeliveryError(error) };
       }
     }
   }
@@ -689,7 +489,7 @@ export async function handleUpdateEmployee(
       activated: Boolean(row.activated_at),
       revision: row.revision,
     },
-    ...(activationDelivery ? { activationDelivery } : {}),
+    ...(emailVerificationDelivery ? { emailVerificationDelivery } : {}),
   });
 }
 
@@ -946,133 +746,4 @@ export async function handleResendActivatedEmailVerification(
       error: { code, message: "Email verification could not be sent." },
     });
   }
-}
-
-export async function handleStartEmployeeActivation(
-  request: Request,
-  env: Env,
-  requestId: string,
-): Promise<Response> {
-  const body = await readJsonObject(request);
-  const workspaceId = normalizeWorkspaceId(body?.workspaceId);
-  const employeeNo = normalizeEmployeeNo(body?.employeeNo);
-  if (!workspaceId || !employeeNo) {
-    return json(env, requestId, 400, {
-      error: { code: "INVALID_EMPLOYEE_ACTIVATION", message: "Employee activation request is invalid." },
-    });
-  }
-
-  const employee = await pendingEmployee(env, workspaceId, employeeNo);
-  let otp = fakeOtpIssue();
-  if (employee && employee.workspace_status === "active" && employee.enabled === 0
-      && !employee.activated_at && employee.credential_present === 0) {
-    try {
-      otp = await findActiveEmailOtp(env, {
-        purpose: "employee_email_verification",
-        scopeKey: activationScope(workspaceId, employee.employee_id),
-        email: employee.email_normalized,
-      }) ?? await sendActivationEmail(env, employee);
-    } catch {
-      otp = fakeOtpIssue();
-    }
-  }
-
-  return json(env, requestId, 202, {
-    activation: otp as unknown as JsonValue,
-    message: "If an account is pending activation, a verification code is available or has been sent.",
-  });
-}
-
-export async function handleConfirmEmployeeActivation(
-  request: Request,
-  env: Env,
-  requestId: string,
-): Promise<Response> {
-  const body = await readJsonObject(request);
-  const workspaceId = normalizeWorkspaceId(body?.workspaceId);
-  const employeeNo = normalizeEmployeeNo(body?.employeeNo);
-  const challengeId = typeof body?.challengeId === "string" ? body.challengeId.trim() : "";
-  const code = typeof body?.code === "string" ? body.code.trim() : "";
-  const password = normalizePassword(body?.password);
-  if (!workspaceId || !employeeNo || !challengeId || !/^\d{6}$/.test(code) || !password) {
-    return json(env, requestId, 400, {
-      error: { code: "INVALID_EMPLOYEE_ACTIVATION", message: "Employee activation confirmation is invalid." },
-    });
-  }
-
-  const employee = await pendingEmployee(env, workspaceId, employeeNo);
-  if (!employee || employee.workspace_status !== "active" || employee.enabled !== 0
-      || employee.activated_at || employee.credential_present !== 0) {
-    return json(env, requestId, 400, {
-      error: { code: "EMPLOYEE_ACTIVATION_FAILED", message: "Employee activation verification failed." },
-    });
-  }
-
-  const challenge = await verifyEmailOtp(env, {
-    challengeId,
-    purpose: "employee_email_verification",
-    scopeKey: activationScope(workspaceId, employee.employee_id),
-    code,
-  });
-  if (!challenge || challenge.email_normalized !== employee.email_normalized) {
-    return json(env, requestId, 400, {
-      error: { code: "EMPLOYEE_ACTIVATION_FAILED", message: "Employee activation verification failed." },
-    });
-  }
-
-  const verifier = await createCredentialVerifier(password);
-  const now = new Date().toISOString();
-  if (!await consumeVerifiedOtp(env, challengeId, now)) {
-    return json(env, requestId, 400, {
-      error: { code: "EMPLOYEE_ACTIVATION_FAILED", message: "Employee activation verification failed." },
-    });
-  }
-
-  try {
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO employee_credentials(
-           employee_id, algorithm, verifier, credential_version, updated_at
-         ) VALUES(?1, ?2, ?3, 1, ?4)`
-      ).bind(employee.employee_id, CURRENT_CREDENTIAL_ALGORITHM, verifier, now),
-      env.DB.prepare(
-        `UPDATE employees
-            SET email_verified_at = ?3,
-                activated_at = ?3,
-                enabled = 1,
-                revision = revision + 1,
-                updated_at = ?3
-          WHERE workspace_id = ?1
-            AND employee_id = ?2
-            AND activated_at IS NULL`
-      ).bind(workspaceId, employee.employee_id, now),
-      env.DB.prepare(
-        `INSERT INTO identity_audit_events(
-           event_id, workspace_id, actor_employee_id, target_employee_id,
-           event_type, detail_json, created_at
-         ) VALUES(?1, ?2, NULL, ?3, 'employee_activation_completed', ?4, ?5)`
-      ).bind(
-        `audit_${crypto.randomUUID()}`,
-        workspaceId,
-        employee.employee_id,
-        JSON.stringify({ employeeNo, roleKey: employee.role_key }),
-        now,
-      ),
-    ]);
-  } catch {
-    return json(env, requestId, 409, {
-      error: { code: "EMPLOYEE_ACTIVATION_CONFLICT", message: "Employee activation could not be completed." },
-    });
-  }
-
-  return json(env, requestId, 200, {
-    activated: true,
-    employee: {
-      employeeId: employee.employee_id,
-      employeeNo: employee.employee_no,
-      displayName: employee.name,
-      email: employee.email_normalized,
-      roleKey: employee.role_key,
-    },
-  });
 }

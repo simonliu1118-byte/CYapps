@@ -125,6 +125,8 @@ internal static class AllowanceWorkflowTests
 
             var ambiguous = await setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1");
             Equal(InvoiceAllowanceReconcileOutcome.Problem, ambiguous.Outcome);
+            Equal(1, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
+            Equal(0, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
             Equal(true, ambiguous.Message.Contains("多筆", StringComparison.Ordinal));
             Equal(true, HasPending(setup.Repository.Invoices.LoadOrCreate().Single()));
 
@@ -152,10 +154,38 @@ internal static class AllowanceWorkflowTests
         var pending = await setup.Workflow.MarkManualCompletedAsync(
             issue, "2000", "AdminPass1");
         Equal(InvoiceAllowanceReconcileOutcome.PendingConfirmation, pending.Outcome);
+        Equal(0, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
+        Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
 
         Throws<InvalidOperationException>(() =>
             setup.Workflow.CancelManualReview(issue, "2000", "AdminPass1"));
         Equal(true, HasPending(setup.Repository.Invoices.LoadOrCreate().Single()));
+    }
+
+    public static async Task QueueFollowsOfficialConfirmationAsync()
+    {
+        using var temporary = new AllowanceTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path);
+        setup.Gateway.Queries.Enqueue(Query());
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.SubmitAsync(setup.Record, "3015", "Employee1", "部分退貨", 50);
+        Equal(1, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
+        var issue = AllowanceIssue(setup.Repository);
+        await setup.Workflow.MarkManualCompletedAsync(issue, "2000", "AdminPass1");
+        Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
+        // A missing gateway result fails the authoritative refresh, preserving pending work.
+        var failed = await setup.Workflow.ReconcilePendingAsync(setup.Record);
+        Equal(InvoiceAllowanceReconcileOutcome.Problem, failed.Outcome);
+        Equal(0, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
+        Equal(1, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Count);
+        setup.Gateway.Queries.Enqueue(Query());
+        await setup.Workflow.ReconcilePendingAsync(setup.Record);
+        Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
+        setup.Gateway.Queries.Enqueue(Query([Allowance("D0401", UploadStatuses.Complete, "NEW-002", tax: "2", total: "48")]));
+        var completed = await setup.Workflow.ReconcilePendingAsync(setup.Record);
+        Equal(InvoiceAllowanceReconcileOutcome.Confirmed, completed.Outcome);
+        Equal(0, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
+        Equal(true, new InvoiceWorkQueue(setup.Repository).Load().UploadIssues.Single().ResolvedUtc is not null);
     }
 
     public static async Task VoidIsBlockedWhileAllowanceRequestExistsAsync()

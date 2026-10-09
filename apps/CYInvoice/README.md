@@ -6,9 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程測試基準：**V2.6.4 Build 1**。
+- 目前工程測試基準：**V2.6.11 Build 2**。
 - 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
-- V2.6.4 Build 1 修正 Cloud 第一個 Workspace Email OTP、bootstrap SQL／錯誤分類與 Windows 非 JSON 錯誤處理；仍需 development Worker live 建立／Windows 實機驗證，目前不是正式 Release。
+- V2.6.11 Build 2 將正常等待光貿／電子發票平台處理的項目獨立至「處理中」清單；目前為工程測試版，實機驗收與 CI 狀態見 PR #216。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
 - 唯一版本來源為 `VERSION`；正式 Release 必須由 `main` 重新建置與驗證。
 - 只有使用者於當次工作明確要求 `release` 時，才可建立正式 tag／Release；PR、VERSION、BUILD 或 engineering Artifact 都不代表發布授權。
@@ -73,7 +73,7 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - 折讓 PDF 支援三種官方版型並使用獨立 `Cache/AllowancePDF`。
 - PDF 短效網址不保存；只保存下載後且通過 PDF 驗證的內容。
 
-### 上傳問題
+### 上傳問題與處理中
 
 V2.6.2 起整併為單一清單，包含：
 
@@ -85,6 +85,8 @@ V2.6.2 起整併為單一清單，包含：
 - 等待官方確認或可由管理員結案的 pending。
 
 只有「開立失敗」列可勾選清除；人工待辦一律雙擊開啟詳細視窗處理。
+
+「上傳問題」旁的「處理中」沿用相同清單與雙擊明細，顯示正常上傳等待、光貿明確確認處理中的作廢，以及人工操作完成且正常等待官方確認的折讓。資料由現有發票狀態與待辦投影，沒有第二套 pending 資料庫。完成後從處理中移除；回查失敗、折讓金額／候選衝突仍保留在上傳問題。處理中項目不能勾選刪除或直接標記成功；超過保留期的作廢／折讓仍保留管理員結案入口。舊折讓未保存明確確認分類時，先留在上傳問題，經正常回查後再分類。
 
 ### 系統診斷（V2.6.3）
 

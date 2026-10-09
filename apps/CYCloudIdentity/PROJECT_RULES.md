@@ -2,87 +2,90 @@
 
 本文件只記錄 **CYCloud Identity** 的專案級永久規則。共通規則依 repository root `REPOSITORY_RULES.md`；repo-specific 規則依 root `REPO_POLICY.md`。
 
-## 1. 產品定位
+## 1. 產品定位與責任邊界
 
-- CYCloud Identity 是志遠各 Cloud App 共用的 Workspace／Employee／Credential／Workspace Role／Application Access／Session／Email OTP／Recovery 身分權威。
-- CYCloud Identity 的責任是確認「使用者是誰、Workspace 身分層級為何、是否可進入某個 CY App」；各 App 的業務資料、模組權限與 domain-specific authorization 不放進 CYCloud Identity。
-- 目前所有接入 CYCloud Identity 的 CY App 都直接採用 CYID 的三層 Workspace Role：`SUPER_ADMIN`、`ADMIN`、`USER`；不得由 consumer App 另行重建一套不同的 Super Admin／Admin／User 對應。
-- CYInvoice 後續若轉接 CYCloud Identity，必須由 CYInvoice 自己的工作線安全切換；本專案不得直接修改 CYInvoice runtime／Device lifecycle。
+- CYCloud Identity 是志遠各 Cloud App 共用的 Workspace／Employee／Credential／Workspace Role／Identity Admin capability／Application Access／Session／Email verification／OTP／Recovery 身分權威。
+- CYID 回答三件事：使用者是誰、Workspace 層級為何、是否可進入某個 CY App。各 App 的業務資料、模組權限與 domain-specific authorization 不放進 CYID。
+- 所有接入 CYID 的 App 直接採用三層 Workspace Role：`SUPER_ADMIN`、`ADMIN`、`USER`；consumer 不得另外建立一套 coarse role projection。
+- CY Web 是核心帳號管理 App；首次 Email 驗證、首次正式密碼設定與一般帳號 self-service 都由 CY Web 作主要入口，但 authority 仍屬 CYID。
 
 ## 2. Workspace Role、Super Admin 與 Identity Admin
 
-- Employee 身分以 Workspace 為邊界；同一 Employee No 或 Email 可在不同 Workspace 各自存在，但同一 Workspace 內必須唯一。
-- Workspace 身分層級固定收斂為三層：`SUPER_ADMIN`、`ADMIN`、`USER`。
-- 每個啟用中的 Workspace 必須維持恰好一名有效的 `SUPER_ADMIN`。Super Admin 是受保護的 Workspace authority pointer，不是可由一般 role update 產生的普通 Employee role；實作可維持 `super_admin_employee_id`／`isWorkspaceSuperAdmin` 等穩定 protocol 欄位。
-- Consumer-facing 名稱使用 **超級管理員（Super Admin）**。Super Admin 只能由目前 Super Admin 主動完成受保護的移交流程，不得由其他 Employee 降級、停用、刪除或撤銷其最終控制權。
-- 一般 Employee 的持久角色只需要 `ADMIN`／`USER`；有效角色計算時，若 Employee 是 Workspace authority pointer 指向的 Employee，則有效角色為 `SUPER_ADMIN`。
-- `Identity Admin` 是附掛於 `ADMIN` 的特殊 Identity-management capability，**不是第四種 Workspace Role**。目前只有 `ADMIN` 可持有此 capability。
-- 只有 Super Admin 可以授予或撤銷 `Identity Admin` capability；Identity Admin 不得自行取得、撤銷自己或其他 Identity Admin 的該 capability，也不得把另一名 Identity Admin 降為 USER。
-- 未來若公司出現專職 HR／人資角色，可再把部分 Identity lifecycle 能力 capability 化，允許非 ADMIN Employee 持有受限 Identity 管理能力；此為 future/deferred direction，目前不得因此新增第四種 Role 或提前實作複雜 permission catalog。
+- Employee 身分以 Workspace 為邊界；同一 Employee No 或 Email 可存在於不同 Workspace，但同一 Workspace 內必須唯一。
+- Workspace Role 固定為 `SUPER_ADMIN / ADMIN / USER`。
+- 每個 active Workspace 恰有一名有效 Super Admin。Super Admin 由受保護的 Workspace authority pointer 決定，不是一般 role update 可產生的普通角色。
+- Consumer-facing 名稱使用 **超級管理員（Super Admin）**。只有目前 Super Admin 可透過受保護流程移交 authority；其他 Employee 不得降級、停用、刪除或撤銷 Super Admin。
+- `Identity Admin` 是附掛於 `ADMIN` 的 Identity-management capability，不是第四種 Role；目前只有 ADMIN 可持有。
+- 只有 Super Admin 可授予或撤銷 Identity Admin。Identity Admin 不得自授、自撤、撤銷其他 Identity Admin capability，也不得直接把另一名 Identity Admin 降為 USER。
+- 若未來 HR 需要部分 Identity lifecycle 能力，應新增 narrower capability，而不是現在增加第四種 Workspace Role。
 
-## 3. Employee lifecycle 與管理邊界
+## 3. Employee lifecycle 與 Email 驗證
 
-- 新增 Employee 時直接指定初始 Role，不要求先建立 USER 再另外升級。
-- 一般 `ADMIN` 只能新增 `USER`；`Identity Admin` 與 `SUPER_ADMIN` 可以直接新增 `USER` 或 `ADMIN`。新增 Employee 時不得直接授予 `Identity Admin` capability。
-- 一般 ADMIN 可處理一般 USER 的日常帳號 lifecycle：建立 USER、編輯尚未啟用 USER 的資料、重寄啟用信、刪除尚未完成第一次啟用的 USER、停用／重新啟用已啟用 USER。一般 ADMIN 不具任何 App Access／CY Web Module Access 設定能力。
-- Identity Admin 除上述能力外，可執行 `USER ↔ ADMIN`、管理非 Super Admin Employee 的 Application Access，以及執行已啟用 Employee 的管理員強制 Email recovery。Super Admin 擁有同等能力並保留最終控制權。
-- Identity Admin 可以管理其他 Identity Admin 的 Application Access，但不得修改自己的 Application Access；自己的 Access 必須由另一名 Identity Admin 或 Super Admin 調整。
-- Role 升降不得自動新增、刪除或重算既有 Application Access；Role 與 Access 是兩個獨立維度。
-- 若一名 Identity Admin 要降為 USER，必須先由 Super Admin撤銷其 `Identity Admin` capability，再完成 Role 降級；目前不得存在 `USER + Identity Admin` 組合。
-- 只有從未完成第一次啟用的 Employee 可以真正刪除。任何曾完成啟用的 Employee 後續離職或停權都只能停用，不得實體刪除，以保留 Audit 與歷史 referential integrity。
+- 新增 Employee 時直接選擇初始 Role：一般 ADMIN 只能建立 USER；Identity Admin／Super Admin 可建立 USER 或 ADMIN；建立時不得直接授予 Identity Admin。
+- 對外產品語言一律稱 **Email 驗證**。不得把首次使用流程另命名為「啟用帳號」，也不在 CY Web 登入頁維護第二個「啟用帳號」入口。
+- 建立新 Employee 後，CYID 必須自動寄出第一封 Email 驗證郵件。郵件提供一次性 **首次登入密碼**；首次登入密碼不是正式 Employee password。
+- 首次登入密碼必須有明確 expiry、只可用於 CY Web 核心帳號 App 的首次登入流程，且受登入 rate limit 保護。它不得建立一般 Identity session，也不得直接登入 CYACCweb、CYInvoice 或其他 App。
+- 使用首次登入密碼驗證成功後，CYID 只可簽發短效、不可作 App authorization 的 first-login ticket，讓使用者設定自己的正式密碼。
+- 使用者完成正式密碼設定後，CYID 必須：建立正式 credential、標記 Email 已驗證／完成首次 lifecycle、使首次登入密碼與 first-login ticket 失效；**不得直接建立一般 Identity session**。CY Web 必須回到一般登入頁，要求使用者用剛設定的正式密碼重新登入。
+- 首次登入密碼逾期時仍屬 Email 驗證未完成；有權限的管理員可執行 **重寄驗證 Email**。每次重寄都必須產生新的首次登入密碼並立即使舊密碼失效，同時重新計算 expiry。
+- 修改尚未完成 Email 驗證 Employee 的 Email 後，驗證流程改以新 Email 為準，舊首次登入密碼立即失效並寄出新的驗證 Email。
+- Email provider 寄送失敗不得回滾刪除 Employee；保留 pending Employee、呈現寄送失敗並允許重寄驗證 Email。
+- Pending 管理 UI 至少提供 `編輯 / 重寄驗證 Email / 刪除`。只有從未完成第一次 Email 驗證／正式 credential 建立的 Employee 可實體刪除。
+- `activated_at` 或等價欄位可作內部 durable lifecycle marker，但不是使用者-facing 流程名稱；後續 Email recovery 不得把已完成首次 lifecycle 的 Employee 退回初次 pending。
 
-## 4. 啟用信、Email recovery、Credential／Session／OTP
+## 4. 已啟用帳號、Credential、Session 與 OTP
 
-- 管理員建立 pending Employee 成功後，CYCloud Identity 必須主動發送第一封啟用信；不得要求管理員另外通知使用者自行尋找啟用入口。
-- 第一封啟用信必須包含可直接開啟 **CY Web 帳號啟用流程**的連結。該連結只負責導向正確啟用 UI，不得本身構成登入憑證或繞過 Email 驗證／OTP／第一次密碼設定。
-- Pending Employee 的管理 UI 至少提供 **編輯／重寄啟用信／刪除**。修改 pending Employee 的 Email 後應對新 Email 重新發送啟用信。
-- Email provider 暫時寄送失敗時，已成功建立的 Employee 不回滾刪除；應保存 pending Employee、回報寄送失敗狀態並允許管理員重寄。
-- 已啟用 Employee 的 Email 若失效、被停權或不可使用，`Identity Admin`／`SUPER_ADMIN` 可執行管理員強制 Email 變更。普通 ADMIN 不可執行此操作。
-- 強制 Email 變更後，Employee 帳號仍屬已啟用帳號、原密碼保留，新 Email 變為待驗證，既有 Session 必須撤銷；不得把帳號錯誤退回「第一次待啟用」狀態。新 Email 可重寄驗證信。
-- Password 明文不得儲存、寫 log、進 Git、進 Audit 或進 backup metadata；credential verifier 只能存在 Shared Identity authority。
-- Password 長度固定為 8–16 字元，所有 consumer App 必須遵循 CYCloud Identity 的同一驗證規則，不得自行放寬或縮限。
-- Browser session token 只在 client cookie 保存原值；server 只保存不可逆 hash。Session 必須有 application、workspace、employee 與 expiry 邊界。
-- 一般 session resolve 不採 sliding-write heartbeat；避免無意義 D1 writes。
-- Employee 停用、Role 變更、credential version 變更、管理員強制 Email 變更與 Application Access 失效都必須立即反映 server-side authority；相關既有 Session 必須撤銷或在下一次 resolve/request 失效，不能依賴舊前端畫面繼續授權。
-- OTP 必須 purpose-scoped、single-use、有 expiry、錯誤次數限制與 resend cooldown；不同 purpose 的 OTP 不得互相重放。
-- Email transport 必須 provider-neutral。Brevo、Resend 或未來 provider 都只能作寄送 adapter，不得改變 Identity API contract。
+- 已完成首次 lifecycle 的 Employee 後續只可停用／重新啟用，不得實體刪除，以保留 Audit 與 referential integrity。
+- Identity Admin／Super Admin 可對已啟用 Employee 執行管理員強制 Email recovery；一般 ADMIN 不可。
+- 強制 Email 變更後帳號仍屬已啟用、正式密碼保留、新 Email 變為待驗證、既有 Session 必須撤銷；不得混同首次 Email 驗證。
+- Password 明文、首次登入密碼明文、OTP、raw session token 不得寫入 Git、log、Audit 或 backup metadata。正式 password verifier 與 initial credential verifier 只存在 CYID authority。
+- 正式 password 長度固定 8–16 Unicode 字元；所有 consumer App 採同一輸入規則，不自行放寬或縮限。
+- Browser session raw token 只在 client cookie／受控 server transport 保存；CYID server 只保存不可逆 hash。Session 必須有 application、workspace、employee、expiry 與 credential-version 邊界。
+- Session resolve 不採 sliding-write heartbeat。Employee 停用、Role 變更、credential version 變更、強制 Email recovery、Application Access 失效或 Super Admin transfer 都必須立即反映 server-side authority。
+- OTP 仍用於 Workspace bootstrap、password recovery、已啟用 Email re-verification、Super Admin transfer 等用途；OTP 必須 purpose-scoped、single-use、有 expiry、嘗試限制與 resend cooldown。
+- Email transport 必須 provider-neutral；Brevo、Resend 或其他 provider 只作 adapter，不改變 Identity contract。
 
-## 5. Application Access 與 consumer role contract
+## 5. Application Access 與 consumer contract
 
-- Shared Identity 只決定 Employee 是否可進入某個已註冊 App；App 內的細部 module/business permission 仍由各 App 自己管理。
-- Application registry 必須是 generic/data-driven contract；Public migration／fixture／source 不預置正式 Workspace→App 或 Employee→App access matrix。
-- **CY Web 是目前指定的核心帳號管理 App**：每一名有效 Employee 的 CY Web entry access 必須視為固定 `TRUE`／不可取消，即使該 Employee 沒有任何 CY Web 業務模組權限，也必須能登入 CY Web 管理自己的帳號。
-- 除 CY Web 核心 entry access 外，新 Employee 的其他 App Access 預設為未授予，建立後再由 Identity Admin／Super Admin 調整。
-- 一般 ADMIN 不得設定任何 Employee 的 Application Access。
-- Identity Admin 可設定 USER、ADMIN 及其他 Identity Admin 的 Application Access，但不能修改自己的 Access，也不能修改 Super Admin 的 Access。
-- Super Admin 對 Workspace 已啟用的所有 CY App 自動具有 entry access，且不可被一般 grant 誤刪或取消。
-- 所有接入 CYID 的 CY App 暫時採一對一 role projection：CYID `SUPER_ADMIN → App SUPER_ADMIN`、`ADMIN → App ADMIN`、`USER → App USER`。不再以 Identity Group／Group Application mapping 產生另一套 App-specific coarse role。
-- 對一般單體 App，ADMIN 只要有該 App Access，即視為該 App 的 Admin；更細的 App 內 permission 目前主要針對 USER，由 consumer App 自己管理。
-- CY Web 是多模組特例：CYID 只保證 CY Web 核心 entry access；Customer／Order／Item／Outsourcing／WorkLog 等 Module Access 由 CY Web 自己保存與 server-side enforcement。Super Admin 對所有 CY Web Module 自動允許；Identity Admin／Super Admin 可管理 USER、ADMIN 與其他 Identity Admin 的 CY Web Module Access，Identity Admin 不得修改自己的 Module Access。ADMIN 有某 Module Access 時，在該 Module 內具有完整管理權。
-- Application Access 與 CY Web Module Access 的前端顯示都不是權限來源；server-side authority 必須在 session resolve 或受保護 request 時重新確認。
+- Application registry 必須 generic/data-driven；Public source 不預置正式 Workspace→App 或 Employee→App access matrix。
+- CY Web 是核心帳號管理 App：每名有效 Employee 的 CY Web entry access 固定 `TRUE`／不可取消，即使沒有任何 CY Web business Module Access，仍必須能進入 account self-service。
+- 除 CY Web 核心 entry 外，新 Employee 的其他 App Access 預設不授予，建立後由 Identity Admin／Super Admin 管理。
+- 一般 ADMIN 不得設定任何 App Access。Identity Admin 可設定 USER、ADMIN、其他 Identity Admin 的 App Access，但不得修改自己的 Access 或 Super Admin Access。Super Admin 對 Workspace 已啟用 App 自動有 entry access。
+- Role 與 App Access 是獨立維度；Role 變更不得自動新增、刪除或重算既有 Access。
+- 所有 consumer 採直接 role projection：`SUPER_ADMIN -> SUPER_ADMIN`、`ADMIN -> ADMIN`、`USER -> USER`。Identity Group／Group Application mapping 不再作 forward authority。
+- CY Web 是多模組特例：Customer／Order／Item／Outsourcing／WorkLog 等 Module Access 由 CY Web 保存與 server-side enforcement；Super Admin 全模組自動允許，Identity Admin／Super Admin 管理 eligible Employee，正常 ADMIN 不具 Access-management 權限。
+- UI 顯示永遠不是授權來源；App entry 與 module/business authorization 必須由 server 重新確認。
 
-## 6. Security authority reserved to Super Admin
+## 6. Super Admin 專屬安全權限
 
-- Workspace Recovery Email 必須對應目前 Super Admin 已驗證的 Email；Super Admin 移交完成時 Recovery Email 必須一併切換。
-- Super Admin 移交必須重新驗證目前 Super Admin credential，並以目前已驗證 Email 完成 OTP，再以原子操作完成 authority 與 Recovery Email 切換。
-- `Identity Admin` capability 的授予／撤銷、Super Admin 移交、Workspace Recovery、安全核心／OTP policy 等會影響 Workspace 最終控制權的操作只允許 Super Admin。
-- Identity Admin 不得修改 Super Admin 的 Role、Application Access、CY Web Module Access、Email 或 authority pointer。
+- Workspace Recovery Email 對應目前 Super Admin 已驗證 Email；Super Admin transfer 成功時一併切換。
+- Super Admin transfer 必須重新驗證目前 Super Admin credential，並以目前已驗證 Email 完成 OTP，再原子切換 authority 與 Recovery Email。
+- Identity Admin grant/revoke、Super Admin transfer、Workspace Recovery、安全核心／OTP policy 等最終控制權操作只允許 Super Admin。
+- Identity Admin 不得修改 Super Admin 的 Role、App Access、CY Web Module Access、Email 或 authority pointer。
 
 ## 7. Public Source 與部署
 
-- `CYapps` 是 Public repository；所有 source、commit、PR、Actions log、Artifact metadata 都必須視為外部可見。
-- Public source 只保存 schema、generic contract、placeholder、adapter 與 deployment logic；Cloudflare resource ID、Workspace ID、Employee 資料、Email、實際 App access matrix、API Key、OTP pepper、backup key 與其他 secrets／營運配置不得 commit。
-- 所有正式資源識別、provider target、secret、初始 Workspace／Employee／Application runtime data 必須由受控 Deployment Environment、secret store 或正式管理流程注入。
-- Cloud Apps 優先透過 private Service Binding 使用 Identity；browser 不直接取得 provider secret 或 credential verifier。
-- Production deploy、正式資料建立、付費方案啟用與任何不可逆 cutover 都必須另有明確使用者同意。
+- `CYapps` 是 Public repository；source、commit、PR、Actions log、Artifact metadata 都視為外部可見。
+- Public source 只保存 schema、generic contract、placeholder、adapter、migration、deployment logic 與 synthetic fixture；production IDs、Employee／Email、實際 access matrix、API key、OTP pepper、credential、session、backup key 等不得 commit。
+- Cloud Apps 優先透過 private Service Binding 使用 CYID；browser 不直接取得 provider secret 或 credential verifier。
+- Production deploy、正式資料建立、付費方案與不可逆 cutover 必須另有使用者明確同意。
 
 ## 8. 成本與資源
 
-- 架構不得默認需要付費 Cloudflare、Email 或 Backup tier 才能正常運作；若未來容量超出目前可用免費額度，先量測、最佳化並回報，再由使用者決定是否升級。
-- Identity 查詢必須有索引；避免 full scan、高頻 polling、session heartbeat writes、無意義 Cron 或會快速消耗免費額度的背景工作。
+- 架構不得預設需要付費 Cloudflare／Email／Backup tier；若容量超出可用額度，先量測與最佳化，再由使用者決定升級。
+- Identity 查詢必須有索引；避免 full scan、高頻 polling、session heartbeat writes、無必要 Cron 或其他會快速消耗免費額度的背景工作。
 
-## 9. CYInvoice 邊界
+## 9. Consumer contract 與工作線治理
 
-- 現階段只參考 CYInvoice 已確認的 Workspace／Employee／Credential／Super Admin／Email OTP／Recovery 行為建立獨立 authority。
-- 不修改 CYInvoice Cloud 現有 source/runtime、D1 或 Device pairing 流程；CYInvoice 的 Device／Local→Cloud transition 保留在 CYInvoice 工作線，直到後續明確轉移。
-- CYInvoice 後續轉接時，以 CYCloud Identity 的穩定三層 Role + Application Access contract 為目標，不把 CYInvoice-specific Device lifecycle 反向寫成所有 Cloud App 的共同規則。
+- `docs/CONSUMER_INTEGRATION_STANDARD.md` 是所有 CYID consumer 的唯一 shared technical integration standard；永久遵循義務由本文件與 repository governance 建立。Consumer-specific handoff 不得複製共同規範後形成第二套 Identity authority。
+- CYID 以 `CONSUMER_CONTRACT_VERSION` 發布最新 consumer contract revision，以 `CONSUMER_MIN_COMPATIBLE_VERSION` 定義 provider runtime 仍支援的最舊 consumer revision。完成 CYID 接入的 consumer 必須保存自己的 `CYID_CONSUMER_VERSION`。
+- CYID product `VERSION` 與 consumer contract version 是不同維度；只有 consumer-visible obligation / endpoint / field / authority semantics 改變時才需要推進 consumer contract version。
+- 每個修改 CYID 的 PR 都必須標示 consumer impact：`NONE`、`BACKWARD_COMPATIBLE` 或 `CONSUMER_UPDATE_REQUIRED`。後兩者必須同一工作項目更新 consumer standard、contract version 與 consumer contract changelog。
+- `BACKWARD_COMPATIBLE` 變更不得使目前最低相容版本失效；consumer 可在支援版本窗內逐步升級。
+- `CONSUMER_UPDATE_REQUIRED` 變更必須先保留可讓既有正式 consumer 運作的 compatibility path，或完成協調 migration；在受影響 consumer 尚未更新前，不得先提高最低相容版本並部署會讓 production consumer 失效的 provider。
+- Consumer-specific handoff 只保存 app 現況差異、migration plan、app-specific例外與 acceptance，不保存 shared Role / Session / App Access / first-login / recovery 規格副本。
+- 跨 repository consumer 必須依 `CONSUMER_SYNC_MANIFEST.json` 保存 shared contract 的同步鏡像，提供可重現 sync 流程，並在 governance/CI 與 deployment 前逐檔驗證與 CYID `main` canonical bytes 一致；鏡像只讀、不形成新 authority。同一 repository 內 consumer 直接讀 canonical files，不另建重複鏡像。
+- Manifest-listed 文件即使只是 documentation-only 修正、未推進 consumer contract version，跨 repo mirror 仍必須同步；consumer contract version 只表示相容語意，不取代文件同步。
+- CY Web 是第一個 Shared Identity consumer 與核心帳號管理入口。
+- CYAccountingWeb（CYACCweb）與 CYInvoice 採同一 CYID consumer standard，但實際 consumer migration 在各自工作線執行；本專案不直接修改其業務 runtime。
+- CYInvoice-specific Device pairing、Device Token、Local→Cloud transition 與 Windows offline credential cache 保留在 CYInvoice 工作線，不反向升格為 CYID 共通規則。

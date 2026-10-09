@@ -10,6 +10,7 @@ internal sealed class SyncIssuesForm : Form
     internal const string ReadStateScope = "upload-issues-read";
     private static readonly int[] DefaultWidths = [145, 130, 110, 150, 0, 90];
 
+    private readonly bool processing;
     private readonly LocalRepository repository;
     private readonly InvoiceSyncIssueStore issueStore;
     private readonly InvoiceSyncStateStore stateStore;
@@ -47,8 +48,9 @@ internal sealed class SyncIssuesForm : Form
     private readonly Button deleteFailed = UiControls.StandardButton("刪除勾選");
     private readonly Button clearFailed = UiControls.StandardButton("清除開立失敗紀錄");
 
-    public SyncIssuesForm(LocalRepository repository)
+    public SyncIssuesForm(LocalRepository repository, bool processing = false)
     {
+        this.processing = processing;
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
         stateStore = new InvoiceSyncStateStore(repository.DataDirectory);
@@ -61,7 +63,7 @@ internal sealed class SyncIssuesForm : Form
         lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
         headerCursor = new FixedColumnHeaderCursor(list);
 
-        Text = "上傳問題";
+        Text = processing ? "處理中" : "上傳問題";
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(900, 450);
         ClientSize = new Size(960, 520);
@@ -70,12 +72,13 @@ internal sealed class SyncIssuesForm : Form
         ShowIcon = false;
 
         BuildLayout();
-        MarkVisibleIssuesRead();
+        if (!processing) MarkVisibleIssuesRead();
         ReloadAll();
     }
 
     private void BuildLayout()
     {
+        list.CheckBoxes = !processing;
         ConfigureList();
         var reload = UiControls.StandardButton("重新整理");
         reload.Click += (_, _) => ReloadAll();
@@ -83,7 +86,7 @@ internal sealed class SyncIssuesForm : Form
         list.ItemCheck += (_, eventArgs) =>
         {
             if (eventArgs.Index < 0 || eventArgs.Index >= list.Items.Count) return;
-            if (eventArgs.NewValue == CheckState.Checked && list.Items[eventArgs.Index].Tag is not InvoiceRecord)
+            if (eventArgs.NewValue == CheckState.Checked && (processing || list.Items[eventArgs.Index].Tag is not InvoiceRecord))
                 eventArgs.NewValue = CheckState.Unchecked;
         };
         list.ItemChecked += (_, _) => BeginInvoke((Action)UpdateFailedButtons);
@@ -123,8 +126,11 @@ internal sealed class SyncIssuesForm : Form
             Margin = Padding.Empty,
             Padding = new Padding(0, 4, 0, 0),
         };
-        failedActions.Controls.Add(deleteFailed);
-        failedActions.Controls.Add(clearFailed);
+        if (!processing)
+        {
+            failedActions.Controls.Add(deleteFailed);
+            failedActions.Controls.Add(clearFailed);
+        }
         close.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         close.Margin = new Padding(0, 4, 0, 0);
         bottom.Controls.Add(failedActions, 0, 0);
@@ -163,8 +169,9 @@ internal sealed class SyncIssuesForm : Form
         try
         {
             lastRead = stateStore.LastSuccess(accountKey, ReadStateScope);
-            var issues = issueStore.All(accountKey);
-            var failed = CurrentFailedRecords();
+            var queue = new InvoiceWorkQueue(repository).Load();
+            var issues = processing ? queue.ProcessingIssues : queue.UploadIssues;
+            var failed = processing ? Array.Empty<InvoiceRecord>() : CurrentFailedRecords();
             var rows = new List<(string SortKey, ListViewItem Row)>();
 
             foreach (var issue in issues)
@@ -172,7 +179,7 @@ internal sealed class SyncIssuesForm : Form
                 var state = IssueState(issue);
                 var time = issue.CreatedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss");
                 var row = new ListViewItem(ShortIssueTime(time));
-                row.SubItems.Add(DisplayType(issue.IssueType));
+                row.SubItems.Add(processing && IsAllowanceManualReview(issue) ? "折讓處理中" : DisplayType(issue.IssueType));
                 row.SubItems.Add(issue.InvoiceNumber);
                 row.SubItems.Add(issue.OrderId);
                 row.SubItems.Add(issue.Message);
@@ -189,6 +196,23 @@ internal sealed class SyncIssuesForm : Form
                 if (state is "人工確認" or "等待確認" or "可結案")
                     stateCell.Font = new Font(list.Font, FontStyle.Bold);
                 rows.Add((time, row));
+            }
+
+            if (processing)
+            {
+                foreach (var item in queue.ProcessingItems)
+                {
+                    var time = FullIssueTime(item.Record);
+                    var row = new ListViewItem(ShortIssueTime(time));
+                    row.SubItems.Add(item.Kind == InvoiceProcessingKind.Void ? "作廢處理中" : "發票上傳處理中");
+                    row.SubItems.Add(item.Record.InvoiceNumber);
+                    row.SubItems.Add(item.Record.OrderId);
+                    row.SubItems.Add(item.Message);
+                    row.SubItems.Add(item.Kind == InvoiceProcessingKind.Void && administrativeClosure.CanClose(item.Record) ? "可結案" : "處理中");
+                    row.Tag = item;
+                    row.SubItems[5].ForeColor = Color.FromArgb(190, 120, 0);
+                    rows.Add((time, row));
+                }
             }
 
             foreach (var record in failed)
@@ -224,13 +248,13 @@ internal sealed class SyncIssuesForm : Form
             }
 
             var unresolved = issues.Count(issue => issue.ResolvedUtc is null);
-            summary.Text = $"尚未解決：{unresolved} 項｜開立失敗：{failed.Count} 筆";
+            summary.Text = processing ? $"處理中：{queue.ProcessingCount} 項" : $"尚未解決：{unresolved} 項｜開立失敗：{failed.Count} 筆";
             UpdateFailedButtons();
             LayoutColumns();
         }
         catch (Exception error)
         {
-            MessageBox.Show(this, "讀取上傳問題失敗：" + error.Message, "讀取失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, "讀取" + Text + "失敗：" + error.Message, "讀取失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -250,7 +274,13 @@ internal sealed class SyncIssuesForm : Form
 
     private async Task ShowSelectedIssueDetailsAsync()
     {
-        if (manualReviewBusy || SelectedIssue() is not { } issue) return;
+        if (manualReviewBusy) return;
+        if (list.SelectedItems.Count == 1 && list.SelectedItems[0].Tag is InvoiceProcessingItem item)
+        {
+            ShowProcessingDetails(item);
+            return;
+        }
+        if (SelectedIssue() is not { } issue) return;
         try
         {
             var manual = IsManualReview(issue);
@@ -269,7 +299,7 @@ internal sealed class SyncIssuesForm : Form
 
             if (issue.ResolvedUtc is null)
             {
-                if (InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue))
+                if (administrativeClosure.IsActiveWorkIssue(issue))
                 {
                     try { allowAdministrativeClose = administrativeClosure.CanClose(issue); }
                     catch { allowAdministrativeClose = false; }
@@ -305,7 +335,7 @@ internal sealed class SyncIssuesForm : Form
                         }
                     }
                 }
-                else if (!allowAdministrativeClose && !manual)
+                else if (!allowAdministrativeClose && !manual && !administrativeClosure.IsActiveWorkIssue(issue))
                 {
                     primaryText = "標記已解決";
                 }
@@ -340,9 +370,28 @@ internal sealed class SyncIssuesForm : Form
         }
     }
 
+    private void ShowProcessingDetails(InvoiceProcessingItem item)
+    {
+        try
+        {
+            var canClose = item.Kind == InvoiceProcessingKind.Void && administrativeClosure.CanClose(item.Record);
+            using var detail = new ManualReviewDetailForm("處理中", [
+                new("發票號碼", item.Record.InvoiceNumber), new("訂單編號", item.Record.OrderId),
+                new("開立時間", FullIssueTime(item.Record)), new("目前訊息", item.Message),
+                new("官方上傳狀態", item.Record.UploadStatusText), new("最後回查", item.Record.LastChecked),
+            ], string.Empty, false, canClose);
+            if (detail.ShowDialog(this) == DialogResult.OK && detail.SelectedAction == ManualReviewDetailAction.AdministrativeClose)
+                CloseAdministrativeWork("作廢", (employee, password) => administrativeClosure.Close(item.Record, employee, password));
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "讀取處理中明細失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
     private void ResolveIssue(InvoiceSyncIssue issue)
     {
-        if (issue.ResolvedUtc is not null || IsManualReview(issue) || InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue)) return;
+        if (issue.ResolvedUtc is not null || IsManualReview(issue) || administrativeClosure.IsActiveWorkIssue(issue)) return;
         try
         {
             issueStore.Resolve(issue.Id, DateTimeOffset.Now);
@@ -358,6 +407,11 @@ internal sealed class SyncIssuesForm : Form
     {
         if (manualReviewBusy || !administrativeClosure.CanClose(issue)) return;
         var operation = IsAllowanceManualReview(issue) ? "折讓" : "作廢";
+        CloseAdministrativeWork(operation, (employee, password) => administrativeClosure.Close(issue, employee, password));
+    }
+
+    private void CloseAdministrativeWork(string operation, Action<string, string> closeWork)
+    {
         if (MessageBox.Show(
                 this,
                 $"這筆{operation}待處理作業已超過系統保留的兩期。\n\n管理員結案後，CYInvoice 會停止追蹤這筆作業、清除本機等待標記，之後可依舊資料保留規則清除。\n\n此操作不會呼叫光貿 API，也不代表光貿已完成{operation}。確定結案？",
@@ -372,7 +426,7 @@ internal sealed class SyncIssuesForm : Form
         SetManualReviewBusy(true);
         try
         {
-            administrativeClosure.Close(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+            closeWork(login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
             MessageBox.Show(this, "已由管理員手動結案。CYInvoice 不會再自動追蹤這筆待處理作業。", "結案完成",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             ReloadAll();
@@ -804,7 +858,7 @@ internal sealed class SyncIssuesForm : Form
     {
         if (issue.ResolvedUtc is not null)
             return IsAllowanceManualReview(issue) || IsAllowanceVoidManualReview(issue) ? "已人工處理" : "已解決";
-        if (InvoiceAdministrativeClosureService.IsAdministrativeClosureIssue(issue))
+        if (administrativeClosure.IsActiveWorkIssue(issue))
         {
             try { if (administrativeClosure.CanClose(issue)) return "可結案"; }
             catch { }
@@ -948,9 +1002,9 @@ internal sealed class SyncIssuesForm : Form
 
     internal void VerifySmokeLayout()
     {
-        if (Text != "上傳問題" || ShowIcon || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
+        if (Text != (processing ? "處理中" : "上傳問題") || ShowIcon || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)
             throw new InvalidOperationException("上傳問題視窗標題、圖示或字級不正確");
-        if (list is not BufferedListView || !list.CheckBoxes || list.Columns.Count != 6 || !list.GridLines || !list.Scrollable)
+        if (list is not BufferedListView || list.CheckBoxes == processing || list.Columns.Count != 6 || !list.GridLines || !list.Scrollable)
             throw new InvalidOperationException("上傳問題單一清單結構不正確");
         if (list.Columns[5].Text != "狀態" || clearFailed.Text != "清除開立失敗紀錄")
             throw new InvalidOperationException("上傳問題欄位或開立失敗清除按鈕不正確");

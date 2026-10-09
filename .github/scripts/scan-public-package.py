@@ -46,7 +46,9 @@ GENERAL_PATTERNS: list[tuple[str, re.Pattern[bytes]]] = [
     # such as "-----BEGIN PRIVATE KEY-----" embedded in standard TLS libraries.
     ("private key", re.compile(br"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n\t ]{80,}?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.I | re.S)),
     ("Google OAuth client secret", re.compile(br"\bGOCSPX-[A-Za-z0-9_-]{12,}\b")),
-    ("Google refresh token", re.compile(br"\b1//[A-Za-z0-9._/-]{20,}\b")),
+    # Google refresh tokens are base64url after "1//": no "." or "/" in the body.
+    # Allowing them matched binary tables in official OpenCV native DLLs.
+    ("Google refresh token", re.compile(br"\b1//[A-Za-z0-9_-]{20,}\b")),
     ("GitHub token", re.compile(br"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")),
     ("Cloudflare API token assignment", re.compile(br"\bCLOUDFLARE_API_TOKEN\b\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[A-Za-z0-9._-]{20,}", re.I | re.M)),
     ("Cloudflare account id assignment", re.compile(br"\bCLOUDFLARE_ACCOUNT_ID\b\s*[:=]\s*[\"']?(?!\$\{|\$\(|__|<)[0-9a-f]{32}\b", re.I | re.M)),

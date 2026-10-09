@@ -71,6 +71,71 @@ internal static class AdministrativeClosureTests
         Equal(true, ReloadIssue(setup).ResolvedUtc is not null);
     }
 
+    public static void ProcessingVoidCanCloseWithoutUploadIssue()
+    {
+        using var temporary = new AdministrativeClosureTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path, "2026/06/30", InvoiceSyncIssueTypes.QueryFailed);
+        var issues = new InvoiceSyncIssueStore(setup.Repository.DataDirectory);
+        issues.Delete(setup.Issue.Id);
+        var record = setup.Repository.Invoices.LoadOrCreate().Single();
+        InvoiceVoidService.SetOfficialPending(record, true);
+        new InvoiceSyncRepository(setup.Repository.DataDirectory).UpsertMany([record]);
+        var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
+        Equal(1, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
+        Equal(true, service.CanClose(record));
+        Throws<UnauthorizedAccessException>(() => service.Close(record, "3015", "Employee1"));
+        service.Close(record, "2000", "AdminPass1");
+        Equal(0, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
+        Equal(InvoiceStates.Unknown, setup.Repository.Invoices.LoadOrCreate().Single().InvoiceState);
+        Throws<InvalidOperationException>(() => service.Close(record, "2000", "AdminPass1"));
+    }
+
+    public static void QueryFailureWithoutPendingCannotClose()
+    {
+        using var temporary = new AdministrativeClosureTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path, "2026/06/30", InvoiceSyncIssueTypes.QueryFailed);
+        var record = setup.Repository.Invoices.LoadOrCreate().Single();
+        record.ExtensionData = null;
+        record.InvoiceState = InvoiceStates.Opened;
+        new InvoiceSyncRepository(setup.Repository.DataDirectory).UpsertMany([record]);
+        var service = new InvoiceAdministrativeClosureService(setup.Repository, () => Clock);
+        Equal(false, service.CanClose(setup.Issue));
+        Throws<InvalidOperationException>(() => service.Close(setup.Issue, "2000", "AdminPass1"));
+        Equal(null, ReloadIssue(setup).ResolvedUtc);
+    }
+
+    public static void UploadQueueSeparatesStatusAndAccount()
+    {
+        using var temporary = new AdministrativeClosureTemporaryDirectory();
+        var setup = CreateSetup(temporary.Path, "2026/08/15", InvoiceSyncIssueTypes.QueryFailed);
+        new InvoiceSyncIssueStore(setup.Repository.DataDirectory).Delete(setup.Issue.Id);
+        var record = setup.Repository.Invoices.LoadOrCreate().Single();
+        var sync = new InvoiceSyncRepository(setup.Repository.DataDirectory);
+        record.ExtensionData = null;
+        record.InvoiceState = InvoiceStates.Opened;
+        foreach (var status in new[] { 1, 2, 3, 31, 32, 0, 91, 99, 77 })
+        {
+            record.UploadStatus = status;
+            sync.UpsertMany([record]);
+            Equal(status is 1 or 2 or 3 or 31 or 32 ? 1 : 0, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
+        }
+        record.UploadStatus = 31;
+        record.SellerInvoice = "87654321";
+        sync.UpsertMany([record]);
+        Equal(0, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
+        record.SellerInvoice = "12345678";
+        record.Environment = Environments.Test;
+        sync.UpsertMany([record]);
+        Equal(0, new InvoiceWorkQueue(setup.Repository).Load().ProcessingCount);
+        record.Environment = Environments.Production;
+        sync.UpsertMany([record]);
+        var issues = new InvoiceSyncIssueStore(setup.Repository.DataDirectory);
+        issues.Record(setup.Issue.AccountKey, record.InvoiceNumber, record.OrderId, InvoiceSyncIssueTypes.QueryFailed, "無法回查", Clock);
+        var queue = new InvoiceWorkQueue(setup.Repository).Load();
+        Equal(1, queue.UploadIssues.Count);
+        Equal(0, queue.ProcessingCount);
+    }
+
     private static AdministrativeClosureSetup CreateSetup(
         string path,
         string invoiceDate,

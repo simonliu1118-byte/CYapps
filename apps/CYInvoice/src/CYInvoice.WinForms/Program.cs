@@ -144,6 +144,13 @@ internal static class Program
         syncIssues.VerifySmokeLayout();
         syncIssues.Close();
 
+        using var processing = new SyncIssuesForm(repository, processing: true);
+        processing.Show();
+        processing.PerformLayout();
+        Application.DoEvents();
+        processing.VerifySmokeLayout();
+        processing.Close();
+
         using var diagnostics = new SystemDiagnosticsForm(repository, startupSmokeTest: true);
         diagnostics.Show();
         diagnostics.PerformLayout();
