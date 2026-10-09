@@ -167,6 +167,7 @@ function setupAdaptiveDataSettings() {
       <section class="cy-data-section">
         <h4>Excel 匯入</h4>
         <div class="cy-data-actions" id="excelImportSettingsHost">
+          <button id="excelImportTemplate" class="secondary compact" type="button">下載 Excel 模板</button>
           <button id="ledgerExcelImport" class="secondary compact" type="button" title="匯入 .xlsx 記帳資料">匯入 Excel</button>
         </div>
       </section>`;
@@ -194,7 +195,6 @@ function cleanupAdaptiveInterfaceCopy() {
       '#settingsDialog [data-settings-pane="backup"] #backupHeadingHint',
       '#settingsDialog [data-settings-pane="backup"] .backup-security-note',
       '#settingsDialog [data-settings-pane="backup"] .backup-restore-note',
-      '#settingsDialog [data-settings-pane="migration"] .migration-heading .hint',
       '#settingsDialog [data-settings-pane="migration"] .migration-privacy',
       '#openingDialog .opening-dialog-heading > .hint'
     ];

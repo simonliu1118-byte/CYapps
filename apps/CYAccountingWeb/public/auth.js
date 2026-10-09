@@ -1,3 +1,10 @@
+// Authentication navigation belongs to this module; callers only report server responses.
+window.cyaccHandleAuthResponse = (response, data = {}) => {
+  if (response.status !== 401 && data?.code !== 'AUTH_REQUIRED') return false;
+  location.replace('/login');
+  return true;
+};
+
 let cyaccAuthStarted = false;
 
 if (document.readyState === 'loading') {
@@ -44,14 +51,14 @@ function startCyaccAuth() {
         credentials: 'include'
       }, 8_000);
       const data = await response.json().catch(() => ({}));
-      if (response.status === 401 || data.code === 'AUTH_REQUIRED') {
-        location.replace('/login');
+      if (window.cyaccHandleAuthResponse(response, data)) {
         throw new Error('AUTH_REQUIRED');
       }
       if (!response.ok || data.ok === false) {
         throw new Error(data.error || '帳號服務目前無法驗證登入狀態。');
       }
       if (!validBootUser(data.user)) throw new Error('帳號資料格式不正確。');
+      scheduleSessionExpiry(data.session?.expiresAt);
       return data.user;
     } catch (error) {
       if (String(error?.message || '') === 'AUTH_REQUIRED') throw error;
@@ -61,6 +68,22 @@ function startCyaccAuth() {
       setBootFailure(message);
       throw new Error(message);
     }
+  }
+
+  function scheduleSessionExpiry(expiresAt) {
+    const deadline = Date.parse(expiresAt);
+    if (!Number.isFinite(deadline)) return;
+    // Use only CYID's expiry timestamp. This is navigation, not a second session policy.
+    const checkExpiry = () => {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) { location.replace('/login'); return; }
+      window.setTimeout(checkExpiry, Math.min(remaining, 2_147_483_647));
+    };
+    checkExpiry();
+    window.addEventListener('pageshow', () => { if (Date.now() >= deadline) location.replace('/login'); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && Date.now() >= deadline) location.replace('/login');
+    });
   }
 
   function validBootUser(user) {

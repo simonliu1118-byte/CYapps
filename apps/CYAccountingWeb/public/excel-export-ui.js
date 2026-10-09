@@ -36,6 +36,7 @@ async function downloadMonthlyExcel() {
       cache: 'no-store'
     });
 
+    if (window.cyaccHandleAuthResponse?.(response)) throw new Error('AUTH_REQUIRED');
     if (!response.ok) {
       const data = await response.json().catch(() => null);
       throw new Error(data?.error || `匯出失敗（HTTP ${response.status}）。`);

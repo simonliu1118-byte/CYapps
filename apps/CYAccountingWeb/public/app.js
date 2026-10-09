@@ -331,6 +331,9 @@ function setLedgerLoadingState(loading) {
   ledger?.setAttribute('aria-busy', busy ? 'true' : 'false');
   const loadingLabel = document.querySelector('#ledgerMonthLoading');
   if (loadingLabel) loadingLabel.hidden = !busy;
+  const loadingOverlay = document.querySelector('#ledgerLoadingOverlay');
+  if (loadingOverlay) loadingOverlay.hidden = !busy;
+  ledger?.querySelector('.table-wrap table')?.toggleAttribute('inert', busy && Boolean(window.cyIsDesktopInteractionWorkspace?.()));
   for (const control of document.querySelectorAll(
     '#ledgerPrevMonth, #ledgerNextMonth, #monthFilter, #ledgerMoreButton, #ledgerBalanceButton, #ledgerQuickLockButton, #ledgerOpeningBalanceButton, #ledgerLockSettingsButton, #ledgerExcelExport, #ledgerSearchForm input, #ledgerSearchForm button'
   )) {
@@ -921,6 +924,7 @@ async function api(path, options = {}) {
       signal: controller.signal
     });
     const data = await response.json().catch(() => ({}));
+    if (window.cyaccHandleAuthResponse?.(response, data)) throw new Error('AUTH_REQUIRED');
     if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
     return data;
   });

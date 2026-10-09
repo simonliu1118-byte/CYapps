@@ -309,6 +309,15 @@ function renderBackupStatus(data) {
     renderBackupHistory(model.recentRuns || []);
   }
 
+  if (window.cyIsDesktopInteractionWorkspace?.()) {
+    const latest = model.latest;
+    if (lastDetail && latest) lastDetail.textContent = `${Number(latest.rowCount || 0).toLocaleString()} 筆 · ${backupBytes(latest.byteSize || 0)} · ${latest.status === 'success' ? '驗證成功' : '待確認驗證結果'}`;
+    const historyTitle = document.querySelector('.backup-history-title strong');
+    const historyHint = document.querySelector('.backup-history-title .hint');
+    if (historyTitle) historyTitle.textContent = '最近備份紀錄';
+    if (historyHint) historyHint.textContent = '每筆備份分別顯示 R2 與 GCS 的驗證結果';
+  }
+
   if (run) run.disabled = !model.configured;
   renderPhaseCAcceptance(data);
 }
