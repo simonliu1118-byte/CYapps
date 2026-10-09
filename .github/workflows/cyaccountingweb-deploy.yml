@@ -23,31 +23,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  cleanup-ledger-audit:
-    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[cleanup-ledger-audit]')
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Delete the encrypted audit log
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-        run: |
-          node --input-type=module <<'JS'
-          const paths = [
-            '/actions/runs/37965124293/logs'
-          ];
-          for (const path of paths) {
-            const response = await fetch(`https://api.github.com/repos/${process.env.GH_REPOSITORY}${path}`, {
-              method: 'DELETE',
-              headers: { authorization: `Bearer ${process.env.GH_TOKEN}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' }
-            });
-            if (![204, 404].includes(response.status)) throw new Error(`Audit cleanup failed (${response.status})`);
-          }
-          console.log('Encrypted audit log removed.');
-          JS
-
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
