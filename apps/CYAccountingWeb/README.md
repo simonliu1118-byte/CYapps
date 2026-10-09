@@ -4,14 +4,14 @@
 
 更新：2026/10/10（日本時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
-**V0.22.31 Build 2（已部署）**：桌機右側年月／鎖帳圖示／五格統計／期初餘額／匯出合併單列；月份與收支上下緣同高，移除三角、箭頭 SVG 置中。共用 quick-lock 邊界規則，桌機非邊界月份開啟既有鎖帳設定；觸控流程不變。歷史月份缺帳／收支不符尚未結案，需比對正式月帳匯出與來源帳本；本次未改動帳務資料。 24 組測試、六種 viewport、跨帳戶清單／統計與 90% 縮放驗證通過；PR #371 治理／CI 與正式部署 #576（run `37962825541`）成功。
+**V0.22.31 Build 3（待部署）**：接續歷史帳目調查，修正月帳簿與期初工作表 OOXML 的 autoFilter／mergeCells 順序；加入空月、180 筆跨帳戶及模板結構回歸。24 組本地測試通過。使用者已授權一次性 D1 唯讀調查與加密傳回；私鑰保留本地，不把真實帳務寫入 Git。查完立即移除暫時 CI／查詢腳本與工作分支。缺帳仍待正式查詢證據，不修改正式帳務或手機／平板呈現，Stable Release 維持 V0.22.15。
 
 ## 目前狀態
 
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.31 Build 2**；PR #371 已合併，完成桌機單列工具列、月份對齊與共用鎖帳圖示；歷史缺帳問題仍待資料比對，手機與平板既有排列保留 |
+| 正式版本 | **V0.22.31 Build 3** 待部署；Excel 結構修正待 CI，歷史缺帳未結案 |
 | 正式部署 | [CYAccountingWeb Validate and Deploy #576（run `37962825541`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37962825541) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **7**；最新 migration `0007_account_color_slots.sql` |

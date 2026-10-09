@@ -1,6 +1,7 @@
 import readExcelFile, { readSheet } from 'read-excel-file/universal';
 import { buildMonthlyWorkbook, buildImportTemplateWorkbook, handleExcelExportApi } from '../src/excel-export.js';
 import { analyzeImportRows } from '../src/excel-import.js';
+import { unzipSync, strFromU8 } from 'fflate';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -23,6 +24,34 @@ assert(sheets[0].sheet === '月帳簿', 'expected monthly ledger as first sheet'
 const sheetByName = await readSheet(arrayBuffer, '月帳簿');
 const header = sheetByName.find(row => Array.isArray(row) && row[0] === '日期');
 assert(header?.[5] === '金額', 'expected monthly ledger header');
+
+// ISO/IEC 29500 CT_Worksheet is a sequence: autoFilter precedes mergeCells.
+// A tolerant data reader does not detect the Excel repair dialog caused by this.
+function validateWorksheetOrder(bytes) {
+  const files = unzipSync(new Uint8Array(bytes));
+  const order = ['sheetPr', 'dimension', 'sheetViews', 'sheetFormatPr', 'cols', 'sheetData', 'autoFilter', 'mergeCells', 'dataValidations', 'pageMargins', 'pageSetup'];
+  for (const [name, data] of Object.entries(files)) {
+    if (!/^xl\/worksheets\/sheet\d+\.xml$/.test(name)) continue;
+    const xml = strFromU8(data);
+    let previous = -1;
+    for (const element of xml.matchAll(/<(sheetPr|dimension|sheetViews|sheetFormatPr|cols|sheetData|autoFilter|mergeCells|dataValidations|pageMargins|pageSetup)(?=[\s/>])/g)) {
+      const index = order.indexOf(element[1]);
+      assert(index > previous, `${name}: invalid worksheet element order at ${element[1]}`);
+      previous = index;
+    }
+  }
+}
+validateWorksheetOrder(arrayBuffer);
+validateWorksheetOrder(buildMonthlyWorkbook({ month: '2026-02', transactions: [], accountNames: [], openingMap: new Map() }));
+const historical = buildMonthlyWorkbook({
+  month: '2026-02', accountNames: ['測試現金', '測試銀行'], openingMap: new Map([['測試現金', 1000], ['測試銀行', 2000]]),
+  transactions: Array.from({ length: 180 }, (_, i) => ({ id: i + 1, tx_date: `2026-02-${String(i % 28 + 1).padStart(2, '0')}`, account_name: i % 2 ? '測試銀行' : '測試現金', kind: i % 3 ? 'expense' : 'income', category_name: '測試科目', summary: '摘要 & <測試> "引號"\n第二行', amount: 100, created_at: '2026-02-01T00:00:00Z' }))
+});
+validateWorksheetOrder(historical);
+const historicalRows = await readSheet(historical.buffer.slice(historical.byteOffset, historical.byteOffset + historical.byteLength), '月帳簿');
+assert(historicalRows.length === 186, 'historical export retains all 180 records');
+assert(historicalRows[2][3] === 6000 && historicalRows[2][5] === 12000 && historicalRows[3][1] === -3000, 'historical export totals include both accounts');
+assert(historicalRows.slice(6).filter(row => row[1] === '測試現金').length === 90 && historicalRows.slice(6).filter(row => row[1] === '測試銀行').length === 90, 'historical export preserves every account');
 
 class MockStatement {
   constructor(sql) {
@@ -74,6 +103,7 @@ const templateResponse = await handleExcelExportApi(new Request('https://acc.exa
 assert(templateResponse.status === 200, 'template download succeeds');
 assert(templateResponse.headers.get('content-disposition').includes('CYAccounting_import_template.xlsx'), 'template has a download filename');
 const template = await templateResponse.arrayBuffer();
+validateWorksheetOrder(template);
 const templateSheets = await readExcelFile(template);
 assert(templateSheets[0].sheet === '記帳匯入' && templateSheets[1].sheet === '填寫說明', 'template separates writable records from instructions');
 const templateRows = await readSheet(template, '記帳匯入');

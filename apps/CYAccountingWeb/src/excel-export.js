@@ -197,8 +197,8 @@ function ledgerSheetXml({ month, locked, generatedAt, openingTotal, income, expe
     <col min="8" max="8" width="15" customWidth="1"/>
   </cols>
   <sheetData>${rows.join('')}</sheetData>
-  ${mergeCells}
   ${autoFilter}
+  ${mergeCells}
   <pageMargins left="0.25" right="0.25" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>
   <pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>
 </worksheet>`;
@@ -232,8 +232,8 @@ function openingSheetXml({ month, accountNames, openingBalances, openingSources 
   <sheetFormatPr defaultRowHeight="18"/>
   <cols><col min="1" max="1" width="24" customWidth="1"/><col min="2" max="2" width="16" customWidth="1"/><col min="3" max="3" width="20" customWidth="1"/></cols>
   <sheetData>${rows.join('')}</sheetData>
-  <mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells>
   <autoFilter ref="A3:C${lastRow}"/>
+  <mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells>
   <pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>
 </worksheet>`;
 }

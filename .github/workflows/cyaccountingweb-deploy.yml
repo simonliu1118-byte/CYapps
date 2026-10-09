@@ -185,6 +185,10 @@ jobs:
       - name: Apply D1 migrations
         run: npx wrangler d1 migrations apply DB --remote --config wrangler.deploy.jsonc
 
+      - name: One-shot encrypted read-only ledger audit
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[ledger-read-audit]')
+        run: node scripts/audit-ledger-read.mjs
+
       - name: Deploy Worker and static assets
         run: npx wrangler deploy --config wrangler.deploy.jsonc
 
