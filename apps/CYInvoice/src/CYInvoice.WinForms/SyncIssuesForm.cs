@@ -49,6 +49,7 @@ internal sealed class SyncIssuesForm : Form
     public SyncIssuesForm(LocalRepository repository, bool processing = false, bool startupSmokeTest = false)
     {
         this.processing = processing;
+        this.startupSmokeTest = startupSmokeTest;
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
         issueStore = new InvoiceSyncIssueStore(repository.DataDirectory);
         stateStore = new InvoiceSyncStateStore(repository.DataDirectory);
