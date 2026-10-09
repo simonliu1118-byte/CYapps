@@ -114,6 +114,14 @@ internal sealed class ErpAutomationService
         await FillTabGroupAsync(root, snapshot, "送貨資料", cancellationToken);
         await FillTabGroupAsync(root, snapshot, "發票資料(一)", cancellationToken);
 
+        if (snapshot.HandoffBeforeDetails.Length > 0)
+        {
+            result.HandedOff = snapshot.HandoffBeforeDetails;
+            progress.Report("ERP：單頭已輸入，依訂單備註轉人工處理（未輸入明細、未儲存）。");
+            _log.Info("automation", $"handed off before details document={_log.Value(result.DocumentKey)} reason={_log.Value(snapshot.HandoffBeforeDetails)}");
+            return result;
+        }
+
         if (snapshot.Details.Count > 0)
         {
             progress.Report("ERP：啟用並光學定位商品明細…");

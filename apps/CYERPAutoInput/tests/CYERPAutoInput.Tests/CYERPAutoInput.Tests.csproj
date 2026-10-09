@@ -16,6 +16,8 @@
     <Compile Include="..\..\OcrTextNormalizer.cs" Link="Linked\OcrTextNormalizer.cs" />
     <Compile Include="..\..\ErpDocumentState.cs" Link="Linked\ErpDocumentState.cs" />
     <Compile Include="..\..\ProbeRedaction.cs" Link="Linked\ProbeRedaction.cs" />
+    <Compile Include="..\..\XlsxReader.cs" Link="Linked\XlsxReader.cs" />
+    <Compile Include="..\..\ShopeeOrderImport.cs" Link="Linked\ShopeeOrderImport.cs" />
   </ItemGroup>
 
   <ItemGroup>

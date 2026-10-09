@@ -40,6 +40,11 @@ internal sealed class FormSnapshot
 {
     public Dictionary<string, string> Values { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public List<DetailRow> Details { get; init; } = [];
+    /// <summary>
+    /// When set, the run stops after the header and tab fields, before any detail row,
+    /// and hands the document to a person (Shopee orders with remarks).
+    /// </summary>
+    public string HandoffBeforeDetails { get; init; } = string.Empty;
     /// <summary>ERP combo options by field key, in ERP list order (see <see cref="ErpComboOptions"/>).</summary>
     public Dictionary<string, List<string>> ComboOptions { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }
@@ -78,7 +83,7 @@ internal static class FieldCatalog
         new("payment_terms", "交易資料", "付款條件"),
 
         new("ship_name", "送貨資料", "送貨客戶全名"),
-        new("ship_addr1", "送貨資料", "送貨地址(一)"),
+        new("ship_addr1", "送貨資料", "送貨地址(一)", FieldKind.Text, true),
         new("ship_addr2", "送貨資料", "送貨地址(二)"),
         new("contact", "送貨資料", "連絡人"),
         new("receiver", "送貨資料", "收貨人"),

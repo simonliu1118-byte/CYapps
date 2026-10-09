@@ -10,6 +10,9 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _autoSave = new();
     private readonly CheckBox _firstRowWarehouse = new();
     private readonly TextBox _firstRowWarehouseCode = new();
+    private readonly TextBox _shopeeOrderType = new();
+    private readonly TextBox _shopeeCustomerCode = new();
+    private readonly TextBox _shopeeNotePrefix = new();
 
     private static readonly string[] ConfigurableKeys =
     [
@@ -27,7 +30,7 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
-        Size = new Size(640, 690);
+        Size = new Size(640, 726);
         MinimumSize = new Size(560, 480);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
@@ -42,12 +45,13 @@ internal sealed class SettingsForm : Form
 
     private void BuildUi()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 7, ColumnCount = 1, Padding = new Padding(12) };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 8, ColumnCount = 1, Padding = new Padding(12) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         Controls.Add(root);
@@ -95,6 +99,21 @@ internal sealed class SettingsForm : Form
         warehouseRow.Controls.Add(_firstRowWarehouseCode);
         root.Controls.Add(warehouseRow, 0, 4);
 
+        var shopeeRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
+        void AddShopeeField(string label, TextBox box, string value, int width)
+        {
+            shopeeRow.Controls.Add(new Label { Text = label, AutoSize = true, Padding = new Padding(3, 7, 0, 0) });
+            box.Width = width;
+            box.Text = value;
+            box.Margin = new Padding(0, 4, 10, 0);
+            shopeeRow.Controls.Add(box);
+        }
+        AddShopeeField("蝦皮匯入　銷貨單別", _shopeeOrderType, _settings.ShopeeOrderType, 60);
+        AddShopeeField("客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 90);
+        AddShopeeField("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 100);
+        _shopeeOrderType.MaxLength = 4;
+        root.Controls.Add(shopeeRow, 0, 5);
+
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
         _grid.AllowUserToDeleteRows = false;
@@ -123,7 +142,7 @@ internal sealed class SettingsForm : Form
             var index = _grid.Rows.Add(field.Label, value);
             _grid.Rows[index].Tag = key;
         }
-        root.Controls.Add(_grid, 0, 5);
+        root.Controls.Add(_grid, 0, 6);
         Shown += (_, _) => _grid.CurrentCell = _grid.Rows.Count > 0 ? _grid.Rows[0].Cells["Value"] : null;
 
         var buttons = new FlowLayoutPanel
@@ -144,7 +163,7 @@ internal sealed class SettingsForm : Form
             probe.Click += async (_, _) => await RunProbeAsync(probe);
             buttons.Controls.Add(probe);
         }
-        root.Controls.Add(buttons, 0, 6);
+        root.Controls.Add(buttons, 0, 7);
         AcceptButton = save;
         CancelButton = cancel;
     }
@@ -184,6 +203,9 @@ internal sealed class SettingsForm : Form
             _firstRowWarehouseCode.Focus();
             return;
         }
+        _settings.ShopeeOrderType = _shopeeOrderType.Text.Trim();
+        _settings.ShopeeCustomerCode = _shopeeCustomerCode.Text.Trim();
+        _settings.ShopeeNotePrefix = _shopeeNotePrefix.Text.Trim();
         _settings.FirstRowWarehouseEnabled = _firstRowWarehouse.Checked;
         _settings.FirstRowWarehouse = warehouse;
         _settings.AdvancedMode = _advanced.Checked;

@@ -11,6 +11,10 @@ internal sealed class UserSettings
     /// <summary>When on, a blank 庫別 on the first detail row is filled with <see cref="FirstRowWarehouse"/>; ERP carries it to later rows.</summary>
     public bool FirstRowWarehouseEnabled { get; set; }
     public string FirstRowWarehouse { get; set; } = string.Empty;
+    /// <summary>Shopee import: 銷貨單別, 客戶代號 and 備註 prefix (real codes stay local, PROJECT_RULES §3).</summary>
+    public string ShopeeOrderType { get; set; } = string.Empty;
+    public string ShopeeCustomerCode { get; set; } = string.Empty;
+    public string ShopeeNotePrefix { get; set; } = "蝦皮訂單";
     public Dictionary<string, string> Defaults { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 

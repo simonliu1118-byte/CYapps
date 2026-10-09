@@ -579,20 +579,31 @@ internal sealed class MainForm : Form
             return;
         }
 
+        await RunGuardedAsync(async token =>
+        {
+            var result = await RunDocumentAsync(snapshot, _settings.AutoSave, token);
+            if (result.HandedOff.Length > 0)
+            {
+                MessageBox.Show(this, $"銷貨單 {DocumentKeyText(result)} 已輸入單頭，依訂單備註停止，請人工輸入明細並儲存。\n\n{result.HandedOff}",
+                    "轉人工處理", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            ShowRunSummaryIfNeeded(result, DocumentKeyText(result));
+        });
+    }
+
+    /// <summary>
+    /// Shared automation envelope: one run at a time, global Esc watcher, status and error
+    /// reporting. A cancelled or failed run never presses ERP 取消 or 儲存.
+    /// </summary>
+    private async Task RunGuardedAsync(Func<CancellationToken, Task> work)
+    {
         _automationCts = new CancellationTokenSource();
         _start.Enabled = false;
-        var token = _automationCts.Token;
         var watcher = WatchGlobalEscapeAsync(_automationCts);
         try
         {
-            var progress = new Progress<string>(SetStatus);
-            var result = await _automation.RunAsync(snapshot, _settings.AutoSave, progress, token);
-            var documentKey = string.IsNullOrWhiteSpace(result.DocumentKey) ? "未取得" : result.DocumentKey;
-            var saveText = result.Saved ? "已儲存" : "尚未儲存";
-            SetStatus(result.Warnings.Count > 0
-                ? $"ERP：銷貨單 {documentKey} 輸入完成；{result.Warnings.Count} 筆需人工確認；{saveText}"
-                : $"ERP：銷貨單 {documentKey} 輸入完成；{saveText}");
-            ShowRunSummaryIfNeeded(result, documentKey);
+            await work(_automationCts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -613,6 +624,174 @@ internal sealed class MainForm : Form
             _automationCts = null;
             _start.Enabled = true;
         }
+    }
+
+    private async Task<AutomationRunResult> RunDocumentAsync(FormSnapshot snapshot, bool autoSave, CancellationToken token)
+    {
+        var progress = new Progress<string>(SetStatus);
+        var result = await _automation.RunAsync(snapshot, autoSave, progress, token);
+        if (result.HandedOff.Length > 0)
+        {
+            SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 單頭已輸入，轉人工處理（未輸入明細、未儲存）");
+            return result;
+        }
+        var saveText = result.Saved ? "已儲存" : "尚未儲存";
+        SetStatus(result.Warnings.Count > 0
+            ? $"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{result.Warnings.Count} 筆需人工確認；{saveText}"
+            : $"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{saveText}");
+        return result;
+    }
+
+    private static string DocumentKeyText(AutomationRunResult result) =>
+        string.IsNullOrWhiteSpace(result.DocumentKey) ? "未取得" : result.DocumentKey;
+
+    private async Task ImportShopeeAsync()
+    {
+        if (_automationCts is not null) return;
+        if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
+        {
+            MessageBox.Show(this, "請先在「設定」填入蝦皮匯入的銷貨單別與客戶代號。", "蝦皮訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new OpenFileDialog
+        {
+            Title = "選擇蝦皮訂單匯出檔",
+            Filter = "Excel 活頁簿 (*.xlsx)|*.xlsx",
+            CheckFileExists = true
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+        ShopeeImportResult parsed;
+        try
+        {
+            await using var stream = File.OpenRead(dialog.FileName);
+            parsed = ShopeeOrderImport.Parse(XlsxReader.ReadFirstSheet(stream));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
+        {
+            _log.Warn("shopee", $"export read failed: {ex.GetType().Name}");
+            MessageBox.Show(this, $"無法讀取這個檔案：{ex.Message}", "蝦皮訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _log.Info("shopee", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
+
+        using var preview = new ShopeeImportForm(Path.GetFileName(dialog.FileName), parsed, _settings.AutoSave);
+        if (preview.ShowDialog(this) != DialogResult.OK) return;
+
+        if (preview.Action == ShopeeImportAction.LoadSelected && preview.SelectedOrder is not null)
+        {
+            LoadShopeeOrder(preview.SelectedOrder);
+            SetStatus($"已載入蝦皮訂單 {preview.SelectedOrder.OrderSn}；確認後按「開始輸入 ERP」");
+            if (_loadedOrderHandoff.Length > 0)
+                MessageBox.Show(this, $"這張訂單有備註，輸入 ERP 時只會打完單頭就停止，明細轉人工處理。\n\n{_loadedOrderHandoff}",
+                    "蝦皮訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        else if (preview.Action == ShopeeImportAction.RunAll)
+        {
+            await RunShopeeBatchAsync(parsed.Orders);
+        }
+    }
+
+    /// <summary>Handoff reason of the Shopee order currently loaded on the form (empty when none).</summary>
+    private string _loadedOrderHandoff = string.Empty;
+
+    private ShopeeMapping ShopeeMappingFromSettings() =>
+        new(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix);
+
+    /// <summary>
+    /// Puts one order on the form: the Shopee header fields and a fresh detail grid; every
+    /// other field keeps its current value (local defaults such as 單據日期 or 員工代號).
+    /// </summary>
+    private void LoadShopeeOrder(ShopeeOrder order)
+    {
+        foreach (var pair in ShopeeOrderImport.HeaderValues(order, ShopeeMappingFromSettings()))
+            if (_valueControls.TryGetValue(pair.Key, out var control)) SetFieldText(control, pair.Value);
+
+        _details.EndEdit();
+        _details.Rows.Clear();
+        var rowCount = Math.Max(10, order.Items.Count);
+        for (var i = 0; i < rowCount; i++) _details.Rows.Add();
+        for (var i = 0; i < order.Items.Count; i++)
+        {
+            var item = order.Items[i];
+            _details["ItemCode", i].Value = item.ItemCode;
+            _details["Quantity", i].Value = item.Quantity;
+            _details["UnitPrice", i].Value = item.UnitPrice;
+        }
+        ApplyDefaultsToBlankFields();
+        _loadedOrderHandoff = order.HandoffReason;
+    }
+
+    /// <summary>
+    /// Enters every order in turn; each must be saved before the next starts. The batch
+    /// stops at the first failure (abandoning a failed document is not automated yet) and
+    /// lists what was saved, what failed and what was not started.
+    /// </summary>
+    private async Task RunShopeeBatchAsync(IReadOnlyList<ShopeeOrder> orders)
+    {
+        var done = new List<string>();
+        var review = new List<string>();
+        string? failure = null;
+        var next = 0;
+
+        await RunGuardedAsync(async token =>
+        {
+            for (; next < orders.Count; next++)
+            {
+                token.ThrowIfCancellationRequested();
+                var order = orders[next];
+                LoadShopeeOrder(order);
+                SetStatus($"蝦皮批次 {next + 1}/{orders.Count}：訂單 {order.OrderSn}");
+                var snapshot = CreateSnapshot(out var validationError);
+                if (snapshot is null) { failure = $"訂單 {order.OrderSn}：{validationError}"; return; }
+
+                AutomationRunResult result;
+                try
+                {
+                    result = await RunDocumentAsync(snapshot, autoSave: true, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    failure = $"訂單 {order.OrderSn}：已按 Esc 停止，這張可能已部分輸入，請在 ERP 確認";
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _log.Error("shopee", ex);
+                    failure = $"訂單 {order.OrderSn}：{ex.Message}";
+                    return;
+                }
+                if (result.HandedOff.Length > 0)
+                {
+                    failure = $"訂單 {order.OrderSn}（{DocumentKeyText(result)}）有備註，已打完單頭停在 ERP 轉人工：{result.HandedOff}";
+                    return;
+                }
+                if (!result.Saved)
+                {
+                    failure = $"訂單 {order.OrderSn}：未儲存（{result.SaveSkippedReason}）";
+                    return;
+                }
+                done.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
+                review.AddRange(result.Warnings.Select(w => $"{order.OrderSn}（{DocumentKeyText(result)}）第 {w.DetailRow} 列 {w.ItemCode}：{w.Message}"));
+                _log.Info("shopee", $"batch order saved index={next + 1}/{orders.Count} document={_log.Value(DocumentKeyText(result))}");
+            }
+        });
+
+        var lines = new List<string> { $"已儲存 {done.Count} / {orders.Count} 張" };
+        lines.AddRange(done.Select(d => "・" + d));
+        if (review.Count > 0) { lines.Add(string.Empty); lines.Add("需人工確認："); lines.AddRange(review.Select(r => "・" + r)); }
+        if (failure is not null) { lines.Add(string.Empty); lines.Add("停止於：" + failure); }
+        if (failure is not null && next + 1 < orders.Count) lines.Add("請處理完 ERP 上這張單後，再重新匯入剩下的訂單。");
+        var notStarted = orders.Count - done.Count - (failure is null ? 0 : 1);
+        if (notStarted > 0 && next < orders.Count)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"未處理 {notStarted} 張：" + string.Join("、", orders.Skip(next + (failure is null ? 0 : 1)).Select(o => o.OrderSn)));
+        }
+        SetStatus($"蝦皮批次結束：已儲存 {done.Count}/{orders.Count} 張");
+        MessageBox.Show(this, string.Join(Environment.NewLine, lines), "蝦皮批次結果", MessageBoxButtons.OK,
+            failure is null && review.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
     private void ShowRunSummaryIfNeeded(AutomationRunResult result, string documentKey)
@@ -646,6 +825,7 @@ internal sealed class MainForm : Form
         _details.Rows.Clear();
         for (var i = 0; i < 10; i++) _details.Rows.Add();
         ApplyDefaultsToBlankFields();
+        _loadedOrderHandoff = string.Empty;
         SetStatus("已清除表單");
     }
 
@@ -751,7 +931,7 @@ internal sealed class MainForm : Form
 
         validationError = string.Empty;
         var comboOptions = ErpComboOptions.ByField.ToDictionary(p => p.Key, p => p.Value.ToList(), StringComparer.OrdinalIgnoreCase);
-        return new FormSnapshot { Values = values, Details = details, ComboOptions = comboOptions };
+        return new FormSnapshot { Values = values, Details = details, ComboOptions = comboOptions, HandoffBeforeDetails = _loadedOrderHandoff };
     }
 
     private static string Cell(DataGridViewRow row, string column) =>
@@ -784,9 +964,12 @@ internal sealed class MainForm : Form
         };
         button.Size = new Size(84, 34);
         button.Margin = new Padding(4, 1, 4, 1);
-        button.Click += (_, _) => MessageBox.Show(this,
-            $"{text} 匯入解析會在 C# ERP 核心驗收後接續；入口固定保留。",
-            "訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        if (text == "蝦皮")
+            button.Click += async (_, _) => await ImportShopeeAsync();
+        else
+            button.Click += (_, _) => MessageBox.Show(this,
+                $"{text} 匯入尚未實作；入口固定保留。",
+                "訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
         return button;
     }
 

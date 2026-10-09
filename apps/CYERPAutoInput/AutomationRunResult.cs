@@ -12,6 +12,8 @@ internal sealed class AutomationRunResult
     public bool Saved { get; set; }
     /// <summary>Why auto-save did not run although it was enabled; empty when saved or disabled.</summary>
     public string SaveSkippedReason { get; set; } = string.Empty;
+    /// <summary>Set when the run stopped before the details on purpose and a person takes over.</summary>
+    public string HandedOff { get; set; } = string.Empty;
 }
 
 internal sealed record AutomationWarning(

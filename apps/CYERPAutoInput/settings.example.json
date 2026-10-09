@@ -5,5 +5,8 @@
   "AutoSave": false,
   "FirstRowWarehouseEnabled": false,
   "FirstRowWarehouse": "",
+  "ShopeeOrderType": "",
+  "ShopeeCustomerCode": "",
+  "ShopeeNotePrefix": "蝦皮訂單",
   "Defaults": {}
 }
