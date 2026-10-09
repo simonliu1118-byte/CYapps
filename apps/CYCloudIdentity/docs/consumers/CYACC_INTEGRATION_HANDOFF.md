@@ -12,7 +12,13 @@ This file intentionally does **not** restate shared Role, Session, App Access, f
 
 ## 1. Current CYACC baseline
 
-This migration map was checked against CYAccountingWeb V0.21.5 Build 8 on 2026-09-30.
+**2026-10-10 follow-up (GitHub `main` source, not Cloudflare runtime):** This section preserves the **historical pre-cutover baseline** checked against CYAccountingWeb V0.21.5 Build 8 on 2026-09-30. Do not treat the legacy `/v1/web-auth`, `web_sessions` and old login paths described below as today's active implementation.
+
+The currently reviewed CYACC `src/identity-adapter.js` uses `env.IDENTITY.fetch()` and CYID canonical `/v1/identity/login`, `/v1/identity/session/resolve`, `/v1/identity/logout`, with provider app-scoped Bearer token/`x-identity-application` and browser HttpOnly/Secure `SameSite=Lax` cookie. `src/app.js` enforces protected business API resolution and USER read-only policy. Consumer version declaration on main is `1.0.1`, supported by CYID current `1.0.2`/minimum `1.0.0`. No CYACC-local Session is minted or read as an authority in the reviewed path.
+
+App-specific review gaps (not evidence of an exploit or a second authority): `normalizePrincipal` coercion of CYID boolean/version fields is weaker than CY Web's strict invariants; CYACC performs an extra fresh Session Resolve during login; `identityFetch` timeout mainly covers `fetch()` response rather than response-body parsing. For logout, CYACC's Worker reports HTTP 200/`ok: true` with `providerRevoked: false` if provider revoke fails, and `public/auth.js` navigates to `/login` even if the logout request itself fails. Fix at CYACC's canonical adapter/app/browser lifecycle, with regression tests; do not add local Session authority, compatibility fallback or another logout subsystem.
+
+Current production Service Binding targets, real-Tablet acceptance and usage metrics were **not read back** during this review. This document does not claim production deployment/change. Details and pending next-consumer work are in `../../TODO.md`.
 
 CYACC already has the useful high-level Cloudflare shape:
 

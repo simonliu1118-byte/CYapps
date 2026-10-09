@@ -2,7 +2,7 @@
 
 CYCloud Identity（CYID）是志遠 Cloud App 共用的 Identity authority，負責 Workspace、Employee、Credential、Workspace Role、Identity Admin capability、Application Access、Session、Email verification、OTP、Recovery 與 Identity security audit。
 
-各 consumer App 保留自己的 business data、module access 與 domain authorization。CY Web 是核心帳號管理 App；CYAccountingWeb（CYACCweb）與 CYInvoice 之後以同一 shared contract 接入。
+各 consumer App 保留自己的 business data、module access 與 domain authorization。CY Web 是核心帳號管理 App；CYAccountingWeb（CYACCweb）已使用 CYID canonical login/session/logout contract。CYInvoice 的 CYID 模式與 CYERPAutoInput 等後續 desktop consumers 尚未完成接入；現況及下一個 consumer 準備事項只在 `TODO.md` 追蹤。
 
 ## Active documentation map
 
@@ -22,8 +22,7 @@ CYCloud Identity（CYID）是志遠 Cloud App 共用的 Identity authority，負
 12. `docs/DEVELOPMENT_DEPLOYMENT.md` — development deployment procedure。
 13. `docs/consumers/CYACC_INTEGRATION_HANDOFF.md` — **只保存 CYACC 現況差異／遷移／app-specific acceptance**，不得重複 shared standard。
 14. `TODO.md` — **唯一 current implementation status / next-work tracker**。
-
-Implementation review evidence: `docs/COMPATIBILITY_REVIEW.md` records obsolete runtime paths, consumer retirement dependencies and the production provisioning replay risk. It is not a new rules/contract layer or a second progress tracker.
+15. `docs/COMPATIBILITY_REVIEW.md` — historical compatibility evidence and dated follow-up findings；不作 shared consumer contract 或第二份進度表。
 
 `migrations/` 與 current source 是 executable implementation evidence；已套用 migration 不重寫。
 
