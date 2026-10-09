@@ -612,7 +612,14 @@ internal sealed class ErpAutomationService
                 _log.Info("field", $"lookup target is blank; ignored retained inner-editor text key={field.Key} editor_class={NativeMethods.ClassName(focus)} editor_len={editorBefore.Length}");
 
             if (!string.IsNullOrWhiteSpace(before))
-                throw new InvalidOperationException($"ERP 欄位「{field.Label}」目前已有內容；為避免覆蓋既有值已停止。");
+            {
+                // ERP fills 付款條件 from the customer; the form value is meant to replace it.
+                if (field.Key != "payment_terms")
+                    throw new InvalidOperationException($"ERP 欄位「{field.Label}」目前已有內容；為避免覆蓋既有值已停止。");
+                InputSender.EndBackspace(before.Length + 2);
+                await Delay(80, cancellationToken);
+                _log.Info("field", $"replacing ERP value key={field.Key} old_len={before.Length}");
+            }
         }
 
         InputSender.UnicodeText(value);

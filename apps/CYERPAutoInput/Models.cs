@@ -80,7 +80,7 @@ internal static class FieldCatalog
         new("invoice_print", "交易資料", "發票列印"),
         new("receipt_salesperson", "交易資料", "收款業務員", FieldKind.Lookup),
         new("employee_code", "交易資料", "員工代號", FieldKind.Lookup, true),
-        new("payment_terms", "交易資料", "付款條件"),
+        new("payment_terms", "交易資料", "付款條件", FieldKind.Lookup, true),
 
         new("ship_name", "送貨資料", "送貨客戶全名"),
         new("ship_addr1", "送貨資料", "送貨地址(一)", FieldKind.Text, true),
