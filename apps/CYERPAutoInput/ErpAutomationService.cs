@@ -603,7 +603,7 @@ internal sealed class ErpAutomationService
                     throw new InvalidOperationException("開啟下一筆明細前無法把 ERP 帶到前景。");
                 InputSender.Press(NativeMethods.VK_DOWN);
                 await Delay(180, cancellationToken);
-                await HandleRowTransitionDialogsAsync(root, grid, result, rowIndex, rows[rowIndex - 1], cancellationToken);
+                await HandleRowTransitionDialogsAsync(root, grid, geometry, result, rowIndex, rows[rowIndex - 1], cancellationToken);
                 await Delay(140, cancellationToken);
                 _log.Info("detail", $"next row activated by Down logical_row={rowIndex + 1}");
             }
@@ -981,6 +981,7 @@ internal sealed class ErpAutomationService
     private async Task HandleRowTransitionDialogsAsync(
         nint root,
         WindowControl grid,
+        GridGeometry geometry,
         AutomationRunResult result,
         int completedDetailRow,
         DetailRow completedRow,
@@ -993,11 +994,7 @@ internal sealed class ErpAutomationService
             throw new InvalidOperationException("關閉庫存不足提示後無法回到 COPI08；已停止避免後續錯位。");
         await Delay(200, cancellationToken);
 
-        var rows = await CountDetailRowsAsync(grid, cancellationToken);
-        _log.Info("detail", $"rows after stock warning count={rows} expected_next={completedDetailRow + 1}");
-        if (rows > completedDetailRow) return;
-        if (rows != completedDetailRow)
-            throw new InvalidOperationException("關閉庫存不足提示後無法確認 ERP 明細列數；已停止避免錯位。");
+        if (await DetailRowExistsAsync(grid, geometry, completedDetailRow + 1, "after-stock-warning", cancellationToken)) return;
 
         // ERP stayed in the completed row: ask for the next row once more.
         InputSender.Press(NativeMethods.VK_DOWN);
@@ -1005,9 +1002,7 @@ internal sealed class ErpAutomationService
         if (await AcknowledgeStockWarningIfShownAsync(root, completedDetailRow, completedRow, RowChangeUnexpected, cancellationToken))
             throw new InvalidOperationException($"第 {completedDetailRow} 列品號 {completedRow.ItemCode}：按確定後 ERP 仍不允許換到下一列（庫存量或批號量不足）；請檢查庫別、數量或批號後人工處理。");
         Win32Automation.PrepareForeground(root, _log);
-        rows = await CountDetailRowsAsync(grid, cancellationToken);
-        _log.Info("detail", $"rows after second Down count={rows} expected_next={completedDetailRow + 1}");
-        if (rows <= completedDetailRow)
+        if (!await DetailRowExistsAsync(grid, geometry, completedDetailRow + 1, "after-second-down", cancellationToken))
             throw new InvalidOperationException($"第 {completedDetailRow} 列之後 ERP 沒有建立下一列；已停止避免錯位。");
     }
 
@@ -1065,22 +1060,36 @@ internal sealed class ErpAutomationService
         throw new InvalidOperationException(unexpectedMessage);
     }
 
-    /// <summary>Highest 序號 visible in the detail grid's first column (0 when unreadable).</summary>
-    private async Task<int> CountDetailRowsAsync(WindowControl grid, CancellationToken cancellationToken)
+    /// <summary>
+    /// Whether ERP has created detail row <paramref name="rowNumber"/>: its 序號 cell shows
+    /// glyphs, while the slot of a row that does not exist yet is blank. Reading the number
+    /// itself is only logged — the new row is the blue selected row and ERP's slashed zeros
+    /// made a whole-column OCR miss it (real test, Build 10).
+    /// </summary>
+    private async Task<bool> DetailRowExistsAsync(WindowControl grid, GridGeometry geometry, int rowNumber, string context, CancellationToken cancellationToken)
     {
-        if (!NativeMethods.GetWindowRect(grid.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 0) return 0;
-        // 序號 only (x < ~48 at 100% scale); wider would take in 品號, which can be all digits.
-        var column = new Rectangle(rect.Left, rect.Top, Math.Min(rect.Width, 48), rect.Height);
-        using var image = ScreenCapture.Capture(column);
-        var tokens = await _textVision.RecognizeAsync(image, cancellationToken);
-        var max = 0;
-        foreach (var token in tokens)
+        if (geometry.RowCenterY.Count == 0 || !NativeMethods.GetWindowRect(grid.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 0)
+            throw new InvalidOperationException("無法取得商品明細位置，無法確認 ERP 是否已建立下一列；已停止避免錯位。");
+
+        var firstY = geometry.RowCenterY[0];
+        var maxVisible = Math.Max(0, (rect.Height - firstY - 6) / ProvenDetailRowPitch);
+        var slot = Math.Min(rowNumber - 1, maxVisible);
+        var centerY = rect.Top + firstY + slot * ProvenDetailRowPitch;
+        // 序號 digits sit at x≈13–46; the left edge holds the row indicator (*).
+        var cell = Rectangle.FromLTRB(rect.Left + 12, centerY - 10, rect.Left + Math.Min(rect.Width, 48), centerY + 10);
+
+        using var image = ScreenCapture.Capture(cell);
+        using var normalized = F2BatchCellLocator.NormalizeCell(image);
+        using var glyphs = F2BatchCellLocator.TrimToGlyphs(normalized);
+        var exists = glyphs is not null;
+        var read = string.Empty;
+        if (glyphs is not null)
         {
-            var digits = token.Text.Trim();
-            if (digits.Length is >= 2 and <= 5 && digits.All(char.IsAsciiDigit) && int.TryParse(digits, out var n))
-                max = Math.Max(max, n);
+            var line = await _textVision.RecognizeLineAsync(glyphs, cancellationToken);
+            read = InputRules.TryAcceptLowConfidenceStock(line.Chars, out var digits) ? digits : line.Text;
         }
-        return max;
+        _log.Info("detail", $"row exists check context={context} row={rowNumber} slot={slot + 1} exists={exists} read={_log.Value(read)}");
+        return exists;
     }
 
     private async Task<GridGeometry> EnsureDetailColumnVisibleAsync(
