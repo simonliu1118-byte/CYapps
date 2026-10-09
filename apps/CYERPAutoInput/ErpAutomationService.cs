@@ -392,8 +392,15 @@ internal sealed class ErpAutomationService
 
     private async Task<string> CaptureSalesOrderNumberAsync(nint root, string expectedDate, CancellationToken cancellationToken)
     {
+        if (expectedDate.Length == 0)
+        {
+            // No date on the form: ERP fills today's date itself (user-confirmed); read it back.
+            var shownDate = NativeMethods.ControlText(ErpLayoutResolver.ResolveHeader(root, "order_date").Handle) ?? string.Empty;
+            if (InputRules.TryNormalizeValidDate(shownDate, out var erpDate)) expectedDate = erpDate;
+            _log.Info("document", $"order date taken from ERP date_len={expectedDate.Length}");
+        }
         if (expectedDate.Length != 8 || !expectedDate.All(char.IsDigit))
-            throw new InvalidOperationException("單據日期尚未正規化為 8 位 YYYYMMDD，無法驗證 ERP 銷貨單號。");
+            throw new InvalidOperationException("無法取得單據日期（表單未填，ERP 日期欄也讀不到），無法驗證 ERP 銷貨單號。");
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("讀取銷貨單號前無法把 COPI08 帶到前景。");
 
