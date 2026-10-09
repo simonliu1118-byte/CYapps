@@ -183,11 +183,13 @@ internal static class Program
         {
             var repository = LocalRepository.Open(temporaryRoot, new DpapiSecretProtector());
             var settings = repository.Settings.LoadOrCreate();
+            CloudDirectJoinForm.VerifySmokeJoinFlow();
 
             using var firstRun = new FirstRunModeForm();
             firstRun.Show();
             firstRun.PerformLayout();
             Application.DoEvents();
+            firstRun.VerifySmokeLayout();
             firstRun.Close();
 
             using var directJoin = new CloudDirectJoinForm(repository);

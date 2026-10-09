@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.12 — 2026/10/09（工程測試中，未正式 Release）
+
+- 修正「邀請碼＋超管帳密」首次加入：Cloud claim 已完成後清空密碼觸發 TextChanged，原本會清掉 preview，接著讀取 preview.WorkspaceId 發生 NullReferenceException。本次加入先保存已確認的 Workspace；清密碼仍使可編輯授權失效，執行中的 Workspace 驗證不受影響。
+- 保留 Device／Workspace／Employee authority／protected snapshot 全部驗證及 Pending Token 復原。使用者回報舊包第一次錯誤、重試顯示 Invitation is unavailable、關閉後第二次開啟成功；這是已使用邀請與本機完成流程中斷，不代表重新使用邀請成功。
+- 首次使用說明改為左對齊的兩點，單機建立本機超管、雲端沿用中央帳號分開顯示，於完整語句處折行。
+- Windows startup smoke 增加真實 TextChanged／Next／Join／HTTP client／protected persistence 回歸：邀請首次完成、配對完成、Workspace mismatch 拒絕、claim 後 snapshot 中斷及重開復原、編輯後禁止未確認 claim。全部使用合成 fixture，不呼叫 live Cloud。
+- 此項是 V2.6.11 處理中分流以外的新 bug／說明調整，依共通版本規則 Patch + 1、BUILD 歸零。Cloud API／schema／deployment 不變；PR #216 精確 head CI 與 engineering Artifact 以即時結果為準，修正版人工首次加入驗收仍待完成。
+
 ## V2.6.11 Build 2 — 2026/10/09（工程測試中，未正式 Release）
 
 - 已開立清單新增與「上傳問題」並排的「處理中」按鈕及數量；兩者共用同一清單／明細實作。

@@ -2,7 +2,7 @@
 
 更新日期：2026-10-09（原設計基準：2026-09-29）
 
-目前工程版 V2.6.11 Build 2；實作與驗收停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，唯一待辦清單為 [TODO.md](TODO.md)。本文件的尚未接線 CYID 部分依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
+目前工程版 V2.6.12；實作與驗收停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，唯一待辦清單為 [TODO.md](TODO.md)。本文件的尚未接線 CYID 部分依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
 
 本文件記錄 CYInvoice V3.0 在 Workspace、Device、Device Token、Employee authority、Local／Cloud、離線、Recovery 與最高管理權上的定案行為。
 

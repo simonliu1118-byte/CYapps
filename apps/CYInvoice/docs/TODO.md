@@ -2,7 +2,7 @@
 
 本檔只保留目前仍未完成、需要後續驗證或已明確延後的工作。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-09（Asia/Taipei）。main 為 V2.6.10 Build 2／3b22f9f8；目前工程候選版 **V2.6.11 Build 2** 在 PR #216（尚未合併）。最新正式 Release 仍為 cyinvoice-v2.4.2。
+更新日期：2026-10-09（Asia/Taipei）。main 為 V2.6.10 Build 2／3b22f9f8；目前工程候選版 **V2.6.12** 在 PR #216（尚未合併）。最新正式 Release 仍為 cyinvoice-v2.4.2。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
@@ -12,6 +12,7 @@ Cloud source 0.8.8／API 1／compatibility marker 8／storage Schema 11；最後
 
 | 優先 | 未完成工作 | 驗收位置／依賴 |
 | --- | --- | --- |
+| 目前 | V2.6.12 邀請首次加入與首次說明 | RC X；舊包重開成功有使用者證據，修正版首次成功待實機 |
 | 目前 | V2.6.11 處理中／上傳問題分流、舊資料結案、Danger button／號碼隱藏 | RC W；Windows #258 通過，人工待測 |
 | 目前 | A/B 最新工程版基線與即時中央權限／Offline reconnect | RC Q／R；四包已實作，不再重做 |
 | 目前 | 可拋棄 C 的 revoke／reset 與 ambiguous 恢復 | RC S／T／U；A/B recovery path 保留 |
@@ -21,7 +22,7 @@ Cloud source 0.8.8／API 1／compatibility marker 8／storage Schema 11；最後
 | 後續 | 正式折讓 API／全域單號、自架手冊、酷澎樣本 | 5／6／9；不可用人工流程冒充完成 |
 
 - [ ] 完成 RC W 的實機驗收並記錄包／環境／結果：正常等待→完成、等待→錯誤→恢復、數量／公司隔離、舊折讓 null 分類、無 active upload issue 的作廢仍能管理員結案。
-- [ ] V2.6.11 等待驗收／必要修正收斂後，依當時 main 與精確 head CI 整合 PR #216。文件 commit 不改功能 source；目前尚未合併。
+- [ ] V2.6.12 與既有分流驗收／必要修正收斂後，依當時 main 與精確 head CI 整合 PR #216。本次另修邀請 UI 空物件錯誤；目前尚未合併。
 
 本檔既有未勾選實機項目代表「尚未取得可引用證據」，不等於已發現 defect。已完成工程證據集中在交接／CHANGELOG，不把 CI 自動勾成人工成功。
 
@@ -101,8 +102,8 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.2 目前剩餘驗證／修正
 
-- [ ] **目前候選版 A/B baseline acceptance：**兩台既有 Device 升級 V2.6.11 Build 2 通過 CI 的工程包後仍可連線，Device Management 清單、一般同步／開票既有路徑無回歸。
-- [ ] 邀請碼加入路徑、邀請撤銷／重寄與結果不明恢復實機驗收。
+- [ ] **目前候選版 A/B baseline acceptance：**兩台既有 Device 升級 V2.6.12 通過 CI 的工程包後仍可連線，Device Management 清單、一般同步／開票既有路徑無回歸。
+- [ ] V2.6.12 邀請第一次加入與首次說明實機驗收（RC X）。10/09 舊包已取得「第一次錯誤、重開成功」證據，已定位 password.Clear → TextChanged → preview=null；修正版單次完成尚待使用者驗證。邀請撤銷／重寄與其他不明結果仍待實測。
 - [ ] 精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。
 - [ ] **Authority freshness A/B 實機驗收：**A 修改中央 Employee 密碼／role／enabled 後，B 不等待背景同步或重開即可在下一次 protected operation 套用最新 authority；真正斷網時使用最後可信 cache，恢復連線後 Online authority 重新覆蓋。
 - [ ] Built-in Employee CRUD、Email OTP、password、enabled、role 在 A/B 間即時與背景 snapshot 同步實機測試。

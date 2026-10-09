@@ -2,7 +2,7 @@
 
 本文件記錄 C#／WinForms 現行工程線的本機資料、SQLite 遷移、Cache 與安全規則。
 
-- 目前工程測試基準：**V2.6.11 Build 2**。
+- 目前工程測試基準：**V2.6.12**。
 - 最新公開正式 Release：**V2.4.2**。
 - 主要本機資料庫：`Data/CYInvoice.db`。
 - 安全設定：`Data/settings.json`。

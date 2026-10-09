@@ -259,11 +259,11 @@
 
 ## 通過條件
 
-- 本次變更涉及的 A～U 與 W 項目依實際 scope 通過，且 Logs 沒有未處理 `ERROR` 或未處理例外。
+- 本次變更涉及的 A～U、W 與 X 項目依實際 scope 通過，且 Logs 沒有未處理 `ERROR` 或未處理例外。
 - 所有需要光貿實際回覆的結果均以真實測試回覆為準，不以 UI 顯示自行推定 API 行為。
 - Cloud lifecycle 測試必須以 development Cloud 與可回復／可拋棄 Device 為主，不為驗證 destructive path 而破壞唯一 recovery path。
 - 發票成功判定、防重、環境隔離、Cloud authority、Device trust、結果不明禁止重送／誤刪等安全不變量不得因 UI 或人工流程調整而改變。
-- **目前 V2.6.11 Build 2 仍為工程版；CI／實機驗收、merge 到 main 或 development Cloud deploy 均不等於正式 Release。**
+- **目前 V2.6.12 仍為工程版；CI／實機驗收、merge 到 main 或 development Cloud deploy 均不等於正式 Release。**
 
 
 ## W. V2.6.11 Build 2 上傳問題／處理中分流
@@ -279,3 +279,15 @@
 7. 使用舊資料回歸：沒有 active upload issue 的正常作廢等待，超過兩期仍能由管理員結案；一般 QueryFailed 不得藉結案清除其他業務 pending。
 8. 作廢確認期間發票文字／預覽維持隱藏，黑色號碼遮罩不再出現；已開立(等待作廢) 為半形括號。折讓「已人工處理」與作廢採同一 Danger button 外觀。
 9. 先以 96 DPI 檢查按鈕並排／明細不裁切；125%／150% 保持既定延後項目，不宣稱已通過。
+
+## X. V2.6.12 首次說明與邀請加入回歸
+
+10/09 使用者已回報舊包第一次空物件錯誤、重試 Invitation is unavailable、關閉再開成功。這只確認舊版復原可用，不能勾選修正版首次完成。
+
+1. 以可拋棄的全新測試安裝檢查首次說明：單機／直接加入雲端為左對齊的兩點，於完整語句折行，96 DPI 不裁切。
+2. 使用新核發的測試邀請及超管帳密，下一步核對 Workspace、確認加入一次，應同步中央帳號並顯示完成，不需要關閉再開。
+3. A 機回查應只有一筆新增 Device；B 重開維持相同 Device identity，不能重建第二筆。
+4. 回歸使用配對碼加入，仍可首次完成且不建立本機帳號。
+5. 返回修改加入資料後，必須重新按下一步核對，舊 preview 不可授權修改後輸入。
+6. 若 claim 已成功但後續 authority／snapshot 中斷，保留原 Pending Device Token；重開先找回相同 Device，不重送已用邀請。
+7. Workspace／Device／authority／snapshot 不一致仍拒絕完成，不能因避免空物件錯誤而略過驗證。

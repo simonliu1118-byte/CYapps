@@ -12,11 +12,11 @@
 | main | `3b22f9f8c9f070454148da89d1986882985b1f92`；CYInvoice V2.6.10 Build 2 |
 | 現行 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
 | 分支 | `cyinvoice/fix-void-workflow-ui`；已同步上述 main |
-| 工程版本 | **V2.6.11 Build 2**；來源為 ../VERSION、../BUILD |
-| 已驗證功能 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
+| 工程版本 | **V2.6.12**；來源為 ../VERSION、../BUILD |
+| 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
 
-本次文件整理不更動 source、VERSION／BUILD、Cloud deployment 或正式發布身分。後續文件 commit 的 head／CI 以 PR 即時狀態為準，不能把上表功能 commit 寫成永遠最新的 branch head。
+本次修正邀請 UI 空物件錯誤與首次說明，屬新的獨立 bug／需求，Patch 推進 2.6.12、BUILD 歸零。Cloud API／schema／deployment 與正式 Release 不變。精確 head／CI／最新測試包以 PR 即時狀態為準，上表 66ec3671 僅為先前分流證據。
 
 ## 2. V2.6.11 已完成的變更
 
@@ -34,7 +34,17 @@
 
 保留原 PR 修正：作廢確認移除黑色號碼遮罩但文字／預覽仍隱藏，等待作廢使用半形括號，折讓「已人工處理」使用共通 Danger button。
 
-## 3. 自動化證據與測試包
+## 3. V2.6.12 邀請加入停點
+
+舊包第一次 claim 已讓 Cloud 建立 Device 並使用邀請；password.Clear 觸發 TextChanged → ResetAuthorization，把 preview 清空，下一行讀取 preview.WorkspaceId 發生空物件錯誤。再次 preview 已使用邀請因而 unavailable；關閉再開沿用 protected Pending Token 找回原 Device，使用者已回報成功。
+
+修正由 CloudDirectJoinForm 保留每次操作已確認的 Workspace，仍清密碼與使可編輯授權失效，保留原本 Device／authority／snapshot 與 protected persistence 驗證。State／render／lifecycle／mutation owner 仍為同一 Form 與既有 client/store；不新增 retry／第二加入路徑／第二 authority。HTTP transport 與原生通知僅在 offline smoke fixture 替換，正常程式仍使用同一流程。
+
+首次說明改為左對齊兩點並於語句邊界折行；Windows startup smoke 覆蓋邀請首次完成、配對完成、Workspace mismatch、claim 後 snapshot 中斷及重開復原、修改輸入後禁止未確認 claim。修正版實機首次成功仍需 RC X；舊包重開成功不視為修正版已驗收。
+
+目前 V2.6.12 精確 source CI／engineering Artifact 請看 [PR #216 checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不得使用下段 V2.6.11 舊包驗收此修正。未改 Cloud source，不需為本次 Windows UI 修正部署 Worker／migration。
+
+## 4. 先前 V2.6.11 自動化證據與測試包
 
 以下全部屬功能 commit 66ec3671，不是 Windows 人工／AMEGO live 驗收：
 
@@ -48,7 +58,7 @@ Windows 已完成 warnings-as-errors build、startup smoke、Core parity 62／Vo
 
 Windows Artifact：[CYInvoice_V2.6.11_Build2_engineering-run258](https://github.com/simonliu1118-byte/CYapps/actions/runs/37916154524/artifacts/11608879449)。Actions 保留 3 天；到期時間 **2026-10-12 18:15（Asia/Taipei）**。下載 ZIP SHA-256：`b08fb736fecb91a12361a20b11d41a8de6d03bc0b4cb29c0cbb25bb70dfc6158`。這包出自功能 commit，尚未包含本次文件整理；可執行程式與本次文件整理後的 source 相同。
 
-## 4. Cloud 工程與遠端部署的界線
+## 5. Cloud 工程與遠端部署的界線
 
 Reference backend source：Cloud **0.8.8**／API **1**／legacy compatibility schemaVersion=8／actual storage Schema **11**；forward migrations 0001～0011。不可把 compatibility marker 與 storage migration progress 當同一欄位。
 
@@ -63,15 +73,15 @@ Reference backend source：Cloud **0.8.8**／API **1**／legacy compatibility sc
 
 2026-09-28～29 的 A 機連線與 B 機 Run255 配對加入已有人工作業證據；**最新版 A/B authority freshness 與 A/B/C revoke／reset 尚未取得人工驗收結果**。Run229／255／343 僅為歷史驗證編號，舊 Actions Artifact 已逾保留期，不能當目前下載包。
 
-## 5. CY ID 與後續實作停點
+## 6. CY ID 與後續實作停點
 
 CYID 已有 canonical [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)，contract **1.0.2**、minimum **1.0.0**。不再以「尚未發布共同 contract」作為唯一等待理由。同 repo 直接讀 canonical files，不複製另一份 shared contract。
 
 CYInvoice 尚未實作 CyIdIdentityProvider、Workspace binding、CYID App Access／Session 接線、Windows offline 協定及 0-active-Device recovery。先完成 desktop／per-operation transport 適配與 acceptance 設計；不把 Web Session／HttpOnly-cookie 語意直接套進 WinForms，不自訂第二套 CYID role／access／credential contract。帳號管理 visibility 與 business／Device ownership 依 [CY_ID_INTEGRATION.md](CY_ID_INTEGRATION.md)。
 
-## 6. 接續工作順序
+## 7. 接續工作順序
 
-唯一可勾選的進度表為 [TODO.md](TODO.md)。先驗收 RC W 的分流與舊結案，再做 Q／R 的 A/B 基線／即時權限，之後用可拋棄 C 做 S／T／U 的撤銷、重置與不明結果恢復。再處理 invitation／Employee identity matrix／OTP／transfer 的跨機驗收。
+唯一可勾選的進度表為 [TODO.md](TODO.md)。先驗收 RC X 的邀請首次完成／說明，再驗收 RC W 的分流與舊結案，再做 Q／R 的 A/B 基線／即時權限，之後用可拋棄 C 做 S／T／U 的撤銷、重置與不明結果恢復。再處理 invitation／Employee identity matrix／OTP／transfer 的跨機驗收。
 
 尚未實作的後續主線為 CYID adapter、all-device-loss recovery、Cloud Work Item 原子轉移／revision、多機離線 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊。Offline cache 完整性簽章、125%／150% DPI、多公司與營運摘要保持原定延後範圍，不自動升為本次阻塞。
 

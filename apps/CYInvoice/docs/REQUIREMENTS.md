@@ -2,7 +2,7 @@
 
 本文件描述目前 C#／WinForms 工程線產品行為；永久治理規則仍以 `PROJECT_RULES.md` 為準。
 
-- 目前工程測試基準：**V2.6.11 Build 2**。
+- 目前工程測試基準：**V2.6.12**。
 - 最新公開正式 Release：**V2.4.2**（tag：`cyinvoice-v2.4.2`）。
 - 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258；PR #216 尚未合併，仍需實機／光貿驗證；未經使用者當次明確要求不得建立正式 Release。
 
