@@ -39,6 +39,7 @@ internal static class Program
         var smokeTest = args.Contains("--startup-smoke-test", StringComparer.Ordinal);
         try
         {
+            if (smokeTest) Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
             ApplicationConfiguration.Initialize();
             UiControls.InstallGlobalEnterNavigation();
             if (smokeTest)
@@ -127,11 +128,24 @@ internal static class Program
 
     private static void RunStartupSmokeTest()
     {
+        var stage = "initialization";
+        using var deadline = new System.Threading.Timer(_ =>
+        {
+            var error = new TimeoutException("Startup smoke exceeded 120 seconds at: " + stage);
+            WriteStartupError(error);
+            Console.Error.WriteLine(error);
+            Environment.Exit(1);
+        }, null, TimeSpan.FromSeconds(120), Timeout.InfiniteTimeSpan);
+        void Stage(string name) { stage = name; Console.WriteLine("Startup smoke: " + name); }
+        Stage("icon/version");
         ApplicationIcon.VerifyCanonicalForSmoke();
         ApplicationVersion.VerifySmokeVersion();
+        Stage("rounded buttons");
         RoundedButtonSmokeTests.Verify();
+        Stage("five-row history");
         InvoiceOperationHistoryControl.VerifySmokeFiveRows();
 
+        Stage("main and detail layouts");
         using var form = new MainForm(startupSmokeTest: true);
         form.Show();
         form.PerformLayout();
@@ -140,7 +154,8 @@ internal static class Program
         form.Close();
 
         var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
-        using var syncIssues = new SyncIssuesForm(repository);
+        Stage("upload issues rows");
+        using var syncIssues = new SyncIssuesForm(repository, startupSmokeTest: true);
         syncIssues.Show();
         syncIssues.PerformLayout();
         Application.DoEvents();
@@ -148,7 +163,8 @@ internal static class Program
         syncIssues.VerifySmokeRowSizing();
         syncIssues.Close();
 
-        using var processing = new SyncIssuesForm(repository, processing: true);
+        Stage("processing rows");
+        using var processing = new SyncIssuesForm(repository, processing: true, startupSmokeTest: true);
         processing.Show();
         processing.PerformLayout();
         Application.DoEvents();
@@ -177,7 +193,9 @@ internal static class Program
         cloudSetup.VerifySmokeLayout();
         cloudSetup.Close();
 
+        Stage("cloud device/join forms");
         SmokeCloudDeviceForms();
+        Stage("completed");
     }
 
     private static void SmokeCloudDeviceForms()

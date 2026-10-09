@@ -26,6 +26,7 @@ internal sealed class SyncIssuesForm : Form
     private readonly ToolTip contentToolTip = new();
     private string visibleToolTip = string.Empty;
 
+    private readonly bool startupSmokeTest;
     private const int MaximumVisibleRows = 12;
     private readonly NativeListViewHost listHost = new(fontSize: 10F, rowHeight: 22);
     private ListView list => listHost.List;
@@ -45,7 +46,7 @@ internal sealed class SyncIssuesForm : Form
     private readonly Button deleteFailed = UiControls.StandardButton("刪除勾選");
     private readonly Button clearFailed = UiControls.StandardButton("清除開立失敗紀錄");
 
-    public SyncIssuesForm(LocalRepository repository, bool processing = false)
+    public SyncIssuesForm(LocalRepository repository, bool processing = false, bool startupSmokeTest = false)
     {
         this.processing = processing;
         this.repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -261,6 +262,7 @@ internal sealed class SyncIssuesForm : Form
         }
         catch (Exception error)
         {
+            if (startupSmokeTest) throw;
             MessageBox.Show(this, "讀取" + Text + "失敗：" + error.Message, "讀取失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
