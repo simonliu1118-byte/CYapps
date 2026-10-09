@@ -302,7 +302,7 @@ internal sealed class SyncIssuesForm : Form
                         throw new InvalidOperationException("空待辦清單必須只顯示無資料");
                 }
                 else if (listHost.VisibleRowCapacity() != Math.Min(count, MaximumVisibleRows))
-                    throw new InvalidOperationException("待辦清單高度未符合實際資料列數");
+                    throw new InvalidOperationException($"Issue viewport: items={count}, capacity={listHost.VisibleRowCapacity()}, height={listHost.Height}; expected actual rows capped at {MaximumVisibleRows}.");
                 if (body.Bottom > root.ClientSize.Height || body.Height <= 0)
                     throw new InvalidOperationException("待辦動態高度超出視窗");
             }

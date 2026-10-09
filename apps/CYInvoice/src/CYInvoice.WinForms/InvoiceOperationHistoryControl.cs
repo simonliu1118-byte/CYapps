@@ -11,7 +11,8 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
     internal const int VisibleRows = 5;
     private readonly NativeListViewHost listHost = new(fontSize: 10F, rowHeight: 22);
     private ListView list => listHost.List;
-    internal int FiveRowHeight => listHost.HeightForRows(VisibleRows);
+    private readonly int emptyFiveRowHeight;
+    internal int FiveRowHeight => list.Items.Count > 0 ? listHost.HeightForRows(VisibleRows) : emptyFiveRowHeight;
 
     public InvoiceOperationHistoryControl()
     {
@@ -24,6 +25,11 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
         list.Columns.Add("類型", 76, HorizontalAlignment.Left);
         list.Columns.Add("日期", 100, HorizontalAlignment.Left);
         list.Columns.Add("摘要", 140, HorizontalAlignment.Left);
+        // Measure native row geometry before attaching observers or loading history.
+        // The blank measurement item is removed while the control is still hidden.
+        list.Items.Add(new ListViewItem(string.Empty));
+        try { emptyFiveRowHeight = listHost.HeightForRows(VisibleRows); }
+        finally { list.Items.Clear(); }
         list.OwnerDraw = true;
         list.DrawColumnHeader += (_, eventArgs) => NativeListViewHost.DrawHeader(eventArgs, list.Font);
         list.DrawItem += (_, eventArgs) => { if (list.View != View.Details) eventArgs.DrawDefault = true; };
@@ -156,7 +162,7 @@ internal sealed class InvoiceOperationHistoryControl : UserControl
                 Application.DoEvents();
                 if (listHost.VisibleRowCapacity() != VisibleRows || !listHost.UsesOnlyNativeScrollBar ||
                     (count > VisibleRows && !listHost.VerticalScrollVisible))
-                    throw new InvalidOperationException("作廢/折讓紀錄必須固定五列，超過使用原生捲軸");
+                    throw new InvalidOperationException($"History viewport: items={count}, capacity={listHost.VisibleRowCapacity()}, height={history.Height}, scroll={listHost.VerticalScrollVisible}; expected five rows and native scrolling above five items.");
             }
         }
         finally
