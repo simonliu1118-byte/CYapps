@@ -39,9 +39,9 @@ function setupLedgerToolbar() {
   context.innerHTML = `
     <div class="ledger-month-tools">
       <button id="ledgerBalanceButton" class="secondary compact cy-ledger-balance-button" type="button">餘額</button>
-      <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月">‹</button>
+      <button id="ledgerPrevMonth" class="secondary compact" type="button" title="上一個月"><span class="ledger-month-arrow-text">‹</span><svg class="ledger-month-arrow-icon" viewBox="0 0 14 14" aria-hidden="true"><path d="M9 3 5 7l4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <div id="ledgerMonthSlot"><span id="ledgerMonthDisplay" class="cy-mobile-month-display" aria-hidden="true"></span></div>
-      <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月">›</button>
+      <button id="ledgerNextMonth" class="secondary compact" type="button" title="下一個月"><span class="ledger-month-arrow-text">›</span><svg class="ledger-month-arrow-icon" viewBox="0 0 14 14" aria-hidden="true"><path d="m5 3 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <button id="ledgerQuickLockButton" class="secondary compact cy-ledger-quick-lock" type="button" aria-label="快速鎖帳" aria-pressed="false" title="快速鎖帳">
         <svg class="cy-ledger-lock-icon cy-ledger-lock-icon-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 9.7-1.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         <svg class="cy-ledger-lock-icon cy-ledger-lock-icon-closed" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="5" y="10" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
@@ -276,7 +276,7 @@ function syncLedgerQuickLock() {
   const loading = document.querySelector('.ledger-card')?.classList.contains('is-loading') === true;
   button.classList.toggle('is-locked', quick.locked);
   button.classList.toggle('is-lock-boundary', quick.boundary);
-  button.disabled = loading || !enabled;
+  button.disabled = loading || (!enabled && !window.cyIsDesktopInteractionWorkspace?.());
   button.setAttribute('aria-pressed', quick.locked ? 'true' : 'false');
 
   if (quick.canUnlock) {
@@ -296,7 +296,9 @@ function syncLedgerQuickLock() {
 
   if (quick.locked) {
     button.setAttribute('aria-label', `${formatLedgerMonthLabel(month)} 已鎖帳`);
-    button.title = `此月份已由鎖帳至 ${formatLedgerMonthLabel(quick.lockedThrough)} 涵蓋；只能從最新鎖帳月份逐月解除`;
+    button.title = window.cyIsDesktopInteractionWorkspace?.()
+      ? `此月份已鎖帳；開啟月份鎖帳設定`
+      : `此月份已由鎖帳至 ${formatLedgerMonthLabel(quick.lockedThrough)} 涵蓋；只能從最新鎖帳月份逐月解除`;
     return;
   }
 
@@ -313,7 +315,10 @@ async function handleLedgerQuickLock() {
   if (!button || !/^\d{4}-\d{2}$/.test(month)) return;
 
   const quick = ledgerQuickLockState(month);
-  if (!quick.canLock && !quick.canUnlock) return;
+  if (!quick.canLock && !quick.canUnlock) {
+    if (window.cyIsDesktopInteractionWorkspace?.()) document.querySelector('#ledgerLockSettingsButton')?.click();
+    return;
+  }
 
   let target = month;
   let confirmed = false;
