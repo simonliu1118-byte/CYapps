@@ -2,6 +2,15 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.14 — 2026/10/10（工程測試版，未正式 Release）
+
+- 裝置管理直接顯示「目前有 N 台使用中的裝置」、原有撤銷說明與 active 清單；移除分頁、狀態及撤銷時間欄。撤銷採共通 Danger button，最後一台防護與目前裝置安全重置維持。
+- 新增裝置流程搬到獨立 CloudAddDeviceForm；保留配對／邀請、一次性碼、狀態回查與重開恢復。標籤按文字寬度配置，欄位同欄、垂直置中，避免固定窄欄裁切。
+- 「使用版本」為該裝置最近成功回報的 VERSION／BUILD；每次程式啟動只更新自己的版本與 server UTC 最後使用時間。離線或舊版尚未回報時保留既有值，不虛構即時在線狀態。
+- 更改裝置名稱使用中央超管執行時驗證，限定同一 Workspace 的 active 裝置；並發撤銷／權限變更會拒絕。改名與稽核同一交易，forward migration 0012 保留既有 audit、增添 device_renamed。
+- Cloud source 0.8.9／API 1／compatibility marker 8／storage Schema 12；新 capabilities device-usage-v1／device-rename-v1。撤銷紀錄仍保留雲端資料庫及既有 API，只從程式清單隱藏。
+- 本次獨立功能需求推進 Patch、BUILD 歸零；已同步 main 6d997be0，保留先前分流、邀請修正與介面。自動化、部署及工程包證據以現行交接／PR 精確 head 為準；實機 RC Z 尚待驗收，未建立 tag／正式 Release。
+
 ## V2.6.13 — 2026/10/09（工程測試中，未正式 Release）
 
 - 依使用者新介面要求統一所有應用程式按鈕的小圓角；共用 RoundedButton 的 state／render／lifecycle，移除舊 NoFocusCueButton 與各自重複繪圖事件。品牌匯入、Primary、Danger、PDF 版型與商品列刪除均納入盤點，保留原生操作及鍵盤行為。

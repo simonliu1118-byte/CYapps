@@ -51,7 +51,7 @@ assert.match(login, /8_000/);
 assert.match(login, /Promise\.race\(\[request, timeout\]\)/);
 assert.match(login, /TimeoutError/);
 assert.match(login, /window\.location\.replace\('\/'\)/);
-assert.match(html, /auth\.js\?rev=session-hard-timeout/);
+assert.match(html, /auth\.js\?rev=session-expiry-navigation/);
 const appAsset = /src="(\/app\.js\?rev=[^"]+)"/.exec(html)?.[1];
 assert.ok(appAsset, 'the current app asset must have a cache revision');
 const deployWorkflow = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
@@ -105,3 +105,28 @@ browserListeners.DOMContentLoaded();
 await assert.rejects(browserContext.window.cyaccSessionPromise, /帳號驗證逾時/);
 assert.equal(bootStatus.textContent, '帳號驗證逾時，請重新整理後再試。');
 assert.equal(classNames.has('cyacc-boot-failed'), true);
+
+// Expiry navigation uses the provider timestamp and catches revocation on API calls.
+const redirects = [], expiryTimers = [], expiryListeners = {};
+let browserNow = 1000;
+const expiryScope = vm.createContext({
+  Date: { parse: Date.parse, now: () => browserNow },
+  Number, Math, location: { replace: target => redirects.push(target) },
+  window: { setTimeout: (fn, delay) => expiryTimers.push({ fn, delay }), addEventListener: (event, fn) => { expiryListeners[event] = fn; } },
+  document: { visibilityState: 'visible', addEventListener: (event, fn) => { expiryListeners[event] = fn; } }
+});
+vm.runInContext(auth.slice(0, auth.indexOf('let cyaccAuthStarted')), expiryScope);
+assert.equal(vm.runInContext('window.cyaccHandleAuthResponse({status:403})', expiryScope), false, 'permission denial must not log out a valid user');
+assert.equal(vm.runInContext('window.cyaccHandleAuthResponse({status:401})', expiryScope), true);
+assert.deepEqual(redirects, ['/login']);
+redirects.length = 0;
+const expirySource = auth.slice(auth.indexOf('  function scheduleSessionExpiry'), auth.indexOf('  function validBootUser'));
+vm.runInContext(expirySource, expiryScope);
+vm.runInContext("scheduleSessionExpiry('1970-01-01T00:00:02.000Z')", expiryScope);
+assert.equal(expiryTimers[0].delay, 1000);
+browserNow = 2001;
+expiryTimers[0].fn();
+assert.deepEqual(redirects, ['/login'], 'idle page navigates at the provider expiry');
+redirects.length = 0;
+expiryListeners.visibilitychange();
+assert.deepEqual(redirects, ['/login'], 'resuming a suspended expired tab navigates immediately');

@@ -4,7 +4,6 @@
   max-width: 920px;
 }
 
-.migration-heading,
 .migration-source,
 .migration-plan-head,
 .migration-actions {
@@ -14,11 +13,6 @@
   gap: 14px;
 }
 
-.migration-heading h3 {
-  margin-bottom: 4px;
-}
-
-.migration-local-badge,
 .migration-status {
   display: inline-flex;
   align-items: center;
@@ -28,12 +22,6 @@
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
-}
-
-.migration-local-badge {
-  background: #eef4fb;
-  color: #315d86;
-  border: 1px solid #d2dfec;
 }
 
 .migration-warning {
@@ -199,8 +187,7 @@
 }
 
 @media (max-width: 620px) {
-  .migration-heading,
-  .migration-source,
+    .migration-source,
   .migration-plan-head {
     align-items: flex-start;
     flex-direction: column;

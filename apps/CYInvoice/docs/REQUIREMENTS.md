@@ -2,7 +2,7 @@
 
 本文件描述目前 C#／WinForms 工程線產品行為；永久治理規則仍以 `PROJECT_RULES.md` 為準。
 
-- 目前工程測試基準：**V2.6.13**。
+- 目前工程測試基準：**V2.6.14**。
 - 最新公開正式 Release：**V2.4.2**（tag：`cyinvoice-v2.4.2`）。
 - 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258；PR #216 尚未合併，仍需實機／光貿驗證；未經使用者當次明確要求不得建立正式 Release。
 
@@ -192,7 +192,7 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - Device inventory／revoke 保留 history／audit，舊 Token 失效，rejoin 為新 identity；最後一台 active Built-in Device 有 LAST_ACTIVE_DEVICE 防護。
 - Cloud → Local 以雙重確認、關閉程式後 revoke／self-status 確認，再清目前安裝 Data／Cache／identity；不明結果保留資料，Windows 不刪中央 Workspace。
 - Built-in Cloud 忘記密碼已使用 Email challenge／confirm；尚需 live Email 與 A/B 測試。
-- Source Cloud 0.8.8／API 1／compatibility Schema 8／storage Schema 11，deployment 與人工驗收證據見 CLOUD_WORK_HANDOFF.md。
+- Source Cloud 0.8.9／API 1／compatibility Schema 8／storage Schema 12，deployment 與人工驗收證據見 CLOUD_WORK_HANDOFF.md。
 - CY ID 模式是已定案未接線的後續模式，共同 contract 直接引用 CYCloudIdentity canonical standard。
 
 ## 14. 目前尚未完成
@@ -213,3 +213,12 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - 「處理中」與「上傳問題」共用動態高度：空清單顯示「無資料」、一筆只顯示一列，最多十二列並受螢幕工作區限制，超過使用原生捲軸；既有分類與授權不變。
 - 發票詳細資訊的作廢／折讓紀錄固定五列（含表頭以外五筆容量），超過使用原生捲軸；其餘高度留給發票資訊，長內容仍可捲動完整閱讀。
 - 裝置管理欄位為「加入時版本」，舊組件版本移除 +Git 提交碼，顯示 VX.Y.Z；有 Build 時保留 Build N。新裝置加入使用 VERSION／BUILD，歷史紀錄沒有 Build 時不猜測。此欄位不代表升級後目前執行版本，未新增 Cloud heartbeat／schema。
+
+
+## V2.6.14 裝置管理（2026-10-10 使用者要求）
+
+- 主窗依序為 active 數量、原說明、active 清單、操作按鈕；移除 tabs、status／revoked timestamp 欄，撤銷使用 Danger。
+- 新增裝置移至獨立視窗並保留原配對／邀請授權、one-time code、回查／重開恢復；label 按文字寬度、欄位對齊，不能裁切。
+- 使用版本取代 V2.6.13 加入時快照。每台裝置每次啟動成功回報自己的 VERSION／BUILD 與 server UTC 最後使用；Windows 轉為本機時間。離線／舊版維持最近確認資料，不宣稱即時在線。
+- 名稱修改經中央 SUPER_ADMIN 執行時驗證，只可改同一 Workspace active Device，並發 identity／credential 變更拒絕；與 audit 原子保存。歷史只從 Windows 隱藏，Cloud 保留。
+- Cloud 0.8.9／API 1／marker 8／storage 12；新增 usage／rename capabilities，0012 forward migration 保留 audit history，實際部署與實機結果另記。

@@ -149,7 +149,7 @@ assert.match(css, /data-tablet-layout="portrait"[\s\S]*?\.ledger-card\.is-loadin
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerMonthSlot \{[\s\S]*?border-radius:\s*10px !important[\s\S]*?background:\s*#fff !important/, 'portrait month selector is a bounded touch capsule');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerMonthDisplay::after[\s\S]*?content:\s*"▾"/, 'portrait month selector exposes an explicit picker cue');
 assert.match(css, /data-tablet-layout="portrait"[\s\S]*?#ledgerSummarySearch \{[\s\S]*?font-size:\s*16px !important/, 'portrait native search stays at iOS-safe 16px and does not trigger focus zoom');
-assert.match(source, /syncTabletPortraitLedgerExportPlacement\(orientation\)/, 'tablet layout owns export placement');
+assert.match(source, /syncLedgerToolbarPlacement\(orientation\)/, 'tablet layout owns export placement');
 assert.match(source, /orientation === 'portrait' \? summaryActions : viewTools/, 'portrait moves the canonical Excel button beside opening balance');
 assert.match(exportSource, /Boolean\(document\.documentElement\.dataset\.tabletLayout\)/, 'both tablet orientations use the phone native-share owner');
 assert.match(exportSource, /window\.__cyaccTabletPreviewEnabled === true/, 'tablet preview also uses the phone native-share owner');

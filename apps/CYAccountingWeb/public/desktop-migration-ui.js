@@ -54,10 +54,7 @@
 
   function migrationPaneHtml() {
     return `
-      <div class="migration-heading">
-        <div><h3>CYAccounting 桌面帳本移轉</h3><p class="hint">將既有桌面版 SQLite 帳本安全合併到目前 Web 帳本。只有超級管理員可執行。</p></div>
-        <span class="migration-local-badge">SQLite 本機解析</span>
-      </div>
+      <h4>CYAccounting 桌面帳本移轉</h4>
       <div class="migration-warning">
         <strong>選檔前請先關閉桌面版 CYAccounting。</strong>
         <span>桌面版使用 SQLite WAL；若程式仍開啟，單獨讀取 <code>Data/CYaccounting.db</code> 可能尚未包含 WAL 中的最新資料。也可以選擇最近完成且已驗證的桌面備份檔。</span>
@@ -332,6 +329,7 @@
   async function jsonFetch(url, options) {
     const response = await fetch(url, options);
     const data = await response.json().catch(() => ({}));
+    if (window.cyaccHandleAuthResponse?.(response, data)) throw new Error('AUTH_REQUIRED');
     if (!response.ok || data.ok === false) {
       const error = new Error(data.error || `HTTP ${response.status}`);
       error.code = data.code;

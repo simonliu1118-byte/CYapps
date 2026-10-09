@@ -5,7 +5,21 @@ const CRC_TABLE = buildCrcTable();
 
 export async function handleExcelExportApi(request, env) {
   const url = new URL(request.url);
-  if (url.pathname !== '/api/export/month.xlsx' || request.method !== 'GET') return null;
+  if (request.method !== 'GET') return null;
+  if (url.pathname === '/api/import/template.xlsx') {
+    const [accounts, categories] = await Promise.all([
+      env.DB.prepare('SELECT name FROM accounts WHERE archived_at IS NULL ORDER BY sort_order, id').all(),
+      env.DB.prepare('SELECT name, kind FROM categories ORDER BY kind, sort_order, id').all()
+    ]);
+    return new Response(buildImportTemplateWorkbook({ accounts: accounts.results || [], categories: categories.results || [] }), {
+      headers: {
+        'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'content-disposition': 'attachment; filename="CYAccounting_import_template.xlsx"',
+        'cache-control': 'no-store', 'x-content-type-options': 'nosniff'
+      }
+    });
+  }
+  if (url.pathname !== '/api/export/month.xlsx') return null;
 
   const month = String(url.searchParams.get('month') || currentMonth()).trim();
   if (!isMonth(month)) return json({ ok: false, error: '月份格式錯誤。' }, 400);
@@ -84,6 +98,42 @@ export function buildMonthlyWorkbook({ month, transactions, accountNames, openin
   return zipStore(files.map(file => ({ name: file.name, data: encoder.encode(file.text) })));
 }
 
+export function buildImportTemplateWorkbook({ accounts = [], categories = [], generatedAt = new Date() } = {}) {
+  const headers = ['日期', '帳戶', '收支', '科目', '摘要', '金額'];
+  const dataRows = [rowXml(1, headers.map((label, i) => inlineCell(`${String.fromCharCode(65 + i)}1`, label, 5)))];
+  for (let row = 2; row <= 101; row++) {
+    dataRows.push(rowXml(row, headers.map((_, i) => inlineCell(`${String.fromCharCode(65 + i)}${row}`, '', 7))));
+  }
+  const instructions = [
+    ['填寫說明', '只匯入「記帳匯入」工作表；第一列為欄位標題，第二列開始填寫。'],
+    ['日期', '必填，使用 YYYY-MM-DD，例如 2026-10-09。'],
+    ['帳戶', '必填，使用下方目前帳戶名稱；請勿自行縮寫。'],
+    ['收支', '必填，填「收入」或「支出」。'],
+    ['科目', '必填，名稱需存在且對應同一收支種類。'],
+    ['摘要', '選填，最多 100 字。'],
+    ['金額', '必填，1～9,999,999 的正整數，不加貨幣符號或負號。'],
+    ['注意', '空白列會略過；匯入前會預覽並檢查鎖帳、重複與欄位內容。']
+  ];
+  const notes = instructions.map((r, i) => rowXml(i + 1, [inlineCell(`A${i + 1}`, r[0], 5), inlineCell(`B${i + 1}`, r[1], 11)]).replace('<row ', '<row ht="36" customHeight="1" '));
+  notes.push(rowXml(10, [inlineCell('A10', '可用帳戶', 5), inlineCell('B10', '科目收支', 5), inlineCell('C10', '可用科目', 5)]));
+  for (let i = 0; i < Math.max(accounts.length, categories.length); i++) {
+    const row = i + 11;
+    notes.push(rowXml(row, [inlineCell(`A${row}`, accounts[i]?.name || '', 7), inlineCell(`B${row}`, categories[i] ? (categories[i].kind === 'income' ? '收入' : '支出') : '', 7), inlineCell(`C${row}`, categories[i]?.name || '', 7)]));
+  }
+  const sheet = (rows, cols, extra = '') => xmlHeader() + `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="24"/><cols>${cols}</cols><sheetData>${rows.join('')}</sheetData>${extra}</worksheet>`;
+  const cols = [15, 20, 12, 22, 36, 16].map((width, i) => `<col min="${i + 1}" max="${i + 1}" width="${width}" customWidth="1"/>`).join('');
+  const validations = '<autoFilter ref="A1:F101"/><dataValidations count="2"><dataValidation type="list" allowBlank="1" showErrorMessage="1" errorTitle="收支格式" error="請選擇收入或支出" sqref="C2:C101"><formula1>"收入,支出"</formula1></dataValidation><dataValidation type="whole" operator="between" allowBlank="1" showErrorMessage="1" error="金額必須為 1～9,999,999 的整數" sqref="F2:F101"><formula1>1</formula1><formula2>9999999</formula2></dataValidation></dataValidations>';
+  const files = [
+    { name: '[Content_Types].xml', text: contentTypesXml() }, { name: '_rels/.rels', text: rootRelsXml() },
+    { name: 'docProps/core.xml', text: corePropsXml(generatedAt.toISOString()) }, { name: 'docProps/app.xml', text: appPropsXml(['記帳匯入', '填寫說明']) },
+    { name: 'xl/workbook.xml', text: workbookXml(['記帳匯入', '填寫說明']) }, { name: 'xl/_rels/workbook.xml.rels', text: workbookRelsXml() },
+    { name: 'xl/styles.xml', text: stylesXml() },
+    { name: 'xl/worksheets/sheet1.xml', text: sheet(dataRows, cols, validations) },
+    { name: 'xl/worksheets/sheet2.xml', text: sheet(notes, '<col min="1" max="1" width="20" customWidth="1"/><col min="2" max="2" width="70" customWidth="1"/><col min="3" max="3" width="26" customWidth="1"/>') }
+  ];
+  return zipStore(files.map(file => ({ name: file.name, data: encoder.encode(file.text) })));
+}
+
 function ledgerSheetXml({ month, locked, generatedAt, openingTotal, income, expense, net, ending, detail }) {
   const [year, monthNumber] = month.split('-');
   const title = `志遠記帳系統｜${year}年${monthNumber}月帳簿`;
@@ -147,8 +197,8 @@ function ledgerSheetXml({ month, locked, generatedAt, openingTotal, income, expe
     <col min="8" max="8" width="15" customWidth="1"/>
   </cols>
   <sheetData>${rows.join('')}</sheetData>
-  ${mergeCells}
   ${autoFilter}
+  ${mergeCells}
   <pageMargins left="0.25" right="0.25" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>
   <pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>
 </worksheet>`;
@@ -182,8 +232,8 @@ function openingSheetXml({ month, accountNames, openingBalances, openingSources 
   <sheetFormatPr defaultRowHeight="18"/>
   <cols><col min="1" max="1" width="24" customWidth="1"/><col min="2" max="2" width="16" customWidth="1"/><col min="3" max="3" width="20" customWidth="1"/></cols>
   <sheetData>${rows.join('')}</sheetData>
-  <mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells>
   <autoFilter ref="A3:C${lastRow}"/>
+  <mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells>
   <pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>
 </worksheet>`;
 }
@@ -252,10 +302,10 @@ function rootRelsXml() {
 </Relationships>`;
 }
 
-function workbookXml() {
+function workbookXml(names = ['月帳簿', '期初餘額']) {
   return xmlHeader() + `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <workbookPr date1904="0"/><bookViews><workbookView xWindow="120" yWindow="120" windowWidth="22000" windowHeight="14000"/></bookViews>
-  <sheets><sheet name="月帳簿" sheetId="1" r:id="rId2"/><sheet name="期初餘額" sheetId="2" r:id="rId3"/></sheets>
+  <sheets><sheet name="${xmlEscape(names[0])}" sheetId="1" r:id="rId2"/><sheet name="${xmlEscape(names[1])}" sheetId="2" r:id="rId3"/></sheets>
   <calcPr calcId="191029" calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>
 </workbook>`;
 }
@@ -275,11 +325,11 @@ function corePropsXml(generatedIso) {
 </cp:coreProperties>`;
 }
 
-function appPropsXml() {
+function appPropsXml(names = ['月帳簿', '期初餘額']) {
   return xmlHeader() + `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
   <Application>CYAccountingWeb</Application><DocSecurity>0</DocSecurity><ScaleCrop>false</ScaleCrop>
   <HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>工作表</vt:lpstr></vt:variant><vt:variant><vt:i4>2</vt:i4></vt:variant></vt:vector></HeadingPairs>
-  <TitlesOfParts><vt:vector size="2" baseType="lpstr"><vt:lpstr>月帳簿</vt:lpstr><vt:lpstr>期初餘額</vt:lpstr></vt:vector></TitlesOfParts><Company>Chihyuan</Company><AppVersion>1.0</AppVersion>
+  <TitlesOfParts><vt:vector size="2" baseType="lpstr"><vt:lpstr>${xmlEscape(names[0])}</vt:lpstr><vt:lpstr>${xmlEscape(names[1])}</vt:lpstr></vt:vector></TitlesOfParts><Company>Chihyuan</Company><AppVersion>1.0</AppVersion>
 </Properties>`;
 }
 

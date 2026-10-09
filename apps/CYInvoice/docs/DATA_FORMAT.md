@@ -2,7 +2,7 @@
 
 本文件記錄 C#／WinForms 現行工程線的本機資料、SQLite 遷移、Cache 與安全規則。
 
-- 目前工程測試基準：**V2.6.13**。
+- 目前工程測試基準：**V2.6.14**。
 - 最新公開正式 Release：**V2.4.2**。
 - 主要本機資料庫：`Data/CYInvoice.db`。
 - 安全設定：`Data/settings.json`。
@@ -258,3 +258,8 @@ V2.6.11 UI 以 InvoiceWorkQueue 唯讀投影分為「上傳問題／處理中」
 - 同步只做唯讀查詢與本機更新，不呼叫開票 API 重送。
 - 本機結案不代表光貿已完成作廢／折讓／折讓作廢。
 - 正式公司資料、員工密碼／復原碼、發票歷史、App Key、平台密碼、執行期 DB／LOG 不得進入 Public Git。
+
+
+## Cloud Device metadata（V2.6.14）
+
+既有 devices.client_version／last_seen_at 由 authenticated self usage 更新；後者為 Cloud UTC、Windows 顯示本機時區。paired_at／created_at 繼續代表加入時間，不由啟動回報覆寫。display_name 可經同 Workspace 中央超管改名，使用既有最大 120 字界限。0012_device_rename_audit.sql 保存既有 security_audit_events 再加入 device_renamed vocabulary；不回寫既有 migration，不刪 revoked Device。

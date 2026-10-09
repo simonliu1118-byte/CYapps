@@ -4,16 +4,16 @@ Cloudflare Worker + D1 reference implementation for CYInvoice V3 coordination an
 
 AMEGO remains the authoritative source for invoice / void / allowance business state. AMEGO App Keys remain local to Windows and are not part of this backend.
 
-The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current Windows baseline is V2.6.13 (PR #216, not merged); source CI evidence and package are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
+The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current Windows baseline is V2.6.14 (PR #216, not merged); source CI evidence and package are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
 
 ## Current compatibility
 
 - Service: `cyinvoice-cloud`
-- Cloud implementation: `0.8.8`
+- Cloud implementation: `0.8.9`
 - API: `1`
 - Legacy API compatibility marker: `schemaVersion=8`
-- Actual storage schema: `storageSchemaVersion=11`
-- Migrations: `0001` through `0011`
+- Actual storage schema: `storageSchemaVersion=12`
+- Migrations: `0001` through `0012`
 - Worker entrypoint: `src/app.ts`
 
 `wrangler.jsonc` advertises the client compatibility schema. Applied migrations are immutable; future changes must use new forward migrations.
@@ -196,3 +196,12 @@ No live Email-delivery claim should be made until the development deployment has
 ## Public repository boundary
 
 This directory is public source. Keep implementation provider-neutral at the Windows boundary and do not place runtime secrets or operational customer data in source, PR text, logs, or engineering artifacts.
+
+
+## Device metadata (Windows V2.6.14 / Cloud 0.8.9)
+
+- `POST /v1/devices/usage` accepts `{clientVersion}` with an active Device Token. It updates only that Device's version and server UTC `last_seen_at` on startup. Client timestamps/target IDs cannot redirect the update. Offline/older clients retain their last confirmed values; this is not a live presence heartbeat.
+- `POST /v1/devices/rename` accepts `{targetDeviceId, displayName, employeeNo, password}`. Current central SUPER_ADMIN credentials and an active same-Workspace target are required. The transaction rechecks actor, Workspace and credential freshness and records `device_renamed` atomically.
+- Migration `0012_device_rename_audit.sql` retains all prior audit rows and adds the rename vocabulary. Metadata columns already exist. API compatibility marker stays 8; storage schema advances to 12.
+- Desktop management filters active Devices and hides status/revocation columns. Cloud inventory and DB retain revoked history. Existing last-active protection and self-reset remain intact.
+- Local `npm test` executes real lifecycle handlers/SQL, including auth/race rejection and audit-failure rollback. Remote deployment evidence is recorded separately in the handoff/PR.

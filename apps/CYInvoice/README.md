@@ -6,9 +6,9 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程測試基準：**V2.6.13**。
+- 目前工程測試基準：**V2.6.14**。
 - 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
-- V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 尚未合併，精確 head CI／測試包與人工停點見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
+- V2.6.14 簡化裝置管理，新增裝置移到獨立視窗，使用版本及最後使用時間由每台裝置啟動時回報，並提供超管驗證改名。V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 尚未合併，精確 head CI／測試包與人工停點見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
 - 版本來源為 `VERSION`／`BUILD`；正式 Release 必須由 `main` 重新建置與驗證。
 - 只有使用者於當次工作明確要求 `release` 時，才可建立正式 tag／Release；PR、VERSION、BUILD 或 engineering Artifact 都不代表發布授權。
@@ -94,7 +94,7 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 - Local／Built-in provider 共用 IIdentityProvider；正式 role 為 SUPER_ADMIN / ADMIN / USER。
 - Online 權限操作取最新中央 authority；只有真正傳輸斷線／timeout 使用最後可信 protected offline cache。
 - 裝置管理支援 inventory／revoke，保留歷史與最後一台 active Device 防護；Cloud → Local 使用雙重確認及 crash-safe 本機重置。
-- Source 為 Cloud 0.8.8／API 1／compatibility Schema 8／storage Schema 11。最後 development deployment 證據為 2026-09-29 Run #7，本次未重新驗證 live 狀態。
+- Source 為 Cloud 0.8.9／API 1／compatibility Schema 8／storage Schema 12。最後 development deployment 證據為 2026-09-29 Run #7，本次未重新驗證 live 狀態。
 - CY ID adapter、Windows offline 接線及跨機業務 Work Item 尚未實作；canonical shared contract 已發布，詳見 [CY ID 整合](docs/CY_ID_INTEGRATION.md)。
 
 ### 系統診斷（V2.6.3）

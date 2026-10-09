@@ -1,6 +1,6 @@
 # CYInvoice 現行工作交接
 
-更新日期：2026-10-09（Asia/Taipei）
+更新日期：2026-10-10（Asia/Taipei）
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
@@ -9,16 +9,28 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `3b22f9f8c9f070454148da89d1986882985b1f92`；CYInvoice V2.6.10 Build 2 |
+| main | `6d997be0ddebb7cc403e53ea1416863d51a26311`；CYInvoice V2.6.10 Build 2 |
 | 現行 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
 | 分支 | `cyinvoice/fix-void-workflow-ui`；已同步上述 main |
-| 工程版本 | **V2.6.13**；來源為 ../VERSION、../BUILD |
+| 工程版本 | **V2.6.14**；來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
 
-本次使用者追加按鈕圓角、動態清單、五列歷史與版本顯示，屬新的獨立介面需求，Patch 推進 2.6.13、BUILD 歸零。保留 V2.6.12 邀請修正。Cloud API／schema／deployment 與正式 Release 不變。精確 head／CI／最新測試包以 PR 即時狀態為準，上表 66ec3671 僅為先前分流證據。
+本次獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
 
-## V2.6.13 最新介面停點
+## V2.6.14 裝置管理
+
+主視窗只管 active inventory／selection／rename／revoke；原 tabs 及新增流程已移除。獨立 CloudAddDeviceForm 是新增／ticket／timer／lifetime owner，保留同一 CloudClient、既有 pairing／invitation authorization 與重開狀態恢復。返回主窗重新載入 inventory；不建立第二套加入路徑。
+
+主窗上方顯示 active 數量及原撤銷說明；四欄為裝置名稱／使用版本／加入時間／最後使用時間，撤銷與確認撤銷採共通 Danger。Cloud inventory API 保留歷史供管理查詢，Windows 只篩選 active。雲端不刪除 revoked Device，既有 self-reset／LAST_ACTIVE_DEVICE 不變。
+
+MainForm 啟動在既有 lifetime 下回報自己的 VERSION／BUILD；POST /v1/devices/usage 只依 token 身分更新本 Device，server UTC 記錄最後使用。離線不阻擋正常工作、不修改原 authority/cache；舊版或未成功回報資料保留，不宣稱 heartbeat 或目前在線。POST /v1/devices/rename 經中央 SUPER_ADMIN 執行時驗證，同一 Workspace active Device、actor／workspace／credential 在 mutation 交易再檢查，並與 device_renamed audit 原子保存。0012 forward migration 只擴充 audit vocabulary，保留歷史；沒有新增 Device metadata table。
+
+本機 TypeScript、bootstrap SQL、實際 lifecycle handler／SQL 回歸及 bundle dry-run 已通過。回歸含 own-device 更新、server time、空白／控制字元／長度、撤銷／disabled Workspace、credential race、audit failure rollback 及歷史保留；C# client 增加 wire contract／錯誤回傳拒絕，Windows smoke 增加四欄／active filtering／最後一台防護／新增視窗標籤測量。Windows CI 與工程包結果以 PR 精確 head 為準；實機 RC Z、125／150 DPI 尚未取得證據。
+
+Development 部署沿用 cyinvoice/cloud-dev-deploy 既有 staged workflow，先 bookmark／aggregate／FK audit，再套用 0012、部署與核對 Cloud 0.8.9／API 1／marker 8／storage 12 及新 capabilities；實際部署結果另記 PR，未通過前不能將 source 版本宣稱為 live。
+
+## V2.6.13 歷史介面停點（版本快照已由 V2.6.14 取代）
 
 共用 RoundedButton 取代舊無焦點點線 Button 及重複品牌／Primary／Danger renderer，保留 native Button 的 action／DialogResult／keyboard／accessibility owner，PDF 版型只自訂顏色，商品列刪除共用同一 surface。使用者要求所有方形按鈕圓角，屬本次 Secondary 外觀例外，不變更共通永久規則。
 
@@ -70,7 +82,7 @@ Windows Artifact：[CYInvoice_V2.6.11_Build2_engineering-run258](https://github.
 
 ## 5. Cloud 工程與遠端部署的界線
 
-Reference backend source：Cloud **0.8.8**／API **1**／legacy compatibility schemaVersion=8／actual storage Schema **11**；forward migrations 0001～0011。不可把 compatibility marker 與 storage migration progress 當同一欄位。
+Reference backend source：Cloud **0.8.9**／API **1**／legacy compatibility schemaVersion=8／actual storage Schema **12**；forward migrations 0001～0012。不可把 compatibility marker 與 storage migration progress 當同一欄位。
 
 最後可引用的 development 遠端證據是 **2026-09-29 staged deploy Run #7**：health／storage／device-revoke-v1／device-self-status-v1 通過；部署前已無未套用 migration，沒有重跑 0010／0011。前後 aggregate audit／FK 正常。詳見 [9/29 歷史快照](NEXT_CHAT_HANDOFF_2026-09-29.md)。本次未連線重查 live Worker／D1，不把當時資料筆數或健康狀態宣稱為今日即時狀態。
 

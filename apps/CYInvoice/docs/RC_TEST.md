@@ -2,9 +2,9 @@
 
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
 
-- 目前工程測試基準：**V2.6.13**。
-- Development Cloud：**Cloud 0.8.8 / API 1 / compatibility Schema 8 / storage Schema 11**。
-- 本輪 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.13` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
+- 目前工程測試基準：**V2.6.14**。
+- Cloud source：**0.8.9 / API 1 / compatibility marker 8 / storage Schema 12**；實際 development 部署結果見交接／PR，勿拿 source 代替 live。
+- 本輪 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.14` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
 - 最新公開正式 Release：**V2.4.2**。
 - V2.6.11 功能 commit 的 Governance #1137、Cloud #369、Windows #258 全部通過；9/29 development staged deployment 為既有歷史證據，本次未重查 live。PR #216 尚未合併，本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
 
@@ -198,7 +198,7 @@
 
 > 先做本節，再進行 R～U。既有 A/B 兩台都是目前 Workspace 的 recovery path，不應一開始就做破壞性動作。
 
-1. A、B 均使用目前 V2.6.13 通過 CI 的工程包啟動；來源／digest 見 CLOUD_WORK_HANDOFF.md，不使用已到期 Run343 Artifact。
+1. A、B 均使用目前 V2.6.14 通過 CI 的工程包啟動；來源／digest 見 CLOUD_WORK_HANDOFF.md，不使用已到期 Run343 Artifact。
 2. 兩台都應能連上 development Cloud，既有 Workspace 不應被重新 bootstrap。
 3. `裝置管理` 應看到既有 active Device inventory；不應因升級產生重複 Device。
 4. 既有中央 Employees 應仍可登入，角色為 `SUPER_ADMIN / ADMIN / USER` vocabulary，不得出現 active `EMPLOYEE` role。
@@ -263,7 +263,7 @@
 - 所有需要光貿實際回覆的結果均以真實測試回覆為準，不以 UI 顯示自行推定 API 行為。
 - Cloud lifecycle 測試必須以 development Cloud 與可回復／可拋棄 Device 為主，不為驗證 destructive path 而破壞唯一 recovery path。
 - 發票成功判定、防重、環境隔離、Cloud authority、Device trust、結果不明禁止重送／誤刪等安全不變量不得因 UI 或人工流程調整而改變。
-- **目前 V2.6.13 仍為工程版；CI／實機驗收、merge 到 main 或 development Cloud deploy 均不等於正式 Release。**
+- **目前 V2.6.14 仍為工程版；CI／實機驗收、merge 到 main 或 development Cloud deploy 均不等於正式 Release。**
 
 
 ## W. V2.6.11 Build 2 上傳問題／處理中分流
@@ -294,10 +294,24 @@
 
 ## Y. V2.6.13 按鈕、清單高度與版本
 
-使用精確 head CI 通過的 V2.6.13 工程包，記錄包／環境／結果。
+使用精確 head CI 通過的目前 V2.6.14 工程包驗收保留的介面，記錄包／環境／結果。
 
 1. 96 DPI 巡查主畫面工具列、開票／匯入／商品刪除、發票／折讓／PDF 版型、設定／首次設定、帳號與所有雲端視窗；全部 Button 為共通小圓角。確認 hover／pressed／disabled、Tab 焦點、Enter／Escape、圖像及品牌／Danger 色彩正常，無文字裁切。125／150 DPI、High Contrast 另待實機結果，不由 CI 宣稱完成。
 2. 「處理中」及「上傳問題」以 0、1、4、20 筆驗收，零筆顯示「無資料」、一筆只有一列，超過十二列或工作區限制出現捲軸；重新整理由多變少可縮回。雙擊明細與既有權限不變，處理中禁止勾選刪除。
 3. 紙本／公司／載具發票詳細資訊，作廢／折讓紀錄空、1、5、8 筆均固定五列容量；8 筆可捲動讀完，上方資訊區得到剩餘空間，長內容可完整查看，PDF 預覽與操作未重疊。
-4. 裝置欄位「加入時版本」不再顯示 +SHA；舊資料無 Build 不猜測，新加入記錄 VERSION／BUILD。有 Build N 顯示正確；既有裝置升級不會變更加入時版本。未提供目前執行版本的即時回報能力。
+4. V2.6.13 的加入時快照已由 V2.6.14「使用版本」取代；依 Z 驗收，不再要求升級後保留加入時版本。
 5. 回歸 RC W／X 的分流、行政結案及首次邀請／配對完成；本次不以舊包證據取代新版驗收。
+
+
+## Z. V2.6.14 裝置管理與啟動回報
+
+使用 PR 精確 head 全部 CI 通過的 V2.6.14 工程包；先核對 development Cloud 0.8.9／storage 12／device-usage-v1／device-rename-v1。
+
+1. 主窗顯示「目前有 N 台使用中的裝置」、原撤銷說明、四欄清單；無 tabs／狀態／撤銷時間，撤銷為 Danger，最後一台仍禁用。數量與 active 列數一致，revoked 不在 Windows 清單。
+2. 新增裝置按鈕開獨立視窗；六個 label 完整顯示，欄位左緣一致、垂直置中，複製網址／OTP／配對／邀請仍能操作。關閉重開可恢復 pending／joined ticket；成功後返回主窗重新整理。
+3. A、B 分別升級與啟動，成功連線後主窗顯示各自 VERSION／BUILD 與各自最後使用時間；B 啟動不改 A 版本。server UTC 在 Windows 以本機時區顯示；不要將此欄解讀為持續 heartbeat。
+4. B 離線啟動不阻擋主窗／開票既有離線流程，不虛構最後使用；之後連線重啟才更新。舊版未回報仍保留較舊版本，沒有最後使用值留白。
+5. 超管可更改 A 或 B 名稱，空白／過長／換行、錯誤超管、非超管或已撤銷裝置拒絕；改名不變 Device／Token／Employee identity，另機重新整理可見。名稱與 audit 同交易保存。
+6. 使用可拋棄 C 撤銷，清單消失但 Cloud DB 的 Device row／revoked_at 與 audit 仍在；不得為驗收刪除歷史。保留 A/B 及最後一台 recovery path。
+
+自動化不能代替實機 96 DPI 驗收。125／150 DPI、High Contrast 尚待證據，不自動升為本輪阻塞。

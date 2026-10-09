@@ -1,6 +1,6 @@
 # CYInvoice 雲端版長期藍圖與上線路線
 
-更新日期：2026-10-09。現行工程版本 V2.6.13；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
+更新日期：2026-10-09。現行工程版本 V2.6.14；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
 
 本文件整理 CYInvoice 從目前單機版進入多機雲端協調後的產品邊界、長期擴充方向、資料責任與分階段順序。若由新的長時間工作階段／ChatGPT Work 接手目前 Identity 階段，先依 `AGENTS.md` 讀永久規則，再讀 `CLOUD_WORK_HANDOFF.md`。
 
@@ -262,7 +262,7 @@ Cloud：
 - conflict resolution。
 - central Employee CRUD。
 - SUPER_ADMIN transfer。
-- API 1／capability compatibility；source Cloud 0.8.8、legacy schema marker 8／storage Schema 11。
+- API 1／capability compatibility；source Cloud 0.8.9、legacy schema marker 8／storage Schema 12。
 - Identity Provider／Online authority freshness／Device inventory-revoke／crash-safe Cloud → Local reset。
 
 9/29 staged development deployment 與 migration audit 已完成。剩餘是最新版 A/B/C／live OTP／invitation／transfer 人工驗收與 all-device-loss recovery；不重開已完成的四個 package。最新證據見 CLOUD_WORK_HANDOFF.md；唯一進度表為 TODO.md。

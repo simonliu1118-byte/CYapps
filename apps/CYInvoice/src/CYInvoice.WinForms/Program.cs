@@ -236,6 +236,10 @@ internal static class Program
             using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
             management.PerformLayout();
             management.VerifySmokeLayout();
+            using var addDevice = new CloudAddDeviceForm("https://cloud.example.test/", token);
+            addDevice.CreateControl();
+            addDevice.PerformLayout();
+            addDevice.VerifySmokeLayout();
         }
         finally
         {

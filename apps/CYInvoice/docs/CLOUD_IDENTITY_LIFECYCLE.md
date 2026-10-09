@@ -2,7 +2,7 @@
 
 更新日期：2026-10-09（原設計基準：2026-09-29）
 
-目前工程版 V2.6.13；實作與驗收停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，唯一待辦清單為 [TODO.md](TODO.md)。本文件的尚未接線 CYID 部分依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
+目前工程版 V2.6.14；實作與驗收停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，唯一待辦清單為 [TODO.md](TODO.md)。本文件的尚未接線 CYID 部分依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
 
 本文件記錄 CYInvoice V3.0 在 Workspace、Device、Device Token、Employee authority、Local／Cloud、離線、Recovery 與最高管理權上的定案行為。
 
@@ -467,3 +467,8 @@ Cloudflare Worker + D1 是 reference implementation；CYInvoice 對外可自架�
 - **延後／非目前阻塞：**Cloud Employee offline cache server-signed snapshot／完整性簽章。除非實際發生竄改事件、威脅模型提高或有稽核需求，否則保留 TODO，不投入目前版本成本。
 
 Merge／deploy 依 repository governance 與當前使用者授權執行；tag 與正式 GitHub Release 仍另行確認。
+
+
+## V2.6.14 使用版本、最後使用與裝置名稱
+
+每次開啟成功回報，僅由該 Device Token 更新自己的 VERSION／BUILD 與 Cloud UTC last_seen_at；不從本機提交時間或另一台 target。舊版、離線及失敗保留先前確認值，不等同目前在線。改名沿用中央 SUPER_ADMIN 執行時驗證，不改 token／Device identity／Employee authority；同一 Workspace active Device 與當前 credential 在 transaction 再核對，device_renamed audit 與名稱同交易。撤銷 Device 仍保留 DB／audit，Windows inventory 不再顯示歷史；LAST_ACTIVE_DEVICE 與安全 reset 契約不變。

@@ -96,7 +96,7 @@ internal sealed class MainForm : Form
             if (!EnsureInitialSetup()) return;
             UpdateEnvironment();
             invoicePage.RefreshEnvironment();
-            await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync());
+            await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync(), ReportDeviceStartupAsync());
             if (shuttingDown) return;
             await RunStartupSyncAsync();
             if (!shuttingDown) syncTimer.Start();
@@ -651,6 +651,27 @@ internal sealed class MainForm : Form
         {
             if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
             SetCloudUnavailableState(requested, ExceptionDetails(error));
+        }
+    }
+
+    private async Task ReportDeviceStartupAsync()
+    {
+        var settings = repository.Settings.LoadOrCreate();
+        if (settings.CloudMode == CloudModes.LocalOnly || settings.CloudBaseUrl.Length == 0
+            || settings.CloudDeviceId.Length == 0) return;
+        try
+        {
+            var token = repository.Settings.CloudDeviceToken(settings);
+            if (token.Length == 0) return;
+            var client = new CloudDeviceLifecycleClient(cloudHealthHttpClient,
+                new Uri(settings.CloudBaseUrl, UriKind.Absolute), token);
+            await client.ReportUsageAsync(settings.CloudDeviceId, ApplicationVersion.ReadDisplay(), syncLifetime.Token);
+        }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            // Usage metadata is best-effort. An offline start must not block invoice work,
+            // overwrite the last confirmed server timestamp, or change authority/cache state.
         }
     }
 
