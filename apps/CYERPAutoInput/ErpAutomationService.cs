@@ -879,7 +879,7 @@ internal sealed class ErpAutomationService
         // ERP's own F2 response is the final signal: a lot-managed item opens the batch
         // lookup, an item without lots opens nothing. The visual check above only skips F2
         // for clearly blank cells; on the active row every cell shows a "…" editor button,
-        // which reads as a marker (real test, V0.2.0 Build 2: A00203 has no lots).
+        // which reads as a marker (real test, V0.2.0 Build 2: an item without lots).
         var lookup = await WaitLookupAsync(cancellationToken, 2000);
         if (lookup == 0)
         {

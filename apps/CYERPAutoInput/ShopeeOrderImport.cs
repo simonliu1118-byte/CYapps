@@ -28,7 +28,7 @@ internal sealed record ShopeeMapping(string OrderType, string CustomerCode, stri
 
 /// <summary>
 /// Parses the official Shopee order export (one order per row; all items of an order in
-/// product_info as "[1] 商品名稱:…; 商品選項名稱:…; 價格: $ 350; 數量: 1; 商品選項貨號: C00415; [2] …").
+/// product_info as "[1] 商品名稱:…; 商品選項名稱:…; 價格: $ 350; 數量: 1; 商品選項貨號: X00001; [2] …").
 /// Pure: no Win32 or UI, unit tested. An order with any unusable item is reported as an
 /// error and left out, never partly imported.
 /// </summary>
