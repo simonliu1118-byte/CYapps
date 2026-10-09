@@ -4356,7 +4356,7 @@ function setupTabletWorkspace() {
     document.documentElement.dataset.tabletLayout = orientation;
     document.documentElement.dataset.viewport = window.innerWidth < 768 ? 'mobile' : tablet ? 'tablet' : 'desktop';
     syncTabletPickerOwnership(orientation);
-    syncTabletPortraitLedgerExportPlacement(orientation);
+    syncLedgerToolbarPlacement(orientation);
     if (typeof syncMobileWorkspaceMobileIdentity === 'function') syncMobileWorkspaceMobileIdentity();
     if (typeof syncMobileWorkspaceConfirmationPolicy === 'function') syncMobileWorkspaceConfirmationPolicy();
     if (!tablet && !wasTablet) return;
@@ -4406,17 +4406,20 @@ function setupTabletWorkspace() {
   sync();
   syncHeight();
 }
-function syncTabletPortraitLedgerExportPlacement(orientation = tabletWorkspaceOrientation()) {
+function syncLedgerToolbarPlacement(orientation = tabletWorkspaceOrientation()) {
   const exportButton = document.querySelector('#ledgerExcelExport');
   const status = document.querySelector('#ledgerExcelExportStatus');
   const summaryActions = document.querySelector('.cy-summary-actions');
   const viewTools = document.querySelector('.ledger-view-tools');
   if (!exportButton || !status || !summaryActions || !viewTools) return;
 
-  const target = orientation === 'portrait' ? summaryActions : viewTools;
+  const desktop = isDesktopInteractionWorkspace();
+  if (exportButton.getAttribute('aria-busy') !== 'true') exportButton.textContent = desktop ? '匯出' : '匯出 Excel';
+  const target = desktop || orientation === 'portrait' ? summaryActions : viewTools;
+  window.cySyncLedgerQuickLock?.();
   if (exportButton.parentElement !== target) target.append(exportButton);
   if (status.parentElement !== target) target.append(status);
 }
-window.cySyncTabletPortraitLedgerExportPlacement = syncTabletPortraitLedgerExportPlacement;
+window.cySyncLedgerToolbarPlacement = syncLedgerToolbarPlacement;
 
 window.addEventListener('load', setupTabletWorkspace, { once: true });
