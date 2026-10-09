@@ -81,6 +81,17 @@ function setupLedgerToolbar() {
     </div>`;
   title.insertAdjacentElement('afterend', toolbar);
 
+  const tableWrap = card.querySelector('.table-wrap');
+  if (tableWrap) {
+    const overlay = document.createElement('div');
+    overlay.id = 'ledgerLoadingOverlay';
+    overlay.className = 'ledger-loading-overlay';
+    overlay.hidden = true;
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'polite');
+    overlay.innerHTML = '<span class="ledger-loading-spinner" aria-hidden="true"></span><span>載入中…</span>';
+    tableWrap.append(overlay);
+  }
   setupLedgerUtilityMenu();
   syncLedgerMonthDisplay();
 }

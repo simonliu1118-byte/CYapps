@@ -570,7 +570,6 @@
   }
 
   /* Migration preview remains readable inside the mobile settings sheet. */
-  .migration-heading,
   .migration-source,
   .migration-plan-head {
     align-items: stretch;
@@ -6274,7 +6273,6 @@
   #backupHeadingHint,
   .backup-security-note,
   .backup-restore-note,
-  .migration-heading .hint,
   .migration-privacy,
   .cy-data-section > p {
     display: none !important;
@@ -11683,6 +11681,9 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   stroke-linejoin: round;
 }
 
+.ledger-loading-overlay { display: none; }
+@keyframes ledger-loading-spin { to { transform: rotate(360deg); } }
+
 /* Desktop business workspace. Touch presentation and canonical writers remain
    shared; only field placement, compact shortcuts and edit widths differ. */
 @media (min-width: 1024px) {
@@ -11706,13 +11707,13 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   }
   html[data-viewport="desktop"] .entry-card .entry-kind-switch {
     width: 100% !important;
-    height: 42px !important;
+    height: 32px !important;
   }
   html[data-viewport="desktop"] .entry-card .entry-kind-switch .kind-button {
     width: 100% !important;
-    min-height: 38px !important;
-    height: 38px !important;
-    font-size: 18px !important;
+    min-height: 28px !important;
+    height: 28px !important;
+    font-size: 16px !important;
   }
   html[data-viewport="desktop"] .entry-card .entry-grid > label:not(.account-source-field) {
     display: grid !important;
@@ -11767,6 +11768,33 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     width: 32px;
     padding: 0 !important;
   }
+  html[data-viewport="desktop"] #ledgerMonthLoading { display: none; }
+  html[data-viewport="desktop"] .ledger-card .table-wrap {
+    position: relative;
+    min-height: 180px;
+  }
+  html[data-viewport="desktop"] .ledger-loading-overlay:not([hidden]) {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: rgba(247, 250, 253, .92);
+    color: #425b73;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: wait;
+  }
+  html[data-viewport="desktop"] .ledger-loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #d3deea;
+    border-top-color: #3975b9;
+    border-radius: 50%;
+    animation: ledger-loading-spin .8s linear infinite;
+  }
   html[data-viewport="desktop"] .settings-account-actions {
     display: flex;
     align-items: center;
@@ -11797,10 +11825,82 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] #settingsDialog #backupMessage:empty {
     display: none;
   }
+  html[data-viewport="desktop"] #settingsDialog .quick-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 100%;
+  }
+  html[data-viewport="desktop"] #settingsDialog .quick-settings-grid label:first-child {
+    grid-column: 1 / -1;
+  }
+  html[data-viewport="desktop"] #settingsDialog .quick-settings-grid > label,
+  html[data-viewport="desktop"] #settingsDialog .quick-settings-grid input,
+  html[data-viewport="desktop"] #settingsDialog .quick-settings-grid select { min-width: 0; width: 100%; }
+  html[data-viewport="desktop"] #settingsDialog .backup-status-grid { grid-template-columns: 1fr; }
+  html[data-viewport="desktop"] #settingsDialog .backup-status-card {
+    grid-template-columns: 92px minmax(0, 1fr);
+    align-items: center;
+    gap: 4px 8px;
+    padding: 8px 10px;
+  }
+  html[data-viewport="desktop"] #settingsDialog .backup-card-label { grid-row: 1 / 3; }
+  html[data-viewport="desktop"] #settingsDialog .backup-status-card .hint { grid-column: 2; }
+  html[data-viewport="desktop"] #settingsDialog .backup-status-card strong,
+  html[data-viewport="desktop"] #settingsDialog .backup-status-card .hint,
+  html[data-viewport="desktop"] #settingsDialog .backup-provider-card-detail,
+  html[data-viewport="desktop"] #settingsDialog .backup-provider-card-head div > span,
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table th,
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td,
+  html[data-viewport="desktop"] #settingsDialog .backup-run-detail {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+  html[data-viewport="desktop"] #settingsDialog .backup-acceptance-strip {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 10px;
+  }
+  html[data-viewport="desktop"] #settingsDialog .backup-acceptance-progress { min-width: 0; }
+  html[data-viewport="desktop"] #settingsDialog .backup-acceptance-detail {
+    grid-column: 1 / -1;
+    text-align: left;
+    white-space: normal;
+  }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-title,
+  html[data-viewport="desktop"] #settingsDialog .backup-actions-row { flex-wrap: wrap; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-title .hint { width: 100%; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table th,
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td { padding: 6px 4px; font-size: 10.5px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(1),
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(1) { width: 112px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(2),
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(2) { width: 34px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(4),
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(4),
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(5),
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(5) { width: 40px; }
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table th:nth-child(6),
+  html[data-viewport="desktop"] #settingsDialog .backup-history-table td:nth-child(6) { width: 88px; }
   html[data-viewport="desktop"] #settingsDialog .migration-pane {
     display: block;
     min-width: 0;
   }
+  html[data-viewport="desktop"] #settingsDialog .migration-details > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 30px;
+    cursor: pointer;
+    list-style: none;
+  }
+  html[data-viewport="desktop"] #settingsDialog .migration-details > summary::-webkit-details-marker { display: none; }
+  html[data-viewport="desktop"] #settingsDialog .migration-details h4 { margin: 0; font-size: 13px; }
+  html[data-viewport="desktop"] #settingsDialog .migration-expand-label { color: #486787; font-size: 13px; }
+  html[data-viewport="desktop"] #settingsDialog .migration-expand-label::after { content: " ▾"; }
+  html[data-viewport="desktop"] #settingsDialog .migration-details[open] .migration-expand-label::after { content: " ▴"; }
+  html[data-viewport="desktop"] #settingsDialog #desktopMigrationMessage:empty { display: none; }
+  html[data-viewport="desktop"] #settingsDialog .migration-pane:has(#desktopMigrationPreview.hidden) .migration-actions { display: none; }
   html[data-viewport="desktop"] #settingsDialog .migration-pane .migration-source label {
     min-width: 0;
     width: 100%;

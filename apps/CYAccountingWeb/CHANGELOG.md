@@ -4,6 +4,7 @@
 
 | 版本 | 狀態與變更 |
 | --- | --- |
+| V0.22.31 Build 0 | 桌機 slider 降高、清單 loading 遮罩與 spinner、窄設定／備份換行、資料移轉精簡；Excel 空白模板下載；CYID expiry／401 共用登入導頁。未改手機／平板版面、D1 schema 或帳務寫入 owner。 |
 | V0.22.30 Build 1 | PR #364 已合併；正式部署 #564（run `37823795188`）成功。 右上帳號列恢復平板同款；帳戶標題隱藏，日期／科目／摘要／金額標籤同行、放大黑字；收支控制加寬；常用項目加虛線框及小型 pill；金額／儲存／清空統一 40px。月份控制靠上並加框，空／有資料欄位固定；帳戶改名與封存同行靠右。設定縮為 640px，桌面帳本移轉併入資料管理，清除備份空訊息占位。只調整桌機 presentation，手機／平板尺寸與流程保留。 |
 | V0.22.30 Build 0 | 使用者電腦版 10 項實機返修：所有版本移除新增記帳／記帳資料標題；桌機保留原 split 左右版面並將收支靠左、日曆改單一 SVG、表單改成帳戶後依日期／科目＋小常用／摘要＋小常用／金額＋儲存＋清空逐列；全裝置帳本獨立收支欄隱藏，以金額正負號及相應色彩呈現；桌機切月顯示載入中；期初餘額對話窗加寬，手動調整 audit 直接顯示在右半邊；期初／收入／支出／期末／淨利損同平板五格放大；修正編輯列輸入最小寬導致跑版；右上角色標籤改平板式括號純文字，沒有 pill／漸層背景。保留共用 writer 與既有觸控表格欄位 index。PR #362 已合併，Production run `37736085139` validate/deploy 及 semantic assets 成功，仍待真實裝置畫面驗收。 |
 | V0.22.29 Build 0 | 電腦版實機回報恢復：Input Confirmation 建立時間晚於 Adaptive split 初始化，造成桌機雙欄工作區未建立、確認側欄遮住帳本；修正為由正式 Confirmation owner 發出 `cyacc:confirmation-ready`，既有 Adaptive owner 收到後完成左右分欄。Desktop 日期 JS 已改以 `desktopUi-date-*` 命名，原 CSS 卻仍使用 `cy-date-*`，造成原生 date 與自製日期重複顯示；本次直接同步原 CSS selector，不另加相容殼。加入時序與 selector 回歸、更新 production semantic verifier；PR #360 已合併，Production run `37733787088` 成功，真實桌機視覺待確認。 |

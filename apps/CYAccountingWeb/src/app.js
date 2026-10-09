@@ -322,7 +322,7 @@ async function handleLogout(request, env) {
 async function handleMe(request, env) {
   const result = await resolveIdentitySession(request, env);
   if (!result.ok) return authFailure(result);
-  return json({ ok: true, user: result.user });
+  return json({ ok: true, user: result.user, session: { expiresAt: result.expiresAt } });
 }
 
 function loginErrorKey(result) {
