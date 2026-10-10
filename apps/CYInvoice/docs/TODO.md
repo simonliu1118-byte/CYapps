@@ -127,6 +127,13 @@
 
 ### 7.3 CY ID / Self-hosted 架構定案（尚未實作）
 
+> **2026-10-10 CYInvoice 主控接手入口：** `docs/CY_ID_INTEGRATION.md` §13；以 CYID canonical Consumer Contract 1.0.2（minimum 1.0.0）為現有 source 基準。Desktop 的 operation-scoped Session、Device+Employee 授權交集、Workspace binding 與 Offline credential 設計尚待主控定案；本次僅準備文件，沒有開始接入。
+
+- [ ] 主控確認現行正式 source／Deploy 與待合 PR，避免以此處歷史 checkpoint 的 `Build 0` 誤覆寫最新 `VERSION=2.6.10`、`BUILD=2`。
+- [ ] 決定 CYID Session/Logout、private Service Binding gateway、Device identity、Workspace binding 與 Offline/reconnect 的單一路徑，再新增 CYID provider；不得從 Windows 直接查 CYID D1。
+- [ ] CYInvoice CYID Consumer Version 宣告、app access/role/revoke/response validation/error normalization integration tests，以及 Windows real-device acceptance；無 production cutover 授權。
+
+
 - [x] 產品模式定案：Local、Built-in Cloud / Self-hosted、CY ID Cloud 三種均為正式路線。
 - [x] Built-in Cloud 必須保留，第三方公司可依 User Manual 自架自己的 Worker／Database／Email Provider／Workspace／權限庫，不依賴 CY ID。
 - [x] CY ID Workspace 與 CYInvoice Workspace 不合併；CY ID 管 Employee／Credential，共通 identity；CYInvoice Workspace 管 Device／Pairing／Token／Sync／Work Item／Invoice business state。

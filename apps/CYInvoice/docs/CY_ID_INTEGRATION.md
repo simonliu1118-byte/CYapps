@@ -226,3 +226,61 @@ CY ID authority
 Built-in 與 CY ID 共用 CYInvoice 的 Device／Workspace／業務層；差別只在 Employee／Credential authority 來源與帳號管理 ownership。
 
 任何正式 source 修改、Build 推進、Cloud migration、CY ID binding 或 production cutover 都需另行規劃與驗收。
+
+## 13. CYID Consumer 接入交接 — 2026-10-10
+
+> **範圍**：本節供 CYInvoice 主控工作線接手，僅整理已確認設計、GitHub source 事實與待決問題。沒有授權 CYInvoice runtime、CYID Provider、D1 Migration、部署、Release 或資料切換。持續性的 shared Identity 語意以 CYID 的 `docs/CONSUMER_INTEGRATION_STANDARD.md` 等 canonical contract 為準；本節不另立規範。
+
+### 13.1 基準、可依賴的既有成果
+
+- 2026-10-10 GitHub `main` source：`VERSION=2.6.10`、`BUILD=2`。既有 `docs/TODO.md` 首段的 V2.6.10 Build 0 是較早 checkpoint；交接以目前版本檔為準。此處沒有重新查證 live Cloudflare 部署或 Windows 實機驗收。
+- CYID Provider source `0.3.5`；canonical Consumer Contract `1.0.2`、minimum compatible `1.0.0`。CY Web consumer `1.0.2`，CYACCweb `1.0.1`，皆已用 `IDENTITY` private Service Binding 呼叫 CYID canonical login／resolve／logout。相容版本不表示 CYInvoice 已經完成接入。
+- `src/CYInvoice.Core/IdentityProvider.cs` 已有 `AppPrincipal`、`AppRole`、`IIdentityProvider`、`LocalIdentityProvider`、`BuiltInCloudIdentityProvider`、`IdentityProviderRuntime`，目前 ProviderKind 只有 Local 和 BuiltInCloud；**尚無 CYID Provider**。
+- Built-in Cloud 線的 online freshness、Device revoke/retire、Cloud→Local crash-safe reset 已有 source 基礎；A/B/C 裝置實機 lifecycle acceptance 仍以 `docs/TODO.md` 未勾選項目為準。勿把 source 完成當成實機通過。
+- 現有 `cloud/src/web-auth.ts` 的 `/v1/web-auth/login` 是 **CYInvoice Built-in Cloud** Employee 驗證路徑，不能當成 CYID canonical consumer API；CYID 正式路徑是 `/v1/identity/login`、`/v1/identity/session/resolve`、`/v1/identity/logout`。
+- CYInvoice 目前 Cloud Worker / D1 保存自有 Device、Workspace、Built-in Employee 與業務協同資料。接入 CYID 不代表要複製 CYID D1、取消 CYInvoice 業務 D1，或把 CYID Workspace 與 CYInvoice Workspace 合成同一筆。
+
+### 13.2 既定責任與路由
+
+```text
+CYInvoice Windows (execution-time Employee authentication; no always-on Employee login)
+    -> CYInvoice Cloud Worker (CY_ID mode only)
+       -> private IDENTITY Service Binding
+          -> CYID Worker
+             -> CYID Identity D1
+
+CYInvoice Windows <-> CYInvoice Worker/D1: own Workspace binding, Device Token,
+pairing/revoke, sync, business operations, app-local authorization
+
+Local mode: local EmployeeStore only, no CYID requirement
+Built-in Cloud / Self-hosted: its own Employee/Credential authority, no CYID dependency
+```
+
+CYInvoice 的 Desktop Client **不應直接連 CYID D1**；也不要假設 CYID Worker 有公開網域可供 Desktop 直連。以受管 CYInvoice Worker 作 private Service Binding gateway 為優先架構候選，具體 endpoint/request/authentication/Session lifecycle 留在 CYInvoice 工作線經威脅模型與測試確認；Device Token 不得被誤認為 Employee Session 或 Employee 授權。
+
+CYID canonical response 需嚴格驗證 Workspace／Employee identity、`SUPER_ADMIN|ADMIN|USER`、Identity Admin capability 一致性、Application Access 和版本欄位；其中 `emailVerified`、`isWorkspaceSuperAdmin`、`credentialVersion`、`employeeRevision` 屬目前 shared principal schema。CYInvoice 可將 CYID principal 正規化成既有 `AppPrincipal`，但不可擅自把 CYID Employee ID 視為 CYInvoice Workspace ID 或把 role 當成全部業務授權。
+
+### 13.3 需要主控對話先決定、不得靠相容層猜測的事項
+
+1. **Operation-scoped CYID Session**：CYInvoice 不持續登入員工，但 CYID permanent login 會簽發 opaque app-scoped Session。要如何由受管 Worker 登入、Resolve、在操作完成後可靠 Logout／撤銷，處理 Worker/Windows 逾時、崩潰和撤銷結果不明？必須先決定此生命週期與顯示行為，不得保留長期未管控 Session 或建立 CYInvoice 第二種 Employee authority。
+2. **Device + Employee 授權交集**：哪些操作必須同時確認有效 Device Token、CYInvoice Workspace 綁定、CYID app-scoped Employee Access 與 CYInvoice 業務權限？註冊/首次加入/Device recovery 應設計狹窄例外並有可測的 server-side 授權。
+3. **Workspace binding & mode selection**：CYID Workspace 與 CYInvoice Workspace 的穩定關聯、錯誤綁定拒絕、選模式/切換/回復條件；不得把測試 Workspace 默認對應正式 Workspace。
+4. **Offline auth**：CYID 不把中央 credential verifier 散給 consumer；Windows 本機 offline protected material 的建立、保存、有效期間、可授權操作範圍、reconnect/role/access/password 撤銷同步及 Session 無法在線撤銷時的狀態，必須安全設計並隔離 Built-in Cloud 的 verifier snapshot 模型。
+5. **First login／Recovery／帳號管理**：尚未完成 CY Web 首次 Email 驗證的員工不能在 CYInvoice 用一次性首次登入憑證進入一般業務；員工管理/密碼重設/Super Admin Transfer 統一由 CY Web／CYID。CY ID 模式隱藏 CYInvoice 帳號管理；Local、Built-in 不受影響。
+6. **舊資料與遷移**：是否要把當前 CYInvoice Workspace 切換到 CY_ID mode；先做不可恢復或未結 Work Item／裝置狀態稽核，不預設大規模 Employee migration，也不以破壞性 Cloud→Local reset 代替受控 Identity authority switch。
+7. **基礎設施及驗證**：確認已註冊 CYInvoice Application 與該 Workspace 的 enablement、經核准的 `IDENTITY` production binding、Cloudflare Free D1/Workers 限額與實際用量。現有 CYInvoice 業務 D1 可以保留；小型未來 App 可以共用輕量資料庫，但**不得將 CYID Credential/Session authority 與業務表共庫**。Dev testing 可 local-first，需要跨 Worker 真實驗證時才用隔離 Cloudflare 資源。不要在 Public Git 中寫實際 IDs、tokens 或 secrets。
+
+### 13.4 最小分批實作建議（僅規劃，待主控確認）
+
+1. 先核對目前 CYInvoice 主控 branch、`PROJECT_RULES.md`、待合 PR、真正版本/Deploy baseline 和 Windows Device 驗收狀態；確認既有 `IdentityProviderRuntime` owner 可直接擴充，避免新增平行 authentication handler。
+2. 定案上述 operation-scoped Session、Device binding、online/offline 與錯誤狀態後，先建 CYInvoice Worker 的 CYID gateway，以及 `CyIdIdentityProvider` 介面適配（或現有 boundary 的最小必要擴充），**不要修改** Local/Built-in 的 authority 邏輯。
+3. 對 CYInvoice 宣告獨立 `CYID_CONSUMER_VERSION`（目前可依實作採用 provider 支援的 1.0.2），Cloudflare configuration 由部署時注入 `IDENTITY`／Application／Workspace binding，不進 Public Git。
+4. 先完成 synthetic unit/Worker integration：登入／Resolve／Logout、非法回應拒絕、App Access deny/revoke、Role/Employee disable/password change 即時生效、跨 Workspace/Device、Timeout/CYID outage、ambiguous logout 與無憑證洩漏；再安排 Windows 真機網路失敗、Offline/reconnect、A/B/C Device/Reset、Account Management 隱藏與高權限操作回歸。
+5. 依規則採獨立 branch / PR 與必要 Windows CI；正式 CYID Cloud cutover、Migration/Release/Production 部署另行審核，避免將本次交接當成執行許可。
+
+### 13.5 正式參考（先讀 canonical，再讀 CYInvoice 專用設計）
+
+- 共通治理：`/REPOSITORY_RULES.md` → `/REPO_POLICY.md` → `apps/CYInvoice/PROJECT_RULES.md`。
+- CYID：`apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`、`AUTH_CONTRACT.md`、`ROLE_AND_ACCESS_MODEL.md`、`ARCHITECTURE.md`，以及 consumer contract 版本檔／changelog。
+- CYInvoice：本文件 → `IDENTITY_PROVIDER_REFACTOR_PLAN.md` → `CLOUD_IDENTITY_LIFECYCLE.md` → `TODO.md`；再比對 `IdentityProvider.cs`、Desktop sensitive-operation call-sites、`cloud/src/app.ts`／`employee-authority.ts`／`web-auth.ts`。
+- CYID 與 CY Web／CYACCweb source parity 的 read-only 檢查已另由 CYID `cyid/docs-consumer-integration-readiness-20261010` branch 的 PR #378 提出；該 PR 仍待合併，不得把未合併紀錄當成正式 main 基準。
