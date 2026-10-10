@@ -87,6 +87,12 @@ internal static class UiSnapshot
         // (WM_GETMINMAXINFO above lifts the OS limit).
         NativeMethods.SetWindowPos(form.Handle, 0, -32000, -32000, size.Width, size.Height, SwpNoZOrder | SwpNoActivate);
         for (var i = 0; i < 3; i++) { Application.DoEvents(); form.PerformLayout(); }
+        if (form is MainForm main && main.DetailRowsShortfall() is > 0 and var shortfall)
+        {
+            // Same growth the real window does on Load: the detail grid shows exactly 10 rows.
+            NativeMethods.SetWindowPos(form.Handle, 0, -32000, -32000, size.Width, size.Height + shortfall, SwpNoZOrder | SwpNoActivate);
+            for (var i = 0; i < 3; i++) { Application.DoEvents(); form.PerformLayout(); }
+        }
 
         using var bitmap = new Bitmap(form.Width, form.Height);
         form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));

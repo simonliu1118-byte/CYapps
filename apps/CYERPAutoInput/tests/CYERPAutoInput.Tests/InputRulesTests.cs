@@ -60,3 +60,27 @@ public class InputRulesTests
     public void TryParseStockText_rejects_non_numbers(string raw) =>
         Assert.False(InputRules.TryParseStockText(raw, out _));
 }
+
+public class ShippingAmountTests
+{
+    [Theory]
+    [InlineData("1", "60", "60")]
+    [InlineData("", "60", "60")]
+    [InlineData("2", "45", "90")]
+    [InlineData("1", "65.5", "65.5")]
+    public void Uses_quantity_times_unit_price(string quantity, string price, string expected)
+    {
+        Assert.True(InputRules.TryShippingAmount(quantity, price, out var amount));
+        Assert.Equal(expected, amount);
+    }
+
+    [Theory]
+    [InlineData("1", "")]
+    [InlineData("1", "0")]
+    [InlineData("1", "-60")]
+    [InlineData("x", "60")]
+    public void Ignores_missing_zero_or_unreadable_amounts(string quantity, string price)
+    {
+        Assert.False(InputRules.TryShippingAmount(quantity, price, out _));
+    }
+}

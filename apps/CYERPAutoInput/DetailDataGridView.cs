@@ -43,6 +43,8 @@ internal sealed class DetailDataGridView : DataGridView
             if (col < 0) { col = ColumnCount - 1; row--; }
             if (row < 0) row = 0;
 
+            // Moving on from the last row appends a blank one (there is no built-in new row).
+            if (row >= RowCount && !AllowUserToAddRows) Rows.Add();
             row = Math.Min(row, Math.Max(0, RowCount - 1));
             if (Columns[col].ReadOnly) continue;
 

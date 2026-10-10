@@ -84,6 +84,23 @@ internal static class InputRules
     }
 
     /// <summary>ERP shows combo options as "code:label"; the code is the part before the colon.</summary>
+    /// <summary>
+    /// 運費 from the shipping item row: quantity × unit price (quantity blank = 1); only a
+    /// positive amount counts.
+    /// </summary>
+    public static bool TryShippingAmount(string quantity, string unitPrice, out string amount)
+    {
+        amount = string.Empty;
+        var qtyText = string.IsNullOrWhiteSpace(quantity) ? "1" : quantity.Trim();
+        if (!decimal.TryParse(qtyText, NumberStyles.Number, CultureInfo.InvariantCulture, out var qty) ||
+            !decimal.TryParse(unitPrice?.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var price))
+            return false;
+        var total = qty * price;
+        if (total <= 0) return false;
+        amount = total.ToString("0.####", CultureInfo.InvariantCulture);
+        return true;
+    }
+
     public static string ComboOptionCode(string option)
     {
         var text = NormalizeComboText(option);

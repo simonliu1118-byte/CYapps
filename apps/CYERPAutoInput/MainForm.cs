@@ -48,6 +48,7 @@ internal sealed class MainForm : Form
         _modeToggle.Checked = false;
         ApplyMode(false);
 
+        Load += (_, _) => FitDetailRows();
         _statePoll.Tick += (_, _) => RefreshErpState();
         Shown += (_, _) =>
         {
@@ -216,40 +217,52 @@ internal sealed class MainForm : Form
         var fieldsHost = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 4,
+            ColumnCount = 3,
             RowCount = 1,
             AutoScroll = false,
             Padding = new Padding(0, 4, 0, 4),
             Margin = Padding.Empty
         };
-        for (var i = 0; i < 4; i++) fieldsHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        // 交易資料 and 送貨資料 are stacked in a double-width middle column so long values
+        // such as 備註 and 送貨地址 have room (user, 2026-10-10).
+        fieldsHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        fieldsHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        fieldsHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         _root.Controls.Add(fieldsHost, 0, 1);
 
-        var groups = new[] { "表頭", "交易資料", "送貨資料", "發票資料(一)" };
-        for (var i = 0; i < groups.Length; i++)
+        var middle = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = new Padding(4, 0, 4, 0), Padding = Padding.Empty };
+        middle.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        middle.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+        fieldsHost.Controls.Add(middle, 1, 0);
+
+        GroupBox AddGroup(string group, bool wide, Padding margin)
         {
             var box = new GroupBox
             {
-                Text = groups[i] == "發票資料(一)" ? "發票資料" : groups[i],
+                Text = group == "發票資料(一)" ? "發票資料" : group,
                 Dock = DockStyle.Fill,
                 Padding = new Padding(7),
-                Margin = new Padding(i == 0 ? 0 : 4, 0, i == groups.Length - 1 ? 0 : 4, 0)
+                Margin = margin
             };
             var flow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.TopDown,
-                WrapContents = false,
+                FlowDirection = wide ? FlowDirection.LeftToRight : FlowDirection.TopDown,
+                WrapContents = wide,
                 AutoScroll = true,
                 Padding = new Padding(3, 2, 0, 2),
                 Margin = Padding.Empty
             };
             DisableHorizontalScroll(flow);
             box.Controls.Add(flow);
-            fieldsHost.Controls.Add(box, i, 0);
-            _groupFlows[groups[i]] = flow;
-            flow.ClientSizeChanged += (_, _) => FitFieldRows(flow);
+            _groupFlows[group] = flow;
+            flow.ClientSizeChanged += (_, _) => FitFieldRows(flow, wide);
+            return box;
         }
+        fieldsHost.Controls.Add(AddGroup("表頭", false, new Padding(0, 0, 4, 0)), 0, 0);
+        middle.Controls.Add(AddGroup("交易資料", true, new Padding(0, 0, 0, 3)), 0, 0);
+        middle.Controls.Add(AddGroup("送貨資料", true, new Padding(0, 3, 0, 0)), 0, 1);
+        fieldsHost.Controls.Add(AddGroup("發票資料(一)", false, new Padding(4, 0, 0, 0)), 2, 0);
         foreach (var field in FieldCatalog.All) AddField(field);
 
         var detailBox = new GroupBox
@@ -283,17 +296,23 @@ internal sealed class MainForm : Form
     private const int FieldLabelWidth = 98;
     private const int FieldInputLeft = 104;
 
+    /// <summary>Fields that take a whole line in the double-width groups (long free text).</summary>
+    private static readonly HashSet<string> FullLineKeys = new(["trade_note", "ship_name", "ship_addr1", "ship_addr2"], StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Sizes every field row to the group's client width (reserving the vertical
-    /// scrollbar) so inputs are never clipped and no horizontal scrollbar appears.
+    /// scrollbar) so inputs are never clipped and no horizontal scrollbar appears. In a
+    /// double-width group two fields share a line, except the long free-text ones.
     /// </summary>
-    private static void FitFieldRows(FlowLayoutPanel flow)
+    private static void FitFieldRows(FlowLayoutPanel flow, bool wide)
     {
-        var rowWidth = flow.ClientSize.Width - flow.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 2;
-        if (rowWidth < FieldInputLeft + 60) return;
+        var fullWidth = flow.ClientSize.Width - flow.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 2;
+        var halfWidth = fullWidth / 2 - 2;
+        if ((wide ? halfWidth : fullWidth) < FieldInputLeft + 60) return;
         flow.SuspendLayout();
         foreach (Control row in flow.Controls)
         {
+            var rowWidth = !wide || (row.Tag is string key && FullLineKeys.Contains(key)) ? fullWidth : halfWidth;
             row.Width = rowWidth;
             foreach (Control child in row.Controls)
                 if (child is TextBox or ComboBox) child.Width = rowWidth - FieldInputLeft - 2;
@@ -319,7 +338,7 @@ internal sealed class MainForm : Form
         const int labelWidth = FieldLabelWidth;
         const int inputLeft = FieldInputLeft;
         var flow = _groupFlows[field.Group];
-        var row = new Panel { Width = 238, Height = 28, Margin = new Padding(1) };
+        var row = new Panel { Width = 238, Height = 28, Margin = new Padding(1), Tag = field.Key };
         row.Controls.Add(new Label
         {
             Text = field.Label,
@@ -397,11 +416,40 @@ internal sealed class MainForm : Form
         };
     }
 
+    private const int DefaultDetailRows = 10;
+
+    /// <summary>
+    /// Grows the window so the detail grid shows exactly the default 10 rows without a
+    /// scrollbar at the standard size; more rows bring the scrollbar.
+    /// </summary>
+    private void FitDetailRows()
+    {
+        if (WindowState != FormWindowState.Normal || _modeToggle.Checked) return;
+        var delta = DetailRowsShortfall();
+        if (delta <= 0) return;
+        Height += delta;
+        MinimumSize = new Size(MinimumSize.Width, Math.Max(MinimumSize.Height, Height));
+    }
+
+    /// <summary>Pixels the detail grid lacks to show the default rows without a scrollbar.</summary>
+    internal int DetailRowsShortfall()
+    {
+        _root.PerformLayout();
+        var needed = _details.ColumnHeadersHeight + DefaultDetailRows * _details.RowTemplate.Height + 1;
+        return needed - _details.ClientSize.Height;
+    }
+
     private void ConfigureDetailGrid()
     {
         _details.Dock = DockStyle.Fill;
-        _details.AllowUserToAddRows = true;
-        _details.AllowUserToDeleteRows = true;
+        // No built-in "new row": it would be an 11th row and force a scrollbar on the
+        // default 10. A blank row is appended when the last row is edited instead.
+        _details.AllowUserToAddRows = false;
+        _details.AllowUserToDeleteRows = false;
+        // Column widths and row heights are fixed (user, 2026-10-10).
+        _details.AllowUserToResizeColumns = false;
+        _details.AllowUserToResizeRows = false;
+        _details.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
         _details.AutoGenerateColumns = false;
         _details.RowHeadersVisible = false;
         _details.ScrollBars = ScrollBars.Vertical;
@@ -446,7 +494,13 @@ internal sealed class MainForm : Form
         _details.AlternatingRowsDefaultCellStyle.SelectionBackColor = CyVisualTheme.Selection;
         _details.AlternatingRowsDefaultCellStyle.SelectionForeColor = CyVisualTheme.TextPrimary;
 
-        for (var i = 0; i < 10; i++) _details.Rows.Add();
+        for (var i = 0; i < DefaultDetailRows; i++) _details.Rows.Add();
+        // Typing into the last row appends a blank one, so a document can have more than 10 rows.
+        _details.CellValueChanged += (_, e) =>
+        {
+            if (e.RowIndex == _details.Rows.Count - 1 && !string.IsNullOrWhiteSpace(Convert.ToString(_details[e.ColumnIndex, e.RowIndex].Value)))
+                BeginInvoke(() => { if (e.RowIndex == _details.Rows.Count - 1) _details.Rows.Add(); });
+        };
         _details.CellFormatting += (_, e) =>
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
@@ -515,10 +569,11 @@ internal sealed class MainForm : Form
             _root.RowStyles[2].SizeType = SizeType.Percent;
             _root.RowStyles[2].Height = 100;
             WindowState = FormWindowState.Normal;
-            Size = StandardWindowSize;
+            Size = new Size(StandardWindowSize.Width, Math.Max(StandardWindowSize.Height, MinimumSize.Height));
         }
 
         _root.PerformLayout();
+        if (!advanced) FitDetailRows();
     }
 
     private void OpenSettings()
@@ -831,7 +886,7 @@ internal sealed class MainForm : Form
         _details.Rows.Clear();
         // A handed-off order stops before the details; items it cannot enter are left out.
         var items = order.Items.Where(i => i.ItemCode.Length > 0).ToList();
-        var rowCount = Math.Max(10, items.Count);
+        var rowCount = Math.Max(DefaultDetailRows, items.Count + 1);
         for (var i = 0; i < rowCount; i++) _details.Rows.Add();
         for (var i = 0; i < items.Count; i++)
         {
@@ -1051,7 +1106,7 @@ internal sealed class MainForm : Form
         }
         _details.EndEdit();
         _details.Rows.Clear();
-        for (var i = 0; i < 10; i++) _details.Rows.Add();
+        for (var i = 0; i < DefaultDetailRows; i++) _details.Rows.Add();
         ApplyDefaultsToBlankFields();
         _loadedOrder = null;
         SetStatus("已清除表單");
@@ -1149,6 +1204,20 @@ internal sealed class MainForm : Form
         {
             details[0].Warehouse = _settings.FirstRowWarehouse;
             _details["Warehouse", firstDetailGridRow].Value = _settings.FirstRowWarehouse;
+        }
+
+        // The shipping item's amount goes to 送貨資料・運費 when that field was left blank
+        // (user, 2026-10-10), whatever the order's source.
+        var shippingCode = _settings.MoShippingItemCode;
+        if (shippingCode.Length > 0 && !values.ContainsKey("freight_fee"))
+        {
+            var shipping = details.FirstOrDefault(d => d.ItemCode.Equals(shippingCode, StringComparison.OrdinalIgnoreCase));
+            if (shipping is not null && InputRules.TryShippingAmount(shipping.Quantity, shipping.UnitPrice, out var fee))
+            {
+                values["freight_fee"] = fee;
+                if (_valueControls.TryGetValue("freight_fee", out var feeControl)) SetFieldText(feeControl, fee);
+                _log.Info("form", "freight_fee filled from the shipping item");
+            }
         }
 
         if (values.Count == 0 && details.Count == 0)
