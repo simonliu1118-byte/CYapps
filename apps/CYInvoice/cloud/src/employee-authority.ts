@@ -27,6 +27,7 @@ type EmployeeRow = {
   credential_algorithm: string | null;
   credential_version: number;
   revision: number;
+  workspace_revision?: number;
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
@@ -154,7 +155,7 @@ async function authorityStatus(request: Request, env: Env, requestId: string): P
   });
 }
 
-async function employeeSnapshot(request: Request, env: Env, requestId: string): Promise<Response> {
+export async function employeeSnapshot(request: Request, env: Env, requestId: string): Promise<Response> {
   const device = await authenticateDevice(request, env);
   if (!device) return json(env, requestId, 401, { error: { code: "UNAUTHORIZED", message: "Device authentication failed." } });
 
@@ -167,12 +168,12 @@ async function employeeSnapshot(request: Request, env: Env, requestId: string): 
   }
 
   const rows = await env.DB.prepare(
-    `SELECT employee_id, employee_no, name, email_normalized, email_verified_at,
-            role, enabled, credential_verifier, credential_algorithm,
-            credential_version, revision
-       FROM cloud_employees
-      WHERE workspace_id = ?1
-      ORDER BY CASE role WHEN 'SUPER_ADMIN' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END, employee_no`
+    `SELECT e.employee_id, e.employee_no, e.name, e.email_normalized, e.email_verified_at,
+            e.role, e.enabled, e.credential_verifier, e.credential_algorithm,
+            e.credential_version, e.revision, w.employee_revision AS workspace_revision
+       FROM cloud_employees e JOIN workspaces w ON w.workspace_id = e.workspace_id
+      WHERE e.workspace_id = ?1
+      ORDER BY CASE e.role WHEN 'SUPER_ADMIN' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END, e.employee_no`
   ).bind(device.workspace_id).all<EmployeeRow>();
   const employees = rows.results ?? [];
   if (employees.length === 0)
@@ -190,7 +191,7 @@ async function employeeSnapshot(request: Request, env: Env, requestId: string): 
   return json(env, requestId, 200, {
     employeeSnapshot: {
       workspaceId: device.workspace_id,
-      workspaceRevision: await workspaceRevision(env, device.workspace_id),
+      workspaceRevision: employees[0].workspace_revision!,
       employees: employees.map(employee => ({
         employeeId: employee.employee_id,
         employeeNo: employee.employee_no,

@@ -1,8 +1,21 @@
 name: CYInvoice Development Cloud Deploy
 
 on:
+  pull_request:
+    paths:
+      - 'apps/CYInvoice/cloud/**'
+      - '.github/workflows/cyinvoice-cloud-dev-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Read-only preflight or additive Built-in development deployment'
+        type: choice
+        options: [preflight, deploy]
+        default: preflight
+        required: true
   push:
     branches:
+      - cyinvoice/cloud-dev-preflight
       - cyinvoice/cloud-dev-deploy
 
 permissions:
@@ -13,8 +26,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Migrate and deploy development Cloud
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/CYInvoice/cloud
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Scan public source
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/scan-public-package.py apps/CYInvoice/cloud
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Validate source, deployment audit and Worker bundle
+        run: npm run check && npm test && npm run deploy:dry-run
+
+  development:
+    name: Audit and optionally deploy original development Cloud
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: development
@@ -22,136 +56,62 @@ jobs:
       run:
         shell: bash
         working-directory: apps/CYInvoice/cloud
-
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
+      CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
+      WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@v7
-
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-
-      - name: Verify development credentials are available
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Read-only remote preflight and private recovery checkpoint
         run: |
-          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
-            echo "The development environment is missing Cloudflare credentials."
+          set -euo pipefail
+          umask 077
+          node scripts/deployment-preflight.mjs before "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
+
+      - name: Validate preserved development config before mutation
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        run: |
+          set -euo pipefail
+          if ! npx wrangler deploy --dry-run --config wrangler.deploy.generated.jsonc --outdir "$RUNNER_TEMP/cyinvoice-deploy-bundle" > "$RUNNER_TEMP/cyinvoice-private-bundle.log" 2>&1; then
+            echo 'Preserved development config bundle validation failed; no remote mutation performed.'
             exit 1
           fi
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Verify required development runtime secret names
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          secret_file="$RUNNER_TEMP/cyinvoice-cloud-secret-names.json"
-          npx wrangler secret list --format json >"$secret_file"
-
-          node - "$secret_file" <<'NODE'
-          const fs = require('node:fs');
-          const configured = new Set(
-            JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).map(secret => secret.name)
-          );
-          const required = ['BOOTSTRAP_KEY', 'OTP_PEPPER', 'BREVO_API_KEY', 'EMAIL_FROM'];
-          const missing = required.filter(name => !configured.has(name));
-          if (missing.length !== 0) {
-            throw new Error(`Missing required development runtime secret names: ${missing.join(', ')}`);
-          }
-          console.log('All required development runtime secret names are configured.');
-          NODE
-
-      - name: Validate source and Worker bundle
-        run: |
-          npm run check
-          npm test
-          npm run deploy:dry-run
-
-      - name: Capture D1 restore bookmark
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler d1 time-travel info DB
-
-      - name: Audit development state before migration
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          echo "Unapplied migrations before deployment:"
-          npx wrangler d1 migrations list DB --remote
-          npx wrangler d1 execute DB --remote --command \
-            "SELECT (SELECT COUNT(*) FROM workspaces) AS workspaces, (SELECT COUNT(*) FROM devices) AS devices, (SELECT COUNT(*) FROM cloud_employees) AS employees, (SELECT COUNT(*) FROM device_pairing_codes) AS pairings;"
-          npx wrangler d1 execute DB --remote --command \
-            "SELECT status, COUNT(*) AS count FROM devices GROUP BY status ORDER BY status; SELECT role, COUNT(*) AS count FROM cloud_employees GROUP BY role ORDER BY role;"
-
-      - name: Apply canonical remote D1 migrations
+      - name: Apply reviewed forward migration to original development D1
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
         env:
           CI: 'true'
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          npx wrangler d1 migrations apply DB --remote
-          echo "Unapplied migrations after deployment:"
-          npx wrangler d1 migrations list DB --remote
-
-      - name: Audit development state after migration
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          npx wrangler d1 execute DB --remote --command \
-            "SELECT (SELECT COUNT(*) FROM workspaces) AS workspaces, (SELECT COUNT(*) FROM devices) AS devices, (SELECT COUNT(*) FROM cloud_employees) AS employees, (SELECT COUNT(*) FROM device_pairing_codes) AS pairings;"
-          npx wrangler d1 execute DB --remote --command \
-            "SELECT status, COUNT(*) AS count FROM devices GROUP BY status ORDER BY status; SELECT role, COUNT(*) AS count FROM cloud_employees GROUP BY role ORDER BY role; PRAGMA foreign_key_check;"
-
-      - name: Deploy development Worker and verify health contract
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          deploy_log="$RUNNER_TEMP/cyinvoice-cloud-deploy.log"
-          if ! npx wrangler deploy >"$deploy_log" 2>&1; then
-            sed -E 's#https://[^[:space:]]+\.workers\.dev#<worker-url>#g' "$deploy_log"
+          set -euo pipefail
+          if ! npx wrangler d1 migrations apply DB --remote --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyinvoice-private-migration.log" 2>&1; then
+            echo 'Development migration failed. Keep CYID disabled and inspect the protected recovery checkpoint; do not restore D1 automatically.'
             exit 1
           fi
+          echo 'Reviewed forward migrations applied to the original development D1.'
 
-          worker_url="$(grep -Eo 'https://[^[:space:]]+\.workers\.dev' "$deploy_log" | tail -n 1)"
-          if [[ -z "$worker_url" ]]; then
-            echo "Worker deployment completed, but its health URL could not be determined."
+      - name: Deploy additive development Worker with CYID disabled
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        run: |
+          set -euo pipefail
+          if ! npx wrangler deploy --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyinvoice-private-deploy.log" 2>&1; then
+            echo 'Development deployment failed. Keep CYID disabled; diagnose the current Worker/version before retrying.'
             exit 1
           fi
+          echo 'Additive development Worker deployed; no CYID authority switch or secret replacement.'
 
-          health_file="$RUNNER_TEMP/cyinvoice-cloud-health.json"
-          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 3 \
-            "$worker_url/v1/health" >"$health_file"
+      - name: Verify source version, API compatibility and original history
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
 
-          node - "$health_file" <<'NODE'
-          const fs = require('node:fs');
-          const health = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          const capabilities = new Set(Array.isArray(health.capabilities) ? health.capabilities : []);
-
-          if (health.ok !== true || health.storage !== 'ok') {
-            throw new Error('Development Worker health or storage check failed.');
-          }
-          if (health.cloudVersion !== '0.8.9') {
-            throw new Error(`Expected Cloud 0.8.9, got ${health.cloudVersion ?? 'unknown'}.`);
-          }
-          if (String(health.apiVersion) !== '1') {
-            throw new Error(`Expected API 1, got ${health.apiVersion ?? 'unknown'}.`);
-          }
-          if (String(health.schemaVersion) !== '8') {
-            throw new Error(`Expected API-1 compatibility schema marker 8, got ${health.schemaVersion ?? 'unknown'}.`);
-          }
-          if (String(health.storageSchemaVersion) !== '12') {
-            throw new Error(`Expected storage Schema 12, got ${health.storageSchemaVersion ?? 'unknown'}.`);
-          }
-          for (const required of ['device-revoke-v1', 'device-self-status-v1', 'device-usage-v1', 'device-rename-v1']) {
-            if (!capabilities.has(required)) throw new Error(`Missing required capability: ${required}.`);
-          }
-
-          console.log(`Verified development Cloud ${health.cloudVersion}, API ${health.apiVersion}, compatibility Schema ${health.schemaVersion}, storage Schema ${health.storageSchemaVersion}, storage ${health.storage}.`);
-          NODE
+      - name: Remove private generated files
+        if: always()
+        run: |
+          rm -f wrangler.deploy.generated.jsonc "$RUNNER_TEMP/cyinvoice-deploy-audit.json" "$RUNNER_TEMP/cyinvoice-private-bundle.log" "$RUNNER_TEMP/cyinvoice-private-migration.log" "$RUNNER_TEMP/cyinvoice-private-deploy.log"
+          rm -rf "$RUNNER_TEMP/cyinvoice-deploy-bundle"

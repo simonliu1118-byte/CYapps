@@ -1,6 +1,6 @@
 # CYInvoice 現行工作交接
 
-更新日期：2026-10-10（Asia/Taipei）
+更新日期：2026-10-11（Asia/Taipei）
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
@@ -9,14 +9,59 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `6d997be0ddebb7cc403e53ea1416863d51a26311`；CYInvoice V2.6.10 Build 2 |
-| 現行 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
-| 分支 | `cyinvoice/fix-void-workflow-ui`；已同步上述 main |
-| 工程版本 | **V2.6.14**；來源為 ../VERSION、../BUILD |
+| main | `1b661957faeac9684ff73b0b6ea7835ffdc9d07e`（#382 是 CYAccountingWeb 修改）；CYInvoice 仍 V2.6.10 Build 2 |
+| 本輪 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380)，draft、未合併，完整 CI／工程包以精確 head checks 為準 |
+| 前置介面 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
+| 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
+| 工程版本 | **V2.6.17**；來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
 
-本次獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
+前置獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
+
+## CYID Consumer／服務連線現行停點
+
+### 分段上線準備 — 2026-10-11
+
+使用者委託逐步推進至 CYID 上線；先 preflight／保留 Built-in 的 additive Cloud，再隔離 staging／Windows 實機及可檢視的正式切換方案。PR #380 仍 draft／未合併；未因本次委託略過原 Workspace continuity、帳號／App Access／Role、private binding、回復及 Release gates。
+
+沿用 cyinvoice-cloud-dev-deploy.yml 為唯一 development owner，修正 health 舊 0.9.0 hard-code；preflight 專用 branch 只讀遠端。部署前固定 original D1／development／CYID disabled，核對 immutable migration prefix（僅允許 pending 0013）、FK、必要 runtime secret names／rate limit、private Time Travel／Worker recovery checkpoint。暫存 generated config 保留原 vars/services/secrets；after 核對 source version、storage 13、runtime-sync capability 與原 Workspace／Device Token hashes／員工／邀請／audit 歷史。敏感值不寫 Public log／Artifact；恢復點 UTC timestamp 可回查 bookmark，不自動 D1 restore。
+
+本機 TypeScript／完整 Worker 回歸／bundle 與 deployment audit 通過，含真實 SQLite 0013 前後歷史延續及 Token hash 異動拒絕。Windows／Worker business runtime 未改，VERSION／BUILD 維持 V2.6.17 Build 2。遠端 preflight／additive deployment 尚待執行，不把既有 development business Workspace 當隔離 CYID sandbox。唯一 checklist 見 TODO §7.3.3；執行／回復說明見 cloud/README。
+
+### V2.6.17 source checkpoint — 2026-10-10
+
+本批實作取代先前設計-only checkpoint（歷史見 Git）。ServiceConnectivity／MainForm 沿用原 lifecycle，POST runtime/sync 合併 Device＋權限，60 秒完整同步、15 秒 liveness、故障後重連立即同步；不改五分鐘光貿 invoice sync。CYID private named RPC 只 invalidation，不登入／不建立 Session／不輸出 verifier。Built-in snapshot revision 與 rows 同次讀取，local revision 防倒退；known deny 不因後續 503 復活。
+
+LocalResetCoordinator 同裝置 explicit revoked 先存 durable marker；MainForm 停止工作退出，新程序等待 parent 結束才 recover。Program 每 portable folder 單程序 guard，清除前不 Open repository；保留 package-files.json 的原發行檔案，Data／Cache／Logs／root runtime／其他新目錄全清，marker 最後移除；partial wipe／lock／kill 留 marker 阻擋直到續清。一般401／403、Workspace disabled、scope mismatch、503不自動 wipe。手動 Local reset 的原 Logs 保留契約不變。系統 temp 共享 Preview 不列入 portable reset；原 finally 清理仍保留，不能任意刪 portable 外檔案。
+
+人工结案／折讓及 Built-in 中央 mutation dialog 只收輸入，最終 core／server 完整 Device＋Employee 驗證。設定讀取／儲存是分開的受保護操作，儲存重驗且拒絕舊 provider binding 覆寫。OTP 多階段每階段保留當次驗證，沒有可重用 Session。CYID 1.0.2/1.0.3 同scope快取接續，不改 Workspace／Device／Token／資料。
+
+版本 CYInvoice 2.6.17／BUILD 2、Cloud 0.9.2、CYID provider 0.3.6／BUILD 0、canonical 1.0.3／minimum 1.0.0，Consumer Impact BACKWARD_COMPATIBLE。新 private IDENTITY_AUTHORITY binding 配置示例是 placeholder，尚未部署。TODO §7.3.2 source 項與 RC AC／原 RC AA、AB／staging／cutover 分開；正式 Release 未授權。
+
+本地證據：aggregate single-request／60秒節流／重連、原連線矩陣、malformed／scope／Workspace-disabled不誤wipe、explicit revoke durable marker、模擬程序中斷後 partial recovery 與 Logs 清除；real-provider D1 invalidation（停用／Role／App Access／credential／deleted ID）及CYID outage＋Device revoke。完整八套 C# 回歸、CYID 44 項測試、Worker TypeScript／完整測試／bundle dry-run、tracked-source public scan 通過；Linux WinForms 編譯 0 errors（既有 WebView2 WPF MSB3277 warning）。Windows 原生 smoke／DPAPI／package／精確 head Artifact 於 CI 核對，不引用V2.6.16綠燈。
+
+本輪 [#380 checks](https://github.com/simonliu1118-byte/CYapps/pull/380/checks) 是最新 CI 結果入口；在該精確 head 的 Windows Build 成功後，從 run 的 Artifacts 取得 V2.6.17 工程包（保留 3 天）。不以此文件的歷史 run 代替最新版驗收。
+
+### V2.6.16 source 快照（由 V2.6.17 取代；歷史證據）
+
+使用者 2026-10-10 授權開始 consumer 開發；新獨立 Patch／BUILD 0。整合 main 與兩支未合 PR 以保留最新介面和設計，不自動合併／關閉前置 PR。前置 PR #216 精確 head 1e6d4137 的 Governance #1172／Cloud #378／Windows #267 全綠只是 V2.6.14 證據，不能冒充本輪 CI。
+
+本輪完成 CyIdIdentityProvider、集中選擇及 authenticated discovery／DPAPI binding、private IDENTITY gateway、Device 與 Employee／App Access／Role 分離、兩 Workspace 固定綁定、原有降級 cache／reconnect 更新（V2.6.16 納入暫時 503）。Rename／revoke／pairing／invitation 保留原 handler 及 audit owner；0013 新增 external invitation actor 並保留 Built-in FK／歷史，沒有匯入或讀 CYID D1。帳號管理隱藏／復原提示 CY Web；CYID 不讀 Built-in employee snapshot。詳見 CY_ID_INTEGRATION §14。
+
+Source Cloud 0.9.1／API 1／marker 8／storage 13／cyid-consumer-v1；預設 CYID 關閉，runtime binding 與實際 Application enablement 未核對。本輪沒有遠端 migration、部署、正式切換、tag／Release；目前最後有效 development deployment 仍是下方 Cloud 0.8.9／storage 12 Run #8 attempt 2。
+
+本機驗證：TypeScript、完整 npm test（bootstrap／lifecycle／真實 CYID provider，各自 synthetic DB 與 migrations）與 bundle dry-run 通過；C# Core Release build 與 Cloud contracts 通過，Void workflow 29／Allowance 12／SQLite migration 13 通過。WinForms Linux cross-build 只作編譯預檢，Windows-only smoke／DPAPI／PE／封裝仍由本輪 PR CI 驗證，不引用舊包。新增 Windows join smoke 包含 CYID invitation／pairing／mismatched binding，確認不下載 Built-in verifier。
+
+Architecture Exception：依使用者保留既有 last-trusted offline 行為，整筆 scope／principal／本機 proof DPAPI 保護，沒有新增 TTL；離線無法即時觀察中央撤銷，server mutation 仍在線驗證。Logout loss 不 replay、不假稱已撤銷，provider expiry 負責 orphaned Session（目前 default 8h）。每個 server mutation 前 Resolve；CYID／consumer D1 不構成跨庫 atomic transaction。Local／Built-in 是獨立正式模式，沒有在 CYID 失敗時自動啟用。Rolling-deployment 404 discovery reader 只供未確認 CYID 的舊 Built-in Worker。
+
+剩餘人工／切換驗收只在 TODO §7.3、RC AA／AB 追蹤：Windows 實機及舊 A/B/C、staging bindings、受控 migration／actor audit／rollback。0-active-Device recovery 未做，LAST_ACTIVE_DEVICE 保護維持；125／150 DPI 仍 Deferred。
+
+2026-10-10 使用者補充：切 CYID 必須在原 CYInvoice Workspace 接續工作。既有 Confirm binding 路徑只更新 authority，拒絕不同 Workspace；本輪補 source continuity regression（兩台原 Device Token、consumer 歷史 rows、本機 SQLite／settings 切換後重開及 pending／PDF／protected credentials 保留），不新增 runtime path／schema／版本。切換前所有 active Windows 升級、CYID accounts/access/roles/email 與原裝置 staging 業務驗收未完成時維持 Built-in；禁止重建／重新加入／reset 代替接續。詳見 integration §14.5、TODO 7.3、RC AA。
+
+2026-10-10 使用者最終定案（本輪新功能 V2.6.16／BUILD 0）：雲端連線失敗／timeout／暫時 503 且光貿正常，沿用原有降級單機；帳密錯誤／權限拒絕／Device 撤銷不降級。光貿不可達僅 Cloud 可用時停用光貿功能；雙斷線一個 modal 阻擋全部業務，MainForm 15 秒檢查／手動重查，任一恢復回對應狀態。純 Local 只依光貿正常／阻擋至恢復。保留 Workspace、Device／Token、資料及輸入，不 reset、不自動重送。光貿 guards 在業務請求與本機變更前；known Device denial 清身分快取，後續 503 不能復活。Cloud 0.9.1 discovery 經原 private IDENTITY 呼叫 canonical health，不新增 authority、schema、Session 或 migration。原 Workspace continuity 與前置介面回歸保留。矩陣以 integration §14.2 描述。
+
+本輪本機驗證與後續 CI：八套 C# business／Cloud regressions、TypeScript／Worker tests 及 Linux WinForms 編譯預檢；Windows 原生阻擋／恢復 smoke、DPAPI、封裝／public safety scan 以本輪 #380 精確 head CI 為準。上一版 4930de4b 的 Windows #271／Cloud #382 全綠只證明 V2.6.15，不可替代本輪服務連線驗收；尚無 V2.6.16 人工／live staging 結果。
 
 ## V2.6.14 裝置管理
 
@@ -28,7 +73,18 @@ MainForm 啟動在既有 lifetime 下回報自己的 VERSION／BUILD；POST /v1/
 
 本機 TypeScript、bootstrap SQL、實際 lifecycle handler／SQL 回歸及 bundle dry-run 已通過。回歸含 own-device 更新、server time、空白／控制字元／長度、撤銷／disabled Workspace、credential race、audit failure rollback 及歷史保留；C# client 增加 wire contract／錯誤回傳拒絕，Windows smoke 增加四欄／active filtering／最後一台防護／新增視窗標籤測量。Windows CI 與工程包結果以 PR 精確 head 為準；實機 RC Z、125／150 DPI 尚未取得證據。
 
-Development 部署沿用 cyinvoice/cloud-dev-deploy 既有 staged workflow，先 bookmark／aggregate／FK audit，再套用 0012、部署與核對 Cloud 0.8.9／API 1／marker 8／storage 12 及新 capabilities；實際部署結果另記 PR，未通過前不能將 source 版本宣稱為 live。
+Development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) 已成功；deploy commit 3b7325ea 與功能 source db1a3b95 的 tree 相同。先 capture bookmark／aggregate audit，0012 一次套用；Device 總量及 active／revoked 分組前後保持，仍存在 revoked 歷史，FK 無異常。第一次 immediate health 尚讀到 0.8.8；完全相同 source 重跑後無 pending migration，health 已驗證 Cloud 0.8.9／API 1／marker 8／storage 12／storage ok 及 usage／rename capabilities。未重跑 0010／0011，未操作真人裝置名稱或憑證。
+
+### V2.6.14 自動化與工程包
+
+功能 source **db1a3b9560510a94400ffb308a1536a3a1ef8754**：
+
+- [Governance #1171 通過](https://github.com/simonliu1118-byte/CYapps/actions/runs/37982871612)。
+- [Cloud #377 通過](https://github.com/simonliu1118-byte/CYapps/actions/runs/37982871621)，含 lifecycle SQL／migration／Linux 及 Windows client contracts。
+- [Windows #266 通過](https://github.com/simonliu1118-byte/CYapps/actions/runs/37982871637)，含編譯、全部回歸、startup／packaged smoke、PE／VERSION／BUILD 及 public-package scan。
+- 當輪 [V2.6.14 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/37982871637/artifacts/11642360855)，SHA-256 4f150a845bb8eaa119e9ab5a8d348dfa278e12d814e1393aab3e4c6a592052c6，原 Artifact 至 2026-10-13 03:53（Asia/Taipei）。
+
+本次收尾只更新部署／CI 證據文件，不推進 VERSION／BUILD；下載最新版及精確 head checks 以 PR #216 為準。功能 source 的 CI 不冒充後續文件 head 已完成檢查。
 
 ## V2.6.13 歷史介面停點（版本快照已由 V2.6.14 取代）
 
@@ -84,7 +140,7 @@ Windows Artifact：[CYInvoice_V2.6.11_Build2_engineering-run258](https://github.
 
 Reference backend source：Cloud **0.8.9**／API **1**／legacy compatibility schemaVersion=8／actual storage Schema **12**；forward migrations 0001～0012。不可把 compatibility marker 與 storage migration progress 當同一欄位。
 
-最後可引用的 development 遠端證據是 **2026-09-29 staged deploy Run #7**：health／storage／device-revoke-v1／device-self-status-v1 通過；部署前已無未套用 migration，沒有重跑 0010／0011。前後 aggregate audit／FK 正常。詳見 [9/29 歷史快照](NEXT_CHAT_HANDOFF_2026-09-29.md)。本次未連線重查 live Worker／D1，不把當時資料筆數或健康狀態宣稱為今日即時狀態。
+最新 development 遠端證據為 2026-10-10 staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509)，詳見上方 V2.6.14。9/29 Run #7／Cloud 0.8.8／storage 11 保留為 [歷史快照](NEXT_CHAT_HANDOFF_2026-09-29.md)，不再當最新部署基準。
 
 以下四包已合併進 main，不再列為未實作：
 
@@ -99,12 +155,44 @@ Reference backend source：Cloud **0.8.9**／API **1**／legacy compatibility sc
 
 CYID 已有 canonical [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)，contract **1.0.2**、minimum **1.0.0**。不再以「尚未發布共同 contract」作為唯一等待理由。同 repo 直接讀 canonical files，不複製另一份 shared contract。
 
-CYInvoice 尚未實作 CyIdIdentityProvider、Workspace binding、CYID App Access／Session 接線、Windows offline 協定及 0-active-Device recovery。先完成 desktop／per-operation transport 適配與 acceptance 設計；不把 Web Session／HttpOnly-cookie 語意直接套進 WinForms，不自訂第二套 CYID role／access／credential contract。帳號管理 visibility 與 business／Device ownership 依 [CY_ID_INTEGRATION.md](CY_ID_INTEGRATION.md)。
+V2.6.15 source 已實作 CyIdIdentityProvider、Workspace binding、CYID App Access／Session 與 Windows offline 接線；實機／staging／正式切換尚待驗收，0-active-Device recovery 未實作。具體限制見 §14；不把 Web Session／HttpOnly-cookie 語意直接套進 WinForms，不自訂第二套 CYID role／access／credential contract。帳號管理 visibility 與 business／Device ownership 依 [CY_ID_INTEGRATION.md](CY_ID_INTEGRATION.md)。
 
 ## 7. 接續工作順序
 
 唯一可勾選的進度表為 [TODO.md](TODO.md)。先驗收 RC X 的邀請首次完成／說明，再驗收 RC W 的分流與舊結案，再做 Q／R 的 A/B 基線／即時權限，之後用可拋棄 C 做 S／T／U 的撤銷、重置與不明結果恢復。再處理 invitation／Employee identity matrix／OTP／transfer 的跨機驗收。
 
-尚未實作的後續主線為 CYID adapter、all-device-loss recovery、Cloud Work Item 原子轉移／revision、多機離線 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊。Offline cache 完整性簽章、125%／150% DPI、多公司與營運摘要保持原定延後範圍，不自動升為本次阻塞。
+CYID Consumer 後續是 staging／實機及受控切換；尚未實作的主線為 all-device-loss recovery、Cloud Work Item 原子轉移／revision、多機離線 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊。Offline cache 完整性簽章、125%／150% DPI、多公司與營運摘要保持原定延後範圍，不自動升為本次阻塞。
 
 正式發布仍依三層規則及使用者當次明確 release 指示處理；PR／CI／文件更新不代表完成正式發布。
+
+### 本輪治理前置與自動化證據
+
+初次 #380 source head `0b7e343287860de1778bb0f101a26e4d28ae0d0e` 的 [Cloud #379](https://github.com/simonliu1118-byte/CYapps/actions/runs/38038565641) 通過；[Windows #268](https://github.com/simonliu1118-byte/CYapps/actions/runs/38038565637) 的 warnings-as-errors build／startup smoke／全部 business regressions 通過，完整 package 結果仍以 run 本身為準。Governance #1173 指出 PROJECT_RULES 缺 canonical consumer adoption 引用；依治理規則另建 [#381](https://github.com/simonliu1118-byte/CYapps/pull/381)，[Governance #1174](https://github.com/simonliu1118-byte/CYapps/actions/runs/38038662600) 通過後合併 main，GOVERNANCE_VERSION 2.3.34。僅採用既有 canonical standard，不新增 shared identity 語意、不停用檢查。
+
+#380 同步 main adoption 後重新跑精確 head 全部 CI；功能 code 與 0b7e3432 相同，新增差異只有治理同步／狀態文件。最終結果與最新版工程包依上方 #380 checks，不以初次失敗 run 代替最終驗收。正式 deployment 仍未更動。
+
+
+## V2.6.17 Build 2 CI 收斂
+
+Build 0 source 187f2b5b 已通過 Windows warnings-as-errors／startup smoke／各業務測試／manifest package／packaged smoke；最後 upload 結果仍以 run 38063846171 核對。CYID check／兩個 deployment workflows 的 PR-only validate 通過，沒有執行 deployment。Governance 1182 因 PR Consumer Impact 使用 Markdown 粗體而未匹配純文字格式，已修 PR body；不改治理規則。
+
+Build 1 補舊 Gateway 404 的明確升級診斷及 unknown token 不清除 regression。源頭未改原連線矩陣，仍沿用原降級；先以 CYID disabled 在原 Workspace 升級 additive Cloud 0.9.2，再升級 Windows，private RPC／原裝置 staging 之後才談切換。CI／工程包核對最後 source head，不拿較早 Build 0 綠燈替代。本批尚未合併／部署／正式切换／Release。
+
+Build 2 補最後撤銷邊界：aggregate 共用原 self-status parser（含 revokedAt／合法狀態），缺完整證據不清除；手動自己撤銷／已撤銷退出同樣只落 authorized marker，等 fresh parent-exit recovery 清除包含 Logs，避免舊程序背景工作在 wipe 後寫回。手動純 Local／Workspace disabled 保留原不同契約。新增真实 SettingsStore＋既有 ExecuteAsync／RecoverPendingAsync 合成 HTTP 回歸，未部署／實機驗收。
+
+
+## V2.6.17 Build 2 已驗證工程包
+
+功能 source **64f233810bc5066db1a92f27e95552974a105a63** 六項 CI 全部通過：
+
+- [Windows #275](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658727)：warnings-as-errors、原生／packaged startup smoke、業務 regressions、manifest／PE／封裝及 public-package scan。
+- [Cloud #386](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658712)：Worker／real-provider synthetic D1、Linux／Windows contracts 與 engineering package scan。
+- [Governance #1184](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658742)。
+- [CYID Check #105](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658743)。
+- [Development workflow #116](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658721)／[Production workflow #11](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658719) 只完成 PR validate，部署 job skipped；沒有遠端部署。
+
+[下載 V2.6.17 Build 2 engineering](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658727/artifacts/11674241804)，81,087,634 bytes；Artifact archive SHA-256 `368ff2aab2a99885f43e291e6a53d828bab3f3d08ae6b8cdd45d1a527974d9b9`，有效至 **2026-10-13 23:45 Asia/Taipei**。Artifact head 已核對等於功能 source。
+
+升级原可攜資料夾時覆蓋整包的程式檔，包含 package-files.json／Runtime；保留原 Data／Cache／Logs 與原 Workspace。不要僅換 EXE 而漏 manifest。雲端目前仍未部署 additive 0.9.2／private RPC；新同步在隔離 staging 更新 Gateway 後才可驗收。
+
+本次收尾只補 CI／Artifact 證據文件，不推進 VERSION／BUILD。後續純文件 head 不冒充本段功能 source 已測；最新 PR checks／engineering artifact 為即時入口。未完成：RC AA／AB／AC 與前置 A/B/C 實機、隔離 binding／帳號／App Access／Workspace continuity／用量量測、正式切換 gate、0-Device recovery 等原 TODO；未合併／部署／正式 Release。

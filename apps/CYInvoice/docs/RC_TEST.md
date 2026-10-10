@@ -2,9 +2,9 @@
 
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
 
-- 目前工程測試基準：**V2.6.14**。
-- Cloud source：**0.8.9 / API 1 / compatibility marker 8 / storage Schema 12**；實際 development 部署結果見交接／PR，勿拿 source 代替 live。
-- 本輪 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.14` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
+- 目前工程測試基準：**V2.6.17**；CYID source 未部署，精確 head Windows 工程包另記交接。
+- Development Cloud：**0.8.9 / API 1 / compatibility marker 8 / storage Schema 12**；10/10 staged Run #8 attempt 2 已驗證新 capabilities，實機操作仍待驗收。
+- 前置 V2.6.14 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.14` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
 - 最新公開正式 Release：**V2.4.2**。
 - V2.6.11 功能 commit 的 Governance #1137、Cloud #369、Windows #258 全部通過；9/29 development staged deployment 為既有歷史證據，本次未重查 live。PR #216 尚未合併，本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
 
@@ -315,3 +315,55 @@
 6. 使用可拋棄 C 撤銷，清單消失但 Cloud DB 的 Device row／revoked_at 與 audit 仍在；不得為驗收刪除歷史。保留 A/B 及最後一台 recovery path。
 
 自動化不能代替實機 96 DPI 驗收。125／150 DPI、High Contrast 尚待證據，不自動升為本輪阻塞。
+
+## AA. V2.6.15 CYID Consumer 實機驗收（尚未執行）
+
+先安排隔離 staging，確認 registered Application／Workspace enablement／App Access、private IDENTITY binding、兩 Workspace 配對、0013 backup/FK；記錄 PR 精確 head、工程包 hash 和環境，不把上一版包或 local provider fixture 當 live 證據。原 Local／Built-in A/B/C 與業務驗收保留。
+
+- [ ] Local／Built-in 原流程及舊 discovery-404 Worker 不受影響；已確認 CYID 的 client 不自動降級。
+- [ ] 原 A/B/C 安裝先升級到 CYID-capable Windows，備妥各員工啟用／App Access／Role／verified 超管 Email，再受控啟用。前後核對同一 CYInvoice Workspace、原 Device／Token、公司／印表機／protected secrets、發票／pending／買方／PDF；重開可繼續原工作，不重新加入／建立 Workspace／reset，錯綁定拒絕且保留原設定。
+- [ ] CYID invitation／pairing 首次加入成功，pending token 中斷／重開仍只 claim 一次；不讀 Built-in Employee snapshot，不建立 Local 員工。
+- [ ] Account Management 隱藏且上方按鈕排列正常；settings 顯示 CYID，忘記密碼提示 CY Web；首次啟用／重設在 CY Web 完成。
+- [ ] USER／ADMIN／SUPER_ADMIN 逐次帳密驗證原本開票／作廢／折讓／設定／裝置 rename/revoke；Identity Admin 不升格為 app SUPER_ADMIN。
+- [ ] App Access 撤銷／恢復、role change、Employee disable、password/credential change 後，下一次在線驗證立即採新結果；拒絕清除相應 cache。
+- [ ] 原裝置先成功在線驗證，再只阻斷雲端（光貿仍正常）／transport timeout／503：正確密碼用最後 protected Role，錯誤密碼拒絕；未在線成功的員工沒有 offline grant。
+- [ ] 整機斷網阻擋全部業務；只阻斷 Windows→CYInvoice 或 Worker→private CYID（503）且光貿仍可達時驗收原降級；結果不明禁止重送。
+- [ ] HTTP 401／403、畸形成功或錯 scope 回應、使用者取消不走降級；已知拒絕後 503 不復活；Device／provider／Workspace 錯誤拒絕並清全部 cache。
+- [ ] Offline→reconnect 再操作採新權限；中央撤銷在斷網期間不可觀察，last-trusted 無新增 TTL 的產品邊界確實可接受。
+- [ ] A/B/C 裝置 token 不能代替 Employee；撤銷後舊 Token 不可用；複製 cache／修改 endpoint／Workspace／Device／token 不可重用。
+- [ ] Logout 失敗／response loss 不 replay business action，不把未撤銷 Session 宣稱清除；不在 Logs／package 保存密碼或 CYID token。
+- [ ] Cloud→Local reset 清 CYID cache/binding，保留原 crash-safe 流程；未實作 0-Device recovery 前 LAST_ACTIVE_DEVICE 仍拒絕最後撤銷。
+- [ ] Migration 0013 保留舊邀請與 audit；external actor 不建 fake employee／verifier，rollback 不自動降級已確認 CYID client。
+
+125／150 DPI 仍 Deferred。本節全部為人工待驗，不以自動化測試勾選；正式切換／Release 另行授權。
+
+
+## AB. V2.6.16 服務連線／原有降級／恢復實機驗收（尚未執行）
+
+記錄 PR 精確 head、工程包 SHA-256、環境、操作前後原 Workspace／Device／Token／資料及輸入。自動化測試不勾選人工驗收。
+
+- [ ] Built-in、CYID 各測光貿／雲端都可用，當次權限驗證採最新 role／enabled／password／App Access。
+- [ ] 光貿正常，雲端 transport／timeout／503（含 private CYID outage）：原降級正確密碼與最後 Role 可用，錯密碼與未有可信 cache 者拒絕；中央帳號／Device 異動不可用。
+- [ ] 光貿不可達、Cloud 正常：開票／查詢（含買方與 PDF cache）／作廢／折讓確認／背景同步停止，不新增未知或發票變更；雲端功能依原權限正常。
+- [ ] 雙斷線 modal 阻擋所有業務，不能 Alt+F4／Esc 略過；保留重新檢查／關閉程式，15 秒自動檢查；先恢复雲端或先恢復光貿都立即回對應狀態，不重啟。
+- [ ] 純 Local 光貿可用正常、不可用同一阻擋、恢復後正常；不產生任何 Cloud 探測或身份切換。
+- [ ] 帳密錯誤／權限拒絕／Device 撤銷絕不因 503 降級；已知 Device／綁定拒絕後仍阻擋，直到同一裝置／綁定驗證成功。
+- [ ] 中斷／恢復不改 Workspace、Device、Token、mode、設定、發票 pending 或輸入；不自動開票、不自動重送，結果不明先回查。
+- [ ] modal 文字完整、共通圓角按鈕、tab／Enter／關閉行為符合原生操作；96 DPI 實機確認，125／150 DPI 維持 Deferred。
+
+正式 CYID 切換仍先完成 RC AA 與原 A/B/C，未以本項取代 staging、migration／rollback 或帳號準備。
+
+
+## AC. 裝置／權限合併同步與撤銷完整清除（V2.6.17 source，人工尚未驗收）
+
+產品決策 CY_ID_INTEGRATION §14.6；唯一開發待辦 TODO §7.3.2。記錄精確 head／工程包／環境；不拿 V2.6.16 CI 或自動化測試勾選本節。
+
+- [ ] 原安裝啟動、每 60 秒、重連各一次合併請求；Device／權限分項結果，無推播／員工持續登入，光貿同步頻率維持。
+- [ ] Built-in／CYID 角色、停用、刪除、App Access、密碼變更與漏同步，舊 proof 失效，最終操作 Device＋Employee＋current access，不能使用舊開窗授權或 stale response。
+- [ ] 使用中撤銷、未開啟下一次啟動、空員工 cache 啟動、CYID 故障但 Device 已撤銷，均先確認同一裝置撤銷，再阻擋／清除／重啟。
+- [ ] 確認撤銷後、shutdown 前、wipe 中分別強制關閉／kill；下次啟動 marker 優先恢復。檔案占用／部分清除失敗不得進入業務，背景工作不能重建資料。
+- [ ] Logs、Data、Cache、root／各子目錄 runtime 檔案、設定與憑證全部清除，保留發行必要程式，重啟進首次設定；folder 外檔案保持，marker 最後移除。
+- [ ] 401／403／錯密碼／員工拒絕／scope mismatch／Workspace disabled／503 不誤自動 wipe；原降級及四種連線狀態、Local、原 Workspace continuity 維持。
+- [ ] 撤銷時已送出的 AMEGO 操作不假稱取消、不自動重送，結果不明有既有查核途徑，不保留已撤銷裝置業務資料。
+
+正式部署／CYID 切換／Release 未授權；RC AA／AB 未完成項仍保留。

@@ -79,7 +79,7 @@ internal static class Program
     private static async Task TestIssueUsesTestPrefixAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         var rawOrderId = "CUSTOM-TEST-001";
         var apiOrderId = TestOrderIdPrefix.Apply(rawOrderId, FixedDate);
@@ -114,7 +114,7 @@ internal static class Program
     private static async Task TestProductionDiscoveryAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var fake = new FakeGateway
         {
@@ -144,7 +144,7 @@ internal static class Program
     private static async Task TestProductionOverwriteAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         repository.Invoices.Append(new InvoiceRecord
         {
@@ -191,7 +191,7 @@ internal static class Program
     private static async Task TestUnchangedSkipsQueryAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         repository.Invoices.Append(MatchingRecord("CC12345678", "66091800111111"));
         var fake = new FakeGateway { QueryException = new InvalidOperationException("query must not be called") };
@@ -206,7 +206,7 @@ internal static class Program
     private static async Task TestTestEnvironmentPrefixDiscoveryAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         var prefix = TestOrderIdPrefix.ForDate(FixedDate);
         var ours = prefix + "66091800123456";
@@ -238,7 +238,7 @@ internal static class Program
     private static async Task TestTestEnvironmentSkipsFailedAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         repository.Invoices.Append(new InvoiceRecord
         {
@@ -266,7 +266,7 @@ internal static class Program
     private static async Task TestRemoteAbsenceDoesNotDeleteAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         repository.Invoices.Append(MatchingRecord("EE12345678", "66091800222222"));
         var fake = new FakeGateway();
@@ -280,7 +280,7 @@ internal static class Program
     private static async Task TestPaginationAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var fake = new FakeGateway();
         fake.Pages[1] = ListResponse(2, [Remote("FF12345678", "66091800333333", "100")]);
@@ -297,7 +297,7 @@ internal static class Program
     private static async Task TestDetailRefreshAlwaysQueriesAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var original = MatchingRecord("HH12345678", "66091800555555");
         repository.Invoices.Append(original);
@@ -320,7 +320,7 @@ internal static class Program
     private static async Task TestDetailRefreshOverwriteAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var original = MatchingRecord("JJ12345678", "M20260918001");
         original.Source = InvoiceSources.Manual;
@@ -354,7 +354,7 @@ internal static class Program
     private static async Task TestTestDetailRefreshStripsPrefixAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         var rawOrderId = "66091800666666";
         var apiOrderId = TestOrderIdPrefix.Apply(rawOrderId, FixedDate);
@@ -377,7 +377,7 @@ internal static class Program
     private static async Task TestDetailRefreshFailureLeavesCacheAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var original = MatchingRecord("KK12345678", "66091800777777");
         repository.Invoices.Append(original);
@@ -403,7 +403,7 @@ internal static class Program
     private static async Task TestDetailRefreshByOrderIdAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var original = MatchingRecord("LL12345678", "M20260918002");
         original.InvoiceNumber = string.Empty;

@@ -4,21 +4,21 @@ Cloudflare Worker + D1 reference implementation for CYInvoice V3 coordination an
 
 AMEGO remains the authoritative source for invoice / void / allowance business state. AMEGO App Keys remain local to Windows and are not part of this backend.
 
-The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current Windows baseline is V2.6.14 (PR #216, not merged); source CI evidence and package are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
+The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current source baseline is V2.6.17 Build 2 (CYID Consumer candidate); V2.6.14 predecessor PR #216 remains open; exact source CI, package and remote deployment evidence are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
 
 ## Current compatibility
 
 - Service: `cyinvoice-cloud`
-- Cloud implementation: `0.8.9`
+- Cloud implementation: `0.9.2`
 - API: `1`
 - Legacy API compatibility marker: `schemaVersion=8`
-- Actual storage schema: `storageSchemaVersion=12`
-- Migrations: `0001` through `0012`
+- Actual storage schema: `storageSchemaVersion=13`
+- Migrations: `0001` through `0013`
 - Worker entrypoint: `src/app.ts`
 
-`wrangler.jsonc` advertises the client compatibility schema. Applied migrations are immutable; future changes must use new forward migrations.
+`wrangler.jsonc` contains a local/CI D1 placeholder and the source storage configuration. Remote development uses the existing Worker's bound D1 after verifying its deployment environment and database metadata; its concrete ID is injected only into a private generated config. Applied migrations are immutable; future changes must use new forward migrations.
 
-> GitHub Actions validates the Worker bundle and migrations with local SQLite. It does not prove current remote deployment health. The last recorded development deployment is 2026-09-29 staged Run #7 at Cloud 0.8.8 / API 1 / storage Schema 11; this documentation update did not query or deploy the live service.
+> Source CI passed on db1a3b95 (Cloud #377 / Windows #266). Development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) verified Cloud 0.8.9 / API 1 / compatibility marker 8 / storage Schema 12 and both new capabilities. Migration 0012 was applied once, with stable aggregate Device state and an empty foreign-key check; retry found no unapplied migrations. The first immediate health read still returned 0.8.8; identical-source retry passed. This does not replace Windows A/B/C manual acceptance.
 
 ## Development commands
 
@@ -32,16 +32,7 @@ npm run db:migrate:local
 
 Remote actions must be deliberate:
 
-```bash
-npm run db:migrate:remote
-npm run deploy
-```
-
-or, only when explicitly intended:
-
-```bash
-npm run deploy:with-migrations
-```
+Use the reviewed development workflow below. The default config has no runnable remote D1 ID; do not replace its placeholder with a real identifier in Git. Direct remote commands require the preflight-generated private config and the same deployment/history gates.
 
 Do not infer remote deployment state from source or CI alone.
 
@@ -205,3 +196,45 @@ This directory is public source. Keep implementation provider-neutral at the Win
 - Migration `0012_device_rename_audit.sql` retains all prior audit rows and adds the rename vocabulary. Metadata columns already exist. API compatibility marker stays 8; storage schema advances to 12.
 - Desktop management filters active Devices and hides status/revocation columns. Cloud inventory and DB retain revoked history. Existing last-active protection and self-reset remain intact.
 - Local `npm test` executes real lifecycle handlers/SQL, including auth/race rejection and audit-failure rollback. Remote deployment evidence is recorded separately in the handoff/PR.
+
+## CYID Consumer candidate (disabled by default)
+
+Canonical identity semantics come directly from `../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`; this consumer declares `../CYID_CONSUMER_VERSION=1.0.3`. No mirror or CYID D1 binding is added.
+
+An independently reviewed deployment injects `CYID_ENABLED=true`, private `IDENTITY` Service Binding, and runtime-only `IDENTITY_APPLICATION_ID`, `IDENTITY_WORKSPACE_ID`, `IDENTITY_CYINVOICE_WORKSPACE_ID`. The two Workspace IDs are distinct scopes; this Worker binds exactly one CYInvoice Workspace. Missing/mismatched configuration fails closed. No real deployment binding or CYID application enablement was verified in this source task. With the flag absent/false, Built-in remains available.
+
+`IDENTITY_CYINVOICE_WORKSPACE_ID` is the existing business Workspace ID, not a new Workspace. Cutover retains the current consumer D1, Workspace, Devices and Tokens; existing installations must not rejoin or reset. Upgrade all active Windows installations to CYID-capable clients (current batch: V2.6.17), prepare Employee activation/App Access/Role/verified Super Admin Email, and prove continuity in isolated staging before enabling the flag. Until those gates pass, retain the Built-in deployment. Windows offline authentication is not offline invoice issuance: AMEGO still requires connectivity; Cloud transport/timeout/temporary 503 with reachable AMEGO uses the existing protected fallback. Credential/permission/Device rejection never permits fallback. Both services unavailable blocks all business; pure Local requires only AMEGO. See CY_ID_INTEGRATION §14.2. Authenticated discovery now checks canonical private `/v1/health` via the existing Binding; this is liveness only, creates no Session, and never grants Employee/App Access authorization. Source Cloud 0.9.1 adds no schema/migration or deployment.
+
+`GET /v1/identity-provider` requires an active Device Token and returns the confirmed provider/binding. `POST /v1/cyid/authenticate` accepts only per-operation employeeNo/password plus Device Token. The gateway owns Login → Resolve → result → finally Logout, returning normalized principal without Session/verifier. CYID owns Employee/enabled/Role/App Access; CYInvoice owns Device and business permission. Legacy account/bootstrap routes reject in CYID mode.
+
+Device rename/revoke, pairing issuance and invitation issue/preview/claim/revoke reuse the existing handler/mutation owners with a request-local CYID context. Invitation requires current SUPER_ADMIN credentials; pairing claim uses the existing one-time ticket issued after SUPER_ADMIN + Email OTP and grants Device membership only. Verified owner Email is read transiently from the authorized CYID admin snapshot, never imported into consumer authority/cache. Migration 0013 retains old invitation history/FKs and distinguishes Built-in from external CYID actors.
+
+Logout is best effort in finally. Response loss/crash can leave a CYID Session active until provider revocation/expiry (current default 8 hours); no consumer token is persisted and no completed mutation is retried. No distributed transaction is claimed between CYID Resolve and consumer D1 mutation. Windows uses a subordinate DPAPI cache only after transport failure, never after an HTTP authority error; offline server administration is unavailable. See CY_ID_INTEGRATION §14 for acceptance and cutover gates.
+
+
+### V2.6.17 aggregate runtime synchronization (Cloud 0.9.2)
+
+`POST /v1/runtime/sync`, authenticated by the original Device Token, accepts `{synchronize, authorities}`. It returns self Device status and fixed consumer/provider binding, plus provider-specific permission results on a full refresh. Revoked tokens expose only their authenticated self-state; unknown tokens do not authorize reset. A final self-state check runs even after provider failure. The normal 60-second refresh reuses Built-in snapshot or canonical CYID private invalidation; liveness-only calls create no employee authorization. No migration or deployment is performed by this source change.
+
+CYID mode additionally requires the named RPC binding below, targeting the same approved provider as `IDENTITY`; deployment substitutes a private service name. These are placeholders, not runnable production configuration:
+
+```json
+{"services":[
+  {"binding":"IDENTITY","service":"PROVIDER_SERVICE_PLACEHOLDER"},
+  {"binding":"IDENTITY_AUTHORITY","service":"PROVIDER_SERVICE_PLACEHOLDER","entrypoint":"ConsumerAuthoritySync"}
+]}
+```
+
+Canonical capability semantics stay in CONSUMER_INTEGRATION_STANDARD §11.1. Consumer Impact BACKWARD_COMPATIBLE; existing Fetcher consumers keep operating. Missing/mismatched binding blocks validation rather than silently switching authority. Staging must exercise the named RPC, Device revoke during CYID outage, original Workspace continuity and usage/quota; production cutover remains separately authorized.
+
+## Development rollout and recovery checkpoint (2026-10-11)
+
+The existing `cyinvoice-cloud-dev-deploy.yml` is the only development deployment owner. PRs validate without credentials. A push to `cyinvoice/cloud-dev-preflight`, or dispatch with `mode=preflight`, performs remote reads only: existing settings/D1 binding, Built-in mode, canonical migration prefix, FK check, bounded history fingerprints, health, Time Travel checkpoint and prior Worker deployments. It creates no Workspace, Employee, Device or Session and sends no Email. Runtime data/resource identifiers stay in private runner temporary files and are never uploaded.
+
+After a successful preflight, the existing `cyinvoice/cloud-dev-deploy` branch or explicit dispatch `mode=deploy` applies only reviewed pending migration 0013 (or no migration when already applied). A private generated config preserves the original D1, runtime vars, Service Bindings and secrets, explicitly retains `CYID_ENABLED=false`, and updates storage configuration to 13. Unknown resource bindings, changed rate limits, wrong environment/DB, enabled CYID, missing secrets, unexpected migrations or dirty FK stop before mutation. Source version is read from package.json rather than an old hard-coded 0.9.0.
+
+Post-deployment verifies Cloud source version, API 1, compatibility marker 8, storage 13 and runtime-sync capability. It compares old Workspace, Device IDs/Token hashes/status, employee IDs/roles/revisions and pairing/invitation/audit history. New audit events may append; missing/changed captured rows fail acceptance. A legitimate concurrent account/Device change can also fail this conservative gate and requires diagnosis rather than automatic retry or restore. These are infrastructure/history checks; they do not replace original Device authentication and Windows acceptance.
+
+Recovery does not replay an authority switch or automatically restore D1. Keep CYID disabled, diagnose the current Worker and migration state, and use the previously captured Worker deployment/version for an approved code rollback if necessary. Schema 13 retains Built-in invitation fields and historical actor FK; validate the old runtime against the forward schema before rollback. Restoring D1 by the logged checkpoint timestamp is a last resort after stopping writes and accounting for newer writes; otherwise recovery could erase legitimate activity. The bookmark and settings remain temporary/private; the checkpoint UTC timestamp is recorded in the job log so the original D1 bookmark can be retrieved again through Cloudflare. Recovery must happen within the applicable Time Travel retention window.
+
+This original development target may contain the existing business Workspace; it is **not** automatically an isolated CYID sandbox. Separate staging targets and reviewed Application/Workspace bindings must be verified before creating synthetic accounts or switching authority. All active Windows installations remain in their original folders, are upgraded with the complete package, and retain Data/Cache/Logs. No production deployment, CYID flag switch or Release is implied by the development workflow.

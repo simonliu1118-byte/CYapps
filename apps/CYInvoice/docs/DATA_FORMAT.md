@@ -2,7 +2,7 @@
 
 本文件記錄 C#／WinForms 現行工程線的本機資料、SQLite 遷移、Cache 與安全規則。
 
-- 目前工程測試基準：**V2.6.14**。
+- 目前工程測試基準：**V2.6.16**。
 - 最新公開正式 Release：**V2.4.2**。
 - 主要本機資料庫：`Data/CYInvoice.db`。
 - 安全設定：`Data/settings.json`。
@@ -263,3 +263,18 @@ V2.6.11 UI 以 InvoiceWorkQueue 唯讀投影分為「上傳問題／處理中」
 ## Cloud Device metadata（V2.6.14）
 
 既有 devices.client_version／last_seen_at 由 authenticated self usage 更新；後者為 Cloud UTC、Windows 顯示本機時區。paired_at／created_at 繼續代表加入時間，不由啟動回報覆寫。display_name 可經同 Workspace 中央超管改名，使用既有最大 120 字界限。0012_device_rename_audit.sql 保存既有 security_audit_events 再加入 device_renamed vocabulary；不回寫既有 migration，不刪 revoked Device。
+
+## CYID protected consumer state（V2.6.15）
+
+SettingsModels 新增 `cloud_identity_provider`（BUILT_IN／CYID，default BUILT_IN）及 `cyid_binding_enc`。Confirmed CYID binding 由 Device-authenticated discovery 取得，包含 gateway URL、CYInvoice Workspace、Device、CYID Workspace、Application、Consumer Version、Device Token SHA-256 digest；整筆由 Windows DPAPI 保護，讀取時必須符合目前 endpoint／Device／token。不保存 CYID Session 或 password，不把 client 提供的 scope 當 authority。
+
+切換沿用原 `cloud_workspace_id`／`cloud_device_id`／`cloud_device_token_enc`；CYID Workspace 只保存在 identity binding，不覆寫業務 Workspace。Data／Cache、SQLite 發票／pending 及其他公司設定不因 authority 切換重建或清除。
+
+`Data/cyid_offline_cache.json` 以 employeeNo 索引 protected entry；每筆完整 binding、AppPrincipal（含 Role／credentialVersion／employeeRevision）、隨機 salt 及本機 PBKDF2-SHA256 210000 次 proof 都在 DPAPI ciphertext 中。Proof 是 online success 後本機建立，不是 CYID credential verifier。V2.6.16 在雲端 transport failure／timeout／暫時 5xx 且光貿正常時沿用原有降級快取，中央拒絕／失效會清除相應 entry；Device／scope 改變不能重用。沒有新增 TTL，不聲稱即時得知離線撤銷。
+
+Cloud→Local destructive reset 的既有完整 Data replacement 也移除 CYID binding/cache。Built-in SQLite employee cache 保留自己的模式用途，CYID 不下載或使用它作 Employee authority；不新增 CYID employee replica 或第二套 business state。
+
+
+## V2.6.16 服務連線狀態
+
+ServiceConnectionState 僅為當次執行記憶體狀態；不新增持久化檔案、資料庫 schema、Token 或 Workspace 身分。光貿／雲端可用性不是 Employee 授權。已知 Device／綁定拒絕會由現行 stores 清身分快取；雙斷線不清發票、settings、pending 或 PDF。正式業務未知結果資料語意不變；恢復不 replay。連線矩陣及既有降級條件以 CY_ID_INTEGRATION §14.2 描述為準。

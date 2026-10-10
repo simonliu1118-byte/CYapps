@@ -2,7 +2,7 @@
 
 本文件描述目前 C#／WinForms 工程線產品行為；永久治理規則仍以 `PROJECT_RULES.md` 為準。
 
-- 目前工程測試基準：**V2.6.14**。
+- 目前工程測試基準：**V2.6.16**。
 - 最新公開正式 Release：**V2.4.2**（tag：`cyinvoice-v2.4.2`）。
 - 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258；PR #216 尚未合併，仍需實機／光貿驗證；未經使用者當次明確要求不得建立正式 Release。
 
@@ -26,6 +26,7 @@
 - AMEGO 已成功開立與本機保存成功是不同狀態；遠端成功但本機保存失敗時不得當一般失敗重送。
 - 網路逾時／傳輸結果不明時只做唯讀回查；無法嚴格確認則標記「結果不明」並禁止盲目重送。
 - 開票後回查不得只比 OrderId；必須唯一命中並核對必要欄位。
+- 目前開立必須連線光貿；離線身份驗證不提供離線開票、配號或恢復連線自動重送。
 - 上傳狀態只有 AMEGO 明確回覆 `99` 才視為完成；`91` 為錯誤；其餘不得冒充成功。
 
 ## 3. 公司統編與買方名稱
@@ -192,8 +193,8 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - Device inventory／revoke 保留 history／audit，舊 Token 失效，rejoin 為新 identity；最後一台 active Built-in Device 有 LAST_ACTIVE_DEVICE 防護。
 - Cloud → Local 以雙重確認、關閉程式後 revoke／self-status 確認，再清目前安裝 Data／Cache／identity；不明結果保留資料，Windows 不刪中央 Workspace。
 - Built-in Cloud 忘記密碼已使用 Email challenge／confirm；尚需 live Email 與 A/B 測試。
-- Source Cloud 0.8.9／API 1／compatibility Schema 8／storage Schema 12，deployment 與人工驗收證據見 CLOUD_WORK_HANDOFF.md。
-- CY ID 模式是已定案未接線的後續模式，共同 contract 直接引用 CYCloudIdentity canonical standard。
+- Source Cloud 0.9.1／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 CLOUD_WORK_HANDOFF.md。
+- V2.6.15 CYID Consumer source 已接線，正式環境未切換；共同 contract 直接引用 CYCloudIdentity canonical standard，實機／staging gate 見 TODO §7.3／RC AA。
 
 ## 14. 目前尚未完成
 
@@ -222,3 +223,22 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - 使用版本取代 V2.6.13 加入時快照。每台裝置每次啟動成功回報自己的 VERSION／BUILD 與 server UTC 最後使用；Windows 轉為本機時間。離線／舊版維持最近確認資料，不宣稱即時在線。
 - 名稱修改經中央 SUPER_ADMIN 執行時驗證，只可改同一 Workspace active Device，並發 identity／credential 變更拒絕；與 audit 原子保存。歷史只從 Windows 隱藏，Cloud 保留。
 - Cloud 0.8.9／API 1／marker 8／storage 12；新增 usage／rename capabilities，0012 forward migration 保留 audit history，實際部署與實機結果另記。
+
+## V2.6.15 CYID Consumer（2026-10-10 授權開發）
+
+- 保留 Local／Built-in 正式模式；CYID mode 使用 CYID canonical authority，不直接讀 CYID D1 或自建 Employee／App Access authority。
+- 不持續員工登入；每次輸入員編／密碼經 private gateway Login／Resolve／finally Logout，不向 Windows 傳 Session／verifier。
+- Device Token 和一次性加入 ticket 只代表裝置；CYID Employee／App Access／Role 與 CYInvoice Device／Workspace／business permission 取交集。
+- 確認綁定才啟用 CYID；兩 Workspace 各自穩定、不從 client 猜測，綁定不符或 provider error 拒絕，不自動降級。
+- V2.6.16 沿用原 last-trusted 降級，限雲端 transport／timeout／暫時 5xx 且光貿可達；整筆 protected cache 綁原裝置，online deny 清除 cache，reconnect 即採新權限。沒有 TTL，不承諾離線即時撤銷。
+- 帳號管理／首次啟用／復原由 CY Web；Windows 隱藏帳號管理，CYID 加入不讀 Built-in verifier snapshot。
+- Source／CI 不代表部署成功；real binding、隔離 staging、遷移／rollback、RC AA 與正式切換仍為後續 gate，0-active-Device recovery 保護尚未放寬。
+
+
+## V2.6.16 光貿／雲端服務連線（2026-10-10 使用者定案）
+
+- 光貿與雲端驗證分開檢查，四種狀態依 CY_ID_INTEGRATION §14.2；雲端 503 暫時不可用納入原有降級，帳密／權限拒絕／Device 撤銷不得降級。
+- 純 Local 不查雲端，光貿正常可用、不可達阻擋全部業務至光貿恢復。
+- 雙斷線用一個原生 modal，保留重新檢查／關閉程式；MainForm 每 15 秒檢查，任一恢復即回對應狀態。光貿相關入口與核心都阻擋，Cloud-only 功能在 Cloud 可用時仍走原權限流程。
+- 沿用原 Workspace、Device／Token、資料及輸入，不 reset／重建／改 Mode；恢復不自動重送開票，結果不明先回查。
+- 不新增第二套 identity authority、CYID D1 連線、server Session、離線配號／業務佇列、持久化 connectivity cache 或額外相容層。

@@ -142,7 +142,7 @@ internal static class AdministrativeClosureTests
         string issueType,
         bool allowance = false)
     {
-        var repository = LocalRepository.Open(path, new AdministrativeClosureProtector());
+        var repository = TestRepository.Open(path, new AdministrativeClosureProtector());
         var settings = repository.Settings.LoadOrCreate();
         settings.Environment = Environments.Production;
         settings.ProductionInvoice = "12345678";

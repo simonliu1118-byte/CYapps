@@ -2,6 +2,39 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.17 Build 2 — 2026-10-10（engineering，未部署／未正式切換）
+
+- 2026-10-11 部署準備：沿用原 development workflow，增加唯讀 preflight、原 DB／authority／migration／FK／歷史 fingerprint 與 private recovery checkpoint；驗收使用 Cloud package version，修正舊 0.9.0 hard-code。此批只改部署工具／測試／文件，Windows 及 Worker 業務 runtime、VERSION／BUILD 均未改；遠端結果見現行交接。
+- Build 2 收斂 self-status parser，缺完整撤銷證據不能 wipe；自己撤銷這台裝置亦先落 marker，等新程序再完整清除包含 Logs。手動 Local／Workspace-disabled reset 原契約保留。
+- Build 1 補舊 Gateway 404 的明確升級提示及 unknown token 不清除回歸；先升級保留 Built-in 的 additive Cloud 0.9.2，再升級 Windows／staging，不能拿舊 Gateway 當新同步已完成。Build 0 的治理 PR 標記格式已改為純文字。
+- 啟動、60 秒及重連以 POST /v1/runtime/sync 一次刷新 Device／binding／權限；15 秒連線檢查不每輪載入全員工，保留原光貿同步週期。Built-in snapshot 沿用既有 owner，revision 與 rows 同一查詢；拒絕舊 revision 覆寫。
+- CYID 採 canonical Contract 1.0.3 private invalidation，中央仍是唯一權威；背景不登入、不保存員工帳密、不建立 Session，只移除失效 proof。同一 Workspace／Device／Token 的 1.0.2 cache 在升版後保持原範圍，不要求重加裝置。
+- 人工結案／折讓及 Built-in 中央帳號操作改由最終 core／server 驗證，對話只收輸入；開窗權限不代替最終 mutation。儲存設定重新驗證管理員並防舊 provider 設定覆寫。
+- 明確同裝置撤銷先落 durable marker，停止工作後關閉；新程序等待舊程序結束，再由既有 recovery 清除 Data／Cache／Logs 與 portable 所有非發行檔案。marker 最後移除，partial wipe／kill 續清；每個可攜資料夾只允許一個程序寫入。401／一般拒絕／Workspace disabled／503 不誤清除。
+- 發行包保存並驗證 package-files.json，保留程式必要 binaries／文件；不刪可攜資料夾以外檔案、不自動重送光貿結果不明請求。版本 Patch +1、BUILD 0，Cloud 0.9.2、CYID 0.3.6／Consumer Impact BACKWARD_COMPATIBLE。Windows／實機驗收依現行交接與 TODO，未建立 tag／Release。
+
+## V2.6.16 — 2026/10/10（服務連線與原有降級，工程版）
+
+- 依使用者最終定案分開檢查光貿及雲端驗證，雲端 transport／timeout／暫時 503 且光貿正常沿用既有降級單機；不另建 Local authority 或修改 Workspace。
+- 光貿不可達停用開票、查詢、作廢、折讓確認、PDF、同步；僅 Cloud 正常時雲端功能仍走原權限。雙斷線原生 modal 阻擋全部業務，每 15 秒及手動重新檢查，任一恢復回對應狀態。純 Local 只依光貿檢查正常／阻擋至恢復。
+- 帳密／權限／Device 拒絕不能降級；已知 Device 拒絕清相應身分快取，後續 503 不復活。保留原設定／Token／發票及輸入；恢復不自動開票／重送，原結果不明流程保留。
+- 共用 ServiceConnectivity 收斂既有光貿 probe，核心在業務請求／本機變更前防護；MainForm 為單一檢查及提示 lifecycle owner。Cloud 0.9.1 authenticated discovery 經現有 private Binding 檢查 CYID canonical health，不建立 Session 或第二 authority。API 1／marker 8／storage 13／Contract 1.0.2 不變，CYID Consumer Impact: NONE。
+- 新增四狀態／純 Local／503／HTML 503／deny→outage／恢復／零業務請求與資料保留回歸；Windows 增加原生 modal／不可略過／重新檢查與關閉 smoke。CI／工程包看 PR #380 精確 head，人工 RC AA／AB、staging 及正式切換尚未完成。
+- 新獨立 Patch +1／BUILD 0；同步現行文件及 TODO，未部署、migration、建立 tag 或正式 Release。以下 V2.6.15 transport-only／503 拒絕為當時歷史，已由本版最終定案取代。
+
+## V2.6.15 — 2026/10/10（CYID Consumer 工程版，未部署／正式切換）
+
+- 依 CYID canonical Consumer Contract 1.0.2 新增 CyIdIdentityProvider；集中式 provider owner 保留 Local／Built-in 模式，CYID 確認後不自動降回舊 authority。
+- 每次員工驗證由 CYInvoice Worker 經 private IDENTITY Service Binding 登入、Resolve、執行、finally Logout；Session 不傳給 Windows、不保存。Device Token 只代表裝置，Employee／App Access 由 CYID 判定，兩種 Workspace 明確綁定。
+- 真正 Windows transport 中斷才使用原裝置最後可信的 protected offline cache；Role／scope／本機離線 proof 整筆 DPAPI 保護。重新連線採最新 CYID，拒絕／停用／憑證失效清除該員工快取。HTTP 503、錯誤回應與取消不轉離線。
+- 裝置改名、撤銷、配對／邀請沿用既有流程及 audit owner；0013 forward migration 保留 Built-in 邀請歷史，獨立保存外部 CYID 邀請人 identity，不建立假 Built-in 帳號。
+- Windows 確認 CYID 綁定後隱藏帳號管理；加入不讀 Built-in Employee snapshot，忘記密碼改提示至 CY Web。未接入的舊 Worker 保持 Built-in。
+- Source Cloud 0.9.0／API 1／marker 8／storage 13，新增 cyid-consumer-v1；預設未啟用 CYID。沒有修改 CYID provider／canonical contract，CYID Consumer Impact: NONE。
+- 本機 TypeScript、real-provider gateway／onboarding／migration regression、C# Cloud contracts、Void workflow 29／Allowance 12／SQLite 13 通過；Linux WinForms cross-build 只作編譯預檢，真正 Windows CI／封裝及實機 acceptance 另記交接。
+- PR #380 整合 source，canonical adoption 另由治理 #381／2.3.34 完成；本輪精確 head CI／測試包以 #380 checks 為準。
+- 10/10 補原 Workspace 接續 regression：同一 Device／Token、consumer history 及本機設定／資料在 authority 切換後重開保留，拒絕改綁不同業務 Workspace。文件明定升級／帳號授權／原裝置 staging 驗收先於啟用，不要求重建或重新加入；離線驗證不等於光貿離線開票，HTTP 503 不 fallback。本次只新增測試／文件，不修改產品 VERSION／BUILD 或部署。
+- 新獨立功能按 Patch +1、BUILD 0；不宣告既有實機待辦完成，未建立 tag／Release。
+
 ## V2.6.14 — 2026/10/10（工程測試版，未正式 Release）
 
 - 裝置管理直接顯示「目前有 N 台使用中的裝置」、原有撤銷說明與 active 清單；移除分頁、狀態及撤銷時間欄。撤銷採共通 Danger button，最後一台防護與目前裝置安全重置維持。
@@ -10,6 +43,8 @@
 - 更改裝置名稱使用中央超管執行時驗證，限定同一 Workspace 的 active 裝置；並發撤銷／權限變更會拒絕。改名與稽核同一交易，forward migration 0012 保留既有 audit、增添 device_renamed。
 - Cloud source 0.8.9／API 1／compatibility marker 8／storage Schema 12；新 capabilities device-usage-v1／device-rename-v1。撤銷紀錄仍保留雲端資料庫及既有 API，只從程式清單隱藏。
 - 本次獨立功能需求推進 Patch、BUILD 歸零；已同步 main 6d997be0，保留先前分流、邀請修正與介面。自動化、部署及工程包證據以現行交接／PR 精確 head 為準；實機 RC Z 尚待驗收，未建立 tag／正式 Release。
+
+- V2.6.14 功能 source db1a3b95 的 Governance #1171／Cloud #377／Windows #266 全部通過，development staged Run #8 attempt 2 已驗證 Cloud 0.8.9／Schema 12／新 capabilities。0012 一次套用，重跑無 pending，Device aggregate／revoked 歷史與 FK 正常。初次立即 health 尚讀到 0.8.8，相同 source 重跑通過；收尾文件更新不另推進 VERSION／BUILD。
 
 ## V2.6.13 — 2026/10/09（工程測試中，未正式 Release）
 

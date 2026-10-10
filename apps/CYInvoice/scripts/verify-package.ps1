@@ -45,6 +45,25 @@ try {
     $Reader = [System.IO.StreamReader]::new($VersionEntry.Open())
     try { $VersionText = $Reader.ReadToEnd() }
     finally { $Reader.Dispose() }
+    $ManifestEntry = $Archive.GetEntry("CYInvoice/package-files.json")
+    if ($null -eq $ManifestEntry) { throw "Package ZIP is missing the original-file manifest." }
+    $ManifestReader = [System.IO.StreamReader]::new($ManifestEntry.Open())
+    try { $Manifest = @($ManifestReader.ReadToEnd() | ConvertFrom-Json) }
+    finally { $ManifestReader.Dispose() }
+    if ($Manifest.Count -lt 1 -or $Manifest.Count -gt 4096 -or $Manifest -notcontains "CYInvoice.exe") {
+        throw "Package manifest is invalid."
+    }
+    foreach ($File in $Manifest) {
+        if ($File -isnot [string] -or $File -match '(^/|\\|:|(^|/)\.{1,2}(/|$)|^(Data|Cache|Logs)(/|$))') {
+            throw "Package manifest contains a runtime or unsafe path."
+        }
+    }
+    $PackagedFiles = @($Archive.Entries | Where-Object {
+        $_.Length -ge 0 -and -not $_.FullName.EndsWith('/') -and $_.FullName -ne "CYInvoice/package-files.json"
+    } | ForEach-Object { ($_.FullName -replace '\\', '/') -replace '^CYInvoice/', '' })
+    if (@(Compare-Object ($Manifest | Sort-Object -Unique) ($PackagedFiles | Sort-Object -Unique)).Count -ne 0) {
+        throw "Package manifest does not match the original package files."
+    }
 }
 finally {
     $Archive.Dispose()
@@ -54,6 +73,7 @@ $RequiredEntries = @(
     "CYInvoice/CYInvoice.exe",
     "CYInvoice/VERSION",
     "CYInvoice/BUILD",
+    "CYInvoice/package-files.json",
     "CYInvoice/$ArtifactVersion.txt",
     "CYInvoice/使用說明.txt",
     "CYInvoice/Runtime/WebView2/Microsoft.Web.WebView2.Core.dll",

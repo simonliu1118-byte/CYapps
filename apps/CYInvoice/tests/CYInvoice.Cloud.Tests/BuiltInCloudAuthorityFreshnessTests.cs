@@ -11,7 +11,7 @@ internal static class BuiltInCloudAuthorityFreshnessTests
     public static async Task RunAsync()
     {
         await CurrentAuthorityOverridesStaleCacheAsync();
-        await OnlyTransportFailureUsesOfflineCacheAsync();
+        await TemporaryServiceFailureUsesExistingFallbackAsync();
         await ReconnectReplacesOfflineAuthorityAsync();
         await ConfiguredSourceRejectsWorkspaceMismatchAsync();
     }
@@ -60,7 +60,7 @@ internal static class BuiltInCloudAuthorityFreshnessTests
         Equal(8, state.WorkspaceRevision, "successful online refresh must persist the current Workspace revision");
     }
 
-    private static async Task OnlyTransportFailureUsesOfflineCacheAsync()
+    private static async Task TemporaryServiceFailureUsesExistingFallbackAsync()
     {
         using var temporary = new AuthorityTemporaryDirectory();
         var cache = new CloudEmployeeCacheStore(temporary.Path, new TestProtector());
@@ -94,16 +94,9 @@ internal static class BuiltInCloudAuthorityFreshnessTests
         }
 
         source.Handler = _ => throw new CloudApiException(
-            "UNAUTHORIZED", "device rejected", HttpStatusCode.Unauthorized);
-        await ThrowsAsync<CloudApiException>(
-            () => provider.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "Offline22")),
-            "HTTP 401 must fail closed instead of using stale cache");
-
-        source.Handler = _ => throw new CloudApiException(
             "STORAGE_UNAVAILABLE", "storage unavailable", HttpStatusCode.ServiceUnavailable);
-        await ThrowsAsync<CloudApiException>(
-            () => provider.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "Offline22")),
-            "reachable Cloud HTTP failure must fail closed instead of masquerading as Offline");
+        NotNull(await provider.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "Offline22")),
+            "503 temporary outage must reuse the original protected fallback");
 
         source.Handler = _ => throw new InvalidDataException("malformed authority snapshot");
         await ThrowsAsync<InvalidDataException>(
@@ -115,6 +108,14 @@ internal static class BuiltInCloudAuthorityFreshnessTests
         await ThrowsAsync<InvalidOperationException>(
             () => provider.AuthenticateAsync(new IdentityAuthenticationRequest("0002", "Offline22")),
             "Offline cache from another Workspace must never authenticate current Workspace operations");
+        source.CurrentWorkspaceId = "ws_offline";
+        source.Handler = _ => throw new CloudApiException("UNAUTHORIZED", "device rejected", HttpStatusCode.Unauthorized);
+        await ThrowsAsync<CloudApiException>(() => provider.AuthenticateAsync(new("0002", "Offline22")),
+            "known Device rejection must never fall back");
+        source.Handler = _ => throw new HttpRequestException("later outage");
+        await ThrowsAsync<InvalidOperationException>(() => provider.AuthenticateAsync(new("0002", "Offline22")),
+            "a later outage cannot resurrect credentials after known Device rejection");
+
     }
 
     private static async Task ReconnectReplacesOfflineAuthorityAsync()

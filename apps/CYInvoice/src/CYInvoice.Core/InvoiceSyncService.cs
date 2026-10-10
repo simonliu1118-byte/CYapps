@@ -45,6 +45,7 @@ public sealed class InvoiceSyncService
         CancellationToken cancellationToken = default)
     {
         if (startDate > endDate) throw new ArgumentOutOfRangeException(nameof(startDate));
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         var account = CurrentAccount();
         var gateway = gatewayFactory(account.SellerInvoice, account.AppKey);
         if (account.Environment == Environments.Test)

@@ -55,7 +55,12 @@ public sealed class CloudEmployeeAuthorityClient
     {
         using var document = await SendAsync(HttpMethod.Get, "v1/employee-authority/snapshot", null, cancellationToken)
             .ConfigureAwait(false);
-        if (!document.RootElement.TryGetProperty("employeeSnapshot", out var snapshot) || snapshot.ValueKind != JsonValueKind.Object)
+        return ReadSnapshot(document.RootElement);
+    }
+
+    public static CloudEmployeeAuthoritySnapshot ReadSnapshot(JsonElement root)
+    {
+        if (!root.TryGetProperty("employeeSnapshot", out var snapshot) || snapshot.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Cloud Employee authority response is missing employeeSnapshot.");
         if (!snapshot.TryGetProperty("employees", out var employeesElement) || employeesElement.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("Cloud Employee authority snapshot is missing Employees.");
@@ -117,7 +122,12 @@ public sealed class CloudEmployeeAuthorityClient
             .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
             .ConfigureAwait(false);
         await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
-        var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token).ConfigureAwait(false);
+        JsonDocument document;
+        try { document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token).ConfigureAwait(false); }
+        catch (JsonException) when ((int)response.StatusCode is >= 500 and <= 599)
+        {
+            throw new CloudApiException("CLOUD_UNAVAILABLE", "雲端驗證服務暫時不可用。", response.StatusCode);
+        }
         if (response.IsSuccessStatusCode) return document;
 
         var code = ReadErrorCode(document.RootElement);

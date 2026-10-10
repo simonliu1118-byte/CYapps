@@ -431,13 +431,16 @@ internal sealed class RecordDetailForm : Form
         UpdateActionAvailability();
     }
 
+    internal void ApplyServiceState() => UpdateActionAvailability();
+
     private void UpdateActionAvailability()
     {
         var operationBusy = voidBusy || allowanceBusy;
+        var ameAvailable = repository.Connections.Current is not { AmegoAvailable: false } and not { BlockAll: true };
         close.Enabled = !operationBusy;
         changePrinter.Enabled = !operationBusy;
 
-        var pdfAllowed = !operationBusy && !latestStatusUnknown && service.GetInvoicePdfEligibility(record).Allowed;
+        var pdfAllowed = ameAvailable && !operationBusy && !latestStatusUnknown && service.GetInvoicePdfEligibility(record).Allowed;
         viewPdf.Enabled = pdfAllowed;
         printPdf.Enabled = pdfAllowed;
 
@@ -454,7 +457,7 @@ internal sealed class RecordDetailForm : Form
         else
         {
             voidInvoice.Text = voidManualReview ? "人工確認中" : "作廢";
-            voidInvoice.Enabled = canOperateInvoice && !allowanceBusy && !voidManualReview && allowanceReview is null;
+            voidInvoice.Enabled = ameAvailable && canOperateInvoice && !allowanceBusy && !voidManualReview && allowanceReview is null;
         }
 
         allowanceInvoice.Visible = canOperateInvoice || allowanceReview is not null;
@@ -468,7 +471,7 @@ internal sealed class RecordDetailForm : Form
             allowanceInvoice.Text = allowanceReview is null
                 ? "折讓"
                 : allowanceReview.AwaitingConfirmation ? "折讓待確認" : "折讓處理中";
-            allowanceInvoice.Enabled = canOperateInvoice && !voidBusy && allowanceReview is null && !voidManualReview;
+            allowanceInvoice.Enabled = ameAvailable && canOperateInvoice && !voidBusy && allowanceReview is null && !voidManualReview;
         }
     }
 
@@ -878,7 +881,8 @@ internal sealed class RecordDetailForm : Form
     private void SetPdfBusy(bool busy, string action)
     {
         pdfBusy = busy;
-        var allowed = !busy && !voidBusy && !allowanceBusy && !latestStatusUnknown && service.GetInvoicePdfEligibility(record).Allowed;
+        var allowed = repository.Connections.Current is not { AmegoAvailable: false } and not { BlockAll: true }
+            && !busy && !voidBusy && !allowanceBusy && !latestStatusUnknown && service.GetInvoicePdfEligibility(record).Allowed;
         viewPdf.Enabled = allowed;
         printPdf.Enabled = allowed;
         changePrinter.Enabled = !busy && !voidBusy && !allowanceBusy;

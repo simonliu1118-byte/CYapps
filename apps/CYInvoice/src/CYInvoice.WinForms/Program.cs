@@ -48,6 +48,19 @@ internal static class Program
                 return;
             }
 
+            if (!WaitForResetParent(args)) return;
+            // One portable directory has one writer, including reset recovery.
+            var directoryKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(AppContext.BaseDirectory).ToUpperInvariant())));
+            using var instance = new Mutex(false, @"Local\CYInvoice-" + directoryKey);
+            bool acquired;
+            try { acquired = instance.WaitOne(0); }
+            catch (AbandonedMutexException) { acquired = true; }
+            if (!acquired)
+            {
+                MessageBox.Show("這個資料夾的 CYInvoice 已經開啟，請使用原本的視窗。", "CYInvoice");
+                return;
+            }
             if (!RecoverPendingReset()) return;
 
             Application.Run(new MainForm());
@@ -104,6 +117,13 @@ internal static class Program
 
     private static void RunScheduledResetAfterShutdown()
     {
+        if (LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
+        {
+            // The child waits until this process is gone. No old task can recreate
+            // a file while the fresh process performs marker-owned recovery.
+            RestartAfterParentExit();
+            return;
+        }
         if (!LocalResetApplication.TryTake(out var request) || request is null) return;
         try
         {
@@ -111,7 +131,7 @@ internal static class Program
                 .ExecuteAsync(AppContext.BaseDirectory, new DpapiSecretProtector(), request)
                 .GetAwaiter()
                 .GetResult();
-            Application.Restart();
+            RestartAfterParentExit();
         }
         catch (Exception error)
         {
@@ -122,8 +142,32 @@ internal static class Program
                 ? error.Message + "\n\n本機資料尚未刪除。請稍後重新開啟 CYInvoice，程式會先確認 Cloud 狀態後再決定是否繼續。"
                 : error.Message + "\n\n本機資料已保留，CYInvoice 將重新開啟。";
             MessageBox.Show(message, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            if (!recoveryPending) Application.Restart();
+            if (!recoveryPending) RestartAfterParentExit();
         }
+    }
+
+    private static void RestartAfterParentExit()
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+        start.ArgumentList.Add("--reset-parent");
+        start.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        System.Diagnostics.Process.Start(start);
+    }
+
+    private static bool WaitForResetParent(string[] args)
+    {
+        var position = Array.IndexOf(args, "--reset-parent");
+        if (position < 0) return true;
+        if (position + 1 >= args.Length || !int.TryParse(args[position + 1], out var id) || id == Environment.ProcessId)
+            return false;
+        try
+        {
+            using var parent = System.Diagnostics.Process.GetProcessById(id);
+            if (parent.WaitForExit(30_000)) return true;
+            MessageBox.Show("先前程序尚未結束，清除標記已保留。請關閉先前程序後重新啟動。", "裝置清除待完成");
+            return false;
+        }
+        catch (ArgumentException) { return true; }
     }
 
     private static void RunStartupSmokeTest()

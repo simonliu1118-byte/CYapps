@@ -125,6 +125,7 @@ public sealed class InvoiceService
         await pdfGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
             var stored = repository.Invoices.LoadOrCreate().SingleOrDefault(item => item.Id == record.Id)
                 ?? throw new InvalidOperationException("本機找不到這筆發票紀錄，請重新整理清單");
             if (!string.Equals(stored.InvoiceNumber.Trim(), record.InvoiceNumber.Trim(), StringComparison.Ordinal))
@@ -170,6 +171,7 @@ public sealed class InvoiceService
         string ban,
         CancellationToken cancellationToken = default)
     {
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         ban = ValidateBuyerBan(ban);
         if (repository.BuyerNames.TryLookup(ban, out var localName))
         {
@@ -183,6 +185,7 @@ public sealed class InvoiceService
         string ban,
         CancellationToken cancellationToken = default)
     {
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         ban = ValidateBuyerBan(ban);
         var (gateway, _) = GetGateway();
         return await LookupBuyerNameFromApiCoreAsync(gateway, ban, cancellationToken).ConfigureAwait(false);
@@ -376,6 +379,7 @@ public sealed class InvoiceService
     public async Task<IReadOnlyList<InvoiceRecord>> RefreshAllAsync(
         CancellationToken cancellationToken = default)
     {
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         var records = repository.Invoices.LoadOrCreate().ToList();
         if (records.Count == 0)
         {
@@ -514,6 +518,7 @@ public sealed class InvoiceService
         CancellationToken cancellationToken)
     {
         InvoiceValidator.Validate(draft);
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         options = options with
         {
             Source = options.Source.Length == 0 ? InvoiceSources.Manual : options.Source,

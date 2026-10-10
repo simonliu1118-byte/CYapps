@@ -280,6 +280,7 @@ public sealed class EmployeeAllowanceWorkflowService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(selected);
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         var record = Reload(selected);
         ValidateCurrentAccount(record);
         var review = ReadManualReview(record)

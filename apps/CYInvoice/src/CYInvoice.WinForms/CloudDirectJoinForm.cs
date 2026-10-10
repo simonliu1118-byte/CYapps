@@ -487,6 +487,23 @@ internal sealed partial class CloudDirectJoinForm : Form
         if (identity.WorkspaceId != workspaceId || identity.DeviceId != deviceId)
             throw new InvalidDataException("裝置身分驗證結果不一致。");
 
+        var binding = await CyIdGateway.DiscoverAsync(http, new Uri(endpoint), token, workspaceId, deviceId, lifetime.Token);
+        if (binding is not null)
+        {
+            settings.CloudBaseUrl = endpoint;
+            settings.CloudWorkspaceId = workspaceId;
+            settings.CloudDeviceId = deviceId;
+            repository.Settings.SetCloudDeviceToken(settings, token);
+            repository.Settings.ConfirmCyIdConfiguration(settings, binding);
+            repository.Settings.ClearCloudPendingDeviceJoin(settings);
+            repository.Settings.Save(settings);
+            IdentityCompleted = true;
+            showMessage("裝置已加入，員工驗證由 CYID 提供。", "加入完成", MessageBoxIcon.Information);
+            DialogResult = DialogResult.OK;
+            Close();
+            return;
+        }
+
         var authorityClient = new CloudEmployeeAuthorityClient(http, new Uri(endpoint), token);
         var authority = await authorityClient.GetStatusAsync(lifetime.Token);
         if (authority.State != "cloud" || authority.WorkspaceId != workspaceId || authority.DeviceId != deviceId)

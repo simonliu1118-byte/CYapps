@@ -167,6 +167,15 @@ public sealed class CloudEmployeeCacheStore
             ConfigureWritableConnection(connection);
             using var transaction = connection.BeginTransaction();
 
+            using (var previous = connection.CreateCommand())
+            {
+                previous.Transaction = transaction;
+                previous.CommandText = "SELECT workspace_revision FROM cloud_employee_cache_state WHERE singleton_id = 1 AND workspace_id = $workspace";
+                previous.Parameters.AddWithValue("$workspace", workspaceId);
+                if (previous.ExecuteScalar() is long revision && revision > workspaceRevision)
+                    throw new InvalidDataException("較舊的中央權限回應不能覆寫新快取。");
+            }
+
             using (var clear = connection.CreateCommand())
             {
                 clear.Transaction = transaction;

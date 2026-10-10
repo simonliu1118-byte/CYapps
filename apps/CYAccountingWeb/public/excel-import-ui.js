@@ -59,6 +59,18 @@ function importDialogHtml() {
     </div>
 
     <div class="excel-import-body">
+      <section id="excelImportPeriodSection" class="import-section hidden">
+        <label><span>匯入方式</span><select id="excelImportMode"><option value="append">追加新資料</option><option value="replace_period">替換指定期間（超級管理員）</option></select></label>
+        <div id="excelImportPeriodOptions" class="hidden">
+          <div class="import-sheet-controls">
+            <label><span>起始月份</span><input id="excelImportStartMonth" type="month"></label>
+            <label><span>結束月份</span><input id="excelImportEndMonth" type="month"></label>
+          </div>
+          <label><span>替換理由</span><input id="excelImportReason" type="text" maxlength="200"></label>
+          <label><input id="excelImportCreateCategories" type="checkbox">保留來源科目名稱；缺少的科目建立於「歷史科目」分類</label>
+          <p class="hint">只替換指定期間的交易。期間外帳目、期初餘額與既有稽核均保留；鎖帳月份需先透過鎖帳設定解除。執行前自動備份並驗證 R2 與 GCS，任一失敗即停止。</p>
+        </div>
+      </section>
       <section class="import-section">
         <div class="import-section-title"><strong>1. 選擇 Excel 檔案</strong><span class="hint">僅支援 .xlsx，最大 8 MB；檔案只送到 CYAccountingWeb Cloudflare Worker 解析。</span></div>
         <div class="import-file-row">
@@ -117,11 +129,29 @@ function bindExcelImportDialog() {
   document.querySelector('#excelImportMappingGrid')?.addEventListener('change', resetImportPreview);
   document.querySelector('#excelImportPreviewButton')?.addEventListener('click', buildExcelImportPreview);
   document.querySelector('#excelImportCommitButton')?.addEventListener('click', commitExcelImport);
+  document.querySelector('#excelImportPeriodSection')?.addEventListener('change', () => {
+    document.querySelector('#excelImportPeriodOptions')?.classList.toggle('hidden', document.querySelector('#excelImportMode').value !== 'replace_period');
+    resetImportPreview();
+  });
+  document.querySelector('#excelImportReason')?.addEventListener('input', resetImportPreview);
 }
 
 function openExcelImport() {
   setImportMessage('');
+  const desktop = typeof window.cyIsDesktopInteractionWorkspace === 'function' && window.cyIsDesktopInteractionWorkspace();
+  const allowed = desktop && window.cyaccCurrentUser?.role === 'SUPER_ADMIN';
+  document.querySelector('#excelImportPeriodSection')?.classList.toggle('hidden', !allowed);
+  if (!allowed) document.querySelector('#excelImportMode').value = 'append';
   document.querySelector('#excelImportDialog')?.showModal();
+}
+
+function importOptions() {
+  const mode = document.querySelector('#excelImportMode')?.value || 'append';
+  if (mode !== 'replace_period') return { mode: 'append' };
+  return { mode, startMonth: document.querySelector('#excelImportStartMonth').value,
+    endMonth: document.querySelector('#excelImportEndMonth').value,
+    reason: document.querySelector('#excelImportReason').value.trim(),
+    createCategories: document.querySelector('#excelImportCreateCategories').checked };
 }
 
 async function handleExcelImportFile(event) {
@@ -314,7 +344,7 @@ async function buildExcelImportPreview() {
     let server = { results: [], summary: { total: 0, ready: 0, duplicates: 0, locked: 0, errors: 0 }, canCommit: false };
     if (built.validRows.length) {
       server = await api('/api/import/preview', {
-        method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ rows: built.validRows })
+        method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ rows: built.validRows, ...importOptions() })
       });
     }
 
@@ -326,7 +356,7 @@ async function buildExcelImportPreview() {
       locked: mergedResults.filter(row => row.status === 'locked').length,
       errors: mergedResults.filter(row => row.status === 'error').length
     };
-    cyImportState.preview = { results: mergedResults, summary, canCommit: summary.ready > 0 && summary.locked === 0 && summary.errors === 0 };
+    cyImportState.preview = { ...server, results: mergedResults, summary, canCommit: server.canCommit && summary.ready > 0 && summary.locked === 0 && summary.errors === 0 };
     renderExcelImportPreview();
     setImportMessage('');
   } catch (error) {
@@ -468,10 +498,17 @@ function renderExcelImportPreview() {
   if (summaryEl) summaryEl.innerHTML = `可匯入 <strong>${summary.ready}</strong>　重複 <strong>${summary.duplicates}</strong>　鎖帳 <strong>${summary.locked}</strong>　錯誤 <strong>${summary.errors}</strong>`;
 
   const notice = document.querySelector('#excelImportPreviewNotice');
-  if (summary.errors || summary.locked) {
+  if (preview.replacement?.lockedRange) {
+    setDialogMessage(notice, `指定期間包含已鎖帳月份（目前鎖至 ${preview.replacement.lockedThrough}），不允許替換。請先到鎖帳設定解除，再重新預覽。`, true);
+  } else if (summary.errors || summary.locked) {
     setDialogMessage(notice, '有錯誤或鎖帳資料時不允許部分匯入；請修正檔案或欄位對應後重新預覽。', true);
   } else if (!summary.ready && summary.duplicates) {
     setDialogMessage(notice, '所有資料都已存在，沒有新資料需要匯入。');
+  } else if (preview.replacement) {
+    const plan = preview.replacement;
+    const categories = plan.missingCategories.map(row => `${row.kind === 'income' ? '收入' : '支出'}／${row.name}`).join('、');
+    const openings = plan.openingOverrides.map(row => `${row.month} ${row.accountName} $${row.amount.toLocaleString()}（${row.reason}）`).join('；');
+    setDialogMessage(notice, `替換 ${plan.startMonth}～${plan.endMonth}：移除 ${plan.deleteCount} 筆，寫入 ${plan.insertCount} 筆，保留期間外 ${plan.preservedCount} 筆。來源內相同交易會逐筆保留。${categories ? `\n新增歷史科目：${categories}。` : ''}\n既有人工期初基準保留：${openings || '無'}。最初各帳戶期初餘額不會自動建立。`);
   } else {
     setDialogMessage(notice, `確認後會新增 ${summary.ready} 筆，並略過 ${summary.duplicates} 筆重複資料。`);
   }
@@ -494,7 +531,7 @@ function renderExcelImportPreview() {
 
   const commit = document.querySelector('#excelImportCommitButton');
   commit.disabled = !preview.canCommit;
-  commit.textContent = preview.canCommit ? `確認匯入 ${summary.ready} 筆` : '確認匯入';
+  commit.textContent = preview.canCommit ? `${preview.replacement ? '確認替換' : '確認匯入'} ${summary.ready} 筆` : '確認匯入';
 }
 
 async function commitExcelImport() {
@@ -502,14 +539,16 @@ async function commitExcelImport() {
   if (!preview?.canCommit) return;
   const ready = preview.summary.ready;
   const duplicates = preview.summary.duplicates;
-  if (!confirm(`確定匯入 ${ready} 筆資料嗎？${duplicates ? `\n另有 ${duplicates} 筆重複資料會自動略過。` : ''}`)) return;
+  const plan = preview.replacement;
+  const prompt = plan ? `確定替換 ${plan.startMonth}～${plan.endMonth}？\n移除 ${plan.deleteCount} 筆、寫入 ${ready} 筆、保留期間外 ${plan.preservedCount} 筆。\n會先完成 R2 與 GCS 驗證備份。期初基準保留。` : `確定匯入 ${ready} 筆資料嗎？${duplicates ? `\n另有 ${duplicates} 筆重複資料會自動略過。` : ''}`;
+  if (!confirm(prompt)) return;
 
   setImportBusy(true);
-  setImportMessage('正在寫入 D1…');
+  setImportMessage(plan ? '正在備份、回讀驗證並替換期間，請勿關閉視窗…' : '正在寫入 D1…');
   try {
     const data = await api('/api/import/commit', {
-      method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ rows: cyImportState.normalizedRows, confirm: true })
-    });
+      method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ rows: cyImportState.normalizedRows, confirm: true, ...importOptions(), previewToken: plan?.previewToken })
+    }, plan ? 120_000 : 12_000);
     setImportMessage(`${data.message || '匯入完成'}${data.skippedDuplicates ? `　略過重複 ${data.skippedDuplicates} 筆。` : ''}`);
     if (cyImportState.preview) cyImportState.preview.canCommit = false;
     const commitButton = document.querySelector('#excelImportCommitButton');
