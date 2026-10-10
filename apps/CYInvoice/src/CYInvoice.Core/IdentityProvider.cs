@@ -1,3 +1,5 @@
+using CYInvoice.Core.Cloud;
+
 namespace CYInvoice.Core.Storage;
 
 public enum AppRole
@@ -127,13 +129,16 @@ public sealed class BuiltInCloudIdentityProvider : IIdentityProvider
 {
     private readonly CloudEmployeeCacheStore employees;
     private readonly ICloudEmployeeAuthoritySnapshotSource authority;
+    private readonly Func<CancellationToken, Task>? requireAmegoForFallback;
 
     public BuiltInCloudIdentityProvider(
         CloudEmployeeCacheStore employees,
-        ICloudEmployeeAuthoritySnapshotSource authority)
+        ICloudEmployeeAuthoritySnapshotSource authority,
+        Func<CancellationToken, Task>? requireAmegoForFallback = null)
     {
         this.employees = employees ?? throw new ArgumentNullException(nameof(employees));
         this.authority = authority ?? throw new ArgumentNullException(nameof(authority));
+        this.requireAmegoForFallback = requireAmegoForFallback;
     }
 
     public IdentityProviderKind Kind => IdentityProviderKind.BuiltInCloud;
@@ -180,8 +185,21 @@ public sealed class BuiltInCloudIdentityProvider : IIdentityProvider
             // The Cloud request timed out rather than being cancelled by the caller.
             offlineFallback = true;
         }
+        catch (CloudApiException error) when (error.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden
+            || error.Code is "DEVICE_REVOKED" or "DEVICE_INVALID" or "ACCESS_DENIED" or "UNAUTHORIZED")
+        {
+            employees.Clear();
+            throw;
+        }
+        catch (CloudApiException error) when ((int)error.StatusCode is >= 500 and <= 599
+            && error.Code is not "UNAUTHORIZED" and not "ACCESS_DENIED" and not "DEVICE_REVOKED" and not "DEVICE_INVALID")
+        {
+            offlineFallback = true;
+        }
 
         if (!offlineFallback) return;
+        if (requireAmegoForFallback is not null)
+            await requireAmegoForFallback(cancellationToken).ConfigureAwait(false);
         var state = employees.LoadState();
         var currentWorkspaceId = authority.CurrentWorkspaceId;
         if (state is null
@@ -220,11 +238,11 @@ public sealed class IdentityProviderRuntime(
         get
         {
             var current = settings.LoadOrCreate();
-            if (current.CloudMode == CloudModes.LocalOnly) return local;
+            if (current.CloudMode is CloudModes.LocalOnly or CloudModes.CloudTransition) return local;
             if (current.CloudIdentityProvider == "CYID")
                 return cyId ?? throw new InvalidOperationException("CYID Provider 尚未設定。");
             return current.CloudMode == CloudModes.CloudPreferred && current.CloudEmployeeAuthorityReady
-                ? builtInCloud : local;
+                ? builtInCloud : throw new InvalidOperationException("雲端帳號切換狀態不完整，不能自動改用單機帳號。");
         }
     }
 }

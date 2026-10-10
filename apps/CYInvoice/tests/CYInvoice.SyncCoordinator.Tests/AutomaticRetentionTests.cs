@@ -13,7 +13,7 @@ internal static class AutomaticRetentionTests
     public static async Task TestDailyTestScopePrunesExpiredWithoutQueryAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         repository.Invoices.Append(TestRecord("expired", "TT00000001", "M20260917001", "2026/09/17"));
         var gateway = new FakeGateway();
@@ -32,7 +32,7 @@ internal static class AutomaticRetentionTests
     {
         using (var temporary = new TemporaryDirectory())
         {
-            var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+            var repository = TestRepository.Open(temporary.Path, new TestProtector());
             ConfigureTest(repository);
             repository.Invoices.Append(TestRecord("expired", "TT00000001", "M20260917001", "2026/09/17"));
             var today = TestRecord("today", "TT00000002", "M20260918001", "2026/09/18");
@@ -57,7 +57,7 @@ internal static class AutomaticRetentionTests
     private static Task TestExpiredActiveWorkIsProtectedAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
 
         repository.Invoices.Append(TestRecord("plain-expired", "TT00000001", "M20260917001", "2026/09/17"));

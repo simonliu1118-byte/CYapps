@@ -2,6 +2,15 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.16 — 2026/10/10（服務連線與原有降級，工程版）
+
+- 依使用者最終定案分開檢查光貿及雲端驗證，雲端 transport／timeout／暫時 503 且光貿正常沿用既有降級單機；不另建 Local authority 或修改 Workspace。
+- 光貿不可達停用開票、查詢、作廢、折讓確認、PDF、同步；僅 Cloud 正常時雲端功能仍走原權限。雙斷線原生 modal 阻擋全部業務，每 15 秒及手動重新檢查，任一恢復回對應狀態。純 Local 只依光貿檢查正常／阻擋至恢復。
+- 帳密／權限／Device 拒絕不能降級；已知 Device 拒絕清相應身分快取，後續 503 不復活。保留原設定／Token／發票及輸入；恢復不自動開票／重送，原結果不明流程保留。
+- 共用 ServiceConnectivity 收斂既有光貿 probe，核心在業務請求／本機變更前防護；MainForm 為單一檢查及提示 lifecycle owner。Cloud 0.9.1 authenticated discovery 經現有 private Binding 檢查 CYID canonical health，不建立 Session 或第二 authority。API 1／marker 8／storage 13／Contract 1.0.2 不變，CYID Consumer Impact: NONE。
+- 新增四狀態／純 Local／503／HTML 503／deny→outage／恢復／零業務請求與資料保留回歸；Windows 增加原生 modal／不可略過／重新檢查與關閉 smoke。CI／工程包看 PR #380 精確 head，人工 RC AA／AB、staging 及正式切換尚未完成。
+- 新獨立 Patch +1／BUILD 0；同步現行文件及 TODO，未部署、migration、建立 tag 或正式 Release。以下 V2.6.15 transport-only／503 拒絕為當時歷史，已由本版最終定案取代。
+
 ## V2.6.15 — 2026/10/10（CYID Consumer 工程版，未部署／正式切換）
 
 - 依 CYID canonical Consumer Contract 1.0.2 新增 CyIdIdentityProvider；集中式 provider owner 保留 Local／Built-in 模式，CYID 確認後不自動降回舊 authority。

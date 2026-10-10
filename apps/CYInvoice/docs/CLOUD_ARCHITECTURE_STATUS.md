@@ -7,10 +7,10 @@
 ## 1. 工程基準
 
 - Windows 正式產品線：C# / WinForms。
-- 工程版本：V2.6.15。
+- 工程版本：V2.6.16。
 - Reference backend：Cloudflare Worker + D1。
 - Cloud API：`1`。
-- Cloud implementation version：`0.9.0`。
+- Cloud implementation version：`0.9.1`。
 - Legacy API compatibility schemaVersion：8；actual storageSchemaVersion：13，forward migrations 0001～0013。
 - Public Windows client 不內建專案擁有者私人 endpoint，只接受使用者設定的相容 HTTPS API。
 - 已執行 migration 不回寫；schema 修改只能新增 forward migration。
@@ -160,7 +160,7 @@ Cloud Mode 斷網時仍是 Cloud Mode。
 - Role / Enabled 狀態。
 - Protected offline credential verifier。
 
-Online protected operation 先取得最新 Cloud authority；只有真正 transport outage／timeout 才使用最後可信 protected cache。HTTP 拒絕、revoked Device、malformed／Workspace mismatch 或 caller cancellation fail closed，不視為可繞過的離線狀況。
+Online protected operation 先取得最新 Cloud authority；雲端 transport outage／timeout／暫時 5xx 且光貿正常時沿用原有降級的最後可信 protected cache。HTTP 拒絕、revoked Device、malformed／Workspace mismatch 或 caller cancellation fail closed，不視為可繞過的離線狀況。
 
 帳號全域異動不允許離線修改再合併，包括新增／Email／role／enabled／password／SUPER_ADMIN transfer／identity conflict resolution。如此避免多台電腦離線各自修改同一帳號後產生雙主衝突。
 
@@ -226,4 +226,7 @@ IdentityProviderRuntime 增加第三個 provider，不新增第二個 desktop �
 
 Employee／credential／enabled／App Access／Role 由 CYID canonical endpoints 決定，Device 及 app-local business permission 仍由 CYInvoice 負責。一次性 pairing ticket 只加入 Device。CYID Session 在 Worker 當次記憶體內使用，finally Logout，response loss 留給 provider expiry／revocation，不 replay mutation。CYID mode 阻擋 legacy account/bootstrap routes；verified owner Email transient lookup 不建立 Employee replica。0013 保留邀請歷史，區分 Built-in／external actor。
 
-Offline cache 由本機線上成功密碼建立 proof，principal／Role／scope 全 DPAPI 保護；只在真正 Windows transport failure 使用，HTTP reject/error 不 fallback。無新增 TTL，保留 last-trusted semantics；重新連線用最新權限。本輪沒有 live binding／application enablement 驗證或切換，完整安全邊界見 CY_ID_INTEGRATION §14、現行 CI／人工停點見 CLOUD_WORK_HANDOFF／TODO。
+Offline cache 由本機線上成功密碼建立 proof，principal／Role／scope 全 DPAPI 保護；V2.6.16 在雲端 transport／timeout／暫時 5xx 且光貿正常時沿用原降級，帳密／權限／Device 拒絕不 fallback。無新增 TTL，保留 last-trusted semantics；重新連線用最新權限。本輪沒有 live binding／application enablement 驗證或切換，完整安全邊界見 CY_ID_INTEGRATION §14、現行 CI／人工停點見 CLOUD_WORK_HANDOFF／TODO。
+
+
+ServiceConnectivity 收斂既有光貿 probe 與 authenticated Cloud discovery；MainForm 管理唯一連線提示及 15 秒檢查。Cloud 0.9.1 discovery 在 CYID enabled 時經原 private IDENTITY 檢查 canonical health，liveness 不授予權限。無新 schema／migration／authority；Cloud 與光貿功能及純 Local 矩陣見 CY_ID_INTEGRATION §14.2。

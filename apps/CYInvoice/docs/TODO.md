@@ -2,11 +2,11 @@
 
 本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-10（Asia/Taipei）。main 為 V2.6.10 Build 2／a04f706c（治理 #381 後）；目前工程候選版 **V2.6.15** 為 CYID Consumer source，前置 V2.6.14 PR #216 仍未合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
+更新日期：2026-10-10（Asia/Taipei）。main 為 V2.6.10 Build 2／a04f706c（治理 #381 後）；目前工程候選版 **V2.6.16** 為 CYID Consumer source，前置 V2.6.14 PR #216 仍未合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
-Cloud source 0.9.0／API 1／compatibility marker 8／storage 13；未部署。最後 development 0.8.9／storage 12 的 development staged **10/10 Run #8 attempt 2** 已通過 migration／aggregate／FK／health／新 capabilities，0012 已套用且無 pending migration。CI 成功不等於實機驗收或遠端部署。
+Cloud source 0.9.1／API 1／compatibility marker 8／storage 13；未部署。最後 development 0.8.9／storage 12 的 development staged **10/10 Run #8 attempt 2** 已通過 migration／aggregate／FK／health／新 capabilities，0012 已套用且無 pending migration。CI 成功不等於實機驗收或遠端部署。
 
 ## 0. 接續優先順序
 
@@ -112,7 +112,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] **目前候選版 A/B baseline acceptance：**兩台既有 Device 升級 V2.6.14 通過 CI 的工程包後仍可連線，Device Management 清單、一般同步／開票既有路徑無回歸。
 - [ ] V2.6.12 邀請第一次加入與首次說明實機驗收（RC X）。10/09 舊包已取得「第一次錯誤、重開成功」證據，已定位 password.Clear → TextChanged → preview=null；修正版單次完成尚待使用者驗證。邀請撤銷／重寄與其他不明結果仍待實測。
 - [ ] 精確命中、全新 Employee、Employee No only、Email only、兩欄各撞不同人的實機／integration 測試。
-- [ ] **Authority freshness A/B 實機驗收：**A 修改中央 Employee 密碼／role／enabled 後，B 不等待背景同步或重開即可在下一次 protected operation 套用最新 authority；真正斷網時使用最後可信 cache，恢復連線後 Online authority 重新覆蓋。
+- [ ] **Authority freshness A/B 實機驗收：**A 修改中央 Employee 密碼／role／enabled 後，B 不等待背景同步或重開即可在下一次 protected operation 套用最新 authority；雲端暫時不可用且光貿正常時沿用原降級可信 cache，恢復連線後 Online authority 重新覆蓋。
 - [ ] Built-in Employee CRUD、Email OTP、password、enabled、role 在 A/B 間即時與背景 snapshot 同步實機測試。
 - [ ] Built-in Cloud「忘記密碼」員編／已驗證 Email challenge、重寄倒數、OTP／新密碼 confirm 及 A/B 舊密碼失效實機驗收；工程已實作。
 - [ ] SUPER_ADMIN transfer 的 execution-time re-auth／OTP／原子 X→ADMIN、Y→SUPER_ADMIN／Recovery Email 與 A/B authority 驗收。
@@ -125,7 +125,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] 驗收 fresh-install 首次分流。
 - [ ] **延後／非目前阻塞：Cloud Employee offline cache 完整性簽章。** 未來可評估 server-signed snapshot／等效完整性保護；沒有實際竄改事件、威脅模型提高或稽核需求時長期擱置。
 
-### 7.3 CYID Consumer（V2.6.15 source 已實作，正式切換未完成）
+### 7.3 CYID Consumer（V2.6.16 source 已實作，正式切換未完成）
 
 設計與授權／限制見 CY_ID_INTEGRATION.md §14，PR #379 的 §13 保留原交接快照。Canonical 1.0.2／minimum 1.0.0；同 repo 直接引用，不建 contract mirror。
 
@@ -133,7 +133,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] CyIdIdentityProvider、集中 provider 選擇、authenticated protected Workspace／Device binding；Local／Built-in 保留，確認 CYID 後不自動回退。
 - [x] Worker private IDENTITY gateway、Login／Resolve／finally Logout、穩定錯誤與無 Session／verifier 外洩；Device 與 Employee／App Access 權限分離。
 - [x] Device rename／revoke、pairing／invitation 沿用現有 mutation owner；0013 forward migration 區分 external invitation actor，保留 Built-in 歷史／FK。
-- [x] last-trusted protected offline cache，僅 transport failure 使用；online reject 清除 cache、reconnect 新權限重生效；不 export CYID verifier。
+- [x] last-trusted protected offline cache，V2.6.16 沿用原降級：雲端 transport／timeout／暫時 5xx 且光貿正常；online reject 清除 cache、reconnect 新權限重生效；不 export CYID verifier。
 - [x] Consumer Version 1.0.2、canonical support-window gate、real-provider Worker 與 C# contracts／拒絕／scope／outage／logout loss／onboarding 本機回歸。
 - [x] 原 Workspace 接續 source regression：原兩台 Device Token 切換前後可用；本機切換後重開保留 Workspace／Device／Token、發票 pending、買方／PDF、公司設定及 protected credentials；錯綁定不覆寫。
 
@@ -143,10 +143,17 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] RC_TEST AA Windows 實機 CYID：Account Management／settings／高權限操作，斷網／reconnect 與角色、App Access、停用、密碼變更後更新。
 - [ ] 核對真實 CYID Application 註冊／Workspace enablement／App Access、private Service Binding、兩 Workspace 配對；先隔離 staging，再討論正式切換（未授權）。
 - [ ] 受控切換：備份／0013／FK、EmployeeNo 與歷史 actor／pending 業務稽核、rollback／舊 client gate；不以 destructive reset 代替 migration。
-- [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（本輪 V2.6.15），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
-- [ ] 分別驗收整機斷網、僅 Windows→驗證入口 transport 失敗但光貿可達、private CYID 故障回覆 503；離線驗證不等於離線開票，503 不 fallback，不新增斷網自動重送。
+- [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（目前 V2.6.16），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
+- [ ] RC_TEST AB 實機驗收四種狀態、Built-in／CYID 503 原降級、純 Local 光貿斷線阻擋、任一恢復及輸入／Workspace 保留；帳密／權限／Device 拒絕不降級，不自動重送。
 - [ ] CYID 0-active-Device recovery 實作／驗證後才調整 LAST_ACTIVE_DEVICE；目前保留原保護。
 - [ ] 若未來要整合 dialog／core 的重複驗證，依單一 operation context 收斂；不保存可重用 Session 或新增持續登入。
+
+### 7.3.1 V2.6.16 服務連線收斂
+
+- [x] 依使用者四點定案保留原有降級，加入 transient 503／HTML 503；共享光貿探測與核心入口防護，四狀態及純 Local 回歸。
+- [x] MainForm 一個 15 秒檢查／modal blocker，重新檢查與恢復沿用原設定／輸入； known deny 後 503 不復活。Windows 原生視窗 smoke source 已加入，CI 結果以 #380 精確 head 為準。
+- [x] VERSION 2.6.16／BUILD 0、Cloud source 0.9.1；無新 schema 或遠端部署，文件／CHANGELOG 同步。
+- [ ] RC AB 在原安裝測四種狀態／純 Local／雙斷線提示／恢復；RC AA 原 CYID staging gate 保留未完成。
 
 ### 7.4 新裝置加入方式與安全紀錄
 

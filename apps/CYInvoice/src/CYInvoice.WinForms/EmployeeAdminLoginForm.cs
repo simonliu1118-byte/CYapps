@@ -147,9 +147,10 @@ internal sealed class EmployeeAdminLoginForm : Form
             DialogResult = DialogResult.OK;
             Close();
         }
-        catch (InvalidOperationException)
+        catch (Exception error)
         {
-            ValidationError("員工編號或密碼錯誤", employeeNo);
+            ValidationError(identityProvider.Kind == IdentityProviderKind.Local && error is InvalidOperationException
+                ? "員工編號或密碼錯誤" : error.Message, employeeNo);
         }
     }
 

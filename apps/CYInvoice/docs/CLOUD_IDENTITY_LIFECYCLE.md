@@ -2,7 +2,7 @@
 
 更新日期：2026-10-09（原設計基準：2026-09-29）
 
-目前工程版 V2.6.15；實作與驗收停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，唯一待辦清單為 [TODO.md](TODO.md)。V2.6.15 CYID consumer source 已接線但尚未部署／正式切換，0-Device recovery 仍待實作；具體 runtime／offline 邊界見 CY_ID_INTEGRATION §14。本文件的 CYID 設計依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
+目前工程版 V2.6.16；實作與驗收停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，唯一待辦清單為 [TODO.md](TODO.md)。V2.6.15 CYID consumer source 已接線但尚未部署／正式切換，0-Device recovery 仍待實作；具體 runtime／offline 邊界見 CY_ID_INTEGRATION §14。本文件的 CYID 設計依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
 
 本文件記錄 CYInvoice V3.0 在 Workspace、Device、Device Token、Employee authority、Local／Cloud、離線、Recovery 與最高管理權上的定案行為。
 
@@ -235,7 +235,7 @@ Cloud 可連線時，任何 Employee 密碼／權限驗證必須使用當下最�
 
 Online 時以 CY ID 回傳的目前有效 Employee identity、enabled、CYInvoice access 與 role 為 authority。CYInvoice 不維護第二套中央 credential authority。
 
-V2.6.15 已實作 CYID device-bound DPAPI offline cache，僅真正 transport failure 使用；online reject 不轉離線，reconnect 更新最新權限。Last-trusted 無新增 TTL 與 Session loss 的限制見 CY_ID_INTEGRATION §14；不讀 CYID D1、不下載中央 verifier，不形成第二套 authority。
+V2.6.15 已實作 CYID device-bound DPAPI offline cache，V2.6.16 在雲端 transport／timeout／暫時 5xx 且光貿正常時沿用原降級；帳密／權限／Device 拒絕不轉降級，reconnect 更新最新權限。Last-trusted 無新增 TTL 與 Session loss 的限制見 CY_ID_INTEGRATION §14；不讀 CYID D1、不下載中央 verifier，不形成第二套 authority。
 
 ## 9. Cloud Mode Offline
 
@@ -247,14 +247,14 @@ Cloud Mode / Offline
 
 不是 Local Mode。
 
-Offline 可使用最後成功建立／同步的可信 cache：
+雲端暫時不可用（含 503）且光貿正常時，沿用原降級所使用的最後可信 cache：
 
 - Employee identity；
 - role；
 - enabled；
 - credential version / protected verifier 或 CY ID 模式等效的受保護 offline material。
 
-完全離線期間無法知道 Cloud 上剛發生的 role、enabled 或 password 變更，這是離線系統不可消除的限制。恢復連線後，Online authority 必須更新／取代本機 cache。
+雲端不可達期間無法知道中央剛發生的 role、enabled 或 password 變更。光貿與雲端同時不可達時阻擋全部業務；純 Local 光貿不可達同樣阻擋，直到光貿恢復。連線矩陣及自動恢復見 CY_ID_INTEGRATION §14.2。恢復連線後，Online authority 必須更新／取代本機 cache。
 
 Workspace-wide account mutations 不支援 offline。
 

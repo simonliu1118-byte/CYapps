@@ -23,10 +23,12 @@ internal sealed class MainForm : Form
     private readonly LocalRepository repository;
     private readonly InvoiceService service;
     private readonly InvoiceSyncCoordinator syncCoordinator;
-    private readonly AmegoConnectivityProbe connectivityProbe = new();
     private readonly HttpClient cloudHealthHttpClient = new();
     private readonly CancellationTokenSource syncLifetime = new();
     private readonly System.Windows.Forms.Timer syncTimer = new() { Interval = SyncIntervalMilliseconds };
+    private readonly System.Windows.Forms.Timer connectionTimer = new() { Interval = 15_000 };
+    private bool checkingConnections;
+    private ConnectionBlockForm? connectionBlocker;
     private readonly InvoiceEntryControl invoicePage;
     private readonly RecordsControl recordsPage;
     private readonly Panel banner = new();
@@ -88,6 +90,7 @@ internal sealed class MainForm : Form
         recordsPage = new RecordsControl(repository, service, syncCoordinator, syncLifetime.Token);
         invoicePage = new InvoiceEntryControl(repository, service, recordsPage.Reload);
         syncTimer.Tick += async (_, _) => await RunScheduledSyncAsync();
+        connectionTimer.Tick += async (_, _) => await RefreshConnectionsAsync();
         FormClosing += (_, _) => StopBackgroundSync();
         BuildShell();
         SetAmegoConnectionState("啟動中", Color.FromArgb(128, 128, 128), "首次設定完成後將檢查光貿 API 連線。");
@@ -97,6 +100,9 @@ internal sealed class MainForm : Form
             if (!EnsureInitialSetup()) return;
             UpdateEnvironment();
             invoicePage.RefreshEnvironment();
+            connectionTimer.Start();
+            await RefreshConnectionsAsync();
+            if (shuttingDown) return;
             await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync(), ReportDeviceStartupAsync());
             if (shuttingDown) return;
             await RunStartupSyncAsync();
@@ -530,6 +536,22 @@ internal sealed class MainForm : Form
 
         ImportConfirmationForm.VerifySmokeLayout(repository, service);
         RecordDetailForm.VerifySmokeLayout(repository, service);
+        if (connectionTimer.Interval != 15_000 || connectionTimer.Enabled)
+            throw new InvalidOperationException("連線恢復檢查必須由主視窗的 15 秒 Timer 管理，smoke 不啟動網路檢查");
+        foreach (var ame in new[] { false, true })
+        foreach (var cloud in new[] { false, true })
+        {
+            var state = new ServiceConnectionState(ame, cloud, true);
+            ApplyConnectionControls(state);
+            if (invoicePage.Enabled != ame || recordsPage.Enabled != ame ||
+                accountManagementButton.Enabled != cloud || settingsButton.Enabled != (ame || cloud))
+                throw new InvalidOperationException("光貿／雲端四種狀態的可用功能不正確");
+        }
+        ApplyConnectionControls(new(true, false, true, CloudRejected: true));
+        if (invoicePage.Enabled || recordsPage.Enabled || accountManagementButton.Enabled || settingsButton.Enabled)
+            throw new InvalidOperationException("已知授權拒絕不能開放功能");
+        ConnectionBlockForm.VerifySmoke(this);
+        ApplyConnectionControls(new(true, false, false));
     }
 
     private void UpdateEnvironment()
@@ -690,7 +712,7 @@ internal sealed class MainForm : Form
         catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested) { }
         catch (Exception)
         {
-            // Usage metadata is best-effort. An offline start must not block invoice work,
+            // Usage metadata is best-effort. Its failure must not replace service availability checks,
             // overwrite the last confirmed server timestamp, or change authority/cache state.
         }
     }
@@ -757,7 +779,7 @@ internal sealed class MainForm : Form
             "雲端離線",
             Color.FromArgb(180, 0, 0),
             (settings.CloudIdentityProvider == "CYID"
-                ? "這台電腦使用 CYID。只有真正傳輸中斷時，已在線驗證的員工才可使用原裝置最後加密快取；重新連線採最新權限。\n\n"
+                ? "這台電腦使用 CYID。連線失敗、逾時或 503 暫時不可用且光貿正常時，已在線驗證的員工可沿用原裝置最後加密快取；重新連線採最新權限。\n\n"
                 : "這台電腦仍維持 Cloud Mode，不會切回舊 Local 帳號系統。需要權限的操作會使用最後一次成功同步的 Cloud Employee 離線快取。\n\n") + details,
             showToolTip: true);
     }
@@ -785,7 +807,7 @@ internal sealed class MainForm : Form
 
         try
         {
-            await connectivityProbe.CheckAsync(syncLifetime.Token);
+            await repository.Connections.RequireAmegoAsync(syncLifetime.Token);
         }
         catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
         {
@@ -899,8 +921,53 @@ internal sealed class MainForm : Form
         return lines.Count == 0 ? error.GetType().Name : string.Join(Environment.NewLine, lines);
     }
 
+    private async Task RefreshConnectionsAsync()
+    {
+        if (checkingConnections || shuttingDown) return;
+        checkingConnections = true;
+        ServiceConnectionState state;
+        try { state = await repository.Connections.CheckAsync(syncLifetime.Token); }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested) { return; }
+        finally { checkingConnections = false; }
+        if (shuttingDown || IsDisposed) return;
+        ApplyConnectionControls(state);
+        foreach (var detail in Application.OpenForms.OfType<RecordDetailForm>().ToArray()) detail.ApplyServiceState();
+        foreach (var import in Application.OpenForms.OfType<ImportConfirmationForm>().ToArray()) import.ApplyServiceState();
+        SetAmegoConnectionState(state.AmegoAvailable ? "光貿連線正常" : "光貿連線異常",
+            state.AmegoAvailable ? Color.FromArgb(0, 120, 60) : Color.FromArgb(180, 0, 0), state.AmegoProblem,
+            showToolTip: !state.AmegoAvailable);
+        if (state.CloudRequired)
+            SetRuntimeModeState(state.CloudRejected ? "雲端授權拒絕" : state.CloudAvailable ? "雲端模式" : state.UsesExistingFallback ? "雲端離線（原有單機備援）" : "雲端離線",
+                state.CloudAvailable ? SystemColors.ControlText : Color.FromArgb(180, 0, 0),
+                state.CloudRejected ? "目前裝置／綁定已被拒絕，不能降級；請確認授權後重新檢查。\n" + state.CloudProblem
+                    : state.CloudAvailable ? "雲端可連線；權限操作仍依當次驗證。"
+                    : "雲端暫時不可用。光貿正常時沿用原有可信快取驗證；中央帳號／裝置異動須等待雲端恢復。\n" + state.CloudProblem,
+                showToolTip: !state.CloudAvailable);
+        if (!state.BlockAll)
+        {
+            connectionBlocker?.RestoreConnection();
+            return;
+        }
+        if (connectionBlocker is not null) { connectionBlocker.UpdateState(state); return; }
+        using var blocker = new ConnectionBlockForm(state, RefreshConnectionsAsync);
+        connectionBlocker = blocker;
+        try { blocker.ShowDialog(Form.ActiveForm ?? this); }
+        finally { connectionBlocker = null; }
+        if (blocker.ExitRequested && !shuttingDown) Close();
+    }
+
+    private void ApplyConnectionControls(ServiceConnectionState state)
+    {
+        invoicePage.Enabled = state.AmegoAvailable && !state.BlockAll;
+        recordsPage.Enabled = state.AmegoAvailable && !state.BlockAll;
+        accountManagementButton.Enabled = !state.BlockAll && (!state.CloudRequired || state.CloudAvailable);
+        forgotPasswordButton.Enabled = accountManagementButton.Enabled;
+        settingsButton.Enabled = !state.BlockAll;
+    }
+
     private async Task RunStartupSyncAsync()
     {
+        if (repository.Connections.Current is { AmegoAvailable: false }) return;
         try
         {
             var run = await syncCoordinator.RunStartupAsync(syncLifetime.Token);
@@ -920,6 +987,7 @@ internal sealed class MainForm : Form
     private async Task RunScheduledSyncAsync()
     {
         _ = RefreshRuntimeModeAsync();
+        if (repository.Connections.Current is { AmegoAvailable: false }) return;
         try
         {
             var run = await syncCoordinator.RunScheduledAsync(syncLifetime.Token);
@@ -941,6 +1009,7 @@ internal sealed class MainForm : Form
         if (shuttingDown) return;
         shuttingDown = true;
         syncTimer.Stop();
+        connectionTimer.Stop();
         syncLifetime.Cancel();
     }
 
@@ -980,6 +1049,7 @@ internal sealed class MainForm : Form
         {
             StopBackgroundSync();
             syncTimer.Dispose();
+            connectionTimer.Dispose();
             cloudHealthHttpClient.Dispose();
             apiToolTip.Dispose();
             runtimeModeToolTip.Dispose();

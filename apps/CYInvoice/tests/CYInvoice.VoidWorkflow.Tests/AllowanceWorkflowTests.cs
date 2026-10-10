@@ -210,7 +210,7 @@ internal static class AllowanceWorkflowTests
 
     private static AllowanceSetup CreateSetup(string path)
     {
-        var repository = LocalRepository.Open(path, new AllowanceTestProtector());
+        var repository = TestRepository.Open(path, new AllowanceTestProtector());
         repository.Employees.CreateFirstSuperAdmin("0001", "超管", "super@example.com", "SuperPass1");
         repository.Employees.CreateEmployee("0001", "3015", "員工", "employee@example.com", "Employee1");
         repository.Employees.CreateEmployee("0001", "2000", "管理員", "admin@example.com", "AdminPass1", EmployeeRoles.Admin);

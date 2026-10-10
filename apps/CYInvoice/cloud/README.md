@@ -4,12 +4,12 @@ Cloudflare Worker + D1 reference implementation for CYInvoice V3 coordination an
 
 AMEGO remains the authoritative source for invoice / void / allowance business state. AMEGO App Keys remain local to Windows and are not part of this backend.
 
-The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current source baseline is V2.6.15 (CYID Consumer candidate, not deployed); V2.6.14 predecessor PR #216 remains open; source CI evidence and package are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
+The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current source baseline is V2.6.16 (CYID Consumer candidate, not deployed); V2.6.14 predecessor PR #216 remains open; source CI evidence and package are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
 
 ## Current compatibility
 
 - Service: `cyinvoice-cloud`
-- Cloud implementation: `0.9.0`
+- Cloud implementation: `0.9.1`
 - API: `1`
 - Legacy API compatibility marker: `schemaVersion=8`
 - Actual storage schema: `storageSchemaVersion=13`
@@ -212,7 +212,7 @@ Canonical identity semantics come directly from `../../CYCloudIdentity/docs/CONS
 
 An independently reviewed deployment injects `CYID_ENABLED=true`, private `IDENTITY` Service Binding, and runtime-only `IDENTITY_APPLICATION_ID`, `IDENTITY_WORKSPACE_ID`, `IDENTITY_CYINVOICE_WORKSPACE_ID`. The two Workspace IDs are distinct scopes; this Worker binds exactly one CYInvoice Workspace. Missing/mismatched configuration fails closed. No real deployment binding or CYID application enablement was verified in this source task. With the flag absent/false, Built-in remains available.
 
-`IDENTITY_CYINVOICE_WORKSPACE_ID` is the existing business Workspace ID, not a new Workspace. Cutover retains the current consumer D1, Workspace, Devices and Tokens; existing installations must not rejoin or reset. Upgrade all active Windows installations to CYID-capable clients (this batch: V2.6.15), prepare Employee activation/App Access/Role/verified Super Admin Email, and prove continuity in isolated staging before enabling the flag. Until those gates pass, retain the Built-in deployment. Windows offline authentication is not offline invoice issuance: AMEGO still requires connectivity; a reachable Worker returning private CYID outage HTTP 503 does not activate the cache.
+`IDENTITY_CYINVOICE_WORKSPACE_ID` is the existing business Workspace ID, not a new Workspace. Cutover retains the current consumer D1, Workspace, Devices and Tokens; existing installations must not rejoin or reset. Upgrade all active Windows installations to CYID-capable clients (current batch: V2.6.16), prepare Employee activation/App Access/Role/verified Super Admin Email, and prove continuity in isolated staging before enabling the flag. Until those gates pass, retain the Built-in deployment. Windows offline authentication is not offline invoice issuance: AMEGO still requires connectivity; Cloud transport/timeout/temporary 503 with reachable AMEGO uses the existing protected fallback. Credential/permission/Device rejection never permits fallback. Both services unavailable blocks all business; pure Local requires only AMEGO. See CY_ID_INTEGRATION §14.2. Authenticated discovery now checks canonical private `/v1/health` via the existing Binding; this is liveness only, creates no Session, and never grants Employee/App Access authorization. Source Cloud 0.9.1 adds no schema/migration or deployment.
 
 `GET /v1/identity-provider` requires an active Device Token and returns the confirmed provider/binding. `POST /v1/cyid/authenticate` accepts only per-operation employeeNo/password plus Device Token. The gateway owns Login → Resolve → result → finally Logout, returning normalized principal without Session/verifier. CYID owns Employee/enabled/Role/App Access; CYInvoice owns Device and business permission. Legacy account/bootstrap routes reject in CYID mode.
 

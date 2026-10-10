@@ -10,9 +10,10 @@ namespace CYInvoice.Core.Storage;
 public sealed record CyIdBinding(string BaseUrl, string WorkspaceId, string DeviceId,
     string IdentityWorkspaceId, string ApplicationId, string ConsumerVersion, string DeviceTokenDigest);
 
-public sealed class CyIdAuthenticationException(string code) : InvalidOperationException(MessageFor(code))
+public sealed class CyIdAuthenticationException(string code, HttpStatusCode? statusCode = null) : InvalidOperationException(MessageFor(code))
 {
     public string Code { get; } = code;
+    public HttpStatusCode? StatusCode { get; } = statusCode;
     private static string MessageFor(string code) => code switch
     {
         "ACCESS_DENIED" => "此帳號目前沒有 CYInvoice 使用權限，請由 CY Web 管理員確認。",
@@ -91,14 +92,18 @@ public static class CyIdGateway
     {
         JsonDocument json;
         try { json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false)); }
-        catch (JsonException) { throw new InvalidDataException("CYID 回應格式無效。"); }
+        catch (JsonException) {
+            if ((int)response.StatusCode is >= 500 and <= 599)
+                throw new CyIdAuthenticationException("IDENTITY_UNAVAILABLE", response.StatusCode);
+            throw new InvalidDataException("CYID 回應格式無效。");
+        }
         if (!response.IsSuccessStatusCode || !json.RootElement.TryGetProperty("ok", out var ok) || ok.ValueKind != JsonValueKind.True)
         {
             var code = "IDENTITY_UNAVAILABLE";
             if (json.RootElement.TryGetProperty("error", out var error) && error.TryGetProperty("code", out var value))
                 code = value.GetString() ?? code;
             json.Dispose();
-            throw new CyIdAuthenticationException(code);
+            throw new CyIdAuthenticationException(code, response.StatusCode);
         }
         return json;
     }
@@ -173,7 +178,8 @@ public sealed class CyIdOfflineCache(string dataDirectory, ISecretProtector prot
     }
 }
 
-public sealed class CyIdIdentityProvider(SettingsStore settings, CyIdOfflineCache offline, HttpClient? http = null) : IIdentityProvider
+public sealed class CyIdIdentityProvider(SettingsStore settings, CyIdOfflineCache offline, HttpClient? http = null,
+    Func<CancellationToken, Task>? requireAmegoForFallback = null) : IIdentityProvider
 {
     private static readonly HttpClient SharedHttpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
     public IdentityProviderKind Kind => IdentityProviderKind.CyId;
@@ -194,8 +200,14 @@ public sealed class CyIdIdentityProvider(SettingsStore settings, CyIdOfflineCach
             offline.Remember(binding, principal, request.Password);
             return principal;
         }
-        catch (HttpRequestException) { return offline.Authenticate(binding, request); }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return offline.Authenticate(binding, request); }
+        catch (HttpRequestException) { return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
+            return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (CyIdAuthenticationException error) when ((int?)error.StatusCode is >= 500 and <= 599
+            && error.Code == "IDENTITY_UNAVAILABLE") {
+            return await FallbackAsync(binding, request, cancellationToken).ConfigureAwait(false);
+        }
         catch (CyIdAuthenticationException error) {
             if (error.Code is "DEVICE_INVALID" or "IDENTITY_WORKSPACE_MISMATCH" or "IDENTITY_PROVIDER_MISMATCH") offline.Forget();
             else if (error.Code is "LOGIN_FAILED" or "AUTH_INVALID" or "ACCESS_DENIED") offline.Forget(request.EmployeeNo);
@@ -203,6 +215,14 @@ public sealed class CyIdIdentityProvider(SettingsStore settings, CyIdOfflineCach
             throw;
         }
         catch (Exception) when (!cancellationToken.IsCancellationRequested) { offline.Forget(request.EmployeeNo); throw; }
+    }
+
+    private async Task<AppPrincipal?> FallbackAsync(CyIdBinding binding, IdentityAuthenticationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (requireAmegoForFallback is not null)
+            await requireAmegoForFallback(cancellationToken).ConfigureAwait(false);
+        return offline.Authenticate(binding, request);
     }
 
     public Task<AppPrincipal?> RefreshPrincipalAsync(string employeeNo, CancellationToken cancellationToken = default)

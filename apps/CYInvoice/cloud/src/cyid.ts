@@ -171,6 +171,17 @@ export async function handleCyId(request: Request, env: CyIdEnv): Promise<Respon
   try {
     if (path === "/v1/identity-provider" && request.method === "GET") {
       const device = await cyIdDevice(request, env);
+      if (usesCyId(env)) {
+        cyIdBinding(env);
+        try {
+          const health = await env.IDENTITY!.fetch(new Request("https://cyid.private/v1/health", {
+            signal: AbortSignal.timeout(4000),
+          }));
+          const body = object(await health.json());
+          if (!health.ok || body.status !== "ok" || body.identity !== "ready")
+            throw new CyIdError(503, "IDENTITY_UNAVAILABLE");
+        } catch { throw new CyIdError(503, "IDENTITY_UNAVAILABLE"); }
+      }
       return Response.json({ ok: true, provider: usesCyId(env) ? "CYID" : "BUILT_IN",
         workspaceId: device.workspace_id, deviceId: device.device_id,
         ...(usesCyId(env) ? cyIdBinding(env) : {}) }, { headers: { "cache-control": "no-store" } });

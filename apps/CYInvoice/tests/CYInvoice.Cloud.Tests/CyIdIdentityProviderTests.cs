@@ -15,7 +15,7 @@ internal static class CyIdIdentityProviderTests
         try
         {
             var protector = new Protector();
-            var repository = LocalRepository.Open(directory, protector);
+            var repository = TestRepository.Open(directory, protector);
             var settings = repository.Settings.LoadOrCreate();
             settings.ProductionInvoice = "12345675";
             settings.Environment = Environments.Production;
@@ -30,7 +30,7 @@ internal static class CyIdIdentityProviderTests
             repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
             repository.Settings.Save(settings);
             // Reopen with the existing company scope, as an already configured installation does.
-            repository = LocalRepository.Open(directory, protector);
+            repository = TestRepository.Open(directory, protector);
             repository.Invoices.Append(new InvoiceRecord
             {
                 Id = "existing-pending", Source = "手動", OriginalOrderId = "M20261010001",
@@ -62,7 +62,7 @@ internal static class CyIdIdentityProviderTests
 
             repository.Settings.ConfirmCyIdConfiguration(settings, binding);
             repository.Settings.Save(settings);
-            repository = LocalRepository.Open(directory, protector);
+            repository = TestRepository.Open(directory, protector);
             var after = repository.Settings.LoadOrCreate();
             Check(after.CloudWorkspaceId == "ws_invoice" && after.CloudDeviceId == "dev_test"
                 && after.CloudBaseUrl == binding.BaseUrl && after.CloudDeviceTokenEncrypted == protectedToken
@@ -105,7 +105,9 @@ internal static class CyIdIdentityProviderTests
             var cache = new CyIdOfflineCache(directory, protector);
             var handler = new Handler(token);
             using var http = new HttpClient(handler);
-            var provider = new CyIdIdentityProvider(settingsStore, cache, http);
+            var ameAvailable = true;
+            var provider = new CyIdIdentityProvider(settingsStore, cache, http, _ => ameAvailable
+                ? Task.CompletedTask : Task.FromException(new ServiceConnectionException("Both services unavailable")));
             var credentials = new IdentityAuthenticationRequest("0002", "SyntheticPass1");
             Check(!provider.OwnsAccountManagement, "CYID must not own consumer account management");
             var principal = await provider.AuthenticateAsync(credentials);
@@ -124,9 +126,14 @@ internal static class CyIdIdentityProviderTests
             handler.Mode = "offline";
             Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "updated role persists offline");
             handler.Mode = "unavailable";
-            await ThrowsAsync<CyIdAuthenticationException>(() => provider.AuthenticateAsync(credentials));
+            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "503 uses the existing protected fallback");
+            ameAvailable = false;
+            await ThrowsAsync<ServiceConnectionException>(() => provider.AuthenticateAsync(credentials));
+            ameAvailable = true;
+            handler.Mode = "html503";
+            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "Cloudflare non-JSON 503 is a service outage");
             handler.Mode = "offline";
-            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "503 blocks this request without masquerading as transport outage");
+            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "temporary service outage preserves the original cache");
             handler.Mode = "denied";
             await ThrowsAsync<CyIdAuthenticationException>(() => provider.AuthenticateAsync(credentials));
             handler.Mode = "offline";
@@ -198,6 +205,7 @@ internal static class CyIdIdentityProviderTests
             Check(!body.RootElement.TryGetProperty("workspaceId", out _) && !body.RootElement.TryGetProperty("applicationId", out _),
                 "Windows cannot select its authority scope");
             if (Mode == "offline") throw new HttpRequestException("synthetic transport outage");
+            if (Mode == "html503") return new(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("Service unavailable") };
             if (Mode is "denied" or "unavailable") return new(Mode == "denied" ? HttpStatusCode.Forbidden : HttpStatusCode.ServiceUnavailable)
                 { Content = JsonContent.Create(new { ok = false, error = new { code = Mode == "denied" ? "ACCESS_DENIED" : "IDENTITY_UNAVAILABLE" } }) };
             return new(HttpStatusCode.OK) { Content = JsonContent.Create(new {

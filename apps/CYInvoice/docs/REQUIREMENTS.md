@@ -2,7 +2,7 @@
 
 本文件描述目前 C#／WinForms 工程線產品行為；永久治理規則仍以 `PROJECT_RULES.md` 為準。
 
-- 目前工程測試基準：**V2.6.15**。
+- 目前工程測試基準：**V2.6.16**。
 - 最新公開正式 Release：**V2.4.2**（tag：`cyinvoice-v2.4.2`）。
 - 功能 commit 66ec3671 已通過 Governance #1137、Cloud #369、Windows #258；PR #216 尚未合併，仍需實機／光貿驗證；未經使用者當次明確要求不得建立正式 Release。
 
@@ -193,7 +193,7 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - Device inventory／revoke 保留 history／audit，舊 Token 失效，rejoin 為新 identity；最後一台 active Built-in Device 有 LAST_ACTIVE_DEVICE 防護。
 - Cloud → Local 以雙重確認、關閉程式後 revoke／self-status 確認，再清目前安裝 Data／Cache／identity；不明結果保留資料，Windows 不刪中央 Workspace。
 - Built-in Cloud 忘記密碼已使用 Email challenge／confirm；尚需 live Email 與 A/B 測試。
-- Source Cloud 0.9.0／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 CLOUD_WORK_HANDOFF.md。
+- Source Cloud 0.9.1／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 CLOUD_WORK_HANDOFF.md。
 - V2.6.15 CYID Consumer source 已接線，正式環境未切換；共同 contract 直接引用 CYCloudIdentity canonical standard，實機／staging gate 見 TODO §7.3／RC AA。
 
 ## 14. 目前尚未完成
@@ -230,6 +230,15 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - 不持續員工登入；每次輸入員編／密碼經 private gateway Login／Resolve／finally Logout，不向 Windows 傳 Session／verifier。
 - Device Token 和一次性加入 ticket 只代表裝置；CYID Employee／App Access／Role 與 CYInvoice Device／Workspace／business permission 取交集。
 - 確認綁定才啟用 CYID；兩 Workspace 各自穩定、不從 client 猜測，綁定不符或 provider error 拒絕，不自動降級。
-- 舊 last-trusted offline 能力限真正 transport failure；整筆 protected cache 綁原裝置，online deny 清除 cache，reconnect 即採新權限。沒有 TTL，不承諾離線即時撤銷。
+- V2.6.16 沿用原 last-trusted 降級，限雲端 transport／timeout／暫時 5xx 且光貿可達；整筆 protected cache 綁原裝置，online deny 清除 cache，reconnect 即採新權限。沒有 TTL，不承諾離線即時撤銷。
 - 帳號管理／首次啟用／復原由 CY Web；Windows 隱藏帳號管理，CYID 加入不讀 Built-in verifier snapshot。
 - Source／CI 不代表部署成功；real binding、隔離 staging、遷移／rollback、RC AA 與正式切換仍為後續 gate，0-active-Device recovery 保護尚未放寬。
+
+
+## V2.6.16 光貿／雲端服務連線（2026-10-10 使用者定案）
+
+- 光貿與雲端驗證分開檢查，四種狀態依 CY_ID_INTEGRATION §14.2；雲端 503 暫時不可用納入原有降級，帳密／權限拒絕／Device 撤銷不得降級。
+- 純 Local 不查雲端，光貿正常可用、不可達阻擋全部業務至光貿恢復。
+- 雙斷線用一個原生 modal，保留重新檢查／關閉程式；MainForm 每 15 秒檢查，任一恢復即回對應狀態。光貿相關入口與核心都阻擋，Cloud-only 功能在 Cloud 可用時仍走原權限流程。
+- 沿用原 Workspace、Device／Token、資料及輸入，不 reset／重建／改 Mode；恢復不自動重送開票，結果不明先回查。
+- 不新增第二套 identity authority、CYID D1 連線、server Session、離線配號／業務佇列、持久化 connectivity cache 或額外相容層。

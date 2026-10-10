@@ -50,7 +50,7 @@ internal static class Program
     private static async Task TestManualCooldownAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var clock = new TestClock(new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
         var gateway = new FakeGateway();
@@ -74,7 +74,7 @@ internal static class Program
     private static async Task TestBusyGateAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var clock = new TestClock(new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
         var gateway = new FakeGateway { BlockFirstList = true };
@@ -101,7 +101,7 @@ internal static class Program
     private static async Task TestFailedManualDoesNotCooldownAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var clock = new TestClock(new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
         var gateway = new FakeGateway { FailNextList = true };
@@ -124,7 +124,7 @@ internal static class Program
     private static async Task TestDailyBroadThenRecentAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var clock = new TestClock(new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
         var gateway = new FakeGateway();
@@ -147,7 +147,7 @@ internal static class Program
     private static async Task TestManualStaysRecentAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var clock = new TestClock(new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.FromHours(8)));
         var gateway = new FakeGateway();
@@ -165,7 +165,7 @@ internal static class Program
     private static async Task TestFailedDailyRemainsDueAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var clock = new TestClock(new DateTimeOffset(2026, 1, 15, 12, 0, 0, TimeSpan.FromHours(8)));
         var gateway = new FakeGateway { FailNextList = true };

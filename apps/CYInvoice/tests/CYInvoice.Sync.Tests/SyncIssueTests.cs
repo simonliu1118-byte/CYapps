@@ -42,7 +42,7 @@ internal static class SyncIssueTests
     private static async Task QueryFailureForcesRetryAndResolvesAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         repository.Invoices.Append(Record("query-retry", "QA12345678", "66091800111111", buyer: "舊買受人"));
 
@@ -72,7 +72,7 @@ internal static class SyncIssueTests
     private static async Task InvoiceListFailureResolvesAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var gateway = new FakeGateway { ListException = new InvalidOperationException("forced list failure") };
         var service = Sync(repository, gateway);
@@ -98,7 +98,7 @@ internal static class SyncIssueTests
     private static async Task AmbiguousMatchIsRecordedAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var first = Record("duplicate-a", "QB12345678", "66091800222222", buyer: "本機A");
         var second = Record("duplicate-b", "QB12345678", "66091800222222", buyer: "本機B");
@@ -124,7 +124,7 @@ internal static class SyncIssueTests
     private static async Task UnknownNotFoundResolvesAfterConfirmationAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         var record = Record(
             "test-unknown",

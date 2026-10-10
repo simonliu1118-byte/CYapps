@@ -260,7 +260,7 @@ static async Task QueueReviewAsync(TestSetup setup)
 
 static TestSetup CreateSetup(string path, bool paper = true)
 {
-    var repository = LocalRepository.Open(path, new TestProtector());
+    var repository = TestRepository.Open(path, new TestProtector());
     repository.Employees.CreateFirstSuperAdmin("0001", "超管", "super@example.com", "SuperPass1");
     repository.Employees.CreateEmployee("0001", "3015", "員工", "employee@example.com", "Employee1");
     repository.Employees.CreateEmployee("0001", "2000", "管理員", "admin@example.com", "AdminPass1", EmployeeRoles.Admin);

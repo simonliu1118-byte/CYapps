@@ -935,9 +935,11 @@ internal sealed class ImportConfirmationForm : Form
         UpdateIssueEnabled(busy);
     }
 
+    internal void ApplyServiceState() => UpdateIssueEnabled();
+
     private void UpdateIssueEnabled(bool busy = false)
     {
-        if (busy || issuing || entries.Count == 0)
+        if (busy || issuing || entries.Count == 0 || repository.Connections.Current is { AmegoAvailable: false } or { BlockAll: true })
         {
             issue.Enabled = false;
             return;

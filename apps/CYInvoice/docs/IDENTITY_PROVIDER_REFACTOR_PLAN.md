@@ -192,7 +192,7 @@ Acceptance includes A/B real-device checks for:
 - role change effective on B at the next protected operation;
 - enabled/disabled change effective on B at the next protected operation;
 - password change effective on B at the next protected operation;
-- true network outage still permits only the approved offline behavior;
+- Cloud outage (including temporary HTTP 503) with reachable AMEGO permits only the existing approved fallback; simultaneous outage blocks all business;
 - reconnect restores current Cloud authority.
 
 ## 6. Package 3 — Device revoke / retire
@@ -243,7 +243,7 @@ V2.6.15 implements CyIdIdentityProvider behind the existing runtime owner and CY
 
 Per-operation Login/Resolve/finally Logout keeps CYID Session server-only and ephemeral in consumer memory. CYID owns stable Employee identity, enabled, Workspace Role and App Access; CYInvoice owns Device/Workspace binding and business permission. Device management/onboarding reuse the current handler owner; old account authority routes reject in CYID mode. Windows hides account management and does not import Built-in snapshots.
 
-A device-bound DPAPI cache permits the user-approved last-trusted offline behavior only on real transport interruption. It derives a local offline proof after online success, never downloads a central CYID verifier. Online errors do not become offline grants; reconnect refreshes authority. Cache has no new TTL, so central revocation cannot be observed while offline. Session loss can leave provider-owned expiry pending; no completed mutation is replayed.
+A device-bound DPAPI cache permits the user-approved last-trusted offline behavior when Cloud transport/timeout/temporary 5xx fails and AMEGO remains reachable. It derives a local offline proof after online success, never downloads a central CYID verifier. Credential/permission/Device denial, malformed success and inconsistent scope do not become fallback grants; reconnect refreshes authority. Cache has no new TTL, so central revocation cannot be observed while offline. Session loss can leave provider-owned expiry pending; no completed mutation is replayed.
 
 Source tests use real CYID Worker with separate synthetic databases and C# cache/gateway contracts. Real Windows CI/package, RC AA, application enablement/private binding, reviewed migration/rollback and formal cutover remain separate gates. No production deployment or Release is authorized; 0-active-Device recovery remains unimplemented.
 
@@ -280,4 +280,9 @@ Do not reverse this order by wiring CY ID directly into Forms/workflows before t
 
 ## 12. Current scope / version / release boundary
 
-The current engineering baseline is V2.6.15; CYID Consumer adds the third provider while retaining V2.6.14 device management and previous UI/join fixes. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.
+The current engineering baseline is V2.6.16; CYID Consumer adds the third provider while retaining V2.6.14 device management and previous UI/join fixes. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.
+
+
+## Service connectivity implementation (V2.6.16)
+
+The current product decision is CY_ID_INTEGRATION §14.2, superseding the historical Package 2 transport-only trigger. ServiceConnectivity owns independent AMEGO/Cloud reachability; MainForm owns one 15-second check and one modal blocker. Existing providers keep their own action-time authority and protected fallback. There is no new Local authority, offline issuance queue, Session store or mutation retry. Raw availability probes can recover after denial; a known denial stays blocked through subsequent outages and clears only after the same Device/binding succeeds. Local checks only AMEGO. Existing invoice services guard requests before local mutations, including cache-hit lookup/PDF paths; transport loss after a sent issue remains the existing uncertain-result workflow. Native Windows smoke and service matrix regression accompany the implementation; real-device/staging acceptance remains RC AA/AB.

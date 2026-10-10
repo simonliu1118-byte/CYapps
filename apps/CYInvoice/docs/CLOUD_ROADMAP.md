@@ -152,13 +152,13 @@ Identity matching 使用 Employee No + Email；Name 只作顯示：
 
 ## 4. 離線與恢復
 
-Cloud Mode 斷網時：
+Cloud Mode 雲端暫時不可用且光貿正常時（含 timeout／503）：
 
 - 使用最後一次成功同步的 Cloud Employee identity / role / enabled / credential verifier。
 - 需要權限的操作仍在執行當下輸入 Employee No + Password。
 - 不切回舊 Local EmployeeStore。
 
-完全離線期間不可能知道 Cloud 上剛發生的 role／enabled／password 異動，因此只能使用最後已知 cache；恢復連線後由 Cloud authority 更新 cache。
+雲端不可達時無法得知最新 role／enabled／password；原降級使用最後可信 cache，恢復後由 authority 更新。光貿單獨不可達停用光貿功能；兩者不可達阻擋全部業務。純 Local 只依光貿連線決定正常／阻擋，詳見 CY_ID_INTEGRATION §14.2。
 
 Workspace-wide 帳號異動全部 Online-only：
 

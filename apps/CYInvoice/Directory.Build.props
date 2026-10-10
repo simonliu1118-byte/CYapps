@@ -7,4 +7,7 @@
     <AnalysisLevel>latest</AnalysisLevel>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+  <ItemGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
+    <Compile Include="$(MSBuildThisFileDirectory)tests/Support/ServiceConnectivityFixture.cs" Link="ServiceConnectivityFixture.cs" />
+  </ItemGroup>
 </Project>

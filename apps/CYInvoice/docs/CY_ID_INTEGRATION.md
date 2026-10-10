@@ -204,7 +204,7 @@ AMEGO 仍是發票官方真相，CYInvoice 重新接回正式光貿後可依既�
 
 CY ID 模式仍必須保留 CYInvoice 已定案的 Cloud Offline 使用能力；但 CYInvoice 不應直接讀 CY ID D1，也不應要求 CY ID 把自己的 credential verifier 當成一般 consumer data 回傳。
 
-V2.6.15 已實作 Windows offline credential/cache；技術邊界、last-trusted 限制及 acceptance 見 §14。原產品不變量保留：
+V2.6.15 已實作 Windows offline credential/cache；V2.6.16 依使用者定案銜接原有降級及光貿／雲端獨立連線檢查；技術邊界、last-trusted 限制及 acceptance 見 §14。原產品不變量保留：
 
 - Online 時以目前 CY ID authority 為準；
 - Offline 時只能使用最後一次可信同步／建立的本機 protected cache；
@@ -297,7 +297,7 @@ CYID canonical response 需嚴格驗證 Workspace／Employee identity、`SUPER_A
 | Private transport | CYInvoice Worker 的 IDENTITY Fetcher | 只呼叫 canonical CYID endpoints，不直接連 CYID D1；runtime 配置另行核准 |
 | 授權交集 | 有效 Device／CYInvoice Workspace ＋ CYID Employee／Workspace／App Access ＋ CYInvoice operation Role | Device Token、配對碼不代表 Employee 或 App Access；CYID Identity Admin 不是 CYInvoice Super Admin |
 | Workspace | runtime identity Workspace 與 CYInvoice Workspace 分別固定 | gateway 只接受 configured consumer Workspace，不由 client 傳入／猜測綁定 |
-| Offline／reconnect | 線上成功後的 device-bound DPAPI cache，真正 transport failure 時驗本機 proof | 線上拒絕優先；重新連線使用新的 Role／App Access／credential，不讀 Local authority |
+| Offline／reconnect | 線上成功後的 device-bound DPAPI cache，雲端 transport／timeout／暫時 5xx 且光貿正常時驗本機 proof | 線上拒絕優先；重新連線使用新的 Role／App Access／credential，不讀 Local authority |
 | 遷移／切換 | 0013 保留 Built-in 邀請歷史並新增外部 actor 欄位；CYID 預設關閉 | 不匯入 CYID verifier，不 bulk migrate Employee，不自動刪 Built-in 或切正式服務 |
 
 ### 14.1 Runtime owner 與最小相容責任
@@ -312,11 +312,22 @@ CYID enabled 後舊 Employee／Web auth／bootstrap authority routes 明確拒�
 
 ### 14.2 Architecture Exception：使用者指定既有離線行為
 
-Primary path 是當次 CYID online authority；subordinate cache 僅在 Windows→CYInvoice HTTPS transport 的 HttpRequestException 或非使用者取消 timeout 啟用，為已完成線上驗證的員工保留本機驗證能力。由密碼在本機建立隨機 salt／PBKDF2 proof，連 principal、Role、revision、credentialVersion、完整 scope 一起 DPAPI 保護；不是 CYID 中央 credential verifier，不會 mint server Session 或授權離線 Worker 管理。
+Primary path 是當次 CYID online authority；2026-10-10 使用者定案：**沿用原 CYInvoice 降級單機功能**。Windows→Cloud transport failure、非使用者取消的 timeout，以及暫時 5xx（含 Worker→private CYID 故障的 503），在光貿可連線時使用已線上成功驗證的最後可信快取。不是重新建立 Local 員工／第二套降級 authority，不把 CloudMode、Workspace 或 Token 切成另一個模式。
 
-此處的 offline 是身分驗證備援，不是離線開票。目前開票必須呼叫光貿 Issue API；整台電腦斷網或光貿不可達時，不能在本機完成新發票開立。若只是 Windows→CYInvoice 驗證入口 transport 失敗、光貿仍可達，已在線驗證者才可能用最後可信 principal 繼續需要光貿的操作；實際成功仍由光貿回覆決定。Worker 可達但 private CYID 不可用所回覆的 HTTP 503 不啟用本機快取。既有結果不明不得盲目重送，也不新增離線配號／待連線自動開票佇列。
+| 光貿 | 雲端驗證 | 執行行為 |
+| --- | --- | --- |
+| 可用 | 可用 | 正常使用；權限操作採當次最新 authority |
+| 可用 | 暫時不可用 | 使用原有降級；中央帳號／Device 異動等待雲端恢復 |
+| 不可用 | 可用 | 停止光貿相關開票、查詢、作廢、折讓確認、PDF、同步；雲端帳號／Device 功能依原授權可用 |
+| 不可用 | 不可用 | 一個 modal 提示阻擋全部業務；僅重新檢查／關閉程式可用；任一恢復後回到對應狀態 |
 
-使用者選擇沿用現行 last-trusted cache，這輪未增加到期時間：離線無法即時知道停用／撤銷／權限降低。實際範圍受最後 principal 的 app-local Role 限制，伺服器操作仍必須在線。HTTP 401／403／503、畸形或不一致回應、使用者取消、配置／裝置失效不視為 offline；登入失敗／明確拒絕清除該員工，裝置／provider／Workspace 不符清除全部 cache。重新連線每次重新驗證並替換成功快取。CYInvoice provider owner 維護，scope 為目前 Windows 裝置；改用 server-approved offline policy 時才能替換這個產品能力，以斷網／reconnect／拒絕／scope regression 驗證，不當作暫時雙 authority。
+純 Local 沒有雲端依賴：光貿可用則正常，光貿不可用則使用同一阻擋方式，直到光貿恢復。MainForm 是唯一連線 UI／15 秒恢復檢查 lifecycle owner；ServiceConnectivity 是共用狀態／探測 owner，光貿檢查收斂到現有 AmegoConnectivityProbe 的 `/json/time`，不是只看網卡。正式 business service 在請求前重查光貿；cloud liveness 不代表 Employee／App Access 授權。CYID authenticated discovery 經原 private Binding 呼叫 canonical `/v1/health`；健康檢查不建立 Session、不讀 CYID D1，每次權限操作仍經 provider。
+
+由線上成功的密碼在本機建立隨機 salt／PBKDF2 proof，連 principal、Role、revision、credentialVersion、完整 scope 一起 DPAPI 保護；不是 CYID 中央 verifier，不 mint server Session，不授權離線 Worker 管理。Built-in 沿用原 protected Cloud Employee cache；CYID 沿用 V2.6.15 已實作的裝置快取。
+
+帳密錯誤、權限拒絕、裝置撤銷不能降級；HTTP 401／403、配置／scope 不一致、成功回應畸形與 caller cancellation 都 fail closed。拒絕依原 cache owner 清除相應快取；裝置／provider／Workspace 不符清除全部身分快取。已知 Device 拒絕後又遇 503 不能重新放行，須同一裝置／綁定成功驗證才能解除。發票、原 Workspace、Device／Token、設定及使用者輸入保留；不因短暫 outage 重建或 reset。
+
+Last-trusted 沒有新增 TTL，降級期間無法即時觀察中央撤銷；權限仍受最後 principal 的 app-local Role 限制，server mutations 仍須在線。重新連線後每次重新驗證，最新 Role／App Access／credential 替換成功快取。光貿斷線不能在本機完成開票；恢復不自動重送，既有結果不明仍先查詢，不新增離線配號或待連線自動開票佇列。CYInvoice provider owner 維護本能力，scope 為目前 Windows 裝置；未來替換 server-approved offline policy 時以 outage／reconnect／deny／scope regression 驗證，不當作暫時雙 authority。
 
 ### 14.3 Session 與一致性限制
 
@@ -326,7 +337,7 @@ finally 呼叫 Logout；Logout 失敗只留下不含憑證的 CYID_LOGOUT_UNCONF
 
 ### 14.4 驗證與正式切換 gate
 
-本機使用 repository 真實 CYID Worker、獨立 synthetic DB／migrations 測 Login／Resolve／Logout、Role／App Access／enabled／credential change、錯 scope、first-login、provider outage、logout loss 不 replay，以及 pairing／invitation／rename／revoke；C# 測整筆 protected cache、transport-only offline、authority reject、cancel、scope、Unicode 邊界。Windows CI 執行真實 DPAPI、加入控件 smoke、原本完整 business regressions 與封裝；實機依 RC_TEST AA 尚待驗收，125／150 DPI 維持 Deferred。
+本機使用 repository 真實 CYID Worker、獨立 synthetic DB／migrations 測 Login／Resolve／Logout、Role／App Access／enabled／credential change、錯 scope、first-login、provider outage、logout loss 不 replay，以及 pairing／invitation／rename／revoke；C# 測整筆 protected cache、transport／timeout／503／HTML 503 降級、四種服務狀態、純 Local、拒絕後 outage 不復活、cancel、scope、Unicode 邊界。Windows CI 執行真實 DPAPI、加入控件 smoke、原本完整 business regressions 與封裝；Windows 阻擋 modal／不能關閉略過／重新檢查恢復 smoke 隨本輪 CI 驗證；實機依 RC_TEST AA／AB 尚待驗收，125／150 DPI 維持 Deferred。
 
 實際部署／正式 CYID 切換前仍需：核對已註冊 Application 與 Workspace enablement／App Access、核准 private binding 與兩 Workspace 配對、備份／migration 0013 與 FK check、EmployeeNo 及歷史業務 actor 稽核、A/B/C device／offline reconnect 驗收、server rollback 與已確認 CYID client 的 fail-closed 邊界。先做隔離 staging，不將 source bundle／CI 視為 live 成功。0-active-Device recovery 未完成，LAST_ACTIVE_DEVICE 保護維持；未授權 production cutover、正式 tag 或 Release。CYID Consumer Impact: NONE；provider canonical source 未修改。
 
@@ -336,4 +347,4 @@ finally 呼叫 Logout；Logout 失敗只留下不含憑證的 CYID_LOGOUT_UNCONF
 
 SettingsStore 在更新 provider 前核對既有 endpoint／CYInvoice Workspace／Device／Token digest；不同 Workspace 的 discovery 拒絕，不能覆寫原設定。回歸以真實本機 SQLite／SettingsStore 切換後重開，核對發票及 pending 狀態、買方名稱、PDF cache、公司／印表機／protected credentials；Worker 以原兩台 Device Token 在 flag 前後 discovery／authenticate，核對 Workspace、Devices、歷史員工／邀請／audit rows 完整保留。這是 synthetic source 證據，真實 A/B/C 接續使用仍待 RC AA。
 
-正式切換前先在原安裝升級所有使用中的 Windows 到支援 CYID 的版本（本輪 V2.6.15），備妥員工啟用、原 EmployeeNo 對應、Application Access、所需 Role 與 verified Super Admin Email，再在隔離 staging 證明原裝置可完成既有業務。任一條件未完成，維持現行 Built-in 部署，不開啟 CYID flag；不可先切 authority 再要求使用者重建 Workspace 修復。受控啟用後原安裝重新 discovery／驗證，以當次 CYID 結果更新權限；不因拒絕而回退舊 authority，也不承諾服務故障期間所有遠端操作可用。
+正式切換前先在原安裝升級所有使用中的 Windows 到支援 CYID 的版本（目前 V2.6.16），備妥員工啟用、原 EmployeeNo 對應、Application Access、所需 Role 與 verified Super Admin Email，再在隔離 staging 證明原裝置可完成既有業務。任一條件未完成，維持現行 Built-in 部署，不開啟 CYID flag；不可先切 authority 再要求使用者重建 Workspace 修復。受控啟用後原安裝重新 discovery／驗證，以當次 CYID 結果更新權限；不因拒絕而回退舊 authority，也不承諾服務故障期間所有遠端操作可用。

@@ -117,7 +117,12 @@ public sealed class CloudEmployeeAuthorityClient
             .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
             .ConfigureAwait(false);
         await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
-        var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token).ConfigureAwait(false);
+        JsonDocument document;
+        try { document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token).ConfigureAwait(false); }
+        catch (JsonException) when ((int)response.StatusCode is >= 500 and <= 599)
+        {
+            throw new CloudApiException("CLOUD_UNAVAILABLE", "雲端驗證服務暫時不可用。", response.StatusCode);
+        }
         if (response.IsSuccessStatusCode) return document;
 
         var code = ReadErrorCode(document.RootElement);

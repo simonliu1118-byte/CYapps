@@ -176,7 +176,7 @@ internal static class PendingVoidSyncTests
 
     private static LocalRepository OpenProduction(string path)
     {
-        var repository = LocalRepository.Open(path, new TestProtector());
+        var repository = TestRepository.Open(path, new TestProtector());
         var settings = repository.Settings.LoadOrCreate();
         settings.Environment = Environments.Production;
         settings.ProductionInvoice = "12345675";

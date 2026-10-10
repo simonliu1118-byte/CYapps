@@ -58,6 +58,7 @@ public sealed class InvoiceVoidService
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
             var record = Reload(selected);
             var account = CurrentAccount();
             ValidateAccount(record, account);
@@ -207,6 +208,7 @@ public sealed class InvoiceVoidService
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
             var record = Reload(selected);
             var account = CurrentAccount();
             ValidateAccount(record, account);

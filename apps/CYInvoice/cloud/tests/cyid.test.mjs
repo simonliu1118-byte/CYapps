@@ -109,11 +109,15 @@ assert.equal(auth.body.principal.workspaceRole, 'SUPER_ADMIN');
 assert.equal(auth.body.workspaceId, 'ws_invoice');
 assert.equal(auth.body.principal.workspaceId, 'ws_identity');
 assert.equal(auth.body.principal.employeeId, 'emp_owner');
-assert.deepEqual(paths, ['/v1/identity/login', '/v1/identity/session/resolve', '/v1/identity/logout']);
+assert.deepEqual(paths, ['/v1/health', '/v1/health', '/v1/identity/login', '/v1/identity/session/resolve', '/v1/identity/logout']);
 assert.equal(provider.db.prepare('SELECT count(*) n FROM identity_sessions WHERE revoked_at IS NULL').get().n, 0);
 assert.ok(!JSON.stringify(auth.body).includes('cyid_'));
 assert.ok(!JSON.stringify(auth.body).includes(verifier));
 assert.equal((await call('/v1/identity-provider')).body.provider, 'CYID');
+providerBehavior = request => new URL(request.url).pathname === '/v1/health'
+  ? new Response('Service unavailable', { status: 503 }) : undefined;
+assert.equal((await call('/v1/identity-provider')).body.error.code, 'IDENTITY_UNAVAILABLE');
+providerBehavior = undefined;
 assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { CYID_ENABLED: 'false' })).body.provider, 'BUILT_IN');
 assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { IDENTITY_WORKSPACE_ID: undefined })).status, 503);
 assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { IDENTITY_CYINVOICE_WORKSPACE_ID: 'ws_other' })).status, 409);
