@@ -435,7 +435,8 @@ internal sealed class MainForm : Form
     internal int DetailRowsShortfall()
     {
         _root.PerformLayout();
-        var needed = _details.ColumnHeadersHeight + DefaultDetailRows * _details.RowTemplate.Height + 1;
+        // A few spare pixels: DataGridView shows its scrollbar when the last row is even 1 px short.
+        var needed = _details.ColumnHeadersHeight + DefaultDetailRows * _details.RowTemplate.Height + 4;
         return needed - _details.ClientSize.Height;
     }
 
