@@ -176,8 +176,10 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 - [x] 修正 development 部署驗收的舊 0.9.0 hard-code；由 Cloud package.json 核對版本及 runtime-sync capability，保留原部署 owner。
 - [x] 唯讀 preflight、原 DB／Built-in／runtime secret names／rate limit／canonical migration prefix／FK／歷史 fingerprint／private recovery checkpoint source 與回歸；0013 真實 SQLite 前後延續及 Token hash 更換拒絕通過。
-- [ ] 遠端 development preflight：核對真正部署版本、原 Workspace／Device、0013 pending 及 Time Travel／Worker rollback 可用；不把既有 development target 自稱隔離 sandbox。
-- [ ] preflight 通過後 additive Cloud 0.9.2／storage 13 部署，CYID 關閉，驗證原資料／Token／history、API compatibility、secret/binding 保留與新同步；Windows 認證／業務驗收仍獨立。
+- [x] 遠端 development preflight #11：原 Cloud 0.8.9／storage 12、1 Workspace／4 Device records、僅 pending 0013、FK／private Time Travel／Worker checkpoint 可用；不把既有 development target 自稱隔離 sandbox。
+- [x] additive development Cloud #12：0.9.2／storage 13，CYID 關閉；原資料／Token hashes／history／API compatibility 與 runtime-sync capability 驗收通過。沒有 secret replacement／authority switch；Windows 當次認證／業務與 UI 驗收仍獨立。
+- [x] CY Web main 的七個 manifest mirror 與 CYID main canonical byte-sync（1.0.2）；#380 staged 1.0.3 尚未合併，不以舊 mirror 檢查冒充新版採用。
+- [ ] Provider 0.3.6／private named RPC staged rollout：先核對既有 development 設定／Secrets 保留與原 consumer 相容性，不重播 bootstrap／authority；合併 canonical 1.0.3 後同步跨 repo mirror，再進 coordinated rollout。
 - [ ] 確認隔離 staging 資源及部署權限／Free 用量、private IDENTITY／IDENTITY_AUTHORITY 同 provider、Application 與 Workspace scopes；不能猜正式對應或在原業務資料上造 synthetic 帳號。
 - [ ] staging、RC AA／AB／AC 與原 A/B/C 完成後提出正式切換／回復方案；正式 tag／Release 版本身分另依 PROJECT_RULES 明確處理。
 

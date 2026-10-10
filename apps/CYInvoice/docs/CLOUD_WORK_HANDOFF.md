@@ -27,7 +27,17 @@
 
 沿用 cyinvoice-cloud-dev-deploy.yml 為唯一 development owner，修正 health 舊 0.9.0 hard-code；preflight 專用 branch 只讀遠端。部署前固定 original D1／development／CYID disabled，核對 immutable migration prefix（僅允許 pending 0013）、FK、必要 runtime secret names／rate limit、private Time Travel／Worker recovery checkpoint。暫存 generated config 保留原 vars/services/secrets；after 核對 source version、storage 13、runtime-sync capability 與原 Workspace／Device Token hashes／員工／邀請／audit 歷史。敏感值不寫 Public log／Artifact；恢復點 UTC timestamp 可回查 bookmark，不自動 D1 restore。
 
-本機 TypeScript／完整 Worker 回歸／bundle 與 deployment audit 通過，含真實 SQLite 0013 前後歷史延續及 Token hash 異動拒絕。Windows／Worker business runtime 未改，VERSION／BUILD 維持 V2.6.17 Build 2。遠端 preflight／additive deployment 尚待執行，不把既有 development business Workspace 當隔離 CYID sandbox。唯一 checklist 見 TODO §7.3.3；執行／回復說明見 cloud/README。
+本機 TypeScript／完整 Worker 回歸／bundle 與 deployment audit 通過，含真實 SQLite 0013 前後歷史延續及 Token hash 異動拒絕。Windows／Worker business runtime 未改，VERSION／BUILD 維持 V2.6.17 Build 2。唯一 checklist 見 TODO §7.3.3；執行／回復說明見 cloud/README。
+
+Source **82080dfa1939c2ea5873aa3902d5ff46fb509a5b** 的七項 CI 全部通過（Windows #277、Cloud #388、Governance #1187、CYID #107，以及三個 deployment workflow 的 PR validate；PR deployment jobs 均 skipped）。[Windows #277 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38076799208/artifacts/11678896282)，81,087,619 bytes，archive SHA-256 cc00f5534b41913681f4889a9e67c5cf829c24c9ccf9f169e66f4bba72c989eb，expiry 2026-10-14 02:44 Asia/Taipei。較早 #275／#276 包保留歷史追溯，本段才是本輪 source 證據。
+
+[唯讀 preflight #11](https://github.com/simonliu1118-byte/CYapps/actions/runs/38076867183)（cbb26758；tree 與 82080dfa 完全相同）通過：原 Cloud 0.8.9／storage 12、1 Workspace／4 Device records、僅 pending 0013、FK 正常及 private Time Travel／prior Worker checkpoint。所有 mutation 步驟 skipped。
+
+**最新 development deployment 為 [#12](https://github.com/simonliu1118-byte/CYapps/actions/runs/38077157550)**，commit 38163fcc8b755d5a9af97773a86c82f54e052ede，tree 與 82080dfa 相同。原部署 branch fast-forward，沒有 force push；preflight 再次通過後只套用 0013，再部署同一 Worker／D1。after 通過 Cloud **0.9.2／API 1／marker 8／storage 13**、runtime-sync capability、原 Workspace／Device Token hashes／employee／pairing／invitation／audit 歷史延續及 FK。**CYID disabled，仍用 Built-in；未改正式 provider、未切 authority、未建立 tag／Release。** 恢復 checkpoint timestamp：2026-10-10T18:47:23.452Z；D1 restore 不自動執行，先停寫並稽核 checkpoint 後的資料。
+
+CYID development health 仍 **0.3.5**；1.0.3 named RPC 尚未部署／實際綁定驗收。原 development business target 不等於隔離 CYID sandbox。CY Web main 的七個 manifest mirror files 與 CYID main canonical 逐 byte 一致，declared／canonical 仍 1.0.2；#380 staged canonical 1.0.3 合併後，需要同步新版 mirror 再做 coordinated provider rollout。這只是 contract sync 檢查，不代替 Employee activation／App Access／Role／verified Email 或正式 scope 稽核。
+
+接續：保留現有 provider 設定／Secrets 的更新流程與隔離 staging 資源／用量核對，確認批准的 Application／兩 Workspace 配對及 private IDENTITY／IDENTITY_AUTHORITY，完成實際 gateway 授權／invalidation；再做 Windows RC AA／AB／AC 與原 A/B/C。正式切換方案另列原 D1／Device continuity、備份、舊 client／回復 gate；不能用重新加入／reset 修復錯綁定。Windows 可先以原 Built-in 安裝測新同步與一般回歸，真實 UI、DPAPI、kill／檔案占用及人工操作仍不能由 Linux 或 CI 冒充。
 
 ### V2.6.17 source checkpoint — 2026-10-10
 
@@ -140,7 +150,7 @@ Windows Artifact：[CYInvoice_V2.6.11_Build2_engineering-run258](https://github.
 
 Reference backend source：Cloud **0.8.9**／API **1**／legacy compatibility schemaVersion=8／actual storage Schema **12**；forward migrations 0001～0012。不可把 compatibility marker 與 storage migration progress 當同一欄位。
 
-最新 development 遠端證據為 2026-10-10 staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509)，詳見上方 V2.6.14。9/29 Run #7／Cloud 0.8.8／storage 11 保留為 [歷史快照](NEXT_CHAT_HANDOFF_2026-09-29.md)，不再當最新部署基準。
+最新 development 遠端證據為本文件上方 2026-10-11 [Run #12](https://github.com/simonliu1118-byte/CYapps/actions/runs/38077157550)：Cloud 0.9.2／storage 13／CYID disabled。先前 Run #8 attempt 2／Cloud 0.8.9／storage 12 保留 V2.6.14 歷史；9/29 Run #7／Cloud 0.8.8／storage 11 為 [歷史快照](NEXT_CHAT_HANDOFF_2026-09-29.md)。
 
 以下四包已合併進 main，不再列為未實作：
 

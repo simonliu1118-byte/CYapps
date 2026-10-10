@@ -18,7 +18,7 @@ The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engin
 
 `wrangler.jsonc` contains a local/CI D1 placeholder and the source storage configuration. Remote development uses the existing Worker's bound D1 after verifying its deployment environment and database metadata; its concrete ID is injected only into a private generated config. Applied migrations are immutable; future changes must use new forward migrations.
 
-> Source CI passed on db1a3b95 (Cloud #377 / Windows #266). Development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) verified Cloud 0.8.9 / API 1 / compatibility marker 8 / storage Schema 12 and both new capabilities. Migration 0012 was applied once, with stable aggregate Device state and an empty foreign-key check; retry found no unapplied migrations. The first immediate health read still returned 0.8.8; identical-source retry passed. This does not replace Windows A/B/C manual acceptance.
+> Latest development [Run #12](https://github.com/simonliu1118-byte/CYapps/actions/runs/38077157550) deployed the validated 82080dfa tree, applied only 0013, and verified Cloud 0.9.2 / API 1 / compatibility marker 8 / storage 13 / runtime-sync capability with CYID disabled. Original Workspace/Device token hashes/employee/pairing/invitation/audit history was retained and FK was clean. CYID development still reports 0.3.5; its named private capability and scoped binding acceptance remain pending. Run #8 / Cloud 0.8.9 / storage 12 is historical. Windows and original Device authorization/business acceptance remain separate.
 
 ## Development commands
 
