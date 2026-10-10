@@ -9,11 +9,11 @@ const compare = (a,b) => a[0]-b[0] || a[1]-b[1] || a[2]-b[2];
 assert.ok(compare(parsedVersions[0], parsedVersions[1]) <= 0 && compare(parsedVersions[1], parsedVersions[2]) <= 0, 'consumer version must be inside canonical support window');
 
 async function moduleFrom(path) {
-  const result = await build({ entryPoints: [path], bundle: true, write: false, format: 'esm', platform: 'node' });
+  const result = await build({ entryPoints: [path], bundle: true, write: false, format: 'esm', platform: 'node', plugins: [{ name: 'worker-entrypoint-test', setup(b) { b.onResolve({ filter: /^cloudflare:workers$/ }, () => ({ path: 'workers', namespace: 'test-runtime' })); b.onLoad({ filter: /.*/, namespace: 'test-runtime' }, () => ({ contents: 'export class WorkerEntrypoint { constructor(ctx, env) { this.env = env; } }', loader: 'js' })); } }] });
   return import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
 }
 const { default: invoice } = await moduleFrom('src/app.ts');
-const { default: identity } = await moduleFrom('../../CYCloudIdentity/src/index.ts');
+const { default: identity, ConsumerAuthoritySync } = await moduleFrom('../../CYCloudIdentity/src/index.ts');
 const { createCredentialVerifier } = await moduleFrom('../../CYCloudIdentity/src/crypto.ts');
 
 function database(migrations, beforeMigration) {
@@ -74,7 +74,7 @@ const paths = [];
 const env = { DB: consumer.d1, APP_ENV: 'test', API_VERSION: '1', SCHEMA_VERSION: '13', CYID_ENABLED: 'true',
   IDENTITY_APPLICATION_ID: 'CYINVOICE', IDENTITY_WORKSPACE_ID: 'ws_identity', IDENTITY_CYINVOICE_WORKSPACE_ID: 'ws_invoice',
   WEB_LOGIN_EMPLOYEE_RATE_LIMIT: rate, WEB_LOGIN_IP_RATE_LIMIT: rate, WEB_PASSWORD_RESET_EMPLOYEE_RATE_LIMIT: rate,
-  WEB_PASSWORD_RESET_IP_RATE_LIMIT: rate, IDENTITY: { fetch: async request => {
+  WEB_PASSWORD_RESET_IP_RATE_LIMIT: rate, IDENTITY_AUTHORITY: new ConsumerAuthoritySync(null, identityEnv), IDENTITY: { fetch: async request => {
     paths.push(new URL(request.url).pathname);
     if (providerBehavior) { const response = await providerBehavior(request); if (response) return response; }
     return identity.fetch(request, identityEnv);
@@ -110,6 +110,43 @@ assert.equal(auth.body.workspaceId, 'ws_invoice');
 assert.equal(auth.body.principal.workspaceId, 'ws_identity');
 assert.equal(auth.body.principal.employeeId, 'emp_owner');
 assert.deepEqual(paths, ['/v1/health', '/v1/health', '/v1/identity/login', '/v1/identity/session/resolve', '/v1/identity/logout']);
+// Private background synchronization invalidates existing authority only; no login/session writes.
+const cachedUser = { employeeId: 'emp_user', credentialVersion: 1, employeeRevision: 1,
+  workspaceRole: 'USER', isIdentityAdmin: false, emailVerified: true };
+const syncRequest = { synchronize: true, authorities: [cachedUser] };
+const sessionCount = provider.db.prepare('SELECT count(*) n FROM identity_sessions').get().n;
+let runtime = await call('/v1/runtime/sync', syncRequest);
+assert.equal(runtime.status, 200);
+assert.equal(runtime.body.device.status, 'active');
+assert.deepEqual(runtime.body.permissions, { ok: true, invalidated: [] });
+for (const [mutate, restore] of [
+  ["UPDATE employees SET enabled=0 WHERE employee_id='emp_user'", "UPDATE employees SET enabled=1 WHERE employee_id='emp_user'"],
+  ["UPDATE employees SET role_key='ADMIN' WHERE employee_id='emp_user'", "UPDATE employees SET role_key='USER' WHERE employee_id='emp_user'"],
+  ["UPDATE employee_credentials SET credential_version=2 WHERE employee_id='emp_user'", "UPDATE employee_credentials SET credential_version=1 WHERE employee_id='emp_user'"],
+  ["UPDATE employee_application_access SET enabled=0 WHERE employee_id='emp_user'", "UPDATE employee_application_access SET enabled=1 WHERE employee_id='emp_user'"],
+]) {
+  provider.db.exec(mutate);
+  assert.deepEqual((await call('/v1/runtime/sync', syncRequest)).body.permissions.invalidated, ['emp_user']);
+  provider.db.exec(restore);
+}
+assert.deepEqual((await call('/v1/runtime/sync', { synchronize: true,
+  authorities: [{ ...cachedUser, employeeId: 'deleted_employee' }] })).body.permissions.invalidated, ['deleted_employee']);
+provider.db.exec("UPDATE applications SET status='disabled' WHERE application_id='CYINVOICE'");
+assert.equal((await call('/v1/runtime/sync', syncRequest)).body.permissions.code, 'ACCESS_DENIED');
+provider.db.exec("UPDATE applications SET status='active' WHERE application_id='CYINVOICE'");
+assert.equal(provider.db.prepare('SELECT count(*) n FROM identity_sessions').get().n, sessionCount);
+assert.equal((await identity.fetch(new Request('https://identity.test/v1/consumer/authority-sync'), identityEnv)).status, 404);
+const missedRevoke = await call('/v1/runtime/sync', syncRequest, tokens[0], { IDENTITY_AUTHORITY: {
+  invalidateCache: async () => {
+    consumer.db.prepare("UPDATE devices SET status='revoked' WHERE device_id=?").run(ids[0]);
+    throw new Error('synthetic provider outage');
+  }
+} });
+assert.equal(missedRevoke.body.device.status, 'revoked');
+assert.equal(missedRevoke.body.permissions, undefined);
+assert.equal(missedRevoke.body.binding, undefined);
+consumer.db.prepare("UPDATE devices SET status='active' WHERE device_id=?").run(ids[0]);
+console.log('PASS aggregate sync/private invalidation, permission changes and revoke during provider outage');
 assert.equal(provider.db.prepare('SELECT count(*) n FROM identity_sessions WHERE revoked_at IS NULL').get().n, 0);
 assert.ok(!JSON.stringify(auth.body).includes('cyid_'));
 assert.ok(!JSON.stringify(auth.body).includes(verifier));

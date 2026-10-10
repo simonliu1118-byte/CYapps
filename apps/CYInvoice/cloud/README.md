@@ -208,14 +208,30 @@ This directory is public source. Keep implementation provider-neutral at the Win
 
 ## CYID Consumer candidate (disabled by default)
 
-Canonical identity semantics come directly from `../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`; this consumer declares `../CYID_CONSUMER_VERSION=1.0.2`. No mirror or CYID D1 binding is added.
+Canonical identity semantics come directly from `../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`; this consumer declares `../CYID_CONSUMER_VERSION=1.0.3`. No mirror or CYID D1 binding is added.
 
 An independently reviewed deployment injects `CYID_ENABLED=true`, private `IDENTITY` Service Binding, and runtime-only `IDENTITY_APPLICATION_ID`, `IDENTITY_WORKSPACE_ID`, `IDENTITY_CYINVOICE_WORKSPACE_ID`. The two Workspace IDs are distinct scopes; this Worker binds exactly one CYInvoice Workspace. Missing/mismatched configuration fails closed. No real deployment binding or CYID application enablement was verified in this source task. With the flag absent/false, Built-in remains available.
 
-`IDENTITY_CYINVOICE_WORKSPACE_ID` is the existing business Workspace ID, not a new Workspace. Cutover retains the current consumer D1, Workspace, Devices and Tokens; existing installations must not rejoin or reset. Upgrade all active Windows installations to CYID-capable clients (current batch: V2.6.16), prepare Employee activation/App Access/Role/verified Super Admin Email, and prove continuity in isolated staging before enabling the flag. Until those gates pass, retain the Built-in deployment. Windows offline authentication is not offline invoice issuance: AMEGO still requires connectivity; Cloud transport/timeout/temporary 503 with reachable AMEGO uses the existing protected fallback. Credential/permission/Device rejection never permits fallback. Both services unavailable blocks all business; pure Local requires only AMEGO. See CY_ID_INTEGRATION §14.2. Authenticated discovery now checks canonical private `/v1/health` via the existing Binding; this is liveness only, creates no Session, and never grants Employee/App Access authorization. Source Cloud 0.9.1 adds no schema/migration or deployment.
+`IDENTITY_CYINVOICE_WORKSPACE_ID` is the existing business Workspace ID, not a new Workspace. Cutover retains the current consumer D1, Workspace, Devices and Tokens; existing installations must not rejoin or reset. Upgrade all active Windows installations to CYID-capable clients (current batch: V2.6.17), prepare Employee activation/App Access/Role/verified Super Admin Email, and prove continuity in isolated staging before enabling the flag. Until those gates pass, retain the Built-in deployment. Windows offline authentication is not offline invoice issuance: AMEGO still requires connectivity; Cloud transport/timeout/temporary 503 with reachable AMEGO uses the existing protected fallback. Credential/permission/Device rejection never permits fallback. Both services unavailable blocks all business; pure Local requires only AMEGO. See CY_ID_INTEGRATION §14.2. Authenticated discovery now checks canonical private `/v1/health` via the existing Binding; this is liveness only, creates no Session, and never grants Employee/App Access authorization. Source Cloud 0.9.1 adds no schema/migration or deployment.
 
 `GET /v1/identity-provider` requires an active Device Token and returns the confirmed provider/binding. `POST /v1/cyid/authenticate` accepts only per-operation employeeNo/password plus Device Token. The gateway owns Login → Resolve → result → finally Logout, returning normalized principal without Session/verifier. CYID owns Employee/enabled/Role/App Access; CYInvoice owns Device and business permission. Legacy account/bootstrap routes reject in CYID mode.
 
 Device rename/revoke, pairing issuance and invitation issue/preview/claim/revoke reuse the existing handler/mutation owners with a request-local CYID context. Invitation requires current SUPER_ADMIN credentials; pairing claim uses the existing one-time ticket issued after SUPER_ADMIN + Email OTP and grants Device membership only. Verified owner Email is read transiently from the authorized CYID admin snapshot, never imported into consumer authority/cache. Migration 0013 retains old invitation history/FKs and distinguishes Built-in from external CYID actors.
 
 Logout is best effort in finally. Response loss/crash can leave a CYID Session active until provider revocation/expiry (current default 8 hours); no consumer token is persisted and no completed mutation is retried. No distributed transaction is claimed between CYID Resolve and consumer D1 mutation. Windows uses a subordinate DPAPI cache only after transport failure, never after an HTTP authority error; offline server administration is unavailable. See CY_ID_INTEGRATION §14 for acceptance and cutover gates.
+
+
+### V2.6.17 aggregate runtime synchronization (Cloud 0.9.2)
+
+`POST /v1/runtime/sync`, authenticated by the original Device Token, accepts `{synchronize, authorities}`. It returns self Device status and fixed consumer/provider binding, plus provider-specific permission results on a full refresh. Revoked tokens expose only their authenticated self-state; unknown tokens do not authorize reset. A final self-state check runs even after provider failure. The normal 60-second refresh reuses Built-in snapshot or canonical CYID private invalidation; liveness-only calls create no employee authorization. No migration or deployment is performed by this source change.
+
+CYID mode additionally requires the named RPC binding below, targeting the same approved provider as `IDENTITY`; deployment substitutes a private service name. These are placeholders, not runnable production configuration:
+
+```json
+{"services":[
+  {"binding":"IDENTITY","service":"PROVIDER_SERVICE_PLACEHOLDER"},
+  {"binding":"IDENTITY_AUTHORITY","service":"PROVIDER_SERVICE_PLACEHOLDER","entrypoint":"ConsumerAuthoritySync"}
+]}
+```
+
+Canonical capability semantics stay in CONSUMER_INTEGRATION_STANDARD §11.1. Consumer Impact BACKWARD_COMPATIBLE; existing Fetcher consumers keep operating. Missing/mismatched binding blocks validation rather than silently switching authority. Staging must exercise the named RPC, Device revoke during CYID outage, original Workspace continuity and usage/quota; production cutover remains separately authorized.

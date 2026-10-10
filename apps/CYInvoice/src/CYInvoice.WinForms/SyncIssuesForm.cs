@@ -478,12 +478,12 @@ internal sealed class SyncIssuesForm : Form
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
 
-        using var login = new EmployeeAdminLoginForm(repository, "管理員結案－驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        using var login = new EmployeeAdminLoginForm(repository, "管理員結案－驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
         SetManualReviewBusy(true);
         try
         {
-            closeWork(login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+            closeWork(login.EnteredEmployeeNo, login.AuthenticatedPassword);
             MessageBox.Show(this, "已由管理員手動結案。CYInvoice 不會再自動追蹤這筆待處理作業。", "結案完成",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             ReloadAll();
@@ -537,12 +537,12 @@ internal sealed class SyncIssuesForm : Form
                 MessageBoxIcon.Question,
                 MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository, "折讓作廢人工處理－管理員驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        using var login = new EmployeeAdminLoginForm(repository, "折讓作廢人工處理－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
         SetManualReviewBusy(true);
         try
         {
-            allowanceVoidWorkflow.MarkManualCompleted(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+            allowanceVoidWorkflow.MarkManualCompleted(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             MessageBox.Show(this, "折讓作廢人工待辦已標記完成。", "處理完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
             ReloadAll();
         }
@@ -559,12 +559,12 @@ internal sealed class SyncIssuesForm : Form
                 "這筆作廢申請的紙本電子發票證明聯先前尚未收回。\n\n確認後，CYInvoice 會重新查詢光貿最新狀態，再送出作廢。請確認已完成主管核准並可進行作廢。",
                 "確認送出作廢", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository, "人工確認－管理員驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        using var login = new EmployeeAdminLoginForm(repository, "人工確認－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
         SetManualReviewBusy(true);
         try
         {
-            var result = await voidWorkflow.ApproveManualReviewAsync(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+            var result = await voidWorkflow.ApproveManualReviewAsync(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             switch (result.Outcome)
             {
                 case InvoiceVoidOutcome.Confirmed:
@@ -598,12 +598,12 @@ internal sealed class SyncIssuesForm : Form
                 "請先確認已在光貿網站完成這筆人工折讓。\n\n按下「是」後，CYInvoice 會進入等待確認並用 invoice_query 自動比對新的折讓資料。",
                 "折讓已人工處理", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository, "折讓人工處理－管理員驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        using var login = new EmployeeAdminLoginForm(repository, "折讓人工處理－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
         SetManualReviewBusy(true);
         try
         {
-            var result = await allowanceWorkflow.MarkManualCompletedAsync(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+            var result = await allowanceWorkflow.MarkManualCompletedAsync(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
             ShowAllowanceResult(result);
             ReloadAll();
         }
@@ -623,15 +623,15 @@ internal sealed class SyncIssuesForm : Form
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        using var login = new EmployeeAdminLoginForm(repository, "折讓單號確認－管理員驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        using var login = new EmployeeAdminLoginForm(repository, "折讓單號確認－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
         using var selector = new AllowanceCandidateForm(candidates);
         if (selector.ShowDialog(this) != DialogResult.OK || selector.SelectedAllowanceNumber.Length == 0) return;
         SetManualReviewBusy(true);
         try
         {
             var result = await allowanceWorkflow.ConfirmCandidateAsync(issue, selector.SelectedAllowanceNumber,
-                login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+                login.EnteredEmployeeNo, login.AuthenticatedPassword);
             ShowAllowanceResult(result);
             ReloadAll();
         }
@@ -672,24 +672,24 @@ internal sealed class SyncIssuesForm : Form
                 : "確定取消並退回這筆作廢申請？\n\n不會向光貿送出作廢，發票會維持「已開立」。";
         if (MessageBox.Show(this, prompt, "取消退回", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             return;
-        using var login = new EmployeeAdminLoginForm(repository, "人工確認－管理員驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        using var login = new EmployeeAdminLoginForm(repository, "人工確認－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
         SetManualReviewBusy(true);
         try
         {
             if (allowanceVoid)
             {
-                allowanceVoidWorkflow.CancelManualReview(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+                allowanceVoidWorkflow.CancelManualReview(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
                 MessageBox.Show(this, "已取消退回；未對光貿執行折讓作廢。", "已取消", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else if (allowance)
             {
-                allowanceWorkflow.CancelManualReview(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+                allowanceWorkflow.CancelManualReview(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
                 MessageBox.Show(this, "已取消退回；未對光貿執行折讓。", "已取消", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
             {
-                voidWorkflow.CancelManualReview(issue, login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+                voidWorkflow.CancelManualReview(issue, login.EnteredEmployeeNo, login.AuthenticatedPassword);
                 MessageBox.Show(this, "已取消退回；未向光貿送出作廢。", "已取消", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             ReloadAll();

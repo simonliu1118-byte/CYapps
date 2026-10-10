@@ -7,6 +7,7 @@ using CYInvoice.Core.Storage;
 var tests = new (string Name, Func<Task> Run)[]
 {
     ("cloud settings default to local-only with no endpoint", TestSettingsAsync),
+    ("revoked-device durable recovery wipes Logs and portable runtime", LocalResetCoordinatorTests.RunAsync),
     ("identity providers normalize Local and Built-in Cloud authority", IdentityProviderFoundationTests.RunAsync),
     ("CYID gateway, protected offline authority and invalidation", CyIdIdentityProviderTests.RunAsync),
     ("CYID cutover retains existing Workspace, Device, credentials and business data after restart", CyIdIdentityProviderTests.WorkspaceContinuityAsync),

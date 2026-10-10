@@ -371,6 +371,14 @@ internal sealed class SettingsForm : Form
             if (cloudMode.Checked && !HasCloudIdentity(settings))
                 throw new InvalidOperationException("請先完成建立／加入雲端空間；只有 API 網址尚不能切換成雲端版。");
 
+            // Opening the settings window does not authorize a later write.
+            using var authorization = new EmployeeAdminLoginForm(repository, "儲存設定－管理員驗證");
+            if (authorization.ShowDialog(this) != DialogResult.OK) return;
+            var latest = repository.Settings.LoadOrCreate();
+            if (latest.CloudIdentityProvider != settings.CloudIdentityProvider
+                || latest.CyIdBindingEncrypted != settings.CyIdBindingEncrypted)
+                throw new InvalidOperationException("雲端驗證設定已更新，請重新開啟設定視窗後儲存。");
+
             if (cloudMode.Checked)
             {
                 settings.CloudMode = settings.CloudEmployeeAuthorityReady

@@ -54,6 +54,8 @@ public static class LocalResetCoordinator
     private const string MarkerFileName = ".cyinvoice-local-reset.pending.json";
     private const string KindLocal = "local";
     private const string KindBuiltInCloud = "built_in_cloud";
+    private const string KindRevokedDevice = "revoked_device";
+    public const string PackageManifestFileName = "package-files.json";
     private const string PhaseCloudExitPending = "cloud_exit_pending";
     private const string PhaseWipeAuthorized = "wipe_authorized";
 
@@ -272,6 +274,39 @@ public static class LocalResetCoordinator
     public static bool HasPendingReset(string baseDirectory) =>
         File.Exists(MarkerPath(Path.GetFullPath(baseDirectory)));
 
+    public static bool IsRevokedDeviceResetPending(string baseDirectory)
+    {
+        var marker = LoadMarker(Path.GetFullPath(baseDirectory));
+        if (marker is null) return false;
+        ValidateMarker(marker);
+        return marker.Kind == KindRevokedDevice;
+    }
+
+    // This is called only with an authenticated self-status for the locally bound Device.
+    // It authorizes recovery before any UI shutdown, without persisting credentials.
+    public static void PrepareRevokedDeviceReset(string baseDirectory, Settings current, CloudDeviceSelfStatus self)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(self);
+        baseDirectory = Path.GetFullPath(baseDirectory);
+        ValidateIdentity(self, current.CloudWorkspaceId, current.CloudDeviceId);
+        if (current.CloudMode == CloudModes.LocalOnly || self.Status != "revoked")
+            throw new LocalResetBlockedException("只有明確撤銷目前雲端裝置才能自動清除。");
+        var existing = LoadMarker(baseDirectory);
+        if (existing is not null)
+        {
+            ValidateMarker(existing);
+            if (existing.Kind == KindRevokedDevice)
+            {
+                ValidateMarkerIdentity(existing, current.CloudBaseUrl, self.WorkspaceId, self.DeviceId);
+                return;
+            }
+            throw new LocalResetBlockedException("已有本機重設尚未完成，不能覆寫清除標記。");
+        }
+        SaveMarker(baseDirectory, NewMarker(KindRevokedDevice, PhaseWipeAuthorized,
+            current.CloudBaseUrl, self.WorkspaceId, self.DeviceId));
+    }
+
     private static (string BaseUrl, string WorkspaceId, string DeviceId, string Token) ReadCloudIdentity(
         LocalRepository repository,
         Settings settings)
@@ -329,9 +364,61 @@ public static class LocalResetCoordinator
 
     private static void WipeLocalState(string baseDirectory)
     {
+        if (LoadMarker(baseDirectory)?.Kind == KindRevokedDevice)
+        {
+            WipePortableRuntime(baseDirectory);
+            return;
+        }
         DeleteDirectoryIfExists(Path.Combine(baseDirectory, "Data"));
         DeleteDirectoryIfExists(Path.Combine(baseDirectory, "Cache"));
         DeleteMarker(baseDirectory);
+    }
+
+    private static void WipePortableRuntime(string baseDirectory)
+    {
+        // The package records original files at build time. Runtime directories must
+        // never be in this manifest; a missing/invalid manifest blocks destructive work.
+        if (!JsonFile.TryRead<string[]>(Path.Combine(baseDirectory, PackageManifestFileName), out var files)
+            || files is null || files.Length is < 1 or > 4096)
+            throw new LocalResetBlockedException("發行檔案清單缺失，無法安全完成裝置清除。");
+        var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { PackageManifestFileName, MarkerFileName };
+        foreach (var raw in files)
+        {
+            var relative = raw.Replace('\\', '/');
+            if (relative.Length == 0 || Path.IsPathRooted(relative)
+                || relative.Split('/').Any(p => p is "" or "." or ".." || p.Contains(':'))
+                || new[] { "Data", "Cache", "Logs" }.Any(d => relative.Equals(d, StringComparison.OrdinalIgnoreCase)
+                    || relative.StartsWith(d + "/", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("發行檔案清單包含無效路徑。");
+            keep.Add(relative);
+        }
+        if (!keep.Contains("CYInvoice.exe")) throw new InvalidDataException("發行檔案清單未包含程式。");
+        CleanDirectory(baseDirectory, "", keep);
+        // Keep this marker until every runtime path was removed successfully.
+        DeleteMarker(baseDirectory);
+    }
+
+    private static void CleanDirectory(string directory, string prefix, HashSet<string> keep)
+    {
+        foreach (var path in Directory.EnumerateFileSystemEntries(directory).ToArray())
+        {
+            var relative = prefix + Path.GetFileName(path);
+            var attributes = File.GetAttributes(path);
+            if (keep.Contains(relative))
+            {
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidDataException("發行檔案不得是連結。");
+                continue;
+            }
+            var isDirectory = (attributes & FileAttributes.Directory) != 0;
+            if (isDirectory && (attributes & FileAttributes.ReparsePoint) == 0
+                && keep.Any(p => p.StartsWith(relative + "/", StringComparison.OrdinalIgnoreCase)))
+                CleanDirectory(path, relative + "/", keep);
+            else if (isDirectory)
+                Directory.Delete(path, recursive: (attributes & FileAttributes.ReparsePoint) == 0);
+            else
+                File.Delete(path);
+        }
     }
 
     private static void DeleteDirectoryIfExists(string path)
@@ -342,7 +429,10 @@ public static class LocalResetCoordinator
 
     private static ResetMarker? LoadMarker(string baseDirectory)
     {
-        if (!JsonFile.TryRead<ResetMarker>(MarkerPath(baseDirectory), out var marker)) return null;
+        var path = MarkerPath(baseDirectory);
+        if (!File.Exists(path)) return null;
+        if (!JsonFile.TryRead<ResetMarker>(path, out var marker))
+            throw new InvalidDataException("CYInvoice reset marker cannot be read safely.");
         return marker ?? throw new InvalidDataException("CYInvoice reset marker is empty.");
     }
 
@@ -361,8 +451,9 @@ public static class LocalResetCoordinator
     private static void ValidateMarker(ResetMarker marker)
     {
         if (marker.Version != MarkerVersion
-            || marker.Kind is not (KindLocal or KindBuiltInCloud)
+            || marker.Kind is not (KindLocal or KindBuiltInCloud or KindRevokedDevice)
             || marker.Phase is not (PhaseCloudExitPending or PhaseWipeAuthorized)
+            || marker.Kind == KindRevokedDevice && marker.Phase != PhaseWipeAuthorized
             || !DateTimeOffset.TryParse(marker.StartedAtUtc, out _))
             throw new InvalidDataException("CYInvoice reset marker is invalid.");
     }

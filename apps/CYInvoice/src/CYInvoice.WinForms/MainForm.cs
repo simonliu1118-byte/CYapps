@@ -95,13 +95,34 @@ internal sealed class MainForm : Form
         BuildShell();
         SetAmegoConnectionState("啟動中", Color.FromArgb(128, 128, 128), "首次設定完成後將檢查光貿 API 連線。");
         UpdateEnvironment();
+        var startupSettings = repository.Settings.LoadOrCreate();
+        if (!startupSmokeTest && startupSettings.CloudMode != CloudModes.LocalOnly && startupSettings.CloudDeviceId.Length != 0)
+        {
+            invoicePage.Visible = false;
+            recordsPage.Visible = false;
+        }
         if (!startupSmokeTest) Shown += async (_, _) =>
         {
+            // Existing bound devices are checked before an empty Employee cache
+            // can send startup into initial setup. Fresh installs retain the wizard.
+            var initial = repository.Settings.LoadOrCreate();
+            var checkedBoundDevice = initial.CloudMode != CloudModes.LocalOnly && initial.CloudDeviceId.Length != 0;
+            if (checkedBoundDevice)
+            {
+                // The startup blocker also needs the existing recovery timer.
+                connectionTimer.Start();
+                invoicePage.Visible = false;
+                recordsPage.Visible = false;
+                await RefreshConnectionsAsync();
+                if (shuttingDown) return;
+                invoicePage.Visible = true;
+                recordsPage.Visible = true;
+            }
             if (!EnsureInitialSetup()) return;
             UpdateEnvironment();
             invoicePage.RefreshEnvironment();
             connectionTimer.Start();
-            await RefreshConnectionsAsync();
+            if (!checkedBoundDevice) await RefreshConnectionsAsync();
             if (shuttingDown) return;
             await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync(), ReportDeviceStartupAsync());
             if (shuttingDown) return;
@@ -475,6 +496,7 @@ internal sealed class MainForm : Form
         Application.DoEvents();
         employeeLogin.VerifySmokeLayout();
         employeeLogin.Close();
+        EmployeeAdminLoginForm.VerifyCredentialsCollectionSmoke(this);
 
         using var settings = new SettingsForm(repository);
         settings.Show(this);
@@ -657,23 +679,6 @@ internal sealed class MainForm : Form
             var onboarding = await client.GetOnboardingStatusAsync(syncLifetime.Token);
             if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
 
-            if (requestedMode == CloudModes.CloudPreferred && requested.CloudEmployeeAuthorityReady)
-            {
-                var syncProblem = await TryRefreshCloudEmployeeCacheAsync(requested, requestedUrl);
-                if (!CurrentCloudSettingsMatch(requestedMode, requestedUrl)) return;
-                if (syncProblem.Length != 0)
-                {
-                    SetRuntimeModeState(
-                        "雲端帳號同步異常",
-                        Color.FromArgb(180, 0, 0),
-                        (requested.CloudIdentityProvider == "CYID"
-                            ? "Cloud API 可連線，但這次無法確認 CYID 裝置綁定。受保護操作仍必須通過當次驗證。\n\n"
-                            : "Cloud API 可連線，但中央帳號快取這次沒有更新。程式仍使用最後一次成功同步的 Cloud Employee 快取。\n\n") + syncProblem,
-                        showToolTip: true);
-                    return;
-                }
-            }
-
             var onboardingText = onboarding.WorkspaceInitialized ? "已建立雲端空間" : "尚未建立雲端空間";
             var modeText = requestedMode == CloudModes.CloudTransition ? "雲端轉換中" : "雲端模式";
             var detail = requested.CloudIdentityProvider == "CYID"
@@ -714,52 +719,6 @@ internal sealed class MainForm : Form
         {
             // Usage metadata is best-effort. Its failure must not replace service availability checks,
             // overwrite the last confirmed server timestamp, or change authority/cache state.
-        }
-    }
-
-    private async Task<string> TryRefreshCloudEmployeeCacheAsync(Settings settings, string baseUrl)
-    {
-        if (!settings.CloudEmployeeAuthorityReady || settings.CloudMode != CloudModes.CloudPreferred)
-            return string.Empty;
-        if (settings.CloudWorkspaceId.Length == 0 || settings.CloudDeviceId.Length == 0)
-            return "本機 Cloud Workspace／Device identity 不完整。";
-        try
-        {
-            var token = repository.Settings.CloudDeviceToken(settings);
-            if (token.Length == 0) return "本機 Cloud Device Token 不存在。";
-            var binding = await CyIdGateway.DiscoverAsync(cloudHealthHttpClient, new Uri(baseUrl), token,
-                settings.CloudWorkspaceId, settings.CloudDeviceId, syncLifetime.Token);
-            if (binding is not null)
-            {
-                repository.Settings.ConfirmCyIdConfiguration(settings, binding);
-                repository.Settings.Save(settings);
-                ownsAccountManagement = false;
-                accountManagementButton.Visible = false;
-                PositionHeaderButtons();
-                return string.Empty;
-            }
-            if (settings.CloudIdentityProvider == "CYID")
-                return "伺服器身分來源與已確認的 CYID 綁定不一致，請由管理員檢查。";
-            var authority = new CloudEmployeeAuthorityClient(
-                cloudHealthHttpClient,
-                new Uri(baseUrl, UriKind.Absolute),
-                token);
-            var snapshot = await authority.GetSnapshotAsync(syncLifetime.Token);
-            if (!string.Equals(snapshot.WorkspaceId, settings.CloudWorkspaceId, StringComparison.Ordinal))
-                return "中央帳號快取回傳的 Workspace identity 與本機不一致。";
-            repository.CloudEmployees.ReplaceSnapshot(
-                snapshot.WorkspaceId,
-                snapshot.WorkspaceRevision,
-                snapshot.Employees);
-            return string.Empty;
-        }
-        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception error)
-        {
-            return ExceptionDetails(error);
         }
     }
 
@@ -930,6 +889,17 @@ internal sealed class MainForm : Form
         catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested) { return; }
         finally { checkingConnections = false; }
         if (shuttingDown || IsDisposed) return;
+        if (LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
+        {
+            StopBackgroundSync();
+            foreach (Form form in Application.OpenForms) form.Enabled = false;
+            LocalResetApplication.ScheduleRevokedDeviceRestart();
+            return;
+        }
+        var identitySettings = repository.Settings.LoadOrCreate();
+        ownsAccountManagement = identitySettings.CloudIdentityProvider != "CYID";
+        accountManagementButton.Visible = ownsAccountManagement;
+        PositionHeaderButtons();
         ApplyConnectionControls(state);
         foreach (var detail in Application.OpenForms.OfType<RecordDetailForm>().ToArray()) detail.ApplyServiceState();
         foreach (var import in Application.OpenForms.OfType<ImportConfirmationForm>().ToArray()) import.ApplyServiceState();

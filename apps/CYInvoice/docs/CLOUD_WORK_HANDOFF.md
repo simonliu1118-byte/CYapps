@@ -13,15 +13,29 @@
 | 本輪 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380)，draft、未合併，完整 CI／工程包以精確 head checks 為準 |
 | 前置介面 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
 | 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
-| 工程版本 | **V2.6.16**；來源為 ../VERSION、../BUILD |
+| 工程版本 | **V2.6.17**；來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
 
 前置獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
 
-## V2.6.16 CYID Consumer／服務連線現行停點
+## CYID Consumer／服務連線現行停點
 
-本輪 [#380 checks](https://github.com/simonliu1118-byte/CYapps/pull/380/checks) 是最新 CI 結果入口；在該精確 head 的 Windows Build 成功後，從 run 的 Artifacts 取得 V2.6.16 工程包（保留 3 天）。不以此文件的歷史 run 代替最新版驗收。
+### V2.6.17 source checkpoint — 2026-10-10
+
+本批實作取代先前設計-only checkpoint（歷史見 Git）。ServiceConnectivity／MainForm 沿用原 lifecycle，POST runtime/sync 合併 Device＋權限，60 秒完整同步、15 秒 liveness、故障後重連立即同步；不改五分鐘光貿 invoice sync。CYID private named RPC 只 invalidation，不登入／不建立 Session／不輸出 verifier。Built-in snapshot revision 與 rows 同次讀取，local revision 防倒退；known deny 不因後續 503 復活。
+
+LocalResetCoordinator 同裝置 explicit revoked 先存 durable marker；MainForm 停止工作退出，新程序等待 parent 結束才 recover。Program 每 portable folder 單程序 guard，清除前不 Open repository；保留 package-files.json 的原發行檔案，Data／Cache／Logs／root runtime／其他新目錄全清，marker 最後移除；partial wipe／lock／kill 留 marker 阻擋直到續清。一般401／403、Workspace disabled、scope mismatch、503不自動 wipe。手動 Local reset 的原 Logs 保留契約不變。系統 temp 共享 Preview 不列入 portable reset；原 finally 清理仍保留，不能任意刪 portable 外檔案。
+
+人工结案／折讓及 Built-in 中央 mutation dialog 只收輸入，最終 core／server 完整 Device＋Employee 驗證。設定讀取／儲存是分開的受保護操作，儲存重驗且拒絕舊 provider binding 覆寫。OTP 多階段每階段保留當次驗證，沒有可重用 Session。CYID 1.0.2/1.0.3 同scope快取接續，不改 Workspace／Device／Token／資料。
+
+版本 CYInvoice 2.6.17／BUILD 0、Cloud 0.9.2、CYID provider 0.3.6／BUILD 0、canonical 1.0.3／minimum 1.0.0，Consumer Impact BACKWARD_COMPATIBLE。新 private IDENTITY_AUTHORITY binding 配置示例是 placeholder，尚未部署。TODO §7.3.2 source 項與 RC AC／原 RC AA、AB／staging／cutover 分開；正式 Release 未授權。
+
+本地證據：aggregate single-request／60秒節流／重連、原連線矩陣、malformed／scope／Workspace-disabled不誤wipe、explicit revoke durable marker、模擬程序中斷後 partial recovery 與 Logs 清除；real-provider D1 invalidation（停用／Role／App Access／credential／deleted ID）及CYID outage＋Device revoke。完整八套 C# 回歸、CYID 44 項測試、Worker TypeScript／完整測試／bundle dry-run、tracked-source public scan 通過；Linux WinForms 編譯 0 errors（既有 WebView2 WPF MSB3277 warning）。Windows 原生 smoke／DPAPI／package／精確 head Artifact 於 CI 核對，不引用V2.6.16綠燈。
+
+本輪 [#380 checks](https://github.com/simonliu1118-byte/CYapps/pull/380/checks) 是最新 CI 結果入口；在該精確 head 的 Windows Build 成功後，從 run 的 Artifacts 取得 V2.6.17 工程包（保留 3 天）。不以此文件的歷史 run 代替最新版驗收。
+
+### V2.6.16 source 快照（由 V2.6.17 取代；歷史證據）
 
 使用者 2026-10-10 授權開始 consumer 開發；新獨立 Patch／BUILD 0。整合 main 與兩支未合 PR 以保留最新介面和設計，不自動合併／關閉前置 PR。前置 PR #216 精確 head 1e6d4137 的 Governance #1172／Cloud #378／Windows #267 全綠只是 V2.6.14 證據，不能冒充本輪 CI。
 

@@ -12,6 +12,7 @@ import { handleEmployeePasswordRecovery } from "./employee-password-recovery";
 import { handleSuperAdminTransfer } from "./super-admin-transfer";
 import { handleWebAuth } from "./web-auth";
 import { handleWebPasswordRecovery } from "./web-password-recovery";
+import { handleRuntimeSync } from "./runtime-sync";
 
 interface Env extends CyIdEnv {
   DB: D1Database;
@@ -32,6 +33,8 @@ interface Env extends CyIdEnv {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const runtimeSync = await handleRuntimeSync(request, env);
+    if (runtimeSync) return runtimeSync;
     const cyIdResponse = await handleCyId(request, env);
     if (cyIdResponse) return cyIdResponse;
     try {

@@ -6,11 +6,11 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 
 ## 版本狀態
 
-- 目前工程測試基準：**V2.6.16**（CYID Consumer，尚未部署／正式切換）。
+- 目前工程測試基準：**V2.6.17**（CYID Consumer，尚未部署／正式切換）。
 - 光貿與雲端驗證分別檢查；雲端 503 且光貿正常沿用原有降級，雙斷線／純 Local 光貿斷線阻擋至恢復。詳見 [服務連線矩陣](docs/CY_ID_INTEGRATION.md#142-architecture-exception使用者指定既有離線行為)。
 - 最新公開正式 Release：**CYInvoice V2.4.2**（tag：`cyinvoice-v2.4.2`）。
 - V2.6.14 簡化裝置管理，新增裝置移到獨立視窗，使用版本及最後使用時間由每台裝置啟動時回報，並提供超管驗證改名。V2.6.13 統一應用程式按鈕小圓角，待辦清單依資料列數調整高度，歷史固定五列，裝置清單顯示可讀的加入時版本。V2.6.12 修正邀請已加入卻被 UI 誤報失敗，並將首次使用說明改成兩點。包含 V2.6.11 的「處理中」分流；PR #216 尚未合併，精確 head CI／測試包與人工停點見 [現行交接](docs/CLOUD_WORK_HANDOFF.md)。
-- V2.6.16 延續第三個 CyIdIdentityProvider、私有 Worker gateway 與裝置綁定的離線快取；保留上述 V2.6.14 介面。CYID 帳號／權限由 CY Web 管理，詳見 [整合設計 §14](docs/CY_ID_INTEGRATION.md#14-v2615-consumer-實作與切換邊界)。
+- V2.6.17 加入啟動／60 秒／重連 Device＋權限合併同步，以及明確撤銷後包含 Logs 的完整 portable 清除與中斷續清；延續第三個 CyIdIdentityProvider、私有 Worker gateway 與裝置綁定的離線快取；保留上述 V2.6.14 介面。CYID 帳號／權限由 CY Web 管理，詳見 [整合設計 §14](docs/CY_ID_INTEGRATION.md#14-v2615-consumer-實作與切換邊界)。
 - C#／WinForms 自 V2.0.0 起為唯一正式產品線。
 - 版本來源為 `VERSION`／`BUILD`；正式 Release 必須由 `main` 重新建置與驗證。
 - 只有使用者於當次工作明確要求 `release` 時，才可建立正式 tag／Release；PR、VERSION、BUILD 或 engineering Artifact 都不代表發布授權。
@@ -96,7 +96,7 @@ V2.6.11 將正常等待拆到「處理中」；「上傳問題」仍以單一表
 - Local／Built-in provider 共用 IIdentityProvider；正式 role 為 SUPER_ADMIN / ADMIN / USER。
 - Online 權限操作取最新中央 authority；只有真正傳輸斷線／timeout 使用最後可信 protected offline cache。
 - 裝置管理支援 inventory／revoke，保留歷史與最後一台 active Device 防護；Cloud → Local 使用雙重確認及 crash-safe 本機重置。
-- Source 為 Cloud 0.9.1／API 1／compatibility marker 8／storage 13（未部署）。2026-10-10 development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) 已驗證 Cloud 0.8.9／storage 12 與新能力；人工 A/B/C 行為仍待驗收。
+- Source 為 Cloud 0.9.2／API 1／compatibility marker 8／storage 13（未部署）。2026-10-10 development staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509) 已驗證 Cloud 0.8.9／storage 12 與新能力；人工 A/B/C 行為仍待驗收。
 - V2.6.16 CYID provider／gateway／Windows 原有降級與服務連線 source 已接線，隔離 staging／實機驗收與正式切換尚待完成；0-Device recovery 及跨機業務 Work Item 未實作。詳見 [CY ID 整合](docs/CY_ID_INTEGRATION.md)。
 
 ### 系統診斷（V2.6.3）

@@ -10,6 +10,7 @@ internal static class ServiceConnectivityTests
 {
     public static async Task RunAsync()
     {
+        await AggregateSyncAsync();
         using var temporary = new AuthorityTemporaryDirectory();
         var services = new Services();
         using var http = new HttpClient(services);
@@ -119,6 +120,60 @@ internal static class ServiceConnectivityTests
         await ThrowsAsync<OperationCanceledException>(() => repository.Connections.CheckAsync(cancelled.Token));
     }
 
+    private static async Task AggregateSyncAsync()
+    {
+        using var temporary = new AuthorityTemporaryDirectory();
+        var services = new Services();
+        using var http = new HttpClient(services);
+        var repository = LocalRepository.Open(temporary.Path, new TestProtector(), http);
+        var settings = repository.Settings.LoadOrCreate();
+        settings.CloudBaseUrl = "https://cloud.example.test/";
+        settings.CloudWorkspaceId = "ws_services";
+        settings.CloudDeviceId = "dev_services";
+        repository.Settings.SetCloudDeviceToken(settings, "cydev_" + new string('a', 64));
+        repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
+        repository.Settings.Save(settings);
+        long now = 100;
+        var connection = new ServiceConnectivity(repository.Settings, http, repository.CloudEmployees.Clear,
+            builtInCache: repository.CloudEmployees, baseDirectory: temporary.Path, monotonicMilliseconds: () => now);
+        await connection.CheckAsync();
+        Check(services.CloudCalls == 1 && services.Synchronizations.SequenceEqual(new[] { true })
+            && repository.CloudEmployees.LoadState()?.WorkspaceId == "ws_services", "one startup request refreshes Device and Built-in authority");
+        now += 15_000;
+        await connection.CheckAsync();
+        Check(services.Synchronizations.SequenceEqual(new[] { true, false }), "15-second liveness does not refresh all permissions");
+        now = 60_100;
+        await connection.CheckAsync();
+        Check(services.Synchronizations.Last(), "60-second permission refresh uses the same aggregate route");
+        services.Cloud = false;
+        await connection.CheckAsync();
+        services.Cloud = true;
+        await connection.CheckAsync();
+        Check(services.Synchronizations.Last(), "reconnect immediately refreshes authority without waiting another minute");
+        var seed = BuiltInCloudAuthorityFreshnessTests.Seed;
+        repository.CloudEmployees.ReplaceSnapshot("ws_services", 2, [seed("emp_super", "0001", "Super", EmployeeRoles.SuperAdmin, "SuperPass1", 1, 2, true)]);
+        await ThrowsAsync<InvalidDataException>(() => Task.Run(() => repository.CloudEmployees.ReplaceSnapshot("ws_services", 1,
+            [seed("emp_super", "0001", "Super", EmployeeRoles.SuperAdmin, "SuperPass1", 1, 1, true)])));
+        Check(repository.CloudEmployees.LoadState()?.WorkspaceRevision == 2, "older responses cannot overwrite newer Built-in authority");
+        services.Reply = new { ok = true };
+        Check((await connection.CheckAsync()).CloudRejected && !LocalResetCoordinator.HasPendingReset(temporary.Path),
+            "missing successful-response fields fail closed without authorizing wipe");
+        services.Reply = new { ok = true, device = new { workspaceId = "ws_services", deviceId = "dev_other",
+            status = "revoked", workspaceStatus = "active" } };
+        Check((await connection.CheckAsync()).CloudRejected && !LocalResetCoordinator.HasPendingReset(temporary.Path),
+            "revocation of a different Device cannot wipe this installation");
+        services.Reply = new { ok = true, device = new { workspaceId = "ws_services", deviceId = "dev_services",
+            status = "active", workspaceStatus = "disabled" } };
+        Check((await connection.CheckAsync()).CloudRejected && !LocalResetCoordinator.HasPendingReset(temporary.Path),
+            "Workspace disable blocks but does not authorize automatic wipe");
+        Directory.CreateDirectory(Path.Combine(temporary.Path, "Logs"));
+        File.WriteAllText(Path.Combine(temporary.Path, "Logs", "test.log"), "synthetic log");
+        services.Reply = new { ok = true, device = new { workspaceId = "ws_services", deviceId = "dev_services",
+            status = "revoked", workspaceStatus = "active" } };
+        Check((await connection.CheckAsync()).CloudRejected && LocalResetCoordinator.IsRevokedDeviceResetPending(temporary.Path)
+            && File.Exists(Path.Combine(temporary.Path, "Logs", "test.log")), "explicit same-Device revoke persists recovery before shutdown or deletion");
+    }
+
     private static void Check(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
     private static async Task ThrowsAsync<T>(Func<Task> work) where T : Exception
     {
@@ -132,20 +187,34 @@ internal static class ServiceConnectivityTests
         public bool Cloud { get; set; } = true;
         public bool Revoked { get; set; }
         public int CloudCalls { get; set; }
+        public object? Reply { get; set; }
+        public List<bool> Synchronizations { get; } = [];
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (request.RequestUri!.AbsolutePath == "/json/time")
                 return Task.FromResult(new HttpResponseMessage(Amego ? HttpStatusCode.OK : HttpStatusCode.ServiceUnavailable)
                     { Content = JsonContent.Create(new { timestamp = 1791626400 }) });
+            Check(request.Method == HttpMethod.Post && request.RequestUri.AbsolutePath == "/v1/runtime/sync", "only the aggregate route is used");
+            using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult());
+            Synchronizations.Add(body.RootElement.GetProperty("synchronize").GetBoolean());
             CloudCalls++;
+            if (Reply is not null) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(Reply) });
             if (!Cloud) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
                 { Content = JsonContent.Create(new { ok = false, error = new { code = "STORAGE_UNAVAILABLE" } }) });
             if (Revoked) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden)
                 { Content = JsonContent.Create(new { ok = false, error = new { code = "DEVICE_REVOKED" } }) });
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = request.RequestUri.AbsolutePath == "/v1/device"
-                ? JsonContent.Create(new { workspace = new { workspaceId = "ws_services" }, device = new { deviceId = "dev_services", displayName = "Synthetic" } })
-                : JsonContent.Create(new { ok = true, workspaceId = "ws_services", deviceId = "dev_services", provider = "BUILT_IN" }) });
+            var snapshot = BuiltInCloudAuthorityFreshnessTests.Snapshot("ws_services", 1,
+                BuiltInCloudAuthorityFreshnessTests.Seed("emp_super", "0001", "Super", EmployeeRoles.SuperAdmin, "SuperPass1", 1, 1, true),
+                BuiltInCloudAuthorityFreshnessTests.Seed("emp_user", "0002", "User", EmployeeRoles.User, "UserPass22", 1, 1, true));
+            var employeeSnapshot = new { workspaceId = snapshot.WorkspaceId, workspaceRevision = snapshot.WorkspaceRevision,
+                employees = snapshot.Employees.Select(e => new { employeeId = e.EmployeeId, employeeNo = e.EmployeeNo,
+                    name = e.Name, email = e.Email, role = e.Role, enabled = e.Enabled, emailVerified = e.EmailVerified,
+                    credentialVerifier = e.CredentialVerifier, credentialAlgorithm = "pbkdf2-sha256", credentialVersion = e.CredentialVersion,
+                    revision = e.Revision }) };
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new {
+                ok = true, device = new { workspaceId = "ws_services", deviceId = "dev_services", status = "active", workspaceStatus = "active" },
+                binding = new { provider = "BUILT_IN", workspaceId = "ws_services" }, permissions = new { ok = true, employeeSnapshot } }) });
         }
     }
 

@@ -280,9 +280,14 @@ Do not reverse this order by wiring CY ID directly into Forms/workflows before t
 
 ## 12. Current scope / version / release boundary
 
-The current engineering baseline is V2.6.16; CYID Consumer adds the third provider while retaining V2.6.14 device management and previous UI/join fixes. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.
+The current engineering baseline is V2.6.17; CYID Consumer adds the third provider while retaining V2.6.14 device management and previous UI/join fixes. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.
 
 
 ## Service connectivity implementation (V2.6.16)
 
 The current product decision is CY_ID_INTEGRATION §14.2, superseding the historical Package 2 transport-only trigger. ServiceConnectivity owns independent AMEGO/Cloud reachability; MainForm owns one 15-second check and one modal blocker. Existing providers keep their own action-time authority and protected fallback. There is no new Local authority, offline issuance queue, Session store or mutation retry. Raw availability probes can recover after denial; a known denial stays blocked through subsequent outages and clears only after the same Device/binding succeeds. Local checks only AMEGO. Existing invoice services guard requests before local mutations, including cache-hit lookup/PDF paths; transport loss after a sent issue remains the existing uncertain-result workflow. Native Windows smoke and service matrix regression accompany the implementation; real-device/staging acceptance remains RC AA/AB.
+
+
+## V2.6.17 source: device/access sync and automatic revoked-device reset
+
+2026-10-10 product decisions are recorded only in CY_ID_INTEGRATION §14.6; implementation tasks are TODO §7.3.2 and the resumable checkpoint is CLOUD_WORK_HANDOFF. No push; startup, 60-second and reconnect aggregate synchronization; final-operation Device plus Employee authorization; reuse the existing reset/recovery owner with a durable marker before shutdown and wipe all portable runtime data, including Logs. Source now implements the existing lifecycle/reset owners and canonical optional invalidation capability. Do not change AMEGO invoice synchronization cadence or original Workspace continuity. Canonical 1.0.3 private invalidation is defined in the provider standard §11.1; Windows CI and real-device/staging acceptance remain separate gates.

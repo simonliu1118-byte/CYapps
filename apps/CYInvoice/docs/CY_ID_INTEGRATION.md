@@ -6,7 +6,7 @@
 
 Local／Built-in foundation 已合併，V2.6.14 介面與 Device metadata 仍在 PR #216。V2.6.15 已實作 CYID adapter／binding／offline consumer，尚未部署或正式切換；0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
 
-CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.2）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
+CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.3）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
 
 ## 1. 產品目標
 
@@ -308,7 +308,7 @@ CYID enabled 後舊 Employee／Web auth／bootstrap authority routes 明確拒�
 
 新裝置 invitation preview／claim 使用現行 CYID Super Admin 帳密；pairing claim 保留已簽發的一次性 code，不增加員工欄位，它只加入 Device，後續每次受保護業務仍驗 CYID。Verified Email 從目前 authorized CYID admin snapshot 取該 Super Admin 一列，只為原 Email OTP／邀請寄送，不持久化 provider snapshot／verifier。
 
-既有 dialog 與 core 可能各驗一次同一操作；每次驗證都是獨立、完整清理的 CYID lifecycle。尚未重構全部 operation context，不能宣稱一個 UI 操作只會登入一次，也不為省呼叫而保存可重用 Session。
+V2.6.17 的人工結案／折讓與 Built-in 中央帳號 mutation dialog 只收帳密，由既有 core／server 作最終完整 Device＋Employee 驗證。必要的開窗／讀取與後續 mutation 是不同授權階段，OTP 多階段保留每次 server 檢查；不宣稱整個 UI 流程只會呼叫一次，也不保存跨操作 Session。
 
 ### 14.2 Architecture Exception：使用者指定既有離線行為
 
@@ -339,7 +339,7 @@ finally 呼叫 Logout；Logout 失敗只留下不含憑證的 CYID_LOGOUT_UNCONF
 
 本機使用 repository 真實 CYID Worker、獨立 synthetic DB／migrations 測 Login／Resolve／Logout、Role／App Access／enabled／credential change、錯 scope、first-login、provider outage、logout loss 不 replay，以及 pairing／invitation／rename／revoke；C# 測整筆 protected cache、transport／timeout／503／HTML 503 降級、四種服務狀態、純 Local、拒絕後 outage 不復活、cancel、scope、Unicode 邊界。Windows CI 執行真實 DPAPI、加入控件 smoke、原本完整 business regressions 與封裝；Windows 阻擋 modal／不能關閉略過／重新檢查恢復 smoke 隨本輪 CI 驗證；實機依 RC_TEST AA／AB 尚待驗收，125／150 DPI 維持 Deferred。
 
-實際部署／正式 CYID 切換前仍需：核對已註冊 Application 與 Workspace enablement／App Access、核准 private binding 與兩 Workspace 配對、備份／migration 0013 與 FK check、EmployeeNo 及歷史業務 actor 稽核、A/B/C device／offline reconnect 驗收、server rollback 與已確認 CYID client 的 fail-closed 邊界。先做隔離 staging，不將 source bundle／CI 視為 live 成功。0-active-Device recovery 未完成，LAST_ACTIVE_DEVICE 保護維持；未授權 production cutover、正式 tag 或 Release。CYID Consumer Impact: NONE；provider canonical source 未修改。
+實際部署／正式 CYID 切換前仍需：核對已註冊 Application 與 Workspace enablement／App Access、核准 private binding 與兩 Workspace 配對、備份／migration 0013 與 FK check、EmployeeNo 及歷史業務 actor 稽核、A/B/C device／offline reconnect 驗收、server rollback 與已確認 CYID client 的 fail-closed 邊界。先做隔離 staging，不將 source bundle／CI 視為 live 成功。0-active-Device recovery 未完成，LAST_ACTIVE_DEVICE 保護維持；未授權 production cutover、正式 tag 或 Release。V2.6.17 CYID Consumer Impact: BACKWARD_COMPATIBLE；provider source 0.3.6 與 canonical 1.0.3 新增 optional private invalidation，最低相容 1.0.0 保留。
 
 ### 14.5 原 Workspace 接續使用（2026-10-10 使用者明確要求）
 
@@ -347,4 +347,24 @@ finally 呼叫 Logout；Logout 失敗只留下不含憑證的 CYID_LOGOUT_UNCONF
 
 SettingsStore 在更新 provider 前核對既有 endpoint／CYInvoice Workspace／Device／Token digest；不同 Workspace 的 discovery 拒絕，不能覆寫原設定。回歸以真實本機 SQLite／SettingsStore 切換後重開，核對發票及 pending 狀態、買方名稱、PDF cache、公司／印表機／protected credentials；Worker 以原兩台 Device Token 在 flag 前後 discovery／authenticate，核對 Workspace、Devices、歷史員工／邀請／audit rows 完整保留。這是 synthetic source 證據，真實 A/B/C 接續使用仍待 RC AA。
 
-正式切換前先在原安裝升級所有使用中的 Windows 到支援 CYID 的版本（目前 V2.6.16），備妥員工啟用、原 EmployeeNo 對應、Application Access、所需 Role 與 verified Super Admin Email，再在隔離 staging 證明原裝置可完成既有業務。任一條件未完成，維持現行 Built-in 部署，不開啟 CYID flag；不可先切 authority 再要求使用者重建 Workspace 修復。受控啟用後原安裝重新 discovery／驗證，以當次 CYID 結果更新權限；不因拒絕而回退舊 authority，也不承諾服務故障期間所有遠端操作可用。
+正式切換前先在原安裝升級所有使用中的 Windows 到支援 CYID 的版本（目前 V2.6.17），備妥員工啟用、原 EmployeeNo 對應、Application Access、所需 Role 與 verified Super Admin Email，再在隔離 staging 證明原裝置可完成既有業務。任一條件未完成，維持現行 Built-in 部署，不開啟 CYID flag；不可先切 authority 再要求使用者重建 Workspace 修復。受控啟用後原安裝重新 discovery／驗證，以當次 CYID 結果更新權限；不因拒絕而回退舊 authority，也不承諾服務故障期間所有遠端操作可用。
+
+### 14.6 裝置／權限同步與撤銷自動重設（V2.6.17 source，人工／staging 待驗收）
+
+本節保存 CYInvoice 差異；shared private invalidation contract 只讀 canonical standard §11.1（1.0.3／minimum 1.0.0，BACKWARD_COMPATIBLE）。待辦唯一來源 TODO §7.3.2，人工驗收 RC_TEST AC；V2.6.16 CI 不代表本版完成。
+
+- 無中央推播。已綁定裝置啟動立即、使用中每 60 秒、雲端重連立即同步；每輪 Windows → CYInvoice Worker 只發一個合併 Device／Workspace binding／Provider 權限變更請求。Worker 內部可查多個服務，分項判斷故障。
+- 重用 self-status；已撤銷 Token 只可讀自身最小撤銷證據，不可讀員工／業務資料。裝置撤銷不能被 active-only gate、CYID outage 或員工驗證失敗掩蓋。
+- CYID 須先正式提供 private service-level change contract；現有 Login／Resolve／Logout／admin snapshot 不是無 Session feed。背景不存帳密、不反覆登入、不讀 CYID D1、不 export verifier。Device Token 不是 Employee／App Access authority；Built-in 一併收斂，Local 保留。
+- 變更涵蓋 Employee enabled／刪除、Workspace／Application 狀態、App Access、Role、credentialVersion 及漏同步。受影響 cache 失效；不把新 principal 接到舊密碼 proof，新的成功線上員工驗證才重建可信離線 entry。Wire contract／版本／Consumer Impact 由 canonical Provider 管理。
+- 最終操作一次確認 Device＋原 Workspace＋Employee credentials＋current App Access／Role，再執行 app-local 業務授權。收斂 dialog／core 重複，保留真正執行前檢查；不沿用開窗時的舊授權或跨操作 Session。
+- MainForm 為 lifecycle owner，ServiceConnectivity／Provider 為既有狀態與授權 owner。60 秒不改光貿發票同步頻率；15 秒連線偵測不每輪重跑完整 feed。去重並發同步，防舊回應覆蓋新權限或復活 known deny／revoke。
+- 已綁定啟動檢查不能被空 Employee cache／EnsureInitialSetup 阻斷；pending reset 優先恢復，未綁定走原初始化。雲端不可達仍依 §14.2 原降級，離線不能即時觀察中央異動，不新增 TTL／authority。
+- Automatic wipe 僅限明確同一 Device／Workspace 撤銷；一般 401／403、密碼／員工拒絕、503、scope mismatch、單純 Workspace disabled 不觸發。手動退出原規則不暗改；切換 CYID 仍沿用 §14.5，不 reset 原資料。
+- 確認撤銷先阻擋新操作並由 LocalResetCoordinator 持久化 authorized marker，再停止全部背景寫入、關閉資料存取、清除及重啟。marker 不能等正常退出後才寫；kill／失敗／部分清除後下次啟動續清，完成前不開放業務。
+- 使用者明定 **Logs 也全部清除，整個 CYInvoice 可攜資料夾回到發行包首次使用狀態**。盤點 root／各子目錄全部 runtime 檔案，含 Data、Cache、Logs、設定、憑證、身分 proof／binding、發票、PDF／暫存；保留原程式及發行必要檔案。marker 最後移除，不刪 folder 外使用者檔案，不只刪三目錄就宣稱完整。
+- 已送出 AMEGO request 不能宣稱取消或自動重送；核對既有結果不明查核及其他有效裝置／重新設定後查詢途徑，不為此保留 revoked-device 業務資料或新增離線 queue。正式部署／切換／tag／Release 未授權。
+
+V2.6.17 implementation：ServiceConnectivity 共用 checkGate 與 monotonic 60 秒節流；CYID background invalidation／操作時 proof 更新共用原 cache gate，Builtin revision 防舊快照覆寫。worker 在 provider 故障後仍重新確認 Device，撤銷結果優先；缺欄位／scope mismatch／configuration invalid 不降級。每個 portable directory 的 Program process gate 防其他程序在清除期間寫回，新程序等待原程序退出後直接恢复 authorized marker，不先開 repository。package manifest 只保存原始發行檔案；清除失敗維持 marker 並阻擋業務，缺 manifest 也不猜測刪除。正常授權升版保留 scope 與原資料；1.0.2/1.0.3 reader 是 canonical 支援版本窗，非第二套 authority。
+
+60 秒刷新不對 CYID 建立／刷新 Session。每裝置持續開啟一天約 1,440 次 permission refresh，15 秒 liveness 約 5,760 次 aggregate request（完整 sync 已包含其中）；只讀 D1 查詢，實際 requests/rows/延遲及免費額度待 staging 量測。離線期間无法得知中央異動，不能承諾即時撤銷。系統 temp 的既有 PDF preview finally 清理不屬 portable reset 掃描；不得擴大刪除外部共享 temp 或使用者 exports。

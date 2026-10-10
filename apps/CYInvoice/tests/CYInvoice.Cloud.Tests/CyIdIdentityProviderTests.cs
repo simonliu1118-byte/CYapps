@@ -119,6 +119,17 @@ internal static class CyIdIdentityProviderTests
                 "cache encrypts authority and local offline proof, no raw provider session");
 
             handler.Mode = "offline";
+            Check(cache.Authenticate(binding with { ConsumerVersion = "1.0.3" }, credentials)?.Role == AppRole.User
+                && cache.AuthorityChecks(binding with { ConsumerVersion = "1.0.3" }).Length == 1,
+                "contract upgrade retains the same original authority proof and scope");
+            cache.InvalidateEmployees(new HashSet<string> { "emp_other" });
+            Check(cache.Authenticate(binding, credentials) is not null, "unaffected cache remains usable");
+            cache.InvalidateEmployees(new HashSet<string> { "emp_test" });
+            Check(cache.Authenticate(binding, credentials) is null && cache.AuthorityChecks(binding).Length == 0,
+                "background invalidation removes the old proof without granting a new principal");
+            handler.Mode = "online";
+            await provider.AuthenticateAsync(credentials);
+            handler.Mode = "offline";
             Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.User, "real transport outage uses the last confirmed cache");
             Check(await provider.AuthenticateAsync(credentials with { Password = "WrongPassword1" }) is null, "offline password required");
             handler.Mode = "admin";

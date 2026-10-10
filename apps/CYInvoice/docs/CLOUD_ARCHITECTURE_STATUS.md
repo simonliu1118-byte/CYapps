@@ -7,10 +7,10 @@
 ## 1. 工程基準
 
 - Windows 正式產品線：C# / WinForms。
-- 工程版本：V2.6.16。
+- 工程版本：V2.6.17。
 - Reference backend：Cloudflare Worker + D1。
 - Cloud API：`1`。
-- Cloud implementation version：`0.9.1`。
+- Cloud implementation version：`0.9.2`。
 - Legacy API compatibility schemaVersion：8；actual storageSchemaVersion：13，forward migrations 0001～0013。
 - Public Windows client 不內建專案擁有者私人 endpoint，只接受使用者設定的相容 HTTPS API。
 - 已執行 migration 不回寫；schema 修改只能新增 forward migration。
@@ -20,6 +20,8 @@ GitHub Actions 驗證 source、Worker bundle、local migration、contract、Wind
 目前 development 遠端部署證據為 2026-10-10 staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509)：Cloud 0.8.9／API 1／compatibility marker 8／storage Schema 12／storage ok，包含 device-usage-v1／device-rename-v1；0012 已套用，aggregate Device 狀態保持、FK 無異常，重跑無 pending migration。第一次即時 health 尚讀到 0.8.8，相同 source 再驗證正常。Windows A/B/C 操作仍待 RC Z，不能以部署 health 冒充人工通過。
 
 ## 2. 帳號權威模型
+
+V2.6.17 source 已實作：啟動／60 秒／重連一次 Device＋權限同步、最終操作完整授權、遠端撤銷完整清除（包含 Logs、portable 回初始狀態）。設計見 CY_ID_INTEGRATION §14.6、唯一待辦 TODO §7.3.2、開發 checkpoint CLOUD_WORK_HANDOFF；V2.6.16 CI 不代表此需求完成。
 
 CYInvoice 不採「程式啟動後持續登入某人」的模型。
 
@@ -213,7 +215,7 @@ Cloud → Local 已完成雙重確認及 crash-safe reset：關閉主 UI／同�
 
 A 機連線與 B 機 Run255 pairing 曾通過實機；四個 identity／freshness／revoke／reset 包已合併，不重新列為未實作。新版 A/B/C lifecycle、invitation、Employee identity matrix／Email OTP／password recovery／SUPER_ADMIN transfer 仍待實機驗收。
 
-CYID consumer 已接線但尚待實機／staging／切換；尚未實作的 Recovery Device flow、business Work Item／revision、跨機 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊均由 [TODO.md](TODO.md) 追蹤；本文件不維護第二份勾選清單。CYID shared standard 已發布為 1.0.2／minimum 1.0.0，同 repo 直接引用 canonical files。Built-in Cloud 的 role／credential transport 不作為 CYID 共通契約。
+CYID consumer 已接線但尚待實機／staging／切換；尚未實作的 Recovery Device flow、business Work Item／revision、跨機 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊均由 [TODO.md](TODO.md) 追蹤；本文件不維護第二份勾選清單。CYID shared standard 已發布為 1.0.3／minimum 1.0.0，同 repo 直接引用 canonical files。Built-in Cloud 的 role／credential transport 不作為 CYID 共通契約。
 
 
 ## V2.6.14 Device metadata
@@ -230,3 +232,5 @@ Offline cache 由本機線上成功密碼建立 proof，principal／Role／scope
 
 
 ServiceConnectivity 收斂既有光貿 probe 與 authenticated Cloud discovery；MainForm 管理唯一連線提示及 15 秒檢查。Cloud 0.9.1 discovery 在 CYID enabled 時經原 private IDENTITY 檢查 canonical health，liveness 不授予權限。無新 schema／migration／authority；Cloud 與光貿功能及純 Local 矩陣見 CY_ID_INTEGRATION §14.2。
+
+V2.6.17 runtime 採 aggregate Device／binding／permission，具 durable revoke marker、manifest 全 portable runtime 清除與單程序寫入保護。canonical private invalidation 只移除失效快取；shared authority／支援窗仍由 CYID 保存。測試證據見現行交接，live binding／實機／正式切換未完成。

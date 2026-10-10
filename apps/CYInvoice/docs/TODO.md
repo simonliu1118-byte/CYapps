@@ -2,11 +2,11 @@
 
 本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-10（Asia/Taipei）。main 為 V2.6.10 Build 2／a04f706c（治理 #381 後）；目前工程候選版 **V2.6.16** 為 CYID Consumer source，前置 V2.6.14 PR #216 仍未合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
+更新日期：2026-10-10（Asia/Taipei）。main 為 V2.6.10 Build 2／a04f706c（治理 #381 後）；目前工程候選版 **V2.6.17** 為 CYID Consumer source，前置 V2.6.14 PR #216 仍未合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
-Cloud source 0.9.1／API 1／compatibility marker 8／storage 13；未部署。最後 development 0.8.9／storage 12 的 development staged **10/10 Run #8 attempt 2** 已通過 migration／aggregate／FK／health／新 capabilities，0012 已套用且無 pending migration。CI 成功不等於實機驗收或遠端部署。
+Cloud source 0.9.2／API 1／compatibility marker 8／storage 13；未部署。最後 development 0.8.9／storage 12 的 development staged **10/10 Run #8 attempt 2** 已通過 migration／aggregate／FK／health／新 capabilities，0012 已套用且無 pending migration。CI 成功不等於實機驗收或遠端部署。
 
 ## 0. 接續優先順序
 
@@ -146,7 +146,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（目前 V2.6.16），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
 - [ ] RC_TEST AB 實機驗收四種狀態、Built-in／CYID 503 原降級、純 Local 光貿斷線阻擋、任一恢復及輸入／Workspace 保留；帳密／權限／Device 拒絕不降級，不自動重送。
 - [ ] CYID 0-active-Device recovery 實作／驗證後才調整 LAST_ACTIVE_DEVICE；目前保留原保護。
-- [ ] 若未來要整合 dialog／core 的重複驗證，依單一 operation context 收斂；不保存可重用 Session 或新增持續登入。
+- [x] 人工结案／折讓及中央帳號操作 dialog／core 收斂見 §7.3.2；多階段 OTP／必要讀取仍各自最終驗證，不保存跨操作 Session。
 
 ### 7.3.1 V2.6.16 服務連線收斂
 
@@ -154,6 +154,23 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] MainForm 一個 15 秒檢查／modal blocker，重新檢查與恢復沿用原設定／輸入； known deny 後 503 不復活。Windows 原生視窗 smoke source 已加入，CI 結果以 #380 精確 head 為準。
 - [x] VERSION 2.6.16／BUILD 0、Cloud source 0.9.1；無新 schema 或遠端部署，文件／CHANGELOG 同步。
 - [ ] RC AB 在原安裝測四種狀態／純 Local／雙斷線提示／恢復；RC AA 原 CYID staging gate 保留未完成。
+
+### 7.3.2 裝置／權限同步與撤銷自動重設（V2.6.17 source）
+
+設計 CY_ID_INTEGRATION §14.6；停點 CLOUD_WORK_HANDOFF；人工 RC_TEST AC。不得拿 V2.6.16 CI 當成本批完成。
+
+- [x] 盤點 portable package／全部 runtime 路徑及 canonical owner，確認 final-operation 入口與 in-flight AMEGO 結果查核；原 Workspace、降級及光貿同步週期保留。
+- [x] CYID canonical private service-level change contract／實作／回歸，涵蓋 enabled、刪除、Role、App Access、credentialVersion／漏同步；同步版本、changelog、Consumer Impact／支援範圍，不直接讀 CYID D1 或以 login 輪詢替代。
+- [x] 一次 aggregate Device self-status／binding／Provider change 請求，分項故障；revoked Token 只回自身清除證據，CYID outage 不掩蓋 revoke。
+- [x] MainForm 啟動／60 秒／重連單一同步 lifecycle，Built-in 收斂；去重、stale response／known denial 保護，15 秒連線探測不重跑完整 feed，光貿 sync 不加頻。
+- [x] 原 cache owner invalidation 涵蓋角色／停用／刪除／App Access／密碼及漏同步；不把新 principal 接到舊 password proof，新成功驗證才建立新可信 entry。
+- [x] 收斂 dialog／core，同一最終操作 Device＋Employee＋最新 App Access／Role；不跳過執行前檢查，不保留跨操作 Session。
+- [x] explicit remote revoke 接既有 LocalResetCoordinator／Program recovery；先 durable marker 再 shutdown／wipe／restart，補 Schedule memory-only kill 缺口，啟動不因空員工 cache 卡住。
+- [x] Logs 及 root／subdirectory 所有程式管理 runtime 檔案完整清除，portable 回發行初始狀態；marker 最後刪，kill／partial wipe／檔案占用續清，停止背景寫回。Unknown Token／401／Workspace disabled／scope／503 不誤 wipe。
+- [x] 本地回歸覆蓋 single request、真實 Provider／Built-in／Local、startup、cache／credential／permission／deleted employee、stale response、CYID outage＋revoke、重連、Logs／模擬程序中斷後 partial wipe；真實 kill／檔案占用另由 RC AC 驗收。
+- [ ] 精確 head Windows CI／DPAPI／smoke／package safety scan 與 engineering Artifact，結果以 PR #380 checks 為準。
+- [ ] RC AC 實機撤銷／關閉／kill／下次啟動／Logs／初始設定／光貿結果不明；原 RC AA／AB 與正式切換 gate 保留。
+- [x] 開始 runtime 新工作時按共通規則推進版本、同步 CHANGELOG／狀態／設計／驗收；版本為 2.6.17／BUILD 0，人工／staging 不冒充完成。
 
 ### 7.4 新裝置加入方式與安全紀錄
 

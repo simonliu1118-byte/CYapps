@@ -2,7 +2,7 @@
 
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
 
-- 目前工程測試基準：**V2.6.16**；CYID source 未部署，精確 head Windows 工程包另記交接。
+- 目前工程測試基準：**V2.6.17**；CYID source 未部署，精確 head Windows 工程包另記交接。
 - Development Cloud：**0.8.9 / API 1 / compatibility marker 8 / storage Schema 12**；10/10 staged Run #8 attempt 2 已驗證新 capabilities，實機操作仍待驗收。
 - 前置 V2.6.14 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.14` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
 - 最新公開正式 Release：**V2.4.2**。
@@ -352,3 +352,18 @@
 - [ ] modal 文字完整、共通圓角按鈕、tab／Enter／關閉行為符合原生操作；96 DPI 實機確認，125／150 DPI 維持 Deferred。
 
 正式 CYID 切換仍先完成 RC AA 與原 A/B/C，未以本項取代 staging、migration／rollback 或帳號準備。
+
+
+## AC. 裝置／權限合併同步與撤銷完整清除（V2.6.17 source，人工尚未驗收）
+
+產品決策 CY_ID_INTEGRATION §14.6；唯一開發待辦 TODO §7.3.2。記錄精確 head／工程包／環境；不拿 V2.6.16 CI 或自動化測試勾選本節。
+
+- [ ] 原安裝啟動、每 60 秒、重連各一次合併請求；Device／權限分項結果，無推播／員工持續登入，光貿同步頻率維持。
+- [ ] Built-in／CYID 角色、停用、刪除、App Access、密碼變更與漏同步，舊 proof 失效，最終操作 Device＋Employee＋current access，不能使用舊開窗授權或 stale response。
+- [ ] 使用中撤銷、未開啟下一次啟動、空員工 cache 啟動、CYID 故障但 Device 已撤銷，均先確認同一裝置撤銷，再阻擋／清除／重啟。
+- [ ] 確認撤銷後、shutdown 前、wipe 中分別強制關閉／kill；下次啟動 marker 優先恢復。檔案占用／部分清除失敗不得進入業務，背景工作不能重建資料。
+- [ ] Logs、Data、Cache、root／各子目錄 runtime 檔案、設定與憑證全部清除，保留發行必要程式，重啟進首次設定；folder 外檔案保持，marker 最後移除。
+- [ ] 401／403／錯密碼／員工拒絕／scope mismatch／Workspace disabled／503 不誤自動 wipe；原降級及四種連線狀態、Local、原 Workspace continuity 維持。
+- [ ] 撤銷時已送出的 AMEGO 操作不假稱取消、不自動重送，結果不明有既有查核途徑，不保留已撤銷裝置業務資料。
+
+正式部署／CYID 切換／Release 未授權；RC AA／AB 未完成項仍保留。

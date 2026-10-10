@@ -26,6 +26,9 @@ public sealed class CyIdAuthenticationException(string code, HttpStatusCode? sta
 
 public static class CyIdGateway
 {
+    // Contract revisions describe transport, not a new Device/Workspace authority.
+    public static bool SameAuthorityScope(CyIdBinding first, CyIdBinding second) =>
+        first with { ConsumerVersion = second.ConsumerVersion } == second;
 
     public static string TokenDigest(string token) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
@@ -64,7 +67,7 @@ public static class CyIdGateway
         var root = json.RootElement;
         if (Text(root, "provider") != "CYID" || Text(root, "workspaceId") != binding.WorkspaceId
             || Text(root, "deviceId") != binding.DeviceId || Text(root, "identityWorkspaceId") != binding.IdentityWorkspaceId
-            || Text(root, "applicationId") != binding.ApplicationId || Text(root, "consumerVersion") != binding.ConsumerVersion
+            || Text(root, "applicationId") != binding.ApplicationId || Text(root, "consumerVersion") is not ("1.0.2" or "1.0.3")
             || root.TryGetProperty("session", out _) || root.TryGetProperty("firstLogin", out _))
             throw new InvalidDataException("CYID 驗證回應與已確認綁定不一致。");
         var p = root.GetProperty("principal");
@@ -117,7 +120,7 @@ public static class CyIdGateway
         if (binding.WorkspaceId.Length is < 1 or > 80 || binding.DeviceId.Length is < 1 or > 80
             || binding.IdentityWorkspaceId.Length is < 1 or > 80 || binding.ApplicationId.Length is < 2 or > 64
             || binding.ApplicationId.Any(c => !char.IsAsciiLetterUpper(c) && !char.IsAsciiDigit(c) && c is not '_' and not '-')
-            || binding.ConsumerVersion != "1.0.2" || binding.DeviceTokenDigest.Length != 64)
+            || binding.ConsumerVersion is not ("1.0.2" or "1.0.3") || binding.DeviceTokenDigest.Length != 64)
             throw new InvalidDataException("CYID 綁定格式無效。");
     }
 
@@ -132,6 +135,7 @@ public static class CyIdGateway
 // credential/session authority. The entire entry (including role) is platform protected.
 public sealed class CyIdOfflineCache(string dataDirectory, ISecretProtector protector)
 {
+    internal SemaphoreSlim AuthorityGate { get; } = new(1, 1);
     private sealed record Entry(CyIdBinding Binding, AppPrincipal Principal, string Salt, string Hash);
     private readonly Lock gate = new();
     private readonly string path = Path.Combine(dataDirectory, "cyid_offline_cache.json");
@@ -139,6 +143,35 @@ public sealed class CyIdOfflineCache(string dataDirectory, ISecretProtector prot
 
     private Dictionary<string, string> Load() => JsonFile.TryRead<Dictionary<string, string>>(path, out var value)
         ? value! : new(StringComparer.Ordinal);
+
+    public object[] AuthorityChecks(CyIdBinding binding)
+    {
+        lock (gate) return Load().Values.Select(encrypted =>
+        {
+            var entry = JsonSerializer.Deserialize<Entry>(protector.Unprotect(encrypted))
+                ?? throw new InvalidDataException("CYID 快取無效。");
+            if (!CyIdGateway.SameAuthorityScope(entry.Binding, binding)) throw new InvalidDataException("CYID 快取綁定不一致。");
+            var p = entry.Principal;
+            return (object)new { employeeId = p.StableEmployeeId, credentialVersion = p.CredentialVersion,
+                employeeRevision = p.AuthorityRevision, workspaceRole = AppRoles.ToValue(p.Role),
+                isIdentityAdmin = p.IsIdentityAdmin, emailVerified = p.EmailVerified };
+        }).ToArray();
+    }
+
+    public void InvalidateEmployees(IReadOnlySet<string> employeeIds)
+    {
+        lock (gate)
+        {
+            var entries = Load();
+            foreach (var key in entries.Keys.ToArray())
+            {
+                var entry = JsonSerializer.Deserialize<Entry>(protector.Unprotect(entries[key]))
+                    ?? throw new InvalidDataException("CYID 快取無效。");
+                if (employeeIds.Contains(entry.Principal.StableEmployeeId)) entries.Remove(key);
+            }
+            JsonFile.Write(path, entries);
+        }
+    }
 
     public void Remember(CyIdBinding binding, AppPrincipal principal, string password)
     {
@@ -158,7 +191,7 @@ public sealed class CyIdOfflineCache(string dataDirectory, ISecretProtector prot
             if (!Load().TryGetValue(request.EmployeeNo, out var encrypted)) return null;
             var entry = JsonSerializer.Deserialize<Entry>(protector.Unprotect(encrypted))
                 ?? throw new InvalidDataException("CYID 離線快取格式無效。");
-            if (entry.Binding != binding || entry.Principal.ProviderKind != IdentityProviderKind.CyId
+            if (!CyIdGateway.SameAuthorityScope(entry.Binding, binding) || entry.Principal.ProviderKind != IdentityProviderKind.CyId
                 || entry.Principal.WorkspaceId != binding.IdentityWorkspaceId || entry.Principal.EmployeeNo != request.EmployeeNo
                 || !entry.Principal.Enabled) throw new InvalidDataException("CYID 離線快取不屬於目前裝置／Workspace。");
             var actual = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(request.Password), Convert.FromHexString(entry.Salt),
@@ -186,6 +219,13 @@ public sealed class CyIdIdentityProvider(SettingsStore settings, CyIdOfflineCach
     public bool OwnsAccountManagement => false;
 
     public async Task<AppPrincipal?> AuthenticateAsync(IdentityAuthenticationRequest request, CancellationToken cancellationToken = default)
+    {
+        await offline.AuthorityGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { return await AuthenticateCoreAsync(request, cancellationToken).ConfigureAwait(false); }
+        finally { offline.AuthorityGate.Release(); }
+    }
+
+    private async Task<AppPrincipal?> AuthenticateCoreAsync(IdentityAuthenticationRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();

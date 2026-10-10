@@ -32,7 +32,7 @@ type EmployeeRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.9.1";
+const CLOUD_VERSION = "0.9.2";
 const LEGACY_SCHEMA_COMPATIBILITY_VERSION = "8";
 const MINIMUM_CLIENT_VERSION = "2.6.5";
 const MINIMUM_DEVICE_ONBOARDING_CLIENT_VERSION = "2.6.6";
@@ -48,6 +48,7 @@ const CAPABILITIES = [
   "device-rename-v1",
   "security-audit-v1",
   "cyid-consumer-v1",
+  "runtime-sync-v1",
 ];
 
 function requestIdFrom(request: Request): string {

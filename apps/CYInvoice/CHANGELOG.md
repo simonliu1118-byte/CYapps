@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.17 — 2026-10-10（engineering，未部署／未正式切換）
+
+- 啟動、60 秒及重連以 POST /v1/runtime/sync 一次刷新 Device／binding／權限；15 秒連線檢查不每輪載入全員工，保留原光貿同步週期。Built-in snapshot 沿用既有 owner，revision 與 rows 同一查詢；拒絕舊 revision 覆寫。
+- CYID 採 canonical Contract 1.0.3 private invalidation，中央仍是唯一權威；背景不登入、不保存員工帳密、不建立 Session，只移除失效 proof。同一 Workspace／Device／Token 的 1.0.2 cache 在升版後保持原範圍，不要求重加裝置。
+- 人工結案／折讓及 Built-in 中央帳號操作改由最終 core／server 驗證，對話只收輸入；開窗權限不代替最終 mutation。儲存設定重新驗證管理員並防舊 provider 設定覆寫。
+- 明確同裝置撤銷先落 durable marker，停止工作後關閉；新程序等待舊程序結束，再由既有 recovery 清除 Data／Cache／Logs 與 portable 所有非發行檔案。marker 最後移除，partial wipe／kill 續清；每個可攜資料夾只允許一個程序寫入。401／一般拒絕／Workspace disabled／503 不誤清除。
+- 發行包保存並驗證 package-files.json，保留程式必要 binaries／文件；不刪可攜資料夾以外檔案、不自動重送光貿結果不明請求。版本 Patch +1、BUILD 0，Cloud 0.9.2、CYID 0.3.6／Consumer Impact BACKWARD_COMPATIBLE。Windows／實機驗收依現行交接與 TODO，未建立 tag／Release。
+
 ## V2.6.16 — 2026/10/10（服務連線與原有降級，工程版）
 
 - 依使用者最終定案分開檢查光貿及雲端驗證，雲端 transport／timeout／暫時 503 且光貿正常沿用既有降級單機；不另建 Local authority 或修改 Workspace。

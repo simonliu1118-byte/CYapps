@@ -3,6 +3,7 @@ export interface CyIdEnv {
   DB: D1Database;
   CYID_ENABLED?: string;
   IDENTITY?: Fetcher;
+  IDENTITY_AUTHORITY?: { invalidateCache(input: unknown): Promise<unknown> };
   IDENTITY_APPLICATION_ID?: string;
   IDENTITY_WORKSPACE_ID?: string;
   IDENTITY_CYINVOICE_WORKSPACE_ID?: string;
@@ -38,7 +39,7 @@ export function cyIdBinding(env: CyIdEnv) {
       || !env.IDENTITY_WORKSPACE_ID || !env.IDENTITY_CYINVOICE_WORKSPACE_ID)
     throw new CyIdError(503, "IDENTITY_CONFIGURATION_INVALID");
   return { applicationId: env.IDENTITY_APPLICATION_ID, identityWorkspaceId: env.IDENTITY_WORKSPACE_ID,
-    workspaceId: env.IDENTITY_CYINVOICE_WORKSPACE_ID, consumerVersion: "1.0.2" };
+    workspaceId: env.IDENTITY_CYINVOICE_WORKSPACE_ID, consumerVersion: "1.0.3" };
 }
 
 function object(value: unknown): Record<string, unknown> {
