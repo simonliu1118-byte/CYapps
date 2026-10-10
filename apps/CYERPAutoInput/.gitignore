@@ -2,10 +2,23 @@
 logs/
 config/settings.json
 config/*.local.json
+Data/settings.json
+Data/order_ledger.json*
+Data/Logs/
+runtime/ocr/*.onnx
+runtime/ocr/SHA256.txt
+
+# .NET / IDE output
+bin/
+obj/
+.vs/
+*.user
+*.pdb
 
 # Build output
 dist/
 package/
+publish-staging/
 *.exe
 *.zip
 rsrc_windows_*.syso
@@ -16,3 +29,4 @@ control-scan_*.txt
 errors_*.csv
 command-crash_*.txt
 crash_*.txt
+ui-snapshots/
