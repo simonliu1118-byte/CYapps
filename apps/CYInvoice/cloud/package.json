@@ -1,11 +1,11 @@
 {
   "name": "@cyapps/cyinvoice-cloud",
-  "version": "0.8.8",
+  "version": "0.9.2",
   "private": true,
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "node tests/bootstrap-sql.test.mjs",
+    "test": "node tests/bootstrap-sql.test.mjs && node tests/device-lifecycle.test.mjs && node tests/cyid.test.mjs && node tests/deployment-preflight.test.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:dry-run": "wrangler deploy --dry-run --outdir dist",
@@ -16,6 +16,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260918.1",
     "typescript": "5.9.3",
-    "wrangler": "4.135.0"
+    "wrangler": "4.135.0",
+    "esbuild": "0.28.1"
   }
 }

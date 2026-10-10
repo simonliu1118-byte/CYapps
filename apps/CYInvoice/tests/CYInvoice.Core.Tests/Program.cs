@@ -570,7 +570,7 @@ static async Task TestConcurrentDuplicateIssueAsync()
 static async Task TestEnvironmentIssueIsolationAsync()
 {
     using var temporary = new TemporaryDirectory();
-    var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+    var repository = TestRepository.Open(temporary.Path, new TestProtector());
     var gateways = new List<(string Invoice, string AppKey, FakeGateway Gateway)>();
     var service = new InvoiceService(
         repository,
@@ -1209,7 +1209,7 @@ static async Task TestCompanyPdfStylesAsync()
 {
     using var temporary = new TemporaryDirectory();
     var fake = new FakeGateway { PdfBytes = TestPdfBytes() };
-    var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+    var repository = TestRepository.Open(temporary.Path, new TestProtector());
     var current = new DateTimeOffset(2026, 9, 5, 9, 8, 7, TimeSpan.FromHours(8));
     var service = new InvoiceService(repository, (_, _) => fake, () => current);
     var record = PdfReadyRecord("WX12345678");
@@ -1236,7 +1236,7 @@ static async Task TestCompanyPdfStylesAsync()
 static async Task TestInvoicePreviewCacheAsync()
 {
     using var temporary = new TemporaryDirectory();
-    var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+    var repository = TestRepository.Open(temporary.Path, new TestProtector());
     var pdfPath = Path.Combine(repository.InvoicePdfCacheDirectory, "test", "20260905", "AA12345678_style0.pdf");
     var previewPath = InvoicePreviewCache.PathForPdf(
         repository.InvoicePreviewCacheDirectory,
@@ -1391,7 +1391,7 @@ static (InvoiceService Service, LocalRepository Repository) TestService(
     FakeGateway gateway,
     Action<string, StatusUpdate>? statusUpdater = null)
 {
-    var repository = LocalRepository.Open(path, new TestProtector());
+    var repository = TestRepository.Open(path, new TestProtector());
     var service = new InvoiceService(
         repository,
         (_, _) => gateway,

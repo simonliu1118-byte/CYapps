@@ -14,7 +14,8 @@ public sealed class LocalRepository
         BuyerNameStore buyerNames,
         EmployeeStore employees,
         CloudEmployeeCacheStore cloudEmployees,
-        IdentityProviderRuntime identityRuntime)
+        IdentityProviderRuntime identityRuntime,
+        ServiceConnectivity connections)
     {
         DataDirectory = dataDirectory;
         CacheDirectory = cacheDirectory;
@@ -26,6 +27,7 @@ public sealed class LocalRepository
         Employees = employees;
         CloudEmployees = cloudEmployees;
         this.identityRuntime = identityRuntime;
+        Connections = connections;
     }
 
     public string DataDirectory { get; }
@@ -38,16 +40,19 @@ public sealed class LocalRepository
     public EmployeeStore Employees { get; }
     public CloudEmployeeCacheStore CloudEmployees { get; }
     public IIdentityProvider IdentityProvider => identityRuntime.Current;
+    public ServiceConnectivity Connections { get; }
 
     public bool UsesCloudEmployeeAuthority() =>
-        IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud;
+        IdentityProvider.Kind is IdentityProviderKind.BuiltInCloud or IdentityProviderKind.CyId;
 
     public bool HasAuthorityEmployees() =>
+        IdentityProvider.Kind == IdentityProviderKind.CyId ? true :
         IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud
             ? CloudEmployees.LoadAll().Count != 0
             : Employees.HasEmployees();
 
     public IReadOnlyList<EmployeeAccount> LoadAuthorityEmployees() =>
+        IdentityProvider.Kind == IdentityProviderKind.CyId ? [] :
         IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud
             ? CloudEmployees.LoadAll().Select(ToEmployeeAccount).ToArray()
             : Employees.LoadAll();
@@ -73,7 +78,7 @@ public sealed class LocalRepository
         account.SyncedUtc,
         account.SyncedUtc);
 
-    public static LocalRepository Open(string baseDirectory, ISecretProtector protector)
+    public static LocalRepository Open(string baseDirectory, ISecretProtector protector, HttpClient? serviceHttp = null)
     {
         var data = Path.Combine(baseDirectory, "Data");
         var cache = Path.Combine(baseDirectory, "Cache");
@@ -91,12 +96,18 @@ public sealed class LocalRepository
         var buyerNames = new BuyerNameStore(data);
         var employees = new EmployeeStore(data);
         var cloudEmployees = new CloudEmployeeCacheStore(data, protector);
+        var cyIdOffline = new CyIdOfflineCache(data, protector);
+        var connections = new ServiceConnectivity(settings, serviceHttp, () => {
+            cloudEmployees.Clear();
+            cyIdOffline.Forget();
+        }, cyIdOffline, cloudEmployees, baseDirectory);
         var identityRuntime = new IdentityProviderRuntime(
             settings,
             new LocalIdentityProvider(employees),
             new BuiltInCloudIdentityProvider(
                 cloudEmployees,
-                new ConfiguredCloudEmployeeAuthoritySnapshotSource(settings)));
+                new ConfiguredCloudEmployeeAuthoritySnapshotSource(settings), connections.RequireAmegoAsync),
+            new CyIdIdentityProvider(settings, cyIdOffline, requireAmegoForFallback: connections.RequireAmegoAsync));
         invoices.LoadOrCreate();
         buyerNames.LoadOrCreate();
 
@@ -110,6 +121,7 @@ public sealed class LocalRepository
             buyerNames,
             employees,
             cloudEmployees,
-            identityRuntime);
+            identityRuntime,
+            connections);
     }
 }

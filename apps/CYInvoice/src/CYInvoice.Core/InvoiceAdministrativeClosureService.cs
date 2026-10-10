@@ -6,7 +6,6 @@ namespace CYInvoice.Core.Invoicing;
 
 public sealed class InvoiceAdministrativeClosureService
 {
-    private const string VoidPendingMetadataKey = "cyinvoice_void_pending";
     private const string VoidManualReviewMetadataKey = "cyinvoice_void_manual_review";
     private const string AllowancePendingMetadataKey = "cyinvoice_allowance_pending";
     private const string AllowanceManualReviewMetadataKey = "cyinvoice_allowance_manual_review";
@@ -15,7 +14,7 @@ public sealed class InvoiceAdministrativeClosureService
     private static readonly string[] ActiveWorkIssueTypes =
     [
         InvoiceVoidIssueTypes.ManualReview,
-        InvoiceVoidSyncIssueTypes.PendingConfirmation,
+        InvoiceSyncIssueTypes.QueryFailed,
         InvoiceAllowanceIssueTypes.ManualReview,
         InvoiceAllowanceVoidIssueTypes.ManualReview,
     ];
@@ -38,11 +37,11 @@ public sealed class InvoiceAdministrativeClosureService
     public bool CanClose(InvoiceSyncIssue issue)
     {
         ArgumentNullException.ThrowIfNull(issue);
-        if (issue.ResolvedUtc is not null || !IsAdministrativeClosureIssue(issue)) return false;
+        if (issue.ResolvedUtc is not null || !IsActiveWorkIssue(issue)) return false;
         if (!string.Equals(issue.AccountKey, CurrentAccountKey(), StringComparison.Ordinal)) return false;
 
         var record = TryFindIssueRecord(issue);
-        if (record is null) return false;
+        if (record is null || (issue.IssueType == InvoiceSyncIssueTypes.QueryFailed && !HasActiveWork(record))) return false;
         return IsOutsideRetentionWindow(record, DateOnly.FromDateTime(now().DateTime));
     }
 
@@ -56,12 +55,46 @@ public sealed class InvoiceAdministrativeClosureService
 
         if (issue.ResolvedUtc is not null)
             throw new InvalidOperationException("這筆待處理作業已經結案");
-        if (!IsAdministrativeClosureIssue(issue))
+        if (!IsActiveWorkIssue(issue))
             throw new InvalidOperationException("這筆上傳問題不屬於可由管理員手動結案的作廢或折讓作業");
         if (!string.Equals(issue.AccountKey, CurrentAccountKey(), StringComparison.Ordinal))
             throw new UnauthorizedAccessException("這筆待處理作業屬於其他公司或環境，已停止結案");
 
         var record = FindIssueRecord(issue);
+        if (issue.IssueType == InvoiceSyncIssueTypes.QueryFailed && !HasActiveWork(record))
+            throw new InvalidOperationException("這筆回查問題沒有待處理的作廢或折讓作業");
+        CloseRecord(record);
+        issueStore.Resolve(issue.Id, now());
+    }
+
+    public bool CanClose(InvoiceRecord selected)
+    {
+        var record = FindCurrentRecord(selected);
+        return HasActiveWork(record) && IsOutsideRetentionWindow(record, DateOnly.FromDateTime(now().DateTime));
+    }
+
+    public void Close(InvoiceRecord selected, string actorEmployeeNo, string actorPassword)
+    {
+        EmployeeOperationAuthentication.AuthenticateManager(repository, actorEmployeeNo, actorPassword);
+        var record = FindCurrentRecord(selected);
+        if (!HasActiveWork(record)) throw new InvalidOperationException("這筆發票已沒有待處理的作廢或折讓作業");
+        CloseRecord(record);
+    }
+
+    private InvoiceRecord FindCurrentRecord(InvoiceRecord selected)
+    {
+        var account = CurrentAccount();
+        return repository.Invoices.LoadOrCreate().SingleOrDefault(record => record.Id == selected.Id &&
+            record.Environment == account.Environment &&
+            (record.SellerInvoice.Trim().Length == 0 || record.SellerInvoice.Trim() == account.SellerInvoice))
+            ?? throw new InvalidOperationException("本機找不到目前公司及環境的待處理發票");
+    }
+
+    private static bool HasActiveWork(InvoiceRecord record) =>
+        InvoiceVoidService.HasPendingMarker(record) || EmployeeAllowanceWorkflowService.HasPendingMarker(record);
+
+    private void CloseRecord(InvoiceRecord record)
+    {
         if (!IsOutsideRetentionWindow(record, DateOnly.FromDateTime(now().DateTime)))
             throw new InvalidOperationException("這筆資料仍在目前保留的兩期範圍內，不能手動結案");
 
@@ -75,7 +108,6 @@ public sealed class InvoiceAdministrativeClosureService
         syncRepository.UpsertMany([record]);
 
         var resolvedAt = now();
-        issueStore.Resolve(issue.Id, resolvedAt);
         issueStore.ResolveMatching(
             CurrentAccountKey(),
             record.InvoiceNumber.Trim(),
@@ -84,8 +116,13 @@ public sealed class InvoiceAdministrativeClosureService
             ActiveWorkIssueTypes);
     }
 
-    public static bool IsAdministrativeClosureIssue(InvoiceSyncIssue issue) =>
-        ActiveWorkIssueTypes.Contains(issue.IssueType, StringComparer.Ordinal);
+    public bool IsActiveWorkIssue(InvoiceSyncIssue issue)
+    {
+        if (!ActiveWorkIssueTypes.Contains(issue.IssueType, StringComparer.Ordinal)) return false;
+        if (issue.IssueType != InvoiceSyncIssueTypes.QueryFailed) return true;
+        var record = TryFindIssueRecord(issue);
+        return record is not null && HasActiveWork(record);
+    }
 
     internal static bool IsOutsideRetentionWindow(
         InvoiceRecord record,
@@ -127,7 +164,8 @@ public sealed class InvoiceAdministrativeClosureService
     private static void ClearActiveWorkMetadata(InvoiceRecord record)
     {
         if (record.ExtensionData is null) return;
-        record.ExtensionData.Remove(VoidPendingMetadataKey);
+        InvoiceVoidService.ClearPendingMarker(record);
+        if (record.ExtensionData is null) return;
         record.ExtensionData.Remove(VoidManualReviewMetadataKey);
         record.ExtensionData.Remove(AllowancePendingMetadataKey);
         record.ExtensionData.Remove(AllowanceManualReviewMetadataKey);

@@ -2,9 +2,9 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
-## Current checkpoint — 2026-10-01
+## Current checkpoint — 2026-10-10
 
-- Current source release is **CYCloudIdentity 0.3.5 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.5 Build 0 已部署並驗證**，run `36821423383`；source 與部署證據分開記錄。
+- Current source release is **CYCloudIdentity 0.3.6 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.5 Build 0 已部署並驗證**，run `36821423383`；source 與部署證據分開記錄。
 - CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
@@ -20,7 +20,7 @@
 - Provider local acceptance 已證明：expiry、single-use、core-app-only、ticket-not-session、completion-no-session、ticket replay rejection、explicit re-login、resend/edit invalidation。
 - CYID 0.3 development deploy 已成功完成 remote migration `0007_initial_email_password.sql`、Worker deploy 與 Identity secret configuration。
 - Controlled real Email/browser lifecycle 驗收依使用者目前條件暫緩；這不重開已定案 contract，但仍是 production 前必要 acceptance。
-- CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.2 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
+- CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.3 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
 - CYAccountingWeb（CYACCweb）handoff 已收斂為 app-specific migration guide：`docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；共同 Role / Session / App Access / first-login / recovery 規範只讀 `docs/CONSUMER_INTEGRATION_STANDARD.md`。
 - CYACC **V0.21.6 Build 1 / Draft PR #243** isolated development live acceptance run #96 已通過：USER login/read-only/Excel、Role change Session invalidation、ADMIN isolated write、App Access revoke/restore + Session invalidation、logout。Password Recovery Email/browser、Tablet 真機與 production cutover 仍為獨立 gate。
 - Cross-repository contract mirror 已定義 manifest + exact-sync 規則：CY Web 等外部 repo 必須鏡像 manifest 所列 7 個 artifacts 並在 governance/CI/deploy 前 byte-compare；同 repo consumer 直接讀 canonical files。
@@ -29,6 +29,13 @@
 - **相容層與部署檢查完成**：讀 `docs/COMPATIBILITY_REVIEW.md`。已確認 obsolete Group API/projections、兩份 Session authority 檢查、舊不可達 lifecycle handlers 與 initial-access wrapper；第一批 source 清理已完成：resolve API 與 management/self-service 共用 `resolveIdentitySession`；移除 6 個未 dispatch 的 legacy lifecycle/admin handlers。Provider Group endpoints／public fields、initial-access wrapper 與 Email budget 重複尚待下一批協調清理。
 - **Production provisioning replay 已封住**：PR #254 直接在既有 production deployment branch 退休一次性 workflow；main 保存相同 inert gate。重跑只回 retirement error，不持有 Secrets，也沒有 continuity／migrations／deploy。日常 production deployment path 已建立於 `cycloudidentity-production-deploy.yml`：只接受 main 手動觸發，讀既有正式 bindings，consumer readiness 與 dry-run 通過後只做 forward migration/source deploy，不重播 authority。不得直接把含舊 consumer baseline 的整個 deployment branch 合入 main。
 - Backup rollout / restore acceptance 與 CY Web production business-data rollout 未完成。
+
+## Optional consumer invalidation source
+
+- [x] Contract 1.0.3 / source 0.3.6 adds the private named RPC entrypoint; indexed current-state comparison, no positive grant/Session/verifier export. Canonical semantics are in CONSUMER_INTEGRATION_STANDARD §11.1; impact BACKWARD_COMPATIBLE, minimum remains 1.0.0.
+- [x] Real-provider synthetic D1 regression through CYInvoice covers Role, enabled, App Access, credential version, deleted ID, unavailable application and revoke during provider outage; existing provider test suite remains required.
+- [ ] Isolated staging with the named entrypoint binding and actual consumer usage/cost measurement. Source changes do not mean deployed 0.3.6.
+- [ ] Cross-repository manifest byte-sync / coordinated deployment and production approval. Existing CY Web/CYACC compatibility is retained; this task does not modify their runtime.
 
 ## Documentation consolidation
 

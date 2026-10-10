@@ -26,7 +26,11 @@ var tests = new (string Name, Action Run)[]
     ("administrator completed allowance waits for and confirms official result", () => AllowanceWorkflowTests.AdministratorCompletesAndOfficialQueryConfirmsAsync().GetAwaiter().GetResult()),
     ("allowance amount mismatch stays pending", () => AllowanceWorkflowTests.AmountMismatchRemainsPendingAsync().GetAwaiter().GetResult()),
     ("allowance pending cannot be cancelled", () => AllowanceWorkflowTests.PendingCannotBeCancelledAsync().GetAwaiter().GetResult()),
+    ("allowance queue follows pending failure recovery and completion", () => AllowanceWorkflowTests.QueueFollowsOfficialConfirmationAsync().GetAwaiter().GetResult()),
     ("void is blocked while allowance request exists", () => AllowanceWorkflowTests.VoidIsBlockedWhileAllowanceRequestExistsAsync().GetAwaiter().GetResult()),
+    ("processing void retains administrative closure without upload issue", AdministrativeClosureTests.ProcessingVoidCanCloseWithoutUploadIssue),
+    ("unrelated query failure cannot clear invoice work", AdministrativeClosureTests.QueryFailureWithoutPendingCannotClose),
+    ("upload queue separates pending status and current account", AdministrativeClosureTests.UploadQueueSeparatesStatusAndAccount),
     ("work inside retained two periods cannot be administratively closed", AdministrativeClosureTests.WithinTwoPeriodsCannotClose),
     ("ordinary employee cannot administratively close expired work", AdministrativeClosureTests.OrdinaryEmployeeCannotCloseExpiredWork),
     ("administrator can close expired void pending work", AdministrativeClosureTests.AdministratorClosesExpiredVoidPendingWork),
@@ -256,7 +260,7 @@ static async Task QueueReviewAsync(TestSetup setup)
 
 static TestSetup CreateSetup(string path, bool paper = true)
 {
-    var repository = LocalRepository.Open(path, new TestProtector());
+    var repository = TestRepository.Open(path, new TestProtector());
     repository.Employees.CreateFirstSuperAdmin("0001", "超管", "super@example.com", "SuperPass1");
     repository.Employees.CreateEmployee("0001", "3015", "員工", "employee@example.com", "Employee1");
     repository.Employees.CreateEmployee("0001", "2000", "管理員", "admin@example.com", "AdminPass1", EmployeeRoles.Admin);

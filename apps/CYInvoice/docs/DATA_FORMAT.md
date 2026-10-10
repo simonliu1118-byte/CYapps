@@ -2,7 +2,7 @@
 
 本文件記錄 C#／WinForms 現行工程線的本機資料、SQLite 遷移、Cache 與安全規則。
 
-- 目前工程測試基準：**V2.6.2 Build 0**。
+- 目前工程測試基準：**V2.6.16**。
 - 最新公開正式 Release：**V2.4.2**。
 - 主要本機資料庫：`Data/CYInvoice.db`。
 - 安全設定：`Data/settings.json`。
@@ -45,7 +45,7 @@ PDF 下載後必須通過大小與 `%PDF` 檔頭驗證，再原子寫入 Cache�
 
 ## 2. settings.json
 
-目前 `Settings` 正式欄位：
+目前 `Settings` 本機發票／安全欄位：
 
 - `environment`：`test` 或 `prod`。
 - `prod_invoice`：正式公司 8 碼統編。
@@ -53,7 +53,9 @@ PDF 下載後必須通過大小與 `%PDF` 檔頭驗證，再原子寫入 Cache�
 - `mo_password_enc`：Windows DPAPI 加密後的 MO店+ Excel 密碼。
 - `invoice_printer_name`：CYInvoice 記住的發票印表機名稱。
 
-V2.6.x 已不再以舊管理密碼欄位作為目前管理員認證來源。管理／員工登入統一使用 `employees` 資料表；`settings.json` 不保存員工密碼或復原碼。
+Cloud 設定另含 cloud_mode（local_only／cloud_transition／cloud_preferred）、cloud_base_url、cloud_workspace_id、cloud_device_id、cloud_device_token_enc 與 cloud_employee_authority_ready。Pending bootstrap／device join 分別保存目標、開始時間及預先 protected 的 Token，供結果不明時恢復；欄位名稱以 SettingsModels.cs 為準。這些是執行期狀態，不進 Public Git，不能憑 Device Token 推定 Employee 管理權限。
+
+V2.6.x 已不再以舊管理密碼欄位作為目前管理員認證來源。管理／員工驗證統一經 Identity Provider；Local 使用 employees，Cloud cutover 使用中央 authority 與 protected cache；`settings.json` 不保存員工密碼或復原碼。
 
 MO店+ 密碼不是首次設定必要條件；未設定時程式仍可啟動，但按 MO店+ 匯入前必須先完成設定。
 
@@ -68,7 +70,8 @@ MO店+ 密碼不是首次設定必要條件；未設定時程式仍可啟動，�
 - `buyer_names`：人工確認後保存的公司名稱記憶。
 - `sync_state`：同步與 UI read-state 等時間標記。
 - `sync_issues`：技術問題及人工待辦。
-- `employees`：員工帳號／角色／密碼 Hash／復原碼 Hash。
+- `employees`：Local 員工帳號／角色／密碼 Hash／復原碼 Hash。
+- `cloud_employee_cache`／`cloud_employee_cache_state`：中央快照／revision／protected verifier；Cloud cutover 後不回復 Local employees 作第二 authority。
 - `schema_info`：schema version 與遷移 metadata。
 
 ### schema_info
@@ -77,6 +80,7 @@ MO店+ 密碼不是首次設定必要條件；未設定時程式仍可啟動，�
 
 - `schema_version=1`
 - `employee_schema_version=1`
+- role 遷移適用時：employee_role_vocabulary=USER／cloud_employee_cache_role_vocabulary=USER
 - `created_utc`
 - `legacy_invoices_imported`
 - `legacy_buyer_names_imported`
@@ -91,7 +95,7 @@ MO店+ 密碼不是首次設定必要條件；未設定時程式仍可啟動，�
 - `name`
 - `email`
 - `password_hash`
-- `role`：`SUPER_ADMIN`、`ADMIN`、`EMPLOYEE`。
+- `role`：`SUPER_ADMIN`、`ADMIN`、`USER`。
 - `enabled`
 - `recovery_hash`
 - `created_utc`
@@ -105,6 +109,8 @@ MO店+ 密碼不是首次設定必要條件；未設定時程式仍可啟動，�
 - 密碼只保存 PBKDF2 Hash，不保存明文。
 - 超級管理員復原碼格式為 `CYR-XXXX-XXXX-XXXX-XXXX-XXXX`；只在產生時顯示，SQLite 只保存 Hash。
 - 復原碼成功使用後舊 Hash 立即失效並產生新復原碼。
+
+舊 Local／Cloud cache schema 的 EMPLOYEE → USER 由 RoleVocabularySchemaMigration 在 transaction 中一次轉換，保留 credential／recovery 與約束；active runtime 不保留 role alias。Reference Cloud 對應 forward migration 0010。
 
 ## 5. invoices 與 invoice_items
 
@@ -154,16 +160,17 @@ MO店+ 密碼不是首次設定必要條件；未設定時程式仍可啟動，�
 ### 發票作廢
 
 - `cyinvoice_void_pending`：已送出或官方仍有作廢 pending，禁止盲目重送。
+- `cyinvoice_void_official_pending`：只有官方查詢明確仍等待作廢才保存；與 durable pending marker 分開，供正常處理中分類。
 - `cyinvoice_void_manual_review`：紙本證明聯未收回時的人工覆核申請，包含申請員工、原因、申請時間。
 
 對應 `sync_issues.issue_type`：
 
 - `void_manual_review`
-- 作廢核心另有等待官方確認類型，由既有作廢同步流程維護。
+- 舊 void_pending_confirmation 不再作 active upload issue；歷史項目由同步流程收斂。真正回查失敗使用 QueryFailed，不能靠訊息文字推定正常處理中。
 
 ### 折讓人工申請
 
-- `cyinvoice_allowance_manual_review`：人工折讓申請，包含申請員工、原因、含稅金額、申請時間、提出申請當下既有折讓單號基線、等待確認狀態及人工完成時間等。
+- `cyinvoice_allowance_manual_review`：人工折讓申請，包含申請員工、原因、含稅金額、申請時間、提出申請當下既有折讓單號基線、等待確認狀態及人工完成時間等。既有 record 增加 nullable ConfirmationProblem：false 表示官方正常等待，true 表示回查失敗／需人工判定，舊 null 先保留上傳問題，經正常回查更新後再分類。
 - `cyinvoice_allowance_pending`：管理員已完成網站操作，等待 `invoice_query.allowance[]` 官方資料確認。
 
 對應 `sync_issues.issue_type`：
@@ -201,10 +208,14 @@ MO店+ 密碼不是首次設定必要條件；未設定時程式仍可啟動，�
 1. 技術問題，例如 `invoice_list`／`invoice_query` 失敗、本機寫入失敗、解析／比對失敗、`ambiguous_match`。
 2. 需要管理員處理的人工作業，例如紙本作廢確認、折讓人工處理、折讓作廢人工處理。
 
-V2.6.2 UI 將它們與開立失敗紀錄集中在單一「上傳問題」清單顯示，但資料來源仍不同：
+V2.6.11 UI 以 InvoiceWorkQueue 唯讀投影分為「上傳問題／處理中」，不新增資料表或第二套 pending store。資料來源仍不同：
 
 - 技術問題／人工待辦：`sync_issues`
 - 開立失敗：`invoices` 中 `invoice_state=開立失敗` 的紀錄
+- 正常上傳／作廢等待：invoices 狀態與官方確認 metadata，投影合成唯讀列，不製造假 sync issue
+- 正常折讓等待：既有 allowance_manual_review issue 與明確 workflow 分類
+
+只有正常且目前公司／環境唯一匹配的狀態才列處理中；unresolved 技術問題優先。開啟處理中不更新 upload-issue read-state。
 
 只有開立失敗列可以被批次清除。人工 pending 不得用一般 Failed 刪除路徑移除。
 
@@ -235,7 +246,11 @@ V2.6.2 UI 將它們與開立失敗紀錄集中在單一「上傳問題」清單�
 - 未完成且仍在追蹤的發票作廢、折讓、折讓作廢人工待辦／pending 不得被一般 retention 直接清除。
 - 超過兩期的舊待辦只有在管理員手動結案後才停止追蹤並恢復一般清理資格。
 
-## 11. 安全原則
+## 11. Cloud → Local reset 狀態
+
+雙重確認後先關閉主 UI／背景同步，Device revoke 結果由 narrow self-status 確認；只有 Device terminal 或 Workspace inactive 的明確證據才清目前安裝 Data／Cache／settings／identity。最小 reset marker 位於 Data／Cache 外，不保存密碼或 Token；ambiguous 結果保留資料／Token，下一次啟動恢復確認。此流程不刪除中央 Workspace／Employee／其他 Device；不是 Local／Cloud mode flag 切換。
+
+## 12. 安全原則
 
 - 遠端成功與本機保存成功是兩件事。
 - 結果不明不得盲目重送。
@@ -243,3 +258,23 @@ V2.6.2 UI 將它們與開立失敗紀錄集中在單一「上傳問題」清單�
 - 同步只做唯讀查詢與本機更新，不呼叫開票 API 重送。
 - 本機結案不代表光貿已完成作廢／折讓／折讓作廢。
 - 正式公司資料、員工密碼／復原碼、發票歷史、App Key、平台密碼、執行期 DB／LOG 不得進入 Public Git。
+
+
+## Cloud Device metadata（V2.6.14）
+
+既有 devices.client_version／last_seen_at 由 authenticated self usage 更新；後者為 Cloud UTC、Windows 顯示本機時區。paired_at／created_at 繼續代表加入時間，不由啟動回報覆寫。display_name 可經同 Workspace 中央超管改名，使用既有最大 120 字界限。0012_device_rename_audit.sql 保存既有 security_audit_events 再加入 device_renamed vocabulary；不回寫既有 migration，不刪 revoked Device。
+
+## CYID protected consumer state（V2.6.15）
+
+SettingsModels 新增 `cloud_identity_provider`（BUILT_IN／CYID，default BUILT_IN）及 `cyid_binding_enc`。Confirmed CYID binding 由 Device-authenticated discovery 取得，包含 gateway URL、CYInvoice Workspace、Device、CYID Workspace、Application、Consumer Version、Device Token SHA-256 digest；整筆由 Windows DPAPI 保護，讀取時必須符合目前 endpoint／Device／token。不保存 CYID Session 或 password，不把 client 提供的 scope 當 authority。
+
+切換沿用原 `cloud_workspace_id`／`cloud_device_id`／`cloud_device_token_enc`；CYID Workspace 只保存在 identity binding，不覆寫業務 Workspace。Data／Cache、SQLite 發票／pending 及其他公司設定不因 authority 切換重建或清除。
+
+`Data/cyid_offline_cache.json` 以 employeeNo 索引 protected entry；每筆完整 binding、AppPrincipal（含 Role／credentialVersion／employeeRevision）、隨機 salt 及本機 PBKDF2-SHA256 210000 次 proof 都在 DPAPI ciphertext 中。Proof 是 online success 後本機建立，不是 CYID credential verifier。V2.6.16 在雲端 transport failure／timeout／暫時 5xx 且光貿正常時沿用原有降級快取，中央拒絕／失效會清除相應 entry；Device／scope 改變不能重用。沒有新增 TTL，不聲稱即時得知離線撤銷。
+
+Cloud→Local destructive reset 的既有完整 Data replacement 也移除 CYID binding/cache。Built-in SQLite employee cache 保留自己的模式用途，CYID 不下載或使用它作 Employee authority；不新增 CYID employee replica 或第二套 business state。
+
+
+## V2.6.16 服務連線狀態
+
+ServiceConnectionState 僅為當次執行記憶體狀態；不新增持久化檔案、資料庫 schema、Token 或 Workspace 身分。光貿／雲端可用性不是 Employee 授權。已知 Device／綁定拒絕會由現行 stores 清身分快取；雙斷線不清發票、settings、pending 或 PDF。正式業務未知結果資料語意不變；恢復不 replay。連線矩陣及既有降級條件以 CY_ID_INTEGRATION §14.2 描述為準。

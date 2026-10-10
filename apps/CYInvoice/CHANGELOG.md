@@ -2,6 +2,86 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.17 Build 2 — 2026-10-10（engineering，Cloud development 已更新／未正式切換）
+
+- 2026-10-11 部署準備：沿用原 development workflow，增加唯讀 preflight、原 DB／authority／migration／FK／歷史 fingerprint 與 private recovery checkpoint；驗收使用 Cloud package version，修正舊 0.9.0 hard-code。此批只改部署工具／測試／文件，Windows 及 Worker 業務 runtime、VERSION／BUILD 均未改；遠端結果見現行交接。
+- 2026-10-11 development #12 已套用 0013 並驗證 Cloud 0.9.2／storage 13，新同步 capability、原 Workspace／Token hashes／歷史及 FK 正常；CYID 關閉，Built-in 接續。Source 82080dfa 七項 CI 全綠，Windows #277 工程包可測；CYID development 仍 0.3.5，staging／實機／正式切換／Release 尚未完成。
+- Build 2 收斂 self-status parser，缺完整撤銷證據不能 wipe；自己撤銷這台裝置亦先落 marker，等新程序再完整清除包含 Logs。手動 Local／Workspace-disabled reset 原契約保留。
+- Build 1 補舊 Gateway 404 的明確升級提示及 unknown token 不清除回歸；先升級保留 Built-in 的 additive Cloud 0.9.2，再升級 Windows／staging，不能拿舊 Gateway 當新同步已完成。Build 0 的治理 PR 標記格式已改為純文字。
+- 啟動、60 秒及重連以 POST /v1/runtime/sync 一次刷新 Device／binding／權限；15 秒連線檢查不每輪載入全員工，保留原光貿同步週期。Built-in snapshot 沿用既有 owner，revision 與 rows 同一查詢；拒絕舊 revision 覆寫。
+- CYID 採 canonical Contract 1.0.3 private invalidation，中央仍是唯一權威；背景不登入、不保存員工帳密、不建立 Session，只移除失效 proof。同一 Workspace／Device／Token 的 1.0.2 cache 在升版後保持原範圍，不要求重加裝置。
+- 人工結案／折讓及 Built-in 中央帳號操作改由最終 core／server 驗證，對話只收輸入；開窗權限不代替最終 mutation。儲存設定重新驗證管理員並防舊 provider 設定覆寫。
+- 明確同裝置撤銷先落 durable marker，停止工作後關閉；新程序等待舊程序結束，再由既有 recovery 清除 Data／Cache／Logs 與 portable 所有非發行檔案。marker 最後移除，partial wipe／kill 續清；每個可攜資料夾只允許一個程序寫入。401／一般拒絕／Workspace disabled／503 不誤清除。
+- 發行包保存並驗證 package-files.json，保留程式必要 binaries／文件；不刪可攜資料夾以外檔案、不自動重送光貿結果不明請求。版本 Patch +1、BUILD 0，Cloud 0.9.2、CYID 0.3.6／Consumer Impact BACKWARD_COMPATIBLE。Windows／實機驗收依現行交接與 TODO，未建立 tag／Release。
+
+## V2.6.16 — 2026/10/10（服務連線與原有降級，工程版）
+
+- 依使用者最終定案分開檢查光貿及雲端驗證，雲端 transport／timeout／暫時 503 且光貿正常沿用既有降級單機；不另建 Local authority 或修改 Workspace。
+- 光貿不可達停用開票、查詢、作廢、折讓確認、PDF、同步；僅 Cloud 正常時雲端功能仍走原權限。雙斷線原生 modal 阻擋全部業務，每 15 秒及手動重新檢查，任一恢復回對應狀態。純 Local 只依光貿檢查正常／阻擋至恢復。
+- 帳密／權限／Device 拒絕不能降級；已知 Device 拒絕清相應身分快取，後續 503 不復活。保留原設定／Token／發票及輸入；恢復不自動開票／重送，原結果不明流程保留。
+- 共用 ServiceConnectivity 收斂既有光貿 probe，核心在業務請求／本機變更前防護；MainForm 為單一檢查及提示 lifecycle owner。Cloud 0.9.1 authenticated discovery 經現有 private Binding 檢查 CYID canonical health，不建立 Session 或第二 authority。API 1／marker 8／storage 13／Contract 1.0.2 不變，CYID Consumer Impact: NONE。
+- 新增四狀態／純 Local／503／HTML 503／deny→outage／恢復／零業務請求與資料保留回歸；Windows 增加原生 modal／不可略過／重新檢查與關閉 smoke。CI／工程包看 PR #380 精確 head，人工 RC AA／AB、staging 及正式切換尚未完成。
+- 新獨立 Patch +1／BUILD 0；同步現行文件及 TODO，未部署、migration、建立 tag 或正式 Release。以下 V2.6.15 transport-only／503 拒絕為當時歷史，已由本版最終定案取代。
+
+## V2.6.15 — 2026/10/10（CYID Consumer 工程版，未部署／正式切換）
+
+- 依 CYID canonical Consumer Contract 1.0.2 新增 CyIdIdentityProvider；集中式 provider owner 保留 Local／Built-in 模式，CYID 確認後不自動降回舊 authority。
+- 每次員工驗證由 CYInvoice Worker 經 private IDENTITY Service Binding 登入、Resolve、執行、finally Logout；Session 不傳給 Windows、不保存。Device Token 只代表裝置，Employee／App Access 由 CYID 判定，兩種 Workspace 明確綁定。
+- 真正 Windows transport 中斷才使用原裝置最後可信的 protected offline cache；Role／scope／本機離線 proof 整筆 DPAPI 保護。重新連線採最新 CYID，拒絕／停用／憑證失效清除該員工快取。HTTP 503、錯誤回應與取消不轉離線。
+- 裝置改名、撤銷、配對／邀請沿用既有流程及 audit owner；0013 forward migration 保留 Built-in 邀請歷史，獨立保存外部 CYID 邀請人 identity，不建立假 Built-in 帳號。
+- Windows 確認 CYID 綁定後隱藏帳號管理；加入不讀 Built-in Employee snapshot，忘記密碼改提示至 CY Web。未接入的舊 Worker 保持 Built-in。
+- Source Cloud 0.9.0／API 1／marker 8／storage 13，新增 cyid-consumer-v1；預設未啟用 CYID。沒有修改 CYID provider／canonical contract，CYID Consumer Impact: NONE。
+- 本機 TypeScript、real-provider gateway／onboarding／migration regression、C# Cloud contracts、Void workflow 29／Allowance 12／SQLite 13 通過；Linux WinForms cross-build 只作編譯預檢，真正 Windows CI／封裝及實機 acceptance 另記交接。
+- PR #380 整合 source，canonical adoption 另由治理 #381／2.3.34 完成；本輪精確 head CI／測試包以 #380 checks 為準。
+- 10/10 補原 Workspace 接續 regression：同一 Device／Token、consumer history 及本機設定／資料在 authority 切換後重開保留，拒絕改綁不同業務 Workspace。文件明定升級／帳號授權／原裝置 staging 驗收先於啟用，不要求重建或重新加入；離線驗證不等於光貿離線開票，HTTP 503 不 fallback。本次只新增測試／文件，不修改產品 VERSION／BUILD 或部署。
+- 新獨立功能按 Patch +1、BUILD 0；不宣告既有實機待辦完成，未建立 tag／Release。
+
+## V2.6.14 — 2026/10/10（工程測試版，未正式 Release）
+
+- 裝置管理直接顯示「目前有 N 台使用中的裝置」、原有撤銷說明與 active 清單；移除分頁、狀態及撤銷時間欄。撤銷採共通 Danger button，最後一台防護與目前裝置安全重置維持。
+- 新增裝置流程搬到獨立 CloudAddDeviceForm；保留配對／邀請、一次性碼、狀態回查與重開恢復。標籤按文字寬度配置，欄位同欄、垂直置中，避免固定窄欄裁切。
+- 「使用版本」為該裝置最近成功回報的 VERSION／BUILD；每次程式啟動只更新自己的版本與 server UTC 最後使用時間。離線或舊版尚未回報時保留既有值，不虛構即時在線狀態。
+- 更改裝置名稱使用中央超管執行時驗證，限定同一 Workspace 的 active 裝置；並發撤銷／權限變更會拒絕。改名與稽核同一交易，forward migration 0012 保留既有 audit、增添 device_renamed。
+- Cloud source 0.8.9／API 1／compatibility marker 8／storage Schema 12；新 capabilities device-usage-v1／device-rename-v1。撤銷紀錄仍保留雲端資料庫及既有 API，只從程式清單隱藏。
+- 本次獨立功能需求推進 Patch、BUILD 歸零；已同步 main 6d997be0，保留先前分流、邀請修正與介面。自動化、部署及工程包證據以現行交接／PR 精確 head 為準；實機 RC Z 尚待驗收，未建立 tag／正式 Release。
+
+- V2.6.14 功能 source db1a3b95 的 Governance #1171／Cloud #377／Windows #266 全部通過，development staged Run #8 attempt 2 已驗證 Cloud 0.8.9／Schema 12／新 capabilities。0012 一次套用，重跑無 pending，Device aggregate／revoked 歷史與 FK 正常。初次立即 health 尚讀到 0.8.8，相同 source 重跑通過；收尾文件更新不另推進 VERSION／BUILD。
+
+## V2.6.13 — 2026/10/09（工程測試中，未正式 Release）
+
+- 依使用者新介面要求統一所有應用程式按鈕的小圓角；共用 RoundedButton 的 state／render／lifecycle，移除舊 NoFocusCueButton 與各自重複繪圖事件。品牌匯入、Primary、Danger、PDF 版型與商品列刪除均納入盤點，保留原生操作及鍵盤行為。
+- 處理中／上傳問題共用 NativeListViewHost，零筆顯示「無資料」，依筆數縮放，最多十二列並受工作區限制；不再顯示大量空行。保留原有唯讀／刪除／行政結案核心。
+- 作廢／折讓紀錄固定五列，超過以原生捲軸查看；上方發票資訊取得剩餘高度，長文字可捲動。
+- 裝置管理改顯示「加入時版本」，移除舊 informational version 的 +Git SHA，新加入使用 VERSION／BUILD；套件攜帶並驗證 BUILD。未新增 Cloud heartbeat，不宣稱歷史資料是目前執行版本。
+- Startup smoke 增加原生 Enter／Escape、停用與圖片保留、待辦 0／1／4／20／1／0 列、歷史 0／1／5／8 筆與版本格式／套件身分檢查。96 DPI 實機視覺驗收及 125／150 DPI 仍待測；CI 結果以 PR 精確 head 為準。
+- 此為邀請修正以外的新介面需求，Patch 推進、BUILD 歸零。PR #216 尚未合併；未建立 tag／正式 Release。
+
+## V2.6.12 — 2026/10/09（工程測試中，未正式 Release）
+
+- 修正「邀請碼＋超管帳密」首次加入：Cloud claim 已完成後清空密碼觸發 TextChanged，原本會清掉 preview，接著讀取 preview.WorkspaceId 發生 NullReferenceException。本次加入先保存已確認的 Workspace；清密碼仍使可編輯授權失效，執行中的 Workspace 驗證不受影響。
+- 保留 Device／Workspace／Employee authority／protected snapshot 全部驗證及 Pending Token 復原。使用者回報舊包第一次錯誤、重試顯示 Invitation is unavailable、關閉後第二次開啟成功；這是已使用邀請與本機完成流程中斷，不代表重新使用邀請成功。
+- 首次使用說明改為左對齊的兩點，單機建立本機超管、雲端沿用中央帳號分開顯示，於完整語句處折行。
+- Windows startup smoke 增加真實 TextChanged／Next／Join／HTTP client／protected persistence 回歸：邀請首次完成、配對完成、Workspace mismatch 拒絕、claim 後 snapshot 中斷及重開復原、編輯後禁止未確認 claim。全部使用合成 fixture，不呼叫 live Cloud。
+- 此項是 V2.6.11 處理中分流以外的新 bug／說明調整，依共通版本規則 Patch + 1、BUILD 歸零。Cloud API／schema／deployment 不變；PR #216 精確 head CI 與 engineering Artifact 以即時結果為準，修正版人工首次加入驗收仍待完成。
+
+## V2.6.11 Build 2 — 2026/10/09（工程測試中，未正式 Release）
+
+- 已開立清單新增與「上傳問題」並排的「處理中」按鈕及數量；兩者共用同一清單／明細實作。
+- 正常上傳狀態 1／2／3／31／32、官方確認處理中的作廢及正常等待確認的折讓顯示於處理中；真正查詢失敗、結果不明與需要人工處理／衝突的折讓保留上傳問題。
+- 處理中取自現有 invoice metadata／workflow，不另建排程或 pending store；完成後移除，禁止勾選刪除及手動標記成功。
+- 行政結案共用同一核心，支援處理中作廢超過保留期後由管理員停止本機追蹤；一般回查失敗不會被誤當作廢待辦。
+- 保留本批原有修正：移除作廢確認的黑色發票號碼遮罩、文字與預覽仍隱藏；等待作廢使用半形括號；折讓「已人工處理」採 Danger button。
+- 已同步 main 3b22f9f8；功能 commit 66ec3671 的 Governance #1137、Cloud #369、Windows #258 全部通過，含 Employee void workflow 29/29 與完整封裝。PR #216 尚未合併，Windows 實機／AMEGO live 驗收未宣稱完成。
+- 10/09 文件彙整：統一現行版本／資料格式／Cloud 0.8.8 與驗收停點，封存舊階段交接為歷史，TODO 分開已完成、待實測、未實作及延後。文件整理不推進 VERSION／BUILD。
+
+## V2.6.7～V2.6.10 — 2026/09/28～29（已整合至 main，未正式 Release）
+
+- V2.6.7 Identity Foundation：AppPrincipal／AppRole／IIdentityProvider、Local／Built-in provider 與集中選擇；USER role 一次性 schema／forward migration。
+- V2.6.8 Authority Freshness：Online operation 使用最新中央 credential／role／enabled；僅 transport outage／timeout 可採最後可信 protected offline cache，其餘 fail closed。
+- V2.6.9 Device Revoke：inventory／revoke／Token invalidation／history／audit 與 Windows 裝置管理，保留 LAST_ACTIVE_DEVICE。
+- V2.6.10 Cloud → Local：雙重確認、關閉程式後 revoke／self-status 確認再 wipe，結果不明保留資料與下次啟動 recovery；Build 1／2 整理 engineering 收尾。
+- 四包已經 ede1fa37 整合至 main；main CYInvoice 版本後續為 V2.6.10 Build 2。2026/09/29 development staged Run #7 已驗證 Cloud 0.8.8／API 1／compatibility marker 8／storage Schema 11；部署前無未套用 migration。人工 A/B/C acceptance 仍待完成，證據見 CLOUD_WORK_HANDOFF.md 及 9/29 歷史快照。
+
 ## V2.6.6 Build 3 — 2026/09/25（工程測試中，未正式 Release）
 
 - 新機加入改為「立即配對」或「新裝置邀請」兩條路徑；移除 Workspace 識別碼加超管帳密的舊直連方式。邀請寄至已驗證的超管信箱，含 Cloud API 網址和 72 小時一次性開通碼，可撤銷；B 機以開通碼與超管帳密加入。

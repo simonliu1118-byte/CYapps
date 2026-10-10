@@ -256,7 +256,7 @@ internal sealed class CloudFirstWorkspaceForm : Form
                     bootstrapKey.Text,
                     workspace,
                     device,
-                    Application.ProductVersion,
+                    ApplicationVersion.ReadDisplay(),
                     challenge.ChallengeId,
                     otp,
                     attempt,

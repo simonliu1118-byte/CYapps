@@ -1,8 +1,8 @@
 # CYInvoice Identity Provider Refactor — Implementation Plan
 
-更新日期：2026-09-29
+更新日期：2026-10-10（原設計基準：2026-09-29）
 
-> Status: approved planning baseline. This document defines the next CYInvoice implementation sequence only. It does not authorize source changes, deployment, merge, tag or Release by itself.
+> Status: implementation-sequence reference. Packages 1–4 are implemented and merged; current acceptance and source/package evidence are in CLOUD_WORK_HANDOFF.md. TODO.md is the only progress checklist. V2.6.15 CYID consumer source is implemented, with live binding/cutover and real-device acceptance pending; this plan is not a separate rules layer or release authorization.
 
 ## 1. Why this work comes first
 
@@ -20,7 +20,7 @@ The shared desktop reference is `simonliu1118-byte/AITeam:docs/DESKTOP_IDENTITY_
 
 - CYInvoice formal roles are `SUPER_ADMIN`, `ADMIN`, `USER`.
 - `EMPLOYEE` is no longer a role name.
-- There is no persisted legacy `EMPLOYEE` role dataset requiring migration.
+- Local employees/cache schema and Cloud forward migration 0010 now migrate legacy EMPLOYEE storage to USER; no active runtime alias is retained.
 - Local mode keeps CYInvoice Local EmployeeStore authority.
 - Built-in Cloud / Self-hosted keeps CYInvoice-owned Workspace / Employee / Credential authority.
 - CY ID Cloud will use CY ID as Employee / Credential authority while CYInvoice keeps its own Workspace / Device / business coordination.
@@ -30,7 +30,7 @@ The shared desktop reference is `simonliu1118-byte/AITeam:docs/DESKTOP_IDENTITY_
 
 ## 3. Package 1 — Identity Foundation Refactor
 
-This is the next source work package. Its goal is architectural separation with **no intended functional behavior change**.
+Package 1 is already implemented and merged as V2.6.7. The original goal is architectural separation with **no intended functional behavior change**.
 
 ### 3.1 Role vocabulary cleanup
 
@@ -50,7 +50,7 @@ ADMIN
 USER
 ```
 
-Apply consistently to source, tests, synthetic fixtures, schema/contract constants where applicable, UI labels and documentation. Do not add a permanent `EMPLOYEE == USER` compatibility alias because no real persisted legacy role requires it.
+Apply consistently to source, tests, synthetic fixtures, schema/contract constants where applicable, UI labels and documentation. Do not add a permanent `EMPLOYEE == USER` compatibility alias because active authority must converge on USER; existing persisted schema is handled once by migration.
 
 ### 3.2 Normalized principal
 
@@ -172,7 +172,7 @@ Package 1 is accepted only when all of the following hold:
 
 ## 5. Package 2 — Built-in Cloud online authority freshness
 
-Only after Package 1 is stable, fix the already-reproduced B-device stale Employee snapshot defect inside the Built-in Cloud provider boundary.
+Package 2 is implemented and merged as V2.6.8. The source fixes the B-device stale authority defect inside the provider boundary; real A/B acceptance remains pending.
 
 Target behavior:
 
@@ -192,12 +192,12 @@ Acceptance includes A/B real-device checks for:
 - role change effective on B at the next protected operation;
 - enabled/disabled change effective on B at the next protected operation;
 - password change effective on B at the next protected operation;
-- true network outage still permits only the approved offline behavior;
+- Cloud outage (including temporary HTTP 503) with reachable AMEGO permits only the existing approved fallback; simultaneous outage blocks all business;
 - reconnect restores current Cloud authority.
 
 ## 6. Package 3 — Device revoke / retire
 
-Implement Device revoke/retire API + UI + token invalidation + security audit before destructive Cloud -> Local reset.
+Package 3 is implemented and merged as V2.6.9: Device inventory/revoke API + Windows UI + token invalidation + retained history/security audit. Real A/B/C acceptance remains pending.
 
 Required invariant:
 
@@ -210,7 +210,7 @@ Device revoked
 
 ## 7. Package 4 — Cloud -> Local destructive reset
 
-Depends on Package 3.
+Package 4 is implemented and merged as V2.6.10; staged development deployment Run #7 was verified on 2026-09-29. Real reset/fault-injection acceptance remains pending. It depends on Package 3.
 
 Implement the already-approved double-confirmation reset:
 
@@ -239,26 +239,13 @@ After the identity/refactor/reset foundations are stable, complete:
 
 ## 9. Package 6 — CY ID integration
 
-Do not start until CYCloudIdentity/CYWEB publishes a stable consumer handoff/contract.
+V2.6.15 implements CyIdIdentityProvider behind the existing runtime owner and CYInvoice Worker private IDENTITY gateway. The current V2.6.17 source consumes canonical Contract 1.0.3 (minimum 1.0.0), declared in CYID_CONSUMER_VERSION; same-repo canonical files remain the only shared authority. Implementation details, architecture exception, and deployment gates are in CY_ID_INTEGRATION.md §14; TODO.md §7.3 is the only checklist.
 
-Expected CYInvoice consumer inputs are intentionally small:
+Per-operation Login/Resolve/finally Logout keeps CYID Session server-only and ephemeral in consumer memory. CYID owns stable Employee identity, enabled, Workspace Role and App Access; CYInvoice owns Device/Workspace binding and business permission. Device management/onboarding reuse the current handler owner; old account authority routes reject in CYID mode. Windows hides account management and does not import Built-in snapshots.
 
-```text
-stable Employee identity
-enabled state
-CYInvoice App Access result
-CYInvoice role: SUPER_ADMIN | ADMIN | USER
-```
+A device-bound DPAPI cache permits the user-approved last-trusted offline behavior when Cloud transport/timeout/temporary 5xx fails and AMEGO remains reachable. It derives a local offline proof after online success, never downloads a central CYID verifier. Credential/permission/Device denial, malformed success and inconsistent scope do not become fallback grants; reconnect refreshes authority. Cache has no new TTL, so central revocation cannot be observed while offline. Session loss can leave provider-owned expiry pending; no completed mutation is replayed.
 
-Then implement `CyIdIdentityProvider` (or equivalent adapter) without changing CYInvoice business workflows already migrated to the provider boundary.
-
-CY ID mode requirements:
-
-- Account Management hidden in CYInvoice;
-- CY ID role maps 1:1 to CYInvoice role;
-- App Access is consumed as an upstream allow/deny result, not re-managed inside CYInvoice;
-- Device/Workspace/business/offline responsibilities remain CYInvoice-owned;
-- final Windows offline credential/cache protocol is designed at integration time and must not create dual authority.
+Source tests use real CYID Worker with separate synthetic databases and C# cache/gateway contracts. Real Windows CI/package, RC AA, application enablement/private binding, reviewed migration/rollback and formal cutover remain separate gates. No production deployment or Release is authorized; 0-active-Device recovery remains unimplemented.
 
 ## 10. Package 7 — V3 business coordination
 
@@ -284,13 +271,23 @@ Cloud -> Local destructive reset
         ↓
 remaining Cloud acceptance
         ↓
-CY ID adapter after stable external contract
+CY ID consumer source + isolated staging / acceptance
         ↓
 V3 business coordination
 ```
 
 Do not reverse this order by wiring CY ID directly into Forms/workflows before the provider boundary exists.
 
-## 12. Version / release boundary
+## 12. Current scope / version / release boundary
 
-This plan does not itself decide the next VERSION/BUILD value. Before source work starts, re-read repository/project version rules and classify the authorized work package. No merge, tag or formal Release without explicit user authorization.
+The current engineering baseline is V2.6.17; CYID Consumer adds the third provider while retaining V2.6.14 device management and previous UI/join fixes. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.
+
+
+## Service connectivity implementation (V2.6.16)
+
+The current product decision is CY_ID_INTEGRATION §14.2, superseding the historical Package 2 transport-only trigger. ServiceConnectivity owns independent AMEGO/Cloud reachability; MainForm owns one 15-second check and one modal blocker. Existing providers keep their own action-time authority and protected fallback. There is no new Local authority, offline issuance queue, Session store or mutation retry. Raw availability probes can recover after denial; a known denial stays blocked through subsequent outages and clears only after the same Device/binding succeeds. Local checks only AMEGO. Existing invoice services guard requests before local mutations, including cache-hit lookup/PDF paths; transport loss after a sent issue remains the existing uncertain-result workflow. Native Windows smoke and service matrix regression accompany the implementation; real-device/staging acceptance remains RC AA/AB.
+
+
+## V2.6.17 source: device/access sync and automatic revoked-device reset
+
+2026-10-10 product decisions are recorded only in CY_ID_INTEGRATION §14.6; implementation tasks are TODO §7.3.2 and the resumable checkpoint is CLOUD_WORK_HANDOFF. No push; startup, 60-second and reconnect aggregate synchronization; final-operation Device plus Employee authorization; reuse the existing reset/recovery owner with a durable marker before shutdown and wipe all portable runtime data, including Logs. Source now implements the existing lifecycle/reset owners and canonical optional invalidation capability. Do not change AMEGO invoice synchronization cadence or original Workspace continuity. Canonical 1.0.3 private invalidation is defined in the provider standard §11.1; Windows CI and real-device/staging acceptance remain separate gates.

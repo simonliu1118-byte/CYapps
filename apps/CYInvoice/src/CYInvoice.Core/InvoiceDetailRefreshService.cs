@@ -30,6 +30,7 @@ public sealed class InvoiceDetailRefreshService
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
             var stored = repository.Invoices.LoadOrCreate().SingleOrDefault(record => record.Id == selected.Id)
                 ?? throw new InvalidOperationException("本機找不到這筆發票紀錄，請重新整理清單");
             var account = CurrentAccount();

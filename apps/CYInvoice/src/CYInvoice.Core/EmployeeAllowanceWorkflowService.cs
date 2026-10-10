@@ -18,7 +18,8 @@ public sealed record InvoiceAllowanceManualReview(
     bool AwaitingConfirmation = false,
     DateTimeOffset? ManualCompletedUtc = null,
     string ConfirmedAllowanceNumber = "",
-    string HandlerEmployeeNo = "");
+    string HandlerEmployeeNo = "",
+    bool? ConfirmationProblem = null);
 
 public sealed record EmployeeAllowanceWorkflowResult(
     InvoiceRecord Record,
@@ -228,6 +229,7 @@ public sealed class EmployeeAllowanceWorkflowService
         catch (Exception error)
         {
             var message = "折讓狀態回查失敗：" + error.Message;
+            SetConfirmationProblem(record, true);
             UpdateIssueMessage(record, message);
             return new InvoiceAllowanceReconcileResult(
                 InvoiceAllowanceReconcileOutcome.Problem,
@@ -278,6 +280,7 @@ public sealed class EmployeeAllowanceWorkflowService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(selected);
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         var record = Reload(selected);
         ValidateCurrentAccount(record);
         var review = ReadManualReview(record)
@@ -297,6 +300,7 @@ public sealed class EmployeeAllowanceWorkflowService
         catch (Exception error)
         {
             var message = "折讓狀態回查失敗：" + error.Message;
+            SetConfirmationProblem(record, true);
             UpdateIssueMessage(record, message);
             return new InvoiceAllowanceReconcileResult(
                 InvoiceAllowanceReconcileOutcome.Problem,
@@ -441,6 +445,7 @@ public sealed class EmployeeAllowanceWorkflowService
 
     private InvoiceAllowanceReconcileResult Pending(InvoiceRecord record, string message)
     {
+        SetConfirmationProblem(record, false);
         UpdateIssueMessage(record, message);
         return new InvoiceAllowanceReconcileResult(
             InvoiceAllowanceReconcileOutcome.PendingConfirmation,
@@ -450,11 +455,21 @@ public sealed class EmployeeAllowanceWorkflowService
 
     private InvoiceAllowanceReconcileResult Problem(InvoiceRecord record, string message)
     {
+        SetConfirmationProblem(record, true);
         UpdateIssueMessage(record, message);
         return new InvoiceAllowanceReconcileResult(
             InvoiceAllowanceReconcileOutcome.Problem,
             Reload(record),
             message);
+    }
+
+    private void SetConfirmationProblem(InvoiceRecord record, bool problem)
+    {
+        var review = ReadManualReview(record)
+            ?? throw new InvalidDataException("折讓待確認缺少人工申請資料");
+        record.ExtensionData![ManualReviewMetadataKey] = JsonSerializer.SerializeToElement(
+            review with { ConfirmationProblem = problem });
+        syncRepository.UpsertMany([record]);
     }
 
     private void ValidateEligible(InvoiceRecord record, long taxInclusiveAmount)

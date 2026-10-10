@@ -284,7 +284,7 @@ internal sealed class EmployeeEditForm : Form
         Margin = new Padding(0, 0, 6, 0),
     };
 
-    private static Button CompactButton(string text) => new NoFocusCueButton
+    private static Button CompactButton(string text) => new RoundedButton
     {
         Text = text,
         Width = CompactButtonWidth,

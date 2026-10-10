@@ -2,12 +2,14 @@
 
 此文件只記錄非敏感的 Email Provider 工程狀態與切換原則。不得寫入 API Key、SMTP 密碼、真實收件人 Email、OTP、Cloudflare Secret 或其他機密資料。
 
+更新日期：2026-10-09。最新工作停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，本文件不另維護進度清單。
+
 ## 目前狀態
 
 - 已建立 Resend 帳號，登入方式為 GitHub Sign-In。
 - 目前尚未持有可供 CYInvoice 驗證寄件的自有網域，因此 Resend 暫不作為正式 OTP 寄件來源。
 - 已建立 Brevo 帳號，並完成可用寄件 Sender 的 Email 驗證。
-- Brevo API Key 尚待帳號手機驗證完成後建立；手機驗證若暫時失敗，不阻塞其餘 OTP／Cloud 程式開發。
+- Brevo runtime 寄信已接線，bootstrap OTP 曾實機寄達；9/29 staged deployment 已通過 required secret-name presence gate。這是既有驗證證據，不代表本次重新查詢 API Key／寄件狀態。
 - 目前 V3.0 reference backend 的開發寄信 Provider 定為 **Brevo**。
 - Resend 保留為已實作的可切換 Provider；日後取得自有網域並完成網域驗證後，可切回 Resend。
 - 所有 Provider API Key 都不得提交至 repository；只能放在 Cloudflare Worker Secret 或等價的後端 Secret Store。
@@ -33,7 +35,7 @@ CYInvoice 的 OTP lifecycle 由 CYInvoice Cloud 自己管理；Email Provider �
 - `BREVO_API_KEY`：Cloudflare Worker Secret。
 - `EMAIL_FROM`：已驗證 Sender；實際 Email 不寫入 Public repository。
 
-Brevo API Key 尚未建立前，程式可完成 type-check、schema、OTP 邏輯與 UI 開發，但不能進行真實寄信測試。
+Employee Email／forgot-password／SUPER_ADMIN transfer 的端到端寄信與有效期／重寄仍需實機驗收，見 TODO.md；不得將 bootstrap 的寄達證據當作所有 OTP scope 已驗收。曾觀察到約 7 分鐘延遲，Worker 無刻意延後排程；必要時可做不含 Email／OTP／Token 的 provider timing telemetry。
 
 ## 未來切回 Resend 的條件
 

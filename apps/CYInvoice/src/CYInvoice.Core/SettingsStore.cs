@@ -239,9 +239,38 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
         settings.CloudDeviceId = string.Empty;
         settings.CloudDeviceTokenEncrypted = string.Empty;
         settings.CloudEmployeeAuthorityReady = false;
+        settings.CloudIdentityProvider = "BUILT_IN";
+        settings.CyIdBindingEncrypted = string.Empty;
         ClearCloudPendingBootstrap(settings);
         ClearCloudPendingDeviceJoin(settings);
         settings.CloudMode = CloudModes.LocalOnly;
+    }
+
+    public void ConfirmCyIdConfiguration(Settings settings, CyIdBinding binding)
+    {
+        CyIdGateway.ValidateBinding(binding);
+        if (binding.BaseUrl != settings.CloudBaseUrl || binding.WorkspaceId != settings.CloudWorkspaceId
+            || binding.DeviceId != settings.CloudDeviceId
+            || binding.DeviceTokenDigest != CyIdGateway.TokenDigest(CloudDeviceToken(settings)))
+            throw new InvalidDataException("CYID 綁定與本機裝置不一致。");
+        settings.CyIdBindingEncrypted = protector.Protect(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(binding));
+        settings.CloudIdentityProvider = "CYID";
+        MarkCloudEmployeeAuthorityReady(settings);
+    }
+
+    public CyIdBinding CyIdConfiguration(Settings settings)
+    {
+        if (settings.CloudIdentityProvider != "CYID" || settings.CyIdBindingEncrypted.Length == 0
+            || settings.CloudMode != CloudModes.CloudPreferred || !settings.CloudEmployeeAuthorityReady)
+            throw new InvalidDataException("CYID 模式缺少已確認的綁定。");
+        var binding = System.Text.Json.JsonSerializer.Deserialize<CyIdBinding>(protector.Unprotect(settings.CyIdBindingEncrypted))
+            ?? throw new InvalidDataException("CYID 綁定無法讀取。");
+        CyIdGateway.ValidateBinding(binding);
+        if (binding.BaseUrl != settings.CloudBaseUrl || binding.WorkspaceId != settings.CloudWorkspaceId
+            || binding.DeviceId != settings.CloudDeviceId
+            || binding.DeviceTokenDigest != CyIdGateway.TokenDigest(CloudDeviceToken(settings)))
+            throw new InvalidDataException("CYID 綁定與目前裝置不一致。");
+        return binding;
     }
 
     private string Unprotect(string value) => value.Length == 0 ? string.Empty : Encoding.UTF8.GetString(protector.Unprotect(value));
@@ -266,6 +295,10 @@ public sealed class SettingsStore(string dataDirectory, ISecretProtector protect
             && (!HasCloudIdentity(settings) || settings.CloudEmployeeAuthorityReady))
             throw new InvalidDataException("Cloud 帳號轉換狀態與 Device identity 不一致。");
 
+        if (settings.CloudIdentityProvider is not "BUILT_IN" and not "CYID")
+            throw new InvalidDataException("不支援的 Cloud identity provider。");
+        if (settings.CloudIdentityProvider == "CYID" && (!settings.CloudEmployeeAuthorityReady || settings.CyIdBindingEncrypted.Length == 0))
+            throw new InvalidDataException("CYID 模式缺少已確認的綁定。");
         ValidateCloudPendingBootstrap(settings);
         ValidateCloudPendingDeviceJoin(settings);
         if (settings.CloudPendingBootstrapTokenEncrypted.Length != 0

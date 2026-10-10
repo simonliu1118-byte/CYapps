@@ -1,0 +1,232 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using CYInvoice.Core;
+using CYInvoice.Core.Storage;
+
+internal static class CyIdIdentityProviderTests
+{
+    public static async Task WorkspaceContinuityAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "CYInvoice.CyId.Continuity", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var protector = new Protector();
+            var repository = TestRepository.Open(directory, protector);
+            var settings = repository.Settings.LoadOrCreate();
+            settings.ProductionInvoice = "12345675";
+            settings.Environment = Environments.Production;
+            settings.InvoicePrinterName = "Synthetic Printer";
+            settings.CloudBaseUrl = "https://invoice.example.test/";
+            settings.CloudWorkspaceId = "ws_invoice";
+            settings.CloudDeviceId = "dev_test";
+            var token = "cydev_" + new string('a', 64);
+            repository.Settings.SetCloudDeviceToken(settings, token);
+            repository.Settings.SetProductionAppKey(settings, "SyntheticAppKey");
+            repository.Settings.SetMoPassword(settings, "SyntheticMoPassword");
+            repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
+            repository.Settings.Save(settings);
+            // Reopen with the existing company scope, as an already configured installation does.
+            repository = TestRepository.Open(directory, protector);
+            repository.Invoices.Append(new InvoiceRecord
+            {
+                Id = "existing-pending", Source = "手動", OriginalOrderId = "M20261010001",
+                OrderId = "M20261010001", ApiOrderId = "M20261010001", SellerInvoice = "12345675",
+                Environment = Environments.Production, InvoiceNumber = "AA12345678",
+                InvoiceState = InvoiceStates.OpenedWaitingVoid, Amount = 100,
+                BuyerIdentifier = "12345675", BuyerName = "Synthetic Buyer", MainRemark = "保留原待處理紀錄",
+                UploadStatus = 31, UploadStatusText = "處理中",
+            });
+            repository.BuyerNames.RememberAfterSuccessfulInvoice("12345675", true, "", "Synthetic Buyer", true);
+            var invoicesBefore = JsonSerializer.Serialize(repository.Invoices.LoadOrCreate());
+            var settingsPath = Path.Combine(repository.DataDirectory, "settings.json");
+            var settingsBefore = File.ReadAllText(settingsPath);
+            var protectedToken = settings.CloudDeviceTokenEncrypted;
+            var protectedKey = settings.ProductionAppKeyEncrypted;
+            var protectedMo = settings.MoPasswordEncrypted;
+            var pdfPath = Path.Combine(repository.InvoicePdfCacheDirectory, "existing.pdf");
+            File.WriteAllText(pdfPath, "synthetic cached document");
+            var binding = new CyIdBinding(settings.CloudBaseUrl, settings.CloudWorkspaceId, settings.CloudDeviceId,
+                "ws_identity", "CYINVOICE", "1.0.2", CyIdGateway.TokenDigest(token));
+            try
+            {
+                repository.Settings.ConfirmCyIdConfiguration(settings, binding with { WorkspaceId = "ws_other" });
+                throw new InvalidOperationException("A cutover must reject replacing the existing CYInvoice Workspace");
+            }
+            catch (InvalidDataException) { }
+            Check(settings.CloudIdentityProvider == "BUILT_IN" && File.ReadAllText(settingsPath) == settingsBefore,
+                "mismatched cutover leaves the original authority and persisted settings intact");
+
+            repository.Settings.ConfirmCyIdConfiguration(settings, binding);
+            repository.Settings.Save(settings);
+            repository = TestRepository.Open(directory, protector);
+            var after = repository.Settings.LoadOrCreate();
+            Check(after.CloudWorkspaceId == "ws_invoice" && after.CloudDeviceId == "dev_test"
+                && after.CloudBaseUrl == binding.BaseUrl && after.CloudDeviceTokenEncrypted == protectedToken
+                && repository.Settings.CloudDeviceToken(after) == token, "same Workspace, endpoint, Device and protected Token after restart");
+            Check(after.ProductionInvoice == "12345675" && after.Environment == Environments.Production
+                && after.InvoicePrinterName == "Synthetic Printer" && after.ProductionAppKeyEncrypted == protectedKey
+                && after.MoPasswordEncrypted == protectedMo, "business configuration and protected credentials survive cutover");
+            Check(JsonSerializer.Serialize(repository.Invoices.LoadOrCreate()) == invoicesBefore
+                && repository.BuyerNames.TryLookup("12345675", out var buyer) && buyer == "Synthetic Buyer"
+                && File.ReadAllText(pdfPath) == "synthetic cached document", "existing invoices, pending state, buyer memory and PDF cache survive restart");
+            Check(repository.IdentityProvider.Kind == IdentityProviderKind.CyId && repository.HasAuthorityEmployees(),
+                "existing installation selects CYID without new Workspace, rejoin or local employee setup");
+            using var http = new HttpClient(new Handler(token));
+            var provider = new CyIdIdentityProvider(repository.Settings, new CyIdOfflineCache(repository.DataDirectory, protector), http);
+            Check((await provider.AuthenticateAsync(new("0002", "SyntheticPass1")))?.WorkspaceId == "ws_identity",
+                "new authority authenticates through the original device while identity scope remains separate");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    public static async Task RunAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "CYInvoice.CyId.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var protector = new Protector();
+            var settingsStore = new SettingsStore(directory, protector);
+            var settings = settingsStore.LoadOrCreate();
+            settings.CloudBaseUrl = "https://invoice.example.test/";
+            settings.CloudWorkspaceId = "ws_invoice";
+            settings.CloudDeviceId = "dev_test";
+            var token = "cydev_" + new string('a', 64);
+            settingsStore.SetCloudDeviceToken(settings, token);
+            settingsStore.MarkCloudEmployeeAuthorityReady(settings);
+            var binding = new CyIdBinding(settings.CloudBaseUrl, settings.CloudWorkspaceId, settings.CloudDeviceId,
+                "ws_identity", "CYINVOICE", "1.0.2", CyIdGateway.TokenDigest(token));
+            settingsStore.ConfirmCyIdConfiguration(settings, binding);
+            settingsStore.Save(settings);
+            var cache = new CyIdOfflineCache(directory, protector);
+            var handler = new Handler(token);
+            using var http = new HttpClient(handler);
+            var ameAvailable = true;
+            var provider = new CyIdIdentityProvider(settingsStore, cache, http, _ => ameAvailable
+                ? Task.CompletedTask : Task.FromException(new ServiceConnectionException("Both services unavailable")));
+            var credentials = new IdentityAuthenticationRequest("0002", "SyntheticPass1");
+            Check(!provider.OwnsAccountManagement, "CYID must not own consumer account management");
+            var principal = await provider.AuthenticateAsync(credentials);
+            Check(principal?.StableEmployeeId == "emp_test" && principal.Role == AppRole.User
+                && principal.WorkspaceId == "ws_identity" && principal.CredentialVersion == 1, "canonical principal");
+            var saved = File.ReadAllText(Path.Combine(directory, "cyid_offline_cache.json"));
+            Check(!saved.Contains("SyntheticPass1", StringComparison.Ordinal) && !saved.Contains("emp_test", StringComparison.Ordinal)
+                && !saved.Contains("USER", StringComparison.Ordinal) && !saved.Contains("cyid_", StringComparison.Ordinal),
+                "cache encrypts authority and local offline proof, no raw provider session");
+
+            handler.Mode = "offline";
+            Check(cache.Authenticate(binding with { ConsumerVersion = "1.0.3" }, credentials)?.Role == AppRole.User
+                && cache.AuthorityChecks(binding with { ConsumerVersion = "1.0.3" }).Length == 1,
+                "contract upgrade retains the same original authority proof and scope");
+            cache.InvalidateEmployees(new HashSet<string> { "emp_other" });
+            Check(cache.Authenticate(binding, credentials) is not null, "unaffected cache remains usable");
+            cache.InvalidateEmployees(new HashSet<string> { "emp_test" });
+            Check(cache.Authenticate(binding, credentials) is null && cache.AuthorityChecks(binding).Length == 0,
+                "background invalidation removes the old proof without granting a new principal");
+            handler.Mode = "online";
+            await provider.AuthenticateAsync(credentials);
+            handler.Mode = "offline";
+            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.User, "real transport outage uses the last confirmed cache");
+            Check(await provider.AuthenticateAsync(credentials with { Password = "WrongPassword1" }) is null, "offline password required");
+            handler.Mode = "admin";
+            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "online authority replaces cached role");
+            handler.Mode = "offline";
+            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "updated role persists offline");
+            handler.Mode = "unavailable";
+            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "503 uses the existing protected fallback");
+            ameAvailable = false;
+            await ThrowsAsync<ServiceConnectionException>(() => provider.AuthenticateAsync(credentials));
+            ameAvailable = true;
+            handler.Mode = "html503";
+            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "Cloudflare non-JSON 503 is a service outage");
+            handler.Mode = "offline";
+            Check((await provider.AuthenticateAsync(credentials))?.Role == AppRole.Admin, "temporary service outage preserves the original cache");
+            handler.Mode = "denied";
+            await ThrowsAsync<CyIdAuthenticationException>(() => provider.AuthenticateAsync(credentials));
+            handler.Mode = "offline";
+            Check(await provider.AuthenticateAsync(credentials) is null, "App Access denial removes offline access");
+            handler.Mode = "online";
+            await provider.AuthenticateAsync(credentials);
+            handler.Mode = "malformed";
+            await ThrowsAsync<InvalidDataException>(() => provider.AuthenticateAsync(credentials));
+            handler.Mode = "offline";
+            Check(await provider.AuthenticateAsync(credentials) is null, "malformed/cross-workspace authority cannot preserve offline access");
+            handler.Mode = "online";
+            await provider.AuthenticateAsync(credentials);
+            using var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            await ThrowsAsync<OperationCanceledException>(() => provider.AuthenticateAsync(credentials, cancelled.Token));
+            Check(await provider.AuthenticateAsync(credentials with { Password = "short" }) is null, "shared password minimum");
+            Check(await provider.AuthenticateAsync(credentials with { Password = new string('x', 17) }) is null, "shared password maximum");
+            Check(await provider.AuthenticateAsync(credentials with { Password = "密碼😀abcdefgh" }) is not null, "shared Unicode password boundary");
+            await ThrowsAsync<CyIdAuthenticationException>(() => provider.RefreshPrincipalAsync("0002"));
+            settingsStore.SetCloudDeviceToken(settings, "cydev_" + new string('b', 64));
+            settingsStore.Save(settings);
+            await ThrowsAsync<InvalidDataException>(() => provider.AuthenticateAsync(credentials));
+            settingsStore.ClearCloudIdentity(settings);
+            settingsStore.Save(settings);
+            Check(settings.CloudIdentityProvider == "BUILT_IN" && settings.CyIdBindingEncrypted.Length == 0, "reset clears CYID binding");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
+    private static async Task ThrowsAsync<T>(Func<Task> work) where T : Exception
+    {
+        try { await work(); } catch (T) { return; }
+        throw new InvalidOperationException($"Expected {typeof(T).Name}");
+    }
+
+    private sealed class Protector : ISecretProtector
+    {
+        private readonly byte[] key = RandomNumberGenerator.GetBytes(32);
+        public string Protect(ReadOnlySpan<byte> plaintext)
+        {
+            var nonce = RandomNumberGenerator.GetBytes(12);
+            var bytes = new byte[plaintext.Length];
+            var tag = new byte[16];
+            using var aes = new AesGcm(key, 16);
+            aes.Encrypt(nonce, plaintext, bytes, tag);
+            return Convert.ToBase64String(nonce.Concat(tag).Concat(bytes).ToArray());
+        }
+        public byte[] Unprotect(string ciphertext)
+        {
+            var value = Convert.FromBase64String(ciphertext);
+            var result = new byte[value.Length - 28];
+            using var aes = new AesGcm(key, 16);
+            aes.Decrypt(value.AsSpan(0, 12), value.AsSpan(28), value.AsSpan(12, 16), result);
+            return result;
+        }
+    }
+
+    private sealed class Handler(string token) : HttpMessageHandler
+    {
+        public string Mode { get; set; } = "online";
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            cancellationToken.ThrowIfCancellationRequested();
+            Check(request.Headers.Authorization?.Parameter == token, "only the current Device Token authenticates gateway transport");
+            Check(request.RequestUri?.AbsolutePath == "/v1/cyid/authenticate", "canonical consumer gateway route");
+            using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
+            Check(!body.RootElement.TryGetProperty("workspaceId", out _) && !body.RootElement.TryGetProperty("applicationId", out _),
+                "Windows cannot select its authority scope");
+            if (Mode == "offline") throw new HttpRequestException("synthetic transport outage");
+            if (Mode == "html503") return new(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("Service unavailable") };
+            if (Mode is "denied" or "unavailable") return new(Mode == "denied" ? HttpStatusCode.Forbidden : HttpStatusCode.ServiceUnavailable)
+                { Content = JsonContent.Create(new { ok = false, error = new { code = Mode == "denied" ? "ACCESS_DENIED" : "IDENTITY_UNAVAILABLE" } }) };
+            return new(HttpStatusCode.OK) { Content = JsonContent.Create(new {
+                ok = true, provider = "CYID", workspaceId = "ws_invoice", deviceId = "dev_test", identityWorkspaceId = "ws_identity",
+                applicationId = "CYINVOICE", consumerVersion = "1.0.2", principal = new {
+                    workspaceId = Mode == "malformed" ? "ws_other" : "ws_identity", employeeId = "emp_test", employeeNo = "0002",
+                    displayName = "Synthetic User", workspaceRole = Mode == "admin" ? "ADMIN" : "USER",
+                    isIdentityAdmin = false, emailVerified = true, isWorkspaceSuperAdmin = false,
+                    credentialVersion = 1, employeeRevision = Mode == "admin" ? 2 : 1,
+                } }) };
+        }
+    }
+}

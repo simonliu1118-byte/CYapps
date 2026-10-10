@@ -114,7 +114,7 @@ internal sealed class SelfAccountManagementForm : Form
             var started = await client.StartUpdateAsync(account.EmployeeNo, authenticatedPassword, proposal);
             if (!started.VerificationRequired || started.Challenge is null)
                 throw new InvalidDataException("雲端未要求新 Email 驗證，資料未變更。");
-            using var verify = new CloudEmployeeUpdateVerificationForm(client, account,
+            using var verify = new CloudEmployeeUpdateVerificationForm(client, account.EmployeeNo,
                 authenticatedPassword, proposal, started.Challenge);
             if (verify.ShowDialog(this) != DialogResult.OK || verify.UpdatedEmployee is null) return;
             var authority = new CloudEmployeeAuthorityClient(httpClient, baseUri, token);

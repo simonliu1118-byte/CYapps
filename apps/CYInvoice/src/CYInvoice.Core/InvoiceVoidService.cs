@@ -25,6 +25,7 @@ public sealed record InvoiceVoidResult(
 public sealed class InvoiceVoidService
 {
     private const string PendingMetadataKey = "cyinvoice_void_pending";
+    private const string OfficialPendingMetadataKey = "cyinvoice_void_official_pending";
     private static readonly TimeSpan RecoveryQueryTimeout = TimeSpan.FromSeconds(20);
     private readonly LocalRepository repository;
     private readonly InvoiceSyncRepository syncRepository;
@@ -57,6 +58,7 @@ public sealed class InvoiceVoidService
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
             var record = Reload(selected);
             var account = CurrentAccount();
             ValidateAccount(record, account);
@@ -206,6 +208,7 @@ public sealed class InvoiceVoidService
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
             var record = Reload(selected);
             var account = CurrentAccount();
             ValidateAccount(record, account);
@@ -358,6 +361,7 @@ public sealed class InvoiceVoidService
     {
         record.InvoiceState = InvoiceStates.OpenedWaitingVoid;
         record.ErrorMessage = string.Empty;
+        SetOfficialPending(record, inspection.Pending);
         ApplyOriginalInvoiceStatus(record, inspection);
     }
 
@@ -388,8 +392,19 @@ public sealed class InvoiceVoidService
     {
         if (record.ExtensionData is null) return;
         record.ExtensionData.Remove(PendingMetadataKey);
+        record.ExtensionData.Remove(OfficialPendingMetadataKey);
         if (record.ExtensionData.Count == 0) record.ExtensionData = null;
     }
+
+    internal static void SetOfficialPending(InvoiceRecord record, bool pending)
+    {
+        record.ExtensionData ??= new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        record.ExtensionData[OfficialPendingMetadataKey] = JsonSerializer.SerializeToElement(pending);
+    }
+
+    public static bool IsOfficiallyPending(InvoiceRecord record) =>
+        record.ExtensionData is not null &&
+        record.ExtensionData.TryGetValue(OfficialPendingMetadataKey, out var value) && value.ValueKind == JsonValueKind.True;
 
     internal static bool HasPendingMarker(InvoiceRecord record)
     {
