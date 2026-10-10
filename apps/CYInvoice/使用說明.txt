@@ -1,5 +1,5 @@
 CYInvoice 使用說明
-適用版本：V2.6.14（工程測試版）
+適用版本：V2.6.15（工程測試版）
 
 Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 本程式與原始碼之使用、修改與散布權利以 repository 根目錄 LICENSE 為準。
@@ -72,3 +72,10 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 2. 發生問題時請保留完整 CYInvoice 資料夾及 Logs，不要自行重送結果不明的發票；可在「設定 → 系統診斷」重新檢查與複製不含機密的摘要。
 3. 若下載正式 GitHub Release，請同時核對附帶的 SHA-256；Public 可下載不代表開放原始碼，授權仍以 LICENSE 為準。
 4. 測試 Artifact 依套件內 `Channel: engineering` 中繼資料及 Artifact 名稱與正式包區分；版本標題不另加「工程測試包」。未經明確發布要求的版本不建立正式 Release。
+
+CYID 帳號模式（工程接入版）
+1. 只有管理員完成雲端 CYID 接入及裝置確認後，這台程式才使用 CYID；現行單機／Built-in Cloud 仍可使用。
+2. CYID 員工首次啟用、帳號管理、密碼重設由 CY Web 辦理；CYInvoice 隱藏帳號管理，不需要持續登入。
+3. 操作時輸入 4 碼員編及 CYID 永久密碼（8～16 個 Unicode 字元）；每次在線確認最新使用權限。
+4. 已成功在線驗證的員工，真正斷網時可用原裝置最後加密快取。離線看不到中央撤銷，重新連線後採最新權限；雲端拒絕不會當成斷網放行。
+5. 本版只有接入 source／測試，尚未切換正式 CYID；實際可用模式依部署與設定為準。

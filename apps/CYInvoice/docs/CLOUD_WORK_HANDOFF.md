@@ -9,14 +9,28 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `6d997be0ddebb7cc403e53ea1416863d51a26311`；CYInvoice V2.6.10 Build 2 |
-| 現行 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
-| 分支 | `cyinvoice/fix-void-workflow-ui`；已同步上述 main |
-| 工程版本 | **V2.6.14**；來源為 ../VERSION、../BUILD |
+| main | `94f559cdb74a250453cce078a5f5c4e4d9a51df7`；CYInvoice 仍 V2.6.10 Build 2 |
+| 前置介面 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
+| 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
+| 工程版本 | **V2.6.15**；來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
 
-本次獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
+前置獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
+
+## V2.6.15 CYID Consumer 現行停點
+
+使用者 2026-10-10 授權開始 consumer 開發；新獨立 Patch／BUILD 0。整合 main 與兩支未合 PR 以保留最新介面和設計，不自動合併／關閉前置 PR。前置 PR #216 精確 head 1e6d4137 的 Governance #1172／Cloud #378／Windows #267 全綠只是 V2.6.14 證據，不能冒充本輪 CI。
+
+本輪完成 CyIdIdentityProvider、集中選擇及 authenticated discovery／DPAPI binding、private IDENTITY gateway、Device 與 Employee／App Access／Role 分離、兩 Workspace 固定綁定、transport-only offline cache／reconnect 更新。Rename／revoke／pairing／invitation 保留原 handler 及 audit owner；0013 新增 external invitation actor 並保留 Built-in FK／歷史，沒有匯入或讀 CYID D1。帳號管理隱藏／復原提示 CY Web；CYID 不讀 Built-in employee snapshot。詳見 CY_ID_INTEGRATION §14。
+
+Source Cloud 0.9.0／API 1／marker 8／storage 13／cyid-consumer-v1；預設 CYID 關閉，runtime binding 與實際 Application enablement 未核對。本輪沒有遠端 migration、部署、正式切換、tag／Release；目前最後有效 development deployment 仍是下方 Cloud 0.8.9／storage 12 Run #8 attempt 2。
+
+本機驗證：TypeScript、完整 npm test（bootstrap／lifecycle／真實 CYID provider，各自 synthetic DB 與 migrations）與 bundle dry-run 通過；C# Core Release build 與 Cloud contracts 通過，Void workflow 29／Allowance 12／SQLite migration 13 通過。WinForms Linux cross-build 只作編譯預檢，Windows-only smoke／DPAPI／PE／封裝仍由本輪 PR CI 驗證，不引用舊包。新增 Windows join smoke 包含 CYID invitation／pairing／mismatched binding，確認不下載 Built-in verifier。
+
+Architecture Exception：依使用者保留既有 last-trusted offline 行為，整筆 scope／principal／本機 proof DPAPI 保護，沒有新增 TTL；離線無法即時觀察中央撤銷，server mutation 仍在線驗證。Logout loss 不 replay、不假稱已撤銷，provider expiry 負責 orphaned Session（目前 default 8h）。每個 server mutation 前 Resolve；CYID／consumer D1 不構成跨庫 atomic transaction。Local／Built-in 是獨立正式模式，沒有在 CYID 失敗時自動啟用。Rolling-deployment 404 discovery reader 只供未確認 CYID 的舊 Built-in Worker。
+
+剩餘驗收只在 TODO §7.3、RC AA 追蹤：精確 head CI／工程包、Windows 實機及舊 A/B/C、staging bindings、受控 migration／actor audit／rollback。0-active-Device recovery 未做，LAST_ACTIVE_DEVICE 保護維持；125／150 DPI 仍 Deferred。
 
 ## V2.6.14 裝置管理
 

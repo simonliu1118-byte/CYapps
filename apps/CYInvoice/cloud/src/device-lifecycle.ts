@@ -1,7 +1,8 @@
+import { usesCyId, cyIdDevice, CyIdError, cyIdErrorResponse, type CyIdEnv } from "./cyid";
 import { recordSecurityEvent } from "./security-audit";
 import { verifyPassword } from "./web-auth";
 
-interface Env {
+interface Env extends CyIdEnv {
   DB: D1Database;
   APP_ENV: string;
   API_VERSION: string;
@@ -86,6 +87,7 @@ function bearerToken(request: Request): string | null {
 }
 
 async function authenticateDevice(request: Request, env: Env): Promise<DeviceIdentity | null> {
+  if (usesCyId(env)) await cyIdDevice(request, env);
   const token = bearerToken(request);
   if (!token) return null;
   const tokenHash = await sha256Hex(token);
@@ -143,6 +145,12 @@ async function authenticateSuperAdmin(
   device: DeviceIdentity,
   body: Record<string, unknown> | null,
 ): Promise<SuperAdminRow | null> {
+  if (usesCyId(env)) {
+    if (!env.cyIdContext) throw new CyIdError(401, "AUTH_REQUIRED");
+    const principal = await env.cyIdContext.revalidate();
+    if (principal.workspaceRole !== "SUPER_ADMIN") return null;
+    return { employee_id: principal.employeeId, credential_algorithm: null, credential_verifier: null };
+  }
   if (device.employeeAuthorityState !== "cloud") return null;
   const employeeNo = normalizedEmployeeNo(body?.employeeNo);
   const password = normalizedPassword(body?.password);
@@ -411,10 +419,10 @@ async function renameDevice(request: Request, env: Env, requestId: string): Prom
         WHERE device_id = ?3 AND workspace_id = ?4 AND status = 'active'
           AND EXISTS (SELECT 1 FROM devices a JOIN workspaces w ON w.workspace_id = a.workspace_id
                        WHERE a.device_id = ?5 AND a.workspace_id = ?4 AND a.status = 'active' AND w.status = 'active')
-          AND EXISTS (SELECT 1 FROM cloud_employees WHERE employee_id = ?6 AND workspace_id = ?4
-                       AND role = 'SUPER_ADMIN' AND enabled = 1 AND credential_verifier = ?7)`
+          AND (?8 = 1 OR EXISTS (SELECT 1 FROM cloud_employees WHERE employee_id = ?6 AND workspace_id = ?4
+                       AND role = 'SUPER_ADMIN' AND enabled = 1 AND credential_verifier = ?7))`
     ).bind(displayName, now, targetDeviceId, actor.workspaceId, actor.deviceId,
-      owner.employee_id, owner.credential_verifier),
+      owner.employee_id, owner.credential_verifier, usesCyId(env) ? 1 : 0),
     env.DB.prepare(
       `INSERT INTO security_audit_events (
          event_id, workspace_id, event_type, outcome, actor_device_id,
@@ -453,6 +461,7 @@ export async function handleDeviceLifecycle(request: Request, env: Env): Promise
       return await renameDevice(request, env, requestId);
     return null;
   } catch (error) {
+    if (error instanceof CyIdError) return cyIdErrorResponse(error);
     console.error("device_lifecycle_request_failed", {
       requestId,
       path: url.pathname,

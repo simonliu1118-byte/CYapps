@@ -22,6 +22,7 @@ internal sealed class SettingsForm : Form
     private readonly Button diagnostics = UiControls.StandardButton("系統診斷");
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
+    private GroupBox modeGroup = null!;
     private BufferedTableLayoutPanel environmentLayout = null!;
     private BufferedFlowLayoutPanel modeChoices = null!;
     private BufferedTableLayoutPanel platformLayout = null!;
@@ -78,7 +79,7 @@ internal sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
 
-        var modeGroup = new GroupBox { Text = "運作模式", Dock = DockStyle.Fill };
+        modeGroup = new GroupBox { Text = "運作模式", Dock = DockStyle.Fill };
         modeChoices = new BufferedFlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -328,6 +329,7 @@ internal sealed class SettingsForm : Form
 
     private void UpdateCloudControls()
     {
+        modeGroup.Text = settings.CloudIdentityProvider == "CYID" ? "運作模式（CYID）" : "運作模式";
         cloudSettings.Visible = cloudMode.Checked;
         deviceManagement.Visible = cloudMode.Checked;
         localReset.Visible = localMode.Checked && settings.CloudMode == CloudModes.LocalOnly;

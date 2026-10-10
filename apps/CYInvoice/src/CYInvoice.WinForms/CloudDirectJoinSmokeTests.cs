@@ -36,7 +36,7 @@ internal sealed partial class CloudDirectJoinForm
 
     private static async Task VerifyJoinFlowAsync()
     {
-        foreach (var scenario in new[] { "invitation", "pairing", "mismatch", "recover", "edited" })
+        foreach (var scenario in new[] { "invitation", "pairing", "mismatch", "recover", "edited", "cyid-invitation", "cyid-pairing", "cyid-mismatch" })
         {
             var directory = Path.Combine(Path.GetTempPath(), "CYInvoice.JoinRegression", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
@@ -47,13 +47,15 @@ internal sealed partial class CloudDirectJoinForm
                 {
                     WrongWorkspace = scenario == "mismatch",
                     FailSnapshotOnce = scenario == "recover",
+                    CyId = scenario.StartsWith("cyid-", StringComparison.Ordinal),
+                    WrongIdentityBinding = scenario == "cyid-mismatch",
                 };
                 var messages = new List<(string Message, MessageBoxIcon Icon)>();
                 using (var form = new CloudDirectJoinForm(repository, new HttpClient(new JoinSmokeHandler(server)),
                     (message, _, icon) => messages.Add((message, icon))))
                 {
                     form.url.Text = "https://cloud.example.test/";
-                    form.ownerMethod.Checked = scenario != "pairing";
+                    form.ownerMethod.Checked = !scenario.EndsWith("pairing", StringComparison.Ordinal);
                     form.pairingCode.Text = new string('a', 20);
                     form.invitationCode.Text = new string('b', 40);
                     form.employeeNo.Text = "0001";
@@ -72,7 +74,7 @@ internal sealed partial class CloudDirectJoinForm
                     }
 
                     await form.JoinAsync();
-                    if (scenario is "mismatch" or "recover")
+                    if (scenario is "mismatch" or "recover" or "cyid-mismatch")
                     {
                         Require(!form.IdentityCompleted, scenario + ": failure must not commit identity");
                         Require(repository.Settings.CloudPendingDeviceJoin(repository.Settings.LoadOrCreate()) is not null,
@@ -81,7 +83,7 @@ internal sealed partial class CloudDirectJoinForm
                             scenario + ": failure must not save a formal device");
                         Require(messages.Count == 1 && messages[0].Icon == MessageBoxIcon.Warning,
                             scenario + ": expected one failure notification");
-                        if (scenario == "mismatch")
+                        if (scenario is "mismatch" or "cyid-mismatch")
                         {
                             Require(messages[0].Message.Contains("Workspace", StringComparison.Ordinal),
                                 "Workspace mismatch must fail explicitly, without a null reference");
@@ -115,8 +117,17 @@ internal sealed partial class CloudDirectJoinForm
                     scenario + ": verified identity must persist");
                 Require(repository.Settings.CloudPendingDeviceJoin(saved) is null,
                     scenario + ": completed join must clear pending identity");
-                Require(repository.CloudEmployees.LoadAll().Count == 1,
-                    scenario + ": central Employee snapshot must persist");
+                Require(repository.CloudEmployees.LoadAll().Count == (server.CyId ? 0 : 1),
+                    scenario + ": CYID must not import Built-in Employee credentials");
+                Require(server.Snapshots == (server.CyId ? 0 : scenario == "recover" ? 2 : 1),
+                    scenario + ": only Built-in mode may read its Employee snapshot");
+                if (server.CyId)
+                {
+                    Require(saved.CloudIdentityProvider == "CYID" && !repository.IdentityProvider.OwnsAccountManagement,
+                        scenario + ": confirmed CYID must hide app account management");
+                    Require(repository.Settings.CyIdConfiguration(saved).IdentityWorkspaceId == "ws_identity_smoke",
+                        scenario + ": protected CYID binding must persist");
+                }
                 Require(!repository.Employees.HasEmployees(), scenario + ": direct join must not create Local authority");
                 Require(server.Claims == 1 && server.Previews == 1,
                     scenario + ": recovery must not consume an invitation twice or create a second device");
@@ -139,6 +150,8 @@ internal sealed partial class CloudDirectJoinForm
     {
         public bool WrongWorkspace { get; init; }
         public bool FailSnapshotOnce { get; set; }
+        public bool CyId { get; init; }
+        public bool WrongIdentityBinding { get; init; }
         public int Claims { get; set; }
         public int Previews { get; set; }
         public int Snapshots { get; set; }
@@ -174,6 +187,13 @@ internal sealed partial class CloudDirectJoinForm
             Require(server.Claims == 1, "Device must be claimed before authenticated reads");
             Require(request.Headers.Authorization?.Parameter == server.Token, "Recovery must use the original Device Token");
             if (path == "/v1/device") return Identity("ws_smoke");
+            if (path == "/v1/identity-provider")
+            {
+                if (server.CyId)
+                    return Json(new { ok = true, provider = "CYID", workspaceId = server.WrongIdentityBinding ? "ws_other" : "ws_smoke",
+                        deviceId = "dev_smoke", identityWorkspaceId = "ws_identity_smoke", applicationId = "CYINVOICE", consumerVersion = "1.0.2" });
+                return Json(new { ok = true, provider = "BUILT_IN", workspaceId = "ws_smoke", deviceId = "dev_smoke" });
+            }
             if (path == "/v1/employee-authority/status")
                 return Json(new { authority = new { deviceId = "dev_smoke", workspaceId = "ws_smoke",
                     state = "cloud", transitionSnapshotHash = "", transitionItemCount = 0, unresolvedCount = 0,

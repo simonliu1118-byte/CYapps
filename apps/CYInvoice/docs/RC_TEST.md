@@ -2,9 +2,9 @@
 
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
 
-- 目前工程測試基準：**V2.6.14**。
+- 目前工程測試基準：**V2.6.15**；CYID source 未部署，精確 head Windows 工程包另記交接。
 - Development Cloud：**0.8.9 / API 1 / compatibility marker 8 / storage Schema 12**；10/10 staged Run #8 attempt 2 已驗證新 capabilities，實機操作仍待驗收。
-- 本輪 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.14` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
+- 前置 V2.6.14 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.14` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
 - 最新公開正式 Release：**V2.4.2**。
 - V2.6.11 功能 commit 的 Governance #1137、Cloud #369、Windows #258 全部通過；9/29 development staged deployment 為既有歷史證據，本次未重查 live。PR #216 尚未合併，本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
 
@@ -315,3 +315,22 @@
 6. 使用可拋棄 C 撤銷，清單消失但 Cloud DB 的 Device row／revoked_at 與 audit 仍在；不得為驗收刪除歷史。保留 A/B 及最後一台 recovery path。
 
 自動化不能代替實機 96 DPI 驗收。125／150 DPI、High Contrast 尚待證據，不自動升為本輪阻塞。
+
+## AA. V2.6.15 CYID Consumer 實機驗收（尚未執行）
+
+先安排隔離 staging，確認 registered Application／Workspace enablement／App Access、private IDENTITY binding、兩 Workspace 配對、0013 backup/FK；記錄 PR 精確 head、工程包 hash 和環境，不把上一版包或 local provider fixture 當 live 證據。原 Local／Built-in A/B/C 與業務驗收保留。
+
+- [ ] Local／Built-in 原流程及舊 discovery-404 Worker 不受影響；已確認 CYID 的 client 不自動降級。
+- [ ] CYID invitation／pairing 首次加入成功，pending token 中斷／重開仍只 claim 一次；不讀 Built-in Employee snapshot，不建立 Local 員工。
+- [ ] Account Management 隱藏且上方按鈕排列正常；settings 顯示 CYID，忘記密碼提示 CY Web；首次啟用／重設在 CY Web 完成。
+- [ ] USER／ADMIN／SUPER_ADMIN 逐次帳密驗證原本開票／作廢／折讓／設定／裝置 rename/revoke；Identity Admin 不升格為 app SUPER_ADMIN。
+- [ ] App Access 撤銷／恢復、role change、Employee disable、password/credential change 後，下一次在線驗證立即採新結果；拒絕清除相應 cache。
+- [ ] 原裝置先成功在線驗證，再斷網／transport timeout：正確密碼用最後 protected Role，錯誤密碼拒絕；未在線成功的員工沒有 offline grant。
+- [ ] HTTP 401／403／503、畸形或錯 scope 回應、使用者取消不走 offline；Device／provider／Workspace 錯誤拒絕並清全部 cache。
+- [ ] Offline→reconnect 再操作採新權限；中央撤銷在斷網期間不可觀察，last-trusted 無新增 TTL 的產品邊界確實可接受。
+- [ ] A/B/C 裝置 token 不能代替 Employee；撤銷後舊 Token 不可用；複製 cache／修改 endpoint／Workspace／Device／token 不可重用。
+- [ ] Logout 失敗／response loss 不 replay business action，不把未撤銷 Session 宣稱清除；不在 Logs／package 保存密碼或 CYID token。
+- [ ] Cloud→Local reset 清 CYID cache/binding，保留原 crash-safe 流程；未實作 0-Device recovery 前 LAST_ACTIVE_DEVICE 仍拒絕最後撤銷。
+- [ ] Migration 0013 保留舊邀請與 audit；external actor 不建 fake employee／verifier，rollback 不自動降級已確認 CYID client。
+
+125／150 DPI 仍 Deferred。本節全部為人工待驗，不以自動化測試勾選；正式切換／Release 另行授權。

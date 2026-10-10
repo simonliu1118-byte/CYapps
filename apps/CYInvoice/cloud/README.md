@@ -4,16 +4,16 @@ Cloudflare Worker + D1 reference implementation for CYInvoice V3 coordination an
 
 AMEGO remains the authoritative source for invoice / void / allowance business state. AMEGO App Keys remain local to Windows and are not part of this backend.
 
-The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current Windows baseline is V2.6.14 (PR #216, not merged); source CI evidence and package are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
+The identity contract is defined in `../docs/CLOUD_IDENTITY_LIFECYCLE.md`; engineering status is in `../docs/CLOUD_ARCHITECTURE_STATUS.md`. Current source baseline is V2.6.15 (CYID Consumer candidate, not deployed); V2.6.14 predecessor PR #216 remains open; source CI evidence and package are in [the current handoff](../docs/CLOUD_WORK_HANDOFF.md), and remaining acceptance/implementation is tracked only in [TODO](../docs/TODO.md).
 
 ## Current compatibility
 
 - Service: `cyinvoice-cloud`
-- Cloud implementation: `0.8.9`
+- Cloud implementation: `0.9.0`
 - API: `1`
 - Legacy API compatibility marker: `schemaVersion=8`
-- Actual storage schema: `storageSchemaVersion=12`
-- Migrations: `0001` through `0012`
+- Actual storage schema: `storageSchemaVersion=13`
+- Migrations: `0001` through `0013`
 - Worker entrypoint: `src/app.ts`
 
 `wrangler.jsonc` advertises the client compatibility schema. Applied migrations are immutable; future changes must use new forward migrations.
@@ -205,3 +205,15 @@ This directory is public source. Keep implementation provider-neutral at the Win
 - Migration `0012_device_rename_audit.sql` retains all prior audit rows and adds the rename vocabulary. Metadata columns already exist. API compatibility marker stays 8; storage schema advances to 12.
 - Desktop management filters active Devices and hides status/revocation columns. Cloud inventory and DB retain revoked history. Existing last-active protection and self-reset remain intact.
 - Local `npm test` executes real lifecycle handlers/SQL, including auth/race rejection and audit-failure rollback. Remote deployment evidence is recorded separately in the handoff/PR.
+
+## CYID Consumer candidate (disabled by default)
+
+Canonical identity semantics come directly from `../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md`; this consumer declares `../CYID_CONSUMER_VERSION=1.0.2`. No mirror or CYID D1 binding is added.
+
+An independently reviewed deployment injects `CYID_ENABLED=true`, private `IDENTITY` Service Binding, and runtime-only `IDENTITY_APPLICATION_ID`, `IDENTITY_WORKSPACE_ID`, `IDENTITY_CYINVOICE_WORKSPACE_ID`. The two Workspace IDs are distinct scopes; this Worker binds exactly one CYInvoice Workspace. Missing/mismatched configuration fails closed. No real deployment binding or CYID application enablement was verified in this source task. With the flag absent/false, Built-in remains available.
+
+`GET /v1/identity-provider` requires an active Device Token and returns the confirmed provider/binding. `POST /v1/cyid/authenticate` accepts only per-operation employeeNo/password plus Device Token. The gateway owns Login → Resolve → result → finally Logout, returning normalized principal without Session/verifier. CYID owns Employee/enabled/Role/App Access; CYInvoice owns Device and business permission. Legacy account/bootstrap routes reject in CYID mode.
+
+Device rename/revoke, pairing issuance and invitation issue/preview/claim/revoke reuse the existing handler/mutation owners with a request-local CYID context. Invitation requires current SUPER_ADMIN credentials; pairing claim uses the existing one-time ticket issued after SUPER_ADMIN + Email OTP and grants Device membership only. Verified owner Email is read transiently from the authorized CYID admin snapshot, never imported into consumer authority/cache. Migration 0013 retains old invitation history/FKs and distinguishes Built-in from external CYID actors.
+
+Logout is best effort in finally. Response loss/crash can leave a CYID Session active until provider revocation/expiry (current default 8 hours); no consumer token is persisted and no completed mutation is retried. No distributed transaction is claimed between CYID Resolve and consumer D1 mutation. Windows uses a subordinate DPAPI cache only after transport failure, never after an HTTP authority error; offline server administration is unavailable. See CY_ID_INTEGRATION §14 for acceptance and cutover gates.

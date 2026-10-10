@@ -47,6 +47,7 @@ internal sealed class MainForm : Form
     private readonly TabPage invoiceTab = new("開立發票");
     private readonly TabPage recordsTab = new("已開立發票清單");
     private readonly Button forgotPasswordButton = UiControls.StandardButton("忘記密碼");
+    private bool ownsAccountManagement = true;
     private readonly Button accountManagementButton = UiControls.StandardButton("帳號管理");
     private readonly Button settingsButton = UiControls.StandardButton("設定");
     private readonly Label copyrightLabel = new()
@@ -249,7 +250,7 @@ internal sealed class MainForm : Form
             accountManagementButton.Width,
             accountManagementButton.Height);
         forgotPasswordButton.SetBounds(
-            Math.Max(0, accountManagementButton.Left - forgotPasswordButton.Width - HeaderButtonGap),
+            Math.Max(0, (ownsAccountManagement ? accountManagementButton.Left : settingsButton.Left) - forgotPasswordButton.Width - HeaderButtonGap),
             top,
             forgotPasswordButton.Width,
             forgotPasswordButton.Height);
@@ -285,6 +286,7 @@ internal sealed class MainForm : Form
 
     private void OpenAccountManagement()
     {
+        if (!repository.IdentityProvider.OwnsAccountManagement) return;
         if (!repository.HasAuthorityEmployees())
         {
             MessageBox.Show(this, "尚未建立可用的員工帳戶，請先完成首次設定或雲端帳號同步。", "密碼驗證",
@@ -308,6 +310,12 @@ internal sealed class MainForm : Form
 
     private void OpenPasswordRecovery()
     {
+        if (repository.IdentityProvider.Kind == IdentityProviderKind.CyId)
+        {
+            MessageBox.Show(this, "CYID 帳號的密碼復原與帳號設定請至 CY Web 辦理。", "忘記密碼",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
         if (repository.UsesCloudEmployeeAuthority())
         {
             try
@@ -551,6 +559,9 @@ internal sealed class MainForm : Form
 
     private void UpdateRuntimeModeInitial(Settings settings)
     {
+        ownsAccountManagement = settings.CloudIdentityProvider != "CYID";
+        accountManagementButton.Visible = ownsAccountManagement;
+        PositionHeaderButtons();
         if (settings.CloudMode == CloudModes.LocalOnly)
         {
             SetRuntimeModeState(
@@ -583,12 +594,17 @@ internal sealed class MainForm : Form
         SetRuntimeModeState(
             "雲端模式",
             SystemColors.ControlText,
-            "Cloud Employee 是唯一帳號主資料，正在確認 CYInvoice Cloud API 與中央帳號快取狀態。");
+            settings.CloudIdentityProvider == "CYID"
+                ? "CYID 為員工身分來源，正在確認 CYInvoice Cloud API 與裝置綁定。"
+                : "Cloud Employee 是唯一帳號主資料，正在確認 CYInvoice Cloud API 與中央帳號快取狀態。");
     }
 
     private async Task RefreshRuntimeModeAsync()
     {
         var requested = repository.Settings.LoadOrCreate();
+        ownsAccountManagement = requested.CloudIdentityProvider != "CYID";
+        accountManagementButton.Visible = ownsAccountManagement;
+        PositionHeaderButtons();
         var requestedMode = requested.CloudMode;
         var requestedUrl = requested.CloudBaseUrl.Trim();
 
@@ -628,7 +644,9 @@ internal sealed class MainForm : Form
                     SetRuntimeModeState(
                         "雲端帳號同步異常",
                         Color.FromArgb(180, 0, 0),
-                        "Cloud API 可連線，但中央帳號快取這次沒有更新。程式仍使用最後一次成功同步的 Cloud Employee 快取。\n\n" + syncProblem,
+                        (requested.CloudIdentityProvider == "CYID"
+                            ? "Cloud API 可連線，但這次無法確認 CYID 裝置綁定。受保護操作仍必須通過當次驗證。\n\n"
+                            : "Cloud API 可連線，但中央帳號快取這次沒有更新。程式仍使用最後一次成功同步的 Cloud Employee 快取。\n\n") + syncProblem,
                         showToolTip: true);
                     return;
                 }
@@ -636,7 +654,9 @@ internal sealed class MainForm : Form
 
             var onboardingText = onboarding.WorkspaceInitialized ? "已建立雲端空間" : "尚未建立雲端空間";
             var modeText = requestedMode == CloudModes.CloudTransition ? "雲端轉換中" : "雲端模式";
-            var detail = requestedMode == CloudModes.CloudTransition
+            var detail = requested.CloudIdentityProvider == "CYID"
+                ? "CYID 為員工身分來源；每次受保護操作取最新權限，帳號設定請至 CY Web。\n"
+                : requestedMode == CloudModes.CloudTransition
                 ? "Cloud Device identity 已連線，但 Employee authority 尚未切換。\n"
                 : "Cloud Employee 為唯一帳號主資料；本機已同步可供暫時離線驗證的安全快取。\n";
             SetRuntimeModeState(
@@ -685,6 +705,19 @@ internal sealed class MainForm : Form
         {
             var token = repository.Settings.CloudDeviceToken(settings);
             if (token.Length == 0) return "本機 Cloud Device Token 不存在。";
+            var binding = await CyIdGateway.DiscoverAsync(cloudHealthHttpClient, new Uri(baseUrl), token,
+                settings.CloudWorkspaceId, settings.CloudDeviceId, syncLifetime.Token);
+            if (binding is not null)
+            {
+                repository.Settings.ConfirmCyIdConfiguration(settings, binding);
+                repository.Settings.Save(settings);
+                ownsAccountManagement = false;
+                accountManagementButton.Visible = false;
+                PositionHeaderButtons();
+                return string.Empty;
+            }
+            if (settings.CloudIdentityProvider == "CYID")
+                return "伺服器身分來源與已確認的 CYID 綁定不一致，請由管理員檢查。";
             var authority = new CloudEmployeeAuthorityClient(
                 cloudHealthHttpClient,
                 new Uri(baseUrl, UriKind.Absolute),
@@ -723,7 +756,9 @@ internal sealed class MainForm : Form
         SetRuntimeModeState(
             "雲端離線",
             Color.FromArgb(180, 0, 0),
-            "這台電腦仍維持 Cloud Mode，不會切回舊 Local 帳號系統。需要權限的操作會使用最後一次成功同步的 Cloud Employee 離線快取。\n\n" + details,
+            (settings.CloudIdentityProvider == "CYID"
+                ? "這台電腦使用 CYID。只有真正傳輸中斷時，已在線驗證的員工才可使用原裝置最後加密快取；重新連線採最新權限。\n\n"
+                : "這台電腦仍維持 Cloud Mode，不會切回舊 Local 帳號系統。需要權限的操作會使用最後一次成功同步的 Cloud Employee 離線快取。\n\n") + details,
             showToolTip: true);
     }
 

@@ -137,8 +137,8 @@ jobs:
           if (health.ok !== true || health.storage !== 'ok') {
             throw new Error('Development Worker health or storage check failed.');
           }
-          if (health.cloudVersion !== '0.8.9') {
-            throw new Error(`Expected Cloud 0.8.9, got ${health.cloudVersion ?? 'unknown'}.`);
+          if (health.cloudVersion !== '0.9.0') {
+            throw new Error(`Expected Cloud 0.9.0, got ${health.cloudVersion ?? 'unknown'}.`);
           }
           if (String(health.apiVersion) !== '1') {
             throw new Error(`Expected API 1, got ${health.apiVersion ?? 'unknown'}.`);
@@ -146,8 +146,8 @@ jobs:
           if (String(health.schemaVersion) !== '8') {
             throw new Error(`Expected API-1 compatibility schema marker 8, got ${health.schemaVersion ?? 'unknown'}.`);
           }
-          if (String(health.storageSchemaVersion) !== '12') {
-            throw new Error(`Expected storage Schema 12, got ${health.storageSchemaVersion ?? 'unknown'}.`);
+          if (String(health.storageSchemaVersion) !== '13') {
+            throw new Error(`Expected storage Schema 13, got ${health.storageSchemaVersion ?? 'unknown'}.`);
           }
           for (const required of ['device-revoke-v1', 'device-self-status-v1', 'device-usage-v1', 'device-rename-v1']) {
             if (!capabilities.has(required)) throw new Error(`Missing required capability: ${required}.`);

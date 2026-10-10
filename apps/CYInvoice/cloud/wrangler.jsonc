@@ -7,7 +7,7 @@
   "vars": {
     "APP_ENV": "development",
     "API_VERSION": "1",
-    "SCHEMA_VERSION": "12"
+    "SCHEMA_VERSION": "13"
   },
   "d1_databases": [
     {

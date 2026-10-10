@@ -1,12 +1,12 @@
 # CYInvoice 待辦與驗證
 
-本檔只保留目前仍未完成、需要後續驗證或已明確延後的工作。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
+本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-10（Asia/Taipei）。main 為 V2.6.10 Build 2／6d997be0；目前工程候選版 **V2.6.14** 在 PR #216（尚未合併）。最新正式 Release 仍為 cyinvoice-v2.4.2。
+更新日期：2026-10-10（Asia/Taipei）。main 為 V2.6.10 Build 2／94f559cd；目前工程候選版 **V2.6.15** 為 CYID Consumer source，前置 V2.6.14 PR #216 仍未合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
-Cloud source 0.8.9／API 1／compatibility marker 8／storage Schema 12；development staged **10/10 Run #8 attempt 2** 已通過 migration／aggregate／FK／health／新 capabilities，0012 已套用且無 pending migration。CI 成功不等於實機驗收或遠端部署。
+Cloud source 0.9.0／API 1／compatibility marker 8／storage 13；未部署。最後 development 0.8.9／storage 12 的 development staged **10/10 Run #8 attempt 2** 已通過 migration／aggregate／FK／health／新 capabilities，0012 已套用且無 pending migration。CI 成功不等於實機驗收或遠端部署。
 
 ## 0. 接續優先順序
 
@@ -18,7 +18,7 @@ Cloud source 0.8.9／API 1／compatibility marker 8／storage Schema 12；develo
 | 目前 | A/B 最新工程版基線與即時中央權限／Offline reconnect | RC Q／R；四包已實作，不再重做 |
 | 目前 | 可拋棄 C 的 revoke／reset 與 ambiguous 恢復 | RC S／T／U；A/B recovery path 保留 |
 | 接續 | Invitation、Employee identity matrix／CRUD／Email／password recovery／transfer | 7.2；使用最新測試包，舊 Run343 Artifact 已到期 |
-| 後續實作 | CYID adapter／desktop offline／Device recovery | canonical contract 已發布；desktop transport 與 recovery 尚待設計、接線 |
+| 本輪 | CYID Consumer source CI／Windows 實機／隔離 staging 與切換計畫 | 7.3／RC AA；provider／gateway／offline 已接線，正式切換及 0-Device recovery 未完成 |
 | V3 協同 | Cloud Work Item／原子結案／revision、多機 OrderID 防撞、Audit | 7.5／7.6；identity gate 後分項開發 |
 | 後續 | 正式折讓 API／全域單號、自架手冊、酷澎樣本 | 5／6／9；不可用人工流程冒充完成 |
 
@@ -125,14 +125,22 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] 驗收 fresh-install 首次分流。
 - [ ] **延後／非目前阻塞：Cloud Employee offline cache 完整性簽章。** 未來可評估 server-signed snapshot／等效完整性保護；沒有實際竄改事件、威脅模型提高或稽核需求時長期擱置。
 
-### 7.3 CY ID consumer 接線（尚未實作）
+### 7.3 CYID Consumer（V2.6.15 source 已實作，正式切換未完成）
 
-三種正式路線、分離 Workspace／Device／Employee authority 與 CYID 模式隱藏帳號管理已定案，見 CY_ID_INTEGRATION.md。Built-in Cloud 保留為可獨立自架模式。CYID shared standard **1.0.2／minimum 1.0.0 已發布**，同 repo 直接讀 canonical package；「等待共同 contract 發布」已不是現況。
+設計與授權／限制見 CY_ID_INTEGRATION.md §14，PR #379 的 §13 保留原交接快照。Canonical 1.0.2／minimum 1.0.0；同 repo 直接引用，不建 contract mirror。
 
-- [ ] 依 canonical shared standard 定義 CYInvoice desktop／per-operation transport 與 acceptance，再實作 CyIdIdentityProvider／adapter、Workspace binding、App Access／role／enabled authority 與 fresh Device recovery；不得把 Web cookie transport 直接套入 WinForms 或複製 shared contract。
-- [ ] CY ID 模式 Windows Offline credential/cache 協定：Online 以 CY ID authority 為準、Offline 使用最後可信 protected cache、reconnect 後最新 authority 重生效；不得直接讀 CY ID D1 或形成雙 authority。
-- [ ] CY ID 模式 Account Management visibility / settings status / execution-time auth Windows UI acceptance。
-- [ ] CY ID 0-active-Device recovery 完成並驗證後，才把 `LAST_ACTIVE_DEVICE` server policy 改為 identity-provider-aware；此前 Built-in 規則維持不變。
+- [x] 核對 main 94f559cd、PR #216 V2.6.14 head 1e6d4137、PR #379 文件；整合新獨立工作分支，VERSION 2.6.15／BUILD 0。
+- [x] CyIdIdentityProvider、集中 provider 選擇、authenticated protected Workspace／Device binding；Local／Built-in 保留，確認 CYID 後不自動回退。
+- [x] Worker private IDENTITY gateway、Login／Resolve／finally Logout、穩定錯誤與無 Session／verifier 外洩；Device 與 Employee／App Access 權限分離。
+- [x] Device rename／revoke、pairing／invitation 沿用現有 mutation owner；0013 forward migration 區分 external invitation actor，保留 Built-in 歷史／FK。
+- [x] last-trusted protected offline cache，僅 transport failure 使用；online reject 清除 cache、reconnect 新權限重生效；不 export CYID verifier。
+- [x] Consumer Version 1.0.2、canonical support-window gate、real-provider Worker 與 C# contracts／拒絕／scope／outage／logout loss／onboarding 本機回歸。
+- [ ] 本輪精確 head Governance／Cloud／Windows CI 與完整 engineering Artifact；結果以 CLOUD_WORK_HANDOFF 為準。
+- [ ] RC_TEST AA Windows 實機 CYID：Account Management／settings／高權限操作，斷網／reconnect 與角色、App Access、停用、密碼変更後更新。
+- [ ] 核對真實 CYID Application 註冊／Workspace enablement／App Access、private Service Binding、兩 Workspace 配對；先隔離 staging，再討論正式切換（未授權）。
+- [ ] 受控切換：備份／0013／FK、EmployeeNo 與歷史 actor／pending 業務稽核、rollback／舊 client gate；不以 destructive reset 代替 migration。
+- [ ] CYID 0-active-Device recovery 實作／驗證後才調整 LAST_ACTIVE_DEVICE；目前保留原保護。
+- [ ] 若未來要整合 dialog／core 的重複驗證，依單一 operation context 收斂；不保存可重用 Session 或新增持續登入。
 
 ### 7.4 新裝置加入方式與安全紀錄
 

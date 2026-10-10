@@ -36,6 +36,7 @@ public enum IdentityProviderKind
 {
     Local,
     BuiltInCloud,
+    CyId,
 }
 
 public sealed record IdentityAuthenticationRequest(string EmployeeNo, string Password);
@@ -50,6 +51,11 @@ public sealed record AppPrincipal(
     IdentityProviderKind ProviderKind,
     int AuthorityRevision)
 {
+    public string WorkspaceId { get; init; } = string.Empty;
+    public int CredentialVersion { get; init; }
+    public bool IsIdentityAdmin { get; init; }
+    public bool EmailVerified { get; init; }
+
     public EmployeeAccount ToEmployeeAccount(DateTimeOffset? timestamp = null)
     {
         var value = timestamp ?? DateTimeOffset.UtcNow;
@@ -202,7 +208,8 @@ public sealed class BuiltInCloudIdentityProvider : IIdentityProvider
 public sealed class IdentityProviderRuntime(
     SettingsStore settings,
     IIdentityProvider local,
-    IIdentityProvider builtInCloud)
+    IIdentityProvider builtInCloud,
+    IIdentityProvider? cyId = null)
 {
     private readonly SettingsStore settings = settings ?? throw new ArgumentNullException(nameof(settings));
     private readonly IIdentityProvider local = local ?? throw new ArgumentNullException(nameof(local));
@@ -213,9 +220,11 @@ public sealed class IdentityProviderRuntime(
         get
         {
             var current = settings.LoadOrCreate();
+            if (current.CloudMode == CloudModes.LocalOnly) return local;
+            if (current.CloudIdentityProvider == "CYID")
+                return cyId ?? throw new InvalidOperationException("CYID Provider 尚未設定。");
             return current.CloudMode == CloudModes.CloudPreferred && current.CloudEmployeeAuthorityReady
-                ? builtInCloud
-                : local;
+                ? builtInCloud : local;
         }
     }
 }

@@ -2,6 +2,17 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.15 — 2026/10/10（CYID Consumer 工程版，未部署／正式切換）
+
+- 依 CYID canonical Consumer Contract 1.0.2 新增 CyIdIdentityProvider；集中式 provider owner 保留 Local／Built-in 模式，CYID 確認後不自動降回舊 authority。
+- 每次員工驗證由 CYInvoice Worker 經 private IDENTITY Service Binding 登入、Resolve、執行、finally Logout；Session 不傳給 Windows、不保存。Device Token 只代表裝置，Employee／App Access 由 CYID 判定，兩種 Workspace 明確綁定。
+- 真正 Windows transport 中斷才使用原裝置最後可信的 protected offline cache；Role／scope／本機離線 proof 整筆 DPAPI 保護。重新連線採最新 CYID，拒絕／停用／憑證失效清除該員工快取。HTTP 503、錯誤回應與取消不轉離線。
+- 裝置改名、撤銷、配對／邀請沿用既有流程及 audit owner；0013 forward migration 保留 Built-in 邀請歷史，獨立保存外部 CYID 邀請人 identity，不建立假 Built-in 帳號。
+- Windows 確認 CYID 綁定後隱藏帳號管理；加入不讀 Built-in Employee snapshot，忘記密碼改提示至 CY Web。未接入的舊 Worker 保持 Built-in。
+- Source Cloud 0.9.0／API 1／marker 8／storage 13，新增 cyid-consumer-v1；預設未啟用 CYID。沒有修改 CYID provider／canonical contract，CYID Consumer Impact: NONE。
+- 本機 TypeScript、real-provider gateway／onboarding／migration regression、C# Cloud contracts、Void workflow 29／Allowance 12／SQLite 13 通過；Linux WinForms cross-build 只作編譯預檢，真正 Windows CI／封裝及實機 acceptance 另記交接。
+- 新獨立功能按 Patch +1、BUILD 0；不宣告既有實機待辦完成，未建立 tag／Release。
+
 ## V2.6.14 — 2026/10/10（工程測試版，未正式 Release）
 
 - 裝置管理直接顯示「目前有 N 台使用中的裝置」、原有撤銷說明與 active 清單；移除分頁、狀態及撤銷時間欄。撤銷採共通 Danger button，最後一台防護與目前裝置安全重置維持。

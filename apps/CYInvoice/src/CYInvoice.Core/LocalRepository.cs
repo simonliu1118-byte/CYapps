@@ -40,14 +40,16 @@ public sealed class LocalRepository
     public IIdentityProvider IdentityProvider => identityRuntime.Current;
 
     public bool UsesCloudEmployeeAuthority() =>
-        IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud;
+        IdentityProvider.Kind is IdentityProviderKind.BuiltInCloud or IdentityProviderKind.CyId;
 
     public bool HasAuthorityEmployees() =>
+        IdentityProvider.Kind == IdentityProviderKind.CyId ? true :
         IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud
             ? CloudEmployees.LoadAll().Count != 0
             : Employees.HasEmployees();
 
     public IReadOnlyList<EmployeeAccount> LoadAuthorityEmployees() =>
+        IdentityProvider.Kind == IdentityProviderKind.CyId ? [] :
         IdentityProvider.Kind == IdentityProviderKind.BuiltInCloud
             ? CloudEmployees.LoadAll().Select(ToEmployeeAccount).ToArray()
             : Employees.LoadAll();
@@ -96,7 +98,8 @@ public sealed class LocalRepository
             new LocalIdentityProvider(employees),
             new BuiltInCloudIdentityProvider(
                 cloudEmployees,
-                new ConfiguredCloudEmployeeAuthoritySnapshotSource(settings)));
+                new ConfiguredCloudEmployeeAuthoritySnapshotSource(settings)),
+            new CyIdIdentityProvider(settings, new CyIdOfflineCache(data, protector)));
         invoices.LoadOrCreate();
         buyerNames.LoadOrCreate();
 

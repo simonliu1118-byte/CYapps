@@ -1,8 +1,8 @@
 # CYInvoice Identity Provider Refactor — Implementation Plan
 
-更新日期：2026-10-09（原設計基準：2026-09-29）
+更新日期：2026-10-10（原設計基準：2026-09-29）
 
-> Status: implementation-sequence reference. Packages 1–4 are implemented and merged; current acceptance and source/package evidence are in CLOUD_WORK_HANDOFF.md. TODO.md is the only progress checklist. CYID integration is still unimplemented; this plan is not a separate rules layer or release authorization.
+> Status: implementation-sequence reference. Packages 1–4 are implemented and merged; current acceptance and source/package evidence are in CLOUD_WORK_HANDOFF.md. TODO.md is the only progress checklist. V2.6.15 CYID consumer source is implemented, with live binding/cutover and real-device acceptance pending; this plan is not a separate rules layer or release authorization.
 
 ## 1. Why this work comes first
 
@@ -239,26 +239,13 @@ After the identity/refactor/reset foundations are stable, complete:
 
 ## 9. Package 6 — CY ID integration
 
-CYID has published canonical Consumer Integration Standard 1.0.2 (minimum 1.0.0). Read ../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md and its canonical package directly; do not copy a shared contract into CYInvoice. The remaining gate is desktop/per-operation transport and offline/recovery adaptation, followed by implementation and acceptance.
+V2.6.15 implements CyIdIdentityProvider behind the existing runtime owner and CYInvoice Worker private IDENTITY gateway. The current source consumes canonical Contract 1.0.2 (minimum 1.0.0), declared in CYID_CONSUMER_VERSION; same-repo canonical files remain the only shared authority. Implementation details, architecture exception, and deployment gates are in CY_ID_INTEGRATION.md §14; TODO.md §7.3 is the only checklist.
 
-Expected CYInvoice consumer inputs are intentionally small:
+Per-operation Login/Resolve/finally Logout keeps CYID Session server-only and ephemeral in consumer memory. CYID owns stable Employee identity, enabled, Workspace Role and App Access; CYInvoice owns Device/Workspace binding and business permission. Device management/onboarding reuse the current handler owner; old account authority routes reject in CYID mode. Windows hides account management and does not import Built-in snapshots.
 
-```text
-stable Employee identity
-enabled state
-CYInvoice App Access result
-CYInvoice role: SUPER_ADMIN | ADMIN | USER
-```
+A device-bound DPAPI cache permits the user-approved last-trusted offline behavior only on real transport interruption. It derives a local offline proof after online success, never downloads a central CYID verifier. Online errors do not become offline grants; reconnect refreshes authority. Cache has no new TTL, so central revocation cannot be observed while offline. Session loss can leave provider-owned expiry pending; no completed mutation is replayed.
 
-Then implement `CyIdIdentityProvider` (or equivalent adapter) without changing CYInvoice business workflows already migrated to the provider boundary.
-
-CY ID mode requirements:
-
-- Account Management hidden in CYInvoice;
-- CY ID role maps 1:1 to CYInvoice role;
-- App Access is consumed as an upstream allow/deny result, not re-managed inside CYInvoice;
-- Device/Workspace/business/offline responsibilities remain CYInvoice-owned;
-- final Windows offline credential/cache protocol is designed at integration time and must not create dual authority.
+Source tests use real CYID Worker with separate synthetic databases and C# cache/gateway contracts. Real Windows CI/package, RC AA, application enablement/private binding, reviewed migration/rollback and formal cutover remain separate gates. No production deployment or Release is authorized; 0-active-Device recovery remains unimplemented.
 
 ## 10. Package 7 — V3 business coordination
 
@@ -284,7 +271,7 @@ Cloud -> Local destructive reset
         ↓
 remaining Cloud acceptance
         ↓
-CY ID adapter after stable external contract
+CY ID consumer source + isolated staging / acceptance
         ↓
 V3 business coordination
 ```
@@ -293,4 +280,4 @@ Do not reverse this order by wiring CY ID directly into Forms/workflows before t
 
 ## 12. Current scope / version / release boundary
 
-The current engineering baseline is V2.6.14; device management, authenticated startup usage metadata and SUPER_ADMIN rename extend V2.6.13 while retaining the invitation fix. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.
+The current engineering baseline is V2.6.15; CYID Consumer adds the third provider while retaining V2.6.14 device management and previous UI/join fixes. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.
