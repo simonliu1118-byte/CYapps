@@ -368,3 +368,5 @@ SettingsStore 在更新 provider 前核對既有 endpoint／CYInvoice Workspace�
 V2.6.17 implementation：ServiceConnectivity 共用 checkGate 與 monotonic 60 秒節流；CYID background invalidation／操作時 proof 更新共用原 cache gate，Builtin revision 防舊快照覆寫。worker 在 provider 故障後仍重新確認 Device，撤銷結果優先；缺欄位／scope mismatch／configuration invalid 不降級。每個 portable directory 的 Program process gate 防其他程序在清除期間寫回，新程序等待原程序退出後直接恢复 authorized marker，不先開 repository。package manifest 只保存原始發行檔案；清除失敗維持 marker 並阻擋業務，缺 manifest 也不猜測刪除。正常授權升版保留 scope 與原資料；1.0.2/1.0.3 reader 是 canonical 支援版本窗，非第二套 authority。
 
 60 秒刷新不對 CYID 建立／刷新 Session。每裝置持續開啟一天約 1,440 次 permission refresh，15 秒 liveness 約 5,760 次 aggregate request（完整 sync 已包含其中）；只讀 D1 查詢，實際 requests/rows/延遲及免費額度待 staging 量測。離線期間无法得知中央異動，不能承諾即時撤銷。系統 temp 的既有 PDF preview finally 清理不屬 portable reset 掃描；不得擴大刪除外部共享 temp 或使用者 exports。
+
+Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID flag 關閉時，先升級 additive Cloud 0.9.2（包含 /v1/runtime/sync），再升級原 Windows 至 V2.6.17；完成 private RPC 與原裝置 staging 後才核准切 CYID。舊 Worker 404 明確提示版本未提供同步，保留原既有降級，不清除／不換 Workspace；不能把這種舊 Gateway 當作已完成新同步驗收。0.9.2 Cloud rollout 與 CYID 0.3.6 named entrypoint 都仍待部署授權。

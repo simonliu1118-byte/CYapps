@@ -150,6 +150,15 @@ internal static class ServiceConnectivityTests
         services.Cloud = true;
         await connection.CheckAsync();
         Check(services.Synchronizations.Last(), "reconnect immediately refreshes authority without waiting another minute");
+        services.HttpFailure = HttpStatusCode.NotFound;
+        var unsupported = await connection.CheckAsync();
+        Check(unsupported.UsesExistingFallback && unsupported.CloudProblem.Contains("雲端版本")
+            && !LocalResetCoordinator.HasPendingReset(temporary.Path), "old Worker needs an additive upgrade and never resets the original installation");
+        services.HttpFailure = HttpStatusCode.Unauthorized;
+        Check((await connection.CheckAsync()).CloudRejected && !LocalResetCoordinator.HasPendingReset(temporary.Path),
+            "unknown token is denial without authenticated revoke evidence");
+        services.HttpFailure = null;
+        Check(!(await connection.CheckAsync()).CloudRejected, "original Device recovers after successful current verification");
         var seed = BuiltInCloudAuthorityFreshnessTests.Seed;
         repository.CloudEmployees.ReplaceSnapshot("ws_services", 2, [seed("emp_super", "0001", "Super", EmployeeRoles.SuperAdmin, "SuperPass1", 1, 2, true)]);
         await ThrowsAsync<InvalidDataException>(() => Task.Run(() => repository.CloudEmployees.ReplaceSnapshot("ws_services", 1,
@@ -188,6 +197,7 @@ internal static class ServiceConnectivityTests
         public bool Revoked { get; set; }
         public int CloudCalls { get; set; }
         public object? Reply { get; set; }
+        public HttpStatusCode? HttpFailure { get; set; }
         public List<bool> Synchronizations { get; } = [];
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -199,6 +209,8 @@ internal static class ServiceConnectivityTests
             using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult());
             Synchronizations.Add(body.RootElement.GetProperty("synchronize").GetBoolean());
             CloudCalls++;
+            if (HttpFailure is { } failure) return Task.FromResult(new HttpResponseMessage(failure)
+                { Content = JsonContent.Create(new { ok = false }) });
             if (Reply is not null) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(Reply) });
             if (!Cloud) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
                 { Content = JsonContent.Create(new { ok = false, error = new { code = "STORAGE_UNAVAILABLE" } }) });

@@ -2,8 +2,9 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V2.6.17 — 2026-10-10（engineering，未部署／未正式切換）
+## V2.6.17 Build 1 — 2026-10-10（engineering，未部署／未正式切換）
 
+- Build 1 補舊 Gateway 404 的明確升級提示及 unknown token 不清除回歸；先升級保留 Built-in 的 additive Cloud 0.9.2，再升級 Windows／staging，不能拿舊 Gateway 當新同步已完成。Build 0 的治理 PR 標記格式已改為純文字。
 - 啟動、60 秒及重連以 POST /v1/runtime/sync 一次刷新 Device／binding／權限；15 秒連線檢查不每輪載入全員工，保留原光貿同步週期。Built-in snapshot 沿用既有 owner，revision 與 rows 同一查詢；拒絕舊 revision 覆寫。
 - CYID 採 canonical Contract 1.0.3 private invalidation，中央仍是唯一權威；背景不登入、不保存員工帳密、不建立 Session，只移除失效 proof。同一 Workspace／Device／Token 的 1.0.2 cache 在升版後保持原範圍，不要求重加裝置。
 - 人工結案／折讓及 Built-in 中央帳號操作改由最終 core／server 驗證，對話只收輸入；開窗權限不代替最終 mutation。儲存設定重新驗證管理員並防舊 provider 設定覆寫。

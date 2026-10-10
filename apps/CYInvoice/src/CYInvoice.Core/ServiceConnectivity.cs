@@ -79,6 +79,9 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
             request.Headers.Authorization = new("Bearer", settings.CloudDeviceToken(current));
             request.Content = JsonContent.Create(new { synchronize, authorities });
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                throw new CloudApiException("RUNTIME_SYNC_UNSUPPORTED",
+                    "雲端版本尚未提供裝置／權限合併同步。請先更新 Cloud，再測試新同步功能。", response.StatusCode);
             if (!response.IsSuccessStatusCode)
                 throw new CloudApiException("RUNTIME_SYNC_FAILED", "無法確認雲端狀態。", response.StatusCode);
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
