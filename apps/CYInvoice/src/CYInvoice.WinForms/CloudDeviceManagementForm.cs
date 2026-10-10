@@ -226,7 +226,7 @@ internal sealed class CloudDeviceManagementForm : Form
         if (selected.Current)
         {
             if (MessageBox.Show(this,
-                    "最後確認：CYInvoice 會先完整關閉，停止背景同步後才向 Cloud 撤銷目前 Device。Cloud 明確確認 Device 已撤銷後，才會刪除本機 Data / Cache 並回到首次使用。\n\n若 Cloud 結果不明，本機資料與 Device Token 都會保留，不會猜測成功。\n\n確定立即執行？",
+                    "最後確認：CYInvoice 會先完整關閉，停止背景同步後才向 Cloud 撤銷目前 Device。Cloud 明確確認 Device 已撤銷後，才會由重啟後的復原程序清除本機 Data / Cache / Logs 及其他執行資料，並回到首次使用。\n\n若 Cloud 結果不明，本機資料與 Device Token 都會保留，不會猜測成功。\n\n確定立即執行？",
                     "最後確認",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning,

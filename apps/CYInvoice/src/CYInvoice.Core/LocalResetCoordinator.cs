@@ -126,7 +126,8 @@ public static class LocalResetCoordinator
         string baseDirectory,
         ISecretProtector protector,
         LocalResetExecutionRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        HttpClient? httpClient = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
         ArgumentNullException.ThrowIfNull(protector);
@@ -152,7 +153,8 @@ public static class LocalResetCoordinator
             identity.DeviceId);
         SaveMarker(baseDirectory, cloudMarker);
 
-        using var httpClient = new HttpClient();
+        using var ownedHttp = httpClient is null ? new HttpClient() : null;
+        httpClient ??= ownedHttp!;
         var endpoint = new Uri(identity.BaseUrl, UriKind.Absolute);
         var selfClient = new CloudDeviceSelfStatusClient(httpClient, endpoint, identity.Token);
         var self = await selfClient.GetAsync(cancellationToken).ConfigureAwait(false);
@@ -160,6 +162,7 @@ public static class LocalResetCoordinator
 
         if (CanWipe(self))
         {
+            if (self.Status == "revoked") cloudMarker.Kind = KindRevokedDevice;
             AuthorizeAndWipe(baseDirectory, cloudMarker);
             return;
         }
@@ -183,6 +186,7 @@ public static class LocalResetCoordinator
                 || result.Device.Status != "revoked")
                 throw new InvalidDataException("Cloud did not confirm revocation of the current Device.");
 
+            cloudMarker.Kind = KindRevokedDevice;
             AuthorizeAndWipe(baseDirectory, cloudMarker);
         }
         catch (CloudApiException error) when (error.Code == "LAST_ACTIVE_DEVICE")
@@ -250,6 +254,7 @@ public static class LocalResetCoordinator
 
             if (CanWipe(self))
             {
+                if (self.Status == "revoked") marker.Kind = KindRevokedDevice;
                 marker.Phase = PhaseWipeAuthorized;
                 SaveMarker(baseDirectory, marker);
                 WipeLocalState(baseDirectory);
@@ -290,7 +295,7 @@ public static class LocalResetCoordinator
         ArgumentNullException.ThrowIfNull(self);
         baseDirectory = Path.GetFullPath(baseDirectory);
         ValidateIdentity(self, current.CloudWorkspaceId, current.CloudDeviceId);
-        if (current.CloudMode == CloudModes.LocalOnly || self.Status != "revoked")
+        if (current.CloudMode == CloudModes.LocalOnly || self.Status != "revoked" || self.RevokedAt is null)
             throw new LocalResetBlockedException("只有明確撤銷目前雲端裝置才能自動清除。");
         var existing = LoadMarker(baseDirectory);
         if (existing is not null)
@@ -359,6 +364,9 @@ public static class LocalResetCoordinator
     {
         marker.Phase = PhaseWipeAuthorized;
         SaveMarker(baseDirectory, marker);
+        // Confirmed Device revocation always waits for a fresh process. This
+        // includes a self-revoke initiated by the device-management window.
+        if (marker.Kind == KindRevokedDevice) return;
         WipeLocalState(baseDirectory);
     }
 

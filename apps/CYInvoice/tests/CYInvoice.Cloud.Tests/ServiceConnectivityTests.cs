@@ -168,17 +168,21 @@ internal static class ServiceConnectivityTests
         Check((await connection.CheckAsync()).CloudRejected && !LocalResetCoordinator.HasPendingReset(temporary.Path),
             "missing successful-response fields fail closed without authorizing wipe");
         services.Reply = new { ok = true, device = new { workspaceId = "ws_services", deviceId = "dev_other",
-            status = "revoked", workspaceStatus = "active" } };
+            status = "revoked", workspaceStatus = "active", revokedAt = "2026-10-10T00:00:00Z" } };
         Check((await connection.CheckAsync()).CloudRejected && !LocalResetCoordinator.HasPendingReset(temporary.Path),
             "revocation of a different Device cannot wipe this installation");
         services.Reply = new { ok = true, device = new { workspaceId = "ws_services", deviceId = "dev_services",
             status = "active", workspaceStatus = "disabled" } };
         Check((await connection.CheckAsync()).CloudRejected && !LocalResetCoordinator.HasPendingReset(temporary.Path),
             "Workspace disable blocks but does not authorize automatic wipe");
+        services.Reply = new { ok = true, device = new { workspaceId = "ws_services", deviceId = "dev_services",
+            status = "revoked", workspaceStatus = "active" } };
+        Check((await connection.CheckAsync()).CloudRejected && !LocalResetCoordinator.HasPendingReset(temporary.Path),
+            "incomplete revocation evidence never authorizes wipe");
         Directory.CreateDirectory(Path.Combine(temporary.Path, "Logs"));
         File.WriteAllText(Path.Combine(temporary.Path, "Logs", "test.log"), "synthetic log");
         services.Reply = new { ok = true, device = new { workspaceId = "ws_services", deviceId = "dev_services",
-            status = "revoked", workspaceStatus = "active" } };
+            status = "revoked", workspaceStatus = "active", revokedAt = "2026-10-10T00:00:00Z" } };
         Check((await connection.CheckAsync()).CloudRejected && LocalResetCoordinator.IsRevokedDeviceResetPending(temporary.Path)
             && File.Exists(Path.Combine(temporary.Path, "Logs", "test.log")), "explicit same-Device revoke persists recovery before shutdown or deletion");
     }

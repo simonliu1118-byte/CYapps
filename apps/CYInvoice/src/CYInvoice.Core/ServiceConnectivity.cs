@@ -93,8 +93,7 @@ public sealed class ServiceConnectivity(SettingsStore settings, HttpClient? http
             var root = json.RootElement;
             if (!root.GetProperty("ok").GetBoolean()) throw new InvalidDataException("同步回應無效。");
             var d = root.GetProperty("device");
-            var self = new CloudDeviceSelfStatus(d.GetProperty("deviceId").GetString()!, d.GetProperty("workspaceId").GetString()!,
-                d.GetProperty("status").GetString()!, d.GetProperty("workspaceStatus").GetString()!, null);
+            var self = CloudDeviceSelfStatusClient.ReadStatus(d);
             if (self.WorkspaceId != current.CloudWorkspaceId || self.DeviceId != current.CloudDeviceId)
                 throw new InvalidDataException("同步裝置／Workspace 不一致。");
             if (self.Status == "revoked")

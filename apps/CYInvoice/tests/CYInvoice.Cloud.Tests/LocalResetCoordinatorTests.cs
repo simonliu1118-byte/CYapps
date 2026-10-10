@@ -1,12 +1,15 @@
 using CYInvoice.Core.Storage;
 using CYInvoice.Core.Cloud;
 using System.Text.Json;
+using System.Net;
+using System.Net.Http.Json;
 
 internal static class LocalResetCoordinatorTests
 {
     public static async Task RunAsync()
     {
         await TestRevokedRecoveryAsync();
+        await TestSelfRevokeRecoveryAsync();
         var directory = Path.Combine(Path.GetTempPath(), "CYInvoice.LocalReset.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -95,6 +98,44 @@ internal static class LocalResetCoordinatorTests
             True(LocalResetCoordinator.HasPendingReset(directory), "unreadable marker cannot be mistaken for completed recovery");
         }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static async Task TestSelfRevokeRecoveryAsync()
+    {
+        using var temporary = new AuthorityTemporaryDirectory();
+        var protector = new ResetTestProtector();
+        var repository = LocalRepository.Open(temporary.Path, protector);
+        var settings = repository.Settings.LoadOrCreate();
+        settings.CloudWorkspaceId = "workspace";
+        settings.CloudDeviceId = "device";
+        settings.CloudBaseUrl = "https://synthetic.invalid/";
+        repository.Settings.SetCloudDeviceToken(settings, "cydev_" + new string('a', 64));
+        repository.Settings.Save(settings);
+        File.WriteAllText(Path.Combine(temporary.Path, "CYInvoice.exe"), "original");
+        File.WriteAllText(Path.Combine(temporary.Path, LocalResetCoordinator.PackageManifestFileName), "[\"CYInvoice.exe\"]");
+        var logs = Path.Combine(temporary.Path, "Logs");
+        Directory.CreateDirectory(logs);
+        File.WriteAllText(Path.Combine(logs, "test.log"), "synthetic log");
+        using var http = new HttpClient(new RevokedSelfHandler());
+        await LocalResetCoordinator.ExecuteAsync(temporary.Path, protector,
+            new LocalResetExecutionRequest(LocalResetKind.BuiltInCloud), httpClient: http);
+        True(LocalResetCoordinator.IsRevokedDeviceResetPending(temporary.Path) && Directory.Exists(logs),
+            "self-revoke must authorize full cleanup but leave it to fresh-process recovery");
+        await LocalResetCoordinator.RecoverPendingAsync(temporary.Path, protector);
+        True(!Directory.Exists(logs) && !Directory.Exists(Path.Combine(temporary.Path, "Data"))
+            && File.Exists(Path.Combine(temporary.Path, "CYInvoice.exe")), "self-revoke also wipes Logs and preserves only package originals");
+    }
+
+    private sealed class RevokedSelfHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            True(request.RequestUri!.AbsolutePath == "/v1/devices/self-status", "only authenticated self-state is required for an already revoked device");
+            True(request.Headers.Authorization?.Scheme == "Bearer", "self-state must use the bound Device token");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new {
+                ok = true, workspaceId = "workspace", deviceId = "device", status = "revoked", workspaceStatus = "active",
+                revokedAt = "2026-10-10T00:00:00Z" }) });
+        }
     }
 
     private static void Equal<T>(T expected, T actual, string description)

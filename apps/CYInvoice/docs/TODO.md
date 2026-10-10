@@ -170,7 +170,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] 本地回歸覆蓋 single request、真實 Provider／Built-in／Local、startup、cache／credential／permission／deleted employee、stale response、CYID outage＋revoke、重連、Logs／模擬程序中斷後 partial wipe；真實 kill／檔案占用另由 RC AC 驗收。
 - [ ] 精確 head Windows CI／DPAPI／smoke／package safety scan 與 engineering Artifact，結果以 PR #380 checks 為準。
 - [ ] RC AC 實機撤銷／關閉／kill／下次啟動／Logs／初始設定／光貿結果不明；原 RC AA／AB 與正式切換 gate 保留。
-- [x] 開始 runtime 新工作時按共通規則推進版本、同步 CHANGELOG／狀態／設計／驗收；版本為 2.6.17／BUILD 1，人工／staging 不冒充完成。
+- [x] 開始 runtime 新工作時按共通規則推進版本、同步 CHANGELOG／狀態／設計／驗收；版本為 2.6.17／BUILD 2，人工／staging 不冒充完成。
 
 ### 7.4 新裝置加入方式與安全紀錄
 
