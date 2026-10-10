@@ -1,7 +1,7 @@
 import readExcelFile, { readSheet } from 'read-excel-file/universal';
 import { buildMonthlyWorkbook, buildImportTemplateWorkbook, handleExcelExportApi } from '../src/excel-export.js';
-import { analyzeImportRows } from '../src/excel-import.js';
-import { unzipSync, strFromU8 } from 'fflate';
+import { analyzeImportRows, handleExcelImportApi } from '../src/excel-import.js';
+import { unzipSync, zipSync, strFromU8 } from 'fflate';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -52,6 +52,19 @@ const historicalRows = await readSheet(historical.buffer.slice(historical.byteOf
 assert(historicalRows.length === 186, 'historical export retains all 180 records');
 assert(historicalRows[2][3] === 6000 && historicalRows[2][5] === 12000 && historicalRows[3][1] === -3000, 'historical export totals include both accounts');
 assert(historicalRows.slice(6).filter(row => row[1] === '測試現金').length === 90 && historicalRows.slice(6).filter(row => row[1] === '測試銀行').length === 90, 'historical export preserves every account');
+
+// Compressed worksheet XML > 512 KiB used to start an unsupported nested
+// worker inside read-excel-file. Exercise the actual canonical inspect route.
+const largeWorkbook = buildMonthlyWorkbook({ month:'2026-02', accountNames:['測試現金'], openingMap:new Map(),
+  transactions:Array.from({length:4000},(_,i)=>({id:i+1,tx_date:'2026-02-01',account_name:'測試現金',kind:'income',category_name:'測試收入',summary:`大量工作表測試 ${i}`,amount:1,created_at:'2026-02-01T00:00:00Z'})) });
+const xmlEntries = unzipSync(largeWorkbook);
+assert(Object.entries(xmlEntries).some(([name,bytes])=>name.startsWith('xl/worksheets/') && bytes.byteLength>512*1024),'large compressed XML fixture must hit the nested worker threshold');
+const compressed = zipSync(xmlEntries,{level:6});
+const inspected = await handleExcelImportApi(new Request('https://test.invalid/api/import/xlsx/inspect',{method:'POST',body:compressed}),{});
+assert(inspected.status===200,'large compressed workbook parses in Worker-compatible path');
+assert((await inspected.json()).sheets[0].rowCount===4006,'large workbook inspect retains all records');
+const parsedLarge = await handleExcelImportApi(new Request('https://test.invalid/api/import/xlsx/inspect?mode=sheet&sheet=1',{method:'POST',body:compressed}),{});
+assert(parsedLarge.status===200 && (await parsedLarge.json()).rows.length===4006,'large worksheet parses in canonical sheet route');
 
 class MockStatement {
   constructor(sql) {
