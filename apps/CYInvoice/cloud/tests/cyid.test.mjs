@@ -87,6 +87,22 @@ async function call(path, body, token = tokens[0], overrides = {}) {
   return { status: response.status, body: await response.json() };
 }
 const credentials = { employeeNo: '0001', password: pass };
+// Change identity authority on an existing installation, without claiming a new Device or Workspace.
+const continuitySnapshot = () => Object.fromEntries(
+  ['workspaces', 'devices', 'cloud_employees', 'device_invitations', 'security_audit_events']
+    .map(table => [table, consumer.db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]));
+const beforeCutover = continuitySnapshot();
+for (const token of tokens) {
+  const before = await call('/v1/identity-provider', undefined, token, { CYID_ENABLED: 'false' });
+  assert.equal(before.status, 200);
+  assert.equal(before.body.provider, 'BUILT_IN');
+  const after = await call('/v1/identity-provider', undefined, token);
+  assert.equal(after.status, 200);
+  assert.equal(after.body.provider, 'CYID');
+  assert.equal(after.body.workspaceId, 'ws_invoice');
+  assert.equal(after.body.deviceId, ids[tokens.indexOf(token)]);
+  assert.equal(after.body.identityWorkspaceId, 'ws_identity');
+}
 const auth = await call('/v1/cyid/authenticate', credentials);
 assert.equal(auth.status, 200);
 assert.equal(auth.body.principal.workspaceRole, 'SUPER_ADMIN');
@@ -101,6 +117,8 @@ assert.equal((await call('/v1/identity-provider')).body.provider, 'CYID');
 assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { CYID_ENABLED: 'false' })).body.provider, 'BUILT_IN');
 assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { IDENTITY_WORKSPACE_ID: undefined })).status, 503);
 assert.equal((await call('/v1/identity-provider', undefined, tokens[0], { IDENTITY_CYINVOICE_WORKSPACE_ID: 'ws_other' })).status, 409);
+assert.deepEqual(continuitySnapshot(), beforeCutover,
+  'authority discovery, authentication and rejected rebinding preserve all existing consumer Workspace/Device/history rows');
 assert.equal((await call('/v1/cyid/authenticate', credentials, `cydev_${'f'.repeat(64)}`)).status, 401);
 for (const path of ['/v1/employee-authority/snapshot', '/v1/employees', '/v1/web-auth/login', '/v1/bootstrap'])
   assert.equal((await call(path, path.endsWith('snapshot') || path.endsWith('employees') ? undefined : credentials)).status, 409);

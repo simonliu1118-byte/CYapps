@@ -3,10 +3,86 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using CYInvoice.Core;
 using CYInvoice.Core.Storage;
 
 internal static class CyIdIdentityProviderTests
 {
+    public static async Task WorkspaceContinuityAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "CYInvoice.CyId.Continuity", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var protector = new Protector();
+            var repository = LocalRepository.Open(directory, protector);
+            var settings = repository.Settings.LoadOrCreate();
+            settings.ProductionInvoice = "12345675";
+            settings.Environment = Environments.Production;
+            settings.InvoicePrinterName = "Synthetic Printer";
+            settings.CloudBaseUrl = "https://invoice.example.test/";
+            settings.CloudWorkspaceId = "ws_invoice";
+            settings.CloudDeviceId = "dev_test";
+            var token = "cydev_" + new string('a', 64);
+            repository.Settings.SetCloudDeviceToken(settings, token);
+            repository.Settings.SetProductionAppKey(settings, "SyntheticAppKey");
+            repository.Settings.SetMoPassword(settings, "SyntheticMoPassword");
+            repository.Settings.MarkCloudEmployeeAuthorityReady(settings);
+            repository.Settings.Save(settings);
+            // Reopen with the existing company scope, as an already configured installation does.
+            repository = LocalRepository.Open(directory, protector);
+            repository.Invoices.Append(new InvoiceRecord
+            {
+                Id = "existing-pending", Source = "手動", OriginalOrderId = "M20261010001",
+                OrderId = "M20261010001", ApiOrderId = "M20261010001", SellerInvoice = "12345675",
+                Environment = Environments.Production, InvoiceNumber = "AA12345678",
+                InvoiceState = InvoiceStates.OpenedWaitingVoid, Amount = 100,
+                BuyerIdentifier = "12345675", BuyerName = "Synthetic Buyer", MainRemark = "保留原待處理紀錄",
+                UploadStatus = 31, UploadStatusText = "處理中",
+            });
+            repository.BuyerNames.RememberAfterSuccessfulInvoice("12345675", true, "", "Synthetic Buyer", true);
+            var invoicesBefore = JsonSerializer.Serialize(repository.Invoices.LoadOrCreate());
+            var settingsPath = Path.Combine(repository.DataDirectory, "settings.json");
+            var settingsBefore = File.ReadAllText(settingsPath);
+            var protectedToken = settings.CloudDeviceTokenEncrypted;
+            var protectedKey = settings.ProductionAppKeyEncrypted;
+            var protectedMo = settings.MoPasswordEncrypted;
+            var pdfPath = Path.Combine(repository.InvoicePdfCacheDirectory, "existing.pdf");
+            File.WriteAllText(pdfPath, "synthetic cached document");
+            var binding = new CyIdBinding(settings.CloudBaseUrl, settings.CloudWorkspaceId, settings.CloudDeviceId,
+                "ws_identity", "CYINVOICE", "1.0.2", CyIdGateway.TokenDigest(token));
+            try
+            {
+                repository.Settings.ConfirmCyIdConfiguration(settings, binding with { WorkspaceId = "ws_other" });
+                throw new InvalidOperationException("A cutover must reject replacing the existing CYInvoice Workspace");
+            }
+            catch (InvalidDataException) { }
+            Check(settings.CloudIdentityProvider == "BUILT_IN" && File.ReadAllText(settingsPath) == settingsBefore,
+                "mismatched cutover leaves the original authority and persisted settings intact");
+
+            repository.Settings.ConfirmCyIdConfiguration(settings, binding);
+            repository.Settings.Save(settings);
+            repository = LocalRepository.Open(directory, protector);
+            var after = repository.Settings.LoadOrCreate();
+            Check(after.CloudWorkspaceId == "ws_invoice" && after.CloudDeviceId == "dev_test"
+                && after.CloudBaseUrl == binding.BaseUrl && after.CloudDeviceTokenEncrypted == protectedToken
+                && repository.Settings.CloudDeviceToken(after) == token, "same Workspace, endpoint, Device and protected Token after restart");
+            Check(after.ProductionInvoice == "12345675" && after.Environment == Environments.Production
+                && after.InvoicePrinterName == "Synthetic Printer" && after.ProductionAppKeyEncrypted == protectedKey
+                && after.MoPasswordEncrypted == protectedMo, "business configuration and protected credentials survive cutover");
+            Check(JsonSerializer.Serialize(repository.Invoices.LoadOrCreate()) == invoicesBefore
+                && repository.BuyerNames.TryLookup("12345675", out var buyer) && buyer == "Synthetic Buyer"
+                && File.ReadAllText(pdfPath) == "synthetic cached document", "existing invoices, pending state, buyer memory and PDF cache survive restart");
+            Check(repository.IdentityProvider.Kind == IdentityProviderKind.CyId && repository.HasAuthorityEmployees(),
+                "existing installation selects CYID without new Workspace, rejoin or local employee setup");
+            using var http = new HttpClient(new Handler(token));
+            var provider = new CyIdIdentityProvider(repository.Settings, new CyIdOfflineCache(repository.DataDirectory, protector), http);
+            Check((await provider.AuthenticateAsync(new("0002", "SyntheticPass1")))?.WorkspaceId == "ws_identity",
+                "new authority authenticates through the original device while identity scope remains separate");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
     public static async Task RunAsync()
     {
         var directory = Path.Combine(Path.GetTempPath(), "CYInvoice.CyId.Tests", Guid.NewGuid().ToString("N"));

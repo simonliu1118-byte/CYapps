@@ -35,6 +35,10 @@ Architecture Exception：依使用者保留既有 last-trusted offline 行為，
 
 剩餘人工／切換驗收只在 TODO §7.3、RC AA 追蹤：Windows 實機及舊 A/B/C、staging bindings、受控 migration／actor audit／rollback。0-active-Device recovery 未做，LAST_ACTIVE_DEVICE 保護維持；125／150 DPI 仍 Deferred。
 
+2026-10-10 使用者補充：切 CYID 必須在原 CYInvoice Workspace 接續工作。既有 Confirm binding 路徑只更新 authority，拒絕不同 Workspace；本輪補 source continuity regression（兩台原 Device Token、consumer 歷史 rows、本機 SQLite／settings 切換後重開及 pending／PDF／protected credentials 保留），不新增 runtime path／schema／版本。切換前所有 active Windows 升級、CYID accounts/access/roles/email 與原裝置 staging 業務驗收未完成時維持 Built-in；禁止重建／重新加入／reset 代替接續。詳見 integration §14.5、TODO 7.3、RC AA。
+
+離線語意釐清：快取只備援 Windows→驗證入口 transport failure；整機斷網不能透過光貿新開票，private CYID outage HTTP 503 仍拒絕。本輪只補文件／回歸，不新增離線配號／自動重送，不改 last-trusted policy；最新精確 head CI 仍以 #380 checks 為準。
+
 ## V2.6.14 裝置管理
 
 主視窗只管 active inventory／selection／rename／revoke；原 tabs 及新增流程已移除。獨立 CloudAddDeviceForm 是新增／ticket／timer／lifetime owner，保留同一 CloudClient、既有 pairing／invitation authorization 與重開狀態恢復。返回主窗重新載入 inventory；不建立第二套加入路徑。

@@ -321,11 +321,13 @@
 先安排隔離 staging，確認 registered Application／Workspace enablement／App Access、private IDENTITY binding、兩 Workspace 配對、0013 backup/FK；記錄 PR 精確 head、工程包 hash 和環境，不把上一版包或 local provider fixture 當 live 證據。原 Local／Built-in A/B/C 與業務驗收保留。
 
 - [ ] Local／Built-in 原流程及舊 discovery-404 Worker 不受影響；已確認 CYID 的 client 不自動降級。
+- [ ] 原 A/B/C 安裝先升級到 CYID-capable Windows，備妥各員工啟用／App Access／Role／verified 超管 Email，再受控啟用。前後核對同一 CYInvoice Workspace、原 Device／Token、公司／印表機／protected secrets、發票／pending／買方／PDF；重開可繼續原工作，不重新加入／建立 Workspace／reset，錯綁定拒絕且保留原設定。
 - [ ] CYID invitation／pairing 首次加入成功，pending token 中斷／重開仍只 claim 一次；不讀 Built-in Employee snapshot，不建立 Local 員工。
 - [ ] Account Management 隱藏且上方按鈕排列正常；settings 顯示 CYID，忘記密碼提示 CY Web；首次啟用／重設在 CY Web 完成。
 - [ ] USER／ADMIN／SUPER_ADMIN 逐次帳密驗證原本開票／作廢／折讓／設定／裝置 rename/revoke；Identity Admin 不升格為 app SUPER_ADMIN。
 - [ ] App Access 撤銷／恢復、role change、Employee disable、password/credential change 後，下一次在線驗證立即採新結果；拒絕清除相應 cache。
 - [ ] 原裝置先成功在線驗證，再斷網／transport timeout：正確密碼用最後 protected Role，錯誤密碼拒絕；未在線成功的員工沒有 offline grant。
+- [ ] 整機斷網無法光貿新開票，不把登入成功視為開票成功；只阻斷 Windows→CYInvoice transport、光貿仍可達時才驗收快取驗證後的光貿操作。Worker→private CYID 故障回覆 503 仍拒絕；結果不明禁止重送。
 - [ ] HTTP 401／403／503、畸形或錯 scope 回應、使用者取消不走 offline；Device／provider／Workspace 錯誤拒絕並清全部 cache。
 - [ ] Offline→reconnect 再操作採新權限；中央撤銷在斷網期間不可觀察，last-trusted 無新增 TTL 的產品邊界確實可接受。
 - [ ] A/B/C 裝置 token 不能代替 Employee；撤銷後舊 Token 不可用；複製 cache／修改 endpoint／Workspace／Device／token 不可重用。

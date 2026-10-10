@@ -12,6 +12,7 @@
 - Source Cloud 0.9.0／API 1／marker 8／storage 13，新增 cyid-consumer-v1；預設未啟用 CYID。沒有修改 CYID provider／canonical contract，CYID Consumer Impact: NONE。
 - 本機 TypeScript、real-provider gateway／onboarding／migration regression、C# Cloud contracts、Void workflow 29／Allowance 12／SQLite 13 通過；Linux WinForms cross-build 只作編譯預檢，真正 Windows CI／封裝及實機 acceptance 另記交接。
 - PR #380 整合 source，canonical adoption 另由治理 #381／2.3.34 完成；本輪精確 head CI／測試包以 #380 checks 為準。
+- 10/10 補原 Workspace 接續 regression：同一 Device／Token、consumer history 及本機設定／資料在 authority 切換後重開保留，拒絕改綁不同業務 Workspace。文件明定升級／帳號授權／原裝置 staging 驗收先於啟用，不要求重建或重新加入；離線驗證不等於光貿離線開票，HTTP 503 不 fallback。本次只新增測試／文件，不修改產品 VERSION／BUILD 或部署。
 - 新獨立功能按 Patch +1、BUILD 0；不宣告既有實機待辦完成，未建立 tag／Release。
 
 ## V2.6.14 — 2026/10/10（工程測試版，未正式 Release）

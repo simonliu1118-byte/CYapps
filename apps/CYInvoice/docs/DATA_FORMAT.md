@@ -268,6 +268,8 @@ V2.6.11 UI 以 InvoiceWorkQueue 唯讀投影分為「上傳問題／處理中」
 
 SettingsModels 新增 `cloud_identity_provider`（BUILT_IN／CYID，default BUILT_IN）及 `cyid_binding_enc`。Confirmed CYID binding 由 Device-authenticated discovery 取得，包含 gateway URL、CYInvoice Workspace、Device、CYID Workspace、Application、Consumer Version、Device Token SHA-256 digest；整筆由 Windows DPAPI 保護，讀取時必須符合目前 endpoint／Device／token。不保存 CYID Session 或 password，不把 client 提供的 scope 當 authority。
 
+切換沿用原 `cloud_workspace_id`／`cloud_device_id`／`cloud_device_token_enc`；CYID Workspace 只保存在 identity binding，不覆寫業務 Workspace。Data／Cache、SQLite 發票／pending 及其他公司設定不因 authority 切換重建或清除。
+
 `Data/cyid_offline_cache.json` 以 employeeNo 索引 protected entry；每筆完整 binding、AppPrincipal（含 Role／credentialVersion／employeeRevision）、隨機 salt 及本機 PBKDF2-SHA256 210000 次 proof 都在 DPAPI ciphertext 中。Proof 是 online success 後本機建立，不是 CYID credential verifier。Offline 僅 transport failure 可用，中央拒絕／失效會清除相應 entry；Device／scope 改變不能重用。沒有新增 TTL，不聲稱即時得知離線撤銷。
 
 Cloud→Local destructive reset 的既有完整 Data replacement 也移除 CYID binding/cache。Built-in SQLite employee cache 保留自己的模式用途，CYID 不下載或使用它作 Employee authority；不新增 CYID employee replica 或第二套 business state。

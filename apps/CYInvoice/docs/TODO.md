@@ -135,6 +135,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] Device rename／revoke、pairing／invitation 沿用現有 mutation owner；0013 forward migration 區分 external invitation actor，保留 Built-in 歷史／FK。
 - [x] last-trusted protected offline cache，僅 transport failure 使用；online reject 清除 cache、reconnect 新權限重生效；不 export CYID verifier。
 - [x] Consumer Version 1.0.2、canonical support-window gate、real-provider Worker 與 C# contracts／拒絕／scope／outage／logout loss／onboarding 本機回歸。
+- [x] 原 Workspace 接續 source regression：原兩台 Device Token 切換前後可用；本機切換後重開保留 Workspace／Device／Token、發票 pending、買方／PDF、公司設定及 protected credentials；錯綁定不覆寫。
 
 本輪精確 head Governance／Cloud／Windows CI 與 engineering Artifact 以 [#380 checks](https://github.com/simonliu1118-byte/CYapps/pull/380/checks) 為單一即時結果；source／治理證據見 CLOUD_WORK_HANDOFF，不用手動 checklist 鏡像 run 狀態。
 
@@ -142,6 +143,8 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] RC_TEST AA Windows 實機 CYID：Account Management／settings／高權限操作，斷網／reconnect 與角色、App Access、停用、密碼變更後更新。
 - [ ] 核對真實 CYID Application 註冊／Workspace enablement／App Access、private Service Binding、兩 Workspace 配對；先隔離 staging，再討論正式切換（未授權）。
 - [ ] 受控切換：備份／0013／FK、EmployeeNo 與歷史 actor／pending 業務稽核、rollback／舊 client gate；不以 destructive reset 代替 migration。
+- [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（本輪 V2.6.15），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
+- [ ] 分別驗收整機斷網、僅 Windows→驗證入口 transport 失敗但光貿可達、private CYID 故障回覆 503；離線驗證不等於離線開票，503 不 fallback，不新增斷網自動重送。
 - [ ] CYID 0-active-Device recovery 實作／驗證後才調整 LAST_ACTIVE_DEVICE；目前保留原保護。
 - [ ] 若未來要整合 dialog／core 的重複驗證，依單一 operation context 收斂；不保存可重用 Session 或新增持續登入。
 
