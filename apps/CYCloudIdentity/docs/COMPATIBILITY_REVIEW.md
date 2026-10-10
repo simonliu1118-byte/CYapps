@@ -75,3 +75,22 @@ The findings above describe the reviewed historical baseline. The remaining sour
 ## Release evidence — 2026-10-01
 
 CYID 0.3.5 and CY Web 0.7.0 are development-deployed, with actual version/binding/D1-health/invalid-Session readback in runs 36821423383 and 36821410198. Routine production readiness also checks the protected existing core Worker Service Binding, Application ID and consumer declaration; development consumer health alone is insufficient. No production release or real Email/browser acceptance is claimed.
+
+## GitHub source follow-up — 2026-10-10
+
+This section is a dated evidence addendum to the 2026-10-01 review, not a replacement of historical baseline conclusions. CYID `main` remains source version `0.3.5`; shared consumer contract remains `1.0.2` (minimum `1.0.0`). No provider/runtime/schema change was made in this review; **CYID Consumer Impact: NONE**.
+
+| Source-verified concern | CY Web | CYACCweb | Interpretation |
+| --- | --- | --- | --- |
+| Transport | `IDENTITY` Service Binding / `env.IDENTITY.fetch()` | Same | Same private Worker-to-Worker architecture; no direct CYID D1 binding in consumer |
+| Core endpoints | `/v1/identity/login`, `/v1/identity/session/resolve`, `/v1/identity/logout` | Same | Shared canonical CYID API |
+| Session resolve header | Bearer token + `x-identity-application` | Same | CYID validates current app-scoped authority |
+| Principal validation | Strict required field/role/capability and revision checks | More permissive booleans and version coercion | Harden CYACC consumer; provider currently constructs normalized principal |
+| Login path | Set Cookie after provider Login | Login + immediate provider Resolve + Cookie | Extra CYACC resolve is not a second authority; measure before simplifying |
+| Cookie attributes | HttpOnly, Secure, `SameSite=Strict` | HttpOnly, Secure, `SameSite=Lax`, explicit `Expires` | Intentional app-specific Tablet/Safari transport difference |
+| Timeout | Default 5 s, covers provider body | Default 5 s configurable, primarily fetch promise | Align failure semantics without adding wrapping layers |
+| Logout | Provider revocation before success; currently non-5xx response treated as success | Worker returns `ok: true` on provider failure and clears browser cookie; browser always navigates after attempt | Preserve clear-cookie safety; distinguish revoked/unconfirmed/request-failed states and test them |
+
+Relevant read-only source: `chihyuan-web/worker/identity/cycloud-identity-adapter.ts`, `provider-transport.ts`; `CYapps/apps/CYAccountingWeb/src/identity-adapter.js`, `src/app.js`, `public/auth.js`; CYID `src/session-auth.ts`. Templates establish expected `IDENTITY` Binding but **do not prove** deployed production Binding points at the same provider or D1. Cloudflare current runtime bindings, actual quota headroom, real email/device and production rollout remain separate verification tasks (tracked once in `../TODO.md`).
+
+Next Consumer: CYInvoice's planned `CyIdIdentityProvider` still needs Device/local/offline contract design; CYERPAutoInput has no existing CYID implementation and may not need its own cloud business D1. No selection/implementation is inferred here. Existing standard `CONSUMER_INTEGRATION_STANDARD.md` is unchanged; this report does not create an alternative contract or new permanent rules.
