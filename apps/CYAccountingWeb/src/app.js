@@ -138,7 +138,7 @@ export default {
         }, 404);
       }
 
-      const importResponse = await handleExcelImportApi(request, env);
+      const importResponse = await handleExcelImportApi(request, env, resolved.session);
       if (importResponse) return importResponse;
 
       const exportResponse = await handleExcelExportApi(request, env);

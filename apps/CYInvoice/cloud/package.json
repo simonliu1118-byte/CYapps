@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "node tests/bootstrap-sql.test.mjs && node tests/device-lifecycle.test.mjs && node tests/cyid.test.mjs",
+    "test": "node tests/bootstrap-sql.test.mjs && node tests/device-lifecycle.test.mjs && node tests/cyid.test.mjs && node tests/deployment-preflight.test.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:dry-run": "wrangler deploy --dry-run --outdir dist",

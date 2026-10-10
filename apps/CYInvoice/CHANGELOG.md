@@ -4,6 +4,7 @@
 
 ## V2.6.17 Build 2 — 2026-10-10（engineering，未部署／未正式切換）
 
+- 2026-10-11 部署準備：沿用原 development workflow，增加唯讀 preflight、原 DB／authority／migration／FK／歷史 fingerprint 與 private recovery checkpoint；驗收使用 Cloud package version，修正舊 0.9.0 hard-code。此批只改部署工具／測試／文件，Windows 及 Worker 業務 runtime、VERSION／BUILD 均未改；遠端結果見現行交接。
 - Build 2 收斂 self-status parser，缺完整撤銷證據不能 wipe；自己撤銷這台裝置亦先落 marker，等新程序再完整清除包含 Logs。手動 Local／Workspace-disabled reset 原契約保留。
 - Build 1 補舊 Gateway 404 的明確升級提示及 unknown token 不清除回歸；先升級保留 Built-in 的 additive Cloud 0.9.2，再升級 Windows／staging，不能拿舊 Gateway 當新同步已完成。Build 0 的治理 PR 標記格式已改為純文字。
 - 啟動、60 秒及重連以 POST /v1/runtime/sync 一次刷新 Device／binding／權限；15 秒連線檢查不每輪載入全員工，保留原光貿同步週期。Built-in snapshot 沿用既有 owner，revision 與 rows 同一查詢；拒絕舊 revision 覆寫。

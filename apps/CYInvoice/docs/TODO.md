@@ -134,16 +134,16 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] Worker private IDENTITY gateway、Login／Resolve／finally Logout、穩定錯誤與無 Session／verifier 外洩；Device 與 Employee／App Access 權限分離。
 - [x] Device rename／revoke、pairing／invitation 沿用現有 mutation owner；0013 forward migration 區分 external invitation actor，保留 Built-in 歷史／FK。
 - [x] last-trusted protected offline cache，V2.6.16 沿用原降級：雲端 transport／timeout／暫時 5xx 且光貿正常；online reject 清除 cache、reconnect 新權限重生效；不 export CYID verifier。
-- [x] Consumer Version 1.0.2、canonical support-window gate、real-provider Worker 與 C# contracts／拒絕／scope／outage／logout loss／onboarding 本機回歸。
+- [x] Consumer Version 1.0.3（初次接入 1.0.2）、canonical support-window gate、real-provider Worker 與 C# contracts／拒絕／scope／outage／logout loss／onboarding 本機回歸。
 - [x] 原 Workspace 接續 source regression：原兩台 Device Token 切換前後可用；本機切換後重開保留 Workspace／Device／Token、發票 pending、買方／PDF、公司設定及 protected credentials；錯綁定不覆寫。
 
 本輪精確 head Governance／Cloud／Windows CI 與 engineering Artifact 以 [#380 checks](https://github.com/simonliu1118-byte/CYapps/pull/380/checks) 為單一即時結果；source／治理證據見 CLOUD_WORK_HANDOFF，不用手動 checklist 鏡像 run 狀態。
 
 - [x] 專案 canonical adoption 依 governance/* 流程完成 #381／Governance 2.3.34，功能分支同步 main；不把規則修改混入一般功能 PR。
 - [ ] RC_TEST AA Windows 實機 CYID：Account Management／settings／高權限操作，斷網／reconnect 與角色、App Access、停用、密碼變更後更新。
-- [ ] 核對真實 CYID Application 註冊／Workspace enablement／App Access、private Service Binding、兩 Workspace 配對；先隔離 staging，再討論正式切換（未授權）。
+- [ ] 核對真實 CYID Application 註冊／Workspace enablement／App Access、private Service Binding、兩 Workspace 配對；2026-10-11 使用者委託推進至上線，先隔離 staging，正式切換前完成可檢視的驗收／回復方案。
 - [ ] 受控切換：備份／0013／FK、EmployeeNo 與歷史 actor／pending 業務稽核、rollback／舊 client gate；不以 destructive reset 代替 migration。
-- [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（目前 V2.6.16），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
+- [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（目前 V2.6.17 Build 2），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
 - [ ] RC_TEST AB 實機驗收四種狀態、Built-in／CYID 503 原降級、純 Local 光貿斷線阻擋、任一恢復及輸入／Workspace 保留；帳密／權限／Device 拒絕不降級，不自動重送。
 - [ ] CYID 0-active-Device recovery 實作／驗證後才調整 LAST_ACTIVE_DEVICE；目前保留原保護。
 - [x] 人工结案／折讓及中央帳號操作 dialog／core 收斂見 §7.3.2；多階段 OTP／必要讀取仍各自最終驗證，不保存跨操作 Session。
@@ -171,6 +171,15 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] V2.6.17 Build 2 source 64f23381 的 Windows #275／Cloud #386／Governance #1184／CYID #105 與 engineering Artifact 通過；最新 head 結果仍以 PR #380 checks 為準。
 - [ ] RC AC 實機撤銷／關閉／kill／下次啟動／Logs／初始設定／光貿結果不明；原 RC AA／AB 與正式切換 gate 保留。
 - [x] 開始 runtime 新工作時按共通規則推進版本、同步 CHANGELOG／狀態／設計／驗收；版本為 2.6.17／BUILD 2，人工／staging 不冒充完成。
+
+### 7.3.3 部署前檢查與分段上線（2026-10-11）
+
+- [x] 修正 development 部署驗收的舊 0.9.0 hard-code；由 Cloud package.json 核對版本及 runtime-sync capability，保留原部署 owner。
+- [x] 唯讀 preflight、原 DB／Built-in／runtime secret names／rate limit／canonical migration prefix／FK／歷史 fingerprint／private recovery checkpoint source 與回歸；0013 真實 SQLite 前後延續及 Token hash 更換拒絕通過。
+- [ ] 遠端 development preflight：核對真正部署版本、原 Workspace／Device、0013 pending 及 Time Travel／Worker rollback 可用；不把既有 development target 自稱隔離 sandbox。
+- [ ] preflight 通過後 additive Cloud 0.9.2／storage 13 部署，CYID 關閉，驗證原資料／Token／history、API compatibility、secret/binding 保留與新同步；Windows 認證／業務驗收仍獨立。
+- [ ] 確認隔離 staging 資源及部署權限／Free 用量、private IDENTITY／IDENTITY_AUTHORITY 同 provider、Application 與 Workspace scopes；不能猜正式對應或在原業務資料上造 synthetic 帳號。
+- [ ] staging、RC AA／AB／AC 與原 A/B/C 完成後提出正式切換／回復方案；正式 tag／Release 版本身分另依 PROJECT_RULES 明確處理。
 
 ### 7.4 新裝置加入方式與安全紀錄
 

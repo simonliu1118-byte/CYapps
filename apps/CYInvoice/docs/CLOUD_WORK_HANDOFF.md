@@ -1,6 +1,6 @@
 # CYInvoice 現行工作交接
 
-更新日期：2026-10-10（Asia/Taipei）
+更新日期：2026-10-11（Asia/Taipei）
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
@@ -9,7 +9,7 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `a04f706c888013d2b25762fa35d4ff8eefeaea6e`（治理 #381 後）；CYInvoice 仍 V2.6.10 Build 2 |
+| main | `1b661957faeac9684ff73b0b6ea7835ffdc9d07e`（#382 是 CYAccountingWeb 修改）；CYInvoice 仍 V2.6.10 Build 2 |
 | 本輪 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380)，draft、未合併，完整 CI／工程包以精確 head checks 為準 |
 | 前置介面 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
 | 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
@@ -20,6 +20,14 @@
 前置獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
 
 ## CYID Consumer／服務連線現行停點
+
+### 分段上線準備 — 2026-10-11
+
+使用者委託逐步推進至 CYID 上線；先 preflight／保留 Built-in 的 additive Cloud，再隔離 staging／Windows 實機及可檢視的正式切換方案。PR #380 仍 draft／未合併；未因本次委託略過原 Workspace continuity、帳號／App Access／Role、private binding、回復及 Release gates。
+
+沿用 cyinvoice-cloud-dev-deploy.yml 為唯一 development owner，修正 health 舊 0.9.0 hard-code；preflight 專用 branch 只讀遠端。部署前固定 original D1／development／CYID disabled，核對 immutable migration prefix（僅允許 pending 0013）、FK、必要 runtime secret names／rate limit、private Time Travel／Worker recovery checkpoint。暫存 generated config 保留原 vars/services/secrets；after 核對 source version、storage 13、runtime-sync capability 與原 Workspace／Device Token hashes／員工／邀請／audit 歷史。敏感值不寫 Public log／Artifact；恢復點 UTC timestamp 可回查 bookmark，不自動 D1 restore。
+
+本機 TypeScript／完整 Worker 回歸／bundle 與 deployment audit 通過，含真實 SQLite 0013 前後歷史延續及 Token hash 異動拒絕。Windows／Worker business runtime 未改，VERSION／BUILD 維持 V2.6.17 Build 2。遠端 preflight／additive deployment 尚待執行，不把既有 development business Workspace 當隔離 CYID sandbox。唯一 checklist 見 TODO §7.3.3；執行／回復說明見 cloud/README。
 
 ### V2.6.17 source checkpoint — 2026-10-10
 

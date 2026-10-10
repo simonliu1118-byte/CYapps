@@ -239,7 +239,7 @@ After the identity/refactor/reset foundations are stable, complete:
 
 ## 9. Package 6 — CY ID integration
 
-V2.6.15 implements CyIdIdentityProvider behind the existing runtime owner and CYInvoice Worker private IDENTITY gateway. The current source consumes canonical Contract 1.0.2 (minimum 1.0.0), declared in CYID_CONSUMER_VERSION; same-repo canonical files remain the only shared authority. Implementation details, architecture exception, and deployment gates are in CY_ID_INTEGRATION.md §14; TODO.md §7.3 is the only checklist.
+V2.6.15 implements CyIdIdentityProvider behind the existing runtime owner and CYInvoice Worker private IDENTITY gateway. The current V2.6.17 source consumes canonical Contract 1.0.3 (minimum 1.0.0), declared in CYID_CONSUMER_VERSION; same-repo canonical files remain the only shared authority. Implementation details, architecture exception, and deployment gates are in CY_ID_INTEGRATION.md §14; TODO.md §7.3 is the only checklist.
 
 Per-operation Login/Resolve/finally Logout keeps CYID Session server-only and ephemeral in consumer memory. CYID owns stable Employee identity, enabled, Workspace Role and App Access; CYInvoice owns Device/Workspace binding and business permission. Device management/onboarding reuse the current handler owner; old account authority routes reject in CYID mode. Windows hides account management and does not import Built-in snapshots.
 
