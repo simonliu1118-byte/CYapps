@@ -913,7 +913,7 @@ function numericInput(event) {
   event.target.value = event.target.value.replace(/\D/g, '').slice(0, 7);
 }
 
-async function api(path, options = {}) {
+async function api(path, options = {}, timeoutMs = 12_000) {
   const controller = new AbortController();
   let timeoutId;
   const request = Promise.resolve().then(async () => {
@@ -934,7 +934,7 @@ async function api(path, options = {}) {
       const error = new Error('CYACC_BROWSER_TIMEOUT');
       error.name = 'TimeoutError';
       reject(error);
-    }, 12_000);
+    }, timeoutMs);
   });
 
   try {
