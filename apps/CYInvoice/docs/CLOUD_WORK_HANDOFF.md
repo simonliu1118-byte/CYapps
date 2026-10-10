@@ -171,3 +171,20 @@ Build 0 source 187f2b5b 已通過 Windows warnings-as-errors／startup smoke／�
 Build 1 補舊 Gateway 404 的明確升級診斷及 unknown token 不清除 regression。源頭未改原連線矩陣，仍沿用原降級；先以 CYID disabled 在原 Workspace 升級 additive Cloud 0.9.2，再升級 Windows，private RPC／原裝置 staging 之後才談切換。CI／工程包核對最後 source head，不拿較早 Build 0 綠燈替代。本批尚未合併／部署／正式切换／Release。
 
 Build 2 補最後撤銷邊界：aggregate 共用原 self-status parser（含 revokedAt／合法狀態），缺完整證據不清除；手動自己撤銷／已撤銷退出同樣只落 authorized marker，等 fresh parent-exit recovery 清除包含 Logs，避免舊程序背景工作在 wipe 後寫回。手動純 Local／Workspace disabled 保留原不同契約。新增真实 SettingsStore＋既有 ExecuteAsync／RecoverPendingAsync 合成 HTTP 回歸，未部署／實機驗收。
+
+
+## V2.6.17 Build 2 已驗證工程包
+
+功能 source **64f233810bc5066db1a92f27e95552974a105a63** 六項 CI 全部通過：
+
+- [Windows #275](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658727)：warnings-as-errors、原生／packaged startup smoke、業務 regressions、manifest／PE／封裝及 public-package scan。
+- [Cloud #386](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658712)：Worker／real-provider synthetic D1、Linux／Windows contracts 與 engineering package scan。
+- [Governance #1184](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658742)。
+- [CYID Check #105](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658743)。
+- [Development workflow #116](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658721)／[Production workflow #11](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658719) 只完成 PR validate，部署 job skipped；沒有遠端部署。
+
+[下載 V2.6.17 Build 2 engineering](https://github.com/simonliu1118-byte/CYapps/actions/runs/38064658727/artifacts/11674241804)，81,087,634 bytes；Artifact archive SHA-256 `368ff2aab2a99885f43e291e6a53d828bab3f3d08ae6b8cdd45d1a527974d9b9`，有效至 **2026-10-13 23:45 Asia/Taipei**。Artifact head 已核對等於功能 source。
+
+升级原可攜資料夾時覆蓋整包的程式檔，包含 package-files.json／Runtime；保留原 Data／Cache／Logs 與原 Workspace。不要僅換 EXE 而漏 manifest。雲端目前仍未部署 additive 0.9.2／private RPC；新同步在隔離 staging 更新 Gateway 後才可驗收。
+
+本次收尾只補 CI／Artifact 證據文件，不推進 VERSION／BUILD。後續純文件 head 不冒充本段功能 source 已測；最新 PR checks／engineering artifact 為即時入口。未完成：RC AA／AB／AC 與前置 A/B/C 實機、隔離 binding／帳號／App Access／Workspace continuity／用量量測、正式切換 gate、0-Device recovery 等原 TODO；未合併／部署／正式 Release。

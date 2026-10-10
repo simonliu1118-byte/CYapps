@@ -168,7 +168,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] explicit remote revoke 接既有 LocalResetCoordinator／Program recovery；先 durable marker 再 shutdown／wipe／restart，補 Schedule memory-only kill 缺口，啟動不因空員工 cache 卡住。
 - [x] Logs 及 root／subdirectory 所有程式管理 runtime 檔案完整清除，portable 回發行初始狀態；marker 最後刪，kill／partial wipe／檔案占用續清，停止背景寫回。Unknown Token／401／Workspace disabled／scope／503 不誤 wipe。
 - [x] 本地回歸覆蓋 single request、真實 Provider／Built-in／Local、startup、cache／credential／permission／deleted employee、stale response、CYID outage＋revoke、重連、Logs／模擬程序中斷後 partial wipe；真實 kill／檔案占用另由 RC AC 驗收。
-- [ ] 精確 head Windows CI／DPAPI／smoke／package safety scan 與 engineering Artifact，結果以 PR #380 checks 為準。
+- [x] V2.6.17 Build 2 source 64f23381 的 Windows #275／Cloud #386／Governance #1184／CYID #105 與 engineering Artifact 通過；最新 head 結果仍以 PR #380 checks 為準。
 - [ ] RC AC 實機撤銷／關閉／kill／下次啟動／Logs／初始設定／光貿結果不明；原 RC AA／AB 與正式切換 gate 保留。
 - [x] 開始 runtime 新工作時按共通規則推進版本、同步 CHANGELOG／狀態／設計／驗收；版本為 2.6.17／BUILD 2，人工／staging 不冒充完成。
 
