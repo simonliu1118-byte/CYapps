@@ -29,7 +29,11 @@ public static class InvoiceOfficialState
         }
 
         InvoiceOfficialMetadata.SetCancelDate(record, 0);
-        if (query.VoidPending) InvoiceVoidService.MarkPendingMarker(record);
+        if (query.VoidPending)
+        {
+            InvoiceVoidService.MarkPendingMarker(record);
+            InvoiceVoidService.SetOfficialPending(record, true);
+        }
         record.InvoiceState = ResolveQuery(record, query);
     }
 

@@ -1,8 +1,8 @@
 # CYInvoice Identity Provider Refactor — Implementation Plan
 
-更新日期：2026-09-29
+更新日期：2026-10-09（原設計基準：2026-09-29）
 
-> Status: approved planning baseline. This document defines the next CYInvoice implementation sequence only. It does not authorize source changes, deployment, merge, tag or Release by itself.
+> Status: implementation-sequence reference. Packages 1–4 are implemented and merged; current acceptance and source/package evidence are in CLOUD_WORK_HANDOFF.md. TODO.md is the only progress checklist. CYID integration is still unimplemented; this plan is not a separate rules layer or release authorization.
 
 ## 1. Why this work comes first
 
@@ -20,7 +20,7 @@ The shared desktop reference is `simonliu1118-byte/AITeam:docs/DESKTOP_IDENTITY_
 
 - CYInvoice formal roles are `SUPER_ADMIN`, `ADMIN`, `USER`.
 - `EMPLOYEE` is no longer a role name.
-- There is no persisted legacy `EMPLOYEE` role dataset requiring migration.
+- Local employees/cache schema and Cloud forward migration 0010 now migrate legacy EMPLOYEE storage to USER; no active runtime alias is retained.
 - Local mode keeps CYInvoice Local EmployeeStore authority.
 - Built-in Cloud / Self-hosted keeps CYInvoice-owned Workspace / Employee / Credential authority.
 - CY ID Cloud will use CY ID as Employee / Credential authority while CYInvoice keeps its own Workspace / Device / business coordination.
@@ -30,7 +30,7 @@ The shared desktop reference is `simonliu1118-byte/AITeam:docs/DESKTOP_IDENTITY_
 
 ## 3. Package 1 — Identity Foundation Refactor
 
-This is the next source work package. Its goal is architectural separation with **no intended functional behavior change**.
+Package 1 is already implemented and merged as V2.6.7. The original goal is architectural separation with **no intended functional behavior change**.
 
 ### 3.1 Role vocabulary cleanup
 
@@ -50,7 +50,7 @@ ADMIN
 USER
 ```
 
-Apply consistently to source, tests, synthetic fixtures, schema/contract constants where applicable, UI labels and documentation. Do not add a permanent `EMPLOYEE == USER` compatibility alias because no real persisted legacy role requires it.
+Apply consistently to source, tests, synthetic fixtures, schema/contract constants where applicable, UI labels and documentation. Do not add a permanent `EMPLOYEE == USER` compatibility alias because active authority must converge on USER; existing persisted schema is handled once by migration.
 
 ### 3.2 Normalized principal
 
@@ -172,7 +172,7 @@ Package 1 is accepted only when all of the following hold:
 
 ## 5. Package 2 — Built-in Cloud online authority freshness
 
-Only after Package 1 is stable, fix the already-reproduced B-device stale Employee snapshot defect inside the Built-in Cloud provider boundary.
+Package 2 is implemented and merged as V2.6.8. The source fixes the B-device stale authority defect inside the provider boundary; real A/B acceptance remains pending.
 
 Target behavior:
 
@@ -197,7 +197,7 @@ Acceptance includes A/B real-device checks for:
 
 ## 6. Package 3 — Device revoke / retire
 
-Implement Device revoke/retire API + UI + token invalidation + security audit before destructive Cloud -> Local reset.
+Package 3 is implemented and merged as V2.6.9: Device inventory/revoke API + Windows UI + token invalidation + retained history/security audit. Real A/B/C acceptance remains pending.
 
 Required invariant:
 
@@ -210,7 +210,7 @@ Device revoked
 
 ## 7. Package 4 — Cloud -> Local destructive reset
 
-Depends on Package 3.
+Package 4 is implemented and merged as V2.6.10; staged development deployment Run #7 was verified on 2026-09-29. Real reset/fault-injection acceptance remains pending. It depends on Package 3.
 
 Implement the already-approved double-confirmation reset:
 
@@ -239,7 +239,7 @@ After the identity/refactor/reset foundations are stable, complete:
 
 ## 9. Package 6 — CY ID integration
 
-Do not start until CYCloudIdentity/CYWEB publishes a stable consumer handoff/contract.
+CYID has published canonical Consumer Integration Standard 1.0.2 (minimum 1.0.0). Read ../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md and its canonical package directly; do not copy a shared contract into CYInvoice. The remaining gate is desktop/per-operation transport and offline/recovery adaptation, followed by implementation and acceptance.
 
 Expected CYInvoice consumer inputs are intentionally small:
 
@@ -291,6 +291,6 @@ V3 business coordination
 
 Do not reverse this order by wiring CY ID directly into Forms/workflows before the provider boundary exists.
 
-## 12. Version / release boundary
+## 12. Current scope / version / release boundary
 
-This plan does not itself decide the next VERSION/BUILD value. Before source work starts, re-read repository/project version rules and classify the authorized work package. No merge, tag or formal Release without explicit user authorization.
+The current engineering baseline is V2.6.14; device management, authenticated startup usage metadata and SUPER_ADMIN rename extend V2.6.13 while retaining the invitation fix. Source changes, merge/deployment and formal promotion follow repository/project governance and current user authorization. Formal tag/Release requires a separate explicit release instruction.

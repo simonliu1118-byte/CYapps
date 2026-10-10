@@ -1,10 +1,12 @@
 # CYInvoice × CY ID 整合設計基準
 
-更新日期：2026-09-29
+更新日期：2026-10-09（原設計基準：2026-09-29）
 
 本文件記錄 CYInvoice 作為 CY ID / CYCloud Identity consumer 時已確認的產品邊界。這是 CYInvoice 端的設計／需求文件，不定義 CY ID／CYWEB 內部 schema、Group 儲存方式、Application Access 資料模型或管理介面實作。
 
-本文件目前只定案架構方向；尚未開始 CYInvoice source 修改、Build 推進、Cloud migration 或正式 cutover。
+Local／Built-in provider、role migration、freshness、Device revoke 與 reset 已實作並合併；CYID adapter／binding／offline／0-Device recovery 尚未接線。目前工程版為 V2.6.14，最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
+
+CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.2）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
 
 ## 1. 產品目標
 
@@ -102,7 +104,7 @@ CY ID USER        → CYInvoice USER
 
 `SUPER_ADMIN` 仍然是 `SUPER_ADMIN`，不降階、不使用「視同 ADMIN」等轉換。
 
-目前實際使用資料沒有已持久化的 `EMPLOYEE` role 需要相容，因此本次 role rename **不需要歷史資料 migration**。後續實作只需同步修正 source、schema/fixture、測試、文件與 UI 名稱。
+Role rename 已完成，Local employees／Cloud cache 的一次性 schema migration 與 Cloud forward migration 0010 均已實作；active runtime 使用 USER，不保留 EMPLOYEE alias。
 
 中文 UI 建議保持：
 
@@ -213,7 +215,7 @@ CY ID 模式下 Windows offline credential/cache 的最終協定屬後續實作�
 
 ## 12. 實作原則
 
-CYInvoice source 後續應把「Cloud Employee 一定存在 CYInvoice 自己的 backend」這個假設從權限驗證邊界抽開，但不需要建立過度通用的 Identity plugin framework。
+CYInvoice 已以 IIdentityProvider／AppPrincipal／AppRole 抽開 Local／Built-in authority；後續 CYID 接入延用此邊界，不建立過度通用的 Identity plugin framework。
 
 最低需求是讓 CYInvoice 可以明確分流：
 

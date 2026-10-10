@@ -4,11 +4,12 @@ using CYInvoice.Core.Storage;
 
 namespace CYInvoice.WinForms;
 
-internal sealed class CloudDirectJoinForm : Form
+internal sealed partial class CloudDirectJoinForm : Form
 {
     private readonly LocalRepository repository;
     private readonly Settings settings;
-    private readonly HttpClient http = new();
+    private readonly HttpClient http;
+    private readonly Action<string, string, MessageBoxIcon> showMessage;
     private readonly CancellationTokenSource lifetime = new();
 
     private readonly TextBox url = UiControls.TextBox(200);
@@ -53,8 +54,17 @@ internal sealed class CloudDirectJoinForm : Form
     private bool resourcesDisposed;
 
     public CloudDirectJoinForm(LocalRepository repository)
+        : this(repository, new HttpClient(), null)
+    {
+    }
+
+    private CloudDirectJoinForm(LocalRepository repository, HttpClient httpClient,
+        Action<string, string, MessageBoxIcon>? notification)
     {
         this.repository = repository;
+        http = httpClient;
+        showMessage = notification ?? ((message, title, icon) =>
+            MessageBox.Show(this, message, title, MessageBoxButtons.OK, icon));
         settings = repository.Settings.LoadOrCreate();
 
         Text = "首次開啟：直接加入雲端";
@@ -379,7 +389,10 @@ internal sealed class CloudDirectJoinForm : Form
     {
         await RunAsync(async () =>
         {
-            if (preview is null) throw new InvalidOperationException("請先完成 Workspace 確認。");
+            // TextChanged also invalidates the editable preview when a successful
+            // claim clears the password. Keep the confirmed target for this operation.
+            var confirmedWorkspace = preview
+                ?? throw new InvalidOperationException("請先完成 Workspace 確認。");
             ValidateInput();
             var displayName = deviceName.Text.Trim();
             var endpoint = BaseUri().ToString();
@@ -406,7 +419,7 @@ internal sealed class CloudDirectJoinForm : Form
                     ? await Client().ClaimPairingAsync(
                         pairingCode.Text.Replace("-", "", StringComparison.Ordinal).Trim(),
                         displayName,
-                        Application.ProductVersion,
+                        ApplicationVersion.ReadDisplay(),
                         attempt,
                         lifetime.Token,
                         directJoin: true)
@@ -415,7 +428,7 @@ internal sealed class CloudDirectJoinForm : Form
                         employeeNo.Text.Trim(),
                         password.Text,
                         displayName,
-                        Application.ProductVersion,
+                        ApplicationVersion.ReadDisplay(),
                         attempt,
                         lifetime.Token);
                 password.Clear();
@@ -429,7 +442,7 @@ internal sealed class CloudDirectJoinForm : Form
                     error);
             }
 
-            if (claimed.WorkspaceId != preview.WorkspaceId)
+            if (claimed.WorkspaceId != confirmedWorkspace.WorkspaceId)
                 throw new InvalidDataException("Cloud 回傳的 Workspace 與確認的目標不一致。");
             await CompleteAsync(endpoint, attempt.DeviceToken, claimed.WorkspaceId, claimed.DeviceId);
         });
@@ -493,8 +506,7 @@ internal sealed class CloudDirectJoinForm : Form
         repository.Settings.Save(settings);
 
         IdentityCompleted = true;
-        MessageBox.Show(this, "裝置已加入，雲端員工帳號已同步。", "加入完成",
-            MessageBoxButtons.OK, MessageBoxIcon.Information);
+        showMessage("裝置已加入，雲端員工帳號已同步。", "加入完成", MessageBoxIcon.Information);
         DialogResult = DialogResult.OK;
         Close();
     }
@@ -516,8 +528,7 @@ internal sealed class CloudDirectJoinForm : Form
             if (!IsDisposed)
             {
                 status.Text = error.Message;
-                MessageBox.Show(this, error.Message, "無法加入雲端",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                showMessage(error.Message, "無法加入雲端", MessageBoxIcon.Warning);
             }
         }
         finally

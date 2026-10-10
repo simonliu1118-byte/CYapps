@@ -507,9 +507,9 @@ internal sealed class RecordDetailForm : Form
             BackColor = SystemColors.Control,
         };
         section.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        section.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        section.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         section.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        section.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        section.RowStyles.Add(new RowStyle(SizeType.Absolute, history.FiveRowHeight));
         section.Controls.Add(new Label
         {
             Text = "發票資訊",
@@ -522,9 +522,8 @@ internal sealed class RecordDetailForm : Form
         var informationHost = new Panel
         {
             Dock = DockStyle.Fill,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            AutoScroll = false,
+            AutoSize = false,
+            AutoScroll = true,
             Margin = Padding.Empty,
             Padding = new Padding(6, 0, 4, 0),
             BackColor = SystemColors.Control,
@@ -543,6 +542,7 @@ internal sealed class RecordDetailForm : Form
             Margin = new Padding(6, 0, 0, 0),
         }, 0, 2);
         section.Controls.Add(history, 0, 3);
+        section.HandleCreated += (_, _) => section.RowStyles[3].Height = history.FiveRowHeight;
         return section;
     }
 
@@ -1211,11 +1211,11 @@ internal sealed class RecordDetailForm : Form
         if (details.BackColor != SystemColors.Control)
             throw new InvalidOperationException("發票資訊區未沿用視窗灰底");
         var informationHost = FindTaggedControl(this, InformationHostTag) as Panel;
-        if (informationHost is null || informationHost.AutoScroll || !informationHost.AutoSize ||
+        if (informationHost is null || !informationHost.AutoScroll || informationHost.AutoSize ||
             history.Parent is not TableLayoutPanel historyParent || history.Height <= 0 ||
-            historyParent.RowStyles.Count < 4 || historyParent.RowStyles[1].SizeType != SizeType.AutoSize ||
-            historyParent.RowStyles[3].SizeType != SizeType.Percent)
-            throw new InvalidOperationException("發票資訊必須完整顯示且只有作廢/折讓紀錄區可使用剩餘高度捲動");
+            historyParent.RowStyles.Count < 4 || historyParent.RowStyles[1].SizeType != SizeType.Percent ||
+            historyParent.RowStyles[3].SizeType != SizeType.Absolute)
+            throw new InvalidOperationException("發票資訊必須取得剩餘高度，作廢/折讓紀錄固定五列");
         if (!UiControls.HasLogicalSize(close, 100, UiControls.StandardButtonHeight))
             throw new InvalidOperationException("關閉按鈕未使用核准尺寸");
         if (carrier)

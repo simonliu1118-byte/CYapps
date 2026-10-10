@@ -62,7 +62,7 @@ internal sealed class MainForm : Form
 
     public MainForm(bool startupSmokeTest = false)
     {
-        Text = $"CY 電子發票 V{ApplicationVersion.Read()}";
+        Text = $"CY 電子發票 V{ApplicationVersion.ReadDisplay()}";
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = DefaultClientSize;
         Font = new Font("Microsoft JhengHei UI", 12F);
@@ -96,7 +96,7 @@ internal sealed class MainForm : Form
             if (!EnsureInitialSetup()) return;
             UpdateEnvironment();
             invoicePage.RefreshEnvironment();
-            await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync());
+            await Task.WhenAll(RefreshRuntimeModeAsync(), RefreshApiAsync(), ReportDeviceStartupAsync());
             if (shuttingDown) return;
             await RunStartupSyncAsync();
             if (!shuttingDown) syncTimer.Start();
@@ -654,6 +654,27 @@ internal sealed class MainForm : Form
         }
     }
 
+    private async Task ReportDeviceStartupAsync()
+    {
+        var settings = repository.Settings.LoadOrCreate();
+        if (settings.CloudMode == CloudModes.LocalOnly || settings.CloudBaseUrl.Length == 0
+            || settings.CloudDeviceId.Length == 0) return;
+        try
+        {
+            var token = repository.Settings.CloudDeviceToken(settings);
+            if (token.Length == 0) return;
+            var client = new CloudDeviceLifecycleClient(cloudHealthHttpClient,
+                new Uri(settings.CloudBaseUrl, UriKind.Absolute), token);
+            await client.ReportUsageAsync(settings.CloudDeviceId, ApplicationVersion.ReadDisplay(), syncLifetime.Token);
+        }
+        catch (OperationCanceledException) when (syncLifetime.IsCancellationRequested) { }
+        catch (Exception)
+        {
+            // Usage metadata is best-effort. An offline start must not block invoice work,
+            // overwrite the last confirmed server timestamp, or change authority/cache state.
+        }
+    }
+
     private async Task<string> TryRefreshCloudEmployeeCacheAsync(Settings settings, string baseUrl)
     {
         if (!settings.CloudEmployeeAuthorityReady || settings.CloudMode != CloudModes.CloudPreferred)
@@ -930,21 +951,5 @@ internal sealed class MainForm : Form
             environmentToolTip.Dispose();
         }
         base.Dispose(disposing);
-    }
-}
-
-internal static class ApplicationVersion
-{
-    public static string Read()
-    {
-        try
-        {
-            var value = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "VERSION")).Trim();
-            return value.Length == 0 ? "2.0.0" : value;
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            return "2.0.0";
-        }
     }
 }
