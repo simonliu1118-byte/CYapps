@@ -193,7 +193,7 @@ V2.6.11 兩個按鈕並排，兩種模式共用同一清單／詳細頁。「上
 - Cloud → Local 以雙重確認、關閉程式後 revoke／self-status 確認，再清目前安裝 Data／Cache／identity；不明結果保留資料，Windows 不刪中央 Workspace。
 - Built-in Cloud 忘記密碼已使用 Email challenge／confirm；尚需 live Email 與 A/B 測試。
 - Source Cloud 0.9.0／API 1／compatibility marker 8／storage 13；最後 development deployment 仍 0.8.9／storage 12，證據見 CLOUD_WORK_HANDOFF.md。
-- CY ID 模式是已定案未接線的後續模式，共同 contract 直接引用 CYCloudIdentity canonical standard。
+- V2.6.15 CYID Consumer source 已接線，正式環境未切換；共同 contract 直接引用 CYCloudIdentity canonical standard，實機／staging gate 見 TODO §7.3／RC AA。
 
 ## 14. 目前尚未完成
 

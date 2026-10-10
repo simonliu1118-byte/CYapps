@@ -135,10 +135,11 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] Device rename／revoke、pairing／invitation 沿用現有 mutation owner；0013 forward migration 區分 external invitation actor，保留 Built-in 歷史／FK。
 - [x] last-trusted protected offline cache，僅 transport failure 使用；online reject 清除 cache、reconnect 新權限重生效；不 export CYID verifier。
 - [x] Consumer Version 1.0.2、canonical support-window gate、real-provider Worker 與 C# contracts／拒絕／scope／outage／logout loss／onboarding 本機回歸。
+
 本輪精確 head Governance／Cloud／Windows CI 與 engineering Artifact 以 [#380 checks](https://github.com/simonliu1118-byte/CYapps/pull/380/checks) 為單一即時結果；source／治理證據見 CLOUD_WORK_HANDOFF，不用手動 checklist 鏡像 run 狀態。
 
 - [x] 專案 canonical adoption 依 governance/* 流程完成 #381／Governance 2.3.34，功能分支同步 main；不把規則修改混入一般功能 PR。
-- [ ] RC_TEST AA Windows 實機 CYID：Account Management／settings／高權限操作，斷網／reconnect 與角色、App Access、停用、密碼変更後更新。
+- [ ] RC_TEST AA Windows 實機 CYID：Account Management／settings／高權限操作，斷網／reconnect 與角色、App Access、停用、密碼變更後更新。
 - [ ] 核對真實 CYID Application 註冊／Workspace enablement／App Access、private Service Binding、兩 Workspace 配對；先隔離 staging，再討論正式切換（未授權）。
 - [ ] 受控切換：備份／0013／FK、EmployeeNo 與歷史 actor／pending 業務稽核、rollback／舊 client gate；不以 destructive reset 代替 migration。
 - [ ] CYID 0-active-Device recovery 實作／驗證後才調整 LAST_ACTIVE_DEVICE；目前保留原保護。

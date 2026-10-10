@@ -204,7 +204,7 @@ AMEGO 仍是發票官方真相，CYInvoice 重新接回正式光貿後可依既�
 
 CY ID 模式仍必須保留 CYInvoice 已定案的 Cloud Offline 使用能力；但 CYInvoice 不應直接讀 CY ID D1，也不應要求 CY ID 把自己的 credential verifier 當成一般 consumer data 回傳。
 
-CY ID 模式下 Windows offline credential/cache 的最終協定屬後續實作階段技術設計項目。產品不變量只有：
+V2.6.15 已實作 Windows offline credential/cache；技術邊界、last-trusted 限制及 acceptance 見 §14。原產品不變量保留：
 
 - Online 時以目前 CY ID authority 為準；
 - Offline 時只能使用最後一次可信同步／建立的本機 protected cache；

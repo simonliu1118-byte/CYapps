@@ -235,7 +235,7 @@ Cloud 可連線時，任何 Employee 密碼／權限驗證必須使用當下最�
 
 Online 時以 CY ID 回傳的目前有效 Employee identity、enabled、CYInvoice access 與 role 為 authority。CYInvoice 不維護第二套中央 credential authority。
 
-CY ID 模式 Windows offline credential/cache 的最終協定尚待實作階段定義，但不得直接讀 CY ID D1、不得造成 Built-in + CY ID 雙 authority，且 reconnect 後最新 CY ID authority 必須重新生效。
+V2.6.15 已實作 CYID device-bound DPAPI offline cache，僅真正 transport failure 使用；online reject 不轉離線，reconnect 更新最新權限。Last-trusted 無新增 TTL 與 Session loss 的限制見 CY_ID_INTEGRATION §14；不讀 CYID D1、不下載中央 verifier，不形成第二套 authority。
 
 ## 9. Cloud Mode Offline
 
@@ -459,8 +459,8 @@ Cloudflare Worker + D1 是 reference implementation；CYInvoice 對外可自架�
 - 四個 foundational package 已合併，CI 與 9/29 development deployment 完成；尚待最新版 A/B/C lifecycle 人工驗收。
 - 邀請碼加入、撤銷／重寄、result-unknown recovery 實機驗收。
 - A/B Built-in Employee CRUD、role、enabled、password 與 reconnect 行為驗收。
-- CYID canonical contract 已發布（1.0.2／minimum 1.0.0）；尚待 CYInvoice adapter、desktop／per-operation transport 與 acceptance 接線。
-- CY ID 模式 Windows Offline credential/cache 技術方案。
+- CYID canonical contract 1.0.2／minimum 1.0.0；V2.6.15 adapter／desktop transport source 已接線，尚待隔離 staging、Windows acceptance、遷移／rollback 與正式切換。
+- CYID protected offline cache 已實作；Windows 實機斷網／reconnect／deny／scope acceptance 尚待完成。
 - CY ID `0 active Device` recovery / re-authorize Device flow。
 - Built-in all-Device-Token-loss 的獨立 Recovery Device flow（若未來產品需要）。
 - 後續 business sync / Work Item / Audit。
