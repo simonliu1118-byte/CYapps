@@ -1,6 +1,6 @@
 # CYAccountingWeb TODO
 
-更新：2026/10/08（日本時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
+更新：2026/10/10（台灣時間）。只記錄尚未完成或尚未完整驗收的工作；目前正式版本與證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)，已上線能力見 [README.md](README.md)，版本歷史見 [CHANGELOG.md](CHANGELOG.md)，永久規則只依根規則鏈與本專案 `PROJECT_RULES.md`。
 
 ## 裝置與 UI 驗收
 
@@ -16,7 +16,7 @@
 
 ## 帳務與 Identity
 
-- [ ] 使用者補齊帳務資料並提供自動計算起始年月後，再評估開帳基準調整與歷史保留；目前未修改正式資料。
+- [ ] 使用者補齊帳務資料並提供自動計算起始年月後，再評估開帳基準調整與歷史保留；歷史替換的實際提交結果尚待稽核核實。
 - [ ] Password Recovery 真實 Email delivery／browser 完整驗收。
 - [ ] CYID post-cutover 穩定後，以獨立 forward migration 退休 `web_sessions` 實體表；現行 authority 已是 CYID，沒有舊表 fallback。
 
@@ -37,4 +37,4 @@
 
 下一個獨立開發項目應從目前 main 建新 branch，不延續未合併舊 branch。已完成項目不再堆在 TODO；請回 README／CHANGELOG 查已上線能力與版本歷史。
 
-- [ ] 授權歷史帳本替換：Google Drive 來源 2024～2026/03 待連線／讀取／核對；替換既有 2025/12～2026/03，保留 2026/04 之後。先備份、再原子替換並比對筆數／收支／後續資料。2024 首期期初由使用者後補，尚未執行正式資料變更。
+- [ ] 授權歷史帳本替換：V0.22.32 已部署；下一步**先唯讀查核正式匯入稽核、交易筆數與鎖帳**，確認前次沒有提交，避免重複替換。私人來源 2024/05～2026/03 已完成校驗，正式目標為指定期間替換，保留 2026/04 以後交易。若需提交，重新預覽並由 canonical 流程先做 R2＋GCS paired backup 回讀驗證，再原子寫入、對帳與復原鎖帳界線。2024 首期期初仍由使用者後補。
