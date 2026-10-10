@@ -9,7 +9,8 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `94f559cdb74a250453cce078a5f5c4e4d9a51df7`；CYInvoice 仍 V2.6.10 Build 2 |
+| main | `a04f706c888013d2b25762fa35d4ff8eefeaea6e`（治理 #381 後）；CYInvoice 仍 V2.6.10 Build 2 |
+| 本輪 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380)，draft、未合併，完整 CI／工程包以精確 head checks 為準 |
 | 前置介面 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
 | 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
 | 工程版本 | **V2.6.15**；來源為 ../VERSION、../BUILD |
@@ -19,6 +20,8 @@
 前置獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
 
 ## V2.6.15 CYID Consumer 現行停點
+
+本輪 [#380 checks](https://github.com/simonliu1118-byte/CYapps/pull/380/checks) 是最新 CI 結果入口；在該精確 head 的 Windows Build 成功後，從 run 的 Artifacts 取得 V2.6.15 工程包（保留 3 天）。不以此文件的歷史 run 代替最新版驗收。
 
 使用者 2026-10-10 授權開始 consumer 開發；新獨立 Patch／BUILD 0。整合 main 與兩支未合 PR 以保留最新介面和設計，不自動合併／關閉前置 PR。前置 PR #216 精確 head 1e6d4137 的 Governance #1172／Cloud #378／Windows #267 全綠只是 V2.6.14 證據，不能冒充本輪 CI。
 
@@ -30,7 +33,7 @@ Source Cloud 0.9.0／API 1／marker 8／storage 13／cyid-consumer-v1；預設 C
 
 Architecture Exception：依使用者保留既有 last-trusted offline 行為，整筆 scope／principal／本機 proof DPAPI 保護，沒有新增 TTL；離線無法即時觀察中央撤銷，server mutation 仍在線驗證。Logout loss 不 replay、不假稱已撤銷，provider expiry 負責 orphaned Session（目前 default 8h）。每個 server mutation 前 Resolve；CYID／consumer D1 不構成跨庫 atomic transaction。Local／Built-in 是獨立正式模式，沒有在 CYID 失敗時自動啟用。Rolling-deployment 404 discovery reader 只供未確認 CYID 的舊 Built-in Worker。
 
-剩餘驗收只在 TODO §7.3、RC AA 追蹤：精確 head CI／工程包、Windows 實機及舊 A/B/C、staging bindings、受控 migration／actor audit／rollback。0-active-Device recovery 未做，LAST_ACTIVE_DEVICE 保護維持；125／150 DPI 仍 Deferred。
+剩餘人工／切換驗收只在 TODO §7.3、RC AA 追蹤：Windows 實機及舊 A/B/C、staging bindings、受控 migration／actor audit／rollback。0-active-Device recovery 未做，LAST_ACTIVE_DEVICE 保護維持；125／150 DPI 仍 Deferred。
 
 ## V2.6.14 裝置管理
 
@@ -133,3 +136,9 @@ CYInvoice 尚未實作 CyIdIdentityProvider、Workspace binding、CYID App Acces
 尚未實作的後續主線為 CYID adapter、all-device-loss recovery、Cloud Work Item 原子轉移／revision、多機離線 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊。Offline cache 完整性簽章、125%／150% DPI、多公司與營運摘要保持原定延後範圍，不自動升為本次阻塞。
 
 正式發布仍依三層規則及使用者當次明確 release 指示處理；PR／CI／文件更新不代表完成正式發布。
+
+### 本輪治理前置與自動化證據
+
+初次 #380 source head `0b7e343287860de1778bb0f101a26e4d28ae0d0e` 的 [Cloud #379](https://github.com/simonliu1118-byte/CYapps/actions/runs/38038565641) 通過；[Windows #268](https://github.com/simonliu1118-byte/CYapps/actions/runs/38038565637) 的 warnings-as-errors build／startup smoke／全部 business regressions 通過，完整 package 結果仍以 run 本身為準。Governance #1173 指出 PROJECT_RULES 缺 canonical consumer adoption 引用；依治理規則另建 [#381](https://github.com/simonliu1118-byte/CYapps/pull/381)，[Governance #1174](https://github.com/simonliu1118-byte/CYapps/actions/runs/38038662600) 通過後合併 main，GOVERNANCE_VERSION 2.3.34。僅採用既有 canonical standard，不新增 shared identity 語意、不停用檢查。
+
+#380 同步 main adoption 後重新跑精確 head 全部 CI；功能 code 與 0b7e3432 相同，新增差異只有治理同步／狀態文件。最終結果與最新版工程包依上方 #380 checks，不以初次失敗 run 代替最終驗收。正式 deployment 仍未更動。

@@ -87,3 +87,7 @@
 - `cyinvoice/csharp-remake` 與 `cyinvoice/fix-four-group-titles` 都不是後續正式開發線；不得再合併到 `main` 或作為新版本基準。
 - Go／Win32 `V1.1.0` 只作歷史回退用途；新功能、修正及 Release 一律以 `main` 的 C#／WinForms source 為準。
 - 測試 ZIP／Artifact 提供給使用者前，至少應通過對應 Windows build、核心測試、啟動 smoke test、公開安全掃描與 PE 資源檢查。
+
+## 9. CYID Consumer 採用來源
+
+- CYInvoice 接入 CYID 時採用 `apps/CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md` 與其 canonical consumer package；同 repository 直接引用，版本宣告／支援範圍依根 REPO_POLICY §4，不建立平行 shared contract。
