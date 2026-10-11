@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CYERPAutoInput;
 
@@ -19,9 +20,22 @@ internal sealed class UserSettings
     public string MoOrderType { get; set; } = string.Empty;
     public string MoCustomerCode { get; set; } = string.Empty;
     public string MoNotePrefix { get; set; } = "MO店+訂單";
-    public string MoDiscountItemCode { get; set; } = string.Empty;
-    public string MoShippingItemCode { get; set; } = string.Empty;
-    public Dictionary<string, string> MoFreightTypes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Shared by every platform: 折價券／運費品號 and carrier → ERP 貨運別 (local only).</summary>
+    public string DiscountItemCode { get; set; } = string.Empty;
+    public string ShippingItemCode { get; set; } = string.Empty;
+    public Dictionary<string, string> FreightTypes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    // Build 14–19 kept these under MO店+; read once and moved to the shared settings.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MoDiscountItemCode { get => null; set { if (DiscountItemCode.Length == 0 && !string.IsNullOrWhiteSpace(value)) DiscountItemCode = value; } }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MoShippingItemCode { get => null; set { if (ShippingItemCode.Length == 0 && !string.IsNullOrWhiteSpace(value)) ShippingItemCode = value; } }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? MoFreightTypes
+    {
+        get => null;
+        set { if (value is not null) foreach (var p in value) FreightTypes.TryAdd(p.Key, p.Value); }
+    }
     /// <summary>MO店+ export password, DPAPI-protected for the current Windows user (base64).</summary>
     public string MoPasswordProtected { get; set; } = string.Empty;
     public Dictionary<string, string> Defaults { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -49,7 +63,7 @@ internal sealed class UserSettingsStore
             var loaded = JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
             loaded.Defaults ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             loaded.Defaults = new Dictionary<string, string>(loaded.Defaults, StringComparer.OrdinalIgnoreCase);
-            loaded.MoFreightTypes = new Dictionary<string, string>(loaded.MoFreightTypes ?? [], StringComparer.OrdinalIgnoreCase);
+            loaded.FreightTypes = new Dictionary<string, string>(loaded.FreightTypes ?? [], StringComparer.OrdinalIgnoreCase);
             return loaded;
         }
         catch (Exception ex)

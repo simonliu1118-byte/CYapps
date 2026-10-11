@@ -57,3 +57,33 @@ internal sealed class ImportedOrder
     public string ItemSummary() =>
         string.Join("、", Items.Select(i => $"{i.ItemCode}×{i.Quantity}＠{i.UnitPrice}"));
 }
+
+/// <summary>
+/// Carriers whose ERP 貨運別 code is set in 設定 (shared by every platform; user,
+/// 2026-10-11). A carrier applies when its name appears in the export's carrier text
+/// (e.g. 第三方物流-新竹貨運, 7-11店出); only the ERP codes are local settings.
+/// </summary>
+internal static class FreightCarriers
+{
+    public static readonly string[] All =
+        ["新竹", "7-11", "全家", "黑貓", "宅配通", "萊爾富", "蝦皮店到店", "蝦皮店到店 - 隔日到貨", "店到家宅配"];
+
+    /// <summary>
+    /// The code of the carrier named in <paramref name="carrierText"/>; the longest name wins
+    /// (蝦皮店到店 - 隔日到貨 over 蝦皮店到店). Spaces are ignored on both sides.
+    /// </summary>
+    public static string Match(string carrierText, IReadOnlyDictionary<string, string> codes)
+    {
+        var text = Compact(carrierText);
+        if (text.Length == 0) return string.Empty;
+        return codes
+            .Where(p => Compact(p.Key).Length > 0 && p.Value.Trim().Length > 0 &&
+                        text.Contains(Compact(p.Key), StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(p => Compact(p.Key).Length)
+            .Select(p => p.Value.Trim())
+            .FirstOrDefault() ?? string.Empty;
+    }
+
+    private static string Compact(string value) =>
+        new((value ?? string.Empty).Where(c => !char.IsWhiteSpace(c)).ToArray());
+}

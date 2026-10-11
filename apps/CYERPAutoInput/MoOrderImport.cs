@@ -181,7 +181,7 @@ internal static class MoOrderImport
         if (order.Shipping > 0) items.Add(new ImportedItem(mapping.ShippingItemCode, "1", Number(order.Shipping)));
 
         var freightType = MatchFreightType(order.Carrier, mapping.FreightTypes);
-        if (freightType.Length == 0) handoff.Add($"物流商「{order.Carrier}」不在貨運別對照表");
+        if (freightType.Length == 0) handoff.Add($"物流商「{order.Carrier}」沒有設定貨運別");
 
         var header = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -210,22 +210,11 @@ internal static class MoOrderImport
         };
     }
 
-    /// <summary>
-    /// MO店+ carriers set up in 設定 (user, 2026-10-11): each keyword is matched inside the
-    /// export's 物流商 text (e.g. 第三方物流-新竹貨運, 7-11店出, 全家店出); only the ERP code is local.
-    /// </summary>
-    internal static readonly string[] Carriers = ["新竹", "7-11", "全家"];
-
     /// <summary>"A + B" style codes name a set of items; they go to a person for now.</summary>
     internal static bool IsCombination(string code) => code.IndexOfAny(['+', '＋']) >= 0;
 
-    /// <summary>The 貨運別 whose keyword appears in the carrier text; the longest keyword wins.</summary>
     internal static string MatchFreightType(string carrier, IReadOnlyDictionary<string, string> table) =>
-        table.Where(p => p.Key.Trim().Length > 0 && p.Value.Trim().Length > 0 &&
-                         carrier.Contains(p.Key.Trim(), StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(p => p.Key.Trim().Length)
-            .Select(p => p.Value.Trim())
-            .FirstOrDefault() ?? string.Empty;
+        FreightCarriers.Match(carrier, table);
 
     /// <summary>Parses "關鍵字=貨運別" lines (settings text box) into the carrier table.</summary>
     internal static Dictionary<string, string> ParseFreightTable(string text)

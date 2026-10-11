@@ -11,9 +11,9 @@
   "MoOrderType": "",
   "MoCustomerCode": "",
   "MoNotePrefix": "MO店+訂單",
-  "MoDiscountItemCode": "",
-  "MoShippingItemCode": "",
-  "MoFreightTypes": {},
   "MoPasswordProtected": "",
+  "DiscountItemCode": "",
+  "ShippingItemCode": "",
+  "FreightTypes": {},
   "Defaults": {}
 }

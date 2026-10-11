@@ -45,7 +45,15 @@ internal static class UiSnapshot
             }
 
             using (var settings = new SettingsForm(new UserSettings(), () => Task.FromResult(string.Empty)))
+            {
                 Capture(settings, Path.Combine(folder, "settings.png"), settings.Size);
+                var tabs = AllControls(settings).OfType<TabControl>().First();
+                for (var i = 1; i < tabs.TabCount; i++)
+                {
+                    tabs.SelectedIndex = i;
+                    Capture(settings, Path.Combine(folder, $"settings-{i + 1}.png"), settings.Size);
+                }
+            }
 
             // Fictitious MO店+ orders: one ready, one handed off, one needing the invoice name.
             var mapping = new MoMapping("T01", "C0001", "MO店+訂單", "D901", "S100", MoOrderImport.ParseFreightTable("7-11=F1"));
@@ -70,6 +78,15 @@ internal static class UiSnapshot
             log.Error("ui-snapshot", ex);
             Console.Error.WriteLine($"ui snapshot failed: {ex.GetType().Name}: {ex.Message}");
             return 1;
+        }
+    }
+
+    private static IEnumerable<Control> AllControls(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            yield return child;
+            foreach (var nested in AllControls(child)) yield return nested;
         }
     }
 

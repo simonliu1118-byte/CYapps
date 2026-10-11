@@ -6,7 +6,7 @@ namespace CYERPAutoInput;
 internal sealed record ShopeeOrderItem(string ItemCode, string Quantity, string UnitPrice, string Name);
 
 internal sealed record ShopeeOrder(int SourceRow, string OrderSn, string TrackingNumber, IReadOnlyList<ShopeeOrderItem> Items,
-    string BuyerRemark = "", string SellerNote = "")
+    string BuyerRemark = "", string SellerNote = "", string Carrier = "")
 {
     /// <summary>
     /// Orders with a buyer remark or seller note are entered up to the header only and
@@ -24,7 +24,8 @@ internal sealed record ShopeeOrder(int SourceRow, string OrderSn, string Trackin
 internal sealed record ShopeeImportResult(IReadOnlyList<ShopeeOrder> Orders, IReadOnlyList<string> Errors);
 
 /// <summary>Where the local Shopee settings put an order on the COPI08 form.</summary>
-internal sealed record ShopeeMapping(string OrderType, string CustomerCode, string NotePrefix);
+internal sealed record ShopeeMapping(string OrderType, string CustomerCode, string NotePrefix,
+    IReadOnlyDictionary<string, string>? FreightTypes = null);
 
 /// <summary>
 /// Parses the official Shopee order export (one order per row; all items of an order in
@@ -35,6 +36,12 @@ internal sealed record ShopeeMapping(string OrderType, string CustomerCode, stri
 internal static partial class ShopeeOrderImport
 {
     private static readonly string[] RequiredHeaders = ["tracking_number", "order_sn", "product_info"];
+
+    /// <summary>
+    /// The current official export has no carrier column; when one appears (any of these
+    /// names), its text is matched to the shared 貨運別 settings.
+    /// </summary>
+    private static readonly string[] CarrierHeaders = ["shipping_carrier", "shipping_option", "寄送方式", "物流方式", "物流商"];
 
     public static ShopeeImportResult Parse(IReadOnlyList<string[]> rows)
     {
@@ -75,7 +82,8 @@ internal static partial class ShopeeOrderImport
                 continue;
             }
             if (items.Count == 0) { errors.Add($"第 {excelRow} 列訂單 {orderSn}：product_info 沒有商品。"); continue; }
-            orders.Add(new ShopeeOrder(excelRow, orderSn, tracking, items, Cell("remark_from_buyer"), Cell("seller_note")));
+            var carrier = CarrierHeaders.Select(Cell).FirstOrDefault(v => v.Length > 0) ?? string.Empty;
+            orders.Add(new ShopeeOrder(excelRow, orderSn, tracking, items, Cell("remark_from_buyer"), Cell("seller_note"), carrier));
         }
         return new(orders, errors);
     }
@@ -135,13 +143,21 @@ internal static partial class ShopeeOrderImport
     {
         var header = HeaderValues(order, mapping);
         header.Remove("ship_addr1"); // carried by ImportedOrder.TrackingNumber
+        var handoff = order.HandoffReason;
+        if (order.Carrier.Length > 0)
+        {
+            var freightType = FreightCarriers.Match(order.Carrier, mapping.FreightTypes ?? new Dictionary<string, string>());
+            if (freightType.Length > 0) header["freight_type"] = freightType;
+            else handoff = string.Join("；", new[] { handoff, $"物流商「{order.Carrier}」沒有設定貨運別" }.Where(x => x.Length > 0));
+        }
         return new ImportedOrder
         {
             Source = Source,
             OrderSn = order.OrderSn,
             Header = header,
             Items = order.Items.Select(i => new ImportedItem(i.ItemCode, i.Quantity, i.UnitPrice)).ToList(),
-            HandoffReason = order.HandoffReason,
+            HandoffReason = handoff,
+            Carrier = order.Carrier,
             TrackingNumber = order.TrackingNumber
         };
     }

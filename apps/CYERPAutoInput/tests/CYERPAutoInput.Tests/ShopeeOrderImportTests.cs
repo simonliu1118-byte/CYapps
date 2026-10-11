@@ -133,3 +133,36 @@ public class ShopeeOrderImportTests
         return stream;
     }
 }
+
+public class ShopeeCarrierTests
+{
+    private const string OneItem = "[1] 商品名稱:測試商品; 價格: $ 100; 數量: 1; 商品選項貨號: X00001; ";
+
+    [Fact]
+    public void An_optional_carrier_column_sets_the_freight_type_or_hands_off()
+    {
+        string[] header = ["tracking_number", "order_sn", "product_info", "shipping_carrier"];
+        var result = ShopeeOrderImport.Parse(
+        [
+            header,
+            ["TW1", "SN1", OneItem, "蝦皮店到店 - 隔日到貨"],
+            ["TW2", "SN2", OneItem, "某某物流"]
+        ]);
+        var mapping = new ShopeeMapping("T01", "C0001", "蝦皮訂單",
+            new Dictionary<string, string> { ["蝦皮店到店"] = "F6", ["蝦皮店到店 - 隔日到貨"] = "F7" });
+        var first = ShopeeOrderImport.ToImported(result.Orders[0], mapping);
+        Assert.Equal("F7", first.HeaderValues()["freight_type"]);
+        Assert.Empty(first.HandoffReason);
+        var second = ShopeeOrderImport.ToImported(result.Orders[1], mapping);
+        Assert.Contains("沒有設定貨運別", second.HandoffReason);
+    }
+
+    [Fact]
+    public void Without_a_carrier_column_the_freight_type_is_left_to_the_form()
+    {
+        var result = ShopeeOrderImport.Parse([["tracking_number", "order_sn", "product_info"], ["TW1", "SN1", OneItem]]);
+        var order = ShopeeOrderImport.ToImported(result.Orders[0], new ShopeeMapping("T01", "C0001", "蝦皮訂單"));
+        Assert.False(order.HeaderValues().ContainsKey("freight_type"));
+        Assert.Empty(order.HandoffReason);
+    }
+}

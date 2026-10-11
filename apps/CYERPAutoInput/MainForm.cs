@@ -797,7 +797,7 @@ internal sealed class MainForm : Form
         }
         _log.Info("shopee", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
 
-        var mapping = new ShopeeMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix);
+        var mapping = new ShopeeMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix, _settings.FreightTypes);
         var orders = parsed.Orders.Select(o => ShopeeOrderImport.ToImported(o, mapping)).ToList();
         await PreviewAndRunAsync(ShopeeOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
     }
@@ -809,12 +809,12 @@ internal sealed class MainForm : Form
         {
             _settings.MoOrderType.Length == 0 ? "銷貨單別" : null,
             _settings.MoCustomerCode.Length == 0 ? "客戶代號" : null,
-            _settings.MoDiscountItemCode.Length == 0 ? "折價券品號" : null,
-            _settings.MoShippingItemCode.Length == 0 ? "運費品號" : null
+            _settings.DiscountItemCode.Length == 0 ? "折價券品號" : null,
+            _settings.ShippingItemCode.Length == 0 ? "運費品號" : null
         }.Where(x => x is not null).ToList();
         if (missing.Count > 0)
         {
-            MessageBox.Show(this, $"請先在「設定」填入 MO店+ 匯入的{string.Join("、", missing)}。", "MO店+訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", "MO店+訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -839,7 +839,7 @@ internal sealed class MainForm : Form
         _log.Info("mo", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
 
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
-            _settings.MoDiscountItemCode, _settings.MoShippingItemCode, _settings.MoFreightTypes);
+            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes);
         var orders = parsed.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
         await PreviewAndRunAsync(MoOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
     }
@@ -1232,7 +1232,7 @@ internal sealed class MainForm : Form
 
         // The shipping item's amount goes to 送貨資料・運費 when that field was left blank
         // (user, 2026-10-10), whatever the order's source.
-        var shippingCode = _settings.MoShippingItemCode;
+        var shippingCode = _settings.ShippingItemCode;
         if (shippingCode.Length > 0 && !values.ContainsKey("freight_fee"))
         {
             var shipping = details.FirstOrDefault(d => d.ItemCode.Equals(shippingCode, StringComparison.OrdinalIgnoreCase));

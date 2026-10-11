@@ -93,7 +93,7 @@ public class MoOrderImportTests
         Assert.Contains("組合品號", orders["90000000000003"].HandoffReason);
         Assert.Contains("沒有商品原廠編號", orders["90000000000004"].HandoffReason);
         Assert.Contains("店家備註：請先出貨", orders["90000000000005"].HandoffReason);
-        Assert.Contains("不在貨運別對照表", orders["90000000000006"].HandoffReason);
+        Assert.Contains("沒有設定貨運別", orders["90000000000006"].HandoffReason);
         Assert.False(orders["90000000000006"].HeaderValues().ContainsKey("freight_type"));
     }
 
@@ -173,5 +173,35 @@ public class MoOrderImportTests
         var table = MoOrderImport.ParseFreightTable("新竹=F3\n新竹貨運=F5\n不完整的行\n=F9");
         Assert.Equal(2, table.Count);
         Assert.Equal("F5", MoOrderImport.MatchFreightType("第三方物流-新竹貨運", table));
+    }
+}
+
+public class FreightCarrierTests
+{
+    private static readonly Dictionary<string, string> Codes = new()
+    {
+        ["新竹"] = "F3", ["7-11"] = "F1", ["全家"] = "F2",
+        ["蝦皮店到店"] = "F6", ["蝦皮店到店 - 隔日到貨"] = "F7", ["黑貓"] = "F4"
+    };
+
+    [Theory]
+    [InlineData("第三方物流-新竹貨運", "F3")]
+    [InlineData("7-11店出", "F1")]
+    [InlineData("蝦皮店到店", "F6")]
+    [InlineData("蝦皮店到店 - 隔日到貨", "F7")]
+    [InlineData("蝦皮店到店-隔日到貨", "F7")]
+    [InlineData("黑貓宅急便", "F4")]
+    [InlineData("萊爾富", "")]
+    [InlineData("", "")]
+    public void Matches_the_longest_carrier_name_in_the_text(string text, string expected)
+    {
+        Assert.Equal(expected, FreightCarriers.Match(text, Codes));
+    }
+
+    [Fact]
+    public void Lists_every_carrier_once()
+    {
+        Assert.Equal(FreightCarriers.All.Length, FreightCarriers.All.Distinct().Count());
+        Assert.Contains("店到家宅配", FreightCarriers.All);
     }
 }
