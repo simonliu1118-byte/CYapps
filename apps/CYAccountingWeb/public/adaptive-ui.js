@@ -23,7 +23,6 @@ function startAdaptiveUi() {
   setupAdaptiveEntryHelp();
   setupAdaptiveDataSettings();
   cleanupAdaptiveInterfaceCopy();
-  setupAdaptiveUserIdentity();
 }
 
 function setupAdaptiveViewportState() {
@@ -79,6 +78,7 @@ function setupAdaptiveHeaderLayout() {
 
   if (currentUser && currentUser.parentElement !== accountCluster) accountCluster.append(currentUser);
   if (logout && logout.parentElement !== accountCluster) accountCluster.append(logout);
+  accountCluster.dataset.identityReady = String(Boolean(currentUser?.querySelector('.current-user-main')?.textContent) && !currentUser.classList.contains('hidden'));
   if (accountCluster.parentElement !== actions) actions.append(accountCluster);
   if (settings) {
     if (settings.parentElement !== actions) actions.append(settings);
@@ -225,41 +225,6 @@ function cleanupAdaptiveInterfaceCopy() {
   }
 }
 
-async function setupAdaptiveUserIdentity() {
-  const target = document.querySelector('#currentUser');
-  if (!target) return;
-  let user = null;
-
-  const render = () => {
-    if (!user) return;
-    if (target.querySelector('.current-user-role')) return;
-    const employeeNo = String(user.employeeNo || '').trim();
-    const name = String(user.name || '').trim();
-    const role = String(user.role || '').trim();
-    const roleLabel = adaptiveRoleLabel(role);
-    target.innerHTML = `<span class="current-user-main">${adaptiveEscapeHtml(`${employeeNo} ${name}`.trim())}</span><span class="current-user-role" title="權限組：${adaptiveEscapeHtml(role || roleLabel)}">${adaptiveEscapeHtml(roleLabel)}</span>`;
-    target.classList.remove('hidden');
-  };
-
-  const observer = new MutationObserver(render);
-  observer.observe(target, { childList: true, subtree: true, characterData: true });
-
-  try {
-    user = window.cyaccCurrentUser || (window.cyaccSessionPromise ? await window.cyaccSessionPromise : null);
-    if (!user) return;
-    target.innerHTML = '';
-    render();
-  } catch {
-    // Authentication UI already owns connection/error handling; role display is optional presentation only.
-  }
-}
-
-function adaptiveRoleLabel(role) {
-  if (role === 'SUPER_ADMIN') return '超級管理員';
-  if (role === 'ADMIN') return '管理員';
-  return role || '一般使用者';
-}
-
 function adaptiveEscapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -349,7 +314,6 @@ function startEntryUi() {
   runEntryUiStep('account-choices', setupEntryUiAccountChoices);
   runEntryUiStep('desktop-quick-tools', setupDesktopEntryQuickTools);
   runEntryUiStep('summary-limit', setupEntryUiSummaryLimit);
-  runEntryUiStep('role-medal', setupEntryUiRoleMedal);
   runEntryUiStep('enter-hints', setupMobileEntryEnterHints);
   runEntryUiStep('help-copy', syncMobileEntryHelpCopy);
 }
@@ -365,7 +329,6 @@ function runEntryUiStep(name, task) {
 function syncEntryUiAfterLoad() {
   startEntryUi();
   syncEntryUiAccountChoices();
-  syncEntryUiRoleMedal();
   syncMobileEntryAccountPickerLabel();
   syncMobileEntryHelpCopy();
 }
@@ -670,22 +633,6 @@ function entryUiTrimWeighted(value, maxUnits) {
 
 
 
-function setupEntryUiRoleMedal() {
-  const target = document.querySelector('#currentUser');
-  if (!target) return;
-  const observer = new MutationObserver(syncEntryUiRoleMedal);
-  observer.observe(target, { childList: true, subtree: true, characterData: true });
-  syncEntryUiRoleMedal();
-}
-
-function syncEntryUiRoleMedal() {
-  const target = document.querySelector('#currentUser');
-  const role = String(target?.querySelector('.current-user-role')?.textContent || '').trim();
-  if (!target) return;
-  target.classList.toggle('role-super-admin', role === '超級管理員');
-  target.classList.toggle('role-admin', role === '管理員');
-}
-
 function setupMobileEntryEnterHints() {
   const date = document.querySelector('#txDate');
   const summary = document.querySelector('#summary');
@@ -896,6 +843,7 @@ function syncMobileWorkspaceMobileIdentity() {
   const preview = isTabletPreviewMode();
   const ready = Boolean(main) && !source.classList.contains('hidden');
   const cluster = source.closest('.cy-account-cluster');
+  if (cluster) cluster.dataset.identityReady = String(ready);
   const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
   const admin = source.classList.contains('role-admin') || role === '管理員';
 

@@ -106,6 +106,36 @@ await assert.rejects(browserContext.window.cyaccSessionPromise, /帳號驗證逾
 assert.equal(bootStatus.textContent, '帳號驗證逾時，請重新整理後再試。');
 assert.equal(classNames.has('cyacc-boot-failed'), true);
 
+// A pending session never reveals a placeholder; only Auth constructs the identity once.
+let resolveUser, identityWrites = 0;
+const identityClasses = new Set(['hidden']);
+const cluster = { dataset: { identityReady: 'false' } };
+const identity = {
+  classList: { contains: name => identityClasses.has(name), add: name => identityClasses.add(name), remove: (...names) => names.forEach(name => identityClasses.delete(name)) },
+  replaceChildren() { identityWrites++; }, append(...children) { this.children = children; }, closest() { return cluster; }
+};
+const listeners = {};
+const identityScope = vm.createContext({
+  AbortController, CustomEvent: browserContext.CustomEvent, console, location: { replace() {} },
+  fetch: () => new Promise(resolve => { resolveUser = resolve; }),
+  document: { readyState: 'loading', body: { dataset: {} }, addEventListener: (type, listener) => { listeners[type] = listener; },
+    querySelector: selector => selector === '#currentUser' ? identity : null, createElement: () => ({}) },
+  window: { setTimeout, clearTimeout, dispatchEvent() {}, matchMedia: () => ({ matches: false }) }
+});
+vm.runInContext(auth, identityScope);
+listeners.DOMContentLoaded();
+assert.equal(identityWrites, 0);
+assert.equal(cluster.dataset.identityReady, 'false');
+await Promise.resolve();
+resolveUser({ ok: true, status: 200, json: async () => ({ ok: true, user: { employeeNo: '0123', name: '測試', role: 'SUPER_ADMIN', canWriteAccounting: true } }) });
+await identityScope.window.cyaccSessionPromise;
+await Promise.resolve();
+assert.equal(identityWrites, 1);
+assert.equal(identity.children[0].textContent, '0123 測試');
+assert.equal(identity.children[1].textContent, '超級管理員');
+assert.equal(cluster.dataset.identityReady, 'true');
+assert.equal(identityClasses.has('hidden'), false);
+
 // Expiry navigation uses the provider timestamp and catches revocation on API calls.
 const redirects = [], expiryTimers = [], expiryListeners = {};
 let browserNow = 1000;

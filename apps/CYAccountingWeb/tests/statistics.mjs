@@ -78,12 +78,49 @@ globalThis.document = { readyState: 'loading', addEventListener() {} };
 const ui = await import('../public/statistics-ui.js');
 delete globalThis.document;
 const synthetic = structuredClone(classified); synthetic.groups[0].subjects[0].name = '<script>bad</script>';
+synthetic.groups.find(group => group.kind === 'expense').subjects[0].name = '<script>bad</script>';
 assert.ok(ui.renderStatistics(synthetic).includes('&lt;script&gt;bad&lt;/script&gt;'));
+assert.ok(ui.renderStatistics(synthetic).includes('均排除指定移轉科目'));
+assert.ok(!ui.renderStatistics(classified).includes('data-statistics-group="income:'));
+assert.ok(ui.renderStatistics(classified).includes('非移轉記帳共 2 筆'));
+assert.equal(ui.statisticsItems(period,'income').reduce((sum,item)=>sum+item.amount,0),1651);
 assert.ok(ui.renderIncomeStatement(synthetic).includes('帳戶移轉（另列'));
 assert.ok(ui.renderIncomeStatement(synthetic).includes('$1,651'));
-assert.equal(ui.statisticsItems(classified,'income').reduce((sum,item)=>sum+item.amount,0),1651);
+assert.equal(ui.statisticsItems(classified,'income').reduce((sum,item)=>sum+item.amount,0),0,'chart groups must exclude transfer subjects');
 assert.equal(ui.statisticsItems(classified,'expense','subject').reduce((sum,item)=>sum+item.amount,0),27);
 assert.ok(!ui.renderStatistics(await stats('2030-01')).includes('<circle'));
+
+// Direct annotations keep tiny slices legible without hiding items in hover text.
+const pieItems = [{name:'大分類',amount:900}, ...Array.from({length:35},(_,i)=>({name:`小分類${i}`,amount:1}))];
+for (const compact of [false,true]) {
+  const layout = ui.pieLabelLayout(pieItems,compact);
+  assert.equal(layout.labels.length,pieItems.length);
+  for (const side of ['left','right']) {
+    const labels=layout.labels.filter(label=>!label.inside && label.side===side).sort((a,b)=>a.y-b.y);
+    for(let i=0;i<labels.length;i++) {
+      assert.ok(labels[i].y-labels[i].height/2>=0);
+      assert.ok(labels[i].y+labels[i].height/2<=layout.height);
+      if(i) assert.ok(labels[i].y-labels[i].height/2>=labels[i-1].y+labels[i-1].height/2+5);
+    }
+  }
+}
+const tabs=ui.renderStatistics(classified,{id:'test-stats',tab:'totals'});
+assert.match(tabs,/id="test-stats-totals-tab"[^>]*aria-selected="true"/);
+assert.match(tabs,/id="test-stats-charts"[^>]*hidden/);
+assert.ok(!tabs.includes('<title>'),'chart values are visible annotations rather than tooltip-only titles');
+// Pagination must retain each subject exactly once, and keep full-month totals on every page.
+const many=structuredClone(classified);
+many.groups=[{kind:'income',name:'分類',subjects:Array.from({length:37},(_,i)=>({name:`科目${i}`,amount:i+1,isTransfer:false}))},
+ {kind:'expense',name:'移轉分類',subjects:Array.from({length:13},(_,i)=>({name:`移轉${i}`,amount:i+1,isTransfer:true}))}];
+const seen=new Set(),transfers=new Set();
+const first=ui.statementPage(many,{operatingRows:7,transferRows:3});
+for(let page=0;page<first.pages;page++) {
+  const result=ui.statementPage(many,{operatingRows:7,transferRows:3,page});
+  result.lists[0].filter(row=>row.type==='subject').forEach(row=>{assert.ok(!seen.has(row.name));seen.add(row.name)});
+  result.lists[3].filter(row=>row.type==='subject').forEach(row=>{assert.ok(!transfers.has(row.name));transfers.add(row.name)});
+  assert.ok(ui.renderIncomeStatement(many,{operatingRows:7,transferRows:3,page}).includes('$1,651'));
+}
+assert.equal(seen.size,37);assert.equal(transfers.size,13);
 
 // Existing mobile page owner must preserve the entry/ledger visibility and allow statistics as a third page.
 const adaptive = fs.readFileSync(new URL('../public/adaptive-ui.js',import.meta.url),'utf8');

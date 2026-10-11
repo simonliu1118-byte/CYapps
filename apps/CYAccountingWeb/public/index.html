@@ -74,7 +74,7 @@
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.23.0 Build 1</span></p>
+      <p>CYAccounting Web <span class="version">V0.23.1</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -129,7 +129,7 @@
       </div>
     </section>
     <section id="statisticsCard" class="card statistics-card" aria-label="單月統計">
-      <div class="statistics-actions"><button type="button" class="secondary compact" data-statistics-open="period">多月統計圖表</button><button type="button" class="secondary compact" data-statistics-open="income">單月損益表</button></div>
+      <div class="statistics-actions"><button type="button" class="secondary compact" data-statistics-open="income">單月損益表</button><button type="button" class="secondary compact" data-statistics-open="period">多月統計圖表</button></div>
       <div class="statistics-heading"><h2>單月統計 <span id="statisticsMonthLabel"></span></h2><label class="statistics-mobile-month">月份<input id="statisticsMobileMonth" type="month" aria-label="統計月份"></label></div>
       <div id="statisticsSidebarResults" class="statistics-results" aria-live="polite"><p class="statistics-empty">載入統計中…</p></div>
     </section>
@@ -137,7 +137,7 @@
 
   <dialog id="statisticsDialog" class="modal statistics-dialog" aria-labelledby="statisticsDialogTitle">
     <div class="modal-header"><h2 id="statisticsDialogTitle">統計圖表</h2><button type="button" class="icon-button" data-close-dialog="statisticsDialog" aria-label="關閉統計圖表">×</button></div>
-    <div class="statistics-actions statistics-dialog-tabs"><button type="button" class="secondary" data-statistics-open="period">多月統計圖表</button><button type="button" class="secondary" data-statistics-open="income">單月損益表</button></div>
+    <div class="statistics-actions statistics-dialog-tabs"><button type="button" class="secondary" data-statistics-open="income">單月損益表</button><button type="button" class="secondary" data-statistics-open="period">多月統計圖表</button></div>
     <form id="statisticsPeriodForm" class="statistics-period-form"><label><span id="statisticsStartLabel">起始月份</span><input id="statisticsStart" type="month" required></label><label id="statisticsEndField">結束月份<input id="statisticsEnd" type="month" required></label><button type="submit" class="primary">查詢</button></form>
     <div id="statisticsDialogResults" class="statistics-results" aria-live="polite"></div>
   </dialog>
