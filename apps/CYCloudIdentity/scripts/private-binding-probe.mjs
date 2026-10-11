@@ -130,11 +130,22 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
       const expires = Number(current.bindings.find(b => b.type === 'plain_text' && b.name === 'PROBE_EXPIRES_AT')?.text);
       requireValue(Number.isSafeInteger(expires) && expires > 0 && expires <= Date.now(), 'PROBE_RETAINED_VERSION_NOT_EXPIRED');
     }
+    // Use the immutable Worker ID for deletion. Validate the name and re-read the
+    // same owned version by ID before mutation; never guess or try other targets.
+    const identity = (await apiCall(`/workers/workers/${encodeURIComponent(worker)}`, 'GET', undefined, 'CONSUMER_WORKER_ID_READ')).result;
+    requireValue(identity?.name === worker && (versionUuid(identity.id) || /^[a-f0-9]{32}$/i.test(identity.id ?? '')),
+      'PROBE_WORKER_ID_SCOPE_FAILED');
+    const target = `/workers/workers/${encodeURIComponent(identity.id)}/versions/${versionId}`;
+    const identified = (await apiCall(target)).result;
+    requireValue(identified?.id === versionId && stable(identified.annotations) === stable(current.annotations) &&
+      stable(identified.bindings) === stable(current.bindings), 'PROBE_WORKER_ID_VERSION_MISMATCH');
+    console.log('Immutable consumer Worker ID and same owned version readback verified before deletion.');
     const deployed = (await apiCall(prefix + '/deployments')).result?.deployments?.[0]?.versions;
     requireValue(Array.isArray(deployed) && !deployed.some(v => v.version_id === versionId), 'PROBE_VERSION_IN_USE_REFUSE_DELETE');
     requireValue(stable(deployed) === stable(deployments), 'PROBE_CONSUMER_DEPLOYMENT_CHANGED');
-    await apiCall(versionPrefix + '/' + versionId, 'DELETE', undefined, 'OWNED_VERSION_DELETE');
-    requireValue((await apiCall(versionPrefix + '/' + versionId)).absent === true, 'PROBE_CLEANUP_NOT_CONFIRMED');
+    await apiCall(target, 'DELETE', undefined, 'OWNED_VERSION_DELETE');
+    requireValue((await apiCall(target)).absent === true &&
+      (await apiCall(versionPrefix + '/' + versionId)).absent === true, 'PROBE_CLEANUP_NOT_CONFIRMED');
   };
   const verifyOriginal = async () => {
     const active = await activeDeployment(async suffix => (await apiCall(suffix)).result, worker);

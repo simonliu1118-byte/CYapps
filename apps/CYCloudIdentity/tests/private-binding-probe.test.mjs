@@ -8,13 +8,13 @@ import worker from '../scripts/private-binding-probe-worker.mjs';
 import { main, platformResponse } from '../scripts/private-binding-probe.mjs';
 
 for (const scenario of ['success', 'none', 'multiple', 'wrong-owner', 'wrong-target', 'd1', 'secret', 'active',
-  'not-expired', 'invalid-expiry', 'wrong-id', 'delete-denied', 'absence-unconfirmed', 'changed-after']) {
+  'not-expired', 'invalid-expiry', 'wrong-id', 'delete-denied', 'absence-unconfirmed', 'changed-after', 'worker-id-name', 'worker-id-invalid', 'worker-id-version']) {
   test(`explicit retained-version cleanup: ${scenario}`, async t => {
     const consumer = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../CYInvoice/cloud/wrangler.jsonc'), 'utf8'));
     const env = {CLOUDFLARE_API_TOKEN:'PRIVATE_TOKEN', CLOUDFLARE_ACCOUNT_ID:'PRIVATE_ACCOUNT',
       CYID_WORKER_NAME:'private-provider-development', CYID_D1_DATABASE_ID:'private-provider-d1', RUNNER_TEMP:os.tmpdir()};
     const original = {name:env.CYID_WORKER_NAME,vars:{APP_ENV:'development',CORE_ACCOUNT_APPLICATION_ID:'PRIVATE_CORE_APP'}};
-    const activeId='11111111-1111-1111-1111-111111111111', probeId='22222222-2222-2222-2222-222222222222', nonce='a'.repeat(32);
+    const activeId='11111111-1111-1111-1111-111111111111', probeId='22222222-2222-2222-2222-222222222222', workerId='33333333-3333-3333-3333-333333333333', nonce='a'.repeat(32);
     const originalBindings=[{type:'plain_text',name:'APP_ENV',text:'development'},{type:'plain_text',name:'CYID_ENABLED',text:'false'},
       {type:'d1',name:'DB',id:'private-consumer-d1'},{type:'secret_text',name:'PRIVATE_SECRET'}];
     const deployments={deployments:[{versions:[{version_id:activeId,percentage:100}]}]};
@@ -33,8 +33,11 @@ for (const scenario of ['success', 'none', 'multiple', 'wrong-owner', 'wrong-tar
     const ok=result=>Response.json({success:true,result});
     const versions=`/workers/workers/${consumer.name}/versions`,script=`/workers/scripts/${consumer.name}`;
     const fetcher=async(url,args={})=>{
-      const p=new URL(url).pathname.replace(/^\/client\/v4\/accounts\/PRIVATE_ACCOUNT/,''),method=args.method??'GET';
-      operations.push({p,method});
+      const raw=new URL(url).pathname.replace(/^\/client\/v4\/accounts\/PRIVATE_ACCOUNT/,''),method=args.method??'GET';
+      const p=raw.replace('/workers/workers/'+workerId+'/','/workers/workers/'+consumer.name+'/');
+      operations.push({p:raw,method});
+      if(p==='/workers/workers/'+consumer.name)return ok({id:scenario==='worker-id-invalid'?'bad-id':workerId,name:scenario==='worker-id-name'?'private-other-worker':consumer.name});
+      if(raw.includes(workerId)&&scenario==='worker-id-version')return ok({...probe,bindings:[]});
       if(p===script+'/deployments')return ok(scenario==='active'?{deployments:[{versions:[{version_id:probeId,percentage:100}]}]}:deployments);
       if(p===versions+'/'+activeId)return ok({id:activeId,bindings:deleted&&scenario==='changed-after'?[]:originalBindings});
       if(p===script+'/subdomain')return ok({enabled:true,previews_enabled:false});
@@ -53,7 +56,7 @@ for (const scenario of ['success', 'none', 'multiple', 'wrong-owner', 'wrong-tar
     else await assert.rejects(main(env,fetcher,command,original,audit,true));
     const mayDelete=['success','delete-denied','absence-unconfirmed','changed-after'].includes(scenario);
     assert.equal(operations.filter(o=>o.method!=='GET').length,mayDelete?1:0);
-    assert.equal(operations.filter(o=>o.method!=='GET').every(o=>o.method==='DELETE'&&o.p===versions+'/'+probeId),true);
+    assert.equal(operations.filter(o=>o.method!=='GET').every(o=>o.method==='DELETE'&&o.p===`/workers/workers/${workerId}/versions/${probeId}`),true);
     assert.doesNotMatch(logs.join('\n'),/PRIVATE_|private-provider|private-consumer|11111111|22222222|a{32}/);
     assert.equal(logs.join('\n').includes(consumer.name),false);
     assert.equal(logs.join('\n').includes('Expired owned probe version absence confirmed'),scenario==='success');
@@ -232,7 +235,7 @@ for (const scenario of ['success', 'approved-scope', 'scope-unavailable', 'scope
     const env = { CLOUDFLARE_API_TOKEN: 'PRIVATE_API_TOKEN', CLOUDFLARE_ACCOUNT_ID: 'PRIVATE_ACCOUNT',
       CYID_WORKER_NAME: 'private-provider-development', CYID_D1_DATABASE_ID: 'private-provider-d1', RUNNER_TEMP: directory };
     const original = { name: env.CYID_WORKER_NAME, vars: { APP_ENV: 'development', CORE_ACCOUNT_APPLICATION_ID: 'PRIVATE_CORE_APP' } };
-    const originalId = '11111111-1111-1111-1111-111111111111', probeId = '22222222-2222-2222-2222-222222222222';
+    const originalId = '11111111-1111-1111-1111-111111111111', probeId = '22222222-2222-2222-2222-222222222222', workerId='33333333-3333-3333-3333-333333333333';
     const initialBindings = [{type:'plain_text',name:'APP_ENV',text:'development'}, {type:'plain_text',name:'CYID_ENABLED',text:'false'},
       {type:'d1',name:'DB',id:'private-original-consumer-d1'}, {type:'secret_text',name:'PRIVATE_ORIGINAL_SECRET'}];
     const originalDeployment = [{version_id:originalId,percentage:100}];
@@ -260,8 +263,10 @@ for (const scenario of ['success', 'approved-scope', 'scope-unavailable', 'scope
     const missing = () => new Response(null,{status:404});
     const script = `/workers/scripts/${consumer.name}`, versions = `/workers/workers/${consumer.name}/versions`;
     const fetcher = async (url,args={}) => {
-      const u = new URL(url), p = u.pathname.replace(/^\/client\/v4\/accounts\/PRIVATE_ACCOUNT/,''), method = args.method ?? 'GET';
-      operations.push({p,method,query:u.search});
+      const u = new URL(url), raw = u.pathname.replace(/^\/client\/v4\/accounts\/PRIVATE_ACCOUNT/,''), method = args.method ?? 'GET';
+      const p = raw.replace('/workers/workers/'+workerId+'/','/workers/workers/'+consumer.name+'/');
+      operations.push({p:raw,method,query:u.search});
+      if(p==='/workers/workers/'+consumer.name)return ok({id:workerId,name:consumer.name});
       if (url.includes('.workers.dev/')) {
         probeRequests++;
         assert.equal(url,`https://${probeId.slice(0,8)}-${consumer.name}.synthetic.workers.dev/probe`);
@@ -314,7 +319,7 @@ for (const scenario of ['success', 'approved-scope', 'scope-unavailable', 'scope
       if (success) await main(env,fetcher,command,undefined,audit);
       else await assert.rejects(main(env,fetcher,command,undefined,audit), /^Error: (?:PROBE_[A-Z0-9_]+|SINGLE_ACTIVE_DEPLOYMENT_REQUIRED|ACTIVE_[A-Z0-9_]+|PRIVATE_BINDING_TRANSPORT_FAILED)$/);
       assert.equal(deleted,!noMutation && !refuseDelete && !['upload-denied','delete-denied'].includes(scenario));
-      assert.equal(operations.filter(o=>o.method!=='GET').every(o=>o.p===versions || o.p===versions+'/'+probeId),true);
+      assert.equal(operations.filter(o=>o.method!=='GET').every(o=>o.p===versions || o.p===`/workers/workers/${workerId}/versions/${probeId}`),true);
       assert.equal(operations.some(o=>/\/d1\/|\/identity\//.test(o.p)),false);
       if (noMutation) assert.equal(operations.some(o=>o.method!=='GET'),false);
       assert.equal(fs.readdirSync(directory).length,0);
