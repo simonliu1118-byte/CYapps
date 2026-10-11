@@ -4,9 +4,11 @@
 
 ## 目前工作
 
-- V0.22.33 Build 1：恢復角色填色並修正帳號文字行高。V0.22.33：桌機工具按鈕等寬等字級、使用者文字對齊與月份浮窗裁切修正；統計及圖表僅提出方案，尚未實作。
+- V0.23.0 新增統計；桌機 ≥1600px 三欄、較窄桌機統計置於看帳下方；手機第三頁籤、平板雙方向同一入口。原帳務 writer、native picker、Settings lifecycle 與 Identity owner 保留。
+- 移轉科目以 categories.id 儲存於既有 app_settings，隨既有備份保存；不猜測或自動標記正式科目。分類依現行主檔，未匹配歷史科目以未分類保留。
+- 報表不包含期初餘額；收支包含移轉，損益排除指定移轉科目並另列。
 
-- 正式程式版本為 V0.22.33 Build 1；schema 8 已部署，穩定 Release 為 V0.22.15。
+- 正式程式版本為 V0.23.0；schema 8 已部署，穩定 Release 為 V0.22.15。
 - V0.22.32 指定期間替換與大型 Excel 解析修正已合併、通過 CI 並部署。25 組本地測試通過，公開文件只描述程式能力與建置狀態。
 - 實際帳務來源、交易內容、核對結果、鎖帳／期初現況、備份識別及執行紀錄由私人工作檢查點維護，不放 Public Git。接續資料操作前先讀取私人檢查點；不可從本文件推定是否已匯入或決定重跑。
 - 暫時診斷與清理 workflow 已移除；正式部署維持最小權限，沒有長期資料查詢或日誌清理入口。
@@ -34,6 +36,7 @@
 | 期初餘額 carry-forward / override snapshot | `src/opening-balances.js` |
 | 帳戶封存／解封／永久刪除規則 | `src/account-lifecycle.js` |
 | Backup package / topology | `src/backup-package.js` → `src/backup-service.js` → provider adapters |
+| Statistics snapshot / report settings | `src/statistics.js`；路由與角色檢查仍由 `src/app.js` |
 | Desktop SQLite migration | `src/desktop-migration-core.js` + `src/desktop-migration.js` |
 
 ### Frontend
@@ -46,6 +49,7 @@
 | Quick-entry / frequent presentation | `public/quick-entry.js` |
 | Settings lifecycle / renderer / action surface | `public/adaptive-ui.js` 的 `window.cySettingsManager` |
 | RWD / native picker / gesture / device presentation | `public/adaptive-ui.js` |
+| Statistics charts / income statement | `public/statistics-ui.js`；頁籤與裝置 placement 仍由 Adaptive UI owner |
 | Input confirmation drawer | `public/input-confirmation.js` |
 
 目前沒有核准永久第二套 business/data owner。修 Bug 先找上述 owner；若開始需要第二 renderer、internal MutationObserver、retry bootstrap、DOM relocation、compatibility wrapper、duplicate device business component 或新的 override chain，套用 Architecture Review Trigger，不直接疊下一層。

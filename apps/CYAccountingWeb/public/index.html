@@ -68,12 +68,13 @@
   <link rel="stylesheet" href="/backup.css?rev=backup-readonly-mobile">
   <link rel="stylesheet" href="/desktop-migration.css?rev=desktop-data-panel">
   <link rel="stylesheet" href="/adaptive-ui.css?rev=desktop-ledger-heading">
+  <link rel="stylesheet" href="/statistics.css?rev=statistics-workspace">
 </head>
 <body class="cyacc-booting">
   <header class="topbar">
     <div>
       <h1>志遠記帳系統</h1>
-      <p>CYAccounting Web <span class="version">V0.22.33 Build 1</span></p>
+      <p>CYAccounting Web <span class="version">V0.23.0</span></p>
     </div>
     <div class="topbar-actions">
       <span id="currentUser" class="current-user hidden"></span>
@@ -127,7 +128,19 @@
         </table>
       </div>
     </section>
+    <section id="statisticsCard" class="card statistics-card" aria-label="單月統計">
+      <div class="statistics-actions"><button type="button" class="secondary compact" data-statistics-open="period">多月統計圖表</button><button type="button" class="secondary compact" data-statistics-open="income">單月損益表</button></div>
+      <div class="statistics-heading"><h2>單月統計 <span id="statisticsMonthLabel"></span></h2><label class="statistics-mobile-month">月份<input id="statisticsMobileMonth" type="month" aria-label="統計月份"></label></div>
+      <div id="statisticsSidebarResults" class="statistics-results" aria-live="polite"><p class="statistics-empty">載入統計中…</p></div>
+    </section>
   </main>
+
+  <dialog id="statisticsDialog" class="modal statistics-dialog" aria-labelledby="statisticsDialogTitle">
+    <div class="modal-header"><h2 id="statisticsDialogTitle">統計圖表</h2><button type="button" class="icon-button" data-close-dialog="statisticsDialog" aria-label="關閉統計圖表">×</button></div>
+    <div class="statistics-actions statistics-dialog-tabs"><button type="button" class="secondary" data-statistics-open="period">多月統計圖表</button><button type="button" class="secondary" data-statistics-open="income">單月損益表</button></div>
+    <form id="statisticsPeriodForm" class="statistics-period-form"><label><span id="statisticsStartLabel">起始月份</span><input id="statisticsStart" type="month" required></label><label id="statisticsEndField">結束月份<input id="statisticsEnd" type="month" required></label><button type="submit" class="primary">查詢</button></form>
+    <div id="statisticsDialogResults" class="statistics-results" aria-live="polite"></div>
+  </dialog>
 
   <dialog id="editDialog" class="modal small-modal">
     <form id="editTransactionForm" method="dialog" autocomplete="off">
@@ -158,6 +171,7 @@
       <nav class="settings-nav" aria-label="設定分類">
         <button type="button" class="settings-tab active" data-settings-tab="accounts">帳戶</button>
         <button type="button" class="settings-tab" data-settings-tab="categories">科目</button>
+        <button type="button" class="settings-tab" data-settings-tab="statistics">統計／損益</button>
         <button type="button" class="settings-tab" data-settings-tab="lock">鎖帳</button>
       </nav>
       <div class="settings-content">
@@ -174,6 +188,10 @@
           <div class="inline-add"><input id="newGroupName" type="text" maxlength="60" placeholder="新增大分類"><button id="addGroupButton" class="secondary" type="button">新增大分類</button></div>
         </section>
 
+        <section class="settings-pane" data-settings-pane="statistics">
+          <h3>統計／損益設定</h3><p class="hint">勾選屬於帳戶間移轉的科目。收支統計照帳本計入；損益表排除移轉，並另外列出。此設定套用所有月份。</p>
+          <div id="statisticsTransferSettings"></div><div id="statisticsSettingsMessage" role="status" class="dialog-message"></div>
+        </section>
         <section class="settings-pane" data-settings-pane="lock">
           <h3>月份鎖帳</h3>
           <p class="hint">設定後，該月份以及更早月份都不能新增、編輯、刪除記帳或修改期初餘額。設定頁仍可調整鎖帳月份。</p>
@@ -208,5 +226,6 @@
   <script src="/backup-ui.js?rev=desktop-readable-backup" defer></script>
   <script src="/desktop-migration-ui.js?rev=desktop-data-panel" defer></script>
   <script src="/adaptive-ui.js?rev=desktop-ledger-heading" defer></script>
+  <script src="/statistics-ui.js?rev=statistics-workspace" type="module"></script>
 </body>
 </html>
