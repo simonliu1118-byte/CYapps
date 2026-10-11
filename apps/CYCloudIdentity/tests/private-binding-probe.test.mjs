@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import worker from '../scripts/private-binding-probe-worker.mjs';
-import { main } from '../scripts/private-binding-probe.mjs';
+import { main, uploadHint } from '../scripts/private-binding-probe.mjs';
 
 function fixture() {
   let fetches = 0, rpc = 0;
@@ -58,7 +58,7 @@ for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1
     assert.equal(config.d1_databases, undefined);
     assert.equal(fs.statSync(args[3]).mode & 0o777, 0o600);
     exists = true;
-    if (failure === 'deploy-config') throw Object.assign(new Error('Private settings/path must not be exported'), { code: 1, stderr: 'Invalid configuration: private values' });
+    if (failure === 'deploy-config') throw Object.assign(new Error('Private settings/path must not be exported'), { code: 1, stderr: '[ERROR] Invalid configuration: private values' });
     if (failure === 'deploy-missing-cli') throw Object.assign(new Error('spawn private executable ENOENT'), { code: 'ENOENT' });
     if (failure === 'deploy') throw Object.assign(new Error('raw private deployment details'), { stderr: 'Private worker name and settings; [code: \u001b[31m10000\u001b[0m]'  });
   };
@@ -96,4 +96,12 @@ test('production scope is refused before any platform request or mutation', asyn
   const env = { CLOUDFLARE_API_TOKEN: 'synthetic-token', CLOUDFLARE_ACCOUNT_ID: 'synthetic-account', CYID_WORKER_NAME: 'identity-test', RUNNER_TEMP: os.tmpdir() };
   const never = async () => { assert.fail('must not call platform/command'); };
   await assert.rejects(main(env, never, never, { name: env.CYID_WORKER_NAME, vars: { APP_ENV: 'production', CORE_ACCOUNT_APPLICATION_ID: 'APP_TEST' } }), /PROBE_DEVELOPMENT_SCOPE_REQUIRED/);
+});
+
+test('upload hint only emits fixed public words and removes private settings and unrelated binding banner', () => {
+  const output = 'env.IDENTITY (private-service) Worker\n[ERROR] Your Worker name PRIVATE_TARGET is not supported; contact private@example.test https://private.example.test/key SECRET_TOKEN';
+  assert.equal(uploadHint(output, ['PRIVATE_TARGET', 'SECRET_TOKEN']), 'ERROR_YOUR_WORKER_NAME_IS_NOT_SUPPORTED');
+  assert.equal(uploadHint('env.IDENTITY (private-service) Worker'), 'NO_ERROR_LABEL');
+  assert.doesNotMatch(uploadHint('[ERROR] SECRET_TOKEN private/path a'.repeat(50), ['SECRET_TOKEN']), /SECRET|PRIVATE|PATH/);
+  assert.ok(uploadHint('[ERROR] a '.repeat(50)).split('_').length <= 45);
 });
