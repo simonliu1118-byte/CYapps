@@ -738,6 +738,12 @@ internal sealed class MainForm : Form
                 return;
             }
             ShowRunSummaryIfNeeded(result, DocumentKeyText(result), notes);
+            // A run with nothing left to check clears the form for the next order (user, 2026-10-11).
+            if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && notes.Count == 0)
+            {
+                ResetForm();
+                SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{(result.Saved ? "已儲存" : "尚未儲存")}；表單已清空");
+            }
         });
     }
 
@@ -805,14 +811,16 @@ internal sealed class MainForm : Form
     private async Task AbandonCurrentErpDocumentAsync(CancellationToken token)
     {
         SetStatus("ERP：放棄目前的輸入，回到檢視…");
-        await _automation.AbandonInputAsync(null, token);
+        using (PhysicalMouseLock.Engage(_log)) await _automation.AbandonInputAsync(null, token);
         SetStatus("ERP：已回到檢視");
     }
 
     private async Task<AutomationRunResult> RunDocumentAsync(FormSnapshot snapshot, bool autoSave, CancellationToken token)
     {
         var progress = new Progress<string>(SetStatus);
-        var result = await _automation.RunAsync(snapshot, autoSave, progress, token);
+        AutomationRunResult result;
+        // The physical mouse is ignored while CY types (user, 2026-10-11); Esc releases it.
+        using (PhysicalMouseLock.Engage(_log)) result = await _automation.RunAsync(snapshot, autoSave, progress, token);
         if (result.HandedOff.Length > 0)
         {
             SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 單頭已輸入，轉人工處理（未輸入明細、未儲存）");
@@ -885,11 +893,11 @@ internal sealed class MainForm : Form
         if (order.TrackingNumber.Length == 0) notes.Add("物流單號空白：取得後請填到送貨地址(一)。");
         SetStatus($"蝦皮訂單 {order.OrderSn} 已帶入表單；請確認後按「開始輸入 ERP」");
         _log.Info("shopee-shot", $"order loaded items={order.Items.Count} notes={notes.Count}");
-        MessageBox.Show(this,
-            notes.Count == 0
-                ? $"蝦皮訂單 {order.OrderSn} 已帶入表單。\n請確認後按「開始輸入 ERP」。"
-                : $"蝦皮訂單 {order.OrderSn} 已帶入表單，請先確認以下項目，補齊後再按「開始輸入 ERP」：\n\n" + string.Join("\n", notes.Select(n => "・" + n)),
-            "蝦皮訂單截圖輸入", MessageBoxButtons.OK, notes.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        // A clean order only gets the status line (user, 2026-10-11); notes still need a look.
+        if (notes.Count > 0)
+            MessageBox.Show(this,
+                $"蝦皮訂單 {order.OrderSn} 已帶入表單，請先確認以下項目，補齊後再按「開始輸入 ERP」：\n\n" + string.Join("\n", notes.Select(n => "・" + n)),
+                "蝦皮訂單截圖輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         return Task.CompletedTask;
     }
 
@@ -1176,7 +1184,7 @@ internal sealed class MainForm : Form
                     }
                     try
                     {
-                        await _automation.AbandonInputAsync(createdNumber, token);
+                        using (PhysicalMouseLock.Engage(_log)) await _automation.AbandonInputAsync(createdNumber, token);
                         failed.Add($"{order.OrderSn}：{ex.Message}（ERP 單據已放棄）");
                         continue;
                     }
@@ -1255,7 +1263,12 @@ internal sealed class MainForm : Form
         if (MessageBox.Show(this, "清除所有欄位與商品明細？（本機預設值會重新帶入）", "清除表單",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
             return;
+        ResetForm();
+        SetStatus("已清除表單");
+    }
 
+    private void ResetForm()
+    {
         foreach (var control in _valueControls.Values)
         {
             if (control is CheckBox checkBox) checkBox.Checked = false;
@@ -1266,7 +1279,6 @@ internal sealed class MainForm : Form
         for (var i = 0; i < DefaultDetailRows; i++) _details.Rows.Add();
         ApplyDefaultsToBlankFields();
         _loadedOrder = null;
-        SetStatus("已清除表單");
     }
 
     private void OpenLogFolder()
