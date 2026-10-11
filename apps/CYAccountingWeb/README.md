@@ -4,7 +4,7 @@
 
 更新：2026/10/11（台灣時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
-**V0.23.1**：新增單月收支統計、分類／科目圓餅圖、多月期間合計與單月損益表。桌機寬視窗採三欄，手機提供底部統計頁籤，平板提供統計圖表入口；在「設定 → 統計／損益」指定移轉科目，統計及損益均排除移轉，損益表另列移轉。所有入口共用完整期間彙總，保留歷史未分類科目及封存帳戶資料。Stable Release 維持 V0.22.15。
+**V0.23.1 Build 1**：新增單月收支統計、分類／科目圓餅圖、多月期間合計與單月損益表。桌機寬視窗採三欄，手機提供底部統計頁籤，平板提供統計圖表入口；在「設定 → 統計／損益」指定移轉科目，統計及損益均排除移轉，損益表另列移轉。所有入口共用完整期間彙總，保留歷史未分類科目及封存帳戶資料。Stable Release 維持 V0.22.15。
 
 **V0.22.32（已部署）**：桌機超級管理員 Excel 匯入新增指定期間替換，沿用既有 parser、preview 與 commit owner；鎖帳月份仍阻擋，缺少的科目需明確同意保留原名並建立於歷史分類。提交前完成 R2＋GCS 成對備份及回讀驗證，再以帳本／主檔／期初／鎖帳 snapshot guard 執行單一 D1 transaction；包含 append-only 替換稽核，失敗回滾，期間外交易與期初基準保留。修正大型壓縮工作表在 Worker 啟動巢狀執行緒造成解析失敗。25 組本地測試與 CI 通過；實際帳務操作及核對結果只由私人檢查點維護。手機／平板 presentation 未改。Stable Release 維持 V0.22.15。
 
@@ -13,8 +13,8 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.23.1**；實際帳務狀態由私人檢查點維護 |
-| 正式部署 | V0.23.1 由既有 validate、Worker/static assets、secure login 與 semantic frontend assets 流程部署 |
+| 正式版本 | **V0.23.1 Build 1**；實際帳務狀態由私人檢查點維護 |
+| 正式部署 | V0.23.1 Build 1 由既有 validate、Worker/static assets、secure login 與 semantic frontend assets 流程部署 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **8 已部署**；`0008_excel_import_runs.sql` 保存 append-only Excel 替換稽核 |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
