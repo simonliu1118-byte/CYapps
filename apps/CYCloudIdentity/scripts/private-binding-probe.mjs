@@ -4,22 +4,9 @@ import { randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { stripVTControlCharacters } from 'node:util';
 const root = path.resolve(import.meta.dirname, '..');
 const requireValue = (condition, code) => { if (!condition) throw new Error(code); };
 const run = promisify(execFile);
-// Emit only words from this public, fixed vocabulary, never arbitrary CLI text.
-export function uploadHint(output, privateValues = []) {
-  const lines = stripVTControlCharacters(output).split(/\r?\n/);
-  const start = lines.findIndex(line => /\[ERROR\]|^Error:|npm (ERR|error)/.test(line));
-  if (start < 0) return 'NO_ERROR_LABEL';
-  let fatal = lines.slice(start, start + 8).join(' ');
-  for (const value of privateValues) if (typeof value === 'string' && value) fatal = fatal.replaceAll(value, ' ');
-  fatal = fatal.replace(/https?:\/\/\S+|[\w.+-]+@[\w.-]+\.[a-z]+|[\/\\][\w.\/\\-]+/gi, ' ');
-  const words = new Set('error a an account api are as assets authentication binding bindings build by cannot cloudflare compatibility configuration could credentials date denied deploy deployed deployment does environment entrypoint exceed failed fetch file found has invalid is limit maximum missing module must name no not npm on only permission request required script scripts service services support supported target the to token unavailable unknown upload version was with worker workers would you your'.split(' '));
-  return (fatal.toLowerCase().match(/[a-z]+/g) ?? []).filter(word => words.has(word)).slice(0, 45).join('_').toUpperCase() || 'NO_PUBLIC_HINT';
-}
-
 export async function main(env = process.env, fetcher = fetch, command = run, originalConfig) {
   requireValue(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN && env.CYID_WORKER_NAME && env.RUNNER_TEMP, 'PROBE_INPUTS_REQUIRED');
   const original = originalConfig ?? JSON.parse(fs.readFileSync(path.join(root, 'wrangler.deploy.generated.jsonc'), 'utf8'));
@@ -29,13 +16,16 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
   const key = randomBytes(32).toString('hex');
   const api = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}`;
   const configPath = path.join(env.RUNNER_TEMP, `cyid-binding-${nonce}.jsonc`);
+  const bundlePath = path.join(env.RUNNER_TEMP, `cyid-binding-bundle-${nonce}`);
   const apiCall = async (suffix, method = 'GET', body) => {
+    const multipart = body instanceof FormData;
     const response = await fetcher(api + suffix, { method,
-      headers: { authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'content-type': 'application/json' },
-      ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(30000) });
-    if (response.status === 404) return { absent: true };
-    const result = await response.json();
-    requireValue(response.ok && result.success === true, 'PROBE_PLATFORM_REQUEST_FAILED');
+      headers: { authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, ...(multipart ? {} : { 'content-type': 'application/json' }) },
+      ...(body ? { body: multipart ? body : JSON.stringify(body) } : {}), signal: AbortSignal.timeout(30000) });
+    if (response.status === 404 && method === 'GET') return { absent: true };
+    const result = await response.json().catch(() => ({}));
+    const code = result.errors?.find(e => Number.isSafeInteger(e?.code) && e.code >= 0 && e.code <= 999999)?.code;
+    requireValue(response.ok && result.success === true, `PROBE_PLATFORM_HTTP_${response.status}_CODE_${code ?? 'UNSPECIFIED'}`);
     return { result: result.result };
   };
   const prefix = `/workers/scripts/${worker}`;
@@ -55,27 +45,26 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
   let completed = false;
   try {
     fs.writeFileSync(configPath, JSON.stringify(config), { mode: 0o600 });
-    mutationAttempted = true;
-    // Output may contain private deployment names: capture, never print or upload it.
+    fs.mkdirSync(bundlePath, { mode: 0o700 });
+    // Local bundle only. API upload below owns all remote mutation/error handling.
     try {
-      await command(process.execPath, [path.join(root, 'node_modules/wrangler/bin/wrangler.js'), 'deploy', '--config', configPath], { cwd: root, env, timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
-    } catch (error) {
-      const output = stripVTControlCharacters(`${error?.stdout ?? ''}\n${error?.stderr ?? ''}`);
-      console.log(`PROBE_UPLOAD_HINT_${uploadHint(output, [worker, nonce, key, subdomain, original.name, env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_API_TOKEN, ...Object.values(config.vars)])}`);
-      const code = output.match(/\[code:\s*(\d{1,6})\]/)?.[1];
-      const childCode = Number.isInteger(error?.code) ? `EXIT_${error.code}`
-        : ['ENOENT', 'EACCES', 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'].includes(error?.code) ? error.code
-        : error?.killed === true ? 'TERMINATED' : 'UNKNOWN';
-      const hint = uploadHint(output);
-      const category = /entry.?point|export/i.test(hint) ? 'ENTRYPOINT' : /authenticat|permission|unauthorized|credentials/i.test(hint) ? 'AUTHORIZATION'
-        : /configuration|config file/i.test(hint) ? 'CONFIGURATION' : /compatibility/i.test(hint) ? 'COMPATIBILITY' : /service|binding/i.test(hint) ? 'SERVICE_BINDING'
-        : /fetch|network|connect|socket|ENOTFOUND/i.test(hint) ? 'NETWORK' : /quota|limit exceeded/i.test(hint) ? 'QUOTA'
-        : /worker.*name|name.*worker/i.test(hint) ? 'WORKER_NAME' : /npm (ERR|error)/i.test(hint) ? 'PACKAGE_RUNNER' : 'UNCLASSIFIED';
-      throw new Error(code ? `PROBE_UPLOAD_FAILED_${code}` : `PROBE_UPLOAD_FAILED_${childCode}_${category}`);
-    }
+      await command(process.execPath, [path.join(root, 'node_modules/wrangler/bin/wrangler.js'), 'deploy', '--dry-run', '--config', configPath, '--outdir', bundlePath], { cwd: root, env, timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
+    } catch { throw new Error('PROBE_LOCAL_BUNDLE_FAILED'); }
+    const moduleName = 'private-binding-probe-worker.js';
+    requireValue(fs.readdirSync(bundlePath).filter(name => /\.(?:m?js|wasm)$/.test(name)).join(',') === moduleName, 'PROBE_UNEXPECTED_BUNDLE_MODULES');
+    const metadata = { main_module: moduleName, compatibility_date: config.compatibility_date,
+      bindings: [...Object.entries(config.vars).map(([name, text]) => ({ type: 'plain_text', name, text })),
+        ...config.services.map(({ binding, ...service }) => ({ type: 'service', name: binding, ...service }))] };
+    const upload = new FormData();
+    upload.set('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }), 'metadata.json');
+    upload.set(moduleName, new Blob([fs.readFileSync(path.join(bundlePath, moduleName))], { type: 'application/javascript+module' }), moduleName);
+    mutationAttempted = true;
+    await apiCall(prefix, 'PUT', upload);
     console.log('Temporary probe Worker uploaded.');
     requireValue(!(await apiCall(prefix + '/secrets', 'PUT', { name: 'PROBE_AUTH_KEY', text: key, type: 'secret_text' })).absent, 'PROBE_SECRET_NOT_READY');
     console.log('Temporary probe-only secret configured.');
+    const route = await apiCall(prefix + '/subdomain', 'POST', { enabled: true, previews_enabled: false });
+    requireValue(route.result?.enabled === true && route.result?.previews_enabled === false, 'PROBE_ROUTE_NOT_ENABLED');
     let response;
     for (let attempt = 0; attempt < 20; attempt++) {
       response = await fetcher(`https://${worker}.${subdomain}.workers.dev/probe`, {
@@ -104,7 +93,7 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
         }
         console.log('Temporary probe Worker absence confirmed.');
       }
-    } finally { fs.rmSync(configPath, { force: true }); }
+    } finally { fs.rmSync(configPath, { force: true }); fs.rmSync(bundlePath, { recursive: true, force: true }); }
   }
   requireValue(completed, 'PRIVATE_BINDING_TRANSPORT_FAILED');
   console.log(`Private binding transport passed against development provider ${expected}: default Fetcher health/invalid Session denial and named RPC unavailable-scope invalidation verified; isolated probe Worker removed. No provider secret/authority/Session write; real scope/positive authorization/Windows acceptance remain pending.`);
