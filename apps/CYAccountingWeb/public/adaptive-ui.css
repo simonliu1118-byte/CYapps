@@ -2273,7 +2273,7 @@
     bottom: 0;
     left: 0;
     display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     gap: 0 !important;
     padding: 5px 8px max(5px, env(safe-area-inset-bottom)) !important;
     border-top: 1px solid #d8dfe6 !important;
@@ -4603,12 +4603,12 @@
    The approved income/expense segmented slider is intentionally inherited unchanged. */
 
 @media (min-width: 1360px) {
-  .shell.cy-split-layout {
-    width: min(1680px, calc(100% - 48px));
+  html[data-viewport="desktop"] .shell.cy-split-layout {
+    width: calc(100% - 48px);
     margin: 22px auto 36px;
     display: grid;
-    grid-template-columns: minmax(380px, 420px) minmax(0, 1fr);
-    gap: 20px;
+    grid-template-columns: 360px minmax(0, 1fr);
+    gap: 16px;
     align-items: start;
   }
 
@@ -4827,8 +4827,8 @@
 }
 
 @media (min-width: 1600px) {
-  .shell.cy-split-layout {
-    grid-template-columns: 420px minmax(0, 1fr);
+  html[data-viewport="desktop"] .shell.cy-split-layout {
+    grid-template-columns: clamp(320px, 18.75vw, 360px) minmax(820px, 1fr) clamp(320px, 18.75vw, 360px);
   }
 }
 
@@ -9742,14 +9742,14 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .curre
 
 html[data-viewport="desktop"] .cy-account-cluster .current-user-role::before,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role::before {
-  content: "［" !important;
+  content: var(--account-role-open, "［") !important;
   color: inherit !important;
   font-size: inherit !important;
 }
 
 html[data-viewport="desktop"] .cy-account-cluster .current-user-role::after,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-role::after {
-  content: "］" !important;
+  content: var(--account-role-close, "］") !important;
   display: inline !important;
   color: inherit !important;
   font-size: inherit !important;
@@ -11685,6 +11685,11 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     --account-identity-font-size: 13px;
     --account-identity-height: 32px;
     --account-identity-line-height: 18px;
+
+  }
+  html[data-viewport="desktop"] .cy-account-cluster.role-super-admin {
+    --account-role-open: "[";
+    --account-role-close: "]";
   }
   html[data-viewport="desktop"] .entry-card .section-title,
   html[data-viewport="desktop"] .entry-card .title-with-badge {
