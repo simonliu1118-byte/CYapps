@@ -126,12 +126,35 @@ public class ShopeeScreenshotTests
         Assert.Contains(result.Problems, p => p.Contains("金額對不上"));
     }
 
+    [Fact]
+    public void Coins_merged_with_their_note_and_a_split_simplified_code_label()
+    {
+        List<OcrBox> items =
+        [
+            B("編", 44, 34), B("單價", 753, 49), B("數量", 826, 49), B("小計", 912, 49), B("號", 45, 67),
+            B("1", 49, 146, 8), B("249", 757, 144, 26), B("1", 850, 145, 9), B("249", 917, 144, 26),
+            B("規格：4號-竟4.5公分（超取最多3包）", 159, 157, 220), B("商品選項货號：", 161, 178, 80), B("X00208", 246, 177, 60)
+        ];
+        List<OcrBox> amounts =
+        [
+            B("買家實付金額", 57, 29), B("訂單金額", 712, 61), B("NT$249", 899, 61, 55), B("買家支付運費", 682, 95), B("NTSO", 917, 96, 40),
+            B("優惠券", 727, 130), B("-NT$18", 903, 131, 55), B("賣場優惠券", 697, 166), B("-NT$12", 903, 166, 55),
+            B("蝦幣折抵", 712, 200), B("（⑤53蝦幣）-NT$53", 818, 200, 140), B("買家總支付金額", 666, 241), B("NT$166", 868, 238, 90, 26)
+        ];
+        var result = Read(OrderShot(), [items], amounts);
+        Assert.Empty(result.Problems);
+        Assert.Equal([new ImportedItem("X00208", "1", "249"), new ImportedItem("D901", "1", "-30")], result.Order!.Items);
+        Assert.Equal("166", result.Order.HeaderValues()["cod"]);
+    }
+
     [Theory]
     [InlineData("NT$594", true, 594)]
     [InlineData("-NT$25", true, -25)]
     [InlineData("-NTS12", true, -12)]
     [InlineData("NT$O", true, 0)]
     [InlineData("NT$1,200", true, 1200)]
+    [InlineData("（⑤53蝦幣）-NT$53", true, -53)]
+    [InlineData("NTSO", true, 0)]
     [InlineData("訂單金額", false, 0)]
     public void Reads_ocr_amounts(string text, bool ok, decimal expected)
     {

@@ -83,7 +83,7 @@ internal static partial class ShopeeScreenshot
         bool Has(string text) => lines.Any(l => Compact(l.Text).Contains(text, StringComparison.Ordinal));
         if (Has("買家實付金額") || Has("買家總支付金額")) return ShopeeShotKind.Amounts;
         if (Has("訂單編號")) return ShopeeShotKind.Order;
-        if (Has("貨號") || (Has("單價") && Has("數量"))) return ShopeeShotKind.Items;
+        if (lines.Any(l => CodeLabelPattern().IsMatch(Compact(l.Text))) || (Has("單價") && Has("數量"))) return ShopeeShotKind.Items;
         return ShopeeShotKind.Unknown;
     }
 
@@ -149,13 +149,19 @@ internal static partial class ShopeeScreenshot
             var block = lines.Where(l => Nearest(l) == anchor).ToList();
             var index = int.Parse(Compact(anchor.Text), CultureInfo.InvariantCulture);
 
-            var codeLine = block.FirstOrDefault(l => Compact(l.Text).Contains("貨號", StringComparison.Ordinal));
+            // 「商品選項貨號：A00001」; OCR may read 貨 as 货 and split the code into its own box.
+            var codeLine = block.FirstOrDefault(l => CodeLabelPattern().IsMatch(Compact(l.Text)));
             var code = string.Empty;
             if (codeLine is not null)
             {
                 var text = Compact(codeLine.Text);
-                var colon = text.IndexOfAny([':', '：']);
-                code = colon >= 0 ? text[(colon + 1)..] : text[(text.IndexOf("貨號", StringComparison.Ordinal) + 2)..];
+                code = text[(CodeLabelPattern().Match(text).Index + CodeLabelPattern().Match(text).Length)..].TrimStart(':', '：');
+                if (code.Length == 0)
+                    code = block
+                        .Where(l => l.Left >= codeLine.Right - 4 && Math.Abs(l.CenterY - codeLine.CenterY) <= Math.Max(10, codeLine.Height / 2))
+                        .OrderBy(l => l.Left)
+                        .Select(l => Compact(l.Text))
+                        .FirstOrDefault() ?? string.Empty;
             }
 
             var columns = new List<List<(OcrBox Box, decimal Value)>>();
@@ -190,14 +196,18 @@ internal static partial class ShopeeScreenshot
         decimal? orderAmount = null, total = null;
         decimal shipping = 0, coupons = 0, coins = 0;
         var others = new List<string>();
-        foreach (var label in lines.Where(l => l.Text.Any(c => c > 0x3000)))
+        // Each amount belongs to the nearest text on its left in the same row ("(53蝦幣)-NT$53"
+        // is read as one box, so a value is matched at the end of a box).
+        foreach (var value in lines)
         {
-            var value = lines
-                .Where(v => v != label && v.Left > label.Right && Math.Abs(v.CenterY - label.CenterY) <= Math.Max(14, label.Height))
-                .OrderBy(v => v.Left)
-                .FirstOrDefault(v => TryNumber(v.Text, out _, digitsOnly: false));
-            if (value is null || !TryNumber(value.Text, out var amount, digitsOnly: false)) continue;
-            var name = Compact(label.Text);
+            if (!TryNumber(value.Text, out var amount, digitsOnly: false)) continue;
+            var label = lines
+                .Where(l => l != value && l.Right <= value.Left + 4 && Math.Abs(l.CenterY - value.CenterY) <= Math.Max(14, value.Height) &&
+                            l.Text.Any(c => c > 0x3000) && !TryNumber(l.Text, out _, digitsOnly: false))
+                .OrderByDescending(l => l.Right)
+                .FirstOrDefault();
+            if (label is null) continue;
+            var name = Compact(label.Text) + Compact(value.Text);
             if (name.Contains("總支付", StringComparison.Ordinal)) total = amount;
             else if (name.Contains("訂單金額", StringComparison.Ordinal)) orderAmount = amount;
             else if (name.Contains("運費", StringComparison.Ordinal) && amount >= 0) shipping += amount;
@@ -206,7 +216,7 @@ internal static partial class ShopeeScreenshot
             else if (amount < 0)
             {
                 coupons += amount;
-                others.Add($"{name} {Number(amount)}");
+                others.Add($"{Compact(label.Text)} {Number(amount)}");
             }
         }
         if (orderAmount is null) problems.Add("金額截圖讀不到訂單金額。");
@@ -305,9 +315,12 @@ internal static partial class ShopeeScreenshot
     [GeneratedRegex(@"^[0-9A-Z]{10,20}$")]
     private static partial Regex OrderSnPattern();
 
+    [GeneratedRegex(@"(貨|货)(號|号)")]
+    private static partial Regex CodeLabelPattern();
+
     [GeneratedRegex(@"^\d{1,7}$")]
     private static partial Regex DigitsPattern();
 
-    [GeneratedRegex(@"^(?<neg>-)?NT[\$S]?(?<n>[0-9Oo]+(\.\d+)?)$")]
+    [GeneratedRegex(@"(?<neg>-)?NT[\$S]?(?<n>[0-9Oo]+(\.\d+)?)$")]
     private static partial Regex AmountPattern();
 }
