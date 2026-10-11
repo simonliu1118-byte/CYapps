@@ -1,6 +1,6 @@
 # CYInvoice 現行工作交接
 
-更新日期：2026-10-11（Asia/Taipei）
+更新日期：2026-10-12（Asia/Taipei）
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
@@ -9,10 +9,10 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `8c036f0d4cea464a8cd0885a70898859e5de1ae3`（本次證據文件更新前）；#380／#384～#393 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
+| main | `19e5318446ce2295d1993f41c5b187a1ac22ea63`（本輪 source 基準）；#380／#384～#393／#402／#403 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
 | 已完成工程 PR | #380 工程基準／#385 買方名稱修改已合併；最新 Windows 功能 head `6c499108` 的 Windows #281／Cloud #393／Governance #1201 通過，工程包見下方 |
 | 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
-| 本輪工作線 | CYInvoice 功能已合併 main；CYID 升級／probe tooling 獨立接續，不再把歷史 feature branch 當未合併停點 |
+| 本輪工作線 | CYInvoice 功能已合併 main；CYID 綁定準備獨立接續，不再把歷史 feature branch 當未合併停點 |
 | 工程版本 | **V2.6.19 Build 0**；查無買方名稱可留空，來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
@@ -50,6 +50,14 @@ CY Web governance #145 canonical mirrors1.0.3已同步，consumer1.0.2相容；P
 原三個probe／cleanup branch refs已fast-forward停放到#402同一tree，controller／測試模組與push trigger均不存在，不重用歷史run。Temporary Workers Admin取消仍待使用者確認，不需增加權限。
 
 CYID private transport、真實 Application／兩 Workspace binding／Employee App Access與Role、原Windows裝置認證、RC AA／AB／AC、實際Free用量、portable清除中斷復原與最終authority cutover保持待驗收。後續透過真實consumer已存在的功能驗收，不新增遠端測試handler或帳號authority；production切換／Release仍獨立核准。產品VERSION／BUILD、Cloud0.9.2、Provider0.3.6、canonical1.0.3／minimum1.0.0不變。
+
+
+
+### CYID 綁定準備流程 — 2026-10-12
+
+既有 development deployment owner 新增 `prepare-cyid`；僅加入核准的 `IDENTITY`／`IDENTITY_AUTHORITY` 與三項 Application／Workspace scope，仍保持 Built-in／CYID false。原 Secrets／D1／rate limits／其他 services 從 exact active UUID 繼承，既有正確綁定不重寫；缺值、錯誤原 Workspace、既有 scope／target／entrypoint 衝突或讀回差異會阻擋。一般 deploy 不得順帶新增 CYID bindings／scope；prepare 要求完整 schema 且不跑 migration。沒有遠端測試 handler、測試上傳、新 Workspace、CYID D1 讀取或權威切換。runtime IDs 改由 Environment Secrets 注入，既有兩項 Provider 資源 vars 複製為同名 Secrets，Provider 原 vars 保留。步驟／輸入唯一技術說明見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)。
+
+本輪只完成 source／本地回歸／bundle 準備；CI 以此變更 PR 的精確 head checks 為準。三項 scope 在 actual #25 均空白，尚無更新證據；需填入已核准的既有對應才能執行真實準備。此階段的 binding readback／Provider public health 不算 private Fetcher／named RPC 或 Employee App Access 驗收。原 Windows／Device／資料延續、真實授權與正式切換仍依 TODO／RC gate，產品與 contract 版本不變。
 
 ### 分段上線準備 — 2026-10-11
 

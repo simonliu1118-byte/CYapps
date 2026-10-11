@@ -384,3 +384,8 @@ Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID f
 CYID private transport、真實 Application／兩 Workspace binding／Employee App Access與Role、原Windows裝置認證、RC AA／AB／AC、實際Free用量、portable清除中斷復原與最終authority cutover保持待驗收。後續透過真實consumer已存在的功能驗收，不新增遠端測試handler或帳號authority；production切換／Release仍獨立核准。產品VERSION／BUILD、Cloud0.9.2、Provider0.3.6、canonical1.0.3／minimum1.0.0不變。
 
 實際source/run證據集中 CYCloudIdentity docs/DEVELOPMENT_DEPLOYMENT.md；唯一待辦入口維持本專案TODO §7.3.3。
+
+
+### 14.8 保留原 Workspace 的綁定準備
+
+2026-10-12，既有部署流程加入 `prepare-cyid` 配置準備，保留 Built-in／CYID false。只接受核准的既有 Application／兩邊 Workspace，原 consumer Workspace 必須存在且 active；既有綁定衝突不覆寫。流程、參數與讀回邊界見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)，現況見 [CLOUD_WORK_HANDOFF](CLOUD_WORK_HANDOFF.md)，待辦仍只在 TODO §7.3.3。三項 scope 的最新實際 evidence 仍是 #25 空白，準備尚未執行；source／本地測試或 public health 不代替 private transport／Employee 授權、原 Windows continuity 與正式切換。沒有新增身分 authority、遠端測試程式或權威切換。
