@@ -4,6 +4,8 @@
 
 更新：2026/10/11（台灣時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
+**V0.22.33**：桌機工具按鈕尺寸與字級一致、帳號列垂直置中，月份浮窗避免左側裁切。統計及圖表尚未實作。
+
 **V0.22.32（已部署）**：桌機超級管理員 Excel 匯入新增指定期間替換，沿用既有 parser、preview 與 commit owner；鎖帳月份仍阻擋，缺少的科目需明確同意保留原名並建立於歷史分類。提交前完成 R2＋GCS 成對備份及回讀驗證，再以帳本／主檔／期初／鎖帳 snapshot guard 執行單一 D1 transaction；包含 append-only 替換稽核，失敗回滾，期間外交易與期初基準保留。修正大型壓縮工作表在 Worker 啟動巢狀執行緒造成解析失敗。25 組本地測試與 CI 通過；實際帳務操作及核對結果只由私人檢查點維護。手機／平板 presentation 未改。Stable Release 維持 V0.22.15。
 
 ## 目前狀態
@@ -11,7 +13,7 @@
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.32**；實際帳務狀態由私人檢查點維護 |
+| 正式版本 | **V0.22.33**；實際帳務狀態由私人檢查點維護 |
 | 正式部署 | V0.22.32 validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；舊 V0.22.0 Release/tag 已移除 |
 | D1 schema | **8 已部署**；`0008_excel_import_runs.sql` 保存 append-only Excel 替換稽核 |

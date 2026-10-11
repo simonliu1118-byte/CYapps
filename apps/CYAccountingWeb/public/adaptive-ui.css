@@ -9692,7 +9692,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster {
   background: #fff !important;
 }
 
-html[data-viewport="desktop"] .cy-account-cluster .current-user,
+html[data-viewport="desktop"] .cy-account-cluster #currentUser,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user {
   display: flex !important;
   align-items: center !important;
@@ -9715,7 +9715,7 @@ html[data-viewport="desktop"] .cy-account-cluster .current-user-main,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user-main {
   overflow: hidden !important;
   color: #39495a !important;
-  font-size: 12px !important;
+  font-size: var(--account-identity-font-size, 12px) !important;
   font-weight: 600 !important;
   line-height: 1 !important;
   text-overflow: ellipsis !important;
@@ -9734,7 +9734,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .curre
   background: transparent !important;
   box-shadow: none !important;
   color: #6f7c89 !important;
-  font-size: 11px !important;
+  font-size: var(--account-identity-font-size, 11px) !important;
   font-weight: 600 !important;
   line-height: 1 !important;
   white-space: nowrap !important;
@@ -11678,6 +11678,9 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
 /* Desktop business workspace. Touch presentation and canonical writers remain
    shared; only field placement, compact shortcuts and edit widths differ. */
 @media (min-width: 1024px) {
+  html[data-viewport="desktop"] .cy-account-cluster {
+    --account-identity-font-size: 13px;
+  }
   html[data-viewport="desktop"] .entry-card .section-title,
   html[data-viewport="desktop"] .entry-card .title-with-badge {
     align-items: center;
@@ -11752,6 +11755,10 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
   html[data-viewport="desktop"] .ledger-month-tools { gap: 4px; }
   html[data-viewport="desktop"] #ledgerMonthPickerCustom,
   html[data-viewport="desktop"] #ledgerMonthSlot { height: 32px; }
+  html[data-viewport="desktop"] #ledgerMonthPickerPopover {
+    left: 0;
+    transform: none;
+  }
   html[data-viewport="desktop"] #ledgerMonthPickerTrigger .cy-month-picker-caret { display: none !important; }
   html[data-viewport="desktop"] #ledgerQuickLockButton {
     display: inline-flex !important;
@@ -12089,7 +12096,23 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
     gap: 6px;
   }
   html[data-viewport="desktop"] .cy-summary-actions { display: flex; gap: 5px; flex-wrap: nowrap; }
-  html[data-viewport="desktop"] .cy-summary-actions button { height: 32px !important; min-height: 32px !important; padding: 0 7px !important; font-size: 11.5px !important; white-space: nowrap; }
+  html[data-viewport="desktop"] #ledgerOpeningBalanceButton,
+  html[data-viewport="desktop"] #ledgerExcelExport {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box;
+    flex: 0 0 82px;
+    width: 82px !important;
+    min-width: 82px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 7px !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+    white-space: nowrap;
+  }
   html[data-viewport="desktop"] #ledgerExcelExportStatus:empty { display: none; }
   html[data-viewport="desktop"] .cy-ledger-summary-bar #monthSummary {
     display: grid !important;
