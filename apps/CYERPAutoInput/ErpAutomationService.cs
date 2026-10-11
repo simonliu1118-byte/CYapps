@@ -624,11 +624,31 @@ internal sealed class ErpAutomationService
             }
         }
 
+        var imeClosedBefore = InputSender.ImeClosedCount;
         InputSender.UnicodeText(value);
+        if (InputSender.ImeClosedCount != imeClosedBefore) _log.Info("field", $"ERP IME was open; switched off before typing key={field.Key}");
         await Delay(100, cancellationToken);
         InputSender.Press(NativeMethods.VK_TAB);
         await Delay(field.Kind == FieldKind.Lookup ? 420 : 220, cancellationToken);
+
+        // Free-text fields must read back exactly; anything else means characters went
+        // astray (IME composition, field length limit) and the next field must not get them.
+        if (ReadBackKeys.Contains(field.Key))
+        {
+            var after = NativeMethods.ControlText(target.Handle)?.Trim();
+            if (after is null) _log.Warn("field", $"read-back unavailable key={field.Key}");
+            else if (after != value.Trim())
+            {
+                _log.Warn("field", $"read-back mismatch key={field.Key} expected_len={value.Length} actual_len={after.Length} actual={_log.Value(after)}");
+                throw new InvalidOperationException(
+                    $"ERP 欄位「{field.Label}」輸入後讀回與表單不同（表單 {value.Length} 字，ERP {after.Length} 字）；可能被輸入法攔住或超過欄位長度，已停止，請確認 ERP 內容。");
+            }
+        }
     }
+
+    /// <summary>Free-text fields that ERP keeps as typed, verified after leaving them.</summary>
+    private static readonly HashSet<string> ReadBackKeys =
+        new(["trade_note", "ship_addr1", "inv_name"], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Fields ERP may pre-fill from the customer on a new document (付款條件, 貨運別,

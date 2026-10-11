@@ -237,8 +237,19 @@ internal static class InputSender
         NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 
+    /// <summary>Set when CY closed an open IME before typing (for the log).</summary>
+    public static int ImeClosedCount;
+
     public static void UnicodeText(string text, int delayMs = 24)
     {
+        // A Chinese IME left open in ERP holds the typed characters in its composition
+        // (dotted underline) instead of the field, and later drops them into whatever field
+        // gets focus next (user, 2026-10-11). Switch the receiving field's IME off first.
+        if (NativeMethods.CloseImeFor(NativeMethods.FocusedControlOfForeground()))
+        {
+            Interlocked.Increment(ref ImeClosedCount);
+            Thread.Sleep(60);
+        }
         foreach (var ch in text)
         {
             var inputs = new[]

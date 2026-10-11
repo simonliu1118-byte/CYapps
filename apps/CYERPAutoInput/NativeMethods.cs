@@ -241,6 +241,28 @@ internal static class NativeMethods
         return n > 0 ? sb.ToString() : string.Empty;
     }
 
+    [DllImport("imm32.dll")]
+    internal static extern nint ImmGetDefaultIMEWnd(nint hWnd);
+
+    internal const uint WM_IME_CONTROL = 0x0283;
+    internal const nint IMC_GETOPENSTATUS = 0x0005;
+    internal const nint IMC_SETOPENSTATUS = 0x0006;
+
+    /// <summary>
+    /// Turns the IME of another process's window to non-conversion (英數) through its
+    /// default IME window, which works across processes. Returns true when an open IME was
+    /// closed.
+    /// </summary>
+    internal static bool CloseImeFor(nint hwnd)
+    {
+        if (hwnd == 0) return false;
+        var ime = ImmGetDefaultIMEWnd(hwnd);
+        if (ime == 0) return false;
+        if (SendMessage(ime, WM_IME_CONTROL, IMC_GETOPENSTATUS, 0) == 0) return false;
+        SendMessage(ime, WM_IME_CONTROL, IMC_SETOPENSTATUS, 0);
+        return true;
+    }
+
     internal static nint FocusedControlOfForeground(nint expectedRoot = 0)
     {
         var fg = GetForegroundWindow();
