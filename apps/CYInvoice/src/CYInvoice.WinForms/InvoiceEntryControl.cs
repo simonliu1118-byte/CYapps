@@ -283,7 +283,7 @@ internal sealed class InvoiceEntryControl : UserControl
             cachedBan = ban;
             if (!lookup.Local && lookup.LookupSucceeded && lookup.Name.Trim().Length == 0)
             {
-                MessageBox.Show(this, "查無此統一編號，請再次確認或自行輸入買方名稱", "查無統編", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, "光貿查無買方名稱，請確認統編並自行輸入名稱；留空仍可開立，將以統編作為買方名稱送出。", "查無統編", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 buyerName.Focus();
             }
         };
@@ -528,7 +528,7 @@ internal sealed class InvoiceEntryControl : UserControl
                 var value = InvoiceCalculator.ItemDecimals(item);
                 return $"{index + 1}. {item.Description}　{value.Quantity} × {MoneyFormatter.Decimal(value.UnitPrice.ToString())} ＝ {MoneyFormatter.Decimal(value.Amount.ToString())}";
             }));
-            var buyer = draft.CompanyBuyer ? $"{draft.BuyerIdentifier}　{draft.BuyerName}" : "一般消費者 (紙本)";
+            var buyer = draft.CompanyBuyer ? $"{draft.BuyerIdentifier}　{(draft.BuyerName.Length == 0 ? draft.BuyerIdentifier + "（名稱留空時使用統編）" : draft.BuyerName)}" : "一般消費者 (紙本)";
             MessageBox.Show(this, $"訂單編號：{draft.OrderId}\n買受人：{buyer}\n\n商品明細：\n{lines}\n\n發票總額：{MoneyFormatter.Integer(draft.TotalAmount)}", "發票預覽", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception error) { MessageBox.Show(this, error.Message, "無法預覽", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
@@ -551,11 +551,13 @@ internal sealed class InvoiceEntryControl : UserControl
                     draft.BuyerName = lookup.Name.Trim();
                     buyerName.Text = draft.BuyerName;
                 }
-                if (draft.BuyerName.Trim().Length == 0) throw new InvalidOperationException("查無此統一編號，請再次確認或自行輸入買方名稱");
+
             }
             var formal = repository.Settings.LoadOrCreate().Environment == Environments.Production;
+            var buyerNotice = draft.CompanyBuyer && draft.BuyerName.Trim().Length == 0
+                ? $"買方名稱留空，將以統編 {draft.BuyerIdentifier} 送出。\n\n" : string.Empty;
             var confirm = MessageBox.Show(this,
-                $"即將開立{(formal ? "正式發票" : "測試發票")}\n\n訂單編號：{draft.OrderId}\n發票總額：{MoneyFormatter.Integer(draft.TotalAmount)}\n\n請再次確認，送出後不可因等待時間較長而重複開立。",
+                $"{buyerNotice}即將開立{(formal ? "正式發票" : "測試發票")}\n\n訂單編號：{draft.OrderId}\n發票總額：{MoneyFormatter.Integer(draft.TotalAmount)}\n\n請再次確認，送出後不可因等待時間較長而重複開立。",
                 "確認開立", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
             if (confirm != DialogResult.OK) return;
             Enabled = false;

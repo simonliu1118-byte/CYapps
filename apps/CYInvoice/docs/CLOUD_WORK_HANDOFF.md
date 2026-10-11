@@ -13,11 +13,15 @@
 | 已完成工程 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380) 已合併；精確 head `46723a89` 七項 CI 通過，工程包 Windows #280 |
 | 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
 | 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
-| 工程版本 | **V2.6.18 Build 1**；來源為 ../VERSION、../BUILD |
+| 工程版本 | **V2.6.19 Build 0**；查無買方名稱可留空，來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
 
 前置獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
+
+## 買方名稱查無資料 — 2026-10-11
+
+使用者確認光貿接受 BuyerName 等於統編；V2.6.19 Build 0 調整手開／全部匯入共用送出 owner。正常查無資料提示人工輸入，留空以統編送出且本機紀錄相同；預設值不寫人工名稱記憶。技術／權限錯誤仍依原規則阻擋，測試池隱私不放寬，無新表／timer／authority。精確 CI／工程包及實機 RC D.12 分開記錄。CYID 接續 work 保留；Provider development 保留設定 upgrade PR #384 已通過四項 CI 並合併，遠端 preflight 與 canonical mirror 正在驗證，尚不能宣稱 Provider deployed。
 
 ## 重複開立失敗修正 — 2026-10-11
 
