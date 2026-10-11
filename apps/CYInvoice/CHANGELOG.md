@@ -2,9 +2,33 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
-## V2.6.17 Build 2 — 2026-10-10（engineering，未部署／未正式切換）
+## V2.6.19 — 2026/10/11（買方名稱查無資料可留空，工程測試）
+
+- 手動開立、MO／酷澎／鼎新匯入遇到光貿正常空結果／code 99，提示可人工輸入買方名稱；留空仍可開立，正式送出及本機紀錄以該張統編作為 BuyerName。API 技術／權限錯誤與未完成查詢仍擋下，不冒充查無資料。
+- 匯入確認保留名稱編輯與鼎新套用資料流程；提示與最後開立確認清楚說明留空的送出值。只有使用者人工名稱在成功開立後記憶；統編預設值不寫進人工名稱記憶，避免遮住往後 API 名稱。
+- 沿用原 InvoiceService／統編查詢／本機 schema，測試環境仍使用公開測試統編與光貿名稱，不送真實識別資料。獨立需求推進 Patch、BUILD 歸零；CYID／Cloud runtime／Workspace 不變。真實非營利單位送出由使用者驗收。
+
+## V2.6.18 Build 1 — 2026/10/11（舊雙成功修復，工程測試中）
+
+- 使用者核准修復舊重複成功資料，沿用 InvoiceSyncService／InvoiceSyncRepository 的重新整理及 SQLite 寫入交易。限目前公司／環境、兩筆本機已開立、同官方號碼及 API OrderID、完整明細一致，且原生成 record_id 時間與 SentAt 一致、官方開立時間介於兩次送出而能確認先後；不依清單排序選取。缺少證據、第三筆候選、不同內容或人工／作廢／折讓 metadata 均保留原資料。
+- 先唯讀回查光貿，再以 SQLite online backup 保存完整原資料庫於 Data/RepairBackups，檢查完整性、關聯及原發票快照並 flush。寫入前重新比對全部發票與明細，期間有變更就停止；更正及本輪同步共用交易，中斷回滾、重試不重複修復。
+- 原成功保留，多出的嘗試改為開立失敗並清空發票號碼／上傳完成狀態，只留上傳問題；原送出時間與明細不刪除。成功後沿用既有 issue resolution 解除歧義。只查光貿，不作廢、不重開、不新增資料表或修復 timer。
+- 新增正向、差異／證據不足、官方失敗、備份失敗、併發更動、交易中斷後重試及取消回歸。實際使用者 Data 未提供，工程測試通過不代表已修復使用者資料；需以新版在原資料夾重新整理驗收。
+- 同一 bug 補修維持 VERSION 2.6.18，BUILD 0→1。Cloud／provider／Workspace／schema 不變；沒有 merge、部署、正式切換或 Release。精確 head Windows CI／工程包以 PR #380 checks 為準。
+
+## V2.6.18 — 2026/10/11（重複開立失敗修正，工程測試中）
+
+- 保留原 API OrderID 再次送出、由光貿判斷重複的流程；未新增本機預先阻擋或重開尾碼。AMEGO code 在共用 decoder 接受明確的整數 number／string，code 15 校時共用同一解析；缺失／null／不合法 code 不默認成功。明確非零錯誤直接記為 Failed，不回查既有發票當成本次成功。
+- HTTP 字串重複錯誤的修正前回歸重現「decoder 例外 → 訂單回查 → 舊發票被記為第二筆成功」。這是已驗證的缺口，沒有原實機回覆／Logs，不能宣稱它就是使用者該次事件的唯一原因。
+- 回覆或結果不明回查命中已知同環境／API OrderID／發票號碼的既有發票時，本次記為重複失敗；清空本次發票號碼及上傳狀態，保留原成功紀錄。真正首次送出逾時的嚴格回查、結果不明禁止盲目重送及遠端成功／本機保存失敗仍沿用既有流程。
+- 依使用者建議，開立失敗僅在「上傳問題」顯示及依原規則清除；主清單及其狀態篩選移除 Failed。資料仍存原 invoices，不建立第二套失敗表；結果不明仍在主清單保留。
+- 詳細回查禁止覆寫 Failed；官方同步排除 Failed 比對候選，必要時另同步真正的官方發票，避免用同 OrderID 改寫失敗嘗試。新增真實 HTTP decoder→core、舊發票回覆／回查、官方同步與 Windows 清單實際載入回歸。
+- 獨立 bug 推進 Patch、BUILD 歸零。Cloud／CYID API、storage、Workspace、Device Token、部署與正式切換均未變動。既有錯誤雙成功紀錄不靠排序自動改寫／刪除，待原本機識別碼與官方證據確認後更正。
+
+## V2.6.17 Build 2 — 2026-10-10（engineering，Cloud development 已更新／未正式切換）
 
 - 2026-10-11 部署準備：沿用原 development workflow，增加唯讀 preflight、原 DB／authority／migration／FK／歷史 fingerprint 與 private recovery checkpoint；驗收使用 Cloud package version，修正舊 0.9.0 hard-code。此批只改部署工具／測試／文件，Windows 及 Worker 業務 runtime、VERSION／BUILD 均未改；遠端結果見現行交接。
+- 2026-10-11 development #12 已套用 0013 並驗證 Cloud 0.9.2／storage 13，新同步 capability、原 Workspace／Token hashes／歷史及 FK 正常；CYID 關閉，Built-in 接續。Source 82080dfa 七項 CI 全綠，Windows #277 工程包可測；CYID development 仍 0.3.5，staging／實機／正式切換／Release 尚未完成。
 - Build 2 收斂 self-status parser，缺完整撤銷證據不能 wipe；自己撤銷這台裝置亦先落 marker，等新程序再完整清除包含 Logs。手動 Local／Workspace-disabled reset 原契約保留。
 - Build 1 補舊 Gateway 404 的明確升級提示及 unknown token 不清除回歸；先升級保留 Built-in 的 additive Cloud 0.9.2，再升級 Windows／staging，不能拿舊 Gateway 當新同步已完成。Build 0 的治理 PR 標記格式已改為純文字。
 - 啟動、60 秒及重連以 POST /v1/runtime/sync 一次刷新 Device／binding／權限；15 秒連線檢查不每輪載入全員工，保留原光貿同步週期。Built-in snapshot 沿用既有 owner，revision 與 rows 同一查詢；拒絕舊 revision 覆寫。

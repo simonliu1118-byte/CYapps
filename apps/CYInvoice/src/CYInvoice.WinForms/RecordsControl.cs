@@ -84,7 +84,7 @@ internal sealed class RecordsControl : UserControl
     private void BuildLayout()
     {
         source.Items.AddRange(["全部", "光貿同步", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang, InvoiceSources.Digiwin]);
-        state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.OpenedWaitingVoid, InvoiceStates.Failed, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
+        state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.OpenedWaitingVoid, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 144));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -250,6 +250,7 @@ internal sealed class RecordsControl : UserControl
 
     private bool Matches(InvoiceRecord record)
     {
+        if (record.InvoiceState == InvoiceStates.Failed) return false;
         var date = ParseDate(record.InvoiceDate.Length == 0 ? record.SentAt : record.InvoiceDate);
         if (dateFrom.Checked && (date is null || date.Value.Date < dateFrom.Value.Date)) return false;
         if (dateTo.Checked && (date is null || date.Value.Date > dateTo.Value.Date)) return false;
@@ -803,6 +804,34 @@ internal sealed class RecordsControl : UserControl
         dateTo.Checked = true;
         invoiceNumber.Clear(); orderId.Clear(); buyerName.Clear(); buyerBan.Clear();
         source.SelectedIndex = 0; state.SelectedIndex = 0;
+    }
+
+    internal void VerifySmokeFailedRecords()
+    {
+        var failed = new InvoiceRecord
+        {
+            Id = "smoke-failed-" + Guid.NewGuid().ToString("N"),
+            Environment = repository.Settings.LoadOrCreate().Environment,
+            OrderId = "SMOKE-DUPLICATE", OriginalOrderId = "SMOKE-DUPLICATE",
+            Source = InvoiceSources.Manual, InvoiceState = InvoiceStates.Failed,
+            SentAt = DateTimeOffset.Now.ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture),
+            ErrorMessage = "API code 3040171: OrderId duplicate",
+        };
+        repository.Invoices.Append(failed);
+        try
+        {
+            Reload();
+            if (Records.Items.Cast<ListViewItem>().Any(row => row.Tag is InvoiceRecord record && record.Id == failed.Id) ||
+                state.Items.Contains(InvoiceStates.Failed))
+                throw new InvalidOperationException("開立失敗紀錄仍出現在主清單或狀態篩選");
+            using var issues = new SyncIssuesForm(repository, startupSmokeTest: true);
+            issues.VerifySmokeFailedRecord(failed.Id);
+        }
+        finally
+        {
+            new FailedInvoiceRecordStore(repository.DataDirectory).Delete([failed]);
+            Reload();
+        }
     }
 
     internal void VerifySmokeLayout()

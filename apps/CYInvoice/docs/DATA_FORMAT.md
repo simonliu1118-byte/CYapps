@@ -217,7 +217,7 @@ V2.6.11 UI 以 InvoiceWorkQueue 唯讀投影分為「上傳問題／處理中」
 
 只有正常且目前公司／環境唯一匹配的狀態才列處理中；unresolved 技術問題優先。開啟處理中不更新 upload-issue read-state。
 
-只有開立失敗列可以被批次清除。人工 pending 不得用一般 Failed 刪除路徑移除。
+只有開立失敗列可以被批次清除。人工 pending 不得用一般 Failed 刪除路徑移除。V2.6.18 將 Failed 從主清單隱藏，只在上傳問題顯示，仍保存於原 invoices；官方同步排除 Failed 比對候選，詳細回查禁止將其改成已開立。沒有新增失敗資料表或 storage migration。V2.6.18 Build 1 的舊雙成功修復沿用原 invoices：唯讀官方回查與先後證據符合後，將多餘嘗試改 Failed，保留 ID／訂單／SentAt／明細，清空發票號碼／上傳狀態。修改前用 SQLite online backup 將完整原 DB 存為 Data/RepairBackups/duplicate-<random>.db，含其他表與關聯；只有完整性／FK／原發票快照驗證及 flush 完成才發布 .db。暫存 .db.tmp 不視為完成備份。原發票與明細在寫入交易內重驗，與本輪同步原子提交。備份含本機業務資料，不得提交 Git 或工程 Artifact；撤銷完整 portable 清除包含此目錄。
 
 ## 9. 舊 JSON → SQLite 遷移
 

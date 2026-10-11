@@ -56,6 +56,9 @@ var tests = new (string Name, Action Run)[]
     }),
     ("AMEGO form and signature", () => TestAmegoSignatureAsync().GetAwaiter().GetResult()),
     ("AMEGO code 15 synchronizes time once", () => TestAmegoTimeSyncAsync().GetAwaiter().GetResult()),
+    ("AMEGO string code 15 uses the same time sync", () => TestAmegoTimeSyncAsync("\"15\"").GetAwaiter().GetResult()),
+    ("AMEGO numeric and string duplicate errors preserve the failed second attempt", () => TestWireDuplicateRejectionAsync().GetAwaiter().GetResult()),
+    ("AMEGO envelope requires an explicit integer code", () => TestInvalidEnvelopeCodeAsync().GetAwaiter().GetResult()),
     ("AMEGO query selects exact order", () => TestAmegoExactQueryAsync().GetAwaiter().GetResult()),
     ("AMEGO invoice file downloads only trusted PDF", () => TestAmegoInvoicePdfAsync().GetAwaiter().GetResult()),
     ("AMEGO invoice file rejects untrusted URL", () => TestAmegoInvoicePdfUrlSafetyAsync().GetAwaiter().GetResult()),
@@ -67,6 +70,7 @@ var tests = new (string Name, Action Run)[]
     ("negative discount line remains valid", TestNegativeDiscountLine),
     ("untaxed company totals use official one-twentieth tax", TestUntaxedCompanyTotals),
     ("opened order resends original ID and lets AMEGO reject duplicate", () => TestIssueOpensAndBlocksResendAsync().GetAwaiter().GetResult()),
+    ("recovery cannot count the previous invoice as a new successful attempt", () => TestRecoveryOfExistingInvoiceAsync().GetAwaiter().GetResult()),
     ("unknown result retries only after query confirms not found", () => TestAmbiguousIssueAsync().GetAwaiter().GetResult()),
     ("unknown retry stops when preflight query is unavailable", () => TestUnknownRetryPreflightFailureAsync().GetAwaiter().GetResult()),
     ("ambiguous issue recovers only from strict order query", () => TestAmbiguousRecoveryAsync().GetAwaiter().GetResult()),
@@ -104,6 +108,9 @@ var tests = new (string Name, Action Run)[]
     ("MO raw export preserves specifications and member carrier", TestMoRawSpecifications),
     ("MO issue masks shared test-pool customer data", () => TestMoIssuePrivacyAsync().GetAwaiter().GetResult()),
     ("Coupang confirmation is reused and company test privacy uses AMEGO buyer", () => TestCoupangIssuePrivacyAsync().GetAwaiter().GetResult()),
+    ("manual and all imports send BAN for empty name after successful no-result lookup", () => TestMissingCompanyNameAsync().GetAwaiter().GetResult()),
+    ("uncertain BAN fallback does not become manual memory after recovery", () => TestMissingCompanyNameRecoveryAsync().GetAwaiter().GetResult()),
+    ("missing lookup and lookup service failure never use BAN fallback", () => TestMissingCompanyNameRefusalAsync().GetAwaiter().GetResult()),
     ("unresolved imported company name blocks before API", () => TestImportedLookupBlockAsync().GetAwaiter().GetResult()),
     ("consumer PDF uses style zero and same-day cache", () => TestConsumerPdfCacheAsync().GetAwaiter().GetResult()),
     ("company PDF caches each style and refreshes next day", () => TestCompanyPdfStylesAsync().GetAwaiter().GetResult()),
@@ -238,7 +245,7 @@ static async Task TestAmegoSignatureAsync()
     Equal("AB12345678", response.InvoiceNumber);
 }
 
-static async Task TestAmegoTimeSyncAsync()
+static async Task TestAmegoTimeSyncAsync(string timeCode = "15")
 {
     var fixedTime = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
     var serverTime = fixedTime.AddMinutes(5).ToUnixTimeSeconds();
@@ -256,7 +263,7 @@ static async Task TestAmegoTimeSyncAsync()
         if (posts == 1)
         {
             Equal("1700000000", form["time"]);
-            return JsonResponse("{\"code\":15,\"msg\":\"time error\"}");
+            return JsonResponse($"{{\"code\":{timeCode},\"msg\":\"time error\"}}");
         }
         Equal(serverTime.ToString(), form["time"]);
         return JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":[{\"ban\":\"12345678\",\"name\":\"光貿測試公司\"}]}");
@@ -266,6 +273,63 @@ static async Task TestAmegoTimeSyncAsync()
     Equal("光貿測試公司", result.Data[0].Name);
     Equal(2, posts);
     Equal(1, clocks);
+}
+
+static async Task TestWireDuplicateRejectionAsync()
+{
+    foreach (var code in new[] { "3040171", "\"3040171\"" })
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var posts = 0;
+        var queries = 0;
+        var apiOrderId = TestApiOrderId("20260905001");
+        var handler = new StubHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/json/f0401")
+            {
+                posts++;
+                return Task.FromResult(JsonResponse(posts == 1
+                    ? "{\"code\":0,\"msg\":\"\",\"invoice_number\":\"AB12345678\"}"
+                    : $"{{\"code\":{code},\"msg\":\"OrderId duplicate\",\"invoice_number\":\"AB12345678\"}}"));
+            }
+            Equal("/json/invoice_query", request.RequestUri.AbsolutePath);
+            queries++;
+            return Task.FromResult(JsonResponse($"{{\"code\":0,\"data\":{{\"invoice_number\":\"AB12345678\",\"order_id\":\"{apiOrderId}\",\"sales_amount\":105,\"tax_amount\":0,\"total_amount\":105,\"detail_vat\":1}}}}"));
+        });
+        using var http = new HttpClient(handler);
+        var client = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http) { BaseUrl = "https://test.invalid" };
+        var service = new InvoiceService(repository, (_, _) => client,
+            () => new DateTimeOffset(2026, 9, 5, 9, 8, 7, TimeSpan.FromHours(8)));
+        var first = await service.IssueManualAsync(SafeDraft());
+        var rejection = await ThrowsAsync<AmegoApiException>(() => service.IssueManualAsync(SafeDraft()));
+        Equal(3040171, rejection.Code);
+        Equal(2, posts);
+        Equal(1, queries); // A definite rejection must not recover the previous invoice.
+        var records = repository.Invoices.LoadOrCreate();
+        Equal(2, records.Count);
+        Equal(InvoiceStates.Opened, records.Single(record => record.Id == first.Record.Id).InvoiceState);
+        var failed = records.Single(record => record.Id != first.Record.Id);
+        Equal(InvoiceStates.Failed, failed.InvoiceState);
+        Equal(string.Empty, failed.InvoiceNumber);
+        Equal(0, failed.UploadStatus);
+        Equal(true, failed.ErrorMessage.Contains("3040171", StringComparison.Ordinal));
+    }
+}
+
+static async Task TestInvalidEnvelopeCodeAsync()
+{
+    foreach (var code in new[] { "", "\"code\":null,", "\"code\":true,", "\"code\":0.5,", "\"code\":\"invalid\",", "\"code\":2147483648," })
+    {
+        using var http = new HttpClient(new StubHandler(_ => Task.FromResult(
+            JsonResponse("{" + code + "\"invoice_number\":\"AB12345678\"}"))));
+        var client = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http) { BaseUrl = "https://test.invalid" };
+        await ThrowsAsync<InvalidDataException>(() => client.IssueAsync(MinimalIssue()));
+    }
+    using var successHttp = new HttpClient(new StubHandler(_ => Task.FromResult(
+        JsonResponse("{\"code\":\"0\",\"invoice_number\":\"AB12345678\"}"))));
+    var successClient = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, successHttp) { BaseUrl = "https://test.invalid" };
+    Equal("AB12345678", (await successClient.IssueAsync(MinimalIssue())).InvoiceNumber);
 }
 
 static async Task TestAmegoExactQueryAsync()
@@ -448,6 +512,35 @@ static async Task TestIssueOpensAndBlocksResendAsync()
     Equal(1, records.Count(record => record.InvoiceState == InvoiceStates.Opened));
     Equal(1, records.Count(record => record.InvoiceState == InvoiceStates.Failed));
     Equal(true, records.All(record => record.ApiOrderId == apiOrderId));
+}
+
+static async Task TestRecoveryOfExistingInvoiceAsync()
+{
+    foreach (var transportFailure in new[] { true, false })
+    {
+        using var temporary = new TemporaryDirectory();
+        var fake = new FakeGateway
+        {
+            IssueResponse = new IssueResponse(0, "", "AB12345678", 0, ""),
+            QueryResponse = ConfirmedQuery(TestApiOrderId("20260905001"), "AB12345678", 105, 0, 105, 1),
+        };
+        var (service, repository) = TestService(temporary.Path, fake);
+        var original = await service.IssueManualAsync(SafeDraft());
+        if (transportFailure) fake.IssueException = new IOException("decode API response");
+        var error = await ThrowsAsync<InvalidOperationException>(() => service.IssueManualAsync(SafeDraft()));
+        Equal(true, error.Message.Contains("訂單編號重複", StringComparison.Ordinal));
+        Equal(2, fake.IssueCalls); // AMEGO remains responsible for the issue decision.
+        var records = repository.Invoices.LoadOrCreate();
+        Equal(2, records.Count);
+        Equal(InvoiceStates.Opened, records.Single(record => record.Id == original.Record.Id).InvoiceState);
+        var failed = records.Single(record => record.Id != original.Record.Id);
+        Equal(InvoiceStates.Failed, failed.InvoiceState);
+        Equal(string.Empty, failed.InvoiceNumber);
+        Equal(0, failed.UploadStatus);
+        Equal(true, failed.ErrorMessage.Contains("訂單編號重複", StringComparison.Ordinal));
+        await service.RefreshAllAsync();
+        Equal(InvoiceStates.Failed, repository.Invoices.LoadOrCreate().Single(record => record.Id == failed.Id).InvoiceState);
+    }
 }
 
 static async Task TestAmbiguousIssueAsync()
@@ -1155,6 +1248,100 @@ static async Task TestCoupangIssuePrivacyAsync()
     Equal("12345675", result.Record.BuyerIdentifier);
     Equal("人工醫院名稱", result.Record.BuyerName);
     Equal("真實酷澎商品", result.Record.Items[0].Description);
+}
+
+static async Task TestMissingCompanyNameAsync()
+{
+    foreach (var path in new[] { "manual", "manual-lookup", "mo", "mo-lookup", "coupang", "coupang-lookup", "digiwin" })
+    foreach (var name in new[] { "", "  ", "人工非營利名稱" })
+    {
+        using var temporary = new TemporaryDirectory();
+        var orderId = "MISSING-NAME-" + path;
+        var fake = new FakeGateway
+        {
+            BanException = path == "coupang" ? null : new AmegoApiException(99, "synthetic no matching name"),
+            BanResponse = new BanResponse(0, "", []),
+            IssueResponse = new IssueResponse(0, "", "MN12345678", 0, ""),
+            QueryResponse = ConfirmedQuery(orderId, "MN12345678", 100, 5, 105, 1),
+        };
+        var (service, repository) = TestService(temporary.Path, fake);
+        var settings = repository.Settings.LoadOrCreate();
+        settings.Environment = Environments.Production;
+        settings.ProductionInvoice = "12345675";
+        repository.Settings.SetProductionAppKey(settings, "TEST-KEY-NOT-REAL");
+        repository.Settings.Save(settings);
+        var lookup = new NameLookup(LookupSucceeded: true);
+        var item = new InvoiceItem { Description = "商品", Quantity = 1, UnitPrice = 105, Amount = 105 };
+        IssueResult result;
+        if (path.StartsWith("manual"))
+        {
+            var draft = CompanyDraft(orderId, name);
+            result = path == "manual" ? await service.IssueManualAsync(draft) : await service.IssueManualWithLookupAsync(draft, lookup);
+        }
+        else if (path.StartsWith("mo"))
+        {
+            var order = new MoOrder { OrderId = orderId, BuyerBan = "12345675", BuyerName = name, TotalAmount = 105 };
+            order.Items.Add(item);
+            result = path == "mo" ? await service.IssueMoAsync(order) : await service.IssueMoWithLookupAsync(order, lookup);
+        }
+        else if (path.StartsWith("coupang"))
+        {
+            var order = new CoupangOrder { OrderId = orderId, BuyerBan = "12345675", BuyerName = name, TotalAmount = 105 };
+            order.Items.Add(item);
+            result = path == "coupang" ? await service.IssueCoupangAsync(order) : await service.IssueCoupangWithLookupAsync(order, lookup);
+        }
+        else
+        {
+            var order = new DigiwinOrder { OrderId = orderId, BuyerBan = "12345675", BuyerName = name, TotalAmount = 105 };
+            order.Items.Add(item);
+            result = await service.IssueDigiwinWithLookupAsync(order, lookup);
+        }
+        Equal(true, result.Opened);
+        Equal(1, fake.IssueCalls);
+        var expected = name.Trim().Length == 0 ? "12345675" : name.Trim();
+        Equal("12345675", fake.LastIssue!.BuyerIdentifier);
+        Equal(expected, fake.LastIssue.BuyerName);
+        Equal(expected, result.Record.BuyerName);
+        Equal(expected, repository.Invoices.LoadOrCreate().Single().BuyerName);
+        Equal(name.Trim().Length != 0, result.Record.BuyerNameNeedsMemory);
+        Equal(name.Trim().Length != 0, repository.BuyerNames.TryLookup("12345675", out var remembered));
+        if (name.Trim().Length != 0) Equal(name.Trim(), remembered);
+    }
+}
+
+static async Task TestMissingCompanyNameRecoveryAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway { IssueException = new IOException("synthetic connection reset"), QueryException = new IOException("synthetic temporary failure") };
+    var (service, repository) = TestService(temporary.Path, fake);
+    var draft = CompanyDraft("MISSING-NAME-RECOVERY", "");
+    await ThrowsAsync<UnknownInvoiceResultException>(() => service.IssueManualWithLookupAsync(draft, new NameLookup(LookupSucceeded: true)));
+    Equal("", draft.BuyerName); // Auto transport fallback must not turn into a supplied manual name on retry.
+    var stored = repository.Invoices.LoadOrCreate().Single();
+    Equal("12345675", stored.BuyerName);
+    Equal(false, stored.BuyerNameNeedsMemory);
+    Equal(false, repository.BuyerNames.TryLookup("12345675", out _));
+    fake.QueryException = null;
+    fake.QueryResponse = ConfirmedQuery(TestApiOrderId(draft.OrderId), "MR12345678", 100, 5, 105, 1);
+    await service.RefreshAllAsync();
+    Equal(InvoiceStates.Opened, repository.Invoices.LoadOrCreate().Single().InvoiceState);
+    Equal(false, repository.BuyerNames.TryLookup("12345675", out _));
+}
+
+static async Task TestMissingCompanyNameRefusalAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway();
+    var (service, repository) = TestService(temporary.Path, fake);
+    await ThrowsAsync<InvalidOperationException>(() => service.IssueManualWithLookupAsync(CompanyDraft("UNRESOLVED", ""), new NameLookup()));
+    foreach (var error in new Exception[] { new IOException("synthetic transport failure"), new AmegoApiException(503, "unavailable"), new AmegoApiException(401, "denied") })
+    {
+        fake.BanException = error;
+        await ThrowsAsync<Exception>(() => service.IssueManualAsync(CompanyDraft("FAILED-LOOKUP", "")));
+    }
+    Equal(0, fake.IssueCalls);
+    Equal(0, repository.Invoices.LoadOrCreate().Count);
+    Equal(false, repository.BuyerNames.TryLookup("12345675", out _));
 }
 
 static async Task TestImportedLookupBlockAsync()

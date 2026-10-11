@@ -222,11 +222,7 @@ public sealed class InvoiceService
         if (IsMoCompany(order))
         {
             var lookup = await LookupBuyerNameAsync(order.BuyerBan, cancellationToken).ConfigureAwait(false);
-            if (lookup.Name.Trim().Length == 0)
-            {
-                throw new InvalidOperationException("光貿查詢成功但沒有公司名稱，請先在匯入確認視窗輸入買方名稱");
-            }
-            order.BuyerName = lookup.Name;
+            if (lookup.Name.Trim().Length != 0) order.BuyerName = lookup.Name;
             return await IssueMoWithLookupAsync(order, lookup, cancellationToken).ConfigureAwait(false);
         }
         return await IssueMoWithLookupAsync(order, new NameLookup(), cancellationToken).ConfigureAwait(false);
@@ -301,11 +297,7 @@ public sealed class InvoiceService
         if (company)
         {
             lookup = await LookupBuyerNameAsync(order.BuyerBan, cancellationToken).ConfigureAwait(false);
-            if (lookup.Name.Length == 0)
-            {
-                throw new InvalidOperationException("光貿查不到公司名稱，請在匯入確認視窗輸入買方名稱");
-            }
-            order.BuyerName = lookup.Name;
+            if (lookup.Name.Trim().Length != 0) order.BuyerName = lookup.Name;
         }
         return await IssueCoupangWithLookupAsync(order, lookup, cancellationToken).ConfigureAwait(false);
     }
@@ -351,8 +343,8 @@ public sealed class InvoiceService
     {
         var ban = order.BuyerBan.Trim();
         var name = order.BuyerName.Trim();
-        if ((ban.Length == 0) != (name.Length == 0))
-            throw new InvalidOperationException("鼎新公司統編與買方名稱必須同時填寫或同時留空");
+        if (ban.Length == 0 && name.Length != 0)
+            throw new InvalidOperationException("填寫買方名稱時，請一併填寫公司統編");
         var company = ban.Length != 0;
         if (company && !lookup.Local && !lookup.LookupSucceeded)
             throw new InvalidOperationException("買方名稱尚未完成查詢，已擋下且未送出");
@@ -518,6 +510,13 @@ public sealed class InvoiceService
         CancellationToken cancellationToken)
     {
         InvoiceValidator.Validate(draft);
+        var suppliedBuyerName = draft.BuyerName.Trim();
+        if (draft.CompanyBuyer && suppliedBuyerName.Length == 0)
+        {
+            if (lookup.Name.Trim().Length != 0) draft.BuyerName = lookup.Name.Trim();
+            else if (lookup.Local || !lookup.LookupSucceeded || lookup.ApiName.Trim().Length != 0)
+                throw new InvalidOperationException("買方名稱尚未完成查詢，已擋下且未送出");
+        }
         await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         options = options with
         {
@@ -593,10 +592,10 @@ public sealed class InvoiceService
                     options = options with { TestPrivacy = true, ApiBuyerName = safeBuyerName };
                 }
 
-                var manualName = draft.BuyerName.Trim();
+                var manualName = suppliedBuyerName;
                 var rememberLocalCorrection = draft.CompanyBuyer && lookup.Local && manualName.Length != 0 &&
                     !string.Equals(manualName, lookup.Name.Trim(), StringComparison.Ordinal);
-                var rememberMissingApiName = draft.CompanyBuyer && !lookup.Local && lookup.LookupSucceeded && lookup.ApiName.Trim().Length == 0;
+                var rememberMissingApiName = draft.CompanyBuyer && manualName.Length != 0 && !lookup.Local && lookup.LookupSucceeded && lookup.ApiName.Trim().Length == 0;
                 var record = new InvoiceRecord
                 {
                     Id = NewRecordId(createdAt),
@@ -628,19 +627,12 @@ public sealed class InvoiceService
                 try
                 {
                     response = await gateway.IssueAsync(BuildIssueRequest(draft, options), cancellationToken).ConfigureAwait(false);
+                    if (response.Code != 0) throw new AmegoApiException(response.Code, response.Message);
+                    RequireNewIssueResult(records, record, response.InvoiceNumber);
                 }
-                catch (AmegoApiException error)
+                catch (Exception error) when (error is AmegoApiException or DuplicateIssueResultException)
                 {
-                    record.InvoiceState = InvoiceStates.Failed;
-                    record.ErrorMessage = error.Message;
-                    try
-                    {
-                        SaveStatus(record.Id, CreateStatusUpdate(record));
-                    }
-                    catch (Exception saveError)
-                    {
-                        throw new AggregateException(error, saveError);
-                    }
+                    PersistFailed(record, error);
                     throw;
                 }
                 catch (Exception issueError)
@@ -652,7 +644,13 @@ public sealed class InvoiceService
                         using var recoveryTimeout = new CancellationTokenSource(RecoveryQueryTimeout);
                         query = await gateway.QueryByOrderIdAsync(apiOrderId, recoveryTimeout.Token).ConfigureAwait(false);
                         VerifyQueryResult(record, draft, query.Data, string.Empty);
+                        RequireNewIssueResult(records, record, query.Data.InvoiceNumber);
                         queryError = null;
+                    }
+                    catch (DuplicateIssueResultException error)
+                    {
+                        PersistFailed(record, error);
+                        throw;
                     }
                     catch (Exception error)
                     {
@@ -747,6 +745,32 @@ public sealed class InvoiceService
                 activeIssueKeys.Remove(activeKey);
             }
         }
+    }
+
+    private sealed class DuplicateIssueResultException()
+        : InvalidOperationException("訂單編號重複：光貿回覆的是既有發票，本次未新增發票");
+
+    private static void RequireNewIssueResult(
+        IEnumerable<InvoiceRecord> records, InvoiceRecord attempt, string invoiceNumber)
+    {
+        if (invoiceNumber.Trim().Length == 0) return;
+        if (records.Any(record => record.Id != attempt.Id &&
+                SameEnvironment(record.Environment, attempt.Environment) &&
+                record.InvoiceState is InvoiceStates.Opened or InvoiceStates.OpenedWaitingVoid or InvoiceStates.Voided &&
+                string.Equals(EffectiveRecordOrderId(record), attempt.ApiOrderId, StringComparison.Ordinal) &&
+                string.Equals(record.InvoiceNumber.Trim(), invoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)))
+            throw new DuplicateIssueResultException();
+    }
+
+    private void PersistFailed(InvoiceRecord record, Exception error)
+    {
+        record.InvoiceState = InvoiceStates.Failed;
+        record.InvoiceNumber = string.Empty;
+        record.UploadStatus = 0;
+        record.UploadStatusText = string.Empty;
+        record.ErrorMessage = error.Message;
+        try { SaveStatus(record.Id, CreateStatusUpdate(record)); }
+        catch (Exception saveError) { throw new AggregateException(error, saveError); }
     }
 
     private (IAmegoGateway Gateway, string Environment) GetGateway()
@@ -1075,7 +1099,9 @@ public sealed class InvoiceService
     private static string EffectiveBuyerName(InvoiceDraft draft, string overrideName) =>
         overrideName.Trim().Length != 0
             ? overrideName.Trim()
-            : draft.CompanyBuyer ? draft.BuyerName.Trim() : "消費者";
+            : draft.CompanyBuyer
+                ? draft.BuyerName.Trim().Length == 0 ? draft.BuyerIdentifier.Trim() : draft.BuyerName.Trim()
+                : "消費者";
 
     private static int DetailVat(InvoiceDraft draft) => draft.PricesExcludeTax ? 0 : 1;
 
@@ -1107,10 +1133,6 @@ public sealed class InvoiceService
             throw new InvalidOperationException("買方名稱尚未完成查詢，已擋下且未送出");
         }
         currentName = currentName.Trim();
-        if (currentName.Length == 0)
-        {
-            throw new InvalidOperationException("光貿查不到公司名稱，請在匯入確認視窗輸入買方名稱");
-        }
         apply(currentName);
     }
 

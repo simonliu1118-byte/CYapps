@@ -1,10 +1,10 @@
 # CYInvoice × CY ID 整合設計基準
 
-更新日期：2026-10-10（原設計基準：2026-09-29）
+更新日期：2026-10-11（原設計基準：2026-09-29）
 
 本文件記錄 CYInvoice 作為 CY ID / CYCloud Identity consumer 時已確認的產品邊界。這是 CYInvoice 端的設計／需求文件，不定義 CY ID／CYWEB 內部 schema、Group 儲存方式、Application Access 資料模型或管理介面實作。
 
-Local／Built-in foundation 已合併，V2.6.14 介面與 Device metadata 仍在 PR #216。V2.6.15 已實作 CYID adapter／binding／offline consumer，尚未部署或正式切換；0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
+Local／Built-in foundation、V2.6.14 介面與 Device metadata 均已由 #380 合併（包含 #216／#379 ancestry）。CYID adapter／binding／offline consumer 已實作；原 development Cloud 0.9.2 additive rollout 與 Provider 0.3.6 升級已完成，CYID flag 仍關閉、Built-in 與原 Workspace／Device 保留；真實授權／Windows 驗收及正式切換未完成，0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
 
 CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.3）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
 
@@ -369,4 +369,16 @@ V2.6.17 implementation：ServiceConnectivity 共用 checkGate 與 monotonic 60 �
 
 60 秒刷新不對 CYID 建立／刷新 Session。每裝置持續開啟一天約 1,440 次 permission refresh，15 秒 liveness 約 5,760 次 aggregate request（完整 sync 已包含其中）；只讀 D1 查詢，實際 requests/rows/延遲及免費額度待 staging 量測。離線期間无法得知中央異動，不能承諾即時撤銷。系統 temp 的既有 PDF preview finally 清理不屬 portable reset 掃描；不得擴大刪除外部共享 temp 或使用者 exports。
 
-Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID flag 關閉時，先升級 additive Cloud 0.9.2（包含 /v1/runtime/sync），再升級原 Windows 至 V2.6.17；完成 private RPC 與原裝置 staging 後才核准切 CYID。舊 Worker 404 明確提示版本未提供同步，保留原既有降級，不清除／不換 Workspace；不能把這種舊 Gateway 當作已完成新同步驗收。0.9.2 Cloud rollout 與 CYID 0.3.6 named entrypoint 都仍待部署授權。
+Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID flag 關閉時，先升級 additive Cloud 0.9.2（包含 /v1/runtime/sync），再升級原 Windows 至 V2.6.17；完成 private RPC 與原裝置 staging 後才核准切 CYID。舊 Worker 404 明確提示版本未提供同步，保留原既有降級，不清除／不換 Workspace；不能把這種舊 Gateway 當作已完成新同步驗收。原 development Cloud 0.9.2 additive rollout 已於 #12 完成、CYID disabled／Built-in 保留；Provider development 0.3.6 code-only upgrade #124 通過，canonical mirrors 1.0.3 已同步。private named entrypoint source 已部署，但實際 binding／正向 App Access／原 Windows acceptance 仍未完成。Production／正式 authority 切換仍需核准。
+
+隔離 private binding probe #393 source 5dc0c4f7 已通過四項 exact-head CI／78 項 Provider tests／21 項 focused regression 並合併；既有 owner 補安全分類與當前 Token GET-only 檢查，不新增 authority。[Actual development #139](https://github.com/simonliu1118-byte/CYapps/actions/runs/38119760514) 原 Provider preflight 通過，account Token active；自身 policy GET 403／9109 不可讀，temporary Worker upload 仍為 Cloudflare JSON 403（無 numeric API code／intermediary-denial marker），未到 default Fetcher／named RPC。暫時 Worker absence confirmed、原 Provider deploy skipped，私有檔案清除；#136 及更早 runs 為失敗歷史。管理者需在 Cloudflare 核對 protected development Token 的 account／upload／cleanup 能力及 API 拒絕原因；目前工具無 Token 管理連線，不能由 policy-read 拒絕推定 Worker-write 缺失，不為診斷擴權或盲目重跑。原 Workspace／Device／Provider／Built-in 保留，實際 transport／正向授權／Windows／正式切換未完成。證據見 Provider DEVELOPMENT_DEPLOYMENT.md，唯一待辦仍在 TODO §7.3.3。
+
+
+### 原 development 受控驗證補充 — 2026-10-11
+
+使用者確認當前全部裝置未使用，批准現在驗證。沿用既有 CYInvoice development workflow 及 CYID probe owner，以 `deploy=false` 上傳既有 consumer Worker 的短效測試版本；active Built-in 及原 Workspace／Device／Token／D1／Secrets 不切換，無新 authority／D1／帳號／Session／grant。Version URLs 必須已存在，不能為測試開啟所有舊版本預覽。只清除 nonce-owned、bindings 正確且未部署的版本；always-run post-check 核對原 consumer history。
+
+這一步只能證明 default Fetcher／named RPC transport／deny；protected approved scope 齊全且原 Workspace fingerprint 相符時，可額外確認 Workspace/Application enablement。缺值即 unknown，不猜配對、不直接讀 CYID D1。真實 Employee／App Access／Role、原 Windows Device continuity、離線／撤銷及正式切換仍須獨立验收。具體工具／actual-run 證據見 CYCloudIdentity DEVELOPMENT_DEPLOYMENT；待辦唯一入口仍為 CYInvoice TODO §7.3.3。
+
+
+受控 #17（38121460188）上傳成功但 owned-version delete 403，尚未通過 cleanup；無獨立 request proof，不計 transport／scope 成功。Audit 現行修正：固定實際 100% active deployment/version bindings，不能把 latest-upload `/settings` 當 runtime D1／Secrets。Retained probe 未清除前禁止再上傳與一般部署；唯讀核對原 active Cloud／history／expiration 後另補 actual evidence。原 authority 仍 Built-in，沒有正式切換或原裝置 reset。

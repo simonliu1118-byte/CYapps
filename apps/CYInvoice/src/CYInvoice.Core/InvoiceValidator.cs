@@ -33,11 +33,6 @@ public static class InvoiceValidator
             {
                 throw new InvalidOperationException("公司統編必須為 8 碼");
             }
-
-            if (string.IsNullOrWhiteSpace(draft.BuyerName))
-            {
-                throw new InvalidOperationException("請輸入買方名稱");
-            }
         }
         else if (draft.PricesExcludeTax)
         {

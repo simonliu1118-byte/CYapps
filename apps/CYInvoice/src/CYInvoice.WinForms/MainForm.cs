@@ -480,6 +480,7 @@ internal sealed class MainForm : Form
         tabs.PerformLayout();
         Application.DoEvents();
         recordsPage.VerifySmokeLayout();
+        recordsPage.VerifySmokeFailedRecords();
         tabs.SelectedTab = invoiceTab;
         Application.DoEvents();
 

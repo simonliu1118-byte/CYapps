@@ -1056,6 +1056,12 @@ internal sealed class SyncIssuesForm : Form
 
     private static bool IsCjk(char value) => value is >= '\u3400' and <= '\u9fff';
 
+    internal void VerifySmokeFailedRecord(string recordId)
+    {
+        if (!list.Items.Cast<ListViewItem>().Any(row => row.Tag is InvoiceRecord record && record.Id == recordId))
+            throw new InvalidOperationException("開立失敗紀錄未保留在上傳問題清單");
+    }
+
     internal void VerifySmokeLayout()
     {
         if (Text != (processing ? "處理中" : "上傳問題") || ShowIcon || Math.Abs(Font.SizeInPoints - 10F) > 0.1F)

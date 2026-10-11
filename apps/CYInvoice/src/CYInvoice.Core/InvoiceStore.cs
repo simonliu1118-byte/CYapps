@@ -123,11 +123,12 @@ public sealed class InvoiceStore
         }
     }
 
-    private IReadOnlyList<InvoiceRecord> LoadRecords(SqliteConnection connection)
+    internal static IReadOnlyList<InvoiceRecord> LoadRecords(SqliteConnection connection, SqliteTransaction? transaction = null)
     {
         var rows = new List<(long LocalId, InvoiceRecord Record)>();
         using (var command = connection.CreateCommand())
         {
+            command.Transaction = transaction;
             command.CommandText = """
                 SELECT local_id, record_id, seller_invoice, environment, source, record_origin,
                        original_order_id, order_id, api_order_id, invoice_number, invoice_state,
@@ -180,6 +181,7 @@ public sealed class InvoiceStore
         var byLocalId = rows.ToDictionary(item => item.LocalId, item => item.Record);
         using (var command = connection.CreateCommand())
         {
+            command.Transaction = transaction;
             command.CommandText = """
                 SELECT invoice_local_id, description, quantity_value, quantity_decimal,
                        unit, unit_price, unit_price_decimal, tax_type, amount, amount_decimal,
