@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 const root = path.resolve(import.meta.dirname, '..');
 const requireValue = (condition, code) => { if (!condition) throw new Error(code); };
 const run = promisify(execFile);
@@ -48,8 +49,14 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
     try {
       await command('npx', ['wrangler', 'deploy', '--config', configPath], { cwd: root, env, timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
     } catch (error) {
-      const code = `${error?.stdout ?? ''}\n${error?.stderr ?? ''}`.match(/\[code:\s*(\d{1,6})\]/)?.[1];
-      throw new Error(code ? `PROBE_UPLOAD_FAILED_${code}` : 'PROBE_UPLOAD_FAILED');
+      const output = stripVTControlCharacters(`${error?.stdout ?? ''}\n${error?.stderr ?? ''}`);
+      const code = output.match(/\[code:\s*(\d{1,6})\]/)?.[1];
+      const childCode = Number.isInteger(error?.code) ? `EXIT_${error.code}`
+        : ['ENOENT', 'EACCES', 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'].includes(error?.code) ? error.code
+        : error?.killed === true ? 'TERMINATED' : 'UNKNOWN';
+      const category = /entrypoint|export/i.test(output) ? 'ENTRYPOINT' : /authentication|permission|unauthorized/i.test(output) ? 'AUTHORIZATION'
+        : /configuration|config file/i.test(output) ? 'CONFIGURATION' : /compatibility/i.test(output) ? 'COMPATIBILITY' : 'UNCLASSIFIED';
+      throw new Error(code ? `PROBE_UPLOAD_FAILED_${code}` : `PROBE_UPLOAD_FAILED_${childCode}_${category}`);
     }
     console.log('Temporary probe Worker uploaded.');
     requireValue(!(await apiCall(prefix + '/secrets', 'PUT', { name: 'PROBE_AUTH_KEY', text: key, type: 'secret_text' })).absent, 'PROBE_SECRET_NOT_READY');
