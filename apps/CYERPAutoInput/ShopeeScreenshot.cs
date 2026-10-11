@@ -115,7 +115,8 @@ internal static partial class ShopeeScreenshot
         var tracking = string.Empty;
         foreach (var line in lines)
         {
-            var text = Compact(line.Text).Replace('＃', '#');
+            // 「包裏」 is how the OCR often reads 「包裹」 (2026-10-11).
+            var text = Compact(line.Text).Replace('＃', '#').Replace("包裏", "包裹");
             var hash = text.IndexOf('#');
             var head = hash >= 0 ? text[..hash] : text;
             if (head.StartsWith("包裹", StringComparison.Ordinal) && carrier.Length == 0)

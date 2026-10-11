@@ -1,0 +1,77 @@
+using Xunit;
+
+namespace CYERPAutoInput.Tests;
+
+/// <summary>Automatic scan of the Shopee order page; all page content here is made up.</summary>
+public sealed class ShopeePageScanTests
+{
+    // A page of distinct rows, seen through a 300-row window with a 40-row fixed bar on top.
+    private static readonly long[] PageRows = Enumerable.Range(0, 2000).Select(i => (long)(i * 7919 % 1000 + (i / 50) * 13)).ToArray();
+
+    private static List<long> View(int scroll) =>
+        Enumerable.Range(0, 40).Select(i => 5_000_000L + i).Concat(Enumerable.Range(0, 260).Select(i => PageRows[scroll + 40 + i])).ToList();
+
+    [Fact]
+    public void Measures_the_scroll_below_the_fixed_bar()
+    {
+        Assert.Equal(40, ShopeePageScan.StaticTopRows(View(0), View(120)));
+        Assert.Equal(120, ShopeePageScan.FindScrollOffset(View(0), View(120), 40));
+        Assert.Equal(0, ShopeePageScan.FindScrollOffset(View(500), View(500), 40));
+    }
+
+    [Fact]
+    public void Reports_no_fit_when_the_page_changed()
+    {
+        var other = View(0).Select((v, i) => i < 40 ? v : v + 97 * i).ToList();
+        Assert.Equal(-1, ShopeePageScan.FindScrollOffset(View(0), other, 40));
+    }
+
+    [Fact]
+    public void Places_captures_on_the_page_without_duplicating_the_overlap()
+    {
+        var page = new List<OcrBox>();
+        ShopeePageScan.AddCapture(page, [new OcrBox("瀏覽器", 0, 5, 80, 20), new OcrBox("商品選項貨號：X00001", 100, 250, 130, 16)], 0, 40);
+        // The next capture, scrolled 200: the same line now at 50, read slightly differently.
+        ShopeePageScan.AddCapture(page, [new OcrBox("商品項貨號：X00001", 100, 51, 128, 16), new OcrBox("商品選項貨號：X00002", 100, 180, 130, 16)], 200, 40);
+        Assert.Equal(["商品選項貨號：X00001", "商品選項貨號：X00002"], page.Select(b => b.Text));
+        Assert.Equal(380, page[1].Top);
+    }
+
+    [Fact]
+    public void Cuts_the_three_parts_out_of_the_page()
+    {
+        List<OcrBox> page =
+        [
+            new("訂單編號", 360, 520, 75, 28), new("2610100TEST01", 363, 560, 126, 17), new("運送資訊", 362, 600, 70, 21),
+            new("包裹1：新竹物流#5000000001", 363, 637, 211, 20), new("共1個商品", 416, 682, 78, 21), new("增加備註", 1310, 105, 60, 16),
+            new("編", 358, 1170, 19, 17), new("單價", 1000, 1182, 36, 22), new("數量", 1066, 1182, 36, 22), new("小計", 1145, 1182, 35, 22),
+            new("1", 362, 1300, 8, 12), new("120", 1010, 1280, 31, 18), new("2", 1098, 1282, 9, 14), new("240", 1150, 1280, 31, 18),
+            new("商品選項貨號：X00009", 458, 1310, 126, 16), new("隱藏入帳明細", 1090, 1340, 80, 15), new("訂單金額", 950, 1370, 60, 18),
+            new("買家實付金額", 360, 2000, 100, 22), new("訂單金額", 670, 2040, 60, 18), new("NT$240", 860, 2040, 55, 18),
+            new("買家支付運費", 640, 2075, 90, 18), new("NT$0", 870, 2075, 36, 18), new("買家總支付金額", 630, 2160, 107, 18), new("NT$240", 830, 2150, 84, 26)
+        ];
+        Assert.True(ShopeePageScan.HasBuyerTotal(page));
+        var problems = new List<string>();
+        var sections = ShopeePageScan.Sections(page, problems);
+        Assert.Empty(problems);
+        Assert.Equal([ShopeeShotKind.Order, ShopeeShotKind.Items, ShopeeShotKind.Amounts], sections.Select(s => s.Kind));
+        Assert.All(sections, s => Assert.Equal(s.Kind, ShopeeScreenshot.Classify(s.Lines)));
+        Assert.DoesNotContain(sections[0].Lines, l => l.Text == "增加備註");
+        Assert.DoesNotContain(sections[1].Lines, l => l.Text == "訂單金額");
+
+        var (items, groups) = ShopeeScreenshot.ParseItems(sections[1].Lines, sections[1].PageArea.Width, problems);
+        Assert.Empty(problems);
+        Assert.Equal([new ShopeeShotItem(1, "X00009", 120, 2, 240)], items);
+        Assert.Equal([new ShopeeShotGroup(1, 240, 240)], groups);
+        Assert.Equal(240m, ShopeeScreenshot.ParseAmounts(sections[2].Lines, problems)!.Total);
+    }
+
+    [Fact]
+    public void Says_which_part_is_missing()
+    {
+        var problems = new List<string>();
+        ShopeePageScan.Sections([new OcrBox("訂單編號", 360, 520, 75, 28)], problems);
+        Assert.Contains(problems, p => p.Contains("單價", StringComparison.Ordinal));
+        Assert.Contains(problems, p => p.Contains("買家實付金額", StringComparison.Ordinal));
+    }
+}

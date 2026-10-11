@@ -37,7 +37,7 @@ internal sealed class ShopeeScreenshotForm : Form
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
-        Size = new Size(860, 580);
+        Size = new Size(980, 600);
         MinimumSize = new Size(640, 420);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         KeyPreview = true;
@@ -55,19 +55,23 @@ internal sealed class ShopeeScreenshotForm : Form
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        top.ColumnCount = 3;
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        top.ColumnCount = 4;
         top.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "開啟時自動進入截圖：框選蝦皮訂單頁的一段，放開即加入並接著截下一張，按 Esc 結束。\n需要：訂單資訊、明細（可多張）、買家實付金額，順序不限；也可 Ctrl+V 貼上或拖曳圖片檔。",
+            Text = "先在瀏覽器開好蝦皮訂單明細頁；開啟本視窗時自動由上往下捲動擷取（Esc 停止）。\n也可按「框選截圖」自己框選、Ctrl+V 貼上或拖曳圖片檔；不要的圖按右上角紅色 × 移除。",
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
         var help = new CyButton { Text = "說明", Size = new Size(92, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
         help.Click += (_, _) => { using var form = new ShopeeScreenshotHelpForm(); form.ShowDialog(this); };
-        var capture = new CyButton { Text = "截圖", Size = new Size(92, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
+        var scan = new CyButton { Text = "自動擷取", Size = new Size(100, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
+        scan.Click += async (_, _) => await AutoScanAsync();
+        var capture = new CyButton { Text = "框選截圖", Size = new Size(100, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
         capture.Click += async (_, _) => await CaptureLoopAsync();
-        top.Controls.Add(capture, 1, 0);
-        top.Controls.Add(help, 2, 0);
+        top.Controls.Add(scan, 1, 0);
+        top.Controls.Add(capture, 2, 0);
+        top.Controls.Add(help, 3, 0);
         root.Controls.Add(top, 0, 0);
 
         _cards.Dock = DockStyle.Fill;
@@ -107,7 +111,7 @@ internal sealed class ShopeeScreenshotForm : Form
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files) await AddFilesAsync(files);
         };
         FormClosed += (_, _) => { foreach (var shot in _shots) shot.Image.Dispose(); };
-        Shown += async (_, _) => { if (_shots.Count == 0 && !UiSnapshot.Active) await CaptureLoopAsync(); };
+        Shown += async (_, _) => { if (_shots.Count == 0 && !UiSnapshot.Active) await AutoScanAsync(); };
 
         CyVisualTheme.Apply(this);
         UpdateSummary();
@@ -177,7 +181,67 @@ internal sealed class ShopeeScreenshotForm : Form
         }
     }
 
-    private async Task AddAsync(Bitmap image)
+    /// <summary>
+    /// Scrolls the browser's Shopee order page from the top and adds its three parts
+    /// (user, 2026-10-11). CY's windows step aside and the physical mouse is ignored while the
+    /// browser scrolls; Esc stops. When it cannot finish, the manual ways stay available.
+    /// </summary>
+    private async Task AutoScanAsync()
+    {
+        if (_capturing) return;
+        var browser = ShopeePageScanner.FindBrowser();
+        if (browser == 0)
+        {
+            MessageBox.Show(this, "找不到開著蝦皮訂單頁的瀏覽器視窗。\n請先在瀏覽器開好訂單明細頁，再按「自動擷取」；也可以用「框選截圖」或 Ctrl+V 貼上。",
+                Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        _capturing = true;
+        var owner = Owner;
+        var ownerOpacity = owner?.Opacity ?? 1;
+        ShopeePageScanner.Result? result = null;
+        try
+        {
+            Opacity = 0;
+            if (owner is not null) owner.Opacity = 0;
+            using (PhysicalMouseLock.Engage(_log))
+                result = await new ShopeePageScanner(_ocr, _log).ScanAsync(browser,
+                    () => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("page-scan", ex);
+            MessageBox.Show(this, $"自動擷取失敗：{ex.Message}\n可以改用「框選截圖」或 Ctrl+V 貼上。", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            if (owner is not null && !owner.IsDisposed) owner.Opacity = ownerOpacity;
+            if (!IsDisposed) { Opacity = 1; Activate(); }
+            _capturing = false;
+        }
+        if (result is null || IsDisposed) { DisposeCaptures(result); return; }
+
+        foreach (var section in result.Sections)
+            await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines);
+        DisposeCaptures(result);
+        if (result.Cancelled)
+            MessageBox.Show(this, "已停止自動擷取。可以按「自動擷取」重來，或用「框選截圖」、Ctrl+V 補上缺的部分。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        else if (result.Problems.Count > 0)
+            MessageBox.Show(this, "自動擷取沒有完整讀到：\n\n" + string.Join("\n", result.Problems.Select(p => "・" + p)) +
+                "\n\n可以用「框選截圖」或 Ctrl+V 補上缺的部分。", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+        static void DisposeCaptures(ShopeePageScanner.Result? r)
+        {
+            if (r is null) return;
+            foreach (var c in r.Captures) c.Image.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Adds one screenshot; <paramref name="lines"/> are given when the auto scan already read
+    /// it, so only the classification and the re-read of missing cells run here.
+    /// </summary>
+    private async Task AddAsync(Bitmap image, List<OcrBox>? lines = null)
     {
         var shot = new Shot { Image = image };
         _shots.Add(shot);
@@ -185,8 +249,12 @@ internal sealed class ShopeeScreenshotForm : Form
         UpdateSummary();
         try
         {
-            var tokens = await _ocr.RecognizeAsync(image, CancellationToken.None);
-            shot.Lines = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+            if (lines is not null) shot.Lines = lines;
+            else
+            {
+                var tokens = await _ocr.RecognizeAsync(image, CancellationToken.None);
+                shot.Lines = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+            }
             shot.Kind = ShopeeScreenshot.Classify(shot.Lines);
             if (shot.Kind == ShopeeShotKind.Items) await ReadMissingCellsAsync(shot);
             _log.Info("shopee-shot", $"screenshot recognized kind={shot.Kind} lines={shot.Lines.Count} size={image.Width}x{image.Height}");
