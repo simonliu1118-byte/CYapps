@@ -48,10 +48,11 @@ internal sealed class MainForm : Form
         _modeToggle.Checked = false;
         ApplyMode(false);
 
-        Load += (_, _) => FitDetailRows();
+        Load += (_, _) => { FitDetailRows(); FitAllFieldRows(); };
         _statePoll.Tick += (_, _) => RefreshErpState();
         Shown += (_, _) =>
         {
+            FitAllFieldRows();
             if (_details.Rows.Count > 0) _details.CurrentCell = _details.Rows[0].Cells["ItemCode"];
             UpdateDpiHint();
             RefreshErpState();
@@ -257,6 +258,7 @@ internal sealed class MainForm : Form
             box.Controls.Add(flow);
             _groupFlows[group] = flow;
             flow.ClientSizeChanged += (_, _) => FitFieldRows(flow, wide);
+            _flowIsWide[flow] = wide;
             return box;
         }
         fieldsHost.Controls.Add(AddGroup("表頭", false, new Padding(0, 0, 4, 0)), 0, 0);
@@ -296,6 +298,18 @@ internal sealed class MainForm : Form
     private const int FieldLabelWidth = 98;
     private const int FieldInputLeft = 104;
 
+    private readonly Dictionary<FlowLayoutPanel, bool> _flowIsWide = [];
+
+    /// <summary>
+    /// Sizes every group's rows once the window has its final size: a group whose client
+    /// size never changed after creation kept the default row width and clipped its inputs
+    /// (表頭, user 2026-10-11).
+    /// </summary>
+    private void FitAllFieldRows()
+    {
+        foreach (var (flow, wide) in _flowIsWide) FitFieldRows(flow, wide);
+    }
+
     /// <summary>Fields that take a whole line in the double-width groups (long free text).</summary>
     private static readonly HashSet<string> FullLineKeys = new(["trade_note", "ship_name", "ship_addr1", "ship_addr2"], StringComparer.OrdinalIgnoreCase);
 
@@ -314,8 +328,12 @@ internal sealed class MainForm : Form
         {
             var rowWidth = !wide || (row.Tag is string key && FullLineKeys.Contains(key)) ? fullWidth : halfWidth;
             row.Width = rowWidth;
+            // A date field keeps room for its calendar button on the right.
+            var picker = row.Controls.OfType<CalendarButton>().FirstOrDefault();
+            var inputWidth = rowWidth - FieldInputLeft - 2 - (picker is null ? 0 : picker.Width + 2);
             foreach (Control child in row.Controls)
-                if (child is TextBox or ComboBox) child.Width = rowWidth - FieldInputLeft - 2;
+                if (child is TextBox or ComboBox) child.Width = inputWidth;
+            if (picker is not null) picker.Left = FieldInputLeft + inputWidth + 2;
         }
         flow.ResumeLayout();
     }
@@ -391,6 +409,10 @@ internal sealed class MainForm : Form
             {
                 text.MaxLength = 10;
                 ConfigureDateTextBox(text);
+                var pick = new CalendarButton { Location = new Point(inputLeft + text.Width + 2, 1), Height = text.Height + 2 };
+                pick.Click += (_, _) => DatePickerPopup.Show(text, new Rectangle(0, 0, text.Width, text.Height), text.Text,
+                    date => { SetFieldText(text, date); text.Focus(); });
+                row.Controls.Add(pick);
             }
             value = text;
         }
@@ -575,6 +597,7 @@ internal sealed class MainForm : Form
 
         _root.PerformLayout();
         if (!advanced) FitDetailRows();
+        FitAllFieldRows();
     }
 
     private void OpenSettings()

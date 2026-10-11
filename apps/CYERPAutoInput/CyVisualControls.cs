@@ -17,30 +17,139 @@ internal static class CyDrawing
     }
 }
 
+internal static class CyButtonGeometry
+{
+    /// <summary>
+    /// Corner radius for every CY button. The visual guide's WinForms reference is ~2 px,
+    /// which reads as square on the user's Windows; the user asked for visibly rounded
+    /// buttons (2026-10-11), matching CYInvoice's 6–7 px.
+    /// </summary>
+    internal const float Radius = 6f;
+
+    /// <summary>Paint inset: 1 px horizontal safety, ~1.5 px vertical (reference geometry).</summary>
+    internal static RectangleF Bounds(Control c) => new(1f, 1.5f, Math.Max(1f, c.Width - 3f), Math.Max(1f, c.Height - 4f));
+}
+
 /// <summary>
-/// Ordinary CY button: the native themed WinForms Button (CY WinForms theme-button
-/// reference). Only the legacy dotted focus rectangle is suppressed; the native
-/// themed focus/default border keeps keyboard focus perceivable.
+/// Ordinary (secondary) CY button: a native WinForms Button with owner-painted appearance
+/// only (CY WinForms theme-button reference) so its rounded corners match the themed
+/// buttons; click, keyboard, focus and accessibility stay native.
 /// </summary>
 internal class CyButton : Button
 {
     private const int WmUpdateUiState = 0x0128;
     private static readonly nint HideFocusState = 0x00010001;
+    private static readonly Color Hover = Color.FromArgb(243, 244, 246);
+    private static readonly Color Down = Color.FromArgb(229, 231, 235);
+    private bool _hovered;
+    private bool _pressed;
 
     public CyButton()
     {
-        UseVisualStyleBackColor = true;
         AutoSize = false;
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        UseVisualStyleBackColor = false;
+        SetStyle(ControlStyles.UserPaint |
+                 ControlStyles.AllPaintingInWmPaint |
+                 ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.ResizeRedraw, true);
     }
 
     protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); HideFocusCue(); }
-    protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); HideFocusCue(); }
-    protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); HideFocusCue(); }
+    protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); HideFocusCue(); Invalidate(); }
+    protected override void OnLostFocus(EventArgs e) { _pressed = false; Invalidate(); base.OnLostFocus(e); }
+    protected override void OnMouseEnter(EventArgs e) { _hovered = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _hovered = false; _pressed = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) _pressed = true; Invalidate(); base.OnMouseDown(e); HideFocusCue(); }
+    protected override void OnMouseUp(MouseEventArgs e) { _pressed = false; Invalidate(); base.OnMouseUp(e); }
+    protected override void OnKeyDown(KeyEventArgs e) { if (e.KeyCode is Keys.Space or Keys.Enter) _pressed = true; Invalidate(); base.OnKeyDown(e); }
+    protected override void OnKeyUp(KeyEventArgs e) { _pressed = false; Invalidate(); base.OnKeyUp(e); }
+    protected override void OnEnabledChanged(EventArgs e) { _pressed = false; Invalidate(); base.OnEnabledChanged(e); }
+
+    protected override void OnPaintBackground(PaintEventArgs e) =>
+        e.Graphics.Clear(Parent?.BackColor ?? CyVisualTheme.Window);
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.Clear(Parent?.BackColor ?? CyVisualTheme.Window);
+
+        var bounds = CyButtonGeometry.Bounds(this);
+        using var path = CyDrawing.RoundedRectangle(bounds, CyButtonGeometry.Radius);
+        var fill = !Enabled ? CyVisualTheme.ReadOnly : _pressed ? Down : _hovered ? Hover : CyVisualTheme.White;
+        var border = Focused && Enabled ? CyVisualTheme.AccentFocus : CyVisualTheme.Border;
+        using var brush = new SolidBrush(fill);
+        using var pen = new Pen(border, Focused && Enabled ? 1.5f : 1f);
+        g.FillPath(brush, path);
+        g.DrawPath(pen, path);
+        PaintContent(g, Rectangle.Round(bounds), Enabled ? CyVisualTheme.TextPrimary : CyVisualTheme.TextDisabled);
+    }
+
+    protected virtual void PaintContent(Graphics g, Rectangle bounds, Color text) =>
+        TextRenderer.DrawText(g, Text, Font, bounds, text,
+            TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine |
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
+            TextFormatFlags.EndEllipsis);
 
     private void HideFocusCue()
     {
         if (IsHandleCreated)
             NativeMethods.SendMessage(Handle, WmUpdateUiState, HideFocusState, 0);
+    }
+}
+
+/// <summary>Small button beside a date field that opens the calendar; draws a calendar glyph.</summary>
+internal sealed class CalendarButton : CyButton
+{
+    public CalendarButton()
+    {
+        Size = new Size(26, 24);
+        TabStop = false;
+        AccessibleName = "選擇日期";
+    }
+
+    protected override void PaintContent(Graphics g, Rectangle bounds, Color text) => DrawGlyph(g, bounds, text);
+
+    internal static void DrawGlyph(Graphics g, Rectangle bounds, Color text)
+    {
+        var w = 12; var h = 11;
+        var x = bounds.Left + (bounds.Width - w) / 2;
+        var y = bounds.Top + (bounds.Height - h) / 2 + 1;
+        using var pen = new Pen(text, 1f);
+        g.SmoothingMode = SmoothingMode.None;
+        g.DrawRectangle(pen, x, y, w, h);
+        g.DrawLine(pen, x, y + 3, x + w, y + 3);
+        g.DrawLine(pen, x + 3, y - 2, x + 3, y + 1);
+        g.DrawLine(pen, x + w - 3, y - 2, x + w - 3, y + 1);
+        using var dot = new SolidBrush(text);
+        for (var r = 0; r < 2; r++)
+            for (var c = 0; c < 3; c++)
+                g.FillRectangle(dot, x + 2 + c * 3, y + 5 + r * 3, 2, 2);
+    }
+}
+
+/// <summary>Calendar popup (native MonthCalendar) under an anchor control.</summary>
+internal static class DatePickerPopup
+{
+    public static void Show(Control anchor, Rectangle anchorBounds, string current, Action<string> picked)
+    {
+        var initial = InputRules.TryNormalizeValidDate(current, out var digits)
+            ? DateTime.ParseExact(digits, "yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture)
+            : DateTime.Today;
+        var calendar = new MonthCalendar { MaxSelectionCount = 1, SelectionStart = initial, SelectionEnd = initial, ShowToday = true };
+        var host = new ToolStripControlHost(calendar) { Margin = Padding.Empty, Padding = Padding.Empty, AutoSize = false, Size = calendar.Size };
+        var drop = new ToolStripDropDown { Padding = Padding.Empty };
+        drop.Items.Add(host);
+        calendar.DateSelected += (_, e) =>
+        {
+            picked(e.Start.ToString("yyyy/MM/dd", System.Globalization.CultureInfo.InvariantCulture));
+            drop.Close();
+        };
+        drop.Closed += (_, _) => drop.BeginInvoke(drop.Dispose);
+        drop.Show(anchor, new Point(anchorBounds.Left, anchorBounds.Bottom));
     }
 }
 
@@ -101,7 +210,7 @@ internal sealed class CyPrimaryButton : Button
     private bool _hovered;
     private bool _pressed;
 
-    internal float CornerRadius { get; set; } = 2f;
+    internal float CornerRadius { get; set; } = CyButtonGeometry.Radius;
 
     public CyPrimaryButton()
     {
@@ -137,7 +246,7 @@ internal sealed class CyPrimaryButton : Button
         g.Clear(Parent?.BackColor ?? CyVisualTheme.Window);
 
         // CY WinForms theme-button reference geometry: 1 px horizontal safety inset,
-        // ~1.5 px vertical inset and a fixed ~2 px corner radius.
+        // ~1.5 px vertical inset; corner radius from CyButtonGeometry.
         var bounds = new RectangleF(1f, 1.5f, Math.Max(1f, Width - 3f), Math.Max(1f, Height - 4f));
         using var path = CyDrawing.RoundedRectangle(bounds, CornerRadius);
 

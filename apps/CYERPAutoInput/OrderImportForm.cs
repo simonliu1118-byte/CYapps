@@ -97,6 +97,10 @@ internal sealed class OrderImportForm : Form
         _grid.SelectionMode = _editable ? DataGridViewSelectionMode.CellSelect : DataGridViewSelectionMode.FullRowSelect;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.EditMode = DataGridViewEditMode.EditOnEnter;
+        // Column widths and row heights are fixed (user, 2026-10-11).
+        _grid.AllowUserToResizeColumns = false;
+        _grid.AllowUserToResizeRows = false;
+        _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
 
         void Column(string name, string header, float weight, int minWidth, bool editable = false) =>
             _grid.Columns.Add(new DataGridViewTextBoxColumn
@@ -117,6 +121,16 @@ internal sealed class OrderImportForm : Form
             Column("TaxId", "統編", 80, 76);
             Column("InvoiceName", "客戶全名", 110, 80, true);
             Column("InvoiceDate", "發票日期", 90, 84, true);
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "InvoiceDatePick",
+                HeaderText = string.Empty,
+                ToolTipText = "選擇發票日期",
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
+                Width = 28,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
             Column("InvoiceNo", "發票號碼", 100, 90, true);
             Column("Total", "代收", 55, 50);
         }
@@ -152,7 +166,37 @@ internal sealed class OrderImportForm : Form
         _grid.CellEndEdit += (_, e) => WriteBack(e.RowIndex, e.ColumnIndex);
         _grid.CellDoubleClick += (_, e) =>
         {
-            if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && _grid.Columns[e.ColumnIndex].ReadOnly) StartSelected();
+            if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && _grid.Columns[e.ColumnIndex].ReadOnly &&
+                _grid.Columns[e.ColumnIndex].Name != "InvoiceDatePick")
+                StartSelected();
+        };
+        if (!_editable) return;
+
+        // 發票日期 gets the slashes while typing, like the main form's date fields.
+        _grid.EditingControlShowing += (_, e) =>
+        {
+            if (e.Control is not TextBox box) return;
+            box.TextChanged -= FormatDateWhileTyping;
+            if (_grid.CurrentCell?.OwningColumn.Name == "InvoiceDate") box.TextChanged += FormatDateWhileTyping;
+        };
+        _grid.CellPainting += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || _grid.Columns[e.ColumnIndex].Name != "InvoiceDatePick" || e.Graphics is null) return;
+            e.Paint(e.CellBounds, DataGridViewPaintParts.Background | DataGridViewPaintParts.Border);
+            CalendarButton.DrawGlyph(e.Graphics, e.CellBounds, CyVisualTheme.TextSecondary);
+            e.Handled = true;
+        };
+        _grid.CellClick += (_, e) =>
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0 || _grid.Columns[e.ColumnIndex].Name != "InvoiceDatePick") return;
+            var dateColumn = _grid.Columns["InvoiceDate"]!.Index;
+            var cell = _grid.GetCellDisplayRectangle(dateColumn, e.RowIndex, false);
+            var rowIndex = e.RowIndex;
+            DatePickerPopup.Show(_grid, cell, Convert.ToString(_grid[dateColumn, rowIndex].Value) ?? string.Empty, date =>
+            {
+                _grid[dateColumn, rowIndex].Value = date;
+                WriteBack(rowIndex, dateColumn);
+            });
         };
     }
 
@@ -164,6 +208,15 @@ internal sealed class OrderImportForm : Form
     {
         if (!_editable || e.ColumnIndex < 0 || e.CellStyle is null) return;
         e.CellStyle.BackColor = _grid.Columns[e.ColumnIndex].ReadOnly ? CyVisualTheme.ReadOnly : CyVisualTheme.White;
+    }
+
+    private static void FormatDateWhileTyping(object? sender, EventArgs e)
+    {
+        if (sender is not TextBox box) return;
+        var formatted = InputRules.FormatDateForDisplay(InputRules.NormalizeDateDigits(box.Text));
+        if (box.Text == formatted) return;
+        box.Text = formatted;
+        box.SelectionStart = box.Text.Length;
     }
 
     private void WriteBack(int rowIndex, int columnIndex)

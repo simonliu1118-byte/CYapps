@@ -44,9 +44,9 @@ internal abstract class BrandButtonBase : Button
         g.Clear(Parent?.BackColor ?? CyVisualTheme.Window);
 
         // Same shell as CyPrimaryButton (CY WinForms theme-button reference): native Button behavior,
-        // appearance-only owner paint, fixed ~2 px radius and symmetric inset.
+        // appearance-only owner paint, CyButtonGeometry radius and symmetric inset.
         var bounds = new RectangleF(1f, 1.5f, Math.Max(1f, Width - 3f), Math.Max(1f, Height - 4f));
-        using var path = CyDrawing.RoundedRectangle(bounds, 2f);
+        using var path = CyDrawing.RoundedRectangle(bounds, CyButtonGeometry.Radius);
         PaintBrandSurface(g, path, bounds);
 
         using var borderPen = new Pen(ResolveBorderColor(), Focused && Enabled ? 1.5f : 1f);
