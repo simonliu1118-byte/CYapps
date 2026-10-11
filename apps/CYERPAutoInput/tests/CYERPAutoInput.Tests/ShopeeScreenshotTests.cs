@@ -151,7 +151,22 @@ public class ShopeeScreenshotTests
         ], result.Order!.Items);
     }
 
+    [Fact]
+    public void A_set_price_that_does_not_divide_evenly_is_rounded_to_two_decimals()
+    {
+        List<OcrBox> items =
+        [
+            B("1", 49, 120, 8), B("119", 757, 120, 26), B("1", 850, 120, 9), B("119", 917, 120, 26),
+            B("規格: 11x13cm (每包50片),3包優惠價", 159, 140, 240), B("商品選項貨號：X00579-1x3", 161, 160, 180)
+        ];
+        List<OcrBox> amounts = [B("訂單金額", 752, 64), B("NT$119", 922, 65, 55), B("買家總支付金額", 706, 140), B("NT$119", 889, 137, 60)];
+        var result = Read(OrderShot(), [items], amounts);
+        Assert.Empty(result.Problems);
+        Assert.Equal([new ImportedItem("X00579-1", "3", "39.67")], result.Order!.Items);
+    }
+
     [Theory]
+    [InlineData("A00579-1x3", "A00579-1", 3)]
     [InlineData("F0033x2", "F0033", 2)]
     [InlineData("F0033*2", "F0033", 2)]
     [InlineData("F0033 x 2", "F0033", 2)]

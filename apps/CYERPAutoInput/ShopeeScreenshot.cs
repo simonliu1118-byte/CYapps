@@ -194,8 +194,11 @@ internal static partial class ShopeeScreenshot
             used.Add(quantity.Value.Box);
             var (code, multiplier) = SplitSet(rawCode);
             if (code.Length == 0) problems.Add("有一項商品讀不到商品選項貨號。");
+            // A set price that does not divide evenly is entered to 2 decimals (119 ÷ 3 → 39.67;
+            // user, 2026-10-11); checks keep using the screenshot's own amount.
+            var setUnit = Math.Round(unit.Value.Value / multiplier, 2, MidpointRounding.AwayFromZero);
             items.Add(new ShopeeShotItem(GroupOf(unit.Value.Box.CenterY), code,
-                unit.Value.Value / multiplier, quantity.Value.Value * multiplier, unit.Value.Value * quantity.Value.Value));
+                setUnit, quantity.Value.Value * multiplier, unit.Value.Value * quantity.Value.Value));
         }
         if (unitColumn.Any(n => !used.Contains(n.Box)))
             problems.Add("明細有商品讀不到商品選項貨號，請核對截圖。");
