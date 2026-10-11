@@ -72,11 +72,14 @@ internal sealed class ShopeeScreenshotForm : Form
         _apply.Size = new Size(120, 34);
         _apply.Click += (_, _) => Apply();
         var cancel = new CyButton { Text = "取消", Size = new Size(92, 34), DialogResult = DialogResult.Cancel };
-        var clear = new CyButton { Text = "全部清除", Size = new Size(100, 34), Margin = new Padding(3, 3, 32, 3) };
+        var clear = new CyButton { Text = "全部清除", Size = new Size(100, 34), Margin = new Padding(3, 3, 12, 3) };
+        var help = new CyButton { Text = "截圖說明", Size = new Size(100, 34) };
+        help.Click += (_, _) => { using var form = new ShopeeScreenshotHelpForm(); form.ShowDialog(this); };
         clear.Click += (_, _) => { foreach (var shot in _shots) shot.Image.Dispose(); _shots.Clear(); _cards.Controls.Clear(); UpdateSummary(); };
         buttons.Controls.Add(_apply);
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(clear);
+        buttons.Controls.Add(help);
         root.Controls.Add(buttons, 0, 3);
         CancelButton = cancel;
 
@@ -196,11 +199,29 @@ internal sealed class ShopeeScreenshotForm : Form
         string Mark(int n) => n > 0 ? "✓" : "—";
         _summary.Text = $"訂單資訊 {Mark(order)}　明細 {(items > 0 ? $"{items} 張" : "—")}　買家實付金額 {Mark(amounts)}" +
                         (pending > 0 ? $"　（{pending} 張辨識中）" : string.Empty);
-        _apply.Enabled = pending == 0 && order > 0 && items > 0 && amounts > 0;
+        _apply.Enabled = pending == 0 && _shots.Count > 0;
     }
 
     private void Apply()
     {
+        // An order needs all three parts (user, 2026-10-11); say which are missing.
+        var missingParts = new[]
+        {
+            _shots.Any(s => s.Kind == ShopeeShotKind.Order) ? null : "訂單資訊（訂單編號、運送資訊）",
+            _shots.Any(s => s.Kind == ShopeeShotKind.Items) ? null : "商品明細（表頭與商品）",
+            _shots.Any(s => s.Kind == ShopeeShotKind.Amounts) ? null : "買家實付金額"
+        }.Where(x => x is not null).ToList();
+        if (missingParts.Count > 0)
+        {
+            var unknown = _shots.Count(s => s.Kind == ShopeeShotKind.Unknown);
+            MessageBox.Show(this,
+                "一張蝦皮訂單需要訂單資訊、商品明細、買家實付金額三種截圖，目前缺少：\n\n" +
+                string.Join("\n", missingParts.Select(p => "・" + p)) +
+                (unknown > 0 ? $"\n\n另有 {unknown} 張無法判斷種類，請確認截圖範圍（可按「截圖說明」）。" : string.Empty),
+                "截圖不完整", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         var problems = new List<string>();
         var orderShots = _shots.Where(s => s.Kind == ShopeeShotKind.Order).ToList();
         var amountShots = _shots.Where(s => s.Kind == ShopeeShotKind.Amounts).ToList();

@@ -189,6 +189,10 @@ internal sealed class MainForm : Form
             Margin = new Padding(10, 0, 2, 0)
         });
         actions.Controls.Add(ImportButton("蝦皮"));
+        var shopeeHelp = new CyButton { Text = "?", Size = new Size(26, 34), Margin = new Padding(0, 1, 6, 1), AccessibleName = "蝦皮截圖輸入說明" };
+        shopeeHelp.Click += (_, _) => { using var form = new ShopeeScreenshotHelpForm(); form.ShowDialog(this); };
+        new ToolTip().SetToolTip(shopeeHelp, "蝦皮截圖輸入說明");
+        actions.Controls.Add(shopeeHelp);
         actions.Controls.Add(ImportButton("MO店+"));
         actions.Controls.Add(ImportButton("酷澎商城"));
 

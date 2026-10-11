@@ -74,6 +74,9 @@ internal static class UiSnapshot
                        new ShopeeShotMapping("T01", "C0001", "蝦皮訂單", "D901", "S100", "P900", new Dictionary<string, string>()), log))
                 Capture(shot, Path.Combine(folder, "shopee-screenshot.png"), shot.Size);
 
+            using (var help = new ShopeeScreenshotHelpForm())
+                Capture(help, Path.Combine(folder, "shopee-help.png"), help.Size);
+
             Console.WriteLine($"ui snapshots written to {folder}");
             return 0;
         }

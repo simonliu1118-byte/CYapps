@@ -36,6 +36,8 @@
     <EmbeddedResource Include="assets\Auto.ico" LogicalName="CYERPAutoInput.Auto.ico" />
     <EmbeddedResource Include="VERSION" LogicalName="CYERPAutoInput.VERSION" />
     <EmbeddedResource Include="BUILD" LogicalName="CYERPAutoInput.BUILD" />
+    <!-- Help example screenshots (order number, tracking number and item code pixelated). -->
+    <EmbeddedResource Include="assets\help\*.png" LogicalName="CYERPAutoInput.help.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <Target Name="ReadCanonicalVersion" BeforeTargets="GenerateAssemblyInfo">
