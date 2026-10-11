@@ -1395,7 +1395,9 @@ internal sealed class MainForm : Form
 
         validationError = string.Empty;
         var comboOptions = ErpComboOptions.ByField.ToDictionary(p => p.Key, p => p.Value.ToList(), StringComparer.OrdinalIgnoreCase);
-        return new FormSnapshot { Values = values, Details = details, ComboOptions = comboOptions, HandoffBeforeDetails = _loadedOrder?.HandoffReason ?? string.Empty };
+        var noBatch = new HashSet<string>(new[] { _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode }
+            .Select(c => c.Trim()).Where(c => c.Length > 0), StringComparer.OrdinalIgnoreCase);
+        return new FormSnapshot { Values = values, Details = details, ComboOptions = comboOptions, HandoffBeforeDetails = _loadedOrder?.HandoffReason ?? string.Empty, NoBatchItemCodes = noBatch };
     }
 
     private static string Cell(DataGridViewRow row, string column) =>

@@ -93,23 +93,31 @@ internal sealed class ShopeePageScanner
             if (stopRequested()) { result.Cancelled = true; break; }
             var image = await StableCaptureAsync(area, cancellationToken);
             var signature = Signature(image, dispose: false);
+            var byPixels = -1;
+            if (previous is not null)
+            {
+                result.FixedTop = Math.Max(result.FixedTop, ShopeePageScan.StaticTopRows(previous, signature));
+                byPixels = ShopeePageScan.FindScrollOffset(previous, signature, result.FixedTop);
+            }
+
             // Only the page's content column is read (the cards sit in the middle; the margins
-            // and Shopee's icon bar on the right carry nothing needed), which makes OCR faster.
-            var column = Rectangle.FromLTRB(image.Width * 10 / 100, 0, image.Width * 72 / 100, image.Height);
+            // and Shopee's icon bar carry nothing needed), and when the pixels already told how
+            // far the page moved, only the newly shown strip (with a margin) — faster OCR
+            // (user, 2026-10-11: scrolling felt slow).
+            var stripTop = byPixels > 0 ? Math.Max(result.FixedTop, image.Height - byPixels - 80) : 0;
+            var column = Rectangle.FromLTRB(image.Width * 10 / 100, stripTop, image.Width * 72 / 100, image.Height);
             List<OcrBox> boxes;
             using (var part = image.Clone(column, image.PixelFormat))
             {
                 var tokens = await _ocr.RecognizeAsync(part, cancellationToken);
-                boxes = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left + column.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+                boxes = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left + column.Left, t.Rect.Top + column.Top, t.Rect.Width, t.Rect.Height)));
             }
             if (previous is not null && previousBoxes is not null)
             {
-                result.FixedTop = Math.Max(result.FixedTop, ShopeePageScan.StaticTopRows(previous, signature));
-                var byPixels = ShopeePageScan.FindScrollOffset(previous, signature, result.FixedTop);
-                var byText = ShopeePageScan.FindScrollOffsetByText(previousBoxes, boxes, result.FixedTop);
-                // Text positions are the tie-breaker: they ignore shadows and hover effects.
-                var moved = byText >= 0 && (byPixels < 0 || Math.Abs(byPixels - byText) > 3) ? byText : byPixels;
-                _log.Info("page-scan", $"step={step} moved={moved} pixels={byPixels} text={byText} fixed_top={result.FixedTop}");
+                // Text positions decide only when the pixels could not (shadow, hover, animation).
+                var byText = byPixels < 0 ? ShopeePageScan.FindScrollOffsetByText(previousBoxes, boxes, result.FixedTop) : -1;
+                var moved = byPixels >= 0 ? byPixels : byText;
+                _log.Info("page-scan", $"step={step} moved={moved} pixels={byPixels} text={byText} fixed_top={result.FixedTop} ocr_top={stripTop}");
                 if (moved < 0)
                 {
                     image.Dispose();

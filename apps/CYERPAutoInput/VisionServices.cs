@@ -36,6 +36,18 @@ internal static class ScreenCapture
         return Capture(r.ToRectangle());
     }
 
+    /// <summary>
+    /// Like <see cref="Capture"/> but includes layered windows (CAPTUREBLT): ERP's Ribbon
+    /// drop-down is one, and a plain copy shows the form behind it (user's PC, 2026-10-11).
+    /// </summary>
+    public static Bitmap CaptureWithLayers(Rectangle screenRect)
+    {
+        var bitmap = new Bitmap(screenRect.Width, screenRect.Height, PixelFormat.Format32bppArgb);
+        using var graphics = Graphics.FromImage(bitmap);
+        graphics.CopyFromScreen(screenRect.Left, screenRect.Top, 0, 0, screenRect.Size, CopyPixelOperation.SourceCopy | CopyPixelOperation.CaptureBlt);
+        return bitmap;
+    }
+
     public static Bitmap Capture(Rectangle screenRect)
     {
         if (screenRect.Width <= 0 || screenRect.Height <= 0)

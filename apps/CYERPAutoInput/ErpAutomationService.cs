@@ -9,6 +9,7 @@ internal sealed class ErpAutomationService
     private readonly AppLogger _log;
     private readonly FastDetailGridVisionService _gridVision;
     private readonly OpticalTextLocator _textVision;
+    private HashSet<string> _noBatchItemCodes = new(StringComparer.OrdinalIgnoreCase);
     private readonly F2UnitCellLocator _unitCellLocator;
     private readonly F2BatchCellLocator _batchCellLocator;
 
@@ -95,6 +96,7 @@ internal sealed class ErpAutomationService
     {
         var result = new AutomationRunResult();
         LastSalesOrderNumber = string.Empty;
+        _noBatchItemCodes = snapshot.NoBatchItemCodes;
         if (snapshot.Values.TryGetValue("order_type", out var orderType))
             result.SalesOrderType = orderType.Trim();
         var windows = Win32Automation.FindCopi08Windows();
@@ -234,17 +236,26 @@ internal sealed class ErpAutomationService
         if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "列印") is not { } labelRect)
             return "Ribbon 上找不到「列印」";
         var labelScreen = new Rectangle(ribbon.Left + labelRect.Left, ribbon.Top + labelRect.Top, labelRect.Width, labelRect.Height);
+        // The drop-down opens below the button: 直接列印 / 預覽列印.
+        var menu = new Rectangle(labelScreen.Left - 60, labelScreen.Bottom, 360, 200);
+
+        // A menu left open by an earlier try is used as it is; clicking 列印 again would close it.
+        using (var open = ScreenCapture.CaptureWithLayers(menu))
+            if (RibbonPrintLocator.FindWord((await _textVision.RecognizeAsync(open, cancellationToken)).Select(t => (t.Text, t.Rect)).ToList(), "直接") is { } already)
+            {
+                InputSender.Click(new Point(menu.Left + already.Left + already.Width / 2, menu.Top + already.Top + already.Height / 2));
+                _log.Info("print", $"direct print clicked in a menu already open attempt={attempt}");
+                return string.Empty;
+            }
         cancellationToken.ThrowIfCancellationRequested();
         InputSender.Click(new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
         _log.Info("print", $"ribbon 列印 clicked attempt={attempt}");
 
-        // The drop-down opens below the button: 直接列印 / 預覽列印.
-        var menu = new Rectangle(labelScreen.Left - 60, labelScreen.Bottom, 360, 200);
         var menuDeadline = Environment.TickCount64 + 1500;
         while (Environment.TickCount64 < menuDeadline)
         {
             await Delay(250, cancellationToken);
-            using var image = ScreenCapture.Capture(menu);
+            using var image = ScreenCapture.CaptureWithLayers(menu);
             var menuTokens = await _textVision.RecognizeAsync(image, cancellationToken);
             // 「直接」 alone is enough: the other item is 「預覽列印」.
             if (RibbonPrintLocator.FindWord(menuTokens.Select(t => (t.Text, t.Rect)).ToList(), "直接") is { } item)
@@ -1132,6 +1143,13 @@ internal sealed class ErpAutomationService
         string itemCode,
         CancellationToken cancellationToken)
     {
+        // 折價券／運費／促銷組合 lines never have a batch; their F2 check only waited ~2 s each
+        // (user, 2026-10-11).
+        if (_noBatchItemCodes.Contains(itemCode.Trim()))
+        {
+            _log.Info("detail", $"batch not required row={visibleRow + 1} item={_log.Value(itemCode)} reason=settings-item-without-batch");
+            return geometry;
+        }
         geometry = await EnsureDetailColumnVisibleAsync(root, grid, geometry, visibleRow, 5, cancellationToken);
         if (!Win32Automation.PrepareForeground(root, _log))
             throw new InvalidOperationException("檢查批號欄前無法把 ERP 帶到前景。");
