@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import worker from '../scripts/private-binding-probe-worker.mjs';
-import { main, uploadHint } from '../scripts/private-binding-probe.mjs';
+import { main } from '../scripts/private-binding-probe.mjs';
 
 function fixture() {
   let fetches = 0, rpc = 0;
@@ -45,22 +45,23 @@ test('wrong provider version, accepted Session, positive grant and missing RPC f
   }
 });
 
-for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1', 'deploy', 'deploy-config', 'deploy-missing-cli']) test(`probe controller cleanup boundaries: ${failure}`, async () => {
+for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1', 'bundle', 'upload', 'partial-upload', 'subdomain']) test(`probe controller cleanup boundaries: ${failure}`, async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cyid-private-probe-'));
   const env = { CLOUDFLARE_API_TOKEN: 'synthetic-api-token', CLOUDFLARE_ACCOUNT_ID: 'synthetic-account', CYID_WORKER_NAME: 'identity-test-development', RUNNER_TEMP: directory };
   const original = { name: env.CYID_WORKER_NAME, vars: { APP_ENV: 'development', CORE_ACCOUNT_APPLICATION_ID: 'APP_TEST' } };
   let config, exists = false, deleted = false, secret;
   const operations = [];
   const command = async (name, args) => {
-    assert.equal(name, process.execPath); assert.equal(args[0], path.resolve(import.meta.dirname, '../node_modules/wrangler/bin/wrangler.js')); assert.deepEqual(args.slice(1, 3), ['deploy', '--config']);
-    config = JSON.parse(fs.readFileSync(args[3], 'utf8'));
+    assert.equal(name, process.execPath); assert.equal(args[0], path.resolve(import.meta.dirname, '../node_modules/wrangler/bin/wrangler.js'));
+    assert.deepEqual(args.slice(1, 4), ['deploy', '--dry-run', '--config']);
+    config = JSON.parse(fs.readFileSync(args[4], 'utf8'));
     assert.notEqual(config.name, original.name);
     assert.equal(config.d1_databases, undefined);
-    assert.equal(fs.statSync(args[3]).mode & 0o777, 0o600);
-    exists = true;
-    if (failure === 'deploy-config') throw Object.assign(new Error('Private settings/path must not be exported'), { code: 1, stderr: '[ERROR] Invalid configuration: private values' });
-    if (failure === 'deploy-missing-cli') throw Object.assign(new Error('spawn private executable ENOENT'), { code: 'ENOENT' });
-    if (failure === 'deploy') throw Object.assign(new Error('raw private deployment details'), { stderr: 'Private worker name and settings; [code: \u001b[31m10000\u001b[0m]'  });
+    assert.equal(fs.statSync(args[4]).mode & 0o777, 0o600);
+    if (failure === 'bundle') throw new Error('raw private bundler failure');
+    assert.equal(args[5], '--outdir');
+    assert.equal(fs.statSync(args[6]).mode & 0o777, 0o700);
+    fs.writeFileSync(path.join(args[6], 'private-binding-probe-worker.js'), 'export default {};');
   };
   const fetcher = async (url, args = {}) => {
     const p = new URL(url).pathname; const method = args.method ?? 'GET'; operations.push({ p, method });
@@ -70,6 +71,22 @@ for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1
       return Response.json({ ok: true, defaultFetcher: true, invalidSessionDenied: true, namedInvalidationRpc: true });
     }
     if (p.endsWith('/workers/subdomain')) return Response.json({ success: true, result: { subdomain: 'synthetic' } });
+    if (method === 'PUT' && args.body instanceof FormData) {
+      assert.equal(args.headers['content-type'], undefined);
+      const metadata = JSON.parse(await args.body.get('metadata').text());
+      assert.equal(metadata.main_module, 'private-binding-probe-worker.js');
+      assert.equal(await args.body.get(metadata.main_module).text(), 'export default {};');
+      assert.equal(metadata.bindings.some(b => b.type === 'd1'), false);
+      assert.deepEqual(metadata.bindings.filter(b => b.type === 'service').map(b => [b.name, b.service, b.entrypoint]), [['IDENTITY', original.name, undefined], ['IDENTITY_AUTHORITY', original.name, 'ConsumerAuthoritySync']]);
+      exists = failure !== 'upload';
+      if (['upload', 'partial-upload'].includes(failure)) return Response.json({success: false, errors: [{code: 10021, message: 'PRIVATE CONFIG MUST NOT LEAK'}]}, {status: 400});
+      return Response.json({success: true, result: {}});
+    }
+    if (p.endsWith('/subdomain')) {
+      assert.equal(method, 'POST'); assert.deepEqual(JSON.parse(args.body), {enabled:true, previews_enabled:false});
+      if (failure === 'subdomain') return new Response('Private gateway body', {status:503});
+      return Response.json({success:true, result:{enabled:true, previews_enabled:false}});
+    }
     if (p.endsWith('/settings')) {
       if (!exists) return new Response(null, { status: 404 });
       return Response.json({ success: true, result: { bindings: [
@@ -84,8 +101,8 @@ for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1
   };
   try {
     if (failure === 'none') await main(env, fetcher, command, original);
-    else await assert.rejects(main(env, fetcher, command, original), failure === 'deploy' ? /PROBE_UPLOAD_FAILED_10000/ : failure === 'deploy-config' ? /PROBE_UPLOAD_FAILED_EXIT_1_CONFIGURATION/ : failure === 'deploy-missing-cli' ? /PROBE_UPLOAD_FAILED_ENOENT_UNCLASSIFIED/ : undefined);
-    assert.equal(deleted, !['wrong-owner', 'wrong-target', 'new-d1'].includes(failure));
+    else await assert.rejects(main(env, fetcher, command, original), failure === 'bundle' ? /PROBE_LOCAL_BUNDLE_FAILED/ : ['upload','partial-upload'].includes(failure) ? /PROBE_PLATFORM_HTTP_400_CODE_10021/ : failure === 'subdomain' ? /PROBE_PLATFORM_HTTP_503_CODE_UNSPECIFIED/ : undefined);
+    assert.equal(deleted, !['wrong-owner', 'wrong-target', 'new-d1', 'bundle', 'upload'].includes(failure));
     assert.equal(fs.readdirSync(directory).length, 0);
     assert.equal(operations.filter(x => x.method !== 'GET').every(x => x.p.includes('/workers/scripts/cyid-binding-probe-')), true);
     assert.equal(operations.some(x => /\/d1\/database\/|\/identity\//.test(x.p)), false);
@@ -96,12 +113,4 @@ test('production scope is refused before any platform request or mutation', asyn
   const env = { CLOUDFLARE_API_TOKEN: 'synthetic-token', CLOUDFLARE_ACCOUNT_ID: 'synthetic-account', CYID_WORKER_NAME: 'identity-test', RUNNER_TEMP: os.tmpdir() };
   const never = async () => { assert.fail('must not call platform/command'); };
   await assert.rejects(main(env, never, never, { name: env.CYID_WORKER_NAME, vars: { APP_ENV: 'production', CORE_ACCOUNT_APPLICATION_ID: 'APP_TEST' } }), /PROBE_DEVELOPMENT_SCOPE_REQUIRED/);
-});
-
-test('upload hint only emits fixed public words and removes private settings and unrelated binding banner', () => {
-  const output = 'env.IDENTITY (private-service) Worker\n[ERROR] Your Worker name PRIVATE_TARGET is not supported; contact private@example.test https://private.example.test/key SECRET_TOKEN';
-  assert.equal(uploadHint(output, ['PRIVATE_TARGET', 'SECRET_TOKEN']), 'ERROR_YOUR_WORKER_NAME_IS_NOT_SUPPORTED');
-  assert.equal(uploadHint('env.IDENTITY (private-service) Worker'), 'NO_ERROR_LABEL');
-  assert.doesNotMatch(uploadHint('[ERROR] SECRET_TOKEN private/path a'.repeat(50), ['SECRET_TOKEN']), /SECRET|PRIVATE|PATH/);
-  assert.ok(uploadHint('[ERROR] a '.repeat(50)).split('_').length <= 45);
 });
