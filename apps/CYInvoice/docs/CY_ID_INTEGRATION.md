@@ -386,6 +386,6 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 實際source/run證據集中 CYCloudIdentity docs/DEVELOPMENT_DEPLOYMENT.md；唯一待辦入口維持本專案TODO §7.3.3。
 
 
-### 14.8 保留原 Workspace 的綁定準備
+### 14.8 保留原 Workspace 的綁定準備與共通參數
 
-2026-10-12，既有部署流程加入 `prepare-cyid` 配置準備，保留 Built-in／CYID false。只接受核准的既有 Application／兩邊 Workspace，原 consumer Workspace 必須存在且 active；既有綁定衝突不覆寫。流程、參數與讀回邊界見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)，現況見 [CLOUD_WORK_HANDOFF](CLOUD_WORK_HANDOFF.md)，待辦仍只在 TODO §7.3.3。三項 scope 的最新實際 evidence 仍是 #25 空白，準備尚未執行；source／本地測試或 public health 不代替 private transport／Employee 授權、原 Windows continuity 與正式切換。沒有新增身分 authority、遠端測試程式或權威切換。
+#412 的 prepare-cyid 已經六項 CI 通過並合併，原 Workspace／Built-in 保留。2026-10-12 依使用者同 Repo 共用參數的確認，接續 source 讓 CYInvoice／CYID／CYACC deployment 使用同一 Provider base-name Secret；CYACC 原 production resolver 不變，各 Application ID 獨立。CYInvoice 由 Provider active Worker deployment metadata 取得自己的兩項 scope，原 business Workspace 由原 D1 唯一 active Workspace 確認，不借 CYACC 的 scope、不建立新 Workspace或讀 CYID D1。缺 metadata 或 Provider drift 阻擋準備，public health／配置不算授權。操作與安全邊界見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)；Secret migration／sourceCI／唯讀證據見現行交接，待辦只在 TODO §7.3.3。#25仍是最新 actual Built-in 部署，實際準備／private transport／Employee 授權／Windows／正式切換待驗收。

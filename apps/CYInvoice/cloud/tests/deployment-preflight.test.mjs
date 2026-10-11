@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig } from '../scripts/deployment-preflight.mjs';
+import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion, readCyIdPreparation, prepareCyIdConfig, providerConfiguration, resolveCyIdPreparation } from '../scripts/deployment-preflight.mjs';
 
 const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 let activeReads = 0;
@@ -206,7 +207,31 @@ assert.equal(JSON.stringify(bindingState([{type:'secret_text',name:'KEY',text:'D
 // Prepare real Consumer bindings with Built-in retained; all fixtures stay local.
 const preparation = {CYID_WORKER_NAME:'synthetic-provider', IDENTITY_APPLICATION_ID:'CYINVOICE',
   IDENTITY_WORKSPACE_ID:'identity_workspace_synthetic', IDENTITY_CYINVOICE_WORKSPACE_ID:'workspace_synthetic'};
-const preparationAudit = {...structuredClone(validAudit),state:{workspaces:fingerprintRows([{workspace_id:'workspace_synthetic'}],'workspace_id')},cyIdPreparation:preparation};
+const providerDatabase='33333333-3333-4333-8333-333333333333';
+const providerSettings={bindings:[{name:'APP_ENV',type:'plain_text',text:'development'},
+  {name:'API_VERSION',type:'plain_text',text:'v1'},{name:'DB',type:'d1',id:providerDatabase},
+  {name:'CYINVOICE_APPLICATION_ID',type:'plain_text',text:'CYINVOICE'},
+  {name:'CYINVOICE_WORKSPACE_ID',type:'plain_text',text:'identity_workspace_synthetic'}]};
+const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const providerCheckpoint={worker:'synthetic-provider',versionId:activeId,databaseId:providerDatabase,
+  bindingDigest:hash(bindingState(providerSettings.bindings))};
+assert.deepEqual(resolveCyIdPreparation({settings:providerSettings},'synthetic-provider',[{workspace_id:'workspace_synthetic',status:'active'}]),preparation);
+const missingScope={bindings:providerSettings.bindings.filter(b=>!b.name.startsWith('CYINVOICE_'))};
+assert.equal(providerConfiguration(missingScope).scope,null);
+assert.throws(()=>resolveCyIdPreparation({settings:missingScope},'synthetic-provider',[{workspace_id:'workspace_synthetic',status:'active'}]),/CYID_CONSUMER_SCOPE_REQUIRED/);
+assert.equal(providerConfiguration({bindings:[...missingScope.bindings,{name:'CYACC_APPLICATION_ID',type:'plain_text',text:'CYACC'},{name:'CYACC_WORKSPACE_ID',type:'plain_text',text:'other_workspace'}]}).scope,null);
+for(const workspaces of [[],[{workspace_id:'one',status:'disabled'}],[{workspace_id:'one',status:'active'},{workspace_id:'two',status:'active'}]])
+  assert.throws(()=>resolveCyIdPreparation({settings:providerSettings},'synthetic-provider',workspaces),/SINGLE_ORIGINAL_WORKSPACE_REQUIRED/);
+for(const patch of [
+  {name:'APP_ENV',type:'plain_text',text:'production'},
+  {name:'API_VERSION',type:'plain_text',text:'unknown'},
+  {name:'DB',type:'d1',id:'invalid'},
+  {name:'CYINVOICE_APPLICATION_ID',type:'secret_text'},
+  {name:'CYINVOICE_WORKSPACE_ID',type:'plain_text',text:'bad workspace'},
+]) assert.throws(()=>providerConfiguration({bindings:providerSettings.bindings.map(b=>b.name===patch.name?patch:b)}),/CYID_PROVIDER_ENVIRONMENT_INVALID|CYID_PROVIDER_DATABASE_BINDING_INVALID|CYID_CONSUMER_SCOPE_INVALID/);
+assert.throws(()=>providerConfiguration({bindings:providerSettings.bindings.filter(b=>b.name!=='CYINVOICE_WORKSPACE_ID')}),/CYID_CONSUMER_SCOPE_INVALID/);
+assert.throws(()=>providerConfiguration({bindings:[...providerSettings.bindings,providerSettings.bindings[0]]}),/CYID_PROVIDER_SETTINGS_INVALID/);
+const preparationAudit = {...structuredClone(validAudit),state:{workspaces:fingerprintRows([{workspace_id:'workspace_synthetic'}],'workspace_id')},cyIdPreparation:preparation,provider:providerCheckpoint};
 preparationAudit.settings.bindings = preparationAudit.settings.bindings.filter(b=>b.name!=='IDENTITY');
 preparationAudit.settings.bindings.push({name:'UNRELATED',type:'service',service:'synthetic-other'});
 const preparationBase = {...validConfig,services:[{binding:'UNRELATED',service:'synthetic-other'}]};
@@ -228,7 +253,7 @@ for (const conflicting of [
   {name:'IDENTITY_APPLICATION_ID',type:'plain_text',text:'OTHER'},
   {name:'IDENTITY_WORKSPACE_ID',type:'secret_text'},
 ]) assert.throws(()=>prepareCyIdConfig(preparationBase,{bindings:[...preparationAudit.settings.bindings,conflicting]},preparation,preparationAudit.state.workspaces),/CYID_SERVICE_BINDING_CONFLICT|CYID_SCOPE_BINDING_CONFLICT/);
-for (const scenario of ['new','existing','partial','wrong-readback','scope-drift','unreviewed-service','unreviewed-scope']) {
+for (const scenario of ['new','existing','partial','wrong-readback','scope-drift','unreviewed-service','unreviewed-scope','provider-changed-before-upload','provider-changed-before-deploy']) {
   const checkpoint=structuredClone(preparationAudit);
   if (scenario==='existing' || scenario==='partial') checkpoint.settings.bindings.push(...preparedConfig.services
     .filter(b=>scenario==='existing'?b.binding!=='UNRELATED':b.binding==='IDENTITY')
@@ -242,6 +267,12 @@ for (const scenario of ['new','existing','partial','wrong-readback','scope-drift
   }
   let current=activeId, uploaded, posts=0;
   const request=async (route,body)=>{
+    if (route.includes('/synthetic-provider/')) {
+      if (route.endsWith('/deployments')) return {deployments:[{versions:[{version_id:activeId,percentage:100}]}]};
+      const bindings=structuredClone(providerSettings.bindings);
+      if(scenario==='provider-changed-before-upload' || (scenario==='provider-changed-before-deploy' && uploaded)) bindings.find(b=>b.name==='CYINVOICE_WORKSPACE_ID').text='changed_workspace';
+      return {id:activeId,bindings};
+    }
     if (body && route.endsWith('?deploy=false')) {
       posts++; uploaded=body;
       const originalResources=checkpoint.settings.bindings.filter(b=>b.type!=='plain_text');
@@ -266,7 +297,7 @@ for (const scenario of ['new','existing','partial','wrong-readback','scope-drift
   };
   const action=()=>deployReviewedVersion(checkpoint,desired,'export default {};',request,()=>{},deploymentNow);
   if (['new','existing','partial'].includes(scenario)) {await action();assert.equal(posts,2);}
-  else {await assert.rejects(action(),/UPLOADED_BINDINGS_MISMATCH|CYID_SCOPE_BINDING_CONFLICT|UNREVIEWED_SERVICE_BINDING_CHANGE|CYID_SCOPE_PREPARATION_REQUIRED/);assert.equal(posts,scenario==='wrong-readback'?1:0);}
+  else {await assert.rejects(action(),/UPLOADED_BINDINGS_MISMATCH|CYID_SCOPE_BINDING_CONFLICT|UNREVIEWED_SERVICE_BINDING_CHANGE|CYID_SCOPE_PREPARATION_REQUIRED|CYID_PROVIDER_CHANGED/);assert.equal(posts,['wrong-readback','provider-changed-before-deploy'].includes(scenario)?1:0);}
 }
 
 // Run the actual CLI orchestration against synthetic Cloudflare HTTP responses.
@@ -277,7 +308,7 @@ const priorGenerated = fs.existsSync(generatedPath) ? fs.readFileSync(generatedP
 const originalFetch = globalThis.fetch;
 const originalLog = console.log;
 let applied = canonical.slice(0, 12), currentDatabase = '11111111-1111-4111-8111-111111111111';
-let retainedProbe = false;
+let retainedProbe = false, configuredProviderScope = true, providerRevisionChanged = false;
 const retainedId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const retainedNonce = 'a'.repeat(32);
 const calls = [], logs = [];
@@ -286,7 +317,11 @@ globalThis.fetch = async (url, options = {}) => {
   const u = new URL(url);
   calls.push([u.pathname, options.method ?? 'GET']);
   let result;
-  if (u.pathname.endsWith('/versions/'+retainedId)) result = {id:retainedId,annotations:{'workers/message':'CYID_BINDING_PROBE_'+retainedNonce},bindings:[
+  if(u.pathname.includes('/synthetic-provider/') && u.pathname.endsWith('/versions/'+activeId)) {
+    result={id:activeId,...structuredClone(configuredProviderScope?providerSettings:missingScope)};
+    if(providerRevisionChanged) result.bindings.find(b=>b.name==='API_VERSION').text='unknown';
+  }
+  else if (u.pathname.endsWith('/versions/'+retainedId)) result = {id:retainedId,annotations:{'workers/message':'CYID_BINDING_PROBE_'+retainedNonce},bindings:[
     {type:'plain_text',name:'PROBE_OWNER_NONCE',text:retainedNonce},
     {type:'plain_text',name:'PROBE_EXPIRES_AT',text:String(Date.now()-1000)},
     {type:'secret_text',name:'PROBE_AUTH_KEY'},
@@ -322,9 +357,9 @@ globalThis.fetch = async (url, options = {}) => {
   return Response.json({ success: true, result });
 };
 try {
-  const env = { CLOUDFLARE_API_TOKEN: 'synthetic-token', CLOUDFLARE_ACCOUNT_ID: 'synthetic-account' };
+  const env = { CLOUDFLARE_API_TOKEN: 'synthetic-token', CLOUDFLARE_ACCOUNT_ID: 'synthetic-account',CYID_WORKER_NAME:'synthetic-provider' };
   const statePath = path.join(tmp, 'checkpoint.json');
-  await assert.rejects(main('before',statePath,{...env,CYINVOICE_DEPLOYMENT_MODE:'prepare-cyid'}),/CYID_PREPARATION_SETTINGS_REQUIRED/);
+  await assert.rejects(main('before',statePath,{...env,CYID_WORKER_NAME:undefined}),/SHARED_CYID_PROVIDER_SETTING_REQUIRED/);
   assert.equal(calls.length,0);
   await main('before', statePath, env);
   const generated = JSON.parse(fs.readFileSync(generatedPath, 'utf8'));
@@ -338,7 +373,7 @@ try {
   assert.equal(fs.statSync(generatedPath).mode & 0o777, 0o600);
   applied = canonical;
   await main('after', statePath, env);
-  const prepareEnv={...env,...preparation,CYINVOICE_DEPLOYMENT_MODE:'prepare-cyid'};
+  const prepareEnv={...env,CYINVOICE_DEPLOYMENT_MODE:'prepare-cyid'};
   await main('before',statePath,prepareEnv);
   const prepared=JSON.parse(fs.readFileSync(generatedPath,'utf8'));
   assert.equal(prepared.vars.IDENTITY_CYINVOICE_WORKSPACE_ID,'workspace_synthetic');
@@ -349,19 +384,26 @@ try {
   const bundlePath=path.join(bundleDir,'app.js');fs.writeFileSync(bundlePath,'export default {};');
   const countBeforeRejectedDeploy=calls.length;
   await assert.rejects(main('deploy',statePath,{...env,CYINVOICE_DEPLOYMENT_MODE:'deploy'},bundlePath),/AUDIT_DEPLOYMENT_MODE_MISMATCH/);
-  await assert.rejects(main('deploy',statePath,{...prepareEnv,IDENTITY_WORKSPACE_ID:'changed_workspace'},bundlePath),/AUDIT_SCOPE_MISMATCH/);
+  await assert.rejects(main('deploy',statePath,{...prepareEnv,CYID_WORKER_NAME:'changed-provider'},bundlePath),/AUDIT_SCOPE_MISMATCH/);
   assert.equal(calls.length,countBeforeRejectedDeploy);
-  await assert.rejects(main('before',statePath,{...prepareEnv,IDENTITY_CYINVOICE_WORKSPACE_ID:'unknown_workspace'}),/CYID_ORIGINAL_WORKSPACE_REQUIRED/);
+  configuredProviderScope=false;
+  await assert.rejects(main('before',statePath,{...prepareEnv,...preparation}),/CYID_CONSUMER_SCOPE_REQUIRED/);
+  await main('before',statePath,env);
+  assert.ok(logs.some(l=>l.includes('scope configured: false')));
+  configuredProviderScope=true;
   db.exec("UPDATE workspaces SET status='disabled' WHERE workspace_id='workspace_synthetic'");
-  await assert.rejects(main('before',statePath,prepareEnv),/CYID_ORIGINAL_WORKSPACE_REQUIRED/);
+  await assert.rejects(main('before',statePath,prepareEnv),/SINGLE_ORIGINAL_WORKSPACE_REQUIRED/);
   db.exec("UPDATE workspaces SET status='active' WHERE workspace_id='workspace_synthetic'");
   currentDatabase = '22222222-2222-4222-8222-222222222222';
   await assert.rejects(main('after', statePath, env), /AUDIT_SCOPE_MISMATCH/);
+  currentDatabase=providerDatabase;
+  await assert.rejects(main('before',statePath,env),/ORIGINAL_DEVELOPMENT_DATABASE_REQUIRED/);
   currentDatabase = '11111111-1111-4111-8111-111111111111'; retainedProbe = true;
   await main('before',statePath,{...env,CYID_WORKER_NAME:'synthetic-provider'});
   assert.equal(JSON.parse(fs.readFileSync(statePath,'utf8')).retainedProbeCount,1);
   await main('after',statePath,{...env,CYID_WORKER_NAME:'synthetic-provider'});
   assert.ok(logs.some(l=>l.includes('Retained probe versions: 1; expired: 1')));
+  assert.ok(calls.filter(([url])=>url.includes('/d1/database/')).every(([url])=>!url.includes(providerDatabase)));
   assert.ok(calls.every(([url, method]) => method === 'GET' || (method === 'POST' && url.endsWith('/query'))));
   assert.ok(!logs.join('\n').includes('synthetic-token') && !logs.join('\n').includes('synthetic-bookmark') &&
     !logs.join('\n').includes('11111111-1111-4111-8111-111111111111'));
@@ -380,8 +422,11 @@ for (const file of ['cyinvoice-cloud-dev-deploy.yml','cycloudidentity-deploy.yml
 }
 assert.equal(fs.existsSync(path.resolve('../../CYCloudIdentity/scripts/private-binding-probe.mjs')),false);
 
-const consumerWorkflow=fs.readFileSync(path.resolve('../../../.github/workflows/cyinvoice-cloud-dev-deploy.yml'),'utf8');
-for (const name of ['CYID_WORKER_NAME','CYID_D1_DATABASE_ID',...Object.keys(preparation).filter(n=>n.startsWith('IDENTITY_'))]) {
-  assert.ok(consumerWorkflow.includes('${{ secrets.'+name+' }}'));
-  assert.equal(consumerWorkflow.includes('${{ vars.'+name+' }}'),false);
+for(const file of ['cyinvoice-cloud-dev-deploy.yml','cycloudidentity-deploy.yml','cycloudidentity-production-deploy.yml','cyaccountingweb-deploy.yml']) {
+  const workflow=fs.readFileSync(path.resolve('../../../.github/workflows',file),'utf8');
+  assert.ok(workflow.includes('${{ secrets.CYID_WORKER_NAME }}'));
+  assert.equal(workflow.includes('${{ vars.CYID_WORKER_NAME }}'),false);
 }
+const consumerWorkflow=fs.readFileSync(path.resolve('../../../.github/workflows/cyinvoice-cloud-dev-deploy.yml'),'utf8');
+for(const name of ['CYID_D1_DATABASE_ID',...Object.keys(preparation).filter(n=>n.startsWith('IDENTITY_'))])
+  assert.equal(consumerWorkflow.includes('${{ secrets.'+name+' }}'),false);

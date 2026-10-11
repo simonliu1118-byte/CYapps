@@ -61,10 +61,6 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
-      CYID_D1_DATABASE_ID: ${{ secrets.CYID_D1_DATABASE_ID }}
-      IDENTITY_APPLICATION_ID: ${{ secrets.IDENTITY_APPLICATION_ID }}
-      IDENTITY_WORKSPACE_ID: ${{ secrets.IDENTITY_WORKSPACE_ID }}
-      IDENTITY_CYINVOICE_WORKSPACE_ID: ${{ secrets.IDENTITY_CYINVOICE_WORKSPACE_ID }}
       CYINVOICE_DEPLOYMENT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.ref == 'refs/heads/cyinvoice/cloud-dev-prepare-cyid' && 'prepare-cyid' || github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy' && 'deploy' || 'preflight') }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
