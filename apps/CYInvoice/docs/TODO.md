@@ -132,7 +132,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.3 CYID Consumer（V2.6.16 source 已實作，正式切換未完成）
 
-設計與授權／限制見 CY_ID_INTEGRATION.md §14，PR #379 的 §13 保留原交接快照。Canonical 1.0.2／minimum 1.0.0；同 repo 直接引用，不建 contract mirror。
+設計與授權／限制見 CY_ID_INTEGRATION.md §14，PR #379 的 §13 保留原交接快照。Canonical 1.0.3／minimum 1.0.0；同 repo 直接引用，不建 contract mirror。
 
 - [x] 核對 main 94f559cd、PR #216 V2.6.14 head 1e6d4137、PR #379 文件；整合新獨立工作分支，VERSION 2.6.15／BUILD 0。
 - [x] CyIdIdentityProvider、集中 provider 選擇、authenticated protected Workspace／Device binding；Local／Built-in 保留，確認 CYID 後不自動回退。
@@ -148,7 +148,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] RC_TEST AA Windows 實機 CYID：Account Management／settings／高權限操作，斷網／reconnect 與角色、App Access、停用、密碼變更後更新。
 - [ ] 核對真實 CYID Application 註冊／Workspace enablement／App Access、private Service Binding、兩 Workspace 配對；2026-10-11 使用者委託推進至上線，先隔離 staging，正式切換前完成可檢視的驗收／回復方案。
 - [ ] 受控切換：備份／0013／FK、EmployeeNo 與歷史 actor／pending 業務稽核、rollback／舊 client gate；不以 destructive reset 代替 migration。
-- [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（目前 V2.6.17 Build 2），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
+- [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（目前工程包 V2.6.19），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
 - [ ] RC_TEST AB 實機驗收四種狀態、Built-in／CYID 503 原降級、純 Local 光貿斷線阻擋、任一恢復及輸入／Workspace 保留；帳密／權限／Device 拒絕不降級，不自動重送。
 - [ ] CYID 0-active-Device recovery 實作／驗證後才調整 LAST_ACTIVE_DEVICE；目前保留原保護。
 - [x] 人工结案／折讓及中央帳號操作 dialog／core 收斂見 §7.3.2；多階段 OTP／必要讀取仍各自最終驗證，不保存跨操作 Session。
@@ -187,8 +187,9 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] CY Web 七個 manifest mirror 已同步 main canonical 1.0.3（governance #145，main a0cb4675，Governance #243／deploy PR validation #136 通過）；其 consumer 維持支援窗內 1.0.2，不改 Web runtime。
 - [x] Provider development 0.3.6 code-only upgrade：#384 source 348185fb 四項 CI 通過，preflight #123／實際 upgrade #124 通過；原七個 migration、vars／bindings／Secret names／hashed authority／history counts／FK 保留，invalid Session 拒絕正常；UTC recovery reference 2026-10-11T04:20:13.295Z。沒有 Secret replacement／remote migration／bootstrap／authority cutover。
 - [ ] Private named RPC 與既有 consumer 實際 binding／帳號授權驗收，依下列 staging scope／Windows gate；Provider health 不等於該能力已 exercised。
-- [x] 隔離 consumer probe #391 controlled API 路徑與 #393 安全診斷已合併；歷史 source 5dc0c4f7 四項 CI／78 項 Provider tests／21 項 focused regression 通過。無 D1／帳號／Session／grant，owner／target／D1 範圍檢查後清理，私人產物不公開；Token inspection GET-only、權限 hint 不作授權證據。
-- [ ] 完成 private IDENTITY／IDENTITY_AUTHORITY request proof與owned-version cleanup：最新#23核對immutable Worker ID／同一version後DELETE仍404／10339，probe仍在；原Built-in／資料continuity通過。停止retry／擴權／upload／一般deploy，已要求移除暫時Admin（待確認），需Cloudflare釐清刪除API。詳見Provider DEVELOPMENT_DEPLOYMENT最新actual evidence；不重跑舊#17、不刪Worker／reset／restore。
+- [x] 依使用者定案移除遠端probe／cleanup CLI、測試模組與workflow入口；保留過期未部署no-D1版本，停止DELETE重試／擴權／測試上傳。歷史證據見Provider DEVELOPMENT_DEPLOYMENT；刪除10339不再是接入先決條件。
+- [ ] Exact active-version inheritance之真實business部署：原existing owner以exactUUID保留Secrets／DB／services／rate limits，先上傳真實app、readback與原traffic/routes核對後才部署；精確CI／actual evidence待記錄，CYID仍false。
+- [ ] Private IDENTITY／IDENTITY_AUTHORITY與真實Employee／App Access／Role／原Windows驗收，使用真實consumer功能，不新增遠端測試handler；temporary Workers Admin取消待確認。
 - [x] 使用者全部裝置停用窗口的受控上傳／原服務安全核對：#395 六項 CI；#396 active-version audit／guard source 六項 CI／43 focused／100 Provider tests 通過並合併。唯讀 #19 通過 active version health／original D1／FK／Workspace／Device hashes／employee/history 在 #19 window 的保留；恢復 UTC 2026-10-11T07:41:20.449Z。這不代替 cleanup、#17 pre-upload snapshot 比對、真實 Windows Device 認證／本機 backup／回復或正式切換。
 - [ ] 確認驗證 scope 及部署權限／Free 用量、核准的 Application／兩 Workspace 配對與 Employee／App Access／Role／Email readiness，再在隔離 scope 驗正向與變更／撤銷／outage；不猜正式對應或在原業務資料上造 synthetic 帳號。
 - [ ] staging、RC AA／AB／AC 與原 A/B/C 完成後提出正式切換／回復方案；正式 tag／Release 版本身分另依 PROJECT_RULES 明確處理。
@@ -250,14 +251,3 @@ Offline cache 整體簽章（7.2）、多公司（8）與營運摘要（10）保
 - 管理員開機待辦提醒：不做；沒有持續登入，無法可靠知道開程式的人是管理員。
 
 工程 merge 與 development Cloud deployment 在達到對應 CI／Governance／安全驗證 gate 後可依技術需要進行，不應讓已完成的 stacked work 長期停放；**正式 tag / Release 仍視為獨立 promotion 行為，需另行明確決定。**
-
-
-2026-10-11 受控版本驗證更新：#395 source b3e60f70 六項 PR CI 通過並合併；actual CYInvoice development #17（38121460188）原 preflight／undeployed version upload 成功，但 owned-version DELETE 回 Cloudflare JSON 403，版本 absence 未確認。舊 post-check 將最新上傳的無 D1 probe metadata 當成 active runtime 而中止；不代表資料庫被刪除，也不把被 cleanup error 蓋住的 request result 算通過。現行 audit 修正為讀取 single 100% active version、清除 secret 值後比對，重查 deployment 穩定；同一 helper 被 probe owner 重用，retained probe 未清前禁止再上傳／一般 deploy。read-only preflight 增加原 history／health after-check 及 retained-probe 無 D1／未部署／到期檢查。source CI／actual read-only #19 active readback 已通過，Cloudflare version delete 權限／拒絕原因需管理端處理，正式切換保持未完成。證據見 Provider DEVELOPMENT_DEPLOYMENT。
-
-
-2026-10-11 管理端受控清理接續：使用者明確同意並已儲存暫時 Workers Admin 權限，本次作業完成後移除；這是一次性操作授權，不是永久 Token policy。截圖顯示原 Workers Editor 可上傳既有版本但未含 Admin，無 expiry／IP 限制；不可先把單一版本 DELETE 403 宣稱已解決。沿用唯一 private-binding-probe controller，新增 retained-version-cleanup CLI 與同一 CYInvoice development workflow 的 binding-cleanup mode／專用 branch。此入口不 bundle／upload／deploy，只允許清理 checkpoint 中唯一已過期、nonce／完整 UUID／同 Provider 雙 bindings／僅 probe Secret／無 D1 的未部署版本，刪除前重查 original 100% traffic，刪除後確認 GET 404／清單 absence／原 active bindings及routes，workflow always-run history／health 核對。Fresh probe 與 retained cleanup 共用同一刪除 owner，不重跑歷史 #17、不刪 Worker、不重設 Workspace／Device、不切 CYID。先完成精確 source CI，再執行 actual cleanup 與 current guarded transport proof；真實權限／Windows／最終切換仍待驗收，VERSION／BUILD／consumer contract 不變。
-
-
-2026-10-11 actual cleanup #21（38129017243）：#399 source a91bc561／merge ce2db3dd 五項 exact-head CI 通過；暫時 Admin 儲存後，原 preflight、nonce／unused scope 檢查通過，但 version DELETE 從403改回404／10339，absence未確認。always-run原Cloud／storage13／Built-in／Workspace／Device token hashes／history／FK核對及private cleanup成功；殘留1個expired未部署無D1版本，不算transport通過。回復reference UTC2026-10-11T09:37:57.160Z。現行唯一delete owner改先GET原consumer immutable Worker ID／name並以ID讀回同一version及相同bindings／annotation，重新核對traffic後只刪該version；不猜ID、不作多endpoint retry或新probe upload。此為對名稱解析可能性的受控檢查，未有actual結果前不宣稱404已修好；暫時Admin完成本次檢查後移除。
-
-最新管理端驗證：使用者授權暫時 Workers Admin 後，actual cleanup #21（38129017243）刪除回404／10339；#400 source c53893ae 五項 CI／60 focused／117 Provider tests 通過並合併53d583b5。actual #23（38129363451）已核對 immutable Worker ID／name／同一 owned version，但 DELETE 仍404／10339，故停止重試／擴權／新上傳／一般deploy。原active Built-in Cloud0.9.2／storage13／D1／Workspace／Device token hashes／history／FK及private cleanup通過；1個expired未部署無D1 probe仍在。UTC recovery2026-10-11T09:43:50.118Z。已請使用者取消Workers Admin保留Editor，尚待確認；接續由Cloudflare釐清API拒絕，absence／transport／positive auth／Windows／cutover保持未完成。詳細exact source/run證據由Provider DEVELOPMENT_DEPLOYMENT.md維護，不重建Workspace或Device。
