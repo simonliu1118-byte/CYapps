@@ -7,6 +7,59 @@ import { createHash } from 'node:crypto';
 import worker from '../scripts/private-binding-probe-worker.mjs';
 import { main, platformResponse } from '../scripts/private-binding-probe.mjs';
 
+for (const scenario of ['success', 'none', 'multiple', 'wrong-owner', 'wrong-target', 'd1', 'secret', 'active',
+  'not-expired', 'invalid-expiry', 'wrong-id', 'delete-denied', 'absence-unconfirmed', 'changed-after']) {
+  test(`explicit retained-version cleanup: ${scenario}`, async t => {
+    const consumer = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../CYInvoice/cloud/wrangler.jsonc'), 'utf8'));
+    const env = {CLOUDFLARE_API_TOKEN:'PRIVATE_TOKEN', CLOUDFLARE_ACCOUNT_ID:'PRIVATE_ACCOUNT',
+      CYID_WORKER_NAME:'private-provider-development', CYID_D1_DATABASE_ID:'private-provider-d1', RUNNER_TEMP:os.tmpdir()};
+    const original = {name:env.CYID_WORKER_NAME,vars:{APP_ENV:'development',CORE_ACCOUNT_APPLICATION_ID:'PRIVATE_CORE_APP'}};
+    const activeId='11111111-1111-1111-1111-111111111111', probeId='22222222-2222-2222-2222-222222222222', nonce='a'.repeat(32);
+    const originalBindings=[{type:'plain_text',name:'APP_ENV',text:'development'},{type:'plain_text',name:'CYID_ENABLED',text:'false'},
+      {type:'d1',name:'DB',id:'private-consumer-d1'},{type:'secret_text',name:'PRIVATE_SECRET'}];
+    const deployments={deployments:[{versions:[{version_id:activeId,percentage:100}]}]};
+    const audit={worker:consumer.name,databaseId:'private-consumer-d1',capturedAt:new Date().toISOString(),
+      settings:{bindings:originalBindings},deployments,retainedProbeCount:scenario==='none'?0:scenario==='multiple'?2:1};
+    const annotations={'workers/message':'CYID_BINDING_PROBE_'+nonce};
+    const probe={id:scenario==='wrong-id'?activeId:probeId,annotations,bindings:[
+      {type:'plain_text',name:'PROBE_OWNER_NONCE',text:scenario==='wrong-owner'?'b'.repeat(32):nonce},
+      {type:'plain_text',name:'PROBE_EXPIRES_AT',text:scenario==='invalid-expiry'?'not-a-number':String(Date.now()+(scenario==='not-expired'?600000:-600000))},
+      {type:'secret_text',name:scenario==='secret'?'PRIVATE_ORIGINAL_SECRET':'PROBE_AUTH_KEY'},
+      {type:'service',name:'IDENTITY',service:scenario==='wrong-target'?'private-other-provider':original.name},
+      {type:'service',name:'IDENTITY_AUTHORITY',service:original.name,entrypoint:'ConsumerAuthoritySync'},
+      ...(scenario==='d1'?[{type:'d1',name:'DB',id:'private-original-d1'}]:[])]};
+    const operations=[],logs=[]; let deleted=false;
+    t.mock.method(console,'log',value=>logs.push(value));
+    const ok=result=>Response.json({success:true,result});
+    const versions=`/workers/workers/${consumer.name}/versions`,script=`/workers/scripts/${consumer.name}`;
+    const fetcher=async(url,args={})=>{
+      const p=new URL(url).pathname.replace(/^\/client\/v4\/accounts\/PRIVATE_ACCOUNT/,''),method=args.method??'GET';
+      operations.push({p,method});
+      if(p===script+'/deployments')return ok(scenario==='active'?{deployments:[{versions:[{version_id:probeId,percentage:100}]}]}:deployments);
+      if(p===versions+'/'+activeId)return ok({id:activeId,bindings:deleted&&scenario==='changed-after'?[]:originalBindings});
+      if(p===script+'/subdomain')return ok({enabled:true,previews_enabled:false});
+      if(p==='/workers/subdomain')return ok({subdomain:'synthetic'});
+      if(p==='/tokens/verify')return ok({status:'active'});
+      if(p===versions)return ok(deleted||scenario==='none'?[]:Array.from({length:scenario==='multiple'?2:1},()=>({id:probeId,annotations})));
+      if(p===versions+'/'+probeId&&method==='GET')return deleted&&scenario!=='absence-unconfirmed'?new Response(null,{status:404}):ok(probe);
+      if(p===versions+'/'+probeId&&method==='DELETE'){
+        if(scenario==='delete-denied')return Response.json({success:false,errors:[{message:'PRIVATE_DENIAL'}]},{status:403});
+        deleted=true;return ok({});
+      }
+      assert.fail('Unexpected remote operation');
+    };
+    const command=async()=>assert.fail('cleanup must never bundle or upload');
+    if(scenario==='success')await main(env,fetcher,command,original,audit,true);
+    else await assert.rejects(main(env,fetcher,command,original,audit,true));
+    const mayDelete=['success','delete-denied','absence-unconfirmed','changed-after'].includes(scenario);
+    assert.equal(operations.filter(o=>o.method!=='GET').length,mayDelete?1:0);
+    assert.equal(operations.filter(o=>o.method!=='GET').every(o=>o.method==='DELETE'&&o.p===versions+'/'+probeId),true);
+    assert.doesNotMatch(logs.join('\n'),/PRIVATE_|private-provider|private-consumer|11111111|22222222|a{32}/);
+    assert.equal(logs.join('\n').includes(consumer.name),false);
+    assert.equal(logs.join('\n').includes('Expired owned probe version absence confirmed'),scenario==='success');
+  });
+}
+
 test('platform diagnostics project fixed facts from JSON, HTML and intermediary denial without copying private text', async () => {
   for (const [body, headers, pattern] of [
     [JSON.stringify({success:false, errors:[{code:10000, message:'PRIVATE BODY', documentation_url:'https://private.example/PRIVATE'}]}), {}, /CODE_10000_BODY_JSON_ENVELOPE_1.*ERROR_DOC_1/],
@@ -242,7 +295,7 @@ for (const scenario of ['success', 'approved-scope', 'scope-unavailable', 'scope
       }
       if (p === versions+'/'+probeId && method === 'GET') {
         if (!uploaded) return missing();
-        return ok({annotations:uploaded.annotations,bindings:uploaded.bindings.map(b=>
+        return ok({id:probeId,annotations:uploaded.annotations,bindings:uploaded.bindings.map(b=>
           scenario === 'wrong-owner' && b.name==='PROBE_OWNER_NONCE' ? {...b,text:'other-owner'} :
           scenario === 'wrong-target' && b.type==='service' ? {...b,service:'other-provider'} : b)
           .concat(scenario === 'new-d1' ? [{type:'d1',name:'UNEXPECTED'}] : [])});

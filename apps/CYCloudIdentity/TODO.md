@@ -153,3 +153,6 @@ Prerequisites for later Email tests: user-designated controlled inbox, explicit 
 
 
 2026-10-11 actual read-only #19（38122167283）已通過；source #396／3b0a8c62 六項 distinct CI 與 merge f57c186b 為相同 tree86957505。原 active Cloud0.9.2／storage13／Built-in／D1／1 Workspace／4 Device／FK 正常，#19 before/after 的 captured hashes/history 保留；UTC recovery 2026-10-11T07:41:20.449Z。殘留 probe 1 個、過期／未部署／無D1；未刪除或重跑 probe，沒有 authority／Secrets／schema／business deployment。原 Built-in 可續用；管理端刪除403仍需解決，transport request／positive auth／Windows／cutover未通過。詳見 DEVELOPMENT_DEPLOYMENT 的最新 actual evidence；不得重跑舊 #17。
+
+
+2026-10-11 管理端受控清理接續：使用者明確同意並已儲存暫時 Workers Admin 權限，本次作業完成後移除；這是一次性操作授權，不是永久 Token policy。截圖顯示原 Workers Editor 可上傳既有版本但未含 Admin，無 expiry／IP 限制；不可先把單一版本 DELETE 403 宣稱已解決。沿用唯一 private-binding-probe controller，新增 retained-version-cleanup CLI 與同一 CYInvoice development workflow 的 binding-cleanup mode／專用 branch。此入口不 bundle／upload／deploy，只允許清理 checkpoint 中唯一已過期、nonce／完整 UUID／同 Provider 雙 bindings／僅 probe Secret／無 D1 的未部署版本，刪除前重查 original 100% traffic，刪除後確認 GET 404／清單 absence／原 active bindings及routes，workflow always-run history／health 核對。Fresh probe 與 retained cleanup 共用同一刪除 owner，不重跑歷史 #17、不刪 Worker、不重設 Workspace／Device、不切 CYID。先完成精確 source CI，再執行 actual cleanup 與 current guarded transport proof；真實權限／Windows／最終切換仍待驗收，VERSION／BUILD／consumer contract 不變。

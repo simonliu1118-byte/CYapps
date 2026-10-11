@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Preflight, additive Built-in deploy, or undeployed private-binding version'
+        description: 'Preflight, additive Built-in deploy, private binding or owned-version cleanup'
         type: choice
-        options: [preflight, deploy, binding-version]
+        options: [preflight, deploy, binding-version, binding-cleanup]
         default: preflight
         required: true
   push:
@@ -19,6 +19,7 @@ on:
       - cyinvoice/cloud-dev-preflight
       - cyinvoice/cloud-dev-deploy
       - cyinvoice/cloud-dev-binding-version
+      - cyinvoice/cloud-dev-binding-cleanup
 
 permissions:
   contents: read
@@ -125,8 +126,12 @@ jobs:
         if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-version')
         run: node ../../CYCloudIdentity/scripts/private-binding-probe.mjs existing-version "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
 
+      - name: Remove only the expired owned undeployed probe version
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-cleanup') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-cleanup')
+        run: node ../../CYCloudIdentity/scripts/private-binding-probe.mjs retained-version-cleanup "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
+
       - name: Verify original Cloud and history after version probe
-        if: always() && ((github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-version'))
+        if: always() && ((github.event_name == 'push' && (github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version' || github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-cleanup')) || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'binding-version' || inputs.mode == 'binding-cleanup')))
         run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
 
       - name: Verify active Cloud and history without deployment

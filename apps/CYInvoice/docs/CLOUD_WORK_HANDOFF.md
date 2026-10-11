@@ -232,3 +232,6 @@ Build 2 補最後撤銷邊界：aggregate 共用原 self-status parser（含 rev
 升级原可攜資料夾時覆蓋整包的程式檔，包含 package-files.json／Runtime；保留原 Data／Cache／Logs 與原 Workspace。不要僅換 EXE 而漏 manifest。雲端目前仍未部署 additive 0.9.2／private RPC；新同步在隔離 staging 更新 Gateway 後才可驗收。
 
 本次收尾只補 CI／Artifact 證據文件，不推進 VERSION／BUILD。後續純文件 head 不冒充本段功能 source 已測；最新 PR checks／engineering artifact 為即時入口。未完成：RC AA／AB／AC 與前置 A/B/C 實機、隔離 binding／帳號／App Access／Workspace continuity／用量量測、正式切換 gate、0-Device recovery 等原 TODO；未合併／部署／正式 Release。
+
+
+2026-10-11 管理端受控清理接續：使用者明確同意並已儲存暫時 Workers Admin 權限，本次作業完成後移除；這是一次性操作授權，不是永久 Token policy。截圖顯示原 Workers Editor 可上傳既有版本但未含 Admin，無 expiry／IP 限制；不可先把單一版本 DELETE 403 宣稱已解決。沿用唯一 private-binding-probe controller，新增 retained-version-cleanup CLI 與同一 CYInvoice development workflow 的 binding-cleanup mode／專用 branch。此入口不 bundle／upload／deploy，只允許清理 checkpoint 中唯一已過期、nonce／完整 UUID／同 Provider 雙 bindings／僅 probe Secret／無 D1 的未部署版本，刪除前重查 original 100% traffic，刪除後確認 GET 404／清單 absence／原 active bindings及routes，workflow always-run history／health 核對。Fresh probe 與 retained cleanup 共用同一刪除 owner，不重跑歷史 #17、不刪 Worker、不重設 Workspace／Device、不切 CYID。先完成精確 source CI，再執行 actual cleanup 與 current guarded transport proof；真實權限／Windows／最終切換仍待驗收，VERSION／BUILD／consumer contract 不變。
