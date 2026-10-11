@@ -24,6 +24,7 @@
     <Compile Include="..\..\OrderLedger.cs" Link="Linked\OrderLedger.cs" />
     <Compile Include="..\..\CoupangOrderImport.cs" Link="Linked\CoupangOrderImport.cs" />
     <Compile Include="..\..\CompanyNameResponse.cs" Link="Linked\CompanyNameResponse.cs" />
+    <Compile Include="..\..\ShopeeScreenshot.cs" Link="Linked\ShopeeScreenshot.cs" />
   </ItemGroup>
 
   <ItemGroup>
