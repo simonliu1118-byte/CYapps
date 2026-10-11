@@ -54,15 +54,20 @@ internal sealed class ShopeeScreenshotForm : Form
         var top = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        top.ColumnCount = 3;
         top.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "用 Win+Shift+S 截取蝦皮訂單頁，在這裡按 Ctrl+V 貼上（也可拖曳圖片檔）。\n需要：訂單資訊（訂單編號、運送資訊）、明細（可多張）、買家實付金額；順序不限。",
+            Text = "開啟時自動進入截圖：框選蝦皮訂單頁的一段，放開即加入並接著截下一張，按 Esc 結束。\n需要：訂單資訊、明細（可多張）、買家實付金額，順序不限；也可 Ctrl+V 貼上或拖曳圖片檔。",
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
         var help = new CyButton { Text = "說明", Size = new Size(92, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
         help.Click += (_, _) => { using var form = new ShopeeScreenshotHelpForm(); form.ShowDialog(this); };
-        top.Controls.Add(help, 1, 0);
+        var capture = new CyButton { Text = "截圖", Size = new Size(92, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
+        capture.Click += async (_, _) => await CaptureLoopAsync();
+        top.Controls.Add(capture, 1, 0);
+        top.Controls.Add(help, 2, 0);
         root.Controls.Add(top, 0, 0);
 
         _cards.Dock = DockStyle.Fill;
@@ -102,6 +107,7 @@ internal sealed class ShopeeScreenshotForm : Form
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files) await AddFilesAsync(files);
         };
         FormClosed += (_, _) => { foreach (var shot in _shots) shot.Image.Dispose(); };
+        Shown += async (_, _) => { if (_shots.Count == 0 && !UiSnapshot.Active) await CaptureLoopAsync(); };
 
         CyVisualTheme.Apply(this);
         UpdateSummary();
@@ -130,6 +136,44 @@ internal sealed class ShopeeScreenshotForm : Form
             {
                 MessageBox.Show(this, $"無法開啟圖片：{Path.GetFileName(file)}", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
+        }
+    }
+
+    private bool _capturing;
+
+    /// <summary>
+    /// Captures one region after another (user, 2026-10-11): CY's windows step aside, the
+    /// frozen desktop is framed, and each selection is added (OCR runs in the background)
+    /// before the next capture opens. Esc ends the loop and brings this window back.
+    /// </summary>
+    private async Task CaptureLoopAsync()
+    {
+        if (_capturing) return;
+        _capturing = true;
+        var owner = Owner;
+        var ownerOpacity = owner?.Opacity ?? 1;
+        try
+        {
+            while (!IsDisposed)
+            {
+                Opacity = 0;
+                if (owner is not null) owner.Opacity = 0;
+                await Task.Delay(250); // let the desktop repaint without CY's windows
+                var image = RegionCaptureForm.Capture(this);
+                if (image is null) break;
+                _log.Info("shopee-shot", $"region captured size={image.Width}x{image.Height}");
+                _ = AddAsync(image);
+            }
+        }
+        finally
+        {
+            if (owner is not null && !owner.IsDisposed) owner.Opacity = ownerOpacity;
+            if (!IsDisposed)
+            {
+                Opacity = 1;
+                Activate();
+            }
+            _capturing = false;
         }
     }
 
@@ -193,11 +237,13 @@ internal sealed class ShopeeScreenshotForm : Form
 
     private void AddCard(Shot shot)
     {
-        var card = new Panel { Size = new Size(190, 170), Margin = new Padding(6) };
+        var card = new Panel { Size = new Size(190, 148), Margin = new Padding(6) };
         var picture = new PictureBox { Image = shot.Image, SizeMode = PictureBoxSizeMode.Zoom, Bounds = new Rectangle(0, 0, 190, 118), BorderStyle = BorderStyle.FixedSingle };
         var caption = new Label { Bounds = new Rectangle(0, 122, 190, 22), TextAlign = ContentAlignment.MiddleLeft };
-        var remove = new LinkLabel { Text = "移除", Bounds = new Rectangle(0, 146, 60, 20) };
-        remove.LinkClicked += (_, _) =>
+        // A round red × on the picture's top-right corner (user, 2026-10-11).
+        var remove = new RemoveBadge { Location = new Point(picture.Width - 26, 4) };
+        new ToolTip().SetToolTip(remove, "移除這張截圖");
+        remove.Click += (_, _) =>
         {
             _shots.Remove(shot);
             _cards.Controls.Remove(card);
@@ -205,9 +251,9 @@ internal sealed class ShopeeScreenshotForm : Form
             shot.Image.Dispose();
             UpdateSummary();
         };
+        picture.Controls.Add(remove);
         card.Controls.Add(picture);
         card.Controls.Add(caption);
-        card.Controls.Add(remove);
         shot.Caption = caption;
         _cards.Controls.Add(card);
         UpdateCaption(shot);
