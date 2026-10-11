@@ -117,4 +117,31 @@ public sealed class ShopeePageScanTests
         Assert.Contains(problems, p => p.Contains("單價", StringComparison.Ordinal));
         Assert.Contains(problems, p => p.Contains("買家實付金額", StringComparison.Ordinal));
     }
+    [Fact]
+    public void Splits_the_column_into_cards_on_grey_gaps()
+    {
+        // 20 grey rows, a 100-row card with a #FAFAFA table header (not grey), a 16-row gap,
+        // a 10-row sliver (ignored), a gap, then a 60-row card running to the bottom.
+        var shares = new List<double>();
+        shares.AddRange(Enumerable.Repeat(1.0, 20));
+        shares.AddRange(Enumerable.Repeat(0.08, 40));
+        shares.AddRange(Enumerable.Repeat(0.0, 20));
+        shares.AddRange(Enumerable.Repeat(0.08, 40));
+        shares.AddRange(Enumerable.Repeat(0.97, 16));
+        shares.AddRange(Enumerable.Repeat(0.1, 10));
+        shares.AddRange(Enumerable.Repeat(1.0, 16));
+        shares.AddRange(Enumerable.Repeat(0.05, 60));
+        var cards = ShopeePageScan.Cards(shares);
+        Assert.Equal([new ShopeePageScan.CardRange(20, 120), new ShopeePageScan.CardRange(162, 222)], cards);
+    }
+
+    [Theory]
+    [InlineData("訂單編號 X00000000000AB", true)]
+    [InlineData("進 帳 資 訊", true)]
+    [InlineData("買家實付金額", true)]
+    [InlineData("待出貨", false)]
+    [InlineData("累計帳款調整", false)]
+    [InlineData("買家訂單完成率", false)]
+    public void Knows_which_cards_the_order_needs(string title, bool wanted) =>
+        Assert.Equal(wanted, ShopeePageScan.WantedCard(title));
 }

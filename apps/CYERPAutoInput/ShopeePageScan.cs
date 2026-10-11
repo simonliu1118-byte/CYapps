@@ -185,6 +185,38 @@ internal static class ShopeePageScan
         }
     }
 
+    internal readonly record struct CardRange(int Top, int Bottom);
+
+    /// <summary>
+    /// The cards of the page column: runs of rows that are not Shopee's grey background (at
+    /// least 95 % grey marks a gap between cards; inside a card the white, or a table header's
+    /// #FAFAFA, never reaches that). Runs shorter than 30 rows are ignored.
+    /// </summary>
+    public static List<CardRange> Cards(IReadOnlyList<double> greyShare)
+    {
+        var cards = new List<CardRange>();
+        var start = -1;
+        for (var y = 0; y <= greyShare.Count; y++)
+        {
+            var gap = y == greyShare.Count || greyShare[y] >= 0.95;
+            if (!gap && start < 0) start = y;
+            else if (gap && start >= 0)
+            {
+                if (y - start >= 30) cards.Add(new CardRange(start, y));
+                start = -1;
+            }
+        }
+        return cards;
+    }
+
+    /// <summary>The cards whose text the order needs, by their title.</summary>
+    public static bool WantedCard(string title)
+    {
+        var t = Compact(title);
+        return t.Contains("訂單編號", StringComparison.Ordinal) || t.Contains("進帳資訊", StringComparison.Ordinal) ||
+               t.Contains("買家實付金額", StringComparison.Ordinal);
+    }
+
     private static double Overlap(OcrBox a, OcrBox b)
     {
         var w = Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left);

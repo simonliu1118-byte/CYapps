@@ -85,37 +85,21 @@ internal sealed class ShopeePageScanner
         InputSender.Press(0x24 /* VK_HOME */);
         _log.Info("page-scan", "Home pressed to start from the top");
 
-        // The browser scrolls on while earlier captures are still being read (user, 2026-10-11:
-        // the first scroll waited for the first OCR); the reads finish in order behind it.
+        // Scrolling only captures (user, 2026-10-11: the reads were the wait); the cards are read
+        // afterwards. OCR runs here only when the pixels cannot tell how far the page moved.
         List<long>? previous = null;
-        Task<List<OcrBox>>? previousRead = null;
-        var reads = new List<(Task<List<OcrBox>> Read, int PageTop)>();
-        var placed = 0;
+        Bitmap? previousImage = null;
         var notches = 0;
         var pixelsPerNotch = 0.0;
         var pageTop = 0;
-        bool PlaceFinishedReads()
-        {
-            while (placed < reads.Count && reads[placed].Read.IsCompleted)
-            {
-                ShopeePageScan.AddCapture(result.Page, reads[placed].Read.Result, reads[placed].PageTop, result.FixedTop);
-                placed++;
-            }
-            return ShopeePageScan.HasBuyerTotal(result.Page);
-        }
-
         for (var step = 0; step < MaxSteps; step++)
         {
             if (stopRequested()) { result.Cancelled = true; break; }
-            if (PlaceFinishedReads()) break;
             var image = await StableCaptureAsync(area, cancellationToken);
             var signature = Signature(image, dispose: false);
-            var byPixels = -1;
-            if (previous is not null)
+            if (previous is not null && previousImage is not null)
             {
-                // Bottom of the page: nothing moved. (Measuring the fixed band on two identical
-                // captures made the whole screen "fixed" and dropped every box; Build 6 on the
-                // user's PC, once scrolling ran ahead of the reads.)
+                // Bottom of the page: nothing moved.
                 if (ShopeePageScan.SameScreen(previous, signature))
                 {
                     _log.Info("page-scan", $"step={step} bottom reached");
@@ -124,36 +108,28 @@ internal sealed class ShopeePageScanner
                 }
                 // The fixed band is measured on the first scroll only.
                 if (result.FixedTop == 0) result.FixedTop = ShopeePageScan.StaticTopRows(previous, signature);
-                byPixels = ShopeePageScan.FindScrollOffset(previous, signature, result.FixedTop);
-            }
-
-            // Only the content column is read, and when the pixels told how far the page moved,
-            // only the newly shown strip (with a margin).
-            var stripTop = byPixels > 0 ? Math.Max(result.FixedTop, image.Height - byPixels - 80) : 0;
-            var read = ReadAsync(image, stripTop, cancellationToken);
-            if (previous is not null && previousRead is not null)
-            {
+                var byPixels = ShopeePageScan.FindScrollOffset(previous, signature, result.FixedTop);
                 // Text positions decide only when the pixels could not (shadow, hover, animation).
-                var byText = byPixels < 0 ? ShopeePageScan.FindScrollOffsetByText(await previousRead, await read, result.FixedTop) : -1;
+                var byText = byPixels < 0
+                    ? ShopeePageScan.FindScrollOffsetByText(await ReadAsync(previousImage, 0, cancellationToken), await ReadAsync(image, 0, cancellationToken), result.FixedTop)
+                    : -1;
                 var moved = byPixels >= 0 ? byPixels : byText;
-                _log.Info("page-scan", $"step={step} moved={moved} pixels={byPixels} text={byText} fixed_top={result.FixedTop} ocr_top={stripTop}");
+                _log.Info("page-scan", $"step={step} moved={moved} pixels={byPixels} text={byText} fixed_top={result.FixedTop}");
                 if (moved < 0)
                 {
-                    await read;
                     image.Dispose();
                     result.Problems.Add("捲動後畫面對不上（頁面可能在捲動時變動），請改用框選截圖或貼上。");
                     break;
                 }
-                if (moved == 0) { await read; image.Dispose(); break; } // bottom of the page
+                if (moved == 0) { image.Dispose(); break; }
                 pageTop += moved;
                 if (pixelsPerNotch == 0 && notches > 0) pixelsPerNotch = moved / (double)notches;
             }
             result.Captures.Add(new Capture(image, pageTop));
-            reads.Add((read, pageTop));
             previous = signature;
-            previousRead = read;
+            previousImage = image;
 
-            // About 80 % of the visible page per scroll: enough overlap to line up, little reread.
+            // About 80 % of the visible page per scroll: enough overlap to line up.
             notches = pixelsPerNotch > 0
                 ? Math.Max(1, (int)((image.Height - result.FixedTop) * 0.8 / pixelsPerNotch))
                 : FirstWheelNotches;
@@ -161,15 +137,10 @@ internal sealed class ShopeePageScanner
             // Park the cursor on the page's empty left margin so no hover effect changes the next capture.
             NativeMethods.SetCursorPos(area.Left + 12, wheelPoint.Y);
         }
-        // The page is captured; the user gets CY back while the reads finish (user, 2026-10-11).
+        // The page is captured; the user gets CY back while the cards are read (user, 2026-10-11).
         scrolled?.Invoke();
-        for (var i = 0; i < reads.Count; i++)
-        {
-            readProgress?.Report((i, reads.Count));
-            await reads[i].Read;
-        }
-        readProgress?.Report((reads.Count, reads.Count));
-        PlaceFinishedReads();
+        if (!result.Cancelled && result.Captures.Count > 0)
+            await ReadCardsAsync(result, readProgress, cancellationToken);
 
         // The fixed band (browser bar, Shopee's header) is only known after the first scroll;
         // drop what the first capture put on the page from it.
@@ -179,6 +150,106 @@ internal sealed class ShopeePageScanner
         foreach (var b in result.Page)
             _log.Info("page-scan", $"  page box x={b.Left} y={b.Top} w={b.Width} h={b.Height} text={_log.Value(b.Text)}");
         return result;
+    }
+
+    /// <summary>
+    /// Reads only the cards the order needs (user, 2026-10-11: keep accuracy, cut the wait).
+    /// The page column is stitched, cut into cards at the grey gaps between them, and every
+    /// card's title (its top-left corner) is read in one small OCR. Then only 訂單編號,
+    /// 進帳資訊 (down to 隱藏入帳明細) and 買家實付金額 are read in full — the same pixels at the
+    /// same size as before, so nothing read changes. If the cards cannot be told apart, the
+    /// whole column is read as before.
+    /// </summary>
+    private async Task ReadCardsAsync(Result result, IProgress<(int Done, int Total)>? progress, CancellationToken cancellationToken)
+    {
+        var width = result.Captures[0].Image.Width;
+        var column = Rectangle.FromLTRB(width * 15 / 100, result.FixedTop, width * 66 / 100,
+            result.Captures.Max(c => c.PageTop + c.Image.Height));
+        using var page = Stitch(result, column);
+        var cards = ShopeePageScan.Cards(RowBackgroundShares(page));
+        _log.Info("page-scan", $"cards={cards.Count} column={column.Width}x{column.Height}");
+
+        // Titles: the top-left of each card, stacked into one image.
+        const int TitleHeight = 70, TitleWidth = 320, Gap = 12;
+        var wanted = new List<(ShopeePageScan.CardRange Card, string Title)>();
+        if (cards.Count > 0)
+        {
+            using var titles = new Bitmap(TitleWidth, cards.Count * (TitleHeight + Gap), PixelFormat.Format24bppRgb);
+            using (var g = Graphics.FromImage(titles))
+            {
+                g.Clear(Color.White);
+                for (var i = 0; i < cards.Count; i++)
+                    g.DrawImage(page, new Rectangle(0, i * (TitleHeight + Gap), TitleWidth, TitleHeight),
+                        new Rectangle(0, cards[i].Top, TitleWidth, Math.Min(TitleHeight, cards[i].Bottom - cards[i].Top)), GraphicsUnit.Pixel);
+            }
+            progress?.Report((0, 4));
+            var tokens = await _ocr.RecognizeAsync(titles, cancellationToken, maxScale: 1.0);
+            for (var i = 0; i < cards.Count; i++)
+            {
+                var band = (Top: i * (TitleHeight + Gap), Bottom: i * (TitleHeight + Gap) + TitleHeight);
+                var title = string.Concat(tokens.Where(t => t.Rect.Top + t.Rect.Height / 2 >= band.Top && t.Rect.Top + t.Rect.Height / 2 < band.Bottom)
+                    .OrderBy(t => t.Rect.Top).ThenBy(t => t.Rect.Left).Select(t => t.Text));
+                _log.Info("page-scan", $"  card top={cards[i].Top + column.Top} height={cards[i].Bottom - cards[i].Top} title={_log.Value(title)}");
+                if (ShopeePageScan.WantedCard(title)) wanted.Add((cards[i], title));
+            }
+        }
+
+        var targeted = wanted.Count >= 3;
+        if (!targeted) _log.Info("page-scan", $"card titles not all found wanted={wanted.Count}; reading the whole column");
+        var parts = targeted ? wanted.Select(w => (w.Card.Top, w.Card.Bottom, StopAtLedger: w.Title.Contains("進帳", StringComparison.Ordinal))).ToList()
+                             : [(0, page.Height, false)];
+        for (var i = 0; i < parts.Count; i++)
+        {
+            progress?.Report((i + 1, parts.Count + 1));
+            // Long cards (a 進帳資訊 with many products) are read in overlapping chunks; the
+            // product table stops at 隱藏入帳明細, so the income breakdown below is not read.
+            const int Chunk = 900, Overlap = 60;
+            for (var top = parts[i].Top; top < parts[i].Bottom; top += Chunk - Overlap)
+            {
+                var bottom = Math.Min(parts[i].Bottom, top + Chunk);
+                using var piece = page.Clone(Rectangle.FromLTRB(0, top, page.Width, bottom), page.PixelFormat);
+                var tokens = await _ocr.RecognizeAsync(piece, cancellationToken, maxScale: 1.0);
+                // A line the chunk edge cuts in half is read whole by the neighbouring chunk; each
+                // line is kept by the chunk whose half of the overlap holds its centre.
+                var first = top == parts[i].Top;
+                var last = bottom >= parts[i].Bottom;
+                tokens = tokens.Where(t =>
+                {
+                    var centre = t.Rect.Top + t.Rect.Height / 2;
+                    return (first || centre >= Overlap / 2) && (last || centre < piece.Height - Overlap / 2);
+                }).ToList();
+                var boxes = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left + column.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+                ShopeePageScan.AddCapture(result.Page, boxes, top + column.Top, 0);
+                if (parts[i].StopAtLedger && boxes.Any(b => b.Text.Contains("入帳明細", StringComparison.Ordinal) || b.Text.StartsWith("訂單金額", StringComparison.Ordinal)))
+                    break;
+                if (bottom >= parts[i].Bottom) break;
+            }
+        }
+        progress?.Report((parts.Count + 1, parts.Count + 1));
+    }
+
+    /// <summary>Per row of the stitched column, the share of pixels in Shopee's grey page background.</summary>
+    private static List<double> RowBackgroundShares(Bitmap page)
+    {
+        var shares = new List<double>(page.Height);
+        var data = page.LockBits(new Rectangle(0, 0, page.Width, page.Height), ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+        try
+        {
+            var buffer = new byte[data.Stride];
+            for (var y = 0; y < page.Height; y++)
+            {
+                Marshal.Copy(data.Scan0 + y * data.Stride, buffer, 0, data.Stride);
+                int grey = 0, count = 0;
+                for (var x = 0; x < page.Width; x += 3, count++)
+                {
+                    int b = buffer[x * 3], gr = buffer[x * 3 + 1], r = buffer[x * 3 + 2];
+                    if (r is >= 241 and <= 248 && Math.Abs(r - gr) <= 2 && Math.Abs(r - b) <= 2) grey++;
+                }
+                shares.Add(count == 0 ? 0 : grey / (double)count);
+            }
+        }
+        finally { page.UnlockBits(data); }
+        return shares;
     }
 
     /// <summary>OCR of a capture's content column from <paramref name="top"/> down, in capture coordinates.</summary>

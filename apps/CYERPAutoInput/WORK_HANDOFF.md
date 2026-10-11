@@ -56,7 +56,7 @@
 - 自動列印：V0.2.0 Build 31 實測「Ribbon 上找不到『列印』」（LOG 未記錄讀到什麼）；原因是這台 OCR 對 Ribbon 逐字回傳（159 個框），V0.2.1 Build 0 改為同一行相鄰字串接後比對並記錄 Ribbon OCR 文字，待實測。另待確認：點「列印」文字是否開出選單、「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）、非 100% DPI 下的擷取範圍。
 - Build 30 工具列放大後的版面、貨運別新增項目、按 Esc 恢復滑鼠。
 - Build 31 數量欄「一」視為 1、重讀信心門檻 0.8 的實際效果。
-- V0.2.2 Build 1：實測 Build 0：一般訂單捲完後 OCR 6.4 s（原 7.7 s）；24 件長訂單 10 次捲動、全程 ~22 s、商品表 3294px 切出、缺格重讀 4/4。「包里1」→ 物流方式讀不到，`PackagePattern` 放寬。
+- V0.2.2 Build 1：實測 Build 0：一般訂單捲完後 OCR 6.4 s（原 7.7 s）；24 件長訂單 10 次捲動、全程 ~22 s、商品表 3294px 切出、缺格重讀 4/4。「包里1」→ 物流方式讀不到，`PackagePattern` 放寬。使用者要求在維持正確率下再加速：`ShopeePageScanner.ScanAsync` 捲動只截圖（像素比對失敗才 OCR 前後兩張），捲完 `ReadCardsAsync`：拼接內容欄 → `RowBackgroundShares`（灰 241–248）→ `ShopeePageScan.Cards`（≥95% 灰為間隔、≥30 列為卡片）→ 卡片標題條堆疊一次 OCR → `WantedCard`（訂單編號／進帳資訊／買家實付金額）才完整辨識（900px 分段、重疊 60、以字中心分配；進帳卡讀到入帳明細／訂單金額即停）；找不到 3 張即整欄辨識。LOG 記 `cards=` 與每張卡片 top/height/title，待實機驗證速度與卡片切割。
 - V0.2.2 Build 0：使用者 2026-10-11 指定自動擷取為新功能、升 Patch；內容同 V0.2.1 Build 8。待實測：Build 8 的 OCR 加速（15%–66% 欄、原尺寸）準確度、列印選單 BitBlt、進度條。
 - V0.2.1 Build 8：Build 7 實測成功（捲動 3.5 s、5 次 OCR 共 7.7 s、缺格重讀補回編號）。頁面 OCR 改 15%–66% 欄、`maxScale: 1.0`。`ScanAsync(scrolled:, readProgress:)`：捲完即還原視窗與滑鼠，截圖視窗顯示進度條。待實測：準確度是否下降（有訂單編號格式、金額核對、缺格重讀保護）。
 - V0.2.1 Build 7：Build 6 實測：pipeline 下捲動 2.6 s 捲到頁底，step=5 兩張相同 → `StaticTopRows`=1040 → FixedTop 吃掉全部 boxes。改為 `SameScreen` 即到底、FixedTop 只在第一次捲動量測且上限 40%。
