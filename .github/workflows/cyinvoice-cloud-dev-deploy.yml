@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Read-only preflight or additive Built-in development deployment'
+        description: 'Read-only preflight or reviewed Built-in business deployment'
         type: choice
         options: [preflight, deploy]
         default: preflight
@@ -61,6 +61,9 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
       CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
+      IDENTITY_APPLICATION_ID: ${{ vars.IDENTITY_APPLICATION_ID }}
+      IDENTITY_WORKSPACE_ID: ${{ vars.IDENTITY_WORKSPACE_ID }}
+      IDENTITY_CYINVOICE_WORKSPACE_ID: ${{ vars.IDENTITY_CYINVOICE_WORKSPACE_ID }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@v7
@@ -100,14 +103,10 @@ jobs:
         if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
         run: |
           set -euo pipefail
-          if ! npx wrangler deploy --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyinvoice-private-deploy.log" 2>&1; then
-            echo 'Development deployment failed. Keep CYID disabled; diagnose the current Worker/version before retrying.'
-            exit 1
-          fi
-          echo 'Additive development Worker deployed; no CYID authority switch or secret replacement.'
+          node scripts/deployment-preflight.mjs deploy "$RUNNER_TEMP/cyinvoice-deploy-audit.json" "$RUNNER_TEMP/cyinvoice-deploy-bundle/app.js"
 
       - name: Verify source version, API compatibility and original history
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        if: always()
         run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
 
       - name: Remove private generated files

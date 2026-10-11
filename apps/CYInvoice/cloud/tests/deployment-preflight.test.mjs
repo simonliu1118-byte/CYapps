@@ -3,7 +3,25 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main } from '../scripts/deployment-preflight.mjs';
+import { checkSettings, checkMigrations, fingerprintRows, checkContinuity, checkHealth, snapshot, main, activeDeployment, bindingState, deployReviewedVersion } from '../scripts/deployment-preflight.mjs';
+
+const activeId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+let activeReads = 0;
+const active = await activeDeployment(async route => {
+  assert.ok(!route.endsWith('/settings')); // Latest upload may be an undeployed probe.
+  if (route.endsWith('/deployments')) { activeReads++; return {deployments:[{versions:[{version_id:activeId,percentage:100}]}]}; }
+  return {id:activeId,bindings:[{type:'secret_text',name:'SECRET',text:'PRIVATE-DO-NOT-COPY'},{type:'d1',name:'DB',id:'original'}]};
+},'synthetic-consumer');
+assert.equal(activeReads,2);
+assert.equal(JSON.stringify(active).includes('PRIVATE-DO-NOT-COPY'),false);
+assert.equal(active.settings.bindings.find(b=>b.name==='DB').id,'original');
+for (const kind of ['gradual','changed','wrong-version','missing-bindings']) {
+  let n=0;
+  await assert.rejects(activeDeployment(async route => {
+    if (route.endsWith('/deployments')) return {deployments:[{versions:[{version_id:kind==='changed' && ++n>1 ? 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' : activeId,percentage:kind==='gradual' ? 50 : 100}]}]};
+    return {id:kind==='wrong-version' ? 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' : activeId,bindings:kind==='missing-bindings' ? undefined : []};
+  },'synthetic-consumer'), /SINGLE_ACTIVE_DEPLOYMENT_REQUIRED|ACTIVE_DEPLOYMENT_CHANGED|ACTIVE_VERSION_BINDINGS_REQUIRED/);
+}
 
 const config = { d1_databases: [{ database_id: 'synthetic-consumer-db' }],
   ratelimits: [{ name: 'LOGIN', namespace_id: '1', simple: { limit: 12, period: 60 } }] };
@@ -105,6 +123,85 @@ db.exec("UPDATE devices SET token_hash='unexpected_replacement' WHERE device_id=
 assert.throws(() => checkContinuity(schema12, undefined), /AUDIT_SNAPSHOT_INVALID/);
 assert.throws(() => checkContinuity(schema12, { ...schema13, devices: fingerprintRows(db.prepare('SELECT device_id, workspace_id, token_hash, status, revoked_at, employee_authority_state FROM devices').all(), 'device_id') }), /HISTORY_CHANGED_DEVICES/);
 
+// Exact-source inheritance must bypass a poisoned latest upload without secret reads.
+const deployedId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const deploymentNow = Date.now();
+const validConfig = {...config, name:'synthetic-consumer', compatibility_date:'2026-09-20',
+  vars:{APP_ENV:'development',API_VERSION:'1',SCHEMA_VERSION:'13'},
+  d1_databases:[{database_id:'11111111-1111-4111-8111-111111111111'}]};
+const validAudit = {worker:validConfig.name,databaseId:validConfig.d1_databases[0].database_id,
+  capturedAt:new Date(deploymentNow).toISOString(),retainedProbeCount:1,
+  deployments:{deployments:[{versions:[{version_id:activeId,percentage:100}]}]},
+  settings:{bindings:[...settings.bindings.filter(b=>b.name!=='DB'),
+    {name:'DB',type:'d1',id:validConfig.d1_databases[0].database_id},
+    {name:'IDENTITY',type:'service',service:'synthetic-provider',entrypoint:'default'},
+    {name:'CUSTOM_POLICY',type:'plain_text',text:'preserved-policy'}]},
+  routes:[],workerSubdomain:{enabled:true,previews_enabled:true}};
+for (const scenario of ['success','missing-secret','extra-probe-secret','wrong-db','wrong-service','wrong-rate-limit',
+  'wrong-date','wrong-flags','changed-before-upload','changed-before-deploy','routes-changed','lost-upload-response','lost-deploy-response']) {
+  const checkpoint=structuredClone(validAudit), operations=[];
+  let current=activeId, uploadBody, saved, posts=0;
+  const request=async (route,body) => {
+    operations.push({route,body});
+    if (body && route.endsWith('?deploy=false')) {
+      posts++; uploadBody=body;
+      assert.equal(saved.uploadAttempted,true);
+      if (scenario==='lost-upload-response') throw new Error('RESPONSE_LOST');
+      assert.ok(body.bindings.filter(b=>b.type==='inherit').every(b=>b.version_id===activeId));
+      assert.deepEqual(body.bindings.filter(b=>b.type==='inherit').map(b=>b.name).sort(),
+        validAudit.settings.bindings.filter(b=>b.type!=='plain_text').map(b=>b.name).sort());
+      assert.equal(body.bindings.some(b=>b.type==='secret_text' || b.name==='PROBE_AUTH_KEY'),false);
+      assert.equal(body.modules.length,1); assert.equal(body.main_module,'app.js');
+      return {id:deployedId};
+    }
+    if (body && route.endsWith('/deployments')) {
+      posts++; assert.equal(saved.uploadedVersionId,deployedId);
+      assert.deepEqual(body,{strategy:'percentage',versions:[{version_id:deployedId,percentage:100}]});
+      current=deployedId;
+      if (scenario==='lost-deploy-response') throw new Error('RESPONSE_LOST');
+      return {versions:body.versions};
+    }
+    if (route.endsWith('/deployments')) {
+      const id=scenario==='changed-before-upload' || (scenario==='changed-before-deploy' && uploadBody) ? deployedId : current;
+      return {deployments:[{versions:[{version_id:id,percentage:100}]}]};
+    }
+    if (route.endsWith('/routes')) return scenario==='routes-changed' ? [{pattern:'unexpected.example.test/*'}] : [];
+    if (route.endsWith('/subdomain')) return validAudit.workerSubdomain;
+    if (route.endsWith('/versions/'+activeId)) return {id:activeId,bindings:validAudit.settings.bindings};
+    if (route.endsWith('/versions/'+deployedId)) {
+      const bindings=uploadBody ? uploadBody.bindings.map(b=>b.type==='inherit' ? structuredClone(validAudit.settings.bindings.find(x=>x.name===b.name)) : b) : validAudit.settings.bindings;
+      if (scenario==='missing-secret') bindings.splice(bindings.findIndex(b=>b.name==='OTP_PEPPER'),1);
+      if (scenario==='extra-probe-secret') bindings.push({name:'PROBE_AUTH_KEY',type:'secret_text'});
+      if (scenario==='wrong-db') bindings.find(b=>b.name==='DB').id='22222222-2222-4222-8222-222222222222';
+      if (scenario==='wrong-service') bindings.find(b=>b.name==='IDENTITY').service='unexpected-provider';
+      if (scenario==='wrong-rate-limit') bindings.find(b=>b.name==='LOGIN').simple.limit++;
+      return {id:deployedId,bindings,compatibility_date:scenario==='wrong-date'?'2020-01-01':validConfig.compatibility_date,
+        compatibility_flags:scenario==='wrong-flags'?['nodejs_compat']:[]};
+    }
+    throw new Error('UNEXPECTED_TEST_REQUEST');
+  };
+  const action=()=>deployReviewedVersion(checkpoint,validConfig,'export default {fetch(){return new Response("synthetic");}}',request,
+    value=>{saved=structuredClone(value);},deploymentNow);
+  if (scenario==='success') {
+    await action(); assert.equal(posts,2); assert.equal(current,deployedId);
+    assert.equal(uploadBody.bindings.find(b=>b.name==='CUSTOM_POLICY').text,'preserved-policy');
+    assert.equal(uploadBody.bindings.find(b=>b.name==='CYID_ENABLED').text,'false');
+  } else {
+    await assert.rejects(action(),/UPLOADED_BINDINGS_MISMATCH|ACTIVE_DEPLOYMENT_CHANGED|WORKER_ROUTES_CHANGED|RESPONSE_LOST/);
+    assert.equal(posts,scenario==='lost-deploy-response'?2:['changed-before-upload','routes-changed'].includes(scenario)?0:1);
+  }
+  if (saved) await assert.rejects(deployReviewedVersion(saved,validConfig,'export default {};',request,()=>{},deploymentNow),/DEPLOYMENT_ALREADY_ATTEMPTED/);
+  assert.ok(!operations.some(op=>op.route.includes('/latest') || op.route.endsWith('/settings') || op.route.includes('/secrets')));
+  assert.ok(operations.every(op=>!op.body || op.route.endsWith('?deploy=false') || op.route.endsWith('/deployments')));
+}
+for (const [patch,error] of [[{capturedAt:'invalid'},'AUDIT_SNAPSHOT_EXPIRED'],
+  [{capturedAt:new Date(deploymentNow-21*60*1000).toISOString()},'AUDIT_SNAPSHOT_EXPIRED'],
+  [{worker:'other-consumer'},'AUDIT_SCOPE_MISMATCH']]) {
+  await assert.rejects(deployReviewedVersion({...validAudit,...patch},validConfig,'export default {};',()=>assert.fail('must not call API'),()=>{},deploymentNow),new RegExp(error));
+}
+assert.throws(()=>checkSettings({bindings:[...settings.bindings,settings.bindings[0]]},config),/BINDING_NAMES_INVALID/);
+assert.equal(JSON.stringify(bindingState([{type:'secret_text',name:'KEY',text:'DO-NOT-STORE'}])).includes('DO-NOT-STORE'),false);
+
 // Run the actual CLI orchestration against synthetic Cloudflare HTTP responses.
 const deploymentConfig = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cyinvoice-deployment-test-'));
@@ -113,16 +210,26 @@ const priorGenerated = fs.existsSync(generatedPath) ? fs.readFileSync(generatedP
 const originalFetch = globalThis.fetch;
 const originalLog = console.log;
 let applied = canonical.slice(0, 12), currentDatabase = '11111111-1111-4111-8111-111111111111';
+let retainedProbe = false;
+const retainedId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const retainedNonce = 'a'.repeat(32);
 const calls = [], logs = [];
 console.log = value => logs.push(value);
 globalThis.fetch = async (url, options = {}) => {
   const u = new URL(url);
   calls.push([u.pathname, options.method ?? 'GET']);
   let result;
-  if (u.pathname.endsWith('/settings')) result = { bindings: [
+  if (u.pathname.endsWith('/versions/'+retainedId)) result = {id:retainedId,annotations:{'workers/message':'CYID_BINDING_PROBE_'+retainedNonce},bindings:[
+    {type:'plain_text',name:'PROBE_OWNER_NONCE',text:retainedNonce},
+    {type:'plain_text',name:'PROBE_EXPIRES_AT',text:String(Date.now()-1000)},
+    {type:'secret_text',name:'PROBE_AUTH_KEY'},
+    {type:'service',name:'IDENTITY',service:'synthetic-provider'},
+    {type:'service',name:'IDENTITY_AUTHORITY',service:'synthetic-provider',entrypoint:'ConsumerAuthoritySync'},
+  ]};
+  else if (u.pathname.endsWith('/versions/'+activeId)) result = { id:activeId, bindings: [
     ...settings.bindings.filter(b => b.name !== 'DB' && b.name !== 'LOGIN'),
     { name: 'DB', type: 'd1', id: currentDatabase },
-    { name: 'SCHEMA_VERSION', type: 'plain_text', text: String(applied.length) },
+    { name: 'SCHEMA_VERSION', type: 'plain_text', text: '13' },
     { name: 'CUSTOM_POLICY', type: 'plain_text', text: 'preserve-synthetic-policy' },
     ...deploymentConfig.ratelimits.map(r => ({ ...r, type: 'ratelimit' })),
     { name: 'IDENTITY', type: 'service', service: 'synthetic-provider' },
@@ -136,7 +243,10 @@ globalThis.fetch = async (url, options = {}) => {
   } else if (u.pathname.endsWith('/time_travel/bookmark')) {
     assert.ok(u.searchParams.get('timestamp'));
     result = { bookmark: 'synthetic-bookmark' };
-  } else if (u.pathname.endsWith('/deployments')) result = { deployments: [{ id: 'synthetic-deployment', versions: [{ version_id: 'synthetic-version', percentage: 100 }] }] };
+  } else if (u.pathname.endsWith('/deployments')) result = { deployments: [{ id: 'synthetic-deployment', versions: [{ version_id:activeId, percentage:100 }] }] };
+  else if (u.pathname.endsWith('/versions')) result = retainedProbe ? [{id:retainedId,annotations:{'workers/message':'CYID_BINDING_PROBE_'+retainedNonce}}] : [];
+  else if (u.pathname.endsWith('/routes')) result = [];
+  else if (u.pathname.includes('/workers/scripts/') && u.pathname.endsWith('/subdomain')) result = {enabled:true, previews_enabled:true};
   else if (u.pathname.endsWith('/subdomain')) result = { subdomain: 'synthetic-account' };
   else if (u.pathname.endsWith('/v1/health')) return Response.json({ ...health, storageSchemaVersion: String(applied.length), cloudVersion: applied.length === 12 ? '0.8.9' : '0.9.2' });
   else if (u.pathname.endsWith('/' + currentDatabase)) result = { uuid: currentDatabase, name: deploymentConfig.d1_databases[0].database_name };
@@ -159,6 +269,11 @@ try {
   await main('after', statePath, env);
   currentDatabase = '22222222-2222-4222-8222-222222222222';
   await assert.rejects(main('after', statePath, env), /AUDIT_SCOPE_MISMATCH/);
+  currentDatabase = '11111111-1111-4111-8111-111111111111'; retainedProbe = true;
+  await main('before',statePath,{...env,CYID_WORKER_NAME:'synthetic-provider'});
+  assert.equal(JSON.parse(fs.readFileSync(statePath,'utf8')).retainedProbeCount,1);
+  await main('after',statePath,{...env,CYID_WORKER_NAME:'synthetic-provider'});
+  assert.ok(logs.some(l=>l.includes('Retained probe versions: 1; expired: 1')));
   assert.ok(calls.every(([url, method]) => method === 'GET' || (method === 'POST' && url.endsWith('/query'))));
   assert.ok(!logs.join('\n').includes('synthetic-token') && !logs.join('\n').includes('synthetic-bookmark') &&
     !logs.join('\n').includes('11111111-1111-4111-8111-111111111111'));
@@ -170,3 +285,9 @@ try {
   db.close();
 }
 console.log('Deployment audit: scope/authority/migrations/continuity/privacy/health regressions passed.');
+
+for (const file of ['cyinvoice-cloud-dev-deploy.yml','cycloudidentity-deploy.yml']) {
+  const workflow = fs.readFileSync(path.resolve('../../../.github/workflows',file),'utf8');
+  assert.equal(/private-binding-probe|binding-version|binding-cleanup|binding-probe/.test(workflow),false);
+}
+assert.equal(fs.existsSync(path.resolve('../../CYCloudIdentity/scripts/private-binding-probe.mjs')),false);

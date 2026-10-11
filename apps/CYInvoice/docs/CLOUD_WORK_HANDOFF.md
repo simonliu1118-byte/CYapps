@@ -9,8 +9,8 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `90f6fc92ce844646a555e8cb5d087bdab949a744`（本次文件整理前）；#380／#384～#391 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
-| 已完成工程 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380) 已合併；精確 head `46723a89` 七項 CI 通過，工程包 Windows #280 |
+| main | `8c036f0d4cea464a8cd0885a70898859e5de1ae3`（本次證據文件更新前）；#380／#384～#393 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
+| 已完成工程 PR | #380 工程基準／#385 買方名稱修改已合併；最新 Windows 功能 head `6c499108` 的 Windows #281／Cloud #393／Governance #1201 通過，工程包見下方 |
 | 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
 | 本輪工作線 | CYInvoice 功能已合併 main；CYID 升級／probe tooling 獨立接續，不再把歷史 feature branch 當未合併停點 |
 | 工程版本 | **V2.6.19 Build 0**；查無買方名稱可留空，來源為 ../VERSION、../BUILD |
@@ -39,7 +39,15 @@ V2.6.18／BUILD 1，同一開票 bug 補修；本地回歸與精確 head CI／�
 
 #380 精確功能 head 46723a89 七項 CI 全綠後合併 main 59d63b67；Windows 工程包 #280 是買方名稱修改前版本。#384 deployment audit source 348185fb 四項 CI 通過並合併，development preflight #123 與 actual code-only upgrade #124 成功；部署 commit 56c27685 與 tested tree 相同。Provider development **0.3.6**／canonical **1.0.3**／minimum **1.0.0**，七個原 migration 無 pending、未寫 schema，原 vars／DB／rate limits／bindings／Secret names／hashed authority metadata／history counts／FK 保留，synthetic invalid Session 拒絕正常。UTC recovery reference 2026-10-11T04:20:13.295Z，可回查 Cloudflare Time Travel／Worker history，非 restore rehearsal；無 bootstrap／Secret replacement／authority 切換。
 
-CY Web governance #145 已合併 main a0cb4675，七個 mirror 與 main canonical 1.0.3 完全 byte-match，consumer 維持相容 1.0.2，不改 Web runtime／部署。CYInvoice development Cloud 0.9.2／storage 13／Built-in 保留；Provider health 不代表 private RPC transport／實際 App Access／原 Windows Device 已驗收。沿用 provider deployment owner 新增 binding-probe mode：暫時 secret-gated consumer Worker、無 D1／帳號／grant，fixed invalid Session／不存在 scope；CLI/config/key 不公開，owner nonce／同 provider services 核對後清理。最終 probe source 4dc28ff6／#391 的四項 CI 與 13 項回歸已通過；[actual development #136](https://github.com/simonliu1118-byte/CYapps/actions/runs/38113320985) 原 Provider preflight 通過，但 temporary Worker upload HTTP 403（無 API code），已確認暫時 Worker 不存在、原 Provider deploy skipped。因此 private transport 尚未通過；需要核對受保護的隔離 consumer target／上傳與清理能力及拒絕原因，不能自行擴權或改原 Provider。最終路徑為 pinned Wrangler local bundle → owner-scoped multipart API；不保留 CLI hint 相容路徑。維運證據／邊界見 [Provider development guide](../../CYCloudIdentity/docs/DEVELOPMENT_DEPLOYMENT.md)，唯一待辦仍在 TODO §7.3.3。
+CY Web governance #145 canonical mirrors1.0.3已同步，consumer1.0.2相容；Provider0.3.6 development #124已部署且原authority保留。CYInvoice Cloud0.9.2/storage13維持Built-in，private binding／真實授權／Windows／cutover未完成。
+
+2026-10-11 使用者定案：保留刪除失敗的 expired／undeployed／no-D1 測試紀錄，停止 DELETE 重試／擴權，後續不再把測試 Worker／測試版本上傳 Cloudflare。遠端 probe／cleanup CLI、專用 runtime branches／dispatch modes及測試模組已移除；本地／CI synthetic Worker 與真實 core regression 繼續。舊 branches／歷史 run 不能作接續入口。
+
+原 CYInvoice development deployment owner 改用 modern Worker version API，所有非 plain-text bindings（包含 Secrets、原 DB、rate limits、services）以 exact active version UUID 繼承；不從 latest upload 繼承、不讀／重設 Secret 值。僅上傳本次受檢查的真實 app.js，保留 Built-in／CYID_ENABLED=false；上傳後讀回完整 binding names/types/targets/vars與compatibility，重查原100%流量與routes穩定，再明確部署該新UUID。未知resource、split traffic、過期checkpoint、任一readback不符皆停止；response loss不自動重試，always-run核對實際active version／原history／health。過期紀錄存在不再單獨阻擋這條 exact-source deployment。原 D1／Workspace／Device／Token 不 reset 或 rejoin。
+
+本輪本地／PR／實際 business deployment 驗證待精確 source 與 run 證據；不把官方API支援或 synthetic tests 當遠端通過。原最新實際安全核對 #23（38129363451）仍是 Built-in Cloud0.9.2／storage13，1 Workspace／4 Device records、history／FK核對通過；DELETE404／10339原因未知，1個expired測試版本仍在。私有recovery UTC2026-10-11T09:43:50.118Z。Temporary Workers Admin移除尚待使用者確認，無進一步擴權需求。
+
+CYID private transport、真實 Application／兩 Workspace binding／Employee App Access與Role、原Windows裝置認證、RC AA／AB／AC、實際Free用量、portable清除中斷復原與最終authority cutover保持待驗收。後續透過真實consumer已存在的功能驗收，不新增遠端測試handler或帳號authority；production切換／Release仍獨立核准。產品VERSION／BUILD、Cloud0.9.2、Provider0.3.6、canonical1.0.3／minimum1.0.0不變。
 
 ### 分段上線準備 — 2026-10-11
 

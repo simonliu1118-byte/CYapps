@@ -371,4 +371,14 @@ V2.6.17 implementation：ServiceConnectivity 共用 checkGate 與 monotonic 60 �
 
 Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID flag 關閉時，先升級 additive Cloud 0.9.2（包含 /v1/runtime/sync），再升級原 Windows 至 V2.6.17；完成 private RPC 與原裝置 staging 後才核准切 CYID。舊 Worker 404 明確提示版本未提供同步，保留原既有降級，不清除／不換 Workspace；不能把這種舊 Gateway 當作已完成新同步驗收。原 development Cloud 0.9.2 additive rollout 已於 #12 完成、CYID disabled／Built-in 保留；Provider development 0.3.6 code-only upgrade #124 通過，canonical mirrors 1.0.3 已同步。private named entrypoint source 已部署，但實際 binding／正向 App Access／原 Windows acceptance 仍未完成。Production／正式 authority 切換仍需核准。
 
-隔離 private binding probe source 4dc28ff6／#391 已通過四項 CI 與 13 項回歸；actual development #136 在暫時 Worker 上傳收到 HTTP 403（無 API code），原 Provider preflight 通過、暫時 Worker absence 已確認、原 Provider deploy skipped。實際 transport／deny 仍未驗收；先核對可授權的隔離 consumer target／upload／cleanup 能力及拒絕原因，不擴權、不動原 Workspace／Device／Provider 來繞過。具體證據見 Provider DEVELOPMENT_DEPLOYMENT.md，待辦只在 TODO §7.3.3。
+### 14.7 部署策略收斂：保留過期紀錄，不再上傳測試程式
+
+2026-10-11 使用者定案：保留刪除失敗的 expired／undeployed／no-D1 測試紀錄，停止 DELETE 重試／擴權，後續不再把測試 Worker／測試版本上傳 Cloudflare。遠端 probe／cleanup CLI、專用 runtime branches／dispatch modes及測試模組已移除；本地／CI synthetic Worker 與真實 core regression 繼續。舊 branches／歷史 run 不能作接續入口。
+
+原 CYInvoice development deployment owner 改用 modern Worker version API，所有非 plain-text bindings（包含 Secrets、原 DB、rate limits、services）以 exact active version UUID 繼承；不從 latest upload 繼承、不讀／重設 Secret 值。僅上傳本次受檢查的真實 app.js，保留 Built-in／CYID_ENABLED=false；上傳後讀回完整 binding names/types/targets/vars與compatibility，重查原100%流量與routes穩定，再明確部署該新UUID。未知resource、split traffic、過期checkpoint、任一readback不符皆停止；response loss不自動重試，always-run核對實際active version／原history／health。過期紀錄存在不再單獨阻擋這條 exact-source deployment。原 D1／Workspace／Device／Token 不 reset 或 rejoin。
+
+本輪本地／PR／實際 business deployment 驗證待精確 source 與 run 證據；不把官方API支援或 synthetic tests 當遠端通過。原最新實際安全核對 #23（38129363451）仍是 Built-in Cloud0.9.2／storage13，1 Workspace／4 Device records、history／FK核對通過；DELETE404／10339原因未知，1個expired測試版本仍在。私有recovery UTC2026-10-11T09:43:50.118Z。Temporary Workers Admin移除尚待使用者確認，無進一步擴權需求。
+
+CYID private transport、真實 Application／兩 Workspace binding／Employee App Access與Role、原Windows裝置認證、RC AA／AB／AC、實際Free用量、portable清除中斷復原與最終authority cutover保持待驗收。後續透過真實consumer已存在的功能驗收，不新增遠端測試handler或帳號authority；production切換／Release仍獨立核准。產品VERSION／BUILD、Cloud0.9.2、Provider0.3.6、canonical1.0.3／minimum1.0.0不變。
+
+實際source/run證據集中 CYCloudIdentity docs/DEVELOPMENT_DEPLOYMENT.md；唯一待辦入口維持本專案TODO §7.3.3。

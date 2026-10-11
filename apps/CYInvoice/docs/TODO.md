@@ -132,7 +132,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.3 CYID Consumer（V2.6.16 source 已實作，正式切換未完成）
 
-設計與授權／限制見 CY_ID_INTEGRATION.md §14，PR #379 的 §13 保留原交接快照。Canonical 1.0.2／minimum 1.0.0；同 repo 直接引用，不建 contract mirror。
+設計與授權／限制見 CY_ID_INTEGRATION.md §14，PR #379 的 §13 保留原交接快照。Canonical 1.0.3／minimum 1.0.0；同 repo 直接引用，不建 contract mirror。
 
 - [x] 核對 main 94f559cd、PR #216 V2.6.14 head 1e6d4137、PR #379 文件；整合新獨立工作分支，VERSION 2.6.15／BUILD 0。
 - [x] CyIdIdentityProvider、集中 provider 選擇、authenticated protected Workspace／Device binding；Local／Built-in 保留，確認 CYID 後不自動回退。
@@ -148,7 +148,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] RC_TEST AA Windows 實機 CYID：Account Management／settings／高權限操作，斷網／reconnect 與角色、App Access、停用、密碼變更後更新。
 - [ ] 核對真實 CYID Application 註冊／Workspace enablement／App Access、private Service Binding、兩 Workspace 配對；2026-10-11 使用者委託推進至上線，先隔離 staging，正式切換前完成可檢視的驗收／回復方案。
 - [ ] 受控切換：備份／0013／FK、EmployeeNo 與歷史 actor／pending 業務稽核、rollback／舊 client gate；不以 destructive reset 代替 migration。
-- [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（目前 V2.6.17 Build 2），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
+- [ ] 切換前所有 active 裝置在原安裝升級至 CYID-capable Windows（目前工程包 V2.6.19），員工啟用／App Access／Role／verified 超管 Email 備妥；staging 證明原 Workspace、Device、Token、資料及業務接續。不達 gate 維持 Built-in，不要求重建／重新加入。
 - [ ] RC_TEST AB 實機驗收四種狀態、Built-in／CYID 503 原降級、純 Local 光貿斷線阻擋、任一恢復及輸入／Workspace 保留；帳密／權限／Device 拒絕不降級，不自動重送。
 - [ ] CYID 0-active-Device recovery 實作／驗證後才調整 LAST_ACTIVE_DEVICE；目前保留原保護。
 - [x] 人工结案／折讓及中央帳號操作 dialog／core 收斂見 §7.3.2；多階段 OTP／必要讀取仍各自最終驗證，不保存跨操作 Session。
@@ -187,9 +187,11 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] CY Web 七個 manifest mirror 已同步 main canonical 1.0.3（governance #145，main a0cb4675，Governance #243／deploy PR validation #136 通過）；其 consumer 維持支援窗內 1.0.2，不改 Web runtime。
 - [x] Provider development 0.3.6 code-only upgrade：#384 source 348185fb 四項 CI 通過，preflight #123／實際 upgrade #124 通過；原七個 migration、vars／bindings／Secret names／hashed authority／history counts／FK 保留，invalid Session 拒絕正常；UTC recovery reference 2026-10-11T04:20:13.295Z。沒有 Secret replacement／remote migration／bootstrap／authority cutover。
 - [ ] Private named RPC 與既有 consumer 實際 binding／帳號授權驗收，依下列 staging scope／Windows gate；Provider health 不等於該能力已 exercised。
-- [x] 隔離 consumer probe source 4dc28ff6／#391 四項 CI 與 13 項回歸通過；最終只保留 local bundle → controlled API 路徑，無 D1／帳號／Session／grant，owner／target／D1 範圍檢查後清理，私人產物不公開。
-- [ ] 實際 private IDENTITY／IDENTITY_AUTHORITY transport／deny：development #136 的原 Provider preflight 通過，但 temporary Worker upload HTTP 403、無 API code，暫時 Worker absence 已確認；未執行原 Provider deploy。先核對受保護的隔離 target／upload／cleanup 能力及拒絕原因，再驗 default Fetcher／named RPC；不自行擴權，不把 mock、健康檢查或失敗 run 當 live binding 成功。證據見 Provider DEVELOPMENT_DEPLOYMENT.md／現行交接；正向授權仍需下一項。
-- [ ] 確認隔離 staging 資源及部署權限／Free 用量、核准的 Application／兩 Workspace 配對與 Employee／App Access／Role／Email readiness，再在隔離 scope 驗正向與變更／撤銷／outage；不猜正式對應或在原業務資料上造 synthetic 帳號。
+- [x] 依使用者定案移除遠端probe／cleanup CLI、測試模組與workflow入口；保留過期未部署no-D1版本，停止DELETE重試／擴權／測試上傳。歷史證據見Provider DEVELOPMENT_DEPLOYMENT；刪除10339不再是接入先決條件。
+- [ ] Exact active-version inheritance之真實business部署：原existing owner以exactUUID保留Secrets／DB／services／rate limits，先上傳真實app、readback與原traffic/routes核對後才部署；精確CI／actual evidence待記錄，CYID仍false。
+- [ ] Private IDENTITY／IDENTITY_AUTHORITY與真實Employee／App Access／Role／原Windows驗收，使用真實consumer功能，不新增遠端測試handler；temporary Workers Admin取消待確認。
+- [x] 使用者全部裝置停用窗口的受控上傳／原服務安全核對：#395 六項 CI；#396 active-version audit／guard source 六項 CI／43 focused／100 Provider tests 通過並合併。唯讀 #19 通過 active version health／original D1／FK／Workspace／Device hashes／employee/history 在 #19 window 的保留；恢復 UTC 2026-10-11T07:41:20.449Z。這不代替 cleanup、#17 pre-upload snapshot 比對、真實 Windows Device 認證／本機 backup／回復或正式切換。
+- [ ] 確認驗證 scope 及部署權限／Free 用量、核准的 Application／兩 Workspace 配對與 Employee／App Access／Role／Email readiness，再在隔離 scope 驗正向與變更／撤銷／outage；不猜正式對應或在原業務資料上造 synthetic 帳號。
 - [ ] staging、RC AA／AB／AC 與原 A/B/C 完成後提出正式切換／回復方案；正式 tag／Release 版本身分另依 PROJECT_RULES 明確處理。
 
 ### 7.4 新裝置加入方式與安全紀錄
