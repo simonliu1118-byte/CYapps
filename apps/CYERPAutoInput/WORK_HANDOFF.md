@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-10（V0.2.0 Build 28）  
+> 更新：2026-10-10（V0.2.0 Build 29）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -45,6 +45,7 @@
 
 尚未實機確認：
 
+- Build 29：使用者需求（2026-10-11，跟下一版一起發）：`UserSettings.AutoPrint`；`ErpAutomationService.PrintDocumentAsync`（Ribbon 上方 220px OCR「列印」→ 點 label → 下方 360×200 OCR「直接列印」→ 點）；失敗 `PrintProblem`，Esc 關選單。待實機：split button 點 label 是否開選單、DPI 下擷取範圍。
 - Build 28：Build 27 實測 LOG（診斷模式 box）：編號 "-"／"乙" 誤讀、縮圖 "5" 被當編號。`TryIndexDigits` 字形對照；`IndexAnchors` 要求 `貨號行.Left − CenterX ≥ 4×字高`。實機：滑鼠鎖定 blocked_events=233，正常解除。
 - Build 27：使用者需求（2026-10-11）：`PhysicalMouseLock`（WH_MOUSE_LL 丟棄非 injected 事件；同執行緒 WH_KEYBOARD_LL 實體 Esc 即解除，不依賴 UI 執行緒），包住 `RunAsync`／`AbandonInputAsync`，對話框出現前已解除。截圖帶入無 notes 不跳視窗。`StartAutomationAsync` 完成且無 warnings／notes／SaveSkippedReason 時 `ResetForm()`。待實機：滑鼠鎖定與 Esc 解除。
 - Build 26：Build 25 實測（使用者 2026-10-11）：(1) 劃線原價漏讀 → 原價合計 3716≠3800，促銷組合被擋；群組只讀到一個小計且 Σ單價×數量 > 小計、≤ 2 倍時以 Σ 為原價。(2) 有表頭的截圖仍出現「第 5 項讀不到小計」；`IndexAnchors` 改為須在表頭下方且與小計欄數字垂直對齊（無小計欄時需靠近貨號行）。診斷模式記錄 OCR 框（`  box x= y= w= h= text=`）。

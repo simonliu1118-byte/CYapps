@@ -8,6 +8,7 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _advanced = new();
     private readonly CheckBox _diagnostic = new();
     private readonly CheckBox _autoSave = new();
+    private readonly CheckBox _autoPrint = new();
     private readonly CheckBox _firstRowWarehouse = new();
     private readonly TextBox _firstRowWarehouseCode = new();
     private readonly TextBox _shopeeOrderType = new();
@@ -124,6 +125,10 @@ internal sealed class SettingsForm : Form
         var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
         flow.Controls.Add(Option(_diagnostic, "診斷模式（LOG 記錄實際 ERP 內容；僅本機，除錯時才開）", _settings.DiagnosticLogging));
         flow.Controls.Add(Option(_autoSave, "輸入完成後自動儲存 ERP 單據（只限 CY 新增的單據；需人工確認項目於完成後列出）", _settings.AutoSave));
+        flow.Controls.Add(Option(_autoPrint, "自動儲存後按 ERP「列印 → 直接列印」", _settings.AutoPrint));
+        _autoPrint.Margin = new Padding(20, 0, 0, 8);
+        _autoPrint.Enabled = _autoSave.Checked;
+        _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         Option(_firstRowWarehouse, "商品明細第一列庫別預設填入：", _settings.FirstRowWarehouseEnabled);
@@ -375,6 +380,7 @@ internal sealed class SettingsForm : Form
         _settings.AdvancedMode = _advanced.Checked;
         _settings.DiagnosticLogging = _diagnostic.Checked;
         _settings.AutoSave = _autoSave.Checked;
+        _settings.AutoPrint = _autoPrint.Checked;
         foreach (DataGridViewRow row in _grid.Rows)
         {
             if (row.Tag is not string key) continue;

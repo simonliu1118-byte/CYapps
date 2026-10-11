@@ -739,7 +739,7 @@ internal sealed class MainForm : Form
             }
             ShowRunSummaryIfNeeded(result, DocumentKeyText(result), notes);
             // A run with nothing left to check clears the form for the next order (user, 2026-10-11).
-            if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && notes.Count == 0)
+            if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && result.PrintProblem.Length == 0 && notes.Count == 0)
             {
                 ResetForm();
                 SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{(result.Saved ? "已儲存" : "尚未儲存")}；表單已清空");
@@ -820,7 +820,7 @@ internal sealed class MainForm : Form
         var progress = new Progress<string>(SetStatus);
         AutomationRunResult result;
         // The physical mouse is ignored while CY types (user, 2026-10-11); Esc releases it.
-        using (PhysicalMouseLock.Engage(_log)) result = await _automation.RunAsync(snapshot, autoSave, progress, token);
+        using (PhysicalMouseLock.Engage(_log)) result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && _settings.AutoPrint);
         if (result.HandedOff.Length > 0)
         {
             SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 單頭已輸入，轉人工處理（未輸入明細、未儲存）");
@@ -1239,10 +1239,11 @@ internal sealed class MainForm : Form
     private void ShowRunSummaryIfNeeded(AutomationRunResult result, string documentKey, IReadOnlyList<string>? notes = null)
     {
         notes ??= [];
-        if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && notes.Count == 0) return;
+        if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && result.PrintProblem.Length == 0 && notes.Count == 0) return;
 
         var lines = new List<string> { $"銷貨單：{documentKey}", $"儲存：{(result.Saved ? "已儲存" : "尚未儲存")}" };
         if (result.SaveSkippedReason.Length > 0) lines.Add($"未自動儲存原因：{result.SaveSkippedReason}");
+        if (result.PrintProblem.Length > 0) lines.Add($"未自動列印：{result.PrintProblem}");
         if (result.Warnings.Count > 0)
         {
             lines.Add(string.Empty);

@@ -90,7 +90,8 @@ internal sealed class ErpAutomationService
         return (mode, edits.Length, readOnly, writable);
     }
 
-    public async Task<AutomationRunResult> RunAsync(FormSnapshot snapshot, bool autoSave, IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task<AutomationRunResult> RunAsync(FormSnapshot snapshot, bool autoSave, IProgress<string> progress, CancellationToken cancellationToken,
+        bool autoPrint = false)
     {
         var result = new AutomationRunResult();
         LastSalesOrderNumber = string.Empty;
@@ -156,8 +157,76 @@ internal sealed class ErpAutomationService
         progress.Report("ERP：輸入完成，儲存單據…");
         await SaveDocumentAsync(root, result, snapshot.Details, cancellationToken);
         progress.Report("ERP：已儲存。");
+        if (autoPrint)
+        {
+            progress.Report("ERP：已儲存，直接列印…");
+            await PrintDocumentAsync(root, result, cancellationToken);
+            progress.Report(result.Printed ? "ERP：已儲存並送出直接列印。" : $"ERP：已儲存；{result.PrintProblem}");
+        }
         return result;
     }
+
+    /// <summary>
+    /// ERP 列印 → 直接列印 on the saved document (user, 2026-10-11). The Ribbon has no
+    /// shortcut for it, so both targets are found by OCR: the 「列印」 label opens the drop-down
+    /// and only an item reading 「直接列印」 is clicked. Anything unexpected closes the menu
+    /// with Esc and is reported; the saved document is never touched.
+    /// </summary>
+    private async Task PrintDocumentAsync(nint root, AutomationRunResult result, CancellationToken cancellationToken)
+    {
+        void Skip(string reason)
+        {
+            result.PrintProblem = reason;
+            _log.Warn("print", $"direct print skipped document={_log.Value(result.DocumentKey)} reason={reason}");
+        }
+
+        if (!Win32Automation.PrepareForeground(root, _log)) { Skip("無法把 COPI08 帶到前景，未列印"); return; }
+        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0 || DetectMode(root) != ErpMode.Browse)
+        {
+            Skip("ERP 不在檢視狀態或有其他視窗，未列印");
+            return;
+        }
+        if (!NativeMethods.GetWindowRect(root, out var window)) { Skip("讀不到 COPI08 視窗位置，未列印"); return; }
+
+        // The Ribbon is the top strip of COPI08; 列印 sits in its left part.
+        var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
+        OcrToken? label;
+        using (var image = ScreenCapture.Capture(ribbon))
+            label = (await _textVision.RecognizeAsync(image, cancellationToken)).FirstOrDefault(t => Compact(t.Text) == "列印");
+        if (label is null) { Skip("Ribbon 上找不到「列印」，未列印"); return; }
+        var labelScreen = new Rectangle(ribbon.Left + label.Rect.Left, ribbon.Top + label.Rect.Top, label.Rect.Width, label.Rect.Height);
+        cancellationToken.ThrowIfCancellationRequested();
+        InputSender.Click(new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
+        _log.Info("print", "ribbon 列印 clicked");
+
+        // The drop-down opens below the button: 直接列印 / 預覽列印.
+        var menu = new Rectangle(labelScreen.Left - 60, labelScreen.Bottom, 360, 200);
+        OcrToken? item = null;
+        var deadline = Environment.TickCount64 + 2000;
+        while (item is null && Environment.TickCount64 < deadline)
+        {
+            await Delay(250, cancellationToken);
+            using var image = ScreenCapture.Capture(menu);
+            item = (await _textVision.RecognizeAsync(image, cancellationToken)).FirstOrDefault(t => Compact(t.Text).Contains("直接列印", StringComparison.Ordinal));
+        }
+        if (item is null)
+        {
+            InputSender.Press(NativeMethods.VK_ESCAPE);
+            Skip("列印選單找不到「直接列印」，已關閉選單，未列印");
+            return;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        InputSender.Click(new Point(menu.Left + item.Rect.Left + item.Rect.Width / 2, menu.Top + item.Rect.Top + item.Rect.Height / 2));
+        result.Printed = true;
+        _log.Info("print", $"direct print requested document={_log.Value(result.DocumentKey)}");
+
+        // Let ERP hand the job to the printer; a window it opens is logged and left alone.
+        await Delay(1500, cancellationToken);
+        var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
+        if (peers.Count > 0) LogPeerWindows("after-direct-print", peers);
+    }
+
+    private static string Compact(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
 
     /// <summary>
     /// Saves with ERP's F12 shortcut (the Ribbon 儲存 group also holds 取消, so a click is

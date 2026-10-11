@@ -9,6 +9,8 @@ internal sealed class UserSettings
     public bool AdvancedMode { get; set; }
     public bool DiagnosticLogging { get; set; }
     public bool AutoSave { get; set; }
+    /// <summary>After a verified auto-save, ERP 列印 → 直接列印 (user, 2026-10-11).</summary>
+    public bool AutoPrint { get; set; }
     /// <summary>When on, a blank 庫別 on the first detail row is filled with <see cref="FirstRowWarehouse"/>; ERP carries it to later rows.</summary>
     public bool FirstRowWarehouseEnabled { get; set; }
     public string FirstRowWarehouse { get; set; } = string.Empty;
