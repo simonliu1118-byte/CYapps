@@ -110,7 +110,17 @@ internal sealed class ShopeePageScanner
             var byPixels = -1;
             if (previous is not null)
             {
-                result.FixedTop = Math.Max(result.FixedTop, ShopeePageScan.StaticTopRows(previous, signature));
+                // Bottom of the page: nothing moved. (Measuring the fixed band on two identical
+                // captures made the whole screen "fixed" and dropped every box; Build 6 on the
+                // user's PC, once scrolling ran ahead of the reads.)
+                if (ShopeePageScan.SameScreen(previous, signature))
+                {
+                    _log.Info("page-scan", $"step={step} bottom reached");
+                    image.Dispose();
+                    break;
+                }
+                // The fixed band is measured on the first scroll only.
+                if (result.FixedTop == 0) result.FixedTop = ShopeePageScan.StaticTopRows(previous, signature);
                 byPixels = ShopeePageScan.FindScrollOffset(previous, signature, result.FixedTop);
             }
 

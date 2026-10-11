@@ -20,6 +20,14 @@ public sealed class ShopeePageScanTests
     }
 
     [Fact]
+    public void Never_takes_an_unmoved_screen_for_a_fixed_band()
+    {
+        // At the bottom of the page two captures are identical (Build 6 on the user's PC).
+        Assert.True(ShopeePageScan.SameScreen(View(500), View(500)));
+        Assert.True(ShopeePageScan.StaticTopRows(View(500), View(500)) <= 300 * 2 / 5);
+    }
+
+    [Fact]
     public void Tolerates_a_header_shadow_and_hover_rows()
     {
         // After scrolling, a few rows under the fixed bar and around the cursor look different.

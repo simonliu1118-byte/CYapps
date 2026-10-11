@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-11（V0.2.1 Build 6，分支 `cyerp-auto-input/fix-print-help`；V0.2.0 Build 31 已合併 `main`）  
+> 更新：2026-10-11（V0.2.1 Build 7，分支 `cyerp-auto-input/fix-print-help`；V0.2.0 Build 31 已合併 `main`）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -56,6 +56,7 @@
 - 自動列印：V0.2.0 Build 31 實測「Ribbon 上找不到『列印』」（LOG 未記錄讀到什麼）；原因是這台 OCR 對 Ribbon 逐字回傳（159 個框），V0.2.1 Build 0 改為同一行相鄰字串接後比對並記錄 Ribbon OCR 文字，待實測。另待確認：點「列印」文字是否開出選單、「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）、非 100% DPI 下的擷取範圍。
 - Build 30 工具列放大後的版面、貨運別新增項目、按 Esc 恢復滑鼠。
 - Build 31 數量欄「一」視為 1、重讀信心門檻 0.8 的實際效果。
+- V0.2.1 Build 7：Build 6 實測：pipeline 下捲動 2.6 s 捲到頁底，step=5 兩張相同 → `StaticTopRows`=1040 → FixedTop 吃掉全部 boxes。改為 `SameScreen` 即到底、FixedTop 只在第一次捲動量測且上限 40%。
 - V0.2.1 Build 6：Build 5 實測：`CopyFromScreen(SourceCopy|CaptureBlt)` 丟 InvalidEnumArgument → `CaptureWithLayers` 改 BitBlt(SRCCOPY|CAPTUREBLT)。實測 OCR 訂單編號 26100952QVWX96 → 26100952QWWWX96（全自動已帶入），新增 14 碼格式檢查（`OrderSnFormatPattern`）。擷取改為 pipeline（OCR 背景依序、捲動不等 OCR）、80% 步距、`RecognizeAsync(maxScale: 1.25)`。實測時序：Home→第一張 OCR 完 4.5 s、全程 12.7 s（4 張）。
 - V0.2.1 Build 5：Build 4 實測：全自動擷取→帶回→輸入→儲存成功（捲動 400/600/600，4 張）。列印：「列印」label 找到（逐字框），但選單 OCR 全是後方表單 → DevExpress 下拉為分層視窗，`CopyFromScreen` 需 `CaptureBlt`（`ScreenCapture.CaptureWithLayers`，只用於選單）；重試前先檢查選單是否已開。`FormSnapshot.NoBatchItemCodes`（設定三個特殊品號）跳過批號檢查。擷取 OCR 只跑新捲入的條帶（像素比對成功時）。開始時點左側空白（area.Left+12）後送 Home，再以滾輪確認到頂。
 - V0.2.1 Build 4：Build 3 實測 LOG：捲動 400px×4 正確、找到買家總支付金額，但表頭「小計」→「小」使商品表段落缺失；以該 LOG 的 page box 離線重跑，修正後三段皆切出，解析得訂單編號、新竹、三品項、優惠券 -40、代收 1403（第 1 組編號「1」未偵測，實機靠缺格重讀）。捲動改為量測每格距離後每步約可見高度 70%，OCR 只跑 10%–72% 寬的內容欄。

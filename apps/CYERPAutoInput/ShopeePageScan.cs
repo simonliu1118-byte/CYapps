@@ -70,7 +70,8 @@ internal static class ShopeePageScan
     /// </summary>
     public static int StaticTopRows(IReadOnlyList<long> previous, IReadOnlyList<long> next)
     {
-        var rows = Math.Min(previous.Count, next.Count);
+        // A fixed band is a strip at the top, never most of the screen.
+        var rows = Math.Min(previous.Count, next.Count) * 2 / 5;
         var end = 0;
         var changedRun = 0;
         for (var i = 0; i < rows; i++)
