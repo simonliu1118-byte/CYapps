@@ -27,6 +27,8 @@ internal sealed class UserSettings
     /// <summary>Shared by every platform: 折價券／運費品號 and carrier → ERP 貨運別 (local only).</summary>
     public string DiscountItemCode { get; set; } = string.Empty;
     public string ShippingItemCode { get; set; } = string.Empty;
+    /// <summary>促銷組合品號: one line for the struck-out promotion discounts (Shopee screenshots).</summary>
+    public string PromotionItemCode { get; set; } = string.Empty;
     public Dictionary<string, string> FreightTypes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     // Build 14–19 kept these under MO店+; read once and moved to the shared settings.

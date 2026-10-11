@@ -12,10 +12,14 @@ internal sealed class ErpAutomationService
     private readonly F2UnitCellLocator _unitCellLocator;
     private readonly F2BatchCellLocator _batchCellLocator;
 
+    /// <summary>The shared OCR engine (also used to read Shopee order screenshots).</summary>
+    internal PaddleOcrService Ocr { get; }
+
     public ErpAutomationService(AppLogger log)
     {
         _log = log;
         var ocr = new PaddleOcrService(log);
+        Ocr = ocr;
         _gridVision = new FastDetailGridVisionService(ocr, log);
         _textVision = new OpticalTextLocator(ocr, log);
         _unitCellLocator = new F2UnitCellLocator(ocr, log);

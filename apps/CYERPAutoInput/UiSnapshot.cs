@@ -70,6 +70,10 @@ internal static class UiSnapshot
                        ["第 9 列訂單 90000000000009：運費對不上：開立發票金額推算為 45，運費欄位合計為 0。"], autoSave: true, _ => null))
                 Capture(preview, Path.Combine(folder, "mo-import.png"), preview.Size);
 
+            using (var shot = new ShopeeScreenshotForm(new PaddleOcrService(log),
+                       new ShopeeShotMapping("T01", "C0001", "蝦皮訂單", "D901", "S100", "P900", new Dictionary<string, string>()), log))
+                Capture(shot, Path.Combine(folder, "shopee-screenshot.png"), shot.Size);
+
             Console.WriteLine($"ui snapshots written to {folder}");
             return 0;
         }

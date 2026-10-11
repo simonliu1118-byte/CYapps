@@ -855,6 +855,40 @@ internal sealed class MainForm : Form
         await PreviewAndRunAsync(ShopeeOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
     }
 
+    /// <summary>
+    /// One Shopee order read from screenshots onto the form (user, 2026-10-11): no batch and
+    /// no automatic start; anything to check is listed and the user starts the input.
+    /// </summary>
+    private Task ImportShopeeScreenshotsAsync()
+    {
+        if (_automationCts is not null) return Task.CompletedTask;
+        if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
+        {
+            MessageBox.Show(this, "請先在「設定」填入蝦皮的銷貨單別與客戶代號。", "蝦皮訂單截圖輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return Task.CompletedTask;
+        }
+        var ledger = LoadLedger();
+        if (ledger is null) return Task.CompletedTask;
+
+        var mapping = new ShopeeShotMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix,
+            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
+        using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log);
+        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return Task.CompletedTask;
+
+        LoadOrder(order);
+        var notes = dialog.Result.Problems.ToList();
+        if (ledger.Find(order.LedgerKey) is { } entry) notes.Insert(0, $"這張訂單{entry.Describe()}。");
+        if (order.TrackingNumber.Length == 0) notes.Add("物流單號空白：取得後請填到送貨地址(一)。");
+        SetStatus($"蝦皮訂單 {order.OrderSn} 已帶入表單；請確認後按「開始輸入 ERP」");
+        _log.Info("shopee-shot", $"order loaded items={order.Items.Count} notes={notes.Count}");
+        MessageBox.Show(this,
+            notes.Count == 0
+                ? $"蝦皮訂單 {order.OrderSn} 已帶入表單。\n請確認後按「開始輸入 ERP」。"
+                : $"蝦皮訂單 {order.OrderSn} 已帶入表單，請先確認以下項目，補齊後再按「開始輸入 ERP」：\n\n" + string.Join("\n", notes.Select(n => "・" + n)),
+            "蝦皮訂單截圖輸入", MessageBoxButtons.OK, notes.Count == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        return Task.CompletedTask;
+    }
+
     private async Task ImportMoAsync()
     {
         if (_automationCts is not null) return;
@@ -1382,7 +1416,13 @@ internal sealed class MainForm : Form
         button.Size = new Size(84, 34);
         button.Margin = new Padding(4, 1, 4, 1);
         if (text == "蝦皮")
-            button.Click += async (_, _) => await ImportShopeeAsync();
+        {
+            // Screenshots (OCR) are the main way for now; the official export stays available.
+            var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
+            menu.Items.Add("截圖輸入（OCR）", null, async (_, _) => await ImportShopeeScreenshotsAsync());
+            menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
+            button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
+        }
         else if (text == "MO店+")
             button.Click += async (_, _) => await ImportMoAsync();
         else if (text == "酷澎商城")

@@ -17,6 +17,7 @@
   "CoupangNotePrefix": "酷澎訂單",
   "DiscountItemCode": "",
   "ShippingItemCode": "",
+  "PromotionItemCode": "",
   "FreightTypes": {},
   "Defaults": {}
 }

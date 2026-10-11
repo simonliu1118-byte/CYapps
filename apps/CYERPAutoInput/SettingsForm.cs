@@ -23,6 +23,7 @@ internal sealed class SettingsForm : Form
     private readonly TabControl _tabs = new();
     private readonly TextBox _discountItem = new();
     private readonly TextBox _shippingItem = new();
+    private readonly TextBox _promotionItem = new();
     private readonly Dictionary<string, TextBox> _freightCodes = [];
 
     private static readonly string[] ConfigurableKeys =
@@ -41,7 +42,7 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
-        Size = new Size(640, 680);
+        Size = new Size(640, 712);
         MinimumSize = new Size(600, 520);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
@@ -181,7 +182,8 @@ internal sealed class SettingsForm : Form
         // the screen order so Enter/Tab go 蝦皮 → MO店+ → 酷澎 → 共用.
         page.Controls.Add(Section("共用（所有平台）",
             ("折價券品號", _discountItem, _settings.DiscountItemCode, 120),
-            ("運費品號", _shippingItem, _settings.ShippingItemCode, 120)));
+            ("運費品號", _shippingItem, _settings.ShippingItemCode, 120),
+            ("促銷組合品號", _promotionItem, _settings.PromotionItemCode, 120)));
         page.Controls.Add(Section("酷澎",
             ("銷貨單別", _coupangOrderType, _settings.CoupangOrderType, 80),
             ("客戶代號", _coupangCustomerCode, _settings.CoupangCustomerCode, 120),
@@ -363,6 +365,7 @@ internal sealed class SettingsForm : Form
         _settings.CoupangNotePrefix = _coupangNotePrefix.Text.Trim();
         _settings.DiscountItemCode = _discountItem.Text.Trim();
         _settings.ShippingItemCode = _shippingItem.Text.Trim();
+        _settings.PromotionItemCode = _promotionItem.Text.Trim();
         _settings.FreightTypes = _freightCodes
             .Where(p => p.Value.Text.Trim().Length > 0)
             .ToDictionary(p => p.Key, p => p.Value.Text.Trim(), StringComparer.OrdinalIgnoreCase);
