@@ -45,7 +45,7 @@ test('wrong provider version, accepted Session, positive grant and missing RPC f
   }
 });
 
-for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1', 'deploy']) test(`probe controller cleanup boundaries: ${failure}`, async () => {
+for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1', 'deploy', 'deploy-config', 'deploy-missing-cli']) test(`probe controller cleanup boundaries: ${failure}`, async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cyid-private-probe-'));
   const env = { CLOUDFLARE_API_TOKEN: 'synthetic-api-token', CLOUDFLARE_ACCOUNT_ID: 'synthetic-account', CYID_WORKER_NAME: 'identity-test-development', RUNNER_TEMP: directory };
   const original = { name: env.CYID_WORKER_NAME, vars: { APP_ENV: 'development', CORE_ACCOUNT_APPLICATION_ID: 'APP_TEST' } };
@@ -58,7 +58,9 @@ for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1
     assert.equal(config.d1_databases, undefined);
     assert.equal(fs.statSync(args[3]).mode & 0o777, 0o600);
     exists = true;
-    if (failure === 'deploy') throw Object.assign(new Error('raw private deployment details'), { stderr: 'Private worker name and settings; [code: 10000]' });
+    if (failure === 'deploy-config') throw Object.assign(new Error('Private settings/path must not be exported'), { code: 1, stderr: 'Invalid configuration: private values' });
+    if (failure === 'deploy-missing-cli') throw Object.assign(new Error('spawn private executable ENOENT'), { code: 'ENOENT' });
+    if (failure === 'deploy') throw Object.assign(new Error('raw private deployment details'), { stderr: 'Private worker name and settings; [code: \u001b[31m10000\u001b[0m]'  });
   };
   const fetcher = async (url, args = {}) => {
     const p = new URL(url).pathname; const method = args.method ?? 'GET'; operations.push({ p, method });
@@ -82,7 +84,7 @@ for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1
   };
   try {
     if (failure === 'none') await main(env, fetcher, command, original);
-    else await assert.rejects(main(env, fetcher, command, original), failure === 'deploy' ? /PROBE_UPLOAD_FAILED_10000/ : undefined);
+    else await assert.rejects(main(env, fetcher, command, original), failure === 'deploy' ? /PROBE_UPLOAD_FAILED_10000/ : failure === 'deploy-config' ? /PROBE_UPLOAD_FAILED_EXIT_1_CONFIGURATION/ : failure === 'deploy-missing-cli' ? /PROBE_UPLOAD_FAILED_ENOENT_UNCLASSIFIED/ : undefined);
     assert.equal(deleted, !['wrong-owner', 'wrong-target', 'new-d1'].includes(failure));
     assert.equal(fs.readdirSync(directory).length, 0);
     assert.equal(operations.filter(x => x.method !== 'GET').every(x => x.p.includes('/workers/scripts/cyid-binding-probe-')), true);
