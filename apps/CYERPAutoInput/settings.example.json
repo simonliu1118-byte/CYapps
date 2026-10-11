@@ -1,8 +1,8 @@
 {
   "Version": 1,
   "AdvancedMode": false,
-  "DiagnosticLogging": false,
   "AutoSave": false,
+  "AutoPrint": false,
   "FirstRowWarehouseEnabled": false,
   "FirstRowWarehouse": "",
   "ShopeeOrderType": "",

@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-10（V0.2.0 Build 31）  
+> 更新：2026-10-11（V0.2.0 Build 31，已合併 `main`）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -10,23 +10,27 @@
 2. `/REPO_POLICY.md`
 3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.33）
 4. 本文件 → `README.md` → `CHANGELOG.md`
-5. PR #104 與工作 branch 的實際 source
+5. `main` 的實際 source（PR #104 已合併，工作 branch 已刪除）
 
 不要以舊聊天記憶覆蓋目前 Git 狀態。
 
 ## 2. Branch／PR／版本
 
 - Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
-- `main`：仍是舊 Go 線（`V0.0.10` Build 19）。舊 Go optical prototype PR #103 已關閉。
-- 工作 branch：`cyerp-auto-input/v0.1.0-csharp`（名稱沿用以保留 PR #104）；Draft PR #104。
-- VERSION `0.2.0`，BUILD 見 `BUILD`。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。
+- `main`：C# 重寫線 `V0.2.0` Build 31（2026-10-11 由 PR #104 squash merge，取代舊 Go 線 `V0.0.10` Build 19）。工作 branch `cyerp-auto-input/v0.1.0-csharp` 已刪除；舊 Go optical prototype PR #103 已關閉。
+- 下一輪修改從最新 `main` 開新 branch（例如 `cyerp-auto-input/<type>-<summary>`），開新 PR。
+- VERSION `0.2.0`，BUILD 見 `BUILD`。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新的獨立修改依共通規則判斷 Z＋1（Build 歸零）或沿用版本加 Build。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
-- 測試包：每次 push 由 PR #104 CI 產生 Artifact（保留 3 天），連結貼在 PR #104 留言。
-- 第一階段完成前 PR #104 維持 Draft；合併 `main` 後需從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release。
+- 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。尚未正式 Release。
+- 合併後待辦：從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release（之後的建置優先從該 Release 取模型）。
 
 ## 3. 目前功能（細節見 README）
 
-單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續）→ 選用 F12 自動儲存並讀回單號。蝦皮官方匯出檔與 MO店+ OrderExport（加密 `.xls`）匯入：預覽（MO店+ 可填物流單號與發票欄位）、單筆輸入、批次依序輸入、轉人工、本機防重複紀錄。輔助功能：ERP 狀態大標籤、診斷模式、第一列庫別預設、ERP 結構探測、清除表單、開啟 LOG。進階模式隱藏中。
+- 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」→ 無待確認項目時清空表單。
+- 輸入期間忽略實體滑鼠，Esc 立即恢復並緊急停止；輸入法自動切英數；自由文字欄位讀回比對。
+- 訂單來源：蝦皮截圖 OCR（主要）、蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`）、酷澎 DeliveryList。預覽、單筆、批次、轉人工、本機防重複紀錄。統編自動查客戶全名（經濟部 API，每次上網查）。
+- 共用設定：折價券／運費／促銷組合品號；貨運別（物流：郵局、大榮、新竹、黑貓、宅配通、嘉里；本公司；超商 6 種）。
+- 輔助：ERP 狀態大標籤、第一列庫別預設、員工代號（開程式詢問，暫時作法）、清除表單、開啟 LOG。LOG 一律診斷模式。進階模式隱藏中。
 
 ## 4. 實機驗證狀態
 
@@ -43,33 +47,20 @@
 - 換列時庫存不足提示按確定後繼續打完並列出待確認 — Build 11。**第一階段完成（2026-10-10）。**
 - 放棄本次新增與開始前提醒、蝦皮匯入預覽與輸入 — Build 13（使用者 2026-10-10 回報「看起來沒什麼問題」）。
 
+- 蝦皮截圖 OCR 單筆輸入（Build 22–27 多次實機使用；Build 23–31 依實機診斷 LOG 修正誤讀）。
+- 輸入中滑鼠鎖定生效、結束後解除 — Build 27 LOG（`blocked_events=233`）。
+- MO店+ 單筆輸入完成（備註中文、送貨地址、發票日期／號碼）— Build 17；工作列圖示 — Build 15。
+
 尚未實機確認：
 
-- Build 31：Build 27 實測 LOG：編號／數量「1」→「一」；Build 27 無字形對照而重讀編號得「7」(0.639)。`WithLoneGlyphDigits` 於 `ParseItems`／`MissingCellProbes` 入口；重讀 `Confidence < 0.8` 拒用並記 LOG。
-- Build 30：使用者需求（2026-10-11）：工具列放大（`ToolbarButtonHeight`=38）；`CoupangButton` 逐字量寬連排；移除 `ErpProbe.cs`、尋找 ERP、主畫面「?」、`DiagnosticLogging`（`_log.Diagnostic = true`）；`FreightCarriers.Own`＋`Logistics` 擴充、`Aliases`（郵局↔中華郵政）。
-- Build 29：使用者需求（2026-10-11，跟下一版一起發）：`UserSettings.AutoPrint`；`ErpAutomationService.PrintDocumentAsync`（Ribbon 上方 220px OCR「列印」→ 點 label → 下方 360×200 OCR「直接列印」→ 點）；失敗 `PrintProblem`，Esc 關選單。待實機：split button 點 label 是否開選單、DPI 下擷取範圍。
-- Build 28：Build 27 實測 LOG（診斷模式 box）：編號 "-"／"乙" 誤讀、縮圖 "5" 被當編號。`TryIndexDigits` 字形對照；`IndexAnchors` 要求 `貨號行.Left − CenterX ≥ 4×字高`。實機：滑鼠鎖定 blocked_events=233，正常解除。
-- Build 27：使用者需求（2026-10-11）：`PhysicalMouseLock`（WH_MOUSE_LL 丟棄非 injected 事件；同執行緒 WH_KEYBOARD_LL 實體 Esc 即解除，不依賴 UI 執行緒），包住 `RunAsync`／`AbandonInputAsync`，對話框出現前已解除。截圖帶入無 notes 不跳視窗。`StartAutomationAsync` 完成且無 warnings／notes／SaveSkippedReason 時 `ResetForm()`。待實機：滑鼠鎖定與 Esc 解除。
-- Build 26：Build 25 實測（使用者 2026-10-11）：(1) 劃線原價漏讀 → 原價合計 3716≠3800，促銷組合被擋；群組只讀到一個小計且 Σ單價×數量 > 小計、≤ 2 倍時以 Σ 為原價。(2) 有表頭的截圖仍出現「第 5 項讀不到小計」；`IndexAnchors` 改為須在表頭下方且與小計欄數字垂直對齊（無小計欄時需靠近貨號行）。診斷模式記錄 OCR 框（`  box x= y= w= h= text=`）。
-- Build 25：Build 24 實測（使用者 2026-10-11）：三組多品項促銷訂單明細與促銷組合正確，但跳「第 4 項讀不到小計」；縮圖小字被讀成編號。`ShopeeScreenshot.IndexAnchors` 只取最左欄（表頭「編」或最小 x，±15px）。
-- Build 24：Build 23 實測（使用者 2026-10-11）：明細截圖無表頭＋數量「1」漏讀 → `probes=0`，小計欄被當數量，促銷組合 = 450×450−450。`ShopeeScreenshot.ResolveColumns` 統一欄位判定（表頭優先；兩欄時以欄距 >7.5 字高或劃線原價判定右欄為小計）；仍缺數量時單一商品編號以小計÷單價推算；Σ單價×數量 ≠ Σ小計原價時不加促銷組合列。
-- Build 23：Build 22 實測（使用者 2026-10-11）：C# 偵測漏掉明細第一列的編號「1」與數量「1」（Python 同模型讀得到），改為缺格裁切重讀（recognizer-only）；LOG `detail cells re-read probes= recovered=`。
-- Build 22：蝦皮截圖輸入（OCR）。開發環境以使用者提供的 5 組真實截圖驗證解析（含促銷組合多商品、套組 x2／x3、蝦幣、OCR 把「貨」讀成「货」、「選」讀成「项」、0 讀成 O）；實機 OCR 走 C# RapidOCRSharp，字框粒度可能不同，以 MergeLines 合併。套組規則使用者表示之後有訂單再補充。員工代號開程式詢問。
-- Build 21：統編查名（經濟部公司 API 已在開發環境以公開大公司統編驗證可回傳名稱；商號 API 當時網站忙碌未驗證，欄位依官方名稱 President_No／Business_Name，查無即留空）、客戶全名不強制、設定 Enter 跳欄、貨運別排序。
-- Build 20：酷澎匯入（未實機）。使用者規則 2026-10-11：單價先用銷售價格、免運時運費為 0（樣本少，有問題再改）；應開立予酷澎之發票金額、配送訊息、捆綁配送忽略；沒有統編時統一編號欄空白；預覽可填發票日期／號碼。多品項格式待使用者取得更多訂單後上傳確認。
-- Build 19：按鈕統一 2px 圓角（使用者 2026-10-11 選擇「全部統一 2px」）。設定分頁重整、折價券／運費品號與貨運別改共用、貨運別 9 種（使用者 2026-10-11 指定名單）。
-- Build 18：日期選擇器、預覽發票日期自動加「/」、表頭欄寬修正、按鈕 6px 圓角、匯入預覽欄寬列高固定。貨運別設定改固定三列；欄位讀到與表單相同的值也重打（實測 ERP 畫面空白但 Win32 讀到舊值「11」，CY 跳過導致沒輸入）。
-- Build 17 實測（使用者 2026-10-11）：MO店+ 單筆輸入完成，狀態列「輸入完成」，表單帶入備註中文、送貨地址(一)、發票日期與號碼。
-- Build 17：輸入前關閉 ERP 欄位的中文輸入法、自由文字欄位讀回比對（Build 16 前實測：備註欄出現輸入法組字虛線，字被帶到送貨地址(一)；使用者截圖確認）。
-- Build 16：送貨地址(一) 覆蓋 ERP 既有內容（Build 15 實測：ERP 畫面空白但 CY 讀到內容而停止，原因未明；請以診斷模式 LOG 的 `replacing ERP value key=ship_addr1 … codes=` 確認讀到什麼）。
-- Build 15：工作列圖示已實測正常（2026-10-11）；介面重排、明細 10 列無捲軸與固定欄寬列高、運費品號自動回填運費欄。
-- Build 14 實測（使用者 2026-10-10）：MO店+ 單筆輸入，CY 狀態列顯示輸入完成（自動儲存關）；表單帶入品號、負數折價券列、代收貨款、貨運別。ERP 端各欄是否正確尚未回報。
-
-- 蝦皮批次多張連續輸入、批次失敗放棄後繼續、修改狀態下的放棄確認文字。
-- 付款條件、貨運別、發票客戶全名、統一編號覆蓋 ERP 依客戶帶出的值（Build 14；後三者 ERP 是否會自動帶出未知）。
-- MO店+ 匯入全流程（Build 14）：真實匯出檔解密與解析已在開發環境以使用者提供的兩個檔案逐格比對 msoffcrypto＋xlrd 一致、18 張訂單金額核對全過（檔案只留本機）；ERP 端（負數單價、運費品號、代收貨款、貨運別、統編與發票欄位）未實測。
-- 防重複紀錄的提醒與擋下（Build 14）。
-- 蝦皮批次略過有備註的訂單並列為需人工處理（Build 14）。
+- Build 29 自動列印：點「列印」文字是否開出選單、「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）、非 100% DPI 下的擷取範圍。
+- Build 30 工具列放大後的版面、貨運別新增項目、按 Esc 恢復滑鼠。
+- Build 31 數量欄「一」視為 1、重讀信心門檻 0.8 的實際效果。
+- 蝦皮截圖：套組訂單（規則待使用者補充）、跨多張明細截圖的大訂單。
+- 酷澎匯入（多品項格式待使用者取得訂單後確認）；統編查名的商號 API（公司 API 已驗證）。
+- 蝦皮匯出檔批次多張、批次失敗放棄後繼續、修改狀態下的放棄確認文字。
+- 付款條件、貨運別、發票客戶全名、統一編號覆蓋 ERP 依客戶帶出的值。
+- MO店+ ERP 端（負數單價、運費品號、代收貨款、貨運別、統編與發票欄位）；防重複提醒與擋下。
 - 非 100% 顯示比例、不同電腦／字型（使用者表示只用 100%）。
 
 ## 5. 已確認的 ERP 行為（實作依據）
@@ -88,7 +79,8 @@
 - F2 批號查詢：第 1 列為篩選列（`=` 與 ABC 圖示）；數字字型為斜線 0；剛開啟時可能尚未繪製。
 - 「庫存量或批號量不足！」為 ERP 自繪訊息框（OK／Cancel，焦點預設 OK），文字不在 Win32 控制項，OCR 會把「庫」「號」讀錯。換列時出現；單列單據在 F12 儲存時出現。漏填庫別時按確定後會停在原格。
 - 下拉（課稅別、發票聯數）的選項順序見 `Models.cs` 的 `ErpComboOptions`。
-- Ribbon 按鈕、明細 cell、F2 表格內容、訊息框文字都沒有暴露給 Win32／MSAA（結構探測確認）。
+- Ribbon 按鈕、明細 cell、F2 表格內容、訊息框文字都沒有暴露給 Win32／MSAA（早期結構探測確認）。Ribbon「列印」為下拉按鈕，選單有「直接列印」「預覽列印」（使用者 2026-10-11 截圖）。
+- 蝦皮訂單頁在使用者電腦的 C# OCR：單獨的「1」常被讀成「一」「-」或漏讀，「2」讀成「乙」；商品縮圖上的小字會被讀成數字；劃線原價可能漏讀（Build 23–31 LOG）。
 - 放棄本次新增（使用者 2026-10-08／10 說明，Build 13 實作 `AbandonInputAsync`）：焦點須在表頭（不能在表身輸入中）→ 點「客戶代號」→ `Esc` → 「是否放棄本次新增?」（OK／Cancel，預設 OK）→ OK 回到檢視。CY 送出的 Esc 以時間記號讓全域 Esc 監看忽略。修改狀態的確認文字尚未實機確認（比對「放棄」片段）。
 - 尚未實作、使用者已說明的 ERP 操作：
   - （Build 13 已實作，見下方）
@@ -97,7 +89,7 @@
 ## 6. Roadmap（使用者 2026-10-09 確定）
 
 1. 自動輸入核心穩定 — 2026-10-10 完成。
-2. 平台訂單匯出檔 → 自動打單 — 進行中（蝦皮 Build 12 起，MO店+ Build 14）。使用者 2026-10-10 指定對應：銷貨單別、客戶代號為使用者指定的固定值（存本機設定，不寫入 repo）、備註「蝦皮訂單」＋order_sn、送貨地址(一)＝tracking_number、明細由 product_info 的商品選項貨號／數量／價格帶入；有 remark_from_buyer 或 seller_note 時打完單頭（進品號前）停止轉人工。目前的匯出檔由蝦皮官方提供，日後若改用中介平台處理檔案格式會變，到時再調整。
+2. 平台訂單 → 自動打單 — 進行中（蝦皮匯出檔 Build 12、MO店+ Build 14、酷澎 Build 20、蝦皮截圖 OCR Build 22 起）。使用者 2026-10-10 指定對應：銷貨單別、客戶代號為使用者指定的固定值（存本機設定，不寫入 repo）、備註「蝦皮訂單」＋order_sn、送貨地址(一)＝tracking_number、明細由 product_info 的商品選項貨號／數量／價格帶入；有 remark_from_buyer 或 seller_note 時打完單頭（進品號前）停止轉人工。目前的匯出檔由蝦皮官方提供，日後若改用中介平台處理檔案格式會變，到時再調整。
    MO店+（使用者 2026-10-10 指定）：前綴＋訂單編號、另一組單別／客戶代號；商品原廠編號→品號、商品售價→單價；折價券＝Σ售價×數量−Σ開立發票金額，打折價券品號數量 1 單價取負；運費打運費品號並填運費欄；物流商→貨運別用對照表（例：7-11、全家、新竹物流各一個代號，存本機設定）；物流單號＝送貨地址(一)，MO店+ 要匯出後才能取號，所以預覽可手填，可空白但最後列出待回補；代收貨款＝開立發票金額；發票開立統編→統一編號，有統編時客戶全名（收件人）必填，預覽可填客戶全名、發票日期、發票號碼；店家備註轉人工；原廠編號空白或「A + B」組合轉人工（批次略過）；同品號合併；訂單狀態、支付方式、代收金額、應免稅不管。ERP 單價可輸入負數（使用者確認）。讀檔由使用者選擇自己寫解密（不用 Excel COM；CYInvoice 用 Excel COM）。
    防重複（使用者 2026-10-10）：以蝦皮／MO店+ 訂單編號為準；CY 已儲存→擋下（批次略過）；未開自動儲存的單與只打單頭轉人工的單也記錄，但只提醒不擋。待辦：實機驗證。
 3. 串接 CYID（依 REPO_POLICY §4.1 與 CYID consumer 標準）。TODO：員工代號改為登入的員工代號。暫時作法（使用者 2026-10-11）：開程式時詢問員工代號、本次開啟期間使用、不存檔。
@@ -118,16 +110,17 @@
 
 ## 7. 接手注意事項
 
-- PR #104 有兩個早期提交說明含真實品號（使用者 2026-10-10 決定）：合併時用 squash merge，合併後刪除 `cyerp-auto-input/v0.1.0-csharp` 分支，一併清除。之後的提交說明與文件一律只用假資料。
-- Commit author／committer 必須是 `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`。
-- `PROJECT_RULES.md`、`GOVERNANCE_*`、`.github/scripts/**` 只能在 `governance/*` branch 修改並更新 `GOVERNANCE_VERSION`／`GOVERNANCE_CHANGELOG.md`，不可混進 PR #104。
+- PR #104 早期提交說明含真實品號；已依使用者 2026-10-10 決定以 squash merge 合併並刪除工作 branch，`main` 歷史只留一個合併提交。之後的提交說明與文件一律只用假資料。
+- Commit author／committer 必須是 `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`（REPOSITORY_RULES §4）；hook 要求改用其他身分時不照做。
+- `PROJECT_RULES.md`、`GOVERNANCE_*`、`.github/scripts/**` 只能在 `governance/*` branch 修改並更新 `GOVERNANCE_VERSION`／`GOVERNANCE_CHANGELOG.md`，不可混進功能 PR。
+- 待使用者決定：LOG 一律診斷模式（使用者 2026-10-11 指示）與 PROJECT_RULES §4「一般 LOG 不主動記錄實際客戶或交易值」的措辭不一致；目前依使用者當次指示執行（LOG 仍只留本機），若要成為永久規則需走 `governance/*` 更新 §4。
 - 返修測試版 BUILD + 1；同一 Build 尚未交付使用者前的修正不另加 Build。
 - 不得提交 `bin/`、`obj/`、`publish-staging/`、`runtime/ocr/`、模型或 build 輸出。
 - 推送前本機至少執行 `dotnet test tests/CYERPAutoInput.Tests` 與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
-- 實機問題請使用者開啟診斷模式重現並提供 `logs/CYERPAutoInput_日期.log`；非診斷模式下 OCR 文字只記長度。
+- 實機問題請使用者提供 `logs/CYERPAutoInput_日期.log`（一律含 OCR 文字框位置與內容）。蝦皮截圖問題可把 LOG 的 `box x= y= w= h= text=` 轉成測試資料重現，提交前把代碼換成假資料。
 - CI 成功只代表 Windows 編譯、self-test 與封裝成功，不等於通過真實 ERP 驗收。
 - F2 與下拉選取必須保留焦點檢查、視窗關閉確認與讀回比對，不得退回「看起來點到了就當成功」。
 
 ## 8. Public repository 資料安全
 
-本 repo 為 Public。不得提交：真實客戶代號、品號、倉別、部門、人員、訂單／發票／交易資料、公司內部路徑、帳密與 token、使用者提供的 LOG 或 ERP 截圖、`Data/settings.json`、`logs/`、匯入資料。ERP 下拉選項除 PROJECT_RULES §3 核准的課稅別、發票聯數外，不得寫入 source。診斷 LOG 只在使用者本機產生、由使用者主動提供分析。
+本 repo 為 Public。不得提交：真實客戶代號、品號、倉別、部門、人員、訂單／發票／交易資料、公司內部路徑、帳密與 token、使用者提供的 LOG 或 ERP 截圖、`Data/settings.json`、`logs/`、匯入資料。ERP 下拉選項除 PROJECT_RULES §3 核准的課稅別、發票聯數外，不得寫入 source。LOG（一律診斷模式）只在使用者本機產生、由使用者主動提供分析。
