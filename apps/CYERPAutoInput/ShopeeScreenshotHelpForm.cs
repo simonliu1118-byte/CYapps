@@ -10,7 +10,7 @@ internal sealed class ShopeeScreenshotHelpForm : Form
 {
     public ShopeeScreenshotHelpForm()
     {
-        Text = "蝦皮訂單截圖輸入說明";
+        Text = "蝦皮訂單光學辨識輸入說明";
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
@@ -50,7 +50,7 @@ internal sealed class ShopeeScreenshotHelpForm : Form
         Heading("一張蝦皮訂單需要三種截圖（缺少任何一種都無法帶入）");
         Body("1. 開啟蝦皮賣家中心的訂單詳情頁。");
         Body("2. 按 Win＋Shift＋S，用滑鼠框選下面三個區塊，各截一張（明細可以截多張）。");
-        Body("3. 在「蝦皮訂單截圖輸入」視窗按 Ctrl＋V 貼上（也可以拖曳圖片檔），三種的順序不限。");
+        Body("3. 在「蝦皮訂單光學辨識輸入」視窗按 Ctrl＋V 貼上（也可以拖曳圖片檔），三種的順序不限。");
         Body("4. 按「帶入表單」，確認列出的提示並補齊後，再按主畫面的「開始輸入 ERP」。");
 
         Heading("① 訂單資訊：訂單編號＋運送資訊");

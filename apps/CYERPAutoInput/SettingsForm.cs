@@ -120,7 +120,7 @@ internal sealed class SettingsForm : Form
         _autoPrint.Margin = new Padding(20, 0, 0, 8);
         _autoPrint.Enabled = _autoSave.Checked;
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
-        flow.Controls.Add(Option(_shopeeFullAuto, "蝦皮全自動：按「開始」後擷取、判讀、帶回、輸入 ERP、儲存並列印（只限蝦皮；MO店+、酷澎要補發票資料）", _settings.ShopeeFullAuto));
+        flow.Controls.Add(Option(_shopeeFullAuto, "蝦皮全自動：按「開始」後擷取、判讀、帶回、輸入 ERP、儲存並列印（只限蝦皮）", _settings.ShopeeFullAuto));
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         Option(_firstRowWarehouse, "商品明細第一列庫別預設填入：", _settings.FirstRowWarehouseEnabled);

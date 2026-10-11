@@ -27,16 +27,19 @@ internal sealed class ShopeeScreenshotForm : Form
     private readonly ProgressBar _progress = new() { Visible = false, Style = ProgressBarStyle.Continuous, Width = 260, Height = 16, Anchor = AnchorStyles.Right };
     private readonly Label _progressText = new() { Visible = false, AutoSize = true, Anchor = AnchorStyles.Right, ForeColor = CyVisualTheme.TextSecondary };
     private readonly CyPrimaryButton _apply = new();
+    private readonly FullAutoSession? _session;
 
     public ShopeeShotResult? Result { get; private set; }
 
     /// <param name="autoStart">Shopee full auto (user, 2026-10-11): start the page scan on opening, without 開始.</param>
-    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false)
+    /// <param name="session">Shopee full auto: keeps the mouse locked from the scan on (user, 2026-10-12).</param>
+    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false, FullAutoSession? session = null)
     {
         _ocr = ocr;
         _mapping = mapping;
         _log = log;
-        Text = "蝦皮訂單截圖輸入";
+        _session = session;
+        Text = "蝦皮訂單光學辨識輸入";
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
@@ -216,6 +219,7 @@ internal sealed class ShopeeScreenshotForm : Form
         var mouseLock = (PhysicalMouseLock?)null;
         void Restore()
         {
+            // In full auto the mouse stays locked after the scan, until the run ends or stops.
             mouseLock?.Dispose();
             mouseLock = null;
             if (owner is not null && !owner.IsDisposed) owner.Opacity = ownerOpacity;
@@ -225,7 +229,8 @@ internal sealed class ShopeeScreenshotForm : Form
         {
             Opacity = 0;
             if (owner is not null) owner.Opacity = 0;
-            mouseLock = PhysicalMouseLock.Engage(_log);
+            if (_session is not null) _session.Begin();
+            else mouseLock = PhysicalMouseLock.Engage(_log);
             result = await new ShopeePageScanner(_ocr, _log).ScanAsync(browser,
                 () => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, CancellationToken.None,
                 // Back to this window as soon as the page is captured, with a progress bar for
@@ -236,6 +241,7 @@ internal sealed class ShopeeScreenshotForm : Form
         catch (Exception ex)
         {
             _log.Error("page-scan", ex);
+            _session?.End();
             MessageBox.Show(this, $"自動擷取失敗：{ex.Message}\n可以改用「框選截圖」或 Ctrl+V 貼上。", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally
@@ -243,13 +249,14 @@ internal sealed class ShopeeScreenshotForm : Form
             Restore();
             _capturing = false;
         }
-        if (result is null || IsDisposed) { HideProgress(); DisposeCaptures(result); return; }
+        if (result is null || IsDisposed) { _session?.End(); HideProgress(); DisposeCaptures(result); return; }
 
         ShowProgress("判讀中…", 1, 1);
         foreach (var section in result.Sections)
             await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines);
         DisposeCaptures(result);
         HideProgress();
+        if (result.Cancelled || result.Problems.Count > 0) _session?.End();
         if (result.Cancelled)
             MessageBox.Show(this, "已停止自動擷取。可以按「開始」重來，或用「框選截圖」補上缺的部分後按「帶入表單」。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         else if (result.Problems.Count > 0)
@@ -419,6 +426,7 @@ internal sealed class ShopeeScreenshotForm : Form
         }.Where(x => x is not null).ToList();
         if (missingParts.Count > 0)
         {
+            _session?.End();
             if (automatic) missingParts.Add("（自動擷取的圖有問題，請用「框選截圖」補上，完成後按「帶入表單」）");
             var unknown = _shots.Count(s => s.Kind == ShopeeShotKind.Unknown);
             MessageBox.Show(this,
@@ -448,12 +456,14 @@ internal sealed class ShopeeScreenshotForm : Form
         var result = ShopeeScreenshot.Combine(order, items, groups, amounts, _mapping, problems);
         if (result.Order is null)
         {
+            _session?.End();
             MessageBox.Show(this, "無法組成訂單：\n\n" + string.Join("\n", result.Problems.Select(p => "・" + p)), Text,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         if (automatic && result.Problems.Count > 0)
         {
+            _session?.End();
             MessageBox.Show(this, "自動判讀發現問題，已暫停：\n\n" + string.Join("\n", result.Problems.Select(p => "・" + p)) +
                 "\n\n請核對截圖：有問題的圖按紅色 × 移除，用「框選截圖」補上，完成後按「帶入表單」。", Text,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);

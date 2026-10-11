@@ -5,6 +5,7 @@ internal sealed class MainForm : Form
     private static readonly Size StandardWindowSize = new(1160, 720);
 
     private readonly AppLogger _log;
+    private FullAutoSession? _fullAuto;
     private readonly ErpAutomationService _automation;
     private readonly UserSettingsStore _settingsStore;
     private readonly UserSettings _settings;
@@ -14,7 +15,6 @@ internal sealed class MainForm : Form
     private readonly DetailDataGridView _details = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ToolStripStatusLabel _buildStatus = new();
-    private readonly ToolStripStatusLabel _logLink = new() { Text = "開啟 LOG 資料夾", IsLink = true };
     private readonly ToolStripStatusLabel _dpiHint = new();
     private readonly ToolStripStatusLabel _employeeLink = new() { Text = "員工代號：未設定", IsLink = true };
 
@@ -288,8 +288,6 @@ internal sealed class MainForm : Form
         statusStrip.Items.Add(_buildStatus);
         _employeeLink.Click += (_, _) => AskEmployeeCode();
         statusStrip.Items.Add(_employeeLink);
-        _logLink.Click += (_, _) => OpenLogFolder();
-        statusStrip.Items.Add(_logLink);
         _root.Controls.Add(statusStrip, 0, 3);
     }
 
@@ -690,6 +688,7 @@ internal sealed class MainForm : Form
         var snapshot = CreateSnapshot(out var validationError);
         if (snapshot is null)
         {
+            _fullAuto?.End(); // a question is never behind a locked mouse (full auto, user 2026-10-12)
             MessageBox.Show(this, validationError, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -784,6 +783,7 @@ internal sealed class MainForm : Form
             ErpDocumentState.Modify => "修改",
             _ => "新增或修改"
         };
+        _fullAuto?.End();
         var answer = MessageBox.Show(this,
             $"ERP 目前在「{what}」狀態。\n\n要放棄 ERP 上這張尚未儲存的單據（{what}的內容不會保留），回到檢視後再從新增開始輸入嗎？",
             "ERP 正在輸入中", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -804,8 +804,19 @@ internal sealed class MainForm : Form
     {
         var progress = new Progress<string>(SetStatus);
         AutomationRunResult result;
-        // The physical mouse is ignored while CY types (user, 2026-10-11); Esc releases it.
-        using (PhysicalMouseLock.Engage(_log)) result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
+        // The physical mouse is ignored while CY types (user, 2026-10-11); Esc releases it. In
+        // full auto the session holds the lock and shows its notice (user, 2026-10-12).
+        var fullAuto = print == true && _fullAuto is not null;
+        try
+        {
+            if (fullAuto) _fullAuto!.Begin();
+            using (fullAuto ? null : PhysicalMouseLock.Engage(_log))
+                result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
+        }
+        finally
+        {
+            if (fullAuto) _fullAuto!.End();
+        }
         if (result.HandedOff.Length > 0)
         {
             SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 單頭已輸入，轉人工處理（未輸入明細、未儲存）");
@@ -861,7 +872,7 @@ internal sealed class MainForm : Form
         if (_automationCts is not null) return;
         if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
         {
-            MessageBox.Show(this, "請先在「設定」填入蝦皮的銷貨單別與客戶代號。", "蝦皮訂單截圖輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "請先在「設定」填入蝦皮的銷貨單別與客戶代號。", "蝦皮訂單光學辨識輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         var ledger = LoadLedger();
@@ -869,11 +880,25 @@ internal sealed class MainForm : Form
 
         var mapping = new ShopeeShotMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
-        using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto);
-        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return;
+        _fullAuto ??= new FullAutoSession(_log);
+        try
+        {
+            using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto,
+                session: _settings.ShopeeFullAuto ? _fullAuto : null);
+            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return;
+            await ContinueShopeeScreenshotOrderAsync(dialog.Result.Problems, order, ledger);
+        }
+        finally
+        {
+            // Whatever happened, the mouse is free again once the order is done or stopped.
+            _fullAuto.End();
+        }
+    }
 
+    private async Task ContinueShopeeScreenshotOrderAsync(IEnumerable<string> problems, ImportedOrder order, OrderLedger ledger)
+    {
         LoadOrder(order);
-        var notes = dialog.Result.Problems.ToList();
+        var notes = problems.ToList();
         if (ledger.Find(order.LedgerKey) is { } entry) notes.Insert(0, $"這張訂單{entry.Describe()}。");
         if (order.TrackingNumber.Length == 0) notes.Add("物流單號空白：取得後請填到送貨地址(一)。");
         SetStatus($"蝦皮訂單 {order.OrderSn} 已帶入表單；請確認後按「開始輸入 ERP」");
@@ -882,6 +907,7 @@ internal sealed class MainForm : Form
         // with notes the user decides, defaulting to stop.
         if (_settings.ShopeeFullAuto)
         {
+            if (notes.Count > 0) _fullAuto?.End();
             if (notes.Count > 0 && MessageBox.Show(this,
                     $"蝦皮訂單 {order.OrderSn} 已帶入表單，但有以下項目需要確認：\n\n" + string.Join("\n", notes.Select(n => "・" + n)) +
                     "\n\n仍要繼續全自動輸入 ERP、儲存並列印嗎？（選「否」可先修改表單，再按「開始輸入 ERP」）",
@@ -895,7 +921,7 @@ internal sealed class MainForm : Form
         if (notes.Count > 0)
             MessageBox.Show(this,
                 $"蝦皮訂單 {order.OrderSn} 已帶入表單，請先確認以下項目，補齊後再按「開始輸入 ERP」：\n\n" + string.Join("\n", notes.Select(n => "・" + n)),
-                "蝦皮訂單截圖輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                "蝦皮訂單光學辨識輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private async Task ImportMoAsync()
@@ -1070,10 +1096,12 @@ internal sealed class MainForm : Form
         if (entry is null) return true;
         if (entry.Status == LedgerStatus.Saved)
         {
+            _fullAuto?.End();
             MessageBox.Show(this, $"{order.Source}訂單 {order.OrderSn} {entry.Describe()}。\n\n為避免重複打單，已擋下。",
                 "重複訂單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
+        _fullAuto?.End();
         return MessageBox.Show(this,
             $"{order.Source}訂單 {order.OrderSn} {entry.Describe()}。\n\n請先確認 ERP 沒有這張單。仍要再輸入一次嗎？",
             "可能重複", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
@@ -1277,23 +1305,6 @@ internal sealed class MainForm : Form
         for (var i = 0; i < DefaultDetailRows; i++) _details.Rows.Add();
         ApplyDefaultsToBlankFields();
         _loadedOrder = null;
-    }
-
-    private void OpenLogFolder()
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = _log.LogDirectory,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            _log.Warn("app", $"open log folder failed: {ex.GetType().Name}");
-            MessageBox.Show(this, $"無法開啟 LOG 資料夾：{_log.LogDirectory}", "LOG", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
     }
 
     private void UpdateBuildStatus() =>
