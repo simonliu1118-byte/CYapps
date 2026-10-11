@@ -56,6 +56,9 @@ var tests = new (string Name, Action Run)[]
     }),
     ("AMEGO form and signature", () => TestAmegoSignatureAsync().GetAwaiter().GetResult()),
     ("AMEGO code 15 synchronizes time once", () => TestAmegoTimeSyncAsync().GetAwaiter().GetResult()),
+    ("AMEGO string code 15 uses the same time sync", () => TestAmegoTimeSyncAsync("\"15\"").GetAwaiter().GetResult()),
+    ("AMEGO numeric and string duplicate errors preserve the failed second attempt", () => TestWireDuplicateRejectionAsync().GetAwaiter().GetResult()),
+    ("AMEGO envelope requires an explicit integer code", () => TestInvalidEnvelopeCodeAsync().GetAwaiter().GetResult()),
     ("AMEGO query selects exact order", () => TestAmegoExactQueryAsync().GetAwaiter().GetResult()),
     ("AMEGO invoice file downloads only trusted PDF", () => TestAmegoInvoicePdfAsync().GetAwaiter().GetResult()),
     ("AMEGO invoice file rejects untrusted URL", () => TestAmegoInvoicePdfUrlSafetyAsync().GetAwaiter().GetResult()),
@@ -67,6 +70,7 @@ var tests = new (string Name, Action Run)[]
     ("negative discount line remains valid", TestNegativeDiscountLine),
     ("untaxed company totals use official one-twentieth tax", TestUntaxedCompanyTotals),
     ("opened order resends original ID and lets AMEGO reject duplicate", () => TestIssueOpensAndBlocksResendAsync().GetAwaiter().GetResult()),
+    ("recovery cannot count the previous invoice as a new successful attempt", () => TestRecoveryOfExistingInvoiceAsync().GetAwaiter().GetResult()),
     ("unknown result retries only after query confirms not found", () => TestAmbiguousIssueAsync().GetAwaiter().GetResult()),
     ("unknown retry stops when preflight query is unavailable", () => TestUnknownRetryPreflightFailureAsync().GetAwaiter().GetResult()),
     ("ambiguous issue recovers only from strict order query", () => TestAmbiguousRecoveryAsync().GetAwaiter().GetResult()),
@@ -238,7 +242,7 @@ static async Task TestAmegoSignatureAsync()
     Equal("AB12345678", response.InvoiceNumber);
 }
 
-static async Task TestAmegoTimeSyncAsync()
+static async Task TestAmegoTimeSyncAsync(string timeCode = "15")
 {
     var fixedTime = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
     var serverTime = fixedTime.AddMinutes(5).ToUnixTimeSeconds();
@@ -256,7 +260,7 @@ static async Task TestAmegoTimeSyncAsync()
         if (posts == 1)
         {
             Equal("1700000000", form["time"]);
-            return JsonResponse("{\"code\":15,\"msg\":\"time error\"}");
+            return JsonResponse($"{{\"code\":{timeCode},\"msg\":\"time error\"}}");
         }
         Equal(serverTime.ToString(), form["time"]);
         return JsonResponse("{\"code\":0,\"msg\":\"\",\"data\":[{\"ban\":\"12345678\",\"name\":\"光貿測試公司\"}]}");
@@ -266,6 +270,63 @@ static async Task TestAmegoTimeSyncAsync()
     Equal("光貿測試公司", result.Data[0].Name);
     Equal(2, posts);
     Equal(1, clocks);
+}
+
+static async Task TestWireDuplicateRejectionAsync()
+{
+    foreach (var code in new[] { "3040171", "\"3040171\"" })
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var posts = 0;
+        var queries = 0;
+        var apiOrderId = TestApiOrderId("20260905001");
+        var handler = new StubHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/json/f0401")
+            {
+                posts++;
+                return Task.FromResult(JsonResponse(posts == 1
+                    ? "{\"code\":0,\"msg\":\"\",\"invoice_number\":\"AB12345678\"}"
+                    : $"{{\"code\":{code},\"msg\":\"OrderId duplicate\",\"invoice_number\":\"AB12345678\"}}"));
+            }
+            Equal("/json/invoice_query", request.RequestUri.AbsolutePath);
+            queries++;
+            return Task.FromResult(JsonResponse($"{{\"code\":0,\"data\":{{\"invoice_number\":\"AB12345678\",\"order_id\":\"{apiOrderId}\",\"sales_amount\":105,\"tax_amount\":0,\"total_amount\":105,\"detail_vat\":1}}}}"));
+        });
+        using var http = new HttpClient(handler);
+        var client = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http) { BaseUrl = "https://test.invalid" };
+        var service = new InvoiceService(repository, (_, _) => client,
+            () => new DateTimeOffset(2026, 9, 5, 9, 8, 7, TimeSpan.FromHours(8)));
+        var first = await service.IssueManualAsync(SafeDraft());
+        var rejection = await ThrowsAsync<AmegoApiException>(() => service.IssueManualAsync(SafeDraft()));
+        Equal(3040171, rejection.Code);
+        Equal(2, posts);
+        Equal(1, queries); // A definite rejection must not recover the previous invoice.
+        var records = repository.Invoices.LoadOrCreate();
+        Equal(2, records.Count);
+        Equal(InvoiceStates.Opened, records.Single(record => record.Id == first.Record.Id).InvoiceState);
+        var failed = records.Single(record => record.Id != first.Record.Id);
+        Equal(InvoiceStates.Failed, failed.InvoiceState);
+        Equal(string.Empty, failed.InvoiceNumber);
+        Equal(0, failed.UploadStatus);
+        Equal(true, failed.ErrorMessage.Contains("3040171", StringComparison.Ordinal));
+    }
+}
+
+static async Task TestInvalidEnvelopeCodeAsync()
+{
+    foreach (var code in new[] { "", "\"code\":null,", "\"code\":true,", "\"code\":0.5,", "\"code\":\"invalid\",", "\"code\":2147483648," })
+    {
+        using var http = new HttpClient(new StubHandler(_ => Task.FromResult(
+            JsonResponse("{" + code + "\"invoice_number\":\"AB12345678\"}"))));
+        var client = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, http) { BaseUrl = "https://test.invalid" };
+        await ThrowsAsync<InvalidDataException>(() => client.IssueAsync(MinimalIssue()));
+    }
+    using var successHttp = new HttpClient(new StubHandler(_ => Task.FromResult(
+        JsonResponse("{\"code\":\"0\",\"invoice_number\":\"AB12345678\"}"))));
+    var successClient = new AmegoClient(AmegoDefaults.TestInvoice, AmegoDefaults.TestAppKey, successHttp) { BaseUrl = "https://test.invalid" };
+    Equal("AB12345678", (await successClient.IssueAsync(MinimalIssue())).InvoiceNumber);
 }
 
 static async Task TestAmegoExactQueryAsync()
@@ -448,6 +509,35 @@ static async Task TestIssueOpensAndBlocksResendAsync()
     Equal(1, records.Count(record => record.InvoiceState == InvoiceStates.Opened));
     Equal(1, records.Count(record => record.InvoiceState == InvoiceStates.Failed));
     Equal(true, records.All(record => record.ApiOrderId == apiOrderId));
+}
+
+static async Task TestRecoveryOfExistingInvoiceAsync()
+{
+    foreach (var transportFailure in new[] { true, false })
+    {
+        using var temporary = new TemporaryDirectory();
+        var fake = new FakeGateway
+        {
+            IssueResponse = new IssueResponse(0, "", "AB12345678", 0, ""),
+            QueryResponse = ConfirmedQuery(TestApiOrderId("20260905001"), "AB12345678", 105, 0, 105, 1),
+        };
+        var (service, repository) = TestService(temporary.Path, fake);
+        var original = await service.IssueManualAsync(SafeDraft());
+        if (transportFailure) fake.IssueException = new IOException("decode API response");
+        var error = await ThrowsAsync<InvalidOperationException>(() => service.IssueManualAsync(SafeDraft()));
+        Equal(true, error.Message.Contains("訂單編號重複", StringComparison.Ordinal));
+        Equal(2, fake.IssueCalls); // AMEGO remains responsible for the issue decision.
+        var records = repository.Invoices.LoadOrCreate();
+        Equal(2, records.Count);
+        Equal(InvoiceStates.Opened, records.Single(record => record.Id == original.Record.Id).InvoiceState);
+        var failed = records.Single(record => record.Id != original.Record.Id);
+        Equal(InvoiceStates.Failed, failed.InvoiceState);
+        Equal(string.Empty, failed.InvoiceNumber);
+        Equal(0, failed.UploadStatus);
+        Equal(true, failed.ErrorMessage.Contains("訂單編號重複", StringComparison.Ordinal));
+        await service.RefreshAllAsync();
+        Equal(InvoiceStates.Failed, repository.Invoices.LoadOrCreate().Single(record => record.Id == failed.Id).InvoiceState);
+    }
 }
 
 static async Task TestAmbiguousIssueAsync()

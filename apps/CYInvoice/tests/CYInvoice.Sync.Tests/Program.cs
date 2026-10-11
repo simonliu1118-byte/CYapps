@@ -31,6 +31,8 @@ internal static class Program
             ("test detail refresh strips prefix from displayed OrderID", TestTestDetailRefreshStripsPrefixAsync),
             ("detail refresh failure leaves local cache untouched", TestDetailRefreshFailureLeavesCacheAsync),
             ("detail refresh falls back to OrderID when invoice number is missing", TestDetailRefreshByOrderIdAsync),
+            ("failed duplicate is not replaced by a detail query", TestFailedDetailRefreshAsync),
+            ("official sync does not adopt a failed attempt by OrderID", TestFailedOrderMatchAsync),
         };
 
         var failures = 0;
@@ -420,6 +422,64 @@ internal static class Program
         Equal("M20260918002", fake.LastOrderQuery);
         Equal("LL12345678", fresh.InvoiceNumber);
         Equal(InvoiceStates.Opened, fresh.InvoiceState);
+    }
+
+    private static async Task TestFailedDetailRefreshAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var failed = MatchingRecord(string.Empty, "M20260918002");
+        failed.InvoiceState = InvoiceStates.Failed;
+        failed.UploadStatus = 0;
+        failed.ErrorMessage = "API code 3040171: OrderId duplicate";
+        repository.Invoices.Append(failed);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query("LL12345678", failed.OrderId, "100", "買受人", description: "商品", buyerIdentifier: "0000000000"),
+        };
+        try
+        {
+            await DetailRefresh(repository, fake).RefreshAsync(failed);
+            throw new InvalidDataException("failed attempt was queried and promoted");
+        }
+        catch (InvalidOperationException error)
+        {
+            Equal(true, error.Message.Contains("開立失敗", StringComparison.Ordinal));
+        }
+        Equal(0, fake.QueryCalls);
+        var stored = repository.Invoices.LoadOrCreate().Single();
+        Equal(InvoiceStates.Failed, stored.InvoiceState);
+        Equal(string.Empty, stored.InvoiceNumber);
+        Equal(failed.ErrorMessage, stored.ErrorMessage);
+    }
+
+    private static async Task TestFailedOrderMatchAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var failed = MatchingRecord(string.Empty, "M20260918002");
+        failed.InvoiceState = InvoiceStates.Failed;
+        failed.UploadStatus = 0;
+        failed.ErrorMessage = "API code 3040171: OrderId duplicate";
+        repository.Invoices.Append(failed);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query("LL12345678", failed.OrderId, "100", "買受人", description: "商品", buyerIdentifier: "0000000000"),
+        };
+        fake.Pages[1] = ListResponse(1, [Remote("LL12345678", failed.OrderId, "100")]);
+        await Sync(repository, fake).SyncRecentAsync();
+        var rows = repository.Invoices.LoadOrCreate();
+        Equal(2, rows.Count);
+        Equal(InvoiceStates.Failed, rows.Single(record => record.Id == failed.Id).InvoiceState);
+        Equal(string.Empty, rows.Single(record => record.Id == failed.Id).InvoiceNumber);
+        Equal(failed.ErrorMessage, rows.Single(record => record.Id == failed.Id).ErrorMessage);
+        var official = rows.Single(record => record.Id != failed.Id);
+        Equal(InvoiceStates.Opened, official.InvoiceState);
+        Equal("LL12345678", official.InvoiceNumber);
+        await Sync(repository, fake).SyncRecentAsync();
+        Equal(2, repository.Invoices.LoadOrCreate().Count);
     }
 
     private static InvoiceSyncService Sync(LocalRepository repository, FakeGateway fake) => new(

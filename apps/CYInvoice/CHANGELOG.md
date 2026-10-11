@@ -2,6 +2,15 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.18 — 2026/10/11（重複開立失敗修正，工程測試中）
+
+- 保留原 API OrderID 再次送出、由光貿判斷重複的流程；未新增本機預先阻擋或重開尾碼。AMEGO code 在共用 decoder 接受明確的整數 number／string，code 15 校時共用同一解析；缺失／null／不合法 code 不默認成功。明確非零錯誤直接記為 Failed，不回查既有發票當成本次成功。
+- HTTP 字串重複錯誤的修正前回歸重現「decoder 例外 → 訂單回查 → 舊發票被記為第二筆成功」。這是已驗證的缺口，沒有原實機回覆／Logs，不能宣稱它就是使用者該次事件的唯一原因。
+- 回覆或結果不明回查命中已知同環境／API OrderID／發票號碼的既有發票時，本次記為重複失敗；清空本次發票號碼及上傳狀態，保留原成功紀錄。真正首次送出逾時的嚴格回查、結果不明禁止盲目重送及遠端成功／本機保存失敗仍沿用既有流程。
+- 依使用者建議，開立失敗僅在「上傳問題」顯示及依原規則清除；主清單及其狀態篩選移除 Failed。資料仍存原 invoices，不建立第二套失敗表；結果不明仍在主清單保留。
+- 詳細回查禁止覆寫 Failed；官方同步排除 Failed 比對候選，必要時另同步真正的官方發票，避免用同 OrderID 改寫失敗嘗試。新增真實 HTTP decoder→core、舊發票回覆／回查、官方同步與 Windows 清單實際載入回歸。
+- 獨立 bug 推進 Patch、BUILD 歸零。Cloud／CYID API、storage、Workspace、Device Token、部署與正式切換均未變動。既有錯誤雙成功紀錄不靠排序自動改寫／刪除，待原本機識別碼與官方證據確認後更正。
+
 ## V2.6.17 Build 2 — 2026-10-10（engineering，Cloud development 已更新／未正式切換）
 
 - 2026-10-11 部署準備：沿用原 development workflow，增加唯讀 preflight、原 DB／authority／migration／FK／歷史 fingerprint 與 private recovery checkpoint；驗收使用 Cloud package version，修正舊 0.9.0 hard-code。此批只改部署工具／測試／文件，Windows 及 Worker 業務 runtime、VERSION／BUILD 均未改；遠端結果見現行交接。

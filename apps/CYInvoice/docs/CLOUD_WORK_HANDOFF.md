@@ -13,11 +13,19 @@
 | 本輪 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380)，draft、未合併，完整 CI／工程包以精確 head checks 為準 |
 | 前置介面 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
 | 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
-| 工程版本 | **V2.6.17**；來源為 ../VERSION、../BUILD |
+| 工程版本 | **V2.6.18**；來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
 
 前置獨立裝置管理需求推進 V2.6.14／BUILD 0；保留 V2.6.11～13。CI／工程包請核對 [PR #216 精確 head checks](https://github.com/simonliu1118-byte/CYapps/pull/216/checks)，不能拿 V2.6.13 Windows #265 的綠燈當新版通過。正式 Release 未授權、未建立。
+
+## 重複開立失敗修正 — 2026-10-11
+
+使用者確認光貿未重開，較新的本機雙成功列是錯誤紀錄；維持第二次送原 API OrderID、由光貿判定，收到拒絕應記開立失敗。修正共用 AmegoClient decoder，整數字串 code 不再在校時檢查 GetInt32 拋例外後進入回查；缺失／不合法 code 不默認成功。HTTP 修正前測試能重現舊發票被記成第二筆成功，但未取得原 Logs，不把模擬路徑宣稱為該次事件唯一根因。
+
+InvoiceService 保留送出／未知結果回查 owner，明確拒絕走既有 Failed 保存；已知同環境／API OrderID／發票號碼的舊發票不能算新增成功。官方同步／詳細回查不覆寫 Failed。RecordsControl 唯一主清單 owner 隱藏失敗，SyncIssuesForm 仍顯示與清除原 invoices 的 Failed，無新增 table／wrapper／timer／provider。結果不明仍保留主清單與禁止盲目重送。
+
+V2.6.18／BUILD 0，獨立開票 bug；本地回歸與精確 head CI／工程包結果以 PR #380 checks 為準，Windows UI／官方 API 實機仍需 RC D.9。原 development Cloud 0.9.2／Built-in 保留；本批不部署、切 CYID、merge 或 Release。舊雙成功資料需要原本機 ID／官方證據，尚未自動改寫或刪除。
 
 ## CYID Consumer／服務連線現行停點
 

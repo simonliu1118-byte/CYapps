@@ -628,19 +628,12 @@ public sealed class InvoiceService
                 try
                 {
                     response = await gateway.IssueAsync(BuildIssueRequest(draft, options), cancellationToken).ConfigureAwait(false);
+                    if (response.Code != 0) throw new AmegoApiException(response.Code, response.Message);
+                    RequireNewIssueResult(records, record, response.InvoiceNumber);
                 }
-                catch (AmegoApiException error)
+                catch (Exception error) when (error is AmegoApiException or DuplicateIssueResultException)
                 {
-                    record.InvoiceState = InvoiceStates.Failed;
-                    record.ErrorMessage = error.Message;
-                    try
-                    {
-                        SaveStatus(record.Id, CreateStatusUpdate(record));
-                    }
-                    catch (Exception saveError)
-                    {
-                        throw new AggregateException(error, saveError);
-                    }
+                    PersistFailed(record, error);
                     throw;
                 }
                 catch (Exception issueError)
@@ -652,7 +645,13 @@ public sealed class InvoiceService
                         using var recoveryTimeout = new CancellationTokenSource(RecoveryQueryTimeout);
                         query = await gateway.QueryByOrderIdAsync(apiOrderId, recoveryTimeout.Token).ConfigureAwait(false);
                         VerifyQueryResult(record, draft, query.Data, string.Empty);
+                        RequireNewIssueResult(records, record, query.Data.InvoiceNumber);
                         queryError = null;
+                    }
+                    catch (DuplicateIssueResultException error)
+                    {
+                        PersistFailed(record, error);
+                        throw;
                     }
                     catch (Exception error)
                     {
@@ -747,6 +746,32 @@ public sealed class InvoiceService
                 activeIssueKeys.Remove(activeKey);
             }
         }
+    }
+
+    private sealed class DuplicateIssueResultException()
+        : InvalidOperationException("訂單編號重複：光貿回覆的是既有發票，本次未新增發票");
+
+    private static void RequireNewIssueResult(
+        IEnumerable<InvoiceRecord> records, InvoiceRecord attempt, string invoiceNumber)
+    {
+        if (invoiceNumber.Trim().Length == 0) return;
+        if (records.Any(record => record.Id != attempt.Id &&
+                SameEnvironment(record.Environment, attempt.Environment) &&
+                record.InvoiceState is InvoiceStates.Opened or InvoiceStates.OpenedWaitingVoid or InvoiceStates.Voided &&
+                string.Equals(EffectiveRecordOrderId(record), attempt.ApiOrderId, StringComparison.Ordinal) &&
+                string.Equals(record.InvoiceNumber.Trim(), invoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase)))
+            throw new DuplicateIssueResultException();
+    }
+
+    private void PersistFailed(InvoiceRecord record, Exception error)
+    {
+        record.InvoiceState = InvoiceStates.Failed;
+        record.InvoiceNumber = string.Empty;
+        record.UploadStatus = 0;
+        record.UploadStatusText = string.Empty;
+        record.ErrorMessage = error.Message;
+        try { SaveStatus(record.Id, CreateStatusUpdate(record)); }
+        catch (Exception saveError) { throw new AggregateException(error, saveError); }
     }
 
     private (IAmegoGateway Gateway, string Environment) GetGateway()

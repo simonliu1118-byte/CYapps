@@ -326,8 +326,10 @@ public sealed class InvoiceSyncService
 
     private static InvoiceRecord? Match(IReadOnlyList<InvoiceRecord> local, InvoiceListItem remote, Account account)
     {
+        // A rejected issue attempt is not the official invoice, even when its OrderID matches.
+        var candidates = local.Where(record => record.InvoiceState != InvoiceStates.Failed).ToArray();
         var number = remote.InvoiceNumber.Trim();
-        var byNumber = local.Where(record =>
+        var byNumber = candidates.Where(record =>
             string.Equals(record.InvoiceNumber.Trim(), number, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (byNumber.Length > 1)
             throw new AmbiguousInvoiceMatchException($"同一發票號碼對到 {byNumber.Length} 筆本機紀錄，已停止自動更新");
@@ -336,7 +338,7 @@ public sealed class InvoiceSyncService
         var apiOrderId = remote.OrderId.Trim();
         if (apiOrderId.Length == 0) return null;
         var orderId = CanonicalOrderId(account, apiOrderId);
-        var byOrder = local.Where(record =>
+        var byOrder = candidates.Where(record =>
             string.Equals(record.ApiOrderId.Trim(), apiOrderId, StringComparison.Ordinal) ||
             string.Equals(record.OrderId.Trim(), orderId, StringComparison.Ordinal) ||
             string.Equals(record.OriginalOrderId.Trim(), orderId, StringComparison.Ordinal)).ToArray();

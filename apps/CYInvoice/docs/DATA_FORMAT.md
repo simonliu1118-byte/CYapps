@@ -217,7 +217,7 @@ V2.6.11 UI 以 InvoiceWorkQueue 唯讀投影分為「上傳問題／處理中」
 
 只有正常且目前公司／環境唯一匹配的狀態才列處理中；unresolved 技術問題優先。開啟處理中不更新 upload-issue read-state。
 
-只有開立失敗列可以被批次清除。人工 pending 不得用一般 Failed 刪除路徑移除。
+只有開立失敗列可以被批次清除。人工 pending 不得用一般 Failed 刪除路徑移除。V2.6.18 將 Failed 從主清單隱藏，只在上傳問題顯示，仍保存於原 invoices；官方同步排除 Failed 比對候選，詳細回查禁止將其改成已開立。沒有新增失敗資料表或 storage migration。
 
 ## 9. 舊 JSON → SQLite 遷移
 
