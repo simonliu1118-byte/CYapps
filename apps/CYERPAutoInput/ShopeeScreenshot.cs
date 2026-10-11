@@ -628,7 +628,21 @@ internal static partial class ShopeeScreenshot
         return DigitsPattern().IsMatch(mapped) && mapped.Length <= 3;
     }
 
-    private static string Compact(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+    /// <summary>
+    /// Text without spaces, with the simplified glyphs the OCR model sometimes returns for
+    /// Shopee's labels folded to traditional (diagnostic log, 2026-10-12: 「訂單金额」).
+    /// </summary>
+    internal static string Compact(string text) =>
+        new(text.Where(c => !char.IsWhiteSpace(c)).Select(c => SimplifiedGlyphs.TryGetValue(c, out var t) ? t : c).ToArray());
+
+    private static readonly Dictionary<char, char> SimplifiedGlyphs = new()
+    {
+        ['额'] = '額', ['订'] = '訂', ['单'] = '單', ['总'] = '總', ['费'] = '費', ['运'] = '運', ['优'] = '優',
+        ['币'] = '幣', ['虾'] = '蝦', ['实'] = '實', ['计'] = '計', ['价'] = '價', ['数'] = '數',
+        ['项'] = '項', ['选'] = '選', ['货'] = '貨', ['号'] = '號', ['规'] = '規', ['编'] = '編',
+        ['买'] = '買', ['卖'] = '賣', ['场'] = '場', ['帐'] = '帳', ['账'] = '帳', ['进'] = '進', ['讯'] = '訊',
+        ['资'] = '資', ['录'] = '錄', ['细'] = '細', ['隐'] = '隱', ['调'] = '調'
+    };
 
     private static string Number(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 

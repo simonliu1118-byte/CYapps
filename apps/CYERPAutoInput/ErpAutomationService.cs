@@ -236,37 +236,34 @@ internal sealed class ErpAutomationService
         if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "列印") is not { } labelRect)
             return "Ribbon 上找不到「列印」";
         var labelScreen = new Rectangle(ribbon.Left + labelRect.Left, ribbon.Top + labelRect.Top, labelRect.Width, labelRect.Height);
-        // The drop-down opens below the button: 直接列印 / 預覽列印.
-        var menu = new Rectangle(labelScreen.Left - 60, labelScreen.Bottom, 360, 200);
+        // The drop-down (直接列印 / 預覽列印) opens over the button itself, not only below it:
+        // Build 1 on the user's PC read only COPI08's form below 「列印」 and the retry's click
+        // on 「列印」 landed on 預覽列印 (2026-10-12). So the area around the label is read, and
+        // when ERP shows a popup window there, that window is read.
+        var near = new Rectangle(labelScreen.Left - 120, labelScreen.Top - 180, 420, 400);
 
         // A menu left open by an earlier try is used as it is; clicking 列印 again would close it.
-        using (var open = ScreenCapture.CaptureWithLayers(menu))
-            if (RibbonPrintLocator.FindWord((await _textVision.RecognizeAsync(open, cancellationToken)).Select(t => (t.Text, t.Rect)).ToList(), "直接") is { } already)
-            {
-                InputSender.Click(new Point(menu.Left + already.Left + already.Width / 2, menu.Top + already.Top + already.Height / 2));
-                _log.Info("print", $"direct print clicked in a menu already open attempt={attempt}");
-                return string.Empty;
-            }
+        if (await FindDirectPrintAsync(root, near, attempt, logTokens: false, cancellationToken) is { } already)
+        {
+            InputSender.Click(already);
+            _log.Info("print", $"direct print clicked in a menu already open attempt={attempt}");
+            return string.Empty;
+        }
         cancellationToken.ThrowIfCancellationRequested();
         InputSender.Click(new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
-        _log.Info("print", $"ribbon 列印 clicked attempt={attempt}");
+        _log.Info("print", $"ribbon 列印 clicked attempt={attempt} label=({labelScreen.Left},{labelScreen.Top},{labelScreen.Width},{labelScreen.Height})");
 
-        var menuDeadline = Environment.TickCount64 + 1500;
+        var menuDeadline = Environment.TickCount64 + 3000;
         while (Environment.TickCount64 < menuDeadline)
         {
             await Delay(250, cancellationToken);
-            using var image = ScreenCapture.CaptureWithLayers(menu);
-            var menuTokens = await _textVision.RecognizeAsync(image, cancellationToken);
-            // 「直接」 alone is enough: the other item is 「預覽列印」.
-            if (RibbonPrintLocator.FindWord(menuTokens.Select(t => (t.Text, t.Rect)).ToList(), "直接") is { } item)
+            if (await FindDirectPrintAsync(root, near, attempt, logTokens: Environment.TickCount64 >= menuDeadline, cancellationToken) is { } item)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                InputSender.Click(new Point(menu.Left + item.Left + item.Width / 2, menu.Top + item.Top + item.Height / 2));
+                InputSender.Click(item);
+                _log.Info("print", $"direct print clicked at ({item.X},{item.Y}) attempt={attempt}");
                 return string.Empty;
             }
-            if (Environment.TickCount64 >= menuDeadline)
-                foreach (var t in menuTokens)
-                    _log.Info("print", $"  menu token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
         }
         if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
         {
@@ -274,6 +271,27 @@ internal sealed class ErpAutomationService
             await Delay(200, cancellationToken);
         }
         return "列印選單沒有出現「直接列印」";
+    }
+
+    /// <summary>Screen point of 「直接列印」 in an open 列印 drop-down, or null.</summary>
+    private async Task<Point?> FindDirectPrintAsync(nint root, Rectangle near, int attempt, bool logTokens, CancellationToken cancellationToken)
+    {
+        var popups = Win32Automation.FindProcessPopupsNear(root, near);
+        var areas = popups.Count > 0 ? popups.ToList() : [];
+        areas.Add(near);
+        foreach (var area in areas)
+        {
+            using var image = ScreenCapture.CaptureWithLayers(area);
+            var tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            // 「直接」 alone is enough: the other item is 「預覽列印」.
+            if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "直接") is { } item)
+                return new Point(area.Left + item.Left + item.Width / 2, area.Top + item.Top + item.Height / 2);
+            if (!logTokens) continue;
+            _log.Info("print", $"  menu area=({area.Left},{area.Top},{area.Width},{area.Height}) popup={popups.Contains(area)} attempt={attempt}");
+            foreach (var t in tokens)
+                _log.Info("print", $"  menu token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
+        }
+        return null;
     }
 
     private static string Compact(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());

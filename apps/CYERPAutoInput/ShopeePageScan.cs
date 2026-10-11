@@ -225,5 +225,5 @@ internal static class ShopeePageScan
         return w * (double)h / Math.Max(1, Math.Min(a.Width * a.Height, b.Width * b.Height));
     }
 
-    private static string Compact(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+    private static string Compact(string text) => ShopeeScreenshot.Compact(text);
 }

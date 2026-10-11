@@ -454,4 +454,20 @@ public class ShopeeScreenshotTests
         Assert.Equal(ok, ShopeeScreenshot.TryNumber(text, out var value, digitsOnly: false));
         if (ok) Assert.Equal(expected, value);
     }
+    [Fact]
+    public void Reads_amount_labels_the_ocr_returned_in_simplified_glyphs()
+    {
+        // The PC read 「訂單金額」 as 「訂單金额」 (diagnostic log, 2026-10-12).
+        List<OcrBox> shot =
+        [
+            new("買家實付金額", 40, 12, 126, 19), new("訂單金额", 682, 40, 56, 18), new("NT$1,000", 830, 42, 57, 15),
+            new("買家支付運費", 657, 74, 81, 17), new("NT$0", 856, 73, 32, 18), new("賣場優惠券", 670, 137, 70, 17),
+            new("-NT$40", 840, 137, 50, 19), new("买家總支付金額", 644, 174, 96, 16), new("NT$960", 794, 169, 96, 24)
+        ];
+        var problems = new List<string>();
+        var amounts = ShopeeScreenshot.ParseAmounts(shot, problems)!;
+        Assert.Empty(problems);
+        Assert.Equal(1000m, amounts.OrderAmount);
+        Assert.Equal(960m, amounts.Total);
+    }
 }
