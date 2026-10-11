@@ -242,6 +242,25 @@ This original development target may contain the existing business Workspace; it
 
 ## Exact active-version deployment; remote probes retired
 
-The existing deployment owner now uploads only the reviewed real `app.js` through the modern Worker version API with `deploy=false`. Every non-plain-text binding is inherited using the exact UUID of the original version serving100% traffic; runtime vars retain the original values plus reviewed configuration and `CYID_ENABLED=false`. Secrets are neither read nor replaced. Binding/compatibility readback, unchanged original traffic/routes, a fresh private checkpoint and canonical complete migrations are required before explicitly deploying the uploaded business version at100%. Always-run post-checks verify active settings, health, original Workspace/Device token hashes/employee/history and FK. Response loss is not automatically retried or restored.
+The existing deployment owner now uploads only the reviewed real `app.js` through the modern Worker version API with `deploy=false`. Every original non-plain-text binding is inherited using the exact UUID of the original version serving100% traffic; runtime vars retain the original values plus reviewed configuration and `CYID_ENABLED=false`. Secrets are neither read nor replaced. Binding/compatibility readback, unchanged original traffic/routes, a fresh private checkpoint and canonical complete migrations are required before explicitly deploying the uploaded business version at100%. Always-run post-checks verify active settings, health, original Workspace/Device token hashes/employee/history and FK. Response loss is not automatically retried or restored.
 
 Per the user's2026-10-11 decision, the expired undeployed no-D1 probe may remain in version history. Its deletion is no longer a prerequisite for exact-source deployment. Remote probe/cleanup controllers, modules, dispatch modes and dedicated push triggers have been removed; synthetic tests stay local/CI. Do not replay old deployment branches or runs. Real private binding/Employee authorization, Windows continuity, offline/revoke recovery, usage and final CYID cutover remain separate pending gates. Current evidence is in CYCloudIdentity `docs/DEVELOPMENT_DEPLOYMENT.md` and CYInvoice `docs/TODO.md`§7.3.3; product/contract versions unchanged.
+
+
+### Prepare the existing CYID binding (Built-in retained)
+
+The same development workflow offers `mode=prepare-cyid` (or the reviewed `cyinvoice/cloud-dev-prepare-cyid` branch). It deploys the real business bundle with `CYID_ENABLED=false`; it adds only the two approved CYID Service Bindings and the three scope vars. Original Secrets, D1, rate limits and unrelated services inherit from the exact active version. Existing matching bindings are inherited; conflicting targets, entrypoints or scope vars stop before upload. Ordinary `deploy` cannot introduce these bindings or change the scope.
+
+Configure the existing GitHub `development` **Environment Secrets** after confirming the approved existing mapping. GitHub masks Secrets in runner logs; ordinary variables are not suitable for these runtime identifiers. Copy the two existing CYID resource variables into same-named Secrets, retaining the variables used by the Provider workflow:
+
+| Variable | Required existing value |
+| --- | --- |
+| `CYID_WORKER_NAME` | Copy the original development provider name from the existing same-named variable |
+| `CYID_D1_DATABASE_ID` | Copy the existing Provider D1 ID; exclusion check only, never queried by CYInvoice |
+| `IDENTITY_APPLICATION_ID` | Registered, approved CYInvoice Application ID |
+| `IDENTITY_WORKSPACE_ID` | Existing CYID Workspace for the employees |
+| `IDENTITY_CYINVOICE_WORKSPACE_ID` | Original CYInvoice business Workspace; never a replacement Workspace |
+
+Missing/invalid values fail before any remote request. Preflight then verifies the configured CYInvoice Workspace exists and is active in the original consumer D1; the complete reviewed schema is required, and this preparation mode does not run migrations. Provider public health confirms only provider liveness, not its Application/Workspace enablement or private transport. Generated mappings and targets stay in private runner files; logs contain only fixed validation outcomes. Uploaded and active binding readback plus original history/health checks must pass. No remote test code, synthetic accounts, CYID D1 access or authority switch is performed.
+
+Actual #25 had all three scope variables empty. The preparation inputs now use Secrets; their presence has not been verified. Configuration preparation remains unexecuted until the approved existing mapping and the two existing resource values are entered there. Successful preparation alone is not private Fetcher/RPC or Employee/App Access acceptance. Verify those through the existing Consumer business flows in the separately reviewed acceptance/cutover stage, with the original Windows installations and data retained.

@@ -40,6 +40,8 @@
 - [x] 歷史 #19／#21／#23 原 consumer Built-in／D1／Workspace／Device token hashes／history／FK 安全核對；測試版本無D1、未部署、已過期。DELETE403→404／10339未解決，不算transport成功。歷史source/run證據集中 docs/DEVELOPMENT_DEPLOYMENT.md。
 - [x] 依使用者最新定案，移除 remote probe／cleanup controller、測試Worker與workflow modes／branches；保留 expired history，停止重試／擴權。CI只作本地synthetic驗證，不上傳測試程式。
 - [x] CYInvoice exact-active-source真實business部署：#402六CI全通過並合併；actual #25（38134710138）原Cloud0.9.2／storage13／Built-in／Workspace／Device hashes／history／FK／routes保留，before/after expired probe仍1個；無test upload／DELETE／Secret replacement／authority switch。精確source/tree/recovery evidence見docs/DEVELOPMENT_DEPLOYMENT.md。三個old branch refs已停放到無probe入口的#402 tree。
+- [x] CYInvoice 既有部署 owner 新增 prepare-cyid source，Built-in／原 Workspace 保留，僅 approved bindings／scope 準備；source／本地回歸完成，無 remote test upload／CYID D1／authority switch。技術操作見 CYInvoice Cloud README。
+- [ ] development Environment Secrets 三項 Application／Workspace approved mapping 與既有兩項資源值填入後執行真實準備／history readback；#25仍是最新 actual（三項空白），準備尚未執行且不等於 private transport／Employee 授權驗收。
 - [ ] 實際private Fetcher／named RPC與App Access／Role／原Windows裝置驗收，使用真實consumer功能；不再增加遠端probe入口。配對／範圍／Free量測與正式切換仍獨立gate。
 - [ ] Temporary Workers Admin移除由使用者確認；不增加權限。刪除10339留歷史／非目前部署阻塞。
 

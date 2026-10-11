@@ -8,15 +8,16 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Read-only preflight or reviewed Built-in business deployment'
+        description: 'Preflight, Built-in deployment, or CYID binding preparation with Built-in retained'
         type: choice
-        options: [preflight, deploy]
+        options: [preflight, deploy, prepare-cyid]
         default: preflight
         required: true
   push:
     branches:
       - cyinvoice/cloud-dev-preflight
       - cyinvoice/cloud-dev-deploy
+      - cyinvoice/cloud-dev-prepare-cyid
 
 permissions:
   contents: read
@@ -59,11 +60,12 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
-      CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
-      IDENTITY_APPLICATION_ID: ${{ vars.IDENTITY_APPLICATION_ID }}
-      IDENTITY_WORKSPACE_ID: ${{ vars.IDENTITY_WORKSPACE_ID }}
-      IDENTITY_CYINVOICE_WORKSPACE_ID: ${{ vars.IDENTITY_CYINVOICE_WORKSPACE_ID }}
+      CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
+      CYID_D1_DATABASE_ID: ${{ secrets.CYID_D1_DATABASE_ID }}
+      IDENTITY_APPLICATION_ID: ${{ secrets.IDENTITY_APPLICATION_ID }}
+      IDENTITY_WORKSPACE_ID: ${{ secrets.IDENTITY_WORKSPACE_ID }}
+      IDENTITY_CYINVOICE_WORKSPACE_ID: ${{ secrets.IDENTITY_CYINVOICE_WORKSPACE_ID }}
+      CYINVOICE_DEPLOYMENT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.ref == 'refs/heads/cyinvoice/cloud-dev-prepare-cyid' && 'prepare-cyid' || github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy' && 'deploy' || 'preflight') }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@v7
@@ -79,7 +81,7 @@ jobs:
           node scripts/deployment-preflight.mjs before "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
 
       - name: Validate preserved development config before mutation
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        if: env.CYINVOICE_DEPLOYMENT_MODE != 'preflight'
         run: |
           set -euo pipefail
           if ! npx wrangler deploy --dry-run --config wrangler.deploy.generated.jsonc --outdir "$RUNNER_TEMP/cyinvoice-deploy-bundle" > "$RUNNER_TEMP/cyinvoice-private-bundle.log" 2>&1; then
@@ -88,7 +90,7 @@ jobs:
           fi
 
       - name: Apply reviewed forward migration to original development D1
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        if: env.CYINVOICE_DEPLOYMENT_MODE == 'deploy'
         env:
           CI: 'true'
         run: |
@@ -100,7 +102,7 @@ jobs:
           echo 'Reviewed forward migrations applied to the original development D1.'
 
       - name: Deploy additive development Worker with CYID disabled
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        if: env.CYINVOICE_DEPLOYMENT_MODE != 'preflight'
         run: |
           set -euo pipefail
           node scripts/deployment-preflight.mjs deploy "$RUNNER_TEMP/cyinvoice-deploy-audit.json" "$RUNNER_TEMP/cyinvoice-deploy-bundle/app.js"
