@@ -56,7 +56,7 @@
 - 自動列印：V0.2.0 Build 31 實測「Ribbon 上找不到『列印』」（LOG 未記錄讀到什麼）；原因是這台 OCR 對 Ribbon 逐字回傳（159 個框），V0.2.1 Build 0 改為同一行相鄰字串接後比對並記錄 Ribbon OCR 文字，待實測。另待確認：點「列印」文字是否開出選單、「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）、非 100% DPI 下的擷取範圍。
 - Build 30 工具列放大後的版面、貨運別新增項目、按 Esc 恢復滑鼠。
 - Build 31 數量欄「一」視為 1、重讀信心門檻 0.8 的實際效果。
-- V0.2.1 Build 5：Build 4 實測：全自動擷取→帶回→輸入→儲存成功（捲動 400/600/600，4 張）。列印：「列印」label 找到（逐字框），但選單 OCR 全是後方表單 → DevExpress 下拉為分層視窗，`CopyFromScreen` 需 `CaptureBlt`（`ScreenCapture.CaptureWithLayers`，只用於選單）；重試前先檢查選單是否已開。`FormSnapshot.NoBatchItemCodes`（設定三個特殊品號）跳過批號檢查。擷取 OCR 只跑新捲入的條帶（像素比對成功時）。
+- V0.2.1 Build 5：Build 4 實測：全自動擷取→帶回→輸入→儲存成功（捲動 400/600/600，4 張）。列印：「列印」label 找到（逐字框），但選單 OCR 全是後方表單 → DevExpress 下拉為分層視窗，`CopyFromScreen` 需 `CaptureBlt`（`ScreenCapture.CaptureWithLayers`，只用於選單）；重試前先檢查選單是否已開。`FormSnapshot.NoBatchItemCodes`（設定三個特殊品號）跳過批號檢查。擷取 OCR 只跑新捲入的條帶（像素比對成功時）。開始時點左側空白（area.Left+12）後送 Home，再以滾輪確認到頂。
 - V0.2.1 Build 4：Build 3 實測 LOG：捲動 400px×4 正確、找到買家總支付金額，但表頭「小計」→「小」使商品表段落缺失；以該 LOG 的 page box 離線重跑，修正後三段皆切出，解析得訂單編號、新竹、三品項、優惠券 -40、代收 1403（第 1 組編號「1」未偵測，實機靠缺格重讀）。捲動改為量測每格距離後每步約可見高度 70%，OCR 只跑 10%–72% 寬的內容欄。
 - V0.2.1 Build 3：Build 2 實測 LOG `step=1 moved=-1 fixed_top=177`（Chrome 1920×1040）。`FindScrollOffset` 改為有內容列 ≥60% 完全相等；新增 `FindScrollOffsetByText`（同文字同左緣的位移眾數，≥3 個一致），不一致時取文字；LOG `moved= pixels= text=`。模擬加入頁首陰影與 hover 干擾後兩法皆正確。
 - V0.2.1 Build 2：截圖視窗改由使用者按「開始」，乾淨的擷取自動 `Apply(automatic: true)` 帶回；`UserSettings.ShopeeFullAuto` → `StartAutomationAsync(fullAuto: true)`（強制儲存＋列印），有 notes 先 Yes/No（預設 No）。蝦皮訂單頁自動擷取。`ShopeePageScan`（純邏輯：列亮度簽章比對捲動距離、固定上方區、重疊框以位置去重、依卡片標題切三段）與 `ShopeePageScanner`（找瀏覽器、滾輪 4 格／步、等畫面穩定、OCR、接圖 `Stitch`）。開發環境以使用者 2026-10-11 截圖拼成模擬頁面、模擬 6 次捲動截圖驗證：捲動距離全對、三段切出、解析正確（編號「1」單獨未偵測，實機靠缺格重讀）。待實機：瀏覽器偵測、滾輪捲動、聊天視窗遮擋、長訂單。

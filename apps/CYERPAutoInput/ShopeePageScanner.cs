@@ -74,7 +74,13 @@ internal sealed class ShopeePageScanner
         var wheelPoint = new Point(area.Left + area.Width * 2 / 5, area.Top + area.Height * 3 / 5);
         _log.Info("page-scan", $"browser window class={NativeMethods.ClassName(browser)} area={area.Width}x{area.Height}");
 
-        // From the top of the page.
+        // From the top of the page (user, 2026-10-11): the page may have been left scrolled.
+        // A click on the page's empty left margin gives it the keyboard focus (not the address
+        // bar), then Home jumps to the top; the wheel loop below only confirms it.
+        InputSender.Click(new Point(area.Left + 12, wheelPoint.Y));
+        await Task.Delay(150, cancellationToken);
+        InputSender.Press(0x24 /* VK_HOME */);
+        _log.Info("page-scan", "Home pressed to start from the top");
         for (var i = 0; i < 12; i++)
         {
             var before = Signature(await StableCaptureAsync(area, cancellationToken), dispose: true);
