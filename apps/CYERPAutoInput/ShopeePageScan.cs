@@ -138,19 +138,28 @@ internal static class ShopeePageScan
             sections.Add(Cut(ShopeeShotKind.Order, Rectangle.FromLTRB(orderLabel.Left - 50, orderLabel.Top - 12, orderLabel.Left + 900, end + 12)));
         }
 
-        // Product table: header 單價／數量／小計 … 隱藏入帳明細.
+        // Product table: header 單價／數量／小計 … 隱藏入帳明細. The OCR may drop a header glyph
+        // (「小計」 read as 「小」; user's PC, 2026-10-11), so 單價 alone anchors the header and
+        // the right edge falls back to the rightmost number column below it.
         var unit = Find(t => t == "單價");
-        var subtotal = unit is null ? null : page.FirstOrDefault(b => Compact(b.Text) == "小計" && Math.Abs(b.CenterY - unit.CenterY) <= 20);
-        if (unit is null || subtotal is null) problems.Add("頁面上找不到商品表的表頭（單價、小計）。");
+        if (unit is null) problems.Add("頁面上找不到商品表的表頭（單價）。");
         else
         {
+            bool OnHeaderRow(OcrBox b) => Math.Abs(b.CenterY - unit.CenterY) <= 20 && b.Left > unit.Right;
+            var quantity = page.FirstOrDefault(b => OnHeaderRow(b) && Compact(b.Text) is "數量" or "數" or "量");
+            var subtotal = page.Where(b => OnHeaderRow(b) && Compact(b.Text) is "小計" or "小" or "計").OrderByDescending(b => b.Right).FirstOrDefault();
             var number = page.Where(b => Compact(b.Text) == "編" && b.Right < unit.Left && Math.Abs(b.CenterY - unit.CenterY) <= 40).FirstOrDefault();
             var codes = page.Where(b => b.Top > unit.Top && Compact(b.Text).Contains("貨號", StringComparison.Ordinal)).ToList();
             var left = number is not null ? number.Left - 25 : codes.Count > 0 ? codes.Min(c => c.Left) - 140 : unit.Left - 700;
             var stop = Find(t => t.Contains("入帳明細", StringComparison.Ordinal) || t.StartsWith("訂單金額", StringComparison.Ordinal), unit.Top);
             if (stop is null) problems.Add("頁面上找不到商品表的結尾（隱藏入帳明細）。");
             var bottom = stop?.Top - 4 ?? (codes.Count > 0 ? codes.Max(c => c.Bottom) + 20 : unit.Bottom + 200);
-            sections.Add(Cut(ShopeeShotKind.Items, Rectangle.FromLTRB(left, unit.Top - 30, subtotal.Right + 40, bottom)));
+            // Numbers of the table only: right of 單價, within about three column widths.
+            var columnStep = quantity is not null ? quantity.Left - unit.Left : 80;
+            var tableNumbers = page.Where(b => b.Top > unit.Bottom && b.Bottom < bottom && b.Left > unit.Left - 20 &&
+                                               b.Left < unit.Left + columnStep * 3 && ShopeeScreenshot.TryNumber(b.Text, out _, digitsOnly: true)).ToList();
+            var right = subtotal?.Right ?? (tableNumbers.Count > 0 ? tableNumbers.Max(b => b.Right) : unit.Right + columnStep * 2);
+            sections.Add(Cut(ShopeeShotKind.Items, Rectangle.FromLTRB(left, unit.Top - 30, right + 40, bottom)));
         }
 
         // 買家實付金額 … 買家總支付金額 and its amount.

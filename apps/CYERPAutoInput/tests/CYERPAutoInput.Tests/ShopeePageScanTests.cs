@@ -84,6 +84,24 @@ public sealed class ShopeePageScanTests
     }
 
     [Fact]
+    public void Finds_the_table_when_a_header_glyph_is_missing()
+    {
+        // The PC read 「小計」 as 「小」 (diagnostic log, 2026-10-11); a stray icon digit sits far right.
+        List<OcrBox> page =
+        [
+            new("編", 366, 1173, 14, 12), new("數量", 1075, 1184, 31, 19), new("商品", 399, 1185, 31, 19), new("單價", 1010, 1186, 28, 17),
+            new("小", 1156, 1187, 20, 15), new("2", 369, 1301, 7, 12), new("700", 1014, 1299, 24, 16), new("1", 1098, 1302, 7, 9),
+            new("700", 1159, 1299, 24, 16), new("商品選項貨號：X00012", 472, 1318, 124, 17), new("9", 1877, 1300, 22, 23),
+            new("隱藏入帳明細", 1102, 1346, 73, 17)
+        ];
+        var problems = new List<string>();
+        var items = ShopeePageScan.Sections(page, problems).Single(s => s.Kind == ShopeeShotKind.Items);
+        Assert.DoesNotContain(problems, p => p.Contains("單價", StringComparison.Ordinal));
+        Assert.Contains(items.Lines, l => l.Text == "700" && l.Left > 700);
+        Assert.DoesNotContain(items.Lines, l => l.Text == "9");
+    }
+
+    [Fact]
     public void Says_which_part_is_missing()
     {
         var problems = new List<string>();

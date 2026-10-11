@@ -23,7 +23,8 @@ internal sealed class ShopeePageScanner
         public bool Cancelled { get; set; }
     }
 
-    private const int WheelNotchesPerStep = 4;
+    /// <summary>The first scroll; later ones are sized from what it measured.</summary>
+    private const int FirstWheelNotches = 4;
     private const int MaxSteps = 40;
     private readonly PaddleOcrService _ocr;
     private readonly AppLogger _log;
@@ -84,14 +85,23 @@ internal sealed class ShopeePageScanner
 
         List<long>? previous = null;
         List<OcrBox>? previousBoxes = null;
+        var notches = 0;
+        var pixelsPerNotch = 0.0;
         var pageTop = 0;
         for (var step = 0; step < MaxSteps; step++)
         {
             if (stopRequested()) { result.Cancelled = true; break; }
             var image = await StableCaptureAsync(area, cancellationToken);
             var signature = Signature(image, dispose: false);
-            var tokens = await _ocr.RecognizeAsync(image, cancellationToken);
-            var boxes = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+            // Only the page's content column is read (the cards sit in the middle; the margins
+            // and Shopee's icon bar on the right carry nothing needed), which makes OCR faster.
+            var column = Rectangle.FromLTRB(image.Width * 10 / 100, 0, image.Width * 72 / 100, image.Height);
+            List<OcrBox> boxes;
+            using (var part = image.Clone(column, image.PixelFormat))
+            {
+                var tokens = await _ocr.RecognizeAsync(part, cancellationToken);
+                boxes = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left + column.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+            }
             if (previous is not null && previousBoxes is not null)
             {
                 result.FixedTop = Math.Max(result.FixedTop, ShopeePageScan.StaticTopRows(previous, signature));
@@ -108,13 +118,19 @@ internal sealed class ShopeePageScanner
                 }
                 if (moved == 0) { image.Dispose(); break; } // bottom of the page
                 pageTop += moved;
+                // Size the next scrolls to about 70 % of the visible page, so captures
+                // overlap enough to line up but not much more (user, 2026-10-11: too slow).
+                if (pixelsPerNotch == 0 && notches > 0) pixelsPerNotch = moved / (double)notches;
             }
             result.Captures.Add(new Capture(image, pageTop));
             previous = signature;
             previousBoxes = boxes;
             ShopeePageScan.AddCapture(result.Page, boxes, pageTop, result.FixedTop);
             if (ShopeePageScan.HasBuyerTotal(result.Page)) break;
-            Wheel(wheelPoint, -WheelNotchesPerStep);
+            notches = pixelsPerNotch > 0
+                ? Math.Max(1, (int)((image.Height - result.FixedTop) * 0.7 / pixelsPerNotch))
+                : FirstWheelNotches;
+            Wheel(wheelPoint, -notches);
             // Park the cursor on the page's empty left margin so no hover effect changes the next capture.
             NativeMethods.SetCursorPos(area.Left + 12, wheelPoint.Y);
         }
