@@ -9696,6 +9696,11 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster {
   background: #fff !important;
 }
 
+/* Auth owns the identity; keep its cluster hidden until the canonical render is complete. */
+.cy-account-cluster:not([data-identity-ready="true"]),
+.topbar-actions #currentUser.hidden,
+.topbar-actions #logoutButton.hidden { visibility: hidden !important; }
+
 html[data-viewport="desktop"] .cy-account-cluster .current-user,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user {
   display: flex !important;
