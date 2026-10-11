@@ -69,9 +69,13 @@ internal sealed class ImportedOrder
 /// </summary>
 internal static class FreightCarriers
 {
-    /// <summary>In the order of the user's ERP codes (user, 2026-10-11); the codes stay local.</summary>
-    public static readonly string[] All =
-        ["新竹", "黑貓", "宅配通", "7-11", "全家", "萊爾富", "蝦皮店到店", "蝦皮店到店 - 隔日到貨", "店到家宅配"];
+    /// <summary>Home-delivery carriers, in the order of the user's ERP codes (user, 2026-10-11).</summary>
+    public static readonly string[] Logistics = ["新竹", "黑貓", "宅配通"];
+
+    /// <summary>Convenience-store pickup channels, in the order of the user's ERP codes.</summary>
+    public static readonly string[] Stores = ["7-11", "全家", "萊爾富", "蝦皮店到店", "蝦皮店到店 - 隔日到貨", "店到家宅配"];
+
+    public static readonly string[] All = [.. Logistics, .. Stores];
 
     /// <summary>
     /// The code of the carrier named in <paramref name="carrierText"/>; the longest name wins

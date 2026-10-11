@@ -245,30 +245,37 @@ internal sealed class SettingsForm : Form
             Text = "填入各物流商在 ERP 的貨運別代號（所有平台共用）。匯出檔的物流商文字包含左側名稱即套用；空白表示未設定，該訂單轉人工。",
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
-        var grid = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 4, AutoSize = true };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-        for (var i = 0; i < FreightCarriers.All.Length; i++)
+        // 物流 and 超商 side by side (user, 2026-10-11), each a column of name + code.
+        var groups = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        groups.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        groups.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        GroupBox CarrierGroup(string title, string[] carriers, Padding margin)
         {
-            var carrier = FreightCarriers.All[i];
-            var box = new TextBox
+            var box = new GroupBox { Text = title, Dock = DockStyle.Top, Padding = new Padding(10, 6, 10, 8), Margin = margin, Height = carriers.Length * 32 + 34 };
+            var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+            for (var i = 0; i < carriers.Length; i++)
             {
-                Width = 70,
-                MaxLength = 10,
-                Margin = new Padding(0, 4, 0, 4),
-                Text = _settings.FreightTypes.TryGetValue(carrier, out var code) ? code : string.Empty,
-                AccessibleName = carrier + " 貨運別"
-            };
-            _freightCodes[carrier] = box;
-            // Down the left column first, then the right one, so the list reads in order.
-            var perColumn = (FreightCarriers.All.Length + 1) / 2;
-            var (row, column) = (i % perColumn, i / perColumn);
-            grid.Controls.Add(new Label { Text = carrier, AutoSize = true, Margin = new Padding(0, 8, 6, 0) }, column * 2, row);
-            grid.Controls.Add(box, column * 2 + 1, row);
+                var carrier = carriers[i];
+                var code = new TextBox
+                {
+                    Width = 70,
+                    MaxLength = 10,
+                    Margin = new Padding(0, 4, 0, 4),
+                    Text = _settings.FreightTypes.TryGetValue(carrier, out var saved) ? saved : string.Empty,
+                    AccessibleName = carrier + " 貨運別"
+                };
+                _freightCodes[carrier] = code;
+                grid.Controls.Add(new Label { Text = carrier, AutoSize = true, Margin = new Padding(0, 8, 6, 0) }, 0, i);
+                grid.Controls.Add(code, 1, i);
+            }
+            box.Controls.Add(grid);
+            return box;
         }
-        layout.Controls.Add(grid, 0, 1);
+        groups.Controls.Add(CarrierGroup("物流", FreightCarriers.Logistics, new Padding(0, 0, 6, 0)), 0, 0);
+        groups.Controls.Add(CarrierGroup("超商", FreightCarriers.Stores, new Padding(6, 0, 0, 0)), 1, 0);
+        layout.Controls.Add(groups, 0, 1);
         page.Controls.Add(layout);
         return page;
     }
