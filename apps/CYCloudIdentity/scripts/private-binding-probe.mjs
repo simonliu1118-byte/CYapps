@@ -30,6 +30,7 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
   requireValue((await apiCall(prefix + '/settings')).absent === true, 'PROBE_NAME_NOT_NEW');
   const subdomain = (await apiCall('/workers/subdomain')).result?.subdomain;
   requireValue(/^[a-z0-9-]+$/.test(subdomain ?? ''), 'PROBE_ENDPOINT_UNAVAILABLE');
+  console.log('Probe runtime scope checked; temporary Worker name is new.');
   const expected = fs.readFileSync(path.join(root, 'VERSION'), 'utf8').trim();
   const config = { name: worker, main: path.join(root, 'scripts/private-binding-probe-worker.mjs'),
     compatibility_date: '2026-09-25', workers_dev: true,
@@ -44,8 +45,15 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
     fs.writeFileSync(configPath, JSON.stringify(config), { mode: 0o600 });
     mutationAttempted = true;
     // Output may contain private deployment names: capture, never print or upload it.
-    await command('npx', ['wrangler', 'deploy', '--config', configPath], { cwd: root, env, timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
+    try {
+      await command('npx', ['wrangler', 'deploy', '--config', configPath], { cwd: root, env, timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
+    } catch (error) {
+      const code = `${error?.stdout ?? ''}\n${error?.stderr ?? ''}`.match(/\[code:\s*(\d{1,6})\]/)?.[1];
+      throw new Error(code ? `PROBE_UPLOAD_FAILED_${code}` : 'PROBE_UPLOAD_FAILED');
+    }
+    console.log('Temporary probe Worker uploaded.');
     requireValue(!(await apiCall(prefix + '/secrets', 'PUT', { name: 'PROBE_AUTH_KEY', text: key, type: 'secret_text' })).absent, 'PROBE_SECRET_NOT_READY');
+    console.log('Temporary probe-only secret configured.');
     let response;
     for (let attempt = 0; attempt < 20; attempt++) {
       response = await fetcher(`https://${worker}.${subdomain}.workers.dev/probe`, {
@@ -72,6 +80,7 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
           await apiCall(prefix, 'DELETE');
           requireValue((await apiCall(prefix + '/settings')).absent === true, 'PROBE_CLEANUP_NOT_CONFIRMED');
         }
+        console.log('Temporary probe Worker absence confirmed.');
       }
     } finally { fs.rmSync(configPath, { force: true }); }
   }
