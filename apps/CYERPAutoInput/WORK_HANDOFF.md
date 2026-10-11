@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-11（V0.2.2 Build 0，分支 `cyerp-auto-input/fix-print-help`；V0.2.0 Build 31 已合併 `main`）  
+> 更新：2026-10-11（V0.2.2 Build 1，分支 `cyerp-auto-input/fix-print-help`；V0.2.0 Build 31 已合併 `main`）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -56,6 +56,7 @@
 - 自動列印：V0.2.0 Build 31 實測「Ribbon 上找不到『列印』」（LOG 未記錄讀到什麼）；原因是這台 OCR 對 Ribbon 逐字回傳（159 個框），V0.2.1 Build 0 改為同一行相鄰字串接後比對並記錄 Ribbon OCR 文字，待實測。另待確認：點「列印」文字是否開出選單、「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）、非 100% DPI 下的擷取範圍。
 - Build 30 工具列放大後的版面、貨運別新增項目、按 Esc 恢復滑鼠。
 - Build 31 數量欄「一」視為 1、重讀信心門檻 0.8 的實際效果。
+- V0.2.2 Build 1：實測 Build 0：一般訂單捲完後 OCR 6.4 s（原 7.7 s）；24 件長訂單 10 次捲動、全程 ~22 s、商品表 3294px 切出、缺格重讀 4/4。「包里1」→ 物流方式讀不到，`PackagePattern` 放寬。
 - V0.2.2 Build 0：使用者 2026-10-11 指定自動擷取為新功能、升 Patch；內容同 V0.2.1 Build 8。待實測：Build 8 的 OCR 加速（15%–66% 欄、原尺寸）準確度、列印選單 BitBlt、進度條。
 - V0.2.1 Build 8：Build 7 實測成功（捲動 3.5 s、5 次 OCR 共 7.7 s、缺格重讀補回編號）。頁面 OCR 改 15%–66% 欄、`maxScale: 1.0`。`ScanAsync(scrolled:, readProgress:)`：捲完即還原視窗與滑鼠，截圖視窗顯示進度條。待實測：準確度是否下降（有訂單編號格式、金額核對、缺格重讀保護）。
 - V0.2.1 Build 7：Build 6 實測：pipeline 下捲動 2.6 s 捲到頁底，step=5 兩張相同 → `StaticTopRows`=1040 → FixedTop 吃掉全部 boxes。改為 `SameScreen` 即到底、FixedTop 只在第一次捲動量測且上限 40%。

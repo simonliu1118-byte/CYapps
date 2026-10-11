@@ -338,6 +338,20 @@ public class ShopeeScreenshotTests
     }
 
     [Theory]
+    [InlineData("包裹1:新竹物流#5000000001")]
+    [InlineData("包裏1:新竹物流#5000000001")]
+    [InlineData("包里1:新竹物流#5000000001")]
+    public void Reads_the_carrier_whatever_glyph_follows_the_package_word(string line)
+    {
+        var problems = new List<string>();
+        var order = ShopeeScreenshot.ParseOrder(ShopeeScreenshot.MergeLines(
+            [B("訂單編號", 64, 50), B("2610000TEST01A", 65, 87), B("運送資訊", 64, 131), B(line, 65, 173, 290)]), problems);
+        Assert.Equal("新竹物流", order.Carrier);
+        Assert.Equal("5000000001", order.TrackingNumber);
+        Assert.Empty(problems);
+    }
+
+    [Theory]
     [InlineData("2610000TEST01A", false)]
     [InlineData("2610000TESST01A", true)]
     [InlineData("26100TEST01AB", true)]

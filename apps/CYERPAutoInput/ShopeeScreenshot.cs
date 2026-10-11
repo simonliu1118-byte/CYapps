@@ -119,8 +119,9 @@ internal static partial class ShopeeScreenshot
         var tracking = string.Empty;
         foreach (var line in lines)
         {
-            // 「包裏」 is how the OCR often reads 「包裹」 (2026-10-11).
-            var text = Compact(line.Text).Replace('＃', '#').Replace("包裏", "包裹");
+            // The OCR reads 「包裹」 as 「包裏」 or 「包里」 (2026-10-11): any one glyph after 包,
+            // then the package number and a colon, marks the line.
+            var text = PackagePattern().Replace(Compact(line.Text).Replace('＃', '#'), "包裹");
             var hash = text.IndexOf('#');
             var head = hash >= 0 ? text[..hash] : text;
             if (head.StartsWith("包裹", StringComparison.Ordinal) && carrier.Length == 0)
@@ -633,6 +634,9 @@ internal static partial class ShopeeScreenshot
 
     [GeneratedRegex(@"^[0-9A-Z]{10,20}$")]
     private static partial Regex OrderSnPattern();
+
+    [GeneratedRegex(@"^包\S(?=\d*[:：])")]
+    private static partial Regex PackagePattern();
 
     [GeneratedRegex(@"^\d{6}[0-9A-Z]{8}$")]
     private static partial Regex OrderSnFormatPattern();
