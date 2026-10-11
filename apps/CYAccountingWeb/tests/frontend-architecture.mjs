@@ -14,6 +14,7 @@ const html = read('public/index.html');
 const appJs = read('public/app.js');
 const ledgerTools = read('public/ledger-tools.js');
 const adaptiveUi = read('public/adaptive-ui.js');
+assert.doesNotMatch(adaptiveUi, /setupAdaptiveUserIdentity|setupEntryUiRoleMedal|syncEntryUiRoleMedal/, 'Auth owns identity rendering and role classes; Adaptive UI must not clear or rebuild them');
 const quickEntry = read('public/quick-entry.js');
 const inlineEdit = read('public/ledger-inline-edit.js');
 const inputConfirmation = read('public/input-confirmation.js');
