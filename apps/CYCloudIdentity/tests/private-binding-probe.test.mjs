@@ -58,7 +58,7 @@ for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1
     assert.equal(config.d1_databases, undefined);
     assert.equal(fs.statSync(args[3]).mode & 0o777, 0o600);
     exists = true;
-    if (failure === 'deploy') throw new Error('synthetic raw deployment failure');
+    if (failure === 'deploy') throw Object.assign(new Error('raw private deployment details'), { stderr: 'Private worker name and settings; [code: 10000]' });
   };
   const fetcher = async (url, args = {}) => {
     const p = new URL(url).pathname; const method = args.method ?? 'GET'; operations.push({ p, method });
@@ -82,7 +82,7 @@ for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1
   };
   try {
     if (failure === 'none') await main(env, fetcher, command, original);
-    else await assert.rejects(main(env, fetcher, command, original));
+    else await assert.rejects(main(env, fetcher, command, original), failure === 'deploy' ? /PROBE_UPLOAD_FAILED_10000/ : undefined);
     assert.equal(deleted, !['wrong-owner', 'wrong-target', 'new-d1'].includes(failure));
     assert.equal(fs.readdirSync(directory).length, 0);
     assert.equal(operations.filter(x => x.method !== 'GET').every(x => x.p.includes('/workers/scripts/cyid-binding-probe-')), true);
