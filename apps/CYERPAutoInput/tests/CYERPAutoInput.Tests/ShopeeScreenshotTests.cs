@@ -165,6 +165,40 @@ public class ShopeeScreenshotTests
         Assert.Equal([new ImportedItem("X00579-1", "3", "39.67")], result.Order!.Items);
     }
 
+    // As the PC read it (2026-10-11): no header row and the 數量 "1" missed, so only the
+    // 單價 and 小計 columns have numbers; the 小計 used to be taken as the quantity.
+    private static List<OcrBox> NoHeaderMissingQuantity() =>
+    [
+        B("1", 43, 57, 7, 13), B("450", 752, 56, 28, 15), B("450", 912, 56, 27, 15),
+        B("商品選項貨號：X00086", 157, 90, 160)
+    ];
+
+    [Fact]
+    public void Does_not_take_the_subtotal_for_a_missed_quantity()
+    {
+        var lines = ShopeeScreenshot.MergeLines(NoHeaderMissingQuantity());
+        var probe = Assert.Single(ShopeeScreenshot.MissingCellProbes(lines, 990, 160));
+        Assert.Equal("數量", probe.Purpose);
+        Assert.InRange(probe.Left + probe.Width / 2, 820, 870);
+
+        List<OcrBox> amounts = [B("訂單金額", 752, 64), B("NT$450", 922, 65, 55), B("買家總支付金額", 706, 140), B("NT$450", 889, 137, 60)];
+        var result = Read(OrderShot(), [NoHeaderMissingQuantity()], amounts);
+        Assert.Equal([new ImportedItem("X00086", "1", "450")], result.Order!.Items);
+        Assert.Contains(result.Problems, p => p.Contains("已依小計推算為 1", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Reads_the_quantity_column_once_the_reread_finds_it()
+    {
+        var lines = ShopeeScreenshot.MergeLines(NoHeaderMissingQuantity());
+        lines.Add(new OcrBox("1", 844, 57, 7, 13));
+        var problems = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 990, problems);
+        Assert.Empty(problems);
+        Assert.Equal([new ShopeeShotItem(1, "X00086", 450, 1, 450)], items);
+        Assert.Equal([new ShopeeShotGroup(1, 450, 450)], groups);
+    }
+
     [Fact]
     public void Proposes_rereading_lone_digits_the_detector_missed()
     {

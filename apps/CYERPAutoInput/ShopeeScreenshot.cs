@@ -151,26 +151,22 @@ internal static partial class ShopeeScreenshot
             .OrderBy(l => l.Top)
             .ToList();
 
-        // Columns of the numbers in the right half: 單價, 數量, 小計 from left to right.
+        // Numbers in the right half, each assigned to the nearest 單價／數量／小計 column.
         var numbers = lines
             .Where(l => l.CenterX > imageWidth * 0.5 && TryNumber(l.Text, out _, digitsOnly: true))
             .Select(l => (Box: l, Value: decimal.Parse(Compact(l.Text), CultureInfo.InvariantCulture)))
             .ToList();
-        var columns = new List<List<(OcrBox Box, decimal Value)>>();
-        foreach (var n in numbers.OrderBy(n => n.Box.CenterX))
-        {
-            var column = columns.FirstOrDefault(c => Math.Abs(c.Average(x => x.Box.CenterX) - n.Box.CenterX) <= 40);
-            if (column is null) columns.Add([n]);
-            else column.Add(n);
-        }
-        if (columns.Count < 2)
+        var layout = ResolveColumns(lines, imageWidth);
+        if (layout is null)
         {
             problems.Add("明細截圖讀不到單價與數量欄；截圖請包含右側的單價、數量、小計。");
             return (items, groups);
         }
-        var unitColumn = columns[0];
-        var quantityColumn = columns[1];
-        var subtotalColumn = columns.Count >= 3 ? columns[2] : [];
+        List<(OcrBox Box, decimal Value)> InColumn(double? x) => x is not { } cx ? []
+            : numbers.Where(n => Math.Abs(n.Box.CenterX - cx) <= ColumnTolerance && layout.Nearest(n.Box.CenterX) == cx).ToList();
+        var unitColumn = InColumn(layout.Unit);
+        var quantityColumn = InColumn(layout.Quantity);
+        var subtotalColumn = InColumn(layout.Subtotal);
 
         int GroupOf(int centerY) => anchors.Count == 0 ? 0
             : int.Parse(Compact(anchors.OrderBy(a => Math.Abs(a.CenterY - centerY)).First().Text), CultureInfo.InvariantCulture);
@@ -178,6 +174,16 @@ internal static partial class ShopeeScreenshot
         var codeLines = lines.Where(l => CodeLabelPattern().IsMatch(Compact(l.Text))).OrderBy(l => l.Top).ToList();
         var previousBottom = int.MinValue;
         var used = new HashSet<OcrBox>();
+        var noQuantity = new List<(int Group, string RawCode, decimal Unit)>();
+        void AddItem(int group, string rawCode, decimal unit, decimal quantity)
+        {
+            var (code, multiplier) = SplitSet(rawCode);
+            if (code.Length == 0) problems.Add("有一項商品讀不到商品選項貨號。");
+            // A set price that does not divide evenly is entered to 2 decimals (119 ÷ 3 → 39.67;
+            // user, 2026-10-11); checks keep using the screenshot's own amount.
+            var setUnit = Math.Round(unit / multiplier, 2, MidpointRounding.AwayFromZero);
+            items.Add(new ShopeeShotItem(group, code, setUnit, quantity * multiplier, unit * quantity));
+        }
         foreach (var codeLine in codeLines)
         {
             var bandTop = previousBottom;
@@ -188,20 +194,20 @@ internal static partial class ShopeeScreenshot
             var unit = Pick(unitColumn);
             var quantity = Pick(quantityColumn);
             var rawCode = CodeAfterLabel(codeLine, lines);
-            if (unit is null || quantity is null)
+            if (unit is null)
             {
                 problems.Add($"商品「{rawCode}」讀不到單價或數量。");
                 continue;
             }
             used.Add(unit.Value.Box);
+            if (quantity is null)
+            {
+                // Settled below from the 小計 once the groups are known.
+                noQuantity.Add((GroupOf(unit.Value.Box.CenterY), rawCode, unit.Value.Value));
+                continue;
+            }
             used.Add(quantity.Value.Box);
-            var (code, multiplier) = SplitSet(rawCode);
-            if (code.Length == 0) problems.Add("有一項商品讀不到商品選項貨號。");
-            // A set price that does not divide evenly is entered to 2 decimals (119 ÷ 3 → 39.67;
-            // user, 2026-10-11); checks keep using the screenshot's own amount.
-            var setUnit = Math.Round(unit.Value.Value / multiplier, 2, MidpointRounding.AwayFromZero);
-            items.Add(new ShopeeShotItem(GroupOf(unit.Value.Box.CenterY), code,
-                setUnit, quantity.Value.Value * multiplier, unit.Value.Value * quantity.Value.Value));
+            AddItem(GroupOf(unit.Value.Box.CenterY), rawCode, unit.Value.Value, quantity.Value.Value);
         }
         if (unitColumn.Any(n => !used.Contains(n.Box)))
             problems.Add("明細有商品讀不到商品選項貨號，請核對截圖。");
@@ -212,6 +218,21 @@ internal static partial class ShopeeScreenshot
             var values = subtotalColumn.Where(n => GroupOf(n.Box.CenterY) == index).OrderBy(n => n.Box.Top).Select(n => n.Value).ToList();
             if (values.Count == 0) { problems.Add($"第 {index} 項讀不到小計。"); continue; }
             groups.Add(new ShopeeShotGroup(index, values[0], values[^1]));
+        }
+
+        // A 數量 the detector and the re-read both missed (a lone "1"; user's PC, 2026-10-11).
+        // When the product is alone under its 編號, its 小計 (original) ÷ 單價 is the quantity;
+        // otherwise the user fills it in on the form.
+        foreach (var (group, rawCode, unit) in noQuantity)
+        {
+            var subtotal = groups.FirstOrDefault(g => g.Index == group);
+            var alone = items.All(i => i.Group != group) && noQuantity.Count(n => n.Group == group) == 1;
+            if (alone && subtotal is not null && unit > 0 && subtotal.Original % unit == 0 && subtotal.Original / unit is > 0 and var derived)
+            {
+                AddItem(group, rawCode, unit, derived);
+                problems.Add($"商品「{rawCode}」讀不到數量，已依小計推算為 {Number(derived)}，請核對。");
+            }
+            else problems.Add($"商品「{rawCode}」讀不到數量，請在表單補上該商品。");
         }
         return (items, groups);
     }
@@ -226,22 +247,15 @@ internal static partial class ShopeeScreenshot
     public static List<CellProbe> MissingCellProbes(IReadOnlyList<OcrBox> lines, int imageWidth, int imageHeight)
     {
         var probes = new List<CellProbe>();
-        double? Header(string name) => lines.FirstOrDefault(l => Compact(l.Text) == name)?.CenterX;
         var numbers = lines.Where(l => l.CenterX > imageWidth * 0.5 && TryNumber(l.Text, out _, digitsOnly: true)).ToList();
-        var clusters = new List<List<OcrBox>>();
-        foreach (var n in numbers.OrderBy(n => n.CenterX))
-        {
-            var cluster = clusters.FirstOrDefault(c => Math.Abs(c.Average(x => x.CenterX) - n.CenterX) <= 40);
-            if (cluster is null) clusters.Add([n]);
-            else cluster.Add(n);
-        }
-        double? ClusterX(int i) => clusters.Count > i ? clusters[i].Average(x => x.CenterX) : null;
-        var unitX = Header("單價") ?? ClusterX(0);
-        var quantityX = Header("數量") ?? (clusters.Count >= 2 ? ClusterX(1) : null);
-        var subtotalX = Header("小計") ?? (clusters.Count >= 3 ? ClusterX(2) : null);
+        var layout = ResolveColumns(lines, imageWidth);
+        if (layout is null) return probes;
+        var unitX = layout.Unit;
+        var quantityX = layout.Quantity;
+        var subtotalX = layout.Subtotal;
         var anchors = lines.Where(l => l.CenterX < imageWidth * 0.2 && TryNumber(l.Text, out _, digitsOnly: true) && Compact(l.Text).Length <= 3).ToList();
-        var anchorX = Header("編") ?? (anchors.Count > 0 ? anchors.Average(a => a.CenterX) : imageWidth * 0.05);
-        if (unitX is null) return probes;
+        var anchorX = lines.FirstOrDefault(l => Compact(l.Text) == "編")?.CenterX
+            ?? (anchors.Count > 0 ? anchors.Average(a => a.CenterX) : imageWidth * 0.05);
 
         bool HasNumberAt(IEnumerable<OcrBox> boxes, double x, int y, int tolerance) =>
             boxes.Any(b => TryNumber(b.Text, out _, digitsOnly: true) && Math.Abs(b.CenterX - x) <= 40 && Math.Abs(b.CenterY - y) <= tolerance);
@@ -252,7 +266,7 @@ internal static partial class ShopeeScreenshot
             return new CellProbe(left, top, Math.Min(halfWidth * 2, imageWidth - left), Math.Min(height * 2, imageHeight - top), purpose);
         }
 
-        foreach (var unit in numbers.Where(n => Math.Abs(n.CenterX - unitX.Value) <= 40))
+        foreach (var unit in numbers.Where(n => Math.Abs(n.CenterX - unitX) <= ColumnTolerance && layout.Nearest(n.CenterX) == unitX))
         {
             var tolerance = Math.Max(10, unit.Height);
             if (quantityX is { } qx && !HasNumberAt(lines, qx, unit.CenterY, tolerance))
@@ -260,7 +274,7 @@ internal static partial class ShopeeScreenshot
         }
         if (subtotalX is { } sx)
         {
-            var cells = numbers.Where(n => Math.Abs(n.CenterX - sx) <= 40).OrderBy(n => n.Top).ToList();
+            var cells = numbers.Where(n => Math.Abs(n.CenterX - sx) <= ColumnTolerance).OrderBy(n => n.Top).ToList();
             // The upper number of a 小計 cell (a struck-out original sits just below it).
             var tops = cells.Where(c => !cells.Any(o => o != c && o.Top < c.Top && c.Top - o.Top <= 30)).ToList();
             foreach (var top in tops)
@@ -268,6 +282,62 @@ internal static partial class ShopeeScreenshot
                     probes.Add(Probe(anchorX, top.CenterY, Math.Max(12, top.Height), 25, "編號"));
         }
         return probes;
+    }
+
+    private const int ColumnTolerance = 40;
+
+    /// <summary>Center x of the 單價／數量／小計 columns; 數量 or 小計 is null when not on the screenshot.</summary>
+    internal sealed record ColumnLayout(double Unit, double? Quantity, double? Subtotal)
+    {
+        public double Nearest(double x) =>
+            new[] { Unit, Quantity, Subtotal }.OfType<double>().OrderBy(c => Math.Abs(c - x)).First();
+    }
+
+    /// <summary>
+    /// The 單價／數量／小計 columns, from the header when it is on the screenshot. Without a
+    /// header they come from the numbers' positions, and a missing column must not shift the
+    /// others: with only two number columns the right one is 小計 when it carries a struck-out
+    /// original or sits about two column widths from 單價 — a 數量 "1" the detector missed made
+    /// the 小計 read as the quantity (450 × 450; user's PC, 2026-10-11).
+    /// </summary>
+    internal static ColumnLayout? ResolveColumns(IReadOnlyList<OcrBox> lines, int imageWidth)
+    {
+        double? Header(string name) => lines.FirstOrDefault(l => Compact(l.Text) == name && l.CenterX > imageWidth * 0.5)?.CenterX;
+        var numbers = lines.Where(l => l.CenterX > imageWidth * 0.5 && TryNumber(l.Text, out _, digitsOnly: true)).ToList();
+        var clusters = new List<List<OcrBox>>();
+        foreach (var n in numbers.OrderBy(n => n.CenterX))
+        {
+            var cluster = clusters.FirstOrDefault(c => Math.Abs(c.Average(x => x.CenterX) - n.CenterX) <= ColumnTolerance);
+            if (cluster is null) clusters.Add([n]);
+            else cluster.Add(n);
+        }
+
+        var unitHeader = Header("單價");
+        var quantityHeader = Header("數量");
+        var subtotalHeader = Header("小計");
+        if (unitHeader is { } hu && (quantityHeader is not null || subtotalHeader is not null))
+        {
+            // Header columns are spaced alike; one the OCR missed sits midway or one step on.
+            var hq = quantityHeader ?? (hu + subtotalHeader!.Value) / 2;
+            var hs = subtotalHeader ?? hq + (hq - hu);
+            return new ColumnLayout(hu, hq, hs);
+        }
+
+        if (clusters.Count == 0) return null;
+        double X(List<OcrBox> c) => c.Average(b => b.CenterX);
+        if (clusters.Count >= 3) return new ColumnLayout(X(clusters[0]), X(clusters[1]), X(clusters[2]));
+        if (clusters.Count == 1) return null;
+
+        var (left, right) = (clusters[0], clusters[1]);
+        var gap = X(right) - X(left);
+        var height = numbers.Select(n => (double)n.Height).OrderBy(h => h).ElementAt(numbers.Count / 2);
+        // A 小計 cell with a promotion shows the price and the struck-out original stacked.
+        var stacked = right.Any(c => right.Any(o => o != c && o.Top < c.Top && c.Top - o.Top <= Math.Max(30, height * 2.5)));
+        // Neighbouring columns are about 5 text heights apart (單價 → 數量 → 小計).
+        var wide = gap > height * 7.5;
+        return stacked || wide
+            ? new ColumnLayout(X(left), X(left) + gap / 2, X(right))
+            : new ColumnLayout(X(left), X(right), null);
     }
 
     /// <summary>The code after 「商品選項貨號：」, or the next box on the row when OCR split it off.</summary>
@@ -369,6 +439,14 @@ internal static partial class ShopeeScreenshot
 
         var promotion = lines.Sum(l => l.Amount) - amounts.OrderAmount;
         if (promotion < 0) problems.Add($"單價×數量合計低於訂單金額 {Number(-promotion)}，請核對明細。");
+        // A 促銷組合 is only as right as the products' 單價×數量: when that disagrees with the
+        // 小計 originals (a misread quantity), leave the line out rather than enter a wild amount.
+        var itemsAgree = missing.Count == 0 && subtotals.Count > 0 && subtotals.Sum(g => g.Original) == lines.Sum(l => l.Amount);
+        if (promotion > 0 && !itemsAgree)
+        {
+            problems.Add($"明細數字對不起來，沒有加入促銷組合（推算 {Number(promotion)}），請核對數量後在表單補上。");
+            promotion = 0;
+        }
         void AddLine(string code, decimal price, string what)
         {
             if (code.Length == 0) problems.Add($"請在設定填入{what}品號（本張有{what} {Number(price)}）。");

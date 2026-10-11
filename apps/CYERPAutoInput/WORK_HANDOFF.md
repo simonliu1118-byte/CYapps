@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-10（V0.2.0 Build 23）  
+> 更新：2026-10-10（V0.2.0 Build 24）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -45,6 +45,7 @@
 
 尚未實機確認：
 
+- Build 24：Build 23 實測（使用者 2026-10-11）：明細截圖無表頭＋數量「1」漏讀 → `probes=0`，小計欄被當數量，促銷組合 = 450×450−450。`ShopeeScreenshot.ResolveColumns` 統一欄位判定（表頭優先；兩欄時以欄距 >7.5 字高或劃線原價判定右欄為小計）；仍缺數量時單一商品編號以小計÷單價推算；Σ單價×數量 ≠ Σ小計原價時不加促銷組合列。
 - Build 23：Build 22 實測（使用者 2026-10-11）：C# 偵測漏掉明細第一列的編號「1」與數量「1」（Python 同模型讀得到），改為缺格裁切重讀（recognizer-only）；LOG `detail cells re-read probes= recovered=`。
 - Build 22：蝦皮截圖輸入（OCR）。開發環境以使用者提供的 5 組真實截圖驗證解析（含促銷組合多商品、套組 x2／x3、蝦幣、OCR 把「貨」讀成「货」、「選」讀成「项」、0 讀成 O）；實機 OCR 走 C# RapidOCRSharp，字框粒度可能不同，以 MergeLines 合併。套組規則使用者表示之後有訂單再補充。員工代號開程式詢問。
 - Build 21：統編查名（經濟部公司 API 已在開發環境以公開大公司統編驗證可回傳名稱；商號 API 當時網站忙碌未驗證，欄位依官方名稱 President_No／Business_Name，查無即留空）、客戶全名不強制、設定 Enter 跳欄、貨運別排序。
