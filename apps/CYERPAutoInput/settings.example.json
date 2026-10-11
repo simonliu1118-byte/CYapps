@@ -1,21 +1,23 @@
 {
-  "version": 1,
-  "combos": {
-    "delivery_slot": {
-      "selected": "",
-      "options": []
-    },
-    "inv_copies": {
-      "selected": "",
-      "options": []
-    },
-    "tax_type": {
-      "selected": "",
-      "options": []
-    },
-    "customs": {
-      "selected": "",
-      "options": []
-    }
-  }
+  "Version": 1,
+  "AdvancedMode": false,
+  "AutoSave": false,
+  "AutoPrint": false,
+  "FirstRowWarehouseEnabled": false,
+  "FirstRowWarehouse": "",
+  "ShopeeOrderType": "",
+  "ShopeeCustomerCode": "",
+  "ShopeeNotePrefix": "蝦皮訂單",
+  "MoOrderType": "",
+  "MoCustomerCode": "",
+  "MoNotePrefix": "MO店+訂單",
+  "MoPasswordProtected": "",
+  "CoupangOrderType": "",
+  "CoupangCustomerCode": "",
+  "CoupangNotePrefix": "酷澎訂單",
+  "DiscountItemCode": "",
+  "ShippingItemCode": "",
+  "PromotionItemCode": "",
+  "FreightTypes": {},
+  "Defaults": {}
 }

@@ -30,9 +30,11 @@ public sealed class InvoiceDetailRefreshService
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
             var stored = repository.Invoices.LoadOrCreate().SingleOrDefault(record => record.Id == selected.Id)
                 ?? throw new InvalidOperationException("本機找不到這筆發票紀錄，請重新整理清單");
+            if (stored.InvoiceState == InvoiceStates.Failed)
+                throw new InvalidOperationException("這筆是開立失敗紀錄，不能以既有發票回查改成已開立；請依失敗紀錄流程處理");
+            await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
             var account = CurrentAccount();
             if (stored.Environment.Trim().Length != 0 &&
                 !string.Equals(stored.Environment, account.Environment, StringComparison.Ordinal))
