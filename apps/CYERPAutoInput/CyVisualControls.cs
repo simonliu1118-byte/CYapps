@@ -20,11 +20,11 @@ internal static class CyDrawing
 internal static class CyButtonGeometry
 {
     /// <summary>
-    /// Corner radius for every CY button. The visual guide's WinForms reference is ~2 px,
-    /// which reads as square on the user's Windows; the user asked for visibly rounded
-    /// buttons (2026-10-11), matching CYInvoice's 6–7 px.
+    /// Corner radius for every CY button: the visual guide's WinForms reference ~2 px.
+    /// Secondary buttons are owner-painted with the same radius so the whole row matches
+    /// (user, 2026-10-11; 6 px in Build 18 was too round).
     /// </summary>
-    internal const float Radius = 6f;
+    internal const float Radius = 2f;
 
     /// <summary>Paint inset: 1 px horizontal safety, ~1.5 px vertical (reference geometry).</summary>
     internal static RectangleF Bounds(Control c) => new(1f, 1.5f, Math.Max(1f, c.Width - 3f), Math.Max(1f, c.Height - 4f));
@@ -32,8 +32,8 @@ internal static class CyButtonGeometry
 
 /// <summary>
 /// Ordinary (secondary) CY button: a native WinForms Button with owner-painted appearance
-/// only (CY WinForms theme-button reference) so its rounded corners match the themed
-/// buttons; click, keyboard, focus and accessibility stay native.
+/// only (CY WinForms theme-button reference) so its corners match the themed buttons;
+/// click, keyboard, focus and accessibility stay native.
 /// </summary>
 internal class CyButton : Button
 {
