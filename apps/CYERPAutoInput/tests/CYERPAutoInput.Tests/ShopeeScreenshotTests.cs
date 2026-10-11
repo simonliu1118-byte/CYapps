@@ -260,6 +260,28 @@ public class ShopeeScreenshotTests
     }
 
     [Fact]
+    public void Reads_misread_index_glyphs_and_skips_thumbnail_print()
+    {
+        // The PC's boxes (diagnostic log, 2026-10-11): 編號 "1" read as "-", "2" as "乙", and a
+        // thumbnail's 「5號杯」 read as "5" beside group 2.
+        List<OcrBox> items =
+        [
+            B("Any2enjoy1%off", 63, 23, 111, 19), B("30", 777, 85, 16, 17), B("1", 861, 87, 7, 12),
+            B("5號择", 104, 114, 15, 6), B("商品選項貨號：X00005", 157, 128, 132, 15), B("145", 919, 128, 28, 19),
+            B("-", 54, 140, 7, 11), B("150", 923, 146, 21, 17), B("30", 781, 171, 11, 17), B("4", 861, 173, 8, 12),
+            B("G號", 104, 199, 11, 6), B("商品選項貨號：X00006", 157, 213, 131, 16), B("Any2enjoy1%off", 60, 266, 115, 19),
+            B("30", 777, 329, 19, 16), B("59", 929, 329, 17, 17), B("2", 860, 330, 9, 14), B("乙", 52, 339, 10, 13),
+            B("60", 934, 348, 9, 13), B("5", 103, 355, 11, 9), B("商品選項貨號：X00005", 155, 370, 133, 17)
+        ];
+        List<OcrBox> amounts = [B("訂單金額", 752, 64), B("NT$204", 922, 65, 55), B("買家總支付金額", 706, 140), B("NT$204", 889, 137, 60)];
+        var result = Read(OrderShot(), [items], amounts);
+        Assert.Empty(result.Problems);
+        Assert.Equal(
+            [new ImportedItem("X00005", "3", "30"), new ImportedItem("X00006", "4", "30"), new ImportedItem("P900", "1", "-6")],
+            result.Order!.Items);
+    }
+
+    [Fact]
     public void Proposes_rereading_lone_digits_the_detector_missed()
     {
         // As the PC read it: the 編號 "1" and the 數量 "1" of the first row are missing.

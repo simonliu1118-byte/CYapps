@@ -302,9 +302,22 @@ internal static partial class ShopeeScreenshot
     /// </summary>
     private static List<OcrBox> IndexAnchors(IReadOnlyList<OcrBox> lines, int imageWidth)
     {
+        // The 編號 glyph alone is often misread: "1" as "-", "2" as "乙" (user's PC, 2026-10-11).
         var candidates = lines
-            .Where(l => l.CenterX < imageWidth * 0.2 && TryNumber(l.Text, out _, digitsOnly: true) && Compact(l.Text).Length <= 3)
+            .Where(l => l.CenterX < imageWidth * 0.2)
+            .Select(l => TryIndexDigits(l.Text, out var digits) ? l with { Text = digits } : null)
+            .OfType<OcrBox>()
             .ToList();
+        // Product thumbnails sit between 編號 and the product text and carry small print
+        // (「5號杯」 read as "5"); a 編號 is well left of them, about 6 text heights before the
+        // product text, a thumbnail's print about 3.
+        var codes = lines.Where(l => CodeLabelPattern().IsMatch(Compact(l.Text))).ToList();
+        if (codes.Count > 0)
+        {
+            var textLeft = codes.Min(c => c.Left);
+            var textHeight = codes.Select(c => (double)c.Height).OrderBy(h => h).ElementAt(codes.Count / 2);
+            candidates = candidates.Where(c => textLeft - c.CenterX >= textHeight * 4).ToList();
+        }
         // Shopee centres the 編號 and the 小計 in the same cell, so a real 編號 lines up with a
         // 小計 number; stray digits elsewhere in the column made up a 「第 5 項」 (user's PC,
         // 2026-10-11). Without a 小計 column, it must at least sit beside a product.
@@ -542,6 +555,19 @@ internal static partial class ShopeeScreenshot
     }
 
     /// <summary>A re-read cell as digits: OCR's look-alikes of 1 and 0 are mapped; anything else is rejected.</summary>
+    /// <summary>A 編號 as OCR reads the lone glyph: digits, or a look-alike of 1 or 2.</summary>
+    internal static bool TryIndexDigits(string text, out string digits)
+    {
+        var compact = Compact(text);
+        digits = compact switch
+        {
+            "-" or "一" or "—" or "－" => "1",
+            "乙" or "Z" or "z" => "2",
+            _ => compact
+        };
+        return TryNumber(digits, out _, digitsOnly: true) && digits.Length <= 3;
+    }
+
     internal static bool TryProbeDigits(string text, out string digits)
     {
         var mapped = new string(Compact(text).Select(c => c switch
