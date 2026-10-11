@@ -385,3 +385,6 @@ Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID f
 
 
 最新 actual #19（38122167283）唯讀確認 active Built-in／CYID disabled／原Cloud0.9.2／D1／1 Workspace／4 Device／FK，#19 before/after captured Workspace／Device hashes／employee/history 保留。source #396 全六項 distinct CI 通過並合併，與 preflight9724611d為同一 tree86957505。殘留1個 expired／undeployed／no-D1 probe；mutation／新probe／migration／restore／authority switch皆未執行。原 Built-in 可以續用，但 delete403／cleanup、transport獨立proof、approved scope／原WindowsDevice positive authorization及正式切換仍未通過。詳見 Provider DEVELOPMENT_DEPLOYMENT 最新 actual evidence；不得以重跑舊 #17 或 reset/rejoin 解決。
+
+
+2026-10-11 管理端受控清理接續：使用者明確同意並已儲存暫時 Workers Admin 權限，本次作業完成後移除；這是一次性操作授權，不是永久 Token policy。截圖顯示原 Workers Editor 可上傳既有版本但未含 Admin，無 expiry／IP 限制；不可先把單一版本 DELETE 403 宣稱已解決。沿用唯一 private-binding-probe controller，新增 retained-version-cleanup CLI 與同一 CYInvoice development workflow 的 binding-cleanup mode／專用 branch。此入口不 bundle／upload／deploy，只允許清理 checkpoint 中唯一已過期、nonce／完整 UUID／同 Provider 雙 bindings／僅 probe Secret／無 D1 的未部署版本，刪除前重查 original 100% traffic，刪除後確認 GET 404／清單 absence／原 active bindings及routes，workflow always-run history／health 核對。Fresh probe 與 retained cleanup 共用同一刪除 owner，不重跑歷史 #17、不刪 Worker、不重設 Workspace／Device、不切 CYID。先完成精確 source CI，再執行 actual cleanup 與 current guarded transport proof；真實權限／Windows／最終切換仍待驗收，VERSION／BUILD／consumer contract 不變。
