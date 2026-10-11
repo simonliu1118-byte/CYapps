@@ -381,4 +381,7 @@ Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID f
 這一步只能證明 default Fetcher／named RPC transport／deny；protected approved scope 齊全且原 Workspace fingerprint 相符時，可額外確認 Workspace/Application enablement。缺值即 unknown，不猜配對、不直接讀 CYID D1。真實 Employee／App Access／Role、原 Windows Device continuity、離線／撤銷及正式切換仍須獨立验收。具體工具／actual-run 證據見 CYCloudIdentity DEVELOPMENT_DEPLOYMENT；待辦唯一入口仍為 CYInvoice TODO §7.3.3。
 
 
-受控 #17（38121460188）上傳成功但 owned-version delete 403，尚未通過 cleanup；無獨立 request proof，不計 transport／scope 成功。Audit 現行修正：固定實際 100% active deployment/version bindings，不能把 latest-upload `/settings` 當 runtime D1／Secrets。Retained probe 未清除前禁止再上傳與一般部署；唯讀核對原 active Cloud／history／expiration 後另補 actual evidence。原 authority 仍 Built-in，沒有正式切換或原裝置 reset。
+受控 #17（38121460188）上傳成功但 owned-version delete 403，尚未通過 cleanup；無獨立 request proof，不計 transport／scope 成功。Audit 現行修正：固定實際 100% active deployment/version bindings，不能把 latest-upload `/settings` 當 runtime D1／Secrets。Retained probe 未清除前禁止再上傳與一般部署；唯讀核對原 active Cloud／history／expiration 已在 #19 通過。原 authority 仍 Built-in，沒有正式切換或原裝置 reset。
+
+
+最新 actual #19（38122167283）唯讀確認 active Built-in／CYID disabled／原Cloud0.9.2／D1／1 Workspace／4 Device／FK，#19 before/after captured Workspace／Device hashes／employee/history 保留。source #396 全六項 distinct CI 通過並合併，與 preflight9724611d為同一 tree86957505。殘留1個 expired／undeployed／no-D1 probe；mutation／新probe／migration／restore／authority switch皆未執行。原 Built-in 可以續用，但 delete403／cleanup、transport獨立proof、approved scope／原WindowsDevice positive authorization及正式切換仍未通過。詳見 Provider DEVELOPMENT_DEPLOYMENT 最新 actual evidence；不得以重跑舊 #17 或 reset/rejoin 解決。
