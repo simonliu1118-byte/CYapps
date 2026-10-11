@@ -180,59 +180,89 @@ internal sealed class ErpAutomationService
             _log.Warn("print", $"direct print skipped document={_log.Value(result.DocumentKey)} reason={reason}");
         }
 
-        if (!Win32Automation.PrepareForeground(root, _log)) { Skip("無法把 COPI08 帶到前景，未列印"); return; }
-        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0 || DetectMode(root) != ErpMode.Browse)
+        // ERP keeps working for a while after the save shows browse mode, and how long varies
+        // (user, 2026-10-11): 列印 may be greyed out or ignore a click. So the whole
+        // 列印 → 直接列印 step is retried until it lands or the time is up.
+        var deadline = Environment.TickCount64 + 20000;
+        var attempt = 0;
+        var lastReason = string.Empty;
+        await Delay(500, cancellationToken);
+        while (Environment.TickCount64 < deadline)
         {
-            Skip("ERP 不在檢視狀態或有其他視窗，未列印");
-            return;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (attempt++ > 0) await Delay(800, cancellationToken);
+            var outcome = await TryDirectPrintOnceAsync(root, attempt, cancellationToken);
+            if (outcome.Length == 0)
+            {
+                result.Printed = true;
+                _log.Info("print", $"direct print requested document={_log.Value(result.DocumentKey)} attempt={attempt}");
+                break;
+            }
+            lastReason = outcome;
+            _log.Info("print", $"direct print attempt={attempt} not yet: {outcome}");
         }
-        if (!NativeMethods.GetWindowRect(root, out var window)) { Skip("讀不到 COPI08 視窗位置，未列印"); return; }
+        if (!result.Printed) { Skip($"{lastReason}（重試 {attempt} 次、20 秒），未列印"); return; }
+
+        // Let ERP hand the job to the printer; a window it opens is logged and left alone.
+        await Delay(1500, cancellationToken);
+        var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
+        if (peers.Count > 0) LogPeerWindows("after-direct-print", peers);
+    }
+
+    /// <summary>
+    /// One 列印 → 直接列印 try. Returns empty when 直接列印 was clicked, else why not. A drop-down
+    /// left open without 直接列印 is closed with Esc only when ERP shows a popup window, so a
+    /// stray Esc never reaches COPI08 itself.
+    /// </summary>
+    private async Task<string> TryDirectPrintOnceAsync(nint root, int attempt, CancellationToken cancellationToken)
+    {
+        if (!Win32Automation.PrepareForeground(root, _log)) return "無法把 COPI08 帶到前景";
+        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0) return "ERP 有其他視窗開著";
+        if (DetectMode(root) != ErpMode.Browse) return "ERP 不在檢視狀態";
+        if (!NativeMethods.GetWindowRect(root, out var window)) return "讀不到 COPI08 視窗位置";
 
         // The Ribbon is the top strip of COPI08; 列印 sits in its left part.
         var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
         IReadOnlyList<OcrToken> tokens;
         using (var image = ScreenCapture.Capture(ribbon))
             tokens = await _textVision.RecognizeAsync(image, cancellationToken);
-        // Logged every time: Build 31 found no exact 「列印」 token on the user's PC
+        // Logged on the first try: Build 31 found no exact 「列印」 token on the user's PC
         // (2026-10-11) and the log could not show what the OCR read instead.
-        foreach (var t in tokens)
-            _log.Info("print", $"  ribbon token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
-        if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "列印") is not { } labelRect) { Skip("Ribbon 上找不到「列印」，未列印"); return; }
+        if (attempt == 1)
+            foreach (var t in tokens)
+                _log.Info("print", $"  ribbon token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
+        if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "列印") is not { } labelRect)
+            return "Ribbon 上找不到「列印」";
         var labelScreen = new Rectangle(ribbon.Left + labelRect.Left, ribbon.Top + labelRect.Top, labelRect.Width, labelRect.Height);
         cancellationToken.ThrowIfCancellationRequested();
         InputSender.Click(new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
-        _log.Info("print", "ribbon 列印 clicked");
+        _log.Info("print", $"ribbon 列印 clicked attempt={attempt}");
 
         // The drop-down opens below the button: 直接列印 / 預覽列印.
         var menu = new Rectangle(labelScreen.Left - 60, labelScreen.Bottom, 360, 200);
-        Rectangle? item = null;
-        var deadline = Environment.TickCount64 + 2000;
-        while (item is null && Environment.TickCount64 < deadline)
+        var menuDeadline = Environment.TickCount64 + 1500;
+        while (Environment.TickCount64 < menuDeadline)
         {
             await Delay(250, cancellationToken);
             using var image = ScreenCapture.Capture(menu);
             var menuTokens = await _textVision.RecognizeAsync(image, cancellationToken);
             // 「直接」 alone is enough: the other item is 「預覽列印」.
-            item = RibbonPrintLocator.FindWord(menuTokens.Select(t => (t.Text, t.Rect)).ToList(), "直接");
-            if (item is null)
+            if (RibbonPrintLocator.FindWord(menuTokens.Select(t => (t.Text, t.Rect)).ToList(), "直接") is { } item)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                InputSender.Click(new Point(menu.Left + item.Left + item.Width / 2, menu.Top + item.Top + item.Height / 2));
+                return string.Empty;
+            }
+            if (Environment.TickCount64 >= menuDeadline)
                 foreach (var t in menuTokens)
                     _log.Info("print", $"  menu token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
         }
-        if (item is null)
+        if (Win32Automation.FindVisibleProcessPeerWindows(root).Count > 0)
         {
             InputSender.Press(NativeMethods.VK_ESCAPE);
-            Skip("列印選單找不到「直接列印」，已關閉選單，未列印");
-            return;
+            await Delay(200, cancellationToken);
         }
-        cancellationToken.ThrowIfCancellationRequested();
-        InputSender.Click(new Point(menu.Left + item.Value.Left + item.Value.Width / 2, menu.Top + item.Value.Top + item.Value.Height / 2));
-        result.Printed = true;
-        _log.Info("print", $"direct print requested document={_log.Value(result.DocumentKey)}");
-
-        // Let ERP hand the job to the printer; a window it opens is logged and left alone.
-        await Delay(1500, cancellationToken);
-        var peers = Win32Automation.FindVisibleProcessPeerWindows(root);
-        if (peers.Count > 0) LogPeerWindows("after-direct-print", peers);
+        return "列印選單沒有出現「直接列印」";
     }
 
     private static string Compact(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
