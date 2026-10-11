@@ -4826,6 +4826,10 @@
   }
 }
 
+@media (min-width: 1360px) and (max-width: 1599px) {
+  html[data-viewport="desktop"] .cy-entry-rail { grid-row: 1 / span 2; }
+}
+
 @media (min-width: 1600px) {
   html[data-viewport="desktop"] .shell.cy-split-layout {
     grid-template-columns: clamp(320px, 18.75vw, 360px) minmax(820px, 1fr) clamp(320px, 18.75vw, 360px);
