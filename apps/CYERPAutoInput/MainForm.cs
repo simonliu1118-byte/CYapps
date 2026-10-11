@@ -844,6 +844,45 @@ internal sealed class MainForm : Form
         await PreviewAndRunAsync(MoOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
     }
 
+    private async Task ImportCoupangAsync()
+    {
+        if (_automationCts is not null) return;
+        var missing = new[]
+        {
+            _settings.CoupangOrderType.Length == 0 ? "酷澎銷貨單別" : null,
+            _settings.CoupangCustomerCode.Length == 0 ? "酷澎客戶代號" : null,
+            _settings.DiscountItemCode.Length == 0 ? "折價券品號" : null,
+            _settings.ShippingItemCode.Length == 0 ? "運費品號" : null
+        }.Where(x => x is not null).ToList();
+        if (missing.Count > 0)
+        {
+            MessageBox.Show(this, $"請先在「設定」填入{string.Join("、", missing)}。", "酷澎訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var path = PickExportFile("選擇酷澎訂單匯出檔（DeliveryList）", "Excel 活頁簿 (*.xlsx)|*.xlsx");
+        if (path is null) return;
+
+        CoupangImportResult parsed;
+        try
+        {
+            await using var stream = File.OpenRead(path);
+            parsed = CoupangOrderImport.Parse(XlsxReader.ReadFirstSheet(stream));
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or UnauthorizedAccessException)
+        {
+            _log.Warn("coupang", $"export read failed: {ex.GetType().Name}");
+            MessageBox.Show(this, $"無法讀取這個檔案：{ex.Message}", "酷澎訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        _log.Info("coupang", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
+
+        var mapping = new CoupangMapping(_settings.CoupangOrderType, _settings.CoupangCustomerCode, _settings.CoupangNotePrefix,
+            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes);
+        var orders = parsed.Orders.Select(o => CoupangOrderImport.ToImported(o, mapping)).ToList();
+        await PreviewAndRunAsync(CoupangOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
+    }
+
     private string? PickExportFile(string title, string filter)
     {
         using var dialog = new OpenFileDialog { Title = title, Filter = filter, CheckFileExists = true };
@@ -1290,10 +1329,8 @@ internal sealed class MainForm : Form
             button.Click += async (_, _) => await ImportShopeeAsync();
         else if (text == "MO店+")
             button.Click += async (_, _) => await ImportMoAsync();
-        else
-            button.Click += (_, _) => MessageBox.Show(this,
-                $"{text} 匯入尚未實作；入口固定保留。",
-                "訂單匯入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        else if (text == "酷澎商城")
+            button.Click += async (_, _) => await ImportCoupangAsync();
         return button;
     }
 

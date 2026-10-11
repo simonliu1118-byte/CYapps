@@ -20,6 +20,10 @@ internal sealed class UserSettings
     public string MoOrderType { get; set; } = string.Empty;
     public string MoCustomerCode { get; set; } = string.Empty;
     public string MoNotePrefix { get; set; } = "MO店+訂單";
+    /// <summary>酷澎 import: 銷貨單別, 客戶代號 and 備註 prefix (local only).</summary>
+    public string CoupangOrderType { get; set; } = string.Empty;
+    public string CoupangCustomerCode { get; set; } = string.Empty;
+    public string CoupangNotePrefix { get; set; } = "酷澎訂單";
     /// <summary>Shared by every platform: 折價券／運費品號 and carrier → ERP 貨運別 (local only).</summary>
     public string DiscountItemCode { get; set; } = string.Empty;
     public string ShippingItemCode { get; set; } = string.Empty;

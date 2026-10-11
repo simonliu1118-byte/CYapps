@@ -17,6 +17,9 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _moCustomerCode = new();
     private readonly TextBox _moNotePrefix = new();
     private readonly TextBox _moPassword = new();
+    private readonly TextBox _coupangOrderType = new();
+    private readonly TextBox _coupangCustomerCode = new();
+    private readonly TextBox _coupangNotePrefix = new();
     private readonly TextBox _discountItem = new();
     private readonly TextBox _shippingItem = new();
     private readonly Dictionary<string, TextBox> _freightCodes = [];
@@ -37,7 +40,7 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
-        Size = new Size(640, 600);
+        Size = new Size(640, 680);
         MinimumSize = new Size(600, 520);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
@@ -168,12 +171,17 @@ internal sealed class SettingsForm : Form
         var page = Page("平台匯入");
         _shopeeOrderType.MaxLength = 4;
         _moOrderType.MaxLength = 4;
+        _coupangOrderType.MaxLength = 4;
         _moPassword.UseSystemPasswordChar = true;
         _moPassword.PlaceholderText = _settings.MoPasswordProtected.Length > 0 ? "已設定，空白不變更" : string.Empty;
         // Docked to the top in reverse order: the last added sits highest.
         page.Controls.Add(Section("共用（所有平台）",
             ("折價券品號", _discountItem, _settings.DiscountItemCode, 120),
             ("運費品號", _shippingItem, _settings.ShippingItemCode, 120)));
+        page.Controls.Add(Section("酷澎",
+            ("銷貨單別", _coupangOrderType, _settings.CoupangOrderType, 80),
+            ("客戶代號", _coupangCustomerCode, _settings.CoupangCustomerCode, 120),
+            ("備註前綴", _coupangNotePrefix, _settings.CoupangNotePrefix, 150)));
         page.Controls.Add(Section("MO店+",
             ("銷貨單別", _moOrderType, _settings.MoOrderType, 80),
             ("客戶代號", _moCustomerCode, _settings.MoCustomerCode, 120),
@@ -301,6 +309,9 @@ internal sealed class SettingsForm : Form
         _settings.MoOrderType = _moOrderType.Text.Trim();
         _settings.MoCustomerCode = _moCustomerCode.Text.Trim();
         _settings.MoNotePrefix = _moNotePrefix.Text.Trim();
+        _settings.CoupangOrderType = _coupangOrderType.Text.Trim();
+        _settings.CoupangCustomerCode = _coupangCustomerCode.Text.Trim();
+        _settings.CoupangNotePrefix = _coupangNotePrefix.Text.Trim();
         _settings.DiscountItemCode = _discountItem.Text.Trim();
         _settings.ShippingItemCode = _shippingItem.Text.Trim();
         _settings.FreightTypes = _freightCodes

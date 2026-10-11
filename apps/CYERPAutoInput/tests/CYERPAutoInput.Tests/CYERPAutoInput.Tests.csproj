@@ -22,6 +22,7 @@
     <Compile Include="..\..\MoOrderImport.cs" Link="Linked\MoOrderImport.cs" />
     <Compile Include="..\..\ImportedOrder.cs" Link="Linked\ImportedOrder.cs" />
     <Compile Include="..\..\OrderLedger.cs" Link="Linked\OrderLedger.cs" />
+    <Compile Include="..\..\CoupangOrderImport.cs" Link="Linked\CoupangOrderImport.cs" />
   </ItemGroup>
 
   <ItemGroup>
