@@ -84,6 +84,7 @@ jobs:
         if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
         run: |
           set -euo pipefail
+          node --input-type=module -e 'import fs from "node:fs"; if (JSON.parse(fs.readFileSync(process.argv[1], "utf8")).retainedProbeCount !== 0) { console.error("Retained probe version blocks deployment; resolve owned-version cleanup before inheriting runtime secrets."); process.exit(1); }' "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
           if ! npx wrangler deploy --dry-run --config wrangler.deploy.generated.jsonc --outdir "$RUNNER_TEMP/cyinvoice-deploy-bundle" > "$RUNNER_TEMP/cyinvoice-private-bundle.log" 2>&1; then
             echo 'Preserved development config bundle validation failed; no remote mutation performed.'
             exit 1
@@ -126,6 +127,10 @@ jobs:
 
       - name: Verify original Cloud and history after version probe
         if: always() && ((github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-version'))
+        run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
+
+      - name: Verify active Cloud and history without deployment
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-preflight') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'preflight')
         run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
 
       - name: Remove private generated files

@@ -9,6 +9,7 @@ const digest = value => createHash('sha256').update(JSON.stringify(value)).diges
 const fail = code => { throw new Error(code); };
 const check = (condition, code) => { if (!condition) fail(code); };
 const rowLimit = 10000;
+const uuid = value => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value ?? '');
 const tables = {
   workspaces: 'workspace_id, status, employee_revision',
   devices: 'device_id, workspace_id, token_hash, status, revoked_at, employee_authority_state',
@@ -17,6 +18,22 @@ const tables = {
   device_invitations: 'invitation_id, workspace_id, code_hash, issued_by_device_id, issued_by_employee_id, delivery_state, expires_at, sent_at, revoked_at, consumed_at, consumed_by_device_id, created_at',
   security_audit_events: 'event_id, workspace_id, event_type, outcome, actor_device_id, actor_employee_id, target_device_id, pairing_id, invitation_id, reason_code, request_id, occurred_at',
 };
+
+// /settings follows the latest upload, which may never have served traffic.
+// Deployment preservation must inspect the version actually receiving traffic.
+export async function activeDeployment(request, worker) {
+  const path = `/workers/scripts/${encodeURIComponent(worker)}/deployments`;
+  const deployments = await request(path);
+  const versions = deployments?.deployments?.[0]?.versions;
+  check(Array.isArray(versions) && versions.length === 1 && versions[0].percentage === 100 &&
+    uuid(versions[0].version_id), 'SINGLE_ACTIVE_DEPLOYMENT_REQUIRED');
+  const version = await request(`/workers/workers/${encodeURIComponent(worker)}/versions/${versions[0].version_id}`);
+  check(version?.id === versions[0].version_id && Array.isArray(version.bindings), 'ACTIVE_VERSION_BINDINGS_REQUIRED');
+  const observed = await request(path);
+  check(JSON.stringify(observed?.deployments?.[0]?.versions) === JSON.stringify(versions), 'ACTIVE_DEPLOYMENT_CHANGED');
+  const bindings = version.bindings.map(b => b.type === 'secret_text' ? {type:b.type,name:b.name} : b);
+  return { deployments, settings:{bindings} };
+}
 
 export function checkSettings(settings, config) {
   const bindings = settings?.bindings;
@@ -121,7 +138,31 @@ export async function main(mode, statePath, env = process.env) {
     check(response.ok && data.success === true, 'REMOTE_READ_FAILED');
     return data.result;
   }
-  const settings = await request(`/workers/scripts/${encodeURIComponent(config.name)}/settings`);
+  const {settings, deployments} = await activeDeployment(request, config.name);
+  console.log('Active business deployment read; latest uploaded version is not used as runtime configuration.');
+  const uploaded = await request(`/workers/workers/${encodeURIComponent(config.name)}/versions?per_page=100`);
+  check(Array.isArray(uploaded), 'UPLOADED_VERSION_READ_REQUIRED');
+  const probes = uploaded.filter(v => /^CYID_BINDING_PROBE_[a-f0-9]{32}$/.test(v.annotations?.['workers/message'] ?? ''));
+  check(probes.length <= 10, 'UNREVIEWED_PROBE_VERSION_COUNT');
+  let expired = 0;
+  for (const probe of probes) {
+    check(uuid(probe.id) && !deployments.deployments[0].versions.some(v => v.version_id === probe.id), 'PROBE_VERSION_ACTIVE');
+    const version = await request(`/workers/workers/${encodeURIComponent(config.name)}/versions/${probe.id}`);
+    const bindings = version?.bindings ?? [];
+    const plain = name => bindings.find(b => b.type === 'plain_text' && b.name === name)?.text;
+    const services = bindings.filter(b => b.type === 'service');
+    const expires = Number(plain('PROBE_EXPIRES_AT'));
+    check(version?.id === probe.id && version.annotations?.['workers/message'] === probe.annotations['workers/message'] &&
+      probe.annotations['workers/message'] === `CYID_BINDING_PROBE_${plain('PROBE_OWNER_NONCE')}` &&
+      !bindings.some(b => b.type === 'd1') && services.length === 2 && env.CYID_WORKER_NAME &&
+      services.every(b => b.service === env.CYID_WORKER_NAME) &&
+      services.some(b => b.name === 'IDENTITY' && (!b.entrypoint || b.entrypoint === 'default')) &&
+      services.some(b => b.name === 'IDENTITY_AUTHORITY' && b.entrypoint === 'ConsumerAuthoritySync') &&
+      bindings.filter(b => b.type === 'secret_text').every(b => b.name === 'PROBE_AUTH_KEY') &&
+      Number.isSafeInteger(expires) && expires > 0, 'RETAINED_PROBE_SCOPE_INVALID');
+    if (expires <= Date.now()) expired++;
+  }
+  console.log(`Retained probe versions: ${probes.length}; expired: ${expired}; none deployed or bound to a D1. No version mutation performed by this audit.`);
   // Reuse the existing deployment's D1, not a new database or a public concrete ID.
   const databaseId = settings?.bindings?.find(b => b.name === 'DB' && b.type === 'd1')?.id;
   check(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(databaseId ?? ''),
@@ -158,9 +199,6 @@ export async function main(mode, statePath, env = process.env) {
     const capturedAt = new Date().toISOString();
     const bookmark = await request(databasePath + '/time_travel/bookmark?timestamp=' + encodeURIComponent(capturedAt));
     check(typeof bookmark?.bookmark === 'string' && bookmark.bookmark.length > 0, 'RESTORE_BOOKMARK_REQUIRED');
-    const deployments = await request(`/workers/scripts/${encodeURIComponent(config.name)}/deployments`);
-    check(Array.isArray(deployments?.deployments) && deployments.deployments.length > 0,
-      'WORKER_ROLLBACK_VERSION_REQUIRED');
     const services = settings.bindings.filter(b => b.type === 'service').map(b => ({
       binding: b.name, service: b.service, ...(b.environment ? { environment: b.environment } : {}),
       ...(b.entrypoint ? { entrypoint: b.entrypoint } : {}),
@@ -169,7 +207,7 @@ export async function main(mode, statePath, env = process.env) {
     const deployConfig = { ...runtimeConfig, vars: { ...vars, ...config.vars, CYID_ENABLED: 'false' }, ...(services.length ? { services } : {}) };
     const configPath = path.join(root, 'wrangler.deploy.generated.jsonc');
     fs.writeFileSync(configPath, JSON.stringify(deployConfig, null, 2), { mode: 0o600 });
-    fs.writeFileSync(statePath, JSON.stringify({ sourceIdentity, databaseId, worker: config.name, state,
+    fs.writeFileSync(statePath, JSON.stringify({ sourceIdentity, databaseId, worker: config.name, state, retainedProbeCount:probes.length,
       bookmark, deployments, settings, origin, capturedAt }), { mode: 0o600 });
     console.log(`Private recovery checkpoint captured at ${capturedAt}; retrieve its bookmark by timestamp from the original D1 if recovery is needed. Never restore automatically.`);
     console.log(`Preflight passed: Cloud ${health.cloudVersion}; storage ${applied.length}; pending ${pending.length}; ` +
