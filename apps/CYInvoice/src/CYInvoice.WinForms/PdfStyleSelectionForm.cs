@@ -72,7 +72,7 @@ internal sealed class PdfStyleSelectionForm : Form
             var style = this.styles[index];
             var thumbnail = PdfStyleThumbnail.Create(style, new Size(164, 220));
             thumbnails.Add(thumbnail);
-            var button = new NoFocusCueButton
+            var button = new PdfStyleButton
             {
                 Size = new Size(184, 278),
                 Anchor = AnchorStyles.None,
@@ -93,11 +93,6 @@ internal sealed class PdfStyleSelectionForm : Form
             button.FlatAppearance.BorderColor = Color.FromArgb(0, 120, 215);
             button.FlatAppearance.MouseOverBackColor = SystemColors.Control;
             button.FlatAppearance.MouseDownBackColor = SystemColors.Control;
-            void SetFrame(bool visible) => button.FlatAppearance.BorderSize = visible ? 1 : 0;
-            button.MouseEnter += (_, _) => SetFrame(true);
-            button.MouseLeave += (_, _) => SetFrame(false);
-            button.MouseDown += (_, eventArgs) => { if (eventArgs.Button == MouseButtons.Left) SetFrame(true); };
-            button.MouseUp += (_, eventArgs) => SetFrame(button.ClientRectangle.Contains(eventArgs.Location));
             button.Click += (_, _) =>
             {
                 SelectedStyle = (InvoicePdfStyle)button.Tag!;
@@ -114,6 +109,13 @@ internal sealed class PdfStyleSelectionForm : Form
         {
             if (eventArgs.KeyCode == Keys.Escape) Close();
         };
+    }
+
+    private sealed class PdfStyleButton : RoundedButton
+    {
+        protected override ButtonColors ResolveColors() => new(BackColor,
+            Hovered || Focused ? Color.FromArgb(37, 99, 235) : BackColor,
+            Enabled ? SystemColors.ControlText : SystemColors.GrayText);
     }
 
     public InvoicePdfStyle? SelectedStyle { get; private set; }

@@ -15,6 +15,9 @@ internal static class CloudDeviceLifecycleClientTests
         await RevokeSendsExecutionTimeSuperAdminCredentialAsync();
         await LastActiveDeviceFailureIsPreservedAsync();
         await InconsistentListFailsClosedAsync();
+        await UsageReportsOwnVersionAndServerTimeAsync();
+        await RenameSendsExecutionTimeCredentialAsync();
+        await MetadataMismatchFailsClosedAsync();
     }
 
     private static async Task ListDevicesParsesCurrentAndHistoryAsync()
@@ -124,19 +127,77 @@ internal static class CloudDeviceLifecycleClientTests
             "Device list without a current marker must fail closed");
     }
 
+    private static async Task UsageReportsOwnVersionAndServerTimeAsync()
+    {
+        var handler = new QueueHandler();
+        handler.Enqueue(request =>
+        {
+            Equal(HttpMethod.Post, request.Method, "usage method");
+            Equal("/v1/devices/usage", request.RequestUri?.AbsolutePath, "usage path");
+            Equal(DeviceToken, request.Headers.Authorization?.Parameter, "usage token");
+            using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal("2.6.14 Build 1", body.RootElement.GetProperty("clientVersion").GetString(), "usage version");
+            True(!body.RootElement.TryGetProperty("targetDeviceId", out _), "usage cannot select another device");
+            True(!body.RootElement.TryGetProperty("lastSeenAt", out _), "usage cannot supply server time");
+            return Json(HttpStatusCode.OK, new { device = Device(CurrentDeviceId, "A 機", "active", true,
+                clientVersion: "2.6.14 Build 1", lastSeenAt: "2026-10-09T14:00:00Z") });
+        });
+        using var http = new HttpClient(handler);
+        var client = new CloudDeviceLifecycleClient(http, new Uri("https://cloud.example.test/"), DeviceToken);
+        var result = await client.ReportUsageAsync(CurrentDeviceId, "2.6.14 Build 1");
+        True(result.LastSeenAt is not null, "usage requires confirmed server time");
+        await ThrowsAsync<ArgumentException>(() => client.ReportUsageAsync(CurrentDeviceId, "bad\nversion"), "invalid version rejected");
+    }
+
+    private static async Task RenameSendsExecutionTimeCredentialAsync()
+    {
+        var handler = new QueueHandler();
+        handler.Enqueue(request =>
+        {
+            Equal("/v1/devices/rename", request.RequestUri?.AbsolutePath, "rename path");
+            Equal(DeviceToken, request.Headers.Authorization?.Parameter, "rename token");
+            using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            Equal(OtherDeviceId, body.RootElement.GetProperty("targetDeviceId").GetString(), "rename target");
+            Equal("新裝置", body.RootElement.GetProperty("displayName").GetString(), "trimmed name");
+            Equal("0001", body.RootElement.GetProperty("employeeNo").GetString(), "rename SUPER_ADMIN");
+            Equal("SyntheticPass1", body.RootElement.GetProperty("password").GetString(), "rename execution password");
+            return Json(HttpStatusCode.OK, new { device = Device(OtherDeviceId, "新裝置", "active", false) });
+        });
+        using var http = new HttpClient(handler);
+        var client = new CloudDeviceLifecycleClient(http, new Uri("https://cloud.example.test/"), DeviceToken);
+        Equal("新裝置", (await client.RenameAsync(OtherDeviceId, " 新裝置 ", "0001", "SyntheticPass1")).DisplayName, "renamed name");
+    }
+
+    private static async Task MetadataMismatchFailsClosedAsync()
+    {
+        var handler = new QueueHandler();
+        handler.Enqueue(_ => Json(HttpStatusCode.OK, new { device = Device(OtherDeviceId, "B 機", "active", true,
+            clientVersion: "2.6.14", lastSeenAt: "2026-10-09T14:00:00Z") }));
+        handler.Enqueue(_ => Json(HttpStatusCode.OK, new { device = Device(CurrentDeviceId, "A 機", "active", true,
+            clientVersion: "2.6.14") }));
+        handler.Enqueue(_ => Json(HttpStatusCode.OK, new { device = Device(OtherDeviceId, "Old Name", "active", false) }));
+        using var http = new HttpClient(handler);
+        var client = new CloudDeviceLifecycleClient(http, new Uri("https://cloud.example.test/"), DeviceToken);
+        await ThrowsAsync<InvalidDataException>(() => client.ReportUsageAsync(CurrentDeviceId, "2.6.14"), "wrong device usage rejected");
+        await ThrowsAsync<InvalidDataException>(() => client.ReportUsageAsync(CurrentDeviceId, "2.6.14"), "missing last-use time rejected");
+        await ThrowsAsync<InvalidDataException>(() => client.RenameAsync(OtherDeviceId, "New Name", "0001", "SyntheticPass1"), "wrong renamed name rejected");
+    }
+
     private static object Device(
         string id,
         string name,
         string status,
         bool current,
-        string revokedAt = "") => new
+        string revokedAt = "",
+        string clientVersion = "2.6.9",
+        string lastSeenAt = "") => new
         {
             deviceId = id,
             displayName = name,
             status,
-            clientVersion = "2.6.9",
+            clientVersion,
             pairedAt = "2026-09-28T12:00:00+00:00",
-            lastSeenAt = "",
+            lastSeenAt,
             createdAt = "2026-09-28T12:00:00+00:00",
             revokedAt,
             current,

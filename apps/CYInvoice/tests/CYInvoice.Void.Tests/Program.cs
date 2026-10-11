@@ -267,7 +267,7 @@ static class Fixtures
 {
     public static (InvoiceVoidService Service, LocalRepository Repository, InvoiceRecord Record) CreateService(string path, FakeGateway gateway)
     {
-        var repository = LocalRepository.Open(path, new TestProtector());
+        var repository = TestRepository.Open(path, new TestProtector());
         var record = new InvoiceRecord
         {
             Id = Guid.NewGuid().ToString("N"),

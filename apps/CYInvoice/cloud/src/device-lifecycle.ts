@@ -1,7 +1,8 @@
+import { usesCyId, cyIdDevice, CyIdError, cyIdErrorResponse, type CyIdEnv } from "./cyid";
 import { recordSecurityEvent } from "./security-audit";
 import { verifyPassword } from "./web-auth";
 
-interface Env {
+interface Env extends CyIdEnv {
   DB: D1Database;
   APP_ENV: string;
   API_VERSION: string;
@@ -34,7 +35,7 @@ type SuperAdminRow = {
 };
 
 const SERVICE_NAME = "cyinvoice-cloud";
-const CLOUD_VERSION = "0.8.7";
+const CLOUD_VERSION = "0.8.9";
 
 function requestIdFrom(request: Request): string {
   const supplied = request.headers.get("x-request-id")?.trim();
@@ -86,6 +87,7 @@ function bearerToken(request: Request): string | null {
 }
 
 async function authenticateDevice(request: Request, env: Env): Promise<DeviceIdentity | null> {
+  if (usesCyId(env)) await cyIdDevice(request, env);
   const token = bearerToken(request);
   if (!token) return null;
   const tokenHash = await sha256Hex(token);
@@ -143,6 +145,12 @@ async function authenticateSuperAdmin(
   device: DeviceIdentity,
   body: Record<string, unknown> | null,
 ): Promise<SuperAdminRow | null> {
+  if (usesCyId(env)) {
+    if (!env.cyIdContext) throw new CyIdError(401, "AUTH_REQUIRED");
+    const principal = await env.cyIdContext.revalidate();
+    if (principal.workspaceRole !== "SUPER_ADMIN") return null;
+    return { employee_id: principal.employeeId, credential_algorithm: null, credential_verifier: null };
+  }
   if (device.employeeAuthorityState !== "cloud") return null;
   const employeeNo = normalizedEmployeeNo(body?.employeeNo);
   const password = normalizedPassword(body?.password);
@@ -357,6 +365,88 @@ async function revokeDevice(request: Request, env: Env, requestId: string): Prom
   });
 }
 
+async function readManagedDevice(env: Env, deviceId: string, workspaceId: string): Promise<DeviceRow | null> {
+  return env.DB.prepare(
+    `SELECT device_id, display_name, status, client_version, paired_at,
+            last_seen_at, created_at, revoked_at
+       FROM devices WHERE device_id = ?1 AND workspace_id = ?2 LIMIT 1`
+  ).bind(deviceId, workspaceId).first<DeviceRow>();
+}
+
+async function reportUsage(request: Request, env: Env, requestId: string): Promise<Response> {
+  const actor = await authenticateDevice(request, env);
+  if (!actor) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
+  const body = await readJsonObject(request);
+  const version = typeof body?.clientVersion === "string" ? body.clientVersion.trim() : "";
+  if (!version || version.length > 64 || /[\u0000-\u001f\u007f-\u009f]/u.test(version))
+    return errorResponse(env, requestId, 400, "INVALID_CLIENT_VERSION", "Client version is invalid.");
+  const now = new Date().toISOString();
+  const result = await env.DB.prepare(
+    `UPDATE devices SET client_version = ?1, last_seen_at = ?2, updated_at = ?2
+      WHERE device_id = ?3 AND workspace_id = ?4 AND status = 'active'
+        AND EXISTS (SELECT 1 FROM workspaces WHERE workspace_id = ?4 AND status = 'active')`
+  ).bind(version, now, actor.deviceId, actor.workspaceId).run();
+  if (result.meta.changes !== 1)
+    return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device is no longer active.");
+  const device = await readManagedDevice(env, actor.deviceId, actor.workspaceId);
+  if (!device || device.status !== "active")
+    return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device is no longer active.");
+  return json(env, requestId, 200, { device: deviceJson(device, actor.deviceId) });
+}
+
+async function renameDevice(request: Request, env: Env, requestId: string): Promise<Response> {
+  const actor = await authenticateDevice(request, env);
+  if (!actor) return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device authentication failed.");
+  const body = await readJsonObject(request);
+  const targetDeviceId = normalizedDeviceId(body?.targetDeviceId);
+  const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
+  if (!targetDeviceId)
+    return errorResponse(env, requestId, 400, "INVALID_DEVICE", "Target Device ID is invalid.");
+  if (!displayName || displayName.length > 120 || /[\u0000-\u001f\u007f-\u009f]/u.test(displayName))
+    return errorResponse(env, requestId, 400, "INVALID_DEVICE_NAME", "Device display name is invalid.");
+  const owner = await authenticateSuperAdmin(env, actor, body);
+  if (!owner) {
+    await recordSecurityEvent(env.DB, {
+      workspaceId: actor.workspaceId, type: "device_renamed", outcome: "denied",
+      actorDeviceId: actor.deviceId, targetDeviceId, reasonCode: "SUPER_ADMIN_AUTH_FAILED", requestId,
+    });
+    return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
+  }
+  const now = new Date().toISOString();
+  const results = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE devices SET display_name = ?1, updated_at = ?2
+        WHERE device_id = ?3 AND workspace_id = ?4 AND status = 'active'
+          AND EXISTS (SELECT 1 FROM devices a JOIN workspaces w ON w.workspace_id = a.workspace_id
+                       WHERE a.device_id = ?5 AND a.workspace_id = ?4 AND a.status = 'active' AND w.status = 'active')
+          AND (?8 = 1 OR EXISTS (SELECT 1 FROM cloud_employees WHERE employee_id = ?6 AND workspace_id = ?4
+                       AND role = 'SUPER_ADMIN' AND enabled = 1 AND credential_verifier = ?7))`
+    ).bind(displayName, now, targetDeviceId, actor.workspaceId, actor.deviceId,
+      owner.employee_id, owner.credential_verifier, usesCyId(env) ? 1 : 0),
+    env.DB.prepare(
+      `INSERT INTO security_audit_events (
+         event_id, workspace_id, event_type, outcome, actor_device_id,
+         actor_employee_id, target_device_id, reason_code, request_id, occurred_at
+       ) SELECT ?1, ?2, 'device_renamed', 'success', ?3, ?4, ?5, 'SUPER_ADMIN_RENAME', ?6, ?7
+          WHERE changes() = 1`
+    ).bind(`evt_${crypto.randomUUID()}`, actor.workspaceId, actor.deviceId,
+      owner.employee_id, targetDeviceId, requestId, now),
+  ]);
+  if (results[0].meta.changes !== 1) {
+    await recordSecurityEvent(env.DB, {
+      workspaceId: actor.workspaceId, type: "device_renamed", outcome: "denied",
+      actorDeviceId: actor.deviceId, actorEmployeeId: owner.employee_id,
+      targetDeviceId, reasonCode: "DEVICE_UNAVAILABLE", requestId,
+    });
+    return errorResponse(env, requestId, 409, "DEVICE_UNAVAILABLE", "Device or authority changed. Refresh and try again.");
+  }
+  if (results[1].meta.changes !== 1) throw new Error("Device rename audit was not persisted atomically.");
+  const device = await readManagedDevice(env, targetDeviceId, actor.workspaceId);
+  if (!device || device.status !== "active")
+    return errorResponse(env, requestId, 409, "DEVICE_UNAVAILABLE", "Device is no longer active.");
+  return json(env, requestId, 200, { device: deviceJson(device, actor.deviceId) });
+}
+
 export async function handleDeviceLifecycle(request: Request, env: Env): Promise<Response | null> {
   const url = new URL(request.url);
   const requestId = requestIdFrom(request);
@@ -365,8 +455,13 @@ export async function handleDeviceLifecycle(request: Request, env: Env): Promise
       return await listDevices(request, env, requestId);
     if (request.method === "POST" && url.pathname === "/v1/devices/revoke")
       return await revokeDevice(request, env, requestId);
+    if (request.method === "POST" && url.pathname === "/v1/devices/usage")
+      return await reportUsage(request, env, requestId);
+    if (request.method === "POST" && url.pathname === "/v1/devices/rename")
+      return await renameDevice(request, env, requestId);
     return null;
   } catch (error) {
+    if (error instanceof CyIdError) return cyIdErrorResponse(error);
     console.error("device_lifecycle_request_failed", {
       requestId,
       path: url.pathname,

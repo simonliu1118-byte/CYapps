@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.0.2`
+> **Contract version:** `1.0.3`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -263,6 +263,16 @@ The consumer must accept current provider authority for:
 - direct Employee Application Access.
 
 A stale browser page never preserves server authority after provider rejection.
+
+### 11.1 Optional private cache-invalidation capability (1.0.3)
+
+A trusted consumer gateway may bind the named `ConsumerAuthoritySync` Worker entrypoint using a private RPC Service Binding (consumer name `IDENTITY_AUTHORITY`). It supplements the existing `IDENTITY` Fetcher; it has no public HTTP endpoint. This optional capability is **BACKWARD_COMPATIBLE**, minimum compatible remains 1.0.0; existing login/resolve/logout consumers and bindings keep working.
+
+`invalidateCache({workspaceId, applicationId, authorities})` accepts at most 10,000 already-confirmed cache descriptions: `employeeId`, positive `credentialVersion` / `employeeRevision`, canonical `workspaceRole`, boolean `isIdentityAdmin` / `emailVerified`. The gateway derives Workspace/Application from deployment configuration and authenticates its own consumer Device; it must not expose arbitrary scope selection or a public provider proxy.
+
+The provider returns `{workspaceId, applicationId, available, invalidated}`. `available` reports Workspace/Application enablement; `invalidated` contains supplied IDs whose current Employee/enabled/Role/App Access/credential/revision/capability/Email state no longer matches (including deleted or foreign-scope IDs). It compares current indexed authority, so no cursor or missed event can preserve obsolete entries. No principal, Session, verifier, password, permission grant or authority mutation is returned. An unchanged entry is not authorization for a protected operation; normal Login → Resolve → Logout and app-local permission enforcement remain required.
+
+Temporary service failure retains only the consumer's separately approved offline semantics. Known denial invalidates subordinate authority; the capability cannot restore a cache entry or change an old password proof into a newly privileged principal. Polling cadence and offline exceptions are consumer-specific. Empty checks establish service/scope availability without creating Employee authority. Provider work is read-only: one scope lookup and one indexed cached-ID query, no Session/heartbeat writes. Measure real Worker/D1 usage before rollout; actual quotas are deployment data.
 
 ## 12. Immediate invalidation behavior
 

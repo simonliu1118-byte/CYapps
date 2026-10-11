@@ -114,6 +114,53 @@ public sealed class CloudDeviceLifecycleClient
         return new CloudDeviceRevokeResult(device, alreadyElement.GetBoolean());
     }
 
+    public async Task<CloudManagedDevice> ReportUsageAsync(
+        string expectedDeviceId,
+        string clientVersion,
+        CancellationToken cancellationToken = default)
+    {
+        expectedDeviceId = NormalizeDeviceId(expectedDeviceId);
+        clientVersion = clientVersion?.Trim() ?? string.Empty;
+        if (clientVersion.Length is < 1 or > 64 || clientVersion.Any(char.IsControl))
+            throw new ArgumentException("Client version is invalid.", nameof(clientVersion));
+        using var document = await SendAsync(HttpMethod.Post, "v1/devices/usage",
+            new { clientVersion }, cancellationToken).ConfigureAwait(false);
+        var device = ReadMutationDevice(document.RootElement);
+        if (device.DeviceId != expectedDeviceId || !device.Current || device.Status != "active"
+            || device.ClientVersion != clientVersion || device.LastSeenAt is null)
+            throw new InvalidDataException("Cloud Device usage response is inconsistent.");
+        return device;
+    }
+
+    public async Task<CloudManagedDevice> RenameAsync(
+        string targetDeviceId,
+        string displayName,
+        string employeeNo,
+        string password,
+        CancellationToken cancellationToken = default)
+    {
+        targetDeviceId = NormalizeDeviceId(targetDeviceId);
+        displayName = displayName?.Trim() ?? string.Empty;
+        if (displayName.Length is < 1 or > 120 || displayName.Any(char.IsControl))
+            throw new ArgumentException("Device display name is invalid.", nameof(displayName));
+        employeeNo = NormalizeEmployeeNo(employeeNo);
+        if (password is null || password.Length is < 1 or > 200)
+            throw new ArgumentException("Super administrator password is invalid.", nameof(password));
+        using var document = await SendAsync(HttpMethod.Post, "v1/devices/rename",
+            new { targetDeviceId, displayName, employeeNo, password }, cancellationToken).ConfigureAwait(false);
+        var device = ReadMutationDevice(document.RootElement);
+        if (device.DeviceId != targetDeviceId || device.Status != "active" || device.DisplayName != displayName)
+            throw new InvalidDataException("Cloud Device rename response is inconsistent.");
+        return device;
+    }
+
+    private static CloudManagedDevice ReadMutationDevice(JsonElement root)
+    {
+        if (!root.TryGetProperty("device", out var device) || device.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Cloud Device mutation response is missing device.");
+        return ReadDevice(device);
+    }
+
     private async Task<JsonDocument> SendAsync(
         HttpMethod method,
         string relativePath,

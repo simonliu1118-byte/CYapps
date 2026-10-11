@@ -26,6 +26,10 @@ internal static class PendingVoidSyncTests
             InvoiceVoidSyncIssueTypes.PendingConfirmation,
             "等待光貿確認作廢",
             clock.Now());
+        False(issueStore.All(Environments.Production + "|12345675")
+            .Any(issue => issue.IssueType == InvoiceVoidSyncIssueTypes.PendingConfirmation));
+        False(issueStore.Unresolved(Environments.Production + "|12345675")
+            .Any(issue => issue.IssueType == InvoiceVoidSyncIssueTypes.PendingConfirmation));
         var syncGateway = new ListGateway
         {
             Items = [ListItem(cancelDate: 1789790000)],
@@ -79,6 +83,9 @@ internal static class PendingVoidSyncTests
         Equal(1, voidGateway.QueryCalls);
         Equal(0, voidGateway.StatusCalls);
         Equal(0, voidGateway.VoidCalls);
+        False(new InvoiceSyncIssueStore(repository.DataDirectory)
+            .Unresolved(Environments.Production + "|12345675")
+            .Any(issue => issue.InvoiceNumber == record.InvoiceNumber));
     }
 
     public static async Task OldPendingUsesSingleQueryAndNeverResendsAsync()
@@ -129,10 +136,30 @@ internal static class PendingVoidSyncTests
         Equal(1, voidGateway.QueryCalls);
         Equal(0, voidGateway.StatusCalls);
         Equal(0, voidGateway.VoidCalls);
-        var issue = new InvoiceSyncIssueStore(repository.DataDirectory)
+        False(new InvoiceSyncIssueStore(repository.DataDirectory)
             .Unresolved(Environments.Production + "|12345675")
-            .Single(item => item.InvoiceNumber == record.InvoiceNumber);
-        Equal(InvoiceVoidSyncIssueTypes.PendingConfirmation, issue.IssueType);
+            .Any(item => item.InvoiceNumber == record.InvoiceNumber));
+
+        using var failingTemporary = new TemporaryDirectory();
+        var failingRepository = OpenProduction(failingTemporary.Path);
+        var failingRecord = AppendPendingRecord(failingRepository, "2026/09/10");
+        var failingClock = new TestClock(new DateTimeOffset(2026, 9, 19, 12, 5, 0, TimeSpan.FromHours(8)));
+        var failingVoidGateway = new VoidStatusGateway
+        {
+            QueryError = new IOException("forced void query failure"),
+        };
+        var failingCoordinator = Coordinator(failingRepository, new ListGateway(), failingVoidGateway, failingClock);
+
+        var failingResult = await failingCoordinator.RunManualAsync();
+
+        Equal(InvoiceSyncRunStatus.Completed, failingResult.Status);
+        var issue = new InvoiceSyncIssueStore(failingRepository.DataDirectory)
+            .Unresolved(Environments.Production + "|12345675")
+            .Single(item => item.InvoiceNumber == failingRecord.InvoiceNumber);
+        Equal(InvoiceSyncIssueTypes.QueryFailed, issue.IssueType);
+        True(issue.Message.StartsWith("作廢狀態回查失敗：", StringComparison.Ordinal));
+        Equal(1, failingVoidGateway.QueryCalls);
+        Equal(0, failingVoidGateway.VoidCalls);
     }
 
     private static InvoiceSyncCoordinator Coordinator(
@@ -149,7 +176,7 @@ internal static class PendingVoidSyncTests
 
     private static LocalRepository OpenProduction(string path)
     {
-        var repository = LocalRepository.Open(path, new TestProtector());
+        var repository = TestRepository.Open(path, new TestProtector());
         var settings = repository.Settings.LoadOrCreate();
         settings.Environment = Environments.Production;
         settings.ProductionInvoice = "12345675";
@@ -268,6 +295,7 @@ internal static class PendingVoidSyncTests
     private sealed class VoidStatusGateway : IAmegoGateway
     {
         public QueryResponse Query { get; set; } = PendingVoidSyncTests.Query();
+        public Exception? QueryError { get; set; }
         public StatusResponse Status { get; set; } = new(0, "", []);
         public int QueryCalls { get; private set; }
         public int StatusCalls { get; private set; }
@@ -282,7 +310,9 @@ internal static class PendingVoidSyncTests
         public Task<QueryResponse> QueryByInvoiceNumberAsync(string number, CancellationToken cancellationToken = default)
         {
             QueryCalls++;
-            return Task.FromResult(Query);
+            return QueryError is null
+                ? Task.FromResult(Query)
+                : Task.FromException<QueryResponse>(QueryError);
         }
 
         public Task<StatusResponse> StatusAsync(IEnumerable<string> invoiceNumbers, CancellationToken cancellationToken = default)

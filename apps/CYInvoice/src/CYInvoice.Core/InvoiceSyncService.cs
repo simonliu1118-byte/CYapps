@@ -45,6 +45,7 @@ public sealed class InvoiceSyncService
         CancellationToken cancellationToken = default)
     {
         if (startDate > endDate) throw new ArgumentOutOfRangeException(nameof(startDate));
+        await repository.Connections.RequireAmegoAsync(cancellationToken).ConfigureAwait(false);
         var account = CurrentAccount();
         var gateway = gatewayFactory(account.SellerInvoice, account.AppKey);
         if (account.Environment == Environments.Test)
@@ -79,7 +80,10 @@ public sealed class InvoiceSyncService
         }
         TryResolveAccountIssue(accountKey, InvoiceSyncIssueTypes.InvoiceListFailed);
 
-        var local = AccountRecords(account).ToList();
+        var allLocal = repository.Invoices.LoadOrCreate();
+        var initialSnapshot = InvoiceSyncRepository.Snapshot(allLocal);
+        var local = allLocal.Where(record => BelongsToAccount(record, account)).ToList();
+        var hasDuplicateRepair = false;
         var changes = new List<InvoiceRecord>();
         var invalidations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var problems = new List<string>();
@@ -99,6 +103,18 @@ public sealed class InvoiceSyncService
             if (invoiceNumber.Length == 0) continue;
             try
             {
+                var duplicates = local.Where(record => record.InvoiceState != InvoiceStates.Failed &&
+                    string.Equals(record.InvoiceNumber.Trim(), invoiceNumber, StringComparison.OrdinalIgnoreCase)).ToArray();
+                QueryResult? repairQuery = null;
+                if (duplicates.Length > 1)
+                {
+                    var failed = await ConfirmDuplicateAsync(gateway, local, duplicates, item, account, cancellationToken).ConfigureAwait(false);
+                    repairQuery = failed.Query;
+                    changes.Add(failed.Record);
+                    processedLocalIds.Add(failed.Record.Id);
+                    updated++;
+                    hasDuplicateRepair = true;
+                }
                 var record = Match(local, item, account);
                 var isNew = record is null;
                 record ??= NewSyncedRecord(account, item);
@@ -116,15 +132,16 @@ public sealed class InvoiceSyncService
                     InvoiceSyncIssueTypes.QueryFailed,
                     InvoiceSyncIssueTypes.RemoteNotFound,
                     InvoiceSyncIssueTypes.UnknownRemoteNotFound);
-                if (isNew || summaryChanged || record.Items.Count == 0 || pendingQueryIssue)
+                if (repairQuery is not null || isNew || summaryChanged || record.Items.Count == 0 || pendingQueryIssue)
                 {
                     try
                     {
-                        var query = await gateway.QueryByInvoiceNumberAsync(item.InvoiceNumber, cancellationToken).ConfigureAwait(false);
+                        var query = repairQuery ?? (await gateway.QueryByInvoiceNumberAsync(item.InvoiceNumber, cancellationToken).ConfigureAwait(false)).Data;
                         queried++;
-                        ApplyQuery(record, query.Data, account);
+                        ApplyQuery(record, query, account);
                         successfulQueries.Add(Identity(record, item));
                     }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                     catch (Exception error)
                     {
                         var issueType = error is AmegoApiException { Code: 71 }
@@ -159,6 +176,7 @@ public sealed class InvoiceSyncService
                     unchanged++;
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (AmbiguousInvoiceMatchException error)
             {
                 AddIssueProblem(
@@ -251,7 +269,7 @@ public sealed class InvoiceSyncService
 
         try
         {
-            syncRepository.UpsertMany(changes);
+            syncRepository.UpsertMany(changes, hasDuplicateRepair ? initialSnapshot : null, cancellationToken);
         }
         catch (Exception error)
         {
@@ -318,15 +336,101 @@ public sealed class InvoiceSyncService
     }
 
     private IEnumerable<InvoiceRecord> AccountRecords(Account account) =>
-        repository.Invoices.LoadOrCreate().Where(record =>
+        repository.Invoices.LoadOrCreate().Where(record => BelongsToAccount(record, account));
+
+    private static bool BelongsToAccount(InvoiceRecord record, Account account) =>
             string.Equals(record.Environment, account.Environment, StringComparison.Ordinal) &&
             (record.SellerInvoice.Trim().Length == 0 ||
-             string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal)));
+             string.Equals(record.SellerInvoice.Trim(), account.SellerInvoice, StringComparison.Ordinal));
+
+    private async Task<(InvoiceRecord Record, QueryResult Query)> ConfirmDuplicateAsync(
+        IAmegoGateway gateway, IReadOnlyList<InvoiceRecord> local, InvoiceRecord[] duplicates,
+        InvoiceListItem item, Account account, CancellationToken cancellationToken)
+    {
+        const string unsafeMessage = "重複成功的本機紀錄缺少一致的官方內容或送出先後證據，已保留原資料";
+        if (duplicates.Length != 2 || item.OrderId.Trim().Length == 0 || item.CancelDate != 0 ||
+            duplicates.Any(record => record.InvoiceState != InvoiceStates.Opened || record.RecordOrigin != RecordOrigins.Local ||
+                record.SellerInvoice != account.SellerInvoice || record.Environment != account.Environment ||
+                record.ExtensionData is { Count: > 0 } || record.ErrorMessage.Length != 0 ||
+                record.ApiOrderId != item.OrderId.Trim() || record.OrderId != CanonicalOrderId(account, item.OrderId.Trim()) ||
+                record.OriginalOrderId != record.OrderId || record.Items.Count == 0) ||
+            local.Count(record => record.InvoiceState != InvoiceStates.Failed && EffectiveOrderId(record) == item.OrderId.Trim()) != 2)
+            throw new AmbiguousInvoiceMatchException(unsafeMessage);
+
+        // Persisted issue IDs carry UTC nanoseconds; SentAt corroborates chronology. UI/list order is irrelevant.
+        var attempts = duplicates.Select(record => (Record: record, Stamp: IssueStamp(record.Id), Sent: IssueSentAt(record.SentAt)))
+            .OrderBy(attempt => attempt.Stamp).ToArray();
+        if (attempts.Any(attempt => attempt.Stamp is null || attempt.Sent is null) ||
+            attempts[0].Stamp == attempts[1].Stamp || attempts[0].Sent > attempts[1].Sent ||
+            Math.Abs((attempts[1].Stamp!.Value - attempts[0].Stamp!.Value) / 100 -
+                (attempts[1].Sent!.Value - attempts[0].Sent!.Value).Ticks) >= TimeSpan.TicksPerSecond)
+            throw new AmbiguousInvoiceMatchException(unsafeMessage);
+
+        var response = await gateway.QueryByInvoiceNumberAsync(item.InvoiceNumber, cancellationToken).ConfigureAwait(false);
+        var query = response.Data;
+        if (response.Code != 0 || query is null ||
+            !string.Equals(query.InvoiceNumber.Trim(), item.InvoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase) ||
+            query.OrderId.Trim() != item.OrderId.Trim() || query.CancelDate != 0 || query.VoidPending || query.Allowances.Count != 0 ||
+            !query.DetailVatPresent || query.InvoiceDate.Trim().Length == 0 || query.InvoiceTime.Trim().Length == 0 ||
+            query.TotalAmount.Trim().Length == 0 || query.BuyerIdentifier.Trim().Length == 0 || query.BuyerName.Trim().Length == 0 ||
+            ParseItems(query.ProductItems) is not { Count: > 0 })
+            throw new AmbiguousInvoiceMatchException(unsafeMessage);
+
+        var original = attempts[0].Record;
+        var extra = attempts[1].Record;
+        var issued = IssueSentAt(JoinDateTime(NormalizeDate(query.InvoiceDate), NormalizeTime(query.InvoiceTime)));
+        if (issued is null || issued < attempts[0].Sent || issued > attempts[1].Sent)
+            throw new AmbiguousInvoiceMatchException(unsafeMessage);
+        var official = JsonSerializer.Deserialize<InvoiceRecord>(JsonSerializer.Serialize(original))!;
+        ApplyList(official, item, account);
+        var listContent = DuplicateContent(official);
+        ApplyQuery(official, query, account);
+        if (DuplicateContent(original) != listContent || DuplicateContent(extra) != listContent ||
+            DuplicateContent(official) != listContent || original.Source != extra.Source || original.Delivery != extra.Delivery)
+            throw new AmbiguousInvoiceMatchException(unsafeMessage);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        extra.InvoiceState = InvoiceStates.Failed;
+        extra.InvoiceNumber = string.Empty;
+        extra.UploadStatus = 0;
+        extra.UploadStatusText = string.Empty;
+        extra.ErrorMessage = "重複訂單開立失敗：光貿回查確認此發票屬於較早的送出紀錄；本次未另開發票。原資料已備份於 Data/RepairBackups。";
+        extra.LastChecked = FormatDateTime(now());
+        return (extra, query);
+    }
+
+    private static long? IssueStamp(string id)
+    {
+        var parts = id.Split('-');
+        return parts.Length == 2 && parts[0].Length == 19 && parts[1].Length == 12 && parts[1].All(char.IsAsciiHexDigit) &&
+            long.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var stamp) && stamp > 0
+            ? stamp : null;
+    }
+
+    private static DateTime? IssueSentAt(string value) =>
+        DateTime.TryParseExact(value, "yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var sent)
+            ? sent : null;
+
+    private static string DuplicateContent(InvoiceRecord record) => JsonSerializer.Serialize(new
+    {
+        Number = record.InvoiceNumber.Trim().ToUpperInvariant(), record.OrderId, record.ApiOrderId,
+        Date = NormalizeDate(record.InvoiceDate), Time = NormalizeTime(record.InvoiceTime),
+        record.BuyerIdentifier, record.BuyerName, record.Amount, record.MainRemark, record.DetailVat,
+        record.CarrierType, record.CarrierId1, record.CarrierId2, record.NpoBan,
+        Items = record.Items.Select(item => new
+        {
+            item.Description, Quantity = InvoiceCalculator.ItemDecimals(item).Quantity.ToString(), item.Unit,
+            Price = InvoiceCalculator.ItemDecimals(item).UnitPrice.ToString(), item.TaxType,
+            Amount = InvoiceCalculator.ItemDecimals(item).Amount.ToString(), item.Remark,
+        }),
+    });
 
     private static InvoiceRecord? Match(IReadOnlyList<InvoiceRecord> local, InvoiceListItem remote, Account account)
     {
+        // A rejected issue attempt is not the official invoice, even when its OrderID matches.
+        var candidates = local.Where(record => record.InvoiceState != InvoiceStates.Failed).ToArray();
         var number = remote.InvoiceNumber.Trim();
-        var byNumber = local.Where(record =>
+        var byNumber = candidates.Where(record =>
             string.Equals(record.InvoiceNumber.Trim(), number, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (byNumber.Length > 1)
             throw new AmbiguousInvoiceMatchException($"同一發票號碼對到 {byNumber.Length} 筆本機紀錄，已停止自動更新");
@@ -335,7 +439,7 @@ public sealed class InvoiceSyncService
         var apiOrderId = remote.OrderId.Trim();
         if (apiOrderId.Length == 0) return null;
         var orderId = CanonicalOrderId(account, apiOrderId);
-        var byOrder = local.Where(record =>
+        var byOrder = candidates.Where(record =>
             string.Equals(record.ApiOrderId.Trim(), apiOrderId, StringComparison.Ordinal) ||
             string.Equals(record.OrderId.Trim(), orderId, StringComparison.Ordinal) ||
             string.Equals(record.OriginalOrderId.Trim(), orderId, StringComparison.Ordinal)).ToArray();

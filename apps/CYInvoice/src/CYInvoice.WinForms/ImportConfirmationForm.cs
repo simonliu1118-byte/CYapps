@@ -375,7 +375,7 @@ internal sealed class ImportConfirmationForm : Form
         grid.CellFormatting += (_, eventArgs) => FormatStatus(eventArgs);
         FormClosing += (_, eventArgs) =>
         {
-            if (issuing)
+            if (issuing && !LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
             {
                 eventArgs.Cancel = true;
                 MessageBox.Show(this, "發票正在逐張處理，為避免狀態遺失，完成前不能關閉此視窗。", "正在開立", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -935,9 +935,11 @@ internal sealed class ImportConfirmationForm : Form
         UpdateIssueEnabled(busy);
     }
 
+    internal void ApplyServiceState() => UpdateIssueEnabled();
+
     private void UpdateIssueEnabled(bool busy = false)
     {
-        if (busy || issuing || entries.Count == 0)
+        if (busy || issuing || entries.Count == 0 || repository.Connections.Current is { AmegoAvailable: false } or { BlockAll: true })
         {
             issue.Enabled = false;
             return;

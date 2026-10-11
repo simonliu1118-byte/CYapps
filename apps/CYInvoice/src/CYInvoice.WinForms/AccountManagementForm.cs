@@ -291,8 +291,8 @@ internal sealed class AccountManagementForm : Form
         using var editForm = new EmployeeEditForm();
         if (editForm.ShowDialog(this) != DialogResult.OK) return;
 
-        using var login = new EmployeeAdminLoginForm(repository, "新增使用者－管理員驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        using var login = new EmployeeAdminLoginForm(repository, "新增使用者－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
 
         try
         {
@@ -313,7 +313,7 @@ internal sealed class AccountManagementForm : Form
                 token);
             using var verification = new CloudEmployeeCreationForm(
                 client,
-                login.AuthenticatedEmployee,
+                login.EnteredEmployeeNo,
                 login.AuthenticatedPassword,
                 proposal);
             if (verification.ShowDialog(this) != DialogResult.OK || verification.CreatedEmployee is null) return;
@@ -403,8 +403,8 @@ internal sealed class AccountManagementForm : Form
             && string.Equals(nextRole, target.Role, StringComparison.Ordinal))
             return;
 
-        using var login = new EmployeeAdminLoginForm(repository, "修改使用者－管理員驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        using var login = new EmployeeAdminLoginForm(repository, "修改使用者－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
 
         try
         {
@@ -415,7 +415,7 @@ internal sealed class AccountManagementForm : Form
                 form.Email,
                 nextRole);
             var started = await client.StartUpdateAsync(
-                login.AuthenticatedEmployee.EmployeeNo,
+                login.EnteredEmployeeNo,
                 login.AuthenticatedPassword,
                 proposal,
                 lifetime.Token);
@@ -426,7 +426,7 @@ internal sealed class AccountManagementForm : Form
                     throw new InvalidDataException("Cloud Employee Email 驗證狀態不完整。");
                 using var verification = new CloudEmployeeUpdateVerificationForm(
                     client,
-                    login.AuthenticatedEmployee,
+                    login.EnteredEmployeeNo,
                     login.AuthenticatedPassword,
                     proposal,
                     started.Challenge);
@@ -484,10 +484,10 @@ internal sealed class AccountManagementForm : Form
     private async Task PasswordCloudSelectedAsync()
     {
         if (repository is null || SelectedAccount is not { } target || !password.Enabled) return;
-        using var login = new EmployeeAdminLoginForm(repository, "變更密碼－權限驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
+        using var login = new EmployeeAdminLoginForm(repository, "變更密碼－權限驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
         if (target.Role == EmployeeRoles.SuperAdmin
-            && login.AuthenticatedEmployee.EmployeeNo != target.EmployeeNo)
+            && login.EnteredEmployeeNo != target.EmployeeNo)
         {
             MessageBox.Show(this, "超級管理員密碼只能由超級管理員本人變更。", "無法變更密碼",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -501,14 +501,14 @@ internal sealed class AccountManagementForm : Form
             var (settings, token, client) = CreateCloudAccountClient();
             var verifier = CloudEmployeeCredentialVerifier.Create(reset.NewPassword);
             var updated = await client.SetPasswordAsync(
-                login.AuthenticatedEmployee.EmployeeNo,
+                login.EnteredEmployeeNo,
                 login.AuthenticatedPassword,
                 target.EmployeeNo,
                 verifier,
                 lifetime.Token);
             await RefreshCloudEmployeeSnapshotAsync(settings, token);
             Reload(updated.EmployeeNo);
-            var self = login.AuthenticatedEmployee.EmployeeNo == target.EmployeeNo;
+            var self = login.EnteredEmployeeNo == target.EmployeeNo;
             MessageBox.Show(this, self ? "密碼已變更。" : "密碼已重設。", "帳號管理",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -556,9 +556,9 @@ internal sealed class AccountManagementForm : Form
         if (MessageBox.Show(this, $"確定要{action} {target.EmployeeNo} {target.Name}?", "帳號管理",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 
-        using var login = new EmployeeAdminLoginForm(repository, $"{action}帳號－管理員驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
-        if (login.AuthenticatedEmployee.EmployeeNo == target.EmployeeNo)
+        using var login = new EmployeeAdminLoginForm(repository, $"{action}帳號－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        if (login.EnteredEmployeeNo == target.EmployeeNo)
         {
             MessageBox.Show(this, "管理員不能變更自己的啟用狀態。", $"無法{action}帳號",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -569,7 +569,7 @@ internal sealed class AccountManagementForm : Form
         {
             var (settings, token, client) = CreateCloudAccountClient();
             var updated = await client.SetEnabledAsync(
-                login.AuthenticatedEmployee.EmployeeNo,
+                login.EnteredEmployeeNo,
                 login.AuthenticatedPassword,
                 target.EmployeeNo,
                 next,
@@ -623,9 +623,9 @@ internal sealed class AccountManagementForm : Form
         if (MessageBox.Show(this, $"確定要將 {target.EmployeeNo} {target.Name} {action}?", "帳號管理",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 
-        using var login = new EmployeeAdminLoginForm(repository, "變更權限－管理員驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
-        if (login.AuthenticatedEmployee.EmployeeNo == target.EmployeeNo)
+        using var login = new EmployeeAdminLoginForm(repository, "變更權限－管理員驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        if (login.EnteredEmployeeNo == target.EmployeeNo)
         {
             MessageBox.Show(this, "管理員不能變更自己的帳號權限。", "無法變更權限",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -641,7 +641,7 @@ internal sealed class AccountManagementForm : Form
                 target.Email,
                 nextRole);
             var started = await client.StartUpdateAsync(
-                login.AuthenticatedEmployee.EmployeeNo,
+                login.EnteredEmployeeNo,
                 login.AuthenticatedPassword,
                 proposal,
                 lifetime.Token);
@@ -685,15 +685,9 @@ internal sealed class AccountManagementForm : Form
             || SelectedAccount is not { Role: EmployeeRoles.Admin, Enabled: true } target)
             return;
 
-        using var login = new EmployeeAdminLoginForm(repository, "移交超管權限－超管驗證");
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return;
-        if (login.AuthenticatedEmployee.Role != EmployeeRoles.SuperAdmin)
-        {
-            MessageBox.Show(this, "必須由目前 Workspace 超級管理員本人重新驗證。", "無法移交",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        if (login.AuthenticatedEmployee.EmployeeNo == target.EmployeeNo)
+        using var login = new EmployeeAdminLoginForm(repository, "移交超管權限－超管驗證", collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return;
+        if (login.EnteredEmployeeNo == target.EmployeeNo)
         {
             MessageBox.Show(this, "超級管理員不能將權限移交給自己。", "無法移交",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -712,7 +706,7 @@ internal sealed class AccountManagementForm : Form
                 token);
             using var transfer = new CloudSuperAdminTransferForm(
                 client,
-                login.AuthenticatedEmployee,
+                login.EnteredEmployeeNo,
                 login.AuthenticatedPassword,
                 target);
             if (transfer.ShowDialog(this) != DialogResult.OK || transfer.Result is null) return;

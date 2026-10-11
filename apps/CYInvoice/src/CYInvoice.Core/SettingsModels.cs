@@ -34,6 +34,8 @@ public sealed class Settings
     [JsonPropertyName("cloud_workspace_id")] public string CloudWorkspaceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_id")] public string CloudDeviceId { get; set; } = string.Empty;
     [JsonPropertyName("cloud_device_token_enc")] public string CloudDeviceTokenEncrypted { get; set; } = string.Empty;
+    [JsonPropertyName("cloud_identity_provider")] public string CloudIdentityProvider { get; set; } = "BUILT_IN";
+    [JsonPropertyName("cyid_binding_enc")] public string CyIdBindingEncrypted { get; set; } = string.Empty;
     [JsonPropertyName("cloud_employee_authority_ready")] public bool CloudEmployeeAuthorityReady { get; set; }
     [JsonPropertyName("cloud_pending_bootstrap_url")] public string CloudPendingBootstrapUrl { get; set; } = string.Empty;
     [JsonPropertyName("cloud_pending_bootstrap_workspace_name")] public string CloudPendingBootstrapWorkspaceName { get; set; } = string.Empty;

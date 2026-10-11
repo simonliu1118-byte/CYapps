@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using System.Text;
 using System.Text.Json;
 using CYInvoice.Core;
@@ -16,6 +17,15 @@ internal static class Program
     {
         var tests = new (string Name, Func<Task> Run)[]
         {
+            ("verified historical duplicate repairs transactionally and only once", TestHistoricalDuplicateAsync),
+            ("unsafe historical duplicates preserve both records", TestUnsafeHistoricalDuplicatesAsync),
+            ("historical repair isolates company environment and unrelated data", TestHistoricalIsolationAsync),
+            ("three historical success candidates are never auto repaired", TestHistoricalThreeCandidatesAsync),
+            ("historical duplicate query failure preserves both records", TestHistoricalQueryFailureAsync),
+            ("historical duplicate backup failure prevents writes", TestHistoricalBackupFailureAsync),
+            ("concurrent data changes prevent historical correction", TestHistoricalConcurrentChangeAsync),
+            ("interrupted historical repair rolls back and retries", TestHistoricalRollbackAsync),
+            ("cancelled historical repair preserves records", TestHistoricalCancellationAsync),
             ("source inference follows current OrderID", TestSourceInferenceAsync),
             ("test prefix is four characters and deterministic", TestPrefixFormulaAsync),
             ("test issue sends prefixed API OrderID but keeps local OrderID", TestIssueUsesTestPrefixAsync),
@@ -31,6 +41,8 @@ internal static class Program
             ("test detail refresh strips prefix from displayed OrderID", TestTestDetailRefreshStripsPrefixAsync),
             ("detail refresh failure leaves local cache untouched", TestDetailRefreshFailureLeavesCacheAsync),
             ("detail refresh falls back to OrderID when invoice number is missing", TestDetailRefreshByOrderIdAsync),
+            ("failed duplicate is not replaced by a detail query", TestFailedDetailRefreshAsync),
+            ("official sync does not adopt a failed attempt by OrderID", TestFailedOrderMatchAsync),
         };
 
         var failures = 0;
@@ -49,6 +61,237 @@ internal static class Program
         }
         Console.WriteLine($"{tests.Length - failures}/{tests.Length} sync tests passed");
         return failures == 0 ? 0 : 1;
+    }
+
+    private static (InvoiceRecord Original, InvoiceRecord Extra, FakeGateway Gateway) HistoricalPair(LocalRepository repository)
+    {
+        ConfigureProduction(repository);
+        var original = MatchingRecord("AA12345678", "66091800123456");
+        original.Id = "1789697410000000000-000000000001";
+        original.SentAt = "2026/09/18 10:10:10";
+        var extra = JsonSerializer.Deserialize<InvoiceRecord>(JsonSerializer.Serialize(original))!;
+        extra.Id = "1789697420000000000-000000000002";
+        extra.SentAt = "2026/09/18 10:10:20";
+        // Deliberately reverse insertion order: persisted chronology, not list order, selects the original.
+        repository.Invoices.Save([extra, original]);
+        var gateway = new FakeGateway { QueryResponse = Query(original.InvoiceNumber, original.ApiOrderId, "100", "買受人", description: "商品") };
+        gateway.Pages[1] = ListResponse(1, [Remote(original.InvoiceNumber, original.ApiOrderId, "100")]);
+        return (original, extra, gateway);
+    }
+
+    private static string Stored(LocalRepository repository) => JsonSerializer.Serialize(repository.Invoices.LoadOrCreate());
+    private static string[] Backups(LocalRepository repository) => Directory.Exists(Path.Combine(repository.DataDirectory, "RepairBackups"))
+        ? Directory.GetFiles(Path.Combine(repository.DataDirectory, "RepairBackups"), "*.db") : [];
+
+    private static void Sql(LocalRepository repository, string sql)
+    {
+        using var connection = new SqliteConnection($"Data Source={Path.Combine(repository.DataDirectory, "CYInvoice.db")};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+    }
+
+    private static async Task TestHistoricalDuplicateAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var (original, extra, gateway) = HistoricalPair(repository);
+        new InvoiceSyncIssueStore(repository.DataDirectory).Record("prod|12345675", original.InvoiceNumber, original.ApiOrderId, InvoiceSyncIssueTypes.AmbiguousMatch, "synthetic preexisting ambiguity", FixedNow);
+        var result = await Sync(repository, gateway).SyncRecentAsync();
+        Equal(0, result.Problems.Count);
+        Equal(1, result.Queried);
+        Equal(1, gateway.QueryByInvoiceCalls);
+        Equal(0, gateway.QueryByOrderCalls);
+        Equal(string.Empty, gateway.LastIssueOrderId);
+        var records = repository.Invoices.LoadOrCreate();
+        Equal(2, records.Count);
+        var kept = records.Single(record => record.Id == original.Id);
+        Equal(InvoiceStates.Opened, kept.InvoiceState);
+        Equal(original.InvoiceNumber, kept.InvoiceNumber);
+        var rejected = records.Single(record => record.Id == extra.Id);
+        Equal(InvoiceStates.Failed, rejected.InvoiceState);
+        Equal(string.Empty, rejected.InvoiceNumber);
+        Equal(0, rejected.UploadStatus);
+        Equal(string.Empty, rejected.UploadStatusText);
+        Equal(extra.OrderId, rejected.OrderId);
+        Equal(extra.SentAt, rejected.SentAt);
+        Equal(true, rejected.ErrorMessage.Contains("重複訂單開立失敗", StringComparison.Ordinal));
+        using (var backup = new SqliteConnection($"Data Source={Backups(repository).Single()};Mode=ReadOnly;Pooling=False"))
+        {
+            backup.Open();
+            using var command = backup.CreateCommand();
+            command.CommandText = "SELECT count(*) FROM invoices WHERE invoice_state = '已開立';";
+            Equal(2L, Convert.ToInt64(command.ExecuteScalar()));
+            command.CommandText = "SELECT count(*) FROM invoice_items;";
+            Equal(2L, Convert.ToInt64(command.ExecuteScalar()));
+            command.CommandText = "PRAGMA integrity_check;";
+            Equal("ok", command.ExecuteScalar()?.ToString());
+            command.CommandText = "PRAGMA foreign_key_check;";
+            using var reader = command.ExecuteReader();
+            Equal(false, reader.Read());
+        }
+        var after = Stored(repository);
+        var repeat = await Sync(repository, gateway).SyncRecentAsync();
+        Equal(0, repeat.Problems.Count);
+        Equal(0, repeat.Queried);
+        Equal(after, Stored(repository));
+        Equal(1, Backups(repository).Length);
+        Equal(0, new InvoiceSyncIssueStore(repository.DataDirectory).Unresolved("prod|12345675").Count);
+    }
+
+    private static async Task TestUnsafeHistoricalDuplicatesAsync()
+    {
+        var cases = new Action<InvoiceRecord, InvoiceRecord, FakeGateway>[]
+        {
+            (_, extra, _) => extra.Amount = 200,
+            (_, extra, _) => extra.BuyerName = "另一個買受人",
+            (_, extra, _) => extra.Items[0].Description = "另一項商品",
+            (_, extra, _) => extra.SentAt = string.Empty,
+            (_, extra, _) => extra.SentAt = "2026/09/18 10:10:30",
+            (_, extra, _) => extra.SentAt = "2026/09/18 09:00:00",
+            (original, extra, _) => extra.Id = original.Id[..19] + "-000000000002",
+            (_, extra, _) => extra.Id = "legacy-record-id",
+            (_, extra, _) => extra.ApiOrderId = "OTHER",
+            (_, extra, _) => extra.RecordOrigin = RecordOrigins.Sync,
+            (_, extra, _) => extra.InvoiceState = InvoiceStates.OpenedWaitingVoid,
+            (_, extra, _) => extra.ExtensionData = new() { ["manual_work"] = JsonSerializer.SerializeToElement(true) },
+            (_, _, gateway) => gateway.QueryResponse = gateway.QueryResponse with { Code = 70 },
+            (_, _, gateway) => gateway.QueryResponse = gateway.QueryResponse with { Data = gateway.QueryResponse.Data with { InvoiceTime = "110000" } },
+            (_, _, gateway) => gateway.QueryResponse = gateway.QueryResponse with { Data = gateway.QueryResponse.Data with { CancelDate = 1789697430 } },
+            (_, _, gateway) => gateway.QueryResponse = gateway.QueryResponse with { Data = gateway.QueryResponse.Data with { Allowances = [new InvoiceAllowanceResult("07", 99, 1, "CA12345678", "20260918", "0", "10")] } },
+            (_, _, gateway) => gateway.QueryResponse = gateway.QueryResponse with { Data = gateway.QueryResponse.Data with { OrderId = "OTHER" } },
+            (_, _, gateway) => gateway.QueryResponse = gateway.QueryResponse with { Data = gateway.QueryResponse.Data with { InvoiceNumber = "ZZ12345678" } },
+            (_, _, gateway) => gateway.QueryResponse = gateway.QueryResponse with { Data = gateway.QueryResponse.Data with { ProductItems = default } },
+            (_, _, gateway) => gateway.QueryResponse = gateway.QueryResponse with { Data = gateway.QueryResponse.Data with { VoidPending = true } },
+            (_, _, gateway) => gateway.QueryResponse = gateway.QueryResponse with { Data = gateway.QueryResponse.Data with { DetailVatPresent = false } },
+        };
+        foreach (var change in cases)
+        {
+            using var temporary = new TemporaryDirectory();
+            var repository = TestRepository.Open(temporary.Path, new TestProtector());
+            var (original, extra, gateway) = HistoricalPair(repository);
+            change(original, extra, gateway);
+            repository.Invoices.Save([extra, original]);
+            var before = Stored(repository);
+            var result = await Sync(repository, gateway).SyncRecentAsync();
+            Equal(true, result.Problems.Count > 0);
+            Equal(before, Stored(repository));
+            Equal(0, Backups(repository).Length);
+        }
+    }
+
+    private static async Task TestHistoricalIsolationAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var (original, _, gateway) = HistoricalPair(repository);
+        var others = new List<InvoiceRecord>();
+        foreach (var scope in new[] { "other-company", "other-environment", "unrelated" })
+        {
+            var other = JsonSerializer.Deserialize<InvoiceRecord>(JsonSerializer.Serialize(original))!;
+            other.Id = scope;
+            if (scope == "other-company") other.SellerInvoice = "87654321";
+            if (scope == "other-environment") other.Environment = Environments.Test;
+            if (scope == "unrelated") { other.InvoiceNumber = "BB12345678"; other.ApiOrderId = other.OrderId = other.OriginalOrderId = "OTHER"; }
+            repository.Invoices.Append(other);
+            others.Add(other);
+        }
+        Equal(0, (await Sync(repository, gateway).SyncRecentAsync()).Problems.Count);
+        var stored = repository.Invoices.LoadOrCreate();
+        foreach (var other in others)
+            Equal(JsonSerializer.Serialize(other), JsonSerializer.Serialize(stored.Single(record => record.Id == other.Id)));
+        Equal(1, stored.Count(record => record.InvoiceState == InvoiceStates.Failed));
+    }
+
+    private static async Task TestHistoricalThreeCandidatesAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var (original, _, gateway) = HistoricalPair(repository);
+        var third = JsonSerializer.Deserialize<InvoiceRecord>(JsonSerializer.Serialize(original))!;
+        third.Id = "1789697430000000000-000000000003";
+        third.SentAt = "2026/09/18 10:10:30";
+        repository.Invoices.Append(third);
+        var before = Stored(repository);
+        Equal(true, (await Sync(repository, gateway).SyncRecentAsync()).Problems.Count > 0);
+        Equal(before, Stored(repository));
+        Equal(0, gateway.QueryCalls);
+        Equal(0, Backups(repository).Length);
+    }
+
+    private static async Task TestHistoricalQueryFailureAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var (_, _, gateway) = HistoricalPair(repository);
+        gateway.QueryException = new IOException("synthetic offline");
+        var before = Stored(repository);
+        Equal(true, (await Sync(repository, gateway).SyncRecentAsync()).Problems.Count > 0);
+        Equal(before, Stored(repository));
+        Equal(0, Backups(repository).Length);
+    }
+
+    private static async Task TestHistoricalBackupFailureAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var (_, _, gateway) = HistoricalPair(repository);
+        File.WriteAllText(Path.Combine(repository.DataDirectory, "RepairBackups"), "synthetic blocked directory");
+        var before = Stored(repository);
+        try { await Sync(repository, gateway).SyncRecentAsync(); throw new Exception("expected backup failure"); }
+        catch (IOException) { }
+        Equal(before, Stored(repository));
+    }
+
+    private static async Task TestHistoricalConcurrentChangeAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var (_, _, gateway) = HistoricalPair(repository);
+        string? concurrent = null;
+        gateway.OnQuery = () =>
+        {
+            Sql(repository, "UPDATE invoices SET buyer_name = 'concurrent synthetic change' WHERE sent_at = '2026/09/18 10:10:20';");
+            concurrent = Stored(repository);
+        };
+        try { await Sync(repository, gateway).SyncRecentAsync(); throw new Exception("expected snapshot conflict"); }
+        catch (InvalidDataException) { }
+        Equal(concurrent, Stored(repository));
+        Equal(0, Backups(repository).Length);
+    }
+
+    private static async Task TestHistoricalRollbackAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var (_, _, gateway) = HistoricalPair(repository);
+        // Force an original-row refresh, then abort it after the extra-row update in the same transaction.
+        Sql(repository, "UPDATE invoices SET upload_status = 2;");
+        Sql(repository, "CREATE TRIGGER reject_repair BEFORE UPDATE ON invoices WHEN OLD.sent_at = '2026/09/18 10:10:10' BEGIN SELECT RAISE(ABORT, 'synthetic interruption'); END;");
+        var before = Stored(repository);
+        try { await Sync(repository, gateway).SyncRecentAsync(); throw new Exception("expected transaction failure"); }
+        catch (SqliteException) { }
+        Equal(before, Stored(repository));
+        Equal(1, Backups(repository).Length);
+        Sql(repository, "DROP TRIGGER reject_repair;");
+        Equal(0, (await Sync(repository, gateway).SyncRecentAsync()).Problems.Count);
+        Equal(1, repository.Invoices.LoadOrCreate().Count(record => record.InvoiceState == InvoiceStates.Failed));
+        Equal(2, Backups(repository).Length);
+    }
+
+    private static async Task TestHistoricalCancellationAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        var (_, _, gateway) = HistoricalPair(repository);
+        using var cancellation = new CancellationTokenSource();
+        gateway.OnQuery = cancellation.Cancel;
+        var before = Stored(repository);
+        try { await Sync(repository, gateway).SyncRecentAsync(cancellation.Token); throw new Exception("expected cancellation"); }
+        catch (OperationCanceledException) { }
+        Equal(before, Stored(repository));
+        Equal(0, Backups(repository).Length);
     }
 
     private static Task TestSourceInferenceAsync()
@@ -79,7 +322,7 @@ internal static class Program
     private static async Task TestIssueUsesTestPrefixAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         var rawOrderId = "CUSTOM-TEST-001";
         var apiOrderId = TestOrderIdPrefix.Apply(rawOrderId, FixedDate);
@@ -114,7 +357,7 @@ internal static class Program
     private static async Task TestProductionDiscoveryAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var fake = new FakeGateway
         {
@@ -144,7 +387,7 @@ internal static class Program
     private static async Task TestProductionOverwriteAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         repository.Invoices.Append(new InvoiceRecord
         {
@@ -191,7 +434,7 @@ internal static class Program
     private static async Task TestUnchangedSkipsQueryAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         repository.Invoices.Append(MatchingRecord("CC12345678", "66091800111111"));
         var fake = new FakeGateway { QueryException = new InvalidOperationException("query must not be called") };
@@ -206,7 +449,7 @@ internal static class Program
     private static async Task TestTestEnvironmentPrefixDiscoveryAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         var prefix = TestOrderIdPrefix.ForDate(FixedDate);
         var ours = prefix + "66091800123456";
@@ -238,7 +481,7 @@ internal static class Program
     private static async Task TestTestEnvironmentSkipsFailedAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         repository.Invoices.Append(new InvoiceRecord
         {
@@ -266,7 +509,7 @@ internal static class Program
     private static async Task TestRemoteAbsenceDoesNotDeleteAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         repository.Invoices.Append(MatchingRecord("EE12345678", "66091800222222"));
         var fake = new FakeGateway();
@@ -280,7 +523,7 @@ internal static class Program
     private static async Task TestPaginationAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var fake = new FakeGateway();
         fake.Pages[1] = ListResponse(2, [Remote("FF12345678", "66091800333333", "100")]);
@@ -297,7 +540,7 @@ internal static class Program
     private static async Task TestDetailRefreshAlwaysQueriesAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var original = MatchingRecord("HH12345678", "66091800555555");
         repository.Invoices.Append(original);
@@ -320,7 +563,7 @@ internal static class Program
     private static async Task TestDetailRefreshOverwriteAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var original = MatchingRecord("JJ12345678", "M20260918001");
         original.Source = InvoiceSources.Manual;
@@ -354,7 +597,7 @@ internal static class Program
     private static async Task TestTestDetailRefreshStripsPrefixAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureTest(repository);
         var rawOrderId = "66091800666666";
         var apiOrderId = TestOrderIdPrefix.Apply(rawOrderId, FixedDate);
@@ -377,7 +620,7 @@ internal static class Program
     private static async Task TestDetailRefreshFailureLeavesCacheAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var original = MatchingRecord("KK12345678", "66091800777777");
         repository.Invoices.Append(original);
@@ -403,7 +646,7 @@ internal static class Program
     private static async Task TestDetailRefreshByOrderIdAsync()
     {
         using var temporary = new TemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new TestProtector());
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
         ConfigureProduction(repository);
         var original = MatchingRecord("LL12345678", "M20260918002");
         original.InvoiceNumber = string.Empty;
@@ -420,6 +663,64 @@ internal static class Program
         Equal("M20260918002", fake.LastOrderQuery);
         Equal("LL12345678", fresh.InvoiceNumber);
         Equal(InvoiceStates.Opened, fresh.InvoiceState);
+    }
+
+    private static async Task TestFailedDetailRefreshAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var failed = MatchingRecord(string.Empty, "M20260918002");
+        failed.InvoiceState = InvoiceStates.Failed;
+        failed.UploadStatus = 0;
+        failed.ErrorMessage = "API code 3040171: OrderId duplicate";
+        repository.Invoices.Append(failed);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query("LL12345678", failed.OrderId, "100", "買受人", description: "商品", buyerIdentifier: "0000000000"),
+        };
+        try
+        {
+            await DetailRefresh(repository, fake).RefreshAsync(failed);
+            throw new InvalidDataException("failed attempt was queried and promoted");
+        }
+        catch (InvalidOperationException error)
+        {
+            Equal(true, error.Message.Contains("開立失敗", StringComparison.Ordinal));
+        }
+        Equal(0, fake.QueryCalls);
+        var stored = repository.Invoices.LoadOrCreate().Single();
+        Equal(InvoiceStates.Failed, stored.InvoiceState);
+        Equal(string.Empty, stored.InvoiceNumber);
+        Equal(failed.ErrorMessage, stored.ErrorMessage);
+    }
+
+    private static async Task TestFailedOrderMatchAsync()
+    {
+        using var temporary = new TemporaryDirectory();
+        var repository = TestRepository.Open(temporary.Path, new TestProtector());
+        ConfigureProduction(repository);
+        var failed = MatchingRecord(string.Empty, "M20260918002");
+        failed.InvoiceState = InvoiceStates.Failed;
+        failed.UploadStatus = 0;
+        failed.ErrorMessage = "API code 3040171: OrderId duplicate";
+        repository.Invoices.Append(failed);
+        var fake = new FakeGateway
+        {
+            QueryResponse = Query("LL12345678", failed.OrderId, "100", "買受人", description: "商品", buyerIdentifier: "0000000000"),
+        };
+        fake.Pages[1] = ListResponse(1, [Remote("LL12345678", failed.OrderId, "100")]);
+        await Sync(repository, fake).SyncRecentAsync();
+        var rows = repository.Invoices.LoadOrCreate();
+        Equal(2, rows.Count);
+        Equal(InvoiceStates.Failed, rows.Single(record => record.Id == failed.Id).InvoiceState);
+        Equal(string.Empty, rows.Single(record => record.Id == failed.Id).InvoiceNumber);
+        Equal(failed.ErrorMessage, rows.Single(record => record.Id == failed.Id).ErrorMessage);
+        var official = rows.Single(record => record.Id != failed.Id);
+        Equal(InvoiceStates.Opened, official.InvoiceState);
+        Equal("LL12345678", official.InvoiceNumber);
+        await Sync(repository, fake).SyncRecentAsync();
+        Equal(2, repository.Invoices.LoadOrCreate().Count);
     }
 
     private static InvoiceSyncService Sync(LocalRepository repository, FakeGateway fake) => new(
@@ -536,6 +837,7 @@ internal static class Program
         public QueryResponse QueryResponse { get; set; } = null!;
         public IssueResponse IssueResultResponse { get; set; } = new(0, "", "TT12345678", FixedNow.ToUnixTimeSeconds(), "1234");
         public Exception? QueryException { get; set; }
+        public Action? OnQuery { get; set; }
         public bool ThrowIfListCalled { get; set; }
         public int ListCalls { get; private set; }
         public int QueryCalls { get; private set; }
@@ -563,6 +865,7 @@ internal static class Program
             QueryCalls++;
             QueryByInvoiceCalls++;
             LastInvoiceQuery = number;
+            OnQuery?.Invoke();
             if (QueryException is not null) return Task.FromException<QueryResponse>(QueryException);
             if (QueryByInvoice.TryGetValue(number, out var response)) return Task.FromResult(response);
             return Task.FromResult(QueryResponse);

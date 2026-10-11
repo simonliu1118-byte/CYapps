@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 internal sealed class CloudEmployeeCreationForm : Form
 {
     private readonly CloudEmployeeManagementClient client;
-    private readonly EmployeeAccount actor;
+    private readonly string actorEmployeeNo;
     private readonly string actorPassword;
     private readonly CloudEmployeeCreateProposal proposal;
     private readonly CancellationTokenSource lifetime = new();
@@ -22,16 +22,14 @@ internal sealed class CloudEmployeeCreationForm : Form
 
     public CloudEmployeeCreationForm(
         CloudEmployeeManagementClient client,
-        EmployeeAccount actor,
+        string actorEmployeeNo,
         string actorPassword,
         CloudEmployeeCreateProposal proposal)
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
-        this.actor = actor ?? throw new ArgumentNullException(nameof(actor));
+        this.actorEmployeeNo = actorEmployeeNo ?? throw new ArgumentNullException(nameof(actorEmployeeNo));
         this.actorPassword = actorPassword ?? throw new ArgumentNullException(nameof(actorPassword));
         this.proposal = proposal ?? throw new ArgumentNullException(nameof(proposal));
-        if (!EmployeeRoles.CanManageAccounts(actor.Role))
-            throw new InvalidOperationException("只有管理員可以新增使用者。");
 
         Text = "新增雲端使用者－Email 驗證";
         StartPosition = FormStartPosition.CenterParent;
@@ -105,7 +103,7 @@ internal sealed class CloudEmployeeCreationForm : Form
     {
         await RunBusyAsync(async () =>
         {
-            challenge = await client.StartCreateAsync(actor.EmployeeNo, actorPassword, proposal, lifetime.Token);
+            challenge = await client.StartCreateAsync(actorEmployeeNo, actorPassword, proposal, lifetime.Token);
             status.Text = $"驗證碼已寄至 {challenge.MaskedEmail}，有效至 {challenge.ExpiresAt.ToLocalTime():HH:mm:ss}。";
             otp.Focus();
         });
@@ -120,7 +118,7 @@ internal sealed class CloudEmployeeCreationForm : Form
             if (code.Length != 6 || !code.All(char.IsAsciiDigit))
                 throw new InvalidOperationException("Email 驗證碼必須是 6 碼數字。");
             CreatedEmployee = await client.ConfirmCreateAsync(
-                actor.EmployeeNo,
+                actorEmployeeNo,
                 actorPassword,
                 proposal,
                 challenge.ChallengeId,

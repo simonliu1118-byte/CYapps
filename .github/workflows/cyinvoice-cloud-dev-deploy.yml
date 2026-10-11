@@ -1,0 +1,117 @@
+name: CYInvoice Development Cloud Deploy
+
+on:
+  pull_request:
+    paths:
+      - 'apps/CYInvoice/cloud/**'
+      - '.github/workflows/cyinvoice-cloud-dev-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Read-only preflight or additive Built-in development deployment'
+        type: choice
+        options: [preflight, deploy]
+        default: preflight
+        required: true
+  push:
+    branches:
+      - cyinvoice/cloud-dev-preflight
+      - cyinvoice/cloud-dev-deploy
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cyinvoice-development-cloud-deploy
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/CYInvoice/cloud
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Scan public source
+        working-directory: ${{ github.workspace }}
+        run: python3 .github/scripts/scan-public-package.py apps/CYInvoice/cloud
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Validate source, deployment audit and Worker bundle
+        run: npm run check && npm test && npm run deploy:dry-run
+
+  development:
+    name: Audit and optionally deploy original development Cloud
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: development
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/CYInvoice/cloud
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
+      CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Read-only remote preflight and private recovery checkpoint
+        run: |
+          set -euo pipefail
+          umask 077
+          node scripts/deployment-preflight.mjs before "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
+
+      - name: Validate preserved development config before mutation
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        run: |
+          set -euo pipefail
+          if ! npx wrangler deploy --dry-run --config wrangler.deploy.generated.jsonc --outdir "$RUNNER_TEMP/cyinvoice-deploy-bundle" > "$RUNNER_TEMP/cyinvoice-private-bundle.log" 2>&1; then
+            echo 'Preserved development config bundle validation failed; no remote mutation performed.'
+            exit 1
+          fi
+
+      - name: Apply reviewed forward migration to original development D1
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        env:
+          CI: 'true'
+        run: |
+          set -euo pipefail
+          if ! npx wrangler d1 migrations apply DB --remote --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyinvoice-private-migration.log" 2>&1; then
+            echo 'Development migration failed. Keep CYID disabled and inspect the protected recovery checkpoint; do not restore D1 automatically.'
+            exit 1
+          fi
+          echo 'Reviewed forward migrations applied to the original development D1.'
+
+      - name: Deploy additive development Worker with CYID disabled
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        run: |
+          set -euo pipefail
+          if ! npx wrangler deploy --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyinvoice-private-deploy.log" 2>&1; then
+            echo 'Development deployment failed. Keep CYID disabled; diagnose the current Worker/version before retrying.'
+            exit 1
+          fi
+          echo 'Additive development Worker deployed; no CYID authority switch or secret replacement.'
+
+      - name: Verify source version, API compatibility and original history
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
+
+      - name: Remove private generated files
+        if: always()
+        run: |
+          rm -f wrangler.deploy.generated.jsonc "$RUNNER_TEMP/cyinvoice-deploy-audit.json" "$RUNNER_TEMP/cyinvoice-private-bundle.log" "$RUNNER_TEMP/cyinvoice-private-migration.log" "$RUNNER_TEMP/cyinvoice-private-deploy.log"
+          rm -rf "$RUNNER_TEMP/cyinvoice-deploy-bundle"

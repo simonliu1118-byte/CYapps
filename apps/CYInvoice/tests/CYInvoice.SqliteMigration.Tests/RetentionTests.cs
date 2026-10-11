@@ -8,7 +8,7 @@ internal static class RetentionTests
     public static void ProductionPrunesAllExpiredRows()
     {
         using var temporary = new RetentionTemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new RetentionTestProtector());
+        var repository = TestRepository.Open(temporary.Path, new RetentionTestProtector());
         ConfigureProduction(repository);
 
         repository.Invoices.Append(Record("old-delete", "AA00000001", "M20260630001", InvoiceStates.Opened, "2026/06/30"));
@@ -68,7 +68,7 @@ internal static class RetentionTests
     public static void TestEnvironmentKeepsTodayOnly()
     {
         using var temporary = new RetentionTemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new RetentionTestProtector());
+        var repository = TestRepository.Open(temporary.Path, new RetentionTestProtector());
         var settings = repository.Settings.LoadOrCreate();
         settings.Environment = Environments.Test;
         repository.Settings.Save(settings);
@@ -96,7 +96,7 @@ internal static class RetentionTests
     public static void FailedStoreDeletesOnlyFailedRows()
     {
         using var temporary = new RetentionTemporaryDirectory();
-        var repository = LocalRepository.Open(temporary.Path, new RetentionTestProtector());
+        var repository = TestRepository.Open(temporary.Path, new RetentionTestProtector());
         ConfigureProduction(repository);
         var failed = Record("failed-delete", string.Empty, "CUSTOM-FAILED", InvoiceStates.Failed, "2026/09/18");
         failed.ErrorMessage = "明確開立失敗";
