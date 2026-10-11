@@ -618,7 +618,9 @@ internal sealed class ErpAutomationService
                     throw new InvalidOperationException($"ERP 欄位「{field.Label}」目前已有內容；為避免覆蓋既有值已停止。");
                 InputSender.EndBackspace(before.Length + 2);
                 await Delay(80, cancellationToken);
-                _log.Info("field", $"replacing ERP value key={field.Key} old_len={before.Length}");
+                // Code points help explain values that look blank on screen (diagnostic mode only).
+                var codes = string.Join(" ", before.Take(12).Select(c => ((int)c).ToString("X4")));
+                _log.Info("field", $"replacing ERP value key={field.Key} old_len={before.Length} old={_log.Value(before)} codes={_log.Value(codes)}");
             }
         }
 
@@ -629,11 +631,13 @@ internal sealed class ErpAutomationService
     }
 
     /// <summary>
-    /// Fields ERP may pre-fill from the customer on a new document (付款條件, 貨運別, and the
-    /// invoice 客戶全名／統一編號); a different form value replaces them instead of stopping.
+    /// Fields ERP may pre-fill from the customer on a new document (付款條件, 貨運別,
+    /// 送貨地址(一), and the invoice 客戶全名／統一編號); a different form value replaces them
+    /// instead of stopping. 送貨地址(一) carries the tracking number: Build 15 stopped on it
+    /// although it looked blank in ERP (user, 2026-10-11).
     /// </summary>
     private static readonly HashSet<string> CustomerDerivedKeys =
-        new(["payment_terms", "freight_type", "inv_name", "tax_id"], StringComparer.OrdinalIgnoreCase);
+        new(["payment_terms", "freight_type", "ship_addr1", "inv_name", "tax_id"], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Selects a COPI08 drop-down value. With a known option list (ERP order) the list is
