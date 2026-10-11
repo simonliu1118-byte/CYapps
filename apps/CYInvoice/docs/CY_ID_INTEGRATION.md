@@ -1,10 +1,10 @@
 # CYInvoice × CY ID 整合設計基準
 
-更新日期：2026-10-10（原設計基準：2026-09-29）
+更新日期：2026-10-11（原設計基準：2026-09-29）
 
 本文件記錄 CYInvoice 作為 CY ID / CYCloud Identity consumer 時已確認的產品邊界。這是 CYInvoice 端的設計／需求文件，不定義 CY ID／CYWEB 內部 schema、Group 儲存方式、Application Access 資料模型或管理介面實作。
 
-Local／Built-in foundation 已合併，V2.6.14 介面與 Device metadata 仍在 PR #216。V2.6.15 已實作 CYID adapter／binding／offline consumer，尚未部署或正式切換；0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
+Local／Built-in foundation、V2.6.14 介面與 Device metadata 均已由 #380 合併（包含 #216／#379 ancestry）。CYID adapter／binding／offline consumer 已實作；原 development Cloud 0.9.2 additive rollout 與 Provider 0.3.6 升級已完成，CYID flag 仍關閉、Built-in 與原 Workspace／Device 保留；真實授權／Windows 驗收及正式切換未完成，0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
 
 CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.3）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
 
@@ -370,3 +370,5 @@ V2.6.17 implementation：ServiceConnectivity 共用 checkGate 與 monotonic 60 �
 60 秒刷新不對 CYID 建立／刷新 Session。每裝置持續開啟一天約 1,440 次 permission refresh，15 秒 liveness 約 5,760 次 aggregate request（完整 sync 已包含其中）；只讀 D1 查詢，實際 requests/rows/延遲及免費額度待 staging 量測。離線期間无法得知中央異動，不能承諾即時撤銷。系統 temp 的既有 PDF preview finally 清理不屬 portable reset 掃描；不得擴大刪除外部共享 temp 或使用者 exports。
 
 Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID flag 關閉時，先升級 additive Cloud 0.9.2（包含 /v1/runtime/sync），再升級原 Windows 至 V2.6.17；完成 private RPC 與原裝置 staging 後才核准切 CYID。舊 Worker 404 明確提示版本未提供同步，保留原既有降級，不清除／不換 Workspace；不能把這種舊 Gateway 當作已完成新同步驗收。原 development Cloud 0.9.2 additive rollout 已於 #12 完成、CYID disabled／Built-in 保留；Provider development 0.3.6 code-only upgrade #124 通過，canonical mirrors 1.0.3 已同步。private named entrypoint source 已部署，但實際 binding／正向 App Access／原 Windows acceptance 仍未完成。Production／正式 authority 切換仍需核准。
+
+隔離 private binding probe source 4dc28ff6／#391 已通過四項 CI 與 13 項回歸；actual development #136 在暫時 Worker 上傳收到 HTTP 403（無 API code），原 Provider preflight 通過、暫時 Worker absence 已確認、原 Provider deploy skipped。實際 transport／deny 仍未驗收；先核對可授權的隔離 consumer target／upload／cleanup 能力及拒絕原因，不擴權、不動原 Workspace／Device／Provider 來繞過。具體證據見 Provider DEVELOPMENT_DEPLOYMENT.md，待辦只在 TODO §7.3.3。
