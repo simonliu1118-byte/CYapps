@@ -635,6 +635,8 @@ internal sealed class ErpAutomationService
         InputSender.Press(NativeMethods.VK_TAB);
         await Delay(field.Kind == FieldKind.Lookup ? 420 : 220, cancellationToken);
 
+        if (field.Key == "tax_id") await AcknowledgeTaxIdWarningIfShownAsync(root, cancellationToken);
+
         // Free-text fields must read back exactly; anything else means characters went
         // astray (IME composition, field length limit) and the next field must not get them.
         if (ReadBackKeys.Contains(field.Key))
@@ -648,6 +650,44 @@ internal sealed class ErpAutomationService
                     $"ERP 欄位「{field.Label}」輸入後讀回與表單不同（表單 {value.Length} 字，ERP {after.Length} 字）；可能被輸入法攔住或超過欄位長度，已停止，請確認 ERP 內容。");
             }
         }
+    }
+
+    /// <summary>
+    /// ERP checks 統一編號 when it is left and answers a valid but unchecked one (e.g. a
+    /// non-profit) with 「統一編號輸入錯誤！」, focus on OK; that is expected and only
+    /// acknowledged with Enter (user, 2026-10-11). Any other message stops the run.
+    /// </summary>
+    private async Task AcknowledgeTaxIdWarningIfShownAsync(nint root, CancellationToken cancellationToken)
+    {
+        nint dialog = 0;
+        var deadline = Environment.TickCount64 + 900;
+        while (dialog == 0 && Environment.TickCount64 < deadline)
+        {
+            await Delay(100, cancellationToken);
+            dialog = Win32Automation.FindVisibleProcessPeerWindows(root).FirstOrDefault();
+        }
+        if (dialog == 0) return;
+
+        var isTaxIdWarning = false;
+        for (var attempt = 1; attempt <= 3 && !isTaxIdWarning; attempt++)
+        {
+            if (attempt > 1) await Delay(250, cancellationToken);
+            isTaxIdWarning = Win32Automation.WindowTreeContainsText(dialog, "統一編號") ||
+                             await _textVision.ContainsAllFragmentsAsync(dialog, ["錯誤"], cancellationToken);
+        }
+        if (!isTaxIdWarning)
+        {
+            LogPeerWindows("tax-id", [dialog]);
+            throw new InvalidOperationException("輸入統一編號後 ERP 跳出未預期的訊息；CY 未代為處理，請人工確認。");
+        }
+        if (!Win32Automation.PrepareForeground(dialog, _log))
+            throw new InvalidOperationException("無法取得「統一編號輸入錯誤」視窗焦點；請人工處理。");
+        InputSender.Press(NativeMethods.VK_RETURN);
+        if (!await WaitWindowClosedAsync(dialog, 1500, cancellationToken))
+            throw new InvalidOperationException("已對「統一編號輸入錯誤」按 Enter，但視窗沒有關閉；請人工處理。");
+        _log.Info("field", "ERP tax-id check warning acknowledged with OK (expected for e.g. non-profit buyers)");
+        Win32Automation.PrepareForeground(root, _log);
+        await Delay(150, cancellationToken);
     }
 
     /// <summary>Free-text fields that ERP keeps as typed, verified after leaving them.</summary>
