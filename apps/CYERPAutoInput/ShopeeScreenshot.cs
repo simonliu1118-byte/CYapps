@@ -146,10 +146,7 @@ internal static partial class ShopeeScreenshot
     {
         var items = new List<ShopeeShotItem>();
         var groups = new List<ShopeeShotGroup>();
-        var anchors = lines
-            .Where(l => l.CenterX < imageWidth * 0.2 && TryNumber(l.Text, out _, digitsOnly: true) && Compact(l.Text).Length <= 3)
-            .OrderBy(l => l.Top)
-            .ToList();
+        var anchors = IndexAnchors(lines, imageWidth).OrderBy(l => l.Top).ToList();
 
         // Numbers in the right half, each assigned to the nearest 單價／數量／小計 column.
         var numbers = lines
@@ -253,8 +250,8 @@ internal static partial class ShopeeScreenshot
         var unitX = layout.Unit;
         var quantityX = layout.Quantity;
         var subtotalX = layout.Subtotal;
-        var anchors = lines.Where(l => l.CenterX < imageWidth * 0.2 && TryNumber(l.Text, out _, digitsOnly: true) && Compact(l.Text).Length <= 3).ToList();
-        var anchorX = lines.FirstOrDefault(l => Compact(l.Text) == "編")?.CenterX
+        var anchors = IndexAnchors(lines, imageWidth);
+        var anchorX = IndexColumnX(lines)
             ?? (anchors.Count > 0 ? anchors.Average(a => a.CenterX) : imageWidth * 0.05);
 
         bool HasNumberAt(IEnumerable<OcrBox> boxes, double x, int y, int tolerance) =>
@@ -282,6 +279,24 @@ internal static partial class ShopeeScreenshot
                     probes.Add(Probe(anchorX, top.CenterY, Math.Max(12, top.Height), 25, "編號"));
         }
         return probes;
+    }
+
+    private static double? IndexColumnX(IReadOnlyList<OcrBox> lines) =>
+        lines.FirstOrDefault(l => Compact(l.Text) == "編")?.CenterX;
+
+    /// <summary>
+    /// The 編號 numbers: short numbers in the leftmost column only. Product thumbnails sit just
+    /// right of 編號 and carry small print (「3號杯」) the OCR can read as a lone digit, which
+    /// made up a 編號 with no 小計 (「第 4 項讀不到小計」; user's PC, 2026-10-11).
+    /// </summary>
+    private static List<OcrBox> IndexAnchors(IReadOnlyList<OcrBox> lines, int imageWidth)
+    {
+        var candidates = lines
+            .Where(l => l.CenterX < imageWidth * 0.2 && TryNumber(l.Text, out _, digitsOnly: true) && Compact(l.Text).Length <= 3)
+            .ToList();
+        if (candidates.Count == 0) return candidates;
+        var x = IndexColumnX(lines) ?? candidates.Min(c => c.CenterX);
+        return candidates.Where(c => Math.Abs(c.CenterX - x) <= 15).ToList();
     }
 
     private const int ColumnTolerance = 40;

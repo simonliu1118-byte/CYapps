@@ -200,6 +200,29 @@ public class ShopeeScreenshotTests
     }
 
     [Fact]
+    public void Ignores_digits_read_from_product_thumbnails()
+    {
+        // As the PC read it (2026-10-11): a thumbnail's small print 「4號杯」 read as "4" beside
+        // the 編號 column made up a 第 4 項 with no 小計.
+        List<OcrBox> items =
+        [
+            B("Any 2 enjoy 1% off", 63, 29, 124), B("100", 775, 91, 32), B("1", 868, 94, 10, 13),
+            B("商品選項貨號：X00145", 162, 134, 137), B("213", 922, 134, 37), B("1", 59, 146, 11, 14), B("220", 927, 151, 31),
+            B("30", 784, 178, 22), B("4", 867, 180, 11, 13), B("4", 112, 200, 9, 12), B("商品選項貨號：X00003", 161, 219, 137),
+            B("Any 2 enjoy 1% off", 62, 271, 125), B("30", 783, 336, 23), B("4", 867, 338, 11, 13),
+            B("商品選項貨號：X00002", 161, 375, 137), B("145", 924, 376, 35), B("2", 57, 387, 14), B("150", 928, 395, 30),
+            B("30", 784, 421, 22), B("1", 867, 422, 11, 15), B("商品選項貨號：X00003", 161, 460, 138),
+            B("3", 57, 539, 13), B("30", 775, 538, 23), B("1", 860, 540, 9, 13), B("30", 934, 538, 24), B("商品選項貨號：X00002", 170, 571, 136)
+        ];
+        List<OcrBox> amounts = [B("訂單金額", 752, 64), B("NT$388", 922, 65, 55), B("買家總支付金額", 706, 140), B("NT$388", 889, 137, 60)];
+        var result = Read(OrderShot(), [items], amounts);
+        Assert.Empty(result.Problems);
+        Assert.Equal(
+            [new ImportedItem("X00145", "1", "100"), new ImportedItem("X00003", "5", "30"), new ImportedItem("X00002", "5", "30"), new ImportedItem("P900", "1", "-12")],
+            result.Order!.Items);
+    }
+
+    [Fact]
     public void Proposes_rereading_lone_digits_the_detector_missed()
     {
         // As the PC read it: the 編號 "1" and the 數量 "1" of the first row are missing.
