@@ -75,23 +75,23 @@ html[data-viewport="desktop"] .statistics-pie-labels-compact { display: none; }
 .statistics-period-form button { height: 36px; }
 .statistics-period-form [hidden] { display: none !important; }
 .statistics-range { text-align: center; color: #657386; font-size: 14px; }
-.statistics-income-dialog { width: min(1200px, calc(100vw - 32px)); max-width: 1200px; height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); padding: 16px 20px; overflow: hidden; }
+.statistics-income-dialog { width: min(1200px, calc(100vw - 32px)); max-width: 1200px; height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); padding: 12px 20px; overflow: hidden; }
 .statistics-income-dialog[open] { display: flex; flex-direction: column; }
-.statistics-income-dialog .modal-header { flex: 0 0 auto; margin-bottom: 8px; }
-.statistics-income-dialog .statistics-period-form { flex: 0 0 auto; margin-bottom: 8px; gap: 10px; align-items: center; }
+.statistics-income-dialog .modal-header { flex: 0 0 auto; margin-bottom: 6px; }
+.statistics-income-dialog .statistics-period-form { flex: 0 0 auto; margin-bottom: 6px; gap: 10px; align-items: center; }
 .statistics-income-dialog .statistics-period-form label { display: flex; align-items: center; gap: 8px; }
 .statistics-income-dialog .statistics-period-form label > span { white-space: nowrap; }
 .statistics-income-dialog .statistics-period-form input, .statistics-income-dialog .statistics-period-form button { height: 30px; }
 .statistics-income-dialog #statisticsDialogResults { flex: 1; min-height: 0; overflow: hidden; }
-.income-statement { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.income-statement { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 4px; margin: 0; }
 .income-statement > * { flex-shrink: 0; }
-.statement-heading { text-align: center; }
+.statement-heading { text-align: center; line-height: 1.3; }
 .statement-heading h3 { font-size: 17px; margin: 0 0 3px; }
 .statement-period { color: #657386; font-size: 12px; margin: 0 0 5px; }
 .income-statement table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 12.5px; line-height: 1.18; table-layout: fixed; }
 .statement-name-col { width: 34%; }
 .statement-amount-col { width: 16%; }
-.income-statement th, .income-statement td { padding: 2px 7px; border-bottom: 1px solid #e2e8ef; }
+.income-statement th, .income-statement td { padding: 1.5px 7px; border-bottom: 1px solid #e2e8ef; }
 .income-statement th { text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .income-statement td, .income-statement thead th:nth-child(even) { font-size: inherit; line-height: inherit; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .income-statement thead th { background: #eaf1f7; font-weight: 700; padding-top: 5px; padding-bottom: 5px; }
@@ -101,7 +101,7 @@ html[data-viewport="desktop"] .statistics-pie-labels-compact { display: none; }
 .income-statement th.statement-subject { padding-left: 20px; }
 .income-statement tfoot th, .income-statement tfoot td { font-weight: 700; border-top: 1px solid #99aabb; padding-top: 5px; padding-bottom: 5px; }
 .statement-net { display: flex; justify-content: center; align-items: center; gap: 24px; border-bottom: 3px double #526273; padding: 6px; font-size: 17px; font-weight: 700; }
-.statement-transfer-section h4 { font-size: 12px; margin: 2px 0 4px; }
+.statement-transfer-section h4 { font-size: 12px; line-height: 1.3; margin: 2px 0 4px; }
 .statement-no-transfers, .statement-transfer-net { margin: 3px 0; font-size: 11.5px; color: #657386; line-height: 1.4; }
 .statement-footer { margin-top: auto; }
 .statement-footer .statistics-note { margin: 3px 0 0; font-size: 11px; line-height: 1.35; }
