@@ -14,6 +14,9 @@ internal sealed record OcrBox(string Text, int Left, int Top, int Width, int Hei
 
 internal enum ShopeeShotKind { Unknown, Order, Items, Amounts }
 
+/// <summary>A cell to read again with the recognizer alone (see <see cref="ShopeeScreenshot.MissingCellProbes"/>).</summary>
+internal sealed record CellProbe(int Left, int Top, int Width, int Height, string Purpose);
+
 internal sealed record ShopeeShotOrder(string OrderSn, string Carrier, string TrackingNumber);
 
 /// <summary>
@@ -213,6 +216,60 @@ internal static partial class ShopeeScreenshot
         return (items, groups);
     }
 
+    /// <summary>
+    /// Cells where a number must be but none was read: the 數量 on a row that has a 單價,
+    /// and the 編號 beside a 小計. The text detector misses lone short glyphs such as "1"
+    /// (seen on the user's PC, 2026-10-11), so the caller reads these cells again with the
+    /// recognizer alone. Columns come from the header (單價／數量／小計／編號) or, without
+    /// one, from the numbers already read.
+    /// </summary>
+    public static List<CellProbe> MissingCellProbes(IReadOnlyList<OcrBox> lines, int imageWidth, int imageHeight)
+    {
+        var probes = new List<CellProbe>();
+        double? Header(string name) => lines.FirstOrDefault(l => Compact(l.Text) == name)?.CenterX;
+        var numbers = lines.Where(l => l.CenterX > imageWidth * 0.5 && TryNumber(l.Text, out _, digitsOnly: true)).ToList();
+        var clusters = new List<List<OcrBox>>();
+        foreach (var n in numbers.OrderBy(n => n.CenterX))
+        {
+            var cluster = clusters.FirstOrDefault(c => Math.Abs(c.Average(x => x.CenterX) - n.CenterX) <= 40);
+            if (cluster is null) clusters.Add([n]);
+            else cluster.Add(n);
+        }
+        double? ClusterX(int i) => clusters.Count > i ? clusters[i].Average(x => x.CenterX) : null;
+        var unitX = Header("單價") ?? ClusterX(0);
+        var quantityX = Header("數量") ?? (clusters.Count >= 2 ? ClusterX(1) : null);
+        var subtotalX = Header("小計") ?? (clusters.Count >= 3 ? ClusterX(2) : null);
+        var anchors = lines.Where(l => l.CenterX < imageWidth * 0.2 && TryNumber(l.Text, out _, digitsOnly: true) && Compact(l.Text).Length <= 3).ToList();
+        var anchorX = Header("編") ?? (anchors.Count > 0 ? anchors.Average(a => a.CenterX) : imageWidth * 0.05);
+        if (unitX is null) return probes;
+
+        bool HasNumberAt(IEnumerable<OcrBox> boxes, double x, int y, int tolerance) =>
+            boxes.Any(b => TryNumber(b.Text, out _, digitsOnly: true) && Math.Abs(b.CenterX - x) <= 40 && Math.Abs(b.CenterY - y) <= tolerance);
+        CellProbe Probe(double x, int centerY, int height, int halfWidth, string purpose)
+        {
+            var left = Math.Clamp((int)x - halfWidth, 0, Math.Max(0, imageWidth - 1));
+            var top = Math.Clamp(centerY - height, 0, Math.Max(0, imageHeight - 1));
+            return new CellProbe(left, top, Math.Min(halfWidth * 2, imageWidth - left), Math.Min(height * 2, imageHeight - top), purpose);
+        }
+
+        foreach (var unit in numbers.Where(n => Math.Abs(n.CenterX - unitX.Value) <= 40))
+        {
+            var tolerance = Math.Max(10, unit.Height);
+            if (quantityX is { } qx && !HasNumberAt(lines, qx, unit.CenterY, tolerance))
+                probes.Add(Probe(qx, unit.CenterY, Math.Max(12, unit.Height), 35, "數量"));
+        }
+        if (subtotalX is { } sx)
+        {
+            var cells = numbers.Where(n => Math.Abs(n.CenterX - sx) <= 40).OrderBy(n => n.Top).ToList();
+            // The upper number of a 小計 cell (a struck-out original sits just below it).
+            var tops = cells.Where(c => !cells.Any(o => o != c && o.Top < c.Top && c.Top - o.Top <= 30)).ToList();
+            foreach (var top in tops)
+                if (!HasNumberAt(anchors, anchorX, top.CenterY, Math.Max(15, top.Height)))
+                    probes.Add(Probe(anchorX, top.CenterY, Math.Max(12, top.Height), 25, "編號"));
+        }
+        return probes;
+    }
+
     /// <summary>The code after 「商品選項貨號：」, or the next box on the row when OCR split it off.</summary>
     private static string CodeAfterLabel(OcrBox codeLine, IReadOnlyList<OcrBox> lines)
     {
@@ -360,6 +417,19 @@ internal static partial class ShopeeScreenshot
         if (!decimal.TryParse(digits, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value)) return false;
         if (match.Groups["neg"].Success) value = -value;
         return true;
+    }
+
+    /// <summary>A re-read cell as digits: OCR's look-alikes of 1 and 0 are mapped; anything else is rejected.</summary>
+    internal static bool TryProbeDigits(string text, out string digits)
+    {
+        var mapped = new string(Compact(text).Select(c => c switch
+        {
+            'I' or 'l' or '|' or 'i' or '丨' => '1',
+            'O' or 'o' or 'Q' or 'D' => '0',
+            _ => c
+        }).ToArray());
+        digits = mapped;
+        return DigitsPattern().IsMatch(mapped) && mapped.Length <= 3;
     }
 
     private static string Compact(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());

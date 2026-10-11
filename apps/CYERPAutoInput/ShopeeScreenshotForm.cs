@@ -139,6 +139,7 @@ internal sealed class ShopeeScreenshotForm : Form
             var tokens = await _ocr.RecognizeAsync(image, CancellationToken.None);
             shot.Lines = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
             shot.Kind = ShopeeScreenshot.Classify(shot.Lines);
+            if (shot.Kind == ShopeeShotKind.Items) await ReadMissingCellsAsync(shot);
             _log.Info("shopee-shot", $"screenshot recognized kind={shot.Kind} lines={shot.Lines.Count} size={image.Width}x{image.Height}");
         }
         catch (Exception ex)
@@ -150,6 +151,29 @@ internal sealed class ShopeeScreenshotForm : Form
         if (IsDisposed) return;
         UpdateCaption(shot);
         UpdateSummary();
+    }
+
+    /// <summary>
+    /// Reads again, with the recognizer alone, the detail cells where a number must be but
+    /// the detector found none (a lone "1" in 數量 or 編號).
+    /// </summary>
+    private async Task ReadMissingCellsAsync(Shot shot)
+    {
+        var probes = ShopeeScreenshot.MissingCellProbes(shot.Lines, shot.Image.Width, shot.Image.Height);
+        var added = 0;
+        foreach (var probe in probes)
+        {
+            if (probe.Width < 4 || probe.Height < 4) continue;
+            using var cell = shot.Image.Clone(new Rectangle(probe.Left, probe.Top, probe.Width, probe.Height), shot.Image.PixelFormat);
+            using var normalized = F2BatchCellLocator.NormalizeCell(cell);
+            using var glyphs = F2BatchCellLocator.TrimToGlyphs(normalized);
+            if (glyphs is null) continue;
+            var line = await _ocr.RecognizeLineAsync(glyphs, CancellationToken.None);
+            if (!ShopeeScreenshot.TryProbeDigits(line.Text, out var digits)) continue;
+            shot.Lines.Add(new OcrBox(digits, probe.Left, probe.Top, probe.Width, probe.Height));
+            added++;
+        }
+        _log.Info("shopee-shot", $"detail cells re-read probes={probes.Count} recovered={added}");
     }
 
     private void AddCard(Shot shot)

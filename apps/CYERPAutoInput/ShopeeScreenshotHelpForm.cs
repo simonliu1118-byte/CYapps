@@ -30,18 +30,21 @@ internal sealed class ShopeeScreenshotHelpForm : Form
             Font = new Font("Microsoft JhengHei UI", 11F, FontStyle.Bold),
             Margin = new Padding(0, 14, 0, 4)
         });
-        void Body(string text) => flow.Controls.Add(new Label { Text = text, AutoSize = true, MaximumSize = new Size(1020, 0), Margin = new Padding(0, 2, 0, 2) });
+        void Body(string text) => flow.Controls.Add(new Label { Text = text, AutoSize = true, MaximumSize = new Size(1000, 0), Margin = new Padding(0, 2, 0, 2) });
         void Example(string resource)
         {
             var image = LoadImage(resource);
             if (image is null) return;
-            flow.Controls.Add(new PictureBox
+            var picture = new PictureBox
             {
                 Image = image,
-                SizeMode = PictureBoxSizeMode.AutoSize,
+                SizeMode = PictureBoxSizeMode.Zoom,
                 BorderStyle = BorderStyle.FixedSingle,
-                Margin = new Padding(0, 4, 0, 6)
-            });
+                Margin = new Padding(0, 4, 0, 6),
+                Size = image.Size
+            };
+            _pictures.Add(picture);
+            flow.Controls.Add(picture);
         }
 
         Heading("一張蝦皮訂單需要三種截圖（缺少任何一種都無法帶入）");
@@ -69,7 +72,27 @@ internal sealed class ShopeeScreenshotHelpForm : Form
         Body("・買家備註、賣家備註不在截圖內，請自行查看。");
 
         CyVisualTheme.Apply(this);
+        // Images and text follow the window width so there is never a horizontal scrollbar.
+        void Fit()
+        {
+            var available = scroll.ClientSize.Width - scroll.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 4;
+            if (available < 200) return;
+            flow.SuspendLayout();
+            foreach (var picture in _pictures)
+            {
+                var width = Math.Min(picture.Image!.Width + 2, available);
+                picture.Size = new Size(width, (int)Math.Round((picture.Image.Height + 2) * (width / (double)(picture.Image.Width + 2))));
+            }
+            foreach (var label in flow.Controls.OfType<Label>()) label.MaximumSize = new Size(available, 0);
+            flow.ResumeLayout();
+            scroll.HorizontalScroll.Visible = false;
+        }
+        scroll.HorizontalScroll.Enabled = false;
+        Shown += (_, _) => Fit();
+        Resize += (_, _) => Fit();
     }
+
+    private readonly List<PictureBox> _pictures = [];
 
     private static Image? LoadImage(string name)
     {

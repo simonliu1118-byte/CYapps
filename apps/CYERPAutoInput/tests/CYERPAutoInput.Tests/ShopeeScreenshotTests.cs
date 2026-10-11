@@ -165,6 +165,47 @@ public class ShopeeScreenshotTests
         Assert.Equal([new ImportedItem("X00579-1", "3", "39.67")], result.Order!.Items);
     }
 
+    [Fact]
+    public void Proposes_rereading_lone_digits_the_detector_missed()
+    {
+        // As the PC read it: the 編號 "1" and the 數量 "1" of the first row are missing.
+        List<OcrBox> lines = ShopeeScreenshot.MergeLines(
+        [
+            B("編", 41, 18), B("商品", 80, 33), B("單價", 750, 33), B("數量", 823, 33), B("小計", 909, 32), B("號", 41, 50),
+            B("150", 755, 127, 26), B("150", 915, 128, 26), B("商品選項貨號：X00701", 157, 162, 160),
+            B("2", 45, 236, 8), B("60", 763, 235, 18), B("1", 847, 236, 9), B("60", 922, 235, 18), B("商品選項貨號：X00177", 157, 269, 160)
+        ]);
+        var probes = ShopeeScreenshot.MissingCellProbes(lines, 990, 300);
+        Assert.Equal(2, probes.Count);
+        var quantity = Assert.Single(probes, p => p.Purpose == "數量");
+        Assert.InRange(quantity.Left + quantity.Width / 2, 830, 860);
+        Assert.InRange(quantity.Top + quantity.Height / 2, 125, 145);
+        var index = Assert.Single(probes, p => p.Purpose == "編號");
+        Assert.InRange(index.Left + index.Width / 2, 35, 60);
+
+        // With the re-read cells added the two products parse.
+        lines.Add(new OcrBox("1", quantity.Left, quantity.Top, quantity.Width, quantity.Height));
+        lines.Add(new OcrBox("1", index.Left, index.Top, index.Width, index.Height));
+        var problems = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 990, problems);
+        Assert.Empty(problems);
+        Assert.Equal(2, items.Count);
+        Assert.Equal([1, 2], groups.Select(g => g.Index));
+    }
+
+    [Theory]
+    [InlineData("1", true, "1")]
+    [InlineData("I", true, "1")]
+    [InlineData("l", true, "1")]
+    [InlineData("O", true, "0")]
+    [InlineData("12", true, "12")]
+    [InlineData("A", false, "")]
+    public void Maps_reread_look_alikes_to_digits(string text, bool ok, string expected)
+    {
+        Assert.Equal(ok, ShopeeScreenshot.TryProbeDigits(text, out var digits));
+        if (ok) Assert.Equal(expected, digits);
+    }
+
     [Theory]
     [InlineData("X00579-1x3", "X00579-1", 3)]
     [InlineData("Y0033x2", "Y0033", 2)]
