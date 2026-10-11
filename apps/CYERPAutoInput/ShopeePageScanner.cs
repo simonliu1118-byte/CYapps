@@ -76,27 +76,35 @@ internal sealed class ShopeePageScanner
 
         // From the top of the page (user, 2026-10-11): the page may have been left scrolled.
         // A click on the page's empty left margin gives it the keyboard focus (not the address
-        // bar), then Home jumps to the top; the wheel loop below only confirms it.
+        // bar), then Home jumps to the top.
         InputSender.Click(new Point(area.Left + 12, wheelPoint.Y));
-        await Task.Delay(150, cancellationToken);
+        await Task.Delay(120, cancellationToken);
         InputSender.Press(0x24 /* VK_HOME */);
         _log.Info("page-scan", "Home pressed to start from the top");
-        for (var i = 0; i < 12; i++)
-        {
-            var before = Signature(await StableCaptureAsync(area, cancellationToken), dispose: true);
-            Wheel(wheelPoint, +15);
-            var after = Signature(await StableCaptureAsync(area, cancellationToken), dispose: true);
-            if (ShopeePageScan.SameScreen(before, after)) break;
-        }
 
+        // The browser scrolls on while earlier captures are still being read (user, 2026-10-11:
+        // the first scroll waited for the first OCR); the reads finish in order behind it.
         List<long>? previous = null;
-        List<OcrBox>? previousBoxes = null;
+        Task<List<OcrBox>>? previousRead = null;
+        var reads = new List<(Task<List<OcrBox>> Read, int PageTop)>();
+        var placed = 0;
         var notches = 0;
         var pixelsPerNotch = 0.0;
         var pageTop = 0;
+        bool PlaceFinishedReads()
+        {
+            while (placed < reads.Count && reads[placed].Read.IsCompleted)
+            {
+                ShopeePageScan.AddCapture(result.Page, reads[placed].Read.Result, reads[placed].PageTop, result.FixedTop);
+                placed++;
+            }
+            return ShopeePageScan.HasBuyerTotal(result.Page);
+        }
+
         for (var step = 0; step < MaxSteps; step++)
         {
             if (stopRequested()) { result.Cancelled = true; break; }
+            if (PlaceFinishedReads()) break;
             var image = await StableCaptureAsync(area, cancellationToken);
             var signature = Signature(image, dispose: false);
             var byPixels = -1;
@@ -106,48 +114,42 @@ internal sealed class ShopeePageScanner
                 byPixels = ShopeePageScan.FindScrollOffset(previous, signature, result.FixedTop);
             }
 
-            // Only the page's content column is read (the cards sit in the middle; the margins
-            // and Shopee's icon bar carry nothing needed), and when the pixels already told how
-            // far the page moved, only the newly shown strip (with a margin) — faster OCR
-            // (user, 2026-10-11: scrolling felt slow).
+            // Only the content column is read, and when the pixels told how far the page moved,
+            // only the newly shown strip (with a margin).
             var stripTop = byPixels > 0 ? Math.Max(result.FixedTop, image.Height - byPixels - 80) : 0;
-            var column = Rectangle.FromLTRB(image.Width * 10 / 100, stripTop, image.Width * 72 / 100, image.Height);
-            List<OcrBox> boxes;
-            using (var part = image.Clone(column, image.PixelFormat))
-            {
-                var tokens = await _ocr.RecognizeAsync(part, cancellationToken);
-                boxes = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left + column.Left, t.Rect.Top + column.Top, t.Rect.Width, t.Rect.Height)));
-            }
-            if (previous is not null && previousBoxes is not null)
+            var read = ReadAsync(image, stripTop, cancellationToken);
+            if (previous is not null && previousRead is not null)
             {
                 // Text positions decide only when the pixels could not (shadow, hover, animation).
-                var byText = byPixels < 0 ? ShopeePageScan.FindScrollOffsetByText(previousBoxes, boxes, result.FixedTop) : -1;
+                var byText = byPixels < 0 ? ShopeePageScan.FindScrollOffsetByText(await previousRead, await read, result.FixedTop) : -1;
                 var moved = byPixels >= 0 ? byPixels : byText;
                 _log.Info("page-scan", $"step={step} moved={moved} pixels={byPixels} text={byText} fixed_top={result.FixedTop} ocr_top={stripTop}");
                 if (moved < 0)
                 {
+                    await read;
                     image.Dispose();
                     result.Problems.Add("捲動後畫面對不上（頁面可能在捲動時變動），請改用框選截圖或貼上。");
                     break;
                 }
-                if (moved == 0) { image.Dispose(); break; } // bottom of the page
+                if (moved == 0) { await read; image.Dispose(); break; } // bottom of the page
                 pageTop += moved;
-                // Size the next scrolls to about 70 % of the visible page, so captures
-                // overlap enough to line up but not much more (user, 2026-10-11: too slow).
                 if (pixelsPerNotch == 0 && notches > 0) pixelsPerNotch = moved / (double)notches;
             }
             result.Captures.Add(new Capture(image, pageTop));
+            reads.Add((read, pageTop));
             previous = signature;
-            previousBoxes = boxes;
-            ShopeePageScan.AddCapture(result.Page, boxes, pageTop, result.FixedTop);
-            if (ShopeePageScan.HasBuyerTotal(result.Page)) break;
+            previousRead = read;
+
+            // About 80 % of the visible page per scroll: enough overlap to line up, little reread.
             notches = pixelsPerNotch > 0
-                ? Math.Max(1, (int)((image.Height - result.FixedTop) * 0.7 / pixelsPerNotch))
+                ? Math.Max(1, (int)((image.Height - result.FixedTop) * 0.8 / pixelsPerNotch))
                 : FirstWheelNotches;
             Wheel(wheelPoint, -notches);
             // Park the cursor on the page's empty left margin so no hover effect changes the next capture.
             NativeMethods.SetCursorPos(area.Left + 12, wheelPoint.Y);
         }
+        foreach (var r in reads) await r.Read;
+        PlaceFinishedReads();
 
         // The fixed band (browser bar, Shopee's header) is only known after the first scroll;
         // drop what the first capture put on the page from it.
@@ -157,6 +159,16 @@ internal sealed class ShopeePageScanner
         foreach (var b in result.Page)
             _log.Info("page-scan", $"  page box x={b.Left} y={b.Top} w={b.Width} h={b.Height} text={_log.Value(b.Text)}");
         return result;
+    }
+
+    /// <summary>OCR of a capture's content column from <paramref name="top"/> down, in capture coordinates.</summary>
+    private async Task<List<OcrBox>> ReadAsync(Bitmap image, int top, CancellationToken cancellationToken)
+    {
+        var column = Rectangle.FromLTRB(image.Width * 10 / 100, top, image.Width * 72 / 100, image.Height);
+        using var part = image.Clone(column, image.PixelFormat);
+        // Page text is ordinary screen text: 1.25× is enough and much faster than 1.5–2×.
+        var tokens = await _ocr.RecognizeAsync(part, cancellationToken, maxScale: 1.25);
+        return ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left + column.Left, t.Rect.Top + column.Top, t.Rect.Width, t.Rect.Height)));
     }
 
     /// <summary>The page area assembled from the captures that show it.</summary>

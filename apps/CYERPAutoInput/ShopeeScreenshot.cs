@@ -110,6 +110,10 @@ internal static partial class ShopeeScreenshot
                 .FirstOrDefault(t => OrderSnPattern().IsMatch(t)) ?? string.Empty;
         }
         if (orderSn.Length == 0) problems.Add("訂單資訊截圖讀不到訂單編號。");
+        // A Shopee order number is 6 date digits and 8 letters or digits; the OCR once read
+        // 「QV」 as 「QWW」 (user's PC, 2026-10-11), so anything else is flagged.
+        else if (!OrderSnFormatPattern().IsMatch(orderSn))
+            problems.Add($"訂單編號「{orderSn}」不是蝦皮的 14 碼格式（6 碼日期＋8 碼英數），可能讀錯，請核對。");
 
         var carrier = string.Empty;
         var tracking = string.Empty;
@@ -629,6 +633,9 @@ internal static partial class ShopeeScreenshot
 
     [GeneratedRegex(@"^[0-9A-Z]{10,20}$")]
     private static partial Regex OrderSnPattern();
+
+    [GeneratedRegex(@"^\d{6}[0-9A-Z]{8}$")]
+    private static partial Regex OrderSnFormatPattern();
 
     [GeneratedRegex(@"(貨|货)(號|号)")]
     private static partial Regex CodeLabelPattern();

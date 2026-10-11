@@ -337,6 +337,20 @@ public class ShopeeScreenshotTests
         Assert.Equal([new ShopeeShotGroup(1, 466, 480), new ShopeeShotGroup(2, 466, 480)], groups);
     }
 
+    [Theory]
+    [InlineData("2610000TEST01A", false)]
+    [InlineData("2610000TESST01A", true)]
+    [InlineData("26100TEST01AB", true)]
+    public void Flags_an_order_number_that_breaks_the_shopee_format(string orderSn, bool flagged)
+    {
+        // The PC once read 「QV」 as 「QWW」, giving 15 characters (2026-10-11).
+        var problems = new List<string>();
+        var order = ShopeeScreenshot.ParseOrder(ShopeeScreenshot.MergeLines(
+            [B("訂單編號", 64, 50), B(orderSn, 65, 87), B("運送資訊", 64, 131), B("包裹1：新竹物流#5000000001", 65, 173, 290)]), problems);
+        Assert.Equal(orderSn, order.OrderSn);
+        Assert.Equal(flagged, problems.Any(p => p.Contains("14 碼", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public void Proposes_rereading_lone_digits_the_detector_missed()
     {

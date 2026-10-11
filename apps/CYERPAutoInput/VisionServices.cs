@@ -42,11 +42,32 @@ internal static class ScreenCapture
     /// </summary>
     public static Bitmap CaptureWithLayers(Rectangle screenRect)
     {
+        // CopyFromScreen rejects SourceCopy|CaptureBlt (Build 5 on the user's PC), so BitBlt it.
         var bitmap = new Bitmap(screenRect.Width, screenRect.Height, PixelFormat.Format32bppArgb);
         using var graphics = Graphics.FromImage(bitmap);
-        graphics.CopyFromScreen(screenRect.Left, screenRect.Top, 0, 0, screenRect.Size, CopyPixelOperation.SourceCopy | CopyPixelOperation.CaptureBlt);
+        var target = graphics.GetHdc();
+        var screen = GetDC(0);
+        try
+        {
+            const int SrcCopy = 0x00CC0020, CaptureBlt = 0x40000000;
+            BitBlt(target, 0, 0, screenRect.Width, screenRect.Height, screen, screenRect.Left, screenRect.Top, SrcCopy | CaptureBlt);
+        }
+        finally
+        {
+            ReleaseDC(0, screen);
+            graphics.ReleaseHdc(target);
+        }
         return bitmap;
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern nint GetDC(nint hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int ReleaseDC(nint hWnd, nint hDC);
+
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern bool BitBlt(nint hdcDest, int xDest, int yDest, int width, int height, nint hdcSrc, int xSrc, int ySrc, int rop);
 
     public static Bitmap Capture(Rectangle screenRect)
     {
@@ -71,13 +92,14 @@ internal sealed class PaddleOcrService
     public async Task<IReadOnlyList<OcrToken>> RecognizeAsync(
         Bitmap bitmap,
         CancellationToken cancellationToken,
-        bool requireChinese = false)
+        bool requireChinese = false,
+        double maxScale = 2.0)
     {
         await _gate.WaitAsync(cancellationToken);
         var temp = Path.Combine(Path.GetTempPath(), $"CYERPAutoInput_paddle_{Guid.NewGuid():N}.png");
         try
         {
-            using var prepared = PrepareForOcr(bitmap, out var scale);
+            using var prepared = PrepareForOcr(bitmap, maxScale, out var scale);
             prepared.Save(temp, ImageFormat.Png);
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -254,12 +276,12 @@ internal sealed class PaddleOcrService
         return _engine;
     }
 
-    private static Bitmap PrepareForOcr(Bitmap source, out double scale)
+    private static Bitmap PrepareForOcr(Bitmap source, double maxScale, out double scale)
     {
         var maxSide = Math.Max(source.Width, source.Height);
         scale = maxSide <= 1100 ? 2.0 : maxSide <= 1800 ? 1.5 : 1.0;
         scale = Math.Min(scale, 3000.0 / Math.Max(1, maxSide));
-        scale = Math.Clamp(scale, 1.0, 2.0);
+        scale = Math.Clamp(scale, 1.0, Math.Max(1.0, maxScale));
 
         if (Math.Abs(scale - 1.0) < 0.01)
             return source.Clone(new Rectangle(0, 0, source.Width, source.Height), PixelFormat.Format32bppArgb);
