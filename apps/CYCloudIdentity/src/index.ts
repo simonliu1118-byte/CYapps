@@ -30,6 +30,7 @@ import { enforceLoginRateLimit } from "./rate-limit";
 import { handlePutDirectApplicationAccess, handleRoleAccessSnapshot } from "./role-admin";
 import { handleGetSecurityPolicy, handleUpdateSecurityPolicy } from "./security-policy";
 import type { Env } from "./types";
+export { ConsumerAuthoritySync } from "./consumer-authority";
 
 function decodedSegment(value: string): string | null {
   try {

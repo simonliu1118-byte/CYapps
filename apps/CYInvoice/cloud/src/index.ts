@@ -1,3 +1,4 @@
+import { usesCyId, cyIdBinding, cyIdDevice, CyIdError, cyIdErrorResponse, type CyIdEnv } from "./cyid";
 import { createEmailSender } from "./email";
 import { verifyPassword } from "./web-auth";
 import { recordSecurityEvent, securityEventStatement } from "./security-audit";
@@ -6,7 +7,7 @@ import {
   BOOTSTRAP_WORKSPACE_INSERT_SQL,
 } from "./bootstrap-sql";
 
-interface Env {
+interface Env extends CyIdEnv {
   DB: D1Database;
   APP_ENV: string;
   API_VERSION: string;
@@ -346,6 +347,7 @@ function bearerToken(request: Request): string | null {
 }
 
 async function authenticateDevice(request: Request, env: Env): Promise<DeviceIdentity | null> {
+  if (usesCyId(env)) await cyIdDevice(request, env);
   const token = bearerToken(request);
   if (!token || !validDeviceToken(token)) return null;
   const tokenHash = await sha256Hex(normalizeDeviceToken(token));
@@ -529,6 +531,7 @@ async function directJoinWorkspace(env: Env, workspaceId: string): Promise<{ dis
     "SELECT display_name FROM workspaces WHERE workspace_id = ?1 AND status = 'active' LIMIT 1"
   ).bind(workspaceId).first<{ display_name: string }>();
   if (!workspace) return null;
+  if (usesCyId(env)) return workspaceId === cyIdBinding(env).workspaceId ? workspace : null;
   const ready = await env.DB.prepare(
     `SELECT COUNT(*) AS total,
             SUM(CASE WHEN role = 'SUPER_ADMIN' AND enabled = 1 THEN 1 ELSE 0 END) AS owners,
@@ -570,6 +573,12 @@ async function directJoinOwner(env: Env, workspaceId: string, employeeNo: string
 
 async function authorizedOwner(request: Request, env: Env, workspaceId: string,
   body: Record<string, unknown> | null): Promise<{ employee_id: string; email_normalized: string } | null> {
+  if (usesCyId(env)) {
+    if (workspaceId !== cyIdBinding(env).workspaceId || !env.cyIdContext) return null;
+    const principal = await env.cyIdContext.revalidate();
+    if (principal.workspaceRole !== "SUPER_ADMIN") return null;
+    return { employee_id: principal.employeeId, email_normalized: await env.cyIdContext.verifiedEmail() };
+  }
   const employeeNo = typeof body?.employeeNo === "string" ? body.employeeNo.trim() : "";
   const password = body?.password;
   if (!/^\d{4}$/.test(employeeNo) || typeof password !== "string" || password.length < 1 || password.length > 200)
@@ -628,10 +637,10 @@ async function issueInvitation(request: Request, env: Env, requestId: string): P
   const now = new Date();
   const expiresAt = new Date(now.getTime() + INVITATION_TTL_MS).toISOString();
   await env.DB.prepare(`INSERT INTO device_invitations (
-    invitation_id, workspace_id, code_hash, issued_by_device_id, issued_by_employee_id,
-    delivery_state, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?7)`)
+    invitation_id, workspace_id, code_hash, issued_by_device_id, issued_by_employee_id, issued_by_cyid_employee_id,
+    delivery_state, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?8, 'pending', ?6, ?7)`)
     .bind(invitationId, device.workspaceId, await sha256Hex(code), device.deviceId,
-      owner.employee_id, expiresAt, now.toISOString()).run();
+      usesCyId(env) ? null : owner.employee_id, expiresAt, now.toISOString(), usesCyId(env) ? owner.employee_id : null).run();
   try {
     await sender.send({ to: owner.email_normalized, subject: "CYInvoice 新裝置邀請",
       text: `CYInvoice 新裝置連線設定\nCloud API 網址：${new URL(request.url).origin}\n開通碼：${code}\n有效至：${expiresAt}\n僅限使用一次。若非本人操作，請通知管理員撤銷邀請。`,
@@ -857,6 +866,7 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
   }
   const normalizedCode = (body.code as string).trim().toLowerCase();
   const directJoin = body.directJoin === true;
+  if (usesCyId(env) && !directJoin) throw new CyIdError(409, "CLIENT_UPDATE_REQUIRED");
   const normalizedToken = normalizeDeviceToken(body.deviceToken as string);
   const codeHash = await sha256Hex(normalizedCode);
   const tokenHash = await sha256Hex(normalizedToken);
@@ -1019,6 +1029,7 @@ export default {
         return await currentDevice(request, env, requestId);
       return errorResponse(env, requestId, 404, "NOT_FOUND", "Route not found.");
     } catch (error) {
+      if (error instanceof CyIdError) return cyIdErrorResponse(error);
       console.error("cloud_request_failed", {
         requestId,
         path: url.pathname,

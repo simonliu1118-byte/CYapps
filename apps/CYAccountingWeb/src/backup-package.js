@@ -16,6 +16,13 @@ export async function buildBackupPackage(db, now = new Date()) {
     readPaged(db, 'SELECT id, month, account_name, action, previous_amount, new_amount, reason, actor_employee_id, actor_employee_no, actor_name, actor_role, created_at FROM opening_balance_audit ORDER BY id', mapOpeningAudit),
     readPaged(db, 'SELECT key, value FROM app_settings ORDER BY key', mapSetting)
   ]);
+  const importRuns = Number(schemaRow?.value || 0) >= 8 ? await readPaged(db,
+    'SELECT id, start_date, end_exclusive, reason, source_sha256, backup_id, deleted_count, inserted_count, actor_json, created_at FROM excel_import_runs ORDER BY created_at, id', row => ({
+      id: String(row.id), startDate: String(row.start_date), endExclusive: String(row.end_exclusive),
+      reason: String(row.reason), sourceSha256: String(row.source_sha256), backupId: String(row.backup_id),
+      deletedCount: Number(row.deleted_count), insertedCount: Number(row.inserted_count),
+      actor: JSON.parse(row.actor_json), createdAt: String(row.created_at)
+    })) : [];
 
   const data = {
     accounts,
@@ -24,7 +31,8 @@ export async function buildBackupPackage(db, now = new Date()) {
     openingBalanceOverrides: openingOverrides,
     openingBalanceAudit: openingAudit,
     transactions,
-    appSettings: settings
+    appSettings: settings,
+    excelImportRuns: importRuns
   };
   const counts = Object.fromEntries(Object.entries(data).map(([key, rows]) => [key, rows.length]));
   const totalRowCount = Object.values(counts).reduce((sum, count) => sum + count, 0);

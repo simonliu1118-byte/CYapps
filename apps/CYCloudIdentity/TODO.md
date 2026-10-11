@@ -2,9 +2,9 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
-## Current checkpoint — 2026-10-01
+## Current checkpoint — 2026-10-11
 
-- Current source release is **CYCloudIdentity 0.3.5 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.5 Build 0 已部署並驗證**，run `36821423383`；source 與部署證據分開記錄。
+- Current source release is **CYCloudIdentity 0.3.6 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.6 Build 0 已部署並驗證**，run `38111211344`（既有設定／Secrets／authority 保留，原 0.3.5 run 36821423383 為歷史）；source 與部署證據分開記錄。
 - CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
@@ -20,7 +20,7 @@
 - Provider local acceptance 已證明：expiry、single-use、core-app-only、ticket-not-session、completion-no-session、ticket replay rejection、explicit re-login、resend/edit invalidation。
 - CYID 0.3 development deploy 已成功完成 remote migration `0007_initial_email_password.sql`、Worker deploy 與 Identity secret configuration。
 - Controlled real Email/browser lifecycle 驗收依使用者目前條件暫緩；這不重開已定案 contract，但仍是 production 前必要 acceptance。
-- CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.2 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
+- CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.3 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
 - CYAccountingWeb（CYACCweb）handoff 已收斂為 app-specific migration guide：`docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；共同 Role / Session / App Access / first-login / recovery 規範只讀 `docs/CONSUMER_INTEGRATION_STANDARD.md`。
 - CYACC **V0.21.6 Build 1 / Draft PR #243** isolated development live acceptance run #96 已通過：USER login/read-only/Excel、Role change Session invalidation、ADMIN isolated write、App Access revoke/restore + Session invalidation、logout。Password Recovery Email/browser、Tablet 真機與 production cutover 仍為獨立 gate。
 - Cross-repository contract mirror 已定義 manifest + exact-sync 規則：CY Web 等外部 repo 必須鏡像 manifest 所列 7 個 artifacts 並在 governance/CI/deploy 前 byte-compare；同 repo consumer 直接讀 canonical files。
@@ -29,6 +29,29 @@
 - **相容層與部署檢查完成**：讀 `docs/COMPATIBILITY_REVIEW.md`。已確認 obsolete Group API/projections、兩份 Session authority 檢查、舊不可達 lifecycle handlers 與 initial-access wrapper；第一批 source 清理已完成：resolve API 與 management/self-service 共用 `resolveIdentitySession`；移除 6 個未 dispatch 的 legacy lifecycle/admin handlers。Provider Group endpoints／public fields、initial-access wrapper 與 Email budget 重複尚待下一批協調清理。
 - **Production provisioning replay 已封住**：PR #254 直接在既有 production deployment branch 退休一次性 workflow；main 保存相同 inert gate。重跑只回 retirement error，不持有 Secrets，也沒有 continuity／migrations／deploy。日常 production deployment path 已建立於 `cycloudidentity-production-deploy.yml`：只接受 main 手動觸發，讀既有正式 bindings，consumer readiness 與 dry-run 通過後只做 forward migration/source deploy，不重播 authority。不得直接把含舊 consumer baseline 的整個 deployment branch 合入 main。
 - Backup rollout / restore acceptance 與 CY Web production business-data rollout 未完成。
+
+## Development upgrade preparation
+
+- [x] CYInvoice Consumer/canonical 1.0.3 工程基準 PR #380 已合併到 main `59d63b6785fa028657c9a2fb13fc9515e497d95d`；精確功能 head `46723a89` 七項 CI 通過，無自動部署／正式切換。
+- [x] 既有 development workflow 收斂為唯讀 preflight／保留原設定的 code-only upgrade；只讀 Provider 維運 D1 metadata、exact migration／FK／hashed authority／history 與 recovery reference，不重寫 Secrets／bootstrap、不跑 remote migration。deployment tooling 不修改產品／contract／VERSION／BUILD。
+- [x] Deployment audit source 348185fb 四項 CI 通過並合併 #384；read-only development #123（38110828710）及實際 0.3.6 upgrade #124（38111211344）通過，部署 head 56c27685 與已測 source tree 相同。原七個 migration 無 pending／未寫 remote schema、FK 清潔、原 vars／bindings／Secret names／hashed authority metadata／history counts 保留，health 與 synthetic invalid Session 拒絕正常。恢復參考 UTC checkpoint 2026-10-11T04:20:13.295Z；無 bootstrap／Secret replacement／D1 restore。private RPC／真實 Employee 與原 Device 另行驗收。
+- [x] CY Web governance PR #145 合併 main a0cb4675；七個 manifest mirror 與 canonical 1.0.3 bytes 相同，CY Web consumer 維持相容 1.0.2，沒有 Web runtime／部署變更。
+
+- [x] Isolated temporary consumer transport probe source／tests：secret-gated route、default Fetcher／named RPC 同一 Provider、固定 synthetic invalid Session／unavailable scope；不建帳號／Session／grant／D1，成功／失敗以 owner nonce／bindings 核對後清理，不改原 Provider Secret／authority。
+- [x] Probe 最終 source 4dc28ff6／#391 已通過 Governance、Provider Check、兩個 deployment PR validate；13 項 controller／Worker 回歸涵蓋 multipart、local zero-mutation failure、partial upload／route failure 清理與 owner／target／D1 拒絕。只保留一條 local bundle → controlled API upload 路徑，CLI hint 中間層已移除。
+- [x] 同一 probe owner 補上固定 platform response 分類與當前 Token 唯讀驗證／可讀 policy hint；不公開原始 body／headers／IDs，不列出或修改 Token，不為診斷擴權。#393 source 5dc0c4f7 四項 exact-head CI／完整 78 項 Provider tests／21 項 focused regression 通過並合併；可讀權限名稱僅供診斷，不能當授權證據。
+- [ ] 真實 private binding transport／deny 驗收：latest [development #139](https://github.com/simonliu1118-byte/CYapps/actions/runs/38119760514)（5dc0c4f7）validate／原 Provider preflight 通過；account Token active，自身 policy GET HTTP 403／9109 不可讀。Temporary Worker upload 仍回 HTTP 403（JSON envelope／Cloudflare markers，無 numeric API code、無 intermediary-denial marker），未到 Fetcher／RPC。Temporary Worker absence confirmed、Provider deploy／post-check skipped、私有檔案清除。#136 及更早 runs 僅為失敗診斷歷史。
+- [ ] 若受控既有版本路徑仍被拒絕，管理者在 Cloudflare 核對既有 development Token 的目標 account／Worker upload 與 cleanup 能力及 API 拒絕紀錄；現有工具沒有 Token 管理讀写連線，自身 policy 不可讀不等於缺少 Worker-write。不為診斷增加 Token-read 權限、不自行擴權、不盲目重跑；有可驗證的授權／配置修正後才重跑隔離 probe。詳細證據／邊界見 docs/DEVELOPMENT_DEPLOYMENT.md。
+
+- [x] 使用者停用窗口的原服務安全核對已完成 #19；cleanup／transport／Windows positive authorization 仍開放。受控驗證：沿用 CYInvoice development owner 與同一 probe controller，上傳 `deploy=false` 的短效版本、保留 active Built-in／原 D1／Secrets／路由，僅刪已確認 owner 且未部署的 probe version；source tests 與 actual run／cleanup 證據分開。Optional approved scope fingerprint／enablement 不代替 Employee／Device 授權。詳見 DEVELOPMENT_DEPLOYMENT 的既有版本段落。
+
+## Optional consumer invalidation source
+
+- [x] Contract 1.0.3 / source 0.3.6 adds the private named RPC entrypoint; indexed current-state comparison, no positive grant/Session/verifier export. Canonical semantics are in CONSUMER_INTEGRATION_STANDARD §11.1; impact BACKWARD_COMPATIBLE, minimum remains 1.0.0.
+- [x] Real-provider synthetic D1 regression through CYInvoice covers Role, enabled, App Access, credential version, deleted ID, unavailable application and revoke during provider outage; existing provider test suite remains required.
+- [ ] Isolated staging with the named entrypoint binding, positive authorization and actual consumer usage/cost measurement. Development 0.3.6 is deployed (#124); transport/deny proof alone does not establish real consumer authorization.
+- [x] CY Web cross-repository manifest byte-sync 1.0.3（#145）；同 repo consumers 直接讀 canonical，不新增 mirror。
+- [ ] Coordinated private binding／consumer acceptance and production approval. Existing CY Web/CYACC compatibility is retained; this task does not modify their runtime.
 
 ## Documentation consolidation
 
@@ -124,3 +147,9 @@ The user explicitly deferred real Email acceptance and asked that the checklist 
 - [ ] Production source release readiness and explicit authorization; existing provisioning success does not close Email/browser/restore gates.
 
 Prerequisites for later Email tests: user-designated controlled inbox, explicit recipient/account-creation authority, secure login/OTP collection and user handoff for new permanent credential entry. No credentials or real recipient addresses belong in Public documents. CY Web's business backup target remains R2 + GCS under its own approved architecture; independent App/scope/credentials must be preserved.
+
+
+2026-10-11 受控版本驗證更新：#395 source b3e60f70 六項 PR CI 通過並合併；actual CYInvoice development #17（38121460188）原 preflight／undeployed version upload 成功，但 owned-version DELETE 回 Cloudflare JSON 403，版本 absence 未確認。舊 post-check 將最新上傳的無 D1 probe metadata 當成 active runtime 而中止；不代表資料庫被刪除，也不把被 cleanup error 蓋住的 request result 算通過。現行 audit 修正為讀取 single 100% active version、清除 secret 值後比對，重查 deployment 穩定；同一 helper 被 probe owner 重用，retained probe 未清前禁止再上傳／一般 deploy。read-only preflight 增加原 history／health after-check 及 retained-probe 無 D1／未部署／到期檢查。source CI／actual read-only #19 active readback 已通過，Cloudflare version delete 權限／拒絕原因需管理端處理，正式切換保持未完成。證據見 Provider DEVELOPMENT_DEPLOYMENT。
+
+
+2026-10-11 actual read-only #19（38122167283）已通過；source #396／3b0a8c62 六項 distinct CI 與 merge f57c186b 為相同 tree86957505。原 active Cloud0.9.2／storage13／Built-in／D1／1 Workspace／4 Device／FK 正常，#19 before/after 的 captured hashes/history 保留；UTC recovery 2026-10-11T07:41:20.449Z。殘留 probe 1 個、過期／未部署／無D1；未刪除或重跑 probe，沒有 authority／Secrets／schema／business deployment。原 Built-in 可續用；管理端刪除403仍需解決，transport request／positive auth／Windows／cutover未通過。詳見 DEVELOPMENT_DEPLOYMENT 的最新 actual evidence；不得重跑舊 #17。

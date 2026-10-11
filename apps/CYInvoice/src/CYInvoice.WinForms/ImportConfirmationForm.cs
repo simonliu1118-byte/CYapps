@@ -375,7 +375,7 @@ internal sealed class ImportConfirmationForm : Form
         grid.CellFormatting += (_, eventArgs) => FormatStatus(eventArgs);
         FormClosing += (_, eventArgs) =>
         {
-            if (issuing)
+            if (issuing && !LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
             {
                 eventArgs.Cancel = true;
                 MessageBox.Show(this, "發票正在逐張處理，為避免狀態遺失，完成前不能關閉此視窗。", "正在開立", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -415,7 +415,7 @@ internal sealed class ImportConfirmationForm : Form
             ? "已找到本機記憶名稱，請套用資料"
             : lookup.ApiName.Trim().Length != 0
                 ? "已查詢買受人名稱，請套用資料"
-                : "光貿查無名稱，請輸入買方名稱後套用資料";
+                : "光貿查無名稱，可自行填寫後套用；留空則以統編送出";
         UpdateIssueEnabled();
     }
 
@@ -448,6 +448,13 @@ internal sealed class ImportConfirmationForm : Form
             if (closing) return;
             RefreshGrid();
             SetBusy(false, string.Empty);
+            var missing = entries.FirstOrDefault(entry => CanEditName(entry));
+            if (missing is not null)
+            {
+                SelectEntry(missing);
+                MessageBox.Show(this, "部分統編查無買方名稱，請確認統編並在買方名稱欄自行輸入。\n\n留空仍可開立，將以該張發票的統編作為買方名稱送出。", "買方名稱查無資料", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                buyerName.Focus();
+            }
         }
         catch (OperationCanceledException) when (closing)
         {
@@ -547,14 +554,13 @@ internal sealed class ImportConfirmationForm : Form
             var fallback = entry.BuyerName.Trim().Length == 0 ? entry.OriginalBuyerName.Trim() : entry.BuyerName.Trim();
             entry.BuyerName = fallback;
             entry.ApplyBuyerData?.Invoke(entry.BuyerBan.Trim(), fallback);
-            entry.Status = fallback.Length == 0 ? "請輸入買方名稱" : "光貿查無名稱，請確認買方名稱";
-            entry.Selected = fallback.Length != 0;
+            entry.Status = fallback.Length == 0 ? "名稱可填；留空以統編送出" : "光貿查無名稱，請確認買方名稱";
         }
         else
         {
             entry.BuyerName = string.Empty;
             entry.ApplyBuyerName(string.Empty);
-            entry.Status = "請輸入買方名稱";
+            entry.Status = "名稱可填；留空以統編送出";
         }
     }
 
@@ -597,20 +603,15 @@ internal sealed class ImportConfirmationForm : Form
         var entry = ActiveEntry();
         if (entry is null || !CanEditName(entry)) return;
         var name = buyerName.Text.Trim();
-        if (name.Length == 0)
-        {
-            if (showMessage) MessageBox.Show(this, "請輸入買方名稱。", "尚未完成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
         foreach (var other in entries.Where(value =>
                      !value.Finished && value.LookupError is null && value.Lookup.LookupSucceeded &&
                      value.Lookup.ApiName.Trim().Length == 0 && value.BuyerBan.Trim() == entry.BuyerBan.Trim()))
         {
-            SetResolvedName(other, name, "人工名稱待成功後記憶");
+            SetResolvedName(other, name, name.Length == 0 ? "名稱留空，將以統編送出" : "人工名稱待成功後記憶");
         }
         RefreshGrid();
         if (showMessage)
-            MessageBox.Show(this, "已套用到本批次相同統編的訂單；只有成功開立後才會記憶。", "名稱已套用", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, name.Length == 0 ? "已套用到本批次相同統編的訂單；買方名稱留空，將以統編送出。" : "已套用到本批次相同統編的訂單；只有成功開立後才會記憶。", "名稱已套用", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private async Task ApplyDigiwinBuyerDataAsync(bool showMessage)
@@ -632,9 +633,9 @@ internal sealed class ImportConfirmationForm : Form
             RefreshGrid();
             return;
         }
-        if (ban.Length == 0 || name.Length == 0)
+        if (ban.Length == 0)
         {
-            if (showMessage) MessageBox.Show(this, "統一編號與買方名稱必須同時填寫或同時留空。", "買方資料不完整", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (showMessage) MessageBox.Show(this, "填寫買方名稱時，請一併填寫公司統編。", "買方資料不完整", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             UpdateIssueEnabled();
             return;
         }
@@ -661,6 +662,8 @@ internal sealed class ImportConfirmationForm : Form
         }
         if (closing) return;
 
+        if (error is null && name.Length == 0 && lookup.Name.Trim().Length != 0)
+            name = lookup.Name.Trim();
         entry.BuyerBan = ban;
         entry.BuyerName = name;
         entry.Lookup = lookup;
@@ -678,7 +681,7 @@ internal sealed class ImportConfirmationForm : Form
             entry.Status = lookup.Local
                 ? string.Equals(name, lookup.Name.Trim(), StringComparison.Ordinal) ? "本機記憶名稱" : "人工名稱將覆寫本機記憶"
                 : lookup.ApiName.Trim().Length == 0
-                    ? "人工名稱待成功後記憶"
+                    ? name.Length == 0 ? "名稱留空，將以統編送出" : "人工名稱待成功後記憶"
                     : string.Equals(name, lookup.ApiName.Trim(), StringComparison.Ordinal)
                         ? "光貿查詢完成"
                         : "名稱與光貿查詢不同";
@@ -716,8 +719,10 @@ internal sealed class ImportConfirmationForm : Form
 
         var formal = repository.Settings.LoadOrCreate().Environment == Environments.Production;
         var total = selected.Sum(entry => entry.TotalAmount);
+        var unnamed = selected.Count(entry => entry.Company && entry.BuyerName.Trim().Length == 0);
+        var buyerNotice = unnamed == 0 ? string.Empty : $"其中 {unnamed} 張買方名稱留空，將以各自的統編送出。\n\n";
         var confirmation = MessageBox.Show(this,
-            $"即將依勾選順序開立 {selected.Length} 張{(formal ? "正式" : "測試")}發票\n\n選擇總額：{MoneyFormatter.Integer(total)}\n\n每張會逐一送出；等待期間請勿關閉視窗或重複操作。",
+            $"{buyerNotice}即將依勾選順序開立 {selected.Length} 張{(formal ? "正式" : "測試")}發票\n\n選擇總額：{MoneyFormatter.Integer(total)}\n\n每張會逐一送出；等待期間請勿關閉視窗或重複操作。",
             "確認批次開立", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
         if (confirmation != DialogResult.OK) return;
 
@@ -788,11 +793,11 @@ internal sealed class ImportConfirmationForm : Form
         {
             var ban = entry.BuyerBan.Trim();
             var name = entry.BuyerName.Trim();
-            if ((ban.Length == 0) != (name.Length == 0)) return true;
+            if (ban.Length == 0 && name.Length != 0) return true;
             if (ban.Length == 0) return false;
             return ban.Length != 8 || !ban.All(char.IsAsciiDigit) || (!entry.Lookup.Local && !entry.Lookup.LookupSucceeded);
         }
-        return entry.Company && entry.BuyerName.Trim().Length == 0;
+        return entry.Company && (entry.BuyerBan.Trim().Length != 8 || !entry.BuyerBan.Trim().All(char.IsAsciiDigit) || (!entry.Lookup.Local && !entry.Lookup.LookupSucceeded));
     }
 
     private void RefreshGrid()
@@ -935,9 +940,11 @@ internal sealed class ImportConfirmationForm : Form
         UpdateIssueEnabled(busy);
     }
 
+    internal void ApplyServiceState() => UpdateIssueEnabled();
+
     private void UpdateIssueEnabled(bool busy = false)
     {
-        if (busy || issuing || entries.Count == 0)
+        if (busy || issuing || entries.Count == 0 || repository.Connections.Current is { AmegoAvailable: false } or { BlockAll: true })
         {
             issue.Enabled = false;
             return;

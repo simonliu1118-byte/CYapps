@@ -10,6 +10,8 @@ on:
       - "apps/CYInvoice/Directory.Build.props"
       - "apps/CYInvoice/VERSION"
       - "apps/CYInvoice/BUILD"
+      - "apps/CYInvoice/CYID_CONSUMER_VERSION"
+      - "apps/CYCloudIdentity/CONSUMER_*"
       - "apps/CYInvoice/src/**"
       - "apps/CYInvoice/tests/**"
       - "apps/CYInvoice/assets/**"

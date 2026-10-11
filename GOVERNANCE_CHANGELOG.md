@@ -1,5 +1,9 @@
 # CYApps Governance Changelog
 
+## 2.3.34 — 2026/10/10
+
+- CYInvoice `PROJECT_RULES.md` 明列採用 CYID canonical Consumer Integration Standard；完成使用者授權 consumer 接入所需的專案 adoption gate，直接引用同 repo canonical package，不新增身分語意／規則層，也不授權正式切換。
+
 ## 2.3.33 — 2026/10/10
 
 - CYERPAutoInput `PROJECT_RULES.md` §1：使用者核准新增第二個放棄單據例外。按「開始輸入」時 ERP 已在新增或修改狀態，須先提醒並經使用者明確確認，才可放棄該單據回到檢視、再從新增開始輸入；未確認不得開始。原批次失敗放棄自建單據的例外不變。

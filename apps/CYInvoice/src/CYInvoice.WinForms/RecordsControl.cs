@@ -27,6 +27,7 @@ internal sealed class RecordsControl : UserControl
     private readonly ComboBox state = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NativeListViewHost recordsHost = new(10F, 22);
     private readonly Button refreshButton = UiControls.StandardButton("重新整理");
+    private readonly Button processingButton = UiControls.StandardButton("處理中");
     private readonly Button uploadIssuesButton = UiControls.StandardButton("上傳問題");
     private readonly Label rangeToLabel = FilterLabel("至");
     private readonly Label buyerBanLabel = FilterLabel("統編");
@@ -83,7 +84,7 @@ internal sealed class RecordsControl : UserControl
     private void BuildLayout()
     {
         source.Items.AddRange(["全部", "光貿同步", InvoiceSources.Manual, InvoiceSources.Mo, InvoiceSources.Coupang, InvoiceSources.Digiwin]);
-        state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.OpenedWaitingVoid, InvoiceStates.Failed, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
+        state.Items.AddRange(["全部", InvoiceStates.Opened, InvoiceStates.OpenedWaitingVoid, InvoiceStates.Unknown, InvoiceStates.Changing, InvoiceStates.Voided]);
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 144));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -123,6 +124,12 @@ internal sealed class RecordsControl : UserControl
             form.ShowDialog(FindForm());
             Reload();
         };
+        processingButton.Click += (_, _) =>
+        {
+            using var form = new SyncIssuesForm(repository, processing: true);
+            form.ShowDialog(FindForm());
+            Reload();
+        };
         leftButtons.Controls.Add(query);
         leftButtons.Controls.Add(clear);
         leftButtons.Controls.Add(refreshButton);
@@ -130,7 +137,15 @@ internal sealed class RecordsControl : UserControl
         uploadIssuesButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         uploadIssuesButton.Margin = new Padding(6, 2, 6, 2);
         buttonRow.Controls.Add(leftButtons, 0, 0);
-        buttonRow.Controls.Add(uploadIssuesButton, 1, 0);
+        var workButtons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = Padding.Empty,
+        };
+        processingButton.Margin = uploadIssuesButton.Margin;
+        workButtons.Controls.Add(uploadIssuesButton);
+        workButtons.Controls.Add(processingButton);
+        buttonRow.Controls.Add(workButtons, 1, 0);
         filters.Controls.Add(buttonRow, 0, 2);
         filters.SetColumnSpan(buttonRow, 8);
 
@@ -235,6 +250,7 @@ internal sealed class RecordsControl : UserControl
 
     private bool Matches(InvoiceRecord record)
     {
+        if (record.InvoiceState == InvoiceStates.Failed) return false;
         var date = ParseDate(record.InvoiceDate.Length == 0 ? record.SentAt : record.InvoiceDate);
         if (dateFrom.Checked && (date is null || date.Value.Date < dateFrom.Value.Date)) return false;
         if (dateTo.Checked && (date is null || date.Value.Date > dateTo.Value.Date)) return false;
@@ -336,9 +352,12 @@ internal sealed class RecordsControl : UserControl
             if (accountKey.Length == 0)
             {
                 uploadIssuesButton.Text = "上傳問題";
+                processingButton.Text = "處理中";
                 return;
             }
-            var issues = new InvoiceSyncIssueStore(repository.DataDirectory).Unresolved(accountKey);
+            var queue = new InvoiceWorkQueue(repository).Load();
+            var issues = queue.UploadIssues.Where(issue => issue.ResolvedUtc is null);
+            processingButton.Text = queue.ProcessingCount == 0 ? "處理中" : $"處理中 ({queue.ProcessingCount})";
             var lastRead = new InvoiceSyncStateStore(repository.DataDirectory)
                 .LastSuccess(accountKey, SyncIssuesForm.ReadStateScope);
             var unread = issues.Count(issue => lastRead is null || issue.CreatedUtc > lastRead.Value);
@@ -347,6 +366,7 @@ internal sealed class RecordsControl : UserControl
         catch (Exception)
         {
             uploadIssuesButton.Text = "上傳問題";
+            processingButton.Text = "處理中";
         }
     }
 
@@ -786,6 +806,34 @@ internal sealed class RecordsControl : UserControl
         source.SelectedIndex = 0; state.SelectedIndex = 0;
     }
 
+    internal void VerifySmokeFailedRecords()
+    {
+        var failed = new InvoiceRecord
+        {
+            Id = "smoke-failed-" + Guid.NewGuid().ToString("N"),
+            Environment = repository.Settings.LoadOrCreate().Environment,
+            OrderId = "SMOKE-DUPLICATE", OriginalOrderId = "SMOKE-DUPLICATE",
+            Source = InvoiceSources.Manual, InvoiceState = InvoiceStates.Failed,
+            SentAt = DateTimeOffset.Now.ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture),
+            ErrorMessage = "API code 3040171: OrderId duplicate",
+        };
+        repository.Invoices.Append(failed);
+        try
+        {
+            Reload();
+            if (Records.Items.Cast<ListViewItem>().Any(row => row.Tag is InvoiceRecord record && record.Id == failed.Id) ||
+                state.Items.Contains(InvoiceStates.Failed))
+                throw new InvalidOperationException("開立失敗紀錄仍出現在主清單或狀態篩選");
+            using var issues = new SyncIssuesForm(repository, startupSmokeTest: true);
+            issues.VerifySmokeFailedRecord(failed.Id);
+        }
+        finally
+        {
+            new FailedInvoiceRecordStore(repository.DataDirectory).Delete([failed]);
+            Reload();
+        }
+    }
+
     internal void VerifySmokeLayout()
     {
         if (Records.Columns.Count != 10) throw new InvalidOperationException("已開立發票原生 ListView 欄位未建立");
@@ -801,6 +849,10 @@ internal sealed class RecordsControl : UserControl
         if (!UiControls.HasLogicalSize(uploadIssuesButton, UiControls.StandardButtonWidth, UiControls.StandardButtonHeight) ||
             !uploadIssuesButton.Text.StartsWith("上傳問題", StringComparison.Ordinal))
             throw new InvalidOperationException("上傳問題按鈕尺寸或文字不正確");
+        if (!processingButton.Text.StartsWith("處理中", StringComparison.Ordinal) ||
+            processingButton.Parent != uploadIssuesButton.Parent || processingButton.Left <= uploadIssuesButton.Left ||
+            Math.Abs(ScreenCenterY(processingButton) - ScreenCenterY(uploadIssuesButton)) > 1)
+            throw new InvalidOperationException("處理中按鈕未與上傳問題並排對齊");
         if (copyHint.Text != CopyHintText || copyHint.Parent is null)
             throw new InvalidOperationException("發票號碼單擊複製提示未建立");
         if (Records.Columns[0].Text != "開立時間" || Records.Columns[1].Text != "發票號碼" || Records.Columns[2].Text != "來源")

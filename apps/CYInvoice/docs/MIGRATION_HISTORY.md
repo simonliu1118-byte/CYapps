@@ -86,6 +86,20 @@ V2.6 在正式折讓 API 尚未自動化前，先以本機人工待辦接入實�
 
 V2.6.2 Build 0 已通過 Windows engineering CI；仍需實機／光貿驗證，尚未建立正式 Release。
 
+## V2.6.7～V2.6.10：Identity／Device lifecycle
+
+- 四包已整合至 main：provider-neutral authority、Online freshness、Device inventory／revoke、crash-safe Cloud → Local reset。
+- 正式 role 改為 SUPER_ADMIN／ADMIN／USER；舊 Local employees／Cloud cache 用一次性 transaction migration，Cloud 用 0010 forward migration，無 active EMPLOYEE alias。0011 增加 revoked-device lifecycle。
+- API 1 的 compatibility marker 8 與 storage Schema 11 分開；9/29 staged development Run #7 沒有未套用 migration，不重跑已套用 migration。
+- 人工作業與 CI／deployment 分別記錄於 CLOUD_WORK_HANDOFF.md／TODO.md；沒有新的正式 Release。
+
+## V2.6.11 Build 2：處理中投影
+
+- 新增正常官方等待清單，使用既有 invoice metadata／workflow／issues，沒有新資料表或第二套 pending store。
+- cyinvoice_void_official_pending 與折讓 nullable ConfirmationProblem 區分正常等待與問題；舊資料保守分類，回查後收斂。
+- 舊 void_pending_confirmation 從 active upload issue 退役；管理員結案不再要求製造假 issue，仍只停止本機追蹤。
+- 功能 commit 66ec3671 的 Governance／Cloud／Windows 全通過；PR #216 尚未合併，實機驗收未完成。
+
 ## 正式發布結果
 
 - 最新公開正式 Release 仍為 V2.4.2（2026/09/19）。

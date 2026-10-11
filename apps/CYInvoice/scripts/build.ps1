@@ -90,6 +90,12 @@ C#／WinForms 已自 V2.0.0 起成為唯一正式產品線。
 "@ | Set-Content -Path (Join-Path $ReleaseDir ("{0}.txt" -f $ArtifactVersion)) -Encoding UTF8
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+# Original package files are preserved by automatic revoked-device recovery.
+# Empty Data/Cache/Logs folders have no entries; runtime files cannot enter this list.
+$PackageFiles = @(Get-ChildItem -LiteralPath $ReleaseDir -File -Recurse |
+    ForEach-Object { [IO.Path]::GetRelativePath($ReleaseDir, $_.FullName).Replace('\', '/') } |
+    Sort-Object)
+ConvertTo-Json -InputObject $PackageFiles | Set-Content -Path (Join-Path $ReleaseDir "package-files.json") -Encoding utf8
 $Archive = [System.IO.Compression.ZipFile]::Open($ZipPath, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
     foreach ($File in Get-ChildItem -LiteralPath $ReleaseDir -File -Recurse | Sort-Object FullName) {

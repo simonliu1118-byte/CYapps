@@ -60,7 +60,11 @@ public sealed class CloudDeviceSelfStatusClient
                 response.StatusCode);
         }
 
-        var root = document.RootElement;
+        return ReadStatus(document.RootElement);
+    }
+
+    public static CloudDeviceSelfStatus ReadStatus(JsonElement root)
+    {
         var deviceId = ReadRequiredString(root, "deviceId");
         var workspaceId = ReadRequiredString(root, "workspaceId");
         var status = ReadRequiredString(root, "status");

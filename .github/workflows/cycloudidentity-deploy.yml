@@ -8,16 +8,25 @@ on:
       - "apps/CYCloudIdentity/**"
       - ".github/workflows/cycloudidentity-deploy.yml"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Read-only preflight or preserve-existing development upgrade'
+        type: choice
+        options: [preflight, upgrade, binding-probe]
+        default: preflight
+        required: true
   push:
     branches:
       - deploy/cycloudidentity-development
+      - deploy/cycloudidentity-development-preflight
+      - deploy/cycloudidentity-development-binding-probe
 
 permissions:
   contents: read
 
 concurrency:
-  group: cycloudidentity-deploy-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: cycloudidentity-development
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -69,12 +78,20 @@ jobs:
       - name: Validate Worker bundle
         run: npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc
 
+      - name: Validate isolated private probe bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'rm -f "$RUNNER_TEMP/cyid-probe-ci.jsonc"' EXIT
+          node --input-type=module -e 'import fs from "node:fs"; import path from "node:path"; fs.writeFileSync(path.join(process.env.RUNNER_TEMP, "cyid-probe-ci.jsonc"), JSON.stringify({name:"cyid-binding-ci",main:path.resolve("scripts/private-binding-probe-worker.mjs"),compatibility_date:"2026-09-25",services:[{binding:"IDENTITY",service:"identity-test-ci"},{binding:"IDENTITY_AUTHORITY",service:"identity-test-ci",entrypoint:"ConsumerAuthoritySync"}]}));'
+          npx wrangler deploy --dry-run --config "$RUNNER_TEMP/cyid-probe-ci.jsonc" --outdir "$RUNNER_TEMP/cyid-probe-ci-bundle"
+
       - name: Remove generated config
         if: always()
         run: rm -f wrangler.ci.generated.jsonc
 
   deploy-development:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-development')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -87,19 +104,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
-      CYID_D1_DATABASE_NAME: ${{ vars.CYID_D1_DATABASE_NAME }}
       CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
-      CYID_LOGIN_RATE_LIMIT_NAMESPACE_ID: ${{ vars.CYID_LOGIN_RATE_LIMIT_NAMESPACE_ID }}
-      CYID_SESSION_TTL_SECONDS: ${{ vars.CYID_SESSION_TTL_SECONDS }}
-      CYID_EMAIL_PROVIDER: ${{ vars.CYID_EMAIL_PROVIDER }}
-      CYID_EMAIL_FROM: ${{ vars.CYID_EMAIL_FROM }}
-      CYID_EMAIL_DAILY_BUDGET: ${{ vars.CYID_EMAIL_DAILY_BUDGET }}
-      CYID_CORE_ACCOUNT_APPLICATION_ID: ${{ vars.CYID_CORE_ACCOUNT_APPLICATION_ID }}
-      CYID_ACCOUNT_PORTAL_URL: ${{ vars.CYID_ACCOUNT_PORTAL_URL }}
-      CYID_BREVO_API_KEY: ${{ secrets.CYID_BREVO_API_KEY }}
-      CYID_RESEND_API_KEY: ${{ secrets.CYID_RESEND_API_KEY }}
-      CYID_OTP_PEPPER: ${{ secrets.CYID_OTP_PEPPER }}
-      CYID_BOOTSTRAP_SECRET: ${{ secrets.CYID_BOOTSTRAP_SECRET }}
 
     steps:
       - name: Checkout source
@@ -113,88 +118,44 @@ jobs:
       - name: Install development dependencies
         run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
 
-      - name: Verify deployment inputs
+      - name: Read-only provider preflight and private recovery checkpoint
         shell: bash
         run: |
           set -euo pipefail
-          required=(
-            CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
-            CYID_WORKER_NAME CYID_D1_DATABASE_NAME CYID_D1_DATABASE_ID
-            CYID_LOGIN_RATE_LIMIT_NAMESPACE_ID CYID_SESSION_TTL_SECONDS
-            CYID_EMAIL_PROVIDER CYID_EMAIL_FROM CYID_EMAIL_DAILY_BUDGET
-            CYID_CORE_ACCOUNT_APPLICATION_ID CYID_ACCOUNT_PORTAL_URL
-            CYID_OTP_PEPPER CYID_BOOTSTRAP_SECRET
-          )
-          for name in "${required[@]}"; do
-            if [[ -z "${!name:-}" ]]; then
-              echo "Missing required development setting: ${name}" >&2
-              exit 1
-            fi
-          done
-          if [[ "${CYID_EMAIL_PROVIDER}" == "brevo" && -z "${CYID_BREVO_API_KEY:-}" ]]; then
-            echo "Missing CYID_BREVO_API_KEY for Brevo." >&2
-            exit 1
-          fi
-          if [[ "${CYID_EMAIL_PROVIDER}" == "resend" && -z "${CYID_RESEND_API_KEY:-}" ]]; then
-            echo "Missing CYID_RESEND_API_KEY for Resend." >&2
-            exit 1
-          fi
+          umask 077
+          node scripts/deployment-preflight.mjs before "$RUNNER_TEMP/cyid-upgrade-audit.json"
 
-      - name: Render development Cloudflare config
-        run: node scripts/render-deploy-config.mjs --output wrangler.deploy.generated.jsonc
-
-      - name: Apply remote D1 migrations
-        run: npx wrangler d1 migrations apply DB --remote --config wrangler.deploy.generated.jsonc
-
-      - name: Deploy development Worker
-        run: npx wrangler deploy --config wrangler.deploy.generated.jsonc
-
-      - name: Configure Identity secrets
+      - name: Validate preserved development bundle before mutation
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' "$CYID_OTP_PEPPER" | npx wrangler secret put OTP_PEPPER --config wrangler.deploy.generated.jsonc
-          printf '%s' "$CYID_BOOTSTRAP_SECRET" | npx wrangler secret put BOOTSTRAP_SECRET --config wrangler.deploy.generated.jsonc
-          if [[ "$CYID_EMAIL_PROVIDER" == "brevo" ]]; then
-            printf '%s' "$CYID_BREVO_API_KEY" | npx wrangler secret put BREVO_API_KEY --config wrangler.deploy.generated.jsonc
-          else
-            printf '%s' "$CYID_RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY --config wrangler.deploy.generated.jsonc
+          if ! npx wrangler deploy --dry-run --config wrangler.deploy.generated.jsonc --outdir "$RUNNER_TEMP/cyid-upgrade-bundle" > "$RUNNER_TEMP/cyid-private-bundle.log" 2>&1; then
+            echo 'Preserved development bundle failed; no remote mutation performed.'
+            exit 1
           fi
 
-      - name: Verify deployed development bindings and release
+      - name: Upgrade original development provider without secret or authority writes
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-development') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'upgrade')
         shell: bash
         run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const api='https://api.cloudflare.com/client/v4/accounts/'+process.env.CLOUDFLARE_ACCOUNT_ID;
-          async function read(path){
-            const response=await fetch(api+path,{headers:{authorization:'Bearer '+process.env.CLOUDFLARE_API_TOKEN},signal:AbortSignal.timeout(20000)});
-            const body=await response.json();
-            if(!response.ok||body.success!==true) throw new Error('DEVELOPMENT_RESOURCE_READBACK_FAILED');
-            return body.result;
-          }
-          const settings=await read('/workers/scripts/'+process.env.CYID_WORKER_NAME+'/settings');
-          if(settings.bindings?.find(b=>b.type==='plain_text'&&b.name==='APP_ENV')?.text!=='development'
-            ||settings.bindings?.find(b=>b.type==='d1'&&b.name==='DB')?.id!==process.env.CYID_D1_DATABASE_ID) throw new Error('DEVELOPMENT_BINDING_ISOLATION_FAILED');
-          const account=await read('/workers/subdomain');
-          if(!account?.subdomain) throw new Error('DEVELOPMENT_ENDPOINT_UNAVAILABLE');
-          const origin='https://'+process.env.CYID_WORKER_NAME+'.'+account.subdomain+'.workers.dev';
-          const expected=fs.readFileSync('VERSION','utf8').trim();
-          let ready=false;
-          for(let attempt=0;attempt<10;attempt++){
-            const response=await fetch(origin+'/v1/health',{signal:AbortSignal.timeout(10000)});
-            const body=await response.json();
-            if(response.ok&&body.ok===true&&body.environment==='development'&&body.serviceVersion===expected){ready=true;break;}
-            await new Promise(resolve=>setTimeout(resolve,1000));
-          }
-          if(!ready) throw new Error('DEVELOPMENT_RELEASE_NOT_READY');
-          const token='cyid_'+crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
-          const response=await fetch(origin+'/v1/identity/session/resolve',{method:'POST',headers:{authorization:'Bearer '+token,'x-identity-application':process.env.CYID_CORE_ACCOUNT_APPLICATION_ID},signal:AbortSignal.timeout(10000)});
-          const body=await response.json();
-          if(response.status!==401||body.error?.code!=='SESSION_INVALID') throw new Error('DEVELOPMENT_SESSION_REJECTION_FAILED');
-          console.log('Deployed development bindings, source version '+expected+' and fail-closed D1 Session resolution verified.');
-          NODE
+          set -euo pipefail
+          if ! npx wrangler deploy --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyid-private-deploy.log" 2>&1; then
+            echo 'Development upgrade failed; inspect existing Worker and private checkpoint. Do not restore D1 or replay bootstrap automatically.'
+            exit 1
+          fi
+          echo 'Development provider code upgraded with original runtime bindings and secrets retained.'
 
-      - name: Remove generated config
+      - name: Verify provider version and authority continuity
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-development') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'upgrade')
+        run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyid-upgrade-audit.json"
+
+      - name: Verify private binding transport through isolated temporary Worker
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-development-binding-probe') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-probe')
+        run: node scripts/private-binding-probe.mjs
+
+      - name: Remove private generated config and checkpoint
         if: always()
-        run: rm -f wrangler.deploy.generated.jsonc
+        shell: bash
+        run: |
+          rm -f wrangler.deploy.generated.jsonc "$RUNNER_TEMP/cyid-upgrade-audit.json" "$RUNNER_TEMP/cyid-private-bundle.log" "$RUNNER_TEMP/cyid-private-deploy.log"
+          rm -rf "$RUNNER_TEMP/cyid-upgrade-bundle"

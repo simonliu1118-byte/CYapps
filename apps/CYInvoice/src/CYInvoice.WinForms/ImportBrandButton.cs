@@ -1,5 +1,3 @@
-using System.Drawing.Drawing2D;
-
 namespace CYInvoice.WinForms;
 
 internal enum ImportBrand
@@ -9,12 +7,9 @@ internal enum ImportBrand
     Coupang,
 }
 
-internal sealed class ImportBrandButton : NoFocusCueButton
+internal sealed class ImportBrandButton : RoundedButton
 {
     private readonly ImportBrand brand;
-    private bool hovered;
-    private bool pressed;
-
     public ImportBrandButton(string text, ImportBrand brand)
     {
         this.brand = brand;
@@ -24,70 +19,13 @@ internal sealed class ImportBrandButton : NoFocusCueButton
         Height = UiControls.StandardButtonHeight;
         Margin = new Padding(6, 2, 6, 2);
         AutoSize = false;
-        FlatStyle = FlatStyle.Flat;
-        FlatAppearance.BorderSize = 0;
-        UseVisualStyleBackColor = false;
-        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-            ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
     }
 
-    protected override void OnMouseEnter(EventArgs eventArgs)
-    {
-        hovered = true;
-        Invalidate();
-        base.OnMouseEnter(eventArgs);
-    }
+    protected override ButtonColors ResolveColors() => new(Color.White,
+        brand == ImportBrand.Coupang ? Color.FromArgb(188, 188, 188) : Color.FromArgb(75, 75, 75), Color.White);
 
-    protected override void OnMouseLeave(EventArgs eventArgs)
+    protected override void PaintContent(Graphics graphics, Rectangle bounds, ButtonColors colors)
     {
-        hovered = false;
-        pressed = false;
-        Invalidate();
-        base.OnMouseLeave(eventArgs);
-    }
-
-    protected override void OnMouseDown(MouseEventArgs eventArgs)
-    {
-        if (eventArgs.Button == MouseButtons.Left) pressed = true;
-        Invalidate();
-        base.OnMouseDown(eventArgs);
-    }
-
-    protected override void OnMouseUp(MouseEventArgs eventArgs)
-    {
-        pressed = false;
-        Invalidate();
-        base.OnMouseUp(eventArgs);
-    }
-
-    protected override void OnKeyDown(KeyEventArgs eventArgs)
-    {
-        if (eventArgs.KeyCode is Keys.Space or Keys.Enter) pressed = true;
-        Invalidate();
-        base.OnKeyDown(eventArgs);
-    }
-
-    protected override void OnKeyUp(KeyEventArgs eventArgs)
-    {
-        pressed = false;
-        Invalidate();
-        base.OnKeyUp(eventArgs);
-    }
-
-    protected override void OnPaintBackground(PaintEventArgs eventArgs)
-    {
-        eventArgs.Graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
-    }
-
-    protected override void OnPaint(PaintEventArgs eventArgs)
-    {
-        var graphics = eventArgs.Graphics;
-        graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
-        var bounds = new Rectangle(1, 1, Math.Max(1, Width - 3), Math.Max(1, Height - 3));
-        using var shape = RoundedRectangle(bounds, 6);
-        graphics.SetClip(shape);
-
         if (brand == ImportBrand.Digiwin) DrawDigiwin(graphics, bounds);
         else if (brand == ImportBrand.MoShop) DrawMoShop(graphics, bounds);
         else DrawCoupang(graphics, bounds);
@@ -97,20 +35,16 @@ internal sealed class ImportBrandButton : NoFocusCueButton
             using var disabled = new SolidBrush(Color.FromArgb(125, SystemColors.Control));
             graphics.FillRectangle(disabled, bounds);
         }
-        else if (pressed)
+        else if (Pressed)
         {
             using var down = new SolidBrush(Color.FromArgb(42, Color.Black));
             graphics.FillRectangle(down, bounds);
         }
-        else if (hovered)
+        else if (Hovered)
         {
             using var over = new SolidBrush(Color.FromArgb(32, Color.White));
             graphics.FillRectangle(over, bounds);
         }
-
-        graphics.ResetClip();
-        using var border = new Pen(brand == ImportBrand.Coupang ? Color.FromArgb(188, 188, 188) : Color.FromArgb(75, 75, 75));
-        graphics.DrawPath(border, shape);
     }
 
     private void DrawDigiwin(Graphics graphics, Rectangle bounds)
@@ -148,7 +82,7 @@ internal sealed class ImportBrandButton : NoFocusCueButton
 
     private void DrawCoupang(Graphics graphics, Rectangle bounds)
     {
-        using (var background = new SolidBrush(hovered && Enabled ? Color.FromArgb(246, 251, 255) : Color.White))
+        using (var background = new SolidBrush(Hovered && Enabled ? Color.FromArgb(246, 251, 255) : Color.White))
             graphics.FillRectangle(background, bounds);
         var characters = new[] { "酷", "澎", "商", "城" };
         var colors = new[]
@@ -182,23 +116,10 @@ internal sealed class ImportBrandButton : NoFocusCueButton
             TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | alignment);
     }
 
-    internal static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
-    {
-        var diameter = radius * 2;
-        var path = new GraphicsPath();
-        path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
-        path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
-        path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
-        path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
 }
 
-internal sealed class PrimaryActionButton : NoFocusCueButton
+internal sealed class PrimaryActionButton : RoundedButton
 {
-    private bool hovered;
-    private bool pressed;
     private bool production;
 
     public PrimaryActionButton()
@@ -207,13 +128,8 @@ internal sealed class PrimaryActionButton : NoFocusCueButton
         Height = 46;
         Margin = Padding.Empty;
         AutoSize = false;
-        FlatStyle = FlatStyle.Flat;
-        FlatAppearance.BorderSize = 0;
         ForeColor = Color.White;
         Font = new Font("Microsoft JhengHei UI", 14F, FontStyle.Bold);
-        UseVisualStyleBackColor = false;
-        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
-            ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
     }
 
     public void SetEnvironment(bool isProduction)
@@ -222,58 +138,13 @@ internal sealed class PrimaryActionButton : NoFocusCueButton
         Invalidate();
     }
 
-    protected override void OnMouseEnter(EventArgs eventArgs)
+    protected override ButtonColors ResolveColors()
     {
-        hovered = true;
-        Invalidate();
-        base.OnMouseEnter(eventArgs);
-    }
-
-    protected override void OnMouseLeave(EventArgs eventArgs)
-    {
-        hovered = false;
-        pressed = false;
-        Invalidate();
-        base.OnMouseLeave(eventArgs);
-    }
-
-    protected override void OnMouseDown(MouseEventArgs eventArgs)
-    {
-        if (eventArgs.Button == MouseButtons.Left) pressed = true;
-        Invalidate();
-        base.OnMouseDown(eventArgs);
-    }
-
-    protected override void OnMouseUp(MouseEventArgs eventArgs)
-    {
-        pressed = false;
-        Invalidate();
-        base.OnMouseUp(eventArgs);
-    }
-
-    protected override void OnPaintBackground(PaintEventArgs eventArgs)
-    {
-        eventArgs.Graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
-    }
-
-    protected override void OnPaint(PaintEventArgs eventArgs)
-    {
+        if (!Enabled) return RoundedButtonSurface.SecondaryColors(false, false, false);
         var normal = production ? Color.FromArgb(3, 155, 229) : Color.FromArgb(25, 135, 84);
         var hover = production ? Color.FromArgb(41, 182, 246) : Color.FromArgb(31, 157, 99);
         var down = production ? Color.FromArgb(2, 119, 189) : Color.FromArgb(19, 108, 67);
-        var borderColor = production ? Color.FromArgb(2, 119, 189) : Color.FromArgb(18, 105, 65);
-        var fill = !Enabled ? SystemColors.ControlDark : pressed ? down : hovered ? hover : normal;
-        var bounds = new Rectangle(1, 1, Math.Max(1, Width - 3), Math.Max(1, Height - 3));
-        eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        eventArgs.Graphics.Clear(Parent?.BackColor ?? SystemColors.Control);
-        using var path = ImportBrandButton.RoundedRectangle(bounds, 7);
-        using var brush = new SolidBrush(fill);
-        using var pen = new Pen(borderColor);
-        eventArgs.Graphics.FillPath(brush, path);
-        eventArgs.Graphics.DrawPath(pen, path);
-        TextRenderer.DrawText(eventArgs.Graphics, Text, Font, bounds, Enabled ? Color.White : SystemColors.GrayText,
-            TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine |
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-        UiControls.HideFocusCue(this);
+        var border = production ? Color.FromArgb(2, 119, 189) : Color.FromArgb(18, 105, 65);
+        return new ButtonColors(Pressed ? down : Hovered ? hover : normal, border, Color.White);
     }
 }

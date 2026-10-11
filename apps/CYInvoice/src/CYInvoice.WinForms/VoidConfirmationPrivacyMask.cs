@@ -4,7 +4,6 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
 {
     private const string MaskedDetailTitle = "發票詳細資訊";
     private const string PreviewMaskTag = "void-confirmation-preview-mask";
-    private const string InvoiceMaskTag = "void-confirmation-invoice-mask";
 
     private readonly Form owner;
     private readonly string originalTitle;
@@ -12,7 +11,6 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
     private readonly List<MaskedPicture> pictures = [];
     private readonly List<Control> overlays = [];
     private readonly List<ListMaskHandler> listMasks = [];
-    private readonly List<OverlayPositionHandler> overlayPositionHandlers = [];
     private bool disposed;
 
     private VoidConfirmationPrivacyMask(Form owner, string invoiceNumber)
@@ -25,7 +23,6 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
                      .Where(label => string.Equals(label.Text.Trim(), invoiceNumber, StringComparison.OrdinalIgnoreCase)))
         {
             labels.Add(new MaskedLabel(label, label.Text));
-            AddInvoiceMask(label);
             label.Text = string.Empty;
         }
 
@@ -62,41 +59,6 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
         if (owner.IsDisposed) throw new ObjectDisposedException(nameof(owner));
         if (invoiceNumber.Length == 0) throw new ArgumentException("發票號碼不可空白", nameof(invoiceNumber));
         return new VoidConfirmationPrivacyMask(owner, invoiceNumber);
-    }
-
-    private void AddInvoiceMask(Label label)
-    {
-        var parent = label.Parent;
-        if (parent is null) return;
-        var overlay = new Panel
-        {
-            BackColor = Color.Black,
-            Margin = Padding.Empty,
-            Tag = InvoiceMaskTag,
-        };
-        parent.Controls.Add(overlay);
-        overlays.Add(overlay);
-
-        void Reposition()
-        {
-            if (overlay.IsDisposed || label.IsDisposed || parent.IsDisposed) return;
-            var width = Math.Min(Math.Max(92, TextRenderer.MeasureText("AA00000000", label.Font).Width + 8), Math.Max(92, label.Width));
-            var height = Math.Min(18, Math.Max(14, label.Height - 8));
-            overlay.Bounds = new Rectangle(
-                label.Left,
-                label.Top + Math.Max(0, (label.Height - height) / 2),
-                width,
-                height);
-            overlay.BringToFront();
-        }
-
-        EventHandler controlHandler = (_, _) => Reposition();
-        LayoutEventHandler layoutHandler = (_, _) => Reposition();
-        label.LocationChanged += controlHandler;
-        label.SizeChanged += controlHandler;
-        parent.Layout += layoutHandler;
-        overlayPositionHandlers.Add(new OverlayPositionHandler(label, parent, controlHandler, layoutHandler));
-        Reposition();
     }
 
     private void MaskVisibleInvoiceNumbers(Form? backgroundForm)
@@ -151,15 +113,6 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
             item.List.DrawSubItem -= item.Handler;
             item.List.Invalidate();
         }
-        foreach (var item in overlayPositionHandlers)
-        {
-            if (!item.Label.IsDisposed)
-            {
-                item.Label.LocationChanged -= item.ControlHandler;
-                item.Label.SizeChanged -= item.ControlHandler;
-            }
-            if (!item.Parent.IsDisposed) item.Parent.Layout -= item.LayoutHandler;
-        }
         foreach (var item in labels)
         {
             if (!item.Label.IsDisposed) item.Label.Text = item.Text;
@@ -189,20 +142,12 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
 
         var mask = Apply(owner, "AA12345678");
         if (owner.Text != MaskedDetailTitle || number.Text.Length != 0 ||
-            FindTaggedControl(owner, InvoiceMaskTag) is not Panel invoiceMask || invoiceMask.BackColor != Color.Black ||
-            invoiceMask.Top < number.Top || invoiceMask.Bottom > number.Bottom ||
             FindTaggedControl(owner, PreviewMaskTag) is null)
             throw new InvalidOperationException("作廢確認未正確遮蔽詳細資料中的發票號碼與預覽");
 
-        number.Location = new Point(10, 9);
-        owner.PerformLayout();
-        Application.DoEvents();
-        if (invoiceMask.Top < number.Top || invoiceMask.Bottom > number.Bottom)
-            throw new InvalidOperationException("發票號碼遮罩未跟隨欄位位置更新");
-
         mask.Dispose();
         if (owner.Text != "發票詳細資訊-AA12345678" || number.Text != "AA12345678" ||
-            FindTaggedControl(owner, InvoiceMaskTag) is not null || FindTaggedControl(owner, PreviewMaskTag) is not null)
+            FindTaggedControl(owner, PreviewMaskTag) is not null)
             throw new InvalidOperationException("作廢確認結束後未正確還原詳細資料");
     }
 
@@ -229,9 +174,4 @@ internal sealed class VoidConfirmationPrivacyMask : IDisposable
     private sealed record MaskedLabel(Label Label, string Text);
     private sealed record MaskedPicture(PictureBox Picture, bool Visible);
     private sealed record ListMaskHandler(ListView List, DrawListViewSubItemEventHandler Handler);
-    private sealed record OverlayPositionHandler(
-        Label Label,
-        Control Parent,
-        EventHandler ControlHandler,
-        LayoutEventHandler LayoutHandler);
 }

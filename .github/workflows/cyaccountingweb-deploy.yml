@@ -86,6 +86,7 @@ jobs:
       - name: Run application tests
         run: |
           node tests/excel-transfer.mjs
+          node tests/period-replacement.mjs
           node tests/backup-package.mjs
           node tests/gcs-backup.mjs
           node tests/backup-compatibility.mjs

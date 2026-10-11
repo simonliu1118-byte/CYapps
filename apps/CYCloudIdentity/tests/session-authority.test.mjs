@@ -15,7 +15,7 @@ try {
     const source = readFileSync(new URL(`../src/${name}.ts`, import.meta.url), "utf8");
     writeFileSync(join(directory, `${name}.js`), ts.transpileModule(source, {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-    }).outputText);
+    }).outputText.replace('require("cloudflare:workers")', '({ WorkerEntrypoint: class { constructor(ctx, env) { this.env = env; } } })'));
   }
   const require = createRequire(join(directory, "test.cjs"));
   ({ handleResolveSession } = require("./auth.js"));

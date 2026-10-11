@@ -4,7 +4,7 @@ internal sealed class CloudDeviceRevokeAuthenticationForm : Form
 {
     private readonly TextBox employeeNo = UiControls.TextBox(4);
     private readonly TextBox password = UiControls.TextBox(200);
-    private readonly Button confirm = UiControls.StandardButton("確認撤銷");
+    private readonly Button confirm = UiControls.DangerButton("確認撤銷");
     private readonly Button cancel = UiControls.StandardButton("取消");
 
     public CloudDeviceRevokeAuthenticationForm(string deviceDisplayName, bool currentDevice)

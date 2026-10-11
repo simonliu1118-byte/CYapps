@@ -154,7 +154,7 @@ internal sealed class VoidReasonForm : Form
             throw new InvalidOperationException("作廢原因按鈕尺寸不正確");
     }
 
-    private static Button CompactButton(string text) => new NoFocusCueButton
+    private static Button CompactButton(string text) => new RoundedButton
     {
         Text = text,
         Width = CompactButtonWidth,
