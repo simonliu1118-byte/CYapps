@@ -869,7 +869,7 @@ internal sealed class MainForm : Form
 
         var mapping = new ShopeeShotMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
-        using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log);
+        using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto);
         if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return;
 
         LoadOrder(order);
@@ -1436,7 +1436,7 @@ internal sealed class MainForm : Form
         {
             // Screenshots (OCR) are the main way for now; the official export stays available.
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
-            menu.Items.Add("截圖輸入（OCR）", null, async (_, _) => await ImportShopeeScreenshotsAsync());
+            menu.Items.Add("光學辨識輸入", null, async (_, _) => await ImportShopeeScreenshotsAsync());
             menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }

@@ -30,7 +30,8 @@ internal sealed class ShopeeScreenshotForm : Form
 
     public ShopeeShotResult? Result { get; private set; }
 
-    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log)
+    /// <param name="autoStart">Shopee full auto (user, 2026-10-11): start the page scan on opening, without 開始.</param>
+    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false)
     {
         _ocr = ocr;
         _mapping = mapping;
@@ -123,6 +124,7 @@ internal sealed class ShopeeScreenshotForm : Form
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files) await AddFilesAsync(files);
         };
         FormClosed += (_, _) => { foreach (var shot in _shots) shot.Image.Dispose(); };
+        if (autoStart) Shown += async (_, _) => { if (_shots.Count == 0 && !UiSnapshot.Active) await AutoScanAsync(); };
 
         CyVisualTheme.Apply(this);
         UpdateSummary();
