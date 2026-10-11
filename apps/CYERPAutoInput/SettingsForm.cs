@@ -20,6 +20,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _coupangOrderType = new();
     private readonly TextBox _coupangCustomerCode = new();
     private readonly TextBox _coupangNotePrefix = new();
+    private readonly TabControl _tabs = new();
     private readonly TextBox _discountItem = new();
     private readonly TextBox _shippingItem = new();
     private readonly Dictionary<string, TextBox> _freightCodes = [];
@@ -73,12 +74,13 @@ internal sealed class SettingsForm : Form
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
 
-        var tabs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(14, 5) };
-        tabs.TabPages.Add(GeneralPage());
-        tabs.TabPages.Add(ImportPage());
-        tabs.TabPages.Add(FreightPage());
-        tabs.TabPages.Add(DefaultsPage());
-        root.Controls.Add(tabs, 0, 1);
+        _tabs.Dock = DockStyle.Fill;
+        _tabs.Padding = new Point(14, 5);
+        _tabs.TabPages.Add(GeneralPage());
+        _tabs.TabPages.Add(ImportPage());
+        _tabs.TabPages.Add(FreightPage());
+        _tabs.TabPages.Add(DefaultsPage());
+        root.Controls.Add(_tabs, 0, 1);
 
         var buttons = new FlowLayoutPanel
         {
@@ -99,7 +101,8 @@ internal sealed class SettingsForm : Form
             buttons.Controls.Add(probe);
         }
         root.Controls.Add(buttons, 0, 2);
-        AcceptButton = save;
+        // No AcceptButton: Enter moves to the next field and saves only from a page's last
+        // field (user, 2026-10-11); see ProcessCmdKey.
         CancelButton = cancel;
     }
 
@@ -174,7 +177,8 @@ internal sealed class SettingsForm : Form
         _coupangOrderType.MaxLength = 4;
         _moPassword.UseSystemPasswordChar = true;
         _moPassword.PlaceholderText = _settings.MoPasswordProtected.Length > 0 ? "已設定，空白不變更" : string.Empty;
-        // Docked to the top in reverse order: the last added sits highest.
+        // Docked to the top in reverse order: the last added sits highest; TabIndex follows
+        // the screen order so Enter/Tab go 蝦皮 → MO店+ → 酷澎 → 共用.
         page.Controls.Add(Section("共用（所有平台）",
             ("折價券品號", _discountItem, _settings.DiscountItemCode, 120),
             ("運費品號", _shippingItem, _settings.ShippingItemCode, 120)));
@@ -191,7 +195,42 @@ internal sealed class SettingsForm : Form
             ("銷貨單別", _shopeeOrderType, _settings.ShopeeOrderType, 80),
             ("客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 120),
             ("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 150)));
+        // Added in reverse (last added sits highest), so count TabIndex from the end.
+        var sections = page.Controls.OfType<GroupBox>().ToList();
+        for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
         return page;
+    }
+
+    /// <summary>
+    /// Enter moves to the next field of the current page; on the page's last field (or the
+    /// last row of 本機預設值) it saves. Buttons keep their own Enter.
+    /// </summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData != Keys.Enter || ActiveControl is Button) return base.ProcessCmdKey(ref msg, keyData);
+        var page = _tabs.SelectedTab;
+        if (page is null) return base.ProcessCmdKey(ref msg, keyData);
+
+        if (_grid.ContainsFocus)
+        {
+            _grid.EndEdit();
+            var row = _grid.CurrentCell?.RowIndex ?? -1;
+            if (row < 0 || row >= _grid.Rows.Count - 1) SaveAndClose();
+            else
+            {
+                _grid.CurrentCell = _grid.Rows[row + 1].Cells["Value"];
+                _grid.BeginEdit(true);
+            }
+            return true;
+        }
+
+        var fields = new List<Control>();
+        for (Control? c = page; (c = page.GetNextControl(c, true)) is not null;)
+            if (c is TextBox or CheckBox && c.Visible && c.Enabled && c.TabStop) fields.Add(c);
+        var focused = fields.FindIndex(f => f.ContainsFocus);
+        if (focused < 0 || focused == fields.Count - 1) SaveAndClose();
+        else fields[focused + 1].Focus();
+        return true;
     }
 
     private TabPage FreightPage()
@@ -223,8 +262,11 @@ internal sealed class SettingsForm : Form
                 AccessibleName = carrier + " 貨運別"
             };
             _freightCodes[carrier] = box;
-            grid.Controls.Add(new Label { Text = carrier, AutoSize = true, Margin = new Padding(0, 8, 6, 0) }, (i % 2) * 2, i / 2);
-            grid.Controls.Add(box, (i % 2) * 2 + 1, i / 2);
+            // Down the left column first, then the right one, so the list reads in order.
+            var perColumn = (FreightCarriers.All.Length + 1) / 2;
+            var (row, column) = (i % perColumn, i / perColumn);
+            grid.Controls.Add(new Label { Text = carrier, AutoSize = true, Margin = new Padding(0, 8, 6, 0) }, column * 2, row);
+            grid.Controls.Add(box, column * 2 + 1, row);
         }
         layout.Controls.Add(grid, 0, 1);
         page.Controls.Add(layout);

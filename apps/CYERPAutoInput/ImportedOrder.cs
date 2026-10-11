@@ -44,11 +44,15 @@ internal sealed class ImportedOrder
         return values;
     }
 
+    /// <summary>
+    /// A buyer tax ID without 客戶全名: warned about before entering, not required (user,
+    /// 2026-10-11; the name is looked up automatically and may stay blank).
+    /// </summary>
+    public bool MissingInvoiceName => BuyerTaxId.Length > 0 && InvoiceName.Trim().Length == 0;
+
     /// <summary>What the preview must fix before this order can be entered; empty when fine.</summary>
     public string ValidationError()
     {
-        if (BuyerTaxId.Length > 0 && InvoiceName.Trim().Length == 0)
-            return "有發票開立統編，請填寫發票的客戶全名。";
         if (InvoiceDate.Trim().Length > 0 && !InputRules.TryNormalizeValidDate(InvoiceDate.Trim(), out _))
             return "發票日期必須是有效日期（YYYY/MM/DD）。";
         return string.Empty;
@@ -65,8 +69,9 @@ internal sealed class ImportedOrder
 /// </summary>
 internal static class FreightCarriers
 {
+    /// <summary>In the order of the user's ERP codes (user, 2026-10-11); the codes stay local.</summary>
     public static readonly string[] All =
-        ["新竹", "7-11", "全家", "黑貓", "宅配通", "萊爾富", "蝦皮店到店", "蝦皮店到店 - 隔日到貨", "店到家宅配"];
+        ["新竹", "黑貓", "宅配通", "7-11", "全家", "萊爾富", "蝦皮店到店", "蝦皮店到店 - 隔日到貨", "店到家宅配"];
 
     /// <summary>
     /// The code of the carrier named in <paramref name="carrierText"/>; the longest name wins

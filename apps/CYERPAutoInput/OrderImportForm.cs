@@ -19,7 +19,7 @@ internal sealed class OrderImportForm : Form
     public ImportedOrder? SelectedOrder { get; private set; }
 
     public OrderImportForm(string source, string fileName, IReadOnlyList<ImportedOrder> orders, IReadOnlyList<string> errors,
-        bool autoSave, Func<ImportedOrder, LedgerEntry?> ledger)
+        bool autoSave, Func<ImportedOrder, LedgerEntry?> ledger, Func<string, Task<string>>? lookupName = null)
     {
         _orders = orders;
         _ledger = ledger;
@@ -41,7 +41,7 @@ internal sealed class OrderImportForm : Form
         Controls.Add(root);
 
         var summary = $"{fileName}：可匯入 {orders.Count} 張訂單" + (errors.Count > 0 ? $"，{errors.Count} 筆無法匯入（見下方）" : string.Empty);
-        if (_editable) summary += "\n白底欄位可直接填寫：物流單號（可空白，之後回補）、有統編時必填客戶全名、發票日期、發票號碼。";
+        if (_editable) summary += "\n白底欄位可直接填寫：物流單號（可空白，之後回補）、客戶全名（有統編時自動查詢經濟部登記名稱）、發票日期、發票號碼。";
         root.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
@@ -84,6 +84,22 @@ internal sealed class OrderImportForm : Form
         CancelButton = cancel;
 
         CyVisualTheme.Apply(this);
+        if (lookupName is not null) Shown += async (_, _) => await FillInvoiceNamesAsync(lookupName);
+    }
+
+    /// <summary>Fills 客戶全名 of orders with a tax ID from the registry; a miss leaves it blank.</summary>
+    private async Task FillInvoiceNamesAsync(Func<string, Task<string>> lookupName)
+    {
+        foreach (DataGridViewRow row in _grid.Rows)
+        {
+            if (row.Tag is not ImportedOrder { MissingInvoiceName: true } order) continue;
+            var name = await lookupName(order.BuyerTaxId);
+            if (IsDisposed || name.Length == 0 || !order.MissingInvoiceName) continue;
+            if (_grid.IsCurrentCellInEditMode && _grid.CurrentCell?.RowIndex == row.Index &&
+                _grid.CurrentCell.OwningColumn.Name == "InvoiceName") continue; // the user is typing it
+            order.InvoiceName = name;
+            row.Cells["InvoiceName"].Value = name;
+        }
     }
 
     private void ConfigureGrid()
@@ -280,6 +296,10 @@ internal sealed class OrderImportForm : Form
         if (index < 0 || index >= _orders.Count) return;
         var order = _orders[index];
         if (ShowProblem(order, order.ValidationError())) return;
+        if (order.MissingInvoiceName && order.HandoffReason.Length == 0 &&
+            MessageBox.Show(this, $"訂單 {order.OrderSn} 有統一編號，但沒有發票的客戶全名（經濟部查無或未填）。\n\n建議先填寫客戶全名；仍要輸入嗎？",
+                Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
         SelectedOrder = order;
         Action = OrderImportAction.StartSelected;
         DialogResult = DialogResult.OK;
@@ -289,8 +309,14 @@ internal sealed class OrderImportForm : Form
     {
         if (!CommitEdits()) return;
         // Orders the batch will skip anyway (handed off, already saved) need no fixing here.
-        foreach (var order in _orders.Where(o => o.HandoffReason.Length == 0 && _ledger(o)?.Status != LedgerStatus.Saved))
+        var toEnter = _orders.Where(o => o.HandoffReason.Length == 0 && _ledger(o)?.Status != LedgerStatus.Saved).ToList();
+        foreach (var order in toEnter)
             if (ShowProblem(order, order.ValidationError())) return;
+        var noName = toEnter.Where(o => o.MissingInvoiceName).Select(o => o.OrderSn).ToList();
+        if (noName.Count > 0 &&
+            MessageBox.Show(this, $"以下 {noName.Count} 張有統一編號，但沒有發票的客戶全名（經濟部查無或未填）：\n{string.Join("、", noName)}\n\n建議先填寫；仍要開始批次輸入嗎？",
+                Text, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
         Action = OrderImportAction.RunAll;
         DialogResult = DialogResult.OK;
     }

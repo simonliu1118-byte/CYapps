@@ -266,6 +266,7 @@ internal sealed class MainForm : Form
         middle.Controls.Add(AddGroup("送貨資料", true, new Padding(0, 3, 0, 0)), 0, 1);
         fieldsHost.Controls.Add(AddGroup("發票資料(一)", false, new Padding(4, 0, 0, 0)), 2, 0);
         foreach (var field in FieldCatalog.All) AddField(field);
+        WireCompanyNameLookup();
 
         var detailBox = new GroupBox
         {
@@ -648,6 +649,26 @@ internal sealed class MainForm : Form
             _details["Warehouse", 0].Value = _settings.FirstRowWarehouse;
     }
 
+    /// <summary>
+    /// Typing an 8-digit 統一編號 fills a blank 客戶全名 from the registry (user, 2026-10-11);
+    /// a result that arrives after the tax ID changed or the name was typed is dropped.
+    /// </summary>
+    private void WireCompanyNameLookup()
+    {
+        if (!_valueControls.TryGetValue("tax_id", out var taxId) || !_valueControls.TryGetValue("inv_name", out var invName)) return;
+        taxId.TextChanged += async (_, _) =>
+        {
+            var ban = taxId.Text.Trim();
+            if (!CompanyNameLookup.IsBan(ban) || invName.Text.Trim().Length > 0) return;
+            var name = await _companyNames.LookupAsync(ban);
+            if (name.Length > 0 && taxId.Text.Trim() == ban && invName.Text.Trim().Length == 0)
+            {
+                SetFieldText(invName, name);
+                SetStatus("已依統一編號帶入客戶全名（經濟部登記名稱）");
+            }
+        };
+    }
+
     private async Task StartAutomationAsync()
     {
         if (_automationCts is not null) return;
@@ -660,6 +681,11 @@ internal sealed class MainForm : Form
 
         var order = _loadedOrder;
         if (order is not null && !ConfirmNotDuplicate(order)) return;
+        // Imported orders were warned in the preview; a manual form is warned here.
+        if (order is null && snapshot.Values.ContainsKey("tax_id") && !snapshot.Values.ContainsKey("inv_name") &&
+            MessageBox.Show(this, "有統一編號，但沒有發票的客戶全名（經濟部查無或未填）。\n\n建議先填寫客戶全名；仍要開始輸入嗎？",
+                "客戶全名", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
         if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return;
 
         await RunGuardedAsync(async token =>
@@ -894,7 +920,8 @@ internal sealed class MainForm : Form
         var ledger = LoadLedger();
         if (ledger is null) return;
 
-        using var preview = new OrderImportForm(source, fileName, orders, errors, _settings.AutoSave, o => ledger.Find(o.LedgerKey));
+        using var preview = new OrderImportForm(source, fileName, orders, errors, _settings.AutoSave, o => ledger.Find(o.LedgerKey),
+            ban => _companyNames.LookupAsync(ban));
         if (preview.ShowDialog(this) != DialogResult.OK) return;
 
         if (preview.Action == OrderImportAction.StartSelected && preview.SelectedOrder is not null)
@@ -926,6 +953,8 @@ internal sealed class MainForm : Form
     }
 
     private OrderLedger? _ledger;
+    private CompanyNameLookup? _companyNameLookup;
+    private CompanyNameLookup _companyNames => _companyNameLookup ??= new CompanyNameLookup(_log);
 
     /// <summary>Platform order currently loaded on the form (null after 清除 or manual input).</summary>
     private ImportedOrder? _loadedOrder;

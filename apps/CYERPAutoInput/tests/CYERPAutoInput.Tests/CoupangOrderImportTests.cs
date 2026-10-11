@@ -46,12 +46,13 @@ public class CoupangOrderImportTests
     }
 
     [Fact]
-    public void A_tax_id_requires_the_invoice_name()
+    public void A_tax_id_without_invoice_name_is_flagged_but_allowed()
     {
         var result = CoupangOrderImport.Parse([Header, Row("90000000000003", "X00003", "100", "100", "0", taxId: "12345678")]);
         var order = CoupangOrderImport.ToImported(Assert.Single(result.Orders), Mapping);
         Assert.Equal("12345678", order.HeaderValues()["tax_id"]);
-        Assert.Contains("客戶全名", order.ValidationError());
+        Assert.True(order.MissingInvoiceName);
+        Assert.Empty(order.ValidationError());
     }
 
     [Fact]

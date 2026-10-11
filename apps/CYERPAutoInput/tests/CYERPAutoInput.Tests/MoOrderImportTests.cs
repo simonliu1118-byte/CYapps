@@ -98,12 +98,15 @@ public class MoOrderImportTests
     }
 
     [Fact]
-    public void A_buyer_tax_id_requires_the_invoice_name()
+    public void A_buyer_tax_id_without_invoice_name_is_flagged_but_allowed()
     {
         var order = ImportFixture()["90000000000005"];
         Assert.Equal("12345678", order.HeaderValues()["tax_id"]);
-        Assert.Contains("客戶全名", order.ValidationError());
+        Assert.True(order.MissingInvoiceName);
+        Assert.Empty(order.ValidationError());
+        Assert.False(order.HeaderValues().ContainsKey("inv_name"));
         order.InvoiceName = "測試公司";
+        Assert.False(order.MissingInvoiceName);
         order.InvoiceDate = "2026/10/01";
         order.InvoiceNo = "AB00000001";
         Assert.Empty(order.ValidationError());
