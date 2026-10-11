@@ -17,7 +17,7 @@ internal enum ShopeeShotKind { Unknown, Order, Items, Amounts }
 internal sealed record ShopeeShotOrder(string OrderSn, string Carrier, string TrackingNumber);
 
 /// <summary>
-/// One product of the order detail: its 商品選項貨號 with a set suffix (F0033x2) resolved
+/// One product of the order detail: its 商品選項貨號 with a set suffix (Y0033x2) resolved
 /// into 數量 × 2 and 單價 ÷ 2, and the product's amount before promotions (單價 × 數量 as
 /// shown). <see cref="Group"/> is the 編號 it is listed under (0 when no 編號 was visible).
 /// </summary>
@@ -228,7 +228,7 @@ internal static partial class ShopeeScreenshot
     }
 
     /// <summary>
-    /// A set listed as "F0033x2", "F0033*2" or "F0033 x 2" is item F0033 two times (user,
+    /// A set listed as "Y0033x2", "Y0033*2" or "Y0033 x 2" is item Y0033 two times (user,
     /// 2026-10-11): quantity × 2 and unit price ÷ 2.
     /// </summary>
     internal static (string Code, decimal Multiplier) SplitSet(string code)

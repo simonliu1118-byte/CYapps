@@ -166,13 +166,13 @@ public class ShopeeScreenshotTests
     }
 
     [Theory]
-    [InlineData("A00579-1x3", "A00579-1", 3)]
-    [InlineData("F0033x2", "F0033", 2)]
-    [InlineData("F0033*2", "F0033", 2)]
-    [InlineData("F0033 x 2", "F0033", 2)]
-    [InlineData("F0033 X 3", "F0033", 3)]
-    [InlineData("A00315-1", "A00315-1", 1)]
-    [InlineData("A00023", "A00023", 1)]
+    [InlineData("X00579-1x3", "X00579-1", 3)]
+    [InlineData("Y0033x2", "Y0033", 2)]
+    [InlineData("Y0033*2", "Y0033", 2)]
+    [InlineData("Y0033 x 2", "Y0033", 2)]
+    [InlineData("Y0033 X 3", "Y0033", 3)]
+    [InlineData("X00315-1", "X00315-1", 1)]
+    [InlineData("X00023", "X00023", 1)]
     public void Splits_set_codes(string text, string code, int multiplier)
     {
         Assert.Equal((code, (decimal)multiplier), ShopeeScreenshot.SplitSet(text));
