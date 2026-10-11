@@ -16,6 +16,13 @@ internal sealed class MainForm : Form
     private readonly ToolStripStatusLabel _buildStatus = new();
     private readonly ToolStripStatusLabel _logLink = new() { Text = "開啟 LOG 資料夾", IsLink = true };
     private readonly ToolStripStatusLabel _dpiHint = new();
+    private readonly ToolStripStatusLabel _employeeLink = new() { Text = "員工代號：未設定", IsLink = true };
+
+    /// <summary>
+    /// Employee code asked when the program opens and used for this session only (user,
+    /// 2026-10-11). Temporary until CYID maps the signed-in user to the employee code.
+    /// </summary>
+    private string _sessionEmployeeCode = string.Empty;
     private readonly ModeToggle _modeToggle = new();
     private readonly CyStatusBadge _erpStateTag = new();
     private readonly ErpDocumentStateTracker _stateTracker = new();
@@ -291,6 +298,8 @@ internal sealed class MainForm : Form
         statusStrip.Items.Add(_status);
         statusStrip.Items.Add(_dpiHint);
         statusStrip.Items.Add(_buildStatus);
+        _employeeLink.Click += (_, _) => AskEmployeeCode();
+        statusStrip.Items.Add(_employeeLink);
         _logLink.Click += (_, _) => OpenLogFolder();
         statusStrip.Items.Add(_logLink);
         _root.Controls.Add(statusStrip, 0, 3);
@@ -636,6 +645,11 @@ internal sealed class MainForm : Form
 
     private void ApplyDefaultsToBlankFields()
     {
+        // The employee code asked at start-up wins over the local default for this session.
+        if (_sessionEmployeeCode.Length > 0 && _valueControls.TryGetValue("employee_code", out var employee) &&
+            string.IsNullOrWhiteSpace(employee.Text))
+            SetFieldText(employee, _sessionEmployeeCode);
+
         foreach (var pair in _settings.Defaults)
         {
             if (!_valueControls.TryGetValue(pair.Key, out var control) || control is CheckBox) continue;
@@ -667,6 +681,19 @@ internal sealed class MainForm : Form
                 SetStatus("已依統一編號帶入客戶全名（經濟部登記名稱）");
             }
         };
+    }
+
+    /// <summary>Asks for this session's employee code (start-up, or the status bar link); blank keeps the local default.</summary>
+    internal void AskEmployeeCode()
+    {
+        using var dialog = new EmployeeCodeForm(_sessionEmployeeCode);
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        _sessionEmployeeCode = dialog.EmployeeCode;
+        _employeeLink.Text = _sessionEmployeeCode.Length > 0 ? $"員工代號：{_sessionEmployeeCode}" : "員工代號：未設定";
+        if (_valueControls.TryGetValue("employee_code", out var employee))
+            SetFieldText(employee, _sessionEmployeeCode);
+        ApplyDefaultsToBlankFields();
+        _log.Info("app", $"session employee code set length={_sessionEmployeeCode.Length}");
     }
 
     private async Task StartAutomationAsync()

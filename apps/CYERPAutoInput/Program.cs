@@ -66,6 +66,7 @@ internal static class Program
             logger.Warn("app", $"window icon load skipped: {ex.Message}");
         }
         CyVisualTheme.Apply(form);
+        form.Shown += (_, _) => form.AskEmployeeCode();
         Application.Run(form);
         return 0;
     }
