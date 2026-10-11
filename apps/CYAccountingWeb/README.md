@@ -2,22 +2,22 @@
 
 志遠記帳系統 Web 版；與 `apps/CYAccounting/` Windows 版分開維護。
 
-更新：2026/10/10（台灣時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
+更新：2026/10/11（台灣時間）。本文件是專案入口與現況摘要；永久規則只依根 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與本專案 `PROJECT_RULES.md`。
 
-**V0.22.32（待部署）**：桌機超級管理員 Excel 匯入新增指定期間替換，沿用既有 parser、preview 與 commit owner；鎖帳月份仍阻擋，缺少的科目需明確同意保留原名並建立於歷史分類。提交前完成 R2＋GCS 成對備份及回讀驗證，再以帳本／主檔／期初／鎖帳 snapshot guard 執行單一 D1 transaction；包含 append-only 替換稽核，失敗回滾，期間外交易與期初基準保留。修正大型壓縮工作表在 Worker 啟動巢狀執行緒造成解析失敗。25 組本地測試通過；來源 Excel 已私人核對，正式資料替換尚未執行。手機／平板 presentation 未改。Stable Release 維持 V0.22.15。
+**V0.22.32（已部署）**：桌機超級管理員 Excel 匯入新增指定期間替換，沿用既有 parser、preview 與 commit owner；鎖帳月份仍阻擋，缺少的科目需明確同意保留原名並建立於歷史分類。提交前完成 R2＋GCS 成對備份及回讀驗證，再以帳本／主檔／期初／鎖帳 snapshot guard 執行單一 D1 transaction；包含 append-only 替換稽核，失敗回滾，期間外交易與期初基準保留。修正大型壓縮工作表在 Worker 啟動巢狀執行緒造成解析失敗。25 組本地測試與 CI 通過；實際帳務操作及核對結果只由私人檢查點維護。手機／平板 presentation 未改。Stable Release 維持 V0.22.15。
 
 ## 目前狀態
 
 | 項目 | 狀態與證據 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 正式版本 | **V0.22.32 待部署**；正式執行仍為 V0.22.31 Build 3，歷史資料替換未執行 |
-| 正式部署 | [CYAccountingWeb Validate and Deploy #581（run `37965124293`）](https://github.com/simonliu1118-byte/CYapps/actions/runs/37965124293) 成功；validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
-| 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；Stable Release **#2**（run `37254391804`）成功；舊 V0.22.0 Release/tag 已移除 |
-| D1 schema | **8 待套用**；新增 `0008_excel_import_runs.sql`，正式目前仍為 7 |
+| 正式版本 | **V0.22.32**；實際帳務狀態由私人檢查點維護 |
+| 正式部署 | V0.22.32 validate、D1 migration、Worker/static assets、secure login 與 semantic frontend assets 全部成功 |
+| 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；舊 V0.22.0 Release/tag 已移除 |
+| D1 schema | **8 已部署**；`0008_excel_import_runs.sql` 保存 append-only Excel 替換稽核 |
 | CYID | consumer 1.0.1；provider contract 1.0.2；minimum compatible 1.0.0 |
 | Governance | Common Rules 2.8.0；CYapps Governance 2.3.34 |
-| 備份 | Phase C；R2＋GCS 手動 paired 驗收完成，scheduled `x/14` 仍需讀正式 catalog，不按日期推算 |
+| 備份 | R2＋GCS 成對備份與回讀驗證；實際 provider health 與排程驗收狀態由正式 catalog 維護 |
 
 電腦版仍沿用既有 Desktop UI/UX 設計（PR #115 為歷史設計里程碑），與手機／平板共用原本資料及帳務 owner。V0.22.29 以 `cyacc:confirmation-ready` 明確 lifecycle 恢復桌機左右分欄，修正 `.desktopUi-date-*` 樣式對應；部署驗證通過不代替使用者於真實電腦瀏覽器的視覺驗收。
 
