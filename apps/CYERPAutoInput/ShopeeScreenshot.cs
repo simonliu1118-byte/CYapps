@@ -16,8 +16,15 @@ internal enum ShopeeShotKind { Unknown, Order, Items, Amounts }
 
 internal sealed record ShopeeShotOrder(string OrderSn, string Carrier, string TrackingNumber);
 
-/// <summary>One line of the order detail: 編號, 商品選項貨號, 單價, 數量 and the shown 小計 (after promotions).</summary>
-internal sealed record ShopeeShotItem(int Index, string ItemCode, decimal UnitPrice, decimal Quantity, decimal Subtotal);
+/// <summary>
+/// One product of the order detail: its 商品選項貨號 with a set suffix (F0033x2) resolved
+/// into 數量 × 2 and 單價 ÷ 2, and the product's amount before promotions (單價 × 數量 as
+/// shown). <see cref="Group"/> is the 編號 it is listed under (0 when no 編號 was visible).
+/// </summary>
+internal sealed record ShopeeShotItem(int Group, string ItemCode, decimal UnitPrice, decimal Quantity, decimal Amount);
+
+/// <summary>A 編號 of the detail: several products of one promotion share one 小計 (shown, and the struck-out original).</summary>
+internal sealed record ShopeeShotGroup(int Index, decimal Shown, decimal Original);
 
 /// <summary>買家實付金額 block. Coupons and 蝦幣 are negative.</summary>
 internal sealed record ShopeeShotAmounts(decimal OrderAmount, decimal Shipping, decimal Coupons, decimal Coins, decimal Total,
@@ -125,70 +132,108 @@ internal static partial class ShopeeScreenshot
     }
 
     /// <summary>
-    /// Detail rows anchored on the 編號 number at the left; each phrase belongs to the
-    /// nearest anchor. Prices are the numbers in the right half: 單價, 數量, then 小計 (the
-    /// upper one when a struck-out original is shown below it).
+    /// Detail screenshot. Every 商品選項貨號 line is one product; its 單價 and 數量 are the
+    /// numbers in those columns between the previous product's code line and its own. 編號
+    /// (left) groups products: a promotion lists several products under one 編號 with one
+    /// 小計 (the upper number; a struck-out original below it). The 單價／數量／小計 columns
+    /// are found from the numbers' positions, so the header row may be off-screen.
     /// </summary>
-    public static List<ShopeeShotItem> ParseItems(IReadOnlyList<OcrBox> lines, int imageWidth, List<string> problems)
+    public static (List<ShopeeShotItem> Items, List<ShopeeShotGroup> Groups) ParseItems(
+        IReadOnlyList<OcrBox> lines, int imageWidth, List<string> problems)
     {
-        var numeric = lines.Where(l => TryNumber(l.Text, out _, digitsOnly: true)).ToList();
-        var anchors = numeric
-            .Where(l => l.CenterX < imageWidth * 0.2 && l.Text.Trim().Length <= 3)
+        var items = new List<ShopeeShotItem>();
+        var groups = new List<ShopeeShotGroup>();
+        var anchors = lines
+            .Where(l => l.CenterX < imageWidth * 0.2 && TryNumber(l.Text, out _, digitsOnly: true) && Compact(l.Text).Length <= 3)
             .OrderBy(l => l.Top)
             .ToList();
-        var items = new List<ShopeeShotItem>();
-        if (anchors.Count == 0)
+
+        // Columns of the numbers in the right half: 單價, 數量, 小計 from left to right.
+        var numbers = lines
+            .Where(l => l.CenterX > imageWidth * 0.5 && TryNumber(l.Text, out _, digitsOnly: true))
+            .Select(l => (Box: l, Value: decimal.Parse(Compact(l.Text), CultureInfo.InvariantCulture)))
+            .ToList();
+        var columns = new List<List<(OcrBox Box, decimal Value)>>();
+        foreach (var n in numbers.OrderBy(n => n.Box.CenterX))
         {
-            problems.Add("明細截圖讀不到商品編號（最左邊的 1、2、3…）。");
-            return items;
+            var column = columns.FirstOrDefault(c => Math.Abs(c.Average(x => x.Box.CenterX) - n.Box.CenterX) <= 40);
+            if (column is null) columns.Add([n]);
+            else column.Add(n);
         }
+        if (columns.Count < 2)
+        {
+            problems.Add("明細截圖讀不到單價與數量欄；截圖請包含右側的單價、數量、小計。");
+            return (items, groups);
+        }
+        var unitColumn = columns[0];
+        var quantityColumn = columns[1];
+        var subtotalColumn = columns.Count >= 3 ? columns[2] : [];
+
+        int GroupOf(int centerY) => anchors.Count == 0 ? 0
+            : int.Parse(Compact(anchors.OrderBy(a => Math.Abs(a.CenterY - centerY)).First().Text), CultureInfo.InvariantCulture);
+
+        var codeLines = lines.Where(l => CodeLabelPattern().IsMatch(Compact(l.Text))).OrderBy(l => l.Top).ToList();
+        var previousBottom = int.MinValue;
+        var used = new HashSet<OcrBox>();
+        foreach (var codeLine in codeLines)
+        {
+            var bandTop = previousBottom;
+            var bandBottom = codeLine.Bottom;
+            previousBottom = codeLine.Bottom;
+            (OcrBox Box, decimal Value)? Pick(List<(OcrBox Box, decimal Value)> column) =>
+                column.Where(n => n.Box.CenterY > bandTop && n.Box.CenterY <= bandBottom).OrderBy(n => n.Box.Top).Cast<(OcrBox, decimal)?>().FirstOrDefault();
+            var unit = Pick(unitColumn);
+            var quantity = Pick(quantityColumn);
+            var rawCode = CodeAfterLabel(codeLine, lines);
+            if (unit is null || quantity is null)
+            {
+                problems.Add($"商品「{rawCode}」讀不到單價或數量。");
+                continue;
+            }
+            used.Add(unit.Value.Box);
+            used.Add(quantity.Value.Box);
+            var (code, multiplier) = SplitSet(rawCode);
+            if (code.Length == 0) problems.Add("有一項商品讀不到商品選項貨號。");
+            items.Add(new ShopeeShotItem(GroupOf(unit.Value.Box.CenterY), code,
+                unit.Value.Value / multiplier, quantity.Value.Value * multiplier, unit.Value.Value * quantity.Value.Value));
+        }
+        if (unitColumn.Any(n => !used.Contains(n.Box)))
+            problems.Add("明細有商品讀不到商品選項貨號，請核對截圖。");
 
         foreach (var anchor in anchors)
         {
-            OcrBox Nearest(OcrBox l) => anchors.OrderBy(a => Math.Abs(a.CenterY - l.CenterY)).First();
-            var block = lines.Where(l => Nearest(l) == anchor).ToList();
             var index = int.Parse(Compact(anchor.Text), CultureInfo.InvariantCulture);
-
-            // 「商品選項貨號：A00001」; OCR may read 貨 as 货 and split the code into its own box.
-            var codeLine = block.FirstOrDefault(l => CodeLabelPattern().IsMatch(Compact(l.Text)));
-            var code = string.Empty;
-            if (codeLine is not null)
-            {
-                var text = Compact(codeLine.Text);
-                code = text[(CodeLabelPattern().Match(text).Index + CodeLabelPattern().Match(text).Length)..].TrimStart(':', '：');
-                if (code.Length == 0)
-                    code = block
-                        .Where(l => l.Left >= codeLine.Right - 4 && Math.Abs(l.CenterY - codeLine.CenterY) <= Math.Max(10, codeLine.Height / 2))
-                        .OrderBy(l => l.Left)
-                        .Select(l => Compact(l.Text))
-                        .FirstOrDefault() ?? string.Empty;
-            }
-
-            var columns = new List<List<(OcrBox Box, decimal Value)>>();
-            foreach (var box in block.Where(l => l != anchor && l.CenterX > imageWidth * 0.5).OrderBy(l => l.Left))
-            {
-                if (!TryNumber(box.Text, out var value, digitsOnly: true)) continue;
-                var column = columns.FirstOrDefault(c => Math.Abs(c[0].Box.CenterX - box.CenterX) <= 40);
-                if (column is null) columns.Add([(box, value)]);
-                else column.Add((box, value));
-            }
-            if (columns.Count < 3)
-            {
-                problems.Add($"第 {index} 項讀不到單價、數量、小計。");
-                continue;
-            }
-            columns = columns.OrderBy(c => c[0].Box.CenterX).ToList();
-            var unit = columns[0].OrderBy(c => c.Box.Top).First().Value;
-            var quantity = columns[1].OrderBy(c => c.Box.Top).First().Value;
-            var subtotals = columns[2].OrderBy(c => c.Box.Top).Select(c => c.Value).ToList();
-            var shown = subtotals[0];
-            var original = subtotals[^1];
-            if (unit * quantity != original)
-                problems.Add($"第 {index} 項單價 {Number(unit)} × 數量 {Number(quantity)} 與小計 {Number(original)} 不符，請核對。");
-            if (code.Length == 0) problems.Add($"第 {index} 項讀不到商品選項貨號。");
-            items.Add(new ShopeeShotItem(index, code, unit, quantity, shown));
+            var values = subtotalColumn.Where(n => GroupOf(n.Box.CenterY) == index).OrderBy(n => n.Box.Top).Select(n => n.Value).ToList();
+            if (values.Count == 0) { problems.Add($"第 {index} 項讀不到小計。"); continue; }
+            groups.Add(new ShopeeShotGroup(index, values[0], values[^1]));
         }
-        return items;
+        return (items, groups);
+    }
+
+    /// <summary>The code after 「商品選項貨號：」, or the next box on the row when OCR split it off.</summary>
+    private static string CodeAfterLabel(OcrBox codeLine, IReadOnlyList<OcrBox> lines)
+    {
+        var text = Compact(codeLine.Text);
+        var match = CodeLabelPattern().Match(text);
+        var code = text[(match.Index + match.Length)..].TrimStart(':', '：');
+        if (code.Length > 0) return code;
+        return lines
+            .Where(l => l.Left >= codeLine.Right - 4 && Math.Abs(l.CenterY - codeLine.CenterY) <= Math.Max(10, codeLine.Height / 2))
+            .OrderBy(l => l.Left)
+            .Select(l => Compact(l.Text))
+            .FirstOrDefault() ?? string.Empty;
+    }
+
+    /// <summary>
+    /// A set listed as "F0033x2", "F0033*2" or "F0033 x 2" is item F0033 two times (user,
+    /// 2026-10-11): quantity × 2 and unit price ÷ 2.
+    /// </summary>
+    internal static (string Code, decimal Multiplier) SplitSet(string code)
+    {
+        var match = SetSuffixPattern().Match(Compact(code));
+        if (!match.Success) return (Compact(code), 1);
+        var count = int.Parse(match.Groups["n"].Value, CultureInfo.InvariantCulture);
+        return count > 1 ? (match.Groups["code"].Value, count) : (match.Groups["code"].Value, 1);
     }
 
     public static ShopeeShotAmounts? ParseAmounts(IReadOnlyList<OcrBox> lines, List<string> problems)
@@ -229,8 +274,8 @@ internal static partial class ShopeeScreenshot
     }
 
     /// <summary>Combines the parsed blocks into a form-ready order plus everything to check by hand.</summary>
-    public static ShopeeShotResult Combine(ShopeeShotOrder? order, IReadOnlyList<ShopeeShotItem> items, ShopeeShotAmounts? amounts,
-        ShopeeShotMapping mapping, List<string> problems)
+    public static ShopeeShotResult Combine(ShopeeShotOrder? order, IReadOnlyList<ShopeeShotItem> items, IReadOnlyList<ShopeeShotGroup> groups,
+        ShopeeShotAmounts? amounts, ShopeeShotMapping mapping, List<string> problems)
     {
         if (order is null) problems.Add("缺少訂單資訊截圖（訂單編號、運送資訊）。");
         if (amounts is null && !problems.Any(p => p.StartsWith("金額截圖", StringComparison.Ordinal)))
@@ -239,24 +284,30 @@ internal static partial class ShopeeScreenshot
             problems.Add("缺少明細截圖。");
         if (order is null || amounts is null || items.Count == 0) return new ShopeeShotResult(null, problems);
 
-        // The same line can appear on two overlapping screenshots; keep one per 編號.
-        var lines = new List<ShopeeShotItem>();
-        foreach (var group in items.GroupBy(i => i.Index).OrderBy(g => g.Key))
+        // Overlapping screenshots show the same product or 編號 twice; keep one of each.
+        var lines = items.Distinct().ToList();
+        var subtotals = new List<ShopeeShotGroup>();
+        foreach (var group in groups.GroupBy(g => g.Index).OrderBy(g => g.Key))
         {
-            if (group.Select(i => (i.ItemCode, i.UnitPrice, i.Quantity, i.Subtotal)).Distinct().Count() > 1)
-                problems.Add($"第 {group.Key} 項在兩張截圖讀到的內容不同，請核對。");
-            lines.Add(group.First());
+            if (group.Distinct().Count() > 1) problems.Add($"第 {group.Key} 項在兩張截圖讀到的小計不同，請核對。");
+            subtotals.Add(group.First());
         }
-        var missing = Enumerable.Range(1, lines.Max(l => l.Index)).Except(lines.Select(l => l.Index)).ToList();
+        var missing = subtotals.Count == 0 ? []
+            : Enumerable.Range(1, subtotals.Max(g => g.Index)).Except(subtotals.Select(g => g.Index)).ToList();
         if (missing.Count > 0) problems.Add($"明細缺第 {string.Join("、", missing)} 項，請補截圖或在表單補上。");
-        else if (lines.Sum(l => l.Subtotal) != amounts.OrderAmount)
-            problems.Add($"明細小計合計 {Number(lines.Sum(l => l.Subtotal))} 與訂單金額 {Number(amounts.OrderAmount)} 不同，請核對。");
+        else if (subtotals.Count > 0)
+        {
+            if (subtotals.Sum(g => g.Shown) != amounts.OrderAmount)
+                problems.Add($"明細小計合計 {Number(subtotals.Sum(g => g.Shown))} 與訂單金額 {Number(amounts.OrderAmount)} 不同，請核對。");
+            if (subtotals.Sum(g => g.Original) != lines.Sum(l => l.Amount))
+                problems.Add($"商品單價×數量合計 {Number(lines.Sum(l => l.Amount))} 與小計（原價）合計 {Number(subtotals.Sum(g => g.Original))} 不同，可能漏讀商品，請核對。");
+        }
 
         var formItems = new List<ImportedItem>();
         foreach (var group in lines.GroupBy(l => (l.ItemCode, l.UnitPrice)))
             formItems.Add(new ImportedItem(group.Key.ItemCode, Number(group.Sum(l => l.Quantity)), Number(group.Key.UnitPrice)));
 
-        var promotion = lines.Sum(l => l.UnitPrice * l.Quantity) - amounts.OrderAmount;
+        var promotion = lines.Sum(l => l.Amount) - amounts.OrderAmount;
         if (promotion < 0) problems.Add($"單價×數量合計低於訂單金額 {Number(-promotion)}，請核對明細。");
         void AddLine(string code, decimal price, string what)
         {
@@ -317,6 +368,9 @@ internal static partial class ShopeeScreenshot
 
     [GeneratedRegex(@"(貨|货)(號|号)")]
     private static partial Regex CodeLabelPattern();
+
+    [GeneratedRegex(@"^(?<code>.*[0-9A-Za-z])[xX×*＊](?<n>\d{1,3})$")]
+    private static partial Regex SetSuffixPattern();
 
     [GeneratedRegex(@"^\d{1,7}$")]
     private static partial Regex DigitsPattern();

@@ -38,9 +38,9 @@ public class ShopeeScreenshotTests
     {
         var problems = new List<string>();
         var o = ShopeeScreenshot.ParseOrder(ShopeeScreenshot.MergeLines(order), problems);
-        var items = itemShots.SelectMany(s => ShopeeScreenshot.ParseItems(ShopeeScreenshot.MergeLines(s), 990, problems)).ToList();
+        var parsed = itemShots.Select(s => ShopeeScreenshot.ParseItems(ShopeeScreenshot.MergeLines(s), 990, problems)).ToList();
         var a = ShopeeScreenshot.ParseAmounts(ShopeeScreenshot.MergeLines(amountShot), problems);
-        return ShopeeScreenshot.Combine(o, items, a, Mapping, problems);
+        return ShopeeScreenshot.Combine(o, parsed.SelectMany(p => p.Items).ToList(), parsed.SelectMany(p => p.Groups).ToList(), a, Mapping, problems);
     }
 
     [Fact]
@@ -124,6 +124,43 @@ public class ShopeeScreenshotTests
                                 B("買家總支付金額", 706, 210), B("NT$300", 889, 207, 90, 26)];
         var result = Read(OrderShot(), [PromoItemShot()], amounts);
         Assert.Contains(result.Problems, p => p.Contains("金額對不上"));
+    }
+
+    [Fact]
+    public void A_promotion_group_with_a_set_code_splits_into_quantity_and_unit_price()
+    {
+        // One 編號 with three products and one 小計 171 (original 175); no header row on screen.
+        List<OcrBox> items =
+        [
+            B("Any 2 enjoy 1% off", 41, 18, 120), B("【志遠】測試弧形杯", 145, 54, 480), B("40", 761, 80, 18), B("1", 844, 81, 9),
+            B("規格: 6號", 138, 102, 150), B("商品项货號：X00014", 138, 122, 160),
+            B("【志遠】測試弧形杯", 143, 140, 480), B("1", 37, 176, 8), B("規格:8號", 139, 189, 150), B("40", 761, 166, 18), B("1", 844, 167, 9),
+            B("171", 903, 166, 26), B("175", 906, 183, 26), B("商品项货號：X00015", 138, 207, 160),
+            B("【志遠】測試拔罐槍", 143, 225, 480), B("95", 760, 250, 18), B("1", 844, 251, 9),
+            B("規格:優惠組合-拔罐植頭x2", 139, 274, 260), B("商品選項貨號：", 138, 292, 80), B("Y0033x2", 224, 291, 60), B("隱藏入帳明細", 840, 325)
+        ];
+        List<OcrBox> amounts = [B("訂單金額", 752, 64), B("NT$171", 922, 65, 55), B("買家總支付金額", 706, 140), B("NT$171", 889, 137, 60)];
+        var result = Read(OrderShot(), [items], amounts);
+        Assert.Empty(result.Problems);
+        Assert.Equal(
+        [
+            new ImportedItem("X00014", "1", "40"),
+            new ImportedItem("X00015", "1", "40"),
+            new ImportedItem("Y0033", "2", "47.5"),
+            new ImportedItem("P900", "1", "-4")
+        ], result.Order!.Items);
+    }
+
+    [Theory]
+    [InlineData("F0033x2", "F0033", 2)]
+    [InlineData("F0033*2", "F0033", 2)]
+    [InlineData("F0033 x 2", "F0033", 2)]
+    [InlineData("F0033 X 3", "F0033", 3)]
+    [InlineData("A00315-1", "A00315-1", 1)]
+    [InlineData("A00023", "A00023", 1)]
+    public void Splits_set_codes(string text, string code, int multiplier)
+    {
+        Assert.Equal((code, (decimal)multiplier), ShopeeScreenshot.SplitSet(text));
     }
 
     [Fact]
