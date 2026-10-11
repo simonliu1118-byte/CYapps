@@ -144,10 +144,11 @@ internal static partial class ShopeeScreenshot
     public static (List<ShopeeShotItem> Items, List<ShopeeShotGroup> Groups) ParseItems(
         IReadOnlyList<OcrBox> lines, int imageWidth, List<string> problems)
     {
+        var raw = lines;
         lines = WithLoneGlyphDigits(lines);
         var items = new List<ShopeeShotItem>();
         var groups = new List<ShopeeShotGroup>();
-        var anchors = IndexAnchors(lines, imageWidth).OrderBy(l => l.Top).ToList();
+        var anchors = IndexAnchors(raw, imageWidth).OrderBy(l => l.Top).ToList();
 
         // Numbers in the right half, each assigned to the nearest 單價／數量／小計 column.
         var numbers = lines
@@ -226,7 +227,9 @@ internal static partial class ShopeeScreenshot
             var g = groups[i];
             var sum = items.Where(it => it.Group == g.Index).Sum(it => it.Amount);
             // At most half off: a misread quantity (450 × 450) must still fail the checks.
-            if (g.Shown == g.Original && sum > g.Shown && g.Shown * 2 >= sum) groups[i] = g with { Original = sum };
+            // An original below the price shown is a misread struck number (480 read as 180;
+            // user's PC, 2026-10-11) and is treated as missed.
+            if (g.Original <= g.Shown && sum > g.Shown && g.Shown * 2 >= sum) groups[i] = g with { Original = sum };
         }
 
         // A 數量 the detector and the re-read both missed (a lone "1"; user's PC, 2026-10-11).
@@ -255,6 +258,7 @@ internal static partial class ShopeeScreenshot
     /// </summary>
     public static List<CellProbe> MissingCellProbes(IReadOnlyList<OcrBox> lines, int imageWidth, int imageHeight)
     {
+        var raw = lines;
         lines = WithLoneGlyphDigits(lines);
         var probes = new List<CellProbe>();
         var numbers = lines.Where(l => l.CenterX > imageWidth * 0.5 && TryNumber(l.Text, out _, digitsOnly: true)).ToList();
@@ -263,7 +267,7 @@ internal static partial class ShopeeScreenshot
         var unitX = layout.Unit;
         var quantityX = layout.Quantity;
         var subtotalX = layout.Subtotal;
-        var anchors = IndexAnchors(lines, imageWidth);
+        var anchors = IndexAnchors(raw, imageWidth);
         var anchorX = IndexColumnX(lines)
             ?? (anchors.Count > 0 ? anchors.Average(a => a.CenterX) : imageWidth * 0.05);
 
@@ -304,12 +308,17 @@ internal static partial class ShopeeScreenshot
     /// </summary>
     private static List<OcrBox> IndexAnchors(IReadOnlyList<OcrBox> lines, int imageWidth)
     {
-        // The 編號 glyph alone is often misread: "1" as "-", "2" as "乙" (user's PC, 2026-10-11).
-        var candidates = lines
-            .Where(l => l.CenterX < imageWidth * 0.2)
-            .Select(l => TryIndexDigits(l.Text, out var digits) ? l with { Text = digits } : null)
-            .OfType<OcrBox>()
-            .ToList();
+        // The 編號 glyph alone is often misread: "1" as "-", "2" as "乙" — and "2" as "-" too
+        // (user's PC, 2026-10-11), so a look-alike is only a guess, settled below.
+        var guessed = new HashSet<OcrBox>();
+        var candidates = new List<OcrBox>();
+        foreach (var l in lines.Where(l => l.CenterX < imageWidth * 0.2))
+        {
+            if (!TryIndexDigits(l.Text, out var digits)) continue;
+            var box = l with { Text = digits };
+            if (!TryNumber(l.Text, out _, digitsOnly: true)) guessed.Add(box);
+            candidates.Add(box);
+        }
         // Product thumbnails sit between 編號 and the product text and carry small print
         // (「5號杯」 read as "5"); a 編號 is well left of them, about 6 text heights before the
         // product text, a thumbnail's print about 3.
@@ -340,7 +349,29 @@ internal static partial class ShopeeScreenshot
         }
         if (candidates.Count == 0) return candidates;
         var x = IndexColumnX(lines) ?? candidates.Min(c => c.CenterX);
-        return candidates.Where(c => Math.Abs(c.CenterX - x) <= 15).ToList();
+        var anchors = new List<OcrBox>();
+        // One 編號 cell can carry two boxes (a guessed glyph and a re-read digit); keep one,
+        // preferring a real digit.
+        foreach (var c in candidates.Where(c => Math.Abs(c.CenterX - x) <= 15).OrderBy(c => guessed.Contains(c)).ThenBy(c => c.Top))
+            if (!anchors.Any(a => Math.Abs(a.CenterY - c.CenterY) < Math.Max(a.Height, c.Height)))
+                anchors.Add(c);
+        anchors = anchors.OrderBy(c => c.Top).ToList();
+
+        // 編號 run 1, 2, 3… down the screenshot, so a guessed one takes its number from the
+        // nearest one read as a real digit; with none, from the one above it.
+        var settled = anchors.Select(a => int.Parse(a.Text, CultureInfo.InvariantCulture)).ToArray();
+        var sure = Enumerable.Range(0, anchors.Count).Where(i => !guessed.Contains(anchors[i])).ToList();
+        for (var i = 0; i < anchors.Count; i++)
+        {
+            if (!guessed.Contains(anchors[i])) continue;
+            if (sure.Count > 0)
+            {
+                var j = sure.OrderBy(k => Math.Abs(k - i)).First();
+                settled[i] = settled[j] + (i - j);
+            }
+            else if (i > 0) settled[i] = settled[i - 1] + 1;
+        }
+        return anchors.Select((a, i) => settled[i] >= 1 ? a with { Text = settled[i].ToString(CultureInfo.InvariantCulture) } : a).ToList();
     }
 
     private const int ColumnTolerance = 40;
