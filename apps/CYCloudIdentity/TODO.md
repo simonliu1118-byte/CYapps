@@ -39,6 +39,7 @@
 
 - [x] Isolated temporary consumer transport probe source／tests：secret-gated route、default Fetcher／named RPC 同一 Provider、固定 synthetic invalid Session／unavailable scope；不建帳號／Session／grant／D1，成功／失敗以 owner nonce／bindings 核對後清理，不改原 Provider Secret／authority。
 - [x] Probe 最終 source 4dc28ff6／#391 已通過 Governance、Provider Check、兩個 deployment PR validate；13 項 controller／Worker 回歸涵蓋 multipart、local zero-mutation failure、partial upload／route failure 清理與 owner／target／D1 拒絕。只保留一條 local bundle → controlled API upload 路徑，CLI hint 中間層已移除。
+- [x] 同一 probe owner 補上固定 platform response 分類與當前 Token 唯讀驗證／可讀 policy hint；不公開原始 body／headers／IDs，不列出或修改 Token，不為診斷擴權。21 項 focused regression 本地通過；可讀權限名稱僅供診斷，不能當授權證據，實際 CI／controlled probe 證據另記。
 - [ ] 真實 private binding transport／deny 驗收：latest [development #136](https://github.com/simonliu1118-byte/CYapps/actions/runs/38113320985)（4dc28ff6）原 Provider preflight 通過，但 temporary Worker upload 回 HTTP 403、無數字 API code；temporary Worker absence 已確認，Provider deploy／post-check skipped。不能宣稱 default Fetcher／named RPC 已 exercised；前次 #126／#128／#130／#132／#134 均為失敗診斷歷史。
 - [ ] 取得既有 development Environment 可操作的隔離 consumer target／建立與清理能力並核對 403 拒絕原因；不自行擴大 API Token 權限、公開 credential、修改原 Provider 或把真實業務 target 當可拋棄 probe。詳細 API／清理邊界見 docs/DEVELOPMENT_DEPLOYMENT.md。
 
