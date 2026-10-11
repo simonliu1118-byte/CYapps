@@ -50,12 +50,20 @@ internal sealed class ShopeeScreenshotForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         Controls.Add(root);
 
-        root.Controls.Add(new Label
+        // 說明 sits top right beside the instructions (user, 2026-10-11).
+        var top = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        top.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
             Text = "用 Win+Shift+S 截取蝦皮訂單頁，在這裡按 Ctrl+V 貼上（也可拖曳圖片檔）。\n需要：訂單資訊（訂單編號、運送資訊）、明細（可多張）、買家實付金額；順序不限。",
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
+        var help = new CyButton { Text = "說明", Size = new Size(92, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
+        help.Click += (_, _) => { using var form = new ShopeeScreenshotHelpForm(); form.ShowDialog(this); };
+        top.Controls.Add(help, 1, 0);
+        root.Controls.Add(top, 0, 0);
 
         _cards.Dock = DockStyle.Fill;
         _cards.AutoScroll = true;
@@ -73,13 +81,10 @@ internal sealed class ShopeeScreenshotForm : Form
         _apply.Click += (_, _) => Apply();
         var cancel = new CyButton { Text = "取消", Size = new Size(92, 34), DialogResult = DialogResult.Cancel };
         var clear = new CyButton { Text = "全部清除", Size = new Size(100, 34), Margin = new Padding(3, 3, 12, 3) };
-        var help = new CyButton { Text = "截圖說明", Size = new Size(100, 34) };
-        help.Click += (_, _) => { using var form = new ShopeeScreenshotHelpForm(); form.ShowDialog(this); };
         clear.Click += (_, _) => { foreach (var shot in _shots) shot.Image.Dispose(); _shots.Clear(); _cards.Controls.Clear(); UpdateSummary(); };
         buttons.Controls.Add(_apply);
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(clear);
-        buttons.Controls.Add(help);
         root.Controls.Add(buttons, 0, 3);
         CancelButton = cancel;
 
@@ -251,7 +256,7 @@ internal sealed class ShopeeScreenshotForm : Form
             MessageBox.Show(this,
                 "一張蝦皮訂單需要訂單資訊、商品明細、買家實付金額三種截圖，目前缺少：\n\n" +
                 string.Join("\n", missingParts.Select(p => "・" + p)) +
-                (unknown > 0 ? $"\n\n另有 {unknown} 張無法判斷種類，請確認截圖範圍（可按「截圖說明」）。" : string.Empty),
+                (unknown > 0 ? $"\n\n另有 {unknown} 張無法判斷種類，請確認截圖範圍（可按右上角「說明」）。" : string.Empty),
                 "截圖不完整", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }

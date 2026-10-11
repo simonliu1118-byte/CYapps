@@ -190,24 +190,33 @@ internal sealed class ErpAutomationService
 
         // The Ribbon is the top strip of COPI08; 列印 sits in its left part.
         var ribbon = new Rectangle(window.Left, window.Top, Math.Min(window.Width, 1200), Math.Min(window.Height, 220));
-        OcrToken? label;
+        IReadOnlyList<OcrToken> tokens;
         using (var image = ScreenCapture.Capture(ribbon))
-            label = (await _textVision.RecognizeAsync(image, cancellationToken)).FirstOrDefault(t => Compact(t.Text) == "列印");
-        if (label is null) { Skip("Ribbon 上找不到「列印」，未列印"); return; }
-        var labelScreen = new Rectangle(ribbon.Left + label.Rect.Left, ribbon.Top + label.Rect.Top, label.Rect.Width, label.Rect.Height);
+            tokens = await _textVision.RecognizeAsync(image, cancellationToken);
+        // Logged every time: Build 31 found no exact 「列印」 token on the user's PC
+        // (2026-10-11) and the log could not show what the OCR read instead.
+        foreach (var t in tokens)
+            _log.Info("print", $"  ribbon token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
+        if (RibbonPrintLocator.FindWord(tokens.Select(t => (t.Text, t.Rect)).ToList(), "列印") is not { } labelRect) { Skip("Ribbon 上找不到「列印」，未列印"); return; }
+        var labelScreen = new Rectangle(ribbon.Left + labelRect.Left, ribbon.Top + labelRect.Top, labelRect.Width, labelRect.Height);
         cancellationToken.ThrowIfCancellationRequested();
         InputSender.Click(new Point(labelScreen.Left + labelScreen.Width / 2, labelScreen.Top + labelScreen.Height / 2));
         _log.Info("print", "ribbon 列印 clicked");
 
         // The drop-down opens below the button: 直接列印 / 預覽列印.
         var menu = new Rectangle(labelScreen.Left - 60, labelScreen.Bottom, 360, 200);
-        OcrToken? item = null;
+        Rectangle? item = null;
         var deadline = Environment.TickCount64 + 2000;
         while (item is null && Environment.TickCount64 < deadline)
         {
             await Delay(250, cancellationToken);
             using var image = ScreenCapture.Capture(menu);
-            item = (await _textVision.RecognizeAsync(image, cancellationToken)).FirstOrDefault(t => Compact(t.Text).Contains("直接列印", StringComparison.Ordinal));
+            var menuTokens = await _textVision.RecognizeAsync(image, cancellationToken);
+            // 「直接」 alone is enough: the other item is 「預覽列印」.
+            item = RibbonPrintLocator.FindWord(menuTokens.Select(t => (t.Text, t.Rect)).ToList(), "直接");
+            if (item is null)
+                foreach (var t in menuTokens)
+                    _log.Info("print", $"  menu token x={t.Rect.Left} y={t.Rect.Top} w={t.Rect.Width} h={t.Rect.Height} text={_log.Value(t.Text)}");
         }
         if (item is null)
         {
@@ -216,7 +225,7 @@ internal sealed class ErpAutomationService
             return;
         }
         cancellationToken.ThrowIfCancellationRequested();
-        InputSender.Click(new Point(menu.Left + item.Rect.Left + item.Rect.Width / 2, menu.Top + item.Rect.Top + item.Rect.Height / 2));
+        InputSender.Click(new Point(menu.Left + item.Value.Left + item.Value.Width / 2, menu.Top + item.Value.Top + item.Value.Height / 2));
         result.Printed = true;
         _log.Info("print", $"direct print requested document={_log.Value(result.DocumentKey)}");
 
@@ -227,6 +236,7 @@ internal sealed class ErpAutomationService
     }
 
     private static string Compact(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+
 
     /// <summary>
     /// Saves with ERP's F12 shortcut (the Ribbon 儲存 group also holds 取消, so a click is

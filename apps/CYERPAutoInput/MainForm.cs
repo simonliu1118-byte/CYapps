@@ -721,8 +721,9 @@ internal sealed class MainForm : Form
                 return;
             }
             ShowRunSummaryIfNeeded(result, DocumentKeyText(result), notes);
-            // A run with nothing left to check clears the form for the next order (user, 2026-10-11).
-            if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && result.PrintProblem.Length == 0 && notes.Count == 0)
+            // A saved document clears the form for the next order, after any summary was shown;
+            // so does an unsaved run with nothing left to check (user, 2026-10-11).
+            if (result.Saved || (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && result.PrintProblem.Length == 0 && notes.Count == 0))
             {
                 ResetForm();
                 SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{(result.Saved ? "已儲存" : "尚未儲存")}；表單已清空");

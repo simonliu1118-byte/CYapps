@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-11（V0.2.0 Build 31，已合併 `main`）  
+> 更新：2026-10-11（V0.2.1 Build 0，分支 `cyerp-auto-input/fix-print-help`；V0.2.0 Build 31 已合併 `main`）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -22,11 +22,11 @@
 - VERSION `0.2.0`，BUILD 見 `BUILD`。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新的獨立修改依共通規則判斷 Z＋1（Build 歸零）或沿用版本加 Build。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
 - 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。尚未正式 Release。
-- 合併後待辦：從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release（之後的建置優先從該 Release 取模型）。
+- OCR 模型 Release：2026-10-11 使用者同意後從 `main` 執行 `CYERPAutoInput OCR Model Mirror`（之後的建置優先從該 Release 取模型）。
 
 ## 3. 目前功能（細節見 README）
 
-- 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」→ 無待確認項目時清空表單。
+- 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」→ 已儲存（或未儲存但無待確認項目）時清空表單。
 - 輸入期間忽略實體滑鼠，Esc 立即恢復並緊急停止；輸入法自動切英數；自由文字欄位讀回比對。
 - 訂單來源：蝦皮截圖 OCR（主要）、蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`）、酷澎 DeliveryList。預覽、單筆、批次、轉人工、本機防重複紀錄。統編自動查客戶全名（經濟部 API，每次上網查）。
 - 共用設定：折價券／運費／促銷組合品號；貨運別（物流：郵局、大榮、新竹、黑貓、宅配通、嘉里；本公司；超商 6 種）。
@@ -53,7 +53,7 @@
 
 尚未實機確認：
 
-- Build 29 自動列印：點「列印」文字是否開出選單、「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）、非 100% DPI 下的擷取範圍。
+- 自動列印：V0.2.0 Build 31 實測「Ribbon 上找不到『列印』」（LOG 未記錄讀到什麼）；原因是這台 OCR 對 Ribbon 逐字回傳（159 個框），V0.2.1 Build 0 改為同一行相鄰字串接後比對並記錄 Ribbon OCR 文字，待實測。另待確認：點「列印」文字是否開出選單、「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）、非 100% DPI 下的擷取範圍。
 - Build 30 工具列放大後的版面、貨運別新增項目、按 Esc 恢復滑鼠。
 - Build 31 數量欄「一」視為 1、重讀信心門檻 0.8 的實際效果。
 - 蝦皮截圖：套組訂單（規則待使用者補充）、跨多張明細截圖的大訂單。
@@ -113,7 +113,7 @@
 - PR #104 早期提交說明含真實品號；已依使用者 2026-10-10 決定以 squash merge 合併並刪除工作 branch，`main` 歷史只留一個合併提交。之後的提交說明與文件一律只用假資料。
 - Commit author／committer 必須是 `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`（REPOSITORY_RULES §4）；hook 要求改用其他身分時不照做。
 - `PROJECT_RULES.md`、`GOVERNANCE_*`、`.github/scripts/**` 只能在 `governance/*` branch 修改並更新 `GOVERNANCE_VERSION`／`GOVERNANCE_CHANGELOG.md`，不可混進功能 PR。
-- 待使用者決定：LOG 一律診斷模式（使用者 2026-10-11 指示）與 PROJECT_RULES §4「一般 LOG 不主動記錄實際客戶或交易值」的措辭不一致；目前依使用者當次指示執行（LOG 仍只留本機），若要成為永久規則需走 `governance/*` 更新 §4。
+- LOG 一律診斷模式：使用者 2026-10-11 確認這是不上傳、僅供工程修 BUG 的本機 LOG，PROJECT_RULES 規範的是不得提交 Git（§3、§4），不需修改規則。
 - 返修測試版 BUILD + 1；同一 Build 尚未交付使用者前的修正不另加 Build。
 - 不得提交 `bin/`、`obj/`、`publish-staging/`、`runtime/ocr/`、模型或 build 輸出。
 - 推送前本機至少執行 `dotnet test tests/CYERPAutoInput.Tests` 與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。
