@@ -19,7 +19,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _moPassword = new();
     private readonly TextBox _moDiscountItem = new();
     private readonly TextBox _moShippingItem = new();
-    private readonly TextBox _moFreightTypes = new();
+    private readonly Dictionary<string, TextBox> _moFreightCodes = [];
 
     private static readonly string[] ConfigurableKeys =
     [
@@ -37,7 +37,7 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
-        Size = new Size(680, 880);
+        Size = new Size(680, 812);
         MinimumSize = new Size(560, 480);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         BuildUi();
@@ -61,7 +61,7 @@ internal sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         Controls.Add(root);
@@ -140,22 +140,16 @@ internal sealed class SettingsForm : Form
         AddField(moRow2, "運費品號", _moShippingItem, _settings.MoShippingItemCode, 80);
         root.Controls.Add(moRow2, 0, 7);
 
-        var freightPanel = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
-        freightPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 236));
-        freightPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        freightPanel.Controls.Add(new Label
+        // One code box per MO店+ carrier (user, 2026-10-11); only the ERP 貨運別 codes are typed here.
+        var freightRow = FieldRow();
+        freightRow.Controls.Add(new Label { Text = "MO店+ 貨運別", AutoSize = true, Padding = new Padding(3, 7, 12, 0) });
+        foreach (var carrier in MoOrderImport.Carriers)
         {
-            Text = "MO店+ 物流商→貨運別\n每行一組：關鍵字=貨運別\n關鍵字只要包含在物流商文字中\n例如：全家=代號",
-            Dock = DockStyle.Fill,
-            Padding = new Padding(3, 4, 0, 0)
-        }, 0, 0);
-        _moFreightTypes.Multiline = true;
-        _moFreightTypes.ScrollBars = ScrollBars.Vertical;
-        _moFreightTypes.AcceptsReturn = true;
-        _moFreightTypes.Dock = DockStyle.Fill;
-        _moFreightTypes.Text = MoOrderImport.FormatFreightTable(_settings.MoFreightTypes);
-        freightPanel.Controls.Add(_moFreightTypes, 1, 0);
-        root.Controls.Add(freightPanel, 0, 8);
+            var box = new TextBox { MaxLength = 10 };
+            AddField(freightRow, carrier + " ＝", box, _settings.MoFreightTypes.TryGetValue(carrier, out var code) ? code : string.Empty, 60);
+            _moFreightCodes[carrier] = box;
+        }
+        root.Controls.Add(freightRow, 0, 8);
 
         _grid.Dock = DockStyle.Fill;
         _grid.AllowUserToAddRows = false;
@@ -254,7 +248,9 @@ internal sealed class SettingsForm : Form
         _settings.MoNotePrefix = _moNotePrefix.Text.Trim();
         _settings.MoDiscountItemCode = _moDiscountItem.Text.Trim();
         _settings.MoShippingItemCode = _moShippingItem.Text.Trim();
-        _settings.MoFreightTypes = MoOrderImport.ParseFreightTable(_moFreightTypes.Text);
+        _settings.MoFreightTypes = _moFreightCodes
+            .Where(p => p.Value.Text.Trim().Length > 0)
+            .ToDictionary(p => p.Key, p => p.Value.Text.Trim(), StringComparer.OrdinalIgnoreCase);
         if (_moPassword.Text.Length > 0) _settings.MoPasswordProtected = LocalSecret.Protect(_moPassword.Text);
         _settings.FirstRowWarehouseEnabled = _firstRowWarehouse.Checked;
         _settings.FirstRowWarehouse = warehouse;

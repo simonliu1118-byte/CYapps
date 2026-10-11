@@ -601,17 +601,21 @@ internal sealed class ErpAutomationService
                                        target.ClassName.Equals("TDBEdit", StringComparison.OrdinalIgnoreCase);
             var before = targetIsLookupDbEdit ? targetBefore : editorBefore;
 
-            if (before == value)
+            // A field that reads back the form value is still retyped: ERP's control text can
+            // be stale (it reported 貨運別 "11" and 送貨地址 text while both were blank on
+            // screen), and only tabbing through left the field empty (user, 2026-10-11).
+            var sameValue = before == value;
+            if (sameValue)
             {
-                InputSender.Press(NativeMethods.VK_TAB);
-                await Delay(field.Kind == FieldKind.Lookup ? 420 : 180, cancellationToken);
-                return;
+                InputSender.EndBackspace(before.Length + 2);
+                await Delay(80, cancellationToken);
+                _log.Info("field", $"retyping a field that already reads the form value key={field.Key}");
             }
 
             if (targetIsLookupDbEdit && targetBefore.Length == 0 && editorBefore.Length > 0)
                 _log.Info("field", $"lookup target is blank; ignored retained inner-editor text key={field.Key} editor_class={NativeMethods.ClassName(focus)} editor_len={editorBefore.Length}");
 
-            if (!string.IsNullOrWhiteSpace(before))
+            if (!sameValue && !string.IsNullOrWhiteSpace(before))
             {
                 // ERP fills these from the customer master; the form value is meant to replace it.
                 if (!CustomerDerivedKeys.Contains(field.Key))
@@ -648,7 +652,7 @@ internal sealed class ErpAutomationService
 
     /// <summary>Free-text fields that ERP keeps as typed, verified after leaving them.</summary>
     private static readonly HashSet<string> ReadBackKeys =
-        new(["trade_note", "ship_addr1", "inv_name"], StringComparer.OrdinalIgnoreCase);
+        new(["trade_note", "ship_addr1", "inv_name", "freight_type"], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Fields ERP may pre-fill from the customer on a new document (付款條件, 貨運別,

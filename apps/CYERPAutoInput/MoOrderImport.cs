@@ -210,6 +210,12 @@ internal static class MoOrderImport
         };
     }
 
+    /// <summary>
+    /// MO店+ carriers set up in 設定 (user, 2026-10-11): each keyword is matched inside the
+    /// export's 物流商 text (e.g. 第三方物流-新竹貨運, 7-11店出, 全家店出); only the ERP code is local.
+    /// </summary>
+    internal static readonly string[] Carriers = ["新竹", "7-11", "全家"];
+
     /// <summary>"A + B" style codes name a set of items; they go to a person for now.</summary>
     internal static bool IsCombination(string code) => code.IndexOfAny(['+', '＋']) >= 0;
 
