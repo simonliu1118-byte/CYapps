@@ -2,7 +2,7 @@
 
 本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-11（Asia/Taipei）。main 已合併 #380 的 **V2.6.18 Build 1**；目前工程候選版 **V2.6.19 Build 0** 調整查無買方名稱留空行為，保留 CYID Consumer。#216／#379 head 已包含於 main ancestry，不重複合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
+更新日期：2026-10-11（Asia/Taipei）。main 已合併 #380／#384／#385，目前 **V2.6.19 Build 0** 調整查無買方名稱留空行為並保留 CYID Consumer。#216／#379 head 已包含於 main ancestry，不重複合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
@@ -12,7 +12,7 @@ Cloud source／原 development 0.9.2／API 1／compatibility marker 8／storage 
 
 | 優先 | 未完成工作 | 驗收位置／依賴 |
 | --- | --- | --- |
-| 目前 | V2.6.19 查無買方名稱可人工輸入／留空以統編送出 | RC D.12；本地與精確 CI／工程包後驗收 |
+| 目前 | V2.6.19 查無買方名稱可人工輸入／留空以統編送出 | RC D.12；source 6c499108 的 Windows #281／Cloud #393／Governance #1201 與工程包通過，實機待驗收 |
 | 目前 | V2.6.14 裝置管理、使用版本／最後使用與改名；保留 V2.6.13 介面 | RC Z／Y；source CI 已通過、人工尚待驗收 |
 | 目前 | V2.6.12 邀請首次加入與首次說明 | RC X；舊包重開成功有使用者證據，修正版首次成功待實機 |
 | 目前 | V2.6.11 處理中／上傳問題分流、舊資料結案、Danger button／號碼隱藏 | RC W；Windows #258 通過，人工待測 |
@@ -25,7 +25,7 @@ Cloud source／原 development 0.9.2／API 1／compatibility marker 8／storage 
 
 - [ ] 完成 RC Y 的介面實機驗收（96 DPI）；125／150 DPI 與 High Contrast 尚未取得證據。使用版本／最後使用為成功啟動回報，不代表即時在線；持續 heartbeat 不在本次範圍。
 - [ ] 完成 RC W 的實機驗收並記錄包／環境／結果：正常等待→完成、等待→錯誤→恢復、數量／公司隔離、舊折讓 null 分類、無 active upload issue 的作廢仍能管理員結案。
-- [ ] V2.6.14 裝置管理與既有介面、邀請與既有分流驗收／必要修正收斂後，依當時 main 與精確 head CI 整合 PR #216。本次另修邀請 UI 空物件錯誤；目前尚未合併。
+- [x] PR #216／#379 head 已包含於 #380 ancestry 並合併 main；V2.6.14 裝置管理／邀請／分流實機驗收仍在 RC Z／X／W，不以工程合併代替。
 
 本檔既有未勾選實機項目代表「尚未取得可引用證據」，不等於已發現 defect。已完成工程證據集中在交接／CHANGELOG，不把 CI 自動勾成人工成功。
 
@@ -184,9 +184,11 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] 遠端 development preflight #11：原 Cloud 0.8.9／storage 12、1 Workspace／4 Device records、僅 pending 0013、FK／private Time Travel／Worker checkpoint 可用；不把既有 development target 自稱隔離 sandbox。
 - [x] additive development Cloud #12：0.9.2／storage 13，CYID 關閉；原資料／Token hashes／history／API compatibility 與 runtime-sync capability 驗收通過。沒有 secret replacement／authority switch；Windows 當次認證／業務與 UI 驗收仍獨立。
 - [x] #380 工程基準／canonical 1.0.3 已合併至 main `59d63b67`；功能 head `46723a89` 七項 CI 通過。
-- [ ] CY Web 七個 manifest mirror 同步 main canonical 1.0.3；原 1.0.2 byte-sync 是歷史證據，不冒充新版採用。
-- [ ] Provider 0.3.6／private named RPC staged rollout：development preflight／保留既有設定的 code-only upgrade 已有 source／回歸，待精確 CI、遠端 preflight 與 upgrade；不重寫 Secrets／migration／bootstrap／authority。同步跨 repo mirror 後再進 coordinated rollout。
-- [ ] 確認隔離 staging 資源及部署權限／Free 用量、private IDENTITY／IDENTITY_AUTHORITY 同 provider、Application 與 Workspace scopes；不能猜正式對應或在原業務資料上造 synthetic 帳號。
+- [x] CY Web 七個 manifest mirror 已同步 main canonical 1.0.3（governance #145，main a0cb4675，Governance #243／deploy PR validation #136 通過）；其 consumer 維持支援窗內 1.0.2，不改 Web runtime。
+- [x] Provider development 0.3.6 code-only upgrade：#384 source 348185fb 四項 CI 通過，preflight #123／實際 upgrade #124 通過；原七個 migration、vars／bindings／Secret names／hashed authority／history counts／FK 保留，invalid Session 拒絕正常；UTC recovery reference 2026-10-11T04:20:13.295Z。沒有 Secret replacement／remote migration／bootstrap／authority cutover。
+- [ ] Private named RPC 與既有 consumer 實際 binding／帳號授權驗收，依下列 staging scope／Windows gate；Provider health 不等於該能力已 exercised。
+- [ ] 隔離 consumer probe source／回歸已完成，待精確 CI／actual run／清理確認：先以隔離 consumer probe 驗證 private IDENTITY／IDENTITY_AUTHORITY 指向同一 development provider 的 default Fetcher／named RPC transport；只送固定 synthetic invalid Session／不存在 scope，不建立帳號、Session、grant 或直接讀 CYID D1，產物與敏感設定不公開。這只能驗 transport／deny，不能代替正向授權。
+- [ ] 確認隔離 staging 資源及部署權限／Free 用量、核准的 Application／兩 Workspace 配對與 Employee／App Access／Role／Email readiness，再在隔離 scope 驗正向與變更／撤銷／outage；不猜正式對應或在原業務資料上造 synthetic 帳號。
 - [ ] staging、RC AA／AB／AC 與原 A/B/C 完成後提出正式切換／回復方案；正式 tag／Release 版本身分另依 PROJECT_RULES 明確處理。
 
 ### 7.4 新裝置加入方式與安全紀錄
