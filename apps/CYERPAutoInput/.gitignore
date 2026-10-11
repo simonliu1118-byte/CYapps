@@ -4,7 +4,6 @@ config/settings.json
 config/*.local.json
 Data/settings.json
 Data/order_ledger.json*
-Data/ban_names.json*
 Data/Logs/
 runtime/ocr/*.onnx
 runtime/ocr/SHA256.txt

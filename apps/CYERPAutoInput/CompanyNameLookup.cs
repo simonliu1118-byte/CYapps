@@ -4,9 +4,10 @@ namespace CYERPAutoInput;
 
 /// <summary>
 /// 統一編號 → registered name through the Ministry of Economic Affairs open data API (no key;
-/// user, 2026-10-11): companies first, then businesses (商號). Names found are cached on this
-/// PC (Data/ban_names.json) so a known buyer needs no network. Nothing found, offline or a
-/// timeout all return an empty name; the caller then leaves 客戶全名 blank.
+/// user, 2026-10-11): companies first, then businesses (商號). Every lookup goes to the
+/// registry and nothing is kept on this PC, so a renamed company shows its current name
+/// (user, 2026-10-11). Nothing found, offline or a timeout all return an empty name; the
+/// caller then leaves 客戶全名 blank.
 /// </summary>
 internal sealed class CompanyNameLookup
 {
@@ -15,16 +16,8 @@ internal sealed class CompanyNameLookup
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(6) };
 
     private readonly AppLogger _log;
-    private readonly string _cachePath;
-    private readonly Dictionary<string, string> _cache;
-    private readonly object _gate = new();
 
-    public CompanyNameLookup(AppLogger log, string? cachePath = null)
-    {
-        _log = log;
-        _cachePath = cachePath ?? Path.Combine(AppContext.BaseDirectory, "Data", "ban_names.json");
-        _cache = LoadCache(_cachePath);
-    }
+    public CompanyNameLookup(AppLogger log) => _log = log;
 
     public static bool IsBan(string? value) => CompanyNameResponse.IsBan(value);
 
@@ -32,16 +25,12 @@ internal sealed class CompanyNameLookup
     {
         ban = ban.Trim();
         if (!IsBan(ban)) return string.Empty;
-        lock (_gate)
-            if (_cache.TryGetValue(ban, out var cached)) return cached;
-
         try
         {
             var name = CompanyNameResponse.ParseName(await GetAsync($"{CompanyApi}?$format=json&$filter=Business_Accounting_NO eq {ban}&$skip=0&$top=1", cancellationToken), "Company_Name");
             if (name.Length == 0)
                 name = CompanyNameResponse.ParseName(await GetAsync($"{BusinessApi}?$format=json&$filter=President_No eq {ban}&$skip=0&$top=1", cancellationToken), "Business_Name");
             _log.Info("ban", $"name lookup ban={_log.Value(ban)} found={name.Length > 0}");
-            if (name.Length > 0) Remember(ban, name);
             return name;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException && !cancellationToken.IsCancellationRequested)
@@ -56,39 +45,5 @@ internal sealed class CompanyNameLookup
         using var response = await Http.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync(cancellationToken);
-    }
-
-    private void Remember(string ban, string name)
-    {
-        lock (_gate)
-        {
-            _cache[ban] = name;
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(_cachePath)!);
-                var temp = _cachePath + ".tmp";
-                File.WriteAllText(temp, JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true }));
-                File.Move(temp, _cachePath, overwrite: true);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _log.Warn("ban", $"name cache not saved: {ex.GetType().Name}");
-            }
-        }
-    }
-
-    private static Dictionary<string, string> LoadCache(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                return new Dictionary<string, string>(
-                    JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path)) ?? [], StringComparer.Ordinal);
-        }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
-        {
-            // A damaged cache only costs a network lookup.
-        }
-        return new(StringComparer.Ordinal);
     }
 }
