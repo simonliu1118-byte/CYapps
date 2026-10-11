@@ -8,8 +8,12 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
 {
     private readonly string databasePath = Path.Combine(dataDirectory, SqliteBootstrapper.DatabaseFileName);
 
-    public void UpsertMany(IEnumerable<InvoiceRecord> records)
+    internal static string Snapshot(IEnumerable<InvoiceRecord> records) =>
+        JsonSerializer.Serialize(records.OrderBy(record => record.Id, StringComparer.Ordinal));
+
+    public void UpsertMany(IEnumerable<InvoiceRecord> records, string? repairSnapshot = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var materialized = records.ToList();
         if (materialized.Count == 0) return;
         if (materialized.Any(record => string.IsNullOrWhiteSpace(record.Id)))
@@ -17,9 +21,14 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
 
         using var connection = Open();
         Configure(connection);
+        if (repairSnapshot is not null)
+            BackupBeforeRepair(connection, repairSnapshot, cancellationToken);
         using var transaction = connection.BeginTransaction();
+        if (repairSnapshot is not null)
+            RequireRepairSnapshot(connection, transaction, repairSnapshot);
         foreach (var record in materialized)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var localId = FindLocalId(connection, transaction, record.Id);
             if (localId is null)
             {
@@ -36,7 +45,55 @@ internal sealed class InvoiceSyncRepository(string dataDirectory)
             }
             InsertItems(connection, transaction, localId.Value, record.Items);
         }
+        cancellationToken.ThrowIfCancellationRequested();
         transaction.Commit();
+    }
+
+    private static void RequireRepairSnapshot(SqliteConnection connection, SqliteTransaction transaction, string expected)
+    {
+        if (Snapshot(InvoiceStore.LoadRecords(connection, transaction)) != expected)
+            throw new InvalidDataException("回查期間本機資料已變更，重複紀錄未修復；請重新整理再試");
+    }
+
+    private void BackupBeforeRepair(SqliteConnection connection, string expected, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var directory = Path.Combine(dataDirectory, "RepairBackups");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "duplicate-" + Guid.NewGuid().ToString("N") + ".db");
+        var temporary = path + ".tmp";
+        try
+        {
+            // A read transaction pins the preimage while SQLite copies all tables, including items.
+            using (var transaction = connection.BeginTransaction(deferred: true))
+            {
+                RequireRepairSnapshot(connection, transaction, expected);
+                using var backup = new SqliteConnection(new SqliteConnectionStringBuilder
+                {
+                    DataSource = temporary, Mode = SqliteOpenMode.ReadWriteCreate, Pooling = false,
+                }.ToString());
+                backup.Open();
+                connection.BackupDatabase(backup);
+                using var check = backup.CreateCommand();
+                check.CommandText = "PRAGMA integrity_check;";
+                if (!string.Equals(Convert.ToString(check.ExecuteScalar(), CultureInfo.InvariantCulture), "ok", StringComparison.Ordinal))
+                    throw new InvalidDataException("重複紀錄修復備份完整性檢查失敗");
+                check.CommandText = "PRAGMA foreign_key_check;";
+                using (var reader = check.ExecuteReader())
+                    if (reader.Read()) throw new InvalidDataException("重複紀錄修復備份關聯檢查失敗");
+                if (Snapshot(InvoiceStore.LoadRecords(backup)) != expected)
+                    throw new InvalidDataException("重複紀錄修復備份與原資料不符");
+                transaction.Commit();
+            }
+            using (var file = new FileStream(temporary, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                file.Flush(flushToDisk: true);
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporary, path);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
 
     private SqliteConnection Open()

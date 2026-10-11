@@ -13,7 +13,7 @@
 | 本輪 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380)，draft、未合併，完整 CI／工程包以精確 head checks 為準 |
 | 前置介面 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
 | 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
-| 工程版本 | **V2.6.18**；來源為 ../VERSION、../BUILD |
+| 工程版本 | **V2.6.18 Build 1**；來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
 
@@ -25,7 +25,7 @@
 
 InvoiceService 保留送出／未知結果回查 owner，明確拒絕走既有 Failed 保存；已知同環境／API OrderID／發票號碼的舊發票不能算新增成功。官方同步／詳細回查不覆寫 Failed。RecordsControl 唯一主清單 owner 隱藏失敗，SyncIssuesForm 仍顯示與清除原 invoices 的 Failed，無新增 table／wrapper／timer／provider。結果不明仍保留主清單與禁止盲目重送。
 
-V2.6.18／BUILD 0，獨立開票 bug；本地回歸與精確 head CI／工程包結果以 PR #380 checks 為準，Windows UI／官方 API 實機仍需 RC D.9。原 development Cloud 0.9.2／Built-in 保留；本批不部署、切 CYID、merge 或 Release。舊雙成功資料需要原本機 ID／官方證據，尚未自動改寫或刪除。
+V2.6.18／BUILD 1，同一開票 bug 補修；本地回歸與精確 head CI／工程包結果以 PR #380 checks 為準，Windows UI／官方 API 實機仍需 RC D.9。原 development Cloud 0.9.2／Built-in 保留；本批不部署、切 CYID、merge 或 Release。使用者已核准在既有同步加入受限舊資料修復：同公司／環境、同官方號碼及 API OrderID，兩筆完整內容一致、沒有人工／作廢／折讓 metadata，且原生成 ID 的 UTC 時序與 SentAt 一致、官方開立時間介於兩次送出才修復。先唯讀回查、完整 SQLite online backup（Data/RepairBackups；完整性／FK／快照檢查及 flush），寫入交易內再比對原發票／明細快照；併發改動、備份失敗或取消不改資料。原成功保留，多出的嘗試轉 Failed 並清空號碼／綠燈，仍在原 invoices／上傳問題；修復與本輪同步原子提交，失敗可重試，成功後舊 ambiguous issue 依原路徑解決。無新 owner／table／timer；未取得使用者實際 Data，不能宣稱他的資料已修好。缺證據／第三筆／差異仍保留歧義，需原本機核對。
 
 ## CYID Consumer／服務連線現行停點
 

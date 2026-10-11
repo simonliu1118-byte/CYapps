@@ -2,7 +2,7 @@
 
 本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-11（Asia/Taipei）。main 的 CYInvoice 為 V2.6.10 Build 2；目前工程候選版 **V2.6.18** 加入重複開立失敗修正並保留 CYID Consumer source，前置 V2.6.14 PR #216 仍未合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
+更新日期：2026-10-11（Asia/Taipei）。main 的 CYInvoice 為 V2.6.10 Build 2；目前工程候選版 **V2.6.18 Build 1** 加入重複開立失敗修正並保留 CYID Consumer source，前置 V2.6.14 PR #216 仍未合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
@@ -33,7 +33,8 @@ Cloud source／原 development 0.9.2／API 1／compatibility marker 8／storage 
 ## 1. V2.6.x 實機與光貿驗證
 
 - [ ] V2.6.18：原訂單再次送出由光貿拒絕；第一筆已開立保持不變，第二筆 Failed 只在上傳問題，重新整理／重啟不變成成功；手動與匯入批次成功／失敗計數正確。自動化與精確 head Windows CI 以 #380 checks 為準。
-- [ ] 舊版已存在的同發票雙成功：核對原本機 record_id、送出及官方時間／回覆，再更正錯誤嘗試；未取得原 Data／Logs，不自動按排序刪除或宣稱已修正使用者資料。
+- [x] V2.6.18 Build 1 source：使用者核准受限舊雙成功修復，原同步 owner 回查同公司／環境／官方號碼／OrderID／完整內容，原生成 ID 與 SentAt 一致且官方開立時間介於兩次送出才決定先後；完整 SQLite 備份、快照競態保護、原子寫入及安全重試。只將確認的多餘嘗試轉 Failed，不按排序刪資料。自動化／Windows 結果見精確 head #380 checks。
+- [ ] V2.6.18 Build 1 原機驗收：保留原 Data／Cache／Logs 升級，重新整理後核對一筆原成功與一筆上傳問題失敗、Data/RepairBackups 可讀，重啟／再整理／清除失敗不影響原發票。未取得原 Data，不宣稱已修復使用者資料；證據不足的個案保留歧義再核對。
 
 - [ ] 全新首次設定：建立超級管理員、密碼規則、一次性復原碼與重新啟動。
 - [ ] 首次設定尚未完成、尚未建立超級管理員時，主畫面右上角光貿連線 Tag 先顯示灰色「連線中」；完成首次設定後才執行既有光貿 API 連線檢查，再切換為綠色「光貿連線正常」或紅色「光貿連線異常」。

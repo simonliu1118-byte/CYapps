@@ -2,6 +2,14 @@
 
 本檔保存可確認的歷史事實。正式 Git 標籤只會從「原始碼可重建、Windows 驗證通過」的版本建立；日常工程版本不因 VERSION／BUILD 推進而自動成為正式 Release。
 
+## V2.6.18 Build 1 — 2026/10/11（舊雙成功修復，工程測試中）
+
+- 使用者核准修復舊重複成功資料，沿用 InvoiceSyncService／InvoiceSyncRepository 的重新整理及 SQLite 寫入交易。限目前公司／環境、兩筆本機已開立、同官方號碼及 API OrderID、完整明細一致，且原生成 record_id 時間與 SentAt 一致、官方開立時間介於兩次送出而能確認先後；不依清單排序選取。缺少證據、第三筆候選、不同內容或人工／作廢／折讓 metadata 均保留原資料。
+- 先唯讀回查光貿，再以 SQLite online backup 保存完整原資料庫於 Data/RepairBackups，檢查完整性、關聯及原發票快照並 flush。寫入前重新比對全部發票與明細，期間有變更就停止；更正及本輪同步共用交易，中斷回滾、重試不重複修復。
+- 原成功保留，多出的嘗試改為開立失敗並清空發票號碼／上傳完成狀態，只留上傳問題；原送出時間與明細不刪除。成功後沿用既有 issue resolution 解除歧義。只查光貿，不作廢、不重開、不新增資料表或修復 timer。
+- 新增正向、差異／證據不足、官方失敗、備份失敗、併發更動、交易中斷後重試及取消回歸。實際使用者 Data 未提供，工程測試通過不代表已修復使用者資料；需以新版在原資料夾重新整理驗收。
+- 同一 bug 補修維持 VERSION 2.6.18，BUILD 0→1。Cloud／provider／Workspace／schema 不變；沒有 merge、部署、正式切換或 Release。精確 head Windows CI／工程包以 PR #380 checks 為準。
+
 ## V2.6.18 — 2026/10/11（重複開立失敗修正，工程測試中）
 
 - 保留原 API OrderID 再次送出、由光貿判斷重複的流程；未新增本機預先阻擋或重開尾碼。AMEGO code 在共用 decoder 接受明確的整數 number／string，code 15 校時共用同一解析；缺失／null／不合法 code 不默認成功。明確非零錯誤直接記為 Failed，不回查既有發票當成本次成功。
