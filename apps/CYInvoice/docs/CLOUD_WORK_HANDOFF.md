@@ -9,9 +9,9 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `1b661957faeac9684ff73b0b6ea7835ffdc9d07e`（#382 是 CYAccountingWeb 修改）；CYInvoice 仍 V2.6.10 Build 2 |
-| 本輪 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380)，draft、未合併，完整 CI／工程包以精確 head checks 為準 |
-| 前置介面 PR | [#216](https://github.com/simonliu1118-byte/CYapps/pull/216)，open、尚未合併 |
+| main | `59d63b6785fa028657c9a2fb13fc9515e497d95d`；#380 已合併，CYInvoice V2.6.18 Build 1／canonical 1.0.3 |
+| 已完成工程 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380) 已合併；精確 head `46723a89` 七項 CI 通過，工程包 Windows #280 |
+| 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
 | 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
 | 工程版本 | **V2.6.18 Build 1**；來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
@@ -29,9 +29,13 @@ V2.6.18／BUILD 1，同一開票 bug 補修；本地回歸與精確 head CI／�
 
 ## CYID Consumer／服務連線現行停點
 
+### Provider development 升級準備 — 2026-10-11
+
+#380 精確功能 head 46723a89 七項 CI 全綠後合併 main 59d63b67；原工程包 #280 不因 deployment tooling 重建。CYID canonical 1.0.3 已進 main；跨 repo mirror 同步仍待完成。CYInvoice development Cloud 0.9.2／storage 13／Built-in 保留。Provider live 仍 0.3.5；新 code-only upgrade 收斂原 development owner，讀取現行 vars／DB／rate limits／bindings／Secret names 並保留、不讀／重寫 Secret 值；exact applied migration／FK／hashed authority metadata／history count／private recovery reference／invalid Session 拒絕驗證，不重播 bootstrap／remote migration。新增 audit 本地回歸通過；實際部署與 private binding／原 Windows 驗收仍是待辦，不能把 source 當 live。
+
 ### 分段上線準備 — 2026-10-11
 
-使用者委託逐步推進至 CYID 上線；先 preflight／保留 Built-in 的 additive Cloud，再隔離 staging／Windows 實機及可檢視的正式切換方案。PR #380 仍 draft／未合併；未因本次委託略過原 Workspace continuity、帳號／App Access／Role、private binding、回復及 Release gates。
+使用者委託逐步推進至 CYID 上線；先 preflight／保留 Built-in 的 additive Cloud，再隔離 staging／Windows 實機及可檢視的正式切換方案。PR #380 工程基準已合併；未因本次委託略過原 Workspace continuity、帳號／App Access／Role、private binding、回復及 Release gates。
 
 沿用 cyinvoice-cloud-dev-deploy.yml 為唯一 development owner，修正 health 舊 0.9.0 hard-code；preflight 專用 branch 只讀遠端。部署前固定 original D1／development／CYID disabled，核對 immutable migration prefix（僅允許 pending 0013）、FK、必要 runtime secret names／rate limit、private Time Travel／Worker recovery checkpoint。暫存 generated config 保留原 vars/services/secrets；after 核對 source version、storage 13、runtime-sync capability 與原 Workspace／Device Token hashes／員工／邀請／audit 歷史。敏感值不寫 Public log／Artifact；恢復點 UTC timestamp 可回查 bookmark，不自動 D1 restore。
 

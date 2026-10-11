@@ -2,7 +2,7 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
-## Current checkpoint — 2026-10-10
+## Current checkpoint — 2026-10-11
 
 - Current source release is **CYCloudIdentity 0.3.6 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.5 Build 0 已部署並驗證**，run `36821423383`；source 與部署證據分開記錄。
 - CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
@@ -29,6 +29,12 @@
 - **相容層與部署檢查完成**：讀 `docs/COMPATIBILITY_REVIEW.md`。已確認 obsolete Group API/projections、兩份 Session authority 檢查、舊不可達 lifecycle handlers 與 initial-access wrapper；第一批 source 清理已完成：resolve API 與 management/self-service 共用 `resolveIdentitySession`；移除 6 個未 dispatch 的 legacy lifecycle/admin handlers。Provider Group endpoints／public fields、initial-access wrapper 與 Email budget 重複尚待下一批協調清理。
 - **Production provisioning replay 已封住**：PR #254 直接在既有 production deployment branch 退休一次性 workflow；main 保存相同 inert gate。重跑只回 retirement error，不持有 Secrets，也沒有 continuity／migrations／deploy。日常 production deployment path 已建立於 `cycloudidentity-production-deploy.yml`：只接受 main 手動觸發，讀既有正式 bindings，consumer readiness 與 dry-run 通過後只做 forward migration/source deploy，不重播 authority。不得直接把含舊 consumer baseline 的整個 deployment branch 合入 main。
 - Backup rollout / restore acceptance 與 CY Web production business-data rollout 未完成。
+
+## Development upgrade preparation
+
+- [x] CYInvoice Consumer/canonical 1.0.3 工程基準 PR #380 已合併到 main `59d63b6785fa028657c9a2fb13fc9515e497d95d`；精確功能 head `46723a89` 七項 CI 通過，無自動部署／正式切換。
+- [x] 既有 development workflow 收斂為唯讀 preflight／保留原設定的 code-only upgrade；只讀 Provider 維運 D1 metadata、exact migration／FK／hashed authority／history 與 recovery reference，不重寫 Secrets／bootstrap、不跑 remote migration。deployment tooling 不修改產品／contract／VERSION／BUILD。
+- [ ] 新 deployment audit CI、實際遠端 preflight／development 0.3.6 upgrade 與原 consumer 相容性驗證；通過後才記錄 deployed。
 
 ## Optional consumer invalidation source
 

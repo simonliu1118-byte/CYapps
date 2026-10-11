@@ -12,24 +12,12 @@ Generated `wrangler.*.generated.jsonc` files are ignored and must not be committ
 
 The deployment workflow uses the existing repository Environment named `development` and CYCloud Identity-specific variable names so it does not overwrite other CYapps deployment configuration.
 
-Environment variables:
+Existing-provider upgrade inputs:
 
-- `CYID_WORKER_NAME`
-- `CYID_D1_DATABASE_NAME`
-- `CYID_D1_DATABASE_ID`
-- `CYID_LOGIN_RATE_LIMIT_NAMESPACE_ID`
-- `CYID_SESSION_TTL_SECONDS`
-- `CYID_EMAIL_PROVIDER` (`brevo` or `resend`)
-- `CYID_EMAIL_FROM`
-- `CYID_EMAIL_DAILY_BUDGET`
+- `CYID_WORKER_NAME` and `CYID_D1_DATABASE_ID` identify the original development resources.
+- Environment secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` allow the provider-owned deployment audit and Worker upgrade. They are not exposed to PR validation.
 
-Environment secrets:
-
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CYID_OTP_PEPPER`
-- `CYID_BOOTSTRAP_SECRET`
-- `CYID_BREVO_API_KEY` when using Brevo, or `CYID_RESEND_API_KEY` when using Resend
+Runtime vars, existing D1 metadata, rate limit namespaces/limits, service bindings and Secret names are read from the existing Worker. Existing Secret values are neither read nor replaced. The bootstrap/Email Secrets already configured on the Worker remain there; GitHub copies are not replayed during an upgrade. First provisioning and future schema migrations are separate reviewed work, outside this code-only upgrade path.
 
 Secrets must never be pasted into source, PR descriptions, Actions inputs or chat-visible logs.
 
@@ -49,13 +37,18 @@ Pull requests run validation only:
 4. Wrangler dry-run bundle validation;
 5. Public source safety scan.
 
-Development deployment runs only by explicit `workflow_dispatch` or by updating the dedicated `deploy/cycloudidentity-development` branch. It then:
+`workflow_dispatch` defaults to `preflight`. Updating `deploy/cycloudidentity-development-preflight` also runs only the read-only path:
 
-1. validates required Environment values;
-2. renders a temporary deployment config;
-3. applies numbered migrations to remote development D1;
-4. deploys the development Worker;
-5. writes Worker Secrets through Wrangler without storing them in source;
-6. removes the generated config.
+1. require original development Worker/DB, valid current runtime settings and required Secret names;
+2. require the exact canonical applied migration list; any missing/extra/pending migration blocks this code-only release;
+3. compare bounded, hashed authority metadata and history counts, and check foreign keys without reading passwords, credential verifiers, Session tokens or Email addresses;
+4. capture the private D1 Time Travel bookmark and previous Worker deployment reference; publish only the UTC checkpoint timestamp;
+5. dry-run the source against the privately generated configuration copied from the current Worker.
 
-No push to `main` automatically deploys CYCloud Identity.
+Only `workflow_dispatch` mode `upgrade` or the dedicated `deploy/cycloudidentity-development` branch additionally deploys source and performs the post-check. Development runs serialize without cancelling an in-flight upgrade. No push to `main` automatically deploys CYCloud Identity.
+
+The upgrade does not run remote migrations, bootstrap, authority writes, Secret replacement or an automatic restore. Post-check requires the source version, unchanged settings and authority metadata, nondecreasing history counts, clean FK and rejection of a synthetic invalid Session. Concurrent authority edits cause a stop for investigation, not an automatic D1 restore. History-count checks do not establish a full record-by-record backup.
+
+Private configuration/checkpoint/log files exist only on the runner and are removed even on failure; they are never uploaded as artifacts. Cloudflare retains the Time Travel history and Worker deployment history. The recorded UTC timestamp allows an authorized operator to retrieve the recovery reference again. This is a recovery checkpoint, not a completed restore rehearsal. A failed post-check may mean code has deployed: inspect current health/config and the original checkpoint before any reviewed recovery. Do not replay bootstrap or reset the Workspace.
+
+Health and invalid-Session checks do not prove the named private RPC, real Employee/App Access, original Windows Device continuity or production readiness; those remain separate acceptance gates. Existing consumers in the supported contract window remain on their original authority and settings.
