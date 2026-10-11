@@ -47,15 +47,17 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
     mutationAttempted = true;
     // Output may contain private deployment names: capture, never print or upload it.
     try {
-      await command('npx', ['wrangler', 'deploy', '--config', configPath], { cwd: root, env, timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
+      await command(process.execPath, [path.join(root, 'node_modules/wrangler/bin/wrangler.js'), 'deploy', '--config', configPath], { cwd: root, env, timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
     } catch (error) {
       const output = stripVTControlCharacters(`${error?.stdout ?? ''}\n${error?.stderr ?? ''}`);
       const code = output.match(/\[code:\s*(\d{1,6})\]/)?.[1];
       const childCode = Number.isInteger(error?.code) ? `EXIT_${error.code}`
         : ['ENOENT', 'EACCES', 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'].includes(error?.code) ? error.code
         : error?.killed === true ? 'TERMINATED' : 'UNKNOWN';
-      const category = /entrypoint|export/i.test(output) ? 'ENTRYPOINT' : /authentication|permission|unauthorized/i.test(output) ? 'AUTHORIZATION'
-        : /configuration|config file/i.test(output) ? 'CONFIGURATION' : /compatibility/i.test(output) ? 'COMPATIBILITY' : 'UNCLASSIFIED';
+      const category = /entry.?point|export/i.test(output) ? 'ENTRYPOINT' : /authenticat|permission|unauthorized|credentials/i.test(output) ? 'AUTHORIZATION'
+        : /configuration|config file/i.test(output) ? 'CONFIGURATION' : /compatibility/i.test(output) ? 'COMPATIBILITY' : /service|binding/i.test(output) ? 'SERVICE_BINDING'
+        : /fetch|network|connect|socket|ENOTFOUND/i.test(output) ? 'NETWORK' : /quota|limit exceeded/i.test(output) ? 'QUOTA'
+        : /worker.*name|name.*worker/i.test(output) ? 'WORKER_NAME' : /npm (ERR|error)/i.test(output) ? 'PACKAGE_RUNNER' : 'UNCLASSIFIED';
       throw new Error(code ? `PROBE_UPLOAD_FAILED_${code}` : `PROBE_UPLOAD_FAILED_${childCode}_${category}`);
     }
     console.log('Temporary probe Worker uploaded.');

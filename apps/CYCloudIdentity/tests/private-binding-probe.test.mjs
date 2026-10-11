@@ -52,7 +52,7 @@ for (const failure of ['none', 'request', 'wrong-owner', 'wrong-target', 'new-d1
   let config, exists = false, deleted = false, secret;
   const operations = [];
   const command = async (name, args) => {
-    assert.equal(name, 'npx'); assert.deepEqual(args.slice(0, 3), ['wrangler', 'deploy', '--config']);
+    assert.equal(name, process.execPath); assert.equal(args[0], path.resolve(import.meta.dirname, '../node_modules/wrangler/bin/wrangler.js')); assert.deepEqual(args.slice(1, 3), ['deploy', '--config']);
     config = JSON.parse(fs.readFileSync(args[3], 'utf8'));
     assert.notEqual(config.name, original.name);
     assert.equal(config.d1_databases, undefined);
