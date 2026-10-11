@@ -9,7 +9,7 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `59d63b6785fa028657c9a2fb13fc9515e497d95d`；#380 已合併，CYInvoice V2.6.18 Build 1／canonical 1.0.3 |
+| main | `d82b9009539a7127fd8c9a90fb40deef27b0825a`；#380／#384／#385 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
 | 已完成工程 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380) 已合併；精確 head `46723a89` 七項 CI 通過，工程包 Windows #280 |
 | 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
 | 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
@@ -21,7 +21,9 @@
 
 ## 買方名稱查無資料 — 2026-10-11
 
-使用者確認光貿接受 BuyerName 等於統編；V2.6.19 Build 0 調整手開／全部匯入共用送出 owner。正常查無資料提示人工輸入，留空以統編送出且本機紀錄相同；預設值不寫人工名稱記憶。技術／權限錯誤仍依原規則阻擋，測試池隱私不放寬，無新表／timer／authority。精確 CI／工程包及實機 RC D.12 分開記錄。CYID 接續 work 保留；Provider development 保留設定 upgrade PR #384 已通過四項 CI 並合併，遠端 preflight 與 canonical mirror 正在驗證，尚不能宣稱 Provider deployed。
+使用者確認光貿接受 BuyerName 等於統編；V2.6.19 Build 0 調整手開／全部匯入共用送出 owner。正常查無資料提示人工輸入，留空以統編送出且本機紀錄相同；預設值不寫人工名稱記憶。技術／權限錯誤仍依原規則阻擋，測試池隱私不放寬，無新表／timer／authority。功能 source **6c49910836bb1e7306881c0c627ce868d09f9d04** 通過 Windows #281／Cloud #393／Governance #1201，#385 已合併。實機 RC D.12 仍待驗收。CYID 接續 work 保留；Provider development 保留設定 upgrade PR #384 已通過四項 CI 並合併，遠端 preflight #123／actual upgrade #124 已通過；Provider development 0.3.6 已部署，CY Web #145 canonical mirror 同步完成。private binding／實機／正式切換仍待驗收。
+
+[Windows V2.6.19 Build 0 engineering package](https://github.com/simonliu1118-byte/CYapps/actions/runs/38111161002/artifacts/11692290244)：Artifact 11692290244，81093610 bytes，SHA256 `a4ca85b4d452ffbfc0c01b92649208d6ee3942fe12965ed47cbb8c6e3ecbef40`，head 對應 6c499108，2026-10-14 12:21 Asia/Taipei 到期。Native startup、DPAPI／business suites、PE／layout／packaged startup 與安全掃描通過；完整程式包覆蓋原 portable folder，保留 Data／Cache／Logs／Workspace。空白／統編預設值不建立 **buyer_names 人工名稱記憶**；發票清單仍保存實際送出名稱，不改成缺少 BuyerName 的發票快照。結果不明再回查成功亦不會誤存預設值。
 
 ## 重複開立失敗修正 — 2026-10-11
 
@@ -35,7 +37,9 @@ V2.6.18／BUILD 1，同一開票 bug 補修；本地回歸與精確 head CI／�
 
 ### Provider development 升級準備 — 2026-10-11
 
-#380 精確功能 head 46723a89 七項 CI 全綠後合併 main 59d63b67；原工程包 #280 不因 deployment tooling 重建。CYID canonical 1.0.3 已進 main；跨 repo mirror 同步仍待完成。CYInvoice development Cloud 0.9.2／storage 13／Built-in 保留。Provider live 仍 0.3.5；新 code-only upgrade 收斂原 development owner，讀取現行 vars／DB／rate limits／bindings／Secret names 並保留、不讀／重寫 Secret 值；exact applied migration／FK／hashed authority metadata／history count／private recovery reference／invalid Session 拒絕驗證，不重播 bootstrap／remote migration。新增 audit 本地回歸通過；實際部署與 private binding／原 Windows 驗收仍是待辦，不能把 source 當 live。
+#380 精確功能 head 46723a89 七項 CI 全綠後合併 main 59d63b67；Windows 工程包 #280 是買方名稱修改前版本。#384 deployment audit source 348185fb 四項 CI 通過並合併，development preflight #123 與 actual code-only upgrade #124 成功；部署 commit 56c27685 與 tested tree 相同。Provider development **0.3.6**／canonical **1.0.3**／minimum **1.0.0**，七個原 migration 無 pending、未寫 schema，原 vars／DB／rate limits／bindings／Secret names／hashed authority metadata／history counts／FK 保留，synthetic invalid Session 拒絕正常。UTC recovery reference 2026-10-11T04:20:13.295Z，可回查 Cloudflare Time Travel／Worker history，非 restore rehearsal；無 bootstrap／Secret replacement／authority 切換。
+
+CY Web governance #145 已合併 main a0cb4675，七個 mirror 與 main canonical 1.0.3 完全 byte-match，consumer 維持相容 1.0.2，不改 Web runtime／部署。CYInvoice development Cloud 0.9.2／storage 13／Built-in 保留；Provider health 不代表 private RPC transport／實際 App Access／原 Windows Device 已驗收。沿用 provider deployment owner 新增 binding-probe mode：暫時 secret-gated consumer Worker、無 D1／帳號／grant，fixed invalid Session／不存在 scope；CLI/config/key 不公開，owner nonce／同 provider services 核對後清理。新 source 本地回歸後仍待精確 CI／actual run，不把 mock 當 live。
 
 ### 分段上線準備 — 2026-10-11
 
@@ -51,7 +55,7 @@ Source **82080dfa1939c2ea5873aa3902d5ff46fb509a5b** 的七項 CI 全部通過（
 
 **最新 development deployment 為 [#12](https://github.com/simonliu1118-byte/CYapps/actions/runs/38077157550)**，commit 38163fcc8b755d5a9af97773a86c82f54e052ede，tree 與 82080dfa 相同。原部署 branch fast-forward，沒有 force push；preflight 再次通過後只套用 0013，再部署同一 Worker／D1。after 通過 Cloud **0.9.2／API 1／marker 8／storage 13**、runtime-sync capability、原 Workspace／Device Token hashes／employee／pairing／invitation／audit 歷史延續及 FK。**CYID disabled，仍用 Built-in；未改正式 provider、未切 authority、未建立 tag／Release。** 恢復 checkpoint timestamp：2026-10-10T18:47:23.452Z；D1 restore 不自動執行，先停寫並稽核 checkpoint 後的資料。
 
-CYID development health 仍 **0.3.5**；1.0.3 named RPC 尚未部署／實際綁定驗收。原 development business target 不等於隔離 CYID sandbox。CY Web main 的七個 manifest mirror files 與 CYID main canonical 逐 byte 一致，declared／canonical 仍 1.0.2；#380 staged canonical 1.0.3 合併後，需要同步新版 mirror 再做 coordinated provider rollout。這只是 contract sync 檢查，不代替 Employee activation／App Access／Role／verified Email 或正式 scope 稽核。
+CYID development 已在 #124 升級並驗證 **0.3.6**；named RPC source 已部署，但實際綁定及正向權限驗收仍待完成。原 development business target 不等於隔離 CYID sandbox。CY Web main 七個 manifest mirror 與 canonical 1.0.3 逐 byte 一致；declared consumer 1.0.2 仍在支援窗內。這不代替 Employee／App Access／Role／verified Email、核准的兩 Workspace 配對或正式 scope 稽核。
 
 接續：保留現有 provider 設定／Secrets 的更新流程與隔離 staging 資源／用量核對，確認批准的 Application／兩 Workspace 配對及 private IDENTITY／IDENTITY_AUTHORITY，完成實際 gateway 授權／invalidation；再做 Windows RC AA／AB／AC 與原 A/B/C。正式切換方案另列原 D1／Device continuity、備份、舊 client／回復 gate；不能用重新加入／reset 修復錯綁定。Windows 可先以原 Built-in 安裝測新同步與一般回歸，真實 UI、DPAPI、kill／檔案占用及人工操作仍不能由 Linux 或 CI 冒充。
 
