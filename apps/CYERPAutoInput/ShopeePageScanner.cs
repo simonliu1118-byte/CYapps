@@ -174,10 +174,12 @@ internal sealed class ShopeePageScanner
     /// <summary>OCR of a capture's content column from <paramref name="top"/> down, in capture coordinates.</summary>
     private async Task<List<OcrBox>> ReadAsync(Bitmap image, int top, CancellationToken cancellationToken)
     {
-        var column = Rectangle.FromLTRB(image.Width * 10 / 100, top, image.Width * 72 / 100, image.Height);
+        // The order cards sit at about 16 %–64 % of the window (user's Chrome, 2026-10-11), and
+        // page text is ordinary screen text read at its own size: about half the pixels of
+        // Build 7 (10 %–72 % at 1.25×), whose reads took ~7.7 s after the scrolling.
+        var column = Rectangle.FromLTRB(image.Width * 15 / 100, top, image.Width * 66 / 100, image.Height);
         using var part = image.Clone(column, image.PixelFormat);
-        // Page text is ordinary screen text: 1.25× is enough and much faster than 1.5–2×.
-        var tokens = await _ocr.RecognizeAsync(part, cancellationToken, maxScale: 1.25);
+        var tokens = await _ocr.RecognizeAsync(part, cancellationToken, maxScale: 1.0);
         return ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left + column.Left, t.Rect.Top + column.Top, t.Rect.Width, t.Rect.Height)));
     }
 
