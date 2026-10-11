@@ -39,7 +39,8 @@ internal sealed class MainForm : Form
         _automation = new ErpAutomationService(log);
         _settingsStore = new UserSettingsStore(log);
         _settings = _settingsStore.Load();
-        _log.Diagnostic = _settings.DiagnosticLogging;
+        // Always diagnostic (user, 2026-10-11): the local log keeps what CY read, for troubleshooting.
+        _log.Diagnostic = true;
         UpdateBuildStatus();
 
         Text = "CYERPAutoInput — SMART ERP 自動輸入工具";
@@ -133,7 +134,7 @@ internal sealed class MainForm : Form
             Padding = new Padding(12),
             Margin = Padding.Empty
         };
-        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 50));
         _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 252));
         _root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         _root.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
@@ -160,23 +161,10 @@ internal sealed class MainForm : Form
         };
         toolbar.Controls.Add(actions, 0, 0);
 
-        var find = MakeButton("尋找 ERP", 90);
-        find.Click += (_, _) =>
-        {
-            var windows = Win32Automation.FindCopi08Windows();
-            if (windows.Count == 0) SetStatus("ERP：找不到 COPI08 視窗");
-            else if (windows.Count > 1) SetStatus($"ERP：偵測到 {windows.Count} 個 COPI08 視窗，請只保留一個");
-            else
-            {
-                Win32Automation.PrepareForeground(windows[0], _log);
-                SetStatus("ERP：已找到 COPI08");
-            }
-        };
-        actions.Controls.Add(find);
-
         _start.Text = "開始輸入 ERP";
-        _start.Size = new Size(122, 34);
-        _start.Font = new Font(Font.FontFamily, 9.5F, FontStyle.Bold);
+        // Toolbar buttons sized like CYInvoice's for easier use (user, 2026-10-11).
+        _start.Size = new Size(140, ToolbarButtonHeight);
+        _start.Font = new Font(Font.FontFamily, 10.5F, FontStyle.Bold);
         _start.Margin = new Padding(4, 1, 4, 1);
         _start.Click += async (_, _) => await StartAutomationAsync();
         actions.Controls.Add(_start);
@@ -185,14 +173,10 @@ internal sealed class MainForm : Form
         {
             Text = "訂單匯入：",
             AutoSize = true,
-            Padding = new Padding(0, 9, 0, 0),
+            Padding = new Padding(0, 11, 0, 0),
             Margin = new Padding(10, 0, 2, 0)
         });
         actions.Controls.Add(ImportButton("蝦皮"));
-        var shopeeHelp = new CyButton { Text = "?", Size = new Size(26, 34), Margin = new Padding(0, 1, 6, 1), AccessibleName = "蝦皮截圖輸入說明" };
-        shopeeHelp.Click += (_, _) => { using var form = new ShopeeScreenshotHelpForm(); form.ShowDialog(this); };
-        new ToolTip().SetToolTip(shopeeHelp, "蝦皮截圖輸入說明");
-        actions.Controls.Add(shopeeHelp);
         actions.Controls.Add(ImportButton("MO店+"));
         actions.Controls.Add(ImportButton("酷澎商城"));
 
@@ -207,11 +191,11 @@ internal sealed class MainForm : Form
         };
         toolbar.Controls.Add(rightTools, 1, 0);
 
-        var clearButton = MakeButton("清除表單", 90);
+        var clearButton = MakeButton("清除表單", 120);
         clearButton.Click += (_, _) => ClearForm();
         rightTools.Controls.Add(clearButton);
 
-        var settingsButton = MakeButton("設定", 76);
+        var settingsButton = MakeButton("設定", 120);
         settingsButton.Click += (_, _) => OpenSettings();
         rightTools.Controls.Add(settingsButton);
 
@@ -220,7 +204,7 @@ internal sealed class MainForm : Form
         _modeToggle.CheckedChanged += (_, _) => ApplyMode(_modeToggle.Checked);
         rightTools.Controls.Add(_modeToggle);
 
-        _erpStateTag.Size = new Size(150, 34);
+        _erpStateTag.Size = new Size(150, ToolbarButtonHeight);
         _erpStateTag.Margin = new Padding(4, 1, 12, 1);
         _erpStateTag.Font = new Font("Microsoft JhengHei UI", 11F, FontStyle.Bold);
         _erpStateTag.AccessibleName = "ERP 單據狀態";
@@ -616,12 +600,11 @@ internal sealed class MainForm : Form
 
     private void OpenSettings()
     {
-        using var form = new SettingsForm(_settings, () => ErpProbe.RunAsync(_log));
+        using var form = new SettingsForm(_settings);
         if (form.ShowDialog(this) != DialogResult.OK) return;
         try
         {
             _settingsStore.Save(_settings);
-            _log.Diagnostic = _settings.DiagnosticLogging;
             UpdateBuildStatus();
             _modeToggle.Checked = false;
             ApplyMode(false);
@@ -1430,7 +1413,8 @@ internal sealed class MainForm : Form
             "酷澎商城" => new CoupangButton(),
             _ => new CyButton { Text = text }
         };
-        button.Size = new Size(84, 34);
+        button.Size = new Size(120, ToolbarButtonHeight);
+        button.Font = new Font(Font.FontFamily, 10.5F);
         button.Margin = new Padding(4, 1, 4, 1);
         if (text == "蝦皮")
         {
@@ -1447,10 +1431,13 @@ internal sealed class MainForm : Form
         return button;
     }
 
-    private static Button MakeButton(string text, int width) => new CyButton
+    private const int ToolbarButtonHeight = 38;
+
+    private Button MakeButton(string text, int width) => new CyButton
     {
         Text = text,
-        Size = new Size(width, 34),
+        Font = new Font(Font.FontFamily, 10.5F),
+        Size = new Size(width, ToolbarButtonHeight),
         Margin = new Padding(4, 1, 4, 1)
     };
 

@@ -206,5 +206,18 @@ public class FreightCarrierTests
     {
         Assert.Equal(FreightCarriers.All.Length, FreightCarriers.All.Distinct().Count());
         Assert.Contains("店到家宅配", FreightCarriers.All);
+        Assert.Contains("本公司", FreightCarriers.Own);
+        Assert.DoesNotContain("本公司", FreightCarriers.Logistics);
+    }
+
+    [Theory]
+    [InlineData("中華郵政", "G2")]
+    [InlineData("郵局", "G2")]
+    [InlineData("嘉里快遞", "G7")]
+    [InlineData("大榮貨運", "G3")]
+    public void Matches_added_carriers_and_aliases(string text, string expected)
+    {
+        var codes = new Dictionary<string, string> { ["郵局"] = "G2", ["大榮"] = "G3", ["嘉里"] = "G7" };
+        Assert.Equal(expected, FreightCarriers.Match(text, codes));
     }
 }

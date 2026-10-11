@@ -69,13 +69,22 @@ internal sealed class ImportedOrder
 /// </summary>
 internal static class FreightCarriers
 {
+    /// <summary>The company's own delivery, kept apart from the carriers (user, 2026-10-11).</summary>
+    public static readonly string[] Own = ["本公司"];
+
     /// <summary>Home-delivery carriers, in the order of the user's ERP codes (user, 2026-10-11).</summary>
-    public static readonly string[] Logistics = ["新竹", "黑貓", "宅配通"];
+    public static readonly string[] Logistics = ["郵局", "大榮", "新竹", "黑貓", "宅配通", "嘉里"];
 
     /// <summary>Convenience-store pickup channels, in the order of the user's ERP codes.</summary>
     public static readonly string[] Stores = ["7-11", "全家", "萊爾富", "蝦皮店到店", "蝦皮店到店 - 隔日到貨", "店到家宅配"];
 
-    public static readonly string[] All = [.. Logistics, .. Stores];
+    public static readonly string[] All = [.. Own, .. Logistics, .. Stores];
+
+    /// <summary>Other names a platform may print for a carrier.</summary>
+    private static readonly Dictionary<string, string[]> Aliases = new(StringComparer.Ordinal)
+    {
+        ["郵局"] = ["中華郵政"]
+    };
 
     /// <summary>
     /// The code of the carrier named in <paramref name="carrierText"/>; the longest name wins
@@ -85,11 +94,19 @@ internal static class FreightCarriers
     {
         var text = Compact(carrierText);
         if (text.Length == 0) return string.Empty;
+        int Score(string key) =>
+            new[] { key }.Concat(Aliases.TryGetValue(key, out var more) ? more : [])
+                .Select(Compact)
+                .Where(name => name.Length > 0 && text.Contains(name, StringComparison.OrdinalIgnoreCase))
+                .Select(name => name.Length)
+                .DefaultIfEmpty(0)
+                .Max();
         return codes
-            .Where(p => Compact(p.Key).Length > 0 && p.Value.Trim().Length > 0 &&
-                        text.Contains(Compact(p.Key), StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(p => Compact(p.Key).Length)
-            .Select(p => p.Value.Trim())
+            .Where(p => p.Value.Trim().Length > 0)
+            .Select(p => (Code: p.Value.Trim(), Score: Score(p.Key)))
+            .Where(p => p.Score > 0)
+            .OrderByDescending(p => p.Score)
+            .Select(p => p.Code)
             .FirstOrDefault() ?? string.Empty;
     }
 

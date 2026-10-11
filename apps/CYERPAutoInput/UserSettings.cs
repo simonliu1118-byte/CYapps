@@ -7,7 +7,6 @@ internal sealed class UserSettings
 {
     public int Version { get; set; } = 1;
     public bool AdvancedMode { get; set; }
-    public bool DiagnosticLogging { get; set; }
     public bool AutoSave { get; set; }
     /// <summary>After a verified auto-save, ERP 列印 → 直接列印 (user, 2026-10-11).</summary>
     public bool AutoPrint { get; set; }

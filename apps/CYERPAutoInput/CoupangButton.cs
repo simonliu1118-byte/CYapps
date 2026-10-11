@@ -185,17 +185,19 @@ internal sealed class CoupangButton : BrandButtonBase
 
     protected override void PaintBrandContent(Graphics g, Rectangle bounds)
     {
+        // The four characters read as one word, centred together like CYInvoice's button
+        // (user, 2026-10-11), each in its brand colour.
+        const TextFormatFlags flags = TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
         var chars = new[] { "酷", "澎", "商", "城" };
-        var available = Math.Max(1, bounds.Width - 12);
-        var cell = Math.Max(1, available / chars.Length);
-        var left = bounds.Left + (bounds.Width - cell * chars.Length) / 2;
+        var widths = chars.Select(c => TextRenderer.MeasureText(g, c, Font, Size.Empty, flags).Width).ToArray();
+        var x = bounds.Left + (bounds.Width - widths.Sum()) / 2;
+        var height = TextRenderer.MeasureText(g, Text, Font, Size.Empty, flags).Height;
+        var y = bounds.Top + (bounds.Height - height) / 2;
         for (var i = 0; i < chars.Length; i++)
         {
-            var rect = new Rectangle(left + i * cell, bounds.Top, cell, bounds.Height);
             var color = Enabled ? BrandColors[i] : CyVisualTheme.TextDisabled;
-            TextRenderer.DrawText(g, chars[i], Font, rect, color,
-                TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine |
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(g, chars[i], Font, new Point(x, y), color, flags);
+            x += widths[i];
         }
     }
 }

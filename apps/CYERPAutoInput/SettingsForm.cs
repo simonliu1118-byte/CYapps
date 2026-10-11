@@ -3,10 +3,8 @@ namespace CYERPAutoInput;
 internal sealed class SettingsForm : Form
 {
     private readonly UserSettings _settings;
-    private readonly Func<Task<string>>? _runProbe;
     private readonly DataGridView _grid = new();
     private readonly CheckBox _advanced = new();
-    private readonly CheckBox _diagnostic = new();
     private readonly CheckBox _autoSave = new();
     private readonly CheckBox _autoPrint = new();
     private readonly CheckBox _firstRowWarehouse = new();
@@ -34,10 +32,9 @@ internal sealed class SettingsForm : Form
         "inv_copies", "tax_type", "customs", "tax_rate"
     ];
 
-    public SettingsForm(UserSettings settings, Func<Task<string>>? runProbe = null)
+    public SettingsForm(UserSettings settings)
     {
         _settings = settings;
-        _runProbe = runProbe;
         Text = "CYERPAutoInput 設定";
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
@@ -96,12 +93,6 @@ internal sealed class SettingsForm : Form
         var cancel = new CyButton { Text = "取消", Width = 92, Height = 34, DialogResult = DialogResult.Cancel };
         buttons.Controls.Add(save);
         buttons.Controls.Add(cancel);
-        if (_runProbe is not null)
-        {
-            var probe = new CyButton { Text = "ERP 結構探測", Width = 120, Height = 34, Margin = new Padding(3, 3, 48, 3) };
-            probe.Click += async (_, _) => await RunProbeAsync(probe);
-            buttons.Controls.Add(probe);
-        }
         root.Controls.Add(buttons, 0, 2);
         // No AcceptButton: Enter moves to the next field and saves only from a page's last
         // field (user, 2026-10-11); see ProcessCmdKey.
@@ -123,7 +114,6 @@ internal sealed class SettingsForm : Form
     {
         var page = Page("一般");
         var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
-        flow.Controls.Add(Option(_diagnostic, "診斷模式（LOG 記錄實際 ERP 內容；僅本機，除錯時才開）", _settings.DiagnosticLogging));
         flow.Controls.Add(Option(_autoSave, "輸入完成後自動儲存 ERP 單據（只限 CY 新增的單據；需人工確認項目於完成後列出）", _settings.AutoSave));
         flow.Controls.Add(Option(_autoPrint, "自動儲存後按 ERP「列印 → 直接列印」", _settings.AutoPrint));
         _autoPrint.Margin = new Padding(20, 0, 0, 8);
@@ -280,7 +270,15 @@ internal sealed class SettingsForm : Form
             box.Controls.Add(grid);
             return box;
         }
-        groups.Controls.Add(CarrierGroup("物流", FreightCarriers.Logistics, new Padding(0, 0, 6, 0)), 0, 0);
+        // 本公司 has its own box under 物流, not inside it (user, 2026-10-11).
+        var left = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = Padding.Empty };
+        var logistics = CarrierGroup("物流", FreightCarriers.Logistics, new Padding(0, 0, 6, 8));
+        var own = CarrierGroup("本公司", FreightCarriers.Own, new Padding(0, 0, 6, 0));
+        logistics.Dock = own.Dock = DockStyle.None;
+        logistics.Width = own.Width = 290;
+        left.Controls.Add(logistics);
+        left.Controls.Add(own);
+        groups.Controls.Add(left, 0, 0);
         groups.Controls.Add(CarrierGroup("超商", FreightCarriers.Stores, new Padding(6, 0, 0, 0)), 1, 0);
         layout.Controls.Add(groups, 0, 1);
         page.Controls.Add(layout);
@@ -324,32 +322,6 @@ internal sealed class SettingsForm : Form
         return page;
     }
 
-    private async Task RunProbeAsync(Button probe)
-    {
-        if (MessageBox.Show(this,
-                "唯讀讀取 COPI08 與目前開著的 ERP 視窗結構（不會送出按鍵或點擊），結果存到本機 LOG 資料夾。\n" +
-                "開啟診斷模式時會包含畫面上的實際內容；建議在 ERP 測試公司別執行。\n\n要開始嗎？",
-                "ERP 結構探測", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
-            return;
-
-        probe.Enabled = false;
-        UseWaitCursor = true;
-        try
-        {
-            var path = await _runProbe!();
-            MessageBox.Show(this, $"探測完成，結果已存到：\n{path}", "ERP 結構探測", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "ERP 結構探測", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-        finally
-        {
-            UseWaitCursor = false;
-            probe.Enabled = true;
-        }
-    }
-
     private void SaveAndClose()
     {
         var warehouse = _firstRowWarehouseCode.Text.Trim();
@@ -378,7 +350,6 @@ internal sealed class SettingsForm : Form
         _settings.FirstRowWarehouseEnabled = _firstRowWarehouse.Checked;
         _settings.FirstRowWarehouse = warehouse;
         _settings.AdvancedMode = _advanced.Checked;
-        _settings.DiagnosticLogging = _diagnostic.Checked;
         _settings.AutoSave = _autoSave.Checked;
         _settings.AutoPrint = _autoPrint.Checked;
         foreach (DataGridViewRow row in _grid.Rows)
