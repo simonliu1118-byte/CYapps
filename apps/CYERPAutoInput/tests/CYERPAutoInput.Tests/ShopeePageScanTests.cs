@@ -20,6 +20,23 @@ public sealed class ShopeePageScanTests
     }
 
     [Fact]
+    public void Tolerates_a_header_shadow_and_hover_rows()
+    {
+        // After scrolling, a few rows under the fixed bar and around the cursor look different.
+        var next = View(120).Select((v, i) => i is >= 40 and < 46 || i is >= 200 and < 210 ? v + 50_000 + i : v).ToList();
+        Assert.Equal(120, ShopeePageScan.FindScrollOffset(View(0), next, 40));
+    }
+
+    [Fact]
+    public void Measures_the_scroll_from_the_text_positions()
+    {
+        List<OcrBox> before = [new("瀏覽器", 0, 5, 80, 20), new("訂單編號", 338, 650, 96, 21), new("26100000TEST", 367, 684, 121, 17), new("運送資訊", 337, 724, 94, 21), new("共3個商品", 370, 806, 90, 20)];
+        List<OcrBox> after = [new("瀏覽器", 0, 5, 80, 20), new("訂單編號", 338, 250, 96, 21), new("26100000TEST", 367, 285, 121, 17), new("運送資訊", 337, 324, 94, 21), new("共3個商品", 370, 406, 90, 20)];
+        Assert.Equal(400, ShopeePageScan.FindScrollOffsetByText(before, after, 177));
+        Assert.Equal(-1, ShopeePageScan.FindScrollOffsetByText(before, [new("其他", 10, 300, 40, 20)], 177));
+    }
+
+    [Fact]
     public void Reports_no_fit_when_the_page_changed()
     {
         var other = View(0).Select((v, i) => i < 40 ? v : v + 97 * i).ToList();

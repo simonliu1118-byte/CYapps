@@ -83,17 +83,23 @@ internal sealed class ShopeePageScanner
         }
 
         List<long>? previous = null;
+        List<OcrBox>? previousBoxes = null;
         var pageTop = 0;
         for (var step = 0; step < MaxSteps; step++)
         {
             if (stopRequested()) { result.Cancelled = true; break; }
             var image = await StableCaptureAsync(area, cancellationToken);
             var signature = Signature(image, dispose: false);
-            if (previous is not null)
+            var tokens = await _ocr.RecognizeAsync(image, cancellationToken);
+            var boxes = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+            if (previous is not null && previousBoxes is not null)
             {
                 result.FixedTop = Math.Max(result.FixedTop, ShopeePageScan.StaticTopRows(previous, signature));
-                var moved = ShopeePageScan.FindScrollOffset(previous, signature, result.FixedTop);
-                _log.Info("page-scan", $"step={step} moved={moved} fixed_top={result.FixedTop}");
+                var byPixels = ShopeePageScan.FindScrollOffset(previous, signature, result.FixedTop);
+                var byText = ShopeePageScan.FindScrollOffsetByText(previousBoxes, boxes, result.FixedTop);
+                // Text positions are the tie-breaker: they ignore shadows and hover effects.
+                var moved = byText >= 0 && (byPixels < 0 || Math.Abs(byPixels - byText) > 3) ? byText : byPixels;
+                _log.Info("page-scan", $"step={step} moved={moved} pixels={byPixels} text={byText} fixed_top={result.FixedTop}");
                 if (moved < 0)
                 {
                     image.Dispose();
@@ -105,12 +111,12 @@ internal sealed class ShopeePageScanner
             }
             result.Captures.Add(new Capture(image, pageTop));
             previous = signature;
-
-            var tokens = await _ocr.RecognizeAsync(image, cancellationToken);
-            var boxes = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+            previousBoxes = boxes;
             ShopeePageScan.AddCapture(result.Page, boxes, pageTop, result.FixedTop);
             if (ShopeePageScan.HasBuyerTotal(result.Page)) break;
             Wheel(wheelPoint, -WheelNotchesPerStep);
+            // Park the cursor on the page's empty left margin so no hover effect changes the next capture.
+            NativeMethods.SetCursorPos(area.Left + 12, wheelPoint.Y);
         }
 
         // The fixed band (browser bar, Shopee's header) is only known after the first scroll;

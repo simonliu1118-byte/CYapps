@@ -22,25 +22,46 @@ internal static class ShopeePageScan
     /// </summary>
     public static int FindScrollOffset(IReadOnlyList<long> previous, IReadOnlyList<long> next, int from)
     {
+        // Rows are compared exactly, but only rows with content (an edge against the row above)
+        // count, and most of them — not all — must match: after a scroll Shopee's header grows a
+        // shadow and hover effects change a few rows (user's PC, 2026-10-11).
         var rows = Math.Min(previous.Count, next.Count);
         var best = -1;
-        var bestScore = double.MaxValue;
+        var bestScore = 0.0;
         for (var d = 0; d < rows - from - 40; d++)
         {
-            var count = rows - from - d;
-            long sum = 0;
-            var distinct = 0;
-            for (var i = from; i < from + count; i++)
+            int informative = 0, equal = 0;
+            for (var i = from + 1; i < rows - d; i++)
             {
-                sum += Math.Abs(next[i] - previous[i + d]);
-                if (i > from && next[i] != next[i - 1]) distinct++;
+                if (next[i] == next[i - 1]) continue;
+                informative++;
+                if (next[i] == previous[i + d]) equal++;
             }
-            // A blank stretch matches any shift; it says nothing.
-            if (distinct < 8) continue;
-            var score = sum / (double)count;
-            if (score < bestScore) { bestScore = score; best = d; }
+            if (informative < 8) continue; // a blank stretch matches any shift
+            var score = equal / (double)informative;
+            if (score > bestScore) { bestScore = score; best = d; }
         }
-        return bestScore <= 2.0 ? best : -1;
+        return bestScore >= 0.6 ? best : -1;
+    }
+
+    /// <summary>
+    /// The scroll measured from the OCR text instead: boxes with the same text and left edge in
+    /// both captures, below the fixed band, moved up by the same distance. The most common
+    /// distance wins when at least three boxes agree; -1 otherwise.
+    /// </summary>
+    public static int FindScrollOffsetByText(IReadOnlyList<OcrBox> previous, IReadOnlyList<OcrBox> next, int fixedTop)
+    {
+        var shifts = new List<int>();
+        foreach (var n in next.Where(b => b.Top >= fixedTop && Compact(b.Text).Length >= 3))
+            foreach (var p in previous.Where(b => b.Top >= fixedTop && Compact(b.Text) == Compact(n.Text) && Math.Abs(b.Left - n.Left) <= 4))
+                if (p.Top - n.Top >= 0) shifts.Add(p.Top - n.Top);
+        var best = shifts
+            .GroupBy(s => shifts.Count(o => Math.Abs(o - s) <= 2))
+            .OrderByDescending(g => g.Key)
+            .FirstOrDefault();
+        if (best is null || best.Key < 3) return -1;
+        var centre = best.OrderBy(s => s).ElementAt(best.Count() / 2);
+        return (int)Math.Round(shifts.Where(s => Math.Abs(s - centre) <= 2).Average());
     }
 
     /// <summary>
