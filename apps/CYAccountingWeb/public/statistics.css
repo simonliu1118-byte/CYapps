@@ -1,5 +1,5 @@
 /* Statistics owns only its surfaces. Workspace column geometry stays in Adaptive UI. */
-.statistics-card { display: none; min-width: 0; padding: 16px; }
+.statistics-card { display: none; min-width: 0; padding: 18px 14px; }
 #tabletStatisticsButton { display: none !important; }
 html[data-tablet-layout]:not([data-tablet-layout=""]) #tabletStatisticsButton { display: inline-flex !important; align-items: center; justify-content: center; height: 34px; padding: 0 9px; font-size: 12px; }
 html[data-viewport="desktop"] .statistics-card { display: block; grid-column: 1 / -1; }
@@ -7,6 +7,10 @@ html[data-viewport="desktop"] .cy-split-layout > .statistics-card { grid-column:
 html[data-viewport="desktop"] body[data-cyacc-read-only="true"] .statistics-card { grid-column: 1 / -1 !important; grid-row: auto !important; position: static !important; max-height: none !important; }
 @media (min-width: 1600px) {
   html[data-viewport="desktop"] .cy-split-layout > .statistics-card { grid-column: 3; grid-row: 1; position: sticky; top: 18px; max-height: calc(100dvh - 36px); overflow-y: auto; }
+}
+.statistics-card .statistics-actions { max-width: 360px; }
+@media (min-width: 768px) and (max-width: 1599px) {
+  html[data-viewport="desktop"] .statistics-card .statistics-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 }
 .statistics-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
 .statistics-actions button { flex: 1; display: inline-flex; align-items: center; justify-content: center; min-width: 0; height: 32px; padding: 0 7px; font-size: 13.5px; font-weight: 600; line-height: 1; white-space: nowrap; }
@@ -48,7 +52,9 @@ html[data-viewport="desktop"] body[data-cyacc-read-only="true"] .statistics-card
 .statistics-error { color: #a54b45; font-size: 14px; }
 .statistics-spinner { width: 16px; height: 16px; border: 2px solid #e2e8ef; border-top-color: #407fb0; border-radius: 50%; animation: statistics-spin .8s linear infinite; }
 @keyframes statistics-spin { to { transform: rotate(360deg); } }
-.statistics-dialog { width: min(880px, calc(100vw - 40px)); max-width: 880px; max-height: calc(100dvh - 40px); box-sizing: border-box; }
+.statistics-dialog { width: min(880px, calc(100vw - 40px)); max-width: 880px; max-height: calc(100dvh - 40px); padding: 20px; box-sizing: border-box; }
+.statistics-dialog .modal-header { align-items: center; margin-bottom: 16px; }
+.statistics-dialog .modal-header h2 { margin: 0; }
 .statistics-dialog .statistics-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .statistics-dialog .statistics-totals strong { font-size: 20px; }
 .statistics-dialog .statistics-dialog-tabs { max-width: 360px; }
@@ -62,7 +68,7 @@ html[data-viewport="desktop"] body[data-cyacc-read-only="true"] .statistics-card
 .income-statement > h3, .statement-period { text-align: center; }
 .income-statement > h3 { font-size: 19px; margin: 24px 0 8px; }
 .statement-period { color: #657386; font-size: 13px; margin-bottom: 22px; }
-.income-statement table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+.income-statement table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
 .income-statement th, .income-statement td { padding: 8px 12px; border-bottom: 1px solid #e2e8ef; }
 .income-statement th { text-align: left; white-space: normal; }
 .income-statement td, .income-statement thead th:last-child { text-align: right; font-variant-numeric: tabular-nums; width: 145px; white-space: nowrap; }
