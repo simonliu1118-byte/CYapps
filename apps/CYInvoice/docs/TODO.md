@@ -189,7 +189,8 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [ ] Private named RPC 與既有 consumer 實際 binding／帳號授權驗收，依下列 staging scope／Windows gate；Provider health 不等於該能力已 exercised。
 - [x] 隔離 consumer probe #391 controlled API 路徑與 #393 安全診斷已合併；最新 source 5dc0c4f7 四項 CI／78 項 Provider tests／21 項 focused regression 通過。無 D1／帳號／Session／grant，owner／target／D1 範圍檢查後清理，私人產物不公開；Token inspection GET-only、權限 hint 不作授權證據。
 - [ ] 實際 private IDENTITY／IDENTITY_AUTHORITY transport／deny：[development #139](https://github.com/simonliu1118-byte/CYapps/actions/runs/38119760514) 原 Provider preflight 通過，account Token active，但自身 policy GET 403／9109 不可讀、temporary upload 仍為 Cloudflare JSON 403，無 numeric API code／intermediary-denial marker。暫時 Worker absence confirmed、原 Provider deploy skipped；尚未執行 Fetcher／RPC。需管理者在 Cloudflare 核對既有 protected Token 的 account／upload／cleanup 能力及 API 拒絕原因；目前工具沒有 Token 管理連線，不為診斷增加 Token-read 或盲目重跑。證據見 Provider DEVELOPMENT_DEPLOYMENT.md／現行交接，正向授權仍需下一項。
-- [ ] 確認隔離 staging 資源及部署權限／Free 用量、核准的 Application／兩 Workspace 配對與 Employee／App Access／Role／Email readiness，再在隔離 scope 驗正向與變更／撤銷／outage；不猜正式對應或在原業務資料上造 synthetic 帳號。
+- [ ] 使用者確認全部裝置未使用，批准原 development 受控驗證。沿用 development owner 的 `binding-version`，同一 CYID probe owner 上傳未部署／無 D1／短效 secret 的版本，保留 active Built-in／原 Workspace／Device／Token／Secrets；先驗 transport／approved scope readiness，清除僅限 nonce-owned 且未使用的版本，再核對原歷史。source tests、actual run、原 Windows positive authorization／本機 backup／回復驗收分開；不得把 transport 綠燈當正式切換。見 Provider DEVELOPMENT_DEPLOYMENT 的既有版本段落。
+- [ ] 確認驗證 scope 及部署權限／Free 用量、核准的 Application／兩 Workspace 配對與 Employee／App Access／Role／Email readiness，再在隔離 scope 驗正向與變更／撤銷／outage；不猜正式對應或在原業務資料上造 synthetic 帳號。
 - [ ] staging、RC AA／AB／AC 與原 A/B/C 完成後提出正式切換／回復方案；正式 tag／Release 版本身分另依 PROJECT_RULES 明確處理。
 
 ### 7.4 新裝置加入方式與安全紀錄

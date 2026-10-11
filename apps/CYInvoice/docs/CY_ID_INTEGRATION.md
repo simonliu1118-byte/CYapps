@@ -372,3 +372,10 @@ V2.6.17 implementation：ServiceConnectivity 共用 checkGate 與 monotonic 60 �
 Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID flag 關閉時，先升級 additive Cloud 0.9.2（包含 /v1/runtime/sync），再升級原 Windows 至 V2.6.17；完成 private RPC 與原裝置 staging 後才核准切 CYID。舊 Worker 404 明確提示版本未提供同步，保留原既有降級，不清除／不換 Workspace；不能把這種舊 Gateway 當作已完成新同步驗收。原 development Cloud 0.9.2 additive rollout 已於 #12 完成、CYID disabled／Built-in 保留；Provider development 0.3.6 code-only upgrade #124 通過，canonical mirrors 1.0.3 已同步。private named entrypoint source 已部署，但實際 binding／正向 App Access／原 Windows acceptance 仍未完成。Production／正式 authority 切換仍需核准。
 
 隔離 private binding probe #393 source 5dc0c4f7 已通過四項 exact-head CI／78 項 Provider tests／21 項 focused regression 並合併；既有 owner 補安全分類與當前 Token GET-only 檢查，不新增 authority。[Actual development #139](https://github.com/simonliu1118-byte/CYapps/actions/runs/38119760514) 原 Provider preflight 通過，account Token active；自身 policy GET 403／9109 不可讀，temporary Worker upload 仍為 Cloudflare JSON 403（無 numeric API code／intermediary-denial marker），未到 default Fetcher／named RPC。暫時 Worker absence confirmed、原 Provider deploy skipped，私有檔案清除；#136 及更早 runs 為失敗歷史。管理者需在 Cloudflare 核對 protected development Token 的 account／upload／cleanup 能力及 API 拒絕原因；目前工具無 Token 管理連線，不能由 policy-read 拒絕推定 Worker-write 缺失，不為診斷擴權或盲目重跑。原 Workspace／Device／Provider／Built-in 保留，實際 transport／正向授權／Windows／正式切換未完成。證據見 Provider DEVELOPMENT_DEPLOYMENT.md，唯一待辦仍在 TODO §7.3.3。
+
+
+### 原 development 受控驗證補充 — 2026-10-11
+
+使用者確認當前全部裝置未使用，批准現在驗證。沿用既有 CYInvoice development workflow 及 CYID probe owner，以 `deploy=false` 上傳既有 consumer Worker 的短效測試版本；active Built-in 及原 Workspace／Device／Token／D1／Secrets 不切換，無新 authority／D1／帳號／Session／grant。Version URLs 必須已存在，不能為測試開啟所有舊版本預覽。只清除 nonce-owned、bindings 正確且未部署的版本；always-run post-check 核對原 consumer history。
+
+這一步只能證明 default Fetcher／named RPC transport／deny；protected approved scope 齊全且原 Workspace fingerprint 相符時，可額外確認 Workspace/Application enablement。缺值即 unknown，不猜配對、不直接讀 CYID D1。真實 Employee／App Access／Role、原 Windows Device continuity、離線／撤銷及正式切換仍須獨立验收。具體工具／actual-run 證據見 CYCloudIdentity DEVELOPMENT_DEPLOYMENT；待辦唯一入口仍為 CYInvoice TODO §7.3.3。

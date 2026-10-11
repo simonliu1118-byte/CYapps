@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
@@ -23,12 +23,14 @@ export async function platformResponse(response) {
     `_ERROR_DOC_${Number(errors.some(e => typeof e?.documentation_url === 'string'))}`;
   return { accepted: response.ok && result?.success === true, result: result?.result, diagnostic };
 }
-export async function main(env = process.env, fetcher = fetch, command = run, originalConfig) {
+const stable = value => JSON.stringify(value, (_, item) => item && typeof item === 'object' && !Array.isArray(item)
+  ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+const versionUuid = value => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value ?? '');
+export async function main(env = process.env, fetcher = fetch, command = run, originalConfig, consumerAudit) {
   requireValue(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN && env.CYID_WORKER_NAME && env.RUNNER_TEMP, 'PROBE_INPUTS_REQUIRED');
-  const original = originalConfig ?? JSON.parse(fs.readFileSync(path.join(root, 'wrangler.deploy.generated.jsonc'), 'utf8'));
-  requireValue(original.name === env.CYID_WORKER_NAME && original.vars.APP_ENV === 'development' && original.vars.CORE_ACCOUNT_APPLICATION_ID, 'PROBE_DEVELOPMENT_SCOPE_REQUIRED');
+  let original = originalConfig ?? (consumerAudit ? undefined : JSON.parse(fs.readFileSync(path.join(root, 'wrangler.deploy.generated.jsonc'), 'utf8')));
   const nonce = randomBytes(16).toString('hex');
-  const worker = `cyid-binding-probe-${nonce}`;
+  const worker = consumerAudit?.worker ?? `cyid-binding-probe-${nonce}`;
   const key = randomBytes(32).toString('hex');
   const api = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}`;
   const configPath = path.join(env.RUNNER_TEMP, `cyid-binding-${nonce}.jsonc`);
@@ -56,11 +58,38 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
     requireValue(result.absent || result.accepted, `PROBE_PLATFORM_${result.diagnostic}`);
     return result;
   };
+  if (!original && consumerAudit) {
+    const provider = (await apiCall(`/workers/scripts/${encodeURIComponent(env.CYID_WORKER_NAME)}/settings`)).result;
+    original = { name: env.CYID_WORKER_NAME, vars: Object.fromEntries((provider?.bindings ?? [])
+      .filter(b => b.type === 'plain_text').map(b => [b.name, b.text])) };
+  }
+  requireValue(original?.name === env.CYID_WORKER_NAME && original.vars?.APP_ENV === 'development' && original.vars.CORE_ACCOUNT_APPLICATION_ID, 'PROBE_DEVELOPMENT_SCOPE_REQUIRED');
   const prefix = `/workers/scripts/${worker}`;
-  requireValue((await apiCall(prefix + '/settings')).absent === true, 'PROBE_NAME_NOT_NEW');
+  const versionPrefix = `/workers/workers/${worker}/versions`;
+  let deployments, originalBindings, originalRoute;
+  if (consumerAudit) {
+    const consumer = JSON.parse(fs.readFileSync(path.join(root, '../CYInvoice/cloud/wrangler.jsonc'), 'utf8'));
+    const age = Date.now() - Date.parse(consumerAudit.capturedAt);
+    originalBindings = consumerAudit.settings?.bindings;
+    const plain = name => originalBindings?.find(b => b.name === name && b.type === 'plain_text')?.text;
+    requireValue(worker === consumer.name && worker !== original.name && age >= 0 && age < 20 * 60 * 1000 &&
+      plain('APP_ENV') === 'development' && [undefined, 'false'].includes(plain('CYID_ENABLED')) &&
+      originalBindings?.filter(b => b.type === 'd1').length === 1 &&
+      originalBindings.find(b => b.name === 'DB' && b.type === 'd1')?.id === consumerAudit.databaseId &&
+      consumerAudit.databaseId !== env.CYID_D1_DATABASE_ID, 'PROBE_ORIGINAL_CONSUMER_SCOPE_REQUIRED');
+    const settings = await apiCall(prefix + '/settings');
+    requireValue(stable(settings.result?.bindings) === stable(originalBindings), 'PROBE_CONSUMER_SETTINGS_CHANGED');
+    deployments = (await apiCall(prefix + '/deployments')).result?.deployments?.[0]?.versions;
+    requireValue(Array.isArray(deployments) && deployments.length > 0 &&
+      stable(deployments) === stable(consumerAudit.deployments?.deployments?.[0]?.versions), 'PROBE_CONSUMER_DEPLOYMENT_CHANGED');
+    originalRoute = (await apiCall(prefix + '/subdomain')).result;
+    requireValue(originalRoute?.enabled === true && originalRoute.previews_enabled === true, 'PROBE_EXISTING_VERSION_URL_REQUIRED');
+    requireValue(Array.isArray((await apiCall(versionPrefix + '?per_page=100')).result), 'PROBE_VERSION_CLEANUP_READ_REQUIRED');
+    console.log('Existing development consumer checked; active deployment and Built-in retained.');
+  } else requireValue((await apiCall(prefix + '/settings')).absent === true, 'PROBE_NAME_NOT_NEW');
   const subdomain = (await apiCall('/workers/subdomain')).result?.subdomain;
   requireValue(/^[a-z0-9-]+$/.test(subdomain ?? ''), 'PROBE_ENDPOINT_UNAVAILABLE');
-  console.log('Probe runtime scope checked; temporary Worker name is new.');
+  if (!consumerAudit) console.log('Probe runtime scope checked; temporary Worker name is new.');
   // Optional read-only inspection of this credential only. Missing token-read permission
   // is not evidence of missing Worker-write permission and never requests broader access.
   let verification, user = false;
@@ -87,13 +116,28 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
   const expected = fs.readFileSync(path.join(root, 'VERSION'), 'utf8').trim();
   const config = { name: worker, main: path.join(root, 'scripts/private-binding-probe-worker.mjs'),
     compatibility_date: '2026-09-25', workers_dev: true,
-    vars: { PROBE_OWNER_NONCE: nonce, EXPECTED_VERSION: expected, CORE_APPLICATION: original.vars.CORE_ACCOUNT_APPLICATION_ID,
+    vars: { PROBE_OWNER_NONCE: nonce, PROBE_EXPIRES_AT: String(Date.now() + 10 * 60 * 1000), EXPECTED_VERSION: expected, CORE_APPLICATION: original.vars.CORE_ACCOUNT_APPLICATION_ID,
       INVALID_SESSION: `cyid_${randomBytes(32).toString('hex')}`, SYNTHETIC_WORKSPACE: `probe-${nonce}`,
       SYNTHETIC_APPLICATION: `PROBE_${nonce.toUpperCase()}`, SYNTHETIC_EMPLOYEE: `probe-${nonce}` },
     services: [{ binding: 'IDENTITY', service: original.name },
       { binding: 'IDENTITY_AUTHORITY', service: original.name, entrypoint: 'ConsumerAuthoritySync' }] };
+  if (consumerAudit && env.IDENTITY_APPLICATION_ID && env.IDENTITY_WORKSPACE_ID && env.IDENTITY_CYINVOICE_WORKSPACE_ID) {
+    const idHash = createHash('sha256').update(JSON.stringify(env.IDENTITY_CYINVOICE_WORKSPACE_ID)).digest('hex');
+    requireValue(Object.hasOwn(consumerAudit.state?.workspaces ?? {}, idHash), 'PROBE_APPROVED_WORKSPACE_NOT_ORIGINAL');
+    config.vars.TARGET_APPLICATION = env.IDENTITY_APPLICATION_ID;
+    config.vars.TARGET_WORKSPACE = env.IDENTITY_WORKSPACE_ID;
+  }
   let mutationAttempted = false;
   let completed = false;
+  let versionId, scopeResult;
+  const ownsProbe = bindings => {
+    const services = bindings.filter(b => b.type === 'service');
+    return bindings.some(b => b.type === 'plain_text' && b.name === 'PROBE_OWNER_NONCE' && b.text === nonce) &&
+      services.length === 2 && services.every(b => b.service === original.name) &&
+      services.some(b => b.name === 'IDENTITY' && (!b.entrypoint || b.entrypoint === 'default')) &&
+      services.some(b => b.name === 'IDENTITY_AUTHORITY' && b.entrypoint === 'ConsumerAuthoritySync') &&
+      !bindings.some(b => b.type === 'd1');
+  };
   try {
     fs.writeFileSync(configPath, JSON.stringify(config), { mode: 0o600 });
     fs.mkdirSync(bundlePath, { mode: 0o700 });
@@ -110,15 +154,33 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
     upload.set('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }), 'metadata.json');
     upload.set(moduleName, new Blob([fs.readFileSync(path.join(bundlePath, moduleName))], { type: 'application/javascript+module' }), moduleName);
     mutationAttempted = true;
-    await apiCall(prefix, 'PUT', upload, 'WORKER_UPLOAD');
-    console.log('Temporary probe Worker uploaded.');
-    requireValue(!(await apiCall(prefix + '/secrets', 'PUT', { name: 'PROBE_AUTH_KEY', text: key, type: 'secret_text' }, 'PROBE_SECRET_WRITE')).absent, 'PROBE_SECRET_NOT_READY');
-    console.log('Temporary probe-only secret configured.');
-    const route = await apiCall(prefix + '/subdomain', 'POST', { enabled: true, previews_enabled: false }, 'PROBE_ROUTE_ENABLE');
-    requireValue(route.result?.enabled === true && route.result?.previews_enabled === false, 'PROBE_ROUTE_NOT_ENABLED');
+    let origin;
+    if (consumerAudit) {
+      const version = (await apiCall(versionPrefix + '?deploy=false', 'POST', {
+        main_module: moduleName, compatibility_date: config.compatibility_date,
+        annotations: { 'workers/message': `CYID_BINDING_PROBE_${nonce}` },
+        bindings: [...metadata.bindings, { type: 'secret_text', name: 'PROBE_AUTH_KEY', text: key }],
+        modules: [{ name: moduleName, content_type: 'application/javascript+module',
+          content_base64: fs.readFileSync(path.join(bundlePath, moduleName)).toString('base64') }],
+      }, 'EXISTING_VERSION_UPLOAD')).result;
+      requireValue(versionUuid(version?.id), 'PROBE_VERSION_ID_INVALID');
+      versionId = version.id;
+      origin = `https://${versionId.slice(0, 8)}-${worker}.${subdomain}.workers.dev`;
+      requireValue(version.urls?.includes(origin), 'PROBE_VERSION_URL_UNAVAILABLE');
+      requireValue(stable((await apiCall(prefix + '/deployments')).result?.deployments?.[0]?.versions) === stable(deployments), 'PROBE_CONSUMER_DEPLOYMENT_CHANGED');
+      console.log('Probe version uploaded without deployment, D1 or original runtime secrets.');
+    } else {
+      await apiCall(prefix, 'PUT', upload, 'WORKER_UPLOAD');
+      console.log('Temporary probe Worker uploaded.');
+      requireValue(!(await apiCall(prefix + '/secrets', 'PUT', { name: 'PROBE_AUTH_KEY', text: key, type: 'secret_text' }, 'PROBE_SECRET_WRITE')).absent, 'PROBE_SECRET_NOT_READY');
+      console.log('Temporary probe-only secret configured.');
+      const route = await apiCall(prefix + '/subdomain', 'POST', { enabled: true, previews_enabled: false }, 'PROBE_ROUTE_ENABLE');
+      requireValue(route.result?.enabled === true && route.result?.previews_enabled === false, 'PROBE_ROUTE_NOT_ENABLED');
+      origin = `https://${worker}.${subdomain}.workers.dev`;
+    }
     let response;
     for (let attempt = 0; attempt < 20; attempt++) {
-      response = await fetcher(`https://${worker}.${subdomain}.workers.dev/probe`, {
+      response = await fetcher(origin + '/probe', {
         headers: { 'x-probe-key': key }, signal: AbortSignal.timeout(15000) });
       if (response.status !== 404) break;
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -126,19 +188,36 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
     requireValue(response?.status !== 404, 'PROBE_ENDPOINT_NOT_READY');
     const result = await response.json();
     requireValue(response.ok && result.ok === true && result.defaultFetcher === true && result.invalidSessionDenied === true && result.namedInvalidationRpc === true, 'PRIVATE_BINDING_TRANSPORT_FAILED');
+    if (consumerAudit) requireValue(result.scopeConfigured === !!config.vars.TARGET_WORKSPACE &&
+      (result.scopeConfigured ? typeof result.scopeAvailable === 'boolean' : result.scopeAvailable === null), 'PROBE_SCOPE_RESULT_INVALID');
+    scopeResult = result;
     completed = true;
   } finally {
     try {
-      if (mutationAttempted) {
+      if (mutationAttempted && consumerAudit) {
+        const listed = (await apiCall(versionPrefix + '?per_page=100')).result;
+        requireValue(Array.isArray(listed), 'PROBE_VERSION_CLEANUP_READ_REQUIRED');
+        const owned = listed.filter(v => v.annotations?.['workers/message'] === `CYID_BINDING_PROBE_${nonce}`);
+        requireValue(owned.length <= 1 && (!versionId || owned[0]?.id === versionId), 'PROBE_VERSION_CLEANUP_SCOPE_FAILED');
+        if (owned.length) {
+          versionId = owned[0].id;
+          requireValue(versionUuid(versionId), 'PROBE_VERSION_ID_INVALID');
+          const current = (await apiCall(versionPrefix + '/' + versionId)).result;
+          requireValue(current?.annotations?.['workers/message'] === `CYID_BINDING_PROBE_${nonce}` && ownsProbe(current?.bindings ?? []), 'PROBE_VERSION_CLEANUP_SCOPE_FAILED');
+          const deployed = (await apiCall(prefix + '/deployments')).result?.deployments?.[0]?.versions;
+          requireValue(Array.isArray(deployed) && !deployed.some(v => v.version_id === versionId), 'PROBE_VERSION_IN_USE_REFUSE_DELETE');
+          await apiCall(versionPrefix + '/' + versionId, 'DELETE', undefined, 'OWNED_VERSION_DELETE');
+          requireValue((await apiCall(versionPrefix + '/' + versionId)).absent === true, 'PROBE_CLEANUP_NOT_CONFIRMED');
+        }
+        requireValue(stable((await apiCall(prefix + '/deployments')).result?.deployments?.[0]?.versions) === stable(deployments), 'PROBE_CONSUMER_DEPLOYMENT_CHANGED');
+        requireValue(stable((await apiCall(prefix + '/settings')).result?.bindings) === stable(originalBindings) &&
+          stable((await apiCall(prefix + '/subdomain')).result) === stable(originalRoute), 'PROBE_CONSUMER_SETTINGS_CHANGED');
+        console.log('Owned probe version absence confirmed; original deployment, bindings, secret names and routes unchanged.');
+      } else if (mutationAttempted) {
         const current = await apiCall(prefix + '/settings');
         if (!current.absent) {
           const bindings = current.result?.bindings ?? [];
-          const services = bindings.filter(b => b.type === 'service');
-          requireValue(bindings.some(b => b.type === 'plain_text' && b.name === 'PROBE_OWNER_NONCE' && b.text === nonce) &&
-            services.length === 2 && services.every(b => b.service === original.name) &&
-            services.some(b => b.name === 'IDENTITY' && (!b.entrypoint || b.entrypoint === 'default')) &&
-            services.some(b => b.name === 'IDENTITY_AUTHORITY' && b.entrypoint === 'ConsumerAuthoritySync') &&
-            !bindings.some(b => b.type === 'd1'), 'PROBE_CLEANUP_SCOPE_FAILED');
+          requireValue(ownsProbe(bindings), 'PROBE_CLEANUP_SCOPE_FAILED');
           await apiCall(prefix, 'DELETE', undefined, 'OWNED_PROBE_DELETE');
           requireValue((await apiCall(prefix + '/settings')).absent === true, 'PROBE_CLEANUP_NOT_CONFIRMED');
         }
@@ -147,10 +226,14 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
     } finally { fs.rmSync(configPath, { force: true }); fs.rmSync(bundlePath, { recursive: true, force: true }); }
   }
   requireValue(completed, 'PRIVATE_BINDING_TRANSPORT_FAILED');
-  console.log(`Private binding transport passed against development provider ${expected}: default Fetcher health/invalid Session denial and named RPC unavailable-scope invalidation verified; isolated probe Worker removed. No provider secret/authority/Session write; real scope/positive authorization/Windows acceptance remain pending.`);
+  console.log(`Private binding transport passed against development provider ${expected}: default Fetcher health/invalid Session denial and named RPC unavailable-scope invalidation verified; owned probe removed. No provider secret/authority/Session write; positive authorization/Windows acceptance remain pending.`);
+  if (consumerAudit) console.log(`Approved scope readiness: configured=${scopeResult.scopeConfigured === true}; available=${scopeResult.scopeConfigured === true ? scopeResult.scopeAvailable === true : 'unknown'}. Original Workspace/Device authorization requires real-client acceptance.`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { await main(); }
+  try {
+    requireValue(process.argv.length === 2 || (process.argv.length === 4 && process.argv[2] === 'existing-version'), 'PROBE_MODE_INVALID');
+    await main(process.env, fetch, run, undefined, process.argv[2] === 'existing-version' ? JSON.parse(fs.readFileSync(process.argv[3], 'utf8')) : undefined);
+  }
   catch (error) { console.error(/^[A-Z][A-Z0-9_]+$/.test(error?.message ?? '') ? error.message : 'PRIVATE_BINDING_PROBE_FAILED'); process.exitCode = 1; }
 }
