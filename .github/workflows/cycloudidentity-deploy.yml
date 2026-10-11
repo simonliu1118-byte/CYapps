@@ -12,14 +12,13 @@ on:
       mode:
         description: 'Read-only preflight or preserve-existing development upgrade'
         type: choice
-        options: [preflight, upgrade, binding-probe]
+        options: [preflight, upgrade]
         default: preflight
         required: true
   push:
     branches:
       - deploy/cycloudidentity-development
       - deploy/cycloudidentity-development-preflight
-      - deploy/cycloudidentity-development-binding-probe
 
 permissions:
   contents: read
@@ -78,14 +77,6 @@ jobs:
       - name: Validate Worker bundle
         run: npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc
 
-      - name: Validate isolated private probe bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          trap 'rm -f "$RUNNER_TEMP/cyid-probe-ci.jsonc"' EXIT
-          node --input-type=module -e 'import fs from "node:fs"; import path from "node:path"; fs.writeFileSync(path.join(process.env.RUNNER_TEMP, "cyid-probe-ci.jsonc"), JSON.stringify({name:"cyid-binding-ci",main:path.resolve("scripts/private-binding-probe-worker.mjs"),compatibility_date:"2026-09-25",services:[{binding:"IDENTITY",service:"identity-test-ci"},{binding:"IDENTITY_AUTHORITY",service:"identity-test-ci",entrypoint:"ConsumerAuthoritySync"}]}));'
-          npx wrangler deploy --dry-run --config "$RUNNER_TEMP/cyid-probe-ci.jsonc" --outdir "$RUNNER_TEMP/cyid-probe-ci-bundle"
-
       - name: Remove generated config
         if: always()
         run: rm -f wrangler.ci.generated.jsonc
@@ -103,7 +94,7 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
+      CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
       CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
 
     steps:
@@ -148,10 +139,6 @@ jobs:
       - name: Verify provider version and authority continuity
         if: (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-development') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'upgrade')
         run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyid-upgrade-audit.json"
-
-      - name: Verify private binding transport through isolated temporary Worker
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/deploy/cycloudidentity-development-binding-probe') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-probe')
-        run: node scripts/private-binding-probe.mjs
 
       - name: Remove private generated config and checkpoint
         if: always()

@@ -371,14 +371,21 @@ V2.6.17 implementation：ServiceConnectivity 共用 checkGate 與 monotonic 60 �
 
 Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID flag 關閉時，先升級 additive Cloud 0.9.2（包含 /v1/runtime/sync），再升級原 Windows 至 V2.6.17；完成 private RPC 與原裝置 staging 後才核准切 CYID。舊 Worker 404 明確提示版本未提供同步，保留原既有降級，不清除／不換 Workspace；不能把這種舊 Gateway 當作已完成新同步驗收。原 development Cloud 0.9.2 additive rollout 已於 #12 完成、CYID disabled／Built-in 保留；Provider development 0.3.6 code-only upgrade #124 通過，canonical mirrors 1.0.3 已同步。private named entrypoint source 已部署，但實際 binding／正向 App Access／原 Windows acceptance 仍未完成。Production／正式 authority 切換仍需核准。
 
-隔離 private binding probe #393 source 5dc0c4f7 已通過四項 exact-head CI／78 項 Provider tests／21 項 focused regression 並合併；既有 owner 補安全分類與當前 Token GET-only 檢查，不新增 authority。[Actual development #139](https://github.com/simonliu1118-byte/CYapps/actions/runs/38119760514) 原 Provider preflight 通過，account Token active；自身 policy GET 403／9109 不可讀，temporary Worker upload 仍為 Cloudflare JSON 403（無 numeric API code／intermediary-denial marker），未到 default Fetcher／named RPC。暫時 Worker absence confirmed、原 Provider deploy skipped，私有檔案清除；#136 及更早 runs 為失敗歷史。管理者需在 Cloudflare 核對 protected development Token 的 account／upload／cleanup 能力及 API 拒絕原因；目前工具無 Token 管理連線，不能由 policy-read 拒絕推定 Worker-write 缺失，不為診斷擴權或盲目重跑。原 Workspace／Device／Provider／Built-in 保留，實際 transport／正向授權／Windows／正式切換未完成。證據見 Provider DEVELOPMENT_DEPLOYMENT.md，唯一待辦仍在 TODO §7.3.3。
+### 14.7 部署策略收斂：保留過期紀錄，不再上傳測試程式
+
+2026-10-11 使用者定案：保留刪除失敗的 expired／undeployed／no-D1 測試紀錄，停止 DELETE 重試／擴權，後續不再把測試 Worker／測試版本上傳 Cloudflare。遠端 probe／cleanup CLI、專用 branch push triggers／dispatch modes及測試模組已移除；本地／CI synthetic Worker 與真實 core regression 繼續。舊 branches／歷史 run 不能作接續入口。
+
+原 CYInvoice development deployment owner 改用 modern Worker version API，所有非 plain-text bindings（包含 Secrets、原 DB、rate limits、services）以 exact active version UUID 繼承；不從 latest upload 繼承、不讀／重設 Secret 值。僅上傳本次受檢查的真實 app.js，保留 Built-in／CYID_ENABLED=false；上傳後讀回完整 binding names/types/targets/vars與compatibility，重查原100%流量與routes穩定，再明確部署該新UUID。未知resource、split traffic、過期checkpoint、任一readback不符皆停止；response loss不自動重試，always-run核對實際active version／原history／health。過期紀錄存在不再單獨阻擋這條 exact-source deployment。原 D1／Workspace／Device／Token 不 reset 或 rejoin。
+
+本輪已完成：PR #402 source `274e41be4f887df8d52c1c22bb67158d8e42e301`／tree `97c587033c02524aae5d81091b1a2eaaf67ef818` 六項 exact-head CI（Governance #1252、Provider Check #127、Provider development #147、Provider production #33、CYInvoice development validate #24、Cloud Check #399含Windows）全通過，合併 `b7acdbf6f9079c9b72f507a3f14c912eaf738eb1` 為同一tree。[Actual development #25](https://github.com/simonliu1118-byte/CYapps/actions/runs/38134710138) 以continuity source `aeb3434fe2ff3bec1fad2a726c8166066bcd333a`／同一已測tree完成真實business版本上傳、exact-active-source bindings／compatibility readback及100% deployment。原Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records、Token hashes／employee／history／FK及routes保留，Built-in／CYID false；pending migrations0，沒有Secret replacement／authority切換／test upload／DELETE／restore。1個expired未部署no-D1測試版本在before及after均仍存在，已證明不再阻擋部署。私有recovery reference UTC `2026-10-11T11:13:08.522Z`；runner private files移除通過。這是本次窗口的readback，不宣稱讀到Secret值或完成真實Windows登入／restore rehearsal。
+
+原三個probe／cleanup branch refs已fast-forward停放到#402同一tree，controller／測試模組與push trigger均不存在，不重用歷史run。Temporary Workers Admin取消仍待使用者確認，不需增加權限。
+
+CYID private transport、真實 Application／兩 Workspace binding／Employee App Access與Role、原Windows裝置認證、RC AA／AB／AC、實際Free用量、portable清除中斷復原與最終authority cutover保持待驗收。後續透過真實consumer已存在的功能驗收，不新增遠端測試handler或帳號authority；production切換／Release仍獨立核准。產品VERSION／BUILD、Cloud0.9.2、Provider0.3.6、canonical1.0.3／minimum1.0.0不變。
+
+實際source/run證據集中 CYCloudIdentity docs/DEVELOPMENT_DEPLOYMENT.md；唯一待辦入口維持本專案TODO §7.3.3。
 
 
-### 原 development 受控驗證補充 — 2026-10-11
+### 14.8 保留原 Workspace 的綁定準備與共通參數
 
-使用者確認當前全部裝置未使用，批准現在驗證。沿用既有 CYInvoice development workflow 及 CYID probe owner，以 `deploy=false` 上傳既有 consumer Worker 的短效測試版本；active Built-in 及原 Workspace／Device／Token／D1／Secrets 不切換，無新 authority／D1／帳號／Session／grant。Version URLs 必須已存在，不能為測試開啟所有舊版本預覽。只清除 nonce-owned、bindings 正確且未部署的版本；always-run post-check 核對原 consumer history。
-
-這一步只能證明 default Fetcher／named RPC transport／deny；protected approved scope 齊全且原 Workspace fingerprint 相符時，可額外確認 Workspace/Application enablement。缺值即 unknown，不猜配對、不直接讀 CYID D1。真實 Employee／App Access／Role、原 Windows Device continuity、離線／撤銷及正式切換仍須獨立验收。具體工具／actual-run 證據見 CYCloudIdentity DEVELOPMENT_DEPLOYMENT；待辦唯一入口仍為 CYInvoice TODO §7.3.3。
-
-
-受控 #17（38121460188）上傳成功但 owned-version delete 403，尚未通過 cleanup；無獨立 request proof，不計 transport／scope 成功。Audit 現行修正：固定實際 100% active deployment/version bindings，不能把 latest-upload `/settings` 當 runtime D1／Secrets。Retained probe 未清除前禁止再上傳與一般部署；唯讀核對原 active Cloud／history／expiration 後另補 actual evidence。原 authority 仍 Built-in，沒有正式切換或原裝置 reset。
+#412 的 prepare-cyid 已經六項 CI 通過並合併，原 Workspace／Built-in 保留。2026-10-12 依使用者同 Repo 共用參數的確認，接續 source 讓 CYInvoice／CYID／CYACC deployment 使用同一 Provider base-name Secret；CYACC 原 production resolver 不變，各 Application ID 獨立。CYInvoice 由 Provider active Worker deployment metadata 取得自己的兩項 scope，原 business Workspace 由原 D1 唯一 active Workspace 確認，不借 CYACC 的 scope、不建立新 Workspace或讀 CYID D1。缺 metadata 或 Provider drift 阻擋準備，public health／配置不算授權。操作與安全邊界見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)；Secret migration／sourceCI／唯讀證據見現行交接，待辦只在 TODO §7.3.3。#25仍是最新 actual Built-in 部署，實際準備／private transport／Employee 授權／Windows／正式切換待驗收。

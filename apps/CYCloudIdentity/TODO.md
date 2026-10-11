@@ -37,13 +37,14 @@
 - [x] Deployment audit source 348185fb 四項 CI 通過並合併 #384；read-only development #123（38110828710）及實際 0.3.6 upgrade #124（38111211344）通過，部署 head 56c27685 與已測 source tree 相同。原七個 migration 無 pending／未寫 remote schema、FK 清潔、原 vars／bindings／Secret names／hashed authority metadata／history counts 保留，health 與 synthetic invalid Session 拒絕正常。恢復參考 UTC checkpoint 2026-10-11T04:20:13.295Z；無 bootstrap／Secret replacement／D1 restore。private RPC／真實 Employee 與原 Device 另行驗收。
 - [x] CY Web governance PR #145 合併 main a0cb4675；七個 manifest mirror 與 canonical 1.0.3 bytes 相同，CY Web consumer 維持相容 1.0.2，沒有 Web runtime／部署變更。
 
-- [x] Isolated temporary consumer transport probe source／tests：secret-gated route、default Fetcher／named RPC 同一 Provider、固定 synthetic invalid Session／unavailable scope；不建帳號／Session／grant／D1，成功／失敗以 owner nonce／bindings 核對後清理，不改原 Provider Secret／authority。
-- [x] Probe 最終 source 4dc28ff6／#391 已通過 Governance、Provider Check、兩個 deployment PR validate；13 項 controller／Worker 回歸涵蓋 multipart、local zero-mutation failure、partial upload／route failure 清理與 owner／target／D1 拒絕。只保留一條 local bundle → controlled API upload 路徑，CLI hint 中間層已移除。
-- [x] 同一 probe owner 補上固定 platform response 分類與當前 Token 唯讀驗證／可讀 policy hint；不公開原始 body／headers／IDs，不列出或修改 Token，不為診斷擴權。#393 source 5dc0c4f7 四項 exact-head CI／完整 78 項 Provider tests／21 項 focused regression 通過並合併；可讀權限名稱僅供診斷，不能當授權證據。
-- [ ] 真實 private binding transport／deny 驗收：latest [development #139](https://github.com/simonliu1118-byte/CYapps/actions/runs/38119760514)（5dc0c4f7）validate／原 Provider preflight 通過；account Token active，自身 policy GET HTTP 403／9109 不可讀。Temporary Worker upload 仍回 HTTP 403（JSON envelope／Cloudflare markers，無 numeric API code、無 intermediary-denial marker），未到 Fetcher／RPC。Temporary Worker absence confirmed、Provider deploy／post-check skipped、私有檔案清除。#136 及更早 runs 僅為失敗診斷歷史。
-- [ ] 若受控既有版本路徑仍被拒絕，管理者在 Cloudflare 核對既有 development Token 的目標 account／Worker upload 與 cleanup 能力及 API 拒絕紀錄；現有工具沒有 Token 管理讀写連線，自身 policy 不可讀不等於缺少 Worker-write。不為診斷增加 Token-read 權限、不自行擴權、不盲目重跑；有可驗證的授權／配置修正後才重跑隔離 probe。詳細證據／邊界見 docs/DEVELOPMENT_DEPLOYMENT.md。
-
-- [ ] 使用者確認全部裝置已關閉並批准原 development 受控驗證：沿用 CYInvoice development owner 與同一 probe controller，上傳 `deploy=false` 的短效版本、保留 active Built-in／原 D1／Secrets／路由，僅刪已確認 owner 且未部署的 probe version；source tests 與 actual run／cleanup 證據分開。Optional approved scope fingerprint／enablement 不代替 Employee／Device 授權。詳見 DEVELOPMENT_DEPLOYMENT 的既有版本段落。
+- [x] 歷史 #19／#21／#23 原 consumer Built-in／D1／Workspace／Device token hashes／history／FK 安全核對；測試版本無D1、未部署、已過期。DELETE403→404／10339未解決，不算transport成功。歷史source/run證據集中 docs/DEVELOPMENT_DEPLOYMENT.md。
+- [x] 依使用者最新定案，移除 remote probe／cleanup controller、測試Worker與workflow modes／branches；保留 expired history，停止重試／擴權。CI只作本地synthetic驗證，不上傳測試程式。
+- [x] CYInvoice exact-active-source真實business部署：#402六CI全通過並合併；actual #25（38134710138）原Cloud0.9.2／storage13／Built-in／Workspace／Device hashes／history／FK／routes保留，before/after expired probe仍1個；無test upload／DELETE／Secret replacement／authority switch。精確source/tree/recovery evidence見docs/DEVELOPMENT_DEPLOYMENT.md。三個old branch refs已停放到無probe入口的#402 tree。
+- [x] CYInvoice 既有部署 owner 新增 prepare-cyid source，Built-in／原 Workspace 保留，僅 approved bindings／scope 準備；source／本地回歸完成，無 remote test upload／CYID D1／authority switch。技術操作見 CYInvoice Cloud README。
+- [x] 共通 deployment input／Invoice scope resolver follow-up source：四個 workflows 共用 Provider-name Secret；Invoice 只讀 Provider active Worker metadata／original business D1，不讀 Identity D1、不借 CYACC scope，不重建 Workspace；Provider drift 阻擋。本地回歸通過，CI 依 PR。
+- [ ] 共通 CYID_WORKER_NAME Variable→Secret 一次搬移／唯讀 preflight 驗證後才合併，舊 vars 暫留供未更新 deployment branches；確認 Provider Invoice 專屬兩 scope／registered enabled Application與Workspace 後執行真實 prepare／history acceptance。#25仍為最新 actual，private transport／Employee 授權另驗收。
+- [ ] 實際private Fetcher／named RPC與App Access／Role／原Windows裝置驗收，使用真實consumer功能；不再增加遠端probe入口。配對／範圍／Free量測與正式切換仍獨立gate。
+- [ ] Temporary Workers Admin移除由使用者確認；不增加權限。刪除10339留歷史／非目前部署阻塞。
 
 ## Optional consumer invalidation source
 
@@ -147,6 +148,3 @@ The user explicitly deferred real Email acceptance and asked that the checklist 
 - [ ] Production source release readiness and explicit authorization; existing provisioning success does not close Email/browser/restore gates.
 
 Prerequisites for later Email tests: user-designated controlled inbox, explicit recipient/account-creation authority, secure login/OTP collection and user handoff for new permanent credential entry. No credentials or real recipient addresses belong in Public documents. CY Web's business backup target remains R2 + GCS under its own approved architecture; independent App/scope/credentials must be preserved.
-
-
-2026-10-11 受控版本驗證更新：#395 source b3e60f70 六項 PR CI 通過並合併；actual CYInvoice development #17（38121460188）原 preflight／undeployed version upload 成功，但 owned-version DELETE 回 Cloudflare JSON 403，版本 absence 未確認。舊 post-check 將最新上傳的無 D1 probe metadata 當成 active runtime 而中止；不代表資料庫被刪除，也不把被 cleanup error 蓋住的 request result 算通過。現行 audit 修正為讀取 single 100% active version、清除 secret 值後比對，重查 deployment 穩定；同一 helper 被 probe owner 重用，retained probe 未清前禁止再上傳／一般 deploy。read-only preflight 增加原 history／health after-check 及 retained-probe 無 D1／未部署／到期檢查。source CI／actual active readback 待補，Cloudflare version delete 權限／拒絕原因需管理端處理，正式切換保持未完成。證據見 Provider DEVELOPMENT_DEPLOYMENT。

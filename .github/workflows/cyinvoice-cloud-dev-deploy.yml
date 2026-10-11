@@ -5,20 +5,19 @@ on:
     paths:
       - 'apps/CYInvoice/cloud/**'
       - '.github/workflows/cyinvoice-cloud-dev-deploy.yml'
-      - 'apps/CYCloudIdentity/scripts/private-binding-probe*.mjs'
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Preflight, additive Built-in deploy, or undeployed private-binding version'
+        description: 'Preflight, Built-in deployment, or CYID binding preparation with Built-in retained'
         type: choice
-        options: [preflight, deploy, binding-version]
+        options: [preflight, deploy, prepare-cyid]
         default: preflight
         required: true
   push:
     branches:
       - cyinvoice/cloud-dev-preflight
       - cyinvoice/cloud-dev-deploy
-      - cyinvoice/cloud-dev-binding-version
+      - cyinvoice/cloud-dev-prepare-cyid
 
 permissions:
   contents: read
@@ -61,11 +60,8 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
-      CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
-      IDENTITY_APPLICATION_ID: ${{ vars.IDENTITY_APPLICATION_ID }}
-      IDENTITY_WORKSPACE_ID: ${{ vars.IDENTITY_WORKSPACE_ID }}
-      IDENTITY_CYINVOICE_WORKSPACE_ID: ${{ vars.IDENTITY_CYINVOICE_WORKSPACE_ID }}
+      CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
+      CYINVOICE_DEPLOYMENT_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.ref == 'refs/heads/cyinvoice/cloud-dev-prepare-cyid' && 'prepare-cyid' || github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy' && 'deploy' || 'preflight') }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@v7
@@ -81,17 +77,16 @@ jobs:
           node scripts/deployment-preflight.mjs before "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
 
       - name: Validate preserved development config before mutation
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        if: env.CYINVOICE_DEPLOYMENT_MODE != 'preflight'
         run: |
           set -euo pipefail
-          node --input-type=module -e 'import fs from "node:fs"; if (JSON.parse(fs.readFileSync(process.argv[1], "utf8")).retainedProbeCount !== 0) { console.error("Retained probe version blocks deployment; resolve owned-version cleanup before inheriting runtime secrets."); process.exit(1); }' "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
           if ! npx wrangler deploy --dry-run --config wrangler.deploy.generated.jsonc --outdir "$RUNNER_TEMP/cyinvoice-deploy-bundle" > "$RUNNER_TEMP/cyinvoice-private-bundle.log" 2>&1; then
             echo 'Preserved development config bundle validation failed; no remote mutation performed.'
             exit 1
           fi
 
       - name: Apply reviewed forward migration to original development D1
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        if: env.CYINVOICE_DEPLOYMENT_MODE == 'deploy'
         env:
           CI: 'true'
         run: |
@@ -103,34 +98,13 @@ jobs:
           echo 'Reviewed forward migrations applied to the original development D1.'
 
       - name: Deploy additive development Worker with CYID disabled
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        if: env.CYINVOICE_DEPLOYMENT_MODE != 'preflight'
         run: |
           set -euo pipefail
-          if ! npx wrangler deploy --config wrangler.deploy.generated.jsonc > "$RUNNER_TEMP/cyinvoice-private-deploy.log" 2>&1; then
-            echo 'Development deployment failed. Keep CYID disabled; diagnose the current Worker/version before retrying.'
-            exit 1
-          fi
-          echo 'Additive development Worker deployed; no CYID authority switch or secret replacement.'
+          node scripts/deployment-preflight.mjs deploy "$RUNNER_TEMP/cyinvoice-deploy-audit.json" "$RUNNER_TEMP/cyinvoice-deploy-bundle/app.js"
 
       - name: Verify source version, API compatibility and original history
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
-        run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
-
-      - name: Install pinned shared probe bundle dependencies
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-version')
-        working-directory: apps/CYCloudIdentity
-        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
-
-      - name: Verify private binding using an undeployed version of the original consumer
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-version')
-        run: node ../../CYCloudIdentity/scripts/private-binding-probe.mjs existing-version "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
-
-      - name: Verify original Cloud and history after version probe
-        if: always() && ((github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-version'))
-        run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
-
-      - name: Verify active Cloud and history without deployment
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-preflight') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'preflight')
+        if: always()
         run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
 
       - name: Remove private generated files
