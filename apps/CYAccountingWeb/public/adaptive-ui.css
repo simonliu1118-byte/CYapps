@@ -7716,8 +7716,8 @@
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
-    height: 30px !important;
-    min-height: 30px !important;
+    height: var(--desktop-header-control-height, 30px) !important;
+    min-height: var(--desktop-header-control-height, 30px) !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     line-height: 1 !important;
@@ -7728,8 +7728,8 @@
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
-    min-height: 30px !important;
-    height: 30px !important;
+    min-height: var(--account-identity-height, 30px) !important;
+    height: var(--account-identity-height, 30px) !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     line-height: 1 !important;
@@ -7742,7 +7742,7 @@
   #currentUser .current-user-role {
     display: inline-flex !important;
     align-items: center !important;
-    line-height: 1 !important;
+    line-height: var(--account-identity-line-height, 1) !important;
   }
 
   /* Settings managers use one canonical semantic renderer. */
@@ -9692,7 +9692,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster {
   background: #fff !important;
 }
 
-html[data-viewport="desktop"] .cy-account-cluster #currentUser,
+html[data-viewport="desktop"] .cy-account-cluster .current-user,
 html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .current-user {
   display: flex !important;
   align-items: center !important;
@@ -9717,7 +9717,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .curre
   color: #39495a !important;
   font-size: var(--account-identity-font-size, 12px) !important;
   font-weight: 600 !important;
-  line-height: 1 !important;
+  line-height: var(--account-identity-line-height, 1) !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
 }
@@ -9736,7 +9736,7 @@ html[data-tablet-layout]:not([data-tablet-layout=""]) .cy-account-cluster .curre
   color: #6f7c89 !important;
   font-size: var(--account-identity-font-size, 11px) !important;
   font-weight: 600 !important;
-  line-height: 1 !important;
+  line-height: var(--account-identity-line-height, 1) !important;
   white-space: nowrap !important;
 }
 
@@ -11678,8 +11678,13 @@ html[data-tablet-layout="portrait"]:not([data-tablet-layout=""]) .entry-kind-swi
 /* Desktop business workspace. Touch presentation and canonical writers remain
    shared; only field placement, compact shortcuts and edit widths differ. */
 @media (min-width: 1024px) {
+  html[data-viewport="desktop"] .topbar {
+    --desktop-header-control-height: 34px;
+  }
   html[data-viewport="desktop"] .cy-account-cluster {
     --account-identity-font-size: 13px;
+    --account-identity-height: 32px;
+    --account-identity-line-height: 18px;
   }
   html[data-viewport="desktop"] .entry-card .section-title,
   html[data-viewport="desktop"] .entry-card .title-with-badge {

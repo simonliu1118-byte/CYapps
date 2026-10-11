@@ -173,7 +173,8 @@ for (const name of [
   assert.doesNotMatch(source, /(?:V|v)(?:11|12|13|14|15|16|17|18|181)(?=[A-Za-z0-9_-])/, name + ' must use functional internal identifiers');
 }
 assert.doesNotMatch(read('public/backup-ui.js'), /V0\.18\.[01]/, 'backup UI must not own historical app version display');
-assert.ok(html.includes('<span class="version">V' + read('VERSION').trim() + '</span>'), 'index.html must own the canonical visible version');
+const displayVersion = `V${read('VERSION').trim()}${Number(read('BUILD').trim()) > 0 ? ` Build ${Number(read('BUILD').trim())}` : ''}`;
+assert.ok(html.includes(`<span class="version">${displayVersion}</span>`), 'index.html must own the canonical visible version and build');
 assert.match(appJs, /setLedgerLoadingState\(true\)/, 'month loading must expose an interaction-blocking busy state');
 assert.match(appJs, /requestId === cyTransactionRequestId\) setLedgerLoadingState\(false\)/, 'only the current month request may clear the busy state');
 assert.match(read('public/excel-export-ui.js'), /navigator\.share/, 'mobile Excel export must prefer the native share sheet');
