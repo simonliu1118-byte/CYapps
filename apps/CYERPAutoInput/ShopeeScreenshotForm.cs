@@ -24,6 +24,8 @@ internal sealed class ShopeeScreenshotForm : Form
     private readonly List<Shot> _shots = [];
     private readonly FlowLayoutPanel _cards = new();
     private readonly Label _summary = new();
+    private readonly ProgressBar _progress = new() { Visible = false, Style = ProgressBarStyle.Continuous, Width = 260, Height = 16, Anchor = AnchorStyles.Right };
+    private readonly Label _progressText = new() { Visible = false, AutoSize = true, Anchor = AnchorStyles.Right, ForeColor = CyVisualTheme.TextSecondary };
     private readonly CyPrimaryButton _apply = new();
 
     public ShopeeShotResult? Result { get; private set; }
@@ -82,7 +84,17 @@ internal sealed class ShopeeScreenshotForm : Form
 
         _summary.Dock = DockStyle.Fill;
         _summary.TextAlign = ContentAlignment.MiddleLeft;
-        root.Controls.Add(_summary, 0, 2);
+        // Summary on the left; while the auto scan reads, a progress bar on the right.
+        var status = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
+        status.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        status.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        status.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        status.Controls.Add(_summary, 0, 0);
+        _progressText.Margin = new Padding(8, 7, 8, 0);
+        _progress.Margin = new Padding(0, 7, 0, 0);
+        status.Controls.Add(_progressText, 1, 0);
+        status.Controls.Add(_progress, 2, 0);
+        root.Controls.Add(status, 0, 2);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(4, 8, 4, 0) };
         _apply.Text = "帶入表單";
@@ -199,13 +211,25 @@ internal sealed class ShopeeScreenshotForm : Form
         var owner = Owner;
         var ownerOpacity = owner?.Opacity ?? 1;
         ShopeePageScanner.Result? result = null;
+        var mouseLock = (PhysicalMouseLock?)null;
+        void Restore()
+        {
+            mouseLock?.Dispose();
+            mouseLock = null;
+            if (owner is not null && !owner.IsDisposed) owner.Opacity = ownerOpacity;
+            if (!IsDisposed) { Opacity = 1; Activate(); }
+        }
         try
         {
             Opacity = 0;
             if (owner is not null) owner.Opacity = 0;
-            using (PhysicalMouseLock.Engage(_log))
-                result = await new ShopeePageScanner(_ocr, _log).ScanAsync(browser,
-                    () => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, CancellationToken.None);
+            mouseLock = PhysicalMouseLock.Engage(_log);
+            result = await new ShopeePageScanner(_ocr, _log).ScanAsync(browser,
+                () => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, CancellationToken.None,
+                // Back to this window as soon as the page is captured, with a progress bar for
+                // the reading still to do (user, 2026-10-11).
+                scrolled: () => { Restore(); ShowProgress("辨識中…", 0, 1); },
+                readProgress: new Progress<(int Done, int Total)>(p => ShowProgress($"辨識中… {p.Done}/{p.Total}", p.Done, p.Total + 1)));
         }
         catch (Exception ex)
         {
@@ -214,15 +238,16 @@ internal sealed class ShopeeScreenshotForm : Form
         }
         finally
         {
-            if (owner is not null && !owner.IsDisposed) owner.Opacity = ownerOpacity;
-            if (!IsDisposed) { Opacity = 1; Activate(); }
+            Restore();
             _capturing = false;
         }
-        if (result is null || IsDisposed) { DisposeCaptures(result); return; }
+        if (result is null || IsDisposed) { HideProgress(); DisposeCaptures(result); return; }
 
+        ShowProgress("判讀中…", 1, 1);
         foreach (var section in result.Sections)
             await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines);
         DisposeCaptures(result);
+        HideProgress();
         if (result.Cancelled)
             MessageBox.Show(this, "已停止自動擷取。可以按「開始」重來，或用「框選截圖」補上缺的部分後按「帶入表單」。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         else if (result.Problems.Count > 0)
@@ -237,6 +262,25 @@ internal sealed class ShopeeScreenshotForm : Form
             if (r is null) return;
             foreach (var c in r.Captures) c.Image.Dispose();
         }
+    }
+
+    private void ShowProgress(string text, int value, int maximum)
+    {
+        if (IsDisposed) return;
+        _progress.Maximum = Math.Max(1, maximum);
+        _progress.Value = Math.Clamp(value, 0, _progress.Maximum);
+        _progressText.Text = text;
+        _progress.Visible = _progressText.Visible = true;
+        UseWaitCursor = true;
+        _progress.Refresh();
+        _progressText.Refresh();
+    }
+
+    private void HideProgress()
+    {
+        if (IsDisposed) return;
+        _progress.Visible = _progressText.Visible = false;
+        UseWaitCursor = false;
     }
 
     /// <summary>

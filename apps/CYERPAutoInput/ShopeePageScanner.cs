@@ -59,7 +59,10 @@ internal sealed class ShopeePageScanner
         return titled != 0 ? titled : browser;
     }
 
-    public async Task<Result> ScanAsync(nint browser, Func<bool> stopRequested, CancellationToken cancellationToken)
+    /// <param name="scrolled">Called once the browser is no longer needed (scrolling done), before the reads finish.</param>
+    /// <param name="readProgress">Reads finished so far and in all.</param>
+    public async Task<Result> ScanAsync(nint browser, Func<bool> stopRequested, CancellationToken cancellationToken,
+        Action? scrolled = null, IProgress<(int Done, int Total)>? readProgress = null)
     {
         var result = new Result();
         if (NativeMethods.IsIconic(browser)) NativeMethods.ShowWindow(browser, 9 /* SW_RESTORE */);
@@ -158,7 +161,14 @@ internal sealed class ShopeePageScanner
             // Park the cursor on the page's empty left margin so no hover effect changes the next capture.
             NativeMethods.SetCursorPos(area.Left + 12, wheelPoint.Y);
         }
-        foreach (var r in reads) await r.Read;
+        // The page is captured; the user gets CY back while the reads finish (user, 2026-10-11).
+        scrolled?.Invoke();
+        for (var i = 0; i < reads.Count; i++)
+        {
+            readProgress?.Report((i, reads.Count));
+            await reads[i].Read;
+        }
+        readProgress?.Report((reads.Count, reads.Count));
         PlaceFinishedReads();
 
         // The fixed band (browser bar, Shopee's header) is only known after the first scroll;
