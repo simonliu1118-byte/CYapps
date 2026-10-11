@@ -187,7 +187,8 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] CY Web 七個 manifest mirror 已同步 main canonical 1.0.3（governance #145，main a0cb4675，Governance #243／deploy PR validation #136 通過）；其 consumer 維持支援窗內 1.0.2，不改 Web runtime。
 - [x] Provider development 0.3.6 code-only upgrade：#384 source 348185fb 四項 CI 通過，preflight #123／實際 upgrade #124 通過；原七個 migration、vars／bindings／Secret names／hashed authority／history counts／FK 保留，invalid Session 拒絕正常；UTC recovery reference 2026-10-11T04:20:13.295Z。沒有 Secret replacement／remote migration／bootstrap／authority cutover。
 - [ ] Private named RPC 與既有 consumer 實際 binding／帳號授權驗收，依下列 staging scope／Windows gate；Provider health 不等於該能力已 exercised。
-- [ ] 隔離 consumer probe source／回歸已完成，待精確 CI／actual run／清理確認：先以隔離 consumer probe 驗證 private IDENTITY／IDENTITY_AUTHORITY 指向同一 development provider 的 default Fetcher／named RPC transport；只送固定 synthetic invalid Session／不存在 scope，不建立帳號、Session、grant 或直接讀 CYID D1，產物與敏感設定不公開。這只能驗 transport／deny，不能代替正向授權。
+- [x] 隔離 consumer probe source 4dc28ff6／#391 四項 CI 與 13 項回歸通過；最終只保留 local bundle → controlled API 路徑，無 D1／帳號／Session／grant，owner／target／D1 範圍檢查後清理，私人產物不公開。
+- [ ] 實際 private IDENTITY／IDENTITY_AUTHORITY transport／deny：development #136 的原 Provider preflight 通過，但 temporary Worker upload HTTP 403、無 API code，暫時 Worker absence 已確認；未執行原 Provider deploy。先核對受保護的隔離 target／upload／cleanup 能力及拒絕原因，再驗 default Fetcher／named RPC；不自行擴權，不把 mock、健康檢查或失敗 run 當 live binding 成功。證據見 Provider DEVELOPMENT_DEPLOYMENT.md／現行交接；正向授權仍需下一項。
 - [ ] 確認隔離 staging 資源及部署權限／Free 用量、核准的 Application／兩 Workspace 配對與 Employee／App Access／Role／Email readiness，再在隔離 scope 驗正向與變更／撤銷／outage；不猜正式對應或在原業務資料上造 synthetic 帳號。
 - [ ] staging、RC AA／AB／AC 與原 A/B/C 完成後提出正式切換／回復方案；正式 tag／Release 版本身分另依 PROJECT_RULES 明確處理。
 

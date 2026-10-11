@@ -9,10 +9,10 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `d82b9009539a7127fd8c9a90fb40deef27b0825a`；#380／#384／#385 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
+| main | `90f6fc92ce844646a555e8cb5d087bdab949a744`（本次文件整理前）；#380／#384～#391 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
 | 已完成工程 PR | [#380](https://github.com/simonliu1118-byte/CYapps/pull/380) 已合併；精確 head `46723a89` 七項 CI 通過，工程包 Windows #280 |
 | 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
-| 本輪分支 | `cyinvoice/feature-cyid-consumer`；整合最新 main、PR #216 head 1e6d4137 與 PR #379 handoff c0fe1b84 |
+| 本輪工作線 | CYInvoice 功能已合併 main；CYID 升級／probe tooling 獨立接續，不再把歷史 feature branch 當未合併停點 |
 | 工程版本 | **V2.6.19 Build 0**；查無買方名稱可留空，來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
@@ -39,7 +39,7 @@ V2.6.18／BUILD 1，同一開票 bug 補修；本地回歸與精確 head CI／�
 
 #380 精確功能 head 46723a89 七項 CI 全綠後合併 main 59d63b67；Windows 工程包 #280 是買方名稱修改前版本。#384 deployment audit source 348185fb 四項 CI 通過並合併，development preflight #123 與 actual code-only upgrade #124 成功；部署 commit 56c27685 與 tested tree 相同。Provider development **0.3.6**／canonical **1.0.3**／minimum **1.0.0**，七個原 migration 無 pending、未寫 schema，原 vars／DB／rate limits／bindings／Secret names／hashed authority metadata／history counts／FK 保留，synthetic invalid Session 拒絕正常。UTC recovery reference 2026-10-11T04:20:13.295Z，可回查 Cloudflare Time Travel／Worker history，非 restore rehearsal；無 bootstrap／Secret replacement／authority 切換。
 
-CY Web governance #145 已合併 main a0cb4675，七個 mirror 與 main canonical 1.0.3 完全 byte-match，consumer 維持相容 1.0.2，不改 Web runtime／部署。CYInvoice development Cloud 0.9.2／storage 13／Built-in 保留；Provider health 不代表 private RPC transport／實際 App Access／原 Windows Device 已驗收。沿用 provider deployment owner 新增 binding-probe mode：暫時 secret-gated consumer Worker、無 D1／帳號／grant，fixed invalid Session／不存在 scope；CLI/config/key 不公開，owner nonce／同 provider services 核對後清理。新 source 本地回歸後仍待精確 CI／actual run，不把 mock 當 live。
+CY Web governance #145 已合併 main a0cb4675，七個 mirror 與 main canonical 1.0.3 完全 byte-match，consumer 維持相容 1.0.2，不改 Web runtime／部署。CYInvoice development Cloud 0.9.2／storage 13／Built-in 保留；Provider health 不代表 private RPC transport／實際 App Access／原 Windows Device 已驗收。沿用 provider deployment owner 新增 binding-probe mode：暫時 secret-gated consumer Worker、無 D1／帳號／grant，fixed invalid Session／不存在 scope；CLI/config/key 不公開，owner nonce／同 provider services 核對後清理。最終 probe source 4dc28ff6／#391 的四項 CI 與 13 項回歸已通過；[actual development #136](https://github.com/simonliu1118-byte/CYapps/actions/runs/38113320985) 原 Provider preflight 通過，但 temporary Worker upload HTTP 403（無 API code），已確認暫時 Worker 不存在、原 Provider deploy skipped。因此 private transport 尚未通過；需要核對受保護的隔離 consumer target／上傳與清理能力及拒絕原因，不能自行擴權或改原 Provider。最終路徑為 pinned Wrangler local bundle → owner-scoped multipart API；不保留 CLI hint 相容路徑。維運證據／邊界見 [Provider development guide](../../CYCloudIdentity/docs/DEVELOPMENT_DEPLOYMENT.md)，唯一待辦仍在 TODO §7.3.3。
 
 ### 分段上線準備 — 2026-10-11
 

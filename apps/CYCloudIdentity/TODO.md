@@ -38,13 +38,15 @@
 - [x] CY Web governance PR #145 合併 main a0cb4675；七個 manifest mirror 與 canonical 1.0.3 bytes 相同，CY Web consumer 維持相容 1.0.2，沒有 Web runtime／部署變更。
 
 - [x] Isolated temporary consumer transport probe source／tests：secret-gated route、default Fetcher／named RPC 同一 Provider、固定 synthetic invalid Session／unavailable scope；不建帳號／Session／grant／D1，成功／失敗以 owner nonce／bindings 核對後清理，不改原 Provider Secret／authority。
-- [ ] Probe 精確 source CI 與實際遠端執行／temporary Worker 刪除確認；不以本地 mock 冒充真實 binding。
+- [x] Probe 最終 source 4dc28ff6／#391 已通過 Governance、Provider Check、兩個 deployment PR validate；13 項 controller／Worker 回歸涵蓋 multipart、local zero-mutation failure、partial upload／route failure 清理與 owner／target／D1 拒絕。只保留一條 local bundle → controlled API upload 路徑，CLI hint 中間層已移除。
+- [ ] 真實 private binding transport／deny 驗收：latest [development #136](https://github.com/simonliu1118-byte/CYapps/actions/runs/38113320985)（4dc28ff6）原 Provider preflight 通過，但 temporary Worker upload 回 HTTP 403、無數字 API code；temporary Worker absence 已確認，Provider deploy／post-check skipped。不能宣稱 default Fetcher／named RPC 已 exercised；前次 #126／#128／#130／#132／#134 均為失敗診斷歷史。
+- [ ] 取得既有 development Environment 可操作的隔離 consumer target／建立與清理能力並核對 403 拒絕原因；不自行擴大 API Token 權限、公開 credential、修改原 Provider 或把真實業務 target 當可拋棄 probe。詳細 API／清理邊界見 docs/DEVELOPMENT_DEPLOYMENT.md。
 
 ## Optional consumer invalidation source
 
 - [x] Contract 1.0.3 / source 0.3.6 adds the private named RPC entrypoint; indexed current-state comparison, no positive grant/Session/verifier export. Canonical semantics are in CONSUMER_INTEGRATION_STANDARD §11.1; impact BACKWARD_COMPATIBLE, minimum remains 1.0.0.
 - [x] Real-provider synthetic D1 regression through CYInvoice covers Role, enabled, App Access, credential version, deleted ID, unavailable application and revoke during provider outage; existing provider test suite remains required.
-- [ ] Isolated staging with the named entrypoint binding and actual consumer usage/cost measurement. Source changes do not mean deployed 0.3.6.
+- [ ] Isolated staging with the named entrypoint binding, positive authorization and actual consumer usage/cost measurement. Development 0.3.6 is deployed (#124); transport/deny proof alone does not establish real consumer authorization.
 - [x] CY Web cross-repository manifest byte-sync 1.0.3（#145）；同 repo consumers 直接讀 canonical，不新增 mirror。
 - [ ] Coordinated private binding／consumer acceptance and production approval. Existing CY Web/CYACC compatibility is retained; this task does not modify their runtime.
 
