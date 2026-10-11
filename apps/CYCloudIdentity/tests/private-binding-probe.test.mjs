@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import worker from '../scripts/private-binding-probe-worker.mjs';
 import { main, platformResponse } from '../scripts/private-binding-probe.mjs';
 
@@ -24,7 +25,7 @@ test('platform diagnostics project fixed facts from JSON, HTML and intermediary 
 
 function fixture() {
   let fetches = 0, rpc = 0;
-  const env = { PROBE_AUTH_KEY: 'synthetic-gate', EXPECTED_VERSION: '0.3.6', INVALID_SESSION: 'synthetic-invalid',
+  const env = { PROBE_AUTH_KEY: 'synthetic-gate', PROBE_EXPIRES_AT:String(Date.now() + 60000), EXPECTED_VERSION: '0.3.6', INVALID_SESSION: 'synthetic-invalid',
     CORE_APPLICATION: 'APP_TEST', SYNTHETIC_WORKSPACE: 'workspace-synthetic-missing', SYNTHETIC_APPLICATION: 'APP_SYNTHETIC_MISSING', SYNTHETIC_EMPLOYEE: 'employee-synthetic-missing',
     IDENTITY: { async fetch(url, args) { fetches++;
       if (url.endsWith('/health')) return Response.json({ ok: true, service: 'cycloud-identity', environment: 'development', serviceVersion: '0.3.6' });
@@ -45,8 +46,19 @@ test('unauthenticated and wrong-route probes perform no provider call', async ()
 test('private probe verifies default Fetcher and named RPC without exporting a scope/principal', async () => {
   const f = fixture();
   const result = await worker.fetch(request(), f.env);
-  assert.deepEqual(await result.json(), { ok: true, defaultFetcher: true, invalidSessionDenied: true, namedInvalidationRpc: true });
+  assert.deepEqual(await result.json(), { ok: true, defaultFetcher: true, invalidSessionDenied: true, namedInvalidationRpc: true, scopeConfigured:false, scopeAvailable:null });
   assert.deepEqual(f.counts(), { fetches: 2, rpc: 1 });
+});
+
+test('expired probe credentials perform no provider call; approved scope readiness never returns a principal', async () => {
+  const expired=fixture(); expired.env.PROBE_EXPIRES_AT=String(Date.now()-1);
+  assert.equal((await worker.fetch(request(),expired.env)).status,404); assert.deepEqual(expired.counts(),{fetches:0,rpc:0});
+  const f=fixture(); f.env.TARGET_WORKSPACE='private-approved-workspace'; f.env.TARGET_APPLICATION='PRIVATE_APPROVED_APPLICATION';
+  const prior=f.env.IDENTITY_AUTHORITY.invalidateCache;
+  f.env.IDENTITY_AUTHORITY.invalidateCache=input => input.authorities.length ? prior(input) :
+    ({workspaceId:input.workspaceId,applicationId:input.applicationId,available:true,invalidated:[]});
+  const result=await worker.fetch(request(),f.env);
+  assert.deepEqual(await result.json(),{ok:true,defaultFetcher:true,invalidSessionDenied:true,namedInvalidationRpc:true,scopeConfigured:true,scopeAvailable:true});
 });
 test('wrong provider version, accepted Session, positive grant and missing RPC fail closed', async () => {
   for (const type of ['version', 'session', 'grant', 'rpc']) {
@@ -155,3 +167,108 @@ test('production scope is refused before any platform request or mutation', asyn
   const never = async () => { assert.fail('must not call platform/command'); };
   await assert.rejects(main(env, never, never, { name: env.CYID_WORKER_NAME, vars: { APP_ENV: 'production', CORE_ACCOUNT_APPLICATION_ID: 'APP_TEST' } }), /PROBE_DEVELOPMENT_SCOPE_REQUIRED/);
 });
+
+// Exercise the existing-Worker path independently of temporary Worker creation.
+// Synthetic API responses retain the original traffic deployment, D1 and secrets.
+for (const scenario of ['success', 'approved-scope', 'scope-unavailable', 'scope-result', 'wrong-workspace', 'expired-audit',
+  'settings-changed', 'deployment-changed', 'no-preview', 'provider-as-consumer', 'provider-d1', 'bundle',
+  'upload-denied', 'partial-upload', 'wrong-owner', 'wrong-target', 'new-d1', 'version-in-use', 'wrong-url']) {
+  test(`undeployed existing consumer version: ${scenario}`, async t => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cyid-version-probe-'));
+    const consumer = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../CYInvoice/cloud/wrangler.jsonc'), 'utf8'));
+    const env = { CLOUDFLARE_API_TOKEN: 'PRIVATE_API_TOKEN', CLOUDFLARE_ACCOUNT_ID: 'PRIVATE_ACCOUNT',
+      CYID_WORKER_NAME: 'private-provider-development', CYID_D1_DATABASE_ID: 'private-provider-d1', RUNNER_TEMP: directory };
+    const original = { name: env.CYID_WORKER_NAME, vars: { APP_ENV: 'development', CORE_ACCOUNT_APPLICATION_ID: 'PRIVATE_CORE_APP' } };
+    const originalId = '11111111-1111-1111-1111-111111111111', probeId = '22222222-2222-2222-2222-222222222222';
+    const initialBindings = [{type:'plain_text',name:'APP_ENV',text:'development'}, {type:'plain_text',name:'CYID_ENABLED',text:'false'},
+      {type:'d1',name:'DB',id:'private-original-consumer-d1'}, {type:'secret_text',name:'PRIVATE_ORIGINAL_SECRET'}];
+    const originalDeployment = [{version_id:originalId,percentage:100}];
+    const hash = createHash('sha256').update(JSON.stringify('PRIVATE_ORIGINAL_WORKSPACE')).digest('hex');
+    const audit = {worker:consumer.name,databaseId:'private-original-consumer-d1',capturedAt:new Date().toISOString(),
+      settings:{bindings:initialBindings},deployments:{deployments:[{versions:originalDeployment}]},state:{workspaces:{[hash]:'private-fingerprint'}}};
+    if (scenario === 'expired-audit') audit.capturedAt = new Date(Date.now()-21*60*1000).toISOString();
+    if (scenario === 'provider-as-consumer') audit.worker = original.name;
+    if (scenario === 'provider-d1') env.CYID_D1_DATABASE_ID = audit.databaseId;
+    if (['approved-scope','scope-unavailable','wrong-workspace'].includes(scenario)) Object.assign(env, {
+      IDENTITY_CYINVOICE_WORKSPACE_ID:scenario === 'wrong-workspace' ? 'PRIVATE_OTHER_WORKSPACE' : 'PRIVATE_ORIGINAL_WORKSPACE',
+      IDENTITY_WORKSPACE_ID:'PRIVATE_APPROVED_IDENTITY_WORKSPACE',IDENTITY_APPLICATION_ID:'PRIVATE_APPROVED_APP'});
+    const operations = [], logs = [];
+    let config, uploaded, deleted = false, probeRequests = 0;
+    t.mock.method(console,'log',value=>logs.push(value));
+    const command = async (name,args) => {
+      assert.equal(name,process.execPath);
+      config = JSON.parse(fs.readFileSync(args[4],'utf8'));
+      assert.equal(config.name,consumer.name); assert.equal(config.d1_databases,undefined);
+      assert.equal(fs.statSync(args[4]).mode & 0o777,0o600);
+      if (scenario === 'bundle') throw new Error('PRIVATE BUNDLE FAILURE');
+      fs.writeFileSync(path.join(args[6],'private-binding-probe-worker.js'),'export default {};');
+    };
+    const ok = result => Response.json({success:true,result});
+    const missing = () => new Response(null,{status:404});
+    const script = `/workers/scripts/${consumer.name}`, versions = `/workers/workers/${consumer.name}/versions`;
+    const fetcher = async (url,args={}) => {
+      const u = new URL(url), p = u.pathname.replace(/^\/client\/v4\/accounts\/PRIVATE_ACCOUNT/,''), method = args.method ?? 'GET';
+      operations.push({p,method,query:u.search});
+      if (url.includes('.workers.dev/')) {
+        probeRequests++;
+        assert.equal(url,`https://${probeId.slice(0,8)}-${consumer.name}.synthetic.workers.dev/probe`);
+        assert.equal(args.headers['x-probe-key'],uploaded.bindings.find(b=>b.name==='PROBE_AUTH_KEY').text);
+        const scopeConfigured = !!env.IDENTITY_WORKSPACE_ID;
+        return Response.json({ok:true,defaultFetcher:true,invalidSessionDenied:true,namedInvalidationRpc:true,
+          scopeConfigured:scenario === 'scope-result' ? true : scopeConfigured,
+          scopeAvailable:scopeConfigured ? scenario !== 'scope-unavailable' : null});
+      }
+      if (p === `/workers/scripts/${original.name}/settings`) return ok({bindings:Object.entries(original.vars).map(([name,text])=>({type:'plain_text',name,text}))});
+      if (p === '/workers/subdomain') return ok({subdomain:'synthetic'});
+      if (p === '/tokens/verify') return ok({status:'active'});
+      if (p === script+'/settings') return ok({bindings:scenario === 'settings-changed' ? [] : initialBindings});
+      if (p === script+'/subdomain') return ok({enabled:true,previews_enabled:scenario !== 'no-preview'});
+      if (p === script+'/deployments') return ok({deployments:[{versions:scenario === 'deployment-changed' ? [] :
+        scenario === 'version-in-use' && uploaded ? [{version_id:probeId,percentage:100}] : originalDeployment}]});
+      if (p === versions && method === 'GET') { assert.equal(u.search,'?per_page=100'); return ok(uploaded ? [{id:probeId,annotations:uploaded.annotations}] : []); }
+      if (p === versions && method === 'POST') {
+        assert.equal(u.search,'?deploy=false'); assert.equal(args.headers['content-type'],'application/json');
+        const input = JSON.parse(args.body);
+        assert.equal(input.bindings.some(b=>b.type==='d1' || b.name==='PRIVATE_ORIGINAL_SECRET'),false);
+        assert.deepEqual(input.bindings.filter(b=>b.type==='service').map(b=>[b.name,b.service,b.entrypoint]),
+          [['IDENTITY',original.name,undefined],['IDENTITY_AUTHORITY',original.name,'ConsumerAuthoritySync']]);
+        assert.equal(Buffer.from(input.modules[0].content_base64,'base64').toString(),'export default {};');
+        assert.equal(input.modules[0].name,input.main_module);
+        assert.equal(input.bindings.filter(b=>b.type==='secret_text').length,1);
+        assert.equal(input.bindings.find(b=>b.type==='secret_text').name,'PROBE_AUTH_KEY');
+        uploaded = scenario === 'upload-denied' ? undefined : input;
+        if (['upload-denied','partial-upload'].includes(scenario)) return Response.json({success:false,errors:[{code:10000,message:'PRIVATE PLATFORM FAILURE'}]},{status:403});
+        return ok({id:probeId,urls:scenario === 'wrong-url' ? ['https://private-external.example/'] : [`https://${probeId.slice(0,8)}-${consumer.name}.synthetic.workers.dev`]});
+      }
+      if (p === versions+'/'+probeId && method === 'GET') {
+        if (!uploaded) return missing();
+        return ok({annotations:uploaded.annotations,bindings:uploaded.bindings.map(b=>
+          scenario === 'wrong-owner' && b.name==='PROBE_OWNER_NONCE' ? {...b,text:'other-owner'} :
+          scenario === 'wrong-target' && b.type==='service' ? {...b,service:'other-provider'} : b)
+          .concat(scenario === 'new-d1' ? [{type:'d1',name:'UNEXPECTED'}] : [])});
+      }
+      if (p === versions+'/'+probeId && method === 'DELETE') { deleted = true; uploaded = undefined; return ok({}); }
+      assert.fail(`Unexpected API method/path: ${method} ${p}`);
+    };
+    const success = ['success','approved-scope','scope-unavailable'].includes(scenario);
+    const noMutation = ['wrong-workspace','expired-audit','settings-changed','deployment-changed','no-preview','provider-as-consumer','provider-d1','bundle'].includes(scenario);
+    const refuseDelete = ['wrong-owner','wrong-target','new-d1','version-in-use'].includes(scenario);
+    try {
+      // Omit originalConfig to cover the real CLI's private provider-settings read.
+      if (success) await main(env,fetcher,command,undefined,audit);
+      else await assert.rejects(main(env,fetcher,command,undefined,audit), /^Error: (?:PROBE_[A-Z0-9_]+|PRIVATE_BINDING_TRANSPORT_FAILED)$/);
+      assert.equal(deleted,!noMutation && !refuseDelete && scenario !== 'upload-denied');
+      assert.equal(operations.filter(o=>o.method!=='GET').every(o=>o.p===versions || o.p===versions+'/'+probeId),true);
+      assert.equal(operations.some(o=>/\/d1\/|\/identity\//.test(o.p)),false);
+      if (noMutation) assert.equal(operations.some(o=>o.method!=='GET'),false);
+      assert.equal(fs.readdirSync(directory).length,0);
+      assert.doesNotMatch(logs.join('\n'),/PRIVATE_|private-provider|private-original|11111111|22222222/);
+      assert.equal(logs.join('\n').includes(consumer.name),false);
+      if (scenario === 'wrong-url') assert.equal(probeRequests,0);
+      if (success) assert.match(logs.join('\n'),/Owned probe version absence confirmed/);
+      if (scenario === 'approved-scope') assert.match(logs.join('\n'),/configured=true; available=true/);
+      if (scenario === 'scope-unavailable') assert.match(logs.join('\n'),/configured=true; available=false/);
+      if (config && env.IDENTITY_WORKSPACE_ID) assert.equal(config.vars.TARGET_WORKSPACE,env.IDENTITY_WORKSPACE_ID);
+    } finally { fs.rmSync(directory,{recursive:true,force:true}); }
+  });
+}

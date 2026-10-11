@@ -5,18 +5,20 @@ on:
     paths:
       - 'apps/CYInvoice/cloud/**'
       - '.github/workflows/cyinvoice-cloud-dev-deploy.yml'
+      - 'apps/CYCloudIdentity/scripts/private-binding-probe*.mjs'
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Read-only preflight or additive Built-in development deployment'
+        description: 'Preflight, additive Built-in deploy, or undeployed private-binding version'
         type: choice
-        options: [preflight, deploy]
+        options: [preflight, deploy, binding-version]
         default: preflight
         required: true
   push:
     branches:
       - cyinvoice/cloud-dev-preflight
       - cyinvoice/cloud-dev-deploy
+      - cyinvoice/cloud-dev-binding-version
 
 permissions:
   contents: read
@@ -61,6 +63,9 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
       CYID_D1_DATABASE_ID: ${{ vars.CYID_D1_DATABASE_ID }}
+      IDENTITY_APPLICATION_ID: ${{ vars.IDENTITY_APPLICATION_ID }}
+      IDENTITY_WORKSPACE_ID: ${{ vars.IDENTITY_WORKSPACE_ID }}
+      IDENTITY_CYINVOICE_WORKSPACE_ID: ${{ vars.IDENTITY_CYINVOICE_WORKSPACE_ID }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@v7
@@ -108,6 +113,19 @@ jobs:
 
       - name: Verify source version, API compatibility and original history
         if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-deploy') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy')
+        run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
+
+      - name: Install pinned shared probe bundle dependencies
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-version')
+        working-directory: apps/CYCloudIdentity
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+
+      - name: Verify private binding using an undeployed version of the original consumer
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-version')
+        run: node ../../CYCloudIdentity/scripts/private-binding-probe.mjs existing-version "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
+
+      - name: Verify original Cloud and history after version probe
+        if: always() && ((github.event_name == 'push' && github.ref == 'refs/heads/cyinvoice/cloud-dev-binding-version') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'binding-version'))
         run: node scripts/deployment-preflight.mjs after "$RUNNER_TEMP/cyinvoice-deploy-audit.json"
 
       - name: Remove private generated files
