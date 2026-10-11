@@ -4,7 +4,7 @@ SMART ERP 自動輸入工具，以鼎新 SMART ERP `COPI08` 銷貨單建立作�
 
 ## 版本
 
-目前版本見 `VERSION`／`BUILD`（`V0.2.1` 起）。C# 重寫線已於 2026-10-11 由 PR #104（V0.2.0 Build 31）合併進 `main`，取代舊 Go 線；仍是工程測試版，尚未正式 Release。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
+目前版本見 `VERSION`／`BUILD`（目前 `V0.2.2`）。C# 重寫線已於 2026-10-11 由 PR #104（V0.2.0 Build 31）合併進 `main`，取代舊 Go 線；仍是工程測試版，尚未正式 Release。逐版變更見 `CHANGELOG.md`，目前狀態與待辦見 `WORK_HANDOFF.md`。
 
 ## 主要流程
 
