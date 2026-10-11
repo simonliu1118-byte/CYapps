@@ -144,6 +144,7 @@ internal static partial class ShopeeScreenshot
     public static (List<ShopeeShotItem> Items, List<ShopeeShotGroup> Groups) ParseItems(
         IReadOnlyList<OcrBox> lines, int imageWidth, List<string> problems)
     {
+        lines = WithLoneGlyphDigits(lines);
         var items = new List<ShopeeShotItem>();
         var groups = new List<ShopeeShotGroup>();
         var anchors = IndexAnchors(lines, imageWidth).OrderBy(l => l.Top).ToList();
@@ -254,6 +255,7 @@ internal static partial class ShopeeScreenshot
     /// </summary>
     public static List<CellProbe> MissingCellProbes(IReadOnlyList<OcrBox> lines, int imageWidth, int imageHeight)
     {
+        lines = WithLoneGlyphDigits(lines);
         var probes = new List<CellProbe>();
         var numbers = lines.Where(l => l.CenterX > imageWidth * 0.5 && TryNumber(l.Text, out _, digitsOnly: true)).ToList();
         var layout = ResolveColumns(lines, imageWidth);
@@ -555,6 +557,15 @@ internal static partial class ShopeeScreenshot
     }
 
     /// <summary>A re-read cell as digits: OCR's look-alikes of 1 and 0 are mapped; anything else is rejected.</summary>
+    /// <summary>
+    /// A lone "1" or "2" (編號 or 數量) that the OCR read as a look-alike glyph — "一", "-",
+    /// "乙" (user's PC, 2026-10-11) — becomes the digit, so it needs no re-read.
+    /// </summary>
+    private static List<OcrBox> WithLoneGlyphDigits(IReadOnlyList<OcrBox> lines) =>
+        lines.Select(l => Compact(l.Text).Length == 1 && !TryNumber(l.Text, out _, digitsOnly: true) && TryIndexDigits(l.Text, out var digits)
+            ? l with { Text = digits }
+            : l).ToList();
+
     /// <summary>A 編號 as OCR reads the lone glyph: digits, or a look-alike of 1 or 2.</summary>
     internal static bool TryIndexDigits(string text, out string digits)
     {

@@ -173,7 +173,13 @@ internal sealed class ShopeeScreenshotForm : Form
             using var glyphs = F2BatchCellLocator.TrimToGlyphs(normalized);
             if (glyphs is null) continue;
             var line = await _ocr.RecognizeLineAsync(glyphs, CancellationToken.None);
-            if (!ShopeeScreenshot.TryProbeDigits(line.Text, out var digits)) continue;
+            // A doubtful read is worse than none: a "1" re-read as "7" at 0.64 made up a 第 7 項
+            // (user's PC, 2026-10-11); 0.95 is typical for a clean digit.
+            if (line.Confidence < 0.8f || !ShopeeScreenshot.TryProbeDigits(line.Text, out var digits))
+            {
+                _log.Info("shopee-shot", $"  probe {probe.Purpose} rejected text={_log.Value(line.Text)} confidence={line.Confidence:0.000}");
+                continue;
+            }
             shot.Lines.Add(new OcrBox(digits, probe.Left, probe.Top, probe.Width, probe.Height));
             added++;
         }

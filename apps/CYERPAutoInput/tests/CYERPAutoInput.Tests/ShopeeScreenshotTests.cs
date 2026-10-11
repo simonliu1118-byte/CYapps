@@ -282,6 +282,23 @@ public class ShopeeScreenshotTests
     }
 
     [Fact]
+    public void Reads_look_alike_glyphs_in_the_quantity_column()
+    {
+        // The PC's boxes (diagnostic log, 2026-10-11): 編號 and 數量 "1" both read as "一".
+        List<OcrBox> lines =
+        [
+            B("350", 780, 54, 24, 16), B("350", 937, 54, 27, 16), B("一", 69, 56, 8, 11), B("一", 870, 56, 8, 11),
+            B("規格:測試", 180, 68, 143, 17), B("商品選項貨號：X00206", 181, 88, 134, 15)
+        ];
+        Assert.Empty(ShopeeScreenshot.MissingCellProbes(lines, 1036, 139));
+        var problems = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 1036, problems);
+        Assert.Empty(problems);
+        Assert.Equal([new ShopeeShotItem(1, "X00206", 350, 1, 350)], items);
+        Assert.Equal([new ShopeeShotGroup(1, 350, 350)], groups);
+    }
+
+    [Fact]
     public void Proposes_rereading_lone_digits_the_detector_missed()
     {
         // As the PC read it: the 編號 "1" and the 數量 "1" of the first row are missing.
