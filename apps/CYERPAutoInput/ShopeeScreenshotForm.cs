@@ -141,6 +141,10 @@ internal sealed class ShopeeScreenshotForm : Form
             shot.Kind = ShopeeScreenshot.Classify(shot.Lines);
             if (shot.Kind == ShopeeShotKind.Items) await ReadMissingCellsAsync(shot);
             _log.Info("shopee-shot", $"screenshot recognized kind={shot.Kind} lines={shot.Lines.Count} size={image.Width}x{image.Height}");
+            // Diagnostic mode only (local log): what the OCR read and where, to explain a misparse.
+            if (_log.Diagnostic)
+                foreach (var line in shot.Lines)
+                    _log.Info("shopee-shot", $"  box x={line.Left} y={line.Top} w={line.Width} h={line.Height} text={_log.Value(line.Text)}");
         }
         catch (Exception ex)
         {

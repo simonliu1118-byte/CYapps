@@ -223,6 +223,43 @@ public class ShopeeScreenshotTests
     }
 
     [Fact]
+    public void Takes_the_products_sum_when_the_struck_original_was_missed()
+    {
+        // As the PC read it (2026-10-11): group 1 shows 2,716 but its struck 2,800 was not read.
+        List<OcrBox> items =
+        [
+            B("Any 2 enjoy 1% off", 63, 29, 124), B("600", 772, 85, 32), B("3", 864, 87, 10, 13),
+            B("商品選項貨號：X00154", 160, 108, 137), B("1", 59, 130, 11, 14), B("2,716", 908, 122, 40),
+            B("500", 772, 150, 32), B("2", 864, 152, 10, 13), B("商品選項貨號：X00376", 160, 207, 137),
+            B("Any 2 enjoy 1% off", 63, 248, 124), B("2", 57, 310, 14), B("500", 772, 310, 32), B("2", 864, 312, 10, 13),
+            B("990", 920, 307, 30), B("1,000", 912, 326, 40), B("商品選項貨號：X00417", 160, 352, 137)
+        ];
+        List<OcrBox> amounts = [B("訂單金額", 752, 64), B("NT$3706", 922, 65, 70), B("買家總支付金額", 706, 140), B("NT$3706", 889, 137, 70)];
+        var result = Read(OrderShot(), [items], amounts);
+        Assert.Empty(result.Problems);
+        Assert.Equal(
+            [new ImportedItem("X00154", "3", "600"), new ImportedItem("X00376", "2", "500"), new ImportedItem("X00417", "2", "500"), new ImportedItem("P900", "1", "-94")],
+            result.Order!.Items);
+    }
+
+    [Fact]
+    public void Ignores_stray_digits_in_the_index_column()
+    {
+        // Header present; a stray "5" read above the first row (the 號 of 編號) is no 編號.
+        List<OcrBox> items =
+        [
+            B("編", 80, 15, 18), B("單價", 790, 40, 34), B("數量", 860, 40, 34), B("小計", 945, 40, 34), B("5", 82, 60, 10, 14),
+            B("1", 84, 125, 9, 13), B("200", 790, 125, 30), B("1", 880, 125, 9, 13), B("200", 960, 125, 30), B("商品選項貨號：X00234", 197, 160, 137),
+            B("2", 84, 232, 10, 13), B("150", 790, 232, 30), B("1", 880, 232, 9, 13), B("150", 960, 232, 30), B("商品選項貨號：X00292", 197, 267, 137),
+            B("3", 84, 340, 10, 13), B("100", 790, 340, 30), B("1", 880, 340, 9, 13), B("100", 960, 340, 30), B("商品選項貨號：X00151", 197, 375, 137)
+        ];
+        var problems = new List<string>();
+        var (_, groups) = ShopeeScreenshot.ParseItems(ShopeeScreenshot.MergeLines(items), 1040, problems);
+        Assert.Empty(problems);
+        Assert.Equal([1, 2, 3], groups.Select(g => g.Index));
+    }
+
+    [Fact]
     public void Proposes_rereading_lone_digits_the_detector_missed()
     {
         // As the PC read it: the 編號 "1" and the 數量 "1" of the first row are missing.

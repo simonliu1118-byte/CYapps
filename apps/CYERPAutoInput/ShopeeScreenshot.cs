@@ -216,6 +216,17 @@ internal static partial class ShopeeScreenshot
             if (values.Count == 0) { problems.Add($"第 {index} 項讀不到小計。"); continue; }
             groups.Add(new ShopeeShotGroup(index, values[0], values[^1]));
         }
+        // A discounted 小計 shows the struck-out original below the price, and the OCR can miss
+        // that struck text (2,716 read, 2,800 missed; user's PC, 2026-10-11). Products adding up
+        // to more than the price shown means there was a discount, so their sum is the original;
+        // a missed product would make the sum smaller, which the checks still catch.
+        for (var i = 0; i < groups.Count; i++)
+        {
+            var g = groups[i];
+            var sum = items.Where(it => it.Group == g.Index).Sum(it => it.Amount);
+            // At most half off: a misread quantity (450 × 450) must still fail the checks.
+            if (g.Shown == g.Original && sum > g.Shown && g.Shown * 2 >= sum) groups[i] = g with { Original = sum };
+        }
 
         // A 數量 the detector and the re-read both missed (a lone "1"; user's PC, 2026-10-11).
         // When the product is alone under its 編號, its 小計 (original) ÷ 單價 is the quantity;
@@ -294,6 +305,24 @@ internal static partial class ShopeeScreenshot
         var candidates = lines
             .Where(l => l.CenterX < imageWidth * 0.2 && TryNumber(l.Text, out _, digitsOnly: true) && Compact(l.Text).Length <= 3)
             .ToList();
+        // Shopee centres the 編號 and the 小計 in the same cell, so a real 編號 lines up with a
+        // 小計 number; stray digits elsewhere in the column made up a 「第 5 項」 (user's PC,
+        // 2026-10-11). Without a 小計 column, it must at least sit beside a product.
+        var headerBottom = lines.Where(l => Compact(l.Text) is "單價" or "數量" or "小計").Select(l => l.Bottom).DefaultIfEmpty(int.MinValue).Max();
+        candidates = candidates.Where(c => c.Top > headerBottom).ToList();
+        if (ResolveColumns(lines, imageWidth)?.Subtotal is { } subtotalX)
+        {
+            var subtotals = lines.Where(l => Math.Abs(l.CenterX - subtotalX) <= ColumnTolerance && TryNumber(l.Text, out _, digitsOnly: true)).ToList();
+            if (subtotals.Count > 0)
+                candidates = candidates
+                    .Where(c => subtotals.Any(n => Math.Abs(n.CenterY - c.CenterY) <= Math.Max(25, n.Height * 1.5)))
+                    .ToList();
+        }
+        else
+        {
+            var codeLines = lines.Where(l => CodeLabelPattern().IsMatch(Compact(l.Text))).ToList();
+            candidates = candidates.Where(c => codeLines.Any(code => Math.Abs(code.CenterY - c.CenterY) <= 120)).ToList();
+        }
         if (candidates.Count == 0) return candidates;
         var x = IndexColumnX(lines) ?? candidates.Min(c => c.CenterX);
         return candidates.Where(c => Math.Abs(c.CenterX - x) <= 15).ToList();
