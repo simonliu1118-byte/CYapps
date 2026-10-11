@@ -683,7 +683,8 @@ internal sealed class MainForm : Form
         _log.Info("app", $"session employee code set length={_sessionEmployeeCode.Length}");
     }
 
-    private async Task StartAutomationAsync()
+    /// <param name="fullAuto">Shopee full auto (user, 2026-10-11): save and print whatever the settings say.</param>
+    private async Task StartAutomationAsync(bool fullAuto = false)
     {
         if (_automationCts is not null) return;
         var snapshot = CreateSnapshot(out var validationError);
@@ -705,7 +706,7 @@ internal sealed class MainForm : Form
         await RunGuardedAsync(async token =>
         {
             if (abandonFirst) await AbandonCurrentErpDocumentAsync(token);
-            var result = await RunDocumentAsync(snapshot, _settings.AutoSave, token);
+            var result = await RunDocumentAsync(snapshot, fullAuto || _settings.AutoSave, token, print: fullAuto ? true : null);
             var notes = new List<string>();
             if (order is not null)
             {
@@ -799,12 +800,12 @@ internal sealed class MainForm : Form
         SetStatus("ERP：已回到檢視");
     }
 
-    private async Task<AutomationRunResult> RunDocumentAsync(FormSnapshot snapshot, bool autoSave, CancellationToken token)
+    private async Task<AutomationRunResult> RunDocumentAsync(FormSnapshot snapshot, bool autoSave, CancellationToken token, bool? print = null)
     {
         var progress = new Progress<string>(SetStatus);
         AutomationRunResult result;
         // The physical mouse is ignored while CY types (user, 2026-10-11); Esc releases it.
-        using (PhysicalMouseLock.Engage(_log)) result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && _settings.AutoPrint);
+        using (PhysicalMouseLock.Engage(_log)) result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
         if (result.HandedOff.Length > 0)
         {
             SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 單頭已輸入，轉人工處理（未輸入明細、未儲存）");
@@ -855,21 +856,21 @@ internal sealed class MainForm : Form
     /// One Shopee order read from screenshots onto the form (user, 2026-10-11): no batch and
     /// no automatic start; anything to check is listed and the user starts the input.
     /// </summary>
-    private Task ImportShopeeScreenshotsAsync()
+    private async Task ImportShopeeScreenshotsAsync()
     {
-        if (_automationCts is not null) return Task.CompletedTask;
+        if (_automationCts is not null) return;
         if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
         {
             MessageBox.Show(this, "請先在「設定」填入蝦皮的銷貨單別與客戶代號。", "蝦皮訂單截圖輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return Task.CompletedTask;
+            return;
         }
         var ledger = LoadLedger();
-        if (ledger is null) return Task.CompletedTask;
+        if (ledger is null) return;
 
         var mapping = new ShopeeShotMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
         using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log);
-        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return Task.CompletedTask;
+        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return;
 
         LoadOrder(order);
         var notes = dialog.Result.Problems.ToList();
@@ -877,12 +878,24 @@ internal sealed class MainForm : Form
         if (order.TrackingNumber.Length == 0) notes.Add("物流單號空白：取得後請填到送貨地址(一)。");
         SetStatus($"蝦皮訂單 {order.OrderSn} 已帶入表單；請確認後按「開始輸入 ERP」");
         _log.Info("shopee-shot", $"order loaded items={order.Items.Count} notes={notes.Count}");
+        // Full auto (user, 2026-10-11): a clean order goes straight on to ERP, save and print;
+        // with notes the user decides, defaulting to stop.
+        if (_settings.ShopeeFullAuto)
+        {
+            if (notes.Count > 0 && MessageBox.Show(this,
+                    $"蝦皮訂單 {order.OrderSn} 已帶入表單，但有以下項目需要確認：\n\n" + string.Join("\n", notes.Select(n => "・" + n)) +
+                    "\n\n仍要繼續全自動輸入 ERP、儲存並列印嗎？（選「否」可先修改表單，再按「開始輸入 ERP」）",
+                    "蝦皮全自動", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+            _log.Info("shopee-shot", $"full auto continues to ERP order_notes={notes.Count}");
+            await StartAutomationAsync(fullAuto: true);
+            return;
+        }
         // A clean order only gets the status line (user, 2026-10-11); notes still need a look.
         if (notes.Count > 0)
             MessageBox.Show(this,
                 $"蝦皮訂單 {order.OrderSn} 已帶入表單，請先確認以下項目，補齊後再按「開始輸入 ERP」：\n\n" + string.Join("\n", notes.Select(n => "・" + n)),
                 "蝦皮訂單截圖輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        return Task.CompletedTask;
     }
 
     private async Task ImportMoAsync()

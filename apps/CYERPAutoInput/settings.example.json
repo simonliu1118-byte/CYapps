@@ -3,6 +3,7 @@
   "AdvancedMode": false,
   "AutoSave": false,
   "AutoPrint": false,
+  "ShopeeFullAuto": false,
   "FirstRowWarehouseEnabled": false,
   "FirstRowWarehouse": "",
   "ShopeeOrderType": "",
