@@ -2,7 +2,7 @@
 
 本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-11（Asia/Taipei）。main 的 CYInvoice 為 V2.6.10 Build 2；目前工程候選版 **V2.6.18 Build 1** 加入重複開立失敗修正並保留 CYID Consumer source，前置 V2.6.14 PR #216 仍未合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
+更新日期：2026-10-11（Asia/Taipei）。main 已合併 #380 的 **V2.6.18 Build 1**；目前工程候選版 **V2.6.19 Build 0** 調整查無買方名稱留空行為，保留 CYID Consumer。#216／#379 head 已包含於 main ancestry，不重複合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
@@ -12,6 +12,7 @@ Cloud source／原 development 0.9.2／API 1／compatibility marker 8／storage 
 
 | 優先 | 未完成工作 | 驗收位置／依賴 |
 | --- | --- | --- |
+| 目前 | V2.6.19 查無買方名稱可人工輸入／留空以統編送出 | RC D.12；本地與精確 CI／工程包後驗收 |
 | 目前 | V2.6.14 裝置管理、使用版本／最後使用與改名；保留 V2.6.13 介面 | RC Z／Y；source CI 已通過、人工尚待驗收 |
 | 目前 | V2.6.12 邀請首次加入與首次說明 | RC X；舊包重開成功有使用者證據，修正版首次成功待實機 |
 | 目前 | V2.6.11 處理中／上傳問題分流、舊資料結案、Danger button／號碼隱藏 | RC W；Windows #258 通過，人工待測 |

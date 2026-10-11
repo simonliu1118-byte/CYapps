@@ -108,6 +108,9 @@ var tests = new (string Name, Action Run)[]
     ("MO raw export preserves specifications and member carrier", TestMoRawSpecifications),
     ("MO issue masks shared test-pool customer data", () => TestMoIssuePrivacyAsync().GetAwaiter().GetResult()),
     ("Coupang confirmation is reused and company test privacy uses AMEGO buyer", () => TestCoupangIssuePrivacyAsync().GetAwaiter().GetResult()),
+    ("manual and all imports send BAN for empty name after successful no-result lookup", () => TestMissingCompanyNameAsync().GetAwaiter().GetResult()),
+    ("uncertain BAN fallback does not become manual memory after recovery", () => TestMissingCompanyNameRecoveryAsync().GetAwaiter().GetResult()),
+    ("missing lookup and lookup service failure never use BAN fallback", () => TestMissingCompanyNameRefusalAsync().GetAwaiter().GetResult()),
     ("unresolved imported company name blocks before API", () => TestImportedLookupBlockAsync().GetAwaiter().GetResult()),
     ("consumer PDF uses style zero and same-day cache", () => TestConsumerPdfCacheAsync().GetAwaiter().GetResult()),
     ("company PDF caches each style and refreshes next day", () => TestCompanyPdfStylesAsync().GetAwaiter().GetResult()),
@@ -1245,6 +1248,100 @@ static async Task TestCoupangIssuePrivacyAsync()
     Equal("12345675", result.Record.BuyerIdentifier);
     Equal("人工醫院名稱", result.Record.BuyerName);
     Equal("真實酷澎商品", result.Record.Items[0].Description);
+}
+
+static async Task TestMissingCompanyNameAsync()
+{
+    foreach (var path in new[] { "manual", "manual-lookup", "mo", "mo-lookup", "coupang", "coupang-lookup", "digiwin" })
+    foreach (var name in new[] { "", "  ", "人工非營利名稱" })
+    {
+        using var temporary = new TemporaryDirectory();
+        var orderId = "MISSING-NAME-" + path;
+        var fake = new FakeGateway
+        {
+            BanException = path == "coupang" ? null : new AmegoApiException(99, "synthetic no matching name"),
+            BanResponse = new BanResponse(0, "", []),
+            IssueResponse = new IssueResponse(0, "", "MN12345678", 0, ""),
+            QueryResponse = ConfirmedQuery(orderId, "MN12345678", 100, 5, 105, 1),
+        };
+        var (service, repository) = TestService(temporary.Path, fake);
+        var settings = repository.Settings.LoadOrCreate();
+        settings.Environment = Environments.Production;
+        settings.ProductionInvoice = "12345675";
+        repository.Settings.SetProductionAppKey(settings, "TEST-KEY-NOT-REAL");
+        repository.Settings.Save(settings);
+        var lookup = new NameLookup(LookupSucceeded: true);
+        var item = new InvoiceItem { Description = "商品", Quantity = 1, UnitPrice = 105, Amount = 105 };
+        IssueResult result;
+        if (path.StartsWith("manual"))
+        {
+            var draft = CompanyDraft(orderId, name);
+            result = path == "manual" ? await service.IssueManualAsync(draft) : await service.IssueManualWithLookupAsync(draft, lookup);
+        }
+        else if (path.StartsWith("mo"))
+        {
+            var order = new MoOrder { OrderId = orderId, BuyerBan = "12345675", BuyerName = name, TotalAmount = 105 };
+            order.Items.Add(item);
+            result = path == "mo" ? await service.IssueMoAsync(order) : await service.IssueMoWithLookupAsync(order, lookup);
+        }
+        else if (path.StartsWith("coupang"))
+        {
+            var order = new CoupangOrder { OrderId = orderId, BuyerBan = "12345675", BuyerName = name, TotalAmount = 105 };
+            order.Items.Add(item);
+            result = path == "coupang" ? await service.IssueCoupangAsync(order) : await service.IssueCoupangWithLookupAsync(order, lookup);
+        }
+        else
+        {
+            var order = new DigiwinOrder { OrderId = orderId, BuyerBan = "12345675", BuyerName = name, TotalAmount = 105 };
+            order.Items.Add(item);
+            result = await service.IssueDigiwinWithLookupAsync(order, lookup);
+        }
+        Equal(true, result.Opened);
+        Equal(1, fake.IssueCalls);
+        var expected = name.Trim().Length == 0 ? "12345675" : name.Trim();
+        Equal("12345675", fake.LastIssue!.BuyerIdentifier);
+        Equal(expected, fake.LastIssue.BuyerName);
+        Equal(expected, result.Record.BuyerName);
+        Equal(expected, repository.Invoices.LoadOrCreate().Single().BuyerName);
+        Equal(name.Trim().Length != 0, result.Record.BuyerNameNeedsMemory);
+        Equal(name.Trim().Length != 0, repository.BuyerNames.TryLookup("12345675", out var remembered));
+        if (name.Trim().Length != 0) Equal(name.Trim(), remembered);
+    }
+}
+
+static async Task TestMissingCompanyNameRecoveryAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway { IssueException = new IOException("synthetic connection reset"), QueryException = new IOException("synthetic temporary failure") };
+    var (service, repository) = TestService(temporary.Path, fake);
+    var draft = CompanyDraft("MISSING-NAME-RECOVERY", "");
+    await ThrowsAsync<UnknownInvoiceResultException>(() => service.IssueManualWithLookupAsync(draft, new NameLookup(LookupSucceeded: true)));
+    Equal("", draft.BuyerName); // Auto transport fallback must not turn into a supplied manual name on retry.
+    var stored = repository.Invoices.LoadOrCreate().Single();
+    Equal("12345675", stored.BuyerName);
+    Equal(false, stored.BuyerNameNeedsMemory);
+    Equal(false, repository.BuyerNames.TryLookup("12345675", out _));
+    fake.QueryException = null;
+    fake.QueryResponse = ConfirmedQuery(TestApiOrderId(draft.OrderId), "MR12345678", 100, 5, 105, 1);
+    await service.RefreshAllAsync();
+    Equal(InvoiceStates.Opened, repository.Invoices.LoadOrCreate().Single().InvoiceState);
+    Equal(false, repository.BuyerNames.TryLookup("12345675", out _));
+}
+
+static async Task TestMissingCompanyNameRefusalAsync()
+{
+    using var temporary = new TemporaryDirectory();
+    var fake = new FakeGateway();
+    var (service, repository) = TestService(temporary.Path, fake);
+    await ThrowsAsync<InvalidOperationException>(() => service.IssueManualWithLookupAsync(CompanyDraft("UNRESOLVED", ""), new NameLookup()));
+    foreach (var error in new Exception[] { new IOException("synthetic transport failure"), new AmegoApiException(503, "unavailable"), new AmegoApiException(401, "denied") })
+    {
+        fake.BanException = error;
+        await ThrowsAsync<Exception>(() => service.IssueManualAsync(CompanyDraft("FAILED-LOOKUP", "")));
+    }
+    Equal(0, fake.IssueCalls);
+    Equal(0, repository.Invoices.LoadOrCreate().Count);
+    Equal(false, repository.BuyerNames.TryLookup("12345675", out _));
 }
 
 static async Task TestImportedLookupBlockAsync()
