@@ -8,6 +8,17 @@ import { stripVTControlCharacters } from 'node:util';
 const root = path.resolve(import.meta.dirname, '..');
 const requireValue = (condition, code) => { if (!condition) throw new Error(code); };
 const run = promisify(execFile);
+// Emit only words from this public, fixed vocabulary, never arbitrary CLI text.
+export function uploadHint(output, privateValues = []) {
+  const lines = stripVTControlCharacters(output).split(/\r?\n/);
+  const start = lines.findIndex(line => /\[ERROR\]|^Error:|npm (ERR|error)/.test(line));
+  if (start < 0) return 'NO_ERROR_LABEL';
+  let fatal = lines.slice(start, start + 8).join(' ');
+  for (const value of privateValues) if (typeof value === 'string' && value) fatal = fatal.replaceAll(value, ' ');
+  fatal = fatal.replace(/https?:\/\/\S+|[\w.+-]+@[\w.-]+\.[a-z]+|[\/\\][\w.\/\\-]+/gi, ' ');
+  const words = new Set('error a an account api are as assets authentication binding bindings build by cannot cloudflare compatibility configuration could credentials date denied deploy deployed deployment does environment entrypoint exceed failed fetch file found has invalid is limit maximum missing module must name no not npm on only permission request required script scripts service services support supported target the to token unavailable unknown upload version was with worker workers would you your'.split(' '));
+  return (fatal.toLowerCase().match(/[a-z]+/g) ?? []).filter(word => words.has(word)).slice(0, 45).join('_').toUpperCase() || 'NO_PUBLIC_HINT';
+}
 
 export async function main(env = process.env, fetcher = fetch, command = run, originalConfig) {
   requireValue(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN && env.CYID_WORKER_NAME && env.RUNNER_TEMP, 'PROBE_INPUTS_REQUIRED');
@@ -50,14 +61,16 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
       await command(process.execPath, [path.join(root, 'node_modules/wrangler/bin/wrangler.js'), 'deploy', '--config', configPath], { cwd: root, env, timeout: 120000, maxBuffer: 2 * 1024 * 1024 });
     } catch (error) {
       const output = stripVTControlCharacters(`${error?.stdout ?? ''}\n${error?.stderr ?? ''}`);
+      console.log(`PROBE_UPLOAD_HINT_${uploadHint(output, [worker, nonce, key, subdomain, original.name, env.CLOUDFLARE_ACCOUNT_ID, env.CLOUDFLARE_API_TOKEN, ...Object.values(config.vars)])}`);
       const code = output.match(/\[code:\s*(\d{1,6})\]/)?.[1];
       const childCode = Number.isInteger(error?.code) ? `EXIT_${error.code}`
         : ['ENOENT', 'EACCES', 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'].includes(error?.code) ? error.code
         : error?.killed === true ? 'TERMINATED' : 'UNKNOWN';
-      const category = /entry.?point|export/i.test(output) ? 'ENTRYPOINT' : /authenticat|permission|unauthorized|credentials/i.test(output) ? 'AUTHORIZATION'
-        : /configuration|config file/i.test(output) ? 'CONFIGURATION' : /compatibility/i.test(output) ? 'COMPATIBILITY' : /service|binding/i.test(output) ? 'SERVICE_BINDING'
-        : /fetch|network|connect|socket|ENOTFOUND/i.test(output) ? 'NETWORK' : /quota|limit exceeded/i.test(output) ? 'QUOTA'
-        : /worker.*name|name.*worker/i.test(output) ? 'WORKER_NAME' : /npm (ERR|error)/i.test(output) ? 'PACKAGE_RUNNER' : 'UNCLASSIFIED';
+      const hint = uploadHint(output);
+      const category = /entry.?point|export/i.test(hint) ? 'ENTRYPOINT' : /authenticat|permission|unauthorized|credentials/i.test(hint) ? 'AUTHORIZATION'
+        : /configuration|config file/i.test(hint) ? 'CONFIGURATION' : /compatibility/i.test(hint) ? 'COMPATIBILITY' : /service|binding/i.test(hint) ? 'SERVICE_BINDING'
+        : /fetch|network|connect|socket|ENOTFOUND/i.test(hint) ? 'NETWORK' : /quota|limit exceeded/i.test(hint) ? 'QUOTA'
+        : /worker.*name|name.*worker/i.test(hint) ? 'WORKER_NAME' : /npm (ERR|error)/i.test(hint) ? 'PACKAGE_RUNNER' : 'UNCLASSIFIED';
       throw new Error(code ? `PROBE_UPLOAD_FAILED_${code}` : `PROBE_UPLOAD_FAILED_${childCode}_${category}`);
     }
     console.log('Temporary probe Worker uploaded.');
