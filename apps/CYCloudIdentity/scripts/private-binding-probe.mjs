@@ -4,6 +4,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
+import { activeDeployment } from '../../CYInvoice/cloud/scripts/deployment-preflight.mjs';
 const root = path.resolve(import.meta.dirname, '..');
 const requireValue = (condition, code) => { if (!condition) throw new Error(code); };
 const run = promisify(execFile);
@@ -77,14 +78,16 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
       originalBindings?.filter(b => b.type === 'd1').length === 1 &&
       originalBindings.find(b => b.name === 'DB' && b.type === 'd1')?.id === consumerAudit.databaseId &&
       consumerAudit.databaseId !== env.CYID_D1_DATABASE_ID, 'PROBE_ORIGINAL_CONSUMER_SCOPE_REQUIRED');
-    const settings = await apiCall(prefix + '/settings');
-    requireValue(stable(settings.result?.bindings) === stable(originalBindings), 'PROBE_CONSUMER_SETTINGS_CHANGED');
-    deployments = (await apiCall(prefix + '/deployments')).result?.deployments?.[0]?.versions;
+    const active = await activeDeployment(async suffix => (await apiCall(suffix)).result, worker);
+    requireValue(stable(active.settings.bindings) === stable(originalBindings), 'PROBE_CONSUMER_SETTINGS_CHANGED');
+    deployments = active.deployments.deployments[0].versions;
     requireValue(Array.isArray(deployments) && deployments.length > 0 &&
       stable(deployments) === stable(consumerAudit.deployments?.deployments?.[0]?.versions), 'PROBE_CONSUMER_DEPLOYMENT_CHANGED');
     originalRoute = (await apiCall(prefix + '/subdomain')).result;
     requireValue(originalRoute?.enabled === true && originalRoute.previews_enabled === true, 'PROBE_EXISTING_VERSION_URL_REQUIRED');
-    requireValue(Array.isArray((await apiCall(versionPrefix + '?per_page=100')).result), 'PROBE_VERSION_CLEANUP_READ_REQUIRED');
+    const listed = (await apiCall(versionPrefix + '?per_page=100')).result;
+    requireValue(Array.isArray(listed), 'PROBE_VERSION_CLEANUP_READ_REQUIRED');
+    requireValue(!listed.some(v => /^CYID_BINDING_PROBE_[a-f0-9]{32}$/.test(v.annotations?.['workers/message'] ?? '')), 'PROBE_PREVIOUS_VERSION_REQUIRES_CLEANUP');
     console.log('Existing development consumer checked; active deployment and Built-in retained.');
   } else requireValue((await apiCall(prefix + '/settings')).absent === true, 'PROBE_NAME_NOT_NEW');
   const subdomain = (await apiCall('/workers/subdomain')).result?.subdomain;
@@ -192,6 +195,7 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
       (result.scopeConfigured ? typeof result.scopeAvailable === 'boolean' : result.scopeAvailable === null), 'PROBE_SCOPE_RESULT_INVALID');
     scopeResult = result;
     completed = true;
+    console.log('Private binding request evidence: defaultFetcher=true; invalidSessionDenied=true; namedInvalidationRpc=true. Cleanup must still pass.');
   } finally {
     try {
       if (mutationAttempted && consumerAudit) {
@@ -210,7 +214,8 @@ export async function main(env = process.env, fetcher = fetch, command = run, or
           requireValue((await apiCall(versionPrefix + '/' + versionId)).absent === true, 'PROBE_CLEANUP_NOT_CONFIRMED');
         }
         requireValue(stable((await apiCall(prefix + '/deployments')).result?.deployments?.[0]?.versions) === stable(deployments), 'PROBE_CONSUMER_DEPLOYMENT_CHANGED');
-        requireValue(stable((await apiCall(prefix + '/settings')).result?.bindings) === stable(originalBindings) &&
+        const active = await activeDeployment(async suffix => (await apiCall(suffix)).result, worker);
+        requireValue(stable(active.settings.bindings) === stable(originalBindings) &&
           stable((await apiCall(prefix + '/subdomain')).result) === stable(originalRoute), 'PROBE_CONSUMER_SETTINGS_CHANGED');
         console.log('Owned probe version absence confirmed; original deployment, bindings, secret names and routes unchanged.');
       } else if (mutationAttempted) {

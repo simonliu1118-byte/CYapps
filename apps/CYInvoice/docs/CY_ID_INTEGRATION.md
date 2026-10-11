@@ -379,3 +379,6 @@ Rolling upgrade 順序：在原 CYInvoice 業務 D1／Workspace 保留且 CYID f
 使用者確認當前全部裝置未使用，批准現在驗證。沿用既有 CYInvoice development workflow 及 CYID probe owner，以 `deploy=false` 上傳既有 consumer Worker 的短效測試版本；active Built-in 及原 Workspace／Device／Token／D1／Secrets 不切換，無新 authority／D1／帳號／Session／grant。Version URLs 必須已存在，不能為測試開啟所有舊版本預覽。只清除 nonce-owned、bindings 正確且未部署的版本；always-run post-check 核對原 consumer history。
 
 這一步只能證明 default Fetcher／named RPC transport／deny；protected approved scope 齊全且原 Workspace fingerprint 相符時，可額外確認 Workspace/Application enablement。缺值即 unknown，不猜配對、不直接讀 CYID D1。真實 Employee／App Access／Role、原 Windows Device continuity、離線／撤銷及正式切換仍須獨立验收。具體工具／actual-run 證據見 CYCloudIdentity DEVELOPMENT_DEPLOYMENT；待辦唯一入口仍為 CYInvoice TODO §7.3.3。
+
+
+受控 #17（38121460188）上傳成功但 owned-version delete 403，尚未通過 cleanup；無獨立 request proof，不計 transport／scope 成功。Audit 現行修正：固定實際 100% active deployment/version bindings，不能把 latest-upload `/settings` 當 runtime D1／Secrets。Retained probe 未清除前禁止再上傳與一般部署；唯讀核對原 active Cloud／history／expiration 後另補 actual evidence。原 authority 仍 Built-in，沒有正式切換或原裝置 reset。

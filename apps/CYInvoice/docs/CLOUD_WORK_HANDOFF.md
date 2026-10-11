@@ -43,6 +43,8 @@ CY Web governance #145 已合併 main a0cb4675，七個 mirror 與 main canonica
 
 2026-10-11 新授權：使用者確認全部裝置目前未使用，允許原 development 受控驗證。接續不替換 business handler；同一 CYInvoice development owner／CYID probe controller 以既有 Worker 的 undeployed version（explicit deploy=false）驗 transport，原 Built-in／D1／Workspace／Device／Token／Secrets／routes 保留。既有 Version URLs 必須已開，不能自動開 global preview。短效 probe-only secret、無 D1，確認 nonce／bindings／未部署後只刪測試版本；always-run 原 consumer history post-check。Optional approved Workspace fingerprint／enablement 不代替真實 Employee／App Access／Windows Device 驗收。Actual evidence 尚待，詳細 gate 見 Provider DEVELOPMENT_DEPLOYMENT，待辦仍由 TODO §7.3.3 維護。
 
+受控 #17 結果：#395 已通過六項 source CI；actual development 38121460188 preflight／undeployed version upload 成功，owned-version delete JSON403，未確認清除。舊 after-check 讀 latest-upload `/settings` 而見 probe 無 DB，不能據此判定原 D1 不見。現行同一 audit／probe owner 改讀實際 100% active version並重查穩定性；retained probe 未處理前禁再上傳或一般 deploy。唯讀 active Cloud／history／probe expiration readback 待補；transport request 因 cleanup exception 未獨立留下結果，不算驗收成功。細節／下一步見 Provider DEVELOPMENT_DEPLOYMENT，Workspace／Device 不 reset／rejoin。
+
 ### 分段上線準備 — 2026-10-11
 
 使用者委託逐步推進至 CYID 上線；先 preflight／保留 Built-in 的 additive Cloud，再隔離 staging／Windows 實機及可檢視的正式切換方案。PR #380 工程基準已合併；未因本次委託略過原 Workspace continuity、帳號／App Access／Role、private binding、回復及 Release gates。

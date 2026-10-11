@@ -147,3 +147,6 @@ The user explicitly deferred real Email acceptance and asked that the checklist 
 - [ ] Production source release readiness and explicit authorization; existing provisioning success does not close Email/browser/restore gates.
 
 Prerequisites for later Email tests: user-designated controlled inbox, explicit recipient/account-creation authority, secure login/OTP collection and user handoff for new permanent credential entry. No credentials or real recipient addresses belong in Public documents. CY Web's business backup target remains R2 + GCS under its own approved architecture; independent App/scope/credentials must be preserved.
+
+
+2026-10-11 受控版本驗證更新：#395 source b3e60f70 六項 PR CI 通過並合併；actual CYInvoice development #17（38121460188）原 preflight／undeployed version upload 成功，但 owned-version DELETE 回 Cloudflare JSON 403，版本 absence 未確認。舊 post-check 將最新上傳的無 D1 probe metadata 當成 active runtime 而中止；不代表資料庫被刪除，也不把被 cleanup error 蓋住的 request result 算通過。現行 audit 修正為讀取 single 100% active version、清除 secret 值後比對，重查 deployment 穩定；同一 helper 被 probe owner 重用，retained probe 未清前禁止再上傳／一般 deploy。read-only preflight 增加原 history／health after-check 及 retained-probe 無 D1／未部署／到期檢查。source CI／actual active readback 待補，Cloudflare version delete 權限／拒絕原因需管理端處理，正式切換保持未完成。證據見 Provider DEVELOPMENT_DEPLOYMENT。

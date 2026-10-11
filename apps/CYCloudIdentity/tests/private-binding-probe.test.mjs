@@ -172,7 +172,7 @@ test('production scope is refused before any platform request or mutation', asyn
 // Synthetic API responses retain the original traffic deployment, D1 and secrets.
 for (const scenario of ['success', 'approved-scope', 'scope-unavailable', 'scope-result', 'wrong-workspace', 'expired-audit',
   'settings-changed', 'deployment-changed', 'no-preview', 'provider-as-consumer', 'provider-d1', 'bundle',
-  'upload-denied', 'partial-upload', 'wrong-owner', 'wrong-target', 'new-d1', 'version-in-use', 'wrong-url']) {
+  'upload-denied', 'partial-upload', 'wrong-owner', 'wrong-target', 'new-d1', 'version-in-use', 'wrong-url', 'retained-version', 'delete-denied']) {
   test(`undeployed existing consumer version: ${scenario}`, async t => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cyid-version-probe-'));
     const consumer = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../CYInvoice/cloud/wrangler.jsonc'), 'utf8'));
@@ -221,11 +221,11 @@ for (const scenario of ['success', 'approved-scope', 'scope-unavailable', 'scope
       if (p === `/workers/scripts/${original.name}/settings`) return ok({bindings:Object.entries(original.vars).map(([name,text])=>({type:'plain_text',name,text}))});
       if (p === '/workers/subdomain') return ok({subdomain:'synthetic'});
       if (p === '/tokens/verify') return ok({status:'active'});
-      if (p === script+'/settings') return ok({bindings:scenario === 'settings-changed' ? [] : initialBindings});
+      if (p === versions+'/'+originalId) return ok({id:originalId,bindings:scenario === 'settings-changed' ? [] : initialBindings});
       if (p === script+'/subdomain') return ok({enabled:true,previews_enabled:scenario !== 'no-preview'});
       if (p === script+'/deployments') return ok({deployments:[{versions:scenario === 'deployment-changed' ? [] :
         scenario === 'version-in-use' && uploaded ? [{version_id:probeId,percentage:100}] : originalDeployment}]});
-      if (p === versions && method === 'GET') { assert.equal(u.search,'?per_page=100'); return ok(uploaded ? [{id:probeId,annotations:uploaded.annotations}] : []); }
+      if (p === versions && method === 'GET') { assert.equal(u.search,'?per_page=100'); return ok(uploaded ? [{id:probeId,annotations:uploaded.annotations}] : scenario === 'retained-version' ? [{id:probeId,annotations:{'workers/message':'CYID_BINDING_PROBE_'+'a'.repeat(32)}}] : []); }
       if (p === versions && method === 'POST') {
         assert.equal(u.search,'?deploy=false'); assert.equal(args.headers['content-type'],'application/json');
         const input = JSON.parse(args.body);
@@ -247,17 +247,20 @@ for (const scenario of ['success', 'approved-scope', 'scope-unavailable', 'scope
           scenario === 'wrong-target' && b.type==='service' ? {...b,service:'other-provider'} : b)
           .concat(scenario === 'new-d1' ? [{type:'d1',name:'UNEXPECTED'}] : [])});
       }
-      if (p === versions+'/'+probeId && method === 'DELETE') { deleted = true; uploaded = undefined; return ok({}); }
+      if (p === versions+'/'+probeId && method === 'DELETE') {
+        if (scenario === 'delete-denied') return Response.json({success:false,errors:[{message:'PRIVATE DELETE DENIAL'}]},{status:403});
+        deleted = true; uploaded = undefined; return ok({});
+      }
       assert.fail(`Unexpected API method/path: ${method} ${p}`);
     };
     const success = ['success','approved-scope','scope-unavailable'].includes(scenario);
-    const noMutation = ['wrong-workspace','expired-audit','settings-changed','deployment-changed','no-preview','provider-as-consumer','provider-d1','bundle'].includes(scenario);
+    const noMutation = ['wrong-workspace','expired-audit','settings-changed','deployment-changed','no-preview','provider-as-consumer','provider-d1','bundle','retained-version'].includes(scenario);
     const refuseDelete = ['wrong-owner','wrong-target','new-d1','version-in-use'].includes(scenario);
     try {
       // Omit originalConfig to cover the real CLI's private provider-settings read.
       if (success) await main(env,fetcher,command,undefined,audit);
-      else await assert.rejects(main(env,fetcher,command,undefined,audit), /^Error: (?:PROBE_[A-Z0-9_]+|PRIVATE_BINDING_TRANSPORT_FAILED)$/);
-      assert.equal(deleted,!noMutation && !refuseDelete && scenario !== 'upload-denied');
+      else await assert.rejects(main(env,fetcher,command,undefined,audit), /^Error: (?:PROBE_[A-Z0-9_]+|SINGLE_ACTIVE_DEPLOYMENT_REQUIRED|ACTIVE_[A-Z0-9_]+|PRIVATE_BINDING_TRANSPORT_FAILED)$/);
+      assert.equal(deleted,!noMutation && !refuseDelete && !['upload-denied','delete-denied'].includes(scenario));
       assert.equal(operations.filter(o=>o.method!=='GET').every(o=>o.p===versions || o.p===versions+'/'+probeId),true);
       assert.equal(operations.some(o=>/\/d1\/|\/identity\//.test(o.p)),false);
       if (noMutation) assert.equal(operations.some(o=>o.method!=='GET'),false);
@@ -268,6 +271,11 @@ for (const scenario of ['success', 'approved-scope', 'scope-unavailable', 'scope
       if (success) assert.match(logs.join('\n'),/Owned probe version absence confirmed/);
       if (scenario === 'approved-scope') assert.match(logs.join('\n'),/configured=true; available=true/);
       if (scenario === 'scope-unavailable') assert.match(logs.join('\n'),/configured=true; available=false/);
+      if (scenario === 'delete-denied') {
+        assert.match(logs.join('\n'),/Private binding request evidence:/);
+        assert.doesNotMatch(logs.join('\n'),/Owned probe version absence confirmed/);
+        assert.equal(operations.filter(o=>o.method==='DELETE').length,1);
+      }
       if (config && env.IDENTITY_WORKSPACE_ID) assert.equal(config.vars.TARGET_WORKSPACE,env.IDENTITY_WORKSPACE_ID);
     } finally { fs.rmSync(directory,{recursive:true,force:true}); }
   });
