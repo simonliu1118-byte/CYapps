@@ -35,7 +35,8 @@ internal sealed record MoMapping(
     string NotePrefix,
     string DiscountItemCode,
     string ShippingItemCode,
-    IReadOnlyDictionary<string, string> FreightTypes);
+    IReadOnlyDictionary<string, string> FreightTypes,
+    string PromotionItemCode = "");
 
 /// <summary>
 /// Parses the MO店+ OrderExport (one row per item; an order spans rows with the same 訂單編號
@@ -174,11 +175,11 @@ internal static class MoOrderImport
         {
             var code = group.Key.ItemCode;
             if (code.Length == 0) { handoff.Add($"商品「{group.First().Name}」沒有商品原廠編號"); continue; }
-            if (IsCombination(code)) handoff.Add($"商品原廠編號「{code}」是組合品號");
             items.Add(new ImportedItem(code, Number(group.Sum(l => l.Quantity)), Number(group.Key.ListPrice)));
         }
         if (order.Discount > 0) items.Add(new ImportedItem(mapping.DiscountItemCode, "1", Number(-order.Discount)));
         if (order.Shipping > 0) items.Add(new ImportedItem(mapping.ShippingItemCode, "1", Number(order.Shipping)));
+        items = Bundles.Expand(items, mapping.PromotionItemCode, handoff);
 
         var freightType = MatchFreightType(order.Carrier, mapping.FreightTypes);
         if (freightType.Length == 0) handoff.Add($"物流商「{order.Carrier}」沒有設定貨運別");
@@ -210,8 +211,8 @@ internal static class MoOrderImport
         };
     }
 
-    /// <summary>"A + B" style codes name a set of items; they go to a person for now.</summary>
-    internal static bool IsCombination(string code) => code.IndexOfAny(['+', '＋']) >= 0;
+    /// <summary>"A + B" style codes name a bundle (entered part by part, see <see cref="Bundles"/>).</summary>
+    internal static bool IsCombination(string code) => Bundles.IsBundle(code);
 
     internal static string MatchFreightType(string carrier, IReadOnlyDictionary<string, string> table) =>
         FreightCarriers.Match(carrier, table);

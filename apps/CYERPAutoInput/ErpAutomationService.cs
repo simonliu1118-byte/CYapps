@@ -974,6 +974,11 @@ internal sealed class ErpAutomationService
                 var missing = bundleList.Keys.Where(k => !bundleSold.ContainsKey(k)).ToList();
                 if (missing.Count > 0)
                     throw new InvalidOperationException($"套裝 {string.Join("、", missing)} 少了套裝售價；未輸入促銷組合，請人工處理此單。");
+                // A bundle sold above its parts' list prices is for a person (user, 2026-10-12).
+                var dearer = bundleList.Where(p => p.Value < bundleSold[p.Key]).ToList();
+                if (dearer.Count > 0)
+                    throw new InvalidOperationException("套裝售價高於 ERP 原價合計，轉人工處理：" +
+                        string.Join("、", dearer.Select(p => $"{p.Key}（原價合計 {p.Value:0.##}，售價 {bundleSold[p.Key]:0.##}）")) + "。");
                 var gap = bundleList.Sum(p => p.Value - bundleSold[p.Key]);
                 var basePrice = decimal.Parse(row.UnitPrice.Length > 0 ? row.UnitPrice : "0", NumberStyles.Number, CultureInfo.InvariantCulture);
                 unitPrice = (basePrice - gap).ToString("0.####", CultureInfo.InvariantCulture);

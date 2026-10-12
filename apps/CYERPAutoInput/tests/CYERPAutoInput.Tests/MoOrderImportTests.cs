@@ -87,14 +87,29 @@ public class MoOrderImportTests
     }
 
     [Fact]
-    public void Hands_off_combination_codes_missing_codes_notes_and_unknown_carriers()
+    public void Hands_off_bundles_without_a_promotion_code_missing_codes_notes_and_unknown_carriers()
     {
         var orders = ImportFixture();
-        Assert.Contains("組合品號", orders["90000000000003"].HandoffReason);
+        // A bundle needs the 促銷組合 code for its gap; without it the order goes to a person.
+        Assert.Contains("促銷組合品號", orders["90000000000003"].HandoffReason);
         Assert.Contains("沒有商品原廠編號", orders["90000000000004"].HandoffReason);
         Assert.Contains("店家備註：請先出貨", orders["90000000000005"].HandoffReason);
         Assert.Contains("沒有設定貨運別", orders["90000000000006"].HandoffReason);
         Assert.False(orders["90000000000006"].HeaderValues().ContainsKey("freight_type"));
+    }
+
+    [Fact]
+    public void Enters_a_bundle_part_by_part_with_erp_prices_and_the_gap_on_the_promotion_line()
+    {
+        var mapping = Mapping with { PromotionItemCode = "P900" };
+        var result = MoOrderImport.Parse(ReadFixture("mo_export_40bit.xls"));
+        var order = MoOrderImport.ToImported(result.Orders.Single(o => o.OrderSn == "90000000000003"), mapping);
+        Assert.Equal(string.Empty, order.HandoffReason);
+        var first = order.Items.Single(i => i.ItemCode == "X00003");
+        var second = order.Items.Single(i => i.ItemCode == "X00004");
+        Assert.Equal(("1", "", "360", "X00003"), (first.Quantity, first.UnitPrice, first.BundleTotal, first.SortKey));
+        Assert.Equal(("1", "", (string?)null), (second.Quantity, second.UnitPrice, second.BundleTotal));
+        Assert.True(order.Items.Single(i => i.ItemCode == "P900").TakesBundleGap);
     }
 
     [Fact]
