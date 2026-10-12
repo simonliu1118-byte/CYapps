@@ -6,6 +6,8 @@
 
 ## 最新停點：私有綁定配置完成，尚未切換 CYID — 2026-10-12
 
+後續 readiness：2026-10-12 12:52 Asia/Taipei 使用者確認原安裝升級後發票／設定都在，且原帳密可開設定，授權繼續。接續 source 在唯一 development deployment owner 加入 activate-cyid（只改 flag，完整準備／穩定性／資料 readback gates），CI／實際啟用與中央當次員工驗證尚待完成；不是全部 A/B/C／AA／AB／AC 完成。產品 Windows2.6.19／Cloud0.9.2／Consumer1.0.3／canonical1.0.4 不變。
+
 使用者在既有 CY Web development 中央管理完成 CYInvoice 登記／目前 CYID Workspace 啟用；畫面已出現 CYInvoice 欄，Super Admin 永遠允許，一般員工 App Access 尚未確認。使用者新增 Provider runtime 的 CYINVOICE_APPLICATION_ID／CYINVOICE_WORKSPACE_ID，後者與既有 core portal 身分 Workspace 一致；實際 ID、帳號及 Device Token 不寫 Public 文件。此身分綁定不替換原 CYInvoice business Workspace。
 
 [唯讀 #38](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203645406)（source `ce6528900c7101485424c5c989fe437ae4881d89`）確認 scope configured=true，Consumer 不讀 CYID D1。[prepare-cyid #39](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203790273)（source `2e21c8709f0ef35e665de4d48d4a069b310d1257`）以 main 基準 `2c3071c8b8ed30b5b4898bcf95ca8b174a7b5a99`／tree `c1d303e4d3653c9bd03a034be335bb740c6c2101` 完成真實 business bundle 上傳／100% 部署；IDENTITY Fetcher、IDENTITY_AUTHORITY 的 ConsumerAuthoritySync entrypoint 與三個 approved scope vars readback 通過。原 Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records、原 Token hashes／employee／history／FK／routes 保留，migration skipped、private files cleanup 通過；CYID_ENABLED=false／Built-in 保留。Provider0.3.7／canonical1.0.4、minimum1.0.0。Private recovery reference UTC `2026-10-12T04:27:16.969Z`；不是 restore rehearsal。無測試程式上傳、Secret replacement、重建 Workspace 或 authority switch。
