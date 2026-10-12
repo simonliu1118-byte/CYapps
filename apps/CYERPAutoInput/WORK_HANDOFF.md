@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-12（V0.2.4 Build 0，分支 `cyerp-auto-input/fix-settings-text-progress`；V0.2.3 Build 1 已由 PR #398 合併進 `main`）  
+> 更新：2026-10-12（V0.2.4 由 PR #418 合併進 `main` 並發布第一個正式 Release `cyerp-auto-input-v0.2.4`）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -10,18 +10,18 @@
 2. `/REPO_POLICY.md`
 3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.33）
 4. 本文件 → `README.md` → `CHANGELOG.md`
-5. `main` 的實際 source（PR #104、PR #398 已合併，工作 branch 已刪除）
+5. `main` 的實際 source（PR #104、PR #398、PR #418 已合併，工作 branch 已刪除）
 
 不要以舊聊天記憶覆蓋目前 Git 狀態。
 
 ## 2. Branch／PR／版本
 
 - Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
-- `main`：`V0.2.3` Build 1（2026-10-12 由 PR #398 squash merge；涵蓋 V0.2.1 Build 0–8、V0.2.2 Build 0–2、V0.2.3 Build 0–1）。前一次合併為 PR #104（V0.2.0 Build 31，C# 重寫線取代舊 Go 線 `V0.0.10` Build 19）。工作 branch 合併後刪除。
+- `main`：`V0.2.4`（2026-10-12 由 PR #418 squash merge），已發布正式 Release `cyerp-auto-input-v0.2.4`（`CYERPAutoInput Release` workflow，只從 `main` 手動啟動，BUILD 必須為 0，tag 不覆寫）。之前的合併：PR #398（V0.2.1–V0.2.3 Build 1）、PR #104（V0.2.0 Build 31，C# 重寫線取代舊 Go 線 `V0.0.10` Build 19）。工作 branch 合併後刪除。
 - 下一輪修改從最新 `main` 開新 branch（例如 `cyerp-auto-input/<type>-<summary>`），開新 PR。
 - VERSION／BUILD 見同名檔。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新功能 Z＋1（Build 歸零），返修 Build＋1；使用者說「下一版一起修」的項目不單獨發版。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
-- 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。尚未正式 Release。
+- 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。正式版：GitHub Release（zip＋SHA-256，Release note 取自 CHANGELOG 該版段落）；下一次正式發布前同樣需使用者同意。
 - OCR 模型 Release：2026-10-11 使用者同意後從 `main` 執行 `CYERPAutoInput OCR Model Mirror`（之後的建置優先從該 Release 取模型）。
 
 ## 3. 目前功能（細節見 README）
@@ -46,7 +46,7 @@
 
 尚未實機確認：
 
-- V0.2.3 Build 0：全自動滑鼠全程鎖定與中央提示（V0.2.4 起改名 `AutomationSession`／`AutomationOverlay`：WS_EX_LAYERED|TRANSPARENT|NOACTIVATE、`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`，失敗就不顯示）。確認提示不入鏡、轉圈順暢、任何提示視窗前都已解除鎖定。
+- V0.2.3 Build 0（V0.2.4 實測通過）：全自動滑鼠全程鎖定與中央提示（V0.2.4 起改名 `AutomationSession`／`AutomationOverlay`：WS_EX_LAYERED|TRANSPARENT|NOACTIVATE、`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`，失敗就不顯示）。確認提示不入鏡、轉圈順暢、任何提示視窗前都已解除鎖定。
 - V0.2.3 Build 1：儲存後清除設定（批次每張、MO店+ 批次最後一張）；MO店+／酷澎開始前檢查不通過回到匯入視窗並保留內容；批次預檢。
 - 「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）；非 100% DPI 下列印選單與框選截圖位置。
 - 蝦皮截圖：套組訂單（規則待使用者補充）。
@@ -56,7 +56,8 @@
 - MO店+ ERP 端（負數單價、運費品號、代收貨款、貨運別、統編與發票欄位）；防重複提醒與擋下。
 - 非 100% 顯示比例、不同電腦／字型（使用者表示只用 100%）。
 
-- V0.2.4 Build 0：一般輸入也顯示「自動輸入中」（`MainForm.RunDocumentAsync` 一律 `Session.Begin(title)`／`End()`，`AutomationSession` 取代原本直接 `PhysicalMouseLock`）；提示框寬度依文字；光學辨識進度改為 `IProgress<double>`（依要辨識的列數）＋百分比、`ShowProgress` 以 Value+1 再回設跳過主題動畫；`ParseItems` 沒有任何編號且小計欄 1–2 個數字時視為第 1 項（單品促銷誤報）；設定兩處文字。待實測。
+- V0.2.4：使用者 2026-10-12 實測通過（「測試沒問題」），合併並發布正式 Release。另回報少量 0／O 誤讀，待確認發生欄位。
+- V0.2.4 Build 0 實作：一般輸入也顯示「自動輸入中」（`MainForm.RunDocumentAsync` 一律 `Session.Begin(title)`／`End()`，`AutomationSession` 取代原本直接 `PhysicalMouseLock`）；提示框寬度依文字；光學辨識進度改為 `IProgress<double>`（依要辨識的列數）＋百分比、`ShowProgress` 以 Value+1 再回設跳過主題動畫；`ParseItems` 沒有任何編號且小計欄 1–2 個數字時視為第 1 項（單品促銷誤報）；設定兩處文字。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；蝦皮套組規則；CYID 串接。
 
