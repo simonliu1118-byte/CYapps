@@ -316,6 +316,7 @@ async function loadTransactions() {
     window.cySyncLedgerQuickLock?.();
     await window.cyaccRefreshLedgerView(month);
     updateEntryLockState();
+    window.dispatchEvent(new CustomEvent('cyacc:transactions-loaded', { detail: { month } }));
   } catch (error) {
     if (requestId !== cyTransactionRequestId || month !== els.monthFilter.value) return;
     window.cyaccRenderLedgerMessage(error.message, 'load-error');
@@ -419,6 +420,7 @@ async function persistTransactionUpdate(id, values, onOptimistic) {
       try { await window.cyaccRefreshLedgerView(els.monthFilter.value); }
       catch { showMessage('修改已儲存，餘額載入失敗，請重新整理。', true); }
     }
+    window.dispatchEvent(new CustomEvent('cyacc:transactions-loaded', { detail: { month: els.monthFilter.value } }));
     return true;
   } catch (error) {
     state.transactions = state.transactions.filter(item => Number(item.id) !== id);
@@ -471,6 +473,7 @@ function setSettingsTab(tab) {
   els.settingsTabs.forEach(button => button.classList.toggle('active', button.dataset.settingsTab === tab));
   els.settingsPanes.forEach(pane => pane.classList.toggle('active', pane.dataset.settingsPane === tab));
   setDialogMessage(els.settingsMessage, '');
+  if (tab === 'statistics') window.cyStatistics?.loadSettings();
 }
 
 function renderSettings() {
@@ -723,6 +726,7 @@ async function mutateSettings(path, options, successMessage) {
       await refreshBootstrap();
       await loadTransactions();
     }
+    window.dispatchEvent(new CustomEvent('cyacc:master-data-changed'));
     setDialogMessage(els.settingsMessage, successMessage);
     return true;
   } catch (error) {
@@ -912,6 +916,8 @@ function isLocked(month) {
 function numericInput(event) {
   event.target.value = event.target.value.replace(/\D/g, '').slice(0, 7);
 }
+
+window.cyaccApi = api;
 
 async function api(path, options = {}, timeoutMs = 12_000) {
   const controller = new AbortController();

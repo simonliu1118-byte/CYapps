@@ -4,7 +4,7 @@
 
 ## Current checkpoint — 2026-10-11
 
-- Current source release is **CYCloudIdentity 0.3.6 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.5 Build 0 已部署並驗證**，run `36821423383`；source 與部署證據分開記錄。
+- Current source release is **CYCloudIdentity 0.3.6 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.6 Build 0 已部署並驗證**，run `38111211344`（既有設定／Secrets／authority 保留，原 0.3.5 run 36821423383 為歷史）；source 與部署證據分開記錄。
 - CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
@@ -34,14 +34,27 @@
 
 - [x] CYInvoice Consumer/canonical 1.0.3 工程基準 PR #380 已合併到 main `59d63b6785fa028657c9a2fb13fc9515e497d95d`；精確功能 head `46723a89` 七項 CI 通過，無自動部署／正式切換。
 - [x] 既有 development workflow 收斂為唯讀 preflight／保留原設定的 code-only upgrade；只讀 Provider 維運 D1 metadata、exact migration／FK／hashed authority／history 與 recovery reference，不重寫 Secrets／bootstrap、不跑 remote migration。deployment tooling 不修改產品／contract／VERSION／BUILD。
-- [ ] 新 deployment audit CI、實際遠端 preflight／development 0.3.6 upgrade 與原 consumer 相容性驗證；通過後才記錄 deployed。
+- [x] Deployment audit source 348185fb 四項 CI 通過並合併 #384；read-only development #123（38110828710）及實際 0.3.6 upgrade #124（38111211344）通過，部署 head 56c27685 與已測 source tree 相同。原七個 migration 無 pending／未寫 remote schema、FK 清潔、原 vars／bindings／Secret names／hashed authority metadata／history counts 保留，health 與 synthetic invalid Session 拒絕正常。恢復參考 UTC checkpoint 2026-10-11T04:20:13.295Z；無 bootstrap／Secret replacement／D1 restore。private RPC／真實 Employee 與原 Device 另行驗收。
+- [x] CY Web governance PR #145 合併 main a0cb4675；七個 manifest mirror 與 canonical 1.0.3 bytes 相同，CY Web consumer 維持相容 1.0.2，沒有 Web runtime／部署變更。
+
+- [x] 歷史 #19／#21／#23 原 consumer Built-in／D1／Workspace／Device token hashes／history／FK 安全核對；測試版本無D1、未部署、已過期。DELETE403→404／10339未解決，不算transport成功。歷史source/run證據集中 docs/DEVELOPMENT_DEPLOYMENT.md。
+- [x] 依使用者最新定案，移除 remote probe／cleanup controller、測試Worker與workflow modes／branches；保留 expired history，停止重試／擴權。CI只作本地synthetic驗證，不上傳測試程式。
+- [x] CYInvoice exact-active-source真實business部署：#402六CI全通過並合併；actual #25（38134710138）原Cloud0.9.2／storage13／Built-in／Workspace／Device hashes／history／FK／routes保留，before/after expired probe仍1個；無test upload／DELETE／Secret replacement／authority switch。精確source/tree/recovery evidence見docs/DEVELOPMENT_DEPLOYMENT.md。三個old branch refs已停放到無probe入口的#402 tree。
+- [x] CYInvoice 既有部署 owner 新增 prepare-cyid source，Built-in／原 Workspace 保留，僅 approved bindings／scope 準備；source／本地回歸完成，無 remote test upload／CYID D1／authority switch。技術操作見 CYInvoice Cloud README。
+- [x] 共通 deployment input／Invoice scope resolver follow-up source：四個 workflows 共用 Provider-name Secret；Invoice 只讀 Provider active Worker metadata／original business D1，不讀 Identity D1、不借 CYACC scope，不重建 Workspace；Provider drift 阻擋。本地回歸通過，CI 依 PR。
+- [x] 共通 Secret 已設定；#413 七 CI 通過並合併，唯讀 Invoice #29／CYACC main #608 實際通過，原 Invoice Workspace／Device hashes／history／Builtin保留，無 Identity D1／Invoice upload／authority switch。來源／run見 DEVELOPMENT_DEPLOYMENT。
+- [ ] Provider Invoice 兩 scope 尚未配置（#29 configured=false）；先經現行中央管理確認 registry／Workspace enablement及approved mapping，再prepare。缺 metadata不代表未註冊；不得重播 bootstrap或由Consumer直讀/寫Identity D1、借 production scope替代development。
+- [ ] 尚引用舊Variable的部署入口更新或明確退休／驗證後才刪同名Variable；Invoice deploy aeb3434f、Provider dev56c27685／retired prod8526ba1d已盤點，不重跑退休provisioning。
+- [ ] 實際private Fetcher／named RPC與App Access／Role／原Windows裝置驗收，使用真實consumer功能；不再增加遠端probe入口。配對／範圍／Free量測與正式切換仍獨立gate。
+- [ ] Temporary Workers Admin移除由使用者確認；不增加權限。刪除10339留歷史／非目前部署阻塞。
 
 ## Optional consumer invalidation source
 
 - [x] Contract 1.0.3 / source 0.3.6 adds the private named RPC entrypoint; indexed current-state comparison, no positive grant/Session/verifier export. Canonical semantics are in CONSUMER_INTEGRATION_STANDARD §11.1; impact BACKWARD_COMPATIBLE, minimum remains 1.0.0.
 - [x] Real-provider synthetic D1 regression through CYInvoice covers Role, enabled, App Access, credential version, deleted ID, unavailable application and revoke during provider outage; existing provider test suite remains required.
-- [ ] Isolated staging with the named entrypoint binding and actual consumer usage/cost measurement. Source changes do not mean deployed 0.3.6.
-- [ ] Cross-repository manifest byte-sync / coordinated deployment and production approval. Existing CY Web/CYACC compatibility is retained; this task does not modify their runtime.
+- [ ] Isolated staging with the named entrypoint binding, positive authorization and actual consumer usage/cost measurement. Development 0.3.6 is deployed (#124); transport/deny proof alone does not establish real consumer authorization.
+- [x] CY Web cross-repository manifest byte-sync 1.0.3（#145）；同 repo consumers 直接讀 canonical，不新增 mirror。
+- [ ] Coordinated private binding／consumer acceptance and production approval. Existing CY Web/CYACC compatibility is retained; this task does not modify their runtime.
 
 ## Documentation consolidation
 

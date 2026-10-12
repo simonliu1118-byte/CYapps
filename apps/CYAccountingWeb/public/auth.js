@@ -115,6 +115,8 @@ function startCyaccAuth() {
       if (role === 'SUPER_ADMIN') currentUser.classList.add('role-super-admin');
       else if (role === 'ADMIN') currentUser.classList.add('role-admin');
       else currentUser.classList.add('role-user');
+      const cluster = currentUser.closest('.cy-account-cluster');
+      if (cluster) cluster.dataset.identityReady = 'true';
     }
 
     logoutButton?.classList.remove('hidden');
