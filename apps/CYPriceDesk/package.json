@@ -1,0 +1,7 @@
+{
+  "name": "private-price-desk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node scripts/build.mjs", "test": "node --test tests/core.test.js tests/app-flow.test.js" }
+}

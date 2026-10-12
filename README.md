@@ -13,6 +13,10 @@ Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
 - `apps/CYInvoice`：CY 電子發票工具
 - `apps/TriINVCalc`：三聯式發票開立計算機
 
+## 需求探索原型
+
+- `apps/CYPriceDesk`：價格觀測室；獨立私有 Sites 原型，CYWEB 只提供外部入口。現況與後續需求見該目錄 README／TODO／WORK_HANDOFF，尚未決定併入 CYWEB 或獨立發展。
+
 ## CI / Build
 
 Public repository 可以正常使用自動 CI；目標是避免濫用，而不是把正常驗證全部改成手動。

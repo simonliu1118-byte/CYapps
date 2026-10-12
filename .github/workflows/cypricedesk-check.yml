@@ -1,0 +1,41 @@
+name: CYPriceDesk Prototype Check
+
+on:
+  pull_request:
+    paths:
+      - "apps/CYPriceDesk/**"
+      - ".github/workflows/cypricedesk-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cypricedesk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prototype:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: apps/CYPriceDesk
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify source version
+        run: |
+          node --input-type=module -e "import fs from 'node:fs';const p=JSON.parse(fs.readFileSync('package.json','utf8'));if(p.version!==fs.readFileSync('VERSION','utf8').trim()||!/^\d+$/.test(fs.readFileSync('BUILD','utf8').trim()))process.exit(1)"
+      - name: Validate price and app flows
+        run: npm test
+      - name: Check application JavaScript
+        run: |
+          node --check public/core.js
+          node --check public/app.js
+      - name: Build prototype
+        run: npm run build
+      - name: Validate public static package
+        run: python3 ../../.github/scripts/scan-public-package.py dist
