@@ -149,6 +149,30 @@ internal static class Win32Automation
         return peers;
     }
 
+    /// <summary>
+    /// Visible top-level windows of the ERP process (not <paramref name="root"/>) that overlap
+    /// <paramref name="area"/>, of any size: a Ribbon drop-down is such a small popup.
+    /// </summary>
+    public static IReadOnlyList<Rectangle> FindProcessPopupsNear(nint root, Rectangle area)
+    {
+        if (root == 0) return Array.Empty<Rectangle>();
+        NativeMethods.GetWindowThreadProcessId(root, out var processId);
+        if (processId == 0) return Array.Empty<Rectangle>();
+
+        var popups = new List<Rectangle>();
+        NativeMethods.EnumWindows((hwnd, _) =>
+        {
+            if (hwnd == root || !NativeMethods.IsWindowVisible(hwnd)) return true;
+            NativeMethods.GetWindowThreadProcessId(hwnd, out var pid);
+            if (pid != processId || !NativeMethods.GetWindowRect(hwnd, out var rect)) return true;
+            var bounds = new Rectangle(rect.Left, rect.Top, rect.Width, rect.Height);
+            if (bounds.Width is < 20 or > 1200 || bounds.Height is < 16 or > 800 || !bounds.IntersectsWith(area)) return true;
+            popups.Add(bounds);
+            return true;
+        }, 0);
+        return popups;
+    }
+
     public static bool WindowTreeContainsText(nint hwnd, string expectedText)
     {
         var target = OcrTextNormalizer.Normalize(expectedText);

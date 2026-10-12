@@ -24,20 +24,26 @@ internal sealed class ShopeeScreenshotForm : Form
     private readonly List<Shot> _shots = [];
     private readonly FlowLayoutPanel _cards = new();
     private readonly Label _summary = new();
+    private readonly ProgressBar _progress = new() { Visible = false, Style = ProgressBarStyle.Continuous, Width = 260, Height = 16, Anchor = AnchorStyles.Right };
+    private readonly Label _progressText = new() { Visible = false, AutoSize = true, Anchor = AnchorStyles.Right, ForeColor = CyVisualTheme.TextSecondary };
     private readonly CyPrimaryButton _apply = new();
+    private readonly FullAutoSession? _session;
 
     public ShopeeShotResult? Result { get; private set; }
 
-    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log)
+    /// <param name="autoStart">Shopee full auto (user, 2026-10-11): start the page scan on opening, without 開始.</param>
+    /// <param name="session">Shopee full auto: keeps the mouse locked from the scan on (user, 2026-10-12).</param>
+    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false, FullAutoSession? session = null)
     {
         _ocr = ocr;
         _mapping = mapping;
         _log = log;
-        Text = "蝦皮訂單截圖輸入";
+        _session = session;
+        Text = "蝦皮訂單光學辨識輸入";
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         ShowIcon = false; // secondary dialogs do not repeat the app icon (CY Desktop Visual Guide §11.1)
-        Size = new Size(860, 580);
+        Size = new Size(980, 600);
         MinimumSize = new Size(640, 420);
         Font = new Font("Microsoft JhengHei UI", 9.5F);
         KeyPreview = true;
@@ -50,12 +56,29 @@ internal sealed class ShopeeScreenshotForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         Controls.Add(root);
 
-        root.Controls.Add(new Label
+        // 說明 sits top right beside the instructions (user, 2026-10-11).
+        var top = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        top.ColumnCount = 4;
+        top.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "用 Win+Shift+S 截取蝦皮訂單頁，在這裡按 Ctrl+V 貼上（也可拖曳圖片檔）。\n需要：訂單資訊（訂單編號、運送資訊）、明細（可多張）、買家實付金額；順序不限。",
+            Text = "先在瀏覽器開好蝦皮訂單明細頁，按「開始」：自動由上往下捲動擷取、判讀並帶回（Esc 停止）。\n擷取有問題時改用「框選截圖」補上（也接受 Ctrl+V 貼上），不要的圖按紅色 × 移除，再按「帶入表單」。",
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
+        var help = new CyButton { Text = "說明", Size = new Size(92, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
+        help.Click += (_, _) => { using var form = new ShopeeScreenshotHelpForm(); form.ShowDialog(this); };
+        var scan = new CyPrimaryButton { Text = "開始", Size = new Size(100, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
+        scan.Click += async (_, _) => await AutoScanAsync();
+        var capture = new CyButton { Text = "框選截圖", Size = new Size(100, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
+        capture.Click += async (_, _) => await CaptureLoopAsync();
+        top.Controls.Add(scan, 1, 0);
+        top.Controls.Add(capture, 2, 0);
+        top.Controls.Add(help, 3, 0);
+        root.Controls.Add(top, 0, 0);
 
         _cards.Dock = DockStyle.Fill;
         _cards.AutoScroll = true;
@@ -65,21 +88,28 @@ internal sealed class ShopeeScreenshotForm : Form
 
         _summary.Dock = DockStyle.Fill;
         _summary.TextAlign = ContentAlignment.MiddleLeft;
-        root.Controls.Add(_summary, 0, 2);
+        // Summary on the left; while the auto scan reads, a progress bar on the right.
+        var status = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
+        status.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        status.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        status.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        status.Controls.Add(_summary, 0, 0);
+        _progressText.Margin = new Padding(8, 7, 8, 0);
+        _progress.Margin = new Padding(0, 7, 0, 0);
+        status.Controls.Add(_progressText, 1, 0);
+        status.Controls.Add(_progress, 2, 0);
+        root.Controls.Add(status, 0, 2);
 
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = false, Padding = new Padding(4, 8, 4, 0) };
         _apply.Text = "帶入表單";
         _apply.Size = new Size(120, 34);
-        _apply.Click += (_, _) => Apply();
+        _apply.Click += (_, _) => Apply(automatic: false);
         var cancel = new CyButton { Text = "取消", Size = new Size(92, 34), DialogResult = DialogResult.Cancel };
         var clear = new CyButton { Text = "全部清除", Size = new Size(100, 34), Margin = new Padding(3, 3, 12, 3) };
-        var help = new CyButton { Text = "截圖說明", Size = new Size(100, 34) };
-        help.Click += (_, _) => { using var form = new ShopeeScreenshotHelpForm(); form.ShowDialog(this); };
         clear.Click += (_, _) => { foreach (var shot in _shots) shot.Image.Dispose(); _shots.Clear(); _cards.Controls.Clear(); UpdateSummary(); };
         buttons.Controls.Add(_apply);
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(clear);
-        buttons.Controls.Add(help);
         root.Controls.Add(buttons, 0, 3);
         CancelButton = cancel;
 
@@ -97,6 +127,7 @@ internal sealed class ShopeeScreenshotForm : Form
             if (e.Data?.GetData(DataFormats.FileDrop) is string[] files) await AddFilesAsync(files);
         };
         FormClosed += (_, _) => { foreach (var shot in _shots) shot.Image.Dispose(); };
+        if (autoStart) Shown += async (_, _) => { if (_shots.Count == 0 && !UiSnapshot.Active) await AutoScanAsync(); };
 
         CyVisualTheme.Apply(this);
         UpdateSummary();
@@ -128,7 +159,144 @@ internal sealed class ShopeeScreenshotForm : Form
         }
     }
 
-    private async Task AddAsync(Bitmap image)
+    private bool _capturing;
+
+    /// <summary>
+    /// Captures one region after another (user, 2026-10-11): CY's windows step aside, the
+    /// frozen desktop is framed, and each selection is added (OCR runs in the background)
+    /// before the next capture opens. Esc ends the loop and brings this window back.
+    /// </summary>
+    private async Task CaptureLoopAsync()
+    {
+        if (_capturing) return;
+        _capturing = true;
+        var owner = Owner;
+        var ownerOpacity = owner?.Opacity ?? 1;
+        try
+        {
+            while (!IsDisposed)
+            {
+                Opacity = 0;
+                if (owner is not null) owner.Opacity = 0;
+                await Task.Delay(250); // let the desktop repaint without CY's windows
+                var image = RegionCaptureForm.Capture(this);
+                if (image is null) break;
+                _log.Info("shopee-shot", $"region captured size={image.Width}x{image.Height}");
+                _ = AddAsync(image);
+            }
+        }
+        finally
+        {
+            if (owner is not null && !owner.IsDisposed) owner.Opacity = ownerOpacity;
+            if (!IsDisposed)
+            {
+                Opacity = 1;
+                Activate();
+            }
+            _capturing = false;
+        }
+    }
+
+    /// <summary>
+    /// Scrolls the browser's Shopee order page from the top and adds its three parts
+    /// (user, 2026-10-11). CY's windows step aside and the physical mouse is ignored while the
+    /// browser scrolls; Esc stops. When it cannot finish, the manual ways stay available.
+    /// </summary>
+    private async Task AutoScanAsync()
+    {
+        if (_capturing) return;
+        var browser = ShopeePageScanner.FindBrowser();
+        if (browser == 0)
+        {
+            MessageBox.Show(this, "找不到開著蝦皮訂單頁的瀏覽器視窗。\n請先在瀏覽器開好訂單明細頁，再按「自動擷取」；也可以用「框選截圖」或 Ctrl+V 貼上。",
+                Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        _capturing = true;
+        var owner = Owner;
+        var ownerOpacity = owner?.Opacity ?? 1;
+        ShopeePageScanner.Result? result = null;
+        var mouseLock = (PhysicalMouseLock?)null;
+        void Restore()
+        {
+            // In full auto the mouse stays locked after the scan, until the run ends or stops.
+            mouseLock?.Dispose();
+            mouseLock = null;
+            if (owner is not null && !owner.IsDisposed) owner.Opacity = ownerOpacity;
+            if (!IsDisposed) { Opacity = 1; Activate(); }
+        }
+        try
+        {
+            Opacity = 0;
+            if (owner is not null) owner.Opacity = 0;
+            if (_session is not null) _session.Begin();
+            else mouseLock = PhysicalMouseLock.Engage(_log);
+            result = await new ShopeePageScanner(_ocr, _log).ScanAsync(browser,
+                () => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, CancellationToken.None,
+                // Back to this window as soon as the page is captured, with a progress bar for
+                // the reading still to do (user, 2026-10-11).
+                scrolled: () => { Restore(); ShowProgress("辨識中…", 0, 1); },
+                readProgress: new Progress<(int Done, int Total)>(p => ShowProgress($"辨識中… {p.Done}/{p.Total}", p.Done, p.Total + 1)));
+        }
+        catch (Exception ex)
+        {
+            _log.Error("page-scan", ex);
+            _session?.End();
+            MessageBox.Show(this, $"自動擷取失敗：{ex.Message}\n可以改用「框選截圖」或 Ctrl+V 貼上。", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            Restore();
+            _capturing = false;
+        }
+        if (result is null || IsDisposed) { _session?.End(); HideProgress(); DisposeCaptures(result); return; }
+
+        ShowProgress("判讀中…", 1, 1);
+        foreach (var section in result.Sections)
+            await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines);
+        DisposeCaptures(result);
+        HideProgress();
+        if (result.Cancelled || result.Problems.Count > 0) _session?.End();
+        if (result.Cancelled)
+            MessageBox.Show(this, "已停止自動擷取。可以按「開始」重來，或用「框選截圖」補上缺的部分後按「帶入表單」。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        else if (result.Problems.Count > 0)
+            MessageBox.Show(this, "自動擷取沒有完整讀到：\n\n" + string.Join("\n", result.Problems.Select(p => "・" + p)) +
+                "\n\n請用「框選截圖」補上缺的部分（不要的圖按紅色 × 移除），完成後按「帶入表單」。", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        else
+            // A clean scan is judged and brought back at once (user, 2026-10-11).
+            Apply(automatic: true);
+
+        static void DisposeCaptures(ShopeePageScanner.Result? r)
+        {
+            if (r is null) return;
+            foreach (var c in r.Captures) c.Image.Dispose();
+        }
+    }
+
+    private void ShowProgress(string text, int value, int maximum)
+    {
+        if (IsDisposed) return;
+        _progress.Maximum = Math.Max(1, maximum);
+        _progress.Value = Math.Clamp(value, 0, _progress.Maximum);
+        _progressText.Text = text;
+        _progress.Visible = _progressText.Visible = true;
+        UseWaitCursor = true;
+        _progress.Refresh();
+        _progressText.Refresh();
+    }
+
+    private void HideProgress()
+    {
+        if (IsDisposed) return;
+        _progress.Visible = _progressText.Visible = false;
+        UseWaitCursor = false;
+    }
+
+    /// <summary>
+    /// Adds one screenshot; <paramref name="lines"/> are given when the auto scan already read
+    /// it, so only the classification and the re-read of missing cells run here.
+    /// </summary>
+    private async Task AddAsync(Bitmap image, List<OcrBox>? lines = null)
     {
         var shot = new Shot { Image = image };
         _shots.Add(shot);
@@ -136,8 +304,12 @@ internal sealed class ShopeeScreenshotForm : Form
         UpdateSummary();
         try
         {
-            var tokens = await _ocr.RecognizeAsync(image, CancellationToken.None);
-            shot.Lines = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+            if (lines is not null) shot.Lines = lines;
+            else
+            {
+                var tokens = await _ocr.RecognizeAsync(image, CancellationToken.None);
+                shot.Lines = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
+            }
             shot.Kind = ShopeeScreenshot.Classify(shot.Lines);
             if (shot.Kind == ShopeeShotKind.Items) await ReadMissingCellsAsync(shot);
             _log.Info("shopee-shot", $"screenshot recognized kind={shot.Kind} lines={shot.Lines.Count} size={image.Width}x{image.Height}");
@@ -188,11 +360,13 @@ internal sealed class ShopeeScreenshotForm : Form
 
     private void AddCard(Shot shot)
     {
-        var card = new Panel { Size = new Size(190, 170), Margin = new Padding(6) };
+        var card = new Panel { Size = new Size(190, 148), Margin = new Padding(6) };
         var picture = new PictureBox { Image = shot.Image, SizeMode = PictureBoxSizeMode.Zoom, Bounds = new Rectangle(0, 0, 190, 118), BorderStyle = BorderStyle.FixedSingle };
         var caption = new Label { Bounds = new Rectangle(0, 122, 190, 22), TextAlign = ContentAlignment.MiddleLeft };
-        var remove = new LinkLabel { Text = "移除", Bounds = new Rectangle(0, 146, 60, 20) };
-        remove.LinkClicked += (_, _) =>
+        // A round red × on the picture's top-right corner (user, 2026-10-11).
+        var remove = new RemoveBadge { Location = new Point(picture.Width - 26, 4) };
+        new ToolTip().SetToolTip(remove, "移除這張截圖");
+        remove.Click += (_, _) =>
         {
             _shots.Remove(shot);
             _cards.Controls.Remove(card);
@@ -200,9 +374,9 @@ internal sealed class ShopeeScreenshotForm : Form
             shot.Image.Dispose();
             UpdateSummary();
         };
+        picture.Controls.Add(remove);
         card.Controls.Add(picture);
         card.Controls.Add(caption);
-        card.Controls.Add(remove);
         shot.Caption = caption;
         _cards.Controls.Add(card);
         UpdateCaption(shot);
@@ -236,7 +410,12 @@ internal sealed class ShopeeScreenshotForm : Form
         _apply.Enabled = pending == 0 && _shots.Count > 0;
     }
 
-    private void Apply()
+    /// <summary>
+    /// Builds the order from the screenshots. <paramref name="automatic"/> (after a clean auto
+    /// scan) only brings it back when nothing needs checking; otherwise it says what is wrong
+    /// and leaves the manual way open (user, 2026-10-11).
+    /// </summary>
+    private void Apply(bool automatic)
     {
         // An order needs all three parts (user, 2026-10-11); say which are missing.
         var missingParts = new[]
@@ -247,11 +426,13 @@ internal sealed class ShopeeScreenshotForm : Form
         }.Where(x => x is not null).ToList();
         if (missingParts.Count > 0)
         {
+            _session?.End();
+            if (automatic) missingParts.Add("（自動擷取的圖有問題，請用「框選截圖」補上，完成後按「帶入表單」）");
             var unknown = _shots.Count(s => s.Kind == ShopeeShotKind.Unknown);
             MessageBox.Show(this,
                 "一張蝦皮訂單需要訂單資訊、商品明細、買家實付金額三種截圖，目前缺少：\n\n" +
                 string.Join("\n", missingParts.Select(p => "・" + p)) +
-                (unknown > 0 ? $"\n\n另有 {unknown} 張無法判斷種類，請確認截圖範圍（可按「截圖說明」）。" : string.Empty),
+                (unknown > 0 ? $"\n\n另有 {unknown} 張無法判斷種類，請確認截圖範圍（可按右上角「說明」）。" : string.Empty),
                 "截圖不完整", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -275,7 +456,16 @@ internal sealed class ShopeeScreenshotForm : Form
         var result = ShopeeScreenshot.Combine(order, items, groups, amounts, _mapping, problems);
         if (result.Order is null)
         {
+            _session?.End();
             MessageBox.Show(this, "無法組成訂單：\n\n" + string.Join("\n", result.Problems.Select(p => "・" + p)), Text,
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        if (automatic && result.Problems.Count > 0)
+        {
+            _session?.End();
+            MessageBox.Show(this, "自動判讀發現問題，已暫停：\n\n" + string.Join("\n", result.Problems.Select(p => "・" + p)) +
+                "\n\n請核對截圖：有問題的圖按紅色 × 移除，用「框選截圖」補上，完成後按「帶入表單」。", Text,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
