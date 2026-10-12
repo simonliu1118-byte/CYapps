@@ -1085,7 +1085,8 @@ internal sealed class MainForm : Form
         _details.EndEdit();
         _details.Rows.Clear();
         // A handed-off order stops before the details; items it cannot enter are left out.
-        var items = order.Items.Where(i => i.ItemCode.Length > 0).ToList();
+        var items = ImportedItem.InEntryOrder(order.Items.Where(i => i.ItemCode.Length > 0),
+            [_settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode]);
         var rowCount = Math.Max(DefaultDetailRows, items.Count + 1);
         for (var i = 0; i < rowCount; i++) _details.Rows.Add();
         for (var i = 0; i < items.Count; i++)

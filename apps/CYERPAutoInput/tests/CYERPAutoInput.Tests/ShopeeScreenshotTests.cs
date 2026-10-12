@@ -508,6 +508,7 @@ public class ShopeeScreenshotTests
     [Theory]
     [InlineData("261O1O9R5EC3RC", "2610109R5EC3RC")]
     [InlineData("2610109R5EC3RC", "2610109R5EC3RC")]
+    [InlineData("26I0I09R5EC3RC", "2610109R5EC3RC")]
     public void The_date_part_of_an_order_number_is_digits(string read, string expected) =>
         Assert.Equal(expected, ShopeeScreenshot.OrderSnDateDigits(read));
 
@@ -516,6 +517,8 @@ public class ShopeeScreenshotTests
     [InlineData("TW26507987985O0", "TW265079879850" + "0")]
     [InlineData("5O6O5O6113", "5060506113")]
     [InlineData("AB12O34567", "AB12O34567")]
+    [InlineData("TW2661882I1759I", "TW266188211759I")]
+    [InlineData("5O6O5I6113", "5060516113")]
     public void Tracking_digits_follow_the_carrier_format(string read, string expected) =>
         Assert.Equal(expected, ShopeeScreenshot.TrackingDigits(read));
 

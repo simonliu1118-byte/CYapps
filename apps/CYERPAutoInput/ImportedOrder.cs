@@ -1,6 +1,20 @@
 namespace CYERPAutoInput;
 
-internal sealed record ImportedItem(string ItemCode, string Quantity, string UnitPrice);
+internal sealed record ImportedItem(string ItemCode, string Quantity, string UnitPrice)
+{
+    /// <summary>
+    /// Products in item-code order, smallest first (user, 2026-10-12); the lines for the
+    /// configured 折價券／運費／促銷組合 codes stay last, in their own order.
+    /// </summary>
+    public static List<ImportedItem> InEntryOrder(IEnumerable<ImportedItem> items, IEnumerable<string> trailingCodes)
+    {
+        var trailing = new HashSet<string>(trailingCodes.Where(c => c.Length > 0), StringComparer.OrdinalIgnoreCase);
+        var list = items.ToList();
+        return list.Where(i => !trailing.Contains(i.ItemCode)).OrderBy(i => i.ItemCode, StringComparer.OrdinalIgnoreCase)
+            .Concat(list.Where(i => trailing.Contains(i.ItemCode)))
+            .ToList();
+    }
+}
 
 /// <summary>
 /// One platform order ready for the COPI08 form, whatever its source (蝦皮, MO店+). The

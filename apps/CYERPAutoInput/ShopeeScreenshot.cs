@@ -147,7 +147,7 @@ internal static partial class ShopeeScreenshot
     /// (user, 2026-10-12: the OCR mixes up 0 and O).
     /// </summary>
     internal static string OrderSnDateDigits(string orderSn) =>
-        orderSn.Length < 6 ? orderSn : orderSn[..6].Replace('O', '0') + orderSn[6..];
+        orderSn.Length < 6 ? orderSn : orderSn[..6].Replace('O', '0').Replace('I', '1').Replace('L', '1') + orderSn[6..];
 
     /// <summary>
     /// 0 and O where the tracking number's format decides them: Shopee 店到店 numbers are
@@ -156,9 +156,11 @@ internal static partial class ShopeeScreenshot
     /// </summary>
     internal static string TrackingDigits(string tracking)
     {
+        // I／L read for 1 likewise (user, 2026-10-12: 1 and I look alike).
+        static string Digits(string s) => s.Replace('O', '0').Replace('I', '1').Replace('L', '1');
         if (TwTrackingPattern().IsMatch(tracking))
-            return "TW" + tracking[2..^1].Replace('O', '0') + tracking[^1];
-        return tracking.All(c => char.IsAsciiDigit(c) || c == 'O') && tracking.Any(char.IsAsciiDigit) ? tracking.Replace('O', '0') : tracking;
+            return "TW" + Digits(tracking[2..^1]) + tracking[^1];
+        return tracking.All(c => char.IsAsciiDigit(c) || c is 'O' or 'I' or 'L') && tracking.Any(char.IsAsciiDigit) ? Digits(tracking) : tracking;
     }
 
     /// <summary>
@@ -753,7 +755,7 @@ internal static partial class ShopeeScreenshot
     [GeneratedRegex(@"^\d{6}[0-9A-Z]{8}$")]
     private static partial Regex OrderSnFormatPattern();
 
-    [GeneratedRegex(@"^TW[0-9O]{12}[0-9A-Z]$")]
+    [GeneratedRegex(@"^TW[0-9OIL]{12}[0-9A-Z]$")]
     private static partial Regex TwTrackingPattern();
 
     // 「商品選項貨號：」; the OCR once dropped the 貨 (「商品選項」 + 「號：A0…」, user's PC,
