@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.0.3`
+> **Contract version:** `1.0.4`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
@@ -363,6 +363,39 @@ A normal consumer does not need to duplicate:
 - Workspace security policy.
 
 If a consumer exposes a subset of these operations later, it remains CYID-backed and must use the same authority contract.
+
+### 17.1 Optional application registration through the core account portal
+
+Contract 1.0.4 adds `POST /v1/admin/identity/applications`. It accepts only
+`{applicationId, displayName}`: the ID normalizes to uppercase and must contain
+2–64 ASCII letters, digits, underscores or hyphens; the trimmed name contains
+1–120 Unicode characters and no control characters. Only the current Workspace
+Super Admin's valid Session for the configured core account application may call
+it. Workspace scope comes exclusively from that Session, never from request
+body or consumer business Workspace IDs.
+
+The operation registers the global catalog entry if absent and enables that
+application for the actor's existing Workspace. An existing catalog ID is reused
+only with the exact same display name and active status; this route never renames
+or globally reactivates an existing application, changes another Workspace,
+changes the core application, or creates Employee App Access. Re-enabling an
+existing Workspace entry preserves its existing grants; eligible previous grants
+may therefore allow entry again. Existing revoked Sessions remain revoked.
+
+Registration, Workspace enablement and audit are one D1 transaction, with current
+core Session/credential/Workspace Super Admin authority checked again inside it.
+Repeating the same valid request does not duplicate catalog or Workspace entries;
+each accepted call is audited. Success returns
+`{workspaceId, application: {applicationId, displayName, enabled: true}}` in the
+normal provider envelope. Stable errors are `CORE_SUPER_ADMIN_REQUIRED` (403),
+`INVALID_APPLICATION_REGISTRATION` (400), `CORE_APPLICATION_ACCESS_LOCKED` (409)
+and `APPLICATION_REGISTRATION_CONFLICT` (409).
+
+CY Web exposes this as an explicit Super Admin registration action and refreshes
+the existing application-access snapshot. Ordinary consumers continue to use the
+existing login/resolve/logout and App Access contracts. Registering an application
+does not configure service bindings, enable a consumer's CYID flag, merge identity
+and business Workspaces, or authorize a production rollout.
 
 ## 18. Consumer adoption and update procedure
 
