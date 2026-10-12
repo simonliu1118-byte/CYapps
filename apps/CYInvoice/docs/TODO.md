@@ -2,16 +2,17 @@
 
 本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-11（Asia/Taipei）。main 已合併 #380／#384／#385，目前 **V2.6.19 Build 0** 調整查無買方名稱留空行為並保留 CYID Consumer。#216／#379 head 已包含於 main ancestry，不重複合併。最新正式 Release 仍為 cyinvoice-v2.4.2。
+更新日期：2026-10-13（Asia/Taipei）。目前 **V2.6.19 Build 0**；#216／#379 已由 #380 進入 main，#420／#422 完成 CYID development 啟用與證據。原機 CYID 帳密進設定已由使用者確認，折讓人工歷史缺欄位尚未修正。使用者已要求本批 Release，目前因缺陷與驗收暫停，未建立新 tag／Release；最後核對正式版仍 cyinvoice-v2.4.2。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
-Cloud source／原 development 0.9.2／API 1／compatibility marker 8／storage 13，已由 Development Deploy #12 完成 additive 部署並比對原資料；CYID disabled、Built-in 保留，詳見 §7.3.3。V2.6.18 不改 Cloud／provider，不新增部署。CI 成功不等於實機驗收或正式 CYID 切換。
+Cloud source／原 development 0.9.2／API1／marker8／storage13，actual #42 已核對 CYID_ENABLED=true 與原 Workspace／Device Token hashes／history／FK 保留。單台原機設定驗證成功；其餘角色／裝置、60 秒刷新／斷線／撤銷仍待驗。舊版本段落為歷史證據，不能當現行旗標。
 
 ## 0. 接續優先順序
 
 | 優先 | 未完成工作 | 驗收位置／依賴 |
 | --- | --- | --- |
+| 第一優先 | 折讓人工處理詳情缺申請／處理欄位：查明路徑、逐筆歷史及狀態修正 | §1.1／RC AD；尚未改碼，Release 暫停 |
 | 目前 | V2.6.19 查無買方名稱可人工輸入／留空以統編送出 | RC D.12；source 6c499108 的 Windows #281／Cloud #393／Governance #1201 與工程包通過，實機待驗收 |
 | 目前 | V2.6.14 裝置管理、使用版本／最後使用與改名；保留 V2.6.13 介面 | RC Z／Y；source CI 已通過、人工尚待驗收 |
 | 目前 | V2.6.12 邀請首次加入與首次說明 | RC X；舊包重開成功有使用者證據，修正版首次成功待實機 |
@@ -30,6 +31,16 @@ Cloud source／原 development 0.9.2／API 1／compatibility marker 8／storage 
 本檔既有未勾選實機項目代表「尚未取得可引用證據」，不等於已發現 defect。已完成工程證據集中在交接／CHANGELOG，不把 CI 自動勾成人工成功。
 
 - [ ] 完成 RC Z：active 清單、獨立新增視窗標籤／欄位、A/B 升級重啟回報、離線值保留、超管改名與 revoked 歷史仍可由雲端管理查詢。
+
+## 1.1 折讓人工處理歷史缺欄位（2026-10-12 回報；尚未修正）
+
+- [x] 查核 screenshot 與既有 source，缺口／不確定性集中 CLOUD_WORK_HANDOFF 最新停點；人工申請／處理欄位不是光貿資料，不能依官方回查重建。
+- [ ] 確認使用者該筆按「已人工處理」或取消／行政結案，以及本機 metadata 是否仍在；目前沒有原 DB／備份，不宣稱唯一根因或已恢復舊資料。
+- [ ] 沿用原 owner 設計穩定逐筆對應與完整申請／處理歷史，先核對既有 metadata／issue storage，不預設另建表或相容層；開始改碼時才推進適用版本。
+- [ ] 保存申請人／時間／原因／金額、處理人／時間及結果，正常完成、取消退回、行政結案都能追溯；不覆蓋前一次同發票的歷史。
+- [ ] 詳情與列表區分等待、等待官方確認、官方完成、取消、行政結案、資料缺失；不可只憑 resolved_utc 顯示「已人工處理」。
+- [ ] 回歸含上述各分支、同發票第二次申請／五分鐘誤配、重啟／同步、寫入失敗與原資料保留；舊資料只依可靠本機證據恢復。
+- [ ] 原機驗收成功後才接續本批正式 Release；RC AD 不以 CI 自動勾選。
 
 ## 1. V2.6.x 實機與光貿驗證
 
@@ -196,7 +207,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 - [x] 實際 prepare-cyid #39（38203790273），source 2e21c870／tree c1d303e4，IDENTITY／IDENTITY_AUTHORITY 和三個 approved vars readback／100% business 部署通過。原 Cloud0.9.2／schema13／Workspace1／Device4／Token hashes／employee／history／FK／routes 保留；migration skipped、private cleanup 通過、Built-in／CYID false。精確證據及工程包見 CLOUD_WORK_HANDOFF 最新停點。
 - [x] 2026-10-12 使用者確認原 Windows 升級後發票／設定保留且原帳密可進設定，授權接續；此為單次原安裝 Built-in continuity 回報，不勾選整份 AA／AB／AC 或全部角色／裝置。
 - [x] 原 development 受控 activate-cyid：#420 head70514413／treec8fb38c1 全部 CI 通過並合併；actual #42（38206372325）source8488ce3d／同 tree 確認 CYID_ENABLED=true、100% business 部署、原 Workspace1／Device4／Token hashes／history／FK／routes 保留，migration skipped／private cleanup 通過。Recovery UTC2026-10-12T05:05:10.603Z；無 reset／rejoin／D1 restore／production／Release。
-- [ ] 原 V2.6.19 安裝重開，以 CY Web／CYID Super Admin 員工帳密進入設定，核對原資料／裝置續用、discovery 與中央當次驗證；一般員工 App Access／Role、private RPC 及 AA／AB／AC 另驗，不自動授予一般員工權限。
+- [x] 使用者於 2026-10-12 16:52／16:59 回報原 V2.6.19 安裝重開、CYID 員工帳密進設定與原資料續用正常；此為單台使用者回報。一般員工 App Access／Role、其餘裝置／private RPC／AA／AB／AC 仍另驗，不自動授權或擴大勾選。
 - [x] 官方active與retired部署入口已同步Secret並read-back：Provider development #153／preflight #154通過；Invoice #31於Provider切換時在upload前阻擋，等待Provider完成的新snapshot #32通過，原Workspace／Device hashes／history／Builtin保留、無test upload／authority switch。Exact source／refs／run evidence見現行交接及Provider DEVELOPMENT_DEPLOYMENT。
 - [x] 使用者已刪除 development 同名 CYID_WORKER_NAME Variable 並保留 Secret；唯讀 #34（38195315134）通過，原 Cloud0.9.2／storage13／Workspace／Device／Builtin／FK 保留，Provider scope 仍 false，無 upload／Identity D1 access。
 - [ ] 已配置的 private IDENTITY Fetcher／IDENTITY_AUTHORITY RPC 實際 transport、真實 Employee／App Access／Role／verified Email／原 Windows 驗收，使用真實 consumer 功能，不新增遠端測試 handler；temporary Workers Admin 取消待確認。

@@ -3,7 +3,7 @@
 本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。CYID 接續依使用者決定，不再上傳遠端測試 Worker／版本／handler；以原 development consumer 的既有功能受控驗收，保留原 Workspace／Device／資料。撤銷會完整清除 portable folder，僅可在有完整備份且已指定可撤銷裝置的窗口執行。
 
 - 目前工程基準：**V2.6.19 Build 0**；[Cloud Check #412 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38198294935/artifacts/11724462289)，source `2230ec2b88d2c8835a20f374f08abfc66102a70d`，SHA-256 `aa97e42368f38828b89c1206f6454b7b39ac44420bd188e7bbe1c36107dc32bc`，2026-10-15 11:06 Asia/Taipei 到期。該 source 的 Invoice subtree 與本輪 main 基準 `2c3071c8` 完全一致；不是正式 Release。
-- Development Cloud：**0.9.2 / API 1 / compatibility marker 8 / storage Schema 13**；prepare-cyid #39 保留原資料完成綁定，使用者回報原安裝 Built-in continuity 後，[實際 activate-cyid #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325) 確認 **CYID_ENABLED=true**／原 Workspace／Device Token hashes／history／FK 保留。Provider development 0.3.7／canonical 1.0.4；原 Windows 中央當次驗證、其餘角色／裝置／AA／AB／AC 仍待驗收。
+- Development Cloud：**0.9.2 / API 1 / compatibility marker 8 / storage Schema 13**；prepare-cyid #39 保留原資料完成綁定，使用者回報原安裝 Built-in continuity 後，[實際 activate-cyid #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325) 確認 **CYID_ENABLED=true**／原 Workspace／Device Token hashes／history／FK 保留。Provider development 0.3.7／canonical 1.0.4；原 Windows CYID 帳密進設定已由使用者回報成功；其餘角色／裝置／AA／AB／AC 仍待驗收，另有折讓歷史缺欄位待修（AD），Release 暫停。
 - PR #216／#379 的 source 已隨 #380 進入 main；舊 Windows／Cloud runs 僅為歷史證據，不再作現行停點。下方節名中的舊版號表示功能首次引入；本次一律使用 V2.6.19 驗收。
 - 升級原安裝：先關閉程式並備份完整 portable folder，以工程包程式檔覆蓋原位置（含 Runtime／package-files.json），保留 Data／Cache／Logs 與原 Windows 使用者。重開應延續原 Workspace／Device／資料，不重新加入或進行 reset。
 
@@ -320,7 +320,9 @@
 
 自動化不能代替實機 96 DPI 驗收。125／150 DPI、High Contrast 尚待證據，不自動升為本輪阻塞。
 
-## AA. V2.6.19 CYID Consumer 實機驗收（尚未執行）
+## AA. V2.6.19 CYID Consumer 實機驗收（原機設定驗證已回報，其餘待驗）
+
+- [x] 2026-10-12 16:52／16:59 使用者确认原安裝重開後以 CYID 員工帳密進設定、CYID 模式與原資料續用正常。這是單台使用者回報，未取得 DB／HTTP trace，不代替下列完整 matrix。
 
 中央登記／runtime scope 與兩個私有 bindings 的配置已完成，#39 確認原 schema13／資料保留；這不代替 Employee／App Access／Role 或 transport 授權。先驗原安裝 Built-in continuity 與員工 readiness，再受控驗 CYID；不新增遠端測試程式或 synthetic 帳號。記錄精確 source、工程包 hash、環境與備份，不把配置或 local fixture 當 live 授權。原 Local／Built-in A/B/C 與業務驗收保留。
 
@@ -371,3 +373,15 @@
 - [ ] 撤銷時已送出的 AMEGO 操作不假稱取消、不自動重送，結果不明有既有查核途徑，不保留已撤銷裝置業務資料。
 
 正式部署／CYID 切換／Release 未授權；RC AA／AB 未完成項仍保留。
+
+
+## AD. 折讓人工申請／處理歷史（缺陷待修，尚未驗收）
+
+2026-10-12 使用者回報已結束折讓詳情全部人工欄位空白；目前未改碼。既有 source 缺口與不確定性見 CLOUD_WORK_HANDOFF，唯一實作待辦見 TODO §1.1。驗收用受控本機資料／光貿測試環境，不改正式發票。
+
+- [ ] 正常申請到官方確認完成：申請人／時間／原因／金額、管理員／人工處理時間及官方結果完整；重啟／重新整理仍可讀。
+- [ ] 等待光貿確認不當作完成，保留原人工資料，不盲目重送。
+- [ ] 取消退回與行政結案保留原申請及結束 actor／時間／結果；列表／詳情顯示正確，不冒充官方完成。
+- [ ] 同發票再申請後，兩筆歷史各對應自己的資料，跨五分鐘／重啟／同步不空白或誤取較新申請。
+- [ ] 寫入失敗／中斷不留下只有成功狀態而沒有人工紀錄的半成品，原發票／待辦／資料保留。
+- [ ] 舊紀錄只用可核對的本機 metadata／備份恢復；缺失明确顯示，不編造人員／時間／原因或依光貿猜補。
