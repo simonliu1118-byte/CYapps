@@ -15,6 +15,8 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _shopeeOrderType = new();
     private readonly TextBox _shopeeCustomerCode = new();
     private readonly TextBox _shopeeNotePrefix = new();
+    private readonly TextBox _shopeeLabelPrinter = new();
+    private readonly TextBox _shopeeLabelScale = new();
     private readonly TextBox _moOrderType = new();
     private readonly TextBox _moCustomerCode = new();
     private readonly TextBox _moNotePrefix = new();
@@ -124,7 +126,7 @@ internal sealed class SettingsForm : Form
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
         flow.Controls.Add(Option(_clearAfterSave, "儲存單據後自動清除表單", _settings.ClearAfterSave));
         flow.Controls.Add(Option(_browserHotkey, $"在瀏覽器按 {CYERPAutoInput.BrowserHotkey.KeyName} 開啟蝦皮光學辨識並開始擷取（程式開著即可）", _settings.BrowserHotkey));
-        flow.Controls.Add(Option(_shopeeFullAuto, "蝦皮全自動：按「開始」後擷取、判讀、帶回、輸入 ERP、儲存並列印（只限蝦皮）", _settings.ShopeeFullAuto));
+        flow.Controls.Add(Option(_shopeeFullAuto, "蝦皮自動擷取：按「開始」後擷取、判讀、帶回、輸入 ERP、儲存並列印（只限蝦皮）", _settings.ShopeeFullAuto));
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         Option(_firstRowWarehouse, "商品明細第一列庫別預設填入：", _settings.FirstRowWarehouseEnabled);
@@ -197,7 +199,9 @@ internal sealed class SettingsForm : Form
         page.Controls.Add(Section("蝦皮",
             ("銷貨單別", _shopeeOrderType, _settings.ShopeeOrderType, 80),
             ("客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 120),
-            ("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 150)));
+            ("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 150),
+            ("寄件單印表機", _shopeeLabelPrinter, _settings.ShopeeLabelPrinter, 150),
+            ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
@@ -337,6 +341,15 @@ internal sealed class SettingsForm : Form
             _firstRowWarehouseCode.Focus();
             return;
         }
+        if (!int.TryParse(_shopeeLabelScale.Text.Trim(), out var labelScale) || labelScale is < 10 or > 200)
+        {
+            MessageBox.Show(this, "蝦皮寄件單縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 1;
+            _shopeeLabelScale.Focus();
+            return;
+        }
+        _settings.ShopeeLabelPrinter = _shopeeLabelPrinter.Text.Trim();
+        _settings.ShopeeLabelScale = labelScale;
         _settings.ShopeeOrderType = _shopeeOrderType.Text.Trim();
         _settings.ShopeeCustomerCode = _shopeeCustomerCode.Text.Trim();
         _settings.ShopeeNotePrefix = _shopeeNotePrefix.Text.Trim();

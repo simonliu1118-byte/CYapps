@@ -1,0 +1,158 @@
+using Xunit;
+
+namespace CYERPAutoInput.Tests;
+
+/// <summary>蝦皮全自動 screens, laid out like the seller centre; every number here is made up.</summary>
+public sealed class ShopeeBatchScreensTests
+{
+    private static OcrBox B(string text, int left, int top, int width = 0, int height = 20) =>
+        new(text, left, top, width > 0 ? width : text.Length * 14, height);
+
+    private static List<OcrBox> ListHeader(string todayChip) =>
+    [
+        B("首頁", 66, 142), B("我的銷售", 137, 142),
+        B("待出貨 (63)", 412, 287), B("運送中 (317)", 525, 287),
+        B("訂單狀態", 245, 366), B("全部", 343, 366), B("待處理 (31)", 419, 366), B("已處理 (32)", 544, 366),
+        B("建議出貨期限", 245, 419), B("全部", 374, 419), B("已延遲出貨 (0)", 451, 419), B(todayChip, 597, 419), B("建議明天內出貨 (31)", 773, 419),
+        B("物流方式", 951, 472), B("所有運送方式", 1034, 472),
+        B("32 包裝", 245, 533),
+        B("商品", 264, 594), B("買家實付金額", 776, 594), B("狀態", 967, 594), B("到期時間", 1019, 594), B("物流方式", 1287, 594), B("操作", 1543, 594)
+    ];
+
+    [Fact]
+    public void Reads_an_empty_today_list_and_finds_the_deadline_all()
+    {
+        var boxes = ListHeader("建議今天內出貨 (0)").Concat([B("找不到訂單", 960, 770), B("請重新載入", 990, 795)]).ToList();
+        Assert.True(ShopeeBatchScreens.IsOrderList(boxes));
+        Assert.True(ShopeeBatchScreens.NoOrders(boxes));
+        Assert.Equal(0, ShopeeBatchScreens.TodayCount(boxes));
+        Assert.Equal(31, ShopeeBatchScreens.PendingCount(boxes));
+        Assert.Null(ShopeeBatchScreens.FirstOrder(boxes));
+        // The 全部 of 建議出貨期限, not the one of 訂單狀態.
+        Assert.Equal(419, ShopeeBatchScreens.DeadlineAll(boxes)!.Top);
+    }
+
+    [Fact]
+    public void Takes_the_first_order_below_the_header_with_its_carrier()
+    {
+        var boxes = ListHeader("建議今天內出貨 (2)").Concat(
+        [
+            B("buyer_one", 300, 658), B("訂單編號 261012AB1C23D4", 1587, 658),
+            B("滿額折價【測試】商品一", 334, 708), B("x1", 732, 708), B("NT$318", 775, 708),
+            B("待出貨", 967, 708), B("為了避免延遲出貨，請在 2026/10/13 19:00 之前 出", 967, 732),
+            B("蝦皮店到店 - 隔日到貨", 1287, 708), B("安排出貨", 1544, 708),
+            B("buyer_two", 300, 990), B("訂單編號 261012XY9Z87W6", 1587, 990), B("待出貨", 967, 1040), B("7-ELEVEN", 1287, 1040)
+        ]).ToList();
+        var first = ShopeeBatchScreens.FirstOrder(boxes)!;
+        Assert.Equal("261012AB1C23D4", first.OrderSn);
+        Assert.Equal(708, first.Status.Top);
+        Assert.Equal("蝦皮店到店-隔日到貨", first.Carrier);
+        Assert.True(ShopeeBatchScreens.SupportedCarrier(first.Carrier));
+        Assert.True(ShopeeBatchScreens.SupportedCarrier("蝦皮店到宅"));
+        Assert.False(ShopeeBatchScreens.SupportedCarrier("7-ELEVEN"));
+        Assert.False(ShopeeBatchScreens.SupportedCarrier("全家"));
+    }
+
+    private static List<OcrBox> Detail(params OcrBox[] card) =>
+    [
+        B("首頁", 66, 30), B("我的銷售", 136, 30), B("訂單明細", 241, 30),
+        B("待出貨", 309, 125), B("為了避免延遲出貨，請在 2026/10/13 19:00 之前 出貨", 309, 165),
+        .. card,
+        B("訂單編號", 309, 586), B("261012AB1C23D4", 309, 621),
+        B("運送資訊", 309, 668), B("包裹1:", 309, 709), B("蝦皮店到店 - 隔日到貨", 360, 709)
+    ];
+
+    [Fact]
+    public void Finds_the_ship_button_and_never_the_cancel_button()
+    {
+        var boxes = Detail(B("不成立訂單", 1003, 238), B("安排出貨", 1125, 238));
+        Assert.True(ShopeeBatchScreens.IsOrderDetail(boxes));
+        Assert.Equal("261012AB1C23D4", ShopeeBatchScreens.DetailOrderSn(boxes));
+        Assert.Equal("蝦皮店到店-隔日到貨", ShopeeBatchScreens.DetailCarrier(boxes));
+        Assert.Equal(1125, ShopeeBatchScreens.ShipButton(boxes)!.Left);
+        Assert.Equal("安排取件", ShopeeBatchScreens.ShipButton(Detail(B("不成立訂單", 1003, 238), B("安排取件", 1125, 238)))!.Text);
+
+        // Only 不成立訂單, the two read as one, or the button overlapping it: nothing to click.
+        Assert.Null(ShopeeBatchScreens.ShipButton(Detail(B("不成立訂單", 1003, 238))));
+        Assert.Null(ShopeeBatchScreens.ShipButton(Detail(B("不成立訂單安排出貨", 1003, 238))));
+        Assert.Null(ShopeeBatchScreens.ShipButton(Detail(B("不成立訂單", 1003, 238), B("安排出貨", 1060, 238))));
+        // Shipped already: no button.
+        Assert.Null(ShopeeBatchScreens.ShipButton(Detail()));
+    }
+
+    [Fact]
+    public void Waits_for_the_tracking_number_in_the_dialog()
+    {
+        List<OcrBox> requesting = [B("查看寄件編號", 60, 66), B("寄件編號申請中……", 297, 120), B("確認", 610, 778)];
+        Assert.NotNull(ShopeeBatchScreens.TrackingDialogTitle(requesting));
+        Assert.True(ShopeeBatchScreens.TrackingRequested(requesting));
+        Assert.Equal("", ShopeeBatchScreens.DialogTracking(requesting));
+
+        List<OcrBox> ready = [B("查看寄件編號", 52, 60), B("TW1 234 567 890 12O", 278, 112), B("請盡快將包裹交寄。", 278, 135), B("列印寄件單", 552, 808)];
+        Assert.False(ShopeeBatchScreens.TrackingRequested(ready));
+        Assert.Equal("TW123456789012O", ShopeeBatchScreens.DialogTracking(ready));
+        Assert.Equal(552, ShopeeBatchScreens.PrintLabelButton(ready)!.Left);
+    }
+
+    [Fact]
+    public void Reads_the_label_preview()
+    {
+        List<OcrBox> loading = [B("預覽列印", 18, 149), B("列印出貨文件", 1790, 165), B("0%", 1204, 584), B("下載出貨文件中", 884, 632)];
+        Assert.True(ShopeeBatchScreens.IsAwbPage(loading));
+        Assert.True(ShopeeBatchScreens.AwbDownloading(loading));
+        Assert.Null(ShopeeBatchScreens.AwbDownloaded(loading));
+
+        List<OcrBox> done =
+        [
+            B("預覽列印", 17, 149), B("出貨文件已下載完成。已成功下載1個包裹中的1個包裹的出貨文件。0個包裹下載失敗。", 33, 182),
+            B("列印出貨文件", 1790, 177),
+            B("蝦皮訂單編號: 261012AB1C23D4", 750, 422, 180, 14), B("寄件編號: TW1234567890120", 750, 438, 180, 14)
+        ];
+        Assert.Equal(new ShopeeAwbDownload(1, 1, 0), ShopeeBatchScreens.AwbDownloaded(done));
+        Assert.Equal("261012AB1C23D4", ShopeeBatchScreens.LabelOrderSn(done));
+        Assert.Equal("TW1234567890120", ShopeeBatchScreens.LabelTracking(done));
+        Assert.Equal(1790, ShopeeBatchScreens.PrintDocumentsButton(done)!.Left);
+        // The last character of a TW number may be a letter or a digit; the rest are digits.
+        Assert.True(ShopeeBatchScreens.SameTracking("TW1 234 567 890 120", "TW1234567890120"));
+        Assert.True(ShopeeBatchScreens.SameTracking("TWI23456789O120", "TW1234567890120"));
+        Assert.False(ShopeeBatchScreens.SameTracking("TW123456789012O", "TW1234567890120"));
+        Assert.False(ShopeeBatchScreens.SameTracking("", ""));
+    }
+
+    [Fact]
+    public void Checks_chromes_print_dialog()
+    {
+        List<OcrBox> dialog =
+        [
+            B("列印", 972, 46), B("1 張紙", 1270, 46),
+            B("目的地", 972, 102), B("GG-D410 Printer", 1144, 102),
+            B("頁面", 972, 156), B("全部", 1127, 156),
+            B("縮放比例", 972, 374), B("自訂", 1127, 374), B("110", 1127, 412),
+            B("列印", 1187, 831), B("取消", 1262, 831)
+        ];
+        Assert.True(ShopeeBatchScreens.IsPrintDialog(dialog));
+        Assert.Equal("GG-D410 Printer", ShopeeBatchScreens.PrintDestination(dialog));
+        Assert.True(ShopeeBatchScreens.SamePrinter(ShopeeBatchScreens.PrintDestination(dialog), "GG-D410 Printer"));
+        Assert.True(ShopeeBatchScreens.SamePrinter("GG-D410Printer", "gg-d410 printer"));
+        Assert.False(ShopeeBatchScreens.SamePrinter("Microsoft Print to PDF", "GG-D410 Printer"));
+        Assert.Equal(110, ShopeeBatchScreens.PrintScale(dialog));
+        // The button, not the dialog's title.
+        Assert.Equal(831, ShopeeBatchScreens.PrintButton(dialog)!.Top);
+    }
+
+    [Fact]
+    public void Finds_the_dialog_cross_right_of_the_title()
+    {
+        // A white dialog (x 100–600) on a dimmed page, the title at y 50 and a grey × around (560, 60).
+        int Pixel(int x, int y)
+        {
+            if (x < 100 || x >= 600 || y < 20 || y >= 190) return 120;
+            var dx = x - 560;
+            var dy = y - 60;
+            return Math.Abs(dx) <= 7 && Math.Abs(dy) <= 7 && (Math.Abs(dx - dy) <= 1 || Math.Abs(dx + dy) <= 1) ? 140 : 255;
+        }
+        var cross = ShopeeBatchScreens.CloseCross(Pixel, 700, 200, B("查看寄件編號", 120, 50, 150, 20))!.Value;
+        Assert.InRange(cross.X, 557, 563);
+        Assert.InRange(cross.Y, 57, 63);
+    }
+}

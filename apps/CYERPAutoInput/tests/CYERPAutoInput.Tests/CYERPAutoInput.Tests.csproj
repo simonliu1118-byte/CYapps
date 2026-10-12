@@ -26,6 +26,7 @@
     <Compile Include="..\..\ShopeeScreenshot.cs" Link="Linked\ShopeeScreenshot.cs" />
     <Compile Include="..\..\RibbonPrintLocator.cs" Link="Linked\RibbonPrintLocator.cs" />
     <Compile Include="..\..\ShopeePageScan.cs" Link="Linked\ShopeePageScan.cs" />
+    <Compile Include="..\..\ShopeeBatchScreens.cs" Link="Linked\ShopeeBatchScreens.cs" />
   </ItemGroup>
 
   <ItemGroup>

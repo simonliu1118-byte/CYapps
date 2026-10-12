@@ -29,7 +29,8 @@
 - 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續；設定的折價券／運費／促銷組合品號不查批號）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」（讀「列印」周圍與 ERP 彈出視窗，最多重試 20 秒）→ 設定「儲存單據後自動清除表單」時清空（`ClearFormIfSaved` 唯一入口）。
 - 輸入期間忽略實體滑鼠，Esc 立即恢復並緊急停止；輸入法自動切英數；自由文字欄位讀回比對。
 - 蝦皮光學辨識輸入：按「開始」自動捲動瀏覽器訂單頁截圖（Home 回頂、像素比對捲動距離、到底即停）→ 依卡片灰色間隔切卡片、只辨識訂單編號／進帳資訊／買家實付金額三張 → 判讀並帶回；有問題時以 CY 框選截圖或 Win+Shift+S＋Ctrl+V 補圖。訂單編號 14 碼檢查、簡體字形摺疊。
-- 蝦皮全自動（設定）：擷取 → 帶回 → 輸入 ERP → 儲存 → 列印；全程鎖實體滑鼠並在畫面中央顯示不入鏡的「全自動運轉中／按 Esc 中止」，需要使用者確認時立即解除。
+- 蝦皮全自動（V0.3.0 開發中，選單）：自己的 Chrome 視窗逐筆 安排出貨 → 寄件單列印 → 光學辨識 → ERP，直到沒有待處理訂單；見 §4。
+- 蝦皮自動擷取（設定，原名「蝦皮全自動」）：擷取 → 帶回 → 輸入 ERP → 儲存 → 列印；全程鎖實體滑鼠並在畫面中央顯示不入鏡的「全自動運轉中／按 Esc 中止」，需要使用者確認時立即解除。
 - 其他來源：蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`）、酷澎 DeliveryList。預覽、單筆、批次（開始前預檢全部）、轉人工、本機防重複紀錄；開始前檢查不通過回到同一個匯入視窗、保留已填內容。統編自動查客戶全名（經濟部 API）。
 - 共用設定：折價券／運費／促銷組合品號；貨運別（物流：郵局、大榮、新竹、黑貓、宅配通、嘉里；本公司；超商 6 種）。
 - 瀏覽器 F8：開啟蝦皮光學辨識並開始擷取（V0.2.8）。
@@ -70,6 +71,7 @@
 - V0.2.8 Build 4：`PhysicalMouseLock.EscapePressed`（hook 看到實體 Esc 即在 pool thread 觸發一次）→ `AutomationSession.OnEscape`：取消 `EscapeToken` 並 Post `End(Cancelled)`；`RunDocumentAsync` 以 EscapeToken 取消 `_automationCts`；`ShopeeScreenshotForm.AutoScanAsync` 以 stop token 傳入 `ScanAsync`（含 ReadCardsAsync）。`ShopeeScreenshotHelpForm` 改寫為自動擷取流程；選單「光學辨識輸入 (F8)」。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
 - V0.2.9 Build 0：蝦皮套裝 `ShopeeScreenshot.BundleParts`（+／＋／十）→ `ParseItems.AddItem` 拆品號（ShopeeShotItem 首項帶套裝金額供核對）；`Combine` 產生的表單品項單價留空、首項 `BundleTotal`、促銷組合列 `TakesBundleGap`（有套裝必加）；表單隱藏欄 BundleKey／BundleTotal／BundleGap → `DetailRow`；`ErpAutomationService.FillDetailsAsync` 對套裝品項以 `ReadDetailUnitPriceAsync`（開啟單價編輯框 WM_GETTEXT，失敗 OCR 編輯框，再 Enter）讀 ERP 原價，促銷組合單價＝基礎值−Σ(原價×數量−套裝售價)。讀不到或順序不對即停止（不猜）。使用者要求報表金額正確，不採「首項全價、其餘 0」。共用 `Bundles.Expand`（ImportedOrder.cs）套用於 MO店+、酷澎、蝦皮匯出檔（mapping 加 `PromotionItemCode`）；沒設促銷組合品號才轉人工。ERP 原價合計 < 套裝售價時停止轉人工。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
 - V0.2.4 Build 0 實作：一般輸入也顯示「自動輸入中」（`MainForm.RunDocumentAsync` 一律 `Session.Begin(title)`／`End()`，`AutomationSession` 取代原本直接 `PhysicalMouseLock`）；提示框寬度依文字；光學辨識進度改為 `IProgress<double>`（依要辨識的列數）＋百分比、`ShowProgress` 以 Value+1 再回設跳過主題動畫；`ParseItems` 沒有任何編號且小計欄 1–2 個數字時視為第 1 項（單品促銷誤報）；設定兩處文字。
+- V0.3.0 Build 0（branch `cyerp-auto-input/shopee-batch`）：蝦皮全自動批次。`ShopeeBatchRunner`：`chrome.exe --new-window <ListUrl>`（App Paths 登錄或預設安裝路徑），以前後 `Chrome_WidgetWin_1`（chrome 程序）視窗差異找出自己的視窗並最大化；每一步整窗擷取＋PaddleOCR（maxScale 1.0）讀畫面，`ShopeeBatchScreens`（純邏輯，有單元測試）判斷頁面與點擊目標：清單（我的銷售／待處理 (n)／建議出貨期限列的「全部」／表頭「買家實付金額」下第一個「待出貨」、上方訂單編號、物流方式欄）、明細（訂單編號、包裹1 物流、`ShipButton` 防「不成立訂單」＋橘色像素檢查）、查看寄件編號（申請中→TW 號碼、列印寄件單，看不到就滾輪）、預覽列印（下載完成 1/1/0、寄件單上的訂單編號與寄件編號）、Chrome 列印（目的地、縮放「自訂」下的數字、「取消」左側的「列印」）、× 以像素找（標題上方一列找對話框右緣，標題右側唯一墨跡）。之後 Ctrl+W 回訂單頁（找不到用 Ctrl+Tab 最多 4 次），ERP 走 `ShopeeScreenshotForm(autoStart, session, browser: 自己的視窗)` → `StartAutomationAsync(fullAuto, batch: true)`（`_lastRunResult`）；有提醒／警告／轉人工／未儲存／未列印即 `ShopeeBatchStop`。完成後 Ctrl+W 訂單分頁、F5 清單。結束條件：待處理 (0)，或「全部」找不到訂單且待處理不為正數。`MainForm.Alarm`（SystemSounds.Hand＋Console.Beep×3）。設定 `ShopeeLabelPrinter`（預設 GG-D410 Printer）、`ShopeeLabelScale`（110）。**全部未實機測試**；超商（7-11／全家／萊爾富等）流程使用者之後提供；「安排取件」後的畫面未見過，可能需要補。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；CYID 串接。
 

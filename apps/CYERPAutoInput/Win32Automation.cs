@@ -261,6 +261,13 @@ internal static class InputSender
         NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 
+    /// <summary>Keys held together, pressed in order and released in reverse (Ctrl+W).</summary>
+    public static void Chord(params ushort[] keys)
+    {
+        var inputs = keys.Select(k => Key(k, 0)).Concat(keys.Reverse().Select(k => Key(k, NativeMethods.KEYEVENTF_KEYUP))).ToArray();
+        NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+    }
+
     /// <summary>Set when CY closed an open IME before typing (for the log).</summary>
     public static int ImeClosedCount;
 

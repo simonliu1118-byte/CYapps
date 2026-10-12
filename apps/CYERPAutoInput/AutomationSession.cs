@@ -38,6 +38,7 @@ internal sealed class AutomationSession : IDisposable
 
     public const string FullAutoTitle = "全自動運轉中";
     public const string InputTitle = "自動輸入中";
+    public const string BatchTitle = "蝦皮全自動運轉中";
 
     public AutomationSession(AppLogger log) => _log = log;
 

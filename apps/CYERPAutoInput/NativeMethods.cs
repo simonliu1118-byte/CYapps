@@ -28,6 +28,7 @@ internal static class NativeMethods
 
     internal const ushort VK_BACK = 0x08;
     internal const ushort VK_TAB = 0x09;
+    internal const ushort VK_CONTROL = 0x11;
     internal const ushort VK_RETURN = 0x0D;
     internal const ushort VK_ESCAPE = 0x1B;
     internal const ushort VK_HOME = 0x24;
@@ -157,6 +158,14 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool IsIconic(nint hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsWindow(nint hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

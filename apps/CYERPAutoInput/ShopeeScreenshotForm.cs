@@ -29,13 +29,16 @@ internal sealed class ShopeeScreenshotForm : Form
     private readonly Label _progressText = new() { Visible = false, AutoSize = true, Anchor = AnchorStyles.Right, ForeColor = CyVisualTheme.TextSecondary };
     private readonly CyPrimaryButton _apply = new();
     private readonly AutomationSession? _session;
+    private readonly nint _browser;
 
     public ShopeeShotResult? Result { get; private set; }
 
     /// <param name="autoStart">Shopee full auto (user, 2026-10-11): start the page scan on opening, without 開始.</param>
     /// <param name="session">Shopee full auto: keeps the mouse locked from the scan on (user, 2026-10-12).</param>
-    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false, AutomationSession? session = null)
+    /// <param name="browser">蝦皮全自動 (batch): its own Chrome window, instead of looking for one.</param>
+    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false, AutomationSession? session = null, nint browser = 0)
     {
+        _browser = browser;
         _ocr = ocr;
         _mapping = mapping;
         _log = log;
@@ -206,7 +209,7 @@ internal sealed class ShopeeScreenshotForm : Form
     private async Task AutoScanAsync()
     {
         if (_capturing) return;
-        var browser = ShopeePageScanner.FindBrowser();
+        var browser = _browser != 0 ? _browser : ShopeePageScanner.FindBrowser();
         if (browser == 0)
         {
             MessageBox.Show(this, "找不到開著蝦皮訂單頁的瀏覽器視窗。\n請先在瀏覽器開好訂單明細頁，再按「自動擷取」；也可以用「框選截圖」或 Ctrl+V 貼上。",

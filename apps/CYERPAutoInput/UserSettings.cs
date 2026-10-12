@@ -19,6 +19,12 @@ internal sealed class UserSettings
     /// into ERP, save and print. Shopee only: MO店+ and Coupang need invoice details first.
     /// </summary>
     public bool ShopeeFullAuto { get; set; }
+    /// <summary>
+    /// 蝦皮全自動 (batch, user 2026-10-12): Chrome's print dialog must show this printer and
+    /// scale before the label is printed; otherwise the batch stops.
+    /// </summary>
+    public string ShopeeLabelPrinter { get; set; } = "GG-D410 Printer";
+    public int ShopeeLabelScale { get; set; } = 110;
     /// <summary>When on, a blank 庫別 on the first detail row is filled with <see cref="FirstRowWarehouse"/>; ERP carries it to later rows.</summary>
     public bool FirstRowWarehouseEnabled { get; set; }
     public string FirstRowWarehouse { get; set; } = string.Empty;
