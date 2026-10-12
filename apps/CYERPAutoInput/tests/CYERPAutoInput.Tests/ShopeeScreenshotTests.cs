@@ -299,6 +299,73 @@ public class ShopeeScreenshotTests
     }
 
     [Fact]
+    public void Numbers_guessed_index_glyphs_from_their_neighbours()
+    {
+        // The PC's boxes (diagnostic log, 2026-10-11): 編號 1 and 2 both read as "-", 3 and 4 clean.
+        List<OcrBox> items =
+        [
+            B("30", 771, 86, 11, 17), B("5", 850, 87, 9, 14), B("146", 909, 87, 26, 18), B("-", 45, 99, 4, 7), B("150", 915, 105, 19, 15),
+            B("4號", 95, 114, 9, 7), B("商品選項貨號:X00004", 147, 129, 132, 15),
+            B("30", 768, 244, 15, 16), B("146", 909, 244, 27, 18), B("5", 850, 245, 8, 14), B("-", 44, 257, 7, 9), B("150", 916, 263, 19, 15),
+            B("2號", 94, 272, 11, 7), B("商品選項貨號：X00003", 146, 286, 133, 18),
+            B("30", 771, 402, 11, 17), B("146", 909, 402, 27, 18), B("5", 850, 403, 9, 14), B("3", 42, 413, 9, 14), B("150", 915, 420, 20, 16),
+            B("2號", 93, 430, 13, 8), B("商品選項貨號:X00002", 146, 444, 134, 16),
+            B("30", 769, 560, 16, 16), B("146", 909, 560, 26, 18), B("5", 850, 561, 9, 15), B("4", 43, 571, 9, 12), B("150", 915, 578, 19, 16),
+            B("商品選項貨號:X00001", 146, 602, 132, 15)
+        ];
+        var problems = new List<string>();
+        var (parsed, groups) = ShopeeScreenshot.ParseItems(ShopeeScreenshot.MergeLines(items), 983, problems);
+        Assert.Empty(problems);
+        Assert.Equal([1, 2, 3, 4], groups.Select(g => g.Index));
+        Assert.Equal([1, 2, 3, 4], parsed.Select(i => i.Group));
+    }
+
+    [Fact]
+    public void Treats_an_original_below_the_price_as_misread()
+    {
+        // The PC's boxes (diagnostic log, 2026-10-11): group 2's struck 480 read as 180.
+        List<OcrBox> items =
+        [
+            B("96", 777, 93, 11, 16), B("466", 917, 93, 23, 19), B("5", 857, 94, 8, 14), B("1", 50, 106, 6, 10), B("480", 921, 113, 21, 13),
+            B("商品選項貨號：X00470", 152, 136, 132, 16),
+            B("96", 777, 250, 12, 17), B("466", 918, 251, 22, 18), B("5", 857, 252, 8, 14), B("2", 50, 264, 6, 10), B("180", 924, 271, 18, 12),
+            B("商品選項貨號:X00470", 151, 293, 134, 17)
+        ];
+        var problems = new List<string>();
+        var (_, groups) = ShopeeScreenshot.ParseItems(items, 979, problems);
+        Assert.Empty(problems);
+        Assert.Equal([new ShopeeShotGroup(1, 466, 480), new ShopeeShotGroup(2, 466, 480)], groups);
+    }
+
+    [Theory]
+    [InlineData("包裹1:新竹物流#5000000001")]
+    [InlineData("包裏1:新竹物流#5000000001")]
+    [InlineData("包里1:新竹物流#5000000001")]
+    public void Reads_the_carrier_whatever_glyph_follows_the_package_word(string line)
+    {
+        var problems = new List<string>();
+        var order = ShopeeScreenshot.ParseOrder(ShopeeScreenshot.MergeLines(
+            [B("訂單編號", 64, 50), B("2610000TEST01A", 65, 87), B("運送資訊", 64, 131), B(line, 65, 173, 290)]), problems);
+        Assert.Equal("新竹物流", order.Carrier);
+        Assert.Equal("5000000001", order.TrackingNumber);
+        Assert.Empty(problems);
+    }
+
+    [Theory]
+    [InlineData("2610000TEST01A", false)]
+    [InlineData("2610000TESST01A", true)]
+    [InlineData("26100TEST01AB", true)]
+    public void Flags_an_order_number_that_breaks_the_shopee_format(string orderSn, bool flagged)
+    {
+        // The PC once read 「QV」 as 「QWW」, giving 15 characters (2026-10-11).
+        var problems = new List<string>();
+        var order = ShopeeScreenshot.ParseOrder(ShopeeScreenshot.MergeLines(
+            [B("訂單編號", 64, 50), B(orderSn, 65, 87), B("運送資訊", 64, 131), B("包裹1：新竹物流#5000000001", 65, 173, 290)]), problems);
+        Assert.Equal(orderSn, order.OrderSn);
+        Assert.Equal(flagged, problems.Any(p => p.Contains("14 碼", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void Proposes_rereading_lone_digits_the_detector_missed()
     {
         // As the PC read it: the 編號 "1" and the 數量 "1" of the first row are missing.
@@ -386,5 +453,21 @@ public class ShopeeScreenshotTests
     {
         Assert.Equal(ok, ShopeeScreenshot.TryNumber(text, out var value, digitsOnly: false));
         if (ok) Assert.Equal(expected, value);
+    }
+    [Fact]
+    public void Reads_amount_labels_the_ocr_returned_in_simplified_glyphs()
+    {
+        // The PC read 「訂單金額」 as 「訂單金额」 (diagnostic log, 2026-10-12).
+        List<OcrBox> shot =
+        [
+            new("買家實付金額", 40, 12, 126, 19), new("訂單金额", 682, 40, 56, 18), new("NT$1,000", 830, 42, 57, 15),
+            new("買家支付運費", 657, 74, 81, 17), new("NT$0", 856, 73, 32, 18), new("賣場優惠券", 670, 137, 70, 17),
+            new("-NT$40", 840, 137, 50, 19), new("买家總支付金額", 644, 174, 96, 16), new("NT$960", 794, 169, 96, 24)
+        ];
+        var problems = new List<string>();
+        var amounts = ShopeeScreenshot.ParseAmounts(shot, problems)!;
+        Assert.Empty(problems);
+        Assert.Equal(1000m, amounts.OrderAmount);
+        Assert.Equal(960m, amounts.Total);
     }
 }

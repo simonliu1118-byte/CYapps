@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-11（V0.2.0 Build 31，已合併 `main`）  
+> 更新：2026-10-12（V0.2.3 Build 1 由 PR #398 合併進 `main`）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -10,58 +10,58 @@
 2. `/REPO_POLICY.md`
 3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.33）
 4. 本文件 → `README.md` → `CHANGELOG.md`
-5. `main` 的實際 source（PR #104 已合併，工作 branch 已刪除）
+5. `main` 的實際 source（PR #104、PR #398 已合併，工作 branch 已刪除）
 
 不要以舊聊天記憶覆蓋目前 Git 狀態。
 
 ## 2. Branch／PR／版本
 
 - Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
-- `main`：C# 重寫線 `V0.2.0` Build 31（2026-10-11 由 PR #104 squash merge，取代舊 Go 線 `V0.0.10` Build 19）。工作 branch `cyerp-auto-input/v0.1.0-csharp` 已刪除；舊 Go optical prototype PR #103 已關閉。
+- `main`：`V0.2.3` Build 1（2026-10-12 由 PR #398 squash merge；涵蓋 V0.2.1 Build 0–8、V0.2.2 Build 0–2、V0.2.3 Build 0–1）。前一次合併為 PR #104（V0.2.0 Build 31，C# 重寫線取代舊 Go 線 `V0.0.10` Build 19）。工作 branch 合併後刪除。
 - 下一輪修改從最新 `main` 開新 branch（例如 `cyerp-auto-input/<type>-<summary>`），開新 PR。
-- VERSION `0.2.0`，BUILD 見 `BUILD`。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新的獨立修改依共通規則判斷 Z＋1（Build 歸零）或沿用版本加 Build。
+- VERSION／BUILD 見同名檔。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新功能 Z＋1（Build 歸零），返修 Build＋1；使用者說「下一版一起修」的項目不單獨發版。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
 - 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。尚未正式 Release。
-- 合併後待辦：從 `main` 手動執行一次 `CYERPAutoInput OCR Model Mirror` 建立模型 Release（之後的建置優先從該 Release 取模型）。
+- OCR 模型 Release：2026-10-11 使用者同意後從 `main` 執行 `CYERPAutoInput OCR Model Mirror`（之後的建置優先從該 Release 取模型）。
 
 ## 3. 目前功能（細節見 README）
 
-- 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」→ 無待確認項目時清空表單。
+- 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續；設定的折價券／運費／促銷組合品號不查批號）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」（讀「列印」周圍與 ERP 彈出視窗，最多重試 20 秒）→ 設定「儲存單據後自動清除表單」時清空（`ClearFormIfSaved` 唯一入口）。
 - 輸入期間忽略實體滑鼠，Esc 立即恢復並緊急停止；輸入法自動切英數；自由文字欄位讀回比對。
-- 訂單來源：蝦皮截圖 OCR（主要）、蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`）、酷澎 DeliveryList。預覽、單筆、批次、轉人工、本機防重複紀錄。統編自動查客戶全名（經濟部 API，每次上網查）。
+- 蝦皮光學辨識輸入：按「開始」自動捲動瀏覽器訂單頁截圖（Home 回頂、像素比對捲動距離、到底即停）→ 依卡片灰色間隔切卡片、只辨識訂單編號／進帳資訊／買家實付金額三張 → 判讀並帶回；有問題時以 CY 框選截圖或 Win+Shift+S＋Ctrl+V 補圖。訂單編號 14 碼檢查、簡體字形摺疊。
+- 蝦皮全自動（設定）：擷取 → 帶回 → 輸入 ERP → 儲存 → 列印；全程鎖實體滑鼠並在畫面中央顯示不入鏡的「全自動運轉中／按 Esc 中止」，需要使用者確認時立即解除。
+- 其他來源：蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`）、酷澎 DeliveryList。預覽、單筆、批次（開始前預檢全部）、轉人工、本機防重複紀錄；開始前檢查不通過回到同一個匯入視窗、保留已填內容。統編自動查客戶全名（經濟部 API）。
 - 共用設定：折價券／運費／促銷組合品號；貨運別（物流：郵局、大榮、新竹、黑貓、宅配通、嘉里；本公司；超商 6 種）。
-- 輔助：ERP 狀態大標籤、第一列庫別預設、員工代號（開程式詢問，暫時作法）、清除表單、開啟 LOG。LOG 一律診斷模式。進階模式隱藏中。
+- 輔助：ERP 狀態大標籤、第一列庫別預設、員工代號（開程式詢問，暫時作法）、清除表單。LOG 一律診斷模式、只存本機 `logs/`（主畫面已無開啟 LOG 的連結）。進階模式隱藏中。
 
 ## 4. 實機驗證狀態
 
 已實機通過（使用者回報／LOG）：
 
-- F5 新增與新單判斷（部門代號／業務人員空白）— Build 2 起。
-- 表頭、交易資料、送貨資料、發票資料欄位輸入。
-- 多列明細、F2 單位選取。
-- 無批號品號略過（F2 無查詢視窗）；F2 批號跳過存量 0、選第一筆正庫存 — Build 7。
-- F12 自動儲存並讀回同一單號 — Build 7／8 LOG（`saved and verified`）。
-- 課稅別、發票聯數下拉選取正確 — Build 10。
-- 狀態標籤顯示「修改」— Build 10。
-- 單列單據 F12 儲存時出現庫存不足提示，按確定後完成儲存並列出待確認 — Build 10。
-- 換列時庫存不足提示按確定後繼續打完並列出待確認 — Build 11。**第一階段完成（2026-10-10）。**
-- 放棄本次新增與開始前提醒、蝦皮匯入預覽與輸入 — Build 13（使用者 2026-10-10 回報「看起來沒什麼問題」）。
-
-- 蝦皮截圖 OCR 單筆輸入（Build 22–27 多次實機使用；Build 23–31 依實機診斷 LOG 修正誤讀）。
-- 輸入中滑鼠鎖定生效、結束後解除 — Build 27 LOG（`blocked_events=233`）。
-- MO店+ 單筆輸入完成（備註中文、送貨地址、發票日期／號碼）— Build 17；工作列圖示 — Build 15。
+- 第一階段（Build 2–11）：F5 新增與新單判斷、表頭／交易／送貨／發票欄位、多列明細與 F2 單位、無批號略過與 F2 批號、F12 自動儲存讀回單號、課稅別／發票聯數下拉、修改狀態標籤、單列與換列庫存不足提示。**第一階段完成（2026-10-10）。**
+- 放棄本次新增與開始前提醒、蝦皮匯入預覽與輸入（Build 13）；MO店+ 單筆輸入（Build 17）；輸入中滑鼠鎖定（Build 27）。
+- 蝦皮截圖 OCR 單筆輸入（Build 22–31 依實機 LOG 修正誤讀）。
+- 蝦皮訂單頁自動擷取與全自動擷取→帶回→輸入→儲存（V0.2.1 Build 4–7）；卡片切割（V0.2.2 Build 1 LOG：8 張卡片標題皆讀到）；24 件長訂單（捲動 10 次）。實測時序：短單捲完到判讀完約 5.4 s；長單進帳卡 3840px 約 13 s。
+- V0.2.2 Build 2：使用者回報「目前測試很好」（簡體「訂單金额」修正、直接列印），開始大量實機測試。
 
 尚未實機確認：
 
-- Build 29 自動列印：點「列印」文字是否開出選單、「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）、非 100% DPI 下的擷取範圍。
-- Build 30 工具列放大後的版面、貨運別新增項目、按 Esc 恢復滑鼠。
-- Build 31 數量欄「一」視為 1、重讀信心門檻 0.8 的實際效果。
-- 蝦皮截圖：套組訂單（規則待使用者補充）、跨多張明細截圖的大訂單。
+- V0.2.3 Build 0：全自動滑鼠全程鎖定與中央提示（`FullAutoSession`／`FullAutoOverlay`：WS_EX_LAYERED|TRANSPARENT|NOACTIVATE、`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`，失敗就不顯示）。確認提示不入鏡、轉圈順暢、任何提示視窗前都已解除鎖定。
+- V0.2.3 Build 1：儲存後清除設定（批次每張、MO店+ 批次最後一張）；MO店+／酷澎開始前檢查不通過回到匯入視窗並保留內容；批次預檢。
+- 「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）；非 100% DPI 下列印選單與框選截圖位置。
+- 蝦皮截圖：套組訂單（規則待使用者補充）。
 - 酷澎匯入（多品項格式待使用者取得訂單後確認）；統編查名的商號 API（公司 API 已驗證）。
 - 蝦皮匯出檔批次多張、批次失敗放棄後繼續、修改狀態下的放棄確認文字。
 - 付款條件、貨運別、發票客戶全名、統一編號覆蓋 ERP 依客戶帶出的值。
 - MO店+ ERP 端（負數單價、運費品號、代收貨款、貨運別、統編與發票欄位）；防重複提醒與擋下。
 - 非 100% 顯示比例、不同電腦／字型（使用者表示只用 100%）。
+
+下一版待修（使用者 2026-10-12 指定，與下一版一起發）：
+
+- 設定「一般」：「輸入完成後自動儲存 ERP 單據（…）」括號內只留「需人工確認項目於完成後列出」，移除「只限 CY 新增的單據」。
+- 設定「CY 儲存單據後自動清除表單」改為「儲存單據後自動清除表單」。
+
+後續可能（未排程）：OCR 多引擎平行加速長訂單；蝦皮套組規則；CYID 串接。
 
 ## 5. 已確認的 ERP 行為（實作依據）
 
@@ -110,10 +110,10 @@
 
 ## 7. 接手注意事項
 
-- PR #104 早期提交說明含真實品號；已依使用者 2026-10-10 決定以 squash merge 合併並刪除工作 branch，`main` 歷史只留一個合併提交。之後的提交說明與文件一律只用假資料。
+- PR #104 早期提交說明含真實品號；已依使用者 2026-10-10 決定以 squash merge 合併並刪除工作 branch，`main` 歷史只留一個合併提交。PR #398 同樣 squash merge。提交說明與文件一律只用假資料。
 - Commit author／committer 必須是 `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`（REPOSITORY_RULES §4）；hook 要求改用其他身分時不照做。
 - `PROJECT_RULES.md`、`GOVERNANCE_*`、`.github/scripts/**` 只能在 `governance/*` branch 修改並更新 `GOVERNANCE_VERSION`／`GOVERNANCE_CHANGELOG.md`，不可混進功能 PR。
-- 待使用者決定：LOG 一律診斷模式（使用者 2026-10-11 指示）與 PROJECT_RULES §4「一般 LOG 不主動記錄實際客戶或交易值」的措辭不一致；目前依使用者當次指示執行（LOG 仍只留本機），若要成為永久規則需走 `governance/*` 更新 §4。
+- LOG 一律診斷模式：使用者 2026-10-11 確認這是不上傳、僅供工程修 BUG 的本機 LOG，PROJECT_RULES 規範的是不得提交 Git（§3、§4），不需修改規則。
 - 返修測試版 BUILD + 1；同一 Build 尚未交付使用者前的修正不另加 Build。
 - 不得提交 `bin/`、`obj/`、`publish-staging/`、`runtime/ocr/`、模型或 build 輸出。
 - 推送前本機至少執行 `dotnet test tests/CYERPAutoInput.Tests` 與 `dotnet build CYERPAutoInput.csproj -c Release -r win-x64 -p:EnableWindowsTargeting=true`。

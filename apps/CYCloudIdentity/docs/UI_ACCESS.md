@@ -74,6 +74,7 @@ Super Admin App Access and CY Web Module Access are implicit/all-enabled and not
 - normal ADMIN sees no Access-management controls.
 - Identity Admin/Super Admin manage eligible App Access under anti-self-escalation rules.
 - CY Web module controls may appear in the same account-management experience, but authoritative data/enforcement is CY Web-local.
+- The core account portal may expose `登記系統` only to the current Workspace Super Admin, using the optional canonical registration endpoint (§17.1). Show the application ID/name and explain that registration enables only the current Workspace, preserves existing grants, and does not automatically grant other Employees access. Identity Admin continues managing eligible Employee grants through the existing table; it cannot register a new system.
 
 ## 9. Forced Email recovery
 

@@ -178,3 +178,6 @@ Representative active operations include Employee create/update/delete-pending, 
 Consumers branch on HTTP status and stable `error.code`; provider internal messages are not user-facing authority. Relevant classes include malformed request, authentication failed, session invalid, application access denied, rate limited, first-login expired/invalid, authorization denied and provider unavailable.
 
 Exact operation-specific codes belong to source/tests; UI must not infer authorization from hidden controls alone.
+### Optional application registration
+
+The core account portal may call the current-Workspace Super Admin registration endpoint defined in `CONSUMER_INTEGRATION_STANDARD.md` §17.1. It uses the same normal Session resolver, adds no credential/session authority and leaves ordinary Employee grants separate.

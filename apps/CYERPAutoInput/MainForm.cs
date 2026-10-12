@@ -5,6 +5,7 @@ internal sealed class MainForm : Form
     private static readonly Size StandardWindowSize = new(1160, 720);
 
     private readonly AppLogger _log;
+    private FullAutoSession? _fullAuto;
     private readonly ErpAutomationService _automation;
     private readonly UserSettingsStore _settingsStore;
     private readonly UserSettings _settings;
@@ -14,7 +15,6 @@ internal sealed class MainForm : Form
     private readonly DetailDataGridView _details = new();
     private readonly ToolStripStatusLabel _status = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ToolStripStatusLabel _buildStatus = new();
-    private readonly ToolStripStatusLabel _logLink = new() { Text = "開啟 LOG 資料夾", IsLink = true };
     private readonly ToolStripStatusLabel _dpiHint = new();
     private readonly ToolStripStatusLabel _employeeLink = new() { Text = "員工代號：未設定", IsLink = true };
 
@@ -288,8 +288,6 @@ internal sealed class MainForm : Form
         statusStrip.Items.Add(_buildStatus);
         _employeeLink.Click += (_, _) => AskEmployeeCode();
         statusStrip.Items.Add(_employeeLink);
-        _logLink.Click += (_, _) => OpenLogFolder();
-        statusStrip.Items.Add(_logLink);
         _root.Controls.Add(statusStrip, 0, 3);
     }
 
@@ -683,29 +681,32 @@ internal sealed class MainForm : Form
         _log.Info("app", $"session employee code set length={_sessionEmployeeCode.Length}");
     }
 
-    private async Task StartAutomationAsync()
+    /// <param name="fullAuto">Shopee full auto (user, 2026-10-11): save and print whatever the settings say.</param>
+    /// <returns>False when the run did not start (a check failed or the user said no).</returns>
+    private async Task<bool> StartAutomationAsync(bool fullAuto = false)
     {
-        if (_automationCts is not null) return;
+        if (_automationCts is not null) return false;
         var snapshot = CreateSnapshot(out var validationError);
         if (snapshot is null)
         {
+            _fullAuto?.End(); // a question is never behind a locked mouse (full auto, user 2026-10-12)
             MessageBox.Show(this, validationError, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            return false;
         }
 
         var order = _loadedOrder;
-        if (order is not null && !ConfirmNotDuplicate(order)) return;
+        if (order is not null && !ConfirmNotDuplicate(order)) return false;
         // Imported orders were warned in the preview; a manual form is warned here.
         if (order is null && snapshot.Values.ContainsKey("tax_id") && !snapshot.Values.ContainsKey("inv_name") &&
             MessageBox.Show(this, "有統一編號，但沒有發票的客戶全名（經濟部查無或未填）。\n\n建議先填寫客戶全名；仍要開始輸入嗎？",
                 "客戶全名", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-            return;
-        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return;
+            return false;
+        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return false;
 
         await RunGuardedAsync(async token =>
         {
             if (abandonFirst) await AbandonCurrentErpDocumentAsync(token);
-            var result = await RunDocumentAsync(snapshot, _settings.AutoSave, token);
+            var result = await RunDocumentAsync(snapshot, fullAuto || _settings.AutoSave, token, print: fullAuto ? true : null);
             var notes = new List<string>();
             if (order is not null)
             {
@@ -721,13 +722,21 @@ internal sealed class MainForm : Form
                 return;
             }
             ShowRunSummaryIfNeeded(result, DocumentKeyText(result), notes);
-            // A run with nothing left to check clears the form for the next order (user, 2026-10-11).
-            if (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && result.PrintProblem.Length == 0 && notes.Count == 0)
-            {
-                ResetForm();
-                SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{(result.Saved ? "已儲存" : "尚未儲存")}；表單已清空");
-            }
+            ClearFormIfSaved(result);
         });
+        return true;
+    }
+
+    /// <summary>
+    /// The one place a run clears the form (user, 2026-10-12): a document CY saved, when the
+    /// 「CY 儲存單據後自動清除表單」 setting is on; single orders, Shopee full auto and every
+    /// order of an import batch all come through here.
+    /// </summary>
+    private void ClearFormIfSaved(AutomationRunResult result)
+    {
+        if (!result.Saved || !_settings.ClearAfterSave) return;
+        ResetForm();
+        SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 已儲存；表單已清空");
     }
 
     /// <summary>
@@ -782,6 +791,7 @@ internal sealed class MainForm : Form
             ErpDocumentState.Modify => "修改",
             _ => "新增或修改"
         };
+        _fullAuto?.End();
         var answer = MessageBox.Show(this,
             $"ERP 目前在「{what}」狀態。\n\n要放棄 ERP 上這張尚未儲存的單據（{what}的內容不會保留），回到檢視後再從新增開始輸入嗎？",
             "ERP 正在輸入中", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -798,12 +808,23 @@ internal sealed class MainForm : Form
         SetStatus("ERP：已回到檢視");
     }
 
-    private async Task<AutomationRunResult> RunDocumentAsync(FormSnapshot snapshot, bool autoSave, CancellationToken token)
+    private async Task<AutomationRunResult> RunDocumentAsync(FormSnapshot snapshot, bool autoSave, CancellationToken token, bool? print = null)
     {
         var progress = new Progress<string>(SetStatus);
         AutomationRunResult result;
-        // The physical mouse is ignored while CY types (user, 2026-10-11); Esc releases it.
-        using (PhysicalMouseLock.Engage(_log)) result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && _settings.AutoPrint);
+        // The physical mouse is ignored while CY types (user, 2026-10-11); Esc releases it. In
+        // full auto the session holds the lock and shows its notice (user, 2026-10-12).
+        var fullAuto = print == true && _fullAuto is not null;
+        try
+        {
+            if (fullAuto) _fullAuto!.Begin();
+            using (fullAuto ? null : PhysicalMouseLock.Engage(_log))
+                result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
+        }
+        finally
+        {
+            if (fullAuto) _fullAuto!.End();
+        }
         if (result.HandedOff.Length > 0)
         {
             SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 單頭已輸入，轉人工處理（未輸入明細、未儲存）");
@@ -854,34 +875,61 @@ internal sealed class MainForm : Form
     /// One Shopee order read from screenshots onto the form (user, 2026-10-11): no batch and
     /// no automatic start; anything to check is listed and the user starts the input.
     /// </summary>
-    private Task ImportShopeeScreenshotsAsync()
+    private async Task ImportShopeeScreenshotsAsync()
     {
-        if (_automationCts is not null) return Task.CompletedTask;
+        if (_automationCts is not null) return;
         if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
         {
-            MessageBox.Show(this, "請先在「設定」填入蝦皮的銷貨單別與客戶代號。", "蝦皮訂單截圖輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return Task.CompletedTask;
+            MessageBox.Show(this, "請先在「設定」填入蝦皮的銷貨單別與客戶代號。", "蝦皮訂單光學辨識輸入", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
         }
         var ledger = LoadLedger();
-        if (ledger is null) return Task.CompletedTask;
+        if (ledger is null) return;
 
         var mapping = new ShopeeShotMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
-        using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log);
-        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return Task.CompletedTask;
+        _fullAuto ??= new FullAutoSession(_log);
+        try
+        {
+            using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto,
+                session: _settings.ShopeeFullAuto ? _fullAuto : null);
+            if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return;
+            await ContinueShopeeScreenshotOrderAsync(dialog.Result.Problems, order, ledger);
+        }
+        finally
+        {
+            // Whatever happened, the mouse is free again once the order is done or stopped.
+            _fullAuto.End();
+        }
+    }
 
+    private async Task ContinueShopeeScreenshotOrderAsync(IEnumerable<string> problems, ImportedOrder order, OrderLedger ledger)
+    {
         LoadOrder(order);
-        var notes = dialog.Result.Problems.ToList();
+        var notes = problems.ToList();
         if (ledger.Find(order.LedgerKey) is { } entry) notes.Insert(0, $"這張訂單{entry.Describe()}。");
         if (order.TrackingNumber.Length == 0) notes.Add("物流單號空白：取得後請填到送貨地址(一)。");
         SetStatus($"蝦皮訂單 {order.OrderSn} 已帶入表單；請確認後按「開始輸入 ERP」");
         _log.Info("shopee-shot", $"order loaded items={order.Items.Count} notes={notes.Count}");
+        // Full auto (user, 2026-10-11): a clean order goes straight on to ERP, save and print;
+        // with notes the user decides, defaulting to stop.
+        if (_settings.ShopeeFullAuto)
+        {
+            if (notes.Count > 0) _fullAuto?.End();
+            if (notes.Count > 0 && MessageBox.Show(this,
+                    $"蝦皮訂單 {order.OrderSn} 已帶入表單，但有以下項目需要確認：\n\n" + string.Join("\n", notes.Select(n => "・" + n)) +
+                    "\n\n仍要繼續全自動輸入 ERP、儲存並列印嗎？（選「否」可先修改表單，再按「開始輸入 ERP」）",
+                    "蝦皮全自動", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+                return;
+            _log.Info("shopee-shot", $"full auto continues to ERP order_notes={notes.Count}");
+            await StartAutomationAsync(fullAuto: true);
+            return;
+        }
         // A clean order only gets the status line (user, 2026-10-11); notes still need a look.
         if (notes.Count > 0)
             MessageBox.Show(this,
                 $"蝦皮訂單 {order.OrderSn} 已帶入表單，請先確認以下項目，補齊後再按「開始輸入 ERP」：\n\n" + string.Join("\n", notes.Select(n => "・" + n)),
-                "蝦皮訂單截圖輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        return Task.CompletedTask;
+                "蝦皮訂單光學辨識輸入", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private async Task ImportMoAsync()
@@ -978,17 +1026,22 @@ internal sealed class MainForm : Form
 
         using var preview = new OrderImportForm(source, fileName, orders, errors, _settings.AutoSave, o => ledger.Find(o.LedgerKey),
             ban => _companyNames.LookupAsync(ban));
-        if (preview.ShowDialog(this) != DialogResult.OK) return;
-
-        if (preview.Action == OrderImportAction.StartSelected && preview.SelectedOrder is not null)
+        // When a check stops the start, the same preview comes back with what the user filled
+        // in (user, 2026-10-12: MO店+ and 酷澎 invoice details were lost).
+        while (preview.ShowDialog(this) == DialogResult.OK)
         {
-            LoadOrder(preview.SelectedOrder);
-            SetStatus($"{source}訂單 {preview.SelectedOrder.OrderSn}：開始輸入 ERP");
-            await StartAutomationAsync();
-        }
-        else if (preview.Action == OrderImportAction.RunAll)
-        {
-            await RunImportBatchAsync(source, orders, ledger);
+            if (preview.Action == OrderImportAction.StartSelected && preview.SelectedOrder is not null)
+            {
+                LoadOrder(preview.SelectedOrder);
+                SetStatus($"{source}訂單 {preview.SelectedOrder.OrderSn}：開始輸入 ERP");
+                if (await StartAutomationAsync()) return;
+            }
+            else if (preview.Action == OrderImportAction.RunAll)
+            {
+                if (await RunImportBatchAsync(source, orders, ledger)) return;
+            }
+            else return;
+            _log.Info("import", "start stopped by a check; back to the preview");
         }
     }
 
@@ -1056,10 +1109,12 @@ internal sealed class MainForm : Form
         if (entry is null) return true;
         if (entry.Status == LedgerStatus.Saved)
         {
+            _fullAuto?.End();
             MessageBox.Show(this, $"{order.Source}訂單 {order.OrderSn} {entry.Describe()}。\n\n為避免重複打單，已擋下。",
                 "重複訂單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
+        _fullAuto?.End();
         return MessageBox.Show(this,
             $"{order.Source}訂單 {order.OrderSn} {entry.Describe()}。\n\n請先確認 ERP 沒有這張單。仍要再輸入一次嗎？",
             "可能重複", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
@@ -1090,7 +1145,8 @@ internal sealed class MainForm : Form
     /// listed. The batch only stops when abandoning is not safe or on Esc. Ends with saved /
     /// review / handoff / duplicate / failed / missing tracking / stopped / not started lists.
     /// </summary>
-    private async Task RunImportBatchAsync(string source, IReadOnlyList<ImportedOrder> orders, OrderLedger ledger)
+    /// <returns>False when the batch did not start, so the preview comes back.</returns>
+    private async Task<bool> RunImportBatchAsync(string source, IReadOnlyList<ImportedOrder> orders, OrderLedger ledger)
     {
         var earlier = orders
             .Where(o => o.HandoffReason.Length == 0 && ledger.Find(o.LedgerKey) is { Status: not LedgerStatus.Saved })
@@ -1104,10 +1160,30 @@ internal sealed class MainForm : Form
                 (earlier.Count > 15 ? $"\n…另 {earlier.Count - 15} 張" : string.Empty) +
                 "\n\n是：仍要輸入　否：略過這些　取消：不開始批次",
                 "可能重複", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-            if (answer == DialogResult.Cancel) return;
+            if (answer == DialogResult.Cancel) return false;
             skipEarlier = answer == DialogResult.No;
         }
-        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return;
+
+        // Every order to enter is checked before the first one starts, so a missing value is
+        // fixed in the preview rather than found mid-batch (user, 2026-10-12).
+        var invalid = new List<string>();
+        foreach (var order in orders)
+        {
+            if (order.HandoffReason.Length > 0) continue;
+            if (ledger.Find(order.LedgerKey) is { } seen && (seen.Status == LedgerStatus.Saved || skipEarlier)) continue;
+            LoadOrder(order);
+            if (CreateSnapshot(out var validationError) is null) invalid.Add($"{order.OrderSn}：{validationError}");
+        }
+        if (invalid.Count > 0)
+        {
+            ResetForm();
+            MessageBox.Show(this, $"以下 {invalid.Count} 張資料不完整，請在匯入視窗補齊後再開始：\n\n" +
+                string.Join("\n", invalid.Take(15).Select(i => "・" + i)) +
+                (invalid.Count > 15 ? $"\n…另 {invalid.Count - 15} 張" : string.Empty),
+                "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return false;
 
         var done = new List<string>();
         var review = new List<string>();
@@ -1186,6 +1262,7 @@ internal sealed class MainForm : Form
                     return;
                 }
                 done.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
+                ClearFormIfSaved(result);
                 if (order.TrackingNumber.Trim().Length == 0) noTracking.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
                 review.AddRange(result.Warnings.Select(w => $"{order.OrderSn}（{DocumentKeyText(result)}）第 {w.DetailRow} 列 {w.ItemCode}：{w.Message}"));
                 _log.Info("import", $"batch order saved index={next + 1}/{orders.Count} document={_log.Value(DocumentKeyText(result))}");
@@ -1217,6 +1294,7 @@ internal sealed class MainForm : Form
         var clean = stoppedAt is null && failed.Count == 0 && review.Count == 0 && handOff.Count == 0 && duplicates.Count == 0 && noTracking.Count == 0;
         MessageBox.Show(this, string.Join(Environment.NewLine, lines), $"{source}批次結果", MessageBoxButtons.OK,
             clean ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        return true;
     }
 
     private void ShowRunSummaryIfNeeded(AutomationRunResult result, string documentKey, IReadOnlyList<string>? notes = null)
@@ -1263,23 +1341,6 @@ internal sealed class MainForm : Form
         for (var i = 0; i < DefaultDetailRows; i++) _details.Rows.Add();
         ApplyDefaultsToBlankFields();
         _loadedOrder = null;
-    }
-
-    private void OpenLogFolder()
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = _log.LogDirectory,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            _log.Warn("app", $"open log folder failed: {ex.GetType().Name}");
-            MessageBox.Show(this, $"無法開啟 LOG 資料夾：{_log.LogDirectory}", "LOG", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
     }
 
     private void UpdateBuildStatus() =>
@@ -1381,7 +1442,9 @@ internal sealed class MainForm : Form
 
         validationError = string.Empty;
         var comboOptions = ErpComboOptions.ByField.ToDictionary(p => p.Key, p => p.Value.ToList(), StringComparer.OrdinalIgnoreCase);
-        return new FormSnapshot { Values = values, Details = details, ComboOptions = comboOptions, HandoffBeforeDetails = _loadedOrder?.HandoffReason ?? string.Empty };
+        var noBatch = new HashSet<string>(new[] { _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode }
+            .Select(c => c.Trim()).Where(c => c.Length > 0), StringComparer.OrdinalIgnoreCase);
+        return new FormSnapshot { Values = values, Details = details, ComboOptions = comboOptions, HandoffBeforeDetails = _loadedOrder?.HandoffReason ?? string.Empty, NoBatchItemCodes = noBatch };
     }
 
     private static string Cell(DataGridViewRow row, string column) =>
@@ -1420,7 +1483,7 @@ internal sealed class MainForm : Form
         {
             // Screenshots (OCR) are the main way for now; the official export stays available.
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
-            menu.Items.Add("截圖輸入（OCR）", null, async (_, _) => await ImportShopeeScreenshotsAsync());
+            menu.Items.Add("光學辨識輸入", null, async (_, _) => await ImportShopeeScreenshotsAsync());
             menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }

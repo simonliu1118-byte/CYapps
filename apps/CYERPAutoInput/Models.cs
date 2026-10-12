@@ -47,6 +47,11 @@ internal sealed class FormSnapshot
     public string HandoffBeforeDetails { get; init; } = string.Empty;
     /// <summary>ERP combo options by field key, in ERP list order (see <see cref="ErpComboOptions"/>).</summary>
     public Dictionary<string, List<string>> ComboOptions { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Item codes that never carry a batch — the 折價券／運費／促銷組合 lines from the settings —
+    /// so their batch check (an F2 that waits for a lookup that never comes) is skipped.
+    /// </summary>
+    public HashSet<string> NoBatchItemCodes { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>
