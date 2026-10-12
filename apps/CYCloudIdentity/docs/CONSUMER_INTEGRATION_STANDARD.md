@@ -1,6 +1,6 @@
 # CYCloud Identity Consumer Integration Standard
 
-> **Contract version:** `1.0.3`
+> **Contract version:** `1.0.4`
 >
 > **Minimum compatible consumer version:** `1.0.0`
 >
