@@ -335,7 +335,7 @@ internal sealed class ErpAutomationService
                 if (warningsAcknowledged >= 2)
                     throw new InvalidOperationException("按 F12 儲存後 ERP 連續出現庫存不足提示；請人工確認單據是否已儲存。");
                 await AcknowledgeStockWarningIfShownAsync(root, details.Count, lastRow,
-                    "按 F12 儲存後 ERP 出現訊息視窗；CY 未代為處理，請人工確認單據是否已儲存。", cancellationToken);
+                    "按 F12 儲存後 ERP 出現訊息視窗；程式未代為處理，請人工確認單據是否已儲存。", cancellationToken);
                 warningsAcknowledged++;
                 AddStockWarning(result, details.Count, lastRow);
                 Win32Automation.PrepareForeground(root, _log);
@@ -395,7 +395,7 @@ internal sealed class ErpAutomationService
         {
             var shown = (NativeMethods.ControlText(ErpLayoutResolver.ResolveSalesOrderNumber(root).Handle) ?? string.Empty).Trim();
             if (shown != expectedSalesOrderNumber)
-                throw new InvalidOperationException("ERP 目前的單號與 CY 建立的單據不同；未執行放棄，請人工處理。");
+                throw new InvalidOperationException("ERP 目前的單號與本程式建立的單據不同；未執行放棄，請人工處理。");
         }
 
         var customer = ErpLayoutResolver.ResolveHeader(root, "customer_code");
@@ -426,7 +426,7 @@ internal sealed class ErpAutomationService
         if (!isAbandonPrompt)
         {
             LogPeerWindows("abandon", [confirm]);
-            throw new InvalidOperationException("按 Esc 後 ERP 出現的不是「是否放棄」確認；CY 未代為處理，請人工確認。");
+            throw new InvalidOperationException("按 Esc 後 ERP 出現的不是「是否放棄」確認；程式未代為處理，請人工確認。");
         }
 
         if (!Win32Automation.PrepareForeground(confirm, _log))
@@ -826,7 +826,7 @@ internal sealed class ErpAutomationService
         if (!isTaxIdWarning)
         {
             LogPeerWindows("tax-id", [dialog]);
-            throw new InvalidOperationException("輸入統一編號後 ERP 跳出未預期的訊息；CY 未代為處理，請人工確認。");
+            throw new InvalidOperationException("輸入統一編號後 ERP 跳出未預期的訊息；程式未代為處理，請人工確認。");
         }
         if (!Win32Automation.PrepareForeground(dialog, _log))
             throw new InvalidOperationException("無法取得「統一編號輸入錯誤」視窗焦點；請人工處理。");

@@ -10,6 +10,19 @@ namespace CYERPAutoInput;
 /// auto from the page scan to the print, 「自動輸入中」 for any other ERP input. Ended whenever
 /// CY stops to ask the user something, so a message box is never behind a locked mouse.
 /// </summary>
+/// <summary>How an automatic run ended, for the notice's last look (user, 2026-10-12).</summary>
+internal enum AutomationOutcome
+{
+    /// <summary>Everything the settings asked for was done: a green check, gone after 0.5 s.</summary>
+    Done,
+    /// <summary>Entered, but something is listed for a person to check.</summary>
+    NeedsAttention,
+    /// <summary>Stopped by an error or Esc.</summary>
+    Stopped,
+    /// <summary>The program stopped to ask something.</summary>
+    Paused
+}
+
 internal sealed class AutomationSession : IDisposable
 {
     private readonly AppLogger _log;
@@ -38,17 +51,28 @@ internal sealed class AutomationSession : IDisposable
         }
     }
 
-    /// <summary>Releases the mouse and hides the notice.</summary>
-    public void End()
+    /// <summary>
+    /// Releases the mouse at once; the notice shows how the run ended for a moment, then goes.
+    /// Without an outcome the run paused to ask the user something.
+    /// </summary>
+    public void End(AutomationOutcome outcome = AutomationOutcome.Paused)
     {
-        _overlay?.HideNotice();
-        _mouseLock?.Dispose();
+        if (_mouseLock is null) return;
+        _mouseLock.Dispose();
         _mouseLock = null;
+        try { _overlay?.ShowOutcome(outcome); }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or ExternalException)
+        {
+            _log.Warn("automation", $"outcome not shown: {ex.GetType().Name}");
+            _overlay?.HideNotice();
+        }
     }
 
     public void Dispose()
     {
-        End();
+        _mouseLock?.Dispose();
+        _mouseLock = null;
+        _overlay?.HideNotice();
         _overlay?.Dispose();
         _overlay = null;
     }
@@ -70,12 +94,17 @@ internal sealed class AutomationOverlay : Form
     private const uint WdaExcludeFromCapture = 0x11;
 
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 50 };
+    private readonly System.Windows.Forms.Timer _linger = new();
+    private AutomationOutcome? _outcome;
     private bool _excluded;
     private float _angle;
     private string _title = AutomationSession.InputTitle;
     private static readonly Font TitleFont = new("Microsoft JhengHei UI", 15F, FontStyle.Bold);
     private static readonly Font HintFont = new("Microsoft JhengHei UI", 10.5F);
-    private const string Hint = "按 Esc 中止";
+    private string _hint = RunningHint;
+    private const string RunningHint = "按 Esc 中止";
+    private static readonly Color DoneGreen = Color.FromArgb(34, 197, 94);
+    private static readonly Color AttentionAmber = Color.FromArgb(245, 180, 0);
 
     public AutomationOverlay()
     {
@@ -89,6 +118,7 @@ internal sealed class AutomationOverlay : Form
         Size = new Size(240, 92);
         DoubleBuffered = true;
         _timer.Tick += (_, _) => { _angle = (_angle + 30) % 360; Invalidate(); };
+        _linger.Tick += (_, _) => HideNotice();
     }
 
     protected override bool ShowWithoutActivation => true;
@@ -105,7 +135,10 @@ internal sealed class AutomationOverlay : Form
 
     public void ShowNotice(string title, AppLogger log)
     {
+        _linger.Stop();
+        _outcome = null;
         _title = title;
+        _hint = RunningHint;
         if (!IsHandleCreated) CreateHandle();
         if (!_excluded)
         {
@@ -116,39 +149,96 @@ internal sealed class AutomationOverlay : Form
                 return;
             }
         }
-        // Just wide enough for the text (user, 2026-10-12: the box was too wide).
-        var textWidth = Math.Max(TextRenderer.MeasureText(_title, TitleFont).Width, TextRenderer.MeasureText(Hint, HintFont).Width);
-        Size = new Size(86 + textWidth + 26, 92);
-        var screen = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
-        Location = new Point(screen.Left + (screen.Width - Width) / 2, screen.Top + (screen.Height - Height) / 2);
-        Region?.Dispose();
-        using (var path = Rounded(new Rectangle(Point.Empty, Size), 16)) Region = new Region(path);
+        Place();
         Show();
         _timer.Start();
+    }
+
+    /// <summary>
+    /// The run's end (user, 2026-10-12): a green check and 「自動輸入完成」 for 0.5 s, or an
+    /// amber warning for 1.5 s when it stopped or left something to check.
+    /// </summary>
+    public void ShowOutcome(AutomationOutcome outcome)
+    {
+        _timer.Stop();
+        if (!_excluded || !IsHandleCreated || !Visible) { HideNotice(); return; }
+        _outcome = outcome;
+        (_title, _hint) = outcome switch
+        {
+            AutomationOutcome.Done => ("自動輸入完成", string.Empty),
+            AutomationOutcome.NeedsAttention => ("輸入完成，有項目要確認", "請看提示視窗"),
+            AutomationOutcome.Stopped => ("自動輸入已中斷", "請看提示視窗"),
+            _ => ("已暫停", "請看提示視窗")
+        };
+        Place();
+        Invalidate();
+        _linger.Interval = outcome == AutomationOutcome.Done ? 500 : 1500;
+        _linger.Start();
     }
 
     public void HideNotice()
     {
         _timer.Stop();
+        _linger.Stop();
         if (IsHandleCreated && Visible) Hide();
+    }
+
+    /// <summary>Just wide enough for the text (user, 2026-10-12: the box was too wide), centered.</summary>
+    private void Place()
+    {
+        var textWidth = Math.Max(TextRenderer.MeasureText(_title, TitleFont).Width, TextRenderer.MeasureText(_hint, HintFont).Width);
+        Size = new Size(86 + textWidth + 26, 92);
+        var screen = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
+        Location = new Point(screen.Left + (screen.Width - Width) / 2, screen.Top + (screen.Height - Height) / 2);
+        Region?.Dispose();
+        using var path = Rounded(new Rectangle(Point.Empty, Size), 16);
+        Region = new Region(path);
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        var spinner = new Rectangle(26, (Height - 40) / 2, 40, 40);
-        using (var track = new Pen(Color.FromArgb(70, 255, 255, 255), 5f))
-            g.DrawEllipse(track, spinner);
-        using (var arc = new Pen(CyVisualTheme.Accent, 5f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-            g.DrawArc(arc, spinner, _angle, 100);
-        TextRenderer.DrawText(g, _title, TitleFont, new Point(86, 18), Color.White, TextFormatFlags.NoPrefix);
-        TextRenderer.DrawText(g, Hint, HintFont, new Point(88, 52), Color.FromArgb(210, 210, 210), TextFormatFlags.NoPrefix);
+        var icon = new Rectangle(26, (Height - 40) / 2, 40, 40);
+        switch (_outcome)
+        {
+            case null:
+                using (var track = new Pen(Color.FromArgb(70, 255, 255, 255), 5f))
+                    g.DrawEllipse(track, icon);
+                using (var arc = new Pen(CyVisualTheme.Accent, 5f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                    g.DrawArc(arc, icon, _angle, 100);
+                break;
+            case AutomationOutcome.Done:
+                using (var fill = new SolidBrush(DoneGreen)) g.FillEllipse(fill, icon);
+                using (var tick = new Pen(Color.White, 4.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+                    g.DrawLines(tick, [new PointF(icon.Left + 10, icon.Top + 21), new PointF(icon.Left + 17, icon.Top + 28), new PointF(icon.Left + 30, icon.Top + 13)]);
+                break;
+            default:
+                using (var triangle = new GraphicsPath())
+                {
+                    triangle.AddPolygon([new PointF(icon.Left + 20, icon.Top + 2), new PointF(icon.Right, icon.Bottom - 3), new PointF(icon.Left, icon.Bottom - 3)]);
+                    using var fill = new SolidBrush(AttentionAmber);
+                    g.FillPath(fill, triangle);
+                }
+                using (var mark = new Pen(Color.FromArgb(32, 32, 36), 4f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                    g.DrawLine(mark, icon.Left + 20, icon.Top + 14, icon.Left + 20, icon.Top + 25);
+                using (var dot = new SolidBrush(Color.FromArgb(32, 32, 36)))
+                    g.FillEllipse(dot, icon.Left + 18, icon.Top + 29, 4.5f, 4.5f);
+                break;
+        }
+        if (_hint.Length == 0)
+            TextRenderer.DrawText(g, _title, TitleFont, new Rectangle(86, 0, Width - 86, Height), Color.White,
+                TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+        else
+        {
+            TextRenderer.DrawText(g, _title, TitleFont, new Point(86, 18), Color.White, TextFormatFlags.NoPrefix);
+            TextRenderer.DrawText(g, _hint, HintFont, new Point(88, 52), Color.FromArgb(210, 210, 210), TextFormatFlags.NoPrefix);
+        }
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _timer.Dispose();
+        if (disposing) { _timer.Dispose(); _linger.Dispose(); }
         base.Dispose(disposing);
     }
 

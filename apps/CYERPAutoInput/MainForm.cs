@@ -758,7 +758,7 @@ internal sealed class MainForm : Form
         }
         catch (OperationCanceledException)
         {
-            SetStatus("ERP：自動輸入已停止；CY 未按 ERP 取消或儲存");
+            SetStatus("ERP：自動輸入已停止；程式未按 ERP 取消或儲存");
             _log.Warn("automation", "cancelled by Esc/user");
         }
         catch (Exception ex)
@@ -818,14 +818,20 @@ internal sealed class MainForm : Form
         AutomationRunResult result;
         // The physical mouse is ignored while CY types (user, 2026-10-11; Esc releases it), and
         // the notice says 自動輸入中, or 全自動運轉中 in Shopee full auto (user, 2026-10-12).
+        // How it ended shows on the notice (user, 2026-10-12): done means everything the
+        // settings asked for (input, and save／print when on) went through with nothing to check.
+        var outcome = AutomationOutcome.Stopped;
         try
         {
             Session.Begin(print == true ? AutomationSession.FullAutoTitle : AutomationSession.InputTitle);
             result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
+            outcome = result.HandedOff.Length > 0 || result.Warnings.Count > 0 || result.SaveSkippedReason.Length > 0 || result.PrintProblem.Length > 0
+                ? AutomationOutcome.NeedsAttention
+                : AutomationOutcome.Done;
         }
         finally
         {
-            Session.End();
+            Session.End(outcome);
         }
         if (result.HandedOff.Length > 0)
         {
@@ -1189,7 +1195,7 @@ internal sealed class MainForm : Form
         if (earlier.Count > 0)
         {
             var answer = MessageBox.Show(this,
-                $"以下 {earlier.Count} 張曾經輸入，但不是由 CY 儲存（可能已人工儲存）：\n" +
+                $"以下 {earlier.Count} 張曾經輸入，但不是由本程式儲存（可能已人工儲存）：\n" +
                 string.Join("\n", earlier.Take(15).Select(o => $"・{o.OrderSn}：{ledger.Find(o.LedgerKey)!.Describe()}")) +
                 (earlier.Count > 15 ? $"\n…另 {earlier.Count - 15} 張" : string.Empty) +
                 "\n\n是：仍要輸入　否：略過這些　取消：不開始批次",
