@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-12（V0.2.4 由 PR #418 合併進 `main` 並發布第一個正式 Release `cyerp-auto-input-v0.2.4`）  
+> 更新：2026-10-12（V0.2.5 Build 0，分支 `cyerp-auto-input/order-sn-reread`；V0.2.4 已由 PR #418 合併進 `main`，未發布 Release）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -17,7 +17,7 @@
 ## 2. Branch／PR／版本
 
 - Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
-- `main`：`V0.2.4`（2026-10-12 由 PR #418 squash merge），已發布正式 Release `cyerp-auto-input-v0.2.4`（`CYERPAutoInput Release` workflow，只從 `main` 手動啟動，BUILD 必須為 0，tag 不覆寫）。之前的合併：PR #398（V0.2.1–V0.2.3 Build 1）、PR #104（V0.2.0 Build 31，C# 重寫線取代舊 Go 線 `V0.0.10` Build 19）。工作 branch 合併後刪除。
+- `main`：`V0.2.4`（2026-10-12 由 PR #418 squash merge）。使用者要求 V0.2.4 先不發 Release，等 0／O 改善（V0.2.5）完成並實測後一起發布第一個正式 Release（`CYERPAutoInput Release` workflow，只從 `main` 手動啟動，BUILD 必須為 0，tag `cyerp-auto-input-vX.Y.Z` 不覆寫；尚未執行過）。之前的合併：PR #398（V0.2.1–V0.2.3 Build 1）、PR #104（V0.2.0 Build 31，C# 重寫線取代舊 Go 線 `V0.0.10` Build 19）。工作 branch 合併後刪除。
 - 下一輪修改從最新 `main` 開新 branch（例如 `cyerp-auto-input/<type>-<summary>`），開新 PR。
 - VERSION／BUILD 見同名檔。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新功能 Z＋1（Build 歸零），返修 Build＋1；使用者說「下一版一起修」的項目不單獨發版。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
@@ -56,7 +56,8 @@
 - MO店+ ERP 端（負數單價、運費品號、代收貨款、貨運別、統編與發票欄位）；防重複提醒與擋下。
 - 非 100% 顯示比例、不同電腦／字型（使用者表示只用 100%）。
 
-- V0.2.4：使用者 2026-10-12 實測通過（「測試沒問題」），合併並發布正式 Release。另回報少量 0／O 誤讀，待確認發生欄位。
+- V0.2.4：使用者 2026-10-12 實測通過（「測試沒問題」），已合併；Release 延到 V0.2.5。使用者回報訂單編號／運送單號末段英數混合處偶有 0／O 誤讀。
+- V0.2.5 Build 0：`ShopeeScreenshot.OrderSnDateDigits`（前 6 碼 O→0）、`TrackingDigits`（TW＋12 碼數字段、全數字單號 O→0）、`ResolveZeroO`（後 8 碼依字寬：DP 把 ink run 對齊字元，單獨成塊者與其他數字中位寬比較，≤1.12→0、≥1.25→O）；`ShopeeScreenshotForm.ResolveOrderSnZeroO` 量測 `GlyphRunWidths`（以最常見灰階為背景、差 >70 為字），LOG 記 `order number 0/O runs=` 與判斷。依使用者截圖量測：蝦皮字型 0 與數字同寬約 7px，C／Q 約 9px。待實測。
 - V0.2.4 Build 0 實作：一般輸入也顯示「自動輸入中」（`MainForm.RunDocumentAsync` 一律 `Session.Begin(title)`／`End()`，`AutomationSession` 取代原本直接 `PhysicalMouseLock`）；提示框寬度依文字；光學辨識進度改為 `IProgress<double>`（依要辨識的列數）＋百分比、`ShowProgress` 以 Value+1 再回設跳過主題動畫；`ParseItems` 沒有任何編號且小計欄 1–2 個數字時視為第 1 項（單品促銷誤報）；設定兩處文字。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；蝦皮套組規則；CYID 串接。
