@@ -4,15 +4,19 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：私有綁定配置完成，尚未切換 CYID — 2026-10-12
+## 最新停點：原 development 已啟用 CYID，Windows 中央驗證待回報 — 2026-10-12
 
-後續 readiness：2026-10-12 12:52 Asia/Taipei 使用者確認原安裝升級後發票／設定都在，且原帳密可開設定，授權繼續。接續 source 在唯一 development deployment owner 加入 activate-cyid（只改 flag，完整準備／穩定性／資料 readback gates），CI／實際啟用與中央當次員工驗證尚待完成；不是全部 A/B/C／AA／AB／AC 完成。產品 Windows2.6.19／Cloud0.9.2／Consumer1.0.3／canonical1.0.4 不變。
+2026-10-12 12:52 Asia/Taipei 使用者確認原安裝升級後發票／設定都在，且原帳密可開設定，授權繼續。PR #420 source `70514413b9a3863e1616ecb919a755e1fa30e6bf`／tree `c8fb38c1ce2253b17769aa18f577cf9b7009d58f` 的全部 checks（Governance、deployment validate、Cloud Worker／Windows）通過，合併 `2543222d0a7c9ccd402740477fd3793d123aaeba` 為相同 tree。
+
+[實際 activate-cyid #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325) source `8488ce3d547d671317cb55f1dd27198506462d05`／同已測 tree 成功：before 原 Built-in／完整 scope，exact active inheritance／uploaded readback／100% business 部署與 after 檢查確認 **CYID_ENABLED=true**。Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records、原 Device Token hashes／employee／history／FK／routes 保留；migration skipped／private files cleanup 通過。Recovery UTC `2026-10-12T05:05:10.603Z`，不是 restore rehearsal；無新 Workspace／Device／資料移轉、Secret replacement、測試程式上傳或 production 部署。原 V2.6.19 可直接續用。
+
+下一個人工證據：原安裝重開，確認 CYID discovery／隱藏本機帳號管理，以 CY Web 的 CYID Super Admin 員工編號／密碼進設定並關閉，不開票、不變更資料；一般員工另需 App Access／Role readiness。實際 Fetcher／RPC／Employee 驗證、其餘裝置與 AA／AB／AC 尚未冒充完成。已確認 CYID 的 client 不自動退回 Built-in；不能以 reset／rejoin 修復認證錯誤。產品 Windows2.6.19／Cloud0.9.2／Consumer1.0.3／canonical1.0.4 不變；production／Release 仍另行核准。下方 #38/#39 是啟用前準備證據，其 CYID false 不代表現在旗標。
 
 使用者在既有 CY Web development 中央管理完成 CYInvoice 登記／目前 CYID Workspace 啟用；畫面已出現 CYInvoice 欄，Super Admin 永遠允許，一般員工 App Access 尚未確認。使用者新增 Provider runtime 的 CYINVOICE_APPLICATION_ID／CYINVOICE_WORKSPACE_ID，後者與既有 core portal 身分 Workspace 一致；實際 ID、帳號及 Device Token 不寫 Public 文件。此身分綁定不替換原 CYInvoice business Workspace。
 
 [唯讀 #38](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203645406)（source `ce6528900c7101485424c5c989fe437ae4881d89`）確認 scope configured=true，Consumer 不讀 CYID D1。[prepare-cyid #39](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203790273)（source `2e21c8709f0ef35e665de4d48d4a069b310d1257`）以 main 基準 `2c3071c8b8ed30b5b4898bcf95ca8b174a7b5a99`／tree `c1d303e4d3653c9bd03a034be335bb740c6c2101` 完成真實 business bundle 上傳／100% 部署；IDENTITY Fetcher、IDENTITY_AUTHORITY 的 ConsumerAuthoritySync entrypoint 與三個 approved scope vars readback 通過。原 Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records、原 Token hashes／employee／history／FK／routes 保留，migration skipped、private files cleanup 通過；CYID_ENABLED=false／Built-in 保留。Provider0.3.7／canonical1.0.4、minimum1.0.0。Private recovery reference UTC `2026-10-12T04:27:16.969Z`；不是 restore rehearsal。無測試程式上傳、Secret replacement、重建 Workspace 或 authority switch。
 
-配置 readback 不等於 private Fetcher／RPC／Employee／App Access／Role 已實際驗收。接下來先原 Windows 安裝備份／升級、Built-in continuity、真實員工 readiness，再受控切換驗 AA／AB／AC；正式 production 切換／Release 仍另行核准。下方既有日期段落為歷史證據，過往 scope=false／未部署／未合併敘述不代表現在停點。
+配置 readback 不等於 private Fetcher／RPC／Employee／App Access／Role 已實際驗收。原安裝 Built-in continuity 已由使用者回報、development 啟用已通過 #42；真實中央驗證與 AA／AB／AC 仍待完成。下方既有日期段落為歷史證據，過往 scope=false／未部署／未合併敘述不代表現在停點。
 
 現行 [V2.6.19 Build 0 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38198294935/artifacts/11724462289)：Cloud Check #412、source `2230ec2b88d2c8835a20f374f08abfc66102a70d`，81,093,499 bytes，archive SHA-256 `aa97e42368f38828b89c1206f6454b7b39ac44420bd188e7bbe1c36107dc32bc`，到期 2026-10-15 11:06 Asia/Taipei。Invoice subtree 與本輪 main 基準完全一致；依 RC_TEST 首段升級原 portable folder，保留原資料，不重新加入。
 
