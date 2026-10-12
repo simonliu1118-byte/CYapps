@@ -583,4 +583,33 @@ public class ShopeeScreenshotTests
         Assert.DoesNotContain(problems, p => p.Contains("若是", StringComparison.Ordinal));
         Assert.All(items, i => Assert.Equal(2m, i.Quantity));
     }
+    // Boxes from the user's log (2026-10-12; codes replaced): 編號 「1」 was re-read at 0.29 and dropped.
+    private static List<OcrBox> ThreeGroupsWithoutIndexOne() =>
+    [
+        new("商品", 72, 28, 30, 17), new("單價", 744, 30, 27, 14), new("數量", 818, 30, 26, 14), new("計", 915, 32, 14, 12),
+        new("96", 765, 162, 11, 17), new("1", 847, 165, 6, 10), new("商品選項貨號：X00641S", 140, 185, 140, 20),
+        new("329", 902, 194, 27, 21), new("336", 915, 217, 15, 10), new("120", 755, 228, 23, 18), new("2", 844, 229, 13, 16),
+        new("商品選項貨號：X00465", 140, 270, 133, 18),
+        new("96", 757, 337, 13, 19), new("96", 917, 338, 11, 17), new("1", 838, 341, 9, 11), new("商品項貨號：X00641S", 147, 360, 145, 19),
+        new("96", 765, 475, 13, 19), new("190", 905, 476, 24, 19), new("2", 845, 478, 11, 14), new("3", 36, 487, 11, 14),
+        new("商品選項貨號：X00469", 141, 516, 134, 19), new("2", 16, 329, 50, 34)
+    ];
+
+    [Fact]
+    public void The_numbering_implies_the_missing_first_index()
+    {
+        Assert.Equal(1, ShopeeScreenshot.ExpectedIndexAt(ThreeGroupsWithoutIndexOne(), 969, 204));
+        Assert.Null(ShopeeScreenshot.ExpectedIndexAt(ThreeGroupsWithoutIndexOne(), 969, 420)); // between 2 and 3
+    }
+
+    [Fact]
+    public void With_the_implied_first_index_all_three_groups_add_up()
+    {
+        var lines = ThreeGroupsWithoutIndexOne().Append(new OcrBox("1", 16, 187, 50, 34)).ToList();
+        var problems = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 969, problems);
+        Assert.Equal([1, 2, 3], groups.Select(g => g.Index).Order());
+        Assert.Equal(groups.Sum(g => g.Original), items.Sum(i => i.Amount));
+        Assert.DoesNotContain(problems, p => p.Contains("缺第", StringComparison.Ordinal));
+    }
 }

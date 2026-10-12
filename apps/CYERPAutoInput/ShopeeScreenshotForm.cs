@@ -1,3 +1,4 @@
+using System.Globalization;
 namespace CYERPAutoInput;
 
 /// <summary>
@@ -395,6 +396,7 @@ internal sealed class ShopeeScreenshotForm : Form
     {
         var probes = ShopeeScreenshot.MissingCellProbes(shot.Lines, shot.Image.Width, shot.Image.Height);
         var added = 0;
+        var doubtfulIndexes = new List<(CellProbe Probe, string Digits)>();
         foreach (var probe in probes)
         {
             if (probe.Width < 4 || probe.Height < 4) continue;
@@ -408,10 +410,22 @@ internal sealed class ShopeeScreenshotForm : Form
             if (line.Confidence < 0.8f || !ShopeeScreenshot.TryProbeDigits(line.Text, out var digits))
             {
                 _log.Info("shopee-shot", $"  probe {probe.Purpose} rejected text={_log.Value(line.Text)} confidence={line.Confidence:0.000}");
+                if (probe.Purpose == "編號" && ShopeeScreenshot.TryProbeDigits(line.Text, out var doubtful)) doubtfulIndexes.Add((probe, doubtful));
                 continue;
             }
             shot.Lines.Add(new OcrBox(digits, probe.Left, probe.Top, probe.Width, probe.Height));
             added++;
+        }
+        // A doubtful 編號 is kept only when it is exactly the number its neighbours imply: a faint
+        // 「1」 above 編號 2 was read as 「1」 at 0.29 and dropped, losing 第 1 項 (user's PC,
+        // 2026-10-12). A misread digit (「7」 for 「1」) does not match and stays out.
+        foreach (var (probe, doubtful) in doubtfulIndexes)
+        {
+            var expected = ShopeeScreenshot.ExpectedIndexAt(shot.Lines, shot.Image.Width, probe.Top + probe.Height / 2);
+            if (expected is null || doubtful != expected.Value.ToString(CultureInfo.InvariantCulture)) continue;
+            shot.Lines.Add(new OcrBox(doubtful, probe.Left, probe.Top, probe.Width, probe.Height));
+            added++;
+            _log.Info("shopee-shot", $"  probe 編號 accepted by numbering text={doubtful}");
         }
         _log.Info("shopee-shot", $"detail cells re-read probes={probes.Count} recovered={added}");
     }

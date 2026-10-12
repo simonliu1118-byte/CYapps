@@ -746,6 +746,22 @@ internal static partial class ShopeeScreenshot
         return TryNumber(digits, out _, digitsOnly: true) && digits.Length <= 3;
     }
 
+    /// <summary>
+    /// The 編號 the numbering implies at <paramref name="centerY"/>: one less than the next 編號
+    /// below, one more than the last above (both must agree when both exist). Null when the
+    /// numbers read so far do not say.
+    /// </summary>
+    public static int? ExpectedIndexAt(IReadOnlyList<OcrBox> lines, int imageWidth, int centerY)
+    {
+        var anchors = IndexAnchors(lines, imageWidth)
+            .Select(a => (a.CenterY, Index: int.Parse(Compact(a.Text), CultureInfo.InvariantCulture)))
+            .ToList();
+        var above = anchors.Where(a => a.CenterY < centerY).OrderByDescending(a => a.CenterY).Select(a => (int?)a.Index + 1).FirstOrDefault();
+        var below = anchors.Where(a => a.CenterY > centerY).OrderBy(a => a.CenterY).Select(a => (int?)a.Index - 1).FirstOrDefault();
+        var expected = above is not null && below is not null ? (above == below ? above : null) : above ?? below;
+        return expected is >= 1 ? expected : null;
+    }
+
     internal static bool TryProbeDigits(string text, out string digits)
     {
         var mapped = new string(Compact(text).Select(c => c switch
