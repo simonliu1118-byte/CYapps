@@ -5,6 +5,7 @@
 ## Current checkpoint — 2026-10-12
 
 - Current source **CYCloudIdentity 0.3.7 Build 0／contract 1.0.4** 已由 #416 合併，八項 final-head CI 通過；development actual #158（38197480766）同已測 tree 升級成功，保留原 authority／history／settings／Secrets／七 migrations／FK。Production未部署此批；不自動登記App或授予員工權限。
+- CYInvoice 原 development 已經 #420 exact-head CI／actual activate-cyid #42（38206372325）啟用 CYID；原 Invoice Workspace／Device Token hashes／資料／history／FK 保留，Provider 不變。原 Windows 已由使用者回報 Built-in continuity；live CYID 員工帳密、其餘 App Access／Role／private transport／AA／AB／AC 仍待驗收，詳見 Invoice 現行交接／TODO。不代表 production 或 Release。
 - CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：

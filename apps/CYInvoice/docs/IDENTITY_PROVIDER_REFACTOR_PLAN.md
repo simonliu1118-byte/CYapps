@@ -4,7 +4,7 @@
 
 > Status: implementation-sequence reference. Packages 1–4 are implemented and merged; current acceptance and source/package evidence are in CLOUD_WORK_HANDOFF.md. TODO.md is the only progress checklist. V2.6.15 CYID consumer source is implemented, with live binding/cutover and real-device acceptance pending; this plan is not a separate rules layer or release authorization.
 
-Current checkpoint: central registration/scope and real private-binding configuration passed Invoice #38/#39 with original Workspace/Devices/data and Built-in retained. The user confirmed original Windows V2.6.19 invoices/settings/credential continuity on 2026-10-12 and authorized continuation. The existing deployment owner gains a prepared-only development activation stage; actual activation/private transport/Employee authorization and RC AA/AB/AC remain separately evidenced. No new remote test code, business Workspace or identity authority is introduced; production/Release remain separate.
+Current checkpoint: central registration/scope and private-binding preparation passed Invoice #38/#39. The user confirmed original Windows V2.6.19 invoices/settings/credential continuity and authorized continuation. PR #420 passed all checks; actual development activation #42 confirmed CYID_ENABLED=true and original Workspace/Devices/Token hashes/data/history/FK preserved. Windows live CYID credentials/private transport/Employee authorization and RC AA/AB/AC remain separately evidenced. No new remote test code, business Workspace or identity authority; production/Release remain separate.
 
 ## 1. Why this work comes first
 
