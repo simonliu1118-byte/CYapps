@@ -1,0 +1,114 @@
+name: CYAccountingWeb Stable Release
+
+# Explicit release triggers; normal development/main pushes never publish.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release/cyaccountingweb
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: cyaccountingweb-stable-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout main source
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Verify main identity and successful production deployment
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo 'Formal releases must be dispatched from main.' >&2
+            exit 1
+          fi
+          source_sha=$(git rev-parse HEAD)
+          test "$source_sha" = "$GITHUB_SHA"
+          version=$(cat apps/CYAccountingWeb/VERSION)
+          build=$(cat apps/CYAccountingWeb/BUILD)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$build" = 0
+          test -f "apps/CYAccountingWeb/V$version.txt"
+          grep -F "CYAccountingWeb V$version" "apps/CYAccountingWeb/V$version.txt"
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/cyaccountingweb-deploy.yml/runs?head_sha=$source_sha&event=push&branch=main")
+          echo "$runs" | jq -e --arg sha "$source_sha" '[.workflow_runs[] | select(.head_sha == $sha and .status == "completed" and .conclusion == "success")] | length > 0' >/dev/null
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_SHA=$source_sha" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=cyaccountingweb-v$version" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/CYAccountingWeb/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/CYAccountingWeb
+        run: npm ci --no-audit --no-fund
+
+      - name: Revalidate syntax and all application regressions
+        working-directory: apps/CYAccountingWeb
+        run: |
+          set -euo pipefail
+          for file in src/*.js public/*.js scripts/*.mjs tests/*.mjs; do node --check "$file"; done
+          for file in tests/*.mjs; do node "$file"; done
+          node scripts/validate-cyid-consumer-version.mjs
+
+      - name: Prepare SQLite runtime and CI-only bundle config
+        working-directory: apps/CYAccountingWeb
+        env:
+          CF_WORKER_NAME: cyaccounting-web-ci
+          CF_D1_DATABASE_NAME: cyaccounting-web-ci-db
+          CF_D1_DATABASE_ID: 11111111-1111-4111-8111-111111111111
+          CF_IDENTITY_SERVICE: cyidentity-ci-placeholder
+          CF_CYID_APPLICATION_ID: CYACC_CI
+          CF_CYID_WORKSPACE_ID: workspace-ci-placeholder
+          CF_R2_BACKUP_BUCKET: cyaccounting-backup-ci
+          CF_BACKUP_TOPOLOGY: legacy_gcs
+          CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: acc.example.com
+        run: |
+          node scripts/prepare-sqljs.mjs
+          node scripts/render-wrangler.mjs --output wrangler.ci.generated.jsonc
+          npx wrangler d1 migrations apply DB --local --persist-to /tmp/cyaccounting-release-d1 --config wrangler.ci.generated.jsonc
+          npx wrangler deploy --dry-run --config wrangler.ci.generated.jsonc
+
+      - name: Package tracked public source and verify SHA-256
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          asset="CYAccountingWeb_V$RELEASE_VERSION-source.tar.gz"
+          git archive --format=tar.gz --prefix="CYAccountingWeb_V$RELEASE_VERSION/" --output="out/$asset" "$RELEASE_SHA" apps/CYAccountingWeb LICENSE
+          python3 .github/scripts/scan-public-package.py "out/$asset"
+          (cd out && sha256sum "$asset" > SHA256SUMS.txt && sha256sum --check SHA256SUMS.txt)
+
+      - name: Publish stable mobile Release
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists; refusing to replace published assets.' >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" "out/CYAccountingWeb_V$RELEASE_VERSION-source.tar.gz" out/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SHA" \
+            --title "CYAccountingWeb V$RELEASE_VERSION｜手機穩定版" \
+            --notes-file "apps/CYAccountingWeb/V$RELEASE_VERSION.txt" --latest=false
+
+      - name: Remove generated CI files
+        if: always()
+        working-directory: apps/CYAccountingWeb
+        run: |
+          rm -f wrangler.ci.generated.jsonc
+          node scripts/prepare-sqljs.mjs --clean

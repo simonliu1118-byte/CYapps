@@ -252,7 +252,14 @@ public sealed class AmegoClient : IAmegoGateway
             JsonDocument document;
             try { document = JsonDocument.Parse(body); }
             catch (JsonException error) { throw new InvalidDataException("decode API response", error); }
-            if (document.RootElement.TryGetProperty("code", out var code) && code.GetInt32() == 15 && attempt == 0)
+            int responseCode;
+            try { (responseCode, _) = ReadEnvelope(document.RootElement); }
+            catch
+            {
+                document.Dispose();
+                throw;
+            }
+            if (responseCode == 15 && attempt == 0)
             {
                 document.Dispose();
                 await SynchronizeServerTimeAsync(cancellationToken).ConfigureAwait(false);
@@ -383,7 +390,17 @@ public sealed class AmegoClient : IAmegoGateway
         new(Text(value, "invoice_number") is { Length: > 0 } number ? number : fallbackNumber,
             Text(value, "type"), Int32(value, "status"), Scalar(value, "total_amount"));
 
-    private static (int Code, string Message) ReadEnvelope(JsonElement root) => (Int32(root, "code"), Text(root, "msg"));
+    private static (int Code, string Message) ReadEnvelope(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("code", out var value))
+            throw new InvalidDataException("光貿回覆缺少明確的 code，不能視為成功");
+        int code;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out code) ||
+            value.ValueKind == JsonValueKind.String &&
+            int.TryParse(value.GetString()?.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out code))
+            return (code, Text(root, "msg"));
+        throw new InvalidDataException("光貿回覆 code 必須為整數，不能視為成功");
+    }
     private static void ThrowResponseError(int code, string message)
     {
         if (code != 0) throw new AmegoApiException(code, message.Trim().Length == 0 ? "unknown API error" : message);

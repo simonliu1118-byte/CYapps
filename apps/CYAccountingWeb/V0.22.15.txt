@@ -1,0 +1,21 @@
+CYAccountingWeb V0.22.15 — 穩定版
+Build 0
+
+本版整合 V0.22.1～V0.22.14 的正式成果：
+- 手機新增記帳介面完成底部操作區：清空／取消貼近底部頁籤，儲存緊鄰其上，金額與操作區之間依手機高度自然伸縮。
+- 手機右上角帳號不再先顯示「帳號」placeholder；CYID Session 完成後才一次顯示員工編號與姓名。
+- 手機日期回歸瀏覽器／作業系統原生 date picker；編輯取消可回到原月份與原看帳位置。
+- 看帳維持單列高密度，空月份提示置中；帳戶固定色號由 D1 lifecycle 管理，封存／改名／排序不換色，永久刪除後才釋出。
+- 科目設定收斂為分類－科目階層清單，支援分類排序、科目拖曳與跨分類移動。
+- SUPER_ADMIN 手機「更多」可檢視唯讀備份資訊，不提供手機端備份／復原 mutation。
+- 平板橫式／直式介面與手機／桌機共用同一 transaction writer、Ledger renderer、Toolbar 與 Settings owner，不建立第二套 business flow。
+- 前端已移除歷史版本殼、重複 renderer／observer／retry bootstrap 等舊路徑，保留真正的 API、D1 schema、CYID、備份與檔案格式 contract。
+
+資料與部署
+- D1 schema 為 7；最新 migration 為 0007_account_color_slots.sql。
+- CYID consumer 版本維持 1.0.1，Shared Identity Session／Role／App Access contract 不變。
+- 正式網站與 GitHub Release 是不同流程；本 Release 只包含通過 public-package safety scan 的可重建原始碼包與 SHA-256，不包含正式環境 Secret、帳務資料或 deployment-specific resource identifiers。
+- Restore／DR 與 Backup Phase C 後續工作仍依 TODO.md 追蹤。
+
+Copyright © 2026 C.C. Liu, Chihyuan Co. All Rights Reserved.
+使用與散布權利依 repository 根 LICENSE。

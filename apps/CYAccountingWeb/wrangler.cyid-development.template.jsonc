@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "__CF_WORKER_NAME__",
+  "main": "src/app.js",
+  "compatibility_date": "2026-09-22",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*",
+      "/",
+      "/index.html",
+      "/login",
+      "/login.html"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "__CF_D1_DATABASE_NAME__",
+      "database_id": "__CF_D1_DATABASE_ID__"
+    }
+  ],
+  "services": [
+    {
+      "binding": "IDENTITY",
+      "service": "__CF_IDENTITY_SERVICE__"
+    }
+  ],
+  "vars": {
+    "CYID_APPLICATION_ID": "__CF_CYID_APPLICATION_ID__",
+    "CYID_WORKSPACE_ID": "__CF_CYID_WORKSPACE_ID__"
+  }
+}

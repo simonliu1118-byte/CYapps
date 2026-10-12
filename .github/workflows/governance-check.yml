@@ -193,6 +193,11 @@ jobs:
               if publishes and 'scan-public-package.py' not in text:
                   print(f'ERROR: public Artifact/Release workflow lacks safety scan: {workflow.as_posix()}')
                   sys.exit(1)
+              uploads = len(re.findall(r'(?m)^\s*(?:-\s*)?uses:\s*actions/upload-artifact@', text))
+              retentions = re.findall(r'retention-days:\s*(\S+)', text)
+              if uploads and (len(retentions) != uploads or any(v != '3' for v in retentions)):
+                  print(f'ERROR: every upload-artifact step must set retention-days: 3 (REPO_POLICY §3): {workflow.as_posix()}')
+                  sys.exit(1)
 
           apps = pathlib.Path('apps')
           if apps.is_dir():

@@ -1,0 +1,205 @@
+using System.Drawing.Drawing2D;
+
+namespace CYERPAutoInput;
+
+internal static class VisionSelfTest
+{
+    public static async Task<int> RunAsync(AppLogger log)
+    {
+        try
+        {
+            Console.WriteLine("CYERPAutoInput vision self-test begin");
+            log.Info("selftest", "vision self-test begin");
+
+            using var image = new Bitmap(900, 320);
+            using (var g = Graphics.FromImage(image))
+            {
+                g.Clear(Color.White);
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+                using var font = new Font("Microsoft JhengHei UI", 42, FontStyle.Bold, GraphicsUnit.Pixel);
+                using var pen = new Pen(Color.FromArgb(90, 90, 90), 1);
+                g.DrawString("換算單位  箱", font, Brushes.Black, new PointF(55, 18));
+                foreach (var y in new[] { 105, 150, 195, 240, 285 })
+                    g.DrawLine(pen, 15, y, 880, y);
+            }
+
+            var lines = GridVisionService.FindHorizontalLines(image, 80);
+            if (lines.Count < 4)
+                throw new InvalidOperationException($"Synthetic grid-line detector returned only {lines.Count} horizontal lines.");
+
+            using var verticalImage = new Bitmap(900, 120);
+            using (var g = Graphics.FromImage(verticalImage))
+            {
+                g.Clear(Color.White);
+                using var pen = new Pen(Color.FromArgb(90, 90, 90), 1);
+                foreach (var x in new[] { 15, 90, 205, 340, 485, 620, 755, 880 })
+                    g.DrawLine(pen, x, 2, x, 105);
+            }
+            var vertical = GridVisionService.FindVerticalLines(verticalImage, 110);
+            if (vertical.Count < 6)
+                throw new InvalidOperationException($"Synthetic grid-line detector returned only {vertical.Count} vertical lines.");
+
+            var joinedLatin = GridVisionService.FindPhrase(
+            [
+                new OcrToken("VIS", new Rectangle(20, 20, 45, 24)),
+                new OcrToken("ION", new Rectangle(67, 20, 45, 24))
+            ], ["VISION"]);
+            if (joinedLatin is null)
+                throw new InvalidOperationException("Joined OCR-token Latin phrase matching failed.");
+
+            var joinedChinese = GridVisionService.FindPhrase(
+            [
+                new OcrToken("換算", new Rectangle(120, 20, 42, 24)),
+                new OcrToken("單位", new Rectangle(166, 20, 42, 24))
+            ], ["換算單位"]);
+            if (joinedChinese is null)
+                throw new InvalidOperationException("Joined OCR-token Chinese phrase matching failed.");
+
+            // Regression: when the OCR row is "贈 備 品 量 單 位", looking
+            // for 單位 must return only the two matching tokens, never the preceding
+            // 備品量 span. This is what previously shifted F2 into 贈/備品量.
+            var exactUnitSpan = FastDetailGridVisionService.FindExactPhrase(
+            [
+                new OcrToken("贈", new Rectangle(100, 20, 10, 24)),
+                new OcrToken("備", new Rectangle(112, 20, 10, 24)),
+                new OcrToken("品", new Rectangle(124, 20, 10, 24)),
+                new OcrToken("量", new Rectangle(136, 20, 10, 24)),
+                new OcrToken("單", new Rectangle(160, 20, 10, 24)),
+                new OcrToken("位", new Rectangle(172, 20, 10, 24))
+            ], ["單位"]);
+            if (exactUnitSpan is null || exactUnitSpan.Value.Left != 160 || exactUnitSpan.Value.Right != 182)
+                throw new InvalidOperationException($"Exact unit phrase span failed: {exactUnitSpan?.ToString() ?? "null"}.");
+
+            // Also cover a detector that returns one combined token containing extra
+            // prefix text. The match rectangle must be cropped to the 單位 suffix.
+            var combinedUnitSpan = FastDetailGridVisionService.FindExactPhrase(
+            [new OcrToken("備品量單位", new Rectangle(200, 20, 100, 24))], ["單位"]);
+            if (combinedUnitSpan is null || combinedUnitSpan.Value.Left < 255 || combinedUnitSpan.Value.Width > 45)
+                throw new InvalidOperationException($"Combined-token unit phrase cropping failed: {combinedUnitSpan?.ToString() ?? "null"}.");
+
+            var snappedUnitX = FastDetailGridVisionService.SnapToContainingCell(173, [0, 80, 150, 190, 260]);
+            if (snappedUnitX != 170)
+                throw new InvalidOperationException($"Unit header did not snap to containing grid-cell center: {snappedUnitX}.");
+
+            if (OcrTextNormalizer.Normalize("数 量") != "數量" ||
+                OcrTextNormalizer.Normalize("库别") != "庫別" ||
+                OcrTextNormalizer.Normalize("送货資料") != "送貨資料")
+                throw new InvalidOperationException("Traditional/Simplified OCR normalization failed.");
+
+            var simplifiedQuantity = GridVisionService.FindPhrase(
+            [
+                new OcrToken("数", new Rectangle(120, 20, 20, 24)),
+                new OcrToken("量", new Rectangle(142, 20, 20, 24))
+            ], ["數量"]);
+            if (simplifiedQuantity is null)
+                throw new InvalidOperationException("Simplified OCR tokens did not match Traditional field alias 數量.");
+
+            var unitCandidate = GridVisionService.FindBestUnitCandidate(
+            [
+                new OcrToken("换算", new Rectangle(120, 20, 42, 24)),
+                new OcrToken("单位", new Rectangle(166, 20, 42, 24)),
+                new OcrToken("支", new Rectangle(171, 75, 20, 24)),
+                new OcrToken("箱", new Rectangle(171, 112, 20, 24)),
+                new OcrToken("箱", new Rectangle(500, 150, 20, 24))
+            ], "箱");
+            if (unitCandidate is null || unitCandidate.Rect.Top != 112)
+                throw new InvalidOperationException("F2 requested-unit candidate selection failed.");
+
+            var noHeaderCandidate = GridVisionService.FindBestUnitCandidate(
+            [new OcrToken("箱", new Rectangle(171, 112, 20, 24))], "箱");
+            if (noHeaderCandidate is not null)
+                throw new InvalidOperationException("F2 safety failed: a unit was accepted without recognizing the 換算單位 header.");
+
+            var farColumnCandidate = GridVisionService.FindBestUnitCandidate(
+            [
+                new OcrToken("換算單位", new Rectangle(120, 20, 90, 24)),
+                new OcrToken("箱", new Rectangle(520, 112, 20, 24))
+            ], "箱");
+            if (farColumnCandidate is not null)
+                throw new InvalidOperationException("F2 safety failed: a same-text token outside the unit column was accepted.");
+
+
+            if (!InputRules.TryParseStockText("67", out var batchStock67) || batchStock67 != 67 ||
+                !InputRules.TryParseStockText("100.0000", out var batchStock100) || batchStock100 != 100 ||
+                !InputRules.TryParseStockText("1,234", out var batchStock1234) || batchStock1234 != 1234 ||
+                InputRules.TryParseStockText("批號", out _))
+                throw new InvalidOperationException("F2 batch stock parser regression failed.");
+
+            if (OcrTextNormalizer.Normalize("现有存量") != "現有存量")
+                throw new InvalidOperationException("Batch-stock Traditional/Simplified OCR normalization failed.");
+
+            var ocr = new PaddleOcrService(log);
+            var tokens = await ocr.RecognizeAsync(image, CancellationToken.None, requireChinese: true);
+            var joinedText = string.Concat(tokens.Select(t => t.Text)).Replace(" ", string.Empty).Replace("　", string.Empty);
+            if (!joinedText.Contains("箱", StringComparison.Ordinal))
+                throw new InvalidOperationException($"PaddleOCR ran but did not recognize synthetic Traditional Chinese target 箱 (tokens={tokens.Count}, text={joinedText}).");
+
+            // Real-ERP regression (V0.2.0 Build 1): a lone "0" on the blue selected first row
+            // of F2 批號查詢 returned no OCR token. Every stock cell must read back exactly.
+            var stockReader = new F2BatchCellLocator(ocr, log);
+            var stockCells = new (string Text, Color Back, Color Fore)[]
+            {
+                ("0", Color.FromArgb(0, 120, 215), Color.White),
+                ("0", Color.White, Color.Black),
+                ("53", Color.White, Color.Black),
+                ("100", Color.White, Color.Black),
+                ("7", Color.FromArgb(0, 120, 215), Color.White),
+                ("8", Color.White, Color.Black),
+                ("0", Color.FromArgb(143, 170, 220), Color.Black), // real F2 selected cell colors
+                ("1,234", Color.White, Color.Black)
+            };
+            var stockReads = new List<string>();
+            foreach (var (text, back, fore) in stockCells)
+            {
+                using var cell = RenderStockCell(text, back, fore);
+                var (read, variant) = await stockReader.ReadStockCellAsync(cell, CancellationToken.None);
+                stockReads.Add($"{text}->{read}({variant})");
+                if (!InputRules.TryParseStockText(read, out var value) || value != decimal.Parse(text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture))
+                    throw new InvalidOperationException($"F2 stock cell OCR failed: expected {text}, read \"{read}\" via {variant}.");
+            }
+            using (var blank = RenderStockCell(string.Empty, Color.White, Color.Black))
+            {
+                var (read, variant) = await stockReader.ReadStockCellAsync(blank, CancellationToken.None);
+                if (variant != "blank" || read.Length != 0)
+                    throw new InvalidOperationException($"F2 stock blank cell was not reported blank: \"{read}\" via {variant}.");
+            }
+            Console.WriteLine($"stock cells: {string.Join(", ", stockReads)}");
+
+            var message = $"vision self-test passed engine=PP-OCRv5_mobile_rec horizontal={lines.Count} vertical={vertical.Count} tokens={tokens.Count} text={joinedText}";
+            Console.WriteLine(message);
+            log.Info("selftest", message);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.ToString());
+            log.Error("selftest", ex);
+            return 10;
+        }
+    }
+
+    /// <summary>
+    /// An 86x22 right-aligned numeric grid cell at 100% DPI, like F2 現有存量, including
+    /// the grid lines a row-bound crop picks up.
+    /// </summary>
+    private static Bitmap RenderStockCell(string text, Color back, Color fore)
+    {
+        var bitmap = new Bitmap(86, 22);
+        using var g = Graphics.FromImage(bitmap);
+        g.Clear(back);
+        using (var line = new Pen(Color.FromArgb(160, 160, 160)))
+        {
+            g.DrawLine(line, 0, 0, 85, 0);
+            g.DrawLine(line, 0, 21, 85, 21);
+            g.DrawLine(line, 85, 0, 85, 21);
+        }
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        using var font = new Font("Tahoma", 12, FontStyle.Regular, GraphicsUnit.Pixel);
+        using var brush = new SolidBrush(fore);
+        if (text.Length == 0) return bitmap;
+        var size = g.MeasureString(text, font);
+        g.DrawString(text, font, brush, new PointF(86 - size.Width - 4, (22 - size.Height) / 2));
+        return bitmap;
+    }
+}

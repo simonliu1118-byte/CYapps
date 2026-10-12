@@ -168,7 +168,6 @@ USER_RESPONSE="$USER_RESPONSE" python3 - <<'PY'
 import json, os
 p = json.loads(os.environ['USER_RESPONSE'])['principal']
 assert p['workspaceRole'] == 'USER'
-assert p['applicationRoleKey'] == 'USER'
 assert p['isWorkspaceSuperAdmin'] is False
 assert p['isIdentityAdmin'] is False
 assert p['emailVerified'] is True
@@ -198,7 +197,6 @@ SUPER_RESPONSE="$SUPER_RESPONSE" python3 - <<'PY'
 import json, os
 p = json.loads(os.environ['SUPER_RESPONSE'])['principal']
 assert p['workspaceRole'] == 'SUPER_ADMIN'
-assert p['applicationRoleKey'] == 'SUPER_ADMIN'
 assert p['isWorkspaceSuperAdmin'] is True
 PY
 
@@ -263,7 +261,7 @@ p = json.loads(os.environ['CREATE_USER_RESPONSE'])
 assert p['ok'] is True
 assert p['employee']['roleKey'] == 'USER'
 assert p['employee']['pendingActivation'] is True
-assert p['activationDelivery']['sent'] is False
+assert p['emailVerificationDelivery']['sent'] is False
 PY
 
 CREATE_ADMIN_STATUS="$(curl --silent --output "$STATE_DIR/create-admin.json" --write-out '%{http_code}' \

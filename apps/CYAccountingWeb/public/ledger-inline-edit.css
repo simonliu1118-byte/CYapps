@@ -1,0 +1,108 @@
+/* CYAccountingWeb ledger inline edit styles functional module. */
+
+/* Inline ledger editing presentation. */
+.ledger-card tr.inline-editing td {
+  padding-top: 3px;
+  padding-bottom: 3px;
+  background: #f3f8fb;
+  vertical-align: middle;
+}
+
+.inline-edit-control {
+  width: 100%;
+  min-width: 0;
+  height: 29px;
+  padding: 3px 6px;
+  border: 1px solid #aebdca;
+  border-radius: 5px;
+  background: #fff;
+  color: #263746;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.inline-edit-control:focus {
+  border-color: #5e8fb0;
+  box-shadow: 0 0 0 2px rgba(58, 115, 152, .12);
+}
+
+.inline-edit-date {
+  min-width: 0;
+}
+
+.inline-edit-summary {
+  min-width: 0;
+}
+
+.inline-edit-amount {
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.inline-edit-balance {
+  color: #7b8792;
+  font-size: 10.5px !important;
+  font-weight: 400 !important;
+  white-space: nowrap;
+}
+
+.inline-edit-action-cell {
+  min-width: 0;
+}
+
+.inline-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.inline-edit-actions .row-action {
+  padding: 3px 5px;
+}
+
+.inline-edit-actions .inline-save {
+  color: #25648d;
+  font-weight: 700;
+}
+
+.inline-edit-message {
+  display: block;
+  min-height: 13px;
+  margin-top: 2px;
+  color: #647584;
+  font-size: 9.5px;
+  line-height: 1.2;
+  text-align: right;
+  white-space: normal;
+}
+
+.inline-edit-message.error {
+  color: #b44343;
+}
+
+.inline-editing .kind-tag {
+  white-space: nowrap;
+}
+/* Inline desktop editing keeps the exact ledger columns, without forcing
+   wider minimum input widths than the available account/date/amount cells. */
+@media (min-width: 1024px) {
+  html[data-viewport="desktop"] .ledger-card tr.inline-editing .inline-edit-control {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    font-size: 12px;
+  }
+  html[data-viewport="desktop"] .ledger-card tr.inline-editing .inline-edit-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  html[data-viewport="desktop"] .ledger-card tr.inline-editing .desktopUi-date-trigger {
+    width: 100%;
+    min-width: 0;
+    padding: 0 4px;
+    font-size: 11px;
+  }
+}

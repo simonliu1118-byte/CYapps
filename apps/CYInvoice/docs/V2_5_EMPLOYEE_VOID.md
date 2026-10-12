@@ -1,5 +1,7 @@
 # CYInvoice V2.5 員工帳戶與發票作廢設計
 
+> **V2.5 歷史設計**：下文保存當時工程與設計，不作現行版本／操作指令。現行 V2.6.14 使用 USER role、Identity Provider、半形等待作廢文字、共通子視窗無 title-bar icon、直接 CancelReason「使用者編號-原因」與覆核「管理員編號-使用者編號-原因」，正常官方等待分流至處理中。現行契約見 [REQUIREMENTS.md](REQUIREMENTS.md)、[DATA_FORMAT.md](DATA_FORMAT.md)，驗收／待辦見 [現行交接](CLOUD_WORK_HANDOFF.md)／[TODO.md](TODO.md)。
+
 本文件記錄 CYInvoice V2.5 已確認的產品設計與工程實作基準。它是設計／需求文件，不是新的永久治理規則；永久規則仍以根目錄 `REPOSITORY_RULES.md`、`REPO_POLICY.md` 與 `apps/CYInvoice/PROJECT_RULES.md` 為準。
 
 最新正式 Release 仍為 **V2.4.2**；目前 V2.5 工程基準為 **V2.5.0 Build 3**。VERSION／BUILD、PR merge 或工程測試包都不代表正式 Release 授權。

@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 internal sealed class CloudSuperAdminTransferForm : Form
 {
     private readonly CloudSuperAdminTransferClient client;
-    private readonly EmployeeAccount actor;
+    private readonly string actorEmployeeNo;
     private readonly string actorPassword;
     private readonly EmployeeAccount target;
     private readonly CancellationTokenSource lifetime = new();
@@ -22,16 +22,14 @@ internal sealed class CloudSuperAdminTransferForm : Form
 
     public CloudSuperAdminTransferForm(
         CloudSuperAdminTransferClient client,
-        EmployeeAccount actor,
+        string actorEmployeeNo,
         string actorPassword,
         EmployeeAccount target)
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
-        this.actor = actor ?? throw new ArgumentNullException(nameof(actor));
+        this.actorEmployeeNo = actorEmployeeNo ?? throw new ArgumentNullException(nameof(actorEmployeeNo));
         this.actorPassword = actorPassword ?? throw new ArgumentNullException(nameof(actorPassword));
         this.target = target ?? throw new ArgumentNullException(nameof(target));
-        if (actor.Role != EmployeeRoles.SuperAdmin)
-            throw new InvalidOperationException("只有目前超級管理員可以移交超管權限。");
         if (target.Role != EmployeeRoles.Admin || !target.Enabled)
             throw new InvalidOperationException("接任者必須是啟用中的管理員。");
 
@@ -71,7 +69,7 @@ internal sealed class CloudSuperAdminTransferForm : Form
         root.Controls.Add(targetLabel, 0, 0);
         root.Controls.Add(new Label
         {
-            Text = $"目前超級管理員：{actor.EmployeeNo}  {actor.Name}",
+            Text = $"驗證員工：{actorEmployeeNo}",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
         }, 0, 1);
@@ -117,7 +115,7 @@ internal sealed class CloudSuperAdminTransferForm : Form
         await RunBusyAsync(async () =>
         {
             challenge = await client.StartAsync(
-                actor.EmployeeNo,
+                actorEmployeeNo,
                 actorPassword,
                 target.EmployeeNo,
                 lifetime.Token);
@@ -137,7 +135,7 @@ internal sealed class CloudSuperAdminTransferForm : Form
 
             if (MessageBox.Show(
                     this,
-                    $"完成後：\n{actor.EmployeeNo} {actor.Name} → 管理員\n{target.EmployeeNo} {target.Name} → 超級管理員\nWorkspace Recovery Email → {MaskEmail(target.Email)}\n\n此操作無法以一般角色變更方式復原，確定移交？",
+                    $"完成後：\n{actorEmployeeNo} → 管理員\n{target.EmployeeNo} {target.Name} → 超級管理員\nWorkspace Recovery Email → {MaskEmail(target.Email)}\n\n此操作無法以一般角色變更方式復原，確定移交？",
                     "最後確認",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning,
@@ -145,7 +143,7 @@ internal sealed class CloudSuperAdminTransferForm : Form
                 return;
 
             Result = await client.ConfirmAsync(
-                actor.EmployeeNo,
+                actorEmployeeNo,
                 actorPassword,
                 target.EmployeeNo,
                 challenge.ChallengeId,

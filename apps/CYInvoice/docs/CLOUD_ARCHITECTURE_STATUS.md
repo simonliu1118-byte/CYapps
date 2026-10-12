@@ -7,17 +7,21 @@
 ## 1. 工程基準
 
 - Windows 正式產品線：C# / WinForms。
-- 工程版本：V2.6.4 Build 1。
+- 工程版本：V2.6.17。
 - Reference backend：Cloudflare Worker + D1。
 - Cloud API：`1`。
-- Cloud implementation version：`0.8.2`。
-- Cloud schema compatibility：`7`，forward migrations `0001`～`0007`。
+- Cloud implementation version：`0.9.2`。
+- Legacy API compatibility schemaVersion：8；actual storageSchemaVersion：13，forward migrations 0001～0013。
 - Public Windows client 不內建專案擁有者私人 endpoint，只接受使用者設定的相容 HTTPS API。
 - 已執行 migration 不回寫；schema 修改只能新增 forward migration。
 
-GitHub Actions 驗證的是 source、Worker bundle、local SQLite migration、.NET contract、Windows build／startup smoke 與 engineering package；不等同 remote 已部署。2026-09-22 已確認 development D1 remote 為 Schema 7、Brevo bootstrap OTP 已成功寄達。首次實際建立 Workspace 時因 Worker INSERT SQL 欄位和值數量不符而回滾。2026-09-23 Cloud 0.8.2 已由 development deploy Run #6 部署，`/v1/health` 回覆 API 1 / Schema 7 / storage `ok`；部署前唯讀查核 Workspace／Device／Employee／Pairing 均為 0。之後 Windows V2.6.4 Build 1 回報第一個 Workspace／Device 建立成功與 Device identity 驗證完成；建立後的 D1 尚未獨立唯讀核對，Employee Transition／cutover 尚未驗收。部署前的 0 筆不得當成目前狀態。
+GitHub Actions 驗證 source、Worker bundle、local migration、contract、Windows build／smoke／package；功能 commit 66ec3671 的 Governance #1137、Cloud #369、Windows #258 全部通過，證據見 [現行交接](CLOUD_WORK_HANDOFF.md)。不等同 live deployment 或人工驗收。
+
+目前 development 遠端部署證據為 2026-10-10 staged [Run #8 attempt 2](https://github.com/simonliu1118-byte/CYapps/actions/runs/37983363509)：Cloud 0.8.9／API 1／compatibility marker 8／storage Schema 12／storage ok，包含 device-usage-v1／device-rename-v1；0012 已套用，aggregate Device 狀態保持、FK 無異常，重跑無 pending migration。第一次即時 health 尚讀到 0.8.8，相同 source 再驗證正常。Windows A/B/C 操作仍待 RC Z，不能以部署 health 冒充人工通過。
 
 ## 2. 帳號權威模型
+
+V2.6.17 source 已實作：啟動／60 秒／重連一次 Device＋權限同步、最終操作完整授權、遠端撤銷完整清除（包含 Logs、portable 回初始狀態）。設計見 CY_ID_INTEGRATION §14.6、唯一待辦 TODO §7.3.2、開發 checkpoint CLOUD_WORK_HANDOFF；V2.6.16 CI 不代表此需求完成。
 
 CYInvoice 不採「程式啟動後持續登入某人」的模型。
 
@@ -85,7 +89,7 @@ Workspace、Device、Employee 是三個不同概念：
 - Device：可信任電腦。
 - Employee：人員帳號／操作權限。
 
-Device Join 使用 Pairing Code；Pairing Code 只授權 Device 加入 Workspace，不授予任何 Employee role。
+Device Join 使用 Pairing Code 或 Invitation Code；Pairing Code 只授權 Device 加入 Workspace，不授予任何 Employee role。
 
 B 機進入 Device Join 前必須先於本機當下驗證 Local `ADMIN` 或 `SUPER_ADMIN`，證明操作者有權管理 B 機；Workspace 端 Pairing Code 則獨立證明 Workspace 已授權加入。
 
@@ -100,7 +104,7 @@ Cloud cutover 後，帳號全域異動全部為 **Online-only**，並於操作�
 - 新增 Employee。
 - 修改姓名。
 - 修改 Email；新 Email 必須先完成 OTP 驗證才 commit。
-- `ADMIN ↔ EMPLOYEE`。
+- `ADMIN ↔ USER`。
 - 啟用／停用。
 - 本人變更密碼。
 - 管理員重設其他非 SUPER_ADMIN 的密碼。
@@ -158,7 +162,7 @@ Cloud Mode 斷網時仍是 Cloud Mode。
 - Role / Enabled 狀態。
 - Protected offline credential verifier。
 
-進行原本需要帳密的本機操作時，仍在執行當下驗證；只是資料來源是最後同步的 Cloud Employee cache。
+Online protected operation 先取得最新 Cloud authority；雲端 transport outage／timeout／暫時 5xx 且光貿正常時沿用原有降級的最後可信 protected cache。HTTP 拒絕、revoked Device、malformed／Workspace mismatch 或 caller cancellation fail closed，不視為可繞過的離線狀況。
 
 帳號全域異動不允許離線修改再合併，包括新增／Email／role／enabled／password／SUPER_ADMIN transfer／identity conflict resolution。如此避免多台電腦離線各自修改同一帳號後產生雙主衝突。
 
@@ -201,12 +205,32 @@ Cloud 是跨裝置協作、中央 Employee、Workspace 管理與後續 Work Item
 
 AMEGO 仍是發票／作廢／折讓官方交易真相。Cloud 故障時，能安全本機執行的既有業務不因中央帳號管理暫時離線而全部停擺；但真正依賴 Cloud 的 Workspace／Device／Employee 全域異動必須等待恢復連線。
 
-## 12. 尚未完成／需實機驗證
+## 12. Device lifecycle 與 reset
 
-- 第一個 Workspace／Device 的 Windows client 已回報建立成功；尚待 Cloudflare D1 建立後的唯讀查核及 A 機 Employee Transition／cutover 實機驗收。Cloud 0.8.2 已部署，D1 Schema 7 已確認。
-- Employee Email、SUPER_ADMIN transfer 的真實 Email OTP 測試；bootstrap OTP 寄信已確認。
-- 多台 Windows 實機：A 建 Workspace、B Pairing、whole-device transition、offline cache、恢復同步。
-- Device revoke / all-Device-Token-loss recovery。
-- 後續 business sync / Work Item / Audit；不得把本文件的 identity foundation 誤認為 V3 全部功能已完成。
+Device inventory／revoke／Windows 管理 UI 已實作；只有 execution-time SUPER_ADMIN 可撤銷，history／audit 保留，舊 Token 失效，rejoin 產生新 identity。Built-in active Workspace 保留 LAST_ACTIVE_DEVICE。
 
-正式 merge、tag、Release 仍需明確授權。
+Cloud → Local 已完成雙重確認及 crash-safe reset：關閉主 UI／同步後 revoke，明確 terminal／inactive 證據才 wipe 目前安裝 Data／Cache／identity。不明結果保留資料／Token，由下次啟動 self-status 恢復；Windows 不停用／刪除中央 Workspace。
+
+## 13. 尚未完成／需實機驗證
+
+A 機連線與 B 機 Run255 pairing 曾通過實機；四個 identity／freshness／revoke／reset 包已合併，不重新列為未實作。新版 A/B/C lifecycle、invitation、Employee identity matrix／Email OTP／password recovery／SUPER_ADMIN transfer 仍待實機驗收。
+
+CYID consumer 已接線但尚待實機／staging／切換；尚未實作的 Recovery Device flow、business Work Item／revision、跨機 OrderID 防撞、audit viewer、正式折讓 API 與自架手冊均由 [TODO.md](TODO.md) 追蹤；本文件不維護第二份勾選清單。CYID shared standard 已發布為 1.0.3／minimum 1.0.0，同 repo 直接引用 canonical files。Built-in Cloud 的 role／credential transport 不作為 CYID 共通契約。
+
+
+## V2.6.14 Device metadata
+
+Windows inventory 僅顯示 active；Cloud API／DB 保留 revoked history。啟動 POST usage 以 Device Token 更新本 Device 的 client_version／last_seen_at，沒有新增 heartbeat owner。改名 POST rename 以中央 SUPER_ADMIN 執行時驗證，同 Workspace active Device，交易重查 actor／Workspace／credential 並保存 device_renamed audit。0012 擴充 audit vocabulary，不修改已套用 migrations。新增裝置由獨立 CloudAddDeviceForm 管理既有配對／邀請生命周期。
+
+## CYID Consumer source（V2.6.15，未部署／未正式切換）
+
+IdentityProviderRuntime 增加第三個 provider，不新增第二個 desktop 選擇 owner。Worker app.ts 仍唯一 dispatch；cyid.ts 管理 private IDENTITY Session lifecycle，Device／onboarding 保留業務 mutation owner。新 authenticated discovery 確認 provider／Device／兩 Workspace／Application，Windows 整筆 DPAPI 保存；CYID 確認後不自動降回 Built-in／Local。
+
+Employee／credential／enabled／App Access／Role 由 CYID canonical endpoints 決定，Device 及 app-local business permission 仍由 CYInvoice 負責。一次性 pairing ticket 只加入 Device。CYID Session 在 Worker 當次記憶體內使用，finally Logout，response loss 留給 provider expiry／revocation，不 replay mutation。CYID mode 阻擋 legacy account/bootstrap routes；verified owner Email transient lookup 不建立 Employee replica。0013 保留邀請歷史，區分 Built-in／external actor。
+
+Offline cache 由本機線上成功密碼建立 proof，principal／Role／scope 全 DPAPI 保護；V2.6.16 在雲端 transport／timeout／暫時 5xx 且光貿正常時沿用原降級，帳密／權限／Device 拒絕不 fallback。無新增 TTL，保留 last-trusted semantics；重新連線用最新權限。本輪沒有 live binding／application enablement 驗證或切換，完整安全邊界見 CY_ID_INTEGRATION §14、現行 CI／人工停點見 CLOUD_WORK_HANDOFF／TODO。
+
+
+ServiceConnectivity 收斂既有光貿 probe 與 authenticated Cloud discovery；MainForm 管理唯一連線提示及 15 秒檢查。Cloud 0.9.1 discovery 在 CYID enabled 時經原 private IDENTITY 檢查 canonical health，liveness 不授予權限。無新 schema／migration／authority；Cloud 與光貿功能及純 Local 矩陣見 CY_ID_INTEGRATION §14.2。
+
+V2.6.17 runtime 採 aggregate Device／binding／permission，具 durable revoke marker、manifest 全 portable runtime 清除與單程序寫入保護。canonical private invalidation 只移除失效快取；shared authority／支援窗仍由 CYID 保存。測試證據見現行交接，live binding／實機／正式切換未完成。

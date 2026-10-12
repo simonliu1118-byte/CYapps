@@ -1,5 +1,22 @@
 # Shared Common Rules Changelog
 
+## 2.8.0 — 2026/10/04
+
+- 將既有「單一路徑／禁止版本殼」規則補強為 Canonical Owner 架構治理：每個 concern 應明確只有一個 State、Business/Mutation、Render 與 Lifecycle owner；裝置可有 presentation 差異，但不得複製 business/data authority。
+- 新 implementation 取代舊 implementation 時，原則上同 PR 移除舊 renderer/listener/observer/wrapper/retry/CSS/DOM/state/dead cleanup；真正需要暫時雙路徑時必須標示 Architecture Exception，記錄 primary/legacy path、owner、風險、移除條件與 regression coverage。
+- MutationObserver、setTimeout/retry、wrapper、fallback、device-specific component 與 !important 不採全面禁止；改以「是否形成第二 owner、是否用來取代正式 lifecycle、是否掩蓋 internal dependency／ownership 問題」作判斷。
+- 新增 Root Cause First 與 Architecture Review Trigger：若修正開始需要第二 renderer/mutation handler、observer、retry bootstrap、compatibility wrapper、DOM relocation、duplicate device component 或新的 CSS override 層，必須先檢查 canonical owner、可刪舊層與退場條件。
+- 架構 PR 應列出修改前後 ownership 與新增／移除路徑；architecture complexity 採 replacement/removal budget。CI 應保護 ownership contract，而不是粗暴禁止特定 JavaScript/CSS 語法。
+- Application release number 不得作為長期 runtime architecture 或 cache revision 命名；API/schema/migration/backup/file-format/protocol 等真正 contract version 與正式產品版本照常保留。
+
+## 2.7.0 — 2026/10/01
+
+- 新增全域「禁止版本殼／wrapper 疊床架屋」架構紀律：功能演進與修正必須收斂到正式主路徑與依功能命名模組，不得以 app-vN chain、vNNN.js/css 疊載、Build wrapper 或 patch-on-patch 取代正常整併。
+- 保留合理例外：外部 backward compatibility、資料格式過渡、第三方 API 遷移、rolling deployment 或不可同步升級 consumer 可使用最小必要相容層，但必須單一入口、最小範圍、不形成第二套 authority／business logic、不可再疊第二層，並記錄理由、owner、影響範圍、移除條件與退場時機。
+- 明確區分「protocol／file-format compatibility」與「application runtime wrapper compatibility」；前者可長期依 contract version 保留 reader，後者不得因此保留整套歷史 runtime。
+- 發現既有多層 wrapper／overlay／patch chain 時，優先先收斂主路徑再除錯；緊急暫時層必須有明確 cleanup gate，不得把臨時 workaround 當完成架構。
+- CI／architecture test 應防止已淘汰版本殼與 patch loader 回流；舊測試不得以歷史載入順序為理由要求恢復已移除的殼。
+
 ## 2.6.0 — 2026/09/19
 
 - 新增「一致性優先與例外流程控制」共通規則：相同資料值、狀態碼、欄位語意、權限判斷與 UI 樣式在不同入口維持相同解讀，不因單一流程任意改變既有語意。

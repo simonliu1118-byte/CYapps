@@ -39,6 +39,7 @@ internal static class Program
         var smokeTest = args.Contains("--startup-smoke-test", StringComparer.Ordinal);
         try
         {
+            if (smokeTest) Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
             ApplicationConfiguration.Initialize();
             UiControls.InstallGlobalEnterNavigation();
             if (smokeTest)
@@ -47,6 +48,19 @@ internal static class Program
                 return;
             }
 
+            if (!WaitForResetParent(args)) return;
+            // One portable directory has one writer, including reset recovery.
+            var directoryKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(AppContext.BaseDirectory).ToUpperInvariant())));
+            using var instance = new Mutex(false, @"Local\CYInvoice-" + directoryKey);
+            bool acquired;
+            try { acquired = instance.WaitOne(0); }
+            catch (AbandonedMutexException) { acquired = true; }
+            if (!acquired)
+            {
+                MessageBox.Show("這個資料夾的 CYInvoice 已經開啟，請使用原本的視窗。", "CYInvoice");
+                return;
+            }
             if (!RecoverPendingReset()) return;
 
             Application.Run(new MainForm());
@@ -103,6 +117,13 @@ internal static class Program
 
     private static void RunScheduledResetAfterShutdown()
     {
+        if (LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
+        {
+            // The child waits until this process is gone. No old task can recreate
+            // a file while the fresh process performs marker-owned recovery.
+            RestartAfterParentExit();
+            return;
+        }
         if (!LocalResetApplication.TryTake(out var request) || request is null) return;
         try
         {
@@ -110,7 +131,7 @@ internal static class Program
                 .ExecuteAsync(AppContext.BaseDirectory, new DpapiSecretProtector(), request)
                 .GetAwaiter()
                 .GetResult();
-            Application.Restart();
+            RestartAfterParentExit();
         }
         catch (Exception error)
         {
@@ -121,14 +142,54 @@ internal static class Program
                 ? error.Message + "\n\n本機資料尚未刪除。請稍後重新開啟 CYInvoice，程式會先確認 Cloud 狀態後再決定是否繼續。"
                 : error.Message + "\n\n本機資料已保留，CYInvoice 將重新開啟。";
             MessageBox.Show(message, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            if (!recoveryPending) Application.Restart();
+            if (!recoveryPending) RestartAfterParentExit();
         }
+    }
+
+    private static void RestartAfterParentExit()
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };
+        start.ArgumentList.Add("--reset-parent");
+        start.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        System.Diagnostics.Process.Start(start);
+    }
+
+    private static bool WaitForResetParent(string[] args)
+    {
+        var position = Array.IndexOf(args, "--reset-parent");
+        if (position < 0) return true;
+        if (position + 1 >= args.Length || !int.TryParse(args[position + 1], out var id) || id == Environment.ProcessId)
+            return false;
+        try
+        {
+            using var parent = System.Diagnostics.Process.GetProcessById(id);
+            if (parent.WaitForExit(30_000)) return true;
+            MessageBox.Show("先前程序尚未結束，清除標記已保留。請關閉先前程序後重新啟動。", "裝置清除待完成");
+            return false;
+        }
+        catch (ArgumentException) { return true; }
     }
 
     private static void RunStartupSmokeTest()
     {
+        var stage = "initialization";
+        using var deadline = new System.Threading.Timer(_ =>
+        {
+            var error = new TimeoutException("Startup smoke exceeded 120 seconds at: " + stage);
+            WriteStartupError(error);
+            Console.Error.WriteLine(error);
+            Environment.Exit(1);
+        }, null, TimeSpan.FromSeconds(120), Timeout.InfiniteTimeSpan);
+        void Stage(string name) { stage = name; Console.WriteLine("Startup smoke: " + name); }
+        Stage("icon/version");
         ApplicationIcon.VerifyCanonicalForSmoke();
+        ApplicationVersion.VerifySmokeVersion();
+        Stage("rounded buttons");
+        RoundedButtonSmokeTests.Verify();
+        Stage("five-row history");
+        InvoiceOperationHistoryControl.VerifySmokeFiveRows();
 
+        Stage("main and detail layouts");
         using var form = new MainForm(startupSmokeTest: true);
         form.Show();
         form.PerformLayout();
@@ -137,12 +198,23 @@ internal static class Program
         form.Close();
 
         var repository = LocalRepository.Open(AppContext.BaseDirectory, new DpapiSecretProtector());
-        using var syncIssues = new SyncIssuesForm(repository);
+        Stage("upload issues rows");
+        using var syncIssues = new SyncIssuesForm(repository, startupSmokeTest: true);
         syncIssues.Show();
         syncIssues.PerformLayout();
         Application.DoEvents();
         syncIssues.VerifySmokeLayout();
+        syncIssues.VerifySmokeRowSizing();
         syncIssues.Close();
+
+        Stage("processing rows");
+        using var processing = new SyncIssuesForm(repository, processing: true, startupSmokeTest: true);
+        processing.Show();
+        processing.PerformLayout();
+        Application.DoEvents();
+        processing.VerifySmokeLayout();
+        processing.VerifySmokeRowSizing();
+        processing.Close();
 
         using var diagnostics = new SystemDiagnosticsForm(repository, startupSmokeTest: true);
         diagnostics.Show();
@@ -165,7 +237,9 @@ internal static class Program
         cloudSetup.VerifySmokeLayout();
         cloudSetup.Close();
 
+        Stage("cloud device/join forms");
         SmokeCloudDeviceForms();
+        Stage("completed");
     }
 
     private static void SmokeCloudDeviceForms()
@@ -176,11 +250,13 @@ internal static class Program
         {
             var repository = LocalRepository.Open(temporaryRoot, new DpapiSecretProtector());
             var settings = repository.Settings.LoadOrCreate();
+            CloudDirectJoinForm.VerifySmokeJoinFlow();
 
             using var firstRun = new FirstRunModeForm();
             firstRun.Show();
             firstRun.PerformLayout();
             Application.DoEvents();
+            firstRun.VerifySmokeLayout();
             firstRun.Close();
 
             using var directJoin = new CloudDirectJoinForm(repository);
@@ -204,6 +280,10 @@ internal static class Program
             using var management = new CloudDeviceManagementForm("https://cloud.example.test/", token);
             management.PerformLayout();
             management.VerifySmokeLayout();
+            using var addDevice = new CloudAddDeviceForm("https://cloud.example.test/", token);
+            addDevice.CreateControl();
+            addDevice.PerformLayout();
+            addDevice.VerifySmokeLayout();
         }
         finally
         {

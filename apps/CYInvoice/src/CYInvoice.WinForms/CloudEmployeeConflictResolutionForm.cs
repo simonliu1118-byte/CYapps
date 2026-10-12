@@ -219,15 +219,9 @@ internal sealed class CloudEmployeeConflictResolutionForm : Form
 
     private (string EmployeeNo, string Password)? AuthenticateSuperAdmin(string title)
     {
-        using var login = new EmployeeAdminLoginForm(repository, title);
-        if (login.ShowDialog(this) != DialogResult.OK || login.AuthenticatedEmployee is null) return null;
-        if (login.AuthenticatedEmployee.Role != EmployeeRoles.SuperAdmin)
-        {
-            MessageBox.Show(this, "此操作僅限目前 Workspace 超級管理員。", "權限不足",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return null;
-        }
-        return (login.AuthenticatedEmployee.EmployeeNo, login.AuthenticatedPassword);
+        using var login = new EmployeeAdminLoginForm(repository, title, collectCredentialsOnly: true);
+        if (login.ShowDialog(this) != DialogResult.OK) return null;
+        return (login.EnteredEmployeeNo, login.AuthenticatedPassword);
     }
 
     private CloudEmployeeTransitionConflictClient CreateClient()

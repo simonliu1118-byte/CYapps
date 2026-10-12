@@ -36,25 +36,10 @@ function applicationHeader(request: Request): string | null {
   return raw;
 }
 
-async function groupKeys(env: Env, workspaceId: string, employeeId: string): Promise<string[]> {
-  const result = await env.DB.prepare(
-    `SELECT g.group_key
-       FROM employee_identity_groups eg
-       JOIN identity_groups g
-         ON g.group_id = eg.group_id
-        AND g.workspace_id = eg.workspace_id
-      WHERE eg.workspace_id = ?1
-        AND eg.employee_id = ?2
-        AND g.status = 'active'
-      ORDER BY g.group_key`
-  ).bind(workspaceId, employeeId).all<{ group_key: string }>();
-  return (result.results ?? []).map(row => row.group_key);
-}
-
-export async function requireIdentitySession(
+export async function resolveIdentitySession(
   request: Request,
   env: Env,
-): Promise<IdentityPrincipal | null> {
+): Promise<{ principal: IdentityPrincipal; expiresAt: string } | null> {
   const token = bearerSessionToken(request);
   const applicationId = applicationHeader(request);
   if (!token || !applicationId) return null;
@@ -112,7 +97,7 @@ export async function requireIdentitySession(
     workspaceRole === "SUPER_ADMIN",
   )) return null;
 
-  return {
+  const principal: IdentityPrincipal = {
     workspaceId: row.workspace_id,
     employeeId: row.employee_id,
     employeeNo: row.employee_no,
@@ -121,9 +106,15 @@ export async function requireIdentitySession(
     isIdentityAdmin: workspaceRole === "ADMIN" && row.employee_identity_admin === 1,
     emailVerified: Boolean(row.email_verified_at),
     isWorkspaceSuperAdmin: workspaceRole === "SUPER_ADMIN",
-    groupKeys: await groupKeys(env, row.workspace_id, row.employee_id),
-    applicationRoleKey: workspaceRole,
     credentialVersion: row.current_credential_version,
     employeeRevision: row.employee_revision,
   };
+  return { principal, expiresAt: row.expires_at };
+}
+
+export async function requireIdentitySession(
+  request: Request,
+  env: Env,
+): Promise<IdentityPrincipal | null> {
+  return (await resolveIdentitySession(request, env))?.principal ?? null;
 }

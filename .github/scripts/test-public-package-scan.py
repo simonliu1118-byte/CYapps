@@ -30,6 +30,17 @@ findings = []
 assert not scanner.scan_chunk("native-runtime.dll", false_positive, findings)
 assert findings == []
 
+# Binary tables in official OpenCV native DLLs (OpenCvSharp4.runtime.win
+# 4.13.0.20260627) contain "1//" followed by "/" and "." runs. A base64url
+# refresh token never contains those characters, so these must not block.
+for blob in (
+    b"r/IG5dJ/1/////H69JtLIH9NJf3S6uq9ISh0CxdL8gt46iO2",
+    b"89::;<=>1//..//0225555566667789:;<==>>>>1//..///",
+):
+    findings = []
+    assert not scanner.scan_chunk("OpenCvSharpExtern.dll", blob, findings), blob
+    assert findings == []
+
 # Pinning an official dependency is an exact-byte exception. A modified file
 # with the same name must still fail the ordinary token scan.
 findings = []

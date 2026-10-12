@@ -171,3 +171,29 @@
 - 使用者提出的需求若會造成既有資料語意、狀態規則、UI 規則或主流程出現新的特例，AI 也必須先明確提醒「這會形成例外流程／特判」，再依使用者決定繼續；不得因需求由使用者提出就省略這個提醒。
 - 已核准的例外若屬單一專案永久行為，才寫入該專案唯一 `PROJECT_RULES.md`；若只是當次工作需要，記錄在該次 PR／Issue／設計說明即可。不得為每個例外新增新的規則檔或平行規則層。
 - 測試應優先驗證共通規則本身，並對核准例外補最小必要覆蓋，防止後續修改把例外擴散成新的主路徑，或反過來讓例外改寫共通資料語意。
+- **不得以版本殼、wrapper chain、patch-on-patch 或動態載入舊版本檔作為一般演進方式。** 新功能、修正與重構應收斂到目前正式主路徑與依功能命名的模組；不得以 `app-v1 -> app-v2 -> app-v3`、`vNNN.js/css` 疊載、Build 專屬 wrapper、或「先保留舊實作再包一層新實作」來取代正常整併。
+- 確有外部 backward compatibility、資料格式過渡、第三方 API 遷移、rolling deployment 或不可同步升級的 consumer 需求時，可以建立**最小必要相容層**，但必須同時滿足：單一明確入口、責任範圍可界定、不形成第二套 authority／business logic、不得再疊第二層 wrapper，且 PR／設計說明需記錄存在理由、影響範圍、owner／主責、移除條件與可驗證的退場時機。
+- 相容層不得以版本號本身作為長期架構邊界；若保留的是正式 protocol／file-format version reader，應以「格式／contract 相容」命名與測試，而不是保留整套歷史 application runtime。資料格式相容與 source/runtime wrapper 相容必須分開處理。
+- 若某次修改發現同一功能已出現多層 wrapper、overlay、patch chain 或版本檔互相覆寫，優先任務是先收斂為單一路徑再繼續除錯；不得在未釐清主路徑前再加下一層 hotfix。必要緊急修復若暫時無法先重構，PR 必須明確標示暫時性、風險、後續收斂工作與移除 gate，且不得把臨時層視為完成架構。
+- 對已完成收斂的專案，CI／architecture test 應在合理範圍內防止版本殼、歷史 wrapper 與已淘汰 patch loader 被重新引入；測試應驗證現行功能與 contract，不得因舊測試依賴歷史載入順序而要求把已移除的版本殼加回來。
+### 11.2 Canonical Owner、Replacement 與架構例外
+
+本節補充 11.1 的單一路徑原則。核心目標是**限制架構結果，不機械限制程式語法**：允許合理的 observer、timer、fallback、wrapper 或 device-specific presentation，但不得讓它們演變成永久第二套 owner 或 patch-on-patch。
+
+- 每一個可辨識的功能 concern 應能明確指出目前的 **State owner、Business／Mutation owner、Render owner、Lifecycle owner**；同一 concern 原則上各只有一個 canonical owner。若無法指出唯一 owner，新增功能或修 Bug 前應先釐清 ownership。
+- Desktop／Tablet／Mobile 可以有不同 layout、CSS、gesture 或 presentation component，但同一 business capability 應共用相同 state、mutation、authorization 與 API owner。不得只因 breakpoint 不同就複製第二套 business/data flow。
+- 新 implementation 取代舊 implementation 時，原則上應在同一 PR 移除被取代的 renderer、listener、observer、wrapper、retry、CSS selector、DOM id/class、state 與 dead cleanup。不得以「保險先留著」或「之後再清」為理由讓舊路徑無限期共存。
+- 若因 database migration、API rollout、external consumer compatibility、file-format migration、rolling deployment 或 feature-flag transition 必須暫時雙路徑，PR 必須標示 **Architecture Exception**，至少記錄：primary path、legacy path 使用條件、存在理由、scope、owner、風險、移除條件／milestone 與 regression coverage。沒有可驗證退場條件的 temporary path 視同永久架構，不得以暫時層名義加入。
+- 對 repository 自己控制的 DOM／component，預設不得以 post-render MutationObserver、DOM 搬移、刪除／替換元素、重新綁 action 或 staged retry 來代替正式 lifecycle。需要 render 後協作時，優先由 canonical owner 提供 event、callback、hook 或 explicit API。
+- `MutationObserver` 不全面禁止。監看第三方、瀏覽器控制或本專案無法提供 lifecycle 的 external DOM 可以合理使用；若監看的是本專案自己的 component，PR 必須說明為何 canonical owner 無法提供 event／callback，且不得形成第二個 renderer 或 mutation owner。
+- `setTimeout`／retry 不全面禁止。debounce、animation、toast、network backoff、browser layout／paint 等用途可合理使用；但不得用 retry 解決本專案自己的 module load order、DOM readiness 或 owner dependency。這類問題應修正 load order、startup owner 或 lifecycle。
+- Wrapper／abstraction／fallback 不全面禁止。新增 abstraction 應集中責任、減少 coupling 或提供明確共用能力；不得只是把舊 implementation 再包一層。Fallback 必須有唯一 primary path、明確觸發條件，且不得讓兩套 implementation 同時都成為 authority。
+- 修 Bug 採 **Root Cause First**：先找 canonical owner，再檢查是否已有第二 renderer/listener、observer、retry、wrapper、device duplicate 或 CSS override chain；能直接修 canonical owner 或刪除舊層時，不得先新增下一層 workaround。
+- 若修正開始需要新增第二 renderer／mutation handler、MutationObserver、retry bootstrap、compatibility wrapper、DOM relocation、duplicate device component 或新的 CSS override 層，視為 **Architecture Review Trigger**。實作前至少回答：canonical owner 為何不能直接修改、是否形成第二 owner、是否可改用 shared lifecycle/action、是否有舊層可刪、若屬 temporary layer 何時退場。
+- CSS 可有 breakpoint 與必要的 `!important`，但不得用 duplicate DOM + hide、持續提高 specificity 或疊加 override 來掩蓋 ownership 問題。樣式規則應保護 presentation 差異，不應成為保存舊 component 的手段。
+- 涉及 component/state/lifecycle/business action 的架構 PR，說明應列出修改前後的 State／Render／Lifecycle／Mutation owner，並註明是否新增 observer、retry、wrapper、fallback、device-specific component、transitional legacy path，以及本 PR 移除了哪些舊路徑。修改後 owner 或執行路徑數量增加時，必須說明其必要性。
+- Architecture complexity 採 **replacement/removal budget**：新增一層 abstraction 時，應能指出它取代、合併或簡化了哪些既有責任。若修改後 observer、wrapper、renderer、startup 或 state owner 數量增加，預設視為高風險，需要重新檢查是否真的無法收斂。
+- CI／architecture test 應保護已確立的 ownership contract，例如「某 DOM 只有一個 renderer」「某 toolbar 只有一個 structure/action owner」「已移除版本殼不得回流」；**不得只因 API 名稱出現就粗暴全面禁止 `MutationObserver`、`setTimeout`、fallback 或 device renderer**。
+- Application release number 不得作為長期 runtime architecture boundary、function/class/id/dataset/module 或 cache revision 命名。真正的 API、database schema、migration、backup/file-format、protocol contract version 與使用者可見產品版本仍應保留並依其正式 contract 管理。
+
+最終判斷標準：下一位維護者應能快速回答「資料在哪裡、business/mutation 在哪裡、renderer 在哪裡、lifecycle 在哪裡；裝置差異只在哪個 presentation 層」。若必須依序追查多個 enhancer、observer、retry、wrapper 或裝置專用 owner 才能理解同一功能，表示架構尚未完成收斂。

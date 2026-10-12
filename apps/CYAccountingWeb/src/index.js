@@ -17,7 +17,6 @@ export default {
       if (url.pathname === '/api/bootstrap' && request.method === 'GET') return handleBootstrap(env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'GET') return handleListTransactions(url, env.DB);
       if (url.pathname === '/api/transactions' && request.method === 'POST') return handleCreateTransaction(request, env.DB);
-      if (url.pathname === '/api/summaries/frequent' && request.method === 'GET') return handleFrequentSummaries(url, env.DB);
 
       let match = url.pathname.match(/^\/api\/transactions\/(\d+)$/);
       if (match && request.method === 'PUT') return handleUpdateTransaction(Number(match[1]), request, env.DB);
@@ -26,7 +25,6 @@ export default {
       if (url.pathname === '/api/accounts' && request.method === 'POST') return handleCreateAccount(request, env.DB);
       match = url.pathname.match(/^\/api\/accounts\/(\d+)$/);
       if (match && request.method === 'PUT') return handleRenameAccount(Number(match[1]), request, env.DB);
-      if (match && request.method === 'DELETE') return handleDeleteAccount(Number(match[1]), env.DB);
       match = url.pathname.match(/^\/api\/accounts\/(\d+)\/default$/);
       if (match && request.method === 'POST') return handleDefaultAccount(Number(match[1]), env.DB);
 
@@ -42,9 +40,6 @@ export default {
       if (match && request.method === 'PUT') return handleRenameCategory(Number(match[1]), request, env.DB);
       if (match && request.method === 'DELETE') return handleDeleteCategory(Number(match[1]), env.DB);
 
-      if (url.pathname === '/api/opening-balances' && request.method === 'GET') return handleGetOpeningBalances(url, env.DB);
-      if (url.pathname === '/api/opening-balances' && request.method === 'PUT') return handleSetOpeningBalances(request, env.DB);
-
       if (url.pathname === '/api/settings/lock' && request.method === 'GET') {
         return json({ ok: true, lockedThrough: await getLockedThrough(env.DB) });
       }
@@ -59,21 +54,44 @@ export default {
 };
 
 async function handleBootstrap(db) {
-  const [accounts, groups, categories, lockedThrough] = await Promise.all([
-    db.prepare('SELECT id, name, sort_order, is_default FROM accounts ORDER BY sort_order, id').all(),
-    db.prepare('SELECT id, kind, name, sort_order FROM category_groups ORDER BY kind, sort_order, id').all(),
+  const [accounts, archivedAccounts, groups, categories, lockSetting] = await db.batch([
+    db.prepare(`
+      SELECT id, name, sort_order, is_default, color_slot
+      FROM accounts
+      WHERE archived_at IS NULL
+      ORDER BY sort_order, id
+    `),
+    db.prepare(`
+      SELECT a.id, a.name, a.sort_order, a.color_slot, a.archived_at,
+             (SELECT COUNT(*) FROM transactions t WHERE t.account_name = a.name) AS transaction_count,
+             (SELECT COUNT(*) FROM opening_balance_overrides o WHERE o.account_name = a.name AND o.amount <> 0) AS opening_balance_count,
+             COALESCE((
+               SELECT o.amount
+               FROM opening_balance_overrides o
+               WHERE o.account_name = a.name
+               ORDER BY o.month DESC
+               LIMIT 1
+             ), 0) AS latest_opening_amount
+      FROM accounts a
+      WHERE a.archived_at IS NOT NULL
+      ORDER BY a.archived_at DESC, a.id
+    `),
+    db.prepare('SELECT id, kind, name, sort_order FROM category_groups ORDER BY kind, sort_order, id'),
     db.prepare(`
       SELECT c.id, c.kind, c.name, c.sort_order, c.is_favorite,
              g.id AS group_id, g.name AS group_name, g.sort_order AS group_sort_order
       FROM categories c
       JOIN category_groups g ON g.id = c.group_id
       ORDER BY c.kind, g.sort_order, g.id, c.sort_order, c.id
-    `).all(),
-    getLockedThrough(db)
+    `),
+    db.prepare("SELECT value FROM app_settings WHERE key = 'locked_through'")
   ]);
+  const lockedValue = String(lockSetting.results?.[0]?.value || '').trim();
+  const lockedThrough = isMonth(lockedValue) ? lockedValue : null;
   return json({
     ok: true,
     accounts: accounts.results || [],
+    archivedAccounts: archivedAccounts.results || [],
     groups: groups.results || [],
     categories: categories.results || [],
     lockedThrough
@@ -147,81 +165,56 @@ async function handleDeleteTransaction(id, db) {
   return json({ ok: true });
 }
 
-async function handleFrequentSummaries(url, db) {
-  const kind = String(url.searchParams.get('kind') || '').trim();
-  const account = normalizeName(url.searchParams.get('account'));
-  const category = normalizeName(url.searchParams.get('category'));
-  if (!['income', 'expense'].includes(kind) || !account || !category) {
-    return json({ ok: false, error: '常用摘要查詢條件不完整。' }, 400);
-  }
-  const result = await db.prepare(`
-    SELECT summary, tx_date, created_at, id
-    FROM transactions
-    WHERE kind = ? AND account_name = ? AND category_name = ?
-    ORDER BY tx_date DESC, created_at DESC, id DESC
-    LIMIT 100
-  `).bind(kind, account, category).all();
-
-  const stats = new Map();
-  for (const [rank, row] of (result.results || []).entries()) {
-    const summary = String(row.summary || '').trim();
-    if (!summary) continue;
-    const item = stats.get(summary) || { count: 0, latestRank: rank };
-    item.count += 1;
-    stats.set(summary, item);
-  }
-  const summaries = [...stats.entries()]
-    .filter(([, meta]) => meta.count >= 3)
-    .sort((a, b) => b[1].count - a[1].count || a[1].latestRank - b[1].latestRank)
-    .slice(0, 10)
-    .map(([summary]) => summary);
-  return json({ ok: true, summaries });
-}
-
 async function handleCreateAccount(request, db) {
   const body = await bodyJson(request);
   const name = normalizeName(body?.name);
   if (!name) return json({ ok: false, error: '帳戶名稱不可空白。' }, 400);
-  if (await db.prepare('SELECT 1 FROM accounts WHERE name = ?').bind(name).first()) return json({ ok: false, error: '帳戶名稱已存在。' }, 409);
-  const row = await db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM accounts').first();
+  if (await db.prepare('SELECT 1 FROM accounts WHERE name = ?').bind(name).first()) {
+    return json({ ok: false, error: '帳戶名稱已存在。' }, 409);
+  }
+  if (await db.prepare('SELECT 1 FROM opening_balance_audit WHERE account_name = ? LIMIT 1').bind(name).first()) {
+    return json({ ok: false, error: '此帳戶名稱已有歷史期初調整紀錄，不能建立同名新帳戶。請使用其他名稱。' }, 409);
+  }
+  const row = await db.prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM accounts WHERE archived_at IS NULL').first();
   const result = await db.prepare('INSERT INTO accounts(name, sort_order, is_default, created_at) VALUES (?, ?, 0, ?)')
     .bind(name, Number(row?.next_order || 0), new Date().toISOString()).run();
-  return json({ ok: true, id: result.meta?.last_row_id ?? null }, 201);
+  const id = Number(result.meta?.last_row_id || 0);
+  const created = id > 0
+    ? await db.prepare('SELECT color_slot FROM accounts WHERE id = ?').bind(id).first()
+    : null;
+  return json({
+    ok: true,
+    id: id || null,
+    color_slot: Number(created?.color_slot || 0) || null
+  }, 201);
 }
 
 async function handleRenameAccount(id, request, db) {
   if (!validId(id)) return json({ ok: false, error: '帳戶編號錯誤。' }, 400);
-  if (!await db.prepare('SELECT 1 FROM accounts WHERE id = ?').bind(id).first()) return json({ ok: false, error: '找不到帳戶。' }, 404);
+  const account = await db.prepare('SELECT archived_at FROM accounts WHERE id = ?').bind(id).first();
+  if (!account) return json({ ok: false, error: '找不到帳戶。' }, 404);
+  if (account.archived_at) return json({ ok: false, error: '封存帳戶請先解封後再修改。' }, 409);
   const body = await bodyJson(request);
   const name = normalizeName(body?.name);
   if (!name) return json({ ok: false, error: '帳戶名稱不可空白。' }, 400);
-  if (await db.prepare('SELECT 1 FROM accounts WHERE name = ? AND id <> ?').bind(name, id).first()) return json({ ok: false, error: '帳戶名稱已存在。' }, 409);
-  await db.prepare('UPDATE accounts SET name = ? WHERE id = ?').bind(name, id).run();
-  return json({ ok: true });
-}
-
-async function handleDeleteAccount(id, db) {
-  if (!validId(id)) return json({ ok: false, error: '帳戶編號錯誤。' }, 400);
-  const [countRow, account] = await Promise.all([
-    db.prepare('SELECT COUNT(*) AS count FROM accounts').first(),
-    db.prepare('SELECT id, is_default FROM accounts WHERE id = ?').bind(id).first()
-  ]);
-  if (!account) return json({ ok: false, error: '找不到帳戶。' }, 404);
-  if (Number(countRow?.count || 0) <= 1) return json({ ok: false, error: '帳戶至少需要保留一個。' }, 409);
-  const replacement = await db.prepare('SELECT id FROM accounts WHERE id <> ? ORDER BY sort_order, id LIMIT 1').bind(id).first();
-  const statements = [db.prepare('DELETE FROM accounts WHERE id = ?').bind(id)];
-  if (Number(account.is_default) === 1 && replacement) {
-    statements.push(db.prepare('UPDATE accounts SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END').bind(replacement.id));
+  if (await db.prepare('SELECT 1 FROM accounts WHERE name = ? AND id <> ?').bind(name, id).first()) {
+    return json({ ok: false, error: '帳戶名稱已存在。' }, 409);
   }
-  await db.batch(statements);
-  await normalizeAccountOrder(db);
+  if (await db.prepare('SELECT 1 FROM opening_balance_audit WHERE account_name = ? LIMIT 1').bind(name).first()) {
+    return json({ ok: false, error: '此帳戶名稱已有歷史期初調整紀錄，不能改成此名稱。' }, 409);
+  }
+  await db.prepare('UPDATE accounts SET name = ? WHERE id = ?').bind(name, id).run();
   return json({ ok: true });
 }
 
 async function handleDefaultAccount(id, db) {
   if (!validId(id)) return json({ ok: false, error: '帳戶編號錯誤。' }, 400);
-  if (!await db.prepare('SELECT 1 FROM accounts WHERE id = ?').bind(id).first()) return json({ ok: false, error: '找不到帳戶。' }, 404);
-  await db.prepare('UPDATE accounts SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END').bind(id).run();
+  if (!await db.prepare('SELECT 1 FROM accounts WHERE id = ? AND archived_at IS NULL').bind(id).first()) {
+    return json({ ok: false, error: '找不到可用帳戶。' }, 404);
+  }
+  await db.prepare(
+    'UPDATE accounts SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END WHERE archived_at IS NULL'
+  ).bind(id).run();
   return json({ ok: true });
 }
 
@@ -308,58 +301,6 @@ async function handleDeleteCategory(id, db) {
   return json({ ok: true });
 }
 
-async function handleGetOpeningBalances(url, db) {
-  const month = url.searchParams.get('month') || currentMonth();
-  if (!isMonth(month)) return json({ ok: false, error: '月份格式錯誤。' }, 400);
-  const [accounts, txNames, openings, lockedThrough] = await Promise.all([
-    db.prepare('SELECT name FROM accounts ORDER BY sort_order, id').all(),
-    db.prepare('SELECT DISTINCT account_name AS name FROM transactions WHERE substr(tx_date, 1, 7) = ?').bind(month).all(),
-    db.prepare('SELECT account_name, amount FROM opening_balances WHERE month = ?').bind(month).all(),
-    getLockedThrough(db)
-  ]);
-  const current = new Set((accounts.results || []).map(row => row.name));
-  const amounts = new Map((openings.results || []).map(row => [row.account_name, Number(row.amount)]));
-  const names = [...current];
-  const historical = new Set([...(txNames.results || []).map(row => row.name), ...(openings.results || []).map(row => row.account_name)]);
-  for (const name of [...historical].sort((a, b) => String(a).localeCompare(String(b), 'zh-Hant'))) {
-    if (!current.has(name)) names.push(name);
-  }
-  return json({
-    ok: true,
-    month,
-    locked: isMonthLocked(month, lockedThrough),
-    accounts: names.map(name => ({ name, isCurrent: current.has(name), amount: amounts.has(name) ? amounts.get(name) : null }))
-  });
-}
-
-async function handleSetOpeningBalances(request, db) {
-  const body = await bodyJson(request);
-  const month = String(body?.month || '').trim();
-  if (!isMonth(month)) return json({ ok: false, error: '月份格式錯誤。' }, 400);
-  if (isMonthLocked(month, await getLockedThrough(db))) return json({ ok: false, error: `${month} 已鎖定，無法修改期初餘額。` }, 409);
-  const values = body?.values;
-  if (!values || typeof values !== 'object' || Array.isArray(values)) return json({ ok: false, error: '期初餘額資料格式錯誤。' }, 400);
-  const now = new Date().toISOString();
-  const statements = [];
-  for (const [rawName, rawAmount] of Object.entries(values)) {
-    const name = normalizeName(rawName);
-    if (!name) continue;
-    if (rawAmount === null || rawAmount === '') {
-      statements.push(db.prepare('DELETE FROM opening_balances WHERE month = ? AND account_name = ?').bind(month, name));
-      continue;
-    }
-    const amount = Number(rawAmount);
-    if (!Number.isSafeInteger(amount)) return json({ ok: false, error: `${name} 的期初餘額必須是整數。` }, 400);
-    statements.push(db.prepare(`
-      INSERT INTO opening_balances(month, account_name, amount, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(month, account_name) DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at
-    `).bind(month, name, amount, now, now));
-  }
-  if (statements.length) await db.batch(statements);
-  return json({ ok: true });
-}
-
 async function handleSetLock(request, db) {
   const body = await bodyJson(request);
   const lockedThrough = String(body?.lockedThrough || '').trim();
@@ -379,7 +320,7 @@ async function validateTransaction(values, db) {
   if (!Number.isInteger(values.amount) || values.amount < 1) return json({ ok: false, error: '金額必須大於 0。' }, 400);
   if (values.amount > MAX_AMOUNT) return json({ ok: false, error: '金額最多 7 位數。' }, 400);
   const [account, category] = await Promise.all([
-    db.prepare('SELECT id FROM accounts WHERE name = ?').bind(values.accountName).first(),
+    db.prepare('SELECT id FROM accounts WHERE name = ? AND archived_at IS NULL').bind(values.accountName).first(),
     db.prepare('SELECT id FROM categories WHERE kind = ? AND name = ?').bind(values.kind, values.categoryName).first()
   ]);
   if (!account) return json({ ok: false, error: '帳戶不存在。' }, 400);
@@ -399,7 +340,7 @@ function normalizeTransactionBody(body) {
 }
 
 async function normalizeAccountOrder(db) {
-  const result = await db.prepare('SELECT id FROM accounts ORDER BY sort_order, id').all();
+  const result = await db.prepare('SELECT id FROM accounts WHERE archived_at IS NULL ORDER BY sort_order, id').all();
   const rows = result.results || [];
   if (!rows.length) return;
   await db.batch(rows.map((row, index) => db.prepare('UPDATE accounts SET sort_order = ? WHERE id = ?').bind(index, row.id)));

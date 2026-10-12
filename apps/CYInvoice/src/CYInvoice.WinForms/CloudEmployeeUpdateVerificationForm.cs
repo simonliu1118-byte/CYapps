@@ -6,7 +6,7 @@ namespace CYInvoice.WinForms;
 internal sealed class CloudEmployeeUpdateVerificationForm : Form
 {
     private readonly CloudEmployeeAccountClient client;
-    private readonly EmployeeAccount actor;
+    private readonly string actorEmployeeNo;
     private readonly string actorPassword;
     private readonly CloudEmployeeUpdateProposal proposal;
     private readonly CancellationTokenSource lifetime = new();
@@ -22,13 +22,13 @@ internal sealed class CloudEmployeeUpdateVerificationForm : Form
 
     public CloudEmployeeUpdateVerificationForm(
         CloudEmployeeAccountClient client,
-        EmployeeAccount actor,
+        string actorEmployeeNo,
         string actorPassword,
         CloudEmployeeUpdateProposal proposal,
         CloudEmployeeUpdateChallenge challenge)
     {
         this.client = client ?? throw new ArgumentNullException(nameof(client));
-        this.actor = actor ?? throw new ArgumentNullException(nameof(actor));
+        this.actorEmployeeNo = actorEmployeeNo ?? throw new ArgumentNullException(nameof(actorEmployeeNo));
         this.actorPassword = actorPassword ?? throw new ArgumentNullException(nameof(actorPassword));
         this.proposal = proposal ?? throw new ArgumentNullException(nameof(proposal));
         this.challenge = challenge ?? throw new ArgumentNullException(nameof(challenge));
@@ -106,7 +106,7 @@ internal sealed class CloudEmployeeUpdateVerificationForm : Form
     {
         await RunBusyAsync(async () =>
         {
-            var result = await client.StartUpdateAsync(actor.EmployeeNo, actorPassword, proposal, lifetime.Token);
+            var result = await client.StartUpdateAsync(actorEmployeeNo, actorPassword, proposal, lifetime.Token);
             if (!result.VerificationRequired || result.Challenge is null)
             {
                 UpdatedEmployee = result.Employee;
@@ -129,7 +129,7 @@ internal sealed class CloudEmployeeUpdateVerificationForm : Form
             if (code.Length != 6 || !code.All(char.IsAsciiDigit))
                 throw new InvalidOperationException("Email 驗證碼必須是 6 碼數字。");
             UpdatedEmployee = await client.ConfirmUpdateAsync(
-                actor.EmployeeNo,
+                actorEmployeeNo,
                 actorPassword,
                 proposal,
                 challenge.ChallengeId,

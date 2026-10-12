@@ -60,7 +60,7 @@ async function sha256Hex(value: string): Promise<string> {
   return Array.from(digest, part => part.toString(16).padStart(2, "0")).join("");
 }
 
-async function selfStatus(request: Request, env: Env, requestId: string): Promise<Response> {
+export async function readDeviceSelfStatus(request: Request, env: Env, requestId: string): Promise<Response> {
   const token = bearerToken(request);
   if (!token)
     return errorResponse(env, requestId, 401, "UNAUTHORIZED", "Device token is invalid.");
@@ -100,7 +100,7 @@ export async function handleDeviceSelfStatus(request: Request, env: Env): Promis
 
   const requestId = requestIdFrom(request);
   try {
-    return await selfStatus(request, env, requestId);
+    return await readDeviceSelfStatus(request, env, requestId);
   } catch (error) {
     console.error("device_self_status_failed", {
       requestId,

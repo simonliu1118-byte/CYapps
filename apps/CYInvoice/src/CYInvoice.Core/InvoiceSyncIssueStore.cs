@@ -26,6 +26,7 @@ public sealed record InvoiceSyncIssue(
 
 public sealed class InvoiceSyncIssueStore
 {
+    private const string DeprecatedVoidPendingConfirmationIssueType = "void_pending_confirmation";
     private readonly string databasePath;
 
     public InvoiceSyncIssueStore(string dataDirectory)
@@ -44,9 +45,11 @@ public sealed class InvoiceSyncIssueStore
                    message, created_utc, resolved_utc
             FROM sync_issues
             WHERE account_key = $account_key
+              AND issue_type <> $deprecated_void_pending
             ORDER BY local_id DESC;
             """;
         command.Parameters.AddWithValue("$account_key", accountKey);
+        command.Parameters.AddWithValue("$deprecated_void_pending", DeprecatedVoidPendingConfirmationIssueType);
         return Read(command);
     }
 
@@ -59,10 +62,13 @@ public sealed class InvoiceSyncIssueStore
             SELECT local_id, account_key, invoice_number, order_id, issue_type,
                    message, created_utc, resolved_utc
             FROM sync_issues
-            WHERE account_key = $account_key AND TRIM(resolved_utc) = ''
+            WHERE account_key = $account_key
+              AND TRIM(resolved_utc) = ''
+              AND issue_type <> $deprecated_void_pending
             ORDER BY local_id;
             """;
         command.Parameters.AddWithValue("$account_key", accountKey);
+        command.Parameters.AddWithValue("$deprecated_void_pending", DeprecatedVoidPendingConfirmationIssueType);
         return Read(command);
     }
 
@@ -76,7 +82,11 @@ public sealed class InvoiceSyncIssueStore
         invoiceNumber = invoiceNumber.Trim();
         orderId = orderId.Trim();
         if (issueTypes.Length == 0) return false;
-        var types = issueTypes.Where(type => !string.IsNullOrWhiteSpace(type)).Distinct(StringComparer.Ordinal).ToArray();
+        var types = issueTypes
+            .Where(type => !string.IsNullOrWhiteSpace(type))
+            .Where(type => !string.Equals(type, DeprecatedVoidPendingConfirmationIssueType, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         if (types.Length == 0) return false;
 
         using var connection = Open(SqliteOpenMode.ReadOnly);

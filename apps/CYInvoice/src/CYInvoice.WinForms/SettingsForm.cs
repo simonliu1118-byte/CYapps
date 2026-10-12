@@ -22,6 +22,7 @@ internal sealed class SettingsForm : Form
     private readonly Button diagnostics = UiControls.StandardButton("系統診斷");
     private readonly Button save = UiControls.StandardButton("儲存設定");
     private readonly Button cancel = UiControls.StandardButton("取消");
+    private GroupBox modeGroup = null!;
     private BufferedTableLayoutPanel environmentLayout = null!;
     private BufferedFlowLayoutPanel modeChoices = null!;
     private BufferedTableLayoutPanel platformLayout = null!;
@@ -78,7 +79,7 @@ internal sealed class SettingsForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
 
-        var modeGroup = new GroupBox { Text = "運作模式", Dock = DockStyle.Fill };
+        modeGroup = new GroupBox { Text = "運作模式", Dock = DockStyle.Fill };
         modeChoices = new BufferedFlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -328,6 +329,7 @@ internal sealed class SettingsForm : Form
 
     private void UpdateCloudControls()
     {
+        modeGroup.Text = settings.CloudIdentityProvider == "CYID" ? "運作模式（CYID）" : "運作模式";
         cloudSettings.Visible = cloudMode.Checked;
         deviceManagement.Visible = cloudMode.Checked;
         localReset.Visible = localMode.Checked && settings.CloudMode == CloudModes.LocalOnly;
@@ -368,6 +370,14 @@ internal sealed class SettingsForm : Form
                 throw new InvalidOperationException("請先按「雲端連線設定」完成 Cloud API 連線設定。");
             if (cloudMode.Checked && !HasCloudIdentity(settings))
                 throw new InvalidOperationException("請先完成建立／加入雲端空間；只有 API 網址尚不能切換成雲端版。");
+
+            // Opening the settings window does not authorize a later write.
+            using var authorization = new EmployeeAdminLoginForm(repository, "儲存設定－管理員驗證");
+            if (authorization.ShowDialog(this) != DialogResult.OK) return;
+            var latest = repository.Settings.LoadOrCreate();
+            if (latest.CloudIdentityProvider != settings.CloudIdentityProvider
+                || latest.CyIdBindingEncrypted != settings.CyIdBindingEncrypted)
+                throw new InvalidOperationException("雲端驗證設定已更新，請重新開啟設定視窗後儲存。");
 
             if (cloudMode.Checked)
             {

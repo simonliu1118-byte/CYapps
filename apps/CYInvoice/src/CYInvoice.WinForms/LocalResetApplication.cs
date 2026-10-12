@@ -8,6 +8,13 @@ internal static class LocalResetApplication
 
     public static bool IsPending => pending is not null;
 
+    public static void ScheduleRevokedDeviceRestart()
+    {
+        if (!LocalResetCoordinator.IsRevokedDeviceResetPending(AppContext.BaseDirectory))
+            throw new InvalidOperationException("裝置清除尚未持久化。");
+        Application.Exit();
+    }
+
     public static void Schedule(LocalResetExecutionRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);

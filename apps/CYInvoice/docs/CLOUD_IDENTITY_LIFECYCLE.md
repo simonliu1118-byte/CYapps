@@ -1,6 +1,8 @@
 # CYInvoice V3.0 Workspace／Device／Employee 身分生命週期定案
 
-更新日期：2026-09-29
+更新日期：2026-10-09（原設計基準：2026-09-29）
+
+目前工程版 V2.6.16；實作與驗收停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，唯一待辦清單為 [TODO.md](TODO.md)。V2.6.15 CYID consumer source 已接線但尚未部署／正式切換，0-Device recovery 仍待實作；具體 runtime／offline 邊界見 CY_ID_INTEGRATION §14。本文件的 CYID 設計依 [canonical shared standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md) 適配 desktop／per-operation transport，不建立平行 shared contract。
 
 本文件記錄 CYInvoice V3.0 在 Workspace、Device、Device Token、Employee authority、Local／Cloud、離線、Recovery 與最高管理權上的定案行為。
 
@@ -233,7 +235,7 @@ Cloud 可連線時，任何 Employee 密碼／權限驗證必須使用當下最�
 
 Online 時以 CY ID 回傳的目前有效 Employee identity、enabled、CYInvoice access 與 role 為 authority。CYInvoice 不維護第二套中央 credential authority。
 
-CY ID 模式 Windows offline credential/cache 的最終協定尚待實作階段定義，但不得直接讀 CY ID D1、不得造成 Built-in + CY ID 雙 authority，且 reconnect 後最新 CY ID authority 必須重新生效。
+V2.6.15 已實作 CYID device-bound DPAPI offline cache，V2.6.16 在雲端 transport／timeout／暫時 5xx 且光貿正常時沿用原降級；帳密／權限／Device 拒絕不轉降級，reconnect 更新最新權限。Last-trusted 無新增 TTL 與 Session loss 的限制見 CY_ID_INTEGRATION §14；不讀 CYID D1、不下載中央 verifier，不形成第二套 authority。
 
 ## 9. Cloud Mode Offline
 
@@ -245,14 +247,14 @@ Cloud Mode / Offline
 
 不是 Local Mode。
 
-Offline 可使用最後成功建立／同步的可信 cache：
+雲端暫時不可用（含 503）且光貿正常時，沿用原降級所使用的最後可信 cache：
 
 - Employee identity；
 - role；
 - enabled；
 - credential version / protected verifier 或 CY ID 模式等效的受保護 offline material。
 
-完全離線期間無法知道 Cloud 上剛發生的 role、enabled 或 password 變更，這是離線系統不可消除的限制。恢復連線後，Online authority 必須更新／取代本機 cache。
+雲端不可達期間無法知道中央剛發生的 role、enabled 或 password 變更。光貿與雲端同時不可達時阻擋全部業務；純 Local 光貿不可達同樣阻擋，直到光貿恢復。連線矩陣及自動恢復見 CY_ID_INTEGRATION §14.2。恢復連線後，Online authority 必須更新／取代本機 cache。
 
 Workspace-wide account mutations 不支援 offline。
 
@@ -399,7 +401,7 @@ CY ID USER        → CYInvoice USER
 
 App Access 是 CY ID 的上層入口控制；CYInvoice 不提供第二套 App Access 管理功能。
 
-目前實際使用資料沒有已持久化的 `EMPLOYEE` role 需要相容，因此 `EMPLOYEE` → `USER` 不需要歷史資料 migration；實作時只需同步修改 source/schema fixtures/tests/docs/UI。
+Role rename 已實作；Local employees／Cloud cache 以一次性 schema migration 轉為 USER，Cloud 以 forward migration 0010 收斂。active runtime 不保留 EMPLOYEE alias。原先「不需 migration」假設已由實際 schema 契約取代。
 
 ## 14. SUPER_ADMIN Transfer（Built-in Cloud）
 
@@ -454,14 +456,19 @@ Cloudflare Worker + D1 是 reference implementation；CYInvoice 對外可自架�
 
 ## 18. 目前尚待完成
 
-- Cloud → Local destructive reset Package 4 的最終 CI／development deployment／A-B acceptance 與 merge 收尾。
+- 四個 foundational package 已合併，CI 與 9/29 development deployment 完成；尚待最新版 A/B/C lifecycle 人工驗收。
 - 邀請碼加入、撤銷／重寄、result-unknown recovery 實機驗收。
 - A/B Built-in Employee CRUD、role、enabled、password 與 reconnect 行為驗收。
-- CY ID consumer contract 穩定後的 CYInvoice 專用整合；目前不修改 source。
-- CY ID 模式 Windows Offline credential/cache 技術方案。
+- CYID canonical contract 1.0.2／minimum 1.0.0；V2.6.15 adapter／desktop transport source 已接線，尚待隔離 staging、Windows acceptance、遷移／rollback 與正式切換。
+- CYID protected offline cache 已實作；Windows 實機斷網／reconnect／deny／scope acceptance 尚待完成。
 - CY ID `0 active Device` recovery / re-authorize Device flow。
 - Built-in all-Device-Token-loss 的獨立 Recovery Device flow（若未來產品需要）。
 - 後續 business sync / Work Item / Audit。
 - **延後／非目前阻塞：**Cloud Employee offline cache server-signed snapshot／完整性簽章。除非實際發生竄改事件、威脅模型提高或有稽核需求，否則保留 TODO，不投入目前版本成本。
 
 Merge／deploy 依 repository governance 與當前使用者授權執行；tag 與正式 GitHub Release 仍另行確認。
+
+
+## V2.6.14 使用版本、最後使用與裝置名稱
+
+每次開啟成功回報，僅由該 Device Token 更新自己的 VERSION／BUILD 與 Cloud UTC last_seen_at；不從本機提交時間或另一台 target。舊版、離線及失敗保留先前確認值，不等同目前在線。改名沿用中央 SUPER_ADMIN 執行時驗證，不改 token／Device identity／Employee authority；同一 Workspace active Device 與當前 credential 在 transaction 再核對，device_renamed audit 與名稱同交易。撤銷 Device 仍保留 DB／audit，Windows inventory 不再顯示歷史；LAST_ACTIVE_DEVICE 與安全 reset 契約不變。

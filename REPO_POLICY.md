@@ -21,6 +21,7 @@
 - Public GitHub Actions 可正常使用，不為節省 minutes 而犧牲必要自動驗證；仍須避免無關專案、重複 build 與無意義高頻執行。
 - Codex、Claude 或其他計量式協作 AI 流程不得綁定每次 push 自動重做完整審查；應和一般測試 CI 解耦。
 - 開發測試包依共通規則使用 Actions Artifact 或經使用者同意的 Pre-release。
+- 本 repository 的 Actions Artifact 一律設定 `retention-days: 3`（使用者 2026-10-06 指定，取代共通規則的 14 天預設）；每個 `actions/upload-artifact` 步驟都必須明確寫出，由 Governance Check 檢查。需要長期保存的檔案改用 Release。
 - 正式 Windows x64 EXE／ZIP 可以公開放在 GitHub Releases 供下載。
 - 公開下載不改變根 `LICENSE` 的 source-available proprietary 性質。
 - **Public Build／Artifact／Release 與 Production Deploy 必須分離。** 公開建置流程不得取得、注入或烘焙正式環境的 Secret、Token、Private Key、OAuth Client Secret、Refresh Token、正式帳密或可直接取得正式服務權限的憑證。

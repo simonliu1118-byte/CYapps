@@ -276,7 +276,7 @@ static async Task TestAllowanceVoidAdministrativeClosureAsync()
 
 static LocalRepository CreatePdfRepository(string path, int allowanceStatus)
 {
-    var repository = LocalRepository.Open(path, new TestProtector());
+    var repository = TestRepository.Open(path, new TestProtector());
     var record = NewRecord("2026/09/20");
     InvoiceAllowanceMetadata.ApplyQuery(record, [Allowance(allowanceStatus)]);
     repository.Invoices.Append(record);
@@ -289,7 +289,7 @@ static VoidSetup CreateVoidSetup(
     string invoiceDate = "20260920",
     DateTimeOffset? clock = null)
 {
-    var repository = LocalRepository.Open(path, new TestProtector());
+    var repository = TestRepository.Open(path, new TestProtector());
     repository.Employees.CreateFirstSuperAdmin("0001", "超管", "super@example.com", "SuperPass1");
     repository.Employees.CreateEmployee("0001", "3015", "員工", "employee@example.com", "Employee1");
     repository.Employees.CreateEmployee("0001", "2000", "管理員", "admin@example.com", "AdminPass1", EmployeeRoles.Admin);

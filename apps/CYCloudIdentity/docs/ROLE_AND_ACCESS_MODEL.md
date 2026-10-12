@@ -112,3 +112,6 @@ Old Identity Group memberships, Group Application grants and `USER_ADMIN` compat
 ## 12. Consumer boundary
 
 All consumers implement shared Identity through `CONSUMER_INTEGRATION_STANDARD.md` and the machine-readable compatibility window. CY Web is the first consumer/core account portal. CYAccountingWeb and CYInvoice adopt the same shared role/session/App Access contract in their own workstreams. Consumer-specific business/module permissions stay app-local, and CYInvoice-specific Device/local/offline behavior remains outside CYID.
+### 1.0.2 runtime cleanup
+
+Legacy Group endpoints/projections and compatibility role aliases are retired from runtime. Applied migrations and historical tables remain intact. Login parses/reads Employee authority once and selects permanent credential or purpose-scoped first-login exchange; Employee PATCH uses one guarded handler for pending and verified lifecycle. Email OTP and initial Email delivery share one global/Workspace budget reservation/settlement operation. No HTTP handler re-enters another handler.

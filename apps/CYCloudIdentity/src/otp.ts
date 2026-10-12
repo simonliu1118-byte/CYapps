@@ -1,5 +1,6 @@
 import { normalizeAddress, type EmailSender } from "./email";
-import { globalEmailDailyCeiling, loadWorkspaceSecurityPolicy } from "./security-policy";
+import { loadWorkspaceSecurityPolicy } from "./security-policy";
+import { reserveEmailBudget, settleEmailBudget } from "./email-budget";
 import type { Env } from "./types";
 
 export type OtpPurpose =
@@ -81,95 +82,6 @@ async function effectiveOtpPolicy(env: Env, workspaceId: string | null): Promise
     maxSentPerEmailPurposeHour: policy.otpMaxSentPerEmailPurposeHour,
     workspaceEmailDailyLimit: policy.emailDailyLimit,
   };
-}
-
-function utcUsageDate(now: Date): string {
-  return now.toISOString().slice(0, 10);
-}
-
-async function reserveGlobalEmailBudget(env: Env, now: Date): Promise<string | null> {
-  const usageDate = utcUsageDate(now);
-  const budget = globalEmailDailyCeiling(env);
-  const row = await env.DB.prepare(
-    `INSERT INTO email_delivery_budget(usage_date_utc, reserved_count, sent_count, updated_at)
-     VALUES(?1, 1, 0, ?2)
-     ON CONFLICT(usage_date_utc) DO UPDATE SET
-       reserved_count = reserved_count + 1,
-       updated_at = excluded.updated_at
-     WHERE email_delivery_budget.sent_count + email_delivery_budget.reserved_count < ?3
-     RETURNING reserved_count, sent_count`
-  ).bind(usageDate, now.toISOString(), budget).first<{ reserved_count: number; sent_count: number }>();
-  return row ? usageDate : null;
-}
-
-async function reserveWorkspaceEmailBudget(
-  env: Env,
-  workspaceId: string,
-  usageDate: string,
-  limit: number,
-  now: Date,
-): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `INSERT INTO workspace_email_delivery_budget(
-       workspace_id, usage_date_utc, reserved_count, sent_count, updated_at
-     ) VALUES(?1, ?2, 1, 0, ?3)
-     ON CONFLICT(workspace_id, usage_date_utc) DO UPDATE SET
-       reserved_count = reserved_count + 1,
-       updated_at = excluded.updated_at
-     WHERE workspace_email_delivery_budget.sent_count + workspace_email_delivery_budget.reserved_count < ?4
-     RETURNING reserved_count, sent_count`
-  ).bind(workspaceId, usageDate, now.toISOString(), limit).first<{ reserved_count: number; sent_count: number }>();
-  return Boolean(row);
-}
-
-async function releaseGlobalEmailBudget(env: Env, usageDate: string, now: Date): Promise<void> {
-  await env.DB.prepare(
-    `UPDATE email_delivery_budget
-        SET reserved_count = CASE WHEN reserved_count > 0 THEN reserved_count - 1 ELSE 0 END,
-            updated_at = ?2
-      WHERE usage_date_utc = ?1`
-  ).bind(usageDate, now.toISOString()).run();
-}
-
-async function releaseWorkspaceEmailBudget(
-  env: Env,
-  workspaceId: string,
-  usageDate: string,
-  now: Date,
-): Promise<void> {
-  await env.DB.prepare(
-    `UPDATE workspace_email_delivery_budget
-        SET reserved_count = CASE WHEN reserved_count > 0 THEN reserved_count - 1 ELSE 0 END,
-            updated_at = ?3
-      WHERE workspace_id = ?1
-        AND usage_date_utc = ?2`
-  ).bind(workspaceId, usageDate, now.toISOString()).run();
-}
-
-async function commitGlobalEmailBudget(env: Env, usageDate: string, now: Date): Promise<void> {
-  await env.DB.prepare(
-    `UPDATE email_delivery_budget
-        SET reserved_count = CASE WHEN reserved_count > 0 THEN reserved_count - 1 ELSE 0 END,
-            sent_count = sent_count + 1,
-            updated_at = ?2
-      WHERE usage_date_utc = ?1`
-  ).bind(usageDate, now.toISOString()).run();
-}
-
-async function commitWorkspaceEmailBudget(
-  env: Env,
-  workspaceId: string,
-  usageDate: string,
-  now: Date,
-): Promise<void> {
-  await env.DB.prepare(
-    `UPDATE workspace_email_delivery_budget
-        SET reserved_count = CASE WHEN reserved_count > 0 THEN reserved_count - 1 ELSE 0 END,
-            sent_count = sent_count + 1,
-            updated_at = ?3
-      WHERE workspace_id = ?1
-        AND usage_date_utc = ?2`
-  ).bind(workspaceId, usageDate, now.toISOString()).run();
 }
 
 function randomOtpCode(): string {
@@ -292,29 +204,12 @@ export async function issueEmailOtp(
     now,
   );
 
-  const budgetUsageDate = await reserveGlobalEmailBudget(env, now);
-  if (!budgetUsageDate) throw new Error("EMAIL_DAILY_BUDGET_EXHAUSTED");
-
-  let workspaceBudgetReserved = false;
-  if (workspaceId && policy.workspaceEmailDailyLimit !== null) {
-    workspaceBudgetReserved = await reserveWorkspaceEmailBudget(
-      env,
-      workspaceId,
-      budgetUsageDate,
-      policy.workspaceEmailDailyLimit,
-      now,
-    );
-    if (!workspaceBudgetReserved) {
-      await releaseGlobalEmailBudget(env, budgetUsageDate, now);
-      throw new Error("WORKSPACE_EMAIL_DAILY_LIMIT_EXHAUSTED");
-    }
-  }
-
   const challengeId = `otp_${crypto.randomUUID()}`;
   const code = randomOtpCode();
   const expiresAt = new Date(now.getTime() + OTP_TTL_MS).toISOString();
   const resendAfter = new Date(now.getTime() + policy.resendCooldownSeconds * 1000).toISOString();
   const digest = await otpDigest(env, challengeId, input.purpose, input.scopeKey, email, code);
+  const reservation = await reserveEmailBudget(env, workspaceId, now, policy.workspaceEmailDailyLimit);
 
   try {
     await env.DB.prepare(
@@ -335,13 +230,11 @@ export async function issueEmailOtp(
       now.toISOString(),
     ).run();
   } catch (error) {
-    await releaseGlobalEmailBudget(env, budgetUsageDate, now);
-    if (workspaceId && workspaceBudgetReserved) {
-      await releaseWorkspaceEmailBudget(env, workspaceId, budgetUsageDate, now);
-    }
+    await settleEmailBudget(env, reservation, false, now);
     throw error;
   }
 
+  let sent = false;
   try {
     const suffix = input.textSuffix?.trim();
     await sender.send({
@@ -349,16 +242,13 @@ export async function issueEmailOtp(
       subject: input.subject,
       text: `${input.textPrefix}\n\n驗證碼：${code}\n\n此驗證碼 10 分鐘內有效。請勿將驗證碼提供給其他人。${suffix ? `\n\n${suffix}` : ""}`,
     });
+    sent = true;
     const sentAt = new Date();
     await env.DB.prepare(
       `UPDATE email_otp_challenges
           SET delivery_state = 'sent', sent_at = ?2, updated_at = ?2
         WHERE challenge_id = ?1 AND delivery_state = 'pending'`
     ).bind(challengeId, sentAt.toISOString()).run();
-    await commitGlobalEmailBudget(env, budgetUsageDate, sentAt);
-    if (workspaceId && workspaceBudgetReserved) {
-      await commitWorkspaceEmailBudget(env, workspaceId, budgetUsageDate, sentAt);
-    }
   } catch (error) {
     const failedAt = new Date();
     await env.DB.prepare(
@@ -366,11 +256,9 @@ export async function issueEmailOtp(
           SET delivery_state = 'failed', updated_at = ?2
         WHERE challenge_id = ?1 AND delivery_state = 'pending'`
     ).bind(challengeId, failedAt.toISOString()).run();
-    await releaseGlobalEmailBudget(env, budgetUsageDate, failedAt);
-    if (workspaceId && workspaceBudgetReserved) {
-      await releaseWorkspaceEmailBudget(env, workspaceId, budgetUsageDate, failedAt);
-    }
     throw error;
+  } finally {
+    await settleEmailBudget(env, reservation, sent);
   }
 
   return { challengeId, expiresAt, resendAfter };

@@ -21,7 +21,7 @@ internal static class EmployeeOperationAuthentication
     {
         AppPrincipal? principal = null;
         try { principal = repository.AuthenticatePrincipal(employeeNo, password ?? string.Empty); }
-        catch (InvalidOperationException) { }
+        catch (InvalidOperationException) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local) { }
         if (principal is null || !AppRoles.CanManageAccounts(principal.Role))
             throw new UnauthorizedAccessException("管理員驗證失敗");
         return principal.ToEmployeeAccount();
@@ -43,7 +43,7 @@ internal static class EmployeeOperationAuthentication
         {
             principal = repository.AuthenticatePrincipal(employeeNo, password);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException) when (repository.IdentityProvider.Kind == IdentityProviderKind.Local)
         {
             // Invalid employee-number shape is intentionally indistinguishable from bad credentials.
         }

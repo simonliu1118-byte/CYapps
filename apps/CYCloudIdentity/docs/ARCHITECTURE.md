@@ -120,3 +120,6 @@ OTP remains a shared engine for bootstrap, password recovery, activated Email ve
 - OTP policy: `OTP_SECURITY.md`
 - implementation status: `../TODO.md`
 - schema source of truth: `../migrations/`
+### 1.0.2 runtime cleanup
+
+Legacy Group endpoints/projections and compatibility role aliases are retired from runtime. Applied migrations and historical tables remain intact. Login parses/reads Employee authority once and selects permanent credential or purpose-scoped first-login exchange; Employee PATCH uses one guarded handler for pending and verified lifecycle. Email OTP and initial Email delivery share one global/Workspace budget reservation/settlement operation. No HTTP handler re-enters another handler.
