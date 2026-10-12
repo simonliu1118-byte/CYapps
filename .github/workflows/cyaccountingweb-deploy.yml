@@ -56,6 +56,8 @@ jobs:
           node --check src/accounting-controls.js
           node --check src/account-lifecycle.js
           node --check src/opening-balances.js
+          node --check src/statistics.js
+          node --check public/statistics-ui.js
           node --check src/excel-export.js
           node --check src/excel-import.js
           node --check src/backup-package.js
@@ -85,6 +87,7 @@ jobs:
 
       - name: Run application tests
         run: |
+          node tests/statistics.mjs
           node tests/excel-transfer.mjs
           node tests/period-replacement.mjs
           node tests/backup-package.mjs
@@ -155,7 +158,7 @@ jobs:
       CF_WORKER_NAME: ${{ vars.CF_WORKER_NAME }}
       CF_D1_DATABASE_NAME: ${{ vars.CF_D1_DATABASE_NAME }}
       CF_D1_DATABASE_ID: ${{ vars.CF_D1_DATABASE_ID }}
-      CYID_WORKER_NAME: ${{ vars.CYID_WORKER_NAME }}
+      CYID_WORKER_NAME: ${{ secrets.CYID_WORKER_NAME }}
       CF_R2_BACKUP_BUCKET: ${{ vars.CF_R2_BACKUP_BUCKET }}
       CF_BACKUP_TOPOLOGY: ${{ vars.CF_BACKUP_TOPOLOGY }}
       CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN: ${{ vars.CF_CYACCOUNTINGWEB_CUSTOM_DOMAIN }}
@@ -362,6 +365,8 @@ jobs:
           verify_asset "$base/adaptive-ui.css?rev=desktop-ledger-heading" 'width: min(640px, calc(100vw - 48px))'
           verify_asset "$base/adaptive-ui.css?rev=desktop-ledger-heading" '#backupRefreshStatus'
           verify_asset "$base/desktop-migration-ui.js?rev=desktop-data-panel" "!window.cyIsDesktopInteractionWorkspace()) return;"
+          verify_asset "$base/statistics-ui.js?rev=statistics-workspace" 'renderIncomeStatement'
+          verify_asset "$base/statistics.css?rev=statistics-workspace" 'statistics-dialog'
           echo "CYACC production semantic frontend assets verified."
 
       - name: Remove production generated files
