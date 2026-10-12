@@ -316,6 +316,7 @@ internal sealed class ShopeeScreenshotForm : Form
             }
             shot.Kind = ShopeeScreenshot.Classify(shot.Lines);
             if (shot.Kind == ShopeeShotKind.Items) await ReadMissingCellsAsync(shot);
+            if (shot.Kind == ShopeeShotKind.Order) ResolveOrderSnZeroO(shot);
             _log.Info("shopee-shot", $"screenshot recognized kind={shot.Kind} lines={shot.Lines.Count} size={image.Width}x{image.Height}");
             // Diagnostic mode only (local log): what the OCR read and where, to explain a misparse.
             if (_log.Diagnostic)
@@ -331,6 +332,58 @@ internal sealed class ShopeeScreenshotForm : Form
         if (IsDisposed) return;
         UpdateCaption(shot);
         UpdateSummary();
+    }
+
+    /// <summary>
+    /// 0 or O in the order number's last 8 characters, from the glyph widths in the screenshot
+    /// (user, 2026-10-12). The decisions are logged so a wrong call can be traced.
+    /// </summary>
+    private void ResolveOrderSnZeroO(Shot shot)
+    {
+        if (ShopeeScreenshot.OrderSnBox(shot.Lines) is not { } box) return;
+        var text = ShopeeScreenshot.OrderSnDateDigits(ShopeeScreenshot.Compact(box.Text).ToUpperInvariant());
+        if (!text.Skip(6).Any(c => c is '0' or 'O')) return;
+        var widths = GlyphRunWidths(shot.Image, new Rectangle(box.Left, box.Top, box.Width, box.Height));
+        var (resolved, decisions) = ShopeeScreenshot.ResolveZeroO(text, widths);
+        _log.Info("shopee-shot", $"order number 0/O runs={string.Join(",", widths)} decisions={decisions.Count}");
+        foreach (var decision in decisions) _log.Info("shopee-shot", $"  {decision}");
+        if (resolved == text) return;
+        shot.Lines[shot.Lines.IndexOf(box)] = box with { Text = resolved };
+    }
+
+    /// <summary>
+    /// Widths of the ink runs (columns with text) across a box, left to right. Ink is what
+    /// differs clearly from the box's most common shade, so dark text on white and white text
+    /// on a grey tag both work. One-pixel runs (box edges, specks) are left out.
+    /// </summary>
+    private static List<int> GlyphRunWidths(Bitmap image, Rectangle box)
+    {
+        var area = Rectangle.Intersect(Rectangle.Inflate(box, 1, 0), new Rectangle(Point.Empty, image.Size));
+        var widths = new List<int>();
+        if (area.Width < 4 || area.Height < 4) return widths;
+        using var crop = image.Clone(area, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+        var shade = new int[crop.Width, crop.Height];
+        var counts = new int[256];
+        for (var y = 0; y < crop.Height; y++)
+            for (var x = 0; x < crop.Width; x++)
+            {
+                var c = crop.GetPixel(x, y);
+                var v = (c.R * 299 + c.G * 587 + c.B * 114) / 1000;
+                shade[x, y] = v;
+                counts[v]++;
+            }
+        var background = Array.IndexOf(counts, counts.Max());
+        var run = 0;
+        for (var x = 0; x <= crop.Width; x++)
+        {
+            var ink = false;
+            if (x < crop.Width)
+                for (var y = 0; y < crop.Height && !ink; y++) ink = Math.Abs(shade[x, y] - background) > 70;
+            if (ink) { run++; continue; }
+            if (run > 1) widths.Add(run);
+            run = 0;
+        }
+        return widths;
     }
 
     /// <summary>

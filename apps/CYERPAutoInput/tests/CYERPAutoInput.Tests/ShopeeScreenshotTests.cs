@@ -479,4 +479,70 @@ public class ShopeeScreenshotTests
         Assert.DoesNotContain(result.Problems, p => p.Contains("促銷組合", StringComparison.Ordinal));
         Assert.Contains(result.Order!.Items, i => i.ItemCode == "P900" && i.UnitPrice == "-11");
     }
+    // Ink-run widths as measured on the user's screenshots (2026-10-12); the order number's
+    // letters are replaced with fictitious ones of the same widths.
+    private static readonly int[] OrderSnRuns = [7, 7, 3, 7, 7, 6, 7, 11, 15, 11, 7, 6, 7];
+
+    [Theory]
+    [InlineData("2610096WSAWP90", "2610096WSAWP90")]
+    [InlineData("2610096WSAWP9O", "2610096WSAWP90")]
+    public void A_glyph_as_wide_as_the_digits_is_a_zero(string read, string expected) =>
+        Assert.Equal(expected, ShopeeScreenshot.ResolveZeroO(read, OrderSnRuns).Text);
+
+    [Fact]
+    public void A_glyph_a_third_wider_than_the_digits_is_an_o()
+    {
+        int[] runs = [.. OrderSnRuns[..^1], 10];
+        var (text, decisions) = ShopeeScreenshot.ResolveZeroO("2610096WSAWP90", runs);
+        Assert.Equal("2610096WSAWP9O", text);
+        Assert.Single(decisions);
+    }
+
+    [Fact]
+    public void Leaves_the_reading_when_the_glyphs_cannot_be_lined_up()
+    {
+        Assert.Equal("2610096WSAWP90", ShopeeScreenshot.ResolveZeroO("2610096WSAWP90", [40, 50, 30]).Text);
+        Assert.Equal("2610096WSAWP90", ShopeeScreenshot.ResolveZeroO("2610096WSAWP90", []).Text);
+    }
+
+    [Theory]
+    [InlineData("261O1O9R5EC3RC", "2610109R5EC3RC")]
+    [InlineData("2610109R5EC3RC", "2610109R5EC3RC")]
+    public void The_date_part_of_an_order_number_is_digits(string read, string expected) =>
+        Assert.Equal(expected, ShopeeScreenshot.OrderSnDateDigits(read));
+
+    [Theory]
+    [InlineData("TW2650798798O9K", "TW265079879809K")]
+    [InlineData("TW26507987985O0", "TW265079879850" + "0")]
+    [InlineData("5O6O5O6113", "5060506113")]
+    [InlineData("AB12O34567", "AB12O34567")]
+    public void Tracking_digits_follow_the_carrier_format(string read, string expected) =>
+        Assert.Equal(expected, ShopeeScreenshot.TrackingDigits(read));
+
+    [Fact]
+    public void The_order_screenshot_takes_the_date_digits_and_tracking_format()
+    {
+        var problems = new List<string>();
+        var order = ShopeeScreenshot.ParseOrder(ShopeeScreenshot.MergeLines(
+        [
+            B("訂單編號", 64, 50), B("26100O0TEST01A", 65, 87), B("運送資訊", 64, 131),
+            B("包裹1：蝦皮店到店", 65, 173, 200), B("#TW2000000O0001K", 278, 173, 160)
+        ]), problems);
+        Assert.Equal("2610000TEST01A", order.OrderSn);
+        Assert.Equal("TW200000000001K", order.TrackingNumber);
+    }
+    [Theory]
+    [InlineData(234)] // close enough to be merged into one box
+    [InlineData(260)] // two separate boxes, as on the user's PC
+    public void Reads_the_code_when_the_label_lost_its_first_glyphs(int codeLeft)
+    {
+        // 「商品選項貨號：」 read as 「商品選項」 and 「號：…」 (user's PC, 2026-10-12).
+        var items = PromoItemShot()
+            .Where(b => !b.Text.StartsWith("商品選項", StringComparison.Ordinal))
+            .Concat([B("商品選項", 169, 199, 49), B("號：X00315-1", codeLeft, 199, 66)])
+            .ToList();
+        var result = Read(OrderShot(), [items], PromoAmountShot());
+        Assert.Empty(result.Problems);
+        Assert.Contains(result.Order!.Items, i => i.ItemCode == "X00315-1");
+    }
 }

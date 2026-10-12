@@ -97,18 +97,20 @@ internal static partial class ShopeeScreenshot
         return ShopeeShotKind.Unknown;
     }
 
+    /// <summary>The box under 「訂單編號」 that holds the order number, or null.</summary>
+    public static OcrBox? OrderSnBox(IReadOnlyList<OcrBox> lines)
+    {
+        var label = lines.FirstOrDefault(l => Compact(l.Text).Contains("訂單編號", StringComparison.Ordinal));
+        if (label is null) return null;
+        return lines
+            .Where(l => l.Top > label.Top + label.Height / 2 && l.Top - label.Bottom < 80)
+            .OrderBy(l => l.Top)
+            .FirstOrDefault(l => OrderSnPattern().IsMatch(Compact(l.Text).ToUpperInvariant()));
+    }
+
     public static ShopeeShotOrder ParseOrder(IReadOnlyList<OcrBox> lines, List<string> problems)
     {
-        var orderSn = string.Empty;
-        var label = lines.FirstOrDefault(l => Compact(l.Text).Contains("訂單編號", StringComparison.Ordinal));
-        if (label is not null)
-        {
-            orderSn = lines
-                .Where(l => l.Top > label.Top + label.Height / 2 && l.Top - label.Bottom < 80)
-                .OrderBy(l => l.Top)
-                .Select(l => Compact(l.Text).ToUpperInvariant())
-                .FirstOrDefault(t => OrderSnPattern().IsMatch(t)) ?? string.Empty;
-        }
+        var orderSn = OrderSnBox(lines) is { } snBox ? OrderSnDateDigits(Compact(snBox.Text).ToUpperInvariant()) : string.Empty;
         if (orderSn.Length == 0) problems.Add("訂單資訊截圖讀不到訂單編號。");
         // A Shopee order number is 6 date digits and 8 letters or digits; the OCR once read
         // 「QV」 as 「QWW」 (user's PC, 2026-10-11), so anything else is flagged.
@@ -132,12 +134,100 @@ internal static partial class ShopeeScreenshot
             if (hash >= 0 && tracking.Length == 0)
             {
                 var candidate = new string(text[(hash + 1)..].Where(char.IsAsciiLetterOrDigit).ToArray()).ToUpperInvariant();
-                if (candidate.Length >= 8) tracking = candidate;
+                if (candidate.Length >= 8) tracking = TrackingDigits(candidate);
             }
         }
         if (carrier.Length == 0) problems.Add("訂單資訊截圖讀不到物流方式（包裹）。");
         if (tracking.Length == 0) problems.Add("訂單資訊截圖讀不到物流單號；可在表單的送貨地址(一) 補上。");
         return new ShopeeShotOrder(orderSn, carrier, tracking);
+    }
+
+    /// <summary>
+    /// An order number starts with its date (YYMMDD), where an 「O」 can only be a 0
+    /// (user, 2026-10-12: the OCR mixes up 0 and O).
+    /// </summary>
+    internal static string OrderSnDateDigits(string orderSn) =>
+        orderSn.Length < 6 ? orderSn : orderSn[..6].Replace('O', '0') + orderSn[6..];
+
+    /// <summary>
+    /// 0 and O where the tracking number's format decides them: Shopee 店到店 numbers are
+    /// TW, 12 digits and one more character (seen as a letter, not always); carrier numbers
+    /// (新竹, 黑貓…) are digits only. The last character of a TW number is left as read.
+    /// </summary>
+    internal static string TrackingDigits(string tracking)
+    {
+        if (TwTrackingPattern().IsMatch(tracking))
+            return "TW" + tracking[2..^1].Replace('O', '0') + tracking[^1];
+        return tracking.All(c => char.IsAsciiDigit(c) || c == 'O') && tracking.Any(char.IsAsciiDigit) ? tracking.Replace('O', '0') : tracking;
+    }
+
+    /// <summary>
+    /// Decides 0 or O in the order number's last 8 letters and digits from the glyphs' widths
+    /// (user, 2026-10-12): in Shopee's font a 0 is as wide as the other digits and an O is about
+    /// a third wider. <paramref name="runWidths"/> are the ink runs of the box, left to right;
+    /// touching glyphs make one run, so the runs are first aligned to the characters by their
+    /// usual widths. Only a 0／O that stands alone in its run, with at least two other digits
+    /// alone to compare with, is decided; otherwise the OCR's reading is kept.
+    /// </summary>
+    internal static (string Text, List<string> Decisions) ResolveZeroO(string text, IReadOnlyList<int> runWidths)
+    {
+        var decisions = new List<string>();
+        var ambiguous = Enumerable.Range(6, Math.Max(0, text.Length - 6)).Where(i => text[i] is '0' or 'O').ToList();
+        if (ambiguous.Count == 0 || runWidths.Count == 0) return (text, decisions);
+
+        static double Expected(char c) => c switch
+        {
+            '1' or 'I' => 3.5,
+            'M' or 'W' => 11,
+            >= '0' and <= '9' => 7,
+            'J' or 'L' or 'F' or 'T' or 'S' or 'E' or 'P' or 'Z' or 'Y' => 7.5,
+            >= 'A' and <= 'Z' => 8.5,
+            _ => 7
+        };
+        var scale = runWidths.Sum() / text.Sum(Expected);
+        var n = text.Length;
+        var m = runWidths.Count;
+        // cost[i, j]: the first i characters drawn by the first j runs; a run holds 1–3 characters.
+        var cost = new double[n + 1, m + 1];
+        var take = new int[n + 1, m + 1];
+        for (var i = 0; i <= n; i++)
+            for (var j = 0; j <= m; j++) cost[i, j] = double.PositiveInfinity;
+        cost[0, 0] = 0;
+        for (var j = 1; j <= m; j++)
+            for (var i = 1; i <= n; i++)
+                for (var k = 1; k <= Math.Min(3, i); k++)
+                {
+                    if (double.IsPositiveInfinity(cost[i - k, j - 1])) continue;
+                    var expected = 0.0;
+                    for (var c = i - k; c < i; c++) expected += Expected(text[c]) * scale;
+                    var candidate = cost[i - k, j - 1] + Math.Abs(runWidths[j - 1] - expected) + (k - 1) * 0.5;
+                    if (candidate < cost[i, j]) { cost[i, j] = candidate; take[i, j] = k; }
+                }
+        if (double.IsPositiveInfinity(cost[n, m])) return (text, decisions);
+
+        var single = new int?[n]; // width of each character that has a run to itself
+        for (int i = n, j = m; i > 0; j--)
+        {
+            var k = take[i, j];
+            if (k == 1) single[i - 1] = runWidths[j - 1];
+            i -= k;
+        }
+        var reference = Enumerable.Range(0, n)
+            .Where(i => text[i] is >= '2' and <= '9' && single[i] is not null)
+            .Select(i => (double)single[i]!.Value).OrderBy(w => w).ToList();
+        if (reference.Count < 2) return (text, decisions);
+        var digitWidth = reference[reference.Count / 2];
+
+        var chars = text.ToCharArray();
+        foreach (var i in ambiguous)
+        {
+            if (single[i] is not { } width) continue;
+            var ratio = width / digitWidth;
+            var decided = ratio <= 1.12 ? '0' : ratio >= 1.25 ? 'O' : chars[i];
+            decisions.Add($"pos={i + 1} read={chars[i]} width={width} digit={digitWidth:0.#} ratio={ratio:0.00} → {decided}");
+            chars[i] = decided;
+        }
+        return (new string(chars), decisions);
     }
 
     /// <summary>
@@ -663,7 +753,12 @@ internal static partial class ShopeeScreenshot
     [GeneratedRegex(@"^\d{6}[0-9A-Z]{8}$")]
     private static partial Regex OrderSnFormatPattern();
 
-    [GeneratedRegex(@"(貨|货)(號|号)")]
+    [GeneratedRegex(@"^TW[0-9O]{12}[0-9A-Z]$")]
+    private static partial Regex TwTrackingPattern();
+
+    // 「商品選項貨號：」; the OCR once dropped the 貨 (「商品選項」 + 「號：A0…」, user's PC,
+    // 2026-10-12), so 號 with a colon after 選項 or at a box's start is a label too.
+    [GeneratedRegex(@"(貨|货)(號|号)|(^|選項|选项)(號|号)(?=[:：])")]
     private static partial Regex CodeLabelPattern();
 
     [GeneratedRegex(@"^(?<code>.*[0-9A-Za-z])[xX×*＊](?<n>\d{1,3})$")]
