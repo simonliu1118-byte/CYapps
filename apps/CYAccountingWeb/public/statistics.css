@@ -1,0 +1,145 @@
+/* Statistics owns only its surfaces. Workspace column geometry stays in Adaptive UI. */
+.statistics-card { display: none; min-width: 0; padding: 18px 14px; align-self: start; }
+#tabletStatisticsButton { display: none !important; }
+html[data-tablet-layout]:not([data-tablet-layout=""]) #tabletStatisticsButton { display: inline-flex !important; align-items: center; justify-content: center; height: 34px; padding: 0 9px; font-size: 12px; }
+html[data-viewport="desktop"] .statistics-card { display: block; grid-column: 1 / -1; }
+html[data-viewport="desktop"] .cy-split-layout > .statistics-card { grid-column: 2; }
+html[data-viewport="desktop"] body[data-cyacc-read-only="true"] .statistics-card { grid-column: 1 / -1 !important; grid-row: auto !important; position: static !important; max-height: none !important; }
+@media (min-width: 1600px) {
+  html[data-viewport="desktop"] .cy-split-layout > .statistics-card { grid-column: 3; grid-row: 1; align-self: start; }
+}
+.statistics-card .statistics-actions { max-width: 360px; }
+@media (min-width: 768px) and (max-width: 1599px) {
+  html[data-viewport="desktop"] .statistics-card .statistics-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+}
+.statistics-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.statistics-actions button { flex: 1; display: inline-flex; align-items: center; justify-content: center; min-width: 0; height: 32px; padding: 0 7px; font-size: 13.5px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.statistics-actions button.active { border-color: #407fb0; background: #edf5fb; color: #285b83; }
+.statistics-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 14px; }
+.statistics-heading h2 { margin: 0; font-size: 16px; }
+#statisticsMonthLabel { display: inline-block; font-size: 13px; color: #657386; margin-left: 5px; }
+.statistics-mobile-month { display: none; }
+.statistics-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding-bottom: 12px; border-bottom: 1px solid #e2e8ef; }
+.statistics-totals div { min-width: 0; }
+.statistics-totals span { display: block; font-size: 12px; color: #657386; margin-bottom: 5px; }
+.statistics-totals strong { display: block; font-size: 14px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.statistics-income { color: #2f7a4c; }
+.statistics-expense { color: #a54b45; }
+.statistics-level { display: flex; justify-content: flex-end; margin: 12px 0; font-size: 13px; }
+.statistics-level label { display: inline-flex; align-items: center; gap: 8px; }
+.statistics-level select { width: 80px; height: 30px; padding: 0 5px; font-size: 13px; }
+.statistics-chart { min-width: 0; padding: 12px 0; border-top: 1px solid #e2e8ef; }
+.statistics-chart h3, .statistics-breakdown h3 { font-size: 14px; margin: 0 0 8px; }
+.statistics-pie { display: block; width: 400px; max-width: 100%; height: auto; margin: 0 auto 10px; overflow: visible; }
+.statistics-pie text { font-size: 12px; font-weight: 500; }
+.statistics-pie .statistics-pie-center { font-size: 14px; fill: #526273; }
+.statistics-pie .statistics-pie-total { font-size: 11px; font-weight: 600; fill: #526273; }
+.statistics-pie-labels [role="button"] { cursor: pointer; }
+.statistics-pie-labels-compact { display: block; }
+.statistics-pie-labels-desktop { display: none; }
+html[data-viewport="desktop"] .statistics-pie-labels-desktop { display: block; }
+html[data-viewport="desktop"] .statistics-pie-labels-compact { display: none; }
+.statistics-results [hidden], .statistics-dialog > [hidden] { display: none !important; }
+.statistics-view-tabs { display: flex; gap: 4px; margin: 12px 0; border-bottom: 1px solid #d8e0e8; }
+.statistics-view-tabs button { padding: 7px 20px; min-height: 32px; border: 0; border-radius: 6px 6px 0 0; background: transparent; color: #657386; font-size: 14px; }
+.statistics-view-tabs button[aria-selected="true"] { color: #285b83; background: #edf5fb; box-shadow: inset 0 -2px #407fb0; font-weight: 600; }
+.statistics-legend { margin: 0; padding: 0; list-style: none; }
+.statistics-legend li { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto 42px; align-items: center; gap: 6px; font-size: 12px; padding: 4px 0; }
+.statistics-swatch { width: 8px; height: 8px; border-radius: 2px; }
+.statistics-legend button { min-width: 0; min-height: 24px; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: #285b83; white-space: normal; }
+.statistics-legend b { font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.statistics-legend small { text-align: right; font-size: 11px; color: #657386; white-space: nowrap; }
+.statistics-reset { background: none; border: 0; color: #285b83; padding: 2px 0; font-size: 12px; }
+.statistics-breakdown details { border-bottom: 1px solid #e2e8ef; font-size: 13px; }
+.statistics-breakdown summary { cursor: pointer; padding: 9px 0; }
+.statistics-breakdown summary b { float: right; font-weight: 600; }
+.statistics-breakdown ul { padding: 0 0 8px 16px; margin: 0; list-style: none; }
+.statistics-breakdown li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; font-size: 12px; }
+.statistics-breakdown li b { white-space: nowrap; font-weight: 500; }
+.statistics-transfer-tag { margin-left: 5px; font-size: 10px; color: #7e6950; }
+.statistics-scope-note { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: #657386; }
+.statistics-note { font-size: 12px; line-height: 1.6; color: #657386; margin: 12px 0 0; }
+.statistics-empty { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 20px 0; font-size: 13px; color: #657386; text-align: center; }
+.statistics-error { color: #a54b45; font-size: 14px; }
+.statistics-spinner { width: 16px; height: 16px; border: 2px solid #e2e8ef; border-top-color: #407fb0; border-radius: 50%; animation: statistics-spin .8s linear infinite; }
+@keyframes statistics-spin { to { transform: rotate(360deg); } }
+.statistics-dialog { width: min(880px, calc(100vw - 40px)); max-width: 880px; max-height: calc(100dvh - 40px); padding: 20px; box-sizing: border-box; }
+.statistics-dialog .modal-header { align-items: center; margin-bottom: 16px; }
+.statistics-dialog .modal-header h2 { margin: 0; }
+.statistics-dialog .statistics-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.statistics-dialog .statistics-totals strong { font-size: 20px; }
+.statistics-dialog .statistics-dialog-tabs { max-width: 360px; }
+.statistics-period-form { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin: 0 0 16px; }
+.statistics-period-form label { display: grid; gap: 6px; font-size: 13px; }
+.statistics-period-form input { width: 170px; height: 36px; padding: 0 8px; font-size: 16px; }
+.statistics-period-form button { height: 36px; }
+.statistics-period-form [hidden] { display: none !important; }
+.statistics-range { text-align: center; color: #657386; font-size: 14px; }
+.statistics-income-dialog { width: min(1200px, calc(100vw - 32px)); max-width: 1200px; height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); padding: 12px 20px; overflow: hidden; }
+.statistics-income-dialog[open] { display: flex; flex-direction: column; }
+.statistics-income-dialog .modal-header { flex: 0 0 auto; margin-bottom: 6px; }
+.statistics-income-dialog .statistics-period-form { flex: 0 0 auto; margin-bottom: 6px; gap: 10px; align-items: center; }
+.statistics-income-dialog .statistics-period-form label { display: flex; align-items: center; gap: 8px; }
+.statistics-income-dialog .statistics-period-form label > span { white-space: nowrap; }
+.statistics-income-dialog .statistics-period-form input, .statistics-income-dialog .statistics-period-form button { height: 30px; }
+.statistics-income-dialog #statisticsDialogResults { flex: 1; min-height: 0; overflow: hidden; }
+.income-statement { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 4px; margin: 0; }
+.income-statement > * { flex-shrink: 0; }
+.statement-heading { text-align: center; line-height: 1.3; }
+.statement-heading h3 { font-size: 17px; margin: 0 0 3px; }
+.statement-period { color: #657386; font-size: 12px; margin: 0 0 5px; }
+.income-statement table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 12.5px; line-height: 1.18; table-layout: fixed; }
+.statement-name-col { width: 34%; }
+.statement-amount-col { width: 16%; }
+.income-statement th, .income-statement td { padding: 1.5px 7px; border-bottom: 1px solid #e2e8ef; }
+.income-statement th { text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.income-statement td, .income-statement thead th:nth-child(even) { font-size: inherit; line-height: inherit; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.income-statement thead th { background: #eaf1f7; font-weight: 700; padding-top: 5px; padding-bottom: 5px; }
+.income-statement .statement-half-start { border-left: 1px solid #c8d4e0; }
+.income-statement .statement-group { background: #f1f5f8; font-weight: 600; }
+.income-statement .statement-subject { font-weight: 400; color: #526273; }
+.income-statement th.statement-subject { padding-left: 20px; }
+.income-statement tfoot th, .income-statement tfoot td { font-weight: 700; border-top: 1px solid #99aabb; padding-top: 5px; padding-bottom: 5px; }
+.statement-net { display: flex; justify-content: center; align-items: center; gap: 24px; border-bottom: 3px double #526273; padding: 6px; font-size: 17px; font-weight: 700; }
+.statement-transfer-section h4 { font-size: 12px; line-height: 1.3; margin: 2px 0 4px; }
+.statement-no-transfers, .statement-transfer-net { margin: 3px 0; font-size: 11.5px; color: #657386; line-height: 1.4; }
+.statement-footer { margin-top: auto; }
+.statement-footer .statistics-note { margin: 3px 0 0; font-size: 11px; line-height: 1.35; }
+.statement-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 5px; font-size: 12px; }
+.statement-pagination button { height: 27px; min-height: 27px; padding: 0 9px; font-size: 12px; }
+#statisticsTransferForm fieldset { border: 1px solid #d8e0e8; border-radius: 8px; margin: 12px 0; padding: 10px; }
+#statisticsTransferForm legend { font-size: 14px; font-weight: 600; }
+#statisticsTransferForm .statistics-transfer-choice { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 13px; }
+#statisticsTransferForm input { width: 16px; height: 16px; flex: 0 0 auto; }
+@media (max-width: 767px) {
+  html[data-viewport="mobile"]:not([data-tablet-layout]) .statistics-card,
+  html[data-viewport="mobile"][data-tablet-layout=""] .statistics-card { display: block; padding: 14px 14px 90px; margin: 0; width: 100%; box-sizing: border-box; border: 0; border-radius: 0; box-shadow: none; background: #fff; }
+  .statistics-card.cy-mobile-page-hidden { display: none !important; }
+  .statistics-mobile-month { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .statistics-mobile-month input { height: 36px; width: 150px; font-size: 16px; padding: 0 6px; }
+  #statisticsMonthLabel { display: none; }
+  .statistics-dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); padding: 16px; }
+  .statistics-dialog .statistics-charts { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .statistics-dialog .statistics-totals strong { font-size: 16px; }
+  .statistics-period-form { gap: 8px; }
+  .statistics-period-form label { flex: 1; min-width: 130px; }
+  .statistics-period-form input { width: 100%; box-sizing: border-box; }
+  .statistics-income-dialog { width: calc(100vw - 12px); height: calc(100dvh - 12px); max-height: calc(100dvh - 12px); padding: 10px; }
+  .statistics-income-dialog .statistics-period-form label { flex: 0 1 auto; min-width: 0; }
+  .statistics-income-dialog .statistics-period-form input { width: 150px; }
+  .statement-heading h3 { font-size: 14px; }
+  .income-statement table { font-size: 11.5px; }
+  .statement-name-col { width: 29%; }
+  .statement-amount-col { width: 21%; }
+  .income-statement th, .income-statement td { padding: 3px 3px; }
+  .income-statement th.statement-subject { padding-left: 7px; }
+  .statement-net { font-size: 15px; padding: 5px; }
+  .statement-footer .statistics-note { font-size: 10.5px; }
+}
+@media (prefers-reduced-motion: reduce) { .statistics-spinner { animation: none; } }
+
+@media (max-height: 600px) {
+  .statistics-income-dialog .modal-header { margin-bottom: 4px; }
+  .statistics-income-dialog .modal-header h2 { font-size: 16px; }
+  .statistics-income-dialog .statement-heading { display: none; }
+}

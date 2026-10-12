@@ -31,8 +31,9 @@ for (const width of [375, 820, 1440]) {
   let release;
   let hold = false;
   const context = vm.createContext({
+    CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options?.detail; } },
     state: { transactions: [tx], editingTx: tx, settingsKind: 'income', groups: [{ id: 2, kind: 'income', name: '門市' }], categories: [] }, els,
-    window: { innerWidth: width, matchMedia: () => ({ matches: width < 768 }) },
+    window: { dispatchEvent() {}, innerWidth: width, matchMedia: () => ({ matches: width < 768 }) },
     document: { querySelector: selector => selector === '#settingsManagerDialog' ? dialog : null },
     isLocked: month => month === lockedMonth && Boolean(lockedMonth), jsonHeaders: () => ({ 'content-type': 'application/json' }),
     async api(path, options) { writes.push({ path, method: options.method, body: JSON.parse(options.body) }); if (hold) await new Promise(resolve => { release = resolve; }); if (fail) throw new Error('write failed'); return { id: 99 }; },
@@ -150,7 +151,8 @@ for (const scenario of ['read-before-write', 'read-during-write', 'failed-write'
   let finishWrite;
   let reads = 0;
   const context = vm.createContext({
-    state: { transactions: [original] }, els: { monthFilter: field('2026-09'), transactionRows: {} }, window: { cyaccRefreshLedgerView: async () => {} },
+    CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options?.detail; } },
+    state: { transactions: [original] }, els: { monthFilter: field('2026-09'), transactionRows: {} }, window: { dispatchEvent() {}, cyaccRefreshLedgerView: async () => {} },
     setLedgerLoadingState() {}, renderDesktopLedger() {}, updateEntryLockState() {}, isLocked: () => false,
     jsonHeaders: () => ({}), escapeHtml: value => value,
     async api(path, options) {
