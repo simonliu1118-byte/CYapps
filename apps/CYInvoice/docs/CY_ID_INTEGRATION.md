@@ -398,4 +398,4 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 
 ### 14.9 中央登記接續（2026-10-12）
 
-Provider source 0.3.7／canonical 1.0.4 新增既有 core-portal Super Admin 的 App 登記／Workspace 啟用，CY Web 接續 source 0.7.23。兩者尚待 CI／開發環境部署／真人中央登記，不是 Invoice 已切換的證據。綁定只指定原 CYInvoice Workspace 的身分來源，原 ID／Device／資料保留；同一 CYID Workspace 可供多 App 各自業務 Workspace 使用。單一 App 多業務 Workspace 的成員／授權是未來 app-local 設計，本次仍固定一組。中央登記不替代 Provider scope metadata、private binding 或員工 App Access／Role 與原 Windows 驗收。
+Provider source 0.3.7／canonical 1.0.4 新增既有 core-portal Super Admin 的 App 登記／Workspace 啟用，CY Web 接續 source 0.7.23。兩者已完成 CI／開發部署（Provider #416／#158，Web #146／#138），真人中央登記仍待完成；不是 Invoice 已切換的證據。綁定只指定原 CYInvoice Workspace 的身分來源，原 ID／Device／資料保留；同一 CYID Workspace 可供多 App 各自業務 Workspace 使用。單一 App 多業務 Workspace 的成員／授權是未來 app-local 設計，本次仍固定一組。中央登記不替代 Provider scope metadata、private binding 或員工 App Access／Role 與原 Windows 驗收。

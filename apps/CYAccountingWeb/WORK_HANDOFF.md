@@ -74,3 +74,5 @@
 
 
 同一已驗證Secret入口已同步到Invoice／Provider active及retired部署refs（Provider #153／#154、Invoice #32通過，Invoice維持Builtin）；使用者已刪除同名舊 Variable 並保留 Secret；Invoice 刪除後唯讀 #34（38195315134）通過。此Doc更新不改本App帳務／Session/runtime，對應詳細events見Invoice現行交接。
+
+2026-10-12：中央 Provider development0.3.7／contract1.0.4（#416／actual#158）及 CY Web development0.7.23／consumer1.0.4（#146／actual#138）完成受控部署，新增中央 Super Admin 系統登記入口；本App production authority／scope／帳務／Session未因這批改變。Invoice仍待真人登記／專屬scope／原Workspace私有綁定與Windows驗收，不借本App的production scope。

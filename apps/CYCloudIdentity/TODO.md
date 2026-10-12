@@ -4,7 +4,7 @@
 
 ## Current checkpoint — 2026-10-12
 
-- Current source release is **CYCloudIdentity 0.3.7 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.6 Build 0 已部署並驗證**，run `38111211344`（既有設定／Secrets／authority 保留，原 0.3.5 run 36821423383 為歷史）；source 與部署證據分開記錄。
+- Current source **CYCloudIdentity 0.3.7 Build 0／contract 1.0.4** 已由 #416 合併，八項 final-head CI 通過；development actual #158（38197480766）同已測 tree 升級成功，保留原 authority／history／settings／Secrets／七 migrations／FK。Production未部署此批；不自動登記App或授予員工權限。
 - CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
@@ -52,8 +52,9 @@
 ## Application registration / CYInvoice next step
 
 - Source 0.3.7 / contract 1.0.4 adds optional core-portal Super Admin registration and Workspace enablement through the existing role-admin owner. Same current Session scope, immutable existing catalog metadata, protected core app, transactional authority recheck/audit; no Employee grant or consumer Workspace mutation.
-- [ ] Exact-head CI and development code-only upgrade; retain existing authority, Secrets, scope and seven migrations.
-- [ ] CY Web 0.7.23 / consumer 1.0.4 registration UI and canonical mirror synchronization, development deployment and actual Super Admin registration in the existing Workspace. Its admin hostname currently serves development 0.7.22; deployed access-table source equals main, so the missing column is not repaired by redeploying the old UI.
+- [x] #416 final head cbae06a0／tree 8fe98f7c 八項 CI（含實際 Worker/D1 登記／登入與 Windows）通過，合併 d3411e2；development #158（38197480766）source 3eac1a22／同 tree 升級成功，原 authority／history／settings／Secrets／七 migrations／FK 保留。
+- [x] CY Web #146 source 8aad63d9／tree a02fe9d4 通過 Governance244／Runtime160／deploy-contract137，合併2dfd374e；actual development #138（38197908123）source5325ef77／同 tree 完成0.7.23／consumer1.0.4及canonical／workers.dev版本、D1、invalid Session驗收。七項canonical鏡像exact-sync通過。
+- [ ] 既有 core-portal Super Admin 實際中央登記／Workspace 啟用；操作瀏覽器沒有既有登入Session，由使用者在原登入頁完成，不能用CF token／bootstrap代替員工授權。
 - [ ] Approved Invoice App/scope metadata, prepare-cyid, actual Employee/App Access/private transport/original Windows acceptance and separately approved cutover.
 
 ## Optional consumer invalidation source
