@@ -30,6 +30,11 @@ internal sealed class AutomationSession : IDisposable
     private readonly AppLogger _log;
     private PhysicalMouseLock? _mouseLock;
     private AutomationOverlay? _overlay;
+    private SynchronizationContext? _ui;
+    private CancellationTokenSource _escape = new();
+
+    /// <summary>Cancelled the moment the user presses Esc during this run.</summary>
+    public CancellationToken EscapeToken => _escape.Token;
 
     public const string FullAutoTitle = "全自動運轉中";
     public const string InputTitle = "自動輸入中";
@@ -41,7 +46,13 @@ internal sealed class AutomationSession : IDisposable
     /// <summary>Locks the mouse and shows the notice; when already running, only the title follows.</summary>
     public void Begin(string title)
     {
-        _mouseLock ??= PhysicalMouseLock.Engage(_log);
+        if (_mouseLock is null)
+        {
+            if (_escape.IsCancellationRequested) { _escape.Dispose(); _escape = new CancellationTokenSource(); }
+            _ui = SynchronizationContext.Current;
+            _mouseLock = PhysicalMouseLock.Engage(_log);
+            _mouseLock.EscapePressed += OnEscape;
+        }
         try
         {
             _overlay ??= new AutomationOverlay();
@@ -70,8 +81,17 @@ internal sealed class AutomationSession : IDisposable
         }
     }
 
+    /// <summary>Esc: the run is told to stop and the notice says so at once.</summary>
+    private void OnEscape()
+    {
+        _log.Info("automation", "Esc pressed: stopping");
+        try { _escape.Cancel(); } catch (ObjectDisposedException) { }
+        _ui?.Post(_ => End(AutomationOutcome.Cancelled), null);
+    }
+
     public void Dispose()
     {
+        _escape.Dispose();
         _mouseLock?.Dispose();
         _mouseLock = null;
         _overlay?.HideNotice();

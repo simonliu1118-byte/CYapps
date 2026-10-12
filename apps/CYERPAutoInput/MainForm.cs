@@ -824,6 +824,8 @@ internal sealed class MainForm : Form
         try
         {
             Session.Begin(print == true ? AutomationSession.FullAutoTitle : AutomationSession.InputTitle);
+            // The physical Esc stops the run as soon as it is pressed, not at the next key poll.
+            using var escape = Session.EscapeToken.Register(() => { try { _automationCts?.Cancel(); } catch (ObjectDisposedException) { } });
             result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
             outcome = result.HandedOff.Length > 0 || result.Warnings.Count > 0 || result.SaveSkippedReason.Length > 0 || result.PrintProblem.Length > 0
                 ? AutomationOutcome.NeedsAttention

@@ -218,6 +218,10 @@ internal sealed class ShopeeScreenshotForm : Form
         var ownerOpacity = owner?.Opacity ?? 1;
         ShopeePageScanner.Result? result = null;
         var mouseLock = (PhysicalMouseLock?)null;
+        // Esc stops the scan the moment the hook sees it, also while the cards are being read.
+        using var stop = new CancellationTokenSource();
+        void Stop() { try { stop.Cancel(); } catch (ObjectDisposedException) { } }
+        var stopped = false;
         void Restore()
         {
             // In full auto the mouse stays locked after the scan, until the run ends or stops.
@@ -230,14 +234,30 @@ internal sealed class ShopeeScreenshotForm : Form
         {
             Opacity = 0;
             if (owner is not null) owner.Opacity = 0;
-            if (_session is not null) _session.Begin(AutomationSession.FullAutoTitle);
-            else mouseLock = PhysicalMouseLock.Engage(_log);
+            CancellationTokenRegistration? sessionStop = null;
+            if (_session is not null)
+            {
+                _session.Begin(AutomationSession.FullAutoTitle);
+                sessionStop = _session.EscapeToken.Register(Stop);
+            }
+            else
+            {
+                mouseLock = PhysicalMouseLock.Engage(_log);
+                mouseLock.EscapePressed += Stop;
+            }
+            using var unregister = sessionStop;
             result = await new ShopeePageScanner(_ocr, _log).ScanAsync(browser,
-                () => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, CancellationToken.None,
+                () => stop.IsCancellationRequested || (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, stop.Token,
                 // Back to this window as soon as the page is captured, with a progress bar for
                 // the reading still to do (user, 2026-10-11).
                 scrolled: () => { Restore(); ShowProgress("辨識中… 0%", 0, 100); },
                 readProgress: new Progress<double>(p => ShowProgress($"辨識中… {(int)(p * 100)}%", (int)(p * 100), 100)));
+        }
+        catch (OperationCanceledException)
+        {
+            _log.Info("page-scan", "stopped by Esc");
+            stopped = true;
+            _session?.End(AutomationOutcome.Cancelled);
         }
         catch (Exception ex)
         {
@@ -249,6 +269,12 @@ internal sealed class ShopeeScreenshotForm : Form
         {
             Restore();
             _capturing = false;
+        }
+        if (stopped && !IsDisposed)
+        {
+            HideProgress();
+            MessageBox.Show(this, "已停止自動擷取。可以按「開始」重來，或用「框選截圖」補上缺的部分後按「帶入表單」。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
         }
         if (result is null || IsDisposed) { _session?.End(); HideProgress(); DisposeCaptures(result); return; }
 
