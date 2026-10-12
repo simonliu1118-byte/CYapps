@@ -27,7 +27,7 @@ import {
 } from "./initial-access";
 import { json, requestIdFrom } from "./http";
 import { enforceLoginRateLimit } from "./rate-limit";
-import { handlePutDirectApplicationAccess, handleRoleAccessSnapshot } from "./role-admin";
+import { handlePutDirectApplicationAccess, handleRoleAccessSnapshot, handleRegisterWorkspaceApplication } from "./role-admin";
 import { handleGetSecurityPolicy, handleUpdateSecurityPolicy } from "./security-policy";
 import type { Env } from "./types";
 export { ConsumerAuthoritySync } from "./consumer-authority";
@@ -108,6 +108,9 @@ export default {
 
       if (request.method === "GET" && url.pathname === "/v1/admin/identity/snapshot") {
         return await handleRoleAccessSnapshot(request, env, requestId);
+      }
+      if (request.method === "POST" && url.pathname === "/v1/admin/identity/applications") {
+        return await handleRegisterWorkspaceApplication(request, env, requestId);
       }
       if (request.method === "POST" && url.pathname === "/v1/admin/identity/employees") {
         return await handleCreateEmployee(request, env, requestId);

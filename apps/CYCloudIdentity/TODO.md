@@ -2,9 +2,9 @@
 
 > 本文件只記錄 **current implementation status 與下一步**；不是永久規則來源。永久規則讀 `PROJECT_RULES.md`，產品/API/UI contract 讀 `README.md` 所列 active documents。
 
-## Current checkpoint — 2026-10-11
+## Current checkpoint — 2026-10-12
 
-- Current source release is **CYCloudIdentity 0.3.6 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.6 Build 0 已部署並驗證**，run `38111211344`（既有設定／Secrets／authority 保留，原 0.3.5 run 36821423383 為歷史）；source 與部署證據分開記錄。
+- Current source release is **CYCloudIdentity 0.3.7 Build 0**；單一 Login/Employee handler、共用 Email budget、Session resolver 與 public legacy API/field retirement 已完成。**Development 0.3.6 Build 0 已部署並驗證**，run `38111211344`（既有設定／Secrets／authority 保留，原 0.3.5 run 36821423383 為歷史）；source 與部署證據分開記錄。
 - CY Web coordinated source release **0.7.0 Build 0** adopts contract 1.0.2 and completes WorkLog/Settings/Audit Worker → D1 transport. Provider production release must wait for deployed core consumer health to confirm 1.0.2 adoption; no CY Web production business-data rollout is implied.
 - 0.2 direct Workspace Role / Identity Admin / direct App Access model 維持不變；0.3 的主要新增是新 Employee 首次 Email 驗證 credential flow。
 - 新 Employee 建立後，CYID 自動寄出 **Email 驗證**郵件與 8 字元一次性首次登入密碼。首次登入密碼：
@@ -20,7 +20,7 @@
 - Provider local acceptance 已證明：expiry、single-use、core-app-only、ticket-not-session、completion-no-session、ticket replay rejection、explicit re-login、resend/edit invalidation。
 - CYID 0.3 development deploy 已成功完成 remote migration `0007_initial_email_password.sql`、Worker deploy 與 Identity secret configuration。
 - Controlled real Email/browser lifecycle 驗收依使用者目前條件暫緩；這不重開已定案 contract，但仍是 production 前必要 acceptance。
-- CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.3 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
+- CYID shared consumer contract 已正式版本化為 **Consumer Contract 1.0.4 / Minimum Compatible 1.0.0**；所有完成接入的 consumer 必須宣告自己的 `CYID_CONSUMER_VERSION` 並維持在支援窗內。
 - CYAccountingWeb（CYACCweb）handoff 已收斂為 app-specific migration guide：`docs/consumers/CYACC_INTEGRATION_HANDOFF.md`；共同 Role / Session / App Access / first-login / recovery 規範只讀 `docs/CONSUMER_INTEGRATION_STANDARD.md`。
 - CYACC **V0.21.6 Build 1 / Draft PR #243** isolated development live acceptance run #96 已通過：USER login/read-only/Excel、Role change Session invalidation、ADMIN isolated write、App Access revoke/restore + Session invalidation、logout。Password Recovery Email/browser、Tablet 真機與 production cutover 仍為獨立 gate。
 - Cross-repository contract mirror 已定義 manifest + exact-sync 規則：CY Web 等外部 repo 必須鏡像 manifest 所列 7 個 artifacts 並在 governance/CI/deploy 前 byte-compare；同 repo consumer 直接讀 canonical files。
@@ -44,9 +44,17 @@
 - [x] 共通 deployment input／Invoice scope resolver follow-up source：四個 workflows 共用 Provider-name Secret；Invoice 只讀 Provider active Worker metadata／original business D1，不讀 Identity D1、不借 CYACC scope，不重建 Workspace；Provider drift 阻擋。本地回歸通過，CI 依 PR。
 - [x] 共通 Secret 已設定；#413 七 CI 通過並合併，唯讀 Invoice #29／CYACC main #608 實際通過，原 Invoice Workspace／Device hashes／history／Builtin保留，無 Identity D1／Invoice upload／authority switch。來源／run見 DEVELOPMENT_DEPLOYMENT。
 - [ ] Provider Invoice 兩 scope 尚未配置（#29 configured=false）；先經現行中央管理確認 registry／Workspace enablement及approved mapping，再prepare。缺 metadata不代表未註冊；不得重播 bootstrap或由Consumer直讀/寫Identity D1、借 production scope替代development。
-- [ ] 尚引用舊Variable的部署入口更新或明確退休／驗證後才刪同名Variable；Invoice deploy aeb3434f、Provider dev56c27685／retired prod8526ba1d已盤點，不重跑退休provisioning。
+- [x] 官方active與retired部署入口已同步Secret並read-back：Provider development #153／preflight #154通過；Invoice #31於Provider切換時在upload前阻擋，等待Provider完成的新snapshot #32通過，原Workspace／Device hashes／history／Builtin保留、無test upload／authority switch。Exact source／refs／run evidence見現行交接及Provider DEVELOPMENT_DEPLOYMENT。
+- [x] 使用者已刪除 development 同名 CYID_WORKER_NAME Variable 並保留 Secret；唯讀 Invoice #34（38195315134）通過，Cloud0.9.2／storage13／原 Workspace／Device／Builtin／FK 保留，Provider scope 仍 false，無 upload／Identity D1 access。
 - [ ] 實際private Fetcher／named RPC與App Access／Role／原Windows裝置驗收，使用真實consumer功能；不再增加遠端probe入口。配對／範圍／Free量測與正式切換仍獨立gate。
 - [ ] Temporary Workers Admin移除由使用者確認；不增加權限。刪除10339留歷史／非目前部署阻塞。
+
+## Application registration / CYInvoice next step
+
+- Source 0.3.7 / contract 1.0.4 adds optional core-portal Super Admin registration and Workspace enablement through the existing role-admin owner. Same current Session scope, immutable existing catalog metadata, protected core app, transactional authority recheck/audit; no Employee grant or consumer Workspace mutation.
+- [ ] Exact-head CI and development code-only upgrade; retain existing authority, Secrets, scope and seven migrations.
+- [ ] CY Web 0.7.23 / consumer 1.0.4 registration UI and canonical mirror synchronization, development deployment and actual Super Admin registration in the existing Workspace. Its admin hostname currently serves development 0.7.22; deployed access-table source equals main, so the missing column is not repaired by redeploying the old UI.
+- [ ] Approved Invoice App/scope metadata, prepare-cyid, actual Employee/App Access/private transport/original Windows acceptance and separately approved cutover.
 
 ## Optional consumer invalidation source
 

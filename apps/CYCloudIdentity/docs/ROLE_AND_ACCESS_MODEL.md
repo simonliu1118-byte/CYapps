@@ -87,6 +87,8 @@ Every valid Employee has `CYWEB = TRUE` locked/non-revocable so account self-ser
 - Super Admin automatically enters all Workspace-enabled Apps;
 - consumers receive direct `SUPER_ADMIN / ADMIN / USER` role; no Group-to-App role mapping.
 
+Application registration/Workspace enablement is a separate core-account-portal Super Admin action (canonical standard §17.1). It preserves stable Workspace identities and existing catalog entries and creates no Employee grants. Each App's business Workspace remains consumer-owned; a shared CYID Workspace is not a global replacement for consumer business Workspace IDs.
+
 ## 8. CY Web multi-module exception
 
 CY Web owns Customer/Order/Item/Outsourcing/WorkLog/future Module Access.

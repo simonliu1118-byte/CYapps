@@ -9,7 +9,7 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `4655460c3362232fd1711295f3565f00b464bdf9`（本輪證據文件基準）；#380／#384～#393／#402／#403／#412／#413 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
+| main | `7ac06e7ae864c7c4fa4191ffc3f66bfb35cc6fba`（本輪證據文件基準）；#380／#384～#393／#402／#403／#412／#413／#414 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
 | 已完成工程 PR | #380 工程基準／#385 買方名稱修改已合併；最新 Windows 功能 head `6c499108` 的 Windows #281／Cloud #393／Governance #1201 通過，工程包見下方 |
 | 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
 | 本輪工作線 | CYInvoice 功能已合併 main；CYID 綁定準備獨立接續，不再把歷史 feature branch 當未合併停點 |
@@ -57,9 +57,9 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 
 #413 source `8d3ed4366038b511e0c1f5ce50395907529030a2`／tree `a14f00aac19643e3d7e9145b9c26e8d87356ef05` 七項 exact-head CI 全通過，合併 main `4655460c3362232fd1711295f3565f00b464bdf9`（同一 tree）。使用者已完成共通 Secret；[唯讀 preflight #29](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191352230) 以 continuity `ea0d55a3c95826e4da652d0cf03be3a5a0c00aac`／同一 tree 通過，原 Cloud 0.9.2／API1／marker8／storage13／1 Workspace／4 Device records／Token hashes／history／FK／routes 保留、CYID false；expired undeployed no-D1 probe 仍1個。bundle／migration／deploy 三步均 skipped、private cleanup成功，沒有測試上傳、Identity D1 讀取或權威切換。CYACC main 的 [Validate and Deploy #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386) validate／deploy 都通過，證明新的共通 input 在既有 production resolver 可用；不表示 Invoice 已接入 production。
 
-#29 before/after 均確認 Provider 的 CYInvoice scope configured=false；CYINVOICE_APPLICATION_ID／CYINVOICE_WORKSPACE_ID 尚未配置，不能啟動 prepare-cyid 或開 CYID flag。尚未取得現行中央管理的 Application registry／Workspace enablement 證據，不能把缺部署 metadata 等同「App 尚未註冊」。source 現行 admin snapshot 可查看 Actor Workspace 的 apps／員工 App Access；沒有獨立的後加 Application／Workspace enablement 管理 route，bootstrap 只限空 Identity DB。下一步由 CYID 已授權中央管理流程確認既有註冊／核准 scope，不能重播 bootstrap、建立替代 Workspace、借 CYACC production scope 作 development 對應或由 Consumer 直讀／寫 Identity D1。實際 private transport、Employee/App Access／Role、原 Windows與正式切換仍待驗收。
+#29 before/after 均確認 Provider 的 CYInvoice scope configured=false；CYINVOICE_APPLICATION_ID／CYINVOICE_WORKSPACE_ID 尚未配置，不能啟動 prepare-cyid 或開 CYID flag。尚未取得現行中央管理的 Application registry／Workspace enablement 證據，不能把缺部署 metadata 等同「App 尚未註冊」。source 現行 admin snapshot 可查看 Actor Workspace 的 apps／員工 App Access；現行已部署版本尚無後加 Application／Workspace enablement 管理 route；Provider source 0.3.7／contract 1.0.4 補上中央 core-portal Super Admin 登記，部署與真人執行仍待完成，bootstrap 仍只限空 Identity DB。下一步由 CYID 已授權中央管理流程確認既有註冊／核准 scope，不能重播 bootstrap、建立替代 Workspace、借 CYACC production scope 作 development 對應或由 Consumer 直讀／寫 Identity D1。實際 private transport、Employee/App Access／Role、原 Windows與正式切換仍待驗收。
 
-Variable retirement gate 尚未完成：cyinvoice/cloud-dev-deploy at aeb3434f、deploy/cycloudidentity-development at 56c27685、歷史／已退休的 deploy/cycloudidentity-production at 8526ba1d 尚有 vars.CYID_WORKER_NAME。main 四個 deployment owners 與新的唯讀 preflight 已讀 Secret；舊值暫留，不重跑已退休的 provisioning／probe runs。待所有仍使用的入口更新或明確退休並驗證後，才由有 GitHub Environment 管理權限者刪除同名 Variable；不以 main 合併或固定日期代替此 gate。
+Variable retirement 已完成：官方 active／retired refs 已同步 Secret，使用者於 2026-10-12 確認刪除同名 Variable；刪除後唯讀 Invoice #34（38195315134）完整通過。歷史 gate 以 Git 追溯，不重跑舊 provisioning／probe runs。
 
 原 Workspace／Builtin／Device 延續設計與唯一部署 owner 保留，Provider metadata resolver 不成為 Employee authority；技術操作見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)。產品／canonical 版本不變，最新 Invoice business code 實際部署仍 #25；#29 為唯讀檢查。
 
@@ -248,3 +248,12 @@ Build 2 補最後撤銷邊界：aggregate 共用原 self-status parser（含 rev
 升级原可攜資料夾時覆蓋整包的程式檔，包含 package-files.json／Runtime；保留原 Data／Cache／Logs 與原 Workspace。不要僅換 EXE 而漏 manifest。雲端目前仍未部署 additive 0.9.2／private RPC；新同步在隔離 staging 更新 Gateway 後才可驗收。
 
 本次收尾只補 CI／Artifact 證據文件，不推進 VERSION／BUILD。後續純文件 head 不冒充本段功能 source 已測；最新 PR checks／engineering artifact 為即時入口。未完成：RC AA／AB／AC 與前置 A/B/C 實機、隔離 binding／帳號／App Access／Workspace continuity／用量量測、正式切換 gate、0-Device recovery 等原 TODO；未合併／部署／正式 Release。
+
+
+### 共通 Variable 退場已就緒 — 2026-10-12
+
+#414 證據文件 source e0050ac3／tree97ec5b3f 七 CI 通過、合併 main7ac06e7a。相同已測 tree 同步至部署入口；Provider development #153（38192970528）原0.3.6／authority metadata／history／runtime vars與Secrets保留，Provider唯讀 #154（38193349461）通過。Invoice #31（38192965762）在 Provider 正切換 active version 時，首個穩定性核對於upload前阻擋（ACTIVE_DEPLOYMENT_CHANGED）；after回CYID_PROVIDER_CHANGED，沒有新增版本上傳／部署。待Provider完成後重新取快照的Invoice #32（38193198316）成功：原Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records／Token hashes／history／FK／routes及Builtin保留，exact-active inheritance／uploaded與active readback／100% real-business部署通過，CYID false。Expired undeployed no-D1 probe仍1個，未上傳測試程式、重設Secret或restore。這是code/config入口同步，不是CYID authority切換。
+
+已read-back核對官方active與retired refs均改讀Secret：Invoice deploy e796909e、preflight ea0d55a3；Provider development a0209a16、preflight f22978e9；retired production b3184e15；retired Invoice binding-version910dd5b5／cleanup7c6e9df3／Provider probe3849fb80。retired production #14（38192977888）只執行無Secrets的retirement error gate，沒有重新provision；三個retired probe/cleanup refs無push runtime入口，不重跑歷史runs。main四個deployment owners相同Secret來源。使用者已確認刪除 development 同名 CYID_WORKER_NAME Variable 並保留 Secret；刪除後唯讀 #34（38195315134）完整通過，原 Cloud／Workspace／Device／Builtin／FK 保留，無 upload／Identity D1 access。
+
+Provider兩項Invoice scope仍未配置；中央registry/Workspace enablement尚未確認，不能就此啟用CYID。已核對CY Web main的帳號管理UI：超級管理員或Identity Admin於「帳號與權限 → 系統使用權」查看app清單；先只查看CYInvoice欄，不變更勾選，並核對該Portal的實際Provider/environment。不得把production清單直接當成development授權或缺metadata當成未註冊。
