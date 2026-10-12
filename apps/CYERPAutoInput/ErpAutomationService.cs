@@ -8,6 +8,12 @@ internal sealed class ErpAutomationService
 
     private readonly AppLogger _log;
     private readonly FastDetailGridVisionService _gridVision;
+    /// <summary>
+    /// Where ERP's editor really opened for each detail row (center Y inside the grid), so the
+    /// row pitch is measured instead of assumed: rows were 22 px on the user's PC (2026-10-12)
+    /// and the 24 px pitch put the 7th row's click below the row.
+    /// </summary>
+    private readonly Dictionary<int, int> _editorRowCenter = [];
     private readonly OpticalTextLocator _textVision;
     private HashSet<string> _noBatchItemCodes = new(StringComparer.OrdinalIgnoreCase);
     private readonly F2UnitCellLocator _unitCellLocator;
@@ -986,6 +992,7 @@ internal sealed class ErpAutomationService
             {
                 var geometry = await _gridVision.AnalyzeDetailGridAsync(grid.Handle, cancellationToken);
                 _log.Info("detail", $"geometry ready after first-row prime attempt={attempt} rows={geometry.RowCenterY.Count} columns={geometry.ColumnX.Count}");
+                _editorRowCenter.Clear();
                 return (grid, geometry);
             }
             catch (InvalidOperationException ex) when (attempt < 3 && ex.Message.StartsWith("Optical detail", StringComparison.Ordinal))
@@ -1052,9 +1059,12 @@ internal sealed class ErpAutomationService
             if (editor == 0)
             {
                 var focus = NativeMethods.FocusedControlOfForeground(root);
-                _log.Warn("detail", $"editor not ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)}");
+                NativeMethods.GetWindowRect(focus, out var focusRect);
+                _log.Warn("detail", $"editor not ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} focus=0x{focus:X}/{NativeMethods.ClassName(focus)} focus_rect={focusRect.Left},{focusRect.Top},{focusRect.Width}x{focusRect.Height} grid_top={freshRect.Top}");
                 continue;
             }
+            if (NativeMethods.GetWindowRect(editor, out var editorRect) && editorRect.Height > 0)
+                _editorRowCenter[visibleRow] = (editorRect.Top + editorRect.Bottom) / 2 - freshRect.Top;
 
             _log.Info("detail", $"editor ready row={visibleRow + 1} col={column} attempt={attempt} point={point.X},{point.Y} edit=0x{editor:X}/{NativeMethods.ClassName(editor)}");
             await Delay(90, cancellationToken);
@@ -1398,10 +1408,11 @@ internal sealed class ErpAutomationService
         if (geometry.RowCenterY.Count == 0 || !NativeMethods.GetWindowRect(grid.Handle, out var rect) || rect.Width <= 0 || rect.Height <= 0)
             throw new InvalidOperationException("無法取得商品明細位置，無法確認 ERP 是否已建立下一列；已停止避免錯位。");
 
-        var firstY = geometry.RowCenterY[0];
-        var maxVisible = Math.Max(0, (rect.Height - firstY - 6) / ProvenDetailRowPitch);
+        var firstY = _editorRowCenter.TryGetValue(0, out var seenFirst) ? seenFirst : geometry.RowCenterY[0];
+        var pitch = DetailRowPitch();
+        var maxVisible = Math.Max(0, (int)((rect.Height - firstY - 6) / pitch));
         var slot = Math.Min(rowNumber - 1, maxVisible);
-        var centerY = rect.Top + firstY + slot * ProvenDetailRowPitch;
+        var centerY = rect.Top + firstY + (int)Math.Round(slot * pitch);
         // 序號 digits sit at x≈13–46; the left edge holds the row indicator (*).
         var cell = Rectangle.FromLTRB(rect.Left + 12, centerY - 10, rect.Left + Math.Min(rect.Width, 48), centerY + 10);
 
@@ -1504,6 +1515,20 @@ internal sealed class ErpAutomationService
         throw new InvalidOperationException($"ERP 明細 column={column} 目前不在可視範圍，嘗試水平捲動後仍無法定位。");
     }
 
+    /// <summary>
+    /// Detail row pitch: measured from the first and the furthest of the first six rows whose
+    /// editor has opened in this document, else the long-standing 24 px.
+    /// </summary>
+    private double DetailRowPitch()
+    {
+        var known = _editorRowCenter.Where(p => p.Key <= 5).OrderBy(p => p.Key).ToList();
+        if (known.Count < 2) return ProvenDetailRowPitch;
+        var (first, last) = (known[0], known[^1]);
+        var pitch = (last.Value - first.Value) / (double)(last.Key - first.Key);
+        // Outside a sane range the measurement is wrong (an editor in another row); keep 24.
+        return pitch is >= 16 and <= 36 ? pitch : ProvenDetailRowPitch;
+    }
+
     private async Task<(GridGeometry Geometry, Point Point, Rectangle GridRect)> ResolveFreshDetailCellPointAsync(
         nint gridHwnd,
         GridGeometry geometry,
@@ -1527,12 +1552,13 @@ internal sealed class ErpAutomationService
             if (visibleRow <= 0 || activeGeometry.RowCenterY.Count == 0 || !activeGeometry.ColumnX.TryGetValue(column, out var x))
                 throw new InvalidOperationException($"光學明細定位缺少 column={column}, row={visibleRow + 1}。");
 
-            var firstY = activeGeometry.RowCenterY[0];
-            var maxVisible = Math.Max(0, (activeGeometry.ScreenRect.Height - firstY - 6) / ProvenDetailRowPitch);
+            var firstY = _editorRowCenter.TryGetValue(0, out var seenFirst) ? seenFirst : activeGeometry.RowCenterY[0];
+            var pitch = DetailRowPitch();
+            var maxVisible = Math.Max(0, (int)((activeGeometry.ScreenRect.Height - firstY - 6) / pitch));
             var clickRow = Math.Min(visibleRow, maxVisible);
-            var y = firstY + clickRow * ProvenDetailRowPitch;
+            var y = firstY + (int)Math.Round(clickRow * pitch);
             capturedPoint = new Point(activeGeometry.ScreenRect.Left + x, activeGeometry.ScreenRect.Top + y);
-            _log.Info("detail", $"row point extrapolated logical_row={visibleRow + 1} visible_slot={clickRow + 1} pitch={ProvenDetailRowPitch}");
+            _log.Info("detail", $"row point extrapolated logical_row={visibleRow + 1} visible_slot={clickRow + 1} pitch={pitch:0.##}");
         }
 
         if (!NativeMethods.GetWindowRect(gridHwnd, out fresh) || fresh.Width <= 0 || fresh.Height <= 0)
