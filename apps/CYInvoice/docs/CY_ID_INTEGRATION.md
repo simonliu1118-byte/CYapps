@@ -388,10 +388,14 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 
 ### 14.8 保留原 Workspace 的綁定準備與共通參數
 
-#412 的 prepare-cyid 已經六項 CI 通過並合併，原 Workspace／Built-in 保留。2026-10-12 依使用者同 Repo 共用參數的確認，接續 source 讓 CYInvoice／CYID／CYACC deployment 使用同一 Provider base-name Secret；CYACC 原 production resolver 不變，各 Application ID 獨立。CYInvoice 由 Provider active Worker deployment metadata 取得自己的兩項 scope，原 business Workspace 由原 D1 唯一 active Workspace 確認，不借 CYACC 的 scope、不建立新 Workspace或讀 CYID D1。缺 metadata 或 Provider drift 阻擋準備，public health／配置不算授權。操作與安全邊界見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)；Secret migration／sourceCI／唯讀證據見現行交接，待辦只在 TODO §7.3.3。#25仍是最新 actual Built-in 部署，實際準備／private transport／Employee 授權／Windows／正式切換待驗收。
+#412 的 prepare-cyid 已經六項 CI 通過並合併，原 Workspace／Built-in 保留。2026-10-12 依使用者同 Repo 共用參數的確認，接續 source 讓 CYInvoice／CYID／CYACC deployment 使用同一 Provider base-name Secret；CYACC 原 production resolver 不變，各 Application ID 獨立。CYInvoice 由 Provider active Worker deployment metadata 取得自己的兩項 scope，原 business Workspace 由原 D1 唯一 active Workspace 確認，不借 CYACC 的 scope、不建立新 Workspace或讀 CYID D1。缺 metadata 或 Provider drift 阻擋準備，public health／配置不算授權。操作與安全邊界見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)；Secret migration／sourceCI／唯讀證據見現行交接，待辦只在 TODO §7.3.3。#32是目前 actual Built-in 部署，實際準備／private transport／Employee 授權／Windows／正式切換待驗收。
 
 
 2026-10-12 actual checkpoint：#413七項CI通過並合併，使用者完成Secret、唯讀#29及CYACC main #608通過；#29確認Invoice scope configured=false，metadata／registered enablement及private acceptance仍待補，不因common input成功開CYID flag。舊Variable尚有舊deployment refs使用，退場條件與精確證據見現行交接及TODO，不重播bootstrap或猜scope。
 
 
-後續同一已測source的Provider #153／Invoice #32 real-business入口更新通過，Builtin／原Workspace與資料保留；#31於Provider版本切換期間在upload前被穩定性guard攔住，#32使用fresh snapshot。Active／retired refs的Variable引用已收斂，現在待使用者刪除同名Variable、保留Secret。中央scope仍未確認；完整refs／events僅在現行交接及TODO追蹤。
+後續同一已測source的Provider #153／Invoice #32 real-business入口更新通過，Builtin／原Workspace與資料保留；#31於Provider版本切換期間在upload前被穩定性guard攔住，#32使用fresh snapshot。Active／retired refs的Variable引用已收斂，使用者已刪除同名 Variable 並保留 Secret，唯讀 #34（38195315134）通過。中央scope仍未確認；完整refs／events僅在現行交接及TODO追蹤。
+
+### 14.9 中央登記接續（2026-10-12）
+
+Provider source 0.3.7／canonical 1.0.4 新增既有 core-portal Super Admin 的 App 登記／Workspace 啟用，CY Web 接續 source 0.7.23。兩者尚待 CI／開發環境部署／真人中央登記，不是 Invoice 已切換的證據。綁定只指定原 CYInvoice Workspace 的身分來源，原 ID／Device／資料保留；同一 CYID Workspace 可供多 App 各自業務 Workspace 使用。單一 App 多業務 Workspace 的成員／授權是未來 app-local 設計，本次仍固定一組。中央登記不替代 Provider scope metadata、private binding 或員工 App Access／Role 與原 Windows 驗收。

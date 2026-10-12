@@ -1,4 +1,5 @@
-import { requireIdentityAdministrator, requireWorkspaceAdmin } from "./admin-auth";
+import { requireIdentityAdministrator, requireWorkspaceAdmin, requireWorkspaceSuperAdmin } from "./admin-auth";
+import { sha256Hex } from "./crypto";
 import { json, readJsonObject } from "./http";
 import { effectiveWorkspaceRole, isCoreAccountApplication, type StoredEmployeeRole } from "./role-access";
 import type { Env, JsonValue } from "./types";
@@ -21,6 +22,86 @@ function normalizeApplicationId(value: unknown): string | null {
   const normalized = value.trim().toUpperCase();
   if (normalized.length < 2 || normalized.length > 64 || /[^A-Z0-9_-]/.test(normalized)) return null;
   return normalized;
+}
+
+// Recheck the same core-account Session inside the mutation transaction. This
+// prevents a revoked Session or concurrent authority transfer from registering
+// an application after the initial management guard succeeded.
+const liveCoreSuperAdmin = `
+  SELECT 1 FROM identity_sessions s
+  JOIN employees e ON e.employee_id = s.employee_id AND e.workspace_id = s.workspace_id
+  JOIN employee_credentials c ON c.employee_id = e.employee_id
+  JOIN workspaces w ON w.workspace_id = s.workspace_id
+  JOIN applications a ON a.application_id = s.application_id
+  JOIN workspace_applications wa ON wa.workspace_id = s.workspace_id AND wa.application_id = s.application_id
+  WHERE s.session_hash = ?1 AND s.workspace_id = ?2 AND s.employee_id = ?3
+    AND s.application_id = ?4 AND s.revoked_at IS NULL
+    AND s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    AND s.credential_version = c.credential_version AND e.enabled = 1
+    AND w.status = 'active' AND w.super_admin_employee_id = e.employee_id
+    AND a.status = 'active' AND wa.enabled = 1`;
+
+export async function handleRegisterWorkspaceApplication(
+  request: Request, env: Env, requestId: string,
+): Promise<Response> {
+  const coreApplicationId = request.headers.get("x-identity-application")?.trim().toUpperCase() ?? "";
+  const actor = isCoreAccountApplication(env, coreApplicationId)
+    ? await requireWorkspaceSuperAdmin(request, env) : null;
+  if (!actor) {
+    return json(env, requestId, 403, {
+      error: { code: "CORE_SUPER_ADMIN_REQUIRED", message: "Current Workspace Super Admin authority through the core account application is required." },
+    });
+  }
+  const body = await readJsonObject(request);
+  const applicationId = normalizeApplicationId(body?.applicationId);
+  const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
+  if (!body || Object.keys(body).some(key => !["applicationId", "displayName"].includes(key))
+      || !applicationId || !displayName || [...displayName].length > 120 || /[\u0000-\u001f\u007f]/.test(displayName)) {
+    return json(env, requestId, 400, {
+      error: { code: "INVALID_APPLICATION_REGISTRATION", message: "Application ID and display name are required; Workspace and grants cannot be supplied." },
+    });
+  }
+  if (isCoreAccountApplication(env, applicationId)) {
+    return json(env, requestId, 409, {
+      error: { code: "CORE_APPLICATION_ACCESS_LOCKED", message: "Core account application registration cannot be changed." },
+    });
+  }
+
+  const token = request.headers.get("authorization")!.trim().replace(/^Bearer\s+/i, "").trim();
+  const now = new Date().toISOString();
+  const values = [await sha256Hex(token), actor.workspaceId, actor.employeeId, coreApplicationId, now, applicationId, displayName];
+  const registeredApplication = `SELECT 1 FROM applications a JOIN workspace_applications wa ON wa.application_id = a.application_id
+    WHERE a.application_id = ?6 AND a.display_name = ?7 AND a.status = 'active' AND wa.workspace_id = ?2 AND wa.enabled = 1`;
+  const results = await env.DB.batch([
+    env.DB.prepare(`INSERT INTO applications(application_id, display_name, status, created_at, updated_at)
+      SELECT ?6, ?7, 'active', ?5, ?5 WHERE EXISTS (${liveCoreSuperAdmin})
+      ON CONFLICT(application_id) DO NOTHING`).bind(...values),
+    env.DB.prepare(`INSERT INTO workspace_applications(workspace_id, application_id, enabled, created_at, updated_at)
+      SELECT ?2, ?6, 1, ?5, ?5 FROM applications a
+      WHERE a.application_id = ?6 AND a.display_name = ?7 AND a.status = 'active' AND EXISTS (${liveCoreSuperAdmin})
+      ON CONFLICT(workspace_id, application_id) DO UPDATE SET enabled = 1, updated_at = excluded.updated_at
+      WHERE workspace_applications.enabled <> 1`).bind(...values),
+    env.DB.prepare(`INSERT INTO identity_audit_events(event_id, workspace_id, actor_employee_id, application_id, event_type, detail_json, created_at)
+      SELECT ?8, ?2, ?3, ?6, 'workspace_application_registered', '{"enabled":true}', ?5
+      WHERE EXISTS (${liveCoreSuperAdmin}) AND EXISTS (${registeredApplication})`).bind(...values, `audit_${crypto.randomUUID()}`),
+    env.DB.prepare(`SELECT EXISTS (${liveCoreSuperAdmin}) AS authorized,
+      EXISTS (${registeredApplication}) AS registered`).bind(...values),
+  ]);
+  const outcome = results[3].results?.[0] as { authorized?: number; registered?: number } | undefined;
+  if (outcome?.authorized !== 1) {
+    return json(env, requestId, 403, {
+      error: { code: "CORE_SUPER_ADMIN_REQUIRED", message: "Workspace authority or Session changed before registration." },
+    });
+  }
+  if (outcome.registered !== 1) {
+    return json(env, requestId, 409, {
+      error: { code: "APPLICATION_REGISTRATION_CONFLICT", message: "Application ID already has another display name or is globally disabled; existing registration was preserved." },
+    });
+  }
+  return json(env, requestId, 200, {
+    workspaceId: actor.workspaceId,
+    application: { applicationId, displayName, enabled: true },
+  });
 }
 
 async function audit(

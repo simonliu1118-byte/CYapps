@@ -2,6 +2,10 @@
 
 This changelog tracks consumer-visible CYCloud Identity contract revisions. It is a technical compatibility record, not a fourth permanent-rule layer.
 
+## 1.0.4 — 2026-10-12
+
+Consumer Impact: **BACKWARD_COMPATIBLE**. Add optional core-portal Super Admin application registration/enablement (§17.1). The current authenticated Workspace is retained; catalog collisions/global disablement/core application changes fail closed. Transactional current-authority checks and audit cover registration, with no automatic Employee grants, new Workspace, business-data mutation or bootstrap replay. Provider source is 0.3.7 Build 0; minimum remains 1.0.0. Existing Fetcher/RPC consumers need no changes. CY Web must synchronize canonical mirrors and adopt 1.0.4 before exposing the new operation; actual development registration, consumer bindings and production approval remain separate gates.
+
 ## 1.0.3 — 2026-10-10
 
 Consumer Impact: **BACKWARD_COMPATIBLE**. Add the optional named private `ConsumerAuthoritySync.invalidateCache` RPC capability described in the canonical standard §11.1. It only invalidates supplied subordinate cache descriptions against current indexed authority; no positive grant, verifier export, Session, public route, cursor or persistent login is added. Provider source advances to 0.3.6 Build 0. Existing Fetcher login/resolve/logout consumers remain supported; minimum compatible stays 1.0.0. Production deployment and cross-repository canonical mirror synchronization remain separate gates.
