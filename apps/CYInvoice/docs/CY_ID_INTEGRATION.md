@@ -1,12 +1,12 @@
 # CYInvoice × CY ID 整合設計基準
 
-更新日期：2026-10-11（原設計基準：2026-09-29）
+更新日期：2026-10-12（原設計基準：2026-09-29）
 
 本文件記錄 CYInvoice 作為 CY ID / CYCloud Identity consumer 時已確認的產品邊界。這是 CYInvoice 端的設計／需求文件，不定義 CY ID／CYWEB 內部 schema、Group 儲存方式、Application Access 資料模型或管理介面實作。
 
-Local／Built-in foundation、V2.6.14 介面與 Device metadata 均已由 #380 合併（包含 #216／#379 ancestry）。CYID adapter／binding／offline consumer 已實作；原 development Cloud 0.9.2 additive rollout 與 Provider 0.3.6 升級已完成，CYID flag 仍關閉、Built-in 與原 Workspace／Device 保留；真實授權／Windows 驗收及正式切換未完成，0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
+Local／Built-in foundation、V2.6.14 介面與 Device metadata 均已由 #380 合併（包含 #216／#379 ancestry）。CYID adapter／binding／offline consumer 已實作；development Cloud0.9.2／Provider0.3.7 已部署，使用者完成中央登記／scope，實際 prepare-cyid #39 完成私有綁定配置。CYID flag 仍關閉、Built-in 與原 Workspace／Device 保留；真實 transport／授權／Windows 驗收及正式切換未完成，0-Device recovery 尚未實作。最新停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，未完成工作只在 [TODO.md](TODO.md) 追蹤。
 
-CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.3）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
+CYID 共通語意的唯一來源為 [Consumer Integration Standard](../../CYCloudIdentity/docs/CONSUMER_INTEGRATION_STANDARD.md)、CONSUMER_CONTRACT_VERSION（1.0.4）、CONSUMER_MIN_COMPATIBLE_VERSION（1.0.0）與 CONSUMER_SYNC_MANIFEST.json。同 repo 直接讀 canonical package，本文件只描述 CYInvoice 的 desktop／Device／offline 差異，不複製或重新定義 shared contract。
 
 ## 1. 產品目標
 
@@ -398,4 +398,6 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 
 ### 14.9 中央登記接續（2026-10-12）
 
-Provider source 0.3.7／canonical 1.0.4 新增既有 core-portal Super Admin 的 App 登記／Workspace 啟用，CY Web 接續 source 0.7.23。兩者已完成 CI／開發部署（Provider #416／#158，Web #146／#138），真人中央登記仍待完成；不是 Invoice 已切換的證據。綁定只指定原 CYInvoice Workspace 的身分來源，原 ID／Device／資料保留；同一 CYID Workspace 可供多 App 各自業務 Workspace 使用。單一 App 多業務 Workspace 的成員／授權是未來 app-local 設計，本次仍固定一組。中央登記不替代 Provider scope metadata、private binding 或員工 App Access／Role 與原 Windows 驗收。
+Provider source 0.3.7／canonical 1.0.4 新增既有 core-portal Super Admin 的 App 登記／Workspace 啟用，CY Web 接續 source 0.7.23。兩者已完成 CI／開發部署（Provider #416／#158，Web #146／#138）。使用者已透過中央管理完成 CYInvoice 登記／目前身分 Workspace 啟用與 Provider runtime scope；唯讀 #38 及實際 prepare-cyid #39 完成兩個私有 bindings／三個 approved scope vars readback，原 Invoice Workspace／Device／Token hashes／資料保留，CYID_ENABLED=false。配置不等於私有 transport 或 Employee／App Access／Role 已驗收；原 Windows／AA／AB／AC 與受控切換仍待完成，證據集中現行交接與 TODO §7.3.3。
+
+綁定只指定原 CYInvoice Workspace 的身分來源，原 ID／Device／資料保留；同一 CYID Workspace 可供多 App 各自業務 Workspace 使用。單一 App 多業務 Workspace 的成員／授權是未來 app-local 設計，本次仍固定一組。中央登記不替代員工 App Access／Role 與原 Windows 驗收，Device Token 不代表 Employee 授權。

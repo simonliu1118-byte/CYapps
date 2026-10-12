@@ -2,6 +2,12 @@
 
 > Development only. Production deployment, production DNS/custom domain and paid-tier changes remain out of scope.
 
+## Latest checkpoint — Invoice private binding preparation, 2026-10-12
+
+The user completed CYInvoice central registration/current Identity Workspace enablement through the existing development core portal, then configured the Provider's two Invoice runtime scope variables. Ordinary Employee App Access/Role readiness is not implied. Invoice [read-only #38](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203645406) confirmed scope configured=true, with no Consumer Identity D1 access. [Actual prepare-cyid #39](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203790273), source `2e21c8709f0ef35e665de4d48d4a069b310d1257` / tree `c1d303e4d3653c9bd03a034be335bb740c6c2101`, verified both private service targets, the ConsumerAuthoritySync entrypoint and three approved scope vars, exact inherited settings and 100% reviewed business deployment. Original Cloud0.9.2/API1/marker8/storage13, one business Workspace/four Device records, Token hashes/employee/history/FK/routes remain; migrations skipped and private files removed. Provider remains development0.3.7 / canonical1.0.4 / minimum1.0.0. Recovery UTC `2026-10-12T04:27:16.969Z`, not a restore rehearsal.
+
+CYID_ENABLED=false and Built-in remain. No test code upload, Secret replacement, new Invoice Workspace, rejoin or authority switch. Binding configuration does not prove live Fetcher/RPC or Employee/App Access/Role authorization. Original Windows upgrade/Built-in continuity and employee readiness come next, followed by controlled RC AA/AB/AC/cutover acceptance; production and Release remain separate approvals. Older dated sections below preserve historical evidence, not the current deployment/scope state. Invoice handoff/RC/TODO are the consumer acceptance owners; no actual IDs or credentials are recorded here.
+
 ## Public-repo boundary
 
 The repository contains only a placeholder deployment template. Do not commit actual Worker names, D1 identifiers, Email sender addresses, provider credentials, OTP pepper, bootstrap secret, Workspace data, Employee data or real Application catalog/access data.
@@ -124,4 +130,4 @@ CYID #416 final head cbae06a0 / tree8fe98f7c passed all eight checks (including 
 
 CY Web #146 head8aad63d9 / treea02fe9d4 passed Governance244, Runtime160 and deployment contract137, merged2dfd374e. Actual development #138 (38197908123), continuity source5325ef77 / same tested tree, serves0.7.23/consumer1.0.4; canonical and workers.dev health/source/D1 and invalid Session acceptance passed. Existing sync script synchronized all seven canonical artifacts. The new Super Admin registration UI is available at the existing development account portal.
 
-Actual approved CYInvoice registration/enablement and Employee App Access, Provider runtime scope metadata, private bindings, original Windows acceptance and separately approved cutover remain pending. The agent browser has no authenticated Session; an authorized existing Super Admin must execute the current-Workspace registration through the normal UI. No Invoice Workspace, Device Token, business data or CYID flag changed.
+Central registration/current Workspace enablement was subsequently completed by the user; Invoice runtime scope and binding preparation passed #38/#39 as recorded at the top. Employee App Access/Role/Email readiness, live transport, original Windows acceptance and reviewed cutover remain pending. Original business Workspace/Device Token/data remain and CYID is disabled.
