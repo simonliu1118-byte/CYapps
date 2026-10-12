@@ -1,6 +1,6 @@
 # CYInvoice 雲端版長期藍圖與上線路線
 
-更新日期：2026-10-09。現行工程版本 V2.6.14；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
+更新日期：2026-10-13。現行工程版本 V2.6.19 Build 0；本文件保留產品藍圖，實作／CI／部署停點見 [現行交接](CLOUD_WORK_HANDOFF.md)，待辦只在 [TODO.md](TODO.md)。
 
 本文件整理 CYInvoice 從目前單機版進入多機雲端協調後的產品邊界、長期擴充方向、資料責任與分階段順序。若由新的長時間工作階段／ChatGPT Work 接手目前 Identity 階段，先依 `AGENTS.md` 讀永久規則，再讀 `CLOUD_WORK_HANDOFF.md`。
 
@@ -287,6 +287,8 @@ Cloud：
 ### Phase D — 正式折讓 API
 
 Cloud coordination 成熟後再完成 `/json/g0401` / `/json/g0501` 與 allowance number global uniqueness；目前仍依已定案的 interim `invoice_query`／人工流程。
+
+2026-10-13 使用者決定：V2.6.19 已知的人工折讓逐筆歷史及狀態顯示缺陷，不再補修 V2 工作流程，待 V3.0 正式折讓與跨機 Work Item／Audit 一起重做。新流程需保存逐筆申請／處理 actor、時間、原因、含稅金額、官方結果／取消／行政結案等可稽核欄位，支援同發票多筆、跨裝置 revision／原子操作、未知結果保守處理、可驗證的舊資料遷移與 retention。此條為 V3 需求，不能把現行缺陷當作已修復，也不能以本地 resolved 狀態冒充光貿官方成功。
 
 ### Phase E — 未來 Company
 

@@ -4,7 +4,25 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：CYID 原機驗證成功；折讓歷史未修，Release 暫停 — 2026-10-13
+## 最新停點：V2.6.19 本批改本地驗收，折讓歷史改列 V3.0 — 2026-10-13
+
+2026-10-13 使用者決定：折讓人工處理的逐筆歷史／狀態缺陷**本版不修**，隨 V3.0 正式折讓流程與 Cloud Work Item／Audit 重新設計；已知資料缺漏不標示已修復、也不阻擋本批 Release。其餘待驗項目由 AI 以**本地／隔離自動測試與已通過的精確 source GitHub CI** 作本批接受判斷，無須使用者再逐項進行 Windows、光貿、CYID 多裝置實測；過去未取得的 live 證據仍保持未驗，不將 CI 冒充真實裝置的結果。這是本批驗收例外，不自行修改永久規則或直接代表正式環境全部驗收。
+
+**強制雲端安全邊界：不得新建、上傳或部署任何 Cloudflare 測試 Worker、遠端測試版本或 handler。** 以前建立的測試 Worker／版本有無法刪除的紀錄；停止刪除重試，亦不得以新測試 Worker 補驗。不改動原 development／production Worker、D1、Workspace、Device、Token、使用者資料或 CYID 真實帳號。驗收限本地/CI isolated fixtures；正式 Release workflow 是只從 main 建置 Windows 套件的獨立流程，不是 Cloudflare deploy。
+
+### 本批已核對之可重用工程證據
+
+- V2.6.19 買方名稱／Windows 工程原始碼 `6c499108`：[Windows Build #281](https://github.com/simonliu1118-byte/CYapps/actions/runs/38111161002) job `build-windows-x64` success；[Cloud Check #393](https://github.com/simonliu1118-byte/CYapps/actions/runs/38111161004) jobs `validate`、`windows-client` success；Governance 成功。涵蓋 Windows Build、核心測試、WinForms smoke、工程包與公共安全掃描等 CI steps，不等於使用者機器的 UI 實測。
+- CYID 啟用準備與 runtime contract source `70514413`：[Cloud Check](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206171458) 的 `validate`、`windows-client` 全成功，[Governance](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206171482) 成功；實際 development 啟用 #42 保留原 Workspace／4 Device／Token hashes／history／FK。原 Windows CYID 帳密進設定成功有使用者先前回報；不擴大成全部角色與裝置實測。
+- main 現行產品仍 **V2.6.19 Build 0**；本輪只做驗收／交接／V3 路線圖文件，不改產品核心、schema、Cloud 套件或版本。V2.6.19 本批不為人工折讓已知缺陷開新修補分支或升版。
+- 本會話的執行容器沒有 Windows／.NET SDK，且不能透過網路 clone；因此沒有在此容器重跑 WinForms 或 .NET。採用上述**已完成、且對應既有 source 的實際 GitHub Actions CI**作可核對的本批驗收證據，不編造新本地測試結果。
+- V2.6.19 不是宣告支援零裝置復原；LAST_ACTIVE_DEVICE、已知拒絕不離線降級、AMEGO 不明結果不重送等安全不變量不改。AA／AB／AC、DPI、真實 AMEGO 等未跑項目在 RC_TEST 仍不勾選，列為後續 live evidence／V3 評估，不阻擋此輪經使用者接受之工程版發行。
+
+原先 **2026-10-12 23:22** 的本批正式 Release 請求保持記錄；使用者本次允許調整驗收門檻，不代表改為自動／持續發布。正式發行仍依 PROJECT_RULES 只能從 `main` 手動啟動 `cyinvoice-release.yml`，重新建置、掃描、測試、產生 ZIP 與 SHA-256；如當前工具無權 `workflow_dispatch`，不可把工程包偽裝成正式 Release。尚未執行的正式發布步驟必須明確記錄。
+
+### 之前的調查紀錄（現已改為 V3.0 待辦）
+
+## 歷史停點：CYID 原機驗證成功；折讓歷史未修，當時 Release 暫停 — 2026-10-13
 
 本輪只更新文件。Windows 仍 V2.6.19 Build 0，沒有本項折讓修正 commit、沒有新 tag／Release。文件基準 main d4552bec4684d93372d90f87a1e10090e4a6a427；#420 啟用及 #422 證據文件已合併，本輪不修改其他專案。
 

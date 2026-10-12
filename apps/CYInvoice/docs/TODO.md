@@ -2,18 +2,18 @@
 
 本檔追蹤目前未完成、需要後續驗證或已明確延後的工作；7.3 保留本輪完成核對項供切換 gate 追溯。已完成內容與歷史決策由 README、PR、測試與設計文件保存。
 
-更新日期：2026-10-13（Asia/Taipei）。目前 **V2.6.19 Build 0**；#216／#379 已由 #380 進入 main，#420／#422 完成 CYID development 啟用與證據。原機 CYID 帳密進設定已由使用者確認，折讓人工歷史缺欄位尚未修正。使用者已要求本批 Release，目前因缺陷與驗收暫停，未建立新 tag／Release；最後核對正式版仍 cyinvoice-v2.4.2。
+更新日期：2026-10-13（Asia/Taipei）。目前 **V2.6.19 Build 0**；#216／#379 已由 #380 進入 main，#420／#422 完成 CYID development 啟用與證據。原機 CYID 帳密進設定已由使用者確認。2026-10-13 使用者決定折讓人工歷史缺欄位不在 V2.6.19 修正，併入 V3.0 折讓流程重做；本批其餘項目准以本地／隔離測試及已通過的精確 source CI 作版本驗收，無須額外要求使用者逐項實機操作。此決定只調整本批驗收 gate，不代表尚未執行的實機或實際 Cloud 權限驗收已通過。前次本批 Release 要求仍有效；尚無新 tag／Release，最後核對正式版仍 cyinvoice-v2.4.2。
 
 唯一現行交接：[CLOUD_WORK_HANDOFF.md](CLOUD_WORK_HANDOFF.md)；唯一步驟清單：[RC_TEST.md](RC_TEST.md)。9/29 NEXT_CHAT_HANDOFF 與 V2.5 設計均為歷史資料，不能重新開啟已完成工作。接手前仍依 AGENTS.md 先讀三層永久規則，本檔不是額外規則層。
 
-Cloud source／原 development 0.9.2／API1／marker8／storage13，actual #42 已核對 CYID_ENABLED=true 與原 Workspace／Device Token hashes／history／FK 保留。單台原機設定驗證成功；其餘角色／裝置、60 秒刷新／斷線／撤銷仍待驗。舊版本段落為歷史證據，不能當現行旗標。
+Cloud source／原 development 0.9.2／API1／marker8／storage13，actual #42 已核對 CYID_ENABLED=true 與原 Workspace／Device Token hashes／history／FK 保留。單台原機設定驗證成功；其餘角色／裝置、60 秒刷新／斷線／撤銷的真實多裝置操作未做，交由既有自動化／本地替身作本批版本驗收，未取得的 live 證據仍如實保留供後續確認。**禁止為測試建立／上傳／部署任何 Cloudflare 測試 Worker／測試版本／handler；既有無法刪除的測試 Worker 不重試刪除、不增建替代物；不更動現有 Cloudflare Worker、D1 或真實裝置／帳號。** 舊版本段落為歷史證據，不能當現行旗標。
 
 ## 0. 接續優先順序
 
 | 優先 | 未完成工作 | 驗收位置／依賴 |
 | --- | --- | --- |
-| 第一優先 | 折讓人工處理詳情缺申請／處理欄位：查明路徑、逐筆歷史及狀態修正 | §1.1／RC AD；尚未改碼，Release 暫停 |
-| 目前 | V2.6.19 查無買方名稱可人工輸入／留空以統編送出 | RC D.12；source 6c499108 的 Windows #281／Cloud #393／Governance #1201 與工程包通過，實機待驗收 |
+| V3.0 延後 | 折讓人工處理歷史缺申請／處理欄位；隨 V3 雲端 Work Item／正式折讓流程整體重做 | §1.1／§6／§7.5；V2.6.19 已知缺陷，不再阻擋本批 Release |
+| 本批本地核准 | V2.6.19 查無買方名稱可人工輸入／留空以統編送出 | RC D.12；source 6c499108 的 Windows #281／Cloud #393／Governance #1201 與工程包通過；本批不以新的真人實機操作為必要條件 |
 | 目前 | V2.6.14 裝置管理、使用版本／最後使用與改名；保留 V2.6.13 介面 | RC Z／Y；source CI 已通過、人工尚待驗收 |
 | 目前 | V2.6.12 邀請首次加入與首次說明 | RC X；舊包重開成功有使用者證據，修正版首次成功待實機 |
 | 目前 | V2.6.11 處理中／上傳問題分流、舊資料結案、Danger button／號碼隱藏 | RC W；Windows #258 通過，人工待測 |
@@ -28,19 +28,20 @@ Cloud source／原 development 0.9.2／API1／marker8／storage13，actual #42 �
 - [ ] 完成 RC W 的實機驗收並記錄包／環境／結果：正常等待→完成、等待→錯誤→恢復、數量／公司隔離、舊折讓 null 分類、無 active upload issue 的作廢仍能管理員結案。
 - [x] PR #216／#379 head 已包含於 #380 ancestry 並合併 main；V2.6.14 裝置管理／邀請／分流實機驗收仍在 RC Z／X／W，不以工程合併代替。
 
-本檔既有未勾選實機項目代表「尚未取得可引用證據」，不等於已發現 defect。已完成工程證據集中在交接／CHANGELOG，不把 CI 自動勾成人工成功。
+本檔既有未勾選實機項目代表「尚未取得可引用證據」，不等於已發現 defect。**使用者本次批准改用本地驗收作 V2.6.19 本批發行判斷；未執行的真實 AMEGO、Windows DPI、CYID 角色與多裝置撤銷等仍不能標成實機通過。** 已完成工程證據集中在交接／CHANGELOG，不把 CI 自動勾成人工成功。
 
 - [ ] 完成 RC Z：active 清單、獨立新增視窗標籤／欄位、A/B 升級重啟回報、離線值保留、超管改名與 revoked 歷史仍可由雲端管理查詢。
 
-## 1.1 折讓人工處理歷史缺欄位（2026-10-12 回報；尚未修正）
+## 1.1 折讓人工處理歷史缺欄位（V3.0 整體重做；本批不修）
 
-- [x] 查核 screenshot 與既有 source，缺口／不確定性集中 CLOUD_WORK_HANDOFF 最新停點；人工申請／處理欄位不是光貿資料，不能依官方回查重建。
-- [ ] 確認使用者該筆按「已人工處理」或取消／行政結案，以及本機 metadata 是否仍在；目前沒有原 DB／備份，不宣稱唯一根因或已恢復舊資料。
-- [ ] 沿用原 owner 設計穩定逐筆對應與完整申請／處理歷史，先核對既有 metadata／issue storage，不預設另建表或相容層；開始改碼時才推進適用版本。
-- [ ] 保存申請人／時間／原因／金額、處理人／時間及結果，正常完成、取消退回、行政結案都能追溯；不覆蓋前一次同發票的歷史。
-- [ ] 詳情與列表區分等待、等待官方確認、官方完成、取消、行政結案、資料缺失；不可只憑 resolved_utc 顯示「已人工處理」。
-- [ ] 回歸含上述各分支、同發票第二次申請／五分鐘誤配、重啟／同步、寫入失敗與原資料保留；舊資料只依可靠本機證據恢復。
-- [ ] 原機驗收成功後才接續本批正式 Release；RC AD 不以 CI 自動勾選。
+2026-10-13 使用者決定停止 V2.6.x 的這項缺陷修正，併入 V3.0 折讓／Cloud Work Item／Audit 正式重做；**此處不是已修復或已驗收**。V2.6.19 已知缺陷保留，不作本批 Release 阻塞。不可自行補造原本機遺失的人員、日期、原因、金額，也不因延期清空既有資料。
+
+- [x] 既有 screenshot／source 差異與不確定根因已記錄在 CLOUD_WORK_HANDOFF 歷史停點；原機 DB／備份未取得，不宣稱恢復成功。
+- [x] 使用者明確將本項留待 V3.0 重做；不在 V2.6.19 變動 metadata／sync_issues／UI／schema／VERSION。
+- [ ] V3.0 設計時重新確認多機 Work Item、正式折讓 API、不可覆寫逐筆歷史、申請／處理 actor／時間／原因／金額、結束結果、同步／中斷與 retention；落實詳情狀態區別與可靠的舊資料處理。
+- [ ] 對 V3.0 新流程提供對應的本地／整合與必要實機驗收。原 RC AD 轉成 V3 需求參考，不能把 V2 既有缺陷當作通過測試。
+
+本批 Release 判斷依本地／隔離驗證及既有精確 source GitHub CI；不得上傳任何 Cloudflare 測試 Worker／版本，正式／development 雲端資料與裝置不因驗收而變更。
 
 ## 1. V2.6.x 實機與光貿驗證
 
@@ -100,9 +101,9 @@ V2.6.14 功能 source db1a3b95：Governance #1171、Cloud #377、Windows #266 �
 - [ ] 折扣／負數調整樣本。
 - [ ] 取得樣本後補 parser、金額、防重與測試案例。
 
-## 6. 正式折讓 API（雲端化階段）
+## 6. 正式折讓 API（V3.0 雲端化階段）
 
-目前仍以人工折讓／人工折讓作廢待辦為主；完成紀錄以 `invoice_query.allowance[]` 為官方依據。
+目前仍以人工折讓／人工折讓作廢待辦為主；完成紀錄以 `invoice_query.allowance[]` 為官方依據。2026-10-13 使用者決定目前人工折讓歷史缺欄位不單獨修補，V3.0 隨正式折讓及 Cloud Work Item／Audit 重做；既有 V2 缺陷不因此視為修復。
 
 - [ ] `/json/g0401` 折讓開立：CYInvoice 直接送出，不再要求管理員至光貿網站人工建立。
 - [ ] `/json/g0501` 折讓作廢：正式自動化後只允許 ADMIN／SUPER_ADMIN 直接執行；送出前重新確認最新折讓狀態，結果不明不得自行標成成功。
@@ -224,6 +225,7 @@ Workspace／protected Device identity、pairing／invitation、whole-device tran
 
 ### 7.5 跨機 Work Item / Sync
 
+- [ ] V3.0 重做折讓歷史與狀態：逐筆申請／處理／官方結果／取消／行政結案可追溯；不能僅因 issue resolved 即顯示「已人工處理」，也不能以雲端同步推斷官方成功。
 - [ ] 作廢／折讓／折讓作廢／管理員結案 Work Item 上 Cloud。
 - [ ] Work Item 原子 state transition／optimistic revision，避免多機同時結案。
 - [ ] Cloud coordination 只用於真正需要跨機原子性的點，不把 Cloud Lock 變成所有業務前置條件。
