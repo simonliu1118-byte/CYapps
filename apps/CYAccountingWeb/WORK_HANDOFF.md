@@ -71,3 +71,6 @@
 ## CYID 共通部署參數已驗證 — 2026/10/12
 
 #413 source 8d3ed436／tree a14f00aa 七 CI 通過，使用者完成 development CYID_WORKER_NAME 共通 Secret，Invoice 唯讀 #29 通過後合併 main 4655460c。[CYACC main Validate and Deploy #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386) validate／deploy 通過；本 App 只改 Provider base-name input來源，原 production derive/verify resolver、Application／Workspace、帳務／Session runtime與產品 VERSION／BUILD 不變。Invoice仍Builtin，Provider Invoice scope未配置，不代表本App production尚未接入。原Variable暫留供未更新/retired deployment refs，退場盤點與條件由Invoice TODO追蹤。
+
+
+同一已驗證Secret入口已同步到Invoice／Provider active及retired部署refs（Provider #153／#154、Invoice #32通過，Invoice維持Builtin）；現在可由Environment owner刪除同名舊Variable，Secret保留。此Doc更新不改本App帳務／Session/runtime，對應詳細events見Invoice現行交接。
