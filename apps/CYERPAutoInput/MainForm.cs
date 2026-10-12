@@ -69,7 +69,8 @@ internal sealed class MainForm : Form
             _statePoll.Start();
         };
         DpiChanged += (_, _) => UpdateDpiHint();
-        FormClosing += (_, _) => _statePoll.Stop();
+        FormClosing += (_, _) => { _statePoll.Stop(); _browserHotkey?.Dispose(); _browserHotkey = null; };
+        Shown += (_, _) => ApplyBrowserHotkey();
     }
 
     protected override void WndProc(ref Message m)
@@ -606,6 +607,7 @@ internal sealed class MainForm : Form
         {
             _settingsStore.Save(_settings);
             UpdateBuildStatus();
+            ApplyBrowserHotkey();
             _modeToggle.Checked = false;
             ApplyMode(false);
             ApplyDefaultsToBlankFields();
@@ -875,7 +877,39 @@ internal sealed class MainForm : Form
     /// One Shopee order read from screenshots onto the form (user, 2026-10-11): no batch and
     /// no automatic start; anything to check is listed and the user starts the input.
     /// </summary>
-    private async Task ImportShopeeScreenshotsAsync()
+    private BrowserHotkey? _browserHotkey;
+
+    /// <summary>F8 in the browser starts Shopee 光學辨識 while CY runs (setting, on by default).</summary>
+    private void ApplyBrowserHotkey()
+    {
+        if (UiSnapshot.Active) return;
+        if (_settings.BrowserHotkey && _browserHotkey is null)
+            _browserHotkey = BrowserHotkey.Start(_log, () => BeginInvoke(OnBrowserHotkey));
+        else if (!_settings.BrowserHotkey && _browserHotkey is not null)
+        {
+            _browserHotkey.Dispose();
+            _browserHotkey = null;
+        }
+    }
+
+    private async void OnBrowserHotkey()
+    {
+        // Only from an idle CY: not while ERP is being typed into or another CY window is open.
+        if (_automationCts is not null ||
+            Application.OpenForms.Cast<Form>().Any(f => f != this && f.Visible && f is not AutomationOverlay))
+        {
+            _log.Info("hotkey", $"{BrowserHotkey.KeyName} ignored: CY is busy");
+            return;
+        }
+        _log.Info("hotkey", $"{BrowserHotkey.KeyName} pressed in the browser; opening 光學辨識");
+        // A minimized CY would keep its dialog hidden too.
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        try { await ImportShopeeScreenshotsAsync(startScan: true); }
+        catch (Exception ex) { _log.Error("hotkey", ex); }
+    }
+
+    /// <param name="startScan">From the browser hotkey: the page scan starts at once, full auto or not.</param>
+    private async Task ImportShopeeScreenshotsAsync(bool startScan = false)
     {
         if (_automationCts is not null) return;
         if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
@@ -890,7 +924,7 @@ internal sealed class MainForm : Form
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
         try
         {
-            using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto,
+            using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto || startScan,
                 session: _settings.ShopeeFullAuto ? Session : null);
             if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return;
             await ContinueShopeeScreenshotOrderAsync(dialog.Result.Problems, order, ledger);
