@@ -1,5 +1,10 @@
 # CYApps Governance Changelog
 
+## 2.3.35 — 2026/10/12
+
+- 依使用者確認新增 `apps/CYPriceDesk/` 的最小 `PROJECT_RULES.md`、VERSION／BUILD 與必要 prototype validation workflow。專案採用既有共通／repository 規則，沒有新增永久架構或身分例外。
+- 原型獨立保存，CYWEB 僅提供外部入口；正式需求與併入／獨立發展尚未定案。沒有變更 CYID、其他程式的部署或現有 Sites audience。
+
 ## 2.3.34 — 2026/10/10
 
 - CYInvoice `PROJECT_RULES.md` 明列採用 CYID canonical Consumer Integration Standard；完成使用者授權 consumer 接入所需的專案 adoption gate，直接引用同 repo canonical package，不新增身分語意／規則層，也不授權正式切換。
