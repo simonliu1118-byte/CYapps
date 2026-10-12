@@ -1,22 +1,53 @@
 # CYInvoice 現行工作交接
 
-更新日期：2026-10-12（Asia/Taipei）
+更新日期：2026-10-13（Asia/Taipei）
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：原 development 已啟用 CYID，Windows 中央驗證待回報 — 2026-10-12
+## 最新停點：CYID 原機驗證成功；折讓歷史未修，Release 暫停 — 2026-10-13
+
+本輪只更新文件。Windows 仍 V2.6.19 Build 0，沒有本項折讓修正 commit、沒有新 tag／Release。文件基準 main d4552bec4684d93372d90f87a1e10090e4a6a427；#420 啟用及 #422 證據文件已合併，本輪不修改其他專案。
+
+2026-10-12 16:52／16:59 Asia/Taipei 使用者回覆「可以，沒問題」，確認原 V2.6.19 安裝重開後能以 CY Web／CYID 員工帳密進入設定並確認 CYID，原資料正常延續。這是單台原裝置的使用者回報；沒有原機 DB／HTTP trace，不勾選完整角色／多裝置／private RPC／60 秒刷新／斷線／撤銷清除。啟用 #42 的原 Workspace／Device Token hashes／history 保留證據仍在下段；不重跑舊 Built-in deployment 或 activation。
+
+### 折讓人工處理詳情缺欄位：接續第一優先
+
+2026-10-12 23:44 使用者截圖顯示折讓待辦「已人工處理」，但申請員工／時間／原因、處理管理員／時間、金額均為空白占位，官方折讓資料亦顯示無。截圖、真實發票／訂單識別不進 Public repo。使用者強調：這些人工資料只由 CYInvoice 本機保存，光貿不能補回。
+
+已確認 source 事實；不是已證實該筆唯一根因：
+
+- EmployeeAllowanceWorkflowService 正常官方確認成功會將 review 存入 invoices.extra_json 的 cyinvoice_allowance_handled_review，再清 active review；該 key 只保留最後一筆，不能宣稱所有完成路徑都沒寫入。
+- CancelManualReview 清 active review／pending 並 Resolve；InvoiceAdministrativeClosureService.ClearActiveWorkMetadata 亦清人工 metadata，沒有逐筆完整封存。
+- sync_issues 只存類型／訊息／建立與結束時間，沒有上述申請／處理快照。SyncIssuesForm.AllowanceDetailRows 讀目前 active 或最後 handled review，並以 RequestedUtc 與 issue.CreatedUtc 相差五分鐘作排除；後續同發票新申請可能使舊詳情空白／錯配，沒有可靠的逐筆歷史對應。
+- resolved 折讓／折讓作廢一律被顯示成「已人工處理」，無法區分官方完成、取消退回、行政結案；舊訊息也可能仍是等待管理員。
+
+尚未取得這筆操作路徑（按「已人工處理」或「取消退回／手動結案」）、原 SQLite／備份。已問操作路徑，使用者接著詢問 DB 用途而未回答。不能判定該筆真的未寫入、被清除或只是讀取對應失敗。尚未改程式／VERSION／BUILD／schema、尚未跑本項回歸。
+
+接續先盤點既有 workflow／issue store／invoice metadata owner，決定穩定的逐筆對應與保存位置，完整保存申請人／時間／原因／金額、處理人／時間、結束結果；取消及行政結案也應保留可追溯紀錄。這是待實作方向，沒有定案新增表／欄位／migration，不另建平行待辦或身分 authority。先重現正常完成、取消、行政結案、同發票第二次申請／五分鐘對應、重啟與同步，再修 core 保存及 UI 狀態。舊資料只能依可核對的本機 metadata／備份恢復；缺失明確顯示，不捏造或用光貿拼湊。保存期限仍依原 retention；本輪不變更。
+
+### Release 與下一段順序
+
+2026-10-12 23:22 使用者已要求本批 Release，隨後詢問未完成項目並回報折讓缺陷；目前先處理缺陷與驗收。尚未啟動 cyinvoice-release.yml、建立 cyinvoice-v2.6.19 或發布，最後查到正式版仍 cyinvoice-v2.4.2。這次發布要求已記錄，同一工作接手不要求重複授權，也不延伸成日後每版自動發布。開始修新獨立 bug 才按現行規則判斷 Patch／Build；本文件整理不推進版本。
+
+接手順序：三層規則與本段 → 修折讓逐筆歷史／狀態與回歸 → 原機驗收 → 一般員工授權、60 秒刷新／重連、四種服務狀態、有備份的指定裝置撤銷中斷續清 → main 正式 Windows Release workflow 重建／掃描／封裝並發布。多公司、跨機 Work Item、0-Device recovery 為獨立後續項目，不擴成本輪全部功能開發。
+
+本會話 GitHub connector 能建 PR／合併與讀 Actions，沒有 workflow_dispatch／建立 Release／上傳資產工具；正式 workflow 僅 main 手動觸發。發布時先查當時可用工具，必要時引導 Actions → CYInvoice Stable Release → Run workflow → main；不為觸發改成 push 自動發布、重用 engineering 包或另建發布 owner。這是此次能力記錄，不是新增規則。
+
+本機 Data/CYInvoice.db 保存 invoices／invoice_items／buyer_names／sync_state／sync_issues、Local employees／Built-in cache；人工 metadata 在 invoices.extra_json。設定／加密 Device 憑證在 Data/settings.json，CYID protected offline cache 在 Data/cyid_offline_cache.json，Cache／Logs 另存檔案；中央帳号仍由 CYID 管理。唯一待辦為 TODO，唯一人工驗收清單為 RC_TEST。
+
+## CYID 啟用證據 — 2026-10-12
 
 2026-10-12 12:52 Asia/Taipei 使用者確認原安裝升級後發票／設定都在，且原帳密可開設定，授權繼續。PR #420 source `70514413b9a3863e1616ecb919a755e1fa30e6bf`／tree `c8fb38c1ce2253b17769aa18f577cf9b7009d58f` 的全部 checks（Governance、deployment validate、Cloud Worker／Windows）通過，合併 `2543222d0a7c9ccd402740477fd3793d123aaeba` 為相同 tree。
 
 [實際 activate-cyid #42](https://github.com/simonliu1118-byte/CYapps/actions/runs/38206372325) source `8488ce3d547d671317cb55f1dd27198506462d05`／同已測 tree 成功：before 原 Built-in／完整 scope，exact active inheritance／uploaded readback／100% business 部署與 after 檢查確認 **CYID_ENABLED=true**。Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records、原 Device Token hashes／employee／history／FK／routes 保留；migration skipped／private files cleanup 通過。Recovery UTC `2026-10-12T05:05:10.603Z`，不是 restore rehearsal；無新 Workspace／Device／資料移轉、Secret replacement、測試程式上傳或 production 部署。原 V2.6.19 可直接續用。
 
-下一個人工證據：原安裝重開，確認 CYID discovery／隱藏本機帳號管理，以 CY Web 的 CYID Super Admin 員工編號／密碼進設定並關閉，不開票、不變更資料；一般員工另需 App Access／Role readiness。實際 Fetcher／RPC／Employee 驗證、其餘裝置與 AA／AB／AC 尚未冒充完成。已確認 CYID 的 client 不自動退回 Built-in；不能以 reset／rejoin 修復認證錯誤。產品 Windows2.6.19／Cloud0.9.2／Consumer1.0.3／canonical1.0.4 不變；production／Release 仍另行核准。下方 #38/#39 是啟用前準備證據，其 CYID false 不代表現在旗標。
+原機 CYID 帳密進設定已由使用者回報成功，範圍見最新停點；其餘角色／装置、private RPC、AA／AB／AC 仍待驗收。已確認 CYID 的 client 不自動退回 Built-in，不以 reset／rejoin 修復認證錯誤。產品 Windows2.6.19／Cloud0.9.2／Consumer1.0.3／canonical1.0.4 不變。下方 #38/#39 為啟用前歷史證據。
 
 使用者在既有 CY Web development 中央管理完成 CYInvoice 登記／目前 CYID Workspace 啟用；畫面已出現 CYInvoice 欄，Super Admin 永遠允許，一般員工 App Access 尚未確認。使用者新增 Provider runtime 的 CYINVOICE_APPLICATION_ID／CYINVOICE_WORKSPACE_ID，後者與既有 core portal 身分 Workspace 一致；實際 ID、帳號及 Device Token 不寫 Public 文件。此身分綁定不替換原 CYInvoice business Workspace。
 
 [唯讀 #38](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203645406)（source `ce6528900c7101485424c5c989fe437ae4881d89`）確認 scope configured=true，Consumer 不讀 CYID D1。[prepare-cyid #39](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203790273)（source `2e21c8709f0ef35e665de4d48d4a069b310d1257`）以 main 基準 `2c3071c8b8ed30b5b4898bcf95ca8b174a7b5a99`／tree `c1d303e4d3653c9bd03a034be335bb740c6c2101` 完成真實 business bundle 上傳／100% 部署；IDENTITY Fetcher、IDENTITY_AUTHORITY 的 ConsumerAuthoritySync entrypoint 與三個 approved scope vars readback 通過。原 Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records、原 Token hashes／employee／history／FK／routes 保留，migration skipped、private files cleanup 通過；CYID_ENABLED=false／Built-in 保留。Provider0.3.7／canonical1.0.4、minimum1.0.0。Private recovery reference UTC `2026-10-12T04:27:16.969Z`；不是 restore rehearsal。無測試程式上傳、Secret replacement、重建 Workspace 或 authority switch。
 
-配置 readback 不等於 private Fetcher／RPC／Employee／App Access／Role 已實際驗收。原安裝 Built-in continuity 已由使用者回報、development 啟用已通過 #42；真實中央驗證與 AA／AB／AC 仍待完成。下方既有日期段落為歷史證據，過往 scope=false／未部署／未合併敘述不代表現在停點。
+配置 readback 不等於 private Fetcher／RPC／Employee／App Access／Role 已實際驗收。原安裝 Built-in continuity 已由使用者回報、development 啟用已通過 #42；單台中央帳密進設定已回報成功，其餘 AA／AB／AC 仍待完成。下方既有日期段落為歷史證據，過往 scope=false／未部署／未合併敘述不代表現在停點。
 
 現行 [V2.6.19 Build 0 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38198294935/artifacts/11724462289)：Cloud Check #412、source `2230ec2b88d2c8835a20f374f08abfc66102a70d`，81,093,499 bytes，archive SHA-256 `aa97e42368f38828b89c1206f6454b7b39ac44420bd188e7bbe1c36107dc32bc`，到期 2026-10-15 11:06 Asia/Taipei。Invoice subtree 與本輪 main 基準完全一致；依 RC_TEST 首段升級原 portable folder，保留原資料，不重新加入。
 
