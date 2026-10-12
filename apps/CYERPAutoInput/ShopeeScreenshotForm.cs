@@ -256,7 +256,8 @@ internal sealed class ShopeeScreenshotForm : Form
             await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines);
         DisposeCaptures(result);
         HideProgress();
-        if (result.Cancelled || result.Problems.Count > 0) _session?.End();
+        if (result.Cancelled) _session?.End(AutomationOutcome.Cancelled);
+        else if (result.Problems.Count > 0) _session?.End();
         if (result.Cancelled)
             MessageBox.Show(this, "已停止自動擷取。可以按「開始」重來，或用「框選截圖」補上缺的部分後按「帶入表單」。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         else if (result.Problems.Count > 0)

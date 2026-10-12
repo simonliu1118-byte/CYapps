@@ -829,6 +829,11 @@ internal sealed class MainForm : Form
                 ? AutomationOutcome.NeedsAttention
                 : AutomationOutcome.Done;
         }
+        catch (OperationCanceledException)
+        {
+            outcome = AutomationOutcome.Cancelled; // Esc
+            throw;
+        }
         finally
         {
             Session.End(outcome);

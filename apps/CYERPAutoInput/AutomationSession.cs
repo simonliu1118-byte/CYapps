@@ -17,8 +17,10 @@ internal enum AutomationOutcome
     Done,
     /// <summary>Entered, but something is listed for a person to check.</summary>
     NeedsAttention,
-    /// <summary>Stopped by an error or Esc.</summary>
+    /// <summary>Stopped by an error.</summary>
     Stopped,
+    /// <summary>Stopped by the user's Esc: a red no-entry sign (user, 2026-10-12).</summary>
+    Cancelled,
     /// <summary>The program stopped to ask something.</summary>
     Paused
 }
@@ -105,6 +107,7 @@ internal sealed class AutomationOverlay : Form
     private const string RunningHint = "按 Esc 中止";
     private static readonly Color DoneGreen = Color.FromArgb(34, 197, 94);
     private static readonly Color AttentionAmber = Color.FromArgb(245, 180, 0);
+    private static readonly Color StopRed = Color.FromArgb(220, 38, 38);
 
     public AutomationOverlay()
     {
@@ -168,6 +171,7 @@ internal sealed class AutomationOverlay : Form
             AutomationOutcome.Done => ("自動輸入完成", string.Empty),
             AutomationOutcome.NeedsAttention => ("輸入完成，有項目要確認", "請看提示視窗"),
             AutomationOutcome.Stopped => ("自動輸入已中斷", "請看提示視窗"),
+            AutomationOutcome.Cancelled => ("使用者已停止", "已按 Esc 緊急停止"),
             _ => ("已暫停", "請看提示視窗")
         };
         Place();
@@ -212,6 +216,10 @@ internal sealed class AutomationOverlay : Form
                 using (var fill = new SolidBrush(DoneGreen)) g.FillEllipse(fill, icon);
                 using (var tick = new Pen(Color.White, 4.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
                     g.DrawLines(tick, [new PointF(icon.Left + 10, icon.Top + 21), new PointF(icon.Left + 17, icon.Top + 28), new PointF(icon.Left + 30, icon.Top + 13)]);
+                break;
+            case AutomationOutcome.Cancelled:
+                using (var fill = new SolidBrush(StopRed)) g.FillEllipse(fill, icon);
+                using (var bar = new SolidBrush(Color.White)) g.FillRectangle(bar, icon.Left + 9, icon.Top + 17, 22, 6);
                 break;
             default:
                 using (var triangle = new GraphicsPath())
