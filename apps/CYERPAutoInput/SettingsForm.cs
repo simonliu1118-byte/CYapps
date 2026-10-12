@@ -116,12 +116,12 @@ internal sealed class SettingsForm : Form
     {
         var page = Page("一般");
         var flow = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
-        flow.Controls.Add(Option(_autoSave, "輸入完成後自動儲存 ERP 單據（只限 CY 新增的單據；需人工確認項目於完成後列出）", _settings.AutoSave));
+        flow.Controls.Add(Option(_autoSave, "輸入完成後自動儲存 ERP 單據（需人工確認項目於完成後列出）", _settings.AutoSave));
         flow.Controls.Add(Option(_autoPrint, "自動儲存後按 ERP「列印 → 直接列印」", _settings.AutoPrint));
         _autoPrint.Margin = new Padding(20, 0, 0, 8);
         _autoPrint.Enabled = _autoSave.Checked;
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
-        flow.Controls.Add(Option(_clearAfterSave, "CY 儲存單據後自動清除表單", _settings.ClearAfterSave));
+        flow.Controls.Add(Option(_clearAfterSave, "儲存單據後自動清除表單", _settings.ClearAfterSave));
         flow.Controls.Add(Option(_shopeeFullAuto, "蝦皮全自動：按「開始」後擷取、判讀、帶回、輸入 ERP、儲存並列印（只限蝦皮）", _settings.ShopeeFullAuto));
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };

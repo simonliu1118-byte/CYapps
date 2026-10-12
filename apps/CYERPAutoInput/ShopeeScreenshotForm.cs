@@ -27,13 +27,13 @@ internal sealed class ShopeeScreenshotForm : Form
     private readonly ProgressBar _progress = new() { Visible = false, Style = ProgressBarStyle.Continuous, Width = 260, Height = 16, Anchor = AnchorStyles.Right };
     private readonly Label _progressText = new() { Visible = false, AutoSize = true, Anchor = AnchorStyles.Right, ForeColor = CyVisualTheme.TextSecondary };
     private readonly CyPrimaryButton _apply = new();
-    private readonly FullAutoSession? _session;
+    private readonly AutomationSession? _session;
 
     public ShopeeShotResult? Result { get; private set; }
 
     /// <param name="autoStart">Shopee full auto (user, 2026-10-11): start the page scan on opening, without 開始.</param>
     /// <param name="session">Shopee full auto: keeps the mouse locked from the scan on (user, 2026-10-12).</param>
-    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false, FullAutoSession? session = null)
+    public ShopeeScreenshotForm(PaddleOcrService ocr, ShopeeShotMapping mapping, AppLogger log, bool autoStart = false, AutomationSession? session = null)
     {
         _ocr = ocr;
         _mapping = mapping;
@@ -229,14 +229,14 @@ internal sealed class ShopeeScreenshotForm : Form
         {
             Opacity = 0;
             if (owner is not null) owner.Opacity = 0;
-            if (_session is not null) _session.Begin();
+            if (_session is not null) _session.Begin(AutomationSession.FullAutoTitle);
             else mouseLock = PhysicalMouseLock.Engage(_log);
             result = await new ShopeePageScanner(_ocr, _log).ScanAsync(browser,
                 () => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, CancellationToken.None,
                 // Back to this window as soon as the page is captured, with a progress bar for
                 // the reading still to do (user, 2026-10-11).
-                scrolled: () => { Restore(); ShowProgress("辨識中…", 0, 1); },
-                readProgress: new Progress<(int Done, int Total)>(p => ShowProgress($"辨識中… {p.Done}/{p.Total}", p.Done, p.Total + 1)));
+                scrolled: () => { Restore(); ShowProgress("辨識中… 0%", 0, 100); },
+                readProgress: new Progress<double>(p => ShowProgress($"辨識中… {(int)(p * 100)}%", (int)(p * 100), 100)));
         }
         catch (Exception ex)
         {
@@ -277,7 +277,11 @@ internal sealed class ShopeeScreenshotForm : Form
     {
         if (IsDisposed) return;
         _progress.Maximum = Math.Max(1, maximum);
-        _progress.Value = Math.Clamp(value, 0, _progress.Maximum);
+        // The themed bar animates toward a new value and lags far behind short steps; stepping
+        // past and back makes it draw the value at once.
+        var target = Math.Clamp(value, 0, _progress.Maximum);
+        if (target < _progress.Maximum) { _progress.Value = target + 1; _progress.Value = target; }
+        else { _progress.Maximum++; _progress.Value = _progress.Maximum; _progress.Maximum--; }
         _progressText.Text = text;
         _progress.Visible = _progressText.Visible = true;
         UseWaitCursor = true;

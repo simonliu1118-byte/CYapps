@@ -60,9 +60,9 @@ internal sealed class ShopeePageScanner
     }
 
     /// <param name="scrolled">Called once the browser is no longer needed (scrolling done), before the reads finish.</param>
-    /// <param name="readProgress">Reads finished so far and in all.</param>
+    /// <param name="readProgress">Share of the reading done, 0 to 1 (by pixel rows read).</param>
     public async Task<Result> ScanAsync(nint browser, Func<bool> stopRequested, CancellationToken cancellationToken,
-        Action? scrolled = null, IProgress<(int Done, int Total)>? readProgress = null)
+        Action? scrolled = null, IProgress<double>? readProgress = null)
     {
         var result = new Result();
         if (NativeMethods.IsIconic(browser)) NativeMethods.ShowWindow(browser, 9 /* SW_RESTORE */);
@@ -160,7 +160,7 @@ internal sealed class ShopeePageScanner
     /// same size as before, so nothing read changes. If the cards cannot be told apart, the
     /// whole column is read as before.
     /// </summary>
-    private async Task ReadCardsAsync(Result result, IProgress<(int Done, int Total)>? progress, CancellationToken cancellationToken)
+    private async Task ReadCardsAsync(Result result, IProgress<double>? progress, CancellationToken cancellationToken)
     {
         var width = result.Captures[0].Image.Width;
         var column = Rectangle.FromLTRB(width * 15 / 100, result.FixedTop, width * 66 / 100,
@@ -182,7 +182,7 @@ internal sealed class ShopeePageScanner
                     g.DrawImage(page, new Rectangle(0, i * (TitleHeight + Gap), TitleWidth, TitleHeight),
                         new Rectangle(0, cards[i].Top, TitleWidth, Math.Min(TitleHeight, cards[i].Bottom - cards[i].Top)), GraphicsUnit.Pixel);
             }
-            progress?.Report((0, 4));
+            progress?.Report(0);
             var tokens = await _ocr.RecognizeAsync(titles, cancellationToken, maxScale: 1.0);
             for (var i = 0; i < cards.Count; i++)
             {
@@ -198,9 +198,13 @@ internal sealed class ShopeePageScanner
         if (!targeted) _log.Info("page-scan", $"card titles not all found wanted={wanted.Count}; reading the whole column");
         var parts = targeted ? wanted.Select(w => (w.Card.Top, w.Card.Bottom, StopAtLedger: w.Title.Contains("進帳", StringComparison.Ordinal))).ToList()
                              : [(0, page.Height, false)];
+        // Progress follows the rows still to read (user, 2026-10-12: a step count stood still
+        // while one long 進帳資訊 card was read); the title strip counts as a short card.
+        const int TitleWork = 400;
+        double total = TitleWork + parts.Sum(p => p.Item2 - p.Item1), done = TitleWork;
+        progress?.Report(done / total);
         for (var i = 0; i < parts.Count; i++)
         {
-            progress?.Report((i + 1, parts.Count + 1));
             // Long cards (a 進帳資訊 with many products) are read in overlapping chunks; the
             // product table stops at 隱藏入帳明細, so the income breakdown below is not read.
             const int Chunk = 900, Overlap = 60;
@@ -220,12 +224,14 @@ internal sealed class ShopeePageScanner
                 }).ToList();
                 var boxes = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left + column.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
                 ShopeePageScan.AddCapture(result.Page, boxes, top + column.Top, 0);
+                done += (last ? bottom : bottom - Overlap) - top;
+                progress?.Report(Math.Min(1, done / total));
                 if (parts[i].StopAtLedger && boxes.Any(b => b.Text.Contains("入帳明細", StringComparison.Ordinal) || b.Text.StartsWith("訂單金額", StringComparison.Ordinal)))
                     break;
                 if (bottom >= parts[i].Bottom) break;
             }
         }
-        progress?.Report((parts.Count + 1, parts.Count + 1));
+        progress?.Report(1);
     }
 
     /// <summary>Per row of the stitched column, the share of pixels in Shopee's grey page background.</summary>

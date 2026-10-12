@@ -5,7 +5,9 @@ internal sealed class MainForm : Form
     private static readonly Size StandardWindowSize = new(1160, 720);
 
     private readonly AppLogger _log;
-    private FullAutoSession? _fullAuto;
+    private AutomationSession? _automationSession;
+    /// <summary>Mouse lock and on-screen notice while CY works on its own (user, 2026-10-12).</summary>
+    private AutomationSession Session => _automationSession ??= new AutomationSession(_log);
     private readonly ErpAutomationService _automation;
     private readonly UserSettingsStore _settingsStore;
     private readonly UserSettings _settings;
@@ -689,7 +691,7 @@ internal sealed class MainForm : Form
         var snapshot = CreateSnapshot(out var validationError);
         if (snapshot is null)
         {
-            _fullAuto?.End(); // a question is never behind a locked mouse (full auto, user 2026-10-12)
+            _automationSession?.End(); // a question is never behind a locked mouse (full auto, user 2026-10-12)
             MessageBox.Show(this, validationError, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
@@ -729,7 +731,7 @@ internal sealed class MainForm : Form
 
     /// <summary>
     /// The one place a run clears the form (user, 2026-10-12): a document CY saved, when the
-    /// 「CY 儲存單據後自動清除表單」 setting is on; single orders, Shopee full auto and every
+    /// 「儲存單據後自動清除表單」 setting is on; single orders, Shopee full auto and every
     /// order of an import batch all come through here.
     /// </summary>
     private void ClearFormIfSaved(AutomationRunResult result)
@@ -791,7 +793,7 @@ internal sealed class MainForm : Form
             ErpDocumentState.Modify => "修改",
             _ => "新增或修改"
         };
-        _fullAuto?.End();
+        _automationSession?.End();
         var answer = MessageBox.Show(this,
             $"ERP 目前在「{what}」狀態。\n\n要放棄 ERP 上這張尚未儲存的單據（{what}的內容不會保留），回到檢視後再從新增開始輸入嗎？",
             "ERP 正在輸入中", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
@@ -812,18 +814,16 @@ internal sealed class MainForm : Form
     {
         var progress = new Progress<string>(SetStatus);
         AutomationRunResult result;
-        // The physical mouse is ignored while CY types (user, 2026-10-11); Esc releases it. In
-        // full auto the session holds the lock and shows its notice (user, 2026-10-12).
-        var fullAuto = print == true && _fullAuto is not null;
+        // The physical mouse is ignored while CY types (user, 2026-10-11; Esc releases it), and
+        // the notice says 自動輸入中, or 全自動運轉中 in Shopee full auto (user, 2026-10-12).
         try
         {
-            if (fullAuto) _fullAuto!.Begin();
-            using (fullAuto ? null : PhysicalMouseLock.Engage(_log))
-                result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
+            Session.Begin(print == true ? AutomationSession.FullAutoTitle : AutomationSession.InputTitle);
+            result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
         }
         finally
         {
-            if (fullAuto) _fullAuto!.End();
+            Session.End();
         }
         if (result.HandedOff.Length > 0)
         {
@@ -888,18 +888,17 @@ internal sealed class MainForm : Form
 
         var mapping = new ShopeeShotMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix,
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
-        _fullAuto ??= new FullAutoSession(_log);
         try
         {
             using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto,
-                session: _settings.ShopeeFullAuto ? _fullAuto : null);
+                session: _settings.ShopeeFullAuto ? Session : null);
             if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return;
             await ContinueShopeeScreenshotOrderAsync(dialog.Result.Problems, order, ledger);
         }
         finally
         {
             // Whatever happened, the mouse is free again once the order is done or stopped.
-            _fullAuto.End();
+            Session.End();
         }
     }
 
@@ -915,7 +914,7 @@ internal sealed class MainForm : Form
         // with notes the user decides, defaulting to stop.
         if (_settings.ShopeeFullAuto)
         {
-            if (notes.Count > 0) _fullAuto?.End();
+            if (notes.Count > 0) _automationSession?.End();
             if (notes.Count > 0 && MessageBox.Show(this,
                     $"蝦皮訂單 {order.OrderSn} 已帶入表單，但有以下項目需要確認：\n\n" + string.Join("\n", notes.Select(n => "・" + n)) +
                     "\n\n仍要繼續全自動輸入 ERP、儲存並列印嗎？（選「否」可先修改表單，再按「開始輸入 ERP」）",
@@ -1109,12 +1108,12 @@ internal sealed class MainForm : Form
         if (entry is null) return true;
         if (entry.Status == LedgerStatus.Saved)
         {
-            _fullAuto?.End();
+            _automationSession?.End();
             MessageBox.Show(this, $"{order.Source}訂單 {order.OrderSn} {entry.Describe()}。\n\n為避免重複打單，已擋下。",
                 "重複訂單", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return false;
         }
-        _fullAuto?.End();
+        _automationSession?.End();
         return MessageBox.Show(this,
             $"{order.Source}訂單 {order.OrderSn} {entry.Describe()}。\n\n請先確認 ERP 沒有這張單。仍要再輸入一次嗎？",
             "可能重複", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
