@@ -10,6 +10,8 @@ internal sealed class UserSettings
     public bool AutoSave { get; set; }
     /// <summary>After a verified auto-save, ERP 列印 → 直接列印 (user, 2026-10-11).</summary>
     public bool AutoPrint { get; set; }
+    /// <summary>A document CY saved clears the form for the next order (user, 2026-10-12).</summary>
+    public bool ClearAfterSave { get; set; } = true;
     /// <summary>
     /// Shopee screenshots end to end (user, 2026-10-11): after 開始, scan, bring back, enter
     /// into ERP, save and print. Shopee only: MO店+ and Coupang need invoice details first.

@@ -7,6 +7,7 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _advanced = new();
     private readonly CheckBox _autoSave = new();
     private readonly CheckBox _autoPrint = new();
+    private readonly CheckBox _clearAfterSave = new();
     private readonly CheckBox _shopeeFullAuto = new();
     private readonly CheckBox _firstRowWarehouse = new();
     private readonly TextBox _firstRowWarehouseCode = new();
@@ -120,6 +121,7 @@ internal sealed class SettingsForm : Form
         _autoPrint.Margin = new Padding(20, 0, 0, 8);
         _autoPrint.Enabled = _autoSave.Checked;
         _autoSave.CheckedChanged += (_, _) => _autoPrint.Enabled = _autoSave.Checked;
+        flow.Controls.Add(Option(_clearAfterSave, "CY 儲存單據後自動清除表單", _settings.ClearAfterSave));
         flow.Controls.Add(Option(_shopeeFullAuto, "蝦皮全自動：按「開始」後擷取、判讀、帶回、輸入 ERP、儲存並列印（只限蝦皮）", _settings.ShopeeFullAuto));
 
         var warehouseRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
@@ -354,6 +356,7 @@ internal sealed class SettingsForm : Form
         _settings.AdvancedMode = _advanced.Checked;
         _settings.AutoSave = _autoSave.Checked;
         _settings.AutoPrint = _autoPrint.Checked;
+        _settings.ClearAfterSave = _clearAfterSave.Checked;
         _settings.ShopeeFullAuto = _shopeeFullAuto.Checked;
         foreach (DataGridViewRow row in _grid.Rows)
         {

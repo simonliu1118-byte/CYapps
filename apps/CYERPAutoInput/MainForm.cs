@@ -682,25 +682,26 @@ internal sealed class MainForm : Form
     }
 
     /// <param name="fullAuto">Shopee full auto (user, 2026-10-11): save and print whatever the settings say.</param>
-    private async Task StartAutomationAsync(bool fullAuto = false)
+    /// <returns>False when the run did not start (a check failed or the user said no).</returns>
+    private async Task<bool> StartAutomationAsync(bool fullAuto = false)
     {
-        if (_automationCts is not null) return;
+        if (_automationCts is not null) return false;
         var snapshot = CreateSnapshot(out var validationError);
         if (snapshot is null)
         {
             _fullAuto?.End(); // a question is never behind a locked mouse (full auto, user 2026-10-12)
             MessageBox.Show(this, validationError, "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            return false;
         }
 
         var order = _loadedOrder;
-        if (order is not null && !ConfirmNotDuplicate(order)) return;
+        if (order is not null && !ConfirmNotDuplicate(order)) return false;
         // Imported orders were warned in the preview; a manual form is warned here.
         if (order is null && snapshot.Values.ContainsKey("tax_id") && !snapshot.Values.ContainsKey("inv_name") &&
             MessageBox.Show(this, "有統一編號，但沒有發票的客戶全名（經濟部查無或未填）。\n\n建議先填寫客戶全名；仍要開始輸入嗎？",
                 "客戶全名", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-            return;
-        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return;
+            return false;
+        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return false;
 
         await RunGuardedAsync(async token =>
         {
@@ -721,14 +722,21 @@ internal sealed class MainForm : Form
                 return;
             }
             ShowRunSummaryIfNeeded(result, DocumentKeyText(result), notes);
-            // A saved document clears the form for the next order, after any summary was shown;
-            // so does an unsaved run with nothing left to check (user, 2026-10-11).
-            if (result.Saved || (result.Warnings.Count == 0 && result.SaveSkippedReason.Length == 0 && result.PrintProblem.Length == 0 && notes.Count == 0))
-            {
-                ResetForm();
-                SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 輸入完成；{(result.Saved ? "已儲存" : "尚未儲存")}；表單已清空");
-            }
+            ClearFormIfSaved(result);
         });
+        return true;
+    }
+
+    /// <summary>
+    /// The one place a run clears the form (user, 2026-10-12): a document CY saved, when the
+    /// 「CY 儲存單據後自動清除表單」 setting is on; single orders, Shopee full auto and every
+    /// order of an import batch all come through here.
+    /// </summary>
+    private void ClearFormIfSaved(AutomationRunResult result)
+    {
+        if (!result.Saved || !_settings.ClearAfterSave) return;
+        ResetForm();
+        SetStatus($"ERP：銷貨單 {DocumentKeyText(result)} 已儲存；表單已清空");
     }
 
     /// <summary>
@@ -1018,17 +1026,22 @@ internal sealed class MainForm : Form
 
         using var preview = new OrderImportForm(source, fileName, orders, errors, _settings.AutoSave, o => ledger.Find(o.LedgerKey),
             ban => _companyNames.LookupAsync(ban));
-        if (preview.ShowDialog(this) != DialogResult.OK) return;
-
-        if (preview.Action == OrderImportAction.StartSelected && preview.SelectedOrder is not null)
+        // When a check stops the start, the same preview comes back with what the user filled
+        // in (user, 2026-10-12: MO店+ and 酷澎 invoice details were lost).
+        while (preview.ShowDialog(this) == DialogResult.OK)
         {
-            LoadOrder(preview.SelectedOrder);
-            SetStatus($"{source}訂單 {preview.SelectedOrder.OrderSn}：開始輸入 ERP");
-            await StartAutomationAsync();
-        }
-        else if (preview.Action == OrderImportAction.RunAll)
-        {
-            await RunImportBatchAsync(source, orders, ledger);
+            if (preview.Action == OrderImportAction.StartSelected && preview.SelectedOrder is not null)
+            {
+                LoadOrder(preview.SelectedOrder);
+                SetStatus($"{source}訂單 {preview.SelectedOrder.OrderSn}：開始輸入 ERP");
+                if (await StartAutomationAsync()) return;
+            }
+            else if (preview.Action == OrderImportAction.RunAll)
+            {
+                if (await RunImportBatchAsync(source, orders, ledger)) return;
+            }
+            else return;
+            _log.Info("import", "start stopped by a check; back to the preview");
         }
     }
 
@@ -1132,7 +1145,8 @@ internal sealed class MainForm : Form
     /// listed. The batch only stops when abandoning is not safe or on Esc. Ends with saved /
     /// review / handoff / duplicate / failed / missing tracking / stopped / not started lists.
     /// </summary>
-    private async Task RunImportBatchAsync(string source, IReadOnlyList<ImportedOrder> orders, OrderLedger ledger)
+    /// <returns>False when the batch did not start, so the preview comes back.</returns>
+    private async Task<bool> RunImportBatchAsync(string source, IReadOnlyList<ImportedOrder> orders, OrderLedger ledger)
     {
         var earlier = orders
             .Where(o => o.HandoffReason.Length == 0 && ledger.Find(o.LedgerKey) is { Status: not LedgerStatus.Saved })
@@ -1146,10 +1160,30 @@ internal sealed class MainForm : Form
                 (earlier.Count > 15 ? $"\n…另 {earlier.Count - 15} 張" : string.Empty) +
                 "\n\n是：仍要輸入　否：略過這些　取消：不開始批次",
                 "可能重複", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-            if (answer == DialogResult.Cancel) return;
+            if (answer == DialogResult.Cancel) return false;
             skipEarlier = answer == DialogResult.No;
         }
-        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return;
+
+        // Every order to enter is checked before the first one starts, so a missing value is
+        // fixed in the preview rather than found mid-batch (user, 2026-10-12).
+        var invalid = new List<string>();
+        foreach (var order in orders)
+        {
+            if (order.HandoffReason.Length > 0) continue;
+            if (ledger.Find(order.LedgerKey) is { } seen && (seen.Status == LedgerStatus.Saved || skipEarlier)) continue;
+            LoadOrder(order);
+            if (CreateSnapshot(out var validationError) is null) invalid.Add($"{order.OrderSn}：{validationError}");
+        }
+        if (invalid.Count > 0)
+        {
+            ResetForm();
+            MessageBox.Show(this, $"以下 {invalid.Count} 張資料不完整，請在匯入視窗補齊後再開始：\n\n" +
+                string.Join("\n", invalid.Take(15).Select(i => "・" + i)) +
+                (invalid.Count > 15 ? $"\n…另 {invalid.Count - 15} 張" : string.Empty),
+                "資料檢查", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return false;
+        }
+        if (!ConfirmRestartIfErpBusy(out var abandonFirst)) return false;
 
         var done = new List<string>();
         var review = new List<string>();
@@ -1228,6 +1262,7 @@ internal sealed class MainForm : Form
                     return;
                 }
                 done.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
+                ClearFormIfSaved(result);
                 if (order.TrackingNumber.Trim().Length == 0) noTracking.Add($"{order.OrderSn} → {DocumentKeyText(result)}");
                 review.AddRange(result.Warnings.Select(w => $"{order.OrderSn}（{DocumentKeyText(result)}）第 {w.DetailRow} 列 {w.ItemCode}：{w.Message}"));
                 _log.Info("import", $"batch order saved index={next + 1}/{orders.Count} document={_log.Value(DocumentKeyText(result))}");
@@ -1259,6 +1294,7 @@ internal sealed class MainForm : Form
         var clean = stoppedAt is null && failed.Count == 0 && review.Count == 0 && handOff.Count == 0 && duplicates.Count == 0 && noTracking.Count == 0;
         MessageBox.Show(this, string.Join(Environment.NewLine, lines), $"{source}批次結果", MessageBoxButtons.OK,
             clean ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        return true;
     }
 
     private void ShowRunSummaryIfNeeded(AutomationRunResult result, string documentKey, IReadOnlyList<string>? notes = null)

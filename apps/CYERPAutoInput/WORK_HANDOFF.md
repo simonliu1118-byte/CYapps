@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-12（V0.2.3 Build 0，分支 `cyerp-auto-input/fix-print-help`；V0.2.0 Build 31 已合併 `main`）  
+> 更新：2026-10-12（V0.2.3 Build 1，分支 `cyerp-auto-input/fix-print-help`；V0.2.0 Build 31 已合併 `main`）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -60,6 +60,7 @@
 - V0.2.2 Build 2：實測 Build 1 卡片切割正確（8 張卡片，標題皆讀到）。短單捲完到判讀完約 5.4 s（標題 0.5、訂單 1.0、進帳 883px 2.6、實付 1.0）；24 件長單進帳卡 3840px 約 13 s。短單失敗：「訂單金额」簡體 → `ShopeeScreenshot.Compact` 加簡體→繁體字表（`ShopeePageScan.Compact` 共用）。列印：選單 token 只讀到 COPI08 表單，使用者說點到「預覽列印」位置 → 推定下拉選單蓋在按鈕上展開；改讀「列印」周圍 420×400 並優先讀 `Win32Automation.FindProcessPopupsNear` 找到的 ERP 彈出視窗，等選單 3 s。待實測；若仍失敗看 LOG 的 `menu area=` 與 token。
 - V0.2.2 Build 2 實測：使用者回報「目前測試很好」，開始大量實機測試。
 - V0.2.3 Build 0：`FullAutoSession`（`FullAutoSession.cs`）由 MainForm 持有：`Begin()` 鎖滑鼠＋顯示 `FullAutoOverlay`（WS_EX_LAYERED|TRANSPARENT|NOACTIVATE、`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`，失敗就不顯示），`End()` 解除。蝦皮光學辨識視窗擷取時 Begin、捲完不解除；任何 MessageBox 之前（擷取問題、判讀問題、備註確認、重複單、ERP 輸入中、資料檢查）End；`RunDocumentAsync` 在 print==true 時 Begin、跑完 End；`ImportShopeeScreenshotsAsync` finally End。主畫面狀態列移除「開啟 LOG 資料夾」。待實測：覆蓋層是否確實不入鏡、轉圈是否順。
+- V0.2.3 Build 1：`UserSettings.ClearAfterSave`（預設 true）＋`MainForm.ClearFormIfSaved` 為唯一的執行後清除（單張、全自動、批次每張）；`StartAutomationAsync`／`RunImportBatchAsync` 回傳是否開始，`PreviewAndRunAsync` 未開始就再 `ShowDialog` 同一個 `OrderImportForm`（編輯直接寫在 ImportedOrder 上，保留）；批次開始前 LoadOrder＋CreateSnapshot 預檢全部要輸入的訂單。
 - V0.2.2 Build 0：使用者 2026-10-11 指定自動擷取為新功能、升 Patch；內容同 V0.2.1 Build 8。待實測：Build 8 的 OCR 加速（15%–66% 欄、原尺寸）準確度、列印選單 BitBlt、進度條。
 - V0.2.1 Build 8：Build 7 實測成功（捲動 3.5 s、5 次 OCR 共 7.7 s、缺格重讀補回編號）。頁面 OCR 改 15%–66% 欄、`maxScale: 1.0`。`ScanAsync(scrolled:, readProgress:)`：捲完即還原視窗與滑鼠，截圖視窗顯示進度條。待實測：準確度是否下降（有訂單編號格式、金額核對、缺格重讀保護）。
 - V0.2.1 Build 7：Build 6 實測：pipeline 下捲動 2.6 s 捲到頁底，step=5 兩張相同 → `StaticTopRows`=1040 → FixedTop 吃掉全部 boxes。改為 `SameScreen` 即到底、FixedTop 只在第一次捲動量測且上限 40%。
