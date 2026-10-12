@@ -756,7 +756,9 @@ internal static partial class ShopeeScreenshot
     [GeneratedRegex(@"^TW[0-9O]{12}[0-9A-Z]$")]
     private static partial Regex TwTrackingPattern();
 
-    [GeneratedRegex(@"(貨|货)(號|号)")]
+    // 「商品選項貨號：」; the OCR once dropped the 貨 (「商品選項」 + 「號：A0…」, user's PC,
+    // 2026-10-12), so 號 with a colon after 選項 or at a box's start is a label too.
+    [GeneratedRegex(@"(貨|货)(號|号)|(^|選項|选项)(號|号)(?=[:：])")]
     private static partial Regex CodeLabelPattern();
 
     [GeneratedRegex(@"^(?<code>.*[0-9A-Za-z])[xX×*＊](?<n>\d{1,3})$")]

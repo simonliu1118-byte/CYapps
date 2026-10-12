@@ -531,4 +531,18 @@ public class ShopeeScreenshotTests
         Assert.Equal("2610000TEST01A", order.OrderSn);
         Assert.Equal("TW200000000001K", order.TrackingNumber);
     }
+    [Theory]
+    [InlineData(234)] // close enough to be merged into one box
+    [InlineData(260)] // two separate boxes, as on the user's PC
+    public void Reads_the_code_when_the_label_lost_its_first_glyphs(int codeLeft)
+    {
+        // 「商品選項貨號：」 read as 「商品選項」 and 「號：…」 (user's PC, 2026-10-12).
+        var items = PromoItemShot()
+            .Where(b => !b.Text.StartsWith("商品選項", StringComparison.Ordinal))
+            .Concat([B("商品選項", 169, 199, 49), B("號：X00315-1", codeLeft, 199, 66)])
+            .ToList();
+        var result = Read(OrderShot(), [items], PromoAmountShot());
+        Assert.Empty(result.Problems);
+        Assert.Contains(result.Order!.Items, i => i.ItemCode == "X00315-1");
+    }
 }
