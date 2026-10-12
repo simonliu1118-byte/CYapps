@@ -18,11 +18,11 @@ function startAdaptiveUi() {
   setupMobileSettingsTabVisibility();
   updateAdaptiveKeyboardHint();
   setupAdaptiveHeaderLayout();
+  setupTabletStatisticsEntry();
   setupAdaptiveSplitWorkspace();
   setupAdaptiveEntryHelp();
   setupAdaptiveDataSettings();
   cleanupAdaptiveInterfaceCopy();
-  setupAdaptiveUserIdentity();
 }
 
 function setupAdaptiveViewportState() {
@@ -78,11 +78,25 @@ function setupAdaptiveHeaderLayout() {
 
   if (currentUser && currentUser.parentElement !== accountCluster) accountCluster.append(currentUser);
   if (logout && logout.parentElement !== accountCluster) accountCluster.append(logout);
+  accountCluster.dataset.identityReady = String(Boolean(currentUser?.querySelector('.current-user-main')?.textContent) && !currentUser.classList.contains('hidden'));
   if (accountCluster.parentElement !== actions) actions.append(accountCluster);
   if (settings) {
     if (settings.parentElement !== actions) actions.append(settings);
     actions.insertBefore(settings, accountCluster);
   }
+}
+
+function setupTabletStatisticsEntry() {
+  const actions = document.querySelector('.topbar-actions');
+  const settings = document.querySelector('#settingsButton');
+  if (!actions || !settings || document.querySelector('#tabletStatisticsButton')) return;
+  const button = document.createElement('button');
+  button.id = 'tabletStatisticsButton';
+  button.className = 'secondary compact';
+  button.type = 'button';
+  button.textContent = '統計圖表';
+  button.dataset.statisticsOpen = 'period';
+  actions.insertBefore(button, settings);
 }
 
 function setupAdaptiveEntryHelp() {
@@ -211,41 +225,6 @@ function cleanupAdaptiveInterfaceCopy() {
   }
 }
 
-async function setupAdaptiveUserIdentity() {
-  const target = document.querySelector('#currentUser');
-  if (!target) return;
-  let user = null;
-
-  const render = () => {
-    if (!user) return;
-    if (target.querySelector('.current-user-role')) return;
-    const employeeNo = String(user.employeeNo || '').trim();
-    const name = String(user.name || '').trim();
-    const role = String(user.role || '').trim();
-    const roleLabel = adaptiveRoleLabel(role);
-    target.innerHTML = `<span class="current-user-main">${adaptiveEscapeHtml(`${employeeNo} ${name}`.trim())}</span><span class="current-user-role" title="權限組：${adaptiveEscapeHtml(role || roleLabel)}">${adaptiveEscapeHtml(roleLabel)}</span>`;
-    target.classList.remove('hidden');
-  };
-
-  const observer = new MutationObserver(render);
-  observer.observe(target, { childList: true, subtree: true, characterData: true });
-
-  try {
-    user = window.cyaccCurrentUser || (window.cyaccSessionPromise ? await window.cyaccSessionPromise : null);
-    if (!user) return;
-    target.innerHTML = '';
-    render();
-  } catch {
-    // Authentication UI already owns connection/error handling; role display is optional presentation only.
-  }
-}
-
-function adaptiveRoleLabel(role) {
-  if (role === 'SUPER_ADMIN') return '超級管理員';
-  if (role === 'ADMIN') return '管理員';
-  return role || '一般使用者';
-}
-
 function adaptiveEscapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -335,7 +314,6 @@ function startEntryUi() {
   runEntryUiStep('account-choices', setupEntryUiAccountChoices);
   runEntryUiStep('desktop-quick-tools', setupDesktopEntryQuickTools);
   runEntryUiStep('summary-limit', setupEntryUiSummaryLimit);
-  runEntryUiStep('role-medal', setupEntryUiRoleMedal);
   runEntryUiStep('enter-hints', setupMobileEntryEnterHints);
   runEntryUiStep('help-copy', syncMobileEntryHelpCopy);
 }
@@ -351,7 +329,6 @@ function runEntryUiStep(name, task) {
 function syncEntryUiAfterLoad() {
   startEntryUi();
   syncEntryUiAccountChoices();
-  syncEntryUiRoleMedal();
   syncMobileEntryAccountPickerLabel();
   syncMobileEntryHelpCopy();
 }
@@ -561,7 +538,8 @@ function setupMobileEntryMobilePages() {
     nav.setAttribute('aria-label', '主要頁面');
     nav.innerHTML = `
       <button type="button" class="active" data-mobile-page="entry" aria-selected="true">新增記帳</button>
-      <button type="button" data-mobile-page="ledger" aria-selected="false">記帳資料</button>`;
+      <button type="button" data-mobile-page="ledger" aria-selected="false">記帳資料</button>
+      <button type="button" data-mobile-page="statistics" aria-selected="false"><span class="cy-mobile-nav-icon" aria-hidden="true">◔</span><span>統計</span></button>`;
     topbar.insertAdjacentElement('afterend', nav);
   }
 
@@ -569,17 +547,10 @@ function setupMobileEntryMobilePages() {
   const mobile = window.matchMedia(CY_MOBILE_ENTRY_MOBILE);
 
   const apply = page => {
-    current = page === 'ledger' ? 'ledger' : 'entry';
+    current = ['entry', 'ledger', 'statistics'].includes(page) ? page : 'entry';
     const enabled = mobile.matches && !isTabletPreviewMode();
     nav.hidden = !enabled;
-    entry.classList.toggle('cy-mobile-page-hidden', enabled && current !== 'entry');
-    ledger.classList.toggle('cy-mobile-page-hidden', enabled && current !== 'ledger');
-    shell.dataset.mobilePage = enabled ? current : '';
-    for (const button of nav.querySelectorAll('[data-mobile-page]')) {
-      const active = button.dataset.mobilePage === current;
-      button.classList.toggle('active', active);
-      button.setAttribute('aria-selected', active ? 'true' : 'false');
-    }
+    applyMobileWorkspacePage(current, enabled);
   };
 
   nav.addEventListener('click', event => {
@@ -589,7 +560,7 @@ function setupMobileEntryMobilePages() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
-  const syncMode = () => apply(current);
+  const syncMode = () => apply(shell.dataset.mobilePage || current);
   if (typeof mobile.addEventListener === 'function') mobile.addEventListener('change', syncMode);
   else mobile.addListener?.(syncMode);
   apply('entry');
@@ -661,22 +632,6 @@ function entryUiTrimWeighted(value, maxUnits) {
 }
 
 
-
-function setupEntryUiRoleMedal() {
-  const target = document.querySelector('#currentUser');
-  if (!target) return;
-  const observer = new MutationObserver(syncEntryUiRoleMedal);
-  observer.observe(target, { childList: true, subtree: true, characterData: true });
-  syncEntryUiRoleMedal();
-}
-
-function syncEntryUiRoleMedal() {
-  const target = document.querySelector('#currentUser');
-  const role = String(target?.querySelector('.current-user-role')?.textContent || '').trim();
-  if (!target) return;
-  target.classList.toggle('role-super-admin', role === '超級管理員');
-  target.classList.toggle('role-admin', role === '管理員');
-}
 
 function setupMobileEntryEnterHints() {
   const date = document.querySelector('#txDate');
@@ -888,6 +843,7 @@ function syncMobileWorkspaceMobileIdentity() {
   const preview = isTabletPreviewMode();
   const ready = Boolean(main) && !source.classList.contains('hidden');
   const cluster = source.closest('.cy-account-cluster');
+  if (cluster) cluster.dataset.identityReady = String(ready);
   const superAdmin = source.classList.contains('role-super-admin') || role === '超級管理員';
   const admin = source.classList.contains('role-admin') || role === '管理員';
 
@@ -3849,7 +3805,7 @@ function syncMobileCanvasContinuation() {
   const shell = document.querySelector('.shell');
   const entry = document.querySelector('.entry-card');
   const mobile = window.matchMedia(CY_TOUCH_WORKSPACE_MOBILE).matches;
-  const entryActive = mobile && shell?.dataset.mobilePage !== 'ledger';
+  const entryActive = mobile && shell?.dataset.mobilePage === 'entry';
   const income = entryActive && (entry?.classList.contains('entry-income') || state?.kind === 'income');
   const expense = entryActive && !income;
 
@@ -4184,22 +4140,24 @@ function switchTouchWorkspaceMobilePage(page) {
     if (page === 'entry') setTabletEntryExpanded(true);
     return;
   }
+  applyMobileWorkspacePage(page, true);
+}
+
+function applyMobileWorkspacePage(page, enabled) {
   const shell = document.querySelector('.shell');
-  const entry = shell?.querySelector('.entry-card');
-  const ledger = shell?.querySelector('.ledger-card');
   const nav = document.querySelector('#mobileMainNav');
-  if (!shell || !entry || !ledger || !nav) return;
-
-  const current = page === 'ledger' ? 'ledger' : 'entry';
-  entry.classList.toggle('cy-mobile-page-hidden', current !== 'entry');
-  ledger.classList.toggle('cy-mobile-page-hidden', current !== 'ledger');
-  shell.dataset.mobilePage = current;
-
+  if (!shell || !nav) return;
+  const current = ['entry', 'ledger', 'statistics'].includes(page) ? page : 'entry';
+  for (const [name, selector] of [['entry', '.entry-card'], ['ledger', '.ledger-card'], ['statistics', '#statisticsCard']]) {
+    document.querySelector(selector)?.classList.toggle('cy-mobile-page-hidden', enabled && current !== name);
+  }
+  shell.dataset.mobilePage = enabled ? current : '';
   for (const button of nav.querySelectorAll('[data-mobile-page]')) {
     const active = button.dataset.mobilePage === current;
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', active ? 'true' : 'false');
   }
+  if (enabled && current === 'statistics') window.cyStatistics?.refresh();
 }
 
 function restoreTouchWorkspaceLedgerContext(context, highlightId) {

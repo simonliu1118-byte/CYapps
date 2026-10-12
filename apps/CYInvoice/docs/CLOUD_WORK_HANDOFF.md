@@ -1,6 +1,6 @@
 # CYInvoice 現行工作交接
 
-更新日期：2026-10-11（Asia/Taipei）
+更新日期：2026-10-12（Asia/Taipei）
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
@@ -9,10 +9,10 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `8c036f0d4cea464a8cd0885a70898859e5de1ae3`（本次證據文件更新前）；#380／#384～#393 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
+| main | `4655460c3362232fd1711295f3565f00b464bdf9`（本輪證據文件基準）；#380／#384～#393／#402／#403／#412／#413 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
 | 已完成工程 PR | #380 工程基準／#385 買方名稱修改已合併；最新 Windows 功能 head `6c499108` 的 Windows #281／Cloud #393／Governance #1201 通過，工程包見下方 |
 | 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
-| 本輪工作線 | CYInvoice 功能已合併 main；CYID 升級／probe tooling 獨立接續，不再把歷史 feature branch 當未合併停點 |
+| 本輪工作線 | CYInvoice 功能已合併 main；CYID 綁定準備獨立接續，不再把歷史 feature branch 當未合併停點 |
 | 工程版本 | **V2.6.19 Build 0**；查無買方名稱可留空，來源為 ../VERSION、../BUILD |
 | 先前分流已驗證 commit | `66ec3671d5812efce9c97d6b6796585eed9a638f` |
 | 最新正式 Release | `cyinvoice-v2.4.2`；本批未建立新 tag／Release |
@@ -41,13 +41,27 @@ V2.6.18／BUILD 1，同一開票 bug 補修；本地回歸與精確 head CI／�
 
 CY Web governance #145 canonical mirrors1.0.3已同步，consumer1.0.2相容；Provider0.3.6 development #124已部署且原authority保留。CYInvoice Cloud0.9.2/storage13維持Built-in，private binding／真實授權／Windows／cutover未完成。
 
-2026-10-11 使用者定案：保留刪除失敗的 expired／undeployed／no-D1 測試紀錄，停止 DELETE 重試／擴權，後續不再把測試 Worker／測試版本上傳 Cloudflare。遠端 probe／cleanup CLI、專用 runtime branches／dispatch modes及測試模組已移除；本地／CI synthetic Worker 與真實 core regression 繼續。舊 branches／歷史 run 不能作接續入口。
+2026-10-11 使用者定案：保留刪除失敗的 expired／undeployed／no-D1 測試紀錄，停止 DELETE 重試／擴權，後續不再把測試 Worker／測試版本上傳 Cloudflare。遠端 probe／cleanup CLI、專用 branch push triggers／dispatch modes及測試模組已移除；本地／CI synthetic Worker 與真實 core regression 繼續。舊 branches／歷史 run 不能作接續入口。
 
 原 CYInvoice development deployment owner 改用 modern Worker version API，所有非 plain-text bindings（包含 Secrets、原 DB、rate limits、services）以 exact active version UUID 繼承；不從 latest upload 繼承、不讀／重設 Secret 值。僅上傳本次受檢查的真實 app.js，保留 Built-in／CYID_ENABLED=false；上傳後讀回完整 binding names/types/targets/vars與compatibility，重查原100%流量與routes穩定，再明確部署該新UUID。未知resource、split traffic、過期checkpoint、任一readback不符皆停止；response loss不自動重試，always-run核對實際active version／原history／health。過期紀錄存在不再單獨阻擋這條 exact-source deployment。原 D1／Workspace／Device／Token 不 reset 或 rejoin。
 
-本輪本地／PR／實際 business deployment 驗證待精確 source 與 run 證據；不把官方API支援或 synthetic tests 當遠端通過。原最新實際安全核對 #23（38129363451）仍是 Built-in Cloud0.9.2／storage13，1 Workspace／4 Device records、history／FK核對通過；DELETE404／10339原因未知，1個expired測試版本仍在。私有recovery UTC2026-10-11T09:43:50.118Z。Temporary Workers Admin移除尚待使用者確認，無進一步擴權需求。
+本輪已完成：PR #402 source `274e41be4f887df8d52c1c22bb67158d8e42e301`／tree `97c587033c02524aae5d81091b1a2eaaf67ef818` 六項 exact-head CI（Governance #1252、Provider Check #127、Provider development #147、Provider production #33、CYInvoice development validate #24、Cloud Check #399含Windows）全通過，合併 `b7acdbf6f9079c9b72f507a3f14c912eaf738eb1` 為同一tree。[Actual development #25](https://github.com/simonliu1118-byte/CYapps/actions/runs/38134710138) 以continuity source `aeb3434fe2ff3bec1fad2a726c8166066bcd333a`／同一已測tree完成真實business版本上傳、exact-active-source bindings／compatibility readback及100% deployment。原Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records、Token hashes／employee／history／FK及routes保留，Built-in／CYID false；pending migrations0，沒有Secret replacement／authority切換／test upload／DELETE／restore。1個expired未部署no-D1測試版本在before及after均仍存在，已證明不再阻擋部署。私有recovery reference UTC `2026-10-11T11:13:08.522Z`；runner private files移除通過。這是本次窗口的readback，不宣稱讀到Secret值或完成真實Windows登入／restore rehearsal。
+
+原三個probe／cleanup branch refs已fast-forward停放到#402同一tree，controller／測試模組與push trigger均不存在，不重用歷史run。Temporary Workers Admin取消仍待使用者確認，不需增加權限。
 
 CYID private transport、真實 Application／兩 Workspace binding／Employee App Access與Role、原Windows裝置認證、RC AA／AB／AC、實際Free用量、portable清除中斷復原與最終authority cutover保持待驗收。後續透過真實consumer已存在的功能驗收，不新增遠端測試handler或帳號authority；production切換／Release仍獨立核准。產品VERSION／BUILD、Cloud0.9.2、Provider0.3.6、canonical1.0.3／minimum1.0.0不變。
+
+
+
+### CYID 綁定準備／共通設定已驗證 — 2026-10-12
+
+#413 source `8d3ed4366038b511e0c1f5ce50395907529030a2`／tree `a14f00aac19643e3d7e9145b9c26e8d87356ef05` 七項 exact-head CI 全通過，合併 main `4655460c3362232fd1711295f3565f00b464bdf9`（同一 tree）。使用者已完成共通 Secret；[唯讀 preflight #29](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191352230) 以 continuity `ea0d55a3c95826e4da652d0cf03be3a5a0c00aac`／同一 tree 通過，原 Cloud 0.9.2／API1／marker8／storage13／1 Workspace／4 Device records／Token hashes／history／FK／routes 保留、CYID false；expired undeployed no-D1 probe 仍1個。bundle／migration／deploy 三步均 skipped、private cleanup成功，沒有測試上傳、Identity D1 讀取或權威切換。CYACC main 的 [Validate and Deploy #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386) validate／deploy 都通過，證明新的共通 input 在既有 production resolver 可用；不表示 Invoice 已接入 production。
+
+#29 before/after 均確認 Provider 的 CYInvoice scope configured=false；CYINVOICE_APPLICATION_ID／CYINVOICE_WORKSPACE_ID 尚未配置，不能啟動 prepare-cyid 或開 CYID flag。尚未取得現行中央管理的 Application registry／Workspace enablement 證據，不能把缺部署 metadata 等同「App 尚未註冊」。source 現行 admin snapshot 可查看 Actor Workspace 的 apps／員工 App Access；沒有獨立的後加 Application／Workspace enablement 管理 route，bootstrap 只限空 Identity DB。下一步由 CYID 已授權中央管理流程確認既有註冊／核准 scope，不能重播 bootstrap、建立替代 Workspace、借 CYACC production scope 作 development 對應或由 Consumer 直讀／寫 Identity D1。實際 private transport、Employee/App Access／Role、原 Windows與正式切換仍待驗收。
+
+Variable retirement gate 尚未完成：cyinvoice/cloud-dev-deploy at aeb3434f、deploy/cycloudidentity-development at 56c27685、歷史／已退休的 deploy/cycloudidentity-production at 8526ba1d 尚有 vars.CYID_WORKER_NAME。main 四個 deployment owners 與新的唯讀 preflight 已讀 Secret；舊值暫留，不重跑已退休的 provisioning／probe runs。待所有仍使用的入口更新或明確退休並驗證後，才由有 GitHub Environment 管理權限者刪除同名 Variable；不以 main 合併或固定日期代替此 gate。
+
+原 Workspace／Builtin／Device 延續設計與唯一部署 owner 保留，Provider metadata resolver 不成為 Employee authority；技術操作見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)。產品／canonical 版本不變，最新 Invoice business code 實際部署仍 #25；#29 為唯讀檢查。
 
 ### 分段上線準備 — 2026-10-11
 
