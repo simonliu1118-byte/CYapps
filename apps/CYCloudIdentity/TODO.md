@@ -43,7 +43,7 @@
 - [x] CYInvoice 既有部署 owner 新增 prepare-cyid source，Built-in／原 Workspace 保留，僅 approved bindings／scope 準備；source／本地回歸完成，無 remote test upload／CYID D1／authority switch。技術操作見 CYInvoice Cloud README。
 - [x] 共通 deployment input／Invoice scope resolver follow-up source：四個 workflows 共用 Provider-name Secret；Invoice 只讀 Provider active Worker metadata／original business D1，不讀 Identity D1、不借 CYACC scope，不重建 Workspace；Provider drift 阻擋。本地回歸通過，CI 依 PR。
 - [x] 共通 Secret 已設定；#413 七 CI 通過並合併，唯讀 Invoice #29／CYACC main #608 實際通過，原 Invoice Workspace／Device hashes／history／Builtin保留，無 Identity D1／Invoice upload／authority switch。來源／run見 DEVELOPMENT_DEPLOYMENT。
-- [ ] Provider Invoice 兩 scope 尚未配置（#29 configured=false）；先經現行中央管理確認 registry／Workspace enablement及approved mapping，再prepare。缺 metadata不代表未註冊；不得重播 bootstrap或由Consumer直讀/寫Identity D1、借 production scope替代development。
+- [x] 使用者完成中央 CYInvoice 登記／目前身分 Workspace 啟用並配置 Provider 兩項 Invoice runtime scope；Invoice 唯讀 #38 configured=true，prepare-cyid #39 通過兩個私有 bindings／三個 approved vars readback。原 Invoice Workspace／Device／Token hashes／history／FK 保留，Builtin／CYID false；Consumer 不讀 CYID D1。詳細證據見 docs/DEVELOPMENT_DEPLOYMENT.md。
 - [x] 官方active與retired部署入口已同步Secret並read-back：Provider development #153／preflight #154通過；Invoice #31於Provider切換時在upload前阻擋，等待Provider完成的新snapshot #32通過，原Workspace／Device hashes／history／Builtin保留、無test upload／authority switch。Exact source／refs／run evidence見現行交接及Provider DEVELOPMENT_DEPLOYMENT。
 - [x] 使用者已刪除 development 同名 CYID_WORKER_NAME Variable 並保留 Secret；唯讀 Invoice #34（38195315134）通過，Cloud0.9.2／storage13／原 Workspace／Device／Builtin／FK 保留，Provider scope 仍 false，無 upload／Identity D1 access。
 - [ ] 實際private Fetcher／named RPC與App Access／Role／原Windows裝置驗收，使用真實consumer功能；不再增加遠端probe入口。配對／範圍／Free量測與正式切換仍獨立gate。
@@ -54,7 +54,7 @@
 - Source 0.3.7 / contract 1.0.4 adds optional core-portal Super Admin registration and Workspace enablement through the existing role-admin owner. Same current Session scope, immutable existing catalog metadata, protected core app, transactional authority recheck/audit; no Employee grant or consumer Workspace mutation.
 - [x] #416 final head cbae06a0／tree 8fe98f7c 八項 CI（含實際 Worker/D1 登記／登入與 Windows）通過，合併 d3411e2；development #158（38197480766）source 3eac1a22／同 tree 升級成功，原 authority／history／settings／Secrets／七 migrations／FK 保留。
 - [x] CY Web #146 source 8aad63d9／tree a02fe9d4 通過 Governance244／Runtime160／deploy-contract137，合併2dfd374e；actual development #138（38197908123）source5325ef77／同 tree 完成0.7.23／consumer1.0.4及canonical／workers.dev版本、D1、invalid Session驗收。七項canonical鏡像exact-sync通過。
-- [ ] 既有 core-portal Super Admin 實際中央登記／Workspace 啟用；操作瀏覽器沒有既有登入Session，由使用者在原登入頁完成，不能用CF token／bootstrap代替員工授權。
+- [x] 使用者以既有 core-portal Super Admin 完成 CYInvoice 真人中央登記／目前 Workspace 啟用，系統使用權畫面已出現 CYInvoice；不自動授予一般員工 App Access。取消／dirty guard／busy／行動裝置及一般員工授權仍待實機驗收。
 - [ ] Approved Invoice App/scope metadata, prepare-cyid, actual Employee/App Access/private transport/original Windows acceptance and separately approved cutover.
 
 ## Optional consumer invalidation source

@@ -4,12 +4,22 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
+## 最新停點：私有綁定配置完成，尚未切換 CYID — 2026-10-12
+
+使用者在既有 CY Web development 中央管理完成 CYInvoice 登記／目前 CYID Workspace 啟用；畫面已出現 CYInvoice 欄，Super Admin 永遠允許，一般員工 App Access 尚未確認。使用者新增 Provider runtime 的 CYINVOICE_APPLICATION_ID／CYINVOICE_WORKSPACE_ID，後者與既有 core portal 身分 Workspace 一致；實際 ID、帳號及 Device Token 不寫 Public 文件。此身分綁定不替換原 CYInvoice business Workspace。
+
+[唯讀 #38](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203645406)（source `ce6528900c7101485424c5c989fe437ae4881d89`）確認 scope configured=true，Consumer 不讀 CYID D1。[prepare-cyid #39](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203790273)（source `2e21c8709f0ef35e665de4d48d4a069b310d1257`）以 main 基準 `2c3071c8b8ed30b5b4898bcf95ca8b174a7b5a99`／tree `c1d303e4d3653c9bd03a034be335bb740c6c2101` 完成真實 business bundle 上傳／100% 部署；IDENTITY Fetcher、IDENTITY_AUTHORITY 的 ConsumerAuthoritySync entrypoint 與三個 approved scope vars readback 通過。原 Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records、原 Token hashes／employee／history／FK／routes 保留，migration skipped、private files cleanup 通過；CYID_ENABLED=false／Built-in 保留。Provider0.3.7／canonical1.0.4、minimum1.0.0。Private recovery reference UTC `2026-10-12T04:27:16.969Z`；不是 restore rehearsal。無測試程式上傳、Secret replacement、重建 Workspace 或 authority switch。
+
+配置 readback 不等於 private Fetcher／RPC／Employee／App Access／Role 已實際驗收。接下來先原 Windows 安裝備份／升級、Built-in continuity、真實員工 readiness，再受控切換驗 AA／AB／AC；正式 production 切換／Release 仍另行核准。下方既有日期段落為歷史證據，過往 scope=false／未部署／未合併敘述不代表現在停點。
+
+現行 [V2.6.19 Build 0 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38198294935/artifacts/11724462289)：Cloud Check #412、source `2230ec2b88d2c8835a20f374f08abfc66102a70d`，81,093,499 bytes，archive SHA-256 `aa97e42368f38828b89c1206f6454b7b39ac44420bd188e7bbe1c36107dc32bc`，到期 2026-10-15 11:06 Asia/Taipei。Invoice subtree 與本輪 main 基準完全一致；依 RC_TEST 首段升級原 portable folder，保留原資料，不重新加入。
+
 ## 1. Git／版本／發布狀態
 
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `7ac06e7ae864c7c4fa4191ffc3f66bfb35cc6fba`（本輪證據文件基準）；#380／#384～#393／#402／#403／#412／#413／#414 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
+| main | `2c3071c8b8ed30b5b4898bcf95ca8b174a7b5a99`（本轮配置證據基準）；#380／#416／#417 等已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.4；本輪不修改 CYERPAutoInput |
 | 已完成工程 PR | #380 工程基準／#385 買方名稱修改已合併；最新 Windows 功能 head `6c499108` 的 Windows #281／Cloud #393／Governance #1201 通過，工程包見下方 |
 | 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
 | 本輪工作線 | CYInvoice 功能已合併 main；CYID 綁定準備獨立接續，不再把歷史 feature branch 當未合併停點 |

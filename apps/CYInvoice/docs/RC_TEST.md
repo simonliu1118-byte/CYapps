@@ -1,12 +1,11 @@
 # CYInvoice Windows 候選版驗證清單
 
-本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。Cloud lifecycle 測試只使用 development Cloud 與可安全回復的測試 Device／Workspace。
+本清單供現行 C#／WinForms 工程測試包與正式 Release 前驗收使用。所有會實際改動光貿資料的測試先使用光貿測試環境；只有使用者明確指定時才切換正式公司環境。CYID 接續依使用者決定，不再上傳遠端測試 Worker／版本／handler；以原 development consumer 的既有功能受控驗收，保留原 Workspace／Device／資料。撤銷會完整清除 portable folder，僅可在有完整備份且已指定可撤銷裝置的窗口執行。
 
-- 目前工程測試基準：**V2.6.17**；CYID source 未部署，精確 head Windows 工程包另記交接。
-- Development Cloud：**0.8.9 / API 1 / compatibility marker 8 / storage Schema 12**；10/10 staged Run #8 attempt 2 已驗證新 capabilities，實機操作仍待驗收。
-- 前置 V2.6.14 Windows 測試包：PR #216 最新精確 head 通過 CI 的 `V2.6.14` engineering Artifact；Windows #258／#260 為先前版本證據；Run343 僅保留為歷史記錄，舊 Artifact 已到期。
-- 最新公開正式 Release：**V2.4.2**。
-- V2.6.11 功能 commit 的 Governance #1137、Cloud #369、Windows #258 全部通過；9/29 development staged deployment 為既有歷史證據，本次未重查 live。PR #216 尚未合併，本清單專注於 CI 無法取代的實機、光貿及跨 Device 互動驗證。
+- 目前工程基準：**V2.6.19 Build 0**；[Cloud Check #412 工程包](https://github.com/simonliu1118-byte/CYapps/actions/runs/38198294935/artifacts/11724462289)，source `2230ec2b88d2c8835a20f374f08abfc66102a70d`，SHA-256 `aa97e42368f38828b89c1206f6454b7b39ac44420bd188e7bbe1c36107dc32bc`，2026-10-15 11:06 Asia/Taipei 到期。該 source 的 Invoice subtree 與本輪 main 基準 `2c3071c8` 完全一致；不是正式 Release。
+- Development Cloud：**0.9.2 / API 1 / compatibility marker 8 / storage Schema 13**；[實際 prepare-cyid #39](https://github.com/simonliu1118-byte/CYapps/actions/runs/38203790273) 綁定／原資料 readback 通過，**CYID_ENABLED=false、Built-in 保留**。Provider development 0.3.7／canonical 1.0.4 已部署，實際私有 transport／員工授權與 Windows 仍待驗收。
+- PR #216／#379 的 source 已隨 #380 進入 main；舊 Windows／Cloud runs 僅為歷史證據，不再作現行停點。下方節名中的舊版號表示功能首次引入；本次一律使用 V2.6.19 驗收。
+- 升級原安裝：先關閉程式並備份完整 portable folder，以工程包程式檔覆蓋原位置（含 Runtime／package-files.json），保留 Data／Cache／Logs 與原 Windows 使用者。重開應延續原 Workspace／Device／資料，不重新加入或進行 reset。
 
 ## A. 全新啟動、超級管理員與設定
 
@@ -321,9 +320,9 @@
 
 自動化不能代替實機 96 DPI 驗收。125／150 DPI、High Contrast 尚待證據，不自動升為本輪阻塞。
 
-## AA. V2.6.15 CYID Consumer 實機驗收（尚未執行）
+## AA. V2.6.19 CYID Consumer 實機驗收（尚未執行）
 
-先安排隔離 staging，確認 registered Application／Workspace enablement／App Access、private IDENTITY binding、兩 Workspace 配對、0013 backup/FK；記錄 PR 精確 head、工程包 hash 和環境，不把上一版包或 local provider fixture 當 live 證據。原 Local／Built-in A/B/C 與業務驗收保留。
+中央登記／runtime scope 與兩個私有 bindings 的配置已完成，#39 確認原 schema13／資料保留；這不代替 Employee／App Access／Role 或 transport 授權。先驗原安裝 Built-in continuity 與員工 readiness，再受控驗 CYID；不新增遠端測試程式或 synthetic 帳號。記錄精確 source、工程包 hash、環境與備份，不把配置或 local fixture 當 live 授權。原 Local／Built-in A/B/C 與業務驗收保留。
 
 - [ ] Local／Built-in 原流程及舊 discovery-404 Worker 不受影響；已確認 CYID 的 client 不自動降級。
 - [ ] 原 A/B/C 安裝先升級到 CYID-capable Windows，備妥各員工啟用／App Access／Role／verified 超管 Email，再受控啟用。前後核對同一 CYInvoice Workspace、原 Device／Token、公司／印表機／protected secrets、發票／pending／買方／PDF；重開可繼續原工作，不重新加入／建立 Workspace／reset，錯綁定拒絕且保留原設定。
