@@ -9,7 +9,7 @@
 | 項目 | 已核對狀態 |
 | --- | --- |
 | Repository／專案 | simonliu1118-byte/CYapps／apps/CYInvoice/ |
-| main | `19e5318446ce2295d1993f41c5b187a1ac22ea63`（本輪 source 基準）；#380／#384～#393／#402／#403 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
+| main | `8d683a1f07e874d5a66a2786d739e3b99bf6bf28`（本輪 source 基準）；#380／#384～#393／#402／#403／#412 已合併，CYInvoice V2.6.19 Build 0／canonical 1.0.3 |
 | 已完成工程 PR | #380 工程基準／#385 買方名稱修改已合併；最新 Windows 功能 head `6c499108` 的 Windows #281／Cloud #393／Governance #1201 通過，工程包見下方 |
 | 前置介面 PR | #216／#379 的 head 已包含於 #380 ancestry 並進入 main；不重複合併 |
 | 本輪工作線 | CYInvoice 功能已合併 main；CYID 綁定準備獨立接續，不再把歷史 feature branch 當未合併停點 |
@@ -53,11 +53,15 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 
 
 
-### CYID 綁定準備流程 — 2026-10-12
+### CYID 綁定準備／共通設定收斂 — 2026-10-12
 
-既有 development deployment owner 新增 `prepare-cyid`；僅加入核准的 `IDENTITY`／`IDENTITY_AUTHORITY` 與三項 Application／Workspace scope，仍保持 Built-in／CYID false。原 Secrets／D1／rate limits／其他 services 從 exact active UUID 繼承，既有正確綁定不重寫；缺值、錯誤原 Workspace、既有 scope／target／entrypoint 衝突或讀回差異會阻擋。一般 deploy 不得順帶新增 CYID bindings／scope；prepare 要求完整 schema 且不跑 migration。沒有遠端測試 handler、測試上傳、新 Workspace、CYID D1 讀取或權威切換。runtime IDs 改由 Environment Secrets 注入，既有兩項 Provider 資源 vars 複製為同名 Secrets，Provider 原 vars 保留。步驟／輸入唯一技術說明見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)。
+#412 已合併，source c6d55ee8／tree b4de3eb1 六項 exact-head CI 全通過（含 Cloud #401 的 Windows job）。原 deployment owner 提供 prepare-cyid、保留 Built-in／CYID false、只新增核准 services／scope、exact-active inheritance／readback；沒有測試上傳或權威切換。
 
-本輪只完成 source／本地回歸／bundle 準備；CI 以此變更 PR 的精確 head checks 為準。三項 scope 在 actual #25 均空白，尚無更新證據；需填入已核准的既有對應才能執行真實準備。此階段的 binding readback／Provider public health 不算 private Fetcher／named RPC 或 Employee App Access 驗收。原 Windows／Device／資料延續、真實授權與正式切換仍依 TODO／RC gate，產品與 contract 版本不變。
+依使用者確認同 Repo 共用參數，本輪 source 將 CYInvoice／CYID development與production／CYACCweb 的 Provider base name 統一讀 `development` Environment Secret `CYID_WORKER_NAME`；Account／API Token 原 Secrets 直接沿用。CYACC 仍依原 resolver 取得並核對 production target，不改帳務／登入 runtime。需把既有同名 Variable 的值搬到同名 Secret 一次，唯讀 preflight 驗證成功後才合併，避免影響 CYACC 的 main 自動部署；舊 deployment branches 尚引用 Variable，暂不刪除。
+
+CYInvoice-specific scope 從 Provider exact active Worker 的 CYINVOICE_APPLICATION_ID／CYINVOICE_WORKSPACE_ID 取得；原 business Workspace 由原 D1 唯一 active Workspace 確認，缺少／多個均阻擋。Provider D1 ID 僅由其 binding metadata 取得作排除，不讀 CYID D1。GitHub 不再需要三項 scope／Provider DB ID 的獨立副本。缺 metadata 不借 CYACC 設定，不新增 Workspace；準備前後 Provider version／binding digest 變動阻擋。技術操作見 [Cloud README](../cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)。
+
+本輪 source／本地回歸完成，CI／共通 Secret presence 與 Provider scope 的實際結果以後續 PR／唯讀 run 為準；#25仍是最新真實 business deployment。尚未實際準備、private transport／真實 Employee/App Access／原 Windows continuity／正式切換未完成，唯一待辦仍在 TODO §7.3.3。產品／canonical 版本不變。
 
 ### 分段上線準備 — 2026-10-11
 
