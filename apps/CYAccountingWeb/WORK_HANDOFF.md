@@ -68,6 +68,9 @@
 待辦以 `TODO.md` 為目前清單；真機 RWD／鍵盤／原生 picker／分享驗收、optimistic create、Backup Restore／DR 與 CYID acceptance 仍依正式文件處理。不得把未合併工作線當成已部署基準。
 
 
-## CYID 共通部署參數接續 — 2026/10/12
+## CYID 共通部署參數已驗證 — 2026/10/12
 
-CYInvoice 工作線依使用者同 Repo 共用參數要求，準備將各部署流程 Provider base-name input 統一讀 development Environment Secret CYID_WORKER_NAME；CYACC 只調整這一項輸入来源，既有 derive／verify production provider與自身 Application／Workspace resolver、帳務／Session runtime皆不變，產品 VERSION／BUILD 不变。需將原同名 Variable 值搬入 Secret 一次，並通過唯讀 preflight 再合併，避免 main 自動部署缺 input；舊 Variable 暫留供尚未更新的長期部署分支。CI／實際 presence 證據由本次共通部署參數 PR／Invoice read-only run 記錄；CYInvoice 不得借用 CYACC Application／Workspace 或把 Invoice development 當作本 App production。參考 [Invoice Cloud deployment instructions](../CYInvoice/cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained)。
+#413 source 8d3ed436／tree a14f00aa 七 CI 通過，使用者完成 development CYID_WORKER_NAME 共通 Secret，Invoice 唯讀 #29 通過後合併 main 4655460c。[CYACC main Validate and Deploy #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386) validate／deploy 通過；本 App 只改 Provider base-name input來源，原 production derive/verify resolver、Application／Workspace、帳務／Session runtime與產品 VERSION／BUILD 不變。Invoice仍Builtin，Provider Invoice scope未配置，不代表本App production尚未接入。原Variable暫留供未更新/retired deployment refs，退場盤點與條件由Invoice TODO追蹤。
+
+
+同一已驗證Secret入口已同步到Invoice／Provider active及retired部署refs（Provider #153／#154、Invoice #32通過，Invoice維持Builtin）；現在可由Environment owner刪除同名舊Variable，Secret保留。此Doc更新不改本App帳務／Session/runtime，對應詳細events見Invoice現行交接。
