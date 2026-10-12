@@ -681,7 +681,18 @@ internal static partial class ShopeeScreenshot
 
         var formItems = new List<ImportedItem>();
         foreach (var group in lines.GroupBy(l => (l.ItemCode, l.UnitPrice, l.SortKey)))
-            formItems.Add(new ImportedItem(group.Key.ItemCode, Number(group.Sum(l => l.Quantity)), Number(group.Key.UnitPrice)) { SortKey = group.Key.SortKey });
+        {
+            var quantity = Number(group.Sum(l => l.Quantity));
+            // A bundle's parts leave 單價 to ERP; the first part remembers what the bundle sold for.
+            formItems.Add(group.Key.SortKey is { } bundle
+                ? new ImportedItem(group.Key.ItemCode, quantity, string.Empty)
+                {
+                    SortKey = bundle,
+                    BundleTotal = group.Key.UnitPrice > 0 ? Number(group.Sum(l => l.Amount)) : null
+                }
+                : new ImportedItem(group.Key.ItemCode, quantity, Number(group.Key.UnitPrice)));
+        }
+        var hasBundles = lines.Any(l => l.SortKey is not null);
 
         var promotion = lines.Sum(l => l.Amount) - amounts.OrderAmount;
         if (promotion < 0) problems.Add($"單價×數量合計低於訂單金額 {Number(-promotion)}，請核對明細。");
@@ -693,12 +704,14 @@ internal static partial class ShopeeScreenshot
             problems.Add($"明細數字對不起來，沒有加入促銷組合（推算 {Number(promotion)}），請核對數量後在表單補上。");
             promotion = 0;
         }
-        void AddLine(string code, decimal price, string what)
+        void AddLine(string code, decimal price, string what, bool takesBundleGap = false)
         {
             if (code.Length == 0) problems.Add($"請在設定填入{what}品號（本張有{what} {Number(price)}）。");
-            formItems.Add(new ImportedItem(code, "1", Number(price)));
+            formItems.Add(new ImportedItem(code, "1", Number(price)) { TakesBundleGap = takesBundleGap });
         }
-        if (promotion > 0) AddLine(mapping.PromotionItemCode, -promotion, "促銷組合");
+        // With a bundle the 促銷組合 line is always there: it also takes the gap between ERP's
+        // list prices for the bundle's parts and what the bundle sold for.
+        if (promotion > 0 || hasBundles) AddLine(mapping.PromotionItemCode, -promotion, "促銷組合", hasBundles);
         if (amounts.Coupons < 0) AddLine(mapping.DiscountItemCode, amounts.Coupons, "折價券");
         if (amounts.Shipping > 0) AddLine(mapping.ShippingItemCode, amounts.Shipping, "運費");
 

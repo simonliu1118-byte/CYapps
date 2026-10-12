@@ -506,6 +506,9 @@ internal sealed class MainForm : Form
         _details.Columns.Add(batchColumn);
         _details.Columns.Add(TextColumn("Warehouse", "庫別", 140));
         _details.Columns.Add(TextColumn("UnitPrice", "單價", 130, DataGridViewContentAlignment.MiddleRight));
+        // Bundle bookkeeping travels with the row (hidden), so an edited form keeps it right.
+        foreach (var hidden in new[] { "BundleKey", "BundleTotal", "BundleGap" })
+            _details.Columns.Add(new DataGridViewTextBoxColumn { Name = hidden, Visible = false });
 
         _details.RowsDefaultCellStyle.BackColor = CyVisualTheme.White;
         _details.RowsDefaultCellStyle.ForeColor = CyVisualTheme.TextPrimary;
@@ -1141,6 +1144,9 @@ internal sealed class MainForm : Form
             _details["ItemCode", i].Value = items[i].ItemCode;
             _details["Quantity", i].Value = items[i].Quantity;
             _details["UnitPrice", i].Value = items[i].UnitPrice;
+            _details["BundleKey", i].Value = items[i].BundleTotal is not null || (items[i].SortKey is not null && items[i].UnitPrice.Length == 0) ? items[i].SortKey : null;
+            _details["BundleTotal", i].Value = items[i].BundleTotal;
+            _details["BundleGap", i].Value = items[i].TakesBundleGap ? "1" : null;
         }
         ApplyDefaultsToBlankFields();
         _loadedOrder = order;
@@ -1440,7 +1446,10 @@ internal sealed class MainForm : Form
                 GiftQuantity = Cell(row, "GiftQuantity"),
                 Batch = Cell(row, "Batch"),
                 Warehouse = Cell(row, "Warehouse"),
-                UnitPrice = Cell(row, "UnitPrice")
+                UnitPrice = Cell(row, "UnitPrice"),
+                BundleKey = Cell(row, "BundleKey"),
+                BundleTotal = Cell(row, "BundleTotal"),
+                TakesBundleGap = Cell(row, "BundleGap") == "1"
             };
             if (!d.HasAnyData) continue;
 

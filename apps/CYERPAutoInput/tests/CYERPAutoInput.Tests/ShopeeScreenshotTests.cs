@@ -638,4 +638,28 @@ public class ShopeeScreenshotTests
     [InlineData("X00244", new[] { "X00244" })]
     public void Splits_bundle_codes(string raw, string[] parts) =>
         Assert.Equal(parts, ShopeeScreenshot.BundleParts(raw));
+    [Fact]
+    public void A_bundle_leaves_its_prices_to_erp_and_the_promotion_takes_the_gap()
+    {
+        List<OcrBox> items =
+        [
+            new("單價", 744, 30, 28, 17), new("數量", 816, 30, 32, 17), new("小計", 905, 32, 28, 15),
+            new("1", 37, 150, 8, 14), new("400", 745, 140, 26, 17), new("2", 828, 140, 8, 14), new("792", 906, 140, 26, 17),
+            new("800", 906, 158, 26, 14), new("商品選項貨號：X00244+X00011", 180, 178, 190, 17)
+        ];
+        List<OcrBox> amounts =
+        [
+            B("買家實付金額", 79, 31), B("訂單金額", 752, 64), B("NT$792", 922, 65, 55), B("買家總支付金額", 706, 210), B("NT$792", 889, 207, 90, 26)
+        ];
+        var result = Read(OrderShot(), [items], amounts);
+        Assert.Empty(result.Problems);
+        var lines = result.Order!.Items;
+        var first = lines.Single(i => i.ItemCode == "X00244");
+        var second = lines.Single(i => i.ItemCode == "X00011");
+        Assert.Equal(("2", "", "800"), (first.Quantity, first.UnitPrice, first.BundleTotal));
+        Assert.Equal(("2", "", (string?)null), (second.Quantity, second.UnitPrice, second.BundleTotal));
+        var promotion = lines.Single(i => i.ItemCode == "P900");
+        Assert.Equal("-8", promotion.UnitPrice);
+        Assert.True(promotion.TakesBundleGap);
+    }
 }

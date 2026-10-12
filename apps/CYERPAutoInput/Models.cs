@@ -25,6 +25,11 @@ internal sealed class DetailRow
     public string Batch { get; set; } = string.Empty;
     public string Warehouse { get; set; } = string.Empty;
     public string UnitPrice { get; set; } = string.Empty;
+    /// <summary>Bundle part: ERP's own price is read back and counted against <see cref="BundleTotal"/>.</summary>
+    public string BundleKey { get; set; } = string.Empty;
+    public string BundleTotal { get; set; } = string.Empty;
+    /// <summary>促銷組合 line: its price takes the bundles' gap (list prices − what the bundles sold for).</summary>
+    public bool TakesBundleGap { get; set; }
 
     public bool HasAnyData =>
         !string.IsNullOrWhiteSpace(ItemCode) ||

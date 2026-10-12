@@ -4,6 +4,14 @@ internal sealed record ImportedItem(string ItemCode, string Quantity, string Uni
 {
     /// <summary>For the parts of a bundle: the bundle's first code, so its lines stay together in that order.</summary>
     public string? SortKey { get; init; }
+    /// <summary>
+    /// On a bundle's first part: what the bundle sold for. Bundle parts carry no 單價, so ERP
+    /// enters its own list price, and the gap between those and this goes to 促銷組合 (user,
+    /// 2026-10-12: the report's figures stay right per product).
+    /// </summary>
+    public string? BundleTotal { get; init; }
+    /// <summary>The 促銷組合 line that also takes the bundles' gap, worked out while ERP is filled in.</summary>
+    public bool TakesBundleGap { get; init; }
 
     /// <summary>
     /// Products in item-code order, smallest first (user, 2026-10-12); the lines for the

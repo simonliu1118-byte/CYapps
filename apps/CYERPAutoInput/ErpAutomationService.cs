@@ -1,3 +1,4 @@
+using System.Globalization;
 namespace CYERPAutoInput;
 
 internal sealed class ErpAutomationService
@@ -918,6 +919,15 @@ internal sealed class ErpAutomationService
         if (geometry.RowCenterY.Count == 0)
             throw new InvalidOperationException("光學辨識沒有找到任何可輸入的明細列。");
 
+        // Bundles (user, 2026-10-12): their parts take ERP's own list price, read back here, and
+        // the gap to what each bundle sold for goes to the 促銷組合 line after them.
+        var bundleList = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        var bundleSold = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        var gapRow = rows.ToList().FindIndex(r => r.TakesBundleGap);
+        var lastBundleRow = rows.ToList().FindLastIndex(r => r.BundleKey.Length > 0);
+        if (lastBundleRow >= 0 && gapRow < lastBundleRow)
+            throw new InvalidOperationException("表單有套裝品項，但促銷組合那一列不在套裝品項之後（或被刪除）；套裝與原價的差額無處可放，未開始輸入，請檢查表單。");
+
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -949,8 +959,28 @@ internal sealed class ErpAutomationService
                 geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 3, row.GiftQuantity, cancellationToken);
             if (!string.IsNullOrWhiteSpace(row.Warehouse))
                 geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 6, row.Warehouse, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(row.UnitPrice))
-                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 7, row.UnitPrice, cancellationToken);
+            if (row.BundleKey.Length > 0 && string.IsNullOrWhiteSpace(row.UnitPrice))
+            {
+                var listPrice = await ReadDetailUnitPriceAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);
+                var quantity = decimal.Parse(row.Quantity, NumberStyles.Number, CultureInfo.InvariantCulture);
+                bundleList[row.BundleKey] = bundleList.GetValueOrDefault(row.BundleKey) + listPrice * quantity;
+                if (decimal.TryParse(row.BundleTotal, NumberStyles.Number, CultureInfo.InvariantCulture, out var sold))
+                    bundleSold[row.BundleKey] = bundleSold.GetValueOrDefault(row.BundleKey) + sold;
+                _log.Info("detail", $"bundle part row={visibleRow + 1} item={_log.Value(row.ItemCode)} list_price={listPrice} quantity={quantity} bundle={_log.Value(row.BundleKey)}");
+            }
+            var unitPrice = row.UnitPrice;
+            if (row.TakesBundleGap && bundleList.Count > 0)
+            {
+                var missing = bundleList.Keys.Where(k => !bundleSold.ContainsKey(k)).ToList();
+                if (missing.Count > 0)
+                    throw new InvalidOperationException($"套裝 {string.Join("、", missing)} 少了套裝售價；未輸入促銷組合，請人工處理此單。");
+                var gap = bundleList.Sum(p => p.Value - bundleSold[p.Key]);
+                var basePrice = decimal.Parse(row.UnitPrice.Length > 0 ? row.UnitPrice : "0", NumberStyles.Number, CultureInfo.InvariantCulture);
+                unitPrice = (basePrice - gap).ToString("0.####", CultureInfo.InvariantCulture);
+                _log.Info("detail", $"促銷組合 takes bundle gap={gap} base={basePrice} price={unitPrice}");
+            }
+            if (!string.IsNullOrWhiteSpace(unitPrice))
+                geometry = await SetDetailCellAsync(root, grid, geometry, visibleRow, 7, unitPrice, cancellationToken);
 
             geometry = await SelectBatchIfRequiredAsync(root, grid, geometry, visibleRow, row.ItemCode, cancellationToken);
         }
@@ -1079,6 +1109,45 @@ internal sealed class ErpAutomationService
         }
 
         throw new InvalidOperationException($"ERP 明細 row={visibleRow + 1}, column={column} 連續兩次都沒有進入編輯模式。");
+    }
+
+    /// <summary>
+    /// The 單價 ERP filled in for a bundle part (its list price): the cell's editor is opened and
+    /// its text read (WM_GETTEXT, else OCR of the editor), then Enter leaves it unchanged.
+    /// Nothing is guessed: a price that cannot be read stops the run.
+    /// </summary>
+    private async Task<decimal> ReadDetailUnitPriceAsync(nint root, WindowControl grid, GridGeometry geometry, int visibleRow, string itemCode, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Win32Automation.PrepareForeground(root, _log))
+                throw new InvalidOperationException("讀取 ERP 單價前無法把 ERP 帶到前景。");
+            var (_, point, freshRect) = await ResolveFreshDetailCellPointAsync(grid.Handle, geometry, visibleRow, 7, cancellationToken);
+            InputSender.Click(point);
+            await Delay(150, cancellationToken);
+            var editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 600);
+            if (editor == 0)
+            {
+                InputSender.Press(NativeMethods.VK_RETURN);
+                editor = await WaitGridEditorAsync(root, freshRect, point, cancellationToken, 720);
+            }
+            if (editor == 0) { await Delay(250, cancellationToken); continue; }
+
+            var text = (NativeMethods.ControlText(editor) ?? string.Empty).Trim();
+            if (text.Length == 0 && NativeMethods.GetWindowRect(editor, out var rect) && rect.Width > 0 && rect.Height > 0)
+            {
+                using var image = ScreenCapture.Capture(rect.ToRectangle());
+                text = string.Concat((await _textVision.RecognizeAsync(image, cancellationToken)).OrderBy(t => t.Rect.Left).Select(t => t.Text)).Trim();
+            }
+            InputSender.Press(NativeMethods.VK_RETURN);
+            await Delay(250, cancellationToken);
+            _log.Info("detail", $"unit price read row={visibleRow + 1} item={_log.Value(itemCode)} attempt={attempt} text={_log.Value(text)}");
+            if (decimal.TryParse(text.Replace(",", string.Empty), NumberStyles.Number, CultureInfo.InvariantCulture, out var price) && price > 0)
+                return price;
+            await Delay(300, cancellationToken);
+        }
+        throw new InvalidOperationException($"讀不到套裝品項 {itemCode} 在 ERP 帶出的單價；未繼續，請人工處理此單。");
     }
 
     private async Task<GridGeometry> SelectUnitAsync(
