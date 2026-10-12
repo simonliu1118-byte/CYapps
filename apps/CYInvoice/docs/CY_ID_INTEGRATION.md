@@ -392,3 +392,6 @@ CYID private transport、真實 Application／兩 Workspace binding／Employee A
 
 
 2026-10-12 actual checkpoint：#413七項CI通過並合併，使用者完成Secret、唯讀#29及CYACC main #608通過；#29確認Invoice scope configured=false，metadata／registered enablement及private acceptance仍待補，不因common input成功開CYID flag。舊Variable尚有舊deployment refs使用，退場條件與精確證據見現行交接及TODO，不重播bootstrap或猜scope。
+
+
+後續同一已測source的Provider #153／Invoice #32 real-business入口更新通過，Builtin／原Workspace與資料保留；#31於Provider版本切換期間在upload前被穩定性guard攔住，#32使用fresh snapshot。Active／retired refs的Variable引用已收斂，現在待使用者刪除同名Variable、保留Secret。中央scope仍未確認；完整refs／events僅在現行交接及TODO追蹤。

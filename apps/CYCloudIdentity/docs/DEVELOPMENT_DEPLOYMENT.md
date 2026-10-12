@@ -102,3 +102,12 @@ Invoice obtains its own CYINVOICE_APPLICATION_ID and CYINVOICE_WORKSPACE_ID from
 Variable retirement gate 尚未完成：cyinvoice/cloud-dev-deploy at aeb3434f、deploy/cycloudidentity-development at 56c27685、歷史／已退休的 deploy/cycloudidentity-production at 8526ba1d 尚有 vars.CYID_WORKER_NAME。main 四個 deployment owners 與新的唯讀 preflight 已讀 Secret；舊值暫留，不重跑已退休的 provisioning／probe runs。待所有仍使用的入口更新或明確退休並驗證後，才由有 GitHub Environment 管理權限者刪除同名 Variable；不以 main 合併或固定日期代替此 gate。
 
 Instructions remain in [CYInvoice Cloud README](../../CYInvoice/cloud/README.md#prepare-the-existing-cyid-binding-built-in-retained); unfinished work is tracked only in Invoice TODO §7.3.3. Product/contract versions unchanged.
+
+
+### 共通 Variable 退場已就緒 — 2026-10-12
+
+#414 證據文件 source e0050ac3／tree97ec5b3f 七 CI 通過、合併 main7ac06e7a。相同已測 tree 同步至部署入口；Provider development #153（38192970528）原0.3.6／authority metadata／history／runtime vars與Secrets保留，Provider唯讀 #154（38193349461）通過。Invoice #31（38192965762）在 Provider 正切換 active version 時，首個穩定性核對於upload前阻擋（ACTIVE_DEPLOYMENT_CHANGED）；after回CYID_PROVIDER_CHANGED，沒有新增版本上傳／部署。待Provider完成後重新取快照的Invoice #32（38193198316）成功：原Cloud0.9.2／API1／marker8／storage13、1 Workspace／4 Device records／Token hashes／history／FK／routes及Builtin保留，exact-active inheritance／uploaded與active readback／100% real-business部署通過，CYID false。Expired undeployed no-D1 probe仍1個，未上傳測試程式、重設Secret或restore。這是code/config入口同步，不是CYID authority切換。
+
+已read-back核對官方active與retired refs均改讀Secret：Invoice deploy e796909e、preflight ea0d55a3；Provider development a0209a16、preflight f22978e9；retired production b3184e15；retired Invoice binding-version910dd5b5／cleanup7c6e9df3／Provider probe3849fb80。retired production #14（38192977888）只執行無Secrets的retirement error gate，沒有重新provision；三個retired probe/cleanup refs無push runtime入口，不重跑歷史runs。main四個deployment owners相同Secret來源。現在可由有Environment管理權限者刪除development同名CYID_WORKER_NAME Variable，保留Secret；實際刪除尚待使用者確認，Repo connector不支援這項管理操作。
+
+Provider兩項Invoice scope仍未配置；中央registry/Workspace enablement尚未確認，不能就此啟用CYID。已核對CY Web main的帳號管理UI：超級管理員或Identity Admin於「帳號與權限 → 系統使用權」查看app清單；先只查看CYInvoice欄，不變更勾選，並核對該Portal的實際Provider/environment。不得把production清單直接當成development授權或缺metadata當成未註冊。

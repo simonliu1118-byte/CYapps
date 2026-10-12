@@ -44,7 +44,8 @@
 - [x] 共通 deployment input／Invoice scope resolver follow-up source：四個 workflows 共用 Provider-name Secret；Invoice 只讀 Provider active Worker metadata／original business D1，不讀 Identity D1、不借 CYACC scope，不重建 Workspace；Provider drift 阻擋。本地回歸通過，CI 依 PR。
 - [x] 共通 Secret 已設定；#413 七 CI 通過並合併，唯讀 Invoice #29／CYACC main #608 實際通過，原 Invoice Workspace／Device hashes／history／Builtin保留，無 Identity D1／Invoice upload／authority switch。來源／run見 DEVELOPMENT_DEPLOYMENT。
 - [ ] Provider Invoice 兩 scope 尚未配置（#29 configured=false）；先經現行中央管理確認 registry／Workspace enablement及approved mapping，再prepare。缺 metadata不代表未註冊；不得重播 bootstrap或由Consumer直讀/寫Identity D1、借 production scope替代development。
-- [ ] 尚引用舊Variable的部署入口更新或明確退休／驗證後才刪同名Variable；Invoice deploy aeb3434f、Provider dev56c27685／retired prod8526ba1d已盤點，不重跑退休provisioning。
+- [x] 官方active與retired部署入口已同步Secret並read-back：Provider development #153／preflight #154通過；Invoice #31於Provider切換時在upload前阻擋，等待Provider完成的新snapshot #32通過，原Workspace／Device hashes／history／Builtin保留、無test upload／authority switch。Exact source／refs／run evidence見現行交接及Provider DEVELOPMENT_DEPLOYMENT。
+- [ ] 使用者在development刪除同名CYID_WORKER_NAME Variable，保留Secret；入口退場條件已滿足，實際刪除尚未確認。之後以新source唯讀preflight核對，不重跑歷史/retired runs。
 - [ ] 實際private Fetcher／named RPC與App Access／Role／原Windows裝置驗收，使用真實consumer功能；不再增加遠端probe入口。配對／範圍／Free量測與正式切換仍獨立gate。
 - [ ] Temporary Workers Admin移除由使用者確認；不增加權限。刪除10339留歷史／非目前部署阻塞。
 
