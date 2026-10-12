@@ -15,4 +15,16 @@ public class ImportedItemTests
         var ordered = ImportedItem.InEntryOrder(items, ["D901", "S100", "P902", ""]);
         Assert.Equal(["BB00554", "E0118", "X00110", "X00329", "P902", "D901", "S100"], ordered.Select(i => i.ItemCode));
     }
+
+    [Fact]
+    public void A_bundle_stays_together_with_its_priced_line_first()
+    {
+        List<ImportedItem> items =
+        [
+            new("X00244", "2", "400") { SortKey = "X00244" }, new("X00011", "2", "0") { SortKey = "X00244" },
+            new("X00100", "1", "50"), new("X00300", "1", "60")
+        ];
+        var ordered = ImportedItem.InEntryOrder(items, []);
+        Assert.Equal(["X00100", "X00244", "X00011", "X00300"], ordered.Select(i => i.ItemCode));
+    }
 }

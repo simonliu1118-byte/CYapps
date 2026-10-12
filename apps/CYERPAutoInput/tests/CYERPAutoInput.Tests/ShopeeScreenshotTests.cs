@@ -612,4 +612,30 @@ public class ShopeeScreenshotTests
         Assert.Equal(groups.Sum(g => g.Original), items.Sum(i => i.Amount));
         Assert.DoesNotContain(problems, p => p.Contains("缺第", StringComparison.Ordinal));
     }
+    [Fact]
+    public void A_bundle_enters_every_part_with_the_price_on_the_first()
+    {
+        // 「X00244+X00011」 × 2 at 400, struck 800 shown 792 (user's screenshot, 2026-10-12; codes replaced).
+        List<OcrBox> lines =
+        [
+            new("單價", 744, 30, 28, 17), new("數量", 816, 30, 32, 17), new("小計", 905, 32, 28, 15),
+            new("1", 37, 150, 8, 14), new("400", 745, 140, 26, 17), new("2", 828, 140, 8, 14), new("792", 906, 140, 26, 17),
+            new("800", 906, 158, 26, 14), new("商品選項貨號：X00244+X00011", 180, 178, 190, 17)
+        ];
+        var problems = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 1020, problems);
+        Assert.Empty(problems);
+        Assert.Equal(2, items.Count);
+        Assert.Equal(("X00244", 400m, 2m), (items[0].ItemCode, items[0].UnitPrice, items[0].Quantity));
+        Assert.Equal(("X00011", 0m, 2m), (items[1].ItemCode, items[1].UnitPrice, items[1].Quantity));
+        Assert.Equal(groups.Single().Original, items.Sum(i => i.Amount));
+    }
+
+    [Theory]
+    [InlineData("X00244+X00011", new[] { "X00244", "X00011" })]
+    [InlineData("X00244十X00011", new[] { "X00244", "X00011" })]
+    [InlineData("X00244 ＋ X00011x2", new[] { "X00244", "X00011x2" })]
+    [InlineData("X00244", new[] { "X00244" })]
+    public void Splits_bundle_codes(string raw, string[] parts) =>
+        Assert.Equal(parts, ShopeeScreenshot.BundleParts(raw));
 }

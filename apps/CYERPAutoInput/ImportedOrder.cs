@@ -2,6 +2,9 @@ namespace CYERPAutoInput;
 
 internal sealed record ImportedItem(string ItemCode, string Quantity, string UnitPrice)
 {
+    /// <summary>For the parts of a bundle: the bundle's first code, so its lines stay together in that order.</summary>
+    public string? SortKey { get; init; }
+
     /// <summary>
     /// Products in item-code order, smallest first (user, 2026-10-12); the lines for the
     /// configured 折價券／運費／促銷組合 codes stay last, in their own order.
@@ -10,7 +13,7 @@ internal sealed record ImportedItem(string ItemCode, string Quantity, string Uni
     {
         var trailing = new HashSet<string>(trailingCodes.Where(c => c.Length > 0), StringComparer.OrdinalIgnoreCase);
         var list = items.ToList();
-        return list.Where(i => !trailing.Contains(i.ItemCode)).OrderBy(i => i.ItemCode, StringComparer.OrdinalIgnoreCase)
+        return list.Where(i => !trailing.Contains(i.ItemCode)).OrderBy(i => i.SortKey ?? i.ItemCode, StringComparer.OrdinalIgnoreCase)
             .Concat(list.Where(i => trailing.Contains(i.ItemCode)))
             .ToList();
     }
