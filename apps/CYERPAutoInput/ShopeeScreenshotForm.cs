@@ -505,9 +505,7 @@ internal sealed class ShopeeScreenshotForm : Form
         var groups = new List<ShopeeShotGroup>();
         foreach (var shot in _shots.Where(s => s.Kind == ShopeeShotKind.Items))
         {
-            var corrections = new List<string>();
-            var (shotItems, shotGroups) = ShopeeScreenshot.ParseItems(shot.Lines, shot.Image.Width, problems, corrections);
-            foreach (var correction in corrections) _log.Info("shopee-shot", $"quantity corrected: {correction}");
+            var (shotItems, shotGroups) = ShopeeScreenshot.ParseItems(shot.Lines, shot.Image.Width, problems);
             items.AddRange(shotItems);
             groups.AddRange(shotGroups);
         }

@@ -549,7 +549,7 @@ public class ShopeeScreenshotTests
         Assert.Contains(result.Order!.Items, i => i.ItemCode == "X00315-1");
     }
     [Fact]
-    public void Corrects_the_one_quantity_that_makes_a_group_add_up()
+    public void Names_the_one_quantity_that_would_make_a_group_add_up_without_changing_it()
     {
         // Positions from the user's log (2026-10-12), codes replaced: the 2nd product's 「2」 was read as 「7」.
         List<OcrBox> lines =
@@ -561,15 +561,13 @@ public class ShopeeScreenshotTests
             new("150", 756, 685, 25, 17), new("1", 848, 688, 7, 9), new("商品選項貨號：X00314", 142, 708, 133, 16)
         ];
         var problems = new List<string>();
-        var corrections = new List<string>();
-        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 973, problems, corrections);
-        Assert.Equal(2m, items.Single(i => i.ItemCode == "X00297").Quantity);
-        Assert.Equal(groups.Single().Original, items.Sum(i => i.Amount));
-        Assert.Single(corrections);
+        var (items, _) = ShopeeScreenshot.ParseItems(lines, 973, problems);
+        Assert.Equal(7m, items.Single(i => i.ItemCode == "X00297").Quantity);
+        Assert.Contains(problems, p => p.Contains("X00297", StringComparison.Ordinal) && p.Contains("若是 2", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Leaves_quantities_alone_when_more_than_one_could_be_wrong()
+    public void Names_no_quantity_when_more_than_one_could_be_wrong()
     {
         List<OcrBox> lines =
         [
@@ -579,10 +577,10 @@ public class ShopeeScreenshotTests
             new("商品選項貨號：X00297", 143, 641, 131, 17)
         ];
         // 40×2 + 40×2 ≠ 200, and either product at 3 would add up: no way to tell which.
-        var corrections = new List<string>();
-        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 973, new List<string>(), corrections);
+        var problems = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 973, problems);
         Assert.Equal(200m, groups.Single().Original);
-        Assert.Empty(corrections);
+        Assert.DoesNotContain(problems, p => p.Contains("若是", StringComparison.Ordinal));
         Assert.All(items, i => Assert.Equal(2m, i.Quantity));
     }
 }

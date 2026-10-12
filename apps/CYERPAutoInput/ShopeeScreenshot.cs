@@ -240,7 +240,7 @@ internal static partial class ShopeeScreenshot
     /// are found from the numbers' positions, so the header row may be off-screen.
     /// </summary>
     public static (List<ShopeeShotItem> Items, List<ShopeeShotGroup> Groups) ParseItems(
-        IReadOnlyList<OcrBox> lines, int imageWidth, List<string> problems, List<string>? corrections = null)
+        IReadOnlyList<OcrBox> lines, int imageWidth, List<string> problems)
     {
         var raw = lines;
         lines = WithLoneGlyphDigits(lines);
@@ -353,18 +353,17 @@ internal static partial class ShopeeScreenshot
             else problems.Add($"商品「{rawCode}」讀不到數量，請在表單補上該商品。");
         }
 
-        CorrectOneQuantity(items, groups, corrections);
+        SuggestQuantity(items, groups, problems);
         return (items, groups);
     }
 
     /// <summary>
     /// A 數量 read as another digit (「2」 read as 「7」, user's PC, 2026-10-12) makes a group's
-    /// 單價×數量 differ from its 小計 original. When changing exactly one product's quantity to a
-    /// whole number makes the group add up, and no other product could, that quantity is the
-    /// one on the page; the correction is reported for the log. Anything else is left for the
-    /// checks to flag. Sets (quantity × n) are not touched.
+    /// 單價×數量 differ from its 小計 original. Nothing is changed (user: a wrong quantity makes
+    /// a wrong document): when exactly one product's quantity, as some whole number, would make
+    /// the group add up, the problem names that product and number so the check is quick.
     /// </summary>
-    private static void CorrectOneQuantity(List<ShopeeShotItem> items, List<ShopeeShotGroup> groups, List<string>? corrections)
+    private static void SuggestQuantity(List<ShopeeShotItem> items, List<ShopeeShotGroup> groups, List<string> problems)
     {
         foreach (var group in groups)
         {
@@ -381,9 +380,8 @@ internal static partial class ShopeeScreenshot
                 if (quantity is >= 1 and <= 999 && quantity != item.Quantity) candidates.Add((item, quantity));
             }
             if (candidates.Count != 1) continue;
-            var (wrong, right) = candidates[0];
-            items[items.IndexOf(wrong)] = wrong with { Quantity = right, Amount = wrong.UnitPrice * right };
-            corrections?.Add($"第 {group.Index} 項 {wrong.ItemCode} 數量 {Number(wrong.Quantity)} → {Number(right)}（依小計 {Number(group.Original)}）");
+            var (item1, right) = candidates[0];
+            problems.Add($"第 {group.Index} 項 {item1.ItemCode} 數量讀到 {Number(item1.Quantity)}；若是 {Number(right)}，這一項的小計 {Number(group.Original)} 才對得上，請看截圖核對後在表單修正。");
         }
     }
 
