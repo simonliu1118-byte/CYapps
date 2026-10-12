@@ -67,7 +67,7 @@ internal sealed class ShopeeScreenshotForm : Form
         top.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "先在瀏覽器開好蝦皮訂單明細頁，按「開始」：自動由上往下捲動擷取、判讀並帶回（Esc 停止）。\n擷取有問題時改用「框選截圖」補上（也接受 Ctrl+V 貼上），不要的圖按紅色 × 移除，再按「帶入表單」。",
+            Text = "先在瀏覽器開好蝦皮訂單明細頁，按「開始」（或在瀏覽器按 F8）：自動捲動擷取、判讀並帶回（Esc 停止）。\n擷取有問題時改用「框選截圖」補上（也接受 Ctrl+V 貼上），不要的圖按紅色 × 移除，再按「帶入表單」。",
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
         var help = new CyButton { Text = "說明", Size = new Size(92, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };

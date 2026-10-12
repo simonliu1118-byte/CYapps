@@ -67,7 +67,7 @@
 - V0.2.8 Build 1：實測數量「2」讀成「7」→ `ShopeeScreenshot.SuggestQuantity`（ParseItems 最後）只在提醒中指出唯一能對上小計原價的品號與數量，不改資料（使用者 2026-10-12 明確要求：不能自動改數量／品號）。待實測。
 - V0.2.8 Build 2：`AutomationOutcome.Cancelled`（Esc：`RunDocumentAsync` 捕捉 OperationCanceledException、擷取 `result.Cancelled`）→ 紅色圓形白橫條「使用者已停止」。待實測。
 - V0.2.8 Build 3：編號補讀信心 <0.8 時，若數字等於 `ShopeeScreenshot.ExpectedIndexAt`（上一個＋1／下一個－1，兩者都有須一致）才採用（在所有補讀完成後判斷）。實例：「1」信心 0.289。待實測。
-- V0.2.8 Build 4：`PhysicalMouseLock.EscapePressed`（hook 看到實體 Esc 即在 pool thread 觸發一次）→ `AutomationSession.OnEscape`：取消 `EscapeToken` 並 Post `End(Cancelled)`；`RunDocumentAsync` 以 EscapeToken 取消 `_automationCts`；`ShopeeScreenshotForm.AutoScanAsync` 以 stop token 傳入 `ScanAsync`（含 ReadCardsAsync）。待實測。
+- V0.2.8 Build 4：`PhysicalMouseLock.EscapePressed`（hook 看到實體 Esc 即在 pool thread 觸發一次）→ `AutomationSession.OnEscape`：取消 `EscapeToken` 並 Post `End(Cancelled)`；`RunDocumentAsync` 以 EscapeToken 取消 `_automationCts`；`ShopeeScreenshotForm.AutoScanAsync` 以 stop token 傳入 `ScanAsync`（含 ReadCardsAsync）。`ShopeeScreenshotHelpForm` 改寫為自動擷取流程；選單「光學辨識輸入 (F8)」。待實測。
 - V0.2.4 Build 0 實作：一般輸入也顯示「自動輸入中」（`MainForm.RunDocumentAsync` 一律 `Session.Begin(title)`／`End()`，`AutomationSession` 取代原本直接 `PhysicalMouseLock`）；提示框寬度依文字；光學辨識進度改為 `IProgress<double>`（依要辨識的列數）＋百分比、`ShowProgress` 以 Value+1 再回設跳過主題動畫；`ParseItems` 沒有任何編號且小計欄 1–2 個數字時視為第 1 項（單品促銷誤報）；設定兩處文字。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；蝦皮套組規則；CYID 串接。
