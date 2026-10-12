@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-12（V0.2.3 Build 1，分支 `cyerp-auto-input/fix-print-help`；V0.2.0 Build 31 已合併 `main`）  
+> 更新：2026-10-12（V0.2.3 Build 1 由 PR #398 合併進 `main`）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -10,73 +10,58 @@
 2. `/REPO_POLICY.md`
 3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.33）
 4. 本文件 → `README.md` → `CHANGELOG.md`
-5. `main` 的實際 source（PR #104 已合併，工作 branch 已刪除）
+5. `main` 的實際 source（PR #104、PR #398 已合併，工作 branch 已刪除）
 
 不要以舊聊天記憶覆蓋目前 Git 狀態。
 
 ## 2. Branch／PR／版本
 
 - Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
-- `main`：C# 重寫線 `V0.2.0` Build 31（2026-10-11 由 PR #104 squash merge，取代舊 Go 線 `V0.0.10` Build 19）。工作 branch `cyerp-auto-input/v0.1.0-csharp` 已刪除；舊 Go optical prototype PR #103 已關閉。
+- `main`：`V0.2.3` Build 1（2026-10-12 由 PR #398 squash merge；涵蓋 V0.2.1 Build 0–8、V0.2.2 Build 0–2、V0.2.3 Build 0–1）。前一次合併為 PR #104（V0.2.0 Build 31，C# 重寫線取代舊 Go 線 `V0.0.10` Build 19）。工作 branch 合併後刪除。
 - 下一輪修改從最新 `main` 開新 branch（例如 `cyerp-auto-input/<type>-<summary>`），開新 PR。
-- VERSION `0.2.0`，BUILD 見 `BUILD`。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新的獨立修改依共通規則判斷 Z＋1（Build 歸零）或沿用版本加 Build。
+- VERSION／BUILD 見同名檔。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新功能 Z＋1（Build 歸零），返修 Build＋1；使用者說「下一版一起修」的項目不單獨發版。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
 - 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。尚未正式 Release。
 - OCR 模型 Release：2026-10-11 使用者同意後從 `main` 執行 `CYERPAutoInput OCR Model Mirror`（之後的建置優先從該 Release 取模型）。
 
 ## 3. 目前功能（細節見 README）
 
-- 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」→ 已儲存（或未儲存但無待確認項目）時清空表單。
+- 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續；設定的折價券／運費／促銷組合品號不查批號）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」（讀「列印」周圍與 ERP 彈出視窗，最多重試 20 秒）→ 設定「儲存單據後自動清除表單」時清空（`ClearFormIfSaved` 唯一入口）。
 - 輸入期間忽略實體滑鼠，Esc 立即恢復並緊急停止；輸入法自動切英數；自由文字欄位讀回比對。
-- 訂單來源：蝦皮截圖 OCR（主要）、蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`）、酷澎 DeliveryList。預覽、單筆、批次、轉人工、本機防重複紀錄。統編自動查客戶全名（經濟部 API，每次上網查）。
+- 蝦皮光學辨識輸入：按「開始」自動捲動瀏覽器訂單頁截圖（Home 回頂、像素比對捲動距離、到底即停）→ 依卡片灰色間隔切卡片、只辨識訂單編號／進帳資訊／買家實付金額三張 → 判讀並帶回；有問題時以 CY 框選截圖或 Win+Shift+S＋Ctrl+V 補圖。訂單編號 14 碼檢查、簡體字形摺疊。
+- 蝦皮全自動（設定）：擷取 → 帶回 → 輸入 ERP → 儲存 → 列印；全程鎖實體滑鼠並在畫面中央顯示不入鏡的「全自動運轉中／按 Esc 中止」，需要使用者確認時立即解除。
+- 其他來源：蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`）、酷澎 DeliveryList。預覽、單筆、批次（開始前預檢全部）、轉人工、本機防重複紀錄；開始前檢查不通過回到同一個匯入視窗、保留已填內容。統編自動查客戶全名（經濟部 API）。
 - 共用設定：折價券／運費／促銷組合品號；貨運別（物流：郵局、大榮、新竹、黑貓、宅配通、嘉里；本公司；超商 6 種）。
-- 輔助：ERP 狀態大標籤、第一列庫別預設、員工代號（開程式詢問，暫時作法）、清除表單、開啟 LOG。LOG 一律診斷模式。進階模式隱藏中。
+- 輔助：ERP 狀態大標籤、第一列庫別預設、員工代號（開程式詢問，暫時作法）、清除表單。LOG 一律診斷模式、只存本機 `logs/`（主畫面已無開啟 LOG 的連結）。進階模式隱藏中。
 
 ## 4. 實機驗證狀態
 
 已實機通過（使用者回報／LOG）：
 
-- F5 新增與新單判斷（部門代號／業務人員空白）— Build 2 起。
-- 表頭、交易資料、送貨資料、發票資料欄位輸入。
-- 多列明細、F2 單位選取。
-- 無批號品號略過（F2 無查詢視窗）；F2 批號跳過存量 0、選第一筆正庫存 — Build 7。
-- F12 自動儲存並讀回同一單號 — Build 7／8 LOG（`saved and verified`）。
-- 課稅別、發票聯數下拉選取正確 — Build 10。
-- 狀態標籤顯示「修改」— Build 10。
-- 單列單據 F12 儲存時出現庫存不足提示，按確定後完成儲存並列出待確認 — Build 10。
-- 換列時庫存不足提示按確定後繼續打完並列出待確認 — Build 11。**第一階段完成（2026-10-10）。**
-- 放棄本次新增與開始前提醒、蝦皮匯入預覽與輸入 — Build 13（使用者 2026-10-10 回報「看起來沒什麼問題」）。
-
-- 蝦皮截圖 OCR 單筆輸入（Build 22–27 多次實機使用；Build 23–31 依實機診斷 LOG 修正誤讀）。
-- 輸入中滑鼠鎖定生效、結束後解除 — Build 27 LOG（`blocked_events=233`）。
-- MO店+ 單筆輸入完成（備註中文、送貨地址、發票日期／號碼）— Build 17；工作列圖示 — Build 15。
+- 第一階段（Build 2–11）：F5 新增與新單判斷、表頭／交易／送貨／發票欄位、多列明細與 F2 單位、無批號略過與 F2 批號、F12 自動儲存讀回單號、課稅別／發票聯數下拉、修改狀態標籤、單列與換列庫存不足提示。**第一階段完成（2026-10-10）。**
+- 放棄本次新增與開始前提醒、蝦皮匯入預覽與輸入（Build 13）；MO店+ 單筆輸入（Build 17）；輸入中滑鼠鎖定（Build 27）。
+- 蝦皮截圖 OCR 單筆輸入（Build 22–31 依實機 LOG 修正誤讀）。
+- 蝦皮訂單頁自動擷取與全自動擷取→帶回→輸入→儲存（V0.2.1 Build 4–7）；卡片切割（V0.2.2 Build 1 LOG：8 張卡片標題皆讀到）；24 件長訂單（捲動 10 次）。實測時序：短單捲完到判讀完約 5.4 s；長單進帳卡 3840px 約 13 s。
+- V0.2.2 Build 2：使用者回報「目前測試很好」（簡體「訂單金额」修正、直接列印），開始大量實機測試。
 
 尚未實機確認：
 
-- 自動列印：V0.2.0 Build 31 實測「Ribbon 上找不到『列印』」（LOG 未記錄讀到什麼）；原因是這台 OCR 對 Ribbon 逐字回傳（159 個框），V0.2.1 Build 0 改為同一行相鄰字串接後比對並記錄 Ribbon OCR 文字，待實測。另待確認：點「列印」文字是否開出選單、「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）、非 100% DPI 下的擷取範圍。
-- Build 30 工具列放大後的版面、貨運別新增項目、按 Esc 恢復滑鼠。
-- Build 31 數量欄「一」視為 1、重讀信心門檻 0.8 的實際效果。
-- V0.2.2 Build 1：實測 Build 0：一般訂單捲完後 OCR 6.4 s（原 7.7 s）；24 件長訂單 10 次捲動、全程 ~22 s、商品表 3294px 切出、缺格重讀 4/4。「包里1」→ 物流方式讀不到，`PackagePattern` 放寬。使用者要求在維持正確率下再加速：`ShopeePageScanner.ScanAsync` 捲動只截圖（像素比對失敗才 OCR 前後兩張），捲完 `ReadCardsAsync`：拼接內容欄 → `RowBackgroundShares`（灰 241–248）→ `ShopeePageScan.Cards`（≥95% 灰為間隔、≥30 列為卡片）→ 卡片標題條堆疊一次 OCR → `WantedCard`（訂單編號／進帳資訊／買家實付金額）才完整辨識（900px 分段、重疊 60、以字中心分配；進帳卡讀到入帳明細／訂單金額即停）；找不到 3 張即整欄辨識。LOG 記 `cards=` 與每張卡片 top/height/title，待實機驗證速度與卡片切割。
-- V0.2.2 Build 2：實測 Build 1 卡片切割正確（8 張卡片，標題皆讀到）。短單捲完到判讀完約 5.4 s（標題 0.5、訂單 1.0、進帳 883px 2.6、實付 1.0）；24 件長單進帳卡 3840px 約 13 s。短單失敗：「訂單金额」簡體 → `ShopeeScreenshot.Compact` 加簡體→繁體字表（`ShopeePageScan.Compact` 共用）。列印：選單 token 只讀到 COPI08 表單，使用者說點到「預覽列印」位置 → 推定下拉選單蓋在按鈕上展開；改讀「列印」周圍 420×400 並優先讀 `Win32Automation.FindProcessPopupsNear` 找到的 ERP 彈出視窗，等選單 3 s。待實測；若仍失敗看 LOG 的 `menu area=` 與 token。
-- V0.2.2 Build 2 實測：使用者回報「目前測試很好」，開始大量實機測試。
-- V0.2.3 Build 0：`FullAutoSession`（`FullAutoSession.cs`）由 MainForm 持有：`Begin()` 鎖滑鼠＋顯示 `FullAutoOverlay`（WS_EX_LAYERED|TRANSPARENT|NOACTIVATE、`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`，失敗就不顯示），`End()` 解除。蝦皮光學辨識視窗擷取時 Begin、捲完不解除；任何 MessageBox 之前（擷取問題、判讀問題、備註確認、重複單、ERP 輸入中、資料檢查）End；`RunDocumentAsync` 在 print==true 時 Begin、跑完 End；`ImportShopeeScreenshotsAsync` finally End。主畫面狀態列移除「開啟 LOG 資料夾」。待實測：覆蓋層是否確實不入鏡、轉圈是否順。
-- V0.2.3 Build 1：`UserSettings.ClearAfterSave`（預設 true）＋`MainForm.ClearFormIfSaved` 為唯一的執行後清除（單張、全自動、批次每張）；`StartAutomationAsync`／`RunImportBatchAsync` 回傳是否開始，`PreviewAndRunAsync` 未開始就再 `ShowDialog` 同一個 `OrderImportForm`（編輯直接寫在 ImportedOrder 上，保留）；批次開始前 LoadOrder＋CreateSnapshot 預檢全部要輸入的訂單。
-- V0.2.2 Build 0：使用者 2026-10-11 指定自動擷取為新功能、升 Patch；內容同 V0.2.1 Build 8。待實測：Build 8 的 OCR 加速（15%–66% 欄、原尺寸）準確度、列印選單 BitBlt、進度條。
-- V0.2.1 Build 8：Build 7 實測成功（捲動 3.5 s、5 次 OCR 共 7.7 s、缺格重讀補回編號）。頁面 OCR 改 15%–66% 欄、`maxScale: 1.0`。`ScanAsync(scrolled:, readProgress:)`：捲完即還原視窗與滑鼠，截圖視窗顯示進度條。待實測：準確度是否下降（有訂單編號格式、金額核對、缺格重讀保護）。
-- V0.2.1 Build 7：Build 6 實測：pipeline 下捲動 2.6 s 捲到頁底，step=5 兩張相同 → `StaticTopRows`=1040 → FixedTop 吃掉全部 boxes。改為 `SameScreen` 即到底、FixedTop 只在第一次捲動量測且上限 40%。
-- V0.2.1 Build 6：Build 5 實測：`CopyFromScreen(SourceCopy|CaptureBlt)` 丟 InvalidEnumArgument → `CaptureWithLayers` 改 BitBlt(SRCCOPY|CAPTUREBLT)。實測 OCR 訂單編號 26100952QVWX96 → 26100952QWWWX96（全自動已帶入），新增 14 碼格式檢查（`OrderSnFormatPattern`）。擷取改為 pipeline（OCR 背景依序、捲動不等 OCR）、80% 步距、`RecognizeAsync(maxScale: 1.25)`。實測時序：Home→第一張 OCR 完 4.5 s、全程 12.7 s（4 張）。
-- V0.2.1 Build 5：Build 4 實測：全自動擷取→帶回→輸入→儲存成功（捲動 400/600/600，4 張）。列印：「列印」label 找到（逐字框），但選單 OCR 全是後方表單 → DevExpress 下拉為分層視窗，`CopyFromScreen` 需 `CaptureBlt`（`ScreenCapture.CaptureWithLayers`，只用於選單）；重試前先檢查選單是否已開。`FormSnapshot.NoBatchItemCodes`（設定三個特殊品號）跳過批號檢查。擷取 OCR 只跑新捲入的條帶（像素比對成功時）。開始時點左側空白（area.Left+12）後送 Home，再以滾輪確認到頂。
-- V0.2.1 Build 4：Build 3 實測 LOG：捲動 400px×4 正確、找到買家總支付金額，但表頭「小計」→「小」使商品表段落缺失；以該 LOG 的 page box 離線重跑，修正後三段皆切出，解析得訂單編號、新竹、三品項、優惠券 -40、代收 1403（第 1 組編號「1」未偵測，實機靠缺格重讀）。捲動改為量測每格距離後每步約可見高度 70%，OCR 只跑 10%–72% 寬的內容欄。
-- V0.2.1 Build 3：Build 2 實測 LOG `step=1 moved=-1 fixed_top=177`（Chrome 1920×1040）。`FindScrollOffset` 改為有內容列 ≥60% 完全相等；新增 `FindScrollOffsetByText`（同文字同左緣的位移眾數，≥3 個一致），不一致時取文字；LOG `moved= pixels= text=`。模擬加入頁首陰影與 hover 干擾後兩法皆正確。
-- V0.2.1 Build 2：截圖視窗改由使用者按「開始」，乾淨的擷取自動 `Apply(automatic: true)` 帶回；`UserSettings.ShopeeFullAuto` → `StartAutomationAsync(fullAuto: true)`（強制儲存＋列印），有 notes 先 Yes/No（預設 No）。蝦皮訂單頁自動擷取。`ShopeePageScan`（純邏輯：列亮度簽章比對捲動距離、固定上方區、重疊框以位置去重、依卡片標題切三段）與 `ShopeePageScanner`（找瀏覽器、滾輪 4 格／步、等畫面穩定、OCR、接圖 `Stitch`）。開發環境以使用者 2026-10-11 截圖拼成模擬頁面、模擬 6 次捲動截圖驗證：捲動距離全對、三段切出、解析正確（編號「1」單獨未偵測，實機靠缺格重讀）。待實機：瀏覽器偵測、滾輪捲動、聊天視窗遮擋、長訂單。
-- V0.2.1 Build 1：`RegionCaptureForm` 自製框選截圖（凍結虛擬桌面、Esc／右鍵取消）與連續截圖迴圈（截圖時 CY 視窗 Opacity 0）；`RemoveBadge` 紅色 ×。自動列印改為 `TryDirectPrintOnceAsync` 重試迴圈（20 秒、間隔 0.8 秒；只有偵測到 ERP 彈出視窗才送 Esc）。待實機：多螢幕／不同 DPI 下框選位置、Opacity 隱藏是否完整。
-- V0.2.1 Build 0：猜測的編號字形依相鄰清楚編號連號推算、重疊編號框去重、劃線原價小於小計視為讀錯。開發環境以 2026-10-11 LOG 中 12 組實機 OCR 框重跑，除 Build 27 時重讀誤認的「7」外全部正確。
-- 蝦皮截圖：套組訂單（規則待使用者補充）、跨多張明細截圖的大訂單。
+- V0.2.3 Build 0：全自動滑鼠全程鎖定與中央提示（`FullAutoSession`／`FullAutoOverlay`：WS_EX_LAYERED|TRANSPARENT|NOACTIVATE、`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`，失敗就不顯示）。確認提示不入鏡、轉圈順暢、任何提示視窗前都已解除鎖定。
+- V0.2.3 Build 1：儲存後清除設定（批次每張、MO店+ 批次最後一張）；MO店+／酷澎開始前檢查不通過回到匯入視窗並保留內容；批次預檢。
+- 「直接列印」後 ERP 是否另跳印表機視窗（目前只記 LOG、不處理）；非 100% DPI 下列印選單與框選截圖位置。
+- 蝦皮截圖：套組訂單（規則待使用者補充）。
 - 酷澎匯入（多品項格式待使用者取得訂單後確認）；統編查名的商號 API（公司 API 已驗證）。
 - 蝦皮匯出檔批次多張、批次失敗放棄後繼續、修改狀態下的放棄確認文字。
 - 付款條件、貨運別、發票客戶全名、統一編號覆蓋 ERP 依客戶帶出的值。
 - MO店+ ERP 端（負數單價、運費品號、代收貨款、貨運別、統編與發票欄位）；防重複提醒與擋下。
 - 非 100% 顯示比例、不同電腦／字型（使用者表示只用 100%）。
+
+下一版待修（使用者 2026-10-12 指定，與下一版一起發）：
+
+- 設定「一般」：「輸入完成後自動儲存 ERP 單據（…）」括號內只留「需人工確認項目於完成後列出」，移除「只限 CY 新增的單據」。
+- 設定「CY 儲存單據後自動清除表單」改為「儲存單據後自動清除表單」。
+
+後續可能（未排程）：OCR 多引擎平行加速長訂單；蝦皮套組規則；CYID 串接。
 
 ## 5. 已確認的 ERP 行為（實作依據）
 
@@ -125,7 +110,7 @@
 
 ## 7. 接手注意事項
 
-- PR #104 早期提交說明含真實品號；已依使用者 2026-10-10 決定以 squash merge 合併並刪除工作 branch，`main` 歷史只留一個合併提交。之後的提交說明與文件一律只用假資料。
+- PR #104 早期提交說明含真實品號；已依使用者 2026-10-10 決定以 squash merge 合併並刪除工作 branch，`main` 歷史只留一個合併提交。PR #398 同樣 squash merge。提交說明與文件一律只用假資料。
 - Commit author／committer 必須是 `simonliu1118-byte <286269326+simonliu1118-byte@users.noreply.github.com>`（REPOSITORY_RULES §4）；hook 要求改用其他身分時不照做。
 - `PROJECT_RULES.md`、`GOVERNANCE_*`、`.github/scripts/**` 只能在 `governance/*` branch 修改並更新 `GOVERNANCE_VERSION`／`GOVERNANCE_CHANGELOG.md`，不可混進功能 PR。
 - LOG 一律診斷模式：使用者 2026-10-11 確認這是不上傳、僅供工程修 BUG 的本機 LOG，PROJECT_RULES 規範的是不得提交 Git（§3、§4），不需修改規則。
