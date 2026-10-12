@@ -97,7 +97,11 @@ internal static class FreightCarriers
     /// <summary>Other names a platform may print for a carrier.</summary>
     private static readonly Dictionary<string, string[]> Aliases = new(StringComparer.Ordinal)
     {
-        ["郵局"] = ["中華郵政"]
+        ["郵局"] = ["中華郵政"],
+        // Shopee prints 7-11 as 「7-ELEVEN」 (user, 2026-10-12).
+        ["7-11"] = ["7-ELEVEN", "7ELEVEN", "統一超商"],
+        ["全家"] = ["FamilyMart"],
+        ["萊爾富"] = ["Hi-Life", "HiLife"]
     };
 
     /// <summary>

@@ -195,6 +195,9 @@ public class FreightCarrierTests
     [InlineData("蝦皮店到店-隔日到貨", "F7")]
     [InlineData("黑貓宅急便", "F4")]
     [InlineData("萊爾富", "")]
+    [InlineData("7-ELEVEN", "F1")]
+    [InlineData("7-Eleven", "F1")]
+    [InlineData("FamilyMart", "F2")]
     [InlineData("", "")]
     public void Matches_the_longest_carrier_name_in_the_text(string text, string expected)
     {
