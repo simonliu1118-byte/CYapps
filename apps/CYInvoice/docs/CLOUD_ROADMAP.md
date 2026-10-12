@@ -288,6 +288,8 @@ Cloud：
 
 Cloud coordination 成熟後再完成 `/json/g0401` / `/json/g0501` 與 allowance number global uniqueness；目前仍依已定案的 interim `invoice_query`／人工流程。
 
+2026-10-13 使用者決定：V2.6.19 已知的人工折讓逐筆歷史及狀態顯示缺陷，不再補修 V2 工作流程，待 V3.0 正式折讓與跨機 Work Item／Audit 一起重做。新流程需保存逐筆申請／處理 actor、時間、原因、含稅金額、官方結果／取消／行政結案等可稽核欄位，支援同發票多筆、跨裝置 revision／原子操作、未知結果保守處理、可驗證的舊資料遷移與 retention。此條為 V3 需求，不能把現行缺陷當作已修復，也不能以本地 resolved 狀態冒充光貿官方成功。
+
 ### Phase E — 未來 Company
 
 只有真正出現多統編公司需求時才新增 Company migration / UI / scope。
