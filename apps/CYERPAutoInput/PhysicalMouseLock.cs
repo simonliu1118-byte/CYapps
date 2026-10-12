@@ -26,6 +26,13 @@ internal sealed class PhysicalMouseLock : IDisposable
     private readonly HookProc _keyboardProc;
     private uint _threadId;
     private volatile bool _released;
+    private int _escapeRaised;
+
+    /// <summary>
+    /// A physical Esc, raised once on a pool thread the moment the hook sees it (user,
+    /// 2026-10-12: the run should stop at once, not when the current step happens to end).
+    /// </summary>
+    public event Action? EscapePressed;
     private int _blocked;
 
     private PhysicalMouseLock(AppLogger log)
@@ -90,7 +97,12 @@ internal sealed class PhysicalMouseLock : IDisposable
         {
             var info = Marshal.PtrToStructure<KbdLlHookStruct>(lParam);
             // Only a physical Esc; the Esc CY sends to abandon an ERP document is injected.
-            if (info.vkCode == (uint)NativeMethods.VK_ESCAPE && (info.flags & LlkhfInjected) == 0) _released = true;
+            if (info.vkCode == (uint)NativeMethods.VK_ESCAPE && (info.flags & LlkhfInjected) == 0)
+            {
+                _released = true;
+                if (Interlocked.Exchange(ref _escapeRaised, 1) == 0 && EscapePressed is { } escape)
+                    ThreadPool.QueueUserWorkItem(_ => escape());
+            }
         }
         return CallNextHookEx(0, code, wParam, lParam);
     }

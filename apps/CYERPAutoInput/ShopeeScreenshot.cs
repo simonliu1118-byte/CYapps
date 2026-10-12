@@ -24,7 +24,8 @@ internal sealed record ShopeeShotOrder(string OrderSn, string Carrier, string Tr
 /// into 數量 × 2 and 單價 ÷ 2, and the product's amount before promotions (單價 × 數量 as
 /// shown). <see cref="Group"/> is the 編號 it is listed under (0 when no 編號 was visible).
 /// </summary>
-internal sealed record ShopeeShotItem(int Group, string ItemCode, decimal UnitPrice, decimal Quantity, decimal Amount);
+/// <param name="SortKey">For the parts of a bundle: the bundle's first code, so its lines stay together.</param>
+internal sealed record ShopeeShotItem(int Group, string ItemCode, decimal UnitPrice, decimal Quantity, decimal Amount, string? SortKey = null);
 
 /// <summary>A 編號 of the detail: several products of one promotion share one 小計 (shown, and the struck-out original).</summary>
 internal sealed record ShopeeShotGroup(int Index, decimal Shown, decimal Original);
@@ -147,7 +148,7 @@ internal static partial class ShopeeScreenshot
     /// (user, 2026-10-12: the OCR mixes up 0 and O).
     /// </summary>
     internal static string OrderSnDateDigits(string orderSn) =>
-        orderSn.Length < 6 ? orderSn : orderSn[..6].Replace('O', '0') + orderSn[6..];
+        orderSn.Length < 6 ? orderSn : orderSn[..6].Replace('O', '0').Replace('I', '1').Replace('L', '1') + orderSn[6..];
 
     /// <summary>
     /// 0 and O where the tracking number's format decides them: Shopee 店到店 numbers are
@@ -156,9 +157,11 @@ internal static partial class ShopeeScreenshot
     /// </summary>
     internal static string TrackingDigits(string tracking)
     {
+        // I／L read for 1 likewise (user, 2026-10-12: 1 and I look alike).
+        static string Digits(string s) => s.Replace('O', '0').Replace('I', '1').Replace('L', '1');
         if (TwTrackingPattern().IsMatch(tracking))
-            return "TW" + tracking[2..^1].Replace('O', '0') + tracking[^1];
-        return tracking.All(c => char.IsAsciiDigit(c) || c == 'O') && tracking.Any(char.IsAsciiDigit) ? tracking.Replace('O', '0') : tracking;
+            return "TW" + Digits(tracking[2..^1]) + tracking[^1];
+        return tracking.All(c => char.IsAsciiDigit(c) || c is 'O' or 'I' or 'L') && tracking.Any(char.IsAsciiDigit) ? Digits(tracking) : tracking;
     }
 
     /// <summary>
@@ -275,6 +278,19 @@ internal static partial class ShopeeScreenshot
         var noQuantity = new List<(int Group, string RawCode, decimal Unit)>();
         void AddItem(int group, string rawCode, decimal unit, decimal quantity)
         {
+            // A bundle 「C00244+C00011」 (user, 2026-10-12): every part goes out as many times as
+            // bundles were sold; the first part carries the bundle's price and the others are 0.
+            var parts = BundleParts(rawCode);
+            if (parts.Count > 1)
+            {
+                for (var i = 0; i < parts.Count; i++)
+                {
+                    var (partCode, partTimes) = SplitSet(parts[i]);
+                    var partUnit = i == 0 ? Math.Round(unit / partTimes, 2, MidpointRounding.AwayFromZero) : 0m;
+                    items.Add(new ShopeeShotItem(group, partCode, partUnit, quantity * partTimes, i == 0 ? unit * quantity : 0m, parts[0]));
+                }
+                return;
+            }
             var (code, multiplier) = SplitSet(rawCode);
             if (code.Length == 0) problems.Add("有一項商品讀不到商品選項貨號。");
             // A set price that does not divide evenly is entered to 2 decimals (119 ÷ 3 → 39.67;
@@ -350,7 +366,37 @@ internal static partial class ShopeeScreenshot
             }
             else problems.Add($"商品「{rawCode}」讀不到數量，請在表單補上該商品。");
         }
+
+        SuggestQuantity(items, groups, problems);
         return (items, groups);
+    }
+
+    /// <summary>
+    /// A 數量 read as another digit (「2」 read as 「7」, user's PC, 2026-10-12) makes a group's
+    /// 單價×數量 differ from its 小計 original. Nothing is changed (user: a wrong quantity makes
+    /// a wrong document): when exactly one product's quantity, as some whole number, would make
+    /// the group add up, the problem names that product and number so the check is quick.
+    /// </summary>
+    private static void SuggestQuantity(List<ShopeeShotItem> items, List<ShopeeShotGroup> groups, List<string> problems)
+    {
+        foreach (var group in groups)
+        {
+            var members = items.Where(i => i.Group == group.Index).ToList();
+            var sum = members.Sum(i => i.Amount);
+            if (members.Count == 0 || sum == group.Original) continue;
+            var candidates = new List<(ShopeeShotItem Item, decimal Quantity)>();
+            foreach (var item in members)
+            {
+                if (item.UnitPrice <= 0 || item.UnitPrice * item.Quantity != item.Amount) continue;
+                var amount = group.Original - (sum - item.Amount);
+                if (amount <= 0 || amount % item.UnitPrice != 0) continue;
+                var quantity = amount / item.UnitPrice;
+                if (quantity is >= 1 and <= 999 && quantity != item.Quantity) candidates.Add((item, quantity));
+            }
+            if (candidates.Count != 1) continue;
+            var (item1, right) = candidates[0];
+            problems.Add($"第 {group.Index} 項 {item1.ItemCode} 數量讀到 {Number(item1.Quantity)}；若是 {Number(right)}，這一項的小計 {Number(group.Original)} 才對得上，請看截圖核對後在表單修正。");
+        }
     }
 
     /// <summary>
@@ -548,6 +594,12 @@ internal static partial class ShopeeScreenshot
             .FirstOrDefault() ?? string.Empty;
     }
 
+    /// <summary>The codes of a bundle 「A+B」 (the OCR may read + as ＋ or 十); one code otherwise.</summary>
+    internal static List<string> BundleParts(string rawCode) =>
+        Compact(rawCode).Replace('＋', '+').Replace('十', '+')
+            .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
     /// <summary>
     /// A set listed as "Y0033x2", "Y0033*2" or "Y0033 x 2" is item Y0033 two times (user,
     /// 2026-10-11): quantity × 2 and unit price ÷ 2.
@@ -628,8 +680,19 @@ internal static partial class ShopeeScreenshot
         }
 
         var formItems = new List<ImportedItem>();
-        foreach (var group in lines.GroupBy(l => (l.ItemCode, l.UnitPrice)))
-            formItems.Add(new ImportedItem(group.Key.ItemCode, Number(group.Sum(l => l.Quantity)), Number(group.Key.UnitPrice)));
+        foreach (var group in lines.GroupBy(l => (l.ItemCode, l.UnitPrice, l.SortKey)))
+        {
+            var quantity = Number(group.Sum(l => l.Quantity));
+            // A bundle's parts leave 單價 to ERP; the first part remembers what the bundle sold for.
+            formItems.Add(group.Key.SortKey is { } bundle
+                ? new ImportedItem(group.Key.ItemCode, quantity, string.Empty)
+                {
+                    SortKey = bundle,
+                    BundleTotal = group.Key.UnitPrice > 0 ? Number(group.Sum(l => l.Amount)) : null
+                }
+                : new ImportedItem(group.Key.ItemCode, quantity, Number(group.Key.UnitPrice)));
+        }
+        var hasBundles = lines.Any(l => l.SortKey is not null);
 
         var promotion = lines.Sum(l => l.Amount) - amounts.OrderAmount;
         if (promotion < 0) problems.Add($"單價×數量合計低於訂單金額 {Number(-promotion)}，請核對明細。");
@@ -641,12 +704,14 @@ internal static partial class ShopeeScreenshot
             problems.Add($"明細數字對不起來，沒有加入促銷組合（推算 {Number(promotion)}），請核對數量後在表單補上。");
             promotion = 0;
         }
-        void AddLine(string code, decimal price, string what)
+        void AddLine(string code, decimal price, string what, bool takesBundleGap = false)
         {
             if (code.Length == 0) problems.Add($"請在設定填入{what}品號（本張有{what} {Number(price)}）。");
-            formItems.Add(new ImportedItem(code, "1", Number(price)));
+            formItems.Add(new ImportedItem(code, "1", Number(price)) { TakesBundleGap = takesBundleGap });
         }
-        if (promotion > 0) AddLine(mapping.PromotionItemCode, -promotion, "促銷組合");
+        // With a bundle the 促銷組合 line is always there: it also takes the gap between ERP's
+        // list prices for the bundle's parts and what the bundle sold for.
+        if (promotion > 0 || hasBundles) AddLine(mapping.PromotionItemCode, -promotion, "促銷組合", hasBundles);
         if (amounts.Coupons < 0) AddLine(mapping.DiscountItemCode, amounts.Coupons, "折價券");
         if (amounts.Shipping > 0) AddLine(mapping.ShippingItemCode, amounts.Shipping, "運費");
 
@@ -714,6 +779,22 @@ internal static partial class ShopeeScreenshot
         return TryNumber(digits, out _, digitsOnly: true) && digits.Length <= 3;
     }
 
+    /// <summary>
+    /// The 編號 the numbering implies at <paramref name="centerY"/>: one less than the next 編號
+    /// below, one more than the last above (both must agree when both exist). Null when the
+    /// numbers read so far do not say.
+    /// </summary>
+    public static int? ExpectedIndexAt(IReadOnlyList<OcrBox> lines, int imageWidth, int centerY)
+    {
+        var anchors = IndexAnchors(lines, imageWidth)
+            .Select(a => (a.CenterY, Index: int.Parse(Compact(a.Text), CultureInfo.InvariantCulture)))
+            .ToList();
+        var above = anchors.Where(a => a.CenterY < centerY).OrderByDescending(a => a.CenterY).Select(a => (int?)a.Index + 1).FirstOrDefault();
+        var below = anchors.Where(a => a.CenterY > centerY).OrderBy(a => a.CenterY).Select(a => (int?)a.Index - 1).FirstOrDefault();
+        var expected = above is not null && below is not null ? (above == below ? above : null) : above ?? below;
+        return expected is >= 1 ? expected : null;
+    }
+
     internal static bool TryProbeDigits(string text, out string digits)
     {
         var mapped = new string(Compact(text).Select(c => c switch
@@ -753,7 +834,7 @@ internal static partial class ShopeeScreenshot
     [GeneratedRegex(@"^\d{6}[0-9A-Z]{8}$")]
     private static partial Regex OrderSnFormatPattern();
 
-    [GeneratedRegex(@"^TW[0-9O]{12}[0-9A-Z]$")]
+    [GeneratedRegex(@"^TW[0-9OIL]{12}[0-9A-Z]$")]
     private static partial Regex TwTrackingPattern();
 
     // 「商品選項貨號：」; the OCR once dropped the 貨 (「商品選項」 + 「號：A0…」, user's PC,

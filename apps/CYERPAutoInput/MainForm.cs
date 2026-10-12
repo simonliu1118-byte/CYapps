@@ -69,7 +69,8 @@ internal sealed class MainForm : Form
             _statePoll.Start();
         };
         DpiChanged += (_, _) => UpdateDpiHint();
-        FormClosing += (_, _) => _statePoll.Stop();
+        FormClosing += (_, _) => { _statePoll.Stop(); _browserHotkey?.Dispose(); _browserHotkey = null; };
+        Shown += (_, _) => ApplyBrowserHotkey();
     }
 
     protected override void WndProc(ref Message m)
@@ -505,6 +506,9 @@ internal sealed class MainForm : Form
         _details.Columns.Add(batchColumn);
         _details.Columns.Add(TextColumn("Warehouse", "庫別", 140));
         _details.Columns.Add(TextColumn("UnitPrice", "單價", 130, DataGridViewContentAlignment.MiddleRight));
+        // Bundle bookkeeping travels with the row (hidden), so an edited form keeps it right.
+        foreach (var hidden in new[] { "BundleKey", "BundleTotal", "BundleGap" })
+            _details.Columns.Add(new DataGridViewTextBoxColumn { Name = hidden, Visible = false });
 
         _details.RowsDefaultCellStyle.BackColor = CyVisualTheme.White;
         _details.RowsDefaultCellStyle.ForeColor = CyVisualTheme.TextPrimary;
@@ -606,6 +610,7 @@ internal sealed class MainForm : Form
         {
             _settingsStore.Save(_settings);
             UpdateBuildStatus();
+            ApplyBrowserHotkey();
             _modeToggle.Checked = false;
             ApplyMode(false);
             ApplyDefaultsToBlankFields();
@@ -756,7 +761,7 @@ internal sealed class MainForm : Form
         }
         catch (OperationCanceledException)
         {
-            SetStatus("ERP：自動輸入已停止；CY 未按 ERP 取消或儲存");
+            SetStatus("ERP：自動輸入已停止；程式未按 ERP 取消或儲存");
             _log.Warn("automation", "cancelled by Esc/user");
         }
         catch (Exception ex)
@@ -816,14 +821,27 @@ internal sealed class MainForm : Form
         AutomationRunResult result;
         // The physical mouse is ignored while CY types (user, 2026-10-11; Esc releases it), and
         // the notice says 自動輸入中, or 全自動運轉中 in Shopee full auto (user, 2026-10-12).
+        // How it ended shows on the notice (user, 2026-10-12): done means everything the
+        // settings asked for (input, and save／print when on) went through with nothing to check.
+        var outcome = AutomationOutcome.Stopped;
         try
         {
             Session.Begin(print == true ? AutomationSession.FullAutoTitle : AutomationSession.InputTitle);
+            // The physical Esc stops the run as soon as it is pressed, not at the next key poll.
+            using var escape = Session.EscapeToken.Register(() => { try { _automationCts?.Cancel(); } catch (ObjectDisposedException) { } });
             result = await _automation.RunAsync(snapshot, autoSave, progress, token, autoSave && (print ?? _settings.AutoPrint));
+            outcome = result.HandedOff.Length > 0 || result.Warnings.Count > 0 || result.SaveSkippedReason.Length > 0 || result.PrintProblem.Length > 0
+                ? AutomationOutcome.NeedsAttention
+                : AutomationOutcome.Done;
+        }
+        catch (OperationCanceledException)
+        {
+            outcome = AutomationOutcome.Cancelled; // Esc
+            throw;
         }
         finally
         {
-            Session.End();
+            Session.End(outcome);
         }
         if (result.HandedOff.Length > 0)
         {
@@ -866,7 +884,7 @@ internal sealed class MainForm : Form
         }
         _log.Info("shopee", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
 
-        var mapping = new ShopeeMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix, _settings.FreightTypes);
+        var mapping = new ShopeeMapping(_settings.ShopeeOrderType, _settings.ShopeeCustomerCode, _settings.ShopeeNotePrefix, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = parsed.Orders.Select(o => ShopeeOrderImport.ToImported(o, mapping)).ToList();
         await PreviewAndRunAsync(ShopeeOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
     }
@@ -875,7 +893,39 @@ internal sealed class MainForm : Form
     /// One Shopee order read from screenshots onto the form (user, 2026-10-11): no batch and
     /// no automatic start; anything to check is listed and the user starts the input.
     /// </summary>
-    private async Task ImportShopeeScreenshotsAsync()
+    private BrowserHotkey? _browserHotkey;
+
+    /// <summary>F8 in the browser starts Shopee 光學辨識 while CY runs (setting, on by default).</summary>
+    private void ApplyBrowserHotkey()
+    {
+        if (UiSnapshot.Active) return;
+        if (_settings.BrowserHotkey && _browserHotkey is null)
+            _browserHotkey = BrowserHotkey.Start(_log, () => BeginInvoke(OnBrowserHotkey));
+        else if (!_settings.BrowserHotkey && _browserHotkey is not null)
+        {
+            _browserHotkey.Dispose();
+            _browserHotkey = null;
+        }
+    }
+
+    private async void OnBrowserHotkey()
+    {
+        // Only from an idle CY: not while ERP is being typed into or another CY window is open.
+        if (_automationCts is not null ||
+            Application.OpenForms.Cast<Form>().Any(f => f != this && f.Visible && f is not AutomationOverlay))
+        {
+            _log.Info("hotkey", $"{BrowserHotkey.KeyName} ignored: CY is busy");
+            return;
+        }
+        _log.Info("hotkey", $"{BrowserHotkey.KeyName} pressed in the browser; opening 光學辨識");
+        // A minimized CY would keep its dialog hidden too.
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        try { await ImportShopeeScreenshotsAsync(startScan: true); }
+        catch (Exception ex) { _log.Error("hotkey", ex); }
+    }
+
+    /// <param name="startScan">From the browser hotkey: the page scan starts at once, full auto or not.</param>
+    private async Task ImportShopeeScreenshotsAsync(bool startScan = false)
     {
         if (_automationCts is not null) return;
         if (_settings.ShopeeOrderType.Length == 0 || _settings.ShopeeCustomerCode.Length == 0)
@@ -890,7 +940,7 @@ internal sealed class MainForm : Form
             _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode, _settings.FreightTypes);
         try
         {
-            using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto,
+            using var dialog = new ShopeeScreenshotForm(_automation.Ocr, mapping, _log, autoStart: _settings.ShopeeFullAuto || startScan,
                 session: _settings.ShopeeFullAuto ? Session : null);
             if (dialog.ShowDialog(this) != DialogResult.OK || dialog.Result?.Order is not { } order) return;
             await ContinueShopeeScreenshotOrderAsync(dialog.Result.Problems, order, ledger);
@@ -968,7 +1018,7 @@ internal sealed class MainForm : Form
         _log.Info("mo", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
 
         var mapping = new MoMapping(_settings.MoOrderType, _settings.MoCustomerCode, _settings.MoNotePrefix,
-            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes);
+            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = parsed.Orders.Select(o => MoOrderImport.ToImported(o, mapping)).ToList();
         await PreviewAndRunAsync(MoOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
     }
@@ -1007,7 +1057,7 @@ internal sealed class MainForm : Form
         _log.Info("coupang", $"export parsed orders={parsed.Orders.Count} errors={parsed.Errors.Count}");
 
         var mapping = new CoupangMapping(_settings.CoupangOrderType, _settings.CoupangCustomerCode, _settings.CoupangNotePrefix,
-            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes);
+            _settings.DiscountItemCode, _settings.ShippingItemCode, _settings.FreightTypes, _settings.PromotionItemCode);
         var orders = parsed.Orders.Select(o => CoupangOrderImport.ToImported(o, mapping)).ToList();
         await PreviewAndRunAsync(CoupangOrderImport.Source, Path.GetFileName(path), orders, parsed.Errors);
     }
@@ -1085,7 +1135,8 @@ internal sealed class MainForm : Form
         _details.EndEdit();
         _details.Rows.Clear();
         // A handed-off order stops before the details; items it cannot enter are left out.
-        var items = order.Items.Where(i => i.ItemCode.Length > 0).ToList();
+        var items = ImportedItem.InEntryOrder(order.Items.Where(i => i.ItemCode.Length > 0),
+            [_settings.DiscountItemCode, _settings.ShippingItemCode, _settings.PromotionItemCode]);
         var rowCount = Math.Max(DefaultDetailRows, items.Count + 1);
         for (var i = 0; i < rowCount; i++) _details.Rows.Add();
         for (var i = 0; i < items.Count; i++)
@@ -1093,6 +1144,9 @@ internal sealed class MainForm : Form
             _details["ItemCode", i].Value = items[i].ItemCode;
             _details["Quantity", i].Value = items[i].Quantity;
             _details["UnitPrice", i].Value = items[i].UnitPrice;
+            _details["BundleKey", i].Value = items[i].BundleTotal is not null || (items[i].SortKey is not null && items[i].UnitPrice.Length == 0) ? items[i].SortKey : null;
+            _details["BundleTotal", i].Value = items[i].BundleTotal;
+            _details["BundleGap", i].Value = items[i].TakesBundleGap ? "1" : null;
         }
         ApplyDefaultsToBlankFields();
         _loadedOrder = order;
@@ -1154,7 +1208,7 @@ internal sealed class MainForm : Form
         if (earlier.Count > 0)
         {
             var answer = MessageBox.Show(this,
-                $"以下 {earlier.Count} 張曾經輸入，但不是由 CY 儲存（可能已人工儲存）：\n" +
+                $"以下 {earlier.Count} 張曾經輸入，但不是由本程式儲存（可能已人工儲存）：\n" +
                 string.Join("\n", earlier.Take(15).Select(o => $"・{o.OrderSn}：{ledger.Find(o.LedgerKey)!.Describe()}")) +
                 (earlier.Count > 15 ? $"\n…另 {earlier.Count - 15} 張" : string.Empty) +
                 "\n\n是：仍要輸入　否：略過這些　取消：不開始批次",
@@ -1392,7 +1446,10 @@ internal sealed class MainForm : Form
                 GiftQuantity = Cell(row, "GiftQuantity"),
                 Batch = Cell(row, "Batch"),
                 Warehouse = Cell(row, "Warehouse"),
-                UnitPrice = Cell(row, "UnitPrice")
+                UnitPrice = Cell(row, "UnitPrice"),
+                BundleKey = Cell(row, "BundleKey"),
+                BundleTotal = Cell(row, "BundleTotal"),
+                TakesBundleGap = Cell(row, "BundleGap") == "1"
             };
             if (!d.HasAnyData) continue;
 
@@ -1482,7 +1539,7 @@ internal sealed class MainForm : Form
         {
             // Screenshots (OCR) are the main way for now; the official export stays available.
             var menu = new ContextMenuStrip { Font = new Font("Microsoft JhengHei UI", 9.5F) };
-            menu.Items.Add("光學辨識輸入", null, async (_, _) => await ImportShopeeScreenshotsAsync());
+            menu.Items.Add($"光學辨識輸入 ({BrowserHotkey.KeyName})", null, async (_, _) => await ImportShopeeScreenshotsAsync());
             menu.Items.Add("匯入匯出檔（.xlsx）", null, async (_, _) => await ImportShopeeAsync());
             button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
         }

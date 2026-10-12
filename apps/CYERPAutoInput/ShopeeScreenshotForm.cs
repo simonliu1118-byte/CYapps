@@ -1,3 +1,4 @@
+using System.Globalization;
 namespace CYERPAutoInput;
 
 /// <summary>
@@ -66,7 +67,7 @@ internal sealed class ShopeeScreenshotForm : Form
         top.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "先在瀏覽器開好蝦皮訂單明細頁，按「開始」：自動由上往下捲動擷取、判讀並帶回（Esc 停止）。\n擷取有問題時改用「框選截圖」補上（也接受 Ctrl+V 貼上），不要的圖按紅色 × 移除，再按「帶入表單」。",
+            Text = "先在瀏覽器開好蝦皮訂單明細頁，按「開始」（或在瀏覽器按 F8）：自動捲動擷取、判讀並帶回（Esc 停止）。\n擷取有問題時改用「框選截圖」補上（也接受 Ctrl+V 貼上），不要的圖按紅色 × 移除，再按「帶入表單」。",
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0);
         var help = new CyButton { Text = "說明", Size = new Size(92, 34), Anchor = AnchorStyles.Right, Margin = new Padding(8, 7, 0, 0) };
@@ -217,6 +218,10 @@ internal sealed class ShopeeScreenshotForm : Form
         var ownerOpacity = owner?.Opacity ?? 1;
         ShopeePageScanner.Result? result = null;
         var mouseLock = (PhysicalMouseLock?)null;
+        // Esc stops the scan the moment the hook sees it, also while the cards are being read.
+        using var stop = new CancellationTokenSource();
+        void Stop() { try { stop.Cancel(); } catch (ObjectDisposedException) { } }
+        var stopped = false;
         void Restore()
         {
             // In full auto the mouse stays locked after the scan, until the run ends or stops.
@@ -229,14 +234,30 @@ internal sealed class ShopeeScreenshotForm : Form
         {
             Opacity = 0;
             if (owner is not null) owner.Opacity = 0;
-            if (_session is not null) _session.Begin(AutomationSession.FullAutoTitle);
-            else mouseLock = PhysicalMouseLock.Engage(_log);
+            CancellationTokenRegistration? sessionStop = null;
+            if (_session is not null)
+            {
+                _session.Begin(AutomationSession.FullAutoTitle);
+                sessionStop = _session.EscapeToken.Register(Stop);
+            }
+            else
+            {
+                mouseLock = PhysicalMouseLock.Engage(_log);
+                mouseLock.EscapePressed += Stop;
+            }
+            using var unregister = sessionStop;
             result = await new ShopeePageScanner(_ocr, _log).ScanAsync(browser,
-                () => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, CancellationToken.None,
+                () => stop.IsCancellationRequested || (NativeMethods.GetAsyncKeyState(NativeMethods.VK_ESCAPE) & 0x8000) != 0, stop.Token,
                 // Back to this window as soon as the page is captured, with a progress bar for
                 // the reading still to do (user, 2026-10-11).
                 scrolled: () => { Restore(); ShowProgress("辨識中… 0%", 0, 100); },
                 readProgress: new Progress<double>(p => ShowProgress($"辨識中… {(int)(p * 100)}%", (int)(p * 100), 100)));
+        }
+        catch (OperationCanceledException)
+        {
+            _log.Info("page-scan", "stopped by Esc");
+            stopped = true;
+            _session?.End(AutomationOutcome.Cancelled);
         }
         catch (Exception ex)
         {
@@ -249,6 +270,12 @@ internal sealed class ShopeeScreenshotForm : Form
             Restore();
             _capturing = false;
         }
+        if (stopped && !IsDisposed)
+        {
+            HideProgress();
+            MessageBox.Show(this, "已停止自動擷取。可以按「開始」重來，或用「框選截圖」補上缺的部分後按「帶入表單」。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
         if (result is null || IsDisposed) { _session?.End(); HideProgress(); DisposeCaptures(result); return; }
 
         ShowProgress("判讀中…", 1, 1);
@@ -256,7 +283,8 @@ internal sealed class ShopeeScreenshotForm : Form
             await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines);
         DisposeCaptures(result);
         HideProgress();
-        if (result.Cancelled || result.Problems.Count > 0) _session?.End();
+        if (result.Cancelled) _session?.End(AutomationOutcome.Cancelled);
+        else if (result.Problems.Count > 0) _session?.End();
         if (result.Cancelled)
             MessageBox.Show(this, "已停止自動擷取。可以按「開始」重來，或用「框選截圖」補上缺的部分後按「帶入表單」。", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         else if (result.Problems.Count > 0)
@@ -394,6 +422,7 @@ internal sealed class ShopeeScreenshotForm : Form
     {
         var probes = ShopeeScreenshot.MissingCellProbes(shot.Lines, shot.Image.Width, shot.Image.Height);
         var added = 0;
+        var doubtfulIndexes = new List<(CellProbe Probe, string Digits)>();
         foreach (var probe in probes)
         {
             if (probe.Width < 4 || probe.Height < 4) continue;
@@ -407,10 +436,22 @@ internal sealed class ShopeeScreenshotForm : Form
             if (line.Confidence < 0.8f || !ShopeeScreenshot.TryProbeDigits(line.Text, out var digits))
             {
                 _log.Info("shopee-shot", $"  probe {probe.Purpose} rejected text={_log.Value(line.Text)} confidence={line.Confidence:0.000}");
+                if (probe.Purpose == "編號" && ShopeeScreenshot.TryProbeDigits(line.Text, out var doubtful)) doubtfulIndexes.Add((probe, doubtful));
                 continue;
             }
             shot.Lines.Add(new OcrBox(digits, probe.Left, probe.Top, probe.Width, probe.Height));
             added++;
+        }
+        // A doubtful 編號 is kept only when it is exactly the number its neighbours imply: a faint
+        // 「1」 above 編號 2 was read as 「1」 at 0.29 and dropped, losing 第 1 項 (user's PC,
+        // 2026-10-12). A misread digit (「7」 for 「1」) does not match and stays out.
+        foreach (var (probe, doubtful) in doubtfulIndexes)
+        {
+            var expected = ShopeeScreenshot.ExpectedIndexAt(shot.Lines, shot.Image.Width, probe.Top + probe.Height / 2);
+            if (expected is null || doubtful != expected.Value.ToString(CultureInfo.InvariantCulture)) continue;
+            shot.Lines.Add(new OcrBox(doubtful, probe.Left, probe.Top, probe.Width, probe.Height));
+            added++;
+            _log.Info("shopee-shot", $"  probe 編號 accepted by numbering text={doubtful}");
         }
         _log.Info("shopee-shot", $"detail cells re-read probes={probes.Count} recovered={added}");
     }

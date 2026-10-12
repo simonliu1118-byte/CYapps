@@ -17,7 +17,7 @@ internal sealed record LedgerEntry(LedgerStatus Status, string Document, DateTim
     public string Describe() => Status switch
     {
         LedgerStatus.Saved => $"已於 {Time:yyyy/MM/dd HH:mm} 儲存為 {DisplayDocument}",
-        LedgerStatus.Entered => $"曾於 {Time:yyyy/MM/dd HH:mm} 輸入 {DisplayDocument}（未由 CY 儲存）",
+        LedgerStatus.Entered => $"曾於 {Time:yyyy/MM/dd HH:mm} 輸入 {DisplayDocument}（未由本程式儲存）",
         _ => $"曾於 {Time:yyyy/MM/dd HH:mm} 輸入單頭 {DisplayDocument} 後轉人工"
     };
 

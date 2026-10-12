@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-12（V0.2.7 由 PR #421 合併進 `main`，發布第一個正式 Release `cyerp-auto-input-v0.2.7`）  
+> 更新：2026-10-12（V0.2.9 由 PR #423 合併進 `main`，發布正式 Release `cyerp-auto-input-v0.2.9`；舊 Release V0.2.7 依使用者要求刪除）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -10,14 +10,14 @@
 2. `/REPO_POLICY.md`
 3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.33）
 4. 本文件 → `README.md` → `CHANGELOG.md`
-5. `main` 的實際 source（PR #104、PR #398、PR #418、PR #421 已合併，工作 branch 已刪除）
+5. `main` 的實際 source（PR #104、PR #398、PR #418、PR #421、PR #423 已合併，工作 branch 已刪除）
 
 不要以舊聊天記憶覆蓋目前 Git 狀態。
 
 ## 2. Branch／PR／版本
 
 - Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
-- `main`：`V0.2.7`（2026-10-12 由 PR #421 squash merge），已發布第一個正式 Release `cyerp-auto-input-v0.2.7`（`CYERPAutoInput Release` workflow：只從 `main` 手動啟動，BUILD 必須為 0，CHANGELOG 要有該版段落，tag 不覆寫，Release note 取自 CHANGELOG 該版段落，不設為 repo latest）。之前的合併：PR #418（V0.2.4）、PR #398（V0.2.1–V0.2.3 Build 1）、PR #104（V0.2.0 Build 31，C# 重寫線取代舊 Go 線 `V0.0.10` Build 19）。工作 branch 合併後刪除。下一次正式發布同樣需使用者同意。
+- `main`：`V0.2.9`（2026-10-12 由 PR #423 squash merge），正式 Release `cyerp-auto-input-v0.2.9`。`CYERPAutoInput Release` workflow：只從 `main` 手動啟動、BUILD 必須為 0、tag 不覆寫，Release note 取 CHANGELOG 該版段落中第一個「- Build」之前的摘要。舊 Release `cyerp-auto-input-v0.2.7` 依使用者要求以 `CYERPAutoInput Release Cleanup` workflow（只從 main、只接受本專案 tag）刪除。之前的合併：PR #421（V0.2.5–V0.2.7）、PR #418（V0.2.4）、PR #398（V0.2.1–V0.2.3 Build 1）、PR #104（V0.2.0 Build 31）。工作 branch 合併後刪除。下一次正式發布同樣需使用者同意。
 - 下一輪修改從最新 `main` 開新 branch（例如 `cyerp-auto-input/<type>-<summary>`），開新 PR。
 - VERSION／BUILD 見同名檔。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新功能 Z＋1（Build 歸零），返修 Build＋1；使用者說「下一版一起修」的項目不單獨發版。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
@@ -32,6 +32,7 @@
 - 蝦皮全自動（設定）：擷取 → 帶回 → 輸入 ERP → 儲存 → 列印；全程鎖實體滑鼠並在畫面中央顯示不入鏡的「全自動運轉中／按 Esc 中止」，需要使用者確認時立即解除。
 - 其他來源：蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`）、酷澎 DeliveryList。預覽、單筆、批次（開始前預檢全部）、轉人工、本機防重複紀錄；開始前檢查不通過回到同一個匯入視窗、保留已填內容。統編自動查客戶全名（經濟部 API）。
 - 共用設定：折價券／運費／促銷組合品號；貨運別（物流：郵局、大榮、新竹、黑貓、宅配通、嘉里；本公司；超商 6 種）。
+- 瀏覽器 F8：開啟蝦皮光學辨識並開始擷取（V0.2.8）。
 - 輔助：ERP 狀態大標籤、第一列庫別預設、員工代號（開程式詢問，暫時作法）、清除表單。LOG 一律診斷模式、只存本機 `logs/`（主畫面已無開啟 LOG 的連結）。進階模式隱藏中。
 
 ## 4. 實機驗證狀態
@@ -59,10 +60,18 @@
 - V0.2.4：使用者 2026-10-12 實測通過（「測試沒問題」），已合併；Release 延到 V0.2.5。使用者回報訂單編號／運送單號末段英數混合處偶有 0／O 誤讀。
 - V0.2.5 Build 0：`ShopeeScreenshot.OrderSnDateDigits`（前 6 碼 O→0）、`TrackingDigits`（TW＋12 碼數字段、全數字單號 O→0）、`ResolveZeroO`（後 8 碼依字寬：DP 把 ink run 對齊字元，單獨成塊者與其他數字中位寬比較，≤1.12→0、≥1.25→O）；`ShopeeScreenshotForm.ResolveOrderSnZeroO` 量測 `GlyphRunWidths`（以最常見灰階為背景、差 >70 為字），LOG 記 `order number 0/O runs=` 與判斷。依使用者截圖量測：蝦皮字型 0 與數字同寬約 7px，C／Q 約 9px。隨 V0.2.7 發布；0／O 判斷尚未遇到實例，之後有 `order number 0/O` LOG 再核對。
 - V0.2.6 Build 0：V0.2.5 實測 12 項訂單在第 7 列失敗（`editor not ready row=7 col=0 point=128,620`），所有歷史 LOG 都沒有成功過第 7 列。使用者截圖量得 ERP 明細列高 22 px，`ProvenDetailRowPitch`=24 逐列累積誤差。`ErpAutomationService._editorRowCenter` 記錄每列編輯框實際中心（相對明細頂端，新單據 geometry ready 時清空）；`DetailRowPitch()` 以前 6 列中最先與最遠兩列量測（16–36 px 才採用）；第 1 列錨點也用實際編輯框；`DetailRowExistsAsync` 共用。未就緒的 LOG 加 `focus_rect`、`grid_top`。實測通過：12 項訂單 `pitch=22`、第 12 列 `editor ready`。
-- V0.2.7 Build 0：單品訂單 OCR 把貨號標籤切成「商品選項」＋「號：A0…」（漏「貨」）→ `CodeLabelPattern` 加 `(^|選項)號(?=[:：])`。使用者 2026-10-12 實測通過，合併並發布第一個正式 Release。V0.2.5 的 0／O 判斷尚無實例 LOG（`order number 0/O` 未出現）。
+- V0.2.7 Build 0：單品訂單 OCR 把貨號標籤切成「商品選項」＋「號：A0…」（漏「貨」）→ `CodeLabelPattern` 加 `(^|選項)號(?=[:：])`。使用者 2026-10-12 實測通過，曾發布為正式 Release（後由 V0.2.9 取代並刪除）。
+- V0.2.7 Build 1（使用者指定小修只加 Build，原編 V0.2.8 Build 0）：`ImportedItem.InEntryOrder`（`MainForm.LoadOrder` 使用）依品號排序，設定的折價券／運費／促銷組合品號排最後；`TrackingDigits`／`OrderSnDateDigits` 的數字段 I、L→1（使用者截圖：`#TW266188241759I` 最後一碼為 I）。使用者確認店到店單號最後一碼可能是數字或字母，維持照 OCR。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
+- V0.2.8 Build 0：`BrowserHotkey`（WH_KEYBOARD_LL 獨立執行緒，只在前景為 Chrome_WidgetWin_1／MozillaWindowClass 且非 CY、無 Ctrl／Alt／Shift 的實體 F8 時攔下）→ `MainForm.OnBrowserHotkey` → `ImportShopeeScreenshotsAsync(startScan: true)`（全自動與否照設定）；忙碌（輸入中或有其他可見視窗）時忽略；`UserSettings.BrowserHotkey` 預設開。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
+- V0.2.8 Build 0（續）：`AutomationSession.End(AutomationOutcome)`：Done（綠勾、0.5 s）、NeedsAttention／Stopped／Paused（黃三角、1.5 s）；`RunDocumentAsync` 依 HandedOff／Warnings／SaveSkippedReason／PrintProblem 判斷；無參數 `End()` 為暫停詢問。UI 訊息與 README 不再以「CY」稱呼本程式（使用者 2026-10-12：程式名稱 ERP AutoInput）。 `FreightCarriers.Aliases` 加 7-11←7-ELEVEN／統一超商、全家←FamilyMart、萊爾富←Hi-Life。
+- V0.2.8 Build 1：實測數量「2」讀成「7」→ `ShopeeScreenshot.SuggestQuantity`（ParseItems 最後）只在提醒中指出唯一能對上小計原價的品號與數量，不改資料（使用者 2026-10-12 明確要求：不能自動改數量／品號）。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
+- V0.2.8 Build 2：`AutomationOutcome.Cancelled`（Esc：`RunDocumentAsync` 捕捉 OperationCanceledException、擷取 `result.Cancelled`）→ 紅色圓形白橫條「使用者已停止」。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
+- V0.2.8 Build 3：編號補讀信心 <0.8 時，若數字等於 `ShopeeScreenshot.ExpectedIndexAt`（上一個＋1／下一個－1，兩者都有須一致）才採用（在所有補讀完成後判斷）。實例：「1」信心 0.289。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
+- V0.2.8 Build 4：`PhysicalMouseLock.EscapePressed`（hook 看到實體 Esc 即在 pool thread 觸發一次）→ `AutomationSession.OnEscape`：取消 `EscapeToken` 並 Post `End(Cancelled)`；`RunDocumentAsync` 以 EscapeToken 取消 `_automationCts`；`ShopeeScreenshotForm.AutoScanAsync` 以 stop token 傳入 `ScanAsync`（含 ReadCardsAsync）。`ShopeeScreenshotHelpForm` 改寫為自動擷取流程；選單「光學辨識輸入 (F8)」。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
+- V0.2.9 Build 0：蝦皮套裝 `ShopeeScreenshot.BundleParts`（+／＋／十）→ `ParseItems.AddItem` 拆品號（ShopeeShotItem 首項帶套裝金額供核對）；`Combine` 產生的表單品項單價留空、首項 `BundleTotal`、促銷組合列 `TakesBundleGap`（有套裝必加）；表單隱藏欄 BundleKey／BundleTotal／BundleGap → `DetailRow`；`ErpAutomationService.FillDetailsAsync` 對套裝品項以 `ReadDetailUnitPriceAsync`（開啟單價編輯框 WM_GETTEXT，失敗 OCR 編輯框，再 Enter）讀 ERP 原價，促銷組合單價＝基礎值−Σ(原價×數量−套裝售價)。讀不到或順序不對即停止（不猜）。使用者要求報表金額正確，不採「首項全價、其餘 0」。共用 `Bundles.Expand`（ImportedOrder.cs）套用於 MO店+、酷澎、蝦皮匯出檔（mapping 加 `PromotionItemCode`）；沒設促銷組合品號才轉人工。ERP 原價合計 < 套裝售價時停止轉人工。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
 - V0.2.4 Build 0 實作：一般輸入也顯示「自動輸入中」（`MainForm.RunDocumentAsync` 一律 `Session.Begin(title)`／`End()`，`AutomationSession` 取代原本直接 `PhysicalMouseLock`）；提示框寬度依文字；光學辨識進度改為 `IProgress<double>`（依要辨識的列數）＋百分比、`ShowProgress` 以 Value+1 再回設跳過主題動畫；`ParseItems` 沒有任何編號且小計欄 1–2 個數字時視為第 1 項（單品促銷誤報）；設定兩處文字。
 
-後續可能（未排程）：OCR 多引擎平行加速長訂單；蝦皮套組規則；CYID 串接。
+後續可能（未排程）：OCR 多引擎平行加速長訂單；CYID 串接。
 
 ## 5. 已確認的 ERP 行為（實作依據）
 

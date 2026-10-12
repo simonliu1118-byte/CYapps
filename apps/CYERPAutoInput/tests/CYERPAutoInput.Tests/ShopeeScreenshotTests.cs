@@ -508,6 +508,7 @@ public class ShopeeScreenshotTests
     [Theory]
     [InlineData("261O1O9R5EC3RC", "2610109R5EC3RC")]
     [InlineData("2610109R5EC3RC", "2610109R5EC3RC")]
+    [InlineData("26I0I09R5EC3RC", "2610109R5EC3RC")]
     public void The_date_part_of_an_order_number_is_digits(string read, string expected) =>
         Assert.Equal(expected, ShopeeScreenshot.OrderSnDateDigits(read));
 
@@ -516,6 +517,8 @@ public class ShopeeScreenshotTests
     [InlineData("TW26507987985O0", "TW265079879850" + "0")]
     [InlineData("5O6O5O6113", "5060506113")]
     [InlineData("AB12O34567", "AB12O34567")]
+    [InlineData("TW2661882I1759I", "TW266188211759I")]
+    [InlineData("5O6O5I6113", "5060516113")]
     public void Tracking_digits_follow_the_carrier_format(string read, string expected) =>
         Assert.Equal(expected, ShopeeScreenshot.TrackingDigits(read));
 
@@ -544,5 +547,119 @@ public class ShopeeScreenshotTests
         var result = Read(OrderShot(), [items], PromoAmountShot());
         Assert.Empty(result.Problems);
         Assert.Contains(result.Order!.Items, i => i.ItemCode == "X00315-1");
+    }
+    [Fact]
+    public void Names_the_one_quantity_that_would_make_a_group_add_up_without_changing_it()
+    {
+        // Positions from the user's log (2026-10-12), codes replaced: the 2nd product's 「2」 was read as 「7」.
+        List<OcrBox> lines =
+        [
+            new("單價", 744, 30, 28, 17), new("數量", 816, 30, 32, 17), new("小計", 905, 32, 28, 15),
+            new("40", 765, 515, 15, 15), new("2", 847, 516, 7, 13), new("商品選項貨號：X00298", 140, 554, 137, 18),
+            new("302", 904, 589, 29, 20), new("3", 37, 599, 13, 17), new("40", 767, 599, 11, 17), new("7", 847, 599, 9, 12),
+            new("310", 910, 608, 20, 16), new("商品選項貨號：X00297", 143, 641, 131, 17),
+            new("150", 756, 685, 25, 17), new("1", 848, 688, 7, 9), new("商品選項貨號：X00314", 142, 708, 133, 16)
+        ];
+        var problems = new List<string>();
+        var (items, _) = ShopeeScreenshot.ParseItems(lines, 973, problems);
+        Assert.Equal(7m, items.Single(i => i.ItemCode == "X00297").Quantity);
+        Assert.Contains(problems, p => p.Contains("X00297", StringComparison.Ordinal) && p.Contains("若是 2", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Names_no_quantity_when_more_than_one_could_be_wrong()
+    {
+        List<OcrBox> lines =
+        [
+            new("單價", 744, 30, 28, 17), new("數量", 816, 30, 32, 17), new("小計", 905, 32, 28, 15),
+            new("40", 765, 515, 15, 15), new("2", 847, 516, 7, 13), new("商品選項貨號：X00298", 140, 554, 137, 18),
+            new("200", 904, 589, 29, 20), new("1", 37, 599, 8, 17), new("40", 767, 599, 11, 17), new("2", 847, 599, 9, 12),
+            new("商品選項貨號：X00297", 143, 641, 131, 17)
+        ];
+        // 40×2 + 40×2 ≠ 200, and either product at 3 would add up: no way to tell which.
+        var problems = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 973, problems);
+        Assert.Equal(200m, groups.Single().Original);
+        Assert.DoesNotContain(problems, p => p.Contains("若是", StringComparison.Ordinal));
+        Assert.All(items, i => Assert.Equal(2m, i.Quantity));
+    }
+    // Boxes from the user's log (2026-10-12; codes replaced): 編號 「1」 was re-read at 0.29 and dropped.
+    private static List<OcrBox> ThreeGroupsWithoutIndexOne() =>
+    [
+        new("商品", 72, 28, 30, 17), new("單價", 744, 30, 27, 14), new("數量", 818, 30, 26, 14), new("計", 915, 32, 14, 12),
+        new("96", 765, 162, 11, 17), new("1", 847, 165, 6, 10), new("商品選項貨號：X00641S", 140, 185, 140, 20),
+        new("329", 902, 194, 27, 21), new("336", 915, 217, 15, 10), new("120", 755, 228, 23, 18), new("2", 844, 229, 13, 16),
+        new("商品選項貨號：X00465", 140, 270, 133, 18),
+        new("96", 757, 337, 13, 19), new("96", 917, 338, 11, 17), new("1", 838, 341, 9, 11), new("商品項貨號：X00641S", 147, 360, 145, 19),
+        new("96", 765, 475, 13, 19), new("190", 905, 476, 24, 19), new("2", 845, 478, 11, 14), new("3", 36, 487, 11, 14),
+        new("商品選項貨號：X00469", 141, 516, 134, 19), new("2", 16, 329, 50, 34)
+    ];
+
+    [Fact]
+    public void The_numbering_implies_the_missing_first_index()
+    {
+        Assert.Equal(1, ShopeeScreenshot.ExpectedIndexAt(ThreeGroupsWithoutIndexOne(), 969, 204));
+        Assert.Null(ShopeeScreenshot.ExpectedIndexAt(ThreeGroupsWithoutIndexOne(), 969, 420)); // between 2 and 3
+    }
+
+    [Fact]
+    public void With_the_implied_first_index_all_three_groups_add_up()
+    {
+        var lines = ThreeGroupsWithoutIndexOne().Append(new OcrBox("1", 16, 187, 50, 34)).ToList();
+        var problems = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 969, problems);
+        Assert.Equal([1, 2, 3], groups.Select(g => g.Index).Order());
+        Assert.Equal(groups.Sum(g => g.Original), items.Sum(i => i.Amount));
+        Assert.DoesNotContain(problems, p => p.Contains("缺第", StringComparison.Ordinal));
+    }
+    [Fact]
+    public void A_bundle_enters_every_part_with_the_price_on_the_first()
+    {
+        // 「X00244+X00011」 × 2 at 400, struck 800 shown 792 (user's screenshot, 2026-10-12; codes replaced).
+        List<OcrBox> lines =
+        [
+            new("單價", 744, 30, 28, 17), new("數量", 816, 30, 32, 17), new("小計", 905, 32, 28, 15),
+            new("1", 37, 150, 8, 14), new("400", 745, 140, 26, 17), new("2", 828, 140, 8, 14), new("792", 906, 140, 26, 17),
+            new("800", 906, 158, 26, 14), new("商品選項貨號：X00244+X00011", 180, 178, 190, 17)
+        ];
+        var problems = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 1020, problems);
+        Assert.Empty(problems);
+        Assert.Equal(2, items.Count);
+        Assert.Equal(("X00244", 400m, 2m), (items[0].ItemCode, items[0].UnitPrice, items[0].Quantity));
+        Assert.Equal(("X00011", 0m, 2m), (items[1].ItemCode, items[1].UnitPrice, items[1].Quantity));
+        Assert.Equal(groups.Single().Original, items.Sum(i => i.Amount));
+    }
+
+    [Theory]
+    [InlineData("X00244+X00011", new[] { "X00244", "X00011" })]
+    [InlineData("X00244十X00011", new[] { "X00244", "X00011" })]
+    [InlineData("X00244 ＋ X00011x2", new[] { "X00244", "X00011x2" })]
+    [InlineData("X00244", new[] { "X00244" })]
+    public void Splits_bundle_codes(string raw, string[] parts) =>
+        Assert.Equal(parts, ShopeeScreenshot.BundleParts(raw));
+    [Fact]
+    public void A_bundle_leaves_its_prices_to_erp_and_the_promotion_takes_the_gap()
+    {
+        List<OcrBox> items =
+        [
+            new("單價", 744, 30, 28, 17), new("數量", 816, 30, 32, 17), new("小計", 905, 32, 28, 15),
+            new("1", 37, 150, 8, 14), new("400", 745, 140, 26, 17), new("2", 828, 140, 8, 14), new("792", 906, 140, 26, 17),
+            new("800", 906, 158, 26, 14), new("商品選項貨號：X00244+X00011", 180, 178, 190, 17)
+        ];
+        List<OcrBox> amounts =
+        [
+            B("買家實付金額", 79, 31), B("訂單金額", 752, 64), B("NT$792", 922, 65, 55), B("買家總支付金額", 706, 210), B("NT$792", 889, 207, 90, 26)
+        ];
+        var result = Read(OrderShot(), [items], amounts);
+        Assert.Empty(result.Problems);
+        var lines = result.Order!.Items;
+        var first = lines.Single(i => i.ItemCode == "X00244");
+        var second = lines.Single(i => i.ItemCode == "X00011");
+        Assert.Equal(("2", "", "800"), (first.Quantity, first.UnitPrice, first.BundleTotal));
+        Assert.Equal(("2", "", (string?)null), (second.Quantity, second.UnitPrice, second.BundleTotal));
+        var promotion = lines.Single(i => i.ItemCode == "P900");
+        Assert.Equal("-8", promotion.UnitPrice);
+        Assert.True(promotion.TakesBundleGap);
     }
 }
