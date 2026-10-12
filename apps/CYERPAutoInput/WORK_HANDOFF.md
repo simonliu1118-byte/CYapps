@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-12（V0.2.8 Build 0，分支 `cyerp-auto-input/tracking-i-sort`；`main` 為 V0.2.7，已發布正式 Release `cyerp-auto-input-v0.2.7`）  
+> 更新：2026-10-12（V0.2.8 Build 1，分支 `cyerp-auto-input/tracking-i-sort`；`main` 為 V0.2.7，已發布正式 Release `cyerp-auto-input-v0.2.7`）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -63,7 +63,8 @@
 - V0.2.7 Build 0：單品訂單 OCR 把貨號標籤切成「商品選項」＋「號：A0…」（漏「貨」）→ `CodeLabelPattern` 加 `(^|選項)號(?=[:：])`。使用者 2026-10-12 實測通過，合併並發布第一個正式 Release。
 - V0.2.7 Build 1（使用者指定小修只加 Build，原編 V0.2.8 Build 0）：`ImportedItem.InEntryOrder`（`MainForm.LoadOrder` 使用）依品號排序，設定的折價券／運費／促銷組合品號排最後；`TrackingDigits`／`OrderSnDateDigits` 的數字段 I、L→1（使用者截圖：`#TW266188241759I` 最後一碼為 I）。使用者確認店到店單號最後一碼可能是數字或字母，維持照 OCR。待實測。
 - V0.2.8 Build 0：`BrowserHotkey`（WH_KEYBOARD_LL 獨立執行緒，只在前景為 Chrome_WidgetWin_1／MozillaWindowClass 且非 CY、無 Ctrl／Alt／Shift 的實體 F8 時攔下）→ `MainForm.OnBrowserHotkey` → `ImportShopeeScreenshotsAsync(startScan: true)`（全自動與否照設定）；忙碌（輸入中或有其他可見視窗）時忽略；`UserSettings.BrowserHotkey` 預設開。待實測。
-- V0.2.8 Build 0（續）：`AutomationSession.End(AutomationOutcome)`：Done（綠勾、0.5 s）、NeedsAttention／Stopped／Paused（黃三角、1.5 s）；`RunDocumentAsync` 依 HandedOff／Warnings／SaveSkippedReason／PrintProblem 判斷；無參數 `End()` 為暫停詢問。UI 訊息與 README 不再以「CY」稱呼本程式（使用者 2026-10-12：程式名稱 ERP AutoInput）。 `FreightCarriers.Aliases` 加 7-11←7-ELEVEN／統一超商、全家←FamilyMart、萊爾富←Hi-Life。V0.2.5 的 0／O 判斷尚無實例 LOG（`order number 0/O` 未出現）。
+- V0.2.8 Build 0（續）：`AutomationSession.End(AutomationOutcome)`：Done（綠勾、0.5 s）、NeedsAttention／Stopped／Paused（黃三角、1.5 s）；`RunDocumentAsync` 依 HandedOff／Warnings／SaveSkippedReason／PrintProblem 判斷；無參數 `End()` 為暫停詢問。UI 訊息與 README 不再以「CY」稱呼本程式（使用者 2026-10-12：程式名稱 ERP AutoInput）。 `FreightCarriers.Aliases` 加 7-11←7-ELEVEN／統一超商、全家←FamilyMart、萊爾富←Hi-Life。
+- V0.2.8 Build 1：實測數量「2」讀成「7」→ `ShopeeScreenshot.CorrectOneQuantity`（ParseItems 最後；每組只有唯一一項改成整數數量能對上小計原價時才改，LOG `quantity corrected:`）。待實測。V0.2.5 的 0／O 判斷尚無實例 LOG（`order number 0/O` 未出現）。
 - V0.2.4 Build 0 實作：一般輸入也顯示「自動輸入中」（`MainForm.RunDocumentAsync` 一律 `Session.Begin(title)`／`End()`，`AutomationSession` 取代原本直接 `PhysicalMouseLock`）；提示框寬度依文字；光學辨識進度改為 `IProgress<double>`（依要辨識的列數）＋百分比、`ShowProgress` 以 Value+1 再回設跳過主題動畫；`ParseItems` 沒有任何編號且小計欄 1–2 個數字時視為第 1 項（單品促銷誤報）；設定兩處文字。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；蝦皮套組規則；CYID 串接。

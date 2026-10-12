@@ -240,7 +240,7 @@ internal static partial class ShopeeScreenshot
     /// are found from the numbers' positions, so the header row may be off-screen.
     /// </summary>
     public static (List<ShopeeShotItem> Items, List<ShopeeShotGroup> Groups) ParseItems(
-        IReadOnlyList<OcrBox> lines, int imageWidth, List<string> problems)
+        IReadOnlyList<OcrBox> lines, int imageWidth, List<string> problems, List<string>? corrections = null)
     {
         var raw = lines;
         lines = WithLoneGlyphDigits(lines);
@@ -352,7 +352,39 @@ internal static partial class ShopeeScreenshot
             }
             else problems.Add($"商品「{rawCode}」讀不到數量，請在表單補上該商品。");
         }
+
+        CorrectOneQuantity(items, groups, corrections);
         return (items, groups);
+    }
+
+    /// <summary>
+    /// A 數量 read as another digit (「2」 read as 「7」, user's PC, 2026-10-12) makes a group's
+    /// 單價×數量 differ from its 小計 original. When changing exactly one product's quantity to a
+    /// whole number makes the group add up, and no other product could, that quantity is the
+    /// one on the page; the correction is reported for the log. Anything else is left for the
+    /// checks to flag. Sets (quantity × n) are not touched.
+    /// </summary>
+    private static void CorrectOneQuantity(List<ShopeeShotItem> items, List<ShopeeShotGroup> groups, List<string>? corrections)
+    {
+        foreach (var group in groups)
+        {
+            var members = items.Where(i => i.Group == group.Index).ToList();
+            var sum = members.Sum(i => i.Amount);
+            if (members.Count == 0 || sum == group.Original) continue;
+            var candidates = new List<(ShopeeShotItem Item, decimal Quantity)>();
+            foreach (var item in members)
+            {
+                if (item.UnitPrice <= 0 || item.UnitPrice * item.Quantity != item.Amount) continue;
+                var amount = group.Original - (sum - item.Amount);
+                if (amount <= 0 || amount % item.UnitPrice != 0) continue;
+                var quantity = amount / item.UnitPrice;
+                if (quantity is >= 1 and <= 999 && quantity != item.Quantity) candidates.Add((item, quantity));
+            }
+            if (candidates.Count != 1) continue;
+            var (wrong, right) = candidates[0];
+            items[items.IndexOf(wrong)] = wrong with { Quantity = right, Amount = wrong.UnitPrice * right };
+            corrections?.Add($"第 {group.Index} 項 {wrong.ItemCode} 數量 {Number(wrong.Quantity)} → {Number(right)}（依小計 {Number(group.Original)}）");
+        }
     }
 
     /// <summary>

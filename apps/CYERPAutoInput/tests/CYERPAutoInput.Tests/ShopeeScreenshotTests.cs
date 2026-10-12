@@ -548,4 +548,41 @@ public class ShopeeScreenshotTests
         Assert.Empty(result.Problems);
         Assert.Contains(result.Order!.Items, i => i.ItemCode == "X00315-1");
     }
+    [Fact]
+    public void Corrects_the_one_quantity_that_makes_a_group_add_up()
+    {
+        // Positions from the user's log (2026-10-12), codes replaced: the 2nd product's 「2」 was read as 「7」.
+        List<OcrBox> lines =
+        [
+            new("單價", 744, 30, 28, 17), new("數量", 816, 30, 32, 17), new("小計", 905, 32, 28, 15),
+            new("40", 765, 515, 15, 15), new("2", 847, 516, 7, 13), new("商品選項貨號：X00298", 140, 554, 137, 18),
+            new("302", 904, 589, 29, 20), new("3", 37, 599, 13, 17), new("40", 767, 599, 11, 17), new("7", 847, 599, 9, 12),
+            new("310", 910, 608, 20, 16), new("商品選項貨號：X00297", 143, 641, 131, 17),
+            new("150", 756, 685, 25, 17), new("1", 848, 688, 7, 9), new("商品選項貨號：X00314", 142, 708, 133, 16)
+        ];
+        var problems = new List<string>();
+        var corrections = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 973, problems, corrections);
+        Assert.Equal(2m, items.Single(i => i.ItemCode == "X00297").Quantity);
+        Assert.Equal(groups.Single().Original, items.Sum(i => i.Amount));
+        Assert.Single(corrections);
+    }
+
+    [Fact]
+    public void Leaves_quantities_alone_when_more_than_one_could_be_wrong()
+    {
+        List<OcrBox> lines =
+        [
+            new("單價", 744, 30, 28, 17), new("數量", 816, 30, 32, 17), new("小計", 905, 32, 28, 15),
+            new("40", 765, 515, 15, 15), new("2", 847, 516, 7, 13), new("商品選項貨號：X00298", 140, 554, 137, 18),
+            new("200", 904, 589, 29, 20), new("1", 37, 599, 8, 17), new("40", 767, 599, 11, 17), new("2", 847, 599, 9, 12),
+            new("商品選項貨號：X00297", 143, 641, 131, 17)
+        ];
+        // 40×2 + 40×2 ≠ 200, and either product at 3 would add up: no way to tell which.
+        var corrections = new List<string>();
+        var (items, groups) = ShopeeScreenshot.ParseItems(lines, 973, new List<string>(), corrections);
+        Assert.Equal(200m, groups.Single().Original);
+        Assert.Empty(corrections);
+        Assert.All(items, i => Assert.Equal(2m, i.Quantity));
+    }
 }
