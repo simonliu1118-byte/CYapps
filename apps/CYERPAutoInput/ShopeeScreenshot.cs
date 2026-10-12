@@ -173,7 +173,10 @@ internal static partial class ShopeeScreenshot
         var quantityColumn = InColumn(layout.Quantity);
         var subtotalColumn = InColumn(layout.Subtotal);
 
-        int GroupOf(int centerY) => anchors.Count == 0 ? 0
+        // No 編號 read at all (a lone 「1」 is often missed; user's PC, 2026-10-12): a table whose
+        // 小計 column holds one group's price (and struck original) is that one group, 第 1 項.
+        var singleGroup = anchors.Count == 0 && subtotalColumn.Count is >= 1 and <= 2;
+        int GroupOf(int centerY) => anchors.Count == 0 ? (singleGroup ? 1 : 0)
             : int.Parse(Compact(anchors.OrderBy(a => Math.Abs(a.CenterY - centerY)).First().Text), CultureInfo.InvariantCulture);
 
         var codeLines = lines.Where(l => CodeLabelPattern().IsMatch(Compact(l.Text))).OrderBy(l => l.Top).ToList();
@@ -217,6 +220,11 @@ internal static partial class ShopeeScreenshot
         if (unitColumn.Any(n => !used.Contains(n.Box)))
             problems.Add("明細有商品讀不到商品選項貨號，請核對截圖。");
 
+        if (singleGroup)
+        {
+            var values = subtotalColumn.OrderBy(n => n.Box.Top).Select(n => n.Value).ToList();
+            groups.Add(new ShopeeShotGroup(1, values[0], values[^1]));
+        }
         foreach (var anchor in anchors)
         {
             var index = int.Parse(Compact(anchor.Text), CultureInfo.InvariantCulture);

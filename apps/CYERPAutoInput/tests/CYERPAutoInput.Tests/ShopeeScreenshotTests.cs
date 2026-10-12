@@ -470,4 +470,13 @@ public class ShopeeScreenshotTests
         Assert.Equal(1000m, amounts.OrderAmount);
         Assert.Equal(960m, amounts.Total);
     }
+    [Fact]
+    public void A_one_product_table_without_its_index_is_still_one_group()
+    {
+        // The lone 「1」 was not read (user's PC, 2026-10-12): 75 × 5 = 375 struck, 364 shown.
+        var items = PromoItemShot().Where(b => b.Text != "1").ToList();
+        var result = Read(OrderShot(), [items], PromoAmountShot());
+        Assert.DoesNotContain(result.Problems, p => p.Contains("促銷組合", StringComparison.Ordinal));
+        Assert.Contains(result.Order!.Items, i => i.ItemCode == "P900" && i.UnitPrice == "-11");
+    }
 }
