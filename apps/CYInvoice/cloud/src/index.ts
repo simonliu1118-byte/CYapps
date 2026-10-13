@@ -930,38 +930,58 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
 
   const deviceId = `dev_${crypto.randomUUID()}`;
   try {
-    await env.DB.batch([
+    // Recheck authorization *inside* the SQLite/D1 write transaction.
+    // A recovery cutover may have revoked the issuer or pairing grant after
+    // the initial SELECT. INSERT ... SELECT then creates zero rows instead of
+    // allowing an old grant to establish another active Device.
+    const writes = await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO devices (
           device_id, workspace_id, display_name, token_hash, client_version,
           status, pairing_id, employee_authority_state, employee_transition_completed_at,
           paired_at, created_at, updated_at
-        ) VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?8, ?9, ?7, ?7, ?7)`
+        )
+        SELECT ?1, p.workspace_id, ?3, ?4, ?5, 'active', p.pairing_id,
+          ?8, ?9, ?7, ?7, ?7
+        FROM device_pairing_codes p
+        JOIN workspaces w ON w.workspace_id = p.workspace_id AND w.status = 'active'
+        JOIN devices issuer ON issuer.device_id = p.created_by_device_id
+          AND issuer.workspace_id = p.workspace_id AND issuer.status = 'active'
+        WHERE p.pairing_id = ?6 AND p.workspace_id = ?2
+          AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > ?7`
       ).bind(
-        deviceId,
-        pairing.workspace_id,
-        (body.deviceDisplayName as string).trim(),
-        tokenHash,
-        (body.clientVersion as string).trim(),
-        pairing.pairing_id,
+        deviceId, pairing.workspace_id, (body.deviceDisplayName as string).trim(),
+        tokenHash, (body.clientVersion as string).trim(), pairing.pairing_id,
         now, directJoin ? "cloud" : "transitioning", directJoin ? now : null),
       env.DB.prepare(
         `UPDATE device_pairing_codes
             SET used_at = ?1, claimed_device_id = ?2
-          WHERE pairing_id = ?3 AND used_at IS NULL AND revoked_at IS NULL`
+          WHERE pairing_id = ?3 AND used_at IS NULL AND revoked_at IS NULL
+            AND EXISTS (SELECT 1 FROM devices d
+              WHERE d.device_id = ?2 AND d.pairing_id = device_pairing_codes.pairing_id)`
       ).bind(now, deviceId, pairing.pairing_id),
-      securityEventStatement(env.DB, { workspaceId: pairing.workspace_id, type: "device_joined",
-        outcome: "success", targetDeviceId: deviceId, pairingId: pairing.pairing_id, requestId }),
+      env.DB.prepare(
+        `INSERT INTO security_audit_events (event_id, workspace_id, event_type,
+          outcome, target_device_id, pairing_id, request_id, occurred_at)
+        SELECT ?1, ?2, 'device_joined', 'success', ?3, ?4, ?5, ?6
+        FROM device_pairing_codes p WHERE p.pairing_id = ?4
+          AND p.claimed_device_id = ?3 AND p.used_at = ?6`
+      ).bind(`evt_${crypto.randomUUID()}`, pairing.workspace_id, deviceId,
+        pairing.pairing_id, requestId, now),
     ]);
+    if (writes.some(result => result.meta.changes !== 1))
+      return errorResponse(env, requestId, 409, "PAIRING_CLAIM_CONFLICT",
+        "Pairing authorization is no longer active.");
   } catch (error) {
     const recovered = await env.DB.prepare(
-      `SELECT d.device_id, d.workspace_id, d.display_name AS device_display_name
+      `SELECT d.device_id, d.workspace_id, d.display_name AS device_display_name,
+          d.status
          FROM devices d
          JOIN device_pairing_codes p ON p.claimed_device_id = d.device_id
         WHERE d.token_hash = ?1 AND p.code_hash = ?2
         LIMIT 1`
-    ).bind(tokenHash, codeHash).first<PairingDeviceRow>();
-    if (recovered) {
+    ).bind(tokenHash, codeHash).first<PairingDeviceRow & { status: string }>();
+    if (recovered?.status === "active") {
       return json(env, requestId, 200, {
         recovered: true,
         workspace: { workspaceId: recovered.workspace_id },
