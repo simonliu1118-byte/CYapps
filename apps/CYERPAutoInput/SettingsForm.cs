@@ -17,6 +17,7 @@ internal sealed class SettingsForm : Form
     private readonly TextBox _shopeeNotePrefix = new();
     private readonly TextBox _shopeeLabelPrinter = new();
     private readonly TextBox _shopeeLabelScale = new();
+    private readonly TextBox _sevenLabelScale = new();
     private readonly TextBox _moOrderType = new();
     private readonly TextBox _moCustomerCode = new();
     private readonly TextBox _moNotePrefix = new();
@@ -201,7 +202,8 @@ internal sealed class SettingsForm : Form
             ("客戶代號", _shopeeCustomerCode, _settings.ShopeeCustomerCode, 120),
             ("備註前綴", _shopeeNotePrefix, _settings.ShopeeNotePrefix, 150),
             ("寄件單印表機", _shopeeLabelPrinter, _settings.ShopeeLabelPrinter, 150),
-            ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
+            ("寄件單縮放 %", _shopeeLabelScale, _settings.ShopeeLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60),
+            ("7-11 縮放 %", _sevenLabelScale, _settings.SevenLabelScale.ToString(System.Globalization.CultureInfo.InvariantCulture), 60)));
         // Added in reverse (last added sits highest), so count TabIndex from the end.
         var sections = page.Controls.OfType<GroupBox>().ToList();
         for (var i = 0; i < sections.Count; i++) sections[i].TabIndex = sections.Count - 1 - i;
@@ -348,6 +350,14 @@ internal sealed class SettingsForm : Form
             _shopeeLabelScale.Focus();
             return;
         }
+        if (!int.TryParse(_sevenLabelScale.Text.Trim(), out var sevenScale) || sevenScale is < 10 or > 200)
+        {
+            MessageBox.Show(this, "7-11 交貨便縮放請填 10–200 的數字（Chrome 列印的縮放比例）。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tabs.SelectedIndex = 1;
+            _sevenLabelScale.Focus();
+            return;
+        }
+        _settings.SevenLabelScale = sevenScale;
         _settings.ShopeeLabelPrinter = _shopeeLabelPrinter.Text.Trim();
         _settings.ShopeeLabelScale = labelScale;
         _settings.ShopeeOrderType = _shopeeOrderType.Text.Trim();

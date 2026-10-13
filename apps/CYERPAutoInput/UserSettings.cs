@@ -25,6 +25,8 @@ internal sealed class UserSettings
     /// </summary>
     public string ShopeeLabelPrinter { get; set; } = "GG-D410 Printer";
     public int ShopeeLabelScale { get; set; } = 110;
+    /// <summary>7-ELEVEN 交貨便服務單 print at 100 % (user, 2026-10-13).</summary>
+    public int SevenLabelScale { get; set; } = 100;
     /// <summary>When on, a blank 庫別 on the first detail row is filled with <see cref="FirstRowWarehouse"/>; ERP carries it to later rows.</summary>
     public bool FirstRowWarehouseEnabled { get; set; }
     public string FirstRowWarehouse { get; set; } = string.Empty;

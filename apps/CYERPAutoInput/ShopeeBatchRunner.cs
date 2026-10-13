@@ -15,6 +15,7 @@ internal sealed class ShopeeBatchOrder
 {
     public required string OrderSn { get; init; }
     public string Carrier { get; set; } = string.Empty;
+    public ShopeeBatchCarrier Kind { get; set; }
     public string Tracking { get; set; } = string.Empty;
     public bool Shipped { get; set; }
 }
@@ -36,11 +37,15 @@ internal sealed class ShopeeBatchRunner
     private readonly AppLogger _log;
     private readonly string _printer;
     private readonly int _scale;
+    private readonly int _sevenScale;
     private readonly CancellationToken _token;
     private nint _window;
 
-    public ShopeeBatchRunner(PaddleOcrService ocr, AppLogger log, string printer, int scale, CancellationToken token)
+    /// <param name="scale">Chrome's 縮放比例 for Shopee's own labels.</param>
+    /// <param name="sevenScale">Chrome's 縮放比例 for 7-11's 交貨便 slips (user, 2026-10-13: 100).</param>
+    public ShopeeBatchRunner(PaddleOcrService ocr, AppLogger log, string printer, int scale, int sevenScale, CancellationToken token)
     {
+        _sevenScale = sevenScale;
         _ocr = ocr;
         _log = log;
         _printer = printer;
@@ -270,8 +275,8 @@ internal sealed class ShopeeBatchRunner
             throw new ShopeeBatchStop($"訂單 {first.OrderSn} 已處理過，卻還在待處理清單上；為避免重複出貨，已停止。");
         _log.Info("shopee-batch", $"first order carrier={_log.Value(first.Carrier)}");
         if (!ShopeeBatchScreens.SupportedCarrier(first.Carrier))
-            throw new ShopeeBatchStop($"訂單 {first.OrderSn} 的物流方式「{first.Carrier}」不是蝦皮店到店／店到宅，請人工處理。");
-        var order = new ShopeeBatchOrder { OrderSn = first.OrderSn, Carrier = first.Carrier };
+            throw new ShopeeBatchStop($"訂單 {first.OrderSn} 的物流方式「{first.Carrier}」不是蝦皮店到店／店到宅／7-ELEVEN，請人工處理。");
+        var order = new ShopeeBatchOrder { OrderSn = first.OrderSn, Carrier = first.Carrier, Kind = ShopeeBatchScreens.CarrierKind(first.Carrier) };
         Click(screen, first.Status, "待出貨");
         // The order opens in a new tab of this window.
         var (detail, _) = await WaitAsync("訂單明細頁", 30, s => ShopeeBatchScreens.IsOrderDetail(s.Boxes) && ShopeeBatchScreens.DetailOrderSn(s.Boxes).Length > 0 ? s : null);
@@ -292,8 +297,8 @@ internal sealed class ShopeeBatchRunner
         using (detail)
         {
             var carrier = ShopeeBatchScreens.DetailCarrier(detail.Boxes);
-            if (carrier.Length > 0 && !ShopeeBatchScreens.SupportedCarrier(carrier))
-                throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的運送資訊是「{carrier}」，不是蝦皮店到店／店到宅，請人工處理。");
+            if (carrier.Length > 0 && ShopeeBatchScreens.CarrierKind(carrier) != order.Kind)
+                throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的運送資訊是「{carrier}」，與清單上的「{order.Carrier}」不同或不支援，請人工處理。");
             if (!Orange(detail.Image, button))
                 throw new ShopeeBatchStop($"訂單 {order.OrderSn} 的「{button.Text.Trim()}」按鈕顏色不對，為避免按錯已停止。");
             Click(detail, button, button.Text.Trim());
@@ -312,8 +317,21 @@ internal sealed class ShopeeBatchRunner
         dialog.Dispose();
 
         await ClickPrintLabelAsync(order);
+        if (order.Kind == ShopeeBatchCarrier.SevenEleven) await PrintSevenSlipAsync(order);
+        else await PrintShopeeLabelAsync(order);
+        var (printed, _) = await WaitAsync("列印視窗關閉", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? null : s, shipped: true);
+        printed.Dispose();
+        _log.Info("shopee-batch", "label printed");
 
-        // 預覽列印 opens in a new tab: 下載出貨文件中 → 下載完成.
+        // Close the label's tab: back to the order with its 查看寄件編號 dialog, then close it.
+        Keys("Ctrl+W (寄件單)", NativeMethods.VK_CONTROL, 0x57 /* W */);
+        await Task.Delay(500, _token);
+        await CloseTrackingDialogAsync();
+    }
+
+    /// <summary>Shopee's 預覽列印 tab: 下載出貨文件中 → 下載完成 → checked → 列印出貨文件 → Chrome's print dialog.</summary>
+    private async Task PrintShopeeLabelAsync(ShopeeBatchOrder order)
+    {
         var (awb, download) = await WaitAsync("出貨文件下載完成", 120, s => ShopeeBatchScreens.IsAwbPage(s.Boxes) ? ShopeeBatchScreens.AwbDownloaded(s.Boxes) : null, shipped: true);
         using (awb)
         {
@@ -328,46 +346,74 @@ internal sealed class ShopeeBatchRunner
             var print = ShopeeBatchScreens.PrintDocumentsButton(awb.Boxes) ?? throw new ShopeeBatchStop("讀不到「列印出貨文件」按鈕。", true);
             Click(awb, print, "列印出貨文件");
         }
+        await PrintDialogAsync(_scale);
+    }
 
-        // Chrome's own print dialog: the thermal printer at the set scale, or nothing is printed.
-        // The dialog fills in its printer a moment after it opens, so it is read until it
-        // matches; what it last showed is reported when it never does.
+    /// <summary>
+    /// 7-ELEVEN (user, 2026-10-13): 列印寄件單 opens 7-11's 交貨便 slip in a new tab with no print
+    /// button of its own; once its order number and code are checked, Ctrl+P opens Chrome's print
+    /// dialog, which prints it at 100 %.
+    /// </summary>
+    private async Task PrintSevenSlipAsync(ShopeeBatchOrder order)
+    {
+        var (slip, _) = await WaitAsync("7-ELEVEN 交貨便服務單", 60, s => ShopeeBatchScreens.IsSevenLabelPage(s.Boxes) && !ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null, shipped: true);
+        using (slip)
+        {
+            var labelSn = ShopeeBatchScreens.LabelOrderSn(slip.Boxes);
+            if (labelSn != order.OrderSn)
+                throw new ShopeeBatchStop($"交貨便服務單上的寄貨訂單編號（{(labelSn.Length > 0 ? labelSn : "讀不到")}）不是 {order.OrderSn}，未列印。", true);
+            var code = ShopeeBatchScreens.SevenLabelCode(slip.Boxes);
+            if (!ShopeeBatchScreens.SameTracking(code, order.Tracking))
+                throw new ShopeeBatchStop($"交貨便服務代碼（{(code.Length > 0 ? code : "讀不到")}）與寄件編號 {order.Tracking} 不同，未列印。", true);
+        }
+        Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
+        await PrintDialogAsync(_sevenScale);
+    }
+
+    /// <summary>
+    /// Chrome's own print dialog: the thermal printer at <paramref name="wanted"/> %, or nothing
+    /// is printed and the batch stops. 縮放比例 is under 顯示更多設定 (user, 2026-10-13), opened
+    /// once when it is not shown. The dialog fills in its printer a moment after it opens, so it
+    /// is read until it matches; what it last showed is reported when it never does.
+    /// </summary>
+    private async Task PrintDialogAsync(int wanted)
+    {
         var (opened, _) = await WaitAsync("Chrome 列印視窗", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? s : null, shipped: true);
         opened.Dispose();
         string destination = string.Empty;
         int? scale = null;
+        var expanded = false;
         var watch = Stopwatch.StartNew();
         while (true)
         {
             using var screen = await ReadAsync();
             destination = ShopeeBatchScreens.PrintDestination(screen.Boxes);
             scale = ShopeeBatchScreens.PrintScale(screen.Boxes);
-            if (ShopeeBatchScreens.IsPrintDialog(screen.Boxes) && ShopeeBatchScreens.SamePrinter(destination, _printer) && scale == _scale &&
+            if (scale is null && !expanded && ShopeeBatchScreens.IsPrintDialog(screen.Boxes) && ShopeeBatchScreens.MoreSettings(screen.Boxes) is { } more)
+            {
+                Click(screen, more, "顯示更多設定");
+                expanded = true;
+                await Task.Delay(600, _token);
+                continue;
+            }
+            if (ShopeeBatchScreens.IsPrintDialog(screen.Boxes) && ShopeeBatchScreens.SamePrinter(destination, _printer) && scale == wanted &&
                 ShopeeBatchScreens.PrintButton(screen.Boxes) is { } printButton)
             {
                 _log.Info("shopee-batch", $"print dialog destination={_log.Value(destination)} scale={scale}");
                 Click(screen, printButton, "列印");
                 break;
             }
-            if (watch.Elapsed > TimeSpan.FromSeconds(10))
+            if (watch.Elapsed > TimeSpan.FromSeconds(12))
             {
                 _log.Warn("shopee-batch", $"print dialog not as set destination={_log.Value(destination)} scale={scale}");
                 if (!ShopeeBatchScreens.SamePrinter(destination, _printer))
                     throw new ShopeeBatchStop($"Chrome 列印的目的地是「{destination}」，不是設定的「{_printer}」，未列印。", true);
-                if (scale != _scale)
-                    throw new ShopeeBatchStop($"Chrome 列印的縮放比例是 {(scale?.ToString() ?? "讀不到")}，不是設定的 {_scale}，未列印。", true);
+                if (scale != wanted)
+                    throw new ShopeeBatchStop($"Chrome 列印的縮放比例是 {(scale?.ToString() ?? "讀不到")}，不是設定的 {wanted}，未列印。", true);
                 throw new ShopeeBatchStop("Chrome 列印視窗讀不到「列印」按鈕，未列印。", true);
             }
             await Task.Delay(600, _token);
         }
-        var (printed, _) = await WaitAsync("列印視窗關閉", 30, s => ShopeeBatchScreens.IsPrintDialog(s.Boxes) ? null : s, shipped: true);
-        printed.Dispose();
-        _log.Info("shopee-batch", "label printed");
-
-        // Close the 預覽列印 tab: back to the order with its 查看寄件編號 dialog, then close it.
-        Keys("Ctrl+W (預覽列印)", NativeMethods.VK_CONTROL, 0x57 /* W */);
-        await Task.Delay(500, _token);
-        await CloseTrackingDialogAsync();
     }
 
     /// <summary>「列印寄件單」 sits at the dialog's bottom; when the zoom hides it, the dialog is scrolled.</summary>

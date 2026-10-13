@@ -15,6 +15,8 @@ internal sealed record ShopeeAwbDownload(int Done, int Total, int Failed);
 /// target is found by its own text; nothing is clicked by a fixed position, and anything not
 /// found stops the batch rather than guessing.
 /// </summary>
+internal enum ShopeeBatchCarrier { Other, Shopee, SevenEleven }
+
 internal static partial class ShopeeBatchScreens
 {
     private static string C(OcrBox box) => ShopeeScreenshot.Compact(box.Text);
@@ -94,12 +96,21 @@ internal static partial class ShopeeBatchScreens
         return new ShopeeListOrder(orderSn, status, carrier);
     }
 
-    /// <summary>The three carriers the batch ships (user, 2026-10-12): 蝦皮店到店 (and its 隔日到貨) and 蝦皮店到宅.</summary>
-    public static bool SupportedCarrier(string carrier)
+    /// <summary>
+    /// How the batch ships a carrier: 蝦皮店到店 (and its 隔日到貨) and 蝦皮店到宅 print Shopee's own
+    /// label (user, 2026-10-12); 7-ELEVEN prints its 交貨便 slip from 7-11's page (2026-10-13).
+    /// Anything else is not done by the batch.
+    /// </summary>
+    public static ShopeeBatchCarrier CarrierKind(string carrier)
     {
-        var text = ShopeeScreenshot.Compact(carrier);
-        return text.Contains("蝦皮店到店", StringComparison.Ordinal) || text.Contains("蝦皮店到宅", StringComparison.Ordinal);
+        var text = ShopeeScreenshot.Compact(carrier).ToUpperInvariant().Replace("-", string.Empty, StringComparison.Ordinal);
+        if (text.Contains("蝦皮店到店", StringComparison.Ordinal) || text.Contains("蝦皮店到宅", StringComparison.Ordinal)) return ShopeeBatchCarrier.Shopee;
+        if (text.Contains("7ELEVEN", StringComparison.Ordinal) || text.Contains("711", StringComparison.Ordinal) || text.Contains("統一超商", StringComparison.Ordinal))
+            return ShopeeBatchCarrier.SevenEleven;
+        return ShopeeBatchCarrier.Other;
     }
+
+    public static bool SupportedCarrier(string carrier) => CarrierKind(carrier) != ShopeeBatchCarrier.Other;
 
     // ---- 訂單明細 ----
 
@@ -219,9 +230,28 @@ internal static partial class ShopeeBatchScreens
     public static string LabelTracking(IReadOnlyList<OcrBox> boxes) =>
         boxes.Where(b => C(b).Contains("寄件編號", StringComparison.Ordinal)).Select(b => TrackingIn(C(b).ToUpperInvariant())).FirstOrDefault(t => t.Length > 0) ?? string.Empty;
 
+    // ---- 7-ELEVEN 交貨便服務單 (epayment.7-11.com.tw) ----
+
+    /// <summary>The 交貨便 slip 7-11's page shows after 列印寄件單 (user, 2026-10-13).</summary>
+    public static bool IsSevenLabelPage(IReadOnlyList<OcrBox> boxes) =>
+        Has(boxes, "交貨便服務代碼") || Has(boxes, "統一超商") && Has(boxes, "寄貨訂單編號");
+
+    /// <summary>The 交貨便服務代碼 on the slip (the dialog's 寄件編號).</summary>
+    public static string SevenLabelCode(IReadOnlyList<OcrBox> boxes) =>
+        boxes.Where(b => C(b).Contains("服務代碼", StringComparison.Ordinal)).Select(b => TrackingIn(C(b).ToUpperInvariant())).FirstOrDefault(t => t.Length > 0) ?? string.Empty;
+
     // ---- Chrome 列印 ----
 
-    public static bool IsPrintDialog(IReadOnlyList<OcrBox> boxes) => Has(boxes, "目的地") && Has(boxes, "縮放比例");
+    /// <summary>
+    /// Chrome's print dialog; 縮放比例 shows only once 顯示更多設定 is open (user, 2026-10-13),
+    /// so the dialog is known by 目的地 with either.
+    /// </summary>
+    public static bool IsPrintDialog(IReadOnlyList<OcrBox> boxes) =>
+        Has(boxes, "目的地") && (Has(boxes, "縮放比例") || MoreSettings(boxes) is not null);
+
+    /// <summary>「顯示更多設定」, clicked only while 縮放比例 is not shown (a second click folds it again).</summary>
+    public static OcrBox? MoreSettings(IReadOnlyList<OcrBox> boxes) =>
+        boxes.FirstOrDefault(b => C(b).Contains("更多設定", StringComparison.Ordinal));
 
     /// <summary>The printer named beside 目的地.</summary>
     public static string PrintDestination(IReadOnlyList<OcrBox> boxes)
@@ -266,10 +296,13 @@ internal static partial class ShopeeBatchScreens
         return match.Success ? ShopeeScreenshot.OrderSnDateDigits(match.Value) : string.Empty;
     }
 
+    /// <summary>A Shopee TW number, or a 7-11 交貨便 code (a letter and 11 digits, user 2026-10-13: G55 152 432 330).</summary>
     internal static string TrackingIn(string text)
     {
         var match = TrackingInPattern().Match(text);
-        return match.Success ? ShopeeScreenshot.TrackingDigits(match.Value) : string.Empty;
+        if (match.Success) return ShopeeScreenshot.TrackingDigits(match.Value);
+        var seven = SevenCodePattern().Match(text);
+        return seven.Success ? seven.Value[0] + seven.Value[1..].Replace('O', '0').Replace('I', '1').Replace('L', '1') : string.Empty;
     }
 
     /// <summary>
@@ -281,7 +314,9 @@ internal static partial class ShopeeBatchScreens
     {
         static string N(string s)
         {
-            var t = ShopeeScreenshot.TrackingDigits(new string(s.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray()));
+            var compact = new string(s.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
+            if (SevenCodePattern().IsMatch(compact) && compact.Length == 12) return TrackingIn(compact);
+            var t = ShopeeScreenshot.TrackingDigits(compact);
             return t.StartsWith("TW", StringComparison.Ordinal) && t.Length > 2 && t[^1] == 'O' ? t[..^1] + "0" : t;
         }
         return N(a).Length > 0 && N(a) == N(b);
@@ -295,6 +330,9 @@ internal static partial class ShopeeBatchScreens
 
     [GeneratedRegex(@"TW[0-9OIL]{12}[0-9A-Z](?![0-9A-Z])")]
     private static partial Regex TrackingInPattern();
+
+    [GeneratedRegex(@"(?<![0-9A-Z])[A-Z][0-9OIL]{11}(?![0-9A-Z])")]
+    private static partial Regex SevenCodePattern();
 
     [GeneratedRegex(@"^包\S\d*[:：]")]
     private static partial Regex PackagePattern();

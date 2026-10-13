@@ -49,7 +49,7 @@ public sealed class ShopeeBatchScreensTests
         Assert.Equal("蝦皮店到店-隔日到貨", first.Carrier);
         Assert.True(ShopeeBatchScreens.SupportedCarrier(first.Carrier));
         Assert.True(ShopeeBatchScreens.SupportedCarrier("蝦皮店到宅"));
-        Assert.False(ShopeeBatchScreens.SupportedCarrier("7-ELEVEN"));
+        Assert.True(ShopeeBatchScreens.SupportedCarrier("7-ELEVEN"));
         Assert.False(ShopeeBatchScreens.SupportedCarrier("全家"));
     }
 
@@ -150,6 +150,35 @@ public sealed class ShopeeBatchScreensTests
         List<OcrBox> dialog = [B("查看寄件編號", 53, 47, 135, 25), B("X", 640, 52, 16, 16), B("列印寄件單", 546, 797)];
         Assert.Equal(640, ShopeeBatchScreens.DialogCloseMark(dialog, dialog[0])!.Left);
         Assert.Equal("蝦皮店到店-隔日到貨#TW1234567", ShopeeBatchScreens.DetailCarrier([B("包裹1：蝦皮店到店-隔日到貨", 305, 828), B("#TW1234567", 516, 827)]));
+    }
+
+    [Fact]
+    public void Handles_seven_eleven()
+    {
+        Assert.Equal(ShopeeBatchCarrier.SevenEleven, ShopeeBatchScreens.CarrierKind("7-ELEVEN"));
+        Assert.Equal(ShopeeBatchCarrier.Shopee, ShopeeBatchScreens.CarrierKind("蝦皮店到店-隔日到貨"));
+        Assert.Equal(ShopeeBatchCarrier.Other, ShopeeBatchScreens.CarrierKind("全家"));
+
+        List<OcrBox> dialog = [B("查看寄件編號", 35, 35), B("G12 345 678 9O1", 244, 89), B("寄件編號將於2026/10/1523:59失效", 245, 119), B("列印寄件單", 545, 711)];
+        Assert.Equal("G12345678901", ShopeeBatchScreens.DialogTracking(dialog));
+
+        List<OcrBox> slip =
+        [
+            B("統一超商", 125, 142), B("交貨便服務代碼：G12345678901", 75, 317), B("物流條碼：833001G123456789", 19, 431),
+            B("寄貨訂單編號：261011AB12CD34", 19, 469)
+        ];
+        Assert.True(ShopeeBatchScreens.IsSevenLabelPage(slip));
+        Assert.False(ShopeeBatchScreens.IsPrintDialog(slip));
+        Assert.Equal("261011AB12CD34", ShopeeBatchScreens.LabelOrderSn(slip));
+        Assert.Equal("G12345678901", ShopeeBatchScreens.SevenLabelCode(slip));
+        Assert.True(ShopeeBatchScreens.SameTracking("G12 345 678 9O1", "G12345678901"));
+        Assert.False(ShopeeBatchScreens.SameTracking("G12345678902", "G12345678901"));
+
+        // 縮放比例 only under 顯示更多設定.
+        List<OcrBox> folded = [B("列印", 48, 30), B("目的地", 51, 90), B("GG-D410 Printer", 227, 91), B("份數", 51, 196), B("顯示更多設定", 50, 324)];
+        Assert.True(ShopeeBatchScreens.IsPrintDialog(folded));
+        Assert.Null(ShopeeBatchScreens.PrintScale(folded));
+        Assert.Equal(324, ShopeeBatchScreens.MoreSettings(folded)!.Top);
     }
 
     [Fact]
