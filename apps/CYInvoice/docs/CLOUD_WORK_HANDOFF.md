@@ -4,7 +4,15 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：V3 CYWEB 復原邀請開始工程接線（Draft，2026-10-13）
+## 最新停點：V3 災難復原採「新裝置接管時全數撤銷舊裝置」（2026-10-14）
+
+- 使用者確認復原與一般新增裝置不同：CYWEB 超管簽發時必須明示全數撤銷後果，**寄送時不撤銷**。**成功兌換新 Device 的同一 D1 原子交易**，才將該 Workspace 所有其他 active Device 轉 revoked、舊未使用 JOIN／RECOVERY 邀請與配對碼撤銷、每台 Device 撤銷 Audit／新 Device 接管 Audit 寫入；保留所有 Workspace、發票與裝置歷史。失敗即回滾。DR-06／DR-09 已依此更新 `CLOUD_DISASTER_RECOVERY.md`。
+- [CYInvoice Draft PR #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 新增內部 `src/recovery-claim.ts` 與雙 profile SQL guard 的 D1 batch 一次性全數撤銷、`0014` 的 Pairing revoked_at、optional maintenance 的 claim guard，並修一般 JOIN／PAIRING 漏洞：已 revoked Device、復原專用邀請、已 revoked 配對授權不能藉既有加入 API 繞過接管。`tests/recovery-cutover.test.mjs` 用 synthetic SQLite 驗證新舊 Token、rollback、競爭、稽核。
+- **仍未接通：**CYInvoice 私有 WorkerEntrypoint／正式簽發 Email／狀態查詢／撤銷、提供 Windows 的專用 recovery preview／claim 入口、protected Pending Token／UI、兩服務部署設定及 DR-01～DR-13 實機驗收；只寫入 GitHub Draft PR，沒有對原 Worker／D1／CYID D1 進行變更或部署。
+- 舊裝置新請求需經 D1 Device.status 重新驗證才能拒絕；早已開始的 in-flight mutation 需要 V3 Work Item 執行時 fencing/epoch 邏輯才能保證不可越權完成，不能聲稱全數撤銷自動取消在途網路請求。
+- 本公司既有 CYID_ONLY 員工資料退役維護**已完成，禁止重跑**；新 schema14／optional recovery maintenance **尚未執行**。維持禁止任何 Cloudflare 測試 Worker／handler 建立或部署。
+
+## 歷史停點：V3 CYWEB 復原邀請開始工程接線（Draft，2026-10-13）
 
 - 使用者要求接手已完成 D1 維護後的 Work 停點，並批准「繼續」。本批新增 [CYWEB Draft #151](https://github.com/simonliu1118-byte/chihyuan-web/pull/151) 的 core Session SUPER_ADMIN／Email／Same-Origin 限制、私有 CYInvoice RPC interface 與隔離行為測試；該 PR CI 全綠，但**沒有私有 issuer 實作／配置，尚不能簽發復原碼，也沒有部署**。
 - [CYInvoice Draft #440](https://github.com/simonliu1118-byte/CYapps/pull/440) 正在進行 V3 D1 forward 0014：同一 device_invitations 新增 issuer channel/purpose、credential version/revision 與每 Workspace 唯一 opaque recovery operation ID；同一 audit 增加 recovery event／actor_provider，保留原 rows、Built-in Device/Employee FK。
