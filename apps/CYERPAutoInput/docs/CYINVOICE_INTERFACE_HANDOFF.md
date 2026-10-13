@@ -47,9 +47,19 @@ CYInvoice.exe --autoinput-query  <request.json> --result <result.json>
 - **CYInvoice 沒開**：命令列行程取得 Mutex，以無主視窗模式處理後結束。
 - **CYInvoice 已開**：命令列行程不得自行寫資料庫；建議把請求轉交給已開啟的那個行程處理，例如具名管道 `\\.\pipe\CYInvoice-<directoryKey>-autoinput`，ACL 限同一使用者，再把結果寫回 `result.json` 後結束。也不得跳出需要人工按確定的訊息框。
 
-具體做法由 CYInvoice 主控決定；AutoInput 只依賴 3.1 的命令列與結果檔。
+使用者 2026-10-13 確認：已開啟時把請求轉交給已開著的那一個處理。管道或其他轉交機制的細節由 CYInvoice 主控決定；AutoInput 只依賴 3.1 的命令列與結果檔。
 
-### 3.3 CYInvoice 位置
+### 3.3 回傳方式與等待
+
+AutoInput 的角度永遠只有一種流程，不論 CYInvoice 原本有沒有開：
+
+1. 寫好 `request.json`，啟動 `CYInvoice.exe --autoinput-issue …`（命令列行程）。
+2. 等這個行程結束（`WaitForExit`）。CYInvoice 已開啟時，命令列行程把請求轉交給已開著的那一個，並一直等到它處理完、把結果交回來，才寫 `result.json` 並結束。
+3. 行程結束後讀 `result.json`，結束碼只當摘要。
+4. 進度：命令列行程可在標準輸出逐行寫 `progress <已處理>/<總數> <訂單編號>`，AutoInput 顯示在畫面中央的提示上；沒有也可以。
+5. 逾時：AutoInput 依訂單數給上限（例如每張 60 秒＋60 秒）。逾時只停止等待並轉人工，**不重複呼叫開立**；之後可用 `--autoinput-query` 查回實際結果。
+
+### 3.4 CYInvoice 位置
 
 AutoInput 在自己的設定裡讓使用者指定 `CYInvoice.exe` 路徑（portable，各電腦不同）；找不到就停止並說明，不猜路徑。
 
@@ -126,8 +136,8 @@ AutoInput 在自己的設定裡讓使用者指定 `CYInvoice.exe` 路徑（porta
 
 ## 7. 請 CYInvoice 主控確認的事項
 
-1. MO／酷澎匯入開立時，記錄的 `OriginalOrderId` 在正式環境是否就是平台訂單編號（測試環境有專用 OrderID namespace）。AutoInput 以平台訂單編號對帳。
-2. 單一寫入者（3.2）的處理方式。
+1. ~~正式環境記錄的訂單編號是否就是平台訂單編號~~：使用者 2026-10-13 確認正式環境就是 MO 的 14 碼訂單編號（測試環境的 OrderID namespace 另行處理）。
+2. 單一寫入者（3.2）：使用者已確認轉交給已開著的那一個，請 CYInvoice 主控決定轉交機制。
 3. 服務連線矩陣中「阻擋至恢復」的狀況（例如光貿或雲端斷線）在接口下如何回報（建議結束碼 3＋結果檔說明）。
 4. 「上傳問題」「開立失敗」等既有分類對應到 `failed`／`unknown` 的方式。
 5. 酷澎的訂單編號欄位與現有 `CoupangImporter` 是否足以支援同一介面。
