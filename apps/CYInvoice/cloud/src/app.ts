@@ -13,6 +13,12 @@ import { handleSuperAdminTransfer } from "./super-admin-transfer";
 import { handleWebAuth } from "./web-auth";
 import { handleWebPasswordRecovery } from "./web-password-recovery";
 import { handleRuntimeSync } from "./runtime-sync";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import {
+  issueCyWebRecoveryInvitation, recoveryInvitationStatus,
+  type RecoveryIssueResult,
+} from "./recovery-issuer";
+import type { CyWebRecoveryRequest } from "./recovery-authority";
 
 interface Env extends CyIdEnv {
   DB: D1Database;
@@ -29,6 +35,22 @@ interface Env extends CyIdEnv {
   BREVO_API_KEY?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+}
+
+/**
+ * Named private Service Binding entrypoint used ONLY by trusted CYWEB Worker.
+ * CYWEB must bind to entrypoint CyInvoiceRecoveryEntrypoint explicitly.
+ * No public HTTP route provides this capability. Every invocation re-checks
+ * the CYInvoice Application scoped CYID SUPER_ADMIN authority and the D1 profile.
+ */
+export class CyInvoiceRecoveryEntrypoint extends WorkerEntrypoint<Env> {
+  async issueRecoveryInvitation(input: CyWebRecoveryRequest): Promise<RecoveryIssueResult> {
+    return issueCyWebRecoveryInvitation(this.env, input);
+  }
+
+  async getRecoveryInvitationStatus(input: CyWebRecoveryRequest): Promise<RecoveryIssueResult> {
+    return recoveryInvitationStatus(this.env, input);
+  }
 }
 
 export default {
