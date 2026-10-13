@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-CYERPAutoInput uses third-party components for local OCR inference.
+CYERPAutoInput uses third-party components for local OCR inference and for reading PDF shipping labels.
 
 ## PaddleOCR / PP-OCRv5 models
 
@@ -19,6 +19,12 @@ CYERPAutoInput uses third-party components for local OCR inference.
 
 - Project: Microsoft ONNX Runtime
 - License: MIT License
+
+## PdfPig
+
+- Project: UglyToad/PdfPig (NuGet `PdfPig`)
+- License: Apache License 2.0
+- Used to read the text of MO店+ shipping label PDFs (password protected).
 
 ## OpenCvSharp
 

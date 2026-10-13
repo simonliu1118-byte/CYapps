@@ -19,8 +19,10 @@ internal sealed class OrderImportForm : Form
     public ImportedOrder? SelectedOrder { get; private set; }
 
     public OrderImportForm(string source, string fileName, IReadOnlyList<ImportedOrder> orders, IReadOnlyList<string> errors,
-        bool autoSave, Func<ImportedOrder, LedgerEntry?> ledger, Func<string, Task<string>>? lookupName = null)
+        bool autoSave, Func<ImportedOrder, LedgerEntry?> ledger, Func<string, Task<string>>? lookupName = null,
+        IReadOnlyList<string>? notes = null)
     {
+        notes ??= [];
         _orders = orders;
         _ledger = ledger;
         _editable = orders.Any(o => o.InvoiceEditable);
@@ -36,11 +38,12 @@ internal sealed class OrderImportForm : Form
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(12) };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, _editable ? 52 : 32));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, errors.Count > 0 ? 110 : 0));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, errors.Count + notes.Count > 0 ? 110 : 0));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         Controls.Add(root);
 
-        var summary = $"{fileName}：可匯入 {orders.Count} 張訂單" + (errors.Count > 0 ? $"，{errors.Count} 筆無法匯入（見下方）" : string.Empty);
+        var summary = $"{fileName}：可匯入 {orders.Count} 張訂單" + (errors.Count > 0 ? $"，{errors.Count} 筆無法匯入（見下方）" : string.Empty)
+            + (notes.Count > 0 ? $"，寄件單有 {notes.Count} 項要注意（見下方）" : string.Empty);
         if (_editable) summary += "\n白底欄位可直接填寫：物流單號（可空白，之後回補）、客戶全名（有統編時自動查詢經濟部登記名稱）、發票日期、發票號碼。";
         root.Controls.Add(new Label
         {
@@ -59,8 +62,8 @@ internal sealed class OrderImportForm : Form
             Multiline = true,
             ReadOnly = true,
             ScrollBars = ScrollBars.Vertical,
-            Text = string.Join(Environment.NewLine, errors),
-            Visible = errors.Count > 0
+            Text = string.Join(Environment.NewLine, errors.Concat(notes)),
+            Visible = errors.Count + notes.Count > 0
         };
         root.Controls.Add(errorBox, 0, 2);
 

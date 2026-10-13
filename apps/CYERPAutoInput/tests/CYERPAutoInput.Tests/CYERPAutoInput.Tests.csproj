@@ -19,6 +19,7 @@
     <Compile Include="..\..\ShopeeOrderImport.cs" Link="Linked\ShopeeOrderImport.cs" />
     <Compile Include="..\..\XlsReader.cs" Link="Linked\XlsReader.cs" />
     <Compile Include="..\..\MoOrderImport.cs" Link="Linked\MoOrderImport.cs" />
+    <Compile Include="..\..\MoShippingLabels.cs" Link="Linked\MoShippingLabels.cs" />
     <Compile Include="..\..\ImportedOrder.cs" Link="Linked\ImportedOrder.cs" />
     <Compile Include="..\..\OrderLedger.cs" Link="Linked\OrderLedger.cs" />
     <Compile Include="..\..\CoupangOrderImport.cs" Link="Linked\CoupangOrderImport.cs" />
@@ -37,6 +38,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
 </Project>
