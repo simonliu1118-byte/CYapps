@@ -155,9 +155,12 @@ rollback.close();
 // SQL's CHECK guard must reject and not revoke anybody.
 const raced = dbFixture();
 const racedHash = createHash("sha256").update("cydev_" + "c".repeat(64)).digest("hex");
+let checkCount = 0;
 await assert.rejects(() => run(raced, payload, async () => {
-  // simulate another claim winning before this batch starts
-  if (count(raced, "devices") === 2) {
+  // After the initial invitation read but before the atomic batch, another
+  // claimant wins. Our SQLite guard must fail without revoking old Devices.
+  checkCount++;
+  if (checkCount === 2) {
     raced.prepare(`INSERT INTO devices (device_id,workspace_id,display_name,token_hash,
       status,invitation_id) VALUES ('winner',?,'Winner',?,'active','inv_recovery')`)
       .run(workspace, racedHash);
