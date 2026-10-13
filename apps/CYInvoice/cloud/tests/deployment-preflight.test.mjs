@@ -115,13 +115,13 @@ await assert.rejects(snapshot(async sql => {
 
 
 const health = { ok: true, storage: 'ok', service: 'cyinvoice-cloud', environment: 'development', apiVersion: '1',
-  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.2',
+  schemaVersion: '8', storageSchemaVersion: '13', cloudVersion: '0.9.3',
   capabilities: ['device-revoke-v1', 'device-self-status-v1', 'device-usage-v1', 'device-rename-v1', 'cyid-consumer-v1', 'runtime-sync-v1'] };
-checkHealth(health, { version: '0.9.2', schema: 13 });
-assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.2', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
-assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.2', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
+checkHealth(health, { version: '0.9.3', schema: 13 });
+assert.throws(() => checkHealth({ ...health, cloudVersion: '0.9.0' }, { version: '0.9.3', schema: 13 }), /CLOUD_SOURCE_VERSION_MISMATCH/);
+assert.throws(() => checkHealth({ ...health, capabilities: health.capabilities.slice(0, -1) }, { version: '0.9.3', schema: 13 }), /CLOUD_CAPABILITIES_MISSING/);
 for (const field of ['environment', 'apiVersion', 'schemaVersion', 'storageSchemaVersion', 'storage'])
-  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.2', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
+  assert.throws(() => checkHealth({ ...health, [field]: 'wrong' }, { version: '0.9.3', schema: 13 }), /CLOUD_HEALTH_CONTRACT_INVALID/);
 
 // Exercise the deployment comparison across the actual table-rebuilding migration.
 const db = new DatabaseSync(':memory:');
