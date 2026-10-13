@@ -155,6 +155,10 @@ internal static class ShopeePageScan
             var stop = Find(t => t.Contains("入帳明細", StringComparison.Ordinal) || t.StartsWith("訂單金額", StringComparison.Ordinal), unit.Top);
             if (stop is null) problems.Add("頁面上找不到商品表的結尾（隱藏入帳明細）。");
             var bottom = stop?.Top - 4 ?? (codes.Count > 0 ? codes.Max(c => c.Bottom) + 20 : unit.Bottom + 200);
+            // Never into the 買家實付金額 card below (user's PC, 2026-10-13: an 8-product order's
+            // table took it in and was then taken for the amounts).
+            var buyerBelow = Find(t => t.Contains("買家實付金額", StringComparison.Ordinal), unit.Top);
+            if (buyerBelow is not null) bottom = Math.Min(bottom, buyerBelow.Top - 4);
             // Numbers of the table only: right of 單價, within about three column widths.
             var columnStep = quantity is not null ? quantity.Left - unit.Left : 80;
             var tableNumbers = page.Where(b => b.Top > unit.Bottom && b.Bottom < bottom && b.Left > unit.Left - 20 &&

@@ -261,6 +261,10 @@ internal static partial class ShopeeBatchScreens
     /// <summary>The order's number anywhere on the page (全家 prints it on the line under 蝦皮訂單編號).</summary>
     public static bool ShowsOrderSn(IReadOnlyList<OcrBox> boxes, string orderSn) => boxes.Any(b => OrderSnIn(C(b)) == orderSn);
 
+    /// <summary>A number (spaces ignored) anywhere on the page.</summary>
+    public static bool ShowsNumber(IReadOnlyList<OcrBox> boxes, string number) =>
+        number.Length > 0 && boxes.Any(b => C(b).ToUpperInvariant().Contains(number, StringComparison.Ordinal));
+
     // ---- Chrome 列印 ----
 
     /// <summary>「N 張紙」 at the dialog's top right.</summary>

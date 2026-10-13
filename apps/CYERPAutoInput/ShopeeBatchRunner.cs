@@ -396,6 +396,10 @@ internal sealed class ShopeeBatchRunner
         {
             if (!ShopeeBatchScreens.ShowsOrderSn(slip.Boxes, order.OrderSn))
                 throw new ShopeeBatchStop($"全家寄取貨單上讀不到訂單編號 {order.OrderSn}，未列印。", true);
+            // The 寄件編號 (user, 2026-10-13: 11 digits, e.g. 「# 1635…」 on the order page) is the
+            // slip's own 訂單編號.
+            if (!ShopeeBatchScreens.ShowsNumber(slip.Boxes, order.Tracking))
+                throw new ShopeeBatchStop($"全家寄取貨單上讀不到寄件編號 {order.Tracking}，未列印。", true);
         }
         Keys("Ctrl+P", NativeMethods.VK_CONTROL, 0x50 /* P */);
         await PrintDialogAsync(_print.FamilyScale, _print.FamilyPages);

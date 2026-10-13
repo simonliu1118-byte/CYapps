@@ -283,7 +283,7 @@ internal sealed class ShopeeScreenshotForm : Form
 
         ShowProgress("判讀中…", 1, 1);
         foreach (var section in result.Sections)
-            await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines);
+            await AddAsync(ShopeePageScanner.Stitch(result, section.PageArea), section.Lines, section.Kind);
         DisposeCaptures(result);
         HideProgress();
         if (result.Cancelled) _session?.End(AutomationOutcome.Cancelled);
@@ -331,7 +331,8 @@ internal sealed class ShopeeScreenshotForm : Form
     /// Adds one screenshot; <paramref name="lines"/> are given when the auto scan already read
     /// it, so only the classification and the re-read of missing cells run here.
     /// </summary>
-    private async Task AddAsync(Bitmap image, List<OcrBox>? lines = null)
+    /// <param name="kind">The part the page scan cut this as; its text alone does not decide then.</param>
+    private async Task AddAsync(Bitmap image, List<OcrBox>? lines = null, ShopeeShotKind? kind = null)
     {
         var shot = new Shot { Image = image };
         _shots.Add(shot);
@@ -345,7 +346,7 @@ internal sealed class ShopeeScreenshotForm : Form
                 var tokens = await _ocr.RecognizeAsync(image, CancellationToken.None);
                 shot.Lines = ShopeeScreenshot.MergeLines(tokens.Select(t => new OcrBox(t.Text, t.Rect.Left, t.Rect.Top, t.Rect.Width, t.Rect.Height)));
             }
-            shot.Kind = ShopeeScreenshot.Classify(shot.Lines);
+            shot.Kind = kind ?? ShopeeScreenshot.Classify(shot.Lines);
             if (shot.Kind == ShopeeShotKind.Items) await ReadMissingCellsAsync(shot);
             if (shot.Kind == ShopeeShotKind.Order) ResolveOrderSnZeroO(shot);
             _log.Info("shopee-shot", $"screenshot recognized kind={shot.Kind} lines={shot.Lines.Count} size={image.Width}x{image.Height}");

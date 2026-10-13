@@ -196,6 +196,11 @@ public sealed class ShopeeBatchScreensTests
         Assert.True(ShopeeBatchScreens.IsFamilyLabelPage(slip));
         Assert.True(ShopeeBatchScreens.ShowsOrderSn(slip, "261011AB12CD34"));
         Assert.False(ShopeeBatchScreens.ShowsOrderSn(slip, "261011AB12CD35"));
+        Assert.True(ShopeeBatchScreens.ShowsNumber(slip, "16351972389"));
+        Assert.False(ShopeeBatchScreens.ShowsNumber(slip, "16351972380"));
+        // 全家's 寄件編號: 11 digits under the title.
+        Assert.Equal("16351972389", ShopeeBatchScreens.DialogTracking([B("查看寄件編號", 94, 57, 138, 29), B("16351972389", 330, 105)]));
+        Assert.True(ShopeeBatchScreens.SameTracking("# 16351972389", "16351972389"));
 
         List<OcrBox> dialog =
         [
