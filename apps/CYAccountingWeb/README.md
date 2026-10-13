@@ -9,7 +9,7 @@
 | 項目 | 現況 |
 | --- | --- |
 | 正式網站 | [acc.chihyuancm.com](https://acc.chihyuancm.com) |
-| 產品版本 | **V0.23.2**（桌機日期修復）；V0.23.1 Build 2 為前一版統計返修 |
+| 產品版本 | **V0.23.3**（桌機提示／確認清單／排序）；V0.23.2 為前一版日期修復 |
 | 日期修復追蹤 | [PR #441](https://github.com/simonliu1118-byte/CYapps/pull/441) 及對應 main Actions；產品版本以 VERSION／BUILD 為準 |
 | 前版部署證據 | 統計返修 PR #409～#411；[Build 2 部署](https://github.com/simonliu1118-byte/CYapps/actions/runs/38160506567)成功。共通 Provider Secret 入口改動後的[部署 #608](https://github.com/simonliu1118-byte/CYapps/actions/runs/38191534386)亦成功，產品版本未改 |
 | 公開穩定 Release | **V0.22.15**，tag `cyaccountingweb-v0.22.15`；與持續更新的正式網站分開 |
@@ -18,7 +18,7 @@
 | 治理 | Common Rules 2.8.0；repo 治理版本由根 `GOVERNANCE_VERSION` 讀取 |
 | 帳務與備份現況 | 依私人檢查點及正式 catalog 確認；公開文件不保存交易、來源檔、備份識別或資料操作紀錄 |
 
-首次登入引導 PR **#435** 尚未合併；原工作線標示 V0.23.2，合併前需依最新 main 重新基底及升版，不能覆蓋本次日期修復的版本身分。它仍需先核對正式 CY Web 入口與 CYID authority 相同的 gate。
+首次登入引導 PR **#435** 尚未合併；原工作線標示 V0.23.2，合併前需依最新 main 重新基底及升版，不能覆蓋正式版本身分。它仍需先核對正式 CY Web 入口與 CYID authority 相同的 gate。
 
 ## 文件入口
 
@@ -76,6 +76,8 @@ npm ci --no-audit --no-fund
 npm run dev
 ```
 
-`.github/workflows/cyaccountingweb-deploy.yml` 為現行驗證／部署流程：PR 自動驗證、人工 dispatch 備援，main push 執行正式部署；包含 syntax、26 組 application regressions、D1 local migration、Worker dry-run、CYID contract、secure login 與 semantic assets 驗證。`.github/workflows/cyaccountingweb-release.yml` 只用於明確授權的 Stable Release，重新驗證、掃描公開 source package 及 SHA-256。
+`.github/workflows/cyaccountingweb-deploy.yml` 為現行驗證／部署流程：PR 自動驗證、人工 dispatch 備援，main push 執行正式部署；包含 syntax、27 組 application regressions、D1 local migration、Worker dry-run、CYID contract、secure login 與 semantic assets 驗證。`.github/workflows/cyaccountingweb-release.yml` 只用於明確授權的 Stable Release，重新驗證、掃描公開 source package 及 SHA-256。
 
 V0.23.2 修復桌機日期日／月／年選擇未同步 canonical input 的 HTML data attribute 大小寫問題；選取日期不再清空必填值，儲存使用所選日期。沿用同一 picker 與 transaction writer，手機／平板原生日期不變。GitHub 清理及未合併工作見 WORK_HANDOFF。
+
+V0.23.3：桌機存檔提示放在輸入確認標題列中央；確認改單行、無卡片且保留最新十筆，長內容及過去失敗原因可查看完整文字。日期表頭可切換新到舊／舊到新，帳戶分組顯示「帳戶 [分組]」。排序只改呈現，逐筆餘額仍以完整月份按時間計算；手機／平板原版面及原生日期保留。

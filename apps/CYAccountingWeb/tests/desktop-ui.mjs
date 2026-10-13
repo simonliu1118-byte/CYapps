@@ -39,7 +39,7 @@ const adaptiveAsset = /src="(\/adaptive-ui\.js\?rev=[^"]+)"/.exec(markup)?.[1];
 const deployment = fs.readFileSync(path.resolve(ROOT, '../../.github/workflows/cyaccountingweb-deploy.yml'), 'utf8');
 assert.ok(adaptiveAsset && deployment.includes(adaptiveAsset), 'the deployed date picker and page use the same cache revision');
 
-assert.equal(version, '0.23.2');
+assert.equal(version, '0.23.3');
 assert.equal(build, '0');
 assert.match(css, /@media \(min-width: 1360px\)/);
 assert.match(css, /grid-template-columns:\s*360px minmax\(0, 1fr\)/);
@@ -325,3 +325,61 @@ await lockContext.handleLedgerQuickLock();
 lockContext.els.monthFilter.value = '2026-08';
 await lockContext.handleLedgerQuickLock();
 assert.deepEqual(lockTargets, ['2026-09', '2026-07']);
+
+// View sorting never changes the chronological balances or shared source rows.
+let ledgerDesktop = true;
+const ledgerClicks = new Map();
+const ledgerHeader = { innerHTML: '', dataset: {}, querySelector(selector) {
+  const id = selector.slice(1);
+  return this.innerHTML.includes(`id="${id}"`) ? { addEventListener: (_, fn) => ledgerClicks.set(id, fn) } : null;
+} };
+const ledgerRows = { innerHTML: '' }, renderedRows = [];
+const ledgerTransactions = [
+  { id: 1, tx_date: '2026-10-01', account_name: 'A', kind: 'income', amount: 100, summary: 'match' },
+  { id: 2, tx_date: '2026-10-02', account_name: 'A', kind: 'expense', amount: 20, summary: 'other' },
+  { id: 3, tx_date: '2026-10-02', account_name: 'B', kind: 'income', amount: 30, summary: 'other' },
+  { id: 4, tx_date: '2026-10-03', account_name: 'B', kind: 'expense', amount: 10, summary: 'other' }
+];
+const ordering = vm.createContext({ Map, Set, Number, String, Boolean, Array, Intl,
+  state: { transactions: ledgerTransactions },
+  els: { transactionRows: ledgerRows, monthFilter: { value: '2026-10' }, monthSummary: { innerHTML: '' } },
+  document: { querySelector: selector => selector === '.ledger-card thead tr' ? ledgerHeader : null },
+  window: { cyIsDesktopInteractionWorkspace: () => ledgerDesktop },
+  money: n => `$${n}`, escapeHtml: value => String(value),
+  ledgerPresentationColumnSpan: () => ledgerDesktop ? 7 : 8,
+  ledgerAccountVisual: () => ({ slot: 1, background: '#fff', foreground: '#000' }),
+  renderLedgerMessage: message => { ledgerRows.innerHTML = message; },
+  writeLedgerRows: html => { ledgerRows.innerHTML = html; },
+  renderLedgerRow(tx, balance) { renderedRows.push({ id: tx.id, balance }); return `<tr data-test-id="${tx.id}">${balance}</tr>`; }
+});
+vm.runInContext("let cyLedgerGroupByAccount = false, cyLedgerDateDescending = false, cyLedgerSearch = ''; let cyLedgerOpeningData = { accounts: [{name:'A',amount:1000},{name:'B',amount:2000}] };", ordering);
+vm.runInContext(ledgerSource.slice(ledgerSource.indexOf('function renderDesktopLedger()'),
+  ledgerSource.indexOf('const LEDGER_ACCOUNT_LIGHT_PALETTE')), ordering);
+vm.runInContext(ledgerSource.slice(ledgerSource.indexOf('function updateLedgerHeader()'),
+  ledgerSource.indexOf('function ledgerPresentationColumnSpan()')), ordering);
+const renderOrder = action => { renderedRows.length = 0; action(); return renderedRows.map(row => row.id); };
+assert.deepEqual(renderOrder(() => ordering.renderDesktopLedger()), [1, 3, 2, 4]);
+assert.match(ledgerHeader.innerHTML, /aria-sort="ascending"/);
+const chronologicalBalances = new Map(renderedRows.map(row => [row.id, row.balance]));
+assert.deepEqual(renderOrder(() => ledgerClicks.get('ledgerDateHeader')()), [4, 3, 2, 1]);
+assert.match(ledgerHeader.innerHTML, /aria-sort="descending"/);
+for (const row of renderedRows) assert.equal(row.balance, chronologicalBalances.get(row.id));
+assert.deepEqual(renderOrder(() => ledgerClicks.get('ledgerAccountHeader')()), [2, 1, 4, 3]);
+assert.match(ledgerHeader.innerHTML, /帳戶 \[分組\]/);
+assert.deepEqual(renderedRows, [{ id: 2, balance: 1080 }, { id: 1, balance: 1100 }, { id: 4, balance: 2020 }, { id: 3, balance: 2030 }]);
+assert.deepEqual(renderOrder(() => ledgerClicks.get('ledgerDateHeader')()), [1, 2, 3, 4]);
+assert.deepEqual(renderOrder(() => ledgerClicks.get('ledgerAccountHeader')()), [1, 3, 2, 4]);
+assert.doesNotMatch(ledgerHeader.innerHTML, /帳戶 \[分組\]/);
+renderOrder(() => ledgerClicks.get('ledgerDateHeader')());
+ledgerDesktop = false;
+assert.deepEqual(renderOrder(() => ordering.syncLedgerPresentation()), [1, 3, 2, 4], 'touch returns to its existing chronological display');
+assert.doesNotMatch(ledgerHeader.innerHTML, /ledgerDateHeader|ledger-header-button/);
+renderOrder(() => ledgerClicks.get('ledgerAccountHeader')());
+assert.match(ledgerHeader.innerHTML, /帳戶 ▲/, 'touch grouping label is preserved');
+ledgerDesktop = true;
+assert.deepEqual(renderOrder(() => ordering.syncLedgerPresentation()), [2, 1, 4, 3]);
+assert.match(ledgerHeader.innerHTML, /帳戶 \[分組\]/);
+assert.deepEqual(ledgerTransactions.map(tx => tx.id), [1, 2, 3, 4], 'presentation sorting never mutates the transaction snapshot');
+vm.runInContext("cyLedgerGroupByAccount = false; cyLedgerSearch = 'match';", ordering);
+assert.deepEqual(renderOrder(() => ordering.renderDesktopLedger()), [1]);
+assert.equal(renderedRows[0].balance, chronologicalBalances.get(1), 'search retains balances from the complete month');

@@ -3848,18 +3848,24 @@ function setupTouchWorkspaceSaveMessage() {
   const originalNext = message.nextSibling;
 
   const sync = () => {
+    const desktopSlot = document.querySelector('#confirmationMessageSlot');
+    const desktop = isDesktopInteractionWorkspace();
+    if (desktopSlot) desktopSlot.hidden = !desktop;
     if (usesEntryTransactionEditor()) {
       if (message.previousElementSibling !== saveButton) saveButton.insertAdjacentElement('afterend', message);
       message.classList.add('cy-mobile-save-message');
     } else {
       message.classList.remove('cy-mobile-save-message', 'is-visible', 'is-fading');
-      if (originalParent && message.parentElement !== originalParent) {
+      if (desktop && desktopSlot) {
+        if (message.parentElement !== desktopSlot) desktopSlot.append(message);
+      } else if (originalParent && message.parentElement !== originalParent) {
         if (originalNext && originalNext.parentNode === originalParent) originalParent.insertBefore(message, originalNext);
         else originalParent.append(message);
       }
     }
   };
 
+  window.addEventListener('cyacc:confirmation-ready', sync);
   if (typeof media.addEventListener === 'function') media.addEventListener('change', sync);
   else media.addListener?.(sync);
   window.addEventListener('resize', sync, { passive: true });
@@ -4376,6 +4382,7 @@ function syncLedgerToolbarPlacement(orientation = tabletWorkspaceOrientation()) 
   if (exportButton.getAttribute('aria-busy') !== 'true') exportButton.textContent = desktop ? '匯出' : '匯出 Excel';
   const target = desktop || orientation === 'portrait' ? summaryActions : viewTools;
   window.cySyncLedgerQuickLock?.();
+  window.cySyncLedgerPresentation?.();
   if (exportButton.parentElement !== target) target.append(exportButton);
   if (status.parentElement !== target) target.append(status);
 }

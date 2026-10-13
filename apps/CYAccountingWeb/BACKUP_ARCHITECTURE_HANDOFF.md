@@ -1,6 +1,6 @@
 # CYAccountingWeb 備份架構與維運交接
 
-更新：2026/10/14（台灣時間）。正式程式版本 **V0.23.2**、D1 schema **8**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
+更新：2026/10/14（台灣時間）。正式程式版本 **V0.23.3**、D1 schema **8**；目前版本與部署證據見 [WORK_HANDOFF.md](WORK_HANDOFF.md)。Backup outer／inner format 仍為 2，新增欄位採既有相容格式。永久規則依正式三層來源。
 
 ## 模組與唯一資料來源
 
