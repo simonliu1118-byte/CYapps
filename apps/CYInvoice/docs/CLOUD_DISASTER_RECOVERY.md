@@ -77,7 +77,7 @@ claim owner 在每次送出、包括同 Token retry 前，重新驗證：
 
 - 邀請 RECOVERY 用途、原目標 scope、已送達／可交付狀態、expiry、revocation、issuer principal 與當下 Role／App enablement；issuer 轉移／停用或 credential／revision 變動後重新簽發，不默認舊 grant 仍可用。
 - Token hash 與既有 Device 的關係、Workspace active、CYID profile；已 revoked／外 Workspace 的 Device 不可因 `recovered=true` 復活。
-- 新 Device insert、單次 invitation consume 與成功 Audit 為一個受 guard 的 transaction；競爭失敗不能留下未授權 orphan Device 或成功 audit。
+- **公司級災難復原接管：**新 Device insert、單次 RECOVERY invitation consume、**同 Workspace 其餘全部 active Device revoke**、舊 JOIN／RECOVERY invitation 與未使用 pairing code 撤銷，以及逐裝置撤銷 Audit／成功接管 Audit，必須是**同一筆 D1 原子交易**。任何驗證／寫入／稽核失敗均 rollback，不能有 orphan Device、部分舊 Token 有效或成功 Audit。這是正式復原與一般新增裝置的關鍵差異。
 
 若 response 遺失，保留同一 Pending Token，先透過 authenticated current-device/discovery 讀回原 Device／Workspace／provider scope。未確認時不產生第二個 Token、重簽 invitation 或重播業務；若確定尚未完成且邀請仍有效，才以原 attempt 重試。新身份正式寫入前核對 scope 全部一致；不使用 current claim 的「同 token 找到舊列」分支當作充分證據。
 
@@ -87,9 +87,9 @@ claim owner 在每次送出、包括同 Token retry 前，重新驗證：
 
 ## 7. 舊裝置管理與 V3 協同
 
-D1 中仍 active 的遺失裝置不自動全部撤銷。CYWEB 管理頁顯示該次邀請 ID、到期與狀態，不將原碼放 URL／log；碼寄到當下由 CYID 確認的超管 Email。超管在新裝置連通後看到原 Device registry，明確選擇失聯裝置撤銷；LAST_ACTIVE_DEVICE 保護保持，新 Device 正常加入後才可處理最後一個失聯舊 Device。revoked 歷史與 Invitation／Audit actor 留存，不覆寫成新 Device。
+**2026-10-14 使用者確認的新正式規則：CYWEB 公司級災難復原成功接管時，自動撤銷原 Workspace 的全部舊 Device。** CYWEB 簽發前必須明示「成功兌換後將使所有現有裝置失效」並取得超管確認；僅建立／寄送邀請時不得提前撤銷，以免 Email／新機失敗造成鎖死。新 Device Token 建立與所有舊 active Device `status=revoked`、`revoked_at`、未使用舊邀請與配對碼失效、撤銷／接管 Audit 必須同一個原子交易。**不刪除舊 Device row，不重建 Workspace，不還原舊 Token**；只有新 Device 成功才保持一台 active，舊 Token 立即不能再對 Cloud API 驗證，連線後依既有 durable wipe 流程失效處理。正常多機加入仍不撤銷其他裝置；LAST_ACTIVE_DEVICE 保護只適用一般逐台撤銷，不阻止有新 Device 同交易上線的正式復原切換。
 
-若是疑似 Token 外洩而需緊急全撤銷，屬另一個明確的事件處理範圍；不能偷偷借災復 UI 刪掉全部 active 或將其標為已恢復。
+若是疑似 Token 外洩而需**尚無新 Device 就全部撤銷**，仍屬另一個明確的緊急事件處理範圍；不能偷偷讓僅「簽發復原邀請」提前做全撤銷，也不能將尚未完成的復原標為成功。
 
 V3 Work Item、revision／原子狀態轉移、跨機 OrderID 防撞、正式折讓／逐筆歷史與業務 Audit，共用原 Workspace／Device／actor 模型。裝置加入只恢復協同資格；本地 pending、Cloud Work Item 與官方 AMEGO 結果的重整不能因登入成功而直接標成完成。
 
@@ -138,10 +138,10 @@ V3 同一工作流分批接續，避免獨立災復產品先行：
 | DR-03 | USER、ADMIN、Identity Admin、first-login ticket、過期／revoked core Session、未驗證 Email 均不能簽發復原邀請 |
 | DR-04 | CYWEB core 授權與 CYInvoice App-scoped authority 均重驗；錯 Employee／identity Workspace／Application／business Workspace／profile 拒絕 |
 | DR-05 | Provider outage、Workspace/App disabled、轉移超管、密碼／revision 改變後 fail closed；offline cache 不簽發或兌換 |
-| DR-06 | 兩台／兩個 Token 同時兌換只有一台成功；失敗無 orphan Device、無成功 Audit；Device registry、issuer 與 actor 正確 |
+| DR-06 | 兩台／兩個 Token 同時兌換只有一台成功，且**只有勝者 Device 為 active**、全部舊 Device 一律 revoked；失敗無 orphan Device、無部分 revoke、無假成功 Audit；Device registry、issuer 與 actor 正確 |
 | DR-07 | claim 已提交但 response 遺失、Windows 重啟／settings 寫入失敗，沿用同 Pending Token 找回；原安裝遺失 Token 保留同 Workspace 的本地資料，revoked wipe／外 scope 不旁路 |
 | DR-08 | 簽發 response 遺失可查同一次 request 結果，不盲目重簽；過期／撤銷／重寄及雙重提交按同一 lifecycle 收斂 |
-| DR-09 | 成功後保留原 Workspace／資料／Device history；舊裝置只有經超管明確選擇才撤銷，LAST_ACTIVE_DEVICE 維持 |
+| DR-09 | 超管簽發時清楚確認「復原成功將全數撤銷舊裝置」；簽發未完成或逾時不撤銷；**新 Device 成功兌換的同一 D1 交易**中，原 Workspace 所有其他 active Device 被 revoke、全部舊 Token 失效、舊未使用 JOIN／RECOVERY／Pairing 授權碼撤銷，成功 Audit 記錄每台舊 Device；任一步驟失敗全數 rollback，不存在雙 active／半接管。舊裝置歷史、Workspace、資料仍保留；一般新增裝置不受影響。 |
 | DR-10 | 正常 Device issuer、配對／邀請與獨立 Built-in fixture 可升級；audit／history fingerprint／migration readback 仍成立 |
 | DR-11 | 無帳密、provider token、原邀請碼或 Device Token 明文進入 D1／public source／logs；CSRF／rate/body limits 與 private capability 防濫用 |
 | DR-12 | 異機使用獨立保管的金鑰還原完整私有備份；錯 key、改動／截斷密文、錯 profile／scope 拒絕，回復後撤銷／消耗狀態不倒退 |
