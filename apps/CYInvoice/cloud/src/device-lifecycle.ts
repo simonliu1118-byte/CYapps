@@ -413,16 +413,22 @@ async function renameDevice(request: Request, env: Env, requestId: string): Prom
     return errorResponse(env, requestId, 401, "SUPER_ADMIN_AUTH_FAILED", "Super administrator authentication failed.");
   }
   const now = new Date().toISOString();
+  // CYID-only D1 installations may have physically retired cloud_employees.
+  // Keep separate prepared statements: SQLite resolves table names even when
+  // a SQL OR branch would appear to skip a legacy table.
+  const activeDeviceSql = `UPDATE devices SET display_name = ?1, updated_at = ?2
+    WHERE device_id = ?3 AND workspace_id = ?4 AND status = 'active'
+      AND EXISTS (SELECT 1 FROM devices a JOIN workspaces w ON w.workspace_id = a.workspace_id
+                  WHERE a.device_id = ?5 AND a.workspace_id = ?4 AND a.status = 'active' AND w.status = 'active')`;
+  const renameUpdate = usesCyId(env)
+    ? env.DB.prepare(activeDeviceSql).bind(displayName, now, targetDeviceId, actor.workspaceId, actor.deviceId)
+    : env.DB.prepare(`${activeDeviceSql}
+        AND EXISTS (SELECT 1 FROM cloud_employees WHERE employee_id = ?6 AND workspace_id = ?4
+                    AND role = 'SUPER_ADMIN' AND enabled = 1 AND credential_verifier = ?7)`)
+      .bind(displayName, now, targetDeviceId, actor.workspaceId, actor.deviceId,
+        owner.employee_id, owner.credential_verifier);
   const results = await env.DB.batch([
-    env.DB.prepare(
-      `UPDATE devices SET display_name = ?1, updated_at = ?2
-        WHERE device_id = ?3 AND workspace_id = ?4 AND status = 'active'
-          AND EXISTS (SELECT 1 FROM devices a JOIN workspaces w ON w.workspace_id = a.workspace_id
-                       WHERE a.device_id = ?5 AND a.workspace_id = ?4 AND a.status = 'active' AND w.status = 'active')
-          AND (?8 = 1 OR EXISTS (SELECT 1 FROM cloud_employees WHERE employee_id = ?6 AND workspace_id = ?4
-                       AND role = 'SUPER_ADMIN' AND enabled = 1 AND credential_verifier = ?7))`
-    ).bind(displayName, now, targetDeviceId, actor.workspaceId, actor.deviceId,
-      owner.employee_id, owner.credential_verifier, usesCyId(env) ? 1 : 0),
+    renameUpdate,
     env.DB.prepare(
       `INSERT INTO security_audit_events (
          event_id, workspace_id, event_type, outcome, actor_device_id,

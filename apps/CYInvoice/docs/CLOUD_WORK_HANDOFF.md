@@ -4,7 +4,16 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：規劃 CYID 時代舊 D1 帳號資料退場（**未刪除**）— 2026-10-13
+## 最新停點：本公司 CYID-only D1 實體移除舊員工表 — source 實作中（2026-10-13）
+
+- 使用者澄清 **Built-in 與 CYID 二選一**；本公司已全面採 CYID，故本公司 **原 CYInvoice D1** 不需再保留 Built-in Employee 帳號／密碼／轉換表；其他公司使用 Built-in 時應以自己全新獨立 D1 的原 migrations 建立中央帳號，絕不共用本公司原 D1。Built-in 程式仍維持正式支援。
+- 已開始實作 Cloud source 0.9.3 候選：獨立 `cloud/maintenance/retire-built-in-for-cyid-only.sql` 物理移除 `cloud_employees`、`device_employee_links`、`employee_link_candidates`、`employee_transition_items`（**不納入一般 migrations**）；重建舊 `device_invitations` 保留 original actor text 但移除對舊員工的 FK；共用配對 OTP、Workspace、Device／Token、Security Audit 均保留。唯一 profile marker `cyid_storage_profile` 註記只針對 CYID-only 的 D1。
+- CYID mode 的 Device rename query 已不再解析舊 `cloud_employees`，Built-in 版本仍查驗原員工憑證。部署快照依 profile 區分並維持 row fingerprint／FK fail-closed，不允許一般 Cloud deploy 隱含移除表；Cloud/SQLite tests 由 PR CI 驗證。
+- **遠端尚未執行**：沒有即時 D1 統計／可確認的私有備份，沒有 Cloudflare D1 UPDATE/DELETE/DROP、Cloudflare Worker upload/deploy、CYID D1 修改、測試 Worker 新建／刪除重試。所有新 source 與 CI 為本地／GitHub 隔離執行。
+- **接續 gate**：PR check 全綠 → 原 business D1 經受控唯讀核對（含 `CYID_ENABLED=true`、唯一 Workspace／Device／FK／pending transition／invite／OTP）→ 核准原 Worker 相容 code-only 部署，保持現行 CYID 與所有 binding → 明確 D1 備份／rollback 與當次授權 → 原 D1 上單獨原子 schema retirement → 後驗證。**順序不得顛倒。** 詳細設計以 `CLOUD_IDENTITY_LIFECYCLE.md` §20 為準，原 §19 僅作歷史參考。
+- 本工作不意味新 Windows Stable Release 授權。V2.6.19 正式 tag 保留；原 TODO 已勾選項目視為完成，其他未勾選的真實驗收不得自動勾成成功。
+
+## 歷史停點：規劃 CYID 時代舊 D1 帳號資料退場（**未刪除**）— 2026-10-13
 
 - 使用者明確表示 TODO **已勾選項目驗收完成**，授權開始規劃下一階段，並要求調查 CYInvoice 自身 D1 原有 Built-in 帳號資料可否在員工權威改由 CYID 後退役。保留已完成勾選項，不把前次發布完成項目重新打開。本工作只做 **GitHub 原始碼／SQL 外鍵與現有部署證據的唯讀調查 + 文件規劃**；尚未連線做即時原 D1 查詢，沒有任何實際 D1 UPDATE／DELETE、migration、Worker deploy 或 CYID D1 操作。
 - **原理**：2026-10-12 的 CYID activation #42 有 `CYID_ENABLED=true`、原 1 Workspace／4 Device 連續性；`cloud/src/app.ts` 在 CYID mode 排除舊 Employee／Web Auth，`runtime-sync.ts` 改由 CYID 查 employee 權限。但這是**目前身分權威已轉向 CYID**，**不是舊 CYInvoice D1 員工列全部已搬移／安全可刪**的證據，且無本次直接讀取原 D1 帳號筆數。
