@@ -4,7 +4,14 @@
 
 本文件保存目前工作停點與驗證證據；唯一待辦清單為 [TODO.md](TODO.md)，實機步驟為 [RC_TEST.md](RC_TEST.md)。永久規則仍依 repository REPOSITORY_RULES.md → REPO_POLICY.md → apps/CYInvoice/PROJECT_RULES.md；本文件不是額外規則層。
 
-## 最新停點：本公司 CYID-only D1 實體移除舊員工表 — source 實作中（2026-10-13）
+## 最新停點：本公司 CYID-only D1 退除舊員工表 — source 已合併、真實 D1 未清（2026-10-13）
+
+- **已完成**：[CYInvoice PR #432](https://github.com/simonliu1118-byte/CYapps/pull/432) 經 squash `0cc97c9a5cf2e63cd6bf887510508f301163c9f4` 合併 main。Cloud source version **0.9.3**；本公司 CYID-only 的帳號表實體移除 maintenance SQL、歷史 invitation actor 脫鉤、配對 OTP 保留、Workspace recovery 清理、CYID Device rename SQL 分流與雙 storage-profile history audit 已入庫。一般 migrations 與 Built-in/self-hosted 的新 D1 架構保持原樣。
+- **已驗證**：[CYInvoice Cloud Check #38340836036](https://github.com/simonliu1118-byte/CYapps/actions/runs/38340836036) Linux／SQLite／CYID real-provider／Windows Client／WinForms Smoke／工程包與安全掃描成功；[Cloud Development Validate #38340836071](https://github.com/simonliu1118-byte/CYapps/actions/runs/38340836071) validate 成功，**遠端 deployment skipped**；[Governance #38340836060](https://github.com/simonliu1118-byte/CYapps/actions/runs/38340836060) 成功。
+- **真正雲端還沒動**：上述只在 GitHub CI 使用 synthetic／local SQLite。原 CYInvoice development Worker 仍保留先前活躍版本與 CYID 配置；**未進行 Cloudflare upload／deploy、未對原 D1 讀取即時 counts 或執行 DROP/DELETE、未改動 CYID D1、未建立任何測試 Worker**。V2.6.19 正式 ZIP／tag 原樣保留。
+- **唯一未完 Gate**：取得原 business D1 真正 read-only inventory（不要公開員工個資或原 IDs）、可回復的私有備份與執行窗口 → 原 Worker 0.9.3 code-only 受控 upgrade（`CYID_ENABLED=true`／Device／service bindings 一致）→ 另外核准的原子化 D1 maintenance → FK／Device／Invitation／Audit／CYID 全面 read-back。專用 SQL 非一般 migration，不得誤用於 Built-in 新資料庫。詳細見 `CLOUD_IDENTITY_LIFECYCLE.md` §20 和 `TODO.md` §7.7。
+
+## 歷史停點：本公司 CYID-only D1 實體移除舊員工表 — source 實作中（2026-10-13）
 
 - 使用者澄清 **Built-in 與 CYID 二選一**；本公司已全面採 CYID，故本公司 **原 CYInvoice D1** 不需再保留 Built-in Employee 帳號／密碼／轉換表；其他公司使用 Built-in 時應以自己全新獨立 D1 的原 migrations 建立中央帳號，絕不共用本公司原 D1。Built-in 程式仍維持正式支援。
 - 已開始實作 Cloud source 0.9.3 候選：獨立 `cloud/maintenance/retire-built-in-for-cyid-only.sql` 物理移除 `cloud_employees`、`device_employee_links`、`employee_link_candidates`、`employee_transition_items`（**不納入一般 migrations**）；重建舊 `device_invitations` 保留 original actor text 但移除對舊員工的 FK；共用配對 OTP、Workspace、Device／Token、Security Audit 均保留。唯一 profile marker `cyid_storage_profile` 註記只針對 CYID-only 的 D1。
