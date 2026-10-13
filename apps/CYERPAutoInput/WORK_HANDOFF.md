@@ -1,6 +1,6 @@
 # CYERPAutoInput WORK HANDOFF
 
-> 更新：2026-10-12（V0.2.9 由 PR #423 合併進 `main`，發布正式 Release `cyerp-auto-input-v0.2.9`；舊 Release V0.2.7 依使用者要求刪除）  
+> 更新：2026-10-13（V0.3.0 Build 18 開發中於 branch `cyerp-auto-input/shopee-batch`／Draft PR #424，未發布；`main` 與正式 Release 仍為 V0.2.9）  
 > 協作方式（使用者 2026-10-06 指定）：Claude Code 主控；Claude 額度不足時由 Codex 接手，Claude 額度恢復後檢查確認 Codex 的變更。交接以本文件＋Git 狀態為準。  
 > 本文件只記錄目前狀態、已驗證事實、待辦與交接注意事項，不是永久規則來源。逐版變更見 `CHANGELOG.md`，功能說明見 `README.md`。
 
@@ -8,9 +8,9 @@
 
 1. `/REPOSITORY_RULES.md`
 2. `/REPO_POLICY.md`
-3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.33）
+3. `/apps/CYERPAutoInput/PROJECT_RULES.md`（目前 Governance 2.3.39）
 4. 本文件 → `README.md` → `CHANGELOG.md`
-5. `main` 的實際 source（PR #104、PR #398、PR #418、PR #421、PR #423 已合併，工作 branch 已刪除）
+5. 工作 branch `cyerp-auto-input/shopee-batch` 的實際 source（PR #424；`main` 已於 2026-10-13 合併進此 branch）
 
 不要以舊聊天記憶覆蓋目前 Git 狀態。
 
@@ -18,7 +18,7 @@
 
 - Repository：`simonliu1118-byte/CYapps`，專案：`apps/CYERPAutoInput/`
 - `main`：`V0.2.9`（2026-10-12 由 PR #423 squash merge），正式 Release `cyerp-auto-input-v0.2.9`。`CYERPAutoInput Release` workflow：只從 `main` 手動啟動、BUILD 必須為 0、tag 不覆寫，Release note 取 CHANGELOG 該版段落中第一個「- Build」之前的摘要。舊 Release `cyerp-auto-input-v0.2.7` 依使用者要求以 `CYERPAutoInput Release Cleanup` workflow（只從 main、只接受本專案 tag）刪除。之前的合併：PR #421（V0.2.5–V0.2.7）、PR #418（V0.2.4）、PR #398（V0.2.1–V0.2.3 Build 1）、PR #104（V0.2.0 Build 31）。工作 branch 合併後刪除。下一次正式發布同樣需使用者同意。
-- 下一輪修改從最新 `main` 開新 branch（例如 `cyerp-auto-input/<type>-<summary>`），開新 PR。
+- 目前工作：branch `cyerp-auto-input/shopee-batch`、Draft PR #424，V0.3.0 Build 18（蝦皮全自動、自動擷取改名、MO店+ 兩檔匯入）。使用者指示 V0.3.0 先不發布，等後續項目（§4「V0.3.0 下一輪待做」）一起；合併與發布都需使用者同意，合併後刪除 branch，下一輪再從最新 `main` 開新 branch。本專案目前沒有其他未合併的 branch。
 - VERSION／BUILD 見同名檔。`V0.1.0` 為 Codex C# 重寫（Build 1–27），`V0.2.0` 為使用者指定的 Minor，代表 Claude Code 接手。新功能 Z＋1（Build 歸零），返修 Build＋1；使用者說「下一版一起修」的項目不單獨發版。
 - 技術棧：C# / .NET 8 / WinForms；OCR 為本機 PaddleOCR PP-OCRv5 mobile + ONNX Runtime（CPU）。由 Go 改寫是使用者同意的技術棧變更（Go 線讀不到 DevExpress virtual grid 的 cell 文字）。
 - 測試包：PR 的 CI Artifact（保留 3 天），連結貼在該 PR 留言。正式版：GitHub Release（`CYERPAutoInput_VX.Y.Z.zip`＋SHA-256）。
@@ -29,9 +29,10 @@
 - 單張 COPI08 自動打單：F5 新增 → 表頭／交易／送貨／發票欄位（課稅別、發票聯數為下拉）→ 商品明細（F2 單位、F2 批號第一筆正庫存；庫存不足提示按確定繼續；設定的折價券／運費／促銷組合品號不查批號）→ 選用 F12 自動儲存並讀回單號 → 選用自動「列印 → 直接列印」（讀「列印」周圍與 ERP 彈出視窗，最多重試 20 秒）→ 設定「儲存單據後自動清除表單」時清空（`ClearFormIfSaved` 唯一入口）。
 - 輸入期間忽略實體滑鼠，Esc 立即恢復並緊急停止；輸入法自動切英數；自由文字欄位讀回比對。
 - 蝦皮自動擷取輸入：按「開始」自動捲動瀏覽器訂單頁截圖（Home 回頂、像素比對捲動距離、到底即停）→ 依卡片灰色間隔切卡片、只辨識訂單編號／進帳資訊／買家實付金額三張 → 判讀並帶回；有問題時以 CY 框選截圖或 Win+Shift+S＋Ctrl+V 補圖。訂單編號 14 碼檢查、簡體字形摺疊。
-- 全自動（V0.3.0 開發中，蝦皮選單）：自己的 Chrome 視窗逐筆 安排出貨 → 寄件單列印 → 光學辨識 → ERP，直到沒有待處理訂單；見 §4。
+- 全自動（V0.3.0，蝦皮選單）：自己開的 Chrome 視窗逐筆 安排出貨 → 寄件單列印（蝦皮店到店／店到宅、7-11、全家各自的列印設定）→ 擷取訂單頁 → ERP，直到沒有待處理訂單；畫面以 UI Automation 讀網頁原文（OCR 為退路）；無流程的物流（萊爾富）與需人工的訂單記下跳過，結束時一次列清單；見 §4。
+- MO店+ 匯入（V0.3.0）：「MO店+訂單匯入」視窗放出貨前、出貨後兩份 OrderExport，依訂單編號帶入物流單號後進預覽；附說明。
 - 蝦皮自動擷取（設定，原名「蝦皮全自動」）：擷取 → 帶回 → 輸入 ERP → 儲存 → 列印；全程鎖實體滑鼠並在畫面中央顯示不入鏡的「全自動運轉中／按 Esc 中止」，需要使用者確認時立即解除。
-- 其他來源：蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`）、酷澎 DeliveryList。預覽、單筆、批次（開始前預檢全部）、轉人工、本機防重複紀錄；開始前檢查不通過回到同一個匯入視窗、保留已填內容。統編自動查客戶全名（經濟部 API）。
+- 其他來源：蝦皮官方匯出檔、MO店+ OrderExport（加密 `.xls`，見上）、酷澎 DeliveryList。預覽、單筆、批次（開始前預檢全部）、轉人工、本機防重複紀錄；開始前檢查不通過回到同一個匯入視窗、保留已填內容。統編自動查客戶全名（經濟部 API）。
 - 共用設定：折價券／運費／促銷組合品號；貨運別（物流：郵局、大榮、新竹、黑貓、宅配通、嘉里；本公司；超商 6 種）。
 - 瀏覽器 F8：開啟蝦皮自動擷取輸入並開始擷取（V0.2.8）。
 - 輔助：ERP 狀態大標籤、第一列庫別預設、員工代號（開程式詢問，暫時作法）、清除表單。LOG 一律診斷模式、只存本機 `logs/`（主畫面已無開啟 LOG 的連結）。進階模式隱藏中。
@@ -58,39 +59,21 @@
 - MO店+ ERP 端（負數單價、運費品號、代收貨款、貨運別、統編與發票欄位）；防重複提醒與擋下。
 - 非 100% 顯示比例、不同電腦／字型（使用者表示只用 100%）。
 
-- V0.2.4：使用者 2026-10-12 實測通過（「測試沒問題」），已合併；Release 延到 V0.2.5。使用者回報訂單編號／運送單號末段英數混合處偶有 0／O 誤讀。
-- V0.2.5 Build 0：`ShopeeScreenshot.OrderSnDateDigits`（前 6 碼 O→0）、`TrackingDigits`（TW＋12 碼數字段、全數字單號 O→0）、`ResolveZeroO`（後 8 碼依字寬：DP 把 ink run 對齊字元，單獨成塊者與其他數字中位寬比較，≤1.12→0、≥1.25→O）；`ShopeeScreenshotForm.ResolveOrderSnZeroO` 量測 `GlyphRunWidths`（以最常見灰階為背景、差 >70 為字），LOG 記 `order number 0/O runs=` 與判斷。依使用者截圖量測：蝦皮字型 0 與數字同寬約 7px，C／Q 約 9px。隨 V0.2.7 發布；0／O 判斷尚未遇到實例，之後有 `order number 0/O` LOG 再核對。
-- V0.2.6 Build 0：V0.2.5 實測 12 項訂單在第 7 列失敗（`editor not ready row=7 col=0 point=128,620`），所有歷史 LOG 都沒有成功過第 7 列。使用者截圖量得 ERP 明細列高 22 px，`ProvenDetailRowPitch`=24 逐列累積誤差。`ErpAutomationService._editorRowCenter` 記錄每列編輯框實際中心（相對明細頂端，新單據 geometry ready 時清空）；`DetailRowPitch()` 以前 6 列中最先與最遠兩列量測（16–36 px 才採用）；第 1 列錨點也用實際編輯框；`DetailRowExistsAsync` 共用。未就緒的 LOG 加 `focus_rect`、`grid_top`。實測通過：12 項訂單 `pitch=22`、第 12 列 `editor ready`。
-- V0.2.7 Build 0：單品訂單 OCR 把貨號標籤切成「商品選項」＋「號：A0…」（漏「貨」）→ `CodeLabelPattern` 加 `(^|選項)號(?=[:：])`。使用者 2026-10-12 實測通過，曾發布為正式 Release（後由 V0.2.9 取代並刪除）。
-- V0.2.7 Build 1（使用者指定小修只加 Build，原編 V0.2.8 Build 0）：`ImportedItem.InEntryOrder`（`MainForm.LoadOrder` 使用）依品號排序，設定的折價券／運費／促銷組合品號排最後；`TrackingDigits`／`OrderSnDateDigits` 的數字段 I、L→1（使用者截圖：`#TW266188241759I` 最後一碼為 I）。使用者確認店到店單號最後一碼可能是數字或字母，維持照 OCR。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
-- V0.2.8 Build 0：`BrowserHotkey`（WH_KEYBOARD_LL 獨立執行緒，只在前景為 Chrome_WidgetWin_1／MozillaWindowClass 且非 CY、無 Ctrl／Alt／Shift 的實體 F8 時攔下）→ `MainForm.OnBrowserHotkey` → `ImportShopeeScreenshotsAsync(startScan: true)`（全自動與否照設定）；忙碌（輸入中或有其他可見視窗）時忽略；`UserSettings.BrowserHotkey` 預設開。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
-- V0.2.8 Build 0（續）：`AutomationSession.End(AutomationOutcome)`：Done（綠勾、0.5 s）、NeedsAttention／Stopped／Paused（黃三角、1.5 s）；`RunDocumentAsync` 依 HandedOff／Warnings／SaveSkippedReason／PrintProblem 判斷；無參數 `End()` 為暫停詢問。UI 訊息與 README 不再以「CY」稱呼本程式（使用者 2026-10-12：程式名稱 ERP AutoInput）。 `FreightCarriers.Aliases` 加 7-11←7-ELEVEN／統一超商、全家←FamilyMart、萊爾富←Hi-Life。
-- V0.2.8 Build 1：實測數量「2」讀成「7」→ `ShopeeScreenshot.SuggestQuantity`（ParseItems 最後）只在提醒中指出唯一能對上小計原價的品號與數量，不改資料（使用者 2026-10-12 明確要求：不能自動改數量／品號）。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
-- V0.2.8 Build 2：`AutomationOutcome.Cancelled`（Esc：`RunDocumentAsync` 捕捉 OperationCanceledException、擷取 `result.Cancelled`）→ 紅色圓形白橫條「使用者已停止」。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
-- V0.2.8 Build 3：編號補讀信心 <0.8 時，若數字等於 `ShopeeScreenshot.ExpectedIndexAt`（上一個＋1／下一個－1，兩者都有須一致）才採用（在所有補讀完成後判斷）。實例：「1」信心 0.289。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
-- V0.2.8 Build 4：`PhysicalMouseLock.EscapePressed`（hook 看到實體 Esc 即在 pool thread 觸發一次）→ `AutomationSession.OnEscape`：取消 `EscapeToken` 並 Post `End(Cancelled)`；`RunDocumentAsync` 以 EscapeToken 取消 `_automationCts`；`ShopeeScreenshotForm.AutoScanAsync` 以 stop token 傳入 `ScanAsync`（含 ReadCardsAsync）。`ShopeeScreenshotHelpForm` 改寫為自動擷取流程；選單「光學辨識輸入 (F8)」。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
-- V0.2.9 Build 0：蝦皮套裝 `ShopeeScreenshot.BundleParts`（+／＋／十）→ `ParseItems.AddItem` 拆品號（ShopeeShotItem 首項帶套裝金額供核對）；`Combine` 產生的表單品項單價留空、首項 `BundleTotal`、促銷組合列 `TakesBundleGap`（有套裝必加）；表單隱藏欄 BundleKey／BundleTotal／BundleGap → `DetailRow`；`ErpAutomationService.FillDetailsAsync` 對套裝品項以 `ReadDetailUnitPriceAsync`（開啟單價編輯框 WM_GETTEXT，失敗 OCR 編輯框，再 Enter）讀 ERP 原價，促銷組合單價＝基礎值−Σ(原價×數量−套裝售價)。讀不到或順序不對即停止（不猜）。使用者要求報表金額正確，不採「首項全價、其餘 0」。共用 `Bundles.Expand`（ImportedOrder.cs）套用於 MO店+、酷澎、蝦皮匯出檔（mapping 加 `PromotionItemCode`）；沒設促銷組合品號才轉人工。ERP 原價合計 < 套裝售價時停止轉人工。使用者 2026-10-12 實測通過（隨 V0.2.9 發布）。
-- V0.2.4 Build 0 實作：一般輸入也顯示「自動輸入中」（`MainForm.RunDocumentAsync` 一律 `Session.Begin(title)`／`End()`，`AutomationSession` 取代原本直接 `PhysicalMouseLock`）；提示框寬度依文字；光學辨識進度改為 `IProgress<double>`（依要辨識的列數）＋百分比、`ShowProgress` 以 Value+1 再回設跳過主題動畫；`ParseItems` 沒有任何編號且小計欄 1–2 個數字時視為第 1 項（單品促銷誤報）；設定兩處文字。
-- V0.3.0 Build 0（branch `cyerp-auto-input/shopee-batch`）：蝦皮全自動批次。`ShopeeBatchRunner`：`chrome.exe --new-window <ListUrl>`（App Paths 登錄或預設安裝路徑），以前後 `Chrome_WidgetWin_1`（chrome 程序）視窗差異找出自己的視窗並最大化；每一步整窗擷取＋PaddleOCR（maxScale 1.0）讀畫面，`ShopeeBatchScreens`（純邏輯，有單元測試）判斷頁面與點擊目標：清單（我的銷售／待處理 (n)／建議出貨期限列的「全部」／表頭「買家實付金額」下第一個「待出貨」、上方訂單編號、物流方式欄）、明細（訂單編號、包裹1 物流、`ShipButton` 防「不成立訂單」＋橘色像素檢查）、查看寄件編號（申請中→TW 號碼、列印寄件單，看不到就滾輪）、預覽列印（下載完成 1/1/0、寄件單上的訂單編號與寄件編號）、Chrome 列印（目的地、縮放「自訂」下的數字、「取消」左側的「列印」）、× 以像素找（標題上方一列找對話框右緣，標題右側唯一墨跡）。之後 Ctrl+W 回訂單頁（找不到用 Ctrl+Tab 最多 4 次），ERP 走 `ShopeeScreenshotForm(autoStart, session, browser: 自己的視窗)` → `StartAutomationAsync(fullAuto, batch: true)`（`_lastRunResult`）；有提醒／警告／轉人工／未儲存／未列印即 `ShopeeBatchStop`。完成後 Ctrl+W 訂單分頁、F5 清單。結束條件：待處理 (0)，或「全部」找不到訂單且待處理不為正數。`MainForm.Alarm`（SystemSounds.Hand＋Console.Beep×3）。設定 `ShopeeLabelPrinter`（預設 GG-D410 Printer）、`ShopeeLabelScale`（110）。**全部未實機測試**；超商（7-11／全家／萊爾富等）流程使用者之後提供；「安排取件」後的畫面未見過，可能需要補。
-- V0.3.0 Build 1：`ErpAutomationService.PrimeDetailGridAsync` 先以 `FastDetailGridVisionService.FindFirstItemCellAsync`（表頭 OCR 找「品號」、垂直格線吸附欄中心、表頭下緣橫線＋半列 11 px）點第一列，讀不到才用舊的 5.2%／y=33；`GridVisionService.LearnColumnOrder`：同一次表頭讀到的欄位依畫面 X 重新分配順序槽，`TryGetLogicalOrder` 優先用學到的順序（水平捲動方向、格線推欄）；`FindExactPhrase` 由左而右、`IndexOfHeader` 排除「庫別名稱」；`ProvenDetailRowPitch`＝22（使用者：列高不會變）。待實測（使用者另一台欄位排法：序號、品號、品名、規格、數量、類型、贈/備品量、單位、庫別、庫別名稱、批號、單價…）。
-- V0.3.0 Build 2：實測第一個清單畫面 12 秒後 `IndexOutOfRangeException`（第一次整窗 OCR 1920x1048 成功 111 tokens，約 5 秒；之後沒有 OCR completed 紀錄，推測引擎內部）。`ShopeeBatchRunner.ReadAsync` 失敗時 `ReadInHalvesAsync`；`AppLogger.Error(area, ex)` 附 StackTrace。待實測，若仍失敗以堆疊定位。
-- V0.3.0 Build 3：Build 2 堆疊：`RapidOCRSharpOnnx.Inference.TextCalRecBox.GetWordInfo` IndexOutOfRange（ReturnWordBox 的逐字計算）。`PaddleOcrService.RecognizeLinesAsync`：第二個引擎 `CreateEngine(wordBoxes: false)`，一行一個 box（WordResults 空時改用 DetResult.DetItems＋RecResult.Label）；`ShopeeBatchRunner.ReadAsync` 改用它（移除切半重試），每次讀畫面記 `screen read lines=… list= detail= dialog= awb= print=`。以使用者截圖（本機 python rapidocr 同模型、整行）驗證 `ShopeeBatchScreens`：內→内（`Compact` 加摺疊）、待虚理（`IsOrderList` 不再要求待處理、ChipCount 接受虚）、包里、物流方式在待出貨上方（改以訂單編號到下一筆訂單編號之間）、寄件編號末碼 O／0 等價、`DialogCloseMark`（OCR 讀到 X）。截圖與辨識結果只在本機，未進 Git。
-- V0.3.0 Build 4：7-ELEVEN。`ShopeeBatchScreens.CarrierKind`（Shopee／SevenEleven／Other；7ELEVEN／711／統一超商）、`TrackingIn` 加交貨便代碼 `[A-Z][0-9OIL]{11}`、`IsSevenLabelPage`／`SevenLabelCode`、`IsPrintDialog` 改為 目的地＋（縮放比例或顯示更多設定）、`MoreSettings`。`ShopeeBatchRunner.ShipAsync` 依 Kind 分 `PrintShopeeLabelAsync`／`PrintSevenSlipAsync`（等 7-11 分頁、核對寄貨訂單編號與服務代碼、Ctrl+P），共用 `PrintDialogAsync(scale)`（讀不到縮放比例先點一次顯示更多設定）。設定 `SevenLabelScale`=100。以使用者 7-11 截圖（本機）驗證。待確認：7-11 訂單在蝦皮訂單頁的物流單號是否等於交貨便代碼（ERP 前會比對，不同則停止）。全家／萊爾富待使用者提供。
-- V0.3.0 Build 5：全家。`CarrierKind` FamilyMart（全家／FamilyMart）、`ApplyTrackingButton`（申請寄件編號，WaitAsync 內按一次）、`DialogTracking` 其他格式退而讀標題下方 8–20 碼英數（≥8 數字）、`IsFamilyLabelPage`、`ShowsOrderSn`（全家把訂單編號印在下一行）、`SheetCount`、`PrintRowValue`、`PrintScaleBox`、`PrintPagesBox`。`ShopeeBatchRunner.PrintDialogAsync(scale, pages)` 改為主動設定：頁面全部／自訂＋頁碼、縮放比例自訂＋數字（`ChooseAsync` 開下拉後只點新出現的選項，讀畫面與點擊時不 Front 以免關掉下拉；`TypeIntoAsync` 點、Ctrl+A、輸入、Tab），最後確認目的地、1 張紙；超過 10 次操作或 40 秒即停止。`ShopeeBatchPrint` record 帶印表機與三種縮放、全家頁碼。以使用者全家截圖（本機）驗證辨識；下拉清單的實際樣子未見過，實測時注意 LOG 的 `click 列印設定`／`選 …`／`type …`。
-- V0.3.0 Build 6：`ShopeePageScan.Sections` 商品表 bottom 不超過其下第一個「買家實付金額」上緣（讀不到隱藏入帳明細時，`stop` 會落到買家卡片的「訂單金額」）；`ShopeeScreenshotForm.AddAsync(..., kind)` 沿用 `ShopeePageSection.Kind`。全家寄件編號 11 碼數字＝寄取貨單「訂單編號」，`ShowsNumber` 核對。
-- V0.3.0 Build 7：`ShopeePageScanner.ReadCardsAsync` 進帳資訊的讀取範圍延伸到下一個 wanted 卡片上緣（仍在讀到入帳明細時停止）。依據：LOG 卡片 `進帳資訊 top=1197 h=1186` 之後 `top=2385 h=598 title=買10送1…`（同一商品表被灰線切開）。
-- V0.3.0 Build 8：`SetDetailCellAsync` 3 次嘗試，重試前等 500×attempt ms（LOG 14:03 `editor not ready row=1 col=1`，focus 仍在品號編輯框；使用者重跑即成功）。
-- V0.3.0 Build 9：`CloseOrderTabAsync` 先點頁面左側＋Home 再核對（LOG 14:44 第 1 筆完成後頁面停在底部）。速度：`PageArea()`（最大的 Chrome_RenderWidgetHostHWND）只讀網頁；`ReadAsync(part, reuse)`＋`_inputs` 計數（Click／Keys／Type／Wheel／ERP 後遞增），`WaitAsync(reuseFirst, part)`；列印視窗 `part` 右半（0.5–1.0）。實測 Build 8：一筆蝦皮端 14:41:59→14:43:53（約 2 分），ERP 約 50 秒。
-- V0.3.0 Build 10：`ChromePageText.Read`（System.Windows.Automation，`CacheRequest` 一次取 Name／Value／BoundingRectangle／ControlType，空結果重讀最多 3 次）；`MainForm.DiagnoseChromeTextAsync`。csproj 加 `UseWPF`（只為 UIAutomationClient）並補回 `System.IO`、`System.Net.Http` 全域 using。待使用者在各畫面實測 LOG；可行則下一步以網頁文字取代蝦皮全自動與訂單頁的 OCR（OCR 留作退路）。
-- V0.3.0 Build 11：網頁原文（UI Automation）取代 OCR。`ChromePageText.Read`（ComboBox／Spinner／Edit 取 Value、無名 Button 記為 `ShopeeBatchScreens.NamelessButton`、無 Document 重讀）、`PageBoxes`（去 TabItem／ToolBar／瀏覽器列、相對頁面區）。`ShopeeBatchRunner.ReadAsync` 先讀網頁原文（同時截圖供橘色與 × 像素判斷），無 Document 才 OCR；`Click` 只點可見範圍內；`ChooseAsync` 改 Home／End＋Enter；列印視窗下拉讀不到值（只有標籤名）即改 OCR。`ShopeeBatchScreens`：分開的「待處理」「(19)」、清單整列連結（`FirstOrderRow`，點狀態欄、列頂下 52 px）、整顆按鈕間距 7 px 的防護改為 3 px、「 列印出貨文件」前綴圖示。`ShopeePageScanner.ReadPageText`＋`TextImage`、`ShopeeScreenshotForm.TryPageTextAsync`（三段齊全才採用，`fromText` 不做補讀與 0／O 字寬）。以使用者診斷 LOG（本機）驗證清單、明細、寄件編號視窗、預覽列印、列印視窗與訂單頁解析。
-- V0.3.0 Build 12：`WaitAsync` 需 probe 成功＋與上一讀文字相同＋無 Loading／載入中（LOG 15:30 明細頁 `包裹1: Loadingshippingchannel`）；成功後 250 ms、否則 500 ms 再讀。
-- V0.3.0 Build 13：清單列文字可能被截斷（長訂單）；清單不再讀物流（使用者：所有物流之後都會支援），`ShipAsync` 以明細頁 `DetailCarrier` 決定 `order.Kind`（Other＝尚無流程，安排出貨之前停止）。
-- V0.3.0 Build 14：`ShopeeBatchRunner.Orange` 取樣 8 點（框外 4＋框內緣 4），≥3 點橘色（Build 13 實測：整顆按鈕的 page-text 框外為背景色）。
-- V0.3.0 Build 15：`ShopeeBatchRunner.Skipped`／`Notes`、`ShopeeBatchSkip`（物流無流程，安排出貨前）、`RunAsync(Func<order, Task<string?>>)`；`NextInList` 略過 Skipped，`OpenOrderAsync` 目標不在畫面時滾輪往下找；`ShopeeBatchScreens.Orders` 列出全部訂單（OCR：每個待出貨＋上方訂單編號；網頁原文：每列連結）。`MainForm.EnterShopeeBatchOrderAsync` 回傳 note（未輸入 ERP 或已儲存但有警告）；轉人工／未儲存仍停止；`ShowBatchSummary` 可捲動可複製。`AutomationSession.Pin/Unpin`（全自動期間標題固定＋計時，步驟結束不顯示），`FullAutoTitle`＝自動擷取輸入中、`BatchTitle`＝全自動運轉中；`AutomationOverlay.ShowNotice(since)` 先以 Opacity 0 顯示並 Refresh 再顯示。診斷按鈕移到設定一般頁（`SettingsForm.DiagnoseChromeText`）。
-- V0.3.0 Build 16：只改名。選單「自動擷取輸入 (F8)」、視窗「蝦皮訂單自動擷取輸入」；「全自動（安排出貨＋寄件單＋ERP）」、`ShopeeBatchTitle`＝"全自動"、批次狀態／訊息拿掉「蝦皮」。討論中（未實作）：MO店+ 以兩個檔核對——檔案1 OrderExport（未產生運送資訊，訂單編號 14 碼）＋檔案2 出貨檔（各物流分開的寄件單 PDF，標籤上有「訂單編號」與宅配單號）→ 依訂單編號帶入物流單號後進匯入預覽，使用者填發票資料再自動輸入；待確認 PDF 是否有文字層、其他物流的格式。
-- V0.3.0 Build 17：`MoImportForm`（兩格＋拖曳，`MoOrderImport.ReadTracking`／`IsShippedExport`（過半訂單有物流單號＝出貨後）分類，不看檔名或放的格子；PDF 拒收）→ `MoOrderImport.FillTracking(batch, shipped)`（只填單一號碼，其餘 notes）→ `OrderImportForm(notes)`。`MoImportHelpForm`＋`assets/help/mo-before.png`、`mo-after.png`（假資料＋馬賽克）；說明視窗共用 `HelpForm` 基底（蝦皮說明一併改用）。本機以使用者兩份真實匯出檔驗證分類與帶入（不入庫）。曾試過讀寄件單 PDF（新竹有文字層、全家是圖片且沒有 14 碼訂單編號），使用者確認改用出貨後匯出檔，已移除，未發布。待實機測試。
-- V0.3.0 Build 18：`ConfirmRestartIfErpBusy` 遇 MultipleWindows／NotFound 先提示並回 false（預覽保留）。`PrintShopeeLabelAsync` 的等待條件加上 `LabelOrderSn` 非空（LOG：awb 頁 10→11 行時已「下載完成」，17 行才有寄件單訂單編號；11 行連讀兩次即判定穩定而誤停）。
-- 下一版待做（使用者 2026-10-13 交代，尚未開始）：(1) MO 說明加後台截圖 `assets/help/mo-export-before.png`（未出貨頁→匯出報表、批次出貨）、`mo-export-after.png`（配送中頁→匯出報表），已馬賽克並入庫，尚未接到 `MoImportHelpForm`。(2) 匯入預覽拿掉「轉人工原因」「輸入紀錄」欄，其他欄加寬；輸入前就知道的問題（貨運別未設定等）該列紅字＋tooltip、預設不勾、列在下方。(3) 批次結束清單做成共用元件（蝦皮全自動的 `ShowBatchSummary` 一般化），蝦皮全自動／MO店+／酷澎／蝦皮匯入都用。(4) 兩個開始按鈕合併為「開始輸入（N 張）」，每列前加 checkbox；勾 2 張以上需自動儲存。(5) 已輸入完成（ledger Saved）的訂單在預覽灰掉、不能勾、顯示「已輸入過」。
+- V0.2.4–V0.2.9：已實測通過並隨 Release V0.2.9 發布；逐版內容見 `CHANGELOG.md`。0／O 字寬判斷（V0.2.5）尚未遇到實例，日後有 `order number 0/O` LOG 再核對。
+
+V0.3.0（Build 0–18，未發布）現況：
+
+- 實機已確認（使用者 2026-10-13 LOG）：網頁原文讀取（清單、明細、寄件編號視窗、出貨文件頁、列印視窗）；蝦皮店到店連續 3 筆完成（每筆約 1 分鐘，16:06–16:09），第 4 筆 ERP 儲存列印後停止（原因未查）；MO店+ 匯入視窗以兩份真實匯出檔帶入 2 筆物流單號。
+- 未實機確認：7-11 與全家寄件單流程（列印視窗頁面／縮放下拉的實際值）、捲動找下一筆、萊爾富跳過與結束清單、Build 15 起的計時提示、Build 1 明細欄位順序學習（另一台電腦欄位排法）、Build 18 兩項修正、MO 匯入的全家／7-11 單號帶入。
+- 架構重點：
+  - `ShopeeBatchRunner`（流程與操作）＋`ShopeeBatchScreens`（純判讀，有單元測試）。`ReadAsync` 先讀 `ChromePageText`（UI Automation，`CacheRequest`），沒有 Document 才整窗 OCR（`RecognizeLinesAsync` 行模式引擎；逐字模式整窗會在 RapidOCR `GetWordInfo` IndexOutOfRange）。`WaitAsync`：probe 成功、與上一讀相同、無 Loading 才行動。
+  - 物流只看訂單明細頁「包裹1」（清單列文字可能截斷）；安排出貨按鈕需完整讀到、與「不成立訂單」間距 ≥3 px、橘色取樣 8 點 ≥3 點。全家先按「申請寄件編號」。寄件單：蝦皮出貨文件頁等到寄件單訂單編號出現才核對（Build 18）；7-11、全家用 Ctrl+P；`PrintDialogAsync` 主動設定頁面與縮放（Home／End＋Enter、輸入後讀回），核對印表機與「1 張紙」。
+  - 訂單完成後點頁面左側＋Home、核對訂單頁，再 Ctrl+W 與 F5。ERP 走 `ShopeeScreenshotForm(browser: 自己的視窗)`（`TryPageTextAsync` 先讀網頁原文）→ `StartAutomationAsync(batch: true)`；`EnterShopeeBatchOrderAsync` 回傳 note（記下繼續）或停止（轉人工／未儲存）。
+  - 提示：`AutomationSession.Pin/Unpin`＋計時；標題三種（自動輸入中／自動擷取輸入中／全自動運轉中）。
+  - ERP 端：`PrimeDetailGridAsync` 以表頭「品號」定位第一列並學欄位順序，列高 22 px；`SetDetailCellAsync` 3 次重試；開始前多個 COPI08 或找不到即提示不開始（Build 18）。
+  - MO店+：`MoImportForm` 依內容分類（過半訂單有物流單號＝出貨後），`MoOrderImport.FillTracking` 只填單一號碼、其餘列在預覽下方；寄件單 PDF 路線試過後移除（全家寄件單是圖片且沒有 14 碼訂單編號）。說明視窗共用 `HelpForm`。
+- 設定：`ShopeeLabelPrinter`、`ShopeeLabelScale` 110、`SevenLabelScale` 100、`FamilyLabelScale` 165、`FamilyLabelPages` "2"；Chrome 網頁文字診斷在「設定 › 一般」。
+- V0.3.0 下一輪待做（使用者 2026-10-13 交代，尚未開始，做完一起發布）：(1) MO 說明加後台截圖 `assets/help/mo-export-before.png`（未出貨頁→匯出報表、批次出貨）、`mo-export-after.png`（配送中頁→匯出報表），已馬賽克並入庫，尚未接到 `MoImportHelpForm`。(2) 匯入預覽拿掉「轉人工原因」「輸入紀錄」欄，其他欄加寬；輸入前就知道的問題（貨運別未設定等）該列紅字＋tooltip、預設不勾、列在下方。(3) 批次結束清單做成共用元件（蝦皮全自動的 `ShowBatchSummary` 一般化），蝦皮全自動／MO店+／酷澎／蝦皮匯入都用。(4) 兩個開始按鈕合併為「開始輸入（N 張）」，每列前加 checkbox；勾 2 張以上需自動儲存。(5) 已輸入完成（ledger Saved）的訂單在預覽灰掉、不能勾、顯示「已輸入過」。
 
 後續可能（未排程）：OCR 多引擎平行加速長訂單；CYID 串接。
 
