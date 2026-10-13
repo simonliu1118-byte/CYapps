@@ -606,11 +606,13 @@ function newInvitationCode(): string {
 type InvitationRow = {
   invitation_id: string; workspace_id: string; delivery_state: string; expires_at: string;
   revoked_at: string | null; consumed_at: string | null; consumed_by_device_id: string | null;
+  issuer_channel: string; purpose: string;
 };
 
 async function findInvitation(env: Env, code: string): Promise<InvitationRow | null> {
   return env.DB.prepare(`SELECT invitation_id, workspace_id, delivery_state, expires_at,
-      revoked_at, consumed_at, consumed_by_device_id FROM device_invitations WHERE code_hash = ?1 LIMIT 1`)
+      revoked_at, consumed_at, consumed_by_device_id, issuer_channel, purpose
+      FROM device_invitations WHERE code_hash = ?1 LIMIT 1`)
     .bind(await sha256Hex(code.trim().toLowerCase())).first<InvitationRow>();
 }
 
@@ -687,6 +689,8 @@ async function previewInvitation(request: Request, env: Env, requestId: string):
   if (!invitationCode(body?.code)) return errorResponse(env, requestId, 400, "INVALID_INVITATION", "Invitation code is invalid.");
   const invitation = await findInvitation(env, body.code);
   if (!invitation) return errorResponse(env, requestId, 404, "INVITATION_NOT_FOUND", "Invitation code is invalid.");
+  if (invitation.issuer_channel !== "DEVICE" || invitation.purpose !== "JOIN")
+    return errorResponse(env, requestId, 409, "INVITATION_PURPOSE_MISMATCH", "Use the dedicated recovery flow.");
   const problem = invitationProblem(invitation, new Date().toISOString());
   if (problem) {
     await recordSecurityEvent(env.DB, { workspaceId: invitation.workspace_id, type: "invitation_claim_denied",
@@ -713,12 +717,16 @@ async function claimInvitation(request: Request, env: Env, requestId: string): P
     return errorResponse(env, requestId, 400, "INVALID_INVITATION_CLAIM", "Invitation claim is invalid.");
   const invitation = await findInvitation(env, body.code);
   if (!invitation) return errorResponse(env, requestId, 404, "INVITATION_NOT_FOUND", "Invitation code is invalid.");
+  if (invitation.issuer_channel !== "DEVICE" || invitation.purpose !== "JOIN")
+    return errorResponse(env, requestId, 409, "INVITATION_PURPOSE_MISMATCH", "Use the dedicated recovery flow.");
   const tokenHash = await sha256Hex(normalizeDeviceToken(body.deviceToken));
   const existing = await env.DB.prepare(`SELECT device_id, workspace_id, display_name AS device_display_name,
-    invitation_id FROM devices WHERE token_hash = ?1 LIMIT 1`).bind(tokenHash)
-    .first<PairingDeviceRow & { invitation_id: string | null }>();
+    invitation_id, status FROM devices WHERE token_hash = ?1 LIMIT 1`).bind(tokenHash)
+    .first<PairingDeviceRow & { invitation_id: string | null; status: string }>();
   if (existing) {
-    if (existing.invitation_id !== invitation.invitation_id)
+    if (existing.invitation_id !== invitation.invitation_id || existing.status !== "active"
+        || existing.workspace_id !== invitation.workspace_id
+        || invitation.consumed_by_device_id !== existing.device_id)
       return errorResponse(env, requestId, 409, "DEVICE_TOKEN_ALREADY_USED", "Device token belongs to another claim.");
     return json(env, requestId, 200, { recovered: true,
       workspace: { workspaceId: existing.workspace_id },
@@ -783,7 +791,8 @@ async function revokeInvitation(request: Request, env: Env, requestId: string): 
   const now = new Date().toISOString();
   const result = await env.DB.batch([
     env.DB.prepare(`UPDATE device_invitations SET revoked_at = ?1
-      WHERE invitation_id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL AND consumed_at IS NULL`)
+      WHERE invitation_id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL AND consumed_at IS NULL
+        AND issuer_channel = 'DEVICE' AND purpose = 'JOIN'`)
       .bind(now, invitationId, device.workspaceId),
     env.DB.prepare(`INSERT INTO security_audit_events (event_id, workspace_id, event_type,
       outcome, actor_device_id, actor_employee_id, invitation_id, request_id, occurred_at)
@@ -872,7 +881,7 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
   const tokenHash = await sha256Hex(normalizedToken);
 
   const byToken = await env.DB.prepare(
-    `SELECT device_id, workspace_id, display_name AS device_display_name
+    `SELECT device_id, workspace_id, display_name AS device_display_name, status
        FROM devices WHERE token_hash = ?1 LIMIT 1`
   ).bind(tokenHash).first<PairingDeviceRow>();
   if (byToken) {
@@ -881,8 +890,8 @@ async function claimPairing(request: Request, env: Env, requestId: string): Prom
         WHERE code_hash = ?1 AND claimed_device_id = ?2
         LIMIT 1`
     ).bind(codeHash, byToken.device_id).first<{ pairing_id: string }>();
-    if (!matchingConsumed)
-      return errorResponse(env, requestId, 409, "DEVICE_TOKEN_ALREADY_USED", "Device token already belongs to another device claim.");
+    if (!matchingConsumed || (byToken as PairingDeviceRow & { status?: string }).status !== "active")
+      return errorResponse(env, requestId, 409, "DEVICE_TOKEN_ALREADY_USED", "Device token belongs to a revoked or unrelated claim.");
     return json(env, requestId, 200, {
       recovered: true,
       workspace: { workspaceId: byToken.workspace_id },
